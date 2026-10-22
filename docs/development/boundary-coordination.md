@@ -25,7 +25,7 @@ CMP-261021-0017 の複数大名として自領を運用してください。
 
 本陣のHEADが古くdirtyな場合、本陣へpullやresetをせず、`git fetch origin main` の後に `git show origin/main:docs/development/boundary-coordination.md` で本手順を読む。CLIが本陣に無くても、本陣の作業木を更新する必要はない。
 
-各大名はセッション固有の軽量な管理worktreeを標準とする。`git worktree add --detach --no-checkout <専用管理worktree> origin/main` で作成後、同worktreeで `git sparse-checkout set --no-cone` により `scripts/`、本manifest/guide、返済計画、`docs/task-list.md`、README/CLAUDE/AGENTS/TEST_CONVENTION、rootの `.gitignore`、必要な `.claude/commands/` とスキルだけを配置する。`.gitattributes` が将来追加された場合は同様に配置し、通常のignore・改行規則を保つ。`--no-checkout` を付けず全18,000超ファイルを先に展開すると、同じディスクを使う各セッションで空き容量を圧迫する。管理用worktreeは状態確認・調整操作だけに使い、実装足軽は規約どおり別の隔離worktreeを持つ。管理用worktreeの最新追従もdirty資産を保護し、作業再開時にmain上のCLI/manifestとの版一致を確認する。
+各大名はセッション固有の軽量な管理worktreeを標準とする。`git worktree add --detach --no-checkout <専用管理worktree> origin/main` で作成後、同worktreeで `git sparse-checkout set --no-cone` により `scripts/`、本manifest/guide、返済計画、`docs/task-list.md`、README/CLAUDE/AGENTS/TEST_CONVENTION、rootの `.gitignore`、必要な `.claude/commands/` とスキルだけを配置する。`--no-checkout` を付けず全18,000超ファイルを先に展開すると、同じディスクを使う各セッションで空き容量を圧迫する。管理用worktreeは状態確認・調整操作だけに使い、実装足軽は規約どおり別の隔離worktreeを持つ。管理用worktreeの最新追従もdirty資産を保護し、作業再開時にmain上のCLI/manifestとの版一致を確認する。
 ## 配賦と所有
 
 追跡する[manifest](boundary-coordination.json)が全141レーンの領地を一意に定める。

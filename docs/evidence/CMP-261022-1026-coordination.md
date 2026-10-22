@@ -17,7 +17,7 @@
 | 解放証拠の永続化変更後の対象再検証 | 4/4、exit 0、27.07秒 | release/handoff/resource freeを追記保存。実CLIのrelease後remote再読でも固有証拠と旧依頼を保持 |
 | 141レーン/4回CAS打切りの境界 | 2/2、exit 0、44.54秒 | 実Gitで競合を4回発生させて安全停止。remoteに未確定claimを残さない |
 
-全受入試験はHarness CIの既存Node `--test` 一覧へ1行追加した。出荷head `93855f032a343157506f22eaca87a70869987fe1` の [Harness CI](https://github.com/kenta-0420/mannschaft/actions/runs/39710406513) で全66件（新32件＋既存34件）成功・失敗0・3574msを確認し、他の適用CIも全成功、対象外はSKIPPEDで未完了/失敗0を裏取りして通常mergeした。上の部分実行で対象の追加・変更を検証し、最終全体は同じファイルのCI実行で確認する。
+全受入試験はHarness CIの既存Node `--test` 一覧へ1行追加した。出荷head `93855f032a343157506f22eaca87a70869987fe1` の [Harness CI](https://github.com/kenta-0420/mannschaft/actions/runs/39710406513) で全66件（新32件＋既存34件）成功・失敗0・3574msを確認し、他の適用CIも全成功、対象外はSKIPPEDで未完了/失敗0を裏取りして通常mergeした。上の部分実行で対象の追加・変更を検証し、最終全体は同じファイルのHarness CI実行で成功を確認した。
 
 ローカルログは専用worktreeの `.claude/evidence/cmp-261022-1026/` に保存した（揮発資料）。`skeleton-red.log`、`acceptance-first.log`、`acceptance-boundaries.log`、`release-evidence.log`、`cas-boundary.log`。試験本体は追跡済みなので再実行可能である。
 
@@ -49,7 +49,7 @@
 
 - 実originの調整ref初期化→claim→status→releaseは、main `ef382d8f034e0d60e6fcc62c572b321bcb03c3d5` 着地後に標準Git資格経路で実施しPASS。観測時刻 `2026-10-22T02:45:06.875Z`、init `bb23a9a6b7c46ce8e48593f8e0387d1bce552578` → claim `26a07e923f9a017b450d4007555cfe405288de60` → release/final `62f37cda3e41a9064af42802ca9adc2c58bfade9`。final時点の全7ownerは空、L0-M/L1-A/L1-Fのhold内容を完全保持、解放証拠が保存されている。state.json単独/orphan根、作業木/HEAD/index/FETCH_HEAD/調整追跡以外のref不変もassertで確認。以後の他セッションのclaim/進捗を変更・解放・再初期化しない。永続coordination枝はcleanup対象外。
 - 製品UI/API/DBを変更しないため、画面実機E2E・画面アリシゼーション・製品ロール/テナント横断は本tooling変更では適用外。代わりに実Gitと実CLIの往復を検証した。後続の各返済レーンでは計画の実機条件を引き継ぐ。
-- 既存Harness4本のローカル実行は34件中32件成功/2件失敗。失敗①sparse checkoutで既存 `docs/evidence/` が無く既存全証拠列挙がENOENT、②既存3000files分類が125.82msで100ms閾値超過。新CLIの試験失敗ではないが、ローカルHarness全緑とは報告しない。既存試験・閾値は変更せず、full checkoutのHarness CIで最終確認する。
+- 既存Harness4本のローカル実行は34件中32件成功/2件失敗。失敗①sparse checkoutで既存 `docs/evidence/` が無く既存全証拠列挙がENOENT、②既存3000files分類が125.82msで100ms閾値超過。新CLIの試験失敗ではないが、ローカルHarness全緑とは報告しない。既存試験・閾値は変更せず、full checkoutのHarness CIで全66件の成功を最終確認した。
 - 本作業中のC:空容量0は、殿がこの専用worktreeだけをsparse化して復旧した。本陣・他worktreeの資産を変更していない。以後の大名の管理worktreeはno-checkoutから必要資産だけ配置する手順を正本へ記載した。
 
 ## 出荷・検分・実originの確定
@@ -57,3 +57,5 @@
 主担当が出荷head `93855f032a343157506f22eaca87a70869987fe1` のコード・AC全9・5類型・追加試験を独立に読み、未解決指摘0として承認した。実装PR [#4054](https://github.com/kenta-0420/mannschaft/pull/4054) は2026-10-22 11:43:47 JSTに通常squash merge（`ef382d8f034e0d60e6fcc62c572b321bcb03c3d5`）。主担当はGitHub connectorでもprobe finalのstate.jsonを独立再読し、141レーン、全owner空、hold3件、解放証拠、親closed=falseを確認した。
 
 ローカル既存Harnessの環境2失敗はfull checkoutの上記Harness CIでは両件とも成功した。恒久証拠は[完了JSON](CMP-261022-1026.json)と[専用調整ref](https://github.com/kenta-0420/mannschaft/tree/campaign/cmp-261021-0017-coordination)の履歴に残る。親戦役と既存子CMPの状態は変更せず、この調整基盤の子行だけを完了にする。
+
+完了遷移のローカル検証は正本 `scripts/completion-evidence.mjs --input` に今回の変更を限定して渡し、exit 0を確認した。base/headの全台帳、今回の完了JSON、HEAD treeの実在ファイル集合、実GitHubから取得したPR #4054のmerged/head/check/変更範囲とHarness runのrepo/head/successを照合した。過去の全証拠本文を再実行したものとは報告せず、過去行/参照の維持と今回の完了遷移・証拠の整合を検証した。既存 `--base/--head` 方式は過去全参照のGit subprocessが続くため中断し、合格扱いしていない。
