@@ -12,7 +12,7 @@ CMP-261021-0017 の複数大名として自領を運用してください。
 1. statusのclosed=trueなら親戦役終結済みとして着手せず終了する。最新origin/main、親Issue #4022の全コメント、docs/task-list.md、移設先、調整CLIのstatusを確認する。本陣の既存資産は触らない。
 2. statusで7領地の依頼・待ち・既存担当・入口を確認し、未所有で今進められる作業がある領地を選ぶ。working可能なレーンを優先し、無ければ読取準備で前提を整えられる領地を選ぶ。保持済みの領地しか無ければ担当を奪わず状況を報告する。
 3. セッション固有UUIDv4を生成し、ownerを会話と引継書へ記録する。同じ本陣cwdでも他セッションとUUIDを共有しない。再開時のみ既存の自分のUUIDを使う。
-4. CLI claim --territory <選んだ領地> --owner <UUID> がremoteに確定した後だけ、その領地の大名として足軽を運用する。競合・通信失敗・未確定なら足軽を起動しない。別領地を取るには現在の自領を明示解放する。
+4. CLI claim --territory <選んだ領地> --owner <UUID> がremoteに確定した後だけ、その領地の大名として足軽を運用する。競合・通信失敗・未確定なら足軽を起動しない。取得済み競合ではstatusを再読し、自分の取得が無いと確認した後に別の未所有領地で再試行する。通信失敗・結果不明では同じownerでstatusを読み、取得の成立有無を確定する。確認できない間は待機する。別領地を取るには現在の自領を明示解放する。
 5. 次作業の選択前と待機からの再開前に必ずstatusを再取得し、他領地からの依頼・待ちを読む。自領内レーンでも既存holdを引き取らず、依存・手動gate・共有resourceを確認する。planningは読取準備のみ、workingは実装着手、preparation種別は証拠準備だけである。
 6. 子CMPが未登録なら、専用worktreeのTask-Listのみの登録PRを先にmainへ通す。レーン/ロット・対象クラス・子CMP・branchを親Issueへ宣言する。波とGradle束を混同せず、後続波未確定を第1波の追加前提にしない。
 7. 共有ファイル変更は指定ownerへ依頼し、依頼先/対象範囲/関連PR/必要な引渡し/状態をnoteへ追記する。相手APIの既存ファイルを無断編集しない。自領内の足軽もクラス/ファイルごとに分け、同じファイルを並行編集させない。
@@ -25,7 +25,7 @@ CMP-261021-0017 の複数大名として自領を運用してください。
 
 本陣のHEADが古くdirtyな場合、本陣へpullやresetをせず、`git fetch origin main` の後に `git show origin/main:docs/development/boundary-coordination.md` で本手順を読む。CLIが本陣に無くても、本陣の作業木を更新する必要はない。
 
-各大名はセッション固有の軽量な管理worktreeを標準とする。`git worktree add --detach --no-checkout <専用管理worktree> origin/main` で作成後、同worktreeで `git sparse-checkout set --no-cone` により `scripts/`、本manifest/guide、返済計画、`docs/task-list.md`、README/CLAUDE/AGENTS/TEST_CONVENTION、必要な `.claude/commands/` とスキルだけを配置する。`--no-checkout` を付けず全18,000超ファイルを先に展開すると、同じディスクを使う各セッションで空き容量を圧迫する。管理用worktreeは状態確認・調整操作だけに使い、実装足軽は規約どおり別の隔離worktreeを持つ。管理用worktreeの最新追従もdirty資産を保護し、作業再開時にmain上のCLI/manifestとの版一致を確認する。
+各大名はセッション固有の軽量な管理worktreeを標準とする。`git worktree add --detach --no-checkout <専用管理worktree> origin/main` で作成後、同worktreeで `git sparse-checkout set --no-cone` により `scripts/`、本manifest/guide、返済計画、`docs/task-list.md`、README/CLAUDE/AGENTS/TEST_CONVENTION、rootの `.gitignore`、必要な `.claude/commands/` とスキルだけを配置する。`.gitattributes` が将来追加された場合は同様に配置し、通常のignore・改行規則を保つ。`--no-checkout` を付けず全18,000超ファイルを先に展開すると、同じディスクを使う各セッションで空き容量を圧迫する。管理用worktreeは状態確認・調整操作だけに使い、実装足軽は規約どおり別の隔離worktreeを持つ。管理用worktreeの最新追従もdirty資産を保護し、作業再開時にmain上のCLI/manifestとの版一致を確認する。
 ## 配賦と所有
 
 追跡する[manifest](boundary-coordination.json)が全141レーンの領地を一意に定める。
