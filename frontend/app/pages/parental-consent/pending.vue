@@ -58,7 +58,7 @@ async function handleCancelInvitation(linkId: string) {
     notification.success(t('parental_consent.invite_cancelled'))
     await loadData()
   } catch {
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 

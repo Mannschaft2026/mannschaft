@@ -111,6 +111,7 @@
       "empty_history": "移籍履歴がありません"
     },
     "roster": {
+      "load_match": "読み込む",
       "title": "試合メンバー表",
       "submit": "提出",
       "apply_template": "テンプレを適用",

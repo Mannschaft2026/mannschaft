@@ -111,6 +111,7 @@
       "empty_history": "No transfer history"
     },
     "roster": {
+      "load_match": "Load",
       "title": "Match Roster",
       "submit": "Submit",
       "apply_template": "Apply Template",

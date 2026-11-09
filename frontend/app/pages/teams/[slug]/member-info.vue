@@ -24,7 +24,7 @@ async function loadResponses() {
       editValues.value[item.fieldId] = item.value
     }
   } catch {
-    notification.error(t('common.error.loadFailed'))
+    notification.error(t('memberProfile.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -42,7 +42,7 @@ async function saveAll() {
     notification.success(t('memberInfo.response.saved'))
     await loadResponses()
   } catch {
-    notification.error(t('common.error.saveFailed'))
+    notification.error(t('memberProfile.saveFailed'))
   } finally {
     saving.value = false
   }

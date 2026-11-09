@@ -111,6 +111,7 @@
       "empty_history": "Keine Transfer-Historie"
     },
     "roster": {
+      "load_match": "Laden",
       "title": "Spieler-Meldeliste",
       "submit": "Einreichen",
       "apply_template": "Vorlage anwenden",

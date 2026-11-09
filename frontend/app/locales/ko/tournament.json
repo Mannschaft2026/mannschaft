@@ -111,6 +111,7 @@
       "empty_history": "이적 이력이 없습니다"
     },
     "roster": {
+      "load_match": "불러오기",
       "title": "경기 멤버 명단",
       "submit": "제출",
       "apply_template": "템플릿 적용",

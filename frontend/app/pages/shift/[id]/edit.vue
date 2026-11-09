@@ -410,7 +410,7 @@ function formatDate(dateStr: string): string {
       <template #footer>
         <Button :label="t('common.cancel')" text @click="showBulkDialog = false" />
         <Button
-          :label="t('common.create')"
+          :label="t('button.create')"
           icon="pi pi-check"
           :loading="bulkCreating"
           :disabled="!bulkForm.fromDate || !bulkForm.toDate"
