@@ -1,14 +1,19 @@
 package com.mannschaft.app.chat.service;
 
+import com.mannschaft.app.chat.ChatGroupDmDerivedName;
 import com.mannschaft.app.chat.entity.ChatChannelMemberEntity;
 import com.mannschaft.app.chat.repository.ChatChannelMemberRepository;
+import com.mannschaft.app.common.NameResolverService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * チャンネルメンバーの一括照会サービス（CMP-261103-1225 / #4270 の N+1 解消用・read-only）。
@@ -27,6 +32,7 @@ import java.util.Map;
 public class ChatMemberBatchQueryService {
 
     private final ChatChannelMemberRepository chatChannelMemberRepository;
+    private final NameResolverService nameResolverService;
 
     /**
      * 指定ユーザーが参加しているチャンネルについて、チャンネル ID → 未読数を返す。
@@ -68,6 +74,42 @@ public class ChatMemberBatchQueryService {
                 .findByChannelIdInAndUserIdNotOrderByJoinedAtAscIdAsc(channelIds, userId)) {
             result.putIfAbsent(m.getChannelId(), m.getUserId());
         }
+        return result;
+    }
+
+    /**
+     * 名前なし GROUP_DM の導出表示名を、チャンネルごとに返す（CMP-261113-0110 ダッシュボードの導出名用）。
+     *
+     * <p>対象判定・並び順・連結は {@link ChatGroupDmDerivedName} に従い、チャンネル一覧・詳細の
+     * {@code ChannelResponse.derivedName} と同じ結果になる。参加者メンバー行は全チャンネル分を 1 クエリ、
+     * 参加者の表示名は {@link NameResolverService} で 1 クエリにまとめて取得する（チャンネル数に比例しない）。
+     * 取得できない（ソフトデリート等）参加者は {@value ChatGroupDmDerivedName#UNKNOWN_USER_NAME}。
+     * 他メンバーがいないチャンネルはキーを持たない（導出名 null）。</p>
+     *
+     * @param channelIds 導出対象（名前なし GROUP_DM）のチャンネル ID 群
+     * @param userId     導出名から除外するユーザー ID（呼出ユーザー）
+     * @return チャンネル ID → 導出名
+     */
+    public Map<Long, String> findGroupDmDerivedNameByChannel(Collection<Long> channelIds, Long userId) {
+        Map<Long, String> result = new HashMap<>();
+        if (channelIds == null || channelIds.isEmpty()) {
+            return result;
+        }
+        Map<Long, List<Long>> orderedUserIdsByChannel = ChatGroupDmDerivedName.orderedOtherUserIdsByChannel(
+                chatChannelMemberRepository.findByChannelIdInAndUserIdNotOrderByJoinedAtAscIdAsc(channelIds, userId),
+                userId);
+        Set<Long> userIds = new HashSet<>();
+        orderedUserIdsByChannel.values().forEach(userIds::addAll);
+        if (userIds.isEmpty()) {
+            return result;
+        }
+        Map<Long, String> displayNameByUserId = nameResolverService.resolveUserDisplayNames(userIds);
+        orderedUserIdsByChannel.forEach((channelId, orderedUserIds) -> {
+            String derived = ChatGroupDmDerivedName.format(orderedUserIds, displayNameByUserId::get);
+            if (derived != null) {
+                result.put(channelId, derived);
+            }
+        });
         return result;
     }
 }

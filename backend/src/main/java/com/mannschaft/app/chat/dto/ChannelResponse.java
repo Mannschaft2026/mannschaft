@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
  *   <li>{@code memberCount} — チャンネルのメンバー総数。</li>
  *   <li>{@code dmPartner} — DM の場合の「呼出ユーザー以外の相手」。DM 以外は {@code null}。</li>
  *   <li>{@code viewer} — 呼出ユーザー自身のメンバー状態（未読・ミュート等）。非メンバー/未認証時は {@code null}。</li>
+ *   <li>{@code derivedName} — 名前なし GROUP_DM の参加者名からの導出表示名（CMP-261113-0110）。それ以外は {@code null}。</li>
  * </ul>
  */
 @Builder(toBuilder = true)
@@ -41,7 +42,8 @@ public class ChannelResponse {
     /**
      * 名前なし GROUP_DM（Zimmer）の表示名を参加者名から導出したもの（per-user 拡張・CMP-261113-0110）。
      * GROUP_DM かつ明示名が null/空白のときだけ値を持ち、それ以外は null。DB の name 列には書かない。
-     * （試練段階ではフィールドのみ定義。導出ロジックは出陣で実装する）
+     * 規則（並び順・先頭3名＋" +N"・退会者は "ユーザー"・自分以外0名は null）は
+     * {@link com.mannschaft.app.chat.ChatGroupDmDerivedName} を参照。
      */
     private String derivedName;
 
