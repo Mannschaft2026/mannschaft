@@ -6,7 +6,6 @@ import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.chat.ChannelMemberRole;
 import com.mannschaft.app.chat.ChannelType;
 import com.mannschaft.app.chat.ChatErrorCode;
-import com.mannschaft.app.chat.ChatGroupDmDerivedName;
 import com.mannschaft.app.chat.ChatMapper;
 import com.mannschaft.app.chat.dto.ChannelResponse;
 import com.mannschaft.app.chat.dto.CreateChannelRequest;
@@ -85,9 +84,9 @@ public class ChatChannelService {
     /**
      * ユーザーが参加しているチャンネル一覧を取得する。
      *
-     * <p>各チャンネルに per-user 拡張（memberCount / viewer / dmPartner / derivedName）を付与する。
-     * N+1 を避けるため、メンバー行・メンバー数・DM 相手・名前なし GROUP_DM の導出名はいずれも
-     * チャンネル数に依存しない一括クエリで取得する（AC-B7 / CMP-261113-0110 AC-11）。</p>
+     * <p>各チャンネルに per-user 拡張（memberCount / viewer / dmPartner）を付与する。
+     * N+1 を避けるため、メンバー行・メンバー数・DM 相手はいずれもチャンネル数に依存しない
+     * 一括クエリで取得する（AC-B7）。</p>
      *
      * @param userId ユーザーID
      * @return チャンネルレスポンスリスト
@@ -114,20 +113,16 @@ public class ChatChannelService {
         // dmPartner: DM チャンネルのみ、相手メンバー＋相手ユーザーを一括取得
         Map<Long, ChannelResponse.DmPartnerDto> dmPartnerByChannel = resolveDmPartners(channels, userId);
 
-        // derivedName: 名前なし GROUP_DM のみ、参加者メンバー＋参加者ユーザーを一括取得
-        Map<Long, String> derivedNameByChannel = resolveDerivedNames(channels, userId);
-
         return channels.stream()
                 .map(ch -> enrichChannel(ch,
                         myMemberByChannel.get(ch.getId()),
                         memberCountByChannel.get(ch.getId()),
-                        dmPartnerByChannel.get(ch.getId()),
-                        derivedNameByChannel.get(ch.getId())))
+                        dmPartnerByChannel.get(ch.getId())))
                 .toList();
     }
 
     /**
-     * チャンネル詳細を取得する。per-user 拡張（memberCount / viewer / dmPartner / derivedName）を付与する。
+     * チャンネル詳細を取得する。per-user 拡張（memberCount / viewer / dmPartner）を付与する。
      *
      * <p><b>認可</b>: 本メソッドは認可を持たない tx 本体である。メンバーシップ管理種別でチャンネルメンバーで
      * あることの確認（DM の相手・関係グラフの列挙防止）は {@link ChatChannelFacade#getChannel} が
@@ -138,26 +133,21 @@ public class ChatChannelService {
      * @return チャンネルレスポンス
      */
     public ChannelResponse getChannel(Long channelId, Long userId) {
-        return enrichSingle(findChannelOrThrow(channelId), userId);
-    }
+        ChatChannelEntity entity = findChannelOrThrow(channelId);
 
-    /**
-     * 単一チャンネルに per-user 拡張（memberCount / viewer / dmPartner / derivedName）を付与する。
-     *
-     * <p>詳細取得と作成系（会話開始・Zimmer 招待・グループ変換）の応答が同じ拡張を返すよう、ここに集約する
-     * （CMP-261113-0110）。作成系では呼出元のトランザクション内で実行され、導出の失敗は作成ごと巻き戻る。</p>
-     */
-    private ChannelResponse enrichSingle(ChatChannelEntity entity, Long userId) {
-        Long channelId = entity.getId();
         ChatChannelMemberEntity myMember =
                 memberRepository.findByChannelIdAndUserId(channelId, userId).orElse(null);
         int memberCount = (int) memberRepository.countByChannelId(channelId);
 
-        // DM 相手・導出名は一覧と同じ一括解決を 1 チャンネル分で使い、一覧・詳細・作成応答の結果を揃える
-        ChannelResponse.DmPartnerDto dmPartner = resolveDmPartners(List.of(entity), userId).get(channelId);
-        String derivedName = resolveDerivedNames(List.of(entity), userId).get(channelId);
+        ChannelResponse.DmPartnerDto dmPartner = null;
+        if (entity.getChannelType() == ChannelType.DM) {
+            dmPartner = memberRepository.findByChannelIdAndUserIdNot(channelId, userId).stream()
+                    .findFirst()
+                    .map(pm -> toDmPartner(pm, userRepository.findById(pm.getUserId()).orElse(null)))
+                    .orElse(null);
+        }
 
-        return enrichChannel(entity, myMember, memberCount, dmPartner, derivedName);
+        return enrichChannel(entity, myMember, memberCount, dmPartner);
     }
 
     /**
@@ -171,7 +161,7 @@ public class ChatChannelService {
                 .map(ChatChannelEntity::getId)
                 .toList();
         if (dmChannelIds.isEmpty()) {
-            return new HashMap<>();
+            return Map.of();
         }
 
         List<ChatChannelMemberEntity> partnerMembers =
@@ -192,60 +182,12 @@ public class ChatChannelService {
     }
 
     /**
-     * 名前なし GROUP_DM の導出表示名を一括解決する（CMP-261113-0110）。
-     *
-     * <p>対象判定・並び順・連結は {@link ChatGroupDmDerivedName} に従う。参加者メンバー行と参加者ユーザーを
-     * それぞれ 1 クエリで取得し、チャンネル数に比例する SQL を発行しない。対象がなければ SQL を発行しない。
-     * 参加者がいないチャンネルはキーを持たない（導出名 null）。</p>
-     *
-     * @param channels 対象候補のチャンネル群
-     * @param viewerId 呼出ユーザー ID（導出名から除外する）
-     * @return チャンネル ID → 導出名
-     */
-    private Map<Long, String> resolveDerivedNames(List<ChatChannelEntity> channels, Long viewerId) {
-        List<Long> targetIds = channels.stream()
-                .filter(c -> ChatGroupDmDerivedName.isTarget(c.getChannelType(), c.getName()))
-                .map(ChatChannelEntity::getId)
-                .toList();
-        if (targetIds.isEmpty()) {
-            return new HashMap<>();
-        }
-        List<ChatChannelMemberEntity> participantMembers =
-                memberRepository.findByChannelIdInAndUserIdNot(targetIds, viewerId);
-        Map<Long, List<Long>> orderedUserIdsByChannel =
-                ChatGroupDmDerivedName.orderedOtherUserIdsByChannel(participantMembers, viewerId);
-        if (orderedUserIdsByChannel.isEmpty()) {
-            return new HashMap<>();
-        }
-        Map<Long, UserEntity> userById = userRepository.findAllById(orderedUserIdsByChannel.values().stream()
-                        .flatMap(List::stream)
-                        .distinct()
-                        .toList()).stream()
-                .collect(Collectors.toMap(UserEntity::getId, u -> u, (a, b) -> a));
-        // 表示名とフォールバック（"ユーザー"）は DM 相手の解決（toDmPartner）と同じ規則を使う
-        Map<Long, String> displayNameByUserId = new HashMap<>();
-        for (ChatChannelMemberEntity member : participantMembers) {
-            displayNameByUserId.computeIfAbsent(member.getUserId(),
-                    id -> toDmPartner(member, userById.get(id)).displayName());
-        }
-        Map<Long, String> result = new HashMap<>();
-        orderedUserIdsByChannel.forEach((channelId, orderedUserIds) -> {
-            String derived = ChatGroupDmDerivedName.format(orderedUserIds, displayNameByUserId::get);
-            if (derived != null) {
-                result.put(channelId, derived);
-            }
-        });
-        return result;
-    }
-
-    /**
      * ベース変換（{@link ChatMapper#toChannelResponse}）に per-user 拡張を付与する。
      */
     private ChannelResponse enrichChannel(ChatChannelEntity entity,
                                           ChatChannelMemberEntity myMember,
                                           Integer memberCount,
-                                          ChannelResponse.DmPartnerDto dmPartner,
-                                          String derivedName) {
+                                          ChannelResponse.DmPartnerDto dmPartner) {
         ChannelResponse base = chatMapper.toChannelResponse(entity);
         if (base == null) {
             return null;
@@ -254,8 +196,20 @@ public class ChatChannelService {
                 .memberCount(memberCount)
                 .viewer(buildViewer(myMember))
                 .dmPartner(dmPartner)
-                .derivedName(derivedName)
                 .build();
+    }
+
+    /**
+     * 作成系（会話開始・Zimmer 招待・グループ変換）の応答に、一覧・詳細と同じ memberCount / viewer を付与する
+     * （CMP-261113-0110）。chat ドメインの表だけを読む。DM 相手（dmPartner）と GROUP_DM の導出名（derivedName）は
+     * ユーザー（auth ドメイン）の表示名が要るため、トランザクションの外で {@link ChatGroupDmDerivedNameResolver} 等が付ける。
+     */
+    private ChannelResponse enrichCreated(ChatChannelEntity entity, Long callerId) {
+        Long channelId = entity.getId();
+        ChatChannelMemberEntity myMember =
+                memberRepository.findByChannelIdAndUserId(channelId, callerId).orElse(null);
+        int memberCount = (int) memberRepository.countByChannelId(channelId);
+        return enrichChannel(entity, myMember, memberCount, null);
     }
 
     /**
@@ -504,26 +458,22 @@ public class ChatChannelService {
             requireDmDeliverable(callerId, partnerId);
         }
 
-        StartedChannel started = userIds.size() == 1
-                ? startKabine(callerId, userIds.get(0))
-                : startZimmer(callerId, userIds);
-        // 応答は一覧・詳細と同じ per-user 拡張を付与する。Zimmer の導出名もこのトランザクション内で解決し、
-        // 失敗すれば作成ごと巻き戻る（CMP-261113-0110）。
-        return new ConversationResult(enrichSingle(started.channel(), callerId), started.created());
+        if (userIds.size() == 1) {
+            return startKabine(callerId, userIds.get(0));
+        } else {
+            return startZimmer(callerId, userIds);
+        }
     }
-
-    /** 会話開始で得たチャンネルと新規作成フラグ（応答の per-user 拡張は呼出元で付与する）。 */
-    private record StartedChannel(ChatChannelEntity channel, boolean created) {}
 
     /**
      * Kabine（1対1 DM）を開始する。既存があれば返却、なければ新規作成。
      */
-    private StartedChannel startKabine(Long callerId, Long partnerId) {
+    private ConversationResult startKabine(Long callerId, Long partnerId) {
         // 相手の受信可否は startConversation の入口で保証済み。
 
         // 既存 DM を検索
         return channelRepository.findExistingDm(callerId, partnerId)
-                .map(existing -> new StartedChannel(existing, false))
+                .map(existing -> new ConversationResult(enrichCreated(existing, callerId), false))
                 .orElseGet(() -> {
                     // 新規 DM 作成
                     ChatChannelEntity channel = ChatChannelEntity.builder()
@@ -536,14 +486,14 @@ public class ChatChannelService {
                     memberRepository.save(ChatChannelMemberEntity.builder()
                             .channelId(saved.getId()).userId(partnerId).role(ChannelMemberRole.MEMBER).build());
                     log.info("Kabine作成: channelId={}, callerId={}, partnerId={}", saved.getId(), callerId, partnerId);
-                    return new StartedChannel(saved, true);
+                    return new ConversationResult(enrichCreated(saved, callerId), true);
                 });
     }
 
     /**
      * Zimmer（グループDM）を開始する。常に新規作成。
      */
-    private StartedChannel startZimmer(Long callerId, List<Long> partnerIds) {
+    private ConversationResult startZimmer(Long callerId, List<Long> partnerIds) {
         // 全参加者の受信可否は startConversation の入口で保証済み。
 
         ChatChannelEntity channel = ChatChannelEntity.builder()
@@ -563,7 +513,7 @@ public class ChatChannelService {
         }
 
         log.info("Zimmer作成: channelId={}, callerId={}, members={}", saved.getId(), callerId, partnerIds.size() + 1);
-        return new StartedChannel(saved, true);
+        return new ConversationResult(enrichCreated(saved, callerId), true);
     }
 
     /**
@@ -649,9 +599,7 @@ public class ChatChannelService {
 
         log.info("Zimmer作成（Kabineから招待）: kabineId={}, zimmerId={}, callerId={}, shareHistory={}",
                 channelId, savedZimmer.getId(), callerId, request.isShareHistory());
-        // 応答は一覧・詳細と同じ per-user 拡張を付与する。導出名の解決もこのトランザクション内で行い、
-        // 失敗すれば Zimmer・メンバー・コピー履歴ごと巻き戻る（CMP-261113-0110 AC-16）。
-        return enrichSingle(savedZimmer, callerId);
+        return enrichCreated(savedZimmer, callerId);
     }
 
     /**
@@ -677,8 +625,7 @@ public class ChatChannelService {
         channel.convertToGroupDm();
         ChatChannelEntity saved = channelRepository.save(channel);
         log.info("DMをグループDMに変換: channelId={}, callerId={}", channelId, callerId);
-        // 応答は一覧・詳細と同じ per-user 拡張を付与する。導出の失敗は変換ごと巻き戻る（CMP-261113-0110 AC-16）。
-        return enrichSingle(saved, callerId);
+        return enrichCreated(saved, callerId);
     }
 
     /**

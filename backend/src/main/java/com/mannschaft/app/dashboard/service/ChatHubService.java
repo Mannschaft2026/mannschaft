@@ -124,7 +124,7 @@ public class ChatHubService {
         // CMP-261113-0110: 名前なし GROUP_DM の導出名を、チャンネル一覧・詳細と同じ規則で一括解決する
         //（chat ドメインの照会 Service 経由。チャンネル数に比例する SQL を発行しない）
         Map<Long, String> derivedNameByChannel = chatMemberBatchQueryService.findGroupDmDerivedNameByChannel(
-                ChatGroupDmDerivedName.targetChannelIds(dmChannelEntities), userId);
+                ChatGroupDmDerivedName.targetChannelIds(dmChannelEntities), userId, Map.of());
 
         // パートナー・連絡先ユーザーを 1 クエリで一括取得
         Set<Long> userIdsToResolve = new HashSet<>(dmChannelToPartnerUserId.values());

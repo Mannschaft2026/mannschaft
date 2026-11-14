@@ -3,6 +3,7 @@ package com.mannschaft.app.chat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
+import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.chat.dto.InviteToZimmerRequest;
 import com.mannschaft.app.chat.entity.ChatChannelEntity;
 import com.mannschaft.app.chat.entity.ChatChannelMemberEntity;
@@ -41,8 +42,10 @@ import static org.mockito.Mockito.reset;
 /**
  * CMP-261113-0110 AC-16: 作成系（invite-to-zimmer / convert-to-group）で導出処理が例外を投げたら全ロールバックする試練（red 先行）。
  *
- * <p><b>注入点</b>: 導出名の参加者ユーザー解決は、一覧の N+1 回避（AC-11）と同じく {@link UserRepository#findAllById}
- * による一括取得で行う契約とし、その呼出を {@link MockitoSpyBean} で例外化する。DB・認可・業務 Bean はモックしない
+ * <p><b>注入点</b>: 導出名の参加者の表示名は、一覧の N+1 回避（AC-11）と同じく {@link NameResolverService#resolveUserDisplayNames}
+ * による一括取得で行う契約とし、その呼出を {@link MockitoSpyBean} で例外化する（出陣時に UserRepository#findAllById から差し替え。
+ * chat の作成 tx から auth の Repository へ到達させない設計（番人 D-3T）にしたため、表示名は作成 tx の前に引く。
+ * 取得が失敗すれば作成処理は 1 行も書かずに失敗する）。DB・認可・業務 Bean はモックしない
  * （spy は既定で実処理へ委譲する）。注入点に実際に到達したことを {@link #tripped} で確認する
  * （到達していない rollback テストは緑でも無意味なため）。</p>
  *
@@ -56,7 +59,8 @@ class ChatGroupDmDerivedNameRollbackIT extends AbstractMySqlIntegrationTest {
 
     private static final LocalDateTime T0 = LocalDateTime.of(2026, 1, 1, 10, 0, 0);
 
-    @MockitoSpyBean private UserRepository userRepository;
+    @Autowired private UserRepository userRepository;
+    @MockitoSpyBean private NameResolverService nameResolverService;
     @Autowired private ChatChannelFacade channelFacade;
     @Autowired private ChatChannelRepository channelRepository;
     @Autowired private ChatChannelMemberRepository memberRepository;
@@ -99,7 +103,7 @@ class ChatGroupDmDerivedNameRollbackIT extends AbstractMySqlIntegrationTest {
 
     @AfterEach
     void 所有fixtureだけ片付ける() {
-        reset(userRepository);
+        reset(nameResolverService);
         if (ownedUsers.isEmpty()) {
             return;
         }
@@ -127,9 +131,9 @@ class ChatGroupDmDerivedNameRollbackIT extends AbstractMySqlIntegrationTest {
 
         armDerivationFailure();
         Throwable thrown = catchThrowable(() -> channelFacade.inviteToZimmer(kabine, me, request));
-        reset(userRepository);
+        reset(nameResolverService);
 
-        assertThat(tripped.get()).as("導出の注入点（UserRepository#findAllById）に到達したこと").isPositive();
+        assertThat(tripped.get()).as("導出の注入点（NameResolverService#resolveUserDisplayNames）に到達したこと").isPositive();
         assertThat(thrown).as("導出の例外が作成処理の失敗として呼出元へ伝わる").isNotNull();
         assertThat(countChannelsCreatedBy(me)).as("新 Zimmer が残らない").isEqualTo(channelsBefore);
         assertThat(jdbc.queryForObject(
@@ -148,22 +152,22 @@ class ChatGroupDmDerivedNameRollbackIT extends AbstractMySqlIntegrationTest {
     void ac16_convertToGroupの導出失敗で元DMのまま() {
         armDerivationFailure();
         Throwable thrown = catchThrowable(() -> channelFacade.convertToGroup(kabine, me));
-        reset(userRepository);
+        reset(nameResolverService);
 
-        assertThat(tripped.get()).as("導出の注入点（UserRepository#findAllById）に到達したこと").isPositive();
+        assertThat(tripped.get()).as("導出の注入点（NameResolverService#resolveUserDisplayNames）に到達したこと").isPositive();
         assertThat(thrown).as("導出の例外が変換処理の失敗として呼出元へ伝わる").isNotNull();
         assertThat(jdbc.queryForObject("SELECT channel_type FROM chat_channels WHERE id = ?", String.class, kabine))
                 .as("元 DM は DM のまま").isEqualTo("DM");
         assertThat(jdbc.queryForObject("SELECT name FROM chat_channels WHERE id = ?", String.class, kabine)).isNull();
     }
 
-    /** 導出のための参加者一括解決（findAllById）を、到達を数えつつ例外化する。 */
+    /** 導出のための参加者表示名の一括解決（NameResolverService#resolveUserDisplayNames）を、到達を数えつつ例外化する。 */
     private void armDerivationFailure() {
         tripped.set(0);
         doAnswer(invocation -> {
             tripped.incrementAndGet();
             throw new IllegalStateException("AC-16 検証用: 導出名の参加者解決を強制失敗させる");
-        }).when(userRepository).findAllById(any());
+        }).when(nameResolverService).resolveUserDisplayNames(any());
     }
 
     private long countChannelsCreatedBy(Long userId) {

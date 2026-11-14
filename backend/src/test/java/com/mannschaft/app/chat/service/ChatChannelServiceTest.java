@@ -665,10 +665,9 @@ class ChatChannelServiceTest {
             given(memberRepository.findByChannelIdAndUserId(CHANNEL_ID, USER_ID))
                     .willReturn(Optional.of(myMember));
             given(memberRepository.countByChannelId(CHANNEL_ID)).willReturn(2L);
-            // CMP-261113-0110: 詳細の DM 相手は一覧と同じ一括解決（1 チャンネル分）を使う
-            given(memberRepository.findByChannelIdInAndUserIdNot(List.of(CHANNEL_ID), USER_ID))
+            given(memberRepository.findByChannelIdAndUserIdNot(CHANNEL_ID, USER_ID))
                     .willReturn(List.of(partnerMember));
-            given(userRepository.findAllById(List.of(PARTNER_ID))).willReturn(List.of(partner));
+            given(userRepository.findById(PARTNER_ID)).willReturn(Optional.of(partner));
             given(chatMapper.toChannelResponse(dm)).willReturn(base("DM"));
 
             ChannelResponse result = chatChannelService.getChannel(CHANNEL_ID, USER_ID);
