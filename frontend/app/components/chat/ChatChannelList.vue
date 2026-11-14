@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useDebounceFn } from '@vueuse/core'
 import type { ChatChannelResponse } from '~/types/chat'
+import { resolveChannelDisplayName } from '~/utils/chat/channelDisplayName'
 import { useChatReadSync } from '~/composables/chat/useChatReadSync'
 import { useChatListSync } from '~/composables/chat/useChatListSync'
 
@@ -70,10 +71,7 @@ function selectInitialChannel() {
 }
 
 function getDisplayName(ch: ChatChannelResponse): string {
-  if (ch.dmPartner) {
-    return ch.dmPartner.displayName
-  }
-  return ch.meta.name || ''
+  return resolveChannelDisplayName(ch, t('chat.unnamedChannel'))
 }
 
 function getIcon(ch: ChatChannelResponse): string {

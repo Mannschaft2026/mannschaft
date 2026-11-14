@@ -63,6 +63,7 @@ function channel(id: number): ChatChannelResponse {
     audit: { createdBy: 42, createdAt: null, updatedAt: null },
     memberCount: 2,
     dmPartner: null,
+    derivedName: null,
     viewer: { unreadCount: 0, isMuted: false, isPinned: false, category: null, role: 'OWNER' },
   } as ChatChannelResponse
 }
