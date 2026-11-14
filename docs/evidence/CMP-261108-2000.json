@@ -22,8 +22,8 @@
       "description": "適格Nightly同attempt全6fresh/全3218key分類を保持し正式weights全blobを維持する",
       "tests": [
         {
-          "name": "Nightly43093835182 attempt2 input qualification; weights source/provenance and runtime revalidation",
-          "evidence": "docs/evidence/CMP-261108-2000/weights-source-manifest.json"
+          "name": "Nightly43093835182 attempt2 input qualification / canonical3218 weights保持",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
         }
       ]
     },
@@ -33,7 +33,7 @@
       "tests": [
         {
           "name": "compiled verifyShardCoverage 4profiles / production Integrity / independent review",
-          "evidence": "docs/evidence/CMP-261108-2000/runtime-revalidation.json"
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
         }
       ]
     },
