@@ -241,3 +241,35 @@ Core head `29e6cffe1ff89d6a49ecc827f77b2425c183f0c6` の全13CI（[Backend run43
 
 
 この台帳変更に合わせ、2026-11-14T10:19:16Zに通常GitHub同期806参照を成功させ、正本commit `20fe9166ba635d7e5169c4eee01abf802b48ccea` のraw LF入力からgenerator・validator・overlay自己検証を各1回実行し、全てexit0・不正10例拒否を確認した。台帳は720一意・全7列、raw LF SHA256 `4ee5d37b340f93ee62504b3042f76447ed2f08234733d3827081087f393edbe9` と生成pinが一致する。生成dataはWindows作業木CRLF bytesのSHA256 `202ffe6378ef9ddac2aa6fad213fda1c8ecedcb30dde0c9b7db8d7d0a8ff9c79`、Git正規LF bytesのSHA256 `68a13082c33e2140925583f0a0b3a527e9d88b4279d8c76efea8fdda9cef9e4e` を区別する。変更は生成時刻・source/sync metadataと、CoreのGitHub状態・別CMP0618の完了表示である。累積overlay85/85/154/21の全fieldとHTMLは不変。新bytesの実ボード再実行は行わず、旧自然clock実保存の資格を不変のoverlay/importerへ限定して保持する。親/all164 P4・支援子CMPの未完・Signage別P1を維持する。
+
+### 初回1型・支援7 PRの通常main採用と子CMP閉鎖（2026-11-14）
+
+Core [PR #4352](https://github.com/kenta-0420/mannschaft/pull/4352) の最終head `a820b2e959d6385ab7612e46b1c0208761e157a6` を通常mergeし、実mainは `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2`、tree `3615ac68a53c5906383c08cb5f52e986b0d17de0`、parentsは `816e7f251a8c640e2584e58987b162a31907981c` と同Core headだった。2026-11-14 13:50:18 UTCの公式readbackでCoreは13:50:14、closure #4410は13:50:15、他の支援6 PRは13:50:16 UTCにmerged、8 PRとも同merge commitを示した。全固定headのmain祖先関係と採用tree/内容保持を照合した。支援Draftの間接採用は実観測済みであり、個別Ready/最新main strictの成功とは扱わない。
+
+| 子CMP | 実装PR | 固定head | 同head成功CI run |
+|---|---:|---|---|
+| CMP-260916-1042 | #3644 | `609b42542a8b171391ef82fbc90d7e70fb7eefc2` | 43521999414 / 43521999225 |
+| CMP-261107-1243 | #4360 | `263b44d0479f12059f717ba0f8a132ea7acf75f2` | 43522021461 |
+| CMP-261107-2216 | #4376 | `9b30b8d71481f2bb40f43e34149e75fe1e6388e7` | 43522038681 |
+| CMP-261108-0922 | #4393 | `cf018785dbb20572e199ac92c58a071258691074` | 43522062154 |
+| CMP-261108-2000 | #4410 | `e011aa01973251df02e26ef181eb4b1476e5942c` | 43581628753 |
+| CMP-261110-2011 | #4459 | `870bd9829e8fd96e5ea33ad1c2881a9ef0275d65` | 43543300356 |
+| CMP-261112-0124 | #4493 | `217a61bc0a3103ddc5ff8294f506cb24bb5c4bfe` | 43522085986 |
+
+Core最終Backend [43598137238](https://github.com/kenta-0420/mannschaft/actions/runs/43598137238) の通常6 test taskは全FROM-CACHEで、078の同backend treeで得たfresh実測と区別する。Ready後の [43601101396](https://github.com/kenta-0420/mannschaft/actions/runs/43601101396) を含むCore全15 run成功を採択した。各子JSONのciは上表の実装headへ束縛し、CoreのCIを異なるleaf headへ流用しない。FE-only PRのbackend skipはbackend試験成功としない。マージ時点check/status世代のGitHub API照合は本docs PRのtrusted gateでも検査する。
+
+closure E011はownerの最新引渡しをrootが採択した。Backend [43581628753](https://github.com/kenta-0420/mannschaft/actions/runs/43581628753) attempt1は12 job成功、通常6 shardは同attemptのfresh実行で33,352件＝33,335成功・失敗0・17 skipだった。これは原ログ投影であり、XML errorsの独立集計値ではない。実checkout `9dd11c09a063dccf9f2895e86b3f1e5d0dc6d8a9` はE011からahead1/behind0/files0、whole tree `a06dec3339761c0001f06f3a1b134ca8c942feca` / backend tree `48bd535f2ddf886cefe6f8e9f64187e326bf6462` が一致した。compiled9,805/top-level3,591、全4 profile coverageと別JVM ArchUnit成功、frozen required4成功・最新24名23 success/正規週次skip1を確認した。正式weights全3,218 key、blob `1e3262d6f7c77fad72288d261d6afd75c8025003` / canonical LF SHA256 `6d5bea1188f56bbe293628278923c4172785a6adb1d2d96ead178a5c14d5acf0` を保持し、PR CIをweights入力にはしない。旧ABB/BCD資格の転用ではない。締め固有test-onlyと依存WSを含む実装PR全体appを区別し、実機/探索はrootの限定資格へ結ぶ。
+
+#### Org deferred回帰の原CIと再資格
+
+[原red1 42432423138](https://github.com/kenta-0420/mannschaft/actions/runs/42432423138) はhead `4c3b9e8ecdba4fd0e283a7eb381d101ec4819309` / checkout `c3637dc82c655811df1a31ee773b8c1974e0da18` で13件中10失敗/3成功。10失敗のうち製品9、helper1（INIT11のButton disabled prop expected false/undefined）だった。INIT01/03はname入力disabledの製品assertでありhelper失敗とはしない。[原red2 42435128487](https://github.com/kenta-0420/mannschaft/actions/runs/42435128487) はhead `51f90403e07985433f71bb595fc24c3ca69eb923` / checkout `ad3ff50ce4726248b8faa79dc2560d850931976c` で最終14件中INIT12所在地の製品1失敗/13成功。[原green 42437256353](https://github.com/kenta-0420/mannschaft/actions/runs/42437256353) はhead `4f2376b694679218997589114af9803bea90b1ee` / checkout `6e5f911702c7f1476213fce91b27bd72cb2a7012` で14成功、別既存unit3成功だった。各synthetic mergeの第一parentは `6cd103c824684a306a32cb4adfe7574be86dc35d`、第二parentは対応PR head。green原ログは個別名を列挙しないが、対象spec blobはred2と同一だった。
+
+原greenと現在CF018785はSFC `58c7acccab784c20790fa6a1b08b13fdb967390d`、最終spec `e6df1c96ecd2316b80a93fd12daf3704e3bb56e7`、既存unit `76ab2358902d9f588753091595daa76d572931e0`、Vitest config `efde3ac0dda7ce93e5d9e671cd1ef57a3ab34965`、lock `50f029a0309817f01df3d0a6bfa10d4e26635576` が同一。frontend全tree同一とはしない。現在package.jsonはunit後に `npm run test:ranch-production-artifact` を追加しており、この追加コマンドは歴史greenの資格には含まれない。
+
+2026-11-14の独立Linux再比較は標準Node22.23.2/npm10.9.8、CF018785 source・同固定最終specで、SFCだけを旧 `e47eaa5ac81d2cba83e22e97671be17dcd88bdda` に差し替えたredがnative1、14件中10製品assert失敗/4成功/pending0。INIT01/02/03/05 close・unmount/06/07/08/09/12の入力保護・早期PATCH拒否・遅着応答・所在地保持の欠陥を実測した。最終SFCへだけ戻したgreenはnative0、14/14成功、failure/pending0。frontend archive8,704入力中SFC以外変更0、spec/config/lock/package/setupは同一で、期待値・timeout・plugin・adapter変更0。これは新規再資格であり原CI回収とは別証拠、mock/deferred component試験であり実API/DB実機の代替ではない。Windows2回はbeforeAll120秒timeout・対象assert0の環境失敗を保持し、根因解消やwarm cache保証を主張しない。
+
+#### 閉鎖の範囲
+
+実機はR14 formal f1作成2＋f2残12、Card responsive/long/same-ID/normal2/unavailable/復元/empty、各対象のEC/Match分割・SG搬送限定等の既採択結果へ対応する。Card新spec追加0、空名はnull由来UNAVAILABLE境界だけで任意AVAILABLE空白全探索ではない。Match正式単体red1失敗/1成功→green2成功と、実WS m2＋remaining-only resumeを区別する。独立探索はR14/R15各担当の対象限定採択であり、5機能×3 roleの全組合せ成功ではない。stage passedは探索実施とroot裁定を表し、元R15 driverのac36Passed=false、goals/functional/transportClean/overallClean/native flags、原f2 false、旧失敗/unknownを変更しない。
+
+完了は上記7子CMPだけに限定する。親CMP-261021-0017・L1-R CMP-261028-2304の全164型はP4実装中、Signage CMP-261114-0713はP1未着手（許可仕様判断待ち）、独立tooling CMP-261114-1957はP2未着手を維持する。住民overlay85 persona/85 journey/154 insight/21 declared runsの全fieldとtrusted=false/observed-unverified、人工offline表示・試合timer復元の未実証2件を保持する。専用環境の撤去/選別証拠保持の既採択資格を維持し、所有WT/branch・foreign両resourceの最終整理はrootの全残務判定後の別工程とする。
