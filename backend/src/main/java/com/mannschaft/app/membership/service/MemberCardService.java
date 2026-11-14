@@ -132,9 +132,8 @@ public class MemberCardService {
     public ApiResponse<MemberCardDetailResponse> getCardDetail(Long cardId, Long userId) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
-        // 本人 or ADMIN/DEPUTY_ADMIN なら閲覧可
-        accessControlService.checkOwnerOrAdmin(
-                userId, card.getUserId(), card.getScopeId(), card.getScopeType().name());
+        // 本人 or そのスコープの ADMIN/DEPUTY_ADMIN なら閲覧可。権限なしは不在と同じ 404 に畳む（存在秘匿）
+        requireOwnerOrScopeAdminOrConceal(card, userId);
 
         MemberCardDetailResponse response = new MemberCardDetailResponse(
                 card.getId(),
@@ -163,8 +162,9 @@ public class MemberCardService {
     public ApiResponse<QrTokenResponse> getQrToken(Long cardId, Long userId) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
+        // 所有者以外は不在と同じ MEMBERSHIP_001（存在秘匿）。状態・ロール判定は所有者確認の後
         if (!card.getUserId().equals(userId)) {
-            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_002);
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
         }
 
         if (card.getStatus() != CardStatus.ACTIVE) {
@@ -198,8 +198,9 @@ public class MemberCardService {
     public ApiResponse<RegenerateResponse> regenerateQr(Long cardId, Long userId) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
+        // 所有者以外は不在と同じ MEMBERSHIP_001（存在秘匿）。状態・ロール判定は所有者確認の後
         if (!card.getUserId().equals(userId)) {
-            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_002);
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
         }
 
         // SUPPORTERロール以上であることを検証（GUEST不可）。
@@ -546,9 +547,8 @@ public class MemberCardService {
             Long cardId, Long userId, LocalDateTime from, LocalDateTime to) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
-        // 本人 or ADMIN/DEPUTY_ADMIN なら閲覧可
-        accessControlService.checkOwnerOrAdmin(
-                userId, card.getUserId(), card.getScopeId(), card.getScopeType().name());
+        // 本人 or そのスコープの ADMIN/DEPUTY_ADMIN なら閲覧可。権限なしは不在と同じ 404 に畳む（存在秘匿）
+        requireOwnerOrScopeAdminOrConceal(card, userId);
 
         if (from == null) {
             from = LocalDateTime.now().minusDays(30);
@@ -668,6 +668,22 @@ public class MemberCardService {
         }
         requireMemberOrConceal(card, currentUserId);
         accessControlService.checkAdminOrAbove(currentUserId, card.getScopeId(), card.getScopeType().name());
+    }
+
+    /**
+     * 本人、またはその会員証のスコープの ADMIN/DEPUTY_ADMIN のみ通す。それ以外は会員証不在と同じ
+     * MEMBERSHIP_001（404）を投げ、他人の会員証の存在を秘匿する。PLATFORM 会員証は本人のみ。
+     * 共通部品 {@code checkOwnerOrAdmin}（403 COMMON_002）は存在を漏らすため使わない。
+     */
+    private void requireOwnerOrScopeAdminOrConceal(MemberCardEntity card, Long userId) {
+        if (card.getUserId().equals(userId)) {
+            return;
+        }
+        boolean admin = card.getScopeType() != ScopeType.PLATFORM
+                && accessControlService.isAdminOrAbove(userId, card.getScopeId(), card.getScopeType().name());
+        if (!admin) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
+        }
     }
 
     private void requireMemberOrConceal(MemberCardEntity card, Long currentUserId) {

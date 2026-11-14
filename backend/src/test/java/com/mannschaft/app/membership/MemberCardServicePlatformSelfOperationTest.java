@@ -135,7 +135,7 @@ class MemberCardServicePlatformSelfOperationTest {
         assertThatThrownBy(() -> service.reactivate(CARD_ID))
                 .satisfies(e -> assertCode(e, MembershipErrorCode.MEMBERSHIP_001));
         assertThatThrownBy(() -> service.regenerateQr(CARD_ID, OTHER))
-                .satisfies(e -> assertCode(e, MembershipErrorCode.MEMBERSHIP_002));
+                .satisfies(e -> assertCode(e, MembershipErrorCode.MEMBERSHIP_001));
         verify(memberCardRepository, never()).save(any());
         verifyNoInteractions(accessControlService);
     }
