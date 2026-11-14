@@ -729,6 +729,7 @@
     "group": {
       "title": "Sammelbuchung",
       "slot_count": "30 Min. × {n} Zeitfenster",
+      "slot_count_total": "30 Min. × {n} Zeitfenster ({total} Min. gesamt)",
       "time_range": "Zeitraum",
       "auto_selected": "Die für {menu} benötigten {n} Zeitfenster wurden automatisch ausgewählt",
       "extend": "Zeitfenster verlängern",
