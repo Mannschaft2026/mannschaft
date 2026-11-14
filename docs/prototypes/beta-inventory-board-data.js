@@ -1,5 +1,5 @@
 window.BETA_INVENTORY_DATA = {
-  "generatedAt": "2026-11-14T12:54:55+00:00",
+  "generatedAt": "2026-11-14T14:01:17+00:00",
   "sources": {
     "inventory": "docs/inventory/feature-inventory.yaml",
     "taskList": "docs/task-list.md",
@@ -8,19 +8,19 @@ window.BETA_INVENTORY_DATA = {
     "b0Coverage": "docs/prototypes/beta-inventory-board-b0-coverage.json",
     "gate": "docs/prototypes/beta-inventory-board-gate.json",
     "inventoryCommit": "d61097a49227386d8b4044a2a6ced72fade5b50a",
-    "taskListCommit": "75e81405d9c2a8c50c091700575b690a3a9e513e",
+    "taskListCommit": "bdcbc69a8a47e297aabaaf905831d7f9df79209c",
     "inventorySha256": "b0a1f97197840c865756a40f12f577cfeb10aa8083dc95f2932f7b3a7f90528a",
-    "taskListSha256": "f661214488a3f8a3c36e1774220280001623a26584dae1527e3bc4c3e7084a5d",
+    "taskListSha256": "c63554794f6999f400c4244112a8d906b84a0d78a37c3db3f354ec3c7ec01c93",
     "decisionsSha256": "49dc59d8aa82e66c21579970c4cfed34f5e4e44ea731719c3bcfe43b6931f8d7",
     "gateSha256": "bb96e2277e7cabfa0bf4486f4564cdd08f70814e0f30290c63c00f2d1d21a000",
     "githubSnapshot": "docs/prototypes/beta-inventory-board-github.json",
-    "githubSnapshotSha256": "97df3f0c66213f271371f61d7575f814b87edc488dc5a7e94dd07ffa14be4c7c"
+    "githubSnapshotSha256": "c787ad191b57b9233a3cb36925e8b95147597a2466a69cb1fc0a98195521169c"
   },
   "sourceCounts": {
     "features": 44,
     "capabilities": 95,
     "splitParents": 33,
-    "campaigns": 720,
+    "campaigns": 721,
     "layer": {
       "能力": 26,
       "ドメイン": 18
@@ -37,11 +37,11 @@ window.BETA_INVENTORY_DATA = {
   "verification": {
     "raw": {
       "features": 44,
-      "campaigns": 720
+      "campaigns": 721
     },
     "parsed": {
       "features": 44,
-      "campaigns": 720,
+      "campaigns": 721,
       "core": 25,
       "noncore": 19,
       "blockers": 23,
@@ -26471,8 +26471,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-260916-1042",
       "title": "F02.9 お気に入りで TEAM と ORGANIZATION の同一IDが混線し、チームの「開く」が数値URLで404になる",
-      "status": "working",
-      "statusLabel": "P3 実装中",
+      "status": "done",
+      "statusLabel": "P3 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P3",
@@ -26487,12 +26487,12 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "—",
       "issues": [
         {
-          "label": "2026-09-16 CMP-033 のアリシゼーションで発見し、殿が隔離実機（FE:3001、BE:8082）で再現。FC東京U-15の「開く」で `/teams/2` に遷移し、`GET /api/v1/teams/2` と関連APIが404、画面は「情報を取得できませんでした」。原因1: `TeamFavoriteResolver` が `\"/teams/\" + team.getId()` を返し、現行slug URLと不一致。原因2: `FavoriteResolverService.resolveAll` が種別を含まない `entityId` だけをキーに `putAll` し、`FavoriteService` も同キーで取得するため、TEAM 1 と ORGANIZATION 1 のメタデータが衝突し、チームカードに組織名・組織URLが出る。CMP-033のセッション設計ACとは別戦役として扱う<br>2026-11-07: Draft #3644を引継ぎ再検証中。D1新違反2件（他domain EntityのgetSlug呼出）で実赤。修正前の実装中先行登録。",
+          "label": "登録時点の履歴: 2026-09-16 CMP-033 のアリシゼーションで発見し、殿が隔離実機（FE:3001、BE:8082）で再現。FC東京U-15の「開く」で `/teams/2` に遷移し、`GET /api/v1/teams/2` と関連APIが404、画面は「情報を取得できませんでした」。原因1: `TeamFavoriteResolver` が `\"/teams/\" + team.getId()` を返し、現行slug URLと不一致。原因2: `FavoriteResolverService.resolveAll` が種別を含まない `entityId` だけをキーに `putAll` し、`FavoriteService` も同キーで取得するため、TEAM 1 と ORGANIZATION 1 のメタデータが衝突し、チームカードに組織名・組織URLが出る。CMP-033のセッション設計ACとは別戦役として扱う<br>2026-11-07: Draft #3644を引継ぎ再検証中。D1新違反2件（他domain EntityのgetSlug呼出）で実赤。修正前の実装中先行登録。<br>2026-11-14採用: [実装PR #3644](https://github.com/kenta-0420/mannschaft/pull/3644) head `609b42542a8b171391ef82fbc90d7e70fb7eefc2`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-260916-1042.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "2026-09-16 CMP-033 のアリシゼーションで発見し、殿が隔離実機（FE:3001、BE:8082）で再現。FC東京U-15の「開く」で `/teams/2` に遷移し、`GET /api/v1/teams/2` と関連APIが404、画面は「情報を取得できませんでした」。原因1: `TeamFavoriteResolver` が `\"/teams/\" + team.getId()` を返し、現行slug URLと不一致。原因2: `FavoriteResolverService.resolveAll` が種別を含まない `entityId` だけをキーに `putAll` し、`FavoriteService` も同キーで取得するため、TEAM 1 と ORGANIZATION 1 のメタデータが衝突し、チームカードに組織名・組織URLが出る。CMP-033のセッション設計ACとは別戦役として扱う<br>2026-11-07: Draft #3644を引継ぎ再検証中。D1新違反2件（他domain EntityのgetSlug呼出）で実赤。修正前の実装中先行登録。"
+        "登録時点の履歴: 2026-09-16 CMP-033 のアリシゼーションで発見し、殿が隔離実機（FE:3001、BE:8082）で再現。FC東京U-15の「開く」で `/teams/2` に遷移し、`GET /api/v1/teams/2` と関連APIが404、画面は「情報を取得できませんでした」。原因1: `TeamFavoriteResolver` が `\"/teams/\" + team.getId()` を返し、現行slug URLと不一致。原因2: `FavoriteResolverService.resolveAll` が種別を含まない `entityId` だけをキーに `putAll` し、`FavoriteService` も同キーで取得するため、TEAM 1 と ORGANIZATION 1 のメタデータが衝突し、チームカードに組織名・組織URLが出る。CMP-033のセッション設計ACとは別戦役として扱う<br>2026-11-07: Draft #3644を引継ぎ再検証中。D1新違反2件（他domain EntityのgetSlug呼出）で実赤。修正前の実装中先行登録。<br>2026-11-14採用: [実装PR #3644](https://github.com/kenta-0420/mannschaft/pull/3644) head `609b42542a8b171391ef82fbc90d7e70fb7eefc2`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-260916-1042.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
@@ -26511,21 +26511,37 @@ window.BETA_INVENTORY_DATA = {
         "URL"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
       "githubRefs": [
-        3644
+        3644,
+        4352
       ],
       "github": [
         {
           "number": 3644,
           "kind": "pull_request",
-          "state": "open",
+          "state": "merged",
           "title": "お気に入りのTEAM・ORGANIZATION同ID混線と詳細URLを修正",
           "url": "https://github.com/kenta-0420/mannschaft/pull/3644",
-          "updatedAt": "2026-11-13T23:10:28Z",
+          "updatedAt": "2026-11-14T13:50:16Z",
           "ci": {
-            "status": "success",
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
             "checks": [],
             "source": "GraphQL statusCheckRollup"
           }
@@ -60392,12 +60408,13 @@ window.BETA_INVENTORY_DATA = {
         {
           "number": 4352,
           "kind": "pull_request",
-          "state": "open",
+          "state": "merged",
           "title": "L1-R初回名称正規化と支援修復の統合",
           "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
-          "updatedAt": "2026-11-14T12:16:10Z",
+          "updatedAt": "2026-11-14T13:50:14Z",
           "ci": {
-            "status": "success",
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
             "checks": [],
             "source": "GraphQL statusCheckRollup"
           }
@@ -63671,8 +63688,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-261107-1243",
       "title": "お気に入りのチーム・組織名称更新契約修正",
-      "status": "working",
-      "statusLabel": "P4 実装中",
+      "status": "done",
+      "statusLabel": "P4 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P4",
@@ -63687,12 +63704,12 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "PR #3644 / CMP-260916-1042",
       "issues": [
         {
-          "label": "L1-R実機で既存400/version欠落を確認。登録前の私有試作・単体回帰は保全するが適正な登録先行とは扱わない。PR #3644の正準URL提供に依存し、型検査・既存8件・CI・実機・独立探索は未完。製品公開は別途判断",
+          "label": "登録時点の履歴: L1-R実機で既存400/version欠落を確認。登録前の私有試作・単体回帰は保全するが適正な登録先行とは扱わない。PR #3644の正準URL提供に依存し、型検査・既存8件・CI・実機・独立探索は未完。製品公開は別途判断<br>2026-11-14採用: [実装PR #4360](https://github.com/kenta-0420/mannschaft/pull/4360) head `263b44d0479f12059f717ba0f8a132ea7acf75f2`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261107-1243.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "L1-R実機で既存400/version欠落を確認。登録前の私有試作・単体回帰は保全するが適正な登録先行とは扱わない。PR #3644の正準URL提供に依存し、型検査・既存8件・CI・実機・独立探索は未完。製品公開は別途判断"
+        "登録時点の履歴: L1-R実機で既存400/version欠落を確認。登録前の私有試作・単体回帰は保全するが適正な登録先行とは扱わない。PR #3644の正準URL提供に依存し、型検査・既存8件・CI・実機・独立探索は未完。製品公開は別途判断<br>2026-11-14採用: [実装PR #4360](https://github.com/kenta-0420/mannschaft/pull/4360) head `263b44d0479f12059f717ba0f8a132ea7acf75f2`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261107-1243.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
@@ -63708,21 +63725,52 @@ window.BETA_INVENTORY_DATA = {
         "CI"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
       "githubRefs": [
-        3644
+        3644,
+        4352,
+        4360
       ],
       "github": [
         {
           "number": 3644,
           "kind": "pull_request",
-          "state": "open",
+          "state": "merged",
           "title": "お気に入りのTEAM・ORGANIZATION同ID混線と詳細URLを修正",
           "url": "https://github.com/kenta-0420/mannschaft/pull/3644",
-          "updatedAt": "2026-11-13T23:10:28Z",
+          "updatedAt": "2026-11-14T13:50:16Z",
           "ci": {
-            "status": "success",
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4360,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "修正: お気に入り名称更新に正準slugと取得時versionを使用",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4360",
+          "updatedAt": "2026-11-14T13:50:16Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
             "checks": [],
             "source": "GraphQL statusCheckRollup"
           }
@@ -64131,8 +64179,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-261107-2216",
       "title": "お気に入りカードが狭いウィジェットで名称幅0になる不具合の修正",
-      "status": "working",
-      "statusLabel": "P3 実装中",
+      "status": "done",
+      "statusLabel": "P3 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P3",
@@ -64147,12 +64195,12 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "—",
       "issues": [
         {
-          "label": "実機で名称データが存在するのに描画幅0となる既存不具合を確認。単一行flex内で名称が縮み、操作群と種別badgeが縮まない構造。登録時点で製品修正と修正後の試験・実機・独立探索は未実施",
+          "label": "登録時点の履歴: 実機で名称データが存在するのに描画幅0となる既存不具合を確認。単一行flex内で名称が縮み、操作群と種別badgeが縮まない構造。登録時点で製品修正と修正後の試験・実機・独立探索は未実施<br>2026-11-14採用: [実装PR #4376](https://github.com/kenta-0420/mannschaft/pull/4376) head `9b30b8d71481f2bb40f43e34149e75fe1e6388e7`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261107-2216.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "実機で名称データが存在するのに描画幅0となる既存不具合を確認。単一行flex内で名称が縮み、操作群と種別badgeが縮まない構造。登録時点で製品修正と修正後の試験・実機・独立探索は未実施"
+        "登録時点の履歴: 実機で名称データが存在するのに描画幅0となる既存不具合を確認。単一行flex内で名称が縮み、操作群と種別badgeが縮まない構造。登録時点で製品修正と修正後の試験・実機・独立探索は未実施<br>2026-11-14採用: [実装PR #4376](https://github.com/kenta-0420/mannschaft/pull/4376) head `9b30b8d71481f2bb40f43e34149e75fe1e6388e7`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261107-2216.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
@@ -64164,10 +64212,42 @@ window.BETA_INVENTORY_DATA = {
         "CI"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
-      "githubRefs": [],
-      "github": []
+      "githubRefs": [
+        4352,
+        4376
+      ],
+      "github": [
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4376,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "修正: 狭いお気に入りカードでも名称表示幅を確保",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4376",
+          "updatedAt": "2026-11-14T13:50:16Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        }
+      ]
     },
     {
       "id": "CMP-261108-0254",
@@ -64259,8 +64339,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-261108-0922",
       "title": "組織基本情報編集の初期化遅延による入力上書きを防ぐ",
-      "status": "working",
-      "statusLabel": "P3 実装中",
+      "status": "done",
+      "statusLabel": "P3 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P3",
@@ -64275,12 +64355,12 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "—",
       "issues": [
         {
-          "label": "実機で元名への復旧操作が変更後の名称を再送する事象を確認。初期化中も入力可能で、マスタ取得後にフォームを再設定する経路が存在する。登録時点では製品・テスト未変更、修正後の検証は未実施",
+          "label": "登録時点の履歴: 実機で元名への復旧操作が変更後の名称を再送する事象を確認。初期化中も入力可能で、マスタ取得後にフォームを再設定する経路が存在する。登録時点では製品・テスト未変更、修正後の検証は未実施<br>2026-11-14採用: [実装PR #4393](https://github.com/kenta-0420/mannschaft/pull/4393) head `cf018785dbb20572e199ac92c58a071258691074`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261108-0922.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "実機で元名への復旧操作が変更後の名称を再送する事象を確認。初期化中も入力可能で、マスタ取得後にフォームを再設定する経路が存在する。登録時点では製品・テスト未変更、修正後の検証は未実施"
+        "登録時点の履歴: 実機で元名への復旧操作が変更後の名称を再送する事象を確認。初期化中も入力可能で、マスタ取得後にフォームを再設定する経路が存在する。登録時点では製品・テスト未変更、修正後の検証は未実施<br>2026-11-14採用: [実装PR #4393](https://github.com/kenta-0420/mannschaft/pull/4393) head `cf018785dbb20572e199ac92c58a071258691074`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261108-0922.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
@@ -64296,10 +64376,42 @@ window.BETA_INVENTORY_DATA = {
         "CI"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
-      "githubRefs": [],
-      "github": []
+      "githubRefs": [
+        4352,
+        4393
+      ],
+      "github": [
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4393,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "修正: 組織基本情報の初期化による入力上書きを防ぐ",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4393",
+          "updatedAt": "2026-11-14T13:50:16Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        }
+      ]
     },
     {
       "id": "CMP-261108-1635",
@@ -65178,8 +65290,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-261108-2000",
       "title": "CMP-261021-0017 子: L-SHIME早期締め（全7store照合・上限引下げ・推移報告・nightly weights更新）",
-      "status": "working",
-      "statusLabel": "P4 実装中",
+      "status": "done",
+      "statusLabel": "P4 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P4",
@@ -65194,16 +65306,16 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "CMP-261021-0017、CMP-261021-2213（L1-F）",
       "issues": [
         {
-          "label": "owner e8ded143-7eea-4189-a530-7708882e1200、正規closure claim027449f2確定。登録時点で共有編集・製品/テスト変更・重量実行0。前回週次締め11/5からの早期締めとして全scopeを実施し、weightsだけの更新で完了にしない",
+          "label": "登録時点の履歴: owner e8ded143-7eea-4189-a530-7708882e1200、正規closure claim027449f2確定。登録時点で共有編集・製品/テスト変更・重量実行0。前回週次締め11/5からの早期締めとして全scopeを実施し、weightsだけの更新で完了にしない<br>2026-11-14採用: [実装PR #4410](https://github.com/kenta-0420/mannschaft/pull/4410) head `e011aa01973251df02e26ef181eb4b1476e5942c`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261108-2000.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "owner e8ded143-7eea-4189-a530-7708882e1200、正規closure claim027449f2確定。登録時点で共有編集・製品/テスト変更・重量実行0。前回週次締め11/5からの早期締めとして全scopeを実施し、weightsだけの更新で完了にしない"
+        "登録時点の履歴: owner e8ded143-7eea-4189-a530-7708882e1200、正規closure claim027449f2確定。登録時点で共有編集・製品/テスト変更・重量実行0。前回週次締め11/5からの早期締めとして全scopeを実施し、weightsだけの更新で完了にしない<br>2026-11-14採用: [実装PR #4410](https://github.com/kenta-0420/mannschaft/pull/4410) head `e011aa01973251df02e26ef181eb4b1476e5942c`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261108-2000.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
-        "親Issue #4022。番人判定・ストア本体・CI/timeout/shard/forkは変更しない。UI/API/DB変更のないtest-onlyで実機・画面探索は理由付き対象外、親/L5-Iは未完了"
+        "親Issue #4022。番人判定・ストア本体・CI/timeout/shard/forkは変更しない。登録時点の締め固有scopeはUI/API/DB変更のないtest-onlyと評価し、当時は実機・画面探索を理由付き対象外と説明した。依存WSを含む実装PR全体はappであり、親rootの限定実機/探索を根拠に完了を確定する。親/L5-Iは未完了<br>本締め固有のtest-only説明と、依存WSを含む実装PR全体のscope appを区別する。実機/探索は親rootの限定資格へ対応し、Signage別P1の解消や認可全体合格を主張しない。"
       ],
       "source": "docs/task-list.md",
       "sourceTokens": [
@@ -65228,10 +65340,12 @@ window.BETA_INVENTORY_DATA = {
         "CI"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
       "githubRefs": [
-        4022
+        4022,
+        4352,
+        4410
       ],
       "github": [
         {
@@ -65242,6 +65356,34 @@ window.BETA_INVENTORY_DATA = {
           "url": "https://github.com/kenta-0420/mannschaft/issues/4022",
           "updatedAt": "2026-11-12T23:49:00Z",
           "ci": null
+        },
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4410,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "整理: L-SHIME全7store58行を照合し上限とnightly weightsを更新",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4410",
+          "updatedAt": "2026-11-14T13:50:16Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
         }
       ]
     },
@@ -65738,8 +65880,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-261110-2011",
       "title": "WebSocket/STOMP拒否時のERROR送信と切断の競合を修正",
-      "status": "working",
-      "statusLabel": "P2 実装中",
+      "status": "done",
+      "statusLabel": "P2 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P2",
@@ -65754,16 +65896,16 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "—",
       "issues": [
         {
-          "label": "発見元CMP-261021-0017/L-SHIMEのCI run42722993345/a1。実Spring6.2.17で競合red、private試作21件greenは診断根拠。元CIの同並行順は未立証。製品実装・正式検証未実施、TaskList-onlyをmainへ先行登録する",
+          "label": "登録時点の履歴: 発見元CMP-261021-0017/L-SHIMEのCI run42722993345/a1。実Spring6.2.17で競合red、private試作21件greenは診断根拠。元CIの同並行順は未立証。製品実装・正式検証未実施、TaskList-onlyをmainへ先行登録する<br>2026-11-14採用: [実装PR #4459](https://github.com/kenta-0420/mannschaft/pull/4459) head `870bd9829e8fd96e5ea33ad1c2881a9ef0275d65`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261110-2011.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "発見元CMP-261021-0017/L-SHIMEのCI run42722993345/a1。実Spring6.2.17で競合red、private試作21件greenは診断根拠。元CIの同並行順は未立証。製品実装・正式検証未実施、TaskList-onlyをmainへ先行登録する"
+        "登録時点の履歴: 発見元CMP-261021-0017/L-SHIMEのCI run42722993345/a1。実Spring6.2.17で競合red、private試作21件greenは診断根拠。元CIの同並行順は未立証。製品実装・正式検証未実施、TaskList-onlyをmainへ先行登録する<br>2026-11-14採用: [実装PR #4459](https://github.com/kenta-0420/mannschaft/pull/4459) head `870bd9829e8fd96e5ea33ad1c2881a9ef0275d65`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261110-2011.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
-        "scope app。firstDuplicateNameNormalizer本体・既存6PRの差分、workflow・timeout・weights・freezeは変更しない"
+        "scope app。登録時点の固有WS修正はfirstDuplicateNameNormalizer本体・既存6PRの差分・workflow・timeout・weights・freezeを変更しない範囲と定めた。この履歴は、統合で採用した正式weightsの保持・再検証とは対象が異なり、その採用を否定しない"
       ],
       "source": "docs/task-list.md",
       "sourceTokens": [
@@ -65779,10 +65921,42 @@ window.BETA_INVENTORY_DATA = {
         "CI"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
-      "githubRefs": [],
-      "github": []
+      "githubRefs": [
+        4352,
+        4459
+      ],
+      "github": [
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4459,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "修正: STOMP終端ERRORの送信競合とfatal後のフレーム処理を修正",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4459",
+          "updatedAt": "2026-11-14T13:50:16Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        }
+      ]
     },
     {
       "id": "CMP-261110-0427",
@@ -67370,8 +67544,8 @@ window.BETA_INVENTORY_DATA = {
     {
       "id": "CMP-261112-0124",
       "title": "Matchライブ記録のNuxt初期化・終了処理を整合",
-      "status": "working",
-      "statusLabel": "P2 実装中",
+      "status": "done",
+      "statusLabel": "P2 完了",
       "stage": "未設定",
       "priority": "未設定",
       "taskPriority": "P2",
@@ -67386,12 +67560,12 @@ window.BETA_INVENTORY_DATA = {
       "blocker": "—",
       "issues": [
         {
-          "label": "[親Issue #4022](https://github.com/kenta-0420/mannschaft/issues/4022)",
+          "label": "登録時点の履歴: [親Issue #4022](https://github.com/kenta-0420/mannschaft/issues/4022)<br>2026-11-14採用: [実装PR #4493](https://github.com/kenta-0420/mannschaft/pull/4493) head `217a61bc0a3103ddc5ff8294f506cb24bb5c4bfe`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261112-0124.json)",
           "state": "unknown"
         }
       ],
       "prs": [
-        "[親Issue #4022](https://github.com/kenta-0420/mannschaft/issues/4022)"
+        "登録時点の履歴: [親Issue #4022](https://github.com/kenta-0420/mannschaft/issues/4022)<br>2026-11-14採用: [実装PR #4493](https://github.com/kenta-0420/mannschaft/pull/4493) head `217a61bc0a3103ddc5ff8294f506cb24bb5c4bfe`。Core #4352の通常merge `ea744bb67a19cc2a48adfe881236cb3ce4cea2d2` でmain採用。実PR merged・固定head到達/内容保持・同head成功CIと対象限定の実機/独立探索を照合。個別leaf Ready/strict成功は主張しない。[完了証拠](evidence/CMP-261112-0124.json)"
       ],
       "ci": "正本に記載された証拠を確認してください。",
       "refs": [
@@ -67405,10 +67579,12 @@ window.BETA_INVENTORY_DATA = {
         "entrypoint"
       ],
       "tags": [
-        "進行中"
+        "完了"
       ],
       "githubRefs": [
-        4022
+        4022,
+        4352,
+        4493
       ],
       "github": [
         {
@@ -67419,6 +67595,34 @@ window.BETA_INVENTORY_DATA = {
           "url": "https://github.com/kenta-0420/mannschaft/issues/4022",
           "updatedAt": "2026-11-12T23:49:00Z",
           "ci": null
+        },
+        {
+          "number": 4352,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "L1-R初回名称正規化と支援修復の統合",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
+          "updatedAt": "2026-11-14T13:50:14Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
+        },
+        {
+          "number": 4493,
+          "kind": "pull_request",
+          "state": "merged",
+          "title": "不具合修正: ライブ記録初期化でsetup外の注入解決を避ける",
+          "url": "https://github.com/kenta-0420/mannschaft/pull/4493",
+          "updatedAt": "2026-11-14T13:50:16Z",
+          "ci": {
+            "status": "unavailable",
+            "reason": "終了済みPRのCIは同期対象外",
+            "checks": [],
+            "source": "GraphQL statusCheckRollup"
+          }
         }
       ]
     },
@@ -67661,12 +67865,68 @@ window.BETA_INVENTORY_DATA = {
       ],
       "githubRefs": [],
       "github": []
+    },
+    {
+      "id": "CMP-261114-1957",
+      "title": "完了証拠ゲートがmainだけの完了リンク追加を古いPRによる削除と誤判定する",
+      "status": "not-started",
+      "statusLabel": "P2 未着手",
+      "stage": "未設定",
+      "priority": "未設定",
+      "taskPriority": "P2",
+      "audiences": [],
+      "featureKey": null,
+      "updated": "未設定",
+      "summary": "task-list.mdの正本表から生成。",
+      "nextAction": "AC1 trusted baseのvalidator実行境界を維持。AC2 mainだけの完了リンク追加とPR自身の削除を区別。AC3 真の過去完了行/JSON/リンク削除・差替えを拒否。AC4 ready_for_review/edited/synchronizeの回帰と既存scope/7列/重複/check世代検証を維持",
+      "acceptance": [
+        "AC1 trusted baseのvalidator実行境界を維持。AC2 mainだけの完了リンク追加とPR自身の削除を区別。AC3 真の過去完了行/JSON/リンク削除・差替えを拒否。AC4 ready_for_review/edited/synchronizeの回帰と既存scope/7列/重複/check世代検証を維持"
+      ],
+      "blocker": "—",
+      "issues": [
+        {
+          "label": "trusted main DCF2の実関数で支援7固定headを検証し、該当行はmerge-baseと同一だがmain-only完了リンクを削除扱いすることをroot確認。Core078は同局所選択に成功。独立tooling修復のため未着手、実装/新テスト未実施",
+          "state": "unknown"
+        }
+      ],
+      "prs": [
+        "trusted main DCF2の実関数で支援7固定headを検証し、該当行はmerge-baseと同一だがmain-only完了リンクを削除扱いすることをroot確認。Core078は同局所選択に成功。独立tooling修復のため未着手、実装/新テスト未実施"
+      ],
+      "ci": "正本に記載された証拠を確認してください。",
+      "refs": [
+        "今回の製品lotでvalidatorは変更しない。CoreのみReadyの原子採用と個別leaf保護成功を区別し、真の削除拒否とtrusted base境界を弱めない"
+      ],
+      "source": "docs/task-list.md",
+      "sourceTokens": [
+        "main",
+        "PR",
+        "AC1",
+        "trusted",
+        "base",
+        "validator",
+        "AC2",
+        "main",
+        "PR",
+        "AC3",
+        "JSON",
+        "AC4",
+        "ready_for_review",
+        "edited",
+        "synchronize",
+        "scope",
+        "check"
+      ],
+      "tags": [
+        "未着手"
+      ],
+      "githubRefs": [],
+      "github": []
     }
   ],
   "githubSync": {
     "schemaVersion": 1,
     "repository": "kenta-0420/mannschaft",
-    "synchronizedAt": "2026-11-14T12:51:45+00:00",
+    "synchronizedAt": "2026-11-14T13:58:40+00:00",
     "status": "synced",
     "error": null,
     "references": {
@@ -68175,7 +68435,8 @@ window.BETA_INVENTORY_DATA = {
         3086
       ],
       "CMP-260916-1042": [
-        3644
+        3644,
+        4352
       ],
       "CMP-260917-1206": [
         2880,
@@ -69790,7 +70051,9 @@ window.BETA_INVENTORY_DATA = {
         4353
       ],
       "CMP-261107-1243": [
-        3644
+        3644,
+        4352,
+        4360
       ],
       "CMP-261107-0740": [
         4290,
@@ -69806,12 +70069,18 @@ window.BETA_INVENTORY_DATA = {
       "CMP-261107-2136": [],
       "CMP-261107-1832": [],
       "CMP-261107-1833": [],
-      "CMP-261107-2216": [],
+      "CMP-261107-2216": [
+        4352,
+        4376
+      ],
       "CMP-261108-0254": [
         206,
         2634
       ],
-      "CMP-261108-0922": [],
+      "CMP-261108-0922": [
+        4352,
+        4393
+      ],
       "CMP-261108-1635": [
         4400
       ],
@@ -69842,7 +70111,9 @@ window.BETA_INVENTORY_DATA = {
         4392
       ],
       "CMP-261108-2000": [
-        4022
+        4022,
+        4352,
+        4410
       ],
       "CMP-261108-2026": [
         4418
@@ -69855,7 +70126,10 @@ window.BETA_INVENTORY_DATA = {
       "CMP-261110-0936": [],
       "CMP-261110-0937": [],
       "CMP-261110-0938": [],
-      "CMP-261110-2011": [],
+      "CMP-261110-2011": [
+        4352,
+        4459
+      ],
       "CMP-261110-0427": [
         4460
       ],
@@ -69910,7 +70184,9 @@ window.BETA_INVENTORY_DATA = {
       ],
       "CMP-261113-0211": [],
       "CMP-261112-0124": [
-        4022
+        4022,
+        4352,
+        4493
       ],
       "CMP-261113-1506": [],
       "CMP-261113-1507": [],
@@ -69918,7 +70194,8 @@ window.BETA_INVENTORY_DATA = {
         4308,
         4503
       ],
-      "CMP-261114-0713": []
+      "CMP-261114-0713": [],
+      "CMP-261114-1957": []
     },
     "items": {
       "206": {
@@ -76529,12 +76806,13 @@ window.BETA_INVENTORY_DATA = {
       "3644": {
         "number": 3644,
         "kind": "pull_request",
-        "state": "open",
+        "state": "merged",
         "title": "お気に入りのTEAM・ORGANIZATION同ID混線と詳細URLを修正",
         "url": "https://github.com/kenta-0420/mannschaft/pull/3644",
-        "updatedAt": "2026-11-13T23:10:28Z",
+        "updatedAt": "2026-11-14T13:50:16Z",
         "ci": {
-          "status": "success",
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
           "checks": [],
           "source": "GraphQL statusCheckRollup"
         }
@@ -80238,12 +80516,13 @@ window.BETA_INVENTORY_DATA = {
       "4352": {
         "number": 4352,
         "kind": "pull_request",
-        "state": "open",
+        "state": "merged",
         "title": "L1-R初回名称正規化と支援修復の統合",
         "url": "https://github.com/kenta-0420/mannschaft/pull/4352",
-        "updatedAt": "2026-11-14T12:16:10Z",
+        "updatedAt": "2026-11-14T13:50:14Z",
         "ci": {
-          "status": "success",
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
           "checks": [],
           "source": "GraphQL statusCheckRollup"
         }
@@ -80283,6 +80562,20 @@ window.BETA_INVENTORY_DATA = {
         "title": "修正: CMP-261105-1507 チームの学期・時間割をチーム単独で管理できるようにする",
         "url": "https://github.com/kenta-0420/mannschaft/pull/4358",
         "updatedAt": "2026-11-07T06:59:49Z",
+        "ci": {
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
+          "checks": [],
+          "source": "GraphQL statusCheckRollup"
+        }
+      },
+      "4360": {
+        "number": 4360,
+        "kind": "pull_request",
+        "state": "merged",
+        "title": "修正: お気に入り名称更新に正準slugと取得時versionを使用",
+        "url": "https://github.com/kenta-0420/mannschaft/pull/4360",
+        "updatedAt": "2026-11-14T13:50:16Z",
         "ci": {
           "status": "unavailable",
           "reason": "終了済みPRのCIは同期対象外",
@@ -80360,6 +80653,20 @@ window.BETA_INVENTORY_DATA = {
           "source": "GraphQL statusCheckRollup"
         }
       },
+      "4376": {
+        "number": 4376,
+        "kind": "pull_request",
+        "state": "merged",
+        "title": "修正: 狭いお気に入りカードでも名称表示幅を確保",
+        "url": "https://github.com/kenta-0420/mannschaft/pull/4376",
+        "updatedAt": "2026-11-14T13:50:16Z",
+        "ci": {
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
+          "checks": [],
+          "source": "GraphQL statusCheckRollup"
+        }
+      },
       "4382": {
         "number": 4382,
         "kind": "pull_request",
@@ -80381,6 +80688,20 @@ window.BETA_INVENTORY_DATA = {
         "title": "修正: LoyaltyPointsWriterIT の並列試験が止まるとCI打ち切りまで待つ欠陥を根治（CMP-261107-0740）",
         "url": "https://github.com/kenta-0420/mannschaft/pull/4392",
         "updatedAt": "2026-11-08T04:25:25Z",
+        "ci": {
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
+          "checks": [],
+          "source": "GraphQL statusCheckRollup"
+        }
+      },
+      "4393": {
+        "number": 4393,
+        "kind": "pull_request",
+        "state": "merged",
+        "title": "修正: 組織基本情報の初期化による入力上書きを防ぐ",
+        "url": "https://github.com/kenta-0420/mannschaft/pull/4393",
+        "updatedAt": "2026-11-14T13:50:16Z",
         "ci": {
           "status": "unavailable",
           "reason": "終了済みPRのCIは同期対象外",
@@ -80451,6 +80772,20 @@ window.BETA_INVENTORY_DATA = {
         "title": "文書: アリシゼーション run-20261108 の確定不備と判断保留16行を台帳に起票",
         "url": "https://github.com/kenta-0420/mannschaft/pull/4406",
         "updatedAt": "2026-11-08T11:03:48Z",
+        "ci": {
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
+          "checks": [],
+          "source": "GraphQL statusCheckRollup"
+        }
+      },
+      "4410": {
+        "number": 4410,
+        "kind": "pull_request",
+        "state": "merged",
+        "title": "整理: L-SHIME全7store58行を照合し上限とnightly weightsを更新",
+        "url": "https://github.com/kenta-0420/mannschaft/pull/4410",
+        "updatedAt": "2026-11-14T13:50:16Z",
         "ci": {
           "status": "unavailable",
           "reason": "終了済みPRのCIは同期対象外",
@@ -80589,6 +80924,20 @@ window.BETA_INVENTORY_DATA = {
         "title": "修正: CMP-261030-0648 管理者向け予約通知・問い合わせ通知・業務アラートの遷移先を slug にする",
         "url": "https://github.com/kenta-0420/mannschaft/pull/4457",
         "updatedAt": "2026-11-10T19:52:02Z",
+        "ci": {
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
+          "checks": [],
+          "source": "GraphQL statusCheckRollup"
+        }
+      },
+      "4459": {
+        "number": 4459,
+        "kind": "pull_request",
+        "state": "merged",
+        "title": "修正: STOMP終端ERRORの送信競合とfatal後のフレーム処理を修正",
+        "url": "https://github.com/kenta-0420/mannschaft/pull/4459",
+        "updatedAt": "2026-11-14T13:50:16Z",
         "ci": {
           "status": "unavailable",
           "reason": "終了済みPRのCIは同期対象外",
@@ -80763,6 +81112,20 @@ window.BETA_INVENTORY_DATA = {
           "source": "GraphQL statusCheckRollup"
         }
       },
+      "4493": {
+        "number": 4493,
+        "kind": "pull_request",
+        "state": "merged",
+        "title": "不具合修正: ライブ記録初期化でsetup外の注入解決を避ける",
+        "url": "https://github.com/kenta-0420/mannschaft/pull/4493",
+        "updatedAt": "2026-11-14T13:50:16Z",
+        "ci": {
+          "status": "unavailable",
+          "reason": "終了済みPRのCIは同期対象外",
+          "checks": [],
+          "source": "GraphQL statusCheckRollup"
+        }
+      },
       "4497": {
         "number": 4497,
         "kind": "pull_request",
@@ -80809,8 +81172,8 @@ window.BETA_INVENTORY_DATA = {
     "lastAttempt": {
       "status": "synced",
       "error": null,
-      "synchronizedAt": "2026-11-14T12:51:45+00:00",
-      "referenceCount": 806
+      "synchronizedAt": "2026-11-14T13:58:40+00:00",
+      "referenceCount": 812
     }
   }
 };
