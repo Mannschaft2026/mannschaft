@@ -213385,6 +213385,9 @@
           "audit": {
             "$ref": "#/components/schemas/ChannelAuditDto"
           },
+          "derivedName": {
+            "type": "string"
+          },
           "dmPartner": {
             "$ref": "#/components/schemas/DmPartnerDto"
           },
@@ -251760,6 +251763,9 @@
           "channelId": {
             "type": "integer",
             "format": "int64"
+          },
+          "derivedName": {
+            "type": "string"
           },
           "isMuted": {
             "type": "boolean"

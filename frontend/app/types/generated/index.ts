@@ -70651,6 +70651,7 @@ export interface components {
         };
         ChannelResponse: {
             audit?: components["schemas"]["ChannelAuditDto"];
+            derivedName?: string;
             dmPartner?: components["schemas"]["DmPartnerDto"];
             /** Format: int64 */
             id?: number;
@@ -85039,6 +85040,7 @@ export interface components {
         DirectMessageItemDto: {
             /** Format: int64 */
             channelId?: number;
+            derivedName?: string;
             isMuted?: boolean;
             isPinned?: boolean;
             /** Format: date-time */
