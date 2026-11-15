@@ -81,6 +81,7 @@ export function useSignageApi() {
   async function issueToken(screenId: number) {
     return api<{ data: SignageToken }>(`/api/v1/signage/screens/${screenId}/tokens`, {
       method: 'POST',
+      body: { name: null, allowedIps: null, expiredAt: null },
     })
   }
 
