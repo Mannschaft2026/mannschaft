@@ -58,6 +58,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -289,6 +290,36 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             awaitParentLock(thread);
         });
         assertDate(submitted.get().get(20, TimeUnit.SECONDS), NEW_DATE);
+    }
+
+    @Test
+    void 枠先読み後に希望提出がcommitしても確認なしの移動を拒否する() throws Exception {
+        CountDownLatch read = new CountDownLatch(1);
+        CountDownLatch move = new CountDownLatch(1);
+        CompletableFuture<Void> moving = CompletableFuture.runAsync(() -> tx.executeWithoutResult(s -> {
+            // 親ロック前の枠読取でRR snapshotを確立し、その後に増えた希望を見落とさないことを検査する。
+            slotRepository.findById(slotId).orElseThrow();
+            read.countDown();
+            awaitLatch(move);
+            UpdateShiftSlotRequest unconfirmed = objectMapper.convertValue(
+                    Map.of("slotDate", NEW_DATE.toString()), UpdateShiftSlotRequest.class);
+            slotService.updateSlot(slotId, unconfirmed, adminId);
+        }), executor);
+        try {
+            assertThat(read.await(20, TimeUnit.SECONDS)).isTrue();
+            // HTTP要求が完了した時点で、提出サービスの実TXもcommitしている。
+            mockMvc.perform(post("/api/v1/shifts/requests").with(authentication(auth(memberId)))
+                            .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(Map.of(
+                                    "scheduleId", scheduleId, "slotId", slotId,
+                                    "slotDate", OLD_DATE.toString(), "preference", "PREFERRED"))))
+                    .andExpect(status().isCreated());
+            String afterSubmission = snapshot();
+            move.countDown();
+            assertThatThrownBy(() -> moving.get(20, TimeUnit.SECONDS)).hasCauseInstanceOf(BusinessException.class);
+            assertThat(snapshot()).isEqualTo(afterSubmission);
+        } finally {
+            move.countDown();
+        }
     }
 
     @Test
