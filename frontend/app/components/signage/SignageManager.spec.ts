@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import SignageManager from './SignageManager.vue'
 
@@ -41,8 +41,6 @@ const Select = defineComponent({
     onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLSelectElement).value),
   }, props.options.map((option: { value: string; label: string }) => h('option', { value: option.value }, option.label))),
 })
-enableAutoUnmount(afterEach)
-
 function render() {
   return mount(SignageManager, {
     props: { scopeType: 'TEAM', scopeId: '42' },
