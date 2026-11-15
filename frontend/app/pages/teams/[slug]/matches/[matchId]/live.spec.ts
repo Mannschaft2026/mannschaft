@@ -122,7 +122,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  releaseEventGates.splice(0).forEach(release => release())
+  releaseEventGates.splice(0).forEach((release) => release())
   releaseDetail()
   useRuntimeConfig().public.apiBase = originalBase
   useAuthStore().user = originalUser
@@ -154,9 +154,14 @@ async function mountPage() {
 describe('ライブ記録画面の非同期初期化', () => {
   it('イベント取得待ちで離脱した後の成功応答はtimerや画面資源を作らない', async () => {
     let release!: () => void
-    const gate = new Promise<void>(resolve => { release = resolve })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
     releaseEventGates.push(release)
-    eventPlans.push({ gate, events: [{ id: 'late', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }] })
+    eventPlans.push({
+      gate,
+      events: [{ id: 'late', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }],
+    })
     const intervals = vi.spyOn(globalThis, 'setInterval')
     const addListener = vi.spyOn(window, 'addEventListener')
     const wrapper = await mountPage()
@@ -183,16 +188,23 @@ describe('ライブ記録画面の非同期初期化', () => {
   it('同時再試行の古い失敗応答は新しい成功セッションを停止しない', async () => {
     eventsFail = true
     const wrapper = await mountPage()
-    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true))
+    await vi.waitFor(() =>
+      expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true),
+    )
     const errorView = wrapper.findComponent({ name: 'DashboardErrorState' })
     const retry = errorView.vm.$.vnode.props!.onRetry as () => Promise<void>
     let release!: () => void
-    const gate = new Promise<void>(resolve => { release = resolve })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
     releaseEventGates.push(release)
     eventsFail = false
     eventPlans.push(
       { gate, status: 403 },
-      { gate: Promise.resolve(), events: [{ id: 'fresh', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }] },
+      {
+        gate: Promise.resolve(),
+        events: [{ id: 'fresh', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }],
+      },
     )
     const previousResponses = eventResponses
     const previousRequests = eventRequests
@@ -200,7 +212,9 @@ describe('ライブ記録画面の非同期初期化', () => {
     void retry()
     await vi.waitFor(() => expect(eventRequests).toBe(previousRequests + 1))
     void retry()
-    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'MatchTimerControls' }).props('currentMinute')).toBe(17))
+    await vi.waitFor(() =>
+      expect(wrapper.findComponent({ name: 'MatchTimerControls' }).props('currentMinute')).toBe(17),
+    )
 
     release()
     await vi.waitFor(() => expect(eventResponses).toBe(previousResponses + 2))
