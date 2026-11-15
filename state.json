@@ -2,7 +2,7 @@
   "schema": 1,
   "campaign": "CMP-261021-0017",
   "manifest": "24a7e873fb7c08006fad3a77d4c3bda34507d5f294108d2dc2a2e8aa506d7960",
-  "operation": "53c87347-6005-4076-80ac-c3ba69b4e10f",
+  "operation": "e2003215-8bfd-45ea-9ffd-5c90570de588",
   "territories": {
     "foundation": {
       "owner": "f6efb6d3-51e1-4408-a760-92f7d3642122",
@@ -18,7 +18,7 @@
     },
     "repayment-b": {
       "owner": "46ff84c5-72ea-40d5-9922-c34cfbd6b511",
-      "note": ""
+      "note": "2026-11-15 取得(claim30a81b9e)。親6891751333に宣言。全38ロットは依存L1-G(←L1-M working)とwave/pattern未充足のためplanning相当の読取準備のみ。家老2名でロット別の凍結行数・採用パターン候補・他領地への依頼候補を整理中。業務コード/ストア/共有資産変更0・足軽0・heavy0。マスター指示でL1-M照会(C5dae/common9af6停止)への回答をfoundationセッションへ伝達済(両担当のWT・稼働セッション不在を確認、repayment-cは台帳上未解放のまま)。管理WT agent-4022-admin-46ff84c5。"
     },
     "repayment-c": {
       "owner": "5dae09d2-9385-424c-b665-e6bd69c13586",
