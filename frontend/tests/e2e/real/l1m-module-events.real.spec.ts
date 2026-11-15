@@ -5,7 +5,13 @@ import { loginViaApi } from '../fixtures/auth'
 import { waitForHydration } from '../helpers/wait'
 
 // L1-M（Modulith イベント基盤）の実機E2E。検体の基盤接続だけを検証する。C/F実業務採用・監査保持方針の証明には使わない。
-// 前提: BE を `cd backend && ./gradlew bootRunModuleEventE2e`（試験用検体入り・8081）で起動し、FE を 3001 で起動しておく。
+// 前提: 試験用検体入り BE を 8081 で、FE を 3001 で起動しておく。手順の正本は
+//   backend/src/test/java/com/mannschaft/app/moduleevent/e2e/README.md。要点:
+//   - BE は Gradle 配下（bootRunModuleEventE2e）ではなく、`bootJar moduleEventE2eFixtureJar` の後に jar を
+//     PropertiesLauncher で `java` 直接起動し、シェルから切り離す（Gradle 配下はブラウザ負荷下で JVM が 0xC0000005 で落ちた。ホストのメモリ逼迫時は直接起動でも落ちうる）。
+//     引数に `--server.port=8081 --server.address=::`、環境に MANNSCHAFT_EMAIL_SIMULATE=true と
+//     MANNSCHAFT_ALLOWED_ORIGINS=http://localhost:3001,http://localhost:8081、本陣と同じ暗号鍵・R2 の環境変数が必須。
+//   - FE は `NUXT_PUBLIC_API_BASE=http://localhost:8081 npm run dev -- --port 3001`。
 //   BE が検体 actor 11名を生成して実行ディレクトリ（既定 backend/build/l1m-real-e2e、L1M_E2E_RUN_DIR で上書き）の
 //   actors.json に書き出し、state.json に検体状態を出し続ける。spec は controls/ に制御 command を置いて検体を進める。
 // 実行: L1M_E2E=1 BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 npx playwright test
@@ -118,7 +124,7 @@ async function actorsFromRunDirectory(run: string): Promise<Actor[]> {
   try {
     raw = await readFile(path.join(run, 'actors.json'), 'utf8')
   } catch (cause) {
-    throw new Error(`検体入りBE（./gradlew bootRunModuleEventE2e）の actors.json が読めない: ${run}`, { cause })
+    throw new Error(`検体入りBE（moduleevent/e2e/README.md の手順で起動）の actors.json が読めない: ${run}`, { cause })
   }
   const values: unknown = JSON.parse(raw)
   if (!Array.isArray(values) || values.length !== 11) throw new Error('専用actor集合が不正')
@@ -247,8 +253,13 @@ test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', as
       await expect(navigation).toBeVisible()
       await navigation.locator('a[href="/system-admin"]').click()
       await expect(page).toHaveURL(/\/system-admin$/)
+      // 一覧APIは登録バッチごとに直近ログを引くため数秒かかる（実測 約2.2秒、負荷下でexpect既定8秒を超えた）。
+      // 固定待ちではなく、画面が実際に発行した一覧取得の完了に同期してから表を確認する。
+      const listed = page.waitForResponse(value => value.request().method() === 'GET'
+        && new URL(value.url()).pathname === '/api/v1/system-admin/batch')
       await page.locator('a[href="/system-admin/batches"]').first().click()
       await expect(page).toHaveURL(/\/system-admin\/batches/)
+      expect((await listed).status()).toBe(200)
       await expect(page.locator('[data-test="batch-table"]')).toBeVisible()
       await page.locator('[data-test="detail-module-event-replay"]').click()
       await expect(page.getByRole('dialog')).toBeVisible()
@@ -288,6 +299,23 @@ test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', as
           await expect(page.locator('[data-test="run-sync-module-event-replay"]')).toHaveCount(0)
           await page.screenshot({ path: test.info().outputPath(`batch-denied-${code}-${target.endsWith('batches') ? 'batches' : 'index'}.png`), fullPage: true })
         }
+      }
+    })
+    await test.step('UI: 匿名で管理画面URLを直打ちするとログイン画面へ遷移する', async () => {
+      // 未ログインは auth middleware が system-admin middleware より先に /login?redirect=... へ送る既存契約。
+      const anonymous = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] },
+        locale: 'ja', timezoneId: 'Asia/Tokyo' })
+      contexts.push(anonymous)
+      await anonymous.addCookies([{ name: 'i18n_locale', value: 'ja', url: baseURL }])
+      const page = await anonymous.newPage()
+      for (const target of ['/system-admin', '/system-admin/batches']) {
+        await page.goto(target)
+        await expect(page).toHaveURL(/\/login(?:\?|$)/, { timeout: 30_000 })
+        expect(new URL(page.url()).searchParams.get('redirect')).toBe(target)
+        await expect(page.getByRole('button', { name: 'ログイン', exact: true })).toBeVisible()
+        await expect(page.locator('[data-test="batch-table"]')).toHaveCount(0)
+        await expect(page.locator('[data-test="run-sync-module-event-replay"]')).toHaveCount(0)
+        await page.screenshot({ path: test.info().outputPath(`batch-anonymous-${target.endsWith('batches') ? 'batches' : 'index'}.png`), fullPage: true })
       }
     })
     await test.step('UI: 既存bellクリックから通知一覧・6言語の永続配送文面', async () => {
