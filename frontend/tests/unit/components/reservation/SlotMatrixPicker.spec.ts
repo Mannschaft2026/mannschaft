@@ -193,6 +193,36 @@ describe('SlotMatrixPicker.vue', () => {
     expect(wrapper.findAll('[data-header-index]').length).toBe(0)
   })
 
+  it('CMP-261115-0543-1: 英語UIの日付トグルは日本語の曜日を含まず英語の曜日になる', async () => {
+    mockGetLines.mockResolvedValue({ data: [activeLine] })
+    mockGetSlotGrid.mockResolvedValue(gridResponseWithCells())
+
+    const wrapper = await mountSuspended(SlotMatrixPicker, {
+      props: { teamId: 'team-slug', isAdmin: false },
+    })
+    await flushRaw()
+
+    const toggle = await findDateToggle(wrapper, tomorrow)
+    const label = toggle?.textContent ?? ''
+    expect(label).not.toMatch(/[぀-ヿ一-鿿]/)
+    expect(label).toMatch(/\((Mon|Tue|Wed|Thu|Fri|Sat|Sun)\)/)
+  })
+
+  it('CMP-261115-0543-3: 週ナビ行の「全て開く」ボタンは折り返さず、ナビ行は折り返し可能でタップ領域を確保する', async () => {
+    mockGetLines.mockResolvedValue({ data: [activeLine] })
+    mockGetSlotGrid.mockResolvedValue(gridResponseWithCells())
+
+    const wrapper = await mountSuspended(SlotMatrixPicker, {
+      props: { teamId: 'team-slug', isAdmin: false },
+    })
+    await flushRaw()
+
+    const btn = wrapper.find('[data-testid="matrix-toggle-all"]')
+    expect(btn.classes()).toContain('whitespace-nowrap')
+    expect(btn.classes()).toContain('min-h-11')
+    expect(btn.element.parentElement?.classList.contains('flex-wrap')).toBe(true)
+  })
+
   it('AC-18: 自分の予約済み満席セルは予約済み表示かつ操作不能で、キャンセル待ちを開かない', async () => {
     mockGetLines.mockResolvedValue({ data: [activeLine] })
     mockGetSlotGrid.mockResolvedValue({

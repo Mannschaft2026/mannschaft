@@ -729,6 +729,7 @@
     "group": {
       "title": "まとめて予約",
       "slot_count": "30分×{n}枠",
+      "slot_count_total": "30分×{n}枠（計{total}分）",
       "time_range": "対象時間帯",
       "auto_selected": "{menu}に必要な{n}枠を自動で選びました",
       "extend": "枠を延長",
