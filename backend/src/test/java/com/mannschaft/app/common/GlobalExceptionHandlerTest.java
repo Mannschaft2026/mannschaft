@@ -722,7 +722,8 @@ class GlobalExceptionHandlerTest {
                     .build();
 
             // When / Then
-            mockMvc.perform(get("/test-rse"))
+            // CMP-261113-1507: 日本語 reason をそのまま返すのは ja の利用者に限る（standalone MockMvc の既定ロケールは en）。
+            mockMvc.perform(get("/test-rse").locale(java.util.Locale.JAPANESE))
                     .andExpect(status().isUnprocessableEntity())
                     .andExpect(jsonPath("$.error.code").value("COMMON_001"))
                     .andExpect(jsonPath("$.error.message").value("画像の枚数が上限に達しています"));
