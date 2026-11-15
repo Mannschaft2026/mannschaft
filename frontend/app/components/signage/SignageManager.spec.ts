@@ -74,6 +74,16 @@ describe('サイネージ管理のBE enum契約', () => {
     expect(api.issueToken).toHaveBeenCalledExactlyOnceWith(1, '既存画面')
   })
 
+  it('BEが返すnameをトークン行の表示名として表示する', async () => {
+    api.getTokens.mockResolvedValue({ data: [{ id: 1, screenId: 1, token: 'unit-test-token', name: '実DTOの端末名', createdAt: '2026-01-01T00:00:00' }] })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '管理')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('p.text-sm.font-medium').text()).toBe('実DTOの端末名')
+  })
+
   // 取得成功0件の既存表示を固定するcharacterization（初回からgreen）。
   it('画面一覧の取得成功0件では空表示と追加導線を表示する', async () => {
     api.getScreens.mockResolvedValueOnce({ data: [] })
