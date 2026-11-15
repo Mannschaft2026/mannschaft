@@ -326,7 +326,7 @@ async function handleDeleteSlot(slot: SignageSlot) {
 async function handleIssueToken() {
   if (!selectedScreen.value) return
   try {
-    await issueToken(selectedScreen.value.id)
+    await issueToken(selectedScreen.value.id, selectedScreen.value.name)
     success('トークンを発行しました')
     await loadTokens(selectedScreen.value.id)
   } catch {
@@ -603,7 +603,7 @@ onMounted(loadScreens)
               class="flex items-center gap-2 rounded-lg border border-surface-200 p-3 dark:border-surface-700"
             >
               <div class="min-w-0 flex-1">
-                <p v-if="token.label" class="text-sm font-medium">{{ token.label }}</p>
+                <p v-if="token.name" class="text-sm font-medium">{{ token.name }}</p>
                 <p class="truncate font-mono text-xs text-surface-500">{{ token.token }}</p>
                 <p v-if="token.lastSeenAt" class="mt-0.5 text-xs text-surface-400">
                   最終接続: {{ formatDateTime(token.lastSeenAt) }}

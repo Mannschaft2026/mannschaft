@@ -37,7 +37,7 @@ export interface SignageToken {
   id: number
   screenId: number
   token: string
-  label: string | null
+  name: string
   lastSeenAt: string | null
   createdAt: string
 }

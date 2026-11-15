@@ -7,6 +7,8 @@ import com.mannschaft.app.signage.entity.SignageAccessTokenEntity;
 import com.mannschaft.app.signage.entity.SignageScreenEntity;
 import com.mannschaft.app.signage.repository.SignageAccessTokenRepository;
 import com.mannschaft.app.signage.repository.SignageScreenRepository;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,8 @@ public class SignageAccessTokenService {
      * トークン発行リクエスト DTO。
      */
     public record IssueSignageTokenRequest(
+            @NotBlank
+            @Size(max = 100)
             String name,
             /** 許可IPアドレスリスト（CIDR表記可。nullの場合は全許可） */
             List<String> allowedIps,
