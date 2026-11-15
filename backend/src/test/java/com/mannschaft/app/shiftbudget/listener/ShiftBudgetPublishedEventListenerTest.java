@@ -279,6 +279,13 @@ class ShiftBudgetPublishedEventListenerTest {
 
     /** 時給未設定シナリオの共通スタブ（org 解決 → フラグ ON → slot 1 件 → allocation あり → 時給なし）。 */
     private void givenMissingHourlyRate() {
+        givenResolvedSlotForUser();
+        given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), any()))
+                .willReturn(Optional.empty());
+    }
+
+    /** org 解決 → フラグ ON → slot 1 件 → allocation あり（時給は各テストで与える）。 */
+    private void givenResolvedSlotForUser() {
         given(allocationRepository.findOrganizationIdsWithTeamAllocationContaining(eq(TEAM_ID), any()))
                 .willReturn(List.of(ORG_ID));
         given(featureService.isEnabled(ORG_ID)).willReturn(true);
@@ -286,8 +293,6 @@ class ShiftBudgetPublishedEventListenerTest {
                 .willReturn(List.of(sampleSlotWithUser(7L, USER_ID)));
         given(allocationRepository.findContainingPeriod(eq(ORG_ID), eq(TEAM_ID), any()))
                 .willReturn(Optional.of(allocationWithId()));
-        given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), any()))
-                .willReturn(Optional.empty());
     }
 
     @Test
@@ -414,7 +419,7 @@ class ShiftBudgetPublishedEventListenerTest {
     @org.junit.jupiter.params.ParameterizedTest(name = "CMP-261115-1821 G08: 時給 {0} は計上せず通知と組織別 failed_event に残す")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "-1"})
     void 非正数の時給は計上せず通知とfailedEventに残す(String rateText) {
-        givenMissingHourlyRate();
+        givenResolvedSlotForUser();
         given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), any()))
                 .willReturn(Optional.of(ShiftHourlyRateEntity.builder()
                         .userId(USER_ID).teamId(TEAM_ID).hourlyRate(new BigDecimal(rateText))
