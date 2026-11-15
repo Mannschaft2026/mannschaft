@@ -196,7 +196,7 @@ public class OrganizationMembershipService {
                 continue;
             }
             result.add(new OrgTeamMembershipView(
-                    team.getId(),
+                    m.getTeamId(),
                     team.getSlug(),
                     team.getName(),
                     team.getVisibility().name(),
