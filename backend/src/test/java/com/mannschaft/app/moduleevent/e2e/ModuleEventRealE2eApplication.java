@@ -1,25 +1,19 @@
 package com.mannschaft.app.moduleevent.e2e;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.MannschaftApplication;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
-import java.security.MessageDigest;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.HexFormat;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
@@ -27,295 +21,158 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /**
- * M21専用の実App host。通常main＋明示Fixturesだけを起動し、同hostの検体gateを制御する。
- * 実行はroot別承認後。production CPと専用3source由来JAR以外のproject testclassesを載せない。
- * 新HTTP/製品設定は追加しない。監査保持/C・F業務接続の証明には使わない。
+ * L1-M 実機E2E用の BE 起動入口（2026-11-15 マスター裁可 S4）。
+ *
+ * <p>本番には ReliableEvent の採用がないため、通常の {@link MannschaftApplication} に
+ * 試験用の検体 {@link ModuleEventRealE2eFixtures} を明示登録して起動する。
+ * 起動は {@code ./gradlew bootRunModuleEventE2e}（既定 8081・local プロファイル・通常の MySQL/Valkey）。
+ *
+ * <p>実行ディレクトリ（既定 {@code backend/build/l1m-real-e2e}、環境変数 {@code L1M_E2E_RUN_DIR} で上書き）へ
+ * 検体 actor の資格情報 {@code actors.json} と検体状態 {@code state.json} を書き出し、
+ * {@code controls/} 配下に spec が作るファイルを制御コマンドとして受け取る。
+ * 終了（Ctrl+C か {@code controls/shutdown}）時に、検体が生成した ID のデータだけを撤去する。
+ * 製品 resolver や C/F 実業務の接続証明には使わない。
  */
 public final class ModuleEventRealE2eApplication {
+    static final String RUN_DIR_ENV = "L1M_E2E_RUN_DIR";
+    private static final AtomicBoolean STOPPING = new AtomicBoolean(false);
+    private static final Set<String> COMMANDS = Set.of("release-delayed", "revoke-and-seed-quarantine", "release-last");
+
     private ModuleEventRealE2eApplication() { }
-    public static void main(String[] args) throws Throwable {
-        Path parent = Path.of(required("M21_RUN_DIR")).toAbsolutePath().normalize();
-        Path temporary = Path.of(System.getProperty("java.io.tmpdir")).toRealPath();
-        ModuleEventRealE2eFixtures.require(parent.startsWith(temporary) && Files.isDirectory(parent)
-                && parent.toRealPath().startsWith(temporary), "自己Temp以外では開始しない");
-        Path run = Files.createDirectory(parent.resolve("m21-" + UUID.randomUUID()));
-        Path controls = Files.createDirectory(run.resolve("controls"));
-        Path frontend = Path.of(required("M21_FRONTEND_DIR")).toRealPath();
-        Path cli = frontend.resolve("node_modules/@playwright/test/cli.js");
-        ModuleEventRealE2eFixtures.require(Files.isRegularFile(cli), "既存Playwright依存が必要。自動installしない");
-        ModuleEventRealE2eFixtures.require(ModuleEventRealE2eApplication.class.getClassLoader()
-                .getResource("com/mannschaft/app/moduleevent/ModuleEventRegistryIT.class") == null,
-                "他project testclassesをCPへ混入させない");
-        // 最終統合HEADのproduction CPはrootが明示する。限定compile用の旧CPとは区別する。
-        String productionCp = required("M21_PRODUCTION_CP");
-        Path fixtureJar = Path.of(required("M21_FIXTURE_JAR")).toRealPath();
-        ModuleEventRealE2eFixtures.require(Files.isRegularFile(fixtureJar)
-                && System.getProperty("java.class.path").equals(productionCp + java.io.File.pathSeparator + fixtureJar),
-                "最終production CPと専用fixture JARを明示した起動だけを受け付ける");
+
+    public static void main(String[] args) throws Exception {
+        Path run = Path.of(System.getenv().getOrDefault(RUN_DIR_ENV, "build/l1m-real-e2e")).toAbsolutePath().normalize();
+        Path controls = run.resolve("controls");
+        prepareRunDirectory(run, controls);
         ObjectMapper json = new ObjectMapper().findAndRegisterModules();
         SpringApplication application = new SpringApplication(MannschaftApplication.class, ModuleEventRealE2eFixtures.class);
-        // default configurationの推測ではなく、上の2 Spring sourceだけを明示登録する。
         application.addInitializers(context -> validate(context.getEnvironment()));
-        ConfigurableApplicationContext context = null;
-        Process child = null;
-        Instant childStarted = null;
-        Process residentHelper = null;
-        Instant helperStarted = null;
-        ModuleEventRealE2eFixtures.World world = null;
-        boolean formalPassed = false;
-        boolean explorationCompleted = false;
-        boolean passed = false;
-        Throwable problem = null;
+        // 検体の撤去を context close より先に行うため、Spring 既定の shutdown hook は使わず自前で順序を持つ。
+        application.setRegisterShutdownHook(false);
+        ConfigurableApplicationContext context = application.run(args);
+        ModuleEventRealE2eFixtures.Domain domain = context.getBean(ModuleEventRealE2eFixtures.Domain.class);
+        ModuleEventRealE2eFixtures.World world = context.getBean(ModuleEventRealE2eFixtures.World.class);
+        Thread hook = new Thread(() -> {
+            STOPPING.set(true);
+            shutdown(context, domain, world, run);
+        }, "l1m-real-e2e-shutdown");
+        Runtime.getRuntime().addShutdownHook(hook);
+        Set<String> accepted = new HashSet<>();
         try {
-            context = application.run(args);
-            ModuleEventRealE2eFixtures.Domain domain = context.getBean(ModuleEventRealE2eFixtures.Domain.class);
-            world = context.getBean(ModuleEventRealE2eFixtures.World.class);
             domain.seed();
+            write(json, run.resolve("actors.json"), world.credentials());
             write(json, run.resolve("state.json"), domain.snapshot());
-            ProcessBuilder builder = new ProcessBuilder(required("M21_NODE_EXE"), cli.toString(), "test",
-                    "tests/e2e/real/l1m-module-events.real.spec.ts", "--config=playwright-real.config.ts",
-                    "--project=chromium-real", "--no-deps", "--workers=1", "--retries=0", "--reporter=list",
-                    "--trace=on", "--output=" + run.resolve("playwright-results"));
-            builder.directory(frontend.toFile());
-            // 資格情報はprivate子process環境だけ。ファイル・コマンド引数・stdoutへ保存しない。
-            configureFormalEnvironment(builder, json.writeValueAsString(world.credentials()), run, required("BASE_URL"));
-            builder.redirectErrorStream(true).redirectOutput(run.resolve("playwright.raw.txt").toFile());
-            try (WatchService watcher = controls.getFileSystem().newWatchService()) {
-                controls.register(watcher, StandardWatchEventKinds.ENTRY_CREATE);
-                child = builder.start();
-                childStarted = child.info().startInstant().orElseThrow();
-                Instant deadline = Instant.now().plus(Duration.ofMinutes(10));
-                Set<String> accepted = new java.util.HashSet<>();
-                while (child.isAlive()) {
-                    ModuleEventRealE2eFixtures.require(Instant.now().isBefore(deadline), "M21子process待機上限");
-                    WatchKey key = watcher.poll(1, TimeUnit.SECONDS);
-                    if (key != null) {
-                        for (var event : key.pollEvents()) {
-                            ModuleEventRealE2eFixtures.require(event.kind() != StandardWatchEventKinds.OVERFLOW, "制御eventの欠損");
-                            String command = event.context().toString();
-                            ModuleEventRealE2eFixtures.require(accepted.add(command), "制御commandの重複");
-                            switch (command) {
-                                case "release-delayed" -> { world.release("delayed"); world.release("organization"); }
-                                case "revoke-and-seed-quarantine" -> domain.revokeAndSeedQuarantine();
-                                case "release-last" -> world.release("quarantine");
-                                default -> throw new IllegalStateException("未知のM21制御command");
-                            }
-                            Files.delete(controls.resolve(command));
+            System.out.println("[L1M-E2E] 検体を投入した。run=" + run);
+            while (!STOPPING.get() && !Files.exists(controls.resolve("shutdown"))) {
+                try (Stream<Path> files = Files.list(controls)) {
+                    for (Path file : files.sorted().toList()) {
+                        String command = file.getFileName().toString();
+                        if ("shutdown".equals(command)) continue;
+                        ModuleEventRealE2eFixtures.require(COMMANDS.contains(command), "未知の制御command: " + command);
+                        ModuleEventRealE2eFixtures.require(accepted.add(command), "制御commandの重複: " + command);
+                        switch (command) {
+                            case "release-delayed" -> { world.release("delayed"); world.release("organization"); }
+                            case "revoke-and-seed-quarantine" -> domain.revokeAndSeedQuarantine();
+                            case "release-last" -> world.release("quarantine");
+                            default -> throw new IllegalStateException("未知の制御command: " + command);
                         }
-                        ModuleEventRealE2eFixtures.require(key.reset(), "制御ディレクトリが失われた");
+                        Files.delete(file);
+                        System.out.println("[L1M-E2E] 制御command を処理した: " + command);
                     }
-                    write(json, run.resolve("state.json"), domain.snapshot());
                 }
-                ModuleEventRealE2eFixtures.require(child.waitFor() == 0, "実機spec失敗。private rawを確認");
-                JsonNode result = json.readTree(run.resolve("ui-result.json").toFile());
-                ModuleEventRealE2eFixtures.require(result.path("passed").asBoolean(false), "全step完了の証拠がない");
-                ModuleEventRealE2eFixtures.require(accepted.equals(Set.of("release-delayed", "revoke-and-seed-quarantine", "release-last")),
-                        "制御シナリオが未完了");
-                write(json, run.resolve("final-state.json"), domain.snapshot());
-                formalPassed = true;
-                residentHelper = startResidentHelper(json, run, temporary, world);
-                helperStarted = residentHelper.info().startInstant().orElseThrow();
-                write(json, run.resolve("resident-helper-owner.json"), Map.of("pid", residentHelper.pid(),
-                        "creation", helperStarted.toString(), "runId", run.getFileName().toString(),
-                        "executable", residentHelper.info().command().orElseThrow()));
-                awaitExploration(json, run, residentHelper);
-                explorationCompleted = true;
-                passed = true;
+                write(json, run.resolve("state.json"), domain.snapshot());
+                TimeUnit.MILLISECONDS.sleep(500);
             }
-        } catch (Throwable failure) {
-            problem = failure;
-        } finally {
-            problem = finishCleanup(json, run, context, world, child, childStarted, residentHelper,
-                    helperStarted, problem, passed, formalPassed, explorationCompleted).problem();
+        } catch (InterruptedException | RuntimeException | IOException failure) {
+            // shutdown hook 経由の終了中なら撤去は hook 側が行う。
+            if (STOPPING.get()) return;
+            // 投入・制御の失敗は隠さず表示し、検体を撤去してから異常終了する。
+            failure.printStackTrace();
+            Runtime.getRuntime().removeShutdownHook(hook);
+            shutdown(context, domain, world, run);
+            System.exit(1);
         }
-        if (problem != null) throw problem;
-        ModuleEventRealE2eFixtures.require(passed, "M21未合格");
+        if (STOPPING.get()) return;
+        Runtime.getRuntime().removeShutdownHook(hook);
+        shutdown(context, domain, world, run);
+        System.exit(0);
     }
 
-    /** formal孫には固定allowlistと生成actorだけを渡す。外側Tempと内側runは別でよい。 */
-    private static void configureFormalEnvironment(ProcessBuilder builder, String actors, Path run, String baseUrl) {
-        Map<String, String> environment = builder.environment();
-        Map<String, String> preserved = new HashMap<>();
-        for (String name : List.of("SystemRoot", "WINDIR", "TEMP", "TMP", "PLAYWRIGHT_BROWSERS_PATH")) {
-            String value = environment.get(name);
-            if (value != null) preserved.put(name, value);
+    /** 実行ディレクトリは本入口が所有する固定場所。前回の自己出力だけを消してから使う。 */
+    private static void prepareRunDirectory(Path run, Path controls) throws IOException {
+        Files.createDirectories(controls);
+        try (Stream<Path> files = Files.list(controls)) {
+            for (Path file : files.toList()) Files.delete(file);
         }
-        environment.clear();
-        environment.putAll(preserved);
-        environment.put("M21_ACTORS_JSON", actors);
-        environment.put("M21_RUN_DIRECTORY", run.toString());
-        environment.put("BASE_URL", baseUrl);
-        environment.put("API_BASE_URL", "http://localhost:8081");
-    }
-
-    private static Process startResidentHelper(ObjectMapper json, Path run, Path temporary,
-            ModuleEventRealE2eFixtures.World world) throws Exception {
-        Path helper = Path.of(required("M21_RESIDENT_HELPER")).toRealPath();
-        String expected = required("M21_RESIDENT_HELPER_SHA256");
-        ModuleEventRealE2eFixtures.require(helper.startsWith(temporary) && Files.isRegularFile(helper)
-                && helper.getFileName().toString().endsWith(".cjs") && Files.size(helper) <= 65536
-                && expected.matches("[a-fA-F0-9]{64}"), "自己Tempの固定helperとSHAが必要");
-        String actual = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(helper)));
-        ModuleEventRealE2eFixtures.require(actual.equalsIgnoreCase(expected), "住民helperのSHA不一致");
-        ProcessBuilder builder = new ProcessBuilder(required("M21_NODE_EXE"), helper.toString());
-        builder.directory(run.toFile());
-        builder.environment().clear();
-        // Nodeは絶対path、helperは標準moduleのみなのでPATHも親から継承しない。
-        for (String key : List.of("SystemRoot", "WINDIR", "TEMP", "TMP")) {
-            String value = System.getenv(key);
-            if (value != null) builder.environment().put(key, value);
-        }
-        // 同Windows信頼済み自己run・生成テスト資格情報だけ。ランダムpipe名を認可とは扱わない。
-        builder.environment().put("M21_RUN_DIRECTORY", run.toString());
-        builder.environment().put("M21_ACTORS_JSON", json.writeValueAsString(
-                ModuleEventRealE2eCleanup.residentCredentials(world.credentials(), ModuleEventRealE2eFixtures.Actor::code)));
-        builder.redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD);
-        return builder.start();
-    }
-
-    private static void awaitExploration(ObjectMapper json, Path run, Process helper) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofMinutes(30));
-        Path marker = run.resolve("controls/exploration-finished.json");
-        Path ready = run.resolve("exploration-ready.json");
-        try (WatchService watcher = run.getFileSystem().newWatchService()) {
-            marker.getParent().register(watcher, StandardWatchEventKinds.ENTRY_CREATE,
-                    StandardWatchEventKinds.ENTRY_MODIFY);
-            while (true) {
-                ModuleEventRealE2eFixtures.require(helper.isAlive(), "住民helperが早期終了した");
-                ModuleEventRealE2eFixtures.require(Instant.now().isBefore(deadline), "住民探索待機上限");
-                if (Files.exists(marker)) {
-                    JsonNode completion = readExplorationJson(json, marker);
-                    requireRun(completion, run);
-                    ModuleEventRealE2eFixtures.require(completion.path("passed").isBoolean()
-                            && completion.path("passed").booleanValue(), "住民探索が未完了");
-                    requireResidentCodes(completion.path("actorCodes"));
-                    JsonNode metadata = readExplorationJson(json, ready);
-                    requireRun(metadata, run);
-                    requireResidentCodes(metadata.path("actorCodes"));
-                    ModuleEventRealE2eFixtures.require(metadata.path("pid").asLong(-1) == helper.pid()
-                            && !metadata.path("creation").asText().isBlank()
-                            && metadata.path("pipe").asText().startsWith("\\\\.\\pipe\\m21-"), "住民helper準備証拠不正");
-                    JsonNode state = readExplorationJson(json, run.resolve("exploration-helper-state.json"));
-                    requireRun(state, run);
-                    requireResidentCodes(state.path("servedCodes"));
-                    ModuleEventRealE2eFixtures.require(state.path("pid").asLong(-1) == helper.pid()
-                            && state.path("failed").isBoolean() && !state.path("failed").booleanValue()
-                            && helper.isAlive(), "資格情報の受渡しが未完了");
-                    // markerは自律探索の証明ではない。rootが3住民の観測と終了を裏取りしてから作る。
-                    return;
-                }
-                WatchKey key = watcher.poll(1, TimeUnit.SECONDS);
-                if (key != null) {
-                    ModuleEventRealE2eFixtures.require(key.pollEvents().stream()
-                            .noneMatch(event -> event.kind() == StandardWatchEventKinds.OVERFLOW), "探索eventの欠損");
-                    ModuleEventRealE2eFixtures.require(key.reset(), "探索制御ディレクトリが失われた");
-                }
-            }
+        for (String name : List.of("actors.json", "state.json", "final-state.json")) {
+            Files.deleteIfExists(run.resolve(name));
         }
     }
 
-    private static JsonNode readExplorationJson(ObjectMapper json, Path path) throws Exception {
-        ModuleEventRealE2eFixtures.require(Files.isRegularFile(path) && Files.size(path) <= 16384,
-                "探索証拠がないか上限超過");
-        return json.reader().with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-                .readTree(Files.readAllBytes(path));
-    }
-
-    private static void requireRun(JsonNode value, Path run) {
-        ModuleEventRealE2eFixtures.require(value != null && value.isObject()
-                && value.path("runId").asText().equals(run.getFileName().toString()), "探索run不一致");
-    }
-
-    private static void requireResidentCodes(JsonNode value) {
-        ModuleEventRealE2eFixtures.require(value.isArray() && value.size() == 3, "住民は固定3件が必要");
-        Set<String> codes = new java.util.HashSet<>();
-        value.forEach(code -> ModuleEventRealE2eFixtures.require(code.isTextual() && codes.add(code.textValue()),
-                "住民code不正または重複"));
-        ModuleEventRealE2eFixtures.require(codes.equals(Set.of("system", "admin-de", "member")), "住民code不一致");
-    }
-
-    private static ModuleEventRealE2eCleanup finishCleanup(ObjectMapper json, Path run,
-            ConfigurableApplicationContext context, ModuleEventRealE2eFixtures.World world,
-            Process child, Instant childStarted, Process helper, Instant helperStarted, Throwable problem,
-            boolean passed, boolean formalPassed, boolean explorationCompleted) {
-        // rootは住民browserを終了確認してからmarkerを作る。自己資源の各回収は失敗を隔離する。
-        return ModuleEventRealE2eCleanup.finish(problem,
-                () -> ModuleEventRealE2eCleanup.stopOwnedProcess(helper, helperStarted, true),
-                () -> { if (world != null) world.releaseAll(); },
-                () -> ModuleEventRealE2eCleanup.stopOwnedProcess(child, childStarted, false),
-                () -> { if (context != null) stopWorkers(context); },
-                () -> {
-                    if (context != null && world != null && !world.users.isEmpty()) {
-                        context.getBean(ModuleEventRealE2eFixtures.Domain.class).cleanup();
-                    }
-                },
-                () -> { if (context != null) context.close(); },
-                cleanup -> write(json, run.resolve("host-result.json"), Map.of(
-                        "passed", passed && cleanup.problem() == null,
-                        "formalPassed", formalPassed, "explorationCompleted", explorationCompleted,
-                        "contextClosed", context == null || !context.isActive(), "cleanupStages", cleanup.stages(),
-                        "execution", "M21検体・実業務採用証明ではない",
-                        "resourceDisposal", "root所有wrapperが専用DB/Valkey/container/volumeと孤児子processを所有照合して撤去する")));
-    }
-
-    private static void validate(Environment environment) {
-        ModuleEventRealE2eFixtures.require(List.of(environment.getActiveProfiles()).equals(List.of("local")),
-                "local通常構成だけを使う。test/e2e/openapi-genを配送証明へ流用しない");
-        ModuleEventRealE2eFixtures.require(environment.getProperty("server.port", Integer.class, 8080) == 8081,
-                "自己BE8081だけを使う");
-        URI jdbc = URI.create(environment.getRequiredProperty("spring.datasource.url").substring("jdbc:".length()));
-        String database = jdbc.getPath().substring(1);
-        ModuleEventRealE2eFixtures.require("mysql".equals(jdbc.getScheme()) && loopback(jdbc.getHost())
-                && database.matches("m21_[a-f0-9]{32}") && database.equals(required("M21_DATABASE")),
-                "所有確認済み専用MySQL以外を拒否");
-        ModuleEventRealE2eFixtures.require(loopback(environment.getProperty("spring.data.redis.host", "localhost"))
-                && environment.getProperty("spring.data.redis.port", Integer.class, 6379) != 6379,
-                "共有Valkeyを使用しない");
-        ModuleEventRealE2eFixtures.require(environment.getProperty("mannschaft.email.simulate", Boolean.class, false),
-                "既存LoggingEmailTransportだけを使用する");
-        ModuleEventRealE2eFixtures.require(environment.getProperty("mannschaft.ses.sqs.queue-name", "").isBlank(),
-                "実SQS購読を開始しない");
-        for (String property : List.of("mannschaft.error-report.slack-webhook-url", "mannschaft.storage.endpoint", "mannschaft.ses.endpoint")) {
-            String target = environment.getProperty(property, "");
-            if (!target.isBlank()) {
-                URI url = URI.create(target);
-                ModuleEventRealE2eFixtures.require(loopback(url.getHost()) && "http".equals(url.getScheme())
-                        && List.of(System.getenv().getOrDefault("M21_OWN_LOOPBACK_URLS", "").split(",")).contains(target),
-                        "外部/所有不明の送信先を拒否");
-            }
+    /** 検体 gate 解放 → worker 停止 → 生成 ID 撤去 → context close。失敗は握りつぶさず標準エラーへ出す。 */
+    private static synchronized void shutdown(ConfigurableApplicationContext context,
+            ModuleEventRealE2eFixtures.Domain domain, ModuleEventRealE2eFixtures.World world, Path run) {
+        if (!context.isActive()) return;
+        List<Throwable> failures = new ArrayList<>();
+        attempt(failures, world::releaseAll);
+        attempt(failures, () -> stopWorkers(context));
+        attempt(failures, () -> write(new ObjectMapper().findAndRegisterModules(), run.resolve("final-state.json"), domain.snapshot()));
+        attempt(failures, () -> { if (!world.users.isEmpty()) domain.cleanup(); });
+        attempt(failures, () -> Files.deleteIfExists(run.resolve("actors.json")));
+        attempt(failures, context::close);
+        if (failures.isEmpty()) {
+            System.out.println("[L1M-E2E] 検体データを撤去して停止した。");
+            return;
         }
+        IllegalStateException problem = new IllegalStateException("L1-M 実機E2E 検体の撤去に失敗した。生成ID: " + world.users);
+        failures.forEach(problem::addSuppressed);
+        problem.printStackTrace();
     }
-    private static boolean loopback(String host) { return "localhost".equals(host) || "127.0.0.1".equals(host) || "::1".equals(host); }
-    private static String required(String name) {
-        String value = System.getenv(name);
-        ModuleEventRealE2eFixtures.require(value != null && !value.isBlank(), "M21 private環境が不足: " + name);
-        return value;
-    }
-    private static void stopWorkers(ConfigurableApplicationContext context) throws Throwable {
-        ModuleEventRealE2eCleanup cleanup = new ModuleEventRealE2eCleanup(null);
-        List<ThreadPoolTaskScheduler> schedulers = new java.util.ArrayList<>();
-        List<ThreadPoolTaskExecutor> executors = new java.util.ArrayList<>();
+
+    private interface Step { void run() throws Exception; }
+
+    private static void attempt(List<Throwable> failures, Step step) {
         try {
-            cleanup.attempt("scheduler-list", () -> schedulers.addAll(context.getBeansOfType(ThreadPoolTaskScheduler.class).values()));
-            cleanup.attempt("executor-list", () -> executors.addAll(context.getBeansOfType(ThreadPoolTaskExecutor.class).values()));
-            for (ThreadPoolTaskScheduler scheduler : schedulers) cleanup.attempt("scheduler-stop", scheduler::shutdown);
-            for (ThreadPoolTaskExecutor executor : executors) cleanup.attempt("executor-stop", executor::shutdown);
-            for (ThreadPoolTaskScheduler scheduler : schedulers) {
-                cleanup.attempt("scheduler-exit", () -> ModuleEventRealE2eFixtures.require(
-                        scheduler.getScheduledThreadPoolExecutor().awaitTermination(30, TimeUnit.SECONDS),
-                        "自己App schedulerが停止しなかった"));
-            }
-            for (ThreadPoolTaskExecutor executor : executors) {
-                cleanup.attempt("executor-exit", () -> ModuleEventRealE2eFixtures.require(
-                        executor.getThreadPoolExecutor().awaitTermination(30, TimeUnit.SECONDS),
-                        "自己App executorが停止しなかった"));
-            }
-        } finally {
-            cleanup.restoreInterrupt();
+            step.run();
+        } catch (Exception | Error failure) {
+            failures.add(failure);
         }
-        cleanup.throwIfFailed();
     }
-    private static void write(ObjectMapper mapper, Path target, Object value) throws Exception {
+
+    /** 本番・共有環境への誤投入を防ぐ。local 系の構成とループバックの MySQL だけを受け付ける。 */
+    private static void validate(Environment environment) {
+        List<String> profiles = List.of(environment.getActiveProfiles());
+        List<String> effective = profiles.isEmpty() ? List.of(environment.getDefaultProfiles()) : profiles;
+        ModuleEventRealE2eFixtures.require(effective.contains("local")
+                && effective.stream().noneMatch(Set.of("prod", "staging", "ci", "test")::contains),
+                "local プロファイル以外では起動しない: " + effective);
+        URI jdbc = URI.create(environment.getRequiredProperty("spring.datasource.url").substring("jdbc:".length()));
+        ModuleEventRealE2eFixtures.require("mysql".equals(jdbc.getScheme()) && loopback(jdbc.getHost()),
+                "ループバックの MySQL 以外へは検体を投入しない");
+        ModuleEventRealE2eFixtures.require(environment.getProperty("mannschaft.email.simulate", Boolean.class, false),
+                "メール送信は simulate（LoggingEmailTransport）に限る");
+    }
+
+    private static boolean loopback(String host) {
+        return "localhost".equals(host) || "127.0.0.1".equals(host) || "::1".equals(host);
+    }
+
+    private static void stopWorkers(ConfigurableApplicationContext context) throws InterruptedException {
+        List<ThreadPoolTaskScheduler> schedulers = List.copyOf(context.getBeansOfType(ThreadPoolTaskScheduler.class).values());
+        List<ThreadPoolTaskExecutor> executors = List.copyOf(context.getBeansOfType(ThreadPoolTaskExecutor.class).values());
+        schedulers.forEach(ThreadPoolTaskScheduler::shutdown);
+        executors.forEach(ThreadPoolTaskExecutor::shutdown);
+        for (ThreadPoolTaskScheduler scheduler : schedulers) {
+            ModuleEventRealE2eFixtures.require(scheduler.getScheduledThreadPoolExecutor().awaitTermination(30, TimeUnit.SECONDS),
+                    "scheduler が停止しなかった");
+        }
+        for (ThreadPoolTaskExecutor executor : executors) {
+            ModuleEventRealE2eFixtures.require(executor.getThreadPoolExecutor().awaitTermination(30, TimeUnit.SECONDS),
+                    "executor が停止しなかった");
+        }
+    }
+
+    private static void write(ObjectMapper mapper, Path target, Object value) throws IOException {
         Path next = target.resolveSibling(target.getFileName() + ".next");
         mapper.writerWithDefaultPrettyPrinter().writeValue(next.toFile(), value);
         Files.move(next, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);

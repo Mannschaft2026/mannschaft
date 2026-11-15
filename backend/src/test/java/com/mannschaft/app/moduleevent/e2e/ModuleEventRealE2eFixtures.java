@@ -53,18 +53,18 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /** 明示登録する実機専用検体。製品resolver/C・F業務の接続証明ではない。 */
 public class ModuleEventRealE2eFixtures {
-    public static final String KEY = "m21-real-e2e";
-    public static final String FIRST = "m21-real-first";
-    public static final String SECOND = "m21-real-second";
+    public static final String KEY = "l1m-real-e2e";
+    public static final String FIRST = "l1m-real-first";
+    public static final String SECOND = "l1m-real-second";
     public static final List<String> LOCALES = List.of("ja", "en", "zh", "ko", "es", "de");
 
-    @Bean World m21World() { return new World(); }
-    @Bean Domain m21Domain(EntityManager em, PasswordEncoder encoder, EventPublicationRepository publications,
+    @Bean World l1mE2eWorld() { return new World(); }
+    @Bean Domain l1mE2eDomain(EntityManager em, PasswordEncoder encoder, EventPublicationRepository publications,
             ApplicationEventPublisher publisher, World world) {
         return new Domain(em, encoder, publications, publisher, world);
     }
-    @Bean Resolver m21Resolver(Domain domain) { return new Resolver(domain); }
-    @Bean Listeners m21Listeners(Domain domain, World world) { return new Listeners(domain, world); }
+    @Bean Resolver l1mE2eResolver(Domain domain) { return new Resolver(domain); }
+    @Bean Listeners l1mE2eListeners(Domain domain, World world) { return new Listeners(domain, world); }
 
     public record Actor(String code, long userId, String email, String password, String locale) { }
     public record ProbeEvent(UUID operationId, UUID episodeId, Long organizationId, Long teamId,
@@ -132,20 +132,12 @@ public class ModuleEventRealE2eFixtures {
         }
         @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED, readOnly = false)
         public void seed() {
-            // hostの専用DB照合に加え、通常Flywayの基底だけを認める。基底行は変更・削除しない。
+            // 通常の開発DBへ追加投入する。既存行は読まず・変えず、run固有のメール/slugで自己生成分だけを識別する。
             require(world.users.isEmpty() && world.actors.isEmpty() && world.workflows.isEmpty()
                     && world.roles.isEmpty() && world.memberships.isEmpty() && world.affiliations.isEmpty()
-                    && world.teams.isEmpty() && world.organizations.isEmpty(), "M21検体は未作成でなければならない");
-            require(count("SELECT COUNT(*) FROM flyway_schema_history WHERE success=0") == 0
-                    && count("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND script IN "
-                            + "('V1.012__seed_system_user.sql','V12.004__seed_deleted_sentinel_user.sql')") == 2,
-                    "通常Flywayの基底migration成功が必要");
-            require(count("SELECT COUNT(*) FROM users") == 2
-                    && count("SELECT COUNT(*) FROM users WHERE id=1 AND email='system@mannschaft.local' "
-                            + "AND password_hash IS NULL AND status='ACTIVE'") == 1
-                    && count("SELECT COUNT(*) FROM users WHERE email='deleted@system.internal' "
-                            + "AND password_hash IS NULL AND status='ARCHIVED'") == 1,
-                    "M21は通常Flyway基底2行だけの専用DBを使う。sentinelの採番は推測しない");
+                    && world.teams.isEmpty() && world.organizations.isEmpty(), "検体は未作成でなければならない");
+            require(count("SELECT COUNT(*) FROM flyway_schema_history WHERE success=0") == 0,
+                    "失敗したFlyway migrationが残っている。先にSQLを直してから起動する");
             Actor system = actor("system", "ja");
             assign(system, "SYSTEM_ADMIN", null, null);
             OrganizationEntity first = organization("a");
@@ -182,25 +174,25 @@ public class ModuleEventRealE2eFixtures {
         private Actor actor(String code, String locale) {
             byte[] random = new byte[24]; new SecureRandom().nextBytes(random);
             String password = "Aa1!" + Base64.getUrlEncoder().withoutPadding().encodeToString(random);
-            String email = "m21-" + world.run + "-" + code + "@test.mannschaft.local";
+            String email = "l1m-e2e-" + world.run + "-" + code + "@test.mannschaft.local";
             UserEntity user = save(UserEntity.builder().email(email).passwordHash(encoder.encode(password))
-                    .lastName("M21").firstName(code).lastNameKana("エム").firstNameKana("テスト")
-                    .displayName("M21 " + code).isSearchable(false).locale(locale).countryCode("JP")
+                    .lastName("L1M").firstName(code).lastNameKana("エム").firstNameKana("テスト")
+                    .displayName("L1M " + code).isSearchable(false).locale(locale).countryCode("JP")
                     .timezone("Asia/Tokyo").status(UserEntity.UserStatus.ACTIVE)
                     .privacyPolicyAcceptedAt(local(Instant.now())).privacyPolicyVersion("1.1.1").build(), UserEntity.class);
             world.users.add(user.getId()); Actor actor = new Actor(code, user.getId(), email, password, locale);
             world.actors.put(code, actor); return actor;
         }
         private OrganizationEntity organization(String suffix) {
-            OrganizationEntity value = save(OrganizationEntity.builder().name("M21 " + suffix)
-                    .slug("m21-" + world.run.substring(0, 12) + "-" + suffix)
+            OrganizationEntity value = save(OrganizationEntity.builder().name("L1M " + suffix)
+                    .slug("l1m-e2e-" + world.run.substring(0, 12) + "-" + suffix)
                     .orgType(OrganizationEntity.OrgType.OTHER).visibility(OrganizationEntity.Visibility.PRIVATE)
                     .hierarchyVisibility(OrganizationEntity.HierarchyVisibility.NONE).supporterEnabled(false).build(), OrganizationEntity.class);
             world.organizations.add(value.getId()); return value;
         }
         private TeamEntity team(String suffix) {
-            TeamEntity value = save(TeamEntity.builder().name("M21 " + suffix)
-                    .slug("m21-" + world.run.substring(0, 12) + "-" + suffix)
+            TeamEntity value = save(TeamEntity.builder().name("L1M " + suffix)
+                    .slug("l1m-e2e-" + world.run.substring(0, 12) + "-" + suffix)
                     .visibility(TeamEntity.Visibility.MEMBERS_AND_ABOVE).supporterEnabled(false).build(), TeamEntity.class);
             world.teams.add(value.getId()); return value;
         }
@@ -226,7 +218,7 @@ public class ModuleEventRealE2eFixtures {
             require(workflow.logs.isEmpty(), "episodeを再利用しない");
             List<Long> logs = new ArrayList<>();
             for (String target : List.of(FIRST, SECOND)) {
-                BatchJobLogEntity log = save(BatchJobLogEntity.builder().jobName("m21-" + workflow.operationId + "-" + target)
+                BatchJobLogEntity log = save(BatchJobLogEntity.builder().jobName("l1m-e2e-" + workflow.operationId + "-" + target)
                         .status(BatchJobStatus.RUNNING).startedAt(local(Instant.now())).build(), BatchJobLogEntity.class);
                 logs.add(log.getId());
             }
@@ -336,7 +328,7 @@ public class ModuleEventRealE2eFixtures {
                     .setParameter("actor", world.actors.get("system").userId()).getSingleResult()).longValue());
             return result;
         }
-        /** 自分の生成IDのみ撤去。全background停止後にhostから呼ぶ。失敗は隠さない。 */
+        /** 自分の生成IDのみ撤去。全background停止後に起動入口から呼ぶ。失敗は隠さない。 */
         @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED, readOnly = false)
         public void cleanup() {
             for (Workflow workflow : world.workflows.values()) {
@@ -408,8 +400,8 @@ public class ModuleEventRealE2eFixtures {
         @ModuleEventListener(id = FIRST) public void first(ProbeEvent event) { domain.complete(event, 0); }
         @ModuleEventListener(id = SECOND) public void second(ProbeEvent event) {
             Workflow workflow = world.workflow(event); workflow.entered.countDown();
-            try { require(workflow.release.await(600, TimeUnit.SECONDS), "M21検体gate待機上限"); }
-            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("M21_GATE_INTERRUPTED", interrupted); }
+            try { require(workflow.release.await(600, TimeUnit.SECONDS), "L1M検体gate待機上限"); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("L1M_GATE_INTERRUPTED", interrupted); }
             domain.complete(event, 1);
         }
     }

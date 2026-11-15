@@ -4,8 +4,13 @@ import path from 'node:path'
 import { loginViaApi } from '../fixtures/auth'
 import { waitForHydration } from '../helpers/wait'
 
-// 検体の基盤接続だけを検証する。C/F実業務採用・監査保持方針の証明には使わない。
-// 認証は既存Cookie経路。手書token、shared.auth、HTTP mockは使用しない。
+// L1-M（Modulith イベント基盤）の実機E2E。検体の基盤接続だけを検証する。C/F実業務採用・監査保持方針の証明には使わない。
+// 前提: BE を `cd backend && ./gradlew bootRunModuleEventE2e`（試験用検体入り・8081）で起動し、FE を 3001 で起動しておく。
+//   BE が検体 actor 11名を生成して実行ディレクトリ（既定 backend/build/l1m-real-e2e、L1M_E2E_RUN_DIR で上書き）の
+//   actors.json に書き出し、state.json に検体状態を出し続ける。spec は controls/ に制御 command を置いて検体を進める。
+// 実行: BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 npx playwright test //   tests/e2e/real/l1m-module-events.real.spec.ts --config=playwright-real.config.ts --project=chromium-real --no-deps
+// 検体シナリオは BE 起動ごとに1回きり。再実行時は BE を再起動する。
+// 認証は既存Cookie経路（fixtures/auth の loginViaApi）。手書token、shared.auth、HTTP mockは使用しない。
 type Actor = { code: string; userId: number; email: string; password: string; locale: string }
 type Phase = 'DELAYED' | 'QUARANTINED' | 'RECOVERED'
 type Workflow = {
@@ -102,13 +107,18 @@ const messages: Record<(typeof locales)[number], Record<Phase, readonly [string,
   }
 }
 
-function required(name: string): string {
-  const value = process.env[name]
-  if (!value) throw new Error(`専用host環境が必要: ${name}`)
-  return value
-}
-function actorsFromEnvironment(): Actor[] {
-  const values: unknown = JSON.parse(required('M21_ACTORS_JSON'))
+const RUN_DIR = process.env.L1M_E2E_RUN_DIR ?? path.resolve(process.cwd(), '../backend/build/l1m-real-e2e')
+const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:8081'
+const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3001'
+
+async function actorsFromRunDirectory(run: string): Promise<Actor[]> {
+  let raw: string
+  try {
+    raw = await readFile(path.join(run, 'actors.json'), 'utf8')
+  } catch (cause) {
+    throw new Error(`検体入りBE（./gradlew bootRunModuleEventE2e）の actors.json が読めない: ${run}`, { cause })
+  }
+  const values: unknown = JSON.parse(raw)
   if (!Array.isArray(values) || values.length !== 11) throw new Error('専用actor集合が不正')
   return values.map((value: unknown) => {
     if (!value || typeof value !== 'object') throw new Error('actor形式が不正')
@@ -120,14 +130,12 @@ function actorsFromEnvironment(): Actor[] {
   })
 }
 
-test('M21 管理API運用と既存batch・6言語通知bell（実検体）', async ({ browser }) => {
+test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', async ({ browser }) => {
   test.setTimeout(9 * 60_000)
-  const run = required('M21_RUN_DIRECTORY')
-  const api = required('API_BASE_URL')
-  const baseURL = required('BASE_URL')
-  expect(api).toBe('http://localhost:8081')
-  expect(baseURL).toBe('http://localhost:3003')
-  const actors = actorsFromEnvironment()
+  const run = RUN_DIR
+  const api = API_BASE_URL
+  const baseURL = BASE_URL
+  const actors = await actorsFromRunDirectory(run)
   const actor = (code: string): Actor => {
     const value = actors.find(item => item.code === code)
     if (!value) throw new Error(`専用actorが不足: ${code}`)
@@ -155,7 +163,6 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
     await expect.poll(async () => check(await snapshot()), { timeout: 100_000, intervals: [500, 1000] }).toBe(true)
   }
   const endpoint = `${api}/api/v1/system-admin/module-events`
-  let passed = false
   try {
     await test.step('HTTP: 匿名401・認証済み非SYSTEM_ADMIN403（別tenantも秘匿）', async () => {
       const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] } })
@@ -163,11 +170,11 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
       const id = (await snapshot()).delayed.publications[0]
       expect(id).toBeTruthy()
       expect((await anonymous.request.get(endpoint)).status()).toBe(401)
-      expect((await anonymous.request.post(`${endpoint}/${id}/resume`, { data: { reason: 'M21' } })).status()).toBe(401)
+      expect((await anonymous.request.post(`${endpoint}/${id}/resume`, { data: { reason: 'L1M' } })).status()).toBe(401)
       for (const code of ['member', 'admin-ja', 'org-admin', 'outsider']) {
         const page = await pageFor(code)
         expect((await page.request.get(endpoint)).status()).toBe(403)
-        expect((await page.request.post(`${endpoint}/${id}/resume`, { data: { reason: 'M21' } })).status()).toBe(403)
+        expect((await page.request.post(`${endpoint}/${id}/resume`, { data: { reason: 'L1M' } })).status()).toBe(403)
       }
     })
     await test.step('基盤: 短期正常成功0通知・継続遅延後の実listener完了', async () => {
@@ -206,17 +213,17 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
       for (const reason of [null, '', '   ', 'x'.repeat(501)]) {
         expect((await system.request.post(`${endpoint}/${ids[0]}/resume`, { data: { reason } })).status()).toBe(400)
       }
-      expect((await system.request.post(`${endpoint}/00000000-0000-4000-8000-000000000001/resume`, { data: { reason: 'M21' } })).status()).toBe(404)
+      expect((await system.request.post(`${endpoint}/00000000-0000-4000-8000-000000000001/resume`, { data: { reason: 'L1M' } })).status()).toBe(404)
       expect((await system.request.post(`${endpoint}/${ids[0]}/resume`, { data: { reason: '  x  ' } })).status()).toBe(204)
       await waitState(state => state.quarantine.completed === 1 && state.quarantine.pending === 1)
       expect((await snapshot()).quarantine.recovered).toBe(0)
       // 成功後はpublication/helperが削除されるため、完了済みIDは404。存在するIN_PROGRESSの競合409は後段で確認する。
-      expect((await system.request.post(`${endpoint}/${ids[0]}/resume`, { data: { reason: 'M21 duplicate' } })).status()).toBe(404)
+      expect((await system.request.post(`${endpoint}/${ids[0]}/resume`, { data: { reason: 'L1M duplicate' } })).status()).toBe(404)
       expect((await system.request.post(`${endpoint}/${ids[1]}/resume`, { data: { reason: `  ${'x'.repeat(500)}  ` } })).status()).toBe(204)
       await waitState(state => state.quarantine.entered && state.quarantine.pending === 1)
       expect((await snapshot()).quarantine.recovered).toBe(0)
       expect((await snapshot()).quarantine.deliveries.RECOVERED ?? {}).toEqual({})
-      expect((await system.request.post(`${endpoint}/${ids[1]}/resume`, { data: { reason: 'M21 duplicate' } })).status()).toBe(409)
+      expect((await system.request.post(`${endpoint}/${ids[1]}/resume`, { data: { reason: 'L1M duplicate' } })).status()).toBe(409)
       await command('release-last')
       await waitState(state => state.quarantine.completed === 2 && state.quarantine.pending === 0
         && state.auditCount === 2 && locales.every(locale => delivered(state.quarantine, 'RECOVERED', `admin-${locale}`) === 1)
@@ -256,7 +263,7 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
         : status === 'ACCEPTED' ? 'バッチ起動を受け付けました: module-event-replay'
           : 'バッチ実行が完了しました: module-event-replay'
       await expect(page.getByText(title, { exact: true }).first()).toBeVisible()
-      await page.screenshot({ path: path.join(run, 'batch-ui.png'), fullPage: true })
+      await page.screenshot({ path: test.info().outputPath('batch-ui.png'), fullPage: true })
     })
     await test.step('UI: 非SYSTEM_ADMIN・他tenantは管理入口なし、URL直打ちも拒否', async () => {
       // 常時描画のGlobalSidebarで正のケースと同じ入口を確認する。閉じたメニューの不在判定ではない。
@@ -268,7 +275,7 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
         await expect(navigation).toBeVisible()
         await expect(navigation.locator('a[href="/system-admin"]')).toHaveCount(0)
         await expect(page.locator('a[href="/system-admin/batches"]')).toHaveCount(0)
-        await page.screenshot({ path: path.join(run, `batch-entry-hidden-${code}.png`), fullPage: true })
+        await page.screenshot({ path: test.info().outputPath(`batch-entry-hidden-${code}.png`), fullPage: true })
         for (const target of ['/system-admin', '/system-admin/batches']) {
           await page.goto(target)
           await expect(page).toHaveURL(/\/dashboard$/)
@@ -277,7 +284,7 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
           await expect(page.locator('[data-test="batch-table"]')).toHaveCount(0)
           await expect(page.locator('[data-test="detail-module-event-replay"]')).toHaveCount(0)
           await expect(page.locator('[data-test="run-sync-module-event-replay"]')).toHaveCount(0)
-          await page.screenshot({ path: path.join(run, `batch-denied-${code}-${target.endsWith('batches') ? 'batches' : 'index'}.png`), fullPage: true })
+          await page.screenshot({ path: test.info().outputPath(`batch-denied-${code}-${target.endsWith('batches') ? 'batches' : 'index'}.png`), fullPage: true })
         }
       }
     })
@@ -293,7 +300,7 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
         }
         await page.reload(); await waitForHydration(page)
         await expect(page.getByText(messages[locale].RECOVERED[0], { exact: true }).first()).toBeVisible()
-        await page.screenshot({ path: path.join(run, `bell-${locale}.png`), fullPage: true })
+        await page.screenshot({ path: test.info().outputPath(`bell-${locale}.png`), fullPage: true })
       }
     })
     await test.step('UI: 他tenantのbell・通知一覧に検体通知が混入しない', async () => {
@@ -311,13 +318,11 @@ test('M21 管理API運用と既存batch・6言語通知bell（実検体）', asy
       for (const phase of ['DELAYED', 'QUARANTINED', 'RECOVERED'] as const) {
         for (const message of messages.ja[phase]) await expect(page.getByText(message, { exact: true })).toHaveCount(0)
       }
-      await page.screenshot({ path: path.join(run, 'bell-outsider.png'), fullPage: true })
+      await page.screenshot({ path: test.info().outputPath('bell-outsider.png'), fullPage: true })
     })
     await test.info().attach('fixture-final-state', { body: JSON.stringify(await snapshot()), contentType: 'application/json' })
-    passed = true
   } finally {
-    // traces/rawには生成資格情報が含まれ得る。自己Temp内のprivate証跡として公開しない。
-    await writeFile(path.join(run, 'ui-result.json'), JSON.stringify({ passed, scope: 'M21 fixture / API operations / existing UI only' }))
+    // tracesには生成資格情報（検体actorの使い捨てパスワード）が含まれ得る。公開しない。
     for (const context of contexts) await context.close()
   }
 })
