@@ -89,6 +89,10 @@ class ShiftScheduleServiceTest {
     @Mock
     private DomainEventPublisher eventPublisher;
 
+    /** CMP-261115-1821 公開前の勤務日時給ガード（本テストの対象外のため欠落なしを返す素の Mock）。 */
+    @Mock
+    private com.mannschaft.app.shiftbudget.service.ShiftPublicationHourlyRateGuard hourlyRateGuard;
+
     /**
      * CMP-260909-1445 で {@code ShiftScheduleService} に追加された依存（{@code ClockConfig#wallClock}）。
      *

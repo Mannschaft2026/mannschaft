@@ -75,6 +75,7 @@ public class ShiftScheduleService {
     private final ShiftPositionRepository positionRepository;
     private final ShiftMapper shiftMapper;
     private final DomainEventPublisher eventPublisher;
+    private final com.mannschaft.app.shiftbudget.service.ShiftPublicationHourlyRateGuard hourlyRateGuard;
 
     /** 循環依存を避けるため @Lazy で注入する */
     @Lazy
@@ -279,6 +280,7 @@ public class ShiftScheduleService {
             case PUBLISHED -> {
                 // 未確認の SUCCEEDED 割当実行ログがある場合は目視確認ゲートをかける
                 autoAssignService.assertNoUnreviewedRuns(id);
+                assertAssigneesHaveHourlyRate(entity);
                 entity.publish(userId);
             }
             case ARCHIVED -> {
@@ -324,6 +326,26 @@ public class ShiftScheduleService {
 
         log.info("シフトスケジュールステータス遷移: id={}, status={}", id, targetStatus);
         return shiftMapper.toScheduleResponse(entity);
+    }
+
+    /**
+     * 予算連動の勤務日に有効な時給のない割当者がいれば、公開前に拒否する（CMP-261115-1821）。
+     */
+    private void assertAssigneesHaveHourlyRate(ShiftScheduleEntity entity) {
+        java.util.Map<LocalDate, java.util.Set<Long>> assignedByDate = new java.util.TreeMap<>();
+        for (var slot : slotRepository.findByScheduleIdOrderBySlotDateAscStartTimeAsc(entity.getId())) {
+            List<Long> assigned = com.mannschaft.app.shift.ShiftAssignedUserIds.parse(slot.getAssignedUserIds());
+            if (!assigned.isEmpty()) {
+                assignedByDate.computeIfAbsent(slot.getSlotDate(), d -> new java.util.HashSet<>()).addAll(assigned);
+            }
+        }
+        var missing = hourlyRateGuard.findMissing(entity.getTeamId(), assignedByDate);
+        if (!missing.isEmpty()) {
+            throw new com.mannschaft.app.shift.ShiftHourlyRateMissingException(missing.stream()
+                    .map(m -> new com.mannschaft.app.shift.ShiftHourlyRateMissingException.Missing(
+                            m.userId(), m.slotDate()))
+                    .toList());
+        }
     }
 
     /**

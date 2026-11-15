@@ -69,7 +69,8 @@ public class ShiftBudgetConsumptionService {
      * @param shiftScheduleId    シフトスケジュールID
      * @param slotId             スロットID
      * @param userId             ユーザーID
-     * @param hourlyRate         適用時給（NULL/0 はそのまま受け入れ。設計書 §11 「時給未設定」参照）
+     * @param hourlyRate         適用時給（正数のみ。null・0・負数は既存消化の取消など副作用の前に
+     *                           {@link IllegalArgumentException} で拒否する）
      * @param hours              勤務時間
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -79,7 +80,12 @@ public class ShiftBudgetConsumptionService {
                                         Long userId,
                                         BigDecimal hourlyRate,
                                         BigDecimal hours) {
-        BigDecimal safeRate = hourlyRate != null ? hourlyRate : BigDecimal.ZERO;
+        // 0円・負数への置換は予算管理を黙って無効化する。既存PLANNEDの取消より前に拒否する。
+        if (hourlyRate == null || hourlyRate.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "hourlyRate must be positive: slot=" + slotId + ", user=" + userId);
+        }
+        BigDecimal safeRate = hourlyRate;
         BigDecimal amount = safeRate.multiply(hours).setScale(2, java.math.RoundingMode.HALF_UP);
 
         // (1) 既存 PLANNED → CANCELLED 遷移 + consumed_amount 減算
