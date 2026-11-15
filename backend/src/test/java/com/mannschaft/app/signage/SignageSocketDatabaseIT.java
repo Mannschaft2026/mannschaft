@@ -28,6 +28,12 @@ import org.springframework.web.socket.server.support.WebSocketHandlerMapping;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.ExecutorSubscribableChannel;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.TransactionDefinition;
@@ -64,6 +70,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
     @Autowired ApplicationContext context;
     @Autowired SignageSocketSessions socketSessions;
     @Autowired @Qualifier("applicationEventMulticaster") ApplicationEventMulticaster events;
+    @Autowired @Qualifier("clientInboundChannel") ExecutorSubscribableChannel inboundChannel;
 
     @Test
     void AC4_DB照合中の実peer切断後にCONNECT完成してもregistryを復活させない() throws Exception {
@@ -81,10 +88,23 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
         AtomicReference<WebSocketSession> peer = new AtomicReference<>();
         AtomicReference<String> serverId = new AtomicReference<>();
         var disconnected = new LinkedBlockingQueue<String>();
+        var authorizationCompleted = new LinkedBlockingQueue<String>();
         ApplicationListener<ApplicationEvent> listener = event -> {
             if (event instanceof SessionDisconnectEvent closed) disconnected.offer(closed.getSessionId());
         };
         events.addApplicationListener(listener);
+        ChannelInterceptor afterAuthorization = new ChannelInterceptor() {
+            @Override
+            public Message<?> preSend(Message<?> message, MessageChannel channel) {
+                var accessor = StompHeaderAccessor.wrap(message);
+                if (accessor.getCommand() == StompCommand.CONNECT || accessor.getCommand() == StompCommand.STOMP) {
+                    authorizationCompleted.offer(accessor.getSessionId());
+                }
+                return message;
+            }
+        };
+        // 本物の認可を置換せず、その後段に観測だけを追加してlate認可完了を明示的に待つ。
+        inboundChannel.addInterceptor(afterAuthorization);
         StandardWebSocketClient delegate = new StandardWebSocketClient();
         WebSocketClient tracked = new WebSocketClient() {
             public CompletableFuture<WebSocketSession> execute(WebSocketHandler handler, String uri, Object... args) {
@@ -118,6 +138,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                 await().atMost(Duration.ofSeconds(10)).until(() -> disconnected.contains(serverId.get()));
                 statement.execute("UNLOCK TABLES");
                 await().atMost(Duration.ofSeconds(10)).until(connected::isDone);
+                await().atMost(Duration.ofSeconds(10)).until(() -> authorizationCompleted.contains(serverId.get()));
                 // 実closeが資格queryより先に処理された事実を上で確認した後に、late完了後の状態を観測する。
                 await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.queryForObject(
                         "SELECT COUNT(*) FROM information_schema.processlist WHERE id <> CONNECTION_ID() "
@@ -140,6 +161,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
         } finally {
             var cleanup = new ArrayList<Exception>();
             try { events.removeApplicationListener(listener); } catch (Exception failure) { cleanup.add(failure); }
+            try { inboundChannel.removeInterceptor(afterAuthorization); } catch (Exception failure) { cleanup.add(failure); }
             heartbeats.forEach((service, previous) -> {
                 try { service.setHeartbeatTime(previous); } catch (RuntimeException failure) { cleanup.add(failure); }
             });
