@@ -56,7 +56,8 @@ interface BlockResponse {
 }
 
 interface TeamSummaryResponse {
-  id: number
+  /** URL 識別子（スラッグ）。BE `OrgTeamSummaryResponse.id` は数値ではなくスラッグ文字列を返す。数値IDが要る場合は getTeam の numericId を使う。 */
+  id: string
   /** チームスラッグ（URLルーティング用）。BE `OrgTeamSummaryResponse.slug` と 1:1。 */
   slug: string
   name: string
