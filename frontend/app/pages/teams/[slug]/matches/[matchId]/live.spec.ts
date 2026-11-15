@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
+import { flushPromises } from '@vue/test-utils'
 import { useRuntimeConfig, useRouter } from '#imports'
 import { useAuthStore } from '~/stores/useAuthStore'
 import { createError } from 'h3'
@@ -14,6 +15,10 @@ let canRecord = true
 let matchStatus = 'SCHEDULED'
 let savedEvents: MatchEventResponse[] = []
 let eventsFail = false
+let eventRequests = 0
+let eventResponses = 0
+const eventPlans: { gate: Promise<void>; status?: number; events?: MatchEventResponse[] }[] = []
+const releaseEventGates: (() => void)[] = []
 const postEvent = vi.fn(() => ({ data: { id: 'period-start-test' } }))
 let detailReached = false
 let releaseDetail: () => void
@@ -62,10 +67,16 @@ registerEndpoint(detailPath, async () => {
     },
   }
 })
-registerEndpoint(`/api/v1/organizations/124/matches/${matchId}/events`, () => {
-  if (eventsFail) throw createError({ statusCode: 503, statusMessage: 'events unavailable' })
+registerEndpoint(`/api/v1/organizations/124/matches/${matchId}/events`, async () => {
+  const plan = eventPlans.shift()
+  const status = plan?.status ?? (eventsFail ? 503 : undefined)
+  const events = plan?.events ?? savedEvents
+  eventRequests += 1
+  await plan?.gate
+  eventResponses += 1
+  if (status) throw createError({ statusCode: status, statusMessage: 'events unavailable' })
   return {
-    data: { events: savedEvents, derivedHomeScore: 0, derivedAwayScore: 0 },
+    data: { events, derivedHomeScore: 0, derivedAwayScore: 0 },
   }
 })
 registerEndpoint('/api/v1/teams/live-init-test/members', () => ({ data: [] }))
@@ -80,6 +91,9 @@ beforeEach(() => {
   matchStatus = 'SCHEDULED'
   savedEvents = []
   eventsFail = false
+  eventRequests = 0
+  eventResponses = 0
+  eventPlans.length = 0
   detailReached = false
   detailGate = new Promise((resolve) => {
     releaseDetail = resolve
@@ -108,6 +122,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  releaseEventGates.splice(0).forEach(release => release())
   releaseDetail()
   useRuntimeConfig().public.apiBase = originalBase
   useAuthStore().user = originalUser
@@ -137,6 +152,66 @@ async function mountPage() {
 }
 
 describe('ライブ記録画面の非同期初期化', () => {
+  it('イベント取得待ちで離脱した後の成功応答はtimerや画面資源を作らない', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    releaseEventGates.push(release)
+    eventPlans.push({ gate, events: [{ id: 'late', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }] })
+    const intervals = vi.spyOn(globalThis, 'setInterval')
+    const addListener = vi.spyOn(window, 'addEventListener')
+    const wrapper = await mountPage()
+    await vi.waitFor(() => expect(eventRequests).toBe(1))
+    wrapper.unmount()
+    intervals.mockClear()
+    addListener.mockClear()
+
+    release()
+    await vi.waitFor(() => expect(eventResponses).toBe(1))
+    await flushPromises()
+    try {
+      expect(intervals.mock.calls.filter(([, delay]) => delay === 1000)).toHaveLength(0)
+      expect(requestWakeLock).not.toHaveBeenCalled()
+      expect(addListener.mock.calls.filter(([name]) => name === 'online')).toHaveLength(0)
+    } finally {
+      // red時の既知の離脱後tickもテストから漏らさず、受入assertはそのまま失敗させる。
+      intervals.mock.calls.forEach(([, delay], index) => {
+        if (delay === 1000) clearInterval(intervals.mock.results[index]!.value)
+      })
+    }
+  })
+
+  it('同時再試行の古い失敗応答は新しい成功セッションを停止しない', async () => {
+    eventsFail = true
+    const wrapper = await mountPage()
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true))
+    const errorView = wrapper.findComponent({ name: 'DashboardErrorState' })
+    const retry = errorView.vm.$.vnode.props!.onRetry as () => Promise<void>
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    releaseEventGates.push(release)
+    eventsFail = false
+    eventPlans.push(
+      { gate, status: 403 },
+      { gate: Promise.resolve(), events: [{ id: 'fresh', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }] },
+    )
+    const previousResponses = eventResponses
+    const previousRequests = eventRequests
+    // 再試行ボタンに実際に結線された同一handlerを、古いHTTPが未完了の間に再実行する。
+    void retry()
+    await vi.waitFor(() => expect(eventRequests).toBe(previousRequests + 1))
+    void retry()
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'MatchTimerControls' }).props('currentMinute')).toBe(17))
+
+    release()
+    await vi.waitFor(() => expect(eventResponses).toBe(previousResponses + 2))
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'MatchTimerControls' }).props('running')).toBe(true)
+    expect(wrapper.findComponent({ name: 'MatchTimerControls' }).props('currentMinute')).toBe(17)
+    wrapper.unmount()
+  })
+
   it('再訪では保存済み後半58分を表示し、復元だけでは境界POSTを送らない', async () => {
     matchStatus = 'IN_PROGRESS'
     savedEvents = [
