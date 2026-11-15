@@ -31,6 +31,7 @@ const {
 } = useSignageApi()
 const { success, error: showError } = useNotification()
 const { formatDateTime } = useDatetime()
+const { t } = useI18n()
 
 // --- スコープごとの表示差分 ---
 const screenNamePlaceholder = computed(() =>
@@ -60,40 +61,40 @@ const emergencyMessage = ref('')
 const sendingEmergency = ref(false)
 
 // --- Constants ---
-const LAYOUT_OPTIONS: { label: string; value: SignageLayout }[] = [
-  { label: 'フルスクリーン', value: 'FULLSCREEN' },
-  { label: '水平分割', value: 'SPLIT_HORIZONTAL' },
-  { label: '垂直分割', value: 'SPLIT_VERTICAL' },
-  { label: '4分割', value: 'QUAD' },
-]
+const LAYOUT_OPTIONS = computed<{ label: string; value: SignageLayout }[]>(() => [
+  { label: t('signage.layout.landscape'), value: 'LANDSCAPE' },
+  { label: t('signage.layout.portrait'), value: 'PORTRAIT' },
+  { label: t('signage.layout.standard'), value: 'STANDARD' },
+])
 
 const TRANSITION_OPTIONS: { label: string; value: SignageTransition }[] = [
   { label: 'なし', value: 'NONE' },
   { label: 'フェード', value: 'FADE' },
   { label: 'スライド', value: 'SLIDE' },
-  { label: 'ズーム', value: 'ZOOM' },
 ]
 
-const SLOT_TYPE_OPTIONS: { label: string; value: SignageSlotType }[] = [
-  { label: '画像', value: 'IMAGE' },
-  { label: '動画', value: 'VIDEO' },
-  { label: 'URL', value: 'URL' },
+const SLOT_TYPE_OPTIONS = computed<{ label: string; value: SignageSlotType }[]>(() => [
   { label: 'お知らせ', value: 'ANNOUNCEMENT' },
   { label: 'スケジュール', value: 'SCHEDULE' },
+  { label: t('signage.slotType.activityHighlight'), value: 'ACTIVITY_HIGHLIGHT' },
+  { label: t('signage.slotType.ranking'), value: 'RANKING' },
+  { label: t('signage.slotType.freeText'), value: 'FREE_TEXT' },
+  { label: t('signage.slotType.freeImage'), value: 'FREE_IMAGE' },
   { label: '天気', value: 'WEATHER' },
-]
+  { label: t('signage.slotType.clock'), value: 'CLOCK' },
+])
 
 // --- Zod schemas ---
 const screenSchema = z.object({
   name: z.string().min(1, '画面名は必須です').max(100, '100文字以内で入力してください'),
   description: z.string().max(500, '500文字以内').optional(),
-  layout: z.enum(['FULLSCREEN', 'SPLIT_HORIZONTAL', 'SPLIT_VERTICAL', 'QUAD']),
+  layout: z.enum(['LANDSCAPE', 'PORTRAIT', 'STANDARD']),
   defaultSlideDuration: z
     .number({ error: (issue) => issue.input === undefined ? undefined : '数値を入力してください' })
     .int()
     .min(1, '1秒以上を指定してください')
     .max(3600, '3600秒以内で指定してください'),
-  transitionEffect: z.enum(['NONE', 'FADE', 'SLIDE', 'ZOOM']),
+  transitionEffect: z.enum(['NONE', 'FADE', 'SLIDE']),
 })
 
 type ScreenForm = z.infer<typeof screenSchema>
@@ -109,7 +110,7 @@ const {
   initialValues: {
     name: '',
     description: '',
-    layout: 'FULLSCREEN',
+    layout: 'LANDSCAPE',
     defaultSlideDuration: 10,
     transitionEffect: 'FADE',
   },
@@ -122,7 +123,10 @@ const [screenDuration, screenDurationAttrs] = defineScreenField('defaultSlideDur
 const [screenTransition, screenTransitionAttrs] = defineScreenField('transitionEffect')
 
 const slotSchema = z.object({
-  slotType: z.enum(['IMAGE', 'VIDEO', 'URL', 'ANNOUNCEMENT', 'SCHEDULE', 'WEATHER']),
+  slotType: z.enum([
+    'ANNOUNCEMENT', 'SCHEDULE', 'ACTIVITY_HIGHLIGHT', 'RANKING',
+    'FREE_TEXT', 'FREE_IMAGE', 'WEATHER', 'CLOCK',
+  ]),
   contentSourceId: z.string().optional(),
   durationSeconds: z
     .number({ error: (issue) => issue.input === undefined ? undefined : '数値を入力してください' })
@@ -365,11 +369,11 @@ async function handleSendEmergency() {
 
 // --- Helpers ---
 function getLayoutLabel(layout: string): string {
-  return LAYOUT_OPTIONS.find((o) => o.value === layout)?.label ?? layout
+  return LAYOUT_OPTIONS.value.find((o) => o.value === layout)?.label ?? layout
 }
 
 function getSlotTypeLabel(type: string): string {
-  return SLOT_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
+  return SLOT_TYPE_OPTIONS.value.find((o) => o.value === type)?.label ?? type
 }
 
 onMounted(loadScreens)

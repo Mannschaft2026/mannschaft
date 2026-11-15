@@ -3349,5 +3349,19 @@
       "expires_at": "유효 기간",
       "used_count": "사용 횟수"
     }
+  },
+  "signage": {
+    "layout": {
+      "landscape": "가로",
+      "portrait": "세로",
+      "standard": "표준"
+    },
+    "slotType": {
+      "activityHighlight": "활동 하이라이트",
+      "ranking": "순위",
+      "freeText": "자유 텍스트",
+      "freeImage": "자유 이미지",
+      "clock": "시계"
+    }
   }
 }
