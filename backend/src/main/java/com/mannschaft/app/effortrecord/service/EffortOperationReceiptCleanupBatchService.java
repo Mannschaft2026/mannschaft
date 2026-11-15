@@ -44,7 +44,7 @@ public class EffortOperationReceiptCleanupBatchService {
 
     /** 毎時 17 分に期限切れ receipt を回収する。 */
     @Scheduled(cron = "${mannschaft.effort-record.receipt-cleanup-cron:0 17 * * * *}")
-    @SchedulerLock(name = "effortOperationReceiptCleanup", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
+    @SchedulerLock(name = "effortOperationReceiptCleanup", lockAtMostFor = "PT3H", lockAtLeastFor = "PT10S")
     @BatchEndpoint(name = "effort-receipt-cleanup-hourly", description = "期限切れの頑張り記録 Idempotency receipt を削除する")
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
             reason = "停止すると私的メモを含む冪等 receipt の応答 JSON が保持期限を超えて残り続けるため常時実行する")
