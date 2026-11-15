@@ -26,6 +26,7 @@ function makeChannel(id: number, unreadCount: number): ChatChannelResponse {
     audit: { createdBy: null, createdAt: null, updatedAt: null },
     memberCount: 2,
     dmPartner: null,
+    derivedName: null,
     viewer: { unreadCount, isMuted: false, isPinned: false, category: null, role: null },
   } as ChatChannelResponse
 }

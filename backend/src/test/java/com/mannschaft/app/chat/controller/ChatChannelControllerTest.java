@@ -69,6 +69,7 @@ class ChatChannelControllerTest {
     @MockitoBean private ChatChannelFacade channelFacade;
     @MockitoBean private ChatMessageFacade messageFacade;
     @MockitoBean private ChatAttachmentService attachmentService;
+    @MockitoBean private com.mannschaft.app.chat.service.ChatGroupDmDerivedNameResolver derivedNameResolver;
 
     // F11.3 / F14.1 共通フィルター・コンテキストの依存補完
     @MockitoBean private AuthTokenService authTokenService;
