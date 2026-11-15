@@ -90,11 +90,13 @@ async function loadOrganization(orgId: number, depth: number) {
         if (!Number.isSafeInteger(numericId) || numericId <= 0) throw new Error('team_numeric_id_missing')
         return { numericId, name: team.name }
       }))
+      let allResolved = true
       for (const result of resolvedTeams) {
         if (result.status === 'fulfilled') addOption({ type: 'TEAM', id: result.value.numericId }, result.value.name, depth + 1)
-        else handleApiError(result.reason, 'confirmable target team')
+        else { allResolved = false; handleApiError(result.reason, 'confirmable target team') }
       }
-      opened.value[orgKey] = true
+      // 一部でも解決に失敗したら展開済みにしない（展開ボタンから再取得できる状態を残す）
+      opened.value[orgKey] = allResolved
     }
   } catch (error) { handleApiError(error, 'confirmable target options') } finally { loading.value = false }
 }

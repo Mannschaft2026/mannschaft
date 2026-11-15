@@ -72,6 +72,22 @@ describe('ConfirmableTargetPicker', () => {
     expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toEqual([{ type: 'TEAM', id: 101 }])
   })
 
+  it('チーム詳細の取得に失敗したら展開済みにせず、再取得できる', async () => {
+    mocks.getTeam.mockRejectedValueOnce(new Error('network'))
+    const wrapper = await mountSuspended(ConfirmableTargetPicker, {
+      ...mountOpts,
+      props: { scopeType: 'ORGANIZATION', scopeId: '42', scopeSlug: 'acme', modelValue: [] },
+    })
+    await flushPromises()
+    expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).not.toContain('Aチーム')
+    const reload = wrapper.findAll('button').find(btn => btn.find('.pi-angle-down').exists())
+    expect(reload).toBeDefined()
+    await reload!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Aチーム')
+  })
+
   it('2つ描画してもチェックボックスの id は重複しない', async () => {
     // 実画面と同じく、同一アプリ内に2つ描画する（別アプリ同士では useId が衝突しうるため）
     const Twin = defineComponent({
