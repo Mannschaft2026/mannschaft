@@ -30,6 +30,7 @@ function makeChannel(id: number, unreadCount: number): ChatChannelResponse {
     audit: { createdBy: null, createdAt: null, updatedAt: null },
     memberCount: 2,
     dmPartner: null,
+    derivedName: null,
     viewer: { unreadCount, isMuted: false, isPinned: false, category: null, role: null },
   } as ChatChannelResponse
 }
@@ -97,5 +98,34 @@ describe('ChatChannelList.vue（initialChannelId で開いた直後に選択す�
     await flushPromises()
 
     expect(wrapper.emitted('select')).toBeUndefined()
+  })
+})
+
+/**
+ * CMP-261113-0110: 名前未設定の GROUP_DM は導出名を表示し、導出名も無ければ未命名文言を出す。
+ */
+describe('ChatChannelList.vue（GROUP_DM の表示名）', () => {
+  function makeGroupDm(id: number, derivedName: string | null): ChatChannelResponse {
+    return {
+      ...makeChannel(id, 0),
+      identity: { channelType: 'GROUP_DM', teamId: null, organizationId: null },
+      meta: { name: null, iconKey: null, description: null },
+      derivedName,
+    }
+  }
+
+  it('名前が null の GROUP_DM は導出名を表示する', async () => {
+    getChannels.mockResolvedValue({ data: [makeGroupDm(20, '花子、太郎')] })
+    const wrapper = await mountSuspended(ChatChannelList)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="chat-channel-20"]').text()).toContain('花子、太郎')
+  })
+
+  it('導出名も無ければ未命名文言を表示する', async () => {
+    getChannels.mockResolvedValue({ data: [makeGroupDm(21, null)] })
+    const wrapper = await mountSuspended(ChatChannelList)
+    await flushPromises()
+    const unnamed = useNuxtApp().$i18n.t('chat.unnamedChannel')
+    expect(wrapper.find('[data-testid="chat-channel-21"]').text()).toContain(unnamed)
   })
 })

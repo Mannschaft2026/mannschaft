@@ -199,6 +199,7 @@
     },
     "activeThreadsEmpty": "No active threads",
     "tabAriaLabel": "{name} tab",
+    "unnamedChannel": "Unnamed group",
     "message": {
       "deleted": "This message was deleted",
       "unknownSender": "Unknown",
