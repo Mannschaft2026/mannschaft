@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ChatTab } from '~/types/chat'
+import { resolveChannelDisplayName } from '~/utils/chat/channelDisplayName'
 
 // -----------------------------------------------------------------------
 // Props / Emits
@@ -29,17 +30,13 @@ const channelIcon = computed<string>(() => {
   return '#'
 })
 
-/** タブに表示するチャンネル名（DM は相手ユーザー名） */
-const channelLabel = computed<string>(() => {
-  const ch = props.tab.channel
-  if (ch.dmPartner) {
-    return ch.dmPartner.displayName
-  }
-  return ch.meta.name ?? `#${ch.id}`
-})
-
 /** aria-label 用の完全ラベル */
 const { t } = useI18n()
+
+/** タブに表示するチャンネル名（相手名 → 明示名 → 導出名 → 未命名文言） */
+const channelLabel = computed<string>(() =>
+  resolveChannelDisplayName(props.tab.channel, t('chat.unnamedChannel')),
+)
 const ariaLabel = computed<string>(() => t('chat.tabAriaLabel', { name: channelLabel.value }))
 
 // -----------------------------------------------------------------------

@@ -199,6 +199,7 @@
     },
     "activeThreadsEmpty": "No hay hilos activos",
     "tabAriaLabel": "Pestaña {name}",
+    "unnamedChannel": "Grupo sin nombre",
     "message": {
       "deleted": "Este mensaje fue eliminado",
       "unknownSender": "Desconocido",

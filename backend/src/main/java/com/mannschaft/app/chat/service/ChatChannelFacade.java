@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * チャンネル ID を指定するチャンネル・メンバー操作の認可を、トランザクションの外で済ませるファサード
@@ -34,6 +35,7 @@ public class ChatChannelFacade {
     private final ChatChannelService channelService;
     private final ChatMemberService memberService;
     private final ChatChannelAccessGuard channelAccessGuard;
+    private final ChatGroupDmDerivedNameResolver derivedNameResolver;
 
     /**
      * チャンネル詳細を取得する。メンバーシップ管理種別ではチャンネルメンバーであることを要求する
@@ -41,7 +43,8 @@ public class ChatChannelFacade {
      */
     public ChannelResponse getChannel(Long channelId, Long userId) {
         channelAccessGuard.requireChannelMembership(channelService.findChannelOrThrow(channelId), userId);
-        return channelService.getChannel(channelId, userId);
+        // 名前なし GROUP_DM の導出名は、参加者（auth）の表示名が要るため tx の外で付ける（CMP-261113-0110）
+        return derivedNameResolver.withDerivedName(channelService.getChannel(channelId, userId), userId);
     }
 
     /** チャンネルを更新する（スコープ ADMIN 以上、DM / GROUP_DM はチャンネル OWNER）。 */
@@ -71,7 +74,11 @@ public class ChatChannelFacade {
     /** DM をグループ DM に変換する（権限は更新と同じ。DM はチャンネル OWNER のみ）。 */
     public ChannelResponse convertToGroup(Long channelId, Long callerId) {
         requireChannelAdmin(channelId, callerId);
-        return channelService.convertToGroup(channelId, callerId);
+        // 導出名に要る参加者の表示名は書き込み tx の前に引く。取得が失敗すれば変換せずに失敗する（CMP-261113-0110 AC-16）
+        Map<Long, String> participantNames =
+                derivedNameResolver.prefetchParticipantNames(channelId, callerId, List.of());
+        return derivedNameResolver.withDerivedName(
+                channelService.convertToGroup(channelId, callerId), callerId, participantNames);
     }
 
     /**
@@ -81,7 +88,12 @@ public class ChatChannelFacade {
     public ChannelResponse inviteToZimmer(Long channelId, Long callerId, InviteToZimmerRequest request) {
         channelAccessGuard.requireMembershipRowOrConceal(
                 channelService.findChannelOrThrow(channelId), callerId, ChatErrorCode.CHANNEL_NOT_FOUND);
-        return channelService.inviteToZimmer(channelId, callerId, request);
+        // 導出名に要る参加者（Kabine のメンバー＋招待者）の表示名は書き込み tx の前に引く。取得が失敗すれば
+        // Zimmer・メンバー・コピー履歴を 1 行も書かずに失敗する（CMP-261113-0110 AC-16）
+        Map<Long, String> participantNames =
+                derivedNameResolver.prefetchParticipantNames(channelId, callerId, request.getUserIds());
+        return derivedNameResolver.withDerivedName(
+                channelService.inviteToZimmer(channelId, callerId, request), callerId, participantNames);
     }
 
     /** F10.7: 問い合わせチャンネル設定を更新する（当該チームの ADMIN / DEPUTY_ADMIN、または SYSTEM_ADMIN）。 */
