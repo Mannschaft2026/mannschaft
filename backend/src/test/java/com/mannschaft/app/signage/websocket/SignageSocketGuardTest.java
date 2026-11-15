@@ -1,5 +1,6 @@
 package com.mannschaft.app.signage.websocket;
 
+import com.mannschaft.app.common.websocket.StompRejectedException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.messaging.Message;
@@ -70,7 +71,7 @@ class SignageSocketGuardTest {
         sessions.unsubscribe("session", "sub");
         assertThat(sessions.binding("session", "sub", DESTINATION)).isEmpty();
         sessions.bind("session", "sub", DESTINATION);
-        sessions.disconnect("session");
+        sessions.close("session", new HashMap<>());
         assertThat(sessions.binding("session", "sub", DESTINATION)).isEmpty();
         assertThat(sessions.session("session")).isEmpty();
     }
@@ -135,7 +136,7 @@ class SignageSocketGuardTest {
             }
             Throwable rejected = connection.get(5, TimeUnit.SECONDS);
             assertThat(sessions.session("session")).as("切断後の認可完了で資格を復活させない").isEmpty();
-            assertThat(rejected).isInstanceOf(com.mannschaft.app.common.websocket.StompRejectedException.class);
+            assertThat(rejected).isInstanceOf(StompRejectedException.class);
         }
     }
 
@@ -150,7 +151,7 @@ class SignageSocketGuardTest {
                 MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), null));
 
         assertThat(sessions.session("session")).isEmpty();
-        assertThat(rejected).isInstanceOf(com.mannschaft.app.common.websocket.StompRejectedException.class);
+        assertThat(rejected).isInstanceOf(StompRejectedException.class);
     }
 
     @Test
@@ -190,7 +191,7 @@ class SignageSocketGuardTest {
     }
 
     private void establish(String sessionId, Long tokenId) {
-        sessions.establish(sessionId, new SignageSocketAccess(tokenId, 10L, null, null), "127.0.0.1");
+        sessions.establish(sessionId, new HashMap<>(), new SignageSocketAccess(tokenId, 10L, null, null), "127.0.0.1");
     }
 
     private Message<byte[]> delivery(String recipient, String subscriptionId, String destination) {

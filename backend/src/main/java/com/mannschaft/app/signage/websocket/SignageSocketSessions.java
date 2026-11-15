@@ -1,9 +1,11 @@
 package com.mannschaft.app.signage.websocket;
 
 import org.springframework.context.event.EventListener;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -11,6 +13,7 @@ import java.util.concurrent.ConcurrentMap;
 /** server側sessionとexact購読の束縛。保持する資格はIDと直接peerだけでraw tokenを持たない。 */
 @Component
 public class SignageSocketSessions {
+    private static final String CLOSED_ATTRIBUTE = SignageSocketSessions.class.getName() + ".closed";
     private final ConcurrentMap<String, State> states = new ConcurrentHashMap<>();
 
     /** 外部へ渡せる不変の資格。JWT Principalとは独立する。 */
@@ -18,9 +21,15 @@ public class SignageSocketSessions {
 
     private record State(Access access, ConcurrentMap<String, String> destinations) { }
 
-    void establish(String sessionId, SignageSocketAccess projection, String peerIp) {
-        if (sessionId != null) states.put(sessionId,
-                new State(new Access(projection.tokenId(), projection.screenId(), peerIp), new ConcurrentHashMap<>()));
+    /** 認可完了後の登録と切断を同じ接続寿命のmonitorで直列化する。DB照合は呼出側でlock外に置く。 */
+    boolean establish(String sessionId, Map<String, Object> attributes, SignageSocketAccess projection, String peerIp) {
+        if (sessionId == null || attributes == null) return false;
+        synchronized (attributes) {
+            if (Boolean.TRUE.equals(attributes.get(CLOSED_ATTRIBUTE))) return false;
+            states.put(sessionId,
+                    new State(new Access(projection.tokenId(), projection.screenId(), peerIp), new ConcurrentHashMap<>()));
+            return true;
+        }
     }
 
     Optional<Access> session(String sessionId) {
@@ -49,13 +58,25 @@ public class SignageSocketSessions {
         if (state != null && subscriptionId != null) state.destinations().remove(subscriptionId);
     }
 
-    void disconnect(String sessionId) {
+    void clear(String sessionId) {
         if (sessionId != null) states.remove(sessionId);
     }
 
-    /** abrupt closeも回収する。複数disconnect通知は同じsessionのremoveだけなので冪等。 */
+    /** 資格の消去では寿命を戻さず、切断後に遅れて返った認可結果による再登録を拒否する。 */
+    void close(String sessionId, Map<String, Object> attributes) {
+        if (attributes == null) {
+            clear(sessionId);
+            return;
+        }
+        synchronized (attributes) {
+            attributes.put(CLOSED_ATTRIBUTE, true);
+            clear(sessionId);
+        }
+    }
+
+    /** abrupt closeも回収する。実CONNECTと同じsession属性mapで重複通知も冪等に処理する。 */
     @EventListener
     public void disconnected(SessionDisconnectEvent event) {
-        disconnect(event.getSessionId());
+        close(event.getSessionId(), SimpMessageHeaderAccessor.getSessionAttributes(event.getMessage().getHeaders()));
     }
 }

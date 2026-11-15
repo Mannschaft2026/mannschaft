@@ -31,7 +31,7 @@ public class SignageSubscriptionInterceptor implements ChannelInterceptor {
         if (command == StompCommand.CONNECT || command == StompCommand.STOMP) {
             return connect(message, accessor);
         }
-        if (command == StompCommand.DISCONNECT) sessions.disconnect(sessionId);
+        if (command == StompCommand.DISCONNECT) sessions.close(sessionId, accessor.getSessionAttributes());
         if (command == StompCommand.UNSUBSCRIBE) sessions.unsubscribe(sessionId, accessor.getSubscriptionId());
         String destination = accessor.getDestination();
         if (command == StompCommand.SEND && SignageSocketDestination.inNamespace(destination)) {
@@ -64,7 +64,7 @@ public class SignageSubscriptionInterceptor implements ChannelInterceptor {
         accessor.removeNativeHeader(TOKEN_HEADER);
         Message<?> sanitized = original.isMutable() ? message
                 : MessageBuilder.createMessage(message.getPayload(), accessor.getMessageHeaders());
-        sessions.disconnect(accessor.getSessionId());
+        sessions.clear(accessor.getSessionId());
         if (values == null) return sanitized;
         if (values.size() != 1 || values.get(0) == null || values.get(0).isBlank()) {
             throw reject(StompErrorCode.UNAUTHENTICATED);
@@ -75,7 +75,9 @@ public class SignageSubscriptionInterceptor implements ChannelInterceptor {
         try {
             var projection = reader.authenticate(values.get(0), peerIp)
                     .orElseThrow(() -> reject(StompErrorCode.UNAUTHENTICATED));
-            sessions.establish(accessor.getSessionId(), projection, peerIp);
+            if (!sessions.establish(accessor.getSessionId(), attributes, projection, peerIp)) {
+                throw reject(StompErrorCode.UNAUTHENTICATED);
+            }
         } catch (StompRejectedException denied) {
             throw denied;
         } catch (RuntimeException failure) {
