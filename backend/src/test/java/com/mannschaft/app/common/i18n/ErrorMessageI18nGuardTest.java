@@ -12,6 +12,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.type.filter.AssignableTypeFilter;
 
@@ -321,7 +322,15 @@ class ErrorMessageI18nGuardTest {
      */
     static String deriveKey(ErrorCode code) {
         RecordingMessageSource recorder = new RecordingMessageSource();
-        new GlobalExceptionHandler(recorder).handleBusinessException(new BusinessException(code));
+        // ja（と未対応言語）は enum 文言が正本で MessageSource を引かないため、訳を引く言語（en）で問い合わせさせる。
+        // JVM 既定ロケール（ja_JP の開発機 / en の CI）に結果が左右されないよう明示し、呼び出し後に元へ戻す。
+        org.springframework.context.i18n.LocaleContext previous = LocaleContextHolder.getLocaleContext();
+        try {
+            LocaleContextHolder.setLocale(Locale.ENGLISH);
+            new GlobalExceptionHandler(recorder).handleBusinessException(new BusinessException(code));
+        } finally {
+            LocaleContextHolder.setLocaleContext(previous);
+        }
         return recorder.lastCode;
     }
 

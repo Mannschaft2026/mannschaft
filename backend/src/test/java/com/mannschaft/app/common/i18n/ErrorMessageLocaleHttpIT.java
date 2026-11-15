@@ -232,14 +232,13 @@ class ErrorMessageLocaleHttpIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-12: 未認証の AuthenticationEntryPoint（401）が Accept-Language: en で英語の message を返す")
-        void AC12_未認証401がenで英語() throws Exception {
+        @DisplayName("AC-12: 未認証の AuthenticationEntryPoint（401）は Accept-Language: en で日本語の本文を返さない"
+                + "（本文を付ける契約変更はしない＝殿判断。現状の空本文のままでよい）")
+        void AC12_未認証401がenで日本語の本文を返さない() throws Exception {
             MvcResult result = mockMvc.perform(get("/api/v1/users/me").header("Accept-Language", "en")).andReturn();
             assertThat(result.getResponse().getStatus()).isEqualTo(401);
             String raw = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
-            assertThat(raw).as("401 応答に本文（error.message）が無い").isNotBlank();
-            JsonNode error = objectMapper.readTree(raw).path("error");
-            assertThat(error.path("message").asText()).isNotBlank().doesNotContainPattern(JAPANESE);
+            assertThat(raw).doesNotContainPattern(JAPANESE);
         }
 
         @Test

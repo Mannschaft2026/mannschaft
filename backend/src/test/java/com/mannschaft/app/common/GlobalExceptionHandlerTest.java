@@ -84,6 +84,21 @@ class GlobalExceptionHandlerTest {
     @InjectMocks
     private GlobalExceptionHandler globalExceptionHandler;
 
+    /**
+     * CMP-261113-1507: 文言は利用者の言語（LocaleContextHolder）で決まる。JVM 既定ロケール（開発機 ja_JP / CI en）に
+     * 結果が左右されないよう、既定は ja（enum 文言が正本）に固定する。訳 properties（MessageSource）を引く経路を
+     * 検証するテストだけ個別に en を置く。
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void fixLocaleToJapanese() {
+        org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.JAPANESE);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void resetLocale() {
+        org.springframework.context.i18n.LocaleContextHolder.resetLocaleContext();
+    }
+
     // ========================================
     // handleBusinessException
     // ========================================
@@ -621,6 +636,8 @@ class GlobalExceptionHandlerTest {
         @DisplayName("正常系: reason が無い場合は ErrorCode の多言語メッセージにフォールバックする")
         void handleResponseStatusException_reason無し_多言語メッセージ() {
             // Given
+            // 訳 properties を引く経路の検証のため、訳を持つ言語（en）で問い合わせる。
+            org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.ENGLISH);
             when(messageSource.getMessage(eq("error.common.005"), any(), any()))
                     .thenReturn("リソースが見つかりません");
             ResponseStatusException ex = new ResponseStatusException(HttpStatus.NOT_FOUND);
@@ -729,6 +746,8 @@ class GlobalExceptionHandlerTest {
                 }
             }
 
+            // 訳 properties を引く経路の検証のため、訳を持つ言語（en）で問い合わせる。
+            org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.ENGLISH);
             when(messageSource.getMessage(eq("error.common.005"), any(), any()))
                     .thenReturn("リソースが見つかりません");
 
@@ -987,6 +1006,8 @@ class GlobalExceptionHandlerTest {
             com.mannschaft.app.schedule.ScheduleErrorCode errorCode =
                     com.mannschaft.app.schedule.ScheduleErrorCode.valueOf(errorCodeName);
 
+            // 訳 properties を引く経路の検証のため、訳を持つ言語（en）で問い合わせる。
+            org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.ENGLISH);
             when(messageSource.getMessage(anyString(), any(), any()))
                     .thenThrow(new org.springframework.context.NoSuchMessageException(expectedCode));
 

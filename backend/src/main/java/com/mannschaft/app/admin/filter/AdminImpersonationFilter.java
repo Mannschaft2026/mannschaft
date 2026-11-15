@@ -1,12 +1,15 @@
 package com.mannschaft.app.admin.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.admin.AdminErrorCode;
+import com.mannschaft.app.common.i18n.EarlyErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,7 +17,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * 管理者変身フィルター（F10.1）。
@@ -38,6 +40,8 @@ public class AdminImpersonationFilter extends OncePerRequestFilter {
     static final String ATTR_ORIGINAL_ADMIN_ID = "originalAdminId";
 
     private final ObjectMapper objectMapper;
+
+    private EarlyErrorResponseWriter earlyErrorResponseWriter;
 
     /**
      * admin / system-admin エンドポイントは変身フィルターをスキップする。
@@ -68,8 +72,8 @@ public class AdminImpersonationFilter extends OncePerRequestFilter {
         boolean isSystemAdmin = auth.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_SYSTEM_ADMIN".equals(a.getAuthority()));
         if (!isSystemAdmin) {
-            sendError(response, HttpServletResponse.SC_FORBIDDEN,
-                    "変身機能はシステム管理者のみ使用できます");
+            sendError(request, response, HttpServletResponse.SC_FORBIDDEN,
+                    AdminErrorCode.IMPERSONATION_SYSTEM_ADMIN_ONLY);
             return;
         }
 
@@ -77,8 +81,8 @@ public class AdminImpersonationFilter extends OncePerRequestFilter {
         try {
             targetUserId = Long.parseLong(header.trim());
         } catch (NumberFormatException e) {
-            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "X-Admin-Impersonate-User-Id の形式が不正です");
+            sendError(request, response, HttpServletResponse.SC_BAD_REQUEST,
+                    AdminErrorCode.IMPERSONATION_TARGET_INVALID);
             return;
         }
 
@@ -101,9 +105,23 @@ public class AdminImpersonationFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private void sendError(HttpServletResponse response, int status, String message) throws IOException {
-        response.setStatus(status);
-        response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(objectMapper.writeValueAsString(Map.of("error", message)));
+    /**
+     * 早期拒否の応答を書く（CMP-261113-1507）。従来の {@code {"error":"<日本語>"}} 独自形式をやめ、共通の
+     * {@code ErrorResponse} 形式で利用者の言語（users.locale → Accept-Language）へ訳す。
+     * 部品の Bean が無い縮小構成では ja 正本で同じ形を書く。
+     */
+    private void sendError(HttpServletRequest request, HttpServletResponse response, int status,
+                           AdminErrorCode code) throws IOException {
+        if (earlyErrorResponseWriter != null) {
+            earlyErrorResponseWriter.write(request, response, status, code);
+        } else {
+            EarlyErrorResponseWriter.writeJapanese(response, status, code);
+        }
+    }
+
+    /** 早期拒否応答の部品（任意注入。既存の構築箇所・スライステストのコンストラクタを変えないため setter で受ける）。 */
+    @Autowired(required = false)
+    public void setEarlyErrorResponseWriter(EarlyErrorResponseWriter earlyErrorResponseWriter) {
+        this.earlyErrorResponseWriter = earlyErrorResponseWriter;
     }
 }

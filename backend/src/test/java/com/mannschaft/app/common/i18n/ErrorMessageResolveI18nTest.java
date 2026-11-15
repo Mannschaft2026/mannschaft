@@ -48,16 +48,17 @@ class ErrorMessageResolveI18nTest {
     // ---------------------------------------------------------------- AC-8
 
     @Test
-    @DisplayName("AC-8: 英訳のアポストロフィ（例 can't）が BE 応答の message にそのまま出る（引数なしは MessageFormat を通らない）")
+    @DisplayName("AC-8: 英訳のアポストロフィ（’ または '）が BE 応答の message にそのまま出る（引数なしは MessageFormat を通らない）")
     void AC8_英語のアポストロフィが応答にそのまま出る() {
+        // 翻訳は typographic な ’ で統一している（ASCII の ' は MessageFormat の引用符と紛らわしいため）。
         Properties en = ErrorMessageI18nGuardTest.loadProperties("messages_en.properties");
         Optional<ErrorCode> sample = ErrorMessageI18nGuardTest.scanErrorCodes().stream()
                 .filter(e -> !e.message().matches(".*\\{\\d+.*"))
-                .filter(e -> en.getProperty(e.key(), "").contains("'"))
+                .filter(e -> en.getProperty(e.key(), "").matches(".*['’].*"))
                 .map(e -> findConstant(e.enumName(), e.code()))
                 .findFirst();
         assertThat(sample)
-                .as("英訳にアポストロフィを含む引数なしの error.* が1件も無い（全コードの英訳が未整備）")
+                .as("英訳にアポストロフィ（’ / '）を含む引数なしの error.* が1件も無い（全コードの英訳が未整備）")
                 .isPresent();
         ErrorCode code = sample.get();
         String expected = en.getProperty(ErrorMessageI18nGuardTest.deriveKey(code));
@@ -65,7 +66,27 @@ class ErrorMessageResolveI18nTest {
         LocaleContextHolder.setLocale(Locale.ENGLISH);
         ResponseEntity<ErrorResponse> response = handler.handleBusinessException(new BusinessException(code));
 
-        assertThat(response.getBody().getError().getMessage()).isEqualTo(expected).contains("'");
+        assertThat(response.getBody().getError().getMessage()).isEqualTo(expected).containsPattern("['’]")
+                .doesNotContain("''").doesNotContain("’’");
+    }
+
+    @Test
+    @DisplayName("AC-8: ASCII の ' は引数なしなら 1 個のまま、引数ありなら '' と書いたものが 1 個になって出る（二重化も消失もしない）")
+    void AC8_ASCIIアポストロフィが引数の有無によらず1個で出る() {
+        org.springframework.context.support.StaticMessageSource source =
+                new org.springframework.context.support.StaticMessageSource();
+        source.addMessage("error.zzi18ntest.997", Locale.ENGLISH, "You can't do this");
+        source.addMessage("error.zzi18ntest.996", Locale.ENGLISH, "You can''t join more than {0} villages");
+        GlobalExceptionHandler local = new GlobalExceptionHandler(source);
+        LocaleContextHolder.setLocale(Locale.ENGLISH);
+
+        ResponseEntity<ErrorResponse> plain = local.handleBusinessException(
+                new BusinessException(testCode("ZZI18NTEST_997", "これはできません")));
+        ResponseEntity<ErrorResponse> formatted = local.handleBusinessException(BusinessException.withMessageArgs(
+                testCode("ZZI18NTEST_996", "参加できる村は {0} 村までです"), null, 5));
+
+        assertThat(plain.getBody().getError().getMessage()).isEqualTo("You can't do this");
+        assertThat(formatted.getBody().getError().getMessage()).isEqualTo("You can't join more than 5 villages");
     }
 
     // ---------------------------------------------------------------- AC-11
