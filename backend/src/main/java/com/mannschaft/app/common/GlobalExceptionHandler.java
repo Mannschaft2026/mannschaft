@@ -119,6 +119,12 @@ public class GlobalExceptionHandler {
             Map.entry("DIAGNOSIS_003", HttpStatus.CONFLICT),
             Map.entry("DIAGNOSIS_004", HttpStatus.CONFLICT),
             Map.entry("DIAGNOSIS_005", HttpStatus.SERVICE_UNAVAILABLE),
+            // F06.4.1 個人の頑張り記録: 不在/他人は存在秘匿で 404、状態競合 409、権限 403、基盤障害は 503
+            Map.entry("EFFORT_001", HttpStatus.NOT_FOUND),
+            Map.entry("EFFORT_002", HttpStatus.CONFLICT),
+            Map.entry("EFFORT_003", HttpStatus.FORBIDDEN),
+            Map.entry("EFFORT_004", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("EFFORT_005", HttpStatus.SERVICE_UNAVAILABLE),
             Map.entry("DIAGNOSIS_006", HttpStatus.BAD_REQUEST),
             // 本人操作の受付拒否と非ACTIVE拒否は既存認証エラーへ転用しない。
             Map.entry("RECALLSESSION_001", HttpStatus.CONFLICT),
