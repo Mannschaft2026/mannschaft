@@ -240,6 +240,8 @@ erDiagram
 | [disclosure](disclosure.md) | `disclosure_form_drafts` | `created_by` | ID参照 | `users` |
 | [disclosure](disclosure.md) | `disclosure_form_drafts` | `updated_by` | ID参照 | `users` |
 | [disclosure](disclosure.md) | `disclosure_form_templates` | `created_by` | ID参照 | `users` |
+| [effortrecord](effortrecord.md) | `effort_operation_receipts` | `actor_user_id` | ID参照 | `users` |
+| [effortrecord](effortrecord.md) | `effort_records` | `owner_user_id` | ID参照 | `users` |
 | [equipment](equipment.md) | `equipment_assignments` | `assigned_by_user_id` | ID参照 | `users` |
 | [equipment](equipment.md) | `equipment_assignments` | `assigned_to_user_id` | ID参照 | `users` |
 | [equipment](equipment.md) | `equipment_assignments` | `returned_by_user_id` | ID参照 | `users` |
