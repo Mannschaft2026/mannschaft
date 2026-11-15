@@ -6,12 +6,14 @@ import com.mannschaft.app.signage.entity.SignageScreenEntity;
 import com.mannschaft.app.signage.repository.SignageAccessTokenRepository;
 import com.mannschaft.app.signage.repository.SignageScreenRepository;
 import com.mannschaft.app.signage.websocket.SignageWebSocketPublisher;
+import com.mannschaft.app.signage.websocket.SignageSocketAccessReader;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
 import com.mannschaft.app.support.test.TeamOrgFixtureHelper;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,7 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -52,6 +55,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -81,10 +85,12 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
     @Autowired SimpleBrokerMessageHandler broker;
     @Autowired SimpMessagingTemplate messaging;
     @Autowired TestRestTemplate rest;
+    @Autowired SignageSocketAccessReader accessReader;
     @Autowired AuthTokenService jwtTokens;
     @Autowired PlatformTransactionManager transactions;
     @LocalServerPort int port;
     @PersistenceContext EntityManager em;
+    @Autowired EntityManagerFactory entityManagerFactory;
 
     private final List<WebSocketStompClient> clients = new ArrayList<>();
     private final List<StompSession> sessions = new ArrayList<>();
@@ -131,9 +137,16 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
 
     @AfterEach
     void cleanup() {
-        sessions.stream().filter(StompSession::isConnected).forEach(StompSession::disconnect);
-        clients.forEach(WebSocketStompClient::stop);
-        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+        List<RuntimeException> cleanupFailures = new ArrayList<>();
+        for (StompSession session : sessions) {
+            try { if (session.isConnected()) session.disconnect(); }
+            catch (RuntimeException failure) { cleanupFailures.add(failure); }
+        }
+        for (WebSocketStompClient client : clients) {
+            try { client.stop(); }
+            catch (RuntimeException failure) { cleanupFailures.add(failure); }
+        }
+        try { new TransactionTemplate(transactions).executeWithoutResult(status -> {
             if (!screenIds.isEmpty()) em.createNativeQuery("DELETE FROM signage_emergency_messages WHERE screen_id IN (:ids)")
                     .setParameter("ids", screenIds).executeUpdate();
             if (!tokenIds.isEmpty()) em.createNativeQuery("DELETE FROM signage_access_tokens WHERE id IN (:ids)")
@@ -150,7 +163,8 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
                     .setParameter("id", teamId).executeUpdate();
             if (organizationId != null) em.createNativeQuery("DELETE FROM organizations WHERE id=:id")
                     .setParameter("id", organizationId).executeUpdate();
-        });
+        }); } catch (RuntimeException failure) { cleanupFailures.add(failure); }
+        assertThat(cleanupFailures).as("全client停止と所有DB回収を試み、失敗を元の試験失敗と併記する").isEmpty();
     }
 
     @Test
@@ -287,6 +301,14 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
 
     @Test
     void AC6_接続後の期限到達と画面停止と削除は次配送と再接続を拒否する() throws Exception {
+        var otherScreenToken = new TransactionTemplate(transactions).execute(status -> {
+            var entity = screens.saveAndFlush(SignageScreenEntity.builder().scopeType("ORGANIZATION")
+                    .scopeId(organizationId).name("停止試練の配送対照").createdBy(920001L).build());
+            screenIds.add(entity.getId());
+            return issueToken(entity.getId());
+        });
+        String otherDestination = "/topic/signage/" + otherScreenToken.getScreenId() + "/emergency";
+        Inbox otherScreen = subscribe(connect("/ws", otherScreenToken.getToken(), null, null), otherDestination);
         Inbox established = subscribe(connect("/ws", token.getToken(), null, null), emergency());
         Inbox control = subscribe(connect("/ws/signage", otherToken.getToken(), null, null), emergency());
         mutateToken("expiredAt", LocalDateTime.now().minusSeconds(1));
@@ -303,6 +325,12 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
             publisher.publishEmergency(screen.getId(), marker);
             assertThat(established.messages.poll(400, TimeUnit.MILLISECONDS)).isNull();
             assertThat(control.messages.poll(400, TimeUnit.MILLISECONDS)).isNull();
+            Inbox reconnect = deniedConnectionOrSubscription(token.getToken(), null);
+            publisher.publishEmergency(screen.getId(), "stopped-screen-probe");
+            assertThat(reconnect.messages.poll(400, TimeUnit.MILLISECONDS)).isNull();
+            String otherMarker = UUID.randomUUID().toString();
+            publisher.publishEmergency(otherScreenToken.getScreenId(), otherMarker);
+            assertThat(otherScreen.messages.poll(10, TimeUnit.SECONDS)).containsEntry("message", otherMarker);
             // 無関係topicへの対照配送で、サーバ/接続そのものの停止と区別する。
             assertNonSignageDelivery();
             new TransactionTemplate(transactions).executeWithoutResult(status -> em.createNativeQuery(
@@ -336,6 +364,58 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
                 new HttpEntity<>(Map.of("message", marker), headers), String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(device.messages.poll(10, TimeUnit.SECONDS)).containsEntry("message", marker);
+    }
+
+    @Test
+    void AC6_publisherの旧RRsnapshotでも失効commit後の独立資格判定は拒否する() throws Exception {
+        Inbox revoked = subscribe(connect("/ws", token.getToken(), null, null), emergency());
+        Inbox control = subscribe(connect("/ws/signage", otherToken.getToken(), null, null), emergency());
+        TransactionTemplate outer = new TransactionTemplate(transactions);
+        outer.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        outer.executeWithoutResult(status -> {
+            assertThat(accessReader.authenticate(token.getToken(), "127.0.0.1")).isPresent();
+            assertThat(((Number) em.createNativeQuery("SELECT CASE WHEN is_active THEN 1 ELSE 0 END FROM signage_access_tokens WHERE id=:id")
+                    .setParameter("id", token.getId()).getSingleResult()).intValue()).isEqualTo(1);
+            CompletableFuture.runAsync(() -> mutateToken("isActive", false)).join();
+            assertThat(((Number) em.createNativeQuery("SELECT CASE WHEN is_active THEN 1 ELSE 0 END FROM signage_access_tokens WHERE id=:id")
+                    .setParameter("id", token.getId()).getSingleResult()).intValue())
+                    .as("publisher側のRRは失効前のsnapshotを保持").isEqualTo(1);
+            assertThat(accessReader.permits(token.getId(), screen.getId(), "127.0.0.1"))
+                    .as("同じthread内の資格照合も旧RRへ参加しない").isFalse();
+            try {
+                assertDelivery(control, revoked);
+            } catch (Exception e) {
+                throw new AssertionError("旧RR内publisherからの配送を実STOMPで検査", e);
+            }
+        });
+    }
+
+    @Test
+    void AC8_正常配送はsubscriptionごとに1projectionで制御と非Signageは0query() throws Exception {
+        var statistics = entityManagerFactory.unwrap(org.hibernate.SessionFactory.class).getStatistics();
+        boolean previous = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            var session = connect("/ws", token.getToken(), null, null);
+            Inbox device = subscribe(session, emergency());
+            long before = projectionQueries(statistics);
+            String marker = UUID.randomUUID().toString();
+            publisher.publishEmergency(screen.getId(), marker);
+            assertThat(device.messages.poll(10, TimeUnit.SECONDS)).containsEntry("message", marker);
+            assertThat(projectionQueries(statistics) - before).isEqualTo(1);
+            before = projectionQueries(statistics);
+            device.subscription.unsubscribe();
+            await().atMost(Duration.ofSeconds(10)).until(() -> !registered(emergency(), device.id));
+            assertNonSignageDelivery();
+            assertThat(projectionQueries(statistics) - before).isZero();
+        } finally {
+            statistics.setStatisticsEnabled(previous);
+        }
+    }
+
+    private long projectionQueries(org.hibernate.stat.Statistics statistics) {
+        return Arrays.stream(statistics.getQueries()).filter(query -> query.contains("SignageSocketAccess("))
+                .mapToLong(query -> statistics.getQueryStatistics(query).getExecutionCount()).sum();
     }
 
     @Test

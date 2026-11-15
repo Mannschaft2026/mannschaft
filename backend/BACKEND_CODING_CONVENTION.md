@@ -600,7 +600,7 @@ CI/CD パイプラインの詳細設定（ワークフロー YAML、JaCoCo 集�
     * `ChannelInterceptor` を実装し、`preSend` メソッドにて `CONNECT` コマンド受信時のヘッダー検証を行う。
     * 明示した資格が無効なら接続を拒否する。資格なしの共通CONNECTは匿名として通し、各topicのSUBSCRIBEと配送境界で認可する。
     * 掲示topicはSUBSCRIBE時とrecipientごとの配送時にtoken・画面の現在状態を検証する。購読時だけの検証で失効後の配送を許してはならない。
-* **ハンドシェイク時**: 初期接続（HTTP Handshake）時は認証をスキップし、その後の STOMP プロトコルレベルで認証を強制する構成とする。
+* **ハンドシェイク時**: HTTP upgradeは許可Originで受け付ける。共通CONNECTでJWTの認証ソースを確定し、匿名を含む接続の各topicのSUBSCRIBE/配送境界で、そのtopicの許可契約を強制する。
 
 ### レートリミット（リクエスト制限）規約
 * **必須適用箇所**:
