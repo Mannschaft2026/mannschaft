@@ -1853,6 +1853,7 @@
     }
   },
   "common": {
+    "back": "뒤로",
     "cancel": "취소",
     "search": "검색",
     "edit": "편집",
