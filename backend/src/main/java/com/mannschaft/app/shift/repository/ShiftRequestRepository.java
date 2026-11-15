@@ -45,10 +45,13 @@ public interface ShiftRequestRepository extends JpaRepository<ShiftRequestEntity
     Optional<Long> findLiveIdBySlotForUpdate(@Param("scheduleId") Long scheduleId,
                                            @Param("slotId") Long slotId);
 
-    /** 親ロック下で同枠の生存希望の日付だけを一括変更する。日単位・削除済み希望は保持する。 */
+    /**
+     * 親ロック下で同枠の生存希望の日付だけを一括変更する。日単位・削除済み希望は保持する。
+     * updated_at の自己代入は本番DDLの ON UPDATE CURRENT_TIMESTAMP による内容更新日時の変更を防ぐ。
+     */
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            UPDATE shift_requests SET slot_date = :slotDate
+            UPDATE shift_requests SET slot_date = :slotDate, updated_at = updated_at
             WHERE schedule_id = :scheduleId AND slot_id = :slotId AND deleted_at IS NULL
             """, nativeQuery = true)
     int moveLiveSlotRequests(@Param("scheduleId") Long scheduleId,

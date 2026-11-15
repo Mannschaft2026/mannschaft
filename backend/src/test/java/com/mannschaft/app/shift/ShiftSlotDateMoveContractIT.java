@@ -167,6 +167,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
     @Test
     void 確認後は生存する同枠希望だけ移動し識別子と内容を保持する() throws Exception {
         Long requestId = newRequest(slotId, OLD_DATE, memberId);
+        ShiftRequestEntity original = tx.execute(s -> requestRepository.findById(requestId).orElseThrow());
         Long dailyId = newRequest(null, NEW_DATE, memberId);
         Long otherSlot = tx.execute(s -> newSlot(scheduleId, OLD_DATE));
         Long otherRequest = newRequest(otherSlot, OLD_DATE, memberId);
@@ -184,6 +185,8 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             assertThat(moved.getUserId()).isEqualTo(memberId);
             assertThat(moved.getPreference()).isEqualTo(ShiftPreference.PREFERRED);
             assertThat(moved.getNote()).isEqualTo("移動前の希望");
+            assertThat(moved.getSubmittedAt()).isEqualTo(original.getSubmittedAt());
+            assertThat(moved.getUpdatedAt()).isEqualTo(original.getUpdatedAt());
             assertThat(slotRepository.findById(slotId).orElseThrow().getSlotDate()).isEqualTo(NEW_DATE);
             assertThat(requestRepository.findById(dailyId).orElseThrow().getSlotDate()).isEqualTo(NEW_DATE);
             assertThat(requestRepository.findById(otherRequest).orElseThrow().getSlotDate()).isEqualTo(OLD_DATE);
