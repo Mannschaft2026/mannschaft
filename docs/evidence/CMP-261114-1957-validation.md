@@ -33,7 +33,7 @@
 - [Task-List PR Gate](https://github.com/kenta-0420/mannschaft/actions/runs/43661700361)
 - [Harness tests](https://github.com/kenta-0420/mannschaft/actions/runs/43661702289)
 - [Compile & Test](https://github.com/kenta-0420/mannschaft/actions/runs/43661702403)
-- [追加変更一覧 scan](https://github.com/kenta-0420/mannschaft/actions/runs/43661702400)
+- [秘密情報スキャン（gitleaks）](https://github.com/kenta-0420/mannschaft/actions/runs/43661702400)
 
 実装 PR は head SHA `8051e53007ac4a895aac40b2ecb26fdbb9ae58db` のまま merge 済み。採用後の main push では [ER Diagram Drift Check](https://github.com/kenta-0420/mannschaft/actions/runs/43662427220) と [gitleaks](https://github.com/kenta-0420/mannschaft/actions/runs/43662427230) も成功した（merge commit `9e2f4567dce7896bb8e039346ab6286808d65eb9`）。
 
