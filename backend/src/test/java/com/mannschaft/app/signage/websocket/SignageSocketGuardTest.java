@@ -8,13 +8,19 @@ import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -102,6 +108,77 @@ class SignageSocketGuardTest {
         var message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
         assertThatThrownBy(() -> inbound.preSend(message, null)).hasMessageNotContaining(raw);
         assertThat(sessions.session("session")).isEmpty();
+    }
+
+    @Test
+    void AC4_認可完了前に切断eventを処理しても資格を復活させない() throws Exception {
+        var accessor = connect("device-secret");
+        var message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+        var authenticating = new CountDownLatch(1);
+        var completeAuthentication = new CountDownLatch(1);
+        when(reader.authenticate("device-secret", "127.0.0.1")).thenAnswer(invocation -> {
+            authenticating.countDown();
+            assertThat(completeAuthentication.await(5, TimeUnit.SECONDS)).isTrue();
+            return Optional.of(new SignageSocketAccess(1L, 10L, null, null));
+        });
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var connection = executor.submit(() -> catchThrowable(() -> inbound.preSend(message, null)));
+            try {
+                assertThat(authenticating.await(5, TimeUnit.SECONDS)).isTrue();
+                // 認可のDB待ち中にも別threadでcleanupが完了する。monitorをDB照合中に保持させない。
+                executor.submit(() -> sessions.disconnected(disconnectEvent(accessor)))
+                        .get(5, TimeUnit.SECONDS);
+                assertThat(sessions.session("session")).isEmpty();
+            } finally {
+                completeAuthentication.countDown();
+            }
+            Throwable rejected = connection.get(5, TimeUnit.SECONDS);
+            assertThat(sessions.session("session")).as("切断後の認可完了で資格を復活させない").isEmpty();
+            assertThat(rejected).isInstanceOf(com.mannschaft.app.common.websocket.StompRejectedException.class);
+        }
+    }
+
+    @Test
+    void AC4_切断済みsessionへCONNECTを処理しても資格を再登録しない() {
+        var accessor = connect("device-secret");
+        sessions.disconnected(disconnectEvent(accessor));
+        when(reader.authenticate("device-secret", "127.0.0.1"))
+                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, null, null)));
+
+        Throwable rejected = catchThrowable(() -> inbound.preSend(
+                MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), null));
+
+        assertThat(sessions.session("session")).isEmpty();
+        assertThat(rejected).isInstanceOf(com.mannschaft.app.common.websocket.StompRejectedException.class);
+    }
+
+    @Test
+    void AC4_通常CONNECT後のDISCONNECTと重複eventで資格とbindingを回収する() {
+        var accessor = connect("device-secret");
+        when(reader.authenticate("device-secret", "127.0.0.1"))
+                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, null, null)));
+        inbound.preSend(MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), null);
+        sessions.bind("session", "sub", DESTINATION);
+        assertThat(sessions.binding("session", "sub", DESTINATION)).isPresent();
+        var disconnect = StompHeaderAccessor.create(StompCommand.DISCONNECT);
+        disconnect.setSessionId("session");
+        disconnect.setSessionAttributes(accessor.getSessionAttributes());
+
+        inbound.preSend(MessageBuilder.createMessage(new byte[0], disconnect.getMessageHeaders()), null);
+        sessions.disconnected(disconnectEvent(accessor));
+        sessions.disconnected(disconnectEvent(accessor));
+
+        assertThat(sessions.session("session")).isEmpty();
+        assertThat(sessions.binding("session", "sub", DESTINATION)).isEmpty();
+    }
+
+    private SessionDisconnectEvent disconnectEvent(StompHeaderAccessor connection) {
+        var accessor = StompHeaderAccessor.create(StompCommand.DISCONNECT);
+        accessor.setSessionId("session");
+        accessor.setSessionAttributes(connection.getSessionAttributes());
+        return new SessionDisconnectEvent(this,
+                MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), "session", CloseStatus.NORMAL);
     }
 
     private StompHeaderAccessor connect(String raw) {
