@@ -95,16 +95,15 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
         events.addApplicationListener(listener);
         ChannelInterceptor afterAuthorization = new ChannelInterceptor() {
             @Override
-            public Message<?> preSend(Message<?> message, MessageChannel channel) {
+            public void afterSendCompletion(Message<?> message, MessageChannel channel, boolean sent, Exception exception) {
                 var accessor = StompHeaderAccessor.wrap(message);
                 if (accessor.getCommand() == StompCommand.CONNECT || accessor.getCommand() == StompCommand.STOMP) {
                     authorizationCompleted.offer(accessor.getSessionId());
                 }
-                return message;
             }
         };
-        // 本物の認可を置換せず、その後段に観測だけを追加してlate認可完了を明示的に待つ。
-        inboundChannel.addInterceptor(afterAuthorization);
+        // 本物の認可を置換しない。先頭で完了callbackだけを登録し、後段の成功/拒否の両方を待つ。
+        inboundChannel.addInterceptor(0, afterAuthorization);
         StandardWebSocketClient delegate = new StandardWebSocketClient();
         WebSocketClient tracked = new WebSocketClient() {
             public CompletableFuture<WebSocketSession> execute(WebSocketHandler handler, String uri, Object... args) {
