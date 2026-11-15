@@ -200,6 +200,19 @@ public class ChatChannelService {
     }
 
     /**
+     * 作成系（会話開始・Zimmer 招待・グループ変換）の応答に、一覧・詳細と同じ memberCount / viewer を付与する
+     * （CMP-261113-0110）。chat ドメインの表だけを読む。DM 相手（dmPartner）と GROUP_DM の導出名（derivedName）は
+     * ユーザー（auth ドメイン）の表示名が要るため、トランザクションの外で {@link ChatGroupDmDerivedNameResolver} 等が付ける。
+     */
+    private ChannelResponse enrichCreated(ChatChannelEntity entity, Long callerId) {
+        Long channelId = entity.getId();
+        ChatChannelMemberEntity myMember =
+                memberRepository.findByChannelIdAndUserId(channelId, callerId).orElse(null);
+        int memberCount = (int) memberRepository.countByChannelId(channelId);
+        return enrichChannel(entity, myMember, memberCount, null);
+    }
+
+    /**
      * 呼出ユーザーのメンバー行から viewer 状態を構築する。非メンバー（null）の場合は null。
      */
     private ChannelResponse.ViewerStateDto buildViewer(ChatChannelMemberEntity member) {
@@ -460,7 +473,7 @@ public class ChatChannelService {
 
         // 既存 DM を検索
         return channelRepository.findExistingDm(callerId, partnerId)
-                .map(existing -> new ConversationResult(chatMapper.toChannelResponse(existing), false))
+                .map(existing -> new ConversationResult(enrichCreated(existing, callerId), false))
                 .orElseGet(() -> {
                     // 新規 DM 作成
                     ChatChannelEntity channel = ChatChannelEntity.builder()
@@ -473,7 +486,7 @@ public class ChatChannelService {
                     memberRepository.save(ChatChannelMemberEntity.builder()
                             .channelId(saved.getId()).userId(partnerId).role(ChannelMemberRole.MEMBER).build());
                     log.info("Kabine作成: channelId={}, callerId={}, partnerId={}", saved.getId(), callerId, partnerId);
-                    return new ConversationResult(chatMapper.toChannelResponse(saved), true);
+                    return new ConversationResult(enrichCreated(saved, callerId), true);
                 });
     }
 
@@ -500,7 +513,7 @@ public class ChatChannelService {
         }
 
         log.info("Zimmer作成: channelId={}, callerId={}, members={}", saved.getId(), callerId, partnerIds.size() + 1);
-        return new ConversationResult(chatMapper.toChannelResponse(saved), true);
+        return new ConversationResult(enrichCreated(saved, callerId), true);
     }
 
     /**
@@ -586,7 +599,7 @@ public class ChatChannelService {
 
         log.info("Zimmer作成（Kabineから招待）: kabineId={}, zimmerId={}, callerId={}, shareHistory={}",
                 channelId, savedZimmer.getId(), callerId, request.isShareHistory());
-        return chatMapper.toChannelResponse(savedZimmer);
+        return enrichCreated(savedZimmer, callerId);
     }
 
     /**
@@ -612,7 +625,7 @@ public class ChatChannelService {
         channel.convertToGroupDm();
         ChatChannelEntity saved = channelRepository.save(channel);
         log.info("DMをグループDMに変換: channelId={}, callerId={}", channelId, callerId);
-        return chatMapper.toChannelResponse(saved);
+        return enrichCreated(saved, callerId);
     }
 
     /**

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261110-0427",
+  "scope": "app",
+  "implementation": {
+    "pr": 4460,
+    "sha": "55c5e1845df9e32e692cdf6ef260603f4121f6af"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "予約作成・確定・メンバーキャンセルの各通知で、枠タイトルが null・空・空白のときもフォールバック表示になり「null」が混ざらない",
+      "tests": [
+        {
+          "name": "ReservationAdminNotificationEventListenerTest.java",
+          "evidence": "backend/src/test/java/com/mannschaft/app/reservation/event/ReservationAdminNotificationEventListenerTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "予約サービス・グループ予約の通知本文生成でも枠タイトル未設定が正しく扱われる",
+      "tests": [
+        {
+          "name": "ReservationServiceTest.java",
+          "evidence": "backend/src/test/java/com/mannschaft/app/reservation/ReservationServiceTest.java"
+        },
+        {
+          "name": "ReservationGroupServiceTest.java",
+          "evidence": "backend/src/test/java/com/mannschaft/app/reservation/service/ReservationGroupServiceTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43620358966
+    },
+    {
+      "runId": 43620358959
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4460"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261110-0427.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261110-0427.md"
+    }
+  },
+  "regressions": [
+    {
+      "description": "枠タイトル未設定の予約通知に「nullが予約されました」と出る",
+      "test": "backend/src/test/java/com/mannschaft/app/reservation/event/ReservationAdminNotificationEventListenerTest.java",
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/pull/4460",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/actions/runs/43620358966"
+    }
+  ]
+}
