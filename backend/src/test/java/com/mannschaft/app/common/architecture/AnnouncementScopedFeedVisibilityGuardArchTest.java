@@ -4,8 +4,6 @@ import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
-import com.tngtech.archunit.core.importer.ClassFileImporter;
-import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -45,9 +43,9 @@ class AnnouncementScopedFeedVisibilityGuardArchTest {
     private static final Set<String> TX_ANNOTATIONS = Set.of(
             "org.springframework.transaction.annotation.Transactional", "jakarta.transaction.Transactional");
 
-    private static final JavaClasses CLASSES = new ClassFileImporter()
-            .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-            .importPackages(PACKAGE);
+    private static JavaClasses classes() {
+        return ProductionClasses.get();
+    }
 
     @Test
     @DisplayName("AC7 Guard AnnouncementScopedFeedVisibilityGuard が social.announcement に実在し、@Transactional をクラス・メソッドのどちらにも持たない")
@@ -71,8 +69,8 @@ class AnnouncementScopedFeedVisibilityGuardArchTest {
     })
     @DisplayName("AC7 Controller の削除・ピン留め入口は Service 呼び出しより前に Guard を呼ぶ")
     void ac7_ControllerはServiceより前にGuardを呼ぶ(String controller, String entry, String serviceMethod) {
-        assertThat(CLASSES.contain(controller)).as("Controller %s の取り込み", controller).isTrue();
-        JavaMethod method = entryMethod(CLASSES.get(controller), entry);
+        assertThat(classes().contain(controller)).as("Controller %s の取り込み", controller).isTrue();
+        JavaMethod method = entryMethod(classes().get(controller), entry);
         List<JavaMethodCall> calls = List.copyOf(method.getMethodCallsFromSelf());
 
         OptionalInt serviceLine = calls.stream()
@@ -92,8 +90,8 @@ class AnnouncementScopedFeedVisibilityGuardArchTest {
     }
 
     private static Optional<JavaClass> guard() {
-        return CLASSES.stream()
-                .filter(javaClass -> javaClass.getSimpleName().equals(GUARD))
+        return classes().stream()
+                .filter(javaClass -> javaClass.getPackageName().equals(PACKAGE) && javaClass.getSimpleName().equals(GUARD))
                 .findFirst();
     }
 
