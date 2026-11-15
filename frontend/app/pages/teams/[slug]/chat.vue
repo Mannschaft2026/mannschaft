@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ChatChannelResponse } from '~/types/chat'
+import { resolveChannelDisplayName } from '~/utils/chat/channelDisplayName'
 import { useChatCreatedChannel } from '~/composables/chat/useChatCreatedChannel'
 import { useChatOpenCreatedChannel } from '~/composables/chat/useChatOpenCreatedChannel'
 
@@ -7,6 +8,7 @@ definePageMeta({
   middleware: 'auth',
 })
 
+const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
 const { isAdmin, isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
@@ -71,7 +73,7 @@ watch(
 const selectedChannelName = computed(() => {
   const ch = selectedChannel.value
   if (!ch) return ''
-  return ch.dmPartner?.displayName ?? ch.meta?.name ?? ''
+  return resolveChannelDisplayName(ch, t('chat.unnamedChannel'))
 })
 
 function onChannelSelect(ch: ChatChannelResponse) {

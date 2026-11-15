@@ -11,7 +11,7 @@ const props = defineProps<{
 }>()
 
 const { getSettings, updateSettings } = useConfirmableNotificationApi()
-const { showError } = useNotification()
+const { showError, showSuccess } = useNotification()
 const { t } = useI18n()
 
 const loading = ref(false)
@@ -58,9 +58,7 @@ async function saveSettings() {
       defaultUnconfirmedVisibility: defaultUnconfirmedVisibility.value,
     }
     await updateSettings(props.scopeType, props.scopeId, body)
-    // 保存成功トーストを表示
-    const toast = useToast()
-    toast.add({ severity: 'success', summary: t('dialog.success'), life: 3000 })
+    showSuccess(t('dialog.success'))
   } catch {
     showError(t('confirmable.save_settings_error'))
   } finally {

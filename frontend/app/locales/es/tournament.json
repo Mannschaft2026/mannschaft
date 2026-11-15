@@ -165,6 +165,7 @@
       "private": "Privado",
       "empty": "No hay espacios de contacto disponibles",
       "no_bulletin": "No hay tablón de anuncios",
+      "bulletin_scope_unresolved": "No se puede mostrar el tablón porque no se pudo determinar su ámbito",
       "no_chat": "No hay espacio de chat",
       "visibility_saved": "Visibilidad actualizada",
       "visibility_failed": "Error al actualizar la visibilidad",
