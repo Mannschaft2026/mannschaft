@@ -50,3 +50,30 @@ API 層の探索: passed（欠陥は D-1 のみ）。画面探索: 未実施（�
 ### 判定
 
 画面探索: passed（群F の対象画面に欠陥なし。O-1 は未切り分けの観測）。
+
+## O-1 の切り分け結果（2026-11-15 再実施）
+
+- 実施日: 2026-11-15（JST）。手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-rescreen-261115b.real.spec.ts`、設定は `frontend/playwright-groupf-rescreen-261115b.config.ts`
+- 環境: BE 8081 は **origin/main `8e760380f1`（#4531＝D-F1 修正を含む）から bootJar を新規ビルド**して WSL で起動（出所不明の旧 jar ではない）/ FE 3017（本作業木＝上記 main 取込み済みの dev サーバー）/ 実 MySQL。CORS は OPTIONS で 3017 が 200 になることを実測してから使用
+- 前提データは自前（名前・メールに `e2e-261115b` / `e2e261115b`）。組織・チーム・大会は後始末で削除済み（globalTeardown で組織・チーム 4/4 件、大会の削除は 204）
+- スクリーンショット: `docs/evidence/screenshots/groupF-261115b/`
+
+新規に作った大会（公開・受付中・部門なし）で、組織A管理者と組織A一般会員が各サブ画面を直打ちし、トースト表示時の API を記録した（#4328 が変えた部門・日程・順位系はいずれも 404 なし）。
+
+| 視点 | 画面 | トースト | 失敗した API（status / error.code） |
+|---|---|---|---|
+| 管理者 | 連絡スペース | 「掲示板の取得に失敗しました」 | `GET /api/v1/bulletin/threads?scope_type=TOURNAMENT&page=0&size=20` と `GET /api/v1/bulletin/categories?scope_type=TOURNAMENT` が **400 COMMON_001**（`scope_id` が付いていない） |
+| 管理者 | 書類提出・参加費・ファイル・試合メンバー表・対戦表・順位表・ランキング・対戦マトリクス・スコア入力 | なし | なし（すべて 2xx。404 なし） |
+| 一般会員 | 連絡スペース | 「連絡スペースの取得に失敗しました」 | `GET /api/v1/tournaments/{id}/contact-spaces` **403 TOUR_032**（メッセージは「連絡スペースの公開設定を変更する権限がありません」） |
+| 一般会員 | 書類提出 | 「データの取得に失敗しました」 | `GET /organizations/{slug}/tournaments/{id}/submission-requirements` **403 TOUR_052** |
+| 一般会員 | 参加費 | 「参加費の取得に失敗しました」 | `GET /organizations/{slug}/tournaments/{id}/fees` **403 TOUR_034** |
+| 一般会員 | ファイル置き場 | 「フォルダの読み込みに失敗しました」 | `GET /tournaments/{id}/folders` **403 TOUR_030** |
+| 一般会員 | 試合メンバー表・対戦表・順位表・ランキング・対戦マトリクス・スコア入力 | なし | なし |
+
+結論（#4328 とは無関係。部門・日程・順位系の API は 404 になっていない）:
+
+- 一般会員のトーストは、**権限なし（403）を FE が一律「取得に失敗しました」と表示している**ことによる。大会に役割を持たない一般会員には仕様上 403 でよいが、権限不足の説明が出ない（UX 上の課題。確証のある欠陥としては起票しない。なお TOUR_032 は閲覧の権限なしなのに文言が「公開設定を変更する権限」で不適切）。
+- **管理者の連絡スペースの 400 は欠陥（新規 O-2）**: contact-spaces API の応答は掲示板の参照 ID を `refId` で返す（実測: `spaceKind: BULLETIN`、`refId` あり）が、FE（`communication.vue`）は `bulletinRefId` を読むため常に未定義になり、`scope_id` なしで掲示板 API を叩いて 400 になる。管理者が大会の掲示板を画面で見られない。台帳には未起票。
+- 横スクロール・JS エラーなし。画像 `O1-admin-*.png`
+
+最終判定: 画面探索 **failed**（O-2 の 1 件。群F の対象画面〔部門・参加チームの越境〕の欠陥ではない別件）。O-1 は上記のとおり切り分け済み。

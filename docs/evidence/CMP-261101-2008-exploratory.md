@@ -40,3 +40,15 @@ API 層: passed。画面探索: 未実施（再実施が必要）。
 ### 判定
 
 画面探索: passed（欠陥の確証なし。E-1 は未切り分けとして残る）。
+
+## E-1 の切り分け結果（2026-11-15 再実施）
+
+- 実施日: 2026-11-15（JST）。手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-rescreen-261115b.real.spec.ts`、設定は `frontend/playwright-groupf-rescreen-261115b.config.ts`
+- 環境: BE 8081 は **origin/main `8e760380f1`（#4531＝D-F1 修正を含む）から bootJar を新規ビルド**して WSL で起動（出所不明の旧 jar ではない）/ FE 3017（本作業木＝上記 main 取込み済みの dev サーバー）/ 実 MySQL。CORS は OPTIONS で 3017 が 200 になることを実測してから使用
+- 前提データは自前（名前・メールに `e2e-261115b` / `e2e261115b`）。組織・チーム・大会は後始末で削除済み（globalTeardown で組織・チーム 4/4 件、大会の削除は 204）
+- スクリーンショット: `docs/evidence/screenshots/groupF-261115b/`
+
+- 結論: **欠陥ではなく、前回の操作の取り違え**。組織告知は `/dashboard`（ダッシュボード）の「チーム」タブのお知らせカードとして、ウィジェットの上に常時出る設計。前回は `/teams/{slug}`（チームページ）を開いて「連絡・共有」行を探していた。
+- 再現: 自前の組織告知（組織Aからチームへ一斉送信）を作り、チームA会員で `/dashboard`→「チーム」タブを押すと、「お知らせ 未読1件」のカードに告知タイトルが出た（チームA管理者も同様）。画像 `E1-teamA会員-after-tab.png`、`E1-teamA管理者-after-tab.png`。dashboard API 応答の `teamNotices` に 1 件あり、`featureVisibility`・`announcementScopeId` に起因する非表示は無し。コンソールの 4xx/5xx・JS エラーなし。
+- ただし着地時は「個人」タブで、チームのお知らせは「チーム」タブを押すまで見えない（タブ構成の仕様。欠陥とは判断せず）。
+- 判定: E-1 は解消（欠陥なし）。画面探索の最終判定: **passed**。
