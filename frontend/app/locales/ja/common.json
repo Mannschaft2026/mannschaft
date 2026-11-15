@@ -199,6 +199,7 @@
     },
     "activeThreadsEmpty": "進行中のスレッドはありません",
     "tabAriaLabel": "{name} のタブ",
+    "unnamedChannel": "名称未設定のグループ",
     "message": {
       "deleted": "このメッセージは削除されました",
       "unknownSender": "不明",

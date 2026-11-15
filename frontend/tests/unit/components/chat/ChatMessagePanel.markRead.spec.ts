@@ -54,6 +54,7 @@ function makeChannel(type: ChatChannelType, withViewer: boolean): ChatChannelRes
     audit: { createdBy: 42, createdAt: null, updatedAt: null },
     memberCount: 3,
     dmPartner: null,
+    derivedName: null,
     viewer: withViewer ? { unreadCount: 1, isMuted: false, isPinned: false, category: null, role: 'OWNER' } : null,
   } as ChatChannelResponse
 }
