@@ -4,7 +4,7 @@
 
 ## 画面層（2026-11-15、D-F1 修正後）
 
-- 実施日: 2026-11-15（JST）。手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-rescreen-261115b.real.spec.ts`、設定は `frontend/playwright-groupf-rescreen-261115b.config.ts`
+- 実施日: 2026-11-15（JST）。手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-rescreen-261115b.real.spec.ts`（この spec/config は PR #4537 では同梱せず、commit 32af1348628d08148359028fe35669adeb5b288b に保存）、設定は `frontend/playwright-groupf-rescreen-261115b.config.ts`（この spec/config は PR #4537 では同梱せず、commit 32af1348628d08148359028fe35669adeb5b288b に保存）
 - 環境: BE 8081 は **origin/main `8e760380f1`（#4531＝D-F1 修正を含む）から bootJar を新規ビルド**して WSL で起動（出所不明の旧 jar ではない）/ FE 3017（本作業木＝上記 main 取込み済みの dev サーバー）/ 実 MySQL。CORS は OPTIONS で 3017 が 200 になることを実測してから使用
 - 前提データは自前（名前・メールに `e2e-261115b` / `e2e261115b`）。組織・チーム・大会は後始末で削除済み（globalTeardown で組織・チーム 4/4 件、大会の削除は 204）
 - スクリーンショット: `docs/evidence/screenshots/groupF-261115b/`

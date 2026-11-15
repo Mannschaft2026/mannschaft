@@ -25,7 +25,7 @@ API 層の探索: passed（欠陥は D-1 のみ）。画面探索: 未実施（�
 ## 画面層（2026-11-15 実施）
 
 - 実施日: 2026-11-15（JST）
-- 手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-screen-261115.real.spec.ts`、設定は `frontend/playwright-groupf-261115.config.ts`（3戦役共通の1本。前提データは spec が自前で作成し、後始末は globalTeardown と後述の掃除で行った）
+- 手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-screen-261115.real.spec.ts`（この spec/config は PR #4537 では同梱せず、commit 32af1348628d08148359028fe35669adeb5b288b に保存）、設定は `frontend/playwright-groupf-261115.config.ts`（この spec/config は PR #4537 では同梱せず、commit 32af1348628d08148359028fe35669adeb5b288b に保存）（3戦役共通の1本。前提データは spec が自前で作成し、後始末は globalTeardown と後述の掃除で行った）
 - 環境: BE 8081（WSL 上で既存の検証 jar を `java -jar`。2026-11-12 ビルド。1604/2008/0901 の修正は 11-06 時点の main に入っているため含まれる。ビルド元コミットの特定まではしていない）/ FE 3017（origin/main `9b80e0d2ef` の dev サーバー）/ 実 MySQL
 - スクリーンショット: `docs/evidence/screenshots/groupF-261115/`（本節で参照するもの）
 - 前回の「画面層は未実施」は、本節の実施で置き換える（旧記述は経緯として残す）
@@ -53,7 +53,7 @@ API 層の探索: passed（欠陥は D-1 のみ）。画面探索: 未実施（�
 
 ## O-1 の切り分け結果（2026-11-15 再実施）
 
-- 実施日: 2026-11-15（JST）。手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-rescreen-261115b.real.spec.ts`、設定は `frontend/playwright-groupf-rescreen-261115b.config.ts`
+- 実施日: 2026-11-15（JST）。手段: Playwright（Chromium、実ブラウザ・モックなし）。spec は `frontend/tests/e2e/real/groupf-rescreen-261115b.real.spec.ts`（この spec/config は PR #4537 では同梱せず、commit 32af1348628d08148359028fe35669adeb5b288b に保存）、設定は `frontend/playwright-groupf-rescreen-261115b.config.ts`（この spec/config は PR #4537 では同梱せず、commit 32af1348628d08148359028fe35669adeb5b288b に保存）
 - 環境: BE 8081 は **origin/main `8e760380f1`（#4531＝D-F1 修正を含む）から bootJar を新規ビルド**して WSL で起動（出所不明の旧 jar ではない）/ FE 3017（本作業木＝上記 main 取込み済みの dev サーバー）/ 実 MySQL。CORS は OPTIONS で 3017 が 200 になることを実測してから使用
 - 前提データは自前（名前・メールに `e2e-261115b` / `e2e261115b`）。組織・チーム・大会は後始末で削除済み（globalTeardown で組織・チーム 4/4 件、大会の削除は 204）
 - スクリーンショット: `docs/evidence/screenshots/groupF-261115b/`
