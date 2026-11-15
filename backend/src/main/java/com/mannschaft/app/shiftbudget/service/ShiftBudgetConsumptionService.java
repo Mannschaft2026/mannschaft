@@ -81,6 +81,8 @@ public class ShiftBudgetConsumptionService {
                                         BigDecimal hourlyRate,
                                         BigDecimal hours) {
         // 0円・負数への置換は予算管理を黙って無効化する。既存PLANNEDの取消より前に拒否する。
+        // IllegalStateException にしないのは、Listener の「CONFIRMED 既存」専用 catch に吸われて
+        // failed_event に残らなくなるため（CMP-261115-1821）。
         if (hourlyRate == null || hourlyRate.signum() <= 0) {
             throw new IllegalArgumentException(
                     "hourlyRate must be positive: slot=" + slotId + ", user=" + userId);
