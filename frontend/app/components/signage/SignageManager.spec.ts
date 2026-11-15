@@ -47,7 +47,7 @@ function render() {
     global: { stubs: {
       Button, Dialog, Select, InputText: Input, Textarea: Input, InputNumber: true,
       PageHeader: true, LoadingBounce: true, DashboardEmptyState: true, SectionCard: { template: '<div><slot /></div>' },
-      Tag: true, DataTable: true, Column: true,
+      Tag: true, DataTable: true, Column: true, DashboardErrorState: true,
     } },
   })
 }
@@ -62,6 +62,45 @@ beforeEach(() => {
 })
 
 describe('サイネージ管理のBE enum契約', () => {
+  it('画面一覧403は未登録と区別し、再試行で成功した一覧を表示する', async () => {
+    const failure = { statusCode: 403 }
+    api.getScreens.mockRejectedValueOnce(failure)
+    const wrapper = render()
+    await flushPromises()
+
+    const error = wrapper.findComponent({ name: 'DashboardErrorState' })
+    expect(error.exists()).toBe(true)
+    expect(error.props('error')).toEqual(failure)
+    expect(wrapper.findComponent({ name: 'DashboardEmptyState' }).exists()).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text() === '画面を追加')).toBe(false)
+    await error.vm.$emit('retry')
+    await flushPromises()
+    expect(api.getScreens).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('既存画面')
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+  })
+
+  it.each(['getSlots', 'getTokens'] as const)('%sの403は空表示と区別し、同じ取得を再試行できる', async (method) => {
+    api[method].mockRejectedValueOnce({ statusCode: 403 })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '管理')!.trigger('click')
+    await flushPromises()
+
+    const error = wrapper.findComponent({ name: 'DashboardErrorState' })
+    expect(error.exists()).toBe(true)
+    expect(error.props('showRetry')).toBe(true)
+    if (method === 'getTokens') expect(wrapper.text()).not.toContain('トークンがありません')
+    else expect(wrapper.findComponent({ name: 'DataTable' }).exists()).toBe(false)
+    await error.vm.$emit('retry')
+    await flushPromises()
+    expect(api[method]).toHaveBeenCalledTimes(2)
+    expect(api[method]).toHaveBeenLastCalledWith(1)
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+    if (method === 'getTokens') expect(wrapper.text()).toContain('トークンがありません')
+    else expect(wrapper.findComponent({ name: 'DataTable' }).exists()).toBe(true)
+  })
+
   it.each(['LANDSCAPE', 'PORTRAIT', 'STANDARD'])('レイアウト%sで作成でき、未対応transitionを選べない', async (layout) => {
     const wrapper = render()
     await flushPromises()

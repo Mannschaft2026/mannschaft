@@ -12,6 +12,8 @@ const matchId = '00000000-0000-4000-8000-000000000124'
 const detailPath = `/api/v1/organizations/124/teams/124/matches/${matchId}`
 const errors: unknown[] = []
 let canRecord = true
+let contextTeamsMissing = false
+let contextTeamId: number | null = 124
 let matchStatus = 'SCHEDULED'
 let savedEvents: MatchEventResponse[] = []
 let eventsFail = false
@@ -52,7 +54,7 @@ beforeAll(async () => {
 
 // 自前の composable は実体を通し、HTTP とブラウザのハードウェア境界だけを置き換える。
 registerEndpoint('/api/v1/me/teams', () => ({
-  data: [{ id: 124, slug: 'live-init-test', organizationId: 124 }],
+  data: contextTeamsMissing ? [] : [{ id: contextTeamId, slug: 'live-init-test', organizationId: 124 }],
 }))
 registerEndpoint(detailPath, async () => {
   detailReached = true
@@ -88,6 +90,8 @@ registerEndpoint(`/api/v1/organizations/124/matches/${matchId}/events`, {
 beforeEach(() => {
   errors.length = 0
   canRecord = true
+  contextTeamsMissing = false
+  contextTeamId = 124
   matchStatus = 'SCHEDULED'
   savedEvents = []
   eventsFail = false
@@ -152,6 +156,37 @@ async function mountPage() {
 }
 
 describe('ライブ記録画面の非同期初期化', () => {
+  it.each(['context-null', 'team-id-null'])('%sでは観戦中に偽装せず取得エラーを表示する', async (state) => {
+    contextTeamsMissing = state === 'context-null'
+    contextTeamId = state === 'team-id-null' ? null : 124
+    const wrapper = await mountSuspended(LivePage, {
+      route: `/teams/live-init-test/matches/${matchId}/live?org=124`,
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true))
+    expect(detailReached).toBe(false)
+    expect(wrapper.findComponent({ name: 'MatchSpectatorView' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'MatchTimerControls' }).exists()).toBe(false)
+    expect(requestWakeLock).not.toHaveBeenCalled()
+    expect(postEvent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('無効な組織指定では既存の組織選択と警告を保持する', async () => {
+    const wrapper = await mountSuspended(LivePage, {
+      route: `/teams/live-init-test/matches/${matchId}/live?org=999`,
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'MatchOrgSelect' }).exists()).toBe(true))
+    expect(wrapper.find('[data-testid="match-org-invalid"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'MatchSpectatorView' }).exists()).toBe(false)
+    expect(detailReached).toBe(false)
+    wrapper.unmount()
+  })
+
   it('イベント取得待ちで離脱した後の成功応答はtimerや画面資源を作らない', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
