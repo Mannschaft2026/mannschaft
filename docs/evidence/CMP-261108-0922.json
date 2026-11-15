@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261108-0922",
+  "scope": "app",
+  "implementation": {
+    "pr": 4393,
+    "sha": "cf018785dbb20572e199ac92c58a071258691074"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "master取得中に6項目と保存を保護する",
+      "tests": [
+        {
+          "name": "OBI-INIT-01 / OBI-INIT-02 / OBI-INIT-03",
+          "evidence": "frontend/app/components/organization/OrgBasicInfoEditDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "close/unmount/reopenと遅着した都道府県/都市応答が現入力と候補を上書きしない",
+      "tests": [
+        {
+          "name": "OBI-INIT-05 / OBI-INIT-06 / OBI-INIT-07 / OBI-INIT-08 / OBI-INIT-09",
+          "evidence": "frontend/app/components/organization/OrgBasicInfoEditDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "取得失敗fallback/未掲載所在地/保存失敗時の入力保持を守る",
+      "tests": [
+        {
+          "name": "OBI-INIT-10 / OBI-INIT-11 / OBI-INIT-12",
+          "evidence": "frontend/app/components/organization/OrgBasicInfoEditDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "既存送信7キー/version0・名称更新と元名復旧・既存権限を保つ",
+      "tests": [
+        {
+          "name": "OBI-INIT-04",
+          "evidence": "frontend/app/components/organization/OrgBasicInfoEditDialog.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43522062154
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4393",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "初期化遅延による入力上書きを、原CIの13件10失敗（製品9・helper1）→最終14件中所在地1失敗→14成功、および固定最終specで旧SFCだけを差し替えたLinux比較14件中10製品assert失敗/4成功→14成功で確認した。Windows2回はsetup timeoutで対象assert未実行のまま。実機はR14復旧操作、探索は独立担当の限定資格に対応する。",
+      "test": "OrgBasicInfoEditDialog OBI-INIT-01〜12",
+      "redEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}
