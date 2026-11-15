@@ -35,7 +35,7 @@ import java.util.List;
  * {@link com.mannschaft.app.shiftbudget.view.BudgetView} を {@code MappingJacksonValue} 経由で
  * 切替えることでフィールド単位のマスキングを実現する。</p>
  */
-@Builder
+@Builder(toBuilder = true)
 public record ConsumptionSummaryResponse(
 
         @JsonView(BudgetView.Public.class)

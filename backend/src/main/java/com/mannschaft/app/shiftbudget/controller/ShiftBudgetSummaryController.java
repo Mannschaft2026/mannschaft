@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -78,10 +80,19 @@ public class ShiftBudgetSummaryController {
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id) {
         ConsumptionSummaryResponse response = summaryService.getConsumptionSummary(organizationId, id);
+        Class<?> view = resolveView(organizationId);
+        if (view == BudgetView.BudgetViewer.class) {
+            // 集計後の権限変更でも、空オブジェクトの配列を返さず閲覧者の形状へ揃える。
+            List<String> flags = new ArrayList<>(response.flags());
+            if (!flags.contains("BY_USER_HIDDEN")) {
+                flags.add("BY_USER_HIDDEN");
+            }
+            response = response.toBuilder().byUser(List.of()).flags(List.copyOf(flags)).build();
+        }
 
         // ApiResponse 互換の {"data": {...}} 形状を保ちつつ @JsonView を効かせるため Map で wrap
         MappingJacksonValue jacksonValue = new MappingJacksonValue(Map.of("data", response));
-        jacksonValue.setSerializationView(resolveView(organizationId));
+        jacksonValue.setSerializationView(view);
         return jacksonValue;
     }
 

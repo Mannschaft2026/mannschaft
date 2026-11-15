@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -98,6 +99,10 @@ class ShiftBudgetSummaryControllerTest {
     }
 
     private ConsumptionSummaryResponse responseAsAdmin() {
+        return responseAsAdmin(Collections.emptyList());
+    }
+
+    private ConsumptionSummaryResponse responseAsAdmin(List<String> flags) {
         return ConsumptionSummaryResponse.builder()
                 .allocationId(ALLOCATION_ID)
                 .allocatedAmount(new BigDecimal("300000"))
@@ -107,7 +112,7 @@ class ShiftBudgetSummaryControllerTest {
                 .remainingAmount(new BigDecimal("55000"))
                 .consumptionRate(new BigDecimal("0.8167"))
                 .status("WARN")
-                .flags(Collections.emptyList())
+                .flags(flags)
                 .alerts(List.of(AlertResponse.builder()
                         .id(99L).allocationId(ALLOCATION_ID).thresholdPercent(80)
                         .triggeredAt(LocalDateTime.of(2026, 6, 25, 14, 30))
@@ -190,6 +195,31 @@ class ShiftBudgetSummaryControllerTest {
                 .andExpect(jsonPath("$.data.allocated_amount").value(300000))
                 .andExpect(jsonPath("$.data.by_user").isArray())
                 .andExpect(jsonPath("$.data.by_user").isEmpty());
+    }
+
+    @Test
+    @DisplayName("ADMIN集計後にViewerとなった場合も空配列とflagを返し合計・元recordを保持する")
+    void viewer_afterAdminAggregation() throws Exception {
+        givenViewerOnly();
+        ConsumptionSummaryResponse original = responseAsAdmin(List.of("EXISTING_FLAG"));
+        given(summaryService.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(original);
+
+        mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
+                        .header("X-Organization-Id", ORG_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.by_user").isArray())
+                .andExpect(jsonPath("$.data.by_user").isEmpty())
+                .andExpect(jsonPath("$.data.flags[0]").value("EXISTING_FLAG"))
+                .andExpect(jsonPath("$.data.flags[1]").value("BY_USER_HIDDEN"))
+                .andExpect(jsonPath("$.data.flags.length()").value(2))
+                .andExpect(jsonPath("$.data.allocated_amount").value(300000))
+                .andExpect(jsonPath("$.data.consumed_amount").value(245000))
+                .andExpect(jsonPath("$.data.confirmed_amount").value(200000))
+                .andExpect(jsonPath("$.data.planned_amount").value(45000))
+                .andExpect(jsonPath("$.data.remaining_amount").value(55000));
+
+        assertThat(original.flags()).containsExactly("EXISTING_FLAG");
+        assertThat(original.byUser()).hasSize(2);
     }
 
     @Test
