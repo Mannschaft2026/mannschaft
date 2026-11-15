@@ -69,13 +69,15 @@ test('1957 AC3: PR自身の行・リンク・JSON削除とmain-onlyへの競合�
 });
 
 test('1957 AC4: mainも完了済でもPR自身の新完了は祖先から検出して検査', () => {
-  assert.deepEqual(selectEvidencePaths(completed, completed, [], ancestry(base)), [proofPath]);
-  assert.throws(() => validateCompletionChanges(completed, completed, {}, ancestry(base)), /JSON/);
-  assert.doesNotThrow(() => validateCompletionChanges(completed, completed, { [proofPath]: evidence }, ancestry(base)));
+  for (const ancestor of [base, oldCompleted]) {
+    assert.deepEqual(selectEvidencePaths(completed, completed, [], ancestry(ancestor)), [proofPath]);
+    assert.throws(() => validateCompletionChanges(completed, completed, {}, ancestry(ancestor)), /JSON/);
+    assert.doesNotThrow(() => validateCompletionChanges(completed, completed, { [proofPath]: evidence }, ancestry(ancestor)));
+  }
 });
 
 // 実workflow scriptを実行する。GitHub APIだけをスタブし、trusted validatorは実物をimportする。
-async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = oldCompleted, files = [], compareError, missingAncestor = false } = {}) {
+async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = oldCompleted, files = [], changedFiles = files.length, compareError, invalidAncestor, missingAncestor = false } = {}) {
   const workflow = readFileSync(new URL('../.github/workflows/task-list-pr-gate.yml', import.meta.url), 'utf8');
   const script = workflow.replaceAll('\r\n', '\n').split('          script: |\n')[1].split('\n').map(line => line.replace(/^            /, '')).join('\n');
   const refs = { ['a'.repeat(40)]: completed, ['b'.repeat(40)]: head, ['c'.repeat(40)]: ancestor };
@@ -88,7 +90,7 @@ async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = o
         compareCommitsWithBasehead: async ({ basehead }) => {
           calls.push(basehead);
           if (compareError) throw new Error('compare unavailable');
-          return { data: { merge_base_commit: { sha: 'c'.repeat(40) } } };
+          return { data: { merge_base_commit: { sha: invalidAncestor ? 'not-a-sha' : 'c'.repeat(40) } } };
         },
         getContent: async ({ path, ref }) => {
           if (missingAncestor && ref === 'c'.repeat(40)) throw Object.assign(new Error('missing'), { status: 404 });
@@ -99,7 +101,7 @@ async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = o
     },
   };
   const context = { eventName: 'pull_request_target', repo: { owner: 'owner', repo: 'repo' }, payload: {
-    action, pull_request: { number: 1957, created_at: '2026-11-15T00:00:00Z', base: { sha: 'a'.repeat(40), ref: 'main' }, head: { sha: 'b'.repeat(40) } },
+    action, pull_request: { number: 1957, changed_files: changedFiles, created_at: '2026-11-15T00:00:00Z', base: { sha: 'a'.repeat(40), ref: 'main' }, head: { sha: 'b'.repeat(40) } },
   } };
   const core = { info() {}, notice() {}, error() {}, setFailed(message) { throw new Error(message); } };
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -113,6 +115,10 @@ for (const action of ['ready_for_review', 'edited', 'synchronize']) {
     await assert.rejects(runCompletionWorkflow(action, { ancestor: completed, head: oldCompleted }), /削除/);
     await assert.rejects(runCompletionWorkflow(action, { compareError: true }), /compare unavailable/);
     await assert.rejects(runCompletionWorkflow(action, { missingAncestor: true }), /ancestor|共通祖先/);
+    await assert.rejects(runCompletionWorkflow(action, { invalidAncestor: true }), /ancestor/);
+    for (const changedFiles of [null, -1, 1.5, '0', 1]) {
+      await assert.rejects(runCompletionWorkflow(action, { changedFiles }), /incomplete/);
+    }
     for (const status of ['modified', 'removed', 'renamed']) {
       await assert.rejects(runCompletionWorkflow(action, { files: [{
         filename: status === 'renamed' ? 'docs/evidence/moved.json' : proofPath,
@@ -222,7 +228,7 @@ test('pull_request_targetはbase trusted validatorだけを実行しPR headを�
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /await import\(pathToFileURL\(validatorPath\)\.href\)/);
-  assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths\)/);
+  assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths, \{ ancestorTaskList \}\)/);
   assert.match(workflow, /github\.rest\.git\.getTree/);
   assert.doesNotMatch(workflow, /github\.rest\.repos\.getContent\(\{ owner, repo, path: ref/);
   assert.match(workflow, /file\.status === 'removed'/);
