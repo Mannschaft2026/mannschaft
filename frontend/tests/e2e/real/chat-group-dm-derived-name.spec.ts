@@ -45,6 +45,15 @@ interface World {
 
 const world = {} as World
 const cleanup: Array<{ label: string; path: string; owner: Actor }> = []
+/** この spec が作った利用者。作成直後に積み、afterAll で退会させる（AC6 で退会済みの F は withdrawn に入る） */
+const createdActors: Actor[] = []
+const withdrawn = new Set<number>()
+
+async function newActor(name: string): Promise<Actor> {
+  const actor = await createActor(name)
+  createdActors.push(actor)
+  return actor
+}
 
 async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: path.join(EVIDENCE, `${name}.png`), fullPage: false })
@@ -78,12 +87,12 @@ test.describe.configure({ mode: 'serial' })
 
 test.beforeAll(async () => {
   test.setTimeout(600_000)
-  world.a = await createActor('Alice')
-  world.b = await createActor('Bob')
-  world.c = await createActor('Carol')
-  world.d = await createActor('Dave')
-  world.e = await createActor('Eve')
-  world.f = await createActor('Fay')
+  world.a = await newActor('Alice')
+  world.b = await newActor('Bob')
+  world.c = await newActor('Carol')
+  world.d = await newActor('Dave')
+  world.e = await newActor('Eve')
+  world.f = await newActor('Fay')
   world.orgA = await createOrg(world.a, `GDM組織A ${world.a.nickname}`)
   world.teamA = await createTeam(world.a, `GDMチームA ${world.a.nickname}`)
   for (const m of [world.b, world.c, world.d, world.f]) {
@@ -96,15 +105,28 @@ test.beforeAll(async () => {
   // 前提: A と B の Kabine（画面で開く対象）。Zimmer 化は画面で行う
   const kabine = await must(world.a, 'POST', '/api/v1/chat/channels/conversations', { userIds: [world.b.id] })
   world.kabineAB = kabine.data.id
+  cleanup.push({ label: `kabineAB ${world.kabineAB}`, path: `/api/v1/chat/channels/${world.kabineAB}`, owner: world.a })
 })
 
 test.afterAll(async () => {
-  const results: string[] = []
-  for (const r of [...cleanup].reverse()) {
-    const res = await apiAs(r.owner, 'DELETE', r.path)
-    results.push(`${r.label}:${res.status}`)
+  // 204 / 404（既に無い）以外は失敗として集め、全件試した後にまとめて throw する（後始末の失敗を隠さない）
+  const failures: string[] = []
+  const attempt = async (label: string, owner: Actor, method: string, p: string, body?: unknown): Promise<void> => {
+    const res = await apiAs(owner, method, p, body)
+    console.log(`[gdm] cleanup ${label} -> ${res.status}`)
+    const ok = method === 'DELETE' && p === '/api/v1/users/me' ? res.status === 200 || res.status === 204 || res.status === 404 : res.status === 204 || res.status === 404
+    if (!ok) failures.push(`${label}:${res.status}`)
   }
-  console.log(`[gdm] cleanup(channels) ${results.join(' ')}`)
+  for (const r of [...cleanup].reverse()) await attempt(r.label, r.owner, 'DELETE', r.path)
+  // 管理者 A が他メンバーのいるスコープの唯一の ADMIN のままだと、A の退会が GDPR_011(409) で拒否される。
+  // 退会の前提として、A がメンバーを除名してスコープを空にする（正規の除名 API。スコープ自体の削除は論理削除でメンバーが残る）
+  if (world.a && world.orgA && world.teamA) {
+    for (const m of [world.b, world.c, world.d, world.f]) {
+      if (!m) continue
+      await attempt(`removeMember org ${m.label}`, world.a, 'DELETE', `/api/v1/organizations/${world.orgA.slug}/members/${m.id}`)
+      await attempt(`removeMember team ${m.label}`, world.a, 'DELETE', `/api/v1/teams/${world.teamA.slug}/members/${m.id}`)
+    }
+  }
   // 組織・チームは createOrg/createTeam が n1p1 の資産記録へ積む。ここで同じ DELETE を直接呼ぶ
   for (const [label, p, owner] of [
     ['teamE', `/api/v1/teams/${world.teamE?.slug}`, world.e],
@@ -113,9 +135,14 @@ test.afterAll(async () => {
     ['orgA', `/api/v1/organizations/${world.orgA?.slug}`, world.a],
   ] as const) {
     if (!owner || p.endsWith('undefined')) continue
-    const res = await apiAs(owner, 'DELETE', p)
-    console.log(`[gdm] cleanup ${label} -> ${res.status}`)
+    await attempt(label, owner, 'DELETE', p)
   }
+  // 利用者は最後に退会させる（AC6 で退会済みの F は除く。退会 API は AC6 と同じ DELETE /users/me）
+  for (const actor of [...createdActors].reverse()) {
+    if (withdrawn.has(actor.id)) continue
+    await attempt(`withdraw ${actor.label}`, actor, 'DELETE', '/api/v1/users/me', { currentPassword: actor.password })
+  }
+  if (failures.length) throw new Error(`後始末に失敗: ${failures.join(' ')}`)
 })
 
 test('AC1 A が画面で Kabine を開き Zimmer へ招待すると一覧・タブ・ヘッダーに「B, C」', async ({ browser }) => {
@@ -269,6 +296,7 @@ test('AC6 退会者が参加する Zimmer では「ユーザー」と出る', as
   const wd = await apiAs(world.f, 'DELETE', '/api/v1/users/me', { currentPassword: world.f.password })
   console.log(`[gdm] AC6 F の退会 API status=${wd.status} body=${JSON.stringify(wd.body).slice(0, 200)}`)
   expect(wd.status).toBe(200)
+  withdrawn.add(world.f.id)
 
   const { page, context } = await openAs(browser, world.a, `/chat?channel=${world.zimmerFId}`)
   const listItem = page.locator(`[data-testid="chat-channel-${world.zimmerFId}"]`)
