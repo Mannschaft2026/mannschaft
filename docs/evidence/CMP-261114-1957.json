@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261114-1957",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4516,
+    "sha": "8051e53007ac4a895aac40b2ecb26fdbb9ae58db"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "pull_request_target はbaseのtrusted validatorを維持し、比較API・祖先情報・変更ファイル一覧が不明または不完全な場合はfail-closedする。",
+      "tests": [
+        { "name": "pull_request_targetはbase trusted validatorだけを実行しPR headを実行しない", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "1957 AC1/5: ready_for_reviewで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "AC-9: workflowはfilter all・paginate・世代判定・previous_filename・changed_files照合で実装PRを集める", "evidence": "scripts/completion-evidence.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "共通祖先から行が変わっていない場合、mainだけの完了行・完了化・証拠リンク追加をPRによる削除と誤判定しない。",
+      "tests": [
+        { "name": "1957 AC2: mainだけの完了行・完了化・リンク追加はPRの削除にしない", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "1957 AC1/5: ready_for_reviewで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "1957 AC1/5: editedで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "1957 AC1/5: synchronizeで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "PR自身による既存完了行・リンク・JSONの削除や差替え、およびmain-only状態と競合するPR編集を拒否する。",
+      "tests": [
+        { "name": "1957 AC3: PR自身の行・リンク・JSON削除とmain-onlyへの競合変更は拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "過去完了の証拠link削除・差替えを拒否する", "evidence": "scripts/completion-evidence.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "PR自身が追加した完了状態は、mainも完了済みであっても共通祖先から検出して証拠を検証する。",
+      "tests": [
+        { "name": "1957 AC4: mainも完了済でもPR自身の新完了は祖先から検出して検査", "evidence": "scripts/completion-evidence.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "ready_for_review・edited・synchronizeの各イベントで修正を適用し、既存のscope・7列・重複ID・check世代判定を維持する。",
+      "tests": [
+        { "name": "1957 AC1/5: ready_for_reviewで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "1957 AC1/5: editedで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "1957 AC1/5: synchronizeで実workflowがmain-onlyを許し真削除を拒否", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "台帳をエスケープ済み縦棒込みで7列に分解しCMP重複を検出する", "evidence": "scripts/completion-evidence.test.mjs" },
+        { "name": "AC-7: マージ時点の世代でcheckを判定し、#3847の重複PRによるマージ後failureを採らない", "evidence": "scripts/completion-evidence.test.mjs" }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 43661702403 },
+    { "runId": 43661702397 },
+    { "runId": 43661702400 },
+    { "runId": 43661702390 },
+    { "runId": 43661702352 },
+    { "runId": 43661702363 },
+    { "runId": 43661702289 },
+    { "runId": 43661700361 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4516"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI完了証拠ゲートとvalidatorの修正に限定され、製品UI・API・業務操作を変更していないため、GUI実機確認は対象外。"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "利用者導線や製品機能を変更していないため、業務画面を使う探索確認は対象外。"
+    }
+  },
+  "regressions": [
+    {
+      "description": "mainだけで行われた完了化・証拠リンク追加を、古いPRの変更による過去完了削除と誤判定する回帰を修正し、PR自身の真の削除拒否を維持する。",
+      "test": "1957 AC1/5: ready_for_reviewで実workflowがmain-onlyを許し真削除を拒否",
+      "redEvidence": "docs/evidence/CMP-261114-1957-validation.md",
+      "greenEvidence": "docs/evidence/CMP-261114-1957-validation.md"
+    },
+    {
+      "description": "GitHubのchanged_files件数が不正・欠落・変更一覧と不一致のとき、部分取得を受け入れず完了検査を拒否する。",
+      "test": "1957 AC1/5: ready_for_reviewで実workflowがmain-onlyを許し真削除を拒否",
+      "redEvidence": "docs/evidence/CMP-261114-1957-validation.md",
+      "greenEvidence": "docs/evidence/CMP-261114-1957-validation.md"
+    }
+  ]
+}
