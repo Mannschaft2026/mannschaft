@@ -27,17 +27,21 @@ const displayName = computed(() =>
             ? 'pi pi-lock'
             : 'pi pi-hashtag'
       "
-      class="text-surface-400"
+      class="shrink-0 text-surface-400"
     />
-    <div>
-      <h3 class="text-sm font-semibold">
+    <div class="min-w-0 flex-1">
+      <h3 class="truncate text-sm font-semibold" :title="displayName">
         {{ displayName }}
       </h3>
-      <p v-if="channel.meta.description" class="text-xs text-surface-400">
+      <p
+        v-if="channel.meta.description"
+        class="truncate text-xs text-surface-400"
+        :title="channel.meta.description"
+      >
         {{ channel.meta.description }}
       </p>
     </div>
-    <div class="ml-auto flex items-center gap-2">
+    <div class="ml-auto flex shrink-0 items-center gap-2">
       <Button
         v-if="channel.identity.channelType === 'DM'"
         v-tooltip.bottom="t('chat.invite.button')"
