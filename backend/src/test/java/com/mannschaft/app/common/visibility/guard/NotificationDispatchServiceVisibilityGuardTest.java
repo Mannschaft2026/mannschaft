@@ -53,6 +53,9 @@ class NotificationDispatchServiceVisibilityGuardTest {
     @Mock
     private ContentVisibilityChecker visibilityChecker;
 
+    @Mock
+    private com.mannschaft.app.moduleevent.api.ModuleEventNoticeOutboxApi moduleEventNotices;
+
     @InjectMocks
     private NotificationDispatchService dispatchService;
 
@@ -147,5 +150,30 @@ class NotificationDispatchServiceVisibilityGuardTest {
         // Then
         verify(visibilityChecker, never()).canView(any(), any(), any());
         verify(preferenceService).isNotificationEnabled(eq(USER_ID), any(), any());
+    }
+
+    @Test
+    @DisplayName("dispatch: M通知の配送判定が例外でも fail-closed で配送しない")
+    void dispatch_skips_module_event_notice_when_resolution_throws() {
+        // Given
+        NotificationEntity notification = NotificationEntity.builder()
+                .userId(USER_ID)
+                .notificationType("MODULE_EVENT_NOTICE")
+                .priority(NotificationPriority.NORMAL)
+                .title("テスト通知")
+                .body("body")
+                .sourceType("MODULE_EVENT_NOTICE")
+                .sourceId(CONTENT_ID)
+                .scopeType(NotificationScopeType.PERSONAL)
+                .scopeId(null)
+                .build();
+        given(moduleEventNotices.readDescriptor(CONTENT_ID)).willThrow(new IllegalStateException("boom"));
+
+        // When
+        dispatchService.dispatch(notification);
+
+        // Then
+        verify(preferenceService, never()).isNotificationEnabled(any(), any(), any());
+        verify(messagingTemplate, never()).convertAndSendToUser(any(), any(), any());
     }
 }
