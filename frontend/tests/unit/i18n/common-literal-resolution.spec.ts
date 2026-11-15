@@ -19,6 +19,7 @@ interface Reference {
 
 type Messages = Record<string, unknown>
 const languages = ['ja', 'en', 'zh', 'ko', 'es', 'de'] as const
+type Language = (typeof languages)[number]
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const app = resolve(frontend, 'app')
 
@@ -99,18 +100,19 @@ async function registeredMessages(
   return merged
 }
 
-function composer(language: string, messages: Messages) {
+function composer(language: Language, messages: Messages) {
   return createI18n({
     legacy: false,
     locale: language,
     fallbackLocale: false,
     missingWarn: false,
     fallbackWarn: false,
-    messages: { [language]: messages },
+    // Nuxtの生成型と同じ6言語を登録し、対象言語以外は空辞書にする。
+    messages: { ja: {}, en: {}, zh: {}, ko: {}, es: {}, de: {}, [language]: messages },
   })
 }
 
-function unresolved(keys: string[], language: string, messages: Messages): string[] {
+function unresolved(keys: string[], language: Language, messages: Messages): string[] {
   const i18n = composer(language, messages)
   try {
     return keys.filter(key => !i18n.global.te(key, language))
@@ -133,7 +135,7 @@ describe('literal common.* 番人の負例', () => {
 
   it('jaに存在してもen自身に無いキーを失敗にする', () => {
     const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: false,
-      messages: { ja: { common: { onlyJa: '日本語のみ' } }, en: {} } })
+      messages: { ja: { common: { onlyJa: '日本語のみ' } }, en: {}, zh: {}, ko: {}, es: {}, de: {} } })
     try {
       expect(i18n.global.te('common.onlyJa', 'en')).toBe(false)
     } finally {
