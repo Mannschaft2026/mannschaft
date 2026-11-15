@@ -107,7 +107,8 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         suffix = Long.toHexString(System.nanoTime());
         tx.executeWithoutResult(s -> {
             Long teamId = newTeam();
-            adminId = newUser();
+            // 初回リクエストの locale cache 参照より前に、管理者の保存 locale を en とする。
+            adminId = newUser("en");
             memberId = newUser();
             outsiderId = newUser();
             MembershipTestHelper.insertMembership(em, adminId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
@@ -151,7 +152,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         newRequest(slotId, OLD_DATE, memberId);
         String before = snapshot();
         mockMvc.perform(patch("/api/v1/shifts/slots/{id}", slotId).with(authentication(auth(adminId)))
-                        .header("Accept-Language", "en").contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "ja").contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("slotDate", NEW_DATE.toString()))))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_047"))
                 .andExpect(jsonPath("$.error.message").value(
@@ -440,9 +441,13 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private Long newUser() {
+        return newUser("ja");
+    }
+
+    private Long newUser(String locale) {
         UserEntity user = UserEntity.builder().email("cmp0127-" + suffix + "-" + users.size() + "@example.com")
                 .lastName("日付移動").firstName("試験").displayName("日付移動試験")
-                .status(UserEntity.UserStatus.ACTIVE).locale("ja").timezone("Asia/Tokyo").isSearchable(true).build();
+                .status(UserEntity.UserStatus.ACTIVE).locale(locale).timezone("Asia/Tokyo").isSearchable(true).build();
         em.persist(user);
         users.add(user.getId());
         return user.getId();
