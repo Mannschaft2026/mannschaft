@@ -139,7 +139,8 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
         record("1200", "1", ShiftBudgetConsumptionStatus.PLANNED, false);
         summary(userId, organizationId).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.flags[0]").value("BY_USER_HIDDEN"))
-                .andExpect(jsonPath("$.data.by_user").doesNotExist());
+                .andExpect(jsonPath("$.data.by_user").isArray())
+                .andExpect(jsonPath("$.data.by_user").isEmpty());
     }
 
     @Test
@@ -153,8 +154,10 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
     @Test
     void 通常の閲覧者にも個人時給を返さない() throws Exception {
         grant(false, false);
+        record("1200", "1", ShiftBudgetConsumptionStatus.PLANNED, false);
         summary(userId, organizationId).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.by_user").doesNotExist())
+                .andExpect(jsonPath("$.data.by_user").isArray())
+                .andExpect(jsonPath("$.data.by_user").isEmpty())
                 .andExpect(jsonPath("$.data.flags[0]").value("BY_USER_HIDDEN"));
     }
 

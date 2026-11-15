@@ -44,14 +44,14 @@ import com.mannschaft.app.common.security.AccessGuard;
  * <p>カバレッジ:</p>
  * <ul>
  *   <li>BUDGET_ADMIN 保有時: {@code by_user} 配列含む全フィールド出力</li>
- *   <li>BUDGET_VIEW のみ: {@code by_user} フィールドそのものが除外（{@code @JsonView} で）+ flags=BY_USER_HIDDEN</li>
+ *   <li>BUDGET_VIEW のみ: {@code by_user} 空配列 + flags=BY_USER_HIDDEN</li>
  *   <li>SystemAdmin: BUDGET_ADMIN 同等</li>
  *   <li>権限なし → 403</li>
  *   <li>別組織 → 404</li>
  * </ul>
  *
- * <p>{@code MappingJacksonValue} と {@code @JsonView} の組合せにより
- * {@code by_user} はフィールド単位でシリアライズ除外される（DTO 側の値が空でも JSON に出ない）。</p>
+ * <p>フィルターを無効にし、Service・権限判定を mock にした JSON 形状の試験。
+ * 実際の所属・権限の強制は {@code ShiftBudgetSummaryRateBreakdownIT} で別に検証する。</p>
  */
 @WebMvcTest(ShiftBudgetSummaryController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -177,8 +177,8 @@ class ShiftBudgetSummaryControllerTest {
     }
 
     @Test
-    @DisplayName("BUDGET_VIEW のみ: 200 + by_user フィールドが JSON に出ない (@JsonView 除外) + flags=BY_USER_HIDDEN")
-    void viewerOnly_byUser除外() throws Exception {
+    @DisplayName("BUDGET_VIEW のみ: 200 + by_user 空配列 + flags=BY_USER_HIDDEN")
+    void viewerOnly_byUser空配列() throws Exception {
         givenViewerOnly();
         given(summaryService.getConsumptionSummary(ORG_ID, ALLOCATION_ID))
                 .willReturn(responseAsViewerOnly());
@@ -190,8 +190,8 @@ class ShiftBudgetSummaryControllerTest {
                 .andExpect(jsonPath("$.data.status").value("WARN"))
                 .andExpect(jsonPath("$.data.flags[0]").value("BY_USER_HIDDEN"))
                 .andExpect(jsonPath("$.data.allocated_amount").value(300000))
-                // by_user フィールドそのものが @JsonView(BudgetAdmin) 制御で JSON に出ない
-                .andExpect(jsonPath("$.data.by_user").doesNotExist());
+                .andExpect(jsonPath("$.data.by_user").isArray())
+                .andExpect(jsonPath("$.data.by_user").isEmpty());
     }
 
     @Test
