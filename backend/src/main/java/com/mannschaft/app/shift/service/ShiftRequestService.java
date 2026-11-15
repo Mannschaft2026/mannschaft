@@ -19,6 +19,9 @@ import com.mannschaft.app.shift.entity.ShiftScheduleEntity;
 import com.mannschaft.app.shift.entity.ShiftSlotEntity;
 import com.mannschaft.app.shift.repository.ShiftRequestRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -66,6 +69,7 @@ public class ShiftRequestService {
     private final ShiftMapper shiftMapper;
     private final ProxyInputContext proxyInputContext;
     private final ProxyInputRecordRepository proxyInputRecordRepository;
+    private final EntityManager entityManager;
     @Qualifier("wallClock")
     private final Clock wallClock;
 
@@ -216,7 +220,20 @@ public class ShiftRequestService {
         // 認可は Facade 済み。希望→親スケジュールを読み直し（親行は認可の後にここで FOR UPDATE）、
         // 認可の後に親が消えた競合は解決時と同じ SHIFT_003 の 404・DB 不変にする。
         ShiftRequestEntity entity = findRequestOrThrow(requestId);
+        Long scheduleId = entity.getScheduleId();
         ShiftScheduleEntity schedule = findParentScheduleOrConceal(entity);
+
+        // 親ロック前の希望・親は RR snapshot / 1次 cache に残る。最新の日付・撤回・状態を再検証する。
+        try {
+            entityManager.refresh(schedule, LockModeType.PESSIMISTIC_WRITE);
+            entityManager.refresh(entity, LockModeType.PESSIMISTIC_READ);
+        } catch (EntityNotFoundException e) {
+            throw new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
+        }
+        if (schedule.getDeletedAt() != null || entity.getDeletedAt() != null
+                || !scheduleId.equals(entity.getScheduleId())) {
+            throw new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
+        }
 
         validateCollectingStatus(schedule);
         validateRequestDeadline(schedule);

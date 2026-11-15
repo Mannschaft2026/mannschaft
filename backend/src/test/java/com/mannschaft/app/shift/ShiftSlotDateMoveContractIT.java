@@ -3,6 +3,7 @@ package com.mannschaft.app.shift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.visibility.perf.SqlIntentCounter;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.shift.dto.CreateShiftRequestRequest;
@@ -45,6 +46,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -60,6 +62,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 /**
  * CMP-260910-0127: 確認後の枠・希望日付移動と、並行する希望編集の実MySQL契約。
@@ -147,10 +150,17 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
     void 希望ありの日付変更は確認省略とfalseを409で拒否し全列を保持する() throws Exception {
         newRequest(slotId, OLD_DATE, memberId);
         String before = snapshot();
-        patchSlot(adminId, Map.of("slotDate", NEW_DATE.toString())).andExpect(status().isConflict());
+        patchSlot(adminId, Map.of("slotDate", NEW_DATE.toString())).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_047"));
         assertThat(snapshot()).isEqualTo(before);
         patchSlot(adminId, Map.of("slotDate", NEW_DATE.toString(), "moveRequestsConfirmed", false))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_047"));
+        assertThat(snapshot()).isEqualTo(before);
+        Map<String, Object> explicitNull = new java.util.HashMap<>();
+        explicitNull.put("slotDate", NEW_DATE.toString());
+        explicitNull.put("moveRequestsConfirmed", null);
+        patchSlot(adminId, explicitNull).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_047"));
         assertThat(snapshot()).isEqualTo(before);
     }
 
@@ -218,7 +228,17 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         UpdateShiftSlotRequest invalid = objectMapper.convertValue(Map.of(
                 "slotDate", NEW_DATE.toString(), "moveRequestsConfirmed", true, "note", "x".repeat(201)),
                 UpdateShiftSlotRequest.class);
-        assertThatThrownBy(() -> slotService.updateSlot(slotId, invalid, adminId)).isInstanceOf(RuntimeException.class);
+        try (var capture = SqlIntentCounter.captureCurrentThread()) {
+            assertThatThrownBy(() -> slotService.updateSlot(slotId, invalid, adminId)).isInstanceOf(RuntimeException.class);
+            List<String> sqls = capture.capturedSqls();
+            assertThat(sqls).as("実 SQL 捕捉が有効である").isNotEmpty();
+            assertThat(sqls).filteredOn(sql -> updatesTable(sql, "shift_requests")).hasSize(1);
+            int requestUpdate = java.util.stream.IntStream.range(0, sqls.size())
+                    .filter(i -> updatesTable(sqls.get(i), "shift_requests")).findFirst().orElseThrow();
+            int slotUpdate = java.util.stream.IntStream.range(0, sqls.size())
+                    .filter(i -> updatesTable(sqls.get(i), "shift_slots")).findFirst().orElseThrow();
+            assertThat(slotUpdate).as("希望 UPDATE が返った後の枠保存で失敗したこと").isGreaterThan(requestUpdate);
+        }
         assertThat(snapshot()).isEqualTo(before);
     }
 
@@ -371,20 +391,19 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
                 saveRequest(scheduleId, slotId, OLD_DATE, newUser());
             }
         });
-        var statistics = em.getEntityManagerFactory().unwrap(org.hibernate.SessionFactory.class).getStatistics();
-        boolean enabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
-        statistics.clear();
-        try {
+        try (var capture = SqlIntentCounter.captureCurrentThread()) {
             slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
-            assertThat(statistics.getPrepareStatementCount()).as("希望を一人ずつ読む/更新するN+1を防ぐ").isLessThan(15);
+            assertThat(capture.totalCount()).as("実 SQL 捕捉が有効で、N+1 がない").isBetween(1, 14);
+            assertThat(capture.capturedSqls()).filteredOn(sql -> updatesTable(sql, "shift_requests")).hasSize(1);
             Long movedCount = tx.execute(s -> ((Number) em.createNativeQuery(
                             "SELECT COUNT(*) FROM shift_requests WHERE slot_id=:id AND slot_date=:day AND deleted_at IS NULL")
                     .setParameter("id", slotId).setParameter("day", NEW_DATE).getSingleResult()).longValue());
             assertThat(movedCount).isEqualTo(1000L);
-        } finally {
-            statistics.setStatisticsEnabled(enabled);
         }
+    }
+
+    private boolean updatesTable(String sql, String table) {
+        return sql.toLowerCase(Locale.ROOT).matches("(?s).*\\bupdate\\s+" + table + "\\b.*");
     }
 
     private org.springframework.test.web.servlet.ResultActions patchSlot(Long userId, Map<String, ?> body) throws Exception {
