@@ -359,6 +359,7 @@ public class ModuleEventRealE2eFixtures {
             if (!world.users.isEmpty()) {
                 em.createNativeQuery("DELETE FROM notifications WHERE user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
                 em.createNativeQuery("DELETE FROM notifications_archive WHERE user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
+                em.createNativeQuery("DELETE FROM module_event_resume_actor_states WHERE actor_user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
             }
             world.roles.forEach(id -> remove(UserRoleEntity.class, id));
             world.memberships.forEach(id -> remove(MembershipEntity.class, id));

@@ -275,6 +275,9 @@ public class NotificationDispatchService {
                         .map(recipients -> recipients.stream().anyMatch(r -> notification.getUserId().equals(r.getUserId())))
                         .orElse(false);
             } catch (RuntimeException unresolved) {
+                // fail-closed を維持しつつ、配送判定の障害を握りつぶさず記録する（PII は出さない）。
+                log.warn("M通知の配送判定に失敗したため配送しない (fail-closed): notificationId={}, sourceId={}, userId={}",
+                        notification.getId(), notification.getSourceId(), notification.getUserId(), unresolved);
                 return false;
             }
         }
