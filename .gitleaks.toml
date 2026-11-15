@@ -411,18 +411,6 @@ regexes = [
 ]
 
 [[rules.allowlists]]
-description = "M21固定child env試練の既知非秘密sentinel。9b43c099・b61b228aの2抽出値が同一で、fake Python子envへの到達確認だけに使用し実MySQLへ接続しない。generic-api-keyの当該exact pathとSecret完全一致だけをAND除外し、別path・別値の検出は維持する"
-condition = "AND"
-regexTarget = "secret"
-paths = [
-  '''^scripts/test_m21_wsl_docker_bridge\.py$''',
-]
-regexes = [
-  '''^M21_OWNED_SENTINEL_APP$''',
-  '''^M21_OWNED_SENTINEL_ROOT$''',
-]
-
-[[rules.allowlists]]
 description = "CMP-261108-2026: 承認済み公開assetKeyの実測448値だけを生成物5pathとAND限定。秘密値でなく承認原本16種/V1-4/段階/画風の公開ID。generic-api-key以外・未列挙値・未列挙pathは除外しない"
 condition = "AND"
 regexTarget = "secret"
