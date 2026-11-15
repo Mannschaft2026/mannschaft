@@ -15,6 +15,9 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.adapter.standard.StandardWebSocketSession;
+import org.apache.tomcat.websocket.WsSession;
+import jakarta.websocket.CloseReason;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -133,7 +136,13 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                         "SELECT COUNT(*) FROM information_schema.processlist WHERE id <> CONNECTION_ID() "
                                 + "AND state LIKE '%lock%' AND info LIKE 'select %' AND info LIKE '%signage_access_tokens%'",
                         Integer.class) > 0);
-                peer.get().close();
+                assertThat(serverId.get()).as("実SockJS session IDを取得済み").isNotBlank();
+                assertThat(peer.get()).isInstanceOf(StandardWebSocketSession.class);
+                var nativePeer = ((StandardWebSocketSession) peer.get()).getNativeSession();
+                assertThat(nativePeer).as("固定Tomcat実clientで物理切断を検査する").isInstanceOf(WsSession.class);
+                // 通常closeはhandshake待ちになる。実TomcatのcloseSocket=trueで所有TCPを終了する。
+                var reason = new CloseReason(CloseReason.CloseCodes.UNEXPECTED_CONDITION, "owned transport close");
+                ((WsSession) nativePeer).doClose(reason, reason, true);
                 await().atMost(Duration.ofSeconds(10)).until(() -> disconnected.contains(serverId.get()));
                 statement.execute("UNLOCK TABLES");
                 await().atMost(Duration.ofSeconds(10)).until(connected::isDone);
