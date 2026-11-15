@@ -72,13 +72,10 @@ public class ShiftBudgetSummaryService {
     /**
      * 指定 allocation の消化サマリを返す。
      *
-     * <p>権限: {@code BUDGET_VIEW} 必須（無いと 403）。
-     * {@code BUDGET_ADMIN} 保有時のみ {@code by_user} の実データを返す。</p>
+     * <p>Facadeでfeature・所属・VIEWを確認済み。budgetAdminはPolicyが導いた値のみを受け取る。
+     * package-privateにしてControllerからの未認可の直接呼出を公開しない。</p>
      */
-    public ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId) {
-        featureService.requireEnabled(organizationId);
-        boolean budgetAdmin = requireSummaryBudgetViewAndDetectAdmin(organizationId);
-
+    ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId, boolean budgetAdmin) {
         ShiftBudgetAllocationEntity allocation = allocationRepository
                 .findByIdAndOrganizationIdAndDeletedAtIsNull(allocationId, organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND));
@@ -248,18 +245,6 @@ public class ShiftBudgetSummaryService {
         BigDecimal safeDirect = direct != null ? direct : BigDecimal.ZERO;
         BigDecimal safeViaTodo = viaTodo != null ? viaTodo : BigDecimal.ZERO;
         return safeDirect.add(safeViaTodo);
-    }
-
-    /**
-     * 消化サマリ専用。SYSTEM_ADMIN も実組織の所属・VIEW を必須とし、ADMIN のみ詳細を返す。
-     */
-    private boolean requireSummaryBudgetViewAndDetectAdmin(Long organizationId) {
-        Long userId = SecurityUtils.getCurrentUserId();
-        if (!accessControlService.isMember(userId, organizationId, "ORGANIZATION")
-                || !accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_VIEW")) {
-            throw new BusinessException(ShiftBudgetErrorCode.BUDGET_VIEW_REQUIRED);
-        }
-        return accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_ADMIN");
     }
 
     /**

@@ -12,15 +12,12 @@ import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
 import com.mannschaft.app.shiftbudget.repository.TodoBudgetLinkRepository;
 import com.mannschaft.app.shiftbudget.view.BudgetView;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -43,21 +40,11 @@ class ShiftBudgetSummaryRateBreakdownTest {
     @InjectMocks private ShiftBudgetSummaryService service;
 
     @BeforeEach
-    void authenticate() {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("100", null, List.of()));
-        given(accessControlService.isMember(100L, 1L, "ORGANIZATION")).willReturn(true);
-        given(accessControlService.hasPermission(100L, 1L, "ORGANIZATION", "BUDGET_VIEW")).willReturn(true);
-        given(accessControlService.hasPermission(100L, 1L, "ORGANIZATION", "BUDGET_ADMIN")).willReturn(true);
+    void givenAllocation() {
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(42L, 1L))
                 .willReturn(Optional.of(ShiftBudgetAllocationEntity.builder()
                         .allocatedAmount(new BigDecimal("100000")).consumedAmount(new BigDecimal("6200"))
                         .confirmedAmount(BigDecimal.ZERO).build()));
-    }
-
-    @AfterEach
-    void clearAuthentication() {
-        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -65,7 +52,7 @@ class ShiftBudgetSummaryRateBreakdownTest {
         given(consumptionRepository.findByAllocationIdAndStatusInAndDeletedAtIsNull(42L,
                 List.of(ShiftBudgetConsumptionStatus.PLANNED, ShiftBudgetConsumptionStatus.CONFIRMED)))
                 .willReturn(List.of(row("1300", "2"), row("1200.00", "1"), row("1200.0", "2"), row("0", "8")));
-        var response = service.getConsumptionSummary(1L, 42L);
+        var response = service.getConsumptionSummary(1L, 42L, true);
         ObjectMapper mapper = new ObjectMapper();
         JsonNode user = mapper.readTree(mapper.writerWithView(BudgetView.BudgetAdmin.class)
                 .writeValueAsString(response)).path("by_user").get(0);

@@ -1,10 +1,8 @@
 package com.mannschaft.app.shiftbudget.controller;
 
 import com.mannschaft.app.common.featuregate.RequireFeature;
-import com.mannschaft.app.common.AccessControlService;
-import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.shiftbudget.dto.ConsumptionSummaryResponse;
-import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryFacade;
 import com.mannschaft.app.shiftbudget.view.BudgetView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -39,7 +37,7 @@ import java.util.Map;
  * <ul>
  *   <li>{@code BUDGET_ADMIN} 保有 → {@link BudgetView.BudgetAdmin}（全フィールド公開、{@code by_user} 含む）</li>
  *   <li>{@code BUDGET_VIEW} のみ → {@link BudgetView.BudgetViewer}（{@code by_user} 空配列、flags=BY_USER_HIDDEN）</li>
- *   <li>権限なし → Service 層が 403 を返すため到達しない</li>
+     *   <li>権限なし → FacadeのPolicyが 403 を返すため到達しない</li>
  * </ul>
  *
  * <p>共通: {@code X-Organization-Id} ヘッダで組織スコープを強制（多テナント分離）。</p>
@@ -53,14 +51,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ShiftBudgetSummaryController {
 
-    private final ShiftBudgetSummaryService summaryService;
-    private final AccessControlService accessControlService;
+    private final ShiftBudgetSummaryFacade summaryFacade;
 
     /**
      * 指定 allocation の消化サマリを返す。
      *
      * <p>{@link MappingJacksonValue} で {@link BudgetView} を切替えることでフィールド単位のマスキングを行う。
-     * Service 層では {@code BUDGET_VIEW} を必須とし、{@code BUDGET_ADMIN} 保有時のみ {@code by_user} に
+     * FacadeのPolicyでは {@code BUDGET_VIEW} を必須とし、{@code BUDGET_ADMIN} 保有時のみ {@code by_user} に
      * 実データを詰める。Controller 側でも実組織権限で View 階層を選択し、個人別の要素項目を
      * {@code BudgetAdmin} View で保護する。閲覧者にも {@code by_user} の空配列は返す。</p>
      *
@@ -79,7 +76,7 @@ public class ShiftBudgetSummaryController {
     public MappingJacksonValue getConsumptionSummary(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id) {
-        ConsumptionSummaryResponse response = summaryService.getConsumptionSummary(organizationId, id);
+        ConsumptionSummaryResponse response = summaryFacade.getConsumptionSummary(organizationId, id);
         Class<?> view = resolveView(organizationId);
         if (view == BudgetView.BudgetViewer.class) {
             // 集計後の権限変更でも、空オブジェクトの配列を返さず閲覧者の形状へ揃える。
@@ -99,21 +96,15 @@ public class ShiftBudgetSummaryController {
     /**
      * 現在ユーザーの権限から最も詳細な View を解決する。
      *
-     * <p>設計書 §9.3 のサンプルコードに準拠。
-     * v1.2 クリーンカット方式: {@code BUDGET_ADMIN} 単独判定。
-     * {@code MANAGE_SHIFTS+BUDGET_VIEW} の OR 後方互換ロジックは廃止済（V11.034 で自動付与）。</p>
+     * <p>Policyで実組織の所属・{@code BUDGET_VIEW}・{@code BUDGET_ADMIN}を再確認する。
+     * 集計後にいずれかが失効した場合は閲覧者の形状に伏せる。</p>
      */
     private Class<?> resolveView(Long organizationId) {
-        Long currentUserId = SecurityUtils.getCurrentUserId();
-        if (hasOrgPermission(currentUserId, organizationId, "BUDGET_ADMIN")) {
+        if (summaryFacade.isBudgetAdmin(organizationId)) {
             return BudgetView.BudgetAdmin.class;
         }
-        // Service 層で BUDGET_VIEW 必須を強制済のため、ここに到達した時点で BUDGET_VIEW は保有
+        // FacadeのPolicyで BUDGET_VIEW 必須を強制済。
         return BudgetView.BudgetViewer.class;
     }
 
-    private boolean hasOrgPermission(Long userId, Long organizationId, String permissionName) {
-        return accessControlService.isMember(userId, organizationId, "ORGANIZATION")
-                && accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", permissionName);
-    }
 }
