@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import SignageManager from './SignageManager.vue'
 
@@ -41,6 +41,8 @@ const Select = defineComponent({
     onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLSelectElement).value),
   }, props.options.map((option: { value: string; label: string }) => h('option', { value: option.value }, option.label))),
 })
+enableAutoUnmount(afterEach)
+
 function render() {
   return mount(SignageManager, {
     props: { scopeType: 'TEAM', scopeId: '42' },
@@ -72,9 +74,12 @@ describe('サイネージ管理のBE enum契約', () => {
     expect(selects[0]!.element.value).toBe('LANDSCAPE')
     await selects[0]!.setValue(layout)
     await wrapper.find('form').trigger('submit')
-    await flushPromises()
-    expect(api.createScreen).toHaveBeenCalledWith(expect.objectContaining({ layout, transitionEffect: 'FADE', scopeId: '42' }))
-    wrapper.unmount()
+    // VeeValidateのスキーマ検証はタイマーでまとめられるため、送信結果まで待つ。
+    await vi.waitFor(() => {
+      expect(api.createScreen).toHaveBeenCalledTimes(1)
+      expect(api.createScreen).toHaveBeenCalledWith(expect.objectContaining({ layout, transitionEffect: 'FADE', scopeId: '42' }))
+      expect(wrapper.find('form').exists()).toBe(false)
+    })
   })
 
   it('既存LANDSCAPE画面を編集してそのまま保存できる', async () => {
@@ -82,9 +87,11 @@ describe('サイネージ管理のBE enum契約', () => {
     await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === '編集')!.trigger('click')
     await wrapper.find('form').trigger('submit')
-    await flushPromises()
-    expect(api.updateScreen).toHaveBeenCalledWith(1, expect.objectContaining({ layout: 'LANDSCAPE' }))
-    wrapper.unmount()
+    await vi.waitFor(() => {
+      expect(api.updateScreen).toHaveBeenCalledTimes(1)
+      expect(api.updateScreen).toHaveBeenCalledWith(1, expect.objectContaining({ layout: 'LANDSCAPE' }))
+      expect(wrapper.find('form').exists()).toBe(false)
+    })
   })
 
   it.each(['ANNOUNCEMENT', 'SCHEDULE', 'ACTIVITY_HIGHLIGHT', 'RANKING', 'FREE_TEXT', 'FREE_IMAGE', 'WEATHER', 'CLOCK'])('正規slotType=%sを追加できる', async (slotType) => {
@@ -97,8 +104,10 @@ describe('サイネージ管理のBE enum契約', () => {
     expect(select.findAll('option').map((option) => option.element.value)).toHaveLength(8)
     await select.setValue(slotType)
     await wrapper.find('form').trigger('submit')
-    await flushPromises()
-    expect(api.addSlot).toHaveBeenCalledWith(1, expect.objectContaining({ slotType }))
-    wrapper.unmount()
+    await vi.waitFor(() => {
+      expect(api.addSlot).toHaveBeenCalledTimes(1)
+      expect(api.addSlot).toHaveBeenCalledWith(1, expect.objectContaining({ slotType }))
+      expect(wrapper.find('form').exists()).toBe(false)
+    })
   })
 })
