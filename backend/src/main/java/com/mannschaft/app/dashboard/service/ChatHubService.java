@@ -3,6 +3,7 @@ package com.mannschaft.app.dashboard.service;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.chat.ChannelType;
+import com.mannschaft.app.chat.ChatGroupDmDerivedName;
 import com.mannschaft.app.chat.entity.ChatChannelEntity;
 import com.mannschaft.app.chat.entity.ChatChannelMemberEntity;
 import com.mannschaft.app.chat.repository.ChatChannelMemberRepository;
@@ -120,6 +121,11 @@ public class ChatHubService {
                 .map(ChatContactFolderItemEntity::getItemId)
                 .collect(Collectors.toSet());
 
+        // CMP-261113-0110: 名前なし GROUP_DM の導出名を、チャンネル一覧・詳細と同じ規則で一括解決する
+        //（chat ドメインの照会 Service 経由。チャンネル数に比例する SQL を発行しない）
+        Map<Long, String> derivedNameByChannel = chatMemberBatchQueryService.findGroupDmDerivedNameByChannel(
+                ChatGroupDmDerivedName.targetChannelIds(dmChannelEntities), userId, Map.of());
+
         // パートナー・連絡先ユーザーを 1 クエリで一括取得
         Set<Long> userIdsToResolve = new HashSet<>(dmChannelToPartnerUserId.values());
         userIdsToResolve.addAll(contactUserIds);
@@ -186,7 +192,8 @@ public class ChatHubService {
                             isPinned,
                             isMuted,
                             channel.getLastMessageAt(),
-                            preview
+                            preview,
+                            ChatGroupDmDerivedName.groupDmDisplayName(channel, derivedNameByChannel)
                     );
                 })
                 .sorted(Comparator.comparing(DirectMessageItemDto::isPinned).reversed()
@@ -199,10 +206,16 @@ public class ChatHubService {
         // DM チャンネルを userId でマップ化（パートナーユーザーID → チャンネル）
         // userId が連絡先 itemId としてそのまま使われる
         // FolderItemType.CONTACT を想定（アイテムIDはユーザーID）
+        // 同じ相手が複数の DM 系チャンネルの「相手」になりうる（例: 同じ顔ぶれの GROUP_DM が2つ、1対1 DM と GROUP_DM）。
+        // 重複キーで例外（500）にせず、1対1 DM を優先し、残りはチャンネル ID の小さい方を採る（CMP-261113-0110 で顕在化）。
+        Set<Long> groupDmChannelIds = ChatGroupDmDerivedName.groupDmChannelIds(dmChannelEntities);
         Map<Long, ChatChannelEntity> dmByPartnerId = dmChannelToPartnerUserId.entrySet().stream()
+                .sorted(Comparator.comparing((Map.Entry<Long, Long> e) -> groupDmChannelIds.contains(e.getKey()))
+                        .thenComparing(Map.Entry::getKey))
                 .collect(Collectors.toMap(
                         Map.Entry::getValue,
-                        e -> channelMap.get(e.getKey())
+                        e -> channelMap.get(e.getKey()),
+                        (first, second) -> first
                 ));
 
         List<ContactFolderDto> contacts = folders.stream()

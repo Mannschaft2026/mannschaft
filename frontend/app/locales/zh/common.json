@@ -199,6 +199,7 @@
     },
     "activeThreadsEmpty": "没有进行中的话题",
     "tabAriaLabel": "{name} 标签页",
+    "unnamedChannel": "未命名群组",
     "message": {
       "deleted": "此消息已被删除",
       "unknownSender": "未知",
