@@ -43,6 +43,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy;
@@ -337,6 +340,121 @@ class FlywayFromScratchMigrationTest {
         } finally {
             StandardServiceRegistryBuilder.destroy(registry);
         }
+    }
+
+    /**
+     * Entity がないアーカイブ表の列欠落を、設計書に明記された4組だけで検査する。
+     * 型・NULL・DEFAULT・PK・索引・列順は比較せず、アーカイブ専用列を許容する。
+     */
+    @Test
+    @Order(2)
+    void cmp0012_実Flywayの既知4組に本体の全列がある() throws SQLException {
+        migrateFromScratch();
+        assertThat(archiveColumnViolations(readActualSchema()))
+                .as("本体の全列を対応するarchiveへ保持する（CMP-260924-0012）")
+                .isEmpty();
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_同じ列を持つ4組は合格する() {
+        assertThat(archiveColumnViolations(archiveColumnFixture())).isEmpty();
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_アーカイブ専用列は許容する() {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        schema.forEach((table, columns) -> {
+            if (table.endsWith("_archive")) {
+                columns.add("archived_at");
+            }
+        });
+        assertThat(archiveColumnViolations(schema)).isEmpty();
+    }
+
+    @ParameterizedTest(name = "列欠落 [{index}] {0}.{1}")
+    @CsvSource({
+            "content_reports, content_hidden",
+            "report_actions, note",
+            "direct_mail_logs, body_html",
+            "direct_mail_recipients, status"
+    })
+    @Order(2)
+    void cmp0012_各組のアーカイブ列欠落を検出する(String sourceTable, String column) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        String archiveTable = sourceTable + "_archive";
+        assertThat(schema.get(archiveTable).remove(column)).as("欠落検体の前提").isTrue();
+
+        assertThat(archiveColumnViolations(schema))
+                .containsExactly(sourceTable + " -> " + archiveTable + "." + column);
+    }
+
+    @ParameterizedTest(name = "表欠落 [{index}] {0}")
+    @ValueSource(strings = {"content_reports", "content_reports_archive"})
+    @Order(2)
+    void cmp0012_片側テーブルの欠落を合格にしない(String table) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        assertThat(schema.remove(table)).as("欠落検体の前提").isNotNull();
+
+        assertThat(archiveColumnViolations(schema)).containsExactly(table + " … テーブルが存在しない");
+    }
+
+    @ParameterizedTest(name = "空列集合 [{index}] {0}")
+    @ValueSource(strings = {"content_reports", "content_reports_archive"})
+    @Order(2)
+    void cmp0012_片側の空列集合を合格にしない(String table) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        schema.get(table).clear();
+
+        assertThat(archiveColumnViolations(schema)).containsExactly(table + " … 列集合が空");
+    }
+
+    /**
+     * F10.1とF09.6が同一スキーマと定めた4組の列存在だけを検査する。
+     * 表の欠落や空集合を合格にせず、archive専用列は許容する。
+     */
+    static List<String> archiveColumnViolations(Map<String, Set<String>> schema) {
+        List<String> violations = new ArrayList<>();
+        for (String sourceTable : List.of("content_reports", "report_actions",
+                "direct_mail_logs", "direct_mail_recipients")) {
+            String archiveTable = sourceTable + "_archive";
+            boolean invalidTable = false;
+            for (String table : List.of(sourceTable, archiveTable)) {
+                Set<String> columns = schema.get(table);
+                if (columns == null) {
+                    violations.add(table + " … テーブルが存在しない");
+                    invalidTable = true;
+                } else if (columns.isEmpty()) {
+                    violations.add(table + " … 列集合が空");
+                    invalidTable = true;
+                }
+            }
+            if (invalidTable) {
+                continue;
+            }
+            Set<String> archiveColumns = schema.get(archiveTable);
+            schema.get(sourceTable).stream()
+                    .filter(column -> !archiveColumns.contains(column))
+                    .sorted()
+                    .forEach(column -> violations.add(sourceTable + " -> " + archiveTable + "." + column));
+        }
+        return violations;
+    }
+
+    /** 他の組の欠落で対照が失敗しないよう、常に4組全部を備えた変更可能な検体を返す。 */
+    private static Map<String, Set<String>> archiveColumnFixture() {
+        Map<String, Set<String>> sourceColumns = Map.of(
+                "content_reports", Set.of("id", "content_hidden"),
+                "report_actions", Set.of("id", "note"),
+                "direct_mail_logs", Set.of("id", "body_html"),
+                "direct_mail_recipients", Set.of("id", "status"));
+        Map<String, Set<String>> schema = new HashMap<>();
+        sourceColumns.forEach((table, columns) -> {
+            schema.put(table, new HashSet<>(columns));
+            schema.put(table + "_archive", new HashSet<>(columns));
+        });
+        return schema;
     }
 
     /**
