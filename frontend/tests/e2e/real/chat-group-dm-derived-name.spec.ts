@@ -12,6 +12,8 @@ import {
   joinAsMember,
   must,
   openAs as openAsBase,
+  readAssets,
+  writeAssets,
   type Actor,
   type Scope,
 } from './helpers/n1p1-world'
@@ -135,11 +137,22 @@ test.afterAll(async () => {
     ['orgA', `/api/v1/organizations/${world.orgA?.slug}`, world.a],
   ] as const) {
     if (!owner || p.endsWith('undefined')) continue
+    const before = failures.length
     await attempt(label, owner, 'DELETE', p)
+    // 削除に成功したら、createOrg/createTeam が共有台帳 n1p1-assets.json へ積んだ自分の記録だけを取り除く。
+    // 失敗分は台帳に残す（n1p1-global-teardown が再処理できる）。他 spec の記録は path と所有者が一致するものしか触らない
+    if (failures.length === before) {
+      writeAssets(readAssets().filter((rec) => !(rec.path === p && rec.owner.email === owner.email)))
+    }
   }
   // 利用者は最後に退会させる（AC6 で退会済みの F は除く。退会 API は AC6 と同じ DELETE /users/me）
   for (const actor of [...createdActors].reverse()) {
     if (withdrawn.has(actor.id)) continue
+    // 台帳に所有者としての記録が残っている利用者を退会させると、後の n1p1-global-teardown のログインで退会が自動取り消しされる
+    if (readAssets().some((rec) => rec.owner.email === actor.email)) {
+      failures.push(`withdraw ${actor.label}:台帳に所有記録が残っているため退会しない`)
+      continue
+    }
     await attempt(`withdraw ${actor.label}`, actor, 'DELETE', '/api/v1/users/me', { currentPassword: actor.password })
   }
   if (failures.length) throw new Error(`後始末に失敗: ${failures.join(' ')}`)
