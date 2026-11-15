@@ -65744,7 +65744,7 @@ export interface components {
             allowedIps?: string[];
             /** Format: date-time */
             expiredAt?: string;
-            name?: string;
+            name: string;
         };
         ApiResponseSignageAccessTokenResponse: {
             data?: components["schemas"]["SignageAccessTokenResponse"];
