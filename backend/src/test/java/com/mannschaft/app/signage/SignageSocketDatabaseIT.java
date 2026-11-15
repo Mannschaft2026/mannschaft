@@ -92,6 +92,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
         AtomicReference<String> serverId = new AtomicReference<>();
         var disconnected = new LinkedBlockingQueue<String>();
         var authorizationCompleted = new LinkedBlockingQueue<String>();
+        var disconnectCompleted = new LinkedBlockingQueue<String>();
         ApplicationListener<ApplicationEvent> listener = event -> {
             if (event instanceof SessionDisconnectEvent closed) disconnected.offer(closed.getSessionId());
         };
@@ -102,6 +103,9 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                 var accessor = StompHeaderAccessor.wrap(message);
                 if (accessor.getCommand() == StompCommand.CONNECT || accessor.getCommand() == StompCommand.STOMP) {
                     authorizationCompleted.offer(accessor.getSessionId());
+                }
+                if (accessor.getCommand() == StompCommand.DISCONNECT) {
+                    disconnectCompleted.offer(accessor.getSessionId());
                 }
             }
         };
@@ -144,6 +148,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                 var reason = new CloseReason(CloseReason.CloseCodes.UNEXPECTED_CONDITION, "owned transport close");
                 ((WsSession) nativePeer).doClose(reason, reason, true);
                 await().atMost(Duration.ofSeconds(10)).until(() -> disconnected.contains(serverId.get()));
+                await().atMost(Duration.ofSeconds(10)).until(() -> disconnectCompleted.contains(serverId.get()));
                 statement.execute("UNLOCK TABLES");
                 await().atMost(Duration.ofSeconds(10)).until(connected::isDone);
                 await().atMost(Duration.ofSeconds(10)).until(() -> authorizationCompleted.contains(serverId.get()));
