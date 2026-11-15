@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { ChatChannelResponse } from '~/types/chat'
+import { resolveChannelDisplayName } from '~/utils/chat/channelDisplayName'
 
-defineProps<{
+const props = defineProps<{
   channel: ChatChannelResponse
 }>()
 
@@ -11,6 +12,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const displayName = computed(() =>
+  resolveChannelDisplayName(props.channel, t('chat.unnamedChannel')),
+)
 </script>
 
 <template>
@@ -27,7 +31,7 @@ const { t } = useI18n()
     />
     <div>
       <h3 class="text-sm font-semibold">
-        {{ channel.dmPartner ? channel.dmPartner.displayName : channel.meta.name }}
+        {{ displayName }}
       </h3>
       <p v-if="channel.meta.description" class="text-xs text-surface-400">
         {{ channel.meta.description }}

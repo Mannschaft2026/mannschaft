@@ -92,7 +92,7 @@ export interface ChatViewerState {
  *
  * BE が identity / meta / settings / lastMessage / source / audit のネスト構造で返すため、
  * フラットなフィールド（旧 name / channelType / isPrivate 等）は存在しない。
- * 表示名は DM なら {@code dmPartner.displayName}、それ以外は {@code meta.name} を使う。
+ * 表示名は {@code resolveChannelDisplayName}（utils/chat/channelDisplayName.ts）で決める。
  */
 export interface ChatChannelResponse {
   id: number
@@ -104,6 +104,8 @@ export interface ChatChannelResponse {
   audit: ChatChannelAudit
   memberCount: number
   dmPartner: ChatDmPartner | null
+  /** GROUP_DM で名前が未設定のときの導出名（BE が呼出ユーザーごとに付与。それ以外は null） */
+  derivedName: string | null
   viewer: ChatViewerState | null
 }
 
