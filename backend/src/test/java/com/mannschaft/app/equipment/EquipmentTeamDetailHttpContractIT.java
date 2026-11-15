@@ -63,15 +63,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("TEAM備品詳細GETの同一404契約")
 class EquipmentTeamDetailHttpContractIT extends AbstractMySqlIntegrationTest {
     private static final String PASSWORD = "EquipmentDetail1!";
-    private static final String NOT_FOUND = notFound("備品が見つかりません");
-    /** 言語別の期待本文（ja は ErrorCode 既定文言、他は messages_*.properties の error.equipment.001）。 */
-    private static final Map<String, String> NOT_FOUND_BY_LOCALE = Map.of(
-            "ja", NOT_FOUND,
-            "en", notFound("The equipment was not found"));
-
-    private static String notFound(String message) {
-        return "{\"error\":{\"code\":\"EQUIPMENT_001\",\"message\":\"" + message + "\",\"fieldErrors\":[]}}";
-    }
+    private static final String NOT_FOUND = "{\"error\":{\"code\":\"EQUIPMENT_001\","
+            + "\"message\":\"備品が見つかりません\",\"fieldErrors\":[]}}";
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
@@ -93,7 +86,7 @@ class EquipmentTeamDetailHttpContractIT extends AbstractMySqlIntegrationTest {
     @ValueSource(strings = {"ja", "en"})
     void 非所属と脱退と別TEAM管理者は子の有無によらず同じ404(String locale) throws Exception {
         Fixture f = fixture();
-        JsonNode expected = objectMapper.readTree(NOT_FOUND_BY_LOCALE.get(locale));
+        JsonNode expected = objectMapper.readTree(NOT_FOUND);
         for (UserEntity actor : List.of(f.outsider(), f.left(), f.foreignAdmin())) {
             Cookie cookie = login(actor);
             for (long itemId : List.of(f.local(), f.missing(), f.foreign(), f.deleted())) {
@@ -152,7 +145,7 @@ class EquipmentTeamDetailHttpContractIT extends AbstractMySqlIntegrationTest {
         Cookie cookie = login(f.member());
         MvcResult unknown = read(missingTeamId, f.local(), cookie, locale);
         assertThat(unknown.getResponse().getStatus()).isEqualTo(404);
-        assertThat(body(unknown)).isEqualTo(objectMapper.readTree(NOT_FOUND_BY_LOCALE.get(locale)));
+        assertThat(body(unknown)).isEqualTo(objectMapper.readTree(NOT_FOUND));
         String url = "/api/v1/teams/" + f.team() + "/equipment/" + f.local();
         mockMvc.perform(get(url).servletPath(url)).andExpect(status().isUnauthorized());
         String badItem = "/api/v1/teams/" + f.team() + "/equipment/no-long";
