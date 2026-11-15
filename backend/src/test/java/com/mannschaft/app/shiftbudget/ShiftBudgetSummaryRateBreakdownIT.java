@@ -1,8 +1,10 @@
 package com.mannschaft.app.shiftbudget;
 
 import com.mannschaft.app.admin.repository.FeatureFlagRepository;
+import com.mannschaft.app.common.visibility.perf.SqlIntentCounter;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
+import com.mannschaft.app.organization.entity.OrganizationEntity;
 import com.mannschaft.app.role.entity.PermissionGroupEntity;
 import com.mannschaft.app.role.entity.PermissionGroupPermissionEntity;
 import com.mannschaft.app.role.entity.UserPermissionGroupEntity;
@@ -17,7 +19,6 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.cache.CacheManager;
@@ -30,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -55,10 +57,7 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
     @BeforeEach
     void setUp() {
         FeatureFlagTestSupport.enable(featureFlags, caches, "FEATURE_SHIFT_ENABLED");
-        em.createNativeQuery("INSERT INTO organizations (name, org_type, visibility, hierarchy_visibility, "
-                + "supporter_enabled, version, slug, created_at, updated_at) "
-                + "VALUES ('1559契約', 'OTHER', 'PUBLIC', 'NONE', 1, 0, UUID(), NOW(), NOW())").executeUpdate();
-        organizationId = ((Number) em.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        organizationId = insertOrganization();
         userId = 155900000L + organizationId;
         MembershipTestHelper.insertActiveUser(em, userId);
         ShiftBudgetAllocationEntity allocation = ShiftBudgetAllocationEntity.builder()
@@ -166,6 +165,13 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
+    void 別組織の予算担当でも他組織の割当は取得できない() throws Exception {
+        Long otherOrganizationId = insertOrganization();
+        grant(otherOrganizationId, false, true);
+        summary(userId, otherOrganizationId).andExpect(status().isNotFound());
+    }
+
+    @Test
     void 未認証では取得できない() throws Exception {
         em.flush();
         mvc.perform(get(path()).header("X-Organization-Id", organizationId))
@@ -177,28 +183,25 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
         grant(false, true);
         record("1200", "1", ShiftBudgetConsumptionStatus.PLANNED, false);
         summary(userId, organizationId).andExpect(status().isOk());
-        var statistics = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
-        boolean previouslyEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
-        try {
-            long before = statistics.getPrepareStatementCount();
+        int smallCount;
+        try (var capture = SqlIntentCounter.captureCurrentThread()) {
             summary(userId, organizationId).andExpect(status().isOk());
-            long smallCount = statistics.getPrepareStatementCount() - before;
-            for (int person = 0; person < 100; person++) {
-                for (int day = 0; day < 31; day++) {
-                    recordForUser(userId + person + 1, day % 2 == 0 ? "1200" : "1300", "4",
-                            ShiftBudgetConsumptionStatus.PLANNED, false);
-                }
+            smallCount = capture.totalCount();
+            assertThat(smallCount).isPositive();
+        }
+        for (int person = 0; person < 100; person++) {
+            for (int day = 0; day < 31; day++) {
+                recordForUser(userId + person + 1, day % 2 == 0 ? "1200" : "1300", "4",
+                        ShiftBudgetConsumptionStatus.PLANNED, false);
             }
-            em.flush();
-            em.clear();
-            before = statistics.getPrepareStatementCount();
+        }
+        em.flush();
+        em.clear();
+        try (var capture = SqlIntentCounter.captureCurrentThread()) {
             summary(userId, organizationId).andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.by_user.length()").value(101))
                     .andExpect(jsonPath("$.data.by_user[1].rate_breakdown.length()").value(2));
-            assertThat(statistics.getPrepareStatementCount() - before).isEqualTo(smallCount);
-        } finally {
-            statistics.setStatisticsEnabled(previouslyEnabled);
+            assertThat(capture.totalCount()).isEqualTo(smallCount);
         }
     }
 
@@ -228,10 +231,14 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
     }
 
     private void grant(boolean systemAdmin, boolean budgetAdmin) {
+        grant(organizationId, systemAdmin, budgetAdmin);
+    }
+
+    private void grant(Long scopeId, boolean systemAdmin, boolean budgetAdmin) {
         if (systemAdmin) MembershipTestHelper.insertUserRole(em, userId, "SYSTEM_ADMIN", null, null);
-        MembershipTestHelper.insertMembership(em, userId, ScopeType.ORGANIZATION, organizationId, RoleKind.MEMBER);
-        MembershipTestHelper.insertUserRole(em, userId, "DEPUTY_ADMIN", null, organizationId);
-        PermissionGroupEntity group = PermissionGroupEntity.builder().organizationId(organizationId)
+        MembershipTestHelper.insertMembership(em, userId, ScopeType.ORGANIZATION, scopeId, RoleKind.MEMBER);
+        MembershipTestHelper.insertUserRole(em, userId, "DEPUTY_ADMIN", null, scopeId);
+        PermissionGroupEntity group = PermissionGroupEntity.builder().organizationId(scopeId)
                 .targetRole(PermissionGroupEntity.TargetRole.DEPUTY_ADMIN).name("1559担当").createdBy(userId).build();
         em.persist(group);
         em.flush();
@@ -245,5 +252,21 @@ class ShiftBudgetSummaryRateBreakdownIT extends AbstractMySqlIntegrationTest {
             em.persist(PermissionGroupPermissionEntity.builder().groupId(group.getId()).permissionId(permissionId).build());
         }
         em.persist(UserPermissionGroupEntity.builder().userId(userId).groupId(group.getId()).assignedBy(userId).build());
+    }
+
+    private Long insertOrganization() {
+        // 既存OrgFanoutRecipientSourceRedITと同じEntity金型で必須値と既定値を保存する。
+        OrganizationEntity organization = OrganizationEntity.builder()
+                .name("1559契約")
+                .slug("s-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8))
+                .orgType(OrganizationEntity.OrgType.OTHER)
+                .visibility(OrganizationEntity.Visibility.PUBLIC)
+                .hierarchyVisibility(OrganizationEntity.HierarchyVisibility.NONE)
+                .supporterEnabled(true)
+                .lifecycleStatus(OrganizationEntity.LifecycleStatus.ACTIVE)
+                .build();
+        em.persist(organization);
+        em.flush();
+        return organization.getId();
     }
 }
