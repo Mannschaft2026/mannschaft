@@ -9,6 +9,7 @@ import com.mannschaft.app.shift.repository.ShiftPositionRepository;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
 import com.mannschaft.app.shift.service.ShiftSlotService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -58,6 +59,9 @@ class ShiftSlotTimeValidationServiceTest {
 
     @Mock
     private ShiftAssignmentRepository assignmentRepository;
+
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private ShiftSlotService shiftSlotService;
