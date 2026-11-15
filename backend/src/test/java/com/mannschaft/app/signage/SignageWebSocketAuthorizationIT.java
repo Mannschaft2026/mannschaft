@@ -169,6 +169,21 @@ class SignageWebSocketAuthorizationIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
+    void AC1_SUBSCRIBEheaderへtokenを載せても資格を取得できない() throws Exception {
+        Inbox control = subscribe(connect("/ws", token.getToken(), null, null), emergency());
+        StompSession deniedSession = connect("/ws/signage", null, null, null);
+        StompHeaders headers = new StompHeaders();
+        headers.set("X-Signage-Token", token.getToken());
+        headers.setId(UUID.randomUUID().toString());
+        headers.setDestination(emergency());
+        Inbox denied = new Inbox();
+        deniedSession.subscribe(headers, denied);
+        await().atMost(Duration.ofSeconds(10)).until(() -> !deniedSession.isConnected()
+                || registered(emergency(), headers.getId()));
+        assertDelivery(control, denied);
+    }
+
+    @Test
     void AC4_有効tokenでもprefix外wildcardから本文を受信しない() throws Exception {
         Inbox control = subscribe(connect("/ws", token.getToken(), null, null), emergency());
         Inbox denied = subscribe(connect("/ws", token.getToken(), null, null), "/topic/**");
