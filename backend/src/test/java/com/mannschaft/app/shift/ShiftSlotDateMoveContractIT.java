@@ -150,8 +150,12 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
     void 希望ありの日付変更は確認省略とfalseを409で拒否し全列を保持する() throws Exception {
         newRequest(slotId, OLD_DATE, memberId);
         String before = snapshot();
-        patchSlot(adminId, Map.of("slotDate", NEW_DATE.toString())).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("SHIFT_047"));
+        mockMvc.perform(patch("/api/v1/shifts/slots/{id}", slotId).with(authentication(auth(adminId)))
+                        .header("Accept-Language", "en").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("slotDate", NEW_DATE.toString()))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_047"))
+                .andExpect(jsonPath("$.error.message").value(
+                        "Requests have been submitted for this slot. Please confirm moving them to the new date."));
         assertThat(snapshot()).isEqualTo(before);
         patchSlot(adminId, Map.of("slotDate", NEW_DATE.toString(), "moveRequestsConfirmed", false))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_047"));
