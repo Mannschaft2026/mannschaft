@@ -16,6 +16,7 @@ import com.mannschaft.app.chat.dto.UpdateMyChannelSettingsRequest;
 import com.mannschaft.app.chat.dto.UploadUrlResponse;
 import com.mannschaft.app.chat.entity.ChatChannelEntity;
 import com.mannschaft.app.chat.service.ChatAttachmentService;
+import com.mannschaft.app.chat.service.ChatGroupDmDerivedNameResolver;
 import com.mannschaft.app.chat.service.ChatChannelService.ConversationResult;
 import com.mannschaft.app.chat.service.ChatChannelService;
 import com.mannschaft.app.chat.service.ChatMemberService;
@@ -42,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import com.mannschaft.app.common.SecurityUtils;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -59,6 +61,7 @@ public class ChatChannelController {
     private final ChatChannelFacade channelFacade;
     private final ChatMessageFacade messageFacade;
     private final ChatAttachmentService attachmentService;
+    private final ChatGroupDmDerivedNameResolver derivedNameResolver;
 
 
     /**
@@ -70,7 +73,10 @@ public class ChatChannelController {
     @Operation(summary = "チャンネル一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<List<ChannelResponse>>> listChannels() {
-        List<ChannelResponse> channels = channelService.listMyChannels(SecurityUtils.getCurrentUserId());
+        Long userId = SecurityUtils.getCurrentUserId();
+        // 名前なし GROUP_DM の導出名は、参加者（auth）の表示名が要るため tx の外で付ける（CMP-261113-0110）
+        List<ChannelResponse> channels =
+                derivedNameResolver.withDerivedNames(channelService.listMyChannels(userId), userId);
         return ResponseEntity.ok(ApiResponse.of(channels));
     }
 
@@ -207,10 +213,15 @@ public class ChatChannelController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "新規チャンネル作成")
     public ResponseEntity<ApiResponse<ChannelResponse>> startConversation(
             @Valid @RequestBody StartConversationRequest request) {
-        ConversationResult result = channelService.startConversation(
-                SecurityUtils.getCurrentUserId(), request.getUserIds());
+        Long callerId = SecurityUtils.getCurrentUserId();
+        // Zimmer（2名以上）の導出名に要る参加者の表示名は、書き込み tx の前に引く（CMP-261113-0110）
+        Map<Long, String> participantNames = request.getUserIds().size() >= 2
+                ? derivedNameResolver.prefetchParticipantNames(null, callerId, request.getUserIds())
+                : Map.of();
+        ConversationResult result = channelService.startConversation(callerId, request.getUserIds());
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        return ResponseEntity.status(status).body(ApiResponse.of(result.channel()));
+        return ResponseEntity.status(status).body(ApiResponse.of(
+                derivedNameResolver.withDerivedName(result.channel(), callerId, participantNames)));
     }
 
     /**

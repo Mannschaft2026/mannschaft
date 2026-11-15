@@ -729,6 +729,7 @@
     "group": {
       "title": "整批预约",
       "slot_count": "30分钟×{n}个时段",
+      "slot_count_total": "30分钟×{n}个时段（共{total}分钟）",
       "time_range": "预约时间段",
       "auto_selected": "已自动选择{menu}所需的{n}个时段",
       "extend": "延长时段",

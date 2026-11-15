@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261113-1506",
+  "scope": "app",
+  "implementation": {
+    "pr": 4509,
+    "sha": "9d28c4707046623ec5973002a59371c2a2e416ef"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "詳細取得・チェックイン履歴・QR表示・QR再生成の4経路で、他人のカードと存在しないカードが同一ステータス・同一エラーコード・同一本文で応答する",
+      "tests": [
+        {
+          "name": "MemberCardOwnershipConcealmentTest.java",
+          "evidence": "backend/src/test/java/com/mannschaft/app/membership/MemberCardOwnershipConcealmentTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "本人・同スコープ管理者・未認証の既存挙動は変わらない（本人 200、未認証 401）",
+      "tests": [
+        {
+          "name": "MemberCardOwnershipConcealmentTest.java",
+          "evidence": "backend/src/test/java/com/mannschaft/app/membership/MemberCardOwnershipConcealmentTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43611618062
+    },
+    {
+      "runId": 43611618110
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4509"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261113-1506.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261113-1506.md"
+    }
+  },
+  "regressions": [
+    {
+      "description": "他人のカードと存在しないカードで会員証APIの応答が一致せず存在を推測できる",
+      "test": "backend/src/test/java/com/mannschaft/app/membership/MemberCardOwnershipConcealmentTest.java",
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/pull/4509",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/actions/runs/43611618062"
+    }
+  ]
+}
