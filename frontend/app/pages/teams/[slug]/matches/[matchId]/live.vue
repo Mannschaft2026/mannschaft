@@ -219,7 +219,13 @@ async function loadPage(): Promise<void> {
   teamId.value = ctx?.teamId ?? null
   orgInvalid.value = ctx?.orgInvalid ?? false
   organizations.value = ctx?.organizations ?? []
-  if (ctx === null || teamId.value === null || ctx.orgInvalid) {
+  if (ctx?.orgInvalid) {
+    loading.value = false
+    return
+  }
+  if (ctx === null || teamId.value === null) {
+    loadErrorMessage.value = t('match.live.error.load_match_failed')
+    loadError.value = new Error(loadErrorMessage.value)
     loading.value = false
     return
   }

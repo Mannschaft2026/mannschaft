@@ -62,6 +62,17 @@ beforeEach(() => {
 })
 
 describe('サイネージ管理のBE enum契約', () => {
+  // 取得成功0件の既存表示を固定するcharacterization（初回からgreen）。
+  it('画面一覧の取得成功0件では空表示と追加導線を表示する', async () => {
+    api.getScreens.mockResolvedValueOnce({ data: [] })
+    const wrapper = render()
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'DashboardEmptyState' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text() === '画面を追加')).toBe(true)
+  })
+
   it('画面一覧403は未登録と区別し、再試行で成功した一覧を表示する', async () => {
     const failure = { statusCode: 403 }
     api.getScreens.mockRejectedValueOnce(failure)

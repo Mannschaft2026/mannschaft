@@ -41,11 +41,14 @@ const screenNamePlaceholder = computed(() =>
 // --- State ---
 const screens = ref<SignageScreen[]>([])
 const loadingScreens = ref(false)
+const screensError = shallowRef<unknown>(null)
 const selectedScreen = ref<SignageScreen | null>(null)
 const slots = ref<SignageSlot[]>([])
 const loadingSlots = ref(false)
+const slotsError = shallowRef<unknown>(null)
 const tokens = ref<SignageToken[]>([])
 const loadingTokens = ref(false)
+const tokensError = shallowRef<unknown>(null)
 const showDetailPanel = ref(false)
 
 // Dialog state
@@ -161,10 +164,12 @@ const [slotDisplayCondition, slotDisplayConditionAttrs] = defineSlotField('displ
 // --- Data loading ---
 async function loadScreens() {
   loadingScreens.value = true
+  screensError.value = null
   try {
     const res = await getScreens(props.scopeType, props.scopeId)
     screens.value = res.data
-  } catch {
+  } catch (error) {
+    screensError.value = error
     showError('サイネージ画面一覧の取得に失敗しました')
   } finally {
     loadingScreens.value = false
@@ -173,10 +178,12 @@ async function loadScreens() {
 
 async function loadSlots(screenId: number) {
   loadingSlots.value = true
+  slotsError.value = null
   try {
     const res = await getSlots(screenId)
     slots.value = res.data
-  } catch {
+  } catch (error) {
+    slotsError.value = error
     showError('スロット一覧の取得に失敗しました')
   } finally {
     loadingSlots.value = false
@@ -185,10 +192,12 @@ async function loadSlots(screenId: number) {
 
 async function loadTokens(screenId: number) {
   loadingTokens.value = true
+  tokensError.value = null
   try {
     const res = await getTokens(screenId)
     tokens.value = res.data
-  } catch {
+  } catch (error) {
+    tokensError.value = error
     showError('トークン一覧の取得に失敗しました')
   } finally {
     loadingTokens.value = false
@@ -388,6 +397,13 @@ onMounted(loadScreens)
       <LoadingBounce />
     </div>
 
+    <DashboardErrorState
+      v-else-if="screensError"
+      :error="screensError"
+      :show-retry="true"
+      @retry="loadScreens"
+    />
+
     <div v-else>
       <div class="mb-4 flex justify-end">
         <Button label="画面を追加" icon="pi pi-plus" @click="openCreateScreen" />
@@ -503,6 +519,13 @@ onMounted(loadScreens)
             <LoadingBounce />
           </div>
 
+          <DashboardErrorState
+            v-else-if="slotsError"
+            :error="slotsError"
+            :show-retry="true"
+            @retry="loadSlots(selectedScreen.id)"
+          />
+
           <DataTable
             v-else
             :value="slots"
@@ -561,6 +584,13 @@ onMounted(loadScreens)
           <div v-if="loadingTokens" class="flex justify-center py-4">
             <LoadingBounce />
           </div>
+
+          <DashboardErrorState
+            v-else-if="tokensError"
+            :error="tokensError"
+            :show-retry="true"
+            @retry="loadTokens(selectedScreen.id)"
+          />
 
           <div v-else-if="tokens.length === 0" class="py-4 text-center text-sm text-surface-400">
             トークンがありません
