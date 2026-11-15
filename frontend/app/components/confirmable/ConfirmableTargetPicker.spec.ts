@@ -44,7 +44,10 @@ describe('ConfirmableTargetPicker', () => {
     })
     await flushPromises()
     expect(mocks.api).toHaveBeenCalledTimes(1)
-    expect(String(mocks.api.mock.calls[0][0])).toMatch(/^\/api\/v1\/organizations\/acme\/children\?/)
+    const firstApiCall = mocks.api.mock.calls[0]
+    expect(firstApiCall).toBeDefined()
+    if (!firstApiCall) throw new Error('mocks.api が呼ばれていない')
+    expect(String(firstApiCall[0])).toMatch(/^\/api\/v1\/organizations\/acme\/children\?/)
     expect(mocks.getTeamsInOrg).toHaveBeenCalledWith('acme')
     expect(mocks.handleApiError).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Aチーム')
