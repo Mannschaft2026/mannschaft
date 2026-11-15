@@ -125,4 +125,42 @@ describe('記録時給別の消化内訳', () => {
     expect(wrapper.find('[data-testid="consumption-summary-open-1"]').exists()).toBe(false)
     expect(getConsumptionSummary).not.toHaveBeenCalled()
   })
+
+  it('空の内訳は取得失敗と区別して表示する', async () => {
+    getConsumptionSummary.mockResolvedValueOnce({ ...summary(), by_user: [] })
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="consumption-summary-open-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('記録された消化内訳はありません')
+    expect(wrapper.find('[data-testid="consumption-summary-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="consumption-summary-user-6"]').exists()).toBe(false)
+  })
+
+  it('取得失敗後の再試行で同じ割当の内訳を表示する', async () => {
+    getConsumptionSummary.mockRejectedValueOnce(new Error('load failed'))
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="consumption-summary-open-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="consumption-summary-error-retry"]').trigger('click')
+    await flushPromises()
+    expect(getConsumptionSummary.mock.calls).toEqual([['10', 1], ['10', 1]])
+    expect(wrapper.find('[data-testid="consumption-summary-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="consumption-summary-user-6"]').exists()).toBe(true)
+  })
+
+  it('権限を失った後の応答を破棄し権限復帰だけでは再取得しない', async () => {
+    let finish!: (value: ReturnType<typeof summary>) => void
+    getConsumptionSummary.mockReturnValueOnce(new Promise<ReturnType<typeof summary>>(resolve => { finish = resolve }))
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="consumption-summary-open-1"]').trigger('click')
+    canManageBudget.value = false
+    await flushPromises()
+    finish(summary())
+    await flushPromises()
+    expect(wrapper.find('[data-testid="consumption-summary-user-6"]').exists()).toBe(false)
+    canManageBudget.value = true
+    await flushPromises()
+    expect(getConsumptionSummary).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="consumption-summary-user-6"]').exists()).toBe(false)
+  })
 })

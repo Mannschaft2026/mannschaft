@@ -40,6 +40,14 @@
       "deleteError": "Failed to delete allocation"
     },
     "consumption": {
+      "openByUser": "Member breakdown",
+      "user": "User ID: {id}",
+      "total": "Total {amount} {currency} / {hours} hours",
+      "recordedRate": "Hourly rate when recorded",
+      "hours": "Hours",
+      "zeroHistory": "Recorded at zero (hourly rate needs review)",
+      "empty": "No consumption breakdown has been recorded",
+      "close": "Close",
       "summary": "Consumption Summary",
       "consumed": "Consumed",
       "remaining": "Remaining",
