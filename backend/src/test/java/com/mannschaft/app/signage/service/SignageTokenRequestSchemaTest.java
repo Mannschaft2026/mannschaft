@@ -19,6 +19,7 @@ class SignageTokenRequestSchemaTest {
         assertThat(name).isNotNull();
         assertThat(name.getType()).isEqualTo("string");
         assertThat(name.getMaxLength()).isEqualTo(100);
+        assertThat(name.getMinLength()).isEqualTo(1);
         assertThat(request.getRequired()).containsExactly("name");
     }
 }

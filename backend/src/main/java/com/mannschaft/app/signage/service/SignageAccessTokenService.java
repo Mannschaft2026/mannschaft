@@ -7,6 +7,7 @@ import com.mannschaft.app.signage.entity.SignageAccessTokenEntity;
 import com.mannschaft.app.signage.entity.SignageScreenEntity;
 import com.mannschaft.app.signage.repository.SignageAccessTokenRepository;
 import com.mannschaft.app.signage.repository.SignageScreenRepository;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +43,8 @@ public class SignageAccessTokenService {
      */
     public record IssueSignageTokenRequest(
             @NotBlank
-            @Size(max = 100)
+            @Size(min = 1, max = 100)
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
             String name,
             /** 許可IPアドレスリスト（CIDR表記可。nullの場合は全許可） */
             List<String> allowedIps,
