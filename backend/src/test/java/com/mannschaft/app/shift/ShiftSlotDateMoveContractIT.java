@@ -2,6 +2,7 @@ package com.mannschaft.app.shift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.auth.entity.UserEntity;
+import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.shift.dto.CreateShiftRequestRequest;
@@ -29,10 +30,13 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -272,12 +276,42 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
             submitted.set(CompletableFuture.supplyAsync(() -> {
                 thread.set(Thread.currentThread());
-                return requestService.submitRequest(new CreateShiftRequestRequest(
-                        scheduleId, slotId, NEW_DATE, "PREFERRED", "並行提出"), memberId).getId();
+                ServletRequestAttributes attributes = new ServletRequestAttributes(new MockHttpServletRequest());
+                RequestContextHolder.setRequestAttributes(attributes);
+                try {
+                    return requestService.submitRequest(new CreateShiftRequestRequest(
+                            scheduleId, slotId, NEW_DATE, "PREFERRED", "並行提出"), memberId).getId();
+                } finally {
+                    attributes.requestCompleted();
+                    RequestContextHolder.resetRequestAttributes();
+                }
             }, executor));
             awaitParentLock(thread);
         });
         assertDate(submitted.get().get(20, TimeUnit.SECONDS), NEW_DATE);
+    }
+
+    @Test
+    void 先読み後に撤回された希望を内容編集で書き換えない() throws Exception {
+        Long requestId = newRequest(slotId, OLD_DATE, memberId);
+        CountDownLatch read = new CountDownLatch(1);
+        CountDownLatch edit = new CountDownLatch(1);
+        CompletableFuture<Void> editing = CompletableFuture.runAsync(() -> tx.executeWithoutResult(s -> {
+            requestRepository.findById(requestId).orElseThrow();
+            read.countDown();
+            awaitLatch(edit);
+            requestService.updateRequest(requestId, new UpdateShiftRequestRequest("AVAILABLE", "撤回後の編集"));
+        }), executor);
+        try {
+            assertThat(read.await(20, TimeUnit.SECONDS)).isTrue();
+            requestService.deleteRequest(requestId);
+            String afterWithdrawal = snapshot();
+            edit.countDown();
+            assertThatThrownBy(() -> editing.get(20, TimeUnit.SECONDS)).hasCauseInstanceOf(BusinessException.class);
+            assertThat(snapshot()).isEqualTo(afterWithdrawal);
+        } finally {
+            edit.countDown();
+        }
     }
 
     @Test
