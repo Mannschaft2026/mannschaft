@@ -75,7 +75,7 @@ scopeは通知予約の `module_event_notice_outbox.scope_type`（VARCHAR(16)）
 
 指標名は固定で、IDやpayloadをラベルへ追加しない。監視処理は最古の未完了が厳密に30分を超えた場合に `OLDEST_PENDING_30_MIN`、隔離遷移のcommit後に `QUARANTINED` の運用signalを発行する。既存 errorreport 経路へ HIGH として接続し、固定メッセージ `MODULE_EVENT_OLDEST_PENDING_30_MIN` / `MODULE_EVENT_QUARANTINED` を使用する。業務payloadや元の例外本文をこのsignalへ載せない。
 
-通常再投入は `module-event-replay` が60秒周期で起動し、発行から5分以上経過した未完了を1回最大100件扱う。実行leaseは5分で、未期限の処理を重ねて実行せず、期限切れは再取得の対象となる。再試行受理回数が10回に達した未完了は隔離し、11回目の業務実行へ進めない。
+通常再投入は `module-event-replay` が60秒周期で起動し（ShedLock は `lockAtLeastFor=PT50S / lockAtMostFor=PT3M`。最短保持を周期と同じ60秒にすると次 tick が lock 期限ちょうどに来て取得に失敗し、実質2分周期になるため周期より短くしている）、発行から5分以上経過した未完了を1回最大100件扱う。実行leaseは5分で、未期限の処理を重ねて実行せず、期限切れは再取得の対象となる。再試行受理回数が10回に達した未完了は隔離し、11回目の業務実行へ進めない。
 
 **これらの周期・cutoff・件数・lease・実行容量は、[M18 remote CI 実測（HEAD 30744）](../evidence/CMP-261028-2251/m18-remote-ci-30744.md)を根拠とする確定値である**（未完了1000件を保持し通常10件/秒×300秒の3000件を流して拒否0・p99=131.767637ms、executor core/max4・待ち行列容量200で queue 最大93）。試行回数の上限（10回）や警告の閾値は M18 が測っておらず初期値のままである。この実測は C / F 業務購読者の処理性能を示さず、処理時間や運用上の復旧所要時間を保証する値でもない。本書から新しい運用パラメータは追加しない。
 

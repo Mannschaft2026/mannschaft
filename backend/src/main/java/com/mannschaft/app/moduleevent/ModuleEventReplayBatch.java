@@ -26,12 +26,16 @@ public class ModuleEventReplayBatch {
         this.operations = operations;
     }
 
-    /** lock猶予はM18未確定の初期値。公式再投入と運用観測を同じlock内で開始する。 */
+    /**
+     * 公式再投入と運用観測を同じlock内で開始する。
+     * lockAtLeastFor は周期60秒より短い50秒とする。周期と同じ長さだと次 tick が lock 期限ちょうどに来て取得に失敗し、
+     * 1 tick 抜けて実質2分周期になるため（実機で実測）。多重起動は最短50秒の保持で防ぐ。
+     */
     @BatchEndpoint(name = BATCH_NAME, description = "未完了の確実配信を毎分有界に再投入する")
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
             reason = "永続済み未完了イベントの再配信主体であり、止めると業務間の未反映と遅延が残り続ける")
     @Scheduled(fixedDelay = 60_000)
-    @SchedulerLock(name = LOCK_NAME, lockAtLeastFor = "PT1M", lockAtMostFor = "PT3M")
+    @SchedulerLock(name = LOCK_NAME, lockAtLeastFor = "PT50S", lockAtMostFor = "PT3M")
     @Transactional(propagation = Propagation.NEVER)
     public void poll() {
         LockAssert.assertLocked();

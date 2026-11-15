@@ -114,8 +114,8 @@ class ModuleEventReplayBatchIT extends AbstractMySqlIntegrationTest {
         assertThat(method.getAnnotation(Scheduled.class).fixedDelay()).isEqualTo(60_000);
         var lock = method.getAnnotation(SchedulerLock.class);
         assertThat(lock.name()).isEqualTo(ModuleEventReplayBatch.LOCK_NAME);
-        // この猶予は初期候補であり、M18の負荷検証による確定を代替しない。
-        assertThat(lock.lockAtLeastFor()).isEqualTo("PT1M");
+        // 最短保持は周期60秒より短くする。周期と同じ長さだと次 tick が lock 期限ちょうどに来て取得できず、1 tick 抜ける。
+        assertThat(lock.lockAtLeastFor()).isEqualTo("PT50S");
         assertThat(lock.lockAtMostFor()).isEqualTo("PT3M");
     }
 
