@@ -80590,10 +80590,32 @@ export interface components {
         ApiResponseAllocationListResponse: {
             data?: components["schemas"]["AllocationListResponse"];
         };
-        FilterProvider: Record<string, never>;
-        MappingJacksonValue: {
-            filters?: components["schemas"]["FilterProvider"];
-            value?: Record<string, never>;
+        ConsumptionSummaryResponse: {
+            alerts?: components["schemas"]["AlertResponse"][];
+            allocated_amount?: number;
+            /** Format: int64 */
+            allocation_id?: number;
+            /** @description 予算管理者だけに個人別・記録時給別の実データを返す。予算閲覧者は空配列。 */
+            by_user?: components["schemas"]["UserConsumptionDto"][];
+            confirmed_amount?: number;
+            consumed_amount?: number;
+            consumption_rate?: number;
+            flags?: string[];
+            planned_amount?: number;
+            remaining_amount?: number;
+            status?: string;
+        };
+        HourlyRateConsumptionDto: {
+            amount?: number;
+            hourly_rate_snapshot?: number;
+            hours?: number;
+        };
+        UserConsumptionDto: {
+            amount?: number;
+            hours?: number;
+            rate_breakdown?: components["schemas"]["HourlyRateConsumptionDto"][];
+            /** Format: int64 */
+            user_id?: number;
         };
         ApiResponseListAlertResponse: {
             data?: components["schemas"]["AlertResponse"][];
@@ -164569,13 +164591,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description 消化サマリ */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["MappingJacksonValue"];
+                    "application/json": {
+                        data?: components["schemas"]["ConsumptionSummaryResponse"];
+                    };
                 };
             };
         };
