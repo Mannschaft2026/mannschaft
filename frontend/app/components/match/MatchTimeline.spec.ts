@@ -5,13 +5,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import MatchTimeline from './MatchTimeline.vue'
 import MatchSpectatorView from './MatchSpectatorView.vue'
-import type { MatchEventResponse } from '~/types/match'
+import type { MatchEventResponse, SpectatorConnectionState } from '~/types/match'
 
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 vi.mock('~/composables/match/useMatchLiveSpectator', () => ({
   useMatchLiveSpectator: () => ({
     snapshot: ref({ homeScore: 1, awayScore: 0, events }),
-    connectionState: ref('CONNECTED'), hasSnapshot: ref(true),
+    connectionState: ref<SpectatorConnectionState>('LIVE'), hasSnapshot: ref(true),
     start: vi.fn(), stop: vi.fn(), resync: vi.fn(),
   }),
 }))
