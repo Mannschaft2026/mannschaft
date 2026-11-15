@@ -11298,6 +11298,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{teamId}/invite-tokens/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 招待QRコードPDFダウンロード
+         * @description 発行時に受け取った平文トークンから、チームの招待QRコードをMannschaftブランドのPDFで取得する
+         */
+        post: operations["downloadQrPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{teamId}/homerooms": {
         parameters: {
             query?: never;
@@ -22157,6 +22177,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invite/invitations/{tokenId}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 承諾型招待の辞退（招待ID指定）
+         * @description 宛先本人が招待IDで辞退する。revoked_at を立てカードを辞退済み表示にする
+         */
+        post: operations["declineInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invite/invitations/{tokenId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 承諾型招待の承諾（招待ID指定）
+         * @description 宛先本人が招待IDで承諾して参加する。ボディの folderId 指定時はそのフォルダへ、未指定時は未分類フォルダへ配置
+         */
+        post: operations["acceptInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidents": {
         parameters: {
             query?: never;
@@ -23272,7 +23332,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 委員会招集辞退（トークン） */
-        post: operations["declineInvitation"];
+        post: operations["declineInvitation_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -23289,7 +23349,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 委員会招集受諾（トークン） */
-        post: operations["acceptInvitation"];
+        post: operations["acceptInvitation_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -23900,7 +23960,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** 招待承認 */
-        post: operations["acceptInvitation_1"];
+        post: operations["acceptInvitation_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -35905,26 +35965,6 @@ export interface paths {
         };
         /** 自分のチーム参加申請一覧（申請者本人） */
         get: operations["listMineForTeam"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/teams/{teamId}/invite-tokens/{tokenId}/pdf": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 招待QRコードPDFダウンロード
-         * @description チームの招待トークンのQRコードをMannschaftブランドのPDFで取得する
-         */
-        get: operations["downloadQrPdf"];
         put?: never;
         post?: never;
         delete?: never;
@@ -62741,6 +62781,9 @@ export interface components {
             /** Format: int32 */
             viewCount?: number;
         };
+        InviteQrPdfRequest: {
+            token?: string;
+        };
         ClassHomeroomCreateRequest: {
             /** Format: int32 */
             academicYear: number;
@@ -64278,8 +64321,24 @@ export interface components {
             /** Format: int64 */
             roleId: number;
         };
-        ApiResponseInviteTokenResponse: {
-            data?: components["schemas"]["InviteTokenResponse"];
+        ApiResponseInviteTokenIssuedResponse: {
+            data?: components["schemas"]["InviteTokenIssuedResponse"];
+        };
+        InviteTokenIssuedResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            /** Format: int32 */
+            maxUses?: number;
+            /** Format: date-time */
+            revokedAt?: string;
+            roleName?: string;
+            token?: string;
+            /** Format: int32 */
+            usedCount?: number;
         };
         InviteTokenResponse: {
             /** Format: date-time */
@@ -64293,7 +64352,6 @@ export interface components {
             /** Format: date-time */
             revokedAt?: string;
             roleName?: string;
-            token?: string;
             /** Format: int32 */
             usedCount?: number;
         };
@@ -68673,6 +68731,8 @@ export interface components {
             version?: string;
         };
         RanchState: {
+            /** @description 明示公開許可と正式master/質問/素材登録が揃う時だけtrue。育成・報酬停止とは独立 */
+            approvedVisualsAvailable?: boolean;
             assignment?: components["schemas"]["AssignmentSummary"] | null;
             careBudget?: components["schemas"]["CareBudget"] | null;
             deliveryPaused?: boolean;
@@ -69054,6 +69114,8 @@ export interface components {
             axisSelections?: {
                 [key: string]: components["schemas"]["DiagnosisAxisSelection"];
             } | null;
+            /** @description 保存時の種カタログ版。decimal string */
+            catalogVersion?: string | null;
             /** Format: date-time */
             completedAt?: string;
             descriptionSnapshot?: {
@@ -69061,6 +69123,10 @@ export interface components {
             };
             /** Format: uuid */
             id?: string;
+            /** @description 保存時の種・外見名を含む六言語の対応説明 */
+            mappingDescriptionSnapshot?: {
+                [key: string]: string;
+            } | null;
             mappingVersion?: string;
             /** @enum {string} */
             method?: "DIAGNOSIS" | "BIRTH_STYLE";
@@ -69070,7 +69136,9 @@ export interface components {
             resultSchemaVersion?: string;
             ruleVersion?: string;
             scoringVersion?: string;
+            speciesKey?: string | null;
             typeCode?: string;
+            variantKey?: string | null;
         };
         InviteWatcherRequest: {
             /** @enum {string} */
@@ -70027,6 +70095,9 @@ export interface components {
             /** Format: int64 */
             ticketTypeId: number;
         };
+        ApiResponseInviteTokenResponse: {
+            data?: components["schemas"]["InviteTokenResponse"];
+        };
         CreateEventDelegationRequest: {
             /** Format: int64 */
             delegateId: number;
@@ -70469,7 +70540,6 @@ export interface components {
             scopeName?: string;
             scopeType?: string;
             status?: string;
-            token?: string;
             /** Format: int64 */
             tokenId?: number;
         };
@@ -70672,7 +70742,6 @@ export interface components {
             status?: string;
             /** Format: int64 */
             targetUserId?: number;
-            token?: string;
             /** Format: int64 */
             tokenId?: number;
         };
@@ -114020,6 +114089,32 @@ export interface operations {
             };
         };
     };
+    downloadQrPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteQrPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
     listHomerooms: {
         parameters: {
             query: {
@@ -117840,7 +117935,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseInviteTokenIssuedResponse"];
                 };
             };
         };
@@ -124610,7 +124705,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseInviteTokenIssuedResponse"];
                 };
             };
         };
@@ -134787,6 +134882,50 @@ export interface operations {
             };
         };
     };
+    declineInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 辞退成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["InviteJoinRequest"];
+            };
+        };
+        responses: {
+            /** @description 参加成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listIncidents: {
         parameters: {
             query: {
@@ -136863,7 +137002,7 @@ export interface operations {
             };
         };
     };
-    declineInvitation: {
+    declineInvitation_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -136887,7 +137026,7 @@ export interface operations {
             };
         };
     };
-    acceptInvitation: {
+    acceptInvitation_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -137929,7 +138068,7 @@ export interface operations {
             };
         };
     };
-    acceptInvitation_1: {
+    acceptInvitation_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -159663,29 +159802,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListJoinRequestResponse"];
-                };
-            };
-        };
-    };
-    downloadQrPdf: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                teamId: number;
-                tokenId: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": string;
                 };
             };
         };
