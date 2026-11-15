@@ -13,6 +13,7 @@ definePageMeta({ layout: 'organization', middleware: ['auth', 'confirmable-notif
 
 const route = useRoute()
 const orgApi = useOrganizationApi()
+const orgSlug = computed(() => String(route.params.slug))
 const scopeId = ref('')
 const scopeLoading = ref(true)
 const groupsVersion = ref(0)
@@ -56,6 +57,7 @@ onMounted(async () => {
         <ConfirmableNotificationSender
           scope-type="ORGANIZATION"
           :scope-id="scopeId"
+          :scope-slug="orgSlug"
           :groups-version="groupsVersion + templatesVersion"
           @sent="onNotificationSent"
         />
@@ -72,7 +74,7 @@ onMounted(async () => {
 
       <section class="mt-8">
         <h2 class="mb-4 text-lg font-semibold">{{ $t('confirmable.recipient_groups') }}</h2>
-        <ConfirmableRecipientGroupManager scope-type="ORGANIZATION" :scope-id="scopeId" @changed="groupsVersion++" />
+        <ConfirmableRecipientGroupManager scope-type="ORGANIZATION" :scope-id="scopeId" :scope-slug="orgSlug" @changed="groupsVersion++" />
       </section>
 
       <section class="mt-8">
