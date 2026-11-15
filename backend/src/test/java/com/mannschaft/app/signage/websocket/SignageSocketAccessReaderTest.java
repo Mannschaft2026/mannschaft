@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +37,23 @@ class SignageSocketAccessReaderTest {
         for (LocalDateTime expiry : List.of(NOW, NOW.minusNanos(1))) {
             when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, expiry, null)));
             assertThat(reader.permits(1L, 2L, "127.0.0.1")).isFalse();
+        }
+    }
+
+    @Test
+    void AC3_同じ瞬間ならClockのゾーンが異なっても期限判定は変わらない() {
+        Clock sameInstant = Clock.fixed(NOW.atZone(ZONE).toInstant(), ZONE);
+        for (ZoneId zone : List.of(ZONE, ZoneOffset.UTC, ZoneOffset.ofHours(-8))) {
+            SignageSocketAccessReader zonedReader = new SignageSocketAccessReader(tokens,
+                    sameInstant.withZone(zone), new ObjectMapper());
+            when(tokens.findSocketAccessById(1L, 2L))
+                    .thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, NOW.plusNanos(1), null)));
+            assertThat(zonedReader.permits(1L, 2L, "127.0.0.1")).as("期限直前: %s", zone).isTrue();
+            for (LocalDateTime expiry : List.of(NOW, NOW.minusNanos(1))) {
+                when(tokens.findSocketAccessById(1L, 2L))
+                        .thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, expiry, null)));
+                assertThat(zonedReader.permits(1L, 2L, "127.0.0.1")).as("期限到達後: %s", zone).isFalse();
+            }
         }
     }
 
