@@ -2,6 +2,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
 import { useRuntimeConfig, useRouter } from '#imports'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { createError } from 'h3'
+import type { MatchEventResponse } from '~/types/match'
 import { resolveSportModule } from '~/composables/match/sport/sportModuleRegistry'
 import LivePage from './live.vue'
 
@@ -9,6 +11,10 @@ const matchId = '00000000-0000-4000-8000-000000000124'
 const detailPath = `/api/v1/organizations/124/teams/124/matches/${matchId}`
 const errors: unknown[] = []
 let canRecord = true
+let matchStatus = 'SCHEDULED'
+let savedEvents: MatchEventResponse[] = []
+let eventsFail = false
+const postEvent = vi.fn(() => ({ data: { id: 'period-start-test' } }))
 let detailReached = false
 let releaseDetail: () => void
 let detailGate: Promise<void>
@@ -50,24 +56,28 @@ registerEndpoint(detailPath, async () => {
     data: {
       id: matchId,
       sport: 'SOCCER',
-      status: 'SCHEDULED',
+      status: matchStatus,
       homeAway: 'HOME',
       canRecordTimeline: canRecord,
     },
   }
 })
-registerEndpoint(`/api/v1/organizations/124/matches/${matchId}/events`, () => ({
-  data: { events: [], derivedHomeScore: 0, derivedAwayScore: 0 },
-}))
+registerEndpoint(`/api/v1/organizations/124/matches/${matchId}/events`, () => {
+  if (eventsFail) throw createError({ statusCode: 503, statusMessage: 'events unavailable' })
+  return { data: { events: savedEvents, derivedHomeScore: 0, derivedAwayScore: 0 } }
+})
 registerEndpoint('/api/v1/teams/live-init-test/members', () => ({ data: [] }))
 registerEndpoint(`/api/v1/organizations/124/matches/${matchId}/events`, {
   method: 'POST',
-  handler: () => ({ data: { id: 'period-start-test' } }),
+  handler: postEvent,
 })
 
 beforeEach(() => {
   errors.length = 0
   canRecord = true
+  matchStatus = 'SCHEDULED'
+  savedEvents = []
+  eventsFail = false
   detailReached = false
   detailGate = new Promise((resolve) => {
     releaseDetail = resolve
@@ -125,6 +135,51 @@ async function mountPage() {
 }
 
 describe('ライブ記録画面の非同期初期化', () => {
+  it('再訪では保存済み後半58分を表示し、復元だけでは境界POSTを送らない', async () => {
+    matchStatus = 'IN_PROGRESS'
+    savedEvents = [
+      { id: 'start', sortSeq: 1, eventType: 'PERIOD_START', period: 'SECOND_HALF', minute: 45 },
+      { id: 'recorded', sortSeq: 2, eventType: 'OTHER', period: 'SECOND_HALF', minute: 58 },
+    ]
+    const wrapper = await mountPage()
+
+    await vi.waitFor(() => {
+      const controls = wrapper.findComponent({ name: 'MatchTimerControls' })
+      expect(controls.exists()).toBe(true)
+      expect(controls.props('state')).toBe('SECOND_HALF')
+      expect(controls.props('currentMinute')).toBe(58)
+    })
+    expect(wrapper.findComponent({ name: 'MatchScoreboard' }).props('clock')).toMatch(/^13:0[0-9]$/)
+    expect(postEvent).not.toHaveBeenCalled()
+    expect(errors).toEqual([])
+  })
+
+  it('イベント取得失敗を開始前に偽装せず、再試行で同じ初期化を完了する', async () => {
+    eventsFail = true
+    const wrapper = await mountPage()
+
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true))
+    expect(wrapper.findComponent({ name: 'MatchTimerControls' }).exists()).toBe(false)
+    expect(requestWakeLock).not.toHaveBeenCalled()
+    expect(postEvent).not.toHaveBeenCalled()
+    eventsFail = false
+    savedEvents = [{ id: 'resume', sortSeq: 1, eventType: 'OTHER', period: 'FIRST_HALF', minute: 17 }]
+    await wrapper.findComponent({ name: 'DashboardErrorState' }).vm.$emit('retry')
+
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'MatchTimerControls' }).props('currentMinute')).toBe(17))
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+    expect(postEvent).not.toHaveBeenCalled()
+  })
+
+  it('保存境界が途中失敗した履歴は復元エラーを示し記録操作を出さない', async () => {
+    savedEvents = [{ id: 'incomplete', sortSeq: 1, eventType: 'PERIOD_END', period: 'EXTRA_FIRST', minute: 105 }]
+    const wrapper = await mountPage()
+
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true))
+    expect(wrapper.findComponent({ name: 'MatchTimerControls' }).exists()).toBe(false)
+    expect(postEvent).not.toHaveBeenCalled()
+  })
+
   it('詳細と競技のロード後に記録操作を表示し、unmount で資源を解放する', async () => {
     const addListener = vi.spyOn(window, 'addEventListener')
     const removeListener = vi.spyOn(window, 'removeEventListener')
