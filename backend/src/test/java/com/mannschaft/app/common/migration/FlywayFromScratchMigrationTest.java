@@ -34,6 +34,7 @@ import org.hibernate.mapping.Selectable;
 import org.hibernate.mapping.ToOne;
 import org.hibernate.mapping.Value;
 import org.hibernate.type.BasicType;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -408,6 +409,99 @@ class FlywayFromScratchMigrationTest {
         schema.get(table).clear();
 
         assertThat(archiveColumnViolations(schema)).containsExactly(table + " … 列集合が空");
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_archiveのsender_typeはNOT_NULLでDEFAULTを持たない() throws Exception {
+        migrateFromScratch();
+        try (Connection conn = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())) {
+            assertThat(senderTypeDefinition(conn)).isEqualTo("varchar|20|NO|null");
+            // 新規保存では送信者種類を必須にする（DEFAULT で黙って埋めない）
+            try (Statement st = conn.createStatement()) {
+                org.junit.jupiter.api.Assertions.assertThrows(SQLException.class,
+                        () -> st.executeUpdate(archiveInsertSql(null)));
+            }
+        }
+    }
+
+    /**
+     * 既存値の保持・途中再開（既に列がある状態で migration を再実行）・想定外定義の検出を、
+     * 追加のコンテナや全 migration の再走行なしに、V260 の SQL だけを同じスキーマへ再実行して確かめる。
+     */
+    @Test
+    @Order(2)
+    void cmp0012_archiveのsender_type追加は再実行で既存値を保持し想定外定義を検出する() throws Exception {
+        migrateFromScratch();
+        String script = new String(new PathMatchingResourcePatternResolver()
+                .getResources("classpath*:db/migration/V260.*__add_sender_type_to_direct_mail_logs_archive.sql")[0]
+                .getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        List<String> statements = new ArrayList<>();
+        StringBuilder body = new StringBuilder();
+        for (String line : script.split("\\R")) {
+            if (!line.trim().startsWith("--")) {
+                body.append(line).append('\n');
+            }
+        }
+        for (String part : body.toString().split(";")) {
+            if (!part.isBlank()) {
+                statements.add(part.trim());
+            }
+        }
+        try (Connection conn = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+             Statement st = conn.createStatement()) {
+            try {
+                st.executeUpdate(archiveInsertSql("SYSTEM_AD"));
+                st.executeUpdate(archiveInsertSql("unknown"));
+                // 再実行しても定義・既存値（大文字小文字を含む）は変わらない
+                for (String sql : statements) {
+                    st.execute(sql);
+                }
+                assertThat(senderTypeDefinition(conn)).isEqualTo("varchar|20|NO|null");
+                try (ResultSet rs = st.executeQuery(
+                        "SELECT sender_type FROM direct_mail_logs_archive WHERE subject = 'cmp0012-seed' ORDER BY id")) {
+                    List<String> values = new ArrayList<>();
+                    while (rs.next()) {
+                        values.add(rs.getString(1));
+                    }
+                    assertThat(values).containsExactly("SYSTEM_AD", "unknown");
+                }
+                // 想定外の NULL 可否は握りつぶさず失敗する
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NULL");
+                org.junit.jupiter.api.Assertions.assertThrows(SQLException.class, () -> {
+                    for (String sql : statements) {
+                        st.execute(sql);
+                    }
+                });
+                // 後始末（検出で中断しても一時表が残らないよう接続を閉じる前に落とす）
+                st.execute("DROP TEMPORARY TABLE IF EXISTS cmp0012_sender_type_guard");
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NOT NULL");
+            } finally {
+                st.executeUpdate("DELETE FROM direct_mail_logs_archive WHERE subject = 'cmp0012-seed'");
+                st.execute("DROP TEMPORARY TABLE IF EXISTS cmp0012_sender_type_guard");
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NOT NULL");
+            }
+        }
+    }
+
+    private static String senderTypeDefinition(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT "
+                     + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                     + "AND TABLE_NAME = 'direct_mail_logs_archive' AND COLUMN_NAME = 'sender_type'")) {
+            assertThat(rs.next()).as("direct_mail_logs_archive.sender_type が存在すること").isTrue();
+            return rs.getString(1) + "|" + rs.getLong(2) + "|" + rs.getString(3) + "|" + rs.getString(4);
+        }
+    }
+
+    private static String archiveInsertSql(String senderType) {
+        return "INSERT INTO direct_mail_logs_archive (scope_type, scope_id, sender_id, "
+                + (senderType == null ? "" : "sender_type, ")
+                + "subject, body_markdown, body_html, recipient_type, archived_at) VALUES ('TEAM', 1, 1, "
+                + (senderType == null ? "" : "'" + senderType + "', ")
+                + "'cmp0012-seed', 'm', 'h', 'ALL', NOW())";
     }
 
     /**
