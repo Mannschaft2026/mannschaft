@@ -12,6 +12,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -92,7 +93,7 @@ class SignageSocketGuardTest {
         var accessor = connect(raw);
         accessor.setNativeHeader("X-Forwarded-For", "203.0.113.1");
         when(reader.authenticate(raw, "127.0.0.1"))
-                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, null, null)));
+                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, (LocalDateTime) null, null)));
         var result = inbound.preSend(MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), null);
         assertThat(StompHeaderAccessor.wrap(result).getNativeHeader("X-Signage-Token")).isNull();
         assertThat(sessions.session("session")).isPresent();
@@ -120,7 +121,7 @@ class SignageSocketGuardTest {
         when(reader.authenticate("device-secret", "127.0.0.1")).thenAnswer(invocation -> {
             authenticating.countDown();
             assertThat(completeAuthentication.await(5, TimeUnit.SECONDS)).isTrue();
-            return Optional.of(new SignageSocketAccess(1L, 10L, null, null));
+            return Optional.of(new SignageSocketAccess(1L, 10L, (LocalDateTime) null, null));
         });
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -145,7 +146,7 @@ class SignageSocketGuardTest {
         var accessor = connect("device-secret");
         sessions.disconnected(disconnectEvent(accessor));
         when(reader.authenticate("device-secret", "127.0.0.1"))
-                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, null, null)));
+                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, (LocalDateTime) null, null)));
 
         Throwable rejected = catchThrowable(() -> inbound.preSend(
                 MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), null));
@@ -158,7 +159,7 @@ class SignageSocketGuardTest {
     void AC4_通常CONNECT後のDISCONNECTと重複eventで資格とbindingを回収する() {
         var accessor = connect("device-secret");
         when(reader.authenticate("device-secret", "127.0.0.1"))
-                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, null, null)));
+                .thenReturn(Optional.of(new SignageSocketAccess(1L, 10L, (LocalDateTime) null, null)));
         inbound.preSend(MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), null);
         sessions.bind("session", "sub", DESTINATION);
         assertThat(sessions.binding("session", "sub", DESTINATION)).isPresent();
@@ -191,7 +192,7 @@ class SignageSocketGuardTest {
     }
 
     private void establish(String sessionId, Long tokenId) {
-        sessions.establish(sessionId, new HashMap<>(), new SignageSocketAccess(tokenId, 10L, null, null), "127.0.0.1");
+        sessions.establish(sessionId, new HashMap<>(), new SignageSocketAccess(tokenId, 10L, (LocalDateTime) null, null), "127.0.0.1");
     }
 
     private Message<byte[]> delivery(String recipient, String subscriptionId, String destination) {

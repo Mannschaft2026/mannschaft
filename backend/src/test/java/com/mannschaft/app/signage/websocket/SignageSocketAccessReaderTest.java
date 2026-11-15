@@ -30,7 +30,7 @@ class SignageSocketAccessReaderTest {
 
     @Test
     void AC3_無期限と期限前は許可し期限ちょうどと期限後は拒否する() {
-        when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, null, null)));
+        when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, (LocalDateTime) null, null)));
         assertThat(reader.permits(1L, 2L, "127.0.0.1")).isTrue();
         when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, NOW.plusNanos(1), null)));
         assertThat(reader.permits(1L, 2L, "127.0.0.1")).isTrue();
@@ -60,11 +60,11 @@ class SignageSocketAccessReaderTest {
     @Test
     void AC3_直接peerのIPv4とIPv6とCIDRだけを照合する() {
         for (String json : List.of("[\"127.0.0.1\"]", "[\"127.0.0.0/8\"]")) {
-            when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, null, json)));
+            when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, (LocalDateTime) null, json)));
             assertThat(reader.permits(1L, 2L, "127.0.0.1")).isTrue();
             assertThat(reader.permits(1L, 2L, "203.0.113.1")).isFalse();
         }
-        when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, null, "[\"::1/128\"]")));
+        when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, (LocalDateTime) null, "[\"::1/128\"]")));
         assertThat(reader.permits(1L, 2L, "::1")).isTrue();
         assertThat(reader.permits(1L, 2L, "2001:db8::1")).isFalse();
     }
@@ -73,7 +73,7 @@ class SignageSocketAccessReaderTest {
     void AC3_空リストと壊れたIP設定とhostnameはfailClosed() {
         for (String json : List.of("[]", "null", "[null]", "broken", "[\"localhost\"]",
                 "[\"127.0.0.1/999\"]", "[\"127.0.0.1\",\"bad\"]")) {
-            when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, null, json)));
+            when(tokens.findSocketAccessById(1L, 2L)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, (LocalDateTime) null, json)));
             assertThat(reader.permits(1L, 2L, "127.0.0.1")).as("不正設定の黙認をしない").isFalse();
         }
     }
@@ -84,8 +84,8 @@ class SignageSocketAccessReaderTest {
         assertThat(reader.authenticate(" ", "127.0.0.1")).isEmpty();
         verifyNoInteractions(tokens);
         String raw = "1c147f22-624b-40d9-975c-6ef215bc22e4";
-        when(tokens.findSocketAccessByToken(raw)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, null, null)));
-        assertThat(reader.authenticate(raw, "127.0.0.1")).contains(new SignageSocketAccess(1L, 2L, null, null));
+        when(tokens.findSocketAccessByToken(raw)).thenReturn(Optional.of(new SignageSocketAccess(1L, 2L, (LocalDateTime) null, null)));
+        assertThat(reader.authenticate(raw, "127.0.0.1")).contains(new SignageSocketAccess(1L, 2L, (LocalDateTime) null, null));
         verify(tokens).findSocketAccessByToken(raw);
     }
 }

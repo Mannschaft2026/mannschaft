@@ -9,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.web.util.matcher.IpAddressMatcher;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -44,7 +43,7 @@ public class SignageSocketAccessReader {
 
     private boolean usable(SignageSocketAccess access, String peerIp) {
         if (!literalAddress(peerIp)
-                || (access.expiredAt() != null && !LocalDateTime.now(clock).isBefore(access.expiredAt()))) {
+                || (access.expiredAt() != null && !clock.instant().isBefore(access.expiredAt()))) {
             return false;
         }
         if (access.allowedIps() == null) {

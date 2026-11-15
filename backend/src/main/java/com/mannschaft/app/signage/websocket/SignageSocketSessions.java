@@ -1,5 +1,7 @@
 package com.mannschaft.app.signage.websocket;
 
+import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
+import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Component;
@@ -76,6 +78,8 @@ public class SignageSocketSessions {
 
     /** abrupt closeも回収する。実CONNECTと同じsession属性mapで重複通知も冪等に処理する。 */
     @EventListener
+    @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
+            reason = "機能停止後も切断済み接続の資格と購読bindingを破棄し、遅いCONNECTによる接続寿命の復活を防ぐ必要がある")
     public void disconnected(SessionDisconnectEvent event) {
         close(event.getSessionId(), SimpMessageHeaderAccessor.getSessionAttributes(event.getMessage().getHeaders()));
     }
