@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ConfirmableNotificationPriority, ConfirmableNotificationTemplate, ConfirmableRecipientGroup, ConfirmableTarget, ConfirmableRecipientPreviewRequest, CreateConfirmableNotificationRequest, UnconfirmedVisibility } from '~/types/confirmable'
 
-const props = defineProps<{ scopeType: 'TEAM' | 'ORGANIZATION'; scopeId: string; groupsVersion?: number }>()
+const props = defineProps<{ scopeType: 'TEAM' | 'ORGANIZATION'; scopeId: string; scopeSlug?: string; groupsVersion?: number }>()
 const emit = defineEmits<{ sent: [] }>()
 const { sendNotification, previewRecipients, listTemplates, listRecipientGroups } = useConfirmableNotificationApi()
 const { handleApiError } = useErrorHandler()
@@ -107,7 +107,7 @@ onMounted(async () => {
         <label>{{ $t('confirmable.audience') }}</label>
         <Select v-model="audienceMode" data-testid="sender-audience-mode-select" :options="audienceModeOptions" option-label="label" option-value="value" />
         <small v-if="audienceMode === 'DEFAULT'">{{ $t('confirmable.current_scope_help') }}</small>
-        <ConfirmableTargetPicker v-if="audienceMode === 'TARGETS'" v-model="selectedTargets" :scope-type="scopeType" :scope-id="scopeId" />
+        <ConfirmableTargetPicker v-if="audienceMode === 'TARGETS'" v-model="selectedTargets" :scope-type="scopeType" :scope-id="scopeId" :scope-slug="scopeSlug" />
         <Select v-if="audienceMode === 'GROUP'" v-model="selectedGroupId" data-testid="sender-group-select" :options="groupOptions.filter(option => option.value !== null)" option-label="label" option-value="value" :placeholder="$t('confirmable.select_group')" />
       </div>
       <Message v-if="previewing" severity="info" :closable="false">{{ $t('confirmable.preview_loading') }}</Message>
