@@ -183,8 +183,8 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         });
         // 再送は同日更新となり、希望の行を増やさない。
         patchSlot(adminId, confirmedBody(NEW_DATE)).andExpect(status().isOk());
-        assertThat(tx.execute(s -> requestRepository.findByScheduleIdAndUserId(scheduleId, memberId).size()))
-                .isEqualTo(3);
+        Integer count = tx.execute(s -> requestRepository.findByScheduleIdAndUserId(scheduleId, memberId).size());
+        assertThat(count).isEqualTo(3);
     }
 
     @Test
@@ -360,7 +360,8 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             awaitParentLock(thread);
         });
         withdrawn.get().get(20, TimeUnit.SECONDS);
-        assertThat(tx.execute(s -> requestRepository.findById(requestId).isEmpty())).isTrue();
+        Boolean absent = tx.execute(s -> requestRepository.findById(requestId).isEmpty());
+        assertThat(absent).isTrue();
     }
 
     @Test
@@ -377,10 +378,10 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         try {
             slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
             assertThat(statistics.getPrepareStatementCount()).as("希望を一人ずつ読む/更新するN+1を防ぐ").isLessThan(15);
-            assertThat(tx.execute(s -> ((Number) em.createNativeQuery(
+            Long movedCount = tx.execute(s -> ((Number) em.createNativeQuery(
                             "SELECT COUNT(*) FROM shift_requests WHERE slot_id=:id AND slot_date=:day AND deleted_at IS NULL")
-                    .setParameter("id", slotId).setParameter("day", NEW_DATE).getSingleResult()).longValue()))
-                    .isEqualTo(1000L);
+                    .setParameter("id", slotId).setParameter("day", NEW_DATE).getSingleResult()).longValue());
+            assertThat(movedCount).isEqualTo(1000L);
         } finally {
             statistics.setStatisticsEnabled(enabled);
         }
@@ -445,7 +446,8 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private void assertDate(Long requestId, LocalDate date) {
-        assertThat(tx.execute(s -> requestRepository.findById(requestId).orElseThrow().getSlotDate())).isEqualTo(date);
+        LocalDate actualDate = tx.execute(s -> requestRepository.findById(requestId).orElseThrow().getSlotDate());
+        assertThat(actualDate).isEqualTo(date);
     }
 
     private String snapshot() {
