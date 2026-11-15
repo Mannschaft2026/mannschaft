@@ -27,11 +27,11 @@ MANNSCHAFT_ALLOWED_ORIGINS=http://localhost:3001,http://localhost:8081 ./gradlew
 
 ## spec
 
-`frontend/tests/e2e/real/l1m-module-events.real.spec.ts`。BE を上記で起動し、FE を 3001 で起動したうえで実行する。
+`frontend/tests/e2e/real/l1m-module-events.real.spec.ts`。BE を上記で起動し、FE を 3001 で起動したうえで実行する。検体入り BE が無いと必ず失敗するため、`playwright-real.config.ts` は `L1M_E2E=1` が無い時に本 spec を除外する（全real一括実行には混ざらない）。
 
 ```bash
 cd frontend
-BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 \
+L1M_E2E=1 BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 \
   npx playwright test tests/e2e/real/l1m-module-events.real.spec.ts --config=playwright-real.config.ts --project=chromium-real --no-deps
 ```
 

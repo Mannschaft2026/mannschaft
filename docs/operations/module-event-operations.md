@@ -103,7 +103,7 @@ M側も同じbindingに属する未完了publicationが0件であることを確
 
 試験の設計訂正: 旧「退会が先に確定…」のusers行lock／弱退会試験は「監査0件の強匿名化が先に確定…」へ、旧「凍結済み管理者…」の直接principal/FROZEN試験は「監査が保持期限で全削除されても…」へ置換する。前者の2期待値は撤回したauth同TX案からの局所追加であり、元21ACからの削除ではない。既存の匿名401・roles403・直接API認可・actor偽装拒否・一般認証層の回帰は維持する。resume先勝・state不在の同時作成・外側L1古値と未flush変更の保全もM fence試験として追加する。
 
-局所の実DB・通知・復旧・運用alertの検証は進んでいるが、全CI、OpenAPI生成前後の照合、M21実機と探索、最新mainへの着地の全体完了は未証明である。L1-Mや親戦役の終了、全C / F業務の接続完了として読まない。
+局所の実DB・通知・復旧・運用alertの検証は進んでいるが、全CI、OpenAPI生成前後の照合、通常の/実機（検体入りBE 8081 = `./gradlew bootRunModuleEventE2e` ＋ 実FE 3001、手順は `backend/src/test/java/com/mannschaft/app/moduleevent/e2e/README.md`）と探索、最新mainへの着地の全体完了は未証明である。L1-Mや親戦役の終了、全C / F業務の接続完了として読まない。
 
 ## 日次保持jobの実装と試練契約
 

@@ -8,7 +8,9 @@ import { waitForHydration } from '../helpers/wait'
 // 前提: BE を `cd backend && ./gradlew bootRunModuleEventE2e`（試験用検体入り・8081）で起動し、FE を 3001 で起動しておく。
 //   BE が検体 actor 11名を生成して実行ディレクトリ（既定 backend/build/l1m-real-e2e、L1M_E2E_RUN_DIR で上書き）の
 //   actors.json に書き出し、state.json に検体状態を出し続ける。spec は controls/ に制御 command を置いて検体を進める。
-// 実行: BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 npx playwright test //   tests/e2e/real/l1m-module-events.real.spec.ts --config=playwright-real.config.ts --project=chromium-real --no-deps
+// 実行: L1M_E2E=1 BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 npx playwright test
+//   tests/e2e/real/l1m-module-events.real.spec.ts --config=playwright-real.config.ts --project=chromium-real --no-deps
+// L1M_E2E=1 が無い時は playwright-real.config.ts が本 spec を除外する（検体入り BE 無しの全real一括実行で必ず落ちるため）。
 // 検体シナリオは BE 起動ごとに1回きり。再実行時は BE を再起動する。
 // 認証は既存Cookie経路（fixtures/auth の loginViaApi）。手書token、shared.auth、HTTP mockは使用しない。
 type Actor = { code: string; userId: number; email: string; password: string; locale: string }
