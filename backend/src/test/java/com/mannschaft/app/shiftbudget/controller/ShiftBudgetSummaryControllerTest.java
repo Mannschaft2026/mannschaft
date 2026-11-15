@@ -45,7 +45,7 @@ import com.mannschaft.app.common.security.AccessGuard;
  * <ul>
  *   <li>BUDGET_ADMIN 保有時: {@code by_user} 配列含む全フィールド出力</li>
  *   <li>BUDGET_VIEW のみ: {@code by_user} 空配列 + flags=BY_USER_HIDDEN</li>
- *   <li>SystemAdmin: BUDGET_ADMIN 同等</li>
+ *   <li>SystemAdmin も実組織の BUDGET_VIEW / BUDGET_ADMIN を保有する場合に詳細 View</li>
  *   <li>権限なし → 403</li>
  *   <li>別組織 → 404</li>
  * </ul>
@@ -141,18 +141,16 @@ class ShiftBudgetSummaryControllerTest {
 
     /** BUDGET_ADMIN 保有を AccessControlService に答えさせる。 */
     private void givenAdmin() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        // BUDGET_ADMIN 判定で例外を投げない
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW")).willReturn(true);
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN")).willReturn(true);
     }
 
     /** BUDGET_VIEW のみで BUDGET_ADMIN は持たない設定。 */
     private void givenViewerOnly() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        willThrow(new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED))
-                .given(accessControlService)
-                .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN");
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW")).willReturn(true);
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN")).willReturn(false);
     }
 
     @Test
@@ -195,8 +193,9 @@ class ShiftBudgetSummaryControllerTest {
     }
 
     @Test
-    @DisplayName("SystemAdmin: 200 + by_user 全公開")
+    @DisplayName("SystemAdmin + 実組織の VIEW/ADMIN: 200 + by_user 全公開")
     void systemAdmin_byUser公開() throws Exception {
+        givenAdmin();
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
         given(summaryService.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(responseAsAdmin());
 

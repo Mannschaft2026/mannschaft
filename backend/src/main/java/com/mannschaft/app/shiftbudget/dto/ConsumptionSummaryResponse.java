@@ -3,6 +3,7 @@ package com.mannschaft.app.shiftbudget.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.mannschaft.app.shiftbudget.view.BudgetView;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -79,10 +80,11 @@ public record ConsumptionSummaryResponse(
 
         /**
          * 個人別消化内訳。{@code BUDGET_ADMIN} 保有時のみ実データを返却する。
-         * BUDGET_VIEW のみのユーザーに対しては Service 層で空配列にし、{@code @JsonView} で更にフィールド除外する。
+         * BUDGET_VIEW のみのユーザーには Service 層で空配列にし、要素の個人項目は BudgetAdmin View で保護する。
          */
-        @JsonView(BudgetView.BudgetAdmin.class)
+        @JsonView(BudgetView.BudgetViewer.class)
         @JsonProperty("by_user")
+        @Schema(description = "予算管理者だけに個人別・記録時給別の実データを返す。予算閲覧者は空配列。")
         List<UserConsumptionDto> byUser
 ) {
 }

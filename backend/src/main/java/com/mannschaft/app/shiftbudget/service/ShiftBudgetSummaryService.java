@@ -77,7 +77,7 @@ public class ShiftBudgetSummaryService {
      */
     public ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId) {
         featureService.requireEnabled(organizationId);
-        boolean budgetAdmin = requireBudgetViewAndDetectAdmin(organizationId);
+        boolean budgetAdmin = requireSummaryBudgetViewAndDetectAdmin(organizationId);
 
         ShiftBudgetAllocationEntity allocation = allocationRepository
                 .findByIdAndOrganizationIdAndDeletedAtIsNull(allocationId, organizationId)
@@ -251,7 +251,19 @@ public class ShiftBudgetSummaryService {
     }
 
     /**
-     * {@code BUDGET_VIEW} 権限を要求しつつ、同時に {@code BUDGET_ADMIN} 保有も判定する。
+     * 消化サマリ専用。SYSTEM_ADMIN も実組織の所属・VIEW を必須とし、ADMIN のみ詳細を返す。
+     */
+    private boolean requireSummaryBudgetViewAndDetectAdmin(Long organizationId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (!accessControlService.isMember(userId, organizationId, "ORGANIZATION")
+                || !accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_VIEW")) {
+            throw new BusinessException(ShiftBudgetErrorCode.BUDGET_VIEW_REQUIRED);
+        }
+        return accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_ADMIN");
+    }
+
+    /**
+     * プロジェクト集計向けの既存判定。{@code BUDGET_VIEW} と {@code BUDGET_ADMIN} 保有を判定する。
      *
      * <p>Phase 9-δ 第3段クリーンカット: 権限階層は BUDGET_VIEW ⊂ BUDGET_ADMIN として扱う
      * （V11.034 マイグレーションで BUDGET_ADMIN 保有者には自動付与済の前提）。

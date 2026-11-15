@@ -7,6 +7,10 @@ import com.mannschaft.app.shiftbudget.dto.ConsumptionSummaryResponse;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService;
 import com.mannschaft.app.shiftbudget.view.BudgetView;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.SchemaProperty;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +36,7 @@ import java.util.Map;
  * <p>権限による View 解決:</p>
  * <ul>
  *   <li>{@code BUDGET_ADMIN} 保有 → {@link BudgetView.BudgetAdmin}（全フィールド公開、{@code by_user} 含む）</li>
- *   <li>{@code BUDGET_VIEW} のみ → {@link BudgetView.BudgetViewer}（{@code by_user} 除外、flags=BY_USER_HIDDEN）</li>
+ *   <li>{@code BUDGET_VIEW} のみ → {@link BudgetView.BudgetViewer}（{@code by_user} 空配列、flags=BY_USER_HIDDEN）</li>
  *   <li>権限なし → Service 層が 403 を返すため到達しない</li>
  * </ul>
  *
@@ -55,8 +59,8 @@ public class ShiftBudgetSummaryController {
      *
      * <p>{@link MappingJacksonValue} で {@link BudgetView} を切替えることでフィールド単位のマスキングを行う。
      * Service 層では {@code BUDGET_VIEW} を必須とし、{@code BUDGET_ADMIN} 保有時のみ {@code by_user} に
-     * 実データを詰める。Controller 側では追加で View 階層を選択して JSON シリアライズ時に
-     * {@code by_user} フィールドそのものを除外（{@code BUDGET_ADMIN} 不保持時）する二重防衛とする。</p>
+     * 実データを詰める。Controller 側でも実組織権限で View 階層を選択し、個人別の要素項目を
+     * {@code BudgetAdmin} View で保護する。閲覧者にも {@code by_user} の空配列は返す。</p>
      *
      * <p>レスポンス形式は他 API と整合させるため {@code Map.of("data", ...)} で {@code data} ラップ。
      * {@link com.mannschaft.app.common.ApiResponse} は {@code @JsonView} を持たないため
@@ -66,6 +70,10 @@ public class ShiftBudgetSummaryController {
      */
     @GetMapping("/{id}/consumption-summary")
     @Operation(summary = "シフト予算消化サマリを取得 (BUDGET_ADMIN なら by_user 込み)")
+    @ApiResponse(responseCode = "200", description = "消化サマリ",
+            content = @Content(mediaType = "application/json", schema = @Schema(type = "object"),
+                    schemaProperties = @SchemaProperty(name = "data",
+                            schema = @Schema(implementation = ConsumptionSummaryResponse.class))))
     public MappingJacksonValue getConsumptionSummary(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id) {
@@ -86,9 +94,6 @@ public class ShiftBudgetSummaryController {
      */
     private Class<?> resolveView(Long organizationId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        if (accessControlService.isSystemAdmin(currentUserId)) {
-            return BudgetView.BudgetAdmin.class;
-        }
         if (hasOrgPermission(currentUserId, organizationId, "BUDGET_ADMIN")) {
             return BudgetView.BudgetAdmin.class;
         }
@@ -97,14 +102,7 @@ public class ShiftBudgetSummaryController {
     }
 
     private boolean hasOrgPermission(Long userId, Long organizationId, String permissionName) {
-        if (!accessControlService.isMember(userId, organizationId, "ORGANIZATION")) {
-            return false;
-        }
-        try {
-            accessControlService.checkPermission(userId, organizationId, "ORGANIZATION", permissionName);
-            return true;
-        } catch (com.mannschaft.app.common.BusinessException e) {
-            return false;
-        }
+        return accessControlService.isMember(userId, organizationId, "ORGANIZATION")
+                && accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", permissionName);
     }
 }

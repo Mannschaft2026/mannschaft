@@ -47,6 +47,8 @@ class ShiftBudgetSummaryRateBreakdownTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("100", null, List.of()));
         given(accessControlService.isMember(100L, 1L, "ORGANIZATION")).willReturn(true);
+        given(accessControlService.hasPermission(100L, 1L, "ORGANIZATION", "BUDGET_VIEW")).willReturn(true);
+        given(accessControlService.hasPermission(100L, 1L, "ORGANIZATION", "BUDGET_ADMIN")).willReturn(true);
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(42L, 1L))
                 .willReturn(Optional.of(ShiftBudgetAllocationEntity.builder()
                         .allocatedAmount(new BigDecimal("100000")).consumedAmount(new BigDecimal("6200"))

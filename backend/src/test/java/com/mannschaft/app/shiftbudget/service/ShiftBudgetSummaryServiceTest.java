@@ -44,7 +44,7 @@ import static org.mockito.Mockito.lenient;
  * <ul>
  *   <li>BUDGET_ADMIN 保有時: by_user 実集計 + flags 空配列 + alerts 実データ</li>
  *   <li>BUDGET_VIEW のみ: by_user 空配列 + flags=BY_USER_HIDDEN + alerts 実データ</li>
- *   <li>SystemAdmin: BUDGET_ADMIN 同様（by_user 実集計）</li>
+ *   <li>SystemAdmin も実組織の VIEW / ADMIN を持つ場合に by_user 実集計</li>
  *   <li>by_user 集計: user_id 別 SUM(amount)/SUM(hours)、CANCELLED 除外、user_id 昇順</li>
  *   <li>status 4段階 (OK / WARN / EXCEEDED / SEVERE_EXCEEDED)</li>
  *   <li>境界値 (allocated=0 で割算回避)</li>
@@ -89,15 +89,9 @@ class ShiftBudgetSummaryServiceTest {
 
     /** BUDGET_VIEW のみ保有（BUDGET_ADMIN 不保持）。Service は has-permission の二段階呼出を行う。 */
     private void givenBudgetViewerOnly() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
-        // BUDGET_VIEW チェック → true、BUDGET_ADMIN チェック → false の2回呼ばれる
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        // BUDGET_VIEW: 例外を投げない、BUDGET_ADMIN: 例外を投げる
-        lenient().doNothing().when(accessControlService)
-                .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW");
-        lenient().doThrow(new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED))
-                .when(accessControlService)
-                .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN");
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW")).willReturn(true);
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN")).willReturn(false);
         // alerts 実集計の戻り（デフォルトで空）
         lenient().when(alertRepository.findByAllocationIdOrderByTriggeredAtDesc(ALLOCATION_ID))
                 .thenReturn(Collections.emptyList());
@@ -105,12 +99,9 @@ class ShiftBudgetSummaryServiceTest {
 
     /** BUDGET_ADMIN 保有（BUDGET_VIEW も自動保有）。 */
     private void givenBudgetAdmin() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        lenient().doNothing().when(accessControlService)
-                .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW");
-        lenient().doNothing().when(accessControlService)
-                .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN");
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW")).willReturn(true);
+        given(accessControlService.hasPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN")).willReturn(true);
         lenient().when(alertRepository.findByAllocationIdOrderByTriggeredAtDesc(ALLOCATION_ID))
                 .thenReturn(Collections.emptyList());
     }
@@ -199,9 +190,11 @@ class ShiftBudgetSummaryServiceTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin: BUDGET_ADMIN 相当（by_user 実集計）")
+        @DisplayName("SystemAdmin + 実組織の VIEW/ADMIN: by_user 実集計")
         void systemAdmin_byUser実集計() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+            givenBudgetAdmin();
+            // グローバル権限は存在しても、summary では実組織権限の代わりに参照しない。
+            lenient().when(accessControlService.isSystemAdmin(USER_ID)).thenReturn(true);
             given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                     .willReturn(Optional.of(entityWith(
                             new BigDecimal("100000"),
@@ -393,7 +386,6 @@ class ShiftBudgetSummaryServiceTest {
         @Test
         @DisplayName("BUDGET_VIEW 権限なし → BUDGET_VIEW_REQUIRED (403)")
         void view権限なし_403() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(false);
 
             assertThatThrownBy(() -> service.getConsumptionSummary(ORG_ID, ALLOCATION_ID))
