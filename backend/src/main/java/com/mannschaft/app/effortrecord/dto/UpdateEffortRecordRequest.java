@@ -1,5 +1,6 @@
 package com.mannschaft.app.effortrecord.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -16,4 +17,10 @@ public record UpdateEffortRecordRequest(
         @NotNull LocalDate recordedOn,
         @NotNull @Valid List<EffortFieldValue> values,
         String privateNote) {
+
+    /** 契約にない JSON プロパティは 400（API 契約 §1）。値は例外メッセージへ載せない。 */
+    @JsonAnySetter
+    public void rejectUnknownProperty(String name, Object value) {
+        throw new IllegalArgumentException("許可されていない入力項目です");
+    }
 }

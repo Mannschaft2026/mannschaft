@@ -3318,7 +3318,7 @@ public class GlobalExceptionHandler {
                 || path.matches("/api/v1/teams/[^/]+/loyalty(?:/.*)?")) return true;
         if (path.matches("/api/v1/me/reflections/entries/[^/]+/recall-sessions")) return true;
         for (String prefix : List.of("/api/v1/me/birth-profile", "/api/v1/me/diagnoses", "/api/v1/me/ranch",
-                "/api/v1/me/reflections/recall-sessions")) {
+                "/api/v1/me/reflections/recall-sessions", "/api/v1/effort-records/me")) {
             if (path.equals(prefix) || path.startsWith(prefix + "/")) return true;
         }
         return false;

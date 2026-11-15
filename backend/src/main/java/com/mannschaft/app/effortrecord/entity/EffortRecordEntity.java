@@ -140,7 +140,7 @@ public class EffortRecordEntity extends UuidV7Entity {
 
     @PrePersist
     protected void onCreate() {
-        Instant now = Instant.now();
+        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         if (createdAt == null) {
             createdAt = now;
         }
@@ -157,6 +157,7 @@ public class EffortRecordEntity extends UuidV7Entity {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = Instant.now();
+        // DATETIME(6) に合わせて µs へ丸める（応答の updatedAt と再読込を一致させる）。
+        updatedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
 }

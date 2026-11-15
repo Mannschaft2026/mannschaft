@@ -1,6 +1,9 @@
 package com.mannschaft.app.effortrecord.controller;
 
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.AuthorizedInService;
@@ -23,6 +26,7 @@ import com.mannschaft.app.effortrecord.service.EffortRecordOwnerService;
 import com.mannschaft.app.effortrecord.service.EffortStatsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -41,10 +45,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * F06.4.1 個人の頑張り記録 個人 API（骨格）。API 契約 §3 の 8 本。
+ * F06.4.1 個人の頑張り記録 個人 API。API 契約 §3 の 8 本。
  *
  * <p>Controller は Service を呼ぶだけ。認証主体は {@link SecurityUtils#getCurrentUserId()} で確定し、
  * リクエストから owner を受け取らない。固定 path（presets / stats / definition-snapshots）は
@@ -59,6 +64,12 @@ public class EffortRecordMeController {
     private static final String SELF_SCOPE_REASON =
             "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
                     + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する";
+
+    /** 一覧が受け付ける query。これ以外（camelCase の別名等）は 400（API 契約 §1）。 */
+    private static final Set<String> LIST_QUERY = Set.of("date_from", "date_to", "definition_uuid", "cursor", "limit");
+    private static final Set<String> STATS_QUERY =
+            Set.of("date_from", "date_to", "definition_uuid", "field_key", "chart", "grain");
+    private static final Set<String> DELETE_QUERY = Set.of("version");
 
     private final EffortRecordOwnerService ownerService;
     private final EffortDefinitionService definitionService;
@@ -102,7 +113,9 @@ public class EffortRecordMeController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(name = "definition_uuid", required = false) UUID definitionUuid,
             @RequestParam(name = "cursor", required = false) String cursor,
-            @RequestParam(name = "limit", defaultValue = "20") int limit) {
+            @RequestParam(name = "limit", defaultValue = "20") int limit,
+            HttpServletRequest request) {
+        rejectUnknownQuery(request, LIST_QUERY);
         Long userId = SecurityUtils.getCurrentUserId();
         EffortRecordPage page = ownerService.list(userId,
                 new EffortRecordListCriteria(dateFrom, dateTo, definitionUuid, cursor, limit));
@@ -119,7 +132,9 @@ public class EffortRecordMeController {
             @RequestParam(name = "definition_uuid") UUID definitionUuid,
             @RequestParam(name = "field_key") String fieldKey,
             @RequestParam(name = "chart") EffortChartType chart,
-            @RequestParam(name = "grain", required = false) EffortGrain grain) {
+            @RequestParam(name = "grain", required = false) EffortGrain grain,
+            HttpServletRequest request) {
+        rejectUnknownQuery(request, STATS_QUERY);
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.of(statsService.aggregate(userId,
                 new EffortStatsCriteria(dateFrom, dateTo, definitionUuid, fieldKey, chart, grain))));
@@ -149,8 +164,20 @@ public class EffortRecordMeController {
     public ResponseEntity<ApiResponse<EffortDeleteResponse>> delete(
             @PathVariable UUID id,
             @RequestParam(name = "version") long version,
-            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            HttpServletRequest request) {
+        rejectUnknownQuery(request, DELETE_QUERY);
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.of(ownerService.delete(userId, id, version, idempotencyKey)));
+    }
+
+    /** 未知の query は 400（値は応答・ログへ出さない）。 */
+    private static void rejectUnknownQuery(HttpServletRequest request, Set<String> allowed) {
+        for (String name : request.getParameterMap().keySet()) {
+            if (!allowed.contains(name)) {
+                throw new BusinessException(CommonErrorCode.COMMON_001,
+                        List.of(new ErrorResponse.FieldError("query", "許可されていない query です")));
+            }
+        }
     }
 }
