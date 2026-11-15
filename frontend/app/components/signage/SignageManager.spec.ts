@@ -7,7 +7,7 @@ import SignageManager from './SignageManager.vue'
 
 const api = vi.hoisted(() => ({
   getScreens: vi.fn(), createScreen: vi.fn(), updateScreen: vi.fn(),
-  getSlots: vi.fn(), getTokens: vi.fn(), addSlot: vi.fn(),
+  getSlots: vi.fn(), getTokens: vi.fn(), addSlot: vi.fn(), issueToken: vi.fn(),
 }))
 mockNuxtImport('useSignageApi', () => () => api)
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: vi.fn() }))
@@ -59,9 +59,21 @@ beforeEach(() => {
   api.createScreen.mockResolvedValue({ data: screen })
   api.updateScreen.mockResolvedValue({ data: screen })
   api.addSlot.mockResolvedValue({ data: { id: 1 } })
+  api.issueToken.mockResolvedValue({ data: { id: 1 } })
 })
 
 describe('サイネージ管理のBE enum契約', () => {
+  it('発行クリックは選択した画面のIDと名前を送る', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '管理')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'トークン発行')!.trigger('click')
+    await flushPromises()
+
+    expect(api.issueToken).toHaveBeenCalledExactlyOnceWith(1, '既存画面')
+  })
+
   // 取得成功0件の既存表示を固定するcharacterization（初回からgreen）。
   it('画面一覧の取得成功0件では空表示と追加導線を表示する', async () => {
     api.getScreens.mockResolvedValueOnce({ data: [] })
