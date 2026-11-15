@@ -2,7 +2,7 @@
   "schema": 1,
   "campaign": "CMP-261021-0017",
   "manifest": "24a7e873fb7c08006fad3a77d4c3bda34507d5f294108d2dc2a2e8aa506d7960",
-  "operation": "e2003215-8bfd-45ea-9ffd-5c90570de588",
+  "operation": "c3b7819b-ab79-44ae-9615-ac1f1ae97149",
   "territories": {
     "foundation": {
       "owner": "f6efb6d3-51e1-4408-a760-92f7d3642122",
@@ -18,7 +18,7 @@
     },
     "repayment-b": {
       "owner": "46ff84c5-72ea-40d5-9922-c34cfbd6b511",
-      "note": "2026-11-15 取得(claim30a81b9e)。親6891751333に宣言。全38ロットは依存L1-G(←L1-M working)とwave/pattern未充足のためplanning相当の読取準備のみ。家老2名でロット別の凍結行数・採用パターン候補・他領地への依頼候補を整理中。業務コード/ストア/共有資産変更0・足軽0・heavy0。マスター指示でL1-M照会(C5dae/common9af6停止)への回答をfoundationセッションへ伝達済(両担当のWT・稼働セッション不在を確認、repayment-cは台帳上未解放のまま)。管理WT agent-4022-admin-46ff84c5。"
+      "note": "2026-11-15 取得(claim30a81b9e)。親6891751333に宣言。全38ロットは依存L1-G(←L1-M working)とwave/pattern未充足のためplanning相当の読取準備のみ。家老2名でロット別の凍結行数・採用パターン候補・他領地への依頼候補を整理中。業務コード/ストア/共有資産変更0・足軽0・heavy0。マスター指示でL1-M照会(C5dae/common9af6停止)への回答をfoundationセッションへ伝達済(両担当のWT・稼働セッション不在を確認、repayment-cは台帳上未解放のまま)。管理WT agent-4022-admin-46ff84c5。\n訂正: 直前noteの「foundationセッションへ伝達済」は誤り。宛てたmannschaft-caはL1-M担当ではなく別戦役(P1群F)で、受領・対応はなし。このPCでL1-M(owner f6efb6d3)の稼働セッションは確認できず。L1-M照会への回答は未伝達のまま。マスターへ担当の割り振りを確認中。"
     },
     "repayment-c": {
       "owner": "5dae09d2-9385-424c-b665-e6bd69c13586",
