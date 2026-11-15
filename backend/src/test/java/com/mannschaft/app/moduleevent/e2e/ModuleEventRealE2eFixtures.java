@@ -361,6 +361,8 @@ public class ModuleEventRealE2eFixtures {
                 em.createNativeQuery("DELETE FROM notifications WHERE user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
                 em.createNativeQuery("DELETE FROM notifications_archive WHERE user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
                 em.createNativeQuery("DELETE FROM module_event_resume_actor_states WHERE actor_user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
+                // spec のログインで残る LOGIN_SUCCESS / NEW_DEVICE_LOGIN 等。users への FK が無く、撤去しないと削除済み user を指して残る。
+                em.createNativeQuery("DELETE FROM audit_logs WHERE user_id IN (:ids)").setParameter("ids", world.users).executeUpdate();
             }
             world.roles.forEach(id -> remove(UserRoleEntity.class, id));
             world.memberships.forEach(id -> remove(MembershipEntity.class, id));
