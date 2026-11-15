@@ -77,7 +77,9 @@ public class ShiftBudgetSummaryController {
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id) {
         ConsumptionSummaryResponse response = summaryFacade.getConsumptionSummary(organizationId, id);
-        Class<?> view = resolveView(organizationId);
+        // 表示直前もFacadeのPolicyで実所属・VIEW・ADMINを再確認する。
+        Class<?> view = summaryFacade.isBudgetAdmin(organizationId)
+                ? BudgetView.BudgetAdmin.class : BudgetView.BudgetViewer.class;
         if (view == BudgetView.BudgetViewer.class) {
             // 集計後の権限変更でも、空オブジェクトの配列を返さず閲覧者の形状へ揃える。
             List<String> flags = new ArrayList<>(response.flags());
@@ -91,20 +93,6 @@ public class ShiftBudgetSummaryController {
         MappingJacksonValue jacksonValue = new MappingJacksonValue(Map.of("data", response));
         jacksonValue.setSerializationView(view);
         return jacksonValue;
-    }
-
-    /**
-     * 現在ユーザーの権限から最も詳細な View を解決する。
-     *
-     * <p>Policyで実組織の所属・{@code BUDGET_VIEW}・{@code BUDGET_ADMIN}を再確認する。
-     * 集計後にいずれかが失効した場合は閲覧者の形状に伏せる。</p>
-     */
-    private Class<?> resolveView(Long organizationId) {
-        if (summaryFacade.isBudgetAdmin(organizationId)) {
-            return BudgetView.BudgetAdmin.class;
-        }
-        // FacadeのPolicyで BUDGET_VIEW 必須を強制済。
-        return BudgetView.BudgetViewer.class;
     }
 
 }
