@@ -22,6 +22,7 @@ const { t } = useI18n()
 const { createSlot, updateSlot } = useShiftSlotApi()
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
+const confirm = useConfirm()
 
 const saving = ref(false)
 
@@ -70,8 +71,33 @@ watch(
   { immediate: true },
 )
 
-async function save() {
-  if (!form.value.slotDate) return
+async function save(moveRequestsConfirmed = false) {
+  if (!form.value.slotDate || saving.value) return
+  if (
+    props.slotData &&
+    form.value.slotDate !== props.slotData.time.slotDate &&
+    !moveRequestsConfirmed
+  ) {
+    const slotId = props.slotData.id
+    const oldDate = props.slotData.time.slotDate
+    const newDate = form.value.slotDate
+    confirm.require({
+      header: t('shift.slot.moveDateTitle'),
+      message: t('shift.slot.moveDateMessage', { oldDate, newDate }),
+      icon: 'pi pi-exclamation-triangle',
+      rejectLabel: t('common.cancel'),
+      acceptLabel: t('shift.slot.moveDateAccept'),
+      accept: () => {
+        // 確認中に別の枠へ切り替わった場合は、古い確認を新しい更新へ流用しない。
+        if (
+          !props.visible || props.slotData?.id !== slotId ||
+          props.slotData.time.slotDate !== oldDate || form.value.slotDate !== newDate
+        ) return
+        return save(true)
+      },
+    })
+    return
+  }
   saving.value = true
   try {
     let saved: ShiftSlotResponse
@@ -83,6 +109,7 @@ async function save() {
         positionId: form.value.positionId ?? undefined,
         requiredCount: form.value.requiredCount,
         note: form.value.note.trim() || undefined,
+        ...(moveRequestsConfirmed ? { moveRequestsConfirmed: true } : {}),
       }
       saved = await updateSlot(props.slotData.id, payload)
     } else {
@@ -179,7 +206,7 @@ const dialogHeader = computed(() =>
         icon="pi pi-check"
         :loading="saving"
         :disabled="!form.slotDate"
-        @click="save"
+        @click="save()"
       />
     </template>
   </Dialog>
