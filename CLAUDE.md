@@ -17,7 +17,7 @@
 - ❌ `C:/Claude/mannschaft` 直下 → **作業を中断し、殿に報告する**
   - ただし「大名システム活用ルール」の**例外**節に該当する場合はこの限りではない
 
-worktree 隔離の原則（ここが唯一の正本）: `main` への直接コミット禁止。**本陣 `C:\Claude\mannschaft` での実装・commit は禁止**（pre-commit フックと Claude PreToolUse フックで機械的に拒否。クローン直後・新環境のセットアップは [`docs/development/honjin_protection_setup.md`](docs/development/honjin_protection_setup.md)）。大規模作業は `git worktree add` で物理的に隔離してから着手する。
+worktree 隔離の原則（ここが唯一の正本）: `main` への直接コミット禁止。**本陣 `C:\Claude\mannschaft` での実装・commit は禁止**（pre-commit フックと Claude PreToolUse フックで機械的に拒否。クローン直後・新環境のセットアップは [`docs/development/honjin_protection_setup.md`](docs/development/honjin_protection_setup.md)）。大規模作業は `git worktree add` で物理的に隔離してから着手する。**【セットアップ必須】クローン直後・新環境では、両フック（git pre-commit・Claude PreToolUse）のセットアップ手順を上記文書で読み、必ず実施すること。**
 
 ---
 
@@ -72,7 +72,7 @@ worktree 隔離の原則（ここが唯一の正本）: `main` への直接コ�
 
 **開発作業は原則として必ず大名システム（Agent サブエージェント）経由で実行すること。** BE/API はテスト先行、FE/設計が薄い機能は従来順で可。
 
-よく使うコマンド（dev/build/test/lint 等）は詳細文書 §12。開発ハーネスの入口は [`docs/development/harness-engineering.md`](docs/development/harness-engineering.md)、環境準備は [`harness-environment.md`](docs/development/harness-environment.md)、完了証拠の正本手順は [`completion-evidence.md`](docs/development/completion-evidence.md)。Dynamic Workflows での出陣・検分の並列化（オプトイン。`/検分` の既定検分者は `codex`、Workflow 検分は `claude` を明示）は [`daimyo_workflow_migration.md`](docs/development/daimyo_workflow_migration.md)。
+よく使うコマンド（dev/build/test/lint 等）は詳細文書 §12。開発ハーネスの入口は [`docs/development/harness-engineering.md`](docs/development/harness-engineering.md)、環境準備は [`harness-environment.md`](docs/development/harness-environment.md)、完了証拠の正本手順は [`completion-evidence.md`](docs/development/completion-evidence.md)。`/出陣`・`/検分 claude` は Dynamic Workflows で足軽の並列起動を表現できる（オプトイン。`/検分` の既定検分者は `codex` で Codex による独立検分が走る。Workflow 検分は `claude` を明示。機械的タスクは sonnet/haiku・低 effort、難所は opus・medium に固定（詰まったら high）。コミット/マージは `gh`）。詳細: [`daimyo_workflow_migration.md`](docs/development/daimyo_workflow_migration.md)。
 
 ### 台帳 `docs/task-list.md` の扱い
 
@@ -83,7 +83,7 @@ worktree 隔離の原則（ここが唯一の正本）: `main` への直接コ�
 - **新規行は必ず表の末尾に追加**する（途中挿入は重複が静かに main へ入る）
 - **表の列は必ず7つ**（ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト) / 台帳）。補足は列を増やさず既存列へ畳む。セル内の本物の `|` は（コードスパン内でも）`\|`
 - **未完の行は状態セルの先頭に優先度 `P1`〜`P5` を必須**とする（例: `P1 未着手`。完了・取り下げは不要）。**P1 から順に片付ける**。基準は `docs/task-list.md` 冒頭「優先度」節
-- 番人 `TaskListCmpIdDuplicateGuardTest` が重複・列数・優先度漏れを CI で検出する。細目・経緯は詳細文書
+- 番人 `TaskListCmpIdDuplicateGuardTest`（新旧両形式対応）が重複・列数・優先度漏れを CI で検出する。重複が検出された場合は、後から merge された側が採番し直す。細目・経緯は詳細文書
 
 ### 文脈を短く保つ（トークン費用の本丸）
 
@@ -105,7 +105,11 @@ worktree 隔離の原則（ここが唯一の正本）: `main` への直接コ�
 - ドキュメントの軽微な追記（**ただし `docs/task-list.md` は対象外**。軽微に見えてもコミットする場合は必ず worktree + PR）
 - worktree のクリーンアップなど git 管理操作そのもの（`git worktree add/remove/prune` と、**マージ済みローカルブランチの削除** `git branch -d/-D`。後者は本陣保護フックでも明示的に許可している。作成・改名・upstream 設定は本陣では拒否されるため worktree で行うこと）
 
-worktree は作業完了後に必ず掃除する（agent 完了直後にその commit を本リポへ統合してから `git worktree remove --force`。定期の一括掃除は `/陣払い`、既定7日以上前。**進行中の agent の worktree は削除しない**）。隔離が必須な理由・起動すべき場面・並列セッションの作法・コマンド集は [`docs/development/worktree_operations.md`](docs/development/worktree_operations.md)（WSL 検証コピーの完了ゲートもここと詳細文書）。
+### WSL検証資産の完了ゲート
+
+新たなLinux/WSL検証コピーは `node scripts/verification-run.mjs --source <clean Git root> --evidence-dir <新規外部dir> -- <command>` を共通入口とする。完了時は `--check` の要処置を確認し、自身のコピー・専用cache・配布物・起動プロセス・検証コンテナ/専用volumeを所有確認して撤去する。必要証跡は正本へ確定し、ローカル重複raw・全量archiveを残さない。中断保持は所有者・用途・理由・再確認期限・再開条件を記録する。SIGKILL/ホスト障害の残存、管理外の既存コピーは無差別削除しない。詳細は [worktree運用](docs/development/worktree_operations.md#wsl検証コピーの寿命管理)。
+
+worktree は作業完了後に必ず掃除する（agent 完了直後にその commit を本リポへ統合してから `git worktree remove --force`。定期の一括掃除は `/陣払い`、既定7日以上前。**進行中の agent の worktree は削除しない**）。隔離が必須な理由・起動すべき場面・並列セッションの作法・コマンド集は [`docs/development/worktree_operations.md`](docs/development/worktree_operations.md)。
 
 ---
 
@@ -132,7 +136,7 @@ worktree は作業完了後に必ず掃除する（agent 完了直後にその c
 | `docs/security/README.md` | セキュリティ横断方針 |
 | `docs/architecture/er/README.md` | 実スキーマから自動生成したドメイン単位の E-R 図（テーブル設計・ドメイン境界の前に見る） |
 
-実装前に必ず確認すること。**認可・Cookie・セキュリティヘッダー・依存関係に関わる変更時は `docs/security/` を参照**すること。決済・Connect・サブスクリプション・税・Webhook 署名に関わる実装やレビューでは、記憶や推測に頼らず Stripe 公式スキルを引くこと（一覧と再リンク手順は詳細文書）。
+実装前に必ず確認すること。**認可・Cookie・セキュリティヘッダー・依存関係に関わる変更時は `docs/security/` を参照**すること。決済・Connect・サブスクリプション・税・Webhook 署名に関わる実装やレビューでは、記憶や推測に頼らず Stripe 公式スキルを引くこと（一覧は詳細文書。実体は `.agents/skills/` にあるが、クローン直後は `.claude/skills/` のリンクが無く呼び出せないので、必要になったら `npx skills add https://docs.stripe.com` を再実行してリンクを張り直すこと）。
 
 ---
 
