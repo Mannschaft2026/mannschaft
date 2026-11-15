@@ -109,7 +109,8 @@ export interface UpdateOrganizationRequest {
 }
 
 export interface OrgTeam {
-  id: number
+  /** URL 識別子（スラッグ）。BE は数値ではなくスラッグ文字列を返す。 */
+  id: string
   /** チームスラッグ（URLルーティング用）。{@code /teams/{slug}} に使用する。 */
   slug: string
   name: string
