@@ -35,10 +35,10 @@
   },
   "regressions": [
     {
-      "description": "390/360px 幅で長い導出名がチャットヘッダーを押し広げ人数表示が画面外へ出る",
+      "description": "390/360px 幅で長い導出名がチャットヘッダーを押し広げ人数表示が画面外へ出る。修正前は3件とも assertion 失敗（expected [text-sm,font-semibold] to include truncate 等）、修正後 3 passed、実画面 360x800/de で scrollWidth=clientWidth=360・画面外要素なし（PR #4535）",
       "test": "frontend/tests/unit/components/chat/ChatChannelHeader.overflow.spec.ts",
-      "redEvidence": "修正前は3件とも assertion 失敗（expected ['text-sm','font-semibold'] to include 'truncate' 等）",
-      "greenEvidence": "修正後 3 passed。実画面 360x800/de で scrollWidth=clientWidth=360・画面外要素なし（PR #4535）"
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/pull/4535",
+      "greenEvidence": "frontend/tests/unit/components/chat/ChatChannelHeader.overflow.spec.ts"
     }
   ]
 }
