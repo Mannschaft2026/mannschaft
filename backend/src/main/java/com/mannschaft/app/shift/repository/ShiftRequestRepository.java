@@ -16,7 +16,7 @@ import java.util.Optional;
  * シフト希望リポジトリ。
  */
 public interface ShiftRequestRepository extends JpaRepository<ShiftRequestEntity, Long>,
-        JpaSpecificationExecutor<ShiftRequestEntity> {
+        JpaSpecificationExecutor<ShiftRequestEntity>, ShiftRequestRepositoryCustom {
 
     /**
      * スケジュールの全希望を取得する。

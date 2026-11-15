@@ -19,13 +19,11 @@ import com.mannschaft.app.shift.entity.ShiftScheduleEntity;
 import com.mannschaft.app.shift.entity.ShiftSlotEntity;
 import com.mannschaft.app.shift.repository.ShiftRequestRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityNotFoundException;
-import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,7 +67,6 @@ public class ShiftRequestService {
     private final ShiftMapper shiftMapper;
     private final ProxyInputContext proxyInputContext;
     private final ProxyInputRecordRepository proxyInputRecordRepository;
-    private final EntityManager entityManager;
     @Qualifier("wallClock")
     private final Clock wallClock;
 
@@ -225,9 +222,8 @@ public class ShiftRequestService {
 
         // 親ロック前の希望・親は RR snapshot / 1次 cache に残る。最新の日付・撤回・状態を再検証する。
         try {
-            entityManager.refresh(schedule, LockModeType.PESSIMISTIC_WRITE);
-            entityManager.refresh(entity, LockModeType.PESSIMISTIC_READ);
-        } catch (EntityNotFoundException e) {
+            requestRepository.refreshForPreferenceUpdate(schedule, entity);
+        } catch (EmptyResultDataAccessException e) {
             throw new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
         }
         if (schedule.getDeletedAt() != null || entity.getDeletedAt() != null
