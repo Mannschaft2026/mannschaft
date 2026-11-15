@@ -259,7 +259,7 @@ class WebSocketRelayMultiNodeIntegrationTest {
     void signageBroadcast_crossNode_reaches() throws Exception {
         SignageAccessTokenEntity capability = new TransactionTemplate(transactions).execute(status -> {
             MembershipTestHelper.insertActiveUser(em, SIGNAGE_ACTOR);
-            signageTeamId = TeamOrgFixtureHelper.insertTeam(em, "relay掲示専用", "relay-signage-" + UUID.randomUUID());
+            signageTeamId = TeamOrgFixtureHelper.insertTeam(em, "relay掲示専用", "relay-" + UUID.randomUUID().toString().substring(0, 24));
             var screen = signageScreens.saveAndFlush(SignageScreenEntity.builder().scopeType("TEAM")
                     .scopeId(signageTeamId).name("relay掲示専用").createdBy(SIGNAGE_ACTOR).build());
             signageScreenId = screen.getId();
