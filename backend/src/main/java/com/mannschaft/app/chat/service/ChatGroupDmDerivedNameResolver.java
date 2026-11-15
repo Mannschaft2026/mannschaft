@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +58,7 @@ public class ChatGroupDmDerivedNameResolver {
      * @param sourceChannelId 元チャンネル ID（無ければ null）
      * @param callerId        呼出ユーザー ID
      * @param extraUserIds    追加で参加するユーザー ID 群（無ければ空）
-     * @return ユーザー ID → 表示名
+     * @return ユーザー ID → 表示名（照会した全 ID を含む。返らなかった ID は {@value ChatGroupDmDerivedName#UNKNOWN_USER_NAME}）
      */
     public Map<Long, String> prefetchParticipantNames(Long sourceChannelId, Long callerId,
                                                       Collection<Long> extraUserIds) {
@@ -70,7 +71,12 @@ public class ChatGroupDmDerivedNameResolver {
             userIds.addAll(extraUserIds);
         }
         userIds.remove(callerId);
-        return lookupDisplayNames(userIds);
+        // 照会したが返らなかった ID（ソフトデリート済み等）も「ユーザー」として保持する。保持しないと、導出時に
+        // knownNames に無い参加者として書き込み tx のコミット後に再照会され、その失敗で「書いたのに失敗を返す」
+        // 状態になる（AC-16 違反）。表示は通常経路と同じ UNKNOWN_USER_NAME。
+        Map<Long, String> names = new HashMap<>(lookupDisplayNames(userIds));
+        userIds.forEach(id -> names.putIfAbsent(id, ChatGroupDmDerivedName.UNKNOWN_USER_NAME));
+        return names;
     }
 
     /**

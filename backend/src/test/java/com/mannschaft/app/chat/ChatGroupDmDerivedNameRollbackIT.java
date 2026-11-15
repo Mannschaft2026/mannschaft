@@ -161,6 +161,53 @@ class ChatGroupDmDerivedNameRollbackIT extends AbstractMySqlIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT name FROM chat_channels WHERE id = ?", String.class, kabine)).isNull();
     }
 
+    @Test
+    @DisplayName("AC-16: invite-to-zimmer で元 Kabine に退会者がいても、書き込み後に表示名を再照会せず「ユーザー」と表示する")
+    void ac16_inviteToZimmerは退会者の表示名をコミット後に再照会しない() throws Exception {
+        jdbc.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", alice);
+        InviteToZimmerRequest request = mapper.readValue(
+                "{\"userIds\":[" + bob + "],\"shareHistory\":true}", InviteToZimmerRequest.class);
+
+        armFailureAfterFirstLookup();
+        Throwable thrown = catchThrowable(() -> {
+            var response = channelFacade.inviteToZimmer(kabine, me, request);
+            assertThat(response.getDerivedName()).as("退会者は「ユーザー」と表示される")
+                    .contains(ChatGroupDmDerivedName.UNKNOWN_USER_NAME).contains("巻戻ボブ");
+        });
+        reset(nameResolverService);
+
+        assertThat(thrown).as("事前取得の後に表示名を再照会しない（再照会が失敗すると書き込み済みのまま失敗を返す）").isNull();
+        assertThat(tripped.get()).as("表示名の照会は書き込み前の 1 回だけ").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("AC-16: convert-to-group で元 DM に退会者がいても、書き込み後に表示名を再照会せず「ユーザー」と表示する")
+    void ac16_convertToGroupは退会者の表示名をコミット後に再照会しない() {
+        jdbc.update("UPDATE users SET deleted_at = NOW() WHERE id = ?", alice);
+
+        armFailureAfterFirstLookup();
+        Throwable thrown = catchThrowable(() -> {
+            var response = channelFacade.convertToGroup(kabine, me);
+            assertThat(response.getDerivedName()).as("退会者は「ユーザー」と表示される")
+                    .isEqualTo(ChatGroupDmDerivedName.UNKNOWN_USER_NAME);
+        });
+        reset(nameResolverService);
+
+        assertThat(thrown).as("事前取得の後に表示名を再照会しない（再照会が失敗すると変換済みのまま失敗を返す）").isNull();
+        assertThat(tripped.get()).as("表示名の照会は書き込み前の 1 回だけ").isEqualTo(1);
+    }
+
+    /** 表示名の一括解決を、1 回目は本物へ委譲し、2 回目以降は例外化する（呼出回数を数える）。 */
+    private void armFailureAfterFirstLookup() {
+        tripped.set(0);
+        doAnswer(invocation -> {
+            if (tripped.incrementAndGet() == 1) {
+                return invocation.callRealMethod();
+            }
+            throw new IllegalStateException("AC-16 検証用: 事前取得後の表示名の再照会を強制失敗させる");
+        }).when(nameResolverService).resolveUserDisplayNames(any());
+    }
+
     /** 導出のための参加者表示名の一括解決（NameResolverService#resolveUserDisplayNames）を、到達を数えつつ例外化する。 */
     private void armDerivationFailure() {
         tripped.set(0);
