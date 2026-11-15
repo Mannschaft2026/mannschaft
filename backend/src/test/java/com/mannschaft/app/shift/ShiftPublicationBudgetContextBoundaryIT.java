@@ -148,10 +148,15 @@ class ShiftPublicationBudgetContextBoundaryIT extends AbstractMySqlIntegrationTe
         mockMvc.perform(post("/api/v1/shifts/schedules/{scheduleId}/transition", scheduleId)
                         .param("status", "PUBLISHED")
                         .header("Authorization", "Bearer " + tokens.issueAccessToken(adminId, List.of("MEMBER"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("PUBLISHED"));
-        // 直前の 409 で同一テスト TX が rollback-only になるため、DB の再読込ではなく応答と公開イベントで成功を確かめる
-        assertThat(events.stream(ShiftPublishedEvent.class)).hasSize(1);
+                .andExpect(status().isOk());
+        // 直前の 409 で同一テスト TX が rollback-only になるため、DB の再読込ではなく応答 200 と
+        // 当該スケジュールの公開イベント 1 件（公開処理が時給ガードを通過して publish まで進んだ証拠）で確かめる
+        assertThat(events.stream(ShiftPublishedEvent.class))
+                .singleElement()
+                .satisfies(e -> {
+                    assertThat(e.getScheduleId()).isEqualTo(scheduleId);
+                    assertThat(e.getPublishedAt()).isNotNull();
+                });
     }
 
     @Test
