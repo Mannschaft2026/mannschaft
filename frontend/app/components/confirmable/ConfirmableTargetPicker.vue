@@ -22,7 +22,6 @@ const emit = defineEmits<{
 }>()
 const api = useApi()
 const { getTeamsInOrg } = useOrganizationApi()
-const { getTeam } = useTeamApi()
 const uid = useId()
 const { handleApiError } = useErrorHandler()
 const { t } = useI18n()
@@ -83,20 +82,9 @@ async function loadOrganization(orgId: number, depth: number) {
     hasMore.value[orgKey] = children.meta?.hasNext ?? false
     if (!opened.value[orgKey]) {
       const teams = await getTeamsInOrg(orgSlug)
-      // 一覧の id はスラッグ。確認通知の対象は数値IDが必要なので、チームごとに numericId を引く
-      const resolvedTeams = await Promise.allSettled(teams.data.map(async (team) => {
-        const detail = await getTeam(team.slug)
-        const numericId = Number(detail.data.numericId)
-        if (!Number.isSafeInteger(numericId) || numericId <= 0) throw new Error('team_numeric_id_missing')
-        return { numericId, name: team.name }
-      }))
-      let allResolved = true
-      for (const result of resolvedTeams) {
-        if (result.status === 'fulfilled') addOption({ type: 'TEAM', id: result.value.numericId }, result.value.name, depth + 1)
-        else { allResolved = false; handleApiError(result.reason, 'confirmable target team') }
-      }
-      // 一部でも解決に失敗したら展開済みにしない（展開ボタンから再取得できる状態を残す）
-      opened.value[orgKey] = allResolved
+      // 一覧の id はスラッグ。確認通知の対象は数値IDが必要なので numericId を使う
+      for (const team of teams.data) addOption({ type: 'TEAM', id: team.numericId }, team.name, depth + 1)
+      opened.value[orgKey] = true
     }
   } catch (error) { handleApiError(error, 'confirmable target options') } finally { loading.value = false }
 }

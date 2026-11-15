@@ -113,6 +113,8 @@ export interface OrgTeam {
   id: string
   /** チームスラッグ（URLルーティング用）。{@code /teams/{slug}} に使用する。 */
   slug: string
+  /** チームの内部 BIGINT ID。URL には使わない。 */
+  numericId?: number
   name: string
   nickname1: string | null
   iconUrl: string | null

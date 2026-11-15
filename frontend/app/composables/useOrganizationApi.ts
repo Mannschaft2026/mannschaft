@@ -60,6 +60,8 @@ interface TeamSummaryResponse {
   id: string
   /** チームスラッグ（URLルーティング用）。BE `OrgTeamSummaryResponse.slug` と 1:1。 */
   slug: string
+  /** チームの内部 BIGINT ID。URL には使わず、確認通知の宛先指定など Long を要求する API 専用。 */
+  numericId: number
   name: string
   nickname1: string | null
   iconUrl: string | null
