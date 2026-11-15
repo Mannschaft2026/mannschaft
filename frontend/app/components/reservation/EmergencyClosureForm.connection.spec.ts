@@ -22,7 +22,8 @@ const h = vi.hoisted(() => ({
   }>,
 }))
 
-// 実Form・実useEmergencyClosureLiveを結線し、HTTPとSTOMPの外部境界だけを置き換える。
+// 実Form・実History・実connection-state本体を結線する。HTTP/STOMPとrole/auth/notificationの
+// DI fixtureを固定した表示状態の検証であり、実認可試験ではない（後段の実機で別途確認する）。
 vi.mock('@stomp/stompjs', () => ({
   Client: class {
     active = false
