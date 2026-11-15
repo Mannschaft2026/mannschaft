@@ -154,6 +154,8 @@ const sheetVisible = ref(false)
 const starterSetupVisible = ref(false)
 const opponentNoticeVisible = ref(false)
 const loading = ref(true)
+const loadError = shallowRef<unknown>(null)
+const loadErrorMessage = ref('')
 
 // === undo / 削除 / 編集試行 ===
 async function undo(): Promise<void> {
@@ -199,7 +201,12 @@ function addManualPlayer(p: { name: string; jerseyNumber: number | null }): void
 }
 
 // === 初期ロード ===
-onMounted(async () => {
+async function loadPage(): Promise<void> {
+  loading.value = true
+  loadError.value = null
+  sessionScope?.stop()
+  sessionScope = null
+  session.value = null
   // 試合は作成時の組織の下に保存されている。遷移元（一覧・作成・大会対戦表）が URL クエリ org で引き継ぐ
   const ctx = await resolveContext(teamSlug, { orgId: parseOrgQuery(route.query.org) })
   orgId.value = ctx?.orgId ?? null
@@ -220,8 +227,12 @@ onMounted(async () => {
     homePenaltyScore.value = match.homePenaltyScore ?? 0
     awayPenaltyScore.value = match.awayPenaltyScore ?? 0
     sport = match.sport ?? null
-  } catch {
+  } catch (error) {
     notification.error(t('match.live.error.load_match_failed'))
+    loadError.value = error
+    loadErrorMessage.value = t('match.live.error.load_match_failed')
+    loading.value = false
+    return
   }
 
   // 記録権限がなければ観戦ビュー（read-only）へ。記録セッション（タイマー/グリッド/wakeLock）は
@@ -292,14 +303,21 @@ onMounted(async () => {
     return
   }
   s.setMatchStatus(matchStatus.value)
-  session.value = s
-
   try {
     const res = await eventApi.listEvents(orgId.value, teamId.value, matchId)
+    if (mod !== null && isContinuousModule(mod)) {
+      s.timer.restore({ events: res.events ?? [], matchStatus: matchStatus.value })
+    }
     s.recorder.setEvents(res.events ?? [])
     s.applyDerivedScore(res)
-  } catch {
-    // 通知済み
+    session.value = s
+  } catch (error) {
+    loadError.value = error
+    loadErrorMessage.value = t('match.live.error.load_events_failed')
+    sessionScope.stop()
+    sessionScope = null
+    loading.value = false
+    return
   }
   // 選手名簿の読み込み。失敗を沈黙させると空名簿になり記録できないため通知する
   // （データ破壊はないので確定ブロックまでは不要・通知＋ログで表面化させる）。
@@ -313,7 +331,9 @@ onMounted(async () => {
   await wakeLock.acquireWakeLock().catch(() => undefined)
   window.addEventListener('online', flushOffline)
   loading.value = false
-})
+}
+
+onMounted(loadPage)
 
 onBeforeUnmount(() => {
   wakeLock.releaseWakeLock()
@@ -567,6 +587,13 @@ function goOvertime(): void {
     </div>
 
     <PageLoading v-if="loading" size="40px" />
+
+    <DashboardErrorState
+      v-else-if="loadError"
+      :error="loadError"
+      :message="loadErrorMessage"
+      @retry="loadPage"
+    />
 
     <!-- org クエリが無効: 試合を読み込まず、組織を選び直させる（選択後は再読込して読み直す） -->
     <MatchOrgSelect
