@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.MannschaftApplication;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -172,9 +173,19 @@ public final class ModuleEventRealE2eApplication {
         }
     }
 
-    private static void write(ObjectMapper mapper, Path target, Object value) throws IOException {
+    private static void write(ObjectMapper mapper, Path target, Object value) throws IOException, InterruptedException {
         Path next = target.resolveSibling(target.getFileName() + ".next");
         mapper.writerWithDefaultPrettyPrinter().writeValue(next.toFile(), value);
-        Files.move(next, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        // Windows は読取中（spec が state.json を開いている瞬間）の置換先を rename で置き換えられず
+        // AccessDeniedException になる。読取は短時間で閉じるため有界に再試行し、上限超過は隠さず投げる。
+        for (int attempt = 1; ; attempt++) {
+            try {
+                Files.move(next, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                return;
+            } catch (AccessDeniedException busy) {
+                if (attempt >= 40) throw busy;
+                TimeUnit.MILLISECONDS.sleep(25);
+            }
+        }
     }
 }
