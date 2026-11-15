@@ -271,11 +271,12 @@ public class ModuleEventRealE2eFixtures {
         }
         @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED, readOnly = false)
         public List<ModuleEventNoticeRecipient> recipients(ModuleEventNoticeDescriptor notice, long after, int limit, List<Long> candidates) {
-            require(limit >= 1 && limit <= 100 && after >= 0, "受信者境界が不正");
+            // 上限は SPI 契約（呼出側 ModuleEventImpactEvaluator の MAX_RECIPIENTS=500。fan-out の CHUNK_SIZE も 500）に合わせる。
+            require(limit >= 1 && limit <= 500 && after >= 0, "受信者境界が不正");
             Workflow workflow = world.workflow(notice.getImpact());
             List<Long> selected = candidates == null ? List.copyOf(world.users) : List.copyOf(candidates);
             if (selected.isEmpty()) return List.of();
-            require(selected.size() <= 100, "候補上限を超えた");
+            require(selected.size() <= 500, "候補上限を超えた");
             selected = selected.stream().filter(world.users::contains).toList();
             if (selected.isEmpty()) return List.of();
             String type = workflow.teamId == null ? "ORGANIZATION" : "TEAM";
