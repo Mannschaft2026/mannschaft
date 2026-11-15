@@ -70661,6 +70661,7 @@ export interface components {
         };
         ChannelResponse: {
             audit?: components["schemas"]["ChannelAuditDto"];
+            derivedName?: string;
             dmPartner?: components["schemas"]["DmPartnerDto"];
             /** Format: int64 */
             id?: number;
@@ -73271,6 +73272,8 @@ export interface components {
             /** @example 14:30:00 */
             endTime?: string;
             endsNextDay?: boolean;
+            /** @description 枠の日付変更に伴う希望の日付移動を確認したか。省略・null・false は未確認 */
+            moveRequestsConfirmed?: boolean;
             note?: string;
             /** Format: int64 */
             positionId?: number;
@@ -85049,6 +85052,7 @@ export interface components {
         DirectMessageItemDto: {
             /** Format: int64 */
             channelId?: number;
+            derivedName?: string;
             isMuted?: boolean;
             isPinned?: boolean;
             /** Format: date-time */
