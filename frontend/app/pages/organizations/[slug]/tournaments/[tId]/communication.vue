@@ -43,15 +43,18 @@ const currentSpaces = computed<TournamentContactSpace[]>(() => {
 })
 
 const activeBulletinSpace = computed<TournamentContactSpace | null>(() => {
-  return currentSpaces.value.find(s => s.bulletinRefId !== null) ?? null
+  return findBulletinSpace(currentSpaces.value)
 })
 
+/** 掲示板 API のスコープ。得られないとき null（API を呼ばず、状態として表示する） */
+const activeBulletinScope = computed(() => resolveBulletinScope(activeBulletinSpace.value))
+
 const activeChatSpace = computed<TournamentContactSpace | null>(() => {
-  return currentSpaces.value.find(s => s.chatChannelId !== null) ?? null
+  return findChatSpace(currentSpaces.value)
 })
 
 const activeChatChannel = computed<ChatChannelResponse | null>(() => {
-  const channelId = activeChatSpace.value?.chatChannelId
+  const channelId = resolveChatChannelId(activeChatSpace.value)
   if (!channelId) return null
   return chatChannelCache.value[channelId] ?? null
 })
@@ -112,9 +115,9 @@ async function onScopeChange(scope: 'tournament' | number) {
 }
 
 async function loadChatForCurrentScope() {
-  const space = activeChatSpace.value
-  if (space?.chatChannelId) {
-    await loadChatChannel(space.chatChannelId)
+  const channelId = resolveChatChannelId(activeChatSpace.value)
+  if (channelId) {
+    await loadChatChannel(channelId)
   }
 }
 
@@ -267,13 +270,19 @@ onMounted(async () => {
           <div v-if="spacesLoading" class="flex justify-center py-8">
             <LoadingBounce />
           </div>
-          <template v-else-if="activeBulletinSpace">
+          <template v-else-if="activeBulletinScope">
             <BulletinThreadList
-              scope-type="TOURNAMENT"
-              :scope-id="activeBulletinSpace.bulletinRefId!"
+              :key="`${activeBulletinScope.scopeType}-${activeBulletinScope.scopeId}`"
+              :scope-type="activeBulletinScope.scopeType"
+              :scope-id="activeBulletinScope.scopeId"
               :can-manage="isAdminOrDeputy"
             />
           </template>
+          <DashboardEmptyState
+            v-else-if="activeBulletinSpace"
+            icon="pi pi-exclamation-triangle"
+            :message="$t('tournament.communication.bulletin_scope_unresolved')"
+          />
           <DashboardEmptyState
             v-else
             icon="pi pi-clipboard"
