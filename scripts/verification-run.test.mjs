@@ -134,37 +134,44 @@ async function waitFile(path) {
   throw new Error(`fixture準備timeout: ${path}`);
 }
 // 新規の同UID・非dumpableな脱走fixtureだけを作る。既存プロセスは変更しない。
-async function inaccessibleFixture(t) {
+async function inaccessibleFixture(t, readOwner = waitFile) {
   const cleanups = [];
   const f = await fixture({ after: cleanup => cleanups.push(cleanup) });
-  const python = `import ctypes,os,time,json
-assert ctypes.CDLL(None).prctl(4,0,0,0,0)==0
-e=os.environ['VERIFICATION_EVIDENCE_DIR']
-start=open('/proc/self/stat').read().rsplit(')',1)[1].split()[19]
-with open(e+'/inaccessible','x') as out: out.write(json.dumps({'pid':os.getpid(),'start':start}))
-while not os.path.exists(e+'/release'): time.sleep(.01)
-`;
-  const code = `const fs=require('fs'),{spawn}=require('child_process');const p=spawn('/usr/bin/python3',['-I','-B','-c',${JSON.stringify(python)}],{detached:true,stdio:'ignore'});p.unref();const e=process.env.VERIFICATION_EVIDENCE_DIR;const timer=setInterval(()=>{if(fs.existsSync(e+'/finish-command'))clearInterval(timer)},10)`;
-  const running = run(f, [process.execPath, '-e', code]);
-  const owner = JSON.parse(await waitFile(join(f.evidence, 'inaccessible')));
+  let running, owner;
+  // spawn/owner読取より先に登録する。準備失敗でも固定の専用Eだけへ解放を通知する。
   t.after(async () => {
-    // redでも自身のfixtureを解放し、runner終了とmarkerを照合した個別copyだけを撤去する。
-    await writeFile(join(f.evidence, 'release'), '');
-    await writeFile(join(f.evidence, 'finish-command'), '');
-    await running;
-    const deadline = Date.now() + 10000;
-    let gone = false;
-    while (Date.now() < deadline) {
-      try {
-        const raw = await readFile(`/proc/${owner.pid}/stat`, 'utf8');
-        const fields = raw.slice(raw.lastIndexOf(')') + 2).split(' ');
-        if (fields[19] !== owner.start || ['Z', 'X'].includes(fields[0])) { gone = true; break; }
-      } catch (e) { if (e.code === 'ENOENT' || e.code === 'ESRCH') { gone = true; break; } throw e; }
-      await new Promise(resolve => setTimeout(resolve, 10));
+    if (!running) {
+      for (const cleanup of cleanups) await cleanup();
+      return;
     }
-    assert.ok(gone, '非dumpable fixtureの停止未確認ではcopyを撤去しない');
+    let finished = false;
+    running.then(() => { finished = true; });
+    const finishDeadline = Date.now() + 15000;
+    do {
+      for (const name of ['release', 'finish-command']) {
+        try { await writeFile(join(f.evidence, name), ''); }
+        catch (e) { if (e.code !== 'ENOENT') throw e; }
+      }
+      if (!finished) await Promise.race([running, new Promise(resolve => setTimeout(resolve, 25))]);
+    } while (!finished && Date.now() < finishDeadline);
+    assert.ok(finished, 'fixture runnerの有界終了未確認ではcopyを撤去しない');
+    await running;
+    if (owner) {
+      const deadline = Date.now() + 10000;
+      let gone = false;
+      while (Date.now() < deadline) {
+        try {
+          const raw = await readFile(`/proc/${owner.pid}/stat`, 'utf8');
+          const fields = raw.slice(raw.lastIndexOf(')') + 2).split(' ');
+          if (fields[19] !== owner.start || ['Z', 'X'].includes(fields[0])) { gone = true; break; }
+        } catch (e) { if (e.code === 'ENOENT' || e.code === 'ESRCH') { gone = true; break; } throw e; }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.ok(gone, '非dumpable fixtureの停止未確認ではcopyを撤去しない');
+    }
     const r = await receipt(f);
     if (r.cleanup === 'retained') {
+      assert.ok(owner, `owner未確定のcopyは安全保持する: ${r.scratch}`);
       const marker = JSON.parse(await readFile(join(r.scratch, '.verification-owner.json'), 'utf8'));
       assert.equal(marker.evidence, f.evidence);
       assert.equal(marker.scratch, r.scratch);
@@ -173,10 +180,48 @@ while not os.path.exists(e+'/release'): time.sleep(.01)
       await rm(r.scratch, { recursive: true });
     }
     for (const cleanup of cleanups) await cleanup();
+    return { ownerConfirmed: Boolean(owner), cleanup: r.cleanup, scratch: r.scratch };
   });
+  const python = `import ctypes,os,time,json
+assert ctypes.CDLL(None).prctl(4,0,0,0,0)==0
+e=os.environ['VERIFICATION_EVIDENCE_DIR']
+start=open('/proc/self/stat').read().rsplit(')',1)[1].split()[19]
+with open(e+'/inaccessible.tmp','x') as out: out.write(json.dumps({'pid':os.getpid(),'start':start}))
+os.rename(e+'/inaccessible.tmp',e+'/inaccessible')
+while not os.path.exists(e+'/release'): time.sleep(.01)
+`;
+  const code = `const fs=require('fs'),{spawn}=require('child_process');const p=spawn('/usr/bin/python3',['-I','-B','-c',${JSON.stringify(python)}],{detached:true,stdio:'ignore'});p.unref();const e=process.env.VERIFICATION_EVIDENCE_DIR;const timer=setInterval(()=>{if(fs.existsSync(e+'/finish-command'))clearInterval(timer)},10)`;
+  running = run(f, [process.execPath, '-e', code], { timeout: 12000 });
+  const parsed = JSON.parse(await readOwner(join(f.evidence, 'inaccessible')));
+  assert.ok(Number.isSafeInteger(parsed.pid) && parsed.pid > 1 && typeof parsed.start === 'string' && /^\d+$/.test(parsed.start));
+  owner = parsed;
   // namespace内UID0でもptrace権限を落とした実参照監査で拒否されることを確認する。
   await assert.rejects(readFile(`/proc/${owner.pid}/maps`), { code: 'EACCES' });
   return { f, running, owner };
+}
+for (const failure of ['owner読取timeout', 'ownerJSON不正']) {
+  test(`${failure}でも非dumpable fixtureを解放しrunnerがcopyを撤去する`, { skip: !linux }, async () => {
+    const hooks = [];
+    let processOwner, evidence;
+    await assert.rejects(inaccessibleFixture({ after: hook => hooks.push(hook) }, async path => {
+      // 実際にdetached fixtureが生存した後、owner準備の例外を注入する。
+      evidence = dirname(path);
+      processOwner = JSON.parse(await waitFile(path));
+      if (failure === 'owner読取timeout') throw new Error('fixture owner読取timeout');
+      return '{';
+    }), failure === 'owner読取timeout' ? /owner読取timeout/ : SyntaxError);
+    assert.equal(hooks.length, 1);
+    const result = await hooks[0]();
+    assert.equal(result.ownerConfirmed, false);
+    assert.equal(result.cleanup, 'removed');
+    await absent(result.scratch);
+    await absent(evidence);
+    try {
+      const raw = await readFile(`/proc/${processOwner.pid}/stat`, 'utf8');
+      const fields = raw.slice(raw.lastIndexOf(')') + 2).split(' ');
+      assert.ok(fields[19] !== processOwner.start || ['Z', 'X'].includes(fields[0]));
+    } catch (e) { if (e.code !== 'ENOENT' && e.code !== 'ESRCH') throw e; }
+  });
 }
 test('一過性の新規EACCESは有界内の再監査で終了を確認して撤去する', { skip: !linux }, async t => {
   const { f, running } = await inaccessibleFixture(t);
