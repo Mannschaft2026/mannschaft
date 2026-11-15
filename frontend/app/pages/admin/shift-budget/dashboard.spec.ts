@@ -4,7 +4,10 @@ import { flushPromises } from '@vue/test-utils'
 import { defineComponent, reactive, ref } from 'vue'
 import Dashboard from './dashboard.vue'
 
-const scope = reactive({ current: { type: 'organization', id: '10' } })
+const scope = reactive({
+  current: { type: 'organization', id: '10' },
+  loadFromStorage: vi.fn(),
+})
 const canManageBudget = ref(true)
 const getConsumptionSummary = vi.fn()
 const listAllocations = vi.fn()
@@ -49,7 +52,8 @@ async function mountPage() {
   return wrapper
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await useNuxtApp().$i18n.setLocale('ja')
   scope.current = { type: 'organization', id: '10' }
   canManageBudget.value = true
   getConsumptionSummary.mockReset().mockResolvedValue(summary())
