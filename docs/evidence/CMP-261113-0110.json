@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261113-0110",
+  "scope": "app",
+  "implementation": {
+    "pr": 4498,
+    "sha": "38e801c7e1e25286707c03ec19bc0d5815d2e3ce"
+  },
+  "acceptanceCriteria": [
+    {"id": "AC-1", "description": "invite-to-zimmer の201応答の derivedName が、自分以外のメンバーの displayName を joinedAt 昇順で連結したものになり、memberCount と viewer も入る", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-2", "description": "一覧で名前なし GROUP_DM の derivedName が AC-1 と同じ規則で入り、DM・チャンネル系・名前付き GROUP_DM では null", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-3", "description": "詳細で名前なし GROUP_DM の derivedName が AC-1 と同じ規則で入る", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-4", "description": "自分以外がちょうど3名なら連結のみ、4名なら末尾に +1 が付く", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-5", "description": "自分以外のメンバーが0名の GROUP_DM では derivedName が null で500にならない", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-6", "description": "ソフトデリート済みユーザーの位置は「ユーザー」になる", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-7", "description": "startZimmer・conversations・convert-to-group の応答にも derivedName が入る", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-8", "description": "メンバー退出後は退出者の名前が derivedName から消え、DB の name は null のまま", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-9", "description": "別のメンバーが取得すると取得者自身が除外され他の人の名前が並ぶ（呼出者ごとの導出）", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-10", "description": "非メンバー（同一組織・他組織）は既存と同じ403/404で、derivedName を含む本文を返さず一覧にも出ない", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-11", "description": "一覧の derivedName 用クエリ数が GROUP_DM の件数に比例しない（バッチ取得）", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-12", "description": "chat_channels.name は導出名で更新されず、meta.name の意味は変わらない", "tests": [{"name": "ChatGroupDmDerivedNameRollbackIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameRollbackIT.java"}]},
+    {"id": "AC-13", "description": "FE の一覧・タブ・ヘッダー・チャットページが derivedName を表示し、null なら未命名文言（6言語）を出す", "tests": [{"name": "channelDisplayName.spec.ts", "evidence": "frontend/app/utils/chat/channelDisplayName.spec.ts"}, {"name": "chat-group-dm-derived-name.spec.ts", "evidence": "frontend/tests/e2e/real/chat-group-dm-derived-name.spec.ts"}]},
+    {"id": "AC-14", "description": "ダッシュボード（ChatHubService）の GROUP_DM 表示名が AC-1 と同じ導出名になる", "tests": [{"name": "ChatGroupDmDerivedNameContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatGroupDmDerivedNameContractIT.java"}]},
+    {"id": "AC-15", "description": "F04.2・F04.2.1 仕様書、docs/openapi.json、frontend 生成型が更新されている", "tests": [{"name": "OpenAPI Drift Check", "evidence": "docs/openapi.json"}]}
+  ],
+  "ci": [
+    {"runId": 43674920546},
+    {"runId": 43674920384},
+    {"runId": 43674920371}
+  ],
+  "stages": {
+    "review": {"status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4498"},
+    "real": {"status": "passed", "evidence": "frontend/tests/e2e/real/chat-group-dm-derived-name.spec.ts"},
+    "exploratory": {"status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4535"}
+  },
+  "regressions": [
+    {
+      "description": "390/360px 幅で長い導出名がチャットヘッダーを押し広げ人数表示が画面外へ出る",
+      "test": "frontend/tests/unit/components/chat/ChatChannelHeader.overflow.spec.ts",
+      "redEvidence": "修正前は3件とも assertion 失敗（expected ['text-sm','font-semibold'] to include 'truncate' 等）",
+      "greenEvidence": "修正後 3 passed。実画面 360x800/de で scrollWidth=clientWidth=360・画面外要素なし（PR #4535）"
+    }
+  ]
+}
