@@ -13,6 +13,7 @@ import com.mannschaft.app.social.announcement.AnnouncementFeedService;
 import com.mannschaft.app.social.announcement.AnnouncementReadCommandService;
 import com.mannschaft.app.social.announcement.AnnouncementReadService;
 import com.mannschaft.app.social.announcement.AnnouncementScopeType;
+import com.mannschaft.app.social.announcement.AnnouncementScopedFeedVisibilityGuard;
 import com.mannschaft.app.social.announcement.AnnouncementSourceType;
 import com.mannschaft.app.social.announcement.OrgAnnouncementFeedQueryService;
 import com.mannschaft.app.social.announcement.dto.AnnouncementFeedItemDto;
@@ -76,6 +77,7 @@ public class AnnouncementFeedOrgController {
 
     private final AnnouncementFeedService announcementFeedService;
     private final AnnouncementReadCommandService announcementReadCommandService;
+    private final AnnouncementScopedFeedVisibilityGuard visibilityGuard;
     private final OrgAnnouncementFeedQueryService orgAnnouncementFeedQueryService;
     private final RoleResolver roleResolver;
     private final AccessControlService accessControlService;
@@ -184,6 +186,8 @@ public class AnnouncementFeedOrgController {
             @PathVariable("id") Long announcementId) {
 
         Long userId = SecurityUtils.getCurrentUserId();
+        // 不在・越境・不可視は同一の 404（存在オラクル封じ）。Service の @Transactional の外で判定する
+        visibilityGuard.requireVisible(AnnouncementScopeType.ORGANIZATION, orgId, announcementId, userId);
         announcementFeedService.deleteAnnouncement(announcementId, userId);
         return ResponseEntity.noContent().build();
     }
@@ -215,6 +219,8 @@ public class AnnouncementFeedOrgController {
             @RequestBody(required = false) PinAnnouncementRequestDto request) {
 
         Long userId = SecurityUtils.getCurrentUserId();
+        // 不在・越境・不可視は同一の 404（存在オラクル封じ）。Service の @Transactional の外で判定する
+        visibilityGuard.requireVisible(AnnouncementScopeType.ORGANIZATION, orgId, announcementId, userId);
         var entity = announcementFeedService.togglePin(announcementId, userId);
 
         var item = new AnnouncementFeedService.AnnouncementFeedItem(entity, false);

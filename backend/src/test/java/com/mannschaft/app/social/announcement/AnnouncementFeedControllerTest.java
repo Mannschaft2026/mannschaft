@@ -75,6 +75,10 @@ class AnnouncementFeedControllerTest {
     @MockitoBean
     private AnnouncementReadCommandService announcementReadCommandService;
 
+    // 削除・ピン留めの入口 Guard（CMP-261103-0822。帰属・閲覧資格の判定は IT で検証する）
+    @MockitoBean
+    private AnnouncementScopedFeedVisibilityGuard visibilityGuard;
+
     // JwtAuthenticationFilter の依存解決用
     @MockitoBean
     private AuthTokenService authTokenService;

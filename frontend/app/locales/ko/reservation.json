@@ -729,6 +729,7 @@
     "group": {
       "title": "한번에 예약",
       "slot_count": "30분×{n}슬롯",
+      "slot_count_total": "30분×{n}슬롯 (총 {total}분)",
       "time_range": "예약 시간대",
       "auto_selected": "{menu}에 필요한 {n}개 시간대를 자동으로 선택했습니다",
       "extend": "시간대 연장",

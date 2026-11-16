@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { ChatChannelResponse } from '~/types/chat'
+import { useChatCreatedChannel } from '~/composables/chat/useChatCreatedChannel'
+import { useChatOpenCreatedChannel } from '~/composables/chat/useChatOpenCreatedChannel'
 
 definePageMeta({
   middleware: 'auth',
@@ -11,7 +13,11 @@ const { isAdmin, isAdminOrDeputy, loadPermissions } = useRoleAccess('organizatio
 
 const selectedChannel = ref<ChatChannelResponse | null>(null)
 const showCreateDialog = ref(false)
-const listRef = ref<{ refresh: () => void; refreshAndSelect: (id: number) => void } | null>(null)
+const listRef = ref<{
+  refresh: () => Promise<void>
+  refreshAndSelect: (id: number) => void
+  selectIfPresent: (channelId: number) => boolean
+} | null>(null)
 
 function onSelectChannel(ch: ChatChannelResponse) {
   selectedChannel.value = ch
@@ -21,9 +27,21 @@ function onCreated() {
   listRef.value?.refresh()
 }
 
+/** 作成ダイアログが開始した DM・作成した Zimmer を右ペインに開く（CMP-261105-1507） */
+const { openCreatedChannel } = useChatOpenCreatedChannel(listRef, (ch) => {
+  selectedChannel.value = ch
+})
+
+const { resolveCreatedChannel } = useChatCreatedChannel()
+
+/**
+ * 作成系の応答（viewer を持たない）をそのまま表示中にせず、詳細 API で取り直してから表示する
+ * （作成者が OWNER として操作できるように。CMP-261105-1507）。取り直しの失敗は通知される。
+ */
 async function onChannelCreated(ch: ChatChannelResponse) {
   await listRef.value?.refreshAndSelect(ch.id)
-  selectedChannel.value = ch
+  const detail = await resolveCreatedChannel(ch)
+  if (detail) selectedChannel.value = detail
 }
 
 onMounted(() => loadPermissions())
@@ -62,6 +80,8 @@ onMounted(() => loadPermissions())
       v-model:visible="showCreateDialog"
       :organization-id="orgSlug"
       @created="onCreated"
+      @open-dm="openCreatedChannel"
+      @open-channel="openCreatedChannel"
     />
   </div>
 </template>
