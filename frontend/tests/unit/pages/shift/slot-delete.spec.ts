@@ -9,7 +9,7 @@ const getSchedule = vi.fn()
 const listSlots = vi.fn()
 const listPositions = vi.fn()
 const deleteSlot = vi.fn()
-const listShiftRequests = vi.fn()
+const listRequests = vi.fn()
 const notifySuccess = vi.fn()
 const handleApiError = vi.fn()
 let role = 'ADMIN'
@@ -24,7 +24,7 @@ mockNuxtImport('useRoute', () => () => ({ params: { id: '91' } }))
 mockNuxtImport('useTeamStore', () => () => teamStore)
 mockNuxtImport('useShiftApi', () => () => ({ getSchedule }))
 mockNuxtImport('useShiftSlotApi', () => () => ({ listSlots, deleteSlot, bulkCreateSlots: vi.fn() }))
-mockNuxtImport('useShiftRequestApi', () => () => ({ listShiftRequests }))
+mockNuxtImport('useShiftRequestApi', () => () => ({ listRequests }))
 mockNuxtImport('useShiftPositionApi', () => () => ({ listPositions }))
 mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError }))
@@ -61,7 +61,7 @@ beforeEach(() => {
   listSlots.mockResolvedValue([slot])
   listPositions.mockResolvedValue([])
   deleteSlot.mockReset().mockResolvedValue(undefined)
-  listShiftRequests.mockReset().mockResolvedValue([])
+  listRequests.mockReset().mockResolvedValue([])
 })
 
 describe('シフト枠削除 — 警告と明示確認（CMP-260909-2153）', () => {
@@ -149,12 +149,12 @@ async function openConfirm() {
 describe('シフト枠削除 — 確認文言の件数表示', () => {
   it('希望0・割当0: 件数にも元に戻せない旨にも触れない', async () => {
     await openConfirm()
-    expect(listShiftRequests).toHaveBeenCalledWith(91)
+    expect(listRequests).toHaveBeenCalledWith(91)
     expect(confirmation?.message).toBe('Delete this slot?')
   })
 
   it('希望のみ: 対象枠(slotId一致)の希望だけ数え、他枠・日単位(slotId=null)は数えない', async () => {
-    listShiftRequests.mockResolvedValue([req(1, 301), req(2, 301), req(3, 999), req(4, null)])
+    listRequests.mockResolvedValue([req(1, 301), req(2, 301), req(3, 999), req(4, null)])
     await openConfirm()
     expect(confirmation?.message).toContain('2 request(s)')
     expect(confirmation?.message).not.toContain('assignment')
@@ -162,7 +162,7 @@ describe('シフト枠削除 — 確認文言の件数表示', () => {
   })
 
   it('日単位希望(slotId=null)だけなら希望0件扱いで素の文言', async () => {
-    listShiftRequests.mockResolvedValue([req(4, null)])
+    listRequests.mockResolvedValue([req(4, null)])
     await openConfirm()
     expect(confirmation?.message).toBe('Delete this slot?')
   })
@@ -176,7 +176,7 @@ describe('シフト枠削除 — 確認文言の件数表示', () => {
   })
 
   it('希望と割当の両方: 両件数を添える', async () => {
-    listShiftRequests.mockResolvedValue([req(1, 301)])
+    listRequests.mockResolvedValue([req(1, 301)])
     listSlots.mockResolvedValue([{ ...slot, assignedUserIds: [5, 6] }])
     await openConfirm()
     expect(confirmation?.message).toContain('1 request(s)')
@@ -191,7 +191,7 @@ describe('シフト枠削除 — 確認文言の件数表示', () => {
 
   it('希望一覧の取得に失敗したら件数なしの安全側文言で続行し、エラーを通知して削除は可能', async () => {
     const error = new Error('取得失敗')
-    listShiftRequests.mockRejectedValue(error)
+    listRequests.mockRejectedValue(error)
     await openConfirm()
     expect(handleApiError).toHaveBeenCalledWith(error)
     expect(confirmation?.message).toContain('Any requests submitted for it')
@@ -202,16 +202,16 @@ describe('シフト枠削除 — 確認文言の件数表示', () => {
 
   it('ダイアログを開くたびに希望一覧を取り直し、古い件数を出さない', async () => {
     const wrapper = await openConfirm()
-    listShiftRequests.mockResolvedValue([req(1, 301)])
+    listRequests.mockResolvedValue([req(1, 301)])
     await wrapper.findAllComponents(Button).find(button => button.props('icon') === 'pi pi-trash')!.trigger('click')
     await flushPromises()
-    expect(listShiftRequests).toHaveBeenCalledTimes(2)
+    expect(listRequests).toHaveBeenCalledTimes(2)
     expect(confirmation?.message).toContain('1 request(s)')
   })
 
   it('MEMBERは希望一覧も取得しない', async () => {
     role = 'MEMBER'
     await mountPage()
-    expect(listShiftRequests).not.toHaveBeenCalled()
+    expect(listRequests).not.toHaveBeenCalled()
   })
 })
