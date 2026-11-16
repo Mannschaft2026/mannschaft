@@ -109,7 +109,7 @@ M側も同じbindingに属する未完了publicationが0件であることを確
 
 保持削除は `ModuleEventResumeAuditRetentionBatch.deleteExpiredAudits()` を毎日03:00 UTCに起動する設計とする。管理起動名は `module-event-resume-audit-retention-daily` で、定期起動と同じBean proxy・ShedLock名 `moduleEventResumeAuditRetentionBatch` を通す。瞬時TTLではなく日次整理であり、対象が期限を超えた瞬間の削除は保証しない。機能停止中も保持責務を継続するため `@BackgroundFeaturePolicy(mode=ALWAYS)` とし、対象監査が0件でも正常終了する。
 
-入口は無引数・`Integer`件数を返し、`LockAssert` と `Transactional.NEVER` の境界から既存M privacy APIの `deleteExpired(Instant.now())`（独立primary REQUIRES_NEW・readOnly=false）へ一度だけ委譲する。成功件数をINFOへ記録し、件数とSUCCESS/FAILEDは既存 `BatchExecutionAspect` の履歴へ載せる。DB・ログの失敗を0件成功へ置き換えず例外を伝播する。削除は既存のUTC暦年2年より厳密に古い行への単一JPQL DELETEを維持し、同TXのtimeoutを300秒とする。V257.20261105164744のactor/created_atとcreated_at先頭索引も維持する。
+入口は無引数・`Integer`件数を返し、`LockAssert` と `Transactional.NEVER` の境界から既存M privacy APIの `deleteExpired(Instant.now())`（独立primary REQUIRES_NEW・readOnly=false）へ一度だけ委譲する。成功件数をINFOへ記録し、件数とSUCCESS/FAILEDは既存 `BatchExecutionAspect` の履歴へ載せる。DB・ログの失敗を0件成功へ置き換えず例外を伝播する。削除は既存のUTC暦年2年より厳密に古い行への単一JPQL DELETEを維持し、同TXのtimeoutを300秒とする。V260.20261116040405のactor/created_atとcreated_at先頭索引も維持する。
 
 `lockAtLeastFor=PT1M / lockAtMostFor=PT30M` を採用する。30分は300秒のquery予算、本番Hikari設定の接続取得3秒、取消・rollback/commit・解放に1497秒の保守的余裕を置いた推定である。余裕は実測最大値ではなく、query取消通信やDB障害を含めたhard deadlineを保証しない。最大backlog容量・正常DELETE所要・短TXでの取消経路は未測定である。timeoutが継続する場合は期限超過行数、索引利用、DB負荷と行ロック競合を確認し、容量と競合およびlease見積もりを再評価する。
 

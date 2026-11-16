@@ -704,7 +704,7 @@ class FlywayFromScratchMigrationTest {
         }
     }
 
-    /** M01 の列契約。期待値は V254 の採用済み定義と DB 設計原則8に対応する。 */
+    /** M01 の列契約。期待値は V260（L1-M 新設 migration）の採用済み定義と DB 設計原則8に対応する。 */
     private static void assertModuleEventColumn(Connection conn, String table, String column,
             String dataType, String columnType, Integer length, boolean nullable) throws SQLException {
         try (var statement = conn.prepareStatement("SELECT DATA_TYPE, COLUMN_TYPE, CHARACTER_MAXIMUM_LENGTH, "
