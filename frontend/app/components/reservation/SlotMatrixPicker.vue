@@ -57,7 +57,7 @@ const emit = defineEmits<{
   waitlistChanged: []
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const reservationApi = useReservationApi()
 const teamTimezone = computed(() => props.teamTimezone ?? 'Asia/Tokyo')
 /** 静かなエラー記録（トーストは出さずバックエンドへ送信。WidgetAttendanceResults.vue 等と同一パターン）。 */
@@ -124,7 +124,10 @@ function columnLabel(col: GridColumnDto): string {
 }
 
 function dayLabel(date: string): string {
-  return date ? dayjs.tz(date, teamTimezone.value).format('YYYY/MM/DD (ddd)') : ''
+  if (!date) return ''
+  // 曜日は dayjs の既定ロケール(ja)ではなく UI 言語で整形する（暦日そのものなので UTC 固定で日ずれしない）
+  const weekday = new Intl.DateTimeFormat(locale.value, { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))
+  return `${dayjs.tz(date, teamTimezone.value).format('YYYY/MM/DD')} (${weekday})`
 }
 
 const allCells = computed<MatrixCellInput[]>(() => {
@@ -387,10 +390,12 @@ function cellLabel(row: MatrixRowVM, headerIndex: number): string {
 /**
  * BOOKED セルの aria-label に「押すと何が起きるか」を追記する（検分是正・W2-4-FE）。
  * 押せない（slotId 不明）セルにはヒントを付けない。
+ * 本人が予約済みのセルは押せない（isCellDisabled）ためヒントを付けない。cellLabel が「予約済み」を伝える（R1 / CMP-260824-2217）。
  */
 function waitlistAriaHint(row: MatrixRowVM, headerIndex: number): string {
   const slot = row.aligned[headerIndex]
   if (!slot || slot.kind !== 'cell' || slot.cell.state !== 'BOOKED' || slot.cell.slotId == null) return ''
+  if (slot.cell.reservedByCurrentUser) return ''
   return myWaitlistSlotIds.value.has(slot.cell.slotId)
     ? t('reservation.waitlist.aria_hint_cancel')
     : t('reservation.waitlist.aria_hint_register')
@@ -723,11 +728,11 @@ defineExpose({
           class="w-full"
         />
       </div>
-      <div class="flex items-end justify-start gap-2 md:justify-end">
+      <div class="flex flex-wrap items-end justify-start gap-2 md:justify-end">
         <Button icon="pi pi-angle-left" text rounded @click="prevWeek" />
         <Button :label="t('reservation.grid.view.week') + ' ' + weekRangeLabel()" text size="small" @click="thisWeek" />
         <Button icon="pi pi-angle-right" text rounded @click="nextWeek" />
-        <Button data-testid="matrix-toggle-all" :label="allDatesOpen ? t('reservation.matrix.close_all') : t('reservation.matrix.open_all')" text size="small" @click="toggleAllDates" />
+        <Button data-testid="matrix-toggle-all" class="min-h-11 shrink-0 whitespace-nowrap" :label="allDatesOpen ? t('reservation.matrix.close_all') : t('reservation.matrix.open_all')" text size="small" @click="toggleAllDates" />
       </div>
     </div>
 

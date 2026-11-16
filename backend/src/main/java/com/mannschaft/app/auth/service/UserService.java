@@ -56,6 +56,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * ユーザー管理サービス。プロフィール操作・パスワード変更・メール変更・退会を担当する。
@@ -157,6 +158,35 @@ public class UserService {
     public java.util.Optional<String> getFullName(Long userId) {
         return userRepository.findById(userId)
                 .map(u -> u.getLastName() + " " + u.getFirstName());
+    }
+
+    /** {@link #getFullNamesAndEmails} の戻り値。他ドメインへ {@link UserEntity} を漏らさない最小値（D-1）。 */
+    public record FullNameAndEmail(String fullName, String email) {
+    }
+
+    /**
+     * 氏名（姓 + " " + 名）とメールアドレスを一括取得する（N+1 防止。{@code findAllById} 1回）。
+     *
+     * <p>見つからないユーザー（退会者は {@code @SQLRestriction} で取得できない）は結果の Map に含めない。
+     * 呼び出し側で空文字などに置き換えること。</p>
+     *
+     * @param userIds ユーザーID集合（null・重複は無視）
+     * @return userId をキーとする氏名・メール
+     */
+    public Map<Long, FullNameAndEmail> getFullNamesAndEmails(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = userIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, FullNameAndEmail> result = new LinkedHashMap<>();
+        for (UserEntity user : userRepository.findAllById(ids)) {
+            result.put(user.getId(), new FullNameAndEmail(
+                    user.getLastName() + " " + user.getFirstName(), user.getEmail()));
+        }
+        return result;
     }
 
     /**
@@ -528,6 +558,7 @@ public class UserService {
      * @param req    メールアドレス変更リクエスト
      * @return メッセージレスポンス
      */
+    @PlaintextTokenDebt(cmp = "CMP-261103-2059") // ハッシュ保存済みだが乱数源が UUID で金庫（SecretTokenVault）未使用。金庫への統合が債務
     @Transactional
     public ApiResponse<MessageResponse> requestEmailChange(Long userId, RequestEmailChangeRequest req) {
         // 1. レートリミット

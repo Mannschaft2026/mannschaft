@@ -43,14 +43,17 @@ export function parseTaskList(markdown) {
     if (!/^CMP-(?:\d{6}-\d{4}|\d{3})$/.test(id ?? '')) continue;
     if (cells.length !== 7) throw new Error(`${id} の台帳行は7列ではありません（${lineNumber + 1}行目: ${cells.length}列）`);
     if (byId.has(id)) throw new Error(`docs/task-list.md に ${id} の重複があります`);
-    const row = { id, cells, state: cells[2].replaceAll('**', '').trim(), evidence: cells[5], lineNumber };
+    // 状態セル先頭の優先度 P1〜P5（CMP-261106-0049）は state から分離して priority へ持つ（`**P1 保留**` 形も `**` 除去後に処理）。
+    const rawState = cells[2].replaceAll('**', '').trim();
+    const priorityMatch = /^(P[1-5])\s+/.exec(rawState);
+    const row = { id, cells, state: priorityMatch ? rawState.slice(priorityMatch[0].length) : rawState, priority: priorityMatch ? priorityMatch[1] : null, evidence: cells[5], lineNumber };
     byId.set(id, row);
     rows.push(row);
   }
   return { rows, byId };
 }
 
-function isComplete(state) {
+export function isComplete(state) {
   return /^完了(?:$|[\s（(])/.test(state);
 }
 
@@ -151,15 +154,28 @@ export function summarizeImplementationChecks({ checkRuns, statuses, mergedAt } 
   return summary;
 }
 
+/** 行の位置を除いた内容が祖先と同一で、参照JSONにもPR差分が無い場合だけmain側の前進と認める。 */
+function unchangedFromAncestor(id, baseRow, headRow, ancestor, changed) {
+  if (!ancestor) return false;
+  const ancestorRow = ancestor.byId.get(id);
+  const sameRow = !headRow && !ancestorRow
+    || headRow && ancestorRow && headRow.cells.every((cell, index) => cell === ancestorRow.cells[index]);
+  if (!sameRow) return false;
+  const links = [baseRow, ancestorRow].filter(Boolean).map(row => evidenceJsonLink(row.evidence, id));
+  return !links.some(link => link && changed.has(link));
+}
+
 /** 完了遷移または変更された完了証拠だけを返す。未変更の過去証拠はAPI取得対象にしない。 */
-export function selectEvidencePaths(baseText, headText, changedEvidencePaths = []) {
+export function selectEvidencePaths(baseText, headText, changedEvidencePaths = [], options = {}) {
   const base = parseTaskList(baseText);
   const head = parseTaskList(headText);
+  const ancestor = options.ancestorTaskList === undefined ? null : parseTaskList(options.ancestorTaskList);
   const changed = changedEvidencePaths instanceof Set ? changedEvidencePaths : new Set(changedEvidencePaths);
   const candidates = new Set();
   for (const [id, oldRow] of base.byId) {
     if (!isComplete(oldRow.state)) continue;
     const newRow = head.byId.get(id);
+    if (unchangedFromAncestor(id, oldRow, newRow, ancestor, changed)) continue;
     if (!newRow) throw new Error(`${id}: 過去完了行・証拠を削除できません`);
     const oldLink = evidenceJsonLink(oldRow.evidence, id);
     const newLink = evidenceJsonLink(newRow.evidence, id);
@@ -170,9 +186,9 @@ export function selectEvidencePaths(baseText, headText, changedEvidencePaths = [
   }
   for (const [id, newRow] of head.byId) {
     if (!isComplete(newRow.state)) continue;
-    const oldRow = base.byId.get(id);
-    if (!oldRow || !isComplete(oldRow.state)) {
-      const link = evidenceJsonLink(newRow.evidence, id);
+    const oldRow = (ancestor ?? base).byId.get(id);
+    const link = evidenceJsonLink(newRow.evidence, id);
+    if (!oldRow || !isComplete(oldRow.state) || link && !evidenceJsonLink(oldRow.evidence, id)) {
       if (link) candidates.add(link);
     }
   }
@@ -283,6 +299,8 @@ export function validateEvidence(evidence, cmpId, options = {}) {
 export function validateCompletionChanges(baseText, headText, evidenceByPath = {}, options = {}) {
   const base = parseTaskList(baseText);
   const head = parseTaskList(headText);
+  const ancestor = options.ancestorTaskList === undefined ? null : parseTaskList(options.ancestorTaskList);
+  const changed = new Set([...(options.evidenceChanged ?? []), ...(options.evidenceDeleted ?? [])]);
   const validateRowEvidence = (id, row) => {
     const evidencePath = evidenceJsonLink(row.evidence, id);
     if (!evidencePath) throw new Error(`${id}: 完了行に証拠JSONリンクが必要です`);
@@ -292,6 +310,7 @@ export function validateCompletionChanges(baseText, headText, evidenceByPath = {
   for (const [id, oldRow] of base.byId) {
     if (!isComplete(oldRow.state)) continue;
     const newRow = head.byId.get(id);
+    if (unchangedFromAncestor(id, oldRow, newRow, ancestor, changed)) continue;
     if (!newRow) throw new Error(`${id}: 過去完了行・証拠を削除できません`);
     const oldLink = evidenceJsonLink(oldRow.evidence, id);
     const newLink = evidenceJsonLink(newRow.evidence, id);
@@ -303,9 +322,9 @@ export function validateCompletionChanges(baseText, headText, evidenceByPath = {
   }
   for (const [id, newRow] of head.byId) {
     if (!isComplete(newRow.state)) continue;
-    const oldRow = base.byId.get(id);
-    const becameComplete = !oldRow || !isComplete(oldRow.state);
+    const oldRow = (ancestor ?? base).byId.get(id);
     const link = evidenceJsonLink(newRow.evidence, id);
+    const becameComplete = !oldRow || !isComplete(oldRow.state) || link && !evidenceJsonLink(oldRow.evidence, id);
     const jsonChanged = link && options.evidenceChanged?.has(link);
     if (becameComplete || jsonChanged) validateRowEvidence(id, newRow);
   }

@@ -23,7 +23,7 @@ mockNuxtImport('navigateTo', () => (...args: unknown[]) => mockNavigate(...args)
 
 function makeTeam(overrides: Partial<OrgTeam> = {}): OrgTeam {
   return {
-    id: 12345,
+    id: '12345',
     slug: 'tokyo-fc',
     name: '東京FC',
     nickname1: null,
@@ -40,7 +40,7 @@ describe('OrgTeamGrid.vue（slug リンク回帰）', () => {
   })
 
   it('OTG-001: カードクリックで slug ベースの URL へ遷移する（BIGINT id を URL に使わない）', async () => {
-    const team = makeTeam({ id: 99999, slug: 'osaka-united' })
+    const team = makeTeam({ id: '99999', slug: 'osaka-united' })
     const wrapper = await mountSuspended(OrgTeamGrid, {
       props: { teams: [team] },
     })

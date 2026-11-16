@@ -876,7 +876,6 @@ for (const width of [360, 390, 1280]) {
           const panel = page.locator('.p-popover:visible').filter({ has: hub })
           await expect(panel).toHaveCount(1)
           const jump = panel.getByTestId(`scope-nav-dropdown-scope-${scope.id}`)
-          await expect(jump).toHaveCount(1)
           await expect(jump).toBeVisible()
           return { panel, hub, jump }
         }
@@ -885,35 +884,58 @@ for (const width of [360, 390, 1280]) {
         await expect(all).toHaveCount(1)
         await expect(all.locator('span')).toHaveText('すべて（一覧）')
         await expect(all).toBeVisible()
-        // 非同期評価をまたぐ位置変動を混ぜず、同じDOM/frameの矩形を比較する。
-        // 製品退行が無い証明ではなく、測定競合候補だけを除く（判定閾値は維持）。
-        const geometry = await menu.panel.evaluate(async (panel, { allElement, jumpElement }) => {
-          await document.fonts.ready
-          if (!(allElement instanceof HTMLElement) || !(jumpElement instanceof HTMLElement)
-            || !panel.isConnected || !allElement.isConnected || !jumpElement.isConnected
-            || allElement.closest('.p-popover') !== panel || jumpElement.closest('.p-popover') !== panel) {
-            throw new Error('NAV_GEOMETRY_DOM_CHANGED')
+        await page.evaluate(() => document.fonts.ready.then(() => true))
+        await expect(menu.panel).not.toHaveClass(/\bp-anchored-overlay-enter-active\b/)
+        const labelElement = await all.locator('span').elementHandle()
+        const allElement = await all.elementHandle()
+        const jumpElement = await menu.jump.elementHandle()
+        const panelElement = await menu.panel.elementHandle()
+        if (!labelElement || !allElement || !jumpElement || !panelElement) throw new Error('ナビ計測対象がありません')
+        const elements = { label: labelElement, all: allElement, jump: jumpElement, panel: panelElement }
+        // 合否の幾何条件をpollせず、実animation終了と連続2描画frameの矩形一致だけを待つ。
+        await page.evaluate(async ({ label, all: allItem, jump, panel }) => {
+          let previous = ''
+          let stableFrames = 0
+          while (stableFrames < 2) {
+            await new Promise<number>(resolve => requestAnimationFrame(resolve))
+            const moving = panel.getAnimations({ subtree: true }).some(animation =>
+              Number.isFinite(animation.effect?.getComputedTiming().endTime) &&
+              (animation.pending || (animation.playState !== 'finished' && animation.playState !== 'idle')),
+            )
+            const current = JSON.stringify([panel, label, allItem.parentElement!.parentElement!, jump.parentElement!].map(element => {
+              const { x, y, width, height } = element.getBoundingClientRect()
+              return { x, y, width, height }
+            }))
+            stableFrames = moving ? 0 : current === previous ? stableFrames + 1 : 1
+            previous = current
           }
-          const text = allElement.querySelector('span')
-          const folderPane = allElement.parentElement?.parentElement
-          const jumpPane = jumpElement.parentElement
-          if (!text || !folderPane || !jumpPane) throw new Error('NAV_GEOMETRY_TARGET_MISSING')
-          const before = performance.now()
+        }, elements)
+        // Range・両列・documentは同じ同期evaluateで取得し、frame間の混在を避ける。
+        const { lines, foldersBox, jumpBox, documentSize, measurement } = await page.evaluate(({ label, all: allItem, jump, panel }) => {
+          const folders = allItem.parentElement!.parentElement!
+          const jumpColumn = jump.parentElement!
           const range = document.createRange()
-          range.selectNodeContents(text)
+          range.selectNodeContents(label)
           const lines = [...range.getClientRects()].map(rect => ({ top: rect.top, left: rect.left, right: rect.right }))
-          const folders = folderPane.getBoundingClientRect()
-          const jump = jumpPane.getBoundingClientRect()
-          const documentSize = { width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth }
+          const folderRect = folders.getBoundingClientRect()
+          const jumpRect = jumpColumn.getBoundingClientRect()
+          const foldersBox = { x: folderRect.x, y: folderRect.y, width: folderRect.width, height: folderRect.height }
+          const jumpBox = { x: jumpRect.x, y: jumpRect.y, width: jumpRect.width, height: jumpRect.height }
+          const style = getComputedStyle(panel)
+          const finiteAnimations = panel.getAnimations({ subtree: true })
+            .filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+            .map(animation => ({ playState: animation.playState, pending: animation.pending, endTime: animation.effect?.getComputedTiming().endTime }))
           return {
-            lines,
-            foldersBox: { x: folders.x, y: folders.y, width: folders.width, height: folders.height },
-            jumpBox: { x: jump.x, y: jump.y, width: jump.width, height: jump.height },
-            documentSize, fontsStatus: document.fonts.status, before, after: performance.now(),
+            lines, foldersBox, jumpBox,
+            documentSize: { width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth },
+            measurement: {
+              gapY: jumpBox.y - (foldersBox.y + foldersBox.height),
+              directSiblings: folders.parentElement === jumpColumn.parentElement && folders.nextElementSibling === jumpColumn,
+              popoverTransform: style.transform, popoverTransformOrigin: style.transformOrigin, finiteAnimations,
+            },
           }
-        }, { allElement: await all.elementHandle(), jumpElement: await menu.jump.elementHandle() })
-        const { lines, foldersBox, jumpBox, documentSize } = geometry
-        await testInfo.attach('scope-navigation-geometry', { body: JSON.stringify({ width, scopeType, ...geometry }), contentType: 'application/json' })
+        }, elements)
+        await testInfo.attach('scope-navigation-geometry', { body: JSON.stringify({ width, scopeType, lines, foldersBox, jumpBox, documentSize, measurement }), contentType: 'application/json' })
         expect(lines, 'ALL_LIST_TEXT_HORIZONTAL: 一覧の文字が複数行に縦折返ししている').toHaveLength(1)
         if (mobile) {
           expect(jumpBox.y).toBeGreaterThanOrEqual(foldersBox.y + foldersBox.height - 1)
