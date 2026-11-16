@@ -195,7 +195,7 @@ describe('シフト枠削除 — 確認文言の件数表示', () => {
     await openConfirm()
     expect(handleApiError).toHaveBeenCalledWith(error)
     expect(confirmation?.message).toContain('Any requests submitted for it')
-    expect(confirmation?.message).not.toMatch(/d/)
+    expect(confirmation?.message).not.toMatch(/\d/)
     await confirmation!.accept()
     expect(deleteSlot).toHaveBeenCalledExactlyOnceWith(301)
   })
