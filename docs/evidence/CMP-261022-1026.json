@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261022-1026",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4054,
+    "sha": "93855f032a343157506f22eaca87a70869987fe1"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC1",
+      "description": "全141レーンと113L2の一意配賦",
+      "tests": [
+        {
+          "name": "AC1: 正本113ロットを38/38/37へ一度ずつ配賦し全細分レーンを含む",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "description": "同base競合の排他と別領地再試行",
+      "tests": [
+        {
+          "name": "AC2: 同じ領地の同時claimは一方だけ成功し異なるUUIDを混ぜない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC2: 別領地の同時claimは最新stateへ再適用して両方残す",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "description": "既存lane hold3件の保護",
+      "tests": [
+        {
+          "name": "AC3: 既存担当3件は領地claim・解放でも保持する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "description": "UUID所有・引継ぎ・旧owner拒否",
+      "tests": [
+        {
+          "name": "AC4: 非owner・owner空・同UUID複数領地・TTL相当の無断引取を拒否",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC4: 明示handoff後は旧ownerを拒否し新ownerのみ再開できる",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC4: 既存lane移管には保持者名・解放証拠・停止確認・取得UUIDの一致が必要",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "description": "送信失敗・応答喪失・致命Git障害・4回停止",
+      "tests": [
+        {
+          "name": "AC5/性能: 実Git競合が続いてもCAS再試行は4回で停止する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC5: push成功後の応答喪失は実remote読戻しでcommit到達を確認する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC5: push前障害は成功扱いせずremote状態を変えない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC5: 読戻し祖先照合の致命Gitエラーは競合扱いで再試行しない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC6",
+      "description": "schema/manifest/未知/空/必須resource/owner不正の安全停止",
+      "tests": [
+        {
+          "name": "AC6: 未知laneと空証拠gateを拒否する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC6: 壊れたstate・manifest不一致・欠落・未知レーンを空台帳へ丸めない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC6: 初期化を繰り返して保持・履歴を上書きしない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC6: workingの必須resourceが欠けたstateを拒否する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC6: resourceがないworkingでも領地ownerが必要",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC7",
+      "description": "入口・共有予約・L2並行・常設・L5排他・Gradle撤退互換",
+      "tests": [
+        {
+          "name": "AC7: 未解消依存ではworking・done拒否、読取準備は区別する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 波gateは自ロットのみ、後続波未確定でも着手できる",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 他領地gateの無断解除と証拠なし完了を拒否する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 共有build予約は保持中断でも維持し明示解放後だけ別レーンへ渡る",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: L2別領地は並行working可能、共有verify編集だけを明示予約する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 締めの重み表とL3統合の重み表を同時予約できない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: L5-PRE greenだけでは終結できず他working中もL5-Iを拒否する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 終結開始後も逆向きの別レーンworkingを拒否する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 常設L3-Iと締めは完了後に再開でき各回証拠を保持する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: aggregate束はplanningと出口doneだけで未確定workingを許さない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 親終結後は常設レーン再開と新claimを拒否する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC7: 通常の束未完了は拒否し裁可済みGradle撤退だけ終結依存を読み替える",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC8",
+      "description": "依頼noteと解放/引渡し証拠の追記保持",
+      "tests": [
+        {
+          "name": "AC8: 未解決依頼のnoteは次の進捗で上書きせず追記する",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC9",
+      "description": "実CLI入口・main不一致init拒否・dirty資産保全",
+      "tests": [
+        {
+          "name": "AC9: manifestまたはCLIがorigin/main不一致ならinitせず未初期化を保つ",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC9: dirty作業木・index・HEAD・調整追跡以外の全refを変更しない",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        },
+        {
+          "name": "AC9: 実CLIが自動UUIDを発行しclaim/status/updateと引数拒否を行う",
+          "evidence": "scripts/boundary-coordination.test.mjs"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 39710406513
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261022-1026-coordination.md"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "製品UI/API/DBを変更しないtooling。実Git/実CLIと出荷後の実origin往復を検証済み。画面実機は適用外"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "画面の追加変更がなく、画面実機/画面探索は対象外"
+    }
+  },
+  "regressions": [],
+  "liveVerification": {
+    "status": "passed",
+    "observedAt": "2026-10-22T02:45:06.875Z",
+    "ref": "refs/heads/campaign/cmp-261021-0017-coordination",
+    "mainSha": "ef382d8f034e0d60e6fcc62c572b321bcb03c3d5",
+    "probeOwner": "0d390256-4a9e-424b-bccd-a0bbf9131115",
+    "initSha": "bb23a9a6b7c46ce8e48593f8e0387d1bce552578",
+    "claimSha": "26a07e923f9a017b450d4007555cfe405288de60",
+    "releaseSha": "62f37cda3e41a9064af42802ca9adc2c58bfade9",
+    "finalSha": "62f37cda3e41a9064af42802ca9adc2c58bfade9",
+    "holds": [
+      "L0-M",
+      "L1-A",
+      "L1-F"
+    ],
+    "allOwnersEmptyAtFinalSha": true,
+    "assetsUnchanged": true,
+    "note": "finalSha時点だけの観測。以後の他セッションのclaim/進捗を変更・解放・再初期化しない。永続coordination枝はcleanup対象外"
+  }
+}

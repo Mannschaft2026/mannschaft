@@ -123,6 +123,7 @@
       },
       "card": {
         "pending": "{scope} への招待が届いています",
+        "scopeDeleted": "削除されたチーム",
         "waiting": "相手の承諾待ち",
         "statusPending": "承諾待ち",
         "join": "参加する",
@@ -147,6 +148,79 @@
         "joinFailed": "参加に失敗しました",
         "declineFailed": "辞退に失敗しました"
       }
+    },
+    "channelList": {
+      "title": "チャット",
+      "newConversation": "新しい会話",
+      "addChannel": "チャンネル追加",
+      "dmSection": "Kabine(DM)",
+      "noDm": "DMはありません",
+      "roomSection": "Zimmer(部屋)",
+      "noRoom": "Zimmer(部屋)がありません",
+      "loadFailed": "Zimmer一覧の取得に失敗しました",
+      "detailLoadFailed": "チャンネル情報の取得に失敗しました"
+    },
+    "create": {
+      "typeDm": "Kabine(DM)",
+      "typeRoom": "Zimmer(部屋)",
+      "dmOpened": "Kabine(DM)を開きました",
+      "roomCreated": "Zimmer(部屋)を作成しました",
+      "conversationFailed": "会話の作成に失敗しました",
+      "roomCreateFailed": "Zimmer(部屋)の作成に失敗しました",
+      "header": "新しい会話を始める",
+      "tabContacts": "連絡先から選ぶ",
+      "tabCreateRoom": "Zimmer(部屋)を作成",
+      "searchByName": "名前で検索...",
+      "selectedSummary": "{count}人選択中 → {type}として開始されます",
+      "startAs": "{type}を開始",
+      "roomName": "Zimmer(部屋)名",
+      "roomNamePlaceholder": "例: general",
+      "descriptionOptional": "説明（任意）",
+      "descriptionPlaceholder": "Zimmer(部屋)の説明",
+      "privateRoom": "プライベートZimmer(部屋)（招待制）",
+      "inviteMembersOptional": "メンバーを招待（任意）",
+      "create": "作成"
+    },
+    "inviteZimmer": {
+      "header": "Zimmerに招待する",
+      "tooltip": "Zimmerに招待",
+      "failed": "招待に失敗しました",
+      "noMembers": "招待できるメンバーがいません",
+      "candidatesLoadFailed": "招待できるメンバーの一覧を取得できませんでした。時間をおいて再度お試しください。",
+      "shareQuestion": "既存のチャット内容を共有しますか？",
+      "share": "共有する",
+      "shareHint": "これまでのメッセージが新しいZimmerに引き継がれます",
+      "noShare": "共有しない",
+      "noShareHint": "新しいZimmerは空の状態で始まります",
+      "createZimmer": "Zimmerを作成"
+    },
+    "memberSelect": {
+      "notFound": "メンバーが見つかりません"
+    },
+    "activeThreadsEmpty": "進行中のスレッドはありません",
+    "tabAriaLabel": "{name} のタブ",
+    "unnamedChannel": "名称未設定のグループ",
+    "message": {
+      "deleted": "このメッセージは削除されました",
+      "unknownSender": "不明",
+      "edited": "(編集済み)",
+      "loadOlder": "過去のメッセージを読み込む",
+      "empty": "まだメッセージがありません",
+      "sendFailed": "メッセージの送信に失敗しました",
+      "inputPlaceholder": "メッセージを入力...",
+      "inputDisabled": "このZimmer(部屋)には投稿できません",
+      "loadFailed": "メッセージの取得に失敗しました",
+      "reactionFailed": "リアクションに失敗しました",
+      "pinned": "ピン留めしました",
+      "unpinned": "ピン解除しました",
+      "pinFailed": "ピン操作に失敗しました",
+      "deleteSuccess": "メッセージを削除しました",
+      "deleteFailed": "削除に失敗しました",
+      "bookmarkFailed": "ブックマークに失敗しました",
+      "markReadFailed": "既読にできませんでした",
+      "editHeader": "メッセージを編集",
+      "editSuccess": "メッセージを編集しました",
+      "editFailed": "編集に失敗しました"
     }
   },
   "button": {
@@ -333,7 +407,22 @@
     "period_all": "全コマ",
     "period_number_placeholder": "時限番号",
     "period_suffix": "限",
-    "term_name_placeholder": "例: 1学期"
+    "term_name_placeholder": "例: 1学期",
+    "term_academic_year_range": "年度は{min}〜{max}の範囲で入力してください",
+    "term_end_before_start": "終了日は開始日より後の日付にしてください",
+    "term_date_overlap": "学期の期間が他の学期と重なっています。開始日と終了日を見直してください",
+    "term_delete_confirm": "学期「{name}」を削除しますか？この操作は取り消せません。",
+    "term_delete_success": "学期を削除しました",
+    "term_load_error": "学期の読み込みに失敗しました",
+    "team_term_hint": "このチームの学期です。時間割を作るときは、ここで追加した学期から選びます。",
+    "no_term_for_create": "学期がまだありません。先に「学期」タブで学期を追加してください。",
+    "delete_timetable": "削除",
+    "delete_timetable_confirm": "時間割「{name}」を削除しますか？この操作は取り消せません。",
+    "delete_timetable_success": "時間割を削除しました",
+    "delete_timetable_error": "時間割の削除に失敗しました",
+    "create_error_out_of_term": "時間割の有効期間が学期の範囲外です。学期の開始日から終了日の間で指定してください",
+    "create_error_term_not_found": "選んだ学期が見つかりません。学期の一覧を開き直してください",
+    "effective_until_before_from": "適用終了日は適用開始日以降の日付にしてください"
   },
   "error": {
     "server": "サーバーエラーが発生しました",
@@ -1110,6 +1199,19 @@
     }
   },
   "project": {
+    "back_label": "プロジェクト一覧",
+    "delete_aria": "{title}を削除",
+    "delete_confirm": "「{title}」を削除しますか？",
+    "delete_confirm_header": "削除の確認",
+    "milestone_dialog": {
+      "add_title": "マイルストーン追加",
+      "edit_title": "マイルストーン編集",
+      "title_label": "タイトル",
+      "title_placeholder": "マイルストーン名",
+      "title_required": "タイトルを入力してください",
+      "due_date_label": "期限",
+      "add": "追加"
+    },
     "related_todo_no_due": "期限なし",
     "related_todo_no_assignee": "担当者なし",
     "related_todo_open": "TODO詳細を開く",
@@ -1170,7 +1272,19 @@
       "none": "なし",
       "custom_emoji": "カスタム",
       "custom_color": "カスタムカラー",
-      "current": "現在の値"
+      "current": "現在の値",
+      "colors": {
+        "blue": "ブルー",
+        "red": "レッド",
+        "green": "グリーン",
+        "amber": "アンバー",
+        "violet": "バイオレット",
+        "pink": "ピンク",
+        "cyan": "シアン",
+        "teal": "ティール",
+        "orange": "オレンジ",
+        "gray": "グレー"
+      }
     },
     "guide": {
       "button": "使い方",
@@ -1222,7 +1336,10 @@
       "update_failed": "更新に失敗しました",
       "delete_failed": "削除に失敗しました",
       "status_change_failed": "ステータスの変更に失敗しました",
-      "milestone_save_failed": "マイルストーンの保存に失敗しました"
+      "milestone_save_failed": "マイルストーンの保存に失敗しました",
+      "force_unlock_failed": "強制アンロックに失敗しました",
+      "completion_mode_failed": "完了モードの変更に失敗しました",
+      "gate_init_failed": "ゲートの初期化に失敗しました"
     },
     "status": {
       "active": "進行中",
@@ -2971,7 +3088,11 @@
     "justNow": "たった今",
     "minutesAgo": "{count}分前",
     "hoursAgo": "{count}時間前",
-    "daysAgo": "{count}日前"
+    "daysAgo": "{count}日前",
+    "soon": "まもなく",
+    "inMinutes": "あと{count}分",
+    "inHours": "あと{count}時間",
+    "inDays": "あと{count}日"
   },
   "error_page": {
     "not_found_title": "このページは見つかりませんでした",
@@ -3222,7 +3343,7 @@
       "not_shown_hint": "セキュリティのため、発行済みのリンクは再表示されません。必要な場合は再発行してください。",
       "revoked_by_migration": "セキュリティ強化のため失効しました",
       "reissue": "再発行",
-      "reissue_hint": "再発行すると新しいリンクが作られ、古いリンクは使えなくなります。",
+      "links_hint": "リンクを失くした場合は新規作成で再発行してください。不要になった古いリンクは × で無効にしてください。",
       "label_with_id": "リンク #{id}",
       "created_at": "発行日時",
       "expires_at": "有効期限",

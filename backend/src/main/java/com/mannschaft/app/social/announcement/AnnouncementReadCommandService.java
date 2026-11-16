@@ -85,6 +85,18 @@ public class AnnouncementReadCommandService {
         feedService.markAsRead(scopeType, scopeId, announcementId, userId);
     }
 
+    /**
+     * お知らせがパスのスコープに実在し、閲覧者が見られるか（宛先資格・可視性・課金 HIDDEN。既読と同基準）。
+     * 削除・ピン留めの入口 Guard が共有する。期限切れ・元削除済みでも管理操作は可能とするため isLive は問わない。
+     * 評価不能は不可（fail-closed）。entity を署名に出さないため ID で受ける（D-1 API 境界）。
+     */
+    public boolean isReadableInScope(AnnouncementScopeType scopeType, Long scopeId, Long announcementId, Long userId) {
+        return feedRepository.findById(announcementId)
+                .filter(f -> f.getScopeType() == scopeType && scopeId.equals(f.getScopeId()))
+                .map(f -> isReadable(f, userId))
+                .orElse(false);
+    }
+
     private boolean isReadable(AnnouncementFeedEntity feed, Long userId) {
         ViewerRole role;
         if (feed.getScopeType() == AnnouncementScopeType.ORGANIZATION) {
