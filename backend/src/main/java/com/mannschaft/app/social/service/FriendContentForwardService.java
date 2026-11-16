@@ -49,9 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>権限チェック（ADMIN or {@code MANAGE_FRIEND_TEAMS}）</li>
  *   <li>{@link ForwardTarget#MEMBER_AND_SUPPORTER} は 400 で拒否（Phase 1 制約）</li>
+ *   <li>転送元投稿の検査（{@link FriendForwardSourceGuard}。不許可は不在と同一の 404 SOCIAL_122）</li>
  *   <li>冪等性事前チェック: アクティブレコードがあれば 409</li>
- *   <li>転送元投稿の存在 + {@code share_with_friends = TRUE} 確認</li>
- *   <li>フレンド関係の存在確認</li>
  *   <li>{@code timeline_posts} INSERT（{@code scope_type = FRIEND_FORWARD}）</li>
  *   <li>{@code friend_content_forwards} INSERT（{@code forwarded_post_id} に新投稿 ID）。
  *       UNIQUE 違反（並行転送レース）は rollback で timeline_posts も巻き戻される</li>
@@ -80,6 +79,7 @@ public class FriendContentForwardService {
 
     private final FriendContentForwardRepository forwardRepository;
     private final TeamFriendRepository teamFriendRepository;
+    private final FriendForwardSourceGuard sourceGuard;
     private final TimelinePostRepository timelinePostRepository;
     private final TeamRepository teamRepository;
     private final AccessControlService accessControlService;
@@ -115,31 +115,16 @@ public class FriendContentForwardService {
             throw new BusinessException(SocialErrorCode.FRIEND_FORWARD_SUPPORTER_NOT_ALLOWED);
         }
 
-        // 3. 冪等性事前チェック: アクティブな転送レコードが既に存在する場合は 409
+        // 3. 転送元の検査（不在・非TEAM・非公開・非共有・非フレンドは不在と同一の 404 に畳む）
+        TimelinePostEntity sourcePost = sourceGuard.requireForwardable(teamId, sourcePostId);
+        Long sourceTeamId = sourcePost.getScopeId();
+
+        // 4. 冪等性事前チェック: アクティブな転送レコードが既に存在する場合は 409
         forwardRepository
                 .findBySourcePostIdAndForwardingTeamIdAndIsRevokedFalse(sourcePostId, teamId)
                 .ifPresent(existing -> {
                     throw new BusinessException(SocialErrorCode.FRIEND_FORWARD_ALREADY_EXISTS);
                 });
-
-        // 4. 転送元投稿の存在確認 + share_with_friends = TRUE 確認
-        TimelinePostEntity sourcePost = timelinePostRepository.findById(sourcePostId)
-                .orElseThrow(() -> new BusinessException(
-                        SocialErrorCode.FRIEND_FORWARD_SOURCE_POST_NOT_FOUND));
-
-        if (!Boolean.TRUE.equals(sourcePost.getShareWithFriends())) {
-            throw new BusinessException(SocialErrorCode.FRIEND_FORWARD_NOT_SHARABLE);
-        }
-
-        // 5. 転送元チーム ID を scope_id から取得（TEAM スコープ前提）
-        Long sourceTeamId = sourcePost.getScopeId();
-
-        // 6. フレンド関係の存在確認（正規化ペア）
-        long aId = Math.min(teamId, sourceTeamId);
-        long bId = Math.max(teamId, sourceTeamId);
-        teamFriendRepository.findByTeamAIdAndTeamBId(aId, bId)
-                .orElseThrow(() -> new BusinessException(
-                        SocialErrorCode.FRIEND_FORWARD_RELATION_NOT_FOUND));
 
         // 7. timeline_posts INSERT（FRIEND_FORWARD スコープ）
         TimelinePostEntity forwardedPost = timelinePostRepository.save(
