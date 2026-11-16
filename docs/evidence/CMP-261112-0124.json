@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261112-0124",
+  "scope": "app",
+  "implementation": {
+    "pr": 4493,
+    "sha": "217a61bc0a3103ddc5ff8294f506cb24bb5c4bfe"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "正規Nuxt entrypointで詳細/競技ロード後に記録操作を初期化する",
+      "tests": [
+        {
+          "name": "詳細と競技のロード後に記録操作を表示し、unmount で資源を解放する",
+          "evidence": "frontend/app/pages/teams/[slug]/matches/[matchId]/live.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "記録権限なしでは記録session/wake lockを生成せず観戦へ進み、終了時に資源解放する",
+      "tests": [
+        {
+          "name": "記録権限がない場合は記録セッションと wake lock を作らず観戦へ進む",
+          "evidence": "frontend/app/pages/teams/[slug]/matches/[matchId]/live.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "既存イベント操作/表示/拒否/再接続と実機後探索を限定資格で確認する",
+      "tests": [
+        {
+          "name": "ws-match-m2 + ws-match-m2resume / R15 other目的探索",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43522085986
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4493",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "実live.vueの同期provider/detail到達後、応答解放後のuseToast例外を検出した同一spec正式red1fail/1passと修復後2passへ対応する。初回auth/cold transform失敗は正式redへ採用しない。",
+      "test": "live.spec.ts 詳細と競技のロード後に記録操作を表示し、unmount で資源を解放する",
+      "redEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}

@@ -102,7 +102,9 @@
       "multiple": "{names} tippen…"
     },
     "connection": {
-      "failed": "Verbindung unterbrochen. Verbindungsversuch läuft…"
+      "failed": "Verbindung unterbrochen. Verbindungsversuch läuft…",
+      "denied": "Du hast keine Berechtigung, diesen Kanal anzuzeigen",
+      "unauthenticated": "Deine Anmeldung ist abgelaufen, daher wurden die Echtzeit-Updates gestoppt. Bitte melde dich erneut an"
     },
     "mobile": {
       "backToList": "Zurück zur Kanalliste",
@@ -121,6 +123,7 @@
       },
       "card": {
         "pending": "Du hast eine Einladung zu {scope}",
+        "scopeDeleted": "Gelöschtes Team",
         "waiting": "Warten auf Antwort",
         "statusPending": "Ausstehend",
         "join": "Beitreten",
@@ -145,6 +148,79 @@
         "joinFailed": "Beitritt fehlgeschlagen",
         "declineFailed": "Ablehnen fehlgeschlagen"
       }
+    },
+    "channelList": {
+      "title": "Chat",
+      "newConversation": "Neue Unterhaltung",
+      "addChannel": "Kanal hinzufügen",
+      "dmSection": "Kabine (DM)",
+      "noDm": "Keine Direktnachrichten",
+      "roomSection": "Zimmer (Räume)",
+      "noRoom": "Keine Räume vorhanden",
+      "loadFailed": "Raumliste konnte nicht geladen werden",
+      "detailLoadFailed": "Kanaldetails konnten nicht geladen werden"
+    },
+    "create": {
+      "typeDm": "Kabine (DM)",
+      "typeRoom": "Zimmer (Raum)",
+      "dmOpened": "Kabine (DM) geöffnet",
+      "roomCreated": "Zimmer (Raum) erstellt",
+      "conversationFailed": "Unterhaltung konnte nicht gestartet werden",
+      "roomCreateFailed": "Zimmer (Raum) konnte nicht erstellt werden",
+      "header": "Neue Unterhaltung beginnen",
+      "tabContacts": "Aus Kontakten wählen",
+      "tabCreateRoom": "Zimmer (Raum) erstellen",
+      "searchByName": "Nach Namen suchen...",
+      "selectedSummary": "{count} ausgewählt → wird als {type} gestartet",
+      "startAs": "{type} starten",
+      "roomName": "Name des Zimmers (Raum)",
+      "roomNamePlaceholder": "z. B. general",
+      "descriptionOptional": "Beschreibung (optional)",
+      "descriptionPlaceholder": "Beschreibung des Zimmers (Raum)",
+      "privateRoom": "Privates Zimmer (nur auf Einladung)",
+      "inviteMembersOptional": "Mitglieder einladen (optional)",
+      "create": "Erstellen"
+    },
+    "inviteZimmer": {
+      "header": "In ein Zimmer einladen",
+      "tooltip": "In ein Zimmer einladen",
+      "failed": "Einladung fehlgeschlagen",
+      "noMembers": "Keine Mitglieder zum Einladen",
+      "candidatesLoadFailed": "Die Liste der einladbaren Mitglieder konnte nicht geladen werden. Bitte versuche es später erneut.",
+      "shareQuestion": "Bisherigen Chatverlauf teilen?",
+      "share": "Teilen",
+      "shareHint": "Bisherige Nachrichten werden in das neue Zimmer übernommen",
+      "noShare": "Nicht teilen",
+      "noShareHint": "Das neue Zimmer beginnt leer",
+      "createZimmer": "Zimmer erstellen"
+    },
+    "memberSelect": {
+      "notFound": "Keine Mitglieder gefunden"
+    },
+    "activeThreadsEmpty": "Keine aktiven Threads",
+    "tabAriaLabel": "Tab {name}",
+    "unnamedChannel": "Unbenannte Gruppe",
+    "message": {
+      "deleted": "Diese Nachricht wurde gelöscht",
+      "unknownSender": "Unbekannt",
+      "edited": "(bearbeitet)",
+      "loadOlder": "Ältere Nachrichten laden",
+      "empty": "Noch keine Nachrichten",
+      "sendFailed": "Nachricht konnte nicht gesendet werden",
+      "inputPlaceholder": "Nachricht eingeben...",
+      "inputDisabled": "In diesem Zimmer (Raum) kannst du nicht posten",
+      "loadFailed": "Nachrichten konnten nicht geladen werden",
+      "reactionFailed": "Reaktion fehlgeschlagen",
+      "pinned": "Angeheftet",
+      "unpinned": "Nicht mehr angeheftet",
+      "pinFailed": "Anheften fehlgeschlagen",
+      "deleteSuccess": "Nachricht gelöscht",
+      "deleteFailed": "Löschen fehlgeschlagen",
+      "bookmarkFailed": "Lesezeichen fehlgeschlagen",
+      "markReadFailed": "Konnte nicht als gelesen markiert werden",
+      "editHeader": "Nachricht bearbeiten",
+      "editSuccess": "Nachricht bearbeitet",
+      "editFailed": "Bearbeiten fehlgeschlagen"
     }
   },
   "button": {
@@ -315,6 +391,8 @@
     "add_term": "Semester hinzufügen",
     "term_success": "Semester erstellt",
     "term_error": "Erstellung des Semesters fehlgeschlagen",
+    "term_academic_year_required": "Bitte das Schuljahr eingeben",
+    "term_has_timetables": "Dieses Semester kann nicht gelöscht werden, da noch Stundenpläne vorhanden sind. Bitte zuerst entfernen",
     "no_period": "Keine Stunden definiert",
     "no_term": "Keine Semester definiert",
     "current_week": "Diese Woche",
@@ -329,7 +407,22 @@
     "period_all": "Alle Stunden",
     "period_number_placeholder": "Stundennummer",
     "period_suffix": ". Stunde",
-    "term_name_placeholder": "z.B. 1. Quartal"
+    "term_name_placeholder": "z.B. 1. Quartal",
+    "term_academic_year_range": "Bitte ein Schuljahr zwischen {min} und {max} eingeben",
+    "term_end_before_start": "Das Enddatum muss nach dem Startdatum liegen",
+    "term_date_overlap": "Dieses Semester überschneidet sich mit einem anderen. Bitte Start- und Enddatum prüfen",
+    "term_delete_confirm": "Semester „{name}“ löschen? Dies kann nicht rückgängig gemacht werden.",
+    "term_delete_success": "Semester gelöscht",
+    "term_load_error": "Semester konnten nicht geladen werden",
+    "team_term_hint": "Semester dieses Teams. Beim Erstellen eines Stundenplans wählen Sie eines der hier hinzugefügten Semester.",
+    "no_term_for_create": "Noch keine Semester vorhanden. Fügen Sie zuerst im Semester-Tab ein Semester hinzu.",
+    "delete_timetable": "Löschen",
+    "delete_timetable_confirm": "Stundenplan „{name}“ löschen? Dies kann nicht rückgängig gemacht werden.",
+    "delete_timetable_success": "Stundenplan gelöscht",
+    "delete_timetable_error": "Stundenplan konnte nicht gelöscht werden",
+    "create_error_out_of_term": "Der Gültigkeitszeitraum des Stundenplans liegt außerhalb des Semesters. Wählen Sie Daten zwischen Beginn und Ende des Semesters.",
+    "create_error_term_not_found": "Das ausgewählte Semester wurde nicht gefunden. Öffnen Sie die Semesterliste erneut.",
+    "effective_until_before_from": "Das Enddatum darf nicht vor dem Startdatum liegen."
   },
   "error": {
     "server": "Ein Serverfehler ist aufgetreten",
@@ -1106,6 +1199,22 @@
     }
   },
   "project": {
+    "back_label": "Projektliste",
+    "delete_aria": "{title} löschen",
+    "delete_confirm": "„{title}“ löschen?",
+    "delete_confirm_header": "Löschen bestätigen",
+    "milestone_dialog": {
+      "add_title": "Meilenstein hinzufügen",
+      "edit_title": "Meilenstein bearbeiten",
+      "title_label": "Titel",
+      "title_placeholder": "Name des Meilensteins",
+      "title_required": "Bitte geben Sie einen Titel ein.",
+      "due_date_label": "Fällig am",
+      "add": "Hinzufügen"
+    },
+    "related_todo_no_due": "Kein Fälligkeitsdatum",
+    "related_todo_no_assignee": "Nicht zugewiesen",
+    "related_todo_open": "TODO-Details öffnen",
     "milestones": "Meilensteine",
     "no_milestones": "Keine Meilensteine",
     "due_date": "Fälligkeitsdatum",
@@ -1163,7 +1272,19 @@
       "none": "Keines",
       "custom_emoji": "Benutzerdefiniert",
       "custom_color": "Benutzerdefinierte Farbe",
-      "current": "Aktuell"
+      "current": "Aktuell",
+      "colors": {
+        "blue": "Blau",
+        "red": "Rot",
+        "green": "Grün",
+        "amber": "Bernstein",
+        "violet": "Violett",
+        "pink": "Rosa",
+        "cyan": "Cyan",
+        "teal": "Petrol",
+        "orange": "Orange",
+        "gray": "Grau"
+      }
     },
     "guide": {
       "button": "Anleitung",
@@ -1215,7 +1336,10 @@
       "update_failed": "Aktualisierung fehlgeschlagen",
       "delete_failed": "Löschen fehlgeschlagen",
       "status_change_failed": "Statusänderung fehlgeschlagen",
-      "milestone_save_failed": "Meilenstein konnte nicht gespeichert werden"
+      "milestone_save_failed": "Meilenstein konnte nicht gespeichert werden",
+      "force_unlock_failed": "Erzwungenes Entsperren fehlgeschlagen",
+      "completion_mode_failed": "Abschlussmodus konnte nicht geändert werden",
+      "gate_init_failed": "Gates konnten nicht initialisiert werden"
     },
     "status": {
       "active": "Aktiv",
@@ -1258,12 +1382,12 @@
     "empty": "Noch keine Einladungslinks",
     "never": "Unbegrenzt gültig",
     "copy": "Einladungs-URL kopieren",
-    "revoke": "Einladungslink widerrufen",
-    "revokeConfirm": "Diesen Einladungslink widerrufen?",
+    "revoke": "Einladungslink deaktivieren",
+    "revokeConfirm": "Diesen Einladungslink deaktivieren?",
     "createSuccess": "Einladungslink erstellt",
     "createError": "Einladungslink konnte nicht erstellt werden",
-    "revokeSuccess": "Einladungslink widerrufen",
-    "revokeError": "Einladungslink konnte nicht widerrufen werden",
+    "revokeSuccess": "Einladungslink deaktiviert",
+    "revokeError": "Einladungslink konnte nicht deaktiviert werden",
     "copied": "Einladungs-URL kopiert",
     "oneDay": "1 Tag",
     "sevenDays": "7 Tage",
@@ -1528,7 +1652,9 @@
     },
     "ws": {
       "disconnected": "Verbindung verloren",
-      "reconnecting": "Verbindung wird wiederhergestellt…"
+      "reconnecting": "Verbindung wird wiederhergestellt…",
+      "denied": "Die Echtzeit-Updates wurden gestoppt, weil du keine Berechtigung hast, diese Pinnwand anzuzeigen",
+      "unauthenticated": "Deine Anmeldung ist abgelaufen, daher wurden die Echtzeit-Updates gestoppt. Bitte melde dich erneut an"
     },
     "validation": {
       "required": "Pflichtfeld.",
@@ -2962,7 +3088,11 @@
     "justNow": "Gerade eben",
     "minutesAgo": "vor {count} Minute | vor {count} Minuten",
     "hoursAgo": "vor {count} Stunde | vor {count} Stunden",
-    "daysAgo": "vor {count} Tag | vor {count} Tagen"
+    "daysAgo": "vor {count} Tag | vor {count} Tagen",
+    "soon": "Gleich",
+    "inMinutes": "in {count} Minute | in {count} Minuten",
+    "inHours": "in {count} Stunde | in {count} Stunden",
+    "inDays": "in {count} Tag | in {count} Tagen"
   },
   "error_page": {
     "not_found_title": "Diese Seite wurde nicht gefunden",
@@ -3196,5 +3326,28 @@
     "supporter_label": "{feature} für Unterstützer anzeigen",
     "save_success": "Sichtbarkeit gespeichert",
     "nav": "Navigation"
+  },
+  "secret_token": {
+    "issued_dialog": {
+      "title": "Link erstellt",
+      "once_warning": "Dieser Link wird nur jetzt angezeigt. Nach dem Schließen wird er nie wieder angezeigt. Geben Sie ihn an die Berechtigten weiter, bevor Sie das Fenster schließen.",
+      "url_label": "Erstellter Link",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "copy_failed": "Kopieren fehlgeschlagen. Bitte markieren Sie den Link und kopieren Sie ihn manuell",
+      "qr_label": "QR-Code",
+      "close": "Schließen",
+      "pdf_download": "QR-Code als PDF speichern"
+    },
+    "list": {
+      "not_shown_hint": "Aus Sicherheitsgründen werden erstellte Links nicht erneut angezeigt. Erstellen Sie bei Bedarf einen neuen.",
+      "revoked_by_migration": "Wegen einer Sicherheitsverbesserung widerrufen",
+      "reissue": "Neu erstellen",
+      "links_hint": "Wenn Sie einen Link verlieren, erstellen Sie einen neuen. Deaktivieren Sie nicht mehr benötigte alte Links mit ×.",
+      "label_with_id": "Link #{id}",
+      "created_at": "Erstellt am",
+      "expires_at": "Gültig bis",
+      "used_count": "Anzahl der Nutzungen"
+    }
   }
 }

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261115-0543",
+  "scope": "app",
+  "implementation": {
+    "pr": 4511,
+    "sha": "5a1b279ea92c95fc63422493d0df85b33512c528"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "ja 以外の UI で予約の週表示の日付ラベルの曜日が UI 言語で出る",
+      "tests": [
+        {
+          "name": "SlotMatrixPicker.spec.ts",
+          "evidence": "frontend/tests/unit/components/reservation/SlotMatrixPicker.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "予約確認ダイアログの所要時間がロケールファイル経由で表示され日本語が残らない",
+      "tests": [
+        {
+          "name": "GroupBookingDialog.spec.ts",
+          "evidence": "frontend/tests/unit/components/reservation/GroupBookingDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "390px 幅で週ナビの「すべて表示」ボタンが折れずに収まる",
+      "tests": [
+        {
+          "name": "SlotMatrixPicker.spec.ts",
+          "evidence": "frontend/tests/unit/components/reservation/SlotMatrixPicker.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43643927941
+    },
+    {
+      "runId": 43643927940
+    },
+    {
+      "runId": 43643928147
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4511"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-0543.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-0543.md"
+    }
+  },
+  "regressions": [
+    {
+      "description": "英語UIで週表示の曜日が日本語・所要時間に「分」直書き・390pxで「すべて表示」が折れる",
+      "test": "frontend/tests/unit/components/reservation/SlotMatrixPicker.spec.ts",
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/pull/4511",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/actions/runs/43643927941"
+    }
+  ]
+}

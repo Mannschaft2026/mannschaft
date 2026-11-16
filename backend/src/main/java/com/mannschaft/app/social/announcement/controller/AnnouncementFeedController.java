@@ -6,8 +6,10 @@ import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.dashboard.ViewerRole;
 import com.mannschaft.app.dashboard.service.RoleResolver;
 import com.mannschaft.app.social.announcement.AnnouncementFeedService;
+import com.mannschaft.app.social.announcement.AnnouncementReadCommandService;
 import com.mannschaft.app.social.announcement.AnnouncementReadService;
 import com.mannschaft.app.social.announcement.AnnouncementScopeType;
+import com.mannschaft.app.social.announcement.AnnouncementScopedFeedVisibilityGuard;
 import com.mannschaft.app.social.announcement.AnnouncementSourceType;
 import com.mannschaft.app.social.announcement.dto.AnnouncementFeedItemDto;
 import com.mannschaft.app.social.announcement.dto.AnnouncementFeedMetaDto;
@@ -65,6 +67,8 @@ import java.util.Map;
 public class AnnouncementFeedController {
 
     private final AnnouncementFeedService announcementFeedService;
+    private final AnnouncementReadCommandService announcementReadCommandService;
+    private final AnnouncementScopedFeedVisibilityGuard visibilityGuard;
     private final RoleResolver roleResolver;
 
     // ═════════════════════════════════════════════════════════════
@@ -91,7 +95,9 @@ public class AnnouncementFeedController {
 
         Long userId = SecurityUtils.getCurrentUserId();
         // 固定 "MEMBER" ではなく、当該チームに対する閲覧者の実ロールを解決して渡す（可視性漏洩根治）。
-        ViewerRole viewerRole = roleResolver.resolveViewerRole(userId, "TEAM", teamId);
+        // 告知の可視性に使う役割はキャッシュ（60 秒）を使わない。降格・離脱の直後に会員限定の項目が見え続けるのを防ぐ
+        // （ALIC-1 §2.6。Service は @Transactional なので、キャッシュなしの役割解決は tx の外のここで行って渡す）。
+        ViewerRole viewerRole = roleResolver.resolveViewerRoleForPreview(userId, "TEAM", teamId);
         AnnouncementFeedService.AnnouncementFeedResult result = announcementFeedService.getAnnouncementFeed(
                 AnnouncementScopeType.TEAM, teamId, userId, viewerRole.name(), cursor, limit);
 
@@ -167,6 +173,8 @@ public class AnnouncementFeedController {
             @PathVariable("id") Long announcementId) {
 
         Long userId = SecurityUtils.getCurrentUserId();
+        // 不在・越境・不可視は同一の 404（存在オラクル封じ）。Service の @Transactional の外で判定する
+        visibilityGuard.requireVisible(AnnouncementScopeType.TEAM, teamId, announcementId, userId);
         announcementFeedService.deleteAnnouncement(announcementId, userId);
         return ResponseEntity.noContent().build();
     }
@@ -198,6 +206,8 @@ public class AnnouncementFeedController {
             @RequestBody(required = false) PinAnnouncementRequestDto request) {
 
         Long userId = SecurityUtils.getCurrentUserId();
+        // 不在・越境・不可視は同一の 404（存在オラクル封じ）。Service の @Transactional の外で判定する
+        visibilityGuard.requireVisible(AnnouncementScopeType.TEAM, teamId, announcementId, userId);
         var entity = announcementFeedService.togglePin(announcementId, userId);
 
         // togglePin 後は既読状態が変わらないため isRead = false として返す（ピン操作の結果のみ必要）
@@ -240,7 +250,7 @@ public class AnnouncementFeedController {
             @PathVariable("id") Long announcementId) {
 
         Long userId = SecurityUtils.getCurrentUserId();
-        announcementFeedService.markAsRead(AnnouncementScopeType.TEAM, teamId, announcementId, userId);
+        announcementReadCommandService.markAsRead(AnnouncementScopeType.TEAM, teamId, announcementId, userId);
 
         return ResponseEntity.ok(ApiResponse.of(Map.of(
                 "id", announcementId,
@@ -273,7 +283,7 @@ public class AnnouncementFeedController {
 
         Long userId = SecurityUtils.getCurrentUserId();
         AnnouncementReadService.MarkAllReadOutcome outcome =
-                announcementFeedService.markAllAsRead(AnnouncementScopeType.TEAM, teamId, userId);
+                announcementReadCommandService.markAllAsRead(AnnouncementScopeType.TEAM, teamId, userId);
 
         return ResponseEntity.ok(ApiResponse.of(AnnouncementMarkAllReadResultDto.builder()
                 .markedCount(outcome.markedCount())

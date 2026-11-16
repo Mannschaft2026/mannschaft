@@ -492,15 +492,29 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
             assertThat(countReadStatus(orgAnnAPublicId, childMemberAId)).isEqualTo(1);
         }
 
-        /** AC-S6: 配下チームのみ所属者に組織の内輪限定は一覧に出ないため既読化もできない。 */
+        /**
+         * AC-S6（ALIC-1・M6-a で反転）: 配下チーム（組織に ACTIVE 加盟し、宛先に含まれる）の MEMBER は、組織での役割が無くても
+         * 組織の内輪限定（MEMBERS_AND_ABOVE）を単件既読にできる。旧契約は「配下チームのみ所属者は内輪限定を既読化できない」だった。
+         * 宛先外・無所属の部外者は従来どおり既読化できない（下の実在オラクル封じのケースで固定）。
+         */
         @Test
-        @DisplayName("AC-S6 配下チームのみ所属者は組織の内輪限定を既読化できない")
-        void ac_s6_配下チーム所属者は組織内輪限定を既読化できない() throws Exception {
+        @DisplayName("AC-S6 配下チームの MEMBER は組織の内輪限定を宛先資格で既読にできる（ALIC-1・M6-a。旧: 既読化できない）")
+        void ac_s6_配下チーム所属者は宛先資格で組織内輪限定を既読にできる() throws Exception {
             setAuth(childMemberAId);
+            mockMvc.perform(post("/api/v1/organizations/{orgId}/announcements/{id}/read", orgAId, orgAnnAId))
+                    .andExpect(status().isOk());
+            assertThat(countReadStatus(orgAnnAId, childMemberAId)).isEqualTo(1);
+        }
+
+        /** AC-S6: 部外者（組織にも配下チームにも属さない）は組織の内輪限定を既読化できない。 */
+        @Test
+        @DisplayName("AC-S6 部外者は組織の内輪限定を既読化できない")
+        void ac_s6_部外者は組織内輪限定を既読化できない() throws Exception {
+            setAuth(outsiderId);
             mockMvc.perform(post("/api/v1/organizations/{orgId}/announcements/{id}/read", orgAId, orgAnnAId))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.error.code").value("ANNOUNCE_001"));
-            assertThat(countReadStatus(orgAnnAId, childMemberAId)).isZero();
+            assertThat(countReadStatus(orgAnnAId, outsiderId)).isZero();
         }
 
         /** AC-S6 + AC-S2: 別組織の announcementId を自組織の URL に差し込むと遮断される。 */
@@ -567,7 +581,7 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
         @Test
         @DisplayName("AC-S6 組織版でも不在ID・越境ID・不可視IDは同一応答（実在オラクル封じ）")
         void ac_s6_組織版の実在オラクル封じ() throws Exception {
-            setAuth(childMemberAId);
+            setAuth(outsiderId);
             String missing = readAndReturnBody(orgAId, MISSING_ANNOUNCEMENT_ID);
             String crossTenant = readAndReturnBody(orgAId, orgAnnBId);
             String invisible = readAndReturnBody(orgAId, orgAnnAId);
@@ -593,29 +607,40 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
     class DeleteAndPin {
 
         /**
-         * AC-S8: 正当 ADMIN が別チームの announcementId を自チーム URL に差し込んでも、
-         * entity 自身のスコープで再認可されるため権限昇格しない（ANNOUNCE_002 → 403）。
+         * AC-S8（CMP-261103-0822 で改訂）: 正当 ADMIN が別チームの announcementId を自チーム URL に差し込んだ削除は、
+         * 不在 ID と同じ応答（status・error.code）に畳まれる（存在オラクル封じ）。行は削除されない。
+         * 実JWT/filter での本文全体の一致は {@code AnnouncementDeletePinExistenceOracleIT} が固定する。
          */
         @Test
-        @DisplayName("AC-S8 越境announcementIdの削除は403（entityスコープで再認可・権限昇格なし）")
-        void ac_s8_越境削除は403() throws Exception {
+        @DisplayName("AC-S8 越境announcementIdの削除は不在IDと同一応答（CMP-261103-0822 AC1）")
+        void ac_s8_越境削除は不在と同一() throws Exception {
             setAuth(adminAId);
-            mockMvc.perform(delete("/api/v1/teams/{teamId}/announcements/{id}", teamAId, annBId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_002"));
+            var cross = mockMvc.perform(delete("/api/v1/teams/{teamId}/announcements/{id}", teamAId, annBId))
+                    .andReturn().getResponse();
+            var missing = mockMvc.perform(
+                            delete("/api/v1/teams/{teamId}/announcements/{id}", teamAId, MISSING_ANNOUNCEMENT_ID))
+                    .andReturn().getResponse();
+            assertThat(cross.getStatus()).isEqualTo(missing.getStatus());
+            assertThat(errorCodeOf(cross.getContentAsString())).isEqualTo(errorCodeOf(missing.getContentAsString()));
             assertThat(feedRepository.existsById(annBId)).isTrue();
         }
 
-        /** AC-S8: 越境 announcementId のピン留めも entity スコープで再認可され遮断される。 */
+        /** AC-S8（CMP-261103-0822 で改訂）: 越境 announcementId のピン留めも不在 ID と同じ応答に畳まれる。 */
         @Test
-        @DisplayName("AC-S8 越境announcementIdのピン留めは403（entityスコープで再認可）")
-        void ac_s8_越境ピン留めは403() throws Exception {
+        @DisplayName("AC-S8 越境announcementIdのピン留めは不在IDと同一応答（CMP-261103-0822 AC2）")
+        void ac_s8_越境ピン留めは不在と同一() throws Exception {
             setAuth(adminAId);
-            mockMvc.perform(patch("/api/v1/teams/{teamId}/announcements/{id}/pin", teamAId, annBId)
+            var cross = mockMvc.perform(patch("/api/v1/teams/{teamId}/announcements/{id}/pin", teamAId, annBId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"pinned\":true}"))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_002"));
+                    .andReturn().getResponse();
+            var missing = mockMvc.perform(
+                            patch("/api/v1/teams/{teamId}/announcements/{id}/pin", teamAId, MISSING_ANNOUNCEMENT_ID)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content("{\"pinned\":true}"))
+                    .andReturn().getResponse();
+            assertThat(cross.getStatus()).isEqualTo(missing.getStatus());
+            assertThat(errorCodeOf(cross.getContentAsString())).isEqualTo(errorCodeOf(missing.getContentAsString()));
         }
 
         /** AC-S8: 非管理者メンバーのピン留めは遮断される（ANNOUNCE_002 → 403）。 */

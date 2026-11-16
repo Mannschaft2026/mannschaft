@@ -87,6 +87,29 @@ public class OrganizationService {
     private final java.time.Clock clock;
 
     /**
+     * 組織 ID 群の表示名とアイコン URL をまとめて返す（SQL 1 本・CMP-261103-1225 の N+1 解消用）。
+     *
+     * <p>個人ダッシュボードの「今後の予定」が予定ごとに {@code organizationRepository.findById} で
+     * 名前とアイコンを引いていたのを置き換える。{@code findById} と同じ取得（{@code findAllById}）で、
+     * 見つかる範囲も同一である。Entity は外へ渡さない。</p>
+     *
+     * @param ids 組織 ID 群（null・空なら空 Map）
+     * @return 組織 ID → 名前・アイコン（見つかったものだけ）
+     */
+    public Map<Long, com.mannschaft.app.organization.dto.OrganizationNameIconView> getNameIconsByIds(
+            Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, com.mannschaft.app.organization.dto.OrganizationNameIconView> result = new java.util.HashMap<>();
+        for (OrganizationEntity org : organizationRepository.findAllById(ids)) {
+            result.put(org.getId(), new com.mannschaft.app.organization.dto.OrganizationNameIconView(
+                    org.getId(), org.getName(), org.getIconUrl()));
+        }
+        return result;
+    }
+
+    /**
      * 組織を作成し、作成者をADMINロールで紐付ける。
      */
     @Transactional
@@ -459,6 +482,14 @@ public class OrganizationService {
      */
     public boolean isProvisioned(Long orgId) {
         return organizationRepository.findById(orgId).map(OrganizationEntity::isProvisioned).orElse(false);
+    }
+
+    /**
+     * 組織が存在し、論理削除されていないか（非アクティブ組織の判定。ALIC-1 §2.3 / F00 §11.6）。
+     * {@link OrganizationEntity} は {@code @SQLRestriction("deleted_at IS NULL")} のため、削除済みの組織は {@code findById} で返らない。
+     */
+    public boolean isActiveOrganization(Long orgId) {
+        return organizationRepository.findById(orgId).isPresent();
     }
 
     /**

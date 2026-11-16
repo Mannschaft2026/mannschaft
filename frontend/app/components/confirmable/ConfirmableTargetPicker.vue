@@ -11,9 +11,15 @@ interface TargetOption {
 const props = defineProps<{
   scopeType: 'TEAM' | 'ORGANIZATION'
   scopeId: string
+  /** 組織スコープの slug。配下の取得 API は {slug} でしか受けないため数値IDでは要求できない */
+  scopeSlug?: string
   modelValue: ConfirmableTarget[]
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: ConfirmableTarget[]] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: ConfirmableTarget[]]
+  /** 候補として解決できた対象の名前（宛先グループ一覧の表示名解決用） */
+  resolved: [value: { target: ConfirmableTarget; name: string }]
+}>()
 const api = useApi()
 const { getTeamsInOrg } = useOrganizationApi()
 const { handleApiError } = useErrorHandler()
@@ -22,6 +28,8 @@ const options = ref<TargetOption[]>([])
 const cursors = ref<Record<string, string | null>>({})
 const hasMore = ref<Record<string, boolean>>({})
 const opened = ref<Record<string, boolean>>({})
+// 組織ID → slug（配下取得 API は slug で受ける）
+const orgSlugs = ref<Record<string, string>>({})
 const loading = ref(false)
 const keyword = ref('')
 const currentPage = ref(0)
@@ -53,22 +61,26 @@ function toggle(target: ConfirmableTarget) {
     : [...props.modelValue, target])
 }
 function addOption(target: ConfirmableTarget, name: string, depth: number) {
+  emit('resolved', { target, name })
   if (!options.value.some(option => key(option.target) === key(target))) options.value.push({ target, name, depth })
 }
 async function loadOrganization(orgId: number, depth: number) {
   const orgKey = String(orgId)
+  const orgSlug = orgSlugs.value[orgKey]
+  if (!orgSlug) return
   loading.value = true
   try {
     const query = new URLSearchParams({ size: '50' })
     if (cursors.value[orgKey]) query.set('cursor', cursors.value[orgKey]!)
-    const children = await api<ChildrenResponse>(`/api/v1/organizations/${orgId}/children?${query}`)
+    const children = await api<ChildrenResponse>(`/api/v1/organizations/${orgSlug}/children?${query}`)
     for (const child of children.data ?? []) {
+      if (child.slug) orgSlugs.value[String(child.id)] = child.slug
       addOption({ type: 'ORGANIZATION', id: child.id }, child.name, depth + 1)
     }
     cursors.value[orgKey] = children.meta?.nextCursor ?? null
     hasMore.value[orgKey] = children.meta?.hasNext ?? false
     if (!opened.value[orgKey]) {
-      const teams = await getTeamsInOrg(orgKey)
+      const teams = await getTeamsInOrg(orgSlug)
       for (const team of teams.data) addOption({ type: 'TEAM', id: team.id }, team.name, depth + 1)
       opened.value[orgKey] = true
     }
@@ -80,11 +92,15 @@ function loadMore(orgId: number) {
   if (parent) return loadOrganization(orgId, parent.depth)
 }
 watch(keyword, () => { currentPage.value = 0 })
-watch(() => [props.scopeType, props.scopeId] as const, async () => {
-  options.value = []; cursors.value = {}; hasMore.value = {}; opened.value = {}; currentPage.value = 0
+watch(() => [props.scopeType, props.scopeId, props.scopeSlug] as const, async () => {
+  options.value = []; cursors.value = {}; hasMore.value = {}; opened.value = {}; orgSlugs.value = {}; currentPage.value = 0
   const id = Number(props.scopeId)
   if (!Number.isSafeInteger(id) || id <= 0) return
-  if (props.scopeType === 'ORGANIZATION') await loadOrganization(id, 0)
+  emit('resolved', { target: { type: props.scopeType, id }, name: t('confirmable.current_scope') })
+  if (props.scopeType === 'ORGANIZATION' && props.scopeSlug) {
+    orgSlugs.value[String(id)] = props.scopeSlug
+    await loadOrganization(id, 0)
+  }
 }, { immediate: true })
 </script>
 
@@ -95,7 +111,7 @@ watch(() => [props.scopeType, props.scopeId] as const, async () => {
       <div v-for="option in visible" :key="key(option.target)" class="flex items-center gap-2 py-1" :style="{ paddingLeft: `${Math.min(option.depth, 8) * 12}px` }">
         <Checkbox :model-value="isSelected(option.target)" binary :input-id="key(option.target)" @update:model-value="toggle(option.target)" />
         <label :for="key(option.target)" class="min-w-0 flex-1 truncate">{{ option.name }} ({{ $t(`confirmable.target_type.${option.target.type}`) }})</label>
-        <Button v-if="option.target.type === 'ORGANIZATION' && !opened[String(option.target.id)]" icon="pi pi-angle-down" text size="small" :aria-label="$t('confirmable.open_children')" @click="expand(option)" />
+        <Button v-if="option.target.type === 'ORGANIZATION' && orgSlugs[String(option.target.id)] && !opened[String(option.target.id)]" icon="pi pi-angle-down" text size="small" :aria-label="$t('confirmable.open_children')" @click="expand(option)" />
         <Button v-if="option.target.type === 'ORGANIZATION' && hasMore[String(option.target.id)]" icon="pi pi-plus" text size="small" :aria-label="$t('confirmable.load_more_targets')" @click="loadMore(option.target.id)" />
       </div>
       <PageLoading v-if="loading" size="24px" />

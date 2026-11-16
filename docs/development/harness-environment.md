@@ -8,8 +8,10 @@
 2. `frontend/package.json` の `engines` に合わせて Node.js と npm を用意する。バックエンド用に Java 21、Git、GitHub CLI (`gh`)、Docker CLI も用意する。
 3. `node scripts/harness-doctor.mjs` を実行する。JSONが必要なら `--json` を付ける。これは診断だけを行い、外部接続、認証確認、DB操作、サービス操作、seed投入を行わない。
 4. Gitのpre-commit hookを導入するときだけ、本陣などGit共通ディレクトリへの書込権限がある環境で `node scripts/harness-doctor.mjs --install-hooks` を明示実行する。linked worktreeのGit共通ディレクトリへ書き込めない場合は診断で停止する。既存の独自hookは上書きせず、`core.hooksPath`も変更しない。
-5. DB・seedが必要な開発は、既存の [`CLAUDE.md` の開発環境コマンド](../../CLAUDE.md#よく使うコマンド)と `/陣立て` の手順に従う。この診断CLIからDBやseedを起動・変更しない。
+5. DB・seedが必要な開発は、既存の [開発環境コマンド（`CLAUDE.md` から移設）](claude-md-details.md#12-よく使うコマンド旧-claudemd-の節)と `/陣立て` の手順に従う。この診断CLIからDBやseedを起動・変更しない。
 6. 画面台帳の宣言と実ファイルを確認するときは `node scripts/guard-coverage.mjs` を実行する。機械可読な全一覧は `--json` を付ける。
+
+固定コミットの BE・FE で実機確認する場合は、[ローカル検証環境の起動手順](local-verification.md)へ進む。追跡外の local 設定・鍵の安全な持込、検証用ポートと CORS、WSL の `verification-run`、起動確認と終了処理をまとめている。
 
 ## doctorの判定
 
