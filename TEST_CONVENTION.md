@@ -905,6 +905,16 @@ public void dispatch() { ... }
 
 ---
 
+## 9.8 足軽 worktree の sparse 除外素材に依存するテスト
+
+足軽 worktree は cone モードの sparse checkout で牧場 PNG 素材（`backend/src/main/resources/ranch/approved` など。正本は `scripts/worktree-sparse-exclusions.json`）を展開しない。この素材（承認済み manifest・mapping JSON・PNG）を実体として読むテストは、**テスト単位（メソッドまたはクラス）に `@RequiresRanchApprovedAssets` を付ける**。
+
+- skip するのは「対象の追跡パスが1件以上あり、全て skip-worktree で、作業木に1件も実在しない」ときだけ。追跡0件・git 失敗・部分展開・手で削除した欠落は skip せず失敗させる。
+- `CI=true` では skip しない（素材が無ければ失敗）。全展開の worktree と CI では従来と同数のテストが実行される。
+- skip の理由には対象ディレクトリと「`node scripts/worktree-assets.mjs expand` で展開すれば実行される」旨が出る。
+- クラスごとの `@Disabled`、例外の握りつぶしは禁止。実素材に依存しない単位は分けて通常実行する（`src/test/resources` の合成素材で足りるなら合成素材を使う）。
+- 判定実装は `com.mannschaft.app.support.test.sparse.SparseExcludedAssets`、その単体テストは `SparseExcludedAssetsTest`。
+
 ## 10. テストに関する禁止事項
 
 | 禁止事項 | 理由 |
