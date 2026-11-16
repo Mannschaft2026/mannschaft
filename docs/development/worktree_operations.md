@@ -205,3 +205,17 @@ Windows では、cwd だけが worktree 内にあるプロセス（`node server.
 途中で git が失敗した場合（ファイル使用中など）も非0で終了し、到達状態と再実行コマンドを表示する。既存の変更は失われず、再実行で完了できる。黙って全展開へフォールバックすることはない。
 
 `shrink` / `reapply` が成功すると、適用した一覧のハッシュを worktree ローカル設定（`git config --worktree mannschaft.sparsePathsDigest`）へ記録する。`expand` で消す。共有 `.git/config` は変えない。
+
+## sparse 一覧の正本と番人（CMP-261116-1101）
+
+足軽 worktree に牧場 PNG 素材（約876MB）を展開しないため、Claude Code の `worktree.sparsePaths`（git sparse-checkout の cone モード）に「含めるディレクトリ」を列挙する。cone は含める一覧なので、除外ディレクトリの兄弟を全て並べる必要がある。手書きだと main に新ディレクトリが増えたとき黙って見えなくなるため、一覧は除外の正本から機械生成する。
+
+- 除外の正本: `scripts/worktree-sparse-exclusions.json`（パスと理由）
+- 生成・検査: `scripts/worktree-sparse-paths.mjs`
+  - `node scripts/worktree-sparse-paths.mjs --print` — 生成結果を出力（`--ref <ref>` で対象 ref を指定、既定 HEAD。`git ls-tree --full-tree` で読むため sparse の worktree でも正しく動く）
+  - `node scripts/worktree-sparse-paths.mjs --check` — `.claude/settings.json` の `worktree.sparsePaths` が生成結果と集合として一致し（順序は無視）、全追跡ファイルが展開経路に属すること（未被覆ゼロ）を検査。未設定の間は成功扱い
+  - `node scripts/worktree-sparse-paths.mjs --write` — settings.json へ書き込む
+  - `node scripts/worktree-sparse-paths.mjs --check --require-configured` — 未設定を失敗にする（キー誤記の素通りを根治）。設定を有効化する後続PR（部隊1b）で CI の `--check` ステップに付ける。有効化前の現状は付けない
+- 番人: CI の `Harness CI`（`.github/workflows/harness-ci.yml`）が単体テスト `scripts/worktree-sparse-paths.test.mjs` と `--check` を実行する。main に新しいディレクトリが増えて一覧が古くなると `--check` が落ちるので、`--write` で更新してコミットする。
+- 除外を増減する手順: 正本 JSON を編集し、`--write` で settings.json を更新して同じ PR に含める。除外パスが追跡されなくなる（改名・削除）とエラーになるので、正本から外す。
+- 状態: 生成スクリプトと番人のみ導入済み。`.claude/settings.json` への有効化は後続 PR で行う。
