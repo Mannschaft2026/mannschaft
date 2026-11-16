@@ -165,6 +165,7 @@
       "private": "비공개",
       "empty": "연락 공간이 준비되지 않았습니다",
       "no_bulletin": "게시판 공간이 없습니다",
+      "bulletin_scope_unresolved": "게시판의 범위를 확인할 수 없어 표시할 수 없습니다",
       "no_chat": "채팅 공간이 없습니다",
       "visibility_saved": "공개 설정을 변경했습니다",
       "visibility_failed": "공개 설정 변경에 실패했습니다",

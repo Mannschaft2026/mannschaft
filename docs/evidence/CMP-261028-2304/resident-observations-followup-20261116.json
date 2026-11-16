@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "runId": "l1r-7a9502a2-fu261115-01",
+  "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+  "registrationSource": "actual-resident-artifacts",
+  "trusted": false,
+  "status": "observed-unverified",
+  "coveragePassed": false,
+  "independentResidentCount": 3,
+  "independentJourneyCount": 3,
+  "selectedInsightCount": 1,
+  "idAssignment": "原run/contextは保持。persona/journey/insight IDは登録時付与。06-03は同personaのcontrolled補足で独立人数に加算しない。",
+  "artifacts": [
+    {
+      "artifactId": "root-fresh3-purpose-assignments-02.json",
+      "sha256": "e091a886e0cc30961815baf18106a93e68768d2d84b294e0f5b867135ab9c06e",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-admin-06-02-evidence/result-packet.md",
+      "sha256": "550600a1e250290d3bb6055504266a4e08d2d89640d975d238b9d2a9357b3592",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-admin-06-02-evidence/closure-checkpoint.json",
+      "sha256": "637e3685537b9845e1e9d8afed616c64d30d0e88f7334cf3d96f0159cbf76472",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-member-06-02-evidence/final.packet.json",
+      "sha256": "1eabcc6d65b2a9dea63e475b681df9000015ec96bf9a45384a0c2418bb880247",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-member-06-02-evidence/resident-notes.jsonl",
+      "sha256": "658d1553b152c7da4dd6e28289f478167782604ec9eabbf3b5625af8b654e3a4",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-other-06-02-evidence/resident-report.md",
+      "sha256": "9cdf100a1eb9e21ad0595f245edf0ee81a3f69cce40191d9bec3007d5f29c245",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-other-06-02-evidence/closure-and-boundary.packet.json",
+      "sha256": "ff403fc5603f15d8187fd5da859c585ef772e0e057438488025dcb4bc3dee426",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-admin-06-03-evidence/purpose-result-sealed-0110.md",
+      "sha256": "ce038c384274c6e4a6a72021fd84e5642cfb6298bad9d0c6a750b813559a515b",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-admin-06-03-evidence/controlled-supplement-result.md",
+      "sha256": "e8d054d16c54948552c964e7ebe6bdf8f14928d49e45468ff2e26f1bcdcc8a3e",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-admin-06-03-evidence/closure-checkpoint.json",
+      "sha256": "b6039f658d91c68be385c91bb87da64d41222b0278b88919fa7f5f54d0585ab9",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-member-06-03-evidence/baseline.packet.json",
+      "sha256": "9700ad00e5df72ad34d2068e1f8cf44de9929d5201b0e3914fbd991b71bac48f",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-member-06-03-evidence/match-reception.packet.json",
+      "sha256": "9a246929007cf5ac61a9f6071a268fb1d429f4a0d6594adad358c3e178d51762",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "resident-member-06-03-evidence/final.packet.json",
+      "sha256": "dd3daa0a498a9adc0e47ffbb2a7ab2350206fc1d9255f80b1295ca3a8c569dd3",
+      "visibility": "private-original-not-published"
+    },
+    {
+      "artifactId": "advisor-limited-shipping-review-01.json",
+      "sha256": "34510d2d08f24a95585db7a04c4874f2658396dbe25f7c4f5c83e1b8ea3025c0",
+      "visibility": "private-original-not-published"
+    }
+  ],
+  "personas": [
+    {
+      "id": "ALIC-L1R-FU06-ADMIN-20261116",
+      "personaArchetype": "ADHD傾向×中断・放棄",
+      "registrationSource": "actual-resident-artifacts",
+      "idAssignment": "persona/journey IDは登録時付与。原contextとrun/sourceを保持し固定P01-P20に変換しない。",
+      "originalContextId": "resident-admin-06-02",
+      "runId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false
+    },
+    {
+      "id": "ALIC-L1R-FU06-MEMBER-20261116",
+      "personaArchetype": "一般×素直",
+      "registrationSource": "actual-resident-artifacts",
+      "idAssignment": "persona/journey IDは登録時付与。原contextとrun/sourceを保持し固定P01-P20に変換しない。",
+      "originalContextId": "resident-member-06-02",
+      "runId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false
+    },
+    {
+      "id": "ALIC-L1R-FU06-OTHER-20261116",
+      "personaArchetype": "スマホ片手操作×隙間狙い",
+      "registrationSource": "actual-resident-artifacts",
+      "idAssignment": "persona/journey IDは登録時付与。原contextとrun/sourceを保持し固定P01-P20に変換しない。",
+      "originalContextId": "resident-other-06-02",
+      "runId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false
+    }
+  ],
+  "journeys": [
+    {
+      "id": "ALIC-L1R-FU06-ADMIN-20261116-J1",
+      "personaId": "ALIC-L1R-FU06-ADMIN-20261116",
+      "purpose": "あなたは施設とチームを運営しています。予約者へ新しい臨時休業の連絡を一度届け、確認されたか把握したい。用事で途中離席して戻るように画面を使い、すでに進行中の自チームの試合にも戻って、続きの出来事を一つ記録したい。手順は自分で探してください。",
+      "executionCompleted": true,
+      "allGoalsReached": false,
+      "goalScope": "独立目的探索の実施。全目的達成・全role/機能網羅・製品修復headの合格ではない。",
+      "observedOutcome": "目的未達。許可組織へ自然移動後、権限初期設定dialogを観測。Escape後の閉鎖を確認できず、次のmenu操作がOPERATION_DEADLINEで終端。新休業0・試合OTHER0・普通write0。製品原因を断定しない。",
+      "controlledSupplement": {
+        "independentResident": false,
+        "contexts": [
+          "resident-admin-06-03"
+        ],
+        "purposeRecovery": "01:10UTCに未達/普通write0で封印。原admin02の失敗を上書きしない。",
+        "controlledOutcome": "OTHER1件POST201と本人UI追加を確認。新休業の入力は開始日fillでOPERATION_DEADLINE、送信0。native1、全7PID不在。原因未分類。"
+      },
+      "originalContextId": "resident-admin-06-02",
+      "guiLoginCount": 1,
+      "driverNativeExit": 1,
+      "ordinaryWriteCount": 0,
+      "closed": true,
+      "closeError": false,
+      "pending": 0,
+      "unknown": true,
+      "terminationLimitation": "admin02の期限切れ操作はUNKNOWN_OR_REJECTED。普通write0とdriver/native1を保持。",
+      "runId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false,
+      "unknownOrdinaryWrites": false,
+      "lastOperationResult": "UNKNOWN_OR_REJECTED"
+    },
+    {
+      "id": "ALIC-L1R-FU06-MEMBER-20261116-J1",
+      "personaId": "ALIC-L1R-FU06-MEMBER-20261116",
+      "purpose": "あなたは施設の予約者でチームの一般メンバーです。届いている施設休業の連絡を理解し、必要な確認を済ませ、所属チームの進行中の試合も観戦したい。普段の利用者として自然な導線を探し、迷いや気づいたことを報告してください。",
+      "executionCompleted": true,
+      "allGoalsReached": false,
+      "goalScope": "独立目的探索の実施。全目的達成・全role/機能網羅・製品修復headの合格ではない。",
+      "observedOutcome": "部分達成。お知らせから既存休業の確認と通知既読を各1回、POST200を計2件観測。本人予約2件を閲覧。自然なチーム→試合一覧では観戦入口を認識できず、既受領共有リンクで観戦へ到達。具体的な休業影響理解と自然導線だけの観戦到達は未達。開始前と47分までのtimeline同居を観測。",
+      "controlledSupplement": {
+        "independentResident": false,
+        "contexts": [
+          "resident-member-06-03"
+        ],
+        "controlledOutcome": "同socketのSUBSCRIBE→MESSAGE→自動GET200が2件→UI新OTHER1件を観測。manual reload/refetch0。WebSocket差分だけの直接描画とは主張しない。",
+        "notificationOutcome": "producerの新休業送信0につき通知受信は未実証。受信失敗とは判定しない。",
+        "driverNativeExit": 0
+      },
+      "originalContextId": "resident-member-06-02",
+      "guiLoginCount": 1,
+      "driverNativeExit": 0,
+      "ordinaryWriteCount": 2,
+      "closed": true,
+      "closeError": false,
+      "pending": 0,
+      "unknown": false,
+      "terminationLimitation": "元CLOSED/profile資格/native終端を選別。sender終端値とdriver終端を混同しない。",
+      "runId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false
+    },
+    {
+      "id": "ALIC-L1R-FU06-OTHER-20261116-J1",
+      "personaId": "ALIC-L1R-FU06-OTHER-20261116",
+      "purpose": "あなたは別チームを管理する利用者です。スマホで自チームの進行中の試合状況を確かめ、共有された別チームのページからどこまで閲覧できるか知りたい。使いにくい表示や行き止まりに気づいたら、実際に見えた事実を残してください。",
+      "executionCompleted": true,
+      "allGoalsReached": false,
+      "goalScope": "独立目的探索の実施。全目的達成・全role/機能網羅・製品修復headの合格ではない。",
+      "observedOutcome": "読み取り範囲の部分達成。390x844で自試合の前半・score・timelineを閲覧し、戻る→一覧の既存cardから再入場。他scope共有先では汎用取得失敗、再試行1回でも同表示で閲覧境界の理由は不明。実HTTP403/404/5xxは観測なし。普通write0。",
+      "controlledSupplement": null,
+      "originalContextId": "resident-other-06-02",
+      "guiLoginCount": 1,
+      "driverNativeExit": 0,
+      "ordinaryWriteCount": 0,
+      "closed": true,
+      "closeError": false,
+      "pending": 0,
+      "unknown": false,
+      "terminationLimitation": "元CLOSED/profile資格/native終端を選別。sender終端値とdriver終端を混同しない。",
+      "runId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false
+    }
+  ],
+  "insights": [
+    {
+      "id": "ALIC-L1R-FU06-MEMBER-20261116-I001",
+      "featureKey": "tournament",
+      "featureDetail": "通常試合開始後の永続status・観戦表示・記録再開導線",
+      "personaId": "ALIC-L1R-FU06-MEMBER-20261116",
+      "journeyId": "ALIC-L1R-FU06-MEMBER-20261116-J1",
+      "personaArchetype": "一般×素直",
+      "originalRunId": "l1r-7a9502a2-fu261115-01",
+      "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+      "evidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "sourceEvidencePath": "docs/evidence/CMP-261028-2304/resident-observations-followup-20261116.json",
+      "originalObservationId": "member06-02-start-status-timeline",
+      "title": "開始済みのtimelineがあっても観戦画面は開始前と表示された",
+      "detail": "原member06-02はライブ接続中・観戦のみ・開始前と47分までのtimelineを同時観測し、原因は断定していない。別のroot限定裏取りで、通常GUIのSTART保存後もstatus=SCHEDULEDのままとなる開始ライフサイクル欠落をP2として採択。進行中一覧・再開CTAからの除外はquery/filterの静的影響確認であり、原住民がCTA不在を実機撮影したとはしない。修復と再検証は別作業で、本観測は未実証flagを維持。",
+      "page": "",
+      "screenshotPath": "",
+      "urgency": "normal",
+      "priority": "should",
+      "registrationSource": "actual-resident-artifacts",
+      "trusted": false,
+      "status": "observed-unverified",
+      "coveragePassed": false
+    }
+  ],
+  "rootVerification": {
+    "artifactId": "advisor-limited-shipping-review-01.json",
+    "sha256": "34510d2d08f24a95585db7a04c4874f2658396dbe25f7c4f5c83e1b8ea3025c0",
+    "acceptedPriority": "P2",
+    "scope": "原member観測とは区別した、固定b8の履歴・仕様・呼出経路の限定裏取り。修復済みやcoverage合格を意味しない。",
+    "productExecution": 0
+  },
+  "excludedCandidates": [
+    "長名ellipsis、他scope汎用エラー文、操作deadlineの原因は確定bugへ昇格しない。",
+    "再入場秒数差は記録済みminute復元契約の制限と整合し、秒時計の不備へ昇格しない。",
+    "旧admin02/native1・元purpose未達・通知producer0/未実証をcontrolled成功で上書きしない。"
+  ],
+  "publicationBoundary": "原packet/画像/秘密/絶対private pathは公開しない。artifactIdとSHA256のみで来歴を結ぶ。",
+  "formalParentCompletion": false
+}

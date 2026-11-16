@@ -238,7 +238,7 @@ JDBC の `serverTimezone=UTC` はドライバ側の `Timestamp` 解釈を決め�
 
 1. **「瞬間」と「壁時計」を型で区別する発想が §20 にはない。** §20 は用途を問わず一律 `LocalDateTime` を使い、DB格納だけをUTCにする設計であり、本方針が求める「型で意味を区別する」（方針3点目）と真っ向から異なる。§20 の下では `ReservationEntity.bookedAt`（瞬間）も `ReservationSlotEntity` の関連ロジックで扱う締切判定（壁時計）も、コード上は同じ `LocalDateTime` 型で表現され、区別がつかない。
 2. **§20 はアプリ層をJST固定とし、本方針は「瞬間はUTC、壁時計は土地のTZ（必ずしもJSTではない）」とする。** §20 の「アプリ層＝JST」という前提は、単一TZ（日本国内）運用を暗黙の前提にしており、海外拠点（本方針転換の動機そのもの）を想定していない。本方針では「壁時計」は店・チームごとに異なるTZを持ちうる。
-3. **§20 の `TimeZoneConfig` 撤去条件が §20 には存在しない。** §20 はむしろ `TimeZoneConfig` を規約の中核として位置づけている（`backend/.claudecode.md:16` のディレクトリ構成表にも明記）。本方針は5章で示した通り、これを最終的に撤去する方向を示しており、方向性が逆である。
+3. **§20 の `TimeZoneConfig` 撤去条件が §20 には存在しない。** §20 はむしろ `TimeZoneConfig` を規約の中核として位置づけている（`backend/.claudecode.md` §1 のディレクトリ構成表（[docs/conventions/backend/01-backend-java.md](../conventions/backend/01-backend-java.md)）にも明記）。本方針は5章で示した通り、これを最終的に撤去する方向を示しており、方向性が逆である。
 4. **§20 の「受信側の解釈規則」（未解決時はAsia/Tokyoとみなす）は、個人TZの入力解釈としては本方針と両立しうるが、「壁時計＝土地のTZ」という概念（店・チームのTZ）を扱っていない。** 既存の `common/timezone/` 基盤（`UserTimezoneFilter`/`UserZoneLocalDateTimeParser`）は個人TZの解決に特化しており、棚卸し文書 D-0 が指摘する通り「テナント（チーム・組織）TZ」は一切扱っていない。本方針の「壁時計は店の時計」を実現するには、この基盤とは別に店・チームTZの解決経路が必要になる。
 
 **規約側への提案（提案のみ・実際には直さない）**:
