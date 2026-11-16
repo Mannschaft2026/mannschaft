@@ -76,7 +76,7 @@ class SparseExcludedAssetsTest {
     @Test
     void coneではないsparseはskipしない() throws Exception {
         coneSparse("scripts", OTHER);
-        git("config", "core.sparseCheckoutCone", "false");
+        git("config", "--worktree", "core.sparseCheckoutCone", "false");
         assertThat(SparseExcludedAssets.decide(DIR, NO_CI, repo).skip()).isFalse();
     }
 
