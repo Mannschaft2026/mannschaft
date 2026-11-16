@@ -94,6 +94,31 @@ public class BulletinScopeIdResolver {
     }
 
     /**
+     * グローバル方式（{@code /api/v1/bulletin/threads}）専用の scope_id 解決。
+     *
+     * <p>大会／ディビジョン連絡スコープ（{@code TOURNAMENT / TOURNAMENT_DIVISION}）は数値 ID のみを受け、
+     * slug は 400 とする。それ以外のスコープは {@link #resolve} と同じ経路で解決する。
+     * パス方式の許可リスト（{@link #PATH_ADDRESSABLE_SCOPES}）は広げない（認可は大会連絡アクセス判定が
+     * サービス層で担うため、パス方式の入口には通さない）。</p>
+     *
+     * @param scopeType スコープ種別
+     * @param scopeId   scope_id 文字列
+     * @return 対応する BIGINT ID
+     * @throws ResponseStatusException 大会スコープで数値以外が渡された場合（400）
+     */
+    public Long resolveGlobal(ScopeType scopeType, String scopeId) {
+        if (scopeType == ScopeType.TOURNAMENT || scopeType == ScopeType.TOURNAMENT_DIVISION) {
+            try {
+                return Long.parseLong(scopeId);
+            } catch (NumberFormatException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "scope_id は数値で指定してください: " + scopeType);
+            }
+        }
+        return resolve(scopeType, scopeId);
+    }
+
+    /**
      * スコープ付きパス経路で扱えるスコープ種別であることを要求する（fail-closed）。
      *
      * <p>許可リストに無い種別は、この経路では認可判定の手段が無い（判定に必要な情報が
