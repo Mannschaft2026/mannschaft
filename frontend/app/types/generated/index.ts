@@ -81904,6 +81904,8 @@ export interface components {
             /** Format: int32 */
             memberCount?: number;
             name?: string;
+            /** Format: int64 */
+            numericId?: number;
             slug?: string;
             teamGroup?: components["schemas"]["OrgTeamSummaryGroupRef"];
             visibility?: string;

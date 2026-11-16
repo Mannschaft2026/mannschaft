@@ -144,6 +144,52 @@ tracked差分・残存refに加え、untracked/ignoredを確認する。`logs/` 
 
 必要な差分だけを秘密情報がないと確認したうえで正本branch/PRへ回収し、CMP・担当・次の一手を対応付ける。既存Draft PR/refに必要差分があれば回収branchを重複作成せず、未完理由と次の一手を既存CMPへ対応付ける。採用済み・検証専用・後続改善で不要なものは採否理由を記録する。全量archiveの追加で解消扱いにせず、使用中プロセス・共有Gitディレクトリ・他の利用者資産を確認してから不要な原コピーを個別に撤去する。未確定分は所有者・再確認期限・再開条件を付けて引き継ぐ。既存の `--check` は検知専用のままとし、無差別削除へ変更しない。
 
+## 足軽 worktree の sparse checkout（運用の入口）
+
+足軽 worktree は、牧場 PNG 素材3ディレクトリ（`frontend/dev-fixtures/ranch`・`frontend/public/ranch/approved`・`backend/src/main/resources/ranch/approved`、計約876MB）を展開しない。C ドライブの逼迫対策で、worktree 1本あたり約0.8GB 減る。仕組みは次の2節が正本で、ここでは入口だけを書く。
+
+- [素材の展開・縮小（worktree-assets）](#素材の展開縮小worktree-assets): 展開・縮小のコマンドと拒否条件
+- [sparse 一覧の正本と番人](#sparse-一覧の正本と番人cmp-261116-1101): 設定の一覧の生成と CI 検査
+
+### 何が変わるか
+
+- 新規作成する足軽 worktree は、素材3ディレクトリが作業木に無い（git の追跡は続く）。**commit しても素材の削除は記録されない**。
+- 本陣（メインの作業木）は常に全展開のまま。本陣では `shrink` / `reapply` しない。
+- **既存の worktree には自動適用されない**。設定の有効化後に作る新規分から効く。既存分を縮めたいときは、その worktree で `node scripts/worktree-assets.mjs shrink` を手動で実行する。
+- sparse の worktree では、素材に依存する処理は次のとおり振る舞う（無言でスキップしない）。
+  - FE の素材検証（`verify-ranch-*`）: 実バイト（PNG の中身・hash・寸法）の検査だけを理由つきで省略する。メタデータ検査は常に走る。`CI` 環境では省略しない。
+  - 配置 CLI（`verify-ranch-production-assets.mjs`。`--repository` を付けて書き込むとき）と生成ツール（`generate-ranch-production-appearances.mjs`）: 素材が未展開なら、何も書き込む前に展開手順つきで非0になる。`--repository` なしの検証だけなら sparse でも動く。
+  - 成果物検証（`verify-ranch-production-artifact.mjs`、Docker ビルドの途中でも走る）: 素材が無ければ失敗する。
+  - gitleaks の公開 ID 再検査（`verify-ranch-public-identity-gitleaks.mjs`）: 承認 pack の `manifest.json` が未展開なら HEAD から `git show` で取得して実際に検査する（成功スキップはしない。sparse 除外以外の欠落と `CI` では失敗）。expand は要らない。
+  - BE の牧場テスト: 実素材に依存する単位だけが理由つきで skipped になる（`@RequiresRanchApprovedAssets`）。
+
+### 素材が要る作業と手順
+
+次の作業の前に、その worktree で `node scripts/worktree-assets.mjs expand` を実行する。終わって素材が不要になったら `node scripts/worktree-assets.mjs shrink`。
+
+- 牧場機能の素材を触る（画面・API・診断 formal mapping・素材の生成・登録）
+- 素材の実バイト検証（`verify-ranch-*` を省略させず通したいとき）
+- 配置 CLI の実行、成果物検証、ローカルでの Docker ビルド
+- BE の実素材依存テストを skipped にせず実行したいとき
+
+### main を取り込んだとき
+
+`git merge origin/main` や rebase で `worktree.sparsePaths` の一覧が変わったら、その worktree で `node scripts/worktree-assets.mjs reapply` を実行する（`status` で設定との一致を確認できる）。
+
+### 一覧を更新する場面（番人）
+
+main に新しいトップレベルのディレクトリや、除外ディレクトリの兄弟を足すと、一覧が古くなって CI の `node scripts/worktree-sparse-paths.mjs --check` が落ちる。`node scripts/worktree-sparse-paths.mjs --write` で `.claude/settings.json` を更新して同じ PR に含める。
+
+### やってはいけないこと
+
+- `git sparse-checkout disable` / `set` などを手で打つ。`extensions.worktreeConfig` が無効な環境では共有 `.git/config` を書き換えて他の worktree に影響し、手打ちはこの確認も、未追跡・ignore 済みファイル（生成物など）の検査も、事後検証も通らないため、失う・取りこぼすおそれがある。共有 config に `core.sparsecheckout` が漏れている環境もあり、状態の判定が食い違う。展開・縮小は `worktree-assets.mjs` だけで行う。
+- 本陣で `shrink` / `reapply` する（拒否される）。
+- 除外ディレクトリへ junction・symlink を張る（参照先の追跡ファイルまで消えるおそれがあるため拒否される）。
+
+### WSL 検証コピー
+
+`scripts/verification-run.mjs` は `git archive --format=tar <HEAD>` で HEAD のコミットを展開する。archive はコミットの tree を読み、作業木の sparse 状態を見ないので、sparse の worktree を `--source` に指定しても素材3ディレクトリは WSL 側の検証コピーに全て入る（確認: sparse の worktree で `git archive HEAD frontend/public/ranch/approved` が追跡ファイル全件を出力する）。
+
 ## 素材の展開・縮小（worktree-assets）
 
 牧場 PNG 素材（`frontend/dev-fixtures/ranch`、`frontend/public/ranch/approved`、`backend/src/main/resources/ranch/approved`。計約876MB）は、足軽 worktree では `worktree.sparsePaths`（git sparse-checkout の cone モード）で既定では展開しない運用を目指している。素材が要る作業では `scripts/worktree-assets.mjs` で展開し、終わったら縮小する。操作対象は**実行した worktree だけ**で、共有 `.git/config`・他 worktree・本陣は変えない。
@@ -157,6 +203,7 @@ tracked差分・残存refに加え、untracked/ignoredを確認する。`logs/` 
 - 素材の生成・登録
 - `verify-ranch-*` の実バイト検査
 - ローカルでの Docker ビルド（素材をイメージに含めるため）
+- 配置 CLI・成果物検証、BE の実素材依存テスト（要る作業の全体像は[運用の入口](#足軽-worktree-の-sparse-checkout運用の入口)）
 
 ### コマンド
 
