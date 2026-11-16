@@ -10,7 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * CMP-260909-2152 月次締めイベント (c)。締め TX の中で shiftbudget が自ドメインの表として INSERT する。
@@ -44,15 +44,15 @@ public class ShiftBudgetMonthlyCloseEventEntity extends UuidV7Entity {
     private Long actorUserId;
 
     @Column(name = "closed_at", nullable = false)
-    private LocalDateTime closedAt;
+    private Instant closedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @PrePersist
     void stampCreatedAt() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = Instant.now();
         }
     }
 }

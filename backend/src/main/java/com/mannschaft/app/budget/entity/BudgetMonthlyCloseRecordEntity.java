@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * CMP-260909-2152 月次締め記録 (a)。割当×月の「締めた事実」と、現在の訂正後合計を持つ。
@@ -57,7 +57,7 @@ public class BudgetMonthlyCloseRecordEntity extends UuidV7Entity {
     private Long originalRecordedBy;
 
     @Column(name = "closed_at", nullable = false)
-    private LocalDateTime closedAt;
+    private Instant closedAt;
 
     @Column(name = "revision", nullable = false)
     private long revision;
@@ -69,21 +69,21 @@ public class BudgetMonthlyCloseRecordEntity extends UuidV7Entity {
     private BigDecimal exactTotal;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     @PrePersist
     void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now();
         this.createdAt = now;
         this.updatedAt = now;
     }
 
     @PreUpdate
     void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = Instant.now();
     }
 
     /** 訂正を1件追記した結果を反映する。 */

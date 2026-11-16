@@ -83,14 +83,15 @@ public class ShiftBudgetCorrectionQueryService {
     }
 
     /** 割当が締めた月（旧締めの締めイベント補完用）。 */
-    public record ClosedMonth(String month, java.time.LocalDateTime closedAt) {
+    public record ClosedMonth(String month, java.time.Instant closedAt) {
     }
 
     /** 月次締め仕訳がある月の一覧（月次締めの原仕訳の日付の月と、仕訳の作成日時）。 */
     public List<ClosedMonth> closedMonths(Long allocationId) {
         return transactionRepository.findBySourceTypeAndSourceId(ShiftBudgetJournalSources.MONTHLY, allocationId)
                 .stream()
-                .map(t -> new ClosedMonth(java.time.YearMonth.from(t.getTransactionDate()).toString(), t.getCreatedAt()))
+                .map(t -> new ClosedMonth(java.time.YearMonth.from(t.getTransactionDate()).toString(),
+                        t.getCreatedAt().atZone(com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser.SERVER_ZONE).toInstant()))
                 .toList();
     }
 
@@ -130,7 +131,8 @@ public class ShiftBudgetCorrectionQueryService {
         Optional<BudgetMonthlyCloseRecordEntity> found = recordRepository.findByOriginalTransactionId(journal.getId());
         if (found.isEmpty()) {
             return new ShiftBudgetCorrectionHistoryView(new ShiftBudgetCloseView(journal.getAmount(),
-                    facts.lines().size(), facts.closedAt() != null ? facts.closedAt() : journal.getCreatedAt(),
+                    facts.lines().size(), facts.closedAt() != null ? facts.closedAt()
+                            : journal.getCreatedAt().atZone(com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser.SERVER_ZONE).toInstant(),
                     facts.closeActorKind() != null ? facts.closeActorKind() : "UNKNOWN",
                     "MANUAL".equals(facts.closeActorKind()) ? facts.closeActorUserId() : null, 0L,
                     journal.getAmount(), 0, BigDecimal.ZERO, BigDecimal.ZERO),

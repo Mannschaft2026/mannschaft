@@ -3,7 +3,7 @@ package com.mannschaft.app.budget.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * CMP-260909-2152 「一度締めた」事実と、その後の追加・訂正の累計（履歴画面の見出し）。
@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 public record ShiftBudgetCloseView(
         @JsonProperty("original_amount") BigDecimal originalAmount,
         @JsonProperty("original_line_count") int originalLineCount,
-        @JsonProperty("closed_at") LocalDateTime closedAt,
+        @JsonProperty("closed_at") Instant closedAt,
         @JsonProperty("close_actor_kind") String closeActorKind,
         @JsonProperty("close_actor_user_id") Long closeActorUserId,
         @JsonProperty("revision") long revision,

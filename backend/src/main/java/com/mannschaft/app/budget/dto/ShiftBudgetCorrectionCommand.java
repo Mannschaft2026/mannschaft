@@ -2,7 +2,7 @@ package com.mannschaft.app.budget.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -51,7 +51,7 @@ public record ShiftBudgetCorrectionCommand(
     public record Snapshot(
             String closeActorKind,
             Long closeActorUserId,
-            LocalDateTime closedAt,
+            Instant closedAt,
             List<ClosedLine> lines,
             Set<String> plannedSlotUsers
     ) {

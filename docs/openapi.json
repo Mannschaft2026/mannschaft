@@ -61278,6 +61278,196 @@
         }
       }
     },
+    "/api/v1/shift-budget/allocations/{allocationId}/monthly-closes/{yearMonth}/corrections": {
+      "get": {
+        "tags": [
+          "monthly-shift-budget-correction-controller"
+        ],
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "X-Organization-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "allocationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "yearMonth",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseShiftBudgetCorrectionHistoryView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "monthly-shift-budget-correction-controller"
+        ],
+        "operationId": "correct",
+        "parameters": [
+          {
+            "name": "X-Organization-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "allocationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "yearMonth",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonthlyCloseCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseShiftBudgetCorrectionView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shift-budget/allocations/{allocationId}/monthly-closes/{yearMonth}/corrections/{correctionId}/reversals": {
+      "post": {
+        "tags": [
+          "monthly-shift-budget-correction-controller"
+        ],
+        "operationId": "reverse",
+        "parameters": [
+          {
+            "name": "X-Organization-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "allocationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "yearMonth",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "correctionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonthlyCloseReversalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseShiftBudgetCorrectionView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/shift-budget/alerts/{id}/acknowledge": {
       "post": {
         "tags": [
@@ -88286,7 +88476,7 @@
         "tags": [
           "budget-transaction-controller"
         ],
-        "operationId": "reverse",
+        "operationId": "reverse_1",
         "parameters": [
           {
             "name": "transactionId",
@@ -132400,6 +132590,54 @@
         }
       }
     },
+    "/api/v1/shift-budget/allocations/{allocationId}/monthly-closes/{yearMonth}/uncounted-shifts": {
+      "get": {
+        "tags": [
+          "monthly-shift-budget-correction-controller"
+        ],
+        "operationId": "uncountedShifts",
+        "parameters": [
+          {
+            "name": "X-Organization-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "allocationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "yearMonth",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseUncountedShiftsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/shift-budget/alerts": {
       "get": {
         "tags": [
@@ -144283,7 +144521,7 @@
           "巡礼 (F17.1 Phase 3-β)"
         ],
         "summary": "自分の巡礼履歴を取得する（推薦日降順）",
-        "operationId": "history",
+        "operationId": "history_1",
         "parameters": [
           {
             "name": "page",
@@ -170549,6 +170787,9 @@
             "type": "number"
           },
           "consumed_amount": {
+            "type": "number"
+          },
+          "correction_delta_total": {
             "type": "number"
           },
           "created_at": {
@@ -201035,6 +201276,177 @@
           "period_end",
           "period_start"
         ]
+      },
+      "MonthlyCloseCorrectionRequest": {
+        "type": "object",
+        "properties": {
+          "added_line_id": {
+            "type": "string"
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "consumption_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "content": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hourly_rate": {
+            "type": "number"
+          },
+          "hours": {
+            "type": "number"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "line_kind": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "shift_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "slot_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "ApiResponseShiftBudgetCorrectionView": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ShiftBudgetCorrectionView"
+          }
+        }
+      },
+      "ShiftBudgetCorrectionView": {
+        "type": "object",
+        "properties": {
+          "actor_user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "added_line_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "after_amount": {
+            "type": "number"
+          },
+          "after_hourly_rate": {
+            "type": "number"
+          },
+          "after_hours": {
+            "type": "number"
+          },
+          "after_line_status": {
+            "type": "string"
+          },
+          "before_amount": {
+            "type": "number"
+          },
+          "before_hourly_rate": {
+            "type": "number"
+          },
+          "before_hours": {
+            "type": "number"
+          },
+          "before_line_status": {
+            "type": "string"
+          },
+          "budget_transaction_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "consumption_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "content": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exact_delta": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "line_kind": {
+            "type": "string"
+          },
+          "posted_delta": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reverses_correction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shift_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "slot_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "MonthlyCloseReversalRequest": {
+        "type": "object",
+        "properties": {
+          "command_id": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "AlertAcknowledgeRequest": {
         "type": "object",
@@ -240458,6 +240870,9 @@
           "consumption_rate": {
             "type": "number"
           },
+          "correction_delta_total": {
+            "type": "number"
+          },
           "flags": {
             "type": "array",
             "items": {
@@ -240478,6 +240893,13 @@
       "HourlyRateConsumptionDto": {
         "type": "object",
         "properties": {
+          "added_amount": {
+            "type": "number"
+          },
+          "added_count": {
+            "type": "integer",
+            "format": "int32"
+          },
           "amount": {
             "type": "number"
           },
@@ -240492,6 +240914,13 @@
       "UserConsumptionDto": {
         "type": "object",
         "properties": {
+          "added_amount": {
+            "type": "number"
+          },
+          "added_count": {
+            "type": "integer",
+            "format": "int32"
+          },
           "amount": {
             "type": "number"
           },
@@ -240505,6 +240934,136 @@
             }
           },
           "user_id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ApiResponseUncountedShiftsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UncountedShiftsResponse"
+          }
+        }
+      },
+      "UncountedShiftResponse": {
+        "type": "object",
+        "properties": {
+          "add_available": {
+            "type": "boolean"
+          },
+          "hourly_rate": {
+            "type": "number"
+          },
+          "hours": {
+            "type": "number"
+          },
+          "shift_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "slot_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unavailable_reason": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "UncountedShiftsResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UncountedShiftResponse"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ApiResponseShiftBudgetCorrectionHistoryView": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ShiftBudgetCorrectionHistoryView"
+          }
+        }
+      },
+      "ShiftBudgetCloseView": {
+        "type": "object",
+        "properties": {
+          "added_amount": {
+            "type": "number"
+          },
+          "added_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "close_actor_kind": {
+            "type": "string"
+          },
+          "close_actor_user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "closed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "correction_delta_total": {
+            "type": "number"
+          },
+          "original_amount": {
+            "type": "number"
+          },
+          "original_line_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "posted_total": {
+            "type": "number"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ShiftBudgetCorrectionHistoryView": {
+        "type": "object",
+        "properties": {
+          "close": {
+            "$ref": "#/components/schemas/ShiftBudgetCloseView"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShiftBudgetCorrectionView"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
             "type": "integer",
             "format": "int64"
           }

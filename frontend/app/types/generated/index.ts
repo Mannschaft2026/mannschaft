@@ -15423,6 +15423,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shift-budget/allocations/{allocationId}/monthly-closes/{yearMonth}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history"];
+        put?: never;
+        post: operations["correct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-budget/allocations/{allocationId}/monthly-closes/{yearMonth}/corrections/{correctionId}/reversals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reverse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shift-budget/alerts/{id}/acknowledge": {
         parameters: {
             query?: never;
@@ -24184,7 +24216,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["reverse"];
+        post: operations["reverse_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -39435,6 +39467,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shift-budget/allocations/{allocationId}/monthly-closes/{yearMonth}/uncounted-shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["uncountedShifts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shift-budget/alerts": {
         parameters: {
             query?: never;
@@ -44173,7 +44221,7 @@ export interface paths {
             cookie?: never;
         };
         /** 自分の巡礼履歴を取得する（推薦日降順） */
-        get: operations["history"];
+        get: operations["history_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55140,6 +55188,7 @@ export interface components {
             budget_category_id?: number;
             confirmed_amount?: number;
             consumed_amount?: number;
+            correction_delta_total?: number;
             /** Format: date-time */
             created_at?: string;
             /** Format: int64 */
@@ -66252,6 +66301,77 @@ export interface components {
             project_id?: number;
             /** Format: int64 */
             team_id?: number;
+        };
+        MonthlyCloseCorrectionRequest: {
+            added_line_id?: string;
+            command_id?: string;
+            /** Format: int64 */
+            consumption_id?: number;
+            content?: string;
+            /** Format: int64 */
+            expected_revision?: number;
+            hourly_rate?: number;
+            hours?: number;
+            kind?: string;
+            line_kind?: string;
+            reason?: string;
+            /** Format: int64 */
+            shift_id?: number;
+            /** Format: int64 */
+            slot_id?: number;
+            /** Format: int64 */
+            user_id?: number;
+            /** Format: date */
+            work_date?: string;
+        };
+        ApiResponseShiftBudgetCorrectionView: {
+            data?: components["schemas"]["ShiftBudgetCorrectionView"];
+        };
+        ShiftBudgetCorrectionView: {
+            /** Format: int64 */
+            actor_user_id?: number;
+            /** Format: uuid */
+            added_line_id?: string;
+            after_amount?: number;
+            after_hourly_rate?: number;
+            after_hours?: number;
+            after_line_status?: string;
+            before_amount?: number;
+            before_hourly_rate?: number;
+            before_hours?: number;
+            before_line_status?: string;
+            /** Format: int64 */
+            budget_transaction_id?: number;
+            /** Format: int64 */
+            consumption_id?: number;
+            content?: string;
+            /** Format: date-time */
+            created_at?: string;
+            exact_delta?: number;
+            /** Format: uuid */
+            id?: string;
+            kind?: string;
+            line_kind?: string;
+            posted_delta?: number;
+            reason?: string;
+            /** Format: uuid */
+            reverses_correction_id?: string;
+            /** Format: int64 */
+            revision?: number;
+            /** Format: int64 */
+            shift_id?: number;
+            /** Format: int64 */
+            slot_id?: number;
+            /** Format: int64 */
+            user_id?: number;
+            /** Format: date */
+            work_date?: string;
+        };
+        MonthlyCloseReversalRequest: {
+            command_id?: string;
+            /** Format: int64 */
+            expected_revision?: number;
+            reason?: string;
         };
         AlertAcknowledgeRequest: {
             comment?: string;
@@ -80600,22 +80720,81 @@ export interface components {
             confirmed_amount?: number;
             consumed_amount?: number;
             consumption_rate?: number;
+            correction_delta_total?: number;
             flags?: string[];
             planned_amount?: number;
             remaining_amount?: number;
             status?: string;
         };
         HourlyRateConsumptionDto: {
+            added_amount?: number;
+            /** Format: int32 */
+            added_count?: number;
             amount?: number;
             hourly_rate_snapshot?: number;
             hours?: number;
         };
         UserConsumptionDto: {
+            added_amount?: number;
+            /** Format: int32 */
+            added_count?: number;
             amount?: number;
             hours?: number;
             rate_breakdown?: components["schemas"]["HourlyRateConsumptionDto"][];
             /** Format: int64 */
             user_id?: number;
+        };
+        ApiResponseUncountedShiftsResponse: {
+            data?: components["schemas"]["UncountedShiftsResponse"];
+        };
+        UncountedShiftResponse: {
+            add_available?: boolean;
+            hourly_rate?: number;
+            hours?: number;
+            /** Format: int64 */
+            shift_id?: number;
+            /** Format: int64 */
+            slot_id?: number;
+            unavailable_reason?: string;
+            /** Format: int64 */
+            user_id?: number;
+            /** Format: date */
+            work_date?: string;
+        };
+        UncountedShiftsResponse: {
+            items?: components["schemas"]["UncountedShiftResponse"][];
+            /** Format: int64 */
+            revision?: number;
+        };
+        ApiResponseShiftBudgetCorrectionHistoryView: {
+            data?: components["schemas"]["ShiftBudgetCorrectionHistoryView"];
+        };
+        ShiftBudgetCloseView: {
+            added_amount?: number;
+            /** Format: int32 */
+            added_count?: number;
+            close_actor_kind?: string;
+            /** Format: int64 */
+            close_actor_user_id?: number;
+            /** Format: date-time */
+            closed_at?: string;
+            correction_delta_total?: number;
+            original_amount?: number;
+            /** Format: int32 */
+            original_line_count?: number;
+            posted_total?: number;
+            /** Format: int64 */
+            revision?: number;
+        };
+        ShiftBudgetCorrectionHistoryView: {
+            close?: components["schemas"]["ShiftBudgetCloseView"];
+            items?: components["schemas"]["ShiftBudgetCorrectionView"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            total?: number;
         };
         ApiResponseListAlertResponse: {
             data?: components["schemas"]["AlertResponse"][];
@@ -122019,6 +122198,93 @@ export interface operations {
             };
         };
     };
+    history: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header: {
+                "X-Organization-Id": number;
+            };
+            path: {
+                allocationId: number;
+                yearMonth: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseShiftBudgetCorrectionHistoryView"];
+                };
+            };
+        };
+    };
+    correct: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path: {
+                allocationId: number;
+                yearMonth: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonthlyCloseCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseShiftBudgetCorrectionView"];
+                };
+            };
+        };
+    };
+    reverse: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path: {
+                allocationId: number;
+                yearMonth: string;
+                correctionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonthlyCloseReversalRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseShiftBudgetCorrectionView"];
+                };
+            };
+        };
+    };
     acknowledgeAlert: {
         parameters: {
             query?: never;
@@ -138526,7 +138792,7 @@ export interface operations {
             };
         };
     };
-    reverse: {
+    reverse_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -164604,6 +164870,31 @@ export interface operations {
             };
         };
     };
+    uncountedShifts: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Organization-Id": number;
+            };
+            path: {
+                allocationId: number;
+                yearMonth: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseUncountedShiftsResponse"];
+                };
+            };
+        };
+    };
     listAlerts: {
         parameters: {
             query?: {
@@ -171197,7 +171488,7 @@ export interface operations {
             };
         };
     };
-    history: {
+    history_1: {
         parameters: {
             query?: {
                 page?: number;

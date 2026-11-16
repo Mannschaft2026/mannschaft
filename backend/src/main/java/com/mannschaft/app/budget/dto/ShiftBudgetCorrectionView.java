@@ -5,7 +5,7 @@ import com.mannschaft.app.budget.entity.BudgetMonthlyCloseCorrectionEntity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -36,7 +36,7 @@ public record ShiftBudgetCorrectionView(
         @JsonProperty("content") String content,
         @JsonProperty("reason") String reason,
         @JsonProperty("actor_user_id") Long actorUserId,
-        @JsonProperty("created_at") LocalDateTime createdAt,
+        @JsonProperty("created_at") Instant createdAt,
         @JsonProperty("budget_transaction_id") Long budgetTransactionId
 ) {
 

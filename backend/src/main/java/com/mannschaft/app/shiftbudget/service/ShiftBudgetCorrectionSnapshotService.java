@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -136,7 +136,7 @@ public class ShiftBudgetCorrectionSnapshotService {
      * 属する月の特定は {@link #snapshot} と budget 側の合計照合に任せる）。
      */
     @Transactional
-    public void ensureCloseEvent(Long allocationId, String targetMonth, LocalDateTime closedAt) {
+    public void ensureCloseEvent(Long allocationId, String targetMonth, Instant closedAt) {
         ShiftBudgetAllocationEntity allocation = allocationRepository.findByIdForUpdate(allocationId).orElse(null);
         if (allocation == null || allocation.getDeletedAt() != null) {
             throw new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND);
@@ -148,7 +148,7 @@ public class ShiftBudgetCorrectionSnapshotService {
                 .allocationId(allocationId)
                 .targetMonth(targetMonth)
                 .actorKind(ShiftBudgetMonthlyCloseEventEntity.KIND_UNKNOWN)
-                .closedAt(closedAt != null ? closedAt : LocalDateTime.now())
+                .closedAt(closedAt != null ? closedAt : Instant.now())
                 .build());
         log.info("月次締めイベントを旧締めから補完: allocId={}, month={}", allocationId, targetMonth);
     }

@@ -222,7 +222,7 @@ public class MonthlyShiftBudgetCloseService {
                 .actorKind(closer != null ? ShiftBudgetMonthlyCloseEventEntity.KIND_MANUAL
                         : ShiftBudgetMonthlyCloseEventEntity.KIND_BATCH)
                 .actorUserId(closer)
-                .closedAt(java.time.LocalDateTime.now())
+                .closedAt(java.time.Instant.now())
                 .build();
         // 割当リポジトリの断片（締めサービスの依存を増やさない。凍結キーを動かさないため）で同一 TX に INSERT する。
         allocationRepository.recordClose(closeEvent);
