@@ -5,32 +5,40 @@
  * 縮小時の一覧は HEAD の `.claude/settings.json` の `worktree.sparsePaths` を正本とする。
  *
  *   node scripts/worktree-assets.mjs status
- *   node scripts/worktree-assets.mjs expand   [--skip-process-check]
+ *   node scripts/worktree-assets.mjs expand   [--skip-process-check] [--skip-space-check]
  *   node scripts/worktree-assets.mjs shrink   [--skip-process-check] [--force-replace]
  *   node scripts/worktree-assets.mjs reapply  [--skip-process-check] [--force-replace]
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, statfsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, readlinkSync, renameSync, statfsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT = 'node scripts/worktree-assets.mjs';
 const SETTINGS_FILE = '.claude/settings.json';
+const DIGEST_KEY = 'mannschaft.sparsePathsDigest';
+/** 空き容量の見積りに足す固定の余裕。 */
+export const SPACE_MARGIN_BYTES = 200 * 1024 * 1024;
 
 const USAGE = `使い方: ${SCRIPT} <status|expand|shrink|reapply> [オプション]
   status    sparse の状態・展開/除外ディレクトリ・設定との一致を表示（読み取りのみ）
-  expand    全展開する（必要な容量を表示し、空きが足りなければ何もしない）
+  expand    全展開する（必要容量の見積りを表示し、空きが足りなければ何もしない）
   shrink    HEAD の worktree.sparsePaths で縮小する（本陣では拒否）
   reapply   sparse の worktree で、HEAD の最新の worktree.sparsePaths へ一覧を更新する（本陣では拒否）
 オプション:
-  --skip-process-check  対象 worktree を使うプロセスの検査を省く（取得できない環境用。明示時のみ）
-  --force-replace       設定と無関係な既存の sparse 一覧を置き換える`;
+  --skip-process-check  プロセス一覧の検査だけを省く（使用中プローブと事後検証は省かない）
+  --skip-space-check    空き容量を取得できない環境でだけ、容量検査を省く（expand）
+  --force-replace       設定・履歴・本コマンドの印のいずれにも当たらない既存の sparse 一覧を置き換える
+限界: Windows では cwd だけが worktree 内のプロセスは検出できない。使用中の検出は
+  「外れるディレクトリの rename プローブ」と「適用後の実状態検証」による。`;
 
 /** git を実行する。差し替え可能（テストで失敗を注入する）。 */
-export function defaultRunGit(cwd, args) {
+export function defaultRunGit(cwd, args, input) {
   const r = spawnSync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd,
     encoding: 'utf8',
+    input,
     maxBuffer: 512 * 1024 * 1024,
     windowsHide: true,
   });
@@ -38,7 +46,7 @@ export function defaultRunGit(cwd, args) {
   return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-/** 稼働中プロセスの一覧 [{pid, ppid, cmd}]。取得できなければ例外。差し替え可能。 */
+/** 稼働中プロセスの一覧 [{pid, ppid, cmd, cwd?}]。取得できなければ例外。差し替え可能。 */
 export function defaultListProcesses() {
   if (process.platform === 'win32') {
     const r = spawnSync(
@@ -65,7 +73,17 @@ export function defaultListProcesses() {
     .split('\n')
     .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/))
     .filter(Boolean)
-    .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), cmd: m[3] }));
+    .map((m) => {
+      const entry = { pid: Number(m[1]), ppid: Number(m[2]), cmd: m[3] };
+      if (process.platform === 'linux') {
+        try {
+          entry.cwd = readlinkSync(`/proc/${entry.pid}/cwd`);
+        } catch {
+          // 権限が無い・終了済みは cwd 不明のまま（cmd 一致で検査する）
+        }
+      }
+      return entry;
+    });
 }
 
 export function defaultFreeBytes(path) {
@@ -78,6 +96,8 @@ const normSet = (list) => [...new Set(list.map(normPath).filter(Boolean))].sort(
 const sameSet = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const dirOf = (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
 const human = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : `${(n / 1024 ** 2).toFixed(1)} MB`);
+const digestOf = (list) => createHash('sha1').update(normSet(list).join('\n')).digest('hex');
+const lc = (p) => p.replaceAll('\\', '/').toLowerCase();
 
 /** cone モードで、ディレクトリ dir の直下ファイルが展開されるか（ルート・一覧配下・一覧の祖先）。 */
 function isIncluded(dir, sparse) {
@@ -95,10 +115,12 @@ function makeContext(deps) {
     runGit,
     listProcesses: deps.listProcesses ?? defaultListProcesses,
     freeBytes: deps.freeBytes ?? defaultFreeBytes,
+    rename: deps.rename ?? renameSync,
+    probe: deps.probe ?? process.platform === 'win32',
     cwd: deps.cwd ?? process.cwd(),
     top: '',
-    git(args) {
-      return runGit(this.top || this.cwd, args);
+    git(args, input) {
+      return runGit(this.top || this.cwd, args, input);
     },
   };
 }
@@ -115,28 +137,6 @@ function isMainWorktree(ctx) {
   return resolve(dir.stdout.trim()).toLowerCase() === resolve(common.stdout.trim()).toLowerCase();
 }
 
-function currentSparse(ctx) {
-  const r = ctx.git(['sparse-checkout', 'list']);
-  if (r.status !== 0) return { sparse: false, list: [] };
-  const list = normSet(r.stdout.split('\n'));
-  return { sparse: list.length > 0, list };
-}
-
-/** HEAD の設定。{ ok, paths } または { ok:false, reason } */
-function readSettings(ctx) {
-  const r = ctx.git(['show', `HEAD:${SETTINGS_FILE}`]);
-  if (r.status !== 0) return { ok: false, reason: `HEAD に ${SETTINGS_FILE} が無い` };
-  let json;
-  try {
-    json = JSON.parse(r.stdout);
-  } catch (e) {
-    return { ok: false, reason: `${SETTINGS_FILE} が JSON として読めない: ${e.message}` };
-  }
-  const paths = json?.worktree?.sparsePaths;
-  if (!Array.isArray(paths) || paths.length === 0) return { ok: false, reason: `${SETTINGS_FILE} に worktree.sparsePaths が無い` };
-  return { ok: true, paths: normSet(paths) };
-}
-
 function trackedFiles(ctx) {
   const r = ctx.git(['ls-files', '-t', '-z']);
   if (r.status !== 0) throw new Error(`git ls-files 失敗: ${r.stderr.trim()}`);
@@ -144,6 +144,84 @@ function trackedFiles(ctx) {
     .split('\0')
     .filter(Boolean)
     .map((e) => ({ tag: e[0], path: e.slice(2) }));
+}
+
+/**
+ * この worktree が sparse か。list の非空性では判定しない（ルート直下だけの cone は list が空）。
+ * worktree 側の設定+info/sparse-checkout、または skip-worktree ビットの立ったファイルで判定する。
+ * 共有 config の core.sparsecheckout 漏れだけでは sparse としない。
+ */
+function sparseState(ctx, files) {
+  const skip = files.filter((f) => f.tag === 'S').length;
+  const w = ctx.git(['config', '--worktree', '--get', 'core.sparseCheckout']);
+  const cfgOn = w.status === 0 && w.stdout.trim().toLowerCase() === 'true';
+  const fp = gitPathAbs(ctx, 'info/sparse-checkout');
+  const sparse = skip > 0 || (cfgOn && Boolean(fp) && existsSync(fp));
+  let list = [];
+  if (sparse) {
+    const r = ctx.git(['sparse-checkout', 'list']);
+    if (r.status === 0) list = normSet(r.stdout.split('\n'));
+  }
+  return { sparse, list, skip };
+}
+
+function parseSettingsText(text) {
+  try {
+    return { json: JSON.parse(text) };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+/** sparsePaths の全要素を検証する。正規化で黙って直さない。エラー文の配列を返す。 */
+function validateSparsePaths(ctx, paths) {
+  const errors = [];
+  const seen = new Set();
+  paths.forEach((p, i) => {
+    const label = `[${i}] ${JSON.stringify(p)}`;
+    if (typeof p !== 'string') return errors.push(`${label}: 文字列ではない`);
+    if (p === '') return errors.push(`${label}: 空`);
+    if (p !== p.trim()) return errors.push(`${label}: 前後に空白がある`);
+    if (/[\x00-\x1f]/.test(p)) return errors.push(`${label}: 制御文字を含む`);
+    if (p.startsWith('-')) return errors.push(`${label}: 先頭が - （git のオプションと解釈されうる）`);
+    if (p.includes('\\')) return errors.push(`${label}: バックスラッシュを含む（/ 区切りにする）`);
+    if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return errors.push(`${label}: 絶対パス・ドライブ指定`);
+    if (p.split('/').some((s) => s === '' || s === '.' || s === '..')) return errors.push(`${label}: 空・. ・.. の要素、または末尾の / を含む`);
+    if (seen.has(p)) return errors.push(`${label}: 重複`);
+    seen.add(p);
+    const t = ctx.git(['cat-file', '-t', `HEAD:${p}`]);
+    if (t.status !== 0 || t.stdout.trim() !== 'tree') errors.push(`${label}: HEAD に追跡ディレクトリとして実在しない`);
+  });
+  return errors;
+}
+
+/** HEAD の設定。{ ok, paths } または { ok:false, reason } */
+function readSettings(ctx) {
+  const r = ctx.git(['show', `HEAD:${SETTINGS_FILE}`]);
+  if (r.status !== 0) return { ok: false, reason: `HEAD に ${SETTINGS_FILE} が無い` };
+  const parsed = parseSettingsText(r.stdout);
+  if (parsed.error) return { ok: false, reason: `${SETTINGS_FILE} が JSON として読めない: ${parsed.error}` };
+  const paths = parsed.json?.worktree?.sparsePaths;
+  if (!Array.isArray(paths) || paths.length === 0) return { ok: false, reason: `${SETTINGS_FILE} に worktree.sparsePaths が無い` };
+  const errors = validateSparsePaths(ctx, paths);
+  if (errors.length) return { ok: false, reason: `worktree.sparsePaths が不正（何も変更していない）:\n    ${errors.join('\n    ')}` };
+  return { ok: true, paths: [...paths].sort() };
+}
+
+/** 現在の一覧を「設定由来」と認めるか: HEAD 設定・settings.json の履歴・本コマンドの印のいずれかと一致。 */
+function isOwnList(ctx, list, want) {
+  if (sameSet(list, want)) return true;
+  const mark = ctx.git(['config', '--worktree', '--get', DIGEST_KEY]);
+  if (mark.status === 0 && mark.stdout.trim() === digestOf(list)) return true;
+  const log = ctx.git(['log', '--format=%H', '-n', '100', '--', SETTINGS_FILE]);
+  if (log.status !== 0) return false;
+  for (const sha of log.stdout.split('\n').filter(Boolean)) {
+    const show = ctx.git(['show', `${sha}:${SETTINGS_FILE}`]);
+    if (show.status !== 0) continue;
+    const paths = parseSettingsText(show.stdout).json?.worktree?.sparsePaths;
+    if (Array.isArray(paths) && paths.every((p) => typeof p === 'string') && sameSet(normSet(paths), list)) return true;
+  }
+  return false;
 }
 
 function headSizes(ctx) {
@@ -172,14 +250,24 @@ function statusEntries(ctx) {
   return entries;
 }
 
+/** status 上の削除（追跡ファイルが作業木から消えている）パス。 */
+function deletedPaths(ctx) {
+  return new Set(statusEntries(ctx).filter((e) => e.code.includes('D')).map((e) => e.path));
+}
+
 function stateSummary(ctx) {
-  const cur = currentSparse(ctx);
   const st = ctx.git(['status', '--short']);
   const lines = st.stdout.split('\n').filter(Boolean);
+  let sparseText = '(判定不能)';
+  try {
+    const s = sparseState(ctx, trackedFiles(ctx));
+    sparseText = `${s.sparse ? 'はい' : 'いいえ'} / 一覧: ${s.list.length ? s.list.join(', ') : '(なし)'}`;
+  } catch {
+    // 要約は失敗しても本来のエラー表示を妨げない
+  }
   return [
     '到達状態:',
-    `  sparse: ${cur.sparse ? 'はい' : 'いいえ'}`,
-    `  sparse 一覧: ${cur.list.length ? cur.list.join(', ') : '(なし)'}`,
+    `  sparse: ${sparseText}`,
     `  git status: ${lines.length}件${lines.length ? `\n    ${lines.slice(0, 10).join('\n    ')}${lines.length > 10 ? '\n    ...' : ''}` : ''}`,
   ].join('\n');
 }
@@ -198,7 +286,105 @@ function failMidway(ctx, what, r, rerun) {
   return 1;
 }
 
-/** 縮小の安全検査。問題の説明の配列（空なら安全）。 */
+function ancestorPids(procs, start) {
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  const set = new Set([start]);
+  for (let p = byPid.get(start); p && !set.has(p.ppid); p = byPid.get(p.ppid)) set.add(p.ppid);
+  return set;
+}
+
+/** 縮小で外れる領域の最も浅いディレクトリ（プローブ対象）。 */
+function leavingRoots(leaving, want) {
+  const roots = new Set();
+  for (const f of leaving) {
+    const parts = dirOf(f.path).split('/');
+    for (let i = 1; i <= parts.length; i += 1) {
+      const q = parts.slice(0, i).join('/');
+      if (!isIncluded(q, want)) {
+        roots.add(q);
+        break;
+      }
+    }
+  }
+  return [...roots].sort();
+}
+
+/**
+ * 使用中プローブ: 外れるディレクトリを同じ親の一時名へ rename して戻す。
+ * Windows では配下に開かれたハンドルがあると rename が失敗する。
+ * 戻り値 { busy: string[], fatal?: string }
+ */
+function probeDirectories(ctx, roots) {
+  const busy = [];
+  for (const root of roots) {
+    const abs = join(ctx.top, root);
+    if (!existsSync(abs)) continue;
+    const tmp = `${abs}.wa-probe-${process.pid}`;
+    try {
+      ctx.rename(abs, tmp);
+    } catch (e) {
+      busy.push(`${root}（${e.code ?? e.message}）`);
+      continue;
+    }
+    let last;
+    let restored = false;
+    for (let attempt = 0; attempt < 5 && !restored; attempt += 1) {
+      try {
+        ctx.rename(tmp, abs);
+        restored = true;
+      } catch (e) {
+        last = e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      }
+    }
+    if (!restored) {
+      return {
+        busy,
+        fatal: [
+          `使用中プローブで ${abs} を一時名 ${tmp} へ移したが、元の名前へ戻せなかった（${last?.code ?? last?.message}）。`,
+          `手動復旧: ${tmp} を ${abs} へ名前変更して戻すこと（Windows: Move-Item -LiteralPath "${tmp}" -Destination "${abs}" / Linux: mv "${tmp}" "${abs}"）。`,
+          '戻すまで他の操作（git status・shrink 等）をしない。ファイルは失われていない。',
+        ].join('\n'),
+      };
+    }
+  }
+  return { busy };
+}
+
+/** 展開されるパス（とその祖先）の位置に未追跡・ignore 済みの実体が既にあるか。 */
+function expansionCollisions(ctx, paths) {
+  const hits = new Set();
+  const cache = new Map();
+  const stat = (rel) => {
+    if (!cache.has(rel)) {
+      try {
+        cache.set(rel, lstatSync(join(ctx.top, rel)));
+      } catch {
+        cache.set(rel, null);
+      }
+    }
+    return cache.get(rel);
+  };
+  for (const p of paths) {
+    const parts = p.split('/');
+    for (let i = 0; i < parts.length; i += 1) {
+      const rel = parts.slice(0, i + 1).join('/');
+      const st = stat(rel);
+      if (!st) break;
+      if (i < parts.length - 1) {
+        if (!st.isDirectory()) {
+          hits.add(`${rel}（ファイル等がディレクトリの位置を塞いでいる。展開先: ${p}）`);
+          break;
+        }
+      } else {
+        hits.add(`${rel}（追跡ファイルの位置に未追跡・ignore 済みの実体がある）`);
+      }
+    }
+  }
+  return [...hits];
+}
+
+/** 縮小・更新の事前検査。問題の説明の配列（空なら安全）。 */
 function safetyProblems(ctx, newList, { checkRegion, checkProcess, skipProcessCheck }) {
   const problems = [];
   const unmerged = ctx.git(['ls-files', '-u', '-z']);
@@ -219,19 +405,23 @@ function safetyProblems(ctx, newList, { checkRegion, checkProcess, skipProcessCh
       const isDir = path.endsWith('/');
       const dir = isDir ? normPath(path) : dirOf(path);
       if (isIncluded(dir, newList)) continue;
-      const kind = code === '??' ? '未追跡' : code === '!!' ? 'ignore済み' : /\S./.test(code) && code[0] !== ' ' ? 'ステージ済み/変更' : '未コミット変更';
+      const kind = code === '??' ? '未追跡' : code === '!!' ? 'ignore済み' : code[0] !== ' ' ? 'ステージ済み/変更' : '未コミット変更';
       hits.push(`[${kind}] ${path}`);
     }
     if (hits.length) problems.push(`縮小で外れる領域に変更・未追跡・ignore 済みファイルがある（失うため中断）:\n    ${hits.slice(0, 30).join('\n    ')}${hits.length > 30 ? `\n    ... 他 ${hits.length - 30} 件` : ''}`);
   }
 
   if (checkProcess && !skipProcessCheck) {
-    const want = resolve(ctx.top).replaceAll('\\', '/').toLowerCase();
+    const want = lc(resolve(ctx.top));
     try {
-      const procs = ctx.listProcesses().filter((p) => p.pid !== process.pid && p.pid !== process.ppid);
-      const hit = procs.filter((p) => {
-        const cmd = (p.cmd ?? '').replaceAll('\\', '/').toLowerCase();
-        return cmd.includes(want) && /java|node|gradle/.test(cmd);
+      const all = ctx.listProcesses();
+      const skip = ancestorPids(all, process.pid);
+      const hit = all.filter((p) => {
+        if (skip.has(p.pid)) return false;
+        const cmd = lc(p.cmd ?? '');
+        const cwd = p.cwd ? lc(p.cwd) : '';
+        const inside = cmd.includes(want) || cwd === want || cwd.startsWith(`${want}/`);
+        return inside && /java|node|gradle/.test(cmd);
       });
       if (hit.length) problems.push(`この worktree を使うプロセスが動いている（停止してから再実行）:\n    ${hit.slice(0, 10).map((p) => `pid ${p.pid}: ${p.cmd.slice(0, 160)}`).join('\n    ')}`);
     } catch (e) {
@@ -246,30 +436,58 @@ function worktreeConfigEnabled(ctx) {
   return r.status === 0 && r.stdout.trim().toLowerCase() === 'true';
 }
 
-function applyList(ctx, list, rerun) {
-  const r = ctx.git(['sparse-checkout', 'set', '--cone', ...list]);
-  if (r.status !== 0) return { code: failMidway(ctx, 'git sparse-checkout set', r, rerun) };
-  const after = currentSparse(ctx);
-  if (!sameSet(after.list, list)) {
-    return { code: failMidway(ctx, '適用後の検証（sparse 一覧が期待と異なる）', { stderr: `期待: ${list.join(', ')} / 実際: ${after.list.join(', ')}` }, rerun) };
+const WORKTREE_CONFIG_MESSAGE =
+  'extensions.worktreeConfig が無効のため、sparse の操作が共有 .git/config を書き換えてしまう。他の worktree に影響するので何も変えず中断する。';
+
+/**
+ * 適用後の実状態の検証。
+ * - 外れるべき追跡ファイルは skip-worktree で、作業木に実在しない
+ * - 展開すべき（expandPaths）追跡ファイルは skip-worktree が外れて実在する
+ * - 意図しない削除が status に出ていない
+ */
+function verifyResult(ctx, want, expandPaths, deletedBefore) {
+  const problems = [];
+  const left = [];
+  const files = trackedFiles(ctx);
+  const byPath = new Map(files.map((f) => [f.path, f]));
+  for (const f of files) {
+    if (want && isIncluded(dirOf(f.path), want)) continue;
+    if (want === null) continue;
+    if (f.tag !== 'S' || existsSync(join(ctx.top, f.path))) left.push(f.path);
   }
-  return { code: 0 };
+  if (left.length) problems.push(`外れるはずのファイルが残っている（使用中の可能性）:\n    ${left.slice(0, 20).join('\n    ')}${left.length > 20 ? `\n    ... 他 ${left.length - 20} 件` : ''}`);
+  const missing = expandPaths.filter((p) => {
+    const f = byPath.get(p);
+    return !f || f.tag === 'S' || !existsSync(join(ctx.top, p));
+  });
+  if (missing.length) problems.push(`展開されるはずのファイルが実在しない:\n    ${missing.slice(0, 20).join('\n    ')}${missing.length > 20 ? `\n    ... 他 ${missing.length - 20} 件` : ''}`);
+  const newlyDeleted = [...deletedPaths(ctx)].filter((p) => !deletedBefore.has(p));
+  if (newlyDeleted.length) problems.push(`status に意図しない削除が出ている:\n    ${newlyDeleted.slice(0, 20).join('\n    ')}`);
+  return problems;
+}
+
+function failVerify(ctx, what, problems, rerun) {
+  ctx.error(`${what}の結果検証に失敗した（一部だけ適用された可能性）:`);
+  for (const p of problems) ctx.error(`  - ${p}`);
+  ctx.error(stateSummary(ctx));
+  ctx.error(`復旧: 既存の変更・未追跡・ignore 済みファイルは失っていない。使用中のプロセス・エディタ等を閉じ、未追跡の実体があれば退避してから再実行する（再適用して検証し直す）: ${rerun}`);
+  return 1;
 }
 
 function cmdStatus(ctx) {
   const main = isMainWorktree(ctx);
-  const cur = currentSparse(ctx);
+  const files = trackedFiles(ctx);
+  const cur = sparseState(ctx, files);
   const settings = readSettings(ctx);
   ctx.log(`worktree: ${ctx.top}${main ? '（本陣・メイン作業木）' : ''}`);
   ctx.log(`sparse: ${cur.sparse ? 'はい' : 'いいえ'}`);
-  if (cur.sparse) ctx.log(`現在の sparse 一覧: ${cur.list.join(', ')}`);
+  if (cur.sparse) ctx.log(`現在の sparse 一覧: ${cur.list.length ? cur.list.join(', ') : '(ルート直下のみ)'}`);
   if (settings.ok) {
     ctx.log(`HEAD の worktree.sparsePaths: ${settings.paths.join(', ')}`);
     if (cur.sparse) ctx.log(sameSet(cur.list, settings.paths) ? '一覧は設定と一致（古くない）' : '一覧が設定と異なる（古い可能性。reapply で更新、無関係なら --force-replace が必要）');
   } else {
-    ctx.log(`設定が未投入: ${settings.reason}`);
+    ctx.log(`設定が未投入または不正: ${settings.reason}`);
   }
-  const files = trackedFiles(ctx);
   const sizes = headSizes(ctx);
   const groups = new Map();
   let skipped = 0;
@@ -287,31 +505,44 @@ function cmdStatus(ctx) {
   return 0;
 }
 
+function clearDigest(ctx) {
+  ctx.git(['config', '--worktree', '--unset', DIGEST_KEY]); // 無ければ非0だが問題ない
+}
+
 function cmdExpand(ctx, opts) {
   const files = trackedFiles(ctx);
   const skipped = files.filter((f) => f.tag === 'S');
-  const cur = currentSparse(ctx);
+  const cur = sparseState(ctx, files);
   if (skipped.length === 0 && !cur.sparse) {
     ctx.log('既に全展開のため何もしない');
     return 0;
   }
   const sizes = headSizes(ctx);
-  const need = skipped.reduce((sum, f) => sum + (sizes.get(f.path) ?? 0), 0);
-  let free;
+  const blobs = skipped.reduce((sum, f) => sum + (sizes.get(f.path) ?? 0), 0);
+  // autocrlf 等で checkout 後は blob より増える。保守的に blob×1.5 + ファイル数×4096 + 固定余裕
+  const need = Math.ceil(blobs * 1.5) + skipped.length * 4096 + SPACE_MARGIN_BYTES;
+  let free = null;
   try {
     free = ctx.freeBytes(ctx.top);
   } catch (e) {
-    return fail(ctx, `空き容量を取得できないため中断: ${e.message}`);
+    if (!opts.skipSpaceCheck) return fail(ctx, `空き容量を取得できないため何も変えず中断する（${e.message}）。確認済みなら --skip-space-check を付ける`);
   }
-  ctx.log(`必要な容量: ${human(need)}（除外中 ${skipped.length} ファイル） / 空き容量: ${human(free)}`);
-  if (free < need) return fail(ctx, `空き容量が足りないため何も変えずに中断する（不足 ${human(need - free)}）`);
-  if (cur.sparse && !worktreeConfigEnabled(ctx)) {
-    return fail(ctx, 'extensions.worktreeConfig が無効のため、全展開すると共有 .git/config を変えてしまう。中断する。');
+  ctx.log(`必要な容量(見積り): ${human(need)}（blob ${human(blobs)}×1.5 + ${skipped.length} ファイル×4KB + 余裕 ${human(SPACE_MARGIN_BYTES)}） / 空き容量: ${free === null ? '取得不能（--skip-space-check で続行）' : human(free)}`);
+  if (free !== null && free < need) return fail(ctx, `空き容量が足りないため何も変えずに中断する（不足 ${human(need - free)}）`);
+  if (!worktreeConfigEnabled(ctx)) return fail(ctx, WORKTREE_CONFIG_MESSAGE);
+  const expandPaths = skipped.map((f) => f.path);
+  const collisions = expansionCollisions(ctx, expandPaths);
+  if (collisions.length) {
+    ctx.error('展開先に未追跡・ignore 済みの実体があるため何も変えず中断する（上書き・削除はしない。退避してから再実行）:');
+    for (const c of collisions.slice(0, 30)) ctx.error(`  - ${c}`);
+    return 1;
   }
+  const deletedBefore = deletedPaths(ctx);
   const r = ctx.git(['sparse-checkout', 'disable']);
   if (r.status !== 0) return failMidway(ctx, 'git sparse-checkout disable', r, `${SCRIPT} expand`);
-  const remain = trackedFiles(ctx).filter((f) => f.tag === 'S').length;
-  if (remain > 0) return failMidway(ctx, '全展開の検証', { stderr: `除外が ${remain} ファイル残っている` }, `${SCRIPT} expand`);
+  const problems = verifyResult(ctx, null, expandPaths, deletedBefore);
+  if (problems.length) return failVerify(ctx, '全展開', problems, `${SCRIPT} expand`);
+  clearDigest(ctx);
   ctx.log('全展開した');
   return 0;
 }
@@ -321,37 +552,72 @@ function cmdShrinkOrReapply(ctx, sub, opts) {
     return fail(ctx, `${sub} は本陣（メイン作業木）では実行しない。足軽の worktree で実行すること。何も変更していない。`);
   }
   const settings = readSettings(ctx);
-  if (!settings.ok) return fail(ctx, `設定が未投入のため ${sub} できない: ${settings.reason}`);
+  if (!settings.ok) return fail(ctx, `設定が未投入または不正のため ${sub} できない（何も変更していない）: ${settings.reason}`);
   const want = settings.paths;
-  const cur = currentSparse(ctx);
+  if (!worktreeConfigEnabled(ctx)) return fail(ctx, WORKTREE_CONFIG_MESSAGE);
+  const files = trackedFiles(ctx);
+  const cur = sparseState(ctx, files);
   const rerun = `${SCRIPT} ${sub}${opts.skipProcessCheck ? ' --skip-process-check' : ''}${opts.forceReplace ? ' --force-replace' : ''}`;
 
   if (sub === 'reapply' && !cur.sparse) return fail(ctx, 'この worktree は sparse ではないため reapply できない。縮小するなら shrink を使う。');
+
   if (cur.sparse && sameSet(cur.list, want)) {
-    ctx.log('sparse 一覧は既に設定と一致しているため何もしない');
+    // 一覧は一致。実状態が未完了（外れるべきファイルの残り）なら再適用して検証し直す
+    let problems = verifyResult(ctx, want, [], deletedPaths(ctx));
+    if (!problems.length) {
+      ctx.log('sparse 一覧は既に設定と一致しており、実状態も完了しているため何もしない');
+      return 0;
+    }
+    ctx.log('一覧は一致しているが実状態が未完了のため、git sparse-checkout reapply で再適用する');
+    const r = ctx.git(['sparse-checkout', 'reapply']);
+    if (r.status !== 0) return failMidway(ctx, 'git sparse-checkout reapply', r, rerun);
+    problems = verifyResult(ctx, want, [], deletedPaths(ctx));
+    if (problems.length) return failVerify(ctx, '再適用', problems, rerun);
+    ctx.log('再適用して完了を確認した');
     return 0;
   }
-  if (cur.sparse && !opts.forceReplace) {
-    const related = sub === 'reapply' && (cur.list.every((p) => want.includes(p)) || want.every((p) => cur.list.includes(p)));
-    if (!related) {
-      return fail(
-        ctx,
-        `現在の sparse 一覧（${cur.list.join(', ')}）は設定（${want.join(', ')}）と無関係のため、上書きせず中断する。置き換えてよい場合のみ --force-replace を付ける。`,
-      );
-    }
+  if (cur.sparse && !opts.forceReplace && !isOwnList(ctx, cur.list, want)) {
+    return fail(
+      ctx,
+      `現在の sparse 一覧（${cur.list.length ? cur.list.join(', ') : 'ルート直下のみ'}）は、設定・settings.json の履歴・本コマンドの印のいずれにも当たらない無関係な一覧のため、上書きせず中断する（何も変更していない）。置き換えてよい場合のみ --force-replace を付ける。`,
+    );
   }
-  if (!worktreeConfigEnabled(ctx)) {
-    return fail(ctx, 'extensions.worktreeConfig が無効のため、sparse 設定が共有 .git/config を書き換えてしまう。他の worktree に影響するので中断する。');
-  }
-  const removing = !cur.sparse || cur.list.some((p) => !want.includes(p));
+
+  const leaving = files.filter((f) => f.tag !== 'S' && !isIncluded(dirOf(f.path), want));
+  const expanding = files.filter((f) => f.tag === 'S' && isIncluded(dirOf(f.path), want));
+  const removing = leaving.length > 0;
   const problems = safetyProblems(ctx, want, { checkRegion: removing, checkProcess: removing, skipProcessCheck: opts.skipProcessCheck });
+  const collisions = expansionCollisions(ctx, expanding.map((f) => f.path));
+  if (collisions.length) problems.push(`展開先に未追跡・ignore 済みの実体がある（上書き・削除しない。退避してから再実行）:\n    ${collisions.slice(0, 30).join('\n    ')}`);
   if (problems.length) {
     ctx.error(`${sub} を中断する（何も変更していない）:`);
     for (const p of problems) ctx.error(`  - ${p}`);
     return 1;
   }
-  const { code } = applyList(ctx, want, rerun);
-  if (code !== 0) return code;
+  if (removing && ctx.probe) {
+    const probe = probeDirectories(ctx, leavingRoots(leaving, want));
+    if (probe.fatal) {
+      ctx.error(probe.fatal);
+      return 1;
+    }
+    if (probe.busy.length) {
+      ctx.error(`${sub} を中断する（何も変更していない）:`);
+      ctx.error(`  - 使用中（rename できない）のため縮小できない。開いているファイル・プロセス・エディタを閉じて再実行する:\n    ${probe.busy.join('\n    ')}`);
+      return 1;
+    }
+  }
+
+  const deletedBefore = deletedPaths(ctx);
+  const r = ctx.git(['sparse-checkout', 'set', '--cone', '--stdin'], `${want.join('\n')}\n`);
+  if (r.status !== 0) return failMidway(ctx, 'git sparse-checkout set', r, rerun);
+  const after = sparseState(ctx, trackedFiles(ctx));
+  if (!sameSet(after.list, want)) {
+    return failMidway(ctx, '適用後の検証（sparse 一覧が期待と異なる）', { stderr: `期待: ${want.join(', ')} / 実際: ${after.list.join(', ')}` }, rerun);
+  }
+  const verify = verifyResult(ctx, want, expanding.map((f) => f.path), deletedBefore);
+  if (verify.length) return failVerify(ctx, sub, verify, rerun);
+  const mark = ctx.git(['config', '--worktree', DIGEST_KEY, digestOf(want)]);
+  if (mark.status !== 0) return failMidway(ctx, '印（worktree ローカル設定）の記録', mark, rerun);
   ctx.log(`${sub} 完了: sparse 一覧 = ${want.join(', ')}`);
   return 0;
 }
@@ -359,14 +625,19 @@ function cmdShrinkOrReapply(ctx, sub, opts) {
 export async function run(argv, deps = {}) {
   const ctx = makeContext(deps);
   const [sub, ...rest] = argv;
+  if (sub === '--help' || sub === '-h') {
+    ctx.log(USAGE);
+    return 0;
+  }
   if (!['status', 'expand', 'shrink', 'reapply'].includes(sub)) {
     ctx.error(sub ? `未知のサブコマンド: ${sub}` : 'サブコマンドが無い');
     ctx.error(USAGE);
     return 1;
   }
-  const opts = { skipProcessCheck: false, forceReplace: false };
+  const opts = { skipProcessCheck: false, skipSpaceCheck: false, forceReplace: false };
   for (const a of rest) {
     if (a === '--skip-process-check') opts.skipProcessCheck = true;
+    else if (a === '--skip-space-check') opts.skipSpaceCheck = true;
     else if (a === '--force-replace') opts.forceReplace = true;
     else {
       ctx.error(`未対応の引数: ${a}`);

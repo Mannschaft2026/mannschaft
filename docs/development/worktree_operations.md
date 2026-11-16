@@ -171,14 +171,28 @@ node scripts/worktree-assets.mjs reapply   # main を取り込んで設定の一
 
 ### 拒否される条件と対処
 
+拒否はいずれも、何も変えずに非0で終了する（sparse 一覧・index・共有 `.git/config` は変わらない）。
+
 | 条件 | 対処 |
 |---|---|
 | 本陣（メイン作業木）での `shrink` / `reapply` | 足軽の worktree で実行する（`expand` と `status` は本陣でも可） |
+| `extensions.worktreeConfig` が無効（`git sparse-checkout` を呼ぶ全経路で最初に確認） | 共有 `.git/config` を書き換えてしまうため拒否 |
+| `worktree.sparsePaths` が不正（文字列でない・空・前後空白・`/` 始まり・ドライブ指定・バックスラッシュ・`.`/`..` 要素・先頭 `-`・重複・HEAD に追跡ディレクトリとして無い） | 設定を直す。`--no-cone` のような値を黙って直したり git へ渡したりしない |
 | 縮小で外れる領域に未コミット・ステージ済み・未追跡・ignore 済み（生成物）がある | 該当パスが表示される。コミット・退避・削除してから再実行 |
+| 展開されるパスやその祖先の位置に、未追跡・ignore 済みのファイル/ディレクトリがある（`reapply` / `expand`） | 該当パスが表示される。上書き・削除はしない。退避してから再実行 |
 | 未マージ、進行中の merge/rebase/cherry-pick/revert、`index.lock` | 操作を完了または中止、残骸のロックを所有確認のうえ除去 |
-| 対象 worktree のパスを含む java / node / gradle が動作中 | 停止してから再実行。取得できない環境では「確認できない」として拒否される。確認済みなら `--skip-process-check` |
-| 設定と無関係な sparse 一覧を既に持つ（`boundary-coordination.md` の管理用 worktree など） | 上書きせず拒否。置き換えてよい場合のみ `--force-replace` |
-| `extensions.worktreeConfig` が無効 | 共有 `.git/config` を書き換えてしまうため拒否 |
-| `expand` で空き容量が足りない | 何も変えず非0。空きを作ってから再実行 |
+| 対象 worktree のパスを含む、または cwd が worktree 内（Linux のみ検出）の java / node / gradle が動作中 | 停止してから再実行。取得できなければ「確認できない」として拒否。確認済みなら `--skip-process-check`（プロセス一覧の検査だけを省く） |
+| 使用中プローブ失敗（Windows 既定。外れるディレクトリを一時名へ rename できない） | 開いているファイル・エディタ・プロセスを閉じて再実行。`--skip-process-check` でも省かない |
+| 設定・`settings.json` の履歴（直近100 commit）・本コマンドが記録した印（`git config --worktree mannschaft.sparsePathsDigest`）のどれにも当たらない sparse 一覧（`boundary-coordination.md` の管理用 worktree など。ルート直下のみの一覧も含む） | 上書きせず拒否。置き換えてよい場合のみ `--force-replace` |
+| `expand` で空き容量が足りない / 取得できない | 見積りは「blob 合計×1.5＋ファイル数×4KB＋200MB」。空きを作る。取得できない環境だけ `--skip-space-check` |
 
-途中で git が失敗した場合（ファイル使用中など）は非0で終了し、到達状態と再実行コマンドを表示する。既存の変更は失われず、再実行で完了できる。黙って全展開へフォールバックすることはない。
+### Windows の限界と事後検証
+
+Windows では、cwd だけが worktree 内にあるプロセス（`node server.js` を相対パスで起動した等）はコマンドラインに現れず、標準手段では検出できない。使用中の検出は次の2段で補う。
+
+1. **使用中プローブ**: 縮小で外れる最も浅いディレクトリを同じ親の一時名（`<dir>.wa-probe-<pid>`）へ rename して即座に戻す。開かれたハンドルがあると rename が失敗し、縮小を中止する。戻せない場合は5回再試行し、失敗したら一時名のパスと手動復旧手順（元の名前へ `Move-Item`）を表示して非0で終了する。この状態では他の操作をしない。
+2. **事後検証**: `shrink` / `reapply` / `expand` の後に、外れるべき追跡ファイルが skip-worktree で作業木に残っていないか、展開すべきファイルが実在するか、`git status` に意図しない削除が出ていないかを確かめる。未完了なら非0で、残ったパスと再実行コマンドを表示する。一覧が既に一致していても実状態が未完了なら `git sparse-checkout reapply` で再適用して検証し直す。
+
+途中で git が失敗した場合（ファイル使用中など）も非0で終了し、到達状態と再実行コマンドを表示する。既存の変更は失われず、再実行で完了できる。黙って全展開へフォールバックすることはない。
+
+`shrink` / `reapply` が成功すると、適用した一覧のハッシュを worktree ローカル設定（`git config --worktree mannschaft.sparsePathsDigest`）へ記録する。`expand` で消す。共有 `.git/config` は変えない。

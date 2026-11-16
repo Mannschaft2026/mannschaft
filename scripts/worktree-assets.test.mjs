@@ -4,9 +4,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { defaultRunGit, run } from './worktree-assets.mjs';
+import * as assets from './worktree-assets.mjs';
+const { defaultListProcesses, defaultRunGit, run } = assets;
 
-const roots = [];
+// ユーザーの global/system git config を読まず、書き換えもしない
+const isolatedRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wt-assets-cfg-')));
+writeFileSync(join(isolatedRoot, 'gitconfig'), '');
+process.env.GIT_CONFIG_GLOBAL = join(isolatedRoot, 'gitconfig');
+process.env.GIT_CONFIG_NOSYSTEM = '1';
+
+const roots = [isolatedRoot];
 after(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true, maxRetries: 5 });
 });
@@ -65,6 +72,7 @@ async function exec(cwd, argv, deps = {}) {
     error: (m) => err.push(m),
     listProcesses: NO_PROC,
     freeBytes: BIG,
+    probe: false,
     ...deps,
   });
   return { code, out: out.join('\n'), err: err.join('\n'), all: `${out.join('\n')}\n${err.join('\n')}` };
@@ -383,4 +391,284 @@ test('reapply: sparse でない worktree では拒否する', async () => {
   const r = await exec(wt, ['reapply']);
   assert.notEqual(r.code, 0);
   assert.match(r.all, /sparse ではない/);
+});
+
+// ---------------------------------------------------------------------------
+// Codex 検分 8件の再現テスト
+// ---------------------------------------------------------------------------
+
+let branchSeq = 0;
+/** main 側で設定を変える commit を作り、wt へ ff 取り込みする。 */
+function pullSettings(main, wt, paths) {
+  const b = `upd${(branchSeq += 1)}`;
+  git(main, 'checkout', '-q', '-b', b);
+  write(join(main, '.claude/settings.json'), SETTINGS(paths));
+  git(main, 'commit', '-q', '-am', `settings ${b}`);
+  git(main, 'checkout', '-q', 'main');
+  git(wt, 'merge', '-q', '--ff-only', b);
+}
+
+/** 何も変えず非0であること（sparse 一覧・status・共有 config 不変）を確かめる。 */
+const refused = async (wt, main, argv, deps) => {
+  const before = snapshot(wt);
+  const cfg = sharedConfig(main);
+  const r = await exec(wt, argv, deps);
+  assert.notEqual(r.code, 0, `${argv.join(' ')}: ${r.all}`);
+  assert.deepEqual(snapshot(wt), before);
+  assert.equal(sharedConfig(main), cfg);
+  return r;
+};
+
+test('[1] expand は worktreeConfig 無効＋共有 core.sparsecheckout 漏れでも共有 config を変えず拒否。全サブコマンドで config 不変', async () => {
+  const { main, wt } = makeRepo();
+  git(wt, 'sparse-checkout', 'set', '--cone'); // 空一覧（ルート直下のみ）の cone sparse
+  git(main, 'config', '--unset', 'extensions.worktreeConfig');
+  git(main, 'config', 'core.sparseCheckout', 'true'); // 漏れ
+  const cfg = sharedConfig(main);
+  const listBefore = git(wt, 'ls-files', '-t');
+  for (const sub of ['expand', 'shrink', 'reapply']) {
+    const r = await exec(wt, [sub, '--force-replace']);
+    assert.notEqual(r.code, 0, sub);
+    assert.match(r.all, /worktreeConfig/, sub);
+    assert.equal(sharedConfig(main), cfg, sub);
+  }
+  assert.equal((await exec(wt, ['status'])).code, 0);
+  assert.equal(sharedConfig(main), cfg);
+  assert.equal(git(wt, 'ls-files', '-t'), listBefore);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), false);
+});
+
+test('[1] 正常系の全サブコマンドで共有 config のバイト列が同一', async () => {
+  const { main, wt } = makeRepo();
+  const cfg = sharedConfig(main);
+  for (const argv of [['status'], ['shrink'], ['reapply'], ['expand'], ['shrink'], ['expand']]) {
+    const r = await exec(wt, argv);
+    assert.equal(r.code, 0, `${argv}: ${r.all}`);
+    assert.equal(sharedConfig(main), cfg, argv.join(' '));
+  }
+});
+
+test('[2] shrink 後に除外ファイルが残っていれば非0で残ったパスと復旧手順。一覧一致でも再適用して検証し直す', async () => {
+  const { wt } = makeRepo();
+  const keep = (cwd, args, input) => {
+    const r = defaultRunGit(cwd, args, input);
+    if (args.includes('set') && r.status === 0) write(join(wt, 'assets/big1.bin'), 'x'.repeat(1000)); // 他プロセスが保持したファイルを模す
+    return r;
+  };
+  let r = await exec(wt, ['shrink'], { runGit: keep });
+  assert.notEqual(r.code, 0, r.all);
+  assert.match(r.all, /assets\/big1\.bin/);
+  assert.match(r.all, /復旧/);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+  // 一覧は既に一致しているが、再実行で再適用・検証し直す
+  let reapplied = false;
+  const spy = (cwd, args, input) => {
+    if (args[0] === 'sparse-checkout' && args[1] === 'reapply') reapplied = true;
+    return defaultRunGit(cwd, args, input);
+  };
+  r = await exec(wt, ['shrink'], { runGit: spy });
+  assert.equal(reapplied, true, r.all);
+  if (r.code === 0) assert.equal(existsSync(join(wt, 'assets/big1.bin')), false);
+  else assert.match(r.all, /assets\/big1\.bin/);
+});
+
+test('[3] 展開されるパスの位置に未追跡ファイルがあれば reapply/expand は何も変えず非0', async () => {
+  const { main, wt } = makeRepo({ settings: ['app'] });
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  pullSettings(main, wt, ['app', 'assets']);
+  write(join(wt, 'assets'), 'ただのファイル'); // assets/big1.bin の祖先位置
+  for (const argv of [['reapply'], ['expand']]) {
+    const r = await refused(wt, main, argv);
+    assert.match(r.all, /assets/);
+    assert.equal(readFileSync(join(wt, 'assets'), 'utf8'), 'ただのファイル');
+  }
+});
+
+test('[3] 展開先に別内容のローカルファイルがあっても上書きせず保つ（git が変更として扱う）', async () => {
+  const { wt } = makeRepo({ settings: ['app'] });
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  write(join(wt, 'assets/sub/big2.bin'), 'ローカルの別内容');
+  await exec(wt, ['expand']);
+  assert.equal(readFileSync(join(wt, 'assets/sub/big2.bin'), 'utf8'), 'ローカルの別内容');
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+});
+
+test('[4] ルート直下だけの cone sparse（list が空）も sparse と判定し、既存一覧の保護を迂回しない', async () => {
+  const { main, wt } = makeRepo();
+  git(wt, 'sparse-checkout', 'set', '--cone');
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), false);
+  let r = await exec(wt, ['status']);
+  assert.match(r.all, /sparse: はい/);
+  for (const sub of ['shrink', 'reapply']) {
+    r = await refused(wt, main, [sub]);
+    assert.match(r.all, /force-replace/, sub);
+    assert.doesNotMatch(r.all, /sparse ではない/, sub);
+  }
+  r = await exec(wt, ['expand']);
+  assert.equal(r.code, 0, r.all);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+});
+
+test('[4] 共有 core.sparsecheckout が漏れていて worktree 側に設定もファイルも無ければ「sparse ではない」', async () => {
+  const { main, wt } = makeRepo();
+  git(main, 'config', '--worktree', 'core.sparseCheckout', 'false');
+  git(main, 'config', 'core.sparseCheckout', 'true'); // 漏れ
+  const r = await exec(wt, ['status']);
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.all, /sparse: いいえ/);
+  const e = await exec(wt, ['expand']);
+  assert.equal(e.code, 0, e.all);
+  assert.match(e.all, /既に全展開/);
+  const re = await exec(wt, ['reapply']);
+  assert.notEqual(re.code, 0);
+  assert.match(re.all, /sparse ではない/);
+});
+
+test('[5] worktree.sparsePaths が不正なら変更前に非0（正規化で黙って直さない）', async () => {
+  const { main, wt } = makeRepo();
+  const bad = [['--no-cone'], ['/app'], ['app/'], [' app'], ['app', 'app'], ['../x'], ['app/./x'], ['a\\b'], ['C:/x'], ['-app'], [''], [1], ['nonexistent'], ['README.md']];
+  for (const paths of bad) {
+    write(join(wt, '.claude/settings.json'), SETTINGS(paths));
+    git(wt, 'commit', '-q', '-am', 'bad');
+    const r = await refused(wt, main, ['shrink']);
+    assert.match(r.all, /sparsePaths/, JSON.stringify(paths));
+    assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+    assert.equal(readFileSync(join(wt, 'app/a.txt'), 'utf8'), 'a\n');
+  }
+  assert.deepEqual(sparseList(wt), []);
+});
+
+test('[6] cwd が worktree 内のプロセス（相対パス起動）も拒否する', async () => {
+  const { wt } = makeRepo();
+  const list = () => [{ pid: 99999, ppid: 1, cmd: 'node server.js', cwd: join(wt, 'frontend') }];
+  const r = await exec(wt, ['shrink'], { listProcesses: list });
+  assert.notEqual(r.code, 0);
+  assert.match(r.all, /server\.js/);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+});
+
+test('[6] Linux: 実プロセスの /proc/<pid>/cwd が worktree 内なら拒否', { skip: process.platform !== 'linux' }, async () => {
+  const { spawn } = await import('node:child_process');
+  const { wt } = makeRepo();
+  const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { cwd: wt, stdio: 'ignore' });
+  try {
+    await new Promise((r) => setTimeout(r, 500));
+    const r = await exec(wt, ['shrink'], { listProcesses: defaultListProcesses });
+    assert.notEqual(r.code, 0, r.all);
+    assert.match(r.all, new RegExp(`pid ${child.pid}`));
+  } finally {
+    child.kill();
+  }
+});
+
+test('[6] 使用中プローブ: 外れるディレクトリの rename が失敗すれば何も変えず非0。--skip-process-check でも省かない', async () => {
+  const { main, wt } = makeRepo();
+  const { renameSync } = await import('node:fs');
+  const busy = (from, to) => {
+    if (from.replaceAll('\\', '/').endsWith('/assets')) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    renameSync(from, to);
+  };
+  for (const extra of [[], ['--skip-process-check']]) {
+    const r = await refused(wt, main, ['shrink', ...extra], { probe: true, rename: busy });
+    assert.match(r.all, /使用中/);
+    assert.match(r.all, /assets/);
+    assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+    assert.equal(existsSync(join(wt, 'extra/e.txt')), true);
+  }
+});
+
+test('[6] 使用中プローブが全て通れば一時名は残らず shrink が成功する', async () => {
+  const { wt } = makeRepo();
+  const r = await exec(wt, ['shrink'], { probe: true });
+  assert.equal(r.code, 0, r.all);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), false);
+  assert.equal(git(wt, 'status', '--porcelain'), '');
+});
+
+test('[6] プローブ後に元へ戻せない場合は再試行し、失敗なら手動復旧手順を表示して非0', async () => {
+  const { wt } = makeRepo();
+  const { renameSync } = await import('node:fs');
+  let backTries = 0;
+  const stuck = (from, to) => {
+    if (from.includes('.wa-probe-')) {
+      backTries += 1;
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    }
+    renameSync(from, to);
+  };
+  const r = await exec(wt, ['shrink'], { probe: true, rename: stuck });
+  assert.notEqual(r.code, 0);
+  assert.ok(backTries >= 3, `再試行回数 ${backTries}`);
+  assert.match(r.all, /手動復旧/);
+  assert.match(r.all, /\.wa-probe-/);
+  assert.deepEqual(sparseList(wt), []);
+});
+
+test('[6] プローブが一度だけ戻せなくても再試行で復旧して続行する', async () => {
+  const { wt } = makeRepo();
+  const { renameSync } = await import('node:fs');
+  let failedOnce = false;
+  const flaky = (from, to) => {
+    if (from.includes('.wa-probe-') && !failedOnce) {
+      failedOnce = true;
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    }
+    renameSync(from, to);
+  };
+  const r = await exec(wt, ['shrink'], { probe: true, rename: flaky });
+  assert.equal(r.code, 0, r.all);
+  assert.equal(failedOnce, true);
+});
+
+test('[7] 空き容量は blob 合計×1.5＋ファイル数×4096＋固定余裕で見積もり、取得不能は拒否（--skip-space-check で進む）', async () => {
+  const { wt } = makeRepo();
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  assert.ok(assets.SPACE_MARGIN_BYTES >= 100 * 1024 * 1024);
+  const before = snapshot(wt);
+  let r = await exec(wt, ['expand'], { freeBytes: () => assets.SPACE_MARGIN_BYTES + 3000 });
+  assert.notEqual(r.code, 0);
+  assert.match(r.all, /空き容量/);
+  assert.deepEqual(snapshot(wt), before);
+  const unknown = () => {
+    throw new Error('取得不能');
+  };
+  r = await exec(wt, ['expand'], { freeBytes: unknown });
+  assert.notEqual(r.code, 0);
+  assert.match(r.all, /取得/);
+  assert.deepEqual(snapshot(wt), before);
+  r = await exec(wt, ['expand', '--skip-space-check'], { freeBytes: unknown });
+  assert.equal(r.code, 0, r.all);
+});
+
+test('[8] 管理用 worktree の一覧（設定の部分集合）は --force-replace なしで reapply/shrink が置き換えない', async () => {
+  const { main, wt } = makeRepo();
+  git(wt, 'sparse-checkout', 'set', '--cone', 'docs/development');
+  for (const sub of ['reapply', 'shrink']) {
+    const r = await refused(wt, main, [sub]);
+    assert.match(r.all, /force-replace/, sub);
+  }
+});
+
+test('[8] 本コマンドが適用した一覧は印(worktree ローカル)で認められ、履歴に無い設定へも reapply できる', async () => {
+  const { main, wt } = makeRepo();
+  write(join(wt, '.claude/settings.json'), SETTINGS(['app', 'extra']));
+  git(wt, 'commit', '-q', '-am', 'tmp settings');
+  const cfg = sharedConfig(main);
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  assert.match(git(wt, 'config', '--worktree', '--get', 'mannschaft.sparsePathsDigest').trim(), /^[0-9a-f]{40}$/);
+  assert.equal(sharedConfig(main), cfg);
+  git(wt, 'reset', '-q', '--hard', 'HEAD~1'); // その設定は到達可能な履歴から消える
+  const r = await exec(wt, ['reapply']);
+  assert.equal(r.code, 0, r.all);
+  assert.deepEqual(sparseList(wt), ['app', 'docs/development']);
+});
+
+test('[8] settings.json の履歴上の版と完全一致する一覧は設定由来として認める', async () => {
+  const { wt } = makeRepo();
+  write(join(wt, '.claude/settings.json'), SETTINGS(['app']));
+  git(wt, 'commit', '-q', '-am', 'narrow');
+  git(wt, 'sparse-checkout', 'set', '--cone', 'app', 'docs/development');
+  const r = await exec(wt, ['reapply']);
+  assert.equal(r.code, 0, r.all);
+  assert.deepEqual(sparseList(wt), ['app']);
 });
