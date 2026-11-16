@@ -729,6 +729,7 @@
     "group": {
       "title": "Reserva en grupo",
       "slot_count": "30 min × {n} franjas",
+      "slot_count_total": "30 min × {n} franja ({total} min) | 30 min × {n} franjas ({total} min)",
       "time_range": "Rango horario",
       "auto_selected": "Se seleccionaron automáticamente las {n} franjas necesarias para {menu}",
       "extend": "Ampliar franjas",

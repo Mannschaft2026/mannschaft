@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261103-0822",
+  "scope": "app",
+  "implementation": {
+    "pr": 4536,
+    "sha": "f9b6215a30823315e3f7332d242c38ac4ff5ba24"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "お知らせの解除・ピン留め入口で、越境と不在の status・error.code・message が一致し、DB が変化しない",
+      "tests": [
+        {
+          "name": "AnnouncementDeletePinExistenceOracleIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/announcement/AnnouncementDeletePinExistenceOracleIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "閲覧資格基準の非トランザクションガードが delete・pin 入口の前置として強制される",
+      "tests": [
+        {
+          "name": "AnnouncementScopedFeedVisibilityGuardArchTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/architecture/AnnouncementScopedFeedVisibilityGuardArchTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "正常系（権限を持つ操作）の解除・ピン留めが従来どおり成功する",
+      "tests": [
+        {
+          "name": "AnnouncementFeedControllerTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/announcement/AnnouncementFeedControllerTest.java"
+        },
+        {
+          "name": "SocialAnnouncementScopeContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/announcement/SocialAnnouncementScopeContractIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 43743652877 },
+    { "runId": 43743652929 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4536"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261103-0822-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261103-0822-exploratory.md"
+    }
+  },
+  "regressions": []
+}

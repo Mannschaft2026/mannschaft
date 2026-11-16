@@ -222,8 +222,6 @@ class MemberCardServiceTest {
             // Given
             MemberCardEntity card = createActiveCard();
             given(memberCardRepository.findByIdAndDeletedAtIsNull(CARD_ID)).willReturn(Optional.of(card));
-            doNothing().when(accessControlService)
-                    .checkOwnerOrAdmin(USER_ID, USER_ID, SCOPE_ID, "TEAM");
             given(nameResolverService.resolveScopeName("TEAM", SCOPE_ID)).willReturn("テストチーム");
 
             // When
@@ -281,8 +279,8 @@ class MemberCardServiceTest {
         }
 
         @Test
-        @DisplayName("異常系: 他人の会員証でMEMBERSHIP_002例外")
-        void 取得_他人の会員証_MEMBERSHIP002例外() {
+        @DisplayName("異常系: 他人の会員証でMEMBERSHIP_001例外")
+        void 取得_他人の会員証_MEMBERSHIP001例外() {
             // Given
             MemberCardEntity card = createActiveCard();
             given(memberCardRepository.findByIdAndDeletedAtIsNull(CARD_ID)).willReturn(Optional.of(card));
@@ -293,7 +291,7 @@ class MemberCardServiceTest {
             assertThatThrownBy(() -> memberCardService.getQrToken(CARD_ID, otherUserId))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("MEMBERSHIP_002"));
+                            .isEqualTo("MEMBERSHIP_001"));
         }
 
         @Test
@@ -340,8 +338,8 @@ class MemberCardServiceTest {
         }
 
         @Test
-        @DisplayName("異常系: 他人の会員証でMEMBERSHIP_002例外")
-        void 再生成_他人の会員証_MEMBERSHIP002例外() {
+        @DisplayName("異常系: 他人の会員証でMEMBERSHIP_001例外")
+        void 再生成_他人の会員証_MEMBERSHIP001例外() {
             // Given
             MemberCardEntity card = createActiveCard();
             given(memberCardRepository.findByIdAndDeletedAtIsNull(CARD_ID)).willReturn(Optional.of(card));
@@ -352,7 +350,7 @@ class MemberCardServiceTest {
             assertThatThrownBy(() -> memberCardService.regenerateQr(CARD_ID, otherUserId))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("MEMBERSHIP_002"));
+                            .isEqualTo("MEMBERSHIP_001"));
         }
 
         @Test
@@ -1032,8 +1030,6 @@ class MemberCardServiceTest {
             // Given
             MemberCardEntity card = createActiveCard();
             given(memberCardRepository.findByIdAndDeletedAtIsNull(CARD_ID)).willReturn(Optional.of(card));
-            doNothing().when(accessControlService)
-                    .checkOwnerOrAdmin(USER_ID, USER_ID, SCOPE_ID, "TEAM");
 
             LocalDateTime from = LocalDateTime.now().minusDays(7);
             LocalDateTime to = LocalDateTime.now();
@@ -1069,8 +1065,6 @@ class MemberCardServiceTest {
             // Given
             MemberCardEntity card = createActiveCard();
             given(memberCardRepository.findByIdAndDeletedAtIsNull(CARD_ID)).willReturn(Optional.of(card));
-            doNothing().when(accessControlService)
-                    .checkOwnerOrAdmin(USER_ID, USER_ID, SCOPE_ID, "TEAM");
             given(checkinRepository.findByMemberCardIdAndCheckedInAtBetweenOrderByCheckedInAtDesc(
                     eq(CARD_ID), any(LocalDateTime.class), any(LocalDateTime.class)))
                     .willReturn(List.of());
