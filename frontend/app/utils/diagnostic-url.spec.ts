@@ -23,6 +23,8 @@ describe('診断URLの反復適用と境界', () => {
     '',
     ' ',
     '/p\u0000?token=SYNTHETIC',
+    '/p\u0085?token=SYNTHETIC',
+    '/\ufeffp?token=SYNTHETIC',
     'https://app.test:99999/p',
     'https://bad_host.test/p',
     'https://127.1/p',

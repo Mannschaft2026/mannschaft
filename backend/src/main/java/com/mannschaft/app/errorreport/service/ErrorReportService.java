@@ -62,7 +62,8 @@ public class ErrorReportService {
      * @return 作成または更新されたエラーレポートエンティティ
      */
     public ErrorReportEntity createOrAggregate(ErrorReportRequest request, String ipAddress) {
-        String pagePath = extractPath(request.getPageUrl());
+        String pageUrl = DiagnosticUrl.normalize(request.getPageUrl());
+        String pagePath = extractPath(pageUrl);
         String normalized = normalizeForHash(request.getErrorMessage());
         String errorHash = sha256(normalized + "|" + pagePath);
 
@@ -72,14 +73,14 @@ public class ErrorReportService {
             stackTrace = stackTrace.substring(0, 2000);
         }
 
-        ErrorReportSeverity severity = determineSeverity(request.getPageUrl(), request.getErrorMessage());
+        ErrorReportSeverity severity = determineSeverity(pageUrl, request.getErrorMessage());
         Long organizationId = resolveOrganizationId(request.getUserId());
         LocalDateTime now = LocalDateTime.now();
 
         ErrorReportEntity newReport = ErrorReportEntity.builder()
                 .errorMessage(request.getErrorMessage())
                 .stackTrace(stackTrace)
-                .pageUrl(request.getPageUrl())
+                .pageUrl(pageUrl)
                 .userAgent(request.getUserAgent())
                 .userComment(request.getUserComment())
                 .userId(request.getUserId())
@@ -316,10 +317,10 @@ public class ErrorReportService {
     private String extractPath(String url) {
         try {
             String path = URI.create(url).getPath();
-            return path != null ? path : url;
+            return path != null ? path : "/invalid-url";
         } catch (Exception e) {
-            // URL パースに失敗した場合はそのまま返す
-            return url;
+            // FE取込で正規化済みの値だけを扱い、予期しない解析失敗でも生値へ戻さない。
+            return "/invalid-url";
         }
     }
 
