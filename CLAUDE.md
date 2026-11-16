@@ -17,6 +17,8 @@
 - ❌ `C:/Claude/mannschaft` 直下 → **作業を中断し、殿に報告する**
   - ただし「大名システム活用ルール」の**例外**節に該当する場合はこの限りではない
 
+足軽 worktree は牧場 PNG 素材3ディレクトリ（約876MB）が**未展開**（sparse checkout）。牧場の素材・実バイト検証・Docker ビルド・BE の実素材依存テストが要る作業の前は `node scripts/worktree-assets.mjs expand`（終わったら `shrink`）。本陣は常に全展開。詳細は [`docs/development/worktree_operations.md`](docs/development/worktree_operations.md#足軽-worktree-の-sparse-checkout運用の入口)。
+
 worktree 隔離の原則（ここが唯一の正本）: `main` への直接コミット禁止。**本陣 `C:\Claude\mannschaft` での実装・commit は禁止**（pre-commit フックと Claude PreToolUse フックで機械的に拒否。クローン直後・新環境のセットアップは [`docs/development/honjin_protection_setup.md`](docs/development/honjin_protection_setup.md)）。大規模作業は `git worktree add` で物理的に隔離してから着手する。**【セットアップ必須】クローン直後・新環境では、両フック（git pre-commit・Claude PreToolUse）のセットアップ手順を上記文書で読み、必ず実施すること。**
 
 ---
