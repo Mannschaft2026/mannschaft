@@ -407,7 +407,17 @@ test('E6 振り返り: 週/月/年/任意・棒/折線/円の切替（許可表�
   await page.locator('#effort-to').fill(`${y}/${m}/01`)
   await page.locator('#effort-from').fill(today.replace(/-/g, '/'))
   await page.locator('#effort-from').press('Tab')
-  if (today !== `${y}-${m}-01`) await expect(page.getByText('期間は開始日から終了日まで')).toBeVisible()
+  if (today !== `${y}-${m}-01`) await expect(page.getByText('終了日は開始日以降の日付を指定してください。')).toBeVisible()
+  // 366日超（ALIC-6 の種類別文言）
+  await page.locator('#effort-from').fill(`${Number(y) - 2}/01/01`)
+  await page.locator('#effort-from').press('Tab')
+  await page.locator('#effort-to').fill(today.replace(/-/g, '/'))
+  await page.locator('#effort-to').press('Tab')
+  await expect(page.getByText('期間は開始日から終了日まで、366日以内で指定してください。')).toBeVisible()
+  // 未入力（開始日を空に）
+  await page.locator('#effort-from').fill('')
+  await page.locator('#effort-from').press('Tab')
+  await expect(page.getByText('開始日と終了日の両方を入力してください。')).toBeVisible()
 
   // --- 運動: 棒のみ
   await page.getByTestId('effort-period-month').click()
