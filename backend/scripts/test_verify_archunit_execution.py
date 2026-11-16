@@ -54,6 +54,20 @@ class ArchUnitExecutionTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "重複 suite"):
             verify(self.source, self.results)
 
+    def test_case_class_must_match_suite(self):
+        self.xml()
+        path = self.results / "TEST-example.Rules.xml"
+        path.write_text(path.read_text(encoding="utf-8").replace('classname="example.Rules"', 'classname="example.Other"'), encoding="utf-8")
+        with self.assertRaisesRegex(AssertionError, "クラス不一致"):
+            verify(self.source, self.results)
+
+    def test_added_source_rule_requires_another_case(self):
+        self.xml()
+        path = self.source / "Rules.java"
+        path.write_text(path.read_text(encoding="utf-8") + "\n @ArchTest\n static ArchRule third;\n", encoding="utf-8")
+        with self.assertRaisesRegex(AssertionError, "inventory 不一致"):
+            verify(self.source, self.results)
+
 
 if __name__ == "__main__":
     unittest.main()
