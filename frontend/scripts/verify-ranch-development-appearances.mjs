@@ -1,10 +1,12 @@
 // v4配布素材と原本RGBA照合のsnapshotを検証する。
+// sparse checkout（牧場PNG素材を展開しない足軽worktree）ではメタデータ検査だけ行い、実バイト検査は理由つきで省略する。CIでは省略しない。
+// importしただけではプロセスを終了しない・検証を走らせない（verify() / CLI起動時のみ）。
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
-import sharp from 'sharp'
 import { fileURLToPath } from 'node:url'
+import { runWithSparseOmission } from './lib/sparse-assets.mjs'
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex')
 const root = path.join(frontend, 'dev-fixtures/ranch/appearance64-v4')
@@ -103,13 +105,14 @@ function listFiles(dir, prefix = '') {
     return [rel]
   })
 }
-export async function verify() {
+/** メタデータ検査（バイト列に依存しない）。 */
+export function verifyMetadata() {
   validateMetadata(manifest)
   const expectedPaths = manifest.entries.flatMap((e) => [
     e.fallback.sourcePath,
     ...Object.values(e.clips).map((c) => c.sourcePath),
   ])
-  validateInventory(expectedPaths, listFiles(root))
+  validateInventory(expectedPaths, expectedPaths)
   assert.equal(
     sha(Buffer.from(manifestBytes.toString('utf8').replace(/\r\n/g, '\n'))),
     '01acc16644bda2fb07539ba0fdb7ed7d7eeee58216d487d74d41fc85c48b20d9',
@@ -120,17 +123,30 @@ export async function verify() {
   assert.equal(records.size, 1536)
   for (const e of manifest.entries)
     for (const [action, c] of Object.entries(e.clips)) {
-      const data = fs.readFileSync(path.join(root, c.sourcePath))
-      assert.equal(sha(data), c.sourceSha256)
-      const img = await sharp(data).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
-      assert.equal(img.info.width, c.cell * 4)
-      assert.equal(img.info.height, c.cell)
       assert.equal(c.sourceWidth, c.cell * 4)
       assert.equal(c.sourceHeight, c.cell)
       const snap = records.get(e.assetKey + ':' + action)
       assert.ok(snap)
       assert.equal(snap.frameRGBA.length, 4)
       assert.deepEqual(c.provenance, snap.provenance)
+      if (action === 'idle') assert.equal(e.fallback.sourceSha256, c.provenance[0].sha256)
+    }
+  return { expectedPaths, records }
+}
+
+/** 実バイト検査（配布物の過不足・PNG hash・寸法・原本RGBA照合）。素材が展開されている前提。 */
+export async function verifyImageBytes({ expectedPaths, records }) {
+  // sharpは実バイト検査でだけ使う（メタデータ検査はsharpなしで動く）。
+  const { default: sharp } = await import('sharp')
+  validateInventory(expectedPaths, listFiles(root))
+  for (const e of manifest.entries)
+    for (const [action, c] of Object.entries(e.clips)) {
+      const data = fs.readFileSync(path.join(root, c.sourcePath))
+      assert.equal(sha(data), c.sourceSha256)
+      const img = await sharp(data).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      assert.equal(img.info.width, c.cell * 4)
+      assert.equal(img.info.height, c.cell)
+      const snap = records.get(e.assetKey + ':' + action)
       for (let i = 0; i < 4; i++) {
         const tile = Buffer.alloc(c.cell * c.cell * 4)
         for (let y = 0; y < c.cell; y++)
@@ -148,7 +164,24 @@ export async function verify() {
         assert.equal(sha(f), c.provenance[0].sha256)
       }
     }
-  console.log('v4: 384 entries, 1536 atlases, 384 fallbacks, 6144 RGBA frames verified')
+}
+
+/** 検証本体。sparse除外ならメタデータのみ（理由つきで実バイト省略）。プロセスは終了しない。 */
+export async function verify({ env = process.env, log = console.log } = {}) {
+  let plan = null
+  const outcome = await runWithSparseOmission({
+    repoRoot: path.resolve(frontend, '..'), targets: ['frontend/dev-fixtures/ranch/appearance64-v4'], env, log,
+    // manifest が参照する1920ファイルが全て追跡されていることを要求（無関係な素材の skip-worktree で隠せない）。
+    exact: true,
+    // 全展開時の listFiles() が行う「通常ファイル以外の拒否」を、省略前にも git の mode で行う。
+    regularFilesOnly: true,
+    expected: () => plan.expectedPaths.map(file => 'frontend/dev-fixtures/ranch/appearance64-v4/' + file),
+    label: 'verify-ranch-development-appearances',
+    metadata: () => { plan = verifyMetadata() },
+    bytes: () => verifyImageBytes(plan),
+  })
+  if (outcome.bytesVerified) log('v4: 384 entries, 1536 atlases, 384 fallbacks, 6144 RGBA frames verified')
+  return outcome
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   await verify()
