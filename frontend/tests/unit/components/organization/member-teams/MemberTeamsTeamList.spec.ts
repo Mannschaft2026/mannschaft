@@ -34,7 +34,7 @@ vi.mock('~/composables/useOrgTeamMembershipApi', () => ({
 
 function team(id: number, slug: string, groupId?: string, groupName?: string): OrgTeam {
   return {
-    id,
+    id: String(id),
     slug,
     name: `チーム${id}`,
     nickname1: null,
