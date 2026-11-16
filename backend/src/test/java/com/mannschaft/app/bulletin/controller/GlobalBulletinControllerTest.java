@@ -62,7 +62,6 @@ class GlobalBulletinControllerTest {
     private static final Long USER_ID = 1L;
     private static final Long SCOPE_ID = 10L;
     private static final String SCOPE_ID_STR = "10";
-    private static final String TEAM_SLUG = "slug-team";
     private static final String VILLAGE_SCOPE_ID_STR = "0";
     private static final Long CATEGORY_ID = 5L;
     private static final Long THREAD_ID = 100L;
@@ -280,12 +279,12 @@ class GlobalBulletinControllerTest {
         }
 
         @Test
-        @DisplayName("TEAM slugを含むJSON作成はスコープIDへ解決して201")
-        void teamSlugを含むJson作成_201() throws Exception {
+        @DisplayName("TEAM数値IDのJSON作成はresolveGlobalでスコープIDへ解決して201")
+        void team数値IdのJson作成_201() throws Exception {
             String dataJson = """
-                    {"scopeType":"TEAM","scopeId":"slug-team","title":"タイトル","body":"本文"}
+                    {"scopeType":"TEAM","scopeId":"10","title":"タイトル","body":"本文"}
                     """;
-            given(scopeIdResolver.resolve(ScopeType.TEAM, TEAM_SLUG)).willReturn(SCOPE_ID);
+            given(scopeIdResolver.resolveGlobal(ScopeType.TEAM, SCOPE_ID_STR)).willReturn(SCOPE_ID);
             given(threadService.createThreadGlobal(eq(ScopeType.TEAM), eq(SCOPE_ID), eq(USER_ID), any()))
                     .willReturn(threadResponse());
             MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -294,7 +293,7 @@ class GlobalBulletinControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(dataJson))
                     .andExpect(status().isCreated());
-            verify(scopeIdResolver).resolve(ScopeType.TEAM, TEAM_SLUG);
+            verify(scopeIdResolver).resolveGlobal(ScopeType.TEAM, SCOPE_ID_STR);
             verify(threadService).createThreadGlobal(eq(ScopeType.TEAM), eq(SCOPE_ID), eq(USER_ID), any());
         }
 
