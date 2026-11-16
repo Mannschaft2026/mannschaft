@@ -7,11 +7,13 @@ import com.mannschaft.app.billing.api.dto.BillingConflictErrorResponse;
 import com.mannschaft.app.billing.api.dto.FeatureNotEntitledErrorResponse;
 import com.mannschaft.app.common.duplicatename.DuplicateNameConfirmationErrorResponse;
 import com.mannschaft.app.common.duplicatename.DuplicateNameConfirmationRequiredException;
+import com.mannschaft.app.common.i18n.ErrorMessageResolver;
 import com.mannschaft.app.errorreport.ErrorReportSeverity;
 import com.mannschaft.app.errorreport.service.ErrorReportNotifier;
 import com.mannschaft.app.errorreport.service.ErrorReportService;
 import com.mannschaft.app.recruitment.RecruitmentPenaltyActiveException;
 import com.mannschaft.app.recruitment.dto.RecruitmentPenaltyActiveErrorResponse;
+import com.mannschaft.app.todo.TodoErrorCode;
 import com.mannschaft.app.todo.exception.MilestoneLockedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -22,7 +24,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
-import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -53,7 +54,11 @@ import java.util.Set;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private final MessageSource messageSource;
+    /**
+     * CMP-261113-1507: 文言解決の正本。全ハンドラはここを通して利用者の言語で message を作る
+     * （enum 文言の直使い＝{@code ErrorResponse.of(errorCode)} は使わない）。
+     */
+    private final ErrorMessageResolver errorMessageResolver;
 
     /**
      * F10.6 Phase 10-β-1 — error_reports への記録経路。
@@ -81,7 +86,7 @@ public class GlobalExceptionHandler {
     public GlobalExceptionHandler(MessageSource messageSource,
                                   ObjectProvider<ErrorReportService> errorReportServiceProvider,
                                   ObjectProvider<ErrorReportNotifier> errorReportNotifierProvider) {
-        this.messageSource = messageSource;
+        this.errorMessageResolver = new ErrorMessageResolver(messageSource);
         this.errorReportServiceProvider = errorReportServiceProvider;
         this.errorReportNotifierProvider = errorReportNotifierProvider;
     }
@@ -2616,7 +2621,17 @@ public class GlobalExceptionHandler {
             Map.entry("CONFIRMABLE_NOTIFICATION_RECIPIENTS_EMPTY", HttpStatus.CONFLICT),
             Map.entry("CONFIRMABLE_NOTIFICATION_GROUP_NAME_DUPLICATE", HttpStatus.CONFLICT),
             // NC_002（NotificationCreditErrorCode.CREDIT_INSUFFICIENT）と同じ 402 課金ゲートに統一する。
-            Map.entry("CONFIRMABLE_NOTIFICATION_CREDIT_INSUFFICIENT", HttpStatus.PAYMENT_REQUIRED)
+            Map.entry("CONFIRMABLE_NOTIFICATION_CREDIT_INSUFFICIENT", HttpStatus.PAYMENT_REQUIRED),
+            // CMP-261113-1507: F02.7 マイルストーンロック（専用ハンドラ handleMilestoneLocked と同じ 423）。
+            Map.entry("MILESTONE_LOCKED", HttpStatus.LOCKED),
+            // CMP-261113-1507: 早期拒否フィルタの ErrorCode 化（フィルタが書くステータスと一致させる）。
+            Map.entry("ADMIN_007", HttpStatus.FORBIDDEN),        // 管理者変身はシステム管理者のみ
+            Map.entry("PROXY_INPUT_005", HttpStatus.UNAUTHORIZED),
+            Map.entry("PROXY_INPUT_006", HttpStatus.FORBIDDEN),
+            Map.entry("PROXY_INPUT_007", HttpStatus.FORBIDDEN),
+            Map.entry("PROXY_INPUT_009", HttpStatus.UNAUTHORIZED),
+            Map.entry("PROXY_INPUT_010", HttpStatus.FORBIDDEN),
+            Map.entry("PROXY_INPUT_011", HttpStatus.FORBIDDEN)
     );
 
     /**
@@ -2788,7 +2803,7 @@ public class GlobalExceptionHandler {
         log.warn("Validation failed: {} field error(s)", fieldErrors.size());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001, fieldErrors));
+                .body(localized(CommonErrorCode.COMMON_001, fieldErrors));
     }
 
     /**
@@ -2801,7 +2816,7 @@ public class GlobalExceptionHandler {
         log.warn("Message not readable: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /**
@@ -2820,7 +2835,7 @@ public class GlobalExceptionHandler {
                 .map(GlobalExceptionHandler::toFieldError)
                 .toList();
         log.warn("ConstraintViolationException: {} field error(s)", fieldErrors.size());
-        ErrorResponse body = ErrorResponse.of(CommonErrorCode.COMMON_001, fieldErrors);
+        ErrorResponse body = localized(CommonErrorCode.COMMON_001, fieldErrors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
@@ -2855,7 +2870,7 @@ public class GlobalExceptionHandler {
         log.warn("HandlerMethodValidationException: {} field error(s)", fieldErrors.size());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001, fieldErrors));
+                .body(localized(CommonErrorCode.COMMON_001, fieldErrors));
     }
 
     /**
@@ -2881,12 +2896,12 @@ public class GlobalExceptionHandler {
             log.debug("スコープ識別子の解決失敗（404）: parameter={}, value={}", ex.getName(), ex.getValue());
             return ResponseEntity
                     .status(HttpStatus.NOT_FOUND)
-                    .body(ErrorResponse.of(CommonErrorCode.COMMON_005));
+                    .body(localized(CommonErrorCode.COMMON_005));
         }
         log.warn("Type mismatch: parameter={}, value={}", ex.getName(), ex.getValue());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /** team / organization のスラッグ解決に使うパス変数名。 */
@@ -2938,7 +2953,7 @@ public class GlobalExceptionHandler {
         log.warn("Missing parameter: {}", ex.getParameterName());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /**
@@ -2953,7 +2968,7 @@ public class GlobalExceptionHandler {
         log.warn("Missing header: {}", ex.getHeaderName());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /**
@@ -2966,7 +2981,7 @@ public class GlobalExceptionHandler {
         log.warn("メソッド不一致: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_004));
+                .body(localized(CommonErrorCode.COMMON_004));
     }
 
     /**
@@ -2984,7 +2999,7 @@ public class GlobalExceptionHandler {
         log.debug("リソース未検出: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_005));
+                .body(localized(CommonErrorCode.COMMON_005));
     }
 
     /**
@@ -2996,7 +3011,7 @@ public class GlobalExceptionHandler {
         log.warn("Optimistic lock conflict: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_003));
+                .body(localized(CommonErrorCode.COMMON_003));
     }
 
     /**
@@ -3006,17 +3021,27 @@ public class GlobalExceptionHandler {
      * {@link MilestoneLockedException} が送出される。レスポンスにはエラーコード
      * {@code MILESTONE_LOCKED} とロック解除条件（前マイルストーンタイトル）を含める。</p>
      */
+    /** マイルストーンロック応答の解除条件（details.unlock_condition）の訳キーと ja 正本。{0}=前マイルストーンのタイトル。 */
+    private static final String MILESTONE_UNLOCK_CONDITION_KEY = "todo.milestone.unlock_condition";
+    private static final String MILESTONE_UNLOCK_CONDITION_JA = "前マイルストーン『{0}』を完了";
+
     @ExceptionHandler(MilestoneLockedException.class)
     public ResponseEntity<ErrorResponse> handleMilestoneLocked(MilestoneLockedException ex) {
         log.warn("MilestoneLockedException: milestoneId={}, lockedBy={}",
                 ex.getMilestoneId(), ex.getLockedByMilestoneTitle());
-        String unlockCondition = "前マイルストーン『" + ex.getLockedByMilestoneTitle() + "』を完了";
+        // CMP-261113-1507: 文言は TodoErrorCode.MILESTONE_LOCKED（ja 正本）と訳 properties から解決する。
+        // ID は MessageFormat の桁区切り（1,234）を避けるため文字列で渡す。
+        String milestoneId = String.valueOf(ex.getMilestoneId());
+        String title = ex.getLockedByMilestoneTitle();
+        String message = resolveMessage(TodoErrorCode.MILESTONE_LOCKED, new Object[] {milestoneId, title});
+        String unlockCondition = errorMessageResolver.resolveKey(MILESTONE_UNLOCK_CONDITION_KEY,
+                MILESTONE_UNLOCK_CONDITION_JA, LocaleContextHolder.getLocale(), title);
         List<ErrorResponse.FieldError> details = List.of(
-                new ErrorResponse.FieldError("milestone_id", String.valueOf(ex.getMilestoneId())),
+                new ErrorResponse.FieldError("milestone_id", milestoneId),
                 new ErrorResponse.FieldError("unlock_condition", unlockCondition)
         );
         ErrorResponse body = new ErrorResponse(
-                new ErrorResponse.ErrorDetail("MILESTONE_LOCKED", ex.getMessage(), details));
+                new ErrorResponse.ErrorDetail(TodoErrorCode.MILESTONE_LOCKED.getCode(), message, details));
         return ResponseEntity.status(HttpStatus.LOCKED).body(body);
     }
 
@@ -3037,13 +3062,13 @@ public class GlobalExceptionHandler {
             log.warn("ゲート更新競合: {}", msg);
             return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body(ErrorResponse.of(CommonErrorCode.COMMON_003));
+                    .body(localized(CommonErrorCode.COMMON_003));
         }
         log.error("IllegalStateException", ex);
         recordBackendException(ex, request, ErrorReportSeverity.HIGH);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_999));
+                .body(localized(CommonErrorCode.COMMON_999));
     }
 
     /**
@@ -3070,7 +3095,7 @@ public class GlobalExceptionHandler {
         log.debug("Access denied: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_002));
+                .body(localized(CommonErrorCode.COMMON_002));
     }
 
     /**
@@ -3104,6 +3129,13 @@ public class GlobalExceptionHandler {
      * {@code ResponseStatusException} を新規に書く際は、reason に内部状態・SQL・内部 ID・
      * 他ユーザーの情報などの機微情報を書かないこと。利用者にそのまま見せてよい文言のみを入れる。
      * 5xx の reason のみ本ハンドラが伏せる。</p>
+     *
+     * <p><b>多言語化（CMP-261113-1507）:</b> reason は実装者が書いた日本語の自由文で訳を持たない。
+     * 利用者の言語が ja 以外（en/de/zh/ko/es）で reason が日本語を含むときは、reason を捨てて
+     * ステータス別の共通コード（{@link #resolveCommonErrorCode}）の訳文を返す（日本語を混ぜない）。
+     * そのため reason にしか無い埋め込み値（上限枚数・Content-Type 等）は ja 以外では失われる。
+     * 根治は各 throw を {@link BusinessException}（訳あり ErrorCode・MessageFormat 引数）へ置き換えること
+     * （throw 箇所 74 件・17 ファイル。後続の戦役で順次移行する）。新規コードで本例外を書かないこと。</p>
      */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex,
@@ -3116,17 +3148,31 @@ public class GlobalExceptionHandler {
             recordBackendException(ex, request, ErrorReportSeverity.MEDIUM);
             return ResponseEntity.status(status)
                     .headers(ex.getHeaders())
-                    .body(ErrorResponse.of(errorCode));
+                    .body(localized(errorCode));
         }
 
         String reason = ex.getReason();
-        String message = (reason != null && !reason.isBlank()) ? reason : resolveMessage(errorCode);
+        String message = usableReason(reason) ? reason : resolveMessage(errorCode);
         log.warn("ResponseStatusException: status={}, code={}, reason={}",
                 status.value(), errorCode.getCode(), reason);
         return ResponseEntity.status(status)
                 .headers(ex.getHeaders())
                 .body(new ErrorResponse(
                         new ErrorResponse.ErrorDetail(errorCode.getCode(), message, List.of())));
+    }
+
+    /** 日本語（かな・漢字・半角カナ）を含むか。 */
+    private static final java.util.regex.Pattern JAPANESE_TEXT =
+            java.util.regex.Pattern.compile("[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uFF66-\uFF9F]");
+
+    /**
+     * {@link ResponseStatusException#getReason()} をそのまま利用者へ返してよいか。
+     * 空でなく、かつ「利用者の言語が ja 系」または「reason が日本語を含まない」場合に限る。
+     */
+    private static boolean usableReason(String reason) {
+        if (reason == null || reason.isBlank()) return false;
+        return !ErrorMessageResolver.isTranslated(LocaleContextHolder.getLocale())
+                || !JAPANESE_TEXT.matcher(reason).find();
     }
 
     /**
@@ -3166,7 +3212,7 @@ public class GlobalExceptionHandler {
         recordBackendException(ex, request, ErrorReportSeverity.HIGH);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_999));
+                .body(localized(CommonErrorCode.COMMON_999));
     }
 
     /**
@@ -3212,10 +3258,9 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * ErrorCode から多言語メッセージを解決する。
-     * messages_{locale}.properties のキー形式: error.{ドメイン小文字}.{番号}
-     * 例: TEAM_001 → error.team.001, COMMON_001 → error.common.001
-     * キーが存在しない場合は ErrorCode.getMessage()（日本語）にフォールバック。
+     * ErrorCode から多言語メッセージを解決する（規則の正本は {@link ErrorMessageResolver}）。
+     * ja・未対応言語は enum 文言、en/de/zh/ko/es は {@code messages_{lang}.properties} の
+     * {@code error.{ドメイン小文字}.{番号}}（例: TEAM_001 → error.team.001）。キー欠落・想定外例外は enum 文言へ倒す。
      */
     private String resolveMessage(ErrorCode errorCode) {
         return resolveMessage(errorCode, new Object[0]);
@@ -3223,33 +3268,21 @@ public class GlobalExceptionHandler {
 
     /**
      * プレースホルダへ値を差し込んで文言を解決する（{@link BusinessException#withMessageArgs}）。
-     * 値が空なら従来と同じ固定文言を返す。
+     * 値が空なら MessageFormat を通さず固定文言を返す。
      */
     private String resolveMessage(ErrorCode errorCode, Object[] messageArgs) {
-        String code = errorCode.getCode();
-        // TEAM_001 → "error.team.001" に変換
-        int lastUnderscore = code.lastIndexOf('_');
-        String messageKey;
-        if (lastUnderscore > 0) {
-            String domain = code.substring(0, lastUnderscore).toLowerCase().replace('_', '.');
-            String number = code.substring(lastUnderscore + 1);
-            messageKey = "error." + domain + "." + number;
-        } else {
-            messageKey = "error." + code.toLowerCase();
-        }
+        return errorMessageResolver.resolve(errorCode, messageArgs);
+    }
 
-        try {
-            return messageSource.getMessage(
-                    messageKey,
-                    messageArgs.length == 0 ? null : messageArgs,
-                    LocaleContextHolder.getLocale()
-            );
-        } catch (NoSuchMessageException e) {
-            // properties にキーがない場合は日本語の getMessage() にフォールバック
-            return messageArgs.length == 0
-                    ? errorCode.getMessage()
-                    : java.text.MessageFormat.format(errorCode.getMessage(), messageArgs);
-        }
+    /** 利用者の言語で message を解決した {@link ErrorResponse}（フィールドエラーなし）。 */
+    private ErrorResponse localized(ErrorCode errorCode) {
+        return localized(errorCode, List.of());
+    }
+
+    /** 利用者の言語で message を解決した {@link ErrorResponse}。 */
+    private ErrorResponse localized(ErrorCode errorCode, List<ErrorResponse.FieldError> fieldErrors) {
+        return new ErrorResponse(new ErrorResponse.ErrorDetail(
+                errorCode.getCode(), resolveMessage(errorCode), fieldErrors));
     }
 
     /**
@@ -3329,6 +3362,6 @@ public class GlobalExceptionHandler {
         log.warn("本人APIの入力を拒否: classification={}", category);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 }
