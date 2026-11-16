@@ -160,6 +160,18 @@ for (const { script, manifest: manifestName, root, files } of SUBJECTS) {
     assert.match(out(result), /expected-not-tracked/)
   })
 
+  test(`指摘5 ${id}: 期待一覧に無い余分な追跡ファイルがあれば、全て未展開でも省略せず失敗`, () => {
+    const dir = copyRepo()
+    const blob = spawnSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: 'extra', encoding: 'utf8', env: CLEAN_ENV }).stdout.trim()
+    git(dir, 'update-index', '--add', '--cacheinfo', `100644,${blob},${root}/unexpected.png`)
+    git(dir, 'commit', '--quiet', '-m', 'extra file')
+    sparsify(dir)
+    const result = run(dir, script)
+    assert.notEqual(result.status, 0, out(result))
+    assert.match(out(result), /unexpected-tracked/)
+    assert.doesNotMatch(out(result), /メタデータ検査は完了/)
+  })
+
   test(`指摘2 ${id}: sparse 無効のまま skip-worktree を手で立てて消しても省略しない`, () => {
     const dir = copyRepo()
     const flagged = spawnSync('git', ['update-index', '--skip-worktree', '-z', '--stdin'], { cwd: dir, input: files.join(' ') + ' ', encoding: 'utf8', env: CLEAN_ENV })

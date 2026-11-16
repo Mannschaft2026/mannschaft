@@ -182,6 +182,21 @@ test('指摘1: 検証対象ディレクトリが追跡0件なら、隣の素材�
   } finally { cleanup(dir) }
 })
 
+test('指摘5: 期待一覧に無い余分な追跡ファイルは、省略前に失敗する（配布物一覧の過剰を隠さない）', () => {
+  const dir = makeRepo()
+  try {
+    fs.writeFileSync(path.join(dir, TARGET, 'x/unexpected.png'), 'extra')
+    git(dir, 'add', '.')
+    git(dir, 'commit', '--quiet', '-m', 'extra')
+    sparsify(dir, 'scripts')
+    const result = classify(dir, { expected: FILES, exact: true })
+    assert.equal(result.status, 'fail')
+    assert.equal(result.code, 'unexpected-tracked')
+    assert.equal(classify(dir, { expected: FILES }).status, 'omitted', 'exact 指定なしは従来どおり（gitleaks の manifest 取得用）')
+    assert.match(result.message, /unexpected.png/)
+  } finally { cleanup(dir) }
+})
+
 test('inCone: ルート直下・祖先直下・一覧配下は範囲内、それ以外は範囲外', () => {
   const list = ['frontend/scripts', 'scripts']
   assert.equal(inCone('README.md', list), true)

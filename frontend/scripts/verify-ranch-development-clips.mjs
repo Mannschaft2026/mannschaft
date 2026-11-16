@@ -149,6 +149,7 @@ export async function verifyDevelopmentClips({ frontendRoot = defaultFrontend, e
   const outcome = await runWithSparseOmission({
     repoRoot: path.resolve(frontendRoot, '..'), targets: ['frontend/dev-fixtures/ranch/base16-v3'], env, log,
     // manifest が参照する480ファイルが全て追跡されていることを要求（無関係な素材の skip-worktree で隠せない）。
+    exact: true,
     expected: () => [...plan.expectedPaths].map(file => 'frontend/dev-fixtures/ranch/base16-v3/' + file),
     label: 'verify-ranch-development-clips',
     metadata: () => { plan = verifyMetadata(frontendRoot) },

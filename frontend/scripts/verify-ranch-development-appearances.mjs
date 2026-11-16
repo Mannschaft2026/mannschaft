@@ -172,6 +172,7 @@ export async function verify({ env = process.env, log = console.log } = {}) {
   const outcome = await runWithSparseOmission({
     repoRoot: path.resolve(frontend, '..'), targets: ['frontend/dev-fixtures/ranch/appearance64-v4'], env, log,
     // manifest が参照する1920ファイルが全て追跡されていることを要求（無関係な素材の skip-worktree で隠せない）。
+    exact: true,
     expected: () => plan.expectedPaths.map(file => 'frontend/dev-fixtures/ranch/appearance64-v4/' + file),
     label: 'verify-ranch-development-appearances',
     metadata: () => { plan = verifyMetadata() },

@@ -86,12 +86,12 @@ export function inCone(file, list) {
 
 /**
  * targets（リポジトリルートからの相対ディレクトリ）配下の追跡パスの状態を判定する。
- * expected: その検証が参照するファイル（リポジトリルート相対）。全てが追跡されていることを要求し、
+ * expected: その検証が参照するファイル（リポジトリルート相対）。追跡一覧と過不足なく一致することを要求し、
  * 無関係な素材の skip-worktree で manifest 参照先の削除・改名を隠せないようにする。
  * status: 'present'（欠落なし・または git 管理外で全て実在）/ 'omitted'（本物の sparse による意図した未展開）/ 'fail'
  * git リポジトリの外では「省略」はできない: 期待パスが全て在れば present、欠けていれば fail。
  */
-export function classifyAssetDirs({ repoRoot, targets, expected = null, env = process.env }) {
+export function classifyAssetDirs({ repoRoot, targets, expected = null, exact = false, env = process.env }) {
   const context = gitContext(repoRoot, env)
   if (context.kind === 'git-failed') return fail('git-failed', context.error)
   if (context.kind === 'outside') {
@@ -114,6 +114,11 @@ export function classifyAssetDirs({ repoRoot, targets, expected = null, env = pr
     const trackedSet = new Set(tracked.map(row => row.file))
     const untracked = expected.filter(file => !trackedSet.has(file))
     if (untracked.length > 0) return fail('expected-not-tracked', `検証が参照するパスが追跡されていない（削除・改名の疑い）${untracked.length}件: 例 ${untracked[0]}`)
+    // 配布物一覧の「過剰」も実バイトを読まずに検査できるため省略しない（全展開時の inventory 検査と同じく完全一致）。
+    // exact: 対象ディレクトリ配下の追跡一覧が期待一覧と完全一致すること（配布物一覧を検査する検証が指定）。
+    const expectedSet = new Set(expected)
+    const extra = exact ? tracked.filter(row => !expectedSet.has(row.file)) : []
+    if (extra.length > 0) return fail('unexpected-tracked', `期待一覧に無い追跡ファイルが${extra.length}件（配布物の過剰）: 例 ${extra[0].file}`)
   }
   const missing = tracked.filter(row => !fs.lstatSync(path.join(repoRoot, row.file), { throwIfNoEntry: false }))
   const base = { tracked: tracked.length, omitted: missing.length, targets }
@@ -157,9 +162,9 @@ export function classifyAssetDirs({ repoRoot, targets, expected = null, env = pr
  * 省略時は理由と対象を log に出す。CI・失敗判定では省略せず例外にする。
  * expected は配列、またはメタデータ検査後に評価される関数（検証が参照するファイルのリポジトリルート相対パス）。
  */
-export async function runWithSparseOmission({ repoRoot, targets, expected = null, env = process.env, label, metadata, bytes, log = console.log }) {
+export async function runWithSparseOmission({ repoRoot, targets, expected = null, exact = false, env = process.env, label, metadata, bytes, log = console.log }) {
   await metadata()
-  const state = classifyAssetDirs({ repoRoot, targets, expected: typeof expected === 'function' ? expected() : expected, env })
+  const state = classifyAssetDirs({ repoRoot, targets, expected: typeof expected === 'function' ? expected() : expected, exact, env })
   if (state.status === 'present') {
     await bytes()
     return { bytesVerified: true, state }
