@@ -149,18 +149,22 @@ function tabCacheKey(tab: TabKey): string {
 const noticeCache = new Map<string, Notice[]>()
 
 /**
- * 既読化に成功した通知 ID と「全て既読」の成功回数。取得の応答待ち中に既読化が成功すると、
- * 後から届いた応答は既読化前の状態（未読）を持つため、キャッシュへ入れる前にこれを適用する。
- * 既読は未読へ戻らないため、refresh をまたいでも保持する。
+ * 既読化に成功した通知 ID。取得の応答待ち中に既読化が成功すると、後から届いた応答は
+ * 既読化前の状態（未読）を持ちうるため、キャッシュへ入れる前に適用する。
+ * その ID が既読化済みであることは確実で、既読は未読へ戻らないため refresh をまたいでも保持する。
  */
 const readIds = new Set<number>()
+
+/**
+ * 「全て既読」の成功回数。全件既読は BE で実行時点の通知だけを既読にするため、応答に推測で
+ * 当てはめると既読化後の新着まで既読にしてしまう。取得中に成功した場合は応答を破棄して取り直す。
+ */
 let markAllReadCount = 0
 
-/** 取得開始後に成功した既読化を、後着の応答へ反映する。 */
-function applyKnownReads(list: Notice[], markAllReadCountAtStart: number): Notice[] {
-  const allRead = markAllReadCount !== markAllReadCountAtStart
+/** 既読化に成功した ID を、後着の応答へ反映する。 */
+function applyKnownReads(list: Notice[]): Notice[] {
   for (const n of list) {
-    if (allRead || readIds.has(n.id)) n.isRead = true
+    if (readIds.has(n.id)) n.isRead = true
   }
   return list
 }
@@ -254,9 +258,16 @@ async function loadTab(tab: TabKey, generation: number) {
     if (tab.kind === 'action-required') await loadActionRequired(generation)
     else if (tab.kind === 'platform-announcements') await loadPlatformAnnouncements(generation)
     else {
-      const markAllReadCountAtStart = markAllReadCount
-      const result = await fetchForTab(tab)
-      if (isCurrentRequest(generation)) noticeCache.set(key, applyKnownReads(result, markAllReadCountAtStart))
+      let result: Notice[]
+      let markAllReadCountAtStart: number
+      // 取得中に「全て既読」が成功した応答は、既読化前か既読化後の新着を含むか判別できないため破棄して取り直す。
+      // 取り直しは取得中に全件既読が新たに成功した場合に限るので、利用者の操作なしに続くことはない。
+      do {
+        markAllReadCountAtStart = markAllReadCount
+        result = await fetchForTab(tab)
+        if (!isCurrentRequest(generation)) return
+      } while (markAllReadCountAtStart !== markAllReadCount)
+      noticeCache.set(key, applyKnownReads(result))
     }
   }
   catch (error) {
@@ -326,9 +337,17 @@ async function onMarkAllRead() {
   notices.value.forEach((n) => {
     n.isRead = true
   })
-  // 取得済みの他タブのキャッシュも既読にする（タブ切替で未読に戻さない）。
-  for (const list of noticeCache.values()) {
-    for (const n of list) n.isRead = true
+  // 取得済みの他タブは、取得が既読化の BE 実行より後だった場合に既読化後の新着を含みうるため、
+  // 推測で既読にせず取り直す（表示中の一覧は押下前から表示していたので既読化の対象で確実）。
+  // 取得中のタブは loadTab 側で応答を破棄して取り直す。
+  const currentKey = tabCacheKey(currentTab.value)
+  const staleKeys = [...noticeCache.keys()].filter(key => key !== currentKey)
+  for (const key of staleKeys) {
+    noticeCache.delete(key)
+    tabStates.value.delete(key)
+  }
+  for (const { tab } of tabs.value) {
+    if (staleKeys.includes(tabCacheKey(tab))) void loadTab(tab, requestGeneration)
   }
   notification.success(t('dashboard.widgets.notices.markedAllRead'))
 }
