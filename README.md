@@ -990,6 +990,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 - レスポンス形式: `ApiResponse<T>`（単一）/ `PagedResponse<T>`（リスト+meta）/ `ErrorResponse`（error+fieldErrors）
 - スコープ付きリソース: `/teams/{teamId}/...` または `/organizations/{orgId}/...`
 - WebSocket: STOMP over SockJS（`/ws`）
+- サイネージWS（`/ws`・`/ws/signage`）: 端末capabilityはCONNECT専用header `X-Signage-Token` で提示し、tokenが許可する画面のemergency/updateだけを購読する。購読時と各配送時に失効・期限・画面/IPを再確認する（[F09.10](docs/features/F09.10_digital_signage.md#6-セキュリティ考慮事項)）。
 
 ### Phase 別 API 概要
 
