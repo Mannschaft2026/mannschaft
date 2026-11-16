@@ -82,12 +82,12 @@ test('findUncoveredPaths: cone の取りこぼしを検出する', () => {
 });
 
 test('findUncoveredPaths: 除外配下と除外の祖先直下は被覆扱い', () => {
-  assert.deepEqual(findUncoveredPaths(['p/q/r/img.png', 'p/file'], ['z'], ['p/q/r']), []);
+  assert.deepEqual(findUncoveredPaths(['p/q/r/img.png'], ['z'], ['p/q/r']), []);
   assert.deepEqual(findUncoveredPaths(['p/other/f'], ['z'], ['p/q/r']), ['p/other/f']);
 });
 
 test('生成結果は追跡ファイルを全て被覆する', () => {
-  const files = [...BASE.map((d) => `${d}/f.txt`), 'README.md', 'frontend/package.json', 'frontend/public/x.txt'];
+  const files = [...BASE.filter((d) => d !== 'frontend/public/ranch').map((d) => `${d}/f.txt`), 'README.md', 'frontend/package.json', 'frontend/public/x.txt'];
   const r = computeSparsePaths(BASE, EX);
   assert.deepEqual(findUncoveredPaths(files, r, EX), []);
 });
@@ -106,7 +106,7 @@ test('compareWithSettings: 未設定・一致・不足・余剰（順序は無�
   assert.equal(m.status, 'mismatch');
   assert.deepEqual(m.missing, ['b']);
   assert.deepEqual(m.extra, ['c']);
-  assert.equal(compareWithSettings({ worktree: { sparsePaths: 'a' } }, exp).status, 'mismatch');
+  assert.equal(compareWithSettings({ worktree: { sparsePaths: 'a' } }, exp).status, 'invalid');
 });
 
 test('実際の除外正本が妥当である', () => {
@@ -115,4 +115,52 @@ test('実際の除外正本が妥当である', () => {
   assert.equal(paths.length, 3);
   assert.doesNotThrow(() => validateExclusions(paths));
   for (const e of j.exclusions) assert.ok(e.reason);
+});
+
+// --- 差し戻し対応 ---
+test('findUncoveredPaths: 除外の祖先直下は cone で展開されないので未被覆', () => {
+  assert.deepEqual(findUncoveredPaths(['p/file', 'p/q/file'], ['z'], ['p/q/r']), ['p/file', 'p/q/file']);
+  assert.deepEqual(findUncoveredPaths(['p/q/r/x.png', 'z/f', 'top'], ['z'], ['p/q/r']), []);
+});
+
+test('生成結果で取りこぼす構成（除外の祖先に他の子が無い）を未被覆として検出する', () => {
+  const dirs = ['z', 'p', 'p/q', 'p/q/r'];
+  const r = computeSparsePaths(dirs, ['p/q/r']);
+  assert.deepEqual(r, ['z']);
+  assert.deepEqual(findUncoveredPaths(['p/file', 'p/q/file', 'p/q/r/a'], r, ['p/q/r']), ['p/file', 'p/q/file']);
+});
+
+test('配下判定はパス要素で行い、接頭辞が同じ別名を誤認しない', () => {
+  assert.deepEqual(findUncoveredPaths(['x/ranch-old/f'], ['z'], ['x/ranch']), ['x/ranch-old/f']);
+  assert.deepEqual(findUncoveredPaths(['a/bc/f'], ['a/b'], []), ['a/bc/f']);
+  assert.deepEqual(findUncoveredPaths(['a/b/f', 'a/f'], ['a/b'], []), []);
+});
+
+test('除外直下にファイルとサブディレクトリが混在しても配下は全て除外扱い', () => {
+  assert.deepEqual(findUncoveredPaths(['e/f', 'e/s/g', 'e/s/t/h'], ['z'], ['e']), []);
+});
+
+test('大文字小文字違いは別物', () => {
+  assert.deepEqual(computeSparsePaths(['A', 'a', 'a/Sub'], ['a/Sub']).sort(), ['A']);
+  assert.deepEqual(findUncoveredPaths(['x/Ranch/f'], ['z'], ['x/ranch']), ['x/Ranch/f']);
+});
+
+test('空白・非 ASCII を含むパス', () => {
+  const dirs = withAncestors(['日本 語/子', 'my dir/ranch', 'my dir/other']);
+  const r = computeSparsePaths(dirs, ['my dir/ranch']);
+  assert.deepEqual(r, ['my dir/other', '日本 語'].sort());
+  assert.deepEqual(findUncoveredPaths(['日本 語/子/f', 'my dir/ranch/x'], r, ['my dir/ranch']), []);
+});
+
+test('compareWithSettings: 不正な設定は unset にしない', () => {
+  const bad = [
+    { worktree: null }, { worktree: [] }, { worktree: 'x' },
+    { worktree: { sparsePath: ['z'] } }, { worktree: { sparse_paths: ['z'] } }, { worktree: { sparsepaths: ['z'] } },
+    { worktree: { sparsePaths: [] } }, { worktree: { sparsePaths: 'a' } }, { worktree: { sparsePaths: ['a', 1] } },
+    { worktree: { sparsePaths: ['a', 'a'] } }, { worktree: { sparsePaths: null } },
+  ];
+  for (const s of bad) assert.equal(compareWithSettings(s, ['a']).status, 'invalid', JSON.stringify(s));
+  assert.equal(compareWithSettings({}, ['a']).status, 'unset');
+  assert.equal(compareWithSettings({ worktree: { other: 1 } }, ['a']).status, 'unset');
+  assert.ok(compareWithSettings({ worktree: null }, ['a']).problems.length > 0);
 });

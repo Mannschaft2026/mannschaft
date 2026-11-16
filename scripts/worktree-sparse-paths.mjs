@@ -58,26 +58,43 @@ export function computeSparsePaths(trackedDirs, exclusions) {
   return out.sort();
 }
 
-/** どの経路でも展開されない追跡ファイルを返す。 */
+/**
+ * 展開されない追跡ファイルを返す。cone が自動展開するのはルート直下と、
+ * sparsePaths に指定したディレクトリの祖先ディレクトリ直下のみ（除外パスは git に渡さないので祖先扱いしない）。
+ */
 export function findUncoveredPaths(trackedFiles, sparsePaths, exclusions) {
-  const roots = [...sparsePaths, ...exclusions];
   const autoDirs = new Set(['']);
-  for (const r of roots) for (let p = parentOf(r); p; p = parentOf(p)) autoDirs.add(p);
+  for (const r of sparsePaths) for (let p = parentOf(r); p; p = parentOf(p)) autoDirs.add(p);
   return trackedFiles.filter((f) => {
-    if (roots.some((r) => isUnder(f, r))) return false;
+    if (sparsePaths.some((r) => isUnder(f, r))) return false;
+    if (exclusions.some((r) => isUnder(f, r))) return false;
     return !autoDirs.has(parentOf(f));
   });
 }
 
-/** settings.json の worktree.sparsePaths と期待値を集合比較（順序は無視）。 */
+const LOOKALIKE = /^sparse[-_ ]?paths?$/i;
+
+/** settings.json の worktree.sparsePaths を検査し、期待値と集合比較（順序は無視）。status: unset / ok / mismatch / invalid */
 export function compareWithSettings(settings, expected) {
-  const cur = settings?.worktree?.sparsePaths;
-  if (cur === undefined) return { status: 'unset', missing: [], extra: [] };
-  if (!Array.isArray(cur)) return { status: 'mismatch', missing: [...expected], extra: [], note: 'sparsePaths が配列でない' };
+  const invalid = (...problems) => ({ status: 'invalid', missing: [], extra: [], problems });
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) return invalid('settings.json の最上位がオブジェクトでない');
+  if (!('worktree' in settings)) return { status: 'unset', missing: [], extra: [] };
+  const wt = settings.worktree;
+  if (wt === null || typeof wt !== 'object' || Array.isArray(wt)) return invalid('worktree がオブジェクトでない');
+  if (!('sparsePaths' in wt)) {
+    const like = Object.keys(wt).filter((k) => LOOKALIKE.test(k));
+    if (like.length) return invalid(`sparsePaths の誤記と思われるキーがある: ${like.join(', ')}`);
+    return { status: 'unset', missing: [], extra: [] };
+  }
+  const cur = wt.sparsePaths;
+  if (!Array.isArray(cur)) return invalid('sparsePaths が配列でない');
+  if (cur.length === 0) return invalid('sparsePaths が空配列');
+  if (cur.some((p) => typeof p !== 'string' || p === '')) return invalid('sparsePaths に空でない文字列以外の要素がある');
+  if (new Set(cur).size !== cur.length) return invalid('sparsePaths に重複がある');
   const curSet = new Set(cur);
   const expSet = new Set(expected);
   const missing = expected.filter((p) => !curSet.has(p));
-  const extra = [...curSet].filter((p) => !expSet.has(p));
+  const extra = cur.filter((p) => !expSet.has(p));
   return { status: missing.length || extra.length ? 'mismatch' : 'ok', missing, extra };
 }
 
@@ -93,6 +110,13 @@ export function loadExclusions() {
   return j.exclusions.map((e) => e.path);
 }
 
+const CONE_HINT = 'cone モードではこの場所の直下ファイルを展開できない。ファイルを別のディレクトリへ移すか、除外の単位を見直すこと';
+
+function reportUncovered(uncovered, label) {
+  console.error(`${label}: sparse で展開されない追跡ファイルがある（${uncovered.length} 件）。${CONE_HINT}`);
+  for (const p of uncovered.slice(0, 20)) console.error(`  未被覆: ${p}`);
+}
+
 function main(argv) {
   const mode = ['--print', '--check', '--write'].find((m) => argv.includes(m));
   if (!mode) throw new Error('--print / --check / --write のいずれかを指定すること');
@@ -101,10 +125,18 @@ function main(argv) {
   if (!ref) throw new Error('--ref に値が必要');
   const exclusions = loadExclusions();
   const dirs = git(['ls-tree', '--full-tree', '-r', '-d', '--name-only', '-z', ref]);
+  const files = git(['ls-tree', '--full-tree', '-r', '--name-only', '-z', ref]);
   const expected = computeSparsePaths(dirs, exclusions);
+  // 設定の有無に関わらず、生成結果そのものが取りこぼすファイルを検査する
+  const genUncovered = findUncoveredPaths(files, expected, exclusions);
   if (mode === '--print') {
     console.log(expected.join('\n'));
-    return 0;
+    if (genUncovered.length) reportUncovered(genUncovered, '生成結果');
+    return genUncovered.length ? 1 : 0;
+  }
+  if (genUncovered.length) {
+    reportUncovered(genUncovered, '生成結果');
+    return 1;
   }
   const settings = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'));
   if (mode === '--write') {
@@ -115,24 +147,19 @@ function main(argv) {
   }
   const cmp = compareWithSettings(settings, expected);
   if (cmp.status === 'unset') {
-    console.log('worktree.sparsePaths は未設定（有効化前）。検査を成功扱いとする');
+    console.log(`worktree.sparsePaths は未設定（有効化前）。生成結果の未被覆は 0 件（${expected.length} 件）`);
     return 0;
   }
-  const files = git(['ls-tree', '--full-tree', '-r', '--name-only', '-z', ref]);
-  const effective = Array.isArray(settings.worktree.sparsePaths) ? settings.worktree.sparsePaths : [];
-  const uncovered = findUncoveredPaths(files, effective, exclusions);
+  if (cmp.status === 'invalid') {
+    for (const p of cmp.problems) console.error(`settings.json が不正: ${p}`);
+    return 1;
+  }
   let bad = false;
   if (cmp.status === 'mismatch') {
     bad = true;
     console.error('worktree.sparsePaths が生成結果と一致しない。`node scripts/worktree-sparse-paths.mjs --write` で更新すること');
     for (const p of cmp.missing) console.error(`  不足: ${p}`);
     for (const p of cmp.extra) console.error(`  余剰: ${p}`);
-    if (cmp.note) console.error(`  ${cmp.note}`);
-  }
-  if (uncovered.length) {
-    bad = true;
-    console.error(`sparse で展開されない追跡ファイルがある（${uncovered.length} 件）`);
-    for (const p of uncovered.slice(0, 20)) console.error(`  未被覆: ${p}`);
   }
   if (!bad) console.log(`worktree.sparsePaths は生成結果と一致（${expected.length} 件、未被覆 0）`);
   return bad ? 1 : 0;
