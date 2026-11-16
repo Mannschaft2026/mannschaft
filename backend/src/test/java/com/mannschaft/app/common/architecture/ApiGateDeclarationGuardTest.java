@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * API の mapped method が feature gate または明示的な常時到達理由を宣言することを監査する番人。
- * HTTP は 3,730 件（既存3,729件＋組織告知の一括既読 read-batch 1本）、
+ * HTTP は 3,732 件（既存3,730件＋モジュールイベント管理GET/POST各1本）、
  * STOMP は Chat の 2 件と VillageLobbyPresenceController の 3 件、計 5 件を走査する。
  */
 class ApiGateDeclarationGuardTest {
@@ -42,7 +42,8 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3732);   // 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
+                .isEqualTo(3734);   // 3732 + L1-M モジュールイベント管理GET/POST各1本。未宣言増加0。
+                                    // 3732 = 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
                                     //   どちらも @AlwaysReachable(CORE) を宣言済みで未宣言増加0。3|4 → 3|6）。QR-PDF は旧 GET を POST へ置換（1|1 のまま・純増0）。
                                     // 3730 = 3729 + CMP-261011-0035 ALIC-1 組織告知の一括既読 POST read-batch 1本（AnnouncementFeedOrgController・
                                     //   @AuthorizedInService＋@AlwaysReachable(CORE) 宣言済みで未宣言増加0。6|6 → 6|7）。

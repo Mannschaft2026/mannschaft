@@ -118,6 +118,14 @@ UserSummaryResponse toSummary(UserEntity entity);
 * **例外の処理**: 例外の握り潰し（catchブロックを空にする）は原則禁止です。必ずログ出力または再スローを行ってください。
 * **バリデーション**: メソッドの入り口で **引数チェック（Validation）** を実施し、不正な場合は早期に例外を投げてください。
 
+### エラーメッセージの多言語化（CMP-261113-1507）
+API のエラー応答 `error.message` は BE が利用者の言語（ログイン済みは users.locale、未ログインは Accept-Language）で返す。詳細は `docs/features/F11.3_ui_i18n.md` §4.7.1。
+* **新しい ErrorCode を足すときは 5 言語の訳も同じ PR で足す**: enum に ja 文言（正本）を書き、`messages_{en,de,zh,ko,es}.properties` に導出キー（`TEAM_001 → error.team.001`）の訳を追加する。欠落・日本語の取り残し・プレースホルダ不一致は番人 `ErrorMessageI18nGuardTest` が CI で落とす。
+* **埋め込み値は `BusinessException.withMessageArgs(code, cause, args...)`** で渡し、文言は `{0}` 形式で書く。引数ありのときだけ MessageFormat を通るため、訳文のアポストロフィは typographic な `’` を使う（ASCII の `'` を書くなら、引数ありの訳は `''`、引数なしは `'` 1 個）。数値 ID は桁区切りを避けるため `String.valueOf` で渡す。
+* **エラー応答は `GlobalExceptionHandler`（`ErrorMessageResolver`）経由で作る**。`ErrorResponse.of(errorCode)` は enum 文言（ja）を直接入れるため、ハンドラやコントローラで応答本文を作るのに使わない。
+* **DispatcherServlet より前（Security のフィルタ鎖・前段フィルタ）で応答を書くときは `EarlyErrorResponseWriter`** を使う。`{"error":"<日本語>"}` のような独自形式・文言の直書きは禁止。
+* **`ResponseStatusException` に日本語の reason を書かない**。ja 以外の言語では共通コードの訳文に置き換わり、reason の内容は失われる。業務エラーは訳あり ErrorCode の `BusinessException` で投げる。
+
 ### バリデーションの責務分離
 
 #### Controller層（Jakarta Bean Validation）— 形式チェック
