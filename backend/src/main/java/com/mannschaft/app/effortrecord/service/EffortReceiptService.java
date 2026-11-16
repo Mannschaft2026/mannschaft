@@ -33,7 +33,7 @@ import java.util.UUID;
  *   <li>同 key・同 hash・24 時間以内: 保存済みの status/body を返す（{@link Handle#replay()}）。</li>
  *   <li>同 key・別 hash: 409 {@code COMMON_003}。</li>
  *   <li>同 key が別 TX で処理中（未 commit の receipt 行が存在）: 待たずに 409 + {@code Retry-After: 1}。
- *       INSERT の行ロック待ちを {@code SET_VAR(innodb_lock_wait_timeout=1)} で最大 1 秒に抑え、
+ *       INSERT の行ロック待ちを {@code SET SESSION innodb_lock_wait_timeout=1} で最大 1 秒に抑え、
  *       ロック待ち超過・デッドロック・重複キー（直前に別 TX が commit）をすべて「処理中」として扱う。</li>
  *   <li>24 時間経過した receipt は同 key の再利用時に置き換える（保証外）。期限削除は
  *       {@link EffortOperationReceiptCleanupBatchService}。</li>
@@ -96,9 +96,12 @@ public class EffortReceiptService {
         }
 
         UUID receiptId = com.mannschaft.app.common.UuidV7.generate();
+        // 同 key の未 commit 行があると INSERT は行ロック待ちになる。待たずに「処理中」を返すため、
+        // この INSERT の間だけ接続のロック待ちを 1 秒に短縮し、必ず既定へ戻す（接続は pool で再利用される）。
+        entityManager.createNativeQuery("SET SESSION innodb_lock_wait_timeout = 1").executeUpdate();
         try {
             entityManager.createNativeQuery(
-                            "INSERT /*+ SET_VAR(innodb_lock_wait_timeout=1) */ INTO effort_operation_receipts "
+                            "INSERT INTO effort_operation_receipts "
                                     + "(id, route_kind, route_id, actor_user_id, operation_key, operation_path, request_hash, "
                                     + "response_status, response_json, created_at, updated_at, expires_at) "
                                     + "VALUES (UNHEX(REPLACE(?1, '-', '')), 'OWNER', ?2, ?3, ?4, ?5, ?6, NULL, NULL, ?7, ?8, ?9)")
@@ -117,6 +120,8 @@ public class EffortReceiptService {
                 throw new RetryAfterBusinessException(CommonErrorCode.COMMON_003, 1);
             }
             throw e;
+        } finally {
+            entityManager.createNativeQuery("SET SESSION innodb_lock_wait_timeout = DEFAULT").executeUpdate();
         }
         return new Handle(receiptId, null);
     }

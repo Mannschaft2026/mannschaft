@@ -31,6 +31,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +42,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -56,7 +58,7 @@ import java.util.UUID;
  * {@code /{id}} より先に解決される（Spring は具体的な path を優先する）。</p>
  */
 @RestController
-@RequestMapping("/api/v1/effort-records/me")
+@RequestMapping(value = "/api/v1/effort-records/me", produces = MediaType.APPLICATION_JSON_VALUE)
 @Tag(name = "個人の頑張り記録", description = "F06.4.1 個人の頑張り記録（個人 API）")
 @RequiredArgsConstructor
 public class EffortRecordMeController {
@@ -93,6 +95,7 @@ public class EffortRecordMeController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     @SelfScopedEndpoint(SELF_SCOPE_REASON)
     @Operation(summary = "原本の作成")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> create(

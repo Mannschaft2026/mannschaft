@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -22,7 +23,8 @@ import java.util.UUID;
  * retired 後も物理削除しない（データ設計 §2）。
  */
 @Entity
-@Table(name = "effort_definition_revisions")
+@Table(name = "effort_definition_revisions",
+        uniqueConstraints = @UniqueConstraint(name = "uq_effort_revision", columnNames = {"definition_id", "revision"}))
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

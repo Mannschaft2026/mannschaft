@@ -9,6 +9,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -28,7 +29,8 @@ import java.time.Instant;
  * 時刻は UTC の {@link Instant}（データ設計 §2）。</p>
  */
 @Entity
-@Table(name = "effort_definitions")
+@Table(name = "effort_definitions",
+        uniqueConstraints = @UniqueConstraint(name = "uq_effort_definition_source", columnNames = {"source_type", "source_key"}))
 @SQLRestriction("deleted_at IS NULL")
 @Getter
 @Setter

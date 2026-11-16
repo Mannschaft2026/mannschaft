@@ -101472,7 +101472,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
                 };
             };
         };
@@ -101498,7 +101498,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
                 };
             };
         };
@@ -101524,7 +101524,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEffortDeleteResponse"];
+                    "application/json": components["schemas"]["ApiResponseEffortDeleteResponse"];
                 };
             };
         };
@@ -136816,7 +136816,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["CursorPagedResponseEffortOwnerRecordResponse"];
+                    "application/json": components["schemas"]["CursorPagedResponseEffortOwnerRecordResponse"];
                 };
             };
         };
@@ -136836,13 +136836,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Created */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
                 };
             };
         };
@@ -136866,7 +136866,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEffortDefinitionSnapshotResponse"];
+                    "application/json": components["schemas"]["ApiResponseEffortDefinitionSnapshotResponse"];
                 };
             };
         };
@@ -173899,7 +173899,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEffortStatsResponse"];
+                    "application/json": components["schemas"]["ApiResponseEffortStatsResponse"];
                 };
             };
         };
@@ -173919,7 +173919,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListEffortDefinitionSnapshot"];
+                    "application/json": components["schemas"]["ApiResponseListEffortDefinitionSnapshot"];
                 };
             };
         };

@@ -9,6 +9,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -34,7 +35,8 @@ import java.util.UUID;
  * 互いに独立（データ設計 §6）。</p>
  */
 @Entity
-@Table(name = "effort_records")
+@Table(name = "effort_records",
+        uniqueConstraints = @UniqueConstraint(name = "uq_effort_record_share", columnNames = {"share_id"}))
 @SQLRestriction("deleted_at IS NULL AND purged_at IS NULL")
 @Getter
 @Setter

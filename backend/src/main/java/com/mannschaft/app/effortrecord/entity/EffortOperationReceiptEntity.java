@@ -9,6 +9,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Index;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -25,7 +27,10 @@ import java.time.Instant;
  * <p>private 原本と同じ owner 認可・同じ消去対象（データ設計 §2）。個人情報の長期保管には使わない。</p>
  */
 @Entity
-@Table(name = "effort_operation_receipts")
+@Table(name = "effort_operation_receipts",
+        uniqueConstraints = @UniqueConstraint(name = "uq_effort_receipt",
+                columnNames = {"route_kind", "route_id", "actor_user_id", "operation_path", "operation_key"}),
+        indexes = @Index(name = "idx_effort_receipt_expiry", columnList = "expires_at"))
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
