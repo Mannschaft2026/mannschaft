@@ -143,3 +143,17 @@ SIGKILL・ホスト障害ではfinallyは動かない。`--check` は自分専�
 tracked差分・残存refに加え、untracked/ignoredを確認する。`logs/` 配下のspecやfixtureもコードとして扱う。非祖先であることだけでは未反映と判定せず、正本refへの到達、PRのsquash採用、patch-id、改行正規化後の本文、現mainの後続改善まで照合する。
 
 必要な差分だけを秘密情報がないと確認したうえで正本branch/PRへ回収し、CMP・担当・次の一手を対応付ける。既存Draft PR/refに必要差分があれば回収branchを重複作成せず、未完理由と次の一手を既存CMPへ対応付ける。採用済み・検証専用・後続改善で不要なものは採否理由を記録する。全量archiveの追加で解消扱いにせず、使用中プロセス・共有Gitディレクトリ・他の利用者資産を確認してから不要な原コピーを個別に撤去する。未確定分は所有者・再確認期限・再開条件を付けて引き継ぐ。既存の `--check` は検知専用のままとし、無差別削除へ変更しない。
+
+## sparse 一覧の正本と番人（CMP-261116-1101）
+
+足軽 worktree に牧場 PNG 素材（約876MB）を展開しないため、Claude Code の `worktree.sparsePaths`（git sparse-checkout の cone モード）に「含めるディレクトリ」を列挙する。cone は含める一覧なので、除外ディレクトリの兄弟を全て並べる必要がある。手書きだと main に新ディレクトリが増えたとき黙って見えなくなるため、一覧は除外の正本から機械生成する。
+
+- 除外の正本: `scripts/worktree-sparse-exclusions.json`（パスと理由）
+- 生成・検査: `scripts/worktree-sparse-paths.mjs`
+  - `node scripts/worktree-sparse-paths.mjs --print` — 生成結果を出力（`--ref <ref>` で対象 ref を指定、既定 HEAD。`git ls-tree --full-tree` で読むため sparse の worktree でも正しく動く）
+  - `node scripts/worktree-sparse-paths.mjs --check` — `.claude/settings.json` の `worktree.sparsePaths` が生成結果と集合として一致し（順序は無視）、全追跡ファイルが展開経路に属すること（未被覆ゼロ）を検査。未設定の間は成功扱い
+  - `node scripts/worktree-sparse-paths.mjs --write` — settings.json へ書き込む
+  - `node scripts/worktree-sparse-paths.mjs --check --require-configured` — 未設定を失敗にする（キー誤記の素通りを根治）。設定を有効化する後続PR（部隊1b）で CI の `--check` ステップに付ける。有効化前の現状は付けない
+- 番人: CI の `Harness CI`（`.github/workflows/harness-ci.yml`）が単体テスト `scripts/worktree-sparse-paths.test.mjs` と `--check` を実行する。main に新しいディレクトリが増えて一覧が古くなると `--check` が落ちるので、`--write` で更新してコミットする。
+- 除外を増減する手順: 正本 JSON を編集し、`--write` で settings.json を更新して同じ PR に含める。除外パスが追跡されなくなる（改名・削除）とエラーになるので、正本から外す。
+- 状態: 生成スクリプトと番人のみ導入済み。`.claude/settings.json` への有効化は後続 PR で行う。
