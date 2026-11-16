@@ -2,9 +2,11 @@
   "schemaVersion": 1,
   "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
   "registrationBaseHead": "3bad93f19e33291cb75e10bed7658cfcc6e6acdf",
+  "qualifiedMainHead": "0d42a48763a749aa0da8b677107e719b13ba9712",
+  "qualificationMergeHead": "18e1e4f0c5e953a2060039f945d6b3ba1b692110",
   "htmlSha256": "7708e0a5ab9466df5fb174f1d0f280333470f913c5db64dc0678bf8f63eea8a6",
   "baselineDataSha256": "599f965083d3c135529acebc9d5fcd002421d2456006ab07afd3e392b4bdb6c1",
-  "newDataSha256": "a9965824896a1bbc421041b2b7c024ddb23491604744dbbb84a082c139999901",
+  "newDataSha256": "8627fd7acf11b754b8e6eb121ed8571c1d51204fc561a1005a63e8ee45cea243",
   "clockFixed": false,
   "isolatedFreshContext": true,
   "productAppOperations": 0,
@@ -14,49 +16,49 @@
   "remoteRequests": [],
   "browserProcess": [
     {
-      "ProcessId": 53540,
-      "ParentProcessId": 57800,
-      "creation": "2026-11-16T02:27:29.2992630Z"
+      "ProcessId": 53256,
+      "ParentProcessId": 36636,
+      "creation": "2026-11-16T03:12:22.0903300Z"
     },
     {
-      "ProcessId": 41604,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:27:29.5573860Z"
+      "ProcessId": 51760,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:22.5435730Z"
     },
     {
-      "ProcessId": 42452,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:27:30.9663260Z"
+      "ProcessId": 42204,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:23.6071840Z"
     },
     {
-      "ProcessId": 61892,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:27:31.0592150Z"
+      "ProcessId": 32924,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:23.6833260Z"
     },
     {
-      "ProcessId": 58804,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:27:31.2112000Z"
+      "ProcessId": 36268,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:23.8734450Z"
     },
     {
-      "ProcessId": 41288,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:28:10.8702420Z"
+      "ProcessId": 7516,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:39.0230610Z"
     },
     {
-      "ProcessId": 51828,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:28:11.7744410Z"
+      "ProcessId": 51612,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:39.1790700Z"
     },
     {
-      "ProcessId": 54208,
-      "ParentProcessId": 53540,
-      "creation": "2026-11-16T02:28:43.7798550Z"
+      "ProcessId": 58948,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:13:05.8852130Z"
     }
   ],
   "profileArgumentPresent": true,
-  "profilePathSha256": "f46926c4d15b7e1e709e86f46f38a6e18fb1389b45b8a25e76bc69cb6fee89b8",
-  "naturalClockElapsedMs": 6236,
+  "profilePathSha256": "008fc5e3773bcb894002ce44707413b6ac8e8a89048c7a32daf2148515fc30ca",
+  "naturalClockElapsedMs": 4796,
   "old154AllFieldsDeepEqual": true,
   "initialCount": 154,
   "appendedCount": 155,
@@ -78,25 +80,25 @@
   "profileAbsentAfterClose": true,
   "remainingOwnGenerations": [],
   "serverClosed": true,
-  "elapsedMs": 274270,
+  "elapsedMs": 130638,
   "nativeExitCode": 0,
   "htmlMatchesCommittedRaw": true,
   "finalInputBytes": "HTMLはHEAD raw LF、dataは正規generator出力をLFとして配信。source pinは現commit raw入力と一致。",
   "safeCardImage": {
     "artifactId": "board-followup-card.png",
-    "sha256": "4fd0144d50c5fd18bae647897b0301c76eef6a6c79b90006e4d7c03ee08d407b",
+    "sha256": "35d1449977ae72af5a8ca97fd8ddd2a5ccba906159bcfbacdb1c3a2d44e9e153",
     "visibility": "private-local-prototype-image-not-published",
     "visuallyInspected": true
   },
   "rawSnapshots": [
     {
       "artifactId": "idb-old-154.json",
-      "sha256": "11712ef6d2876e093d5aaf6d4f08f976723d004d6b1801fd20fc1ac9a5621754",
+      "sha256": "6b84ad0372caf31b11446082658a41d202adbbe46152a246513a3fe3b68046be",
       "visibility": "private-local-not-published"
     },
     {
       "artifactId": "idb-final-155.json",
-      "sha256": "8dc2aceef6281041f101bf8412b5b4fce8b064d64456654d26a47bb5c75f1584",
+      "sha256": "439d6d5ce6b0b7864986b7913ac19260e13eb47769900c849c7b8b8ec59ad999",
       "visibility": "private-local-not-published"
     }
   ],

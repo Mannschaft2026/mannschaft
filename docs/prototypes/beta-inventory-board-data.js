@@ -1,5 +1,5 @@
 window.BETA_INVENTORY_DATA = {
-  "generatedAt": "2026-11-16T02:25:39+00:00",
+  "generatedAt": "2026-11-16T03:10:09+00:00",
   "sources": {
     "inventory": "docs/inventory/feature-inventory.yaml",
     "taskList": "docs/task-list.md",
@@ -8,9 +8,9 @@ window.BETA_INVENTORY_DATA = {
     "b0Coverage": "docs/prototypes/beta-inventory-board-b0-coverage.json",
     "gate": "docs/prototypes/beta-inventory-board-gate.json",
     "inventoryCommit": "d61097a49227386d8b4044a2a6ced72fade5b50a",
-    "taskListCommit": "2b8b484a9f64d020e5154509a23cf5c9c1889995",
+    "taskListCommit": "18e1e4f0c5e953a2060039f945d6b3ba1b692110",
     "inventorySha256": "cc1ac3e36a185b52f10d232e18476a461fbe6fc84b67f72f36320ee24260a7f6",
-    "taskListSha256": "59d8c6fe192a2a3913ab426364771c46173b2e6cee1093b527e59056a3c3d098",
+    "taskListSha256": "d981fef1f8698ba2df298ce03abae6c116245badd5e7cefab7f29ce34ba7b2e4",
     "decisionsSha256": "64d129e19fa5c6dc7c2930ec62df7fe13732e8860b0c1ce68845f7867cf76307",
     "gateSha256": "1fe1a0869b148212e4937f26189758b1b34484f309074793bf56950b6a83d75c",
     "githubSnapshot": "docs/prototypes/beta-inventory-board-github.json",
@@ -20,7 +20,7 @@ window.BETA_INVENTORY_DATA = {
     "features": 44,
     "capabilities": 95,
     "splitParents": 33,
-    "campaigns": 745,
+    "campaigns": 746,
     "layer": {
       "能力": 26,
       "ドメイン": 18
@@ -37,11 +37,11 @@ window.BETA_INVENTORY_DATA = {
   "verification": {
     "raw": {
       "features": 44,
-      "campaigns": 745
+      "campaigns": 746
     },
     "parsed": {
       "features": 44,
-      "campaigns": 745,
+      "campaigns": 746,
       "core": 25,
       "noncore": 19,
       "blockers": 23,
@@ -69842,6 +69842,72 @@ window.BETA_INVENTORY_DATA = {
       ],
       "tags": [
         "未着手"
+      ],
+      "githubRefs": [],
+      "github": []
+    },
+    {
+      "id": "CMP-261116-1101",
+      "title": "足軽 worktree の sparse checkout 化。追跡ファイル 1,109MB のうち約876MB を占める牧場 PNG 素材3か所（`frontend/dev-fixtures/ranch`、`frontend/public/ranch/approved`、`backend/src/main/resources/ranch/approved`）が worktree ごとに複製され、約230本・78GB で C ドライブを逼迫させている",
+      "status": "working",
+      "statusLabel": "P4 進行中（部隊0 実機検証）",
+      "stage": "未設定",
+      "priority": "未設定",
+      "taskPriority": "P4",
+      "audiences": [],
+      "featureKey": null,
+      "updated": "未設定",
+      "summary": "task-list.mdの正本表から生成。",
+      "nextAction": "設定投入後に作られる足軽 worktree で素材3ディレクトリが展開されず（1本あたり中央値で800MB以上減）、`git add -A` で削除が記録されず、素材検証は sparse 除外時に実バイト検査だけを理由つきで省略して CI では必ず実行され、手での欠落・改ざん・部分展開は失敗し、展開・縮小コマンドと一覧の番人テストが揃い、本陣は全展開のまま不変であること（受け入れ条件25個は戦役台帳）",
+      "acceptance": [
+        "設定投入後に作られる足軽 worktree で素材3ディレクトリが展開されず（1本あたり中央値で800MB以上減）、`git add -A` で削除が記録されず、素材検証は sparse 除外時に実バイト検査だけを理由つきで省略して CI では必ず実行され、手での欠落・改ざん・部分展開は失敗し、展開・縮小コマンドと一覧の番人テストが揃い、本陣は全展開のまま不変であること（受け入れ条件25個は戦役台帳）"
+      ],
+      "blocker": "—",
+      "issues": [
+        {
+          "label": "軍議 2026-11-16（Codex 軍議検分 実施・指摘12件反映）。方式は Claude Code 組み込みの `worktree.sparsePaths`。範囲外: 素材の git 外出し、FE/BE 同一 PNG 270MB の重複解消",
+          "state": "unknown"
+        }
+      ],
+      "prs": [
+        "軍議 2026-11-16（Codex 軍議検分 実施・指摘12件反映）。方式は Claude Code 組み込みの `worktree.sparsePaths`。範囲外: 素材の git 外出し、FE/BE 同一 PNG 270MB の重複解消"
+      ],
+      "ci": "正本に記載された証拠を確認してください。",
+      "refs": [
+        "`.claude/campaigns/2026-11-16-worktree-sparse-checkout.md`"
+      ],
+      "source": "docs/task-list.md",
+      "sourceTokens": [
+        "worktree",
+        "sparse",
+        "checkout",
+        "MB",
+        "MB",
+        "PNG",
+        "frontend",
+        "dev-fixtures",
+        "ranch",
+        "frontend",
+        "public",
+        "ranch",
+        "approved",
+        "backend",
+        "src",
+        "main",
+        "resources",
+        "ranch",
+        "approved",
+        "worktree",
+        "GB",
+        "worktree",
+        "MB",
+        "git",
+        "add",
+        "sparse",
+        "CI"
+      ],
+      "tags": [
+        "進行中"
       ],
       "githubRefs": [],
       "github": []

@@ -81,7 +81,7 @@
   "generatedCounts": {
     "features": 44,
     "capabilities": 95,
-    "campaigns": 745,
+    "campaigns": 746,
     "core": 25,
     "noncore": 19,
     "blockers": 23
@@ -97,7 +97,7 @@
   "rawInputBinding": [
     {
       "path": "docs/task-list.md",
-      "sha256": "59d8c6fe192a2a3913ab426364771c46173b2e6cee1093b527e59056a3c3d098",
+      "sha256": "d981fef1f8698ba2df298ce03abae6c116245badd5e7cefab7f29ce34ba7b2e4",
       "matchesCommittedRaw": true
     },
     {
@@ -144,5 +144,21 @@
   "sourcePinQualification": "正規generator入力を現commitのraw bytesと一致させ、sourcePinを手編集せず通常再生成。生成JSとHTMLも最終commitと同じLF bytesで実UI検証する。",
   "generatedPinsMatchCommittedRaw": true,
   "finalStaticBrowserNativeExitCode": 0,
-  "finalStaticBrowserEvidence": "docs/evidence/CMP-261028-2304/board-ui-followup-20261116.json"
+  "finalStaticBrowserEvidence": "docs/evidence/CMP-261028-2304/board-ui-followup-20261116.json",
+  "mainFollowQualification": {
+    "mainHead": "0d42a48763a749aa0da8b677107e719b13ba9712",
+    "mergeHead": "18e1e4f0c5e953a2060039f945d6b3ba1b692110",
+    "previousQualifiedHead": "d5f10f690c50723b02ba40e47ddf1d1713202604",
+    "previousHeadCi": "全8workflow success・actual required4 successは旧head履歴。新headのCIへ流用しない。",
+    "mainChanges": "台帳1101新1行とBEエラー訳5ファイル/既存HTTPテスト1ファイル。B0 overlay/HTML/計画/分類はmain変更0。",
+    "taskConflictResolution": "最新main全台帳rawを保持し、元d5の1045行を末尾に1行追加。",
+    "d5OverlayAllFieldsDeepEqual": true,
+    "canonicalCopyDeepEqual": true,
+    "generatedOverlayDeepEqual": true,
+    "githubReferenceSetsEqual": true,
+    "githubReferenceCount": 834,
+    "githubResyncPerformed": false,
+    "snapshotAdoption": "参照番号集合はmain追従前後とも834で同一。既成功の正規同期snapshot bytesを保持。新しいGitHub状態の再取得成功とは主張しない。",
+    "generatedPinsMatchCommittedRaw": true
+  }
 }
