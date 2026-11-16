@@ -284,6 +284,29 @@ public class WorkflowRequestService {
     }
 
     /**
+     * CMP-260909-2152（骨格・未実装）: 連携元（source_type, source_id）単位で申請を 1 件に保ちつつ起票・提出再開する。
+     *
+     * <p>1TX・workflow Repository のみ。source ロック行（UNIQUE(source_type, source_id)）を作成＋FOR UPDATE し、
+     * 同 source の生存申請の最古を正とする。無ければ作成と提出を同 TX で行い、DRAFT なら提出を再開し、
+     * 提出済み以降は何もしない。申請 ID と状態を返す。</p>
+     *
+     * @param scopeType   スコープ種別
+     * @param scopeId     スコープ ID
+     * @param templateId  ワークフロー雛形 ID
+     * @param sourceType  連携元種別
+     * @param sourceId    連携元 ID
+     * @param title       起票時のタイトル
+     * @param fieldValues 起票時の入力値（JSON、null 可）
+     * @return 正とした申請
+     */
+    @Transactional
+    public WorkflowRequestResponse startOrResumeForSource(String scopeType, Long scopeId, Long templateId,
+                                                          String sourceType, Long sourceId,
+                                                          String title, String fieldValues) {
+        throw new UnsupportedOperationException("CMP-260909-2152: startOrResumeForSource は未実装（試練の骨格）");
+    }
+
+    /**
      * 申請を取り下げる。
      *
      * <p>認可: 申請者本人、または entity 由来スコープの ADMIN/DEPUTY_ADMIN のみ（403）。

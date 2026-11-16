@@ -40,6 +40,14 @@
       "deleteError": "Error al eliminar la asignación"
     },
     "consumption": {
+      "openByUser": "Desglose por miembro",
+      "user": "ID de usuario: {id}",
+      "total": "Total {amount} {currency} / {hours} horas",
+      "recordedRate": "Tarifa horaria al registrar",
+      "hours": "Horas",
+      "zeroHistory": "Historial registrado con importe cero (revisar tarifa horaria)",
+      "empty": "No hay un desglose de consumo registrado",
+      "close": "Cerrar",
       "summary": "Resumen de Consumo",
       "consumed": "Consumido",
       "remaining": "Restante",

@@ -193,6 +193,37 @@ public class ShiftBudgetFailedEventService {
         return FailedEventResponse.from(saved);
     }
 
+    /**
+     * CMP-260909-2152（骨格・未実装）: 再試行の着手権を取る。
+     *
+     * <p>状態条件付き UPDATE で RETRYING＋retry_count++ を自 TX でコミットし、試行番号（claim 後の retry_count）を返す。
+     * RETRYING でリース（10 分）が切れていなければ 409。手動 API・バッチの段取り役が共通で使う。</p>
+     *
+     * @param failedEventId 失敗イベント ID
+     * @return 着手権（試行番号つき）
+     */
+    @Transactional
+    public ShiftBudgetRetryClaim claim(Long failedEventId) {
+        throw new UnsupportedOperationException("CMP-260909-2152: claim は未実装（試練の骨格）");
+    }
+
+    /**
+     * CMP-260909-2152（骨格・未実装）: 再試行の結果を条件付きで記録する。
+     *
+     * <p>{@code WHERE id=? AND status='RETRYING' AND retry_count=?} の条件付き UPDATE。0 行なら結果を捨ててログを残し
+     * false を返す（旧実行が新実行の結果や手動解決を上書きしない）。</p>
+     *
+     * @param failedEventId 失敗イベント ID
+     * @param attempt       claim で得た試行番号
+     * @param succeeded     実行が成功したか
+     * @param errorMessage  失敗時のエラー（成功時は null）
+     * @return 記録が反映されたら true、条件不一致で破棄したら false
+     */
+    @Transactional
+    public boolean recordResult(Long failedEventId, int attempt, boolean succeeded, String errorMessage) {
+        throw new UnsupportedOperationException("CMP-260909-2152: recordResult は未実装（試練の骨格）");
+    }
+
     /** 一覧取得（管理 API、{@code BUDGET_VIEW} 権限必須）。{@code status} が null なら全件。 */
     public List<FailedEventResponse> list(Long organizationId,
                                           ShiftBudgetFailedEventStatus status,

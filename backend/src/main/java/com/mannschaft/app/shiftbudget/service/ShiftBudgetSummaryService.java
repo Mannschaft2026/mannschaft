@@ -8,6 +8,7 @@ import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
 import com.mannschaft.app.shiftbudget.ShiftBudgetFeatureService;
 import com.mannschaft.app.shiftbudget.dto.AlertResponse;
 import com.mannschaft.app.shiftbudget.dto.ConsumptionSummaryResponse;
+import com.mannschaft.app.shiftbudget.dto.HourlyRateConsumptionDto;
 import com.mannschaft.app.shiftbudget.dto.UserConsumptionDto;
 import com.mannschaft.app.shiftbudget.entity.BudgetThresholdAlertEntity;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
@@ -24,9 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * F08.7 シフト予算消化サマリ サービス（API #5 / Phase 9-δ 第3段で正規化完了）。
@@ -71,13 +72,10 @@ public class ShiftBudgetSummaryService {
     /**
      * 指定 allocation の消化サマリを返す。
      *
-     * <p>権限: {@code BUDGET_VIEW} 必須（無いと 403）。
-     * {@code BUDGET_ADMIN} 保有時のみ {@code by_user} の実データを返す。</p>
+     * <p>Facadeでfeature・所属・VIEWを確認済み。budgetAdminはPolicyが導いた値のみを受け取る。
+     * package-privateにしてControllerからの未認可の直接呼出を公開しない。</p>
      */
-    public ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId) {
-        featureService.requireEnabled(organizationId);
-        boolean budgetAdmin = requireBudgetViewAndDetectAdmin(organizationId);
-
+    ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId, boolean budgetAdmin) {
         ShiftBudgetAllocationEntity allocation = allocationRepository
                 .findByIdAndOrganizationIdAndDeletedAtIsNull(allocationId, organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND));
@@ -128,9 +126,10 @@ public class ShiftBudgetSummaryService {
      * user_id 別の消化額・勤務時間集計を返す（{@code BUDGET_ADMIN} 保有時のみ呼ばれる）。
      *
      * <p>集計対象: {@code allocation_id} 配下の status PLANNED/CONFIRMED かつ生存レコード。
-     * group by user_id、SUM(amount) と SUM(hours) を採る。</p>
+     * user_id と保存済み時給ごとに SUM(amount) と SUM(hours) を採る。
+     * 現在の時給の検索や金額の再計算は行わない。</p>
      *
-     * <p>並び順は user_id 昇順（決定論的、テスト容易性向上）。</p>
+     * <p>並び順は user_id 昇順、各人の内訳は記録時給の昇順。</p>
      */
     private List<UserConsumptionDto> aggregateByUser(Long allocationId) {
         List<ShiftBudgetConsumptionEntity> consumptions = consumptionRepository
@@ -139,23 +138,36 @@ public class ShiftBudgetSummaryService {
                         List.of(ShiftBudgetConsumptionStatus.PLANNED,
                                 ShiftBudgetConsumptionStatus.CONFIRMED));
 
-        // user_id 昇順を維持するため LinkedHashMap + ソート済 List で構築
-        Map<Long, BigDecimal[]> grouped = new LinkedHashMap<>();
-        consumptions.stream()
-                .sorted((a, b) -> Long.compare(a.getUserId(), b.getUserId()))
-                .forEach(c -> {
-                    BigDecimal[] sums = grouped.computeIfAbsent(
-                            c.getUserId(), k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
-                    sums[0] = sums[0].add(c.getAmount());
-                    sums[1] = sums[1].add(c.getHours());
-                });
+        // TreeMapはBigDecimalを数値で比較するため、1200.0と1200.00も同じ内訳にまとまる。
+        // 取得は従来どおり1回。配列は [保存済み金額の和, 保存済み時間の和]。
+        Map<Long, Map<BigDecimal, BigDecimal[]>> grouped = new TreeMap<>();
+        for (ShiftBudgetConsumptionEntity consumption : consumptions) {
+            Map<BigDecimal, BigDecimal[]> rates = grouped.computeIfAbsent(
+                    consumption.getUserId(), key -> new TreeMap<>());
+            BigDecimal[] sums = rates.computeIfAbsent(consumption.getHourlyRateSnapshot(),
+                    key -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            sums[0] = sums[0].add(consumption.getAmount());
+            sums[1] = sums[1].add(consumption.getHours());
+        }
 
         return grouped.entrySet().stream()
-                .map(e -> UserConsumptionDto.builder()
-                        .userId(e.getKey())
-                        .amount(e.getValue()[0])
-                        .hours(e.getValue()[1])
-                        .build())
+                .map(user -> {
+                    List<HourlyRateConsumptionDto> breakdown = user.getValue().entrySet().stream()
+                            .map(rate -> HourlyRateConsumptionDto.builder()
+                                    .hourlyRateSnapshot(rate.getKey())
+                                    .amount(rate.getValue()[0])
+                                    .hours(rate.getValue()[1])
+                                    .build())
+                            .toList();
+                    return UserConsumptionDto.builder()
+                            .userId(user.getKey())
+                            .amount(breakdown.stream().map(HourlyRateConsumptionDto::amount)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                            .hours(breakdown.stream().map(HourlyRateConsumptionDto::hours)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                            .rateBreakdown(breakdown)
+                            .build();
+                })
                 .toList();
     }
 
@@ -236,7 +248,7 @@ public class ShiftBudgetSummaryService {
     }
 
     /**
-     * {@code BUDGET_VIEW} 権限を要求しつつ、同時に {@code BUDGET_ADMIN} 保有も判定する。
+     * プロジェクト集計向けの既存判定。{@code BUDGET_VIEW} と {@code BUDGET_ADMIN} 保有を判定する。
      *
      * <p>Phase 9-δ 第3段クリーンカット: 権限階層は BUDGET_VIEW ⊂ BUDGET_ADMIN として扱う
      * （V11.034 マイグレーションで BUDGET_ADMIN 保有者には自動付与済の前提）。

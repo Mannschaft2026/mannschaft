@@ -2,7 +2,6 @@ package com.mannschaft.app.shiftbudget.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.auth.service.AuthTokenService;
-import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.i18n.UserLocaleCache;
 import com.mannschaft.app.proxy.ProxyInputContext;
@@ -11,7 +10,7 @@ import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
 import com.mannschaft.app.shiftbudget.dto.AlertResponse;
 import com.mannschaft.app.shiftbudget.dto.ConsumptionSummaryResponse;
 import com.mannschaft.app.shiftbudget.dto.UserConsumptionDto;
-import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryFacade;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -44,14 +44,14 @@ import com.mannschaft.app.common.security.AccessGuard;
  * <p>カバレッジ:</p>
  * <ul>
  *   <li>BUDGET_ADMIN 保有時: {@code by_user} 配列含む全フィールド出力</li>
- *   <li>BUDGET_VIEW のみ: {@code by_user} フィールドそのものが除外（{@code @JsonView} で）+ flags=BY_USER_HIDDEN</li>
- *   <li>SystemAdmin: BUDGET_ADMIN 同等</li>
+ *   <li>BUDGET_VIEW のみ: {@code by_user} 空配列 + flags=BY_USER_HIDDEN</li>
+ *   <li>SystemAdmin も実組織の BUDGET_VIEW / BUDGET_ADMIN を保有する場合に詳細 View</li>
  *   <li>権限なし → 403</li>
  *   <li>別組織 → 404</li>
  * </ul>
  *
- * <p>{@code MappingJacksonValue} と {@code @JsonView} の組合せにより
- * {@code by_user} はフィールド単位でシリアライズ除外される（DTO 側の値が空でも JSON に出ない）。</p>
+ * <p>フィルターを無効にし、Service・権限判定を mock にした JSON 形状の試験。
+ * 実際の所属・権限の強制は {@code ShiftBudgetSummaryRateBreakdownIT} で別に検証する。</p>
  */
 @WebMvcTest(ShiftBudgetSummaryController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -70,10 +70,7 @@ class ShiftBudgetSummaryControllerTest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private ShiftBudgetSummaryService summaryService;
-
-    @MockitoBean
-    private AccessControlService accessControlService;
+    private ShiftBudgetSummaryFacade summaryFacade;
 
     @MockitoBean
     private AuthTokenService authTokenService;
@@ -98,6 +95,10 @@ class ShiftBudgetSummaryControllerTest {
     }
 
     private ConsumptionSummaryResponse responseAsAdmin() {
+        return responseAsAdmin(Collections.emptyList());
+    }
+
+    private ConsumptionSummaryResponse responseAsAdmin(List<String> flags) {
         return ConsumptionSummaryResponse.builder()
                 .allocationId(ALLOCATION_ID)
                 .allocatedAmount(new BigDecimal("300000"))
@@ -107,7 +108,7 @@ class ShiftBudgetSummaryControllerTest {
                 .remainingAmount(new BigDecimal("55000"))
                 .consumptionRate(new BigDecimal("0.8167"))
                 .status("WARN")
-                .flags(Collections.emptyList())
+                .flags(flags)
                 .alerts(List.of(AlertResponse.builder()
                         .id(99L).allocationId(ALLOCATION_ID).thresholdPercent(80)
                         .triggeredAt(LocalDateTime.of(2026, 6, 25, 14, 30))
@@ -139,27 +140,21 @@ class ShiftBudgetSummaryControllerTest {
                 .build();
     }
 
-    /** BUDGET_ADMIN 保有を AccessControlService に答えさせる。 */
+    /** Policy再確認のADMIN結果をFacadeに答えさせる。 */
     private void givenAdmin() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
-        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        // BUDGET_ADMIN 判定で例外を投げない
+        given(summaryFacade.isBudgetAdmin(ORG_ID)).willReturn(true);
     }
 
     /** BUDGET_VIEW のみで BUDGET_ADMIN は持たない設定。 */
     private void givenViewerOnly() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
-        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        willThrow(new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED))
-                .given(accessControlService)
-                .checkPermission(USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN");
+        given(summaryFacade.isBudgetAdmin(ORG_ID)).willReturn(false);
     }
 
     @Test
     @DisplayName("BUDGET_ADMIN: 200 + by_user / alerts / 全金額フィールド出力")
     void admin_200() throws Exception {
         givenAdmin();
-        given(summaryService.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(responseAsAdmin());
+        given(summaryFacade.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(responseAsAdmin());
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))
@@ -177,10 +172,10 @@ class ShiftBudgetSummaryControllerTest {
     }
 
     @Test
-    @DisplayName("BUDGET_VIEW のみ: 200 + by_user フィールドが JSON に出ない (@JsonView 除外) + flags=BY_USER_HIDDEN")
-    void viewerOnly_byUser除外() throws Exception {
+    @DisplayName("BUDGET_VIEW のみ: 200 + by_user 空配列 + flags=BY_USER_HIDDEN")
+    void viewerOnly_byUser空配列() throws Exception {
         givenViewerOnly();
-        given(summaryService.getConsumptionSummary(ORG_ID, ALLOCATION_ID))
+        given(summaryFacade.getConsumptionSummary(ORG_ID, ALLOCATION_ID))
                 .willReturn(responseAsViewerOnly());
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
@@ -190,15 +185,40 @@ class ShiftBudgetSummaryControllerTest {
                 .andExpect(jsonPath("$.data.status").value("WARN"))
                 .andExpect(jsonPath("$.data.flags[0]").value("BY_USER_HIDDEN"))
                 .andExpect(jsonPath("$.data.allocated_amount").value(300000))
-                // by_user フィールドそのものが @JsonView(BudgetAdmin) 制御で JSON に出ない
-                .andExpect(jsonPath("$.data.by_user").doesNotExist());
+                .andExpect(jsonPath("$.data.by_user").isArray())
+                .andExpect(jsonPath("$.data.by_user").isEmpty());
     }
 
     @Test
-    @DisplayName("SystemAdmin: 200 + by_user 全公開")
+    @DisplayName("ADMIN集計後にViewerとなった場合も空配列とflagを返し合計・元recordを保持する")
+    void viewer_afterAdminAggregation() throws Exception {
+        givenViewerOnly();
+        ConsumptionSummaryResponse original = responseAsAdmin(List.of("EXISTING_FLAG"));
+        given(summaryFacade.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(original);
+
+        mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
+                        .header("X-Organization-Id", ORG_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.by_user").isArray())
+                .andExpect(jsonPath("$.data.by_user").isEmpty())
+                .andExpect(jsonPath("$.data.flags[0]").value("EXISTING_FLAG"))
+                .andExpect(jsonPath("$.data.flags[1]").value("BY_USER_HIDDEN"))
+                .andExpect(jsonPath("$.data.flags.length()").value(2))
+                .andExpect(jsonPath("$.data.allocated_amount").value(300000))
+                .andExpect(jsonPath("$.data.consumed_amount").value(245000))
+                .andExpect(jsonPath("$.data.confirmed_amount").value(200000))
+                .andExpect(jsonPath("$.data.planned_amount").value(45000))
+                .andExpect(jsonPath("$.data.remaining_amount").value(55000));
+
+        assertThat(original.flags()).containsExactly("EXISTING_FLAG");
+        assertThat(original.byUser()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("SystemAdmin + 実組織の VIEW/ADMIN: 200 + by_user 全公開")
     void systemAdmin_byUser公開() throws Exception {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-        given(summaryService.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(responseAsAdmin());
+        givenAdmin();
+        given(summaryFacade.getConsumptionSummary(ORG_ID, ALLOCATION_ID)).willReturn(responseAsAdmin());
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))
@@ -212,7 +232,7 @@ class ShiftBudgetSummaryControllerTest {
     void viewなし_403() throws Exception {
         givenViewerOnly();
         willThrow(new BusinessException(ShiftBudgetErrorCode.BUDGET_VIEW_REQUIRED))
-                .given(summaryService).getConsumptionSummary(eq(ORG_ID), anyLong());
+                .given(summaryFacade).getConsumptionSummary(eq(ORG_ID), anyLong());
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))
@@ -224,7 +244,7 @@ class ShiftBudgetSummaryControllerTest {
     void 別組織_404() throws Exception {
         givenViewerOnly();
         willThrow(new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND))
-                .given(summaryService).getConsumptionSummary(ORG_ID, ALLOCATION_ID);
+                .given(summaryFacade).getConsumptionSummary(ORG_ID, ALLOCATION_ID);
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}/consumption-summary", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))
