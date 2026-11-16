@@ -9,11 +9,12 @@ import java.util.UUID;
  * {@link OrgTeamListService} が行う。チーム・ロールの表を読む本クラスの入口と、組織のグループを読む側を
  * 別のトランザクションに分けるための受け渡し用の値である。</p>
  *
+ * @param teamId      チームの内部 ID
  * @param slug        チームの slug
  * @param name        チーム名
  * @param visibility  チームの公開範囲
  * @param memberCount チームの人数（{@code user_roles} の行数。従来の {@code memberCount} と同じ）
  * @param groupId     加盟行の {@code group_id}（未分類・削除済みグループを指す行の判定は呼び出し側）
  */
-public record OrgTeamMembershipView(String slug, String name, String visibility, int memberCount, UUID groupId) {
+public record OrgTeamMembershipView(Long teamId, String slug, String name, String visibility, int memberCount, UUID groupId) {
 }
