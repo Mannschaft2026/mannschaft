@@ -77,6 +77,22 @@ class ErrorReportDiagnosticUrlContractIT extends ErrorReportR1TestSupport {
         assertThat(storedUrl(id)).isEqualTo("https://app.test/p");
     }
 
+    static Stream<Arguments> legacyHashPaths() {
+        return Stream.of(
+                Arguments.of("https://app.test/", "/"),
+                Arguments.of("https://app.test/cmp-diagnostic/hash-contract/42", "/cmp-diagnostic/hash-contract/42"),
+                Arguments.of("https://app.test/cmp-diagnostic/hash-contract/a%3Fpart%23anchor",
+                        "/cmp-diagnostic/hash-contract/a?part#anchor"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("legacyHashPaths")
+    void AC3_通常browserと通常pathとencoded既存pathのhash入力を維持する(String url, String legacyPath) throws Exception {
+        Long id = submit(url, "診断URL互換契約", false, null);
+        assertThat(jdbc.queryForObject("SELECT error_hash FROM error_reports WHERE id = ?", String.class, id))
+                .isEqualTo(sha256("診断URL互換契約|" + legacyPath));
+    }
+
     @Test
     void AC3_通常URLとquery違いは同じhashへ集約し解決後は再発する() throws Exception {
         String path = "/cmp-diagnostic/" + UUID.randomUUID();

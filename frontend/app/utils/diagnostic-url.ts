@@ -15,7 +15,9 @@ export function safeDiagnosticUrl(input: string | null | undefined): string {
   }
   const withoutQuery = input.split(/[?#]/, 1)[0]!
   if (withoutQuery.startsWith('/') && !withoutQuery.startsWith('//')) {
-    return /[\[\]]/.test(withoutQuery) ? INVALID_DIAGNOSTIC_URL : withoutQuery
+    return withoutQuery.includes('[') || withoutQuery.includes(']')
+      ? INVALID_DIAGNOSTIC_URL
+      : withoutQuery
   }
   const absolute = /^(https?):\/\/([^/?#]+)(\/[^?#]*)?$/i.exec(withoutQuery)
   if (!absolute) return INVALID_DIAGNOSTIC_URL
@@ -40,7 +42,7 @@ export function safeDiagnosticUrl(input: string | null | undefined): string {
       }
     }
     const path = absolute[3] || '/'
-    if (/[\[\]]/.test(path)) return INVALID_DIAGNOSTIC_URL
+    if (path.includes('[') || path.includes(']')) return INVALID_DIAGNOSTIC_URL
     return `${absolute[1]!.toLowerCase()}://${hostAndPort}${path}`
   } catch {
     return INVALID_DIAGNOSTIC_URL

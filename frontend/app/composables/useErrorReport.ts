@@ -148,7 +148,9 @@ export const useErrorReport = () => {
       body: {
         errorMessage: err.message.slice(0, 1000),
         stackTrace: err.stack?.slice(0, 2000) || undefined,
-        pageUrl: safeDiagnosticUrl(typeof window !== 'undefined' ? window.location.href : undefined),
+        pageUrl: safeDiagnosticUrl(
+          typeof window !== 'undefined' ? window.location.href : undefined,
+        ),
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         userId: authStore.currentUser?.id ?? undefined,
         occurredAt: new Date().toISOString(),

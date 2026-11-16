@@ -16,7 +16,10 @@ vi.mock('~/stores/useAuthStore', () => ({ useAuthStore: () => runtime.auth }))
 // 実composableを動かし、外部送信境界だけで組み立て済みbodyを捕捉する。
 const urls = [
   ['https://app.test/reset-password?token=QUERY#FRAGMENT', 'https://app.test/reset-password'],
-  ['https://user:PASS@app.test/verify-email?unknown=QUERY#FRAGMENT', 'https://app.test/verify-email'],
+  [
+    'https://user:PASS@app.test/verify-email?unknown=QUERY#FRAGMENT',
+    'https://app.test/verify-email',
+  ],
   ['/verify-email?unknown=QUERY#FRAGMENT', '/verify-email'],
   ['https://app.test', 'https://app.test/'],
   ['/a%3Fpart%23anchor?token=QUERY#FRAGMENT', '/a%3Fpart%23anchor'],
@@ -34,10 +37,15 @@ const urls = [
 ] as const
 
 describe('診断URLの実送信境界', () => {
-  const network = vi.fn(async (_url: string, _options: {
-    headers: Record<string, string>
-    body: Record<string, unknown>
-  }) => ({ data: { id: 1 } }))
+  const network = vi.fn(
+    async (
+      _url: string,
+      _options: {
+        headers: Record<string, string>
+        body: Record<string, unknown>
+      },
+    ) => ({ data: { id: 1 } }),
+  )
   let consoleError: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -53,7 +61,9 @@ describe('診断URLの実送信境界', () => {
     vi.stubGlobal('useAuthStore', () => runtime.auth)
     vi.stubGlobal('readonly', readonly)
     vi.stubGlobal('$fetch', network)
-    vi.stubGlobal('window', { location: { href: 'https://app.test/reset-password?token=QUERY#FRAGMENT' } })
+    vi.stubGlobal('window', {
+      location: { href: 'https://app.test/reset-password?token=QUERY#FRAGMENT' },
+    })
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
   })
   afterEach(() => {
@@ -102,26 +112,40 @@ describe('診断URLの実送信境界', () => {
   it('確定API URLの連結と通常・cooldownのconsole metadataを除去しcallerを変えない', async () => {
     const report = (await import('./useErrorReport')).useErrorReport()
     const apiUrl = 'https://user:PASS@api.test/auth/oauth/link/confirm?token=QUERY#FRAGMENT'
-    const meta = Object.freeze({ apiUrl, statusCode: 500, context: 'oauth-confirm', requestId: 'synthetic-id' })
+    const meta = Object.freeze({
+      apiUrl,
+      statusCode: 500,
+      context: 'oauth-confirm',
+      requestId: 'synthetic-id',
+    })
     report.capture(new Error('確認失敗'), meta)
     await Promise.resolve()
     expect(network.mock.calls[0]?.[1].body.errorMessage).toBe(
       '[500] https://api.test/auth/oauth/link/confirm: 確認失敗',
     )
     expect(report.state.value.errorMessage).not.toContain('QUERY')
-    expect(consoleError.mock.calls[0]?.[2]).toEqual({ ...meta, apiUrl: 'https://api.test/auth/oauth/link/confirm' })
+    expect(consoleError.mock.calls[0]?.[2]).toEqual({
+      ...meta,
+      apiUrl: 'https://api.test/auth/oauth/link/confirm',
+    })
     report.close()
     report.capture(new Error('再確認失敗'), meta)
     expect(consoleError).toHaveBeenCalledTimes(2)
-    expect(consoleError.mock.calls[1]?.[2]).toEqual({ ...meta, apiUrl: 'https://api.test/auth/oauth/link/confirm' })
+    expect(consoleError.mock.calls[1]?.[2]).toEqual({
+      ...meta,
+      apiUrl: 'https://api.test/auth/oauth/link/confirm',
+    })
     expect(network).toHaveBeenCalledTimes(1)
     expect(meta.apiUrl).toBe(apiUrl)
   })
 
-  it.each([undefined, {}, { apiUrl: '' }])('無指定・空metaのconsole引数を維持する %j', async (meta) => {
-    const report = (await import('./useErrorReport')).useErrorReport()
-    report.capture(new Error('合成エラー'), meta)
-    expect(consoleError.mock.calls[0]?.[2]).toEqual(meta)
-    await Promise.resolve()
-  })
+  it.each([undefined, {}, { apiUrl: '' }])(
+    '無指定・空metaのconsole引数を維持する %j',
+    async (meta) => {
+      const report = (await import('./useErrorReport')).useErrorReport()
+      report.capture(new Error('合成エラー'), meta)
+      expect(consoleError.mock.calls[0]?.[2]).toEqual(meta)
+      await Promise.resolve()
+    },
+  )
 })
