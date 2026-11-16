@@ -844,3 +844,59 @@ test('[再点検] --help に「実行中は対象 worktree で他の作業をし
   assert.equal(r.code, 0);
   assert.match(r.all, /他の作業をしない/);
 });
+
+// ---------------------------------------------------------------------------
+// Codex 3回目の再検分 2件の再現テスト
+// ---------------------------------------------------------------------------
+
+test('[E1] expand: 障害物で欠落 → 障害物を除いて再実行しても欠落を見逃さず非0。復元後は0', async () => {
+  const { wt } = makeRepo();
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  // 事前検査の後、disable の直前に別プロセスが extra を通常ファイルとして作る
+  const race = (cwd, args, input) => {
+    if (args[0] === 'sparse-checkout' && args[1] === 'disable') writeFileSync(join(wt, 'extra'), '障害物');
+    return defaultRunGit(cwd, args, input);
+  };
+  let r = await exec(wt, ['expand'], { runGit: race });
+  assert.notEqual(r.code, 0, r.all);
+  rmSync(join(wt, 'extra'), { force: true });
+  r = await exec(wt, ['expand']);
+  assert.notEqual(r.code, 0, `再実行で欠落を見逃した: ${r.all}`);
+  assert.doesNotMatch(r.all, /既に全展開のため何もしない/);
+  assert.match(r.all, /extra\/e\.txt/);
+  assert.match(r.all, /git restore/);
+  git(wt, 'checkout', '--', 'extra/e.txt'); // 案内どおりに復元
+  r = await exec(wt, ['expand']);
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.all, /既に全展開/);
+  assert.equal(git(wt, 'status', '--porcelain'), '');
+});
+
+test('[E2] 操作前からある included 側の削除は障害としない。shrink は完了し再実行も0', async () => {
+  const { wt } = makeRepo({ settings: ['app'] });
+  rmSync(join(wt, 'app/a.txt')); // 利用者の未ステージ削除
+  let r = await exec(wt, ['shrink']);
+  assert.equal(r.code, 0, r.all);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), false);
+  assert.equal(existsSync(join(wt, 'app/a.txt')), false); // 削除は保たれる
+  r = await exec(wt, ['shrink']);
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.all, /既に/);
+  r = await exec(wt, ['reapply']);
+  assert.equal(r.code, 0, r.all);
+});
+
+test('[E3] expand（全展開済み）: 除外ディレクトリ配下の欠落は非0、それ以外の欠落は注意表示で0', async () => {
+  const { wt } = makeRepo();
+  rmSync(join(wt, 'extra/e.txt')); // 設定では除外される領域
+  let r = await exec(wt, ['expand']);
+  assert.notEqual(r.code, 0, r.all);
+  assert.match(r.all, /extra\/e\.txt/);
+  assert.match(r.all, /git restore/);
+  git(wt, 'checkout', '--', 'extra/e.txt');
+  rmSync(join(wt, 'app/a.txt')); // 設定では含める領域＝利用者の削除と区別できない
+  r = await exec(wt, ['expand']);
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.all, /注意/);
+  assert.match(r.all, /app\/a\.txt/);
+});

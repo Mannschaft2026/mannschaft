@@ -11,7 +11,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readdirSync, readlinkSync, renameSync, statfsSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, renameSync, statfsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -537,12 +537,41 @@ function staleProbeNames(ctx) {
 }
 
 /**
- * 目標一覧 want に対する実状態の全体検証（前回との差分ではない）。
- * - 展開されるべき追跡ファイルは skip-worktree が外れて実在する（欠落＝status の ` D`）
- * - 外れるべき追跡ファイルは skip-worktree が立っていて作業木に無い
- * want === null は全展開（外れるものは無い）。
+ * 未完了の展開の記録（worktree 固有の git dir 内。共有 config は変えない）。
+ * 展開を伴う操作の直前に「展開されるはずのパス」を書き、検証が通ったら消す。失敗時は未解決のパスだけ残す。
+ * 目的: 「前回の失敗で欠落したもの」と「利用者が操作前から意図して消したもの」を区別する。
  */
-function verifyFull(ctx, want, scope = null) {
+const PENDING_FILE = 'worktree-assets-pending.json';
+function readPending(ctx) {
+  try {
+    const p = gitPathAbs(ctx, PENDING_FILE);
+    const parsed = JSON.parse(readFileSync(p, 'utf8'));
+    return new Set(Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+function writePending(ctx, set) {
+  const p = gitPathAbs(ctx, PENDING_FILE);
+  if (!p) return;
+  try {
+    if (set.size === 0) unlinkSync(p);
+    else writeFileSync(p, JSON.stringify([...set].sort()));
+  } catch (e) {
+    if (e.code !== 'ENOENT') ctx.error(`注意: 未完了の展開の記録を更新できない（${e.message}）`);
+  }
+}
+
+/**
+ * 目標一覧 want に対する実状態の全体検証（前回との差分ではない）。
+ * - 展開されるべき追跡ファイルは skip-worktree が外れている
+ * - watch（今回展開するはずのパス + 前回失敗の記録）の追跡ファイルは作業木に実在する（欠落＝status の ` D`）。
+ *   操作前から欠落していた利用者の削除（watch に無いパス）は障害としない
+ * - 外れるべき追跡ファイルは skip-worktree が立っていて作業木に無い
+ * want === null は全展開（外れるものは無く、見るのは watch のパスだけ）。
+ * 戻り値: { problems, unresolved }（unresolved は未解決の watch パス＝次回の記録に残す）
+ */
+function verifyFull(ctx, want, watch = new Set()) {
   const problems = [];
   const left = [];
   const notExpanded = [];
@@ -550,9 +579,9 @@ function verifyFull(ctx, want, scope = null) {
   for (const f of trackedFiles(ctx)) {
     const inc = want === null || isIncluded(dirOf(f.path), want);
     if (inc) {
-      if (scope && !scope.has(f.path)) continue; // 全展開では、展開対象だった（S だった）ファイルだけを見る
+      if (want === null && !watch.has(f.path)) continue;
       if (f.tag === 'S') notExpanded.push(f.path);
-      else if (!present(ctx, f.path)) missing.push(f.path);
+      else if (watch.has(f.path) && !present(ctx, f.path)) missing.push(f.path);
     } else if (f.tag !== 'S' || present(ctx, f.path)) {
       left.push(f.path);
     }
@@ -562,10 +591,10 @@ function verifyFull(ctx, want, scope = null) {
   if (notExpanded.length) problems.push(fmt('展開されるはずのファイルが展開されていない（skip-worktree のまま）', notExpanded));
   if (missing.length) {
     problems.push(
-      `${fmt('追跡ファイルが作業木に無い（status の D。展開を妨げる実体があった・意図しない削除）', missing)}\n    復元: git restore -- <上のパス>（意図した削除ならコミットまたは git rm してから再実行）`,
+      `${fmt('展開されるはずの追跡ファイルが作業木に無い（status の D。展開を妨げる実体があった等）', missing)}\n    復元: git restore -- <上のパス>（意図して消すならコミットまたは git rm してから再実行）`,
     );
   }
-  return problems;
+  return { problems, unresolved: new Set([...notExpanded, ...missing]) };
 }
 
 function failVerify(ctx, what, problems, rerun) {
@@ -622,6 +651,8 @@ function guardedApply(ctx, { sub, kind, want, opts, rerun }) {
     }
   }
 
+  const watch = new Set([...expanding.map((f) => f.path), ...readPending(ctx)]);
+  if (expanding.length) writePending(ctx, watch); // 失敗・中断しても「展開するはずだったパス」が残る
   const args = kind === 'set' ? ['sparse-checkout', 'set', '--cone', '--stdin'] : kind === 'reapply' ? ['sparse-checkout', 'reapply'] : ['sparse-checkout', 'disable'];
   const r = ctx.git(args, kind === 'set' ? `${want.join('\n')}\n` : undefined);
   if (r.status !== 0) return failMidway(ctx, `git ${args.slice(0, 2).join(' ')}`, r, rerun);
@@ -631,8 +662,9 @@ function guardedApply(ctx, { sub, kind, want, opts, rerun }) {
       return failMidway(ctx, '適用後の検証（sparse 一覧が期待と異なる）', { stderr: `期待: ${want.join(', ')} / 実際: ${after.list.join(', ')}` }, rerun);
     }
   }
-  const verify = verifyFull(ctx, want, want === null ? new Set(expanding.map((f) => f.path)) : null);
-  if (verify.length) return failVerify(ctx, sub, verify, rerun);
+  const verify = verifyFull(ctx, want, watch);
+  writePending(ctx, verify.unresolved);
+  if (verify.problems.length) return failVerify(ctx, sub, verify.problems, rerun);
   return 0;
 }
 
@@ -677,6 +709,23 @@ function cmdExpand(ctx, opts) {
   const skipped = files.filter((f) => f.tag === 'S');
   const cur = sparseState(ctx, files);
   if (skipped.length === 0 && !cur.sparse) {
+    // 最初の disable で sparse 設定と skip-worktree は解除済みでも、前回の失敗で欠落が残りうる。完了検証を通す
+    const pending = readPending(ctx);
+    const settings = readSettings(ctx);
+    const missing = files.filter((f) => !present(ctx, f.path)).map((f) => f.path);
+    const flagged = missing.filter((p) => pending.has(p) || (settings.ok && !isIncluded(dirOf(p), settings.paths)));
+    const others = missing.filter((p) => !flagged.includes(p));
+    const list = (a) => `\n    ${a.slice(0, 20).join('\n    ')}${a.length > 20 ? `\n    ... 他 ${a.length - 20} 件` : ''}`;
+    if (others.length) {
+      ctx.log(`注意: 展開済みの領域で追跡ファイルが ${others.length} 件欠落している（操作前からの利用者の削除と区別できないため、失敗にはしない）:${list(others)}\n    不要な削除でなければ git restore -- <パス> で戻す`);
+    }
+    if (flagged.length) {
+      writePending(ctx, new Set(flagged.filter((p) => pending.has(p))));
+      ctx.error(`expand の完了検証に失敗した: 前回の失敗で欠落したまま、または除外ディレクトリ配下の追跡ファイルが作業木に無い（利用者の削除と区別できないため黙って成功にしない）:${list(flagged)}`);
+      ctx.error(`復旧: 展開を妨げた実体を退避したうえで git restore -- <上のパス> で復元し、${SCRIPT} expand を再実行する（意図して消すならコミットまたは git rm）`);
+      return 1;
+    }
+    writePending(ctx, new Set());
     ctx.log('既に全展開のため何もしない');
     return 0;
   }
@@ -715,7 +764,8 @@ function cmdShrinkOrReapply(ctx, sub, opts) {
   let kind = 'set';
   if (cur.sparse && sameSet(cur.list, want)) {
     // 完了判定は前回との差分ではなく、常に現在の目標一覧に対する全体検証
-    if (verifyFull(ctx, want).length === 0) {
+    if (verifyFull(ctx, want, readPending(ctx)).problems.length === 0) {
+      writePending(ctx, new Set());
       ctx.log('sparse 一覧は既に設定と一致しており、実状態も完了しているため何もしない');
       return 0;
     }
