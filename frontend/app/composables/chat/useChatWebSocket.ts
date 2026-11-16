@@ -218,10 +218,10 @@ function _ensureClientActive(): void {
     // トークンが無い（リロード直後）ときは Authorization を付けず Cookie 認証に任せる（空 Bearer 禁止）。
     connectHeaders: buildStompConnectHeaders(_authStore?.accessToken),
     beforeConnect: async () => {
-      if (!current()) { await client.deactivate(); return }
+      if (!isCurrentClient()) { await client.deactivate(); return }
       // UNAUTHENTICATED の回復（トークン更新）中なら完了を待つ。回復不能なら deactivate 済みで再接続しない。
       if (_pendingAuthRecovery !== null) await _pendingAuthRecovery
-      if (!current()) { await client.deactivate(); return }
+      if (!isCurrentClient()) { await client.deactivate(); return }
       // 再接続時に最新トークンを差し替える（リフレッシュ後の再接続でも有効なトークンを使う）
       if (_stompClient !== null) {
         client.connectHeaders = buildStompConnectHeaders(_authStore?.accessToken)
@@ -229,7 +229,7 @@ function _ensureClientActive(): void {
     },
     reconnectDelay: 1000,
     onConnect: () => {
-      if (!current()) return
+      if (!isCurrentClient()) return
       _wsAuthState.value = 'OK'
       // 登録済みの購読をすべて張る（初回・再接続とも。拒否済みの宛先は除く）。
       for (const key of _routes.keys()) {
@@ -249,12 +249,12 @@ function _ensureClientActive(): void {
       for (const waiter of waiters) waiter.resolve()
     },
     onWebSocketClose: () => {
-      if (!current()) return
+      if (!isCurrentClient()) return
       // 接続が切れたら現在の購読と receipt はすべて無効。再接続時に onConnect が _routes から張り直す。
       _forgetAllActive()
     },
     onDisconnect: () => {
-      if (!current()) return
+      if (!isCurrentClient()) return
       // 指数バックオフ: 1s → 2s → 4s → 8s → 16s → 最大30s
       const delays = [1000, 2000, 4000, 8000, 16000, 30000]
       _reconnectAttempts = Math.min(_reconnectAttempts + 1, delays.length - 1)
@@ -266,7 +266,7 @@ function _ensureClientActive(): void {
       }
     },
     onStompError: (frame: IFrame) => {
-      if (!current()) return
+      if (!isCurrentClient()) return
       const receiptId = frame.headers['receipt-id']
       const destination = receiptId ? _receiptToDestination.get(receiptId) : undefined
       if (_authRecovery === null) {
@@ -275,7 +275,7 @@ function _ensureClientActive(): void {
       }
       const recovery = handleStompErrorFrame(frame, _authRecovery, {
         onDenied: () => {
-            if (!current()) return
+          if (!isCurrentClient()) return
           if (destination !== undefined) {
             // 拒否された宛先だけを外し、通知購読など他の購読は再接続で維持する。
             _denyDestination(destination)
@@ -287,7 +287,7 @@ function _ensureClientActive(): void {
           void _stompClient?.deactivate()
         },
         onUnauthenticated: () => {
-          if (!current()) return
+          if (!isCurrentClient()) return
           _wsAuthState.value = 'UNAUTHENTICATED'
           _rejectWaiters(new Error('STOMP エラー: UNAUTHENTICATED'))
           void _stompClient?.deactivate()
@@ -306,7 +306,7 @@ function _ensureClientActive(): void {
       }
     },
   })
-  function current(): boolean { return _stompClient === client && session!.current(snapshot) }
+  function isCurrentClient(): boolean { return _stompClient === client && !!session?.current(snapshot) }
   _stompClient = client
   client.activate()
 }
@@ -428,6 +428,18 @@ export function useChatWebSocket() {
     })
   }
   // channel APIは取得時の世代へ束縛する。旧componentの解除で新userの同channelを減算しない。
+  // publisherはchannel取得と独立して所有する。旧componentのleave/typingを新userとして送らない。
+  // 匿名setupのみ、認証後の最初の正当sendまで遅延取得する。raw受信の再取得では所有を替えない。
+  let publisherOwner = _authSession && _authSession.accountId !== null
+    ? { session: _authSession, snapshot: _authSession.capture() }
+    : null
+  function publisherSession(): { session: AuthSessionContext; snapshot: AuthSessionSnapshot } | null {
+    if (!_authSession || _authSession.disposed || _authSession.accountId === null) return null
+    publisherOwner ??= { session: _authSession, snapshot: _authSession.capture() }
+    if (publisherOwner.session !== _authSession || !publisherOwner.session.current(publisherOwner.snapshot)) return null
+    return publisherOwner
+  }
+
   let channelSnapshot: AuthSessionSnapshot | null = null
   const ownedChannels = new Map<number, number>()
   const ownedEvents = new Map<number, number>()
@@ -454,11 +466,12 @@ export function useChatWebSocket() {
    * @param channelId 送信先チャンネル ID
    */
   function sendTyping(channelId: number): void {
-    const session = _authSession
-    const snapshot = session?.capture()
+    const owner = publisherSession()
+    if (owner === null) return
+    const { session, snapshot } = owner
     ensureConnected()
       .then(() => {
-        if (!snapshot || !session?.current(snapshot)) return
+        if (_authSession !== session || !session.current(snapshot)) return
         if (_stompClient === null || !_stompClient.connected) return
         _stompClient.publish({
           destination: '/app/chat.typing',
@@ -585,11 +598,12 @@ export function useChatWebSocket() {
    * 任意の宛先に STOMP メッセージを送信する（在席等チャット以外の用途向け）。
    */
   function publishRaw(destination: string, body = '{}'): void {
-    const session = _authSession
-    const snapshot = session?.capture()
+    const owner = publisherSession()
+    if (owner === null) return
+    const { session, snapshot } = owner
     ensureConnected()
       .then(() => {
-        if (!snapshot || !session?.current(snapshot)) return
+        if (_authSession !== session || !session.current(snapshot)) return
         if (_stompClient === null || !_stompClient.connected) return
         _stompClient.publish({ destination, body })
       })
