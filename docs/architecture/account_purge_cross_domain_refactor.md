@@ -878,6 +878,8 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `blog_ranch_admin_commands` | `actor_user_id` | 強消去 | 本人が実行した牧場管理コマンドの冪等記録（結果JSON・本文ハッシュ）。cms の強消去リスナー `UserBlogSettingsPurgeEventListener` が `cms` 強消去TX内で `actor_user_id` 一致行を一括削除 |
 | `blog_ranch_outboxes` | `recipient_user_id` | 強消去 | 本人宛ての牧場配送 outbox（payload JSON を含む技術配送表）。`UserBlogSettingsPurgeEventListener` が同TX内で `recipient_user_id` 一致行を一括削除 |
 | `blog_ranch_witnesses` | `recipient_user_id` | 強消去 | 本人の牧場資格判定の証跡（内容ダイジェスト・週次）。`UserBlogSettingsPurgeEventListener` が同TX内で `recipient_user_id` 一致行を一括削除 |
+| `budget_monthly_close_corrections` | `user_id` / `actor_user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み）（月次締め後の訂正履歴。勤務者・訂正者を監査証跡として残す。CMP-260909-2152）
+| `budget_monthly_close_records` | `close_actor_user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み）（月次締めの事実と締め操作者。CMP-260909-2152）
 | `bulletin_reactions` | `user_id` | 保持 | 共有本文・反応（投稿は残し著者表示を共通ラベル化する既決。CMP-261011-0124） |
 | `bulletin_read_status` | `user_id` | 保持 | 発信側が参照する既読・確認状況（共同業務の記録） |
 | `chart_records` | `customer_user_id` / `staff_user_id` | 匿名化 | `ChartPurgeEventListener` が `customer_user_id` を NULL 化。`staff_user_id` は施術者の業務記録として保持 |
@@ -1077,6 +1079,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `shared_folders` | `user_id` | 保持 | 共同コンテンツ（既決の除外対象） |
 | `shift_assignments` | `user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `shift_budget_consumptions` | `user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み） |
+| `shift_budget_monthly_close_events` | `actor_user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み）（締めイベントの操作者。CMP-260909-2152）
 | `shift_hourly_rates` | `user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み） |
 | `shift_requests` | `user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `shift_swap_requests` | `target_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |

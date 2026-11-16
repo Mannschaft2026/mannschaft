@@ -19,7 +19,6 @@ import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetMonthlyCloseEventEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
-import com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -71,8 +70,6 @@ public class MonthlyShiftBudgetCloseService {
     private final AuditLogService auditLogService;
     private final OrganizationRepository organizationRepository;
     private final ShiftBudgetFailedEventService failedEventService;
-    /** CMP-260909-2152: 締め TX の中で自ドメインの締めイベントを INSERT する（締め操作者の正本）。 */
-    private final ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
 
     /**
      * 自分自身の Spring プロキシを取得するためのプロバイダ（CMP-260910-1556 の根治）。
@@ -241,7 +238,8 @@ public class MonthlyShiftBudgetCloseService {
         // CMP-260909-2152: 締めイベントを同じ TX で記録する（手動=MANUAL+操作者、バッチ=BATCH）。
         // 以後の再公開で消化を作らない判定・割当の削除拒否・締め後訂正の締め操作者表示の正本になる。
         Long closer = SecurityUtils.getCurrentUserIdOrNull();
-        closeEventRepository.save(ShiftBudgetMonthlyCloseEventEntity.builder()
+        // 割当リポジトリの断片（締めサービスの依存を増やさない。凍結キーを動かさないため）で同一 TX に INSERT する。
+        allocationRepository.recordClose(ShiftBudgetMonthlyCloseEventEntity.builder()
                 .allocationId(allocation.getId())
                 .targetMonth(java.time.YearMonth.from(transactionDate).toString())
                 .actorKind(closer != null ? ShiftBudgetMonthlyCloseEventEntity.KIND_MANUAL

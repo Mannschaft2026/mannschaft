@@ -78,8 +78,6 @@ class MonthlyShiftBudgetCloseServiceTest {
     private OrganizationRepository organizationRepository;
     @Mock
     private ShiftBudgetFailedEventService failedEventService;
-    @Mock
-    private com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
     /**
      * 自己プロキシのプロバイダ（CMP-260910-1556）。
      *
@@ -99,7 +97,7 @@ class MonthlyShiftBudgetCloseServiceTest {
         service = new MonthlyShiftBudgetCloseService(
                 allocationRepository, consumptionRepository, budgetTransactionRepository,
                 featureService, accessControlService, auditLogService,
-                organizationRepository, failedEventService, closeEventRepository, selfProvider);
+                organizationRepository, failedEventService, selfProvider);
         lenient().when(selfProvider.getObject()).thenReturn(service);
         // CMP-260910-1556 検分 P1-2: closeOneAllocation は冒頭で allocation 行を排他ロックする。
         // mock のままだと empty が返り「割当が消滅した」扱いで全件 skip される（= 全検体が静かに 0 件になる）。

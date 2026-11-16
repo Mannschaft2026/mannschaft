@@ -33,7 +33,11 @@ import java.util.Optional;
  */
 @Repository
 public interface ShiftBudgetAllocationRepository
-        extends JpaRepository<ShiftBudgetAllocationEntity, Long> {
+        extends JpaRepository<ShiftBudgetAllocationEntity, Long>, ShiftBudgetCloseEventRecorder {
+
+    /** 締めイベントのある割当か（月次締め済みの月がある割当は削除できない。CMP-260909-2152）。 */
+    @Query("SELECT COUNT(e) > 0 FROM ShiftBudgetMonthlyCloseEventEntity e WHERE e.allocationId = :allocationId")
+    boolean hasCloseEvent(@Param("allocationId") Long allocationId);
 
     /**
      * 多テナント検索の基本: 組織IDと割当IDで生存レコードを取得する。

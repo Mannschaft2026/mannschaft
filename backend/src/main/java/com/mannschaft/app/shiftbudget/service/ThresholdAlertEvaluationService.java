@@ -19,11 +19,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -82,8 +79,6 @@ public class ThresholdAlertEvaluationService {
     private final ShiftBudgetFailedEventService failedEventService;
     /** Issue #2990 L13: 通知を業務コミット後（AFTER_COMMIT）へ逃がすためのイベント publish。 */
     private final ApplicationEventPublisher eventPublisher;
-    /** 訂正後の消化額での再判定（{@link #evaluateWithEffectiveConsumed}）を独立 TX で実行するため。 */
-    private final PlatformTransactionManager transactionManager;
 
     /**
      * 指定 allocation について現在消化率を計算し、80/100/120% 閾値の発火判定を行う。
@@ -107,15 +102,15 @@ public class ThresholdAlertEvaluationService {
      *
      * <p>段取り役（訂正の Coordinator）が訂正のコミット後に TX の外から呼ぶ。判定の中身は
      * {@link #evaluateAndTrigger} と同じで、消化額だけ割当のキャッシュではなく呼出側が算出した訂正後の値を使う。
-     * 通知（AFTER_COMMIT）が配送されるよう、判定は独立トランザクションで実行する。
+     * 通知（AFTER_COMMIT）が配送されるよう、<b>呼出側が独立トランザクション（REQUIRES_NEW）で呼ぶこと</b>。
+     * 本メソッド自体は {@code @Transactional} を持たない（コンストラクタ引数と TX 入口を増やすと、
+     * このクラスの他ドメイン Repository 依存の凍結キーが新しい違反として数えられるため）。
      * 閾値・ワークフロー起動の TX 分離（Coordinator 化）は別戦役で行うため、ここでは既存の評価を再利用するに留める。</p>
      *
      * @param effectiveConsumed 訂正後の消化額
      */
     public void evaluateWithEffectiveConsumed(Long allocationId, BigDecimal effectiveConsumed) {
-        TransactionTemplate template = new TransactionTemplate(transactionManager);
-        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        template.executeWithoutResult(status -> evaluate(allocationId, effectiveConsumed));
+        evaluate(allocationId, effectiveConsumed);
     }
 
     private void evaluate(Long allocationId, BigDecimal consumedOverride) {

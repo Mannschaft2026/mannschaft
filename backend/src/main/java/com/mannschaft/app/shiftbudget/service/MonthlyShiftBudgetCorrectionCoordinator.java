@@ -19,6 +19,9 @@ import com.mannschaft.app.shiftbudget.dto.MonthlyCloseReversalRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.YearMonth;
@@ -58,6 +61,7 @@ public class MonthlyShiftBudgetCorrectionCoordinator {
     private final AuditLogService auditLogService;
     private final ThresholdAlertEvaluationService thresholdAlertEvaluationService;
     private final ShiftBudgetFailedEventService failedEventService;
+    private final PlatformTransactionManager transactionManager;
 
     /** 訂正（MODIFY / CANCEL / ADD）を登録し、登録した訂正行を返す。 */
     public ShiftBudgetCorrectionView correct(Long organizationId, Long allocationId, String yearMonth,
@@ -160,8 +164,12 @@ public class MonthlyShiftBudgetCorrectionCoordinator {
                     snapshotService.amounts(organizationId, allocationId);
             BigDecimal delta = queryService.correctionDeltaTotals(java.util.List.of(allocationId))
                     .getOrDefault(allocationId, BigDecimal.ZERO);
-            thresholdAlertEvaluationService.evaluateWithEffectiveConsumed(allocationId,
-                    CorrectedAmounts.consumed(amounts.consumed(), amounts.confirmed(), delta));
+            BigDecimal effective = CorrectedAmounts.consumed(amounts.consumed(), amounts.confirmed(), delta);
+            // 通知（AFTER_COMMIT）が配送されるよう、再判定は独立 TX（REQUIRES_NEW）で行う。
+            TransactionTemplate template = new TransactionTemplate(transactionManager);
+            template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            template.executeWithoutResult(status ->
+                    thresholdAlertEvaluationService.evaluateWithEffectiveConsumed(allocationId, effective));
         } catch (Exception e) {
             log.error("締め後訂正: 閾値の再判定に失敗（訂正自体は確定済み）: allocId={}", allocationId, e);
             try {

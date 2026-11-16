@@ -14,7 +14,6 @@ import com.mannschaft.app.shiftbudget.dto.AllocationUpdateRequest;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
-import com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetRateQueryRepository;
 import com.mannschaft.app.todo.repository.ProjectRepository;
 import jakarta.persistence.OptimisticLockException;
@@ -61,7 +60,6 @@ public class ShiftBudgetAllocationService {
     private final ShiftBudgetAllocationRepository allocationRepository;
     private final ShiftBudgetConsumptionRepository consumptionRepository;
     private final ShiftBudgetRateQueryRepository rateQueryRepository;
-    private final ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
     private final ProjectRepository projectRepository;
     private final ShiftBudgetFeatureService featureService;
     private final AccessControlService accessControlService;
@@ -288,7 +286,7 @@ public class ShiftBudgetAllocationService {
                 .ifPresent(locked -> {
                     throw new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND);
                 });
-        if (closeEventRepository.existsByAllocationId(allocationId)) {
+        if (allocationRepository.hasCloseEvent(allocationId)) {
             throw new BusinessException(ShiftBudgetErrorCode.HAS_CLOSED_MONTHS);
         }
 
@@ -318,16 +316,6 @@ public class ShiftBudgetAllocationService {
                 entity.getTeamId(), organizationId,
                 null, null, null,
                 String.format("{\"allocation_id\":%d}", allocationId));
-    }
-
-    /**
-     * 割当の削除に先立つ認可・存在確認（CMP-260909-2152）。段取り役が旧締めの締めイベントを補完する前に、
-     * 機能フラグ・BUDGET_ADMIN・組織境界（他組織の割当は 404）を確かめるために使う。何も書き換えない。
-     */
-    public void requireDeletable(Long organizationId, Long allocationId) {
-        featureService.requireEnabled(organizationId);
-        requireBudgetAdmin(organizationId);
-        findOrThrow(allocationId, organizationId);
     }
 
     // ====================================================================

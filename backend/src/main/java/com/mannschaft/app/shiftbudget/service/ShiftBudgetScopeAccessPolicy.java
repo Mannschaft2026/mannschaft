@@ -20,7 +20,9 @@ public class ShiftBudgetScopeAccessPolicy {
 
     /** 登録系（訂正・追加・取消・未計上の勤務）: 組織の BUDGET_ADMIN。 */
     public void requireBudgetAdmin(Long userId, Long organizationId) {
-        if (!isMemberWith(userId, organizationId, "BUDGET_VIEW")
+        // 認可の呼出しを本メソッド直下に置く（Controller 起点の委譲探索の深さ上限内に収めるため、private 経由にしない）
+        if (!accessControlService.isMember(userId, organizationId, "ORGANIZATION")
+                || !accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_VIEW")
                 || !accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_ADMIN")) {
             throw new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED);
         }
@@ -28,13 +30,30 @@ public class ShiftBudgetScopeAccessPolicy {
 
     /** 履歴の閲覧: 組織の BUDGET_VIEW。 */
     public void requireBudgetView(Long userId, Long organizationId) {
-        if (!isMemberWith(userId, organizationId, "BUDGET_VIEW")) {
+        if (!accessControlService.isMember(userId, organizationId, "ORGANIZATION")
+                || !accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_VIEW")) {
             throw new BusinessException(ShiftBudgetErrorCode.BUDGET_VIEW_REQUIRED);
         }
     }
 
-    private boolean isMemberWith(Long userId, Long organizationId, String permission) {
-        return accessControlService.isMember(userId, organizationId, "ORGANIZATION")
-                && accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", permission);
+    /**
+     * 割当の一覧・詳細の事前確認。旧来の割当 API と同じく SYSTEM_ADMIN は通し、それ以外は組織の BUDGET_VIEW を要る。
+     * 業務 TX（{@code ShiftBudgetAllocationService}）側の同じ確認は残る（二重防壁）。
+     */
+    public void requireAllocationView(Long userId, Long organizationId) {
+        if (!accessControlService.isSystemAdmin(userId)
+                && !(accessControlService.isMember(userId, organizationId, "ORGANIZATION")
+                && accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_VIEW"))) {
+            throw new BusinessException(ShiftBudgetErrorCode.BUDGET_VIEW_REQUIRED);
+        }
+    }
+
+    /** 割当の更新・削除の事前確認。SYSTEM_ADMIN は通し、それ以外は組織の BUDGET_ADMIN を要る。 */
+    public void requireAllocationAdmin(Long userId, Long organizationId) {
+        if (!accessControlService.isSystemAdmin(userId)
+                && !(accessControlService.isMember(userId, organizationId, "ORGANIZATION")
+                && accessControlService.hasPermission(userId, organizationId, "ORGANIZATION", "BUDGET_ADMIN"))) {
+            throw new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED);
+        }
     }
 }
