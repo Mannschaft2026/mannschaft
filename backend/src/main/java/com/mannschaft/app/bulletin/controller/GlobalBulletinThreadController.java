@@ -14,6 +14,7 @@ import com.mannschaft.app.bulletin.dto.ThreadResponse;
 import com.mannschaft.app.bulletin.dto.UpdateThreadRequest;
 import com.mannschaft.app.bulletin.service.BulletinReadStatusService;
 import com.mannschaft.app.bulletin.service.BulletinScopeIdResolver;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinThreadService;
 import com.mannschaft.app.bulletin.service.BulletinReadFacade;
 import com.mannschaft.app.common.ApiResponse;
@@ -85,6 +86,8 @@ public class GlobalBulletinThreadController {
     private final BulletinReadStatusService readStatusService;
     private final ObjectMapper objectMapper;
     private final BulletinScopeIdResolver scopeIdResolver;
+    /** 大会/ディビジョン連絡スペースの一覧閲覧認可（取引外・D-3T 回避）。 */
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     /**
      * スレッド一覧を取得する（グローバル方式）。
@@ -119,6 +122,8 @@ public class GlobalBulletinThreadController {
             result = threadService.listVillageThreads(scopeVillageId, categoryId, currentUserId, pageable);
         } else {
             Long resolvedScopeId = scopeIdResolver.resolveGlobal(type, scopeId);
+            // 大会/ディビジョンの閲覧認可は取引外（D-3T）。サービス呼び出しの前に通す。
+            tournamentScopeAccessGuard.checkListView(type, resolvedScopeId, currentUserId);
             if (categoryId != null) {
                 result = threadService.listThreadsByCategory(type, resolvedScopeId, categoryId, currentUserId, pageable);
             } else {

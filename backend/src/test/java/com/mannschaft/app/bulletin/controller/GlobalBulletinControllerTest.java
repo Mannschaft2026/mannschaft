@@ -7,6 +7,7 @@ import com.mannschaft.app.bulletin.service.BulletinCategoryService;
 import com.mannschaft.app.bulletin.service.BulletinReadStatusService;
 import com.mannschaft.app.bulletin.service.BulletinScopeIdResolver;
 import com.mannschaft.app.bulletin.service.BulletinThreadService;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinReadFacade;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
@@ -193,6 +194,9 @@ class GlobalBulletinControllerTest {
         @Mock
         private BulletinScopeIdResolver scopeIdResolver;
 
+        @Mock
+        private BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
+
         @InjectMocks
         private GlobalBulletinThreadController controller;
 
@@ -233,7 +237,7 @@ class GlobalBulletinControllerTest {
         @Test
         @DisplayName("TEAM一覧_category未指定_既存listThreadsへ委譲")
         void team一覧_委譲_200() {
-            given(scopeIdResolver.resolve(eq(ScopeType.TEAM), eq(SCOPE_ID_STR))).willReturn(SCOPE_ID);
+            given(scopeIdResolver.resolveGlobal(eq(ScopeType.TEAM), eq(SCOPE_ID_STR))).willReturn(SCOPE_ID);
             given(threadService.listThreads(eq(ScopeType.TEAM), eq(SCOPE_ID), eq(USER_ID), any()))
                     .willReturn(page());
 
@@ -241,6 +245,7 @@ class GlobalBulletinControllerTest {
                     controller.listThreads("TEAM", SCOPE_ID_STR, null, null, 0, 20);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(tournamentScopeAccessGuard).checkListView(ScopeType.TEAM, SCOPE_ID, USER_ID);
             verify(threadService).listThreads(ScopeType.TEAM, SCOPE_ID, USER_ID, PageRequest.of(0, 20));
             verify(threadService, never()).listVillageThreads(any(), any(), any(), any());
         }
@@ -248,7 +253,7 @@ class GlobalBulletinControllerTest {
         @Test
         @DisplayName("TEAM一覧_category指定_既存listThreadsByCategoryへ委譲")
         void team一覧_カテゴリ_委譲_200() {
-            given(scopeIdResolver.resolve(eq(ScopeType.TEAM), eq(SCOPE_ID_STR))).willReturn(SCOPE_ID);
+            given(scopeIdResolver.resolveGlobal(eq(ScopeType.TEAM), eq(SCOPE_ID_STR))).willReturn(SCOPE_ID);
             given(threadService.listThreadsByCategory(
                     eq(ScopeType.TEAM), eq(SCOPE_ID), eq(CATEGORY_ID), eq(USER_ID), any()))
                     .willReturn(page());
@@ -257,6 +262,7 @@ class GlobalBulletinControllerTest {
                     controller.listThreads("TEAM", SCOPE_ID_STR, null, CATEGORY_ID, 0, 20);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(tournamentScopeAccessGuard).checkListView(ScopeType.TEAM, SCOPE_ID, USER_ID);
             verify(threadService).listThreadsByCategory(
                     ScopeType.TEAM, SCOPE_ID, CATEGORY_ID, USER_ID, PageRequest.of(0, 20));
         }

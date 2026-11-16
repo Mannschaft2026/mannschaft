@@ -96,7 +96,11 @@ public class BulletinThreadService {
      * @return スレッドレスポンスのページ
      */
     public Page<ThreadResponse> listThreads(ScopeType scopeType, Long scopeId, Long userId, Pageable pageable) {
-        checkListViewAccess(scopeType, scopeId, userId);
+        // 所属認可は本メソッド直下で呼ぶ（Wave4 番人が委譲深さ2で認可シグナルを辿れるよう private 委譲にしない）。
+        // 大会/ディビジョンは Controller の BulletinTournamentScopeAccessGuard が取引外で認可済み（D-3T）。
+        if (!isTournamentScope(scopeType)) {
+            accessGuard.checkMembership(userId, scopeType, scopeId);
+        }
         Page<BulletinThreadEntity> page =
                 threadRepository.findByScopeTypeAndScopeIdOrderByIsPinnedDescUpdatedAtDesc(scopeType, scopeId, pageable);
         return enrichPage(page, userId);
@@ -133,7 +137,10 @@ public class BulletinThreadService {
      *                           （{@link BulletinErrorCode#CATEGORY_NOT_FOUND}・404）
      */
     public Page<ThreadResponse> listThreadsByCategory(ScopeType scopeType, Long scopeId, Long categoryId, Long userId, Pageable pageable) {
-        checkListViewAccess(scopeType, scopeId, userId);
+        // 所属認可は本メソッド直下で呼ぶ（Wave4 番人の委譲深さ上限のため）。大会は Controller 側の Guard が認可済み。
+        if (!isTournamentScope(scopeType)) {
+            accessGuard.checkMembership(userId, scopeType, scopeId);
+        }
         // カテゴリの帰属検証。越境 ID と不在 ID はいずれも CATEGORY_NOT_FOUND で同一応答となり、
         // 応答差分から他スコープのカテゴリ実在を判別できない（実在オラクル封じ）。
         categoryService.findCategoryOrThrow(scopeType, scopeId, categoryId);
@@ -240,19 +247,6 @@ public class BulletinThreadService {
             accessGuard.checkMembership(userId, entity.getScopeType(), entity.getScopeId());
         }
         return enrichSingle(entity, userId);
-    }
-
-    /**
-     * 一覧系の閲覧認可。大会/ディビジョン連絡スペースは連絡閲覧認可（canView）に委譲し、
-     * それ以外は所属認可を行う（{@code checkMembership} は大会スコープを判定できず 500 になるため通さない）。
-     */
-    private void checkListViewAccess(ScopeType scopeType, Long scopeId, Long userId) {
-        if (isTournamentScope(scopeType)) {
-            tournamentContactAccessService.checkView(
-                    toContactScope(scopeType), scopeId, ContactSpaceKind.BULLETIN, userId);
-        } else {
-            accessGuard.checkMembership(userId, scopeType, scopeId);
-        }
     }
 
     /** bulletin の scope_type が大会/ディビジョン連絡スペースか。 */
