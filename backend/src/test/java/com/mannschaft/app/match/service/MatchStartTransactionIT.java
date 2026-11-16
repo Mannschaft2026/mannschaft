@@ -27,6 +27,7 @@ import org.springframework.aop.Advisor;
 import org.springframework.aop.framework.Advised;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.messaging.Message;
@@ -36,6 +37,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.support.AbstractMessageChannel;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -46,6 +48,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,8 +77,10 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private SimpMessagingTemplate messaging;
     @Autowired private ObjectMapper mapper;
+    @Autowired @Qualifier("event-pool") private Executor eventPool;
     private TransactionTemplate tx;
     private UUID matchId;
+    private final String auditControlId = UUID.randomUUID().toString();
     private final List<JsonNode> deliveries = new CopyOnWriteArrayList<>();
     private final List<Thread> auditThreads = new CopyOnWriteArrayList<>();
     private final List<Boolean> auditBusinessTransactions = new CopyOnWriteArrayList<>();
@@ -124,15 +129,25 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        if (channel != null && interceptor != null) channel.removeInterceptor(interceptor);
-        if (auditObserver != null) ((Advised) auditService).removeAdvisor(auditObserver);
-        if (matchId != null) {
-            tx.executeWithoutResult(s -> {
-                events.deleteAll(events.findByMatchIdOrderByPeriodAscMinuteAscSortSeqAsc(matchId));
-                audits.deleteAll(audits.findByUserIdOrderByCreatedAtDescIdDesc(ACTOR).stream()
-                        .filter(a -> a.getMetadata() != null && a.getMetadata().contains(matchId.toString())).toList());
-                matches.deleteById(matchId);
-            });
+        try {
+            if (matchId != null) {
+                drainEventPool();
+                tx.executeWithoutResult(s -> {
+                    events.deleteAll(events.findByMatchIdOrderByPeriodAscMinuteAscSortSeqAsc(matchId));
+                    audits.deleteAll(audits.findByUserIdOrderByCreatedAtDescIdDesc(ACTOR).stream()
+                            .filter(a -> a.getMetadata() != null && (a.getMetadata().contains(matchId.toString())
+                                    || a.getMetadata().contains(auditControlId))).toList());
+                    matches.deleteById(matchId);
+                });
+                // observerを残したまま、遅着が所有データを再作成しないことも確認する。
+                await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                    assertThat(statusAudits()).isZero();
+                    assertThat(controlAudits()).isZero();
+                });
+            }
+        } finally {
+            if (channel != null && interceptor != null) channel.removeInterceptor(interceptor);
+            if (auditObserver != null) ((Advised) auditService).removeAdvisor(auditObserver);
         }
     }
 
@@ -155,6 +170,33 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(statusAudits()).isEqualTo(1));
     }
 
+    private long controlAudits() {
+        return audits.findByUserIdOrderByCreatedAtDescIdDesc(ACTOR).stream()
+                .filter(a -> a.getMetadata() != null && a.getMetadata().contains(auditControlId)).count();
+    }
+
+    /** 実Asyncが停止していない正対照を置き、遅着する余分な監査/配信を連続観測する。 */
+    private void assertStableStatusActivity(long expected) {
+        auditService.record("MATCH_STATUS_CHANGED", ACTOR, null, TEAM, ORG, null, null, null,
+                "{\"controlId\":\"" + auditControlId + "\"}");
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(controlAudits()).isEqualTo(1));
+        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            assertThat(statusAudits()).isEqualTo(expected);
+            assertThat(auditThreads).hasSize((int) expected);
+            assertThat(statusDeliveries()).isEqualTo(expected);
+        });
+        drainEventPool();
+        assertThat(statusAudits()).isEqualTo(expected);
+        assertThat(auditThreads).hasSize((int) expected);
+    }
+
+    /** 既存BatchNotificationTransactionITと同じ実poolのidle条件を連続観測する。 */
+    private void drainEventPool() {
+        ThreadPoolTaskExecutor pool = (ThreadPoolTaskExecutor) eventPool;
+        await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(30)).until(() ->
+                pool.getActiveCount() == 0 && pool.getThreadPoolExecutor().getQueue().isEmpty());
+    }
+
     @Test
     @DisplayName("STARTとstatusが同commitで保存され、別threadの監査1件とコミット後配信1件へつながる")
     void committedStartIsVisibleAndAuditedOnce() throws Exception {
@@ -174,8 +216,7 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
         assertThat(auditThreads).hasSize(1).doesNotContain(caller);
         assertThat(auditBusinessTransactions).containsExactly(false);
         eventService.record(matchId, ORG, ACTOR, start());
-        assertThat(statusAudits()).isEqualTo(1);
-        assertThat(statusDeliveries()).isEqualTo(1);
+        assertStableStatusActivity(1);
     }
 
     @Test
@@ -191,6 +232,7 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
         assertThat(statusAudits()).isZero();
         assertThat(auditThreads).isEmpty();
         assertThat(deliveries).isEmpty();
+        assertStableStatusActivity(0);
     }
 
     @Test
@@ -202,6 +244,7 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
         assertThat(events.findByMatchIdOrderByPeriodAscMinuteAscSortSeqAsc(matchId)).isEmpty();
         assertThat(statusAudits()).isZero();
         assertThat(deliveries).isEmpty();
+        assertStableStatusActivity(0);
     }
 
     @Test
@@ -242,5 +285,6 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
         assertThat(events.findByMatchIdOrderByPeriodAscMinuteAscSortSeqAsc(matchId)).hasSize(1);
         assertThat(statusDeliveries()).isEqualTo(1);
         assertThat(auditThreads).hasSize(1);
+        assertStableStatusActivity(1);
     }
 }
