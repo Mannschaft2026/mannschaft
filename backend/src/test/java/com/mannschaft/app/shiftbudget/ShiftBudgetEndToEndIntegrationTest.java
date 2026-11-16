@@ -131,7 +131,6 @@ class ShiftBudgetEndToEndIntegrationTest {
                 allocationRepository, consumptionRepository, budgetTransactionRepository,
                 featureService, accessControlService, auditLogService,
                 organizationRepository, failedEventService,
-                org.mockito.Mockito.mock(com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository.class),
                 closeServiceSelfProvider);
         lenient().when(closeServiceSelfProvider.getObject()).thenReturn(closeService);
 
