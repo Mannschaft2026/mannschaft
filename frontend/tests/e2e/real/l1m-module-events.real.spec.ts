@@ -1,4 +1,4 @@
-import { test, expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
+import { test, expect, type BrowserContext, type Locator, type Page, type Response } from '@playwright/test'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { loginViaApi } from '../fixtures/auth'
@@ -139,7 +139,11 @@ async function actorsFromRunDirectory(run: string): Promise<Actor[]> {
 }
 
 test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', async ({ browser }) => {
-  test.setTimeout(9 * 60_000)
+  // 全段を通した所要の実測（2026-11-16、FE dev・WSL の検体BE）: 前提61秒・HTTP5秒・基盤23秒・隔離再開265秒
+  // （ModuleEventReplayBatch の fixedDelay 60秒を複数周待つ）・batch画面27秒・非管理者4名の入口/直打ち112秒・匿名18秒・
+  // 6言語bell 約180秒（1言語あたりログイン後の / 表示に dev SSR で8〜16秒）・他tenant 15秒、計 約12分。
+  // 旧値9分は UI 段まで到達する前に決めた値で、6言語bellの途中で総予算が尽きた（各 expect は失敗していない）。
+  test.setTimeout(15 * 60_000)
   const run = RUN_DIR
   const api = API_BASE_URL
   const baseURL = BASE_URL
@@ -274,12 +278,19 @@ test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', as
       await page.goto('/'); await waitForHydration(page)
       const navigation = page.getByTestId('global-sidebar')
       await expect(navigation).toBeVisible()
+      const isBatchList = (value: Response) => value.request().method() === 'GET'
+        && new URL(value.url()).pathname === '/api/v1/system-admin/batch'
+      // /system-admin の入口（SystemAdminBatchSummary）も同じ一覧APIを mount 時に呼び、その中に batches への
+      // リンクがある。リンクは要約の描画と同時に押せるため、先に待ち受けると要約側の応答を拾い、batches 画面自身の
+      // 取得完了に同期できていなかった（2026-11-16 実測: 要約の GET 完了後も batches の GET が 2.7 秒以上続いた）。
+      // 入口画面の一覧取得が終わってからリンクを押し、その後に発行された batches 画面の取得を待つ。
+      const summaryListed = page.waitForResponse(isBatchList)
       await navigation.locator('a[href="/system-admin"]').click()
       await expect(page).toHaveURL(/\/system-admin$/)
+      expect((await summaryListed).status()).toBe(200)
       // 一覧APIは登録バッチごとに直近ログを引くため数秒かかる（実測 約2.2秒、負荷下でexpect既定8秒を超えた）。
       // 固定待ちではなく、画面が実際に発行した一覧取得の完了に同期してから表を確認する。
-      const listed = page.waitForResponse(value => value.request().method() === 'GET'
-        && new URL(value.url()).pathname === '/api/v1/system-admin/batch')
+      const listed = page.waitForResponse(isBatchList)
       await page.locator('a[href="/system-admin/batches"]').first().click()
       await expect(page).toHaveURL(/\/system-admin\/batches/)
       expect((await listed).status()).toBe(200)

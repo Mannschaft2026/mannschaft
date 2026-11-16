@@ -45,6 +45,11 @@ Start-Process java -WindowStyle Hidden -PassThru -ArgumentList @(
 - 起動後、`/actuator/health` が 200、`OPTIONS` で `Access-Control-Allow-Origin: http://localhost:3001` が返ることを実測してから spec を流す
 - 停止は `controls/shutdown` を置く（撤去してから終了する）。`Stop-Process` で強制終了すると撤去されないため使わない
 - 異常終了で撤去されなかった場合は、残った `actors.json` の userId、`state.json` の operationId・publication ID、run 固有の slug（`l1m-e2e-<run先頭12桁>-a/b`）で対象 ID を確定してから、`ModuleEventRealE2eFixtures.Domain#cleanup` と同じ順に ID 指定で消す（ワイルドカード DML は使わない）
+- Windows の JVM が 0xC0000005 で落ち続ける場合は、同じ jar を WSL の Linux JVM で起動する（2026-11-16 に全段 PASS を確認）。
+  - jar は WSL のネイティブ FS（`$HOME` 配下）へコピーしてから起動する。`/mnt/c` 上の jar を直接読むと 9p 経由の読み出しで起動が5分経っても終わらない
+  - 実行ディレクトリは Windows 側の spec が読むので `L1M_E2E_RUN_DIR=/mnt/c/.../backend/build/l1m-real-e2e` を渡す
+  - WSL は SIGHUP で子プロセスを落とすため、`systemd-run --user --unit=<名前> --collect bash <起動スクリプト>` で切り離す。鍵は起動スクリプト内で本陣 `start-be.bat` の set 行から取り込み、コマンドライン（`--setenv`）には載せない
+  - mirrored 網なので Windows の FE からは `localhost:<port>` で届く。ポートは空きを実測して選び、`MANNSCHAFT_ALLOWED_ORIGINS`・`NUXT_PUBLIC_API_BASE`・spec の `API_BASE_URL` を揃える
 - 開発中の簡易起動として `MANNSCHAFT_ALLOWED_ORIGINS=http://localhost:3001,http://localhost:8081 MANNSCHAFT_EMAIL_SIMULATE=true ./gradlew bootRunModuleEventE2e` も残している（ブラウザ負荷をかける実機E2E には使わない）
 
 ### 共通事項
