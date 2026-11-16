@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 診断URLの先行試練。実Security→Controller→Service→commit済みMySQLの値を観測する。
- * 正常受信・400・既存hash集約・HEALTH/BACKENDはcharacterizationで初回greenを期待する。
+ * 正常受信・400・既存hash集約・legacy priority・HEALTH/BACKENDはcharacterizationで初回greenを期待する。
  * Redis/外部AI以外の自社Beanは置換せず、Docker未実行・起動失敗はred/greenに数えない。
  */
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
@@ -91,6 +91,23 @@ class ErrorReportDiagnosticUrlContractIT extends ErrorReportR1TestSupport {
         Long id = submit(url, "診断URL互換契約", false, null);
         assertThat(jdbc.queryForObject("SELECT error_hash FROM error_reports WHERE id = ?", String.class, id))
                 .isEqualTo(sha256("診断URL互換契約|" + legacyPath));
+    }
+
+    static Stream<Arguments> legacySeverityInputs() {
+        return Stream.of(
+                Arguments.of("/cmp-diagnostic/normal?next=/payment&token=QUERY#FRAGMENT", "診断priority契約", "HIGH"),
+                Arguments.of("/cmp-diagnostic/normal?next=/payment&token=QUERY#FRAGMENT", "ChunkLoadError 診断priority契約", "HIGH"),
+                Arguments.of("/cmp-diagnostic/normal", "診断priority契約", "MEDIUM"),
+                Arguments.of("/cmp-diagnostic/normal", "ChunkLoadError 診断priority契約", "LOW"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("legacySeverityInputs")
+    void AC4_legacy入力のpriority順序とFEcanonical入力を区別して保存する(String url, String message, String severity) throws Exception {
+        Long id = submit(url, message, false, null);
+        assertThat(storedUrl(id)).isEqualTo("/cmp-diagnostic/normal");
+        assertThat(jdbc.queryForObject("SELECT severity FROM error_reports WHERE id = ?", String.class, id))
+                .isEqualTo(severity);
     }
 
     @Test

@@ -73,7 +73,7 @@ public class ErrorReportService {
             stackTrace = stackTrace.substring(0, 2000);
         }
 
-        ErrorReportSeverity severity = determineSeverity(pageUrl, request.getErrorMessage());
+        ErrorReportSeverity severity = determineSeverity(request.getPageUrl(), request.getErrorMessage());
         Long organizationId = resolveOrganizationId(request.getUserId());
         LocalDateTime now = LocalDateTime.now();
 
@@ -311,8 +311,8 @@ public class ErrorReportService {
 
 
     /**
-     * URL からパス部分を抽出する。
-     * 不透明URI（"health:backend" 等）は getPath() が null を返すため、その場合は元の url をそのまま返す。
+     * FEのcanonical URLから既存hash用のパスを抽出し、解析失敗は固定markerへ倒す。
+     * HEALTH/BACKENDは別入口で処理し、本メソッドへ不透明URIやtemplateを渡さない。
      */
     private String extractPath(String url) {
         try {

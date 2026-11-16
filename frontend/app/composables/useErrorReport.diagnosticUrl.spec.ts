@@ -21,6 +21,7 @@ const urls = [
     'https://app.test/verify-email',
   ],
   ['/verify-email?unknown=QUERY#FRAGMENT', '/verify-email'],
+  ['/cmp-diagnostic/normal?next=/payment&token=QUERY#FRAGMENT', '/cmp-diagnostic/normal'],
   ['https://app.test', 'https://app.test/'],
   ['/a%3Fpart%23anchor?token=QUERY#FRAGMENT', '/a%3Fpart%23anchor'],
   ['/normal/42/%E6%97%A5', '/normal/42/%E6%97%A5'],

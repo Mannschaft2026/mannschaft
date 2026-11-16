@@ -8,6 +8,8 @@
 
 path内token、任意errorMessage／stack／context／userComment全文、既存保存履歴・browser history・全インフラログの全面除去を保証しない。実ユーザーの漏洩履歴は未調査。
 
+BEのlegacy直接POSTでは従来どおり元pageUrlからseverity enumだけを即時導出し、元URLを別fieldやログへ退避しない。query内だけに `/payment` があるHIGH判定とChunkLoadErrorより優先する順序を維持する。新FEがqueryを送信前に除去した場合はその材料をBEへ渡さないため、canonicalな通常pathではMEDIUM／ChunkLoadErrorはLOWとなる。この派生priorityの差は秘匿契約の限界として明記し、新APIやhintを追加しない。
+
 ## URL tokenの静的分類
 
 存在だけで全件を欠陥とは判定しない。固定 `2aebb636f3f44d5d6d43e7b32f5773662bb8f8a0` のtracked sourceを正本とし、確認capabilityの寿命／使用済拒否は先行調査のe7b43a5c、掲示の区別はcore `5b8f96ce81da05abc1cb6e661de97c018dc2e3e0` で補足した。
