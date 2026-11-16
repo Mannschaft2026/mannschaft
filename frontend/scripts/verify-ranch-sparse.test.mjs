@@ -172,6 +172,19 @@ for (const { script, manifest: manifestName, root, files } of SUBJECTS) {
     assert.doesNotMatch(out(result), /メタデータ検査は完了/)
   })
 
+  if (script.includes('appearances')) {
+    test(`指摘6 ${id}: 期待パスが symlink として追跡されていれば、全て未展開でも省略せず失敗`, () => {
+      const dir = copyRepo()
+      const blob = spawnSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: 'target', encoding: 'utf8', env: CLEAN_ENV }).stdout.trim()
+      git(dir, 'update-index', '--cacheinfo', `120000,${blob},${files[0]}`)
+      git(dir, 'commit', '--quiet', '-m', 'symlink')
+      sparsify(dir)
+      const result = run(dir, script)
+      assert.notEqual(result.status, 0, out(result))
+      assert.match(out(result), /non-regular-tracked/)
+    })
+  }
+
   test(`指摘2 ${id}: sparse 無効のまま skip-worktree を手で立てて消しても省略しない`, () => {
     const dir = copyRepo()
     const flagged = spawnSync('git', ['update-index', '--skip-worktree', '-z', '--stdin'], { cwd: dir, input: files.join(' ') + ' ', encoding: 'utf8', env: CLEAN_ENV })

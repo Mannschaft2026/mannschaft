@@ -197,6 +197,21 @@ test('指摘5: 期待一覧に無い余分な追跡ファイルは、省略前�
   } finally { cleanup(dir) }
 })
 
+test('指摘6: regularFilesOnly なら symlink(120000)・gitlink(160000) として追跡された期待パスは省略前に失敗する', () => {
+  const dir = makeRepo()
+  try {
+    const blob = spawnSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: 'target', encoding: 'utf8', env: BASE_ENV }).stdout.trim()
+    git(dir, 'update-index', '--cacheinfo', `120000,${blob},${FILES[0]}`)
+    git(dir, 'commit', '--quiet', '-m', 'symlink')
+    fs.rmSync(path.join(dir, FILES[0]))
+    sparsify(dir, 'scripts')
+    const result = classify(dir, { expected: FILES, exact: true, regularFilesOnly: true })
+    assert.equal(result.status, 'fail')
+    assert.equal(result.code, 'non-regular-tracked')
+    assert.equal(classify(dir, { expected: FILES, exact: true }).status, 'omitted', '指定なし（clips）は従来どおり')
+  } finally { cleanup(dir) }
+})
+
 test('inCone: ルート直下・祖先直下・一覧配下は範囲内、それ以外は範囲外', () => {
   const list = ['frontend/scripts', 'scripts']
   assert.equal(inCone('README.md', list), true)

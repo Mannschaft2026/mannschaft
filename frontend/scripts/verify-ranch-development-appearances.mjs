@@ -173,6 +173,8 @@ export async function verify({ env = process.env, log = console.log } = {}) {
     repoRoot: path.resolve(frontend, '..'), targets: ['frontend/dev-fixtures/ranch/appearance64-v4'], env, log,
     // manifest が参照する1920ファイルが全て追跡されていることを要求（無関係な素材の skip-worktree で隠せない）。
     exact: true,
+    // 全展開時の listFiles() が行う「通常ファイル以外の拒否」を、省略前にも git の mode で行う。
+    regularFilesOnly: true,
     expected: () => plan.expectedPaths.map(file => 'frontend/dev-fixtures/ranch/appearance64-v4/' + file),
     label: 'verify-ranch-development-appearances',
     metadata: () => { plan = verifyMetadata() },

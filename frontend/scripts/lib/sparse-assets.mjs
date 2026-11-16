@@ -91,7 +91,7 @@ export function inCone(file, list) {
  * status: 'present'（欠落なし・または git 管理外で全て実在）/ 'omitted'（本物の sparse による意図した未展開）/ 'fail'
  * git リポジトリの外では「省略」はできない: 期待パスが全て在れば present、欠けていれば fail。
  */
-export function classifyAssetDirs({ repoRoot, targets, expected = null, exact = false, env = process.env }) {
+export function classifyAssetDirs({ repoRoot, targets, expected = null, exact = false, regularFilesOnly = false, env = process.env }) {
   const context = gitContext(repoRoot, env)
   if (context.kind === 'git-failed') return fail('git-failed', context.error)
   if (context.kind === 'outside') {
@@ -119,6 +119,14 @@ export function classifyAssetDirs({ repoRoot, targets, expected = null, exact = 
     const expectedSet = new Set(expected)
     const extra = exact ? tracked.filter(row => !expectedSet.has(row.file)) : []
     if (extra.length > 0) return fail('unexpected-tracked', `期待一覧に無い追跡ファイルが${extra.length}件（配布物の過剰）: 例 ${extra[0].file}`)
+  }
+  if (regularFilesOnly) {
+    // 全展開時の「通常ファイル以外の拒否」を、git の mode（100644/100755 以外＝symlink・gitlink 等）で省略前にも行う。
+    const staged = runGit(repoRoot, ['ls-files', '-s', '-z', '--', ...targets], env)
+    if (!staged.ok) return fail('git-failed', staged.error)
+    const irregular = staged.stdout.toString('utf8').split(' ').filter(Boolean).map(record => ({ mode: record.slice(0, 6), file: record.slice(record.indexOf('	') + 1) }))
+      .filter(row => row.mode !== '100644' && row.mode !== '100755')
+    if (irregular.length > 0) return fail('non-regular-tracked', `通常ファイルでない追跡（mode ${irregular[0].mode}）が${irregular.length}件: 例 ${irregular[0].file}`)
   }
   const missing = tracked.filter(row => !fs.lstatSync(path.join(repoRoot, row.file), { throwIfNoEntry: false }))
   const base = { tracked: tracked.length, omitted: missing.length, targets }
@@ -162,9 +170,9 @@ export function classifyAssetDirs({ repoRoot, targets, expected = null, exact = 
  * 省略時は理由と対象を log に出す。CI・失敗判定では省略せず例外にする。
  * expected は配列、またはメタデータ検査後に評価される関数（検証が参照するファイルのリポジトリルート相対パス）。
  */
-export async function runWithSparseOmission({ repoRoot, targets, expected = null, exact = false, env = process.env, label, metadata, bytes, log = console.log }) {
+export async function runWithSparseOmission({ repoRoot, targets, expected = null, exact = false, regularFilesOnly = false, env = process.env, label, metadata, bytes, log = console.log }) {
   await metadata()
-  const state = classifyAssetDirs({ repoRoot, targets, expected: typeof expected === 'function' ? expected() : expected, exact, env })
+  const state = classifyAssetDirs({ repoRoot, targets, expected: typeof expected === 'function' ? expected() : expected, exact, regularFilesOnly, env })
   if (state.status === 'present') {
     await bytes()
     return { bytesVerified: true, state }
