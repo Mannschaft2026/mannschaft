@@ -35,6 +35,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 @DisplayName("CMP-261113-1507 エラーメッセージ解決（AC-8/11/13/14）")
 class ErrorMessageResolveI18nTest {
 
+    /** かな（ひらがな・カタカナ）。zh の漢字は日本語と共通のため、zh 判定にはこちらを使う。 */
+    private static final Pattern KANA = Pattern.compile("[\u3040-\u30FF\uFF66-\uFF9F]");
+
     private static final Pattern JAPANESE = Pattern.compile("[\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uFF66-\\uFF9F]");
 
     private final MessageSource realMessageSource = new I18nConfig().messageSource();
@@ -195,7 +198,9 @@ class ErrorMessageResolveI18nTest {
 
         ErrorResponse.FieldError fe = response.getBody().getError().getFieldErrors().get(0);
         assertThat(fe.getField()).isEqualTo("visibility");
-        assertThat(fe.getMessage()).isEqualTo(expected).doesNotContainPattern(JAPANESE);
+        assertThat(fe.getMessage()).isEqualTo(expected).isNotEqualTo("定義されていない値です");
+        // zh は漢字が日本語と共通のため、かなの有無で判定する。他言語は漢字を含めて日本語が残らないこと
+        assertThat(fe.getMessage()).doesNotContainPattern("zh".equals(lang) ? KANA : JAPANESE);
     }
 
     @Test
