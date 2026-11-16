@@ -17,6 +17,7 @@ const { getSchedule } = useShiftApi()
 const { userTimezone } = useDatetime()
 const { listSlots, deleteSlot, bulkCreateSlots } = useShiftSlotApi()
 const { listPositions } = useShiftPositionApi()
+const { listShiftRequests } = useShiftRequestApi()
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
 const confirm = useConfirm()
@@ -101,7 +102,7 @@ const checkingSlotId = ref<number | null>(null)
 async function buildDeleteConfirmMessage(slot: ShiftSlotResponse): Promise<string> {
   let requestCount: number
   try {
-    const requests = await listRequests(scheduleId.value)
+    const requests = await listShiftRequests(scheduleId.value)
     requestCount = requests.filter((r) => r.slotId === slot.id).length
   } catch (error) {
     handleApiError(error)
