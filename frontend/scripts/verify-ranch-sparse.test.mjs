@@ -17,14 +17,24 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const frontendSource = path.resolve(here, '..')
 const repoSource = path.resolve(frontendSource, '..')
 const CLEAN_ENV = { ...process.env, CI: '' }
-for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX']) delete CLEAN_ENV[key]
+for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GITHUB_ACTIONS', 'GITLAB_CI', 'TF_BUILD', 'JENKINS_URL']) delete CLEAN_ENV[key]
 const MANIFEST = 'frontend/public/ranch/approved/ranch-approved-20261108-v1/manifest.json'
-const ASSET_FILES = [
-  'frontend/dev-fixtures/ranch/base16-v3/a.png',
-  'frontend/dev-fixtures/ranch/appearance64-v4/b.png',
-  MANIFEST,
-  'frontend/public/ranch/approved/ranch-approved-20261108-v1/c.png',
+const APPROVED_FILES = [MANIFEST, 'frontend/public/ranch/approved/ranch-approved-20261108-v1/c.png']
+// 各検証が manifest で参照するファイル（本物の manifest から算出）。テンプレートには中身のダミーを追跡させる。
+function expectedFor(manifestName, root) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(frontendSource, 'app/utils', manifestName), 'utf8'))
+  return manifest.entries.flatMap(entry => [entry.fallback.sourcePath, ...Object.values(entry.clips).map(clip => clip.sourcePath)])
+    .map(file => `${root}/${file}`)
+}
+const CLIPS_ROOT = 'frontend/dev-fixtures/ranch/base16-v3'
+const APPEARANCES_ROOT = 'frontend/dev-fixtures/ranch/appearance64-v4'
+const SUBJECTS = [
+  { script: 'verify-ranch-development-clips.mjs', manifest: 'ranch-development-clips-manifest.json', root: CLIPS_ROOT,
+    files: expectedFor('ranch-development-clips-manifest.json', CLIPS_ROOT) },
+  { script: 'verify-ranch-development-appearances.mjs', manifest: 'ranch-development-appearances-manifest.json', root: APPEARANCES_ROOT,
+    files: expectedFor('ranch-development-appearances-manifest.json', APPEARANCES_ROOT) },
 ]
+const ASSET_FILES = [...SUBJECTS.flatMap(subject => subject.files), ...APPROVED_FILES]
 const MANIFEST_BODY = '{"entries":[{"assetKey":"synthetic-public-id"}]}'
 
 function git(cwd, ...args) {
@@ -45,13 +55,18 @@ before(() => {
   for (const name of ['ranch-development-clips-manifest.json', 'ranch-development-appearances-manifest.json', 'ranch-production-pack-registration.json']) {
     fs.copyFileSync(path.join(frontendSource, 'app/utils', name), path.join(template, 'frontend/app/utils', name))
   }
-  for (const file of ASSET_FILES) {
-    fs.mkdirSync(path.dirname(path.join(template, file)), { recursive: true })
-    fs.writeFileSync(path.join(template, file), file === MANIFEST ? MANIFEST_BODY : `synthetic ${file}`)
-  }
   git(template, 'init', '--quiet')
   git(template, 'add', '.')
+  // 素材（2400件超）は作業木へ実体を作らず、index にだけ登録する（実体を作るとこの環境では1ケース数分かかる）。
+  // 作業木に無い追跡パスは「手で削除」と同じ状態になり、sparse にすると本物の skip-worktree になる。
+  const blob = body => spawnSync('git', ['hash-object', '-w', '--stdin'], { cwd: template, input: body, encoding: 'utf8', env: CLEAN_ENV }).stdout.trim()
+  const common = blob('synthetic asset bytes'), manifestBlob = blob(MANIFEST_BODY)
+  const info = ASSET_FILES.map(file => `100644 ${file === MANIFEST ? manifestBlob : common} 0	${file}
+`).join('')
+  const added = spawnSync('git', ['update-index', '--add', '--index-info'], { cwd: template, input: info, encoding: 'utf8', env: CLEAN_ENV })
+  assert.equal(added.status, 0, added.stderr)
   git(template, 'commit', '--quiet', '-m', 'template')
+  git(template, 'gc', '--quiet')
 })
 after(() => fs.rmSync(template, { recursive: true, force: true }))
 
@@ -63,35 +78,31 @@ function copyRepo() {
   return dir
 }
 after(() => { for (const dir of made) fs.rmSync(dir, { recursive: true, force: true }) })
-/** sparse 除外を再現（skip-worktree を立ててファイルを消す）。 */
-function omit(dir, files) {
-  for (const file of files) {
-    git(dir, 'update-index', '--skip-worktree', file)
-    fs.rmSync(path.join(dir, file))
-  }
-}
-const devFiles = ASSET_FILES.filter(file => file.includes('dev-fixtures'))
-const approvedFiles = ASSET_FILES.filter(file => file.includes('public/ranch/approved'))
+/** 本物の cone sparse checkout にする（素材ディレクトリは範囲外になり skip-worktree で作業木から消える）。 */
+const sparsify = dir => git(dir, 'sparse-checkout', 'set', '--cone', 'scripts', 'frontend/scripts', 'frontend/app/utils')
 function run(dir, script, args = [], env = {}) {
   return spawnSync(process.execPath, [path.join(dir, 'frontend/scripts', script), ...args],
     { cwd: path.join(dir, 'frontend'), encoding: 'utf8', env: { ...CLEAN_ENV, ...env } })
 }
 const out = result => `${result.stdout}\n${result.stderr}`
 
-for (const script of ['verify-ranch-development-clips.mjs', 'verify-ranch-development-appearances.mjs']) {
-  test(`AC-9/10 ${script}: sparse 除外ならメタデータ検査は通って実バイト省略（理由・対象つき・exit 0）`, () => {
+for (const { script, manifest: manifestName, root, files } of SUBJECTS) {
+  const id = script.replace('verify-ranch-development-', '').replace('.mjs', '')
+
+  test(`AC-9/10 ${id}: 本物の sparse ならメタデータ検査は通って実バイト省略（理由・対象つき・exit 0）`, () => {
     const dir = copyRepo()
-    omit(dir, devFiles)
+    sparsify(dir)
+    assert.ok(!fs.existsSync(path.join(dir, files[0])), '本物の sparse で素材が消えている')
     const result = run(dir, script)
     assert.equal(result.status, 0, out(result))
     assert.match(out(result), /省略/)
-    assert.ok(out(result).includes('frontend/dev-fixtures/ranch'), '対象を表示')
+    assert.ok(out(result).includes(root), '対象を表示')
   })
 
-  test(`AC-9 ${script}: sparse でも不正メタデータは非0（省略に逃げない）`, () => {
+  test(`AC-9 ${id}: sparse でも不正メタデータは非0（省略に逃げない）`, () => {
     const dir = copyRepo()
-    omit(dir, devFiles)
-    const file = path.join(dir, 'frontend/app/utils', script.includes('clips') ? 'ranch-development-clips-manifest.json' : 'ranch-development-appearances-manifest.json')
+    sparsify(dir)
+    const file = path.join(dir, 'frontend/app/utils', manifestName)
     const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
     manifest.entries[0].habitat = manifest.entries[0].habitat === 'SEA' ? 'LAND' : 'SEA'
     fs.writeFileSync(file, JSON.stringify(manifest))
@@ -100,53 +111,79 @@ for (const script of ['verify-ranch-development-clips.mjs', 'verify-ranch-develo
     assert.doesNotMatch(result.stdout, /省略/)
   })
 
-  test(`AC-11 ${script}: CI=true で素材が無ければ失敗（CI では省略しない）`, () => {
+  test(`AC-11/指摘3 ${id}: CI では省略しない（CI=true、GITHUB_ACTIONS=true かつ CI=false）`, () => {
     const dir = copyRepo()
-    omit(dir, devFiles)
-    const result = run(dir, script, [], { CI: 'true' })
-    assert.notEqual(result.status, 0, out(result))
-    assert.match(out(result), /CI/)
+    sparsify(dir)
+    for (const env of [{ CI: 'true' }, { GITHUB_ACTIONS: 'true', CI: 'false' }, { GITHUB_ACTIONS: 'true', CI: '' }]) {
+      const result = run(dir, script, [], env)
+      assert.notEqual(result.status, 0, out(result))
+      assert.match(out(result), /CI/)
+    }
   })
 
-  test(`AC-10 ${script}: 手で削除（skip-worktree でない欠落）は失敗`, () => {
+  test(`AC-10 ${id}: 手で削除（skip-worktree でない欠落）は失敗`, () => {
+    // テンプレートは素材が index にだけ在り作業木に無い（= sparse でなく欠落している状態）。
     const dir = copyRepo()
-    for (const file of devFiles) fs.rmSync(path.join(dir, file))
     const result = run(dir, script)
     assert.notEqual(result.status, 0, out(result))
     assert.match(out(result), /manual-deletion/)
   })
 
-  test(`AC-10 ${script}: 部分展開は失敗`, () => {
+  test(`AC-10 ${id}: 部分展開は失敗`, () => {
     const dir = copyRepo()
-    omit(dir, devFiles.slice(0, 1))
+    sparsify(dir)
+    git(dir, 'update-index', '--no-skip-worktree', files[0])
+    fs.mkdirSync(path.dirname(path.join(dir, files[0])), { recursive: true })
+    fs.writeFileSync(path.join(dir, files[0]), 'restored')
     const result = run(dir, script)
     assert.notEqual(result.status, 0, out(result))
     assert.match(out(result), /partial/)
   })
 
-  test(`AC-10 ${script}: 追跡パス0件は失敗`, () => {
+  test(`指摘1 ${id}: 自分の素材が追跡0件なら、別の素材が追跡・未展開でも失敗（省略で隠さない）`, () => {
     const dir = copyRepo()
-    git(dir, 'rm', '-r', '--quiet', '--cached', 'frontend/dev-fixtures')
-    fs.rmSync(path.join(dir, 'frontend/dev-fixtures'), { recursive: true, force: true })
-    git(dir, 'commit', '--quiet', '-m', 'remove')
+    git(dir, 'rm', '-r', '--quiet', root)
+    git(dir, 'commit', '--quiet', '-m', 'remove own assets')
+    sparsify(dir)
     const result = run(dir, script)
     assert.notEqual(result.status, 0, out(result))
     assert.match(out(result), /no-tracked-paths/)
   })
 
-  test(`AC-10 ${script}: git が使えない（リポジトリでない）は失敗`, () => {
+  test(`指摘1 ${id}: manifest が参照する1件が追跡から消えた（改名）なら、残りが未展開でも失敗`, () => {
+    const dir = copyRepo()
+    git(dir, 'rm', '--quiet', files[0])
+    git(dir, 'commit', '--quiet', '-m', 'rename away')
+    sparsify(dir)
+    const result = run(dir, script)
+    assert.notEqual(result.status, 0, out(result))
+    assert.match(out(result), /expected-not-tracked/)
+  })
+
+  test(`指摘2 ${id}: sparse 無効のまま skip-worktree を手で立てて消しても省略しない`, () => {
+    const dir = copyRepo()
+    const flagged = spawnSync('git', ['update-index', '--skip-worktree', '-z', '--stdin'], { cwd: dir, input: files.join(' ') + ' ', encoding: 'utf8', env: CLEAN_ENV })
+    assert.equal(flagged.status, 0, flagged.stderr)
+    const result = run(dir, script)
+    assert.notEqual(result.status, 0, out(result))
+    assert.match(out(result), /sparse-not-enabled/)
+  })
+
+  test(`指摘4 ${id}: .git の無いコピー（git archive 相当）は git-failed で止まらず、素材が欠ければ省略せず失敗（全て在る場合は lib 試験）`, () => {
     const dir = copyRepo()
     fs.rmSync(path.join(dir, '.git'), { recursive: true, force: true })
     const result = run(dir, script)
     assert.notEqual(result.status, 0, out(result))
-    assert.match(out(result), /git-failed/)
+    assert.match(out(result), /missing-outside-git/)
+    assert.doesNotMatch(out(result), /git-failed|メタデータ検査は完了/)
   })
 
-  test(`AC-11 ${script}: 展開済み素材が改ざん・不整合なら失敗（実バイト検査が走る）`, () => {
+  test(`AC-10 ${id}: .git があるのに git が失敗（壊れたリポジトリ）は失敗`, () => {
     const dir = copyRepo()
+    fs.rmSync(path.join(dir, '.git/HEAD'))
     const result = run(dir, script)
     assert.notEqual(result.status, 0, out(result))
-    assert.doesNotMatch(result.stdout, /PASS/)
+    assert.match(out(result), /git-failed/)
   })
 }
 
@@ -163,7 +200,7 @@ test('AC-12: 検証モジュールは import しただけでは出力もプロ�
 
 test('AC-14: 配置CLIは sparse で省略せず、何も書き込む前に非0で展開手順を表示する', () => {
   const dir = copyRepo()
-  omit(dir, approvedFiles)
+  sparsify(dir)
   const before = git(dir, 'status', '--porcelain')
   const fakePack = path.join(dir, 'no-such-pack')
   const result = run(dir, 'verify-ranch-production-assets.mjs', ['--pack', fakePack, '--manifest-sha256', 'a'.repeat(64),
@@ -176,7 +213,7 @@ test('AC-14: 配置CLIは sparse で省略せず、何も書き込む前に非0�
 
 test('AC-14: installVerifiedPack も sparse なら書き込み前に失敗する', () => {
   const dir = copyRepo()
-  omit(dir, approvedFiles)
+  sparsify(dir)
   assert.throws(() => installVerifiedPack({}, dir), error => error.message.includes(EXPAND_COMMAND))
   assert.equal(fs.existsSync(path.join(dir, 'work')), false)
 })
@@ -191,23 +228,26 @@ test('AC-14: 全展開の配置CLIは従来どおり進む（展開要求で止�
 
 test('AC-15: gitleaks再検査は sparse でも成功スキップせず、HEAD から manifest を取得して実際に読む', () => {
   const dir = copyRepo()
+  fs.mkdirSync(path.dirname(path.join(dir, MANIFEST)), { recursive: true })
+  fs.writeFileSync(path.join(dir, MANIFEST), MANIFEST_BODY)
   const expanded = readApprovedManifestBytes({ repository: dir, env: CLEAN_ENV })
   assert.equal(expanded.toString('utf8'), MANIFEST_BODY)
-  omit(dir, approvedFiles)
+  fs.rmSync(path.join(dir, MANIFEST))
+  sparsify(dir)
   const fromHead = readApprovedManifestBytes({ repository: dir, env: CLEAN_ENV })
   assert.equal(fromHead.toString('utf8'), MANIFEST_BODY)
   assert.throws(() => readApprovedManifestBytes({ repository: dir, env: { ...CLEAN_ENV, CI: 'true' } }), /CI/)
+  assert.throws(() => readApprovedManifestBytes({ repository: dir, env: { ...CLEAN_ENV, GITHUB_ACTIONS: 'true', CI: 'false' } }), /CI/)
 })
 
 test('AC-15: manifest が sparse 除外でなく欠落（手で削除）なら失敗する', () => {
   const dir = copyRepo()
-  fs.rmSync(path.join(dir, MANIFEST))
   assert.throws(() => readApprovedManifestBytes({ repository: dir, env: CLEAN_ENV }), new RegExp(EXPAND_COMMAND))
 })
 
 test('AC-16: 素材なしの成果物は CI の有無を問わず検証失敗（sparse でも pack 欠落でも）', () => {
   const dir = copyRepo()
-  omit(dir, approvedFiles)
+  sparsify(dir)
   const packDirectory = path.join(dir, 'frontend/public/ranch/approved/ranch-approved-20261108-v1')
   for (const env of [{ ...CLEAN_ENV, CI: '' }, { ...CLEAN_ENV, CI: 'true' }]) {
     assert.throws(() => requireProductionPackPresent({ repoRoot: dir, packDirectory, env }), error => error.message.includes(EXPAND_COMMAND))

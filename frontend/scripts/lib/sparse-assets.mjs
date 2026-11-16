@@ -9,6 +9,8 @@
 //  - CI（CI=true / 1）では省略しない（AC-11）。
 //  - import しただけではプロセスを終了しない・出力しない（AC-12）。
 //
+//  - git リポジトリの外（.git が無い git archive 展開コピー・Docker）では省略せず、素材が全て実在すれば従来どおり全検査を走らせる。
+//
 // このファイルは frontend/ 配下に置く。FE の Docker ビルドコンテキストが frontend/ であり、
 // 成果物検証（verify-ranch-production-artifact.mjs）が import するため。
 import fs from 'node:fs'
@@ -48,11 +50,59 @@ export function loadExclusions(repoRoot) {
 
 const fail = (code, message, extra = {}) => ({ status: 'fail', code, message, ...extra })
 
+const CI_PROVIDER_VARIABLES = ['GITHUB_ACTIONS', 'GITLAB_CI', 'CIRCLECI', 'TRAVIS', 'BUILDKITE', 'TF_BUILD', 'APPVEYOR', 'JENKINS_URL', 'TEAMCITY_VERSION']
+const isOff = value => value === undefined || value === '' || value === '0' || value.toLowerCase() === 'false'
+
+/**
+ * CI 実行かどうか。CI=true/1 に加え、提供元の変数（GITHUB_ACTIONS 等）でも CI とみなす。
+ * `GITHUB_ACTIONS=true` かつ `CI=false`（空文字）のような組合せで省略へ迂回できないようにする。
+ */
+export function isCiEnvironment(env = process.env) {
+  return env.CI === 'true' || env.CI === '1' || CI_PROVIDER_VARIABLES.some(name => !isOff(env[name]))
+}
+
+/**
+ * repoRoot が git リポジトリの作業木か。
+ *  - 'repo': 作業木のルートである
+ *  - 'outside': git リポジトリの外（`git archive` 展開コピー・Docker ビルドコンテキスト等で .git が無い）
+ *  - 'git-failed': .git があるのに git が失敗した（壊れた・実行できない）
+ */
+function gitContext(repoRoot, env) {
+  const top = runGit(repoRoot, ['rev-parse', '--show-toplevel'], env)
+  if (top.ok) {
+    const same = path.relative(fs.realpathSync(top.stdout.toString('utf8').trim()), fs.realpathSync(repoRoot)) === ''
+    return same ? { kind: 'repo' } : { kind: 'outside' }
+  }
+  if (fs.existsSync(path.join(repoRoot, '.git'))) return { kind: 'git-failed', error: top.error }
+  return { kind: 'outside' }
+}
+
+/** cone モードの sparse 一覧に対し、file が範囲内（展開されるべき）か。ルート直下・祖先直下・一覧配下を範囲内とする。 */
+export function inCone(file, list) {
+  const parent = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : ''
+  if (parent === '') return true
+  return list.some(dir => parent === dir || parent.startsWith(`${dir}/`) || dir.startsWith(`${parent}/`))
+}
+
 /**
  * targets（リポジトリルートからの相対ディレクトリ）配下の追跡パスの状態を判定する。
- * status: 'present'（欠落なし）/ 'omitted'（全て意図した sparse 除外で未展開）/ 'fail'
+ * expected: その検証が参照するファイル（リポジトリルート相対）。全てが追跡されていることを要求し、
+ * 無関係な素材の skip-worktree で manifest 参照先の削除・改名を隠せないようにする。
+ * status: 'present'（欠落なし・または git 管理外で全て実在）/ 'omitted'（本物の sparse による意図した未展開）/ 'fail'
+ * git リポジトリの外では「省略」はできない: 期待パスが全て在れば present、欠けていれば fail。
  */
-export function classifyAssetDirs({ repoRoot, targets, env = process.env }) {
+export function classifyAssetDirs({ repoRoot, targets, expected = null, env = process.env }) {
+  const context = gitContext(repoRoot, env)
+  if (context.kind === 'git-failed') return fail('git-failed', context.error)
+  if (context.kind === 'outside') {
+    const required = expected ?? []
+    const missingOutside = required.filter(file => !fs.lstatSync(path.join(repoRoot, file), { throwIfNoEntry: false }))
+    const emptyTargets = expected ? [] : targets.filter(dir => !fs.existsSync(path.join(repoRoot, dir)))
+    if (missingOutside.length > 0 || emptyTargets.length > 0) {
+      return fail('missing-outside-git', `git 管理外のコピーで素材が揃っていない（省略はできない）: 例 ${missingOutside[0] ?? emptyTargets[0]}`)
+    }
+    return { status: 'present', tracked: required.length, omitted: 0, targets, outsideGit: true }
+  }
   const listed = runGit(repoRoot, ['ls-files', '-t', '-z', '--', ...targets], env)
   if (!listed.ok) return fail('git-failed', listed.error)
   const unmerged = runGit(repoRoot, ['ls-files', '-u', '-z', '--', ...targets], env)
@@ -60,6 +110,11 @@ export function classifyAssetDirs({ repoRoot, targets, env = process.env }) {
   if (unmerged.stdout.length > 0) return fail('unmerged', '未マージ（コンフリクト）状態の追跡パスがある。先に解消すること')
   const tracked = listed.stdout.toString('utf8').split('\0').filter(Boolean).map(record => ({ tag: record[0], file: record.slice(2) }))
   if (tracked.length === 0) return fail('no-tracked-paths', `対象の追跡パスが0件（パス誤り・改名の疑い）: ${targets.join(', ')}`)
+  if (expected) {
+    const trackedSet = new Set(tracked.map(row => row.file))
+    const untracked = expected.filter(file => !trackedSet.has(file))
+    if (untracked.length > 0) return fail('expected-not-tracked', `検証が参照するパスが追跡されていない（削除・改名の疑い）${untracked.length}件: 例 ${untracked[0]}`)
+  }
   const missing = tracked.filter(row => !fs.lstatSync(path.join(repoRoot, row.file), { throwIfNoEntry: false }))
   const base = { tracked: tracked.length, omitted: missing.length, targets }
   if (missing.length === 0) return { status: 'present', ...base }
@@ -70,6 +125,25 @@ export function classifyAssetDirs({ repoRoot, targets, env = process.env }) {
   if (missing.length !== tracked.length) {
     return fail('partial', `部分展開（${tracked.length}件中${tracked.length - missing.length}件だけ存在）。展開し直すか全て除外すること`, base)
   }
+  // skip-worktree だけでは不十分（手で立てられる）。sparse checkout が実際に有効で、かつ範囲外であることを確認する。
+  const enabled = runGit(repoRoot, ['config', '--get', 'core.sparseCheckout'], env)
+  if (!enabled.ok || enabled.stdout.toString('utf8').trim() !== 'true') {
+    return fail('sparse-not-enabled', 'skip-worktree だが sparse checkout が有効でない（core.sparseCheckout）。手で立てたフラグは意図した除外ではない', base)
+  }
+  const cone = runGit(repoRoot, ['config', '--get', 'core.sparseCheckoutCone'], env)
+  if (!cone.ok || cone.stdout.toString('utf8').trim() !== 'true') {
+    return fail('sparse-not-cone', 'sparse checkout が cone モードでないため範囲を判定できない', base)
+  }
+  const listing = runGit(repoRoot, ['sparse-checkout', 'list'], env)
+  if (!listing.ok) return fail('git-failed', listing.error, base)
+  const coneDirs = listing.stdout.toString('utf8').split('\n').map(line => line.trim().replace(/^\/+|\/+$/g, '')).filter(Boolean)
+  const inside = missing.filter(row => inCone(row.file, coneDirs))
+  if (inside.length > 0) {
+    return fail('in-cone', `sparse の範囲内なのに未展開（skip-worktree が手で立てられた疑い）${inside.length}件: 例 ${inside[0].file}`, base)
+  }
+  if (!fs.existsSync(path.join(repoRoot, EXCLUSIONS_FILE))) {
+    return fail('exclusions-unreadable', `除外正本が無いため意図した除外か判定できない（省略はできない）: ${EXCLUSIONS_FILE}`, base)
+  }
   const exclusions = loadExclusions(repoRoot)
   const outside = missing.filter(row => !underAny(row.file, exclusions))
   if (outside.length > 0) {
@@ -78,15 +152,14 @@ export function classifyAssetDirs({ repoRoot, targets, env = process.env }) {
   return { status: 'omitted', ...base }
 }
 
-const isCi = env => env.CI === 'true' || env.CI === '1'
-
 /**
  * メタデータ検査は常に実行し、実バイト検査は sparse 除外のときだけ省略する。
  * 省略時は理由と対象を log に出す。CI・失敗判定では省略せず例外にする。
+ * expected は配列、またはメタデータ検査後に評価される関数（検証が参照するファイルのリポジトリルート相対パス）。
  */
-export async function runWithSparseOmission({ repoRoot, targets, env = process.env, label, metadata, bytes, log = console.log }) {
+export async function runWithSparseOmission({ repoRoot, targets, expected = null, env = process.env, label, metadata, bytes, log = console.log }) {
   await metadata()
-  const state = classifyAssetDirs({ repoRoot, targets, env })
+  const state = classifyAssetDirs({ repoRoot, targets, expected: typeof expected === 'function' ? expected() : expected, env })
   if (state.status === 'present') {
     await bytes()
     return { bytesVerified: true, state }
@@ -94,7 +167,7 @@ export async function runWithSparseOmission({ repoRoot, targets, env = process.e
   if (state.status === 'fail') {
     throw new Error(`${label}: 素材の状態を安全に判定できない（${state.code}）: ${state.message}`)
   }
-  if (isCi(env)) {
+  if (isCiEnvironment(env)) {
     throw new Error(`${label}: CI では実バイト検査を省略しない。素材が展開されていない（対象 ${targets.join(', ')}、${state.omitted}件）`)
   }
   log(`${label}: メタデータ検査は完了。実バイト検査（PNG の中身・hash・寸法）は省略 — sparse checkout により未展開`
@@ -107,9 +180,9 @@ export async function runWithSparseOmission({ repoRoot, targets, env = process.e
  * git 管理外のディレクトリは対象外（従来どおり通す）。
  */
 export function requireExpandedForWrite({ repoRoot, targets, env = process.env }) {
-  const top = runGit(repoRoot, ['rev-parse', '--show-toplevel'], env)
-  if (!top.ok) return
-  if (path.relative(fs.realpathSync(top.stdout.toString('utf8').trim()), fs.realpathSync(repoRoot)) !== '') return
+  const context = gitContext(repoRoot, env)
+  if (context.kind === 'git-failed') throw new Error(`git が失敗したため素材の展開状態を確認できない。書き込まない: ${context.error}`)
+  if (context.kind === 'outside') return
   const listed = runGit(repoRoot, ['ls-files', '-t', '-z', '--', ...targets], env)
   if (!listed.ok) throw new Error(`素材の展開状態を確認できないため書き込まない: ${listed.error}`)
   const skipped = listed.stdout.toString('utf8').split('\0').filter(Boolean).filter(record => record[0] === 'S')

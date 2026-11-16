@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { classifyAssetDirs, EXPAND_COMMAND } from './lib/sparse-assets.mjs'
+import { classifyAssetDirs, isCiEnvironment, EXPAND_COMMAND } from './lib/sparse-assets.mjs'
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const approvedManifest = 'frontend/public/ranch/approved/ranch-approved-20261108-v1/manifest.json'
@@ -21,9 +21,9 @@ const approvedManifest = 'frontend/public/ranch/approved/ranch-approved-20261108
 export function readApprovedManifestBytes({ repository: root = repository, env = process.env, gitEnv = env } = {}) {
   const file = path.join(root, approvedManifest)
   if (fs.existsSync(file)) return fs.readFileSync(file)
-  const state = classifyAssetDirs({ repoRoot: root, targets: ['frontend/public/ranch/approved'], env })
+  const state = classifyAssetDirs({ repoRoot: root, targets: ['frontend/public/ranch/approved/ranch-approved-20261108-v1'], expected: [approvedManifest], env })
   assert.equal(state.status, 'omitted', `承認pack manifestが無く、sparse除外でもない（${state.code ?? state.status}: ${state.message ?? ''}）。素材を展開すること: ${EXPAND_COMMAND}`)
-  assert.ok(!(env.CI === 'true' || env.CI === '1'), `CI では manifest を省略・代替取得しない。素材を展開すること: ${EXPAND_COMMAND}`)
+  assert.ok(!isCiEnvironment(env), `CI では manifest を省略・代替取得しない。素材を展開すること: ${EXPAND_COMMAND}`)
   return execFileSync('git', ['-C', root, 'show', `HEAD:${approvedManifest}`], { env: gitEnv, maxBuffer: 16 * 1024 * 1024, windowsHide: true })
 }
 
