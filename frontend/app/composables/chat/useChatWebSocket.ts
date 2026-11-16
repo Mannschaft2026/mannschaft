@@ -1,11 +1,12 @@
 import type { Client, IFrame, StompSubscription } from '@stomp/stompjs'
 import { Client as StompClient } from '@stomp/stompjs'
 import { useEventBus } from '@vueuse/core'
-import { computed, readonly, ref } from 'vue'
+import { computed, readonly, ref, effectScope, watch } from 'vue'
+import { getAuthSessionContext, type AuthSessionContext, type AuthSessionSnapshot } from '~/composables/authSessionContext'
 import {
   buildStompConnectHeaders,
   handleStompErrorFrame,
-  useStompAuthRecovery,
+  createStompAuthRecovery,
   type StompAuthRecovery,
 } from '~/composables/stomp/stompAuth'
 import { useWsUrl } from '~/composables/useWsUrl'
@@ -23,6 +24,7 @@ import type { BeMessageListResponse } from './chatMessageMapper'
 interface StompRoute {
   destination: string
   onFrame: (frame: IFrame) => void
+  snapshot?: AuthSessionSnapshot
 }
 
 /** 購読キー（`msg:{channelId}` / `evt:{channelId}` / `raw:{連番}`）→ 購読定義。 */
@@ -61,6 +63,8 @@ const _wsAuthState = ref<'OK' | 'UNAUTHENTICATED'>('OK')
 /** UNAUTHENTICATED の回復手順（最初の composable 呼び出し＝setup コンテキストで取得）。 */
 let _authRecovery: StompAuthRecovery | null = null
 let _authStore: ReturnType<typeof useAuthStore> | null = null
+let _authSession: AuthSessionContext | null = null
+let _createRecovery: (() => StompAuthRecovery) | null = null
 /** 進行中の UNAUTHENTICATED 回復。beforeConnect で完了を待ってから再接続する。 */
 let _pendingAuthRecovery: Promise<void> | null = null
 /** キャッチアップ用 API（最初の composable 呼び出し＝setup コンテキストで取得）。 */
@@ -105,7 +109,14 @@ function _subscribeRoute(key: string): void {
   const receipt = `sub-${++_receiptSeq}`
   _receiptToDestination.set(receipt, route.destination)
   _receiptByKey.set(key, receipt)
-  const subscription = _stompClient.subscribe(route.destination, route.onFrame, { receipt })
+  const client = _stompClient
+  const session = _authSession
+  let subscription: StompSubscription | null = null
+  subscription = client.subscribe(route.destination, (frame) => {
+    if (_stompClient !== client || _routes.get(key) !== route || subscription === null
+      || _activeSubscriptions.get(key) !== subscription || !route.snapshot || !session?.current(route.snapshot)) return
+    route.onFrame(frame)
+  }, { receipt })
   _activeSubscriptions.set(key, subscription)
 }
 
@@ -120,6 +131,8 @@ export function getChatWsDiagnostics(): { routes: number; activeSubscriptions: n
 
 /** 購読を登録し、接続済みなら即座に張る（未接続なら接続後に onConnect が張る）。 */
 function _registerRoute(key: string, route: StompRoute): void {
+  if (!_authSession || _authSession.disposed || _authSession.accountId === null) return
+  route.snapshot = _authSession.capture()
   _routes.set(key, route)
   // 明示的な購読開始は再試行とみなす（メンバーに追加された後の再訪など）。
   _deniedDestinations.value = _deniedDestinations.value.filter(d => d !== route.destination)
@@ -165,8 +178,33 @@ function _rejectWaiters(error: Error): void {
   for (const waiter of waiters) waiter.reject(error)
 }
 
+/** 旧identityの私有状態を同期失効させる。旧Clientの遅着callbackは参照・snapshotで拒否する。 */
+function _resetIdentity(): void {
+  const previous = _stompClient
+  _stompClient = null
+  _routes.clear()
+  _forgetAllActive()
+  _subscriptionCounts.clear()
+  _eventSubscriptionCounts.clear()
+  _lastMessageIdByChannel.clear()
+  _deniedDestinations.value = []
+  _rejectWaiters(new Error('STOMP session changed'))
+  _pendingAuthRecovery = null
+  _authRecovery = _createRecovery?.() ?? null
+  _isFirstConnect = true
+  _reconnectAttempts = 0
+  _wsConnectionFailed.value = false
+  _wsAuthState.value = 'OK'
+  if (previous) void previous.deactivate().catch((error: unknown) => {
+    console.error('[useChatWebSocket] 旧セッションの切断に失敗しました:', error)
+  })
+}
+
 /** 共有 STOMP クライアントを生成・活性化する（既に活性なら何もしない）。 */
 function _ensureClientActive(): void {
+  const session = _authSession
+  if (!session || session.disposed || session.accountId === null) return
+  const snapshot = session.capture()
   if (_stompClient !== null) {
     if (!_stompClient.active && _stompClient.connected === false) {
       // 未認証で止めていた接続を、新たな購読・送信の要求を機に再開する（再ログイン後など）。
@@ -180,15 +218,18 @@ function _ensureClientActive(): void {
     // トークンが無い（リロード直後）ときは Authorization を付けず Cookie 認証に任せる（空 Bearer 禁止）。
     connectHeaders: buildStompConnectHeaders(_authStore?.accessToken),
     beforeConnect: async () => {
+      if (!current()) { await client.deactivate(); return }
       // UNAUTHENTICATED の回復（トークン更新）中なら完了を待つ。回復不能なら deactivate 済みで再接続しない。
       if (_pendingAuthRecovery !== null) await _pendingAuthRecovery
+      if (!current()) { await client.deactivate(); return }
       // 再接続時に最新トークンを差し替える（リフレッシュ後の再接続でも有効なトークンを使う）
       if (_stompClient !== null) {
-        _stompClient.connectHeaders = buildStompConnectHeaders(_authStore?.accessToken)
+        client.connectHeaders = buildStompConnectHeaders(_authStore?.accessToken)
       }
     },
     reconnectDelay: 1000,
     onConnect: () => {
+      if (!current()) return
       _wsAuthState.value = 'OK'
       // 登録済みの購読をすべて張る（初回・再接続とも。拒否済みの宛先は除く）。
       for (const key of _routes.keys()) {
@@ -208,10 +249,12 @@ function _ensureClientActive(): void {
       for (const waiter of waiters) waiter.resolve()
     },
     onWebSocketClose: () => {
+      if (!current()) return
       // 接続が切れたら現在の購読と receipt はすべて無効。再接続時に onConnect が _routes から張り直す。
       _forgetAllActive()
     },
     onDisconnect: () => {
+      if (!current()) return
       // 指数バックオフ: 1s → 2s → 4s → 8s → 16s → 最大30s
       const delays = [1000, 2000, 4000, 8000, 16000, 30000]
       _reconnectAttempts = Math.min(_reconnectAttempts + 1, delays.length - 1)
@@ -223,6 +266,7 @@ function _ensureClientActive(): void {
       }
     },
     onStompError: (frame: IFrame) => {
+      if (!current()) return
       const receiptId = frame.headers['receipt-id']
       const destination = receiptId ? _receiptToDestination.get(receiptId) : undefined
       if (_authRecovery === null) {
@@ -231,6 +275,7 @@ function _ensureClientActive(): void {
       }
       const recovery = handleStompErrorFrame(frame, _authRecovery, {
         onDenied: () => {
+            if (!current()) return
           if (destination !== undefined) {
             // 拒否された宛先だけを外し、通知購読など他の購読は再接続で維持する。
             _denyDestination(destination)
@@ -242,6 +287,7 @@ function _ensureClientActive(): void {
           void _stompClient?.deactivate()
         },
         onUnauthenticated: () => {
+          if (!current()) return
           _wsAuthState.value = 'UNAUTHENTICATED'
           _rejectWaiters(new Error('STOMP エラー: UNAUTHENTICATED'))
           void _stompClient?.deactivate()
@@ -260,6 +306,7 @@ function _ensureClientActive(): void {
       }
     },
   })
+  function current(): boolean { return _stompClient === client && session!.current(snapshot) }
   _stompClient = client
   client.activate()
 }
@@ -269,6 +316,10 @@ function _ensureClientActive(): void {
  */
 function ensureConnected(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    if (!_authSession || _authSession.disposed || _authSession.accountId === null) {
+      reject(new Error('STOMP authentication required'))
+      return
+    }
     if (_stompClient !== null && _stompClient.connected) {
       resolve()
       return
@@ -309,11 +360,16 @@ function onChannelFrame(channelId: number, frame: IFrame): void {
  */
 async function _catchupMessages(channelId: number, lastMessageId: number): Promise<void> {
   if (_catchupApi === null) return
+  const session = _authSession
+  const snapshot = session?.capture()
+  const client = _stompClient
+  if (!snapshot || !session?.current(snapshot)) return
   try {
     const res = await _catchupApi<BeMessageListResponse>(
       `/api/v1/chat/channels/${channelId}/messages`,
       { query: { cursor: lastMessageId, direction: 'after', limit: 100 } },
     )
+    if (_stompClient !== client || !session.current(snapshot)) return
     for (const msg of res.data) {
       useEventBus<{ type: string; data: unknown }>('chat:ws:event').emit({
         type: 'MESSAGE_CREATED',
@@ -349,9 +405,47 @@ async function _catchupMessages(channelId: number, lastMessageId: number): Promi
 export function useChatWebSocket() {
   // キャッチアップ用 API と認証回復手順は setup コンテキストで取得する（最初の呼び出しのものを共有）。
   const api = useApi()
-  if (_catchupApi === null) _catchupApi = api
-  if (_authStore === null) _authStore = useAuthStore()
-  if (_authRecovery === null) _authRecovery = useStompAuthRecovery()
+  const authStore = useAuthStore()
+  const config = useRuntimeConfig()
+  if (import.meta.client && _authStore === null) {
+    _catchupApi = api
+    _authStore = authStore
+    _authSession = getAuthSessionContext(authStore)
+    _createRecovery = () => createStompAuthRecovery({ config, authStore })
+    _authRecovery = _createRecovery()
+    const app = useNuxtApp()
+    _authSession.bindApp(app)
+    const scope = effectScope(true)
+    scope.run(() => watch(() => authStore.user?.id ?? null, () => _resetIdentity(), { flush: 'sync' }))
+    app.vueApp.onUnmount(() => {
+      scope.stop()
+      _resetIdentity()
+      _authStore = null
+      _authSession = null
+      _catchupApi = null
+      _authRecovery = null
+      _createRecovery = null
+    })
+  }
+  // channel APIは取得時の世代へ束縛する。旧componentの解除で新userの同channelを減算しない。
+  let channelSnapshot: AuthSessionSnapshot | null = null
+  const ownedChannels = new Map<number, number>()
+  const ownedEvents = new Map<number, number>()
+  function acquire(counts: Map<number, number>, channelId: number): boolean {
+    const session = _authSession
+    if (!session || session.disposed || session.accountId === null) return false
+    if (channelSnapshot && !session.current(channelSnapshot)) return false
+    channelSnapshot ??= session.capture()
+    counts.set(channelId, (counts.get(channelId) ?? 0) + 1)
+    return true
+  }
+  function release(counts: Map<number, number>, channelId: number): boolean {
+    const count = counts.get(channelId) ?? 0
+    if (count === 0) return false
+    if (count === 1) counts.delete(channelId)
+    else counts.set(channelId, count - 1)
+    return channelSnapshot !== null && !!_authSession?.current(channelSnapshot)
+  }
 
   /**
    * タイピングインジケーターを STOMP で送信する（デバウンス用・2秒に1回を推奨）。
@@ -360,8 +454,11 @@ export function useChatWebSocket() {
    * @param channelId 送信先チャンネル ID
    */
   function sendTyping(channelId: number): void {
+    const session = _authSession
+    const snapshot = session?.capture()
     ensureConnected()
       .then(() => {
+        if (!snapshot || !session?.current(snapshot)) return
         if (_stompClient === null || !_stompClient.connected) return
         _stompClient.publish({
           destination: '/app/chat.typing',
@@ -379,6 +476,7 @@ export function useChatWebSocket() {
    * @param channelId 購読対象のチャンネル ID
    */
   function subscribeChannel(channelId: number): void {
+    if (!acquire(ownedChannels, channelId)) return
     const count = _subscriptionCounts.get(channelId) ?? 0
     _subscriptionCounts.set(channelId, count + 1)
     if (count === 0) {
@@ -396,6 +494,7 @@ export function useChatWebSocket() {
    * @param channelId 購読解除対象のチャンネル ID
    */
   function unsubscribeChannel(channelId: number): void {
+    if (!release(ownedChannels, channelId)) return
     const count = _subscriptionCounts.get(channelId) ?? 0
     if (count <= 0) {
       return
@@ -420,6 +519,7 @@ export function useChatWebSocket() {
    * @param channelId 購読対象のチャンネル ID
    */
   function subscribeChannelEvents(channelId: number): void {
+    if (!acquire(ownedEvents, channelId)) return
     const count = _eventSubscriptionCounts.get(channelId) ?? 0
     _eventSubscriptionCounts.set(channelId, count + 1)
     if (count === 0) {
@@ -450,6 +550,7 @@ export function useChatWebSocket() {
    * @param channelId 購読解除対象のチャンネル ID
    */
   function unsubscribeChannelEvents(channelId: number): void {
+    if (!release(ownedEvents, channelId)) return
     const count = _eventSubscriptionCounts.get(channelId) ?? 0
     if (count <= 0) {
       return
@@ -484,8 +585,11 @@ export function useChatWebSocket() {
    * 任意の宛先に STOMP メッセージを送信する（在席等チャット以外の用途向け）。
    */
   function publishRaw(destination: string, body = '{}'): void {
+    const session = _authSession
+    const snapshot = session?.capture()
     ensureConnected()
       .then(() => {
+        if (!snapshot || !session?.current(snapshot)) return
         if (_stompClient === null || !_stompClient.connected) return
         _stompClient.publish({ destination, body })
       })

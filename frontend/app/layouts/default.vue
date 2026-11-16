@@ -75,9 +75,11 @@ onUnmounted(() => {
 // （レイアウト自体は unmount せずに済むセッション途中の状態変化にも対応）。
 // これが無いと、ログイン後にレイアウトが再マウントされない限りバッジが永久に更新されない。
 watch(
-  () => authStore.isAuthenticated,
-  (authenticated) => {
-    if (authenticated) {
+  () => authStore.user?.id ?? null,
+  (userId) => {
+    stopInboxPolling()
+    userNotificationSocket.stop()
+    if (userId !== null) {
       startInboxPolling()
       userNotificationSocket.start()
     } else {
@@ -85,6 +87,7 @@ watch(
       userNotificationSocket.stop()
     }
   },
+  { flush: 'sync' },
 )
 
 const guardianshipSwitchStore = useGuardianshipSwitchStore()
