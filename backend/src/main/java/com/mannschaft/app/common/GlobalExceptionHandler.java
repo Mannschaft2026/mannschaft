@@ -1316,6 +1316,8 @@ public class GlobalExceptionHandler {
             Map.entry("RESERVATION_051", HttpStatus.NOT_FOUND),              // RECURRING_BLOCKED_TIME_NOT_FOUND（IDOR秘匿）
             // F03.4.5 §6.4 W2-6 予約作成レートリミット（単枠・グループ共通バケット）
             Map.entry("RESERVATION_053", HttpStatus.TOO_MANY_REQUESTS),      // RESERVATION_CREATE_RATE_LIMITED
+            // CMP-261104-0334 臨時休業通知の冪等性（同じキーで内容が異なる再送は 409。056=キー形式不正は既定 400）
+            Map.entry("RESERVATION_055", HttpStatus.CONFLICT),               // CLOSURE_IDEMPOTENCY_KEY_REUSED
             // F06.5 アクティブリコール学習（IDOR 対策で 404、上限/範囲外は 400、楽観排他/マスク中編集/再輸出は 409）
             Map.entry("REFLECTION_001", HttpStatus.NOT_FOUND),              // NOT_FOUND（他人所有も IDOR 対策で 404）
             Map.entry("REFLECTION_002", HttpStatus.BAD_REQUEST),           // THEME_LIMIT_EXCEEDED
@@ -1715,14 +1717,9 @@ public class GlobalExceptionHandler {
             Map.entry("MEMBERSHIP_001", HttpStatus.NOT_FOUND),           // 会員証不在（IDOR 秘匿 → 404）
             Map.entry("MEMBERSHIP_019", HttpStatus.NOT_FOUND),           // 拠点不在／越境（IDOR 秘匿 → 404）
             // 認可監査 Wave6 ロットC: F02.1 QR会員証機能の残り未登録分。
-            //  - MEMBERSHIP_002（他人の会員証への getQrToken/regenerateQr アクセス）は
-            //    MemberCardService.java 118-119/153-154行 実測で cardId 直指定＋所有者不一致検知のため、
-            //    兄弟 MEMBERSHIP_001（会員証不在）と同一の存在秘匿 → 404（403 だと「その cardId は
-            //    存在するが他人のもの」と漏らしてしまう）。
             //  - MEMBERSHIP_004（SUPPORTER によるQR再生成拒否）は明確な認可拒否 → 403
             //  - MEMBERSHIP_003/009/010/016/017/018 はいずれも状態競合（非ACTIVE・無効化済み・
             //    二重スキャン・既にSUSPENDED・REVOKED再有効化不可・非SUSPENDED再有効化不可）→ 409
-            Map.entry("MEMBERSHIP_002", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_003", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_004", HttpStatus.FORBIDDEN),
             Map.entry("MEMBERSHIP_009", HttpStatus.CONFLICT),

@@ -132,6 +132,25 @@ describe('GroupBookingDialog.vue', () => {
     expect(findByTestId('group-menu-option-menu-cut')).toBeNull()
   })
 
+  it('CMP-261115-0543-2: 英語UIのステッパー文言に日本語の「分」や全角括弧が混ざらない', async () => {
+    await mountSuspended(GroupBookingDialog, {
+      props: {
+        visible: true,
+        teamId: 'team-slug',
+        lines: [{ id: 1, name: '席1' }],
+        menus: [cutMenu],
+        context: buildContext(),
+      },
+    })
+    await flush()
+    findByTestId<HTMLButtonElement>('group-menu-option-menu-cut')!.click()
+    await flush()
+
+    const text = findByTestId('group-slot-stepper')!.textContent ?? ''
+    expect(text).not.toMatch(/[分（）]/)
+    expect(text).toContain('30 min × 2 slots (60 min)')
+  })
+
   it('AC-2: 直後セルが AVAILABLE な間は延長でき、末尾（12:00）到達で延長不可になる', async () => {
     await mountSuspended(GroupBookingDialog, {
       props: {

@@ -16,6 +16,11 @@ public class OrgTeamSummaryResponse {
     private final String id;
     /** チームスラッグ（URL ルーティング用）。{@code /teams/{slug}} に使用する。 */
     private final String slug;
+    /**
+     * チームの内部 BIGINT ID。URL には使わない。確認通知の宛先指定など、BE が Long のチーム ID を要求する
+     * 内部連携専用。この一覧は組織の visibility ラダーで保護されており、閲覧できる者にのみ返る。
+     */
+    private final Long numericId;
     private final String name;
     private final String iconUrl;
     private final String visibility;
