@@ -69,6 +69,7 @@ describe('診断URLの実送信境界', () => {
     expect(network).toHaveBeenCalledTimes(1)
     expect(network.mock.calls[0]?.[1].body.pageUrl).toBe(expected)
     expect(report.state.value.pageUrl).toBe(expected)
+    expect(window.location.href).toBe(input)
     expect(network.mock.calls[0]?.[1].headers).toEqual({})
     await Promise.resolve()
   })
@@ -117,7 +118,7 @@ describe('診断URLの実送信境界', () => {
     expect(meta.apiUrl).toBe(apiUrl)
   })
 
-  it.each([undefined, {}])('無指定・空metaのconsole引数を維持する %j', async (meta) => {
+  it.each([undefined, {}, { apiUrl: '' }])('無指定・空metaのconsole引数を維持する %j', async (meta) => {
     const report = (await import('./useErrorReport')).useErrorReport()
     report.capture(new Error('合成エラー'), meta)
     expect(consoleError.mock.calls[0]?.[2]).toEqual(meta)
