@@ -3,6 +3,7 @@ package com.mannschaft.app.match.service;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.match.MatchErrorCode;
+import com.mannschaft.app.match.MatchRecordingStartedEvent;
 import com.mannschaft.app.match.domain.MatchEventType;
 import com.mannschaft.app.match.domain.MatchStatus;
 import com.mannschaft.app.match.domain.PeriodType;
@@ -28,9 +29,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /** 公開record経路から、開始の永続状態・認可・監査・配信の契約を検査する。 */
 class MatchStartLifecycleTest {
@@ -79,6 +85,9 @@ class MatchStartLifecycleTest {
         assertThat(updates.getAllValues()).filteredOn(e -> e instanceof MatchLiveUpdateEvent live
                 && live.getType() == MatchLiveUpdateType.STATUS_CHANGED).singleElement()
                 .satisfies(e -> assertThat(((MatchLiveUpdateEvent) e).getStatus()).isEqualTo(MatchStatus.IN_PROGRESS));
+        assertThat(updates.getAllValues()).filteredOn(e -> e instanceof MatchRecordingStartedEvent).singleElement()
+                .satisfies(e -> assertThat((MatchRecordingStartedEvent) e).isEqualTo(new MatchRecordingStartedEvent(
+                        match.getId(), TEAM, ORG, ACTOR, MatchStatus.SCHEDULED, MatchStatus.IN_PROGRESS)));
         service.record(match.getId(), ORG, ACTOR, command(MatchEventType.PERIOD_START));
         verify(matches).save(match);
         verify(publisher, times(4)).publishEvent(any(Object.class));

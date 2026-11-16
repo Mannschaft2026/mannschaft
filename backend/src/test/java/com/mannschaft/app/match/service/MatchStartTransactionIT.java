@@ -50,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -150,10 +151,8 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
                 .filter(a -> a.getMetadata() != null && a.getMetadata().contains(matchId.toString())).count();
     }
 
-    private void awaitAudit() throws InterruptedException {
-        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-        while (statusAudits() == 0 && System.nanoTime() < deadline) Thread.sleep(25);
-        assertThat(statusAudits()).isEqualTo(1);
+    private void awaitAudit() {
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(statusAudits()).isEqualTo(1));
     }
 
     @Test
