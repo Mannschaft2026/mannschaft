@@ -1,0 +1,76 @@
+{
+  "effort": {
+    "title": "Effort records",
+    "subtitle": "Keep personal records of study, exercise, weight and more, and look back on them.",
+    "record": "Record",
+    "review": "Review",
+    "template": "Type",
+    "recordedOn": "Date",
+    "privateNote": "Private note",
+    "privateNoteHint": "Only you can see the private note.",
+    "privateSave": "Save for myself only",
+    "newTitle": "New record",
+    "editTitle": "Edit record",
+    "newRecord": "Switch to a new record",
+    "edit": "Edit",
+    "saved": "Saved",
+    "savedReconciled": "Already saved (the resent request was verified)",
+    "deleted": "Deleted",
+    "status": {
+      "private": "Saved as a personal record"
+    },
+    "error": {
+      "required": "{field} is required",
+      "conflict": "Another edit was saved first. The latest saved content is shown."
+    },
+    "delete": {
+      "header": "Delete record",
+      "message": "This record will be deleted. Continue?",
+      "reject": "Cancel",
+      "accept": "Delete"
+    },
+    "list": {
+      "title": "Records",
+      "empty": "No records yet",
+      "more": "Show more"
+    },
+    "period": {
+      "week": "Week",
+      "month": "Month",
+      "year": "Year",
+      "custom": "Custom",
+      "prev": "Previous period",
+      "next": "Next period",
+      "from": "Start date",
+      "to": "End date",
+      "invalid": "Choose a range from start to end of up to 366 days."
+    },
+    "chart": {
+      "kind": "Chart",
+      "bar": "Bar chart",
+      "line": "Line chart",
+      "pie": "Pie chart",
+      "noData": "No records in this period",
+      "zeroTotal": "The total is 0, so the pie chart is not shown",
+      "unspecifiedSubject": "No subject",
+      "notRecorded": "Not recorded",
+      "category": "Category",
+      "value": "Value",
+      "share": "Share",
+      "total": "Total",
+      "period": "Period"
+    },
+    "preset": {
+      "study": "Study",
+      "exercise": "Exercise",
+      "weight": "Weight"
+    },
+    "field": {
+      "subject": "Subject",
+      "duration": "Duration",
+      "weight": "Weight",
+      "intensity": "Intensity",
+      "menu": "Menu"
+    }
+  }
+}

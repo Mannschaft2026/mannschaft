@@ -1,0 +1,76 @@
+{
+  "effort": {
+    "title": "노력 기록",
+    "subtitle": "공부, 운동, 체중 등을 나만의 기록으로 남기고 되돌아봅니다.",
+    "record": "기록",
+    "review": "되돌아보기",
+    "template": "종류",
+    "recordedOn": "기록일",
+    "privateNote": "비공개 메모",
+    "privateNoteHint": "비공개 메모는 본인만 볼 수 있습니다.",
+    "privateSave": "나만 보기로 저장",
+    "newTitle": "새 기록",
+    "editTitle": "기록 편집",
+    "newRecord": "새 기록으로 전환",
+    "edit": "편집",
+    "saved": "저장했습니다",
+    "savedReconciled": "이미 저장되었습니다(재전송 결과를 확인했습니다)",
+    "deleted": "삭제했습니다",
+    "status": {
+      "private": "개인 기록으로 저장됨"
+    },
+    "error": {
+      "required": "{field}은(는) 필수입니다",
+      "conflict": "다른 편집이 먼저 저장되어 있었습니다. 최신 저장 내용을 표시합니다."
+    },
+    "delete": {
+      "header": "기록 삭제",
+      "message": "이 기록을 삭제합니다. 계속하시겠습니까?",
+      "reject": "취소",
+      "accept": "삭제"
+    },
+    "list": {
+      "title": "기록 목록",
+      "empty": "아직 기록이 없습니다",
+      "more": "더 보기"
+    },
+    "period": {
+      "week": "주",
+      "month": "월",
+      "year": "연",
+      "custom": "직접 지정",
+      "prev": "이전 기간",
+      "next": "다음 기간",
+      "from": "시작일",
+      "to": "종료일",
+      "invalid": "시작일부터 종료일까지 366일 이내로 지정해 주세요."
+    },
+    "chart": {
+      "kind": "그래프",
+      "bar": "막대그래프",
+      "line": "꺾은선그래프",
+      "pie": "원그래프",
+      "noData": "이 기간의 기록이 없습니다",
+      "zeroTotal": "합계가 0이므로 원그래프를 표시하지 않습니다",
+      "unspecifiedSubject": "과목 미지정",
+      "notRecorded": "미기록",
+      "category": "구분",
+      "value": "값",
+      "share": "비율",
+      "total": "합계",
+      "period": "기간"
+    },
+    "preset": {
+      "study": "공부",
+      "exercise": "운동",
+      "weight": "체중"
+    },
+    "field": {
+      "subject": "과목",
+      "duration": "시간",
+      "weight": "체중",
+      "intensity": "강도",
+      "menu": "메뉴"
+    }
+  }
+}

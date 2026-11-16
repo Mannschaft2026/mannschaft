@@ -2,7 +2,7 @@
 /**
  * F08.10 共通チャートラッパー（04_frontend_and_ux.md §G.3 / §G.8）。
  *
- * chart.js@4 を流用し、radar / line / doughnut / bar を 1 つの土台で扱う。
+ * chart.js@4 を流用し、radar / line / doughnut / bar / pie を 1 つの土台で扱う。
  * Phase 3-C（個人分析）・Phase 3-D（チーム分析）双方で再利用する。
  *
  * 設計ポイント:
@@ -28,6 +28,7 @@ import {
   LineController,
   LineElement,
   LinearScale,
+  PieController,
   PointElement,
   RadarController,
   RadialLinearScale,
@@ -46,6 +47,7 @@ ChartJS.register(
   LineController,
   RadarController,
   DoughnutController,
+  PieController,
   // scales
   CategoryScale,
   LinearScale,
@@ -62,7 +64,7 @@ ChartJS.register(
 )
 
 /** 本ラッパーが扱うチャート種別（コア 4 種・§G.3 の表に対応） */
-type SupportedChartType = Extract<ChartType, 'radar' | 'line' | 'doughnut' | 'bar'>
+type SupportedChartType = Extract<ChartType, 'radar' | 'line' | 'doughnut' | 'bar' | 'pie'>
 
 const props = withDefaults(
   defineProps<{
@@ -103,6 +105,9 @@ const hasRenderableData = computed<boolean>(() => {
   if (datasets.length === 0) return false
   return datasets.some((ds) => {
     const arr = (ds.data ?? []) as unknown[]
+    // pie は「分母が 0（全て 0 / null）なら円を描かない」。0 の扇形は描けず、NaN や架空 100% を
+    // 作らないため、正の値が 1 つも無ければ描画不可とする（F06.4.1 §3.1）。
+    if (props.type === 'pie') return arr.some((v) => typeof v === 'number' && v > 0)
     return arr.some((v) => v !== null && v !== undefined)
   })
 })
