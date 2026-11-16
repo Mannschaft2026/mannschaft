@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
+import { reactive } from 'vue'
 
 /**
  * CMP-261104-0337 共有 STOMP 接続（chat＋ユーザー宛通知 / corkboard）の認証・拒否の扱い。
@@ -92,6 +93,7 @@ vi.mock('~/composables/useApi', async (importOriginal) => {
   }
 })
 
+h.authStore = reactive(h.authStore)
 mockNuxtImport('useAuthStore', () => () => h.authStore)
 
 // 回復手順が使う authStore をテストの偽ストアに固定する（回復ロジック自体は本物の createStompAuthRecovery）。

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 
 /**
@@ -84,6 +84,7 @@ vi.mock('~/composables/useApi', async (importOriginal) => {
   }
 })
 
+h.authStore = reactive(h.authStore)
 mockNuxtImport('useAuthStore', () => () => h.authStore)
 
 // 回復手順が使う authStore をテストの偽ストアに固定する（回復ロジック自体は本物の createStompAuthRecovery）。

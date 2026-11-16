@@ -42,6 +42,7 @@ const h = vi.hoisted(() => {
     subscribe: ReturnType<typeof vi.fn>
     deactivate: ReturnType<typeof vi.fn>
     activate: ReturnType<typeof vi.fn>
+    publish: ReturnType<typeof vi.fn>
   }> = []
   // auth.client プラグインがアプリ初期化時に呼ぶ loadFromStorage も持たせる。初期値は未ログイン
   // （プラグインに先回り更新を武装させない）。各テストの beforeEach でログイン状態にする。
@@ -163,6 +164,42 @@ beforeEach(() => {
 })
 
 describe('N2: 共有STOMPのユーザー隔離', () => {
+  it('N2追加: Aの旧publishRaw handleをB切替後にinvokeしてもBへ送らない', async () => {
+    const old = await freshChat()
+    old.subscribeRaw('/user/queue/notifications', vi.fn())
+    await simulateConnect()
+    h.authStore.user = { id: 8 }
+    const mod = await import('~/composables/chat/useChatWebSocket')
+    const next = mod.useChatWebSocket()
+    next.subscribeRaw('/user/queue/notifications', vi.fn())
+    await simulateConnect()
+    const client = lastClient()
+    old.publishRaw('/app/villages/fixture/lobby/presence/leave', '{}')
+    await flush()
+    expect(client.publish).not.toHaveBeenCalled()
+    next.publishRaw('/app/villages/fixture/lobby/presence/join', '{}')
+    await flush()
+    expect(client.publish).toHaveBeenCalledTimes(1)
+  })
+
+  it('N2追加: Aの旧sendTyping handleをB切替後にinvokeしてもBへ送らない', async () => {
+    const old = await freshChat()
+    old.subscribeRaw('/user/queue/notifications', vi.fn())
+    await simulateConnect()
+    h.authStore.user = { id: 8 }
+    const mod = await import('~/composables/chat/useChatWebSocket')
+    const subscriber = mod.useChatWebSocket()
+    subscriber.subscribeChannel(5)
+    await simulateConnect()
+    const publisher = mod.useChatWebSocket()
+    old.sendTyping(5)
+    await flush()
+    expect(lastClient().publish).not.toHaveBeenCalled()
+    publisher.sendTyping(5)
+    await flush()
+    expect(lastClient().publish).toHaveBeenCalledTimes(1)
+  })
+
   it('匿名setupでは接続せず、認証復元後の取得で初めて接続する', async () => {
     h.authStore.user = null
     h.authStore.isAuthenticated = false

@@ -1,4 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { reactive } from 'vue'
+import { mockNuxtImport } from '@nuxt/test-utils/runtime'
+
+const auth = vi.hoisted(() => ({ store: {
+  user: null as { id: number } | null,
+  isAuthenticated: false,
+  accessToken: null as string | null,
+  loadFromStorage: () => {},
+} }))
+auth.store = reactive(auth.store)
+mockNuxtImport('useAuthStore', () => () => auth.store)
 
 /**
  * F04.2.1 Phase6 useChatApi — WebSocket STOMP 購読管理のユニットテスト。
@@ -28,6 +39,8 @@ const mockActivateFn = vi.fn()
 vi.mock('@stomp/stompjs', () => {
   class MockClient {
     connected = false
+    active = false
+    deactivate = vi.fn(async () => { this.active = false; this.connected = false })
     private onConnect: OnConnectCallback | null = null
 
     constructor(config: { onConnect?: OnConnectCallback }) {
@@ -38,6 +51,7 @@ vi.mock('@stomp/stompjs', () => {
 
     activate() {
       mockActivateFn()
+      this.active = true
       this.connected = true
       const cb = this.onConnect
       if (cb) {
@@ -89,6 +103,8 @@ async function freshUseChatApi() {
   vi.doMock('@stomp/stompjs', () => {
     class MockClient {
       connected = false
+    active = false
+    deactivate = vi.fn(async () => { this.active = false; this.connected = false })
       private onConnect: OnConnectCallback | null = null
 
       constructor(config: { onConnect?: OnConnectCallback }) {
@@ -99,6 +115,7 @@ async function freshUseChatApi() {
 
       activate() {
         mockActivateFn()
+      this.active = true
         this.connected = true
         const cb = this.onConnect
         if (cb) {
@@ -139,6 +156,8 @@ async function flushPromises(rounds = 5) {
 
 describe('useChatApi — WebSocket STOMP 購読管理', () => {
   beforeEach(() => {
+    auth.store.user = { id: 7 }
+    auth.store.isAuthenticated = true
     mockSubscribeFn.mockClear().mockImplementation(
       (_destination: string, _callback: SubscribeCallback) => ({
         id: 'sub-mock',
@@ -161,7 +180,7 @@ describe('useChatApi — WebSocket STOMP 購読管理', () => {
 
       // SUBSCRIBE は1回のみ
       expect(mockSubscribeFn).toHaveBeenCalledTimes(1)
-      expect(mockSubscribeFn).toHaveBeenCalledWith('/topic/channels/42', expect.any(Function))
+      expect(mockSubscribeFn).toHaveBeenCalledWith('/topic/channels/42', expect.any(Function), expect.objectContaining({ receipt: expect.any(String) }))
     })
 
     it('異なる channelId では SUBSCRIBE がそれぞれ1回ずつ実行される', async () => {
@@ -176,8 +195,8 @@ describe('useChatApi — WebSocket STOMP 購読管理', () => {
 
       // チャンネル1と2それぞれで SUBSCRIBE が呼ばれる
       expect(mockSubscribeFn).toHaveBeenCalledTimes(2)
-      expect(mockSubscribeFn).toHaveBeenCalledWith('/topic/channels/1', expect.any(Function))
-      expect(mockSubscribeFn).toHaveBeenCalledWith('/topic/channels/2', expect.any(Function))
+      expect(mockSubscribeFn).toHaveBeenCalledWith('/topic/channels/1', expect.any(Function), expect.objectContaining({ receipt: expect.any(String) }))
+      expect(mockSubscribeFn).toHaveBeenCalledWith('/topic/channels/2', expect.any(Function), expect.objectContaining({ receipt: expect.any(String) }))
     })
   })
 
