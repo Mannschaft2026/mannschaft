@@ -82,7 +82,7 @@ public class MemberCardController {
      * QRコード表示用トークンを取得する。
      *
      * <p>認可根治済み: {@code MemberCardService#getQrToken} が
-     * {@code card.getUserId().equals(userId)} で本人所有を検証する（MEMBERSHIP_002）。</p>
+     * {@code card.getUserId().equals(userId)} で本人所有を検証する（他人は不在と同じ MEMBERSHIP_001）。</p>
      */
     @AuthorizedInService
     @GetMapping("/{id}/qr")
