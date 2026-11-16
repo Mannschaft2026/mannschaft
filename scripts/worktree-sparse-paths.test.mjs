@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   computeSparsePaths,
   findUncoveredPaths,
@@ -163,4 +165,22 @@ test('compareWithSettings: 不正な設定は unset にしない', () => {
   assert.equal(compareWithSettings({}, ['a']).status, 'unset');
   assert.equal(compareWithSettings({ worktree: { other: 1 } }, ['a']).status, 'unset');
   assert.ok(compareWithSettings({ worktree: null }, ['a']).problems.length > 0);
+});
+
+test('compareWithSettings: 最上位の worktree 誤記は invalid', () => {
+  for (const k of ['workTree', 'work_tree', 'worktrees', 'Worktree', 'work-tree', 'WORKTREES']) {
+    assert.equal(compareWithSettings({ [k]: { sparsePaths: ['old'] } }, ['a']).status, 'invalid', k);
+  }
+  assert.equal(compareWithSettings({ worktree: { sparsePaths: ['a'] } }, ['a']).status, 'ok');
+});
+
+test('CLI: --require-configured は未設定なら非0、無指定の --check は成功', () => {
+  const script = fileURLToPath(new URL('./worktree-sparse-paths.mjs', import.meta.url));
+  const run = (...a) => spawnSync(process.execPath, [script, ...a], { encoding: 'utf8' });
+  const settings = JSON.parse(readFileSync(new URL('../.claude/settings.json', import.meta.url), 'utf8'));
+  if (settings.worktree !== undefined) return; // 有効化後は別経路で検証される
+  assert.equal(run('--check').status, 0);
+  const r = run('--check', '--require-configured');
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /未設定|設定が投入/);
 });

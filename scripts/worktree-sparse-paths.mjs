@@ -4,6 +4,8 @@
  * 除外の正本: scripts/worktree-sparse-exclusions.json
  *   --print  生成結果を1行1パスで出力
  *   --check  .claude/settings.json の worktree.sparsePaths と一致・被覆を検査（未設定は成功）
+ *   --require-configured  --check と併用。未設定なら失敗にする（誤記の素通りを根治する）。
+ *     設定を有効化する後続PR（部隊1b）で CI の --check ステップに付ける。有効化前の今は付けない
  *   --write  .claude/settings.json に書き込む
  *   --ref <ref>  追跡一覧を読む ref（既定 HEAD。作業木の実在に依存しない）
  */
@@ -78,6 +80,8 @@ const LOOKALIKE = /^sparse[-_ ]?paths?$/i;
 export function compareWithSettings(settings, expected) {
   const invalid = (...problems) => ({ status: 'invalid', missing: [], extra: [], problems });
   if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) return invalid('settings.json の最上位がオブジェクトでない');
+  const topLike = Object.keys(settings).filter((k) => k !== 'worktree' && /^work[-_ ]?trees?$/i.test(k));
+  if (topLike.length) return invalid(`worktree の誤記と思われる最上位キーがある: ${topLike.join(', ')}`);
   if (!('worktree' in settings)) return { status: 'unset', missing: [], extra: [] };
   const wt = settings.worktree;
   if (wt === null || typeof wt !== 'object' || Array.isArray(wt)) return invalid('worktree がオブジェクトでない');
@@ -146,6 +150,10 @@ function main(argv) {
     return 0;
   }
   const cmp = compareWithSettings(settings, expected);
+  if (cmp.status === 'unset' && argv.includes('--require-configured')) {
+    console.error('worktree.sparsePaths が未設定。設定が投入されているはずなのに見つからない（キーの誤記・削除の疑い）');
+    return 1;
+  }
   if (cmp.status === 'unset') {
     console.log(`worktree.sparsePaths は未設定（有効化前）。生成結果の未被覆は 0 件（${expected.length} 件）`);
     return 0;
