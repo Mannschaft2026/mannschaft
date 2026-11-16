@@ -59,6 +59,8 @@ class ErrorReportDiagnosticUrlContractIT extends ErrorReportR1TestSupport {
         String message = "診断保存境界 " + UUID.randomUUID();
         Long id = submit(input, message, false, null);
         assertThat(storedUrl(id)).isEqualTo(expected);
+        assertThat(submit(expected, message, false, null)).as("安全化済み値の再取込も同じhashへ集約").isEqualTo(id);
+        assertThat(storedUrl(id)).isEqualTo(expected);
         assertThat(jdbc.queryForObject("SELECT error_message FROM error_reports WHERE id = ?", String.class, id))
                 .isEqualTo(message);
     }
@@ -101,8 +103,8 @@ class ErrorReportDiagnosticUrlContractIT extends ErrorReportR1TestSupport {
     void AC4_HEALTHとBACKENDの内部path契約は保持する() {
         String component = "cmp-diagnostic-" + UUID.randomUUID();
         var health = service.findOrCreateHealthDownReport(component);
-        owned.add(health.getId());
-        assertThat(storedUrl(health.getId())).isEqualTo("health:" + component);
+        owned.add(health);
+        assertThat(storedUrl(health)).isEqualTo("health:" + component);
         var exception = new IllegalStateException("内部境界 " + UUID.randomUUID());
         var report = backend.doRecordBackendException(exception, "/api/v1/items/{itemId}", null,
                 "127.0.0.211", requestId(), ErrorReportSeverity.MEDIUM);
