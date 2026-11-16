@@ -55,4 +55,12 @@ public interface BudgetFiscalYearRepository extends JpaRepository<BudgetFiscalYe
             @Param("scopeType") String scopeType,
             @Param("scopeId") Long scopeId,
             @Param("today") LocalDate today);
+
+    /**
+     * CMP-260909-2152: 年度行を {@code FOR UPDATE} で読む。月次締め後の訂正はこのロックを取ってから状態を判定するため、
+     * 年度クローズの UPDATE と並行しても「CLOSED の年度内に訂正が入る」状態にならない。
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT fy FROM BudgetFiscalYearEntity fy WHERE fy.id = :id")
+    Optional<BudgetFiscalYearEntity> findByIdForUpdate(@Param("id") Long id);
 }

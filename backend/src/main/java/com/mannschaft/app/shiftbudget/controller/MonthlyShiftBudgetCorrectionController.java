@@ -1,9 +1,12 @@
 package com.mannschaft.app.shiftbudget.controller;
 
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionHistoryView;
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionView;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.featuregate.RequireFeature;
 import com.mannschaft.app.shiftbudget.dto.MonthlyCloseCorrectionRequest;
 import com.mannschaft.app.shiftbudget.dto.MonthlyCloseReversalRequest;
+import com.mannschaft.app.shiftbudget.dto.UncountedShiftsResponse;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCorrectionCoordinator;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCorrectionHistoryFacade;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +43,7 @@ public class MonthlyShiftBudgetCorrectionController {
 
     @PostMapping("/corrections")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<Object> correct(
+    public ApiResponse<ShiftBudgetCorrectionView> correct(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable Long allocationId,
             @PathVariable String yearMonth,
@@ -50,7 +53,7 @@ public class MonthlyShiftBudgetCorrectionController {
 
     @PostMapping("/corrections/{correctionId}/reversals")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<Object> reverse(
+    public ApiResponse<ShiftBudgetCorrectionView> reverse(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable Long allocationId,
             @PathVariable String yearMonth,
@@ -60,7 +63,7 @@ public class MonthlyShiftBudgetCorrectionController {
     }
 
     @GetMapping("/corrections")
-    public ApiResponse<Object> history(
+    public ApiResponse<ShiftBudgetCorrectionHistoryView> history(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable Long allocationId,
             @PathVariable String yearMonth,
@@ -70,7 +73,7 @@ public class MonthlyShiftBudgetCorrectionController {
     }
 
     @GetMapping("/uncounted-shifts")
-    public ApiResponse<Object> uncountedShifts(
+    public ApiResponse<UncountedShiftsResponse> uncountedShifts(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable Long allocationId,
             @PathVariable String yearMonth) {

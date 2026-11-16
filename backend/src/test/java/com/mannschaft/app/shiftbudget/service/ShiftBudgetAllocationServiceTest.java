@@ -80,6 +80,9 @@ class ShiftBudgetAllocationServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
+
     @InjectMocks
     private ShiftBudgetAllocationService service;
 

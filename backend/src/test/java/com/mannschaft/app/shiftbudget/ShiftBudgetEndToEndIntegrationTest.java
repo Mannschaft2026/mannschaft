@@ -1,5 +1,7 @@
 package com.mannschaft.app.shiftbudget;
 
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionOverlay;
+import com.mannschaft.app.budget.service.ShiftBudgetCorrectionQueryService;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.budget.entity.BudgetTransactionEntity;
 import com.mannschaft.app.budget.repository.BudgetTransactionRepository;
@@ -123,11 +125,14 @@ class ShiftBudgetEndToEndIntegrationTest {
                 allocationRepository, consumptionRepository, todoBudgetLinkRepository,
                 alertRepository, featureService, accessControlService);
         summaryService = new ShiftBudgetSummaryFacade(featureService,
-                new ShiftBudgetSummaryAccessPolicy(accessControlService), calculationService);
+                new ShiftBudgetSummaryAccessPolicy(accessControlService), calculationService,
+                org.mockito.Mockito.mock(ShiftBudgetCorrectionQueryService.class, invocation -> ShiftBudgetCorrectionOverlay.EMPTY));
         closeService = new MonthlyShiftBudgetCloseService(
                 allocationRepository, consumptionRepository, budgetTransactionRepository,
                 featureService, accessControlService, auditLogService,
-                organizationRepository, failedEventService, closeServiceSelfProvider);
+                organizationRepository, failedEventService,
+                org.mockito.Mockito.mock(com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository.class),
+                closeServiceSelfProvider);
         lenient().when(closeServiceSelfProvider.getObject()).thenReturn(closeService);
 
         allocation = ShiftBudgetAllocationEntity.builder()

@@ -1,5 +1,7 @@
 package com.mannschaft.app.shiftbudget.service;
 
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionOverlay;
+import com.mannschaft.app.budget.service.ShiftBudgetCorrectionQueryService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus;
@@ -80,7 +82,8 @@ class ShiftBudgetSummaryServiceTest {
 
     @BeforeEach
     void setUpSecurity() {
-        facade = new ShiftBudgetSummaryFacade(featureService, new ShiftBudgetSummaryAccessPolicy(accessControlService), service);
+        facade = new ShiftBudgetSummaryFacade(featureService, new ShiftBudgetSummaryAccessPolicy(accessControlService), service,
+                org.mockito.Mockito.mock(ShiftBudgetCorrectionQueryService.class, invocation -> ShiftBudgetCorrectionOverlay.EMPTY));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(USER_ID.toString(), null, List.of()));
     }

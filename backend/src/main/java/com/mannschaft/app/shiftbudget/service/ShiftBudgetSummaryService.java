@@ -1,5 +1,6 @@
 package com.mannschaft.app.shiftbudget.service;
 
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionOverlay;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
@@ -76,13 +77,24 @@ public class ShiftBudgetSummaryService {
      * package-privateにしてControllerからの未認可の直接呼出を公開しない。</p>
      */
     ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId, boolean budgetAdmin) {
+        return getConsumptionSummary(organizationId, allocationId, budgetAdmin, ShiftBudgetCorrectionOverlay.EMPTY);
+    }
+
+    /**
+     * 月次締め後の訂正（CMP-260909-2152）を重ねた消化サマリ。budget の値は段取り役が先に取得して値で渡す
+     * （この TX から budget の Repository へは触れない）。金額欄は訂正後の値で、元の消化行は書き換えない。
+     */
+    ConsumptionSummaryResponse getConsumptionSummary(Long organizationId, Long allocationId, boolean budgetAdmin,
+                                                     ShiftBudgetCorrectionOverlay overlay) {
         ShiftBudgetAllocationEntity allocation = allocationRepository
                 .findByIdAndOrganizationIdAndDeletedAtIsNull(allocationId, organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND));
 
         BigDecimal allocated = allocation.getAllocatedAmount();
-        BigDecimal consumed = allocation.getConsumedAmount();
-        BigDecimal confirmed = allocation.getConfirmedAmount();
+        BigDecimal correctionDelta = overlay.correctionDeltaTotal();
+        BigDecimal consumed = CorrectedAmounts.consumed(allocation.getConsumedAmount(),
+                allocation.getConfirmedAmount(), correctionDelta);
+        BigDecimal confirmed = CorrectedAmounts.confirmed(allocation.getConfirmedAmount(), correctionDelta);
         // planned = consumed - confirmed（CHECK で負数禁止）。負値防止のため max(0)
         BigDecimal planned = consumed.subtract(confirmed).max(BigDecimal.ZERO);
         BigDecimal remaining = allocated.subtract(consumed);
@@ -100,7 +112,7 @@ public class ShiftBudgetSummaryService {
         List<UserConsumptionDto> byUser;
         List<String> flags;
         if (budgetAdmin) {
-            byUser = aggregateByUser(resolvedId);
+            byUser = aggregateByUser(resolvedId, overlay);
             flags = Collections.emptyList();
         } else {
             byUser = Collections.emptyList();
@@ -112,6 +124,7 @@ public class ShiftBudgetSummaryService {
                 .allocatedAmount(allocated)
                 .consumedAmount(consumed)
                 .confirmedAmount(confirmed)
+                .correctionDeltaTotal(correctionDelta)
                 .plannedAmount(planned)
                 .remainingAmount(remaining)
                 .consumptionRate(rate)
@@ -131,7 +144,7 @@ public class ShiftBudgetSummaryService {
      *
      * <p>並び順は user_id 昇順、各人の内訳は記録時給の昇順。</p>
      */
-    private List<UserConsumptionDto> aggregateByUser(Long allocationId) {
+    private List<UserConsumptionDto> aggregateByUser(Long allocationId, ShiftBudgetCorrectionOverlay overlay) {
         List<ShiftBudgetConsumptionEntity> consumptions = consumptionRepository
                 .findByAllocationIdAndStatusInAndDeletedAtIsNull(
                         allocationId,
@@ -139,15 +152,28 @@ public class ShiftBudgetSummaryService {
                                 ShiftBudgetConsumptionStatus.CONFIRMED));
 
         // TreeMapはBigDecimalを数値で比較するため、1200.0と1200.00も同じ内訳にまとまる。
-        // 取得は従来どおり1回。配列は [保存済み金額の和, 保存済み時間の和]。
+        // 取得は従来どおり1回。配列は [金額の和, 時間の和, 締め後追加の金額の和, 締め後追加の件数]。
         Map<Long, Map<BigDecimal, BigDecimal[]>> grouped = new TreeMap<>();
         for (ShiftBudgetConsumptionEntity consumption : consumptions) {
-            Map<BigDecimal, BigDecimal[]> rates = grouped.computeIfAbsent(
-                    consumption.getUserId(), key -> new TreeMap<>());
-            BigDecimal[] sums = rates.computeIfAbsent(consumption.getHourlyRateSnapshot(),
-                    key -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
-            sums[0] = sums[0].add(consumption.getAmount());
-            sums[1] = sums[1].add(consumption.getHours());
+            BigDecimal rate = consumption.getHourlyRateSnapshot();
+            BigDecimal hours = consumption.getHours();
+            BigDecimal amount = consumption.getAmount();
+            // 締め後に訂正された確定明細は、訂正後の値（取消済みは集計に入れない）で数える
+            ShiftBudgetCorrectionOverlay.Line corrected = overlay.correctedLines().get(consumption.getId());
+            if (corrected != null) {
+                if (!corrected.live()) {
+                    continue;
+                }
+                rate = corrected.hourlyRate();
+                hours = corrected.hours();
+                amount = corrected.amount();
+            }
+            accumulate(grouped, consumption.getUserId(), rate, amount, hours, false);
+        }
+        for (ShiftBudgetCorrectionOverlay.AddedLine added : overlay.addedLines()) {
+            if (added.live()) {
+                accumulate(grouped, added.userId(), added.hourlyRate(), added.amount(), added.hours(), true);
+            }
         }
 
         return grouped.entrySet().stream()
@@ -157,6 +183,8 @@ public class ShiftBudgetSummaryService {
                                     .hourlyRateSnapshot(rate.getKey())
                                     .amount(rate.getValue()[0])
                                     .hours(rate.getValue()[1])
+                                    .addedAmount(rate.getValue()[2])
+                                    .addedCount(rate.getValue()[3].intValue())
                                     .build())
                             .toList();
                     return UserConsumptionDto.builder()
@@ -166,9 +194,25 @@ public class ShiftBudgetSummaryService {
                             .hours(breakdown.stream().map(HourlyRateConsumptionDto::hours)
                                     .reduce(BigDecimal.ZERO, BigDecimal::add))
                             .rateBreakdown(breakdown)
+                            .addedAmount(breakdown.stream().map(HourlyRateConsumptionDto::addedAmount)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                            .addedCount(breakdown.stream().mapToInt(HourlyRateConsumptionDto::addedCount).sum())
                             .build();
                 })
                 .toList();
+    }
+
+    private static void accumulate(Map<Long, Map<BigDecimal, BigDecimal[]>> grouped, Long userId, BigDecimal rate,
+                                   BigDecimal amount, BigDecimal hours, boolean added) {
+        Map<BigDecimal, BigDecimal[]> rates = grouped.computeIfAbsent(userId, key -> new TreeMap<>());
+        BigDecimal[] sums = rates.computeIfAbsent(rate,
+                key -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+        sums[0] = sums[0].add(amount);
+        sums[1] = sums[1].add(hours);
+        if (added) {
+            sums[2] = sums[2].add(amount);
+            sums[3] = sums[3].add(BigDecimal.ONE);
+        }
     }
 
     /**

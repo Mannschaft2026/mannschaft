@@ -171,6 +171,35 @@
         "EXHAUSTED": "Wiederholungslimit erreicht",
         "MANUAL_RESOLVED": "Manuell gelöst"
       }
+    },
+    "uncounted": {
+      "open": "Nach Abschluss nicht erfasste Schichten",
+      "title": "Nach Abschluss nicht erfasste Schichten",
+      "description": "Schichten dieser Zuweisung, die nach dem Monatsabschluss nicht erfasst wurden (auch solche, die beim erneuten Veröffentlichen übersprungen wurden). Mit „Nach Abschluss hinzufügen“ werden sie als Nachtrag nach dem Abschluss erfasst.",
+      "empty": "Es gibt keine nach dem Abschluss nicht erfassten Schichten",
+      "user": "Mitarbeitende",
+      "userLabel": "Benutzer Nr. {id}",
+      "workDate": "Arbeitstag",
+      "hours": "Stunden",
+      "rate": "Stundensatz",
+      "add": "Nach Abschluss hinzufügen",
+      "close": "Schließen",
+      "reason": {
+        "HOURLY_RATE_MISSING": "Hinzufügen nicht möglich: Es ist kein Stundensatz hinterlegt. Bitte in den Teameinstellungen eintragen.",
+        "PLANNED_EXISTS": "Hinzufügen nicht möglich: Es besteht noch ein geplanter Verbrauch.",
+        "UNKNOWN": "Hinzufügen nicht möglich."
+      },
+      "addTitle": "Nach Abschluss hinzufügen",
+      "addSummary": "Die Schicht von Benutzer Nr. {id} am {date} ({hours} Stunden) als Nachtrag nach dem Abschluss erfassen.",
+      "rateLabel": "Stundensatz (JPY)",
+      "reasonLabel": "Grund für den Nachtrag",
+      "reasonPlaceholder": "z. B. beim erneuten Veröffentlichen übersprungene Schicht",
+      "addNote": "Der Nachtrag wird im Verlauf als Ergänzung eines bereits abgeschlossenen Monats geführt. Der ursprüngliche Abschluss bleibt unverändert.",
+      "addConfirm": "Hinzufügen",
+      "content": "Nachtrag einer nach dem Abschluss nicht erfassten Schicht",
+      "addSuccess": "Als Nachtrag nach dem Abschluss erfasst",
+      "addError": "Hinzufügen fehlgeschlagen. Bitte die Liste neu laden und erneut versuchen.",
+      "loadError": "Nach Abschluss nicht erfasste Schichten konnten nicht geladen werden"
     }
   }
 }

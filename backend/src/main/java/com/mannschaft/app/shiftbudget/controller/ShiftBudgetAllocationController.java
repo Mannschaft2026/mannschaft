@@ -6,6 +6,7 @@ import com.mannschaft.app.shiftbudget.dto.AllocationCreateRequest;
 import com.mannschaft.app.shiftbudget.dto.AllocationListResponse;
 import com.mannschaft.app.shiftbudget.dto.AllocationResponse;
 import com.mannschaft.app.shiftbudget.dto.AllocationUpdateRequest;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetAllocationReadFacade;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetAllocationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -56,6 +57,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShiftBudgetAllocationController {
 
     private final ShiftBudgetAllocationService allocationService;
+    /** CMP-260909-2152: 一覧・詳細・更新・削除は段取り役経由（月次締め後の訂正を重ねる・旧締めの補完）。 */
+    private final ShiftBudgetAllocationReadFacade readFacade;
 
     @GetMapping
     @Operation(summary = "シフト予算割当の一覧を取得")
@@ -63,7 +66,7 @@ public class ShiftBudgetAllocationController {
             @RequestHeader("X-Organization-Id") Long organizationId,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        AllocationListResponse response = allocationService.listAllocations(organizationId, page, size);
+        AllocationListResponse response = readFacade.list(organizationId, page, size);
         return ApiResponse.of(response);
     }
 
@@ -81,7 +84,7 @@ public class ShiftBudgetAllocationController {
     public ApiResponse<AllocationResponse> getAllocation(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id) {
-        AllocationResponse response = allocationService.getAllocation(organizationId, id);
+        AllocationResponse response = readFacade.get(organizationId, id);
         return ApiResponse.of(response);
     }
 
@@ -91,7 +94,7 @@ public class ShiftBudgetAllocationController {
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id,
             @Valid @RequestBody AllocationUpdateRequest request) {
-        AllocationResponse response = allocationService.updateAllocation(organizationId, id, request);
+        AllocationResponse response = readFacade.update(organizationId, id, request);
         return ApiResponse.of(response);
     }
 
@@ -100,7 +103,7 @@ public class ShiftBudgetAllocationController {
     public ResponseEntity<Void> deleteAllocation(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long id) {
-        allocationService.deleteAllocation(organizationId, id);
+        readFacade.delete(organizationId, id);
         return ResponseEntity.noContent().build();
     }
 }

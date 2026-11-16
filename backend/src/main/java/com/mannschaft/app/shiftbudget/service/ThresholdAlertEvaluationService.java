@@ -19,8 +19,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -79,6 +82,8 @@ public class ThresholdAlertEvaluationService {
     private final ShiftBudgetFailedEventService failedEventService;
     /** Issue #2990 L13: 通知を業務コミット後（AFTER_COMMIT）へ逃がすためのイベント publish。 */
     private final ApplicationEventPublisher eventPublisher;
+    /** 訂正後の消化額での再判定（{@link #evaluateWithEffectiveConsumed}）を独立 TX で実行するため。 */
+    private final PlatformTransactionManager transactionManager;
 
     /**
      * 指定 allocation について現在消化率を計算し、80/100/120% 閾値の発火判定を行う。
@@ -94,6 +99,26 @@ public class ThresholdAlertEvaluationService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void evaluateAndTrigger(Long allocationId) {
+        evaluate(allocationId, null);
+    }
+
+    /**
+     * 月次締め後の訂正で消化額が変わったとき、<b>訂正後の消化額</b>で閾値を再判定する（CMP-260909-2152）。
+     *
+     * <p>段取り役（訂正の Coordinator）が訂正のコミット後に TX の外から呼ぶ。判定の中身は
+     * {@link #evaluateAndTrigger} と同じで、消化額だけ割当のキャッシュではなく呼出側が算出した訂正後の値を使う。
+     * 通知（AFTER_COMMIT）が配送されるよう、判定は独立トランザクションで実行する。
+     * 閾値・ワークフロー起動の TX 分離（Coordinator 化）は別戦役で行うため、ここでは既存の評価を再利用するに留める。</p>
+     *
+     * @param effectiveConsumed 訂正後の消化額
+     */
+    public void evaluateWithEffectiveConsumed(Long allocationId, BigDecimal effectiveConsumed) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        template.executeWithoutResult(status -> evaluate(allocationId, effectiveConsumed));
+    }
+
+    private void evaluate(Long allocationId, BigDecimal consumedOverride) {
         ShiftBudgetAllocationEntity allocation = allocationRepository.findById(allocationId)
                 .orElse(null);
         if (allocation == null || allocation.getDeletedAt() != null) {
@@ -102,7 +127,7 @@ public class ThresholdAlertEvaluationService {
         }
 
         BigDecimal allocated = allocation.getAllocatedAmount();
-        BigDecimal consumed = allocation.getConsumedAmount();
+        BigDecimal consumed = consumedOverride != null ? consumedOverride : allocation.getConsumedAmount();
         if (allocated == null || allocated.signum() == 0) {
             // 予算ゼロ円の境界ケース: 設計書 §11 では即 100% 超過判定とするが、
             // 本実装では「割当0+消化0=0%」として WARN/EXCEEDED いずれも発火させない方針

@@ -89,7 +89,8 @@ class ThresholdAlertEvaluationServiceTest {
         service = new ThresholdAlertEvaluationService(
                 allocationRepository, alertRepository, budgetConfigRepository,
                 userRoleRepository, auditLogService,
-                workflowRequestService, objectMapper, failedEventService, eventPublisher);
+                workflowRequestService, objectMapper, failedEventService, eventPublisher,
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
     /**

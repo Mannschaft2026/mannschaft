@@ -54,6 +54,11 @@ public record ConsumptionSummaryResponse(
         @JsonProperty("confirmed_amount")
         BigDecimal confirmedAmount,
 
+        /** CMP-260909-2152 月次締め後の訂正による確定額の増減（訂正が無ければ 0）。consumed / confirmed は訂正後の値。 */
+        @JsonView(BudgetView.BudgetViewer.class)
+        @JsonProperty("correction_delta_total")
+        BigDecimal correctionDeltaTotal,
+
         @JsonView(BudgetView.BudgetViewer.class)
         @JsonProperty("planned_amount")
         BigDecimal plannedAmount,

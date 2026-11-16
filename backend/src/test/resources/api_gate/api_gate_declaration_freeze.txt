@@ -613,6 +613,7 @@ HTTP|com.mannschaft.app.shift.controller.ShiftSlotController|7|7
 HTTP|com.mannschaft.app.shift.controller.ShiftSwapController|5|5
 HTTP|com.mannschaft.app.shiftbudget.controller.BudgetThresholdAlertController|0|2
 HTTP|com.mannschaft.app.shiftbudget.controller.MonthlyShiftBudgetCloseController|0|1
+HTTP|com.mannschaft.app.shiftbudget.controller.MonthlyShiftBudgetCorrectionController|0|4
 HTTP|com.mannschaft.app.shiftbudget.controller.ShiftBudgetAllocationController|0|5
 HTTP|com.mannschaft.app.shiftbudget.controller.ShiftBudgetCalcController|0|1
 HTTP|com.mannschaft.app.shiftbudget.controller.ShiftBudgetFailedEventController|0|3

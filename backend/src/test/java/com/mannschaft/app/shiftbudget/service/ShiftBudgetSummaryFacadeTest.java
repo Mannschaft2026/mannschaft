@@ -1,5 +1,7 @@
 package com.mannschaft.app.shiftbudget.service;
 
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionOverlay;
+import com.mannschaft.app.budget.service.ShiftBudgetCorrectionQueryService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
@@ -82,7 +84,8 @@ class ShiftBudgetSummaryFacadeTest {
                 () -> new ShiftBudgetSummaryAccessPolicy(accessControlService));
         context.registerBean(ShiftBudgetSummaryFacade.class, () -> new ShiftBudgetSummaryFacade(
                 featureService, context.getBean(ShiftBudgetSummaryAccessPolicy.class),
-                context.getBean(ShiftBudgetSummaryService.class)));
+                context.getBean(ShiftBudgetSummaryService.class),
+                org.mockito.Mockito.mock(ShiftBudgetCorrectionQueryService.class, invocation -> ShiftBudgetCorrectionOverlay.EMPTY)));
         context.refresh();
         facade = context.getBean(ShiftBudgetSummaryFacade.class);
     }

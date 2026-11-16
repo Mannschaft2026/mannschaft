@@ -140,6 +140,52 @@ public interface ShiftBudgetRateQueryRepository
             nativeQuery = true)
     Optional<String> findTeamSlugByTeamId(@Param("teamId") Long teamId);
 
+    // ====================================================================
+    // CMP-260909-2152 月次締め後訂正: 勤務枠・時給の読取（他ドメインの表を read-only で参照する。上の teams と同じ前例）
+    // ====================================================================
+
+    /** 勤務枠の勤務月（yyyy-MM）。論理削除済みの枠は空。再公開時に「締め済みの月か」を判定する。 */
+    @Query(value = "SELECT DATE_FORMAT(sl.slot_date, '%Y-%m') FROM shift_slots sl "
+            + "WHERE sl.id = :slotId AND sl.deleted_at IS NULL", nativeQuery = true)
+    Optional<String> findSlotMonth(@Param("slotId") Long slotId);
+
+    /** 勤務枠の持ち主（[チームID, シフトID]）。論理削除済みの枠・シフトは空。 */
+    @Query(value = "SELECT sch.team_id, sl.schedule_id FROM shift_slots sl "
+            + "INNER JOIN shift_schedules sch ON sch.id = sl.schedule_id "
+            + "WHERE sl.id = :slotId AND sl.deleted_at IS NULL AND sch.deleted_at IS NULL", nativeQuery = true)
+    List<Object[]> findSlotOwner(@Param("slotId") Long slotId);
+
+    /**
+     * チームの公開済みシフトの勤務枠のうち、期間内で担当者が割り当たっているもの。
+     * 戻り値は [枠ID, シフトID, 勤務日(yyyy-MM-dd), 開始(HH:mm:ss), 終了(HH:mm:ss), 担当者ID の JSON 配列]。
+     */
+    @Query(value = "SELECT sl.id, sl.schedule_id, DATE_FORMAT(sl.slot_date, '%Y-%m-%d'), "
+            + "TIME_FORMAT(sl.start_time, '%H:%i:%s'), TIME_FORMAT(sl.end_time, '%H:%i:%s'), "
+            + "CAST(sl.assigned_user_ids AS CHAR) "
+            + "FROM shift_slots sl INNER JOIN shift_schedules sch ON sch.id = sl.schedule_id "
+            + "WHERE sch.team_id = :teamId AND sch.status = 'PUBLISHED' "
+            + "  AND sl.deleted_at IS NULL AND sch.deleted_at IS NULL "
+            + "  AND sl.slot_date BETWEEN :fromDate AND :toDate AND sl.assigned_user_ids IS NOT NULL "
+            + "ORDER BY sl.slot_date, sl.start_time, sl.id", nativeQuery = true)
+    List<Object[]> findPublishedSlotsOfTeam(@Param("teamId") Long teamId, @Param("fromDate") LocalDate fromDate,
+                                            @Param("toDate") LocalDate toDate);
+
+    /** 組織全体の割当が対象にするチーム（組織に ACTIVE 加盟し、期間内にチーム個別の割当を持たないチーム）。 */
+    @Query(value = "SELECT tom.team_id FROM team_org_memberships tom "
+            + "WHERE tom.organization_id = :organizationId AND tom.status = 'ACTIVE' "
+            + "  AND NOT EXISTS (SELECT 1 FROM shift_budget_allocations a WHERE a.team_id = tom.team_id "
+            + "      AND a.deleted_at IS NULL AND a.period_start <= :toDate AND a.period_end >= :fromDate) "
+            + "ORDER BY tom.team_id", nativeQuery = true)
+    List<Long> findOrgWideTeamIds(@Param("organizationId") Long organizationId, @Param("fromDate") LocalDate fromDate,
+                                  @Param("toDate") LocalDate toDate);
+
+    /** チーム内の指定ユーザーの時給履歴。戻り値は [ユーザーID, 時給, 適用開始日(yyyy-MM-dd)]。 */
+    @Query(value = "SELECT r.user_id, r.hourly_rate, DATE_FORMAT(r.effective_from, '%Y-%m-%d') "
+            + "FROM shift_hourly_rates r WHERE r.team_id = :teamId AND r.user_id IN (:userIds) "
+            + "ORDER BY r.user_id, r.effective_from", nativeQuery = true)
+    List<Object[]> findRatesOfUsers(@Param("teamId") Long teamId,
+                                    @Param("userIds") java.util.Collection<Long> userIds);
+
     /**
      * 指定チームの平均時給（POSITION_AVG フォールバック用）。
      *

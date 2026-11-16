@@ -81,4 +81,19 @@ public interface BudgetTransactionRepository extends JpaRepository<BudgetTransac
      */
     boolean existsBySourceTypeAndSourceIdAndTransactionDate(
             String sourceType, Long sourceId, LocalDate transactionDate);
+
+    /**
+     * CMP-260909-2152: 月次仕訳を行ロックなしで探す（生存のみ。V209 の論理削除は SQLRestriction で除外）。
+     * 年度行を先にロックするため、年度IDを知る目的で使う。
+     */
+    List<BudgetTransactionEntity> findBySourceTypeAndSourceIdAndTransactionDate(
+            String sourceType, Long sourceId, LocalDate transactionDate);
+
+    /** CMP-260909-2152: 月次仕訳を {@code FOR UPDATE} で読む。訂正 TX は年度行のロックの後にここへ来る。 */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM BudgetTransactionEntity t WHERE t.sourceType = :sourceType AND t.sourceId = :sourceId "
+            + "AND t.transactionDate = :transactionDate ORDER BY t.id")
+    List<BudgetTransactionEntity> findBySourceForUpdate(@Param("sourceType") String sourceType,
+                                                        @Param("sourceId") Long sourceId,
+                                                        @Param("transactionDate") LocalDate transactionDate);
 }

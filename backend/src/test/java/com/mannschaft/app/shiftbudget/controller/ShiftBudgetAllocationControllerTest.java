@@ -11,6 +11,7 @@ import com.mannschaft.app.shiftbudget.dto.AllocationCreateRequest;
 import com.mannschaft.app.shiftbudget.dto.AllocationListResponse;
 import com.mannschaft.app.shiftbudget.dto.AllocationResponse;
 import com.mannschaft.app.shiftbudget.dto.AllocationUpdateRequest;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetAllocationReadFacade;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetAllocationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -73,6 +74,10 @@ class ShiftBudgetAllocationControllerTest {
     @MockitoBean
     private ShiftBudgetAllocationService allocationService;
 
+    /** CMP-260909-2152: 一覧・詳細・更新・削除は段取り役（訂正の重ね合わせ・旧締めの補完）経由。 */
+    @MockitoBean
+    private ShiftBudgetAllocationReadFacade readFacade;
+
     @MockitoBean
     private AuthTokenService authTokenService;
 
@@ -112,7 +117,7 @@ class ShiftBudgetAllocationControllerTest {
     @org.junit.jupiter.api.Test
     @DisplayName("GET /allocations: 一覧 → 200 + items")
     void list_200() throws Exception {
-        given(allocationService.listAllocations(eq(ORG_ID), eq(0), eq(20)))
+        given(readFacade.list(eq(ORG_ID), eq(0), eq(20)))
                 .willReturn(AllocationListResponse.builder()
                         .items(List.of(sampleResponse()))
                         .page(0).size(20).total(1L).build());
@@ -162,7 +167,7 @@ class ShiftBudgetAllocationControllerTest {
     @org.junit.jupiter.api.Test
     @DisplayName("GET /allocations/{id}: 詳細 → 200")
     void get_200() throws Exception {
-        given(allocationService.getAllocation(ORG_ID, ALLOCATION_ID)).willReturn(sampleResponse());
+        given(readFacade.get(ORG_ID, ALLOCATION_ID)).willReturn(sampleResponse());
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))
@@ -174,7 +179,7 @@ class ShiftBudgetAllocationControllerTest {
     @DisplayName("GET /allocations/{id}: 別組織 → 404")
     void get_別組織_404() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND))
-                .given(allocationService).getAllocation(ORG_ID, ALLOCATION_ID);
+                .given(readFacade).get(ORG_ID, ALLOCATION_ID);
 
         mockMvc.perform(get("/api/v1/shift-budget/allocations/{id}", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))
@@ -187,7 +192,7 @@ class ShiftBudgetAllocationControllerTest {
         AllocationUpdateRequest req = new AllocationUpdateRequest(
                 new BigDecimal("400000"), "増額", 99L);
         willThrow(new BusinessException(ShiftBudgetErrorCode.OPTIMISTIC_LOCK_CONFLICT))
-                .given(allocationService).updateAllocation(eq(ORG_ID), eq(ALLOCATION_ID), any());
+                .given(readFacade).update(eq(ORG_ID), eq(ALLOCATION_ID), any());
 
         mockMvc.perform(put("/api/v1/shift-budget/allocations/{id}", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID)
@@ -208,7 +213,7 @@ class ShiftBudgetAllocationControllerTest {
     @DisplayName("DELETE /allocations/{id}: PLANNED 残存 → 409")
     void delete_planned残存_409() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.HAS_CONSUMPTIONS_PLANNED))
-                .given(allocationService).deleteAllocation(ORG_ID, ALLOCATION_ID);
+                .given(readFacade).delete(ORG_ID, ALLOCATION_ID);
 
         mockMvc.perform(delete("/api/v1/shift-budget/allocations/{id}", ALLOCATION_ID)
                         .header("X-Organization-Id", ORG_ID))

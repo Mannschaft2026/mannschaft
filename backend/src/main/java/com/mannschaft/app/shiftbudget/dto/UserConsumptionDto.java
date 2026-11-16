@@ -20,6 +20,8 @@ import java.util.List;
  * @param amount 消化額（円）
  * @param hours  勤務時間
  * @param rateBreakdown 記録時給別の内訳（時給の昇順）
+ * @param addedCount    締め後に追加した明細のうち有効な件数（amount / hours に含まれる）
+ * @param addedAmount   同、金額
  */
 @Builder
 public record UserConsumptionDto(
@@ -38,9 +40,18 @@ public record UserConsumptionDto(
 
         @JsonView(BudgetView.BudgetAdmin.class)
         @JsonProperty("rate_breakdown")
-        List<HourlyRateConsumptionDto> rateBreakdown
+        List<HourlyRateConsumptionDto> rateBreakdown,
+
+        @JsonView(BudgetView.BudgetAdmin.class)
+        @JsonProperty("added_count")
+        int addedCount,
+
+        @JsonView(BudgetView.BudgetAdmin.class)
+        @JsonProperty("added_amount")
+        BigDecimal addedAmount
 ) {
     public UserConsumptionDto {
         rateBreakdown = rateBreakdown == null ? List.of() : List.copyOf(rateBreakdown);
+        addedAmount = addedAmount == null ? BigDecimal.ZERO : addedAmount;
     }
 }

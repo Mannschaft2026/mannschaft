@@ -1,11 +1,14 @@
 package com.mannschaft.app.shiftbudget.service;
 
 import com.mannschaft.app.shiftbudget.ShiftBudgetCancelReason;
+import com.mannschaft.app.shiftbudget.ShiftBudgetClosedMonthException;
 import com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
+import com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository;
+import com.mannschaft.app.shiftbudget.repository.ShiftBudgetRateQueryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -50,6 +53,8 @@ public class ShiftBudgetConsumptionService {
 
     private final ShiftBudgetConsumptionRepository consumptionRepository;
     private final ShiftBudgetAllocationRepository allocationRepository;
+    private final ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
+    private final ShiftBudgetRateQueryRepository rateQueryRepository;
 
     /** 既存LocalDateTime列と同じ業務壁時計を使う。 */
     @Qualifier("wallClock")
@@ -79,6 +84,17 @@ public class ShiftBudgetConsumptionService {
                                         Long userId,
                                         BigDecimal hourlyRate,
                                         BigDecimal hours) {
+        // CMP-260909-2152: 締め済みの月の勤務は PLANNED を作らない（締めた月は再び締められず、永久に未計上で残る）。
+        // 月次締めと同じ割当行ロックで直列化するので、「締め前に記録した分だけが CONFIRMED になる」。
+        // 計上は訂正 API の ADD（画面の「締め後に未計上の勤務」から1操作）に一本化する。
+        allocationRepository.findByIdForUpdate(allocationId);
+        String slotMonth = rateQueryRepository.findSlotMonth(slotId).orElse(null);
+        if (slotMonth != null && closeEventRepository.existsByAllocationIdAndTargetMonth(allocationId, slotMonth)) {
+            log.info("締め済みのため訂正 API の ADD で計上: allocation={}, month={}, slot={}, user={}",
+                    allocationId, slotMonth, slotId, userId);
+            throw new ShiftBudgetClosedMonthException(allocationId, slotMonth, slotId, userId);
+        }
+
         BigDecimal safeRate = hourlyRate != null ? hourlyRate : BigDecimal.ZERO;
         BigDecimal amount = safeRate.multiply(hours).setScale(2, java.math.RoundingMode.HALF_UP);
 

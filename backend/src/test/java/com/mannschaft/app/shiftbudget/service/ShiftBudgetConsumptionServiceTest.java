@@ -59,13 +59,17 @@ class ShiftBudgetConsumptionServiceTest {
     private ShiftBudgetConsumptionRepository consumptionRepository;
     @Mock
     private ShiftBudgetAllocationRepository allocationRepository;
+    @Mock
+    private com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
+    @Mock
+    private com.mannschaft.app.shiftbudget.repository.ShiftBudgetRateQueryRepository rateQueryRepository;
 
     private ShiftBudgetConsumptionService service;
 
     @BeforeEach
     void setUp() {
         service = new ShiftBudgetConsumptionService(
-                consumptionRepository, allocationRepository, FIXED_WALL_CLOCK);
+                consumptionRepository, allocationRepository, closeEventRepository, rateQueryRepository, FIXED_WALL_CLOCK);
     }
 
     @Nested

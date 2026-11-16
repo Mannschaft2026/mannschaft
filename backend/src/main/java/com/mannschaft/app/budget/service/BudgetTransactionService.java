@@ -6,6 +6,7 @@ import com.mannschaft.app.budget.BudgetFiscalYearStatus;
 import com.mannschaft.app.budget.BudgetMapper;
 import com.mannschaft.app.budget.BudgetPaymentMethod;
 import com.mannschaft.app.budget.BudgetTransactionType;
+import com.mannschaft.app.budget.ShiftBudgetJournalSources;
 import com.mannschaft.app.budget.dto.AttachmentResponse;
 import com.mannschaft.app.budget.dto.CreateTransactionRequest;
 import com.mannschaft.app.budget.dto.RegisterAttachmentRequest;
@@ -198,6 +199,7 @@ public class BudgetTransactionService {
         BudgetTransactionEntity original = findById(id);
         BudgetFiscalYearEntity fy = fiscalYearService.findById(original.getFiscalYearId());
         accessControlService.checkAdminOrAbove(currentUserId, fy.getScopeId(), fy.getScopeType());
+        requireNotShiftBudgetJournal(original);
 
         if (fy.getStatus() != BudgetFiscalYearStatus.OPEN) {
             throw new BusinessException(BudgetErrorCode.BUDGET_004);
@@ -250,9 +252,20 @@ public class BudgetTransactionService {
         requireScopeMatchOrConceal(entity, scopeId, scopeType);
         Long currentUserId = SecurityUtils.getCurrentUserId();
         accessControlService.checkAdminOrAbove(currentUserId, entity.getScopeId(), entity.getScopeType());
+        requireNotShiftBudgetJournal(entity);
 
         transactionRepository.delete(entity);
         log.info("取引を削除しました: id={}", id);
+    }
+
+    /**
+     * CMP-260909-2152: シフト予算の自動計上仕訳（月次の原仕訳・締め後訂正の差額仕訳）は汎用の削除・取消の対象外。
+     * 訂正は月次締め後訂正 API から追記する。認可の後に判定するので、権限のない呼出元へ仕訳の種別を漏らさない。
+     */
+    private void requireNotShiftBudgetJournal(BudgetTransactionEntity entity) {
+        if (ShiftBudgetJournalSources.isProtected(entity.getSourceType())) {
+            throw new BusinessException(BudgetErrorCode.BUDGET_023);
+        }
     }
 
     /**

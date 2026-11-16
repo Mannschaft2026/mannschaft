@@ -171,6 +171,35 @@
         "EXHAUSTED": "已达重试上限",
         "MANUAL_RESOLVED": "手动补正完成"
       }
+    },
+    "uncounted": {
+      "open": "结账后未计入的班次",
+      "title": "结账后未计入的班次",
+      "description": "月度结账之后，属于该预算分配但尚未计入的班次（包括重新发布时被跳过的班次）。点击“结账后追加”即可作为结账后的追加计入。",
+      "empty": "没有结账后未计入的班次",
+      "user": "工作人员",
+      "userLabel": "用户 #{id}",
+      "workDate": "工作日期",
+      "hours": "工时",
+      "rate": "时薪",
+      "add": "结账后追加",
+      "close": "关闭",
+      "reason": {
+        "HOURLY_RATE_MISSING": "未设置时薪，无法追加。请在团队设置中登记时薪。",
+        "PLANNED_EXISTS": "仍有计划中的消耗记录，无法追加。",
+        "UNKNOWN": "无法追加。"
+      },
+      "addTitle": "结账后追加",
+      "addSummary": "将用户 #{id} 在 {date} 的班次（{hours} 小时）作为结账后的追加计入。",
+      "rateLabel": "时薪（日元）",
+      "reasonLabel": "追加原因",
+      "reasonPlaceholder": "例如：补记重新发布时被跳过的班次",
+      "addNote": "将作为对已结账月份的追加记入历史。原有结账内容不会被改写。",
+      "addConfirm": "追加",
+      "content": "追加结账后未计入的班次",
+      "addSuccess": "已作为结账后的追加计入",
+      "addError": "追加失败。请重新加载列表后再试。",
+      "loadError": "获取结账后未计入的班次失败"
     }
   }
 }
