@@ -1,6 +1,7 @@
 package com.mannschaft.app.effortrecord.service;
 
 import com.mannschaft.app.common.timezone.UserTimezoneCache;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.effortrecord.dto.CreateEffortRecordRequest;
 import com.mannschaft.app.effortrecord.dto.EffortDeleteResponse;
 import com.mannschaft.app.effortrecord.dto.EffortOwnerRecordResponse;
@@ -25,7 +26,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EffortRecordOwnerService {
 
-    private static final ZoneId FALLBACK_ZONE = ZoneId.of("Asia/Tokyo");
+    private static final ZoneId FALLBACK_ZONE = UserZoneLocalDateTimeParser.SERVER_ZONE;
 
     private final EffortRecordTxService tx;
     private final UserTimezoneCache userTimezones;

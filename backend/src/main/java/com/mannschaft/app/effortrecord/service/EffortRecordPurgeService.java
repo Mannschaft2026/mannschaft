@@ -2,14 +2,10 @@ package com.mannschaft.app.effortrecord.service;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
@@ -25,11 +21,7 @@ import java.util.Objects;
  * 再実行しても同じ結果になる（冪等）。
  */
 @Service
-@RequiredArgsConstructor
 public class EffortRecordPurgeService {
-
-    @Qualifier("utcClock")
-    private final Clock clock;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -46,10 +38,9 @@ public class EffortRecordPurgeService {
                 .setParameter(1, userId).executeUpdate();
         entityManager.createNativeQuery("UPDATE effort_records SET values_json = JSON_OBJECT(), definition_snapshot = JSON_OBJECT(), "
                         + "share_definition_snapshot = NULL, share_mapping_json = NULL, desired_projection = NULL, "
-                        + "private_note = NULL, purged_at = ?2, updated_at = ?2 "
+                        + "private_note = NULL, purged_at = UTC_TIMESTAMP(6), updated_at = UTC_TIMESTAMP(6) "
                         + "WHERE owner_user_id = ?1 AND share_id IS NOT NULL AND purged_at IS NULL")
                 .setParameter(1, userId)
-                .setParameter(2, clock.instant().truncatedTo(ChronoUnit.MICROS))
                 .executeUpdate();
     }
 }

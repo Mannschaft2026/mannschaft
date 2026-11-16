@@ -130,11 +130,10 @@ public class EffortReceiptService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void complete(UUID receiptId, int status, String responseJson) {
         entityManager.createNativeQuery("UPDATE effort_operation_receipts SET response_status = ?1, response_json = ?2, "
-                        + "updated_at = ?3 WHERE id = UNHEX(REPLACE(?4, '-', ''))")
+                        + "updated_at = UTC_TIMESTAMP(6) WHERE id = UNHEX(REPLACE(?3, '-', ''))")
                 .setParameter(1, status)
                 .setParameter(2, responseJson)
-                .setParameter(3, clock.instant().truncatedTo(ChronoUnit.MICROS))
-                .setParameter(4, receiptId.toString())
+                .setParameter(3, receiptId.toString())
                 .executeUpdate();
     }
 
