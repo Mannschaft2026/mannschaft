@@ -10,7 +10,7 @@ const props = defineProps<{
 }>()
 
 const { listNotifications, cancelNotification } = useConfirmableNotificationApi()
-const { showError } = useNotification()
+const { showError, showSuccess } = useNotification()
 const { t } = useI18n()
 const { relativeTime } = useRelativeTime()
 
@@ -41,8 +41,7 @@ async function onCancel(notificationId: number) {
     await cancelNotification(props.scopeType, props.scopeId, notificationId)
     // キャンセル後に一覧を再取得
     await loadNotifications()
-    const toast = useToast()
-    toast.add({ severity: 'success', summary: t('dialog.success'), life: 3000 })
+    showSuccess(t('dialog.success'))
   } catch {
     showError(t('confirmable.cancel_error'))
   } finally {
