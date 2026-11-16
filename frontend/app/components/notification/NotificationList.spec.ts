@@ -130,7 +130,7 @@ const stubs = {
       '<button type="button" :data-label="label" :data-testid="label === \'notification.list.markAllRead\' ? \'mark-all-read\' : undefined" @click="$emit(\'click\', $event)">{{ label }}</button>',
   },
   SelectButton: { props: ['modelValue'], emits: ['update:modelValue'], template: '<div />' },
-  Menu: { template: '<div />' },
+  Menu: { props: ['model'], template: '<div />' },
   LoadingBounce: { template: '<div />' },
 }
 
@@ -452,6 +452,8 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     mocks.notificationStore = reactive({ latestNotification: null })
     mocks.notificationApi.markAsRead.mockResolvedValue(undefined)
     mocks.confirmableApi.confirmNotification.mockResolvedValue(undefined)
+    mocks.notificationApi.markAllAsRead.mockResolvedValue(undefined)
+    mocks.notificationApi.snooze.mockReset().mockResolvedValue(undefined)
   })
 
   it('N3: 空一覧でも受信後に正規APIを再取得し、新しい通知を表示する', async () => {
@@ -590,6 +592,163 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     await flushPromises()
     expect(mocks.notificationApi.markAsRead).not.toHaveBeenCalled()
     expect(mocks.toastAdd).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('N5追加: 既読toggle成功前に取得した旧GETで未読へ戻らない', async () => {
+    const stale = liveRow(1)
+    const wrapper = await mountList(liveRow(1))
+    await flushPromises()
+    let completeOld!: (value: NotificationListResponse) => void
+    let completeFresh!: (value: NotificationListResponse) => void
+    mocks.notificationApi.getNotifications
+      .mockImplementationOnce(
+        () =>
+          new Promise<NotificationListResponse>((resolve) => {
+            completeOld = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<NotificationListResponse>((resolve) => {
+            completeFresh = resolve
+          }),
+      )
+    await receiveNotification(2)
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
+    await wrapper.get('button[aria-label="notification.list.markRead"]').trigger('click')
+    await flushPromises()
+    expect(mocks.notificationApi.markAsRead).toHaveBeenCalledWith(1)
+    expect(stale.isRead).toBe(false)
+    completeOld(listResponse([stale]))
+    await flushPromises()
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(3)
+    expect(wrapper.find('button[aria-label="notification.list.markRead"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="notification.list.markUnread"]').exists()).toBe(true)
+    completeFresh(listResponse([{ ...liveRow(1), isRead: true }]))
+    await flushPromises()
+    expect(wrapper.find('button[aria-label="notification.list.markUnread"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('N5追加: 全件既読成功前に取得した旧GETで全件を未読へ戻さない', async () => {
+    const stale = [liveRow(1), liveRow(2)]
+    const wrapper = await mountList(liveRow(1))
+    await flushPromises()
+    mocks.notificationApi.getNotifications.mockResolvedValueOnce(
+      listResponse([liveRow(1), liveRow(2)]),
+    )
+    await (wrapper.vm as unknown as { refresh: () => Promise<void> }).refresh()
+    let completeOld!: (value: NotificationListResponse) => void
+    let completeFresh!: (value: NotificationListResponse) => void
+    mocks.notificationApi.getNotifications
+      .mockImplementationOnce(
+        () =>
+          new Promise<NotificationListResponse>((resolve) => {
+            completeOld = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<NotificationListResponse>((resolve) => {
+            completeFresh = resolve
+          }),
+      )
+    await receiveNotification(3)
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(3)
+    await wrapper.get('[data-testid="mark-all-read"]').trigger('click')
+    await flushPromises()
+    expect(mocks.notificationApi.markAllAsRead).toHaveBeenCalledTimes(1)
+    expect(stale.every((row) => !row.isRead)).toBe(true)
+    completeOld(listResponse(stale))
+    await flushPromises()
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(4)
+    expect(wrapper.findAll('button[aria-label="notification.list.markRead"]')).toHaveLength(0)
+    expect(wrapper.findAll('button[aria-label="notification.list.markUnread"]')).toHaveLength(2)
+    completeFresh(listResponse(stale.map((row) => ({ ...row, isRead: true }))))
+    await flushPromises()
+    expect(wrapper.findAll('button[aria-label="notification.list.markUnread"]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('N5追加: snooze成功前に取得した旧GETで除去済みrowを再挿入しない', async () => {
+    const stale = liveRow(1)
+    const wrapper = await mountList(liveRow(1))
+    await flushPromises()
+    let completeOld!: (value: NotificationListResponse) => void
+    let completeFresh!: (value: NotificationListResponse) => void
+    mocks.notificationApi.getNotifications
+      .mockImplementationOnce(
+        () =>
+          new Promise<NotificationListResponse>((resolve) => {
+            completeOld = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<NotificationListResponse>((resolve) => {
+            completeFresh = resolve
+          }),
+      )
+    await receiveNotification(2)
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
+    // PrimeVue Menuへ渡された公開modelから、実際のプリセットcommandを実行する。
+    wrapper.getComponent(stubs.Menu).props('model')[0].command()
+    await flushPromises()
+    expect(mocks.notificationApi.snooze).toHaveBeenCalledWith(1, expect.any(String))
+    expect(mocks.toastAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: 'inbox.action.snoozed' }),
+    )
+    completeOld(listResponse([stale]))
+    await flushPromises()
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(3)
+    expect(wrapper.find('[data-notification-id="1"]').exists()).toBe(false)
+    completeFresh(listResponse([]))
+    await flushPromises()
+    expect(wrapper.find('[data-notification-id="1"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('N5追加: snooze失敗とfilter変更が競合しても旧rowを挿入せず現filterを再取得する', async () => {
+    const stale = { ...liveRow(1), isRead: true }
+    const wrapper = await mountList({ ...liveRow(1), isRead: true })
+    await flushPromises()
+    let completeOld!: (value: NotificationListResponse) => void
+    let rejectSnooze!: (error: Error) => void
+    mocks.notificationApi.getNotifications.mockImplementationOnce(
+      () =>
+        new Promise<NotificationListResponse>((resolve) => {
+          completeOld = resolve
+        }),
+    )
+    mocks.notificationApi.snooze.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSnooze = reject
+        }),
+    )
+    await receiveNotification(2)
+    expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
+    wrapper.getComponent(stubs.Menu).props('model')[0].command()
+    await flushPromises()
+    expect(mocks.notificationApi.snooze).toHaveBeenCalledWith(1, expect.any(String))
+    wrapper.getComponent(stubs.SelectButton).vm.$emit('update:modelValue', 'unread')
+    await flushPromises()
+    rejectSnooze(new Error('fixture snooze failure'))
+    await flushPromises()
+    expect(mocks.showError).toHaveBeenCalledWith('inbox.action.snoozeFailed')
+    expect(wrapper.find('[data-notification-id="1"]').exists()).toBe(false)
+    mocks.notificationApi.getNotifications.mockResolvedValue(listResponse([liveRow(3)]))
+    completeOld(listResponse([stale]))
+    await flushPromises()
+    expect(wrapper.find('[data-notification-id="1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-notification-id="3"]').exists()).toBe(true)
+    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({
+      page: 0,
+      size: 20,
+      isRead: false,
+    })
+    expect(mocks.showError).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 
