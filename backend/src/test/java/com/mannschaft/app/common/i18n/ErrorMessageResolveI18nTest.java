@@ -178,6 +178,54 @@ class ErrorMessageResolveI18nTest {
         };
     }
 
+    // ---------------------------------------------------------------- fieldErrors（列挙値エラー）
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}: 未定義の列挙値の fieldErrors が {0} で訳される")
+    @org.junit.jupiter.params.provider.CsvSource({
+            "en,This value is not defined.",
+            "de,Dieser Wert ist nicht definiert.",
+            "zh,该值未被定义。",
+            "ko,정의되지 않은 값입니다.",
+            "es,Este valor no está definido."})
+    @DisplayName("fieldErrors: 未定義の列挙値（EnumInputParser）の message が利用者の言語で返り日本語が残らない")
+    void fieldErrors_未定義の列挙値が利用者の言語で返る(String lang, String expected) {
+        LocaleContextHolder.setLocale(Locale.forLanguageTag(lang));
+
+        ResponseEntity<ErrorResponse> response = handler.handleBusinessException(invalidEnum());
+
+        ErrorResponse.FieldError fe = response.getBody().getError().getFieldErrors().get(0);
+        assertThat(fe.getField()).isEqualTo("visibility");
+        assertThat(fe.getMessage()).isEqualTo(expected).doesNotContainPattern(JAPANESE);
+    }
+
+    @Test
+    @DisplayName("fieldErrors: 未定義の列挙値は ja・未対応言語では従来の日本語のまま返る（回帰防止）")
+    void fieldErrors_未定義の列挙値はjaと未対応言語で従来の日本語() {
+        for (Locale locale : new Locale[] {Locale.JAPANESE, Locale.FRENCH}) {
+            LocaleContextHolder.setLocale(locale);
+            ResponseEntity<ErrorResponse> response = handler.handleBusinessException(invalidEnum());
+            assertThat(response.getBody().getError().getFieldErrors().get(0).getMessage())
+                    .as(locale.toString()).isEqualTo("定義されていない値です");
+        }
+    }
+
+    @Test
+    @DisplayName("fieldErrors: 訳キー（messageKey）は JSON 応答に出ない")
+    void fieldErrors_訳キーはJSONに出ない() throws Exception {
+        String json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .writeValueAsString(ErrorResponse.FieldError.ofKey("visibility", "k", "ja"));
+        assertThat(json).doesNotContain("messageKey").contains("visibility");
+    }
+
+    private static BusinessException invalidEnum() {
+        try {
+            com.mannschaft.app.common.EnumInputParser.parse(Thread.State.class, "PRIVATE", "visibility");
+            throw new IllegalStateException("BusinessException が投げられなかった");
+        } catch (BusinessException e) {
+            return e;
+        }
+    }
+
     private static ErrorCode findConstant(String enumName, String code) {
         try {
             for (Object c : Class.forName(enumName).getEnumConstants()) {
