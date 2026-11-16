@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 5
+- テーブル数: 6
 - ビュー数: 0
 
 ## ER 図
@@ -34,6 +34,11 @@ erDiagram
         bigint id PK
         bigint organization_id "ID参照"
     }
+    shift_budget_monthly_close_events {
+        binary id PK
+        bigint allocation_id FK
+        bigint actor_user_id "ID参照"
+    }
     todo_budget_links {
         bigint id PK
         bigint project_id "ID参照"
@@ -59,6 +64,8 @@ erDiagram
     shift_budget_allocations ||--o{ shift_budget_consumptions : "allocation_id"
     users ||..o{ shift_budget_consumptions : "ID参照(FKなし) user_id"
     organizations ||..o{ shift_budget_failed_events : "ID参照(FKなし) organization_id"
+    shift_budget_allocations ||--o{ shift_budget_monthly_close_events : "allocation_id"
+    users |o..o{ shift_budget_monthly_close_events : "ID参照(FKなし) actor_user_id"
     projects |o..o{ todo_budget_links : "ID参照(FKなし) project_id"
     shift_budget_allocations ||--o{ todo_budget_links : "allocation_id"
     todos |o..o{ todo_budget_links : "ID参照(FKなし) todo_id"
@@ -159,6 +166,18 @@ erDiagram
 | `status` | `varchar(20)` | NO | `PENDING` |  |
 | `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
+
+### `shift_budget_monthly_close_events`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `allocation_id` | `bigint unsigned` | NO | （なし） | 締めた割当 |
+| `target_month` | `varchar(7)` | NO | （なし） | 締め対象月 yyyy-MM |
+| `actor_kind` | `varchar(10)` | NO | （なし） | MANUAL=手動 / BATCH=cron / UNKNOWN=本表導入前の締め |
+| `actor_user_id` | `bigint unsigned` | YES | NULL | 手動締めの操作者。BATCH と UNKNOWN は NULL |
+| `closed_at` | `datetime` | NO | （なし） | 締めた日時 |
+| `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 
 ### `todo_budget_links`
 

@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 7
+- テーブル数: 9
 - ビュー数: 0
 
 ## ER 図
@@ -29,6 +29,21 @@ erDiagram
     budget_fiscal_years {
         bigint id PK
         bigint created_by "ID参照"
+    }
+    budget_monthly_close_corrections {
+        binary id PK
+        binary close_record_id FK
+        binary reverses_correction_id UK
+        bigint user_id "ID参照"
+        bigint actor_user_id "ID参照"
+        binary command_id UK
+        bigint budget_transaction_id FK, UK
+    }
+    budget_monthly_close_records {
+        binary id PK
+        bigint original_transaction_id FK, UK
+        bigint close_actor_user_id "ID参照"
+        bigint original_recorded_by "ID参照"
     }
     budget_reports {
         bigint id PK
@@ -57,6 +72,13 @@ erDiagram
     budget_categories |o--o{ budget_configs : "default_income_category_id"
     workflow_templates |o..o{ budget_configs : "ID参照(FKなし) workflow_template_id"
     users ||..o{ budget_fiscal_years : "ID参照(FKなし) created_by"
+    budget_monthly_close_records ||--o{ budget_monthly_close_corrections : "close_record_id"
+    budget_transactions |o--o| budget_monthly_close_corrections : "budget_transaction_id"
+    users ||..o{ budget_monthly_close_corrections : "ID参照(FKなし) actor_user_id"
+    users ||..o{ budget_monthly_close_corrections : "ID参照(FKなし) user_id"
+    budget_transactions ||--o| budget_monthly_close_records : "original_transaction_id"
+    users |o..o{ budget_monthly_close_records : "ID参照(FKなし) close_actor_user_id"
+    users ||..o{ budget_monthly_close_records : "ID参照(FKなし) original_recorded_by"
     budget_fiscal_years ||--o{ budget_reports : "fiscal_year_id"
     users ||..o{ budget_reports : "ID参照(FKなし) generated_by"
     budget_transactions ||--o{ budget_transaction_attachments : "transaction_id"
@@ -100,6 +122,13 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | テーブル | 列 | 理由 |
 | --- | --- | --- |
 | `budget_configs` | `over_limit_workflow_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_corrections` | `added_line_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_corrections` | `command_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_corrections` | `consumption_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_corrections` | `reverses_correction_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_corrections` | `shift_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_corrections` | `slot_id` | 参照先テーブルを特定できない |
+| `budget_monthly_close_records` | `allocation_id` | 参照先テーブルを特定できない |
 
 ## テーブル定義
 
@@ -169,6 +198,62 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `deleted_at` | `datetime` | YES | NULL |  |
 | `active_unique_key` | `tinyint` | YES | NULL |  |
+
+### `budget_monthly_close_corrections`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `close_record_id` | `binary(16)` | NO | （なし） |  |
+| `revision` | `bigint` | NO | （なし） | 締め記録内の通し番号（1 始まり） |
+| `kind` | `varchar(10)` | NO | （なし） | MODIFY / CANCEL / ADD / REVERSAL |
+| `line_kind` | `varchar(10)` | NO | （なし） | ORIGINAL=元の確定明細 / ADDED=締め後に追加した明細 |
+| `consumption_id` | `bigint unsigned` | YES | NULL | ORIGINAL のとき対象の消化行ID |
+| `added_line_id` | `binary(16)` | YES | NULL | ADDED のとき明細ID（ADD 行自身の ID） |
+| `reverses_correction_id` | `binary(16)` | YES | NULL | REVERSAL のとき取り消す訂正の ID |
+| `user_id` | `bigint unsigned` | NO | （なし） | 勤務者 |
+| `work_date` | `date` | YES | NULL | ADDED の勤務日 |
+| `slot_id` | `bigint unsigned` | YES | NULL | ADDED の勤務枠（FK なし） |
+| `shift_id` | `bigint unsigned` | YES | NULL | ADDED のシフト（FK なし） |
+| `before_hours` | `decimal(6,2)` | NO | （なし） |  |
+| `before_hourly_rate` | `decimal(10,2)` | YES | NULL |  |
+| `before_amount` | `decimal(12,2)` | NO | （なし） |  |
+| `before_line_status` | `varchar(10)` | NO | （なし） | ABSENT / CONFIRMED / CANCELLED |
+| `after_hours` | `decimal(6,2)` | NO | （なし） |  |
+| `after_hourly_rate` | `decimal(10,2)` | YES | NULL |  |
+| `after_amount` | `decimal(12,2)` | NO | （なし） |  |
+| `after_line_status` | `varchar(10)` | NO | （なし） | ABSENT / CONFIRMED / CANCELLED |
+| `exact_delta` | `decimal(12,2)` | NO | （なし） | 月合計（丸め前）の増減 |
+| `posted_delta` | `decimal(12,0)` | NO | （なし） | 差額仕訳の金額（月合計を丸めた値の増減） |
+| `exact_month_total_after` | `decimal(14,2)` | NO | （なし） | この訂正後の月合計（丸め前） |
+| `content` | `varchar(500)` | YES | NULL | 訂正内容 |
+| `reason` | `varchar(500)` | NO | （なし） | 訂正理由 |
+| `actor_user_id` | `bigint unsigned` | NO | （なし） | 訂正した人 |
+| `command_id` | `binary(16)` | NO | （なし） | 冪等キー |
+| `request_hash` | `char(64)` | NO | （なし） | 要求内容のハッシュ（同 command の内容違い検出） |
+| `budget_transaction_id` | `bigint unsigned` | YES | NULL | 差額仕訳（差額0 は NULL） |
+| `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
+
+### `budget_monthly_close_records`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `original_transaction_id` | `bigint unsigned` | NO | （なし） | 原月次仕訳（SHIFT_BUDGET_MONTHLY） |
+| `allocation_id` | `bigint unsigned` | NO | （なし） | 割当ID（他ドメインのため FK なし） |
+| `target_month` | `varchar(7)` | NO | （なし） | 締め対象月 yyyy-MM |
+| `original_amount` | `decimal(12,0)` | NO | （なし） | 締めた時点の月合計（原仕訳の金額） |
+| `original_line_count` | `int` | NO | （なし） | 締めた時点の確定明細件数 |
+| `original_exact_total` | `decimal(14,2)` | NO | （なし） | 締めた時点の月合計（丸め前） |
+| `close_actor_kind` | `varchar(10)` | NO | （なし） | MANUAL / BATCH / UNKNOWN |
+| `close_actor_user_id` | `bigint unsigned` | YES | NULL | 手動締めの操作者。割当作成者・仕訳記録者は入れない |
+| `original_recorded_by` | `bigint unsigned` | NO | （なし） | 原仕訳の記録者の写し（締め操作者とは区別する） |
+| `closed_at` | `datetime` | NO | （なし） | 締めた日時 |
+| `revision` | `bigint` | NO | `0` | 訂正の通し番号（楽観ロック。最新訂正の revision） |
+| `posted_total` | `decimal(12,0)` | NO | （なし） | 訂正後の月合計（仕訳ベース） |
+| `exact_total` | `decimal(14,2)` | NO | （なし） | 訂正後の月合計（丸め前） |
+| `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
+| `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 
 ### `budget_reports`
 

@@ -41,7 +41,7 @@ Docker が必要です。CI（`er-diagram-drift-check`）は migration・Entity�
 | [appearance](appearance.md) | 1 | 0 |
 | [auth](auth.md) | 17 | 0 |
 | [billing](billing.md) | 26 | 0 |
-| [budget](budget.md) | 7 | 0 |
+| [budget](budget.md) | 9 | 0 |
 | [bulletin](bulletin.md) | 7 | 0 |
 | [chart](chart.md) | 10 | 0 |
 | [chat](chat.md) | 6 | 0 |
@@ -122,7 +122,7 @@ Docker が必要です。CI（`er-diagram-drift-check`）は migration・Entity�
 | [securityincident](securityincident.md) | 1 | 0 |
 | [service](service.md) | 8 | 0 |
 | [shift](shift.md) | 11 | 0 |
-| [shiftbudget](shiftbudget.md) | 5 | 0 |
+| [shiftbudget](shiftbudget.md) | 6 | 0 |
 | [signage](signage.md) | 5 | 0 |
 | [skill](skill.md) | 3 | 0 |
 | [social](social.md) | 11 | 0 |
@@ -148,6 +148,6 @@ Docker が必要です。CI（`er-diagram-drift-check`）は migration・Entity�
 | [_unmapped](_unmapped.md) | 9 | 5 |
 
 - ドメイン数（`_unmapped` を除く）: 112
-- テーブル合計: 830（`flyway_schema_history` を除く）
+- テーブル合計: 833（`flyway_schema_history` を除く）
 - ビュー合計: 5
 - Entity 未紐付け（`_unmapped.md`）: テーブル 9 件 / ビュー 5 件
