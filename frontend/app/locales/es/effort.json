@@ -22,7 +22,9 @@
     "error": {
       "required": "{field} es obligatorio",
       "recordedOnRequired": "Introduce la fecha del registro",
-      "conflict": "Otra edición se guardó antes. Se muestra el contenido guardado más reciente."
+      "conflict": "Otra edición se guardó antes. Se muestra el contenido guardado más reciente.",
+      "recordedOnInvalid": "Introduce una fecha real de hoy o anterior como fecha del registro",
+      "noContent": "Rellena al menos un campo"
     },
     "delete": {
       "header": "Eliminar registro",
@@ -44,7 +46,9 @@
       "next": "Periodo siguiente",
       "from": "Fecha de inicio",
       "to": "Fecha de fin",
-      "invalid": "Elige un rango de hasta 366 días, de inicio a fin."
+      "invalid": "Elige un rango de hasta 366 días, de inicio a fin.",
+      "invalidMissing": "Introduce la fecha de inicio y la de fin.",
+      "invalidOrder": "La fecha de fin debe ser igual o posterior a la de inicio."
     },
     "chart": {
       "kind": "Gráfico",

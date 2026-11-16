@@ -5,6 +5,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildEffortFieldValues,
+  extractEffortFieldErrors,
+  formatEffortValueWithUnit,
+  hasEffortContent,
+  parseTypedYmd,
   fromEffortWireValue,
   reconcileUpdateAfter409,
   restoreEffortInputs,
@@ -224,5 +228,44 @@ describe('単位コードの表示名変換', () => {
       translate,
     )
     expect(f.map((x) => x.unit)).toEqual(['分', 'kg', null, 'FURLONG'])
+  })
+})
+
+describe('ALIC-1 値と単位の連結', () => {
+  const tr = (c: string) => ({ MINUTE: '分', KILOGRAM: 'kg' } as Record<string, string>)[c] ?? null
+  it('単位コードを表示名へ変換し、値との間は半角空白 1 つ', () => {
+    expect(formatEffortValueWithUnit('90.00', 'MINUTE', tr)).toBe('90.00 分')
+    expect(formatEffortValueWithUnit('62.50', 'KILOGRAM', tr)).toBe('62.50 kg')
+  })
+  it('NONE・空は値のみ、未知コードはそのまま', () => {
+    expect(formatEffortValueWithUnit('5', 'NONE', tr)).toBe('5')
+    expect(formatEffortValueWithUnit('5', undefined, tr)).toBe('5')
+    expect(formatEffortValueWithUnit('5', 'XYZ', tr)).toBe('5 XYZ')
+  })
+})
+
+describe('ALIC-3 打たれた記録日の検証', () => {
+  it('実在する日は Date、存在しない日・形式不正・空は null', () => {
+    expect(parseTypedYmd('2026/11/17')?.getDate()).toBe(17)
+    expect(parseTypedYmd('2026/02/29')).toBeNull()
+    expect(parseTypedYmd('2028/02/29')?.getMonth()).toBe(1)
+    expect(parseTypedYmd('abc')).toBeNull()
+    expect(parseTypedYmd('')).toBeNull()
+  })
+})
+
+describe('ALIC-4 中身のない記録', () => {
+  it('全 field が null なら中身なし、1 件でも値があれば中身あり（0 は値）', () => {
+    expect(hasEffortContent([{ fieldKey: 'a', value: null }, { fieldKey: 'b', value: null }])).toBe(false)
+    expect(hasEffortContent([{ fieldKey: 'a', value: null }, { fieldKey: 'b', value: '0' }])).toBe(true)
+  })
+})
+
+describe('ALIC-5 fieldErrors の取り出し', () => {
+  it('400 応答の fieldErrors を返す。無ければ空', () => {
+    const e = { data: { error: { fieldErrors: [{ field: 'values.duration', message: '入力できる範囲を超えています' }] } } }
+    expect(extractEffortFieldErrors(e)).toEqual([{ field: 'values.duration', message: '入力できる範囲を超えています' }])
+    expect(extractEffortFieldErrors(new Error('x'))).toEqual([])
+    expect(extractEffortFieldErrors(null)).toEqual([])
   })
 })

@@ -7,6 +7,9 @@ import type { ActivityFieldValue } from '~/utils/activityFields'
 import { toYmd } from '~/utils/activityFields'
 import {
   buildEffortFieldValues,
+  extractEffortFieldErrors,
+  hasEffortContent,
+  parseTypedYmd,
   fromEffortWireValue,
   reconcileUpdateAfter409,
   restoreEffortInputs,
@@ -99,6 +102,8 @@ const saving = ref(false)
 const formError = ref('')
 const savedNotice = ref('')
 const conflictNotice = ref(false)
+/** 記録日の入力欄に利用者が打った文字列。DatePicker は maxDate 等で黙って別の日へ置換するため、打った値そのものを検証する。 */
+const recordedOnTyped = ref<string | null>(null)
 
 const activeDefinition = computed<EffortDefinitionSnapshotResponse | null>(() => {
   if (editing.value?.definition) return editing.value.definition
@@ -133,6 +138,11 @@ function onPresetChange() {
   resetInputs()
   clearNotices()
   pendingCreateKey = null
+  recordedOnTyped.value = null
+}
+
+function onRecordedOnInput(ev: Event) {
+  recordedOnTyped.value = (ev.target as HTMLInputElement | null)?.value ?? null
 }
 
 function currentBody() {
@@ -144,6 +154,20 @@ function currentBody() {
 }
 
 function validate(): boolean {
+  const typed = recordedOnTyped.value
+  if (typed !== null) {
+    if (typed.trim() === '') {
+      formError.value = t('effort.error.recordedOnRequired')
+      return false
+    }
+    const parsed = parseTypedYmd(typed)
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    if (!parsed || parsed > today || parsed.getFullYear() < 1900) {
+      formError.value = t('effort.error.recordedOnInvalid')
+      return false
+    }
+  }
   if (!(recordedOn.value instanceof Date) || Number.isNaN(recordedOn.value.getTime())) {
     formError.value = t('effort.error.recordedOnRequired')
     return false
@@ -155,6 +179,25 @@ function validate(): boolean {
       return false
     }
   }
+  if (!hasEffortContent(wire)) {
+    formError.value = t('effort.error.noContent')
+    return false
+  }
+  return true
+}
+
+/** BE の 400 fieldErrors をフォームへ表示する。表示できたら true（トーストは出さない）。 */
+function showFieldErrors(e: unknown): boolean {
+  if (statusOf(e) !== 400) return false
+  const errs = extractEffortFieldErrors(e)
+  if (errs.length === 0) return false
+  const labels = new Map(formFields.value.map((f) => [`values.${f.fieldKey}`, f.fieldLabel]))
+  formError.value = errs
+    .map((fe) => {
+      const label = labels.get(fe.field) ?? (fe.field === 'recordedOn' ? t('effort.recordedOn') : fe.field === 'privateNote' ? t('effort.privateNote') : '')
+      return label ? `${label}: ${fe.message}` : fe.message
+    })
+    .join(' / ')
   return true
 }
 
@@ -162,6 +205,7 @@ function adopt(record: EffortRecordResponse) {
   editing.value = record
   const d = fromEffortWireValue('DATE', record.recordedOn)
   recordedOn.value = d instanceof Date ? d : new Date()
+  recordedOnTyped.value = null
   inputs.value = restoreEffortInputs(toInputFields(record.definition?.fields), record.values)
   privateNote.value = record.privateNote ?? ''
 }
@@ -190,7 +234,7 @@ async function save() {
     }
     await loadRecords(true)
   } catch (e) {
-    handleApiError(e)
+    if (!showFieldErrors(e)) handleApiError(e)
   } finally {
     saving.value = false
   }
@@ -231,6 +275,7 @@ function newRecord() {
   editing.value = null
   clearNotices()
   recordedOn.value = new Date()
+  recordedOnTyped.value = null
   resetInputs()
   pendingCreateKey = null
 }
@@ -298,7 +343,7 @@ const chartTargetIndex = ref(0)
 const stats = ref<EffortStatsResult | null>(null)
 const statsLoading = ref(false)
 const statsError = ref<unknown>(null)
-const rangeError = ref(false)
+const rangeErrorKey = ref<string | null>(null)
 
 const reviewDefinition = computed(() => presets.value.find((p) => p.definitionUuid === reviewDefinitionUuid.value) ?? null)
 const chartTargets = computed<EffortChartTarget[]>(() => (reviewDefinition.value ? listEffortChartTargets(reviewDefinition.value) : []))
@@ -317,12 +362,16 @@ async function loadStats() {
   const isLatest = statsGuard.next()
   stats.value = null
   statsError.value = null
-  rangeError.value = false
+  rangeErrorKey.value = null
   statsLoading.value = false
   const range = reviewRange.value
   const target = chartTarget.value
   if (!range) {
-    rangeError.value = periodKind.value === 'custom' && (customFrom.value !== null || customTo.value !== null)
+    if (periodKind.value === 'custom' && (customFrom.value !== null || customTo.value !== null)) {
+      if (!customFrom.value || !customTo.value) rangeErrorKey.value = 'effort.period.invalidMissing'
+      else if (customTo.value < customFrom.value) rangeErrorKey.value = 'effort.period.invalidOrder'
+      else rangeErrorKey.value = 'effort.period.invalid'
+    }
     return
   }
   if (!target || !reviewDefinitionUuid.value) return
@@ -409,6 +458,8 @@ onMounted(async () => {
               date-format="yy/mm/dd"
               :max-date="new Date()"
               show-icon
+              @input="onRecordedOnInput"
+              @date-select="recordedOnTyped = null"
             />
           </div>
 
@@ -482,7 +533,7 @@ onMounted(async () => {
             <label for="effort-to" class="mb-1 inline-flex min-h-11 items-center text-sm font-medium">{{ t('effort.period.to') }}</label>
             <DatePicker v-model="customTo" input-id="effort-to" input-class="min-h-11 text-base" class="w-full" date-format="yy/mm/dd" show-icon />
           </div>
-          <p v-if="rangeError" class="text-sm text-red-600 sm:col-span-2" role="alert">{{ t('effort.period.invalid') }}</p>
+          <p v-if="rangeErrorKey" class="text-sm text-red-600 sm:col-span-2" role="alert" data-testid="effort-range-error">{{ t(rangeErrorKey) }}</p>
         </div>
 
         <div class="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">

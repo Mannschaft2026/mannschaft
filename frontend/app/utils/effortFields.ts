@@ -208,3 +208,44 @@ export function toEffortFormFields(
     }
   })
 }
+
+/** 値と単位を「値 単位」（半角空白 1 つ）で連結する。単位が無い（NONE/空）なら値のみ。 */
+export function formatEffortValueWithUnit(
+  value: string,
+  unit: string | null | undefined,
+  translate: (code: string) => string | null,
+): string {
+  const label = toEffortUnitLabel(unit, translate)
+  return label ? `${value} ${label}` : value
+}
+
+/** 送信する値が 1 件でもあるか（全 field が null の「中身のない記録」を FE で止めるため）。 */
+export function hasEffortContent(values: readonly EffortFieldValueBody[]): boolean {
+  return values.some((v) => v.value !== null)
+}
+
+/**
+ * 入力欄に打たれた記録日の文字列（yyyy/mm/dd）を、実在する暦日として解釈する。
+ * 空・形式不正・存在しない日（2026/02/29 等）は null。DatePicker の maxDate 等で黙って
+ * 別の日へ置き換わる前の「利用者が打った値」を検証するために使う。
+ */
+export function parseTypedYmd(text: string): Date | null {
+  const m = /^\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s*$/.exec(text)
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2])
+  const d = Number(m[3])
+  const date = new Date(y, mo - 1, d)
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null
+  return date
+}
+
+/** API の 400 応答に含まれる fieldErrors（field・message）を取り出す。無ければ空配列。 */
+export function extractEffortFieldErrors(e: unknown): Array<{ field: string; message: string }> {
+  const x = e as { data?: { error?: { fieldErrors?: unknown } }; response?: { _data?: { error?: { fieldErrors?: unknown } } } }
+  const raw = x?.data?.error?.fieldErrors ?? x?.response?._data?.error?.fieldErrors
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((fe): fe is { field: string; message: string } => typeof fe?.field === 'string' && typeof fe?.message === 'string')
+    .map((fe) => ({ field: fe.field, message: fe.message }))
+}

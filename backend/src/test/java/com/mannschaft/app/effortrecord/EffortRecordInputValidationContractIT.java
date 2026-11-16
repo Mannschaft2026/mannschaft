@@ -114,6 +114,32 @@ class EffortRecordInputValidationContractIT extends EffortRecordItSupport {
         }
     }
 
+    static Stream<Arguments> 範囲外の文言() {
+        return Stream.of(
+                Arguments.of(STUDY, "duration", "-5"),
+                Arguments.of(STUDY, "duration", "1441"),
+                Arguments.of(WEIGHT, "weight", "-60.00"),
+                Arguments.of(WEIGHT, "weight", "0"));
+    }
+
+    @ParameterizedTest(name = "範囲外の文言 {1}={2}")
+    @MethodSource("範囲外の文言")
+    @DisplayName("ALIC-5: 負数・範囲外は「10進表記」ではなく範囲外の文言で返す")
+    void 負数と範囲外は範囲外の文言(UUID definition, String fieldKey, String value) throws Exception {
+        Long owner = user("範囲文言");
+        Map<String, String> values = baseline(definition);
+        values.put(fieldKey, value);
+        JsonNode body = expectError(postCreate(owner, createBody(definition, DAY, TOKYO, values, null),
+                UUID.randomUUID().toString()), 400, "COMMON_001");
+        List<String> messages = new ArrayList<>();
+        body.at("/error/fieldErrors").forEach(error -> {
+            if (("values." + fieldKey).equals(error.path("field").asText())) {
+                messages.add(error.path("message").asText());
+            }
+        });
+        assertThat(messages).containsExactly("入力できる範囲を超えています");
+    }
+
     @Test
     @DisplayName("AC-4: 任意欄の空文字は null に正規化し、任意数値の null を 0 にしない")
     void AC4_任意空文字はnull正規化で任意数値nullは0にしない() throws Exception {

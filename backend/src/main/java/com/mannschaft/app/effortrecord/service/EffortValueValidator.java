@@ -47,7 +47,7 @@ public class EffortValueValidator {
     private static final int MAX_SUBJECT_LENGTH = 100;
     private static final int MAX_TEXT_LENGTH = 2000;
     private static final int MAX_NUMBER_LENGTH = 24;
-    private static final Pattern DECIMAL = Pattern.compile("[0-9]+(\\.[0-9]+)?");
+    private static final Pattern DECIMAL = Pattern.compile("-?[0-9]+(\\.[0-9]+)?");
     private static final Set<String> ZONES = ZoneId.getAvailableZoneIds();
 
     private final EffortSnapshotCodec codec;
@@ -161,6 +161,11 @@ public class EffortValueValidator {
             return null;
         }
         BigDecimal value = new BigDecimal(raw);
+        if (value.signum() < 0 && (field.min() == null || value.compareTo(new BigDecimal(field.min())) < 0)) {
+            // 負数は構文としては正しい 10 進数。下限を下回る（下限なしなら負数すべて）ので「形式不正」ではなく範囲外として伝える。
+            errors.add(error(path, "入力できる範囲を超えています"));
+            return null;
+        }
         if (value.scale() > field.scale()) {
             errors.add(error(path, field.scale() == 0 ? "整数で入力してください"
                     : "小数は" + field.scale() + "桁以内で入力してください"));

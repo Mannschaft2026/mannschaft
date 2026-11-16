@@ -22,7 +22,9 @@
     "error": {
       "required": "{field} ist erforderlich",
       "recordedOnRequired": "Bitte das Datum des Eintrags angeben",
-      "conflict": "Eine andere Änderung wurde zuerst gespeichert. Der neueste gespeicherte Stand wird angezeigt."
+      "conflict": "Eine andere Änderung wurde zuerst gespeichert. Der neueste gespeicherte Stand wird angezeigt.",
+      "recordedOnInvalid": "Bitte ein gültiges Datum von heute oder früher als Eintragsdatum angeben",
+      "noContent": "Bitte mindestens ein Feld ausfüllen"
     },
     "delete": {
       "header": "Eintrag löschen",
@@ -44,7 +46,9 @@
       "next": "Nächster Zeitraum",
       "from": "Startdatum",
       "to": "Enddatum",
-      "invalid": "Wähle einen Zeitraum von Start bis Ende mit höchstens 366 Tagen."
+      "invalid": "Wähle einen Zeitraum von Start bis Ende mit höchstens 366 Tagen.",
+      "invalidMissing": "Bitte Start- und Enddatum angeben.",
+      "invalidOrder": "Das Enddatum muss am oder nach dem Startdatum liegen."
     },
     "chart": {
       "kind": "Diagramm",

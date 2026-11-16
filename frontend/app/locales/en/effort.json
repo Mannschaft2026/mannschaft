@@ -22,7 +22,9 @@
     "error": {
       "required": "{field} is required",
       "recordedOnRequired": "Please enter the record date",
-      "conflict": "Another edit was saved first. The latest saved content is shown."
+      "conflict": "Another edit was saved first. The latest saved content is shown.",
+      "recordedOnInvalid": "Enter a real date that is today or earlier for the record date",
+      "noContent": "Please fill in at least one field"
     },
     "delete": {
       "header": "Delete record",
@@ -44,7 +46,9 @@
       "next": "Next period",
       "from": "Start date",
       "to": "End date",
-      "invalid": "Choose a range from start to end of up to 366 days."
+      "invalid": "Choose a range from start to end of up to 366 days.",
+      "invalidMissing": "Enter both a start date and an end date.",
+      "invalidOrder": "The end date must be on or after the start date."
     },
     "chart": {
       "kind": "Chart",

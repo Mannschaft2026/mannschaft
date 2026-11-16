@@ -22,7 +22,9 @@
     "error": {
       "required": "{field}为必填项",
       "recordedOnRequired": "请输入记录日期",
-      "conflict": "已有其他编辑先被保存。当前显示最新保存的内容。"
+      "conflict": "已有其他编辑先被保存。当前显示最新保存的内容。",
+      "recordedOnInvalid": "记录日期请输入今天或更早的有效日期",
+      "noContent": "请至少填写一项"
     },
     "delete": {
       "header": "删除记录",
@@ -44,7 +46,9 @@
       "next": "下一期间",
       "from": "开始日期",
       "to": "结束日期",
-      "invalid": "请指定从开始日到结束日、不超过366天的范围。"
+      "invalid": "请指定从开始日到结束日、不超过366天的范围。",
+      "invalidMissing": "请同时输入开始日期和结束日期。",
+      "invalidOrder": "结束日期不能早于开始日期。"
     },
     "chart": {
       "kind": "图表",

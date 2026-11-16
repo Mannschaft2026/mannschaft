@@ -9,12 +9,13 @@
  */
 import type { ChartData } from 'chart.js'
 import type { EffortStatsResult } from '~/composables/useEffortRecordApi'
+import { formatEffortValueWithUnit } from '~/utils/effortFields'
 
 const props = defineProps<{
   stats: EffortStatsResult
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const PALETTE = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#dc2626', '#0891b2', '#65a30d', '#db2777', '#4b5563', '#ca8a04', '#0d9488', '#7c3aed']
 
@@ -69,6 +70,15 @@ function percentOf(value: string | undefined): string | null {
   return `${(Math.round((v / total) * 1000 + Number.EPSILON) / 10).toFixed(1)}%`
 }
 
+/** 単位コード（MINUTE 等）を表示名へ翻訳した「値 単位」。未知コードはコードのまま。 */
+function withUnit(value: string | undefined | null): string {
+  return formatEffortValueWithUnit(String(value ?? ''), props.stats.unit, (code) => (te(`effort.unit.${code}`) ? t(`effort.unit.${code}`) : null))
+}
+
+function bucketCell(v: string | undefined | null, sampleCount: number | undefined): string {
+  return v === null || v === undefined || (sampleCount ?? 0) === 0 ? bucketValue(v, sampleCount) : withUnit(v)
+}
+
 function bucketValue(v: string | undefined | null, sampleCount: number | undefined): string {
   if (v === null || v === undefined || (sampleCount ?? 0) === 0) return t('effort.chart.notRecorded')
   return v
@@ -106,14 +116,14 @@ function bucketValue(v: string | undefined | null, sampleCount: number | undefin
               <span class="mr-2 inline-block h-3 w-3 rounded-sm align-middle" :style="{ backgroundColor: PALETTE[i % PALETTE.length] }" aria-hidden="true" />
               {{ c.key === '__unspecified__' ? t('effort.chart.unspecifiedSubject') : c.label }}
             </td>
-            <td class="py-1 text-right">{{ c.value }} {{ stats.unit }}</td>
+            <td class="py-1 text-right">{{ withUnit(c.value) }}</td>
             <td class="py-1 text-right">{{ percentOf(c.value) ?? '-' }}</td>
           </tr>
         </tbody>
         <tfoot v-if="stats.total !== undefined && stats.total !== null">
           <tr class="font-semibold">
             <td class="py-1">{{ t('effort.chart.total') }}</td>
-            <td class="py-1 text-right" data-testid="effort-stats-total">{{ stats.total }} {{ stats.unit }}</td>
+            <td class="py-1 text-right" data-testid="effort-stats-total">{{ withUnit(stats.total) }}</td>
             <td />
           </tr>
         </tfoot>
@@ -128,7 +138,7 @@ function bucketValue(v: string | undefined | null, sampleCount: number | undefin
         <tbody>
           <tr v-for="b in stats.buckets" :key="b.startOn" data-testid="effort-stats-row">
             <td class="py-1">{{ b.startOn }}<template v-if="b.endOn && b.endOn !== b.startOn"> - {{ b.endOn }}</template></td>
-            <td class="py-1 text-right">{{ bucketValue(b.value, b.sampleCount) }}<template v-if="b.value !== null && b.value !== undefined && (b.sampleCount ?? 0) > 0"> {{ stats.unit }}</template></td>
+            <td class="py-1 text-right">{{ bucketCell(b.value, b.sampleCount) }}</td>
           </tr>
         </tbody>
       </table>

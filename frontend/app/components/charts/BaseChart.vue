@@ -143,6 +143,17 @@ watch(
   { deep: true },
 )
 
+// canvas は <ClientOnly> 内にあり、ClientOnly は mount 後の次 tick でスロットを描く。
+// そのため onMounted 時点では canvasRef が未マウントで、props も変わらないと一度も描かれず
+// 真っ白な canvas（300x150）になる。canvas の出現・差し替えそのものを契機に描画する。
+watch(canvasRef, (el) => {
+  if (el) renderChart()
+  else {
+    chartInstance?.destroy()
+    chartInstance = null
+  }
+}, { flush: 'post' })
+
 onMounted(renderChart)
 onUnmounted(() => {
   chartInstance?.destroy()

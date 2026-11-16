@@ -123,4 +123,18 @@ describe('EffortStatsView（AC-18）', () => {
     expect(rows[1]!.text()).not.toContain('MINUTE')
     expect(rows[2]!.text()).toContain('90.00')
   })
+  // ALIC-1: 単位コード（MINUTE/KILOGRAM）を表示名へ翻訳し、値との間は半角空白 1 つに統一する。
+  it('数値表の単位は表示名（分・kg）で、値との間に空白が入る（コード直表示・空白欠落なし）', async () => {
+    const bar: EffortStatsResult = {
+      chart: 'BAR', grain: 'DAY', unit: 'KILOGRAM', dateFrom: '2026-11-01', dateTo: '2026-11-01', categories: [], total: undefined, totalSampleCount: 1,
+      buckets: [{ startOn: '2026-11-01', endOn: '2026-11-01', value: '62.50', sampleCount: 1 }],
+    }
+    const wb = await mountSuspended(EffortStatsView, { props: { stats: bar }, global })
+    expect(wb.get('[data-testid="effort-stats-row"]').text()).toContain('62.50 kg')
+    expect(wb.text()).not.toContain('KILOGRAM')
+    const wp = await mountSuspended(EffortStatsView, { props: { stats: pieStats() }, global })
+    expect(wp.findAll('[data-testid="effort-stats-row"]')[0]!.text()).toMatch(/30\.00 (分|min)/)
+    expect(wp.get('[data-testid="effort-stats-total"]').text()).toMatch(/90\.00 (分|min)/)
+    expect(wp.text()).not.toContain('MINUTE')
+  })
 })

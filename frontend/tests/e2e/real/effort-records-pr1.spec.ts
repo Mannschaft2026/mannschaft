@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect, type Browser, type Page } from '@playwright/test'
+import { test, expect, type Browser, type Locator, type Page } from '@playwright/test'
 import { API, FE, createActor, openAs, gotoAndHydrate, type Actor } from './helpers/n1p1-world'
 
 /**
@@ -111,6 +111,21 @@ async function save(page: Page) {
     page.getByTestId('effort-save').click(),
   ])
   return res.status()
+}
+
+/** canvas に実際に描かれている（非透明画素が 1 つ以上ある）こと。真っ白な canvas（ALIC-2）を検出する。 */
+async function expectPainted(canvas: Locator) {
+  await expect.poll(
+    () => canvas.evaluate((el) => {
+      const c = el as HTMLCanvasElement
+      const data = c.getContext('2d')?.getImageData(0, 0, c.width, c.height).data
+      if (!data) return 0
+      let n = 0
+      for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) n++
+      return n
+    }),
+    { timeout: 30_000 },
+  ).toBeGreaterThan(0)
 }
 
 const list = (page: Page) => page.getByTestId('effort-list').locator('li')
@@ -361,6 +376,7 @@ test('E6 振り返り: 週/月/年/任意・棒/折線/円の切替（許可表�
   const lastDay = new Date(Date.UTC(Number(y), Number(m), 0)).getUTCDate()
   await expect(page.getByTestId('effort-range')).toHaveText(`${y}-${m}-01 - ${y}-${m}-${String(lastDay).padStart(2, '0')}`)
   await expect(statsView.locator('canvas')).toBeVisible({ timeout: 60_000 })
+  await expectPainted(statsView.locator('canvas'))
   await shot(page, 'e6-1-study-bar-month')
 
   await pickChart('円グラフ')
@@ -404,6 +420,7 @@ test('E6 振り返り: 週/月/年/任意・棒/折線/円の切替（許可表�
   expect(await options()).toEqual(['折れ線グラフ (体重)'])
   await expect(statsView.locator('canvas')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('effort-stats-table')).toContainText('60.25')
+  await expectPainted(statsView.locator('canvas'))
   await shot(page, 'e6-4-weight-line')
 
   // --- 0件: 過去の空の期間（年 -3）は円も棒も描かない
