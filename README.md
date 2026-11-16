@@ -877,6 +877,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 
 - **消費税設定**: 税名称・税率・表示方式（税込/税抜）の設定
 - **エラーレポート管理（F12.5 Phase 2）**: ユーザーから送信されたエラーレポートの一覧・Kanban・詳細確認（スタックトレース・発生ページ・ユーザーエージェント・任意コメント）。ステータス管理（未対応 / 対応中 / 解決済み）に加え、ワークフロー段階管理（INVESTIGATION_STARTED → ROOT_CAUSE_IDENTIFIED → FIX_IN_PROGRESS → TEST_COMPLETED → RELEASED）、担当者アサイン、操作履歴・コメント、タイムライン（occurrences + activities）、AI 自動分析（Claude Haiku 4.5、月次予算 5,000 円）、GitHub Issue 自動作成（PII 除去 + 内部 URL 付与）に対応。詳細: `docs/features/F12.5_frontend_error_tracking.md` §12
+- 診断URLはFE送信時・BEのFE取込保存前にquery/fragment/userinfoを除去し、capabilityリンク本体と内部HEALTH/BACKENDのpathを維持する。保証範囲は[F12.5の診断URL保存境界](docs/features/F12.5_frontend_error_tracking.md#診断urlの保存境界cmp-261116-1416)を参照。
 - **アフィリエイト設定**: AmazonアソシエイトのタグIDと表示配置（サイドバー右・バナーフッター等）を管理画面から設定・切り替え。将来は楽天アフィリエイト等の追加も対応できる設計とする
 - **広告管理（将来）**: プラットフォーム全体の広告クリエイティブ（画像・タイトル・リンク先・リンク種別）の登録・審査・公開管理。キャンペーン（掲載期間・表示対象プランスコープ・ターゲティング条件）の作成・一覧確認。インプレッション・クリック数の統計確認
 - ユーザーBAN・通報管理
