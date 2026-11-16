@@ -12,7 +12,12 @@ vi.mock('~/composables/useApi', () => ({
 function fixture() {
   h.refresh.mockReset().mockResolvedValue('refreshed')
   h.logout.mockReset().mockResolvedValue(undefined)
-  const store = reactive({ user: { id: 7 } as { id: number } | null, get isAuthenticated() { return this.user !== null } })
+  const store = reactive({
+    user: { id: 7 } as { id: number } | null,
+    get isAuthenticated() {
+      return this.user !== null
+    },
+  })
   type Deps = Parameters<typeof createStompAuthRecovery>[0]
   const recovery = createStompAuthRecovery({
     config: { public: { apiBase: '' } } as unknown as Deps['config'],
@@ -49,7 +54,12 @@ describe('N2: STOMP回復のセッション境界', () => {
   it('Aの遅着auth_failedでBをlogoutしない', async () => {
     const { store, recovery } = fixture()
     let complete!: (value: string) => void
-    h.refresh.mockImplementationOnce(() => new Promise<string>(resolve => { complete = resolve }))
+    h.refresh.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          complete = resolve
+        }),
+    )
     const old = recovery.recover()
     store.user = { id: 8 }
     complete('auth_failed')
@@ -60,7 +70,12 @@ describe('N2: STOMP回復のセッション境界', () => {
   it('Aの遅着TRANSIENTはBの新しい更新窓を消去しない', async () => {
     const { store, recovery } = fixture()
     let complete!: (value: string) => void
-    h.refresh.mockImplementationOnce(() => new Promise<string>(resolve => { complete = resolve }))
+    h.refresh.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          complete = resolve
+        }),
+    )
     const old = recovery.recover()
     store.user = { id: 8 }
     expect(await recovery.recover()).toBe('RETRY')

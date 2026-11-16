@@ -2,7 +2,11 @@ import type { Client, IFrame, StompSubscription } from '@stomp/stompjs'
 import { Client as StompClient } from '@stomp/stompjs'
 import { useEventBus } from '@vueuse/core'
 import { computed, readonly, ref, effectScope, watch } from 'vue'
-import { getAuthSessionContext, type AuthSessionContext, type AuthSessionSnapshot } from '~/composables/authSessionContext'
+import {
+  getAuthSessionContext,
+  type AuthSessionContext,
+  type AuthSessionSnapshot,
+} from '~/composables/authSessionContext'
 import {
   buildStompConnectHeaders,
   handleStompErrorFrame,
@@ -112,16 +116,31 @@ function _subscribeRoute(key: string): void {
   const client = _stompClient
   const session = _authSession
   let subscription: StompSubscription | null = null
-  subscription = client.subscribe(route.destination, (frame) => {
-    if (_stompClient !== client || _routes.get(key) !== route || subscription === null
-      || _activeSubscriptions.get(key) !== subscription || !route.snapshot || !session?.current(route.snapshot)) return
-    route.onFrame(frame)
-  }, { receipt })
+  subscription = client.subscribe(
+    route.destination,
+    (frame) => {
+      if (
+        _stompClient !== client ||
+        _routes.get(key) !== route ||
+        subscription === null ||
+        _activeSubscriptions.get(key) !== subscription ||
+        !route.snapshot ||
+        !session?.current(route.snapshot)
+      )
+        return
+      route.onFrame(frame)
+    },
+    { receipt },
+  )
   _activeSubscriptions.set(key, subscription)
 }
 
 /** テスト・診断用: 共有接続が保持している購読・receipt の件数（増え続けないことの確認に使う）。 */
-export function getChatWsDiagnostics(): { routes: number; activeSubscriptions: number; receipts: number } {
+export function getChatWsDiagnostics(): {
+  routes: number
+  activeSubscriptions: number
+  receipts: number
+} {
   return {
     routes: _routes.size,
     activeSubscriptions: _activeSubscriptions.size,
@@ -135,11 +154,10 @@ function _registerRoute(key: string, route: StompRoute): void {
   route.snapshot = _authSession.capture()
   _routes.set(key, route)
   // 明示的な購読開始は再試行とみなす（メンバーに追加された後の再訪など）。
-  _deniedDestinations.value = _deniedDestinations.value.filter(d => d !== route.destination)
+  _deniedDestinations.value = _deniedDestinations.value.filter((d) => d !== route.destination)
   if (_stompClient !== null && _stompClient.connected) {
     _subscribeRoute(key)
-  }
-  else {
+  } else {
     _ensureClientActive()
   }
 }
@@ -160,7 +178,10 @@ function _denyDestination(destination: string): void {
   // （片方ずつ拒否されて再接続を 2 回繰り返さないため）。
   const channelMatch = /^\/topic\/channels\/(\d+)(?:\/events)?$/.exec(destination)
   const targets = channelMatch
-    ? [channelDestination(Number(channelMatch[1])), channelEventsDestination(Number(channelMatch[1]))]
+    ? [
+        channelDestination(Number(channelMatch[1])),
+        channelEventsDestination(Number(channelMatch[1])),
+      ]
     : [destination]
   const merged = new Set([..._deniedDestinations.value, ...targets])
   _deniedDestinations.value = [...merged]
@@ -195,9 +216,10 @@ function _resetIdentity(): void {
   _reconnectAttempts = 0
   _wsConnectionFailed.value = false
   _wsAuthState.value = 'OK'
-  if (previous) void previous.deactivate().catch((error: unknown) => {
-    console.error('[useChatWebSocket] 旧セッションの切断に失敗しました:', error)
-  })
+  if (previous)
+    void previous.deactivate().catch((error: unknown) => {
+      console.error('[useChatWebSocket] 旧セッションの切断に失敗しました:', error)
+    })
 }
 
 /** 共有 STOMP クライアントを生成・活性化する（既に活性なら何もしない）。 */
@@ -218,10 +240,16 @@ function _ensureClientActive(): void {
     // トークンが無い（リロード直後）ときは Authorization を付けず Cookie 認証に任せる（空 Bearer 禁止）。
     connectHeaders: buildStompConnectHeaders(_authStore?.accessToken),
     beforeConnect: async () => {
-      if (!isCurrentClient()) { await client.deactivate(); return }
+      if (!isCurrentClient()) {
+        await client.deactivate()
+        return
+      }
       // UNAUTHENTICATED の回復（トークン更新）中なら完了を待つ。回復不能なら deactivate 済みで再接続しない。
       if (_pendingAuthRecovery !== null) await _pendingAuthRecovery
-      if (!isCurrentClient()) { await client.deactivate(); return }
+      if (!isCurrentClient()) {
+        await client.deactivate()
+        return
+      }
       // 再接続時に最新トークンを差し替える（リフレッシュ後の再接続でも有効なトークンを使う）
       if (_stompClient !== null) {
         client.connectHeaders = buildStompConnectHeaders(_authStore?.accessToken)
@@ -282,7 +310,10 @@ function _ensureClientActive(): void {
             return
           }
           // 宛先を特定できない拒否（CONNECT 段階など）は再接続しても解消しないため止める。
-          console.error('[useChatWebSocket] 宛先を特定できない購読拒否のため再接続を停止します:', frame.headers['message'])
+          console.error(
+            '[useChatWebSocket] 宛先を特定できない購読拒否のため再接続を停止します:',
+            frame.headers['message'],
+          )
           _rejectWaiters(new Error(`STOMP エラー: ${frame.headers['message'] ?? 'unknown'}`))
           void _stompClient?.deactivate()
         },
@@ -306,7 +337,9 @@ function _ensureClientActive(): void {
       }
     },
   })
-  function isCurrentClient(): boolean { return _stompClient === client && !!session?.current(snapshot) }
+  function isCurrentClient(): boolean {
+    return _stompClient === client && !!session?.current(snapshot)
+  }
   _stompClient = client
   client.activate()
 }
@@ -344,8 +377,7 @@ function onChannelFrame(channelId: number, frame: IFrame): void {
       type: payload.type,
       data: payload.data,
     })
-  }
-  catch (err: unknown) {
+  } catch (err: unknown) {
     console.error(
       `[useChatApi] チャンネル ${channelId} の受信メッセージのパースに失敗しました:`,
       err,
@@ -376,8 +408,7 @@ async function _catchupMessages(channelId: number, lastMessageId: number): Promi
         data: msg,
       })
     }
-  }
-  catch {
+  } catch {
     // キャッチアップ失敗はサイレント（次回の WS 受信で補完される）
   }
 }
@@ -416,7 +447,13 @@ export function useChatWebSocket() {
     const app = useNuxtApp()
     _authSession.bindApp(app)
     const scope = effectScope(true)
-    scope.run(() => watch(() => authStore.user?.id ?? null, () => _resetIdentity(), { flush: 'sync' }))
+    scope.run(() =>
+      watch(
+        () => authStore.user?.id ?? null,
+        () => _resetIdentity(),
+        { flush: 'sync' },
+      ),
+    )
     app.vueApp.onUnmount(() => {
       scope.stop()
       _resetIdentity()
@@ -430,13 +467,21 @@ export function useChatWebSocket() {
   // channel APIは取得時の世代へ束縛する。旧componentの解除で新userの同channelを減算しない。
   // publisherはchannel取得と独立して所有する。旧componentのleave/typingを新userとして送らない。
   // 匿名setupのみ、認証後の最初の正当sendまで遅延取得する。raw受信の再取得では所有を替えない。
-  let publisherOwner = _authSession && _authSession.accountId !== null
-    ? { session: _authSession, snapshot: _authSession.capture() }
-    : null
-  function publisherSession(): { session: AuthSessionContext; snapshot: AuthSessionSnapshot } | null {
+  let publisherOwner =
+    _authSession && _authSession.accountId !== null
+      ? { session: _authSession, snapshot: _authSession.capture() }
+      : null
+  function publisherSession(): {
+    session: AuthSessionContext
+    snapshot: AuthSessionSnapshot
+  } | null {
     if (!_authSession || _authSession.disposed || _authSession.accountId === null) return null
     publisherOwner ??= { session: _authSession, snapshot: _authSession.capture() }
-    if (publisherOwner.session !== _authSession || !publisherOwner.session.current(publisherOwner.snapshot)) return null
+    if (
+      publisherOwner.session !== _authSession ||
+      !publisherOwner.session.current(publisherOwner.snapshot)
+    )
+      return null
     return publisherOwner
   }
 
@@ -541,11 +586,11 @@ export function useChatWebSocket() {
         onFrame: (frame: IFrame) => {
           try {
             const event = JSON.parse(frame.body) as ChatChannelEvent
-            useEventBus<{ channelId: number; event: ChatChannelEvent }>(
-              'chat:channel:event',
-            ).emit({ channelId, event })
-          }
-          catch (err: unknown) {
+            useEventBus<{ channelId: number; event: ChatChannelEvent }>('chat:channel:event').emit({
+              channelId,
+              event,
+            })
+          } catch (err: unknown) {
             console.error(
               `[useChatApi] チャンネル ${channelId} のイベントパースに失敗しました:`,
               err,
@@ -613,8 +658,10 @@ export function useChatWebSocket() {
 
   /** そのチャンネル（メッセージ／イベント）の購読が拒否されたか（閲覧権限なし）。 */
   function isChannelDenied(channelId: number): boolean {
-    return _deniedDestinations.value.includes(channelDestination(channelId))
-      || _deniedDestinations.value.includes(channelEventsDestination(channelId))
+    return (
+      _deniedDestinations.value.includes(channelDestination(channelId)) ||
+      _deniedDestinations.value.includes(channelEventsDestination(channelId))
+    )
   }
 
   return {
@@ -643,8 +690,7 @@ if (import.meta.client) {
     if (document.hidden) {
       // バックグラウンドタブ: 再接続間隔を延長
       _stompClient.reconnectDelay = 60_000
-    }
-    else {
+    } else {
       // フォアグラウンド復帰: 即再接続
       _stompClient.reconnectDelay = 1000
       // 未認証で止めた接続は、ここでは再開しない（再接続しても解消しないため）。

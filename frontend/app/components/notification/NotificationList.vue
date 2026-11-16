@@ -31,14 +31,19 @@ let mutationRevision = 0
 let pendingPage: number | null = null
 let refreshPending = false
 let loadFlight: Promise<void> | null = null
-function current(snapshot: AuthSessionSnapshot): boolean { return !disposed && session.current(snapshot) }
+function current(snapshot: AuthSessionSnapshot): boolean {
+  return !disposed && session.current(snapshot)
+}
 function mutationSucceeded(): void {
   mutationRevision += 1
   if (loadFlight) refreshPending = true
 }
-function patchNotification(notif: NotificationResponse, patch: Partial<NotificationResponse>): void {
+function patchNotification(
+  notif: NotificationResponse,
+  patch: Partial<NotificationResponse>,
+): void {
   Object.assign(notif, patch)
-  const displayed = notifications.value.find(row => row.id === notif.id)
+  const displayed = notifications.value.find((row) => row.id === notif.id)
   if (displayed && displayed !== notif) Object.assign(displayed, patch)
 }
 
@@ -92,7 +97,7 @@ async function onSnooze(notif: NotificationResponse, preset: SnoozePreset) {
     await snooze(notif.id, snoozedUntil)
     if (!current(snapshot)) return
     mutationSucceeded()
-    notifications.value = notifications.value.filter(row => row.id !== notif.id)
+    notifications.value = notifications.value.filter((row) => row.id !== notif.id)
     toast.add({
       severity: 'success',
       summary: t('inbox.action.snoozed'),
@@ -101,7 +106,11 @@ async function onSnooze(notif: NotificationResponse, preset: SnoozePreset) {
   } catch {
     if (!current(snapshot)) return
     // ロールバック: 除去した通知を元の位置に戻す
-    if (revision === viewRevision && idx >= 0 && !notifications.value.some(row => row.id === notif.id)) {
+    if (
+      revision === viewRevision &&
+      idx >= 0 &&
+      !notifications.value.some((row) => row.id === notif.id)
+    ) {
       notifications.value.splice(idx, 0, notif)
     } else if (revision !== viewRevision) {
       requestRefresh()
@@ -134,7 +143,8 @@ function drainLoads(): Promise<void> {
     }
   })().finally(() => {
     loadFlight = null
-    if (!disposed && session.accountId !== null && (pendingPage !== null || refreshPending)) void drainLoads()
+    if (!disposed && session.accountId !== null && (pendingPage !== null || refreshPending))
+      void drainLoads()
   })
   return loadFlight
 }
@@ -146,21 +156,29 @@ async function fetchNotifications(page: number | null) {
   const mutation = mutationRevision
   const selectedFilter = filter.value
   const depth = Math.max(1, nextPage.value)
-  const valid = () => current(snapshot) && revision === viewRevision && selectedFilter === filter.value
+  const valid = () =>
+    current(snapshot) && revision === viewRevision && selectedFilter === filter.value
   loading.value = true
   try {
     const pages = page === null ? Array.from({ length: depth }, (_, index) => index) : [page]
     const rows: NotificationResponse[] = []
     let totalPages = 0
     for (const requestedPage of pages) {
-      const res = await getNotifications({ page: requestedPage, size: 20, isRead: selectedFilter === 'unread' ? false : undefined })
+      const res = await getNotifications({
+        page: requestedPage,
+        size: 20,
+        isRead: selectedFilter === 'unread' ? false : undefined,
+      })
       if (!valid()) return
-      if (mutation !== mutationRevision) { refreshPending = true; return }
+      if (mutation !== mutationRevision) {
+        refreshPending = true
+        return
+      }
       rows.push(...res.data)
       totalPages = res.meta.totalPages
     }
     const combined = page !== null && page > 0 ? [...notifications.value, ...rows] : rows
-    notifications.value = [...new Map(combined.map(row => [row.id, row])).values()]
+    notifications.value = [...new Map(combined.map((row) => [row.id, row])).values()]
     nextPage.value = page === null ? depth : page + 1
     hasNext.value = nextPage.value < totalPages
     // 確認通知のサマリ（未確認件数等）を並列取得（権限が無いものは静かにスキップ）
@@ -401,20 +419,36 @@ async function onConfirmNotification(notif: NotificationResponse) {
   }
 }
 
-watch(filter, () => { viewRevision += 1; void loadNotifications() })
-watch(() => notificationStore.latestNotification, payload => { if (payload) requestRefresh() })
-watch(() => authStore.user?.id ?? null, () => {
+watch(filter, () => {
   viewRevision += 1
-  notifications.value = []
-  confirmableSummaries.value = {}
-  nextPage.value = 0
-  hasNext.value = false
-  refreshPending = false
-  pendingPage = null
-  if (session.accountId !== null) void loadNotifications()
-}, { flush: 'sync' })
+  void loadNotifications()
+})
+watch(
+  () => notificationStore.latestNotification,
+  (payload) => {
+    if (payload) requestRefresh()
+  },
+)
+watch(
+  () => authStore.user?.id ?? null,
+  () => {
+    viewRevision += 1
+    notifications.value = []
+    confirmableSummaries.value = {}
+    nextPage.value = 0
+    hasNext.value = false
+    refreshPending = false
+    pendingPage = null
+    if (session.accountId !== null) void loadNotifications()
+  },
+  { flush: 'sync' },
+)
 onMounted(() => loadNotifications())
-onUnmounted(() => { disposed = true; pendingPage = null; refreshPending = false })
+onUnmounted(() => {
+  disposed = true
+  pendingPage = null
+  refreshPending = false
+})
 
 defineExpose({ refresh: () => loadNotifications() })
 </script>

@@ -10,7 +10,9 @@ import NotificationList from '~/components/notification/NotificationList.vue'
 type ConfirmableNotificationFixture = NotificationResponse & { isConfirmed?: boolean | null }
 
 const mocks = vi.hoisted(() => ({
-  authStore: { user: { id: 42, timezone: 'Asia/Tokyo' } as { id: number; timezone: string } | null },
+  authStore: {
+    user: { id: 42, timezone: 'Asia/Tokyo' } as { id: number; timezone: string } | null,
+  },
   notificationStore: { latestNotification: null as { id: number; userId: number } | null },
   notificationApi: {
     getNotifications: vi.fn(),
@@ -52,7 +54,9 @@ vi.mock('~/composables/useRelativeTime', () => ({
 vi.mock('~/stores/useAuthStore', () => ({
   useAuthStore: () => mocks.authStore,
 }))
-vi.mock('~/stores/useNotificationStore', () => ({ useNotificationStore: () => mocks.notificationStore }))
+vi.mock('~/stores/useNotificationStore', () => ({
+  useNotificationStore: () => mocks.notificationStore,
+}))
 vi.mock('nuxt/app', async () => {
   const actual = await vi.importActual<typeof import('nuxt/app')>('nuxt/app')
   return {
@@ -419,11 +423,21 @@ describe('既読 API の失敗と冪等化（CMP-261030-0652）', () => {
   })
 })
 
-function listResponse(rows: NotificationResponse[], page = 0, totalPages = 1): NotificationListResponse {
+function listResponse(
+  rows: NotificationResponse[],
+  page = 0,
+  totalPages = 1,
+): NotificationListResponse {
   return { data: rows, meta: { total: totalPages * 20, page, size: 20, totalPages } }
 }
 function liveRow(id: number): NotificationResponse {
-  return { ...notification(null, false), id, title: `通知 ${id}`, sourceType: 'SYSTEM', sourceId: null }
+  return {
+    ...notification(null, false),
+    id,
+    title: `通知 ${id}`,
+    sourceType: 'SYSTEM',
+    sourceId: null,
+  }
 }
 async function receiveNotification(id: number) {
   mocks.notificationStore.latestNotification = { id, userId: mocks.authStore.user?.id ?? 42 }
@@ -458,7 +472,11 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     await flushPromises()
     mocks.notificationApi.getNotifications.mockResolvedValue(listResponse([liveRow(2), liveRow(2)]))
     await receiveNotification(2)
-    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({ page: 0, size: 20, isRead: false })
+    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({
+      page: 0,
+      size: 20,
+      isRead: false,
+    })
     expect(wrapper.findAll('[data-notification-id="2"]')).toHaveLength(1)
     wrapper.unmount()
   })
@@ -477,10 +495,16 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     await receiveNotification(3)
     expect(wrapper.text()).toContain('通知 3')
     expect(wrapper.text()).toContain('通知 2')
-    mocks.notificationApi.getNotifications.mockResolvedValueOnce(listResponse([liveRow(2), liveRow(4)], 2, 3))
+    mocks.notificationApi.getNotifications.mockResolvedValueOnce(
+      listResponse([liveRow(2), liveRow(4)], 2, 3),
+    )
     await wrapper.get('button[data-label="notification.list.loadMore"]').trigger('click')
     await flushPromises()
-    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({ page: 2, size: 20, isRead: undefined })
+    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({
+      page: 2,
+      size: 20,
+      isRead: undefined,
+    })
     expect(wrapper.findAll('[data-notification-id="2"]')).toHaveLength(1)
     wrapper.unmount()
   })
@@ -489,7 +513,12 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     const wrapper = await mountList(liveRow(1))
     await flushPromises()
     let complete!: (value: NotificationListResponse) => void
-    mocks.notificationApi.getNotifications.mockImplementationOnce(() => new Promise<NotificationListResponse>(resolve => { complete = resolve }))
+    mocks.notificationApi.getNotifications.mockImplementationOnce(
+      () =>
+        new Promise<NotificationListResponse>((resolve) => {
+          complete = resolve
+        }),
+    )
     await receiveNotification(2)
     expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
     for (let id = 3; id <= 12; id++) await receiveNotification(id)
@@ -506,7 +535,12 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     const wrapper = await mountList(liveRow(1))
     await flushPromises()
     let complete!: (value: NotificationListResponse) => void
-    mocks.notificationApi.getNotifications.mockImplementationOnce(() => new Promise<NotificationListResponse>(resolve => { complete = resolve }))
+    mocks.notificationApi.getNotifications.mockImplementationOnce(
+      () =>
+        new Promise<NotificationListResponse>((resolve) => {
+          complete = resolve
+        }),
+    )
     await receiveNotification(2)
     expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
     wrapper.unmount()
@@ -520,12 +554,19 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     const wrapper = await mountList(notification(false, false))
     await flushPromises()
     let complete!: (value: NotificationListResponse) => void
-    mocks.notificationApi.getNotifications.mockImplementationOnce(() => new Promise<NotificationListResponse>(resolve => { complete = resolve }))
+    mocks.notificationApi.getNotifications.mockImplementationOnce(
+      () =>
+        new Promise<NotificationListResponse>((resolve) => {
+          complete = resolve
+        }),
+    )
     await receiveNotification(2)
     expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
     await wrapper.get(`button[data-label="${confirmButtonLabel}"]`).trigger('click')
     await flushPromises()
-    mocks.notificationApi.getNotifications.mockResolvedValue(listResponse([notification(true, true)]))
+    mocks.notificationApi.getNotifications.mockResolvedValue(
+      listResponse([notification(true, true)]),
+    )
     complete(listResponse([notification(false, false)]))
     await flushPromises()
     expect(wrapper.text()).toContain(confirmedLabel)
@@ -537,7 +578,12 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     const wrapper = await mountList(notification(false, false))
     await flushPromises()
     let complete!: () => void
-    mocks.confirmableApi.confirmNotification.mockImplementationOnce(() => new Promise<void>(resolve => { complete = resolve }))
+    mocks.confirmableApi.confirmNotification.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve
+        }),
+    )
     await wrapper.get(`button[data-label="${confirmButtonLabel}"]`).trigger('click')
     mocks.authStore.user = { id: 43, timezone: 'Asia/Tokyo' }
     complete()
@@ -550,7 +596,9 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
   it('N5: refresh取得失敗を既存エラーで表示し、現在の通知を消さない', async () => {
     const wrapper = await mountList(liveRow(1))
     await flushPromises()
-    mocks.notificationApi.getNotifications.mockRejectedValueOnce(new Error('fixture network failure'))
+    mocks.notificationApi.getNotifications.mockRejectedValueOnce(
+      new Error('fixture network failure'),
+    )
     await receiveNotification(2)
     expect(mocks.showError).toHaveBeenCalledWith('notification.list.loadError')
     expect(wrapper.text()).toContain('通知 1')
@@ -561,7 +609,12 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     const wrapper = await mountList(liveRow(1))
     await flushPromises()
     let complete!: (value: NotificationListResponse) => void
-    mocks.notificationApi.getNotifications.mockImplementationOnce(() => new Promise<NotificationListResponse>(resolve => { complete = resolve }))
+    mocks.notificationApi.getNotifications.mockImplementationOnce(
+      () =>
+        new Promise<NotificationListResponse>((resolve) => {
+          complete = resolve
+        }),
+    )
     await receiveNotification(2)
     expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
     wrapper.findComponent(stubs.SelectButton).vm.$emit('update:modelValue', 'unread')
@@ -571,7 +624,11 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('通知 3')
     expect(wrapper.text()).not.toContain('通知 2')
-    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({ page: 0, size: 20, isRead: false })
+    expect(mocks.notificationApi.getNotifications).toHaveBeenLastCalledWith({
+      page: 0,
+      size: 20,
+      isRead: false,
+    })
     wrapper.unmount()
   })
 
@@ -579,7 +636,12 @@ describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
     const wrapper = await mountList(liveRow(1))
     await flushPromises()
     let complete!: (value: NotificationListResponse) => void
-    mocks.notificationApi.getNotifications.mockImplementationOnce(() => new Promise<NotificationListResponse>(resolve => { complete = resolve }))
+    mocks.notificationApi.getNotifications.mockImplementationOnce(
+      () =>
+        new Promise<NotificationListResponse>((resolve) => {
+          complete = resolve
+        }),
+    )
     await receiveNotification(2)
     expect(mocks.notificationApi.getNotifications).toHaveBeenCalledTimes(2)
     mocks.authStore.user = { id: 43, timezone: 'Asia/Tokyo' }

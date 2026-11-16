@@ -29,11 +29,13 @@ function createSocket() {
   return socket
 }
 afterEach(() => {
-  sockets.splice(0).forEach(socket => socket.stop())
+  sockets.splice(0).forEach((socket) => socket.stop())
 })
 
 const mockUnsubscribeFn = vi.fn()
-const mockSubscribeRawFn = vi.fn((_topic: string, _callback: SubscribeCallback) => mockUnsubscribeFn)
+const mockSubscribeRawFn = vi.fn(
+  (_topic: string, _callback: SubscribeCallback) => mockUnsubscribeFn,
+)
 
 vi.mock('~/composables/chat/useChatWebSocket', () => ({
   useChatWebSocket: () => ({ subscribeRaw: mockSubscribeRawFn }),
@@ -70,7 +72,12 @@ describe('useUserNotificationSocket — /user/queue/notifications 購読', () =>
     useUserNotificationSocket().stop()
     mockSubscribeRawFn.mockClear()
     mockUnsubscribeFn.mockClear()
-    useAuthStore().user = { id: 42, email: 'fixture@example.invalid', fullName: '試験', profileImageUrl: null }
+    useAuthStore().user = {
+      id: 42,
+      email: 'fixture@example.invalid',
+      fullName: '試験',
+      profileImageUrl: null,
+    }
   })
 
   it('SPEC-001: start() で共有チャット接続の subscribeRaw を通じて所定トピックを購読する', () => {
@@ -176,7 +183,12 @@ describe('useUserNotificationSocket — /user/queue/notifications 購読', () =>
     const socket = createSocket()
     socket.start()
     const oldCallback = mockSubscribeRawFn.mock.calls[0]![1]
-    useAuthStore().user = { id: 43, email: 'other@example.invalid', fullName: '次の試験', profileImageUrl: null }
+    useAuthStore().user = {
+      id: 43,
+      email: 'other@example.invalid',
+      fullName: '次の試験',
+      profileImageUrl: null,
+    }
     socket.stop()
     socket.start()
     oldCallback(JSON.stringify(notificationPayload()))

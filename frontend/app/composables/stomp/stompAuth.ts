@@ -102,8 +102,13 @@ export function createStompAuthRecovery(deps: StompAuthRecoveryDeps) {
     if (!deps.authStore.isAuthenticated) return 'ANONYMOUS'
     const snapshot = session.capture()
     const at = now()
-    if (lastRefreshSnapshot !== null && session.current(lastRefreshSnapshot)
-      && lastRefreshAt !== null && at - lastRefreshAt < STOMP_AUTH_RETRY_WINDOW_MS) return 'EXHAUSTED'
+    if (
+      lastRefreshSnapshot !== null &&
+      session.current(lastRefreshSnapshot) &&
+      lastRefreshAt !== null &&
+      at - lastRefreshAt < STOMP_AUTH_RETRY_WINDOW_MS
+    )
+      return 'EXHAUSTED'
     lastRefreshAt = at
     lastRefreshSnapshot = snapshot
     const result = await performTokenRefresh(deps.config, deps.authStore)

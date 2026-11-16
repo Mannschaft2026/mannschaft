@@ -102,10 +102,11 @@ vi.mock('~/composables/stomp/stompAuth', async (importOriginal) => {
   type Deps = Parameters<typeof original.createStompAuthRecovery>[0]
   return {
     ...original,
-    useStompAuthRecovery: () => original.createStompAuthRecovery({
-      config: { public: { apiBase: '' } } as unknown as Deps['config'],
-      authStore: h.authStore as unknown as Deps['authStore'],
-    }),
+    useStompAuthRecovery: () =>
+      original.createStompAuthRecovery({
+        config: { public: { apiBase: '' } } as unknown as Deps['config'],
+        authStore: h.authStore as unknown as Deps['authStore'],
+      }),
   }
 })
 
@@ -132,11 +133,19 @@ function simulateError(headers: Record<string, string>): void {
 }
 
 /** 直近の接続以降に購読された宛先と receipt。 */
-function subscribedSince(index: number): Array<{ destination: string; receipt?: string; callback: FrameCallback }> {
-  return lastClient().subscribe.mock.calls.slice(index).map((call) => {
-    const [destination, callback, headers] = call as [string, FrameCallback, Record<string, string> | undefined]
-    return { destination, callback, receipt: headers?.receipt }
-  })
+function subscribedSince(
+  index: number,
+): Array<{ destination: string; receipt?: string; callback: FrameCallback }> {
+  return lastClient()
+    .subscribe.mock.calls.slice(index)
+    .map((call) => {
+      const [destination, callback, headers] = call as [
+        string,
+        FrameCallback,
+        Record<string, string> | undefined,
+      ]
+      return { destination, callback, receipt: headers?.receipt }
+    })
 }
 
 async function flush(rounds = 10): Promise<void> {
@@ -155,10 +164,14 @@ async function freshChatModule() {
   return { ws: mod.useChatWebSocket(), diagnostics: mod.getChatWsDiagnostics }
 }
 
-
 beforeEach(() => {
   h.instances.length = 0
-  h.authStore = reactive({ accessToken: 'token-A', isAuthenticated: true, user: { id: 7 }, loadFromStorage: () => {} })
+  h.authStore = reactive({
+    accessToken: 'token-A',
+    isAuthenticated: true,
+    user: { id: 7 },
+    loadFromStorage: () => {},
+  })
   h.refresh.mockReset().mockResolvedValue('refreshed')
   h.logout.mockReset().mockResolvedValue(undefined)
 })
@@ -325,7 +338,12 @@ describe('N2: 共有STOMPのユーザー隔離', () => {
     await simulateConnect()
     const old = lastClient()
     let complete!: (value: string) => void
-    h.refresh.mockImplementationOnce(() => new Promise<string>(resolve => { complete = resolve }))
+    h.refresh.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          complete = resolve
+        }),
+    )
     simulateError({ 'x-error-code': 'UNAUTHENTICATED' })
     const pendingConnect = old.config.beforeConnect?.(old)
     h.authStore.user = { id: 8 }

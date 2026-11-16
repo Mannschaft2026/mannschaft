@@ -57,19 +57,33 @@ export function useUserNotificationSocket() {
   function start(): void {
     if (import.meta.server) return
     const snapshot = session.capture()
-    if (snapshot.accountId === null) { stop(); return }
-    if (ownedLease === activeLease && ownedLease !== null && session.current(ownedLease.snapshot)) return
+    if (snapshot.accountId === null) {
+      stop()
+      return
+    }
+    if (ownedLease === activeLease && ownedLease !== null && session.current(ownedLease.snapshot))
+      return
     stop()
-    if (activeLease !== null && (activeLease.session !== session || !session.current(activeLease.snapshot))) {
+    if (
+      activeLease !== null &&
+      (activeLease.session !== session || !session.current(activeLease.snapshot))
+    ) {
       release(activeLease)
     }
     if (activeLease === null) {
-      const lease: NotificationLease = { unsubscribe: null, owners: 0, session, snapshot, store: notificationStore }
+      const lease: NotificationLease = {
+        unsubscribe: null,
+        owners: 0,
+        session,
+        snapshot,
+        store: notificationStore,
+      }
       activeLease = lease
       lease.unsubscribe = subscribeRaw('/user/queue/notifications', (body: string) => {
         if (activeLease !== lease || !session.current(snapshot)) return
         const payload = parseUserNotificationPayload(body)
-        if (payload && payload.userId === snapshot.accountId) notificationStore.setLatestNotification(payload)
+        if (payload && payload.userId === snapshot.accountId)
+          notificationStore.setLatestNotification(payload)
       })
     }
     ownedLease = activeLease
@@ -99,8 +113,7 @@ export function parseUserNotificationPayload(body: string): WebSocketNotificatio
     const obj = raw as Record<string, unknown>
     if (typeof obj.id !== 'number') return null
     return raw as WebSocketNotificationPayload
-  }
-  catch {
+  } catch {
     // eslint-disable-next-line no-restricted-syntax -- 壊れた通知フレーム（JSON パース不能）を破棄する防御。null=不正フレームは購読側で無視
     return null
   }
