@@ -900,3 +900,96 @@ test('[E3] expand（全展開済み）: 除外ディレクトリ配下の欠落�
   assert.match(r.all, /注意/);
   assert.match(r.all, /app\/a\.txt/);
 });
+
+// ---------------------------------------------------------------------------
+// Codex 4回目の再検分: 記録ファイルの失敗時の扱い
+// ---------------------------------------------------------------------------
+
+const pendingPath = (wt) => git(wt, 'rev-parse', '--path-format=absolute', '--git-path', 'worktree-assets-pending.json').trim();
+
+/** 設定を ['app'] → ['app','extra'] へ変えた sparse worktree。reapply の git 直前に extra を通常ファイルで塞ぐ。 */
+async function raceSetup() {
+  const { main, wt } = makeRepo({ settings: ['app'] });
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  pullSettings(main, wt, ['app', 'extra']);
+  const race = (cwd, args, input) => {
+    if (args[0] === 'sparse-checkout' && args.includes('set')) writeFileSync(join(wt, 'extra'), '障害物');
+    return defaultRunGit(cwd, args, input);
+  };
+  return { main, wt, race };
+}
+
+test('[P1] 記録を保存できなければ展開前に何も変えず非0（記録パスがディレクトリ）', async () => {
+  const { main, wt, race } = await raceSetup();
+  mkdirSync(pendingPath(wt), { recursive: true }); // 書き込み不能にする
+  const r = await refused(wt, main, ['reapply'], { runGit: race });
+  assert.match(r.all, /記録/);
+  assert.equal(existsSync(join(wt, 'extra')), false, 'git の書き換えまで進んだ');
+  rmSync(pendingPath(wt), { recursive: true, force: true });
+  const ok = await exec(wt, ['reapply']);
+  assert.equal(ok.code, 0, ok.all);
+  assert.equal(existsSync(join(wt, 'extra/e.txt')), true);
+});
+
+test('[P1] 記録の書き込みが失敗したら（ENOSPC 等）展開前に何も変えず非0', async () => {
+  const { main, wt, race } = await raceSetup();
+  const full = () => {
+    throw Object.assign(new Error('no space'), { code: 'ENOSPC' });
+  };
+  const r = await refused(wt, main, ['reapply'], { runGit: race, writeFile: full });
+  assert.match(r.all, /記録/);
+  assert.match(r.all, /ENOSPC|no space/);
+  assert.equal(existsSync(join(wt, 'extra')), false, 'git の書き換えまで進んだ');
+});
+
+test('[P2] 壊れた記録は「記録なし」として扱わず、何も変えず非0。記録は消さない。status でも報告', async () => {
+  const { main, wt } = makeRepo({ settings: ['app'] });
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  const p = pendingPath(wt);
+  const variants = {
+    途中で切れたJSON: '["extra/e.tx',
+    配列でない: '{"a":1}',
+    要素が文字列でない: '[1,2]',
+  };
+  for (const [name, body] of Object.entries(variants)) {
+    writeFileSync(p, body);
+    for (const sub of ['shrink', 'reapply', 'expand']) {
+      const r = await refused(wt, main, [sub]);
+      assert.match(r.all, /worktree-assets-pending\.json/, `${name}/${sub}`);
+      assert.match(r.all, /git restore/, `${name}/${sub}`);
+      assert.equal(readFileSync(p, 'utf8'), body, `${name}/${sub}: 記録が消えた・変わった`);
+    }
+    const s = await exec(wt, ['status']);
+    assert.equal(s.code, 0, s.all);
+    assert.match(s.all, /要処置/, name);
+    assert.match(s.all, /worktree-assets-pending\.json/, name);
+  }
+  // 読み取りエラー（ディレクトリ）
+  rmSync(p, { force: true });
+  mkdirSync(p);
+  const r = await refused(wt, main, ['shrink']);
+  assert.match(r.all, /worktree-assets-pending\.json/);
+  rmSync(p, { recursive: true, force: true });
+  assert.equal((await exec(wt, ['shrink'])).code, 0); // 手で除いた後は進める
+});
+
+test('[P3] 記録は一時ファイルへ書いてから rename で置換する（途中切れを残さない）', async () => {
+  const { main, wt } = makeRepo({ settings: ['app'] });
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  pullSettings(main, wt, ['app', 'extra']);
+  const written = [];
+  const { writeFileSync: real } = await import('node:fs');
+  const spy = (path, data) => {
+    written.push(path);
+    real(path, data);
+  };
+  const r = await exec(wt, ['reapply'], { writeFile: spy });
+  assert.equal(r.code, 0, r.all);
+  assert.ok(written.length > 0, '記録を書いていない');
+  for (const w of written) {
+    assert.notEqual(w, pendingPath(wt), '記録へ直接書いた');
+    assert.match(w.replaceAll('\\', '/'), /worktree-assets-pending\.json\.tmp/);
+  }
+  assert.equal(existsSync(pendingPath(wt)), false);
+  assert.deepEqual(readdirSync(join(pendingPath(wt), '..')).filter((n) => n.includes('.tmp')), []);
+});
