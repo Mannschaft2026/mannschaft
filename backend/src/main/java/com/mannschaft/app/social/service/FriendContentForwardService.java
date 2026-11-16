@@ -49,7 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>権限チェック（ADMIN or {@code MANAGE_FRIEND_TEAMS}）</li>
  *   <li>{@link ForwardTarget#MEMBER_AND_SUPPORTER} は 400 で拒否（Phase 1 制約）</li>
- *   <li>転送元投稿の検査（{@link FriendForwardSourceGuard}。不許可は不在と同一の 404 SOCIAL_122）</li>
+ *   <li>転送元投稿の検査（{@link #requireForwardableSource}。不許可は不在と同一の 404 SOCIAL_122）</li>
  *   <li>冪等性事前チェック: アクティブレコードがあれば 409</li>
  *   <li>{@code timeline_posts} INSERT（{@code scope_type = FRIEND_FORWARD}）</li>
  *   <li>{@code friend_content_forwards} INSERT（{@code forwarded_post_id} に新投稿 ID）。
@@ -79,7 +79,6 @@ public class FriendContentForwardService {
 
     private final FriendContentForwardRepository forwardRepository;
     private final TeamFriendRepository teamFriendRepository;
-    private final FriendForwardSourceGuard sourceGuard;
     private final TimelinePostRepository timelinePostRepository;
     private final TeamRepository teamRepository;
     private final AccessControlService accessControlService;
@@ -116,7 +115,7 @@ public class FriendContentForwardService {
         }
 
         // 3. 転送元の検査（不在・非TEAM・非公開・非共有・非フレンドは不在と同一の 404 に畳む）
-        TimelinePostEntity sourcePost = sourceGuard.requireForwardable(teamId, sourcePostId);
+        TimelinePostEntity sourcePost = requireForwardableSource(teamId, sourcePostId);
         Long sourceTeamId = sourcePost.getScopeId();
 
         // 4. 冪等性事前チェック: アクティブな転送レコードが既に存在する場合は 409
@@ -177,6 +176,33 @@ public class FriendContentForwardService {
                 .target(target)
                 .forwardedAt(forward.getForwardedAt())
                 .build();
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // 転送元の検査（存在オラクル封じ）
+    // ═════════════════════════════════════════════════════════════
+
+    /**
+     * 転送元投稿が転送可能であることを確かめる。CMP-261103-0823 存在オラクル封じ。
+     *
+     * <p>不在・論理削除済み・scope_type が TEAM 以外・PUBLISHED 以外・非共有・フレンド関係なし
+     * （自チームを含む）は、すべて不在と同一の {@code FRIEND_FORWARD_SOURCE_POST_NOT_FOUND}
+     * （404 SOCIAL_122）を返し、投稿の実在・共有設定・フレンド関係を判別できなくする。</p>
+     */
+    private TimelinePostEntity requireForwardableSource(Long forwardingTeamId, Long sourcePostId) {
+        TimelinePostEntity post = timelinePostRepository.findById(sourcePostId)
+                .filter(p -> p.getScopeType() == PostScopeType.TEAM)
+                .filter(p -> p.getStatus() == PostStatus.PUBLISHED)
+                .filter(p -> Boolean.TRUE.equals(p.getShareWithFriends()))
+                .filter(p -> p.getScopeId() != null)
+                .orElseThrow(() -> new BusinessException(
+                        SocialErrorCode.FRIEND_FORWARD_SOURCE_POST_NOT_FOUND));
+        long aId = Math.min(forwardingTeamId, post.getScopeId());
+        long bId = Math.max(forwardingTeamId, post.getScopeId());
+        if (aId == bId || teamFriendRepository.findByTeamAIdAndTeamBId(aId, bId).isEmpty()) {
+            throw new BusinessException(SocialErrorCode.FRIEND_FORWARD_SOURCE_POST_NOT_FOUND);
+        }
+        return post;
     }
 
     // ═════════════════════════════════════════════════════════════
