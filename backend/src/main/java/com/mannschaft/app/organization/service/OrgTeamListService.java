@@ -72,6 +72,7 @@ public class OrgTeamListService {
             result.add(new OrgTeamSummaryResponse(
                     team.slug(),
                     team.slug(),
+                    team.teamId(),
                     team.name(),
                     null,
                     team.visibility(),
