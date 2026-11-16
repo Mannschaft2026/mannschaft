@@ -18,7 +18,6 @@ const STUDY = '01938a00-0000-7000-8000-000000000001'
 const EXERCISE = '01938a00-0000-7000-8000-000000000002'
 const WEIGHT = '01938a00-0000-7000-8000-000000000003'
 const LIST_API = /\/api\/v1\/effort-records\/me$/
-const STATS_API = /\/api\/v1\/effort-records\/me\/stats$/
 
 interface Rec {
   id: string
@@ -496,7 +495,9 @@ test('E9 導線: 個人メニュー・ダッシュボード等に /my/effort-rec
   const menuButtons = page.locator('header button:not([aria-label*="ログアウト"]):not([aria-label*="Logout"])')
   const n = await menuButtons.count()
   for (let i = 0; i < Math.min(n, 6); i++) {
-    await menuButtons.nth(i).click({ timeout: 3_000 }).catch(() => undefined)
+    const btn = menuButtons.nth(i)
+    if (!(await btn.isVisible()) || !(await btn.isEnabled())) continue
+    await btn.click({ timeout: 3_000 })
     await page.waitForTimeout(300)
     expect(await page.locator('a[href*="effort-records"]').count()).toBe(0)
     await page.keyboard.press('Escape')
