@@ -29,7 +29,7 @@ type SubscribeCallback = (frame: StompFrameLike) => void
 type OnConnectCallback = () => void
 
 /** テスト間で共有するモック関数 */
-const mockSubscribeFn = vi.fn((_destination: string, _callback: SubscribeCallback) => ({
+const mockSubscribeFn = vi.fn((_destination: string, _callback: SubscribeCallback, _headers?: Record<string, string>) => ({
   id: 'sub-mock',
   unsubscribe: mockUnsubscribeFn,
 }))
@@ -59,8 +59,8 @@ vi.mock('@stomp/stompjs', () => {
       }
     }
 
-    subscribe(destination: string, callback: SubscribeCallback) {
-      return mockSubscribeFn(destination, callback)
+    subscribe(destination: string, callback: SubscribeCallback, headers?: Record<string, string>) {
+      return mockSubscribeFn(destination, callback, headers)
     }
   }
 
@@ -123,8 +123,8 @@ async function freshUseChatApi() {
         }
       }
 
-      subscribe(destination: string, callback: SubscribeCallback) {
-        return mockSubscribeFn(destination, callback)
+      subscribe(destination: string, callback: SubscribeCallback, headers?: Record<string, string>) {
+        return mockSubscribeFn(destination, callback, headers)
       }
     }
 
@@ -159,7 +159,7 @@ describe('useChatApi — WebSocket STOMP 購読管理', () => {
     auth.store.user = { id: 7 }
     auth.store.isAuthenticated = true
     mockSubscribeFn.mockClear().mockImplementation(
-      (_destination: string, _callback: SubscribeCallback) => ({
+      (_destination: string, _callback: SubscribeCallback, _headers?: Record<string, string>) => ({
         id: 'sub-mock',
         unsubscribe: mockUnsubscribeFn,
       }),

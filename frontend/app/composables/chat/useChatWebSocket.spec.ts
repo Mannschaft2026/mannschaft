@@ -164,6 +164,40 @@ beforeEach(() => {
 })
 
 describe('N2: 共有STOMPのユーザー隔離', () => {
+  it('N2追加: 匿名sendは接続0、認証後の最初の正当sendは同handleで送れる', async () => {
+    h.authStore.user = null
+    h.authStore.isAuthenticated = false
+    const ws = await freshChat()
+    ws.publishRaw('/app/villages/fixture/lobby/presence/join')
+    await flush()
+    expect(h.instances).toHaveLength(0)
+    h.authStore.user = { id: 7 }
+    h.authStore.isAuthenticated = true
+    ws.publishRaw('/app/villages/fixture/lobby/presence/join')
+    await simulateConnect()
+    await flush()
+    expect(lastClient().publish).toHaveBeenCalledTimes(1)
+  })
+
+  it('N2追加: 同id再login後も旧publisher handleを新世代へ流用しない', async () => {
+    const old = await freshChat()
+    old.subscribeRaw('/user/queue/notifications', vi.fn())
+    await simulateConnect()
+    h.authStore.user = null
+    h.authStore.user = { id: 7 }
+    h.authStore.accessToken = 'token-A-new-session'
+    const mod = await import('~/composables/chat/useChatWebSocket')
+    const next = mod.useChatWebSocket()
+    next.subscribeRaw('/user/queue/notifications', vi.fn())
+    await simulateConnect()
+    old.publishRaw('/app/villages/fixture/lobby/presence/leave')
+    await flush()
+    expect(lastClient().publish).not.toHaveBeenCalled()
+    next.publishRaw('/app/villages/fixture/lobby/presence/join')
+    await flush()
+    expect(lastClient().publish).toHaveBeenCalledTimes(1)
+  })
+
   it('N2追加: Aの旧publishRaw handleをB切替後にinvokeしてもBへ送らない', async () => {
     const old = await freshChat()
     old.subscribeRaw('/user/queue/notifications', vi.fn())
