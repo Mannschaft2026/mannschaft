@@ -159,7 +159,8 @@ public class ShiftBudgetSummaryService {
             BigDecimal hours = consumption.getHours();
             BigDecimal amount = consumption.getAmount();
             // 締め後に訂正された確定明細は、訂正後の値（取消済みは集計に入れない）で数える
-            ShiftBudgetCorrectionOverlay.Line corrected = overlay.correctedLines().get(consumption.getId());
+            ShiftBudgetCorrectionOverlay.Line corrected = consumption.getId() == null ? null
+                    : overlay.correctedLines().get(consumption.getId());
             if (corrected != null) {
                 if (!corrected.live()) {
                     continue;

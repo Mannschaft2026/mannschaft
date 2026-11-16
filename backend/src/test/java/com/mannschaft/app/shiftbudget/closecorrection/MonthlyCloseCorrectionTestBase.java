@@ -127,6 +127,7 @@ abstract class MonthlyCloseCorrectionTestBase extends AbstractMySqlIntegrationTe
 
     @BeforeEach
     void setUpCorrectionFixture() {
+        org.springframework.security.test.context.TestSecurityContextHolder.clearContext();
         FeatureFlagTestSupport.enable(featureFlags, caches, "FEATURE_SHIFT_ENABLED");
         tx.executeWithoutResult(s -> {
             orgId = insertOrganization();
@@ -146,6 +147,8 @@ abstract class MonthlyCloseCorrectionTestBase extends AbstractMySqlIntegrationTe
     @AfterEach
     void tearDownCorrectionFixture() {
         SecurityContextHolder.clearContext();
+        // authentication() 後処理が積んだテスト用の認証が次の試験の未認証リクエストへ漏れないようにする
+        org.springframework.security.test.context.TestSecurityContextHolder.clearContext();
         Mockito.reset(budgetTransactionRepository);
     }
 

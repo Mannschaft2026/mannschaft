@@ -198,8 +198,15 @@ public class BudgetTransactionService {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         BudgetTransactionEntity original = findById(id);
         BudgetFiscalYearEntity fy = fiscalYearService.findById(original.getFiscalYearId());
+        if (ShiftBudgetJournalSources.isProtected(original.getSourceType())) {
+            // 自動計上仕訳は取消できない。年度のスコープ または 仕訳自身のスコープ（削除と同じ）の管理者にだけ理由を示し、
+            // どちらの権限も無い呼出元へは仕訳の種別を漏らさず 403 にする。
+            if (!accessControlService.isAdminOrAbove(currentUserId, fy.getScopeId(), fy.getScopeType())) {
+                accessControlService.checkAdminOrAbove(currentUserId, original.getScopeId(), original.getScopeType());
+            }
+            throw new BusinessException(BudgetErrorCode.BUDGET_023);
+        }
         accessControlService.checkAdminOrAbove(currentUserId, fy.getScopeId(), fy.getScopeType());
-        requireNotShiftBudgetJournal(original);
 
         if (fy.getStatus() != BudgetFiscalYearStatus.OPEN) {
             throw new BusinessException(BudgetErrorCode.BUDGET_004);
