@@ -69,6 +69,7 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
     @Autowired private MatchEventRepository events;
     @Autowired private AuditLogRepository audits;
     @Autowired private AuditLogService auditService;
+    @Autowired private GlobalExceptionHandler exceptionHandler;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private SimpMessagingTemplate messaging;
     @Autowired private ObjectMapper mapper;
@@ -233,6 +234,9 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
             Throwable two = second.get(30, TimeUnit.SECONDS);
             assertThat(java.util.stream.Stream.of(one, two).filter(e -> e == null).count()).isEqualTo(1);
             assertThat(java.util.stream.Stream.of(one, two).filter(e -> e instanceof ObjectOptimisticLockingFailureException).count()).isEqualTo(1);
+            ObjectOptimisticLockingFailureException conflict = (ObjectOptimisticLockingFailureException)
+                    (one != null ? one : two);
+            assertThat(exceptionHandler.handleOptimisticLock(conflict).getStatusCode().value()).isEqualTo(409);
         }
         awaitAudit();
         assertThat(matches.findById(matchId).orElseThrow().getStatus()).isEqualTo(MatchStatus.IN_PROGRESS);
