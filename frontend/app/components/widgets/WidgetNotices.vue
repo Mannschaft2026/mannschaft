@@ -52,7 +52,15 @@ type TabKey =
 const notices = ref<Notice[]>([])
 const currentTab = ref<TabKey>({ kind: 'all' })
 const tabStates = ref(new Map<string, 'pending' | 'settled'>())
+/** 選択中タブの本文が取得待ちか。本文側のスピナーにだけ使い、タブ列は消さない。 */
 const loading = computed(() => tabStates.value.get(tabCacheKey(currentTab.value)) !== 'settled')
+/**
+ * 選択中タブの本文を一度でも表示したか。DashboardWidgetCard は loading 中にスロット全体
+ * （タブ列を含む）を外すため、カードのスケルトンは初回表示までに限る。以降の取得待ちは
+ * 本文だけをスピナーにし、取得済みタブへ戻れるようにする。
+ */
+const firstContentShown = ref(false)
+const cardLoading = computed(() => !firstContentShown.value && loading.value)
 let requestGeneration = 0
 let disposed = false
 let folderBootstrap: Promise<void> | null = null
@@ -139,6 +147,23 @@ function tabCacheKey(tab: TabKey): string {
 
 /** タブ別データキャッシュ。初回マウント時に全タブ分を一括取得して保持する。 */
 const noticeCache = new Map<string, Notice[]>()
+
+/**
+ * 既読化に成功した通知 ID と「全て既読」の成功回数。取得の応答待ち中に既読化が成功すると、
+ * 後から届いた応答は既読化前の状態（未読）を持つため、キャッシュへ入れる前にこれを適用する。
+ * 既読は未読へ戻らないため、refresh をまたいでも保持する。
+ */
+const readIds = new Set<number>()
+let markAllReadCount = 0
+
+/** 取得開始後に成功した既読化を、後着の応答へ反映する。 */
+function applyKnownReads(list: Notice[], markAllReadCountAtStart: number): Notice[] {
+  const allRead = markAllReadCount !== markAllReadCountAtStart
+  for (const n of list) {
+    if (allRead || readIds.has(n.id)) n.isRead = true
+  }
+  return list
+}
 
 /** 指定タブのデータを API から取得して返す。 */
 async function fetchForTab(tab: TabKey): Promise<Notice[]> {
@@ -229,8 +254,9 @@ async function loadTab(tab: TabKey, generation: number) {
     if (tab.kind === 'action-required') await loadActionRequired(generation)
     else if (tab.kind === 'platform-announcements') await loadPlatformAnnouncements(generation)
     else {
+      const markAllReadCountAtStart = markAllReadCount
       const result = await fetchForTab(tab)
-      if (isCurrentRequest(generation)) noticeCache.set(key, result)
+      if (isCurrentRequest(generation)) noticeCache.set(key, applyKnownReads(result, markAllReadCountAtStart))
     }
   }
   catch (error) {
@@ -241,6 +267,7 @@ async function loadTab(tab: TabKey, generation: number) {
   finally {
     if (isCurrentRequest(generation)) {
       tabStates.value.set(key, 'settled')
+      if (key === tabCacheKey(currentTab.value)) firstContentShown.value = true
       if (tab.kind !== 'action-required' && tab.kind !== 'platform-announcements' && key === tabCacheKey(currentTab.value)) {
         notices.value = noticeCache.get(key) ?? []
       }
@@ -279,6 +306,8 @@ async function onMarkRead(id: number) {
     captureQuiet(error, { context: 'WidgetNotices: 既読化' })
     return
   }
+  // 応答待ちのタブ取得が後から届いても未読へ戻らないよう、成功した ID を記録する。
+  readIds.add(id)
   // 表示中のタブはリアクティブ経由で更新し（再描画のため先に行う）、
   // 応答待ちの間にタブが切り替わっても、押した通知を ID で全タブのキャッシュから既読にする。
   const current = notices.value.find(n => n.id === id)
@@ -292,9 +321,15 @@ async function onMarkRead(id: number) {
 
 async function onMarkAllRead() {
   await markAllNoticesRead()
+  // 応答待ちのタブ取得が後から届いても未読へ戻らないよう、成功を記録する。
+  markAllReadCount++
   notices.value.forEach((n) => {
     n.isRead = true
   })
+  // 取得済みの他タブのキャッシュも既読にする（タブ切替で未読に戻さない）。
+  for (const list of noticeCache.values()) {
+    for (const n of list) n.isRead = true
+  }
   notification.success(t('dashboard.widgets.notices.markedAllRead'))
 }
 
@@ -509,7 +544,7 @@ onBeforeUnmount(() => {
     :title="t('dashboard.widgets.notices.title')"
     icon="pi pi-bell"
     to="/notifications"
-    :loading="loading"
+    :loading="cardLoading"
     refreshable
     @refresh="load"
   >
@@ -545,8 +580,18 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
+    <!-- 選択中タブの取得待ち（タブ列は残し、本文だけをローディング表示にする） -->
+    <div
+      v-if="loading"
+      class="flex justify-center py-4"
+      aria-busy="true"
+      data-testid="widget-notices-body-loading"
+    >
+      <i class="pi pi-spin pi-spinner text-xl text-surface-400" />
+    </div>
+
     <!-- 通常タブ（すべて・フォルダ別） -->
-    <template v-if="currentTab.kind !== 'action-required' && currentTab.kind !== 'platform-announcements'">
+    <template v-else-if="currentTab.kind !== 'action-required' && currentTab.kind !== 'platform-announcements'">
       <div v-if="notices.length > 0">
         <div class="mb-2 flex items-center justify-between">
           <Badge v-if="unreadCount > 0" :value="unreadCount" severity="danger" />
