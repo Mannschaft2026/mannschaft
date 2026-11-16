@@ -72,6 +72,11 @@
       "weight": "体重",
       "intensity": "强度",
       "menu": "菜单"
+    },
+    "unit": {
+      "MINUTE": "分钟",
+      "KILOGRAM": "千克",
+      "RPE": "RPE"
     }
   }
 }

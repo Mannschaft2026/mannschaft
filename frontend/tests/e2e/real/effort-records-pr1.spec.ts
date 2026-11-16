@@ -165,6 +165,9 @@ test('E1 勉強: 作成→一覧→同データ保持で編集→再読込で永
   await expect(list(page)).toHaveCount(1)
   await expect(list(page).first()).toContainText('数学E2E')
   await expect(list(page).first()).toContainText('45')
+  // 単位コードの生表示が出ない（ja は「分」へ翻訳）
+  await expect(list(page).first()).toContainText('45 分')
+  await expect(page.locator('body')).not.toContainText(/MINUTE|KILOGRAM/)
   await shot(page, 'e1-1-created')
 
   // 再読込→編集（科目は触らず保持したまま時間とメモだけ変える）
@@ -237,6 +240,8 @@ test('E3 体重 60.25 を保存でき表示も 60.25（作成→編集→削除�
   expect(await save(page)).toBeLessThan(300)
   await expect(list(page)).toHaveCount(1)
   await expect(list(page).first()).toContainText('60.25')
+  await expect(list(page).first()).toContainText('60.25 kg')
+  await expect(page.locator('body')).not.toContainText(/MINUTE|KILOGRAM/)
   await gotoAndHydrate(page, PAGE_PATH)
   await expect(list(page).first()).toContainText('60.25')
   await list(page).first().getByRole('button', { name: '編集' }).click()

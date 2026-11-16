@@ -9,6 +9,7 @@ import {
   reconcileUpdateAfter409,
   restoreEffortInputs,
   toEffortFormFields,
+  toEffortUnitLabel,
   toEffortWireValue,
   type EffortInputField,
   type EffortRecord,
@@ -188,5 +189,40 @@ describe('期間とグラフ許可表', () => {
     expect(listEffortChartTargets(exercise)).toEqual([{ chart: 'BAR', fieldKey: 'duration' }])
     expect(listEffortChartTargets({ fields: [{ fieldKey: 'weight', semantic: 'WEIGHT' }] })).toEqual([{ chart: 'LINE', fieldKey: 'weight' }])
     expect(listEffortChartTargets({ fields: [{ fieldKey: 'x', semantic: 'NUMBER', aggregation: 'NONE' }] })).toEqual([])
+  })
+})
+
+describe('単位コードの表示名変換', () => {
+  const names: Record<string, string> = { MINUTE: '分', KILOGRAM: 'kg', RPE: 'RPE' }
+  const translate = (code: string) => names[code] ?? null
+
+  it('既知コードは表示名へ変換する', () => {
+    expect(toEffortUnitLabel('MINUTE', translate)).toBe('分')
+    expect(toEffortUnitLabel('KILOGRAM', translate)).toBe('kg')
+  })
+
+  it('未知コードは握りつぶさずコードのまま返す', () => {
+    expect(toEffortUnitLabel('FURLONG', translate)).toBe('FURLONG')
+  })
+
+  it('NONE・空は表示しない', () => {
+    expect(toEffortUnitLabel('NONE', translate)).toBeNull()
+    expect(toEffortUnitLabel('', translate)).toBeNull()
+    expect(toEffortUnitLabel(null, translate)).toBeNull()
+    expect(toEffortUnitLabel(undefined, translate)).toBeNull()
+  })
+
+  it('toEffortFormFields は unit を表示名へ変換し、生コードを残さない', () => {
+    const f = toEffortFormFields(
+      [
+        { fieldKey: 'duration', type: 'NUMBER', unit: 'MINUTE' },
+        { fieldKey: 'w', type: 'NUMBER', unit: 'KILOGRAM' },
+        { fieldKey: 'x', type: 'NUMBER', unit: 'NONE' },
+        { fieldKey: 'y', type: 'NUMBER', unit: 'FURLONG' },
+      ] as never,
+      (x) => x.fieldKey ?? '',
+      translate,
+    )
+    expect(f.map((x) => x.unit)).toEqual(['分', 'kg', null, 'FURLONG'])
   })
 })

@@ -11,6 +11,7 @@ import {
   reconcileUpdateAfter409,
   restoreEffortInputs,
   toEffortFormFields,
+  toEffortUnitLabel,
   toInputFields,
   type EffortSnapshotField,
 } from '~/utils/effortFields'
@@ -49,6 +50,12 @@ function statusOf(e: unknown): number | undefined {
 function fieldLabel(f: EffortSnapshotField): string {
   if (f.labelKey && te(f.labelKey)) return t(f.labelKey)
   return f.label ?? f.fieldKey ?? ''
+}
+
+/** 単位コードの i18n 解決（未定義コードは null → 呼び出し側でコードのまま表示） */
+function unitName(code: string): string | null {
+  const key = `effort.unit.${code}`
+  return te(key) ? t(key) : null
 }
 
 function presetName(d: EffortDefinitionSnapshotResponse): string {
@@ -98,7 +105,7 @@ const activeDefinition = computed<EffortDefinitionSnapshotResponse | null>(() =>
   return presets.value.find((p) => p.definitionUuid === selectedDefinitionUuid.value) ?? null
 })
 const inputFields = computed(() => toInputFields(activeDefinition.value?.fields))
-const formFields = computed(() => toEffortFormFields(activeDefinition.value?.fields, fieldLabel))
+const formFields = computed(() => toEffortFormFields(activeDefinition.value?.fields, fieldLabel, unitName))
 
 function resetInputs() {
   inputs.value = restoreEffortInputs(inputFields.value, [])
@@ -275,7 +282,8 @@ function summaryOf(r: EffortRecordResponse): string {
     .filter((v) => v.value !== null && v.value !== undefined)
     .map((v) => {
       const f = defs.get(v.fieldKey)
-      const unit = f?.unit && f.unit !== 'NONE' ? ` ${f.unit}` : ''
+      const unitLabel = toEffortUnitLabel(f?.unit, unitName)
+      const unit = unitLabel ? ` ${unitLabel}` : ''
       return `${f ? fieldLabel(f) : v.fieldKey}: ${v.value}${unit}`
     })
     .join(' / ')

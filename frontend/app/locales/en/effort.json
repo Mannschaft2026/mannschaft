@@ -72,6 +72,11 @@
       "weight": "Weight",
       "intensity": "Intensity",
       "menu": "Menu"
+    },
+    "unit": {
+      "MINUTE": "min",
+      "KILOGRAM": "kg",
+      "RPE": "RPE"
     }
   }
 }

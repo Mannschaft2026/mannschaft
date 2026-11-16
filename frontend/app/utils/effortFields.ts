@@ -169,17 +169,30 @@ export interface EffortFormField {
 }
 
 /**
+ * 単位コード（MINUTE / KILOGRAM / RPE / NONE）を表示名へ変換する。NONE / 空は null（表示しない）。
+ * translate が null を返す未知コードは握りつぶさず、コードをそのまま返す（フォールバック）。
+ */
+export function toEffortUnitLabel(
+  unit: string | null | undefined,
+  translate: (code: string) => string | null,
+): string | null {
+  if (!unit || unit === 'NONE') return null
+  return translate(unit) ?? unit
+}
+
+/**
  * snapshot の field 定義を、既存の入力部品 ActivityFieldInputs が受ける形へ変換する（型差の吸収）。
  * 表示ラベルは呼び出し側の resolveLabel（labelKey の i18n 解決 → snapshot の label）に委ねる。
- * 単位は NONE/空を表示しない。SELECT の選択肢は値に stable option key を使う。
+ * 単位は resolveUnit で表示名へ変換し（未知コードはそのまま）、NONE/空は表示しない。SELECT の選択肢は値に stable option key を使う。
  */
 export function toEffortFormFields(
   fields: readonly EffortSnapshotField[] | undefined,
   resolveLabel: (f: EffortSnapshotField) => string,
+  resolveUnit: (code: string) => string | null = () => null,
 ): EffortFormField[] {
   return (fields ?? []).map((f, i) => {
     if (!f.fieldKey || !f.type) throw new Error('snapshot の field 定義に fieldKey / type がありません')
-    const unit = f.unit && f.unit !== 'NONE' ? f.unit : null
+    const unit = toEffortUnitLabel(f.unit, resolveUnit)
     return {
       id: i,
       fieldKey: f.fieldKey,
