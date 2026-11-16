@@ -71,7 +71,7 @@ const props = withDefaults(
     /** チャート種別 */
     type: SupportedChartType
     /** chart.js の data（labels + datasets） */
-    data: ChartData<SupportedChartType>
+    data: ChartData<SupportedChartType> | ChartData<SupportedChartType, Array<number | null>>
     /** chart.js の options（未指定時は responsive 既定を使う） */
     options?: ChartOptions<SupportedChartType>
     /** 空状態に表示するメッセージ（i18n 済みの文字列を渡す） */

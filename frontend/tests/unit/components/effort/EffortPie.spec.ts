@@ -34,7 +34,7 @@ vi.setConfig({ testTimeout: 120000 })
 
 const global = { stubs: { ClientOnly: { template: '<div><slot /></div>' } } }
 
-const pie = (data: Array<number | null>): ChartData<'pie'> => ({
+const pie = (data: Array<number | null>): ChartData<'pie', Array<number | null>> => ({
   labels: data.map((_, i) => `c${i}`),
   datasets: [{ data }],
 })

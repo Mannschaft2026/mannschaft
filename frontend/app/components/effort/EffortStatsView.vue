@@ -30,7 +30,7 @@ function toPlot(value: string | undefined | null): number | null {
   return value === null || value === undefined ? null : Number(value)
 }
 
-const chartData = computed<ChartData<'bar' | 'line' | 'pie'>>(() => {
+const chartData = computed<ChartData<'line' | 'pie', Array<number | null>>>(() => {
   const s = props.stats
   if (isPie.value) {
     const cats = s.categories ?? []
@@ -41,7 +41,7 @@ const chartData = computed<ChartData<'bar' | 'line' | 'pie'>>(() => {
         data: cats.map((c) => toPlot(c.value)),
         backgroundColor: cats.map((_, i) => PALETTE[i % PALETTE.length]),
       }],
-    } as ChartData<'pie'>
+    }
   }
   const buckets = s.buckets ?? []
   return {
@@ -53,7 +53,7 @@ const chartData = computed<ChartData<'bar' | 'line' | 'pie'>>(() => {
       borderColor: PALETTE[0],
       spanGaps: false,
     }],
-  } as ChartData<'bar'>
+  }
 })
 
 const noData = computed(() => props.stats.emptyReason === 'NO_DATA')
@@ -87,7 +87,7 @@ function bucketValue(v: string | undefined | null, sampleCount: number | undefin
       <BaseChart
         v-if="showChart"
         :type="chartType"
-        :data="(chartData as never)"
+        :data="chartData"
         :empty-message="t('effort.chart.noData')"
       />
 

@@ -152,7 +152,7 @@ describe('AC-65 原本 PUT 応答消失 → 再送 409 の照合', () => {
 
   it('null と値は区別する（null を 0 とみなさない）', () => {
     const nullSent = { ...sent, values: [{ fieldKey: 'duration', value: null }, { fieldKey: 'subject', value: null }] }
-    const zero = { ...base, values: [{ fieldKey: 'duration', value: '0.00' }, { fieldKey: 'subject', value: null }] }
+    const zero = { ...base, values: [{ fieldKey: 'duration', value: '0.00' }, { fieldKey: 'subject' }] }
     expect(reconcileUpdateAfter409(fields, nullSent, zero)).toBe('CONFLICT')
   })
 })
