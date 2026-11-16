@@ -4,8 +4,15 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 import type { NotificationResponse, NotificationListResponse } from '~/types/notification'
 import NotificationList from '~/components/notification/NotificationList.vue'
+
+// happy-dom単独mountでも、通常のapp/plugins/dayjs.tsと同じ日時前提を満たす。
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 type ConfirmableNotificationFixture = NotificationResponse & { isConfirmed?: boolean | null }
 
