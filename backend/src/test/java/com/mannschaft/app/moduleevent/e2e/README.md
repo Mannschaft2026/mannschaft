@@ -73,4 +73,6 @@ L1M_E2E=1 BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8081 \
   npx playwright test tests/e2e/real/l1m-module-events.real.spec.ts --config=playwright-real.config.ts --project=chromium-real --no-deps
 ```
 
+spec は最初の段で、UI 段の遷移先（`/dashboard`・`/system-admin`・`/system-admin/batches`・`/notifications`）を system actor で一度ずつ開く。Nuxt dev はルートの page・middleware をブラウザの初回要求時に変換し、vue-router はそれを読み終えるまで URL を確定しないため、起動直後の FE では SYSTEM クリックから URL 確定まで 11.5 秒かかり、期待値の既定 8 秒を超えて「`/dashboard` のまま」に見えた（2026-11-16 実測。変換済みなら 0.2〜0.6 秒。本番ビルドにこの待ちは無い）。
+
 検体の状態は起動ごとに 1 回きりのシナリオ（遅延→回復、隔離→再開）なので、spec を再実行するときは BE を再起動する。

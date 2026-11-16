@@ -172,6 +172,18 @@ test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', as
   }
   const endpoint = `${api}/api/v1/system-admin/module-events`
   try {
+    await test.step('前提: FE dev サーバーの初回モジュール変換を済ませる（計測対象外）', async () => {
+      // Nuxt dev（Vite）は各ルートのページ・middleware のクライアント module を、ブラウザが初めて要求した時に変換する。
+      // vue-router はクリック遷移で遷移先の middleware と page を読み終えるまで URL を確定しないため、初回だけ
+      // SYSTEM クリックから URL 確定まで 11.5 秒かかった（middleware/system-admin.ts 1 本の変換に 7.2 秒。2026-11-16 実測）。
+      // 変換済みなら同じクリックは 0.2〜0.6 秒で確定する。本番ビルドは事前に bundle 済みで、この待ちは存在しない。
+      // UI 段の URL 確定・表示の確認が dev 固有の初回変換ではなく画面の動作を測るよう、遷移先を一度ずつ開いておく。
+      const warm = await pageFor('system')
+      for (const target of ['/dashboard', '/system-admin', '/system-admin/batches', '/notifications']) {
+        await warm.goto(target); await waitForHydration(warm)
+        await expect(warm).toHaveURL(new RegExp(`${target.replaceAll('/', '\\/')}(?:\\?.*)?$`))
+      }
+    })
     await test.step('HTTP: 匿名401・認証済み非SYSTEM_ADMIN403（別tenantも秘匿）', async () => {
       const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] } })
       contexts.push(anonymous)
