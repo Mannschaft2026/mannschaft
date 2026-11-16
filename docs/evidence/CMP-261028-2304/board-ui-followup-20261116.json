@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+  "registrationBaseHead": "3bad93f19e33291cb75e10bed7658cfcc6e6acdf",
+  "qualifiedMainHead": "0d42a48763a749aa0da8b677107e719b13ba9712",
+  "qualificationMergeHead": "18e1e4f0c5e953a2060039f945d6b3ba1b692110",
+  "htmlSha256": "7708e0a5ab9466df5fb174f1d0f280333470f913c5db64dc0678bf8f63eea8a6",
+  "baselineDataSha256": "599f965083d3c135529acebc9d5fcd002421d2456006ab07afd3e392b4bdb6c1",
+  "newDataSha256": "8627fd7acf11b754b8e6eb121ed8571c1d51204fc561a1005a63e8ee45cea243",
+  "clockFixed": false,
+  "isolatedFreshContext": true,
+  "productAppOperations": 0,
+  "productApiOperations": 0,
+  "productDatabaseOperations": 0,
+  "pageErrors": [],
+  "remoteRequests": [],
+  "browserProcess": [
+    {
+      "ProcessId": 53256,
+      "ParentProcessId": 36636,
+      "creation": "2026-11-16T03:12:22.0903300Z"
+    },
+    {
+      "ProcessId": 51760,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:22.5435730Z"
+    },
+    {
+      "ProcessId": 42204,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:23.6071840Z"
+    },
+    {
+      "ProcessId": 32924,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:23.6833260Z"
+    },
+    {
+      "ProcessId": 36268,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:23.8734450Z"
+    },
+    {
+      "ProcessId": 7516,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:39.0230610Z"
+    },
+    {
+      "ProcessId": 51612,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:12:39.1790700Z"
+    },
+    {
+      "ProcessId": 58948,
+      "ParentProcessId": 53256,
+      "creation": "2026-11-16T03:13:05.8852130Z"
+    }
+  ],
+  "profileArgumentPresent": true,
+  "profilePathSha256": "008fc5e3773bcb894002ce44707413b6ac8e8a89048c7a32daf2148515fc30ca",
+  "naturalClockElapsedMs": 4796,
+  "old154AllFieldsDeepEqual": true,
+  "initialCount": 154,
+  "appendedCount": 155,
+  "newCount": 1,
+  "duplicateIds": 0,
+  "newFindingMetadataPreserved": true,
+  "reload155AllFieldsDeepEqual": true,
+  "humanStatusChange": {
+    "id": "ALI-october-wave2-login-resident-overlay-20261026-ALIC-L1R-FU06-MEMBER-20261116-I001",
+    "before": "inbox",
+    "after": "planned",
+    "reloadPreserved": true,
+    "sourceFieldsUnchanged": true,
+    "other154AllFieldsDeepEqual": true
+  },
+  "status": "PASSED",
+  "contextClosed": true,
+  "browserClosed": true,
+  "profileAbsentAfterClose": true,
+  "remainingOwnGenerations": [],
+  "serverClosed": true,
+  "elapsedMs": 130638,
+  "nativeExitCode": 0,
+  "htmlMatchesCommittedRaw": true,
+  "finalInputBytes": "HTMLはHEAD raw LF、dataは正規generator出力をLFとして配信。source pinは現commit raw入力と一致。",
+  "safeCardImage": {
+    "artifactId": "board-followup-card.png",
+    "sha256": "35d1449977ae72af5a8ca97fd8ddd2a5ccba906159bcfbacdb1c3a2d44e9e153",
+    "visibility": "private-local-prototype-image-not-published",
+    "visuallyInspected": true
+  },
+  "rawSnapshots": [
+    {
+      "artifactId": "idb-old-154.json",
+      "sha256": "6b84ad0372caf31b11446082658a41d202adbbe46152a246513a3fe3b68046be",
+      "visibility": "private-local-not-published"
+    },
+    {
+      "artifactId": "idb-final-155.json",
+      "sha256": "439d6d5ce6b0b7864986b7913ac19260e13eb47769900c849c7b8b8ec59ad999",
+      "visibility": "private-local-not-published"
+    }
+  ],
+  "baselineBinding": {
+    "baseHead": "3bad93f19e33291cb75e10bed7658cfcc6e6acdf",
+    "rawCommitSha256": "641e5943c89d1dd01817b237c0d09bec2aac4bec5e53c84498b140cc16f5eb62",
+    "servedSha256": "599f965083d3c135529acebc9d5fcd002421d2456006ab07afd3e392b4bdb6c1",
+    "onlyCheckoutCrlfDifference": true,
+    "logicalDataIdentical": true
+  },
+  "browserOwnershipLimit": "起動時と閉鎖前の所有PID/startを照合し専有profile不在も確認。全期間の任意Windows handle網羅は主張しない。"
+}
