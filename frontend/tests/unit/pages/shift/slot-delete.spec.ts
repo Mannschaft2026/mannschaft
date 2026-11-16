@@ -39,7 +39,7 @@ const schedule: ShiftScheduleResponse = {
   audit: { createdBy: 3, createdAt: '2026-09-29T00:00:00', updatedAt: '2026-09-29T00:00:00' },
 }
 const slot: ShiftSlotResponse = {
-  id: 301, scheduleId: 91,
+  version: 0, id: 301, scheduleId: 91,
   time: { slotDate: '2026-10-10', startTime: '09:00:00', endTime: '12:00:00', endsNextDay: false },
   position: { positionId: null, positionName: null, requiredCount: 1 },
   assignedUserIds: [], assignmentMasked: false, note: null,
