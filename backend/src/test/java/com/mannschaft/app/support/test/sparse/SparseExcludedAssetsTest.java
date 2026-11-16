@@ -60,7 +60,7 @@ class SparseExcludedAssetsTest {
     // ---- skip しない ----
 
     @Test
-    void 全展開（sparse無効）ならskipしない() {
+    void 全展開でsparse無効ならskipしない() {
         assertThat(SparseExcludedAssets.decide(DIR, NO_CI, repo).skip()).isFalse();
     }
 
@@ -151,7 +151,7 @@ class SparseExcludedAssetsTest {
     }
 
     @Test
-    void CIの環境変数が無い・偽値ならCIではなくskipする() throws Exception {
+    void CIの環境変数が無いか偽値ならCIではなくskipする() throws Exception {
         coneSparse("scripts", OTHER);
         for (Map<String, String> env : List.of(
                 Map.<String, String>of(), Map.of("CI", "false"), Map.of("CI", "0"), Map.of("CI", ""),
