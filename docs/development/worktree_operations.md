@@ -158,7 +158,9 @@ tracked差分・残存refに加え、untracked/ignoredを確認する。`logs/` 
 - **既存の worktree には自動適用されない**。設定の有効化後に作る新規分から効く。既存分を縮めたいときは、その worktree で `node scripts/worktree-assets.mjs shrink` を手動で実行する。
 - sparse の worktree では、素材に依存する処理は次のとおり振る舞う（無言でスキップしない）。
   - FE の素材検証（`verify-ranch-*`）: 実バイト（PNG の中身・hash・寸法）の検査だけを理由つきで省略する。メタデータ検査は常に走る。`CI` 環境では省略しない。
-  - 配置 CLI（`generate-ranch-production-appearances.mjs`）と成果物検証（`verify-ranch-production-artifact.mjs`、Docker ビルドの途中でも走る）: 素材が無ければ失敗する。
+  - 配置 CLI（`verify-ranch-production-assets.mjs`。`--repository` を付けて書き込むとき）と生成ツール（`generate-ranch-production-appearances.mjs`）: 素材が未展開なら、何も書き込む前に展開手順つきで非0になる。`--repository` なしの検証だけなら sparse でも動く。
+  - 成果物検証（`verify-ranch-production-artifact.mjs`、Docker ビルドの途中でも走る）: 素材が無ければ失敗する。
+  - gitleaks の公開 ID 再検査（`verify-ranch-public-identity-gitleaks.mjs`）: 承認 pack の `manifest.json` が未展開なら HEAD から `git show` で取得して実際に検査する（成功スキップはしない。sparse 除外以外の欠落と `CI` では失敗）。expand は要らない。
   - BE の牧場テスト: 実素材に依存する単位だけが理由つきで skipped になる（`@RequiresRanchApprovedAssets`）。
 
 ### 素材が要る作業と手順
@@ -169,7 +171,6 @@ tracked差分・残存refに加え、untracked/ignoredを確認する。`logs/` 
 - 素材の実バイト検証（`verify-ranch-*` を省略させず通したいとき）
 - 配置 CLI の実行、成果物検証、ローカルでの Docker ビルド
 - BE の実素材依存テストを skipped にせず実行したいとき
-- gitleaks の公開 ID 境界の再検査（`frontend/scripts/verify-ranch-public-identity-gitleaks.mjs` は承認 pack の `manifest.json` を読む）
 
 ### main を取り込んだとき
 
@@ -181,7 +182,7 @@ main に新しいトップレベルのディレクトリや、除外ディレク
 
 ### やってはいけないこと
 
-- `git sparse-checkout disable` / `set` などを手で打つ。`.git/config` は全 worktree の共有で、他の worktree と本陣の状態を巻き込む。展開・縮小は `worktree-assets.mjs` だけで行う。
+- `git sparse-checkout disable` / `set` などを手で打つ。`extensions.worktreeConfig` が無効な環境では共有 `.git/config` を書き換えて他の worktree に影響し、手打ちはこの確認も、未追跡・ignore 済みファイル（生成物など）の検査も、事後検証も通らないため、失う・取りこぼすおそれがある。共有 config に `core.sparsecheckout` が漏れている環境もあり、状態の判定が食い違う。展開・縮小は `worktree-assets.mjs` だけで行う。
 - 本陣で `shrink` / `reapply` する（拒否される）。
 - 除外ディレクトリへ junction・symlink を張る（参照先の追跡ファイルまで消えるおそれがあるため拒否される）。
 

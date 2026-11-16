@@ -170,7 +170,7 @@ ArchUnit 認可番人（`AuthzControllerGuardArchTest`）は、公開エンド�
 
 gitleaksは標準ルールを継承し、既知の非秘密値だけを限定除外する。正式恐竜素材の公開`assetKey`は承認原本16種・外見・段階・画風から生成したIDであり、実測448値を`generic-api-key`ルールの5つの完全一致生成物pathとANDで限定する。値の前後は`^...$`で固定し、他path・未列挙値・他rule・entropy閾値を変更しない。
 
-この再検査は承認packの`manifest.json`を読むため、素材未展開（sparse）の足軽worktreeでは先に`node scripts/worktree-assets.mjs expand`が要る（[worktree運用](../development/worktree_operations.md#足軽-worktree-の-sparse-checkout運用の入口)）。この境界は`frontend/scripts/verify-ranch-public-identity-gitleaks.mjs`に実gitleaks8.28.0・比較元commit・全履歴範囲・証拠pathを明示して再検査できる。専用TMPで新commit/別lineの高entropy疑似key・未列挙pathの同公開ID・別ruleの検知を確認し、値をredactしたmetadataのみ保存する。全体180秒上限で失敗を合格扱いせず、専用fixtureと生reportを所有確認して撤去する。
+素材未展開（sparse）の足軽worktreeでは、承認packの`manifest.json`をHEADから`git show`で取得して検査する（成功スキップはしない。sparse除外以外の欠落とCIでは失敗する。[worktree運用](../development/worktree_operations.md#足軽-worktree-の-sparse-checkout運用の入口)）。この境界は`frontend/scripts/verify-ranch-public-identity-gitleaks.mjs`に実gitleaks8.28.0・比較元commit・全履歴範囲・証拠pathを明示して再検査できる。専用TMPで新commit/別lineの高entropy疑似key・未列挙pathの同公開ID・別ruleの検知を確認し、値をredactしたmetadataのみ保存する。全体180秒上限で失敗を合格扱いせず、専用fixtureと生reportを所有確認して撤去する。
 
 ### `.gitignore` 除外（確認済み）
 `.env` / `secrets.yml` / `credentials.yml` / `*.key` / `*.pem`
