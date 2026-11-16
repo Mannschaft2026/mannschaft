@@ -178,6 +178,9 @@ node scripts/worktree-assets.mjs reapply   # main を取り込んで設定の一
 | 本陣（メイン作業木）での `shrink` / `reapply` | 足軽の worktree で実行する（`expand` と `status` は本陣でも可） |
 | `extensions.worktreeConfig` が無効（`git sparse-checkout` を呼ぶ全経路で最初に確認） | 共有 `.git/config` を書き換えてしまうため拒否 |
 | `worktree.sparsePaths` が不正（文字列でない・空・前後空白・`/` 始まり・ドライブ指定・バックスラッシュ・`.`/`..` 要素・先頭 `-`・重複・HEAD に追跡ディレクトリとして無い） | 設定を直す。`--no-cone` のような値を黙って直したり git へ渡したりしない |
+| junction・symlink（reparse point）が、worktree ルート・外れる/展開されるパスの祖先・外れる領域の配下のいずれかにある（git が追跡する symlink エントリ=120000 は対象外） | 参照先の追跡ファイルまで消えるおそれがあるため拒否。該当パスと理由が表示される。リンクを外してから再実行 |
+| 前回の使用中プローブが強制終了で残した一時名（`<dir>.wa-probe-<pid>`） | 検出して報告するだけで勝手に消さない。表示された手順で元の名前へ戻す |
+| `worktree.sparsePaths` に祖先と子孫の併記（例 `app` と `app/sub`） | git が祖先へ正規化するため拒否。どちらかを外す |
 | 縮小で外れる領域に未コミット・ステージ済み・未追跡・ignore 済み（生成物）がある | 該当パスが表示される。コミット・退避・削除してから再実行 |
 | 展開されるパスやその祖先の位置に、未追跡・ignore 済みのファイル/ディレクトリがある（`reapply` / `expand`） | 該当パスが表示される。上書き・削除はしない。退避してから再実行 |
 | 未マージ、進行中の merge/rebase/cherry-pick/revert、`index.lock` | 操作を完了または中止、残骸のロックを所有確認のうえ除去 |
@@ -185,6 +188,12 @@ node scripts/worktree-assets.mjs reapply   # main を取り込んで設定の一
 | 使用中プローブ失敗（Windows 既定。外れるディレクトリを一時名へ rename できない） | 開いているファイル・エディタ・プロセスを閉じて再実行。`--skip-process-check` でも省かない |
 | 設定・`settings.json` の履歴（直近100 commit）・本コマンドが記録した印（`git config --worktree mannschaft.sparsePathsDigest`）のどれにも当たらない sparse 一覧（`boundary-coordination.md` の管理用 worktree など。ルート直下のみの一覧も含む） | 上書きせず拒否。置き換えてよい場合のみ `--force-replace` |
 | `expand` で空き容量が足りない / 取得できない | 見積りは「blob 合計×1.5＋ファイル数×4KB＋200MB」。空きを作る。取得できない環境だけ `--skip-space-check` |
+
+### 実行中の注意
+
+作業木を書き換える `git sparse-checkout` 呼び出しは、1つの関数（安全検査を必ず通す入口）だけから行う。一覧が既に一致していて実状態だけ未完了の再適用も同じ検査を通る。完了判定は前回との差分ではなく、常に「現在の目標一覧に対する全体検証」（展開されるべき追跡ファイルの実在と skip-worktree の解除、外れるべきファイルの不在、欠落＝status の ` D` が無いこと）で行う。欠落が残る場合は非0で、`git restore` での復元手順を表示する。
+
+検査から実行までの間に起きた変更（事前検査の後に未追跡ファイルが作られる等）は原理的に防げない。その場合は事後検証で必ず非0になる。**実行中は対象 worktree で他の作業をしない**（エディタ・ビルド・テスト・git 操作を止める）。
 
 ### Windows の限界と事後検証
 

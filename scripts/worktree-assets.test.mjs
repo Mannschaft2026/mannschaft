@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -36,7 +36,7 @@ function sandbox() {
 const SETTINGS = (paths) => JSON.stringify({ worktree: { sparsePaths: paths } }, null, 2);
 
 /** main リポ + 追加 worktree 1つを作る。既定の設定は ["app","docs/development"]。 */
-function makeRepo({ settings = ['app', 'docs/development'], worktreeConfig = true } = {}) {
+function makeRepo({ settings = ['app', 'docs/development'], worktreeConfig = true, trackedSymlink = false } = {}) {
   const root = sandbox();
   const main = join(root, 'main');
   mkdirSync(main);
@@ -47,6 +47,7 @@ function makeRepo({ settings = ['app', 'docs/development'], worktreeConfig = tru
   write(join(main, 'README.md'), 'readme\n');
   write(join(main, '.gitignore'), '*.log\n');
   write(join(main, 'app/a.txt'), 'a\n');
+  write(join(main, 'app/sub/s.txt'), 's\n');
   write(join(main, 'assets/big1.bin'), 'x'.repeat(1000));
   write(join(main, 'assets/sub/big2.bin'), 'y'.repeat(2000));
   write(join(main, 'docs/development/x.md'), 'x\n');
@@ -54,6 +55,10 @@ function makeRepo({ settings = ['app', 'docs/development'], worktreeConfig = tru
   write(join(main, 'extra/e.txt'), 'e\n');
   if (settings) write(join(main, '.claude/settings.json'), SETTINGS(settings));
   git(main, 'add', '-A');
+  if (trackedSymlink) {
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: main, input: 'e.txt', encoding: 'utf8' }).trim();
+    git(main, 'update-index', '--add', '--cacheinfo', `120000,${blob},extra/link`);
+  }
   git(main, 'commit', '-q', '-m', 'init');
   const wt = join(root, 'wt');
   git(main, 'worktree', 'add', '-q', '-b', 'feature/t', wt);
@@ -671,4 +676,171 @@ test('[8] settings.json の履歴上の版と完全一致する一覧は設定�
   const r = await exec(wt, ['reapply']);
   assert.equal(r.code, 0, r.all);
   assert.deepEqual(sparseList(wt), ['app']);
+});
+
+// ---------------------------------------------------------------------------
+// Codex 再検分（2回目）4件 + 再点検の再現テスト
+// ---------------------------------------------------------------------------
+
+test('[R1] 除外ディレクトリが別の作業木を指す junction/symlink なら何も変えず非0。参照先は無傷', async () => {
+  const { main, wt } = makeRepo();
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  symlinkSync(join(main, 'assets'), join(wt, 'assets'), 'junction');
+  const mainBefore = snapshot(main);
+  for (const argv of [['shrink'], ['reapply']]) {
+    const r = await refused(wt, main, argv);
+    assert.match(r.all, /junction|symlink|シンボリック/, argv[0]);
+    assert.match(r.all, /assets/, argv[0]);
+  }
+  // expand は junction 越しのファイルを書き換えない（参照先は無傷のまま）
+  await exec(wt, ['expand']);
+  assert.equal(readFileSync(join(main, 'assets/big1.bin'), 'utf8'), 'x'.repeat(1000));
+  assert.deepEqual(snapshot(main), mainBefore);
+});
+
+test('[R1] 外れる領域の深い階層にある junction/symlink も拒否する', async () => {
+  const { main, wt } = makeRepo();
+  mkdirSync(join(wt, 'extra/deep'), { recursive: true });
+  symlinkSync(join(main, 'assets'), join(wt, 'extra/deep/ln.log'), 'junction'); // ignore 済みの名前
+  const r = await refused(wt, main, ['shrink']);
+  assert.match(r.all, /junction|symlink|シンボリック/);
+  assert.match(r.all, /extra\/deep\/ln\.log/);
+  assert.equal(existsSync(join(main, 'assets/big1.bin')), true);
+});
+
+test('[R1] 作業木のルート自身が symlink/junction なら拒否する', async () => {
+  const { main, wt } = makeRepo();
+  const link = join(main, '..', 'wt-link');
+  symlinkSync(wt, link, 'junction');
+  // git が実パスへ解決するため、ルート検査は ctx.cwd 側の別名も見る
+  const before = snapshot(wt);
+  const r = await exec(link, ['shrink']);
+  assert.notEqual(r.code, 0, r.all);
+  assert.match(r.all, /junction|symlink|シンボリック/);
+  assert.deepEqual(snapshot(wt), before);
+});
+
+test('[R1] git が追跡している symlink エントリ(120000)は拒否対象から除く', async () => {
+  const { wt } = makeRepo({ trackedSymlink: true });
+  assert.match(git(wt, 'ls-files', '-s', 'extra/link'), /^120000 /);
+  const r = await exec(wt, ['shrink']);
+  assert.equal(r.code, 0, r.all);
+  assert.equal(existsSync(join(wt, 'extra/e.txt')), false);
+});
+
+test('[R2] 一覧一致の再適用経路も安全検査を通る: 外れる領域の ignore 済みファイルを消さない', async () => {
+  const { main, wt } = makeRepo();
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  write(join(wt, 'assets/big1.bin'), 'x'.repeat(1000)); // HEAD と同じ内容で再作成
+  write(join(wt, 'assets/gen.log'), '生成物'); // ignore 済み
+  const r = await refused(wt, main, ['shrink']);
+  assert.match(r.all, /assets\/gen\.log/);
+  assert.equal(readFileSync(join(wt, 'assets/gen.log'), 'utf8'), '生成物');
+  const r2 = await refused(wt, main, ['reapply']);
+  assert.match(r2.all, /assets\/gen\.log/);
+  assert.equal(readFileSync(join(wt, 'assets/gen.log'), 'utf8'), '生成物');
+});
+
+test('[R2] 一覧一致の再適用経路でも使用中プロセスと rename プローブを通る', async () => {
+  const { wt } = makeRepo();
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  write(join(wt, 'assets/big1.bin'), 'x'.repeat(1000)); // 未完了状態を作る
+  const running = () => [{ pid: 99999, ppid: 1, cmd: 'node server.js', cwd: wt }];
+  const r = await exec(wt, ['shrink'], { listProcesses: running });
+  assert.notEqual(r.code, 0);
+  assert.match(r.all, /server\.js/);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+  const { renameSync } = await import('node:fs');
+  const busy = (from, to) => {
+    if (from.replaceAll('\\', '/').endsWith('/assets')) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    renameSync(from, to);
+  };
+  const r2 = await exec(wt, ['shrink'], { probe: true, rename: busy });
+  assert.notEqual(r2.code, 0);
+  assert.match(r2.all, /使用中/);
+  assert.equal(existsSync(join(wt, 'assets/big1.bin')), true);
+});
+
+test('[R3] 障害物を退避して再実行しても、欠落した展開対象を既存状態として扱わず非0。復元後は0', async () => {
+  const { main, wt } = makeRepo({ settings: ['app'] });
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  pullSettings(main, wt, ['app', 'extra']);
+  // 事前検査の後に別プロセスが extra を通常ファイルとして作る
+  const race = (cwd, args, input) => {
+    if (args[0] === 'sparse-checkout' && args.includes('set')) writeFileSync(join(wt, 'extra'), '障害物');
+    return defaultRunGit(cwd, args, input);
+  };
+  let r = await exec(wt, ['reapply'], { runGit: race });
+  assert.notEqual(r.code, 0, r.all);
+  rmSync(join(wt, 'extra'), { force: true });
+  r = await exec(wt, ['reapply']);
+  assert.notEqual(r.code, 0, `再実行で未完了を見逃した: ${r.all}`);
+  assert.match(r.all, /extra\/e\.txt/);
+  assert.match(r.all, /git restore|git checkout/);
+  assert.equal(existsSync(join(wt, 'extra/e.txt')), false);
+  git(wt, 'checkout', '--', 'extra/e.txt'); // 案内どおりに復元
+  r = await exec(wt, ['reapply']);
+  assert.equal(r.code, 0, r.all);
+  assert.equal(existsSync(join(wt, 'extra/e.txt')), true);
+});
+
+test('[R4] sparsePaths の親子重複は拒否（該当の組を表示）。一覧比較は順序・重複を無視した集合比較', async () => {
+  const { main, wt } = makeRepo();
+  write(join(wt, '.claude/settings.json'), SETTINGS(['app', 'app/sub']));
+  git(wt, 'commit', '-q', '-am', 'nested');
+  const r = await refused(wt, main, ['shrink']);
+  assert.match(r.all, /app/);
+  assert.match(r.all, /app\/sub/);
+  assert.match(r.all, /祖先|子孫/);
+
+  // 順序違いは同一一覧: 設定 ['docs/development','app'] と現在の ['app','docs/development'] は一致
+  write(join(wt, '.claude/settings.json'), SETTINGS(['docs/development', 'app']));
+  git(wt, 'commit', '-q', '-am', 'order');
+  assert.equal((await exec(wt, ['shrink'])).code, 0);
+  const again = await exec(wt, ['shrink']);
+  assert.equal(again.code, 0, again.all);
+  assert.match(again.all, /既に/);
+});
+
+test('[R4] 履歴上の版が順序違い・重複を含んでも、同じ集合なら設定由来として認める', async () => {
+  const { wt } = makeRepo();
+  write(join(wt, '.claude/settings.json'), SETTINGS(['docs/development', 'app', 'app']));
+  git(wt, 'commit', '-q', '-am', 'unsorted dup');
+  write(join(wt, '.claude/settings.json'), SETTINGS(['app']));
+  git(wt, 'commit', '-q', '-am', 'narrow');
+  git(wt, 'sparse-checkout', 'set', '--cone', 'app', 'docs/development');
+  const r = await exec(wt, ['reapply']);
+  assert.equal(r.code, 0, r.all);
+  assert.deepEqual(sparseList(wt), ['app']);
+});
+
+test('[再点検] 拒否しても rename プローブの一時名は残らない', async () => {
+  const { wt } = makeRepo();
+  const { renameSync } = await import('node:fs');
+  const busy = (from, to) => {
+    if (from.replaceAll('\\', '/').endsWith('/extra')) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    renameSync(from, to);
+  };
+  const r = await exec(wt, ['shrink'], { probe: true, rename: busy });
+  assert.notEqual(r.code, 0);
+  const leftovers = [wt, join(wt, 'docs')].flatMap((d) => readdirSync(d)).filter((n) => n.includes('.wa-probe-'));
+  assert.deepEqual(leftovers, []);
+});
+
+test('[再点検] 強制終了で残った一時名は次回実行で検出して報告し、勝手に消さない', async () => {
+  const { main, wt } = makeRepo();
+  write(join(wt, 'assets.wa-probe-4242/big1.bin'), 'x'.repeat(1000));
+  const r = await refused(wt, main, ['shrink']);
+  assert.match(r.all, /assets\.wa-probe-4242/);
+  assert.match(r.all, /元の名前/);
+  assert.equal(existsSync(join(wt, 'assets.wa-probe-4242/big1.bin')), true);
+  const s = await exec(wt, ['status']);
+  assert.match(s.all, /assets\.wa-probe-4242/);
+});
+
+test('[再点検] --help に「実行中は対象 worktree で他の作業をしない」旨がある', async () => {
+  const { wt } = makeRepo();
+  const r = await exec(wt, ['--help']);
+  assert.equal(r.code, 0);
+  assert.match(r.all, /他の作業をしない/);
 });
