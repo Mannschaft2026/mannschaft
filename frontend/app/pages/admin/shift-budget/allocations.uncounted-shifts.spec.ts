@@ -98,9 +98,13 @@ describe('締め後に未計上の勤務のワンクリック追加', () => {
 
   it('初期値を埋めた確認ダイアログから理由を入れて1操作で ADD し、成功後は一覧から消える', async () => {
     const wrapper = await mountPage()
-    await wrapper.find('[data-testid="uncounted-shifts-open-1"]').trigger('click')
+    const open = wrapper.find('[data-testid="uncounted-shifts-open-1"]')
+    expect(open.exists()).toBe(true)
+    await open.trigger('click')
     await flushPromises()
-    await wrapper.find('[data-testid="uncounted-shift-add-501-6"]').trigger('click')
+    const add = wrapper.find('[data-testid="uncounted-shift-add-501-6"]')
+    expect(add.exists()).toBe(true)
+    await add.trigger('click')
     await flushPromises()
 
     const rate = wrapper.find('[data-testid="uncounted-shift-add-rate"]')
