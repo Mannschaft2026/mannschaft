@@ -422,4 +422,3 @@ describe('既読 API の失敗と冪等化（CMP-261030-0652）', () => {
     wrapper.unmount()
   })
 })
-
