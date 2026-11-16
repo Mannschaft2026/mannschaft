@@ -85408,38 +85408,6 @@
         }
       }
     },
-    "/api/v1/effort-records/me/definition-snapshots": {
-      "post": {
-        "tags": [
-          "個人の頑張り記録"
-        ],
-        "summary": "チーム定義の snapshot 登録と定義 token 発行",
-        "description": "認可根拠: EffortDefinitionService が現在所属と TEAM template の scopeId 一致を検証する。",
-        "operationId": "createDefinitionSnapshot",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateEffortDefinitionSnapshotRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseEffortDefinitionSnapshotResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/corkboards/{boardId}/groups": {
       "post": {
         "tags": [
@@ -212762,46 +212730,6 @@
           "recordedOn",
           "values"
         ]
-      },
-      "CreateEffortDefinitionSnapshotRequest": {
-        "type": "object",
-        "properties": {
-          "teamId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "teamTemplateId": {
-            "type": "integer",
-            "format": "int64"
-          }
-        },
-        "required": [
-          "teamId",
-          "teamTemplateId"
-        ]
-      },
-      "ApiResponseEffortDefinitionSnapshotResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/EffortDefinitionSnapshotResponse"
-          }
-        }
-      },
-      "EffortDefinitionSnapshotResponse": {
-        "type": "object",
-        "properties": {
-          "definition": {
-            "$ref": "#/components/schemas/EffortDefinitionSnapshot"
-          },
-          "definitionToken": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
       },
       "CreateCardRequest": {
         "type": "object",

@@ -23039,26 +23039,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/effort-records/me/definition-snapshots": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * チーム定義の snapshot 登録と定義 token 発行
-         * @description 認可根拠: EffortDefinitionService が現在所属と TEAM template の scopeId 一致を検証する。
-         */
-        post: operations["createDefinitionSnapshot"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/corkboards/{boardId}/groups": {
         parameters: {
             query?: never;
@@ -70375,21 +70355,6 @@ export interface components {
             /** Format: date */
             recordedOn: string;
             values: components["schemas"]["EffortFieldValue"][];
-        };
-        CreateEffortDefinitionSnapshotRequest: {
-            /** Format: int64 */
-            teamId: number;
-            /** Format: int64 */
-            teamTemplateId: number;
-        };
-        ApiResponseEffortDefinitionSnapshotResponse: {
-            data?: components["schemas"]["EffortDefinitionSnapshotResponse"];
-        };
-        EffortDefinitionSnapshotResponse: {
-            definition?: components["schemas"]["EffortDefinitionSnapshot"];
-            definitionToken?: string;
-            /** Format: date-time */
-            expiresAt?: string;
         };
         CreateCardRequest: {
             /** Format: date-time */
@@ -136843,30 +136808,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
-                };
-            };
-        };
-    };
-    createDefinitionSnapshot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateEffortDefinitionSnapshotRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponseEffortDefinitionSnapshotResponse"];
                 };
             };
         };
