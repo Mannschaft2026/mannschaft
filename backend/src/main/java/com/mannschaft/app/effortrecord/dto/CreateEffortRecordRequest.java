@@ -19,7 +19,7 @@ public record CreateEffortRecordRequest(
         @NotNull UUID definitionUuid,
         @NotNull Integer definitionRevision,
         String definitionToken,
-        @NotNull @Valid List<EffortFieldValue> values,
+        @NotNull List<@NotNull @Valid EffortFieldValue> values,
         String privateNote) {
 
     /** 契約にない JSON プロパティは 400（API 契約 §1）。値は例外メッセージへ載せない。 */

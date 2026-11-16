@@ -14,6 +14,8 @@ import {
   toInputFields,
   type EffortSnapshotField,
 } from '~/utils/effortFields'
+import { createLatestGuard } from '~/utils/latestRequest'
+import { mergeEffortRecords } from '~/utils/effortRecordList'
 import {
   listEffortChartTargets,
   resolveEffortPeriod,
@@ -128,13 +130,17 @@ function onPresetChange() {
 
 function currentBody() {
   return {
-    recordedOn: toYmd(recordedOn.value),
+    recordedOn: toYmd(recordedOn.value as Date),
     values: buildEffortFieldValues(inputFields.value, inputs.value),
     privateNote: privateNote.value.trim() === '' ? null : privateNote.value,
   }
 }
 
 function validate(): boolean {
+  if (!(recordedOn.value instanceof Date) || Number.isNaN(recordedOn.value.getTime())) {
+    formError.value = t('effort.error.recordedOnRequired')
+    return false
+  }
   const wire = buildEffortFieldValues(inputFields.value, inputs.value)
   for (const f of formFields.value) {
     if (f.isRequired && wire.find((v) => v.fieldKey === f.fieldKey)?.value === null) {
@@ -158,8 +164,8 @@ async function save() {
   const def = activeDefinition.value
   if (!validate() || !def?.definitionUuid) return
   saving.value = true
-  const body = currentBody()
   try {
+    const body = currentBody()
     if (!editing.value) {
       const payload = {
         ...body,
@@ -254,7 +260,7 @@ async function loadRecords(reset: boolean) {
   recordsError.value = null
   try {
     const page = await api.list({ limit: 20, cursor: reset ? undefined : (nextCursor.value ?? undefined) })
-    records.value = reset ? (page.data ?? []) : [...records.value, ...(page.data ?? [])]
+    records.value = reset ? mergeEffortRecords([], page.data ?? []) : mergeEffortRecords(records.value, page.data ?? [])
     nextCursor.value = page.meta?.hasNext ? (page.meta.nextCursor ?? null) : null
   } catch (e) {
     recordsError.value = e
@@ -297,10 +303,14 @@ function chartTargetLabel(tg: EffortChartTarget): string {
   return def ? `${kind} (${fieldLabel(def)})` : kind
 }
 
+const statsGuard = createLatestGuard()
+
 async function loadStats() {
+  const isLatest = statsGuard.next()
   stats.value = null
   statsError.value = null
   rangeError.value = false
+  statsLoading.value = false
   const range = reviewRange.value
   const target = chartTarget.value
   if (!range) {
@@ -310,7 +320,7 @@ async function loadStats() {
   if (!target || !reviewDefinitionUuid.value) return
   statsLoading.value = true
   try {
-    stats.value = (await api.stats({
+    const res = (await api.stats({
       dateFrom: range.dateFrom,
       dateTo: range.dateTo,
       definitionUuid: reviewDefinitionUuid.value,
@@ -318,10 +328,11 @@ async function loadStats() {
       chart: target.chart,
       grain: range.grain,
     })).data
+    if (isLatest()) stats.value = res
   } catch (e) {
-    statsError.value = e
+    if (isLatest()) statsError.value = e
   } finally {
-    statsLoading.value = false
+    if (isLatest()) statsLoading.value = false
   }
 }
 

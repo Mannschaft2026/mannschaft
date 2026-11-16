@@ -21,6 +21,7 @@
     },
     "error": {
       "required": "{field}은(는) 필수입니다",
+      "recordedOnRequired": "기록일을 입력해 주세요",
       "conflict": "다른 편집이 먼저 저장되어 있었습니다. 최신 저장 내용을 표시합니다."
     },
     "delete": {

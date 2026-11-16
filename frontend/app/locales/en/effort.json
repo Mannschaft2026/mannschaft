@@ -21,6 +21,7 @@
     },
     "error": {
       "required": "{field} is required",
+      "recordedOnRequired": "Please enter the record date",
       "conflict": "Another edit was saved first. The latest saved content is shown."
     },
     "delete": {

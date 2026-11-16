@@ -21,6 +21,7 @@
     },
     "error": {
       "required": "{field}は必須です",
+      "recordedOnRequired": "記録日を入力してください",
       "conflict": "別の編集が先に保存されていました。最新の保存内容を表示しています。"
     },
     "delete": {

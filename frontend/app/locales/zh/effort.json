@@ -21,6 +21,7 @@
     },
     "error": {
       "required": "{field}为必填项",
+      "recordedOnRequired": "请输入记录日期",
       "conflict": "已有其他编辑先被保存。当前显示最新保存的内容。"
     },
     "delete": {

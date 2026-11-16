@@ -209,6 +209,29 @@ class EffortRecordInputValidationContractIT extends EffortRecordItSupport {
         assertThat(created.path("recordTimezone").asText()).isEqualTo("UTC");
     }
 
+    @Test
+    @DisplayName("AC-5: values 配列に null 要素があると作成・更新とも500でなく400（COMMON_001）で原本を作らない")
+    void AC5_values配列のnull要素は400() throws Exception {
+        Long owner = user("null要素");
+        Map<String, Object> body = createBody(STUDY, DAY, TOKYO, values("subject", "数学", "duration", "30"), null);
+        List<Object> withNull = new ArrayList<>(valueList(values("subject", "数学", "duration", "30")));
+        withNull.add(null);
+        body.put("values", withNull);
+        expectError(postCreate(owner, body, UUID.randomUUID().toString()), 400, "COMMON_001");
+        assertThat(ownerRows(owner)).as("null 要素の作成は原本を作らない").isZero();
+
+        JsonNode created = create(owner, STUDY, DAY, values("subject", "数学", "duration", "30"), null);
+        Map<String, Object> update = new LinkedHashMap<>();
+        update.put("version", created.path("version").asLong());
+        update.put("recordedOn", DAY.toString());
+        update.put("values", withNull);
+        update.put("privateNote", null);
+        expectError(http(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put(ME + "/{id}", created.path("id").asText())
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(write(update)), owner),
+                400, "COMMON_001");
+    }
+
     private long ownerRows(Long owner) {
         return count("SELECT COUNT(*) FROM effort_records WHERE owner_user_id = ?1", owner);
     }

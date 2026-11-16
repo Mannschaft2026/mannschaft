@@ -15,7 +15,7 @@ import java.util.List;
 public record UpdateEffortRecordRequest(
         @NotNull @Min(0) Long version,
         @NotNull LocalDate recordedOn,
-        @NotNull @Valid List<EffortFieldValue> values,
+        @NotNull List<@NotNull @Valid EffortFieldValue> values,
         String privateNote) {
 
     /** 契約にない JSON プロパティは 400（API 契約 §1）。値は例外メッセージへ載せない。 */

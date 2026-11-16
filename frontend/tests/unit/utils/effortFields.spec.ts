@@ -102,6 +102,20 @@ describe('AC-64 snapshot 入力 adapter', () => {
     expect(f[1]?.unit).toBeNull()
     expect(f[1]?.optionsJson).toBe('["math"]')
   })
+
+  it('NUMBER の scale を入力部品へ渡す（体重 scale 2 で小数入力できる）。NUMBER 以外は null', () => {
+    const f = toEffortFormFields(
+      [
+        { fieldKey: 'weight', type: 'NUMBER', scale: 2 },
+        { fieldKey: 'duration', type: 'NUMBER' },
+        { fieldKey: 'memo', type: 'TEXT', scale: 2 },
+      ],
+      (x) => x.fieldKey ?? '',
+    )
+    expect(f[0]?.scale).toBe(2)
+    expect(f[1]?.scale).toBeNull()
+    expect(f[2]?.scale).toBeNull()
+  })
 })
 
 describe('AC-65 原本 PUT 応答消失 → 再送 409 の照合', () => {

@@ -21,6 +21,7 @@
     },
     "error": {
       "required": "{field} ist erforderlich",
+      "recordedOnRequired": "Bitte das Datum des Eintrags angeben",
       "conflict": "Eine andere Änderung wurde zuerst gespeichert. Der neueste gespeicherte Stand wird angezeigt."
     },
     "delete": {

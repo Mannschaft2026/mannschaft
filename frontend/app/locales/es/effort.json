@@ -21,6 +21,7 @@
     },
     "error": {
       "required": "{field} es obligatorio",
+      "recordedOnRequired": "Introduce la fecha del registro",
       "conflict": "Otra edición se guardó antes. Se muestra el contenido guardado más reciente."
     },
     "delete": {

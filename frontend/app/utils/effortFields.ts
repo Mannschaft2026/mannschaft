@@ -189,6 +189,7 @@ export function toEffortFormFields(
       unit,
       isAggregatable: f.aggregation === 'SUM',
       sortOrder: i,
+      scale: f.type === 'NUMBER' && typeof f.scale === 'number' ? f.scale : null,
     }
   })
 }
