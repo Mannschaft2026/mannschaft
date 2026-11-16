@@ -7,53 +7,10 @@
       "command": "npx",
       "args": [
         "@playwright/mcp@latest",
-        "--browser",
-        "chromium",
-        "--headless",
-        "false",
-        "--viewport-size",
-        "1280x720"
+        "--browser", "chromium",
+        "--headless", "false",
+        "--viewport-size", "1280x720"
       ]
     }
-  },
-  "worktree": {
-    "sparsePaths": [
-      ".agents",
-      ".claude",
-      ".githooks",
-      ".github",
-      ".gradle-home",
-      "backend/build-logic",
-      "backend/gradle",
-      "backend/infra",
-      "backend/scripts",
-      "backend/src/main/java",
-      "backend/src/main/resources/css",
-      "backend/src/main/resources/db",
-      "backend/src/main/resources/diagnosis",
-      "backend/src/main/resources/docx",
-      "backend/src/main/resources/email",
-      "backend/src/main/resources/fonts",
-      "backend/src/main/resources/ranch/development",
-      "backend/src/main/resources/templates",
-      "backend/src/test",
-      "config",
-      "docs",
-      "frontend/.husky",
-      "frontend/.vscode",
-      "frontend/app",
-      "frontend/docs",
-      "frontend/eslint-rules",
-      "frontend/public/dev-fixtures",
-      "frontend/public/icons",
-      "frontend/scripts",
-      "frontend/server",
-      "frontend/tests",
-      "infra",
-      "k6",
-      "public",
-      "scripts",
-      "test-fixtures"
-    ]
   }
 }
