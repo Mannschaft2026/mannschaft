@@ -3349,5 +3349,19 @@
       "expires_at": "Caduca el",
       "used_count": "Veces usado"
     }
+  },
+  "signage": {
+    "layout": {
+      "landscape": "Horizontal",
+      "portrait": "Vertical",
+      "standard": "Estándar"
+    },
+    "slotType": {
+      "activityHighlight": "Actividades destacadas",
+      "ranking": "Clasificación",
+      "freeText": "Texto libre",
+      "freeImage": "Imagen libre",
+      "clock": "Reloj"
+    }
   }
 }

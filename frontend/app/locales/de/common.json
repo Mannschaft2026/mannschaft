@@ -3349,5 +3349,19 @@
       "expires_at": "Gültig bis",
       "used_count": "Anzahl der Nutzungen"
     }
+  },
+  "signage": {
+    "layout": {
+      "landscape": "Querformat",
+      "portrait": "Hochformat",
+      "standard": "Standard"
+    },
+    "slotType": {
+      "activityHighlight": "Aktivitätshöhepunkte",
+      "ranking": "Rangliste",
+      "freeText": "Freitext",
+      "freeImage": "Freies Bild",
+      "clock": "Uhr"
+    }
   }
 }

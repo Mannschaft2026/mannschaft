@@ -199634,9 +199634,14 @@
             "format": "date-time"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
           }
-        }
+        },
+        "required": [
+          "name"
+        ]
       },
       "ApiResponseSignageAccessTokenResponse": {
         "type": "object",
