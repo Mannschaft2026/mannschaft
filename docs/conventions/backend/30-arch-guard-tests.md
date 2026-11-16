@@ -273,7 +273,9 @@ MAT 実測で、shard 5 の OOM は ArchUnit の本番取り込み（`@AnalyzeCl
     エンジン**で実行され、Jupiter の `@Tag` は読まない）は専用 CI ジョブを持たない。`archunit` エンジン
     だけを含める別の `Test` タスク **`archUnitTest`** が走らせ、`tasks.named<Test>("test") {
     dependsOn(archUnitTest, ...) }` により通常の `test`（各 shard）の依存タスクとして、shard 分割を
-    適用せず全ルールを Spring とは別 JVM で実解析する。CI の専用ジョブ `arch-test` では
+    適用せず全ルールを Spring とは別 JVM で実解析する。heap 4g・forkEvery=0・maxParallelForks=1
+    とし、全 compiled class の選別で多数の JVM を再起動しない。通常 `test` の180 class毎のfork・
+    parallel・6 shard割当は変更しない。CI の専用ジョブ `arch-test` では
     `archTest` しか起動しないため **`@AnalyzeClasses` 側はここでは走らない**（各 shard の `test` 実行
     に埋め込まれて走る）。
 - タグ付きクラスは `shard-weights.properties` に載せない（通常 `test` の shard 貪欲割当が、走らない

@@ -523,6 +523,8 @@ Spring のテストコンテキストを使わない。通常の `test` はタ�
   各 runner の XML を `scripts/verify_archunit_execution.py` で現 Java source の行頭 `@ArchTest` から
   導出したクラス別件数に照合する。件数欠落、重複 case、failure/error/skip は失敗となる。
   store のバイト同値だけを実行の証明とせず、実行後の Integrity 2 case と合わせて確認する。
+  `archUnitTest` は heap 4g・forkEvery=0・maxParallelForks=1 とし、全 compiled class の選別を
+  1 JVM にまとめる。通常 `test` の180 class毎のfork・parallel・6 shardの割当は維持する。
 
 - `@Tag(ArchUnitTestTag.ARCHUNIT)` を付けた **junit-jupiter** のテストクラスは `archTest`（heap 3g・
   1 JVM）が走らせる。

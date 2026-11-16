@@ -310,7 +310,9 @@ tasks.withType<Test> {
     // perfTask は単一クラスの重量級 IT ゆえ forkEvery=0（1 JVM 共有）で無駄な再 fork を避ける。
     // archTest は取り込み結果を JVM 内で共有することが目的のため forkEvery=0・並列 fork なし（1 JVM）。
     // fork し直すと取り込みが JVM の数だけ繰り返され、並列 fork すると取り込みの複製がワーカー数だけ増える。
-    setForkEvery(if (isPerfTask || isArchTask || isErDiagramTask) 0L else ((project.findProperty("fork.every") as String?)?.toLong() ?: 180L))
+    // ArchUnit engine も全 compiled class を選別する。通常の180 class毎の再起動では
+    // 毎runnerで多数JVMを作るため、全ルールの取り込みを1 JVMにまとめる。
+    setForkEvery(if (isPerfTask || isArchTask || isArchUnitTask || isErDiagramTask) 0L else ((project.findProperty("fork.every") as String?)?.toLong() ?: 180L))
     // ローカル（WSL2 Docker）環境では Testcontainers の並列コンテナ起動が WSL2 ポートミラーリングの
     // タイミング問題を引き起こすため、-Pmax.parallel.forks=1 で上書きできるようにする。
     // CI 環境ではデフォルト 2 のまま動作する。
