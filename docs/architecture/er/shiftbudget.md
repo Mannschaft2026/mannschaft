@@ -28,6 +28,7 @@ erDiagram
     shift_budget_consumptions {
         bigint id PK
         bigint allocation_id FK
+        binary close_event_id FK
         bigint user_id "ID参照"
     }
     shift_budget_failed_events {
@@ -65,6 +66,7 @@ erDiagram
     users ||..o{ shift_budget_consumptions : "ID参照(FKなし) user_id"
     organizations ||..o{ shift_budget_failed_events : "ID参照(FKなし) organization_id"
     shift_budget_allocations ||--o{ shift_budget_monthly_close_events : "allocation_id"
+    shift_budget_monthly_close_events |o--o{ shift_budget_consumptions : "close_event_id"
     users |o..o{ shift_budget_monthly_close_events : "ID参照(FKなし) actor_user_id"
     projects |o..o{ todo_budget_links : "ID参照(FKなし) project_id"
     shift_budget_allocations ||--o{ todo_budget_links : "allocation_id"
@@ -150,6 +152,7 @@ erDiagram
 | `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `deleted_at` | `datetime` | YES | NULL |  |
 | `deleted_at_uq` | `datetime` | NO | （なし） |  |
+| `close_event_id` | `binary(16)` | YES | NULL | 締めた月次締めイベント。NULL は導入前の旧締め |
 
 ### `shift_budget_failed_events`
 

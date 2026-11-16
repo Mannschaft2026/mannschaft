@@ -212,6 +212,21 @@ public class MonthlyShiftBudgetCloseService {
             throw new BusinessException(ShiftBudgetErrorCode.MONTHLY_ALREADY_CLOSED);
         }
 
+        // CMP-260909-2152: 締めイベントを同じ TX で先に記録する（手動=MANUAL+操作者、バッチ=BATCH）。
+        // 以後の再公開で消化を作らない判定・割当の削除拒否・締め後訂正の締め操作者表示の正本になる。
+        // persist で ID が採番されるので、昇格させる行に「どの締めで確定したか」の印として入れる（AC22）。
+        Long closer = SecurityUtils.getCurrentUserIdOrNull();
+        ShiftBudgetMonthlyCloseEventEntity closeEvent = ShiftBudgetMonthlyCloseEventEntity.builder()
+                .allocationId(allocation.getId())
+                .targetMonth(java.time.YearMonth.from(transactionDate).toString())
+                .actorKind(closer != null ? ShiftBudgetMonthlyCloseEventEntity.KIND_MANUAL
+                        : ShiftBudgetMonthlyCloseEventEntity.KIND_BATCH)
+                .actorUserId(closer)
+                .closedAt(java.time.LocalDateTime.now())
+                .build();
+        // 割当リポジトリの断片（締めサービスの依存を増やさない。凍結キーを動かさないため）で同一 TX に INSERT する。
+        allocationRepository.recordClose(closeEvent);
+
         // 当該 allocation の生存 PLANNED 消化を抽出
         List<ShiftBudgetConsumptionEntity> planned = consumptionRepository
                 .findByAllocationIdAndStatusInAndDeletedAtIsNull(
@@ -219,7 +234,7 @@ public class MonthlyShiftBudgetCloseService {
 
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (ShiftBudgetConsumptionEntity c : planned) {
-            c.confirm();
+            c.confirm(closeEvent.getId());
             consumptionRepository.save(c);
             totalAmount = totalAmount.add(c.getAmount());
         }
@@ -234,19 +249,6 @@ public class MonthlyShiftBudgetCloseService {
         BudgetTransactionEntity transaction = createMonthlySummaryTransaction(
                 allocation, totalAmount, transactionDate);
         budgetTransactionRepository.save(transaction);
-
-        // CMP-260909-2152: 締めイベントを同じ TX で記録する（手動=MANUAL+操作者、バッチ=BATCH）。
-        // 以後の再公開で消化を作らない判定・割当の削除拒否・締め後訂正の締め操作者表示の正本になる。
-        Long closer = SecurityUtils.getCurrentUserIdOrNull();
-        // 割当リポジトリの断片（締めサービスの依存を増やさない。凍結キーを動かさないため）で同一 TX に INSERT する。
-        allocationRepository.recordClose(ShiftBudgetMonthlyCloseEventEntity.builder()
-                .allocationId(allocation.getId())
-                .targetMonth(java.time.YearMonth.from(transactionDate).toString())
-                .actorKind(closer != null ? ShiftBudgetMonthlyCloseEventEntity.KIND_MANUAL
-                        : ShiftBudgetMonthlyCloseEventEntity.KIND_BATCH)
-                .actorUserId(closer)
-                .closedAt(java.time.LocalDateTime.now())
-                .build());
 
         // 監査ログ
         Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();  // バッチ経由は null

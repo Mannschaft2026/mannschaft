@@ -18,6 +18,7 @@ import org.hibernate.annotations.GeneratedColumn;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * F08.7 シフト予算消化記録エンティティ。
@@ -101,6 +102,14 @@ public class ShiftBudgetConsumptionEntity extends BaseEntity {
     @Column(name = "confirmed_at")
     private LocalDateTime confirmedAt;
 
+    /**
+     * この行を CONFIRMED にした月次締めイベント（{@code shift_budget_monthly_close_events.id}、同一ドメイン FK）。
+     * 月次締めは割当内の全 PLANNED を昇格させるため、複数月にまたがる割当で「どの締めの明細か」を特定する正本。
+     * NULL は本列の導入前に確定した旧行（原本の金額・時間・状態は変えない）。
+     */
+    @Column(name = "close_event_id")
+    private UUID closeEventId;
+
     /** CANCELLED 遷移時刻 */
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
@@ -139,5 +148,13 @@ public class ShiftBudgetConsumptionEntity extends BaseEntity {
     public void confirm() {
         this.status = ShiftBudgetConsumptionStatus.CONFIRMED;
         this.confirmedAt = LocalDateTime.now();
+    }
+
+    /**
+     * PLANNED → CONFIRMED 昇格を行い、昇格させた締めイベントの ID を印として残す（月次締め用）。
+     */
+    public void confirm(UUID closeEventId) {
+        confirm();
+        this.closeEventId = closeEventId;
     }
 }

@@ -72,9 +72,11 @@ public class ShiftBudgetCorrectionSnapshotService {
         ShiftBudgetAllocationEntity allocation = requireAllocation(organizationId, allocationId);
         ShiftBudgetMonthlyCloseEventEntity event = closeEventRepository
                 .findByAllocationIdAndTargetMonth(allocationId, month.toString()).orElse(null);
+        // 締めた明細は close_event_id で特定する（複数月にまたがる割当で、他の月の締めの明細を混ぜない）。
         List<ClosedLine> lines = consumptionRepository
                 .findByAllocationIdAndStatusInAndDeletedAtIsNull(allocationId,
                         List.of(ShiftBudgetConsumptionStatus.CONFIRMED)).stream()
+                .filter(c -> belongsToClose(c, event))
                 .map(c -> new ClosedLine(c.getId(), c.getUserId(), c.getSlotId(), c.getShiftId(), c.getHours(),
                         c.getHourlyRateSnapshot(), c.getAmount()))
                 .toList();
@@ -90,6 +92,35 @@ public class ShiftBudgetCorrectionSnapshotService {
                 allocation.getPeriodStart(), allocation.getPeriodEnd(), event != null, snapshot);
     }
 
+    /**
+     * 確定明細が、この締めイベントの明細か。印（close_event_id）がこの締めと一致する行、または
+     * 印の無い旧行（導入前に確定。{@code NULL}）で、この締めが導入前の旧締め（締めイベントが無い、または補完した UNKNOWN）の場合。
+     * 印の無い旧行を新しい印付きの締め（MANUAL / BATCH）へは混ぜない。旧締めが複数ある割当では旧行の合計が
+     * 原仕訳と一致せず、budget の締め記録の作成が BUDGET_033 で拒否する（誤った月へ訂正を作らない）。
+     */
+    private static boolean belongsToClose(ShiftBudgetConsumptionEntity c, ShiftBudgetMonthlyCloseEventEntity event) {
+        if (c.getCloseEventId() != null) {
+            return event != null && c.getCloseEventId().equals(event.getId());
+        }
+        return event == null || ShiftBudgetMonthlyCloseEventEntity.KIND_UNKNOWN.equals(event.getActorKind());
+    }
+
+    /**
+     * 指定の勤務枠×人が、この月とは別の締めで確定済みか（締め後追加の二重計上防止。同じ枠×人の確定行は割当内で1件）。
+     * この月の締めの明細（元明細の取消後の再追加は budget 側が判定する）は含めない。
+     */
+    public boolean confirmedInOtherClose(Long organizationId, Long allocationId, YearMonth month, Long slotId,
+                                         Long userId) {
+        requireAllocation(organizationId, allocationId);
+        ShiftBudgetMonthlyCloseEventEntity event = closeEventRepository
+                .findByAllocationIdAndTargetMonth(allocationId, month.toString()).orElse(null);
+        return consumptionRepository.findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(slotId, userId,
+                        ShiftBudgetConsumptionStatus.CONFIRMED)
+                .filter(c -> allocationId.equals(c.getAllocationId()))
+                .map(c -> !belongsToClose(c, event))
+                .orElse(false);
+    }
+
     /** 割当のキャッシュ金額（訂正後の消化額を出す土台）。 */
     public AllocationAmounts amounts(Long organizationId, Long allocationId) {
         ShiftBudgetAllocationEntity a = requireAllocation(organizationId, allocationId);
@@ -101,6 +132,8 @@ public class ShiftBudgetCorrectionSnapshotService {
      * 旧締め（締めイベント導入前）の月に、操作者 UNKNOWN の締めイベントを補完する。
      * 割当行を {@code FOR UPDATE} で握るので、月次締め・再公開・割当削除と直列化される。
      * 段取り役が budget の原仕訳の存在を確認した後にだけ呼ぶ。
+     * 既存の締めイベント・確定明細の印（close_event_id）は書き換えない（印の無い旧行は旧締めに属するとみなし、
+     * 属する月の特定は {@link #snapshot} と budget 側の合計照合に任せる）。
      */
     @Transactional
     public void ensureCloseEvent(Long allocationId, String targetMonth, LocalDateTime closedAt) {

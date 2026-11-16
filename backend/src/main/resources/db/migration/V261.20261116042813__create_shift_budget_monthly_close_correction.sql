@@ -23,6 +23,15 @@ CREATE TABLE shift_budget_monthly_close_events (
     CONSTRAINT fk_sbmce_allocation FOREIGN KEY (allocation_id) REFERENCES shift_budget_allocations (id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='シフト予算 月次締めイベント（CMP-260909-2152）';
 
+-- 締めた明細の集合の永続化（AC22）。月次締めは勤務枠の月に関係なく割当内の全 PLANNED を CONFIRMED にするため、
+-- 複数月にまたがる割当では2回目以降の締めの明細を特定できない。昇格させた行へ、そのとき INSERT した締めイベントの ID を入れる。
+-- NULL は本列の導入前に確定した旧行（原本の金額・時間・状態は変えない）。同一ドメイン内の FK のみ。
+ALTER TABLE shift_budget_consumptions
+    ADD COLUMN close_event_id BINARY(16) NULL COMMENT '締めた月次締めイベント。NULL は導入前の旧締め',
+    ADD INDEX idx_sbc_close_event (close_event_id),
+    ADD CONSTRAINT fk_sbc_close_event FOREIGN KEY (close_event_id)
+        REFERENCES shift_budget_monthly_close_events (id) ON DELETE RESTRICT;
+
 -- ─────────────────────────────────────────────
 -- (a) budget: 締め記録
 -- ─────────────────────────────────────────────
