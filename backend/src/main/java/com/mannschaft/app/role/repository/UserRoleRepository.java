@@ -2852,7 +2852,7 @@ public interface UserRoleRepository extends JpaRepository<UserRoleEntity, Long> 
             "     AND m2.scope_id = t.id AND m2.left_at IS NULL AND m2.user_id <> :userId) AS otherMembersCount " +
             "FROM user_roles ur " +
             "JOIN roles r ON r.id = ur.role_id " +
-            "JOIN teams t ON t.id = ur.team_id " +
+            "JOIN teams t ON t.id = ur.team_id AND t.deleted_at IS NULL " +
             "WHERE ur.user_id = :userId AND r.name = 'ADMIN' AND ur.team_id IS NOT NULL " +
             "  AND (SELECT COUNT(*) FROM user_roles ur2 JOIN roles r2 ON r2.id = ur2.role_id " +
             "       WHERE r2.name = 'ADMIN' AND ur2.team_id = t.id) = 1 " +
@@ -2862,7 +2862,7 @@ public interface UserRoleRepository extends JpaRepository<UserRoleEntity, Long> 
             "     AND m3.scope_id = o.id AND m3.left_at IS NULL AND m3.user_id <> :userId) AS otherMembersCount " +
             "FROM user_roles ur " +
             "JOIN roles r ON r.id = ur.role_id " +
-            "JOIN organizations o ON o.id = ur.organization_id " +
+            "JOIN organizations o ON o.id = ur.organization_id AND o.deleted_at IS NULL " +
             "WHERE ur.user_id = :userId AND r.name = 'ADMIN' AND ur.organization_id IS NOT NULL " +
             "  AND (SELECT COUNT(*) FROM user_roles ur3 JOIN roles r3 ON r3.id = ur3.role_id " +
             "       WHERE r3.name = 'ADMIN' AND ur3.organization_id = o.id) = 1",

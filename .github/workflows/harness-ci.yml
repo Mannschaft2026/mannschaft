@@ -36,4 +36,4 @@ jobs:
           frontend/scripts/lib/sparse-assets.test.mjs
           frontend/scripts/verify-ranch-sparse.test.mjs
       - name: Check worktree sparse paths
-        run: node scripts/worktree-sparse-paths.mjs --check
+        run: node scripts/worktree-sparse-paths.mjs --check --require-configured
