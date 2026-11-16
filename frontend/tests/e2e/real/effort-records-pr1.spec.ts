@@ -86,7 +86,9 @@ function jstToday(): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date())
 }
 function shiftDay(ymd: string, delta: number): string {
-  const [y, m, d] = ymd.split('-').map(Number)
+  const parts = ymd.split('-').map(Number)
+  const [y, m, d] = parts
+  if (parts.length !== 3 || y === undefined || m === undefined || d === undefined) throw new Error(`不正な日付形式: ${ymd}`)
   return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10)
 }
 
@@ -467,7 +469,9 @@ test('E8 他アカウント B: P の記録が一覧・集計に出ず、P の記
   test.setTimeout(300_000)
   const pRows = ((await effortApi(P, 'GET', '?limit=1')).body.data ?? []) as Rec[]
   expect(pRows.length).toBe(1)
-  const pid = pRows[0].id
+  const p0 = pRows[0]
+  if (!p0) throw new Error('P の記録が取得できない')
+  const pid = p0.id
   // P 自身は同 ID を取得できる（対照）
   expect((await effortApi(P, 'GET', `/${pid}`)).status).toBe(200)
 
@@ -487,7 +491,7 @@ test('E8 他アカウント B: P の記録が一覧・集計に出ず、P の記
   // 確認補助（API 直叩き）: P の記録 UUID を B で
   const get = await effortApi(B, 'GET', `/${pid}`)
   const put = await effortApi(B, 'PUT', `/${pid}`, { version: 0, recordedOn: today, values: [{ fieldKey: 'duration', value: '1' }], privateNote: null })
-  const del = await effortApi(B, 'DELETE', `/${pid}?version=${pRows[0].version}`, undefined, { 'Idempotency-Key': crypto.randomUUID() })
+  const del = await effortApi(B, 'DELETE', `/${pid}?version=${p0.version}`, undefined, { 'Idempotency-Key': crypto.randomUUID() })
   console.log(`[effort] B -> P record: GET ${get.status} PUT ${put.status} DELETE ${del.status}`)
   expect(get.status).toBe(404)
   expect(put.status).toBe(404)
