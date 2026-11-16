@@ -106,6 +106,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `content_reports_archive` | `scope_type` | `scope_id` |
 | `content_reports_archive` | `target_type` | `target_id` |
 | `direct_mail_logs_archive` | `scope_type` | `scope_id` |
+| `direct_mail_logs_archive` | `sender_type` | `sender_id` |
 | `notifications_archive` | `scope_type` | `scope_id` |
 | `notifications_archive` | `source_type` | `source_id` |
 
@@ -116,7 +117,6 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `chat_messages_archive` | `channel_id` | 参照先テーブルを特定できない |
 | `chat_messages_archive` | `forwarded_from_id` | 参照先テーブルを特定できない |
 | `chat_messages_archive` | `sender_id` | 参照先テーブルを特定できない |
-| `direct_mail_logs_archive` | `sender_id` | 参照先テーブルを特定できない |
 | `direct_mail_recipients_archive` | `mail_log_id` | 参照先テーブルを特定できない |
 | `direct_mail_recipients_archive` | `ses_message_id` | 参照先テーブルを特定できない |
 | `notifications_archive` | `actor_id` | 参照先テーブルを特定できない |
