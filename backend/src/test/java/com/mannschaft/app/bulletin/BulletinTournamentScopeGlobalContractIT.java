@@ -65,12 +65,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * 主催組織 ADMIN／SYSTEM_ADMIN、投稿=参加チームの ADMIN・DEPUTY_ADMIN／主催組織 ADMIN／SYSTEM_ADMIN。
  * 公開スペースでも投稿権は広がらない（§4.2・§5.2）。</p>
  *
- * <p><b>存在秘匿（AC-7〜AC-10）</b>: 当該大会を閲覧できない者（存在を知り得ない者）への拒否は、
- * 不在の大会／ディビジョン ID への応答と status・{@code error.code}・{@code error.message} まで一致させる
- * （{@code docs/security/01_authorization_baseline.md} §3.3.2 の流儀。大会チャット側の
- * {@code ChatChannelAccessGuard} は既に「大会チャットの非該当者」を不在と同一 404 に畳んでいる）。
- * なお設計書 §4.1 の擬似コードは「閲覧不可＝403」と書いており、本 AC はそれより厳しい。
- * 出陣時に設計書 §4.1 も同期すること。</p>
+ * <p><b>権限なしの応答（AC-7〜AC-10）</b>: 現行仕様どおり 403（閲覧=TOUR_030 / 投稿=TOUR_031）とする。
+ * 存在秘匿（不在の大会／ディビジョン ID と同じ 404 に畳む）は別の戦役で扱い、本戦役は 400 の解消に絞る
+ * （マスター裁可 2026-11-16）。</p>
  *
  * <p>実 JWT・実 Security フィルタ・実 MySQL（TEST_CONVENTION §3.1.2。認可を検査するため {@code addFilters=false} を使わない）。
  * fixture は別 TX で commit し、所有行だけを後始末する。</p>
@@ -309,46 +306,61 @@ class BulletinTournamentScopeGlobalContractIT extends AbstractMySqlIntegrationTe
     }
 
     // ========================================================================
-    // AC-7〜10: 権限なしは不在 ID と同一応答（存在オラクルを作らない）
+    // AC-7〜10: 権限なしは現行仕様どおり 403（TOUR_030 閲覧 / TOUR_031 投稿）
+    // 存在秘匿（不在 ID と同じ 404 に畳む）は別戦役で扱う。本戦役は 400 の解消に絞る。
     // ========================================================================
 
+    /**
+     * AC-7: 閲覧権限のない者の TOURNAMENT 一覧は 403 TOUR_030。
+     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     */
     @Test
-    @DisplayName("AC-7: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一覧は不在大会IDと status/code/message まで同一の 404")
-    void ac7_権限なしのTOURNAMENT一覧は不在IDと同一応答() throws Exception {
+    @DisplayName("AC-7: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一覧は 403 TOUR_030")
+    void ac7_権限なしのTOURNAMENT一覧は403() throws Exception {
         for (Long actor : List.of(outsiderId, organizerMemberId, foreignAdminId)) {
-            assertConcealed(list("TOURNAMENT", tournamentId), list("TOURNAMENT", ABSENT_ID), actor);
+            assertForbidden(list("TOURNAMENT", tournamentId), actor, "TOUR_030");
         }
     }
 
+    /**
+     * AC-8: 投稿権限のない者の TOURNAMENT 投稿は 403 TOUR_031 で、DB に何も作られない。
+     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     */
     @Test
-    @DisplayName("AC-8: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 投稿は不在大会IDと同一の 404 で、DB に何も作られない")
-    void ac8_権限なしのTOURNAMENT投稿は不在IDと同一応答() throws Exception {
+    @DisplayName("AC-8: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 投稿は 403 TOUR_031 で、DB に何も作られない")
+    void ac8_権限なしのTOURNAMENT投稿は403() throws Exception {
         for (Long actor : List.of(outsiderId, organizerMemberId, foreignAdminId)) {
-            assertConcealed(create("TOURNAMENT", tournamentId, "CMP2058 越境投稿"),
-                    create("TOURNAMENT", ABSENT_ID, "CMP2058 越境投稿"), actor);
+            assertForbidden(create("TOURNAMENT", tournamentId, "CMP2058 越境投稿"), actor, "TOUR_031");
         }
         assertThat(countThreads("TOURNAMENT", tournamentId, "CMP2058 越境投稿")).isZero();
     }
 
+    /**
+     * AC-9: 閲覧権限のない者の TOURNAMENT 一括既読は 403 TOUR_030 で、既読行が作られない。
+     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     */
     @Test
-    @DisplayName("AC-9: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一括既読は不在大会IDと同一の 404 で、既読行が作られない")
-    void ac9_権限なしのTOURNAMENT一括既読は不在IDと同一応答() throws Exception {
+    @DisplayName("AC-9: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一括既読は 403 TOUR_030 で、既読行が作られない")
+    void ac9_権限なしのTOURNAMENT一括既読は403() throws Exception {
         for (Long actor : List.of(outsiderId, organizerMemberId, foreignAdminId)) {
-            assertConcealed(readAll("TOURNAMENT", tournamentId), readAll("TOURNAMENT", ABSENT_ID), actor);
+            assertForbidden(readAll("TOURNAMENT", tournamentId), actor, "TOUR_030");
             Integer reads = jdbc.queryForObject("SELECT COUNT(*) FROM bulletin_read_status WHERE user_id = ?",
                     Integer.class, actor);
             assertThat(reads).isZero();
         }
     }
 
+    /**
+     * AC-10: 権限のない者の TOURNAMENT_DIVISION 一覧・一括既読は 403 TOUR_030、投稿は 403 TOUR_031。
+     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     */
     @Test
-    @DisplayName("AC-10: 部外者・他テナントADMINの TOURNAMENT_DIVISION 一覧・投稿・一括既読は不在ディビジョンIDと同一の 404")
-    void ac10_権限なしのTOURNAMENT_DIVISIONは不在IDと同一応答() throws Exception {
+    @DisplayName("AC-10: 部外者・他テナントADMINの TOURNAMENT_DIVISION 一覧・一括既読は 403 TOUR_030、投稿は 403 TOUR_031")
+    void ac10_権限なしのTOURNAMENT_DIVISIONは403() throws Exception {
         for (Long actor : List.of(outsiderId, foreignAdminId)) {
-            assertConcealed(list("TOURNAMENT_DIVISION", divisionId), list("TOURNAMENT_DIVISION", ABSENT_ID), actor);
-            assertConcealed(create("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿"),
-                    create("TOURNAMENT_DIVISION", ABSENT_ID, "CMP2058 越境D投稿"), actor);
-            assertConcealed(readAll("TOURNAMENT_DIVISION", divisionId), readAll("TOURNAMENT_DIVISION", ABSENT_ID), actor);
+            assertForbidden(list("TOURNAMENT_DIVISION", divisionId), actor, "TOUR_030");
+            assertForbidden(create("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿"), actor, "TOUR_031");
+            assertForbidden(readAll("TOURNAMENT_DIVISION", divisionId), actor, "TOUR_030");
         }
         assertThat(countThreads("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿")).isZero();
     }
@@ -412,13 +424,11 @@ class BulletinTournamentScopeGlobalContractIT extends AbstractMySqlIntegrationTe
     // 補助
     // ========================================================================
 
-    /**
-     * 実在スコープへの拒否応答が不在 ID への応答と status・error.code・error.message まで一致し、
-     * かつそれが 404 であることを確かめる（両方 400 で一致する、のような偽の緑を避ける）。
-     */
-    private void assertConcealed(MockHttpServletRequestBuilder existing, MockHttpServletRequestBuilder absent, Long actor)
-            throws Exception {
-        assertSameRejection(existing, absent, actor, 404);
+    /** 拒否応答が 403 かつ期待のエラーコードであることを確かめる。 */
+    private void assertForbidden(MockHttpServletRequestBuilder request, Long actor, String expectedCode) throws Exception {
+        MvcResult r = http(request, actor).andReturn();
+        assertThat(r.getResponse().getStatus()).as("actor=" + actor + " " + body(r)).isEqualTo(403);
+        assertThat(errorCode(r)).as("actor=" + actor + " " + body(r)).isEqualTo(expectedCode);
     }
 
     private void assertSameRejection(MockHttpServletRequestBuilder existing, MockHttpServletRequestBuilder absent,
