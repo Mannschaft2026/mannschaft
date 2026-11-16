@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "sourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
   "registrationBaseHead": "3bad93f19e33291cb75e10bed7658cfcc6e6acdf",
-  "htmlSha256": "8c4dff12b553433a6d37660ecfad1dd421af161794dcf41db8881285f911ec5a",
+  "htmlSha256": "7708e0a5ab9466df5fb174f1d0f280333470f913c5db64dc0678bf8f63eea8a6",
   "baselineDataSha256": "599f965083d3c135529acebc9d5fcd002421d2456006ab07afd3e392b4bdb6c1",
-  "newDataSha256": "bf0f0413089124b21dad749cc219ee006cec069b125f9c72f0947737452ce214",
+  "newDataSha256": "a9965824896a1bbc421041b2b7c024ddb23491604744dbbb84a082c139999901",
   "clockFixed": false,
   "isolatedFreshContext": true,
   "productAppOperations": 0,
@@ -14,53 +14,49 @@
   "remoteRequests": [],
   "browserProcess": [
     {
-      "ProcessId": 51380,
-      "ParentProcessId": 47836,
-      "creation": "2026-11-16T02:14:00.1351050Z"
+      "ProcessId": 53540,
+      "ParentProcessId": 57800,
+      "creation": "2026-11-16T02:27:29.2992630Z"
     },
     {
-      "ProcessId": 59992,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:14:00.5685320Z"
+      "ProcessId": 41604,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:27:29.5573860Z"
     },
     {
-      "ProcessId": 21296,
-      "ParentProcessId": 59992,
-      "creation": "2026-11-16T02:14:00.9955290Z"
+      "ProcessId": 42452,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:27:30.9663260Z"
     },
     {
-      "ProcessId": 9260,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:14:02.3018400Z"
+      "ProcessId": 61892,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:27:31.0592150Z"
     },
     {
-      "ProcessId": 14716,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:14:02.5586080Z"
+      "ProcessId": 58804,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:27:31.2112000Z"
     },
     {
-      "ProcessId": 50744,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:14:02.9888630Z"
+      "ProcessId": 41288,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:28:10.8702420Z"
     },
     {
-      "ProcessId": 29244,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:14:33.6860480Z"
+      "ProcessId": 51828,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:28:11.7744410Z"
     },
     {
-      "ProcessId": 48380,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:14:35.1978160Z"
-    },
-    {
-      "ProcessId": 48356,
-      "ParentProcessId": 51380,
-      "creation": "2026-11-16T02:15:00.6471100Z"
+      "ProcessId": 54208,
+      "ParentProcessId": 53540,
+      "creation": "2026-11-16T02:28:43.7798550Z"
     }
   ],
   "profileArgumentPresent": true,
-  "naturalClockElapsedMs": 7031,
+  "profilePathSha256": "f46926c4d15b7e1e709e86f46f38a6e18fb1389b45b8a25e76bc69cb6fee89b8",
+  "naturalClockElapsedMs": 6236,
   "old154AllFieldsDeepEqual": true,
   "initialCount": 154,
   "appendedCount": 155,
@@ -79,27 +75,37 @@
   "status": "PASSED",
   "contextClosed": true,
   "browserClosed": true,
+  "profileAbsentAfterClose": true,
   "remainingOwnGenerations": [],
   "serverClosed": true,
-  "elapsedMs": 214776,
+  "elapsedMs": 274270,
   "nativeExitCode": 0,
+  "htmlMatchesCommittedRaw": true,
+  "finalInputBytes": "HTMLはHEAD raw LF、dataは正規generator出力をLFとして配信。source pinは現commit raw入力と一致。",
   "safeCardImage": {
     "artifactId": "board-followup-card.png",
-    "sha256": "76823a556b9e1075d00ee8c63e0d2d0810845fb1a2ce5c145b00cd02adae3e3c",
+    "sha256": "4fd0144d50c5fd18bae647897b0301c76eef6a6c79b90006e4d7c03ee08d407b",
     "visibility": "private-local-prototype-image-not-published",
     "visuallyInspected": true
   },
   "rawSnapshots": [
     {
       "artifactId": "idb-old-154.json",
-      "sha256": "83184e7b45da0fe277d3b21a94600a13db3c679e1c0c2be726073f600fb6ca0b",
+      "sha256": "11712ef6d2876e093d5aaf6d4f08f976723d004d6b1801fd20fc1ac9a5621754",
       "visibility": "private-local-not-published"
     },
     {
       "artifactId": "idb-final-155.json",
-      "sha256": "1cdc0c4803a791d9884f4f88664526fed963efb2252299c5d9132a272ec3d9a9",
+      "sha256": "8dc2aceef6281041f101bf8412b5b4fce8b064d64456654d26a47bb5c75f1584",
       "visibility": "private-local-not-published"
     }
   ],
-  "browserOwnershipLimit": "起動時と閉鎖前の所有PID/startを照合。全期間の任意Windows handle網羅は主張しない。"
+  "baselineBinding": {
+    "baseHead": "3bad93f19e33291cb75e10bed7658cfcc6e6acdf",
+    "rawCommitSha256": "641e5943c89d1dd01817b237c0d09bec2aac4bec5e53c84498b140cc16f5eb62",
+    "servedSha256": "599f965083d3c135529acebc9d5fcd002421d2456006ab07afd3e392b4bdb6c1",
+    "onlyCheckoutCrlfDifference": true,
+    "logicalDataIdentical": true
+  },
+  "browserOwnershipLimit": "起動時と閉鎖前の所有PID/startを照合し専有profile不在も確認。全期間の任意Windows handle網羅は主張しない。"
 }

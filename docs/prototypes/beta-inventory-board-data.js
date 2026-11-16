@@ -1,5 +1,5 @@
 window.BETA_INVENTORY_DATA = {
-  "generatedAt": "2026-11-16T02:06:37+00:00",
+  "generatedAt": "2026-11-16T02:25:39+00:00",
   "sources": {
     "inventory": "docs/inventory/feature-inventory.yaml",
     "taskList": "docs/task-list.md",
@@ -8,13 +8,13 @@ window.BETA_INVENTORY_DATA = {
     "b0Coverage": "docs/prototypes/beta-inventory-board-b0-coverage.json",
     "gate": "docs/prototypes/beta-inventory-board-gate.json",
     "inventoryCommit": "d61097a49227386d8b4044a2a6ced72fade5b50a",
-    "taskListCommit": "1ff2393979aef160de96ef6fbf23e4c9de27d4bc",
-    "inventorySha256": "b0a1f97197840c865756a40f12f577cfeb10aa8083dc95f2932f7b3a7f90528a",
-    "taskListSha256": "e94270ef72238fd0c36df7793a1688c5e299d741e300a13942bdfd9ee7fecd69",
-    "decisionsSha256": "49dc59d8aa82e66c21579970c4cfed34f5e4e44ea731719c3bcfe43b6931f8d7",
-    "gateSha256": "bb96e2277e7cabfa0bf4486f4564cdd08f70814e0f30290c63c00f2d1d21a000",
+    "taskListCommit": "2b8b484a9f64d020e5154509a23cf5c9c1889995",
+    "inventorySha256": "cc1ac3e36a185b52f10d232e18476a461fbe6fc84b67f72f36320ee24260a7f6",
+    "taskListSha256": "59d8c6fe192a2a3913ab426364771c46173b2e6cee1093b527e59056a3c3d098",
+    "decisionsSha256": "64d129e19fa5c6dc7c2930ec62df7fe13732e8860b0c1ce68845f7867cf76307",
+    "gateSha256": "1fe1a0869b148212e4937f26189758b1b34484f309074793bf56950b6a83d75c",
     "githubSnapshot": "docs/prototypes/beta-inventory-board-github.json",
-    "githubSnapshotSha256": "93498d2cb3cecf8d5aacd65f652cf7d3abf46ffa6b720075d662d9d91af9f82b"
+    "githubSnapshotSha256": "4ecfed3f83f11fb78604226ced2ba997d845004a5effae818887a91a77cedb90"
   },
   "sourceCounts": {
     "features": 44,

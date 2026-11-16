@@ -66,6 +66,12 @@
       "serverClosed": true,
       "knownOwnGenerationsGone": 11,
       "productOperations": 0
+    },
+    "staticBrowserTrial2": {
+      "nativeExitCode": 0,
+      "semanticContractPassed": true,
+      "rawSourcePinQualified": false,
+      "reason": "Windows CRLF入力のSHAはcommit raw LFと不一致。最終採用しない。"
     }
   },
   "productAppOperations": 0,
@@ -87,5 +93,56 @@
     "stagedAdoption": true,
     "synchronizedAt": "2026-11-16T02:02:29+00:00"
   },
-  "generatedOverlayDeepEqual": true
+  "generatedOverlayDeepEqual": true,
+  "rawInputBinding": [
+    {
+      "path": "docs/task-list.md",
+      "sha256": "59d8c6fe192a2a3913ab426364771c46173b2e6cee1093b527e59056a3c3d098",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/inventory/feature-inventory.yaml",
+      "sha256": "cc1ac3e36a185b52f10d232e18476a461fbe6fc84b67f72f36320ee24260a7f6",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board-decisions.json",
+      "sha256": "64d129e19fa5c6dc7c2930ec62df7fe13732e8860b0c1ce68845f7867cf76307",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board-gate.json",
+      "sha256": "1fe1a0869b148212e4937f26189758b1b34484f309074793bf56950b6a83d75c",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board-github.json",
+      "sha256": "4ecfed3f83f11fb78604226ced2ba997d845004a5effae818887a91a77cedb90",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board-github-status.json",
+      "sha256": "56309dbf0be994c7471c13f464a8aa882eacce5b99feb3729f18e6bbebe857de",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board-b0-alicization.json",
+      "sha256": "49cedd9fe60ee82fdefc28109d84f138ae4450bc5127476c21902ebff6f22a3e",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board-b0-coverage.json",
+      "sha256": "6f834bbcadb041e390e0100272a5b055c159c4b5c5659b911f6fff251d2556f9",
+      "matchesCommittedRaw": true
+    },
+    {
+      "path": "docs/prototypes/beta-inventory-board.html",
+      "sha256": "7708e0a5ab9466df5fb174f1d0f280333470f913c5db64dc0678bf8f63eea8a6",
+      "matchesCommittedRaw": true
+    }
+  ],
+  "sourcePinQualification": "正規generator入力を現commitのraw bytesと一致させ、sourcePinを手編集せず通常再生成。生成JSとHTMLも最終commitと同じLF bytesで実UI検証する。",
+  "generatedPinsMatchCommittedRaw": true,
+  "finalStaticBrowserNativeExitCode": 0,
+  "finalStaticBrowserEvidence": "docs/evidence/CMP-261028-2304/board-ui-followup-20261116.json"
 }
