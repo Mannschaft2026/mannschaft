@@ -23,7 +23,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import com.mannschaft.app.common.i18n.ErrorMessageResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.MessageSource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -80,6 +82,7 @@ public class PriceRevisionController {
     private final PriceRevisionCancelService cancelService;
     private final BillingDurableIdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final MessageSource messageSource;
 
     @PostMapping
     @PreAuthorize("hasRole('SYSTEM_ADMIN')")
@@ -228,9 +231,11 @@ public class PriceRevisionController {
                     ? e.getHttpStatusOverride()
                     : GlobalExceptionHandler.resolveStatus(e.getErrorCode());
             if (status.is4xxClientError()) {
-                ErrorResponse errorBody = e.getFieldErrors().isEmpty()
-                        ? ErrorResponse.of(e.getErrorCode())
-                        : ErrorResponse.of(e.getErrorCode(), e.getFieldErrors());
+                // CMP-261113-1507: message は利用者の言語で解決する（再生時は初回リクエストの言語の本文を返す）。
+                ErrorResponse errorBody = new ErrorResponse(new ErrorResponse.ErrorDetail(
+                        e.getErrorCode().getCode(),
+                        new ErrorMessageResolver(messageSource).resolve(e.getErrorCode(), e.getMessageArgs()),
+                        e.getFieldErrors()));
                 idempotencyService.complete(decision.id(), leaseOwner, status.value(), writeJson(errorBody));
             } else {
                 idempotencyService.fail(decision.id(), leaseOwner);

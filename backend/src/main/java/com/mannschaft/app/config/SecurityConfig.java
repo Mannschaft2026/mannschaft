@@ -3,6 +3,8 @@ package com.mannschaft.app.config;
 import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
 import com.mannschaft.app.advertising.campaign.filter.AdPublicEndpointRateLimitFilter;
 import com.mannschaft.app.analytics.filter.PageViewBeaconRateLimitFilter;
+import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.i18n.EarlyErrorResponseWriter;
 import com.mannschaft.app.common.ratelimit.ValkeyRateLimiter;
 import com.mannschaft.app.dashboard.DashboardScopeTabRateLimitFilter;
 import com.mannschaft.app.event.EventDelegationRateLimitFilter;
@@ -67,6 +69,8 @@ public class SecurityConfig {
     private final DashboardScopeTabRateLimitFilter dashboardScopeTabRateLimitFilter;
     private final VillageAffinityRateLimitFilter villageAffinityRateLimitFilter;
     private final ObjectProvider<MarketMutationRateLimitFilter> marketMutationRateLimitFilterProvider;
+    /** 早期拒否（403 COMMON_002）の訳付き応答部品（CMP-261113-1507。縮小構成では不在になり得るため遅延解決）。 */
+    private final ObjectProvider<EarlyErrorResponseWriter> earlyErrorResponseWriterProvider;
 
     /**
      * F10.1: AdminImpersonationFilter の @Component によるサーブレットフィルター自動登録を無効化。
@@ -565,13 +569,17 @@ public class SecurityConfig {
             // 明示的に COMMON_002（権限なし → 403 Forbidden）をレスポンスする。
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+                // CMP-261113-1507: 本ハンドラは UserLocaleFilter より前で応答を書くため、利用者の言語
+                // （users.locale → Accept-Language）は EarlyErrorResponseWriter で解決して訳す。
+                // 縮小構成（Bean 不在）では ja 正本で同じ形を書く。
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write(
-                            "{\"error\":{\"code\":\"COMMON_002\","
-                            + "\"message\":\"この操作を行う権限がありません\","
-                            + "\"fieldErrors\":[]}}");
+                    EarlyErrorResponseWriter writer = earlyErrorResponseWriterProvider.getIfAvailable();
+                    if (writer != null) {
+                        writer.write(request, response, HttpServletResponse.SC_FORBIDDEN, CommonErrorCode.COMMON_002);
+                    } else {
+                        EarlyErrorResponseWriter.writeJapanese(response, HttpServletResponse.SC_FORBIDDEN,
+                                CommonErrorCode.COMMON_002);
+                    }
                 }))
             // API JSON 応答向けのセキュリティヘッダー（docs/security/03 §3）。
             // - frameOptions(deny): クリックジャッキング防止（X-Frame-Options: DENY）
