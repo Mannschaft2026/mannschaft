@@ -2,6 +2,8 @@
 
 あらゆる組織・チーム・個人をシームレスに管理するWebアプリケーション。
 
+確実配信イベントの隔離一覧と理由付き1件再開は SYSTEM_ADMIN 向けAPIで扱う。専用再開監査の保持・匿名化方針と未完了の実装、操作手順、既存通知での遅延・隔離・実復旧の確認と検証境界は[モジュールイベント運用](docs/operations/module-event-operations.md)を参照する。
+
 お気に入りのチーム・組織名称編集は、正準URLの詳細取得時versionを使用します。固定source8afdでformal作成2件＋残12件の分割実機と、その後の新独立3住民探索を範囲採用済みです。探索は部分達成・未実証の気づき2件を含みます。PR #3644の正準URL提供を含む支援成果を検証用に統合し、最終CI・main採用は待機中です（[検証範囲と残務](docs/evidence/CMP-261028-2304-l1r-normalizer.md)、[仕様と制約](docs/features/F02.9_favorites_widget.md#53-クイック編集ダイアログfavoritequickeditdialogvue)）。
 
 チーム・組織ダッシュボードの出席確認状況は、出席（一部出席を含む）・欠席・未定（未回答を含む）の人数を表示し、予定・人数から理由付き詳細へ遷移する。見出しからは出席確認対象の専用一覧を開く。詳細は [F02.2 ダッシュボード](docs/features/F02.2_dashboard.md) の「出席確認状況」を参照。
@@ -1275,6 +1277,12 @@ Phase 9 以降で実装される機能（**広告表示 #27・コルクボード
 - 開発にあたっては、必ずルートの `.claudecode.md` および `BACKEND_CODING_CONVENTION.md`,`FRONTEND_CODING_CONVENTION.md` に記載された規約を最優先で遵守すること。
 - ディレクトリ構成は機能別（Feature-based）パッケージングを採用すること。
 - 開発フローの制約（AI/人間の区別）は `.claudecode.md` §17 を参照すること。
+
+### モジュールイベントの再開監査と本人データ（実装・検証中）
+
+再開理由は専用監査に保存し、本人の全履歴4項目を開示し、強匿名化時に理由を `[REDACTED]` に置換する設計です。監査はUTCの暦年2年より古い行を削除します。強匿名化後の理由再生を防ぐM所有の `module_event_resume_actor_states`（UUIDv7 id・一意なactor_user_id・不可逆なpurged）は、監査削除後もTTLなしで保持します。本人stateのid/purgedも既存audit_logsカテゴリ内の別JSONへ出力する方針です。M内部の本人監査・state取得、期限削除、再開fenceと強匿名化の本文は接続済みです。新fenceとstate取得の業務REDはCIで確認済みですが、接続後の実DB green、PRIVACY/Cへの正式引渡しと実ZIP検証は未完了です。詳細は[運用仕様](docs/operations/module-event-operations.md)と[個人データ仕様](docs/features/F12.3_gdpr_personal_data.md)を参照してください。
+
+保持削除は毎日03:00 UTCの `module-event-resume-audit-retention-daily` と同じ登録名の手動入口から、既存M privacy APIへ一度だけ委譲します。瞬時TTLではありません。独立TXのquery予算は300秒、leaseは接続取得と取消・rollback/commit・解放の余裕を含めて30分と推定しています。実MySQLの先行4試験で未実装stubによる業務REDをCI確認後に本文を接続しましたが、接続後のgreen・短TX取消試験・実機起動は未測定です。leaseは障害時を含む完走時間の保証ではありません。
 
 ### チームの予算・会計画面
 

@@ -183,6 +183,72 @@ class LastAdminSuccessionAcceptanceIT extends AbstractMySqlIntegrationTest {
         }
     }
 
+    @Nested
+    @DisplayName("論理削除済みスコープの唯一ADMINは「最後の管理者」として退会をブロックしない（CMP-261116-0720）")
+    class DeletedScope {
+
+        @Test
+        @DisplayName("(a) 論理削除済みチームの唯一ADMIN（他メンバーあり）は preview に載らず退会が成功する")
+        void 論理削除済みチームは対象外() throws Exception {
+            em.createNativeQuery("UPDATE teams SET deleted_at = NOW() WHERE id = :tid")
+                    .setParameter("tid", teamId)
+                    .executeUpdate();
+            em.flush();
+            em.clear();
+
+            setAuth(adminId);
+            mockMvc.perform(get("/api/v1/account/deletion-preview"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.lastAdminScopes").isEmpty());
+
+            mockMvc.perform(delete("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(withdrawalBody())))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("(b) 論理削除済み組織の唯一ADMIN（他メンバーあり）は preview に載らず退会が成功する")
+        void 論理削除済み組織は対象外() throws Exception {
+            Long orgId = insertOrganization("LASACC 組織");
+            Long orgAdminId = insertUser("lasacc-orgadmin-" + System.nanoTime() + "@example.com");
+            Long orgMemberId = insertUser("lasacc-orgmember-" + System.nanoTime() + "@example.com");
+            MembershipTestHelper.insertMembership(em, orgAdminId, ScopeType.ORGANIZATION, orgId, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, orgAdminId, "ADMIN", null, orgId);
+            MembershipTestHelper.insertMembership(em, orgMemberId, ScopeType.ORGANIZATION, orgId, RoleKind.MEMBER);
+            em.createNativeQuery("UPDATE organizations SET deleted_at = NOW() WHERE id = :oid")
+                    .setParameter("oid", orgId)
+                    .executeUpdate();
+            em.flush();
+            em.clear();
+
+            setAuth(orgAdminId);
+            mockMvc.perform(get("/api/v1/account/deletion-preview"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.lastAdminScopes").isEmpty());
+
+            mockMvc.perform(delete("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(withdrawalBody())))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("(c) 生存チームの唯一ADMIN（他メンバーあり）は従来どおり preview に載り409で拒まれる")
+        void 生存チームは従来どおりブロック() throws Exception {
+            setAuth(adminId);
+            mockMvc.perform(get("/api/v1/account/deletion-preview"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.lastAdminScopes[0].scopeId").value(teamId));
+
+            mockMvc.perform(delete("/api/v1/users/me")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(withdrawalBody())))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error.code").value("GDPR_011"));
+        }
+    }
+
     // AC10（同時退会の直列化）は別クラス LastAdminConcurrentLeaveScopeIT を参照。
     // 本クラスは class 単位 @Transactional（ロールバック前提）だが、AC10 はマルチスレッドで
     // 別コネクション・別トランザクションを要するため、@Transactional 内のセットアップ行が
@@ -234,6 +300,19 @@ class LastAdminSuccessionAcceptanceIT extends AbstractMySqlIntegrationTest {
                 .executeUpdate();
         return ((Number) em.createNativeQuery("SELECT id FROM teams WHERE slug = :slug")
                 .setParameter("slug", slug)
+                .getSingleResult()).longValue();
+    }
+
+    private Long insertOrganization(String name) {
+        em.createNativeQuery(
+                        "INSERT INTO organizations (name, org_type, visibility, hierarchy_visibility, "
+                                + "supporter_enabled, version, slug, created_at, updated_at) "
+                                + "VALUES (:name, 'OTHER', 'PUBLIC', 'NONE', 1, 0, "
+                                + "CONCAT('lasacc-o-', LEFT(REPLACE(UUID(),'-',''),8)), NOW(), NOW())")
+                .setParameter("name", name)
+                .executeUpdate();
+        return ((Number) em.createNativeQuery("SELECT id FROM organizations WHERE name = :name")
+                .setParameter("name", name)
                 .getSingleResult()).longValue();
     }
 }
