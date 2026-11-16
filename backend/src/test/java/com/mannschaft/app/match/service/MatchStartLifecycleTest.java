@@ -81,7 +81,7 @@ class MatchStartLifecycleTest {
                 .satisfies(e -> assertThat(((MatchLiveUpdateEvent) e).getStatus()).isEqualTo(MatchStatus.IN_PROGRESS));
         service.record(match.getId(), ORG, ACTOR, command(MatchEventType.PERIOD_START));
         verify(matches).save(match);
-        verify(publisher, times(4)).publishEvent(any());
+        verify(publisher, times(4)).publishEvent(any(Object.class));
     }
 
     @ParameterizedTest
@@ -93,7 +93,7 @@ class MatchStartLifecycleTest {
         assertThat(match.getStatus()).isEqualTo(status);
         verify(matches, never()).save(any());
         verifyNoInteractions(audit);
-        verify(publisher).publishEvent(any());
+        verify(publisher).publishEvent(any(Object.class));
     }
 
     @Test
