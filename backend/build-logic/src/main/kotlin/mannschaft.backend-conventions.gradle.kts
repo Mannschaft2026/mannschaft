@@ -510,7 +510,7 @@ tasks.withType<Test> {
         // 取り込みが shard 数だけ繰り返されるだけで速くならない）。CI では専用ジョブで 1 回だけ走らせる。
         logger.lifecycle("[archTest] -Pshard.* は archTest には適用しない（全 ArchUnit テストを 1 JVM で実行する）")
     }
-    if (!isArchTask && !isErDiagramTask && !isFreezeIntegrityTask && shardTotal != null && shardIndex != null && shardTotal > 1) {
+    if (!isArchTask && !isArchUnitTask && !isErDiagramTask && !isFreezeIntegrityTask && shardTotal != null && shardIndex != null && shardTotal > 1) {
         require(shardIndex in 0 until shardTotal) {
             "shard.index ($shardIndex) は 0..${shardTotal - 1} の範囲でなければならない（shard.total=$shardTotal）"
         }
@@ -617,7 +617,7 @@ tasks.withType<Test> {
 }
 
 // 全 ArchUnit engine の番人を新しい JVM で実行する。クラス名で選別しない。
-// withType<Test> の同じ heap・タグ・シャード/profile フィルタを継承する。
+// withType<Test> の heap・タグ・profile 設定を継承する。shard 分割はせず各 runner で全件実解析する。
 // 通常 test の必須依存なので、番人の失敗は既存の CI ゲートを失敗させる。
 val archUnitTest = tasks.register<Test>("archUnitTest") {
     group = "verification"
