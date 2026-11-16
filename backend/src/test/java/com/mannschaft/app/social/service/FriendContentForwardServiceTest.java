@@ -13,6 +13,7 @@ import com.mannschaft.app.timeline.PostStatus;
 import com.mannschaft.app.timeline.PostedAsType;
 import com.mannschaft.app.timeline.entity.TimelinePostEntity;
 import com.mannschaft.app.timeline.repository.TimelinePostRepository;
+import com.mannschaft.app.timeline.service.TimelineFriendShareQueryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,9 @@ class FriendContentForwardServiceTest {
 
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private TimelineFriendShareQueryService timelineFriendShareQueryService;
 
     @InjectMocks
     private FriendContentForwardService friendContentForwardService;
