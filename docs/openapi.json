@@ -243671,6 +243671,10 @@
           "name": {
             "type": "string"
           },
+          "numericId": {
+            "type": "integer",
+            "format": "int64"
+          },
           "slug": {
             "type": "string"
           },
