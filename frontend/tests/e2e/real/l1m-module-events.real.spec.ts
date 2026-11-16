@@ -1,4 +1,4 @@
-import { test, expect, type BrowserContext, type Page } from '@playwright/test'
+import { test, expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { loginViaApi } from '../fixtures/auth'
@@ -178,10 +178,21 @@ test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', as
       // SYSTEM クリックから URL 確定まで 11.5 秒かかった（middleware/system-admin.ts 1 本の変換に 7.2 秒。2026-11-16 実測）。
       // 変換済みなら同じクリックは 0.2〜0.6 秒で確定する。本番ビルドは事前に bundle 済みで、この待ちは存在しない。
       // UI 段の URL 確定・表示の確認が dev 固有の初回変換ではなく画面の動作を測るよう、遷移先を一度ずつ開いておく。
+      // データ取得後にだけ描く部品（バッチ一覧の DataTable 等）も初回変換の対象なので、各画面の描画完了まで待つ。
+      // ページを離れる前に描画まで済ませないと、その部品は本番の確認で初めて変換される（2026-11-16、一覧取得 200 の後
+      // batch-table の表示が 8 秒を超えた）。ここで待つのは dev の変換時間であり、検証対象ではないため上限を広く取る。
       const warm = await pageFor('system')
-      for (const target of ['/dashboard', '/system-admin', '/system-admin/batches', '/notifications']) {
+      const compiled = { timeout: 120_000 }
+      const ready: Record<string, Locator> = {
+        '/dashboard': warm.getByTestId('global-sidebar'),
+        '/system-admin': warm.locator('a[href="/system-admin/batches"]').first(),
+        '/system-admin/batches': warm.locator('[data-test="batch-table"]'),
+        '/notifications': warm.locator('[data-notification-id]').or(warm.getByText('通知はありません', { exact: true })).first(),
+      }
+      for (const [target, content] of Object.entries(ready)) {
         await warm.goto(target); await waitForHydration(warm)
-        await expect(warm).toHaveURL(new RegExp(`${target.replaceAll('/', '\\/')}(?:\\?.*)?$`))
+        await expect(warm).toHaveURL(new RegExp(`${target.replaceAll('/', '\\/')}(?:\\?.*)?$`), compiled)
+        await expect(content).toBeVisible(compiled)
       }
     })
     await test.step('HTTP: 匿名401・認証済み非SYSTEM_ADMIN403（別tenantも秘匿）', async () => {
@@ -275,7 +286,9 @@ test('L1-M 管理API運用と既存batch・6言語通知bell（実検体）', as
       await expect(page.locator('[data-test="batch-table"]')).toBeVisible()
       await page.locator('[data-test="detail-module-event-replay"]').click()
       await expect(page.getByRole('dialog')).toBeVisible()
-      await page.getByRole('dialog').getByRole('button', { name: '閉じる', exact: true }).click()
+      // ダイアログにはヘッダーの×（aria-label も「閉じる」）とフッターの「閉じる」が並ぶ。画面に文字で出ているフッター側を押す。
+      await page.getByRole('dialog').getByRole('button', { name: '閉じる', exact: true }).filter({ hasText: '閉じる' }).click()
+      await expect(page.getByRole('dialog')).toHaveCount(0)
       const response = page.waitForResponse(value => value.request().method() === 'POST'
         && value.url().includes('/system-admin/batch/module-event-replay/trigger'))
       await page.locator('[data-test="run-sync-module-event-replay"]').click()
