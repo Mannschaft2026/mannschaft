@@ -65928,6 +65928,26 @@ export interface components {
             publishedBy?: number;
             status?: string;
         };
+        Missing: {
+            /** Format: date */
+            slotDate?: string;
+            /** Format: int64 */
+            userId?: number;
+        };
+        ShiftHourlyRateMissingErrorDetail: {
+            code?: string;
+            details?: components["schemas"]["ShiftHourlyRateMissingErrorDetails"];
+            fieldErrors?: components["schemas"]["FieldError"][];
+            message?: string;
+        };
+        ShiftHourlyRateMissingErrorDetails: {
+            /** @description 時給を確認できなかった割当者と勤務日 */
+            missingHourlyRates?: components["schemas"]["Missing"][];
+        };
+        /** @description 公開前の時給欠落 400 応答 */
+        ShiftHourlyRateMissingErrorResponse: {
+            error?: components["schemas"]["ShiftHourlyRateMissingErrorDetail"];
+        };
         CreateShiftSlotRequest: {
             /** @example 14:30:00 */
             endTime: string;
@@ -121438,6 +121458,15 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseShiftScheduleResponse"];
+                };
+            };
+            /** @description 公開時に予算連動の勤務日の割当者へ有効な正数時給が無い（SHIFT_047）。欠落した対象者・勤務日を details で返す */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ShiftHourlyRateMissingErrorResponse"];
                 };
             };
         };

@@ -21,6 +21,7 @@ public class ShiftHourlyRateMissingErrorResponse {
 
     @Getter
     @RequiredArgsConstructor
+    @Schema(name = "ShiftHourlyRateMissingErrorDetail")
     public static class ErrorDetail {
         private final String code;
         private final String message;
@@ -30,6 +31,7 @@ public class ShiftHourlyRateMissingErrorResponse {
 
     @Getter
     @RequiredArgsConstructor
+    @Schema(name = "ShiftHourlyRateMissingErrorDetails")
     public static class Details {
         @Schema(description = "時給を確認できなかった割当者と勤務日")
         private final List<ShiftHourlyRateMissingException.Missing> missingHourlyRates;
