@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 12
+- テーブル数: 13
 - ビュー数: 0
 
 ## ER 図
@@ -16,9 +16,14 @@ erDiagram
         bigint membership_id "ID参照"
         bigint granted_by "ID参照"
     }
+    invite_token_claims {
+        binary id PK
+        bigint token_id FK
+        bigint user_id "ID参照"
+    }
     invite_tokens {
         bigint id PK
-        char token UK
+        varchar token_hash UK
         bigint team_id "ID参照"
         bigint organization_id "ID参照"
         bigint role_id FK
@@ -84,6 +89,8 @@ erDiagram
     users
     memberships ||..o{ archived_membership_grants : "ID参照(FKなし) membership_id"
     users |o..o{ archived_membership_grants : "ID参照(FKなし) granted_by"
+    invite_tokens ||--o{ invite_token_claims : "token_id"
+    users ||..o{ invite_token_claims : "ID参照(FKなし) user_id"
     organizations |o..o{ invite_tokens : "ID参照(FKなし) organization_id"
     roles ||--o{ invite_tokens : "role_id"
     teams |o..o{ invite_tokens : "ID参照(FKなし) team_id"
@@ -151,12 +158,23 @@ erDiagram
 | `created_at` | `datetime(3)` | NO | （なし） |  |
 | `updated_at` | `datetime(3)` | NO | （なし） |  |
 
+### `invite_token_claims`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `token_id` | `bigint unsigned` | NO | （なし） |  |
+| `user_id` | `bigint unsigned` | NO | （なし） |  |
+| `status` | `varchar(16)` | NO | （なし） |  |
+| `created_at` | `datetime(6)` | NO | （なし） |  |
+| `updated_at` | `datetime(6)` | NO | （なし） |  |
+
 ### `invite_tokens`
 
 | 列名 | 型 | NULL | 既定値 | コメント |
 | --- | --- | --- | --- | --- |
 | `id` | `bigint unsigned` | NO | （なし） auto_increment |  |
-| `token` | `char(36)` | NO | （なし） |  |
+| `token_hash` | `varchar(64)` | NO | （なし） | 招待トークンのSHA-256ハッシュ(hex)。平文は保存しない |
 | `team_id` | `bigint unsigned` | YES | NULL |  |
 | `organization_id` | `bigint unsigned` | YES | NULL |  |
 | `role_id` | `bigint unsigned` | NO | （なし） |  |

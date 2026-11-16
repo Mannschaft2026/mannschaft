@@ -1,5 +1,6 @@
 package com.mannschaft.app.common.security;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -246,9 +247,9 @@ class OracleWave1HttpContractIT extends AbstractMySqlIntegrationTest {
                     .isEqualTo(Locale.forLanguageTag(locale));
             assertThat(mapper.readTree(actual.getResponse().getContentAsByteArray()).get("error"))
                     .isEqualTo(mapper.readTree(missing.getResponse().getContentAsByteArray()).get("error"));
-            // ja/enとも現行キー欠如時の日本語fallbackを維持する。英訳を作らない。
+            // 言語別の期待本文（ja は ErrorCode 既定文言、他言語は messages_*.properties の error.payment.029）。
             assertThat(mapper.readTree(actual.getResponse().getContentAsByteArray()).at("/error/message").asText())
-                    .isEqualTo("会費支払い記録が見つかりません");
+                    .isEqualTo(RECEIPT_NOT_FOUND_BY_LOCALE.get(locale));
             assertThat(receiptSnapshot(payment)).isEqualTo(before);
         }
 
@@ -493,6 +494,10 @@ class OracleWave1HttpContractIT extends AbstractMySqlIntegrationTest {
         }
     }
 
+    private static final Map<String, String> RECEIPT_NOT_FOUND_BY_LOCALE = Map.of(
+            "ja", "会費支払い記録が見つかりません",
+            "en", "Membership fee payment record not found");
+
     static Stream<Arguments> receiptDenialCases() {
         return Stream.of("", "/pdf").flatMap(suffix -> Stream.of("sameScopeAdmin", "otherScopeAdmin", "outsider")
                 .flatMap(actor -> Stream.of("ja", "en").map(locale -> Arguments.of(suffix, actor, locale))));
@@ -633,11 +638,13 @@ class OracleWave1HttpContractIT extends AbstractMySqlIntegrationTest {
             Map<String, String> before = snapshot();
             Logger logger = (Logger)
                     LoggerFactory.getLogger(MemberCardService.class);
+            Level previousLevel = logger.getLevel();
             ListAppender<ILoggingEvent> capture =
                     new ListAppender<>();
             capture.start();
             logger.addAppender(capture);
             try {
+                logger.setLevel(Level.DEBUG);
                 MvcResult missing = checkin(missingToken, locale)
                         .andExpect(status().isOk()).andExpect(jsonPath("$.data.checkedIn").value(false))
                         .andExpect(jsonPath("$.data.reason").value("INVALID_LOCATION")).andReturn();
@@ -653,6 +660,7 @@ class OracleWave1HttpContractIT extends AbstractMySqlIntegrationTest {
             } finally {
                 logger.detachAppender(capture);
                 capture.stop();
+                logger.setLevel(previousLevel);
             }
         }
 
