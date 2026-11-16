@@ -6,12 +6,9 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
-import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
-import com.mannschaft.app.effortrecord.dto.CreateEffortDefinitionSnapshotRequest;
 import com.mannschaft.app.effortrecord.dto.CreateEffortRecordRequest;
 import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshot;
-import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshotResponse;
 import com.mannschaft.app.effortrecord.dto.EffortDeleteResponse;
 import com.mannschaft.app.effortrecord.dto.EffortOwnerRecordResponse;
 import com.mannschaft.app.effortrecord.dto.EffortRecordListCriteria;
@@ -51,10 +48,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * F06.4.1 個人の頑張り記録 個人 API。API 契約 §3 の 8 本。
+ * F06.4.1 個人の頑張り記録 個人 API。API 契約 §3 の 7 本（definition-snapshots は AC-19 で PR-2 に追加）。
  *
  * <p>Controller は Service を呼ぶだけ。認証主体は {@link SecurityUtils#getCurrentUserId()} で確定し、
- * リクエストから owner を受け取らない。固定 path（presets / stats / definition-snapshots）は
+ * リクエストから owner を受け取らない。固定 path（presets / stats）は
  * {@code /{id}} より先に解決される（Spring は具体的な path を優先する）。</p>
  */
 @RestController
@@ -82,16 +79,6 @@ public class EffortRecordMeController {
     @Operation(summary = "標準プリセット定義の一覧")
     public ResponseEntity<ApiResponse<List<EffortDefinitionSnapshot>>> listPresets() {
         return ResponseEntity.ok(ApiResponse.of(definitionService.listPresets()));
-    }
-
-    @PostMapping("/definition-snapshots")
-    @AuthorizedInService
-    @Operation(summary = "チーム定義の snapshot 登録と定義 token 発行",
-            description = "認可根拠: EffortDefinitionService が現在所属と TEAM template の scopeId 一致を検証する。")
-    public ResponseEntity<ApiResponse<EffortDefinitionSnapshotResponse>> createDefinitionSnapshot(
-            @Valid @RequestBody CreateEffortDefinitionSnapshotRequest request) {
-        Long userId = SecurityUtils.getCurrentUserId();
-        return ResponseEntity.ok(ApiResponse.of(definitionService.registerTeamSnapshot(userId, request)));
     }
 
     @PostMapping

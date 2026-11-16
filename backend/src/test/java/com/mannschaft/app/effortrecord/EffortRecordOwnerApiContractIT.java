@@ -199,9 +199,8 @@ class EffortRecordOwnerApiContractIT extends EffortRecordItSupport {
                 http(get(ME + "/{id}", id), null),
                 http(put(ME + "/{id}", id).contentType(MediaType.APPLICATION_JSON)
                         .content(write(updateBody(0, DAY, values("subject", "数学", "duration", "30"), null))), null),
-                http(delete(ME + "/{id}", id).param("version", "0").header("Idempotency-Key", UUID.randomUUID().toString()), null),
-                http(post(ME + "/definition-snapshots").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"teamId\":1,\"teamTemplateId\":1}"), null));
+                http(delete(ME + "/{id}", id).param("version", "0").header("Idempotency-Key", UUID.randomUUID().toString()), null));
+        // definition-snapshots は AC-19（PR-2）で追加する
         for (MockHttpServletResponse response : responses) {
             assertThat(response.getStatus()).as(response.getContentAsString()).isEqualTo(401);
         }

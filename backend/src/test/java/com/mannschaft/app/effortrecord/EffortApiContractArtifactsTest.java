@@ -83,7 +83,7 @@ class EffortApiContractArtifactsTest {
         JsonNode paths = document.path("paths");
         String me = "/api/v1/effort-records/me";
         assertThat(paths.has(me + "/presets")).as("presets").isTrue();
-        assertThat(paths.has(me + "/definition-snapshots")).as("definition-snapshots").isTrue();
+        // definition-snapshots は AC-19（PR-2）で追加する
         assertThat(paths.has(me + "/stats")).as("stats").isTrue();
         assertThat(paths.path(me).has("get") && paths.path(me).has("post")).as("一覧と作成").isTrue();
         JsonNode byId = paths.path(me + "/{id}");

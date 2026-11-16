@@ -3,9 +3,7 @@ package com.mannschaft.app.effortrecord.service;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorResponse;
-import com.mannschaft.app.effortrecord.dto.CreateEffortDefinitionSnapshotRequest;
 import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshot;
-import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshotResponse;
 import com.mannschaft.app.effortrecord.entity.EffortDefinitionEntity;
 import com.mannschaft.app.effortrecord.entity.EffortDefinitionRevisionEntity;
 import com.mannschaft.app.effortrecord.enums.EffortSourceType;
@@ -25,7 +23,7 @@ import java.util.stream.Collectors;
 /**
  * F06.4.1 定義 Service。標準プリセットの取得と、原本作成時の定義 snapshot 解決を担う。
  *
- * <p>チーム定義の revision 登録・署名 token 発行（{@link #registerTeamSnapshot}）は PR-2 で実装する。
+ * <p>チーム定義の revision 登録・署名 token 発行（registerTeamSnapshot）は PR-2 で実装する。
  * PR-1 の原本作成は標準プリセットだけを受け付ける（TEAM 定義は token を検証できないため 400 で拒否する）。</p>
  */
 @Service
@@ -91,17 +89,6 @@ public class EffortDefinitionService {
     public java.util.Optional<EffortDefinitionSnapshot> findRevision(UUID definitionUuid, int revision) {
         return revisions.findByDefinitionIdAndRevision(definitionUuid, revision)
                 .map(r -> codec.parseSnapshot(r.getDefinitionJson()));
-    }
-
-    /**
-     * チーム定義の snapshot revision を登録（同一 hash なら増やさない）し、署名 token を発行する。
-     * 現在所属＋TEAM template の scopeId 一致が必須。廃止は 409。原本は作らない。
-     *
-     * <p>PR-2（チーム定義・指標設定）で実装する。</p>
-     */
-    public EffortDefinitionSnapshotResponse registerTeamSnapshot(
-            Long userId, CreateEffortDefinitionSnapshotRequest request) {
-        throw new UnsupportedOperationException("F06.4.1 チーム定義 snapshot は PR-2 で実装する");
     }
 
     private static BusinessException invalid(String field, String message) {
