@@ -1,5 +1,7 @@
 package com.mannschaft.app.shiftbudget;
 
+import com.mannschaft.app.budget.dto.ShiftBudgetCorrectionOverlay;
+import com.mannschaft.app.budget.service.ShiftBudgetCorrectionQueryService;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.budget.entity.BudgetTransactionEntity;
 import com.mannschaft.app.budget.repository.BudgetTransactionRepository;
@@ -14,7 +16,9 @@ import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepositor
 import com.mannschaft.app.shiftbudget.repository.TodoBudgetLinkRepository;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetFailedEventService;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryFacade;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryAccessPolicy;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -108,7 +112,7 @@ class ShiftBudgetEndToEndIntegrationTest {
     @Mock
     private ObjectProvider<MonthlyShiftBudgetCloseService> closeServiceSelfProvider;
 
-    private ShiftBudgetSummaryService summaryService;
+    private ShiftBudgetSummaryFacade summaryService;
     private MonthlyShiftBudgetCloseService closeService;
 
     private ShiftBudgetAllocationEntity allocation;
@@ -117,13 +121,17 @@ class ShiftBudgetEndToEndIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        summaryService = new ShiftBudgetSummaryService(
+        ShiftBudgetSummaryService calculationService = new ShiftBudgetSummaryService(
                 allocationRepository, consumptionRepository, todoBudgetLinkRepository,
                 alertRepository, featureService, accessControlService);
+        summaryService = new ShiftBudgetSummaryFacade(featureService,
+                new ShiftBudgetSummaryAccessPolicy(accessControlService), calculationService,
+                org.mockito.Mockito.mock(ShiftBudgetCorrectionQueryService.class, invocation -> ShiftBudgetCorrectionOverlay.EMPTY));
         closeService = new MonthlyShiftBudgetCloseService(
                 allocationRepository, consumptionRepository, budgetTransactionRepository,
                 featureService, accessControlService, auditLogService,
-                organizationRepository, failedEventService, closeServiceSelfProvider);
+                organizationRepository, failedEventService,
+                closeServiceSelfProvider);
         lenient().when(closeServiceSelfProvider.getObject()).thenReturn(closeService);
 
         allocation = ShiftBudgetAllocationEntity.builder()
@@ -188,6 +196,10 @@ class ShiftBudgetEndToEndIntegrationTest {
                 new UsernamePasswordAuthenticationToken(ADMIN_USER_ID.toString(), null, List.of()));
         lenient().when(accessControlService.isSystemAdmin(ADMIN_USER_ID)).thenReturn(false);
         lenient().when(accessControlService.isMember(ADMIN_USER_ID, ORG_ID, "ORGANIZATION")).thenReturn(true);
+        lenient().when(accessControlService.hasPermission(ADMIN_USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW"))
+                .thenReturn(true);
+        lenient().when(accessControlService.hasPermission(ADMIN_USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN"))
+                .thenReturn(true);
         lenient().doNothing().when(accessControlService)
                 .checkPermission(ADMIN_USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW");
         lenient().doNothing().when(accessControlService)
@@ -200,6 +212,10 @@ class ShiftBudgetEndToEndIntegrationTest {
                 new UsernamePasswordAuthenticationToken(VIEWER_USER_ID.toString(), null, List.of()));
         lenient().when(accessControlService.isSystemAdmin(VIEWER_USER_ID)).thenReturn(false);
         lenient().when(accessControlService.isMember(VIEWER_USER_ID, ORG_ID, "ORGANIZATION")).thenReturn(true);
+        lenient().when(accessControlService.hasPermission(VIEWER_USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW"))
+                .thenReturn(true);
+        lenient().when(accessControlService.hasPermission(VIEWER_USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_ADMIN"))
+                .thenReturn(false);
         lenient().doNothing().when(accessControlService)
                 .checkPermission(VIEWER_USER_ID, ORG_ID, "ORGANIZATION", "BUDGET_VIEW");
         lenient().doThrow(new com.mannschaft.app.common.BusinessException(

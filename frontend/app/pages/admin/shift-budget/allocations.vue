@@ -4,6 +4,7 @@ import type {
   AllocationCreateRequest,
   AllocationResponse,
   AllocationUpdateRequest,
+  UncountedShift,
 } from '~/types/shiftBudget'
 
 /**
@@ -125,6 +126,103 @@ async function confirmDelete() {
   }
 }
 
+// ===== 締め後に未計上の勤務（CMP-260909-2152 / ワンクリック追加） =====
+
+/**
+ * 月次締め済みの月で、割当の勤務なのに確定明細にも追加明細にも入っていない勤務（再公開でスキップされた分を含む）。
+ * 行ごとの「締め後追加」から、slot・人・勤務日・時間・その日に有効な時給を初期値にした確認ダイアログを開き、
+ * 理由を入れて1操作で追加できる。時給はリクエストに明示して送る（サーバは再計算しない）。
+ */
+const uncountedVisible = ref(false)
+const uncountedTarget = ref<AllocationResponse | null>(null)
+const uncountedItems = ref<UncountedShift[]>([])
+const uncountedRevision = ref(0)
+const uncountedLoading = ref(false)
+
+const addVisible = ref(false)
+const addTarget = ref<UncountedShift | null>(null)
+const addRate = ref('')
+const addReason = ref('')
+const addSubmitting = ref(false)
+
+/** 締め対象月（割当の開始月）。 */
+function closeMonthOf(allocation: AllocationResponse): string {
+  return allocation.period_start.slice(0, 7)
+}
+
+async function loadUncounted() {
+  if (!organizationId.value || !uncountedTarget.value) return
+  uncountedLoading.value = true
+  try {
+    const res = await api.listUncountedShifts(
+      organizationId.value, uncountedTarget.value.id, closeMonthOf(uncountedTarget.value))
+    uncountedItems.value = res.items
+    uncountedRevision.value = res.revision ?? 0
+  }
+  catch {
+    uncountedItems.value = []
+    notification.error(t('shiftBudget.uncounted.loadError'))
+  }
+  finally {
+    uncountedLoading.value = false
+  }
+}
+
+async function openUncounted(allocation: AllocationResponse) {
+  uncountedTarget.value = allocation
+  uncountedVisible.value = true
+  await loadUncounted()
+}
+
+function openAdd(item: UncountedShift) {
+  addTarget.value = item
+  addRate.value = item.hourly_rate == null ? '' : String(item.hourly_rate)
+  addReason.value = ''
+  addVisible.value = true
+}
+
+const addRateValue = computed(() => Number(addRate.value))
+const addReady = computed(() =>
+  addReason.value.trim().length > 0
+  && Number.isFinite(addRateValue.value)
+  && addRateValue.value > 0)
+
+async function confirmAdd() {
+  if (!organizationId.value || !uncountedTarget.value || !addTarget.value || !addReady.value) return
+  addSubmitting.value = true
+  try {
+    await api.createMonthlyCloseCorrection(
+      organizationId.value,
+      uncountedTarget.value.id,
+      closeMonthOf(uncountedTarget.value),
+      {
+        command_id: crypto.randomUUID(),
+        expected_revision: uncountedRevision.value,
+        kind: 'ADD',
+        user_id: addTarget.value.user_id,
+        work_date: addTarget.value.work_date,
+        slot_id: addTarget.value.slot_id,
+        shift_id: addTarget.value.shift_id,
+        hours: addTarget.value.hours,
+        hourly_rate: addRateValue.value,
+        content: t('shiftBudget.uncounted.content'),
+        reason: addReason.value.trim(),
+      },
+    )
+    notification.success(t('shiftBudget.uncounted.addSuccess'))
+    addVisible.value = false
+    addTarget.value = null
+    // 追加した勤務は一覧から消え、割当の金額（訂正後）も更新される
+    await Promise.all([loadUncounted(), load()])
+  }
+  catch {
+    notification.error(t('shiftBudget.uncounted.addError'))
+  }
+  finally {
+    addSubmitting.value = false
+  }
+}
+
 function consumptionRate(allocation: AllocationResponse): number {
   const allocated = allocation.allocated_amount ?? 0
   const consumed = allocation.consumed_amount ?? 0
@@ -218,6 +316,16 @@ onMounted(() => {
         <template #body="{ data }: { data: AllocationResponse }">
           <div class="flex gap-1">
             <Button
+              :data-testid="`uncounted-shifts-open-${data.id}`"
+              icon="pi pi-clock"
+              size="small"
+              severity="secondary"
+              outlined
+              :aria-label="t('shiftBudget.uncounted.open')"
+              :title="t('shiftBudget.uncounted.open')"
+              @click="openUncounted(data)"
+            />
+            <Button
               icon="pi pi-pencil"
               size="small"
               severity="secondary"
@@ -241,6 +349,113 @@ onMounted(() => {
       @submit-create="handleCreate"
       @submit-update="handleUpdate"
     />
+
+    <!-- 締め後に未計上の勤務の一覧（CMP-260909-2152） -->
+    <Dialog
+      v-model:visible="uncountedVisible"
+      :header="t('shiftBudget.uncounted.title')"
+      :style="{ width: '760px' }"
+      modal
+    >
+      <p class="mb-3 text-sm text-surface-600">{{ t('shiftBudget.uncounted.description') }}</p>
+      <PageLoading v-if="uncountedLoading" />
+      <p v-else-if="uncountedItems.length === 0" class="py-6 text-center text-surface-500">
+        {{ t('shiftBudget.uncounted.empty') }}
+      </p>
+      <table v-else class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-surface-500">
+            <th class="py-1 pr-2">{{ t('shiftBudget.uncounted.user') }}</th>
+            <th class="py-1 pr-2">{{ t('shiftBudget.uncounted.workDate') }}</th>
+            <th class="py-1 pr-2 text-right">{{ t('shiftBudget.uncounted.hours') }}</th>
+            <th class="py-1 pr-2 text-right">{{ t('shiftBudget.uncounted.rate') }}</th>
+            <th class="py-1" />
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="item in uncountedItems"
+            :key="`${item.slot_id}-${item.user_id}`"
+            :data-testid="`uncounted-shift-row-${item.slot_id}-${item.user_id}`"
+            class="border-t border-surface-200"
+          >
+            <td class="py-2 pr-2">{{ t('shiftBudget.uncounted.userLabel', { id: item.user_id }) }}</td>
+            <td class="py-2 pr-2">{{ item.work_date }}</td>
+            <td class="py-2 pr-2 text-right">{{ item.hours }}</td>
+            <td class="py-2 pr-2 text-right">{{ item.hourly_rate == null ? '-' : item.hourly_rate.toLocaleString() }}</td>
+            <td class="py-2 text-right">
+              <Button
+                :data-testid="`uncounted-shift-add-${item.slot_id}-${item.user_id}`"
+                :label="t('shiftBudget.uncounted.add')"
+                size="small"
+                :disabled="!item.add_available"
+                @click="openAdd(item)"
+              />
+              <p
+                v-if="!item.add_available"
+                :data-testid="`uncounted-shift-unavailable-${item.slot_id}-${item.user_id}`"
+                class="mt-1 text-xs text-orange-600"
+              >
+                {{ t(`shiftBudget.uncounted.reason.${item.unavailable_reason ?? 'UNKNOWN'}`) }}
+              </p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <template #footer>
+        <Button
+          :label="t('shiftBudget.uncounted.close')"
+          severity="secondary"
+          @click="uncountedVisible = false"
+        />
+      </template>
+    </Dialog>
+
+    <!-- 追加の確認（初期値を埋めて、理由を入れて1操作） -->
+    <Dialog
+      v-model:visible="addVisible"
+      :header="t('shiftBudget.uncounted.addTitle')"
+      :style="{ width: '440px' }"
+      modal
+    >
+      <div v-if="addTarget" class="flex flex-col gap-3">
+        <p class="text-sm text-surface-600">
+          {{ t('shiftBudget.uncounted.addSummary', {
+            id: addTarget.user_id, date: addTarget.work_date, hours: addTarget.hours,
+          }) }}
+        </p>
+        <label class="flex flex-col gap-1 text-sm">
+          <span>{{ t('shiftBudget.uncounted.rateLabel') }}</span>
+          <InputText v-model="addRate" data-testid="uncounted-shift-add-rate" type="number" min="1" step="1" />
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span>{{ t('shiftBudget.uncounted.reasonLabel') }}</span>
+          <InputText
+            v-model="addReason"
+            data-testid="uncounted-shift-add-reason"
+            maxlength="500"
+            :placeholder="t('shiftBudget.uncounted.reasonPlaceholder')"
+          />
+        </label>
+        <p class="text-xs text-surface-500">{{ t('shiftBudget.uncounted.addNote') }}</p>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <Button
+            :label="t('shiftBudget.allocation.form.cancel')"
+            severity="secondary"
+            @click="addVisible = false"
+          />
+          <Button
+            data-testid="uncounted-shift-add-confirm"
+            :label="t('shiftBudget.uncounted.addConfirm')"
+            :loading="addSubmitting"
+            :disabled="!addReady"
+            @click="confirmAdd"
+          />
+        </div>
+      </template>
+    </Dialog>
 
     <Dialog
       v-model:visible="deleteConfirmVisible"

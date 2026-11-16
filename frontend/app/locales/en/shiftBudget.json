@@ -40,6 +40,14 @@
       "deleteError": "Failed to delete allocation"
     },
     "consumption": {
+      "openByUser": "Member breakdown",
+      "user": "User ID: {id}",
+      "total": "Total {amount} {currency} / {hours} hours",
+      "recordedRate": "Hourly rate when recorded",
+      "hours": "Hours",
+      "zeroHistory": "Recorded at zero (hourly rate needs review)",
+      "empty": "No consumption breakdown has been recorded",
+      "close": "Close",
       "summary": "Consumption Summary",
       "consumed": "Consumed",
       "remaining": "Remaining",
@@ -163,6 +171,35 @@
         "EXHAUSTED": "Retry limit reached",
         "MANUAL_RESOLVED": "Manually resolved"
       }
+    },
+    "uncounted": {
+      "open": "Shifts not counted after closing",
+      "title": "Shifts not counted after closing",
+      "description": "Shifts that belong to this allocation but were not counted after the monthly close (including ones skipped when the schedule was republished). Use \"Add after close\" to count them as a post-close addition.",
+      "empty": "There are no shifts left uncounted after closing",
+      "user": "Worker",
+      "userLabel": "User #{id}",
+      "workDate": "Work date",
+      "hours": "Hours",
+      "rate": "Hourly rate",
+      "add": "Add after close",
+      "close": "Close",
+      "reason": {
+        "HOURLY_RATE_MISSING": "Cannot add: no hourly rate is set. Register the rate in the team settings.",
+        "PLANNED_EXISTS": "Cannot add: a planned consumption still exists.",
+        "UNKNOWN": "Cannot add."
+      },
+      "addTitle": "Add after close",
+      "addSummary": "Count the shift of user #{id} on {date} ({hours} hours) as a post-close addition.",
+      "rateLabel": "Hourly rate (JPY)",
+      "reasonLabel": "Reason for adding",
+      "reasonPlaceholder": "e.g. Shift skipped when the schedule was republished",
+      "addNote": "It is recorded in the history as an addition to a month that was already closed. The original close is not changed.",
+      "addConfirm": "Add",
+      "content": "Addition of a shift that was not counted after closing",
+      "addSuccess": "Counted as a post-close addition",
+      "addError": "Failed to add. Reload the list and try again.",
+      "loadError": "Failed to load shifts not counted after closing"
     }
   }
 }

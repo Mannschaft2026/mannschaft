@@ -40,6 +40,14 @@
       "deleteError": "Error al eliminar la asignación"
     },
     "consumption": {
+      "openByUser": "Desglose por miembro",
+      "user": "ID de usuario: {id}",
+      "total": "Total {amount} {currency} / {hours} horas",
+      "recordedRate": "Tarifa horaria al registrar",
+      "hours": "Horas",
+      "zeroHistory": "Historial registrado con importe cero (revisar tarifa horaria)",
+      "empty": "No hay un desglose de consumo registrado",
+      "close": "Cerrar",
       "summary": "Resumen de Consumo",
       "consumed": "Consumido",
       "remaining": "Restante",
@@ -163,6 +171,35 @@
         "EXHAUSTED": "Límite de reintentos alcanzado",
         "MANUAL_RESOLVED": "Resuelto manualmente"
       }
+    },
+    "uncounted": {
+      "open": "Turnos no contabilizados tras el cierre",
+      "title": "Turnos no contabilizados tras el cierre",
+      "description": "Turnos de esta asignación que no se contabilizaron después del cierre mensual (incluidos los omitidos al republicar el horario). Use «Añadir tras el cierre» para contabilizarlos como una adición posterior al cierre.",
+      "empty": "No hay turnos sin contabilizar tras el cierre",
+      "user": "Trabajador",
+      "userLabel": "Usuario n.º {id}",
+      "workDate": "Fecha de trabajo",
+      "hours": "Horas",
+      "rate": "Tarifa por hora",
+      "add": "Añadir tras el cierre",
+      "close": "Cerrar",
+      "reason": {
+        "HOURLY_RATE_MISSING": "No se puede añadir: falta la tarifa por hora. Regístrela en la configuración del equipo.",
+        "PLANNED_EXISTS": "No se puede añadir: aún existe un consumo planificado.",
+        "UNKNOWN": "No se puede añadir."
+      },
+      "addTitle": "Añadir tras el cierre",
+      "addSummary": "Contabilizar el turno del usuario n.º {id} del {date} ({hours} horas) como una adición posterior al cierre.",
+      "rateLabel": "Tarifa por hora (JPY)",
+      "reasonLabel": "Motivo de la adición",
+      "reasonPlaceholder": "Ej.: turno omitido al republicar el horario",
+      "addNote": "Quedará en el historial como una adición a un mes ya cerrado. El cierre original no se modifica.",
+      "addConfirm": "Añadir",
+      "content": "Adición de un turno no contabilizado tras el cierre",
+      "addSuccess": "Contabilizado como adición posterior al cierre",
+      "addError": "No se pudo añadir. Recargue la lista e inténtelo de nuevo.",
+      "loadError": "No se pudieron cargar los turnos no contabilizados tras el cierre"
     }
   }
 }

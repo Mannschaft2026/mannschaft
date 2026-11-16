@@ -686,6 +686,11 @@ public class GlobalExceptionHandler {
             // F08.7 シフト予算 (Phase 10-β: 通知失敗リトライ + 失敗イベント管理)
             Map.entry("SHIFT_BUDGET_030", HttpStatus.NOT_FOUND),            // FAILED_EVENT_NOT_FOUND (IDOR 対策で 404)
             Map.entry("SHIFT_BUDGET_031", HttpStatus.CONFLICT),             // FAILED_EVENT_NOT_RETRIABLE
+            // CMP-260909-2152 月次締め後の訂正
+            Map.entry("SHIFT_BUDGET_032", HttpStatus.CONFLICT),             // HAS_CLOSED_MONTHS
+            Map.entry("SHIFT_BUDGET_033", HttpStatus.NOT_FOUND),            // CORRECTION_SLOT_NOT_FOUND (IDOR 対策で 404)
+            Map.entry("SHIFT_BUDGET_034", HttpStatus.NOT_FOUND),            // CORRECTION_USER_NOT_FOUND (IDOR 対策で 404)
+            Map.entry("SHIFT_BUDGET_035", HttpStatus.BAD_REQUEST),          // CORRECTION_INVALID_REQUEST
             // F03.15 個人時間割（IDOR 対策で 404 統一、上限・遷移エラーは 409）
             Map.entry("PERSONAL_TIMETABLE_001", HttpStatus.NOT_FOUND),       // PERSONAL_TIMETABLE_NOT_FOUND
             Map.entry("PERSONAL_TIMETABLE_010", HttpStatus.CONFLICT),        // LIMIT_EXCEEDED
@@ -2273,6 +2278,20 @@ public class GlobalExceptionHandler {
             Map.entry("BUDGET_008", HttpStatus.CONFLICT),                // 取引が承認待ち状態（操作不可の状態競合）
             Map.entry("BUDGET_011", HttpStatus.NOT_FOUND),               // 予算報告書が見つからない
             Map.entry("BUDGET_012", HttpStatus.NOT_FOUND),               // 予算設定が見つからない
+            // CMP-260909-2152 シフト予算 月次締め後の訂正
+            Map.entry("BUDGET_023", HttpStatus.CONFLICT),                // 自動計上仕訳の汎用削除・取消（状態競合）
+            Map.entry("BUDGET_024", HttpStatus.NOT_FOUND),               // 対象月の月次締め仕訳が無い（IDOR 秘匿 → 404）
+            Map.entry("BUDGET_025", HttpStatus.CONFLICT),                // 月次締め仕訳が複数ある
+            Map.entry("BUDGET_026", HttpStatus.CONFLICT),                // expected_revision 不一致
+            Map.entry("BUDGET_027", HttpStatus.NOT_FOUND),               // 訂正対象の明細が無い
+            Map.entry("BUDGET_028", HttpStatus.NOT_FOUND),               // 取消対象の訂正が無い（別締めの ID を含む）
+            Map.entry("BUDGET_029", HttpStatus.CONFLICT),                // 最新でない訂正の取消
+            Map.entry("BUDGET_030", HttpStatus.CONFLICT),                // 同 slot 同人の重複
+            Map.entry("BUDGET_031", HttpStatus.CONFLICT),                // PLANNED の消化が残っている
+            Map.entry("BUDGET_032", HttpStatus.CONFLICT),                // 同 command で内容違い
+            Map.entry("BUDGET_033", HttpStatus.CONFLICT),                // 明細合計が原仕訳と不一致
+            Map.entry("BUDGET_034", HttpStatus.CONFLICT),                // 状態遷移として成り立たない訂正
+            Map.entry("BUDGET_035", HttpStatus.BAD_REQUEST),             // 訂正の入力が不正
 
             // 認可監査 Wave6 ロットE: 大会・リーグ管理（TournamentErrorCode）の残り未登録分。
             Map.entry("TOUR_004", HttpStatus.CONFLICT),                  // INVALID_TOURNAMENT_STATUS

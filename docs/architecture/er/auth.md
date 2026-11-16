@@ -186,6 +186,10 @@ erDiagram
 | [billing](billing.md) | `billing_price_versions` | `created_by` | ID参照 | `users` |
 | [billing](billing.md) | `entitlements` | `revoked_by` | ID参照 | `users` |
 | [budget](budget.md) | `budget_fiscal_years` | `created_by` | ID参照 | `users` |
+| [budget](budget.md) | `budget_monthly_close_corrections` | `actor_user_id` | ID参照 | `users` |
+| [budget](budget.md) | `budget_monthly_close_corrections` | `user_id` | ID参照 | `users` |
+| [budget](budget.md) | `budget_monthly_close_records` | `close_actor_user_id` | ID参照 | `users` |
+| [budget](budget.md) | `budget_monthly_close_records` | `original_recorded_by` | ID参照 | `users` |
 | [budget](budget.md) | `budget_reports` | `generated_by` | ID参照 | `users` |
 | [budget](budget.md) | `budget_transactions` | `recorded_by` | ID参照 | `users` |
 | [bulletin](bulletin.md) | `bulletin_archive_folders` | `created_by` | ID参照 | `users` |
@@ -640,6 +644,7 @@ erDiagram
 | [shiftbudget](shiftbudget.md) | `budget_threshold_alerts` | `acknowledged_by` | ID参照 | `users` |
 | [shiftbudget](shiftbudget.md) | `shift_budget_allocations` | `created_by` | ID参照 | `users` |
 | [shiftbudget](shiftbudget.md) | `shift_budget_consumptions` | `user_id` | ID参照 | `users` |
+| [shiftbudget](shiftbudget.md) | `shift_budget_monthly_close_events` | `actor_user_id` | ID参照 | `users` |
 | [shiftbudget](shiftbudget.md) | `todo_budget_links` | `created_by` | ID参照 | `users` |
 | [signage](signage.md) | `signage_access_tokens` | `created_by` | ID参照 | `users` |
 | [signage](signage.md) | `signage_emergency_messages` | `dismissed_by` | ID参照 | `users` |

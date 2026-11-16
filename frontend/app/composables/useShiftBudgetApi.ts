@@ -8,12 +8,15 @@ import type {
   ConsumptionSummaryResponse,
   FailedEventResponse,
   FailedEventStatus,
+  MonthlyCloseCorrectionRequest,
+  MonthlyCloseCorrectionResponse,
   MonthlyCloseRequest,
   MonthlyCloseResponse,
   RequiredSlotsRequest,
   RequiredSlotsResponse,
   TodoBudgetLinkCreateRequest,
   TodoBudgetLinkResponse,
+  UncountedShiftsResponse,
 } from '~/types/shiftBudget'
 
 /**
@@ -231,6 +234,41 @@ export function useShiftBudgetApi() {
     return res.data
   }
 
+  // ===== 月次締め後の訂正（CMP-260909-2152） =====
+
+  /**
+   * 締め済み月で、確定明細も追加済み明細も無い勤務（締め後に未計上の勤務）を取得する（BUDGET_ADMIN 必須）。
+   * @param yearMonth YYYY-MM
+   */
+  async function listUncountedShifts(
+    organizationId: string,
+    allocationId: number,
+    yearMonth: string,
+  ): Promise<UncountedShiftsResponse> {
+    const res = await api<{ data: UncountedShiftsResponse }>(
+      `${BASE}/allocations/${allocationId}/monthly-closes/${yearMonth}/uncounted-shifts`,
+      { headers: orgHeaders(organizationId) },
+    )
+    return res.data
+  }
+
+  /**
+   * 締め後訂正（追加・修正・取消）を登録する（BUDGET_ADMIN 必須）。
+   * 同じ command_id の再送は冪等（保存済みの結果が返る）。
+   */
+  async function createMonthlyCloseCorrection(
+    organizationId: string,
+    allocationId: number,
+    yearMonth: string,
+    request: MonthlyCloseCorrectionRequest,
+  ): Promise<MonthlyCloseCorrectionResponse> {
+    const res = await api<{ data: MonthlyCloseCorrectionResponse }>(
+      `${BASE}/allocations/${allocationId}/monthly-closes/${yearMonth}/corrections`,
+      { method: 'POST', headers: orgHeaders(organizationId), body: request },
+    )
+    return res.data
+  }
+
   // ===== 失敗イベント（Phase 10-β） =====
 
   /**
@@ -299,6 +337,9 @@ export function useShiftBudgetApi() {
     acknowledgeAlert,
     // 月次締め
     executeMonthlyClose,
+    // 月次締め後の訂正
+    listUncountedShifts,
+    createMonthlyCloseCorrection,
     // 失敗イベント
     listFailedEvents,
     retryFailedEvent,

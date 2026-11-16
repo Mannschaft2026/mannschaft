@@ -181,8 +181,9 @@ public class ShiftBudgetConsumptionRecordListener {
                                     thresholdEx);
                         }
                     } catch (IllegalStateException e) {
-                        // CONFIRMED 既存 → スキップして他継続（個別エラーで全体を止めない）
-                        log.warn("F08.7 hook: CONFIRMED 既存のため skip: slot={}, user={}, msg={}",
+                        // CONFIRMED 既存、または月次締め済みの月（CMP-260909-2152: 計上は訂正 API の ADD に一本化）
+                        // → スキップして他継続（個別エラーで全体を止めない）
+                        log.warn("F08.7 hook: CONFIRMED 既存または締め済みの月のため skip: slot={}, user={}, msg={}",
                                 slot.getId(), userId, e.getMessage());
                         tally.skipped++;
                     } catch (Exception e) {

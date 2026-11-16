@@ -189,7 +189,27 @@ public enum ShiftBudgetErrorCode implements ErrorCode {
      * EXHAUSTED に対しては運用判断による再試行を許容する（本エラーは投げない）。
      */
     FAILED_EVENT_NOT_RETRIABLE("SHIFT_BUDGET_031",
-            "対象の失敗イベントは終端状態のため再実行できません", Severity.WARN);
+            "対象の失敗イベントは終端状態のため再実行できません", Severity.WARN),
+
+    // ====================================================================
+    // CMP-260909-2152: 月次締め後の訂正（032〜039）
+    // ====================================================================
+
+    /** 締め済みの月を持つ割当は削除できない (HTTP 409) */
+    HAS_CLOSED_MONTHS("SHIFT_BUDGET_032",
+            "月次締め済みの月があるため割当を削除できません", Severity.WARN),
+
+    /** 追加しようとした勤務枠がこの割当の勤務ではない (HTTP 404) */
+    CORRECTION_SLOT_NOT_FOUND("SHIFT_BUDGET_033",
+            "指定された勤務枠がこの割当に見つかりません", Severity.WARN),
+
+    /** 追加しようとした勤務者が割当の組織のメンバーではない (HTTP 404) */
+    CORRECTION_USER_NOT_FOUND("SHIFT_BUDGET_034",
+            "指定された勤務者が組織のメンバーに見つかりません", Severity.WARN),
+
+    /** 訂正要求の入力が不正（種別・必須項目・範囲） (HTTP 400) */
+    CORRECTION_INVALID_REQUEST("SHIFT_BUDGET_035",
+            "訂正の入力が不正です", Severity.WARN);
 
     private final String code;
     private final String message;

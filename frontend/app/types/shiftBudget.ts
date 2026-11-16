@@ -102,6 +102,8 @@ export interface AllocationResponse {
   allocated_amount: number | null
   consumed_amount: number | null
   confirmed_amount: number | null
+  /** 月次締め後の訂正による確定額の増減（訂正が無ければ 0）。consumed / confirmed は訂正後の値。 */
+  correction_delta_total?: number
   currency: string
   note: string | null
   created_by: number | null
@@ -123,12 +125,26 @@ export interface AllocationListResponse {
 // ===== 消化サマリ（§6.2.3） =====
 
 /**
- * ユーザー別消化額。BUDGET_ADMIN 保有時のみ実データが返る。
+ * 保存済みの記録時給ごとの消化内訳。
  */
+export interface HourlyRateConsumption {
+  hourly_rate_snapshot: number
+  hours: number
+  amount: number
+  /** 同じ時給の、締め後に追加した有効な明細の件数・金額（hours / amount に含まれる）。 */
+  added_count?: number
+  added_amount?: number
+}
+
+/** ユーザー別の合計と記録時給別内訳。BUDGET_ADMIN 保有時のみ返る。 */
 export interface UserConsumption {
   user_id: number
   amount: number
   hours: number
+  rate_breakdown: HourlyRateConsumption[]
+  /** 締め後に追加した有効な明細の件数・金額（amount に含まれる）。 */
+  added_count?: number
+  added_amount?: number
 }
 
 /**
@@ -153,6 +169,7 @@ export interface ConsumptionSummaryResponse {
   allocated_amount: number | null
   consumed_amount: number | null
   confirmed_amount: number | null
+  correction_delta_total?: number
   planned_amount: number | null
   remaining_amount: number | null
   consumption_rate: number | null
@@ -224,4 +241,54 @@ export interface FailedEventResponse {
   status: FailedEventStatus
   created_at: string
   updated_at: string
+}
+
+// ===== 月次締め後の訂正（CMP-260909-2152） =====
+
+/** 締め後に未計上の勤務（ワンクリック追加の候補）。 */
+export interface UncountedShift {
+  slot_id: number
+  shift_id: number
+  user_id: number
+  work_date: string
+  hours: number
+  /** 勤務日に有効な時給。未設定は null（追加ボタンを無効にする）。 */
+  hourly_rate: number | null
+  add_available: boolean
+  /** 追加できない理由コード（HOURLY_RATE_MISSING / PLANNED_EXISTS）。 */
+  unavailable_reason: string | null
+}
+
+export interface UncountedShiftsResponse {
+  items: UncountedShift[]
+  /** 追加（ADD）を送るときの expected_revision。 */
+  revision?: number
+}
+
+/** 締め後訂正の登録リクエスト（画面からは ADD のみ送る）。 */
+export interface MonthlyCloseCorrectionRequest {
+  command_id: string
+  expected_revision: number
+  kind: 'ADD' | 'MODIFY' | 'CANCEL'
+  line_kind?: 'ORIGINAL' | 'ADDED'
+  consumption_id?: number | null
+  added_line_id?: string | null
+  user_id?: number | null
+  work_date?: string | null
+  slot_id?: number | null
+  shift_id?: number | null
+  hours?: number | null
+  hourly_rate?: number | null
+  content?: string | null
+  reason: string
+}
+
+/** 締め後訂正の登録結果（訂正行）。 */
+export interface MonthlyCloseCorrectionResponse {
+  id: string
+  revision: number
+  kind: 'ADD' | 'MODIFY' | 'CANCEL' | 'REVERSAL'
+  line_kind: 'ORIGINAL' | 'ADDED'
+  posted_delta: number
+  after_amount: number
 }

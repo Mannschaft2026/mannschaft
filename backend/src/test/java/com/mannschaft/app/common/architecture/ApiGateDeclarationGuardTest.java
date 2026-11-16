@@ -42,7 +42,7 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3732);   // 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
+                .isEqualTo(3736);   // 3732 + CMP-260909-2152 月次締め後訂正 4本（MonthlyShiftBudgetCorrectionController・クラスに @RequireFeature を宣言済みで未宣言増加0。0|4）。3732 = 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
                                     //   どちらも @AlwaysReachable(CORE) を宣言済みで未宣言増加0。3|4 → 3|6）。QR-PDF は旧 GET を POST へ置換（1|1 のまま・純増0）。
                                     // 3730 = 3729 + CMP-261011-0035 ALIC-1 組織告知の一括既読 POST read-batch 1本（AnnouncementFeedOrgController・
                                     //   @AuthorizedInService＋@AlwaysReachable(CORE) 宣言済みで未宣言増加0。6|6 → 6|7）。

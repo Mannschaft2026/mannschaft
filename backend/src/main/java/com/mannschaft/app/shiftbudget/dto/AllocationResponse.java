@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
  *   <li>{@link BudgetView.BudgetViewer} — 金額情報を解禁</li>
  * </ul>
  */
-@Builder
+@Builder(toBuilder = true)
 public record AllocationResponse(
 
         @JsonView(BudgetView.Public.class)
@@ -72,6 +72,14 @@ public record AllocationResponse(
         @JsonProperty("currency")
         String currency,
 
+        /**
+         * CMP-260909-2152 月次締め後の訂正による確定額の増減（訂正が無ければ 0）。
+         * consumed_amount / confirmed_amount は訂正後の値で、これは締めた時点からの差額。
+         */
+        @JsonView(BudgetView.BudgetViewer.class)
+        @JsonProperty("correction_delta_total")
+        BigDecimal correctionDeltaTotal,
+
         @JsonView(BudgetView.BudgetViewer.class)
         @JsonProperty("note")
         String note,
@@ -110,6 +118,7 @@ public record AllocationResponse(
                 .consumedAmount(entity.getConsumedAmount())
                 .confirmedAmount(entity.getConfirmedAmount())
                 .currency(entity.getCurrency())
+                .correctionDeltaTotal(BigDecimal.ZERO)
                 .note(entity.getNote())
                 .createdBy(entity.getCreatedBy())
                 .version(entity.getVersion())

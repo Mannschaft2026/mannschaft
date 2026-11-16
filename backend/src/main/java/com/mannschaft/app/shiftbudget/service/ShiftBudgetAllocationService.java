@@ -278,7 +278,17 @@ public class ShiftBudgetAllocationService {
         featureService.requireEnabled(organizationId);
         requireBudgetAdmin(organizationId);
 
+        // CMP-260909-2152: 月次締め・再公開と同じ割当行ロックで直列化し、締めイベントの有無を判定する。
+        // 締め済みの月（0件締め・追加のみの月を含む）を持つ割当は、訂正履歴の拠り所を失うため削除できない。
         ShiftBudgetAllocationEntity entity = findOrThrow(allocationId, organizationId);
+        allocationRepository.findByIdForUpdate(allocationId)
+                .filter(locked -> locked.getDeletedAt() != null)
+                .ifPresent(locked -> {
+                    throw new BusinessException(ShiftBudgetErrorCode.ALLOCATION_NOT_FOUND);
+                });
+        if (allocationRepository.hasCloseEvent(allocationId)) {
+            throw new BusinessException(ShiftBudgetErrorCode.HAS_CLOSED_MONTHS);
+        }
 
         // PLANNED 残存チェック
         boolean hasPlanned = consumptionRepository.existsByAllocationIdAndStatusInAndDeletedAtIsNull(

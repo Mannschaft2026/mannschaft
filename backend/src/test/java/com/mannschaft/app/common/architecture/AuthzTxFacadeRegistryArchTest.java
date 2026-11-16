@@ -66,6 +66,8 @@ class AuthzTxFacadeRegistryArchTest {
      * R3 では Facade がここへ届くことを、R4 では tx 本体がここへ届かないことを検査する。
      */
     static final String CHAT_GUARD = "com.mannschaft.app.chat.service.ChatChannelAccessGuard";
+    /** summary専用Policy。Facadeでのみ呼び、計算TXからの到達をR4で拒否する。 */
+    static final String SHIFT_BUDGET_POLICY = "com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryAccessPolicy";
 
     private static final String SHIFT = "com.mannschaft.app.shift.";
     private static final String REC = "com.mannschaft.app.recruitment.";
@@ -189,6 +191,8 @@ class AuthzTxFacadeRegistryArchTest {
         // WebSocket の投稿（/app/chat.send）も REST と同じ Facade を通す（経路で認可が抜ける非対称を作らない）
         add(list, "W8", CHAT + "controller.ChatWebSocketController", CHAT + "service.ChatMessageFacade",
                 "handleSendMessage");
+        add(list, "CMP1559", "com.mannschaft.app.shiftbudget.controller.ShiftBudgetSummaryController",
+                "com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryFacade", "getConsumptionSummary");
         return List.copyOf(list);
     }
 
@@ -240,6 +244,11 @@ class AuthzTxFacadeRegistryArchTest {
         map.put(CHAT + "service.ChatMessageFacade", List.of(
                 method(CHAT + "service.ChatMessageService"),
                 method(CHAT + "service.ChatChannelService")));
+        // project集計の旧認可は対象外。summary計算だけをMETHODで検査する。
+        // FeatureServiceは認可を持たない他ドメイン設定の参照（TX外）。既存SkillCategoryServiceと同じ登録。
+        map.put("com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryFacade", List.of(
+                method("com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService"),
+                cls("com.mannschaft.app.shiftbudget.ShiftBudgetFeatureService")));
         return map;
     }
 
@@ -279,7 +288,8 @@ class AuthzTxFacadeRegistryArchTest {
                     + "findOrThrow・estimateFee は認可を持たない参照。W5 の対象外（試算の作り替えは別課題）で、"
                     + "tx 本体の直呼びが残るため R1 に通せない");
 
-    static final Rules RULES = new Rules(ENTRIES, TX_BODIES, Set.of(ACCESS_CONTROL, GATE, CHAT_GUARD), ACCESS_CONTROL,
+    static final Rules RULES = new Rules(ENTRIES, TX_BODIES,
+            Set.of(ACCESS_CONTROL, GATE, CHAT_GUARD, SHIFT_BUDGET_POLICY), ACCESS_CONTROL,
             THROW_FORM_ALLOWLIST, UNREGISTERED_FACADE_CALLERS);
 
     private final JavaClasses classes = ProductionClasses.get();
@@ -293,11 +303,12 @@ class AuthzTxFacadeRegistryArchTest {
     void 登録表の件数() {
         Map<String, Long> byWave = ENTRIES.stream()
                 .collect(Collectors.groupingBy(Entry::wave, TreeMap::new, Collectors.counting()));
-        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "W1", 9L, "W2", 16L, "W3a", 1L, "W3b", 2L, "W4", 6L, "W5", 11L, "W5周辺", 1L, "W6a", 17L, "W7", 4L,
-                "W8", 22L)); // W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat
-        assertThat(ENTRIES).hasSize(89); // CMP-261010-1432 枠間移動で +1 / CMP-261105-1507 chat で +22
-        assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(89);
+        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+                Map.entry("W1", 9L), Map.entry("W2", 16L), Map.entry("W3a", 1L), Map.entry("W3b", 2L),
+                Map.entry("W4", 6L), Map.entry("W5", 11L), Map.entry("W5周辺", 1L), Map.entry("W6a", 17L),
+                Map.entry("W7", 4L), Map.entry("W8", 22L), Map.entry("CMP1559", 1L)));
+        assertThat(ENTRIES).hasSize(90); // CMP1559: summary認可/TX分離で +1
+        assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(90);
         assertThat(ENTRIES.stream().map(Entry::facade).collect(Collectors.toSet()))
                 .as("登録表の Facade と tx 本体の表の Facade が一致する").isEqualTo(TX_BODIES.keySet());
     }

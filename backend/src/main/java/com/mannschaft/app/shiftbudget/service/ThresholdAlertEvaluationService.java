@@ -94,6 +94,26 @@ public class ThresholdAlertEvaluationService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void evaluateAndTrigger(Long allocationId) {
+        evaluate(allocationId, null);
+    }
+
+    /**
+     * 月次締め後の訂正で消化額が変わったとき、<b>訂正後の消化額</b>で閾値を再判定する（CMP-260909-2152）。
+     *
+     * <p>段取り役（訂正の Coordinator）が訂正のコミット後に TX の外から呼ぶ。判定の中身は
+     * {@link #evaluateAndTrigger} と同じで、消化額だけ割当のキャッシュではなく呼出側が算出した訂正後の値を使う。
+     * 通知（AFTER_COMMIT）が配送されるよう、<b>呼出側が独立トランザクション（REQUIRES_NEW）で呼ぶこと</b>。
+     * 本メソッド自体は {@code @Transactional} を持たない（コンストラクタ引数と TX 入口を増やすと、
+     * このクラスの他ドメイン Repository 依存の凍結キーが新しい違反として数えられるため）。
+     * 閾値・ワークフロー起動の TX 分離（Coordinator 化）は別戦役で行うため、ここでは既存の評価を再利用するに留める。</p>
+     *
+     * @param effectiveConsumed 訂正後の消化額
+     */
+    public void evaluateWithEffectiveConsumed(Long allocationId, BigDecimal effectiveConsumed) {
+        evaluate(allocationId, effectiveConsumed);
+    }
+
+    private void evaluate(Long allocationId, BigDecimal consumedOverride) {
         ShiftBudgetAllocationEntity allocation = allocationRepository.findById(allocationId)
                 .orElse(null);
         if (allocation == null || allocation.getDeletedAt() != null) {
@@ -102,7 +122,7 @@ public class ThresholdAlertEvaluationService {
         }
 
         BigDecimal allocated = allocation.getAllocatedAmount();
-        BigDecimal consumed = allocation.getConsumedAmount();
+        BigDecimal consumed = consumedOverride != null ? consumedOverride : allocation.getConsumedAmount();
         if (allocated == null || allocated.signum() == 0) {
             // 予算ゼロ円の境界ケース: 設計書 §11 では即 100% 超過判定とするが、
             // 本実装では「割当0+消化0=0%」として WARN/EXCEEDED いずれも発火させない方針
