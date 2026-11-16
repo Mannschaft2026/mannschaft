@@ -143,3 +143,42 @@ SIGKILL・ホスト障害ではfinallyは動かない。`--check` は自分専�
 tracked差分・残存refに加え、untracked/ignoredを確認する。`logs/` 配下のspecやfixtureもコードとして扱う。非祖先であることだけでは未反映と判定せず、正本refへの到達、PRのsquash採用、patch-id、改行正規化後の本文、現mainの後続改善まで照合する。
 
 必要な差分だけを秘密情報がないと確認したうえで正本branch/PRへ回収し、CMP・担当・次の一手を対応付ける。既存Draft PR/refに必要差分があれば回収branchを重複作成せず、未完理由と次の一手を既存CMPへ対応付ける。採用済み・検証専用・後続改善で不要なものは採否理由を記録する。全量archiveの追加で解消扱いにせず、使用中プロセス・共有Gitディレクトリ・他の利用者資産を確認してから不要な原コピーを個別に撤去する。未確定分は所有者・再確認期限・再開条件を付けて引き継ぐ。既存の `--check` は検知専用のままとし、無差別削除へ変更しない。
+
+## 素材の展開・縮小（worktree-assets）
+
+牧場 PNG 素材（`frontend/dev-fixtures/ranch`、`frontend/public/ranch/approved`、`backend/src/main/resources/ranch/approved`。計約876MB）は、足軽 worktree では `worktree.sparsePaths`（git sparse-checkout の cone モード）で既定では展開しない運用を目指している。素材が要る作業では `scripts/worktree-assets.mjs` で展開し、終わったら縮小する。操作対象は**実行した worktree だけ**で、共有 `.git/config`・他 worktree・本陣は変えない。
+
+> `worktree.sparsePaths` の設定の有効化は後続PRで行う。設定が未投入の間、`shrink` と `reapply` は「設定が未投入」と表示して非0で終了する（`status` と `expand` は使える）。
+
+### expand が要る作業
+
+- 牧場機能の開発・検証（画面・API が素材を読む）
+- 診断 formal mapping
+- 素材の生成・登録
+- `verify-ranch-*` の実バイト検査
+- ローカルでの Docker ビルド（素材をイメージに含めるため）
+
+### コマンド
+
+```bash
+node scripts/worktree-assets.mjs status    # sparse か・展開/除外・設定との一致（読み取りのみ）
+node scripts/worktree-assets.mjs expand    # 全展開。必要容量を表示し、空きが足りなければ何も変えず非0
+node scripts/worktree-assets.mjs shrink    # HEAD の worktree.sparsePaths で縮小
+node scripts/worktree-assets.mjs reapply   # main を取り込んで設定の一覧が更新された後に、一覧を最新へ更新
+```
+
+素材が要らなくなったら `shrink`。main に新ディレクトリが増えて設定が更新されたのを merge/rebase で取り込んだら `reapply`（既存の変更・未追跡は保たれる）。
+
+### 拒否される条件と対処
+
+| 条件 | 対処 |
+|---|---|
+| 本陣（メイン作業木）での `shrink` / `reapply` | 足軽の worktree で実行する（`expand` と `status` は本陣でも可） |
+| 縮小で外れる領域に未コミット・ステージ済み・未追跡・ignore 済み（生成物）がある | 該当パスが表示される。コミット・退避・削除してから再実行 |
+| 未マージ、進行中の merge/rebase/cherry-pick/revert、`index.lock` | 操作を完了または中止、残骸のロックを所有確認のうえ除去 |
+| 対象 worktree のパスを含む java / node / gradle が動作中 | 停止してから再実行。取得できない環境では「確認できない」として拒否される。確認済みなら `--skip-process-check` |
+| 設定と無関係な sparse 一覧を既に持つ（`boundary-coordination.md` の管理用 worktree など） | 上書きせず拒否。置き換えてよい場合のみ `--force-replace` |
+| `extensions.worktreeConfig` が無効 | 共有 `.git/config` を書き換えてしまうため拒否 |
+| `expand` で空き容量が足りない | 何も変えず非0。空きを作ってから再実行 |
+
+途中で git が失敗した場合（ファイル使用中など）は非0で終了し、到達状態と再実行コマンドを表示する。既存の変更は失われず、再実行で完了できる。黙って全展開へフォールバックすることはない。
