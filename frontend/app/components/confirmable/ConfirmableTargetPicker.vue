@@ -22,6 +22,7 @@ const emit = defineEmits<{
 }>()
 const api = useApi()
 const { getTeamsInOrg } = useOrganizationApi()
+const uid = useId()
 const { handleApiError } = useErrorHandler()
 const { t } = useI18n()
 const options = ref<TargetOption[]>([])
@@ -81,7 +82,8 @@ async function loadOrganization(orgId: number, depth: number) {
     hasMore.value[orgKey] = children.meta?.hasNext ?? false
     if (!opened.value[orgKey]) {
       const teams = await getTeamsInOrg(orgSlug)
-      for (const team of teams.data) addOption({ type: 'TEAM', id: team.id }, team.name, depth + 1)
+      // 一覧の id はスラッグ。確認通知の対象は数値IDが必要なので numericId を使う
+      for (const team of teams.data) addOption({ type: 'TEAM', id: team.numericId }, team.name, depth + 1)
       opened.value[orgKey] = true
     }
   } catch (error) { handleApiError(error, 'confirmable target options') } finally { loading.value = false }
@@ -109,8 +111,8 @@ watch(() => [props.scopeType, props.scopeId, props.scopeSlug] as const, async ()
     <InputText v-model="keyword" :placeholder="$t('confirmable.search_targets')" />
     <div class="max-h-64 overflow-y-auto rounded border border-surface-200 p-2">
       <div v-for="option in visible" :key="key(option.target)" class="flex items-center gap-2 py-1" :style="{ paddingLeft: `${Math.min(option.depth, 8) * 12}px` }">
-        <Checkbox :model-value="isSelected(option.target)" binary :input-id="key(option.target)" @update:model-value="toggle(option.target)" />
-        <label :for="key(option.target)" class="min-w-0 flex-1 truncate">{{ option.name }} ({{ $t(`confirmable.target_type.${option.target.type}`) }})</label>
+        <Checkbox :model-value="isSelected(option.target)" binary :input-id="`${uid}-${key(option.target)}`" @update:model-value="toggle(option.target)" />
+        <label :for="`${uid}-${key(option.target)}`" class="min-w-0 flex-1 truncate">{{ option.name }} ({{ $t(`confirmable.target_type.${option.target.type}`) }})</label>
         <Button v-if="option.target.type === 'ORGANIZATION' && orgSlugs[String(option.target.id)] && !opened[String(option.target.id)]" icon="pi pi-angle-down" text size="small" :aria-label="$t('confirmable.open_children')" @click="expand(option)" />
         <Button v-if="option.target.type === 'ORGANIZATION' && hasMore[String(option.target.id)]" icon="pi pi-plus" text size="small" :aria-label="$t('confirmable.load_more_targets')" @click="loadMore(option.target.id)" />
       </div>
