@@ -224,6 +224,7 @@ describe('N2: 共有STOMPのユーザー隔離', () => {
     h.authStore.user = { id: 8 }
     const next = mod.useChatWebSocket()
     next.subscribeChannel(5)
+    expect(h.instances).toHaveLength(2)
     await simulateConnect()
     old.unsubscribeChannel(5)
     expect(mod.getChatWsDiagnostics().routes).toBe(1)
@@ -260,6 +261,7 @@ describe('N2: 共有STOMPのユーザー隔離', () => {
     h.authStore.accessToken = 'token-B'
     ws.subscribeRaw('/user/queue/notifications', vi.fn())
     const next = lastClient()
+    expect(next).not.toBe(old)
     await simulateConnect()
     complete('auth_failed')
     await pendingConnect

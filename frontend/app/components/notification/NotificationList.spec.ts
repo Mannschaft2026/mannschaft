@@ -433,6 +433,7 @@ async function receiveNotification(id: number) {
 describe('N3–N5: 通知一覧のリアルタイム取得境界', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.notificationApi.getNotifications.mockReset()
     mocks.authStore = reactive({ user: { id: 42, timezone: 'Asia/Tokyo' } })
     mocks.notificationStore = reactive({ latestNotification: null })
     mocks.notificationApi.markAsRead.mockResolvedValue(undefined)
