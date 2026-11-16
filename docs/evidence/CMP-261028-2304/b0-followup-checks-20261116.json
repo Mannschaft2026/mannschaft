@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "registrationBaseHead": "3bad93f19e33291cb75e10bed7658cfcc6e6acdf",
+  "residentSourceHead": "b8eefb7c8aa9913b4fa49ad4c8ce2ec9351a3b69",
+  "oldCounts": [
+    85,
+    85,
+    154,
+    21
+  ],
+  "newCounts": [
+    88,
+    88,
+    155,
+    22
+  ],
+  "allOldFieldsDeepPreserved": true,
+  "topRunIdEnvironmentPreserved": true,
+  "oldRunEnvironmentsPreserved": true,
+  "oldR15FlagsPreserved": true,
+  "duplicateIds": 0,
+  "canonicalCopyDeepEqual": true,
+  "taskListExistingRowsUnchanged": true,
+  "taskListAppendedRows": 1,
+  "checks": [
+    {
+      "command": [
+        "python",
+        "docs/prototypes/generate-beta-inventory-board-data.py"
+      ],
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "node",
+        "docs/prototypes/validate-beta-inventory-board.mjs"
+      ],
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "node",
+        "docs/prototypes/validate-beta-inventory-board.mjs",
+        "--self-test-overlay"
+      ],
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "priorAttempt": {
+    "generator": "FAIL: sparseにB0 spec未展開、生成物未更新",
+    "validators": "FAIL: generator失敗で旧dataと新台帳の件数不一致",
+    "combinedShellExitIsNotIndividualCheckEvidence": true,
+    "staticBrowserTrial1": {
+      "nativeExitCode": 1,
+      "result": "旧import途中のraw24件に対し154件を期待してassertion失敗",
+      "contextClosed": true,
+      "browserClosed": true,
+      "serverClosed": true,
+      "knownOwnGenerationsGone": 11,
+      "productOperations": 0
+    }
+  },
+  "productAppOperations": 0,
+  "productApiOperations": 0,
+  "productDatabaseOperations": 0,
+  "publicOriginalImages": 0,
+  "generatedCounts": {
+    "features": 44,
+    "capabilities": 95,
+    "campaigns": 745,
+    "core": 25,
+    "noncore": 19,
+    "blockers": 23
+  },
+  "githubSync": {
+    "status": "synced",
+    "referenceCount": 834,
+    "ciQueryErrors": 0,
+    "stagedAdoption": true,
+    "synchronizedAt": "2026-11-16T02:02:29+00:00"
+  },
+  "generatedOverlayDeepEqual": true
+}
