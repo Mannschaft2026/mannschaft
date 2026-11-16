@@ -221,6 +221,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `scope_type` | `varchar(20)` | NO | （なし） |  |
 | `scope_id` | `bigint unsigned` | NO | （なし） |  |
 | `sender_id` | `bigint unsigned` | NO | （なし） |  |
+| `sender_type` | `varchar(20)` | NO | （なし） | 送信者種類（USER / SYSTEM_AD 等。判別できない過去の履歴は UNKNOWN） |
 | `subject` | `varchar(200)` | NO | （なし） |  |
 | `body_markdown` | `text` | NO | （なし） |  |
 | `body_html` | `text` | NO | （なし） |  |
