@@ -91,7 +91,15 @@
       "assignmentMasked": "調整中",
       "assignmentMaskedHint": "公開前のため割当は表示されません",
       "deleteTitle": "シフト枠を削除",
-      "deleteConfirm": "この枠を削除しますか？この枠に提出済みの希望は、希望一覧と本人の提出履歴から見えなくなります。通常の操作では元に戻せません。"
+      "deleteConfirmPlain": "この枠を削除しますか？",
+
+      "deleteConfirmBoth": "この枠を削除しますか？この枠に出された希望 {requests} 件・割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmRequestsOnly": "この枠を削除しますか？この枠に出された希望 {requests} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmAssignmentsOnly": "この枠を削除しますか？この枠の割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmUnknown": "この枠を削除しますか？この枠に出された希望と割当があれば、それも削除されます。通常の操作では元に戻せません。"
     },
     "requests": {
       "submissionRate": "提出率",

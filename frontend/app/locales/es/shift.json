@@ -167,7 +167,15 @@
       "assignmentMasked": "En ajuste",
       "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
       "deleteTitle": "Eliminar turno",
-      "deleteConfirm": "¿Eliminar este turno? Las solicitudes enviadas para este turno dejarán de aparecer en la lista de solicitudes y en el historial personal. Esta acción no se puede deshacer mediante las operaciones habituales."
+      "deleteConfirmPlain": "¿Eliminar este turno?",
+
+      "deleteConfirmBoth": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno y sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmRequestsOnly": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno. No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmAssignmentsOnly": "¿Eliminar este turno? También se eliminarán sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmUnknown": "¿Eliminar este turno? Si hay solicitudes enviadas para este turno o asignaciones, también se eliminarán. No se puede deshacer con las operaciones habituales."
     },
     "requests": {
       "submissionRate": "Tasa de envío",

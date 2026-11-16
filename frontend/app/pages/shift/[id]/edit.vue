@@ -88,10 +88,48 @@ function handleSlotSaved(slot: ShiftSlotResponse) {
 
 const deletingSlotId = ref<number | null>(null)
 
-function confirmDeleteSlot(slotId: number) {
-  if (!canManage.value || deletingSlotId.value !== null) return
+// 確認文言のために希望件数を取得中の枠ID（取得待ちの間の二重起動を防ぐ）
+const checkingSlotId = ref<number | null>(null)
+
+/**
+ * 枠削除の確認文言を組み立てる。
+ * 希望件数は slotId 一致のみ数える（slotId が null の日単位希望は枠削除で消えない）。
+ * 希望は他メンバーが随時提出・取消するため画面読込時のキャッシュは古くなりうる。
+ * そのためダイアログを開く都度取得し、古い件数を出さない。
+ * 取得失敗時は件数を出さない安全側の文言で続行する（削除自体は妨げない）。
+ */
+async function buildDeleteConfirmMessage(slot: ShiftSlotResponse): Promise<string> {
+  let requestCount: number
+  try {
+    const requests = await listRequests(scheduleId.value)
+    requestCount = requests.filter((r) => r.slotId === slot.id).length
+  } catch (error) {
+    handleApiError(error)
+    return t('shift.slot.deleteConfirmUnknown')
+  }
+  // 割当が伏せられている場合（assignmentMasked）は割当件数を出さない
+  const assignmentCount = slot.assignmentMasked ? 0 : slot.assignedUserIds.length
+  if (requestCount > 0 && assignmentCount > 0) {
+    return t('shift.slot.deleteConfirmBoth', { requests: requestCount, assignments: assignmentCount })
+  }
+  if (requestCount > 0) return t('shift.slot.deleteConfirmRequestsOnly', { requests: requestCount })
+  if (assignmentCount > 0) return t('shift.slot.deleteConfirmAssignmentsOnly', { assignments: assignmentCount })
+  return t('shift.slot.deleteConfirmPlain')
+}
+
+async function confirmDeleteSlot(slotId: number) {
+  if (!canManage.value || deletingSlotId.value !== null || checkingSlotId.value !== null) return
+  const slot = slots.value.find((s) => s.id === slotId)
+  if (!slot) return
+  checkingSlotId.value = slotId
+  let message: string
+  try {
+    message = await buildDeleteConfirmMessage(slot)
+  } finally {
+    checkingSlotId.value = null
+  }
   confirm.require({
-    message: t('shift.slot.deleteConfirm'),
+    message,
     header: t('shift.slot.deleteTitle'),
     icon: 'pi pi-exclamation-triangle',
     rejectLabel: t('common.cancel'),
@@ -335,7 +373,7 @@ function formatDate(dateStr: string): string {
               rounded
               size="small"
               severity="danger"
-              :disabled="deletingSlotId !== null"
+              :disabled="deletingSlotId !== null || checkingSlotId !== null"
               @click="confirmDeleteSlot(slot.id)"
             />
           </div>

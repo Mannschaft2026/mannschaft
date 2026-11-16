@@ -9,6 +9,7 @@ const getSchedule = vi.fn()
 const listSlots = vi.fn()
 const listPositions = vi.fn()
 const deleteSlot = vi.fn()
+const listRequests = vi.fn()
 const notifySuccess = vi.fn()
 const handleApiError = vi.fn()
 let role = 'ADMIN'
@@ -23,6 +24,7 @@ mockNuxtImport('useRoute', () => () => ({ params: { id: '91' } }))
 mockNuxtImport('useTeamStore', () => () => teamStore)
 mockNuxtImport('useShiftApi', () => () => ({ getSchedule }))
 mockNuxtImport('useShiftSlotApi', () => () => ({ listSlots, deleteSlot, bulkCreateSlots: vi.fn() }))
+mockNuxtImport('useShiftRequestApi', () => () => ({ listRequests }))
 mockNuxtImport('useShiftPositionApi', () => () => ({ listPositions }))
 mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError }))
@@ -59,17 +61,16 @@ beforeEach(() => {
   listSlots.mockResolvedValue([slot])
   listPositions.mockResolvedValue([])
   deleteSlot.mockReset().mockResolvedValue(undefined)
+  listRequests.mockReset().mockResolvedValue([])
 })
 
 describe('シフト枠削除 — 警告と明示確認（CMP-260909-2153）', () => {
-  it('希望が一覧・本人履歴で見えなくなり元に戻せないことを警告し、確認前はDELETEしない', async () => {
+  it('希望0件・割当0件では確認文言が「この枠を削除しますか」相当のみで、確認前はDELETEしない', async () => {
     const wrapper = await mountPage()
     await wrapper.findAllComponents(Button).find(button => button.props('icon') === 'pi pi-trash')!.trigger('click')
 
     expect(deleteSlot).not.toHaveBeenCalled()
-    expect(confirmation?.message).toContain('request list')
-    expect(confirmation?.message).toContain('personal history')
-    expect(confirmation?.message).toContain('cannot be undone')
+    expect(confirmation?.message).toBe('Delete this slot?')
   })
 
   it('確認を取り消しても枠を残し、DELETEと成功通知を行わない', async () => {
@@ -131,5 +132,86 @@ describe('シフト枠削除 — 警告と明示確認（CMP-260909-2153）', ()
     const wrapper = await mountPage()
     expect(wrapper.findAllComponents(Button).filter(button => button.props('icon') === 'pi pi-trash')).toHaveLength(0)
     expect(deleteSlot).not.toHaveBeenCalled()
+  })
+})
+
+const req = (id: number, slotId: number | null) => ({
+  id, scheduleId: 91, userId: 10 + id, slotId, slotDate: '2026-10-10', preference: 'AVAILABLE', note: null, submittedAt: '2026-09-29T00:00:00',
+})
+
+async function openConfirm() {
+  const wrapper = await mountPage()
+  await wrapper.findAllComponents(Button).find(button => button.props('icon') === 'pi pi-trash')!.trigger('click')
+  await flushPromises()
+  return wrapper
+}
+
+describe('シフト枠削除 — 確認文言の件数表示', () => {
+  it('希望0・割当0: 件数にも元に戻せない旨にも触れない', async () => {
+    await openConfirm()
+    expect(listRequests).toHaveBeenCalledWith(91)
+    expect(confirmation?.message).toBe('Delete this slot?')
+  })
+
+  it('希望のみ: 対象枠(slotId一致)の希望だけ数え、他枠・日単位(slotId=null)は数えない', async () => {
+    listRequests.mockResolvedValue([req(1, 301), req(2, 301), req(3, 999), req(4, null)])
+    await openConfirm()
+    expect(confirmation?.message).toContain('2 request(s)')
+    expect(confirmation?.message).not.toContain('assignment')
+    expect(confirmation?.message).toContain('cannot be undone')
+  })
+
+  it('日単位希望(slotId=null)だけなら希望0件扱いで素の文言', async () => {
+    listRequests.mockResolvedValue([req(4, null)])
+    await openConfirm()
+    expect(confirmation?.message).toBe('Delete this slot?')
+  })
+
+  it('割当のみ: 割当件数を添える', async () => {
+    listSlots.mockResolvedValue([{ ...slot, assignedUserIds: [5, 6, 7] }])
+    await openConfirm()
+    expect(confirmation?.message).toContain('3 assignment(s)')
+    expect(confirmation?.message).not.toContain('request(s)')
+    expect(confirmation?.message).toContain('cannot be undone')
+  })
+
+  it('希望と割当の両方: 両件数を添える', async () => {
+    listRequests.mockResolvedValue([req(1, 301)])
+    listSlots.mockResolvedValue([{ ...slot, assignedUserIds: [5, 6] }])
+    await openConfirm()
+    expect(confirmation?.message).toContain('1 request(s)')
+    expect(confirmation?.message).toContain('2 assignment(s)')
+  })
+
+  it('assignmentMasked のときは割当件数を出さない', async () => {
+    listSlots.mockResolvedValue([{ ...slot, assignedUserIds: [5, 6], assignmentMasked: true }])
+    await openConfirm()
+    expect(confirmation?.message).toBe('Delete this slot?')
+  })
+
+  it('希望一覧の取得に失敗したら件数なしの安全側文言で続行し、エラーを通知して削除は可能', async () => {
+    const error = new Error('取得失敗')
+    listRequests.mockRejectedValue(error)
+    await openConfirm()
+    expect(handleApiError).toHaveBeenCalledWith(error)
+    expect(confirmation?.message).toContain('Any requests submitted for it')
+    expect(confirmation?.message).not.toMatch(/d/)
+    await confirmation!.accept()
+    expect(deleteSlot).toHaveBeenCalledExactlyOnceWith(301)
+  })
+
+  it('ダイアログを開くたびに希望一覧を取り直し、古い件数を出さない', async () => {
+    const wrapper = await openConfirm()
+    listRequests.mockResolvedValue([req(1, 301)])
+    await wrapper.findAllComponents(Button).find(button => button.props('icon') === 'pi pi-trash')!.trigger('click')
+    await flushPromises()
+    expect(listRequests).toHaveBeenCalledTimes(2)
+    expect(confirmation?.message).toContain('1 request(s)')
+  })
+
+  it('MEMBERは希望一覧も取得しない', async () => {
+    role = 'MEMBER'
+    await mountPage()
+    expect(listRequests).not.toHaveBeenCalled()
   })
 })

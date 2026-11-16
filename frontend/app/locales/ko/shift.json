@@ -167,7 +167,15 @@
       "assignmentMasked": "조정 중",
       "assignmentMaskedHint": "공개 전이므로 배정은 표시되지 않습니다",
       "deleteTitle": "근무 시간대 삭제",
-      "deleteConfirm": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출한 희망은 희망 목록과 본인의 제출 내역에 더 이상 표시되지 않습니다. 일반적인 조작으로는 되돌릴 수 없습니다."
+      "deleteConfirmPlain": "이 시간대를 삭제하시겠습니까?",
+
+      "deleteConfirmBoth": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망 {requests}건과 배정 {assignments}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
+
+      "deleteConfirmRequestsOnly": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망 {requests}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
+
+      "deleteConfirmAssignmentsOnly": "이 시간대를 삭제하시겠습니까? 이 시간대의 배정 {assignments}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
+
+      "deleteConfirmUnknown": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망과 배정이 있다면 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다."
     },
     "requests": {
       "submissionRate": "제출률",
