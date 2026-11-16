@@ -96,7 +96,7 @@ class MatchStartTransactionIT extends AbstractMySqlIntegrationTest {
         interceptor = new ChannelInterceptor() {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel target) {
-                if (("/topic/matches/" + matchId + "/live").equals(SimpMessageHeaderAccessor.getDestination(message))) {
+                if (("/topic/matches/" + matchId + "/live").equals(SimpMessageHeaderAccessor.getDestination(message.getHeaders()))) {
                     try {
                         Object payload = message.getPayload();
                         deliveries.add(payload instanceof byte[] bytes ? mapper.readTree(bytes) : mapper.valueToTree(payload));
