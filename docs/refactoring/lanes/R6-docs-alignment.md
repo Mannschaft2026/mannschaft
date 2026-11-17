@@ -26,7 +26,8 @@
 | D3 | `docs/development/claude-md-details.md` §12 | 日常の検証に `./gradlew build` / `./gradlew test` を挙げる。`build` は `archTest` まで含み重い | 親文書 §6-3 | 可 |
 | D4 | `docs/refactoring/phase4_overview.md` ほか | 第3弾の文書が無い。再エクスポート（`useParkingApi.ts` 等）の撤去計画が無い | `git log` で第3弾の PR を探す | 可（経緯を1段落で補い、本書へのリンクを足す） |
 | D5 | `infra/README.md`（必要なら `docs/operations/` の該当文書） | FE のデプロイ構成の記述が、方針・Terraform・workflow で食い違う | 方針は「BE は AWS、FE は Cloudflare 上で SSR」（マスター回答 2026-11-17）。現状は `frontend/Dockerfile` が Node サーバ、`frontend-deploy.yml` が ECR / ECS、wrangler の workflow は無い | 可。**方針と現状の差を事実として1節に書く**。差を埋める実装はしない（R7 の P13）。Terraform ファイル内のコメントは変えない |
-| D9 | `frontend/README.md` か `frontend/FRONTEND_CODING_CONVENTION.md` | 描画方針を定めた文書が無い。方針は「ログイン画面は SSR、ログイン後はページ遷移をなるべく発生させない SPA」 | `nuxt.config.ts` の `routeRules` と `ssr`、永続シェルの親ルート（`<NuxtPage/>` を持つ `pages/**/[slug].vue` など）、`docs/features/F02.2_dashboard.md` の決定 | 可。**現状を1節にまとめるだけ**。設定は変えない。SSR にする画面の範囲（未ログイン向けの画面を含むか）は質問として報告する |
+| D9 | `frontend/FRONTEND_CODING_CONVENTION.md` §4a「現状と未整備の点」 | 描画方針は規約に定めた（公開ページは SSR、ログイン後は SPA）。**公開ページの一覧が無い** | `frontend/app/pages` のうち未ログインで開けるページ（`middleware` と `definePageMeta` で判定）、`nuxt.config.ts` の `routeRules` | 可。公開ページの一覧表（パス・SSR が要る理由）を作り、§4a から参照する。設定は変えない |
+| D10 | `FRONTEND_CODING_CONVENTION.md` §7、`docs/security/02_cookie_and_session.md` | 認証トークンの保存先と送信方法の記述が食い違う（`localStorage` + Bearer と、`SameSite=Strict` の Cookie） | `frontend/app/composables/useApi.ts`、`frontend/app/stores/useAuthStore.ts`、`backend/.../auth/controller/AuthTokenCookies.java`、`config/JwtAuthenticationFilter.java` | **直さない。** 実装の現状を表にして質問として報告する |
 | D6 | `boundary-coordination.md` と `modular_monolith_boundary_debt_repayment.md` §7.3 | 引取ルールが矛盾 | — | **直さない。** #4022 にコメントで報告する |
 | D8 | `frontend/FRONTEND_CODING_CONVENTION.md` のテストファイルの配置ルール、`TEST_CONVENTION.md` の参照箇所 | **規約はある**（spec は対象と同じディレクトリに置く）。実態が合っていない | 現状の件数（`tests/unit/` に 531、同居が約 290）を再計測する | 規約の文は変えない。「規約を実態に合わせる」「実態を規約へ寄せる」「新規分だけ規約どおりにする」の選択肢と件数を質問として報告する。文書の変更は裁可後 |
 
@@ -47,7 +48,8 @@
 ## 完了条件
 
 - D1・D2・D2b・D3・D4 が直っている
-- D9 は、描画方針の節が書かれ、SSR の範囲についての質問が報告にある
+- D9 は、公開ページの一覧表がある
+- D10 は、実装の現状の表と質問が報告にある
 - D5 は、方針と現状の差が `infra/README.md` に書かれている
 - D6 は #4022 への報告コメントの URL が報告にある
 - D8 は、規約と実態の差の件数と選択肢が質問に載っている

@@ -61,9 +61,9 @@ API の利用者は現在 Web の FE だけである。モバイルアプリは�
 
 1. ブラウザは Cloudflare の apex ドメインへ接続する。`/api/**` と `/ws` だけが Origin Rule で Cloudflare Tunnel 経由の Spring Boot（ECS）へ流れ、それ以外は FE へ流れる（`infra/terraform/modules/edge/main.tf`）。**FE と BE は同一オリジン**である
    - 決定済みの構成（マスター回答 2026-11-17）: **BE は AWS、FE は Cloudflare**。描画の方針は「**ログイン画面は SSR、ログイン後はページ遷移をなるべく発生させない SPA**」
-   - 描画の実態: `nuxt.config.ts` は SSR を全体で有効にしたまま（`ssr: false` は `/activities/**` と未公開機能のパスだけ）。ただしログイン後の画面は、サーバでは枠だけを出し、中身はブラウザ側で取得して描く。親ルートが `<NuxtPage/>` を持つ「永続シェル」方式（`pages/teams/[slug].vue`、`pages/organizations/[slug].vue`、`pages/villages/[id].vue` など）で、遷移のたびの再取得を避けている。`docs/features/F02.2_dashboard.md` も「SSR 不要。SPA + スケルトン UI」と決めている。**この方針を1か所にまとめた文書は無い**（R6 の D9）
+   - 描画の実態: `nuxt.config.ts` は SSR を全体で有効にしたまま（`ssr: false` は `/activities/**` と未公開機能のパスだけ）。ただしログイン後の画面は、サーバでは枠だけを出し、中身はブラウザ側で取得して描く。親ルートが `<NuxtPage/>` を持つ「永続シェル」方式（`pages/teams/[slug].vue`、`pages/organizations/[slug].vue`、`pages/villages/[id].vue` など）で、遷移のたびの再取得を避けている。`docs/features/F02.2_dashboard.md` も「SSR 不要。SPA + スケルトン UI」と決めている。原則は `backend/.claudecode.md` §2、実装規則は `frontend/FRONTEND_CODING_CONVENTION.md` §4a に定めた（2026-11-17 追記）
    - 現状との差: FE のビルドは Node サーバ向け（`frontend/Dockerfile` が `node server/index.mjs` を起動）で、Cloudflare 上で SSR するための Nitro の preset も、wrangler でデプロイする workflow も無い。既存の `frontend-deploy.yml` は ECR / ECS 向けである。この差は負債 D5 として扱い、実装せず提案（R7 の P13）にする
-2. FE は `useApi` 経由で `/api/v1/**` を呼ぶ。認証は HttpOnly Cookie の JWT
+2. FE は `useApi` 経由で `/api/v1/**` を呼ぶ。認証は、`localStorage` の JWT を `Authorization: Bearer` ヘッダーで送る方式（`frontend/FRONTEND_CODING_CONVENTION.md` §7）。これとは別に、リフレッシュ用のトークンが `SameSite=Strict` の Cookie としても発行される
 3. BE は Controller → Service → Repository（JPA）→ MySQL。ドメイン間は ID 参照と Service 経由が原則
 4. 付随処理は、業務トランザクション内でイベントを発行し、`AFTER_COMMIT` のリスナーが非同期に実行する。通知とメールは outbox 方式
 5. 定期バッチは `@Scheduled` と ShedLock で排他する
@@ -276,7 +276,8 @@ git grep -c '@Disabled' -- backend/src/test | wc -l
 | D3 | `docs/development/claude-md-details.md` §12 の検証コマンドが重い旧式 | `./gradlew build` は `archTest` まで含む | §6 の表に合わせる | 可（R6） |
 | D4 | `docs/refactoring/` に第3弾の文書が無く、再エクスポートの撤去計画も無い | `phase4_overview.md` の実施表にだけ第3弾がある | 経緯を1段落で補う。本書へのリンクを足す | 可（R6） |
 | D5 | FE のデプロイ構成が、決定済みの方針と合っていない | 方針は「FE は Cloudflare 上で SSR」。Terraform は Cloudflare Pages を作り、コメントで wrangler によるデプロイを前提にする。しかし wrangler を使う workflow は無く、`frontend-deploy.yml` は ECR / ECS 向け、`frontend/Dockerfile` は Node サーバを起動する。`nuxt.config.ts` に Cloudflare 向けの Nitro preset の指定も無い | 文書には方針と現状の差を明記する。構成の実現は提案にする | 文書は可（R6）。実現は提案のみ（R7 の P13） |
-| D9 | 描画方針（どの画面が SSR で、どこからが SPA か）を定めた文書が無い | 方針は「ログイン画面は SSR、ログイン後は SPA」。実態は `nuxt.config.ts` と各 `pages/**/[slug].vue` の永続シェル、個別の機能仕様書に散らばる | 現状を1節にまとめる。SSR にする画面の範囲（ログイン以外の未ログイン向け画面を含むか）は質問として報告する | 可（R6。現状の記述のみ） |
+| D9 | 描画方針と設定が合っていない | 規約は「公開ページは SSR、ログイン後は SPA」（`backend/.claudecode.md` §2、`frontend/FRONTEND_CODING_CONVENTION.md` §4a）。`nuxt.config.ts` は SSR を全体で有効にしたままで、公開ページの一覧も無い | 公開ページの一覧を作る。設定での明示は提案にする | 一覧の作成は可（R6）。設定の変更は提案のみ（R7 の P13） |
+| D10 | 認証トークンの扱いの記述が文書間で食い違う | `FRONTEND_CODING_CONVENTION.md` §7 は「JWT は `localStorage`、認証トークンを Cookie に格納しない」と定める。一方、同じ節の注記と `docs/security/02_cookie_and_session.md` は、`access_token` / `refresh_token` が `SameSite=Strict` の Cookie としても発行されると書く | 実装の現状（どのトークンがどこに保存され、どちらで認証されるか）を確かめて質問にまとめる。**文書もコードも直さない**（認証に関わる） | 報告のみ（R6） |
 | D6 | 引取ルールの矛盾 | `boundary-coordination.md`（自動引取禁止）と `modular_monolith_boundary_debt_repayment.md` §7.3（3日＋24時間で引取可） | #4022 の所管へ報告する。自分では直さない | 報告のみ |
 | D7 | `README.md` が 126KB。冒頭に個別 PR の進捗が積もる | `CLAUDE.md` の「README を更新せよ」が蓄積を生む | 進捗を別文書へ分ける案を書く | 提案のみ（R7） |
 
@@ -419,7 +420,7 @@ BE 本体の構造変更は、凍結ストアと #4022 の領地に必ず触れ�
 
 | ID | 質問 | 回答 | 本書への反映 |
 |---|---|---|---|
-| Q1 | FE の本番デプロイ先と、SSR か静的生成か | BE は AWS、FE は Cloudflare。ログイン画面は SSR、ログイン後はページ遷移をなるべく発生させない SPA | §2-4。現状のビルドとデプロイはこの方針に届いていない（D5）。文書の是正は R6、実現の設計は R7 の P13 |
+| Q1 | FE の本番デプロイ先と、SSR か静的生成か | BE は AWS、FE は Cloudflare。ログイン画面は SSR、ログイン後はページ遷移をなるべく発生させない SPA | §2-4。原則は `backend/.claudecode.md` §2、実装規則は `frontend/FRONTEND_CODING_CONVENTION.md` §4a に追記済み。現状のビルドとデプロイはこの方針に届いていない（D5）。文書の是正は R6、実現の設計は R7 の P13 |
 | Q2 | Web の FE 以外に API を使うクライアントはあるか | 今は無い。当面は PWA でスマートフォンに対応し、将来 Android / iOS に対応する | §2-2。ネイティブアプリ向けの仕様と PWA の設定を消さない |
 | Q3 | 追跡されている残骸（H1・H2、参照ゼロの Playwright config）を削除してよいか | 内容を確認して、不要なら削除 | R1・R2。**ファイルの中身を読み、参照ゼロを確かめた**うえで削除する |
 | Q4 | 古い文書6本の扱い | 記事原稿2本は `docs/articles/` へ移動、計画書4本は削除 | R1 |

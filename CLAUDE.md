@@ -148,6 +148,9 @@ worktree は作業完了後に必ず掃除する（agent 完了直後にその c
 - **フロントエンド:** Nuxt 3 (TypeScript / Vue 3) — `frontend/`
 - **インフラ:** Docker Compose — `docker-compose.yml`
 - **ドキュメント:** `docs/`（設計・機能仕様）
+- **本番の配置:** BE は AWS、FE は Cloudflare（同一オリジン。BE へ届くのは `/api/**` と `/ws` だけ）
+- **描画方針:** 公開ページ（ログイン画面を含む）は SSR、ログイン後はページ遷移をなるべく発生させない SPA。実装規則は `frontend/FRONTEND_CODING_CONVENTION.md` §4a
+- **利用クライアント:** 現在は Web のみ（スマートフォンは PWA で対応）。将来 Android / iOS のネイティブアプリに対応するので、API を Web 専用の前提で作らない。詳細は `backend/.claudecode.md` §2
 
 ### ポート一覧・常駐サーバーのポート規約
 
