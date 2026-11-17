@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * CMP-260909-2152 PR-α の migration（V261 系）と事前検査を、既存行のある実 DB（Flyway・MySQL 8.0）で検査する。
+ * CMP-260909-2152 PR-α の migration（α の major 系。採番は実装時の origin/main 最大 major+1）と事前検査を、既存行のある実 DB（Flyway・MySQL 8.0）で検査する。
  *
  * <p>試練118（AC41）・127（AC50 索引）・129b（AC52 旧締め取り込み・V209・異常旧仕訳）・134a（AC59α β 表なし）・
  * 135（AC60）・146（AC75）。</p>
@@ -41,17 +41,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * V260 まで適用 → 既存行を投入 → 本番と同じ {@link FlywayRepairConfig#flywayMigrationStrategy()}（事前検査 → repair → migrate）で
  * α を適用する（金型: FlywayExistingDataRestrictOtherTableCrossDomainFkMigrationTest）。</p>
  *
- * <p>実装前の red 理由: V261 系 migration が無く work_date・新表が存在しない（SQL エラー／「V261 が無い」）、
+ * <p>実装前の red 理由: α の migration が無く work_date・新表が存在しない（SQL エラー／「α の migration が無い」）、
  * 事前検査が無く異常データでも起動が止まらない。</p>
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @EnabledIf("com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodMigrationTest#isDockerAvailable")
-@DisplayName("CMP-260909-2152 α migration（V261）と事前検査（Flyway 実DB）")
+@DisplayName("CMP-260909-2152 α migration と事前検査（Flyway 実DB）")
 class ClosePeriodMigrationTest {
 
-    /** main の最大 major（α は V261）。target は実在する版でなければならないため、V260 系の最大版を引いて使う。 */
-    private static final String PRE_ALPHA_MAJOR = "260.";
+    /**
+     * α の migration 群の識別子。α の major は実装時の origin/main 最大 major+1 で採番するため固定しない
+     * （並行 PR の着地順で V261／V262 … と変わる）。<b>締め期間表を作る migration の説明に
+     * {@code shift_budget_close_periods} を含めること</b>を契約とし、その major を α の major とみなす
+     * （α の全ファイルは同じ major。β は別 major）。
+     */
+    private static final String ALPHA_MARKER = "shift_budget_close_periods";
 
     @SuppressWarnings("resource")
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
@@ -106,28 +111,47 @@ class ClosePeriodMigrationTest {
         return cfg.load();
     }
 
-    /** V260 系（α の直前）の最大版。 */
-    private String preAlphaTarget(String db) {
+    private static String major(MigrationInfo m) {
+        String v = m.getVersion().getVersion();
+        int dot = v.indexOf('.');
+        return dot < 0 ? v : v.substring(0, dot);
+    }
+
+    /** α の major（締め期間表を作る migration の major）。まだ無ければ空。 */
+    private java.util.Optional<String> alphaMajor(String db) {
         return Arrays.stream(flyway(db, null).info().all())
-                .filter(m -> m.getVersion() != null && m.getVersion().getVersion().startsWith(PRE_ALPHA_MAJOR))
+                .filter(m -> m.getVersion() != null
+                        && m.getDescription().replace(' ', '_').toLowerCase().contains(ALPHA_MARKER))
+                .map(ClosePeriodMigrationTest::major)
+                .findFirst();
+    }
+
+    /** α の直前（α の major より小さい版）の最大版。α がまだ無ければ全体の最大版。 */
+    private String preAlphaTarget(String db) {
+        java.util.Optional<String> alpha = alphaMajor(db);
+        return Arrays.stream(flyway(db, null).info().all())
+                .filter(m -> m.getVersion() != null)
+                .filter(m -> alpha.isEmpty() || Long.parseLong(major(m)) < Long.parseLong(alpha.get()))
                 .map(MigrationInfo::getVersion)
                 .max(MigrationVersion::compareTo)
-                .orElseThrow(() -> new IllegalStateException("V260 系 migration が無い"))
+                .orElseThrow(() -> new IllegalStateException("migration が無い"))
                 .getVersion();
     }
 
-    /** 本番と同じ起動経路（事前検査 → repair → migrate）。 */
-    private void startUp(String db) {
-        new FlywayRepairConfig().flywayMigrationStrategy().migrate(flyway(db, null));
+    private List<MigrationInfo> alphaMigrations(String db) {
+        java.util.Optional<String> alpha = alphaMajor(db);
+        assertThat(alpha).as("α の migration（説明に %s を含む締め期間表の作成）が存在すること", ALPHA_MARKER)
+                .isPresent();
+        List<MigrationInfo> list = Arrays.stream(flyway(db, null).info().all())
+                .filter(m -> m.getVersion() != null && major(m).equals(alpha.get()))
+                .toList();
+        assertThat(list).isNotEmpty();
+        return list;
     }
 
-    private List<MigrationInfo> alphaMigrations(String db) {
-        List<MigrationInfo> all = Arrays.asList(flyway(db, null).info().all());
-        List<MigrationInfo> alpha = all.stream()
-                .filter(m -> m.getVersion() != null && m.getVersion().getVersion().startsWith("261."))
-                .toList();
-        assertThat(alpha).as("V261 系 migration が存在すること（α の表・work_date・取り込み）").isNotEmpty();
-        return alpha;
+    private long appliedAlpha(Connection c, String db) throws SQLException {
+        return scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version LIKE '"
+                + alphaMajor(db).orElseThrow() + ".%'");
     }
 
     // ───────────────────────── 投入 ─────────────────────────
@@ -245,7 +269,7 @@ class ClosePeriodMigrationTest {
                     + "WHERE source_type = 'SHIFT_BUDGET_MONTHLY' ORDER BY id");
         }
 
-        // 試練146c: V261 を途中段階まで適用して止め（中間ファイル障害の模擬）、本番の起動経路で残りを適用して収束
+        // 試練146c: α を途中段階まで適用して止め（中間ファイル障害の模擬）、本番の起動経路で残りを適用して収束
         List<MigrationInfo> alpha = alphaMigrations(db);
         assertThat(alpha.size()).as("α は複数ファイル（1ファイル1DDL）").isGreaterThanOrEqualTo(2);
         flyway(db, alpha.get(alpha.size() - 2).getVersion().getVersion()).migrate();
@@ -253,8 +277,7 @@ class ClosePeriodMigrationTest {
 
         try (Connection c = conn(db)) {
             assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 0")).isZero();
-            assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE version LIKE '261.%' AND success = 1"))
-                    .isEqualTo(alpha.size());
+            assertThat(appliedAlpha(c, db)).isEqualTo(alpha.size());
 
             // 試練118 AC41: 全状態の行を slot_date で埋める（recorded_at は使わない）、NOT NULL 化
             assertThat(workDate(c, seed.c1)).isEqualTo("2026-04-10");
@@ -381,8 +404,7 @@ class ClosePeriodMigrationTest {
         startUp(db);
         try (Connection c = conn(db)) {
             assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 0")).isZero();
-            assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE version LIKE '261.%'"))
-                    .isEqualTo(alphaMigrations(db).size());
+            assertThat(appliedAlpha(c, db)).isEqualTo(alphaMigrations(db).size());
             assertThat(workDate(c, seed.c2)).isEqualTo("2026-05-20");
             assertThat(scalar(c, "SELECT COUNT(*) FROM shift_budget_monthly_close_events WHERE journal_transaction_id = "
                     + dup1)).isEqualTo(1);
@@ -391,15 +413,14 @@ class ClosePeriodMigrationTest {
 
     @Test
     @Order(3)
-    @DisplayName("試練146a AC75 空 DB は事前検査を省略して全 migration（V261 含む）を適用し起動する")
+    @DisplayName("試練146a AC75 空 DB は事前検査を省略して全 migration（α 含む）を適用し起動する")
     void 試練146a_空DBは検査省略で起動() throws Exception {
         String db = "m2152_empty";
         createDb(db);
         startUp(db);
         try (Connection c = conn(db)) {
             assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 0")).isZero();
-            assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE version LIKE '261.%' AND success = 1"))
-                    .isEqualTo(alphaMigrations(db).size());
+            assertThat(appliedAlpha(c, db)).isEqualTo(alphaMigrations(db).size());
         }
     }
 
