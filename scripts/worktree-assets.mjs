@@ -49,6 +49,15 @@ export function defaultRunGit(cwd, args, input) {
   return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
+/**
+ * Windows でプロセス一覧を取る PowerShell コマンド（ASCII のみ）。
+ * Windows PowerShell 5.1 は出力を既定でコンソールのコードページ（日本語環境では CP932）で書くため、
+ * node が utf8 で復号できるよう、出力エンコーディングを BOM 無し UTF-8 に固定してから出力する。
+ */
+export const WIN_LIST_PROCESSES_COMMAND =
+  '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; ' +
+  'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress';
+
 /** 稼働中プロセスの一覧 [{pid, ppid, cmd, cwd?}]。取得できなければ例外。差し替え可能。 */
 export function defaultListProcesses() {
   if (process.platform === 'win32') {
@@ -58,7 +67,7 @@ export function defaultListProcesses() {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress',
+        WIN_LIST_PROCESSES_COMMAND,
       ],
       { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, windowsHide: true },
     );

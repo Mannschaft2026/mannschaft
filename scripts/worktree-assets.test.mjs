@@ -566,6 +566,29 @@ test('[6] Linux: 実プロセスの /proc/<pid>/cwd が worktree 内なら拒否
   }
 });
 
+test('[#4588] Windows のプロセス一覧コマンドは PowerShell 出力を UTF-8 に固定し、ASCII のみで書かれている', () => {
+  const cmd = assets.WIN_LIST_PROCESSES_COMMAND;
+  const encodingIdx = cmd.indexOf('[Console]::OutputEncoding');
+  assert.ok(encodingIdx >= 0, 'OutputEncoding の指定が無い');
+  assert.match(cmd, /UTF8Encoding \$false/);
+  assert.ok(encodingIdx < cmd.indexOf('Get-CimInstance'), 'エンコーディング指定は出力前に置く');
+  assert.match(cmd, /^[\x20-\x7e]+$/, 'ASCII のみ');
+});
+
+test('[#4588] Windows 実機: 日本語を含むコマンドラインのプロセスが文字化けせず一覧に出る', { skip: process.platform !== 'win32' }, async () => {
+  const { spawn } = await import('node:child_process');
+  const marker = '日本語テスト4588';
+  const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)', marker], { stdio: 'ignore' });
+  try {
+    await new Promise((r) => setTimeout(r, 1000));
+    const found = defaultListProcesses().find((p) => p.pid === child.pid);
+    assert.ok(found, 'プロセスが一覧に無い');
+    assert.ok(found.cmd.includes(marker), `コマンドラインが化けている: ${found.cmd}`);
+  } finally {
+    child.kill();
+  }
+});
+
 test('[6] 使用中プローブ: 外れるディレクトリの rename が失敗すれば何も変えず非0。--skip-process-check でも省かない', async () => {
   const { main, wt } = makeRepo();
   const { renameSync } = await import('node:fs');
