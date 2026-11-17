@@ -211,6 +211,51 @@ export interface MonthlyCloseResponse {
   already_closed_organization_ids: number[]
 }
 
+// ===== 締め日・締め期間（CMP-260909-2152 PR-α。BE 生成型が出るまでの手動型） =====
+
+/** 締め日の変更履歴 1 件。closing_day は 1〜28、0 は末日。 */
+export interface ClosingSettingChange {
+  revision: number
+  /** 適用開始の期間キー（YYYY-MM） */
+  effective_period_key: string
+  closing_day: number
+  previous_closing_day: number
+  reason: string
+  actor_user_id: number
+  created_at: string
+}
+
+/** GET /closing-settings の応答。 */
+export interface ClosingSettingsResponse {
+  closing_day: number
+  revision: number
+  /** 適用開始に選べる最も早い期間キー（YYYY-MM）。サーバーが算出する（画面では計算しない） */
+  min_effective_period_key?: string
+  changes: ClosingSettingChange[]
+}
+
+/** POST /closing-settings/changes のリクエスト（組織は X-Organization-Id で渡す）。 */
+export interface ClosingSettingChangeRequest {
+  expected_revision: number
+  closing_day: number
+  effective_period_key: string
+  reason: string
+}
+
+/** 締め期間 1 件。period_key は締め日が属する月（YYYY-MM）。 */
+export interface ClosePeriodResponse {
+  period_key: string
+  /** YYYY-MM-DD */
+  period_start: string
+  /** YYYY-MM-DD */
+  period_end: string
+  closing_day: number
+}
+
+export interface ClosePeriodListResponse {
+  items: ClosePeriodResponse[]
+}
+
 // ===== 失敗イベント（Phase 10-β） =====
 
 export interface FailedEventResponse {

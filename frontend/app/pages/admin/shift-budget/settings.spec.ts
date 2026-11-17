@@ -10,7 +10,7 @@ import Settings from './settings.vue'
  *
  * 新ページ `/admin/shift-budget/settings`（pages/admin/shift-budget/settings.vue）の契約:
  * - 締め日は 1〜28 と「末日」（値 0）のセレクト。29〜31 は選べない（data-testid=closing-day-select）。
- * - 適用開始は期間キー（YYYY-MM）のセレクト。今日（Asia/Tokyo）を含む期間以降のみ（closing-effective-select）。
+ * - 適用開始は期間キー（YYYY-MM）のセレクト。選べる最も早い期間はサーバーが返す min_effective_period_key（画面で計算しない。closing-effective-select）。
  * - 理由は必須（closing-reason）。空・空白のみは送信できない（closing-submit）。
  * - 変更前後の期間プレビュー（closing-preview-before / closing-preview-after）に YYYY-MM-DD で期間を出す。
  * - 履歴表（closing-history-row-{revision}、空は closing-history-empty）。
@@ -47,6 +47,7 @@ function settings(overrides: Record<string, unknown> = {}) {
   return {
     closing_day: 0,
     revision: 2,
+    min_effective_period_key: '2026-11',
     changes: [
       { revision: 2, effective_period_key: '2026-09', closing_day: 0, previous_closing_day: 15,
         reason: '月末締めへ戻す', actor_user_id: 6, created_at: '2026-08-20T01:00:00Z' },
@@ -153,7 +154,7 @@ describe('試練108 AC31α 締め日設定画面: 入力', () => {
   })
 
   it('試練108 AC31α 現在が15日締めなら今日(11/17)を含む期間は 2026-12 から', async () => {
-    getClosingSettings.mockResolvedValue(settings({ closing_day: 15, revision: 3 }))
+    getClosingSettings.mockResolvedValue(settings({ closing_day: 15, revision: 3, min_effective_period_key: '2026-12' }))
     const wrapper = await mountPage()
     const keys = (selectOf(wrapper, 'closing-effective-select').props('options') as { value: string }[])
       .map(o => o.value)
