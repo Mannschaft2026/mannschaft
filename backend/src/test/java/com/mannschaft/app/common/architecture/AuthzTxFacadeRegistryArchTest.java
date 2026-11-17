@@ -322,9 +322,10 @@ class AuthzTxFacadeRegistryArchTest {
     void 登録表の件数() {
         Map<String, Long> byWave = ENTRIES.stream()
                 .collect(Collectors.groupingBy(Entry::wave, TreeMap::new, Collectors.counting()));
-        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "W1", 9L, "W2", 16L, "W3a", 1L, "W3b", 2L, "W4", 6L, "W5", 11L, "W5周辺", 1L, "W6a", 17L, "W7", 4L,
-                "W8", 22L, "CMP2152", 6L)); // W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat / CMP2152: シフト予算の締め期間 α
+        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+                Map.entry("W1", 9L), Map.entry("W2", 16L), Map.entry("W3a", 1L), Map.entry("W3b", 2L), Map.entry("W4", 6L),
+                Map.entry("W5", 11L), Map.entry("W5周辺", 1L), Map.entry("W6a", 17L), Map.entry("W7", 4L),
+                Map.entry("W8", 22L), Map.entry("CMP2152", 6L))); // W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat / CMP2152: シフト予算の締め期間 α
         assertThat(ENTRIES).hasSize(95); // CMP-261010-1432 枠間移動で +1 / CMP-261105-1507 chat で +22 / CMP2152 α で +6
         assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(95);
         assertThat(ENTRIES.stream().map(Entry::facade).collect(Collectors.toSet()))
