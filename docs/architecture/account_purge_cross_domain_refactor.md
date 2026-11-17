@@ -908,6 +908,8 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `direct_mail_recipients` | `user_id` | 要裁可 | 広告の配信・計測ログ（個人の行動履歴か、広告主課金の根拠か） |
 | `direct_mail_recipients_archive` | `user_id` | 要裁可 | 広告の配信・計測ログ（個人の行動履歴か、広告主課金の根拠か） |
 | `disclosure_exports` | `requester_user_id` | 保持 | 監査ログ（改ざん防止・説明責任） |
+| `effort_operation_receipts` | `actor_user_id` | 強消去 | `EffortRecordPurgeEventListener`（応答JSONに私的メモを含むため本人分をすべて物理削除） |
+| `effort_records` | `owner_user_id` | 強消去 | `EffortRecordPurgeEventListener`（未共有の原本は物理削除。共有許可を持つ原本は値・私的メモ・snapshotを消去した tombstone を保持） |
 | `electronic_seals` | `user_id` | 保持 | 印鑑・押印履歴（F05.3 の既決で保持） |
 | `email_change_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `email_outbox` | `user_id` | 要裁可 | 送信待ち・一時データ（宛先PIIを含む） |
