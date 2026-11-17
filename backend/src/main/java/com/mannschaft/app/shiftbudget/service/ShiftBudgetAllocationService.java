@@ -14,7 +14,6 @@ import com.mannschaft.app.shiftbudget.dto.AllocationUpdateRequest;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
-import com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetRateQueryRepository;
 import com.mannschaft.app.todo.repository.ProjectRepository;
 import jakarta.persistence.OptimisticLockException;
@@ -61,7 +60,6 @@ public class ShiftBudgetAllocationService {
     private final ShiftBudgetAllocationRepository allocationRepository;
     private final ShiftBudgetConsumptionRepository consumptionRepository;
     private final ShiftBudgetRateQueryRepository rateQueryRepository;
-    private final ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
     private final ProjectRepository projectRepository;
     private final ShiftBudgetFeatureService featureService;
     private final AccessControlService accessControlService;
@@ -326,9 +324,7 @@ public class ShiftBudgetAllocationService {
      */
     private void requireNoLiveCloseEvent(Long allocationId) {
         allocationRepository.findByIdForUpdate(allocationId);
-        if (!closeEventRepository.lockByAllocationAndStates(allocationId, List.of(
-                com.mannschaft.app.shiftbudget.ShiftBudgetCloseEventState.PREPARED,
-                com.mannschaft.app.shiftbudget.ShiftBudgetCloseEventState.CLOSED)).isEmpty()) {
+        if (!allocationRepository.lockLiveCloseEventIds(allocationId).isEmpty()) {
             throw new BusinessException(ShiftBudgetErrorCode.HAS_CONSUMPTIONS_CONFIRMED);
         }
     }

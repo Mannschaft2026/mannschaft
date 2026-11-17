@@ -21,22 +21,19 @@ public class ShiftBudgetScopeAccessPolicy {
 
     private final AccessControlService accessControlService;
 
-    /** 参照（BUDGET_VIEW。BUDGET_ADMIN 保有者は階層上 VIEW も持つ）。 */
+    /** 参照（BUDGET_VIEW。BUDGET_ADMIN 保有者は階層上 VIEW も持つ）。認可呼び出しは Wave4 の探索深さのため本メソッドに直接置く。 */
     public void requireBudgetView(Long userId, Long organizationId) {
-        if (!hasOrganizationPermission(userId, organizationId, "BUDGET_VIEW")) {
+        if (!(accessControlService.isMember(userId, organizationId, ORGANIZATION)
+                && accessControlService.hasPermission(userId, organizationId, ORGANIZATION, "BUDGET_VIEW"))) {
             throw new BusinessException(ShiftBudgetErrorCode.BUDGET_VIEW_REQUIRED);
         }
     }
 
     /** 変更・締め（BUDGET_ADMIN）。 */
     public void requireBudgetAdmin(Long userId, Long organizationId) {
-        if (!hasOrganizationPermission(userId, organizationId, "BUDGET_ADMIN")) {
+        if (!(accessControlService.isMember(userId, organizationId, ORGANIZATION)
+                && accessControlService.hasPermission(userId, organizationId, ORGANIZATION, "BUDGET_ADMIN"))) {
             throw new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED);
         }
-    }
-
-    private boolean hasOrganizationPermission(Long userId, Long organizationId, String permissionName) {
-        return accessControlService.isMember(userId, organizationId, ORGANIZATION)
-                && accessControlService.hasPermission(userId, organizationId, ORGANIZATION, permissionName);
     }
 }

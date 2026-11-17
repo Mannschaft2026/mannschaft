@@ -258,4 +258,13 @@ public interface ShiftBudgetAllocationRepository
             + "AND a.periodStart <= :to AND a.periodEnd >= :from AND a.deletedAt IS NULL ORDER BY a.id")
     List<ShiftBudgetAllocationEntity> findLiveByOrgOverlapping(@Param("organizationId") Long organizationId,
                                                                @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /**
+     * CMP-260909-2152: 割当の PREPARED／CLOSED の締めイベントを共有ロック付きで読む（割当の変更・削除の可否判定）。
+     * 通常 SELECT の古いスナップショットで見落とさない。割当ドメインの Repository から自ドメインの表を読むだけ
+     * （Service のコンストラクタを変えない）。
+     */
+    @Query(value = "SELECT e.id FROM shift_budget_monthly_close_events e WHERE e.allocation_id = :allocationId "
+            + "AND e.state IN ('PREPARED', 'CLOSED') FOR SHARE", nativeQuery = true)
+    List<byte[]> lockLiveCloseEventIds(@Param("allocationId") Long allocationId);
 }
