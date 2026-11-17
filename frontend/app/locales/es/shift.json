@@ -124,6 +124,19 @@
       "formNote": "Nota",
       "formNotePlaceholder": "Opcional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "No se puede publicar: faltan tarifas por hora",
+        "description": "Hay personas asignadas sin una tarifa por hora válida en días laborables vinculados al presupuesto. Configure sus tarifas y vuelva a publicar.",
+        "unknownUser": "ID de usuario {id}",
+        "goSettings": "Abrir configuración de tarifa por hora"
+      },
+      "conflict": {
+        "title": "El turno ha cambiado",
+        "description": "El turno cambió mientras se comprobaba la publicación. Recargue la página, revise el contenido y publique de nuevo."
+      },
+      "close": "Cerrar"
+    },
     "detail": {
       "tabOverview": "Resumen",
       "tabEdit": "Editar",
