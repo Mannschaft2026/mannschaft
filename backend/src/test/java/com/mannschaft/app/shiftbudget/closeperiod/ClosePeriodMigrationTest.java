@@ -149,6 +149,11 @@ class ClosePeriodMigrationTest {
         return list;
     }
 
+    /** 本番と同じ起動経路（事前検査 → repair → migrate）。 */
+    private void startUp(String db) {
+        new FlywayRepairConfig().flywayMigrationStrategy().migrate(flyway(db, null));
+    }
+
     private long appliedAlpha(Connection c, String db) throws SQLException {
         return scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version LIKE '"
                 + alphaMajor(db).orElseThrow() + ".%'");
