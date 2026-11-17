@@ -50,8 +50,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("CMP-260909-2152 α migration（V261）と事前検査（Flyway 実DB）")
 class ClosePeriodMigrationTest {
 
-    /** main の最大 major（α は V261）。 */
-    private static final String PRE_ALPHA_TARGET = "260.99999999999999";
+    /** main の最大 major（α は V261）。target は実在する版でなければならないため、V260 系の最大版を引いて使う。 */
+    private static final String PRE_ALPHA_MAJOR = "260.";
 
     @SuppressWarnings("resource")
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
@@ -104,6 +104,16 @@ class ClosePeriodMigrationTest {
             cfg = cfg.target(MigrationVersion.fromVersion(target));
         }
         return cfg.load();
+    }
+
+    /** V260 系（α の直前）の最大版。 */
+    private String preAlphaTarget(String db) {
+        return Arrays.stream(flyway(db, null).info().all())
+                .filter(m -> m.getVersion() != null && m.getVersion().getVersion().startsWith(PRE_ALPHA_MAJOR))
+                .map(MigrationInfo::getVersion)
+                .max(MigrationVersion::compareTo)
+                .orElseThrow(() -> new IllegalStateException("V260 系 migration が無い"))
+                .getVersion();
     }
 
     /** 本番と同じ起動経路（事前検査 → repair → migrate）。 */
@@ -226,7 +236,7 @@ class ClosePeriodMigrationTest {
     void 試練135_既存行のあるDBへのα適用() throws Exception {
         String db = "m2152_normal";
         createDb(db);
-        flyway(db, PRE_ALPHA_TARGET).migrate();
+        flyway(db, preAlphaTarget(db)).migrate();
         Seed seed;
         List<Map<String, Object>> journalsBefore;
         try (Connection c = conn(db)) {
@@ -326,7 +336,7 @@ class ClosePeriodMigrationTest {
     void 試練146b_異常データは事前検査で起動停止() throws Exception {
         String db = "m2152_anomaly";
         createDb(db);
-        flyway(db, PRE_ALPHA_TARGET).migrate();
+        flyway(db, preAlphaTarget(db)).migrate();
         Seed seed;
         long orphan;
         long notMonthEnd;
