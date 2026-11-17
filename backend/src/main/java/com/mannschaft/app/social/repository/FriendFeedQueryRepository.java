@@ -78,7 +78,8 @@ public class FriendFeedQueryRepository {
                   ON f.sourcePostId = p.id
                  AND f.forwardingTeamId = :teamId
                  AND f.isRevoked = false
-                WHERE p.scopeId IN :friendTeamIds
+                WHERE p.scopeType = com.mannschaft.app.timeline.PostScopeType.TEAM
+                  AND p.scopeId IN :friendTeamIds
                   AND p.shareWithFriends = true
                   AND p.status = com.mannschaft.app.timeline.PostStatus.PUBLISHED
                 """);

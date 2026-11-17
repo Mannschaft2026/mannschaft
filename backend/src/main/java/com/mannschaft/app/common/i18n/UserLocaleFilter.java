@@ -8,16 +8,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 /**
  * ユーザーの locale を各リクエストの LocaleContextHolder にセットするフィルター。
@@ -63,9 +58,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class UserLocaleFilter extends OncePerRequestFilter {
 
-    private static final Set<String> SUPPORTED_LOCALES = Set.of("ja", "en", "zh", "ko", "es", "de");
-    private static final Locale DEFAULT_LOCALE = Locale.JAPANESE;
-
     /**
      * 本フィルターが解決した {@link Locale} を保持するリクエスト属性名。
      * {@link UserLocaleResolver} が DispatcherServlet からの問い合わせ時にこれを読み、
@@ -93,59 +85,11 @@ public class UserLocaleFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * 判定本体は {@link RequestLocaleResolution} に置く（CMP-261113-1507）。本フィルターより前で応答を書く
+     * 早期拒否経路（{@link EarlyErrorResponseWriter}）も同じ順位で言語を決めるため、判定を二重化しない。
+     */
     private Locale resolveLocale(HttpServletRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-
-        // CMP-260923-1640 是正: Spring Security の AnonymousAuthenticationFilter は未ログインリクエストにも
-        // 「principal="anonymousUser"（String）・isAuthenticated()=true」の AnonymousAuthenticationToken を
-        // セットする。これを除外しないと isAuthenticated()==true かつ getPrincipal() instanceof String に
-        // 一致してしまい、Long.parseLong("anonymousUser") が失敗 → catch → DEFAULT_LOCALE(ja) 固定で
-        // Accept-Language 分岐に一切進まなくなる（未ログイン利用者の言語切替が常に無視される実害があった）。
-        // この除外を外すと UserLocaleResolutionIT の「未認証・Accept-Language: en」が red になることを
-        // 実証済み（tests=5 failures=1、失敗するのはこの1件のみ）。
-        boolean isRealUser = auth != null && auth.isAuthenticated()
-                && !(auth instanceof AnonymousAuthenticationToken);
-
-        // ログイン済みの場合は DB（キャッシュ経由）から locale を取得
-        if (isRealUser && auth.getPrincipal() instanceof String principal) {
-            try {
-                Long userId = Long.parseLong(principal);
-                String localeStr = userLocaleCache.getLocale(userId);
-                // null ガード + サブタグ除去 (例: "en-US" → "en")
-                if (localeStr != null) {
-                    String normalized = Locale.forLanguageTag(localeStr).getLanguage();
-                    if (SUPPORTED_LOCALES.contains(normalized)) {
-                        return Locale.forLanguageTag(normalized);
-                    }
-                }
-            } catch (NumberFormatException e) {
-                log.debug("userId のパース失敗: {}", auth.getPrincipal());
-            }
-            return DEFAULT_LOCALE;
-        }
-
-        // 未ログイン: Accept-Language ヘッダーから決定
-        return resolveFromAcceptLanguage(request);
-    }
-
-    private Locale resolveFromAcceptLanguage(HttpServletRequest request) {
-        String header = request.getHeader("Accept-Language");
-        if (header == null || header.isBlank()) {
-            return DEFAULT_LOCALE;
-        }
-        try {
-            List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(header);
-            for (Locale.LanguageRange range : ranges) {
-                // ベース言語コードのみ抽出（例: "en-US" → "en"）
-                String lang = Locale.forLanguageTag(range.getRange()).getLanguage();
-                if (SUPPORTED_LOCALES.contains(lang)) {
-                    return Locale.forLanguageTag(lang);
-                }
-            }
-        } catch (IllegalArgumentException e) {
-            // 不正な Accept-Language ヘッダー → デフォルトにフォールバック
-            log.debug("不正な Accept-Language ヘッダー: {}", header);
-        }
-        return DEFAULT_LOCALE;
+        return RequestLocaleResolution.resolve(request, userLocaleCache);
     }
 }

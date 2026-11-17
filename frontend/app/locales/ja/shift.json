@@ -48,6 +48,19 @@
       "formNote": "メモ",
       "formNotePlaceholder": "任意"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "時給が未設定のため公開できません",
+        "description": "予算に連動する勤務日に、有効な時給が未設定の担当者がいます。次の担当者の時給を設定してから、もう一度公開してください。",
+        "unknownUser": "ユーザーID {id}",
+        "goSettings": "時給設定を開く"
+      },
+      "conflict": {
+        "title": "シフト内容が変更されました",
+        "description": "公開の確認中にシフトの内容が変わりました。画面を読み込み直して内容を確認し、もう一度公開してください。"
+      },
+      "close": "閉じる"
+    },
     "detail": {
       "tabOverview": "概要",
       "tabEdit": "編集",

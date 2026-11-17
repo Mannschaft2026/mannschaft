@@ -124,6 +124,19 @@
       "formNote": "备注",
       "formNotePlaceholder": "可选"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "因时薪未设置，无法发布",
+        "description": "在与预算关联的工作日中，有负责人尚未设置有效时薪。请先设置下列人员的时薪，然后重新发布。",
+        "unknownUser": "用户ID {id}",
+        "goSettings": "打开时薪设置"
+      },
+      "conflict": {
+        "title": "排班内容已变更",
+        "description": "在确认发布期间排班内容发生了变化。请重新加载页面确认内容后再次发布。"
+      },
+      "close": "关闭"
+    },
     "detail": {
       "tabOverview": "概览",
       "tabEdit": "编辑",

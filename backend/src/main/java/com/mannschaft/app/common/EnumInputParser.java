@@ -14,7 +14,11 @@ import java.util.List;
  */
 public final class EnumInputParser {
 
-    private static final String INVALID_ENUM_MESSAGE = "定義されていない値です";
+    /** 未定義の列挙値を示す訳キー（messages_{lang}.properties）。 */
+    public static final String INVALID_ENUM_KEY = "validation.field.invalid_enum";
+
+    /** ja の正本文言。 */
+    public static final String INVALID_ENUM_MESSAGE = "定義されていない値です";
 
     private EnumInputParser() {
     }
@@ -43,6 +47,6 @@ public final class EnumInputParser {
     private static BusinessException invalidValue(String field) {
         return new BusinessException(
                 CommonErrorCode.COMMON_001,
-                List.of(new ErrorResponse.FieldError(field, INVALID_ENUM_MESSAGE)));
+                List.of(ErrorResponse.FieldError.ofKey(field, INVALID_ENUM_KEY, INVALID_ENUM_MESSAGE)));
     }
 }

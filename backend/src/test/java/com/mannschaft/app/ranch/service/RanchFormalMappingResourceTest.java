@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mannschaft.app.diagnosis.service.DiagnosisApprovedQuestionnaireRegistry;
 import com.mannschaft.app.diagnosis.service.DiagnosisQuestionnaireCatalog;
+import com.mannschaft.app.support.test.sparse.RequiresRanchApprovedAssets;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.env.MockEnvironment;
@@ -25,6 +26,7 @@ class RanchFormalMappingResourceTest {
     private final ObjectMapper json = new ObjectMapper();
 
     @Test
+    @RequiresRanchApprovedAssets
     void 採択済み64対応と出生81交点が正式512tupleの実素材に整合登録される() throws Exception {
         var registry = new RanchProductionMasterRegistry(environment(), json);
         var master = registry.current().orElseThrow();
@@ -65,7 +67,7 @@ class RanchFormalMappingResourceTest {
 
     @Test
     void 正式質問版は採択済み24問と六軸同点質問の216翻訳値を無改変で保持する() throws Exception {
-        var env = environment();
+        var env = diagnosisEnvironment();
         var registry = new DiagnosisApprovedQuestionnaireRegistry(env, json);
         var catalog = new DiagnosisQuestionnaireCatalog(json, env, registry);
         var current = catalog.forStart();
@@ -79,6 +81,14 @@ class RanchFormalMappingResourceTest {
         assertThat(current.questions()).hasSize(24);
         assertThat(current.ties()).hasSize(6);
         assertThat(current.approval()).isEqualTo(DiagnosisQuestionnaireCatalog.SnapshotApproval.APPROVED);
+    }
+
+    /** 診断質問版だけを登録した環境。牧場実素材に依存しないので sparse でも使える。 */
+    private MockEnvironment diagnosisEnvironment() throws Exception {
+        return new MockEnvironment()
+                .withProperty("mannschaft.diagnosis.approved-catalog.resource", QUESTIONS)
+                .withProperty("mannschaft.diagnosis.approved-catalog.version", "diagnosis-20261108-v1")
+                .withProperty("mannschaft.diagnosis.approved-catalog.sha256", hash(QUESTIONS));
     }
 
     private MockEnvironment environment() throws Exception {

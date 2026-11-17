@@ -17,6 +17,8 @@
 - ❌ `C:/Claude/mannschaft` 直下 → **作業を中断し、殿に報告する**
   - ただし「大名システム活用ルール」の**例外**節に該当する場合はこの限りではない
 
+足軽 worktree は牧場 PNG 素材3ディレクトリ（約876MB）が**未展開**（sparse checkout）。牧場の素材・実バイト検証・Docker ビルド・BE の実素材依存テストが要る作業の前は `node scripts/worktree-assets.mjs expand`（終わったら `shrink`）。本陣は常に全展開。詳細は [`docs/development/worktree_operations.md`](docs/development/worktree_operations.md#足軽-worktree-の-sparse-checkout運用の入口)。
+
 worktree 隔離の原則（ここが唯一の正本）: `main` への直接コミット禁止。**本陣 `C:\Claude\mannschaft` での実装・commit は禁止**（pre-commit フックと Claude PreToolUse フックで機械的に拒否。クローン直後・新環境のセットアップは [`docs/development/honjin_protection_setup.md`](docs/development/honjin_protection_setup.md)）。大規模作業は `git worktree add` で物理的に隔離してから着手する。**【セットアップ必須】クローン直後・新環境では、両フック（git pre-commit・Claude PreToolUse）のセットアップ手順を上記文書で読み、必ず実施すること。**
 
 ---
@@ -146,6 +148,9 @@ worktree は作業完了後に必ず掃除する（agent 完了直後にその c
 - **フロントエンド:** Nuxt 3 (TypeScript / Vue 3) — `frontend/`
 - **インフラ:** Docker Compose — `docker-compose.yml`
 - **ドキュメント:** `docs/`（設計・機能仕様）
+- **本番の配置:** BE は AWS、FE は Cloudflare（同一オリジン。Cloudflare が BE へ流すのは `/api/**` と `/ws` だけ）。本番環境はまだ構築されていない（台帳 CMP-260826-2129）
+- **描画方針:** 公開ページ（ログイン画面を含む）は SSR、ログイン後はページ遷移をなるべく発生させない SPA。実装規則は `frontend/FRONTEND_CODING_CONVENTION.md` §4a
+- **利用クライアント:** 現在は Web のみ（スマートフォンは PWA で対応）。将来 Android / iOS のネイティブアプリに対応するので、API を Web 専用の前提で作らない。詳細は `backend/.claudecode.md` §2
 
 ### ポート一覧・常駐サーバーのポート規約
 
@@ -208,8 +213,8 @@ Mannschaft は将来のマイクロサービス分割を見据えた**モジュ�
 
 1. クロスドメインFK禁止（整合性はアプリ層で保証、インデックスのみ張る）
 2. CASCADE DELETE は同一ドメイン内のみ許可
-3. コアエンティティ（users/teams/organizations）は `deleted_at` による論理削除
-4. ユーザー退会時は匿名化（物理削除しない）。PII消去は即時（弱匿名化）と30日後（強匿名化）の二段モデル（GDPR Art.17準拠。詳細: [`docs/architecture/withdrawal_flow_immediate_anonymization_fix.md`](docs/architecture/withdrawal_flow_immediate_anonymization_fix.md) §1.3/§13.12）
+3. コアエンティティ（users/teams/organizations）は `deleted_at` による論理削除（users だけは、退会から30日後に下記4のバッチが物理削除する）
+4. ユーザー退会は二段モデル。**退会の受付直後に個人情報を消去**（弱匿名化）し、**30日後にバッチ（`AccountPurgeService`）がユーザー本体と残りの個人データを物理削除**する（強匿名化。2026-11-17 マスター確認: 実装が正）。投稿・履歴・統計は本人との紐付けを断って残す。決済履歴・領収書は法令のため退会後も7年保持する（`backend/.claudecode.md` §8）（GDPR Art.17準拠。詳細: [`docs/architecture/withdrawal_flow_immediate_anonymization_fix.md`](docs/architecture/withdrawal_flow_immediate_anonymization_fix.md) §1.3/§13.12）
 5. `@Transactional` はドメイン内に閉じる（越境時はコメントで理由明記）
 6. 新規テーブルは `UuidV7Entity` 継承（主キーUUIDv7。マスタテーブル・シングルトン表は自然キー/固定値IDのまま可）
 7. テナントスコープ（`organization_id` 絞り込み）Repository は `AbstractTenantAwareRepository` 継承
