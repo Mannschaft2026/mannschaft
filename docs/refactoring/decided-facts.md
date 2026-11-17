@@ -16,6 +16,9 @@
 | M5 | BE 本体の構造変更は実装せず、提案書に留める | `refactor-instructions.md` |
 | M6 | 追跡されている残骸は、中身を確かめて不要なら削除する。記事原稿2本は `docs/articles/` へ移し、古い計画書4本は削除する | `lanes/R1-repo-hygiene.md` |
 | M7 | 本陣の作業木にあった未コミット変更3件はマスターの作業ではない。main の状態へ戻した | 付録 A の Q5 |
+| M8 | 認証トークンについての規約の記述を、実装と認証の設計書に合わせて改訂する（Web は Cookie、ネイティブアプリは Bearer。FE はトークンをメモリにだけ持つ） | `frontend/FRONTEND_CODING_CONVENTION.md` §5・§7、`backend/BACKEND_CODING_CONVENTION.md` の認証の節、`docs/conventions/backend/08-security.md`、`backend/.claudecode.md` §2（改訂済み） |
+| M9 | 完了ゲートの規則に例外を設けない。挙動を変えない変更でも、PR の scope が `app` なら実機 E2E とアリシゼーションの両方を通す | `docs/development/completion-evidence.md`（現行の規則のまま） |
+| M10 | FE の spec の置き場所は、新しく書くものを規約どおり対象と同じディレクトリに置く。既存の `tests/unit/` の spec は動かさない | `frontend/FRONTEND_CODING_CONVENTION.md` §11（規約は変えない） |
 
 ## 2. 配置・運用
 

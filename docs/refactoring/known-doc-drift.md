@@ -11,7 +11,7 @@
 
 | # | 食い違い | 一方 | もう一方 | 扱い |
 |---|---|---|---|---|
-| A1 | 認証トークンの保存先と送り方 | `frontend/FRONTEND_CODING_CONVENTION.md` §5（SSR と認証の制約）・§7、`backend/BACKEND_CODING_CONVENTION.md` の認証の節、`docs/conventions/backend/08-security.md`、`backend/.claudecode.md` §2:「JWT は `localStorage`」「Cookie に格納しない」「Bearer で送る」 | 実装と設計書: FE はトークンをメモリにだけ持ち、Cookie が常に送られる。Web は Cookie、ネイティブアプリは Bearer の二本立て（`docs/features/F01.1_auth.md`、`docs/security/02_cookie_and_session.md`、`useAuthStore.ts`、`useApi.ts`、`JwtAuthenticationFilter.java`） | 上奏。規約5か所が古い。認証に関わるので、直す前に裁可を得る。直すときは、索引（規約の本体）と詳細文書を同じ PR で直す |
+| A1 | 認証トークンの保存先と送り方 | 規約5か所（FE 規約 §5・§7、BE 規約の認証の節、`docs/conventions/backend/08-security.md`、`backend/.claudecode.md` §2）が「JWT は `localStorage`」「Cookie に格納しない」と書いていた | 実装と設計書: Web は Cookie、ネイティブアプリは Bearer。FE はトークンをメモリにだけ持つ | **是正済み**（2026-11-17、マスター決定 M8） |
 | A2 | リフレッシュの結果の状態数 | FE 規約 §5: 3状態 | 実装: 4状態（`useApi.ts` の `TokenRefreshResult`） | 是正 |
 | A3 | 認証 Cookie の `Secure` | `docs/security/02_cookie_and_session.md`:「`AuthLoginController` は `secure(false)` をハードコード」 | 実装: `AuthTokenCookies` が `mannschaft.cookie.secure` を参照 | 是正 |
 | A4 | access_token の Cookie の有効期間 | `docs/security/02_cookie_and_session.md`:「890 秒」「890 秒に修正すること」 | 実装: アクセストークンの有効期限そのまま | 上奏。文書の指示が未反映なのか、指示が撤回されたのかが分からない |
@@ -55,7 +55,7 @@
 | F2 | プラグインのファイル名 | FE 規約 §2・§13: `errorHandler.client.ts`（camelCase） | 実物: `error-handler.client.ts` | 是正 |
 | F3 | E2E の現状 | FE 規約 §11、`TEST_CONVENTION.md` §1.2・§9.2:「Playwright は将来導入」「`frontend/e2e/` に置く」 | 実物: 設定27本、spec 約550本が `frontend/tests/e2e/` にある | 是正 |
 | F4 | FE の CI | `TEST_CONVENTION.md` §8:「フロントエンドは別リポジトリ」「Node 20」 | 実物: 同じリポジトリ、Node 22.23.2 固定 | 是正 |
-| F5 | spec の置き場所 | FE 規約 §11: 対象と同じディレクトリ | 実物: `tests/unit/` に約530、同居が約290 | 上奏。既存を動かすか、規約を緩めるか。**新規は規約どおり同居**で確定 |
+| F5 | spec の置き場所 | FE 規約 §11: 対象と同じディレクトリ | 実物: `tests/unit/` に約530、同居が約290 | **決定済み**（2026-11-17、マスター決定 M10）。新規は同居。既存は動かさない。規約は変えない |
 | F6 | 日時の直列化 | `docs/conventions/backend/20-datetime.md` の FE の節:「オフセットなし＝JST 前提」 | 同じ文書の API 境界の節:「オフセットを付けて直列化」 | 上奏（時刻設計の戦役 CMP-023 の所管） |
 | F7 | `useApi.ts` と `middleware/auth.client.ts` のコメント | 「トークンを `localStorage` から復元」 | 復元するのは利用者情報だけ | 是正（コメントだけ。ただし `useApi.ts` は触らない対象なので、R6 ではなく上奏に回す） |
 | F8 | 直書きの日本語 | FE 規約 §15: UI の文字列を直書きしない | `useApi.ts` に日本語のエラー文言が1つ残る | 起票（`useApi.ts` は本戦役で触らない） |
