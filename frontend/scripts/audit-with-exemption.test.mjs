@@ -125,3 +125,10 @@ test('除外GHSAに到達しても別の high advisory が混ざれば拒否す�
     /許可されない脆弱性/,
   )
 })
+
+test('high entry が除外GHSAに到達せず moderate advisory だけを参照する場合は期限内・期限後とも拒否する', () => {
+  const value = report({ small: entry('small', [advisory('moderate')], 'high') })
+  for (const at of ['2026-11-18T00:00:00Z', '2026-12-02T00:00:00Z']) {
+    assert.throws(() => checkAudit(JSON.stringify(value), 1, Date.parse(at)), /許可されない脆弱性|深刻度/)
+  }
+})

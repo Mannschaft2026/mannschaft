@@ -98,8 +98,13 @@ export function checkAudit(raw, status, now = Date.now()) {
         SEVERITY_RANK[via.severity] >= SEVERITY_RANK.high &&
         !(exemptionActive && EXEMPT_ADVISORY_URLS.has(via.url)),
     )
-    // 除外対象の advisory だけで high になっている entry は通す。到達 advisory が空の high は不正。
-    const onlyExempt = entry.severity === 'high' && high.length === 0 && advisories.length > 0
+    // high entry が通れるのは、期限内で、除外対象 GHSA の high 以上 advisory が実在し、
+    // かつ除外対象以外の high/critical が無い場合だけ。
+    const reachesExempt = advisories.some(
+      (via) =>
+        SEVERITY_RANK[via.severity] >= SEVERITY_RANK.high && EXEMPT_ADVISORY_URLS.has(via.url),
+    )
+    const onlyExempt = exemptionActive && reachesExempt && high.length === 0
     if (entry.severity === 'critical' || high.length > 0 || (entry.severity === 'high' && !onlyExempt)) {
       throw new Error(`許可されない脆弱性: ${entry.severity} ${name}`)
     }
