@@ -60453,6 +60453,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "公開時に予算連動の勤務日の割当者へ有効な正数時給が無い（SHIFT_047）。欠落した対象者・勤務日を details で返す",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShiftHourlyRateMissingErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -200215,6 +200225,60 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "Missing": {
+        "type": "object",
+        "properties": {
+          "slotDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ShiftHourlyRateMissingErrorDetail": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "$ref": "#/components/schemas/ShiftHourlyRateMissingErrorDetails"
+          },
+          "fieldErrors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ShiftHourlyRateMissingErrorDetails": {
+        "type": "object",
+        "properties": {
+          "missingHourlyRates": {
+            "type": "array",
+            "description": "時給を確認できなかった割当者と勤務日",
+            "items": {
+              "$ref": "#/components/schemas/Missing"
+            }
+          }
+        }
+      },
+      "ShiftHourlyRateMissingErrorResponse": {
+        "type": "object",
+        "description": "公開前の時給欠落 400 応答",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ShiftHourlyRateMissingErrorDetail"
           }
         }
       },

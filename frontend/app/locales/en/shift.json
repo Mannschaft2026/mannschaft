@@ -138,6 +138,19 @@
       "formNote": "Note",
       "formNotePlaceholder": "Optional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "Cannot publish: hourly rates are missing",
+        "description": "Some assigned members have no valid hourly rate on budget-linked work days. Set their hourly rates, then publish again.",
+        "unknownUser": "User ID {id}",
+        "goSettings": "Open hourly rate settings"
+      },
+      "conflict": {
+        "title": "The shift was changed",
+        "description": "The shift changed while the publication was being checked. Reload the page, review the content, and publish again."
+      },
+      "close": "Close"
+    },
     "detail": {
       "tabOverview": "Overview",
       "tabEdit": "Edit",

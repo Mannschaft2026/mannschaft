@@ -5,6 +5,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
+import com.mannschaft.app.shift.ShiftScheduleStatus;
 import com.mannschaft.app.shift.dto.CreateShiftScheduleRequest;
 import com.mannschaft.app.shift.dto.ManualRemindResponse;
 import com.mannschaft.app.shift.dto.ShiftScheduleResponse;
@@ -50,6 +51,8 @@ public class ShiftScheduleFacade {
     private final ShiftPreferenceReminderBatchService reminderService;
     private final ScopeConcealingAccessGate accessGate;
     private final AccessControlService accessControlService;
+    /** CMP-261115-1821: 公開の予算連動判定の値を公開 TX の外で取得する口（実装は shiftbudget）。 */
+    private final ShiftPublicationBudgetContextPort publicationBudgetContextPort;
 
     /**
      * チームのシフトスケジュール一覧を取得する（期間指定は {@code from}・{@code to} が両方あるとき）。
@@ -156,10 +159,22 @@ public class ShiftScheduleFacade {
      * @param id     スケジュールID
      * @param status 遷移先ステータス
      * @param userId 操作者ID
+     * <p>CMP-261115-1821: 公開（PUBLISHED）は、認可の後・公開 TX の前に、現在の枠日付の範囲に重なる予算割当候補と
+     * 予算機能の判定を取得して不変の {@link ShiftPublicationBudgetContext} に固定し、公開 TX へ値として渡す。
+     * 公開 TX の中から shiftbudget・budget・feature の Repository へ到達させないため（D-3T の新規越境を作らない）。</p>
+     *
      * @return 更新されたシフトスケジュール
      */
     public ShiftScheduleResponse transitionStatus(Long id, String status, Long userId) {
-        requireAdmin(scheduleService.resolveScope(id), userId);
+        ShiftScheduleScope scope = scheduleService.resolveScope(id);
+        requireAdmin(scope, userId);
+        if (ShiftScheduleStatus.PUBLISHED.name().equals(status)) {
+            ShiftSlotDateRange range = scheduleService.findSlotDateRange(id);
+            ShiftPublicationBudgetContext budgetContext = range.isEmpty()
+                    ? ShiftPublicationBudgetContext.noSlots()
+                    : publicationBudgetContextPort.load(scope.teamId(), range.from(), range.to());
+            return scheduleService.transitionStatus(id, status, userId, budgetContext);
+        }
         return scheduleService.transitionStatus(id, status, userId);
     }
 
