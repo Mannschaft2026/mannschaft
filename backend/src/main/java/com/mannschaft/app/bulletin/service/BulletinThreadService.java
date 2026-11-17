@@ -96,7 +96,11 @@ public class BulletinThreadService {
      * @return スレッドレスポンスのページ
      */
     public Page<ThreadResponse> listThreads(ScopeType scopeType, Long scopeId, Long userId, Pageable pageable) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        // 所属認可は本メソッド直下で呼ぶ（Wave4 番人が委譲深さ2で認可シグナルを辿れるよう private 委譲にしない）。
+        // 大会/ディビジョンは Controller の BulletinTournamentScopeAccessGuard が取引外で認可済み（D-3T）。
+        if (!isTournamentScope(scopeType)) {
+            accessGuard.checkMembership(userId, scopeType, scopeId);
+        }
         Page<BulletinThreadEntity> page =
                 threadRepository.findByScopeTypeAndScopeIdOrderByIsPinnedDescUpdatedAtDesc(scopeType, scopeId, pageable);
         return enrichPage(page, userId);
@@ -133,7 +137,10 @@ public class BulletinThreadService {
      *                           （{@link BulletinErrorCode#CATEGORY_NOT_FOUND}・404）
      */
     public Page<ThreadResponse> listThreadsByCategory(ScopeType scopeType, Long scopeId, Long categoryId, Long userId, Pageable pageable) {
-        accessGuard.checkMembership(userId, scopeType, scopeId);
+        // 所属認可は本メソッド直下で呼ぶ（Wave4 番人の委譲深さ上限のため）。大会は Controller 側の Guard が認可済み。
+        if (!isTournamentScope(scopeType)) {
+            accessGuard.checkMembership(userId, scopeType, scopeId);
+        }
         // カテゴリの帰属検証。越境 ID と不在 ID はいずれも CATEGORY_NOT_FOUND で同一応答となり、
         // 応答差分から他スコープのカテゴリ実在を判別できない（実在オラクル封じ）。
         categoryService.findCategoryOrThrow(scopeType, scopeId, categoryId);

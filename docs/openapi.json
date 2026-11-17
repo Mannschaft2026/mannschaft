@@ -57314,6 +57314,40 @@
         }
       }
     },
+    "/api/v1/system-admin/module-events/{publicationId}/resume": {
+      "post": {
+        "tags": [
+          "system-admin-module-event-controller"
+        ],
+        "operationId": "resumeModuleEventPublication",
+        "parameters": [
+          {
+            "name": "publicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeModuleEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "再開成功"
+          }
+        }
+      }
+    },
     "/api/v1/system-admin/moderation/templates": {
       "post": {
         "tags": [
@@ -60416,6 +60450,16 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseShiftScheduleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "公開時に予算連動の勤務日の割当者へ有効な正数時給が無い（SHIFT_047）。欠落した対象者・勤務日を details で返す",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShiftHourlyRateMissingErrorResponse"
                 }
               }
             }
@@ -128747,6 +128791,59 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseModuleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system-admin/module-events": {
+      "get": {
+        "tags": [
+          "system-admin-module-event-controller"
+        ],
+        "operationId": "listQuarantinedModuleEventPublications",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResponseModuleEventQuarantineResponse"
                 }
               }
             }
@@ -197732,6 +197829,16 @@
           "subscriptionRequired"
         ]
       },
+      "ResumeModuleEventRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 0
+          }
+        }
+      },
       "CreateModerationTemplateRequest": {
         "type": "object",
         "properties": {
@@ -200118,6 +200225,60 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "Missing": {
+        "type": "object",
+        "properties": {
+          "slotDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ShiftHourlyRateMissingErrorDetail": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "$ref": "#/components/schemas/ShiftHourlyRateMissingErrorDetails"
+          },
+          "fieldErrors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ShiftHourlyRateMissingErrorDetails": {
+        "type": "object",
+        "properties": {
+          "missingHourlyRates": {
+            "type": "array",
+            "description": "時給を確認できなかった割当者と勤務日",
+            "items": {
+              "$ref": "#/components/schemas/Missing"
+            }
+          }
+        }
+      },
+      "ShiftHourlyRateMissingErrorResponse": {
+        "type": "object",
+        "description": "公開前の時給欠落 400 応答",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ShiftHourlyRateMissingErrorDetail"
           }
         }
       },
@@ -236395,6 +236556,54 @@
           }
         }
       },
+      "ModuleEventQuarantineResponse": {
+        "type": "object",
+        "properties": {
+          "eventType": {
+            "type": "string"
+          },
+          "failureCode": {
+            "type": "string"
+          },
+          "lastAttemptAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "listenerId": {
+            "type": "string"
+          },
+          "publicationDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quarantinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retryCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResponseModuleEventQuarantineResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleEventQuarantineResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
       "ApiResponseListModerationSettingsResponse": {
         "type": "object",
         "properties": {
@@ -243665,6 +243874,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "numericId": {
+            "type": "integer",
+            "format": "int64"
           },
           "slug": {
             "type": "string"

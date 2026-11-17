@@ -14,7 +14,11 @@ import com.mannschaft.app.common.visibility.ReferenceType;
 import com.mannschaft.app.dashboard.ScopeType;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.common.ErrorResponse;
+import com.mannschaft.app.common.i18n.ErrorMessageResolver;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.MessageSource;
 import com.mannschaft.app.dashboard.ScheduleFeedErrorCode;
 import com.mannschaft.app.dashboard.dto.ActivityFeedPageResponse;
 import com.mannschaft.app.dashboard.dto.ChatHubResponse;
@@ -91,6 +95,14 @@ public class DashboardController {
 
     /** 未読スレッド集計で走査するチームあたりのスレッド上限（ピン留め優先→更新日時降順の先頭）。 */
     private static final int UNREAD_BULLETIN_SCAN_LIMIT_PER_TEAM = 100;
+
+    /**
+     * CMP-261113-1507: ローカル {@code @ExceptionHandler} が返す message を利用者の言語で解決するための訳ソース。
+     * コンストラクタ引数を増やすと多数の単体テストの組み立てが壊れるため、フィールド注入にしている
+     * （単体テストで未注入のときは ja の enum 文言へ倒す）。
+     */
+    @Autowired(required = false)
+    private MessageSource messageSource;
 
     private final DashboardService dashboardService;
     private final DashboardWidgetService widgetService;
@@ -484,15 +496,24 @@ public class DashboardController {
         boolean isActivityEndpoint = isGetActivityMethod(ex.getParameter());
         if (isActivityEndpoint && "cursor".equals(ex.getName())) {
             return ResponseEntity.badRequest()
-                    .body(ErrorResponse.of(ScheduleFeedErrorCode.INVALID_CURSOR));
+                    .body(localizedError(ScheduleFeedErrorCode.INVALID_CURSOR));
         }
         if (isActivityEndpoint && "limit".equals(ex.getName())) {
             return ResponseEntity.badRequest()
-                    .body(ErrorResponse.of(ScheduleFeedErrorCode.INVALID_LIMIT));
+                    .body(localizedError(ScheduleFeedErrorCode.INVALID_LIMIT));
         }
         // 他パラメータ・他エンドポイントは共通の型変換エラーとして扱う（握りつぶさず 400 で返す）。
         return ResponseEntity.badRequest()
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localizedError(CommonErrorCode.COMMON_001));
+    }
+
+    /** 現在のリクエストの言語で message を解決した {@link ErrorResponse}（{@code GlobalExceptionHandler} と同じ規則）。 */
+    private ErrorResponse localizedError(ErrorCode errorCode) {
+        if (messageSource == null) {
+            return ErrorResponse.of(errorCode);
+        }
+        return new ErrorResponse(new ErrorResponse.ErrorDetail(
+                errorCode.getCode(), new ErrorMessageResolver(messageSource).resolve(errorCode), java.util.List.of()));
     }
 
     /**

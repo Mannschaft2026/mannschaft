@@ -5,6 +5,12 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { V2_ENTRY_FIELDS, verifyClipEntry } from './ranch-production-clip-contract.mjs'
+import { requireExpandedForWrite } from './lib/sparse-assets.mjs'
+
+// 配置CLIは sparse checkout（素材未展開）の worktree では省略せず、何も書き込む前に非0で止める（展開手順を表示）。
+// 検証だけ（--repository なし）は外部packを読むだけなので sparse でも動く。
+const approvedPackDirectories = frontendOnly => ['frontend/public/ranch/approved',
+  ...(frontendOnly ? [] : ['backend/src/main/resources/ranch/approved'])]
 
 const stages = ['EGG', 'BABY', 'JUVENILE', 'ADULT']
 const styles = ['PIXEL', 'PAINT_2D']
@@ -195,10 +201,12 @@ export function verifiedProductionArtifactHashes(verified) {
 
 /** 検証済みbytesを両アプリへ配置する。異なる既存packの上書きは拒否する。 */
 export function installVerifiedPack(verified, repository, { frontendOnly = false } = {}) {
+  const root = realpathSync(repository)
+  // 何かを書き込む前（検証済み入力の確認より前）に、sparse 未展開なら展開手順つきで中止する。
+  requireExpandedForWrite({ repoRoot: root, targets: approvedPackDirectories(frontendOnly) })
   const input = verifiedInputs.get(verified)
   if (!input) fail('unverified installation input')
   const { files, masterBytes } = input
-  const root = realpathSync(repository)
   if (!token.test(verified.packVersion) || verified.packVersion.includes('..')) fail('output pack version')
   const frontend = path.join(root, 'frontend/public/ranch/approved', verified.packVersion)
   const backend = path.join(root, 'backend/src/main/resources/ranch/approved/asset-packs', verified.packVersion)
@@ -272,6 +280,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const { values } = parseArgs({ options: { pack: { type: 'string' }, 'manifest-sha256': { type: 'string' },
     master: { type: 'string' }, 'master-sha256': { type: 'string' }, repository: { type: 'string' }, 'frontend-only': { type: 'boolean' } } })
   if (!values.pack || !values['manifest-sha256'] || !values.master || !values['master-sha256']) fail('explicit pack/master inputs required')
+  // 配置先が sparse 未展開なら、検証にも入る前に止める（何も書き込まない）。
+  if (values.repository) requireExpandedForWrite({ repoRoot: realpathSync(values.repository), targets: approvedPackDirectories(values['frontend-only'] === true) })
   const verified = verifyProductionPack({ packDirectory: values.pack, manifestSha256: values['manifest-sha256'],
     masterFile: values.master, masterSha256: values['master-sha256'] })
   if (values.repository) installVerifiedPack(verified, values.repository, { frontendOnly: values['frontend-only'] === true })

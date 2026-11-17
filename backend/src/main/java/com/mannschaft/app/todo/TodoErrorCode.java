@@ -136,7 +136,15 @@ public enum TodoErrorCode implements ErrorCode {
     HANDOFF_NOT_ALLOWED_FOR_PERSONAL("TODO_080", "個人TODOはキャッチボールできません", Severity.WARN),
 
     /** 宛先メンバーがスコープに属していない */
-    HANDOFF_RECIPIENT_NOT_MEMBER("TODO_081", "宛先メンバーが見つかりません", Severity.WARN);
+    HANDOFF_RECIPIENT_NOT_MEMBER("TODO_081", "宛先メンバーが見つかりません", Severity.WARN),
+
+    // F02.7 マイルストーンゲート（CMP-261113-1507 で多言語化のため ErrorCode 化）
+    /**
+     * ロック中マイルストーン配下の TODO 操作（423 Locked）。応答コードは従来どおり {@code MILESTONE_LOCKED}。
+     * {0}=マイルストーン ID（桁区切りを避けるため文字列で渡す）、{1}=前マイルストーンのタイトル。
+     */
+    MILESTONE_LOCKED("MILESTONE_LOCKED",
+            "マイルストーン {0} はロック中のため操作できません。解除条件: 前マイルストーン『{1}』を完了", Severity.WARN);
 
     private final String code;
     private final String message;

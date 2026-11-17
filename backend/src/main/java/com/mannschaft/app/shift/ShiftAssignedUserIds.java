@@ -56,6 +56,36 @@ public final class ShiftAssignedUserIds {
     }
 
     /**
+     * JSON 配列文字列から割当ユーザー ID リストを<b>厳密に</b>復元する（CMP-261115-1821 公開時給ガード用）。
+     *
+     * <p>{@link #parse(String)} は表示経路のため壊れた JSON を空として扱うが、公開の時給検証で同じことをすると
+     * 「割当が読めない枠」を「割当なし」と誤認して検証をすり抜けたまま公開が成功する。そのため公開経路では
+     * 壊れた JSON・{@code null} 要素を例外にする。{@code null}・空文字・{@code []} は割当なしとして空を返す。</p>
+     *
+     * @param json JSON 配列文字列（{@code null} / 空文字可）
+     * @return 割当ユーザー ID リスト
+     * @throws IllegalStateException JSON が壊れている、または {@code null} 要素を含む場合
+     */
+    public static List<Long> parseStrict(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyList();
+        }
+        List<Long> parsed;
+        try {
+            parsed = MAPPER.readValue(json, LIST_OF_LONG);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("assigned_user_ids が壊れているため割当を確定できません", e);
+        }
+        if (parsed == null) {
+            return Collections.emptyList();
+        }
+        if (parsed.contains(null)) {
+            throw new IllegalStateException("assigned_user_ids に null 要素があるため割当を確定できません");
+        }
+        return List.copyOf(parsed);
+    }
+
+    /**
      * 割当ユーザー ID リストを JSON 配列文字列へ直列化する。
      *
      * <p>空リストは {@code null} を返す（列の意味を「割当なし」に揃えるため。
