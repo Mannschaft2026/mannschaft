@@ -60,10 +60,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EffortRecordMeController {
 
-    private static final String SELF_SCOPE_REASON =
-            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
-                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する";
-
     /** 一覧が受け付ける query。これ以外（camelCase の別名等）は 400（API 契約 §1）。 */
     private static final Set<String> LIST_QUERY = Set.of("date_from", "date_to", "definition_uuid", "cursor", "limit");
     private static final Set<String> STATS_QUERY =
@@ -83,7 +79,9 @@ public class EffortRecordMeController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @SelfScopedEndpoint(SELF_SCOPE_REASON)
+    @SelfScopedEndpoint(
+            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
+                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する")
     @Operation(summary = "原本の作成")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> create(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -94,7 +92,9 @@ public class EffortRecordMeController {
     }
 
     @GetMapping
-    @SelfScopedEndpoint(SELF_SCOPE_REASON)
+    @SelfScopedEndpoint(
+            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
+                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する")
     @Operation(summary = "原本の一覧（カーソルページング）")
     public ResponseEntity<CursorPagedResponse<EffortOwnerRecordResponse>> list(
             @RequestParam(name = "date_from", required = false)
@@ -114,7 +114,9 @@ public class EffortRecordMeController {
     }
 
     @GetMapping("/stats")
-    @SelfScopedEndpoint(SELF_SCOPE_REASON)
+    @SelfScopedEndpoint(
+            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
+                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する")
     @Operation(summary = "本人の集計（BAR/LINE/PIE）")
     public ResponseEntity<ApiResponse<EffortStatsResponse>> stats(
             @RequestParam(name = "date_from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
@@ -131,7 +133,9 @@ public class EffortRecordMeController {
     }
 
     @GetMapping("/{id}")
-    @SelfScopedEndpoint(SELF_SCOPE_REASON)
+    @SelfScopedEndpoint(
+            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
+                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する")
     @Operation(summary = "原本の詳細")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> get(@PathVariable UUID id) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -139,7 +143,9 @@ public class EffortRecordMeController {
     }
 
     @PutMapping("/{id}")
-    @SelfScopedEndpoint(SELF_SCOPE_REASON)
+    @SelfScopedEndpoint(
+            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
+                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する")
     @Operation(summary = "原本の更新（全置換）")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> update(
             @PathVariable UUID id,
@@ -149,7 +155,9 @@ public class EffortRecordMeController {
     }
 
     @DeleteMapping("/{id}")
-    @SelfScopedEndpoint(SELF_SCOPE_REASON)
+    @SelfScopedEndpoint(
+            "本人の記録のみを対象とし、owner は SecurityUtils.getCurrentUserId() で確定する。"
+                    + "Repository は ownerUserId を必須条件に引き、他人・不在は EFFORT_001 で秘匿する")
     @Operation(summary = "原本の削除")
     public ResponseEntity<ApiResponse<EffortDeleteResponse>> delete(
             @PathVariable UUID id,
