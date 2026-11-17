@@ -86,6 +86,29 @@
 - **Composables**: 各機能（ページ）に閉じたロジックや、その画面内だけで使う一時的な状態に使用する。
 - 基本方針: **Composables を優先**し、グローバルな管理が必要になった時のみ Pinia を導入する。
 
+## 4a. 描画方針（SSR と SPA）**【必須】**
+
+> 原則の正本は `backend/.claudecode.md` §2。ここでは FE の実装規則を定める（2026-11-17 マスター確認）。
+
+**方針: 未ログインで開ける公開ページ（LP、ログイン画面、ブログ、チーム紹介など。§10）は SSR。ログイン後の画面は、例外なく、ページ遷移をなるべく発生させない SPA に統一する。**（LP の SSR とログイン後の SPA 統一は 2026-11-17 マスター決定）
+
+理由は2つある。サーバ側の描画では、ブラウザが持つ認証の情報（メモリ上のトークンと Cookie）を BE へ中継していないので、利用者を識別できない。また、ログイン後は画面を切り替えるたびに全体を読み直さないほうが速く、入力中の状態も失われない。
+
+### 実装規則
+
+- **アプリ内の遷移は `<NuxtLink>` か `navigateTo()` で行う。** `<a href>`、`window.location`、`location.reload()` でアプリ内の画面へ移らない（全体の再読み込みが起きる）。例外は、外部サイトへの遷移と、決済など外部から戻ってくる導線だけとする
+- **スコープ配下の画面は「永続シェル」に載せる。** 親ルート（`pages/teams/[slug].vue`、`pages/organizations/[slug].vue`、`pages/villages/[id].vue` など）が `<NuxtPage />` とヘッダー・タブを持ち続け、子ルートだけを差し替える。子画面へ移るたびに親のデータを取り直さない
+- **永続シェルの下に兄弟ルートを足すときは、親に `<NuxtPage />` が要る。** 無いと URL だけ変わって画面が変わらない
+- **ページのルート要素は1つにする。** ページ遷移のアニメーション（`pageTransition`）は、ルート要素が複数だと遷移が止まる
+- **ログイン後の画面のデータは、ブラウザ側で取得する。** 取得中はスケルトンを出す。サーバ側の描画で、認証が前提の中身を HTML に出さない
+- **公開ページの SSR には、本人の情報を埋め込まない。** 本人の所属や権限に依存する表示は、ブラウザ側で認証を復元してから取得する
+- **同じ画面の中の切り替え（タブ、表示モード）は、クエリか子ルートで表し、全体の再読み込みにしない**
+
+### 現状と未整備の点
+
+- `nuxt.config.ts` は SSR を全体で有効にしたままで、`ssr: false` を指定しているのは `/activities/**` と未公開機能のパスだけである。ログイン後の画面は、サーバが枠だけを返し、中身をブラウザ側で描いている。設定でページ種別ごとの描画方式を明示することは未実施（設計は `docs/refactoring/proposals/` の提案 P6 で行う。台帳 CMP-261117-1026）
+- どのページを「公開ページ」として SSR の対象にするかの一覧は未整備である（`docs/testing/public-pages.md` として作る予定。台帳 CMP-261117-1026）。未ログインで開けるのは、`middleware: 'auth'` を付けていないページである。新しい公開ページを足すときは、SSR が要るか（検索エンジンに載せるか、共有時に見出しを出すか）を仕様書に書く
+
 ## 5. API通信規約 (API Client & Fetch Settings)
 Nuxt 3 標準の `ofetch` をベースにした共通クライアントを使用する。
 
@@ -96,7 +119,7 @@ Nuxt 3 標準の `ofetch` をベースにした共通クライアントを使用
     - `useFetch` / `useAsyncData`: SSRが必要なページ初期データの取得に使用。
     - `$fetch`: ユーザー操作に伴うデータ送信（POST/PUT/DELETE等）に使用。
 - **Error Handling**: 401 (Unauthorized) 発生時は Refresh Token ローテーション（後述）を試行し、復旧できない場合のみ認証ストアをクリアしてログイン画面へリダイレクトする。
-- **SSR と認証の制約**: JWT は `localStorage` に保存するため、SSR（サーバーサイドレンダリング）時にはアクセスできない。**SSR で実行されるリクエストに認証トークンは付与しない**。SSR は公開ページ（SEO目的）にのみ使用し、認証が必要なページは SPA モードで動作させること。
+- **SSR と認証の制約**: サーバー側の描画（SSR）では、ブラウザが持つ認証の情報（メモリ上のトークンと Cookie）を BE へ中継していない。**SSR で実行されるリクエストに認証の情報は付かない**。SSR は公開ページ（SEO目的。LP・ログイン画面を含む）にのみ使用し、認証が必要なページは SPA として動作させること（§4a）。
 
 ### `ofetch` インターセプターの活用
 `useApi.ts` では `ofetch.create` で共通クライアントを生成し、以下のインターセプターフックを設定する:
@@ -170,11 +193,11 @@ const created = await api<ApiResponse<TeamDetailResponse>>(
 - **Environment Variables**: APIキー等の機密情報は `runtimeConfig` を介し、ブラウザに公開するもの（public）とサーバー側限定のもの（private）を厳密に区別する。
 
 ### 認証トークン管理ルール
-- **保存先**: JWT は **`localStorage`** に統一する。`sessionStorage` は使用しない（タブを閉じるとログアウトされるため UX が悪い）。「ログイン状態を維持」のオプションは Access Token の有効期限（15分）と Refresh Token の有効期限（7日）で自然にカバーされる。
-- **起動時の認証復元**: `AuthStore` は初期化時（`stores/useAuthStore.ts` の Pinia 定義内）に `localStorage` からトークンを読み込み、認証状態を復元する。ページリロードや新しいタブを開いた場合でもログイン状態を維持するため。トークンが期限切れの場合は Refresh Token ローテーション（§5 参照）で自動更新を試みる。
-- **送信方法**: APIリクエストごとに `Authorization: Bearer <token>` ヘッダーをプログラムで付与する。
-- **Cookie 使用禁止**: 認証トークンを Cookie に格納しないこと。Cookie を利用しないことで CSRF 攻撃を構造的に排除する。
-- **XSS対策との併用**: トークン漏洩（XSS）リスクに対しては、Access Token の有効期限を短く（15分）設定し、Refresh Token Rotation を併用することで軽減する。
+- **保存先**: トークン（access / refresh）は **メモリ上（Pinia の AuthStore）にだけ**持つ。`localStorage` と `sessionStorage` には**トークンを保存しない**。`localStorage` に置くのは、利用者の情報（`currentUser`）と有効期限（`tokenExpiresAt`）だけである。ブラウザには、BE が発行する `HttpOnly`・`SameSite=Strict` の Cookie（`access_token` と `refresh_token`）が別に保存される。JavaScript からは読めない（2026-11-17 マスター裁可により、実装と `docs/features/F01.1_auth.md`・`docs/security/02_cookie_and_session.md` に合わせて改訂）。
+- **起動時の認証復元**: `AuthStore` は初期化時に、`localStorage` から利用者の情報と有効期限を復元する。トークンの本体は復元しない。再読み込みの直後はメモリにトークンが無いが、API へは Cookie が送られるので認証される。有効期限が近ければ、Refresh Token ローテーション（§5 参照）で更新し、返ってきたトークンをメモリに載せる。
+- **送信方法**: API へのリクエストは、すべて `credentials: 'include'` で送る（Cookie が付く）。メモリにトークンがあるときは、`Authorization: Bearer <token>` ヘッダーも付ける。BE は Bearer を優先し、無ければ Cookie の `access_token` を読む。この共通処理は `useApi.ts` にあり、各画面で書かない。
+- **Cookie の扱い**: Web の認証は、BE が発行する `HttpOnly` の Cookie が担う。**FE のコードから認証の Cookie を読み書きしない**（`document.cookie` や `useCookie` でトークンを扱わない）。CSRF は、Cookie の `SameSite=Strict` と、FE と BE が同一オリジンであることで防ぐ（CSRF トークンは使わない）。そのため、FE と BE を別サイトに分けてはならない。ネイティブアプリ（将来）は Cookie を使わず、Bearer ヘッダーで認証する。
+- **XSS対策との併用**: トークンを `localStorage` に置かず、Cookie を `HttpOnly` にすることで、XSS があってもトークンを盗み出しにくくしている。加えて、Access Token の有効期限を短く（15分）し、Refresh Token Rotation を併用する。
 - **⚠️ 開発環境の罠（Refresh 用 Cookie は `SameSite=Strict`）**: `Authorization: Bearer` の他に、Refresh Token ローテーション用の `access_token` / `refresh_token` は BE から `SameSite=Strict` の Cookie としても発行される。SameSite の同一サイト判定はホスト名の文字列一致で行われるため、開発時にアプリを `http://127.0.0.1:3000` で開くと `http://localhost:8080` からの `Set-Cookie` が保存されない。ログイン直後は body のトークンが in-memory に載るため正常に見えるが、15分後の先回りリフレッシュ（`armProactiveRefresh`）が Cookie 送信できず 401 となり強制ログアウトされる。**dev サーバーの URL は必ず `http://localhost:3000` を使うこと（`127.0.0.1` は使わない）**。`nuxt.config.ts` の `devServer.host` を `'::'`（デュアルスタック bind）にしてあるため、`localhost` / `127.0.0.1` / `[::1]` のいずれで叩いても正常に 200 が返る。再発防止テスト: `frontend/tests/e2e/real/auth-cookie-origin.spec.ts`。
 
 ### フロント・バック間のバリデーション同期

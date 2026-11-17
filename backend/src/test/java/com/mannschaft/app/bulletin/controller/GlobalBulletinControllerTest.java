@@ -139,7 +139,7 @@ class GlobalBulletinControllerTest {
         @Test
         @DisplayName("TEAM一覧_既存scopeId経路へ委譲して200")
         void team一覧_委譲_200() {
-            given(scopeIdResolver.resolve(eq(ScopeType.TEAM), eq(SCOPE_ID_STR))).willReturn(SCOPE_ID);
+            given(scopeIdResolver.resolveGlobal(eq(ScopeType.TEAM), eq(SCOPE_ID_STR))).willReturn(SCOPE_ID);
             given(categoryService.listCategories(eq(ScopeType.TEAM), eq(SCOPE_ID), eq(USER_ID)))
                     .willReturn(List.of(categoryResponse()));
 
