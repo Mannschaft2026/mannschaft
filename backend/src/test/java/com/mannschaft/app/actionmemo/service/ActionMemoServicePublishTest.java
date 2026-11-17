@@ -28,6 +28,7 @@ import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.team.entity.TeamEntity;
 import com.mannschaft.app.team.repository.TeamRepository;
 import com.mannschaft.app.timeline.PostScopeType;
+import com.mannschaft.app.timeline.PostStatus;
 import com.mannschaft.app.timeline.entity.TimelinePostEntity;
 import com.mannschaft.app.timeline.repository.TimelinePostRepository;
 import com.mannschaft.app.todo.TodoPriority;
@@ -56,7 +57,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -67,6 +70,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.lenient;
 
@@ -225,6 +229,74 @@ class ActionMemoServicePublishTest {
     }
 
     // ==================================================================
+    // タイムライン投稿の擬似 DB（チーム投稿と個人投稿の列分割の試練用）
+    // ==================================================================
+
+    /** timeline_posts を模した擬似 DB。save で採番・登録し、findById / findAllById はここから引く。 */
+    private final Map<Long, TimelinePostEntity> postsDb = new HashMap<>();
+
+    private final AtomicLong postIdSeq = new AtomicLong(5000L);
+
+    /**
+     * {@link TimelinePostRepository} の save / findById / findAllById を擬似 DB に結線する。
+     *
+     * <p>findById も結線するのは、旧実装（findById で旧投稿を引いて論理削除する）でも
+     * 実 DB と同じく投稿が見つかる状態にし、誤削除を red として観測するため。</p>
+     */
+    private void useInMemoryPostsDb() {
+        lenient().when(timelinePostRepository.save(any(TimelinePostEntity.class)))
+                .thenAnswer(inv -> {
+                    TimelinePostEntity p = inv.getArgument(0);
+                    if (p.getId() == null) {
+                        ReflectionTestUtils.setField(p, "id", postIdSeq.getAndIncrement());
+                    }
+                    postsDb.put(p.getId(), p);
+                    return p;
+                });
+        lenient().when(timelinePostRepository.findById(any()))
+                .thenAnswer(inv -> Optional.ofNullable(postsDb.get((Long) inv.getArgument(0))));
+        lenient().when(timelinePostRepository.findAllById(any()))
+                .thenAnswer(inv -> {
+                    Iterable<Long> ids = inv.getArgument(0);
+                    List<TimelinePostEntity> found = new ArrayList<>();
+                    for (Long id : ids) {
+                        TimelinePostEntity p = postsDb.get(id);
+                        if (p != null) {
+                            found.add(p);
+                        }
+                    }
+                    return found;
+                });
+        lenient().when(memoRepository.save(any(ActionMemoEntity.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    /** 擬似 DB に既存投稿を1件登録する。 */
+    private TimelinePostEntity existingPost(Long id, PostScopeType scopeType, Long scopeId, Long postUserId) {
+        TimelinePostEntity post = TimelinePostEntity.builder()
+                .scopeType(scopeType)
+                .scopeId(scopeId)
+                .userId(postUserId)
+                .content("既存投稿")
+                .build();
+        ReflectionTestUtils.setField(post, "id", id);
+        postsDb.put(id, post);
+        return post;
+    }
+
+    /** WORK メモ（チーム投稿可能）を作る。 */
+    private ActionMemoEntity workMemo(Long id, LocalDate memoDate, int hour) {
+        return phase3Memo(id, USER_ID, memoDate, "仕事メモ" + id, ActionMemoCategory.WORK,
+                null, null, null, false, LocalDateTime.of(2026, 4, 9, hour, 0));
+    }
+
+    private PublishDailyRequest publishDailyRequest(LocalDate memoDate) {
+        PublishDailyRequest req = new PublishDailyRequest();
+        req.setMemoDate(memoDate);
+        return req;
+    }
+
+    // ==================================================================
     // publishDaily（Phase 2）
     // ==================================================================
 
@@ -305,8 +377,9 @@ class ActionMemoServicePublishTest {
         }
 
         @Test
-        @DisplayName("冪等性: 既存 timeline_post_id のあるメモがあれば旧投稿を論理削除してから差し替え")
+        @DisplayName("AC-13 冪等性: 既存 timeline_post_id（自分の PERSONAL 投稿）は findAllById で引いて論理削除し、新投稿に差し替える（save(旧) は呼ばない）")
         void publishDaily_idempotentOverwrite() {
+            useInMemoryPostsDb();
             ActionMemoEntity memoWithOldPost = memoWithCreatedAt(
                     1L, USER_ID, TARGET_DATE, "既存メモ", null,
                     LocalDateTime.of(2026, 4, 9, 11, 0));
@@ -317,41 +390,25 @@ class ActionMemoServicePublishTest {
                     .willReturn(memos);
             given(settingsService.getMoodEnabled(USER_ID)).willReturn(false);
 
-            TimelinePostEntity oldPost = TimelinePostEntity.builder()
-                    .scopeType(PostScopeType.PERSONAL)
-                    .scopeId(USER_ID)
-                    .userId(USER_ID)
-                    .content("旧本文")
-                    .build();
-            ReflectionTestUtils.setField(oldPost, "id", 500L);
-            given(timelinePostRepository.findById(500L)).willReturn(Optional.of(oldPost));
+            TimelinePostEntity oldPost = existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
 
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        if (p.getId() == null) {
-                            ReflectionTestUtils.setField(p, "id", 2000L);
-                        }
-                        return p;
-                    });
-            given(memoRepository.save(any(ActionMemoEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
+            PublishDailyResponse response = actionMemoPublishingService.publishDaily(
+                    publishDailyRequest(TARGET_DATE), USER_ID);
 
-            PublishDailyRequest req = new PublishDailyRequest();
-            req.setMemoDate(TARGET_DATE);
-
-            PublishDailyResponse response = actionMemoPublishingService.publishDaily(req, USER_ID);
-
-            // 旧投稿の論理削除が呼ばれている
+            // 旧投稿の論理削除（dirty checking に委ね save(旧) はしない）
             assertThat(oldPost.getDeletedAt()).isNotNull();
+            assertThat(oldPost.getStatus()).isEqualTo(PostStatus.DELETED);
             // 新投稿 ID で差し替え
-            assertThat(response.getTimelinePostId()).isEqualTo(2000L);
-            assertThat(memoWithOldPost.getTimelinePostId()).isEqualTo(2000L);
-            verify(timelinePostRepository).findById(500L);
+            Long newId = response.getTimelinePostId();
+            assertThat(newId).isNotNull().isNotEqualTo(500L);
+            assertThat(memoWithOldPost.getTimelinePostId()).isEqualTo(newId);
+            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostRepository, never()).findById(any());
+            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
         }
 
         @Test
-        @DisplayName("対象日にメモ 0 件 → 400（ACTION_MEMO_NO_MEMOS_FOR_DATE）")
+        @DisplayName("AC-14 対象日にメモ 0 件 → 400（ACTION_MEMO_NO_MEMOS_FOR_DATE）で投稿の作成・削除なし")
         void publishDaily_failsWhenNoMemos() {
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE))
                     .willReturn(List.of());
@@ -365,6 +422,186 @@ class ActionMemoServicePublishTest {
                             ActionMemoErrorCode.ACTION_MEMO_NO_MEMOS_FOR_DATE);
 
             verify(metrics).incrementPublishDailyError();
+            verify(timelinePostRepository, never()).save(any(TimelinePostEntity.class));
+            verify(timelinePostRepository, never()).findAllById(any());
+            verify(timelinePostRepository, never()).findById(any());
+        }
+
+        @Test
+        @DisplayName("AC-1 publishToTeam 済み（チーム投稿T）のメモを含む日に publishDaily してもチーム投稿 T は論理削除されない")
+        void publishDaily_afterPublishToTeam_doesNotDeleteTeamPost() {
+            useInMemoryPostsDb();
+            ActionMemoEntity work = workMemo(1L, TARGET_DATE, 9);
+            given(memoRepository.findByIdAndUserId(1L, USER_ID)).willReturn(Optional.of(work));
+            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(work));
+
+            Long teamPostId = actionMemoPublishingService
+                    .publishToTeam(1L, new PublishToTeamRequest(42L, null), USER_ID).getTimelinePostId();
+            TimelinePostEntity teamPost = postsDb.get(teamPostId);
+
+            actionMemoPublishingService.publishDaily(publishDailyRequest(TARGET_DATE), USER_ID);
+
+            assertThat(teamPost.getScopeType()).isEqualTo(PostScopeType.TEAM);
+            assertThat(teamPost.getDeletedAt()).as("チーム投稿は論理削除されない").isNull();
+            assertThat(teamPost.getStatus()).isNotEqualTo(PostStatus.DELETED);
+        }
+
+        @Test
+        @DisplayName("AC-2 AC-1 の後、メモは postedTeamId=元チーム・teamTimelinePostId=T・timelinePostId=新個人投稿ID を持つ")
+        void publishDaily_afterPublishToTeam_keepsBothReferences() {
+            useInMemoryPostsDb();
+            ActionMemoEntity work = workMemo(1L, TARGET_DATE, 9);
+            given(memoRepository.findByIdAndUserId(1L, USER_ID)).willReturn(Optional.of(work));
+            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(work));
+
+            Long teamPostId = actionMemoPublishingService
+                    .publishToTeam(1L, new PublishToTeamRequest(42L, null), USER_ID).getTimelinePostId();
+            Long personalPostId = actionMemoPublishingService
+                    .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
+
+            assertThat(work.getPostedTeamId()).isEqualTo(42L);
+            assertThat(work.getTeamTimelinePostId()).isEqualTo(teamPostId);
+            assertThat(work.getTimelinePostId()).isEqualTo(personalPostId);
+            assertThat(postsDb.get(personalPostId).getScopeType()).isEqualTo(PostScopeType.PERSONAL);
+        }
+
+        @Test
+        @DisplayName("AC-5 当日メモの旧投稿IDが複数種（P1,P2）でも取得は findAllById 1回のみ・findById 不呼出・両方論理削除・save(旧) なし")
+        void publishDaily_multipleOldPosts_fetchedOnceAndAllDeleted() {
+            useInMemoryPostsDb();
+            ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
+                    LocalDateTime.of(2026, 4, 9, 9, 0));
+            ActionMemoEntity m2 = memoWithCreatedAt(2L, USER_ID, TARGET_DATE, "B", null,
+                    LocalDateTime.of(2026, 4, 9, 10, 0));
+            ActionMemoEntity m3 = memoWithCreatedAt(3L, USER_ID, TARGET_DATE, "C", null,
+                    LocalDateTime.of(2026, 4, 9, 11, 0));
+            m1.setTimelinePostId(501L);
+            m2.setTimelinePostId(502L);
+            m3.setTimelinePostId(501L);
+            TimelinePostEntity p1 = existingPost(501L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            TimelinePostEntity p2 = existingPost(502L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1, m2, m3));
+
+            Long newId = actionMemoPublishingService
+                    .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
+
+            assertThat(p1.getDeletedAt()).isNotNull();
+            assertThat(p2.getDeletedAt()).isNotNull();
+            assertThat(List.of(m1, m2, m3)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
+            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostRepository, never()).findById(any());
+            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
+        }
+
+        @Test
+        @DisplayName("AC-6 timelinePostId が非 PERSONAL 投稿・別ユーザーの個人投稿（scopeId≠操作者）を指していても論理削除しない")
+        void publishDaily_doesNotDeleteNonPersonalOrOtherUsersPost() {
+            useInMemoryPostsDb();
+            ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
+                    LocalDateTime.of(2026, 4, 9, 9, 0));
+            ActionMemoEntity m2 = memoWithCreatedAt(2L, USER_ID, TARGET_DATE, "B", null,
+                    LocalDateTime.of(2026, 4, 9, 10, 0));
+            m1.setTimelinePostId(601L);
+            m2.setTimelinePostId(602L);
+            TimelinePostEntity teamPost = existingPost(601L, PostScopeType.TEAM, 42L, USER_ID);
+            TimelinePostEntity othersPersonal = existingPost(602L, PostScopeType.PERSONAL, OTHER_USER_ID, OTHER_USER_ID);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1, m2));
+
+            actionMemoPublishingService.publishDaily(publishDailyRequest(TARGET_DATE), USER_ID);
+
+            assertThat(teamPost.getDeletedAt()).as("TEAM 投稿は削除しない").isNull();
+            assertThat(othersPersonal.getDeletedAt()).as("他人の個人投稿は削除しない").isNull();
+            assertThat(othersPersonal.getStatus()).isNotEqualTo(PostStatus.DELETED);
+        }
+
+        @Test
+        @DisplayName("AC-16 PERSONAL かつ scopeId=操作者でも投稿の userId≠操作者なら論理削除しない")
+        void publishDaily_doesNotDeletePersonalPostAuthoredByOtherUser() {
+            useInMemoryPostsDb();
+            ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
+                    LocalDateTime.of(2026, 4, 9, 9, 0));
+            m1.setTimelinePostId(701L);
+            TimelinePostEntity foreignAuthored = existingPost(701L, PostScopeType.PERSONAL, USER_ID, OTHER_USER_ID);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1));
+
+            actionMemoPublishingService.publishDaily(publishDailyRequest(TARGET_DATE), USER_ID);
+
+            assertThat(foreignAuthored.getDeletedAt()).isNull();
+            assertThat(foreignAuthored.getStatus()).isNotEqualTo(PostStatus.DELETED);
+        }
+
+        @Test
+        @DisplayName("AC-7 当日メモの timelinePostId が全て null（初回）なら論理削除は起きず、新規投稿1件が全メモに紐づく")
+        void publishDaily_firstTime_noDeletionAndAllLinked() {
+            useInMemoryPostsDb();
+            ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
+                    LocalDateTime.of(2026, 4, 9, 9, 0));
+            ActionMemoEntity m2 = memoWithCreatedAt(2L, USER_ID, TARGET_DATE, "B", null,
+                    LocalDateTime.of(2026, 4, 9, 10, 0));
+            TimelinePostEntity unrelated = existingPost(801L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1, m2));
+
+            Long newId = actionMemoPublishingService
+                    .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
+
+            assertThat(unrelated.getDeletedAt()).isNull();
+            assertThat(postsDb.values()).filteredOn(p -> p.getDeletedAt() != null).isEmpty();
+            assertThat(List.of(m1, m2)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
+            verify(timelinePostRepository, never()).findById(any());
+            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
+        }
+
+        @Test
+        @DisplayName("AC-8 旧投稿が存在しない／既に論理削除済みでも例外にならず新規投稿が作られる")
+        void publishDaily_oldPostMissingOrAlreadyDeleted_stillPublishes() {
+            useInMemoryPostsDb();
+            ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
+                    LocalDateTime.of(2026, 4, 9, 9, 0));
+            ActionMemoEntity m2 = memoWithCreatedAt(2L, USER_ID, TARGET_DATE, "B", null,
+                    LocalDateTime.of(2026, 4, 9, 10, 0));
+            m1.setTimelinePostId(901L); // 擬似 DB に存在しない
+            m2.setTimelinePostId(902L); // 既に論理削除済み
+            TimelinePostEntity alreadyDeleted = existingPost(902L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            alreadyDeleted.softDelete();
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1, m2));
+
+            PublishDailyResponse response = actionMemoPublishingService
+                    .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID);
+
+            Long newId = response.getTimelinePostId();
+            assertThat(newId).isNotNull();
+            assertThat(postsDb.get(newId).getDeletedAt()).isNull();
+            assertThat(List.of(m1, m2)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
+            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostRepository, never()).findById(any());
+        }
+
+        @Test
+        @DisplayName("AC-15 上限200件のメモが同一旧投稿IDを共有しても findAllById 1回・論理削除1回で、200件すべて新投稿に紐づく")
+        void publishDaily_200MemosSharingOldPost_singleFetchAndDelete() {
+            useInMemoryPostsDb();
+            List<ActionMemoEntity> memos = new ArrayList<>();
+            for (long i = 1; i <= 200; i++) {
+                ActionMemoEntity m = memoWithCreatedAt(i, USER_ID, TARGET_DATE, "メモ" + i, null,
+                        LocalDateTime.of(2026, 4, 9, 9, 0).plusMinutes(i));
+                m.setTimelinePostId(500L);
+                memos.add(m);
+            }
+            TimelinePostEntity oldPost = existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(memos);
+
+            Long newId = actionMemoPublishingService
+                    .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
+
+            assertThat(oldPost.getDeletedAt()).isNotNull();
+            assertThat(memos).hasSize(200)
+                    .allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
+            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostRepository, never()).findById(any());
+            // 新投稿の save 1回のみ（旧投稿の save なし）
+            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
         }
 
         @Test
@@ -412,7 +649,29 @@ class ActionMemoServicePublishTest {
     class PublishToTeamTest {
 
         @Test
-        @DisplayName("正常系: WORK / 自チーム / 未投稿 → timelinePostId が返る")
+        @DisplayName("AC-3 publishDaily（個人投稿P）の後に publishToTeam すると timelinePostId=P のまま、teamTimelinePostId=新チーム投稿ID")
+        void publishToTeam_afterPublishDaily_keepsPersonalPostId() {
+            useInMemoryPostsDb();
+            LocalDate date = LocalDate.of(2026, 4, 9);
+            ActionMemoEntity work = workMemo(MEMO_ID, date, 9);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, date)).willReturn(List.of(work));
+            given(memoRepository.findByIdAndUserId(MEMO_ID, USER_ID)).willReturn(Optional.of(work));
+            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+
+            Long personalPostId = actionMemoPublishingService
+                    .publishDaily(publishDailyRequest(date), USER_ID).getTimelinePostId();
+            Long teamPostId = actionMemoPublishingService
+                    .publishToTeam(MEMO_ID, new PublishToTeamRequest(42L, null), USER_ID).getTimelinePostId();
+
+            assertThat(teamPostId).isNotEqualTo(personalPostId);
+            assertThat(work.getTimelinePostId()).as("個人投稿IDは上書きされない").isEqualTo(personalPostId);
+            assertThat(work.getTeamTimelinePostId()).isEqualTo(teamPostId);
+            assertThat(work.getPostedTeamId()).isEqualTo(42L);
+            assertThat(postsDb.get(teamPostId).getScopeType()).isEqualTo(PostScopeType.TEAM);
+        }
+
+        @Test
+        @DisplayName("AC-13 正常系: WORK / 自チーム / 未投稿 → チーム投稿IDは teamTimelinePostId に入り timelinePostId は変えない")
         void publishToTeam_workMemoOwnTeam_returnsTimelinePostId() {
             ActionMemoEntity workMemo = phase3Memo(MEMO_ID, USER_ID, LocalDate.now(),
                     "作業ログ", ActionMemoCategory.WORK, 30, null, null, false,
@@ -436,7 +695,8 @@ class ActionMemoServicePublishTest {
             assertThat(response.getTeamId()).isEqualTo(42L);
             assertThat(response.getMemoId()).isEqualTo(MEMO_ID);
             assertThat(workMemo.getPostedTeamId()).isEqualTo(42L);
-            assertThat(workMemo.getTimelinePostId()).isEqualTo(9000L);
+            assertThat(workMemo.getTeamTimelinePostId()).isEqualTo(9000L);
+            assertThat(workMemo.getTimelinePostId()).as("timelinePostId は PERSONAL 投稿専用").isNull();
         }
 
         @Test
@@ -659,6 +919,32 @@ class ActionMemoServicePublishTest {
 
             // 既投稿は repository 段階で除外されるため、postedCount は未投稿分のみ
             assertThat(response.getPostedCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("AC-10 複数メモを日次チーム投稿すると各メモの teamTimelinePostId は各自のチーム投稿IDになり timelinePostId は変化しない")
+        void publishDailyToTeam_setsTeamPostIdPerMemo_andKeepsPersonalPostId() {
+            useInMemoryPostsDb();
+            ActionMemoEntity m1 = workMemo(11L, CURRENT_DATE, 9);
+            ActionMemoEntity m2 = workMemo(12L, CURRENT_DATE, 10);
+            m1.setTimelinePostId(500L); // 既に個人投稿済み
+            existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+
+            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(memoRepository.findByUserIdAndMemoDateAndCategoryAndPostedTeamIdIsNull(
+                    eq(USER_ID), eq(CURRENT_DATE), eq(ActionMemoCategory.WORK)))
+                    .willReturn(List.of(m1, m2));
+            given(memoRepository.findByIdAndUserId(11L, USER_ID)).willReturn(Optional.of(m1));
+            given(memoRepository.findByIdAndUserId(12L, USER_ID)).willReturn(Optional.of(m2));
+
+            actionMemoPublishingService.publishDailyToTeam(new PublishDailyToTeamRequest(42L), USER_ID);
+
+            assertThat(m1.getTeamTimelinePostId()).isNotNull();
+            assertThat(m2.getTeamTimelinePostId()).isNotNull().isNotEqualTo(m1.getTeamTimelinePostId());
+            assertThat(postsDb.get(m1.getTeamTimelinePostId()).getScopeType()).isEqualTo(PostScopeType.TEAM);
+            assertThat(postsDb.get(m2.getTeamTimelinePostId()).getScopeType()).isEqualTo(PostScopeType.TEAM);
+            assertThat(m1.getTimelinePostId()).as("個人投稿IDは変化しない").isEqualTo(500L);
+            assertThat(m2.getTimelinePostId()).as("個人投稿IDは変化しない").isNull();
         }
 
         @Test
