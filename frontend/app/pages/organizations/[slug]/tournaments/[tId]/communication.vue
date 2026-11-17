@@ -305,6 +305,7 @@ onMounted(async () => {
                 @create="showCreateDialog = true"
               />
               <BulletinThreadForm
+                :key="`form-${activeBulletinScope.scopeType}-${activeBulletinScope.scopeId}`"
                 v-model:visible="showCreateDialog"
                 :scope-type="activeBulletinScope.scopeType"
                 :scope-id="activeBulletinScope.scopeId"
