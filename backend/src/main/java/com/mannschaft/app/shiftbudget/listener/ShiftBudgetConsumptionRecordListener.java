@@ -130,7 +130,12 @@ public class ShiftBudgetConsumptionRecordListener {
                 BigDecimal hours = ShiftBudgetConsumptionService.calculateHours(
                         slot.getStartTime(), slot.getEndTime());
 
+                // CMP-261115-1821: 枠の値は一度だけ読む（他ドメイン Entity への参照箇所を増やさない。D-1 凍結）
+                Long slotId = slot.getId();
+                java.time.LocalDate slotDate = slot.getSlotDate();
                 for (Long userId : assignedUserIds) {
+                    // CMP-261115-1821: 個別失敗の failed_event に実計上入力を残すため、採った時給を外で保持する
+                    BigDecimal adoptedRate = null;
                     try {
                         // CMP-260910-1555: 是正前はここで .orElse(BigDecimal.ZERO) としており、
                         // 時給未登録のメンバーを「単価 0 円で記録成功」として扱っていた。
@@ -140,22 +145,33 @@ public class ShiftBudgetConsumptionRecordListener {
                         // 0 円という誤った金額を台帳に残すより記録しないほうが正しいので skip し、
                         // 対象ユーザーを集めて hook の最後に予算管理者へ通知する（黙らせない）。
                         Optional<BigDecimal> hourlyRateOpt = hourlyRateRepository
-                                .findEffectiveRate(userId, teamId, slot.getSlotDate())
+                                .findEffectiveRate(userId, teamId, slotDate)
                                 .map(r -> r.getHourlyRate());
-                        if (hourlyRateOpt.isEmpty()) {
-                            log.warn("F08.7 hook: 時給未設定のため消化記録をスキップ: "
-                                            + "teamId={}, userId={}, slotId={}, slotDate={}",
-                                    teamId, userId, slot.getId(), slot.getSlotDate());
+                        // CMP-261115-1821: 存在する 0・負数も未設定と同じく計上しない（0 円・負額で台帳を汚さない）。
+                        // 公開時の検証後に時給が削除・訂正された場合もここで止まる。黙らせず、既存の通知集合に
+                        // 含めたうえで、組織が解決済みなので当該組織の failed_event にも理由を残す（0 へ置換しない）。
+                        String rateProblem = hourlyRateOpt.isEmpty() ? RATE_MISSING
+                                : (hourlyRateOpt.get().signum() <= 0 ? RATE_NON_POSITIVE : null);
+                        if (rateProblem != null) {
+                            log.warn("F08.7 hook: 時給が未設定または正数でないため消化記録をスキップ: "
+                                            + "teamId={}, userId={}, slotId={}, slotDate={}, reason={}",
+                                    teamId, userId, slotId, slotDate, rateProblem);
                             tally.missingRateUserIds.add(userId);
                             tally.skipped++;
+                            recordFailureSafe(organizationId, ShiftBudgetFailedEventType.CONSUMPTION_RECORD,
+                                    scheduleId,
+                                    consumptionFailurePayload(scheduleId, teamId, slotId, slotDate, userId, rateProblem,
+                                            allocation.getId(), organizationId, null, null),
+                                    "hourly rate " + rateProblem + ": slot=" + slotId + ", user=" + userId);
                             continue;
                         }
                         BigDecimal hourlyRate = hourlyRateOpt.get();
+                        adoptedRate = hourlyRate;
 
                         consumptionService.recordSingleConsumption(
                                 allocation.getId(),
                                 scheduleId,
-                                slot.getId(),
+                                slotId,
                                 userId,
                                 hourlyRate,
                                 hours);
@@ -167,7 +183,7 @@ public class ShiftBudgetConsumptionRecordListener {
                             thresholdAlertEvaluationService.evaluateAndTrigger(allocation.getId());
                         } catch (Exception thresholdEx) {
                             log.error("F08.7 hook: 閾値判定失敗（処理継続）: allocId={}, slot={}, user={}",
-                                    allocation.getId(), slot.getId(), userId, thresholdEx);
+                                    allocation.getId(), slotId, userId, thresholdEx);
                             // Phase 10-β: 失敗イベントとして永続化 → リトライバッチ + 管理 API で根治
                             recordFailureSafe(organizationId,
                                     ShiftBudgetFailedEventType.THRESHOLD_ALERT,
@@ -175,7 +191,7 @@ public class ShiftBudgetConsumptionRecordListener {
                                     Map.of(
                                             "allocation_id", allocation.getId(),
                                             "shift_schedule_id", scheduleId,
-                                            "slot_id", slot.getId(),
+                                            "slot_id", slotId,
                                             "user_id", userId
                                     ),
                                     thresholdEx);
@@ -183,12 +199,19 @@ public class ShiftBudgetConsumptionRecordListener {
                     } catch (IllegalStateException e) {
                         // CONFIRMED 既存 → スキップして他継続（個別エラーで全体を止めない）
                         log.warn("F08.7 hook: CONFIRMED 既存のため skip: slot={}, user={}, msg={}",
-                                slot.getId(), userId, e.getMessage());
+                                slotId, userId, e.getMessage());
                         tally.skipped++;
                     } catch (Exception e) {
                         log.error("F08.7 hook: 個別消化記録失敗 (skip): slot={}, user={}",
-                                slot.getId(), userId, e);
+                                slotId, userId, e);
                         tally.skipped++;
+                        // CMP-261115-1821: 個別失敗もログだけで終わらせず、当該組織の failed_event に残す。
+                        // 全体 catch へ投げると他の (slot,user) まで止まるため、ここで個別に記録して残りを続ける。
+                        recordFailureSafe(organizationId, ShiftBudgetFailedEventType.CONSUMPTION_RECORD,
+                                scheduleId,
+                                consumptionFailurePayload(scheduleId, teamId, slotId, slotDate, userId, REASON_RECORD_FAILED,
+                                        allocation.getId(), organizationId, adoptedRate, hours),
+                                e);
                     }
                 }
             }
@@ -291,14 +314,58 @@ public class ShiftBudgetConsumptionRecordListener {
         private final Set<Long> missingRateUserIds = new TreeSet<>();
     }
 
+    /** CMP-261115-1821: 個別計上失敗の payload の版。 */
+    static final int CONSUMPTION_FAILURE_PAYLOAD_SCHEMA_VERSION = 1;
+    /** 時給行が無い。 */
+    static final String RATE_MISSING = "MISSING";
+    /** 時給が 0 以下（または null）。 */
+    static final String RATE_NON_POSITIVE = "NON_POSITIVE";
+    /** 正数の時給を採った後の記録処理（INSERT・予算加算など）が失敗した。 */
+    static final String REASON_RECORD_FAILED = "RECORD_FAILED";
+
+    /**
+     * CMP-261115-1821: 個別 (slot,user) の計上失敗を当該組織の failed_event に残す payload。
+     *
+     * <p>欠測値を 0 へ置換しない（時給・時間が無いときは項目自体を入れない）。他組織の金銭情報は混ぜない
+     * （呼び出し側は計上先の組織の failed_event にだけ記録する）。</p>
+     */
+    private static Map<String, Object> consumptionFailurePayload(Long scheduleId, Long teamId, Long slotId,
+                                                                 java.time.LocalDate slotDate, Long userId, String reason, Long allocationId,
+                                                                 Long organizationId, BigDecimal hourlyRate,
+                                                                 BigDecimal hours) {
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("schema_version", CONSUMPTION_FAILURE_PAYLOAD_SCHEMA_VERSION);
+        payload.put("shift_schedule_id", scheduleId);
+        payload.put("team_id", teamId);
+        payload.put("slot_id", slotId);
+        payload.put("user_id", userId);
+        payload.put("slot_date", String.valueOf(slotDate));
+        payload.put("reason", reason);
+        payload.put("allocation_id", allocationId);
+        payload.put("organization_id", organizationId);
+        if (hourlyRate != null) {
+            payload.put("hourly_rate", hourlyRate.toPlainString());
+        }
+        if (hourlyRate != null && hours != null) {
+            payload.put("hours", hours.toPlainString());
+        }
+        return payload;
+    }
+
     /**
      * Phase 10-β: 失敗イベント記録を例外安全に呼ぶ。
      * recordFailure 自体が例外を投げても hook の他処理に影響しないよう catch する。
      */
     private void recordFailureSafe(Long organizationId, ShiftBudgetFailedEventType eventType,
                                    Long sourceId, Map<String, Object> payload, Throwable cause) {
+        recordFailureSafe(organizationId, eventType, sourceId, payload,
+                cause.getClass().getSimpleName() + ": " + cause.getMessage());
+    }
+
+    /** 例外を伴わない失敗（時給の欠測など）を例外安全に記録する。 */
+    private void recordFailureSafe(Long organizationId, ShiftBudgetFailedEventType eventType,
+                                   Long sourceId, Map<String, Object> payload, String errorMsg) {
         try {
-            String errorMsg = cause.getClass().getSimpleName() + ": " + cause.getMessage();
             failedEventService.recordFailure(organizationId, eventType, sourceId, payload, errorMsg);
         } catch (Exception recEx) {
             log.error("F08.7 hook: failed_events 記録自体も失敗（諦め）: orgId={}, eventType={}",
