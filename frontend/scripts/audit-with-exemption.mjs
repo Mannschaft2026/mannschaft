@@ -1,5 +1,5 @@
 // npm audit の high/critical ゲート（方針 docs/security/04_dependency_and_supply_chain.md §4）。
-// 個別除外は picomatch（GHSA-fc5q-39xc-vjpf、CMP-261118-0925）の1件のみ。期限付き（2026-12-02T00:00:00Z に失効。2026-12-01 UTC 末日まで有効）。
+// 個別除外は picomatch（GHSA-fc5q-39xc-vjpf、CMP-261118-0628）の1件のみ。期限付き（2026-12-02T00:00:00Z に失効。2026-12-01 UTC 末日まで有効）。
 // 修正版が存在しない（<=4.0.7 の最新が 4.0.7、first_patched_version=null）ための最後の手段。
 // 除外は GHSA 単位・期限付きで定義し、方針文書 §4.3 に理由を残すこと。修正版が出たら撤去する。
 import { execSync } from 'node:child_process'
