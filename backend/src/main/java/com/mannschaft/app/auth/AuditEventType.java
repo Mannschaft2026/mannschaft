@@ -677,7 +677,14 @@ public enum AuditEventType {
      * 価格改定を取り消した（DRAFT/READY/PROVISION_FAILED → CANCELLED。2026-09-24 御裁可）。
      * metadata に revisionId・status を含める。Stripe Price/Product ID は含めない（AC-168）。
      */
-    PRICE_REVISION_CANCELLED(AuditEventCategory.BILLING);
+    PRICE_REVISION_CANCELLED(AuditEventCategory.BILLING),
+
+    // ─── EFFORT ─────────────────────────────────────────────
+    /**
+     * F06.4.1 本人が頑張り記録の原本を削除した。metadata は recordId・version のみ
+     * （体重・科目・メモ・snapshot は含めない。AC-61）。
+     */
+    EFFORT_RECORD_DELETED(AuditEventCategory.EFFORT);
 
     private final AuditEventCategory category;
 }

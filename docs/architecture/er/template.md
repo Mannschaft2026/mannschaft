@@ -72,7 +72,9 @@ erDiagram
 
 このドメインのテーブルを参照している他ドメインの側（実 FK と ID参照のみ。多態参照と推定不能参照は含まない。同一ドメイン内の参照は上の図を参照）。
 
-なし
+| 参照元ドメイン | 参照元テーブル | 列 | 種別 | 参照先テーブル |
+| --- | --- | --- | --- | --- |
+| [effortrecord](effortrecord.md) | `effort_definitions` | `team_template_id` | ID参照 | `team_templates` |
 
 ## 多態参照（線を引かない）
 
