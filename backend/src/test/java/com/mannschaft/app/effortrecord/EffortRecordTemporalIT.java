@@ -93,15 +93,26 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
         ownerService.create(owner, UUID.randomUUID().toString(), request("61.00"));
         assertThat(receipts(owner)).isEqualTo(2);
 
-        time(START.plus(Duration.ofHours(24)).plusSeconds(1));
+        // 削除側は SQL の UTC_TIMESTAMP(6)（DB 実時刻）で期限判定する（番人方針）。可変 Clock の固定日とは独立なので、
+        // 期限は DB 時刻基準に置き直す: 古い方=期限外（DB今-1h）・新しい方=期限内（DB今+1h）。
+        expireByDbTime(owner, "ASC", "-");
+        expireByDbTime(owner, "DESC", "+");
         int deleted = cleanup.purgeExpired();
         assertThat(deleted).isGreaterThanOrEqualTo(1);
-        assertThat(receipts(owner)).as("12時間後に作った receipt は期限内で残る").isEqualTo(1);
+        assertThat(receipts(owner)).as("期限内（DB今+1h）の receipt は残る").isEqualTo(1);
         assertThat(rows(owner)).as("receipt の期限削除は原本を消さない").isEqualTo(2);
 
-        time(START.plus(Duration.ofHours(36)).plusSeconds(1));
+        tx(() -> em.createNativeQuery("UPDATE effort_operation_receipts SET expires_at = UTC_TIMESTAMP(6) - INTERVAL 1 HOUR "
+                + "WHERE actor_user_id = ?1").setParameter(1, owner).executeUpdate());
         cleanup.purgeExpired();
         assertThat(receipts(owner)).isZero();
+    }
+
+    /** created_at の昇順/降順で先頭1件の expires_at を DB 実時刻基準（±1時間）へ置く。 */
+    private void expireByDbTime(Long actor, String order, String sign) {
+        tx(() -> em.createNativeQuery("UPDATE effort_operation_receipts SET expires_at = UTC_TIMESTAMP(6) " + sign
+                + " INTERVAL 1 HOUR WHERE actor_user_id = ?1 ORDER BY created_at " + order + " LIMIT 1")
+                .setParameter(1, actor).executeUpdate());
     }
 
     @Test
