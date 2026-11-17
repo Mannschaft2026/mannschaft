@@ -111,8 +111,12 @@ public class ShiftBudgetClosePeriodResolver {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ResolvedPeriod ensureFixed(Long organizationId, YearMonth periodKey) {
-        settingRepository.insertIgnore(UuidBytes.toBytes(UuidV7.generate()), organizationId);
-        settingRepository.findByOrganizationIdForUpdate(organizationId);
+        // 先頭行は FOR UPDATE を先に取る（既にあれば INSERT IGNORE の共有ロックを経由しないので、並行する確定同士が
+        // 共有ロック→排他ロックの昇格でデッドロックしない）。無ければ作ってからロックし直す
+        if (settingRepository.findByOrganizationIdForUpdate(organizationId).isEmpty()) {
+            settingRepository.insertIgnore(UuidBytes.toBytes(UuidV7.generate()), organizationId);
+            settingRepository.findByOrganizationIdForUpdate(organizationId);
+        }
         var existing = periodRepository.findByOrganizationIdAndPeriodKey(organizationId, periodKey.toString());
         if (existing.isPresent()) {
             return fromRow(existing.get());

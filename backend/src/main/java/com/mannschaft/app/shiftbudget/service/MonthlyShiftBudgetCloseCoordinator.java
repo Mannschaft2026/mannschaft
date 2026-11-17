@@ -199,7 +199,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
         int failed = 0;
         int consumptions = 0;
         for (Map.Entry<YearMonth, List<ShiftBudgetAllocationEntity>> entry : byKey.entrySet()) {
-            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = periodResolver.ensureFixed(organizationId, entry.getKey());
+            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey());
             for (ShiftBudgetAllocationEntity allocation : entry.getValue()) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
                 switch (r.kind()) {
@@ -274,7 +274,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
                 break;
             }
             keys++;
-            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = periodResolver.ensureFixed(organizationId, entry.getKey());
+            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey());
             for (ShiftBudgetAllocationEntity allocation : entry.getValue()) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
                 if (r.kind() == AllocationResult.Kind.CLOSED) {
@@ -314,7 +314,8 @@ public class MonthlyShiftBudgetCloseCoordinator {
         UUID eventId = null;
         try {
             // 段1 Prepare
-            ShiftBudgetCloseStageService.PrepareResult prepared = stage.prepare(allocationId, key);
+            ShiftBudgetCloseStageService.PrepareResult prepared = ShiftBudgetDeadlockRetry.run("prepare",
+                    () -> stage.prepare(allocationId, key));
             if (prepared == null) {
                 return new AllocationResult(AllocationResult.Kind.SKIPPED, 0);
             }
@@ -322,17 +323,20 @@ public class MonthlyShiftBudgetCloseCoordinator {
             hooks.afterPrepared(allocationId, eventId);
 
             // 段2 Post（budget TX）。年度・判定行の保存済み判定を受け取る
-            ShiftBudgetMonthlyPostResult post = journalService.post(postCommand(allocation, prepared, period));
+            ShiftBudgetMonthlyPostCommand command = postCommand(allocation, prepared, period);
+            ShiftBudgetMonthlyPostResult post = ShiftBudgetDeadlockRetry.run("post", () -> journalService.post(command));
             hooks.afterPosted(allocationId, eventId, post.outcome().name());
 
             if (post.outcome() == ShiftBudgetMonthlyPostResult.Outcome.POSTED) {
                 // 段3a Commit
-                stage.commit(eventId, post.journalTransactionId());
+                final UUID committing = eventId;
+                ShiftBudgetDeadlockRetry.runVoid("commit", () -> stage.commit(committing, post.journalTransactionId()));
                 replayDeferrals(eventId);
                 return new AllocationResult(AllocationResult.Kind.CLOSED, prepared.lineCount());
             }
             // 段3b Abort（判定 ABORTED のみ）
-            stage.abort(eventId, post.reason());
+            final UUID aborting = eventId;
+            ShiftBudgetDeadlockRetry.runVoid("abort", () -> stage.abort(aborting, post.reason()));
             String operation = "FY_CLOSED".equals(post.reason()) ? "POST_FY_CLOSED" : "JOURNAL_CONFLICT";
             recordFailure(allocation.getOrganizationId(), allocationId, operation, key, eventId,
                     "締めを中止しました: reason=" + post.reason());
@@ -357,6 +361,11 @@ public class MonthlyShiftBudgetCloseCoordinator {
                     e.getClass().getSimpleName() + ": " + e.getMessage());
             return new AllocationResult(AllocationResult.Kind.FAILED, 0);
         }
+    }
+
+    /** 期間行の確定（独立 TX）。デッドロックの犠牲は TX の外で再実行する。 */
+    private ShiftBudgetClosePeriodResolver.ResolvedPeriod ensureFixed(Long organizationId, YearMonth key) {
+        return ShiftBudgetDeadlockRetry.run("ensureFixed", () -> periodResolver.ensureFixed(organizationId, key));
     }
 
     private ShiftBudgetMonthlyPostCommand postCommand(ShiftBudgetAllocationEntity allocation,

@@ -41,8 +41,9 @@ public class ShiftBudgetClosingSettingFacade {
         featureService.requireEnabled(organizationId);
         policy.requireBudgetAdmin(userId, organizationId);
 
-        ShiftBudgetClosingSettingService.ClosingSettingView view =
-                settingService.change(organizationId, userId, expectedRevision, closingDay, effectiveKey, reason);
+        // 同じ revision の同時変更はデッドロックの犠牲が出うる。犠牲は TX の外で再実行すると、他方の確定後の revision を読んで 409 になる
+        ShiftBudgetClosingSettingService.ClosingSettingView view = ShiftBudgetDeadlockRetry.run("closingDayChange",
+                () -> settingService.change(organizationId, userId, expectedRevision, closingDay, effectiveKey, reason));
         auditLogService.record("SHIFT_BUDGET_CLOSING_DAY_CHANGED", userId, null, null, organizationId, null, null, null,
                 String.format("{\"revision\":%d,\"effective_period_key\":\"%s\",\"closing_day\":%d}",
                         view.revision(), effectiveKey, closingDay));

@@ -220,3 +220,4 @@ public interface ShiftBudgetRateQueryRepository
             + "AND sl.slot_date BETWEEN :from AND :to ORDER BY sl.slot_date, sl.id", nativeQuery = true)
     List<Object[]> findPublishedSlotsForOrganization(@Param("organizationId") Long organizationId,
                                                      @Param("from") LocalDate from, @Param("to") LocalDate to);
+}

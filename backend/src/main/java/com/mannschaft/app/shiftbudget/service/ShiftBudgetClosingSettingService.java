@@ -62,7 +62,10 @@ public class ShiftBudgetClosingSettingService {
     @Transactional
     public ClosingSettingView change(Long organizationId, Long actorUserId, long expectedRevision, int closingDay,
                                      YearMonth effectiveKey, String reason) {
-        settingRepository.insertIgnore(UuidBytes.toBytes(UuidV7.generate()), organizationId);
+        // FOR UPDATE を先に取る（既にあれば INSERT IGNORE の共有ロックを経由しない）。無ければ作ってからロックし直す
+        if (settingRepository.findByOrganizationIdForUpdate(organizationId).isEmpty()) {
+            settingRepository.insertIgnore(UuidBytes.toBytes(UuidV7.generate()), organizationId);
+        }
         ShiftBudgetClosingSettingEntity setting = settingRepository.findByOrganizationIdForUpdate(organizationId)
                 .orElseThrow(() -> new IllegalStateException("締め日設定の先頭行を確保できません: orgId=" + organizationId));
         List<ShiftBudgetClosingDayChangeEntity> changes = changeRepository.findByOrganizationIdOrderByRevisionAsc(organizationId);
