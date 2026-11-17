@@ -149,8 +149,8 @@ public interface ShiftBudgetRateQueryRepository
             + "WHERE sl.id = :slotId AND sl.deleted_at IS NULL", nativeQuery = true)
     Optional<String> findSlotMonth(@Param("slotId") Long slotId);
 
-    /** 勤務枠の持ち主（[チームID, シフトID]）。論理削除済みの枠・シフトは空。 */
-    @Query(value = "SELECT sch.team_id, sl.schedule_id FROM shift_slots sl "
+    /** 勤務枠の持ち主（[チームID, シフトID, 勤務日(yyyy-MM-dd)]）。論理削除済みの枠・シフトは空。 */
+    @Query(value = "SELECT sch.team_id, sl.schedule_id, DATE_FORMAT(sl.slot_date, '%Y-%m-%d') FROM shift_slots sl "
             + "INNER JOIN shift_schedules sch ON sch.id = sl.schedule_id "
             + "WHERE sl.id = :slotId AND sl.deleted_at IS NULL AND sch.deleted_at IS NULL", nativeQuery = true)
     List<Object[]> findSlotOwner(@Param("slotId") Long slotId);

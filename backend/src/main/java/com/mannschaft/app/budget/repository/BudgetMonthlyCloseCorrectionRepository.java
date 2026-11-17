@@ -3,7 +3,9 @@ package com.mannschaft.app.budget.repository;
 import com.mannschaft.app.budget.entity.BudgetMonthlyCloseCorrectionEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,15 @@ public interface BudgetMonthlyCloseCorrectionRepository
         extends JpaRepository<BudgetMonthlyCloseCorrectionEntity, UUID> {
 
     Optional<BudgetMonthlyCloseCorrectionEntity> findByCommandId(UUID commandId);
+
+    /**
+     * 同じ command の保存済み結果を、ロック付き読み取りで探す。ロック付き読み取りは REPEATABLE READ の
+     * スナップショットではなく最新のコミット済み行を読むため、行ロック待ちの間に先行リクエストが確定した
+     * 同 command の結果を取りこぼさない。
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM BudgetMonthlyCloseCorrectionEntity c WHERE c.commandId = :commandId")
+    Optional<BudgetMonthlyCloseCorrectionEntity> findByCommandIdForUpdate(@Param("commandId") UUID commandId);
 
     Optional<BudgetMonthlyCloseCorrectionEntity> findByIdAndCloseRecordId(UUID id, UUID closeRecordId);
 

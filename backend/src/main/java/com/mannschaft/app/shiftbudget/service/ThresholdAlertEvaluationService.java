@@ -19,8 +19,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -81,20 +82,55 @@ public class ThresholdAlertEvaluationService {
     private final ApplicationEventPublisher eventPublisher;
 
     /**
+     * CMP-260909-2152: 訂正後の消化額で判定するための、訂正差額合計の読取口（同ドメインの値の受け口）と TX マネージャ。
+     *
+     * <p>コンストラクタ引数に足さずフィールド注入にしているのは、ArchUnit の D-5 凍結キーがコンストラクタの
+     * シグネチャを含むため、引数を変えると既存の凍結済み違反が別キーの「新しい違反」として数えられるから
+     * （新しい凍結キーを増やさない方針）。</p>
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    private ShiftBudgetCorrectionDeltaReader correctionDeltaReader;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PlatformTransactionManager transactionManager;
+
+    /**
      * 指定 allocation について現在消化率を計算し、80/100/120% 閾値の発火判定を行う。
      *
      * <p>呼び出し側 ({@code ShiftBudgetConsumptionRecordListener}) は AFTER_COMMIT hook 内で
      * 例外を握りつぶす責務を持つ。本メソッドは例外をそのまま伝播させる
      * （個別 (slot,user) ごとに try-catch して残り処理を続行する責任は呼び出し側）。</p>
      *
-     * <p>各閾値ごとに独立トランザクション ({@link Propagation#REQUIRES_NEW}) で評価することで、
-     * ある閾値の発火失敗が他の閾値の評価を巻き戻さないようにする。</p>
+     * <p>独立トランザクション（REQUIRES_NEW）で評価することで、呼出元の失敗が評価を巻き戻さず、
+     * 通知（AFTER_COMMIT）がこの評価のコミット後に配送される。</p>
+     *
+     * <p>CMP-260909-2152: 判定に使う消化額は、月次締め後の訂正を反映した<b>訂正後の消化額</b>（全入口で共通）。
+     * 訂正の差額は budget の値なので、TX に入る前に取得して値だけを TX の中へ持ち込む
+     * （TX 内で他ドメインを呼ばない）。TX の入口をこのメソッドの注釈ではなく {@link TransactionTemplate} で
+     * 開くのはそのため。</p>
      *
      * @param allocationId 評価対象 allocation の ID
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void evaluateAndTrigger(Long allocationId) {
-        evaluate(allocationId, null);
+        BigDecimal correctionDelta = correctionDeltaReader.totalOf(allocationId);
+        inNewTransaction(() -> evaluate(allocationId, null, correctionDelta));
+    }
+
+    /**
+     * 訂正差額を見ずに、割当のキャッシュ（未訂正の消化額）だけで閾値を判定する。
+     *
+     * <p>{@code @Transactional} を持つ入口（失敗イベントの再試行 {@code ShiftBudgetRetryExecutor#execute} など）は、
+     * {@link #evaluateAndTrigger} を呼ぶと訂正差額の取得（budget の読取）を TX の中から辿ってしまう
+     * （D-3T の新しい凍結キーになる）。そのため再試行の入口は本メソッドを使う。再試行の TX 分離は別 PR（#4559）で
+     * 段取り役に移し、そこで {@link #evaluateAndTrigger}（訂正後の消化額）へ切り替える。</p>
+     */
+    public void evaluateOnCachedAmounts(Long allocationId) {
+        inNewTransaction(() -> evaluate(allocationId, null, BigDecimal.ZERO));
+    }
+
+    private void inNewTransaction(Runnable action) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        template.executeWithoutResult(status -> action.run());
     }
 
     /**
@@ -110,10 +146,10 @@ public class ThresholdAlertEvaluationService {
      * @param effectiveConsumed 訂正後の消化額
      */
     public void evaluateWithEffectiveConsumed(Long allocationId, BigDecimal effectiveConsumed) {
-        evaluate(allocationId, effectiveConsumed);
+        evaluate(allocationId, effectiveConsumed, BigDecimal.ZERO);
     }
 
-    private void evaluate(Long allocationId, BigDecimal consumedOverride) {
+    private void evaluate(Long allocationId, BigDecimal consumedOverride, BigDecimal correctionDelta) {
         ShiftBudgetAllocationEntity allocation = allocationRepository.findById(allocationId)
                 .orElse(null);
         if (allocation == null || allocation.getDeletedAt() != null) {
@@ -122,7 +158,7 @@ public class ThresholdAlertEvaluationService {
         }
 
         BigDecimal allocated = allocation.getAllocatedAmount();
-        BigDecimal consumed = consumedOverride != null ? consumedOverride : allocation.getConsumedAmount();
+        BigDecimal consumed = consumedOverride != null ? consumedOverride : correctedConsumed(allocation, correctionDelta);
         if (allocated == null || allocated.signum() == 0) {
             // 予算ゼロ円の境界ケース: 設計書 §11 では即 100% 超過判定とするが、
             // 本実装では「割当0+消化0=0%」として WARN/EXCEEDED いずれも発火させない方針
@@ -142,6 +178,15 @@ public class ThresholdAlertEvaluationService {
                 fireAlertIfNotExists(allocation, threshold, consumed);
             }
         }
+    }
+
+    /** キャッシュの消化額・確定額と訂正差額から、訂正後の消化額を出す（閾値判定・reader 共通の式）。 */
+    private static BigDecimal correctedConsumed(ShiftBudgetAllocationEntity allocation, BigDecimal correctionDelta) {
+        if (allocation.getConsumedAmount() == null) {
+            return null;
+        }
+        BigDecimal confirmed = allocation.getConfirmedAmount() == null ? BigDecimal.ZERO : allocation.getConfirmedAmount();
+        return CorrectedAmounts.consumed(allocation.getConsumedAmount(), confirmed, correctionDelta);
     }
 
     /**

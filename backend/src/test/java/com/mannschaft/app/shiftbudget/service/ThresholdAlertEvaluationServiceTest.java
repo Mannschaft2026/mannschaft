@@ -80,6 +80,12 @@ class ThresholdAlertEvaluationServiceTest {
     @Mock
     private ShiftBudgetFailedEventService failedEventService;
 
+    /** CMP-260909-2152: 訂正差額の読取口（既定は訂正なし = 0）。 */
+    @Mock
+    private ShiftBudgetCorrectionDeltaReader correctionDeltaReader;
+    @Mock
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ThresholdAlertEvaluationService service;
@@ -90,6 +96,10 @@ class ThresholdAlertEvaluationServiceTest {
                 allocationRepository, alertRepository, budgetConfigRepository,
                 userRoleRepository, auditLogService,
                 workflowRequestService, objectMapper, failedEventService, eventPublisher);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "correctionDeltaReader", correctionDeltaReader);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "transactionManager", transactionManager);
+        org.mockito.Mockito.lenient().when(correctionDeltaReader.totalOf(org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(java.math.BigDecimal.ZERO);
     }
 
     /**

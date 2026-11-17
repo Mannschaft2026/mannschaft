@@ -90,7 +90,7 @@ public class ShiftBudgetRetryExecutor {
         if (allocationId == null) {
             throw new IllegalStateException("THRESHOLD_ALERT failed event has no source_id");
         }
-        thresholdAlertEvaluationService.evaluateAndTrigger(allocationId);
+        thresholdAlertEvaluationService.evaluateOnCachedAmounts(allocationId);
     }
 
     private void retryWorkflowStart(ShiftBudgetFailedEventEntity entity) {
@@ -101,7 +101,7 @@ public class ShiftBudgetRetryExecutor {
         if (allocationId == null) {
             throw new IllegalStateException("WORKFLOW_START payload has no allocation_id");
         }
-        thresholdAlertEvaluationService.evaluateAndTrigger(allocationId);
+        thresholdAlertEvaluationService.evaluateOnCachedAmounts(allocationId);
     }
 
     /**

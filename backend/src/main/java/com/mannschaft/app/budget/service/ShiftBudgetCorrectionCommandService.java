@@ -126,8 +126,9 @@ public class ShiftBudgetCorrectionCommandService {
                 .findBySourceForUpdate(ShiftBudgetJournalSources.MONTHLY, cmd.allocationId(),
                         cmd.originalTransactionDate()));
 
-        // 4 ロック待ちの間に同 command が確定していないか（ロック付き読み取りは最新のコミット済み行を読む）
-        prior = correctionRepository.findByCommandId(cmd.commandId());
+        // 4 ロック待ちの間に同 command が確定していないか（通常の SELECT は REPEATABLE READ のスナップショットを
+        // 読むため、ロック付き読み取りで最新のコミット済み行を読む）
+        prior = correctionRepository.findByCommandIdForUpdate(cmd.commandId());
         if (prior.isPresent()) {
             return replay(prior.get(), hash);
         }

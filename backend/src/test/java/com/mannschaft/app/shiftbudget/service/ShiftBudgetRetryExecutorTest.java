@@ -171,7 +171,7 @@ class ShiftBudgetRetryExecutorTest {
                 ShiftBudgetFailedEventType.THRESHOLD_ALERT, ALLOCATION_ID, "{}");
 
         assertThat(executor.execute(e)).isTrue();
-        verify(thresholdAlertEvaluationService).evaluateAndTrigger(ALLOCATION_ID);
+        verify(thresholdAlertEvaluationService).evaluateOnCachedAmounts(ALLOCATION_ID);
         assertThat(e.getStatus()).isEqualTo(ShiftBudgetFailedEventStatus.SUCCEEDED);
     }
 
@@ -193,7 +193,7 @@ class ShiftBudgetRetryExecutorTest {
                 ShiftBudgetFailedEventType.WORKFLOW_START, 900L, "{\"allocation_id\":42}");
 
         assertThat(executor.execute(e)).isTrue();
-        verify(thresholdAlertEvaluationService).evaluateAndTrigger(ALLOCATION_ID);
+        verify(thresholdAlertEvaluationService).evaluateOnCachedAmounts(ALLOCATION_ID);
     }
 
     @Test

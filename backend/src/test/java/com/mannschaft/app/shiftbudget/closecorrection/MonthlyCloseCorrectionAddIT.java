@@ -234,6 +234,31 @@ class MonthlyCloseCorrectionAddIT extends MonthlyCloseCorrectionTestBase {
         history(adminId, allocationId).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
     }
 
+    // ───────────── 試練42（検分指摘3: 勤務枠の日付の検証） ─────────────
+
+    @Test
+    @DisplayName("試練45 勤務枠の実日付が要求の勤務日と違えば400、割当期間外の枠は404。いずれも変更0")
+    void 試練45_勤務枠の日付と期間の検証() throws Exception {
+        Long allocationId = allocation("50000");
+        // 6月の枠（6/12）。勤務日を 6/20 と偽った ADD は二重計上の入口になるため拒否する
+        long[] june = publishedSlot(teamId, LocalDate.of(2026, 6, 12), LocalTime.of(9, 0), LocalTime.of(13, 0), workerId);
+        // 同じチームの割当期間外（7月）の枠。6月の割当へは追加できない
+        long[] july = publishedSlot(teamId, LocalDate.of(2026, 7, 5), LocalTime.of(9, 0), LocalTime.of(13, 0), workerId);
+        closeJune();
+        int journalsBefore = correctionJournalCount();
+
+        postCorrection(adminId, allocationId, add(workerId, LocalDate.of(2026, 6, 20), june[1], june[0], "4", "1200", 0,
+                "勤務日の偽り")).andExpect(status().isBadRequest());
+        postCorrection(adminId, allocationId, add(workerId, LocalDate.of(2026, 6, 12), july[1], july[0], "4", "1200", 0,
+                "期間外の枠")).andExpect(status().isNotFound());
+
+        assertThat(correctionJournalCount()).isEqualTo(journalsBefore);
+        history(adminId, allocationId).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
+        // 正しい日付なら追加できる
+        postCorrection(adminId, allocationId, add(workerId, LocalDate.of(2026, 6, 12), june[1], june[0], "4", "1200", 0,
+                "正しい追加")).andExpect(status().isCreated());
+    }
+
     // ───────────── 試練36（r4-2 復活の重複） ─────────────
 
     @Test

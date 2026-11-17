@@ -81,7 +81,7 @@ public class MonthlyShiftBudgetCorrectionCoordinator {
             }
             if (request.slotId() != null) {
                 snapshotService.requireSlotOfAllocation(organizationId, allocationId, request.slotId(),
-                        request.shiftId());
+                        request.shiftId(), request.workDate());
                 // 別の月の締めで確定済みの勤務枠×人への追加は二重計上になる（この月の締めの明細は budget 側が判定）
                 if (snapshotService.confirmedInOtherClose(organizationId, allocationId, month, request.slotId(),
                         request.userId())) {

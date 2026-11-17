@@ -153,8 +153,12 @@ public class ShiftBudgetCorrectionSnapshotService {
         log.info("月次締めイベントを旧締めから補完: allocId={}, month={}", allocationId, targetMonth);
     }
 
-    /** ADD の勤務枠が、この割当の勤務か（他チーム・他割当の枠、シフト不一致は 404）。 */
-    public void requireSlotOfAllocation(Long organizationId, Long allocationId, Long slotId, Long shiftId) {
+    /**
+     * ADD の勤務枠が、この割当の勤務か。他チーム・他割当の枠・シフト不一致・割当期間外の枠は 404、
+     * 枠の実日付が要求の勤務日と違うときは 400（別の月の締めへ二重計上する入口になるため）。
+     */
+    public void requireSlotOfAllocation(Long organizationId, Long allocationId, Long slotId, Long shiftId,
+                                        LocalDate workDate) {
         ShiftBudgetAllocationEntity allocation = requireAllocation(organizationId, allocationId);
         List<Object[]> owner = rateQueryRepository.findSlotOwner(slotId);
         if (owner.isEmpty()) {
@@ -171,6 +175,13 @@ public class ShiftBudgetCorrectionSnapshotService {
                         allocation.getPeriodEnd()).contains(slotTeam);
         if (!mine) {
             throw new BusinessException(ShiftBudgetErrorCode.CORRECTION_SLOT_NOT_FOUND);
+        }
+        LocalDate slotDate = LocalDate.parse((String) owner.get(0)[2]);
+        if (slotDate.isBefore(allocation.getPeriodStart()) || slotDate.isAfter(allocation.getPeriodEnd())) {
+            throw new BusinessException(ShiftBudgetErrorCode.CORRECTION_SLOT_NOT_FOUND);
+        }
+        if (!slotDate.equals(workDate)) {
+            throw new BusinessException(ShiftBudgetErrorCode.CORRECTION_INVALID_REQUEST);
         }
     }
 
