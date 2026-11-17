@@ -428,14 +428,14 @@ class FlywayFromScratchMigrationTest {
 
     /**
      * 既存値の保持・途中再開（既に列がある状態で migration を再実行）・想定外定義の検出を、
-     * 追加のコンテナや全 migration の再走行なしに、V260 の SQL だけを同じスキーマへ再実行して確かめる。
+     * 追加のコンテナや全 migration の再走行なしに、V261 の SQL だけを同じスキーマへ再実行して確かめる。
      */
     @Test
     @Order(2)
     void cmp0012_archiveのsender_type追加は再実行で既存値を保持し想定外定義を検出する() throws Exception {
         migrateFromScratch();
         String script = new String(new PathMatchingResourcePatternResolver()
-                .getResources("classpath*:db/migration/V260.*__add_sender_type_to_direct_mail_logs_archive.sql")[0]
+                .getResources("classpath*:db/migration/V261.*__add_sender_type_to_direct_mail_logs_archive.sql")[0]
                 .getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         List<String> statements = new ArrayList<>();
         StringBuilder body = new StringBuilder();
