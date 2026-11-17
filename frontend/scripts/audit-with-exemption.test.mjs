@@ -132,3 +132,8 @@ test('high entry が除外GHSAに到達せず moderate advisory だけを参照�
     assert.throws(() => checkAudit(JSON.stringify(value), 1, Date.parse(at)), /許可されない脆弱性|深刻度/)
   }
 })
+test('除外の境界: 2026-12-01T23:59:59Z は通過し 2026-12-02T00:00:00Z は拒否する', () => {
+  const raw = JSON.stringify(picomatchReport())
+  checkAudit(raw, 1, Date.parse('2026-12-01T23:59:59Z'))
+  assert.throws(() => checkAudit(raw, 1, Date.parse('2026-12-02T00:00:00Z')), /許可されない脆弱性/)
+})
