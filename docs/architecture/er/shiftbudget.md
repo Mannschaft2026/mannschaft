@@ -28,8 +28,8 @@ erDiagram
     shift_budget_consumptions {
         bigint id PK
         bigint allocation_id FK
-        binary close_event_id FK
         bigint user_id "ID参照"
+        binary close_event_id FK
     }
     shift_budget_failed_events {
         bigint id PK
@@ -63,10 +63,10 @@ erDiagram
     teams |o..o{ shift_budget_allocations : "ID参照(FKなし) team_id"
     users ||..o{ shift_budget_allocations : "ID参照(FKなし) created_by"
     shift_budget_allocations ||--o{ shift_budget_consumptions : "allocation_id"
+    shift_budget_monthly_close_events |o--o{ shift_budget_consumptions : "close_event_id"
     users ||..o{ shift_budget_consumptions : "ID参照(FKなし) user_id"
     organizations ||..o{ shift_budget_failed_events : "ID参照(FKなし) organization_id"
     shift_budget_allocations ||--o{ shift_budget_monthly_close_events : "allocation_id"
-    shift_budget_monthly_close_events |o--o{ shift_budget_consumptions : "close_event_id"
     users |o..o{ shift_budget_monthly_close_events : "ID参照(FKなし) actor_user_id"
     projects |o..o{ todo_budget_links : "ID参照(FKなし) project_id"
     shift_budget_allocations ||--o{ todo_budget_links : "allocation_id"
