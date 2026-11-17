@@ -106,9 +106,12 @@ updates:
 
 ---
 
-### 4.3. node-forge / braces の個別例外は撤去済み（2026-11-03）
+### 4.3. picomatch の期限付き個別例外（2026-11-18）と、撤去済みの node-forge / braces 例外
 
-現状: 監査例外の仕組み（`frontend/scripts/audit-with-exemption.mjs` の `EXEMPTIONS` 表）は畳んだ。個別除外は **ゼロ** で、`npm audit` の high/critical は **無条件で CI を落とす**。除外を再導入する場合は GHSA 単位・期限付き・到達経路限定で定義し、本書に理由を残すこと。`--audit-level` の緩和は引き続き禁止。
+現状（2026-11-18〜）: **GHSA-fc5q-39xc-vjpf（picomatch <=4.0.7、extglob の ReDoS、CVSS 7.5）の1件のみ**、`frontend/scripts/audit-with-exemption.mjs` の `EXEMPT_ADVISORY_URLS` で期限付き（2026-12-02 UTC 当日まで）に除外している。理由: `first_patched_version` が無く、npm の最新も 4.0.7 のため、更新・overrides では解消できない。picomatch はビルド時のファイル探索（tinyglobby / unplugin / vite / nuxt 等）にだけ使われ、本番で利用者入力の glob を受けない。`@dxup/nuxt` 等の high はすべてこの1件が伝播したもの。除外は GHSA 単位で、別の high/critical advisory が1つでも混ざれば従来どおり拒否する。修正版が出たら更新して本例外を撤去する（追跡: CMP-261118-0925）。期限切れ後は CI が落ちる。`--audit-level` の緩和は引き続き禁止。
+
+（以下は撤去済みの旧例外の記録）
+旧状態: 監査例外の仕組み（`EXEMPTIONS` 表）は畳んだ。個別除外は **ゼロ** で、`npm audit` の high/critical は **無条件で CI を落とす**。除外を再導入する場合は GHSA 単位・期限付き・到達経路限定で定義し、本書に理由を残すこと。`--audit-level` の緩和は引き続き禁止。
 
 撤去の経緯（履歴）:
 
@@ -173,6 +176,7 @@ Webhook の URL は Zod 4 により前後の空白と ASCII tab/CR/LF を除い�
 
 | 日付 | 変更 |
 |---|---|
+| 2026-11-18 | §4.3 に picomatch（GHSA-fc5q-39xc-vjpf、修正版なし）の期限付き例外を再導入（CMP-261118-0925）。@dxup/nuxt 等の high は同 advisory の伝播 |
 | 2026-11-03 | §4.3/§4.4 の node-forge・braces 個別例外と `EXEMPTIONS` を撤去済みの現状へ改め、経緯を履歴化（CMP-261003-1229）。high/critical は無条件で拒否 |
 | 2026-10-24 | 静的到達性の再評価とユーザー再承認によりnode-forgeの当該GHSAだけ10月30日UTC当日まで再承認。braces期限・対象・経路・拒否条件は不変 |
 | 2026-10-17 | ユーザー再承認により§4.3/§4.4の既存2例外を10月23日UTC当日まで7日延長。対象・経路・拒否条件は不変 |

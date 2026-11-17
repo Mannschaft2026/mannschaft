@@ -86,7 +86,7 @@ jobs:
         run: node --test scripts/audit-with-exemption.test.mjs scripts/patch-nuxt-devtools-simple-git.test.mjs
 
       - name: npm audit (依存脆弱性スキャン)
-      # 個別除外は現在ゼロ（node-forge は 1.4.2 へ更新、braces は勧告が発火せず撤去）。
+      # 個別除外は picomatch GHSA-fc5q-39xc-vjpf の1件のみ（修正版なし・期限付き 2026-12-02）。
       # audit-level を下げることは禁止。詳細は scripts/audit-with-exemption.mjs 冒頭。
         run: node scripts/audit-with-exemption.mjs
 
