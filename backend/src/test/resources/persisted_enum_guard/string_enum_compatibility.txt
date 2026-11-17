@@ -492,6 +492,15 @@ com.mannschaft.app.disclosure.DisclosureOutputFormat#WORD
 com.mannschaft.app.disclosure.DraftStatus#DRAFT
 com.mannschaft.app.disclosure.DraftStatus#EXPORTED
 com.mannschaft.app.disclosure.DraftStatus#READY
+com.mannschaft.app.effortrecord.enums.EffortReceiptRouteKind#OWNER
+com.mannschaft.app.effortrecord.enums.EffortReceiptRouteKind#TEAM
+com.mannschaft.app.effortrecord.enums.EffortShareState#FAILED
+com.mannschaft.app.effortrecord.enums.EffortShareState#MODERATED
+com.mannschaft.app.effortrecord.enums.EffortShareState#PENDING
+com.mannschaft.app.effortrecord.enums.EffortShareState#REVOKED
+com.mannschaft.app.effortrecord.enums.EffortShareState#VISIBLE
+com.mannschaft.app.effortrecord.enums.EffortSourceType#PRESET
+com.mannschaft.app.effortrecord.enums.EffortSourceType#TEAM
 com.mannschaft.app.equipment.EquipmentStatus#ALL_ASSIGNED
 com.mannschaft.app.equipment.EquipmentStatus#AVAILABLE
 com.mannschaft.app.equipment.EquipmentStatus#MAINTENANCE

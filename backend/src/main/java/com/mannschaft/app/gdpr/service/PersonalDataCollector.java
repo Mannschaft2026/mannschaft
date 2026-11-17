@@ -17,6 +17,7 @@ import com.mannschaft.app.auth.repository.OAuthAccountRepository;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.chart.repository.ChartRecordRepository;
 import com.mannschaft.app.common.EncryptionService;
+import com.mannschaft.app.effortrecord.service.EffortPersonalDataService;
 import com.mannschaft.app.errorreport.entity.ErrorReportOccurrenceEntity;
 import com.mannschaft.app.errorreport.repository.ErrorReportOccurrenceRepository;
 import com.mannschaft.app.errorreport.repository.ErrorReportRepository;
@@ -119,6 +120,8 @@ public class PersonalDataCollector {
     // ScheduleCommentEntity を直接参照せず ScheduleCommentService 経由で DTO を受け取る。
     private final ScheduleCommentService scheduleCommentService;
     private final RanchPersonalDataExportService ranchPersonalDataExportService;
+    // F06.4.1 個人の頑張り記録: 他ドメインの Entity を直接参照せず Service 経由で DTO を受け取る
+    private final EffortPersonalDataService effortPersonalDataService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -158,7 +161,9 @@ public class PersonalDataCollector {
             // （他カテゴリの慣例は snake_case ファイル名だが、本カテゴリはキー＝ファイル名を一致させる）、
             // ファイル名も category と同一文字列にする。
             Map.entry("scheduleComments", "scheduleComments"),
-            Map.entry("ranch", "ranch.json")
+            Map.entry("ranch", "ranch.json"),
+            // F06.4.1 個人の頑張り記録（本人の原本のみ。削除済み・purge 済みは除く）
+            Map.entry("effort_records", "effort_records.json")
     );
 
     /**
@@ -238,6 +243,7 @@ public class PersonalDataCollector {
             case "inbox" -> collectInbox(userId);
             case "scheduleComments" -> collectScheduleComments(userId);
             case "ranch" -> ranchPersonalDataExportService.exportUser(userId);
+            case "effort_records" -> OBJECT_MAPPER.writeValueAsString(effortPersonalDataService.collectForGdpr(userId));
             default -> "[]";
         };
     }
