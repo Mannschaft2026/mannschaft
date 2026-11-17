@@ -65,12 +65,11 @@ class MessagesPropertiesTranslationGuardTest {
     }
 
     @Test
-    void 固定欠落54鍵の内訳とJava実パーサによる棚卸を確認する() throws IOException {
-        assertThat(ALLOWED_MISSING).hasSize(54);
+    void 固定欠落45鍵の内訳とJava実パーサによる棚卸を確認する() throws IOException {
+        assertThat(ALLOWED_MISSING).hasSize(45);
         assertThat(ALLOWED_MISSING.keySet().stream()
                 .filter(key -> key.startsWith("notification.type.")).count()).isEqualTo(45);
-        assertThat(ALLOWED_MISSING.keySet().stream()
-                .filter(key -> key.startsWith("error.shift.budget.")).count()).isEqualTo(9);
+        // error.shift.budget.* は main で zh/ko/es/de の訳が入ったため、欠落除外には含めない。
         assertThat(ALLOWED_MISSING.values()).allMatch(reason -> !reason.isBlank());
         assertThat(ALLOWED_SAME_VALUES).extracting(allowance -> allowance.locale() + ":" + allowance.key())
                 .as("同じlocale・完全キーの同値例外を重複登録しない").doesNotHaveDuplicates();
@@ -283,10 +282,6 @@ class MessagesPropertiesTranslationGuardTest {
         for (String label : labels) {
             missing.put("notification.type." + label + ".label",
                     "NotificationPreferenceService用の既存通知設定ラベル。本文翻訳の範囲外");
-        }
-        for (String number : List.of("001", "002", "003", "004", "005", "006", "007", "008", "009")) {
-            missing.put("error.shift.budget." + number,
-                    "GlobalExceptionHandlerが返す既存APIエラー。通知本文ではない");
         }
         return Map.copyOf(missing);
     }
