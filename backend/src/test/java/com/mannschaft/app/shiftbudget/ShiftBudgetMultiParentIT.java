@@ -475,7 +475,7 @@ class ShiftBudgetMultiParentIT extends AbstractMySqlIntegrationTest {
     private Long seedConsumption(Long allocationId, Fixture f) {
         return transactionTemplate.execute(tx -> {
             ShiftBudgetConsumptionEntity c = consumptionRepository.save(
-                    ShiftBudgetConsumptionEntity.builder()
+                    ShiftBudgetConsumptionEntity.builder().workDate(java.time.LocalDate.of(2026, 6, 15))
                             .allocationId(allocationId)
                             .shiftId(f.scheduleId)
                             .slotId(f.slotId)

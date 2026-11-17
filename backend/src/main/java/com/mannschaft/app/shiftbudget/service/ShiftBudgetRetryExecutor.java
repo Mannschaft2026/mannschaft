@@ -58,7 +58,7 @@ public class ShiftBudgetRetryExecutor {
                 case THRESHOLD_ALERT -> retryThresholdAlert(entity);
                 case WORKFLOW_START -> retryWorkflowStart(entity);
                 case NOTIFICATION_SEND -> retryNotificationSend(entity);
-                case CONSUMPTION_RECORD, CONSUMPTION_CANCEL -> {
+                case CONSUMPTION_RECORD, CONSUMPTION_CANCEL, MONTHLY_CLOSE -> {
                     // 消化記録 / キャンセル hook は再実行ロジックが複雑（複数 (slot,user) を跨ぐ）。
                     // 現フェーズでは EXHAUSTED 化させて運用者が DB 直接補正する運用に倒す
                     // （誤再実行で重複 INSERT を起こすリスクを避ける）。

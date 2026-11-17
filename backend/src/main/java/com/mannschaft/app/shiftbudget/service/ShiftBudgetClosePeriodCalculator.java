@@ -17,7 +17,6 @@ import java.util.function.Function;
  * <p>{@code closingDayOf} は期間キー M に有効な締め日（0〜28、0＝末日）を返す関数
  * （effective_period_key &lt;= M の変更のうち revision 最大、無ければ0）。</p>
  *
- * <p>試練段階の骨組み。中身は出陣で実装する。</p>
  */
 public final class ShiftBudgetClosePeriodCalculator {
 
@@ -26,22 +25,27 @@ public final class ShiftBudgetClosePeriodCalculator {
 
     /** 期間キー M・締め日 d の締め日（d=0 は末日）。 */
     public static LocalDate closingDate(YearMonth periodKey, int closingDay) {
-        throw new UnsupportedOperationException("CMP-260909-2152 試練: 未実装");
+        return closingDay == 0 ? periodKey.atEndOfMonth() : periodKey.atDay(closingDay);
     }
 
     /** 期間キー M の締め期間。 */
     public static ClosePeriod period(YearMonth periodKey, Function<YearMonth, Integer> closingDayOf) {
-        throw new UnsupportedOperationException("CMP-260909-2152 試練: 未実装");
+        int day = closingDayOf.apply(periodKey);
+        YearMonth previous = periodKey.minusMonths(1);
+        LocalDate start = closingDate(previous, closingDayOf.apply(previous)).plusDays(1);
+        return new ClosePeriod(periodKey, start, closingDate(periodKey, day), day);
     }
 
     /** 勤務日（深夜跨ぎは開始日）が属する期間キー。 */
     public static YearMonth periodKeyOf(LocalDate workDate, Function<YearMonth, Integer> closingDayOf) {
-        throw new UnsupportedOperationException("CMP-260909-2152 試練: 未実装");
+        YearMonth month = YearMonth.from(workDate);
+        LocalDate end = closingDate(month, closingDayOf.apply(month));
+        return workDate.isAfter(end) ? month.plusMonths(1) : month;
     }
 
     /** 仕訳日 ＝ min(締め日, 割当終了日)。 */
     public static LocalDate journalDate(ClosePeriod period, LocalDate allocationEnd) {
-        throw new UnsupportedOperationException("CMP-260909-2152 試練: 未実装");
+        return period.end().isAfter(allocationEnd) ? allocationEnd : period.end();
     }
 
     /**

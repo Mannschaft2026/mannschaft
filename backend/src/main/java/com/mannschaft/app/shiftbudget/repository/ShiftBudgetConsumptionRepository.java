@@ -3,13 +3,17 @@ package com.mannschaft.app.shiftbudget.repository;
 import com.mannschaft.app.shiftbudget.ShiftBudgetCancelReason;
 import com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -115,6 +119,97 @@ public interface ShiftBudgetConsumptionRepository
                     + "ORDER BY a.id",
             nativeQuery = true)
     List<PlannedAllocationRow> findPlannedAllocationRowsByShiftId(@Param("shiftId") Long shiftId);
+
+    // ───────────────────────── CMP-260909-2152 締め期間・3段締め・ロック順統一 ─────────────────────────
+
+    /** 発見（ロック集合の決定にのみ使う通常 SELECT）: 枠×人の生存 PLANNED／CONFIRMED の割当 ID。 */
+    @Query("SELECT DISTINCT c.allocationId FROM ShiftBudgetConsumptionEntity c WHERE c.slotId = :slotId AND c.userId = :userId "
+            + "AND c.deletedAt IS NULL AND c.status IN (com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED, "
+            + "com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.CONFIRMED)")
+    List<Long> findLiveAllocationIdsBySlotAndUser(@Param("slotId") Long slotId, @Param("userId") Long userId);
+
+    /** 枠×人の生存 PLANNED／CONFIRMED を {@code FOR UPDATE} で再読する（ロック集合の検証・current read）。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ShiftBudgetConsumptionEntity c WHERE c.slotId = :slotId AND c.userId = :userId "
+            + "AND c.deletedAt IS NULL AND c.status IN (com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED, "
+            + "com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.CONFIRMED) ORDER BY c.id")
+    List<ShiftBudgetConsumptionEntity> lockLiveBySlotAndUser(@Param("slotId") Long slotId, @Param("userId") Long userId);
+
+    /** 発見: シフトの生存 PLANNED／CONFIRMED の割当 ID（取消のロック集合の決定のみ）。 */
+    @Query("SELECT DISTINCT c.allocationId FROM ShiftBudgetConsumptionEntity c WHERE c.shiftId = :shiftId "
+            + "AND c.deletedAt IS NULL AND c.status IN (com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED, "
+            + "com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.CONFIRMED)")
+    List<Long> findLiveAllocationIdsByShift(@Param("shiftId") Long shiftId);
+
+    /** シフトの生存 PLANNED／CONFIRMED を ID 昇順で {@code FOR UPDATE}（取消の割当→消化のロック順）。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ShiftBudgetConsumptionEntity c WHERE c.shiftId = :shiftId AND c.deletedAt IS NULL "
+            + "AND c.status IN (com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED, "
+            + "com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.CONFIRMED) ORDER BY c.id")
+    List<ShiftBudgetConsumptionEntity> lockLiveByShift(@Param("shiftId") Long shiftId);
+
+    /** 割当の、印の無い生存 PLANNED を ID 昇順で {@code FOR UPDATE}（Prepare の勤務枠日付追従・対象選定）。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ShiftBudgetConsumptionEntity c WHERE c.allocationId = :allocationId AND c.deletedAt IS NULL "
+            + "AND c.status = com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED "
+            + "AND c.closeEventId IS NULL ORDER BY c.id")
+    List<ShiftBudgetConsumptionEntity> lockUnmarkedPlanned(@Param("allocationId") Long allocationId);
+
+    /** 締めイベントの印が付いた生存 PLANNED を {@code FOR UPDATE}（Commit の件数・合計照合と確定）。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ShiftBudgetConsumptionEntity c WHERE c.closeEventId = :eventId AND c.deletedAt IS NULL "
+            + "AND c.status = com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED ORDER BY c.id")
+    List<ShiftBudgetConsumptionEntity> lockMarkedPlanned(@Param("eventId") UUID eventId);
+
+    /** 対象行に締めイベントの印を付ける（状態は PLANNED のまま）。 */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ShiftBudgetConsumptionEntity c SET c.closeEventId = :eventId WHERE c.id IN :ids")
+    int markCloseEvent(@Param("ids") Collection<Long> ids, @Param("eventId") UUID eventId);
+
+    /** Abort: 印を外す。 */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ShiftBudgetConsumptionEntity c SET c.closeEventId = NULL WHERE c.closeEventId = :eventId")
+    int clearCloseEvent(@Param("eventId") UUID eventId);
+
+    /** 勤務日の追従（枠の現在日付へ）。 */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ShiftBudgetConsumptionEntity c SET c.workDate = :workDate WHERE c.id = :id")
+    int updateWorkDate(@Param("id") Long id, @Param("workDate") LocalDate workDate);
+
+    /** 勤務日が指定期間の、印の無い生存 PLANNED の件数（締め対象の見積り・検証）。 */
+    @Query("SELECT COUNT(c) FROM ShiftBudgetConsumptionEntity c WHERE c.allocationId = :allocationId AND c.deletedAt IS NULL "
+            + "AND c.status = com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED "
+            + "AND c.workDate BETWEEN :from AND :to")
+    long countPlannedInRange(@Param("allocationId") Long allocationId, @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /** 指定の枠群について、生存 PLANNED／CONFIRMED のある (slotId, userId)（未計上候補の除外用。割当を問わない）。 */
+    @Query("SELECT c.slotId AS slotId, c.userId AS userId FROM ShiftBudgetConsumptionEntity c WHERE c.slotId IN :slotIds "
+            + "AND c.deletedAt IS NULL AND c.status IN (com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.PLANNED, "
+            + "com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus.CONFIRMED)")
+    List<SlotUserRow> findLiveSlotUsers(@Param("slotIds") Collection<Long> slotIds);
+
+    /** {@link #findLiveSlotUsers(Collection)} の射影。 */
+    interface SlotUserRow {
+        Long getSlotId();
+
+        Long getUserId();
+    }
+
+    /**
+     * CMP-260909-2152: 指定シフトの生存消化（PLANNED／CONFIRMED）を、計上先の割当・組織ごとに集計して返す。
+     * 締め後の CONFIRMED だけが残るシフトの取消（失敗イベント CANCEL_AFTER_CLOSE）も取消入口へ届けるため、PLANNED に限らない。
+     * {@code plannedCount} は PLANNED の件数。
+     */
+    @Query(value =
+            "SELECT a.id AS allocationId, a.organization_id AS organizationId, "
+                    + "SUM(CASE WHEN c.status = 'PLANNED' THEN 1 ELSE 0 END) AS plannedCount "
+                    + "FROM shift_budget_consumptions c "
+                    + "INNER JOIN shift_budget_allocations a ON a.id = c.allocation_id "
+                    + "WHERE c.shift_id = :shiftId AND c.status IN ('PLANNED', 'CONFIRMED') AND c.deleted_at IS NULL "
+                    + "GROUP BY a.id, a.organization_id "
+                    + "ORDER BY a.id",
+            nativeQuery = true)
+    List<PlannedAllocationRow> findLiveAllocationRowsByShiftId(@Param("shiftId") Long shiftId);
 
     /** {@link #findPlannedAllocationRowsByShiftId(Long)} の射影。 */
     interface PlannedAllocationRow {

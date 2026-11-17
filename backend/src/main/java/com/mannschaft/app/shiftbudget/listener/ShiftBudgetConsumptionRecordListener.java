@@ -16,6 +16,8 @@ import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetRateQueryRepository;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetConsumptionService;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetLockSetChangedException;
+import com.mannschaft.app.shiftbudget.service.ShiftRecordOutcome;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetFailedEventService;
 import com.mannschaft.app.shiftbudget.event.ShiftBudgetHourlyRateMissingEvent;
 import com.mannschaft.app.shiftbudget.service.ThresholdAlertEvaluationService;
@@ -79,13 +81,30 @@ public class ShiftBudgetConsumptionRecordListener {
      */
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * 通常の非同期入口（公開イベントの AFTER_COMMIT）。同期本体 {@link #onShiftPublished} を呼ぶだけ
+     * （CMP-260909-2152: 遅延再実行が同じ記録を同期で実行できるよう、非同期の注釈と本体を分けた）。
+     */
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
             reason = "殿の裁定: 記録と取消は対であり、片方だけ止まれば予算残高が壊れる。対になっているものを別々に扱ってはならず、いずれも常時実行とする")
     @Async("event-pool")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onShiftPublished(ShiftPublishedEvent event) {
+    public void handleShiftPublished(ShiftPublishedEvent event) {
+        onShiftPublished(event);
+    }
+
+    /**
+     * 同期本体。各 (slot, user) の結果を {@link ShiftRecordOutcome} に集計して返す（遅延再実行が REPLAYED／REDEFERRED／失敗を決める）。
+     * 計上先ロック集合の不一致は計上先の解決からやり直し（最大3回）、尽きたら失敗イベント CONSUMPTION_RECORD を残す。
+     */
+    public ShiftRecordOutcome onShiftPublished(ShiftPublishedEvent event) {
         Long scheduleId = event.getScheduleId();
         Long teamId = event.getTeamId();
+        int outRecorded = 0;
+        int outSkipped = 0;
+        int outDeferred = 0;
+        List<ShiftRecordOutcome.SlotUser> outFailures = new java.util.ArrayList<>();
+        boolean fatalFailure = false;
 
         // 計上先の組織（F01.2.1 §9.2 #14）。チームは複数の組織に加盟しうるため、チームから組織を
         // 推測せず、スロットごとに「そのチーム・日付に予算割当を持つ組織」を割当から解決する。
@@ -103,12 +122,13 @@ public class ShiftBudgetConsumptionRecordListener {
 
             for (ShiftSlotEntity slot : slots) {
                 // 当日の allocation を解決（割当を持つ組織 → その組織の allocation）
-                Optional<ShiftBudgetAllocationEntity> allocOpt = resolveAllocationForSlot(teamId, slot);
+                Optional<ShiftBudgetAllocationEntity> allocOpt = resolveAllocationForSlot(teamId, slot.getSlotDate());
                 if (allocOpt.isEmpty()) {
                     log.warn("F08.7 hook: 該当 allocation 不在または計上先の組織を一意に決められない"
                                     + "（事前作成漏れの可能性）: teamId={}, slotDate={}, slotId={}",
                             teamId, slot.getSlotDate(), slot.getId());
                     unresolvedSkipped++;
+                    outSkipped++;
                     continue;
                 }
                 ShiftBudgetAllocationEntity allocation = allocOpt.get();
@@ -158,6 +178,7 @@ public class ShiftBudgetConsumptionRecordListener {
                                     teamId, userId, slotId, slotDate, rateProblem);
                             tally.missingRateUserIds.add(userId);
                             tally.skipped++;
+                            outSkipped++;
                             recordFailureSafe(organizationId, ShiftBudgetFailedEventType.CONSUMPTION_RECORD,
                                     scheduleId,
                                     consumptionFailurePayload(scheduleId, teamId, slotId, slotDate, userId, rateProblem,
@@ -168,43 +189,74 @@ public class ShiftBudgetConsumptionRecordListener {
                         BigDecimal hourlyRate = hourlyRateOpt.get();
                         adoptedRate = hourlyRate;
 
-                        consumptionService.recordSingleConsumption(
-                                allocation.getId(),
-                                scheduleId,
-                                slotId,
-                                userId,
-                                hourlyRate,
-                                hours);
+                        // 計上先ロック集合の不一致は、勤務枠の現在日付を読み直して計上先の解決からやり直す（最大3回）
+                        ShiftBudgetConsumptionService.RecordResult result;
+                        ShiftBudgetAllocationEntity attemptAllocation = allocation;
+                        java.time.LocalDate attemptDate = slotDate;
+                        int attempt = 0;
+                        while (true) {
+                            try {
+                                result = consumptionService.recordSingleConsumption(
+                                        attemptAllocation.getId(),
+                                        scheduleId,
+                                        slotId,
+                                        userId,
+                                        hourlyRate,
+                                        hours,
+                                        attemptDate);
+                                break;
+                            } catch (ShiftBudgetLockSetChangedException lockChanged) {
+                                if (++attempt >= ShiftBudgetConsumptionService.MAX_LOCK_ATTEMPTS) {
+                                    throw lockChanged;
+                                }
+                                Optional<java.time.LocalDate> fresh = rateQueryRepository.findSlotDate(slotId);
+                                Optional<ShiftBudgetAllocationEntity> reResolved = fresh.isEmpty()
+                                        ? Optional.empty() : resolveAllocationForSlot(teamId, fresh.get());
+                                if (reResolved.isEmpty()) {
+                                    result = null;
+                                    break;
+                                }
+                                attemptDate = fresh.get();
+                                attemptAllocation = reResolved.get();
+                            }
+                        }
+                        if (result == ShiftBudgetConsumptionService.RecordResult.DEFERRED) {
+                            outDeferred++;
+                            continue;
+                        }
+                        if (result != ShiftBudgetConsumptionService.RecordResult.RECORDED) {
+                            // 締め済み・計上済み・非公開・枠消滅は正常スキップ（記録しない）
+                            tally.skipped++;
+                            outSkipped++;
+                            continue;
+                        }
                         tally.recorded++;
+                        outRecorded++;
 
                         // Phase 9-δ 追加: 各 (slot,user) PLANNED INSERT 後に閾値判定を呼ぶ。
                         // 例外は飲み込む（既存パターン踏襲: hook 失敗が main トランザクションを巻き戻さないため）
                         try {
-                            thresholdAlertEvaluationService.evaluateAndTrigger(allocation.getId());
+                            thresholdAlertEvaluationService.evaluateAndTrigger(attemptAllocation.getId());
                         } catch (Exception thresholdEx) {
                             log.error("F08.7 hook: 閾値判定失敗（処理継続）: allocId={}, slot={}, user={}",
-                                    allocation.getId(), slotId, userId, thresholdEx);
+                                    attemptAllocation.getId(), slotId, userId, thresholdEx);
                             // Phase 10-β: 失敗イベントとして永続化 → リトライバッチ + 管理 API で根治
                             recordFailureSafe(organizationId,
                                     ShiftBudgetFailedEventType.THRESHOLD_ALERT,
-                                    allocation.getId(),
+                                    attemptAllocation.getId(),
                                     Map.of(
-                                            "allocation_id", allocation.getId(),
+                                            "allocation_id", attemptAllocation.getId(),
                                             "shift_schedule_id", scheduleId,
                                             "slot_id", slotId,
                                             "user_id", userId
                                     ),
                                     thresholdEx);
                         }
-                    } catch (IllegalStateException e) {
-                        // CONFIRMED 既存 → スキップして他継続（個別エラーで全体を止めない）
-                        log.warn("F08.7 hook: CONFIRMED 既存のため skip: slot={}, user={}, msg={}",
-                                slotId, userId, e.getMessage());
-                        tally.skipped++;
                     } catch (Exception e) {
                         log.error("F08.7 hook: 個別消化記録失敗 (skip): slot={}, user={}",
                                 slotId, userId, e);
                         tally.skipped++;
+                        outFailures.add(new ShiftRecordOutcome.SlotUser(slotId, userId));
                         // CMP-261115-1821: 個別失敗もログだけで終わらせず、当該組織の failed_event に残す。
                         // 全体 catch へ投げると他の (slot,user) まで止まるため、ここで個別に記録して残りを続ける。
                         recordFailureSafe(organizationId, ShiftBudgetFailedEventType.CONSUMPTION_RECORD,
@@ -219,7 +271,7 @@ public class ShiftBudgetConsumptionRecordListener {
             if (tallies.isEmpty() && unresolvedSkipped == 0) {
                 // 計上先の組織が 1 つも確定せず、スキップもしていない（全スロットがフラグ OFF の組織、
                 // またはスロット無し）。既存シフト機能を阻害しないよう何も記録せず終える。
-                return;
+                return new ShiftRecordOutcome(outRecorded, outSkipped, outDeferred, outFailures.size(), outFailures);
             }
 
             if (unresolvedSkipped > 0) {
@@ -270,6 +322,7 @@ public class ShiftBudgetConsumptionRecordListener {
             }
 
         } catch (Exception e) {
+            fatalFailure = true;
             // hook 全体の致命的失敗を握りつぶす（main トランザクション保護）。
             // ただし監査ログ + ERROR ログ + Phase 10-β failed_events でフォレンジック可能性を残す。
             log.error("F08.7 hook: シフト公開消化記録の致命的失敗: scheduleId={}, teamId={}",
@@ -304,6 +357,8 @@ public class ShiftBudgetConsumptionRecordListener {
                 // failed_events 記録自体の失敗も諦める（ERROR ログは既に出ている）
             }
         }
+        return new ShiftRecordOutcome(outRecorded, outSkipped, outDeferred,
+                outFailures.size() + (fatalFailure ? 1 : 0), outFailures);
     }
 
     /** 組織ごとの計上集計（監査ログ・通知を組織単位で出すため）。 */
@@ -384,22 +439,22 @@ public class ShiftBudgetConsumptionRecordListener {
      *       任意の 1 件に計上せずスキップする</li>
      * </ol>
      */
-    private Optional<ShiftBudgetAllocationEntity> resolveAllocationForSlot(Long teamId, ShiftSlotEntity slot) {
+    private Optional<ShiftBudgetAllocationEntity> resolveAllocationForSlot(Long teamId, java.time.LocalDate slotDate) {
         List<Long> teamScopeOrgIds = allocationRepository
-                .findOrganizationIdsWithTeamAllocationContaining(teamId, slot.getSlotDate());
+                .findOrganizationIdsWithTeamAllocationContaining(teamId, slotDate);
         if (teamScopeOrgIds.size() > 1) {
             log.error("F08.7 hook: 同じチーム・日付に複数の組織が割当を持つ（重複禁止の破れ）。計上しない: "
-                    + "teamId={}, slotDate={}, organizationIds={}", teamId, slot.getSlotDate(), teamScopeOrgIds);
+                    + "teamId={}, slotDate={}, organizationIds={}", teamId, slotDate, teamScopeOrgIds);
             return Optional.empty();
         }
         if (teamScopeOrgIds.size() == 1) {
             return allocationRepository.findContainingPeriod(
-                    teamScopeOrgIds.get(0), teamId, slot.getSlotDate());
+                    teamScopeOrgIds.get(0), teamId, slotDate);
         }
         List<Long> orgWideOrgIds = allocationRepository
-                .findOrganizationIdsWithOrgWideAllocationContaining(teamId, slot.getSlotDate());
+                .findOrganizationIdsWithOrgWideAllocationContaining(teamId, slotDate);
         if (orgWideOrgIds.size() == 1) {
-            return allocationRepository.findContainingPeriod(orgWideOrgIds.get(0), null, slot.getSlotDate());
+            return allocationRepository.findContainingPeriod(orgWideOrgIds.get(0), null, slotDate);
         }
         return Optional.empty();
     }

@@ -14,6 +14,7 @@ import com.mannschaft.app.shiftbudget.dto.AllocationUpdateRequest;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
+import com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetRateQueryRepository;
 import com.mannschaft.app.todo.repository.ProjectRepository;
 import jakarta.persistence.OptimisticLockException;
@@ -60,6 +61,7 @@ public class ShiftBudgetAllocationService {
     private final ShiftBudgetAllocationRepository allocationRepository;
     private final ShiftBudgetConsumptionRepository consumptionRepository;
     private final ShiftBudgetRateQueryRepository rateQueryRepository;
+    private final ShiftBudgetMonthlyCloseEventRepository closeEventRepository;
     private final ProjectRepository projectRepository;
     private final ShiftBudgetFeatureService featureService;
     private final AccessControlService accessControlService;
@@ -234,6 +236,7 @@ public class ShiftBudgetAllocationService {
         validateAllocatedAmount(request.allocatedAmount());
 
         ShiftBudgetAllocationEntity entity = findOrThrow(allocationId, organizationId);
+        rejectPeriodChange(entity, request);
 
         // クライアント送付 version との不一致を即座に検知
         if (!entity.getVersion().equals(request.version())) {
@@ -280,6 +283,11 @@ public class ShiftBudgetAllocationService {
 
         ShiftBudgetAllocationEntity entity = findOrThrow(allocationId, organizationId);
 
+        // CMP-260909-2152: 締めイベント（PREPARED／CLOSED）がある割当は削除できない（ABORTED は履歴のみで妨げない）。
+        // 割当を FOR UPDATE で取ってから、ロック付き読取でイベントを見る（Prepare とは割当ロックで直列化され、
+        // 先に Prepare が確定していれば必ず 409、削除が先なら Prepare は論理削除済みの割当を締めない）。
+        requireNoLiveCloseEvent(allocationId);
+
         // PLANNED 残存チェック
         boolean hasPlanned = consumptionRepository.existsByAllocationIdAndStatusInAndDeletedAtIsNull(
                 allocationId, List.of(ShiftBudgetConsumptionStatus.PLANNED));
@@ -311,6 +319,33 @@ public class ShiftBudgetAllocationService {
     // ====================================================================
     // ヘルパー
     // ====================================================================
+
+    /**
+     * 締めイベント（PREPARED／CLOSED）が残る割当の変更・削除を 409 で拒否する（同じエラーコード。CMP-260909-2152）。
+     * 割当行を {@code FOR UPDATE} で取り、イベントはロック付き読取で見る（通常 SELECT の古いスナップショットで見落とさない）。
+     */
+    private void requireNoLiveCloseEvent(Long allocationId) {
+        allocationRepository.findByIdForUpdate(allocationId);
+        if (!closeEventRepository.lockByAllocationAndStates(allocationId, List.of(
+                com.mannschaft.app.shiftbudget.ShiftBudgetCloseEventState.PREPARED,
+                com.mannschaft.app.shiftbudget.ShiftBudgetCloseEventState.CLOSED)).isEmpty()) {
+            throw new BusinessException(ShiftBudgetErrorCode.HAS_CONSUMPTIONS_CONFIRMED);
+        }
+    }
+
+    /**
+     * 期間の変更要求の拒否（CMP-260909-2152）。期間・スコープ・費目の変更は不可。指定が現在値と異なる場合、
+     * 締め済み（PREPARED／CLOSED のイベントあり）なら締め済みの割当削除と同じ 409、そうでなくても 400 で拒否し、変更0。
+     */
+    private void rejectPeriodChange(ShiftBudgetAllocationEntity entity, AllocationUpdateRequest request) {
+        boolean startChanged = request.periodStart() != null && !request.periodStart().equals(entity.getPeriodStart());
+        boolean endChanged = request.periodEnd() != null && !request.periodEnd().equals(entity.getPeriodEnd());
+        if (!startChanged && !endChanged) {
+            return;
+        }
+        requireNoLiveCloseEvent(entity.getId());
+        throw new BusinessException(ShiftBudgetErrorCode.INVALID_PERIOD);
+    }
 
     /**
      * 多テナント分離: 別組織 ID を指定したアクセスは 404 (IDOR 対策)。

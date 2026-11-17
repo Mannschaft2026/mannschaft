@@ -12,6 +12,7 @@ package com.mannschaft.app.shiftbudget;
  *   <li>{@link #THRESHOLD_ALERT}    — 閾値判定 / 警告レコード INSERT 失敗</li>
  *   <li>{@link #WORKFLOW_START}     — 100% 到達時の F05.6 ワークフロー起動失敗</li>
  *   <li>{@link #NOTIFICATION_SEND}  — プッシュ / メール / アプリ内通知の送信失敗</li>
+ *   <li>{@link #MONTHLY_CLOSE}      — 期間締めの失敗（CMP-260909-2152）</li>
  * </ul>
  */
 public enum ShiftBudgetFailedEventType {
@@ -19,5 +20,10 @@ public enum ShiftBudgetFailedEventType {
     CONSUMPTION_CANCEL,
     THRESHOLD_ALERT,
     WORKFLOW_START,
-    NOTIFICATION_SEND
+    NOTIFICATION_SEND,
+    /**
+     * 月次（期間）締めの失敗（CMP-260909-2152）。payload.operation に POST_FY_CLOSED／JOURNAL_CONFLICT／COMMIT_MISMATCH／
+     * CANCEL_AFTER_CLOSE／DEFERRAL_REPLAY_FAILED／CLOSE_FAILED などを持つ。自動再試行の対象外（手作業・手動の再締めで回収）。
+     */
+    MONTHLY_CLOSE
 }
