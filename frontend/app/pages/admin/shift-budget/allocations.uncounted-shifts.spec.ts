@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { defineComponent, reactive, ref } from 'vue'
+import Select from 'primevue/select'
 import Allocations from './allocations.vue'
 
 /**
@@ -121,6 +122,39 @@ describe('締め後に未計上の勤務のワンクリック追加', () => {
       reason: '再公開でスキップされた勤務',
     }))
     expect(wrapper.find('[data-testid="uncounted-shift-row-501-6"]').exists()).toBe(false)
+  })
+
+  it('複数月の割当では対象の締め月を選んで、後続月の未計上の勤務を表示・追加できる', async () => {
+    listAllocations.mockResolvedValue({
+      items: [{
+        id: 2, organization_id: 10, team_id: 3, project_id: null, fiscal_year_id: 1, budget_category_id: 1,
+        period_start: '2026-04-01', period_end: '2026-06-30', allocated_amount: 90000, consumed_amount: 10000,
+        confirmed_amount: 10000, correction_delta_total: 0, currency: 'JPY', note: null, version: 0,
+      }],
+      total: 1, page: 0, size: 20,
+    })
+    const wrapper = await mountPage()
+    await wrapper.find('[data-testid="uncounted-shifts-open-2"]').trigger('click')
+    await flushPromises()
+    // 既定は開始月
+    expect(listUncountedShifts).toHaveBeenLastCalledWith('10', 2, '2026-04')
+
+    const select = wrapper.findComponent(Select)
+    expect(select.exists()).toBe(true)
+    expect((select.props('options') as { value: string }[]).map(o => o.value))
+      .toEqual(['2026-04', '2026-05', '2026-06'])
+    select.vm.$emit('update:modelValue', '2026-06')
+    await flushPromises()
+    expect(listUncountedShifts).toHaveBeenLastCalledWith('10', 2, '2026-06')
+
+    await wrapper.find('[data-testid="uncounted-shift-add-501-6"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="uncounted-shift-add-reason"]').setValue('6月締めの追加')
+    await wrapper.find('[data-testid="uncounted-shift-add-confirm"]').trigger('click')
+    await flushPromises()
+    expect(createMonthlyCloseCorrection).toHaveBeenCalledWith('10', 2, '2026-06', expect.objectContaining({
+      kind: 'ADD', slot_id: 501,
+    }))
   })
 
   it('予算管理者でなければ未計上の勤務への導線を出さない', async () => {

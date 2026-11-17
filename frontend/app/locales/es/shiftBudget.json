@@ -199,7 +199,9 @@
       "content": "Adición de un turno no contabilizado tras el cierre",
       "addSuccess": "Contabilizado como adición posterior al cierre",
       "addError": "No se pudo añadir. Recargue la lista e inténtelo de nuevo.",
-      "loadError": "No se pudieron cargar los turnos no contabilizados tras el cierre"
+      "loadError": "No se pudieron cargar los turnos no contabilizados tras el cierre",
+      "monthLabel": "Mes cerrado",
+      "monthHint": "Una asignación que abarca varios meses se cierra mes a mes. Elija un mes ya cerrado."
     }
   }
 }

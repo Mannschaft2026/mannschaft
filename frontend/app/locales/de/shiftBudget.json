@@ -199,7 +199,9 @@
       "content": "Nachtrag einer nach dem Abschluss nicht erfassten Schicht",
       "addSuccess": "Als Nachtrag nach dem Abschluss erfasst",
       "addError": "Hinzufügen fehlgeschlagen. Bitte die Liste neu laden und erneut versuchen.",
-      "loadError": "Nach Abschluss nicht erfasste Schichten konnten nicht geladen werden"
+      "loadError": "Nach Abschluss nicht erfasste Schichten konnten nicht geladen werden",
+      "monthLabel": "Abschlussmonat",
+      "monthHint": "Eine Zuweisung über mehrere Monate wird monatsweise abgeschlossen. Wählen Sie einen bereits abgeschlossenen Monat."
     }
   }
 }

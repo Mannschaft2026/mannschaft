@@ -145,9 +145,37 @@ const addRate = ref('')
 const addReason = ref('')
 const addSubmitting = ref(false)
 
-/** 締め対象月（割当の開始月）。 */
+/** 割当期間に含まれる月（YYYY-MM）の一覧。複数月の割当は月ごとに締められるため、対象月を選べるようにする。 */
+function monthsOf(allocation: AllocationResponse): string[] {
+  const months: string[] = []
+  let year = Number(allocation.period_start.slice(0, 4))
+  let month = Number(allocation.period_start.slice(5, 7))
+  const endKey = allocation.period_end.slice(0, 7)
+  for (let i = 0; i < 600; i++) {
+    const key = `${year}-${String(month).padStart(2, '0')}`
+    if (key > endKey) break
+    months.push(key)
+    month += 1
+    if (month > 12) {
+      month = 1
+      year += 1
+    }
+  }
+  return months
+}
+
+/** 選択中の締め対象月（既定は割当の開始月）。 */
+const uncountedMonth = ref('')
+const uncountedMonthOptions = computed(() =>
+  uncountedTarget.value ? monthsOf(uncountedTarget.value).map(m => ({ label: m, value: m })) : [])
+
 function closeMonthOf(allocation: AllocationResponse): string {
-  return allocation.period_start.slice(0, 7)
+  return uncountedMonth.value || allocation.period_start.slice(0, 7)
+}
+
+async function onUncountedMonthChange(month: string) {
+  uncountedMonth.value = month
+  await loadUncounted()
 }
 
 async function loadUncounted() {
@@ -170,6 +198,7 @@ async function loadUncounted() {
 
 async function openUncounted(allocation: AllocationResponse) {
   uncountedTarget.value = allocation
+  uncountedMonth.value = allocation.period_start.slice(0, 7)
   uncountedVisible.value = true
   await loadUncounted()
 }
@@ -358,6 +387,19 @@ onMounted(() => {
       modal
     >
       <p class="mb-3 text-sm text-surface-600">{{ t('shiftBudget.uncounted.description') }}</p>
+      <label v-if="uncountedMonthOptions.length > 1" class="mb-3 flex flex-col gap-1 text-sm">
+        <span>{{ t('shiftBudget.uncounted.monthLabel') }}</span>
+        <Select
+          :model-value="uncountedMonth"
+          data-testid="uncounted-month"
+          :options="uncountedMonthOptions"
+          option-label="label"
+          option-value="value"
+          class="w-48"
+          @update:model-value="onUncountedMonthChange"
+        />
+        <span class="text-xs text-surface-500">{{ t('shiftBudget.uncounted.monthHint') }}</span>
+      </label>
       <PageLoading v-if="uncountedLoading" />
       <p v-else-if="uncountedItems.length === 0" class="py-6 text-center text-surface-500">
         {{ t('shiftBudget.uncounted.empty') }}

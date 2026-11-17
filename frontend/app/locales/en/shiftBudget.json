@@ -199,7 +199,9 @@
       "content": "Addition of a shift that was not counted after closing",
       "addSuccess": "Counted as a post-close addition",
       "addError": "Failed to add. Reload the list and try again.",
-      "loadError": "Failed to load shifts not counted after closing"
+      "loadError": "Failed to load shifts not counted after closing",
+      "monthLabel": "Closed month",
+      "monthHint": "An allocation spanning several months is closed month by month. Choose a month that has been closed."
     }
   }
 }
