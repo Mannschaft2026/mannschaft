@@ -30,12 +30,13 @@ class SearchQueryTextTest {
     }
 
     @Test
-    @DisplayName("AC-C11: LIKE 用に \ % _ をエスケープする（\ は先に二重化）")
+    @DisplayName("AC-C11: LIKE 用に \\ % _ をエスケープする（\\ は先に二重化）")
     void AC_C11_LIKEエスケープ() {
-        assertThat(SearchQueryText.escapeLike("50%")).isEqualTo("50\%");
-        assertThat(SearchQueryText.escapeLike("a_b")).isEqualTo("a\_b");
-        assertThat(SearchQueryText.escapeLike("c:\dir")).isEqualTo("c:\\dir");
-        assertThat(SearchQueryText.escapeLike("\%_")).isEqualTo("\\\%\_");
+        // 期待値はすべて Java リテラル。"\\" が 1 文字の \ を表す。
+        assertThat(SearchQueryText.escapeLike("50%")).isEqualTo("50\\%");
+        assertThat(SearchQueryText.escapeLike("a_b")).isEqualTo("a\\_b");
+        assertThat(SearchQueryText.escapeLike("c:\\dir")).isEqualTo("c:\\\\dir");
+        assertThat(SearchQueryText.escapeLike("\\%_")).isEqualTo("\\\\\\%\\_");
         assertThat(SearchQueryText.escapeLike("普通の語")).isEqualTo("普通の語");
     }
 
