@@ -127,6 +127,35 @@ describe('CMP-261117-2159 verify-email の多言語化とBEメッセージ', () 
     expect(wrapper.text()).toContain(tr('auth.verify_email.resend_button'))
   })
 
+  // 本文は tr() ではなくリテラルで固定し、本文の削除・英語固定・展開漏れで落ちるようにする。
+  const BODY = {
+    en: {
+      sent: 'We sent a confirmation email. Click the link in the email to complete verification.',
+      sentTo: 'We sent a confirmation email to a@example.test. Click the link in the email to complete verification.',
+      success: 'Your email address has been verified. Please log in.',
+    },
+    de: {
+      sent: 'Wir haben eine Bestätigungs-E-Mail gesendet. Klicken Sie auf den Link in der E-Mail, um die Bestätigung abzuschließen.',
+      sentTo: 'Wir haben eine Bestätigungs-E-Mail an a@example.test gesendet. Klicken Sie auf den Link in der E-Mail, um die Bestätigung abzuschließen.',
+      success: 'Ihre E-Mail-Adresse wurde bestätigt. Bitte melden Sie sich an.',
+    },
+  } as const
+
+  it.each(['en', 'de'] as const)('AC-6: %s の案内画面の本文（email 有りは展開結果・無しは汎用文）', async (locale) => {
+    await setLocale(locale)
+    const withEmail = await mountSuspended(VerifyEmailPage, options)
+    await flushPromises()
+    expect(withEmail.text()).toContain(BODY[locale].sentTo)
+    expect(withEmail.text()).not.toContain('{email}')
+    expectTranslated(withEmail.text())
+    delete mocks.query.email
+    const withoutEmail = await mountSuspended(VerifyEmailPage, options)
+    await flushPromises()
+    expect(withoutEmail.text()).toContain(BODY[locale].sent)
+    expect(withoutEmail.text()).not.toContain('a@example.test')
+    expectTranslated(withoutEmail.text())
+  })
+
   it.each(['en', 'de'] as const)('AC-7: %s で全状態（検証中・成功・失敗・再送・ログイン）が翻訳される', async (locale) => {
     await setLocale(locale)
     mocks.query.token = 'tok'
@@ -140,6 +169,7 @@ describe('CMP-261117-2159 verify-email の多言語化とBEメッセージ', () 
     release()
     await flushPromises()
     // 成功
+    expect(w1.text()).toContain(BODY[locale].success)
     expect(w1.text()).toContain(tr('auth.verify_email.success_title'))
     expect(w1.text()).toContain(tr('auth.verify_email.to_login'))
     expectTranslated(w1.text())
