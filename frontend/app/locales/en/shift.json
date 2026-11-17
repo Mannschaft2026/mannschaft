@@ -15,7 +15,8 @@
       "noUnassignedMembers": "No unassigned members",
       "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
-      "unassignedSlots": "{count} unassigned slots"
+      "unassignedSlots": "{count} unassigned slots",
+      "backToList": "Back to shift list"
     },
     "autoAssign": {
       "button": "Auto Assign",

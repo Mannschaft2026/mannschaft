@@ -15,7 +15,8 @@
       "noUnassignedMembers": "Keine nicht zugewiesenen Mitglieder",
       "noMatchingMembers": "Keine Mitglieder entsprechen Ihrer Suche",
       "dragHint": "Mitglieder per Drag & Drop zuweisen",
-      "unassignedSlots": "{count} nicht zugewiesene Schichten"
+      "unassignedSlots": "{count} nicht zugewiesene Schichten",
+      "backToList": "Zurück zur Schichtliste"
     },
     "autoAssign": {
       "button": "Automatisch zuweisen",

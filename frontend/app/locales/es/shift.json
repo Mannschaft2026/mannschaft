@@ -15,7 +15,8 @@
       "noUnassignedMembers": "No hay miembros sin asignar",
       "noMatchingMembers": "Ningún miembro coincide con la búsqueda",
       "dragHint": "Arrastra miembros para asignar",
-      "unassignedSlots": "{count} turnos sin asignar"
+      "unassignedSlots": "{count} turnos sin asignar",
+      "backToList": "Volver a la lista de turnos"
     },
     "autoAssign": {
       "button": "Asignación automática",

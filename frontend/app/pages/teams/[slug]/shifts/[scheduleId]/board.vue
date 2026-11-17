@@ -16,7 +16,8 @@
         <Tag v-if="schedule" :value="schedule.status.status" severity="info" class="text-xs" />
       </div>
 
-      <div class="flex items-center gap-2">
+      <!-- 操作群はシフト表が取得できたときだけ出す（取得失敗時に死んだ導線を残さない） -->
+      <div v-if="schedule" class="flex items-center gap-2">
         <!-- PDF エクスポートボタン（SUPPORTER ロールは非表示） -->
         <ShiftPdfExportButton
           v-if="!isSupporter"
@@ -74,8 +75,33 @@
       </div>
     </div>
 
+    <!-- シフト表の取得中 -->
+    <PageLoading v-if="scheduleLoading" />
+
+    <!-- シフト表の取得失敗。403/404 は所属外へ実在を示唆しないよう同じ表示に畳む -->
+    <div
+      v-else-if="scheduleError !== undefined"
+      class="flex flex-col items-center gap-2 px-4"
+      data-testid="shift-board-load-error"
+    >
+      <DashboardErrorState
+        :error="scheduleError"
+        :kind="scheduleErrorKind"
+        @retry="initialize"
+      />
+      <NuxtLink :to="`/teams/${teamSlug}/shifts`">
+        <Button
+          :label="$t('shift.board.backToList')"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          size="small"
+        />
+      </NuxtLink>
+    </div>
+
     <!-- メインコンテンツ -->
-    <div class="flex flex-1 overflow-hidden">
+    <div v-else class="flex flex-1 overflow-hidden">
       <!-- シフトボード -->
       <div class="flex-1 overflow-hidden">
         <ShiftBoardMatrix
@@ -154,6 +180,8 @@ import type {
   AssignmentParameters,
   AssignmentStrategyType,
 } from '~/types/shift'
+import type { LoadErrorKind } from '~/utils/loadError'
+import { getLoadErrorHttpStatus } from '~/utils/loadError'
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
@@ -190,6 +218,7 @@ const teamApi = useTeamApi()
 const { t } = useI18n()
 const { handleApiError } = useErrorHandler()
 const { showError } = useNotification()
+const { captureQuiet } = useErrorReport()
 const { runs, isRunning, runAutoAssign, confirmAutoAssign, revokeAutoAssign, fetchRuns } =
   useAutoAssign(scheduleId)
 
@@ -202,6 +231,15 @@ const allMembers = ref<Array<{ userId: number; displayName: string; avatarUrl: s
 const membersLoading = ref(true)
 const membersError = shallowRef<unknown>()
 const scheduleVersion = ref(0)
+// シフト表の取得状態。ボード本体（枠・メンバー欄）はシフト表が取れてから初めて描画する。
+const scheduleLoading = ref(true)
+const scheduleError = shallowRef<unknown>()
+// 403 と 404 を同じ「見つからない／表示できない」に畳み、所属外にシフト表の実在を漏らさない。
+// それ以外（通信断・5xx）は自動判定に任せ、再試行を出す。
+const scheduleErrorKind = computed((): LoadErrorKind | undefined => {
+  const status = getLoadErrorHttpStatus(scheduleError.value)
+  return status === 403 || status === 404 ? 'notFoundOrForbidden' : undefined
+})
 
 // UI 状態
 const autoAssignVisible = ref(false)
@@ -246,10 +284,25 @@ const unassignedMembers = computed(() =>
 )
 
 // 初期データ取得
-onMounted(async () => {
+onMounted(initialize)
+
+async function initialize(): Promise<void> {
   // ⑤ ポジション取得は BE の @RequestParam teamId が必須で、schedule.teamId（数値）が
   // 判明してから叩く必要があるため、loadSchedule だけ先行させてから残りを並行取得する。
-  await loadSchedule()
+  scheduleLoading.value = true
+  scheduleError.value = undefined
+  try {
+    await loadSchedule()
+  } catch (error) {
+    // 所属外の直打ち（404/403）や通信断で取得できないとき、例外を未処理のまま捨てると
+    // 後続の取得に到達せずメンバー欄が読み込み中のまま残る。画面の状態として持ち、
+    // 取得失敗表示に切り替える。BE の文言はトーストに出さず（実在の示唆を避ける）記録だけ残す。
+    scheduleError.value = error
+    captureQuiet(error, { context: 'ShiftBoard: シフト表取得' })
+    return
+  } finally {
+    scheduleLoading.value = false
+  }
   await Promise.all([loadSlots(), loadPositions(), loadMembers(), loadPermissions()])
   // 認可根治 Wave7: 実行履歴 API は管理者専用になったため、権限解決後に管理者のときだけ取得する。
   // 従来どおり Promise.all に混ぜたままだと、一般メンバーでは 403 で Promise.all ごと失敗し
@@ -259,7 +312,7 @@ onMounted(async () => {
   if (isScopeAdmin.value && autoAssignEnabled.value) {
     await fetchRuns()
   }
-})
+}
 
 async function loadSchedule(): Promise<void> {
   const res = await shiftApi.getShiftSchedule(scheduleId.value)

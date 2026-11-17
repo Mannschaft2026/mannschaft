@@ -15,7 +15,8 @@
       "noUnassignedMembers": "没有未分配的成员",
       "noMatchingMembers": "没有符合搜索条件的成员",
       "dragHint": "拖动成员进行分配",
-      "unassignedSlots": "{count}个未分配班次"
+      "unassignedSlots": "{count}个未分配班次",
+      "backToList": "返回班次列表"
     },
     "autoAssign": {
       "button": "自动分配",
