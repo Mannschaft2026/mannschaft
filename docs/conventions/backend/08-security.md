@@ -24,7 +24,7 @@
     * **Refresh Token**: **7日間**（ユーザーの利便性と安全性のバランスを考慮）
 * **トークンローテーション**: Refresh Token を使用して新しい Access Token を発行する際、Refresh Token 自体も新しく発行し、古いものは無効化する。
 * **ログアウト・無効化処理**: ログアウト時は該当トークンを Valkey 上の「ブラックリスト」に登録し、期限内であっても即座に使用不能とする。
-* **保存場所**: フロントエンドでは `localStorage` / `sessionStorage` に保存し、`Authorization: Bearer` ヘッダーで送信する。Cookie には格納しない（CSRF攻撃を構造的に排除するため）。
+* **保存場所**: 認証は二本立てである。Web は `HttpOnly`・`SameSite=Strict` の Cookie（`access_token` と `refresh_token`）、ネイティブアプリは `Authorization: Bearer` ヘッダーで送る。BE は Bearer を優先し、無ければ Cookie を読む。フロントエンドはトークンをメモリにだけ持ち、`localStorage` / `sessionStorage` には保存しない。CSRF は `SameSite=Strict` と同一オリジンで防ぐ（2026-11-17 マスター裁可により、実装と `docs/features/F01.1_auth.md`・`docs/security/02_cookie_and_session.md` に合わせて改訂）。
 * **デバイスバインディング（推奨）**: Refresh Token 使用時に、発行時のIPアドレスおよびUser-Agentとの一致を検証することを推奨する。不一致の場合はトークンを無効化し、再ログインを要求する。これにより、XSSで Refresh Token が漏洩した場合でも、異なるデバイスからの悪用を防止できる。
 
 ### WebSocket (STOMP) 認証規約
