@@ -11,7 +11,7 @@
 
 | # | 食い違い | 一方 | もう一方 | 扱い |
 |---|---|---|---|---|
-| A1 | 認証トークンの保存先と送り方 | `frontend/FRONTEND_CODING_CONVENTION.md` §7、`backend/BACKEND_CODING_CONVENTION.md` の認証の節、`backend/.claudecode.md` §2:「JWT は `localStorage`」「Cookie に格納しない」「Bearer で送る」 | 実装と設計書: FE はトークンをメモリにだけ持ち、Cookie が常に送られる。Web は Cookie、ネイティブアプリは Bearer の二本立て（`docs/features/F01.1_auth.md`、`docs/security/02_cookie_and_session.md`、`useAuthStore.ts`、`useApi.ts`、`JwtAuthenticationFilter.java`） | 上奏。規約3か所が古い。認証に関わるので、直す前に裁可を得る |
+| A1 | 認証トークンの保存先と送り方 | `frontend/FRONTEND_CODING_CONVENTION.md` §5（SSR と認証の制約）・§7、`backend/BACKEND_CODING_CONVENTION.md` の認証の節、`docs/conventions/backend/08-security.md`、`backend/.claudecode.md` §2:「JWT は `localStorage`」「Cookie に格納しない」「Bearer で送る」 | 実装と設計書: FE はトークンをメモリにだけ持ち、Cookie が常に送られる。Web は Cookie、ネイティブアプリは Bearer の二本立て（`docs/features/F01.1_auth.md`、`docs/security/02_cookie_and_session.md`、`useAuthStore.ts`、`useApi.ts`、`JwtAuthenticationFilter.java`） | 上奏。規約5か所が古い。認証に関わるので、直す前に裁可を得る。直すときは、索引（規約の本体）と詳細文書を同じ PR で直す |
 | A2 | リフレッシュの結果の状態数 | FE 規約 §5: 3状態 | 実装: 4状態（`useApi.ts` の `TokenRefreshResult`） | 是正 |
 | A3 | 認証 Cookie の `Secure` | `docs/security/02_cookie_and_session.md`:「`AuthLoginController` は `secure(false)` をハードコード」 | 実装: `AuthTokenCookies` が `mannschaft.cookie.secure` を参照 | 是正 |
 | A4 | access_token の Cookie の有効期間 | `docs/security/02_cookie_and_session.md`:「890 秒」「890 秒に修正すること」 | 実装: アクセストークンの有効期限そのまま | 上奏。文書の指示が未反映なのか、指示が撤回されたのかが分からない |
@@ -19,7 +19,7 @@
 | A6 | 許可オリジンが本番で必須か | 規約（`backend/.claudecode.md` §21）と運用文書: 本番で設定し、既定値を置かない | `application.yml` の既定は localhost。`application-prod.yml` に記載なし | 上奏。規約どおりに直すなら設定の変更になる（R7 の P3） |
 | A7 | Webhook の系統数 | デプロイのチェックリスト、`README.md`: 4系統（SES を含む） | `docs/security/README.md`、`docs/security/01_authorization_baseline.md`: 3系統（SES は SQS へ移行済み） | 是正 |
 | A8 | Stripe の環境変数 | `docs/operations/PRODUCTION_SETUP.md`: 秘密鍵と URL 2本だけ | `application.yml`、Terraform: Webhook のシークレット2種も要る | 是正 |
-| A9 | Valkey の冗長化 | `docs/security/09_key_management_and_rotation.md`、デプロイのチェックリスト: 冗長構成が必須 | Terraform: 1ノード、自動フェイルオーバー無効 | 上奏。本番は未構築 |
+| A9 | Valkey の冗長化 | `docs/security/09_key_management_and_rotation.md`:「本番環境ではシングルポイント構成は禁止」 | Terraform: 1ノード、自動フェイルオーバー無効 | **所管あり。** 要件は決定済みで、実装は台帳 CMP-012 が持つ（再開の条件は「AWS 稼働準備の開始と、2台化の費用の承認」） |
 
 ## 2. 配置・インフラ
 
@@ -33,7 +33,7 @@
 | I6 | Tunnel の記述 | `docs/architecture/websocket_external_broker_valkey.md`:「IaC・docs に Tunnel の記述は皆無」 | `infra/terraform/modules/edge/main.tf`、`infra/README.md` に記述がある | 是正 |
 | I7 | Spring Boot の版 | `README.md`: 3.3.x | ビルド設定: 3.5.13 | 是正 |
 | I8 | 依存の自動更新 | `docs/security/04_dependency_and_supply_chain.md`: Dependabot | リポジトリには `.github/dependabot.yml` と `renovate.json` の両方がある | 上奏 |
-| I9 | デプロイの認証 | 方針: OIDC。ロールは作成済み | `backend-deploy.yml`、`frontend-deploy.yml`: 長期キー | 上奏。切り替えの計画は R7 の P5 |
+| I9 | デプロイの認証 | 方針: OIDC。ロールは Terraform に定義済み（AWS 上の作成状況は未確認） | `backend-deploy.yml`、`frontend-deploy.yml`: 長期キー | 上奏。切り替えの計画は R7 の P5 |
 
 ## 3. バックエンドの規約
 
@@ -42,7 +42,6 @@
 | B1 | イベントの発生時刻の型 | `backend/.claudecode.md` §6:「`LocalDateTime`。`Instant` は使わない」 | 同 §20:「新しい瞬間は `Instant` か `OffsetDateTime`。新規コードで `LocalDateTime` を足さない」 | 上奏 |
 | B2 | コミットとマージの権限 | `backend/.claudecode.md` §28: マスターの承認なしにコミット・プッシュしない。マージは裁可の後に殿が行う | `AGENTS.md`「自動進行」: commit・push・PR・マージまで自動で進める | 上奏。Claude と Codex で規律が違うのは意図かもしれない |
 | B3 | プロファイルの数 | `BACKEND_CODING_CONVENTION.md` §6: 基本4種 | 実物: 基本＋`ci`・`openapi-gen`・`prod`・`staging`・`test` | 是正 |
-| B4 | ページ番号の例 | `backend/.claudecode.md` §12: 0始まり | `docs/conventions/backend/03-error-handling.md` の例: `"page": 1` | 是正 |
 | B5 | `--tests` の可否 | `backend/.claudecode.md` §30 は `archTest --tests` を許し、同じ節で番人の絞り込みを禁じる | 対象が違う（タグで走る系統と、凍結ストアを書き戻す系統）が、読み手には矛盾に見える | 是正（書き分ける） |
 | B6 | 静的解析 | `BACKEND_CODING_CONVENTION.md` §6・§8: Checkstyle と SpotBugs を CI と pre-commit に組み込む | ビルド設定と workflow に、どちらも無い | 上奏。規約を実態に合わせるか、導入するか |
 | B7 | 結合テストのタスク | `BACKEND_CODING_CONVENTION.md` 末尾、`TEST_CONVENTION.md` §7: `integrationTest` などのタスク | 実在しない。`TEST_CONVENTION.md` には「例であり指示ではない」との注記が既にある | 是正（`BACKEND_CODING_CONVENTION.md` 側にも同じ注記） |

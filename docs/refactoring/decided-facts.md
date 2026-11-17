@@ -25,7 +25,7 @@
 | I2 | 本番に実データは無い。既存データを救うための移行 SQL や緩和策を既定で設計に入れない。ただしローカルと CI のシード、E2E フィクスチャは壊さない | マスター確認 2026-08-09 |
 | I3 | FE は Cloudflare Pages（Nuxt）に置く想定。`/api/**` と `/ws` だけを Origin Rule で Cloudflare Tunnel 経由の BE へ流す。FE と BE は同一オリジン | `infra/terraform/modules/edge/main.tf`、`infra/terraform/envs/prod/main.tf` |
 | I4 | 本番の入口は ALB から Cloudflare Tunnel へ移行済み（2026-07-10）。ECS は arm64、1台構成 | `infra/README.md` |
-| I5 | AWS へのデプロイ認証は GitHub OIDC が方針。デプロイ用のロールは作成済みで、deploy workflow の切り替えだけが残っている | `infra/README.md`、`infra/terraform/bootstrap/main.tf` |
+| I5 | AWS へのデプロイ認証は GitHub OIDC が方針。デプロイ用のロールは Terraform に定義されている（AWS 上に実際に作られているかは未確認。本番は未構築）。deploy workflow は長期キーのままである | `infra/README.md`、`infra/terraform/bootstrap/main.tf` |
 | I6 | 秘密は Secrets Manager に置く。Terraform は箱だけを作り、値は手動で入れる | `infra/README.md`、`infra/terraform/modules/app/main.tf` |
 | I7 | 環境変数は `MANNSCHAFT_` で始める。`local` 以外のプロファイルでは、必須の値に既定値を置かない（未設定なら起動に失敗させる） | `backend/.claudecode.md` §21、`BACKEND_CODING_CONVENTION.md` §6 |
 | I8 | 新しい秘密鍵を足すときは、鍵管理の表・本番セットアップ手順・CI の secrets・`application-prod.yml` を同じ PR で更新する | `docs/security/09_key_management_and_rotation.md` |
