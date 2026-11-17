@@ -35,6 +35,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 @DisplayName("CMP-261113-1507 エラーメッセージ解決（AC-8/11/13/14）")
 class ErrorMessageResolveI18nTest {
 
+    /** かな（ひらがな・カタカナ）。zh の漢字は日本語と共通のため、zh 判定にはこちらを使う。 */
+    private static final Pattern KANA = Pattern.compile("[\u3040-\u30FF\uFF66-\uFF9F]");
+
     private static final Pattern JAPANESE = Pattern.compile("[\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uFF66-\\uFF9F]");
 
     private final MessageSource realMessageSource = new I18nConfig().messageSource();
@@ -176,6 +179,56 @@ class ErrorMessageResolveI18nTest {
             @Override public String getMessage() { return message; }
             @Override public Severity getSeverity() { return Severity.WARN; }
         };
+    }
+
+    // ---------------------------------------------------------------- fieldErrors（列挙値エラー）
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}: 未定義の列挙値の fieldErrors が {0} で訳される")
+    @org.junit.jupiter.params.provider.CsvSource({
+            "en,This value is not defined.",
+            "de,Dieser Wert ist nicht definiert.",
+            "zh,该值未被定义。",
+            "ko,정의되지 않은 값입니다.",
+            "es,Este valor no está definido."})
+    @DisplayName("fieldErrors: 未定義の列挙値（EnumInputParser）の message が利用者の言語で返り日本語が残らない")
+    void fieldErrors_未定義の列挙値が利用者の言語で返る(String lang, String expected) {
+        LocaleContextHolder.setLocale(Locale.forLanguageTag(lang));
+
+        ResponseEntity<ErrorResponse> response = handler.handleBusinessException(invalidEnum());
+
+        ErrorResponse.FieldError fe = response.getBody().getError().getFieldErrors().get(0);
+        assertThat(fe.getField()).isEqualTo("visibility");
+        assertThat(fe.getMessage()).isEqualTo(expected).isNotEqualTo("定義されていない値です");
+        // zh は漢字が日本語と共通のため、かなの有無で判定する。他言語は漢字を含めて日本語が残らないこと
+        assertThat(fe.getMessage()).doesNotContainPattern("zh".equals(lang) ? KANA : JAPANESE);
+    }
+
+    @Test
+    @DisplayName("fieldErrors: 未定義の列挙値は ja・未対応言語では従来の日本語のまま返る（回帰防止）")
+    void fieldErrors_未定義の列挙値はjaと未対応言語で従来の日本語() {
+        for (Locale locale : new Locale[] {Locale.JAPANESE, Locale.FRENCH}) {
+            LocaleContextHolder.setLocale(locale);
+            ResponseEntity<ErrorResponse> response = handler.handleBusinessException(invalidEnum());
+            assertThat(response.getBody().getError().getFieldErrors().get(0).getMessage())
+                    .as(locale.toString()).isEqualTo("定義されていない値です");
+        }
+    }
+
+    @Test
+    @DisplayName("fieldErrors: 訳キー（messageKey）は JSON 応答に出ない")
+    void fieldErrors_訳キーはJSONに出ない() throws Exception {
+        String json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .writeValueAsString(ErrorResponse.FieldError.ofKey("visibility", "k", "ja"));
+        assertThat(json).doesNotContain("messageKey").contains("visibility");
+    }
+
+    private static BusinessException invalidEnum() {
+        try {
+            com.mannschaft.app.common.EnumInputParser.parse(Thread.State.class, "PRIVATE", "visibility");
+            throw new IllegalStateException("BusinessException が投げられなかった");
+        } catch (BusinessException e) {
+            return e;
+        }
     }
 
     private static ErrorCode findConstant(String enumName, String code) {

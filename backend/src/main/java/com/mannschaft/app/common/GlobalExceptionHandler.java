@@ -2674,7 +2674,8 @@ public class GlobalExceptionHandler {
                     new ErrorResponse.ErrorDetail(errorCode.getCode(), message, List.of()));
         } else {
             body = new ErrorResponse(
-                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message, ex.getFieldErrors()));
+                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message,
+                            localizeFieldErrors(ex.getFieldErrors())));
         }
         ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
         if (isPrivateSelfInput(request)) response.header(HttpHeaders.CACHE_CONTROL, "no-store");
@@ -3284,6 +3285,19 @@ public class GlobalExceptionHandler {
      */
     private String resolveMessage(ErrorCode errorCode, Object[] messageArgs) {
         return errorMessageResolver.resolve(errorCode, messageArgs);
+    }
+
+    /**
+     * 訳キーを持つフィールドエラー（{@link ErrorResponse.FieldError#ofKey}）の message を利用者の言語へ解決する。
+     * キーを持たないものはそのまま返す。
+     */
+    private List<ErrorResponse.FieldError> localizeFieldErrors(List<ErrorResponse.FieldError> fieldErrors) {
+        java.util.Locale locale = org.springframework.context.i18n.LocaleContextHolder.getLocale();
+        return fieldErrors.stream()
+                .map(fe -> fe.getMessageKey() == null ? fe
+                        : fe.withMessage(errorMessageResolver.resolveKey(
+                                fe.getMessageKey(), fe.getMessage(), locale)))
+                .toList();
     }
 
     /** 利用者の言語で message を解決した {@link ErrorResponse}（フィールドエラーなし）。 */
