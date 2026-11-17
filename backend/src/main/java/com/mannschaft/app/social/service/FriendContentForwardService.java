@@ -13,15 +13,9 @@ import com.mannschaft.app.social.entity.FriendContentForwardEntity;
 import com.mannschaft.app.social.entity.TeamFriendEntity;
 import com.mannschaft.app.social.repository.FriendContentForwardRepository;
 import com.mannschaft.app.social.repository.TeamFriendRepository;
-import com.mannschaft.app.team.entity.TeamEntity;
-import com.mannschaft.app.team.repository.TeamRepository;
-import com.mannschaft.app.timeline.PostScopeType;
-import com.mannschaft.app.timeline.PostStatus;
-import com.mannschaft.app.timeline.PostedAsType;
+import com.mannschaft.app.team.service.TeamService;
 import com.mannschaft.app.timeline.dto.FriendShareableTeamPost;
-import com.mannschaft.app.timeline.entity.TimelinePostEntity;
-import com.mannschaft.app.timeline.repository.TimelinePostRepository;
-import com.mannschaft.app.timeline.service.TimelineFriendShareQueryService;
+import com.mannschaft.app.timeline.service.TimelineFriendForwardPostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +23,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * フレンドコンテンツ転送サービス（F01.5 Phase 1）。
@@ -51,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>権限チェック（ADMIN or {@code MANAGE_FRIEND_TEAMS}）</li>
  *   <li>{@link ForwardTarget#MEMBER_AND_SUPPORTER} は 400 で拒否（Phase 1 制約）</li>
- *   <li>転送元投稿の検査（投稿側は {@link TimelineFriendShareQueryService}、フレンド関係は本クラス。
+ *   <li>転送元投稿の検査（投稿側は {@link TimelineFriendForwardPostService}、フレンド関係は本クラス。
  *       不許可は不在と同一の 404 SOCIAL_122）</li>
  *   <li>冪等性事前チェック: アクティブレコードがあれば 409</li>
  *   <li>{@code timeline_posts} INSERT（{@code scope_type = FRIEND_FORWARD}）</li>
@@ -82,11 +78,10 @@ public class FriendContentForwardService {
 
     private final FriendContentForwardRepository forwardRepository;
     private final TeamFriendRepository teamFriendRepository;
-    private final TimelinePostRepository timelinePostRepository;
-    private final TeamRepository teamRepository;
+    private final TeamService teamService;
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
-    private final TimelineFriendShareQueryService timelineFriendShareQueryService;
+    private final TimelineFriendForwardPostService timelineFriendForwardPostService;
 
     // ═════════════════════════════════════════════════════════════
     // 1. 転送実行
@@ -122,7 +117,7 @@ public class FriendContentForwardService {
         //    PUBLISHED 以外・非共有・フレンド関係なし（自チームを含む）は、すべて不在と同一の
         //    FRIEND_FORWARD_SOURCE_POST_NOT_FOUND（404 SOCIAL_122）に畳む。冪等性 409 判定より前に行う。
         //    投稿側の可視性判定は timeline ドメインの公開窓口に委ね、エンティティは受け取らない。
-        FriendShareableTeamPost source = timelineFriendShareQueryService
+        FriendShareableTeamPost source = timelineFriendForwardPostService
                 .findFriendShareableTeamPost(sourcePostId)
                 .orElseThrow(() -> new BusinessException(
                         SocialErrorCode.FRIEND_FORWARD_SOURCE_POST_NOT_FOUND));
@@ -141,19 +136,11 @@ public class FriendContentForwardService {
                 });
 
         // 7. timeline_posts INSERT（FRIEND_FORWARD スコープ）
-        TimelinePostEntity forwardedPost = timelinePostRepository.save(
-                TimelinePostEntity.builder()
-                        .scopeType(PostScopeType.FRIEND_FORWARD)
-                        .scopeId(teamId)
-                        .userId(userId)
-                        .postedAsType(PostedAsType.TEAM)
-                        .postedAsId(teamId)
-                        .content(buildForwardContent(source.content(), request.getComment()))
-                        .status(PostStatus.PUBLISHED)
-                        .forwardSourcePostId(sourcePostId)
-                        .forwardTargetRange(target.name())
-                        .shareWithFriends(false)
-                        .build());
+        //    timeline ドメインの窓口経由。既定伝播 REQUIRED で本トランザクションに参加するため、
+        //    後続の転送履歴 INSERT と原子的（UNIQUE 違反時は投稿も巻き戻る）。
+        Long forwardedPostId = timelineFriendForwardPostService.createFriendForwardPost(
+                teamId, userId, buildForwardContent(source.content(), request.getComment()),
+                sourcePostId, target.name());
 
         // 8. friend_content_forwards INSERT（UNIQUE 違反は 409 に変換）
         FriendContentForwardEntity forward;
@@ -162,7 +149,7 @@ public class FriendContentForwardService {
                     .sourcePostId(sourcePostId)
                     .sourceTeamId(sourceTeamId)
                     .forwardingTeamId(teamId)
-                    .forwardedPostId(forwardedPost.getId())
+                    .forwardedPostId(forwardedPostId)
                     .target(target.name())
                     .comment(request.getComment())
                     .isRevoked(false)
@@ -176,18 +163,18 @@ public class FriendContentForwardService {
         }
 
         log.info("フレンド投稿転送成立: teamId={}, sourcePostId={}, forwardId={}, forwardedPostId={}, userId={}",
-                teamId, sourcePostId, forward.getId(), forwardedPost.getId(), userId);
+                teamId, sourcePostId, forward.getId(), forwardedPostId, userId);
         recordForwardAudit("FRIEND_CONTENT_FORWARDED", userId, teamId,
                 String.format(
                         "{\"forward_id\":%d,\"source_post_id\":%d,\"source_team_id\":%d,"
                                 + "\"forwarding_team_id\":%d,\"forwarded_post_id\":%d,\"target\":\"%s\"}",
                         forward.getId(), sourcePostId, sourceTeamId,
-                        teamId, forwardedPost.getId(), target.name()));
+                        teamId, forwardedPostId, target.name()));
 
         return ForwardResponse.builder()
                 .forwardId(forward.getId())
                 .sourcePostId(sourcePostId)
-                .forwardedPostId(forwardedPost.getId())
+                .forwardedPostId(forwardedPostId)
                 .target(target)
                 .forwardedAt(forward.getForwardedAt())
                 .build();
@@ -231,11 +218,8 @@ public class FriendContentForwardService {
         forwardRepository.save(forward);
 
         // 4. 転送先 timeline_posts を論理削除
-        timelinePostRepository.findById(forward.getForwardedPostId())
-                .ifPresent(post -> {
-                    post.softDelete();
-                    timelinePostRepository.save(post);
-                });
+        //    timeline ドメインの窓口経由（既定伝播 REQUIRED で本トランザクションに参加）
+        timelineFriendForwardPostService.softDeleteFriendForwardPost(forward.getForwardedPostId());
 
         log.info("フレンド投稿転送取消: teamId={}, forwardId={}, forwardedPostId={}, userId={}",
                 teamId, forwardId, forward.getForwardedPostId(), userId);
@@ -331,9 +315,9 @@ public class FriendContentForwardService {
 
         String forwardingTeamName;
         if (isPublicPair) {
-            forwardingTeamName = teamRepository.findById(forwardingTeamId)
-                    .map(TeamEntity::getName)
-                    .orElse(ANONYMOUS_TEAM_NAME);
+            // team ドメインの公開 Service 経由（論理削除済みは含まれず匿名扱い）
+            String name = teamService.getNamesByIds(List.of(forwardingTeamId)).get(forwardingTeamId);
+            forwardingTeamName = (name != null) ? name : ANONYMOUS_TEAM_NAME;
         } else {
             forwardingTeamName = ANONYMOUS_TEAM_NAME;
         }
