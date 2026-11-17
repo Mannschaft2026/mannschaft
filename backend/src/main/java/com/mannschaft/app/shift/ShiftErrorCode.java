@@ -142,7 +142,15 @@ public enum ShiftErrorCode implements ErrorCode {
      *
      * <p>画面の表示が古いまま操作した状態競合として 409 にする（version 不一致の SHIFT_018 と同じ扱い）。</p>
      */
-    MOVE_SOURCE_NOT_ASSIGNED("SHIFT_046", "移動元の枠にこのメンバーは割り当てられていません。最新の状態を読み込み直してください", Severity.WARN);
+    MOVE_SOURCE_NOT_ASSIGNED("SHIFT_046", "移動元の枠にこのメンバーは割り当てられていません。最新の状態を読み込み直してください", Severity.WARN),
+
+    /**
+     * 予算に連動する勤務日の割当者に有効な時給がなく、公開できない（CMP-261115-1821・400）。
+     *
+     * <p>公開後の予算計上は時給のない割当者を黙って外すため、公開前に対象者・勤務日を返して拒否する。</p>
+     */
+    HOURLY_RATE_MISSING_FOR_PUBLICATION("SHIFT_047",
+            "予算管理の対象日に、勤務時給が未設定の割当メンバーがいるため公開できません", Severity.WARN);
 
     private final String code;
     private final String message;

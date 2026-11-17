@@ -124,6 +124,19 @@
       "formNote": "Notiz",
       "formNotePlaceholder": "Optional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "Veröffentlichung nicht möglich: Stundensätze fehlen",
+        "description": "Für budgetgebundene Arbeitstage haben zugewiesene Personen keinen gültigen Stundensatz. Legen Sie die Stundensätze fest und veröffentlichen Sie erneut.",
+        "unknownUser": "Benutzer-ID {id}",
+        "goSettings": "Stundensatz-Einstellungen öffnen"
+      },
+      "conflict": {
+        "title": "Der Dienstplan wurde geändert",
+        "description": "Der Dienstplan hat sich während der Prüfung der Veröffentlichung geändert. Laden Sie die Seite neu, prüfen Sie den Inhalt und veröffentlichen Sie erneut."
+      },
+      "close": "Schließen"
+    },
     "detail": {
       "tabOverview": "Übersicht",
       "tabEdit": "Bearbeiten",

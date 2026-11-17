@@ -2733,6 +2733,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * CMP-261115-1821: 公開前の勤務日時給欠落（SHIFT_047・400）。対象者・勤務日を details で返す。
+     */
+    @ExceptionHandler(com.mannschaft.app.shift.ShiftHourlyRateMissingException.class)
+    public ResponseEntity<com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse> handleShiftHourlyRateMissing(
+            com.mannschaft.app.shift.ShiftHourlyRateMissingException ex) {
+        log.warn("ShiftHourlyRateMissingException: missingCount={}", ex.getMissingHourlyRates().size());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                new com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse(
+                        ex.getErrorCode().getCode(), resolveMessage(ex.getErrorCode()), ex.getMissingHourlyRates()));
+    }
+
+    /**
      * CMP-260901-1538 柱③-A 409 details 追補: {@link DuplicateNameConfirmationRequiredException}
      * 専用ハンドラ（金型: {@link #handleFeatureNotEntitled}）。
      *
