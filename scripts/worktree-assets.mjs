@@ -55,7 +55,10 @@ export function defaultRunGit(cwd, args, input) {
  * node が utf8 で復号できるよう、出力エンコーディングを BOM 無し UTF-8 に固定してから出力する。
  */
 export const WIN_LIST_PROCESSES_COMMAND =
+  // 設定に失敗したら終端エラーにして非0終了させる（文字化けした一覧を成功扱いで返さない。呼び出し側は status !== 0 で例外にする）
+  "$ErrorActionPreference = 'Stop'; " +
   '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; ' +
+  "$ErrorActionPreference = 'Continue'; " +
   'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress';
 
 /** 稼働中プロセスの一覧 [{pid, ppid, cmd, cwd?}]。取得できなければ例外。差し替え可能。 */

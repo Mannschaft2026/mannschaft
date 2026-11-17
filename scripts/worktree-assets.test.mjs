@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -573,6 +573,16 @@ test('[#4588] Windows のプロセス一覧コマンドは PowerShell 出力を 
   assert.match(cmd, /UTF8Encoding \$false/);
   assert.ok(encodingIdx < cmd.indexOf('Get-CimInstance'), 'エンコーディング指定は出力前に置く');
   assert.match(cmd, /^[\x20-\x7e]+$/, 'ASCII のみ');
+  const stopIdx = cmd.indexOf("$ErrorActionPreference = 'Stop'");
+  assert.ok(stopIdx >= 0 && stopIdx < encodingIdx, '設定失敗を終端エラーにする指定が OutputEncoding より前に無い');
+  assert.ok(cmd.indexOf("$ErrorActionPreference = 'Continue'") > encodingIdx, 'Stop は OutputEncoding 設定だけに限定する');
+});
+
+test('[#4588] Windows 実機: OutputEncoding の設定失敗は非0終了になる（成功扱いで返らない）', { skip: process.platform !== 'win32' }, () => {
+  // 設定失敗を模擬: 代入先を失敗させる同じ構造（Stop の下で例外を起こす）
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = $null; $ErrorActionPreference = 'Continue'; Write-Output ok"], { encoding: 'utf8', windowsHide: true });
+  assert.notEqual(r.status, 0);
+  assert.ok(!r.stdout.includes('ok'));
 });
 
 test('[#4588] Windows 実機: 日本語を含むコマンドラインのプロセスが文字化けせず一覧に出る', { skip: process.platform !== 'win32' }, async () => {
