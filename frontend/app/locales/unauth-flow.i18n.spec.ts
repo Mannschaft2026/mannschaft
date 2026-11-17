@@ -38,7 +38,7 @@ const KEYS: Record<string, string[]> = {
 }
 
 function load(locale: string, file: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(resolve(localesDir, locale, `${file}.json`), 'utf8').replace(/^﻿/, ''))
+  return JSON.parse(readFileSync(resolve(localesDir, locale, `${file}.json`), 'utf8'))
 }
 function pick(doc: Record<string, unknown>, key: string): unknown {
   return key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], doc)

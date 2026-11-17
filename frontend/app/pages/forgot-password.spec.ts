@@ -22,9 +22,11 @@ async function setLocale(locale: 'ja' | 'en' | 'de') {
 function tr(key: string): string {
   return useNuxtApp().$i18n.t(key)
 }
-async function submitWith(wrapper: Awaited<ReturnType<typeof mountSuspended>>, value: string) {
+// vee-validate の検証は非同期のため、送信後は画面に期待する文言が出るまで待つ。
+async function submitWith(wrapper: Awaited<ReturnType<typeof mountSuspended>>, value: string, until: string) {
   await wrapper.find('#email').setValue(value)
   await wrapper.find('form').trigger('submit')
+  await vi.waitFor(() => expect(wrapper.text()).toContain(until), { timeout: 10000 })
   await flushPromises()
 }
 
@@ -44,7 +46,7 @@ describe('CMP-261117-2159 forgot-password の多言語化', () => {
     expect(text).toContain(tr('auth.password_reset.request_submit'))
     expect(text).toContain(tr('auth.password_reset.back_to_login'))
     expect(text).not.toContain('auth.password_reset.')
-    await submitWith(wrapper, 'user@example.com')
+    await submitWith(wrapper, 'user@example.com', tr('auth.password_reset.request_done'))
     const done = wrapper.text()
     expect(done).not.toMatch(JAPANESE)
     expect(done).toContain(tr('auth.password_reset.request_done'))
@@ -54,10 +56,9 @@ describe('CMP-261117-2159 forgot-password の多言語化', () => {
   it.each(['en', 'de'] as const)('AC-2: %s で空は必須エラー・"a" は形式エラーが表示言語で出る', async (locale) => {
     await setLocale(locale)
     const wrapper = await mountSuspended(ForgotPasswordPage, options)
-    await submitWith(wrapper, '')
-    expect(wrapper.text()).toContain(tr('auth.register.err_email_required'))
+    await submitWith(wrapper, '', tr('auth.register.err_email_required'))
     expect(wrapper.text()).not.toMatch(JAPANESE)
-    await submitWith(wrapper, 'a')
+    await submitWith(wrapper, 'a', tr('auth.register.err_email_invalid'))
     expect(wrapper.text()).toContain(tr('auth.register.err_email_invalid'))
     expect(wrapper.text()).not.toContain(tr('auth.register.err_email_required'))
     expect(wrapper.text()).not.toMatch(JAPANESE)
@@ -72,7 +73,7 @@ describe('CMP-261117-2159 forgot-password の多言語化', () => {
     await setLocale('en')
     mocks.api.mockRejectedValue(err)
     const wrapper = await mountSuspended(ForgotPasswordPage, options)
-    await submitWith(wrapper, 'user@example.com')
+    await submitWith(wrapper, 'user@example.com', tr('auth.password_reset.request_done'))
     expect(mocks.api).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain(tr('auth.password_reset.request_done'))
     expect(wrapper.text()).not.toContain('(BE)')
