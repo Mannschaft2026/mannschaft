@@ -777,6 +777,16 @@ void cleanup() {
     - 決済フロー（Stripe テストモード）
 - ヘッドレスモードで CI 上で実行する
 
+#### 完了条件（新規 E2E spec）
+
+- 新規に追加する E2E spec は、`--workers=1` で5回連続して成功し、かつ既定の並列ワーカー数で1回成功して、はじめて完了とする
+- 理由: 直列の連続実行で不安定さ（flaky）を、並列実行で共有状態の衝突を検出するため
+
+```bash
+cd frontend && npx playwright test <spec> --workers=1 --repeat-each=5
+cd frontend && npx playwright test <spec>
+```
+
 ### 9.3 E2E テストの配置
 
 ```
