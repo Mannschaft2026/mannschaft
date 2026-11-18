@@ -114,7 +114,64 @@ object ShardAssignment {
         if (!path.endsWith(".class")) return false
         return isMigrationReplayClass(fqcnTopLevelFromClassPath(path))
     }
+
+    // -------------------------------------------------------------------------
+    // CMP-261111-0508: 実行集合ベースの割り当て（試練で置いたシグネチャ。本体は出陣で実装）
+    // 呼び出し側（Test.exclude 側と verifyShardCoverage）は「実行対象のトップレベルクラス集合」を
+    // executableTopLevelClasses() で同じ方法で作り、assignShards() に重み表と共に渡す。
+    // 重み表に無いクラスはハッシュではなく既定重み（defaultWeight）付きで LPT に参加させる。
+    // -------------------------------------------------------------------------
+
+    /** 重み表が空、または全重みが 0 のときに使う既定重み（秒）。 */
+    const val FALLBACK_DEFAULT_WEIGHT: Double = 1.0
+
+    /**
+     * 未掲載クラスの既定重み = 重み表の値の中央値（件数が偶数なら中央2値の平均）。
+     * 重み表が空・全重み 0 のときは [FALLBACK_DEFAULT_WEIGHT]。
+     */
+    fun defaultWeight(weights: Map<String, Double>): Double =
+        TODO("CMP-261111-0508 出陣で実装")
+
+    /**
+     * 実行対象のトップレベルクラス集合を LPT で shardTotal 個へ割り付ける。
+     * 重みは weights[fqcn]、未掲載なら [defaultWeight]。
+     * 結果は集合の列挙順に依存しない（同重みは FQCN 昇順、合計が同じ shard は index の小さい方を選ぶ）。
+     * 戻り値のキーは executableTopLevelClasses と一致し、値は 0..shardTotal-1。
+     * 集合が空なら空 map。shardTotal がクラス数より大きければ空 shard が生じてよい。
+     */
+    fun assignShards(
+        executableTopLevelClasses: Collection<String>,
+        weights: Map<String, Double>,
+        shardTotal: Int
+    ): Map<String, Int> = TODO("CMP-261111-0508 出陣で実装")
+
+    /**
+     * [assignShards] の結果を使う exclude 述語（Test.exclude と verifyShardCoverage が共用する）。
+     * パス正規化（ネストクラスはトップレベルへ寄せる）→ 割り当て参照 → 否定 までを含む。
+     */
+    fun shouldExcludeForAssignedShard(
+        path: String,
+        isDirectory: Boolean,
+        shardIndex: Int,
+        assignment: Map<String, Int>
+    ): Boolean = TODO("CMP-261111-0508 出陣で実装")
+
+    /**
+     * コンパイル済みテストクラスファイル群から「実行対象のトップレベルクラス集合」を作る。
+     * 数え方: トップレベルクラス自身が抽象でなく、かつ自身またはそのネストクラスのどれかが
+     * テストメソッドを持つもの。ネストクラスは個別に数えない。抽象クラス・ヘルパー
+     * （テストメソッドなし）は含めない。
+     */
+    fun executableTopLevelClasses(classFiles: Collection<CompiledTestClassFile>): Set<String> =
+        TODO("CMP-261111-0508 出陣で実装")
 }
+
+/**
+ * 実行集合の算出に使う「コンパイル済みテストクラスファイル1件」の情報（CMP-261111-0508）。
+ * path は Gradle FileTreeElement.path と同じ "/" 区切りの相対パス（".class" 付き）。
+ * hasTestMethods は継承したテストメソッドも含めて判定した値とする。
+ */
+data class CompiledTestClassFile(val path: String, val isAbstract: Boolean, val hasTestMethods: Boolean)
 
 /** verifyShardCoverage が扱う「コンパイル済み .class ファイル1件」の生パスとトップレベルFQCN。 */
 class ShardCoverageClassFile(val path: String, val topLevelFqcn: String)
