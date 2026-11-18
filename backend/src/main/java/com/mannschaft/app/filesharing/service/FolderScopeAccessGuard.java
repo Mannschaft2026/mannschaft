@@ -80,4 +80,29 @@ public interface FolderScopeAccessGuard {
      * @param userId 操作ユーザー ID
      */
     void checkFolderPostByFileId(Long fileId, Long userId);
+
+    /**
+     * 【Controller 前段専用・tx なしで呼ぶ】folderId のフォルダが大会／ディビジョンスコープなら、
+     * 存在秘匿つきの投稿認可を通す（CMP-261116-0726）。
+     *
+     * <p>閲覧権のない者には不在フォルダと同一の 404（{@code FILE_SHARING_001}）、閲覧できるが投稿権のない者には
+     * 403 {@code TOUR_031}。フォルダ不在も 404（{@code FILE_SHARING_001}）。大会以外のスコープは何もしない。
+     * {@code @Transactional} クラスの内側から呼んではならない（ArchUnit D-3T）。</p>
+     *
+     * @param folderId フォルダ ID
+     * @param userId   操作ユーザー ID
+     */
+    void requirePostConcealedByFolderId(Long folderId, Long userId);
+
+    /**
+     * 【Controller 前段専用・tx なしで呼ぶ】fileId のファイルが属するフォルダが大会／ディビジョンスコープなら、
+     * 存在秘匿つきの投稿認可を通す（CMP-261116-0726）。
+     *
+     * <p>閲覧権なし・ファイル不在（フォルダ不在含む）は 404（{@code FILE_SHARING_002}）、閲覧可で投稿権なしは
+     * 403 {@code TOUR_031}。大会以外のスコープは何もしない。</p>
+     *
+     * @param fileId ファイル ID
+     * @param userId 操作ユーザー ID
+     */
+    void requirePostConcealedByFileId(Long fileId, Long userId);
 }
