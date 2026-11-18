@@ -15,7 +15,17 @@
 - 割り付ける対象は「**実行対象のトップレベルクラス集合**」。コンパイル済み .class から、抽象クラス・
   テストメソッドを持たないヘルパー・jupiter の `@Tag("perf"/"archunit"/"er-diagram")` 付き（専用タスクが実行）を
   除き、ネストクラスはトップレベルへ寄せて数える（`CompiledTestClassScanner` / `ShardAssignment.executableTopLevelClasses`）。
-  `@AnalyzeClasses` のクラスは `archUnitTest` が実行するため対象に含める。
+  `@AnalyzeClasses` だけのクラスは `archUnitTest` が実行するため、**通常の `:test` の集合には含めない**
+  （`archUnitTest` の割り当て集合は従来どおり含める）。
+- **どのクラスも必ずただ 1 つの shard で走る**: 実行対象集合に入らなかったクラス（抽象・ヘルパー・走査の取りこぼし）も、
+  割り当て表に無ければ従来の FQCN ハッシュ（`hashBucket`）で 1 shard に決定的に入れる。以前は「集合外はどの shard でも除外しない」
+  としていたため、走査が取りこぼした本物のテストが全 shard で重複実行され、番人にも見えなかった（検分 P1）。
+  取りこぼした場合の害は「LPT の重みを持たず重み表の未掲載にも数えられない」だけ。
+- 走査（`CompiledTestClassScanner`）は JUnit の検出に寄せてある: `@Test` 等をメタアノテーションに持つ**テストソース内で宣言された**独自注釈
+  （例 `@FastTest`）を数える。子が注釈なしで override した親のテストメソッドは数えず、private / static のテストメソッドも数えない。
+  抽象クラスのネストにだけテストがある外側は数えない（具象のサブクラスが継承したテストは数える。`@Nested` の内側だけにテストがある外側は数える）。
+  ライブラリ側で宣言されたメタ注釈などは読めず、集合から漏れることがあるが、上のとおり 1 shard で走るので安全で、
+  害は重み表の未掲載に数えられない（＝既定重みで LPT に入らない）ことだけである。
 - 重み表に載っていないクラス（新規テスト等）は**ハッシュではなく既定重み付きで同じ貪欲法に参加**する。
   既定重み = 重み表の値の**中央値**（件数が偶数なら中央 2 値の平均。重み表が空・全 0 なら固定 1.0 秒）。
   同じ重みは FQCN 昇順、合計が同じ shard は index の小さい方を選ぶため、**クラスの列挙順に依存しない**。
@@ -35,12 +45,12 @@
 - `verifyShardCoverage` タスクで、コンパイル済み .class ファイルの生パスに対して実際に検証
   できる: `cd backend && ./gradlew verifyShardCoverage -Pshard.total=8`
   （shardIndex = 0..total-1 の全パターンへ実際に述語を適用し、
-  1. 実行対象集合の各クラスがちょうど1つの shard で実行されること（0=取りこぼし、2以上=重複割当）、
+  1. **コンパイル済みの全トップレベルクラス**（実行対象集合の外も含む）がちょうど1つの shard で実行されること（0=取りこぼし、2以上=重複割当）、
   2. migration 除外プロファイルでは migration+Flyway クラスがどの shard でも実行されないこと、
   3. 同一トップレベルクラスに属する複数 .class ファイル（ネストクラス）が同じ shard に乗ること
      （グルーピングは `ShardAssignment` を経由しない独立した文字列操作で行い、正規化バグの
      自己採点を防ぐ）
-  の3点を、重み表あり/なし × migration除外あり/なしの**4プロファイル**全てで assert する）。
+  の3点を、重み表あり/なし × migration除外あり/なしの**4プロファイル**（通常 `:test` の集合）と、`archUnitTest` の集合による 2 プロファイルで assert する）。
 - CI では `backend-ci.yml` の `shard-coverage-guard` ジョブが 1 回だけ `verifyShardCoverage` を
   実行し、`gate`（必須チェック「Compile & Test」）の needs に含まれる。shard それぞれで
   重複実行はしない。同ジョブは `gradlew -p build-logic test`（`ShardAssignment` / `ShardBalanceGuard` / `CompiledTestClassScanner` の単体テスト）と

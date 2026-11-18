@@ -55,7 +55,7 @@ class ShardAssignmentTest {
             .filter { ShardAssignment.fqcnTopLevelFromClassPath(it.path) in executionSet }
             .forEach { f ->
                 val included = (0 until total).filter { k ->
-                    !ShardAssignment.shouldExcludeForAssignedShard(f.path, false, k, executionAssignment)
+                    !ShardAssignment.shouldExcludeForAssignedShard(f.path, false, k, total, executionAssignment)
                 }
                 assertEquals(
                     listOf(executionAssignment.getValue(ShardAssignment.fqcnTopLevelFromClassPath(f.path))),
@@ -65,7 +65,7 @@ class ShardAssignmentTest {
             }
         // ディレクトリは除外しない
         assertTrue((0 until total).none { k ->
-            ShardAssignment.shouldExcludeForAssignedShard("com/example", true, k, executionAssignment)
+            ShardAssignment.shouldExcludeForAssignedShard("com/example", true, k, total, executionAssignment)
         })
     }
 
@@ -161,5 +161,75 @@ class ShardAssignmentTest {
         val classes = listOf("a.A", "a.B", "a.C", "a.migration.FlywayX")
         val assignment = ShardAssignment.assignShards(classes, mapOf("a.A" to 5.0, "a.B" to 1.0), 1)
         assertEquals(classes.associateWith { 0 }, assignment)
+    }
+
+    // ---- 検分の差し戻し対応（CMP-261111-0508） ----
+
+    @Test
+    fun `検分P1 実行集合に入らないクラスもちょうど1つのshardにだけ含まれる（全shardで重複実行されない）`() {
+        val total = 8
+        // 走査が取りこぼした本物のテスト（メタアノテーションだけを持つ想定）・抽象・ヘルパーは実行集合に入らない
+        val files = listOf(
+            cls("com/example/AlphaTest.class"),
+            cls("com/example/MissedByScanTest.class", hasTests = false),
+            cls("com/example/MissedByScanTest\$Inner.class", hasTests = false),
+            cls("com/example/AbstractBaseTest.class", isAbstract = true),
+            cls("com/example/TestFixtures.class", hasTests = false),
+        )
+        val set = ShardAssignment.runnableTopLevelClasses(files, false)
+        assertEquals(setOf("com.example.AlphaTest"), set)
+        val assignment = ShardAssignment.assignShards(set, emptyMap(), total)
+        files.forEach { f ->
+            val included = (0 until total).filter { k ->
+                !ShardAssignment.shouldExcludeForAssignedShard(f.path, false, k, total, assignment)
+            }
+            assertEquals(1, included.size, "${f.path} はちょうど1つの shard だけで実行されること: $included")
+        }
+        // 集合外のクラスは従来どおり FQCN ハッシュの shard
+        val missed = (0 until total).filter { k ->
+            !ShardAssignment.shouldExcludeForAssignedShard("com/example/MissedByScanTest.class", false, k, total, assignment)
+        }
+        assertEquals(listOf(ShardAssignment.hashBucket("com.example.MissedByScanTest", total)), missed)
+        // ネストクラスはトップレベルと同じ shard
+        val nested = (0 until total).filter { k ->
+            !ShardAssignment.shouldExcludeForAssignedShard("com/example/MissedByScanTest\$Inner.class", false, k, total, assignment)
+        }
+        assertEquals(missed, nested)
+    }
+
+    @Test
+    fun `検分P2 通常testの実行集合はAnalyzeClassesだけのクラスを数えず、archUnitTestの集合は従来どおり数える`() {
+        val files = listOf(
+            cls("com/example/AlphaTest.class"),
+            // @AnalyzeClasses だけ（hasTestMethods=true だが jupiter のテストはない）
+            CompiledTestClassFile("com/example/SomeArchTest.class", false, hasTestMethods = true, hasJupiterTests = false),
+            // @AnalyzeClasses かつ jupiter のテストも持つ
+            CompiledTestClassFile("com/example/BothTest.class", false, hasTestMethods = true, hasJupiterTests = true),
+        )
+        assertEquals(
+            setOf("com.example.AlphaTest", "com.example.BothTest"),
+            ShardAssignment.runnableTopLevelClasses(files, false),
+        )
+        assertEquals(
+            setOf("com.example.AlphaTest", "com.example.SomeArchTest", "com.example.BothTest"),
+            ShardAssignment.runnableTopLevelClasses(files, false, archUnitTask = true),
+        )
+        // 通常 test で外したクラスも、割り当て表外としてちょうど1 shard に入る（全 shard で重複しない）
+        val assignment = ShardAssignment.assignShards(ShardAssignment.runnableTopLevelClasses(files, false), emptyMap(), 8)
+        val included = (0 until 8).filter { k ->
+            !ShardAssignment.shouldExcludeForAssignedShard("com/example/SomeArchTest.class", false, k, 8, assignment)
+        }
+        assertEquals(1, included.size)
+    }
+
+    @Test
+    fun `検分P3b 抽象ネストクラスだけにテストがある外側は数えず、具象ネストのテストは数える`() {
+        val files = listOf(
+            cls("com/example/OnlyAbstractNested.class", hasTests = false),
+            cls("com/example/OnlyAbstractNested\$Base.class", isAbstract = true),
+            cls("com/example/NestedConcrete.class", hasTests = false),
+            cls("com/example/NestedConcrete\$Case.class"),
+        )
+        assertEquals(setOf("com.example.NestedConcrete"), ShardAssignment.runnableTopLevelClasses(files, false))
     }
 }

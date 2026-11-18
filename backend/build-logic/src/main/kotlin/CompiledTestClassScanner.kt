@@ -7,9 +7,15 @@ import java.io.File
 //
 // 判定の方針（ShardAssignment.executableTopLevelClasses が使う CompiledTestClassFile を作る）:
 //  - isAbstract: ACC_ABSTRACT（抽象クラス・interface）。
-//  - hasTestMethods: 自身または（コンパイル対象内の）親クラス・interface が JUnit のテストメソッド
-//    （@Test / @ParameterizedTest / @RepeatedTest / @TestFactory / @TestTemplate）を持つ、または
-//    ArchUnit の @AnalyzeClasses を持つ（archUnitTest タスクで実行される。従来どおり shard に分割する）。
+//  - hasJupiterTests: 自身または（コンパイル対象内の）親クラス・interface が JUnit のテストメソッド
+//    （@Test / @ParameterizedTest / @RepeatedTest / @TestFactory / @TestTemplate、およびそれらをメタアノテーションに
+//    持つ「コンパイル対象内で宣言された」独自注釈）を持つ。JUnit と同じく、子が同じ名前・記述子のメソッドを
+//    注釈なしで override していれば親のそのメソッドは数えない。private / static は数えない。
+//  - hasTestMethods: hasJupiterTests、または ArchUnit の @AnalyzeClasses を持つ
+//    （@AnalyzeClasses は archUnitTest タスクだけが実行する。通常 :test の集合には ShardAssignment 側で入れない）。
+//  - 注意: 本走査が取りこぼしても安全側に倒してある。集合に入らないクラスも ShardAssignment が FQCN ハッシュで
+//    ちょうど 1 つの shard へ入れるため、全 shard で重複実行されることはない（重み表上は未掲載扱いになるだけ）。
+//    コンパイル対象外（ライブラリ）で宣言された独自メタ注釈は読めない。
 //  - jupiter の @Tag("perf" / "archunit" / "er-diagram") を持つクラス（通常 test では実行されず、専用タスクが
 //    実行する）は、通常の shard 割り当て対象から外す。@AnalyzeClasses を持つクラスは ArchUnit エンジンで
 //    実行されるため、この除外の対象にしない。
@@ -39,7 +45,15 @@ object CompiledTestClassScanner {
         val ownTests: Boolean,
         val analyzeClasses: Boolean,
         val tags: Set<String>,
+        /** メソッドの名前・記述子・注釈・アクセスフラグ。空なら ownTests だけを手掛かりにする（単体テスト用の簡易構築）。 */
+        val methods: List<MethodInfo> = emptyList(),
+        /** クラス自身に付いた注釈の型（独自注釈がメタアノテーションに @Test を持つかの判定に使う）。 */
+        val classAnnotationTypes: Set<String> = emptySet(),
+        val isAnnotation: Boolean = false,
     )
+
+    /** メソッド1件。annotationTypes は "Lpkg/Name;" 形式。 */
+    class MethodInfo(val name: String, val desc: String, val annotationTypes: Set<String>, val access: Int)
 
     /** classesDirs 配下の全 .class を読み、継承込みの判定をして CompiledTestClassFile の一覧を返す。 */
     fun scan(classesDirs: Collection<File>): List<CompiledTestClassFile> {
@@ -61,18 +75,41 @@ object CompiledTestClassScanner {
             val parents = (listOfNotNull(info.superName) + info.interfaces).mapNotNull { byName[it] }
             return parents.filter { seen.add(it.internalName) }.flatMap { listOf(it) + ancestors(it, seen) }
         }
+        // テストを示す注釈の集合。コンパイル対象内の独自注釈（@interface）が、これらを注釈に持てば仲間入りする
+        // （例: @Test をメタアノテーションに持つ @FastTest）。推移的に不動点まで広げる。
+        val markers = TEST_ANNOTATIONS.toMutableSet()
+        do {
+            val added = entries.map { it.second }
+                .filter { it.isAnnotation && it.classAnnotationTypes.any { t -> t in markers } }
+                .any { markers.add("L${it.internalName};") }
+        } while (added)
+        // 子から親の順に走り、最初に現れた（最も子の）宣言だけを有効にする。子が注釈なしで override したら親の注釈は無効。
+        fun hasJupiterTests(chain: List<RawClassInfo>): Boolean {
+            val seen = mutableSetOf<String>()
+            for (c in chain) {
+                if (c.methods.isEmpty() && c.ownTests) return true
+                for (m in c.methods) {
+                    // private / static は JUnit が検出せず、親のメソッドも override しない。bridge / synthetic も対象外。
+                    if (m.access and (0x0002 or 0x0008 or 0x0040 or 0x1000) != 0) continue
+                    if (!seen.add(m.name + m.desc)) continue
+                    if (m.annotationTypes.any { it in markers }) return true
+                }
+            }
+            return false
+        }
         val resolved = entries.map { (path, info) ->
             val chain = listOf(info) + ancestors(info)
-            val hasTests = chain.any { it.ownTests || it.analyzeClasses }
+            val jupiter = hasJupiterTests(chain)
+            val hasTests = jupiter || chain.any { it.analyzeClasses }
             val excludedByTag = !info.analyzeClasses && chain.any { c -> c.tags.any { it in EXCLUDED_TAGS } }
-            Triple(path, info, hasTests to excludedByTag)
+            Triple(path, info, Triple(hasTests, jupiter, excludedByTag))
         }
         // タグで除外するのはトップレベルクラス単位（ネストクラスはトップレベルに従う）。
-        val excludedTop = resolved.filter { it.third.second && !it.second.internalName.contains('$') }
+        val excludedTop = resolved.filter { it.third.third && !it.second.internalName.contains('$') }
             .map { it.second.internalName }.toSet()
         return resolved
             .filter { (_, info, _) -> info.internalName.substringBefore('$') !in excludedTop }
-            .map { (path, info, flags) -> CompiledTestClassFile(path, info.isAbstract, flags.first) }
+            .map { (path, info, flags) -> CompiledTestClassFile(path, info.isAbstract, flags.first, flags.second) }
     }
 
     /** class ファイルの構造を最小限だけ読む（定数プール・アクセスフラグ・親・メソッド注釈・クラス注釈）。 */
@@ -128,9 +165,14 @@ object CompiledTestClassScanner {
             readAttributes()
         }
         var ownTests = false
+        val methods = mutableListOf<MethodInfo>()
         repeat(input.readUnsignedShort()) { // methods
-            input.skipBytes(6)
-            if (readAttributes().any { it.first in TEST_ANNOTATIONS }) ownTests = true
+            val methodAccess = input.readUnsignedShort()
+            val methodName = utf8[input.readUnsignedShort()] ?: ""
+            val methodDesc = utf8[input.readUnsignedShort()] ?: ""
+            val annotationTypes = readAttributes().map { it.first }.toSet()
+            if (annotationTypes.any { it in TEST_ANNOTATIONS }) ownTests = true
+            methods += MethodInfo(methodName, methodDesc, annotationTypes, methodAccess)
         }
         val classAnnotations = readAttributes()
         val tags = classAnnotations
@@ -144,6 +186,9 @@ object CompiledTestClassScanner {
             ownTests = ownTests,
             analyzeClasses = classAnnotations.any { it.first == ANALYZE_CLASSES },
             tags = tags,
+            methods = methods,
+            classAnnotationTypes = classAnnotations.map { it.first }.toSet(),
+            isAnnotation = (access and 0x2000) != 0,
         )
     }
 
