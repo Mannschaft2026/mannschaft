@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261117-0900",
+  "scope": "app",
+  "implementation": {
+    "pr": 4601,
+    "sha": "b237835f6db66abb33baf8afabd3a06912b38fd2"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "主催組織 ADMIN は大会スコープのカテゴリ一覧を 200 で取得でき、自大会のカテゴリだけが返る（カテゴリ未登録なら空配列）",
+      "tests": [
+        {
+          "name": "AC-1: 主催組織ADMINは TOURNAMENT のカテゴリ一覧を 200 で取得でき、自大会のカテゴリだけが返る",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        },
+        {
+          "name": "AC-1: カテゴリ未登録の大会でも主催組織ADMINは 200・data は空配列",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "主催組織 ADMIN はディビジョンスコープのカテゴリ一覧を 200 で取得できる",
+      "tests": [
+        {
+          "name": "AC-2: 主催組織ADMINは TOURNAMENT_DIVISION のカテゴリ一覧を 200 で取得できる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "参加チームの代表・一般メンバーは大会・ディビジョンのカテゴリ一覧を 200 で取得できる",
+      "tests": [
+        {
+          "name": "AC-3: 参加チームの代表・一般メンバーは TOURNAMENT / TOURNAMENT_DIVISION のカテゴリ一覧を 200 で取得できる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "公開スペースは部外者でも 200 で取得でき、未ログインはスレッド一覧と同一応答になる",
+      "tests": [
+        {
+          "name": "AC-4: 公開スペースは部外者でも 200 でカテゴリを取得でき、未ログインはスレッド一覧と同一応答",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "部外者・主催組織の一般会員のカテゴリ一覧は、スレッド一覧と同一の拒否応答（status・error.code）になる",
+      "tests": [
+        {
+          "name": "AC-5: 部外者・主催組織の一般会員のカテゴリ一覧はスレッド一覧と同一の拒否応答（status・error.code）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "他テナント ADMIN のカテゴリ一覧は、スレッド一覧と同一、かつ部外者と同一の拒否応答になる",
+      "tests": [
+        {
+          "name": "AC-6: 他テナントADMINのカテゴリ一覧はスレッド一覧と同一、かつ部外者（AC-5）と同一の拒否応答",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "不在の大会・ディビジョン、スペース不在、スペース論理削除済みは、スレッド一覧と同一の拒否応答になる",
+      "tests": [
+        {
+          "name": "AC-7: 不在の大会・ディビジョン、スペース不在、スペース論理削除済みはスレッド一覧と同一の拒否応答",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "未ログインで非公開スペースのカテゴリ一覧は、スレッド一覧と同一の拒否応答になる",
+      "tests": [
+        {
+          "name": "AC-8: 未ログインで非公開スペースのカテゴリ一覧はスレッド一覧と同一の拒否応答",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "大会スコープで scope_id が非数値なら 400（スレッド一覧と同一の status・error.code）",
+      "tests": [
+        {
+          "name": "AC-9: 大会スコープで scope_id が非数値なら 400（スレッド一覧と同一の status・error.code）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "TEAM・ORGANIZATION・PERSONAL のカテゴリ一覧は従来どおり（メンバー・本人で 200、TEAM 非メンバーは 403）",
+      "tests": [
+        {
+          "name": "AC-10: TEAM・ORGANIZATION・PERSONAL のカテゴリ一覧はメンバー（本人）で 200、TEAM 非メンバーは 403 のまま",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "主催組織 ADMIN でも大会スコープのカテゴリ作成は 403 COMMON_002 で、DB に何も作られない",
+      "tests": [
+        {
+          "name": "AC-11: 主催組織ADMINでも TOURNAMENT のカテゴリ作成は 403 COMMON_002 で、DB に何も作られない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentCategoryListContractIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 44053722715 },
+    { "runId": 44053722917 },
+    { "runId": 44053722761 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4601"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261117-0900-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261117-0900-exploratory.md"
+    }
+  },
+  "regressions": []
+}
