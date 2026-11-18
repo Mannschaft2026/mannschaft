@@ -3,10 +3,8 @@ package com.mannschaft.app.tournament.service;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.filesharing.FileScopeType;
 import com.mannschaft.app.filesharing.FileSharingErrorCode;
-import com.mannschaft.app.filesharing.entity.SharedFileEntity;
-import com.mannschaft.app.filesharing.entity.SharedFolderEntity;
-import com.mannschaft.app.filesharing.repository.SharedFileRepository;
-import com.mannschaft.app.filesharing.repository.SharedFolderRepository;
+import com.mannschaft.app.filesharing.service.SharedFolderScopeLookup;
+import com.mannschaft.app.filesharing.service.SharedFolderScopeLookup.FolderScopeRef;
 import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.TournamentErrorCode;
@@ -44,9 +42,7 @@ import static org.mockito.Mockito.verify;
 class TournamentFolderScopeAccessGuardTest {
 
     @Mock
-    private SharedFolderRepository folderRepository;
-    @Mock
-    private SharedFileRepository fileRepository;
+    private SharedFolderScopeLookup scopeLookup;
     @Mock
     private TournamentContactAccessService accessService;
     @Mock
@@ -61,35 +57,16 @@ class TournamentFolderScopeAccessGuardTest {
     private static final Long DIVISION_ID = 200L;
     private static final Long USER_ID = 10L;
 
-    private SharedFolderEntity tournamentFolder() {
-        return SharedFolderEntity.builder()
-                .scopeType(FileScopeType.TOURNAMENT)
-                .organizationId(5L)
-                .scopeRefId(TOURNAMENT_ID)
-                .name("大会要項")
-                .build();
+    private FolderScopeRef tournamentFolder() {
+        return new FolderScopeRef(FileScopeType.TOURNAMENT, TOURNAMENT_ID);
     }
 
-    private SharedFolderEntity divisionFolder() {
-        return SharedFolderEntity.builder()
-                .scopeType(FileScopeType.TOURNAMENT_DIVISION)
-                .organizationId(5L)
-                .scopeRefId(DIVISION_ID)
-                .name("規約")
-                .build();
+    private FolderScopeRef divisionFolder() {
+        return new FolderScopeRef(FileScopeType.TOURNAMENT_DIVISION, DIVISION_ID);
     }
 
-    private SharedFolderEntity teamFolder() {
-        return SharedFolderEntity.builder()
-                .scopeType(FileScopeType.TEAM)
-                .teamId(7L)
-                .name("チームフォルダ")
-                .build();
-    }
-
-    private SharedFileEntity file() {
-        return SharedFileEntity.builder()
-                .folderId(FOLDER_ID).name("a.pdf").fileKey("k").fileSize(1L).contentType("application/pdf").build();
+    private FolderScopeRef teamFolder() {
+        return new FolderScopeRef(FileScopeType.TEAM, null);
     }
 
     // ========================================================================
@@ -103,7 +80,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("閲覧権なしはゲートが不在コード（FOLDER_NOT_FOUND）で拒否し、そのまま伝播する")
         void 閲覧権なしは不在コード() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
             willThrow(new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND))
                     .given(accessGate).requireView(
                             eq(ContactSpaceScopeType.TOURNAMENT), eq(TOURNAMENT_ID),
@@ -118,7 +95,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("未ログイン（userId=null）でも閲覧判定へ委譲する（公開判定はゲート側）")
         void 未ログインはゲートへ委譲() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
 
             guard.checkFolderViewByFolderId(FOLDER_ID, null);
 
@@ -130,7 +107,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("閲覧できる者は通過する（例外なし）")
         void 閲覧可は通過() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
 
             assertThatCode(() -> guard.checkFolderViewByFolderId(FOLDER_ID, USER_ID))
                     .doesNotThrowAnyException();
@@ -142,8 +119,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("ファイル ID 経路はファイル→フォルダ→ディビジョンスコープと辿り、不在コードは FILE_NOT_FOUND")
         void ファイルID経路は不在コードFILE() {
-            given(fileRepository.findById(FILE_ID)).willReturn(Optional.of(file()));
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(divisionFolder()));
+            given(scopeLookup.findByFileId(FILE_ID)).willReturn(Optional.of(divisionFolder()));
 
             guard.checkFolderViewByFileId(FILE_ID, USER_ID);
 
@@ -164,7 +140,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("一般メンバーが投稿しようとすると投稿認可で 403")
         void 一般メンバー投稿で403() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
             willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
                     .given(accessService).checkPost(
                             eq(ContactSpaceScopeType.TOURNAMENT), eq(TOURNAMENT_ID), eq(USER_ID));
@@ -178,8 +154,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("ファイル ID 経由の投稿認可も委譲する")
         void ファイルID経由で投稿認可委譲() {
-            given(fileRepository.findById(FILE_ID)).willReturn(Optional.of(file()));
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFileId(FILE_ID)).willReturn(Optional.of(tournamentFolder()));
 
             guard.checkFolderPostByFileId(FILE_ID, USER_ID);
 
@@ -199,7 +174,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("フォルダ ID 経路: ゲートの requirePost を FOLDER_NOT_FOUND で呼ぶ")
         void フォルダID経路でゲート委譲() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
 
             guard.requirePostConcealedByFolderId(FOLDER_ID, USER_ID);
 
@@ -211,8 +186,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("ファイル ID 経路: ゲートの requirePost を FILE_NOT_FOUND で呼ぶ（ディビジョン）")
         void ファイルID経路でゲート委譲() {
-            given(fileRepository.findById(FILE_ID)).willReturn(Optional.of(file()));
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(divisionFolder()));
+            given(scopeLookup.findByFileId(FILE_ID)).willReturn(Optional.of(divisionFolder()));
 
             guard.requirePostConcealedByFileId(FILE_ID, USER_ID);
 
@@ -224,7 +198,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("閲覧可・投稿権なしはゲートが 403 TOUR_031 を投げ、そのまま伝播する")
         void 閲覧可投稿権なしは403() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(tournamentFolder()));
             willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
                     .given(accessGate).requirePost(any(), any(), any(), any(), any());
 
@@ -237,8 +211,8 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("フォルダ不在は FOLDER_NOT_FOUND、ファイル不在は FILE_NOT_FOUND（ゲートは呼ばない）")
         void 不在コード() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.empty());
-            given(fileRepository.findById(FILE_ID)).willReturn(Optional.empty());
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.empty());
+            given(scopeLookup.findByFileId(FILE_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> guard.requirePostConcealedByFolderId(FOLDER_ID, USER_ID))
                     .extracting(e -> ((BusinessException) e).getErrorCode())
@@ -252,8 +226,8 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("ファイルは実在するが所属フォルダが不在でも FILE_NOT_FOUND（FOLDER_NOT_FOUND を漏らさない）")
         void 所属フォルダ不在はファイル不在コード() {
-            given(fileRepository.findById(FILE_ID)).willReturn(Optional.of(file()));
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.empty());
+            // ファイルは実在しても所属フォルダ不在ならルックアップは空（ファイル不在扱い）。
+            given(scopeLookup.findByFileId(FILE_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> guard.requirePostConcealedByFileId(FILE_ID, USER_ID))
                     .extracting(e -> ((BusinessException) e).getErrorCode())
@@ -275,7 +249,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("TEAM フォルダの閲覧では連絡スペース判定を一切呼ばない（既存挙動維持）")
         void TEAM閲覧はnoop() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(teamFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(teamFolder()));
 
             assertThatCode(() -> guard.checkFolderViewByFolderId(FOLDER_ID, USER_ID))
                     .doesNotThrowAnyException();
@@ -285,7 +259,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("TEAM フォルダの投稿（tx 内・前段とも）では連絡スペース判定を一切呼ばない")
         void TEAM投稿はnoop() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.of(teamFolder()));
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.of(teamFolder()));
 
             assertThatCode(() -> guard.checkFolderPostByFolderId(FOLDER_ID, USER_ID))
                     .doesNotThrowAnyException();
@@ -307,7 +281,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("存在しないフォルダ ID は FOLDER_NOT_FOUND（ゲートは呼ばない）")
         void フォルダ不在404() {
-            given(folderRepository.findById(FOLDER_ID)).willReturn(Optional.empty());
+            given(scopeLookup.findByFolderId(FOLDER_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> guard.checkFolderViewByFolderId(FOLDER_ID, USER_ID))
                     .isInstanceOf(BusinessException.class)
@@ -319,7 +293,7 @@ class TournamentFolderScopeAccessGuardTest {
         @Test
         @DisplayName("存在しないファイル ID は FILE_NOT_FOUND（ゲートは呼ばない）")
         void ファイル不在404() {
-            given(fileRepository.findById(FILE_ID)).willReturn(Optional.empty());
+            given(scopeLookup.findByFileId(FILE_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> guard.checkFolderViewByFileId(FILE_ID, USER_ID))
                     .isInstanceOf(BusinessException.class)

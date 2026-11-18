@@ -4,35 +4,31 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.filesharing.FileScopeType;
 import com.mannschaft.app.filesharing.FileSharingErrorCode;
-import com.mannschaft.app.filesharing.entity.SharedFileEntity;
-import com.mannschaft.app.filesharing.entity.SharedFolderEntity;
-import com.mannschaft.app.filesharing.repository.SharedFileRepository;
-import com.mannschaft.app.filesharing.repository.SharedFolderRepository;
 import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
+import com.mannschaft.app.filesharing.service.SharedFolderScopeLookup;
+import com.mannschaft.app.filesharing.service.SharedFolderScopeLookup.FolderScopeRef;
 import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 /**
- * {@link FolderScopeAccessGuard} の tournament ドメイン側実装（F08.7.1 / 04 §3 / §5）。
+ * {@link FolderScopeAccessGuard} の tournament ドメイン側実装（F08.7.1 / 04 §3 / §5、CMP-261116-0726）。
  *
- * <p>filesharing ドメインが宣言した認可ポートを、連絡スペース（BULLETIN）の
- * {@link TournamentContactAccessService#checkView} / {@link TournamentContactAccessService#checkPost}
- * を流用して満たす。依存方向は tournament → filesharing（依存性逆転）であり、循環依存を生まない。</p>
+ * <p>filesharing ドメインが宣言した認可ポートを、連絡スペース（BULLETIN）の認可で満たす。
+ * 依存方向は tournament → filesharing（依存性逆転）であり、循環依存を生まない。</p>
  *
- * <p><b>循環依存回避</b>: 本ガードは filesharing の <em>Service</em>（{@code SharedFolderService} /
- * {@code SharedFileService}）ではなく <em>Repository</em> に直接依存する。Service 側がこのガードを
- * inject するため、Service ↔ ガードの相互依存（循環）を避ける必要があるためである。</p>
+ * <p><b>循環依存回避・ドメイン境界</b>: 本ガードは filesharing の <em>Service</em> /
+ * <em>Repository</em> / <em>Entity</em> に直接依存せず、tx を持たない参照部品
+ * {@link SharedFolderScopeLookup}（ID と enum のみを返す）経由でフォルダ／ファイルのスコープを解決する
+ * （ArchUnit D-1 / D-5）。</p>
  *
  * <p>フォルダのスコープが大会／ディビジョン<b>以外</b>（TEAM / ORGANIZATION / PERSONAL）の場合は
- * 何もしない（既存 F05.5 の挙動を保つ。フラット認可是正は別 Issue）。大会／ディビジョンの場合のみ、
- * フォルダの {@code scope_ref_id}（= 大会 ID / ディビジョン ID）を解決し、連絡スペース認可を通す。</p>
- *
- * <p>ファイル ID 経路は fileId → folderId → folder へと辿り、その後フォルダ経路と同一の判定を行う。
- * 存在しないファイル／フォルダは一律 404、連絡スペース不在・大会／ディビジョン不在も
- * {@link TournamentContactAccessService} 側で 404（IDOR 対策・存在を漏らさない）。</p>
+ * 何もしない（既存 F05.5 の挙動を保つ）。大会／ディビジョンの場合のみ、フォルダの {@code scope_ref_id}
+ * （= 大会 ID / ディビジョン ID）を解決し、連絡スペース認可を通す。</p>
  *
  * <h2>存在秘匿と tx 境界（CMP-261116-0726）</h2>
  * <p>閲覧権のない者には、不在フォルダ／ファイルと同一の不在応答（フォルダ ID 経路は
@@ -48,101 +44,98 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TournamentFolderScopeAccessGuard implements FolderScopeAccessGuard {
 
-    private final SharedFolderRepository folderRepository;
-    private final SharedFileRepository fileRepository;
+    private final SharedFolderScopeLookup scopeLookup;
     private final TournamentContactAccessService accessService;
     private final TournamentContactSpaceAccessGate accessGate;
 
     @Override
     public void checkFolderViewByFolderId(Long folderId, Long userId) {
-        checkView(resolveFolderOrThrow(folderId), userId, FileSharingErrorCode.FOLDER_NOT_FOUND);
+        checkView(resolveByFolderId(folderId), userId, FileSharingErrorCode.FOLDER_NOT_FOUND);
     }
 
     @Override
     public void checkFolderPostByFolderId(Long folderId, Long userId) {
-        checkPost(resolveFolderOrThrow(folderId), userId);
+        checkPost(resolveByFolderId(folderId), userId);
     }
 
     @Override
     public void checkFolderViewByFileId(Long fileId, Long userId) {
-        checkView(resolveFolderOfFile(fileId), userId, FileSharingErrorCode.FILE_NOT_FOUND);
+        checkView(resolveByFileId(fileId), userId, FileSharingErrorCode.FILE_NOT_FOUND);
     }
 
     @Override
     public void checkFolderPostByFileId(Long fileId, Long userId) {
-        checkPost(resolveFolderOfFile(fileId), userId);
+        checkPost(resolveByFileId(fileId), userId);
     }
 
     @Override
     public void requirePostConcealedByFolderId(Long folderId, Long userId) {
-        requirePostConcealed(resolveFolderOrThrow(folderId), userId, FileSharingErrorCode.FOLDER_NOT_FOUND);
+        requirePostConcealed(resolveByFolderId(folderId), userId, FileSharingErrorCode.FOLDER_NOT_FOUND);
     }
 
     @Override
     public void requirePostConcealedByFileId(Long fileId, Long userId) {
-        requirePostConcealed(resolveFolderOfFile(fileId), userId, FileSharingErrorCode.FILE_NOT_FOUND);
+        requirePostConcealed(resolveByFileId(fileId), userId, FileSharingErrorCode.FILE_NOT_FOUND);
     }
 
     // ========================================================================
     // 内部ヘルパー
     // ========================================================================
 
-    private SharedFolderEntity resolveFolderOrThrow(Long folderId) {
-        return folderRepository.findById(folderId)
+    private FolderScopeRef resolveByFolderId(Long folderId) {
+        return scopeLookup.findByFolderId(folderId)
                 .orElseThrow(() -> new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND));
     }
 
-    private SharedFolderEntity resolveFolderOfFile(Long fileId) {
-        // ファイル不在もフォルダ不在も FILE_NOT_FOUND（ファイル ID 経路は常に 002。存在を漏らさない）。
-        SharedFileEntity file = fileRepository.findById(fileId)
-                .orElseThrow(() -> new BusinessException(FileSharingErrorCode.FILE_NOT_FOUND));
-        return folderRepository.findById(file.getFolderId())
+    /** ファイル不在もフォルダ不在も FILE_NOT_FOUND（ファイル ID 経路は常に 002。存在を漏らさない）。 */
+    private FolderScopeRef resolveByFileId(Long fileId) {
+        return scopeLookup.findByFileId(fileId)
                 .orElseThrow(() -> new BusinessException(FileSharingErrorCode.FILE_NOT_FOUND));
     }
 
     /**
-     * フォルダが大会／ディビジョンスコープなら閲覧認可を通す。それ以外は何もしない。
+     * フォルダが大会／ディビジョンスコープなら存在秘匿つきの閲覧認可を通す。それ以外は何もしない。
      */
-    private void checkView(SharedFolderEntity folder, Long userId, ErrorCode notFoundCode) {
-        ContactSpaceScopeType scopeType = toContactScopeType(folder.getScopeType());
-        if (scopeType == null) {
+    private void checkView(FolderScopeRef ref, Long userId, ErrorCode notFoundCode) {
+        Optional<ContactSpaceScopeType> scopeType = toContactScopeType(ref.scopeType());
+        if (scopeType.isEmpty()) {
             return; // TEAM / ORGANIZATION / PERSONAL は既存挙動のまま（本ガード対象外）
         }
-        accessGate.requireView(scopeType, folder.getScopeRefId(), ContactSpaceKind.BULLETIN, userId, notFoundCode);
+        accessGate.requireView(scopeType.get(), ref.scopeRefId(), ContactSpaceKind.BULLETIN, userId, notFoundCode);
     }
 
     /**
-     * 大会／ディビジョンスコープなら存在秘匿つきの投稿認可を通す。それ以外は何もしない。
-     * 閲覧権なしは不在応答、閲覧可で投稿権なしは 403 TOUR_031。
+     * tx 内の多層防御。大会／ディビジョンスコープならアップロード／編集認可を通す。それ以外は何もしない。
      */
-    private void requirePostConcealed(SharedFolderEntity folder, Long userId, ErrorCode notFoundCode) {
-        ContactSpaceScopeType scopeType = toContactScopeType(folder.getScopeType());
-        if (scopeType == null) {
+    private void checkPost(FolderScopeRef ref, Long userId) {
+        Optional<ContactSpaceScopeType> scopeType = toContactScopeType(ref.scopeType());
+        if (scopeType.isEmpty()) {
             return;
         }
-        accessGate.requirePost(scopeType, folder.getScopeRefId(), ContactSpaceKind.BULLETIN, userId, notFoundCode);
+        accessService.checkPost(scopeType.get(), ref.scopeRefId(), userId);
     }
 
     /**
-     * フォルダが大会／ディビジョンスコープならアップロード／編集認可を通す。それ以外は何もしない。
+     * Controller 前段の存在秘匿つき投稿認可。閲覧権なしは不在応答、閲覧可で投稿権なしは 403 TOUR_031。
+     * 大会／ディビジョン以外は何もしない。
      */
-    private void checkPost(SharedFolderEntity folder, Long userId) {
-        ContactSpaceScopeType scopeType = toContactScopeType(folder.getScopeType());
-        if (scopeType == null) {
+    private void requirePostConcealed(FolderScopeRef ref, Long userId, ErrorCode notFoundCode) {
+        Optional<ContactSpaceScopeType> scopeType = toContactScopeType(ref.scopeType());
+        if (scopeType.isEmpty()) {
             return;
         }
-        accessService.checkPost(scopeType, folder.getScopeRefId(), userId);
+        accessGate.requirePost(scopeType.get(), ref.scopeRefId(), ContactSpaceKind.BULLETIN, userId, notFoundCode);
     }
 
     /**
      * filesharing の {@link FileScopeType} を連絡スペースの {@link ContactSpaceScopeType} に対応付ける。
-     * 大会／ディビジョン以外（本ガード対象外）は null を返す。
+     * 大会／ディビジョン以外（本ガード対象外）は空を返す。
      */
-    private ContactSpaceScopeType toContactScopeType(FileScopeType scopeType) {
+    private Optional<ContactSpaceScopeType> toContactScopeType(FileScopeType scopeType) {
         return switch (scopeType) {
-            case TOURNAMENT -> ContactSpaceScopeType.TOURNAMENT;
-            case TOURNAMENT_DIVISION -> ContactSpaceScopeType.TOURNAMENT_DIVISION;
-            case TEAM, ORGANIZATION, PERSONAL -> null;
+            case TOURNAMENT -> Optional.of(ContactSpaceScopeType.TOURNAMENT);
+            case TOURNAMENT_DIVISION -> Optional.of(ContactSpaceScopeType.TOURNAMENT_DIVISION);
+            case TEAM, ORGANIZATION, PERSONAL -> Optional.empty();
         };
     }
 }

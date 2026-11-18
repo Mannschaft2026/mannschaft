@@ -774,27 +774,12 @@ class SharedFolderAccessGuardTest {
         }
 
         @Test
-        @DisplayName("authorizeLinkManage: 大会フォルダはファイル ID 経路の投稿認可（checkFolderPostByFileId）へ委譲する")
-        void リンク管理はファイルID経路() {
-            SharedFolderEntity folder = tournamentFolder();
-            SharedFileEntity file = fileIn(folder, null, false);
-
-            guard.authorizeLinkManage(folder, file, USER_ID);
+        @DisplayName("authorizeTournamentFilePost: ファイル ID 経路の投稿認可（checkFolderPostByFileId）へ委譲し、フォルダ ID 経路は使わない")
+        void 大会ファイル投稿認可はファイルID経路() {
+            guard.authorizeTournamentFilePost(FILE_ID, USER_ID);
 
             verify(folderScopeAccessGuard).checkFolderPostByFileId(FILE_ID, USER_ID);
             verify(folderScopeAccessGuard, never()).checkFolderPostByFolderId(anyLong(), any());
-        }
-
-        @Test
-        @DisplayName("authorizeLinkManage: TEAM は authorizeDelete と同じ管理者限定（大会ポートは呼ばない）")
-        void リンク管理_TEAMは管理者限定() {
-            SharedFolderEntity folder = teamFolder();
-            SharedFileEntity file = fileIn(folder, null, false);
-
-            guard.authorizeLinkManage(folder, file, USER_ID);
-
-            verify(accessControlService).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
-            verify(folderScopeAccessGuard, never()).checkFolderPostByFileId(anyLong(), any());
         }
     }
 }

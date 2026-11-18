@@ -124,15 +124,15 @@ public class SharedFolderAccessGuard {
     }
 
     /**
-     * ファイルの<b>公開リンク管理</b>認可を当てる。大会系は {@link FolderScopeAccessGuard#checkFolderPostByFileId}
-     * （ファイル ID 経路）に寄せ、他スコープは {@link #authorizeDelete} と同一。
+     * 大会／ディビジョンスコープのファイルに対する<b>投稿権限（公開リンク管理など）</b>の認可を、
+     * ファイル ID 経路（{@link FolderScopeAccessGuard#checkFolderPostByFileId}）で当てる。
+     *
+     * <p>フォルダ ID 経路を使うと、ファイル ID 起点の操作が {@code FILE_SHARING_001} を返し得るため、
+     * ファイル ID 起点の入口（公開リンク管理）はこちらを用いる（CMP-261116-0726）。
+     * シグネチャは ID のみ（ArchUnit D-1 API 境界: Entity を公開しない）。</p>
      */
-    public void authorizeLinkManage(SharedFolderEntity folder, SharedFileEntity file, Long userId) {
-        switch (folder.getScopeType()) {
-            case TOURNAMENT, TOURNAMENT_DIVISION ->
-                    folderScopeAccessGuard.checkFolderPostByFileId(file.getId(), userId);
-            default -> authorizeDelete(folder, userId);
-        }
+    public void authorizeTournamentFilePost(Long fileId, Long userId) {
+        folderScopeAccessGuard.checkFolderPostByFileId(fileId, userId);
     }
 
     /**
