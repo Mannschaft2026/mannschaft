@@ -69,7 +69,7 @@ bulletin の `scope_type` は **実 DDL では `VARCHAR(20)`**（`V5.001__create
 - DDL: VARCHAR ゆえ enum 定数追加（Java `ScopeType` への `TOURNAMENT` / `TOURNAMENT_DIVISION` 追加）のみで足り、列定義の `ALTER` は不要。**実装時に実スキーマを grep して 20 桁制約を超えないことを再確認**する。
 - スコープ別スレッド一覧の主クエリ用 `(scope_type, scope_id)` 複合 index は **実 DDL に未存在**（`V5.002` には PRIMARY KEY / category FK / author FK / FULLTEXT のみ。後続移行にも追加なし）。**実装時に grep で確認し、無ければ Flyway 移行で追加**する（§3.4・README Y-2 と整合）。
 
-**API 入口（グローバル方式）**: 大会連絡スペースの掲示板は、グローバル方式掲示板 API（`/api/v1/bulletin/threads` の一覧・作成、`/api/v1/bulletin/threads/read-all`、`/api/v1/bulletin/threads/{threadId}` 系）に `scope_type=TOURNAMENT` / `TOURNAMENT_DIVISION`、`scope_id=<大会ID／ディビジョンID の数値>` を指定して利用する（`scope_id` に slug は使えず 400）。認可は §4（`TournamentContactAccessService`：閲覧=canView・投稿=canPost）に委譲し、権限なしは閲覧 403 `TOUR_030`／投稿 403 `TOUR_031`。パス方式（`/api/v1/{scopeType}/{scopeId}/bulletin/...`）は大会スコープを受理しない（403）。権限なしを不在 ID と同じ 404 に畳む存在秘匿は別戦役で扱う。
+**API 入口（グローバル方式）**: 大会連絡スペースの掲示板は、グローバル方式掲示板 API（`/api/v1/bulletin/threads` の一覧・作成、`/api/v1/bulletin/threads/read-all`、`/api/v1/bulletin/threads/{threadId}` 系）に `scope_type=TOURNAMENT` / `TOURNAMENT_DIVISION`、`scope_id=<大会ID／ディビジョンID の数値>` を指定して利用する（`scope_id` に slug は使えず 400）。認可は §4（`TournamentContactAccessService`：閲覧=canView・投稿=canPost）の規則に従う。閲覧権のない者は不在 ID と同一の 404 に畳み（スコープ系は `TOUR_029`、子リソース ID 指定は子の不在コード `BULLETIN_002`/`BULLETIN_003`/`BULLETIN_007`/`BULLETIN_025`）、閲覧できるが投稿権のない者だけを 403 `TOUR_031` とする（CMP-261116-0726）。旧 403 `TOUR_030`（閲覧権なし）は欠番とし、送出しない（番号は再利用しない）。パス方式（`/api/v1/{scopeType}/{scopeId}/bulletin/...`）は大会スコープを受理しない（403）。
 
 ### 2.3 chat `ChannelType` / `source_type` の拡張（F04.2）
 
@@ -139,7 +139,7 @@ chat の `chat_channels.channel_type` に **`TOURNAMENT_CHAT`（15字）/ `TOURN
 
 新規 `TournamentContactAccessService`（tournament ドメイン）を設け、村の二段認可（`VillageBulletinAccessService` の `checkView` / `checkModerator`）を範として read / write を分離する。掲示板・チャット双方のコントローラ／サービス入口で**必ず**通す（多層防御）。
 
-クロスドメインの所属判定は `TeamMembershipRepository` / `AccessControlService` を **ID 参照のみ**で呼ぶ（原則 1）。存在しない／削除済みスペースは一律 **404**（IDOR 対策・存在を漏らさない）。
+クロスドメインの所属判定は `TeamMembershipRepository` / `AccessControlService` を **ID 参照のみ**で呼ぶ（原則 1）。存在しない／削除済みスペース、および**閲覧権のない者**への応答は一律 **404**（IDOR 対策・存在を漏らさない。§4.3）。
 
 ### 4.1 `canView(scopeType, scopeId, userId)`（要件②）
 
@@ -152,7 +152,7 @@ canView(scopeType, scopeId, userId):
     userId が対象チーム(status IN (REGISTERED, ACTIVE)) のメンバー  → 許可
     主催組織 ADMIN（isAdmin(userId, orgId, "ORGANIZATION")）       → 許可
     SYSTEM_ADMIN                                                  → 許可
-    else                                                         → 403
+    else                                                         → 404（不在と同一応答。403 にしない）
 ```
 
 - **チーム解決の源泉＝`tournament_participants`**。`status IN (REGISTERED, ACTIVE)` を含め、`WITHDRAWN` / `DISQUALIFIED` を**除外**する（**大会開始前から連絡可能**にする決定。要件のユーザビリティ確保）。
@@ -167,11 +167,29 @@ canPost(scopeType, scopeId, userId):
         （accessControlService.isAdminOrAbove(userId, teamId, "TEAM")）  → 許可
     主催組織 ADMIN（isAdmin(userId, orgId, "ORGANIZATION")）             → 許可
     SYSTEM_ADMIN                                                        → 許可
-    else                                                               → 403
+    else（閲覧できる者）                                                → 403 TOUR_031
+    else（閲覧もできない者）                                            → 404（§4.3）
 ```
 
 - 投稿できるのは **各チームの代表（ADMIN）・副代表（DEPUTY_ADMIN）** と **主催組織 ADMIN** のみ。一般 MEMBER・SUPPORTER・PUBLIC は閲覧のみ（権限昇格防止：MEMBER が代表になりすませない）。
 - `is_public=true` のスペースでも、**PUBLIC は常に read-only**。公開で投稿権が広がることはない。
+
+### 4.3 存在秘匿の判定表（CMP-261116-0726）
+
+閲覧権のない者に対し、スペース・スレッド・返信・添付・フォルダ等の**存在を応答の差で漏らさない**。判定は「閲覧できるか」を先に見て、拒否の種類を分ける。
+
+| 状況 | 応答 |
+|------|------|
+| 閲覧権なし（非公開スペースの部外者・未ログイン・主催組織外・脱退/失格チーム等） | **404**。スコープ系 EP は `TOUR_029`、子リソース ID 指定 EP は子の不在コード（スレッド `BULLETIN_002`・返信 `BULLETIN_003`・添付 `BULLETIN_007`・添付対象 `BULLETIN_025`）。実在しない ID と status・コード・本文が一致する |
+| 閲覧可・投稿（管理）権なし | **403 `TOUR_031`** |
+| スペース・大会・ディビジョンが不在、または大会とディビジョンの帰属が不一致 | 404（閲覧権なしと同一） |
+| 閲覧権あり・投稿権あり | 許可 |
+
+- 「閲覧権」は §4.1 の許可主体（公開スペースの閲覧者、参加チームの有効メンバー、主催組織 ADMIN、SYSTEM_ADMIN）。**スペース種別（掲示板／チャット）ごとの `is_public` で判定**する（掲示板・フォルダは掲示板スペース、チャットはチャットスペースを基準にする）。
+- 投稿権の拒否時に 403 か 404 かを分けるのは閲覧権の有無のみ。**投稿権を持つ者は閲覧判定を経ずに通る**。
+- **投稿後に資格を失った本人**（所属チームの脱退・失格等）は、閲覧権がなければ**自分が書いた投稿も不在扱い**（404）になる。公開スペースでは閲覧権があるため、本人の編集・削除は従来どおり行える。
+- 未認証の呼び出しは、公開 EP（大会フォルダ一覧等）を除き、存在の有無によらず同一の 401。
+- 旧 403 `TOUR_030` は欠番。CMP-261116-0726 以降は送出せず、番号も再利用しない（FE ロケールの文言は残置）。
 
 ### 4.3 N+1 回避（大会全体スコープ）
 
@@ -206,8 +224,11 @@ PATCH /api/v1/tournaments/{tournamentId}/contact-spaces/{spaceId}/visibility
 PATCH /api/v1/tournaments/{tournamentId}/divisions/{divisionId}/contact-spaces/{spaceId}/visibility
   body: { "is_public": true }
   認可: 主催組織 ADMIN / SYSTEM_ADMIN のみ（canPost より厳しい。チーム代表は公開設定できない）
-  応答: 200 更新後のスペース / 403 / 404
+  応答: 200 更新後のスペース / 403 TOUR_032 / 404 TOUR_029
 ```
+
+- **スペースの存在を知り得ない者は 404 `TOUR_029`**（不在と同一応答。副作用なし）。**知り得るが管理権のない者は 403 `TOUR_032`**。「知り得る」とは、そのスコープ（大会またはディビジョン）のいずれかのスペース（掲示板／チャット）を**閲覧できる**こと（公開スペース、または参加チームの有効メンバー）。
+- パスの大会とディビジョンの**帰属が一致しない**場合、およびパスのスペース ID が当該スコープのものでない場合は、主催組織 ADMIN でも **404 `TOUR_029`**（スペースは変更されない）。
 
 ### 5.2 公開時の挙動・セキュリティ
 

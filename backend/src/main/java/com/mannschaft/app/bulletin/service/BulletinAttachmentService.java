@@ -32,7 +32,6 @@ import com.mannschaft.app.common.storage.acl.StorageAclService;
 import com.mannschaft.app.common.storage.quota.StorageFeatureType;
 import com.mannschaft.app.common.storage.quota.StorageQuotaService;
 import com.mannschaft.app.common.storage.quota.StorageScopeType;
-import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.service.TournamentContactAccessService;
 import com.mannschaft.app.village.service.VillageBulletinAccessService;
@@ -421,10 +420,10 @@ public class BulletinAttachmentService {
         if (thread.getScopeType() == ScopeType.VILLAGE) {
             villageBulletinAccessService.checkVillageBulletinViewAccess(thread.getScopeVillageId(), userId);
         } else if (isTournamentScope(thread.getScopeType())) {
-            // F08.7.1: 大会/ディビジョン連絡の添付閲覧（一覧/DL URL 発行）は canView に委譲する。
+            // F08.7.1: 大会/ディビジョン連絡の添付閲覧（一覧/DL URL 発行）は BulletinReadFacade が tx 外で
+            // 認可済み（存在秘匿つき・D-3T。CMP-261116-0726）。tx 内では他ドメインの閲覧判定を撃たない。
             // checkMembership は membership.domain.ScopeType に TOURNAMENT が無く 500 になるため通さない。
-            tournamentContactAccessService.checkView(
-                    toContactScope(thread.getScopeType()), thread.getScopeId(), ContactSpaceKind.BULLETIN, userId);
+            return;
         } else if (thread.getScopeType() == ScopeType.PERSONAL) {
             checkPersonalOwner(thread, userId);
         } else {

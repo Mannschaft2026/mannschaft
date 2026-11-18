@@ -16,7 +16,7 @@ import com.mannschaft.app.event.service.EventScopeAccessGuard;
 import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.TournamentErrorCode;
-import com.mannschaft.app.tournament.service.TournamentContactAccessService;
+import com.mannschaft.app.tournament.service.TournamentContactSpaceAccessGate;
 import com.mannschaft.app.village.service.PostingIdentityService;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.DisplayName;
@@ -66,7 +66,7 @@ class ChatChannelAccessGuardTest {
     private ChatChannelRepository channelRepository;
 
     @Mock
-    private TournamentContactAccessService tournamentContactAccessService;
+    private TournamentContactSpaceAccessGate tournamentContactSpaceAccessGate;
 
     @Mock
     private EventScopeAccessGuard eventScopeAccessGuard;
@@ -589,19 +589,20 @@ class ChatChannelAccessGuardTest {
         }
 
         @Test
-        @DisplayName("大会チャット: canView 可なら通過し、大会の正準判定へ正しい引数で委譲する")
-        void 大会はcanViewへ委譲する() {
+        @DisplayName("大会チャット: 閲覧可なら通過し、存在秘匿つきゲートへ CHAT 種別と当該 EP の不在コードで委譲する")
+        void 大会はゲートの閲覧判定へ委譲する() {
             assertThatCode(() -> guard.checkChannelViewAccess(tournament(), USER_ID, ChatErrorCode.CHANNEL_NOT_FOUND))
                     .doesNotThrowAnyException();
-            verify(tournamentContactAccessService).checkView(
-                    ContactSpaceScopeType.TOURNAMENT, TOURNAMENT_ID, ContactSpaceKind.CHAT, USER_ID);
+            verify(tournamentContactSpaceAccessGate).requireView(ContactSpaceScopeType.TOURNAMENT, TOURNAMENT_ID,
+                    ContactSpaceKind.CHAT, USER_ID, ChatErrorCode.CHANNEL_NOT_FOUND);
         }
 
         @Test
         @DisplayName("大会チャット: 閲覧権限なしは渡された不在コード（メッセージ ID 指定なら CHAT_002）と同一")
         void 大会の閲覧不可は不在と同一() {
-            willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkView(any(), any(), any(), any());
+            willThrow(new BusinessException(ChatErrorCode.MESSAGE_NOT_FOUND))
+                    .given(tournamentContactSpaceAccessGate).requireView(ContactSpaceScopeType.TOURNAMENT,
+                            TOURNAMENT_ID, ContactSpaceKind.CHAT, USER_ID, ChatErrorCode.MESSAGE_NOT_FOUND);
 
             assertDenied(() -> guard.checkChannelViewAccess(tournament(), USER_ID, ChatErrorCode.MESSAGE_NOT_FOUND),
                     ChatErrorCode.MESSAGE_NOT_FOUND);
@@ -648,7 +649,8 @@ class ChatChannelAccessGuardTest {
         @DisplayName("投稿: 大会チャットで閲覧はできるが投稿できない利用者は大会の 403 をそのまま返す")
         void 大会の投稿不可で閲覧可なら403() {
             willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkPost(any(), any(), any());
+                    .given(tournamentContactSpaceAccessGate).requirePost(ContactSpaceScopeType.TOURNAMENT,
+                            TOURNAMENT_ID, ContactSpaceKind.CHAT, USER_ID, ChatErrorCode.CHANNEL_NOT_FOUND);
 
             assertDenied(() -> guard.checkChannelPostAccess(tournament(), USER_ID, ChatErrorCode.CHANNEL_NOT_FOUND),
                     TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN);
@@ -657,10 +659,9 @@ class ChatChannelAccessGuardTest {
         @Test
         @DisplayName("投稿: 大会チャットで閲覧もできない利用者は不在と同一")
         void 大会の閲覧も不可なら不在と同一() {
-            willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkPost(any(), any(), any());
-            willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkView(any(), any(), any(), any());
+            willThrow(new BusinessException(ChatErrorCode.MESSAGE_NOT_FOUND))
+                    .given(tournamentContactSpaceAccessGate).requirePost(ContactSpaceScopeType.TOURNAMENT,
+                            TOURNAMENT_ID, ContactSpaceKind.CHAT, USER_ID, ChatErrorCode.MESSAGE_NOT_FOUND);
 
             assertDenied(() -> guard.checkChannelPostAccess(tournament(), USER_ID, ChatErrorCode.MESSAGE_NOT_FOUND),
                     ChatErrorCode.MESSAGE_NOT_FOUND);

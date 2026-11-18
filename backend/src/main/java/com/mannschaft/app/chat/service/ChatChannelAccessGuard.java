@@ -15,8 +15,7 @@ import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.event.service.EventScopeAccessGuard;
 import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
-import com.mannschaft.app.tournament.TournamentErrorCode;
-import com.mannschaft.app.tournament.service.TournamentContactAccessService;
+import com.mannschaft.app.tournament.service.TournamentContactSpaceAccessGate;
 import com.mannschaft.app.village.service.PostingIdentityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,7 +29,7 @@ import org.springframework.stereotype.Service;
  * リクエストが申告したスコープ識別子は判定材料に用いない。</p>
  *
  * <p>本クラスはチャットのリポジトリと、各ドメインの正準の認可判定（{@link AccessControlService}・
- * {@link TournamentContactAccessService}・{@link EventScopeAccessGuard}・{@link PostingIdentityService}）
+ * {@link TournamentContactSpaceAccessGate}・{@link EventScopeAccessGuard}・{@link PostingIdentityService}）
  * のみに依存し、チャットの業務サービスには依存しない。循環依存を作らずに全経路が同一の判定を通ることを
  * 保証するための構成である。</p>
  *
@@ -59,8 +58,12 @@ public class ChatChannelAccessGuard {
     private final ChatChannelRepository channelRepository;
     private final ChatChannelMemberRepository memberRepository;
     private final AccessControlService accessControlService;
-    /** F08.7.1 連絡機能: 大会/ディビジョンチャットの閲覧・投稿認可を委譲する（クロスドメイン・原則1）。 */
-    private final TournamentContactAccessService tournamentContactAccessService;
+    /**
+     * F08.7.1 連絡機能: 大会/ディビジョンチャットの閲覧・投稿認可を委譲する（クロスドメイン・原則1）。
+     * tx を持たない存在秘匿つきゲートを真偽値・不在コード指定で使い、他 Service の例外を catch しない
+     * （proxy 越しの例外 catch による rollback-only 500 の芽を摘む。CMP-261116-0726）。
+     */
+    private final TournamentContactSpaceAccessGate tournamentContactSpaceAccessGate;
     /** 裏目付A: {@code EVENT_CHAT} の閲覧・投稿認可を event ドメインのアクセスモデルへ委譲する。 */
     private final EventScopeAccessGuard eventScopeAccessGuard;
     /** 裏目付A: {@code VILLAGE_LOBBY} の閲覧・投稿認可を village ドメインの正準判定へ委譲する。 */
@@ -94,7 +97,7 @@ public class ChatChannelAccessGuard {
      * <p>種別ごとの意味論（{@link ChannelType#isMembershipGated()} を単一の出所とする）:</p>
      * <ul>
      *   <li><b>{@code TOURNAMENT_CHAT} / {@code TOURNAMENT_DIVISION_CHAT}</b> —
-     *       {@link TournamentContactAccessService#checkView} に委譲（F08.7.1 §4.1）。</li>
+     *       {@link TournamentContactSpaceAccessGate#requireView} に委譲（F08.7.1 §4.1）。</li>
      *   <li><b>メンバーシップ管理種別</b> — {@code chat_channel_members} にメンバー行が存在することを要求する
      *       （{@code TEAM_PUBLIC} も対象。「公開」は自分で参加できる、の意で、未参加のまま本文を読めることは意味しない）。</li>
      *   <li><b>{@code VILLAGE_LOBBY} / {@code EVENT_CHAT}</b> — village / event ドメイン側のアクセスモデルで認可する。</li>
@@ -112,9 +115,9 @@ public class ChatChannelAccessGuard {
     void checkChannelViewAccess(ChatChannelEntity channel, Long userId, ErrorCode notFoundCode) {
         ContactSpaceScopeType scope = tournamentScopeOf(channel);
         if (scope != null) {
-            if (!canViewTournamentChannel(scope, channel, userId)) {
-                throw new BusinessException(notFoundCode);
-            }
+            // 閲覧権なし・スペース不在・大会不在はすべて当該 EP の不在コード（存在秘匿）。
+            tournamentContactSpaceAccessGate.requireView(
+                    scope, channel.getSourceId(), ContactSpaceKind.CHAT, userId, notFoundCode);
             return;
         }
         requireViewableByChannelType(channel, userId, notFoundCode);
@@ -135,14 +138,9 @@ public class ChatChannelAccessGuard {
     void checkChannelPostAccess(ChatChannelEntity channel, Long userId, ErrorCode notFoundCode) {
         ContactSpaceScopeType scope = tournamentScopeOf(channel);
         if (scope != null) {
-            try {
-                tournamentContactAccessService.checkPost(scope, channel.getSourceId(), userId);
-            } catch (BusinessException e) {
-                if (!canViewTournamentChannel(scope, channel, userId)) {
-                    throw new BusinessException(notFoundCode);
-                }
-                throw e;
-            }
+            // 投稿者なら許可。拒否時は閲覧可なら 403 TOUR_031、閲覧不可・不在なら当該 EP の不在コード。
+            tournamentContactSpaceAccessGate.requirePost(
+                    scope, channel.getSourceId(), ContactSpaceKind.CHAT, userId, notFoundCode);
             return;
         }
         requireViewableByChannelType(channel, userId, notFoundCode);
@@ -177,23 +175,6 @@ public class ChatChannelAccessGuard {
         if (!allowed) {
             // 村ロビー・イベントチャットの非該当者はチャンネルの存在を知り得ない。不在と同一応答にする。
             throw new BusinessException(notFoundCode);
-        }
-    }
-
-    /**
-     * 大会連絡チャットを閲覧できるか。大会ドメインの正準判定（{@link TournamentContactAccessService#checkView}）
-     * の拒否（スペース不在・閲覧権限なし）を偽として返す。それ以外の例外はそのまま伝播させる。
-     */
-    private boolean canViewTournamentChannel(ContactSpaceScopeType scope, ChatChannelEntity channel, Long userId) {
-        try {
-            tournamentContactAccessService.checkView(scope, channel.getSourceId(), ContactSpaceKind.CHAT, userId);
-            return true;
-        } catch (BusinessException e) {
-            if (e.getErrorCode() == TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN
-                    || e.getErrorCode() == TournamentErrorCode.CONTACT_SPACE_NOT_FOUND) {
-                return false;
-            }
-            throw e;
         }
     }
 
