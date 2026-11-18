@@ -502,5 +502,76 @@ class CiShardWorkflowStaticTest(unittest.TestCase):
         self.assertIn("    needs: detect", guard)
 
 
+# ---------------------------------------------------------------------------
+# CMP-261111-0508 試練（甲）K-7: regen 互換。
+# runtime-diag artifact に context-progress.log（[ci-ctx] 行）が入っても regen が通り、
+# 重み表は同ファイルの有無で一致する。REQUIRED にはしない（無い ZIP も従来どおり通る）。
+# 未知ファイルの拒否は従来どおり。
+# ---------------------------------------------------------------------------
+CTX_SAMPLE = (
+    b"[ci-ctx] jvm=1234 seq=1 class=example.Class0 key=0123456789ab event=load loadMs=4210 cacheSize=1\n"
+    b"[ci-ctx] jvm=1234 seq=2 class=example.Class1 key=0123456789ab event=hit loadMs=0 cacheSize=1\n"
+)
+
+
+def runtime_zip(files, extra=()):
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        for name, content in files.items():
+            archive.writestr("runtime/" + name, content)
+        for name, content in extra:
+            archive.writestr(name, content)
+    payload = stream.getvalue()
+    return dict(size_in_bytes=len(payload), digest="sha256:" + hashlib.sha256(payload).hexdigest()), payload
+
+
+class ContextProgressLogCompatibilityTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.program = load_program()
+
+    def generate(self, data, target):
+        run, jobs, shards = data
+        weights = self.program["build_weights"](run, jobs, shards, "nightly-full")
+        self.program["atomic_write"](target, self.program["render"](run, weights))
+        return weights
+
+    def test_k7_context_progress_log_is_allowed_but_not_required(self):
+        self.assertIn("context-progress.log", self.program["ALLOWED"], "ZIP 許可リストに context-progress.log を足すこと")
+        self.assertNotIn("context-progress.log", self.program["REQUIRED"], "REQUIRED にはしない（無い ZIP も通す）")
+
+    def test_k7_weights_are_identical_with_and_without_context_progress_log(self):
+        for observation in [b"", CTX_SAMPLE]:
+            with self.subTest(observation=observation), tempfile.TemporaryDirectory() as d:
+                data = fixture()
+                target = Path(d) / "weights"
+                expected = self.generate(data, target)
+                expected_output = target.read_bytes()
+                for _, files in data[2].values():
+                    files["context-progress.log"] = observation
+                    meta, payload = runtime_zip(files)
+                    parsed = self.program["safe_zip"](meta, payload)
+                    self.assertEqual(parsed["context-progress.log"], observation)
+                    files.clear()
+                    files.update(parsed)
+                self.assertEqual(self.generate(data, target), expected)
+                self.assertEqual(target.read_bytes(), expected_output)
+
+    def test_k7_unknown_and_unsafe_members_are_still_rejected(self):
+        invalid_members = {
+            "unknown": ([("runtime/context-progress.log.txt", b"x")], "unknown/duplicate/oversized"),
+            "unknown-sibling": ([("runtime/context-other.log", b"x")], "unknown/duplicate/oversized"),
+            "traversal": ([("../context-progress.log", b"x")], "unsafe zip path/type"),
+            "duplicate": ([("runtime/context-progress.log", b"x"), ("other/context-progress.log", b"x")],
+                          "unknown/duplicate/oversized"),
+            "oversized": ([("runtime/context-progress.log", b"x" * (2 * 1024 * 1024 + 1))], "unknown/duplicate/oversized"),
+        }
+        for name, (extra, error) in invalid_members.items():
+            with self.subTest(name=name):
+                meta, payload = runtime_zip(fixture()[2][0][1], extra)
+                with self.assertRaisesRegex(ValueError, error):
+                    self.program["safe_zip"](meta, payload)
+
+
 if __name__ == "__main__":
     unittest.main()
