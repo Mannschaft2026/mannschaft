@@ -2,6 +2,10 @@ package com.mannschaft.app.effortrecord;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.activity.ActivityScopeType;
+import com.mannschaft.app.activity.dto.CreateTemplateRequest;
+import com.mannschaft.app.activity.dto.UpdateTemplateRequest;
+import com.mannschaft.app.activity.service.ActivityTemplateService;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.auth.service.AuthTokenService;
@@ -9,6 +13,8 @@ import com.mannschaft.app.effortrecord.entity.EffortRecordEntity;
 import com.mannschaft.app.effortrecord.repository.EffortRecordRepository;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
+import com.mannschaft.app.organization.entity.OrganizationEntity;
+import com.mannschaft.app.organization.repository.OrganizationRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
 import com.mannschaft.app.team.entity.TeamEntity;
@@ -75,12 +81,16 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
     @Autowired protected TeamRepository teams;
     @Autowired protected EffortRecordRepository records;
     @Autowired protected DataSource dataSource;
+    @Autowired protected ActivityTemplateService activityTemplates;
+    @Autowired protected OrganizationRepository organizations;
     @PersistenceContext protected EntityManager em;
 
     /** 本土台で作成したユーザー（後始末対象）。 */
     protected final List<Long> ownedUsers = new ArrayList<>();
     /** 本土台で作成したチーム（後始末対象）。 */
     protected final List<Long> ownedTeams = new ArrayList<>();
+    /** 本土台で作成した組織（後始末対象。PR-2 のチーム定義 fixture 用）。 */
+    protected final List<Long> ownedOrganizations = new ArrayList<>();
     /** SYSTEM_ADMIN ロールでトークンを発行するユーザー。 */
     protected final List<Long> systemAdmins = new ArrayList<>();
 
@@ -92,7 +102,7 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
     @AfterEach
     void 所有fixtureだけ片付ける() {
         SecurityContextHolder.clearContext();
-        if (ownedUsers.isEmpty() && ownedTeams.isEmpty()) {
+        if (ownedUsers.isEmpty() && ownedTeams.isEmpty() && ownedOrganizations.isEmpty()) {
             return;
         }
         tx(() -> {
@@ -104,7 +114,20 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
                 em.createNativeQuery("DELETE FROM audit_logs WHERE user_id = :id").setParameter("id", id).executeUpdate();
             }
             for (Long id : ownedTeams) {
+                // PR-2: チーム定義（effort 側）→ activity テンプレート → 組織所属の順に、本土台のチームに属する行だけ消す。
+                em.createNativeQuery("DELETE r FROM effort_definition_revisions r JOIN effort_definitions d ON d.id = r.definition_id "
+                        + "WHERE d.source_type = 'TEAM' AND d.team_id = :id").setParameter("id", id).executeUpdate();
+                em.createNativeQuery("DELETE FROM effort_definitions WHERE source_type = 'TEAM' AND team_id = :id")
+                        .setParameter("id", id).executeUpdate();
+                em.createNativeQuery("DELETE f FROM activity_template_fields f JOIN activity_templates t ON t.id = f.template_id "
+                        + "WHERE t.scope_type = 'TEAM' AND t.scope_id = :id").setParameter("id", id).executeUpdate();
+                em.createNativeQuery("DELETE FROM activity_templates WHERE scope_type = 'TEAM' AND scope_id = :id")
+                        .setParameter("id", id).executeUpdate();
+                em.createNativeQuery("DELETE FROM team_org_memberships WHERE team_id = :id").setParameter("id", id).executeUpdate();
                 em.createNativeQuery("DELETE FROM teams WHERE id = :id").setParameter("id", id).executeUpdate();
+            }
+            for (Long id : ownedOrganizations) {
+                em.createNativeQuery("DELETE FROM organizations WHERE id = :id").setParameter("id", id).executeUpdate();
             }
             for (Long id : ownedUsers) {
                 em.createNativeQuery("DELETE FROM users WHERE id = :id").setParameter("id", id).executeUpdate();
@@ -113,6 +136,7 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
         });
         ownedUsers.clear();
         ownedTeams.clear();
+        ownedOrganizations.clear();
         systemAdmins.clear();
     }
 
@@ -159,6 +183,196 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
             MembershipTestHelper.insertUserRole(em, userId, "ADMIN", teamId, null);
             return null;
         });
+    }
+
+    /** DEPUTY_ADMIN（既存テンプレート管理権限を委任された副管理者）として所属させる。 */
+    protected void teamDeputy(Long userId, Long teamId) {
+        tx(() -> {
+            MembershipTestHelper.insertMembership(em, userId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, userId, "DEPUTY_ADMIN", teamId, null);
+            return null;
+        });
+    }
+
+    /** 所属を終了する（自己脱退相当。left_at を立てる）。 */
+    protected void leave(Long userId, Long teamId) {
+        tx(() -> em.createNativeQuery("UPDATE memberships SET left_at = UTC_TIMESTAMP() "
+                        + "WHERE user_id = :u AND scope_type = 'TEAM' AND scope_id = :t AND left_at IS NULL")
+                .setParameter("u", userId).setParameter("t", teamId).executeUpdate());
+    }
+
+    // ─────────────────────── PR-2: 組織・チームテンプレート fixture ───────────────────────
+
+    /** 組織を作る（TEAM 定義は organization 側にルーティングされるため、チームは組織配下に置く）。 */
+    protected Long organization(String name) {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Long id = tx(() -> organizations.saveAndFlush(OrganizationEntity.builder().name(name)
+                .slug("effort-org-" + suffix).orgType(OrganizationEntity.OrgType.OTHER)
+                .visibility(OrganizationEntity.Visibility.PUBLIC)
+                .hierarchyVisibility(OrganizationEntity.HierarchyVisibility.NONE)
+                .supporterEnabled(false).build()).getId());
+        ownedOrganizations.add(id);
+        return id;
+    }
+
+    /** 組織配下（ACTIVE な team_org_memberships）のチームを作る。 */
+    protected Long teamIn(Long organizationId, String name) {
+        Long teamId = team(name);
+        tx(() -> em.createNativeQuery("INSERT INTO team_org_memberships (team_id, organization_id, status, invited_at, created_at) "
+                        + "VALUES (:t, :o, 'ACTIVE', NOW(), NOW())")
+                .setParameter("t", teamId).setParameter("o", organizationId).executeUpdate());
+        return teamId;
+    }
+
+    /** activity テンプレートの field 指定（activity 側の field_key / 表示名 / 型 / 必須 / 選択肢 JSON / 並び順）。 */
+    protected record FieldSpec(String key, String label, String type, boolean required, String optionsJson, int sortOrder) {
+        static FieldSpec number(String key, String label, int order) {
+            return new FieldSpec(key, label, "NUMBER", false, null, order);
+        }
+
+        static FieldSpec text(String key, String label, int order) {
+            return new FieldSpec(key, label, "TEXT", false, null, order);
+        }
+
+        static FieldSpec select(String key, String label, String optionsJson, int order) {
+            return new FieldSpec(key, label, "SELECT", false, optionsJson, order);
+        }
+
+        static FieldSpec of(String key, String label, String type, int order) {
+            return new FieldSpec(key, label, type, false, null, order);
+        }
+
+        FieldSpec withLabel(String newLabel) {
+            return new FieldSpec(key, newLabel, type, required, optionsJson, sortOrder);
+        }
+
+        FieldSpec withRequired(boolean newRequired) {
+            return new FieldSpec(key, label, type, newRequired, optionsJson, sortOrder);
+        }
+
+        FieldSpec withOptions(String newOptions) {
+            return new FieldSpec(key, label, type, required, newOptions, sortOrder);
+        }
+
+        FieldSpec withOrder(int newOrder) {
+            return new FieldSpec(key, label, type, required, optionsJson, newOrder);
+        }
+
+        FieldSpec withType(String newType) {
+            return new FieldSpec(key, label, newType, required, "SELECT".equals(newType) ? optionsJson : null, sortOrder);
+        }
+    }
+
+    private static List<CreateTemplateRequest.TemplateFieldInput> inputs(List<FieldSpec> fields) {
+        return fields.stream().map(f -> new CreateTemplateRequest.TemplateFieldInput(f.key(), f.label(), f.type(),
+                f.required(), f.optionsJson(), null, null, false, f.sortOrder())).toList();
+    }
+
+    /** 既存 activity Service（実 Service・実 DB）で TEAM テンプレートを作る。adminId はそのチームの ADMIN。 */
+    protected Long teamTemplate(Long adminId, Long teamId, String name, List<FieldSpec> fields) {
+        return activityTemplates.createTemplate(adminId, ActivityScopeType.TEAM, teamId,
+                new CreateTemplateRequest(name, null, null, null, null, null, inputs(fields))).getId();
+    }
+
+    /** 既存 activity Service でテンプレートを全置換更新する（改名・field 削除/追加・label/必須/選択肢/順序変更）。 */
+    protected void updateTeamTemplate(Long adminId, Long templateId, String name, List<FieldSpec> fields) {
+        activityTemplates.updateTemplate(templateId, adminId,
+                new UpdateTemplateRequest(name, null, null, null, null, null, inputs(fields)));
+    }
+
+    /** 既存 activity Service でテンプレートを廃止（論理削除）する。 */
+    protected void retireTeamTemplate(Long adminId, Long templateId) {
+        activityTemplates.deleteTemplate(templateId, adminId);
+    }
+
+    protected static final String SNAPSHOTS = ME + "/definition-snapshots";
+
+    protected MockHttpServletResponse postSnapshot(Long actor, Object body) throws Exception {
+        return http(post(SNAPSHOTS).contentType(MediaType.APPLICATION_JSON).content(write(body)), actor);
+    }
+
+    protected MockHttpServletResponse postSnapshot(Long actor, Long teamId, Long templateId) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("teamId", teamId);
+        body.put("teamTemplateId", templateId);
+        return postSnapshot(actor, body);
+    }
+
+    /** definition-snapshots を 200 で呼び、data（definition / definitionToken / expiresAt）を返す。 */
+    protected JsonNode snapshot(Long actor, Long teamId, Long templateId) throws Exception {
+        return expect(postSnapshot(actor, teamId, templateId), 200).path("data");
+    }
+
+    /** 定義 snapshot の fields から表示名 label の fieldKey を引く（TEAM の fieldKey は effort 側の発番で不透明）。 */
+    protected static String keyOf(JsonNode definition, String label) {
+        return fieldOf(definition, label).path("fieldKey").asText();
+    }
+
+    /** 定義 snapshot の fields から表示名 label の field を引く。 */
+    protected static JsonNode fieldOf(JsonNode definition, String label) {
+        for (JsonNode field : definition.path("fields")) {
+            if (label.equals(field.path("label").asText())) {
+                return field;
+            }
+        }
+        throw new AssertionError("definition.fields に label=" + label + " が無い: " + definition);
+    }
+
+    /**
+     * TEAM 定義の作成リクエスト本文。values は label→値で受け、snapshot の全 field を（未指定は null で）並べる。
+     * definitionUuid / definitionRevision / definitionToken は snapshot API の応答 data をそのまま使う。
+     */
+    protected Map<String, Object> teamCreateBody(JsonNode snapshotData, LocalDate recordedOn,
+                                                 Map<String, String> valuesByLabel, String privateNote) {
+        JsonNode definition = snapshotData.path("definition");
+        Map<String, String> byKey = new LinkedHashMap<>();
+        for (JsonNode field : definition.path("fields")) {
+            byKey.put(field.path("fieldKey").asText(), valuesByLabel.get(field.path("label").asText()));
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("recordedOn", recordedOn.toString());
+        body.put("recordTimezone", TOKYO);
+        body.put("definitionUuid", definition.path("definitionUuid").asText());
+        body.put("definitionRevision", definition.path("revision").asInt());
+        body.put("definitionToken", snapshotData.path("definitionToken").asText());
+        body.put("values", valueList(byKey));
+        body.put("privateNote", privateNote);
+        return body;
+    }
+
+    /** TEAM 定義で原本を作り、201 の data を返す。 */
+    protected JsonNode createTeamRecord(Long owner, JsonNode snapshotData, LocalDate recordedOn,
+                                        Map<String, String> valuesByLabel) throws Exception {
+        return expect(postCreate(owner, teamCreateBody(snapshotData, recordedOn, valuesByLabel, null),
+                UUID.randomUUID().toString()), 201).path("data");
+    }
+
+    /** TEAM 定義の revision 行数（effort_definition_revisions を再読込して数える）。 */
+    protected long revisionCount(String definitionUuid) {
+        return count("SELECT COUNT(*) FROM effort_definition_revisions WHERE definition_id = UNHEX(REPLACE(?1, '-', ''))",
+                definitionUuid);
+    }
+
+    /** 保存された revision の定義 JSON（再読込）。 */
+    protected JsonNode storedRevision(String definitionUuid, int revision) throws Exception {
+        String json = tx(() -> String.valueOf(em.createNativeQuery(
+                        "SELECT CAST(definition_json AS CHAR) FROM effort_definition_revisions "
+                                + "WHERE definition_id = UNHEX(REPLACE(:id, '-', '')) AND revision = :rev")
+                .setParameter("id", definitionUuid).setParameter("rev", revision).getSingleResult()));
+        return mapper.readTree(json);
+    }
+
+    /** 保存された全 revision の定義 JSON（revision 昇順・再読込）。 */
+    protected List<JsonNode> storedRevisions(String definitionUuid) throws Exception {
+        List<?> rows = tx(() -> em.createNativeQuery(
+                        "SELECT CAST(definition_json AS CHAR) FROM effort_definition_revisions "
+                                + "WHERE definition_id = UNHEX(REPLACE(:id, '-', '')) ORDER BY revision")
+                .setParameter("id", definitionUuid).getResultList());
+        List<JsonNode> result = new ArrayList<>();
+        for (Object row : rows) {
+            result.add(mapper.readTree(String.valueOf(row)));
+        }
+        return result;
     }
 
     /** プリセット revision 1 の定義 JSON（migration seed の正本）を返す。 */

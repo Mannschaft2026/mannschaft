@@ -3,6 +3,8 @@ package com.mannschaft.app.effortrecord.service;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorResponse;
+import com.mannschaft.app.effortrecord.dto.CreateDefinitionSnapshotRequest;
+import com.mannschaft.app.effortrecord.dto.EffortDefinitionTokenResponse;
 import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshot;
 import com.mannschaft.app.effortrecord.entity.EffortDefinitionEntity;
 import com.mannschaft.app.effortrecord.entity.EffortDefinitionRevisionEntity;
@@ -56,6 +58,18 @@ public class EffortDefinitionService {
                     return codec.parseSnapshot(revision.getDefinitionJson());
                 })
                 .toList();
+    }
+
+    /**
+     * チーム定義の不変 revision を登録し、10 分有効の definitionToken を返す（API 契約 §3 / §7、AC-19）。
+     *
+     * <p>試練骨格（PR-2）。契約: 現在所属＋TEAM template の scopeId 一致（非所属 403 COMMON_002、
+     * 別チーム・不在 template 404 EFFORT_001、廃止 409 EFFORT_002）。activity の現定義と指標設定の canonical hash が
+     * 現行 revision と同じなら revision を増やさず、異なれば同一 effort TX で新 revision を発行する。
+     * token の有効期限は utcClock 基準で 10 分。原本は作らない。</p>
+     */
+    public EffortDefinitionTokenResponse registerTeamSnapshot(Long userId, CreateDefinitionSnapshotRequest request) {
+        throw new UnsupportedOperationException("F06.4.1 PR-2 試練骨格: definition-snapshots は未実装");
     }
 
     /**

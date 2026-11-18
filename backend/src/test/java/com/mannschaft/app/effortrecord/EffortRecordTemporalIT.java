@@ -2,11 +2,15 @@ package com.mannschaft.app.effortrecord;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.GlobalExceptionHandler;
+import com.mannschaft.app.effortrecord.dto.CreateDefinitionSnapshotRequest;
 import com.mannschaft.app.effortrecord.dto.CreateEffortRecordRequest;
+import com.mannschaft.app.effortrecord.dto.EffortDefinitionTokenResponse;
+import com.mannschaft.app.effortrecord.dto.EffortFieldDefinition;
 import com.mannschaft.app.effortrecord.dto.EffortFieldValue;
 import com.mannschaft.app.effortrecord.dto.EffortOwnerRecordResponse;
 import com.mannschaft.app.effortrecord.dto.EffortRecordListCriteria;
 import com.mannschaft.app.effortrecord.dto.EffortRecordPage;
+import com.mannschaft.app.effortrecord.service.EffortDefinitionService;
 import com.mannschaft.app.effortrecord.service.EffortOperationReceiptCleanupBatchService;
 import com.mannschaft.app.effortrecord.service.EffortRecordOwnerService;
 import org.junit.jupiter.api.AfterEach;
@@ -33,7 +37,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * F06.4.1 PR-1 の24時間失効（試練 / red 先行。CMP-261115-2145）。AC-9（receipt 24h 失効）/ AC-10（cursor 24h 失効）/
- * AC-62（期限削除バッチ）。
+ * AC-62（期限削除バッチ）/ AC-20（PR-2: チーム定義 token の10分失効）。
  *
  * <p><b>時計</b>: 期限判定は共通 {@code utcClock} Bean（{@code ClockConfig}）で行うことを契約とし、本クラスだけ
  * 可変時計へ差し替える（他 context に触れないよう {@link DirtiesContext} AFTER_CLASS で閉じる。前例
@@ -42,7 +46,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
-@DisplayName("F06.4.1 24時間失効（AC-9/10/62）")
+@DisplayName("F06.4.1 24時間失効・定義 token 10分失効（AC-9/10/62/20）")
 class EffortRecordTemporalIT extends EffortRecordItSupport {
 
     private static final Instant START = Instant.parse("2026-11-10T00:00:00Z");
@@ -53,6 +57,7 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
 
     @Autowired private EffortRecordOwnerService ownerService;
     @Autowired private EffortOperationReceiptCleanupBatchService cleanup;
+    @Autowired private EffortDefinitionService definitionService;
 
     static Clock effortTemporalClock() {
         return new MovableClock(new AtomicReference<>(START), ZoneOffset.UTC);
@@ -138,6 +143,46 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
                 ? business.getHttpStatusOverride() : GlobalExceptionHandler.resolveStatus(business.getErrorCode());
         assertThat(status).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(business.getErrorCode().getCode()).isEqualTo("COMMON_001");
+    }
+
+    @Test
+    @DisplayName("AC-20: definitionToken は utcClock 基準で発行から10分有効。10分以内は TEAM 原本を作成でき、10分超は400")
+    void AC20_definitionTokenは10分で失効する() {
+        time(START);
+        Long team = teamIn(organization("token期限組織"), "token期限");
+        Long admin = user("token期限管理者");
+        teamAdmin(admin, team);
+        Long owner = user("token期限本人");
+        member(owner, team);
+        Long template = teamTemplate(admin, team, "期限練習", List.of(FieldSpec.number("n", "回数", 0)));
+
+        EffortDefinitionTokenResponse issued = definitionService.registerTeamSnapshot(owner,
+                new CreateDefinitionSnapshotRequest(team, template));
+        assertThat(issued.expiresAt()).isEqualTo(START.plus(Duration.ofMinutes(10)));
+
+        time(START.plus(Duration.ofMinutes(10)).minusSeconds(1));
+        EffortOwnerRecordResponse created = ownerService.create(owner, UUID.randomUUID().toString(), teamRequest(issued, "3"));
+        assertThat(created.definition()).isEqualTo(issued.definition());
+
+        time(START.plus(Duration.ofMinutes(10)).plusSeconds(1));
+        Throwable expired = catchThrowable(() ->
+                ownerService.create(owner, UUID.randomUUID().toString(), teamRequest(issued, "4")));
+        assertThat(expired).isInstanceOf(BusinessException.class);
+        BusinessException business = (BusinessException) expired;
+        HttpStatus status = business.getHttpStatusOverride() != null
+                ? business.getHttpStatusOverride() : GlobalExceptionHandler.resolveStatus(business.getErrorCode());
+        assertThat(status).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(business.getErrorCode().getCode()).isEqualTo("COMMON_001");
+        assertThat(rows(owner)).as("失効 token では原本を作らない").isEqualTo(1);
+    }
+
+    private CreateEffortRecordRequest teamRequest(EffortDefinitionTokenResponse issued, String value) {
+        List<EffortFieldValue> values = new java.util.ArrayList<>();
+        for (EffortFieldDefinition field : issued.definition().fields()) {
+            values.add(new EffortFieldValue(field.fieldKey(), value));
+        }
+        return new CreateEffortRecordRequest(DAY, TOKYO, issued.definition().definitionUuid(),
+                issued.definition().revision(), issued.definitionToken(), values, null);
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -7,7 +7,9 @@ import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
+import com.mannschaft.app.effortrecord.dto.CreateDefinitionSnapshotRequest;
 import com.mannschaft.app.effortrecord.dto.CreateEffortRecordRequest;
+import com.mannschaft.app.effortrecord.dto.EffortDefinitionTokenResponse;
 import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshot;
 import com.mannschaft.app.effortrecord.dto.EffortDeleteResponse;
 import com.mannschaft.app.effortrecord.dto.EffortOwnerRecordResponse;
@@ -75,6 +77,18 @@ public class EffortRecordMeController {
     @Operation(summary = "標準プリセット定義の一覧")
     public ResponseEntity<ApiResponse<List<EffortDefinitionSnapshot>>> listPresets() {
         return ResponseEntity.ok(ApiResponse.of(definitionService.listPresets()));
+    }
+
+    /**
+     * チーム定義 snapshot の登録と definitionToken 発行（AC-19）。teamId / templateId を受け取るため
+     * {@code @SelfScopedEndpoint} は付けない（API 契約 §3 末尾）。認可は出陣で Service / AccessGuard に実装する。
+     */
+    @PostMapping("/definition-snapshots")
+    @Operation(summary = "チーム定義 snapshot の登録（10 分有効 token）")
+    public ResponseEntity<ApiResponse<EffortDefinitionTokenResponse>> registerDefinitionSnapshot(
+            @Valid @RequestBody CreateDefinitionSnapshotRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.of(definitionService.registerTeamSnapshot(userId, request)));
     }
 
     @PostMapping
