@@ -328,8 +328,8 @@ MAT 実測（run 37196327170）で、shard 0 の OOM 時ヒープの 59%（2.48G
 **各runnerの後段保護**: `archUnitTest` の finalizer は専用
 `archUnitFreezeStoreIntegrityTest`（Jupiter、既存Integrityの2case）を起動する。
 通常 `test` は両taskに依存し、Integrityを重複実行しない。専用guardは通常shard割当から外し、
-6runnerで2caseずつ計12caseを要求する。SelfTestは `archunit` タグで全 `archTest` に移し、
-通常shardで重複させない。Mechanismの試練も含め、専用guardの12caseとは区別する。
+8runnerで2caseずつ計16caseを要求する（2026-11-18 に 6 runner・12case から変更。CMP-261111-0508）。SelfTestは `archunit` タグで全 `archTest` に移し、
+通常shardで重複させない。Mechanismの試練も含め、専用guardの16caseとは区別する。
 Arch解析とguardは正本storeをinputsに持ち、cache/up-to-dateによる省略を許さない。
 guardだけはCLI `--tests` のincludeを解除し、必須class欠損は例外とする。
 NO-SOURCE、XML欠落、skipは合格ではない。Archが失敗した後にguardが成功しても全体は失敗のまま。
