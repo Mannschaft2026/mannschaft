@@ -52,7 +52,7 @@ public class SharedFolderAccessGuard {
      * <p>実効最低可視ロールはファイル個別値を優先し、{@code null} ならフォルダ値を継承する。</p>
      */
     public void authorizeFileView(SharedFolderEntity folder, SharedFileEntity file, Long userId) {
-        authorizeBaseView(folder, userId);
+        authorizeBaseViewForFile(folder, file, userId);
         applyMinVisibleRole(folder, effectiveMinRole(file, folder), userId);
     }
 
@@ -106,6 +106,32 @@ public class SharedFolderAccessGuard {
                     accessControlService.checkAdminOrAbove(userId, folder.getOrganizationId(), "ORGANIZATION");
             case TOURNAMENT, TOURNAMENT_DIVISION ->
                     folderScopeAccessGuard.checkFolderPostByFolderId(folder.getId(), userId);
+        }
+    }
+
+    /**
+     * ファイル ID 経路の基本認可。大会系は {@link FolderScopeAccessGuard#checkFolderViewByFileId} に寄せ、
+     * 閲覧権なしがファイル不在と同一の {@code FILE_SHARING_002} になるようにする
+     * （フォルダ ID 経路の {@code FILE_SHARING_001} を返すとファイル ID の存在オラクルになる）。
+     * 大会系以外は {@link #authorizeBaseView} と同じ。
+     */
+    private void authorizeBaseViewForFile(SharedFolderEntity folder, SharedFileEntity file, Long userId) {
+        switch (folder.getScopeType()) {
+            case TOURNAMENT, TOURNAMENT_DIVISION ->
+                    folderScopeAccessGuard.checkFolderViewByFileId(file.getId(), userId);
+            default -> authorizeBaseView(folder, userId);
+        }
+    }
+
+    /**
+     * ファイルの<b>公開リンク管理</b>認可を当てる。大会系は {@link FolderScopeAccessGuard#checkFolderPostByFileId}
+     * （ファイル ID 経路）に寄せ、他スコープは {@link #authorizeDelete} と同一。
+     */
+    public void authorizeLinkManage(SharedFolderEntity folder, SharedFileEntity file, Long userId) {
+        switch (folder.getScopeType()) {
+            case TOURNAMENT, TOURNAMENT_DIVISION ->
+                    folderScopeAccessGuard.checkFolderPostByFileId(file.getId(), userId);
+            default -> authorizeDelete(folder, userId);
         }
     }
 

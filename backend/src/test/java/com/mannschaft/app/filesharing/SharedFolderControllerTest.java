@@ -7,6 +7,7 @@ import com.mannschaft.app.filesharing.controller.SharedFolderController;
 import com.mannschaft.app.filesharing.dto.CreateFolderRequest;
 import com.mannschaft.app.filesharing.dto.FolderDetailResponse;
 import com.mannschaft.app.filesharing.service.SharedFolderQueryService;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +45,9 @@ class SharedFolderControllerTest {
 
     @Mock
     private SharedFolderQueryService folderQueryService;
+
+    @Mock
+    private FolderScopeAccessGuard folderScopeAccessGuard;
 
     @InjectMocks
     private SharedFolderController controller;
@@ -159,6 +163,21 @@ class SharedFolderControllerTest {
 
             assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
             verify(folderQueryService).deleteFolder(FOLDER_ID, USER_ID);
+            // CMP-261116-0726: 大会スコープの存在秘匿つき投稿認可を Service より前に通す。
+            verify(folderScopeAccessGuard).requirePostConcealedByFolderId(FOLDER_ID, USER_ID);
+        }
+
+        @Test
+        @DisplayName("CMP-261116-0726: 前段ガードが 404 を投げたらフォルダ削除 Service は呼ばれない")
+        void 削除_前段ガード拒否でServiceを呼ばない() {
+            org.mockito.BDDMockito.willThrow(new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND))
+                    .given(folderScopeAccessGuard).requirePostConcealedByFolderId(FOLDER_ID, USER_ID);
+
+            assertThatThrownBy(() -> controller.deleteFolder(FOLDER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(FileSharingErrorCode.FOLDER_NOT_FOUND));
+            org.mockito.Mockito.verify(folderQueryService, org.mockito.Mockito.never()).deleteFolder(any(), any());
         }
     }
 

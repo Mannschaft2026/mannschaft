@@ -3,6 +3,7 @@ package com.mannschaft.app.filesharing.controller;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.filesharing.dto.CreateVersionRequest;
 import com.mannschaft.app.filesharing.dto.FileVersionResponse;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import com.mannschaft.app.filesharing.service.SharedFileVersionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +31,8 @@ import com.mannschaft.app.common.SecurityUtils;
 public class FileVersionController {
 
     private final SharedFileVersionService versionService;
+    /** 大会スコープの存在秘匿つき投稿認可（Controller 前段・tx なし。CMP-261116-0726）。 */
+    private final FolderScopeAccessGuard folderScopeAccessGuard;
 
 
     /**
@@ -66,7 +69,9 @@ public class FileVersionController {
     public ResponseEntity<ApiResponse<FileVersionResponse>> createVersion(
             @PathVariable Long fileId,
             @Valid @RequestBody CreateVersionRequest request) {
-        FileVersionResponse response = versionService.createVersion(fileId, SecurityUtils.getCurrentUserId(), request);
+        Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFileId(fileId, actorId);
+        FileVersionResponse response = versionService.createVersion(fileId, actorId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 }

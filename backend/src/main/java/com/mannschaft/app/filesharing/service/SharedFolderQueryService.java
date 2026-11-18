@@ -394,7 +394,8 @@ public class SharedFolderQueryService {
         SharedFileEntity file = findFileOrThrow(fileId);
         SharedFolderEntity folder = findFolderOrThrow(file.getFolderId());
         // 公開リンク管理は削除と同一の「閲覧より強い」権限（管理者 / 所有者限定）を要求する。
-        folderAccessGuard.authorizeDelete(folder, userId);
+        // 大会系はファイル ID 経路（FILE_SHARING_002 / 403 TOUR_031）で判定する（CMP-261116-0726）。
+        folderAccessGuard.authorizeLinkManage(folder, file, userId);
     }
 
     /**
