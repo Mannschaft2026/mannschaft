@@ -577,18 +577,14 @@ class BulletinAttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("一覧取得: TOURNAMENT は canView を呼び checkMembership に落ちない")
-        void listAttachments大会はcanView() {
+        @DisplayName("一覧取得: TOURNAMENT は tx 内で閲覧判定を撃たず（Facade で認可済み）checkMembership にも落ちない")
+        void listAttachments大会はtx内で閲覧判定しない() {
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(tournamentThread()));
             given(attachmentRepository.findByTargetTypeAndTargetIdOrderByCreatedAtAsc(TargetType.THREAD, THREAD_ID))
                     .willReturn(List.of());
             service.listThreadAttachments(THREAD_ID, USER_ID);
 
-            verify(tournamentContactAccessService).checkView(
-                    eq(com.mannschaft.app.tournament.ContactSpaceScopeType.TOURNAMENT),
-                    eq(T_SCOPE_ID),
-                    eq(com.mannschaft.app.tournament.ContactSpaceKind.BULLETIN),
-                    eq(USER_ID));
+            verify(tournamentContactAccessService, never()).checkView(any(), any(), any(), any());
             verify(accessGuard, never()).checkMembership(any(), any(), any());
         }
 

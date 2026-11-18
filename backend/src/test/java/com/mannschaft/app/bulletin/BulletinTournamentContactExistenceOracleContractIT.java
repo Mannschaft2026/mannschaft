@@ -858,7 +858,7 @@ class BulletinTournamentContactExistenceOracleContractIT extends AbstractMySqlIn
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("targetType", targetType);
         body.put("targetId", targetId);
-        body.put("fileKey", "bulletin/cmp0726/" + UUID.randomUUID() + ".png");
+        body.put("fileKey", String.join("/", "bulletin", "cmp0726", UUID.randomUUID() + ".png"));
         body.put("originalFilename", "cmp0726.png");
         body.put("fileSize", 128);
         body.put("contentType", "image/png");

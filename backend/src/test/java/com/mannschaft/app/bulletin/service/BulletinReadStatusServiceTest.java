@@ -1,5 +1,6 @@
 package com.mannschaft.app.bulletin.service;
 
+import com.mannschaft.app.bulletin.BulletinErrorCode;
 import com.mannschaft.app.bulletin.BulletinMapper;
 import com.mannschaft.app.bulletin.Priority;
 import com.mannschaft.app.bulletin.ReadTrackingMode;
@@ -51,9 +52,6 @@ class BulletinReadStatusServiceTest {
 
     @Mock
     private BulletinAccessGuard accessGuard;
-
-    @Mock
-    private com.mannschaft.app.tournament.service.TournamentContactAccessService tournamentContactAccessService;
 
     @InjectMocks
     private BulletinReadStatusService bulletinReadStatusService;
@@ -211,65 +209,94 @@ class BulletinReadStatusServiceTest {
         }
 
         @Test
-        @DisplayName("markAsReadGlobal: TOURNAMENT は canView を呼び checkMembership に落ちない")
-        void markAsRead大会はcanView() {
+        @DisplayName("markAsReadGlobal: TOURNAMENT は tx 内で閲覧判定を撃たず（Controller で認可済み）checkMembership にも落ちない")
+        void markAsRead大会はtx内で閲覧判定しない() {
             given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(tournamentThread()));
             given(readStatusRepository.existsByThreadIdAndUserId(any(), any())).willReturn(false);
 
             bulletinReadStatusService.markAsReadGlobal(THREAD_ID, USER_ID);
 
-            verify(tournamentContactAccessService).checkView(
-                    org.mockito.ArgumentMatchers.eq(com.mannschaft.app.tournament.ContactSpaceScopeType.TOURNAMENT),
-                    org.mockito.ArgumentMatchers.eq(T_SCOPE_ID),
-                    org.mockito.ArgumentMatchers.eq(com.mannschaft.app.tournament.ContactSpaceKind.BULLETIN),
-                    org.mockito.ArgumentMatchers.eq(USER_ID));
+            verify(readStatusRepository).save(any());
             verify(accessGuard, never()).checkMembership(any(), any(), any());
         }
 
         @Test
-        @DisplayName("markAsReadGlobal: 非権限者（canView 例外）は既読化できない")
-        void markAsRead非権限者は不可() {
+        @DisplayName("listReadUsersGlobal: TOURNAMENT は呼び分けの誤りとして fail-closed で BULLETIN_002")
+        void listReadUsersGlobal大会はfailClosed() {
             given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(tournamentThread()));
-            org.mockito.Mockito.doThrow(new BusinessException(
-                    com.mannschaft.app.tournament.TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .when(tournamentContactAccessService).checkView(any(), any(), any(), any());
 
-            assertThatThrownBy(() -> bulletinReadStatusService.markAsReadGlobal(THREAD_ID, USER_ID))
-                    .isInstanceOf(BusinessException.class);
-            verify(readStatusRepository, never()).save(any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            assertThatThrownBy(() -> bulletinReadStatusService.listReadUsersGlobal(THREAD_ID, USER_ID, null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(BulletinErrorCode.THREAD_NOT_FOUND));
+            verify(readStatusRepository, never()).findByThreadIdOrderByReadAtDesc(any());
         }
 
         @Test
-        @DisplayName("listReadUsersGlobal: TOURNAMENT は canView を呼び checkMembership に落ちない")
-        void listReadUsers大会はcanView() {
+        @DisplayName("listTournamentReadUsers: 非モデレーターの INDIVIDUAL は既読者を返す")
+        void 非モデレーターINDIVIDUALは既読者を返す() {
             given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(tournamentThread()));
             given(readStatusRepository.findByThreadIdOrderByReadAtDesc(THREAD_ID)).willReturn(List.of());
             given(bulletinMapper.toReadStatusResponseList(any())).willReturn(List.of());
 
-            bulletinReadStatusService.listReadUsersGlobal(THREAD_ID, USER_ID, null);
+            bulletinReadStatusService.listTournamentReadUsers(THREAD_ID, false, null);
 
-            verify(tournamentContactAccessService).checkView(
-                    org.mockito.ArgumentMatchers.eq(com.mannschaft.app.tournament.ContactSpaceScopeType.TOURNAMENT),
-                    org.mockito.ArgumentMatchers.eq(T_SCOPE_ID),
-                    org.mockito.ArgumentMatchers.eq(com.mannschaft.app.tournament.ContactSpaceKind.BULLETIN),
-                    org.mockito.ArgumentMatchers.eq(USER_ID));
+            verify(readStatusRepository).findByThreadIdOrderByReadAtDesc(THREAD_ID);
             verify(accessGuard, never()).checkMembership(any(), any(), any());
         }
 
         @Test
-        @DisplayName("listReadUsersGlobal: filter=unread は canPost 無し（非モデレーター）なら 403")
-        void listReadUsersUnreadは非モデレーター403() {
-            given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(tournamentThread()));
-            // canPost が例外＝非モデレーター
-            org.mockito.Mockito.doThrow(new BusinessException(
-                    com.mannschaft.app.tournament.TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
-                    .when(tournamentContactAccessService).checkPost(any(), any(), any());
+        @DisplayName("listTournamentReadUsers: 非モデレーターの COUNT_ONLY は空配列（既読者を読まない）")
+        void 非モデレーターCOUNT_ONLYは空() {
+            BulletinThreadEntity thread = BulletinThreadEntity.builder()
+                    .scopeType(ScopeType.TOURNAMENT_DIVISION).scopeId(T_SCOPE_ID).authorId(USER_ID)
+                    .title("大会連絡").body("本文")
+                    .readTrackingMode(ReadTrackingMode.COUNT_ONLY).build();
+            given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(thread));
 
-            assertThatThrownBy(() -> bulletinReadStatusService.listReadUsersGlobal(THREAD_ID, USER_ID, "unread"))
+            assertThat(bulletinReadStatusService.listTournamentReadUsers(THREAD_ID, false, null)).isEmpty();
+            verify(readStatusRepository, never()).findByThreadIdOrderByReadAtDesc(any());
+        }
+
+        @Test
+        @DisplayName("listTournamentReadUsers: モデレーター相当は COUNT_ONLY でも既読者を返す")
+        void モデレーターはCOUNT_ONLYでも返す() {
+            BulletinThreadEntity thread = BulletinThreadEntity.builder()
+                    .scopeType(ScopeType.TOURNAMENT).scopeId(T_SCOPE_ID).authorId(USER_ID)
+                    .title("大会連絡").body("本文")
+                    .readTrackingMode(ReadTrackingMode.COUNT_ONLY).build();
+            given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(thread));
+            given(readStatusRepository.findByThreadIdOrderByReadAtDesc(THREAD_ID)).willReturn(List.of());
+            given(bulletinMapper.toReadStatusResponseList(any())).willReturn(List.of());
+
+            bulletinReadStatusService.listTournamentReadUsers(THREAD_ID, true, "unread");
+
+            verify(readStatusRepository).findByThreadIdOrderByReadAtDesc(THREAD_ID);
+        }
+
+        @Test
+        @DisplayName("listTournamentReadUsers: filter=unread は非モデレーターなら 403 COMMON_002")
+        void unreadは非モデレーター403() {
+            given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(tournamentThread()));
+
+            assertThatThrownBy(() -> bulletinReadStatusService.listTournamentReadUsers(THREAD_ID, false, "unread"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(CommonErrorCode.COMMON_002));
+        }
+
+        @Test
+        @DisplayName("listTournamentReadUsers: 大会以外のスレッドは fail-closed で BULLETIN_002")
+        void 大会以外はfailClosed() {
+            BulletinThreadEntity thread = BulletinThreadEntity.builder()
+                    .scopeType(ScopeType.TEAM).scopeId(T_SCOPE_ID).authorId(USER_ID)
+                    .title("チーム").body("本文").build();
+            given(threadRepository.findById(THREAD_ID)).willReturn(java.util.Optional.of(thread));
+
+            assertThatThrownBy(() -> bulletinReadStatusService.listTournamentReadUsers(THREAD_ID, true, null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(BulletinErrorCode.THREAD_NOT_FOUND));
         }
     }
 }
