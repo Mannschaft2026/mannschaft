@@ -39,5 +39,7 @@ public enum AuditEventCategory {
     /** F08.4 領収書（発行者設定の変更等）。 */
     RECEIPT,
     /** F20.1 課金センター（Checkout / Portal / 請求書閲覧 / 契約変更等）。 */
-    BILLING
+    BILLING,
+    /** F06.4.1 個人の頑張り記録（本人による原本の削除等。共有・非表示の監査は PR-3 で追加）。 */
+    EFFORT
 }

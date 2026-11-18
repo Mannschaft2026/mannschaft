@@ -272,6 +272,9 @@
           "ERROR": "错误"
         }
       }
+    },
+    "ticket": {
+      "create_success": "已添加商品"
     }
   }
 }

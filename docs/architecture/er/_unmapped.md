@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 9
+- テーブル数: 10
 - ビュー数: 5
 
 ## ER 図
@@ -46,6 +46,9 @@ erDiagram
     direct_mail_recipients_archive {
         bigint id PK
         bigint user_id "ID参照"
+    }
+    event_publication {
+        binary id PK
     }
     notifications_archive {
         bigint id PK
@@ -106,6 +109,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `content_reports_archive` | `scope_type` | `scope_id` |
 | `content_reports_archive` | `target_type` | `target_id` |
 | `direct_mail_logs_archive` | `scope_type` | `scope_id` |
+| `direct_mail_logs_archive` | `sender_type` | `sender_id` |
 | `notifications_archive` | `scope_type` | `scope_id` |
 | `notifications_archive` | `source_type` | `source_id` |
 
@@ -116,9 +120,9 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `chat_messages_archive` | `channel_id` | 参照先テーブルを特定できない |
 | `chat_messages_archive` | `forwarded_from_id` | 参照先テーブルを特定できない |
 | `chat_messages_archive` | `sender_id` | 参照先テーブルを特定できない |
-| `direct_mail_logs_archive` | `sender_id` | 参照先テーブルを特定できない |
 | `direct_mail_recipients_archive` | `mail_log_id` | 参照先テーブルを特定できない |
 | `direct_mail_recipients_archive` | `ses_message_id` | 参照先テーブルを特定できない |
+| `event_publication` | `listener_id` | 参照先テーブルを特定できない |
 | `notifications_archive` | `actor_id` | 参照先テーブルを特定できない |
 | `report_actions_archive` | `report_id` | 参照先テーブルを特定できない |
 
@@ -221,6 +225,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `scope_type` | `varchar(20)` | NO | （なし） |  |
 | `scope_id` | `bigint unsigned` | NO | （なし） |  |
 | `sender_id` | `bigint unsigned` | NO | （なし） |  |
+| `sender_type` | `varchar(20)` | NO | （なし） | 送信者種類（USER / SYSTEM_AD 等。判別できない過去の履歴は UNKNOWN） |
 | `subject` | `varchar(200)` | NO | （なし） |  |
 | `body_markdown` | `text` | NO | （なし） |  |
 | `body_html` | `text` | NO | （なし） |  |
@@ -254,6 +259,17 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `bounce_type` | `varchar(20)` | YES | NULL |  |
 | `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `archived_at` | `datetime` | NO | （なし） |  |
+
+### `event_publication`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `completion_date` | `datetime(6)` | YES | NULL |  |
+| `publication_date` | `datetime(6)` | NO | （なし） |  |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `event_type` | `varchar(255)` | NO | （なし） |  |
+| `listener_id` | `varchar(255)` | NO | （なし） |  |
+| `serialized_event` | `varchar(255)` | NO | （なし） |  |
 
 ### `notifications_archive`
 
