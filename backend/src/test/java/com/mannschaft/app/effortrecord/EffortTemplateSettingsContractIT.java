@@ -16,6 +16,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -488,8 +489,12 @@ class EffortTemplateSettingsContractIT extends EffortRecordItSupport {
                 .noneMatch(c -> c.contains("semantic") || c.contains("effort") || c.contains("aggregation"));
     }
 
+    // CONCAT_WS/GROUP_CONCAT の結果が binary 型（VARBINARY/BLOB。DATETIME/ENUM 混在の連結や GROUP_CONCAT で起きうる）で返ると byte[] になるため文字列へ復号する
     private String activityRow(String sql) {
-        return tx(() -> String.valueOf(em.createNativeQuery(sql).getSingleResult()));
+        return tx(() -> {
+            Object v = em.createNativeQuery(sql).getSingleResult();
+            return v instanceof byte[] b ? new String(b, StandardCharsets.UTF_8) : String.valueOf(v);
+        });
     }
 
     private List<String> columns(String table) {
