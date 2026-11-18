@@ -7,10 +7,17 @@ import java.util.Map;
  * LIKE 系 Contributor が使う「全語 AND・各語は対象列のいずれかに部分一致」の JPQL 断片を組み立てる。
  *
  * <p>語の値は必ずバインドパラメータで渡し（{@link SearchQueryText#containsPattern} でエスケープ済み）、
- * JPQL 文字列には列名とパラメータ名しか埋め込まない。エスケープ文字は MySQL 既定の {@code \}
- * （{@code ESCAPE} 句なし）を前提とする。大文字小文字の区別は列の照合順序（{@code *_ci}）に委ねる。</p>
+ * JPQL 文字列には列名とパラメータ名しか埋め込まない。エスケープ文字 {@code \} は {@code ESCAPE} 句に
+ * バインドパラメータ（{@value #ESCAPE_PARAM}）で渡す（SQL 文字列リテラルのバックスラッシュ解釈や
+ * 方言ごとの既定エスケープに依存しない）。大文字小文字の区別は列の照合順序（{@code *_ci}）に委ねる。</p>
  */
 public final class SearchLikeConditions {
+
+    /** ESCAPE 句に渡すパラメータ名。 */
+    public static final String ESCAPE_PARAM = "likeEscape";
+
+    /** {@link SearchQueryText#escapeLike} が使うエスケープ文字。 */
+    private static final Character ESCAPE_CHAR = '\\';
 
     private SearchLikeConditions() {
     }
@@ -26,6 +33,9 @@ public final class SearchLikeConditions {
      */
     public static String allTermsContain(List<String> columns, List<String> terms, Map<String, Object> params) {
         StringBuilder sb = new StringBuilder();
+        if (!terms.isEmpty()) {
+            params.put(ESCAPE_PARAM, ESCAPE_CHAR);
+        }
         for (int i = 0; i < terms.size(); i++) {
             String name = "kw" + i;
             params.put(name, SearchQueryText.containsPattern(terms.get(i)));
@@ -34,7 +44,7 @@ public final class SearchLikeConditions {
                 if (c > 0) {
                     sb.append(" OR ");
                 }
-                sb.append(columns.get(c)).append(" LIKE :").append(name);
+                sb.append(columns.get(c)).append(" LIKE :").append(name).append(" ESCAPE :").append(ESCAPE_PARAM);
             }
             sb.append(")");
         }

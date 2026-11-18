@@ -1,5 +1,6 @@
 package com.mannschaft.app.search;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +34,12 @@ public record SearchHit(
         List<String> actions) {
 
     /** 作成者。 */
+    @Schema(name = "SearchHitAuthor")
     public record Author(Long id, String displayName, String avatarUrl) {
     }
 
     /** 所属スコープ。 */
+    @Schema(name = "SearchHitScope")
     public record ScopeRef(String type, Long id, String name) {
     }
 }

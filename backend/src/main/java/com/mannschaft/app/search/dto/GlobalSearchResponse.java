@@ -1,5 +1,6 @@
 package com.mannschaft.app.search.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.mannschaft.app.search.SearchHit;
 import com.mannschaft.app.search.SearchType;
 
@@ -21,6 +22,7 @@ public record GlobalSearchResponse(Data data, Meta meta) {
      * @param timedOutTypes   例外・タイムアウトでスキップした種別
      * @param zeroResultsHelp 全種別 0 件のときのみ非 null
      */
+    @Schema(name = "GlobalSearchData")
     public record Data(
             List<SearchHit> results,
             Map<SearchType, Long> typeCounts,
@@ -33,6 +35,7 @@ public record GlobalSearchResponse(Data data, Meta meta) {
      * @param didYouMean   本人の検索履歴のみから出す候補（無ければ null）
      * @param broaderQuery 語数を 1 つ減らした候補（単一語は null）
      */
+    @Schema(name = "GlobalSearchZeroResultsHelp")
     public record ZeroResultsHelp(String didYouMean, String broaderQuery) {
     }
 
@@ -43,10 +46,12 @@ public record GlobalSearchResponse(Data data, Meta meta) {
      * @param size       ページサイズ
      * @param totalPages 総ページ数
      */
+    @Schema(name = "GlobalSearchMeta")
     public record Meta(ViewMode viewMode, long total, int page, int size, int totalPages) {
     }
 
     /** ビュー種別。 */
+    @Schema(name = "GlobalSearchViewMode")
     public enum ViewMode {
         /** type 未指定・複数指定。 */
         OVERVIEW,

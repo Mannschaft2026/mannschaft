@@ -7,9 +7,8 @@ import java.util.regex.Pattern;
 /**
  * 検索キーワードの正規化・分割・エスケープ（設計書 §4 補足「FULLTEXT / LIKE の入力処理」）。
  *
- * <p>LIKE 用のエスケープは MySQL の既定エスケープ文字 {@code \} を前提とする（SQL 側で
- * {@code ESCAPE} 句を付けない。値はパラメータバインドで渡すため文字列リテラルの
- * バックスラッシュ解釈を受けず、LIKE だけが {@code \%} / {@code \_} / {@code \\} を文字として扱う）。</p>
+ * <p>LIKE 用のエスケープ文字は {@code \}。SQL 側は {@link SearchLikeConditions} が {@code ESCAPE} 句に
+ * 同じ文字をバインドパラメータで渡す（SQL 文字列リテラルのバックスラッシュ解釈に依存しない）。</p>
  */
 public final class SearchQueryText {
 

@@ -44,13 +44,13 @@ public class GlobalSearchRateLimitFilter extends AbstractRateLimitFilter {
         if (!"GET".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
-        String path = normalize(request.getServletPath());
+        String path = normalize(pathOf(request));
         return !SEARCH_PATH.equals(path) && !SUGGEST_PATH.equals(path);
     }
 
     @Override
     protected RateLimitRule resolveRule(HttpServletRequest request) {
-        String path = normalize(request.getServletPath());
+        String path = normalize(pathOf(request));
         if (SUGGEST_PATH.equals(path)) {
             return new RateLimitRule(ZONE_PREFIX + "SUGGEST", SUGGEST_RATE_PER_MINUTE, WINDOW);
         }
@@ -58,6 +58,19 @@ public class GlobalSearchRateLimitFilter extends AbstractRateLimitFilter {
             return new RateLimitRule(ZONE_PREFIX + "SEARCH", SEARCH_RATE_PER_MINUTE, WINDOW);
         }
         return null;
+    }
+
+    /**
+     * コンテキストパスを除いたリクエストパス。{@code getServletPath()} は DispatcherServlet の
+     * マッピングや MockMvc の既定（空文字）で空になりうるため、リクエスト URI から求める。
+     */
+    private static String pathOf(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (uri != null && contextPath != null && !contextPath.isEmpty() && uri.startsWith(contextPath)) {
+            return uri.substring(contextPath.length());
+        }
+        return uri;
     }
 
     /** 末尾スラッシュを落とす（{@code /api/v1/search/} を別経路にして制限を回避させない）。 */

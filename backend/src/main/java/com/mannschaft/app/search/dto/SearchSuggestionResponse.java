@@ -1,5 +1,6 @@
 package com.mannschaft.app.search.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 /**
@@ -19,6 +20,7 @@ public record SearchSuggestionResponse(List<Item> suggestions) {
      * @param organizationId ORGANIZATION の ID
      * @param url            遷移先（無ければ null）
      */
+    @Schema(name = "SearchSuggestionItem")
     public record Item(String text, String type, Long userId, Long teamId, Long organizationId, String url) {
 
         /** 本人の検索履歴から作るキーワード候補。 */
