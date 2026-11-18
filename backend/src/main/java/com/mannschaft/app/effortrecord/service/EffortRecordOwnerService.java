@@ -39,7 +39,8 @@ public class EffortRecordOwnerService {
      * <p>TEAM 定義（definitionToken あり）は、token の署名・期限・本人・定義 UUID・revision の束縛を検証し
      * （不正は 400 definitionToken）、token が束縛するチームへの<b>現在所属</b>を再検証してから
      * （脱退済みは 403 COMMON_002）TX へ渡す。所属照会は TX の外で行う（TX 入口から他ドメインへ到達させない）。
-     * 同じ Idempotency-Key・同じ本文の作成が完了済みなら、token の期限より先に元の応答を返す（API 契約 §4.1）。</p>
+     * 同じ Idempotency-Key・同じ本文の作成が完了済みなら、token の期限より先に元の応答を返し、同じ key・別の本文なら
+     * token 検証より先に 409 COMMON_003 を返す（API 契約 §4.1）。</p>
      */
     public EffortOwnerRecordResponse create(Long ownerUserId, String idempotencyKey, CreateEffortRecordRequest request) {
         EffortDefinitionTokenCodec.Claims teamToken = null;

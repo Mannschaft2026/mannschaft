@@ -179,6 +179,38 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
         assertThat(rows(owner)).as("失効 token では原本を作らない").isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("API 契約 §4.1: TEAM 原本の作成完了後24時間以内に同じ Idempotency-Key・異なる本文を送ると、token 失効より先に 409 COMMON_003")
+    void 同key別本文はtoken失効より先に409() {
+        time(START);
+        Long team = team("key別本文");
+        Long admin = user("key別本文管理者");
+        teamAdmin(admin, team);
+        Long owner = user("key別本文本人");
+        member(owner, team);
+        Long template = teamTemplate(admin, team, "別本文練習", List.of(FieldSpec.number("n", "回数", 0)));
+        EffortDefinitionTokenResponse issued = definitionService.registerTeamSnapshot(owner,
+                new CreateDefinitionSnapshotRequest(team, template));
+        String key = UUID.randomUUID().toString();
+        ownerService.create(owner, key, teamRequest(issued, "3"));
+
+        // token は失効、receipt（24時間）は有効。本文を変えた同 key の再送は token 検証ではなく key 衝突で 409。
+        time(START.plus(Duration.ofMinutes(10)).plusSeconds(1));
+        Throwable conflict = catchThrowable(() -> ownerService.create(owner, key, teamRequest(issued, "4")));
+        assertThat(conflict).isInstanceOf(BusinessException.class);
+        BusinessException business = (BusinessException) conflict;
+        HttpStatus status = business.getHttpStatusOverride() != null
+                ? business.getHttpStatusOverride() : GlobalExceptionHandler.resolveStatus(business.getErrorCode());
+        assertThat(status).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(business.getErrorCode().getCode()).isEqualTo("COMMON_003");
+        assertThat(rows(owner)).as("別本文の再送では原本を作らない").isEqualTo(1);
+
+        // 同じ本文の再送は token 失効後でも元の応答を返す（既存契約の維持）。
+        assertThat(ownerService.create(owner, key, teamRequest(issued, "3")).definition())
+                .isEqualTo(issued.definition());
+        assertThat(rows(owner)).isEqualTo(1);
+    }
+
     private CreateEffortRecordRequest teamRequest(EffortDefinitionTokenResponse issued, String value) {
         List<EffortFieldValue> values = new java.util.ArrayList<>();
         for (EffortFieldDefinition field : issued.definition().fields()) {

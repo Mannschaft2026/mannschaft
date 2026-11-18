@@ -156,6 +156,24 @@ class EffortFrozenSnapshotContractIT extends EffortRecordItSupport {
     }
 
     @Test
+    @DisplayName("AC-23: 科目 field を削除し時間 field が現行 revision に残っても、過去の PIE は凍結した科目定義で集計できる")
+    void AC23_科目field削除後も過去のPIEは凍結定義で集計() throws Exception {
+        World w = world("科目削除");
+        // 科目 field だけを削除する。時間（DURATION）の key は現行 revision に残り、現行の subjectFieldKey は消える。
+        updateTeamTemplate(w.admin(), w.template(), "練習",
+                List.of(FieldSpec.number("minutes", "時間", 1), FieldSpec.text("memo", "メモ", 2)));
+        JsonNode latest = snapshot(w.owner(), w.team(), w.template()).path("definition");
+        String minutesKey = keyOf(w.definition(), "時間");
+        assertThat(latest.path("revision").asInt()).as("新しい revision が出ている")
+                .isGreaterThan(w.definition().path("revision").asInt());
+        assertThat(fieldOf(latest, "時間").path("fieldKey").asText()).as("時間 key は現行 revision に残る").isEqualTo(minutesKey);
+        assertThat(fieldOf(latest, "時間").path("semantic").asText()).isEqualTo("DURATION");
+        assertThat(latest.path("subjectFieldKey").isNull()).as("現行 revision には科目が無い").isTrue();
+
+        assertFrozenReadable(w, "30");
+    }
+
+    @Test
     @DisplayName("AC-23: template 廃止後も既存原本の GET・集計・値編集は成功し、不正な値の編集は 400 で保存値を変えない")
     void AC23_廃止後も凍結snapshotで継続() throws Exception {
         World w = world("廃止");

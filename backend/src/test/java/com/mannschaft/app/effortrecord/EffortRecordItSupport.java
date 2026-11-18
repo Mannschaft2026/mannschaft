@@ -61,7 +61,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <p><b>標準プリセット</b>: test profile は Flyway 無効（ddl-auto=create）のため、V260 migration の
  * プリセット seed が入らない。そこで<b>migration ファイル自身の seed 節</b>（{@code -- 標準プリセット定義 seed} 以降）を
- * 読み出して 1 度だけ実行する。プリセットの内容は migration を単一の正本とし、試験側に複製しない。</p>
+ * 読み出して 1 度だけ実行する。プリセットの内容（定義 JSON・hash）は migration を単一の正本とし、試験側に複製しない。
+ * ただし effort_definitions 行だけは V261 の列（organization_id。V263 で削除）が現行スキーマに無いため、
+ * V263 適用後相当の列で試験側が入れる（適用済み migration は書き換えない）。</p>
  */
 @AutoConfigureMockMvc
 abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
@@ -573,6 +575,19 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
 
     private static final Object SEED_LOCK = new Object();
 
+    /**
+     * 標準プリセット定義行（V261 seed の effort_definitions 行を V263 適用後の列だけで書いたもの）。
+     * UUID・source_key・current_revision は V261 seed と同値。revision 行は migration から読む。
+     */
+    private static final String PRESET_DEFINITION_ROWS_AFTER_V263 = """
+            INSERT INTO effort_definitions
+              (id, source_type, source_key, team_id, team_template_id, current_revision, retired_at, version, created_at, updated_at, deleted_at)
+            VALUES
+              (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000001', '-', '')), 'PRESET', 'STUDY_V1', NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL),
+              (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000002', '-', '')), 'PRESET', 'EXERCISE_V1', NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL),
+              (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000003', '-', '')), 'PRESET', 'WEIGHT_V1', NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL)
+            """;
+
     static void seedPresetsFromMigration(DataSource dataSource) throws Exception {
         synchronized (SEED_LOCK) {
             try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
@@ -586,9 +601,21 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
                 boolean autoCommit = connection.getAutoCommit();
                 connection.setAutoCommit(false);
                 try {
+                    // V261 の effort_definitions INSERT は organization_id 列を名指しするが、この列は V263 で削除済みで
+                    // ddl-auto=create の現行スキーマには無い。適用済み migration は Flyway checksum を壊すため書き換えられない
+                    // （backend/.claudecode.md）。そこで定義行だけは V263 適用後相当の列で試験側が入れ、
+                    // 内容の正本である revision 行（定義 JSON・hash）は引き続き migration から実行する。
+                    statement.execute(PRESET_DEFINITION_ROWS_AFTER_V263);
+                    int skipped = 0;
                     for (String sql : presetSeedStatements()) {
+                        if (sql.split("\\s+", 4)[2].equals("effort_definitions")) {
+                            skipped++;
+                            continue;
+                        }
                         statement.execute(sql);
                     }
+                    assertThat(skipped).as("migration seed 節の effort_definitions INSERT は1文だけ（試験側の定義行と置き換える）")
+                            .isEqualTo(1);
                     connection.commit();
                 } finally {
                     connection.setAutoCommit(autoCommit);
