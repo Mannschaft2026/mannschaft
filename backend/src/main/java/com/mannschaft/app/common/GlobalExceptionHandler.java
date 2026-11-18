@@ -2289,7 +2289,7 @@ public class GlobalExceptionHandler {
             Map.entry("TOUR_004", HttpStatus.CONFLICT),                  // INVALID_TOURNAMENT_STATUS
             Map.entry("TOUR_009", HttpStatus.CONFLICT),                  // MATCHES_NOT_COMPLETED
             Map.entry("TOUR_011", HttpStatus.CONFLICT),                  // PROMOTION_ALREADY_EXECUTED
-            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（存在は隠さず権限拒否）
+            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（欠番: CMP-261116-0726 で不送出・番号は再利用しない）
             Map.entry("TOUR_031", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_POST_FORBIDDEN
             Map.entry("TOUR_032", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VISIBILITY_FORBIDDEN
 
