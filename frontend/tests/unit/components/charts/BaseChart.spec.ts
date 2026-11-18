@@ -12,7 +12,8 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import type { ChartData } from 'chart.js'
+import { Chart as ChartJS, type ChartData } from 'chart.js'
+import { defineComponent, h, onMounted, ref } from 'vue'
 
 // happy-dom には canvas 2D コンテキストが無いため最小スタブを注入する。
 // 実 chart.js はこのコンテキストを使って描画する（描画結果は検証しない）。
@@ -102,5 +103,47 @@ describe('BaseChart.vue', () => {
     await wrapper.setProps({ data: filledData })
     await nextTick()
     expect(wrapper.find('canvas').exists()).toBe(true)
+  })
+  // ALIC-2: 本物の ClientOnly は mount 後の次 tick でスロットを描くため、親の onMounted 時点では
+  // canvas が未マウントになる。初期表示でも chart が生成されること（真っ白な canvas にならない）。
+  it('BASE-CHART-005: ClientOnly が mount 後に描画しても初期表示で chart が生成される', async () => {
+    const LateClientOnly = defineComponent({
+      setup(_p, { slots }) {
+        const ready = ref(false)
+        onMounted(() => { ready.value = true })
+        return () => (ready.value ? h('div', slots.default?.()) : h('div', slots.fallback?.()))
+      },
+    })
+    // chart.js は context.canvas が対象 canvas と一致しないと chart を作らないため、このテストだけ canvas を返す。
+    const proto = globalThis.HTMLCanvasElement.prototype
+    const original = proto.getContext
+    Object.defineProperty(proto, 'getContext', {
+      configurable: true,
+      writable: true,
+      value: function getContext2d(this: HTMLCanvasElement) {
+        const canvasEl = this // eslint-disable-line @typescript-eslint/no-this-alias -- Proxy の get から canvas を返すため
+        return new Proxy({}, {
+          get: (_t, prop) => {
+            if (prop === 'canvas') return canvasEl
+            if (prop === 'measureText') return () => ({ width: 0 })
+            if (prop === 'getImageData') return () => ({ data: [] })
+            if (prop === 'createLinearGradient' || prop === 'createRadialGradient') return () => ({ addColorStop: () => {} })
+            return () => {}
+          },
+        })
+      },
+    })
+    const wrapper = await mountSuspended(BaseChart, {
+      props: { type: 'bar', data: filledData },
+      global: { stubs: { ClientOnly: LateClientOnly } },
+    })
+    await nextTick()
+    await nextTick()
+    const canvas = wrapper.find('canvas').element as HTMLCanvasElement
+    try {
+      expect(ChartJS.getChart(canvas)).toBeDefined()
+    } finally {
+      Object.defineProperty(proto, 'getContext', { configurable: true, writable: true, value: original })
+    }
   })
 })

@@ -34,6 +34,8 @@ const values = defineModel<Record<string, ActivityFieldValue>>({ required: true 
       v-model="values[field.fieldKey] as number"
       input-class="min-h-11 text-base"
       :input-id="`activity-field-${field.fieldKey}`"
+      :min-fraction-digits="0"
+      :max-fraction-digits="field.scale ?? undefined"
       class="w-full"
     />
     <DatePicker
