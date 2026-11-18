@@ -204,6 +204,20 @@ object ShardAssignment {
             topFile != null && !topFile.isAbstract && files.any { it.hasTestMethods }
         }.keys.toSortedSet()
     }
+
+    /** 全 runner 必須の専用 stage（archUnitFreezeStoreIntegrityTest）として別走するため、通常の shard 割り当てから外すクラス。 */
+    const val FREEZE_INTEGRITY_CLASS: String = "com.mannschaft.app.common.architecture.ArchUnitFreezeStoreIntegrityTest"
+
+    /**
+     * 「この実行で実際に走るトップレベルクラス集合」。Test.exclude 側と verifyShardCoverage が必ずこの関数で作る。
+     * [executableTopLevelClasses] から専用 stage のクラスを外し、-PexcludeMigrationTests=true なら
+     * migration+Flyway クラスも外す（従来の「除外予定のクラスを貪欲法の対象に含めない」意味を保つ）。
+     */
+    fun runnableTopLevelClasses(classFiles: Collection<CompiledTestClassFile>, excludeMigrationTests: Boolean): Set<String> =
+        executableTopLevelClasses(classFiles)
+            .filter { it != FREEZE_INTEGRITY_CLASS }
+            .filter { !excludeMigrationTests || !isMigrationReplayClass(it) }
+            .toSortedSet()
 }
 
 /**
