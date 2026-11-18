@@ -11,6 +11,8 @@ import Dashboard from './dashboard.vue'
  * dashboard.vue の月次締めダイアログは、自由入力の YYYY-MM をやめ「終了済みの期間」を選ぶ形にする。
  * - 期間は useShiftBudgetApi の listClosePeriods(orgId, from, to) が返す（GET /close-periods?from&to、from/to は YYYY-MM）。
  * - 選べるのは period_end が今日（Asia/Tokyo）以前（終了日当日を含む）の期間だけ。
+ *   CMP-260909-2152 Codex 再検分 P2-4: 終了済みかどうかは BE が業務日（ShiftBudgetBusinessDateProvider）で判定した
+ *   ended を正とし、利用者端末のタイムゾーンの「今日」では判定しない。
  *   未終了期間は選択肢に出さない、または disabled（options の disabled=true）にする。
  * - 既定は終了済みの最新期間。確認文言とトーストに期間（YYYY-MM-DD〜YYYY-MM-DD）を出す。
  * - 締め実行は既存どおり executeMonthlyClose({ organization_id, year_month: 期間キー })。
@@ -33,7 +35,8 @@ const notifyError = vi.fn()
 const notifyInfo = vi.fn()
 
 mockNuxtImport('useScopeStore', () => () => scope)
-mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))
+const userTimezone = ref('Asia/Tokyo')
+mockNuxtImport('useDatetime', () => () => ({ userTimezone }))
 mockNuxtImport('useNotification', () => () => ({ error: notifyError, success: notifySuccess, info: notifyInfo }))
 mockNuxtImport('useShiftBudgetApi', () => () => ({
   listAllocations, getConsumptionSummary: vi.fn(), listClosePeriods, executeMonthlyClose,
@@ -52,10 +55,10 @@ const InlineDialog = defineComponent({
 function periods() {
   return {
     items: [
-      { period_key: '2026-09', period_start: '2026-08-18', period_end: '2026-09-17', closing_day: 17 },
-      { period_key: '2026-10', period_start: '2026-09-18', period_end: '2026-10-17', closing_day: 17 },
-      { period_key: '2026-11', period_start: '2026-10-18', period_end: '2026-11-17', closing_day: 17 },
-      { period_key: '2026-12', period_start: '2026-11-18', period_end: '2026-12-17', closing_day: 17 },
+      { period_key: '2026-09', period_start: '2026-08-18', period_end: '2026-09-17', closing_day: 17, ended: true },
+      { period_key: '2026-10', period_start: '2026-09-18', period_end: '2026-10-17', closing_day: 17, ended: true },
+      { period_key: '2026-11', period_start: '2026-10-18', period_end: '2026-11-17', closing_day: 17, ended: true },
+      { period_key: '2026-12', period_start: '2026-11-18', period_end: '2026-12-17', closing_day: 17, ended: false },
     ],
   }
 }
@@ -85,6 +88,7 @@ beforeEach(async () => {
   vi.setSystemTime(new Date('2026-11-17T03:00:00Z')) // JST 2026-11-17 12:00
   await useNuxtApp().$i18n.setLocale('ja')
   scope.current = { type: 'organization', id: '10' }
+  userTimezone.value = 'Asia/Tokyo'
   canManageBudget.value = true
   listAllocations.mockReset().mockResolvedValue({ items: [], total: 0, page: 0, size: 100 })
   listClosePeriods.mockReset().mockResolvedValue(periods())
@@ -132,13 +136,39 @@ describe('試練108 AC31α 月次締めダイアログ: 期間選択', () => {
 
   it('試練108 AC31α 終了済みの期間が1つも無いときは実行できない', async () => {
     listClosePeriods.mockResolvedValue({
-      items: [{ period_key: '2026-12', period_start: '2026-11-18', period_end: '2026-12-17', closing_day: 17 }],
+      items: [{ period_key: '2026-12', period_start: '2026-11-18', period_end: '2026-12-17', closing_day: 17, ended: false }],
     })
     const wrapper = await openDialog()
     const exec = executeButton(wrapper)
     expect(exec).toBeDefined()
     expect(exec!.attributes('disabled')).toBeDefined()
     await exec!.trigger('click')
+    await flushPromises()
+    expect(executeMonthlyClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('CMP-260909-2152 再検分 P2-4 締め可否は BE の業務日で判定する', () => {
+  it('利用者端末のタイムゾーンでは前日（LA 11/16）でも、BE が終了済み（ended=true）とした 2026-11 を選べて既定になる', async () => {
+    userTimezone.value = 'America/Los_Angeles' // 2026-11-17T03:00Z は LA で 11/16 19:00
+    const wrapper = await openDialog()
+    const options = periodSelect(wrapper).props('options') as { value: string, disabled?: boolean }[]
+    expect(options.find(o => o.value === '2026-11')?.disabled).toBeFalsy()
+    expect(periodSelect(wrapper).props('modelValue')).toBe('2026-11')
+  })
+
+  it('利用者端末のタイムゾーンでは翌日（キリティマティ 11/18）でも、BE が未終了（ended=false）とした期間は選べず実行しない', async () => {
+    vi.setSystemTime(new Date('2026-11-17T12:00:00Z')) // JST 11/17 21:00、Pacific/Kiritimati（UTC+14）では 11/18 02:00
+    userTimezone.value = 'Pacific/Kiritimati'
+    listClosePeriods.mockResolvedValue({
+      // 18日締め: 2026-11 は 10/19〜11/18。JST の業務日 11/17 では未終了
+      items: [{ period_key: '2026-11', period_start: '2026-10-19', period_end: '2026-11-18', closing_day: 18, ended: false }],
+    })
+    const wrapper = await openDialog()
+    const options = periodSelect(wrapper).props('options') as { value: string, disabled?: boolean }[]
+    expect(options.find(o => o.value === '2026-11')?.disabled).toBe(true)
+    const exec = executeButton(wrapper)
+    if (exec) await exec.trigger('click')
     await flushPromises()
     expect(executeMonthlyClose).not.toHaveBeenCalled()
   })

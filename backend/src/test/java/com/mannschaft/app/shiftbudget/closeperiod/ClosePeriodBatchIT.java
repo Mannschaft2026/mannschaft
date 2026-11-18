@@ -15,7 +15,9 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -113,6 +115,26 @@ class ClosePeriodBatchIT extends ClosePeriodTestBase {
         coordinator.closeAll(d("2026-05-02"));
         assertThat(closeEvents(allocationId)).as("バッチは自動で締め直さない").hasSize(1);
         assertThat(failedEvents(orgId, "JOURNAL_CONFLICT")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("CMP-260909-2152 Codex 再検分 P2-2 途中の期間の Prepare が失敗したら、その割当は後続の期間へ進まない（締めは先頭から途切れない）。翌日の日次バッチで失敗した期間から古い順に回収する")
+    void 再検分P2_2_途中失敗で後続期間へ進まず翌日に回収する() {
+        Long allocationId = allocation(d("2026-04-01"), d("2026-06-30"));
+        long[] s4 = worked(d("2026-04-10"), workerId);
+        worked(d("2026-05-10"), workerId);
+        worked(d("2026-06-10"), workerId);
+        // 2026-04 の Prepare だけ1回失敗させる（締めイベントは残らない）
+        doThrow(new IllegalStateException("prepare failed (test)")).doCallRealMethod()
+                .when(stage).prepare(eq(allocationId), eq(java.time.YearMonth.of(2026, 4)));
+
+        coordinator.closeAll(d("2026-07-01"));
+        assertThat(closedEvents(allocationId)).as("先頭が締まらないまま後続の期間を締めない").isEmpty();
+
+        coordinator.closeAll(d("2026-07-02"));
+        assertThat(closedEvents(allocationId)).extracting(e -> e.get("target_month"))
+                .containsExactly("2026-04", "2026-05", "2026-06");
+        assertThat(liveStatus(s4[1], workerId)).as("過去の PLANNED を自動回収する").isEqualTo("CONFIRMED");
     }
 
     @Test
