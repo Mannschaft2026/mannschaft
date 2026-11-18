@@ -1,78 +1,133 @@
 <script setup lang="ts">
-import type { SearchResult, ContentType, SearchResponse } from '~/types/search'
+import type { ContentType, SearchResult, SearchResponse } from '~/types/search'
+import { CONTENT_TYPES } from '~/types/search'
 
 definePageMeta({ middleware: 'auth' })
 
+const DETAIL_PAGE_SIZE = 20
+
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const searchApi = useSearchApi()
 const notification = useNotification()
 
-const query = ref((route.query.q as string) ?? '')
+function typeFromRoute(): ContentType | 'ALL' {
+  const raw = route.query.type
+  return typeof raw === 'string' && (CONTENT_TYPES as readonly string[]).includes(raw)
+    ? (raw as ContentType)
+    : 'ALL'
+}
+
+const query = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const activeType = ref<ContentType | 'ALL'>(typeFromRoute())
 const results = ref<SearchResult[]>([])
-const typeCounts = ref<Record<string, number>>({})
+/** 種別タブの件数。概要ビューの typeCounts を保持し、詳細ビューでは該当種別だけ更新する */
+const typeCounts = ref<Partial<Record<ContentType, number>>>({})
 const timedOutTypes = ref<ContentType[]>([])
-const activeType = ref<ContentType | 'ALL'>('ALL')
-const loading = ref(false)
-const totalPages = ref(0)
+const zeroHelp = ref<SearchResponse['data']['zeroResultsHelp']>(null)
+const viewMode = ref<SearchResponse['meta']['viewMode']>('OVERVIEW')
+const total = ref(0)
 const currentPage = ref(0)
-const zeroHelp = ref<{ didYouMean: string | null; broaderQuery: string | null } | null>(null)
+const totalPages = ref(0)
+const loading = ref(false)
+const searched = ref(false)
+
+const trimmedQuery = computed(() => query.value.trim())
+const showPaginator = computed(() => viewMode.value === 'DETAIL' && totalPages.value > 1)
+const timedOutLabel = computed(() =>
+  timedOutTypes.value.map(type => t(`globalSearch.types.${type}`)).join(', '),
+)
 
 async function performSearch(page = 0) {
-  if (!query.value || query.value.length < 2) return
+  if (trimmedQuery.value.length < 2) {
+    notification.warn(t('globalSearch.tooShort'))
+    return
+  }
   loading.value = true
   try {
-    const params: Parameters<typeof searchApi.search>[0] = { q: query.value, page, perPage: 20 }
-    if (activeType.value !== 'ALL') params.type = activeType.value
-    const res: SearchResponse = await searchApi.search(params)
+    const detailType = activeType.value === 'ALL' ? null : activeType.value
+    const res = await searchApi.search({
+      q: trimmedQuery.value,
+      types: detailType ? [detailType] : undefined,
+      page: detailType ? page : undefined,
+      size: detailType ? DETAIL_PAGE_SIZE : undefined,
+    })
     results.value = res.data.results
-    typeCounts.value = res.data.typeCounts
     timedOutTypes.value = res.data.timedOutTypes
     zeroHelp.value = res.data.zeroResultsHelp ?? null
-    totalPages.value = res.meta.totalPages ?? 0
+    viewMode.value = res.meta.viewMode
+    total.value = res.meta.total
     currentPage.value = res.meta.page
-    router.replace({ query: { q: query.value } })
-  } catch {
-    notification.error('検索に失敗しました')
+    totalPages.value = res.meta.totalPages
+    if (detailType) {
+      typeCounts.value = { ...typeCounts.value, [detailType]: res.data.typeCounts[detailType] ?? 0 }
+    } else {
+      typeCounts.value = { ...res.data.typeCounts }
+    }
+    searched.value = true
+    await router.replace({
+      query: detailType ? { q: trimmedQuery.value, type: detailType } : { q: trimmedQuery.value },
+    })
+  } catch (error: unknown) {
+    // 失敗は利用者へ通知し、結果表示は前回のまま残す（握りつぶさない）
+    console.error('[globalSearch] 検索に失敗', error)
+    notification.error(t('globalSearch.failed'))
   } finally {
     loading.value = false
   }
 }
 
+function runSearch(page = 0) {
+  performSearch(page)
+}
+
+function submit() {
+  runSearch(0)
+}
+
 function handleTypeSelect(type: ContentType | 'ALL') {
   activeType.value = type
-  performSearch()
+  runSearch(0)
 }
 
 function handlePageChange(event: { page: number }) {
-  performSearch(event.page)
+  runSearch(event.page)
 }
 
 function useSuggestion(text: string) {
   query.value = text
-  performSearch()
+  activeType.value = 'ALL'
+  runSearch(0)
 }
 
 onMounted(() => {
-  if (query.value) performSearch()
+  if (trimmedQuery.value.length >= 2) runSearch(0)
 })
 </script>
 
 <template>
   <div class="mx-auto max-w-4xl">
-    <h1 class="mb-6 text-2xl font-bold">検索</h1>
+    <PageHeader :title="t('globalSearch.title')" :back="false" />
 
-    <div class="mb-6 flex gap-2">
+    <form class="mb-6 flex gap-2" role="search" @submit.prevent="submit">
       <InputText
         v-model="query"
         class="flex-1"
-        placeholder="キーワードで検索（2文字以上）"
-        @keyup.enter="performSearch()"
+        :placeholder="t('globalSearch.placeholder')"
+        :aria-label="t('globalSearch.placeholder')"
+        data-testid="global-search-input"
       />
-      <Button label="検索" icon="pi pi-search" :loading="loading" @click="performSearch()" />
-    </div>
+      <Button
+        type="submit"
+        :label="t('globalSearch.submit')"
+        icon="pi pi-search"
+        :loading="loading"
+        data-testid="global-search-submit"
+      />
+    </form>
 
-    <div v-if="Object.keys(typeCounts).length > 0" class="mb-4">
+    <div v-if="searched" class="mb-4">
       <SearchFilterTabs
         :type-counts="typeCounts"
         :active-type="activeType"
@@ -83,31 +138,38 @@ onMounted(() => {
     <div
       v-if="timedOutTypes.length > 0"
       class="mb-4 rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200"
+      data-testid="global-search-timeout"
     >
       <i class="pi pi-exclamation-triangle mr-1" />
-      一部の検索がタイムアウトしました: {{ timedOutTypes.join(', ') }}
+      {{ t('globalSearch.timedOut', { types: timedOutLabel }) }}
     </div>
 
     <PageLoading v-if="loading" />
 
-    <div v-else-if="results.length === 0 && query.length >= 2" class="py-12 text-center">
+    <div
+      v-else-if="searched && results.length === 0"
+      class="py-12 text-center"
+      data-testid="global-search-empty"
+    >
       <i class="pi pi-search mb-2 text-4xl text-surface-400" />
-      <p class="text-surface-500">検索結果がありません</p>
+      <p class="text-surface-500">{{ t('globalSearch.empty') }}</p>
       <div v-if="zeroHelp" class="mt-4 space-y-2">
         <p v-if="zeroHelp.didYouMean" class="text-sm">
-          もしかして:
+          {{ t('globalSearch.didYouMean') }}
           <button
+            type="button"
             class="text-primary hover:underline"
-            @click="useSuggestion(zeroHelp!.didYouMean!)"
+            @click="useSuggestion(zeroHelp.didYouMean)"
           >
             {{ zeroHelp.didYouMean }}
           </button>
         </p>
         <p v-if="zeroHelp.broaderQuery" class="text-sm">
-          より広い検索:
+          {{ t('globalSearch.broaderQuery') }}
           <button
+            type="button"
             class="text-primary hover:underline"
-            @click="useSuggestion(zeroHelp!.broaderQuery!)"
+            @click="useSuggestion(zeroHelp.broaderQuery)"
           >
             {{ zeroHelp.broaderQuery }}
           </button>
@@ -115,7 +177,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else class="space-y-3">
+    <div v-else class="space-y-3" data-testid="global-search-results">
       <SearchResultCard
         v-for="result in results"
         :key="`${result.type}-${result.id}`"
@@ -123,11 +185,11 @@ onMounted(() => {
       />
     </div>
 
-    <div v-if="totalPages > 1" class="mt-6 flex justify-center">
+    <div v-if="showPaginator" class="mt-6 flex justify-center" data-testid="global-search-paginator">
       <Paginator
-        :rows="20"
-        :total-records="totalPages * 20"
-        :first="currentPage * 20"
+        :rows="DETAIL_PAGE_SIZE"
+        :total-records="total"
+        :first="currentPage * DETAIL_PAGE_SIZE"
         @page="handlePageChange"
       />
     </div>
