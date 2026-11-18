@@ -1,0 +1,207 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
+import { defineComponent, reactive, ref } from 'vue'
+import Select from 'primevue/select'
+import Dashboard from './dashboard.vue'
+
+/**
+ * CMP-260909-2152 PR-α 試練108 AC31α（FE・月次締めダイアログの期間選択）。
+ *
+ * dashboard.vue の月次締めダイアログは、自由入力の YYYY-MM をやめ「終了済みの期間」を選ぶ形にする。
+ * - 期間は useShiftBudgetApi の listClosePeriods(orgId, from, to) が返す（GET /close-periods?from&to、from/to は YYYY-MM）。
+ * - 選べるのは period_end が今日（Asia/Tokyo）以前（終了日当日を含む）の期間だけ。
+ *   未終了期間は選択肢に出さない、または disabled（options の disabled=true）にする。
+ * - 既定は終了済みの最新期間。確認文言とトーストに期間（YYYY-MM-DD〜YYYY-MM-DD）を出す。
+ * - 締め実行は既存どおり executeMonthlyClose({ organization_id, year_month: 期間キー })。
+ * - ダイアログ内のセレクトは data-testid=monthly-close-period-select、確認文言は monthly-close-confirm。
+ * - 締め日設定画面への導線 data-testid=closing-settings-link（BUDGET_ADMIN のみ、href=/admin/shift-budget/settings）。
+ * 実装前は自由入力のままのため red。
+ */
+
+const scope = reactive({
+  current: { type: 'organization', id: '10' },
+  loadFromStorage: vi.fn(),
+})
+const canManageBudget = ref(true)
+const ensureLoaded = vi.fn(async () => {})
+const listAllocations = vi.fn()
+const listClosePeriods = vi.fn()
+const executeMonthlyClose = vi.fn()
+const notifySuccess = vi.fn()
+const notifyError = vi.fn()
+const notifyInfo = vi.fn()
+
+mockNuxtImport('useScopeStore', () => () => scope)
+mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))
+mockNuxtImport('useNotification', () => () => ({ error: notifyError, success: notifySuccess, info: notifyInfo }))
+mockNuxtImport('useShiftBudgetApi', () => () => ({
+  listAllocations, getConsumptionSummary: vi.fn(), listClosePeriods, executeMonthlyClose,
+}))
+vi.mock('~/composables/shift/useShiftBudgetAdminAccess', () => ({
+  useShiftBudgetAdminAccess: () => ({ canManageBudget, ensureLoaded }),
+}))
+
+const InlineDialog = defineComponent({
+  props: { visible: Boolean },
+  emits: ['update:visible'],
+  template: '<div v-if="visible"><slot /><slot name="footer" /></div>',
+})
+
+// 今日は 2026-11-17（JST）。17日締め: 2026-11 の期間は 10/18〜11/17（終了日が今日＝選べる）、2026-12 は未終了。
+function periods() {
+  return {
+    items: [
+      { period_key: '2026-09', period_start: '2026-08-18', period_end: '2026-09-17', closing_day: 17 },
+      { period_key: '2026-10', period_start: '2026-09-18', period_end: '2026-10-17', closing_day: 17 },
+      { period_key: '2026-11', period_start: '2026-10-18', period_end: '2026-11-17', closing_day: 17 },
+      { period_key: '2026-12', period_start: '2026-11-18', period_end: '2026-12-17', closing_day: 17 },
+    ],
+  }
+}
+
+function periodSelect(wrapper: VueWrapper) {
+  const found = wrapper.findAllComponents(Select).find(c => c.attributes('data-testid') === 'monthly-close-period-select')
+  if (!found) throw new Error('monthly-close-period-select が見つからない')
+  return found
+}
+
+function executeButton(wrapper: VueWrapper) {
+  return wrapper.findAll('button').find(b => b.text() === '実行')
+}
+
+async function openDialog() {
+  const wrapper = await mountSuspended(Dashboard, { global: { stubs: { Dialog: InlineDialog } } })
+  await flushPromises()
+  const button = wrapper.findAll('button').find(b => b.text().includes('月次締め'))
+  expect(button, '月次締めボタン').toBeDefined()
+  await button!.trigger('click')
+  await flushPromises()
+  return wrapper
+}
+
+beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-17T03:00:00Z')) // JST 2026-11-17 12:00
+  await useNuxtApp().$i18n.setLocale('ja')
+  scope.current = { type: 'organization', id: '10' }
+  canManageBudget.value = true
+  listAllocations.mockReset().mockResolvedValue({ items: [], total: 0, page: 0, size: 100 })
+  listClosePeriods.mockReset().mockResolvedValue(periods())
+  executeMonthlyClose.mockReset().mockResolvedValue({
+    year_month: '2026-11', closed_allocations: 1, already_closed_allocations: 0, closed_consumptions: 5,
+    processed_organization_ids: [10], failed_organization_ids: [], already_closed_organization_ids: [],
+  })
+  notifySuccess.mockReset()
+  notifyError.mockReset()
+  notifyInfo.mockReset()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+describe('試練108 AC31α 月次締めダイアログ: 期間選択', () => {
+  it('試練108 AC31α 自由入力の YYYY-MM をやめ、組織指定で期間一覧を取得してセレクトで選ばせる', async () => {
+    const wrapper = await openDialog()
+    expect(listClosePeriods).toHaveBeenCalledWith('10', expect.stringMatching(/^\d{4}-\d{2}$/), expect.stringMatching(/^\d{4}-\d{2}$/))
+    expect(wrapper.find('input[placeholder="YYYY-MM"]').exists()).toBe(false)
+    expect(periodSelect(wrapper).exists()).toBe(true)
+  })
+
+  it('試練108 AC31α 選べるのは終了済み（終了日が今日以前）の期間だけ。未終了は出さないか disabled', async () => {
+    const wrapper = await openDialog()
+    const options = periodSelect(wrapper).props('options') as { value: string, disabled?: boolean }[]
+    const selectable = options.filter(o => !o.disabled).map(o => o.value)
+    expect(selectable).toEqual(expect.arrayContaining(['2026-09', '2026-10', '2026-11']))
+    expect(selectable).not.toContain('2026-12')
+  })
+
+  it('試練108 AC31α 既定は終了済みの最新期間（終了日が今日の 2026-11）', async () => {
+    const wrapper = await openDialog()
+    expect(periodSelect(wrapper).props('modelValue')).toBe('2026-11')
+  })
+
+  it('試練108 AC31α 期間表示（label）に開始日と終了日を出す', async () => {
+    const wrapper = await openDialog()
+    const options = periodSelect(wrapper).props('options') as { value: string, label: string }[]
+    const label = options.find(o => o.value === '2026-11')!.label
+    expect(label).toContain('2026-10-18')
+    expect(label).toContain('2026-11-17')
+  })
+
+  it('試練108 AC31α 終了済みの期間が1つも無いときは実行できない', async () => {
+    listClosePeriods.mockResolvedValue({
+      items: [{ period_key: '2026-12', period_start: '2026-11-18', period_end: '2026-12-17', closing_day: 17 }],
+    })
+    const wrapper = await openDialog()
+    const exec = executeButton(wrapper)
+    expect(exec).toBeDefined()
+    expect(exec!.attributes('disabled')).toBeDefined()
+    await exec!.trigger('click')
+    await flushPromises()
+    expect(executeMonthlyClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('試練108 AC31α 月次締めダイアログ: 確認文言・実行・トースト', () => {
+  it('試練108 AC31α 確認文言に選んだ期間（開始日と終了日）を出し、選び直すと追随する', async () => {
+    const wrapper = await openDialog()
+    const confirm = () => wrapper.get('[data-testid="monthly-close-confirm"]').text()
+    expect(confirm()).toContain('2026-10-18')
+    expect(confirm()).toContain('2026-11-17')
+    periodSelect(wrapper).vm.$emit('update:modelValue', '2026-10')
+    await flushPromises()
+    expect(confirm()).toContain('2026-09-18')
+    expect(confirm()).toContain('2026-10-17')
+  })
+
+  it('試練108 AC31α 実行は選んだ期間キーを year_month で渡し、成功トーストに期間を出す', async () => {
+    const wrapper = await openDialog()
+    await executeButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(executeMonthlyClose).toHaveBeenCalledTimes(1)
+    expect(executeMonthlyClose).toHaveBeenCalledWith({ organization_id: 10, year_month: '2026-11' })
+    expect(notifySuccess).toHaveBeenCalledTimes(1)
+    const message = String(notifySuccess.mock.calls[0]![0])
+    expect(message).toContain('2026-10-18')
+    expect(message).toContain('2026-11-17')
+  })
+
+  it('試練108 AC31α 古い期間を選んで実行すると、その期間キーで締める', async () => {
+    const wrapper = await openDialog()
+    periodSelect(wrapper).vm.$emit('update:modelValue', '2026-10')
+    await flushPromises()
+    await executeButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(executeMonthlyClose).toHaveBeenCalledWith({ organization_id: 10, year_month: '2026-10' })
+  })
+
+  it('試練108 AC31α 未終了期間を選んでも実行しない（409 を待たずに止める）', async () => {
+    const wrapper = await openDialog()
+    periodSelect(wrapper).vm.$emit('update:modelValue', '2026-12')
+    await flushPromises()
+    const exec = executeButton(wrapper)
+    if (exec) await exec.trigger('click')
+    await flushPromises()
+    expect(executeMonthlyClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('試練108 AC31α 月次締め: 権限と導線', () => {
+  it('試練108 AC31α BUDGET_ADMIN でなければ月次締めボタンも締め日設定への導線も出さない', async () => {
+    canManageBudget.value = false
+    const wrapper = await mountSuspended(Dashboard, { global: { stubs: { Dialog: InlineDialog } } })
+    await flushPromises()
+    expect(wrapper.findAll('button').some(b => b.text().includes('月次締め'))).toBe(false)
+    expect(wrapper.find('[data-testid="closing-settings-link"]').exists()).toBe(false)
+  })
+
+  it('試練108 AC31α BUDGET_ADMIN には締め日設定画面への導線がある', async () => {
+    const wrapper = await mountSuspended(Dashboard, { global: { stubs: { Dialog: InlineDialog } } })
+    await flushPromises()
+    const link = wrapper.find('[data-testid="closing-settings-link"]')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toBe('/admin/shift-budget/settings')
+  })
+})
