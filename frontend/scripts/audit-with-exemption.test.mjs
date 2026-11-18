@@ -98,3 +98,42 @@ test('レポート集計と依存情報の不一致を拒否する', () => {
   value.metadata.vulnerabilities.high = 0
   assert.throws(() => check(value), /不一致/)
 })
+
+const PICOMATCH_URL = 'https://github.com/advisories/GHSA-fc5q-39xc-vjpf'
+const picomatchReport = () =>
+  report({
+    picomatch: entry('picomatch', [{ ...advisory('high', PICOMATCH_URL), name: 'picomatch' }]),
+    tinyglobby: entry('tinyglobby', ['picomatch']),
+  })
+test('期限内は除外GHSA（picomatch）だけで high になっている entry を通す', () => {
+  checkAudit(JSON.stringify(picomatchReport()), 1, Date.parse('2026-11-18T00:00:00Z'))
+})
+test('除外の期限切れ後は picomatch も拒否する', () => {
+  assert.throws(
+    () => checkAudit(JSON.stringify(picomatchReport()), 1, Date.parse('2026-12-02T00:00:00Z')),
+    /許可されない脆弱性/,
+  )
+})
+test('除外GHSAに到達しても別の high advisory が混ざれば拒否する', () => {
+  const value = report({
+    picomatch: entry('picomatch', [{ ...advisory('high', PICOMATCH_URL), name: 'picomatch' }]),
+    braces: entry('braces', [advisory()]),
+    nuxt: entry('nuxt', ['picomatch', 'braces']),
+  })
+  assert.throws(
+    () => checkAudit(JSON.stringify(value), 1, Date.parse('2026-11-18T00:00:00Z')),
+    /許可されない脆弱性/,
+  )
+})
+
+test('high entry が除外GHSAに到達せず moderate advisory だけを参照する場合は期限内・期限後とも拒否する', () => {
+  const value = report({ small: entry('small', [advisory('moderate')], 'high') })
+  for (const at of ['2026-11-18T00:00:00Z', '2026-12-02T00:00:00Z']) {
+    assert.throws(() => checkAudit(JSON.stringify(value), 1, Date.parse(at)), /許可されない脆弱性|深刻度/)
+  }
+})
+test('除外の境界: 2026-12-01T23:59:59Z は通過し 2026-12-02T00:00:00Z は拒否する', () => {
+  const raw = JSON.stringify(picomatchReport())
+  checkAudit(raw, 1, Date.parse('2026-12-01T23:59:59Z'))
+  assert.throws(() => checkAudit(raw, 1, Date.parse('2026-12-02T00:00:00Z')), /許可されない脆弱性/)
+})
