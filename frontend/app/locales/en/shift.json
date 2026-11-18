@@ -192,7 +192,17 @@
       "saveSuccess": "Slot saved",
       "deleteSuccess": "Slot deleted",
       "assignmentMasked": "In adjustment",
-      "assignmentMaskedHint": "Assignments are hidden until the shift is published"
+      "assignmentMaskedHint": "Assignments are hidden until the shift is published",
+      "deleteTitle": "Delete shift slot",
+      "deleteConfirmPlain": "Delete this slot?",
+
+      "deleteConfirmBoth": "Delete this slot? The {requests} request(s) submitted for it and its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmRequestsOnly": "Delete this slot? The {requests} request(s) submitted for it will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmAssignmentsOnly": "Delete this slot? Its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmUnknown": "Delete this slot? Any requests submitted for it and any assignments will also be deleted. This cannot be undone through normal operations."
     },
     "requests": {
       "submissionRate": "Submission rate",

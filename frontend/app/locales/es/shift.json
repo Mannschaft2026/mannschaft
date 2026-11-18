@@ -178,7 +178,17 @@
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",
       "assignmentMasked": "En ajuste",
-      "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno"
+      "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
+      "deleteTitle": "Eliminar turno",
+      "deleteConfirmPlain": "¿Eliminar este turno?",
+
+      "deleteConfirmBoth": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno y sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmRequestsOnly": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno. No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmAssignmentsOnly": "¿Eliminar este turno? También se eliminarán sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmUnknown": "¿Eliminar este turno? Si hay solicitudes enviadas para este turno o asignaciones, también se eliminarán. No se puede deshacer con las operaciones habituales."
     },
     "requests": {
       "submissionRate": "Tasa de envío",
