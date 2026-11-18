@@ -173,7 +173,7 @@ def render(run, weights):
     header = (f'# CI shard weights: metric=class-suite-elapsed-ms (normal :test)\n'
               f'# run={run["id"]} head={run["head_sha"]} attempt={run["run_attempt"]} conclusion=success\n'
               f'# workflow={run["path"]} branch={run["head_branch"]} created={run["created_at"]}\n'
-              '# 全6 fresh runtime。outer suiteは子を二重加算せず、nested-onlyは独立最外suiteを合算。\n'
+              '# 全 shard fresh runtime。outer suiteは子を二重加算せず、nested-onlyは独立最外suiteを合算。\n'
               '# XML testsuite.timeやMFA内部サービス計測値とは異なる。historical sourceの実測。\n'
               f'# classes={len(weights)} migration+Flyway={len(migration)} seconds={sum(migration.values()) / 1000:.3f}\n'
               '# 現在sourceの未計測/削除/arch/perf/skip分類と適用判断は別manifestで検分する。\n'

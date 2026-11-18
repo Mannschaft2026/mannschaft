@@ -130,7 +130,7 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 0 — Flyway マイグレーション再生テスト（65クラス・実測で全テスト正味の
+  # Job 0 — Flyway マイグレーション再生テスト（実測で全テスト正味の
   # 81.6%）の実行要否を判定する。
   #
   # 【なぜ「直前の push との差分」ではなく「最後に成功したデプロイの main SHA」
@@ -277,7 +277,7 @@ jobs:
       # already running on ubuntu-latest so no additional setup is needed.
       #
       # -PexcludeMigrationTests: detect ジョブの判定結果をそのまま渡す。
-      # migration-sensitive な変更が無ければ Flyway 再生テスト（65クラス・
+      # migration-sensitive な変更が無ければ Flyway 再生テスト（
       # 全テスト正味の81.6%）を除外し、壁時計を 45分 → 20〜33分（PR側と同等）
       # まで短縮する。判定不能時は detect 側が既に true（フル実行）に倒して
       # いるため、ここでは受け取った値をそのまま使うだけでよい。
