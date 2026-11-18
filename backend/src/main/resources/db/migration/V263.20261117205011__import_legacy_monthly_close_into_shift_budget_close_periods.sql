@@ -28,7 +28,7 @@ FROM (
 
 INSERT INTO shift_budget_close_periods (id, organization_id, period_key, period_start, period_end, closing_day, created_at)
 SELECT UUID_TO_BIN(UUID(), 1), x.organization_id, x.ym, STR_TO_DATE(CONCAT(x.ym, '-01'), '%Y-%m-%d'),
-       LAST_DAY(STR_TO_DATE(CONCAT(x.ym, '-01'), '%Y-%m-%d')), 0, NOW(6)
+       LAST_DAY(STR_TO_DATE(CONCAT(x.ym, '-01'), '%Y-%m-%d')), 0, UTC_TIMESTAMP(6)
 FROM (
     SELECT DISTINCT a.organization_id, DATE_FORMAT(t.transaction_date, '%Y-%m') AS ym
     FROM budget_transactions t

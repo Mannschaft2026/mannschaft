@@ -42,7 +42,9 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3741);   // 3734 + CMP-261115-2145 F06.4.1 個人の頑張り記録 EffortRecordMeController 7本（feature gate 未宣言の流儀で 7|7）。
+                .isEqualTo(3746);   // 3741 + CMP-260909-2152 α 締め期間GET3本（ShiftBudgetClosePeriodController）・締め日設定GET1本＋POST1本（ShiftBudgetClosingSettingController）。
+                                    //   どちらもクラス単位 @RequireFeature("FEATURE_SHIFT_ENABLED") 宣言済みで未宣言増加0（0|3・0|2）。
+                                    // 3741 = 3734 + CMP-261115-2145 F06.4.1 個人の頑張り記録 EffortRecordMeController 7本（feature gate 未宣言の流儀で 7|7）。
                                     // 3734 = 3732 + L1-M モジュールイベント管理GET/POST各1本。未宣言増加0。
                                     // 3732 = 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
                                     //   どちらも @AlwaysReachable(CORE) を宣言済みで未宣言増加0。3|4 → 3|6）。QR-PDF は旧 GET を POST へ置換（1|1 のまま・純増0）。
