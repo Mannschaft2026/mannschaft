@@ -39,7 +39,7 @@ public class EffortTeamTemplateSettingsController {
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "チームテンプレート編集画面の指標設定。既存のテンプレート管理権限で提供し機能フラグに依存させない")
     @Operation(summary = "テンプレートの指標設定を取得")
-    public ResponseEntity<ApiResponse<EffortTemplateSettingsResponse>> get(
+    public ResponseEntity<ApiResponse<EffortTemplateSettingsResponse>> getEffortTemplateSettings(
             @PathVariable Long teamId, @PathVariable Long templateId) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.of(settingsService.get(userId, teamId, templateId)));
@@ -49,7 +49,7 @@ public class EffortTeamTemplateSettingsController {
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "チームテンプレート編集画面の指標設定。既存のテンプレート管理権限で提供し機能フラグに依存させない")
     @Operation(summary = "テンプレートの指標設定を更新（全置換）")
-    public ResponseEntity<ApiResponse<EffortTemplateSettingsResponse>> update(
+    public ResponseEntity<ApiResponse<EffortTemplateSettingsResponse>> updateEffortTemplateSettings(
             @PathVariable Long teamId, @PathVariable Long templateId,
             @Valid @RequestBody UpdateEffortTemplateSettingsRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
