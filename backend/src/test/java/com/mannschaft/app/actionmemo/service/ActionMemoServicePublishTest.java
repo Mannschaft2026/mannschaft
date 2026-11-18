@@ -344,8 +344,6 @@ class ActionMemoServicePublishTest {
                         ReflectionTestUtils.setField(post, "id", postIdSeq.getAndIncrement());
                         return post;
                     });
-            given(memoRepository.save(any(ActionMemoEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             PublishDailyRequest req = new PublishDailyRequest();
             req.setMemoDate(TARGET_DATE);
@@ -620,8 +618,6 @@ class ActionMemoServicePublishTest {
                         ReflectionTestUtils.setField(p, "id", 3000L);
                         return p;
                     });
-            given(memoRepository.save(any(ActionMemoEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             PublishDailyRequest req = new PublishDailyRequest();
             req.setMemoDate(TARGET_DATE);
