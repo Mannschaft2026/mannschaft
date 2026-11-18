@@ -219,6 +219,14 @@ matcher 式は行挿入で腐らず、`SecurityConfig` を Ctrl+F すれば人�
 - 判定は**トランザクションの外**で行う。チャンネル ID・メッセージ ID 指定の EP は「Controller（REST・WebSocket）→ `ChatChannelFacade` / `ChatMessageFacade`（tx なし・`ChatChannelAccessGuard` で認可と存在秘匿）→ tx 本体（`ChatChannelService` / `ChatMemberService` / `ChatMessageService`・認可なし）」の形とし、認可が読む他ドメイン（membership / role / tournament / event / village）の行をチャットの書き込みトランザクションに巻き込まない（CLAUDE.md DB 設計の原則 #5・番人 D-3T）。型は `AuthzTxFacadeRegistryArchTest` の登録表（W8）が固定する。自己参加のスコープ在籍だけは、離脱処理との競合を直列化するため tx 本体が行ロックつきで再確認する（事前判定を通った利用者なので、再確認の拒否 `COMMON_002` は実在を漏らさない）。
 - 契約は `ChatExistenceConcealmentContractIT` が全 EP について実在 ID と不在 ID の応答を並べて固定する。
 
+**大会連絡スペース（掲示板・ファイル置き場）への適用（CMP-261116-0726）**: 大会・ディビジョン単位の連絡スペース（`tournament_contact_space`）も、チャットと同じ判定順の流儀で存在を秘匿する。スコープは大会／ディビジョンでチーム・組織の所属とは別系統のため、判定は tx を持たない `TournamentContactSpaceAccessGate`（tournament ドメイン）に集約し、掲示板は `BulletinTournamentScopeAccessGuard`、ファイル共有は `TournamentFolderScopeAccessGuard` が入口（Controller／tx なし Facade）から呼ぶ。
+
+- 「存在を知り得る」利用者 = そのスペースを**閲覧できる**者（公開スペースの閲覧者・参加チーム（REGISTERED/ACTIVE）の有効メンバー・主催組織 ADMIN・SYSTEM_ADMIN）。この利用者の権限不足だけを 403 とする（投稿・管理権なし = `TOUR_031`、公開設定 API は `TOUR_032`）。公開設定 API では、そのスコープのいずれかのスペース（掲示板／チャット）を閲覧できる者を「知り得る」とみなす。
+- それ以外の拒否（閲覧権なし・スペース不在・大会／ディビジョン不在・大会とディビジョンの帰属不一致）は不在と完全一致の 404 とする。スコープ系 EP は `TOUR_029`、子リソース ID 指定系は子の不在コード（掲示板 `BULLETIN_002`/`003`/`007`/`025`、ファイル共有 `FILE_SHARING_001`/`002`）。旧 403 `TOUR_030`（閲覧権なし）は欠番とし送出しない。
+- 閲覧権の基準はスペース種別ごと（掲示板・フォルダは掲示板スペース、チャットはチャットスペースの `is_public`）。投稿権を持つ者は閲覧判定を経ずに通す。投稿後に資格を失った本人も、閲覧権がなければ自分の投稿を含め不在扱いとする。
+- 判定は**トランザクションの外**で行い、判定部品は例外の catch で分岐せず、Repository と `AccessControlService` の真偽値で決める（tx 内で例外を握ると rollback-only で 500 になるため）。tx 内の `checkPost` は多層防御として残す。
+- 子リソース ID を直接指定するファイル共有 EP（コメント・タグ・リンク・権限の ID 指定の更新／削除）は未是正で、派生戦役の対象。
+
 ### 3.4 広告（F09.7 / F09.17・IP レート制限あり）
 `POST /api/v1/ads/*/click`、`GET/POST /api/v1/ads/unsubscribe`、`GET /api/v1/ads/pixels/open`。
 
