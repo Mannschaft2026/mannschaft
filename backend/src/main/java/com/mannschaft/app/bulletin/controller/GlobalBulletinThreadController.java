@@ -14,6 +14,7 @@ import com.mannschaft.app.bulletin.dto.ThreadResponse;
 import com.mannschaft.app.bulletin.dto.UpdateThreadRequest;
 import com.mannschaft.app.bulletin.service.BulletinReadStatusService;
 import com.mannschaft.app.bulletin.service.BulletinScopeIdResolver;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinThreadService;
 import com.mannschaft.app.bulletin.service.BulletinReadFacade;
 import com.mannschaft.app.common.ApiResponse;
@@ -62,6 +63,8 @@ import java.util.UUID;
  *   <li>{@code VILLAGE}: {@code scope_village_id} 必須。村可視性認可 → 村スレッド一覧
  *       （{@link BulletinThreadService#listVillageThreads}）。{@code category_id} で絞り込み可。</li>
  *   <li>{@code ORGANIZATION / TEAM / PERSONAL}: {@code scope_id} で既存経路へ委譲。</li>
+ *   <li>{@code TOURNAMENT / TOURNAMENT_DIVISION}（F08.7.1 連絡スペース）: {@code scope_id} は大会 ID／
+ *       ディビジョン ID の数値のみ（slug は 400）。認可は大会連絡アクセス判定（閲覧=canView・投稿=canPost）。</li>
  * </ul>
  *
  * <h2>詳細</h2>
@@ -83,11 +86,13 @@ public class GlobalBulletinThreadController {
     private final BulletinReadStatusService readStatusService;
     private final ObjectMapper objectMapper;
     private final BulletinScopeIdResolver scopeIdResolver;
+    /** 大会/ディビジョン連絡スペースの一覧閲覧認可（取引外・D-3T 回避）。 */
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     /**
      * スレッド一覧を取得する（グローバル方式）。
      *
-     * @param scopeType      スコープ種別（{@code VILLAGE / ORGANIZATION / TEAM / PERSONAL}）
+     * @param scopeType      スコープ種別（{@code VILLAGE / ORGANIZATION / TEAM / PERSONAL / TOURNAMENT / TOURNAMENT_DIVISION}）
      * @param scopeId        スコープ ID（VILLAGE 時は 0）
      * @param scopeVillageId 村 ID（VILLAGE 時必須・それ以外は無視）
      * @param categoryId     カテゴリ ID（任意）
@@ -116,7 +121,9 @@ public class GlobalBulletinThreadController {
             }
             result = threadService.listVillageThreads(scopeVillageId, categoryId, currentUserId, pageable);
         } else {
-            Long resolvedScopeId = scopeIdResolver.resolve(type, scopeId);
+            Long resolvedScopeId = scopeIdResolver.resolveGlobal(type, scopeId);
+            // 大会/ディビジョンの閲覧認可は取引外（D-3T）。サービス呼び出しの前に通す。
+            tournamentScopeAccessGuard.checkListView(type, resolvedScopeId, currentUserId);
             if (categoryId != null) {
                 result = threadService.listThreadsByCategory(type, resolvedScopeId, categoryId, currentUserId, pageable);
             } else {
@@ -222,7 +229,7 @@ public class GlobalBulletinThreadController {
             if (request.getScopeId() == null) {
                 throw new BusinessException(CommonErrorCode.COMMON_001);
             }
-            scopeId = scopeIdResolver.resolve(type, request.getScopeId());
+            scopeId = scopeIdResolver.resolveGlobal(type, request.getScopeId());
         }
         ThreadResponse response = threadService.createThreadGlobal(
                 type, scopeId, currentUserId, request.toCreateThreadRequest());

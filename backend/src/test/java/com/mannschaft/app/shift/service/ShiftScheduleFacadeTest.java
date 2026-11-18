@@ -55,13 +55,16 @@ class ShiftScheduleFacadeTest {
     private ShiftPreferenceReminderBatchService reminderService;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private ShiftPublicationBudgetContextPort publicationBudgetContextPort;
 
     private ShiftScheduleFacade facade;
 
     @BeforeEach
     void setUp() {
         facade = new ShiftScheduleFacade(scheduleService, reminderService,
-                new ScopeConcealingAccessGate(accessControlService), accessControlService);
+                new ScopeConcealingAccessGate(accessControlService), accessControlService,
+                publicationBudgetContextPort);
     }
 
     private static ShiftScheduleScope published() {
@@ -361,6 +364,47 @@ class ShiftScheduleFacadeTest {
             assertThat(facade.remindUnsubmitted(SCHEDULE_ID, USER_ID)).isSameAs(remind);
             assertThat(facade.duplicateSchedule(SCHEDULE_ID, USER_ID)).isSameAs(response);
             verify(scheduleService).deleteSchedule(SCHEDULE_ID, USER_ID);
+        }
+
+        @Test
+        @DisplayName("CMP-261115-1821: 公開は認可の後に枠日付の範囲で予算 context を取得し、値として tx 本体へ渡す")
+        void 公開は認可後に予算contextを固定して渡す() {
+            asAdmin();
+            LocalDate from = LocalDate.of(2026, 7, 1);
+            LocalDate to = LocalDate.of(2026, 7, 31);
+            ShiftPublicationBudgetContext context = new ShiftPublicationBudgetContext(
+                    from, to, List.of(), java.util.Map.of());
+            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+            given(scheduleService.findSlotDateRange(SCHEDULE_ID)).willReturn(new ShiftSlotDateRange(from, to));
+            given(publicationBudgetContextPort.load(TEAM_ID, from, to)).willReturn(context);
+            given(scheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID, context)).willReturn(response);
+
+            assertThat(facade.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID)).isSameAs(response);
+            verify(scheduleService, never()).transitionStatus(anyLong(), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("CMP-261115-1821: 枠が無い公開は候補を引かず空 context で tx 本体へ進む")
+        void 枠なしの公開は候補を引かない() {
+            asAdmin();
+            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+            given(scheduleService.findSlotDateRange(SCHEDULE_ID)).willReturn(new ShiftSlotDateRange(null, null));
+            given(scheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID,
+                    ShiftPublicationBudgetContext.noSlots())).willReturn(response);
+
+            assertThat(facade.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID)).isSameAs(response);
+            verifyNoInteractions(publicationBudgetContextPort);
+        }
+
+        @Test
+        @DisplayName("CMP-261115-1821: 認可で拒否された公開は予算 context を取得しない（認可前に予算情報へ触れない）")
+        void 拒否された公開は予算contextを取得しない() {
+            asPlainMember();
+
+            assertCode(catchThrowable(() -> facade.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID)),
+                    CommonErrorCode.COMMON_002);
+            verifyNoInteractions(publicationBudgetContextPort);
+            verify(scheduleService, never()).findSlotDateRange(anyLong());
         }
 
         @Test

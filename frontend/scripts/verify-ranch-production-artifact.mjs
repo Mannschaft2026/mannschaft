@@ -5,6 +5,7 @@ import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { verifyProductionPack, verifiedProductionArtifactHashes } from './verify-ranch-production-assets.mjs'
+import { requireExpandedForArtifact, EXPAND_COMMAND } from './lib/sparse-assets.mjs'
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const output = path.join(frontend, '.output')
 const manifest = JSON.parse(
@@ -126,12 +127,23 @@ export function inspectArtifact(directory, blockedHashes, markers, verifiedPack 
   assert.ok(files > 0)
   return files
 }
+/**
+ * 成果物検証の前提確認。素材（承認pack）が無いビルド出力を「配布可能」と検証成功にしない。
+ * 省略はしない: CI かどうかを問わず、sparse 未展開・pack 欠落なら失敗する。
+ * （Docker ビルドは sparse 状態の作業木を COPY するとここで失敗する。先に ${EXPAND_COMMAND} を実行しておくこと）
+ */
+export function requireProductionPackPresent({ repoRoot, packDirectory, env = process.env }) {
+  requireExpandedForArtifact({ repoRoot, targets: ['frontend/public/ranch/approved'], env })
+  assert.ok(fs.existsSync(path.join(packDirectory, 'manifest.json')),
+    `承認pack（${packDirectory}）が無い。素材なしの成果物は配布可能と検証しない。素材を展開してから再ビルドすること: ${EXPAND_COMMAND}`)
+}
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const registration = path.join(frontend, 'app/utils/ranch-production-pack-registration.json')
   let verifiedPack = null
   if (fs.existsSync(registration)) {
     const metadata = JSON.parse(fs.readFileSync(registration, 'utf8'))
     assert.match(metadata.packVersion, /^[A-Za-z0-9_-]+$/)
+    requireProductionPackPresent({ repoRoot: path.resolve(frontend, '..'), packDirectory: path.join(frontend, 'public/ranch/approved', metadata.packVersion) })
     verifiedPack = verifyProductionPack({ packDirectory: path.join(frontend, 'public/ranch/approved', metadata.packVersion),
       manifestSha256: metadata.manifestSha256, masterFile: path.join(frontend, 'scripts/fixtures/ranch-production-master.json'), masterSha256: metadata.masterSha256 })
   }

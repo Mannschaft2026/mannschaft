@@ -1,0 +1,86 @@
+{
+  "effort": {
+    "title": "Aufwandsprotokoll",
+    "subtitle": "Halte Lernen, Sport, Gewicht und mehr als persönliche Einträge fest und blicke zurück.",
+    "record": "Eintrag",
+    "review": "Rückblick",
+    "template": "Art",
+    "recordedOn": "Datum",
+    "privateNote": "Private Notiz",
+    "privateNoteHint": "Die private Notiz sieht nur du.",
+    "privateSave": "Nur für mich speichern",
+    "newTitle": "Neuer Eintrag",
+    "editTitle": "Eintrag bearbeiten",
+    "newRecord": "Zu neuem Eintrag wechseln",
+    "edit": "Bearbeiten",
+    "saved": "Gespeichert",
+    "savedReconciled": "Bereits gespeichert (die erneute Anfrage wurde geprüft)",
+    "deleted": "Gelöscht",
+    "status": {
+      "private": "Als persönlicher Eintrag gespeichert"
+    },
+    "error": {
+      "required": "{field} ist erforderlich",
+      "recordedOnRequired": "Bitte das Datum des Eintrags angeben",
+      "conflict": "Eine andere Änderung wurde zuerst gespeichert. Der neueste gespeicherte Stand wird angezeigt.",
+      "recordedOnInvalid": "Bitte ein gültiges Datum von heute oder früher als Eintragsdatum angeben",
+      "noContent": "Bitte mindestens ein Feld ausfüllen"
+    },
+    "delete": {
+      "header": "Eintrag löschen",
+      "message": "Dieser Eintrag wird gelöscht. Fortfahren?",
+      "reject": "Abbrechen",
+      "accept": "Löschen"
+    },
+    "list": {
+      "title": "Einträge",
+      "empty": "Noch keine Einträge",
+      "more": "Mehr anzeigen"
+    },
+    "period": {
+      "week": "Woche",
+      "month": "Monat",
+      "year": "Jahr",
+      "custom": "Benutzerdefiniert",
+      "prev": "Vorheriger Zeitraum",
+      "next": "Nächster Zeitraum",
+      "from": "Startdatum",
+      "to": "Enddatum",
+      "invalid": "Wähle einen Zeitraum von Start bis Ende mit höchstens 366 Tagen.",
+      "invalidMissing": "Bitte Start- und Enddatum angeben.",
+      "invalidOrder": "Das Enddatum muss am oder nach dem Startdatum liegen."
+    },
+    "chart": {
+      "kind": "Diagramm",
+      "bar": "Balkendiagramm",
+      "line": "Liniendiagramm",
+      "pie": "Kreisdiagramm",
+      "noData": "Keine Einträge in diesem Zeitraum",
+      "zeroTotal": "Die Summe ist 0, daher wird kein Kreisdiagramm angezeigt",
+      "unspecifiedSubject": "Kein Fach",
+      "notRecorded": "Nicht erfasst",
+      "category": "Kategorie",
+      "value": "Wert",
+      "share": "Anteil",
+      "total": "Summe",
+      "period": "Zeitraum"
+    },
+    "preset": {
+      "study": "Lernen",
+      "exercise": "Sport",
+      "weight": "Gewicht"
+    },
+    "field": {
+      "subject": "Fach",
+      "duration": "Dauer",
+      "weight": "Gewicht",
+      "intensity": "Intensität",
+      "menu": "Menü"
+    },
+    "unit": {
+      "MINUTE": "Min.",
+      "KILOGRAM": "kg",
+      "RPE": "RPE"
+    }
+  }
+}
