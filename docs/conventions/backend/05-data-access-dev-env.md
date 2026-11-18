@@ -27,6 +27,17 @@ dependencies {
 }
 ```
 * **N+1 問題の防止**: リレーションの取得には `@EntityGraph` またはJPQLの `JOIN FETCH` を明示的に使用し、Lazy Loading による N+1 問題を防止すること。
+* **ループ内で DB を呼ばない**: `for` / `forEach` / `stream` の `map`・`filter` 等のループ内で、Repository や他 Service の単件取得（`findById` 等）・`count`・`exists`・`save` を呼ばない。ID を集めて `findAllById` / `…In` / `GROUP BY` 集計 / `saveAll`・一括 UPDATE にまとめる（一覧・統計・CSV 出力・バッチが特に起きやすい）。
+  ```java
+  // NG: 行数ぶんクエリが走る
+  for (var t : threads) { if (!readRepo.existsByThreadIdAndUserId(t.getId(), userId)) { readRepo.save(new Read(t, userId)); } }
+  // OK: 1回で既読 ID を取り、差分を saveAll
+  Set<Long> read = readRepo.findReadThreadIds(threadIds, userId);
+  readRepo.saveAll(threads.stream().filter(t -> !read.contains(t.getId())).map(t -> new Read(t, userId)).toList());
+  ```
+* **`@Transactional` 内で取得した managed エンティティへの `save()` は不要**（ダーティチェックで反映される）。ループ内で呼ぶと無駄なクエリの温床になる。新規作成時のみ `save` / `saveAll` を使う。
+* **件数上限なしの内部取得に注意**: 内部で `PageRequest.of(0, 10000)` や `Pageable.unpaged()` を使う箇所には `max-page-size`（100）が効かず、上限なしとして扱う。件数が増える対象では、ループ化せず集計クエリ（`GROUP BY`）で取得する。
+* 棚卸しと解消計画: [n-plus-one-inventory-2026-11.md](../../development/n-plus-one-inventory-2026-11.md)
 
 ### 派生クエリの引数型は Entity 属性の型と一致させる — `@Enumerated` 属性に `String` を渡さない（2026-07-30〜）
 
