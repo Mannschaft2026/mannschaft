@@ -195,7 +195,7 @@ public enum AuthErrorCode implements ErrorCode {
     AUTH_069("AUTH_069", "Cannot invite your own email address", Severity.WARN),
 
     /** PENDING_PARENTAL_CONSENT での操作ブロック */
-    AUTH_070("AUTH_070", "This operation is not allowed for accounts pending parental consent", Severity.WARN),
+    AUTH_070("AUTH_070", "保護者の同意が完了するまで、この操作は利用できません", Severity.WARN),
 
     // ===== F02.10 §391 郵便番号検証基盤（国別レジストリ駆動） =====
 

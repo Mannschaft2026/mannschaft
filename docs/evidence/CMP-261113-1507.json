@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261113-1507",
+  "scope": "app",
+  "implementation": { "pr": 4587, "sha": "bb45778d0b0ab7a835479076e3d8116b9bc41946" },
+  "acceptanceCriteria": [
+    { "id": "AC-1", "description": "未ログイン en（en-US 含む）で AUTH_004 が英語", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }] },
+    { "id": "AC-2", "description": "de で AUTH_004 がドイツ語", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }] },
+    { "id": "AC-3", "description": "users.locale=en のログイン済みは ja を送っても GDPR_003 が英語", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }] },
+    { "id": "AC-4", "description": "ja・未指定は従来どおり日本語", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }, { "name": "ErrorMessageResolveI18nTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageResolveI18nTest.java" }] },
+    { "id": "AC-5", "description": "未対応言語 fr・空 Accept-Language は日本語で 500 なし", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }] },
+    { "id": "AC-6", "description": "全 ErrorCode × 5 言語のキーが存在する（番人）", "tests": [{ "name": "ErrorMessageI18nGuardTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageI18nGuardTest.java" }] },
+    { "id": "AC-7", "description": "ja 以外に日本語の残存なし・zh はかな不可（番人）", "tests": [{ "name": "ErrorMessageI18nGuardTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageI18nGuardTest.java" }] },
+    { "id": "AC-8", "description": "アポストロフィ・未解決の {0} がない", "tests": [{ "name": "ErrorMessageI18nGuardTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageI18nGuardTest.java" }] },
+    { "id": "AC-9", "description": "非数字末尾 141 件もキー衝突なく引ける", "tests": [{ "name": "ErrorMessageI18nGuardTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageI18nGuardTest.java" }, { "name": "ErrorMessageResolveI18nTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageResolveI18nTest.java" }] },
+    { "id": "AC-10", "description": "ErrorResponse.of 直接使用 17 箇所も英語", "tests": [{ "name": "ErrorMessageResolveI18nTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageResolveI18nTest.java" }] },
+    { "id": "AC-11", "description": "ResponseStatusException 理由文・マイルストーンロック応答を値保持で訳す", "tests": [{ "name": "ErrorMessageResolveI18nTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageResolveI18nTest.java" }, { "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }] },
+    { "id": "AC-12", "description": "Security 早期拒否でも言語解決でき、優先順位を HTTP テストで固定", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }] },
+    { "id": "AC-13", "description": "キー欠落時は enum の日本語へフォールバック", "tests": [{ "name": "ErrorMessageResolveI18nTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageResolveI18nTest.java" }] },
+    { "id": "AC-14", "description": "MessageSource の想定外例外でも 500 にしない", "tests": [{ "name": "ErrorMessageResolveI18nTest", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageResolveI18nTest.java" }] },
+    { "id": "AC-15", "description": "FE useApi が全リクエストに UI 言語を Accept-Language で付与", "tests": [{ "name": "useApi.acceptLanguage.spec.ts", "evidence": "frontend/tests/unit/composables/useApi.acceptLanguage.spec.ts" }] },
+    { "id": "AC-16", "description": "UI 言語切替で users.locale が更新され、ログイン済みでも新言語になる", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }, { "name": "実機E2E シナリオ 2", "evidence": "docs/evidence/CMP-261113-1507-real.md" }] },
+    { "id": "AC-17", "description": "他テナント ID・不存在 ID で言語によりステータス・コード・秘匿情報が変わらない", "tests": [{ "name": "ErrorMessageLocaleHttpIT", "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java" }, { "name": "実機E2E シナリオ 3", "evidence": "docs/evidence/CMP-261113-1507-real.md" }] },
+    { "id": "AC-18", "description": "実機 en/de で AUTH_004・AUTH_044・GDPR_003 のトーストに日本語がない", "tests": [{ "name": "実機E2E 5 シナリオ", "evidence": "docs/evidence/CMP-261113-1507-real.md" }] }
+  ],
+  "ci": [
+    { "runId": 43909736959 },
+    { "runId": 43909737048 },
+    { "runId": 43909737092 },
+    { "runId": 43909737286 },
+    { "runId": 43909737227 },
+    { "runId": 43909737129 }
+  ],
+  "stages": {
+    "review": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4587" },
+    "real": { "status": "passed", "evidence": "docs/evidence/CMP-261113-1507-real.md" },
+    "exploratory": { "status": "passed", "evidence": "docs/evidence/CMP-261113-1507-real.md" }
+  },
+  "regressions": []
+}

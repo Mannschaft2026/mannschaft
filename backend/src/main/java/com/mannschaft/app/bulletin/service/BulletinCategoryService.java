@@ -11,6 +11,7 @@ import com.mannschaft.app.bulletin.entity.BulletinCategoryEntity;
 import com.mannschaft.app.bulletin.repository.BulletinCategoryRepository;
 import com.mannschaft.app.bulletin.repository.BulletinThreadRepository;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.village.VillageErrorCode;
 import com.mannschaft.app.village.service.VillageBulletinAccessService;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,26 @@ public class BulletinCategoryService {
      */
     public List<CategoryResponse> listCategories(ScopeType scopeType, Long scopeId, Long userId) {
         accessGuard.checkMembership(userId, scopeType, scopeId);
+        List<BulletinCategoryEntity> categories =
+                categoryRepository.findByScopeTypeAndScopeIdOrderByDisplayOrderAsc(scopeType, scopeId);
+        return bulletinMapper.toCategoryResponseList(categories);
+    }
+
+    /**
+     * 大会/ディビジョンスコープのカテゴリ一覧を取得する。
+     *
+     * <p>閲覧認可は呼び出し側 Controller の {@code BulletinTournamentScopeAccessGuard#checkListView}
+     * が取引外（D-3T）で済ませていることを前提とする。大会/ディビジョン以外のスコープは
+     * 認可を素通しさせないため {@code COMMON_002}（fail-closed）で拒否する。</p>
+     *
+     * @param scopeType スコープ種別（TOURNAMENT / TOURNAMENT_DIVISION のみ）
+     * @param scopeId   スコープID
+     * @return カテゴリレスポンスリスト
+     */
+    public List<CategoryResponse> listTournamentCategories(ScopeType scopeType, Long scopeId) {
+        if (!BulletinTournamentScopeAccessGuard.isTournamentScope(scopeType)) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
+        }
         List<BulletinCategoryEntity> categories =
                 categoryRepository.findByScopeTypeAndScopeIdOrderByDisplayOrderAsc(scopeType, scopeId);
         return bulletinMapper.toCategoryResponseList(categories);
