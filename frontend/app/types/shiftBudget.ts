@@ -8,6 +8,8 @@
 // ===== 共通 =====
 
 /** 平均時給算出モード */
+import type { components } from '~/types/generated'
+
 export type ShiftBudgetRateMode = 'MEMBER_AVG' | 'POSITION_AVG' | 'EXPLICIT'
 
 /** 消化サマリのステータス（4 段階） */
@@ -211,46 +213,29 @@ export interface MonthlyCloseResponse {
   already_closed_organization_ids: number[]
 }
 
-// ===== 締め日・締め期間（CMP-260909-2152 PR-α。BE 生成型が出るまでの手動型） =====
+// ===== 締め日・締め期間（CMP-260909-2152 PR-α。BE 由来の生成型を参照する） =====
+// 生成型（openapi-typescript）は springdoc が required を出さず全項目 optional になるため、
+// BE が常に値を返す応答は Required で必須化する。リクエストの closing_day は BE が
+// JsonNode（整数／文字列を自前検証）で受けるため、生成型では Record<string, never> となる。
+// 画面は整数のみ送るので number に上書きする。
+
+type ApiSchemas = components['schemas']
 
 /** 締め日の変更履歴 1 件。closing_day は 1〜28、0 は末日。 */
-export interface ClosingSettingChange {
-  revision: number
-  /** 適用開始の期間キー（YYYY-MM） */
-  effective_period_key: string
-  closing_day: number
-  previous_closing_day: number
-  reason: string
-  actor_user_id: number
-  created_at: string
-}
+export type ClosingSettingChange = Required<ApiSchemas['Change']>
 
 /** GET /closing-settings の応答。 */
-export interface ClosingSettingsResponse {
-  closing_day: number
-  revision: number
-  /** 適用開始に選べる最も早い期間キー（YYYY-MM）。サーバーが算出する（画面では計算しない） */
-  min_effective_period_key?: string
+export type ClosingSettingsResponse = Required<Omit<ApiSchemas['ClosingSettingResponse'], 'changes'>> & {
   changes: ClosingSettingChange[]
 }
 
 /** POST /closing-settings/changes のリクエスト（組織は X-Organization-Id で渡す）。 */
-export interface ClosingSettingChangeRequest {
-  expected_revision: number
+export type ClosingSettingChangeRequest = Required<Omit<ApiSchemas['ClosingDayChangeRequest'], 'closing_day'>> & {
   closing_day: number
-  effective_period_key: string
-  reason: string
 }
 
 /** 締め期間 1 件。period_key は締め日が属する月（YYYY-MM）。 */
-export interface ClosePeriodResponse {
-  period_key: string
-  /** YYYY-MM-DD */
-  period_start: string
-  /** YYYY-MM-DD */
-  period_end: string
-  closing_day: number
-}
+export type ClosePeriodResponse = Required<ApiSchemas['Item']>
 
 export interface ClosePeriodListResponse {
   items: ClosePeriodResponse[]
