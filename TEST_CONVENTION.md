@@ -789,7 +789,7 @@ npx playwright test <spec> --workers=1 --repeat-each=5 --retries=0
 npx playwright test <spec> --retries=0
 ```
 
-- 実行の前提: 既定の BASE_URL は `http://localhost:8081`（`BASE_URL` 環境変数で変更可）。未起動なら config の `webServer` が Nuxt dev サーバーを起動し、起動済みなら再利用する。`tests/e2e/real/` の spec は `--project=chromium-real`（管理者用は `chromium-real-admin`）を指定し、実機のバックエンド（:8080）が必要
+- 実行の前提（接続先、サーバーの起動条件、project や専用 config の選択）は `frontend/playwright.config.ts` と、その spec が属する実行手順（実機 E2E は `docs/testing/real_e2e_setup.md`）に従う。上のコマンドは既定の config で実行できる spec の例である
 
 ### 9.3 E2E テストの配置
 
