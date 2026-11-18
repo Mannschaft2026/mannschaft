@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261103-0823",
+  "scope": "app",
+  "implementation": {
+    "pr": 4589,
+    "sha": "9c8a716f6e898985f0192c9853e694adead887d7"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "許可されない転送元（不在・論理削除済み・非フレンド・自チーム・スコープ越境・非共有・下書き・非表示）は、不在と同一の応答（404 SOCIAL_122）になる",
+      "tests": [
+        {
+          "name": "AC-1: 不在の転送元 → 404 SOCIAL_122（基準応答）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/FriendContentForwardExistenceOracleContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "拒否時は転送履歴・転送先投稿を1件も作らない",
+      "tests": [
+        {
+          "name": "AC-5: 拒否時は転送履歴・転送先投稿を 1 件も作らない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/FriendContentForwardExistenceOracleContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "フレンドチームの共有・公開済み投稿は 201 で転送でき、二重転送は 409 SOCIAL_121 で冪等性を保つ",
+      "tests": [
+        {
+          "name": "AC-6: フレンドチームの共有・公開済み投稿は 201 で転送でき、履歴が 1 件できる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/FriendContentForwardExistenceOracleContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "転送権限のない一般メンバーは、実在・不在を問わず同一の 403 になり、投稿の実在を漏らさない",
+      "tests": [
+        {
+          "name": "AC-8: 転送権限のない一般メンバーは、実在・不在を問わず同一の 403（投稿の実在を漏らさない）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/FriendContentForwardExistenceOracleContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "管理者フィードにはフレンドチームの TEAM スコープの共有・公開済み投稿だけが出る",
+      "tests": [
+        {
+          "name": "AC-9: フィードにはフレンドチームの TEAM 共有投稿だけが出る（組織投稿・非共有・下書き・非フレンドは出ない）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/FriendContentForwardExistenceOracleContractIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 44053685821 },
+    { "runId": 44053685842 },
+    { "runId": 44053685780 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4589"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261103-0823-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261103-0823-exploratory.md"
+    }
+  },
+  "regressions": []
+}
