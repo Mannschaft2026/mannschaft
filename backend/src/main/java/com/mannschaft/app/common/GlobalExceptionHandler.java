@@ -124,6 +124,12 @@ public class GlobalExceptionHandler {
             Map.entry("DIAGNOSIS_003", HttpStatus.CONFLICT),
             Map.entry("DIAGNOSIS_004", HttpStatus.CONFLICT),
             Map.entry("DIAGNOSIS_005", HttpStatus.SERVICE_UNAVAILABLE),
+            // F06.4.1 個人の頑張り記録: 不在/他人は存在秘匿で 404、状態競合 409、権限 403、基盤障害は 503
+            Map.entry("EFFORT_001", HttpStatus.NOT_FOUND),
+            Map.entry("EFFORT_002", HttpStatus.CONFLICT),
+            Map.entry("EFFORT_003", HttpStatus.FORBIDDEN),
+            Map.entry("EFFORT_004", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("EFFORT_005", HttpStatus.SERVICE_UNAVAILABLE),
             Map.entry("DIAGNOSIS_006", HttpStatus.BAD_REQUEST),
             // 本人操作の受付拒否と非ACTIVE拒否は既存認証エラーへ転用しない。
             Map.entry("RECALLSESSION_001", HttpStatus.CONFLICT),
@@ -2668,7 +2674,8 @@ public class GlobalExceptionHandler {
                     new ErrorResponse.ErrorDetail(errorCode.getCode(), message, List.of()));
         } else {
             body = new ErrorResponse(
-                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message, ex.getFieldErrors()));
+                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message,
+                            localizeFieldErrors(ex.getFieldErrors())));
         }
         ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
         if (isPrivateSelfInput(request)) response.header(HttpHeaders.CACHE_CONTROL, "no-store");
@@ -3280,6 +3287,19 @@ public class GlobalExceptionHandler {
         return errorMessageResolver.resolve(errorCode, messageArgs);
     }
 
+    /**
+     * 訳キーを持つフィールドエラー（{@link ErrorResponse.FieldError#ofKey}）の message を利用者の言語へ解決する。
+     * キーを持たないものはそのまま返す。
+     */
+    private List<ErrorResponse.FieldError> localizeFieldErrors(List<ErrorResponse.FieldError> fieldErrors) {
+        java.util.Locale locale = org.springframework.context.i18n.LocaleContextHolder.getLocale();
+        return fieldErrors.stream()
+                .map(fe -> fe.getMessageKey() == null ? fe
+                        : fe.withMessage(errorMessageResolver.resolveKey(
+                                fe.getMessageKey(), fe.getMessage(), locale)))
+                .toList();
+    }
+
     /** 利用者の言語で message を解決した {@link ErrorResponse}（フィールドエラーなし）。 */
     private ErrorResponse localized(ErrorCode errorCode) {
         return localized(errorCode, List.of());
@@ -3357,7 +3377,7 @@ public class GlobalExceptionHandler {
                 || path.matches("/api/v1/teams/[^/]+/loyalty(?:/.*)?")) return true;
         if (path.matches("/api/v1/me/reflections/entries/[^/]+/recall-sessions")) return true;
         for (String prefix : List.of("/api/v1/me/birth-profile", "/api/v1/me/diagnoses", "/api/v1/me/ranch",
-                "/api/v1/me/reflections/recall-sessions")) {
+                "/api/v1/me/reflections/recall-sessions", "/api/v1/effort-records/me")) {
             if (path.equals(prefix) || path.startsWith(prefix + "/")) return true;
         }
         return false;
