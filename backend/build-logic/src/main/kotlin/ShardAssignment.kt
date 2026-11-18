@@ -35,6 +35,10 @@ object ShardAssignment {
                 if (idx < 0) return@mapNotNull null
                 val key = line.substring(0, idx).trim()
                 val value = line.substring(idx + 1).trim().toDoubleOrNull() ?: return@mapNotNull null
+                // 負値・NaN・Infinity は LPT を壊す（偏り・不定動作）ので、黙って通さずクラス名付きで拒否する
+                require(value.isFinite() && value >= 0.0) {
+                    "shard-weights の値が不正です（0 以上の有限値のみ許可）: $key=$value (${weightsFile.name})"
+                }
                 key to value
             }
             .toMap()
@@ -129,8 +133,13 @@ object ShardAssignment {
      * 未掲載クラスの既定重み = 重み表の値の中央値（件数が偶数なら中央2値の平均）。
      * 重み表が空・全重み 0 のときは [FALLBACK_DEFAULT_WEIGHT]。
      */
-    fun defaultWeight(weights: Map<String, Double>): Double =
-        TODO("CMP-261111-0508 出陣で実装")
+    fun defaultWeight(weights: Map<String, Double>): Double {
+        val sorted = weights.values.sorted()
+        if (sorted.isEmpty()) return FALLBACK_DEFAULT_WEIGHT
+        val n = sorted.size
+        val median = if (n % 2 == 1) sorted[n / 2] else (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+        return if (median > 0.0) median else FALLBACK_DEFAULT_WEIGHT
+    }
 
     /**
      * 実行対象のトップレベルクラス集合を LPT で shardTotal 個へ割り付ける。
@@ -143,7 +152,26 @@ object ShardAssignment {
         executableTopLevelClasses: Collection<String>,
         weights: Map<String, Double>,
         shardTotal: Int
-    ): Map<String, Int> = TODO("CMP-261111-0508 出陣で実装")
+    ): Map<String, Int> {
+        val classes = executableTopLevelClasses.toSet()
+        if (classes.isEmpty()) return emptyMap()
+        val fallback = defaultWeight(weights)
+        val shardTotals = DoubleArray(shardTotal)
+        val assignment = LinkedHashMap<String, Int>()
+        // 重い順、同重みは FQCN 昇順（列挙順に依存させない）
+        classes
+            .map { it to (weights[it] ?: fallback) }
+            .sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first })
+            .forEach { (fqcn, seconds) ->
+                var minIdx = 0
+                for (i in 1 until shardTotal) {
+                    if (shardTotals[i] < shardTotals[minIdx]) minIdx = i
+                }
+                assignment[fqcn] = minIdx
+                shardTotals[minIdx] += seconds
+            }
+        return assignment
+    }
 
     /**
      * [assignShards] の結果を使う exclude 述語（Test.exclude と verifyShardCoverage が共用する）。
@@ -154,7 +182,14 @@ object ShardAssignment {
         isDirectory: Boolean,
         shardIndex: Int,
         assignment: Map<String, Int>
-    ): Boolean = TODO("CMP-261111-0508 出陣で実装")
+    ): Boolean {
+        if (isDirectory) return false
+        if (!path.endsWith(".class")) return false
+        val fqcnTopLevel = fqcnTopLevelFromClassPath(path)
+        // 実行対象でない（抽象・ヘルパー）クラスは割り当て外。どの shard でも除外しない（実行されても無害）
+        val assigned = assignment[fqcnTopLevel] ?: return false
+        return assigned != shardIndex
+    }
 
     /**
      * コンパイル済みテストクラスファイル群から「実行対象のトップレベルクラス集合」を作る。
@@ -162,8 +197,13 @@ object ShardAssignment {
      * テストメソッドを持つもの。ネストクラスは個別に数えない。抽象クラス・ヘルパー
      * （テストメソッドなし）は含めない。
      */
-    fun executableTopLevelClasses(classFiles: Collection<CompiledTestClassFile>): Set<String> =
-        TODO("CMP-261111-0508 出陣で実装")
+    fun executableTopLevelClasses(classFiles: Collection<CompiledTestClassFile>): Set<String> {
+        val byTop = classFiles.groupBy { fqcnTopLevelFromClassPath(it.path) }
+        return byTop.filter { (top, files) ->
+            val topFile = files.firstOrNull { fqcnTopLevelFromClassPath(it.path) == top && !it.path.contains('$') }
+            topFile != null && !topFile.isAbstract && files.any { it.hasTestMethods }
+        }.keys.toSortedSet()
+    }
 }
 
 /**
