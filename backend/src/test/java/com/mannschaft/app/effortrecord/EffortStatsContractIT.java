@@ -429,9 +429,10 @@ class EffortStatsContractIT extends EffortRecordItSupport {
                 + "," + field("done", "CHECKBOX", "CHECKBOX", "NONE", "NONE", 0, null, null)
                 + "]}";
         tx(() -> {
-            em.createNativeQuery("INSERT INTO effort_definitions (id, source_type, source_key, organization_id, team_id, "
+            // TEAM 定義は組織に依存しない（2026-11-18 マスター裁定。データ設計 §2: organization_id 列を持たない）。
+            em.createNativeQuery("INSERT INTO effort_definitions (id, source_type, source_key, team_id, "
                             + "team_template_id, current_revision, retired_at, version, created_at, updated_at, deleted_at) "
-                            + "VALUES (UNHEX(REPLACE(:id,'-','')), 'TEAM', :key, 990001, 990001, 990001, 1, NULL, 0, "
+                            + "VALUES (UNHEX(REPLACE(:id,'-','')), 'TEAM', :key, 990001, 990001, 1, NULL, 0, "
                             + "UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL)")
                     .setParameter("id", id.toString()).setParameter("key", "team:990001:template:" + id).executeUpdate();
             em.createNativeQuery("INSERT INTO effort_definition_revisions (id, definition_id, revision, definition_json, "

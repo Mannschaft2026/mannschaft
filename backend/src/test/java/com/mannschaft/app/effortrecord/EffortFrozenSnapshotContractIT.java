@@ -45,7 +45,7 @@ class EffortFrozenSnapshotContractIT extends EffortRecordItSupport {
 
     /** 指標設定済み（時間=DURATION・科目=SUBJECT・メモ=MENU）の template で、本人が 数学 30 分の原本を1件作る。 */
     private World world(String name) throws Exception {
-        Long team = teamIn(organization(name + "組織"), name);
+        Long team = team(name);
         Long admin = user(name + "管理者");
         teamAdmin(admin, team);
         Long owner = user(name + "本人");

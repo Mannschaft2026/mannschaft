@@ -89,7 +89,7 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
     protected final List<Long> ownedUsers = new ArrayList<>();
     /** 本土台で作成したチーム（後始末対象）。 */
     protected final List<Long> ownedTeams = new ArrayList<>();
-    /** 本土台で作成した組織（後始末対象。PR-2 のチーム定義 fixture 用）。 */
+    /** 本土台で作成した組織（後始末対象。PR-2 の親組織・組織テンプレート fixture 用）。 */
     protected final List<Long> ownedOrganizations = new ArrayList<>();
     /** SYSTEM_ADMIN ロールでトークンを発行するユーザー。 */
     protected final List<Long> systemAdmins = new ArrayList<>();
@@ -201,9 +201,36 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
                 .setParameter("u", userId).setParameter("t", teamId).executeUpdate());
     }
 
-    // ─────────────────────── PR-2: 組織・チームテンプレート fixture ───────────────────────
+    // ─────────────────────── PR-2: チーム（親組織の形）・チームテンプレート fixture ───────────────────────
 
-    /** 組織を作る（TEAM 定義は organization 側にルーティングされるため、チームは組織配下に置く）。 */
+    /**
+     * チームの親組織の形。マスター裁定（2026-11-18）: この機能はチーム内共有が目的で、チーム側は組織に依存させない。
+     * 親組織 0 件のチームも複数の親組織に属するチームも、まったく同じ結果にならなければならない。
+     * 主要成功系はこの2形でパラメタ化して通す。
+     */
+    protected enum TeamShape {
+        /** 親組織なしの独立チーム（基本形）。 */
+        STANDALONE(0),
+        /** 2つの組織に ACTIVE で加盟しているチーム。 */
+        TWO_PARENT_ORGS(2);
+
+        final int parents;
+
+        TeamShape(int parents) {
+            this.parents = parents;
+        }
+    }
+
+    /** 指定の形のチームを作る（TWO_PARENT_ORGS は新しい組織を2つ作って ACTIVE 加盟させる）。 */
+    protected Long team(TeamShape shape, String name) {
+        Long teamId = team(name);
+        for (int i = 0; i < shape.parents; i++) {
+            attachToOrganization(teamId, organization(name + "親組織" + (i + 1)));
+        }
+        return teamId;
+    }
+
+    /** 組織を作る（組織テンプレート・親組織の fixture 用。チーム側の判定には使わせない）。 */
     protected Long organization(String name) {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         Long id = tx(() -> organizations.saveAndFlush(OrganizationEntity.builder().name(name)
@@ -215,13 +242,40 @@ abstract class EffortRecordItSupport extends AbstractMySqlIntegrationTest {
         return id;
     }
 
-    /** 組織配下（ACTIVE な team_org_memberships）のチームを作る。 */
-    protected Long teamIn(Long organizationId, String name) {
-        Long teamId = team(name);
+    /** チームを組織へ ACTIVE で加盟させる（team_org_memberships）。 */
+    protected void attachToOrganization(Long teamId, Long organizationId) {
         tx(() -> em.createNativeQuery("INSERT INTO team_org_memberships (team_id, organization_id, status, invited_at, created_at) "
                         + "VALUES (:t, :o, 'ACTIVE', NOW(), NOW())")
                 .setParameter("t", teamId).setParameter("o", organizationId).executeUpdate());
-        return teamId;
+    }
+
+    /** チームの組織加盟をすべて外す（親組織 0 件へ戻す）。 */
+    protected void detachFromAllOrganizations(Long teamId) {
+        tx(() -> em.createNativeQuery("DELETE FROM team_org_memberships WHERE team_id = :t")
+                .setParameter("t", teamId).executeUpdate());
+    }
+
+    /** チームの ACTIVE な親組織 ID（加盟 ID 昇順）。 */
+    protected List<Long> parentOrganizations(Long teamId) {
+        return tx(() -> em.createNativeQuery("SELECT organization_id FROM team_org_memberships "
+                        + "WHERE team_id = :t AND status = 'ACTIVE' ORDER BY id")
+                .setParameter("t", teamId).getResultList().stream().map(o -> ((Number) o).longValue()).toList());
+    }
+
+    /**
+     * 保存された TEAM 定義行に組織 ID が入っていないこと（データ設計 §2・2026-11-18 裁定）。
+     * 設計どおり列自体が削除済みなら列の不在で満たし、列が残っている間は NULL であることを求める。
+     * 列の有無そのものは migration 試験（FlywayEffortRecordsTablesMigrationTest）が固定する。
+     */
+    protected void assertTeamDefinitionHasNoOrganization(String definitionUuid) {
+        long column = count("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() "
+                + "AND table_name = 'effort_definitions' AND column_name = 'organization_id'");
+        assertThat(count("SELECT COUNT(*) FROM effort_definitions WHERE id = UNHEX(REPLACE(?1, '-', '')) AND source_type = 'TEAM'",
+                definitionUuid)).as("TEAM 定義行がある").isEqualTo(1);
+        if (column > 0) {
+            assertThat(count("SELECT COUNT(*) FROM effort_definitions WHERE id = UNHEX(REPLACE(?1, '-', '')) "
+                    + "AND organization_id IS NULL", definitionUuid)).as("TEAM 定義に組織 ID を保存しない").isEqualTo(1);
+        }
     }
 
     /** activity テンプレートの field 指定（activity 側の field_key / 表示名 / 型 / 必須 / 選択肢 JSON / 並び順）。 */

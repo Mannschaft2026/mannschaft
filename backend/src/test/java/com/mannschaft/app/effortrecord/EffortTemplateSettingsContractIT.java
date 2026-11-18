@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -31,32 +32,44 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <p>{@code GET/PUT /api/v1/teams/{teamId}/effort-records/template-settings/{templateId}} を実 Security・実 MySQL で叩く。
  * 認可: 既存テンプレート管理権限（ADMIN・DEPUTY_ADMIN）＋template の scope 一致。MEMBER・非所属・SYSTEM_ADMIN(非所属) は 403、
- * path の team に属さない（他テナントを含む）template は不在と同じ 404 EFFORT_001。非所属者には template の存否で応答を変えない。
+ * path の team に属さない（別チーム・組織スコープ・不在）template は 404 EFFORT_001。非所属者には template の存否で応答を変えない。
+ * 親組織の有無・一致は判定に使わない（2026-11-18 マスター裁定）。主要成功系と別チーム拒否は親組織0件・2件の両方で通す。
  * 拒否・400 の後は version・revision が動かないこと（途中失敗で部分保存しない）を再読込で確かめる。</p>
  */
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("F06.4.1 チームテンプレートの指標設定（AC-21・semantic 境界）")
 class EffortTemplateSettingsContractIT extends EffortRecordItSupport {
 
-    private record World(Long organization, Long team, Long admin, Long member, Long template) {
+    private record World(Long team, Long admin, Long member, Long template) {
     }
 
     private World world(String name, List<FieldSpec> fields) {
-        Long org = organization(name + "組織");
-        Long team = teamIn(org, name);
+        return world(name, fields, TeamShape.STANDALONE);
+    }
+
+    private World world(String name, List<FieldSpec> fields, TeamShape shape) {
+        Long team = team(shape, name);
         Long admin = user(name + "管理者");
         teamAdmin(admin, team);
         Long member = user(name + "部員");
         member(member, team);
-        return new World(org, team, admin, member, teamTemplate(admin, team, name + "練習", fields));
+        return new World(team, admin, member, teamTemplate(admin, team, name + "練習", fields));
     }
 
     private World standard(String name) {
-        return world(name, List.of(
+        return standard(name, TeamShape.STANDALONE);
+    }
+
+    private World standard(String name, TeamShape shape) {
+        return world(name, standardFields(), shape);
+    }
+
+    private static List<FieldSpec> standardFields() {
+        return List.of(
                 FieldSpec.select("subject", "科目", "[\"数学\",\"英語\"]", 0),
                 FieldSpec.number("minutes", "時間", 1),
                 FieldSpec.text("memo", "メモ", 2),
-                FieldSpec.number("distance", "距離", 3)));
+                FieldSpec.number("distance", "距離", 3));
     }
 
     private static String url(Long team, Long template) {
@@ -111,10 +124,11 @@ class EffortTemplateSettingsContractIT extends EffortRecordItSupport {
 
     // ═══════════════════════════════ 正常系 ═══════════════════════════════
 
-    @Test
-    @DisplayName("AC-21: ADMIN は GET/PUT 200。PUT の設定は再読込・snapshot API へ反映され、min/max/scale はサーバが決める")
-    void AC21_ADMINはGETとPUTで200_再読込で反映() throws Exception {
-        World w = standard("管理");
+    @ParameterizedTest(name = "AC-21: 親組織={0}")
+    @EnumSource(TeamShape.class)
+    @DisplayName("AC-21: ADMIN は GET/PUT 200。PUT の設定は再読込・snapshot API へ反映され、min/max/scale はサーバが決める（親組織0件・2件とも）")
+    void AC21_ADMINはGETとPUTで200_再読込で反映(TeamShape shape) throws Exception {
+        World w = standard("管理", shape);
         JsonNode current = settings(w.admin(), w.team(), w.template());
         assertThat(current.path("version").isIntegralNumber()).isTrue();
         assertThat(current.at("/definition/source").asText()).isEqualTo("TEAM");
@@ -173,7 +187,7 @@ class EffortTemplateSettingsContractIT extends EffortRecordItSupport {
         JsonNode before = settings(w.admin(), w.team(), w.template());
         Map<String, Object> valid = validBody(before);
         Long outsider = user("部外者");
-        member(outsider, teamIn(organization("部外組織"), "部外チーム"));
+        member(outsider, team("部外チーム"));
         Long sysAdmin = systemAdmin("運営");
 
         expectError(getSettings(w.member(), w.team(), w.template()), 403, "COMMON_002");
@@ -189,24 +203,29 @@ class EffortTemplateSettingsContractIT extends EffortRecordItSupport {
         assertUnchanged(w, before);
     }
 
-    @Test
-    @DisplayName("AC-21: path の team に属さない template（他テナント・組織スコープ・不在）は 404 EFFORT_001 で区別しない")
-    void AC21_他テナントのtemplateは404() throws Exception {
-        World a = standard("甲");
+    @ParameterizedTest(name = "AC-21: 親組織={0}")
+    @EnumSource(TeamShape.class)
+    @DisplayName("AC-21: path の team に属さない template（別チーム＝同じ親組織でも・組織スコープ・不在）は 404 EFFORT_001 で区別しない")
+    void AC21_別チームのtemplateは404(TeamShape shape) throws Exception {
+        World a = standard("甲", shape);
+        // 乙は甲と同じ親組織に加盟させる（親組織0件なら独立チーム同士）。同じ組織に属することは何の許可にもならない。
         World b = standard("乙");
+        parentOrganizations(a.team()).forEach(org -> attachToOrganization(b.team(), org));
         JsonNode bBefore = settings(b.admin(), b.team(), b.template());
 
         expectError(getSettings(a.admin(), a.team(), b.template()), 404, "EFFORT_001");
         expectError(putSettings(a.admin(), a.team(), b.template(), validBody(bBefore)), 404, "EFFORT_001");
         expectError(getSettings(a.admin(), a.team(), Long.MAX_VALUE - 7), 404, "EFFORT_001");
 
+        // 組織スコープのテンプレート（甲の親組織のもの、親組織が無ければ無関係な組織のもの）も TEAM template として受けない。
+        Long templateOrg = parentOrganizations(a.team()).isEmpty() ? organization("無関係組織") : parentOrganizations(a.team()).get(0);
         Long orgAdmin = user("組織管理者");
         tx(() -> {
-            MembershipTestHelper.insertMembership(em, orgAdmin, ScopeType.ORGANIZATION, a.organization(), RoleKind.MEMBER);
-            MembershipTestHelper.insertUserRole(em, orgAdmin, "ADMIN", null, a.organization());
+            MembershipTestHelper.insertMembership(em, orgAdmin, ScopeType.ORGANIZATION, templateOrg, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, orgAdmin, "ADMIN", null, templateOrg);
             return null;
         });
-        Long orgTemplate = activityTemplates.createTemplate(orgAdmin, ActivityScopeType.ORGANIZATION, a.organization(),
+        Long orgTemplate = activityTemplates.createTemplate(orgAdmin, ActivityScopeType.ORGANIZATION, templateOrg,
                 new CreateTemplateRequest("組織テンプレート", null, null, null, null, null,
                         List.of(new CreateTemplateRequest.TemplateFieldInput("n", "数", "NUMBER", false, null, null,
                                 null, false, 0)))).getId();

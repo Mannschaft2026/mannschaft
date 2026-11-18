@@ -20,11 +20,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * F06.4.1 PR-2 series key の発番（試練 / red 先行。CMP-261115-2145）。AC-22（E09）。
  *
  * <p>series identity は definitionUuid・stable field key・canonical unit・semantic の4要素（親設計 §3）。
- * 台帳裁定④: field_key は effort 側で activity の field ID＋型＋単位から発番する。したがって
+ * 台帳裁定④: field_key は effort 側で activity の field ID＋型＋単位から発番する。殿裁定（2026-11-18）で semantic も発番要素に加える。したがって
  * <ul>
  *   <li>改名（label 変更）は同じ key を保つ</li>
  *   <li>unit 変更、activity での field 削除→同じ activity key での再追加（別型・同型とも field ID が変わる）は新しい key</li>
- *   <li>semantic 変更は旧 series と集計で混ぜない（key の同一性は裁定④に従い本試練では固定しない）</li>
+ *   <li>semantic 変更も新しい key（旧 key と一致しないことまで固定する）で、旧 series と集計で混ぜない</li>
  *   <li>全 revision を通じて、同じ key が別の型・単位を指さない（key の使い回し禁止）</li>
  * </ul>
  * 集計の非混合は個人集計 API（実 Service）で確かめる。</p>
@@ -39,7 +39,7 @@ class EffortSeriesKeyContractIT extends EffortRecordItSupport {
     }
 
     private World world(String name, List<FieldSpec> fields) {
-        Long team = teamIn(organization(name + "組織"), name);
+        Long team = team(name);
         Long admin = user(name + "管理者");
         teamAdmin(admin, team);
         Long member = user(name + "部員");
@@ -74,13 +74,14 @@ class EffortSeriesKeyContractIT extends EffortRecordItSupport {
                 .path("data");
     }
 
-    /** 全 revision を再読込し、同じ fieldKey が別の型・単位を指していないこと（key の使い回し禁止）。 */
+    /** 全 revision を再読込し、同じ fieldKey が別の型・単位・semantic を指していないこと（key の使い回し禁止）。 */
     private void assertKeysNeverReused(String definitionUuid) throws Exception {
         Map<String, String> identity = new HashMap<>();
         for (JsonNode revision : storedRevisions(definitionUuid)) {
             for (JsonNode field : revision.path("fields")) {
                 String key = field.path("fieldKey").asText();
-                String typeAndUnit = field.path("type").asText() + "/" + field.path("unit").asText();
+                String typeAndUnit = field.path("type").asText() + "/" + field.path("unit").asText()
+                        + "/" + field.path("semantic").asText();
                 String previous = identity.putIfAbsent(key, typeAndUnit);
                 assertThat(previous == null || previous.equals(typeAndUnit))
                         .as("key=" + key + " が " + previous + " と " + typeAndUnit + " の両方を指している").isTrue();
@@ -156,18 +157,22 @@ class EffortSeriesKeyContractIT extends EffortRecordItSupport {
     }
 
     @Test
-    @DisplayName("AC-22: semantic 変更（NUMBER→DURATION）後の集計は旧 semantic の記録を混ぜない")
-    void AC22_semantic変更は旧seriesと混ぜない() throws Exception {
+    @DisplayName("AC-22: semantic 変更（NUMBER→DURATION）は新しい key を発番し、集計は旧 semantic の記録を混ぜない")
+    void AC22_semantic変更は新keyで旧seriesと混ぜない() throws Exception {
         World w = world("意味", List.of(FieldSpec.number("min", "時間", 0)));
-        configure(w, "時間", "NUMBER", "MINUTE", "SUM");
+        String numberKey = keyOf(configure(w, "時間", "NUMBER", "MINUTE", "SUM"), "時間");
         JsonNode numberSnap = snapshot(w.member(), w.team(), w.template());
         createTeamRecord(w.member(), numberSnap, DAY, Map.of("時間", "10"));
 
         JsonNode duration = configure(w, "時間", "DURATION", "MINUTE", "SUM");
+        String durationKey = keyOf(duration, "時間");
+        assertThat(durationKey).as("semantic 変更（unit・型は同じ）でも新 key").isNotEqualTo(numberKey);
+        assertThat(keyOf(numberSnap.path("definition"), "時間")).as("旧 revision の key は旧のまま").isEqualTo(numberKey);
         JsonNode durationSnap = snapshot(w.member(), w.team(), w.template());
         createTeamRecord(w.member(), durationSnap, DAY, Map.of("時間", "30"));
 
-        JsonNode result = barStats(w.member(), duration.path("definitionUuid").asText(), keyOf(duration, "時間"));
+        assertThat(keyOf(durationSnap.path("definition"), "時間")).isEqualTo(durationKey);
+        JsonNode result = barStats(w.member(), duration.path("definitionUuid").asText(), durationKey);
         assertThat(result.path("semantic").asText()).isEqualTo("DURATION");
         assertThat(result.path("total").asText()).as("NUMBER 時代の 10 を DURATION の series に混ぜない").isEqualTo("30.00");
         assertKeysNeverReused(duration.path("definitionUuid").asText());

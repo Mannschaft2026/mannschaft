@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -51,19 +52,22 @@ class EffortDefinitionSnapshotContractIT extends EffortRecordItSupport {
                 FieldSpec.text("memo", "メモ", 2));
     }
 
-    /** 組織配下のチーム・ADMIN・MEMBER・テンプレートの一式。 */
-    private record World(Long organization, Long team, Long admin, Long member, Long template) {
+    /** チーム・ADMIN・MEMBER・テンプレートの一式（チームの親組織の形は shape。基本は親組織なし）。 */
+    private record World(Long team, Long admin, Long member, Long template) {
     }
 
     private World world(String name) {
-        Long org = organization(name + "組織");
-        Long team = teamIn(org, name);
+        return world(name, TeamShape.STANDALONE);
+    }
+
+    private World world(String name, TeamShape shape) {
+        Long team = team(shape, name);
         Long admin = user(name + "管理者");
         teamAdmin(admin, team);
         Long member = user(name + "部員");
         member(member, team);
         Long template = teamTemplate(admin, team, name + "練習", baseFields());
-        return new World(org, team, admin, member, template);
+        return new World(team, admin, member, template);
     }
 
     private long teamDefinitionRows(Long teamId) {
@@ -72,10 +76,11 @@ class EffortDefinitionSnapshotContractIT extends EffortRecordItSupport {
 
     // ═══════════════════════════════ 正常系 ═══════════════════════════════
 
-    @Test
-    @DisplayName("AC-19: 所属チームの TEAM template は 200・10分有効 token・定義 snapshot を返し、revision 1 をサーバに保存する")
-    void AC19_所属チームのTEAMテンプレートは200と10分有効token() throws Exception {
-        World w = world("登録");
+    @ParameterizedTest(name = "AC-19: 親組織={0}")
+    @EnumSource(TeamShape.class)
+    @DisplayName("AC-19: 所属チームの TEAM template は 200・10分有効 token・定義 snapshot を返し、revision 1 をサーバに保存する（親組織0件・2件とも）")
+    void AC19_所属チームのTEAMテンプレートは200と10分有効token(TeamShape shape) throws Exception {
+        World w = world("登録", shape);
         Instant before = Instant.now();
 
         JsonNode data = snapshot(w.member(), w.team(), w.template());
@@ -118,13 +123,14 @@ class EffortDefinitionSnapshotContractIT extends EffortRecordItSupport {
         assertThat(expiresAt).isBetween(before.plus(Duration.ofMinutes(10)).minusSeconds(5),
                 Instant.now().plus(Duration.ofMinutes(10)).plusSeconds(5));
 
-        // 再読込: TEAM 定義行（organization 側）と revision 1 の定義 JSON が応答と一致する。
+        // 再読込: TEAM 定義行（team 側。組織 ID は持たない）と revision 1 の定義 JSON が応答と一致する。
         assertThat(teamDefinitionRows(w.team())).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM effort_definitions WHERE id = UNHEX(REPLACE(?1, '-', '')) "
-                        + "AND source_type = 'TEAM' AND team_id = ?2 AND team_template_id = ?3 AND organization_id = ?4 "
+                        + "AND source_type = 'TEAM' AND source_key = ?4 AND team_id = ?2 AND team_template_id = ?3 "
                         + "AND current_revision = 1 AND retired_at IS NULL",
-                definitionUuid, w.team(), w.template(), w.organization()))
-                .as("source_key / organization / team / template を束縛した定義行").isEqualTo(1);
+                definitionUuid, w.team(), w.template(), "team:" + w.team() + ":template:" + w.template()))
+                .as("source_key / team / template を束縛した定義行").isEqualTo(1);
+        assertTeamDefinitionHasNoOrganization(definitionUuid);
         assertThat(revisionCount(definitionUuid)).isEqualTo(1);
         assertThat(storedRevision(definitionUuid, 1)).as("保存 JSON は応答 definition と同一").isEqualTo(definition);
 
@@ -132,10 +138,11 @@ class EffortDefinitionSnapshotContractIT extends EffortRecordItSupport {
         assertThat(count("SELECT COUNT(*) FROM effort_records WHERE owner_user_id = ?1", w.member())).isZero();
     }
 
-    @Test
+    @ParameterizedTest(name = "AC-19: 親組織={0}")
+    @EnumSource(TeamShape.class)
     @DisplayName("AC-19: 同じ定義（同 hash）の再登録では revision を増やさない（別の所属者が呼んでも同じ定義・revision）")
-    void AC19_同一hashならrevision不変() throws Exception {
-        World w = world("同一");
+    void AC19_同一hashならrevision不変(TeamShape shape) throws Exception {
+        World w = world("同一", shape);
         Long another = user("同一部員2");
         member(another, w.team());
 
@@ -195,8 +202,7 @@ class EffortDefinitionSnapshotContractIT extends EffortRecordItSupport {
     void AC19_非所属は403() throws Exception {
         World w = world("非所属");
         Long outsider = user("部外者");
-        Long otherOrg = organization("別組織");
-        member(outsider, teamIn(otherOrg, "部外者のチーム"));
+        member(outsider, team("部外者のチーム"));
         Long sysAdmin = systemAdmin("運営");
         Long leaver = user("脱退者");
         member(leaver, w.team());
@@ -213,25 +219,33 @@ class EffortDefinitionSnapshotContractIT extends EffortRecordItSupport {
         snapshot(w.member(), w.team(), w.template());
     }
 
-    @Test
-    @DisplayName("AC-19: 別チーム（別組織）・組織スコープ・不在の templateId は 404 EFFORT_001 で拒否し、teamId 側に定義を作らない")
-    void AC19_別チームのtemplateIdは拒否() throws Exception {
-        World a = world("甲");
-        World b = world("乙");
+    @ParameterizedTest(name = "AC-19: 親組織={0}")
+    @EnumSource(TeamShape.class)
+    @DisplayName("AC-19: 別チーム（同じ親組織に属していても）・組織スコープ・不在の templateId は 404 EFFORT_001 で拒否し、teamId 側に定義を作らない")
+    void AC19_別チームのtemplateIdは拒否(TeamShape shape) throws Exception {
+        World a = world("甲", shape);
+        // 乙は甲と同じ親組織に加盟させる（親組織0件なら独立チーム同士）。同じ組織に属することは何の許可にもならない。
+        Long bTeam = team("乙");
+        parentOrganizations(a.team()).forEach(org -> attachToOrganization(bTeam, org));
+        Long bAdmin = user("乙管理者");
+        teamAdmin(bAdmin, bTeam);
+        World b = new World(bTeam, bAdmin, null, teamTemplate(bAdmin, bTeam, "乙練習", baseFields()));
         // 甲・乙の両方に所属する者が、甲の teamId で乙の template を差し替える。
         member(a.member(), b.team());
 
         expectError(postSnapshot(a.member(), a.team(), b.template()), 404, "EFFORT_001");
         expectError(postSnapshot(a.member(), a.team(), Long.MAX_VALUE - 7), 404, "EFFORT_001");
 
-        // 組織スコープの activity テンプレート（scopeType=ORGANIZATION）も TEAM template として受けない。
+        // 組織スコープの activity テンプレート（scopeType=ORGANIZATION）も TEAM template として受けない
+        // （甲の親組織のテンプレートでも、親組織が無ければ無関係な組織のテンプレートでも同じ）。
+        Long templateOrg = parentOrganizations(a.team()).isEmpty() ? organization("無関係組織") : parentOrganizations(a.team()).get(0);
         Long orgAdmin = user("組織管理者");
         tx(() -> {
-            MembershipTestHelper.insertMembership(em, orgAdmin, ScopeType.ORGANIZATION, a.organization(), RoleKind.MEMBER);
-            MembershipTestHelper.insertUserRole(em, orgAdmin, "ADMIN", null, a.organization());
+            MembershipTestHelper.insertMembership(em, orgAdmin, ScopeType.ORGANIZATION, templateOrg, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, orgAdmin, "ADMIN", null, templateOrg);
             return null;
         });
-        Long orgTemplate = activityTemplates.createTemplate(orgAdmin, ActivityScopeType.ORGANIZATION, a.organization(),
+        Long orgTemplate = activityTemplates.createTemplate(orgAdmin, ActivityScopeType.ORGANIZATION, templateOrg,
                 new CreateTemplateRequest("組織テンプレート", null, null, null, null, null,
                         List.of(new CreateTemplateRequest.TemplateFieldInput("n", "数", "NUMBER", false, null, null,
                                 null, false, 0)))).getId();

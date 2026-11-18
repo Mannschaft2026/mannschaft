@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -16,8 +18,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 /**
  * F06.4.1 PR-2 TEAM 定義での原本作成（試練 / red 先行。CMP-261115-2145）。AC-20（E02）。
  *
- * <p>TEAM 原本の create は definition-snapshots の署名 token が必須。改竄・他人・別チーム・版不一致の token は 400
- * （fieldErrors に definitionToken）。snapshot 本体はクライアントから受け取らず、サーバ保存の revision を複写する。
+ * <p>TEAM 原本の create は definition-snapshots の署名 token が必須。token は teamId / definitionUuid / revision / hash / 本人ID を
+ * 束縛し、組織 ID は束縛しない（2026-11-18 マスター裁定: チーム側は組織に依存しない）。欠落・改竄・他人・別チーム（同じ親組織でも）・
+ * 版不一致の token は 400 COMMON_001（fieldErrors に definitionToken）。snapshot 本体はクライアントから受け取らず、サーバ保存の revision を複写する。
  * 拒否系は必ず同じ fixture での成功対照（201）と組にし、「TEAM 定義を一律拒否する」PR-1 の暫定挙動で偽の緑にならないようにする。
  * token の 10 分失効は時計を差し替える {@code EffortRecordTemporalIT} で検査する。</p>
  */
@@ -54,11 +57,11 @@ class EffortTeamRecordCreateContractIT extends EffortRecordItSupport {
         return error;
     }
 
-    @Test
-    @DisplayName("AC-20: 正 token で TEAM 原本を作成でき、snapshot はサーバ保存の revision と同一（再読込・GET でも同じ）")
-    void AC20_正tokenでTEAM原本を作成しsnapshotはサーバ保存() throws Exception {
-        Long org = organization("作成組織");
-        Long team = teamIn(org, "作成チーム");
+    @ParameterizedTest(name = "AC-20: 親組織={0}")
+    @EnumSource(TeamShape.class)
+    @DisplayName("AC-20: 正 token で TEAM 原本を作成でき、snapshot はサーバ保存の revision と同一（再読込・GET でも同じ。親組織0件・2件とも）")
+    void AC20_正tokenでTEAM原本を作成しsnapshotはサーバ保存(TeamShape shape) throws Exception {
+        Long team = team(shape, "作成チーム");
         Long template = templateFor(team);
         Long owner = user("本人");
         member(owner, team);
@@ -90,8 +93,7 @@ class EffortTeamRecordCreateContractIT extends EffortRecordItSupport {
     @Test
     @DisplayName("AC-20: クライアントが snapshot 本体・ownerUserId を送っても受け取らず 400（サーバ保存のみ）")
     void AC20_snapshot本体はクライアントから受け取らない() throws Exception {
-        Long org = organization("本体組織");
-        Long team = teamIn(org, "本体チーム");
+        Long team = team("本体チーム");
         Long template = templateFor(team);
         Long owner = user("本人");
         member(owner, team);
@@ -111,12 +113,14 @@ class EffortTeamRecordCreateContractIT extends EffortRecordItSupport {
         assertThat(records(owner)).isEqualTo(1);
     }
 
-    @Test
-    @DisplayName("AC-20: TEAM 定義は token 必須。欠落・改竄・他人の token・別チームの token・版不一致は 400 で原本を作らない")
-    void AC20_token欠落改竄他人別チームは拒否() throws Exception {
-        Long org = organization("拒否組織");
-        Long team1 = teamIn(org, "拒否チーム1");
-        Long team2 = teamIn(org, "拒否チーム2");
+    @ParameterizedTest(name = "AC-20: 親組織={0}")
+    @EnumSource(TeamShape.class)
+    @DisplayName("AC-20: TEAM 定義は token 必須。欠落・改竄・他人・別チーム（同じ親組織でも）・版不一致は 400 definitionToken で原本を作らない")
+    void AC20_token欠落改竄他人別チームは拒否(TeamShape shape) throws Exception {
+        Long team1 = team(shape, "拒否チーム1");
+        // team2 は team1 と同じ親組織に加盟させる（親組織0件なら独立チーム同士）。同じ組織でも token は流用できない。
+        Long team2 = team("拒否チーム2");
+        parentOrganizations(team1).forEach(org -> attachToOrganization(team2, org));
         Long template1 = templateFor(team1);
         Long template2 = templateFor(team2);
         Long owner = user("本人");
@@ -156,10 +160,10 @@ class EffortTeamRecordCreateContractIT extends EffortRecordItSupport {
         crossTeam.put("definitionToken", own2.path("definitionToken").asText());
         rejectedToken(owner, crossTeam);
 
-        // 版不一致（token の revision と definitionRevision が違う）
+        // 版不一致（token の revision と definitionRevision が違う）は token の束縛不一致（API 契約 §3）
         Map<String, Object> wrongRevision = teamCreateBody(own1, DAY, values, null);
         wrongRevision.put("definitionRevision", own1.at("/definition/revision").asInt() + 1);
-        expectError(postCreate(owner, wrongRevision, UUID.randomUUID().toString()), 400, "COMMON_001");
+        rejectedToken(owner, wrongRevision);
 
         assertThat(records(owner)).as("拒否された要求は原本を作らない").isZero();
 
@@ -172,8 +176,7 @@ class EffortTeamRecordCreateContractIT extends EffortRecordItSupport {
     @Test
     @DisplayName("AC-20: token 発行後に脱退した本人の create は 403（現在所属を再検証）。所属を続ける同僚は作成できる")
     void AC20_token発行後に脱退した本人は403() throws Exception {
-        Long org = organization("脱退組織");
-        Long team = teamIn(org, "脱退チーム");
+        Long team = team("脱退チーム");
         Long template = templateFor(team);
         Long leaver = user("脱退者");
         member(leaver, team);

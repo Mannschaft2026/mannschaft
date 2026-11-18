@@ -1,6 +1,7 @@
 package com.mannschaft.app.effortrecord;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.GlobalExceptionHandler;
 import com.mannschaft.app.effortrecord.dto.CreateDefinitionSnapshotRequest;
 import com.mannschaft.app.effortrecord.dto.CreateEffortRecordRequest;
@@ -146,10 +147,10 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
     }
 
     @Test
-    @DisplayName("AC-20: definitionToken は utcClock 基準で発行から10分有効。10分以内は TEAM 原本を作成でき、10分超は400")
+    @DisplayName("AC-20: definitionToken は utcClock 基準で発行から10分有効。10分以内は TEAM 原本を作成でき、10分超は400 COMMON_001（fieldErrors=definitionToken）")
     void AC20_definitionTokenは10分で失効する() {
         time(START);
-        Long team = teamIn(organization("token期限組織"), "token期限");
+        Long team = team("token期限");
         Long admin = user("token期限管理者");
         teamAdmin(admin, team);
         Long owner = user("token期限本人");
@@ -173,6 +174,8 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
                 ? business.getHttpStatusOverride() : GlobalExceptionHandler.resolveStatus(business.getErrorCode());
         assertThat(status).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(business.getErrorCode().getCode()).isEqualTo("COMMON_001");
+        assertThat(business.getFieldErrors()).extracting(ErrorResponse.FieldError::getField)
+                .as("期限切れは token 不正と同じく definitionToken を指す").contains("definitionToken");
         assertThat(rows(owner)).as("失効 token では原本を作らない").isEqualTo(1);
     }
 
