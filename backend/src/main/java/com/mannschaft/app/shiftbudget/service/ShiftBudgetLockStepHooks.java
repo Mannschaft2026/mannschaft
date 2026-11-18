@@ -47,4 +47,9 @@ public class ShiftBudgetLockStepHooks {
     public void afterDeferralClaimed(UUID deferralId, String owner) {
         // 本番では何もしない
     }
+
+    /** 段取り役。期間行の確定（ensureFixed）を呼ぶ直前（終了判定の後。締め日変更の割り込みを試験が差し込む位置）。 */
+    public void beforeEnsureFixed(Long organizationId, java.time.YearMonth periodKey) {
+        // 本番では何もしない
+    }
 }

@@ -211,6 +211,32 @@ class ClosePeriodCloseIT extends ClosePeriodTestBase {
     }
 
     @Test
+    @DisplayName("試練114b AC37 終了判定の通過後に締め日変更（15日→28日）が割り込み、確定した期間が未終了になった場合は 409 SHIFT_BUDGET_036（締め0）")
+    void 試練114b_終了判定後の締め日変更割り込み() throws Exception {
+        fifteenthClosing();
+        Long allocationId = allocation(d("2026-04-16"), d("2026-05-31"));
+        long[] s = worked(d("2026-05-01"), workerId);
+        today(d("2026-05-15"));
+        java.util.concurrent.atomic.AtomicInteger interrupted = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(inv -> {
+            if (interrupted.getAndIncrement() == 0) {
+                setClosingDay(28, "2026-05");
+            }
+            return null;
+        }).when(hooks).beforeEnsureFixed(org.mockito.ArgumentMatchers.anyLong(), any());
+
+        close("2026-05").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_036"));
+
+        assertThat(interrupted.get()).as("割り込みフックが呼ばれた").isPositive();
+        assertThat(liveStatus(s[1], workerId)).isEqualTo("PLANNED");
+        assertThat(closeEvents(allocationId)).isEmpty();
+        assertThat(journals(allocationId)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM shift_budget_close_periods WHERE organization_id = ?",
+                Long.class, orgId)).as("未終了の期間を確定しない").isZero();
+    }
+
+    @Test
     @DisplayName("試練114a AC37 未来の期間キー（2026-12）も 409 SHIFT_BUDGET_036")
     void 試練114a_未来キー() throws Exception {
         allocation(d("2026-12-01"), d("2026-12-31"));

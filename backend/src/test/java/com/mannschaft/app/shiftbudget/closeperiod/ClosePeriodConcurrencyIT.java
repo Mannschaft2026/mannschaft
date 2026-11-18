@@ -531,6 +531,40 @@ class ClosePeriodConcurrencyIT extends ClosePeriodTestBase {
     }
 
     @Test
+    @DisplayName("試練141c AC67 勤務日の再解決（ロック集合不一致の再試行）で、時給も再解決後の勤務日で取り直す（時給の切替日 5/1 をまたいで 4/10 → 5/10 へ移動 → 1,200 円で記録）")
+    void 試練141c_再解決後の勤務日で時給を取り直す() throws Exception {
+        allocation(d("2026-04-01"), d("2026-04-30"));
+        Long b = allocation(d("2026-05-01"), d("2026-05-31"));
+        long[] s1 = worked(d("2026-04-10"), workerId);
+        Long team2 = newTeamInOrg();
+        Long c = allocation(orgId, team2, fiscalYearId, categoryId, d("2026-04-01"), d("2026-05-31"));
+        tx.executeWithoutResult(t -> em.persist(com.mannschaft.app.shift.entity.ShiftHourlyRateEntity.builder()
+                .userId(workerId).teamId(teamId).hourlyRate(new BigDecimal("1200"))
+                .effectiveFrom(d("2026-05-01")).build()));
+
+        AtomicInteger calls = new AtomicInteger();
+        // 1回目の発見の後で、枠を 5/10 へ移し既存行を別の割当 c へ付け替える（ロック集合不一致を起こす）
+        doAnswer(inv -> {
+            if (calls.getAndIncrement() == 0) {
+                moveSlot(s1[1], d("2026-05-10"));
+                jdbc.update("UPDATE shift_budget_consumptions SET allocation_id = ? WHERE slot_id = ? AND status = 'PLANNED'",
+                        c, s1[1]);
+            }
+            return null;
+        }).when(hooks).afterRecordDiscovered(anyLong(), anyLong(), anyLong());
+
+        publish(s1[0]);
+
+        assertThat(calls.get()).as("不一致の後に再解決してやり直す").isGreaterThanOrEqualTo(2);
+        Map<String, Object> live = jdbc.queryForMap("SELECT allocation_id, hourly_rate_snapshot, amount FROM "
+                + "shift_budget_consumptions WHERE slot_id = ? AND status = 'PLANNED' AND deleted_at IS NULL", s1[1]);
+        assertThat(((Number) live.get("allocation_id")).longValue()).isEqualTo(b);
+        assertThat((BigDecimal) live.get("hourly_rate_snapshot")).as("再解決後の勤務日（5/10）の有効時給")
+                .isEqualByComparingTo("1200");
+        assertThat((BigDecimal) live.get("amount")).isEqualByComparingTo("9600");
+    }
+
+    @Test
     @DisplayName("試練141b AC67 ロック集合不一致が3回続けば失敗イベント（CONSUMPTION_RECORD）1件、生存行は二重にならない")
     void 試練141b_3回失敗で失敗イベント() throws Exception {
         allocation(d("2026-04-01"), d("2026-04-30"));

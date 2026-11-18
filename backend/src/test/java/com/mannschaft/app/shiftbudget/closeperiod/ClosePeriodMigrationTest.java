@@ -429,6 +429,37 @@ class ClosePeriodMigrationTest {
         }
     }
 
+    @Test
+    @Order(4)
+    @DisplayName("試練146e AC75 work_date 列の追加まで適用して停止した DB（NULL は正常な中間状態）から再起動 → 事前検査を通り、残りの migration が適用され最終状態に収束する")
+    void 試練146e_列追加まで適用で停止したDBから再起動() throws Exception {
+        String db = "m2152_halfway";
+        createDb(db);
+        flyway(db, preAlphaTarget(db)).migrate();
+        String addColumnVersion = alphaMigrations(db).stream()
+                .filter(m -> m.getDescription().toLowerCase().replace('_', ' ').contains("add work date"))
+                .map(m -> m.getVersion().getVersion())
+                .findFirst().orElseThrow(() -> new AssertionError("work_date 列を追加する α の migration が無い"));
+        flyway(db, addColumnVersion).migrate();
+        Seed seed;
+        try (Connection c = conn(db)) {
+            assertThat(scalar(c, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                    + "AND TABLE_NAME = 'shift_budget_consumptions' AND COLUMN_NAME = 'work_date'")).isEqualTo(1);
+            seed = new Seed().into(c);
+            assertThat(scalar(c, "SELECT COUNT(*) FROM shift_budget_consumptions WHERE work_date IS NULL"))
+                    .as("backfill 前は NULL").isPositive();
+        }
+
+        startUp(db);
+
+        try (Connection c = conn(db)) {
+            assertThat(scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 0")).isZero();
+            assertThat(appliedAlpha(c, db)).isEqualTo(alphaMigrations(db).size());
+            assertThat(workDate(c, seed.c2)).isEqualTo("2026-05-20");
+            assertThat(scalar(c, "SELECT COUNT(*) FROM shift_budget_consumptions WHERE work_date IS NULL")).isZero();
+        }
+    }
+
     // ───────────────────────── ヘルパー ─────────────────────────
 
     private List<Map<String, Object>> events(Connection c, long allocationId) throws SQLException {

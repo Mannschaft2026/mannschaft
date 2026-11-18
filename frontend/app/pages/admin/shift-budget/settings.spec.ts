@@ -189,6 +189,29 @@ describe('試練108 AC31α 締め日設定画面: 入力', () => {
   })
 })
 
+describe('試練108 AC31α 締め日設定画面: 予約済みの将来変更があるときのプレビュー', () => {
+  it('現在は末日締め・12月から15日締めが予約済みで、1月から20日締めへ変更するプレビューは 12/16〜1/20（前月 12月の締め日は予約済みの15日）', async () => {
+    getClosingSettings.mockResolvedValue(settings({
+      closing_day: 0,
+      revision: 1,
+      min_effective_period_key: '2026-12',
+      changes: [
+        { revision: 1, effective_period_key: '2026-12', closing_day: 15, previous_closing_day: 0,
+          reason: '12月から15日締め', actor_user_id: 6, created_at: '2026-11-10T01:00:00Z' },
+      ],
+    }))
+    const wrapper = await mountPage()
+    await fillForm(wrapper, 20, '2027-01', '20日締めへ')
+    const before = wrapper.get('[data-testid="closing-preview-before"]').text()
+    const after = wrapper.get('[data-testid="closing-preview-after"]').text()
+    expect(before).toContain('2026-12-16')
+    expect(before).toContain('2027-01-15')
+    expect(after).toContain('2026-12-16')
+    expect(after).toContain('2027-01-20')
+    expect(after).not.toContain('2027-01-15')
+  })
+})
+
 describe('試練108 AC31α 締め日設定画面: 送信', () => {
   it('試練108 AC31α 送信は expected_revision・closing_day・effective_period_key・reason だけを組織ID指定で渡す', async () => {
     const wrapper = await mountPage()
