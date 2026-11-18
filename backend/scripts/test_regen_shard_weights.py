@@ -509,8 +509,8 @@ class CiShardWorkflowStaticTest(unittest.TestCase):
 # 未知ファイルの拒否は従来どおり。
 # ---------------------------------------------------------------------------
 CTX_SAMPLE = (
-    b"[ci-ctx] jvm=1234 seq=1 class=example.Class0 key=0123456789ab event=load loadMs=4210 cacheSize=1\n"
-    b"[ci-ctx] jvm=1234 seq=2 class=example.Class1 key=0123456789ab event=hit loadMs=0 cacheSize=1\n"
+    b"[ci-ctx] jvm=1234 seq=1 class=example.Class0 key=000000000000 event=load loadMs=4210 cacheSize=1\n"
+    b"[ci-ctx] jvm=1234 seq=2 class=example.Class1 key=000000000000 event=hit loadMs=0 cacheSize=1\n"
 )
 
 

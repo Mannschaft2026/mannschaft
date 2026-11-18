@@ -296,8 +296,10 @@ class ContextGroupClassOrdererTest {
 
     /** MCC 構築が必ず例外になる bootstrapper。 */
     public static class ThrowingBootstrapper extends DefaultTestContextBootstrapper {
+        // buildMergedContextConfiguration は final のため、その内部で呼ばれる resolveContextLoader で失敗させる。
         @Override
-        public MergedContextConfiguration buildMergedContextConfiguration() {
+        protected org.springframework.test.context.ContextLoader resolveContextLoader(Class<?> testClass,
+                List<org.springframework.test.context.ContextConfigurationAttributes> configAttributesList) {
             throw new IllegalStateException("検体: MCC 構築失敗");
         }
     }
