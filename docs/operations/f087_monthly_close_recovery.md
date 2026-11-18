@@ -373,7 +373,7 @@ SELECT shift_id, state, attempt_count, last_error, claimed_by, lease_until, crea
 
 ### 9.3 migration の事前検査と開発DBの作り直し
 
-α の migration（V262 系の複数ファイル。説明に `shift_budget_close_periods` を含む作成ファイルの major）の適用前に、起動時の事前検査（repair より前）が読み取りだけで検査し、
+α の migration（V263 系の複数ファイル。説明に `shift_budget_close_periods` を含む作成ファイルの major）の適用前に、起動時の事前検査（repair より前）が読み取りだけで検査し、
 **異常があれば異常行 ID を示して起動を止める**（スキーマ・データ・Flyway 履歴は変わらない）。
 
 | 異常 | 対応 |

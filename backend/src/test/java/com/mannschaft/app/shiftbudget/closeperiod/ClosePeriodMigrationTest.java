@@ -52,7 +52,7 @@ class ClosePeriodMigrationTest {
 
     /**
      * α の migration 群の識別子。α の major は実装時の origin/main 最大 major+1 で採番するため固定しない
-     * （並行 PR の着地順で V261／V262 … と変わる）。<b>締め期間表を作る migration の説明に
+     * （並行 PR の着地順で V261／V262／V263 … と変わる）。<b>締め期間表を作る migration の説明に
      * {@code shift_budget_close_periods} を含めること</b>を契約とし、その major を α の major とみなす
      * （α の全ファイルは同じ major。β は別 major）。
      */
