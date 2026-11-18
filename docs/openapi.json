@@ -241586,17 +241586,6 @@
           }
         }
       },
-      "ClosePeriodListResponse": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ClosePeriodItem"
-            }
-          }
-        }
-      },
       "ClosePeriodItem": {
         "type": "object",
         "properties": {
@@ -241614,6 +241603,17 @@
           "period_start": {
             "type": "string",
             "format": "date"
+          }
+        }
+      },
+      "ClosePeriodListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClosePeriodItem"
+            }
           }
         }
       },
@@ -241656,17 +241656,6 @@
           }
         }
       },
-      "UncountedShiftListResponse": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UncountedShiftItem"
-            }
-          }
-        }
-      },
       "UncountedShiftItem": {
         "type": "object",
         "properties": {
@@ -241685,6 +241674,17 @@
           "work_date": {
             "type": "string",
             "format": "date"
+          }
+        }
+      },
+      "UncountedShiftListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UncountedShiftItem"
+            }
           }
         }
       },

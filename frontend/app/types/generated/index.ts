@@ -80957,9 +80957,6 @@ export interface components {
         ApiResponseClosePeriodListResponse: {
             data?: components["schemas"]["ClosePeriodListResponse"];
         };
-        ClosePeriodListResponse: {
-            items?: components["schemas"]["ClosePeriodItem"][];
-        };
         ClosePeriodItem: {
             /** Format: int32 */
             closing_day?: number;
@@ -80968,6 +80965,9 @@ export interface components {
             period_key?: string;
             /** Format: date */
             period_start?: string;
+        };
+        ClosePeriodListResponse: {
+            items?: components["schemas"]["ClosePeriodItem"][];
         };
         AllocationListResponse: {
             items?: components["schemas"]["AllocationResponse"][];
@@ -80984,9 +80984,6 @@ export interface components {
         ApiResponseUncountedShiftListResponse: {
             data?: components["schemas"]["UncountedShiftListResponse"];
         };
-        UncountedShiftListResponse: {
-            items?: components["schemas"]["UncountedShiftItem"][];
-        };
         UncountedShiftItem: {
             /** Format: int64 */
             shift_schedule_id?: number;
@@ -80996,6 +80993,9 @@ export interface components {
             user_id?: number;
             /** Format: date */
             work_date?: string;
+        };
+        UncountedShiftListResponse: {
+            items?: components["schemas"]["UncountedShiftItem"][];
         };
         FilterProvider: Record<string, never>;
         MappingJacksonValue: {
