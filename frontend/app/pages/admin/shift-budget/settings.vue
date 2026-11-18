@@ -76,13 +76,28 @@ function periodText(monthKey: string, previousDay: number, day: number): string 
   return `${start.format('YYYY-MM-DD')} – ${end.format('YYYY-MM-DD')}`
 }
 
+/**
+ * 期間キー M に有効な締め日。変更履歴（effective_period_key <= M のうち revision 最大）から解決し、無ければ末日。
+ * 予約済みの将来変更も履歴に含まれるので、今日の締め日ではなく期間ごとに引く（BE の期間算出と同じ規則）。
+ */
+function closingDayOf(monthKey: string): number {
+  let best: { revision: number, day: number } | null = null
+  for (const c of settings.value?.changes ?? []) {
+    if (c.effective_period_key <= monthKey && (best === null || c.revision > best.revision)) {
+      best = { revision: c.revision, day: c.closing_day }
+    }
+  }
+  return best === null ? END_OF_MONTH : best.day
+}
+
 const preview = computed(() => {
-  const current = settings.value?.closing_day
   const { day, effective } = form.value
-  if (current === undefined || day === null || effective === null) return null
+  if (!settings.value || day === null || effective === null) return null
+  const previousMonth = dayjs(`${effective}-01`).subtract(1, 'month').format('YYYY-MM')
+  const previousDay = closingDayOf(previousMonth)
   return {
-    before: periodText(effective, current, current),
-    after: periodText(effective, current, day),
+    before: periodText(effective, previousDay, closingDayOf(effective)),
+    after: periodText(effective, previousDay, day),
   }
 })
 

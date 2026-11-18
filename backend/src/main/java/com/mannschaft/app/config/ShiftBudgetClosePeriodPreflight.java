@@ -23,7 +23,7 @@ import java.util.Optional;
  *   <li>DB の状態の識別は information_schema と Flyway の履歴（info）だけで行う。データ検査は識別した状態に応じた業務表への SELECT のみ</li>
  *   <li>空 DB（履歴表なし、または shift_budget_consumptions なし）は検査を省略して migrate へ進む</li>
  *   <li>α が部分適用なら、<b>次に適用するファイルに必要な検査だけ</b>を行う（失敗行は未適用扱い）。全適用済みなら検査しない</li>
- *   <li>検査項目: 勤務日（work_date）を復元できない消化行（枠なし）／生存旧月次仕訳の月末日以外・同割当同月2件以上・割当なし／
+ *   <li>検査項目: 勤務日（work_date）を復元できない消化行（枠なし。backfill 前）／backfill 適用済みで NOT NULL 化が未適用のときの work_date NULL 行／生存旧月次仕訳の月末日以外・同割当同月2件以上・割当なし／
  *       旧 #4560 の V261 表の存在（作り直しの案内）</li>
  * </ul>
  *
@@ -74,7 +74,9 @@ final class ShiftBudgetClosePeriodPreflight {
             if (isPending(pending, "backfill work date")) {
                 checkConsumptionsWithoutSlot(st, problems);
             }
-            if (isPending(pending, "work date not null") && columnExists(st, "shift_budget_consumptions", "work_date")) {
+            // NULL は backfill 前なら正常な中間状態（列追加まで適用して停止した DB）。backfill 適用済みで NOT NULL 化が未適用のときだけ検査する
+            if (isPending(pending, "work date not null") && !isPending(pending, "backfill work date")
+                    && columnExists(st, "shift_budget_consumptions", "work_date")) {
                 checkNullWorkDate(st, problems);
             }
             if (isPending(pending, "import legacy monthly close") && tableExists(st, "budget_transactions")) {

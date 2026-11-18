@@ -118,7 +118,7 @@ class ClosePeriodDecisionAdditionsIT extends ClosePeriodTestBase {
     void 試練152a_論理削除済みの割当はPrepareで締めない() {
         Long allocationId = allocation(d("2026-04-01"), d("2026-04-30"));
         long[] s = worked(d("2026-04-10"), workerId);
-        periodResolver.ensureFixed(orgId, YearMonth.of(2026, 4));
+        periodResolver.ensureFixed(orgId, YearMonth.of(2026, 4), java.time.LocalDate.of(2099, 12, 31));
         jdbc.update("UPDATE shift_budget_allocations SET deleted_at = NOW() WHERE id = ?", allocationId);
 
         assertThat(stage.prepare(allocationId, ym("2026-04"))).isNull();

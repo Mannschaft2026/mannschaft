@@ -157,44 +157,49 @@ public class ShiftBudgetConsumptionRecordListener {
                     // CMP-261115-1821: 個別失敗の failed_event に実計上入力を残すため、採った時給を外で保持する
                     BigDecimal adoptedRate = null;
                     try {
-                        // CMP-260910-1555: 是正前はここで .orElse(BigDecimal.ZERO) としており、
-                        // 時給未登録のメンバーを「単価 0 円で記録成功」として扱っていた。
-                        // 消化額は 0 のまま増えず、消化率も 0% なので 80/100/120% の閾値警告も
-                        // 永久に発火せず、ログは recorded=N, skipped=0 と成功を報告する——
-                        // すなわち予算管理が丸ごと無効なのに誰にも分からない状態を作っていた。
-                        // 0 円という誤った金額を台帳に残すより記録しないほうが正しいので skip し、
-                        // 対象ユーザーを集めて hook の最後に予算管理者へ通知する（黙らせない）。
-                        Optional<BigDecimal> hourlyRateOpt = hourlyRateRepository
-                                .findEffectiveRate(userId, teamId, slotDate)
-                                .map(r -> r.getHourlyRate());
-                        // CMP-261115-1821: 存在する 0・負数も未設定と同じく計上しない（0 円・負額で台帳を汚さない）。
-                        // 公開時の検証後に時給が削除・訂正された場合もここで止まる。黙らせず、既存の通知集合に
-                        // 含めたうえで、組織が解決済みなので当該組織の failed_event にも理由を残す（0 へ置換しない）。
-                        String rateProblem = hourlyRateOpt.isEmpty() ? RATE_MISSING
-                                : (hourlyRateOpt.get().signum() <= 0 ? RATE_NON_POSITIVE : null);
-                        if (rateProblem != null) {
-                            log.warn("F08.7 hook: 時給が未設定または正数でないため消化記録をスキップ: "
-                                            + "teamId={}, userId={}, slotId={}, slotDate={}, reason={}",
-                                    teamId, userId, slotId, slotDate, rateProblem);
-                            tally.missingRateUserIds.add(userId);
-                            tally.skipped++;
-                            outSkipped++;
-                            recordFailureSafe(organizationId, ShiftBudgetFailedEventType.CONSUMPTION_RECORD,
-                                    scheduleId,
-                                    consumptionFailurePayload(scheduleId, teamId, slotId, slotDate, userId, rateProblem,
-                                            allocation.getId(), organizationId, null, null),
-                                    "hourly rate " + rateProblem + ": slot=" + slotId + ", user=" + userId);
-                            continue;
-                        }
-                        BigDecimal hourlyRate = hourlyRateOpt.get();
-                        adoptedRate = hourlyRate;
-
-                        // 計上先ロック集合の不一致は、勤務枠の現在日付を読み直して計上先の解決からやり直す（最大3回）
+                        // 計上先ロック集合の不一致は、勤務枠の現在日付を読み直して計上先の解決からやり直す（最大3回）。
+                        // 時給も試行ごとの勤務日（再解決後の日付）で取り直し、正数チェックもやり直す
+                        // （時給の切替日をまたいで枠が移動していても、元の勤務日の時給で記録しない）。
+                        // 時給の参照箇所は増やさない（ShiftHourlyRateRepository の呼出箇所は1つのまま）
                         ShiftBudgetConsumptionService.RecordResult result;
                         ShiftBudgetAllocationEntity attemptAllocation = allocation;
                         java.time.LocalDate attemptDate = slotDate;
                         int attempt = 0;
+                        boolean rateRejected = false;
                         while (true) {
+                            // CMP-260910-1555: 是正前はここで .orElse(BigDecimal.ZERO) としており、
+                            // 時給未登録のメンバーを「単価 0 円で記録成功」として扱っていた。
+                            // 消化額は 0 のまま増えず、消化率も 0% なので 80/100/120% の閾値警告も
+                            // 永久に発火せず、ログは recorded=N, skipped=0 と成功を報告する——
+                            // すなわち予算管理が丸ごと無効なのに誰にも分からない状態を作っていた。
+                            // 0 円という誤った金額を台帳に残すより記録しないほうが正しいので skip し、
+                            // 対象ユーザーを集めて hook の最後に予算管理者へ通知する（黙らせない）。
+                            Optional<BigDecimal> hourlyRateOpt = hourlyRateRepository
+                                    .findEffectiveRate(userId, teamId, attemptDate)
+                                    .map(r -> r.getHourlyRate());
+                            // CMP-261115-1821: 存在する 0・負数も未設定と同じく計上しない（0 円・負額で台帳を汚さない）。
+                            // 公開時の検証後に時給が削除・訂正された場合もここで止まる。黙らせず、既存の通知集合に
+                            // 含めたうえで、組織が解決済みなので当該組織の failed_event にも理由を残す（0 へ置換しない）。
+                            String rateProblem = hourlyRateOpt.isEmpty() ? RATE_MISSING
+                                    : (hourlyRateOpt.get().signum() <= 0 ? RATE_NON_POSITIVE : null);
+                            if (rateProblem != null) {
+                                log.warn("F08.7 hook: 時給が未設定または正数でないため消化記録をスキップ: "
+                                                + "teamId={}, userId={}, slotId={}, slotDate={}, reason={}",
+                                        teamId, userId, slotId, attemptDate, rateProblem);
+                                tally.missingRateUserIds.add(userId);
+                                tally.skipped++;
+                                outSkipped++;
+                                recordFailureSafe(organizationId, ShiftBudgetFailedEventType.CONSUMPTION_RECORD,
+                                        scheduleId,
+                                        consumptionFailurePayload(scheduleId, teamId, slotId, attemptDate, userId, rateProblem,
+                                                attemptAllocation.getId(), organizationId, null, null),
+                                        "hourly rate " + rateProblem + ": slot=" + slotId + ", user=" + userId);
+                                rateRejected = true;
+                                result = null;
+                                break;
+                            }
+                            BigDecimal hourlyRate = hourlyRateOpt.get();
+                            adoptedRate = hourlyRate;
                             try {
                                 result = consumptionService.recordSingleConsumption(
                                         attemptAllocation.getId(),
@@ -219,6 +224,9 @@ public class ShiftBudgetConsumptionRecordListener {
                                 attemptDate = fresh.get();
                                 attemptAllocation = reResolved.get();
                             }
+                        }
+                        if (rateRejected) {
+                            continue;
                         }
                         if (result == ShiftBudgetConsumptionService.RecordResult.DEFERRED) {
                             outDeferred++;

@@ -199,7 +199,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
         int failed = 0;
         int consumptions = 0;
         for (Map.Entry<YearMonth, List<ShiftBudgetAllocationEntity>> entry : byKey.entrySet()) {
-            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey());
+            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), today);
             for (ShiftBudgetAllocationEntity allocation : entry.getValue()) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
                 switch (r.kind()) {
@@ -274,7 +274,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
                 break;
             }
             keys++;
-            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey());
+            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), yesterday);
             for (ShiftBudgetAllocationEntity allocation : entry.getValue()) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
                 if (r.kind() == AllocationResult.Kind.CLOSED) {
@@ -364,8 +364,12 @@ public class MonthlyShiftBudgetCloseCoordinator {
     }
 
     /** 期間行の確定（独立 TX）。デッドロックの犠牲は TX の外で再実行する。 */
-    private ShiftBudgetClosePeriodResolver.ResolvedPeriod ensureFixed(Long organizationId, YearMonth key) {
-        return ShiftBudgetDeadlockRetry.run("ensureFixed", () -> periodResolver.ensureFixed(organizationId, key));
+    private ShiftBudgetClosePeriodResolver.ResolvedPeriod ensureFixed(Long organizationId, YearMonth key,
+                                                                      LocalDate latestEnd) {
+        hooks.beforeEnsureFixed(organizationId, key);
+        // 終了判定の後に締め日変更が割り込みうるので、確定 TX の先頭行ロックの下で終了日を再検証する（未終了なら 036）
+        return ShiftBudgetDeadlockRetry.run("ensureFixed",
+                () -> periodResolver.ensureFixed(organizationId, key, latestEnd));
     }
 
     private ShiftBudgetMonthlyPostCommand postCommand(ShiftBudgetAllocationEntity allocation,

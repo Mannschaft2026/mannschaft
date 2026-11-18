@@ -235,7 +235,7 @@ export type ClosingSettingChangeRequest = Required<Omit<ApiSchemas['ClosingDayCh
 }
 
 /** 締め期間 1 件。period_key は締め日が属する月（YYYY-MM）。 */
-export type ClosePeriodResponse = Required<ApiSchemas['Item']>
+export type ClosePeriodResponse = Required<ApiSchemas['ClosePeriodItem']>
 
 export interface ClosePeriodListResponse {
   items: ClosePeriodResponse[]

@@ -80958,9 +80958,9 @@ export interface components {
             data?: components["schemas"]["ClosePeriodListResponse"];
         };
         ClosePeriodListResponse: {
-            items?: components["schemas"]["Item"][];
+            items?: components["schemas"]["ClosePeriodItem"][];
         };
-        Item: {
+        ClosePeriodItem: {
             /** Format: int32 */
             closing_day?: number;
             /** Format: date */
@@ -80985,7 +80985,17 @@ export interface components {
             data?: components["schemas"]["UncountedShiftListResponse"];
         };
         UncountedShiftListResponse: {
-            items?: components["schemas"]["Item"][];
+            items?: components["schemas"]["UncountedShiftItem"][];
+        };
+        UncountedShiftItem: {
+            /** Format: int64 */
+            shift_schedule_id?: number;
+            /** Format: int64 */
+            slot_id?: number;
+            /** Format: int64 */
+            user_id?: number;
+            /** Format: date */
+            work_date?: string;
         };
         FilterProvider: Record<string, never>;
         MappingJacksonValue: {

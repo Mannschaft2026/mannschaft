@@ -241592,12 +241592,12 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Item"
+              "$ref": "#/components/schemas/ClosePeriodItem"
             }
           }
         }
       },
-      "Item": {
+      "ClosePeriodItem": {
         "type": "object",
         "properties": {
           "closing_day": {
@@ -241662,8 +241662,29 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Item"
+              "$ref": "#/components/schemas/UncountedShiftItem"
             }
+          }
+        }
+      },
+      "UncountedShiftItem": {
+        "type": "object",
+        "properties": {
+          "shift_schedule_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "slot_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date"
           }
         }
       },

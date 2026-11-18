@@ -1,6 +1,8 @@
 package com.mannschaft.app.shiftbudget.service;
 
+import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.UuidV7;
+import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
 import com.mannschaft.app.shiftbudget.UuidBytes;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetClosePeriodEntity;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetClosingDayChangeEntity;
@@ -108,9 +110,16 @@ public class ShiftBudgetClosePeriodResolver {
     /**
      * 期間行を確定する（無ければ作る）。独立 TX: 先頭行を {@code FOR UPDATE}（INSERT IGNORE の後）で取り、既存を読み、無ければ INSERT する。
      * 以後の失敗でも期間行は残る。
+     *
+     * <p>先頭行ロックの下で、実際に確定した（または既に確定済みの）期間の終了日が {@code latestEnd} 以前であることを再検証する。
+     * 呼び出し側の終了判定の後に締め日変更が割り込んで期間が未終了になっていた場合は、この TX をロールバックして
+     * 409 SHIFT_BUDGET_036 で中断する（期間行も作らない）。</p>
+     *
+     * @param latestEnd 期間の終了日として許す最新日（手動締めは今日、日次バッチは昨日）
+     * @throws BusinessException 期間が未終了（SHIFT_BUDGET_036）
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public ResolvedPeriod ensureFixed(Long organizationId, YearMonth periodKey) {
+    public ResolvedPeriod ensureFixed(Long organizationId, YearMonth periodKey, LocalDate latestEnd) {
         // 先頭行は FOR UPDATE を先に取る（既にあれば INSERT IGNORE の共有ロックを経由しないので、並行する確定同士が
         // 共有ロック→排他ロックの昇格でデッドロックしない）。無ければ作ってからロックし直す
         if (settingRepository.findByOrganizationIdForUpdate(organizationId).isEmpty()) {
@@ -119,9 +128,9 @@ public class ShiftBudgetClosePeriodResolver {
         }
         var existing = periodRepository.findByOrganizationIdAndPeriodKey(organizationId, periodKey.toString());
         if (existing.isPresent()) {
-            return fromRow(existing.get());
+            return requireEnded(fromRow(existing.get()), latestEnd);
         }
-        ResolvedPeriod computed = compute(periodKey, closingDayFunction(organizationId));
+        ResolvedPeriod computed = requireEnded(compute(periodKey, closingDayFunction(organizationId)), latestEnd);
         ShiftBudgetClosePeriodEntity saved = periodRepository.saveAndFlush(ShiftBudgetClosePeriodEntity.builder()
                 .organizationId(organizationId)
                 .periodKey(periodKey.toString())
@@ -130,6 +139,13 @@ public class ShiftBudgetClosePeriodResolver {
                 .closingDay(computed.closingDay())
                 .build());
         return fromRow(saved);
+    }
+
+    private static ResolvedPeriod requireEnded(ResolvedPeriod period, LocalDate latestEnd) {
+        if (period.end().isAfter(latestEnd)) {
+            throw new BusinessException(ShiftBudgetErrorCode.CLOSE_PERIOD_NOT_ENDED);
+        }
+        return period;
     }
 
     private static ResolvedPeriod compute(YearMonth key, Function<YearMonth, Integer> fn) {
