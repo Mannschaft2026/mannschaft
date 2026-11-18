@@ -57,6 +57,7 @@ Docker が必要です。CI（`er-diagram-drift-check`）は migration・Entity�
 | [digest](digest.md) | 2 | 0 |
 | [directmail](directmail.md) | 4 | 0 |
 | [disclosure](disclosure.md) | 4 | 0 |
+| [effortrecord](effortrecord.md) | 4 | 0 |
 | [equipment](equipment.md) | 2 | 0 |
 | [errorreport](errorreport.md) | 4 | 0 |
 | [event](event.md) | 10 | 0 |
@@ -148,7 +149,7 @@ Docker が必要です。CI（`er-diagram-drift-check`）は migration・Entity�
 | [workflow](workflow.md) | 8 | 0 |
 | [_unmapped](_unmapped.md) | 10 | 5 |
 
-- ドメイン数（`_unmapped` を除く）: 113
-- テーブル合計: 835（`flyway_schema_history` を除く）
+- ドメイン数（`_unmapped` を除く）: 114
+- テーブル合計: 839（`flyway_schema_history` を除く）
 - ビュー合計: 5
 - Entity 未紐付け（`_unmapped.md`）: テーブル 10 件 / ビュー 5 件

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261117-0859",
+  "scope": "app",
+  "implementation": {
+    "pr": 4603,
+    "sha": "1d96615172396833813db4e1066347e965068026"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "大会連絡スペース画面で、新規スレッドの作成ボタンが有効になり、掲示板の一覧が描画される",
+      "tests": [
+        {
+          "name": "作成ボタンを有効にして一覧を描画する",
+          "evidence": "frontend/tests/unit/pages/tournaments/communication-bulletin-wiring.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "スレッドを選ぶと同じ画面内に詳細が開き、戻ると一覧へ戻る",
+      "tests": [
+        {
+          "name": "スレッド選択で同ページに詳細を開き、戻るで一覧へ戻る",
+          "evidence": "frontend/tests/unit/pages/tournaments/communication-bulletin-wiring.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "新規スレッドの作成要求で、大会スコープの作成フォームが開く",
+      "tests": [
+        {
+          "name": "作成要求で大会スコープのフォームが開く",
+          "evidence": "frontend/tests/unit/pages/tournaments/communication-bulletin-wiring.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "スコープ（大会全体／ディビジョン）を切り替えると、選択中のスレッドと作成フォームをリセットする",
+      "tests": [
+        {
+          "name": "スコープ切替で選択スレッドと作成フォームをリセットする",
+          "evidence": "frontend/tests/unit/pages/tournaments/communication-bulletin-wiring.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 44011786914 },
+    { "runId": 44011787041 },
+    { "runId": 44011786774 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4603"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261117-0859-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261117-0859-exploratory.md"
+    }
+  },
+  "regressions": []
+}

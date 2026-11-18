@@ -132,6 +132,7 @@ API のエラー応答 `error.message` は BE が利用者の言語（ログイ�
 Request DTO に Jakarta Bean Validation アノテーションを付与し、「入力値の形式」を検証する。
 - `@NotBlank`, `@NotNull`, `@Size`, `@Email`, `@Pattern`, `@Min`, `@Max` 等
 - 「このフィールドは必須」「8文字以上」「メール形式」といった、ビジネスロジックに依存しない形式検証が対象
+- **ID・要素のリストを受けるリクエスト DTO には必ず `@Size(max = …)` を付ける**（無制限リスト＝無制限クエリ・DoS）。上限は業務上の最大件数で決める。
 
 #### Service層（コード内チェック）— ビジネスルールチェック
 Service メソッド内でビジネスルールを検証し、違反時は `BusinessException` をスローする。
@@ -224,7 +225,7 @@ main の実在例は `recruitment/dto/RecruitmentListingSearchRequest`）にす�
 - 動的フィルタリング（`.claudecode.md` §13 のフィルタリング規約）は **QueryDSL**（`BooleanBuilder` / `BooleanExpression`）でタイプセーフに組み立てる。**文字列ベースの `@Query` で動的条件を結合する方式は禁止**。
 - 動的条件を伴わない固定的な複雑クエリ（JOIN の多い集計・レポート）は `@Query`（JPQL）で書いてよい。ネイティブSQL（`nativeQuery = true`）は最終手段で、使用時はコメントで理由を記載する。
 - QueryDSL は `querydsl-jpa` に **`:jakarta` クラシファイア**を指定し、Gradle の APT で `Q` クラスを自動生成する。生成物は `build/generated` 配下に出力し、バージョン管理対象外とする。
-- N+1 防止のため、リレーション取得には `@EntityGraph` または JPQL の `JOIN FETCH` を明示的に使う（Lazy Loading による N+1 を防ぐ）。
+- N+1 防止のため、リレーション取得には `@EntityGraph` または JPQL の `JOIN FETCH` を明示的に使う（Lazy Loading による N+1 を防ぐ）。**ループ（`for` / `forEach` / `stream`）内で Repository・他 Service の単件取得・`count`・`exists`・`save` を呼ばない**（ID を集めて `findAllById` / `…In` / `GROUP BY` / `saveAll` にする）。`@Transactional` 内の managed エンティティへの `save()` は不要。内部の `PageRequest.of(0, 10000)` / `Pageable.unpaged()` は `max-page-size` が効かない。詳細・例は [05 データアクセス](../docs/conventions/backend/05-data-access-dev-env.md) の「N+1 問題の防止」。
 
 **派生クエリの引数型は Entity 属性の型と一致させる（`@Enumerated` 属性に `String` を渡さない）**
 - 派生クエリの引数型は **Entity の属性型をそのまま書く**（`@Enumerated` 属性なら enum、`String` 属性なら `String`）。`String` で受けるとコンパイル・起動は通るが、そのクエリが呼ばれた瞬間に必ず HTTP 500 になる。
@@ -330,7 +331,7 @@ CI/CD パイプラインの詳細設定（ワークフロー YAML、JaCoCo 集�
 - Access Token は **15分**、Refresh Token は **7日間**。
 - Refresh Token での Access Token 発行時は Refresh Token 自体も新しく発行し、古いものを無効化する（ローテーション）。
 - ログアウト時は該当トークンを Valkey 上のブラックリストに登録し、期限内でも即座に使用不能にする。
-- フロントエンドでは `localStorage` / `sessionStorage` に保存し `Authorization: Bearer` ヘッダーで送信する。**Cookie には格納しない**（CSRF を構造的に排除するため）。
+- 認証は二本立てである。**Web は `HttpOnly`・`SameSite=Strict` の Cookie**（`access_token` と `refresh_token`）、**ネイティブアプリは `Authorization: Bearer` ヘッダー**で送る。BE は Bearer を優先し、無ければ Cookie を読む（`JwtAuthenticationFilter`）。FE はトークンをメモリにだけ持ち、`localStorage` / `sessionStorage` には保存しない。CSRF は `SameSite=Strict` と同一オリジンで防ぐ（2026-11-17 マスター裁可により、実装と `docs/features/F01.1_auth.md`・`docs/security/02_cookie_and_session.md` に合わせて改訂）。
 - デバイスバインディング（推奨）: Refresh Token 使用時に発行時の IP アドレスと User-Agent の一致を検証し、不一致ならトークンを無効化して再ログインを要求する。
 
 **WebSocket (STOMP) 認証**
