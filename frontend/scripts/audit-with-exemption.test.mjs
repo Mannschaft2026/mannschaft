@@ -137,3 +137,33 @@ test('除外の境界: 2026-12-01T23:59:59Z は通過し 2026-12-02T00:00:00Z �
   checkAudit(raw, 1, Date.parse('2026-12-01T23:59:59Z'))
   assert.throws(() => checkAudit(raw, 1, Date.parse('2026-12-02T00:00:00Z')), /許可されない脆弱性/)
 })
+test('同一 picomatch entry の via に除外GHSAと別URLの high があれば期限内でも拒否する', () => {
+  const OTHER_URL = 'https://github.com/advisories/GHSA-0000-0000-0002'
+  const value = report({
+    picomatch: entry('picomatch', [
+      { ...advisory('high', PICOMATCH_URL), name: 'picomatch' },
+      { ...advisory('high', OTHER_URL), name: 'picomatch' },
+    ]),
+  })
+  assert.throws(
+    () => checkAudit(JSON.stringify(value), 1, Date.parse('2026-11-18T00:00:00Z')),
+    /許可されない脆弱性/,
+  )
+})
+test('同一 picomatch entry の via に除外GHSAと別URLの critical があれば期限内でも拒否する', () => {
+  const OTHER_URL = 'https://github.com/advisories/GHSA-0000-0000-0003'
+  const value = report({
+    picomatch: entry(
+      'picomatch',
+      [
+        { ...advisory('high', PICOMATCH_URL), name: 'picomatch' },
+        { ...advisory('critical', OTHER_URL), name: 'picomatch' },
+      ],
+      'critical',
+    ),
+  })
+  assert.throws(
+    () => checkAudit(JSON.stringify(value), 1, Date.parse('2026-11-18T00:00:00Z')),
+    /許可されない脆弱性/,
+  )
+})
