@@ -35,8 +35,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -144,13 +144,11 @@ class ActionMemoTeamPostSplitIT extends AbstractMySqlIntegrationTest {
         Long personal1 = publishDaily();
         Long teamPost = publishToTeam();
 
-        doAnswer(inv -> {
-            TimelinePostEntity p = inv.getArgument(0);
-            if (p.getId() == null && p.getScopeType() == PostScopeType.PERSONAL) {
-                throw new IllegalStateException("試練: 新規個人投稿の保存失敗を注入");
-            }
-            return inv.callRealMethod();
-        }).when(timelinePostRepository).save(any(TimelinePostEntity.class));
+        // 新規個人投稿（id 未採番・PERSONAL）の save だけを失敗させる。他の呼び出しは spy の実処理へ流れる
+        doThrow(new IllegalStateException("試練: 新規個人投稿の保存失敗を注入"))
+                .when(timelinePostRepository)
+                .save(argThat((TimelinePostEntity p) ->
+                        p != null && p.getId() == null && p.getScopeType() == PostScopeType.PERSONAL));
 
         PublishDailyRequest req = new PublishDailyRequest();
         req.setMemoDate(MEMO_DATE);

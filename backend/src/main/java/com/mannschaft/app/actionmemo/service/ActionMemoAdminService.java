@@ -193,6 +193,7 @@ public class ActionMemoAdminService {
                 .relatedTodoId(memo.getRelatedTodoId())
                 .completesTodo(Boolean.TRUE.equals(memo.getCompletesTodo()))
                 .timelinePostId(memo.getTimelinePostId())
+                .teamTimelinePostId(memo.getTeamTimelinePostId())
                 .postedTeamId(memo.getPostedTeamId())
                 .organizationId(memo.getOrganizationId())
                 .orgVisibility(memo.getOrgVisibility())

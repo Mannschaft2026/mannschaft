@@ -23,23 +23,23 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * <b>AC-12: action_memos のチーム投稿ID分離 migration（V261）の既存データ移行の番人テスト。</b>
+ * <b>AC-12: action_memos のチーム投稿ID分離 migration（V262）の既存データ移行の番人テスト。</b>
  *
- * <p>V261 は {@code action_memos.team_timeline_post_id} を追加し、{@code timeline_post_id} が
+ * <p>V262 は {@code action_memos.team_timeline_post_id} を追加し、{@code timeline_post_id} が
  * {@code timeline_posts.scope_type='TEAM'} を指していた既存行を新列へ移して {@code timeline_post_id} を NULL にする。
  * PERSONAL を指す行・NULL の行は不変であること。</p>
  *
  * <p>方針: 既存の {@code FlywayExistingData*MigrationTest} に倣い、Spring を起動せず Testcontainers の
- * 実 MySQL 8.0 に {@link Flyway} を Java API で直接実行する。V261 直前（origin/main 全体の最大
- * {@value #PRE_V261_TARGET}）まで適用 → 既存行をシード → 残りを適用して検証する。</p>
+ * 実 MySQL 8.0 に {@link Flyway} を Java API で直接実行する。V262 直前（origin/main 全体の最大
+ * {@value #PRE_V262_TARGET}）まで適用 → 既存行をシード → 残りを適用して検証する。</p>
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @EnabledIf("com.mannschaft.app.actionmemo.migration.FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest#isDockerAvailable")
-@DisplayName("Flyway 既存データ action_memos チーム投稿ID分離（V261）番人テスト")
+@DisplayName("Flyway 既存データ action_memos チーム投稿ID分離（V262）番人テスト")
 class FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest {
 
-    /** V261 の直前バージョン（origin/main 全体最大）。 */
-    private static final String PRE_V261_TARGET = "260.20261116040405";
+    /** V262 の直前バージョン（origin/main 全体最大）。 */
+    private static final String PRE_V262_TARGET = "261.20261116163707";
 
     @SuppressWarnings("resource")
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
@@ -78,10 +78,10 @@ class FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest {
                 .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration")
                 .outOfOrder(false)
-                .target(MigrationVersion.fromVersion(PRE_V261_TARGET))
+                .target(MigrationVersion.fromVersion(PRE_V262_TARGET))
                 .load();
         MigrateResult preResult = pre.migrate();
-        assertThat(preResult.success).as("V261 直前までの適用が成功すること").isTrue();
+        assertThat(preResult.success).as("V262 直前までの適用が成功すること").isTrue();
 
         final long teamPostId;
         final long personalPostId;
@@ -90,7 +90,7 @@ class FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest {
         final long unpostedMemoId;
         try (Connection c = conn()) {
             assertThat(columnExists(c, "action_memos", "team_timeline_post_id"))
-                    .as("V261 直前には team_timeline_post_id 列はまだ無い").isFalse();
+                    .as("V262 直前には team_timeline_post_id 列はまだ無い").isFalse();
 
             long userId = insertUser(c, "am-split-migration@example.com");
             long teamId = insertTeam(c);
@@ -107,11 +107,11 @@ class FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest {
                 .outOfOrder(false)
                 .load();
         MigrateResult restResult = rest.migrate();
-        assertThat(restResult.success).as("V261 を含む残りの migration が成功すること").isTrue();
+        assertThat(restResult.success).as("V262 を含む残りの migration が成功すること").isTrue();
 
         try (Connection c = conn()) {
             assertThat(columnExists(c, "action_memos", "team_timeline_post_id"))
-                    .as("V261 で team_timeline_post_id 列が追加される").isTrue();
+                    .as("V262 で team_timeline_post_id 列が追加される").isTrue();
 
             assertThat(longColumn(c, teamMemoId, "team_timeline_post_id"))
                     .as("TEAM 投稿を指していた行は新列へ移る").isEqualTo(teamPostId);

@@ -70,8 +70,9 @@ public class ActionMemoPublishingService {
      *   <li>{@code memo_date} 省略時は JST の今日に自動セット</li>
      *   <li>対象日のメモを時系列順に取得（{@code @SQLRestriction} により論理削除済みは除外）</li>
      *   <li>0件なら {@link ActionMemoErrorCode#ACTION_MEMO_NO_MEMOS_FOR_DATE}（400）</li>
-     *   <li><b>冪等性</b>: 既に {@code timeline_post_id} が埋まっているメモが存在する場合は
-     *       対応する {@link TimelinePostEntity} を論理削除し、新規投稿で差し替える
+     *   <li><b>冪等性</b>: 既に {@code timeline_post_id}（個人投稿専用）が埋まっているメモが存在する場合は
+     *       対応する自分の PERSONAL {@link TimelinePostEntity} のみ論理削除し、新規投稿で差し替える。
+     *       チーム投稿（{@code team_timeline_post_id}）は触らない
      *       （設計書 §5 重要な判定ロジック「上書き再投稿」）</li>
      *   <li>本文を {@code ## YYYY-MM-DD の行動ログ} ヘッダー + {@code - HH:MM content} の
      *       リスト形式で組み立てる。{@code mood_enabled = true} のユーザーは各行頭に絵文字付与</li>
@@ -111,11 +112,17 @@ public class ActionMemoPublishingService {
                     .map(ActionMemoEntity::getTimelinePostId)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
-            for (Long oldPostId : oldTimelinePostIds) {
-                timelinePostRepository.findById(oldPostId).ifPresent(old -> {
-                    old.softDelete();
-                    timelinePostRepository.save(old);
-                });
+            // 旧投稿は 1 回の findAllById でまとめて取得する（ループ内で DB を呼ばない）。
+            // 自分の PERSONAL 投稿だけを論理削除する（チーム投稿・他人の投稿は対象外）。
+            // managed エンティティなので softDelete の変更はコミット時に dirty checking で反映される。
+            if (!oldTimelinePostIds.isEmpty()) {
+                for (TimelinePostEntity old : timelinePostRepository.findAllById(oldTimelinePostIds)) {
+                    if (old.getScopeType() == PostScopeType.PERSONAL
+                            && Objects.equals(old.getScopeId(), userId)
+                            && Objects.equals(old.getUserId(), userId)) {
+                        old.softDelete();
+                    }
+                }
             }
 
             // 5. mood 表示可否（ユーザー設定）
@@ -135,9 +142,9 @@ public class ActionMemoPublishingService {
             TimelinePostEntity savedPost = timelinePostRepository.save(post);
 
             // 8. 各メモの timelinePostId を更新
+            // memos は managed エンティティのため dirty checking で永続化される（save 不要）
             for (ActionMemoEntity memo : memos) {
                 memo.setTimelinePostId(savedPost.getId());
-                memoRepository.save(memo);
             }
 
             // 9. メトリクス + ログ（content 本文は出力しない）
@@ -170,7 +177,7 @@ public class ActionMemoPublishingService {
      *   <li>team_id 解決（リクエスト → settings.defaultPostTeamId → 400）</li>
      *   <li>チームメンバーシップ検証</li>
      *   <li>本文フォーマット生成 + タイムライン投稿</li>
-     *   <li>memo.postedTeamId / timelinePostId 更新</li>
+     *   <li>memo.postedTeamId / teamTimelinePostId 更新</li>
      * </ol>
      *
      * @param memoId  投稿対象メモ ID
@@ -215,9 +222,10 @@ public class ActionMemoPublishingService {
                 .build();
         TimelinePostEntity savedPost = timelinePostRepository.save(post);
 
-        // 8. memo.postedTeamId / timelinePostId 更新
+        // 8. memo.postedTeamId / teamTimelinePostId 更新
         memo.setPostedTeamId(teamId);
-        memo.setTimelinePostId(savedPost.getId());
+        // チーム投稿 ID は team_timeline_post_id へ。timeline_post_id（個人投稿専用）は変更しない
+        memo.setTeamTimelinePostId(savedPost.getId());
         memoRepository.save(memo);
 
         log.info("行動メモ チーム投稿成功: memoId={}, teamId={}, timelinePostId={}",
