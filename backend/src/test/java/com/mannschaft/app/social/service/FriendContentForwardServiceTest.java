@@ -7,12 +7,8 @@ import com.mannschaft.app.social.SocialErrorCode;
 import com.mannschaft.app.social.entity.FriendContentForwardEntity;
 import com.mannschaft.app.social.repository.FriendContentForwardRepository;
 import com.mannschaft.app.social.repository.TeamFriendRepository;
-import com.mannschaft.app.team.repository.TeamRepository;
-import com.mannschaft.app.timeline.PostScopeType;
-import com.mannschaft.app.timeline.PostStatus;
-import com.mannschaft.app.timeline.PostedAsType;
-import com.mannschaft.app.timeline.entity.TimelinePostEntity;
-import com.mannschaft.app.timeline.repository.TimelinePostRepository;
+import com.mannschaft.app.team.service.TeamService;
+import com.mannschaft.app.timeline.service.TimelineFriendForwardPostService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -22,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,16 +41,16 @@ class FriendContentForwardServiceTest {
     private TeamFriendRepository teamFriendRepository;
 
     @Mock
-    private TimelinePostRepository timelinePostRepository;
-
-    @Mock
-    private TeamRepository teamRepository;
+    private TeamService teamService;
 
     @Mock
     private AccessControlService accessControlService;
 
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private TimelineFriendForwardPostService timelineFriendForwardPostService;
 
     @InjectMocks
     private FriendContentForwardService friendContentForwardService;
@@ -78,12 +73,9 @@ class FriendContentForwardServiceTest {
         void 正常_取消() {
             // given
             FriendContentForwardEntity forward = buildForward(FORWARD_ID, TEAM_ID, SOURCE_TEAM_ID, false);
-            TimelinePostEntity forwardedPost = buildPost(FORWARDED_POST_ID, TEAM_ID);
 
             given(forwardRepository.findById(FORWARD_ID)).willReturn(Optional.of(forward));
             given(forwardRepository.save(any(FriendContentForwardEntity.class))).willReturn(forward);
-            given(timelinePostRepository.findById(FORWARDED_POST_ID)).willReturn(Optional.of(forwardedPost));
-            given(timelinePostRepository.save(any(TimelinePostEntity.class))).willReturn(forwardedPost);
             doNothing().when(auditLogService).record(anyString(), anyLong(), isNull(),
                     anyLong(), isNull(), isNull(), isNull(), isNull(), anyString());
 
@@ -94,7 +86,7 @@ class FriendContentForwardServiceTest {
             assertThat(forward.getIsRevoked()).isTrue();
             assertThat(forward.getRevokedBy()).isEqualTo(USER_ID);
             verify(forwardRepository).save(forward);
-            verify(timelinePostRepository).save(any(TimelinePostEntity.class));
+            verify(timelineFriendForwardPostService).softDeleteFriendForwardPost(FORWARDED_POST_ID);
         }
 
         @Test
@@ -109,7 +101,7 @@ class FriendContentForwardServiceTest {
 
             // then: save は呼ばれない（冪等：既に取消済みのためスキップ）
             verify(forwardRepository, never()).save(any());
-            verify(timelinePostRepository, never()).save(any());
+            verifyNoInteractions(timelineFriendForwardPostService);
         }
 
         @Test
@@ -171,18 +163,4 @@ class FriendContentForwardServiceTest {
         return entity;
     }
 
-    private TimelinePostEntity buildPost(Long id, Long scopeId) {
-        TimelinePostEntity entity = TimelinePostEntity.builder()
-                .scopeType(PostScopeType.FRIEND_FORWARD)
-                .scopeId(scopeId)
-                .userId(USER_ID)
-                .postedAsType(PostedAsType.TEAM)
-                .postedAsId(scopeId)
-                .content("転送テスト投稿")
-                .status(PostStatus.PUBLISHED)
-                .shareWithFriends(false)
-                .build();
-        ReflectionTestUtils.setField(entity, "id", id);
-        return entity;
-    }
 }

@@ -101,6 +101,8 @@ erDiagram
 | [cms](cms.md) | `blog_post_shares` | `team_id` | ID参照 | `teams` |
 | [cms](cms.md) | `blog_posts` | `team_id` | ID参照 | `teams` |
 | [cms](cms.md) | `blog_tags` | `team_id` | ID参照 | `teams` |
+| [effortrecord](effortrecord.md) | `effort_definitions` | `team_id` | ID参照 | `teams` |
+| [effortrecord](effortrecord.md) | `effort_records` | `share_team_id` | ID参照 | `teams` |
 | [equipment](equipment.md) | `equipment_items` | `team_id` | ID参照 | `teams` |
 | [event](event.md) | `event_delegations` | `team_id` | ID参照 | `teams` |
 | [family](family.md) | `coin_toss_results` | `team_id` | ID参照 | `teams` |
