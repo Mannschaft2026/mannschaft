@@ -6,6 +6,8 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.featuregate.AlwaysReachable;
+import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
 import com.mannschaft.app.effortrecord.dto.CreateDefinitionSnapshotRequest;
 import com.mannschaft.app.effortrecord.dto.CreateEffortRecordRequest;
@@ -50,7 +52,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * F06.4.1 個人の頑張り記録 個人 API。API 契約 §3 の 7 本（definition-snapshots は AC-19 で PR-2 に追加）。
+ * F06.4.1 個人の頑張り記録 個人 API。API 契約 §3 の 8 本（definition-snapshots は PR-2 で追加）。
  *
  * <p>Controller は Service を呼ぶだけ。認証主体は {@link SecurityUtils#getCurrentUserId()} で確定し、
  * リクエストから owner を受け取らない。固定 path（presets / stats）は
@@ -81,9 +83,12 @@ public class EffortRecordMeController {
 
     /**
      * チーム定義 snapshot の登録と definitionToken 発行（AC-19）。teamId / templateId を受け取るため
-     * {@code @SelfScopedEndpoint} は付けない（API 契約 §3 末尾）。認可は出陣で Service / AccessGuard に実装する。
+     * {@code @SelfScopedEndpoint} は付けない（API 契約 §3 末尾）。認可（チームへの現在所属）は
+     * {@link EffortDefinitionService#registerTeamSnapshot} が {@code EffortTeamAccessGuard} で行う。
      */
     @PostMapping("/definition-snapshots")
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "個人の頑張り記録でチーム定義を選ぶための定義照会。チーム所属の認可だけで提供し機能フラグに依存させない")
     @Operation(summary = "チーム定義 snapshot の登録（10 分有効 token）")
     public ResponseEntity<ApiResponse<EffortDefinitionTokenResponse>> registerDefinitionSnapshot(
             @Valid @RequestBody CreateDefinitionSnapshotRequest request) {

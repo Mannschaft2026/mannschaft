@@ -2,6 +2,8 @@ package com.mannschaft.app.effortrecord.controller;
 
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.featuregate.AlwaysReachable;
+import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.effortrecord.dto.EffortTemplateSettingsResponse;
 import com.mannschaft.app.effortrecord.dto.UpdateEffortTemplateSettingsRequest;
 import com.mannschaft.app.effortrecord.service.EffortTemplateSettingsService;
@@ -21,7 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * F06.4.1 チームテンプレートの指標設定 API（API 契約 §7）。
  *
- * <p>試練骨格（PR-2）。認可（既存テンプレート管理権限＋scope 一致）は出陣で Service / AccessGuard に実装する。</p>
+ * <p>Controller は Service を呼ぶだけ。認可（既存 TEAM テンプレート管理権限＝ADMIN・DEPUTY_ADMIN、template の scope 一致）は
+ * {@link EffortTemplateSettingsService} が {@code EffortTeamAccessGuard} で行う。親組織は判定に使わない。</p>
  */
 @RestController
 @RequestMapping(value = "/api/v1/teams/{teamId}/effort-records/template-settings",
@@ -33,6 +36,8 @@ public class EffortTeamTemplateSettingsController {
     private final EffortTemplateSettingsService settingsService;
 
     @GetMapping("/{templateId}")
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "チームテンプレート編集画面の指標設定。既存のテンプレート管理権限で提供し機能フラグに依存させない")
     @Operation(summary = "テンプレートの指標設定を取得")
     public ResponseEntity<ApiResponse<EffortTemplateSettingsResponse>> get(
             @PathVariable Long teamId, @PathVariable Long templateId) {
@@ -41,6 +46,8 @@ public class EffortTeamTemplateSettingsController {
     }
 
     @PutMapping("/{templateId}")
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "チームテンプレート編集画面の指標設定。既存のテンプレート管理権限で提供し機能フラグに依存させない")
     @Operation(summary = "テンプレートの指標設定を更新（全置換）")
     public ResponseEntity<ApiResponse<EffortTemplateSettingsResponse>> update(
             @PathVariable Long teamId, @PathVariable Long templateId,

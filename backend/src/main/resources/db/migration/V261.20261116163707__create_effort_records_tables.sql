@@ -110,11 +110,11 @@ CREATE TABLE effort_operation_receipts (
 --   EXERCISE_V1 : 01938a00-0000-7000-8000-000000000002
 --   WEIGHT_V1   : 01938a00-0000-7000-8000-000000000003
 INSERT INTO effort_definitions
-  (id, source_type, source_key, organization_id, team_id, team_template_id, current_revision, retired_at, version, created_at, updated_at, deleted_at)
+  (id, source_type, source_key, team_id, team_template_id, current_revision, retired_at, version, created_at, updated_at, deleted_at)
 VALUES
-  (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000001', '-', '')), 'PRESET', 'STUDY_V1', NULL, NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL),
-  (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000002', '-', '')), 'PRESET', 'EXERCISE_V1', NULL, NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL),
-  (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000003', '-', '')), 'PRESET', 'WEIGHT_V1', NULL, NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL);
+  (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000001', '-', '')), 'PRESET', 'STUDY_V1', NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL),
+  (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000002', '-', '')), 'PRESET', 'EXERCISE_V1', NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL),
+  (UNHEX(REPLACE('01938a00-0000-7000-8000-000000000003', '-', '')), 'PRESET', 'WEIGHT_V1', NULL, NULL, 1, NULL, 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL);
 
 SET @effort_study_json = '{"definitionUuid":"01938a00-0000-7000-8000-000000000001","revision":1,"source":"PRESET","presetCode":"STUDY_V1","teamTemplateId":null,"templateName":"勉強","durationFieldKey":"duration","subjectFieldKey":"subject","fields":[{"fieldKey":"subject","label":"科目","labelKey":"effort.field.subject","type":"TEXT","required":false,"semantic":"SUBJECT","unit":"NONE","aggregation":"NONE","scale":0,"min":null,"max":null,"options":[]},{"fieldKey":"duration","label":"時間","labelKey":"effort.field.duration","type":"NUMBER","required":false,"semantic":"DURATION","unit":"MINUTE","aggregation":"SUM","scale":0,"min":"0","max":"1440","options":[]}]}';
 SET @effort_exercise_json = '{"definitionUuid":"01938a00-0000-7000-8000-000000000002","revision":1,"source":"PRESET","presetCode":"EXERCISE_V1","teamTemplateId":null,"templateName":"運動","durationFieldKey":"duration","subjectFieldKey":null,"fields":[{"fieldKey":"duration","label":"時間","labelKey":"effort.field.duration","type":"NUMBER","required":true,"semantic":"DURATION","unit":"MINUTE","aggregation":"SUM","scale":0,"min":"0","max":"1440","options":[]},{"fieldKey":"intensity","label":"強度","labelKey":"effort.field.intensity","type":"NUMBER","required":false,"semantic":"INTENSITY","unit":"RPE","aggregation":"NONE","scale":0,"min":"0","max":"10","options":[]},{"fieldKey":"menu","label":"メニュー","labelKey":"effort.field.menu","type":"TEXT","required":false,"semantic":"MENU","unit":"NONE","aggregation":"NONE","scale":0,"min":null,"max":null,"options":[]}]}';

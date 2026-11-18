@@ -126,6 +126,20 @@ public class EffortReceiptService {
         return new Handle(receiptId, null);
     }
 
+    /**
+     * 同 key・同 hash で 24 時間以内に完了済みの応答があれば返す（書込なしの先読み）。
+     * TX 外の事前検証（TEAM 定義 token の期限など）より前に replay を優先するために使う。
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<StoredResponse> findCompleted(Long ownerUserId, String operationPath, UUID key, String requestHash) {
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        return receipts.findByRouteKindAndRouteIdAndActorUserIdAndOperationPathAndOperationKey(
+                        EffortReceiptRouteKind.OWNER, ownerUserId, ownerUserId, operationPath, key.toString())
+                .filter(r -> r.getExpiresAt().isAfter(now) && r.getRequestHash().equals(requestHash)
+                        && r.getResponseStatus() != null && r.getResponseJson() != null)
+                .map(r -> new StoredResponse(r.getResponseStatus(), r.getResponseJson()));
+    }
+
     /** 応答を同一 TX で保存して receipt を確定する。 */
     @Transactional(propagation = Propagation.MANDATORY)
     public void complete(UUID receiptId, int status, String responseJson) {

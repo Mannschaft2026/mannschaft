@@ -6,6 +6,7 @@ import com.mannschaft.app.effortrecord.enums.EffortSemantic;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
@@ -15,9 +16,9 @@ import java.util.List;
  */
 public record UpdateEffortTemplateSettingsRequest(
         @NotNull @Min(0) Long version,
-        @NotNull List<@NotNull @Valid FieldSetting> fields,
-        String durationFieldKey,
-        String subjectFieldKey) {
+        @NotNull @Size(max = 15) List<@NotNull @Valid FieldSetting> fields,
+        @Size(max = 64) String durationFieldKey,
+        @Size(max = 64) String subjectFieldKey) {
 
     /** 契約にない JSON プロパティは 400（API 契約 §1）。値は例外メッセージへ載せない。 */
     @JsonAnySetter
@@ -27,9 +28,9 @@ public record UpdateEffortTemplateSettingsRequest(
 
     /** 1 field の指標設定。 */
     public record FieldSetting(
-            @NotNull String fieldKey,
+            @NotNull @Size(max = 64) String fieldKey,
             @NotNull EffortSemantic semantic,
-            @NotNull String unit,
+            @NotNull @Size(max = 64) String unit,
             @NotNull EffortAggregation aggregation) {
 
         /** 契約にない JSON プロパティは 400（API 契約 §1）。値は例外メッセージへ載せない。 */

@@ -33,6 +33,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * F06.4.1 個人集計 Service。グラフ許可表（API 契約 §5.1）に従い BAR/LINE/PIE を集計する。
@@ -40,7 +42,9 @@ import java.util.Optional;
  * <p>集計は {@link BigDecimal} で行い内部では丸めない。出力だけ小数 2 桁の 10 進文字列にする（AC-17）。
  * 記録日は {@code recordedOn}（LocalDate）のまま扱い、TZ・DST・閏日の影響を受けない（AC-14）。
  * series は「定義 UUID × field key × semantic × unit」で、原本が凍結した revision の同 field が
- * 現行の field と semantic・unit とも一致する行だけを同一 series として合算する（異なる series は合算しない）。</p>
+ * 基準 field と semantic・unit とも一致する行だけを同一 series として合算する（異なる series は合算しない）。
+ * 基準 field は現行 revision から引き、現行に無い key（チームが削除・変更した field）は本人の原本が凍結した
+ * revision から引く（現行 revision だけを見ると field 削除後の集計が 400 になる欠陥の是正。AC-23）。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -80,20 +84,27 @@ public class EffortStatsService {
                 .filter(d -> d.definition().getSourceType() == EffortSourceType.PRESET
                         || queries.existsForOwner(ownerUserId, c.definitionUuid()))
                 .orElseThrow(() -> new BusinessException(EffortErrorCode.EFFORT_001));
-        EffortDefinitionSnapshot snapshot = resolved.snapshot();
+        Map<Integer, EffortDefinitionSnapshot> revisions = new HashMap<>();
+        revisions.put(resolved.revision(), resolved.snapshot());
+        EffortDefinitionSnapshot snapshot = seriesSnapshot(ownerUserId, c, resolved, revisions);
         EffortFieldDefinition field = snapshot.fields().stream()
                 .filter(f -> f.fieldKey().equals(c.fieldKey())).findFirst()
                 .orElseThrow(() -> invalid("field_key", "定義にない項目です"));
         EffortFieldDefinition subjectField = requireChartAllowed(c.chart(), snapshot, field);
 
         List<EffortStatsRow> rows = queries.findStatsRows(ownerUserId, c.definitionUuid(), c.dateFrom(), c.dateTo());
-        Map<Integer, EffortDefinitionSnapshot> revisions = new HashMap<>();
-        revisions.put(resolved.revision(), snapshot);
+        // 原本が凍結した revision は 1 回の照会でまとめて引く（行ごとの照会をしない）。
+        Set<Integer> missing = new HashSet<>();
+        rows.forEach(row -> {
+            if (!revisions.containsKey(row.definitionRevision())) {
+                missing.add(row.definitionRevision());
+            }
+        });
+        revisions.putAll(definitions.findRevisions(c.definitionUuid(), missing));
 
         List<Sample> samples = new ArrayList<>();
         for (EffortStatsRow row : rows) {
-            EffortDefinitionSnapshot frozen = revisions.computeIfAbsent(row.definitionRevision(),
-                    revision -> definitions.findRevision(c.definitionUuid(), revision).orElse(null));
+            EffortDefinitionSnapshot frozen = revisions.get(row.definitionRevision());
             if (frozen == null || !sameSeries(frozen, field)) {
                 continue;
             }
@@ -108,6 +119,31 @@ public class EffortStatsService {
             case LINE -> bucketed(c, grain, field, samples, true);
             case PIE -> pie(c, grain, field, subjectField, samples);
         };
+    }
+
+    /**
+     * field_key の series を定める snapshot。現行 revision にその key があれば現行を使い、無ければ（チームが field を
+     * 削除した・semantic/unit を変えて新 key になった等）本人の原本が凍結した revision のうち、その key を持つ最新の版を使う
+     * （親設計 §3「チームの定義が改名・変更・廃止されても原本の表示・グラフを維持する」、AC-23）。
+     * どの版にも無い key は 400。
+     */
+    private EffortDefinitionSnapshot seriesSnapshot(Long ownerUserId, EffortStatsCriteria c,
+                                                    EffortDefinitionService.ResolvedDefinition resolved,
+                                                    Map<Integer, EffortDefinitionSnapshot> revisions) {
+        if (hasField(resolved.snapshot(), c.fieldKey())) {
+            return resolved.snapshot();
+        }
+        Set<Integer> frozenRevisions = new HashSet<>(queries.findRevisionNumbers(ownerUserId, c.definitionUuid()));
+        frozenRevisions.removeAll(revisions.keySet());
+        revisions.putAll(definitions.findRevisions(c.definitionUuid(), frozenRevisions));
+        return revisions.values().stream()
+                .filter(s -> hasField(s, c.fieldKey()))
+                .max(Comparator.comparingInt(EffortDefinitionSnapshot::revision))
+                .orElse(resolved.snapshot());
+    }
+
+    private static boolean hasField(EffortDefinitionSnapshot snapshot, String fieldKey) {
+        return snapshot.fields().stream().anyMatch(f -> f.fieldKey().equals(fieldKey));
     }
 
     // ───────────────────────────── 許可表 §5.1 ─────────────────────────────
