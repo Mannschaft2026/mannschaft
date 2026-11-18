@@ -71925,6 +71925,8 @@ export interface components {
             related_todo_id?: number;
             tags?: components["schemas"]["ActionMemoTagSummary"][];
             /** Format: int64 */
+            team_timeline_post_id?: number;
+            /** Format: int64 */
             timeline_post_id?: number;
             /** Format: date-time */
             updated_at?: string;

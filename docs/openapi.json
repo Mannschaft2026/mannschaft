@@ -217272,6 +217272,10 @@
               "$ref": "#/components/schemas/ActionMemoTagSummary"
             }
           },
+          "team_timeline_post_id": {
+            "type": "integer",
+            "format": "int64"
+          },
           "timeline_post_id": {
             "type": "integer",
             "format": "int64"
