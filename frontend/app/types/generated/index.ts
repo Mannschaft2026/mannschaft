@@ -80960,6 +80960,7 @@ export interface components {
         ClosePeriodItem: {
             /** Format: int32 */
             closing_day?: number;
+            ended?: boolean;
             /** Format: date */
             period_end?: string;
             period_key?: string;

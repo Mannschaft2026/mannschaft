@@ -241593,6 +241593,9 @@
             "type": "integer",
             "format": "int32"
           },
+          "ended": {
+            "type": "boolean"
+          },
           "period_end": {
             "type": "string",
             "format": "date"
