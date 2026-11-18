@@ -75,7 +75,7 @@ public class EffortTeamDefinitionTxService {
     @Transactional
     public void create(Long teamId, EffortTeamTemplate template) {
         Instant now = now();
-        UUID definitionUuid = com.mannschaft.app.common.entity.UuidV7.generate();
+        UUID definitionUuid = com.mannschaft.app.common.UuidV7.generate();
         EffortDefinitionSnapshot snapshot = EffortTeamDefinitionBuilder.build(definitionUuid, 1, template,
                 EffortTeamDefinitionBuilder.Settings.empty());
         EffortDefinitionEntity definition = EffortDefinitionEntity.builder()
