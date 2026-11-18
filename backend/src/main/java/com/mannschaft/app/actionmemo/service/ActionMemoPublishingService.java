@@ -15,12 +15,10 @@ import com.mannschaft.app.actionmemo.enums.ActionMemoCategory;
 import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.security.HtmlSanitizer;
-import com.mannschaft.app.role.repository.UserRoleRepository;
+import com.mannschaft.app.role.service.PermissionScopeQueryService;
 import com.mannschaft.app.timeline.PostScopeType;
-import com.mannschaft.app.timeline.entity.TimelinePostEntity;
-import com.mannschaft.app.timeline.repository.TimelinePostRepository;
 import com.mannschaft.app.timeline.service.TimelinePostService;
-import com.mannschaft.app.todo.repository.TodoRepository;
+import com.mannschaft.app.todo.service.TodoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -55,12 +53,11 @@ public class ActionMemoPublishingService {
             DateTimeFormatter.ofPattern("HH:mm");
 
     private final ActionMemoRepository memoRepository;
-    private final TimelinePostRepository timelinePostRepository;
     private final TimelinePostService timelinePostService;
-    private final UserRoleRepository userRoleRepository;
+    private final PermissionScopeQueryService permissionScopeQueryService;
     private final ActionMemoSettingsService settingsService;
     private final ActionMemoMetrics metrics;
-    private final TodoRepository todoRepository;
+    private final TodoService todoService;
     @Qualifier("wallClock")
     private final Clock wallClock;
 
@@ -73,7 +70,7 @@ public class ActionMemoPublishingService {
      *   <li>対象日のメモを時系列順に取得（{@code @SQLRestriction} により論理削除済みは除外）</li>
      *   <li>0件なら {@link ActionMemoErrorCode#ACTION_MEMO_NO_MEMOS_FOR_DATE}（400）</li>
      *   <li><b>冪等性</b>: 既に {@code timeline_post_id}（個人投稿専用）が埋まっているメモが存在する場合は
-     *       対応する自分の PERSONAL {@link TimelinePostEntity} のみ論理削除し、新規投稿で差し替える。
+     *       対応する自分の PERSONAL timeline 投稿のみ論理削除し、新規投稿で差し替える。
      *       チーム投稿（{@code team_timeline_post_id}）は触らない
      *       （設計書 §5 重要な判定ロジック「上書き再投稿」）</li>
      *   <li>本文を {@code ## YYYY-MM-DD の行動ログ} ヘッダー + {@code - HH:MM content} の
@@ -81,7 +78,7 @@ public class ActionMemoPublishingService {
      *   <li>{@code extra_comment} が指定されていれば末尾に {@code \n\n---\n} 区切りで追記する。
      *       XSS 対策として {@link HtmlSanitizer#sanitizePlainText(String)} を通す</li>
      *   <li>{@code scope_type=PERSONAL, scope_id=userId, user_id=userId} で
-     *       {@link TimelinePostEntity} を INSERT</li>
+     *       timeline 投稿を INSERT</li>
      *   <li>各 {@link ActionMemoEntity#setTimelinePostId(Long)} を新 ID で更新</li>
      * </ol>
      *
@@ -92,7 +89,7 @@ public class ActionMemoPublishingService {
      * <p><b>ログ方針</b>: 設計書 §6 運用・監視に従い、本文そのもの（content）は出力しない。
      * {@code timelinePostId / memoCount / userId / memoDate} のみ INFO で記録する。</p>
      */
-    // TODO: actionmemoドメインとtimelineドメイン(TimelinePostRepository)をまたいでいる。将来はActionMemoPublishedEvent(PERSONAL)で分離予定
+    // TODO: actionmemoドメインとtimelineドメイン(TimelinePostService)をまたいでいる。将来はActionMemoPublishedEvent(PERSONAL)で分離予定
     @Transactional
     public PublishDailyResponse publishDaily(PublishDailyRequest request, Long userId) {
         try {
@@ -128,27 +125,22 @@ public class ActionMemoPublishingService {
                     memoDate, memos, moodEnabled, request.getExtraComment());
 
             // 7. TimelinePost 新規作成（PERSONAL スコープ）
-            TimelinePostEntity post = TimelinePostEntity.builder()
-                    .scopeType(PostScopeType.PERSONAL)
-                    .scopeId(userId)
-                    .userId(userId)
-                    .content(content)
-                    .build();
-            TimelinePostEntity savedPost = timelinePostRepository.save(post);
+            Long savedPostId = timelinePostService.saveActionMemoPost(
+                    PostScopeType.PERSONAL, userId, userId, content);
 
             // 8. 各メモの timelinePostId を更新
             // memos は managed エンティティのため dirty checking で永続化される（save 不要）
             for (ActionMemoEntity memo : memos) {
-                memo.setTimelinePostId(savedPost.getId());
+                memo.setTimelinePostId(savedPostId);
             }
 
             // 9. メトリクス + ログ（content 本文は出力しない）
             metrics.incrementPublishDailySuccess();
             log.info("行動メモ 終業投稿成功: timelinePostId={}, memoCount={}, userId={}, memoDate={}",
-                    savedPost.getId(), memos.size(), userId, memoDate);
+                    savedPostId, memos.size(), userId, memoDate);
 
             return PublishDailyResponse.builder()
-                    .timelinePostId(savedPost.getId())
+                    .timelinePostId(savedPostId)
                     .memoCount(memos.size())
                     .memoDate(memoDate)
                     .build();
@@ -180,7 +172,7 @@ public class ActionMemoPublishingService {
      * @param userId  現在のユーザー ID
      * @return 投稿レスポンス
      */
-    // TODO: actionmemoドメインがtimelineドメイン(TimelinePostRepository)・roleドメイン(UserRoleRepository)をまたいでいる。将来はActionMemoPublishedEvent(TEAM)で分離予定
+    // TODO: actionmemoドメインがtimelineドメイン(TimelinePostService)・roleドメイン(PermissionScopeQueryService)をまたいでいる。将来はActionMemoPublishedEvent(TEAM)で分離予定
     @Transactional
     public PublishToTeamResponse publishToTeam(Long memoId, PublishToTeamRequest request, Long userId) {
         // 1. メモ所有者検証
@@ -201,7 +193,7 @@ public class ActionMemoPublishingService {
         Long teamId = resolveTeamId(request.getTeamId(), userId);
 
         // 5. チームメンバーシップ検証（IDOR 対策: 非メンバーは 404）
-        if (!userRoleRepository.existsByUserIdAndTeamId(userId, teamId)) {
+        if (!permissionScopeQueryService.existsByUserIdAndTeamId(userId, teamId)) {
             throw new BusinessException(ActionMemoErrorCode.ACTION_MEMO_TEAM_NOT_FOUND);
         }
 
@@ -209,25 +201,20 @@ public class ActionMemoPublishingService {
         String content = buildPublishToTeamContent(memo, request.getExtraComment());
 
         // 7. タイムライン投稿（scope_type=TEAM）
-        TimelinePostEntity post = TimelinePostEntity.builder()
-                .scopeType(PostScopeType.TEAM)
-                .scopeId(teamId)
-                .userId(userId)
-                .content(content)
-                .build();
-        TimelinePostEntity savedPost = timelinePostRepository.save(post);
+        Long savedPostId = timelinePostService.saveActionMemoPost(
+                PostScopeType.TEAM, teamId, userId, content);
 
         // 8. memo.postedTeamId / teamTimelinePostId 更新
         memo.setPostedTeamId(teamId);
         // チーム投稿 ID は team_timeline_post_id へ。timeline_post_id（個人投稿専用）は変更しない
-        memo.setTeamTimelinePostId(savedPost.getId());
+        memo.setTeamTimelinePostId(savedPostId);
         memoRepository.save(memo);
 
         log.info("行動メモ チーム投稿成功: memoId={}, teamId={}, timelinePostId={}",
-                memoId, teamId, savedPost.getId());
+                memoId, teamId, savedPostId);
 
         return PublishToTeamResponse.builder()
-                .timelinePostId(savedPost.getId())
+                .timelinePostId(savedPostId)
                 .teamId(teamId)
                 .memoId(memoId)
                 .build();
@@ -242,7 +229,7 @@ public class ActionMemoPublishingService {
      * @param userId  現在のユーザー ID
      * @return 投稿レスポンス
      */
-    // TODO: actionmemoドメインがroleドメイン(UserRoleRepository)・timelineドメイン(TimelinePostRepository)をまたいでいる。将来はイベント駆動で分離予定
+    // TODO: actionmemoドメインがroleドメイン(PermissionScopeQueryService)・timelineドメイン(TimelinePostService)をまたいでいる。将来はイベント駆動で分離予定
     @Transactional
     public PublishDailyToTeamResponse publishDailyToTeam(PublishDailyToTeamRequest request, Long userId) {
         LocalDate today = LocalDate.now(wallClock);
@@ -251,7 +238,7 @@ public class ActionMemoPublishingService {
         Long teamId = resolveTeamId(request.getTeamId(), userId);
 
         // チームメンバーシップ検証
-        if (!userRoleRepository.existsByUserIdAndTeamId(userId, teamId)) {
+        if (!permissionScopeQueryService.existsByUserIdAndTeamId(userId, teamId)) {
             throw new BusinessException(ActionMemoErrorCode.ACTION_MEMO_TEAM_NOT_FOUND);
         }
 
@@ -371,8 +358,8 @@ public class ActionMemoPublishingService {
 
         // 🔗 関連TODO
         if (memo.getRelatedTodoId() != null) {
-            todoRepository.findByIdAndDeletedAtIsNull(memo.getRelatedTodoId()).ifPresent(todo ->
-                    sb.append("🔗 関連TODO: ").append(todo.getTitle()).append("\n")
+            todoService.findActiveTitle(memo.getRelatedTodoId()).ifPresent(title ->
+                    sb.append("🔗 関連TODO: ").append(title).append("\n")
             );
         }
 

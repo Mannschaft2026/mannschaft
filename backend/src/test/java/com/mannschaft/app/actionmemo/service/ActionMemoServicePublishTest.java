@@ -30,7 +30,7 @@ import com.mannschaft.app.team.repository.TeamRepository;
 import com.mannschaft.app.timeline.PostScopeType;
 import com.mannschaft.app.timeline.PostStatus;
 import com.mannschaft.app.timeline.entity.TimelinePostEntity;
-import com.mannschaft.app.timeline.repository.TimelinePostRepository;
+import com.mannschaft.app.role.service.PermissionScopeQueryService;
 import com.mannschaft.app.timeline.service.TimelinePostService;
 import com.mannschaft.app.todo.TodoPriority;
 import com.mannschaft.app.todo.TodoScopeType;
@@ -103,7 +103,7 @@ class ActionMemoServicePublishTest {
     private TodoRepository todoRepository;
 
     @Mock
-    private TimelinePostRepository timelinePostRepository;
+    private PermissionScopeQueryService permissionScopeQueryService;
 
     /** 旧個人投稿の論理削除は timeline ドメインへ委譲する（所有者・スコープ判定は TimelinePostServiceTest が検証）。 */
     @Mock
@@ -244,23 +244,24 @@ class ActionMemoServicePublishTest {
     private final AtomicLong postIdSeq = new AtomicLong(5000L);
 
     /**
-     * {@link TimelinePostRepository} の save / findById を擬似 DB に結線する。
+     * {@link TimelinePostService#saveActionMemoPost} を擬似 DB に結線する（採番して登録し、ID を返す）。
      *
-     * <p>findById も結線するのは、旧実装（findById で旧投稿を引いて論理削除する）でも
-     * 実 DB と同じく投稿が見つかる状態にし、誤削除を red として観測するため。</p>
+     * <p>旧個人投稿の論理削除は timeline サービスへ委譲されるため、擬似 DB の登録済み投稿は
+     * 「差し替え時に誤って触られていないか」の観測用に使う。</p>
      */
     private void useInMemoryPostsDb() {
-        lenient().when(timelinePostRepository.save(any(TimelinePostEntity.class)))
+        lenient().when(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
                 .thenAnswer(inv -> {
-                    TimelinePostEntity p = inv.getArgument(0);
-                    if (p.getId() == null) {
-                        ReflectionTestUtils.setField(p, "id", postIdSeq.getAndIncrement());
-                    }
+                    TimelinePostEntity p = TimelinePostEntity.builder()
+                            .scopeType(inv.getArgument(0))
+                            .scopeId(inv.getArgument(1))
+                            .userId(inv.getArgument(2))
+                            .content(inv.getArgument(3))
+                            .build();
+                    ReflectionTestUtils.setField(p, "id", postIdSeq.getAndIncrement());
                     postsDb.put(p.getId(), p);
-                    return p;
+                    return p.getId();
                 });
-        lenient().when(timelinePostRepository.findById(any()))
-                .thenAnswer(inv -> Optional.ofNullable(postsDb.get((Long) inv.getArgument(0))));
         lenient().when(memoRepository.save(any(ActionMemoEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
     }
@@ -331,13 +332,8 @@ class ActionMemoServicePublishTest {
                     .willReturn(memos);
             given(settingsService.getMoodEnabled(USER_ID)).willReturn(false);
 
-            AtomicLong postIdSeq = new AtomicLong(1000L);
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity post = inv.getArgument(0);
-                        ReflectionTestUtils.setField(post, "id", postIdSeq.getAndIncrement());
-                        return post;
-                    });
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(1000L);
 
             PublishDailyRequest req = new PublishDailyRequest();
             req.setMemoDate(TARGET_DATE);
@@ -349,14 +345,12 @@ class ActionMemoServicePublishTest {
             assertThat(response.getMemoDate()).isEqualTo(TARGET_DATE);
             assertThat(response.getTimelinePostId()).isEqualTo(1000L);
 
-            ArgumentCaptor<TimelinePostEntity> postCaptor =
-                    ArgumentCaptor.forClass(TimelinePostEntity.class);
-            verify(timelinePostRepository).save(postCaptor.capture());
-            TimelinePostEntity saved = postCaptor.getValue();
-            assertThat(saved.getScopeType()).isEqualTo(PostScopeType.PERSONAL);
-            assertThat(saved.getScopeId()).isEqualTo(USER_ID);
-            assertThat(saved.getUserId()).isEqualTo(USER_ID);
-            assertThat(saved.getContent())
+            ArgumentCaptor<String> postCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<PostScopeType> scopeCaptor = ArgumentCaptor.forClass(PostScopeType.class);
+            verify(timelinePostService).saveActionMemoPost(
+                    scopeCaptor.capture(), any(), any(), postCaptor.capture());
+            assertThat(scopeCaptor.getValue()).isEqualTo(PostScopeType.PERSONAL);
+            assertThat(postCaptor.getValue())
                     .contains("## 2026-04-09 の行動ログ")
                     .contains("朝散歩")
                     .contains("会議準備")
@@ -394,8 +388,7 @@ class ActionMemoServicePublishTest {
             assertThat(newId).isNotNull().isNotEqualTo(500L);
             assertThat(memoWithOldPost.getTimelinePostId()).isEqualTo(newId);
             verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
-            verify(timelinePostRepository, never()).findById(any());
-            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
+            verify(timelinePostService, times(1)).saveActionMemoPost(any(), any(), any(), any());
         }
 
         @Test
@@ -413,9 +406,8 @@ class ActionMemoServicePublishTest {
                             ActionMemoErrorCode.ACTION_MEMO_NO_MEMOS_FOR_DATE);
 
             verify(metrics).incrementPublishDailyError();
-            verify(timelinePostRepository, never()).save(any(TimelinePostEntity.class));
+            verify(timelinePostService, never()).saveActionMemoPost(any(), any(), any(), any());
             verify(timelinePostService, never()).softDeleteOwnPersonalPosts(any(), any());
-            verify(timelinePostRepository, never()).findById(any());
         }
 
         @Test
@@ -424,7 +416,7 @@ class ActionMemoServicePublishTest {
             useInMemoryPostsDb();
             ActionMemoEntity work = workMemo(1L, TARGET_DATE, 9);
             given(memoRepository.findByIdAndUserId(1L, USER_ID)).willReturn(Optional.of(work));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(work));
 
             Long teamPostId = actionMemoPublishingService
@@ -446,7 +438,7 @@ class ActionMemoServicePublishTest {
             useInMemoryPostsDb();
             ActionMemoEntity work = workMemo(1L, TARGET_DATE, 9);
             given(memoRepository.findByIdAndUserId(1L, USER_ID)).willReturn(Optional.of(work));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(work));
 
             Long teamPostId = actionMemoPublishingService
@@ -483,8 +475,7 @@ class ActionMemoServicePublishTest {
             verify(timelinePostService).softDeleteOwnPersonalPosts(Set.of(501L, 502L), USER_ID);
             assertThat(List.of(m1, m2, m3)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
             verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
-            verify(timelinePostRepository, never()).findById(any());
-            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
+            verify(timelinePostService, times(1)).saveActionMemoPost(any(), any(), any(), any());
         }
 
         @Test
@@ -542,8 +533,7 @@ class ActionMemoServicePublishTest {
             assertThat(unrelated.getDeletedAt()).isNull();
             verify(timelinePostService, never()).softDeleteOwnPersonalPosts(any(), any());
             assertThat(List.of(m1, m2)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
-            verify(timelinePostRepository, never()).findById(any());
-            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
+            verify(timelinePostService, times(1)).saveActionMemoPost(any(), any(), any(), any());
         }
 
         @Test
@@ -568,7 +558,6 @@ class ActionMemoServicePublishTest {
             assertThat(postsDb.get(newId).getDeletedAt()).isNull();
             assertThat(List.of(m1, m2)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
             verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
-            verify(timelinePostRepository, never()).findById(any());
         }
 
         @Test
@@ -592,9 +581,8 @@ class ActionMemoServicePublishTest {
             assertThat(memos).hasSize(200)
                     .allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
             verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
-            verify(timelinePostRepository, never()).findById(any());
             // 新投稿の save 1回のみ（旧投稿の save なし）
-            verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
+            verify(timelinePostService, times(1)).saveActionMemoPost(any(), any(), any(), any());
         }
 
         @Test
@@ -607,12 +595,8 @@ class ActionMemoServicePublishTest {
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE))
                     .willReturn(memos);
             given(settingsService.getMoodEnabled(USER_ID)).willReturn(false);
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 3000L);
-                        return p;
-                    });
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(3000L);
 
             PublishDailyRequest req = new PublishDailyRequest();
             req.setMemoDate(TARGET_DATE);
@@ -620,10 +604,11 @@ class ActionMemoServicePublishTest {
 
             actionMemoPublishingService.publishDaily(req, USER_ID);
 
-            ArgumentCaptor<TimelinePostEntity> captor =
-                    ArgumentCaptor.forClass(TimelinePostEntity.class);
-            verify(timelinePostRepository).save(captor.capture());
-            String savedContent = captor.getValue().getContent();
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<PostScopeType> scopeCaptor = ArgumentCaptor.forClass(PostScopeType.class);
+            verify(timelinePostService).saveActionMemoPost(
+                    scopeCaptor.capture(), any(), any(), captor.capture());
+            String savedContent = captor.getValue();
             assertThat(savedContent)
                     .contains("今日はよく動けた")
                     .doesNotContain("<script>")
@@ -647,7 +632,7 @@ class ActionMemoServicePublishTest {
             ActionMemoEntity work = workMemo(MEMO_ID, date, 9);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, date)).willReturn(List.of(work));
             given(memoRepository.findByIdAndUserId(MEMO_ID, USER_ID)).willReturn(Optional.of(work));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
 
             Long personalPostId = actionMemoPublishingService
                     .publishDaily(publishDailyRequest(date), USER_ID).getTimelinePostId();
@@ -669,13 +654,9 @@ class ActionMemoServicePublishTest {
                     LocalDateTime.of(2026, 4, 27, 10, 0));
             given(memoRepository.findByIdAndUserId(MEMO_ID, USER_ID))
                     .willReturn(Optional.of(workMemo));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 9000L);
-                        return p;
-                    });
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(9000L);
             given(memoRepository.save(any(ActionMemoEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
@@ -734,7 +715,7 @@ class ActionMemoServicePublishTest {
                     LocalDateTime.now());
             given(memoRepository.findByIdAndUserId(MEMO_ID, USER_ID))
                     .willReturn(Optional.of(workMemo));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(false);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(false);
 
             PublishToTeamRequest req = new PublishToTeamRequest(42L, null);
 
@@ -772,13 +753,9 @@ class ActionMemoServicePublishTest {
                     .willReturn(Optional.of(workMemo));
             given(settingsService.findSettings(USER_ID))
                     .willReturn(Optional.of(settingsOf(USER_ID, ActionMemoCategory.WORK, 99L)));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 99L)).willReturn(true);
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 9100L);
-                        return p;
-                    });
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 99L)).willReturn(true);
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(9100L);
             given(memoRepository.save(any(ActionMemoEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
@@ -800,15 +777,10 @@ class ActionMemoServicePublishTest {
 
             given(memoRepository.findByIdAndUserId(MEMO_ID, USER_ID))
                     .willReturn(Optional.of(workMemo));
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
-            given(todoRepository.findByIdAndDeletedAtIsNull(42L))
-                    .willReturn(Optional.of(ownPersonalTodo(42L, USER_ID, "重要タスク", TodoStatus.OPEN)));
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 9200L);
-                        return p;
-                    });
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(todoService.findActiveTitle(42L)).willReturn(Optional.of("重要タスク"));
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(9200L);
             given(memoRepository.save(any(ActionMemoEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
@@ -816,10 +788,11 @@ class ActionMemoServicePublishTest {
                     "順調です<script>alert(1)</script>");
             actionMemoPublishingService.publishToTeam(MEMO_ID, req, USER_ID);
 
-            ArgumentCaptor<TimelinePostEntity> postCaptor =
-                    ArgumentCaptor.forClass(TimelinePostEntity.class);
-            verify(timelinePostRepository).save(postCaptor.capture());
-            String content = postCaptor.getValue().getContent();
+            ArgumentCaptor<String> postCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<PostScopeType> scopeCaptor = ArgumentCaptor.forClass(PostScopeType.class);
+            verify(timelinePostService).saveActionMemoPost(
+                    scopeCaptor.capture(), any(), any(), postCaptor.capture());
+            String content = postCaptor.getValue();
 
             // [HH:MM] {content}
             assertThat(content).contains("[09:15]").contains("朝の作業");
@@ -858,19 +831,15 @@ class ActionMemoServicePublishTest {
                     "メモ2", ActionMemoCategory.WORK, null, null, null, false,
                     LocalDateTime.of(2026, 4, 27, 10, 0));
 
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDateAndCategoryAndPostedTeamIdIsNull(
                     eq(USER_ID), eq(CURRENT_DATE), eq(ActionMemoCategory.WORK)))
                     .willReturn(List.of(m1, m2));
             // publishToTeam の中で findByIdAndUserId が呼ばれる
             given(memoRepository.findByIdAndUserId(11L, USER_ID)).willReturn(Optional.of(m1));
             given(memoRepository.findByIdAndUserId(12L, USER_ID)).willReturn(Optional.of(m2));
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 9300L);
-                        return p;
-                    });
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(9300L);
             given(memoRepository.save(any(ActionMemoEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
@@ -890,18 +859,14 @@ class ActionMemoServicePublishTest {
                     "未投稿WORK", ActionMemoCategory.WORK, null, null, null, false,
                     LocalDateTime.of(2026, 4, 27, 9, 0));
 
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDateAndCategoryAndPostedTeamIdIsNull(
                     eq(USER_ID), eq(CURRENT_DATE), eq(ActionMemoCategory.WORK)))
                     .willReturn(List.of(unpostedWork));
             given(memoRepository.findByIdAndUserId(11L, USER_ID))
                     .willReturn(Optional.of(unpostedWork));
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 9400L);
-                        return p;
-                    });
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(9400L);
             given(memoRepository.save(any(ActionMemoEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
@@ -921,7 +886,7 @@ class ActionMemoServicePublishTest {
             m1.setTimelinePostId(500L); // 既に個人投稿済み
             existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
 
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDateAndCategoryAndPostedTeamIdIsNull(
                     eq(USER_ID), eq(CURRENT_DATE), eq(ActionMemoCategory.WORK)))
                     .willReturn(List.of(m1, m2));
@@ -941,7 +906,7 @@ class ActionMemoServicePublishTest {
         @Test
         @DisplayName("当日 WORK メモが0件 → NO_WORK_MEMO_TODAY")
         void publishDailyToTeam_zeroWorkMemos_throws_NO_WORK_MEMO_TODAY() {
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDateAndCategoryAndPostedTeamIdIsNull(
                     eq(USER_ID), eq(CURRENT_DATE), eq(ActionMemoCategory.WORK)))
                     .willReturn(List.of());
@@ -967,19 +932,15 @@ class ActionMemoServicePublishTest {
                     "M3", ActionMemoCategory.WORK, null, null, null, false,
                     LocalDateTime.of(2026, 4, 27, 11, 0));
 
-            given(userRoleRepository.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
+            given(permissionScopeQueryService.existsByUserIdAndTeamId(USER_ID, 42L)).willReturn(true);
             given(memoRepository.findByUserIdAndMemoDateAndCategoryAndPostedTeamIdIsNull(
                     eq(USER_ID), eq(CURRENT_DATE), eq(ActionMemoCategory.WORK)))
                     .willReturn(List.of(m1, m2, m3));
             given(memoRepository.findByIdAndUserId(11L, USER_ID)).willReturn(Optional.of(m1));
             given(memoRepository.findByIdAndUserId(12L, USER_ID)).willReturn(Optional.of(m2));
             given(memoRepository.findByIdAndUserId(13L, USER_ID)).willReturn(Optional.of(m3));
-            given(timelinePostRepository.save(any(TimelinePostEntity.class)))
-                    .willAnswer(inv -> {
-                        TimelinePostEntity p = inv.getArgument(0);
-                        ReflectionTestUtils.setField(p, "id", 9500L);
-                        return p;
-                    });
+            given(timelinePostService.saveActionMemoPost(any(), any(), any(), any()))
+                    .willReturn(9500L);
             given(memoRepository.save(any(ActionMemoEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
@@ -987,8 +948,8 @@ class ActionMemoServicePublishTest {
             PublishDailyToTeamResponse response = actionMemoPublishingService.publishDailyToTeam(req, USER_ID);
 
             assertThat(response.getPostedCount()).isEqualTo(3);
-            // timelinePostRepository.save が 3 回呼ばれる
-            verify(timelinePostRepository, atLeastOnce()).save(any(TimelinePostEntity.class));
+            // saveActionMemoPost が 3 回呼ばれる
+            verify(timelinePostService, atLeastOnce()).saveActionMemoPost(any(), any(), any(), any());
         }
     }
 }

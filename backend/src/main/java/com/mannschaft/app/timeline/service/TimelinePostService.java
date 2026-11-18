@@ -372,6 +372,30 @@ public class TimelinePostService {
     }
 
     /**
+     * 行動メモ（actionmemo）由来の投稿を、指定スコープへ本文のみで保存し投稿 ID を返す。
+     *
+     * <p>{@code createPost} と異なり、通知・ストレージ枠計上・メンション処理・イベント発行などの副作用は
+     * 一切行わない。行動メモ公開サービスが従来 {@code TimelinePostRepository#save} で行っていた
+     * 「スコープ・投稿者・本文だけの INSERT」をそのまま timeline ドメイン内へ移したもの。</p>
+     *
+     * @param scopeType 投稿先スコープ（PERSONAL / TEAM）
+     * @param scopeId   スコープ ID（PERSONAL なら userId、TEAM なら teamId）
+     * @param userId    投稿者 ID
+     * @param content   本文
+     * @return 保存した投稿の ID
+     */
+    @Transactional
+    public Long saveActionMemoPost(PostScopeType scopeType, Long scopeId, Long userId, String content) {
+        TimelinePostEntity post = TimelinePostEntity.builder()
+                .scopeType(scopeType)
+                .scopeId(scopeId)
+                .userId(userId)
+                .content(content)
+                .build();
+        return postRepository.save(post).getId();
+    }
+
+    /**
      * 指定 ID 群のうち生存している（timeline {@code deleted_at} でない）当該村の VILLAGE 投稿 ID を返す
      * （F17.2 Wave2 ③・実況一覧/村史編纂の削除済み除外・AC-17c）。
      */

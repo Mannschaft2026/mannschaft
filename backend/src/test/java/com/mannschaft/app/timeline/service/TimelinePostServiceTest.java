@@ -3128,6 +3128,28 @@ class TimelinePostServiceTest {
         assertThat(deleted.getDeletedAt()).isNotNull();
     }
 
+    @Test
+    @DisplayName("saveActionMemoPost: 指定スコープ・投稿者・本文だけで保存し ID を返す（副作用の Service は呼ばない）")
+    void saveActionMemoPost_savesOnlyGivenValues() {
+        given(postRepository.save(org.mockito.ArgumentMatchers.any(TimelinePostEntity.class)))
+                .willAnswer(inv -> {
+                    TimelinePostEntity p = inv.getArgument(0);
+                    org.springframework.test.util.ReflectionTestUtils.setField(p, "id", 7777L);
+                    return p;
+                });
+
+        Long id = timelinePostService.saveActionMemoPost(PostScopeType.TEAM, 42L, USER_ID, "本文");
+
+        assertThat(id).isEqualTo(7777L);
+        org.mockito.ArgumentCaptor<TimelinePostEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(TimelinePostEntity.class);
+        verify(postRepository, org.mockito.Mockito.times(1)).save(captor.capture());
+        assertThat(captor.getValue().getScopeType()).isEqualTo(PostScopeType.TEAM);
+        assertThat(captor.getValue().getScopeId()).isEqualTo(42L);
+        assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
+        assertThat(captor.getValue().getContent()).isEqualTo("本文");
+    }
+
     private TimelinePostEntity createPersonalPost(Long id, Long scopeId, Long authorId) {
         TimelinePostEntity post = TimelinePostEntity.builder()
                 .scopeType(PostScopeType.PERSONAL).scopeId(scopeId).userId(authorId).content("p").build();
