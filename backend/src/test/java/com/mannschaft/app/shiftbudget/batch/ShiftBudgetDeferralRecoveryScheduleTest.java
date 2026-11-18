@@ -1,5 +1,6 @@
 package com.mannschaft.app.shiftbudget.batch;
 
+import com.mannschaft.app.common.architecture.ArchUnitTestTag;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseCoordinator;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -7,6 +8,7 @@ import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 既定は生成されない Bean からしか {@link MonthlyShiftBudgetCloseCoordinator#recoverDeferrals()} を
  * 呼んでいなければ、PENDING は回収されず残り続ける。</p>
  */
+@Tag(ArchUnitTestTag.ARCHUNIT)
 @DisplayName("CMP-260909-2152 遅延記録の回収は既定設定でも定期実行される")
 class ShiftBudgetDeferralRecoveryScheduleTest {
 

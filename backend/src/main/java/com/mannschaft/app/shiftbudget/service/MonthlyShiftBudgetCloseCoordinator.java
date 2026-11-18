@@ -198,10 +198,16 @@ public class MonthlyShiftBudgetCloseCoordinator {
         int already = 0;
         int failed = 0;
         int consumptions = 0;
+        Set<Long> interrupted = new HashSet<>();
         for (Map.Entry<YearMonth, List<ShiftBudgetAllocationEntity>> entry : byKey.entrySet()) {
+            List<ShiftBudgetAllocationEntity> targets = continuing(entry.getValue(), interrupted);
+            if (targets.isEmpty()) {
+                continue;
+            }
             ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), today);
-            for (ShiftBudgetAllocationEntity allocation : entry.getValue()) {
+            for (ShiftBudgetAllocationEntity allocation : targets) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
+                markIfInterrupted(interrupted, allocation, r);
                 switch (r.kind()) {
                     case CLOSED -> {
                         closed++;
@@ -217,6 +223,26 @@ public class MonthlyShiftBudgetCloseCoordinator {
         log.info("F08.7 期間締め完了: orgId={}, key={}, closed={}, alreadyClosed={}, failed={}, consumptions={}",
                 organizationId, periodKey, closed, already, failed, consumptions);
         return new CloseResult(closed, already, failed, consumptions);
+    }
+
+    /**
+     * 割当ごとの締めは先頭の期間から途切れない（CMP-260909-2152 再検分 P2-2）。途中の期間が締まらなかった割当は、同じ実行で
+     * 後続の期間へ進まない。進むと最終期間だけが CLOSED になり、日次バッチの候補（最終期間の締めの有無で判定）から外れて
+     * 途中の期間の PLANNED が自動で回収されなくなる。
+     */
+    private static List<ShiftBudgetAllocationEntity> continuing(List<ShiftBudgetAllocationEntity> allocations,
+                                                                Set<Long> interrupted) {
+        if (interrupted.isEmpty()) {
+            return allocations;
+        }
+        return allocations.stream().filter(a -> !interrupted.contains(a.getId())).toList();
+    }
+
+    /** CLOSED／既に締め済み以外（失敗・中止・割当消滅）なら、その割当の後続期間を止める。 */
+    private static void markIfInterrupted(Set<Long> interrupted, ShiftBudgetAllocationEntity allocation, AllocationResult r) {
+        if (r.kind() != AllocationResult.Kind.CLOSED && r.kind() != AllocationResult.Kind.ALREADY_CLOSED) {
+            interrupted.add(allocation.getId());
+        }
     }
 
     private static void addIfOpen(TreeMap<YearMonth, List<ShiftBudgetAllocationEntity>> byKey,
@@ -260,8 +286,10 @@ public class MonthlyShiftBudgetCloseCoordinator {
             YearMonth lastOfAllocation = ShiftBudgetClosePeriodCalculator.periodKeyOf(a.getPeriodEnd(), closingDay);
             YearMonth last = lastOfAllocation.isAfter(lastEnded) ? lastEnded : lastOfAllocation;
             for (YearMonth k = first; !k.isAfter(last); k = k.plusMonths(1)) {
-                if (conflicts.contains(a.getId() + ":" + k)) {
-                    continue;
+                if (conflicts.contains(a.getId() + ":" + k)
+                        && events.getOrDefault(a.getId(), Map.of()).get(k.toString()) != ShiftBudgetCloseEventState.CLOSED) {
+                    // 仕訳衝突の期間は自動で締め直さない。締めは先頭から途切れないので、後続の期間へも進まない（手動で解消後に再開）
+                    break;
                 }
                 addIfOpen(byKey, events, a, k);
             }
@@ -269,14 +297,20 @@ public class MonthlyShiftBudgetCloseCoordinator {
         int keys = 0;
         int closed = 0;
         int failed = 0;
+        Set<Long> interrupted = new HashSet<>();
         for (Map.Entry<YearMonth, List<ShiftBudgetAllocationEntity>> entry : byKey.entrySet()) {
             if (keys >= MAX_KEYS_PER_ORGANIZATION) {
                 break;
             }
+            List<ShiftBudgetAllocationEntity> targets = continuing(entry.getValue(), interrupted);
+            if (targets.isEmpty()) {
+                continue;
+            }
             keys++;
             ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), yesterday);
-            for (ShiftBudgetAllocationEntity allocation : entry.getValue()) {
+            for (ShiftBudgetAllocationEntity allocation : targets) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
+                markIfInterrupted(interrupted, allocation, r);
                 if (r.kind() == AllocationResult.Kind.CLOSED) {
                     closed++;
                 } else if (r.kind() == AllocationResult.Kind.FAILED) {

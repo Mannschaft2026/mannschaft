@@ -5,6 +5,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.featuregate.RequireFeature;
 import com.mannschaft.app.shiftbudget.dto.ClosePeriodListResponse;
+import com.mannschaft.app.shiftbudget.service.ShiftBudgetBusinessDateProvider;
 import com.mannschaft.app.shiftbudget.dto.UncountedShiftListResponse;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetClosePeriodFacade;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,6 +38,7 @@ import java.time.format.DateTimeParseException;
 public class ShiftBudgetClosePeriodController {
 
     private final ShiftBudgetClosePeriodFacade facade;
+    private final ShiftBudgetBusinessDateProvider dateProvider;
 
     @GetMapping("/close-periods")
     @Operation(summary = "組織の締め期間一覧（期間キー from〜to。from>to または36か月超は 400）")
@@ -45,7 +47,7 @@ public class ShiftBudgetClosePeriodController {
             @RequestParam("from") String from,
             @RequestParam("to") String to) {
         return ApiResponse.of(ClosePeriodListResponse.from(
-                facade.listByOrganization(organizationId, parseKey(from), parseKey(to))));
+                facade.listByOrganization(organizationId, parseKey(from), parseKey(to)), dateProvider.today()));
     }
 
     @GetMapping("/allocations/{id}/close-periods")
@@ -53,7 +55,8 @@ public class ShiftBudgetClosePeriodController {
     public ApiResponse<ClosePeriodListResponse> listByAllocation(
             @RequestHeader("X-Organization-Id") Long organizationId,
             @PathVariable("id") Long allocationId) {
-        return ApiResponse.of(ClosePeriodListResponse.from(facade.listByAllocation(organizationId, allocationId)));
+        return ApiResponse.of(ClosePeriodListResponse.from(facade.listByAllocation(organizationId, allocationId),
+                dateProvider.today()));
     }
 
     @GetMapping("/allocations/{id}/monthly-closes/{period}/uncounted-shifts")

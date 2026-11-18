@@ -45,13 +45,12 @@ const closePeriods = ref<ClosePeriodResponse[]>([])
 /** 期間一覧の取得範囲（期間キー。今日を含む期間の 12 か月前〜翌月。BE の上限 36 か月以内） */
 const CLOSE_PERIOD_LOOKBACK_MONTHS = 12
 
-function todayInTimezone(): string {
-  return dayjs().tz(userTimezone.value).format('YYYY-MM-DD')
-}
-
-/** 終了日が今日（Asia/Tokyo 等の利用者タイムゾーン）以前の期間だけが締められる（終了日当日を含む）。 */
+/**
+ * 終了済み（終了日当日を含む）の期間だけが締められる。判定はサーバーの業務日（Asia/Tokyo）で BE が返す ended を正とし、
+ * 利用者端末のタイムゾーンの「今日」では判定しない（締め API の 409 判定とずらさない。CMP-260909-2152 再検分 P2-4）。
+ */
 function isEnded(period: ClosePeriodResponse): boolean {
-  return period.period_end <= todayInTimezone()
+  return period.ended
 }
 
 function periodLabel(period: ClosePeriodResponse): string {

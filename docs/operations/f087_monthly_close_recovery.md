@@ -336,6 +336,7 @@ SELECT e.id,
 
 締めの単位は暦月から**組織の締め期間**（締め日 `closing_day`、0＝末日）になった。`year_month` は「期間キー（締め日が属する月）」で、
 API #11 の応答に `period_start`／`period_end`／`closing_day` が付く。日次バッチは毎日 02:00 JST（既定 OFF）。
+割当ごとの締めは**先頭の期間から途切れない**: ある期間の締めが失敗（例外・ABORTED・仕訳衝突・割当消滅）したら、同じ割当の後続期間へは進まない（日次バッチも手動の追いつきも同じ）。失敗した期間が締まれば翌日の日次バッチ（または手動締めの追いつき）が古い順に再開する。
 
 ### 9.1 3段締めの途中停止からの復旧
 
@@ -362,7 +363,7 @@ SELECT e.allocation_id, e.target_month, e.state, e.line_count, e.planned_total, 
 ### 9.2 遅延記録（`shift_budget_record_deferrals`）の回収
 
 締めの PREPARED を理由に記録・取消ができなかったシフトは、遅延行（シフト×イベントごとに PENDING 1件）に入り、Commit／Abort 直後に段取り役が再実行する。
-取りこぼし（再実行前の停止・リース切れ）は日次バッチと15分再試行バッチが回収する。
+取りこぼし（再実行前の停止・リース切れ）は15分ごとの遅延記録回収バッチ（`ShiftBudgetDeferralRecoveryBatchJob`。日次締め cron・失敗イベント再試行バッチの有効化とは独立に**常時**動く）と、日次バッチ（有効時）が回収する。
 
 ```sql
 SELECT shift_id, state, attempt_count, last_error, claimed_by, lease_until, created_at
