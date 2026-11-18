@@ -779,13 +779,17 @@ void cleanup() {
 
 #### 完了条件（新規 E2E spec）
 
-- 新規に追加する E2E spec は、`--workers=1` で5回連続して成功し、かつ既定の並列ワーカー数で1回成功して、はじめて完了とする
-- 理由: 直列の連続実行で不安定さ（flaky）を、並列実行で共有状態の衝突を検出するため
+- 新規に追加する E2E spec は、再試行なし（`--retries=0`）で、`--workers=1` で5回連続して成功し、かつ既定の並列ワーカー数で1回成功して、はじめて完了とする
+- 理由: 直列の連続実行で不安定さ（flaky）を、並列実行で共有状態の衝突を検出するため。再試行を許すと失敗が隠れるので `--retries=0` を付ける
+- 並列の確認は、環境変数 `CI` を設定していないローカルで行う。`frontend/playwright.config.ts` は `CI` が有効だと `workers: 1`（かつ `retries: 2`）になり、並列にならないため
 
 ```bash
-cd frontend && npx playwright test <spec> --workers=1 --repeat-each=5
-cd frontend && npx playwright test <spec>
+cd frontend
+npx playwright test <spec> --workers=1 --repeat-each=5 --retries=0
+npx playwright test <spec> --retries=0
 ```
+
+- 実行の前提: 既定の BASE_URL は `http://localhost:8081`（`BASE_URL` 環境変数で変更可）。未起動なら config の `webServer` が Nuxt dev サーバーを起動し、起動済みなら再利用する。`tests/e2e/real/` の spec は `--project=chromium-real`（管理者用は `chromium-real-admin`）を指定し、実機のバックエンド（:8080）が必要
 
 ### 9.3 E2E テストの配置
 
