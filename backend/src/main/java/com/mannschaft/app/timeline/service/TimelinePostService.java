@@ -345,6 +345,33 @@ public class TimelinePostService {
     }
 
     /**
+     * 指定 ID 群のうち「操作者自身の個人（PERSONAL）投稿」だけを論理削除する。
+     *
+     * <p>行動メモ publishDaily の旧個人投稿差し替え用。投稿の取得・所有者／スコープ確認・論理削除を
+     * timeline ドメイン内に閉じる。チーム投稿・他人の投稿・存在しない ID は無視する。
+     * 取得は {@code findAllById} 1 回のみ（ループ内で Repository を呼ばない）。managed エンティティの
+     * 変更はコミット時の dirty checking で反映するため save は呼ばない。</p>
+     *
+     * <p>正規の {@code deletePost} の副作用（返信数・ストレージ枠など）は通らない。</p>
+     *
+     * @param postIds 削除候補の投稿 ID 群（空・null なら何もしない）
+     * @param userId  操作者（scopeId・投稿者のいずれも一致するものだけ対象）
+     */
+    @Transactional
+    public void softDeleteOwnPersonalPosts(java.util.Collection<Long> postIds, Long userId) {
+        if (postIds == null || postIds.isEmpty() || userId == null) {
+            return;
+        }
+        for (TimelinePostEntity post : postRepository.findAllById(postIds)) {
+            if (post.getScopeType() == PostScopeType.PERSONAL
+                    && java.util.Objects.equals(post.getScopeId(), userId)
+                    && java.util.Objects.equals(post.getUserId(), userId)) {
+                post.softDelete();
+            }
+        }
+    }
+
+    /**
      * 指定 ID 群のうち生存している（timeline {@code deleted_at} でない）当該村の VILLAGE 投稿 ID を返す
      * （F17.2 Wave2 ③・実況一覧/村史編纂の削除済み除外・AC-17c）。
      */

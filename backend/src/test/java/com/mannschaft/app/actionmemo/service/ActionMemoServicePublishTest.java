@@ -31,6 +31,7 @@ import com.mannschaft.app.timeline.PostScopeType;
 import com.mannschaft.app.timeline.PostStatus;
 import com.mannschaft.app.timeline.entity.TimelinePostEntity;
 import com.mannschaft.app.timeline.repository.TimelinePostRepository;
+import com.mannschaft.app.timeline.service.TimelinePostService;
 import com.mannschaft.app.todo.TodoPriority;
 import com.mannschaft.app.todo.TodoScopeType;
 import com.mannschaft.app.todo.TodoStatus;
@@ -61,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,6 +104,10 @@ class ActionMemoServicePublishTest {
 
     @Mock
     private TimelinePostRepository timelinePostRepository;
+
+    /** 旧個人投稿の論理削除は timeline ドメインへ委譲する（所有者・スコープ判定は TimelinePostServiceTest が検証）。 */
+    @Mock
+    private TimelinePostService timelinePostService;
 
     @Mock
     private ActionMemoSettingsService settingsService;
@@ -232,13 +238,13 @@ class ActionMemoServicePublishTest {
     // タイムライン投稿の擬似 DB（チーム投稿と個人投稿の列分割の試練用）
     // ==================================================================
 
-    /** timeline_posts を模した擬似 DB。save で採番・登録し、findById / findAllById はここから引く。 */
+    /** timeline_posts を模した擬似 DB。save で採番・登録し、findById はここから引く。 */
     private final Map<Long, TimelinePostEntity> postsDb = new HashMap<>();
 
     private final AtomicLong postIdSeq = new AtomicLong(5000L);
 
     /**
-     * {@link TimelinePostRepository} の save / findById / findAllById を擬似 DB に結線する。
+     * {@link TimelinePostRepository} の save / findById を擬似 DB に結線する。
      *
      * <p>findById も結線するのは、旧実装（findById で旧投稿を引いて論理削除する）でも
      * 実 DB と同じく投稿が見つかる状態にし、誤削除を red として観測するため。</p>
@@ -255,18 +261,6 @@ class ActionMemoServicePublishTest {
                 });
         lenient().when(timelinePostRepository.findById(any()))
                 .thenAnswer(inv -> Optional.ofNullable(postsDb.get((Long) inv.getArgument(0))));
-        lenient().when(timelinePostRepository.findAllById(any()))
-                .thenAnswer(inv -> {
-                    Iterable<Long> ids = inv.getArgument(0);
-                    List<TimelinePostEntity> found = new ArrayList<>();
-                    for (Long id : ids) {
-                        TimelinePostEntity p = postsDb.get(id);
-                        if (p != null) {
-                            found.add(p);
-                        }
-                    }
-                    return found;
-                });
         lenient().when(memoRepository.save(any(ActionMemoEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
     }
@@ -375,7 +369,7 @@ class ActionMemoServicePublishTest {
         }
 
         @Test
-        @DisplayName("AC-13 冪等性: 既存 timeline_post_id（自分の PERSONAL 投稿）は findAllById で引いて論理削除し、新投稿に差し替える（save(旧) は呼ばない）")
+        @DisplayName("AC-13 冪等性: 既存 timeline_post_id（自分の PERSONAL 投稿）は timeline サービスへ論理削除を委譲し、新投稿に差し替える（save(旧) は呼ばない）")
         void publishDaily_idempotentOverwrite() {
             useInMemoryPostsDb();
             ActionMemoEntity memoWithOldPost = memoWithCreatedAt(
@@ -388,19 +382,18 @@ class ActionMemoServicePublishTest {
                     .willReturn(memos);
             given(settingsService.getMoodEnabled(USER_ID)).willReturn(false);
 
-            TimelinePostEntity oldPost = existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
 
             PublishDailyResponse response = actionMemoPublishingService.publishDaily(
                     publishDailyRequest(TARGET_DATE), USER_ID);
 
-            // 旧投稿の論理削除（dirty checking に委ね save(旧) はしない）
-            assertThat(oldPost.getDeletedAt()).isNotNull();
-            assertThat(oldPost.getStatus()).isEqualTo(PostStatus.DELETED);
+            // 旧投稿の論理削除は timeline ドメインのサービスへ委譲（save(旧) はしない）
+            verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(Set.of(500L), USER_ID);
             // 新投稿 ID で差し替え
             Long newId = response.getTimelinePostId();
             assertThat(newId).isNotNull().isNotEqualTo(500L);
             assertThat(memoWithOldPost.getTimelinePostId()).isEqualTo(newId);
-            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
             verify(timelinePostRepository, never()).findById(any());
             verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
         }
@@ -421,7 +414,7 @@ class ActionMemoServicePublishTest {
 
             verify(metrics).incrementPublishDailyError();
             verify(timelinePostRepository, never()).save(any(TimelinePostEntity.class));
-            verify(timelinePostRepository, never()).findAllById(any());
+            verify(timelinePostService, never()).softDeleteOwnPersonalPosts(any(), any());
             verify(timelinePostRepository, never()).findById(any());
         }
 
@@ -442,6 +435,8 @@ class ActionMemoServicePublishTest {
 
             assertThat(teamPost.getScopeType()).isEqualTo(PostScopeType.TEAM);
             assertThat(teamPost.getDeletedAt()).as("チーム投稿は論理削除されない").isNull();
+            // チーム投稿 ID は旧個人投稿 ID に含まれないため、削除委譲自体が起きない
+            verify(timelinePostService, never()).softDeleteOwnPersonalPosts(any(), any());
             assertThat(teamPost.getStatus()).isNotEqualTo(PostStatus.DELETED);
         }
 
@@ -466,7 +461,7 @@ class ActionMemoServicePublishTest {
         }
 
         @Test
-        @DisplayName("AC-5 当日メモの旧投稿IDが複数種（P1,P2）でも取得は findAllById 1回のみ・findById 不呼出・両方論理削除・save(旧) なし")
+        @DisplayName("AC-5 当日メモの旧投稿IDが複数種（P1,P2）でも削除委譲は1回のみ（ID集合 P1,P2）・findById 不呼出・save(旧) なし")
         void publishDaily_multipleOldPosts_fetchedOnceAndAllDeleted() {
             useInMemoryPostsDb();
             ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
@@ -478,17 +473,16 @@ class ActionMemoServicePublishTest {
             m1.setTimelinePostId(501L);
             m2.setTimelinePostId(502L);
             m3.setTimelinePostId(501L);
-            TimelinePostEntity p1 = existingPost(501L, PostScopeType.PERSONAL, USER_ID, USER_ID);
-            TimelinePostEntity p2 = existingPost(502L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            existingPost(501L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            existingPost(502L, PostScopeType.PERSONAL, USER_ID, USER_ID);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1, m2, m3));
 
             Long newId = actionMemoPublishingService
                     .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
 
-            assertThat(p1.getDeletedAt()).isNotNull();
-            assertThat(p2.getDeletedAt()).isNotNull();
+            verify(timelinePostService).softDeleteOwnPersonalPosts(Set.of(501L, 502L), USER_ID);
             assertThat(List.of(m1, m2, m3)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
-            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
             verify(timelinePostRepository, never()).findById(any());
             verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
         }
@@ -503,15 +497,16 @@ class ActionMemoServicePublishTest {
                     LocalDateTime.of(2026, 4, 9, 10, 0));
             m1.setTimelinePostId(601L);
             m2.setTimelinePostId(602L);
-            TimelinePostEntity teamPost = existingPost(601L, PostScopeType.TEAM, 42L, USER_ID);
-            TimelinePostEntity othersPersonal = existingPost(602L, PostScopeType.PERSONAL, OTHER_USER_ID, OTHER_USER_ID);
+            existingPost(601L, PostScopeType.TEAM, 42L, USER_ID);
+            existingPost(602L, PostScopeType.PERSONAL, OTHER_USER_ID, OTHER_USER_ID);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1, m2));
 
             actionMemoPublishingService.publishDaily(publishDailyRequest(TARGET_DATE), USER_ID);
 
-            assertThat(teamPost.getDeletedAt()).as("TEAM 投稿は削除しない").isNull();
-            assertThat(othersPersonal.getDeletedAt()).as("他人の個人投稿は削除しない").isNull();
-            assertThat(othersPersonal.getStatus()).isNotEqualTo(PostStatus.DELETED);
+            // 非 PERSONAL・他人投稿の除外判定は timeline 側（TimelinePostServiceTest）が持つ。
+            // ここでは操作者 ID を添えて境界の向こうへ委譲していることを検証する。
+            verify(timelinePostService).softDeleteOwnPersonalPosts(Set.of(601L, 602L), USER_ID);
+            verify(timelinePostService, never()).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(OTHER_USER_ID));
         }
 
         @Test
@@ -521,13 +516,13 @@ class ActionMemoServicePublishTest {
             ActionMemoEntity m1 = memoWithCreatedAt(1L, USER_ID, TARGET_DATE, "A", null,
                     LocalDateTime.of(2026, 4, 9, 9, 0));
             m1.setTimelinePostId(701L);
-            TimelinePostEntity foreignAuthored = existingPost(701L, PostScopeType.PERSONAL, USER_ID, OTHER_USER_ID);
+            existingPost(701L, PostScopeType.PERSONAL, USER_ID, OTHER_USER_ID);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(m1));
 
             actionMemoPublishingService.publishDaily(publishDailyRequest(TARGET_DATE), USER_ID);
 
-            assertThat(foreignAuthored.getDeletedAt()).isNull();
-            assertThat(foreignAuthored.getStatus()).isNotEqualTo(PostStatus.DELETED);
+            // 投稿者 userId の照合は timeline 側が行う。操作者 ID を渡して委譲していることを検証する。
+            verify(timelinePostService).softDeleteOwnPersonalPosts(Set.of(701L), USER_ID);
         }
 
         @Test
@@ -545,7 +540,7 @@ class ActionMemoServicePublishTest {
                     .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
 
             assertThat(unrelated.getDeletedAt()).isNull();
-            assertThat(postsDb.values()).filteredOn(p -> p.getDeletedAt() != null).isEmpty();
+            verify(timelinePostService, never()).softDeleteOwnPersonalPosts(any(), any());
             assertThat(List.of(m1, m2)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
             verify(timelinePostRepository, never()).findById(any());
             verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));
@@ -572,12 +567,12 @@ class ActionMemoServicePublishTest {
             assertThat(newId).isNotNull();
             assertThat(postsDb.get(newId).getDeletedAt()).isNull();
             assertThat(List.of(m1, m2)).allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
-            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
             verify(timelinePostRepository, never()).findById(any());
         }
 
         @Test
-        @DisplayName("AC-15 上限200件のメモが同一旧投稿IDを共有しても findAllById 1回・論理削除1回で、200件すべて新投稿に紐づく")
+        @DisplayName("AC-15 上限200件のメモが同一旧投稿IDを共有しても 削除委譲1回（ID集合は1件）で、200件すべて新投稿に紐づく")
         void publishDaily_200MemosSharingOldPost_singleFetchAndDelete() {
             useInMemoryPostsDb();
             List<ActionMemoEntity> memos = new ArrayList<>();
@@ -587,16 +582,16 @@ class ActionMemoServicePublishTest {
                 m.setTimelinePostId(500L);
                 memos.add(m);
             }
-            TimelinePostEntity oldPost = existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
             given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(memos);
 
             Long newId = actionMemoPublishingService
                     .publishDaily(publishDailyRequest(TARGET_DATE), USER_ID).getTimelinePostId();
 
-            assertThat(oldPost.getDeletedAt()).isNotNull();
+            verify(timelinePostService).softDeleteOwnPersonalPosts(Set.of(500L), USER_ID);
             assertThat(memos).hasSize(200)
                     .allSatisfy(m -> assertThat(m.getTimelinePostId()).isEqualTo(newId));
-            verify(timelinePostRepository, times(1)).findAllById(any());
+            verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
             verify(timelinePostRepository, never()).findById(any());
             // 新投稿の save 1回のみ（旧投稿の save なし）
             verify(timelinePostRepository, times(1)).save(any(TimelinePostEntity.class));

@@ -19,6 +19,7 @@ import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.timeline.PostScopeType;
 import com.mannschaft.app.timeline.entity.TimelinePostEntity;
 import com.mannschaft.app.timeline.repository.TimelinePostRepository;
+import com.mannschaft.app.timeline.service.TimelinePostService;
 import com.mannschaft.app.todo.repository.TodoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,6 +56,7 @@ public class ActionMemoPublishingService {
 
     private final ActionMemoRepository memoRepository;
     private final TimelinePostRepository timelinePostRepository;
+    private final TimelinePostService timelinePostService;
     private final UserRoleRepository userRoleRepository;
     private final ActionMemoSettingsService settingsService;
     private final ActionMemoMetrics metrics;
@@ -112,17 +114,10 @@ public class ActionMemoPublishingService {
                     .map(ActionMemoEntity::getTimelinePostId)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
-            // 旧投稿は 1 回の findAllById でまとめて取得する（ループ内で DB を呼ばない）。
-            // 自分の PERSONAL 投稿だけを論理削除する（チーム投稿・他人の投稿は対象外）。
-            // managed エンティティなので softDelete の変更はコミット時に dirty checking で反映される。
+            // 旧個人投稿の取得・所有者／スコープ確認・論理削除は timeline ドメインのサービスへ委譲する
+            // （自分の PERSONAL 投稿だけが対象。チーム投稿・他人の投稿は消えない）。
             if (!oldTimelinePostIds.isEmpty()) {
-                for (TimelinePostEntity old : timelinePostRepository.findAllById(oldTimelinePostIds)) {
-                    if (old.getScopeType() == PostScopeType.PERSONAL
-                            && Objects.equals(old.getScopeId(), userId)
-                            && Objects.equals(old.getUserId(), userId)) {
-                        old.softDelete();
-                    }
-                }
+                timelinePostService.softDeleteOwnPersonalPosts(oldTimelinePostIds, userId);
             }
 
             // 5. mood 表示可否（ユーザー設定）

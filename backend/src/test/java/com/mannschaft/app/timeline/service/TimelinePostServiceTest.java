@@ -3087,6 +3087,54 @@ class TimelinePostServiceTest {
                 .isInstanceOf(IllegalStateException.class).hasMessage("集計失敗");
     }
 
+    @Test
+    @DisplayName("softDeleteOwnPersonalPosts: 自分の PERSONAL 投稿だけ論理削除・取得は1回・save しない")
+    void softDeleteOwnPersonalPosts_deletesOnlyOwnPersonal() {
+        TimelinePostEntity own = createPersonalPost(11L, USER_ID, USER_ID);
+        TimelinePostEntity team = TimelinePostEntity.builder()
+                .scopeType(PostScopeType.TEAM).scopeId(42L).userId(USER_ID).content("t").build();
+        TimelinePostEntity othersPersonal = createPersonalPost(13L, OTHER_USER_ID, OTHER_USER_ID);
+        TimelinePostEntity foreignAuthored = createPersonalPost(14L, USER_ID, OTHER_USER_ID);
+        List<Long> ids = List.of(11L, 12L, 13L, 14L);
+        given(postRepository.findAllById(ids)).willReturn(List.of(own, team, othersPersonal, foreignAuthored));
+
+        timelinePostService.softDeleteOwnPersonalPosts(ids, USER_ID);
+
+        assertThat(own.getDeletedAt()).isNotNull();
+        assertThat(team.getDeletedAt()).isNull();
+        assertThat(othersPersonal.getDeletedAt()).isNull();
+        assertThat(foreignAuthored.getDeletedAt()).isNull();
+        verify(postRepository, org.mockito.Mockito.times(1)).findAllById(ids);
+        verify(postRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("softDeleteOwnPersonalPosts: 空・null なら Repository を呼ばない")
+    void softDeleteOwnPersonalPosts_emptyDoesNothing() {
+        timelinePostService.softDeleteOwnPersonalPosts(List.of(), USER_ID);
+        timelinePostService.softDeleteOwnPersonalPosts(null, USER_ID);
+        org.mockito.Mockito.verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    @DisplayName("softDeleteOwnPersonalPosts: 既に削除済み・存在しない ID でも例外にならない")
+    void softDeleteOwnPersonalPosts_missingOrAlreadyDeleted() {
+        TimelinePostEntity deleted = createPersonalPost(21L, USER_ID, USER_ID);
+        deleted.softDelete();
+        given(postRepository.findAllById(List.of(21L, 22L))).willReturn(List.of(deleted));
+
+        timelinePostService.softDeleteOwnPersonalPosts(List.of(21L, 22L), USER_ID);
+
+        assertThat(deleted.getDeletedAt()).isNotNull();
+    }
+
+    private TimelinePostEntity createPersonalPost(Long id, Long scopeId, Long authorId) {
+        TimelinePostEntity post = TimelinePostEntity.builder()
+                .scopeType(PostScopeType.PERSONAL).scopeId(scopeId).userId(authorId).content("p").build();
+        org.springframework.test.util.ReflectionTestUtils.setField(post, "id", id);
+        return post;
+    }
+
     private TimelinePostReactionRepository.PostReactionSummary reactionSummary(Long postId, long count, long viewerCount) {
         return new TimelinePostReactionRepository.PostReactionSummary() {
             public Long getPostId() { return postId; }
