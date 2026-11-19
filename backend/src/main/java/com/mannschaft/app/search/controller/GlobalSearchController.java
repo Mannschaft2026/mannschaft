@@ -41,9 +41,14 @@ public class GlobalSearchController {
 
     /**
      * 横断検索を実行する。可視範囲は種別ごとの Contributor が閲覧者のスコープ単位ロールで判定する。
+     *
+     * <p><b>認可</b>: 本 EP はスコープ ID（{@code scopeId}）を受け取るため自己スコープ注釈（SelfScopedEndpoint）の対象外
+     * （同注釈は「スコープ ID を受け取らない」ことが前提。番人 {@code SelfScopedEndpointScopeInputGuardTest}）。
+     * 所属・権限の判定は {@link GlobalSearchQueryService#search} が {@code SearchViewerResolver#resolve} 経由で
+     * {@code AccessControlService#findAffiliatedScopeIds}（正準の所属列挙）とスコープ単位ロールから母集団を作り、
+     * {@code scopeType}/{@code scopeId} がその母集団に無い（非所属・GUEST のみ・削除済み・存在しない ID）場合は
+     * Contributor を呼ばずに全種別 0 件の同一応答を返す（存在オラクルを作らない）。</p>
      */
-    @SelfScopedEndpoint("GlobalSearchQueryService#search は SecurityUtils.getCurrentUserId() の所属スコープと"
-            + "スコープ単位ロールで種別ごとの可視性述語を適用し、権限範囲外は結果にも件数にも出さない")
     @GetMapping
     @Operation(summary = "横断検索")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "検索成功")

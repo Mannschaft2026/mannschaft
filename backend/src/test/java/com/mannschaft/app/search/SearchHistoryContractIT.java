@@ -192,6 +192,9 @@ class SearchHistoryContractIT extends AbstractGlobalSearchIT {
             assertThat(historyQueries(owner)).containsExactly(kw + "secret");
         }
 
+        /**
+         * GlobalSearchController#suggest の自己スコープ性（KEYWORD 候補は認証主体本人の検索履歴だけ）を固定する。
+         */
         @Test
         @DisplayName("AC-C16: suggestions に他人の検索語は出ず、本人の語は KEYWORD として出る")
         void AC_C16_サジェストに他人の語が出ない() throws Exception {
