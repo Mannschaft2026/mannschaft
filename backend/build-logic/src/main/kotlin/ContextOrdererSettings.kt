@@ -5,8 +5,6 @@
  * - `:test` だけに Orderer と計測ログを効かせる。`-PcontextOrderer=false` は Orderer だけを外す（計測は残す）。
  * - archTest / archUnitTest / archUnitFreezeStoreIntegrityTest ほか `:test` 以外には何も渡さない
  *   （Listener は spring.factories 経由で全 Spring テストに載るため、ログ出力の有効化は system property で `:test` に限る）。
- *
- * 試練（red）段階のスタブ。出陣で実装する。
  */
 object ContextOrdererSettings {
     /** JUnit Jupiter の既定 ClassOrderer を指定する設定キー。 */
@@ -25,6 +23,17 @@ object ContextOrdererSettings {
      * タスク名と `-PcontextOrderer` の値から、Test タスクへ渡す system property を返す。
      * 戻り値が空なら何も設定しない。
      */
-    fun systemProperties(taskName: String, contextOrdererProperty: String?): Map<String, String> =
-        throw UnsupportedOperationException("CMP-261111-0508: 未実装（出陣で実装する）")
+    fun systemProperties(taskName: String, contextOrdererProperty: String?): Map<String, String> {
+        if (taskName != TEST_TASK_NAME) return emptyMap()
+        val result = linkedMapOf<String, String>()
+        // 無効化は "false"（大文字小文字を問わない）だけ。未指定・他の値は有効のまま（既定で効く）。
+        if (!contextOrdererProperty.equals("false", ignoreCase = true)) {
+            result[ORDER_PROPERTY] = ORDERER_CLASS
+        }
+        result[LOG_PROPERTY] = "true"
+        return result
+    }
+
+    /** Orderer と計測ログを効かせる唯一のタスク名。 */
+    const val TEST_TASK_NAME = "test"
 }

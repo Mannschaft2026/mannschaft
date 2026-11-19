@@ -1,0 +1,3 @@
+# CMP-261111-0508: Spring テストコンテキストのロード計測（`[ci-ctx]`）。順序は ContextKeyTestExecutionListener#getOrder（1900）。
+# 標準出力は system property mannschaft.ci.ctx.log=true（:test だけ）のときに限る。
+org.springframework.test.context.TestExecutionListener=com.mannschaft.app.common.testing.ContextKeyTestExecutionListener
