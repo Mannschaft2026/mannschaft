@@ -126,6 +126,24 @@ class ContextKeyTestExecutionListenerTest {
     }
 
     @Test
+    void K5_DirtiesContext_BEFORE_EACH_TEST_METHODでもPER_METHODとPER_CLASSの各メソッドでloadかreloadが欠けない() {
+        for (Class<?> fixture : List.of(G1BeforeEachPerMethod.class, G2BeforeEachPerClass.class)) {
+            List<String> lines;
+            TestExecutionSummary summary;
+            try (ContextKeyTestExecutionListener.Capture capture = ContextKeyTestExecutionListener.startCapture()) {
+                summary = run(fixture);
+                lines = List.copyOf(capture.lines());
+            }
+            assertThat(summary.getTotalFailureCount()).as(failures(summary)).isZero();
+            assertThat(summary.getTestsSucceededCount()).isEqualTo(2);
+            // 各メソッドの直前に破棄され DI が再ロードするので、ロードは「prepare 時の load + 各メソッドの reload」で計3回
+            // （PER_METHOD では2メソッド目の prepare が hit になることがあるが、hit は数えない）。
+            assertThat(events(lines, fixture).stream().filter(event -> !event.equals("hit")).collect(Collectors.toList()))
+                    .as(fixture.getSimpleName()).containsExactly("load", "reload", "reload");
+        }
+    }
+
+    @Test
     void K5_計測自体の例外は握ってerrorを出しテストを落とさない() {
         List<String> lines;
         TestExecutionSummary summary;
@@ -336,6 +354,53 @@ class ContextKeyTestExecutionListenerTest {
 
         @Test
         void failsInSetUp() {
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class BeforeEachPerMethodConfiguration {
+        @Bean
+        String beforeEachPerMethod() {
+            return "g1";
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class BeforeEachPerClassConfiguration {
+        @Bean
+        String beforeEachPerClass() {
+            return "g2";
+        }
+    }
+
+    @SpringJUnitConfig(BeforeEachPerMethodConfiguration.class)
+    @TestMethodOrder(MethodOrderer.MethodName.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class G1BeforeEachPerMethod {
+        @Test
+        @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+        void m1() {
+        }
+
+        @Test
+        @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+        void m2() {
+        }
+    }
+
+    @SpringJUnitConfig(BeforeEachPerClassConfiguration.class)
+    @org.junit.jupiter.api.TestInstance(org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS)
+    @TestMethodOrder(MethodOrderer.MethodName.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class G2BeforeEachPerClass {
+        @Test
+        @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+        void m1() {
+        }
+
+        @Test
+        @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+        void m2() {
         }
     }
 

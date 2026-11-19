@@ -134,8 +134,8 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
     }
 
     private static void begin(TestContext testContext) {
-        if (PREPARED.contains(testContext.getTestClass()) || PENDING.containsKey(testContext.getTestClass())) {
-            // 未確定の起点が最古の状態。PER_CLASS では prepareTestInstance（ロード済み）が beforeTestClass より先に走るため、上書きしない。
+        if (PENDING.containsKey(testContext.getTestClass())) {
+            // 未確定の起点が最古の状態なので上書きしない。
             return;
         }
         try {
@@ -151,8 +151,17 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
                 }
                 KEYS.put(testContext.getTestClass(), key);
             }
-            PENDING.put(testContext.getTestClass(),
-                    new Pending(key, testContext.hasApplicationContext(), System.nanoTime()));
+            boolean loaded = testContext.hasApplicationContext();
+            if (PREPARED.contains(testContext.getTestClass())) {
+                if (loaded) {
+                    // プリペア済みで、コンテキストが生きている: 確定済みの計測に新しいロードは無い。
+                    // （PER_CLASS では prepareTestInstance が beforeTestClass より先に走るため、ここで上書きすると hit に誤分類する）
+                    return;
+                }
+                // プリペア後に破棄された（@DirtiesContext(BEFORE_*) が order 1500 で破棄）。DI(2000) が再ロードするので新しく計測する。
+                PREPARED.remove(testContext.getTestClass());
+            }
+            PENDING.put(testContext.getTestClass(), new Pending(key, loaded, System.nanoTime()));
         } catch (Throwable failure) { // NOSONAR 計測の失敗でテストを落とさない。
             PENDING.remove(testContext.getTestClass());
             emitError(testContext, failure);
