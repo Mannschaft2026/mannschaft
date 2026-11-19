@@ -3,6 +3,7 @@ package com.mannschaft.app.effortrecord.service;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorResponse;
+import com.mannschaft.app.effortrecord.EffortErrorCode;
 import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshot;
 import com.mannschaft.app.effortrecord.dto.UpdateEffortTemplateSettingsRequest;
 import com.mannschaft.app.effortrecord.entity.EffortDefinitionEntity;
@@ -57,6 +58,24 @@ public class EffortTeamDefinitionTxService {
                           String definitionHash, boolean retired) {
     }
 
+    /**
+     * activity の現定義を読む関数（呼び出し側 Facade が実装する）。TX 本体は他ドメインの型・Service に依存しないため、
+     * 読み出しを関数として受ける。定義行の行ロックを取った後に呼び、ロック前に取得した古い写しで新しい revision を
+     * 巻き戻さないために使う（ロック前の写しは別要求が先に確定した revision より古い可能性がある）。
+     */
+    @FunctionalInterface
+    public interface TemplateLoader {
+        Optional<EffortTeamTemplate> load();
+    }
+
+    /**
+     * 行ロック取得後に activity の現定義を読み直す。ロック保持中に activity から消えていた（廃止された）ときは、
+     * 何も保存せず EFFORT_002（409）とする（廃止の記録は次回の呼び出しが markRetired で行う）。
+     */
+    private static EffortTeamTemplate loadUnderLock(TemplateLoader loader) {
+        return loader.load().orElseThrow(() -> new BusinessException(EffortErrorCode.EFFORT_002));
+    }
+
     /** TEAM 定義の source_key。 */
     public static String sourceKey(Long teamId, Long templateId) {
         return "team:" + teamId + ":template:" + templateId;
@@ -99,9 +118,10 @@ public class EffortTeamDefinitionTxService {
      * 定義行が無ければ empty（呼び出し側が {@link #create} する）。
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Optional<Current> sync(Long teamId, EffortTeamTemplate template) {
-        return definitions.findBySourceKeyForUpdate(EffortSourceType.TEAM, sourceKey(teamId, template.id()))
+    public Optional<Current> sync(Long teamId, Long templateId, TemplateLoader loader) {
+        return definitions.findBySourceKeyForUpdate(EffortSourceType.TEAM, sourceKey(teamId, templateId))
                 .map(definition -> {
+                    EffortTeamTemplate template = loadUnderLock(loader);
                     EffortDefinitionSnapshot current = currentSnapshot(definition);
                     EffortDefinitionSnapshot candidate = EffortTeamDefinitionBuilder.build(definition.getId(),
                             definition.getCurrentRevision(), template, EffortTeamDefinitionBuilder.settingsOf(current));
@@ -114,13 +134,15 @@ public class EffortTeamDefinitionTxService {
      * 要求の fieldKey は現行定義（activity の現定義＋保存済み設定）の key で受け、activity field ID へ読み替えて保存する。
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Current updateSettings(Long teamId, EffortTeamTemplate template, UpdateEffortTemplateSettingsRequest request) {
+    public Current updateSettings(Long teamId, Long templateId, TemplateLoader loader,
+                                  UpdateEffortTemplateSettingsRequest request) {
         EffortDefinitionEntity definition = definitions
-                .findBySourceKeyForUpdate(EffortSourceType.TEAM, sourceKey(teamId, template.id()))
+                .findBySourceKeyForUpdate(EffortSourceType.TEAM, sourceKey(teamId, templateId))
                 .orElseThrow(() -> new IllegalStateException("チーム定義が未作成のまま指標設定を更新しようとしました"));
         if (definition.getVersion() != request.version().longValue()) {
             throw new BusinessException(CommonErrorCode.COMMON_003);
         }
+        EffortTeamTemplate template = loadUnderLock(loader);
         EffortDefinitionSnapshot current = currentSnapshot(definition);
         EffortDefinitionSnapshot live = EffortTeamDefinitionBuilder.build(definition.getId(),
                 definition.getCurrentRevision(), template, EffortTeamDefinitionBuilder.settingsOf(current));

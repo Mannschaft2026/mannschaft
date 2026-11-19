@@ -89,7 +89,6 @@ public class EffortStatsService {
         revisions.put(resolved.revision(), resolved.snapshot());
         SeriesBasis basis = seriesBasis(ownerUserId, c, resolved, revisions);
         EffortFieldDefinition field = basis.field();
-        EffortFieldDefinition subjectField = basis.subjectField();
 
         List<EffortStatsRow> rows = queries.findStatsRows(ownerUserId, c.definitionUuid(), c.dateFrom(), c.dateTo());
         // 原本が凍結した revision は 1 回の照会でまとめて引く（行ごとの照会をしない）。
@@ -109,14 +108,16 @@ public class EffortStatsService {
             }
             Map<String, String> values = codec.parseValues(row.valuesJson());
             BigDecimal number = parseNumber(values.get(field.fieldKey()));
-            samples.add(new Sample(row, number, subjectField == null ? null : values.get(subjectField.fieldKey()),
-                    subjectField == null ? null : frozen));
+            // 科目の対応先は各原本が凍結した revision から引く（定義変更後も過去の内訳を維持する）。
+            EffortFieldDefinition frozenSubject = c.chart() == EffortChartType.PIE ? subjectOf(frozen) : null;
+            samples.add(new Sample(row, number,
+                    frozenSubject == null ? null : values.get(frozenSubject.fieldKey()), frozenSubject));
         }
 
         return switch (c.chart()) {
             case BAR -> bucketed(c, grain, field, samples, false);
             case LINE -> bucketed(c, grain, field, samples, true);
-            case PIE -> pie(c, grain, field, subjectField, samples);
+            case PIE -> pie(c, grain, field, samples);
         };
     }
 
@@ -211,10 +212,15 @@ public class EffortStatsService {
                 .findFirst().orElse(null);
     }
 
+    /**
+     * 原本の凍結 revision の同 field が基準 field と同一 series か。NUMBER は集計可否（aggregation=SUM、§5.1）も
+     * 凍結 revision で判定する（NONE で保存した原本を、後から SUM に変えた定義の合算へ混ぜない）。
+     */
     private static boolean sameSeries(EffortDefinitionSnapshot frozen, EffortFieldDefinition current) {
         return frozen.fields().stream().anyMatch(f -> f.fieldKey().equals(current.fieldKey())
                 && f.semantic() == current.semantic() && f.type() == current.type()
-                && java.util.Objects.equals(f.unit(), current.unit()));
+                && java.util.Objects.equals(f.unit(), current.unit())
+                && (current.semantic() != EffortSemantic.NUMBER || f.aggregation() == EffortAggregation.SUM));
     }
 
     // ───────────────────────────── BAR / LINE ─────────────────────────────
@@ -258,7 +264,7 @@ public class EffortStatsService {
     // ───────────────────────────── PIE ─────────────────────────────
 
     private EffortStatsResponse pie(EffortStatsCriteria c, EffortGrain grain, EffortFieldDefinition field,
-                                    EffortFieldDefinition subjectField, List<Sample> samples) {
+                                    List<Sample> samples) {
         Map<String, CategoryAccumulator> categories = new LinkedHashMap<>();
         BigDecimal total = null;
         long totalCount = 0;
@@ -269,7 +275,7 @@ public class EffortStatsService {
             String subject = sample.subject() == null || sample.subject().isBlank() ? null : sample.subject();
             String key = subject == null ? UNSPECIFIED_SUBJECT_KEY : SUBJECT_KEY_PREFIX + subject;
             CategoryAccumulator accumulator = categories.computeIfAbsent(key,
-                    k -> new CategoryAccumulator(subject == null ? "" : label(sample.frozen(), subjectField, subject)));
+                    k -> new CategoryAccumulator(subject == null ? "" : label(sample.subjectField(), subject)));
             accumulator.add(sample.number());
             total = total == null ? sample.number() : total.add(sample.number());
             totalCount++;
@@ -286,13 +292,11 @@ public class EffortStatsService {
     }
 
     /** 科目の表示名。SELECT は当時の option label、TEXT は入力値そのもの。 */
-    private static String label(EffortDefinitionSnapshot frozen, EffortFieldDefinition subjectField, String value) {
-        if (frozen == null) {
+    private static String label(EffortFieldDefinition frozenSubject, String value) {
+        if (frozenSubject == null || frozenSubject.options() == null) {
             return value;
         }
-        return frozen.fields().stream().filter(f -> f.fieldKey().equals(subjectField.fieldKey())).findFirst()
-                .flatMap(f -> f.options() == null ? Optional.empty() : f.options().stream()
-                        .filter(o -> o.key().equals(value)).findFirst())
+        return frozenSubject.options().stream().filter(o -> o.key().equals(value)).findFirst()
                 .map(EffortFieldDefinition.Option::label).orElse(value);
     }
 
@@ -347,7 +351,7 @@ public class EffortStatsService {
         return new BusinessException(CommonErrorCode.COMMON_001, List.of(new ErrorResponse.FieldError(field, message)));
     }
 
-    private record Sample(EffortStatsRow row, BigDecimal number, String subject, EffortDefinitionSnapshot frozen) {
+    private record Sample(EffortStatsRow row, BigDecimal number, String subject, EffortFieldDefinition subjectField) {
     }
 
     private static final class CategoryAccumulator {

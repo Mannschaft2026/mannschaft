@@ -31,9 +31,9 @@ public class EffortTeamDefinitionResolver {
     /** activity の現定義へ同期した現行 TEAM 定義（初回利用時は作成する）。 */
     public EffortTeamDefinitionTxService.Current sync(Long teamId, Long templateId) {
         EffortTeamTemplate template = template(teamId, templateId);
-        return tx.sync(teamId, template).orElseGet(() -> {
+        return tx.sync(teamId, templateId, loader(teamId, templateId)).orElseGet(() -> {
             createOnce(teamId, template);
-            return tx.sync(teamId, template)
+            return tx.sync(teamId, templateId, loader(teamId, templateId))
                     .orElseThrow(() -> new IllegalStateException("チーム定義を作成できませんでした"));
         });
     }
@@ -45,7 +45,17 @@ public class EffortTeamDefinitionResolver {
         if (!tx.exists(teamId, templateId)) {
             createOnce(teamId, template);
         }
-        return tx.updateSettings(teamId, template, request);
+        return tx.updateSettings(teamId, templateId, loader(teamId, templateId), request);
+    }
+
+    /**
+     * 定義行の行ロック取得後に呼ばれる activity の現定義の読み出し。ロック前に読んだ写し（{@link #template}）は、
+     * 並行する別要求が新しい revision を確定した後では古いため、同期の入力には使わない（巻き戻し防止）。
+     * activity には版の列が無く migration も足さないので、「ロック取得後に読み直す」ことで新旧を保証する。
+     */
+    private EffortTeamDefinitionTxService.TemplateLoader loader(Long teamId, Long templateId) {
+        return () -> activityTemplates.findInScope(templateId, ActivityScopeType.TEAM, teamId)
+                .map(EffortTeamDefinitionResolver::toTemplate);
     }
 
     private EffortTeamTemplate template(Long teamId, Long templateId) {
