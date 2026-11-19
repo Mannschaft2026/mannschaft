@@ -144,6 +144,21 @@ class ContextKeyTestExecutionListenerTest {
     }
 
     @Test
+    void K5_PER_CLASSのMOCK_Web検体でも初回はloadでloadMsが正()  {
+        List<String> lines;
+        TestExecutionSummary summary;
+        try (ContextKeyTestExecutionListener.Capture capture = ContextKeyTestExecutionListener.startCapture()) {
+            summary = run(H1PerClassWeb.class);
+            lines = List.copyOf(capture.lines());
+        }
+        assertThat(summary.getTotalFailureCount()).as(failures(summary)).isZero();
+        assertThat(events(lines, H1PerClassWeb.class)).containsExactly("load");
+        Matcher matcher = Pattern.compile(" event=load loadMs=(\\d+) ").matcher(lines.get(0));
+        assertThat(matcher.find()).as(lines.get(0)).isTrue();
+        assertThat(Long.parseLong(matcher.group(1))).isGreaterThan(0L);
+    }
+
+    @Test
     void K5_計測自体の例外は握ってerrorを出しテストを落とさない() {
         List<String> lines;
         TestExecutionSummary summary;
@@ -401,6 +416,23 @@ class ContextKeyTestExecutionListenerTest {
         @Test
         @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
         void m2() {
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class WebConfiguration {
+        @Bean
+        String web() {
+            return "w";
+        }
+    }
+
+    @org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig(WebConfiguration.class)
+    @org.junit.jupiter.api.TestInstance(org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class H1PerClassWeb {
+        @Test
+        void loadsInPrepare() {
         }
     }
 

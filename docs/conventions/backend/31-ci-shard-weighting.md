@@ -135,11 +135,17 @@ LRU で追い出されて同じ構成が再ロードされる。これを減ら�
   同キーのクラスを連続させ、グループ順は最小 FQCN 昇順・グループ内は FQCN 昇順（入力順に依存しない）。
   Spring 非使用のクラスと MCC 構築が例外になったクラスは単独グループで、実行は継続する。
   並べ替えの所要は `[ci-ctx-orderer] classes=N fallback=F ms=M` で標準出力に出る（目安: 1 shard あたり 30 秒以内。`fallback` は 0 が正常）。
-- **`ContextKeyTestExecutionListener`**（`backend/src/test/resources/META-INF/spring.factories` で登録・`getOrder()`=1900）:
+- **`[ci-ctx]` の計測**（`ContextLoadObservingCustomizer` と `ContextKeyTestExecutionListener`。どちらも `backend/src/test/resources/META-INF/spring.factories` で登録）:
   `[ci-ctx] jvm=<pid> seq=<JVM内通し番号> class=<FQCN> key=<12桁> event=<load|hit|reload|error> loadMs=<n> cacheSize=<n>` を出す。
-  `load`=その JVM で初めてのロード、`hit`=キャッシュヒット（クラスにつき1回）、`reload`=その JVM で既にロード済みのキーの再ロード
-  （`@DirtiesContext`・LRU 追い出し・手動破棄の後）。ロード前の状態を `TestContext#hasApplicationContext()` で取り、ロード後に確定する
-  観測専用で、余分な起動・破棄はしない。`cacheSize` は ContextCache 件数の参考値（版依存のリフレクション。読めなければ -1）。
+  `load`=その JVM で初めてのロード、`reload`=その JVM で既にロード済みのキーの再ロード（`@DirtiesContext`・LRU 追い出し・手動破棄の後）、
+  `hit`=キャッシュヒット（クラスにつき1回）。**load / reload はリスナーの順序から推定せず、実際のロード地点で観測する**:
+  公式の差し替え口 `ContextCustomizerFactory` の customizer が、ローダーの構築中（refresh の直前）に開始時刻を取り、
+  `ContextRefreshedEvent` で確定する。ロードを起こしたクラス（`mcc.getTestClass()`）の行が、呼び出し元（ServletTestExecutionListener・
+  DI リスナー・PER_CLASS / PER_METHOD・`@DirtiesContext` の各モード）に関わらず出る。`loadMs` は refresh 直前から完了まで（切り上げ・生成と Bean 定義登録の手前は含まない）。
+  `cacheSize` は `ContextClosedEvent` まで数えた本計測の生存コンテキスト数で、ContextCache の内部（非公開フィールド）は読まない。
+  hit は `ContextKeyTestExecutionListener`（`getOrder()`=2100・DI リスナーの後）が、クラスの最初の `beforeTestMethod` で、そのクラスの load/reload が
+  無くコンテキストが生きていれば出す。Spring 6.2 の `BootstrapUtils` は `CacheAwareContextLoaderDelegate` の差し替え用 SpringProperties キーを持たない
+  （クラス名が固定）ため、委譲クラスの継承ではなく customizer を使う（全インスタンスを等価にしてあり、MCC＝キャッシュキーを割らない）。
   計測自体の失敗は握って `event=error`（`error=<例外クラス名>`）を出し、テストは落とさない。本来のコンテキスト起動失敗はテスト失敗のまま。
   プロパティ値などの秘密値は出さない（キー・クラス名・数値・例外クラス名だけ）。
 - **有効範囲**: build-logic の `ContextOrdererSettings.systemProperties(taskName, -PcontextOrderer)` が **`:test` だけ**に
@@ -150,5 +156,5 @@ LRU で追い出されて同じ構成が再ロードされる。これを減ら�
 - **収集**: `backend/scripts/run-ci-tests-with-observability.sh` の init スクリプトが `:test` の `[ci-ctx]`・`[ci-ctx-orderer]` 行を
   runtime-diag artifact の `context-progress.log` に集める。`regen-shard-weights.sh` の ZIP 許可リストには `context-progress.log` を加えてあるが、
   **REQUIRED ではなく、重み計算にも使わない**（有無で重み表は変わらない）。
-- 検査: `ContextGroupClassOrdererTest`・`ContextKeyTestExecutionListenerTest`（BE）、`ContextOrdererSettingsTest`（build-logic）、
+- 検査: `ContextGroupClassOrdererTest`・`ContextKeyTestExecutionListenerTest`（BE。PER_CLASS・MOCK Web・BEFORE/AFTER_EACH_TEST_METHOD・@BeforeEach の遅延と失敗の検体を含む）、`ContextOrdererSettingsTest`（build-logic）、
   `ContextProgressLogCompatibilityTest`（`scripts/test_regen_shard_weights.py`）。
