@@ -280,6 +280,24 @@ class BulletinTournamentScopeAccessGuardTest {
                     .isEqualTo(BulletinErrorCode.REPLY_NOT_FOUND);
             verifyNoInteractions(gate);
         }
+
+        @Test
+        @DisplayName("親スレッド欠落でも返信への返信・更新・削除は不在返信と同じ BULLETIN_003（存在オラクル解消）")
+        void 親欠落はBULLETIN003() {
+            replyIs(reply(USER_ID));
+            given(threadRepository.findById(THREAD_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> guard.checkReplyPost(REPLY_ID, USER_ID))
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(BulletinErrorCode.REPLY_NOT_FOUND);
+            assertThatThrownBy(() -> guard.checkReplyAuthorOrPost(REPLY_ID, USER_ID, true))
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(BulletinErrorCode.REPLY_NOT_FOUND);
+            assertThatThrownBy(() -> guard.checkReplyAuthorOrPost(REPLY_ID, USER_ID, false))
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(BulletinErrorCode.REPLY_NOT_FOUND);
+            verifyNoInteractions(gate);
+        }
     }
 
     @Nested
@@ -299,6 +317,18 @@ class BulletinTournamentScopeAccessGuardTest {
                     BulletinErrorCode.THREAD_NOT_FOUND);
             verify(gate).requireView(ContactSpaceScopeType.TOURNAMENT, SCOPE_ID, ContactSpaceKind.BULLETIN, USER_ID,
                     BulletinErrorCode.REPLY_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("REPLY 対象の親スレッド欠落は不在返信と同じ BULLETIN_003")
+        void 返信の親欠落はBULLETIN003() {
+            replyIs(reply(USER_ID));
+            given(threadRepository.findById(THREAD_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> guard.checkReactionTarget("REPLY", REPLY_ID, USER_ID))
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(BulletinErrorCode.REPLY_NOT_FOUND);
+            verifyNoInteractions(gate);
         }
 
         @Test
@@ -349,6 +379,29 @@ class BulletinTournamentScopeAccessGuardTest {
 
             verify(gate).requireAuthorOrPost(eq(ContactSpaceScopeType.TOURNAMENT), eq(SCOPE_ID),
                     eq(ContactSpaceKind.BULLETIN), eq(USER_ID), eq(true), eq(BulletinErrorCode.ATTACHMENT_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("添付削除は添付対象（スレッド/返信の親）が欠落しても BULLETIN_007")
+        void 対象欠落でも添付削除はBULLETIN007() {
+            BulletinAttachmentEntity onThread = BulletinAttachmentEntity.builder()
+                    .targetType(TargetType.THREAD).targetId(THREAD_ID).createdBy(USER_ID).build();
+            given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(onThread));
+            given(threadRepository.findById(THREAD_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> guard.checkAttachmentDelete(ATTACHMENT_ID, USER_ID))
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+
+            BulletinAttachmentEntity onReply = BulletinAttachmentEntity.builder()
+                    .targetType(TargetType.REPLY).targetId(REPLY_ID).createdBy(USER_ID).build();
+            given(attachmentRepository.findById(301L)).willReturn(Optional.of(onReply));
+            given(replyRepository.findById(REPLY_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> guard.checkAttachmentDelete(301L, USER_ID))
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+            verifyNoInteractions(gate);
         }
 
         @Test

@@ -19,8 +19,6 @@ import com.mannschaft.app.tournament.service.TournamentContactSpaceAccessGate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
-
 /**
  * 大会/ディビジョン連絡スペース（F08.7.1）の掲示板に対する、存在秘匿つきの認可門（CMP-261116-0726）。
  *
@@ -156,12 +154,11 @@ public class BulletinTournamentScopeAccessGuard {
     /** 返信への返信の投稿を要求する。拒否・不在は 404 {@code BULLETIN_003}。 */
     public void checkReplyPost(Long replyId, Long userId) {
         BulletinReplyEntity reply = findReplyOrThrow(replyId);
-        Optional<BulletinThreadEntity> thread = threadRepository.findById(reply.getThreadId());
-        if (thread.isEmpty() || !isTournamentScope(thread.get().getScopeType())) {
-            // 親スレッド欠落はサービスの不在応答に任せる（大会の存在は漏れない）
+        BulletinThreadEntity thread = findParentThreadOrThrow(reply);
+        if (!isTournamentScope(thread.getScopeType())) {
             return;
         }
-        contactSpaceAccessGate.requirePost(toContactScope(thread.get().getScopeType()), thread.get().getScopeId(),
+        contactSpaceAccessGate.requirePost(toContactScope(thread.getScopeType()), thread.getScopeId(),
                 ContactSpaceKind.BULLETIN, userId, BulletinErrorCode.REPLY_NOT_FOUND);
     }
 
@@ -173,11 +170,10 @@ public class BulletinTournamentScopeAccessGuard {
      */
     public void checkReplyAuthorOrPost(Long replyId, Long userId, boolean update) {
         BulletinReplyEntity reply = findReplyOrThrow(replyId);
-        Optional<BulletinThreadEntity> thread = threadRepository.findById(reply.getThreadId());
-        if (thread.isEmpty() || !isTournamentScope(thread.get().getScopeType())) {
+        BulletinThreadEntity t = findParentThreadOrThrow(reply);
+        if (!isTournamentScope(t.getScopeType())) {
             return;
         }
-        BulletinThreadEntity t = thread.get();
         boolean isAuthor = isSameUser(reply.getAuthorId(), userId);
         boolean lockedEdit = update && Boolean.TRUE.equals(t.getIsLocked());
         contactSpaceAccessGate.requireAuthorOrPost(toContactScope(t.getScopeType()), t.getScopeId(),
@@ -208,11 +204,7 @@ public class BulletinTournamentScopeAccessGuard {
         } else {
             notFound = BulletinErrorCode.REPLY_NOT_FOUND;
             BulletinReplyEntity reply = findReplyOrThrow(targetId);
-            Optional<BulletinThreadEntity> parent = threadRepository.findById(reply.getThreadId());
-            if (parent.isEmpty()) {
-                return;
-            }
-            thread = parent.get();
+            thread = findParentThreadOrThrow(reply);
         }
         if (!isTournamentScope(thread.getScopeType())) {
             return;
@@ -233,7 +225,8 @@ public class BulletinTournamentScopeAccessGuard {
         if (targetType == null || targetId == null) {
             return;
         }
-        BulletinThreadEntity thread = resolveAttachmentTarget(targetType, targetId);
+        BulletinThreadEntity thread = resolveAttachmentTarget(targetType, targetId,
+                BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND);
         if (!isTournamentScope(thread.getScopeType())) {
             return;
         }
@@ -248,7 +241,9 @@ public class BulletinTournamentScopeAccessGuard {
     public void checkAttachmentDelete(Long attachmentId, Long userId) {
         BulletinAttachmentEntity attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new BusinessException(BulletinErrorCode.ATTACHMENT_NOT_FOUND));
-        BulletinThreadEntity thread = resolveAttachmentTarget(attachment.getTargetType(), attachment.getTargetId());
+        // 添付 ID 指定の EP なので、対象・親の欠落も添付の不在コードにそろえる
+        BulletinThreadEntity thread = resolveAttachmentTarget(attachment.getTargetType(), attachment.getTargetId(),
+                BulletinErrorCode.ATTACHMENT_NOT_FOUND);
         if (!isTournamentScope(thread.getScopeType())) {
             return;
         }
@@ -294,14 +289,19 @@ public class BulletinTournamentScopeAccessGuard {
                 .orElseThrow(() -> new BusinessException(BulletinErrorCode.REPLY_NOT_FOUND));
     }
 
-    /** 添付対象（スレッド/返信）から所属スレッドを逆引きする。欠落は {@code BULLETIN_025}。 */
-    private BulletinThreadEntity resolveAttachmentTarget(TargetType targetType, Long targetId) {
+    /** 返信の親スレッドを引く。欠落（論理削除済み等）は子（返信）の不在コード {@code BULLETIN_003}（基準書 §3.3.2）。 */
+    private BulletinThreadEntity findParentThreadOrThrow(BulletinReplyEntity reply) {
+        return findThreadOrThrow(reply.getThreadId(), BulletinErrorCode.REPLY_NOT_FOUND);
+    }
+
+    /** 添付対象（スレッド/返信）から所属スレッドを逆引きする。欠落は呼び出し側の入口に合わせた {@code notFound}。 */
+    private BulletinThreadEntity resolveAttachmentTarget(TargetType targetType, Long targetId, ErrorCode notFound) {
         Long threadId = targetId;
         if (targetType == TargetType.REPLY) {
             threadId = replyRepository.findById(targetId)
                     .map(BulletinReplyEntity::getThreadId)
-                    .orElseThrow(() -> new BusinessException(BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND));
+                    .orElseThrow(() -> new BusinessException(notFound));
         }
-        return findThreadOrThrow(threadId, BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND);
+        return findThreadOrThrow(threadId, notFound);
     }
 }

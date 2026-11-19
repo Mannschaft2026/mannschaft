@@ -450,6 +450,23 @@ class BulletinTournamentContactExistenceOracleContractIT extends AbstractMySqlIn
         }
     }
 
+    @Test
+    @DisplayName("AC-5/6/7: 親スレッドが論理削除された返信・その添付は、不在返信ID/不在添付IDと同一の 404（BULLETIN_003 / BULLETIN_007）で、実在を漏らさない")
+    void 親スレッド削除済みの子は不在IDと同一() throws Exception {
+        jdbc.update("UPDATE bulletin_threads SET deleted_at = NOW() WHERE id = ?", thA);
+        for (Long actor : List.of(orgAdmin, outsider)) {
+            for (Map.Entry<String, Req> ep : replyWriteEndpoints().entrySet()) {
+                assertConcealed(ep.getKey() + "(親削除)", actor, ep.getValue(), rA, MISSING_REPLY_ID, 404, REPLY_NF);
+            }
+            assertConcealed("POST reactions REPLY(親削除)", actor, id -> addReaction("REPLY", id), rA,
+                    MISSING_REPLY_ID, 404, REPLY_NF);
+            assertConcealed("DELETE attachment(親削除)", actor, id -> delete(API + "/attachments/" + id), attA,
+                    MISSING_ATTACHMENT_ID, 404, ATTACHMENT_NF);
+            assertConcealed("DELETE attachment(返信の親削除)", actor, id -> delete(API + "/attachments/" + id), attRA,
+                    MISSING_ATTACHMENT_ID, 404, ATTACHMENT_NF);
+        }
+    }
+
     // ========================================================================
     // AC-6: リアクション 4EP
     // ========================================================================
