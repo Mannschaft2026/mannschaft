@@ -6,6 +6,7 @@ import com.mannschaft.app.bulletin.dto.AttachmentPresignRequest;
 import com.mannschaft.app.bulletin.dto.AttachmentPresignResponse;
 import com.mannschaft.app.bulletin.dto.AttachmentResponse;
 import com.mannschaft.app.bulletin.dto.CreateAttachmentRequest;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinAttachmentService;
 import com.mannschaft.app.bulletin.service.BulletinReadFacade;
 import com.mannschaft.app.common.ApiResponse;
@@ -49,6 +50,8 @@ class BulletinAttachmentControllerTest {
     private BulletinAttachmentService bulletinAttachmentService;
     @Mock
     private BulletinReadFacade readFacade;
+    @Mock
+    private BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     @InjectMocks
     private BulletinAttachmentController controller;
