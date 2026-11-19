@@ -166,6 +166,7 @@
       "private": "Privat",
       "empty": "Keine Kontaktbereiche vorhanden",
       "no_bulletin": "Kein Schwarzes Brett vorhanden",
+      "bulletin_scope_unresolved": "Das Schwarze Brett kann nicht angezeigt werden, da der Bereich nicht ermittelt werden konnte",
       "no_chat": "Kein Chatbereich vorhanden",
       "visibility_saved": "Sichtbarkeit aktualisiert",
       "visibility_failed": "Fehler beim Aktualisieren der Sichtbarkeit",

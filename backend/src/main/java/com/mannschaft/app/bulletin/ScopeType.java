@@ -36,6 +36,10 @@ public enum ScopeType {
      *   <li>{@code "organizations"} / {@code "organization"} → {@link #ORGANIZATION}</li>
      *   <li>{@code "teams"} / {@code "team"} → {@link #TEAM}</li>
      *   <li>{@code "personal"} → {@link #PERSONAL}</li>
+     *   <li>{@code "villages"} / {@code "village"} → {@link #VILLAGE}</li>
+     *   <li>{@code "tournaments"} / {@code "tournament"} → {@link #TOURNAMENT}（グローバル方式のみで使用）</li>
+     *   <li>{@code "tournament_divisions"} / {@code "tournament_division"} → {@link #TOURNAMENT_DIVISION}
+     *       （グローバル方式のみで使用）</li>
      * </ul>
      * </p>
      *
@@ -53,6 +57,8 @@ public enum ScopeType {
             case "TEAMS", "TEAM" -> TEAM;
             case "PERSONAL" -> PERSONAL;
             case "VILLAGES", "VILLAGE" -> VILLAGE;
+            case "TOURNAMENTS", "TOURNAMENT" -> TOURNAMENT;
+            case "TOURNAMENT_DIVISIONS", "TOURNAMENT_DIVISION" -> TOURNAMENT_DIVISION;
             default -> throw new IllegalArgumentException("Unknown scopeType: " + pathSegment);
         };
     }

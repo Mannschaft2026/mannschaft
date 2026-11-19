@@ -143,7 +143,7 @@ common の業務依存の代表（いずれも §6.1 で kernel から追い出�
 - ローカルの遅延は CPU/IO 競合で、ロック待ちは 0 件。`gradle-turnstile.sh` で直列化する（`docs/development/worktree_operations.md:96-109`）。
 - CI: `.github/workflows/backend-ci.yml` の matrix 6 shard（:412-413）、テスト XML とストアの収集は `backend/build/test-results/**/*.xml` と `backend/src/test/resources/archunit_store/*`（:586-587）、jacoco レポートは `backend/build/reports/jacoco/`（:603）、`cancel-in-progress: true`（:51）。重み表は `backend/src/test/resources/shard-weights.properties`（再生成は `backend/scripts/regen-shard-weights.sh`。いずれも `git ls-files` で実在を確認）、`verifyShardCoverage`。
 - Flyway: `backend/src/main/resources/db/migration` の単一ディレクトリに 1,223 ファイル（他に `rollback/` 2）。番人 `FlywayTimestampNamingGuardTest`。
-- 非同期: `@Primary` の `event-pool` は core 2 / max 5 / queue 100、拒否は AbortPolicy（`config/AsyncConfig.java:47-60`）。executor 無指定の `@Async` は禁止（`backend/.claudecode.md:464`、Issue #2953）。
+- 非同期: `@Primary` の `event-pool` は core 2 / max 5 / queue 100、拒否は AbortPolicy（`config/AsyncConfig.java:47-60`）。executor 無指定の `@Async` は禁止（`backend/.claudecode.md` §15、Issue #2953）。
 - レプリカ振り分け: `config/ReplicaRoutingAspect.java:56` はメソッドに付いた `@Transactional`（`@annotation`）だけを見る。クラスレベルの `readOnly` は振り分けに使われない。
 
 ### 2.6 番人の限界
@@ -385,7 +385,7 @@ void on(JobContractConcludedEvent e) {
 ### 4.4 Registry の登録対象・購読・executor
 
 - **登録対象を明示的に限定する。** Modulith の Registry は、採用版によっては AFTER_COMMIT のトランザクショナルなリスナー全般への配信を永続化する可能性がある。そうなると既存の B のイベント（例: `UserRegisteredEvent` の `email`・`displayName`・`rawToken`）が DB に永続化される。L0-S で採用版の挙動（何が永続化されるか、対象を絞る設定や拡張点があるか）を確認し、**Registry に載るのは kernel の印 `ReliableEvent` を実装したイベントの、`@ModuleEventListener` で購読される配信だけ**になる構成にする（絞れない版なら、配信の仕組みを差し替えて絞るか、Modulith の Registry を採用しない。§14）。既存の認証イベントを発行して Registry に何も保存されない（秘密情報が残らない）**負の IT** を L1-M の受け入れ条件にする。
-- **`@ApplicationModuleListener` をそのまま使わない。** これは `@Async`（executor 無指定）＋ `@Transactional(REQUIRES_NEW)` ＋ `@TransactionalEventListener` の合成で、executor 無指定の `@Async` は `@Primary` の `event-pool`（2/5/100・AbortPolicy）に載る。これは executor 無指定の禁止（`backend/.claudecode.md:464`、Issue #2953）に抵触し、再配信で一度に大量投入すると拒否例外が起きる。
+- **`@ApplicationModuleListener` をそのまま使わない。** これは `@Async`（executor 無指定）＋ `@Transactional(REQUIRES_NEW)` ＋ `@TransactionalEventListener` の合成で、executor 無指定の `@Async` は `@Primary` の `event-pool`（2/5/100・AbortPolicy）に載る。これは executor 無指定の禁止（`backend/.claudecode.md` §15、Issue #2953）に抵触し、再配信で一度に大量投入すると拒否例外が起きる。
 - 代わりに自前の合成アノテーション `@ModuleEventListener` を kernel に置き、`@Async("module-event-pool")` で**専用 executor** を指定する。拒否方針はロットではなく L1-M で決める（AbortPolicy のままにして投入側で流量を抑えるのを第一案とする）。
 - **`@ModuleEventListener` はトランザクションを持たない**（`@Transactional` を含めない。中身は `@Async("module-event-pool")`＋`@TransactionalEventListener(AFTER_COMMIT)`）。購読側が自モジュールの表を書く場合は、自モジュールの Service の `@Transactional` メソッドを呼び、その中で書く。他モジュールを呼ぶ場合（パターン F の保険）は、相手の公開 API が相手自身の tx を開く。こうすると、リスナー自身は tx の入口にならず、D-3T の合成アノテーション検出（L1-G0）とも矛盾しない（tx 属性を持たないので入口として数えられず、書き込みの tx は各モジュールの Service に閉じる）。
 - **Registry の完了記録**: tx を持たないリスナーで、Registry の完了記録（リスナーの正常終了を受けて完了日時を入れる処理）がどの tx で行われるかは採用版の実装に依存する。L0-S で、tx を持たない非同期リスナーでも正常終了で完了が記録され、例外で未完了のまま残ることを確認する（確認項目3に含める）。
@@ -1095,17 +1095,17 @@ CREATE TABLE event_publication (
 
 ### 11.3 Registry の運用値
 
-運用値は**初期値**で、L1-M の完了までに根拠（負荷試験・L0-S の結果）とともに確定し、本節を更新する（期限: L1-M の子 CMP を完了にするまで）。
+運用値のうち、再投入の周期・cutoff・1回の件数・lease・専用 executor の容量は、[M18 remote CI 実測（HEAD 30744）](../evidence/CMP-261028-2251/m18-remote-ci-30744.md)（Backend run 40992429514 / shard 0）の実測を根拠に**確定値**とする。未完了1000件を保持したまま通常3000件（10件/秒×300秒）を流し、frame/physical拒否は0、全3000件の p99=131.767637ms（基準5秒以下）、300個の秒bucketはすべて10件、executor は core/max4・待ち行列容量200で queue 最大93・admission 最大100に収まり、5回の再投入 tick で500件を再生した。定めた値は実測で拒否を出さず余裕が残ったため、値は変えない。なお試行回数の上限・警告の閾値など、M18 が測っていない行は引き続き初期値であり、障害の実例が出た時点で見直す。この実測は C / F 業務購読者の処理性能や最新 HEAD 全体の green を示さない。
 
-| 項目 | 初期値 | 根拠・決め方 |
+| 項目 | 値（行ごとに確定値か初期値かを明記） | 根拠・決め方 |
 |---|---|---|
-| 再投入の対象 | 発行から 5 分以上経って未完了の行 | 通常の配信（専用 executor の待ち行列）が終わる時間より長く取り、処理中の行を再投入しないため。L1-M の負荷試験で通常配信の最大所要時間を測り、その数倍に決める |
-| 再投入の間隔 | 1 分ごと（`@SchedulerLock` で1台だけ） | 再投入1回の上限件数と合わせ、通常の流入を圧迫しない量にする |
-| 1回の再投入の上限件数 | 100 件 | 専用 executor の待ち行列の大きさ以下にする（投入拒否を起こさない） |
-| 処理中件数の上限 | 専用 executor の最大スレッド数＋待ち行列 | これを超える投入をしない |
-| 試行回数の上限 | 10 回 | 再投入間隔×10 ≒ 10 分強で、一時的な障害（再起動・DB フェイルオーバー）を越えられる長さとして置いた初期値。L1-M で障害の実例から見直す |
+| 再投入の対象 | 発行から 5 分以上経って未完了の行（**確定値**） | 通常の配信が終わる時間より長く取り、処理中の行を再投入しないため。M18 実測で通常3000件の全件 p99=131.767637ms・最大1.078402348秒であり、5分（300秒）に対し十分な余裕がある |
+| 再投入の間隔 | 1 分ごと（`@SchedulerLock` で1台だけ）（**確定値**） | M18 で実 `@Scheduled` 固定delay60秒・実ShedLock の tick 5回が全完了、lock row は1件。通常流入（10件/秒）を圧迫せず拒否0 |
+| 1回の再投入の上限件数 | 100 件（**確定値**） | 待ち行列容量200以下。M18 で claim/admit/accepted は500で一致、queue 最大93・admission 最大100・拒否0 |
+| 処理中件数の上限 | 専用 executor の最大スレッド数＋待ち行列（core/max4・容量200）（**確定値**） | これを超える投入をしない。M18 で停止後の capacity も200に戻ることを確認 |
+| 試行回数の上限 | 10 回（初期値。M18 は未測定） | 再投入間隔×10 ≒ 10 分強で、一時的な障害（再起動・DB フェイルオーバー）を越えられる長さとして置いた初期値。L1-M で障害の実例から見直す |
 | 隔離状態 | 試行回数の上限を超えた行は「隔離」にし、再投入の対象から外す | 永久に再投入し続けて正常な行を圧迫しないため |
-| 警告 | 隔離になった時点で**即時に** ERROR ログとアラート。未完了の最古が 30 分を超えたら警告 | 30 分は「再投入の対象 5 分＋試行上限ぶんの時間」を超えたら異常と見なすための初期値 |
+| 警告 | 隔離になった時点で**即時に** ERROR ログとアラート。未完了の最古が 30 分を超えたら警告（30 分は初期値。M18 は未測定） | 30 分は「再投入の対象 5 分＋試行上限ぶんの時間」を超えたら異常と見なすための初期値 |
 | 掃除（パターン F の相手側の保留） | 24 時間確定されない保留を「失効」にする（物理削除しない。ID は保持し、失効からも同一 ID で確定できる） | §4.3-4。失効は見えなくするだけなので、週次の隔離確認・手動再開と矛盾しない |
 | 物理削除（パターン F） | **行わない**。保留・失効・取消の予約はすべて墓標として恒久に残す | §4.3-4。契約が ID を持っている可能性があり、誤った取消や長期の障害の後でも同一 ID で復旧できるようにするため。墓標はチャンネル行1つで容量への影響は軽微 |
 | 予約の上限（パターン F） | 作成者ごとの「保留」20 件（取消・失効・有効は数えない） | §4.3-3。並行な採用確定で事前検査をすり抜けた予約の蓄積を抑える。拒否時は明示取消で即時に枠が戻る |

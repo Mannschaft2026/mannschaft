@@ -87,6 +87,22 @@ public abstract class AbstractMySqlIntegrationTest {
     static {
         if (isDockerAvailable()) {
             MYSQL.start();
+            grantProcessToAppUser();
+        }
+    }
+
+    /**
+     * アプリ接続ユーザーに PROCESS 権限を与える。TRIGGER 内で実行中の文は {@code information_schema.PROCESSLIST} 上で
+     * DEFINER（root）のスレッドとして表示されるため、権限が無いと「処理中」の窓を観測できない
+     * （F06.4.1 の冪等 receipt 試験が同時実行中の状態を PROCESSLIST で検出する）。専用 Testcontainer 内だけの権限。
+     */
+    private static void grantProcessToAppUser() {
+        try (java.sql.Connection connection = java.sql.DriverManager.getConnection(
+                     MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("GRANT PROCESS ON *.* TO '" + MYSQL.getUsername() + "'@'%'");
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException("テスト用 MySQL への PROCESS 権限付与に失敗しました", e);
         }
     }
 
