@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
@@ -69,7 +68,7 @@ beforeEach(() => {
 
 describe('日付移動確認の文言', () => {
   it('希望の有無をFEが断定しない（ja は「あれば」の条件表現）', async () => {
-    const raw = readFileSync(fileURLToPath(new URL('../../locales/ja/shift.json', import.meta.url)), 'utf8')
+    const raw = readFileSync('app/locales/ja/shift.json', 'utf8')
     const ja = JSON.parse(raw) as { shift: { slot: { moveDateMessage: string } } }
     expect(ja.shift.slot.moveDateMessage).toContain('あれば')
   })
@@ -85,7 +84,7 @@ describe('枠の日付移動確認', () => {
     const confirmation = mocks.require.mock.calls[0]![0]
     expect(confirmation.header).toBe('shift.slot.moveDateTitle')
     expect(confirmation.message).toContain('shift.slot.moveDateMessage')
-    expect(confirmation.message).toContain('2026-12-31 → 2027-01-01')
+    expect(confirmation.message).toContain(' → ')
     // ISO 形式のまま出さず、ロケール整形した日付を渡す
     expect(confirmation.message).not.toContain('2026-12-31')
     expect(confirmation.message).not.toContain('2027-01-01')

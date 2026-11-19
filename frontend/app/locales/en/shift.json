@@ -190,7 +190,7 @@
       "dayOfWeek": "Day of week",
       "dayOfWeekHint": "Slots will be created only on the selected days of week",
       "moveDateTitle": "Confirm date change",
-      "moveDateMessage": "Change {oldDate} to {newDate}. Requests already submitted for this slot will also move to the new date.",
+      "moveDateMessage": "This changes the date from {oldDate} to {newDate}. Any requests already submitted for this slot will be moved to the new date as well.",
       "moveDateAccept": "Move slot and requests",
       "saveSuccess": "Slot saved",
       "deleteSuccess": "Slot deleted",

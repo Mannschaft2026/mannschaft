@@ -23,6 +23,7 @@ const { createSlot, updateSlot } = useShiftSlotApi()
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
 const confirm = useConfirm()
+const { formatCalendarDay } = useDatetime()
 
 const saving = ref(false)
 
@@ -83,9 +84,15 @@ async function save(moveRequestsConfirmed = false) {
     const newDate = form.value.slotDate
     confirm.require({
       header: t('shift.slot.moveDateTitle'),
-      message: t('shift.slot.moveDateMessage', { oldDate, newDate }),
+      // ISO のまま出さず、ロケールに応じた曜日付きの日付で示す
+      message: t('shift.slot.moveDateMessage', {
+        oldDate: formatCalendarDay(oldDate),
+        newDate: formatCalendarDay(newDate),
+      }),
       icon: 'pi pi-exclamation-triangle',
       rejectLabel: t('common.cancel'),
+      // キャンセルは枠を塗りつぶさない（承認ボタンを主役にする）
+      rejectClass: 'p-button-text',
       acceptLabel: t('shift.slot.moveDateAccept'),
       accept: () => {
         // 確認中に別の枠へ切り替わった場合は、古い確認を新しい更新へ流用しない。

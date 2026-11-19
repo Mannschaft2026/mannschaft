@@ -176,7 +176,7 @@
       "dayOfWeek": "Día de la semana",
       "dayOfWeekHint": "Las franjas se crean solo en los días seleccionados",
       "moveDateTitle": "Confirmar cambio de fecha",
-      "moveDateMessage": "Cambiar del {oldDate} al {newDate}. Las preferencias ya enviadas para este turno también se moverán a la nueva fecha.",
+      "moveDateMessage": "La fecha cambiará de {oldDate} a {newDate}. Si hay solicitudes ya enviadas para este turno, también se moverán a la nueva fecha.",
       "moveDateAccept": "Mover turno y preferencias",
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",

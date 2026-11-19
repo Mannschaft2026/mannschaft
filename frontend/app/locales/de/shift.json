@@ -176,7 +176,7 @@
       "dayOfWeek": "Wochentag",
       "dayOfWeekHint": "Slots werden nur an den gewählten Wochentagen angelegt",
       "moveDateTitle": "Datumsänderung bestätigen",
-      "moveDateMessage": "{oldDate} in {newDate} ändern. Bereits für diese Schicht eingereichte Wünsche werden ebenfalls auf das neue Datum verschoben.",
+      "moveDateMessage": "Das Datum wird von {oldDate} auf {newDate} geändert. Bereits für diese Schicht eingereichte Wünsche werden, falls vorhanden, ebenfalls auf das neue Datum verschoben.",
       "moveDateAccept": "Schicht und Wünsche verschieben",
       "saveSuccess": "Slot gespeichert",
       "deleteSuccess": "Slot gelöscht",
