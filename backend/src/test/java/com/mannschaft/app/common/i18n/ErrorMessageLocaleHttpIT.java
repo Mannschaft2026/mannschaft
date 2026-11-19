@@ -14,6 +14,7 @@ import com.mannschaft.app.support.test.FeatureFlagTestSupport;
 import com.mannschaft.app.team.entity.TeamEntity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -70,7 +71,18 @@ class ErrorMessageLocaleHttpIT extends AbstractMySqlIntegrationTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private FeatureFlagRepository featureFlagRepository;
     @Autowired private CacheManager cacheManager;
+    @Autowired private UserLocaleCache userLocaleCache;
     @PersistenceContext private EntityManager em;
+
+    /**
+     * 同一 JVM でキャッシュ済み Spring コンテキストが再利用される一方、別コンテキストの起動（ddl-auto=create）で
+     * users の AUTO_INCREMENT が 1 に戻り userId が再利用される。userId キーの UserLocaleCache に
+     * 旧コンテキスト由来の値（例: ja）が残ると users.locale=en が無視されるため、各テスト前に空にする。
+     */
+    @BeforeEach
+    void clearUserLocaleCache() {
+        userLocaleCache.clear();
+    }
 
     // =====================================================================================
     // AC-1 / AC-2 / AC-4 / AC-5 未ログインの業務例外（登録 API・AUTH_004）

@@ -1440,7 +1440,8 @@ class GlobalExceptionHandlerTest {
                 com.mannschaft.app.recruitment.RecruitmentErrorCode.TIER_LIMIT_EXCEEDED,
                 com.mannschaft.app.recruitment.RecruitmentErrorCode.TIER_RANGE_OVERLAP,
                 com.mannschaft.app.reservation.ReservationErrorCode.MAX_REMINDERS_EXCEEDED,
-                com.mannschaft.app.search.SearchErrorCode.MAX_SAVED_QUERIES_EXCEEDED,
+                // SearchErrorCode.MAX_SAVED_QUERIES_EXCEEDED（SEARCH_005）は CMP-261116-0722 で
+                // F04.6 改訂（上限10件・11件目は 409）に合わせ 409 へ移したため、ここには含めない。
                 com.mannschaft.app.safetycheck.SafetyCheckErrorCode.INVALID_RESPONSE_STATUS,
                 com.mannschaft.app.safetycheck.SafetyCheckErrorCode.INVALID_SCOPE_TYPE,
                 com.mannschaft.app.safetycheck.SafetyCheckErrorCode.BULK_RESPOND_LIMIT_EXCEEDED,
