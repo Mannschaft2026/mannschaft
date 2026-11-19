@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261020-1530",
+  "scope": "app",
+  "implementation": {
+    "pr": 4646,
+    "sha": "cbdd20c149fc6747e0c02ae5e69fa032e52153cf"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "既存連携の OAuth ログインで LOGIN_SUCCESS の ip_address と user_agent が正しい位置に入る",
+      "tests": [
+        {
+          "name": "AC-1: 既存連携ログインで ip=引数IP・UA=引数UA・method=OAUTH_GOOGLE",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        },
+        {
+          "name": "OAuth ログイン API の監査ログ契約",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthOAuthLoginAuditContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "OAuth 新規登録経路でも ip・UA・method が正しい位置に入る",
+      "tests": [
+        {
+          "name": "AC-2: OAuth 新規ユーザー登録経路でも ip・UA・method が正しい位置に入る",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        },
+        {
+          "name": "OAuth ログイン API の監査ログ契約",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthOAuthLoginAuditContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "userAgent が null のときは LoginSuccessEvent.userAgent も null のまま（既存連携・新規登録）",
+      "tests": [
+        {
+          "name": "AC-3: userAgent が null なら LoginSuccessEvent.userAgent も null のまま（既存連携）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        },
+        {
+          "name": "AC-3: userAgent が null なら LoginSuccessEvent.userAgent も null のまま（新規登録）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "OAuth ログインで保存する RefreshToken の jti が非 null で、sessionHash = SHA-256(jti)（本番 OAuth ログインが常に 500 だった不具合の同時是正）",
+      "tests": [
+        {
+          "name": "jti: 既存連携ログインで保存する RefreshToken の jti が非 null、sessionHash = SHA-256(jti)",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        },
+        {
+          "name": "jti: 新規登録ログインで保存する RefreshToken の jti が非 null、sessionHash = SHA-256(jti)",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44475877837
+    },
+    {
+      "runId": 44475877767
+    },
+    {
+      "runId": 44475877774
+    },
+    {
+      "runId": 44475878001
+    },
+    {
+      "runId": 44475877770
+    },
+    {
+      "runId": 44475877877
+    },
+    {
+      "runId": 44475877807
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4646"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261020-1530-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261020-1530-real.md"
+    }
+  },
+  "regressions": []
+}
