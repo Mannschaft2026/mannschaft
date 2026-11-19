@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261117-2159",
+  "scope": "app",
+  "implementation": { "pr": 4616, "sha": "16a01513ddd024052dcc81c3345491c965db335c" },
+  "acceptanceCriteria": [
+    { "id": "AC-1", "description": "forgot-password が en/de で日本語を含まない", "tests": [{ "name": "AC-1: %s で全文言が日本語を含まず $t 経由で出る", "evidence": "frontend/app/pages/forgot-password.spec.ts" }, { "name": "CMP-261117-2159 AC-10: 追加キーが6言語に在る", "evidence": "frontend/app/locales/unauth-flow.i18n.spec.ts" }] },
+    { "id": "AC-2", "description": "メール空は必須エラー、\"a\" は形式エラーが現在の言語で出る", "tests": [{ "name": "AC-2: %s で空は必須エラー・\"a\" は形式エラーが表示言語で出る", "evidence": "frontend/app/pages/forgot-password.spec.ts" }] },
+    { "id": "AC-3", "description": "forgot-password の API 失敗（4xx/5xx/ネットワーク）でも完了画面を出し BE message は出さない", "tests": [{ "name": "AC-3: API が %s で失敗しても成功と同じ完了画面でBE messageは出さない", "evidence": "frontend/app/pages/forgot-password.spec.ts" }] },
+    { "id": "AC-4", "description": "verify-email の失敗時、code の有無によらず BE の message を画面本文とトーストに出す", "tests": [{ "name": "AC-4: 検証失敗時、codeが無くてもBEのmessageを失敗画面の本文とトーストに出す", "evidence": "frontend/app/pages/verify-email.spec.ts" }, { "name": "AC-4: codeがあってもBEのmessageを出す", "evidence": "frontend/app/pages/verify-email.spec.ts" }] },
+    { "id": "AC-5", "description": "message の無い失敗は表示言語の i18n 文言にフォールバックする", "tests": [{ "name": "AC-5: messageが無い失敗（通信断・空本文）は表示言語の既定文言にフォールバックする", "evidence": "frontend/app/pages/verify-email.spec.ts" }] },
+    { "id": "AC-6", "description": "token 無し・空 token の案内画面が i18n で出る", "tests": [{ "name": "AC-6: tokenが %j のとき案内画面を表示言語で出す", "evidence": "frontend/app/pages/verify-email.spec.ts" }, { "name": "AC-6: %s の案内画面の本文（email 有りは展開結果・無しは汎用文）", "evidence": "frontend/app/pages/verify-email.spec.ts" }] },
+    { "id": "AC-7", "description": "verify-email の全状態（検証中・成功・失敗・再送・ログイン）が翻訳済み", "tests": [{ "name": "AC-7: %s で全状態（検証中・成功・失敗・再送・ログイン）が翻訳される", "evidence": "frontend/app/pages/verify-email.spec.ts" }, { "name": "CMP-261117-2159 AC-10: 追加キーが6言語に在る", "evidence": "frontend/app/locales/unauth-flow.i18n.spec.ts" }] },
+    { "id": "AC-8a", "description": "確認メール再送の失敗は BE の message を優先し、無ければ既定文言", "tests": [{ "name": "AC-8a: 再送失敗はBEのmessageを優先し、無ければ既定文言", "evidence": "frontend/app/pages/verify-email.spec.ts" }] },
+    { "id": "AC-8b", "description": "再送成功のトーストが i18n で出る", "tests": [{ "name": "AC-8b: 再送成功のトーストがi18nで出る", "evidence": "frontend/app/pages/verify-email.spec.ts" }] },
+    { "id": "AC-8c", "description": "確認成功のトーストが i18n で出る", "tests": [{ "name": "AC-8c: 検証成功のトーストがi18nで出る", "evidence": "frontend/app/pages/verify-email.spec.ts" }] },
+    { "id": "AC-9a", "description": "回数券画面の2つの取得 API が code 付き 403 で失敗したとき英語の BE message を出す", "tests": [{ "name": "AC-9a: 商品取得が code+英語message の403で失敗したらそのmessageを出す", "evidence": "frontend/app/pages/teams/[slug]/tickets.spec.ts" }, { "name": "AC-9a: 発行済み取得が code+英語message の403で失敗したらそのmessageを出す", "evidence": "frontend/app/pages/teams/[slug]/tickets.spec.ts" }] },
+    { "id": "AC-9b", "description": "回数券の商品追加が失敗したとき BE の message を出す", "tests": [{ "name": "AC-9b: 商品追加が code+message で失敗したらBEのmessageを出す", "evidence": "frontend/app/pages/teams/[slug]/tickets.spec.ts" }] },
+    { "id": "AC-9c", "description": "通信断・空本文の失敗でも日本語直書きは出ず翻訳済み文言が出る", "tests": [{ "name": "AC-9c: 取得が通信断・空本文で失敗しても日本語直書きは出ず翻訳済み文言が出る", "evidence": "frontend/app/pages/teams/[slug]/tickets.spec.ts" }, { "name": "AC-9c: 追加が通信断・空本文で失敗しても日本語直書きは出ず翻訳済み文言が出る", "evidence": "frontend/app/pages/teams/[slug]/tickets.spec.ts" }] },
+    { "id": "AC-9d", "description": "追加成功のトーストが i18n で出て、追加後の再取得失敗は取得失敗として通知される", "tests": [{ "name": "AC-9d: 追加成功のトーストがi18nで出て、再取得が失敗したら取得失敗として通知される", "evidence": "frontend/app/pages/teams/[slug]/tickets.spec.ts" }] },
+    { "id": "AC-10", "description": "追加キーが6ロケール全てにあり、日本語残存の番人が緑", "tests": [{ "name": "CMP-261117-2159 AC-10: 追加キーが6言語に在る", "evidence": "frontend/app/locales/unauth-flow.i18n.spec.ts" }, { "name": "AC-1: en/de/es/ko の全文字列値に仮名・漢字が無い（許容リストを除く）", "evidence": "frontend/tests/unit/i18n/locale-no-japanese-residue.spec.ts" }] },
+    { "id": "AC-11", "description": "招待からの戻りリンクが退行しない", "tests": [{ "name": "登録案内のログイン導線へ招待URLを渡す", "evidence": "frontend/app/pages/verify-email.spec.ts" }, { "name": "認証成功のログインボタンでもcomputedの復帰先を渡す", "evidence": "frontend/app/pages/verify-email.spec.ts" }, { "name": "外部復帰先はログイン導線へ渡さない", "evidence": "frontend/app/pages/verify-email.spec.ts" }] }
+  ],
+  "ci": [
+    { "runId": 44286161939 },
+    { "runId": 44286161879 },
+    { "runId": 44286161872 },
+    { "runId": 44286161773 },
+    { "runId": 44286161912 },
+    { "runId": 44286162167 },
+    { "runId": 44286161769 },
+    { "runId": 44286162045 },
+    { "runId": 44286161792 },
+    { "runId": 44286161814 }
+  ],
+  "stages": {
+    "review": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4616" },
+    "real": { "status": "passed", "evidence": "docs/evidence/CMP-261117-2159-real.md" },
+    "exploratory": { "status": "passed", "evidence": "docs/evidence/CMP-261117-2159-real.md" }
+  },
+  "regressions": []
+}

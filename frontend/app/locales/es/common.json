@@ -3349,5 +3349,29 @@
       "expires_at": "Caduca el",
       "used_count": "Veces usado"
     }
+  },
+  "globalSearch": {
+    "title": "Buscar",
+    "placeholder": "Buscar por palabra clave (2 caracteres o más)",
+    "submit": "Buscar",
+    "failed": "La búsqueda ha fallado",
+    "tooShort": "Introduzca al menos 2 caracteres",
+    "empty": "No hay resultados",
+    "didYouMean": "Quizás quiso decir:",
+    "broaderQuery": "Búsqueda más amplia:",
+    "timedOut": "Se agotó el tiempo de búsqueda en algunos tipos: {types}",
+    "noLink": "No hay enlace",
+    "types": {
+      "ALL": "Todo",
+      "POST": "Publicaciones",
+      "MESSAGE": "Mensajes",
+      "THREAD": "Hilos",
+      "ARTICLE": "Artículos",
+      "FILE": "Archivos",
+      "USER": "Usuarios",
+      "TEAM": "Equipos",
+      "ORGANIZATION": "Organizaciones",
+      "ACTIVITY": "Registros de actividad"
+    }
   }
 }
