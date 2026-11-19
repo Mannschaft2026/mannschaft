@@ -125,7 +125,7 @@ public class AuthOAuthService {
             TokenResponse tokenResponse = issueTokenPair(userId, ipAddress, userAgent);
 
             // イベント発行
-            eventPublisher.publish(new LoginSuccessEvent(userId, "OAUTH_" + provider.toUpperCase(), ipAddress, userAgent));
+            eventPublisher.publish(new LoginSuccessEvent(userId, ipAddress, userAgent, "OAUTH_" + provider.toUpperCase()));
 
             return ApiResponse.of(tokenResponse);
         }
@@ -195,7 +195,7 @@ public class AuthOAuthService {
         TokenResponse tokenResponse = issueTokenPair(newUser.getId(), ipAddress, userAgent);
 
         // イベント発行: LoginSuccess + OAuth新規ユーザー登録
-        eventPublisher.publish(new LoginSuccessEvent(newUser.getId(), "OAUTH_" + provider.toUpperCase(), ipAddress, userAgent));
+        eventPublisher.publish(new LoginSuccessEvent(newUser.getId(), ipAddress, userAgent, "OAUTH_" + provider.toUpperCase()));
         eventPublisher.publish(new OAuthUserRegisteredEvent(newUser.getId(), ipAddress, userAgent, provider.toUpperCase()));
 
         return ApiResponse.of(tokenResponse);
