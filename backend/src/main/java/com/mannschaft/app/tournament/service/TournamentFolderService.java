@@ -1,6 +1,7 @@
 package com.mannschaft.app.tournament.service;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.filesharing.FileScopeType;
 import com.mannschaft.app.filesharing.FileSharingErrorCode;
 import com.mannschaft.app.filesharing.dto.CreateFolderRequest;
@@ -25,8 +26,12 @@ import java.util.List;
  * F08.7.1 / 04 リーグ単位ファイル置き場の大会／ディビジョンスコープ folder/file 認可・スコープ解決サービス。
  *
  * <p>既存 F05.5 ファイル共有（{@link SharedFolderService}）を再利用し、大会／ディビジョン文脈の導線を
- * 追加する。認可は連絡スペースと統一し {@link TournamentContactAccessService} の
- * {@code checkView}（閲覧）/ {@code checkPost}（アップロード/編集）を流用する（設計書 §5）。</p>
+ * 追加する。認可は連絡スペース（BULLETIN）と統一し {@link TournamentContactSpaceAccessGate} の
+ * {@code requireView}（閲覧）/ {@code requirePost}（アップロード/編集）を通す（設計書 §5）。</p>
+ *
+ * <p><b>存在秘匿</b>（CMP-261116-0726・AC-8/AC-19）: 大会／ディビジョン不在・帰属不一致・BULLETIN スペース欠落・
+ * 閲覧権なしはすべて不在と同一の 404 {@link TournamentErrorCode#CONTACT_SPACE_NOT_FOUND}（TOUR_029）に畳む。
+ * 閲覧可・書込不可のときだけ 403 {@link TournamentErrorCode#CONTACT_SPACE_POST_FORBIDDEN}（TOUR_031）を返す。</p>
  *
  * <p><b>IDOR 検証チェーン</b>（設計書 §3）: {@code tId → orgId}（主催組織帰属）→（ディビジョンなら）
  * {@code divId → tId} → {@code folderId → (scope_type, scope_ref_id)} 帰属。存在しない／論理削除済みは
@@ -51,7 +56,7 @@ public class TournamentFolderService {
     private final TournamentRepository tournamentRepository;
     private final TournamentDivisionRepository divisionRepository;
     private final SharedFolderService folderService;
-    private final TournamentContactAccessService accessService;
+    private final TournamentContactSpaceAccessGate accessGate;
 
     // ========================================================================
     // 大会スコープ
@@ -66,8 +71,9 @@ public class TournamentFolderService {
      */
     public List<FolderResponse> listTournamentRootFolders(Long tournamentId, Long userId) {
         // IDOR: tId 帰属 + 閲覧認可（公開スペースは未ログイン可・read-only）
-        resolveTournamentOrThrow(tournamentId);
-        accessService.checkView(ContactSpaceScopeType.TOURNAMENT, tournamentId, ContactSpaceKind.BULLETIN, userId);
+        resolveTournamentOrThrow(tournamentId, TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
+        accessGate.requireView(ContactSpaceScopeType.TOURNAMENT, tournamentId, ContactSpaceKind.BULLETIN, userId,
+                TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
         return folderService.listTournamentScopedRootFolders(FileScopeType.TOURNAMENT, tournamentId);
     }
 
@@ -81,8 +87,10 @@ public class TournamentFolderService {
      */
     @Transactional
     public FolderResponse createTournamentFolder(Long tournamentId, Long userId, CreateFolderRequest request) {
-        TournamentEntity tournament = resolveTournamentOrThrow(tournamentId);
-        accessService.checkPost(ContactSpaceScopeType.TOURNAMENT, tournamentId, userId);
+        TournamentEntity tournament = resolveTournamentOrThrow(tournamentId, TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
+        // BULLETIN スペース欠落も不在応答（AC-19）。閲覧可・書込不可のみ 403 TOUR_031。
+        accessGate.requirePost(ContactSpaceScopeType.TOURNAMENT, tournamentId, ContactSpaceKind.BULLETIN, userId,
+                TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
         return folderService.createTournamentScopedFolder(
                 FileScopeType.TOURNAMENT, tournament.getOrganizationId(), tournamentId, userId, request);
     }
@@ -100,8 +108,9 @@ public class TournamentFolderService {
      * @return フォルダレスポンスリスト
      */
     public List<FolderResponse> listDivisionRootFolders(Long tournamentId, Long divisionId, Long userId) {
-        resolveDivisionOrThrow(tournamentId, divisionId);
-        accessService.checkView(ContactSpaceScopeType.TOURNAMENT_DIVISION, divisionId, ContactSpaceKind.BULLETIN, userId);
+        resolveDivisionOrThrow(tournamentId, divisionId, TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
+        accessGate.requireView(ContactSpaceScopeType.TOURNAMENT_DIVISION, divisionId, ContactSpaceKind.BULLETIN, userId,
+                TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
         return folderService.listTournamentScopedRootFolders(FileScopeType.TOURNAMENT_DIVISION, divisionId);
     }
 
@@ -117,10 +126,12 @@ public class TournamentFolderService {
     @Transactional
     public FolderResponse createDivisionFolder(Long tournamentId, Long divisionId, Long userId,
                                                CreateFolderRequest request) {
-        resolveDivisionOrThrow(tournamentId, divisionId);
-        accessService.checkPost(ContactSpaceScopeType.TOURNAMENT_DIVISION, divisionId, userId);
+        resolveDivisionOrThrow(tournamentId, divisionId, TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
+        accessGate.requirePost(ContactSpaceScopeType.TOURNAMENT_DIVISION, divisionId, ContactSpaceKind.BULLETIN, userId,
+                TournamentErrorCode.CONTACT_SPACE_NOT_FOUND);
         // クォータ帰属は主催組織。大会から組織を辿る（§2.1）。
-        Long organizationId = resolveTournamentOrThrow(tournamentId).getOrganizationId();
+        Long organizationId = resolveTournamentOrThrow(tournamentId, TournamentErrorCode.CONTACT_SPACE_NOT_FOUND)
+                .getOrganizationId();
         return folderService.createTournamentScopedFolder(
                 FileScopeType.TOURNAMENT_DIVISION, organizationId, divisionId, userId, request);
     }
@@ -133,7 +144,8 @@ public class TournamentFolderService {
      * フォルダ個別操作の閲覧認可を検証する（設計書 §3・IDOR チェーンの末端 {@code folderId → scope}）。
      *
      * <p>folderId が当該大会／ディビジョンスコープに属することを確認してから閲覧認可を通す。
-     * 他スコープの folderId を渡す IDOR は 404 で弾く。</p>
+     * 他スコープの folderId を渡す IDOR・大会／ディビジョン不在・閲覧権なしは、すべて不在フォルダと同一の
+     * 404 {@link FileSharingErrorCode#FOLDER_NOT_FOUND} に畳む（CMP-261116-0726）。</p>
      *
      * @param tournamentId 大会 ID
      * @param divisionId   ディビジョン ID（大会スコープなら null）
@@ -142,11 +154,15 @@ public class TournamentFolderService {
      */
     public void checkFolderViewAccess(Long tournamentId, Long divisionId, Long folderId, Long userId) {
         ScopeRef ref = resolveAndVerifyFolderScope(tournamentId, divisionId, folderId);
-        accessService.checkView(ref.scopeType(), ref.scopeId(), ContactSpaceKind.BULLETIN, userId);
+        accessGate.requireView(ref.scopeType(), ref.scopeId(), ContactSpaceKind.BULLETIN, userId,
+                FileSharingErrorCode.FOLDER_NOT_FOUND);
     }
 
     /**
      * フォルダ個別操作のアップロード/編集認可を検証する（設計書 §5）。
+     *
+     * <p>閲覧権なし・不在は不在フォルダと同一の 404 {@link FileSharingErrorCode#FOLDER_NOT_FOUND}、
+     * 閲覧可・書込不可は 403 {@link TournamentErrorCode#CONTACT_SPACE_POST_FORBIDDEN}（CMP-261116-0726）。</p>
      *
      * @param tournamentId 大会 ID
      * @param divisionId   ディビジョン ID（大会スコープなら null）
@@ -155,7 +171,8 @@ public class TournamentFolderService {
      */
     public void checkFolderPostAccess(Long tournamentId, Long divisionId, Long folderId, Long userId) {
         ScopeRef ref = resolveAndVerifyFolderScope(tournamentId, divisionId, folderId);
-        accessService.checkPost(ref.scopeType(), ref.scopeId(), userId);
+        accessGate.requirePost(ref.scopeType(), ref.scopeId(), ContactSpaceKind.BULLETIN, userId,
+                FileSharingErrorCode.FOLDER_NOT_FOUND);
     }
 
     // ========================================================================
@@ -163,39 +180,43 @@ public class TournamentFolderService {
     // ========================================================================
 
     /**
-     * 大会の存在を確認して返す。存在しない／論理削除済みは 404（IDOR 対策）。
+     * 大会の存在を確認して返す。存在しない／論理削除済みは {@code notFoundCode} の 404（IDOR 対策）。
+     *
+     * <p>閲覧権なしと同一の不在応答にするため、コードは入口のリソース種別に合わせて呼び出し側が渡す
+     * （大会固有の {@code TOURNAMENT_NOT_FOUND} を返すと存在オラクルになる・CMP-261116-0726）。</p>
      */
-    private TournamentEntity resolveTournamentOrThrow(Long tournamentId) {
+    private TournamentEntity resolveTournamentOrThrow(Long tournamentId, ErrorCode notFoundCode) {
         return tournamentRepository.findById(tournamentId)
-                .orElseThrow(() -> new BusinessException(TournamentErrorCode.TOURNAMENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(notFoundCode));
     }
 
     /**
      * ディビジョンが当該大会に属することを確認して返す（{@code divId → tId} 帰属）。
-     * 不一致／不存在は 404（IDOR 対策）。
+     * 不一致／不存在は {@code notFoundCode} の 404（IDOR 対策・帰属不一致も不在と同一）。
      */
-    private TournamentDivisionEntity resolveDivisionOrThrow(Long tournamentId, Long divisionId) {
+    private TournamentDivisionEntity resolveDivisionOrThrow(Long tournamentId, Long divisionId,
+                                                            ErrorCode notFoundCode) {
         return divisionRepository.findByIdAndTournamentId(divisionId, tournamentId)
-                .orElseThrow(() -> new BusinessException(TournamentErrorCode.DIVISION_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(notFoundCode));
     }
 
     /**
      * folderId が当該大会／ディビジョンスコープに属することを検証し、スコープ参照を返す。
      *
      * <p>IDOR チェーン: tId/divId 帰属を確認した上で、フォルダの {@code (scope_type, scope_ref_id)} が
-     * 期待スコープと一致することを確認する。不一致／不存在は一律 404。</p>
+     * 期待スコープと一致することを確認する。不一致／不存在は一律 404 {@link FileSharingErrorCode#FOLDER_NOT_FOUND}。</p>
      */
     private ScopeRef resolveAndVerifyFolderScope(Long tournamentId, Long divisionId, Long folderId) {
         ContactSpaceScopeType scopeType;
         Long scopeId;
         FileScopeType expectedFileScope;
         if (divisionId != null) {
-            resolveDivisionOrThrow(tournamentId, divisionId);
+            resolveDivisionOrThrow(tournamentId, divisionId, FileSharingErrorCode.FOLDER_NOT_FOUND);
             scopeType = ContactSpaceScopeType.TOURNAMENT_DIVISION;
             scopeId = divisionId;
             expectedFileScope = FileScopeType.TOURNAMENT_DIVISION;
         } else {
-            resolveTournamentOrThrow(tournamentId);
+            resolveTournamentOrThrow(tournamentId, FileSharingErrorCode.FOLDER_NOT_FOUND);
             scopeType = ContactSpaceScopeType.TOURNAMENT;
             scopeId = tournamentId;
             expectedFileScope = FileScopeType.TOURNAMENT;

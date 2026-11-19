@@ -1,7 +1,7 @@
 # F08.7.1 / 01: 連絡機能（掲示板・チャット連絡スペース）
 
-> **ステータス**: 🟡 設計中（CMP-261118-0900 参加者導線を追記中）
-> **最終更新**: 2026-05-31
+> **ステータス**: 🟢 設計完了
+> **最終更新**: 2026-11-20（CMP-261118-0900: §10 参加者導線を追記）
 > **関連ドキュメント**:
 > - [README.md](./README.md) — 機能概要・トレーサビリティ
 > - [F08.7_tournament_league.md](../F08.7_tournament_league.md) — 大会・ディビジョン・参加者（連絡単位の源泉）
@@ -69,7 +69,7 @@ bulletin の `scope_type` は **実 DDL では `VARCHAR(20)`**（`V5.001__create
 - DDL: VARCHAR ゆえ enum 定数追加（Java `ScopeType` への `TOURNAMENT` / `TOURNAMENT_DIVISION` 追加）のみで足り、列定義の `ALTER` は不要。**実装時に実スキーマを grep して 20 桁制約を超えないことを再確認**する。
 - スコープ別スレッド一覧の主クエリ用 `(scope_type, scope_id)` 複合 index は **実 DDL に未存在**（`V5.002` には PRIMARY KEY / category FK / author FK / FULLTEXT のみ。後続移行にも追加なし）。**実装時に grep で確認し、無ければ Flyway 移行で追加**する（§3.4・README Y-2 と整合）。
 
-**API 入口（グローバル方式）**: 大会連絡スペースの掲示板は、グローバル方式掲示板 API（`/api/v1/bulletin/threads` の一覧・作成、`/api/v1/bulletin/threads/read-all`、`/api/v1/bulletin/threads/{threadId}` 系）に `scope_type=TOURNAMENT` / `TOURNAMENT_DIVISION`、`scope_id=<大会ID／ディビジョンID の数値>` を指定して利用する（`scope_id` に slug は使えず 400）。認可は §4（`TournamentContactAccessService`：閲覧=canView・投稿=canPost）に委譲し、権限なしは閲覧 403 `TOUR_030`／投稿 403 `TOUR_031`。パス方式（`/api/v1/{scopeType}/{scopeId}/bulletin/...`）は大会スコープを受理しない（403）。権限なしを不在 ID と同じ 404 に畳む存在秘匿は別戦役で扱う。
+**API 入口（グローバル方式）**: 大会連絡スペースの掲示板は、グローバル方式掲示板 API（`/api/v1/bulletin/threads` の一覧・作成、`/api/v1/bulletin/threads/read-all`、`/api/v1/bulletin/threads/{threadId}` 系）に `scope_type=TOURNAMENT` / `TOURNAMENT_DIVISION`、`scope_id=<大会ID／ディビジョンID の数値>` を指定して利用する（`scope_id` に slug は使えず 400）。認可は §4（`TournamentContactAccessService`：閲覧=canView・投稿=canPost）の規則に従う。閲覧権のない者は不在 ID と同一の 404 に畳み（スコープ系は `TOUR_029`、子リソース ID 指定は子の不在コード `BULLETIN_002`/`BULLETIN_003`/`BULLETIN_007`/`BULLETIN_025`）、閲覧できるが投稿権のない者だけを 403 `TOUR_031` とする（CMP-261116-0726）。旧 403 `TOUR_030`（閲覧権なし）は欠番とし、送出しない（番号は再利用しない）。パス方式（`/api/v1/{scopeType}/{scopeId}/bulletin/...`）は大会スコープを受理しない（403）。
 
 ### 2.3 chat `ChannelType` / `source_type` の拡張（F04.2）
 
@@ -139,14 +139,175 @@ chat の `chat_channels.channel_type` に **`TOURNAMENT_CHAT`（15字）/ `TOURN
 
 新規 `TournamentContactAccessService`（tournament ドメイン）を設け、村の二段認可（`VillageBulletinAccessService` の `checkView` / `checkModerator`）を範として read / write を分離する。掲示板・チャット双方のコントローラ／サービス入口で**必ず**通す（多層防御）。
 
-クロスドメインの所属判定は `TeamMembershipRepository` / `AccessControlService` を **ID 参照のみ**で呼ぶ（原則 1）。存在しない／削除済みスペースは一律 **404**（IDOR 対策・存在を漏らさない）。
-    {
-    }
-}
-[358 more lines]## 10. 参加者向け導線（チーム側連絡スペース画面と一覧 API）（CMP-261118-0900）
+クロスドメインの所属判定は `TeamMembershipRepository` / `AccessControlService` を **ID 参照のみ**で呼ぶ（原則 1）。存在しない／削除済みスペース、および**閲覧権のない者**への応答は一律 **404**（IDOR 対策・存在を漏らさない。§4.3）。
 
-> **ステータス**: 🟡 設計中。本節は追記のみで、§1〜§9 は書き換えない。
-> **認可の契約**: 本節は「§4（PR #4643 改訂後）」の契約（`TournamentContactSpaceAccessGate`・存在秘匿・403 は `TOUR_031` のみ）を正とし、引用せず参照する。#4643 が main に入るまで、本節が参照する Gate 系クラス名・行番号は同 PR のブランチ（`origin/feature/cmp-261116-0726-tournament-contact-oracle-v2`）上にのみ存在する。
+### 4.1 `canView(scopeType, scopeId, userId)`（要件②）
+
+```
+canView(scopeType, scopeId, userId):
+    space = findActiveSpace(scopeType, scopeId, space_kind)
+    space が存在しない / deleted_at IS NOT NULL → 404（IDOR 対策）
+
+    space.is_public == true                                      → 許可（PUBLIC・未ログイン含む。read-only）
+    userId が対象チーム(status IN (REGISTERED, ACTIVE)) のメンバー  → 許可
+    主催組織 ADMIN（isAdmin(userId, orgId, "ORGANIZATION")）       → 許可
+    SYSTEM_ADMIN                                                  → 許可
+    else                                                         → 404（不在と同一応答。403 にしない）
+```
+
+- **チーム解決の源泉＝`tournament_participants`**。`status IN (REGISTERED, ACTIVE)` を含め、`WITHDRAWN` / `DISQUALIFIED` を**除外**する（**大会開始前から連絡可能**にする決定。要件のユーザビリティ確保）。
+- `TOURNAMENT`（大会全体）スコープは**全ディビジョンの participants を集約**して判定する。
+- 主催組織は大会 ID から `tournaments.organization_id` を辿って解決する。
+
+### 4.2 `canPost(scopeType, scopeId, userId)`（要件③）
+
+```
+canPost(scopeType, scopeId, userId):
+    対象チームの ADMIN/DEPUTY_ADMIN
+        （accessControlService.isAdminOrAbove(userId, teamId, "TEAM")）  → 許可
+    主催組織 ADMIN（isAdmin(userId, orgId, "ORGANIZATION")）             → 許可
+    SYSTEM_ADMIN                                                        → 許可
+    else（閲覧できる者）                                                → 403 TOUR_031
+    else（閲覧もできない者）                                            → 404（§4.3）
+```
+
+- 投稿できるのは **各チームの代表（ADMIN）・副代表（DEPUTY_ADMIN）** と **主催組織 ADMIN** のみ。一般 MEMBER・SUPPORTER・PUBLIC は閲覧のみ（権限昇格防止：MEMBER が代表になりすませない）。
+- `is_public=true` のスペースでも、**PUBLIC は常に read-only**。公開で投稿権が広がることはない。
+
+### 4.3 存在秘匿の判定表（CMP-261116-0726）
+
+閲覧権のない者に対し、スペース・スレッド・返信・添付・フォルダ等の**存在を応答の差で漏らさない**。判定は「閲覧できるか」を先に見て、拒否の種類を分ける。
+
+| 状況 | 応答 |
+|------|------|
+| 閲覧権なし（非公開スペースの部外者・未ログイン・主催組織外・脱退/失格チーム等） | **404**。スコープ系 EP は `TOUR_029`、子リソース ID 指定 EP は子の不在コード（スレッド `BULLETIN_002`・返信 `BULLETIN_003`・添付 `BULLETIN_007`・添付対象 `BULLETIN_025`）。実在しない ID と status・コード・本文が一致する |
+| 閲覧可・投稿（管理）権なし | **403 `TOUR_031`** |
+| スペース・大会・ディビジョンが不在、または大会とディビジョンの帰属が不一致 | 404（閲覧権なしと同一） |
+| 閲覧権あり・投稿権あり | 許可 |
+
+- 「閲覧権」は §4.1 の許可主体（公開スペースの閲覧者、参加チームの有効メンバー、主催組織 ADMIN、SYSTEM_ADMIN）。**スペース種別（掲示板／チャット）ごとの `is_public` で判定**する（掲示板・フォルダは掲示板スペース、チャットはチャットスペースを基準にする）。
+- 投稿権の拒否時に 403 か 404 かを分けるのは閲覧権の有無のみ。**投稿権を持つ者は閲覧判定を経ずに通る**。
+- **投稿後に資格を失った本人**（所属チームの脱退・失格等）は、閲覧権がなければ**自分が書いた投稿も不在扱い**（404）になる。公開スペースでは閲覧権があるため、本人の編集・削除は従来どおり行える。
+- 未認証の呼び出しは、公開 EP（大会フォルダ一覧等）を除き、存在の有無によらず同一の 401。
+- 旧 403 `TOUR_030` は欠番。CMP-261116-0726 以降は送出せず、番号も再利用しない（FE ロケールの文言は残置）。
+
+### 4.3 N+1 回避（大会全体スコープ）
+
+`TOURNAMENT` スコープの `canView` / `canPost` は「大会の全参加チームのいずれかで当該ユーザーがメンバー/代表か」を判定するため、ディビジョン × チーム × メンバーで N+1 になりやすい。これを避けるため、`TournamentParticipantRepository` に**単発 exists クエリ**を新設する:
+
+```java
+// 大会のいずれかの参加チーム（REGISTERED/ACTIVE）に当該ユーザーが所属するか
+boolean existsActiveMemberOfAnyParticipantTeam(Long tournamentId, Long userId);
+// 大会のいずれかの参加チームで当該ユーザーが ADMIN/DEPUTY_ADMIN か
+boolean existsTeamAdminOfAnyParticipantTeam(Long tournamentId, Long userId);
+// ディビジョン単位の同等クエリ
+boolean existsActiveMemberOfDivisionParticipantTeam(Long divisionId, Long userId);
+boolean existsTeamAdminOfDivisionParticipantTeam(Long divisionId, Long userId);
+```
+
+JOIN は `tournament_participants × team_memberships`（status 絞り込み付き）の 1 クエリで完結させる。
+
+### 4.4 `@Transactional` の境界
+
+`TournamentContactAccessService` は読み取り専用（`@Transactional(readOnly=true)`）で、tournament ドメイン内に閉じる。所属判定で `TeamMembershipRepository` を呼ぶのはクロスドメインだが**ID 参照の読み取りのみ**であり、書き込みトランザクションを跨がない。
+
+---
+
+## 5. 公開トグル（`is_public`）
+
+主催者（主催組織 ADMIN / SYSTEM_ADMIN）が各スペースの公開可否を切り替える。
+
+### 5.1 API
+
+```
+PATCH /api/v1/tournaments/{tournamentId}/contact-spaces/{spaceId}/visibility
+PATCH /api/v1/tournaments/{tournamentId}/divisions/{divisionId}/contact-spaces/{spaceId}/visibility
+  body: { "is_public": true }
+  認可: 主催組織 ADMIN / SYSTEM_ADMIN のみ（canPost より厳しい。チーム代表は公開設定できない）
+  応答: 200 更新後のスペース / 403 TOUR_032 / 404 TOUR_029
+```
+
+- **スペースの存在を知り得ない者は 404 `TOUR_029`**（不在と同一応答。副作用なし）。**知り得るが管理権のない者は 403 `TOUR_032`**。「知り得る」とは、そのスコープ（大会またはディビジョン）のいずれかのスペース（掲示板／チャット）を**閲覧できる**こと（公開スペース、または参加チームの有効メンバー）。
+- パスの大会とディビジョンの**帰属が一致しない**場合、およびパスのスペース ID が当該スコープのものでない場合は、主催組織 ADMIN でも **404 `TOUR_029`**（スペースは変更されない）。
+
+### 5.2 公開時の挙動・セキュリティ
+
+- **chat の公開は既定 OFF**（`is_private=TRUE`）。公開トグルを ON にしても **PUBLIC は read-only**（投稿は常に §4.2 の代表＋主催者のみ）。スペクテーター（観戦者・未ログイン）への露出範囲は閲覧のみに限定する。
+- 掲示板の公開も同様に PUBLIC は閲覧のみ。
+- 公開トグルの監査：`audit_logs` に `TOURNAMENT_CONTACT_SPACE_VISIBILITY_UPDATED` を記録（誰が・いつ・どのスペースを公開/非公開にしたか）。
+- セキュリティ精査項目（docs/security 連携）：公開スペースに**非公開大会の機微情報（未確定の対戦相手・内部連絡）が露出しないか**を運営に明示。公開はあくまで「広報目的の連絡スペース」用途とし、内部連絡カテゴリ／チャンネルは非公開のまま保つ運用を推奨する。
+
+---
+
+## 6. 削除・退会の取り扱い
+
+### 6.1 大会・ディビジョン削除（原則 2：クロスドメイン CASCADE なし）
+
+- 大会／ディビジョン削除（論理削除）時、連絡スペースは**即時物理削除せず soft delete / archive で残す**（履歴保持）。`tournament_contact_space.deleted_at` をセットし、紐づく bulletin スレッド / chat チャンネルは `is_archived=TRUE` 相当でアーカイブする。
+- `DivisionService.deleteDivision` が**物理 delete** を行う実装の場合は、削除前に**スペース archive フック**を追加する（孤児化を防ぐ。chat_channel / bulletin が宙に浮かないよう、archive 後に空 ref として残すか、tournament ドメイン側の `deleted_at` だけ立てる）。
+- クロスドメイン CASCADE（`ON DELETE CASCADE` で chat_channels を巻き込む等）は**作らない**（原則 2）。連絡履歴は統計・証跡として価値があるため保持する。
+
+### 6.2 ユーザー退会
+
+- 投稿（スレッド・メッセージ）は `user_id` を保持したまま残す。表示名は既存の匿名化フロー（`user.anonymize()`）に**自動追従**する（CLAUDE.md 原則 4）。
+- **本機能専用の退会リスナーは不要**。bulletin / chat 既存の匿名化追従に乗る。
+- **新規テーブルの `created_by` 等の user_id 列**（`tournament_contact_space` の払い出し者を将来記録する場合を含む）は、**履歴・証跡として保持**する＝CLAUDE.md の退会二段モデルにおける**強匿名化対象外**（user_id は NULL 化せず残す）。表示名のみ既存の匿名化に追従させ、退会後は匿名表示名で描画する。GDPR 上の個人特定リスクは表示名匿名化で除去され、証跡としての user_id 参照は保持してよい（即時消去対象の「再設定で復旧可能なデータ」には当たらない）。
+
+---
+
+## 7. F08.7 §5.9 との関係
+
+F08.7 §5.9「ディビジョン別ターゲティング」は「掲示板/通知/DM の配信対象をディビジョンで絞る」フィルタ機能の計画であった。本書はそれを**連絡スペースという常設の場**として具体化したもの。両者は補完関係:
+
+- **本書（連絡スペース）**: 大会/ディビジョンに紐づく**常設の掲示板・チャット**。参加チームが日常的に連絡する場。
+- **§5.9（ターゲティング）**: 既存の通知/DM/タイムラインの**配信先フィルタ**として `target_type='TOURNAMENT_DIVISION'` を使う一過性の配信。
+
+F08.7 §5.9 は本書 01 へのリンクに置き換える（参加チーム解決の源泉＝`tournament_participants`・status=ACTIVE 除外ルールは共通）。
+
+---
+
+## 8. 精査ログ
+
+### 8.1 1 回目（不備・セキュリティ・ユーザビリティ・見落とし・保守性）
+
+- **不備**: 二段（大会/ディビジョン）× 2 種別（掲示板/チャット）の払い出しを §3.1〜§3.3 で網羅。continueTournament の複製漏れをテスト必須として明記。
+- **セキュリティ**: read/write 分離（§4.1/§4.2）、IDOR 404 統一、PUBLIC read-only、公開トグルは主催組織 ADMIN 限定で代表には開放しない（権限昇格防止）。
+- **ユーザビリティ**: 自動付帯で入力摩擦ゼロ。REGISTERED で開始前から連絡可。
+- **見落とし**: N+1 回避の exists クエリ（§4.3）、source 複合 index の実装時 grep、bulletin カテゴリ自動生成。
+- **保守性**: 越境 TODO 明記（原則 5）、UUIDv7（原則 6）、クロスドメイン FK なし（原則 1）、CASCADE なし（原則 2）。
+
+### 8.2 未解決事項
+
+**現時点でなし。**
+
+---
+
+## 9. 実装メモ（隊1・2026-05-31）
+
+設計書に対する実装上の確定事項・軽微な差分を記録する。
+
+### 9.1 実装ファイル
+
+- DDL: `V9.20260531120000__create_tournament_contact_space.sql`（新規テーブル）/ `V9.20260531120100__add_bulletin_threads_scope_index.sql`（§2.2 の `(scope_type, scope_id)` 複合 index 根治追加）
+- enum: `bulletin.ScopeType`（+TOURNAMENT/TOURNAMENT_DIVISION）/ `chat.ChannelType`（+TOURNAMENT_CHAT/TOURNAMENT_DIVISION_CHAT）/ `tournament.ContactSpaceScopeType` / `tournament.ContactSpaceKind`
+- Entity/Repo: `TournamentContactSpaceEntity`（UuidV7Entity 継承）/ `TournamentContactSpaceRepository`
+- 認可: `TournamentContactAccessService`（checkView/checkPost/checkVisibilityManage）+ `TournamentParticipantRepository` の N+1 回避 exists クエリ 4 本
+- 払い出し: `chat.TournamentChatChannelService` / `tournament.TournamentContactSpaceProvisioningService`（フック: createTournament / continueTournament / createDivision、archive: delete*）
+- 公開トグル: `TournamentContactSpaceService` + `TournamentContactSpaceController`（PATCH visibility / GET 一覧）
+- 本体配線: `BulletinThreadService`（*Global メソッド群）/ `ChatMessageService`（sendMessage / checkChannelViewAccess）+ `ChatMessageController.listMessages`
+
+### 9.2 設計差分
+
+- **チーム所属判定の実装**: 設計書は `TeamMembershipRepository` を範としているが、本コードベースに同名クラスは無く、TEAM メンバー判定は `memberships`（`scope_type='TEAM'`）、TEAM 代表（ADMIN/DEPUTY_ADMIN）判定は `user_roles × roles` を使う。N+1 回避 exists クエリは `tournament_participants × tournament_divisions × (memberships | user_roles)` の native JOIN 1 本で完結（§4.3 の意図どおり）。
+- **添付クォータ**: 大会連絡スペースの bulletin/chat 添付は専用 StorageScopeType を持たないため、`VILLAGE` と同方針で操作者の PERSONAL クォータに計上する（`BulletinAttachmentService` / `ChatAttachmentService`）。
+- **公開 PUBLIC 露出経路**: `TournamentContactAccessService.checkView` は `is_public=true` で未ログイン（userId=null）を許可する（§4.1 準拠）。ただし現行の chat/bulletin コントローラは authenticated 経路のため、未ログイン HTTP 公開専用エンドポイントは本波では新設していない（将来の public controller で露出する余地を残す）。
+
+---
+
+## 10. 参加者向け導線（チーム側連絡スペース画面と一覧 API）（CMP-261118-0900）
+
+> **ステータス**: 🟢 設計完了。本節は追記のみで、§1〜§9 は書き換えない。
+> **認可の契約**: 本節は §4 の契約（`TournamentContactSpaceAccessGate`・存在秘匿・403 は `TOUR_031` のみ。PR #4643 でマージ済み）を正とし、引用せず参照する。本節のクラス名・行番号は 2026-11-20 時点の main で確認した。
 
 ### 10.1 背景と目的
 
@@ -162,7 +323,7 @@ chat の `chat_channels.channel_type` に **`TOURNAMENT_CHAT`（15字）/ `TOURN
 4. 主催組織 ADMIN・SYSTEM_ADMIN がチームに所属していない場合、本 API は 404 `TOUR_029`。主催者は主催者用の画面・一覧を使う。主催者がそのチームの会員を兼ねる場合は、全スペースが `POST` になる（AC-P33）。
 5. 部門数 D の上限は設けない。`uq_tp_div_team`（`division_id, team_id` の一意。`V8.042__create_tournament_participants_table.sql:11`）により、1 チームの参加は 1 部門に 1 行までで、D は大会の部門数以下に収まる。
 6. 論理削除済みの大会は 404 `TOUR_029`。`TournamentEntity` に `@SQLRestriction("deleted_at IS NULL")`（`TournamentEntity.java:31`）があるため JPA 経由では自然にそうなる。native クエリでは `t.deleted_at IS NULL` を明示する。
-7. Gate（`TournamentContactSpaceAccessGate`）に、例外を投げずにスコープ単位で一括解決するメソッドを追加する（§10.3.5）。実装は #4643 マージ後。
+7. Gate（`TournamentContactSpaceAccessGate`）に、例外を投げずにスコープ単位で一括解決するメソッドを追加する（§10.3.5）。既存 Gate（#4643 でマージ済み）への追加として実装する。
 8. 関連不具合は別課題（§10.10）。
 
 ### 10.3 API 契約
@@ -190,7 +351,7 @@ chat の `chat_channels.channel_type` に **`TOURNAMENT_CHAT`（15字）/ `TOURN
 | `tournamentId`（パス） | long | 必須 | 大会 ID。数値以外は 400（Spring 型変換。リソースの有無に依存しないためオラクルにならない。AC-P13） |
 | クエリ | — | — | なし（絞り込み・ページングは持たない） |
 
-認証必須（未ログインは 401。§4（PR #4643 改訂後）の「未認証の呼び出しは同一の 401」に合わせる）。
+認証必須（未ログインは 401。§4 の「未認証の呼び出しは同一の 401」に合わせる）。
 
 #### 10.3.3 応答（200）
 
@@ -225,12 +386,12 @@ data: {
 
 #### 10.3.4 認可・エラー（F00 を経由するか）
 
-- **F00（`ContentVisibilityChecker` 等の可視性ラダー）は経由しない。** 連絡スペースの閲覧可否は §4（PR #4643 改訂後）の `TournamentContactSpaceAccessGate` が正本であり、本 API はその上に乗る。
+- **F00（`ContentVisibilityChecker` 等の可視性ラダー）は経由しない。** 連絡スペースの閲覧可否は §4 の `TournamentContactSpaceAccessGate` が正本であり、本 API はその上に乗る。
 - **構成**: Controller は `String teamSlug` を受け、トランザクションを持たない Facade（tournament ドメイン。名称案 `ParticipantContactSpaceFacade`）を呼ぶ。判定はトランザクションの外で行い、「例外の catch で分岐しない」（baseline）に従う。各段は戻り値（`Optional` / 空）で分岐し、拒否はすべて同一の `BusinessException(TOUR_029)` を 1 箇所で投げる。
 - **判定順**:
   1. 認証（未ログイン → 401）。
   2. slug 解決: 例外を投げない Optional 版 `TeamService.resolveFollowableTeamId(String slug)`（`TeamService.java:1395`）を**流用する**。不在・論理削除済み・アーカイブ済み・ACTIVE 以外（PROVISIONED）は空を返す。名称は「フォロー」だが、除外条件が本 API の要件（アーカイブ済み・PROVISIONED は 404）と一致するため新設しない（名称の改善は別課題）。空なら 404 `TOUR_029`。tournament から team ドメインの Service を ID/slug 参照のみで読み取り呼び出すため、越境である旨のコメントを付ける（原則 5）。
-  3. 参加判定を **native クエリ 1 本**に統合する。入力は `teamId`・`tournamentId`・`userId`、出力は「参加中の部門（`divisionId`, 部門名）と大会名」の行。条件は #4643 版 `TournamentParticipantRepository` の `countActiveMemberOf*`（`:111-128`, `:177-185`）と完全に同一にする: `tournament_participants p × tournament_divisions d × tournaments t × memberships m`、`p.team_id = :teamId`、`d.tournament_id = :tournamentId`、`t.deleted_at IS NULL`、`p.status IN ('REGISTERED','ACTIVE')`、`m.scope_type = 'TEAM' AND m.scope_id = p.team_id AND m.user_id = :userId AND m.left_at IS NULL`（ロールでは絞らない。SUPPORTER も含む）。行が 0 件なら 404 `TOUR_029`（呼び出し者が非所属・チームが非参加・参加外・大会不在・論理削除済み大会を区別しない）。
+  3. 参加判定を **native クエリ 1 本**に統合する。入力は `teamId`・`tournamentId`・`userId`、出力は「参加中の部門（`divisionId`, 部門名）と大会名」の行。条件は `TournamentParticipantRepository` の `countActiveMemberOf*`（`:111-128`, `:177-185` 付近。`countActiveMemberOfAnyParticipantTeam` は `:129`、`countActiveMemberOfDivisionParticipantTeam` は `:184` で宣言）と完全に同一にする: `tournament_participants p × tournament_divisions d × tournaments t × memberships m`、`p.team_id = :teamId`、`d.tournament_id = :tournamentId`、`t.deleted_at IS NULL`、`p.status IN ('REGISTERED','ACTIVE')`、`m.scope_type = 'TEAM' AND m.scope_id = p.team_id AND m.user_id = :userId AND m.left_at IS NULL`（ロールでは絞らない。SUPPORTER も含む）。行が 0 件なら 404 `TOUR_029`（呼び出し者が非所属・チームが非参加・参加外・大会不在・論理削除済み大会を区別しない）。
   4. 大会全体と、手順 3 の各部門について、実在するスペース行を `IN` で 1 本取得し、Gate の一括解決（§10.3.5）で見られるものとその水準を決める。
 - 手順 2〜3 の拒否は status・`error.code`・本文が一致する同一応答にする。403 は本 API では返さない（投稿の 403 `TOUR_031` は投稿 API 側）。
 - 主催組織 ADMIN・SYSTEM_ADMIN は、チームの所属者でなければ手順 3 で行が 0 件となり 404（確定事項 4）。所属者を兼ねる場合は手順 3 を満たし、Gate の判定で全スペースが `POST` になる。
@@ -239,12 +400,14 @@ data: {
 #### 10.3.5 性能・N+1・Gate の一括解決
 
 - 参加チーム数・部門数・スペース数に比例するクエリを出さない。クエリは定数本に収める: (a) slug 解決 1、(b) 参加判定 1（上記 native）、(c) スペース取得 1（`scope_type='TOURNAMENT' AND scope_id=:t` OR `scope_type='TOURNAMENT_DIVISION' AND scope_id IN (:divisionIds)`、`deleted_at IS NULL`）、(d) 水準判定（下記）。
-- **Gate に追加するメソッド**（名称案 `resolveLevelsForSpaces(Long userId, Long tournamentId, Collection<TournamentContactSpaceEntity> spaces)`）: 例外を投げず、`Map<UUID(スペース id), ContactAccessLevel>` を返す。閲覧できない行はマップに含めない。構成は次の 3 要素で、クエリ本数は D に依存しない。
+- **Gate に追加するメソッド**（名称案 `resolveLevelsForSpaces(Long userId, Long tournamentId, Collection<TournamentContactSpaceEntity> spaces)`）: 例外を投げず、`Map<UUID(スペース id), ContactAccessLevel>` を返す。**閲覧できない行はマップに含めない**（`NONE` は返さない）。呼び出し元（Facade の手順 3）の結果には依存せず、**このメソッド単体で既存 Gate と同じ閲覧資格判定を行う**（既存 Gate は対象スコープへの所属を `isActiveParticipantMember`（`TournamentContactSpaceAccessGate.java:71`・`:93`・`:129`）で確認する。手順 3 の所属確認は「自チームの部門だけを対象にする」ためのもので、他の参加チームの所属を保証しない）。構成は次の 5 要素で、クエリ本数は D に依存しない。
   1. 大会全体の代表判定 1 本（`countTeamAdminOfAnyParticipantTeam` 相当）。
   2. 部門ごとの代表判定を、部門 ID 群に対する**集約 1 本**（代表である部門 ID の集合を返す）。
-  3. 主催組織 ADMIN・SYSTEM_ADMIN の判定（大会 1 件から組織 ID を引く 1 本 ＋ `isAdmin` / `isSystemAdmin`。スコープに依存しないので 1 回だけ）。
-  - 行ごとの水準: (3) 成立または該当スコープで (1)/(2) 成立 → `POST`。そうでなく `isPublic` → `VIEW`。そうでなければ、参加チームの有効メンバーであること（手順 3 で成立済み）により `VIEW`。
-- 実装は #4643 マージ後の別 PR（Gate は同 PR の成果物のため）。**不変条件**: 全 (scope, kind) について、このメソッドの結果は `requireViewResolvingLevel` の戻り値（例外になるものはマップ不在）と一致する。AC-P20・AC-P34 で固定する。
+  3. 大会全体の有効メンバー判定 1 本（`countActiveMemberOfAnyParticipantTeam` 相当）。
+  4. 部門ごとの有効メンバー判定を、部門 ID 群に対する**集約 1 本**（有効メンバーである部門 ID の集合を返す。条件は `countActiveMemberOfDivisionParticipantTeam` と同一）。
+  5. 主催組織 ADMIN・SYSTEM_ADMIN の判定（大会 1 件から組織 ID を引く 1 本 ＋ `isAdmin` / `isSystemAdmin`。スコープに依存しないので 1 回だけ）。
+  - 行ごとの水準（`requireViewResolvingLevel` と同順）: 5 成立、または該当スコープで 1/2 成立 → `POST`。そうでなく `isPublic` → `VIEW`。そうでなく該当スコープで 3/4 成立 → `VIEW`。いずれも不成立ならマップに含めない。
+- Gate は #4643 でマージ済みのため、上記の追加は本設計の実装 PR に含める。**不変条件**: 全 (scope, kind) について、このメソッドの結果は `requireViewResolvingLevel` の戻り値（例外になるものはマップ不在）と一致する。AC-P20・AC-P34 で固定する。
 - 件数: ページングせず全件を返す。上限は `2 + 2×D`（D ≤ 大会の部門数。確定事項 5）。
 
 #### 10.3.6 0 件・境界
@@ -287,22 +450,22 @@ data: {
 - AC-P19【契約】x が `.../teams/A/...` を呼ぶと D1 の 4 件のみ、`.../teams/B/...` では D2 の 4 件のみ（和集合にならない）。x が A の代表でもある場合、`accessLevel` は AC-P34 の一致規則に従う。
 - AC-P20【契約】クエリ本数: `SqlIntentCounter`（`backend/src/test/java/com/mannschaft/app/common/visibility/perf/SqlIntentCounter.java`）で、D=1 と D=3、参加チーム数 2 と 40 の組み合わせのすべてで、本 API の発行クエリ本数が**同一の定数上限以下**であることを固定する（上限値は実装時の実測で確定し、D・参加チーム数に依存する式にしない）。
 - AC-P21【契約】公開スペース（`isPublic=true`）でも、A の非会員 z は本 API では 404（公開スペースの閲覧は既存経路に従う）。
-- AC-P22【契約】主催者向け一覧 `GET /api/v1/tournaments/{tournamentId}/contact-spaces` の回帰: そのスコープのスペースを閲覧できる者（例: a1）は 403 `TOUR_032`、閲覧できない者（例: z）は 404 `TOUR_029`。主催組織 ADMIN は 200。現行の拒否応答が #4643 の契約と一致していること。
+- AC-P22【契約】主催者向け一覧 `GET /api/v1/tournaments/{tournamentId}/contact-spaces` の回帰: そのスコープのスペースを閲覧できる者（例: a1）は 403 `TOUR_032`、閲覧できない者（例: z）は 404 `TOUR_029`。主催組織 ADMIN は 200。現行の拒否応答が §4.3 の契約と一致していること。
 - AC-P33【契約】主催組織 ADMIN o1 が、A の一般会員（a3 と同じ立場）を兼ねる場合、`.../teams/A/...` で全スペースが `POST`。所属を兼ねない o1 は 404 `TOUR_029`。SYSTEM_ADMIN も所属を兼ねなければ 404。
-- AC-P34【契約】新設する Gate の一括解決メソッドは、全 (scope, kind) について `requireViewResolvingLevel` の戻り値と一致する（一致しないスペースは両者とも不在）。同一スコープの掲示板とチャットの `accessLevel` は同じ。a1・a3・o1・公開スペースを含む組み合わせで固定する。
+- AC-P34【契約】新設する Gate の一括解決メソッドは、全 (scope, kind) について `requireViewResolvingLevel` の戻り値と一致する（一致しないスペースは両者とも不在）。同一スコープの掲示板とチャットの `accessLevel` は同じ。a1・a3・o1・公開スペースに加え、**呼び出し者が所属しない部門（例: A の a3 に対する、D2 の非公開スペース）を入力に含め、既存 Gate と同じく閲覧不可＝マップに含まれない**ことを固定する。大会全体スコープでの非所属者（z）も同様に含まれない。
 - AC-P35【契約】アーカイブ済みのチームの slug は、その会員が呼んでも 404 `TOUR_029`。
 
 **画面（チーム側）**
 
 - AC-P23【E2E】a1 でログインし、`/teams/A/tournaments` の参加大会カードから「連絡スペース」リンクを押すと `/teams/A/tournaments/T/communication` が開き、大会全体・D1 のタブと、掲示板・チャットのタブが見える。観測点: 遷移先 URL と、API 200。
 - AC-P24【E2E】a1 は新規スレッド作成ボタンが見え、スレッドを作成できる（投稿 API が 2xx）。a3・a4 はスレッドを閲覧でき、新規スレッド作成ボタンが出ない。観測点: 画面のボタン有無と、一覧 API の `accessLevel`。
-- AC-P25【E2E】a3 が掲示板スレッドを開いても返信欄が出ない（`BulletinThreadDetail` の `canReply=false`）。API を直接叩いた返信は 403 `TOUR_031`（観測点: 画面の返信欄の有無と、直接呼びの status・`error.code`）。a1 は返信欄が出て投稿できる。
+- AC-P25【E2E】a3 が掲示板スレッドを開いても返信欄が出ない（`BulletinThreadDetail` の `canReply=false`）。API を直接叩いた返信は 403 `TOUR_031`（観測点: 画面の返信欄の有無と、直接呼びの status・`error.code`）。a1 は返信欄が出て投稿できる。また、VIEW の利用者（a3）が**未ロックの**スレッドを見たとき、返信欄も「このスレッドはロックされています」の表示も出ない（観測点: 画面の表示）。ロック済みスレッドでは、VIEW・POST とも従来どおりロック表示が出る。
 - AC-P26【E2E】C の c1 が `/teams/C/tournaments/T/communication` を URL 直打ちすると、「この大会の連絡スペースを利用できません」の状態表示（404 を空白画面や無言のリダイレクトにしない）。z・他テナントのユーザーも同様。観測点: 404 `TOUR_029` と状態表示。
 - AC-P27【E2E】未ログインで URL 直打ちするとログイン画面へ。観測点: 遷移先 URL（`auth` middleware）。
-- AC-P28【E2E】チャットタブで、`VIEW`（a3）では送信入力が出ない／無効、`POST`（a1）では送信できる（`ChatMessagePanel` の `canSend`）。観測点: 画面の送信 UI と、a1 の送信 API の 2xx。
+- AC-P28【E2E】チャットタブで、`VIEW`（a3）では送信入力が出ない／無効、`POST`（a1）では送信できる（`ChatMessagePanel` の `canSend`）。さらに VIEW（a3）がメッセージのスレッドを開いても、`ChatThreadPanel` に返信入力が出ず、送信要求が発生しない（Enter キー押下でも `sendReply` が呼ばれない）。観測点: 画面の送信 UI と、ネットワークに返信の送信リクエストが出ないこと、a1 の送信 API の 2xx。
 - AC-P29【E2E】辞退（`WITHDRAWN`）にしたチームの a1 が再読み込みすると AC-P26 と同じ表示になる。観測点: 404 `TOUR_029` と状態表示。
 - AC-P30【FE】一覧取得が 5xx・通信断のとき、エラー通知と再試行導線を出す（空状態を偽装しない）。404 は状態表示で、通知トーストを濫発しない。
-- AC-P31【FE】`BulletinThreadDetail` と `ChatMessagePanel` の既存の呼び出し元すべて（`pages/teams/[slug]/bulletin.vue`・`pages/organizations/[slug]/bulletin.vue`・`pages/villages/[id]/bulletin.vue`・`pages/teams/[slug]/chat.vue`・`pages/organizations/[slug]/chat.vue`・`pages/chat/index.vue`・`pages/organizations/[slug]/tournaments/[tId]/communication.vue`）で、新 prop 未指定のまま返信欄・送信 UI が従来どおり出る（既定 true）。
+- AC-P31【FE】`BulletinThreadDetail`・`ChatMessagePanel`・`ChatThreadPanel` の既存の呼び出し元すべて（`ChatThreadPanel` の呼び出し元は `ChatMessagePanel.vue:522` のみで、`ChatMessagePanel` 経由で全画面に及ぶ。他は`pages/teams/[slug]/bulletin.vue`・`pages/organizations/[slug]/bulletin.vue`・`pages/villages/[id]/bulletin.vue`・`pages/teams/[slug]/chat.vue`・`pages/organizations/[slug]/chat.vue`・`pages/chat/index.vue`・`pages/organizations/[slug]/tournaments/[tId]/communication.vue`）で、新 prop 未指定のまま返信欄・送信 UI が従来どおり出る（既定 true）。
 - AC-P36【FE】参加者画面では `can-manage` を渡さない（ピン・削除・ロックの UI が出ない）。
 
 実機 E2E で必須: AC-P01・P03・P04・P07・P09・P10・P23〜P29（ロール横断と URL 直打ち）。契約テスト: AC-P01〜P22・P33〜P35。FE 単体: AC-P30・P31・P36 と、`accessLevel` に応じた出し分け。
@@ -312,8 +475,9 @@ data: {
 - **ページ**: `frontend/app/pages/teams/[slug]/tournaments/[tId]/communication.vue`（新設）。`definePageMeta({ layout: 'team', middleware: 'auth' })`。`fees.vue` と違い `orgId` クエリは要らない。
 - **構成**: `PageHeader`（戻り先は `/teams/{slug}/tournaments`）→ 大会名 → スコープ切替（「大会全体」＋応答 `divisions` の部門名）→ 掲示板/チャットのタブ → 本体。主催側 `communication.vue` の骨格を共通コンポーネント（案: `TournamentContactPanel`）に切り出して共用する。共用範囲は `BulletinThreadList` / `BulletinThreadDetail` / `BulletinThreadForm` / `ChatMessagePanel`。主催者専用部分（公開トグル、組織権限）は主催側ページに残す。
 - **既存コンポーネントへの追加（後方互換）**:
-  - `BulletinThreadDetail.vue` の返信欄は現状 `v-if="!thread.isLocked"` だけで出る（`:235-238`）。`canReply`（boolean、**既定 true**）を追加し、`v-if="canReply && !thread.isLocked"` とする。
+  - `BulletinThreadDetail.vue` の返信欄は現状 `v-if="!thread.isLocked"` だけで出る（`:235-240`）。`canReply`（boolean、**既定 true**）を追加し、返信欄を `v-if="canReply && !thread.isLocked"` とする。直後の `v-else`（`:241`、「このスレッドはロックされています」）は、`canReply=false` かつ未ロックでもロック表示が出てしまうため、**`v-else-if="thread.isLocked"` に変える**。
   - `ChatMessagePanel.vue` の props（`:16-22`）に送信可否が無い。`canSend`（boolean、**既定 true**）を追加し、false のとき送信入力を出さない（確定事項）。
+  - `ChatMessagePanel.vue:522` が表示する `ChatThreadPanel.vue` にも返信入力（`InputText` `:244`・送信ボタン `:257`、送信関数 `sendReply` `:64`）がある。`ChatThreadPanel` にも `canSend`（**既定 true**）を追加し、`ChatMessagePanel` から受けた値を伝える。false のとき返信入力・送信ボタンを出さず、`sendReply` を呼ばない。
 - **読み込む API**: 新 EP 1 本のみ。部門一覧 API は呼ばない。チャットを開くときの `GET /chat/channels/{id}` と、掲示板の既存グローバル API は既存のまま。
 - **権限による出し分け**: スペースごとの `accessLevel` を使う。新規スレッド作成ボタン（`can-create`）は `POST` のときだけ表示（主催側のように常に出す方式はとらない）。`BulletinThreadDetail` には `:can-reply="accessLevel === 'POST'"`、`ChatMessagePanel` には `:can-send="accessLevel === 'POST'"`。`VIEW` のときは「閲覧のみ」の補足を出す。**`can-manage` は参加者画面では渡さない**。API 上はチーム代表もロック等の操作ができるが、画面では意図的に出さない（範囲外）。
 - **読み込み・空・失敗**: 読み込み中は `PageLoading`。404 は「利用できない」状態（理由は特定しない）。`spaces` が 0 件は既存キー `tournament.communication.empty`。その他の失敗はエラー通知＋再試行。`catch {}` で握りつぶさない。部門を切り替えても、先に開いたスレッド・作成ダイアログを持ち越さない。
@@ -329,11 +493,11 @@ data: {
 
 | 状況 | status | コード | 備考 |
 |------|--------|--------|------|
-| 未ログイン | 401 | 既存の認証エラー | §4（PR #4643 改訂後）の未認証規則 |
+| 未ログイン | 401 | 既存の認証エラー | §4 の未認証規則 |
 | チーム不在・アーカイブ済み・PROVISIONED・非所属・大会不在/論理削除・非参加・参加外 | 404 | `TOUR_029`（`CONTACT_SPACE_NOT_FOUND`） | 本 API では全て同一応答 |
 | 閲覧可だが投稿権なし（投稿 API 側） | 403 | `TOUR_031` | 本 API は返さない |
 | 公開設定の権限なし（PATCH／主催者向け一覧側） | 403 | `TOUR_032` | 本 API は触らない |
-| `TOUR_030` | — | 欠番 | #4643 で送出停止。再利用しない |
+| `TOUR_030` | — | 欠番 | #4643 で送出停止（マージ済み）。再利用しない |
 
 新規エラーコードは不要。
 

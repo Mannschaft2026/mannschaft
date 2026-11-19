@@ -6,6 +6,7 @@ import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import com.mannschaft.app.filesharing.service.SharedFileLinkService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +35,8 @@ import com.mannschaft.app.common.SecurityUtils;
 public class FileLinkController {
 
     private final SharedFileLinkService linkService;
+    /** 大会スコープの存在秘匿つき投稿認可（Controller 前段・tx なし。CMP-261116-0726）。 */
+    private final FolderScopeAccessGuard folderScopeAccessGuard;
 
 
     /**
@@ -44,6 +47,8 @@ public class FileLinkController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<List<LinkResponse>>> listLinks(
             @PathVariable Long fileId) {
+        // 大会ファイルのリンク管理は投稿権が必要（閲覧権なしは不在応答・閲覧可は 403 TOUR_031）。
+        folderScopeAccessGuard.requirePostConcealedByFileId(fileId, SecurityUtils.getCurrentUserId());
         List<LinkResponse> response = linkService.listLinks(fileId);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -57,7 +62,9 @@ public class FileLinkController {
     public ResponseEntity<ApiResponse<LinkResponse>> createLink(
             @PathVariable Long fileId,
             @Valid @RequestBody CreateLinkRequest request) {
-        LinkResponse response = linkService.createLink(fileId, SecurityUtils.getCurrentUserId(), request);
+        Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFileId(fileId, actorId);
+        LinkResponse response = linkService.createLink(fileId, actorId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
