@@ -108,6 +108,14 @@ public class ActionMemoEntity extends BaseEntity {
     private Long postedTeamId;
 
     /**
+     * チームタイムラインに投稿したチーム投稿の ID（timeline_posts.id への ID 参照）。NULL = 未投稿。
+     * {@link #timelinePostId} は PERSONAL 投稿専用で、チーム投稿 ID はこちらに保持する。
+     */
+    @Setter
+    @Column(name = "team_timeline_post_id")
+    private Long teamTimelinePostId;
+
+    /**
      * Phase 4-α: 組織スコープ投稿先組織 ID。NULL = 組織スコープ未使用。
      * FK → organizations.id（ON DELETE SET NULL）。
      */
