@@ -36,7 +36,7 @@ async function loadTerms() {
   try {
     terms.value = await listTerms()
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     loading.value = false
   }
@@ -84,7 +84,7 @@ async function handleCreate() {
     terms.value = [created, ...terms.value]
     showAddForm.value = false
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('memberProfile.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -96,7 +96,7 @@ async function handleDelete(termId: number) {
     await deleteTerm(termId)
     terms.value = terms.value.filter((t) => t.id !== termId)
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('memberProfile.deleteFailed'))
   } finally {
     deletingId.value = null
   }
@@ -108,7 +108,7 @@ async function handleDelete(termId: number) {
     <!-- ヘッダ: 追加ボタン（ADMIN のみ） -->
     <div class="mb-4 flex items-center justify-between">
       <span class="text-sm text-surface-500 dark:text-surface-400">
-        {{ terms.length }}{{ $t('common.count_suffix') }}
+        {{ $t('repair_plan.handover.term.count', { count: terms.length }, terms.length) }}
       </span>
       <Button
         v-if="isAdmin"
@@ -155,7 +155,7 @@ async function handleDelete(termId: number) {
         <!-- 開始日 -->
         <div>
           <label class="mb-1 block text-xs font-medium">
-            {{ $t('common.start_date') }}
+            {{ $t('schedule.form.startDate') }}
             <span class="ml-1 text-red-500">*</span>
           </label>
           <InputText v-model="formTermStart" type="date" class="w-full" />
@@ -164,7 +164,7 @@ async function handleDelete(termId: number) {
         <!-- 終了日 -->
         <div>
           <label class="mb-1 block text-xs font-medium">
-            {{ $t('common.end_date') }}
+            {{ $t('schedule.form.endDate') }}
             <span class="ml-1 text-red-500">*</span>
           </label>
           <InputText v-model="formTermEnd" type="date" class="w-full" />
@@ -193,7 +193,7 @@ async function handleDelete(termId: number) {
     <DashboardEmptyState
       v-else-if="terms.length === 0"
       icon="pi pi-users"
-      :message="$t('common.no_data')"
+      :message="$t('school.statistics.noData')"
     />
 
     <!-- 任期テーブル -->

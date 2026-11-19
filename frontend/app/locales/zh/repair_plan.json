@@ -85,6 +85,7 @@
     },
     "handover": {
       "builder": {
+        "generate_failed": "生成交接资料包失败",
         "title": "生成交接文件包",
         "select_term": "选择目标任期",
         "pii_level": "个人信息级别",
@@ -110,6 +111,7 @@
         "failed": "失败"
       },
       "term": {
+        "count": "{count}条任期记录 | {count}条任期记录 | {count}条任期记录",
         "manager_title": "理事任期管理",
         "col_name": "姓名",
         "col_role": "职务",

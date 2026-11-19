@@ -141,7 +141,7 @@ describe('useInboxStore', () => {
       await store.fetchInbox()
 
       expect(store.items).toHaveLength(0)
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
       expect(store.loading).toBe(false)
     })
 
@@ -151,7 +151,7 @@ describe('useInboxStore', () => {
 
       await store.fetchInbox()
 
-      expect(store.error).toBe('common.error.unauthorized')
+      expect(store.error).toBe('error.unauthorized')
     })
 
     it('404 エラーで notFound キーが設定される', async () => {
@@ -160,7 +160,7 @@ describe('useInboxStore', () => {
 
       await store.fetchInbox()
 
-      expect(store.error).toBe('common.error.notFound')
+      expect(store.error).toBe('error.notFound')
     })
   })
 
@@ -236,7 +236,7 @@ describe('useInboxStore', () => {
       expect(ok).toBe(false)
       // ロールバックで元の UNREAD に戻る
       expect(store.items[0]?.state).toBe('UNREAD')
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
     })
   })
 
@@ -338,7 +338,7 @@ describe('useInboxStore', () => {
       const store = useInboxStore()
       await store.fetchSummary()
 
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
       expect(store.summaryLoading).toBe(false)
       expect(() => store.inboxCount).not.toThrow()
       expect(store.inboxCount).toBe(0)
@@ -356,7 +356,7 @@ describe('useInboxStore', () => {
       await store.fetchSummary()
 
       expect(store.inboxCount).toBe(3)
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
     })
 
     it('サマリ未取得時は 0 を返す', () => {
@@ -439,7 +439,7 @@ describe('useInboxStore', () => {
       await store.fetchLabels()
 
       expect(store.labels).toHaveLength(0)
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
     })
   })
 
@@ -634,7 +634,7 @@ describe('useInboxStore', () => {
       const result = await store.runBulk('ARCHIVE')
 
       expect(result).toBeNull()
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
     })
   })
 
@@ -1020,7 +1020,7 @@ describe('useInboxStore', () => {
       expect(store.items[0]?.labels).toHaveLength(0)
       expect(store.items[0]?.suggestedLabels).toHaveLength(1)
       expect(store.items[0]?.suggestedLabels?.[0]?.suggestionKey).toBe('REPLY_NEEDED')
-      expect(store.error).toBe('common.error.unknown')
+      expect(store.error).toBe('error.unknown')
     })
 
     it('異常系: 上限超過（4xx）でもロールバックされる', async () => {
