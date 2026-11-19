@@ -434,6 +434,7 @@
     "unauthorized": "Bitte melden Sie sich an",
     "section_load_failed": "Dieser Abschnitt konnte nicht geladen werden. Bitte neu laden.",
     "unknown": "Ein Fehler ist aufgetreten",
+    "notFound": "Nicht gefunden",
     "TEAM_001": "Das Team wurde nicht gefunden.",
     "TEAM_006": "Dieses Team kann nicht wiederhergestellt werden, da es nicht gelöscht wurde.",
     "COMMON_001": "Die Eingaben sind fehlerhaft",
@@ -1853,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "Zurück",
     "cancel": "Abbrechen",
     "search": "Suchen",
     "edit": "Bearbeiten",

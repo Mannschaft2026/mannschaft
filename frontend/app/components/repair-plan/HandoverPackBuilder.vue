@@ -32,7 +32,7 @@ onMounted(async () => {
       selectedTermId.value = terms.value[0].id
     }
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   }
 })
 
@@ -59,7 +59,7 @@ async function handleGenerate() {
     lastPack.value = pack
     emit('generated', pack)
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('repair_plan.handover.builder.generate_failed'))
   } finally {
     generating.value = false
   }
@@ -73,7 +73,7 @@ async function handleDownload() {
     const res = await getDownloadUrl(lastPack.value.id)
     window.open(res.downloadUrl, '_blank', 'noopener,noreferrer')
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     downloading.value = false
   }

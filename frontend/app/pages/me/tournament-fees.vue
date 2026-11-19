@@ -41,7 +41,7 @@ async function loadFees() {
     fees.value = res.data.fees
   } catch {
     loadError.value = true
-    notification.error(t('common.loadError'))
+    notification.error(t('tournament.fees.error_load'))
   } finally {
     loading.value = false
   }
@@ -82,7 +82,7 @@ onMounted(loadFees)
       v-else-if="loadError"
       class="rounded-lg bg-red-50 border border-red-200 px-6 py-6 text-center text-red-600"
     >
-      {{ t('common.loadError') }}
+      {{ t('tournament.fees.error_load') }}
     </div>
 
     <!-- 参加費なし -->
