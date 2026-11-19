@@ -19,10 +19,11 @@ import com.mannschaft.app.timeline.repository.TimelinePostKeywordSearchRepositor
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -54,11 +55,13 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class TimelinePostSearchContributor implements SearchContributor {
 
+    /** {@code CAST(:x AS DATETIME)} に渡す壁時計の書式。 */
+    private static final DateTimeFormatter BOUND_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final TimelinePostKeywordSearchRepository keywordSearchRepository;
     private final TimelineDeliveryScopeResolver deliveryScopeResolver;
     private final OrganizationQueryService organizationQueryService;
     private final NameResolverService nameResolverService;
-    private final Clock clock;
 
     @Override
     public SearchType type() {
@@ -114,8 +117,7 @@ public class TimelinePostSearchContributor implements SearchContributor {
             hits.add(new SearchHit(SearchType.POST, post.getId(), null,
                     SearchTextHighlighter.snippet(post.getContent(), criteria.terms()), Map.of(), s.relevance(),
                     author, scopeRef(post, teamNames, orgNames),
-                    post.getCreatedAt() == null ? null
-                            : post.getCreatedAt().atZone(clock.getZone()).toOffsetDateTime(),
+                    SearchHit.createdAtOf(post.getCreatedAt()),
                     "/timeline/" + post.getId(), List.of()));
         }
         return hits;
@@ -149,7 +151,8 @@ public class TimelinePostSearchContributor implements SearchContributor {
                 farOrgIds = reach.farOrgIds().stream().filter(active::contains).toList();
             }
         }
-        ZoneId zone = clock.getZone();
+        // 日付境界は閲覧者 TZ で作る（リクエストスレッドで解決済みの値。本メソッドは別スレッドで動く）
+        ZoneId zone = criteria.viewerZone();
         return new Condition(booleanQuery, viewer.userId(), safe(teamIds), safe(orgIds), safe(nearOrgIds),
                 safe(farOrgIds), scopeRestricted, criteria.authorId(),
                 startOf(criteria.dateFrom(), zone),
@@ -161,16 +164,23 @@ public class TimelinePostSearchContributor implements SearchContributor {
         return ids.isEmpty() ? List.of(TimelineDeliveryScopeResolver.EMPTY_IN_SENTINEL) : ids;
     }
 
-    /** 閲覧者 TZ でのその日の開始（壁時計）と、その時点の UTC オフセット。 */
+    /**
+     * 閲覧者 TZ でのその日の開始（壁時計）と、その時点の UTC オフセット。
+     *
+     * <p>{@link LocalDate#atStartOfDay(ZoneId)} を使うため、0 時が夏時間の切替で存在しない地域でも
+     * その日の実在する最初の時刻（例 01:00）を境界にする。</p>
+     */
     private static DateBound startOf(LocalDate date, ZoneId zone) {
         if (date == null) {
             return null;
         }
-        ZoneOffset offset = zone.getRules().getOffset(date.atStartOfDay());
+        ZonedDateTime start = date.atStartOfDay(zone);
+        ZoneOffset offset = start.getOffset();
         int totalMinutes = offset.getTotalSeconds() / 60;
         String sign = totalMinutes < 0 ? "-" : "+";
         int abs = Math.abs(totalMinutes);
-        return new DateBound(date + " 00:00:00", String.format("%s%02d:%02d", sign, abs / 60, abs % 60));
+        return new DateBound(start.toLocalDateTime().format(BOUND_FORMAT),
+                String.format("%s%02d:%02d", sign, abs / 60, abs % 60));
     }
 
     private static SearchHit.ScopeRef scopeRef(TimelinePostEntity post, Map<Long, String> teamNames,
