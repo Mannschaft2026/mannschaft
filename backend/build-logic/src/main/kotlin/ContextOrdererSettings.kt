@@ -27,8 +27,7 @@ object ContextOrdererSettings {
         if (taskName != TEST_TASK_NAME) return emptyMap()
         val result = linkedMapOf<String, String>()
         // 無効化は "false"（大文字小文字を問わない）だけ。未指定・他の値は有効のまま（既定で効く）。
-        // K-10 対照（一時）: 既定で無効。-PcontextOrderer=true のときだけ有効（後で revert する）。
-        if (contextOrdererProperty.equals("true", ignoreCase = true)) {
+        if (!contextOrdererProperty.equals("false", ignoreCase = true)) {
             result[ORDER_PROPERTY] = ORDERER_CLASS
         }
         result[LOG_PROPERTY] = "true"
