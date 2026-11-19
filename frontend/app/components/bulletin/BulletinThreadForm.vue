@@ -23,8 +23,8 @@ const { createAnnouncement } = useAnnouncementFeed(
   announceScopeId,
 )
 
-/** VILLAGE スコープではお知らせウィジェット連携を表示しない */
-const supportsAnnouncement = computed(() => props.scopeType !== 'VILLAGE')
+/** お知らせウィジェット連携は TEAM/ORGANIZATION のみ（VILLAGE・大会スコープは非対応で不正な API を叩かない） */
+const supportsAnnouncement = computed(() => props.scopeType === 'TEAM' || props.scopeType === 'ORGANIZATION')
 
 const title = ref('')
 const body = ref('')

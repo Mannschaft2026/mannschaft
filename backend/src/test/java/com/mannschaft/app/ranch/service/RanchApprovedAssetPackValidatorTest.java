@@ -2,12 +2,14 @@ package com.mannschaft.app.ranch.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.mannschaft.app.support.test.sparse.RequiresRanchApprovedAssets;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** 実承認packの限定変異で、geometry・action・phase・hashの不正登録を検証する。 */
+/** 実承認packの限定変異で、geometry・action・phase・hashの不正登録を検証する。実素材（manifest）に依存するため sparse 除外時は skip。 */
+@RequiresRanchApprovedAssets
 class RanchApprovedAssetPackValidatorTest {
     private static final String ROOT = "ranch/approved/asset-packs/ranch-approved-20261108-v1/";
     private final ObjectMapper json = new ObjectMapper();

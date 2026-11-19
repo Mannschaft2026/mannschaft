@@ -247,9 +247,9 @@ class OracleWave1HttpContractIT extends AbstractMySqlIntegrationTest {
                     .isEqualTo(Locale.forLanguageTag(locale));
             assertThat(mapper.readTree(actual.getResponse().getContentAsByteArray()).get("error"))
                     .isEqualTo(mapper.readTree(missing.getResponse().getContentAsByteArray()).get("error"));
-            // ja/enとも現行キー欠如時の日本語fallbackを維持する。英訳を作らない。
+            // 言語別の期待本文（ja は ErrorCode 既定文言、他言語は messages_*.properties の error.payment.029）。
             assertThat(mapper.readTree(actual.getResponse().getContentAsByteArray()).at("/error/message").asText())
-                    .isEqualTo("会費支払い記録が見つかりません");
+                    .isEqualTo(RECEIPT_NOT_FOUND_BY_LOCALE.get(locale));
             assertThat(receiptSnapshot(payment)).isEqualTo(before);
         }
 
@@ -493,6 +493,10 @@ class OracleWave1HttpContractIT extends AbstractMySqlIntegrationTest {
             http(null, "GET", "/api/v1/public/activities/" + committeeRecord.getId(), null).andExpect(status().isNotFound());
         }
     }
+
+    private static final Map<String, String> RECEIPT_NOT_FOUND_BY_LOCALE = Map.of(
+            "ja", "会費支払い記録が見つかりません",
+            "en", "Membership fee payment record not found");
 
     static Stream<Arguments> receiptDenialCases() {
         return Stream.of("", "/pdf").flatMap(suffix -> Stream.of("sameScopeAdmin", "otherScopeAdmin", "outsider")

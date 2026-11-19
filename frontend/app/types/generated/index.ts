@@ -5217,6 +5217,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/effort-records/me/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 原本の詳細 */
+        get: operations["get_19"];
+        /** 原本の更新（全置換） */
+        put: operations["update_46"];
+        post?: never;
+        /** 原本の削除 */
+        delete: operations["delete_43"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/widgets": {
         parameters: {
             query?: never;
@@ -5634,9 +5653,9 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getById_1"];
-        put: operations["update_46"];
+        put: operations["update_47"];
         post?: never;
-        delete: operations["delete_43"];
+        delete: operations["delete_44"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5650,9 +5669,9 @@ export interface paths {
             cookie?: never;
         };
         /** MEMBER既定権限取得 */
-        get: operations["get_19"];
+        get: operations["get_20"];
         /** MEMBER既定権限更新 */
-        put: operations["update_47"];
+        put: operations["update_48"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5691,7 +5710,7 @@ export interface paths {
          * 年齢区分設定更新
          * @description 指定した年齢区分の機能設定・テーマ設定を更新する（SYSTEM_ADMIN のみ）
          */
-        put: operations["update_48"];
+        put: operations["update_49"];
         post?: never;
         delete?: never;
         options?: never;
@@ -13973,6 +13992,22 @@ export interface paths {
          * @description 新しいナビ項目を追加する。key は ^[a-z0-9\-]+$ のみ可。
          */
         post: operations["create_37"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admin/module-events/{publicationId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resumeModuleEventPublication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -23002,6 +23037,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/effort-records/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 原本の一覧（カーソルページング） */
+        get: operations["list_78"];
+        put?: never;
+        /** 原本の作成 */
+        post: operations["create_77"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/corkboards/{boardId}/groups": {
         parameters: {
             query?: never;
@@ -24216,7 +24269,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["create_77"];
+        post: operations["create_78"];
         delete?: never;
         options?: never;
         head?: never;
@@ -24312,7 +24365,7 @@ export interface paths {
         };
         get: operations["listByFiscalYear_2"];
         put?: never;
-        post: operations["create_78"];
+        post: operations["create_79"];
         delete?: never;
         options?: never;
         head?: never;
@@ -25557,7 +25610,7 @@ export interface paths {
          * 同義語新規登録
          * @description synonymDisplay をサーバー側で正規化して保存。正規化キー UNIQUE 違反時は 409 SYNONYM_DUPLICATE。
          */
-        post: operations["create_79"];
+        post: operations["create_80"];
         delete?: never;
         options?: never;
         head?: never;
@@ -25608,7 +25661,7 @@ export interface paths {
         };
         get: operations["listAll_2"];
         put?: never;
-        post: operations["create_80"];
+        post: operations["create_81"];
         delete?: never;
         options?: never;
         head?: never;
@@ -26114,15 +26167,15 @@ export interface paths {
             cookie?: never;
         };
         /** 計画項目取得 */
-        get: operations["get_20"];
+        get: operations["get_21"];
         put?: never;
         post?: never;
         /** 計画項目削除（ADMIN/DEPUTY_ADMIN、If-Match 必須） */
-        delete: operations["delete_44"];
+        delete: operations["delete_45"];
         options?: never;
         head?: never;
         /** 計画項目更新（ADMIN/DEPUTY_ADMIN、If-Match 必須） */
-        patch: operations["update_49"];
+        patch: operations["update_50"];
         trace?: never;
     };
     "/api/v1/{scopeType}/{scopeId}/bulletin/archive/threads/{threadId}/folder": {
@@ -26167,15 +26220,15 @@ export interface paths {
             cookie?: never;
         };
         /** 村詳細取得 */
-        get: operations["get_21"];
+        get: operations["get_22"];
         put?: never;
         post?: never;
         /** 村論理削除（HEADMAN / SYSTEM_ADMIN） */
-        delete: operations["delete_45"];
+        delete: operations["delete_46"];
         options?: never;
         head?: never;
         /** 村更新（HEADMAN / SYSTEM_ADMIN） */
-        patch: operations["update_50"];
+        patch: operations["update_51"];
         trace?: never;
     };
     "/api/v1/villages/{villageId}/memberships/{membershipId}/role": {
@@ -26220,14 +26273,14 @@ export interface paths {
             cookie?: never;
         };
         /** 寄合詳細を取得する（候補日込み） */
-        get: operations["get_22"];
+        get: operations["get_23"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** 寄合を部分更新する（幹事のみ） */
-        patch: operations["update_51"];
+        patch: operations["update_52"];
         trace?: never;
     };
     "/api/v1/villages/{villageId}/match-recruits/{recruitId}": {
@@ -26238,14 +26291,14 @@ export interface paths {
             cookie?: never;
         };
         /** 練習試合・審判募集の詳細（村人のみ） */
-        get: operations["get_23"];
+        get: operations["get_24"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** 練習試合・審判募集を更新（投稿者本人のみ） */
-        patch: operations["update_52"];
+        patch: operations["update_53"];
         trace?: never;
     };
     "/api/v1/villages/{villageId}/festivals/{festivalId}": {
@@ -26256,14 +26309,14 @@ export interface paths {
             cookie?: never;
         };
         /** 村のお祭り詳細を取得する */
-        get: operations["get_24"];
+        get: operations["get_25"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** 村のお祭りを部分更新する（HEADMAN / ELDER のみ） */
-        patch: operations["update_53"];
+        patch: operations["update_54"];
         trace?: never;
     };
     "/api/v1/villages/{villageId}/charter/articles/order": {
@@ -26291,15 +26344,15 @@ export interface paths {
             cookie?: never;
         };
         /** 歳時記イベントの詳細を取得する（村人のみ） */
-        get: operations["get_25"];
+        get: operations["get_26"];
         put?: never;
         post?: never;
         /** 歳時記イベントを論理削除する（HEADMAN / ELDER のみ） */
-        delete: operations["delete_46"];
+        delete: operations["delete_47"];
         options?: never;
         head?: never;
         /** 歳時記イベントを部分更新する（HEADMAN / ELDER のみ） */
-        patch: operations["update_54"];
+        patch: operations["update_55"];
         trace?: never;
     };
     "/api/v1/users/me/public-profile": {
@@ -26769,15 +26822,15 @@ export interface paths {
             cookie?: never;
         };
         /** チームキープ詳細 */
-        get: operations["get_26"];
+        get: operations["get_27"];
         put?: never;
         post?: never;
         /** チームキープ削除 */
-        delete: operations["delete_47"];
+        delete: operations["delete_48"];
         options?: never;
         head?: never;
         /** チームキープ更新 */
-        patch: operations["update_55"];
+        patch: operations["update_56"];
         trace?: never;
     };
     "/api/v1/teams/{teamPublicId}/members/{memberUserId}/calendar-color": {
@@ -28150,13 +28203,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_27"];
+        get: operations["get_28"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["update_56"];
+        patch: operations["update_57"];
         trace?: never;
     };
     "/api/v1/teams/{teamId}/attendance/periods/{recordId}": {
@@ -28638,7 +28691,7 @@ export interface paths {
          * セキュリティインシデント更新
          * @description ステータス変更・DPA 通知記録を行う。
          */
-        patch: operations["update_57"];
+        patch: operations["update_58"];
         trace?: never;
     };
     "/api/v1/system-admin/safety-checks/templates/{templateId}": {
@@ -28787,14 +28840,14 @@ export interface paths {
             cookie?: never;
         };
         /** エラーレポート詳細取得 */
-        get: operations["get_28"];
+        get: operations["get_29"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** エラーレポート更新 */
-        patch: operations["update_58"];
+        patch: operations["update_59"];
         trace?: never;
     };
     "/api/v1/system-admin/error-reports/{id}/workflow-stage": {
@@ -29492,14 +29545,14 @@ export interface paths {
             cookie?: never;
         };
         /** 募集枠詳細取得 */
-        get: operations["get_29"];
+        get: operations["get_30"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** 募集枠編集 (§5.7) */
-        patch: operations["update_59"];
+        patch: operations["update_60"];
         trace?: never;
     };
     "/api/v1/quick-memos/{id}/restore": {
@@ -29809,11 +29862,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** チームグループ削除 */
-        delete: operations["delete_48"];
+        delete: operations["delete_49"];
         options?: never;
         head?: never;
         /** チームグループ変更 */
-        patch: operations["update_60"];
+        patch: operations["update_61"];
         trace?: never;
     };
     "/api/v1/organizations/{slug}/restore": {
@@ -30341,15 +30394,15 @@ export interface paths {
             cookie?: never;
         };
         /** 組織キープ詳細 */
-        get: operations["get_30"];
+        get: operations["get_31"];
         put?: never;
         post?: never;
         /** 組織キープ削除 */
-        delete: operations["delete_49"];
+        delete: operations["delete_50"];
         options?: never;
         head?: never;
         /** 組織キープ更新 */
-        patch: operations["update_61"];
+        patch: operations["update_62"];
         trace?: never;
     };
     "/api/v1/organizations/{orgPublicId}/members/{memberUserId}/calendar-color": {
@@ -30876,13 +30929,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_31"];
+        get: operations["get_32"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["update_62"];
+        patch: operations["update_63"];
         trace?: never;
     };
     "/api/v1/organizations/{orgId}/announcements/{id}/pin": {
@@ -31003,11 +31056,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** カスタム項目削除 */
-        delete: operations["delete_50"];
+        delete: operations["delete_51"];
         options?: never;
         head?: never;
         /** カスタム項目更新 */
-        patch: operations["update_63"];
+        patch: operations["update_64"];
         trace?: never;
     };
     "/api/v1/me/schedules/{id}": {
@@ -31037,15 +31090,15 @@ export interface paths {
             cookie?: never;
         };
         /** 個人キープ詳細 */
-        get: operations["get_32"];
+        get: operations["get_33"];
         put?: never;
         post?: never;
         /** 個人キープ削除 */
-        delete: operations["delete_51"];
+        delete: operations["delete_52"];
         options?: never;
         head?: never;
         /** 個人キープ更新 */
-        patch: operations["update_64"];
+        patch: operations["update_65"];
         trace?: never;
     };
     "/api/v1/me/reflections/themes/{themeId}": {
@@ -31109,15 +31162,15 @@ export interface paths {
             cookie?: never;
         };
         /** 個人時間割詳細 */
-        get: operations["get_33"];
+        get: operations["get_34"];
         put?: never;
         post?: never;
         /** 個人時間割論理削除 */
-        delete: operations["delete_52"];
+        delete: operations["delete_53"];
         options?: never;
         head?: never;
         /** 個人時間割メタ情報更新 */
-        patch: operations["update_65"];
+        patch: operations["update_66"];
         trace?: never;
     };
     "/api/v1/me/market/listings/{id}": {
@@ -31134,7 +31187,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** 個人札のDRAFT編集 */
-        patch: operations["update_66"];
+        patch: operations["update_67"];
         trace?: never;
     };
     "/api/v1/me/favorites/reorder": {
@@ -31688,14 +31741,14 @@ export interface paths {
             cookie?: never;
         };
         /** ポリシー詳細 (段階含む) */
-        get: operations["get_34"];
+        get: operations["get_35"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** ポリシー編集 (is_template_policy=true のみ) */
-        patch: operations["update_67"];
+        patch: operations["update_68"];
         trace?: never;
     };
     "/api/v1/bulletin/threads/{threadId}/priority": {
@@ -31759,10 +31812,10 @@ export interface paths {
         get: operations["getById_2"];
         put?: never;
         post?: never;
-        delete: operations["delete_53"];
+        delete: operations["delete_54"];
         options?: never;
         head?: never;
-        patch: operations["update_68"];
+        patch: operations["update_69"];
         trace?: never;
     };
     "/api/v1/budget/categories/{categoryId}": {
@@ -31775,10 +31828,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["delete_54"];
+        delete: operations["delete_55"];
         options?: never;
         head?: never;
-        patch: operations["update_69"];
+        patch: operations["update_70"];
         trace?: never;
     };
     "/api/v1/blog/posts/{id}/publish": {
@@ -32208,14 +32261,14 @@ export interface paths {
          * 同義語削除
          * @description 物理削除。削除後にキャッシュリビルド。
          */
-        delete: operations["delete_55"];
+        delete: operations["delete_56"];
         options?: never;
         head?: never;
         /**
          * 同義語編集
          * @description synonymDisplay 指定時は再正規化と重複チェックを行う。
          */
-        patch: operations["update_70"];
+        patch: operations["update_71"];
         trace?: never;
     };
     "/api/v1/admin/permission-groups/{id}/unassign/{userId}": {
@@ -33218,7 +33271,7 @@ export interface paths {
             cookie?: never;
         };
         /** 村史（行事アーカイブ）一覧を取得する（archived_at 降順・sourceType 絞り込み可） */
-        get: operations["list_78"];
+        get: operations["list_79"];
         put?: never;
         post?: never;
         delete?: never;
@@ -33235,7 +33288,7 @@ export interface paths {
             cookie?: never;
         };
         /** 村の村史一覧（月次ダイジェスト）を取得する */
-        get: operations["list_79"];
+        get: operations["list_80"];
         put?: never;
         post?: never;
         delete?: never;
@@ -33252,7 +33305,7 @@ export interface paths {
             cookie?: never;
         };
         /** 指定月の村史を取得する（YYYY-MM-DD 形式） */
-        get: operations["get_35"];
+        get: operations["get_36"];
         put?: never;
         post?: never;
         delete?: never;
@@ -33269,7 +33322,7 @@ export interface paths {
             cookie?: never;
         };
         /** 村憲章を取得する（read 公開ゲート・PUBLIC は非メンバー可・UNLISTED はメンバー/SYSTEM_ADMIN） */
-        get: operations["get_36"];
+        get: operations["get_37"];
         put?: never;
         post?: never;
         delete?: never;
@@ -34140,7 +34193,7 @@ export interface paths {
             cookie?: never;
         };
         /** ダイジェスト履歴一覧取得 */
-        get: operations["list_80"];
+        get: operations["list_81"];
         put?: never;
         post?: never;
         delete?: never;
@@ -34225,7 +34278,7 @@ export interface paths {
             cookie?: never;
         };
         /** チームが止めている招待の一覧（チームの加盟操作者） */
-        get: operations["list_81"];
+        get: operations["list_82"];
         put?: never;
         post?: never;
         delete?: never;
@@ -35203,7 +35256,7 @@ export interface paths {
             cookie?: never;
         };
         /** 受信した協会請求の一覧 */
-        get: operations["list_82"];
+        get: operations["list_83"];
         put?: never;
         post?: never;
         delete?: never;
@@ -35254,7 +35307,7 @@ export interface paths {
             cookie?: never;
         };
         /** 立替/精算記録の一覧 */
-        get: operations["list_83"];
+        get: operations["list_84"];
         put?: never;
         post?: never;
         delete?: never;
@@ -35390,7 +35443,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_84"];
+        get: operations["list_85"];
         put?: never;
         post?: never;
         delete?: never;
@@ -36747,7 +36800,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_85"];
+        get: operations["list_86"];
         put?: never;
         post?: never;
         delete?: never;
@@ -37821,7 +37874,7 @@ export interface paths {
             cookie?: never;
         };
         /** プロビジョニング招待の一覧を取得する */
-        get: operations["list_86"];
+        get: operations["list_87"];
         put?: never;
         post?: never;
         delete?: never;
@@ -37838,7 +37891,7 @@ export interface paths {
             cookie?: never;
         };
         /** 課金状況一覧 */
-        get: operations["list_87"];
+        get: operations["list_88"];
         put?: never;
         post?: never;
         delete?: never;
@@ -37890,6 +37943,22 @@ export interface paths {
         };
         /** モジュール詳細取得 */
         get: operations["getModule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admin/module-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listQuarantinedModuleEventPublications"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38088,7 +38157,7 @@ export interface paths {
             cookie?: never;
         };
         /** エラーレポート一覧取得 */
-        get: operations["list_88"];
+        get: operations["list_89"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38378,7 +38447,7 @@ export interface paths {
          * 価格改定 revision 取得
          * @description band明細を含む。不在・論理削除済みは404。
          */
-        get: operations["get_37"];
+        get: operations["get_38"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38786,7 +38855,7 @@ export interface paths {
          * 通報一覧
          * @description status / reasonCode で任意に絞り込んだ通報を created_at DESC で取得する。campaignId（メッセージ型）/ operationalCampaignId（運用型）を併記する。
          */
-        get: operations["list_89"];
+        get: operations["list_90"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38834,7 +38903,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_90"];
+        get: operations["list_91"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38870,7 +38939,7 @@ export interface paths {
          * 審査キュー一覧
          * @description 運用型キャンペーンを status フィルタ（既定 PENDING_REVIEW）・created_at DESC で取得する。
          */
-        get: operations["list_91"];
+        get: operations["list_92"];
         put?: never;
         post?: never;
         delete?: never;
@@ -39409,7 +39478,7 @@ export interface paths {
             cookie?: never;
         };
         /** 失敗イベント一覧を取得 (status で絞り込み可、新しい順) */
-        get: operations["list_92"];
+        get: operations["list_93"];
         put?: never;
         post?: never;
         delete?: never;
@@ -39936,7 +40005,7 @@ export interface paths {
          * キャンセル料記録の一覧
          * @description 受取先側の管理者・受取先本人・運営管理者が、自分が受け取るべきキャンセル料の記録を一覧する（免除対象を選ぶための一覧）。ページングはカーソル方式で、続きは meta.nextCursor を cursor に渡して取得する。
          */
-        get: operations["list_93"];
+        get: operations["list_94"];
         put?: never;
         post?: never;
         delete?: never;
@@ -40864,7 +40933,7 @@ export interface paths {
             cookie?: never;
         };
         /** 権限カタログ一覧（スコープの ADMIN+） */
-        get: operations["list_94"];
+        get: operations["list_95"];
         put?: never;
         post?: never;
         delete?: never;
@@ -41128,7 +41197,7 @@ export interface paths {
             cookie?: never;
         };
         /** 組織が止めている申請の一覧（組織 ADMIN） */
-        get: operations["list_95"];
+        get: operations["list_96"];
         put?: never;
         post?: never;
         delete?: never;
@@ -42658,7 +42727,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_96"];
+        get: operations["list_97"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43070,7 +43139,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_97"];
+        get: operations["list_98"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43241,7 +43310,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_98"];
+        get: operations["list_99"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43621,7 +43690,7 @@ export interface paths {
             cookie?: never;
         };
         /** 村でなれる投稿主体一覧を取得する（村人のみ） */
-        get: operations["list_99"];
+        get: operations["list_100"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43689,7 +43758,7 @@ export interface paths {
             cookie?: never;
         };
         /** メモ添付一覧 */
-        get: operations["list_100"];
+        get: operations["list_101"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43935,7 +44004,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_38"];
+        get: operations["get_39"];
         put?: never;
         post?: never;
         delete?: never;
@@ -44913,7 +44982,7 @@ export interface paths {
          * 請求書一覧
          * @description 指定スコープの請求書を period_end 降順で返す。cursor は不透明値。
          */
-        get: operations["list_101"];
+        get: operations["list_102"];
         put?: never;
         post?: never;
         delete?: never;
@@ -45495,7 +45564,7 @@ export interface paths {
             cookie?: never;
         };
         /** 家族メンバーの個人時間割一覧（status=ACTIVE のみ、共有設定済みのみ） */
-        get: operations["list_102"];
+        get: operations["list_103"];
         put?: never;
         post?: never;
         delete?: never;
@@ -45752,6 +45821,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/effort-records/me/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人の集計（BAR/LINE/PIE） */
+        get: operations["stats_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/effort-records/me/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 標準プリセット定義の一覧 */
+        get: operations["listPresets_6"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/disclosure-templates": {
         parameters: {
             query?: never;
@@ -45775,7 +45878,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_39"];
+        get: operations["get_40"];
         put?: never;
         post?: never;
         delete?: never;
@@ -46850,7 +46953,7 @@ export interface paths {
         get: operations["getById_7"];
         put?: never;
         post?: never;
-        delete: operations["delete_56"];
+        delete: operations["delete_57"];
         options?: never;
         head?: never;
         patch?: never;
@@ -48453,7 +48556,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 書類削除 */
-        delete: operations["delete_57"];
+        delete: operations["delete_58"];
         options?: never;
         head?: never;
         patch?: never;
@@ -48487,7 +48590,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** チームウォッチリスト削除 */
-        delete: operations["delete_58"];
+        delete: operations["delete_59"];
         options?: never;
         head?: never;
         patch?: never;
@@ -48773,7 +48876,7 @@ export interface paths {
          * 手数料パターン割当解除
          * @description 割当を解除する（論理削除）。既存課金には影響しない（焼き付け済みで不変）。
          */
-        delete: operations["delete_59"];
+        delete: operations["delete_60"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49177,7 +49280,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 組織ウォッチリスト削除 */
-        delete: operations["delete_60"];
+        delete: operations["delete_61"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49335,7 +49438,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 書類削除 */
-        delete: operations["delete_61"];
+        delete: operations["delete_62"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49352,7 +49455,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 局面写真の削除（記録権限・R2 ベストエフォート削除） */
-        delete: operations["delete_62"];
+        delete: operations["delete_63"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49423,7 +49526,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 個人メモ削除（論理） */
-        delete: operations["delete_63"];
+        delete: operations["delete_64"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49440,7 +49543,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** 添付削除（論理） */
-        delete: operations["delete_64"];
+        delete: operations["delete_65"];
         options?: never;
         head?: never;
         patch?: never;
@@ -57196,6 +57299,96 @@ export interface components {
             title?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        EffortFieldValue: {
+            fieldKey: string;
+            value?: string;
+        };
+        UpdateEffortRecordRequest: {
+            privateNote?: string;
+            /** Format: date */
+            recordedOn: string;
+            values: components["schemas"]["EffortFieldValue"][];
+            /** Format: int64 */
+            version: number;
+        };
+        ApiResponseEffortOwnerRecordResponse: {
+            data?: components["schemas"]["EffortOwnerRecordResponse"];
+        };
+        EffortDefinitionSnapshot: {
+            /** Format: uuid */
+            definitionUuid?: string;
+            durationFieldKey?: string;
+            fields?: components["schemas"]["EffortFieldDefinition"][];
+            presetCode?: string;
+            /** Format: int32 */
+            revision?: number;
+            /** @enum {string} */
+            source?: "PRESET" | "TEAM";
+            subjectFieldKey?: string;
+            /** Format: int64 */
+            teamTemplateId?: number;
+            templateName?: string;
+        };
+        EffortFieldDefinition: {
+            /** @enum {string} */
+            aggregation?: "SUM" | "LATEST" | "NONE";
+            fieldKey?: string;
+            label?: string;
+            labelKey?: string;
+            max?: string;
+            min?: string;
+            options?: components["schemas"]["Option"][];
+            required?: boolean;
+            /** Format: int32 */
+            scale?: number;
+            /** @enum {string} */
+            semantic?: "DURATION" | "WEIGHT" | "INTENSITY" | "SUBJECT" | "MENU" | "NUMBER" | "TEXT" | "DATE" | "DATETIME" | "CHECKBOX";
+            /** @enum {string} */
+            type?: "NUMBER" | "TEXT" | "SELECT" | "DATE" | "DATETIME" | "CHECKBOX";
+            unit?: string;
+        };
+        EffortOwnerRecordResponse: {
+            /** Format: int64 */
+            contentRevision?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            definition?: components["schemas"]["EffortDefinitionSnapshot"];
+            /** Format: uuid */
+            id?: string;
+            privateNote?: string;
+            recordTimezone?: string;
+            /** Format: date */
+            recordedOn?: string;
+            share?: components["schemas"]["EffortOwnerShare"];
+            /** Format: date-time */
+            updatedAt?: string;
+            values?: components["schemas"]["EffortFieldValue"][];
+            /** Format: int64 */
+            version?: number;
+        };
+        EffortOwnerShare: {
+            /** Format: int64 */
+            grantMembershipId?: number;
+            /** Format: uuid */
+            id?: string;
+            lastErrorCode?: string;
+            selectedFieldKeys?: string[];
+            /** Format: int64 */
+            sourceVersion?: number;
+            /** @enum {string} */
+            state?: "PENDING" | "VISIBLE" | "FAILED" | "REVOKED" | "MODERATED";
+            /** Format: int64 */
+            teamId?: number;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+        };
+        Option: {
+            key?: string;
+            label?: string;
+            labelKey?: string;
         };
         UpdateWidgetSettingsRequest: {
             scopeId?: string;
@@ -64978,6 +65171,9 @@ export interface components {
             sortOrder: number;
             subscriptionRequired: boolean;
         };
+        ResumeModuleEventRequest: {
+            reason?: string;
+        };
         CreateModerationTemplateRequest: {
             actionType?: string;
             isDefault?: boolean;
@@ -65927,6 +66123,26 @@ export interface components {
             /** Format: int64 */
             publishedBy?: number;
             status?: string;
+        };
+        Missing: {
+            /** Format: date */
+            slotDate?: string;
+            /** Format: int64 */
+            userId?: number;
+        };
+        ShiftHourlyRateMissingErrorDetail: {
+            code?: string;
+            details?: components["schemas"]["ShiftHourlyRateMissingErrorDetails"];
+            fieldErrors?: components["schemas"]["FieldError"][];
+            message?: string;
+        };
+        ShiftHourlyRateMissingErrorDetails: {
+            /** @description 時給を確認できなかった割当者と勤務日 */
+            missingHourlyRates?: components["schemas"]["Missing"][];
+        };
+        /** @description 公開前の時給欠落 400 応答 */
+        ShiftHourlyRateMissingErrorResponse: {
+            error?: components["schemas"]["ShiftHourlyRateMissingErrorDetail"];
         };
         CreateShiftSlotRequest: {
             /** @example 14:30:00 */
@@ -70182,6 +70398,18 @@ export interface components {
             userComment?: string;
             /** Format: int64 */
             userId?: number;
+        };
+        CreateEffortRecordRequest: {
+            /** Format: int32 */
+            definitionRevision: number;
+            definitionToken?: string;
+            /** Format: uuid */
+            definitionUuid: string;
+            privateNote?: string;
+            recordTimezone: string;
+            /** Format: date */
+            recordedOn: string;
+            values: components["schemas"]["EffortFieldValue"][];
         };
         CreateCardRequest: {
             /** Format: date-time */
@@ -79072,6 +79300,25 @@ export interface components {
         ApiResponseModuleResponse: {
             data?: components["schemas"]["ModuleResponse"];
         };
+        ModuleEventQuarantineResponse: {
+            eventType?: string;
+            failureCode?: string;
+            /** Format: date-time */
+            lastAttemptAt?: string;
+            listenerId?: string;
+            /** Format: date-time */
+            publicationDate?: string;
+            /** Format: uuid */
+            publicationId?: string;
+            /** Format: date-time */
+            quarantinedAt?: string;
+            /** Format: int32 */
+            retryCount?: number;
+        };
+        PagedResponseModuleEventQuarantineResponse: {
+            data?: components["schemas"]["ModuleEventQuarantineResponse"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         ApiResponseListModerationSettingsResponse: {
             data?: components["schemas"]["ModerationSettingsResponse"][];
         };
@@ -81872,6 +82119,8 @@ export interface components {
             /** Format: int32 */
             memberCount?: number;
             name?: string;
+            /** Format: int64 */
+            numericId?: number;
             slug?: string;
             teamGroup?: components["schemas"]["OrgTeamSummaryGroupRef"];
             visibility?: string;
@@ -84689,6 +84938,54 @@ export interface components {
         ApiResponseListIndividualRankingResponse: {
             data?: components["schemas"]["IndividualRankingResponse"][];
         };
+        CursorPagedResponseEffortOwnerRecordResponse: {
+            data?: components["schemas"]["EffortOwnerRecordResponse"][];
+            meta?: components["schemas"]["CursorMeta"];
+        };
+        ApiResponseEffortStatsResponse: {
+            data?: components["schemas"]["EffortStatsResponse"];
+        };
+        Bucket: {
+            /** Format: date */
+            endOn?: string;
+            /** Format: int64 */
+            sampleCount?: number;
+            /** Format: date */
+            startOn?: string;
+            value?: string;
+        };
+        Category: {
+            key?: string;
+            label?: string;
+            /** Format: int64 */
+            sampleCount?: number;
+            value?: string;
+        };
+        EffortStatsResponse: {
+            buckets?: components["schemas"]["Bucket"][];
+            categories?: components["schemas"]["Category"][];
+            /** @enum {string} */
+            chart?: "BAR" | "LINE" | "PIE";
+            /** Format: date */
+            dateFrom?: string;
+            /** Format: date */
+            dateTo?: string;
+            /** Format: uuid */
+            definitionUuid?: string;
+            /** @enum {string} */
+            emptyReason?: "NO_DATA" | "ZERO_TOTAL";
+            fieldKey?: string;
+            /** @enum {string} */
+            grain?: "DAY" | "MONTH";
+            semantic?: string;
+            total?: string;
+            /** Format: int64 */
+            totalSampleCount?: number;
+            unit?: string;
+        };
+        ApiResponseListEffortDefinitionSnapshot: {
+            data?: components["schemas"]["EffortDefinitionSnapshot"][];
+        };
         ApiResponseListDisclosureFormTemplateResponse: {
             data?: components["schemas"]["DisclosureFormTemplateResponse"][];
         };
@@ -86283,6 +86580,16 @@ export interface components {
             deletedCount?: number;
             /** Format: int32 */
             skippedCount?: number;
+        };
+        ApiResponseEffortDeleteResponse: {
+            data?: components["schemas"]["EffortDeleteResponse"];
+        };
+        EffortDeleteResponse: {
+            /** Format: uuid */
+            id?: string;
+            state?: string;
+            /** Format: int64 */
+            version?: number;
         };
         RemoveParticipantsRequest: {
             userIds?: number[];
@@ -101211,6 +101518,80 @@ export interface operations {
             };
         };
     };
+    get_19: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
+    update_46: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEffortRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
+    delete_43: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortDeleteResponse"];
+                };
+            };
+        };
+    };
     getWidgetSettings: {
         parameters: {
             query: {
@@ -102175,7 +102556,7 @@ export interface operations {
             };
         };
     };
-    update_46: {
+    update_47: {
         parameters: {
             query?: never;
             header?: never;
@@ -102201,7 +102582,7 @@ export interface operations {
             };
         };
     };
-    delete_43: {
+    delete_44: {
         parameters: {
             query?: never;
             header?: never;
@@ -102221,7 +102602,7 @@ export interface operations {
             };
         };
     };
-    get_19: {
+    get_20: {
         parameters: {
             query: {
                 scopeType: string;
@@ -102244,7 +102625,7 @@ export interface operations {
             };
         };
     };
-    update_47: {
+    update_48: {
         parameters: {
             query: {
                 scopeType: string;
@@ -102339,7 +102720,7 @@ export interface operations {
             };
         };
     };
-    update_48: {
+    update_49: {
         parameters: {
             query?: never;
             header?: never;
@@ -119398,6 +119779,30 @@ export interface operations {
             };
         };
     };
+    resumeModuleEventPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeModuleEventRequest"];
+            };
+        };
+        responses: {
+            /** @description 再開成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     createTemplate_9: {
         parameters: {
             query?: never;
@@ -121460,6 +121865,15 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseShiftScheduleResponse"];
+                };
+            };
+            /** @description 公開時に予算連動の勤務日の割当者へ有効な正数時給が無い（SHIFT_047）。欠落した対象者・勤務日を details で返す */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ShiftHourlyRateMissingErrorResponse"];
                 };
             };
         };
@@ -136477,6 +136891,58 @@ export interface operations {
             };
         };
     };
+    list_78: {
+        parameters: {
+            query?: {
+                date_from?: string;
+                date_to?: string;
+                definition_uuid?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPagedResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
+    create_77: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEffortRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
     createGroup_2: {
         parameters: {
             query?: never;
@@ -138578,7 +139044,7 @@ export interface operations {
             };
         };
     };
-    create_77: {
+    create_78: {
         parameters: {
             query?: never;
             header?: never;
@@ -138773,7 +139239,7 @@ export interface operations {
             };
         };
     };
-    create_78: {
+    create_79: {
         parameters: {
             query: {
                 scopeId: number;
@@ -140821,7 +141287,7 @@ export interface operations {
             };
         };
     };
-    create_79: {
+    create_80: {
         parameters: {
             query?: never;
             header?: never;
@@ -140937,7 +141403,7 @@ export interface operations {
             };
         };
     };
-    create_80: {
+    create_81: {
         parameters: {
             query?: never;
             header?: never;
@@ -141946,7 +142412,7 @@ export interface operations {
             };
         };
     };
-    get_20: {
+    get_21: {
         parameters: {
             query?: never;
             header: {
@@ -141972,7 +142438,7 @@ export interface operations {
             };
         };
     };
-    delete_44: {
+    delete_45: {
         parameters: {
             query?: never;
             header: {
@@ -141997,7 +142463,7 @@ export interface operations {
             };
         };
     };
-    update_49: {
+    update_50: {
         parameters: {
             query?: never;
             header: {
@@ -142082,7 +142548,7 @@ export interface operations {
             };
         };
     };
-    get_21: {
+    get_22: {
         parameters: {
             query?: never;
             header?: never;
@@ -142104,7 +142570,7 @@ export interface operations {
             };
         };
     };
-    delete_45: {
+    delete_46: {
         parameters: {
             query?: never;
             header?: never;
@@ -142124,7 +142590,7 @@ export interface operations {
             };
         };
     };
-    update_50: {
+    update_51: {
         parameters: {
             query?: never;
             header?: {
@@ -142205,7 +142671,7 @@ export interface operations {
             };
         };
     };
-    get_22: {
+    get_23: {
         parameters: {
             query?: never;
             header?: never;
@@ -142228,7 +142694,7 @@ export interface operations {
             };
         };
     };
-    update_51: {
+    update_52: {
         parameters: {
             query?: never;
             header?: never;
@@ -142255,7 +142721,7 @@ export interface operations {
             };
         };
     };
-    get_23: {
+    get_24: {
         parameters: {
             query?: never;
             header?: never;
@@ -142278,7 +142744,7 @@ export interface operations {
             };
         };
     };
-    update_52: {
+    update_53: {
         parameters: {
             query?: never;
             header?: never;
@@ -142305,7 +142771,7 @@ export interface operations {
             };
         };
     };
-    get_24: {
+    get_25: {
         parameters: {
             query?: never;
             header?: never;
@@ -142328,7 +142794,7 @@ export interface operations {
             };
         };
     };
-    update_53: {
+    update_54: {
         parameters: {
             query?: never;
             header?: never;
@@ -142381,7 +142847,7 @@ export interface operations {
             };
         };
     };
-    get_25: {
+    get_26: {
         parameters: {
             query?: never;
             header?: never;
@@ -142404,7 +142870,7 @@ export interface operations {
             };
         };
     };
-    delete_46: {
+    delete_47: {
         parameters: {
             query?: never;
             header?: never;
@@ -142425,7 +142891,7 @@ export interface operations {
             };
         };
     };
-    update_54: {
+    update_55: {
         parameters: {
             query?: never;
             header?: never;
@@ -143275,7 +143741,7 @@ export interface operations {
             };
         };
     };
-    get_26: {
+    get_27: {
         parameters: {
             query?: never;
             header?: never;
@@ -143298,7 +143764,7 @@ export interface operations {
             };
         };
     };
-    delete_47: {
+    delete_48: {
         parameters: {
             query?: never;
             header?: never;
@@ -143319,7 +143785,7 @@ export interface operations {
             };
         };
     };
-    update_55: {
+    update_56: {
         parameters: {
             query?: never;
             header?: never;
@@ -146041,7 +146507,7 @@ export interface operations {
             };
         };
     };
-    get_27: {
+    get_28: {
         parameters: {
             query?: never;
             header?: never;
@@ -146063,7 +146529,7 @@ export interface operations {
             };
         };
     };
-    update_56: {
+    update_57: {
         parameters: {
             query?: never;
             header?: never;
@@ -147096,7 +147562,7 @@ export interface operations {
             };
         };
     };
-    update_57: {
+    update_58: {
         parameters: {
             query?: never;
             header?: never;
@@ -147360,7 +147826,7 @@ export interface operations {
             };
         };
     };
-    get_28: {
+    get_29: {
         parameters: {
             query?: never;
             header?: never;
@@ -147382,7 +147848,7 @@ export interface operations {
             };
         };
     };
-    update_58: {
+    update_59: {
         parameters: {
             query?: never;
             header?: never;
@@ -148604,7 +149070,7 @@ export interface operations {
             };
         };
     };
-    get_29: {
+    get_30: {
         parameters: {
             query?: never;
             header?: never;
@@ -148626,7 +149092,7 @@ export interface operations {
             };
         };
     };
-    update_59: {
+    update_60: {
         parameters: {
             query?: never;
             header?: never;
@@ -149198,7 +149664,7 @@ export interface operations {
             };
         };
     };
-    delete_48: {
+    delete_49: {
         parameters: {
             query?: never;
             header?: never;
@@ -149240,7 +149706,7 @@ export interface operations {
             };
         };
     };
-    update_60: {
+    update_61: {
         parameters: {
             query?: never;
             header?: never;
@@ -150233,7 +150699,7 @@ export interface operations {
             };
         };
     };
-    get_30: {
+    get_31: {
         parameters: {
             query?: never;
             header?: never;
@@ -150256,7 +150722,7 @@ export interface operations {
             };
         };
     };
-    delete_49: {
+    delete_50: {
         parameters: {
             query?: never;
             header?: never;
@@ -150277,7 +150743,7 @@ export interface operations {
             };
         };
     };
-    update_61: {
+    update_62: {
         parameters: {
             query?: never;
             header?: never;
@@ -151419,7 +151885,7 @@ export interface operations {
             };
         };
     };
-    get_31: {
+    get_32: {
         parameters: {
             query?: never;
             header?: never;
@@ -151441,7 +151907,7 @@ export interface operations {
             };
         };
     };
-    update_62: {
+    update_63: {
         parameters: {
             query?: never;
             header?: never;
@@ -151664,7 +152130,7 @@ export interface operations {
             };
         };
     };
-    delete_50: {
+    delete_51: {
         parameters: {
             query?: never;
             header?: never;
@@ -151684,7 +152150,7 @@ export interface operations {
             };
         };
     };
-    update_63: {
+    update_64: {
         parameters: {
             query?: never;
             header?: never;
@@ -151780,7 +152246,7 @@ export interface operations {
             };
         };
     };
-    get_32: {
+    get_33: {
         parameters: {
             query?: never;
             header?: never;
@@ -151802,7 +152268,7 @@ export interface operations {
             };
         };
     };
-    delete_51: {
+    delete_52: {
         parameters: {
             query?: never;
             header?: never;
@@ -151822,7 +152288,7 @@ export interface operations {
             };
         };
     };
-    update_64: {
+    update_65: {
         parameters: {
             query?: never;
             header?: never;
@@ -151962,7 +152428,7 @@ export interface operations {
             };
         };
     };
-    get_33: {
+    get_34: {
         parameters: {
             query?: never;
             header?: never;
@@ -151984,7 +152450,7 @@ export interface operations {
             };
         };
     };
-    delete_52: {
+    delete_53: {
         parameters: {
             query?: never;
             header?: never;
@@ -152004,7 +152470,7 @@ export interface operations {
             };
         };
     };
-    update_65: {
+    update_66: {
         parameters: {
             query?: never;
             header?: never;
@@ -152030,7 +152496,7 @@ export interface operations {
             };
         };
     };
-    update_66: {
+    update_67: {
         parameters: {
             query?: never;
             header?: never;
@@ -153235,7 +153701,7 @@ export interface operations {
             };
         };
     };
-    get_34: {
+    get_35: {
         parameters: {
             query?: never;
             header?: never;
@@ -153257,7 +153723,7 @@ export interface operations {
             };
         };
     };
-    update_67: {
+    update_68: {
         parameters: {
             query?: never;
             header?: never;
@@ -153383,7 +153849,7 @@ export interface operations {
             };
         };
     };
-    delete_53: {
+    delete_54: {
         parameters: {
             query?: never;
             header?: never;
@@ -153403,7 +153869,7 @@ export interface operations {
             };
         };
     };
-    update_68: {
+    update_69: {
         parameters: {
             query?: never;
             header?: never;
@@ -153429,7 +153895,7 @@ export interface operations {
             };
         };
     };
-    delete_54: {
+    delete_55: {
         parameters: {
             query: {
                 scopeId: number;
@@ -153452,7 +153918,7 @@ export interface operations {
             };
         };
     };
-    update_69: {
+    update_70: {
         parameters: {
             query: {
                 scopeId: number;
@@ -154208,7 +154674,7 @@ export interface operations {
             };
         };
     };
-    delete_55: {
+    delete_56: {
         parameters: {
             query?: never;
             header?: never;
@@ -154228,7 +154694,7 @@ export interface operations {
             };
         };
     };
-    update_70: {
+    update_71: {
         parameters: {
             query?: never;
             header?: never;
@@ -155738,7 +156204,7 @@ export interface operations {
             };
         };
     };
-    list_78: {
+    list_79: {
         parameters: {
             query?: {
                 sourceType?: "FESTIVAL" | "CALENDAR_EVENT" | "MEETUP";
@@ -155764,7 +156230,7 @@ export interface operations {
             };
         };
     };
-    list_79: {
+    list_80: {
         parameters: {
             query?: never;
             header?: never;
@@ -155786,7 +156252,7 @@ export interface operations {
             };
         };
     };
-    get_35: {
+    get_36: {
         parameters: {
             query?: never;
             header?: never;
@@ -155809,7 +156275,7 @@ export interface operations {
             };
         };
     };
-    get_36: {
+    get_37: {
         parameters: {
             query?: never;
             header?: never;
@@ -156475,7 +156941,7 @@ export interface operations {
         parameters: {
             query?: {
                 eventType?: string;
-                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING")[];
+                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING" | "EFFORT")[];
                 from?: string;
                 to?: string;
                 cursor?: string;
@@ -156974,7 +157440,7 @@ export interface operations {
             };
         };
     };
-    list_80: {
+    list_81: {
         parameters: {
             query: {
                 scopeType: string;
@@ -157098,7 +157564,7 @@ export interface operations {
             };
         };
     };
-    list_81: {
+    list_82: {
         parameters: {
             query?: {
                 page?: number;
@@ -158535,7 +159001,7 @@ export interface operations {
             };
         };
     };
-    list_82: {
+    list_83: {
         parameters: {
             query?: never;
             header?: never;
@@ -158603,7 +159069,7 @@ export interface operations {
             };
         };
     };
-    list_83: {
+    list_84: {
         parameters: {
             query?: never;
             header?: never;
@@ -158815,7 +159281,7 @@ export interface operations {
             };
         };
     };
-    list_84: {
+    list_85: {
         parameters: {
             query: {
                 status?: "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
@@ -160932,7 +161398,7 @@ export interface operations {
             };
         };
     };
-    list_85: {
+    list_86: {
         parameters: {
             query: {
                 fiscalYearId: number;
@@ -160984,7 +161450,7 @@ export interface operations {
             query?: {
                 userId?: number;
                 eventType?: string;
-                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING")[];
+                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING" | "EFFORT")[];
                 from?: string;
                 to?: string;
                 cursor?: string;
@@ -162439,7 +162905,7 @@ export interface operations {
             };
         };
     };
-    list_86: {
+    list_87: {
         parameters: {
             query?: never;
             header?: never;
@@ -162459,7 +162925,7 @@ export interface operations {
             };
         };
     };
-    list_87: {
+    list_88: {
         parameters: {
             query?: {
                 billingStatus?: string;
@@ -162545,6 +163011,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseModuleResponse"];
+                };
+            };
+        };
+    };
+    listQuarantinedModuleEventPublications: {
+        parameters: {
+            query?: {
+                status?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PagedResponseModuleEventQuarantineResponse"];
                 };
             };
         };
@@ -162764,7 +163254,7 @@ export interface operations {
             };
         };
     };
-    list_88: {
+    list_89: {
         parameters: {
             query?: {
                 status?: string;
@@ -163121,7 +163611,7 @@ export interface operations {
             };
         };
     };
-    get_37: {
+    get_38: {
         parameters: {
             query?: never;
             header?: never;
@@ -163693,7 +164183,7 @@ export interface operations {
             };
         };
     };
-    list_89: {
+    list_90: {
         parameters: {
             query?: {
                 status?: "NEW" | "REVIEWING" | "RESOLVED" | "DISMISSED";
@@ -163766,7 +164256,7 @@ export interface operations {
             };
         };
     };
-    list_90: {
+    list_91: {
         parameters: {
             query?: {
                 status?: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
@@ -163811,7 +164301,7 @@ export interface operations {
             };
         };
     };
-    list_91: {
+    list_92: {
         parameters: {
             query?: {
                 status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "PAUSED" | "ENDED";
@@ -164552,7 +165042,7 @@ export interface operations {
             };
         };
     };
-    list_92: {
+    list_93: {
         parameters: {
             query?: {
                 status?: "PENDING" | "RETRYING" | "SUCCEEDED" | "EXHAUSTED" | "MANUAL_RESOLVED";
@@ -165284,7 +165774,7 @@ export interface operations {
             };
         };
     };
-    list_93: {
+    list_94: {
         parameters: {
             query?: {
                 status?: ("NOT_REQUIRED" | "PENDING" | "PAID" | "WAIVED" | "FAILED" | "UNCOLLECTIBLE")[];
@@ -166501,7 +166991,7 @@ export interface operations {
             };
         };
     };
-    list_94: {
+    list_95: {
         parameters: {
             query: {
                 scopeType: string;
@@ -166927,7 +167417,7 @@ export interface operations {
             };
         };
     };
-    list_95: {
+    list_96: {
         parameters: {
             query?: {
                 page?: number;
@@ -169148,7 +169638,7 @@ export interface operations {
             };
         };
     };
-    list_96: {
+    list_97: {
         parameters: {
             query: {
                 status?: "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
@@ -169722,7 +170212,7 @@ export interface operations {
             };
         };
     };
-    list_97: {
+    list_98: {
         parameters: {
             query: {
                 fiscalYearId: number;
@@ -169774,7 +170264,7 @@ export interface operations {
             query?: {
                 userId?: number;
                 eventType?: string;
-                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING")[];
+                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING" | "EFFORT")[];
                 from?: string;
                 to?: string;
                 cursor?: string;
@@ -169961,7 +170451,7 @@ export interface operations {
             };
         };
     };
-    list_98: {
+    list_99: {
         parameters: {
             query?: {
                 status?: "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
@@ -170467,7 +170957,7 @@ export interface operations {
             };
         };
     };
-    list_99: {
+    list_100: {
         parameters: {
             query?: never;
             header?: never;
@@ -170551,7 +171041,7 @@ export interface operations {
             };
         };
     };
-    list_100: {
+    list_101: {
         parameters: {
             query?: never;
             header?: never;
@@ -170866,7 +171356,7 @@ export interface operations {
             };
         };
     };
-    get_38: {
+    get_39: {
         parameters: {
             query?: never;
             header?: never;
@@ -172227,7 +172717,7 @@ export interface operations {
             };
         };
     };
-    list_101: {
+    list_102: {
         parameters: {
             query: {
                 scopeKind: "USER" | "TEAM" | "ORG";
@@ -173106,7 +173596,7 @@ export interface operations {
             };
         };
     };
-    list_102: {
+    list_103: {
         parameters: {
             query?: never;
             header?: never;
@@ -173485,6 +173975,53 @@ export interface operations {
             };
         };
     };
+    stats_1: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+                definition_uuid: string;
+                field_key: string;
+                chart: "BAR" | "LINE" | "PIE";
+                grain?: "DAY" | "MONTH";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortStatsResponse"];
+                };
+            };
+        };
+    };
+    listPresets_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseListEffortDefinitionSnapshot"];
+                };
+            };
+        };
+    };
     listAvailable: {
         parameters: {
             query: {
@@ -173508,7 +174045,7 @@ export interface operations {
             };
         };
     };
-    get_39: {
+    get_40: {
         parameters: {
             query: {
                 organizationId: number;
@@ -174893,7 +175430,7 @@ export interface operations {
             };
         };
     };
-    delete_56: {
+    delete_57: {
         parameters: {
             query: {
                 scopeId: number;
@@ -176218,7 +176755,7 @@ export interface operations {
                 teamId?: number;
                 organizationId?: number;
                 eventType?: string;
-                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING")[];
+                eventCategory?: ("AUTH" | "ACCOUNT" | "OAUTH" | "MFA" | "ADMIN_ACTION" | "LIFECYCLE" | "TEAM" | "ORGANIZATION" | "PAYMENT" | "SCHEDULE" | "TODO" | "REPAIR_PLAN" | "RESIDENT" | "SUCCESSION" | "POINT_CARD" | "VILLAGE" | "SECURITY_RATE_LIMIT" | "CIRCULATION" | "FORM" | "SHIFT" | "BULLETIN" | "TOURNAMENT" | "MATCH" | "PROVISIONING" | "RECEIPT" | "BILLING" | "EFFORT")[];
                 sessionHash?: string;
                 from?: string;
                 to?: string;
@@ -177134,7 +177671,7 @@ export interface operations {
             };
         };
     };
-    delete_57: {
+    delete_58: {
         parameters: {
             query?: never;
             header?: never;
@@ -177177,7 +177714,7 @@ export interface operations {
             };
         };
     };
-    delete_58: {
+    delete_59: {
         parameters: {
             query?: never;
             header?: never;
@@ -177516,7 +178053,7 @@ export interface operations {
             };
         };
     };
-    delete_59: {
+    delete_60: {
         parameters: {
             query?: never;
             header?: never;
@@ -178060,7 +178597,7 @@ export interface operations {
             };
         };
     };
-    delete_60: {
+    delete_61: {
         parameters: {
             query?: never;
             header?: never;
@@ -178260,7 +178797,7 @@ export interface operations {
             };
         };
     };
-    delete_61: {
+    delete_62: {
         parameters: {
             query?: never;
             header?: never;
@@ -178282,7 +178819,7 @@ export interface operations {
             };
         };
     };
-    delete_62: {
+    delete_63: {
         parameters: {
             query?: never;
             header?: never;
@@ -178368,7 +178905,7 @@ export interface operations {
             };
         };
     };
-    delete_63: {
+    delete_64: {
         parameters: {
             query?: never;
             header?: never;
@@ -178388,7 +178925,7 @@ export interface operations {
             };
         };
     };
-    delete_64: {
+    delete_65: {
         parameters: {
             query?: never;
             header?: never;

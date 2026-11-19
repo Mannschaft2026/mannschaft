@@ -165,6 +165,7 @@
       "private": "非公開",
       "empty": "連絡スペースが準備されていません",
       "no_bulletin": "掲示板スペースがありません",
+      "bulletin_scope_unresolved": "掲示板の参照先を特定できないため表示できません",
       "no_chat": "チャットスペースがありません",
       "visibility_saved": "公開設定を変更しました",
       "visibility_failed": "公開設定の変更に失敗しました",

@@ -15,6 +15,7 @@ import com.mannschaft.app.diagnosis.service.DiagnosisPurgeService;
 import com.mannschaft.app.ranch.entity.RanchOperationalControlEntity;
 import com.mannschaft.app.ranch.repository.RanchOperationalControlRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.sparse.RequiresRanchApprovedAssets;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "mannschaft.diagnosis.approved-catalog.sha256=10e2d71bfd2d84791c3fdb3b82c42cce9dc55ed98feb55a095e6016a5198f9d0",
         "mannschaft.ranch.approved-visuals-available=true"})
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
+// 正式な牧場実素材を Spring 起動時に読むため、sparse 除外時は起動より前に skip する。
+@RequiresRanchApprovedAssets
 class DiagnosisFormalMappingPersistenceIT extends AbstractMySqlIntegrationTest {
     private static final String BASE = "/api/v1/me/diagnoses";
     @Autowired private MockMvc mvc;

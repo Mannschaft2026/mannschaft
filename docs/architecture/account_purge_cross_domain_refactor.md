@@ -908,6 +908,8 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `direct_mail_recipients` | `user_id` | 要裁可 | 広告の配信・計測ログ（個人の行動履歴か、広告主課金の根拠か） |
 | `direct_mail_recipients_archive` | `user_id` | 要裁可 | 広告の配信・計測ログ（個人の行動履歴か、広告主課金の根拠か） |
 | `disclosure_exports` | `requester_user_id` | 保持 | 監査ログ（改ざん防止・説明責任） |
+| `effort_operation_receipts` | `actor_user_id` | 強消去 | `EffortRecordPurgeEventListener`（応答JSONに私的メモを含むため本人分をすべて物理削除） |
+| `effort_records` | `owner_user_id` | 強消去 | `EffortRecordPurgeEventListener`（未共有の原本は物理削除。共有許可を持つ原本は値・私的メモ・snapshotを消去した tombstone を保持） |
 | `electronic_seals` | `user_id` | 保持 | 印鑑・押印履歴（F05.3 の既決で保持） |
 | `email_change_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `email_outbox` | `user_id` | 要裁可 | 送信待ち・一時データ（宛先PIIを含む） |
@@ -962,6 +964,8 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `mentions` | `mentioned_user_id` | 保持 | 共有本文・反応（投稿は残し著者表示を共通ラベル化する既決。CMP-261011-0124） |
 | `mfa_recovery_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `moderation_appeals` | `user_id` | 保持 | 通報・モデレーション証跡（被通報者・通報者の記録は運営判断の根拠） |
+| `module_event_resume_audits` | `actor_user_id` | 匿名化 | actor IDは保持し、強匿名化時にreasonのみ `[REDACTED]` に置換。UTCの暦年2年後に行を完全削除する方針。実装・C接続は未完了 |
+| `module_event_resume_actor_states` | `actor_user_id` | 保持 | M所有の理由再生防止状態。actorの匿名参照と不可逆なpurgedを監査の2年期限から独立して保持しTTLを設けない。本人id/purgedを既存audit_logsカテゴリ内の別JSONで取得する設計。骨格・先行試験段階、業務実装・C接続は未完了 |
 | `monitoring_committee_visits` | `subject_user_id` / `visitor_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `my_scope_folders` | `user_id` | 強消去 | CMP-260822-1243 第1陣の本人設定38親表（上表）。各domainの強消去リスナー |
 | `notification_credit_purchases` | `purchased_by_user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み） |
