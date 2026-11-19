@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261117-2250",
+  "scope": "app",
+  "implementation": {
+    "pr": 4633,
+    "sha": "364f961402154bbc3a0f7735970c750e9eec5071"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "publishToTeam 済み（チーム投稿T）のメモを含む日に publishDaily してもチーム投稿は論理削除されない",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_afterPublishToTeam_doesNotDeleteTeamPost",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "AC-1 の後、メモは元チーム・teamTimelinePostId=T・timelinePostId=新個人投稿ID を持つ",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_afterPublishToTeam_keepsBothReferences",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "publishDaily の後に publishToTeam しても timelinePostId は個人投稿のまま、teamTimelinePostId に新チーム投稿IDが入る",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishToTeam_afterPublishDaily_keepsPersonalPostId",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "個人投稿→チーム投稿→再度個人投稿で、旧個人投稿のみ論理削除されチーム投稿は生存する（実DB）",
+      "tests": [
+        {
+          "name": "ActionMemoTeamPostSplitIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/ActionMemoTeamPostSplitIT.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "旧投稿IDが複数種でも取得と削除委譲は1回のみ",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_multipleOldPosts_fetchedOnceAndAllDeleted",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "非 PERSONAL 投稿・別ユーザーの個人投稿は論理削除しない",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_doesNotDeleteNonPersonalOrOtherUsersPost",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "初回（旧投稿IDなし）は論理削除せず新規投稿が全メモに紐づく",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_firstTime_noDeletionAndAllLinked",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "旧投稿が存在しない／削除済みでも例外にならず新規投稿が作られる",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_oldPostMissingOrAlreadyDeleted_stillPublishes",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "新規個人投稿の保存失敗で旧投稿の論理削除もロールバックされる（実DB・別トランザクション）",
+      "tests": [
+        {
+          "name": "ActionMemoTeamPostSplitIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/ActionMemoTeamPostSplitIT.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "複数メモの日次チーム投稿で各メモの teamTimelinePostId が設定され timelinePostId は変わらない",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDailyToTeam_setsTeamPostIdPerMemo_andKeepsPersonalPostId",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "通常GETと管理者GETのJSONに timeline_post_id と team_timeline_post_id の両方が載る",
+      "tests": [
+        {
+          "name": "ActionMemoTeamPostSplitIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/ActionMemoTeamPostSplitIT.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "description": "既存データのチーム投稿IDが migration で新列へ移る（V263）",
+      "tests": [
+        {
+          "name": "FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/migration/FlywayExistingDataActionMemoTeamTimelinePostSplitMigrationTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "description": "冪等性と正常系: チーム投稿IDは teamTimelinePostId に入り timelinePostId は変えない",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_idempotentOverwrite / publishToTeam_workMemoOwnTeam_returnsTimelinePostId",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "description": "対象日にメモ0件なら400で投稿の作成・削除なし",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_failsWhenNoMemos",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "description": "上限200件のメモが同一旧投稿IDを共有しても取得・削除は1回",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_200MemosSharingOldPost_singleFetchAndDelete",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "description": "PERSONAL かつ scopeId=操作者でも投稿の userId が操作者でなければ論理削除しない",
+      "tests": [
+        {
+          "name": "ActionMemoServicePublishTest publishDaily_doesNotDeletePersonalPostAuthoredByOtherUser",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "PR #4633",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44510367015
+    },
+    {
+      "runId": 44510367240
+    },
+    {
+      "runId": 44510367280
+    },
+    {
+      "runId": 44510367140
+    },
+    {
+      "runId": 44510366987
+    },
+    {
+      "runId": 44510366981
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4633"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "frontend/tests/e2e/real/action-memo-team-post-split.spec.ts"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4651"
+    }
+  },
+  "regressions": []
+}
