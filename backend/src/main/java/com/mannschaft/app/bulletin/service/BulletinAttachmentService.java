@@ -3,6 +3,7 @@ package com.mannschaft.app.bulletin.service;
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.bulletin.BulletinErrorCode;
+import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.bulletin.BulletinMapper;
 import com.mannschaft.app.bulletin.ScopeType;
 import com.mannschaft.app.bulletin.TargetType;
@@ -32,7 +33,6 @@ import com.mannschaft.app.common.storage.acl.StorageAclService;
 import com.mannschaft.app.common.storage.quota.StorageFeatureType;
 import com.mannschaft.app.common.storage.quota.StorageQuotaService;
 import com.mannschaft.app.common.storage.quota.StorageScopeType;
-import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.service.TournamentContactAccessService;
 import com.mannschaft.app.village.service.VillageBulletinAccessService;
@@ -240,7 +240,9 @@ public class BulletinAttachmentService {
     public BulletinThreadService.PreviewMetadata getAttachmentReadMetadata(Long attachmentId) {
         BulletinAttachmentEntity attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new BusinessException(BulletinErrorCode.ATTACHMENT_NOT_FOUND));
-        BulletinThreadEntity thread = resolveThread(attachment.getTargetType(), attachment.getTargetId());
+        // 添付 ID 指定の EP なので、対象・親（スレッド）の欠落も添付の不在コードにそろえる（基準書 §子リソースID）
+        BulletinThreadEntity thread = resolveThread(attachment.getTargetType(), attachment.getTargetId(),
+                BulletinErrorCode.ATTACHMENT_NOT_FOUND);
         return new BulletinThreadService.PreviewMetadata(thread.getId(), thread.getScopeType().name(), thread.getScopeId());
     }
 
@@ -282,7 +284,8 @@ public class BulletinAttachmentService {
         BulletinAttachmentEntity attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new BusinessException(BulletinErrorCode.ATTACHMENT_NOT_FOUND));
 
-        BulletinThreadEntity thread = resolveThread(attachment.getTargetType(), attachment.getTargetId());
+        BulletinThreadEntity thread = resolveThread(attachment.getTargetType(), attachment.getTargetId(),
+                BulletinErrorCode.ATTACHMENT_NOT_FOUND);
         checkViewAuthorization(thread, userId);
 
         String downloadUrl = storageAccessService.generateDownloadUrl(
@@ -393,21 +396,30 @@ public class BulletinAttachmentService {
      * 添付対象（スレッド/返信）から所属スレッドを逆引きする。
      */
     private BulletinThreadEntity resolveThread(TargetType targetType, Long targetId) {
+        return resolveThread(targetType, targetId, BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND);
+    }
+
+    /** 対象・親の欠落時に投げる不在コードを EP の入口（対象ID指定か添付ID指定か）に合わせて指定する。 */
+    private BulletinThreadEntity resolveThread(TargetType targetType, Long targetId, ErrorCode notFound) {
         return switch (targetType) {
-            case THREAD -> findThreadOrThrow(targetId);
+            case THREAD -> findThreadOrThrow(targetId, notFound);
             case REPLY -> {
                 BulletinReplyEntity reply = replyRepository.findById(targetId)
                         .filter(r -> r.getDeletedAt() == null)
-                        .orElseThrow(() -> new BusinessException(BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND));
-                yield findThreadOrThrow(reply.getThreadId());
+                        .orElseThrow(() -> new BusinessException(notFound));
+                yield findThreadOrThrow(reply.getThreadId(), notFound);
             }
         };
     }
 
     private BulletinThreadEntity findThreadOrThrow(Long threadId) {
+        return findThreadOrThrow(threadId, BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND);
+    }
+
+    private BulletinThreadEntity findThreadOrThrow(Long threadId, ErrorCode notFound) {
         return threadRepository.findById(threadId)
                 .filter(t -> t.getDeletedAt() == null)
-                .orElseThrow(() -> new BusinessException(BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(notFound));
     }
 
     // ─────────────────────────────────────────────
@@ -421,10 +433,10 @@ public class BulletinAttachmentService {
         if (thread.getScopeType() == ScopeType.VILLAGE) {
             villageBulletinAccessService.checkVillageBulletinViewAccess(thread.getScopeVillageId(), userId);
         } else if (isTournamentScope(thread.getScopeType())) {
-            // F08.7.1: 大会/ディビジョン連絡の添付閲覧（一覧/DL URL 発行）は canView に委譲する。
+            // F08.7.1: 大会/ディビジョン連絡の添付閲覧（一覧/DL URL 発行）は BulletinReadFacade が tx 外で
+            // 認可済み（存在秘匿つき・D-3T。CMP-261116-0726）。tx 内では他ドメインの閲覧判定を撃たない。
             // checkMembership は membership.domain.ScopeType に TOURNAMENT が無く 500 になるため通さない。
-            tournamentContactAccessService.checkView(
-                    toContactScope(thread.getScopeType()), thread.getScopeId(), ContactSpaceKind.BULLETIN, userId);
+            return;
         } else if (thread.getScopeType() == ScopeType.PERSONAL) {
             checkPersonalOwner(thread, userId);
         } else {

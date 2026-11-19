@@ -99,6 +99,8 @@ export default defineConfig({
         '**/real/n1p1-regression.real.spec.ts',
         '**/real/cmp1507-*.real.spec.ts',
         '**/real/chat-group-dm-derived-name.spec.ts',
+        // 専用設定 playwright-actionmemo-split.config.ts でのみ実行（wsl.exe と専用コンテナを使う）
+        '**/real/action-memo-team-post-split.spec.ts',
       ],
       dependencies: ['setup-real-user'],
     },

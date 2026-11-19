@@ -21,7 +21,6 @@ import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.common.NameResolverService;
-import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.service.TournamentContactAccessService;
 import com.mannschaft.app.village.VillageErrorCode;
@@ -240,12 +239,10 @@ public class BulletinThreadService {
                 .orElseThrow(() -> new BusinessException(BulletinErrorCode.THREAD_NOT_FOUND));
         if (entity.getScopeType() == ScopeType.VILLAGE) {
             villageBulletinAccessService.checkVillageBulletinViewAccess(entity.getScopeVillageId(), userId);
-        } else if (isTournamentScope(entity.getScopeType())) {
-            tournamentContactAccessService.checkView(
-                    toContactScope(entity.getScopeType()), entity.getScopeId(), ContactSpaceKind.BULLETIN, userId);
-        } else {
+        } else if (!isTournamentScope(entity.getScopeType())) {
             accessGuard.checkMembership(userId, entity.getScopeType(), entity.getScopeId());
         }
+        // 大会/ディビジョン連絡の閲覧は BulletinReadFacade が tx 外で認可済み（存在秘匿つき・D-3T。CMP-261116-0726）。
         return enrichSingle(entity, userId);
     }
 

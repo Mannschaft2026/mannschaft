@@ -73,6 +73,8 @@ class PreviewReadTransactionBoundaryTest {
             // 委任経路（ALIC-1）の依存。この試験は通常経路の境界を見るので未使用だが Facade の生成に要る
             dependency(context, com.mannschaft.app.bulletin.visibility.BulletinThreadVisibilityResolver.class);
             dependency(context, BulletinAnnouncementPreviewReader.class);
+            // 大会連絡スペースの閲覧門（CMP-261116-0726）。この試験の対象スレッドは大会スコープではない
+            dependency(context, BulletinTournamentScopeAccessGuard.class);
             context.refresh();
             context.getBean(TxControl.class).check(); // annotation interceptor の陽性対照
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();

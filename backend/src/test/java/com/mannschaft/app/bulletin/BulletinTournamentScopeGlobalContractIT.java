@@ -65,9 +65,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * 主催組織 ADMIN／SYSTEM_ADMIN、投稿=参加チームの ADMIN・DEPUTY_ADMIN／主催組織 ADMIN／SYSTEM_ADMIN。
  * 公開スペースでも投稿権は広がらない（§4.2・§5.2）。</p>
  *
- * <p><b>権限なしの応答（AC-7〜AC-10）</b>: 現行仕様どおり 403（閲覧=TOUR_030 / 投稿=TOUR_031）とする。
- * 存在秘匿（不在の大会／ディビジョン ID と同じ 404 に畳む）は別の戦役で扱い、本戦役は 400 の解消に絞る
- * （マスター裁可 2026-11-16）。</p>
+ * <p><b>権限なしの応答（AC-7〜AC-10）</b>: 当初は 403（閲覧=TOUR_030 / 投稿=TOUR_031）としていたが、
+ * CMP-261116-0726（大会連絡スペースの存在オラクル是正）で、閲覧権なしは不在の大会／ディビジョン ID と同一の
+ * 404 TOUR_029 に畳む契約へ改めた（TOUR_030 は欠番）。閲覧可・投稿権なしの 403 TOUR_031 は維持（AC-4・AC-12）。
+ * 掲示板全 EP の秘匿契約は {@code BulletinTournamentContactExistenceOracleContractIT} が担う。</p>
  *
  * <p>実 JWT・実 Security フィルタ・実 MySQL（TEST_CONVENTION §3.1.2。認可を検査するため {@code addFilters=false} を使わない）。
  * fixture は別 TX で commit し、所有行だけを後始末する。</p>
@@ -306,44 +307,46 @@ class BulletinTournamentScopeGlobalContractIT extends AbstractMySqlIntegrationTe
     }
 
     // ========================================================================
-    // AC-7〜10: 権限なしは現行仕様どおり 403（TOUR_030 閲覧 / TOUR_031 投稿）
-    // 存在秘匿（不在 ID と同じ 404 に畳む）は別戦役で扱う。本戦役は 400 の解消に絞る。
+    // AC-7〜10: 閲覧権なしは不在の大会／ディビジョン ID と同一の 404 TOUR_029（存在秘匿）
+    // CMP-261116-0726 で旧契約（403 TOUR_030 閲覧 / 403 TOUR_031 投稿）から改めた。
+    // 閲覧可・投稿権なし（参加チーム一般メンバー・公開スペースの部外者）の 403 TOUR_031 は AC-4 / AC-12 で維持。
     // ========================================================================
 
     /**
-     * AC-7: 閲覧権限のない者の TOURNAMENT 一覧は 403 TOUR_030。
-     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     * AC-7: 閲覧権限のない者の TOURNAMENT 一覧は、不在の大会 ID と status・code・message まで同一の 404 TOUR_029。
      */
     @Test
-    @DisplayName("AC-7: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一覧は 403 TOUR_030")
-    void ac7_権限なしのTOURNAMENT一覧は403() throws Exception {
+    @DisplayName("AC-7: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一覧は不在IDと同一の 404 TOUR_029")
+    void ac7_権限なしのTOURNAMENT一覧は不在と同一の404() throws Exception {
         for (Long actor : List.of(outsiderId, organizerMemberId, foreignAdminId)) {
-            assertForbidden(list("TOURNAMENT", tournamentId), actor, "TOUR_030");
+            assertSameRejection(list("TOURNAMENT", tournamentId), list("TOURNAMENT", ABSENT_ID), actor, 404);
+            assertConcealedCode(list("TOURNAMENT", tournamentId), actor, "TOUR_029");
         }
     }
 
     /**
-     * AC-8: 投稿権限のない者の TOURNAMENT 投稿は 403 TOUR_031 で、DB に何も作られない。
-     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     * AC-8: 閲覧権限のない者の TOURNAMENT 投稿は、不在の大会 ID と同一の 404 TOUR_029 で、DB に何も作られない。
      */
     @Test
-    @DisplayName("AC-8: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 投稿は 403 TOUR_031 で、DB に何も作られない")
-    void ac8_権限なしのTOURNAMENT投稿は403() throws Exception {
+    @DisplayName("AC-8: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 投稿は不在IDと同一の 404 TOUR_029 で、DB に何も作られない")
+    void ac8_権限なしのTOURNAMENT投稿は不在と同一の404() throws Exception {
         for (Long actor : List.of(outsiderId, organizerMemberId, foreignAdminId)) {
-            assertForbidden(create("TOURNAMENT", tournamentId, "CMP2058 越境投稿"), actor, "TOUR_031");
+            assertSameRejection(create("TOURNAMENT", tournamentId, "CMP2058 越境投稿"),
+                    create("TOURNAMENT", ABSENT_ID, "CMP2058 越境投稿"), actor, 404);
+            assertConcealedCode(create("TOURNAMENT", tournamentId, "CMP2058 越境投稿"), actor, "TOUR_029");
         }
         assertThat(countThreads("TOURNAMENT", tournamentId, "CMP2058 越境投稿")).isZero();
     }
 
     /**
-     * AC-9: 閲覧権限のない者の TOURNAMENT 一括既読は 403 TOUR_030 で、既読行が作られない。
-     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     * AC-9: 閲覧権限のない者の TOURNAMENT 一括既読は、不在の大会 ID と同一の 404 TOUR_029 で、既読行が作られない。
      */
     @Test
-    @DisplayName("AC-9: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一括既読は 403 TOUR_030 で、既読行が作られない")
-    void ac9_権限なしのTOURNAMENT一括既読は403() throws Exception {
+    @DisplayName("AC-9: 部外者・主催組織の一般会員・他テナントADMINの TOURNAMENT 一括既読は不在IDと同一の 404 TOUR_029 で、既読行が作られない")
+    void ac9_権限なしのTOURNAMENT一括既読は不在と同一の404() throws Exception {
         for (Long actor : List.of(outsiderId, organizerMemberId, foreignAdminId)) {
-            assertForbidden(readAll("TOURNAMENT", tournamentId), actor, "TOUR_030");
+            assertSameRejection(readAll("TOURNAMENT", tournamentId), readAll("TOURNAMENT", ABSENT_ID), actor, 404);
+            assertConcealedCode(readAll("TOURNAMENT", tournamentId), actor, "TOUR_029");
             Integer reads = jdbc.queryForObject("SELECT COUNT(*) FROM bulletin_read_status WHERE user_id = ?",
                     Integer.class, actor);
             assertThat(reads).isZero();
@@ -351,16 +354,20 @@ class BulletinTournamentScopeGlobalContractIT extends AbstractMySqlIntegrationTe
     }
 
     /**
-     * AC-10: 権限のない者の TOURNAMENT_DIVISION 一覧・一括既読は 403 TOUR_030、投稿は 403 TOUR_031。
-     * 存在秘匿（不在 ID と同一応答）は別戦役で扱う。
+     * AC-10: 閲覧権限のない者の TOURNAMENT_DIVISION 一覧・投稿・一括既読は、不在のディビジョン ID と同一の 404 TOUR_029。
      */
     @Test
-    @DisplayName("AC-10: 部外者・他テナントADMINの TOURNAMENT_DIVISION 一覧・一括既読は 403 TOUR_030、投稿は 403 TOUR_031")
-    void ac10_権限なしのTOURNAMENT_DIVISIONは403() throws Exception {
+    @DisplayName("AC-10: 部外者・他テナントADMINの TOURNAMENT_DIVISION 一覧・投稿・一括既読は不在IDと同一の 404 TOUR_029")
+    void ac10_権限なしのTOURNAMENT_DIVISIONは不在と同一の404() throws Exception {
         for (Long actor : List.of(outsiderId, foreignAdminId)) {
-            assertForbidden(list("TOURNAMENT_DIVISION", divisionId), actor, "TOUR_030");
-            assertForbidden(create("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿"), actor, "TOUR_031");
-            assertForbidden(readAll("TOURNAMENT_DIVISION", divisionId), actor, "TOUR_030");
+            assertSameRejection(list("TOURNAMENT_DIVISION", divisionId), list("TOURNAMENT_DIVISION", ABSENT_ID), actor, 404);
+            assertConcealedCode(list("TOURNAMENT_DIVISION", divisionId), actor, "TOUR_029");
+            assertSameRejection(create("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿"),
+                    create("TOURNAMENT_DIVISION", ABSENT_ID, "CMP2058 越境D投稿"), actor, 404);
+            assertConcealedCode(create("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿"), actor, "TOUR_029");
+            assertSameRejection(readAll("TOURNAMENT_DIVISION", divisionId),
+                    readAll("TOURNAMENT_DIVISION", ABSENT_ID), actor, 404);
+            assertConcealedCode(readAll("TOURNAMENT_DIVISION", divisionId), actor, "TOUR_029");
         }
         assertThat(countThreads("TOURNAMENT_DIVISION", divisionId, "CMP2058 越境D投稿")).isZero();
     }
@@ -424,10 +431,10 @@ class BulletinTournamentScopeGlobalContractIT extends AbstractMySqlIntegrationTe
     // 補助
     // ========================================================================
 
-    /** 拒否応答が 403 かつ期待のエラーコードであることを確かめる。 */
-    private void assertForbidden(MockHttpServletRequestBuilder request, Long actor, String expectedCode) throws Exception {
+    /** 秘匿応答が 404 かつ期待のエラーコード（不在と同一の単一コード）であることを確かめる。 */
+    private void assertConcealedCode(MockHttpServletRequestBuilder request, Long actor, String expectedCode) throws Exception {
         MvcResult r = http(request, actor).andReturn();
-        assertThat(r.getResponse().getStatus()).as("actor=" + actor + " " + body(r)).isEqualTo(403);
+        assertThat(r.getResponse().getStatus()).as("actor=" + actor + " " + body(r)).isEqualTo(404);
         assertThat(errorCode(r)).as("actor=" + actor + " " + body(r)).isEqualTo(expectedCode);
     }
 
