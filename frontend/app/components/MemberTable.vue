@@ -255,10 +255,10 @@ defineExpose({ refresh: loadMembers, changeRole: onChangeRole })
     </Column>
     <Column v-if="scopeType === 'team'" :header="$t('returnStayPlan.memberPill.title')" style="min-width: 180px">
       <template #body="{ data }">
-        <div v-if="returnStayLoading" class="text-xs text-surface-400">{{ $t('common.loading') }}</div>
+        <div v-if="returnStayLoading" class="text-xs text-surface-400">{{ $t('button.loading') }}</div>
         <div v-else-if="returnStayLoadError" class="flex items-center gap-1 text-xs text-surface-400">
           <span>{{ $t('returnStayPlan.memberPill.unavailable') }}</span>
-          <Button text size="small" :label="$t('common.retry')" @click="loadReturnStayPlans" />
+          <Button text size="small" :label="$t('loadErrorState.retry')" @click="loadReturnStayPlans" />
         </div>
         <div v-else class="flex flex-wrap gap-1">
           <button v-for="plan in returnStayPlans.get(data.userId) ?? []" :key="plan.id" type="button" class="rounded focus:outline-none focus:ring-2 focus:ring-primary" :aria-label="$t('returnStayPlan.memberPill.title')" @click="openReturnStayDetail(plan)">
