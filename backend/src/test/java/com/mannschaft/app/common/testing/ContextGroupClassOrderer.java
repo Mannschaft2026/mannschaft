@@ -132,9 +132,16 @@ public final class ContextGroupClassOrderer implements ClassOrderer {
     }
 
     private static boolean usesSpringExtension(Class<?> type) {
-        return MergedAnnotations.from(type, SearchStrategy.TYPE_HIERARCHY).stream(ExtendWith.class)
-                .anyMatch(annotation -> Arrays.stream(annotation.getClassArray("value"))
-                        .anyMatch(SpringExtension.class::isAssignableFrom));
+        // @Nested クラスは enclosing class の拡張（SpringExtension）を JUnit が継承するので、外側も辿る。
+        for (Class<?> current = type; current != null; current = current.getEnclosingClass()) {
+            boolean spring = MergedAnnotations.from(current, SearchStrategy.TYPE_HIERARCHY).stream(ExtendWith.class)
+                    .anyMatch(annotation -> Arrays.stream(annotation.getClassArray("value"))
+                            .anyMatch(SpringExtension.class::isAssignableFrom));
+            if (spring) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** testClass と同一性ハッシュを含まない、MCC の安定した文字列表現。 */

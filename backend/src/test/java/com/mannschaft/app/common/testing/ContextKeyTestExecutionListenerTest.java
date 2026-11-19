@@ -91,6 +91,21 @@ class ContextKeyTestExecutionListenerTest {
     }
 
     @Test
+    void K5_TestInstance_PER_CLASSでもloadとreloadを正しく出す() {
+        List<String> lines;
+        TestExecutionSummary summary;
+        try (ContextKeyTestExecutionListener.Capture capture = ContextKeyTestExecutionListener.startCapture()) {
+            summary = run(D1PerClassDirty.class);
+            lines = List.copyOf(capture.lines());
+        }
+
+        assertThat(summary.getTotalFailureCount()).as(failures(summary)).isZero();
+        assertThat(summary.getTestsSucceededCount()).isEqualTo(2);
+        assertThat(events(lines, D1PerClassDirty.class)).as("初回はload（hitに誤分類しない）、破棄後はreload")
+                .containsExactly("load", "reload");
+    }
+
+    @Test
     void K5_計測自体の例外は握ってerrorを出しテストを落とさない() {
         List<String> lines;
         TestExecutionSummary summary;
@@ -229,6 +244,30 @@ class ContextKeyTestExecutionListenerTest {
     @TestMethodOrder(MethodOrderer.MethodName.class)
     @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
     static class A3DirtyReload {
+        @Test
+        void m1Load() {
+        }
+
+        @Test
+        void m2Reload() {
+        }
+    }
+
+    /** PER_CLASS 検体の構成。 */
+    @Configuration(proxyBeanMethods = false)
+    static class PerClassConfiguration {
+        @Bean
+        String perClass() {
+            return "p";
+        }
+    }
+
+    @SpringJUnitConfig(PerClassConfiguration.class)
+    @org.junit.jupiter.api.TestInstance(org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS)
+    @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+    @TestMethodOrder(MethodOrderer.MethodName.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class D1PerClassDirty {
         @Test
         void m1Load() {
         }

@@ -36,8 +36,8 @@ import org.springframework.test.context.support.AbstractTestExecutionListener;
  * <h2>順序</h2>
  * <p>{@link #ORDER}=1900。DirtiesContextBeforeModesTestExecutionListener（1500）の後ろ（BEFORE_CLASS で破棄された後の
  * 状態を見るため）、DependencyInjectionTestExecutionListener（2000。ここで実際にロードされる）の前。
- * ロード前の状態を prepareTestInstance / beforeTestClass で記録し、ロード後の beforeTestMethod で結果を確定する
- * （beforeTestMethod の BEFORE_METHOD 破棄の影響を受けないよう、確定時にキャッシュを再照会しない）。</p>
+ * ロード前の状態を beforeTestClass / prepareTestInstance / beforeTestMethod のうち最初に来たもの（インスタンス生成順序に依存しない。
+ * PER_CLASS では prepareTestInstance が先、PER_METHOD では beforeTestClass が先）で記録し、DI の再ロードまで済んだ beforeTestExecution で確定する。</p>
  */
 public class ContextKeyTestExecutionListener extends AbstractTestExecutionListener {
 
@@ -61,8 +61,8 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
     private static volatile Field cacheField;
     private static volatile boolean cacheSizeUnavailable;
 
-    /** ロード前の状態。{@code armedByClass} は beforeTestClass で作り、最初の prepareTestInstance で上書きしない印。 */
-    private record Pending(String key, boolean wasLoaded, long startNanos, boolean armedByClass) {
+    /** ロード前の状態（最初の起点で一度だけ記録する）。 */
+    private record Pending(String key, boolean wasLoaded, long startNanos) {
     }
 
     @Override
@@ -72,23 +72,23 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        begin(testContext, true);
+        begin(testContext);
     }
 
     @Override
     public void prepareTestInstance(TestContext testContext) {
-        Pending armed = PENDING.get(testContext.getTestClass());
-        if (armed != null && armed.armedByClass()) {
-            // beforeTestClass で記録済み（コンストラクタ注入でここより前にロードされていても、その前の状態を採る）。
-            PENDING.put(testContext.getTestClass(),
-                    new Pending(armed.key(), armed.wasLoaded(), armed.startNanos(), false));
-            return;
-        }
-        begin(testContext, false);
+        begin(testContext);
     }
 
+    /** BEFORE_METHOD の破棄の後・DI リスナー（2000。@DirtiesContext 後の再注入でロードする）の前。PER_CLASS の2メソッド目以降の起点。 */
     @Override
     public void beforeTestMethod(TestContext testContext) {
+        begin(testContext);
+    }
+
+    /** すべての beforeTestMethod（DI の再ロード込み）が終わった後で結果を確定する。 */
+    @Override
+    public void beforeTestExecution(TestContext testContext) {
         Pending pending = PENDING.remove(testContext.getTestClass());
         if (pending == null) {
             return;
@@ -109,13 +109,22 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
     }
 
     @Override
+    public void afterTestMethod(TestContext testContext) {
+        PENDING.remove(testContext.getTestClass());
+    }
+
+    @Override
     public void afterTestClass(TestContext testContext) {
         PENDING.remove(testContext.getTestClass());
         HIT_LOGGED.remove(testContext.getTestClass());
         KEYS.remove(testContext.getTestClass());
     }
 
-    private static void begin(TestContext testContext, boolean armedByClass) {
+    private static void begin(TestContext testContext) {
+        if (PENDING.containsKey(testContext.getTestClass())) {
+            // 未確定の起点が最古の状態。PER_CLASS では prepareTestInstance（ロード済み）が beforeTestClass より先に走るため、上書きしない。
+            return;
+        }
         try {
             RuntimeException injected = injectedFailure;
             if (injected != null) {
@@ -130,7 +139,7 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
                 KEYS.put(testContext.getTestClass(), key);
             }
             PENDING.put(testContext.getTestClass(),
-                    new Pending(key, testContext.hasApplicationContext(), System.nanoTime(), armedByClass));
+                    new Pending(key, testContext.hasApplicationContext(), System.nanoTime()));
         } catch (Throwable failure) { // NOSONAR 計測の失敗でテストを落とさない。
             PENDING.remove(testContext.getTestClass());
             emitError(testContext, failure);

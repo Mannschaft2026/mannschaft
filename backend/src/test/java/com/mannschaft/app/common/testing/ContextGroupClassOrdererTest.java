@@ -116,6 +116,14 @@ class ContextGroupClassOrdererTest {
     // ---------------------------------------------------------------- K-2
 
     @Test
+    void K2_実在のNestedクラスは外側と同じキーでnullにならない() throws Exception {
+        Class<?> outer = existing("actionmemo.ActionMemoScopeContractIT");
+        Class<?> nested = existing("actionmemo.ActionMemoScopeContractIT$MemoCrud");
+        assertThat(ContextGroupClassOrderer.contextKey(nested)).matches(KEY_PATTERN)
+                .isEqualTo(ContextGroupClassOrderer.contextKey(outer));
+    }
+
+    @Test
     void K2_AbstractMySqlIntegrationTest継承の実在2クラスはMCC構築が成功し同一キーで連続する() throws Exception {
         Class<?> export = existing("circulation.CirculationExportScopeContractIT");
         Class<?> writeAcl = existing("circulation.CirculationWriteAclScopeContractIT");
@@ -132,6 +140,15 @@ class ContextGroupClassOrdererTest {
                 .isNotEqualTo(result.keys().get(otherConfig));
         int exportIndex = result.ordered().indexOf(export);
         assertThat(result.ordered().get(exportIndex + 1)).as("同じ構成の2クラスは連続する").isEqualTo(writeAcl);
+    }
+
+    @Test
+    void K1_Nestedクラスはenclosingの構成を継承しキーは外側と同じ() {
+        String outer = ContextGroupClassOrderer.contextKey(NestedOuter.class);
+        assertThat(outer).matches(KEY_PATTERN);
+        assertThat(ContextGroupClassOrderer.contextKey(NestedOuter.Inner.class)).isEqualTo(outer);
+        assertThat(ContextGroupClassOrderer.order(List.of(NestedOuter.Inner.class)).fallbackCount()).isZero();
+        assertThat(ContextGroupClassOrderer.order(List.of(NestedOuter.Inner.class)).nonSpringCount()).isZero();
     }
 
     // ---------------------------------------------------------------- K-3
@@ -257,6 +274,14 @@ class ContextGroupClassOrdererTest {
     /** 同構成 X（別名）。 */
     @SpringJUnitConfig(ConfigurationX.class)
     static class ZetaSameX {
+    }
+
+    /** @Nested を持つ外側（構成 X）。 */
+    @SpringJUnitConfig(ConfigurationX.class)
+    static class NestedOuter {
+        @org.junit.jupiter.api.Nested
+        class Inner {
+        }
     }
 
     /** Spring 非使用。 */
