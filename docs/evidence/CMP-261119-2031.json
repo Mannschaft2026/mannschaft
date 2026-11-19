@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261119-2031",
+  "scope": "app",
+  "implementation": {
+    "pr": 4655,
+    "sha": "04c070c0ebd37b14637d63290d83cc0dd610d8f1"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "6言語で nuxt.config.ts の files を宣言順にディープマージし、静的キー150種が全て文字列に解決する（生キー表示なし）",
+      "tests": [
+        {
+          "name": "action-memo-locale-resolution",
+          "evidence": "frontend/tests/unit/i18n/action-memo-locale-resolution.spec.ts"
+        },
+        {
+          "name": "PR #4655",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4655"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "各言語の action_memo.json の最上位が action_memo の1キーのみで root を汚さない",
+      "tests": [
+        {
+          "name": "action-memo-locale-resolution",
+          "evidence": "frontend/tests/unit/i18n/action-memo-locale-resolution.spec.ts"
+        },
+        {
+          "name": "PR #4655",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4655"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "全言語のリーフキー集合が ja と一致し空文字がない",
+      "tests": [
+        {
+          "name": "action-memo-locale-resolution",
+          "evidence": "frontend/tests/unit/i18n/action-memo-locale-resolution.spec.ts"
+        },
+        {
+          "name": "PR #4655",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4655"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "カテゴリ行・カテゴリボタン群が flex-wrap、ボタンが whitespace-nowrap で、390px でも横はみ出しせず ja でボタン内改行しない",
+      "tests": [
+        {
+          "name": "ActionMemoCategoryLayout",
+          "evidence": "frontend/tests/unit/components/ActionMemoCategoryLayout.spec.ts"
+        },
+        {
+          "name": "PR #4655",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4655"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44586454946
+    },
+    {
+      "runId": 44586454291
+    },
+    {
+      "runId": 44586454923
+    },
+    {
+      "runId": 44586454608
+    },
+    {
+      "runId": 44586454477
+    },
+    {
+      "runId": 44586454402
+    },
+    {
+      "runId": 44586454491
+    },
+    {
+      "runId": 44586454871
+    },
+    {
+      "runId": 44586454323
+    },
+    {
+      "runId": 44586454543
+    },
+    {
+      "runId": 44586451016
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4655"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4655"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4660"
+    }
+  },
+  "regressions": [
+    {
+      "description": "カテゴリ行の横はみ出し（de 390/360 で scrollWidth 405）と ja のボタン内改行",
+      "test": "frontend/tests/unit/components/ActionMemoCategoryLayout.spec.ts",
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/commit/ead429d106a16643e27370d6c04f23d19e57cbdc",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/commit/a9e224ac80e9582bfcbd9c32f8e78dcc09eb5c3b"
+    }
+  ]
+}
