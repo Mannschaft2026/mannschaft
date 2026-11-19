@@ -464,6 +464,12 @@ class BulletinTournamentContactExistenceOracleContractIT extends AbstractMySqlIn
                     MISSING_ATTACHMENT_ID, 404, ATTACHMENT_NF);
             assertConcealed("DELETE attachment(返信の親削除)", actor, id -> delete(API + "/attachments/" + id), attRA,
                     MISSING_ATTACHMENT_ID, 404, ATTACHMENT_NF);
+            // 添付ID指定の DL URL も、親スレッド欠落時は不在添付IDと同一（BULLETIN_025 で実在を漏らさない）
+            assertConcealed("GET download-url(親削除)", actor, id -> get(API + "/attachments/" + id + "/download-url"),
+                    attA, MISSING_ATTACHMENT_ID, 404, ATTACHMENT_NF);
+            assertConcealed("GET download-url(返信の親削除)", actor,
+                    id -> get(API + "/attachments/" + id + "/download-url"), attRA, MISSING_ATTACHMENT_ID, 404,
+                    ATTACHMENT_NF);
         }
     }
 

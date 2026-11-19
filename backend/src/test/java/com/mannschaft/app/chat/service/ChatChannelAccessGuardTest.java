@@ -184,13 +184,27 @@ class ChatChannelAccessGuardTest {
         }
 
         @Test
-        @DisplayName("境界: メンバーシップ非依存種別（TOURNAMENT_CHAT）も素通しする")
-        void 大会チャットは素通しする() {
+        @DisplayName("AC-10: 大会チャットは連絡スペースの閲覧ゲートに委ね、閲覧権なしは不在 CHANNEL_NOT_FOUND と同一")
+        void 大会チャットは閲覧ゲートに委ねる() {
             ChatChannelEntity tournament = channel(ChannelType.TOURNAMENT_CHAT, null, null);
+            ReflectionTestUtils.setField(tournament, "sourceId", 55L);
+            willThrow(new BusinessException(ChatErrorCode.CHANNEL_NOT_FOUND)).given(tournamentContactSpaceAccessGate)
+                    .requireView(ContactSpaceScopeType.TOURNAMENT, 55L, ContactSpaceKind.CHAT, USER_ID,
+                            ChatErrorCode.CHANNEL_NOT_FOUND);
 
-            assertThatCode(() -> guard.requireChannelMembership(tournament, USER_ID))
-                    .doesNotThrowAnyException();
+            assertDenied(() -> guard.requireChannelMembership(tournament, USER_ID), ChatErrorCode.CHANNEL_NOT_FOUND);
             verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        @DisplayName("AC-10: 大会チャットの閲覧可（ゲート通過）は通過する。ディビジョンチャットも同様")
+        void 大会チャットの閲覧可は通過する() {
+            ChatChannelEntity division = channel(ChannelType.TOURNAMENT_DIVISION_CHAT, null, null);
+            ReflectionTestUtils.setField(division, "sourceId", 56L);
+
+            assertThatCode(() -> guard.requireChannelMembership(division, USER_ID)).doesNotThrowAnyException();
+            verify(tournamentContactSpaceAccessGate).requireView(ContactSpaceScopeType.TOURNAMENT_DIVISION, 56L,
+                    ContactSpaceKind.CHAT, USER_ID, ChatErrorCode.CHANNEL_NOT_FOUND);
         }
     }
 

@@ -716,6 +716,9 @@ class ChatChannelAccessScopeContractIT extends AbstractMySqlIntegrationTest {
                     assertSameAsMissing(actor, get("/api/v1/chat/channels/{id}/threads", channel),
                             get("/api/v1/chat/channels/{id}/threads", ABSENT_CHANNEL_ID), "CHAT_001");
                     assertSameAsMissing(actor, send(channel), send(ABSENT_CHANNEL_ID), "CHAT_001");
+                    // チャンネル詳細 GET はチャンネル名を返すため、同じく不在と完全一致にする
+                    assertSameAsMissing(actor, get("/api/v1/chat/channels/{id}", channel),
+                            get("/api/v1/chat/channels/{id}", ABSENT_CHANNEL_ID), "CHAT_001");
                 }
             }
             assertThat(messageRepository.count()).as("メッセージが作られない").isEqualTo(before);
@@ -738,6 +741,8 @@ class ChatChannelAccessScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuthentication(pMemberId);
             mockMvc.perform(get("/api/v1/chat/channels/{id}/messages", t1ChannelId))
                     .andExpect(status().isOk());
+            mockMvc.perform(get("/api/v1/chat/channels/{id}", t1ChannelId))
+                    .andExpect(status().isOk());
             mockMvc.perform(send(t1ChannelId))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("TOUR_031"));
@@ -747,6 +752,7 @@ class ChatChannelAccessScopeContractIT extends AbstractMySqlIntegrationTest {
 
             for (Long poster : List.of(pAdminId, orgAdminId)) {
                 setAuthentication(poster);
+                mockMvc.perform(get("/api/v1/chat/channels/{id}", t1ChannelId)).andExpect(status().isOk());
                 mockMvc.perform(send(t1ChannelId)).andExpect(status().isCreated());
             }
         }
@@ -758,6 +764,8 @@ class ChatChannelAccessScopeContractIT extends AbstractMySqlIntegrationTest {
             assertSameAsMissing(tOutsiderId, get("/api/v1/chat/channels/{id}/messages", t2ChannelId),
                     get("/api/v1/chat/channels/{id}/messages", ABSENT_CHANNEL_ID), "CHAT_001");
             assertSameAsMissing(tOutsiderId, send(t2ChannelId), send(ABSENT_CHANNEL_ID), "CHAT_001");
+            assertSameAsMissing(tOutsiderId, get("/api/v1/chat/channels/{id}", t2ChannelId),
+                    get("/api/v1/chat/channels/{id}", ABSENT_CHANNEL_ID), "CHAT_001");
             assertSameAsMissing(tOutsiderId, get("/api/v1/chat/messages/{id}/thread", t2MessageId),
                     get("/api/v1/chat/messages/{id}/thread", ABSENT_MESSAGE_ID), "CHAT_002");
             assertThat(messageRepository.count()).isEqualTo(before);
@@ -771,6 +779,8 @@ class ChatChannelAccessScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(get("/api/v1/chat/channels/{id}/messages", t3ChannelId))
                     .andExpect(status().isOk());
             mockMvc.perform(get("/api/v1/chat/messages/{id}/thread", t3MessageId))
+                    .andExpect(status().isOk());
+            mockMvc.perform(get("/api/v1/chat/channels/{id}", t3ChannelId))
                     .andExpect(status().isOk());
             mockMvc.perform(send(t3ChannelId))
                     .andExpect(status().isForbidden())

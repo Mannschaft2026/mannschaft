@@ -203,6 +203,13 @@ public class ChatChannelAccessGuard {
      *                           知り得るが未参加なら {@link ChatErrorCode#CHANNEL_ACCESS_DENIED}
      */
     void requireChannelMembership(ChatChannelEntity channel, Long userId) {
+        // 大会連絡チャット（TOURNAMENT_CHAT / TOURNAMENT_DIVISION_CHAT）は membership 行を持たず、連絡スペースの閲覧ゲートで
+        // 認可する。ここで素通しすると非公開スペースのチャンネル名が任意の認証ユーザーに返る（CMP-261116-0726 AC-10）。
+        // 閲覧権なしはチャンネル ID 指定系の不在（CHANNEL_NOT_FOUND）と完全一致にする。
+        if (tournamentScopeOf(channel) != null) {
+            checkChannelViewAccess(channel, userId, ChatErrorCode.CHANNEL_NOT_FOUND);
+            return;
+        }
         if (!channel.getChannelType().isMembershipGated()) {
             return;
         }

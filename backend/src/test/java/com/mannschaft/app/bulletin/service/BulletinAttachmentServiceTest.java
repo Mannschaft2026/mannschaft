@@ -194,6 +194,30 @@ class BulletinAttachmentServiceTest {
                 .isEqualTo(CommonErrorCode.COMMON_002);
     }
 
+    @Test
+    @DisplayName("CMP-261116-0726 AC-7: 添付ID指定の閲覧メタ取得は、親スレッドが削除済みなら添付の不在コード（BULLETIN_007）")
+    void 親スレッド欠落の閲覧メタは添付の不在コード() {
+        given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(attachment(USER_ID)));
+        given(threadRepository.findById(THREAD_ID)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> service.getAttachmentReadMetadata(ATTACHMENT_ID))
+                .isInstanceOf(BusinessException.class).extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("CMP-261116-0726 AC-7: 返信の親が欠落した添付の DL URL も添付の不在コード（BULLETIN_007）")
+    void 返信欠落の添付DLは添付の不在コード() {
+        BulletinAttachmentEntity replyAttachment = BulletinAttachmentEntity.builder()
+                .id(ATTACHMENT_ID).targetType(TargetType.REPLY).targetId(77L)
+                .fileKey("bulletin/key").originalFilename("doc.pdf").fileSize(1024L)
+                .contentType("application/pdf").createdBy(USER_ID).build();
+        given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(replyAttachment));
+        given(replyRepository.findById(77L)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> service.generateDownloadUrl(ATTACHMENT_ID, USER_ID))
+                .isInstanceOf(BusinessException.class).extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+    }
+
     // ─────────────────────────────────────────────
     @Nested
     @DisplayName("presign（アップロード URL 発行）")
