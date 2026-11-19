@@ -103,4 +103,12 @@ class SearchHistoryControllerTest {
 
         verify(searchHistoryService).saveQuery(USER_ID, request);
     }
+
+    @Test
+    @DisplayName("deleteSavedQuery は savedQueryId の所有者検証を SecurityUtils.getCurrentUserId() で行う")
+    void deleteSavedQuery_ownershipCheckedAgainstCurrentUser() {
+        controller.deleteSavedQuery(7L);
+
+        verify(searchHistoryService).deleteSavedQuery(USER_ID, 7L);
+    }
 }
