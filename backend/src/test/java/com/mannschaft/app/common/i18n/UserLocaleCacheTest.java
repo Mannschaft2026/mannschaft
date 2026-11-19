@@ -86,6 +86,34 @@ class UserLocaleCacheTest {
     }
 
     @Test
+    @DisplayName("実在しないユーザーの既定値 ja はキャッシュしない（後から同じ id で作られた en ユーザーに ja が残らない）")
+    void 実在しないユーザーの既定値はキャッシュしない() {
+        // Given: 初回は行が無く、2回目の時点では同じ id のユーザーが locale=en で存在する
+        given(userRepository.findLocaleById(1L)).willReturn(Optional.empty(), Optional.of("en"));
+
+        // When
+        String first = cache.getLocale(1L);
+        String second = cache.getLocale(1L);
+
+        // Then
+        assertThat(first).isEqualTo("ja");
+        assertThat(second).isEqualTo("en");
+        assertThat(cache.size()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("clear 後は全エントリが破棄され再度DBから取得する")
+    void clear後_再DB取得() {
+        given(userRepository.findLocaleById(1L)).willReturn(Optional.of("ja"), Optional.of("en"));
+
+        assertThat(cache.getLocale(1L)).isEqualTo("ja");
+        cache.clear();
+
+        assertThat(cache.size()).isZero();
+        assertThat(cache.getLocale(1L)).isEqualTo("en");
+    }
+
+    @Test
     @DisplayName("evict後は再度DBから取得する")
     void evict後_再DB取得() {
         // Given

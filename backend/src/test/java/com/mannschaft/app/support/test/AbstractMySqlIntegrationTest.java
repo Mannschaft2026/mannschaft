@@ -123,6 +123,25 @@ public abstract class AbstractMySqlIntegrationTest {
         org.mockito.Mockito.when(redisTemplate.opsForValue()).thenReturn(ops);
     }
 
+    /**
+     * 共有コンテキストの users.locale キャッシュ（Bean が無い縮小構成では null）。
+     *
+     * <p>CMP-261119-1855: 本基底クラスは単一の MySQL を共有し、テスト環境は {@code ddl-auto=create} のため、
+     * 別構成のコンテキストが起動するたびにスキーマが作り直され users の id が 1 から再採番される。
+     * 共有コンテキストの {@code UserLocaleCache}（TTL 5 分）は userId をキーに前テストの値を保持し続けるため、
+     * 再利用された id の新ユーザーに前テストの locale（ja）が返り、早期拒否応答などが
+     * 英語にならない順序依存の失敗になった。各テストの前に破棄して持ち越しを断つ。</p>
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.mannschaft.app.common.i18n.UserLocaleCache sharedUserLocaleCache;
+
+    @org.junit.jupiter.api.BeforeEach
+    void clearSharedUserLocaleCache() {
+        if (sharedUserLocaleCache != null) {
+            sharedUserLocaleCache.clear();
+        }
+    }
+
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
