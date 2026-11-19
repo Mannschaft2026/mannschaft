@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261116-0726",
+  "scope": "app",
+  "implementation": { "pr": 4643, "sha": "b490ffbb54a557bb14fddd0147a885c9f2d85696" },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "閲覧権の無い者への掲示板・連絡スペースの拒否が、不在の大会・ディビジョンと status・エラーコード・本文まで一致する（5 ロール、実在 ID と不在 ID の 240 組の応答比較）",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（応答比較・URL 直打ち）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "連絡スペースの公開設定 API でも、閲覧権の無い者への応答が不在と一致する（別大会のパスで正ディビジョンを指定した場合を含む）",
+      "tests": [
+        { "name": "公開設定の存在オラクル契約 IT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentContactSpaceVisibilityOracleContractIT.java" },
+        { "name": "実機E2E", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "大会スコープのファイル置き場でも、閲覧権の無い者への応答が不在と一致する",
+      "tests": [
+        { "name": "ファイル共有の存在オラクル契約 IT", "evidence": "backend/src/test/java/com/mannschaft/app/filesharing/TournamentScopedFileSharingOracleContractIT.java" },
+        { "name": "実機E2E", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "閲覧できるが投稿権の無い者は 403 のまま、所属者・主催管理者は従来どおり画面から閲覧・投稿・公開設定の切替ができる",
+      "tests": [
+        { "name": "掲示板スコープ契約 IT", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentScopeGlobalContractIT.java" },
+        { "name": "実機E2E（主催ADMIN の画面操作、参加チーム代表・SYSTEM_ADMIN の応答）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "返信を持つスレッドを画面で削除した後、返信 ID・リアクション・添付 ID の各入口も不在 ID と同一応答になる（差し戻し修正。修正後の応答ログで 240 組すべて一致）",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（修正前の不合格と修正後の応答ログ）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "大会チャットの既存の不在畳み込みが退行しない",
+      "tests": [
+        { "name": "チャットのアクセススコープ契約 IT", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatChannelAccessScopeContractIT.java" }
+      ]
+    }
+  ],
+  "ci": [{ "runId": 44523520830 }, { "runId": 44523520944 }, { "runId": 44523520747 }, { "runId": 44523520797 }],
+  "stages": {
+    "review": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4643" },
+    "real": { "status": "passed", "evidence": "docs/evidence/CMP-261116-0726-real.md" },
+    "exploratory": { "status": "passed", "evidence": "docs/evidence/CMP-261116-0726-exploratory.md" }
+  },
+  "regressions": []
+}
