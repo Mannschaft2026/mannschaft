@@ -277,11 +277,12 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
     class ListLinks {
 
         @Test
-        @DisplayName("FileLinkController#listLinks: 未認証はチームファイルの公開リンク一覧に到達しない（403）")
-        void 未認証は到達しない() throws Exception {
+        @DisplayName("FileLinkController#listLinks: 未認証はチームファイルの公開リンク一覧に到達しない（401）")
+        void 未認証は401() throws Exception {
+            // Controller 前段ガードが SecurityUtils#getCurrentUserId を呼ぶため、未認証は COMMON_000 → 401（createLink と同じ）
             SecurityContextHolder.clearContext();
             mockMvc.perform(get("/api/v1/files/{fileId}/links", teamOpenFileId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
