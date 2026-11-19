@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
@@ -65,6 +67,14 @@ beforeEach(() => {
   mocks.create.mockResolvedValue(slot)
 })
 
+describe('日付移動確認の文言', () => {
+  it('希望の有無をFEが断定しない（ja は「あれば」の条件表現）', async () => {
+    const raw = readFileSync(fileURLToPath(new URL('../../locales/ja/shift.json', import.meta.url)), 'utf8')
+    const ja = JSON.parse(raw) as { shift: { slot: { moveDateMessage: string } } }
+    expect(ja.shift.slot.moveDateMessage).toContain('あれば')
+  })
+})
+
 describe('枠の日付移動確認', () => {
   it('日付変更は旧日付と新日付と希望移動を示し、キャンセル時はAPIを送らない', async () => {
     const wrapper = await mountForm()
@@ -76,6 +86,11 @@ describe('枠の日付移動確認', () => {
     expect(confirmation.header).toBe('shift.slot.moveDateTitle')
     expect(confirmation.message).toContain('shift.slot.moveDateMessage')
     expect(confirmation.message).toContain('2026-12-31 → 2027-01-01')
+    // ISO 形式のまま出さず、ロケール整形した日付を渡す
+    expect(confirmation.message).not.toContain('2026-12-31')
+    expect(confirmation.message).not.toContain('2027-01-01')
+    // キャンセルは強調しない（承認が主ボタン）
+    expect(confirmation.rejectClass).toContain('p-button-text')
     confirmation.reject?.()
     await flushPromises()
     expect(mocks.update).not.toHaveBeenCalled()
