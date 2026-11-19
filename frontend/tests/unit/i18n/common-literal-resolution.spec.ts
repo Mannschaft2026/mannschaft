@@ -27,12 +27,25 @@ function isProductSource(filename: string): boolean {
   return /\.(vue|ts)$/.test(filename) && !/\.(spec|test)\.ts$/.test(filename)
 }
 
-function references(source: string, filename: string, commonOnly = true): Reference[] {
+/** t() を経由せず変数に載せて後で t(変数) へ渡す形のキー（例: error = 'common.error.unknown'）を拾う対象。 */
+const bareKeyPattern = /^(?:common|error)\.[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$/
+/** 'common.json' 等のファイル名・拡張子はキーではない。 */
+const notKeyTail = /\.(?:json|ts|vue|js|css|scss|md|html|png|svg)$/
+
+function references(source: string, filename: string, commonOnly = true, bare = false): Reference[] {
   const found: Reference[] = []
   function scan(expression: string, startLine: number): void {
     const parsed = ts.createSourceFile(filename + '.ts', expression, ts.ScriptTarget.Latest, true)
     function visit(node: ts.Node): void {
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+      if (bare && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+        && bareKeyPattern.test(node.text) && !notKeyTail.test(node.text)) {
+        found.push({
+          key: node.text,
+          line: startLine + parsed.getLineAndCharacterOfPosition(node.getStart(parsed)).line,
+          arguments: [],
+        })
+      }
+      if (!bare && ts.isCallExpression(node) && ts.isIdentifier(node.expression)
         && ['t', '$t'].includes(node.expression.text)) {
         const key = node.arguments[0]
         if (key && (ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key))
@@ -168,6 +181,12 @@ describe('literal common.* 番人の負例', () => {
       .toEqual(['common.cancel', 'common.scopeShell.title'])
   })
 
+  it('変数経由のキー文字列リテラルを拾い、ファイル名は拾わない', () => {
+    const source = "const a = 'common.error.unknown'; const f = 'common.json'; const o = { k: 'error.network' }; const x = 'other.key'"
+    expect(references(source, 'fixture.ts', false, true).map(reference => reference.key))
+      .toEqual(['common.error.unknown', 'error.network'])
+  })
+
   it('Vueのコメント・属性の見本を除き補間とdirective・scriptの実呼出を拾う', () => {
     const source = `<script setup lang="ts">t('common.save')</script><template><!-- $t('common.comment') --><div data-example="t('common.example')" :title="$t('common.cancel')">{{ t('common.scopeShell.title') }}</div></template>`
     expect(references(source, 'fixture.vue').map(reference => reference.key))
@@ -178,6 +197,7 @@ describe('literal common.* 番人の負例', () => {
 describe('CMP-260919-1139 登録ロケールと製品のliteral common.*', () => {
   let dictionaries: Map<string, Messages>
   const calls: Array<Reference & { file: string }> = []
+  const bareCalls: Array<Reference & { file: string }> = []
 
   beforeAll(async () => {
     const registered = parseRegisteredLocaleFiles(readTextStripBom(resolve(frontend, 'nuxt.config.ts')))
@@ -188,9 +208,12 @@ describe('CMP-260919-1139 登録ロケールと製品のliteral common.*', () =>
         if (entry.isDirectory()) scan(path)
         else if (isProductSource(entry.name)) {
           const source = readFileSync(path, 'utf8')
-          if (!source.includes('common.')) continue
+          if (!source.includes('common.') && !source.includes('error.')) continue
           for (const reference of references(source, path)) {
             calls.push({ ...reference, file: relative(frontend, path) })
+          }
+          for (const reference of references(source, path, false, true)) {
+            bareCalls.push({ ...reference, file: relative(frontend, path) })
           }
         }
       }
@@ -202,6 +225,13 @@ describe('CMP-260919-1139 登録ロケールと製品のliteral common.*', () =>
     expect(calls.length, '空走査を合格にしない').toBeGreaterThan(0)
     const missing = new Set(unresolved([...new Set(calls.map(call => call.key))], language, dictionaries.get(language)!))
     const violations = calls.filter(call => missing.has(call.key)).map(call => `${call.file}:${call.line} ${call.key}`)
+    expect(violations, `${language}: 未解決${missing.size}種\n${violations.join('\n')}`).toEqual([])
+  })
+
+  it.each(languages)('%sで t() 直書きでない common.* / error.* の文字列リテラルキーも解決する（変数経由の欠落表示）', language => {
+    expect(bareCalls.length, '空走査を合格にしない').toBeGreaterThan(0)
+    const missing = new Set(unresolved([...new Set(bareCalls.map(call => call.key))], language, dictionaries.get(language)!))
+    const violations = bareCalls.filter(call => missing.has(call.key)).map(call => `${call.file}:${call.line} ${call.key}`)
     expect(violations, `${language}: 未解決${missing.size}種\n${violations.join('\n')}`).toEqual([])
   })
 
