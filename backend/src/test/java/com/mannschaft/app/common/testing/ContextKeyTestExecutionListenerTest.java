@@ -106,6 +106,26 @@ class ContextKeyTestExecutionListenerTest {
     }
 
     @Test
+    void K5_BeforeEachの時間はloadMsに混ざらず_BeforeEachが失敗してもload行が出る() {
+        List<String> lines;
+        TestExecutionSummary summary;
+        try (ContextKeyTestExecutionListener.Capture capture = ContextKeyTestExecutionListener.startCapture()) {
+            summary = run(E1SlowBeforeEach.class, E2FailingBeforeEach.class);
+            lines = List.copyOf(capture.lines());
+        }
+
+        assertThat(summary.getTestsSucceededCount()).isEqualTo(1);
+        assertThat(summary.getTotalFailureCount()).as("E2 の @BeforeEach 失敗だけが失敗").isEqualTo(1);
+        List<String> slow = lines.stream().filter(line -> line.contains("class=" + E1SlowBeforeEach.class.getName() + " "))
+                .collect(Collectors.toList());
+        assertThat(slow).hasSize(1);
+        Matcher matcher = Pattern.compile(" event=load loadMs=(\\d+) ").matcher(slow.get(0));
+        assertThat(matcher.find()).as(slow.get(0)).isTrue();
+        assertThat(Long.parseLong(matcher.group(1))).as("@BeforeEach の 1500ms を含めない").isLessThan(1500L);
+        assertThat(events(lines, E2FailingBeforeEach.class)).containsExactly("load");
+    }
+
+    @Test
     void K5_計測自体の例外は握ってerrorを出しテストを落とさない() {
         List<String> lines;
         TestExecutionSummary summary;
@@ -274,6 +294,48 @@ class ContextKeyTestExecutionListenerTest {
 
         @Test
         void m2Reload() {
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class SlowBeforeEachConfiguration {
+        @Bean
+        String slow() {
+            return "s";
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class FailingBeforeEachConfiguration {
+        @Bean
+        String failing() {
+            return "f";
+        }
+    }
+
+    @SpringJUnitConfig(SlowBeforeEachConfiguration.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class E1SlowBeforeEach {
+        @org.junit.jupiter.api.BeforeEach
+        void setUp() throws InterruptedException {
+            Thread.sleep(1500);
+        }
+
+        @Test
+        void passes() {
+        }
+    }
+
+    @SpringJUnitConfig(FailingBeforeEachConfiguration.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class E2FailingBeforeEach {
+        @org.junit.jupiter.api.BeforeEach
+        void setUp() {
+            throw new IllegalStateException("検体: BeforeEach 失敗");
+        }
+
+        @Test
+        void failsInSetUp() {
         }
     }
 

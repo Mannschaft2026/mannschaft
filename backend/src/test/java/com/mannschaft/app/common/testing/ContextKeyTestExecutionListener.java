@@ -36,8 +36,11 @@ import org.springframework.test.context.support.AbstractTestExecutionListener;
  * <h2>順序</h2>
  * <p>{@link #ORDER}=1900。DirtiesContextBeforeModesTestExecutionListener（1500）の後ろ（BEFORE_CLASS で破棄された後の
  * 状態を見るため）、DependencyInjectionTestExecutionListener（2000。ここで実際にロードされる）の前。
- * ロード前の状態を beforeTestClass / prepareTestInstance / beforeTestMethod のうち最初に来たもの（インスタンス生成順序に依存しない。
- * PER_CLASS では prepareTestInstance が先、PER_METHOD では beforeTestClass が先）で記録し、DI の再ロードまで済んだ beforeTestExecution で確定する。</p>
+ * ロード前の状態と開始時刻を、本クラス（order 1900）の beforeTestClass / prepareTestInstance / beforeTestMethod のうち最初に来たもの
+ * （インスタンス生成順序に依存しない）で記録する。確定は別リスナー {@link ContextKeyLoadedTestExecutionListener}（order 2100）が
+ * DI リスナー（2000。ロードは prepareTestInstance、@DirtiesContext 後の再注入は beforeTestMethod）の直後に行う。
+ * 2100 は TransactionalTestExecutionListener（4000）より前で、ユーザーの @BeforeEach より前なので、
+ * loadMs にセットアップ時間が混ざらず、@BeforeEach が失敗してもロードは記録される。</p>
  */
 public class ContextKeyTestExecutionListener extends AbstractTestExecutionListener {
 
@@ -54,6 +57,8 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
     private static final Set<Class<?>> HIT_LOGGED = ConcurrentHashMap.newKeySet();
     private static final Map<Class<?>, Pending> PENDING = new ConcurrentHashMap<>();
     /** クラスごとのキー（メソッドごとに MCC を作り直さないための控え。afterTestClass で捨てる）。 */
+    /** prepareTestInstance で確定済み（次の afterTestMethod まで、後続の起点記録を抑止する）。 */
+    private static final Set<Class<?>> PREPARED = ConcurrentHashMap.newKeySet();
     private static final Map<Class<?>, String> KEYS = new ConcurrentHashMap<>();
     private static final List<List<String>> CAPTURES = new CopyOnWriteArrayList<>();
     private static volatile RuntimeException injectedFailure;
@@ -86,9 +91,29 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
         begin(testContext);
     }
 
-    /** すべての beforeTestMethod（DI の再ロード込み）が終わった後で結果を確定する。 */
     @Override
-    public void beforeTestExecution(TestContext testContext) {
+    public void afterTestMethod(TestContext testContext) {
+        PENDING.remove(testContext.getTestClass());
+        PREPARED.remove(testContext.getTestClass());
+    }
+
+    @Override
+    public void afterTestClass(TestContext testContext) {
+        PENDING.remove(testContext.getTestClass());
+        PREPARED.remove(testContext.getTestClass());
+        HIT_LOGGED.remove(testContext.getTestClass());
+        KEYS.remove(testContext.getTestClass());
+    }
+
+    /**
+     * 結果の確定（{@link ContextKeyLoadedTestExecutionListener} が DI リスナーの後・ユーザーの @BeforeEach の前に呼ぶ）。
+     * {@code afterPrepare} が true なら prepareTestInstance 側の呼び出しで、このメソッド（インスタンス）の起点は確定済みとして
+     * 後続の beforeTestClass / beforeTestMethod の起点記録を抑止する（PER_CLASS では prepare が beforeTestClass より先に走るため）。
+     */
+    static void finish(TestContext testContext, boolean afterPrepare) {
+        if (afterPrepare) {
+            PREPARED.add(testContext.getTestClass());
+        }
         Pending pending = PENDING.remove(testContext.getTestClass());
         if (pending == null) {
             return;
@@ -108,20 +133,8 @@ public class ContextKeyTestExecutionListener extends AbstractTestExecutionListen
         }
     }
 
-    @Override
-    public void afterTestMethod(TestContext testContext) {
-        PENDING.remove(testContext.getTestClass());
-    }
-
-    @Override
-    public void afterTestClass(TestContext testContext) {
-        PENDING.remove(testContext.getTestClass());
-        HIT_LOGGED.remove(testContext.getTestClass());
-        KEYS.remove(testContext.getTestClass());
-    }
-
     private static void begin(TestContext testContext) {
-        if (PENDING.containsKey(testContext.getTestClass())) {
+        if (PREPARED.contains(testContext.getTestClass()) || PENDING.containsKey(testContext.getTestClass())) {
             // 未確定の起点が最古の状態。PER_CLASS では prepareTestInstance（ロード済み）が beforeTestClass より先に走るため、上書きしない。
             return;
         }
