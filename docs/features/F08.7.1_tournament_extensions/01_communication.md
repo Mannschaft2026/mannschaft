@@ -69,6 +69,8 @@ bulletin の `scope_type` は **実 DDL では `VARCHAR(20)`**（`V5.001__create
 - DDL: VARCHAR ゆえ enum 定数追加（Java `ScopeType` への `TOURNAMENT` / `TOURNAMENT_DIVISION` 追加）のみで足り、列定義の `ALTER` は不要。**実装時に実スキーマを grep して 20 桁制約を超えないことを再確認**する。
 - スコープ別スレッド一覧の主クエリ用 `(scope_type, scope_id)` 複合 index は **実 DDL に未存在**（`V5.002` には PRIMARY KEY / category FK / author FK / FULLTEXT のみ。後続移行にも追加なし）。**実装時に grep で確認し、無ければ Flyway 移行で追加**する（§3.4・README Y-2 と整合）。
 
+**API 入口（グローバル方式）**: 大会連絡スペースの掲示板は、グローバル方式掲示板 API（`/api/v1/bulletin/threads` の一覧・作成、`/api/v1/bulletin/threads/read-all`、`/api/v1/bulletin/threads/{threadId}` 系）に `scope_type=TOURNAMENT` / `TOURNAMENT_DIVISION`、`scope_id=<大会ID／ディビジョンID の数値>` を指定して利用する（`scope_id` に slug は使えず 400）。認可は §4（`TournamentContactAccessService`：閲覧=canView・投稿=canPost）に委譲し、権限なしは閲覧 403 `TOUR_030`／投稿 403 `TOUR_031`。パス方式（`/api/v1/{scopeType}/{scopeId}/bulletin/...`）は大会スコープを受理しない（403）。権限なしを不在 ID と同じ 404 に畳む存在秘匿は別戦役で扱う。
+
 ### 2.3 chat `ChannelType` / `source_type` の拡張（F04.2）
 
 chat の `chat_channels.channel_type` に **`TOURNAMENT_CHAT`（15字）/ `TOURNAMENT_DIVISION_CHAT`（24字）** を追加する。紐付けは既存の **`source_type` / `source_id` 方式**（EVENT_CHAT と同じ・カラム追加ゼロ）を踏襲する。

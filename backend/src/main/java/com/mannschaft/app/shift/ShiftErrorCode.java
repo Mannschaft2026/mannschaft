@@ -144,8 +144,16 @@ public enum ShiftErrorCode implements ErrorCode {
      */
     MOVE_SOURCE_NOT_ASSIGNED("SHIFT_046", "移動元の枠にこのメンバーは割り当てられていません。最新の状態を読み込み直してください", Severity.WARN),
 
+    /**
+     * 予算に連動する勤務日の割当者に有効な時給がなく、公開できない（CMP-261115-1821・400）。
+     *
+     * <p>公開後の予算計上は時給のない割当者を黙って外すため、公開前に対象者・勤務日を返して拒否する。</p>
+     */
+    HOURLY_RATE_MISSING_FOR_PUBLICATION("SHIFT_047",
+            "予算管理の対象日に、勤務時給が未設定の割当メンバーがいるため公開できません", Severity.WARN),
+
     /** 希望のある枠の日付変更は、希望も移動する確認が必要（409）。 */
-    REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED("SHIFT_047", "この枠には希望が提出されています。希望も新しい日付へ移動することを確認してください", Severity.WARN);
+    REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED("SHIFT_048", "この枠には希望が提出されています。希望も新しい日付へ移動することを確認してください", Severity.WARN);
 
     private final String code;
     private final String message;

@@ -154,18 +154,18 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         mockMvc.perform(patch("/api/v1/shifts/slots/{id}", slotId).with(authentication(auth(adminId)))
                         .header("Accept-Language", "ja").contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("slotDate", NEW_DATE.toString()))))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_047"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_048"))
                 .andExpect(jsonPath("$.error.message").value(
                         "Requests have been submitted for this slot. Please confirm moving them to the new date."));
         assertThat(snapshot()).isEqualTo(before);
         patchSlot(adminId, Map.of("slotDate", NEW_DATE.toString(), "moveRequestsConfirmed", false))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_047"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SHIFT_048"));
         assertThat(snapshot()).isEqualTo(before);
         Map<String, Object> explicitNull = new java.util.HashMap<>();
         explicitNull.put("slotDate", NEW_DATE.toString());
         explicitNull.put("moveRequestsConfirmed", null);
         patchSlot(adminId, explicitNull).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("SHIFT_047"));
+                .andExpect(jsonPath("$.error.code").value("SHIFT_048"));
         assertThat(snapshot()).isEqualTo(before);
     }
 

@@ -17,11 +17,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -55,13 +58,16 @@ class ShiftScheduleFacadeTest {
     private ShiftPreferenceReminderBatchService reminderService;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private ShiftPublicationBudgetContextPort publicationBudgetContextPort;
 
     private ShiftScheduleFacade facade;
 
     @BeforeEach
     void setUp() {
         facade = new ShiftScheduleFacade(scheduleService, reminderService,
-                new ScopeConcealingAccessGate(accessControlService), accessControlService);
+                new ScopeConcealingAccessGate(accessControlService), accessControlService,
+                publicationBudgetContextPort);
     }
 
     private static ShiftScheduleScope published() {
@@ -71,6 +77,44 @@ class ShiftScheduleFacadeTest {
 
     private static ShiftScheduleScope draft() {
         return new ShiftScheduleScope(SCHEDULE_ID, TEAM_ID, ShiftScheduleStatus.DRAFT, false);
+    }
+
+    static Stream<ShiftScheduleScope> hiddenSummaryScopes() {
+        return Stream.of(draft(),
+                new ShiftScheduleScope(SCHEDULE_ID, TEAM_ID, ShiftScheduleStatus.ARCHIVED, false),
+                new ShiftScheduleScope(SCHEDULE_ID, TEAM_ID, null, false),
+                new ShiftScheduleScope(SCHEDULE_ID, TEAM_ID, null, true));
+    }
+
+    @ParameterizedTest
+    @MethodSource("hiddenSummaryScopes")
+    @DisplayName("CMP-260905-1630: 未公開サマリは一般メンバーに404を返し集計を呼ばない（nullもfail-closed）")
+    void 未公開サマリは404で集計しない(ShiftScheduleScope scope) {
+        given(scheduleService.resolveScope(SCHEDULE_ID)).willReturn(scope);
+        // 修正前は管理者ゲートが在籍を問い合わせ、修正後は未公開判定で先に拒否する。
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM"))
+                .thenReturn(true);
+
+        assertCode(catchThrowable(() -> facade.getScheduleSummary(SCHEDULE_ID, USER_ID)),
+                ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        verify(scheduleService).resolveScope(SCHEDULE_ID);
+        verify(scheduleService, never()).getScheduleSummary(anyLong());
+        verifyNoInteractions(reminderService);
+    }
+
+    @Test
+    @DisplayName("未公開サマリでもSUPPORTERは従来どおり403で集計しない")
+    void 未公開サマリでもSUPPORTERは403() {
+        given(scheduleService.resolveScope(SCHEDULE_ID)).willReturn(draft());
+        given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+        // 修正前の管理者ゲートはSUPPORTERを直接調べないが、主体の条件は両版で同じにする。
+        org.mockito.Mockito.lenient().when(accessControlService.isSupporter(USER_ID, TEAM_ID, "TEAM"))
+                .thenReturn(true);
+
+        assertCode(catchThrowable(() -> facade.getScheduleSummary(SCHEDULE_ID, USER_ID)),
+                CommonErrorCode.COMMON_002);
+        verify(scheduleService).resolveScope(SCHEDULE_ID);
+        verify(scheduleService, never()).getScheduleSummary(anyLong());
     }
 
     private static void assertCode(Throwable thrown, ErrorCode expected) {
@@ -361,6 +405,47 @@ class ShiftScheduleFacadeTest {
             assertThat(facade.remindUnsubmitted(SCHEDULE_ID, USER_ID)).isSameAs(remind);
             assertThat(facade.duplicateSchedule(SCHEDULE_ID, USER_ID)).isSameAs(response);
             verify(scheduleService).deleteSchedule(SCHEDULE_ID, USER_ID);
+        }
+
+        @Test
+        @DisplayName("CMP-261115-1821: 公開は認可の後に枠日付の範囲で予算 context を取得し、値として tx 本体へ渡す")
+        void 公開は認可後に予算contextを固定して渡す() {
+            asAdmin();
+            LocalDate from = LocalDate.of(2026, 7, 1);
+            LocalDate to = LocalDate.of(2026, 7, 31);
+            ShiftPublicationBudgetContext context = new ShiftPublicationBudgetContext(
+                    from, to, List.of(), java.util.Map.of());
+            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+            given(scheduleService.findSlotDateRange(SCHEDULE_ID)).willReturn(new ShiftSlotDateRange(from, to));
+            given(publicationBudgetContextPort.load(TEAM_ID, from, to)).willReturn(context);
+            given(scheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID, context)).willReturn(response);
+
+            assertThat(facade.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID)).isSameAs(response);
+            verify(scheduleService, never()).transitionStatus(anyLong(), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("CMP-261115-1821: 枠が無い公開は候補を引かず空 context で tx 本体へ進む")
+        void 枠なしの公開は候補を引かない() {
+            asAdmin();
+            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+            given(scheduleService.findSlotDateRange(SCHEDULE_ID)).willReturn(new ShiftSlotDateRange(null, null));
+            given(scheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID,
+                    ShiftPublicationBudgetContext.noSlots())).willReturn(response);
+
+            assertThat(facade.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID)).isSameAs(response);
+            verifyNoInteractions(publicationBudgetContextPort);
+        }
+
+        @Test
+        @DisplayName("CMP-261115-1821: 認可で拒否された公開は予算 context を取得しない（認可前に予算情報へ触れない）")
+        void 拒否された公開は予算contextを取得しない() {
+            asPlainMember();
+
+            assertCode(catchThrowable(() -> facade.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID)),
+                    CommonErrorCode.COMMON_002);
+            verifyNoInteractions(publicationBudgetContextPort);
+            verify(scheduleService, never()).findSlotDateRange(anyLong());
         }
 
         @Test

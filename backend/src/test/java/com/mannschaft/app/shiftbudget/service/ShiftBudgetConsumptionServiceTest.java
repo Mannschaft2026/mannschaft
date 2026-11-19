@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * {@link ShiftBudgetConsumptionService} 単体テスト（Phase 9-β / 設計書 §11.1）。
@@ -166,24 +167,29 @@ class ShiftBudgetConsumptionServiceTest {
             verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
         }
 
+        @org.junit.jupiter.params.ParameterizedTest(name = "rate={0} は IllegalArgumentException で拒否し、取消・INSERT・残高更新を一切しない")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "0.00", "-1", "-1200"})
+        @DisplayName("時給が 0 以下は 0 円で記録せず拒否する (CMP-261115-1821)")
+        void 時給0以下は副作用なしで拒否(String rate) {
+            assertRejectedWithoutSideEffects(new BigDecimal(rate));
+        }
+
         @Test
-        @DisplayName("時給未設定 (rate=null) でも 0 として記録 (設計書 §11)")
-        void 時給未設定_amount0で記録() {
-            given(consumptionRepository.findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(
-                    SLOT_ID, USER_ID, ShiftBudgetConsumptionStatus.PLANNED))
-                    .willReturn(Optional.empty());
-            given(consumptionRepository.findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(
-                    SLOT_ID, USER_ID, ShiftBudgetConsumptionStatus.CONFIRMED))
-                    .willReturn(Optional.empty());
+        @DisplayName("時給未設定 (rate=null) は 0 円で記録せず拒否する (CMP-261115-1821)")
+        void 時給未設定は副作用なしで拒否() {
+            assertRejectedWithoutSideEffects(null);
+        }
 
-            service.recordSingleConsumption(ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID,
-                    null, new BigDecimal("4.0"));
+        private void assertRejectedWithoutSideEffects(BigDecimal rate) {
+            assertThatThrownBy(() -> service.recordSingleConsumption(
+                    ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID, rate, new BigDecimal("4.0")))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("hourlyRate");
 
-            ArgumentCaptor<ShiftBudgetConsumptionEntity> capt =
-                    ArgumentCaptor.forClass(ShiftBudgetConsumptionEntity.class);
-            verify(consumptionRepository).save(capt.capture());
-            assertThat(capt.getValue().getHourlyRateSnapshot()).isEqualByComparingTo(BigDecimal.ZERO);
-            assertThat(capt.getValue().getAmount()).isEqualByComparingTo("0.00");
+            // PLANNED の検索すら行わない = 既存 PLANNED の取消・減算が起きない
+            verifyNoInteractions(consumptionRepository);
+            verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
+            verify(allocationRepository, never()).decrementConsumedAmount(any(), any());
         }
     }
 

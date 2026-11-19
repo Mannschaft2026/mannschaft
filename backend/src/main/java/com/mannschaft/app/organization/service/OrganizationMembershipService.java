@@ -191,11 +191,13 @@ public class OrganizationMembershipService {
 
         List<OrgTeamMembershipView> result = new ArrayList<>(memberships.size());
         for (TeamOrgMembershipEntity m : memberships) {
-            TeamEntity team = teams.get(m.getTeamId());
+            Long teamId = m.getTeamId();
+            TeamEntity team = teams.get(teamId);
             if (team == null) {
                 continue;
             }
             result.add(new OrgTeamMembershipView(
+                    teamId,
                     team.getSlug(),
                     team.getName(),
                     team.getVisibility().name(),

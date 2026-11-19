@@ -30,6 +30,15 @@ dependencies {
     implementation("com.ibm.icu:icu4j:78.3")
     // Spring Boot Starters
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    // L1-M: Boot 3.5 系で実測した版を固定。公開 Registry SPI は compile classpath に置く。
+    implementation("org.springframework.modulith:spring-modulith-starter-jpa:1.4.13")
+    implementation("org.springframework.modulith:spring-modulith-events-core:1.4.13")
+    // Modulith の推移依存による番人の版上げを防ぎ、採用版を全構成で固定する。
+    constraints {
+        implementation("com.tngtech.archunit:archunit") {
+            version { strictly("1.3.0") }
+        }
+    }
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -106,6 +115,8 @@ dependencies {
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // L1-M: モジュール検証レポートの ApplicationModules / Violations はテストだけで使う。
+    testImplementation("org.springframework.modulith:spring-modulith-core:1.4.13")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:mysql")
@@ -464,20 +475,21 @@ tasks.withType<Test> {
     // ---------------------------------------------------------------------
     // -Pshard.total=N -Pshard.index=i（0 始まり）を受け取り、テストクラスを N 分割する。
     //
-    // 【振り分けアルゴリズム】
-    //   backend/src/test/resources/shard-weights.properties（クラス単位の実測秒数、
-    //   backend/scripts/regen-shard-weights.sh で生成）が存在する場合:
-    //     貪欲法（bin packing の Longest Processing Time first）で決定論的に割り付ける。
-    //     全トップレベルクラスを重い順にソートし、その時点で合計時間が最小の shard へ
-    //     順に割り当てる。重み表に無いクラス（新規テスト等）は末尾に回し、
-    //     従来の安定ハッシュ（String.hashCode % total）で shard を決める
-    //     （＝重み表が古くても新規テストは必ずどれか 1 shard にだけ割り当たる）。
-    //   重み表ファイル自体が存在しない場合:
-    //     全クラスが従来の安定ハッシュ方式にフォールバックする（旧動作と完全に同じ）。
+    // 【振り分けアルゴリズム（CMP-261111-0508 で更新）】
+    //   実行対象のトップレベルクラス集合（コンパイル済み .class から抽象・ヘルパー・専用タスク用タグ付きを除いたもの）
+    //   を、貪欲法（bin packing の Longest Processing Time first）で決定論的に割り付ける。
+    //   重みは backend/src/test/resources/shard-weights.properties（クラス単位の実測秒数、
+    //   backend/scripts/regen-shard-weights.sh で生成）の値。重み表に無いクラス（新規テスト等）は
+    //   ハッシュではなく「重み表の中央値」を既定重みとして同じ貪欲法に参加させる
+    //   （重み表が空・全 0 なら固定 1.0 秒）。同重みは FQCN 昇順、合計が同じ shard は index の小さい方を選ぶため、
+    //   クラスの列挙順に依存しない。重み表ファイルが無い場合も全クラスが既定重みで割り付く。
     //
-    //   いずれの経路でも「1 クラス＝ちょうど 1 shard」が保証される
-    //   （貪欲法・フォールバックとも関数は決定論的かつ全域で定義されるため、
-    //    取りこぼし・重複割り当ては構造的に起こり得ない）。
+    //   「1 クラス＝ちょうど 1 shard」: 集合の全クラスが assignShards の戻り値で 0..N-1 のどれか 1 つに入る。
+    //   集合に入らないクラス（抽象・ヘルパー・タグで別タスクが実行するもの・走査の取りこぼし）も、
+    //   従来の FQCN ハッシュでちょうど 1 つの shard に入れる（全 shard で重複実行されない）。
+    //   通常の `test` の集合には @AnalyzeClasses だけのクラスを入れない（archUnitTest が実行する）。
+    //
+    //   偏りと重み表の鮮度は verifyShardCoverage が ShardBalanceGuard で検査する（未掲載数・予測 max/avg 比）。
     //
     // 【除外プロファイルごとの構成時計算（重要）】
     //   excludeMigrationTests=true の実行では、下の「Flyway マイグレーション再生テストの
@@ -496,7 +508,7 @@ tasks.withType<Test> {
     // - ハッシュは String.hashCode()（JDK 間で仕様安定）を Int.MIN_VALUE 対策で
     //   Long 化し正規化する決定論的関数。実行環境・実行順に依存しない。
     //
-    // exclude { FileTreeElement } には ShardAssignment.shouldExcludeForShard() の戻り値を
+    // exclude { FileTreeElement } には ShardAssignment.shouldExcludeForAssignedShard() の戻り値を
     // そのまま渡す（パス正規化・bucket 判定・否定を丸ごと関数内に閉じ込め、外側で
     // 追加の判定・反転を書かない。verifyShardCoverage も同じ関数を直接呼ぶ）。
     //
@@ -515,32 +527,32 @@ tasks.withType<Test> {
             "shard.index ($shardIndex) は 0..${shardTotal - 1} の範囲でなければならない（shard.total=$shardTotal）"
         }
 
-        // 重み表の読み込み・貪欲法割り付け・判定は ShardAssignment（本ファイル冒頭で定義）に
-        // 一本化されており、verifyShardCoverage タスクも同じ関数を呼ぶ（二重実装の禁止）。
+        // 重み表の読み込み・割り付け・判定は ShardAssignment（build-logic）に一本化されており、
+        // verifyShardCoverage タスクも同じ関数・同じ実行集合の作り方を使う（二重実装の禁止）。
         val weightsFile = file("src/test/resources/shard-weights.properties")
-        val rawWeights = ShardAssignment.loadWeights(weightsFile)
-        // 実際にこの実行で走るクラス集合に限定して貪欲法を適用する（上記コメント参照）。
-        val weights = if (excludeMigrationTests) {
-            rawWeights.filterKeys { fqcn -> !ShardAssignment.isMigrationReplayClass(fqcn) }
-        } else {
-            rawWeights
-        }
-        val weightedBucketOf = ShardAssignment.buildGreedyAssignment(weights, shardTotal)
-        if (weights.isNotEmpty()) {
+        val weights = ShardAssignment.loadWeights(weightsFile)
+        // 実行対象のトップレベルクラス集合は、コンパイル済みクラスから「クラス走査の直前（実行時）」に
+        // 1 回だけ作る（構成時にはまだコンパイルされていない）。重み表に無いクラスもハッシュではなく
+        // 既定重み（重み表の中央値）付きで貪欲法に参加させる。
+        val assignment by lazy {
+            val compiled = CompiledTestClassScanner.scan(testClassesDirs.files)
+            val runnable = ShardAssignment.runnableTopLevelClasses(compiled, excludeMigrationTests, isArchUnitTask)
+            val result = ShardAssignment.assignShards(runnable, weights, shardTotal)
+            val defaultWeight = ShardAssignment.defaultWeight(weights)
             val shardTotals = DoubleArray(shardTotal)
-            weights.forEach { (fqcn, seconds) -> shardTotals[weightedBucketOf.getValue(fqcn)] += seconds }
+            result.forEach { (fqcn, idx) -> shardTotals[idx] += weights[fqcn] ?: defaultWeight }
             logger.lifecycle(
-                "[shard] 重み表 ${weightsFile.name} を読み込み（excludeMigrationTests=$excludeMigrationTests で" +
-                    "${rawWeights.size - weights.size}クラスを対象外） ${weights.size} クラスを貪欲法で割り付けた。" +
-                    "shard 別合計(秒): " + shardTotals.mapIndexed { i, t -> "$i=${"%.1f".format(t)}" }.joinToString(", ")
+                "[shard] 重み表 ${weightsFile.name}（${weights.size} 件・既定重み %.3f 秒）で".format(defaultWeight) +
+                    " ${result.size} クラス（うち未掲載 ${ShardBalanceGuard.unlistedCount(runnable, weights)}）を貪欲法で割り付けた" +
+                    "（excludeMigrationTests=$excludeMigrationTests）。" +
+                    "shard 別予測合計(秒): " + shardTotals.mapIndexed { i, t -> "$i=${"%.1f".format(t)}" }.joinToString(", ")
             )
-        } else {
-            logger.lifecycle("[shard] 重み表が見つからないため全クラスを安定ハッシュへフォールバックする")
+            result
         }
 
         logger.lifecycle("[shard] テストを $shardTotal 分割し index=$shardIndex のみ実行する")
         exclude { element ->
-            ShardAssignment.shouldExcludeForShard(element.path, element.isDirectory, shardIndex, shardTotal, weightedBucketOf)
+            ShardAssignment.shouldExcludeForAssignedShard(element.path, element.isDirectory, shardIndex, shardTotal, assignment)
         }
     }
 
@@ -634,7 +646,7 @@ val archUnitTest = tasks.register<Test>("archUnitTest") {
         logger.lifecycle("[archunit-runtime] " + archUnitJars.joinToString(", "))
     }
 }
-val freezeIntegrityClass = "com.mannschaft.app.common.architecture.ArchUnitFreezeStoreIntegrityTest"
+val freezeIntegrityClass = ShardAssignment.FREEZE_INTEGRITY_CLASS
 val archUnitFreezeStoreIntegrityTest = tasks.register<Test>("archUnitFreezeStoreIntegrityTest") {
     group = "verification"
     description = "各runnerのArchUnit解析後に全7凍結ストアの対応と行数を検証する"
@@ -752,7 +764,7 @@ registerErDiagramTask(
 // 【検証方法（重要・改訂版）】
 // - 割当を独自に再計算するのではなく、実際にコンパイルされた .class ファイルの
 //   **生の相対パス文字列**（Gradle の FileTreeElement.path と同一形式）に対して、
-//   実運用と全く同じ ShardAssignment.shouldExcludeForShard() /
+//   実運用と全く同じ ShardAssignment.shouldExcludeForAssignedShard() /
 //   shouldExcludeMigrationReplay() を直接呼ぶ。正規化・bucket 判定・否定を
 //   これらの関数の外で再実装しないため、正規化の破損や否定の反転が起きれば
 //   検証も同じ壊れ方の影響を受けて必ず fail する。
@@ -769,17 +781,17 @@ registerErDiagramTask(
 //    build.gradle.kts の Test.exclude 側と同じロジック）。
 // - 4パターン（重み表あり/なし × migration除外あり/なし）全てを検証する。
 //
-// 使い方: cd backend && ./gradlew verifyShardCoverage -Pshard.total=6
+// 使い方: cd backend && ./gradlew verifyShardCoverage -Pshard.total=8
 // （testClasses への依存によりコンパイルは自動で行われる）
 // =============================================================================
 tasks.register("verifyShardCoverage") {
     group = "verification"
-    description = "実際の Test.exclude 述語（ShardAssignment.shouldExcludeForShard 等）を、" +
+    description = "実際の Test.exclude 述語（ShardAssignment.shouldExcludeForAssignedShard 等）を、" +
         "コンパイル済み.classファイルの生パスと全shardIndexへ直接適用し、4プロファイルで取りこぼし・重複・" +
         "ネスト分断が無いことを検証する"
     dependsOn(tasks.named("testClasses"))
     doLast {
-        val total = (project.findProperty("shard.total") as String?)?.toIntOrNull() ?: 6
+        val total = (project.findProperty("shard.total") as String?)?.toIntOrNull() ?: 8
         require(total > 1) { "shard.total は 2 以上を指定すること（現在: $total）" }
 
         // コンパイル済み .class ファイル全件の「生の相対パス」（posix "/" 区切り、".class" 付き）を集める。
@@ -808,16 +820,19 @@ tasks.register("verifyShardCoverage") {
 
         val weightsFile = file("src/test/resources/shard-weights.properties")
         val rawWeights = ShardAssignment.loadWeights(weightsFile)
+        // 実行側（Test.exclude）と同じ走査・同じ関数で「実行対象のトップレベルクラス集合」を作る。
+        val compiledTestClasses = CompiledTestClassScanner.scan(classesDirs)
 
-        fun verifyProfile(label: String, excludeMigrationTests: Boolean, weightsInput: Map<String, Double>) {
-            // build.gradle.kts の Test.exclude 側と同じロジック: 実際に走るクラス集合に
-            // 限定して貪欲法を適用する。
-            val effectiveWeights = if (excludeMigrationTests) {
-                weightsInput.filterKeys { !ShardAssignment.isMigrationReplayClass(it) }
-            } else {
-                weightsInput
-            }
-            val weightedBucketOf = ShardAssignment.buildGreedyAssignment(effectiveWeights, total)
+        fun verifyProfile(
+            label: String,
+            excludeMigrationTests: Boolean,
+            weightsInput: Map<String, Double>,
+            archUnitTask: Boolean = false,
+        ) {
+            // Test.exclude 側と同じ関数・同じ集合の作り方で割り当てを求める（二重実装の禁止）。
+            val runnable = ShardAssignment.runnableTopLevelClasses(compiledTestClasses, excludeMigrationTests, archUnitTask)
+            val assignment = ShardAssignment.assignShards(runnable, weightsInput, total)
+            val defaultWeight = ShardAssignment.defaultWeight(weightsInput)
 
             val shardCounts = IntArray(total)
             val shardSeconds = DoubleArray(total)
@@ -838,7 +853,7 @@ tasks.register("verifyShardCoverage") {
                 for (shardIndex in 0 until total) {
                     // 実運用と全く同じ2つの述語をそのまま呼ぶ（OR で除外＝どちらかが true なら除外）。
                     val shardExcluded =
-                        ShardAssignment.shouldExcludeForShard(cf.path, false, shardIndex, total, weightedBucketOf)
+                        ShardAssignment.shouldExcludeForAssignedShard(cf.path, false, shardIndex, total, assignment)
                     val migrationFilterExcluded =
                         excludeMigrationTests && ShardAssignment.shouldExcludeMigrationReplay(cf.path, false)
                     val executedHere = !shardExcluded && !migrationFilterExcluded
@@ -846,13 +861,16 @@ tasks.register("verifyShardCoverage") {
                         includedCount++
                         if (isTopLevelFile) {
                             shardCounts[shardIndex]++
-                            shardSeconds[shardIndex] += (effectiveWeights[cf.topLevelFqcn] ?: 0.0)
+                            shardSeconds[shardIndex] += (weightsInput[cf.topLevelFqcn] ?: defaultWeight)
                         }
                     }
                 }
                 if (migrationExcluded) {
                     if (includedCount != 0) migrationLeaked.add(cf.path)
                 } else {
+                    // コンパイル済みの全クラス（実行対象集合の外＝走査の取りこぼし・抽象・ヘルパーも含む。
+                    // ネストクラスのファイルも）がちょうど 1 つの shard に属する。集合外のクラスは
+                    // FQCN ハッシュで 1 shard に入る。どの shard でも除外されない（＝全 shard で走る）のを防ぐ。
                     when {
                         includedCount == 0 -> zeroButShouldBeOne.add(cf.path)
                         includedCount >= 2 -> multiAssigned.add(cf.path to includedCount)
@@ -882,7 +900,7 @@ tasks.register("verifyShardCoverage") {
                 if (isMigrationGroup) return@forEach
                 val shardsUsed = files.mapNotNull { cf ->
                     (0 until total).firstOrNull { shardIndex ->
-                        !ShardAssignment.shouldExcludeForShard(cf.path, false, shardIndex, total, weightedBucketOf)
+                        !ShardAssignment.shouldExcludeForAssignedShard(cf.path, false, shardIndex, total, assignment)
                     }
                 }.toSet()
                 if (shardsUsed.size > 1) siblingMismatch.add(groupKey)
@@ -891,7 +909,7 @@ tasks.register("verifyShardCoverage") {
             logger.lifecycle(
                 "[verifyShardCoverage] [$label] shard別実行クラス数: " +
                     shardCounts.mapIndexed { i, c -> "$i=$c" }.joinToString(", ") +
-                    " / shard別合計秒(重み既知分のみ): " +
+                    " / shard別予測合計秒(未掲載は既定重み ${"%.3f".format(defaultWeight)} 秒): " +
                     shardSeconds.mapIndexed { i, t -> "$i=${"%.1f".format(t)}" }.joinToString(", ")
             )
 
@@ -936,8 +954,31 @@ tasks.register("verifyShardCoverage") {
         verifyProfile("重み表なし・migration除外あり（通常PRプロファイル）", true, emptyMap())
         verifyProfile("重み表あり・migration除外なし（nightly-fullプロファイル）", false, rawWeights)
         verifyProfile("重み表あり・migration除外あり（通常PRプロファイル）", true, rawWeights)
+        // archUnitTest（@AnalyzeClasses も実行集合に数える）の割り当てでも同じ検査を行う。
+        verifyProfile("archUnitTest・重み表あり・migration除外なし", false, rawWeights, archUnitTask = true)
+        verifyProfile("archUnitTest・重み表あり・migration除外あり", true, rawWeights, archUnitTask = true)
 
-        logger.lifecycle("[verifyShardCoverage] OK: 4プロファイル全てで取りこぼし・重複・migration漏れ・ネスト分断なしを確認した")
+        logger.lifecycle("[verifyShardCoverage] OK: 通常 :test の4プロファイルと archUnitTest の2プロファイルで、全クラスが" +
+            "ちょうど1 shard・migration漏れ・ネスト分断なしを確認した")
+
+        // 重み表の鮮度と shard 偏りの番人（CMP-261111-0508）。full 集合（migration 込み）で未掲載数を1回、
+        // full と migration 除外の両集合で予測 max/avg 比を評価する。違反があればタスクを失敗させる。
+        val fullRunnable = ShardAssignment.runnableTopLevelClasses(compiledTestClasses, false)
+        val migrationExcludedRunnable = ShardAssignment.runnableTopLevelClasses(compiledTestClasses, true)
+        logger.lifecycle(
+            "[verifyShardCoverage] 番人実測: 実行対象 ${fullRunnable.size} クラス / 重み表未掲載 " +
+                "${ShardBalanceGuard.unlistedCount(fullRunnable, rawWeights)} 件（上限 ${ShardBalanceGuard.MAX_UNLISTED_CLASSES}） / " +
+                "予測 max/avg 比 full=%.4f, migration除外=%.4f（上限 %.2f）".format(
+                    ShardBalanceGuard.predictedImbalanceRatio(fullRunnable, rawWeights, total),
+                    ShardBalanceGuard.predictedImbalanceRatio(migrationExcludedRunnable, rawWeights, total),
+                    ShardBalanceGuard.MAX_IMBALANCE_RATIO,
+                )
+        )
+        val balanceViolations = ShardBalanceGuard.violations(fullRunnable, rawWeights, total)
+        balanceViolations.forEach { logger.error("[verifyShardCoverage] $it") }
+        require(balanceViolations.isEmpty()) {
+            "重み表の鮮度または shard 偏りの番人に違反した（${balanceViolations.size} 件。詳細は上のログを参照）"
+        }
     }
 }
 
