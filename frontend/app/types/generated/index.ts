@@ -48948,6 +48948,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search/saved/{savedQueryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 保存済み検索削除 */
+        delete: operations["deleteSavedQuery"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search/recent/{historyId}": {
         parameters: {
             query?: never;
@@ -71925,6 +71942,8 @@ export interface components {
             related_todo_id?: number;
             tags?: components["schemas"]["ActionMemoTagSummary"][];
             /** Format: int64 */
+            team_timeline_post_id?: number;
+            /** Format: int64 */
             timeline_post_id?: number;
             /** Format: date-time */
             updated_at?: string;
@@ -80884,28 +80903,82 @@ export interface components {
         NavSettingsResponse: {
             features?: components["schemas"]["NavFeatureResponse"][];
         };
-        ApiResponseSearchResultResponse: {
-            data?: components["schemas"]["SearchResultResponse"];
-        };
-        SearchResultResponse: {
-            counts?: {
+        GlobalSearchData: {
+            query?: string;
+            results?: components["schemas"]["SearchHit"][];
+            timedOutTypes?: ("POST" | "MESSAGE" | "THREAD" | "ARTICLE" | "FILE" | "USER" | "TEAM" | "ORGANIZATION" | "ACTIVITY")[];
+            typeCounts?: {
                 [key: string]: number;
             };
+            zeroResultsHelp?: components["schemas"]["GlobalSearchZeroResultsHelp"];
+        };
+        GlobalSearchMeta: {
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
             /** Format: int64 */
-            executionTimeMs?: number;
-            query?: string;
-            results?: {
-                [key: string]: {
-                    [key: string]: Record<string, never>;
-                }[];
+            total?: number;
+            /** Format: int32 */
+            totalPages?: number;
+            /** @enum {string} */
+            viewMode?: "OVERVIEW" | "DETAIL";
+        };
+        GlobalSearchResponse: {
+            data?: components["schemas"]["GlobalSearchData"];
+            meta?: components["schemas"]["GlobalSearchMeta"];
+        };
+        GlobalSearchZeroResultsHelp: {
+            broaderQuery?: string;
+            didYouMean?: string;
+        };
+        SearchHit: {
+            actions?: string[];
+            author?: components["schemas"]["SearchHitAuthor"];
+            /** Format: date-time */
+            createdAt?: string;
+            highlights?: {
+                [key: string]: number[];
             };
+            /** Format: int64 */
+            id?: number;
+            /** Format: double */
+            relevance?: number;
+            scope?: components["schemas"]["SearchHitScope"];
+            snippet?: string;
+            title?: string;
+            /** @enum {string} */
+            type?: "POST" | "MESSAGE" | "THREAD" | "ARTICLE" | "FILE" | "USER" | "TEAM" | "ORGANIZATION" | "ACTIVITY";
+            url?: string;
+        };
+        SearchHitAuthor: {
+            avatarUrl?: string;
+            displayName?: string;
+            /** Format: int64 */
+            id?: number;
+        };
+        SearchHitScope: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            type?: string;
         };
         ApiResponseSearchSuggestionResponse: {
             data?: components["schemas"]["SearchSuggestionResponse"];
         };
+        SearchSuggestionItem: {
+            /** Format: int64 */
+            organizationId?: number;
+            /** Format: int64 */
+            teamId?: number;
+            text?: string;
+            type?: string;
+            url?: string;
+            /** Format: int64 */
+            userId?: number;
+        };
         SearchSuggestionResponse: {
-            recentQueries?: string[];
-            suggestions?: string[];
+            suggestions?: components["schemas"]["SearchSuggestionItem"][];
         };
         ApiResponseListSavedQueryResponse: {
             data?: components["schemas"]["SavedQueryResponse"][];
@@ -165145,8 +165218,16 @@ export interface operations {
     };
     search_3: {
         parameters: {
-            query: {
-                q: string;
+            query?: {
+                q?: string;
+                type?: string;
+                scopeType?: string;
+                scopeId?: string;
+                dateFrom?: string;
+                dateTo?: string;
+                authorId?: string;
+                page?: string;
+                size?: string;
             };
             header?: never;
             path?: never;
@@ -165160,7 +165241,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseSearchResultResponse"];
+                    "*/*": components["schemas"]["GlobalSearchResponse"];
                 };
             };
         };
@@ -165169,6 +165250,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
+                limit?: string;
             };
             header?: never;
             path?: never;
@@ -178145,6 +178227,26 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description キャンセル成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteSavedQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                savedQueryId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 削除成功 */
             204: {
                 headers: {
                     [name: string]: unknown;

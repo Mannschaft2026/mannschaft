@@ -5,6 +5,7 @@ import com.mannschaft.app.bulletin.dto.AttachmentPresignRequest;
 import com.mannschaft.app.bulletin.dto.AttachmentPresignResponse;
 import com.mannschaft.app.bulletin.dto.AttachmentResponse;
 import com.mannschaft.app.bulletin.dto.CreateAttachmentRequest;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinAttachmentService;
 import com.mannschaft.app.bulletin.service.BulletinReadFacade;
 import com.mannschaft.app.common.ApiResponse;
@@ -45,6 +46,8 @@ public class BulletinAttachmentController {
 
     private final BulletinAttachmentService bulletinAttachmentService;
     private final BulletinReadFacade readFacade;
+    /** 大会/ディビジョン連絡スペースの存在秘匿つき認可（取引外・D-3T 回避。CMP-261116-0726）。 */
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     /**
      * 添付ファイルアップロード用 presigned URL を発行する。
@@ -54,8 +57,9 @@ public class BulletinAttachmentController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "発行成功")
     public ResponseEntity<ApiResponse<AttachmentPresignResponse>> presignUpload(
             @Valid @RequestBody AttachmentPresignRequest request) {
-        AttachmentPresignResponse response =
-                bulletinAttachmentService.generateUploadUrl(request, SecurityUtils.getCurrentUserId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkAttachmentUpload(request.targetType(), request.targetId(), currentUserId);
+        AttachmentPresignResponse response = bulletinAttachmentService.generateUploadUrl(request, currentUserId);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
@@ -67,8 +71,9 @@ public class BulletinAttachmentController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "登録成功")
     public ResponseEntity<ApiResponse<AttachmentResponse>> confirmAttachment(
             @Valid @RequestBody CreateAttachmentRequest request) {
-        AttachmentResponse response =
-                bulletinAttachmentService.confirmAttachment(request, SecurityUtils.getCurrentUserId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkAttachmentUpload(request.targetType(), request.targetId(), currentUserId);
+        AttachmentResponse response = bulletinAttachmentService.confirmAttachment(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -124,7 +129,9 @@ public class BulletinAttachmentController {
     @Operation(summary = "添付ファイル削除")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteAttachment(@PathVariable Long id) {
-        bulletinAttachmentService.deleteAttachment(id, SecurityUtils.getCurrentUserId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkAttachmentDelete(id, currentUserId);
+        bulletinAttachmentService.deleteAttachment(id, currentUserId);
         return ResponseEntity.noContent().build();
     }
 }

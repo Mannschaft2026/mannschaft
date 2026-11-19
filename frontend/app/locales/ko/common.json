@@ -3349,5 +3349,29 @@
       "expires_at": "유효 기간",
       "used_count": "사용 횟수"
     }
+  },
+  "globalSearch": {
+    "title": "검색",
+    "placeholder": "키워드로 검색 (2자 이상)",
+    "submit": "검색",
+    "failed": "검색에 실패했습니다",
+    "tooShort": "2자 이상 입력해 주세요",
+    "empty": "검색 결과가 없습니다",
+    "didYouMean": "혹시 이것을 찾으셨나요:",
+    "broaderQuery": "더 넓은 검색:",
+    "timedOut": "일부 유형의 검색이 시간 초과되었습니다: {types}",
+    "noLink": "링크가 없습니다",
+    "types": {
+      "ALL": "전체",
+      "POST": "게시물",
+      "MESSAGE": "메시지",
+      "THREAD": "스레드",
+      "ARTICLE": "기사",
+      "FILE": "파일",
+      "USER": "사용자",
+      "TEAM": "팀",
+      "ORGANIZATION": "조직",
+      "ACTIVITY": "활동 기록"
+    }
   }
 }

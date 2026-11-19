@@ -1,8 +1,10 @@
 package com.mannschaft.app.filesharing.controller;
 
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.filesharing.dto.CreatePermissionRequest;
 import com.mannschaft.app.filesharing.dto.PermissionResponse;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import com.mannschaft.app.filesharing.service.FilePermissionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +33,8 @@ import java.util.List;
 public class FilePermissionController {
 
     private final FilePermissionService permissionService;
+    /** 大会スコープの存在秘匿つき投稿認可（Controller 前段・tx なし。CMP-261116-0726）。 */
+    private final FolderScopeAccessGuard folderScopeAccessGuard;
 
     /**
      * 対象の権限一覧を取得する。
@@ -53,6 +57,12 @@ public class FilePermissionController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "作成成功")
     public ResponseEntity<ApiResponse<PermissionResponse>> createPermission(
             @Valid @RequestBody CreatePermissionRequest request) {
+        Long actorId = SecurityUtils.getCurrentUserId();
+        if ("FILE".equalsIgnoreCase(request.getTargetType())) {
+            folderScopeAccessGuard.requirePostConcealedByFileId(request.getTargetId(), actorId);
+        } else if ("FOLDER".equalsIgnoreCase(request.getTargetType())) {
+            folderScopeAccessGuard.requirePostConcealedByFolderId(request.getTargetId(), actorId);
+        }
         PermissionResponse response = permissionService.createPermission(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
