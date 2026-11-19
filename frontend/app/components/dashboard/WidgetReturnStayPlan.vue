@@ -24,8 +24,8 @@ defineExpose({ focusEditDialog })
 <template>
   <DashboardWidgetCard :title="$t('returnStayPlan.widget.title')" icon="pi pi-map-marker" :scrollable="false">
     <template #actions><Button data-testid="return-stay-plan-add" icon="pi pi-plus" text rounded size="small" :aria-label="$t('returnStayPlan.form.add')" @click="resetForm()" /></template>
-    <div v-if="loading" class="p-4 text-sm text-surface-500">{{ $t('common.loading') }}</div>
-    <div v-else-if="loadError" class="flex items-center gap-2 p-4 text-sm text-red-600"><span>{{ $t('returnStayPlan.form.loadFailed') }}</span><Button text size="small" :label="$t('common.retry')" @click="load" /></div>
+    <div v-if="loading" class="p-4 text-sm text-surface-500">{{ $t('button.loading') }}</div>
+    <div v-else-if="loadError" class="flex items-center gap-2 p-4 text-sm text-red-600"><span>{{ $t('returnStayPlan.form.loadFailed') }}</span><Button text size="small" :label="$t('loadErrorState.retry')" @click="load" /></div>
     <div v-else-if="plans.length === 0" class="p-4 text-sm text-surface-500">{{ $t('returnStayPlan.empty') }}</div>
     <ul v-else class="space-y-2"><li v-for="plan in plans" :key="plan.id" class="rounded-lg bg-surface-50 p-3 dark:bg-surface-800"><div class="flex items-start justify-between gap-2"><div><div class="flex flex-wrap items-center gap-2 font-medium"><span>{{ $t(`returnStayPlan.planType.${plan.planType}`) }} · {{ prefectures.find((item) => item.code === plan.location.prefectureCode)?.label ?? plan.location.regionName }}</span><Tag :severity="statusOf(plan) === 'ACTIVE' ? 'success' : 'info'" :value="statusOf(plan) === 'ACTIVE' ? $t(`returnStayPlan.status.${plan.planType}`) : `${plan.startDate}–${plan.endDate}`" /></div><div class="text-xs">{{ plan.startDate }}–{{ plan.endDate }}</div></div><div class="flex shrink-0"><Button icon="pi pi-pencil" text rounded size="small" :aria-label="$t('returnStayPlan.form.edit')" @click="resetForm(plan)" /><Button icon="pi pi-trash" text rounded size="small" severity="danger" :aria-label="$t('returnStayPlan.form.delete')" @click="remove(plan)" /></div></div></li></ul>
   </DashboardWidgetCard>

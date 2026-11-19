@@ -26,7 +26,7 @@ async function load() {
   try {
     packs.value = await listPacks()
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     loading.value = false
   }
@@ -43,7 +43,7 @@ async function handleDownload(pack: HandoverPack) {
     const res = await getDownloadUrl(pack.id)
     window.open(res.downloadUrl, '_blank', 'noopener,noreferrer')
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     downloadingId.value = null
   }
@@ -55,7 +55,7 @@ async function handleDelete(pack: HandoverPack) {
     await deletePack(pack.id)
     packs.value = packs.value.filter((p) => p.id !== pack.id)
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('memberProfile.deleteFailed'))
   } finally {
     deletingId.value = null
   }
@@ -68,7 +68,7 @@ async function handleRegenerate(pack: HandoverPack) {
     // 一覧の先頭に追加
     packs.value = [newPack, ...packs.value]
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('timeline_digest.error_regenerate'))
   } finally {
     regeneratingId.value = null
   }
@@ -100,7 +100,7 @@ const statusSeverityMap: Record<string, 'info' | 'success' | 'danger'> = {
     <DashboardEmptyState
       v-else-if="packs.length === 0"
       icon="pi pi-inbox"
-      :message="$t('common.no_data')"
+      :message="$t('school.statistics.noData')"
     />
 
     <div v-else class="overflow-x-auto">

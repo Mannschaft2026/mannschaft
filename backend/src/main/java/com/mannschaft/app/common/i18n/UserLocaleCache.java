@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -61,7 +62,14 @@ public class UserLocaleCache {
             return cached;
         }
         // キャッシュミス or 期限切れ: DB から取得
-        String locale = userRepository.findLocaleById(userId).orElse(DEFAULT_LOCALE);
+        Optional<String> found = userRepository.findLocaleById(userId);
+        if (found.isEmpty()) {
+            // 実在しない（未作成・論理削除済み）ユーザーの既定値はキャッシュしない。一括版 getLocales と同じ扱い。
+            // キャッシュすると、後からその id で作られたユーザーが TTL（5分）の間 ja 固定になる
+            // （CMP-261119-1855: テスト共有コンテキストで id が再利用され en ユーザーに ja が返った）。
+            return DEFAULT_LOCALE;
+        }
+        String locale = found.get();
         cache.put(userId, locale);
         return locale;
     }

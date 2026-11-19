@@ -85,6 +85,7 @@
     },
     "handover": {
       "builder": {
+        "generate_failed": "Failed to generate the handover pack",
         "title": "Generate Handover Pack",
         "select_term": "Select Target Term",
         "pii_level": "Personal Information Level",
@@ -110,6 +111,7 @@
         "failed": "Failed"
       },
       "term": {
+        "count": "{count} terms | {count} term | {count} terms",
         "manager_title": "Board Member Terms",
         "col_name": "Name",
         "col_role": "Role",
