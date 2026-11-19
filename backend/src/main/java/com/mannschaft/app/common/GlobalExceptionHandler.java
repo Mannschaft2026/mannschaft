@@ -2475,6 +2475,7 @@ public class GlobalExceptionHandler {
             // F04.6 グローバル検索（SearchErrorCode）の残り未登録分。
             Map.entry("SEARCH_003", HttpStatus.NOT_FOUND),               // SAVED_QUERY_NOT_FOUND
             Map.entry("SEARCH_004", HttpStatus.NOT_FOUND),               // HISTORY_NOT_FOUND
+            Map.entry("SEARCH_005", HttpStatus.CONFLICT),                // MAX_SAVED_QUERIES_EXCEEDED（CMP-261116-0722: 上限10件・11件目は 409）
 
             // F01.5 サポーター申請・管理機能（SupporterErrorCode）の残り未登録分。
             Map.entry("SUPPORTER_001", HttpStatus.CONFLICT),             // 既にサポーター申請済み
