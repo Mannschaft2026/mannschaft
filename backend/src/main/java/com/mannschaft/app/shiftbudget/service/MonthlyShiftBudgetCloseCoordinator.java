@@ -179,9 +179,16 @@ public class MonthlyShiftBudgetCloseCoordinator {
         Map<Long, Map<String, ShiftBudgetCloseEventState>> events = activeEventStates(allocations);
 
         TreeMap<YearMonth, List<ShiftBudgetAllocationEntity>> byKey = new TreeMap<>();
+        int already = 0;
         for (ShiftBudgetAllocationEntity a : allocations) {
             YearMonth first = ShiftBudgetClosePeriodCalculator.periodKeyOf(a.getPeriodStart(), closingDay);
             YearMonth lastOfAllocation = ShiftBudgetClosePeriodCalculator.periodKeyOf(a.getPeriodEnd(), closingDay);
+            // 締め済みの割当×期間は二重計上回避のため処理対象から除外する（addIfOpen）が、指定期間 M が締め済みの割当は
+            // 結果の already に数える（CMP-260909-2152 Codex 検分3 P2-3。数えないと再実行が「締め済み」と判別できない）。
+            // 追いつき対象の M より前の締め済み期間は数えない（再実行のたびに過去期間の数だけ膨らませない）。
+            if (!first.isAfter(periodKey) && !lastOfAllocation.isBefore(periodKey) && isClosed(events, a, periodKey)) {
+                already++;
+            }
             if (!catchUp) {
                 if (!first.isAfter(periodKey) && !lastOfAllocation.isBefore(periodKey)) {
                     addIfOpen(byKey, events, a, periodKey);
@@ -195,7 +202,6 @@ public class MonthlyShiftBudgetCloseCoordinator {
         }
 
         int closed = 0;
-        int already = 0;
         int failed = 0;
         int consumptions = 0;
         Set<Long> interrupted = new HashSet<>();
@@ -245,11 +251,15 @@ public class MonthlyShiftBudgetCloseCoordinator {
         }
     }
 
+    private static boolean isClosed(Map<Long, Map<String, ShiftBudgetCloseEventState>> events,
+                                    ShiftBudgetAllocationEntity allocation, YearMonth key) {
+        return events.getOrDefault(allocation.getId(), Map.of()).get(key.toString()) == ShiftBudgetCloseEventState.CLOSED;
+    }
+
     private static void addIfOpen(TreeMap<YearMonth, List<ShiftBudgetAllocationEntity>> byKey,
                                   Map<Long, Map<String, ShiftBudgetCloseEventState>> events,
                                   ShiftBudgetAllocationEntity allocation, YearMonth key) {
-        ShiftBudgetCloseEventState state = events.getOrDefault(allocation.getId(), Map.of()).get(key.toString());
-        if (state == ShiftBudgetCloseEventState.CLOSED) {
+        if (isClosed(events, allocation, key)) {
             return;
         }
         byKey.computeIfAbsent(key, k -> new ArrayList<>()).add(allocation);
@@ -465,7 +475,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
      * 1組織の締め結果。
      *
      * @param closedAllocations        今回 CLOSED にした割当×期間の件数
-     * @param alreadyClosedAllocations 既に締め済みだった件数
+     * @param alreadyClosedAllocations 指定期間キーが既に締め済みだった割当の件数（処理対象からは除外した分）
      * @param failedAllocations        失敗（ABORTED・例外）件数
      * @param closedConsumptions       CONFIRMED にした消化件数
      */
