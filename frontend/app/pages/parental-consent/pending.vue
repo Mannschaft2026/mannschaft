@@ -46,7 +46,7 @@ async function handleSendInvitation() {
       AUTH_068: 'parental_consent.error_auth_068',
       AUTH_069: 'parental_consent.error_auth_069',
     }
-    notification.error(t(keyMap[code] ?? 'common.error.unknown'))
+    notification.error(t(keyMap[code] ?? 'error.unknown'))
   } finally {
     sending.value = false
   }

@@ -434,6 +434,7 @@
     "unauthorized": "Please log in",
     "section_load_failed": "Failed to load this section. Please reload.",
     "unknown": "An error occurred",
+    "notFound": "Not found",
     "TEAM_001": "Team not found.",
     "TEAM_006": "This team cannot be restored because it has not been deleted.",
     "COMMON_001": "There are errors in the input",
