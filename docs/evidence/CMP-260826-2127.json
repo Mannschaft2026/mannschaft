@@ -32,12 +32,12 @@
       "description": "非管理者のグローバル検索に未公開シフト表が含まれない（title・note）",
       "tests": [
         {
-          "name": "実機 cmp2127-api.txt（sm 視点・検索）",
-          "evidence": "backend/src/main/java/com/mannschaft/app/search/service/GlobalSearchService.java"
+          "name": "実機 cmp2127-api.txt（sm 視点・検索）。旧 GlobalSearchService 撤去（CMP-261116-0722）後は検索種別にシフト表が無いことを GlobalSearchShiftExclusionTest で固定",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchShiftExclusionTest.java"
         },
         {
-          "name": "実機再実測 2026-11-04（ssup 検索 0 件・sm は公開系のみ）",
-          "evidence": "backend/src/main/java/com/mannschaft/app/search/service/GlobalSearchService.java"
+          "name": "実機再実測 2026-11-04（ssup 検索 0 件・sm は公開系のみ）。撤去後の付け替え先: GlobalSearchShiftExclusionTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchShiftExclusionTest.java"
         }
       ]
     },
@@ -46,8 +46,8 @@
       "description": "非メンバーの SYSTEM_ADMIN は全ステータスで AC-10 と同じ結果（PDF・検索含む）",
       "tests": [
         {
-          "name": "実機 a1 視点: 一覧・詳細・PDF は全量、検索 0 件（D-2127-2 は範囲外裁定で据え置き）",
-          "evidence": "backend/src/main/java/com/mannschaft/app/search/service/GlobalSearchService.java"
+          "name": "実機 a1 視点: 一覧・詳細・PDF は全量、検索 0 件（D-2127-2 は範囲外裁定で据え置き）。検索側は撤去後 GlobalSearchShiftExclusionTest で固定（SYSTEM_ADMIN もシフト種別に届かない）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchShiftExclusionTest.java"
         }
       ]
     },

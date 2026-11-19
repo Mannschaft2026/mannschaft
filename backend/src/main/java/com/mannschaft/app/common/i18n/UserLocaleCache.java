@@ -142,9 +142,9 @@ public class UserLocaleCache {
     }
 
     /**
-     * 全エントリを破棄する。users の id が再採番され得るテスト共有コンテキスト
-     * （ddl-auto=create の別コンテキスト起動でスキーマが作り直される）で、前テストの残存エントリを
-     * 次のテストへ持ち越さないための入口。本番コードからは呼ばない。
+     * 全ユーザーの locale キャッシュを破棄する。
+     * 同一 JVM で ddl-auto=create により users が作り直され userId（AUTO_INCREMENT）が再利用される統合テストで、
+     * 旧データ由来の locale が残らないよう各テスト前に呼ぶ。
      */
     public void clear() {
         cache.clear();

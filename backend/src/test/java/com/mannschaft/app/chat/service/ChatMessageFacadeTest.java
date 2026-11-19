@@ -18,7 +18,7 @@ import com.mannschaft.app.event.service.EventScopeAccessGuard;
 import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.TournamentErrorCode;
-import com.mannschaft.app.tournament.service.TournamentContactAccessService;
+import com.mannschaft.app.tournament.service.TournamentContactSpaceAccessGate;
 import com.mannschaft.app.village.service.PostingIdentityService;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,7 +77,7 @@ class ChatMessageFacadeTest {
     @Mock
     private AccessControlService accessControlService;
     @Mock
-    private TournamentContactAccessService tournamentContactAccessService;
+    private TournamentContactSpaceAccessGate tournamentContactSpaceAccessGate;
     @Mock
     private EventScopeAccessGuard eventScopeAccessGuard;
     @Mock
@@ -91,7 +91,7 @@ class ChatMessageFacadeTest {
     @BeforeEach
     void setUp() {
         ChatChannelAccessGuard guard = new ChatChannelAccessGuard(channelRepository, memberRepository,
-                accessControlService, tournamentContactAccessService, eventScopeAccessGuard, postingIdentityService);
+                accessControlService, tournamentContactSpaceAccessGate, eventScopeAccessGuard, postingIdentityService);
         facade = new ChatMessageFacade(messageService, channelService, guard, inviteCardPreviewRefresher);
     }
 
@@ -170,8 +170,10 @@ class ChatMessageFacadeTest {
         @DisplayName("大会チャットの検索: 閲覧権限なしは不在と同一で、検索クエリを走らせない（本文の漏洩防止）")
         void 大会の検索は非権限者に漏らさない() {
             channelById(tournament(CHANNEL_ID));
-            willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkView(any(), any(), any(), any());
+            // ゲートは閲覧権なしを渡された不在コードで投げる
+            willThrow(new BusinessException(ChatErrorCode.CHANNEL_NOT_FOUND))
+                    .given(tournamentContactSpaceAccessGate).requireView(ContactSpaceScopeType.TOURNAMENT,
+                            TOURNAMENT_ID, ContactSpaceKind.CHAT, OTHER_USER_ID, ChatErrorCode.CHANNEL_NOT_FOUND);
 
             assertDenied(() -> facade.searchMessages(CHANNEL_ID, "秘密", 10, OTHER_USER_ID),
                     ChatErrorCode.CHANNEL_NOT_FOUND);
@@ -179,14 +181,14 @@ class ChatMessageFacadeTest {
         }
 
         @Test
-        @DisplayName("大会チャットの検索: 権限者は canView（正しい引数）を通って tx 本体へ進む")
+        @DisplayName("大会チャットの検索: 権限者は閲覧ゲート（正しい引数）を通って tx 本体へ進む")
         void 大会の検索は権限者に通す() {
             channelById(tournament(CHANNEL_ID));
 
             facade.searchMessages(CHANNEL_ID, "公開", 10, SENDER_ID);
 
-            verify(tournamentContactAccessService).checkView(
-                    ContactSpaceScopeType.TOURNAMENT, TOURNAMENT_ID, ContactSpaceKind.CHAT, SENDER_ID);
+            verify(tournamentContactSpaceAccessGate).requireView(ContactSpaceScopeType.TOURNAMENT, TOURNAMENT_ID,
+                    ContactSpaceKind.CHAT, SENDER_ID, ChatErrorCode.CHANNEL_NOT_FOUND);
             verify(messageService).searchMessages(CHANNEL_ID, "公開", 10, SENDER_ID);
         }
 
@@ -265,8 +267,10 @@ class ChatMessageFacadeTest {
         @DisplayName("スレッド: 大会チャットの閲覧権限なしは不在メッセージと同一で、スレッドを読み出さない")
         void 大会のスレッドは非権限者に漏らさない() {
             messageIn(tournament(CHANNEL_ID), SENDER_ID);
-            willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkView(any(), any(), any(), any());
+            // メッセージ ID 指定系は不在メッセージのコードでゲートへ委譲する
+            willThrow(new BusinessException(ChatErrorCode.MESSAGE_NOT_FOUND))
+                    .given(tournamentContactSpaceAccessGate).requireView(ContactSpaceScopeType.TOURNAMENT,
+                            TOURNAMENT_ID, ContactSpaceKind.CHAT, OTHER_USER_ID, ChatErrorCode.MESSAGE_NOT_FOUND);
 
             assertDenied(() -> facade.getThread(MESSAGE_ID, null, 10, OTHER_USER_ID), ChatErrorCode.MESSAGE_NOT_FOUND);
             verify(messageService, never()).getThread(any(), any(), any(), any());
@@ -277,7 +281,7 @@ class ChatMessageFacadeTest {
         void 大会のピン留めはcanPost() {
             messageIn(tournament(CHANNEL_ID), SENDER_ID);
             willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkPost(any(), any(), any());
+                    .given(tournamentContactSpaceAccessGate).requirePost(any(), any(), any(), any(), any());
 
             assertDenied(() -> facade.togglePin(MESSAGE_ID, true, OTHER_USER_ID),
                     TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN);
@@ -302,7 +306,7 @@ class ChatMessageFacadeTest {
             member(CHANNEL_ID, SENDER_ID);
             channelById(tournament(TARGET_CHANNEL_ID));
             willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
-                    .given(tournamentContactAccessService).checkPost(any(), any(), any());
+                    .given(tournamentContactSpaceAccessGate).requirePost(any(), any(), any(), any(), any());
 
             assertDenied(() -> facade.forwardMessage(MESSAGE_ID, new ForwardMessageRequest(TARGET_CHANNEL_ID, null),
                     SENDER_ID), TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN);

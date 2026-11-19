@@ -118,7 +118,9 @@ public class BoundedTtlCache<K, V> {
         }
     }
 
-    /** 全エントリを即時削除する（テスト基盤が共有コンテキストのキャッシュを前テストの残存から切り離すために使う）。 */
+    /**
+     * 全エントリを即時削除する（テストでのコンテキスト間汚染の除去・運用での一括無効化用）。
+     */
     public void clear() {
         synchronized (lock) {
             entries.clear();
