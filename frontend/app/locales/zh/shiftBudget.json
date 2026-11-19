@@ -112,6 +112,8 @@
       "confirm": "将确定 {period} 的预算。确定继续吗？",
       "success": "月度结算完成：{period}（已确定 {count} 条消耗记录）",
       "alreadyClosed": "该月份已结算",
+      "allFailed": "{period} 的结账失败（失败 {failed} 件）。仍有未结账的分配。请查看失败事件后重新执行",
+      "partiallyFailed": "{period} 的结账部分失败（已结账 {closed} 件、失败 {failed} 件）。仍有未结账的分配。请查看失败事件后重新执行",
       "title": "月度结算",
       "execute": "执行",
       "error": "月度结算失败",

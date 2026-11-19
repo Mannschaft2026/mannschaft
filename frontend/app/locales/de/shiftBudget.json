@@ -112,6 +112,8 @@
       "confirm": "Das Budget für {period} wird festgeschrieben. Fortfahren?",
       "success": "Monatsabschluss abgeschlossen: {period} ({count} Verbrauchsdatensätze festgeschrieben)",
       "alreadyClosed": "Dieser Monat wurde bereits abgeschlossen",
+      "allFailed": "Abschluss von {period} fehlgeschlagen ({failed} fehlgeschlagen). Es bleiben nicht abgeschlossene Zuweisungen. Prüfen Sie die fehlgeschlagenen Ereignisse und führen Sie ihn erneut aus",
+      "partiallyFailed": "Abschluss von {period} teilweise fehlgeschlagen ({closed} abgeschlossen, {failed} fehlgeschlagen). Es bleiben nicht abgeschlossene Zuweisungen. Prüfen Sie die fehlgeschlagenen Ereignisse und führen Sie ihn erneut aus",
       "title": "Monatsabschluss",
       "execute": "Ausführen",
       "error": "Monatsabschluss fehlgeschlagen",

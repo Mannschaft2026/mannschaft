@@ -112,6 +112,8 @@
       "confirm": "Se confirmará el presupuesto de {period}. ¿Continuar?",
       "success": "Cierre mensual completado: {period} ({count} registros de consumo confirmados)",
       "alreadyClosed": "Este mes ya ha sido cerrado",
+      "allFailed": "Error al cerrar {period} ({failed} fallidas). Quedan asignaciones sin cerrar. Revise los eventos fallidos y vuelva a ejecutarlo",
+      "partiallyFailed": "El cierre de {period} falló parcialmente ({closed} cerradas, {failed} fallidas). Quedan asignaciones sin cerrar. Revise los eventos fallidos y vuelva a ejecutarlo",
       "title": "Cierre mensual",
       "execute": "Ejecutar",
       "error": "Error en el cierre mensual",

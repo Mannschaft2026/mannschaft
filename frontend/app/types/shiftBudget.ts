@@ -207,6 +207,8 @@ export interface MonthlyCloseResponse {
   year_month: string
   closed_allocations: number
   already_closed_allocations: number
+  /** 失敗（Post 失敗・ABORTED・例外）した割当×期間の件数。1件以上なら未締めの割当が残る */
+  failed_allocations: number
   closed_consumptions: number
   processed_organization_ids: number[]
   failed_organization_ids: number[]

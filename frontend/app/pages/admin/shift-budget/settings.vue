@@ -109,22 +109,37 @@ const canSubmit = computed(() =>
   && form.value.reason.trim() !== '',
 )
 
+/**
+ * 取得の世代。組織切替や再取得のたびに進め、応答の反映時に「取得時の組織が現在の組織で、かつ最新の取得」かを確かめる
+ * （CMP-260909-2152 Codex 検分3 P2-2）。旧組織の応答が後着して新組織の締め日・履歴・revision を上書きし、
+ * 旧 revision で新組織へ送信する事故を防ぐ。
+ */
+let loadGeneration = 0
+
 async function load() {
-  if (!organizationId.value) {
+  const generation = ++loadGeneration
+  const orgId = organizationId.value
+  if (!orgId) {
     settings.value = null
+    loading.value = false
+    loadFailed.value = false
     return
   }
+  const isCurrent = () => generation === loadGeneration && orgId === organizationId.value
   loading.value = true
   loadFailed.value = false
   try {
-    settings.value = await api.getClosingSettings(organizationId.value)
+    const res = await api.getClosingSettings(orgId)
+    if (!isCurrent()) return
+    settings.value = res
   }
   catch {
+    if (!isCurrent()) return
     settings.value = null
     loadFailed.value = true
   }
   finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
@@ -166,6 +181,9 @@ function formatDateTime(value: string): string {
 }
 
 watch(organizationId, () => {
+  // 旧組織の設定（締め日・履歴・revision）と入力・エラーを破棄してから新組織を取得する
+  settings.value = null
+  submitError.value = ''
   resetForm()
   load()
   ensureBudgetAdminAccess()

@@ -155,7 +155,24 @@ async function executeMonthlyClose() {
       year_month: yearMonth,
     }
     const res = await api.executeMonthlyClose(request)
-    if (res.already_closed_allocations > 0 && res.closed_allocations === 0) {
+    // 段取り役は Post 失敗・ABORTED を HTTP 200 の failed_allocations に集計する（CMP-260909-2152 Codex 検分3 P2-1）。
+    // 失敗が1件でもあれば未締めの割当が残るので、成功・締め済みとは区別して通知する。
+    if (res.failed_allocations > 0 && res.closed_allocations === 0) {
+      // 全件失敗: 何も締まっていない。ダイアログを閉じずに再実行できるようにする
+      notification.error(t('shiftBudget.monthlyClose.allFailed', {
+        period: periodLabel(period),
+        failed: res.failed_allocations,
+      }))
+      return
+    }
+    if (res.failed_allocations > 0) {
+      notification.warn(t('shiftBudget.monthlyClose.partiallyFailed', {
+        period: periodLabel(period),
+        closed: res.closed_allocations,
+        failed: res.failed_allocations,
+      }))
+    }
+    else if (res.already_closed_allocations > 0 && res.closed_allocations === 0) {
       notification.info(t('shiftBudget.monthlyClose.alreadyClosed'))
     }
     else {

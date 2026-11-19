@@ -112,6 +112,8 @@
       "confirm": "The budget for {period} will be finalized. Continue?",
       "success": "Monthly close complete: {period} ({count} consumption records finalized)",
       "alreadyClosed": "This month has already been closed",
+      "allFailed": "Closing {period} failed ({failed} failed). Unclosed allocations remain. Check the failed events and run it again",
+      "partiallyFailed": "Closing {period} partially failed ({closed} closed, {failed} failed). Unclosed allocations remain. Check the failed events and run it again",
       "title": "Monthly closing",
       "execute": "Execute",
       "error": "Monthly closing failed",

@@ -131,6 +131,8 @@
       "execute": "実行",
       "success": "月次締め完了: {period}（消化レコード {count} 件を確定）",
       "alreadyClosed": "該当月は既に締め済みです",
+      "allFailed": "{period} の締めに失敗しました（失敗 {failed} 件）。未締めの割当が残っています。失敗イベントを確認して再実行してください",
+      "partiallyFailed": "{period} の締めは一部失敗しました（締め {closed} 件・失敗 {failed} 件）。未締めの割当が残っています。失敗イベントを確認して再実行してください",
       "error": "月次締めに失敗しました",
       "period": "対象期間",
       "periodHint": "終了日を迎えた期間のみ選べます",

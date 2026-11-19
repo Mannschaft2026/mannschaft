@@ -112,6 +112,8 @@
       "confirm": "{period}의 예산을 확정합니다. 계속하시겠습니까?",
       "success": "월 마감 완료: {period} (소진 레코드 {count}건 확정)",
       "alreadyClosed": "해당 월은 이미 마감되었습니다",
+      "allFailed": "{period} 마감에 실패했습니다(실패 {failed}건). 마감되지 않은 배정이 남아 있습니다. 실패 이벤트를 확인한 후 다시 실행하세요",
+      "partiallyFailed": "{period} 마감이 일부 실패했습니다(마감 {closed}건, 실패 {failed}건). 마감되지 않은 배정이 남아 있습니다. 실패 이벤트를 확인한 후 다시 실행하세요",
       "title": "월차 마감",
       "execute": "실행",
       "error": "월차 마감에 실패했습니다",
