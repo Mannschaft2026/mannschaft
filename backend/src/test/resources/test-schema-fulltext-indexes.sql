@@ -7,3 +7,4 @@
 ALTER TABLE timeline_posts ADD FULLTEXT INDEX ft_timeline_posts_content (content) WITH PARSER ngram;
 ALTER TABLE chat_messages ADD FULLTEXT INDEX ft_msg_body (body) WITH PARSER ngram;
 ALTER TABLE bulletin_threads ADD FULLTEXT INDEX ft_bulletin_threads_title_body (title, body) WITH PARSER ngram;
+ALTER TABLE blog_posts ADD FULLTEXT INDEX ft_bp_title_body (title, body) WITH PARSER ngram;
