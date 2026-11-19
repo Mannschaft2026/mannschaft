@@ -40,7 +40,7 @@ function select(value: ActionMemoCategory) {
 
 <template>
   <div
-    class="flex items-center gap-1"
+    class="flex flex-wrap items-center gap-1"
     role="group"
     :aria-label="t('action_memo.phase3.category.label')"
     data-testid="category-selector"
@@ -53,7 +53,7 @@ function select(value: ActionMemoCategory) {
       :disabled="disabled"
       :data-testid="`category-selector-${opt.value.toLowerCase()}`"
       :class="[
-        'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+        'flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
         modelValue === opt.value
           ? 'border-primary bg-primary/10 text-primary dark:border-primary dark:bg-primary/20 dark:text-primary'
           : 'border-surface-200 bg-transparent text-surface-500 hover:border-primary/50 hover:text-primary dark:border-surface-700 dark:text-surface-400 dark:hover:border-primary/50',
