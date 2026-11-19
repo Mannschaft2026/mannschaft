@@ -1,5 +1,6 @@
 package com.mannschaft.app.chat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.chat.entity.ChatChannelEntity;
 import com.mannschaft.app.chat.entity.ChatChannelMemberEntity;
@@ -39,14 +40,18 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -607,6 +612,297 @@ class ChatChannelAccessScopeContractIT extends AbstractMySqlIntegrationTest {
                             .content(objectMapper.writeValueAsString(Map.of("body", "侵入投稿"))))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.error.code").value("CHAT_001"));
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // CMP-261116-0726: 大会連絡チャット（TOURNAMENT_CHAT / TOURNAMENT_DIVISION_CHAT）の存在秘匿・回帰固定
+    //   チャット側のコードは本戦役で変えない（設計書 §2・§3「チャット（回帰のみ）」）。
+    //   閲覧権なし → チャンネルID系は不在チャンネル（404 CHAT_001）、メッセージID系は不在メッセージ（404 CHAT_002）と
+    //   本文全体まで一致。閲覧可・投稿不可は 403 TOUR_031。CHAT スペースの is_public で判定する（AC-17）。
+    // ═════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("CMP-261116-0726 大会連絡チャットの存在秘匿（AC-10 / AC-17）")
+    class TournamentContactChat {
+
+        private static final long ABSENT_CHANNEL_ID = Long.MAX_VALUE - 21;
+        private static final long ABSENT_MESSAGE_ID = Long.MAX_VALUE - 22;
+
+        private Long orgAdminId;
+        private Long orgMemberId;
+        private Long pAdminId;
+        private Long pMemberId;
+        private Long wAdminId;
+        private Long tOutsiderId;
+
+        /** T1: BULLETIN/CHAT とも非公開。 */
+        private Long t1ChannelId;
+        private Long t1MessageId;
+        /** D1（T1 配下）: CHAT 非公開。 */
+        private Long d1ChannelId;
+        /** T2: BULLETIN 公開・CHAT 非公開。 */
+        private Long t2ChannelId;
+        private Long t2MessageId;
+        /** T3: BULLETIN 非公開・CHAT 公開。 */
+        private Long t3ChannelId;
+        private Long t3MessageId;
+
+        @BeforeEach
+        void setUpTournamentChat() {
+            String s = UUID.randomUUID().toString().substring(0, 8);
+            orgAdminId = insertUser("cmp0726-chat-org-admin-" + s + "@example.com");
+            orgMemberId = insertUser("cmp0726-chat-org-member-" + s + "@example.com");
+            pAdminId = insertUser("cmp0726-chat-p-admin-" + s + "@example.com");
+            pMemberId = insertUser("cmp0726-chat-p-member-" + s + "@example.com");
+            wAdminId = insertUser("cmp0726-chat-w-admin-" + s + "@example.com");
+            tOutsiderId = insertUser("cmp0726-chat-outsider-" + s + "@example.com");
+
+            Long orgId = insertOrganization("CMP0726 チャット主催組織 " + s);
+            Long pTeamId = insertTeam("CMP0726 チャット参加チーム " + s);
+            Long wTeamId = insertTeam("CMP0726 チャット辞退チーム " + s);
+            MembershipTestHelper.insertMembership(em, orgAdminId, ScopeType.ORGANIZATION, orgId, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, orgAdminId, "ADMIN", null, orgId);
+            MembershipTestHelper.insertMembership(em, orgMemberId, ScopeType.ORGANIZATION, orgId, RoleKind.MEMBER);
+            MembershipTestHelper.insertMembership(em, pAdminId, ScopeType.TEAM, pTeamId, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, pAdminId, "ADMIN", pTeamId, null);
+            MembershipTestHelper.insertMembership(em, pMemberId, ScopeType.TEAM, pTeamId, RoleKind.MEMBER);
+            MembershipTestHelper.insertMembership(em, wAdminId, ScopeType.TEAM, wTeamId, RoleKind.MEMBER);
+            MembershipTestHelper.insertUserRole(em, wAdminId, "ADMIN", wTeamId, null);
+
+            Long t1 = insertTournament(orgId, "CMP0726 チャットT1 " + s, orgAdminId);
+            Long d1 = insertDivision(t1, "CMP0726 チャットD1 " + s);
+            insertParticipant(d1, pTeamId, "REGISTERED");
+            insertParticipant(d1, wTeamId, "WITHDRAWN");
+            insertContactSpace("TOURNAMENT", t1, "BULLETIN", false);
+            insertContactSpace("TOURNAMENT", t1, "CHAT", false);
+            insertContactSpace("TOURNAMENT_DIVISION", d1, "CHAT", false);
+
+            Long t2 = insertTournament(orgId, "CMP0726 チャットT2 " + s, orgAdminId);
+            insertParticipant(insertDivision(t2, "CMP0726 チャットD2 " + s), pTeamId, "REGISTERED");
+            insertContactSpace("TOURNAMENT", t2, "BULLETIN", true);
+            insertContactSpace("TOURNAMENT", t2, "CHAT", false);
+
+            Long t3 = insertTournament(orgId, "CMP0726 チャットT3 " + s, orgAdminId);
+            insertParticipant(insertDivision(t3, "CMP0726 チャットD3 " + s), pTeamId, "REGISTERED");
+            insertContactSpace("TOURNAMENT", t3, "BULLETIN", false);
+            insertContactSpace("TOURNAMENT", t3, "CHAT", true);
+
+            t1ChannelId = tournamentChannel(ChannelType.TOURNAMENT_CHAT, "TOURNAMENT", t1);
+            d1ChannelId = tournamentChannel(ChannelType.TOURNAMENT_DIVISION_CHAT, "TOURNAMENT_DIVISION", d1);
+            t2ChannelId = tournamentChannel(ChannelType.TOURNAMENT_CHAT, "TOURNAMENT", t2);
+            t3ChannelId = tournamentChannel(ChannelType.TOURNAMENT_CHAT, "TOURNAMENT", t3);
+            t1MessageId = message(t1ChannelId, "T1 非公開チャットの本文");
+            message(d1ChannelId, "D1 非公開チャットの本文");
+            t2MessageId = message(t2ChannelId, "T2 非公開チャットの本文");
+            t3MessageId = message(t3ChannelId, "T3 公開チャットの本文");
+
+            em.flush();
+            em.clear();
+        }
+
+        @Test
+        @DisplayName("AC-10: 閲覧権なし（部外者・主催組織一般・辞退チーム代表）の非公開大会チャットのチャンネルID系（一覧・検索・スレッド一覧・送信）は不在チャンネルと同一の 404 CHAT_001")
+        void ac10_閲覧権なしのチャンネルID系は不在と同一() throws Exception {
+            long before = messageRepository.count();
+            for (Long actor : List.of(tOutsiderId, orgMemberId, wAdminId)) {
+                for (Long channel : List.of(t1ChannelId, d1ChannelId)) {
+                    assertSameAsMissing(actor, get("/api/v1/chat/channels/{id}/messages", channel),
+                            get("/api/v1/chat/channels/{id}/messages", ABSENT_CHANNEL_ID), "CHAT_001");
+                    assertSameAsMissing(actor,
+                            get("/api/v1/chat/channels/{id}/messages/search", channel).param("keyword", "本文"),
+                            get("/api/v1/chat/channels/{id}/messages/search", ABSENT_CHANNEL_ID).param("keyword", "本文"),
+                            "CHAT_001");
+                    assertSameAsMissing(actor, get("/api/v1/chat/channels/{id}/threads", channel),
+                            get("/api/v1/chat/channels/{id}/threads", ABSENT_CHANNEL_ID), "CHAT_001");
+                    assertSameAsMissing(actor, send(channel), send(ABSENT_CHANNEL_ID), "CHAT_001");
+                    // チャンネル詳細 GET はチャンネル名を返すため、同じく不在と完全一致にする
+                    assertSameAsMissing(actor, get("/api/v1/chat/channels/{id}", channel),
+                            get("/api/v1/chat/channels/{id}", ABSENT_CHANNEL_ID), "CHAT_001");
+                }
+            }
+            assertThat(messageRepository.count()).as("メッセージが作られない").isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("AC-10: 閲覧権なしの非公開大会チャットのメッセージID系（スレッド取得・ピン留め）は不在メッセージと同一の 404 CHAT_002")
+        void ac10_閲覧権なしのメッセージID系は不在と同一() throws Exception {
+            for (Long actor : List.of(tOutsiderId, orgMemberId, wAdminId)) {
+                assertSameAsMissing(actor, get("/api/v1/chat/messages/{id}/thread", t1MessageId),
+                        get("/api/v1/chat/messages/{id}/thread", ABSENT_MESSAGE_ID), "CHAT_002");
+                assertSameAsMissing(actor, post("/api/v1/chat/messages/{id}/pin", t1MessageId).param("pinned", "true"),
+                        post("/api/v1/chat/messages/{id}/pin", ABSENT_MESSAGE_ID).param("pinned", "true"), "CHAT_002");
+            }
+        }
+
+        @Test
+        @DisplayName("AC-10/AC-12: 参加チーム一般メンバー（閲覧可・投稿不可）は非公開大会チャットの一覧 200、送信・ピン留めは 403 TOUR_031。代表・主催ADMINは送信 201")
+        void ac10_閲覧可投稿不可は403_投稿者は201() throws Exception {
+            setAuthentication(pMemberId);
+            mockMvc.perform(get("/api/v1/chat/channels/{id}/messages", t1ChannelId))
+                    .andExpect(status().isOk());
+            mockMvc.perform(get("/api/v1/chat/channels/{id}", t1ChannelId))
+                    .andExpect(status().isOk());
+            mockMvc.perform(send(t1ChannelId))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("TOUR_031"));
+            mockMvc.perform(post("/api/v1/chat/messages/{id}/pin", t1MessageId).param("pinned", "true"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("TOUR_031"));
+
+            for (Long poster : List.of(pAdminId, orgAdminId)) {
+                setAuthentication(poster);
+                mockMvc.perform(get("/api/v1/chat/channels/{id}", t1ChannelId)).andExpect(status().isOk());
+                mockMvc.perform(send(t1ChannelId)).andExpect(status().isCreated());
+            }
+        }
+
+        @Test
+        @DisplayName("AC-17: T2（BULLETIN公開・CHAT非公開）の部外者はチャットの一覧・送信・スレッドとも不在と同一の 404（CHAT_001 / CHAT_002）")
+        void ac17_CHAT非公開側は不在と同一() throws Exception {
+            long before = messageRepository.count();
+            assertSameAsMissing(tOutsiderId, get("/api/v1/chat/channels/{id}/messages", t2ChannelId),
+                    get("/api/v1/chat/channels/{id}/messages", ABSENT_CHANNEL_ID), "CHAT_001");
+            assertSameAsMissing(tOutsiderId, send(t2ChannelId), send(ABSENT_CHANNEL_ID), "CHAT_001");
+            assertSameAsMissing(tOutsiderId, get("/api/v1/chat/channels/{id}", t2ChannelId),
+                    get("/api/v1/chat/channels/{id}", ABSENT_CHANNEL_ID), "CHAT_001");
+            assertSameAsMissing(tOutsiderId, get("/api/v1/chat/messages/{id}/thread", t2MessageId),
+                    get("/api/v1/chat/messages/{id}/thread", ABSENT_MESSAGE_ID), "CHAT_002");
+            assertThat(messageRepository.count()).isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("AC-17: T3（BULLETIN非公開・CHAT公開）の部外者はチャットの一覧・スレッド 200、送信・ピン留めは 403 TOUR_031")
+        void ac17_CHAT公開側は閲覧可で投稿403() throws Exception {
+            long before = messageRepository.count();
+            setAuthentication(tOutsiderId);
+            mockMvc.perform(get("/api/v1/chat/channels/{id}/messages", t3ChannelId))
+                    .andExpect(status().isOk());
+            mockMvc.perform(get("/api/v1/chat/messages/{id}/thread", t3MessageId))
+                    .andExpect(status().isOk());
+            mockMvc.perform(get("/api/v1/chat/channels/{id}", t3ChannelId))
+                    .andExpect(status().isOk());
+            mockMvc.perform(send(t3ChannelId))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("TOUR_031"));
+            mockMvc.perform(post("/api/v1/chat/messages/{id}/pin", t3MessageId).param("pinned", "true"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("TOUR_031"));
+            assertThat(messageRepository.count()).isEqualTo(before);
+        }
+
+        // ---- 補助 ----
+
+        private MockHttpServletRequestBuilder send(Long channelId) throws Exception {
+            return post("/api/v1/chat/channels/{id}/messages", channelId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("body", "CMP0726 投稿")));
+        }
+
+        /**
+         * 秘匿対象への応答が不在 ID への応答と status・error.code・error.message・本文全体まで一致し、
+         * 期待の絶対値（404 + expectedCode）であることを検査する。
+         */
+        private void assertSameAsMissing(Long actor, MockHttpServletRequestBuilder existing,
+                                         MockHttpServletRequestBuilder missing, String expectedCode) throws Exception {
+            setAuthentication(actor);
+            MvcResult m = mockMvc.perform(missing).andReturn();
+            MvcResult e = mockMvc.perform(existing).andReturn();
+            String mb = m.getResponse().getContentAsString(StandardCharsets.UTF_8);
+            String eb = e.getResponse().getContentAsString(StandardCharsets.UTF_8);
+            String label = "actor=" + actor + " existing=" + eb + " missing=" + mb;
+            JsonNode mj = objectMapper.readTree(mb.isBlank() ? "{}" : mb);
+            JsonNode ej = objectMapper.readTree(eb.isBlank() ? "{}" : eb);
+            assertThat(m.getResponse().getStatus()).as("不在側の絶対値 " + label).isEqualTo(404);
+            assertThat(mj.path("error").path("code").asText()).as("不在側の絶対値 " + label).isEqualTo(expectedCode);
+            assertThat(e.getResponse().getStatus()).as(label).isEqualTo(404);
+            assertThat(ej.path("error").path("code").asText()).as(label).isEqualTo(expectedCode);
+            assertThat(ej.path("error").path("message").asText()).as(label)
+                    .isEqualTo(mj.path("error").path("message").asText());
+            assertThat(ej).as("本文全体が不在と一致 " + label).isEqualTo(mj);
+        }
+
+        private Long tournamentChannel(ChannelType type, String sourceType, Long sourceId) {
+            return channelRepository.save(ChatChannelEntity.builder()
+                    .channelType(type)
+                    .name("CMP0726 大会連絡 " + sourceType + " " + sourceId)
+                    .isPrivate(false)
+                    .sourceType(sourceType)
+                    .sourceId(sourceId)
+                    .createdBy(orgAdminId)
+                    .build()).getId();
+        }
+
+        private Long message(Long channelId, String body) {
+            return messageRepository.save(ChatMessageEntity.builder()
+                    .channelId(channelId).senderId(orgAdminId).body(body).build()).getId();
+        }
+
+        private Long insertOrganization(String name) {
+            em.createNativeQuery(
+                            "INSERT INTO organizations (name, org_type, visibility, hierarchy_visibility, "
+                                    + "supporter_enabled, version, slug, created_at, updated_at) "
+                                    + "VALUES (:name, 'OTHER', 'PUBLIC', 'NONE', 1, 0, "
+                                    + "CONCAT('c0726-', LEFT(REPLACE(UUID(),'-',''),8)), NOW(), NOW())")
+                    .setParameter("name", name)
+                    .executeUpdate();
+            return ((Number) em.createNativeQuery("SELECT id FROM organizations WHERE name = :name")
+                    .setParameter("name", name)
+                    .getSingleResult()).longValue();
+        }
+
+        private Long insertTournament(Long orgId, String name, Long createdBy) {
+            em.createNativeQuery(
+                            "INSERT INTO tournaments (organization_id, name, format, sport, "
+                                    + "win_points, draw_points, loss_points, has_draw, has_sets, "
+                                    + "has_extra_time, has_penalties, score_unit_label, league_round_type, "
+                                    + "knockout_legs, visibility, status, version, created_by, created_at, updated_at) "
+                                    + "VALUES (:orgId, :name, 'LEAGUE', 'SOCCER', "
+                                    + "3, 1, 0, 1, 0, "
+                                    + "0, 0, '点', 'SINGLE', "
+                                    + "1, 'PUBLIC', 'OPEN', 0, :createdBy, NOW(), NOW())")
+                    .setParameter("orgId", orgId)
+                    .setParameter("name", name)
+                    .setParameter("createdBy", createdBy)
+                    .executeUpdate();
+            return ((Number) em.createNativeQuery("SELECT id FROM tournaments WHERE name = :name")
+                    .setParameter("name", name)
+                    .getSingleResult()).longValue();
+        }
+
+        private Long insertDivision(Long tid, String name) {
+            em.createNativeQuery(
+                            "INSERT INTO tournament_divisions (tournament_id, name, level, promotion_slots, "
+                                    + "relegation_slots, playoff_promotion_slots, sort_order, created_at, updated_at) "
+                                    + "VALUES (:tid, :name, 1, 0, 0, 0, 0, NOW(), NOW())")
+                    .setParameter("tid", tid)
+                    .setParameter("name", name)
+                    .executeUpdate();
+            return ((Number) em.createNativeQuery("SELECT id FROM tournament_divisions WHERE name = :name")
+                    .setParameter("name", name)
+                    .getSingleResult()).longValue();
+        }
+
+        private void insertParticipant(Long divId, Long teamId, String status) {
+            em.createNativeQuery(
+                            "INSERT INTO tournament_participants (division_id, team_id, status, joined_at) "
+                                    + "VALUES (:divId, :teamId, :status, NOW())")
+                    .setParameter("divId", divId)
+                    .setParameter("teamId", teamId)
+                    .setParameter("status", status)
+                    .executeUpdate();
+        }
+
+        private void insertContactSpace(String scopeType, Long scopeId, String kind, boolean isPublic) {
+            em.createNativeQuery(
+                            "INSERT INTO tournament_contact_space (id, scope_type, scope_id, space_kind, ref_id, is_public, "
+                                    + "created_at, updated_at) "
+                                    + "VALUES (UNHEX(REPLACE(UUID(), '-', '')), :st, :sid, :kind, 0, :pub, NOW(), NOW())")
+                    .setParameter("st", scopeType)
+                    .setParameter("sid", scopeId)
+                    .setParameter("kind", kind)
+                    .setParameter("pub", isPublic)
+                    .executeUpdate();
         }
     }
 
