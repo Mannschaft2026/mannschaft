@@ -3,6 +3,7 @@ package com.mannschaft.app.auth;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.sun.net.httpserver.HttpServer;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -45,6 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * （AFTER_COMMIT リスナーはコミットされないと動かないため）。作成した行は {@code @AfterEach} で自分の分だけ削除する。</p>
  */
 @AutoConfigureMockMvc(addFilters = false)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("OAuth ログイン監査ログ契約テスト")
 class AuthOAuthLoginAuditContractIT extends AbstractMySqlIntegrationTest {
@@ -64,7 +67,6 @@ class AuthOAuthLoginAuditContractIT extends AbstractMySqlIntegrationTest {
             server.createContext("/userinfo", ex -> respond(ex, "{\"sub\":\"" + SUB + "\",\"email\":\"" + EMAIL
                     + "\",\"given_name\":\"Taro\",\"family_name\":\"Yamada\",\"name\":\"oauth-audit-it\"}"));
             server.start();
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
             return server;
         } catch (IOException e) {
             throw new IllegalStateException("偽 Google サーバの起動に失敗しました", e);
@@ -85,6 +87,11 @@ class AuthOAuthLoginAuditContractIT extends AbstractMySqlIntegrationTest {
         String base = "http://127.0.0.1:" + FAKE_GOOGLE.getAddress().getPort();
         registry.add("mannschaft.google.token-uri", () -> base + "/token");
         registry.add("mannschaft.google.userinfo-uri", () -> base + "/userinfo");
+    }
+
+    @AfterAll
+    static void stopFakeGoogle() {
+        FAKE_GOOGLE.stop(0);
     }
 
     @Autowired private MockMvc mockMvc;
