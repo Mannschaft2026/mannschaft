@@ -26,6 +26,7 @@ erDiagram
         bigint related_todo_id "ID参照"
         bigint timeline_post_id "ID参照"
         bigint posted_team_id "ID参照"
+        bigint team_timeline_post_id "ID参照"
         bigint organization_id "ID参照"
     }
     user_action_memo_settings {
@@ -42,6 +43,7 @@ erDiagram
     users ||..o{ action_memo_tags : "ID参照(FKなし) user_id"
     organizations |o..o{ action_memos : "ID参照(FKなし) organization_id"
     teams |o..o{ action_memos : "ID参照(FKなし) posted_team_id"
+    timeline_posts |o..o{ action_memos : "ID参照(FKなし) team_timeline_post_id"
     timeline_posts |o..o{ action_memos : "ID参照(FKなし) timeline_post_id"
     todos |o..o{ action_memos : "ID参照(FKなし) related_todo_id"
     users ||..o{ action_memos : "ID参照(FKなし) user_id"
@@ -95,6 +97,7 @@ erDiagram
 | `completes_todo` | `tinyint(1)` | NO | `0` | related_todo_id の TODO を完了扱いにするフラグ |
 | `timeline_post_id` | `bigint unsigned` | YES | NULL | FK → timeline_posts。publish-daily 成功時のみ埋まる |
 | `posted_team_id` | `bigint unsigned` | YES | NULL | チームタイムラインに投稿済みの場合のチームID |
+| `team_timeline_post_id` | `bigint unsigned` | YES | NULL | チームタイムラインに投稿したチーム投稿のID（timeline_posts.id への ID 参照・FKなし）。NULL = 未投稿 |
 | `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 | `deleted_at` | `datetime` | YES | NULL | 論理削除日時 |

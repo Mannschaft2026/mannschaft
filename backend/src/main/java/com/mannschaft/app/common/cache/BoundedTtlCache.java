@@ -119,6 +119,15 @@ public class BoundedTtlCache<K, V> {
     }
 
     /**
+     * 全エントリを即時削除する（テストでのコンテキスト間汚染の除去・運用での一括無効化用）。
+     */
+    public void clear() {
+        synchronized (lock) {
+            entries.clear();
+        }
+    }
+
+    /**
      * 現在の常駐エントリ数（上限の実効性を検証するために公開する）。
      *
      * @return エントリ数

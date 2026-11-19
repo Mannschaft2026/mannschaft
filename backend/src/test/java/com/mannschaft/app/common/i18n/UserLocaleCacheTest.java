@@ -86,6 +86,22 @@ class UserLocaleCacheTest {
     }
 
     @Test
+    @DisplayName("clear後は全ユーザー分を再度DBから取得する（別コンテキスト再作成で userId が再利用されても古い値を返さない）")
+    void clear後_全件再DB取得() {
+        // Given: 同じ userId に対し、clear 前後で DB の値が変わる（ddl-auto=create 後の AUTO_INCREMENT 再利用を模す）
+        given(userRepository.findLocaleById(1L)).willReturn(Optional.of("ja"), Optional.of("en"));
+        assertThat(cache.getLocale(1L)).isEqualTo("ja");
+
+        // When
+        cache.clear();
+
+        // Then
+        assertThat(cache.size()).isZero();
+        assertThat(cache.getLocale(1L)).isEqualTo("en");
+        verify(userRepository, times(2)).findLocaleById(1L);
+    }
+
+    @Test
     @DisplayName("evict後は再度DBから取得する")
     void evict後_再DB取得() {
         // Given
