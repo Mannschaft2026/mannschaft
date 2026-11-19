@@ -286,6 +286,39 @@ class AuthOAuthServiceTest {
             assertThat(event.getUserAgent()).isNull();
             assertThat(event.getIpAddress()).isEqualTo(TEST_IP);
         }
+
+        private String capturedRefreshTokenJti() {
+            org.mockito.ArgumentCaptor<com.mannschaft.app.auth.entity.RefreshTokenEntity> captor =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.entity.RefreshTokenEntity.class);
+            verify(refreshTokenRepository).save(captor.capture());
+            return captor.getValue().getJti();
+        }
+
+        @Test
+        @DisplayName("jti: 既存連携ログインで保存する RefreshToken の jti が非 null、sessionHash = SHA-256(jti)")
+        void 既存連携_jtiが設定されsessionHashと一致する() {
+            stubExistingLink();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
+
+            String jti = capturedRefreshTokenJti();
+            assertThat(jti).isNotNull();
+            assertThat(capturedLoginSuccess().getSessionHash())
+                    .isEqualTo(com.mannschaft.app.common.util.SessionHashUtil.hash(jti));
+        }
+
+        @Test
+        @DisplayName("jti: 新規登録ログインで保存する RefreshToken の jti が非 null、sessionHash = SHA-256(jti)")
+        void 新規登録_jtiが設定されsessionHashと一致する() {
+            stubNewUser();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
+
+            String jti = capturedRefreshTokenJti();
+            assertThat(jti).isNotNull();
+            assertThat(capturedLoginSuccess().getSessionHash())
+                    .isEqualTo(com.mannschaft.app.common.util.SessionHashUtil.hash(jti));
+        }
     }
 
     // ========================================

@@ -23,6 +23,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.common.EncryptionService;
+import com.mannschaft.app.common.util.SessionHashUtil;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -122,12 +123,13 @@ public class AuthOAuthService {
             user.updateLastLoginAt();
             userRepository.save(user);
 
-            TokenResponse tokenResponse = issueTokenPair(userId, ipAddress, userAgent);
+            IssuedTokens issued = issueTokenPair(userId, ipAddress, userAgent);
 
-            // イベント発行
-            eventPublisher.publish(new LoginSuccessEvent(userId, ipAddress, userAgent, "OAUTH_" + provider.toUpperCase()));
+            // イベント発行（sessionHash = SHA-256(refresh_token_jti)。AuthService と同形）
+            eventPublisher.publish(new LoginSuccessEvent(
+                    userId, ipAddress, userAgent, "OAUTH_" + provider.toUpperCase(), issued.sessionHash()));
 
-            return ApiResponse.of(tokenResponse);
+            return ApiResponse.of(issued.tokenResponse());
         }
 
         // 既存連携なし → メール一致ユーザーを検索
@@ -192,13 +194,14 @@ public class AuthOAuthService {
                 .build();
         oauthAccountRepository.save(oauthAccount);
 
-        TokenResponse tokenResponse = issueTokenPair(newUser.getId(), ipAddress, userAgent);
+        IssuedTokens issued = issueTokenPair(newUser.getId(), ipAddress, userAgent);
 
-        // イベント発行: LoginSuccess + OAuth新規ユーザー登録
-        eventPublisher.publish(new LoginSuccessEvent(newUser.getId(), ipAddress, userAgent, "OAUTH_" + provider.toUpperCase()));
+        // イベント発行: LoginSuccess（sessionHash = SHA-256(refresh_token_jti)）+ OAuth新規ユーザー登録
+        eventPublisher.publish(new LoginSuccessEvent(
+                newUser.getId(), ipAddress, userAgent, "OAUTH_" + provider.toUpperCase(), issued.sessionHash()));
         eventPublisher.publish(new OAuthUserRegisteredEvent(newUser.getId(), ipAddress, userAgent, provider.toUpperCase()));
 
-        return ApiResponse.of(tokenResponse);
+        return ApiResponse.of(issued.tokenResponse());
     }
 
     /**
@@ -236,7 +239,7 @@ public class AuthOAuthService {
         oauthAccountRepository.save(oauthAccount);
 
         // 3. Access Token + Refresh Token発行
-        TokenResponse tokenResponse = issueTokenPair(linkToken.getUserId(), null, null);
+        TokenResponse tokenResponse = issueTokenPair(linkToken.getUserId(), null, null).tokenResponse();
 
         // 4. イベント発行
         eventPublisher.publish(new OAuthLinkedEvent(linkToken.getUserId(), linkToken.getProvider().name()));
@@ -327,16 +330,20 @@ public class AuthOAuthService {
     /**
      * Access Token + Refresh Token のペアを発行する。
      */
-    private TokenResponse issueTokenPair(Long userId, String ipAddress, String userAgent) {
+    private IssuedTokens issueTokenPair(Long userId, String ipAddress, String userAgent) {
         // 認可基盤完全根治 Phase 1（§3.2）: RoleClaimResolver で SYSTEM_ADMIN を判定して roles に載せる。
         String accessToken = authTokenService.issueAccessToken(userId, roleClaimResolver.resolveRoles(userId),
                 statusClaimResolver.isPendingParentalConsent(userId));
         String refreshToken = authTokenService.generateRefreshToken();
         String refreshTokenHash = authTokenService.hashToken(refreshToken);
 
+        // refresh_tokens.jti は NOT NULL。session_hash（SHA-256(jti)）の基点でもあるため AuthService と同様に生成する
+        String refreshTokenJti = UUID.randomUUID().toString();
+
         RefreshTokenEntity refreshTokenEntity = RefreshTokenEntity.builder()
                 .userId(userId)
                 .tokenHash(refreshTokenHash)
+                .jti(refreshTokenJti)
                 .rememberMe(false)
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
@@ -344,8 +351,12 @@ public class AuthOAuthService {
                 .build();
         RefreshTokenEntity saved = refreshTokenRepository.save(refreshTokenEntity);
 
-        return new TokenResponse(accessToken, refreshToken, saved.getId(), 3600);
+        return new IssuedTokens(new TokenResponse(accessToken, refreshToken, saved.getId(), 3600),
+                SessionHashUtil.hash(refreshTokenJti));
     }
+
+    /** issueTokenPair の戻り値。LoginSuccessEvent の sessionHash を呼び出し元へ渡すための内部 record。 */
+    private record IssuedTokens(TokenResponse tokenResponse, String sessionHash) {}
 
     /**
      * Google OAuth: 認可コードをアクセストークンに交換し、userinfo エンドポイントからユーザー情報を取得する。
