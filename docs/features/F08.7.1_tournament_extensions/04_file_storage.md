@@ -119,6 +119,8 @@ files/TOURNAMENT_DIVISION/{divId}/...
 - 公開トグルは連絡スペースと共通の `tournament_contact_space.is_public`（[01](./01_communication.md) §2）を参照する。**ファイル置き場専用の公開フラグは持たず**、同一スコープの連絡スペースの公開状態に追従する（運用と認可の一貫性を担保）。
 - 公開（PUBLIC）時も**閲覧のみ**（アップロード/編集は常に代表＋主催者）。PUBLIC 公開時の露出方針は [docs/security/03_role_authority_model.md §15.2](../../security/03_role_authority_model.md) に集約。
 - 存在しない/論理削除済みフォルダ・ファイルは一律 **404**（IDOR 対策）。
+- **存在秘匿（CMP-261116-0726）**: 閲覧権のない者への応答は不在と同一の 404 に統一する（[01_communication.md §4.3](./01_communication.md)）。大会フォルダ一覧／作成（`/tournaments/{t}/folders`・`/divisions/{d}/folders`）は、閲覧権なし・大会／ディビジョン／スペース不在・大会とディビジョンの帰属不一致をすべて **404 `TOUR_029`** とする（閲覧可・投稿権なしの作成のみ 403 `TOUR_031`）。フォルダ ID／ファイル ID を受けるファイル共有 EP は、閲覧権なしを不在と同じ `FILE_SHARING_001`（フォルダ）／`FILE_SHARING_002`（ファイル）の 404 に一致させる。
+- 子リソース ID を直接指定する EP（コメント・タグ・リンク・権限の ID 指定の更新／削除）は本戦役では是正しておらず、派生戦役で扱う。
 
 ---
 
@@ -142,7 +144,7 @@ files/TOURNAMENT_DIVISION/{divId}/...
 
 ### 8.1 1 回目
 - **不備**: スコープ追加（`TOURNAMENT`/`TOURNAMENT_DIVISION`）・folder/file API 拡張・R2 prefix・自動付帯・アクセス権限・クォータ・削除を網羅。F05.5 への DDL 変更は `scope_ref_id` 1 列のみと明示。
-- **セキュリティ**: 閲覧/書込を `TournamentContactAccessService` の `canView`/`canPost` で連絡スペースと統一。公開は連絡スペースの `is_public` に追従し read-only。IDOR チェーン（tId→orgID→divId→folderId）を明記。404 統一。クロスドメイン FK なし（原則 1）。
+- **セキュリティ**: 閲覧/書込を `TournamentContactAccessService` の `canView`/`canPost` で連絡スペースと統一。公開は連絡スペースの `is_public` に追従し read-only。IDOR チェーン（tId→orgID→divId→folderId）を明記。404 統一（閲覧権なしも不在と同一の 404。CMP-261116-0726）。クロスドメイン FK なし（原則 1）。
 - **ユーザビリティ**: デフォルトフォルダ自動付帯で「いきなり置ける」。導線は既存 org folder の複製で学習コストゼロ。
 - **見落とし**: continueTournament の provisioning 漏れ（§4・テスト検証）、クォータ帰属の主催組織集約（§6）、storage_quota.md / F05.5 への追記同期。
 - **保守性**: 既存 F05.5 を最大限流用（新規テーブルなし・DDL は 1 列のみ）。越境 TODO 明記（原則 5）。公開フラグを連絡スペースと共有して二重管理を回避。
