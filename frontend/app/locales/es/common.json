@@ -434,6 +434,7 @@
     "unauthorized": "Por favor, inicie sesión",
     "section_load_failed": "No se pudo cargar esta sección. Recarga la página.",
     "unknown": "Se produjo un error",
+    "notFound": "No se ha encontrado",
     "TEAM_001": "No se ha encontrado el equipo.",
     "TEAM_006": "Este equipo no se puede restaurar porque no se ha eliminado.",
     "COMMON_001": "Hay errores en los datos ingresados",
@@ -1853,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "Volver",
     "cancel": "Cancelar",
     "search": "Buscar",
     "edit": "Editar",
