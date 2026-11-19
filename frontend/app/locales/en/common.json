@@ -3351,5 +3351,29 @@
       "expires_at": "Expires at",
       "used_count": "Times used"
     }
+  },
+  "globalSearch": {
+    "title": "Search",
+    "placeholder": "Search by keyword (2+ characters)",
+    "submit": "Search",
+    "failed": "Search failed",
+    "tooShort": "Please enter at least 2 characters",
+    "empty": "No results found",
+    "didYouMean": "Did you mean:",
+    "broaderQuery": "Broader search:",
+    "timedOut": "Search timed out for some types: {types}",
+    "noLink": "No link available",
+    "types": {
+      "ALL": "All",
+      "POST": "Posts",
+      "MESSAGE": "Messages",
+      "THREAD": "Threads",
+      "ARTICLE": "Articles",
+      "FILE": "Files",
+      "USER": "Users",
+      "TEAM": "Teams",
+      "ORGANIZATION": "Organizations",
+      "ACTIVITY": "Activity records"
+    }
   }
 }

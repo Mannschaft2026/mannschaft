@@ -134,6 +134,15 @@ public class UserLocaleCache {
     }
 
     /**
+     * 全ユーザーの locale キャッシュを破棄する。
+     * 同一 JVM で ddl-auto=create により users が作り直され userId（AUTO_INCREMENT）が再利用される統合テストで、
+     * 旧データ由来の locale が残らないよう各テスト前に呼ぶ。
+     */
+    public void clear() {
+        cache.clear();
+    }
+
+    /**
      * 現在の常駐エントリ数（件数上限が効いていることを検証するために公開する）。
      *
      * @return エントリ数

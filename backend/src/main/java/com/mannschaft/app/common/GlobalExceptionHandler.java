@@ -2289,7 +2289,7 @@ public class GlobalExceptionHandler {
             Map.entry("TOUR_004", HttpStatus.CONFLICT),                  // INVALID_TOURNAMENT_STATUS
             Map.entry("TOUR_009", HttpStatus.CONFLICT),                  // MATCHES_NOT_COMPLETED
             Map.entry("TOUR_011", HttpStatus.CONFLICT),                  // PROMOTION_ALREADY_EXECUTED
-            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（存在は隠さず権限拒否）
+            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（欠番: CMP-261116-0726 で不送出・番号は再利用しない）
             Map.entry("TOUR_031", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_POST_FORBIDDEN
             Map.entry("TOUR_032", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VISIBILITY_FORBIDDEN
 
@@ -2475,6 +2475,7 @@ public class GlobalExceptionHandler {
             // F04.6 グローバル検索（SearchErrorCode）の残り未登録分。
             Map.entry("SEARCH_003", HttpStatus.NOT_FOUND),               // SAVED_QUERY_NOT_FOUND
             Map.entry("SEARCH_004", HttpStatus.NOT_FOUND),               // HISTORY_NOT_FOUND
+            Map.entry("SEARCH_005", HttpStatus.CONFLICT),                // MAX_SAVED_QUERIES_EXCEEDED（CMP-261116-0722: 上限10件・11件目は 409）
 
             // F01.5 サポーター申請・管理機能（SupporterErrorCode）の残り未登録分。
             Map.entry("SUPPORTER_001", HttpStatus.CONFLICT),             // 既にサポーター申請済み

@@ -3351,5 +3351,29 @@
       "expires_at": "Gültig bis",
       "used_count": "Anzahl der Nutzungen"
     }
+  },
+  "globalSearch": {
+    "title": "Suche",
+    "placeholder": "Nach Stichwort suchen (mindestens 2 Zeichen)",
+    "submit": "Suchen",
+    "failed": "Die Suche ist fehlgeschlagen",
+    "tooShort": "Bitte geben Sie mindestens 2 Zeichen ein",
+    "empty": "Keine Suchergebnisse",
+    "didYouMean": "Meinten Sie:",
+    "broaderQuery": "Breitere Suche:",
+    "timedOut": "Bei einigen Typen ist die Suche abgelaufen: {types}",
+    "noLink": "Kein Link vorhanden",
+    "types": {
+      "ALL": "Alle",
+      "POST": "Beiträge",
+      "MESSAGE": "Nachrichten",
+      "THREAD": "Threads",
+      "ARTICLE": "Artikel",
+      "FILE": "Dateien",
+      "USER": "Benutzer",
+      "TEAM": "Teams",
+      "ORGANIZATION": "Organisationen",
+      "ACTIVITY": "Aktivitätsberichte"
+    }
   }
 }

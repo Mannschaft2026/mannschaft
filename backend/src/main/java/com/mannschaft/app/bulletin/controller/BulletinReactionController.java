@@ -3,6 +3,7 @@ package com.mannschaft.app.bulletin.controller;
 import com.mannschaft.app.bulletin.dto.CreateReactionRequest;
 import com.mannschaft.app.bulletin.dto.ReactionResponse;
 import com.mannschaft.app.bulletin.dto.ReactionSummaryResponse;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinReactionService;
 import com.mannschaft.app.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,8 @@ import com.mannschaft.app.common.SecurityUtils;
 public class BulletinReactionController {
 
     private final BulletinReactionService reactionService;
+    /** 大会/ディビジョン連絡スペースの存在秘匿つき閲覧認可（取引外・D-3T 回避。CMP-261116-0726）。 */
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
 
     /**
@@ -42,7 +45,9 @@ public class BulletinReactionController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "追加成功")
     public ResponseEntity<ApiResponse<ReactionResponse>> addReaction(
             @Valid @RequestBody CreateReactionRequest request) {
-        ReactionResponse response = reactionService.addReaction(SecurityUtils.getCurrentUserId(), request);
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReactionTarget(request.getTargetType(), request.getTargetId(), currentUserId);
+        ReactionResponse response = reactionService.addReaction(currentUserId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -56,7 +61,9 @@ public class BulletinReactionController {
             @RequestParam String targetType,
             @RequestParam Long targetId,
             @RequestParam String emoji) {
-        reactionService.removeReaction(SecurityUtils.getCurrentUserId(), targetType, targetId, emoji);
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReactionTarget(targetType, targetId, currentUserId);
+        reactionService.removeReaction(currentUserId, targetType, targetId, emoji);
         return ResponseEntity.noContent().build();
     }
 
@@ -69,7 +76,9 @@ public class BulletinReactionController {
     public ResponseEntity<ApiResponse<List<ReactionResponse>>> listReactions(
             @RequestParam String targetType,
             @RequestParam Long targetId) {
-        List<ReactionResponse> responses = reactionService.listReactions(SecurityUtils.getCurrentUserId(), targetType, targetId);
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReactionTarget(targetType, targetId, currentUserId);
+        List<ReactionResponse> responses = reactionService.listReactions(currentUserId, targetType, targetId);
         return ResponseEntity.ok(ApiResponse.of(responses));
     }
 
@@ -82,7 +91,9 @@ public class BulletinReactionController {
     public ResponseEntity<ApiResponse<List<ReactionSummaryResponse>>> getReactionSummary(
             @RequestParam String targetType,
             @RequestParam Long targetId) {
-        List<ReactionSummaryResponse> responses = reactionService.getReactionSummary(SecurityUtils.getCurrentUserId(), targetType, targetId);
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReactionTarget(targetType, targetId, currentUserId);
+        List<ReactionSummaryResponse> responses = reactionService.getReactionSummary(currentUserId, targetType, targetId);
         return ResponseEntity.ok(ApiResponse.of(responses));
     }
 }

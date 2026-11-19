@@ -17,7 +17,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.event.service.EventScopeAccessGuard;
-import com.mannschaft.app.tournament.service.TournamentContactAccessService;
+import com.mannschaft.app.tournament.service.TournamentContactSpaceAccessGate;
 import com.mannschaft.app.village.service.PostingIdentityService;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,7 +75,7 @@ class ChatChannelFacadeTest {
     @Mock
     private AccessControlService accessControlService;
     @Mock
-    private TournamentContactAccessService tournamentContactAccessService;
+    private TournamentContactSpaceAccessGate tournamentContactSpaceAccessGate;
     @Mock
     private EventScopeAccessGuard eventScopeAccessGuard;
     @Mock
@@ -86,7 +86,7 @@ class ChatChannelFacadeTest {
     @BeforeEach
     void setUp() {
         ChatChannelAccessGuard guard = new ChatChannelAccessGuard(channelRepository, memberRepository,
-                accessControlService, tournamentContactAccessService, eventScopeAccessGuard, postingIdentityService);
+                accessControlService, tournamentContactSpaceAccessGate, eventScopeAccessGuard, postingIdentityService);
         // CMP-261113-0110: 導出名の解決は本テストの関心外のため、受け取った応答をそのまま返す（事前取得は空）
         ChatGroupDmDerivedNameResolver derivedNameResolver = org.mockito.Mockito.mock(ChatGroupDmDerivedNameResolver.class);
         given(derivedNameResolver.withDerivedName(any(), any())).willAnswer(inv -> inv.getArgument(0));
