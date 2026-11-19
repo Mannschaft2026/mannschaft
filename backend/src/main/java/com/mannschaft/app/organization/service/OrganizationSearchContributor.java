@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import java.util.Map;
 public class OrganizationSearchContributor implements SearchContributor {
 
     private final OrganizationKeywordSearchRepository organizationKeywordSearchRepository;
+    private final Clock clock;
 
     @Override
     public SearchType type() {
@@ -66,13 +68,14 @@ public class OrganizationSearchContributor implements SearchContributor {
         return SearchViewer.ORGANIZATION.equals(criteria.scopeType()) ? criteria.scopeId() : null;
     }
 
-    private static SearchHit toHit(OrganizationEntity org, List<String> terms) {
+    private SearchHit toHit(OrganizationEntity org, List<String> terms) {
         Map<String, List<Integer>> highlights = new HashMap<>();
         List<Integer> range = SearchTextHighlighter.titleRange(org.getName(), terms);
         if (range != null) {
             highlights.put("title", range);
         }
         return new SearchHit(SearchType.ORGANIZATION, org.getId(), org.getName(), null, highlights, null, null,
-                null, org.getCreatedAt(), "/organizations/" + org.getSlug(), List.of());
+                null, org.getCreatedAt() == null ? null : org.getCreatedAt().atZone(clock.getZone()).toOffsetDateTime(),
+                "/organizations/" + org.getSlug(), List.of());
     }
 }

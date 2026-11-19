@@ -2,7 +2,9 @@ package com.mannschaft.app.search;
 
 import com.mannschaft.app.common.architecture.ProductionClasses;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.mannschaft.app.common.architecture.ArchUnitTestTag;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static com.tngtech.archunit.base.DescribedPredicate.not;
@@ -19,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 既存違反の凍結に頼らず「ゼロ」を固定する（全体の D-5 番人 {@code CrossDomainRepositoryDependencyArchTest}
  * の凍結分は旧実装の撤去で減る）。</p>
  */
+@Tag(ArchUnitTestTag.ARCHUNIT)
 @DisplayName("search ドメイン境界（AC-C17 試練）")
 class SearchDomainBoundaryTest {
 

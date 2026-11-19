@@ -1,7 +1,7 @@
 package com.mannschaft.app.search;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +16,7 @@ import java.util.Map;
  * @param relevance  FULLTEXT 種別の関連度（LIKE 種別は null）
  * @param author     作成者（無い種別は null）
  * @param scope      所属スコープ（無い種別は null）
- * @param createdAt  作成日時
+ * @param createdAt  作成日時（起きた瞬間なので OffsetDateTime。時刻方針 datetime_policy_utc_instant_vs_wallclock §1）
  * @param url        遷移先の実在 FE ルート（リンク不可は null）
  * @param actions    実行可能アクション
  */
@@ -29,7 +29,7 @@ public record SearchHit(
         Double relevance,
         Author author,
         ScopeRef scope,
-        LocalDateTime createdAt,
+        OffsetDateTime createdAt,
         String url,
         List<String> actions) {
 

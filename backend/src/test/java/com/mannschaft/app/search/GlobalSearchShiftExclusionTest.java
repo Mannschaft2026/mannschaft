@@ -5,7 +5,9 @@ import com.mannschaft.app.common.architecture.ProductionClasses;
 import com.mannschaft.app.search.service.GlobalSearchRequest;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.mannschaft.app.common.architecture.ArchUnitTestTag;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -26,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 現れない——を、種別の列挙・入力検証・Contributor の実装の 3 点で固定する。将来シフトを検索対象に戻すときは
  * 本テストが赤になり、未公開シフト表の可視性述語（CMP-260826-2127 AC-6/AC-11）を改めて試練に載せることになる。</p>
  */
+@Tag(ArchUnitTestTag.ARCHUNIT)
 @DisplayName("グローバル検索にシフト表が出ない（CMP-260826-2127 AC-6 / AC-11）")
 class GlobalSearchShiftExclusionTest {
 
