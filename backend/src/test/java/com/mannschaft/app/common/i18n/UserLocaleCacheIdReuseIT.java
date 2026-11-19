@@ -6,12 +6,9 @@ import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -36,22 +33,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <p>実際の再利用経路は、別構成のコンテキスト起動（{@code ddl-auto=create}）が共有 MySQL のスキーマを作り直し、
  * users の AUTO_INCREMENT が 1 に戻ること。ここでは同じ状態を「行を消して同じ id で作り直す」ことで再現する。
- * 1 本目が locale=ja の利用者をキャッシュへ載せて行を消し、2 本目（基底クラスの {@code @BeforeEach} を挟む）が
- * 同じ id で locale=en の利用者を作って早期拒否（AccessDeniedHandler の 403）が英語になることを確かめる。
- * 基底クラスがキャッシュを破棄しなければ 2 本目は ja のまま red になる。</p>
+ * 1 つのテストで自己完結させる（TEST_CONVENTION の順序非依存）: ja 利用者でキャッシュを温め、行を消して同じ id の
+ * en 利用者を作り、テスト境界で走る基底クラスの {@code @BeforeEach}（キャッシュ破棄）を明示的に実行してから、
+ * 早期拒否（AccessDeniedHandler の 403）が英語になることを確かめる。基底クラスがキャッシュを破棄しなければ
+ * ja のままで red になる。</p>
  */
 @AutoConfigureMockMvc
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("CMP-261119-1855 id 再利用でも users.locale キャッシュが持ち越されない")
 class UserLocaleCacheIdReuseIT extends AbstractMySqlIntegrationTest {
 
     private static final Pattern JAPANESE = Pattern.compile("[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uFF66-\uFF9F]");
     private static final String ADMIN_ONLY_URL = "/api/v1/admin/users/1";
-
-    /** 1 本目が使った id（2 本目が同じ id で作り直す）。 */
-    private static Long reusedId;
-    private static Long createdAgainId;
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
@@ -59,48 +52,38 @@ class UserLocaleCacheIdReuseIT extends AbstractMySqlIntegrationTest {
     @PersistenceContext private EntityManager em;
 
     @Test
-    @Order(1)
-    @DisplayName("前提: locale=ja の利用者でリクエストして users.locale キャッシュに ja を載せ、その行を消す")
-    void ja利用者をキャッシュに載せて行を消す() throws Exception {
-        TransactionTemplate tx = new TransactionTemplate(transactionManager);
-        reusedId = tx.execute(s -> persistUser("ja").getId());
-
-        MvcResult result = mockMvc.perform(get(ADMIN_ONLY_URL)
-                .with(authentication(auth(reusedId))).header("Accept-Language", "en")).andReturn();
-        assertThat(result.getResponse().getStatus()).isEqualTo(403);
-        assertThat(JAPANESE.matcher(message(result)).find()).as("ja 利用者は日本語").isTrue();
-
-        tx.executeWithoutResult(s -> em.createNativeQuery("DELETE FROM users WHERE id = :id")
-                .setParameter("id", reusedId).executeUpdate());
-    }
-
-    @Test
-    @Order(2)
-    @DisplayName("同じ id で locale=en の利用者を作ると、早期拒否の 403 は前テストの ja を引きずらず英語になる")
+    @DisplayName("テスト境界で基盤がキャッシュを破棄するため、同じ id で作り直した en 利用者の早期拒否 403 は前の ja を引きずらず英語になる")
     void 同じidのen利用者は英語() throws Exception {
-        assertThat(reusedId).as("1 本目が先に走っていること").isNotNull();
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
-        createdAgainId = tx.execute(s -> {
-            Long generated = persistUser("en").getId();
-            em.createNativeQuery("UPDATE users SET id = :to WHERE id = :from")
-                    .setParameter("to", reusedId).setParameter("from", generated).executeUpdate();
-            return reusedId;
-        });
+        Long id = tx.execute(s -> persistUser("ja").getId());
+        try {
+            // 前テスト相当: ja 利用者でリクエストし、users.locale キャッシュへ ja を載せる
+            MvcResult first = mockMvc.perform(get(ADMIN_ONLY_URL)
+                    .with(authentication(auth(id))).header("Accept-Language", "en")).andReturn();
+            assertThat(first.getResponse().getStatus()).isEqualTo(403);
+            assertThat(JAPANESE.matcher(message(first)).find()).as("ja 利用者は日本語").isTrue();
 
-        MvcResult result = mockMvc.perform(get(ADMIN_ONLY_URL)
-                .with(authentication(auth(createdAgainId))).header("Accept-Language", "ja")).andReturn();
+            // スキーマ再作成による id 再採番の再現: 行を消し、同じ id で locale=en の利用者を作る
+            tx.executeWithoutResult(s -> em.createNativeQuery("DELETE FROM users WHERE id = :id")
+                    .setParameter("id", id).executeUpdate());
+            tx.executeWithoutResult(s -> {
+                Long generated = persistUser("en").getId();
+                em.createNativeQuery("UPDATE users SET id = :to WHERE id = :from")
+                        .setParameter("to", id).setParameter("from", generated).executeUpdate();
+            });
 
-        assertThat(result.getResponse().getStatus()).isEqualTo(403);
-        assertThat(message(result)).isNotBlank().doesNotContainPattern(JAPANESE);
-    }
+            // テスト境界: 次のテストの前に走る基盤の @BeforeEach をここで明示的に実行する
+            assertThat(AbstractMySqlIntegrationTest.class.getDeclaredMethod("clearSharedUserLocaleCache")
+                    .isAnnotationPresent(BeforeEach.class)).as("基盤は各テストの前にキャッシュを破棄する").isTrue();
+            clearSharedUserLocaleCache();
 
-    @AfterEach
-    void cleanUp() {
-        if (createdAgainId != null) {
-            Long id = createdAgainId;
-            createdAgainId = null;
-            new TransactionTemplate(transactionManager).executeWithoutResult(s ->
-                    em.createNativeQuery("DELETE FROM users WHERE id = :id").setParameter("id", id).executeUpdate());
+            MvcResult second = mockMvc.perform(get(ADMIN_ONLY_URL)
+                    .with(authentication(auth(id))).header("Accept-Language", "ja")).andReturn();
+            assertThat(second.getResponse().getStatus()).isEqualTo(403);
+            assertThat(message(second)).isNotBlank().doesNotContainPattern(JAPANESE);
+        } finally {
+            tx.executeWithoutResult(s -> em.createNativeQuery("DELETE FROM users WHERE id = :id")
+                    .setParameter("id", id).executeUpdate());
         }
     }
 

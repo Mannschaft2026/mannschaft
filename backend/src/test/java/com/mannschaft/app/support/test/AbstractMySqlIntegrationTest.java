@@ -136,7 +136,7 @@ public abstract class AbstractMySqlIntegrationTest {
     private com.mannschaft.app.common.i18n.UserLocaleCache sharedUserLocaleCache;
 
     @org.junit.jupiter.api.BeforeEach
-    void clearSharedUserLocaleCache() {
+    protected void clearSharedUserLocaleCache() {
         if (sharedUserLocaleCache != null) {
             sharedUserLocaleCache.clear();
         }
