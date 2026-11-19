@@ -86,7 +86,7 @@ public class GlobalBulletinThreadController {
     private final BulletinReadStatusService readStatusService;
     private final ObjectMapper objectMapper;
     private final BulletinScopeIdResolver scopeIdResolver;
-    /** 大会/ディビジョン連絡スペースの一覧閲覧認可（取引外・D-3T 回避）。 */
+    /** 大会/ディビジョン連絡スペースの存在秘匿つき認可（取引外・D-3T 回避。CMP-261116-0726）。 */
     private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     /**
@@ -231,6 +231,9 @@ public class GlobalBulletinThreadController {
             }
             scopeId = scopeIdResolver.resolveGlobal(type, request.getScopeId());
         }
+        // 大会/ディビジョンの投稿認可（閲覧権なし・スペース不在は 404 TOUR_029、閲覧可・投稿不可は 403 TOUR_031）。
+        // 取引外（D-3T）でサービス呼び出しの前に通す。大会以外のスコープは何もしない。
+        tournamentScopeAccessGuard.checkScopePost(type, scopeId, currentUserId);
         ThreadResponse response = threadService.createThreadGlobal(
                 type, scopeId, currentUserId, request.toCreateThreadRequest());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
@@ -250,6 +253,7 @@ public class GlobalBulletinThreadController {
             @PathVariable Long threadId,
             @Valid @RequestBody UpdateThreadRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadAuthorOrPost(threadId, currentUserId);
         ThreadResponse response = threadService.updateThreadGlobal(threadId, currentUserId, request);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -265,6 +269,7 @@ public class GlobalBulletinThreadController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteThread(@PathVariable Long threadId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadAuthorOrPost(threadId, currentUserId);
         threadService.deleteThreadGlobal(threadId, currentUserId);
         return ResponseEntity.noContent().build();
     }
@@ -283,6 +288,7 @@ public class GlobalBulletinThreadController {
             @PathVariable Long threadId,
             @Valid @RequestBody ChangePriorityRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadPost(threadId, currentUserId);
         ThreadResponse response = threadService.changePriorityGlobal(threadId, currentUserId, request.getPriority());
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -301,6 +307,7 @@ public class GlobalBulletinThreadController {
             @PathVariable Long threadId,
             @RequestBody SetPinRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadPost(threadId, currentUserId);
         ThreadResponse response = threadService.setPinGlobal(threadId, currentUserId, request.resolvePinned());
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -319,6 +326,7 @@ public class GlobalBulletinThreadController {
             @PathVariable Long threadId,
             @RequestBody SetLockRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadPost(threadId, currentUserId);
         ThreadResponse response = threadService.setLockGlobal(threadId, currentUserId, request.resolveLocked());
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -341,6 +349,7 @@ public class GlobalBulletinThreadController {
             @RequestBody(required = false) SetArchiveRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         boolean isArchived = request == null || request.resolveArchived();
+        tournamentScopeAccessGuard.checkThreadPost(threadId, currentUserId);
         ThreadResponse response = threadService.archiveGlobal(threadId, currentUserId, isArchived);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -362,7 +371,9 @@ public class GlobalBulletinThreadController {
     @Operation(summary = "既読マーク（グローバル）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "既読成功")
     public ResponseEntity<Void> markRead(@PathVariable Long threadId) {
-        readStatusService.markAsReadGlobal(threadId, SecurityUtils.getCurrentUserId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadView(threadId, currentUserId);
+        readStatusService.markAsReadGlobal(threadId, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -382,8 +393,11 @@ public class GlobalBulletinThreadController {
             @Valid @RequestBody ReadAllRequest request) {
         ScopeType type = parseScopeType(request.getScopeType());
         Long scopeId = request.getScopeId() != null ? request.getScopeId() : 0L;
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        // 大会/ディビジョンの閲覧認可は取引外（D-3T）。閲覧権なし・不在は 404 TOUR_029。
+        tournamentScopeAccessGuard.checkListView(type, scopeId, currentUserId);
         int marked = readStatusService.markAllAsReadGlobal(
-                type, scopeId, request.getScopeVillageId(), SecurityUtils.getCurrentUserId());
+                type, scopeId, request.getScopeVillageId(), currentUserId);
         return ResponseEntity.ok(ApiResponse.of(new MarkAllReadResult(marked)));
     }
 
@@ -404,8 +418,13 @@ public class GlobalBulletinThreadController {
     public ResponseEntity<ApiResponse<List<ReadStatusResponse>>> listReaders(
             @PathVariable Long threadId,
             @RequestParam(required = false) String filter) {
-        List<ReadStatusResponse> responses =
-                readStatusService.listReadUsersGlobal(threadId, SecurityUtils.getCurrentUserId(), filter);
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        // 大会/ディビジョンは取引外で閲覧と投稿・管理権を判定し（D-3T・AC-15）、結果を渡して bulletin だけで読む。
+        BulletinTournamentScopeAccessGuard.ReadersAccess tournamentAccess =
+                tournamentScopeAccessGuard.checkThreadReaders(threadId, currentUserId);
+        List<ReadStatusResponse> responses = tournamentAccess != null
+                ? readStatusService.listTournamentReadUsers(threadId, tournamentAccess.canModerate(), filter)
+                : readStatusService.listReadUsersGlobal(threadId, currentUserId, filter);
         return ResponseEntity.ok(ApiResponse.of(responses));
     }
 

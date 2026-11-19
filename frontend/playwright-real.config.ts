@@ -54,6 +54,8 @@ export default defineConfig({
         '**/real/f0121-*.real.spec.ts',
         '**/real/n1p1-regression.real.spec.ts',
         '**/real/cmp1507-*.real.spec.ts',
+        // 専用設定 playwright-actionmemo-split.config.ts でのみ実行（wsl.exe と専用コンテナを使う）
+        '**/real/action-memo-team-post-split.spec.ts',
         ...(process.env.L1M_E2E === '1' ? [] : ['**/real/l1m-module-events.real.spec.ts']),
       ],
       dependencies: ['setup-real-user', 'setup-real-admin'],

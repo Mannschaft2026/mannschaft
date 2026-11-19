@@ -52,6 +52,8 @@ export interface ActionMemo {
   relatedTodoId: number | null
   /** 終業投稿がまだなら null */
   timelinePostId: number | null
+  /** チームタイムライン投稿ID（publish-to-team 専用。timelinePostId は個人投稿専用） */
+  teamTimelinePostId: number | null
   tags: ActionMemoTag[]
   /** ISO LocalDateTime（例 "2026-04-09T08:32:14"） */
   createdAt: string
