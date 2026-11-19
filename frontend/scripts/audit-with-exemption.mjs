@@ -1,16 +1,19 @@
 // npm audit の high/critical ゲート（方針 docs/security/04_dependency_and_supply_chain.md §4）。
-// 個別除外は現在ゼロ。node-forge（GHSA-86w9-cpqp-85rv）は 1.4.2 への更新で、
-// braces（GHSA-vfj7-8cjw-p6xm）は勧告が発火しなくなったため、いずれも除外を撤去した。
-// 除外を再導入する場合は GHSA 単位・期限付き・到達経路限定で定義し、方針文書に理由を残すこと。
+// 個別除外は picomatch（GHSA-fc5q-39xc-vjpf、CMP-261118-0628）の1件のみ。期限付き（2026-12-02T00:00:00Z に失効。2026-12-01 UTC 末日まで有効）。
+// 修正版が存在しない（<=4.0.7 の最新が 4.0.7、first_patched_version=null）ための最後の手段。
+// 除外は GHSA 単位・期限付きで定義し、方針文書 §4.3 に理由を残すこと。修正版が出たら撤去する。
 import { execSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
+// 判定は now < 失効時刻。2026-12-02 の開始時点で失効する。期限切れ後は除外が無効になり CI が落ちる（放置防止）。
+export const EXEMPTION_EXPIRES_AT = Date.parse('2026-12-02T00:00:00Z')
+export const EXEMPT_ADVISORY_URLS = new Set(['https://github.com/advisories/GHSA-fc5q-39xc-vjpf'])
 const SEVERITY_RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 }
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 const validSeverity = (value) => Object.hasOwn(SEVERITY_RANK, value)
 
 // npm の終了状態も検証する。通信失敗の stdout が JSON でも成功扱いしない。
-export function checkAudit(raw, status) {
+export function checkAudit(raw, status, now = Date.now()) {
   if (![0, 1].includes(status)) throw new Error(`npm audit の取得失敗: exit ${status}`)
   const report = JSON.parse(raw)
   if (
@@ -89,8 +92,20 @@ export function checkAudit(raw, status) {
       throw new Error(`npm audit の依存と到達 advisory の深刻度が不一致: ${name}`)
     }
     // 報告entryがlow/moderateでも、到達するhigh/criticalは例外なく拒否する。
-    const high = advisories.filter((via) => SEVERITY_RANK[via.severity] >= SEVERITY_RANK.high)
-    if (entry.severity === 'critical' || high.length > 0 || entry.severity === 'high') {
+    const exemptionActive = now < EXEMPTION_EXPIRES_AT
+    const high = advisories.filter(
+      (via) =>
+        SEVERITY_RANK[via.severity] >= SEVERITY_RANK.high &&
+        !(exemptionActive && EXEMPT_ADVISORY_URLS.has(via.url)),
+    )
+    // high entry が通れるのは、期限内で、除外対象 GHSA の high 以上 advisory が実在し、
+    // かつ除外対象以外の high/critical が無い場合だけ。
+    const reachesExempt = advisories.some(
+      (via) =>
+        SEVERITY_RANK[via.severity] >= SEVERITY_RANK.high && EXEMPT_ADVISORY_URLS.has(via.url),
+    )
+    const onlyExempt = exemptionActive && reachesExempt && high.length === 0
+    if (entry.severity === 'critical' || high.length > 0 || (entry.severity === 'high' && !onlyExempt)) {
       throw new Error(`許可されない脆弱性: ${entry.severity} ${name}`)
     }
   }

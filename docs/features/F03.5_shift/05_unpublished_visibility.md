@@ -4,6 +4,7 @@
 > **初版**: 2026-09-03（軍議やり直し版） / **v1.1**: Codex 検分 12 件を反映 / **v1.2**: U-1 決着（案B・マスター裁可）で設計確定
 > **正本課題**: CMP-260826-2127「シフト表の未公開ステータスが API では絞られていない」
 > **関連**: 本ディレクトリ `04_security_operations.md` §6（PDF・IDOR・情報隠蔽の既存方針）、`02_api_design.md` §4（API 一覧）
+> **認可方針更新（CMP-260903-0657）**: §3・§4.2・AC-12・B-7は現行の入力リソース別方針へ同期した。§1・§5の調査記録と過去のテスト影響見積りは調査当時の記録である。
 
 ---
 
@@ -235,20 +236,20 @@ fail-closed により、そうした行は非管理者から見えなくなる�
 
 | ステータス | SysAdmin | Admin | Member | Supporter | Other |
 |---|---|---|---|---|---|
-| DRAFT | 200 | 200 | **404** | 403 | 403 |
-| COLLECTING / ADJUSTING / PUBLISHED / ARCHIVED(公開済) | 200 | 200 | 200 | 403 | 403 |
-| ARCHIVED（publishedAt なし） | 200 | 200 | **404** | 403 | 403 |
+| DRAFT | 200 | 200 | **404** | 403 | 404 |
+| COLLECTING / ADJUSTING / PUBLISHED / ARCHIVED(公開済) | 200 | 200 | 200 | 403 | 404 |
+| ARCHIVED（publishedAt なし） | 200 | 200 | **404** | 403 | 404 |
 
 ### 3.3 `GET /shifts/schedules/{id}/slots`
 
 | ステータス | SysAdmin | Admin | Member | Supporter | Other |
 |---|---|---|---|---|---|
-| DRAFT | 200 全量 | 200 全量 | **404** | 403 | 403 |
-| COLLECTING | 200 全量 | 200 全量 | **200・`assignedUserIds` は `[]` かつ `assignmentMasked=true`** | 403 | 403 |
-| ADJUSTING | 200 全量 | 200 全量 | **200・`assignedUserIds` は `[]` かつ `assignmentMasked=true`** | 403 | 403 |
-| PUBLISHED | 200 全量 | 200 全量 | 200 全量 | 403 | 403 |
-| ARCHIVED（publishedAt あり） | 200 全量 | 200 全量 | 200 全量 | 403 | 403 |
-| ARCHIVED（publishedAt なし） | 200 全量 | 200 全量 | **404** | 403 | 403 |
+| DRAFT | 200 全量 | 200 全量 | **404** | 403 | 404 |
+| COLLECTING | 200 全量 | 200 全量 | **200・`assignedUserIds` は `[]` かつ `assignmentMasked=true`** | 403 | 404 |
+| ADJUSTING | 200 全量 | 200 全量 | **200・`assignedUserIds` は `[]` かつ `assignmentMasked=true`** | 403 | 404 |
+| PUBLISHED | 200 全量 | 200 全量 | 200 全量 | 403 | 404 |
+| ARCHIVED（publishedAt あり） | 200 全量 | 200 全量 | 200 全量 | 403 | 404 |
+| ARCHIVED（publishedAt なし） | 200 全量 | 200 全量 | **404** | 403 | 404 |
 
 枠単体取得のエンドポイントは存在しない（`ShiftSlotController` に `GET /slots/{id}` は無い。
 `ShiftSlotService#getSlot`（:83-87）は内部利用のみ）。将来 EP を生やす場合は同じ表に従うこと。
@@ -356,6 +357,32 @@ DTO から判定できるが、**DTO は `status` が `null` でも組み立て�
 
 ---
 
+### 3.7 充足状況サマリの存在秘匿（CMP-260905-1630）
+
+`GET /shifts/schedules/{id}/summary` は管理者専用でも、未公開シフトに対する一般メンバーの
+403 と不在 ID の 404 が割れると、シフト表の存在を推定できる。管理者限定の判定だけでは足りない。
+現行の認可ファサード `ShiftScheduleFacade` は、既存の `ShiftScheduleScope#isHidden()` を参照して
+未公開の存在秘匿を先に行い、その後に既存の管理者ゲートを適用する。
+
+| 主体 | DRAFT・未公開ARCHIVED・status=null | COLLECTING・ADJUSTING・PUBLISHED・公開済ARCHIVED |
+|---|---|---|
+| 当該チームの一般メンバー | 404 `SHIFT_001`（不在と同一のcode・message） | 403 `COMMON_002` |
+| SUPPORTER | 403 `COMMON_002` | 403 `COMMON_002` |
+| 別チーム管理者・無所属 | 404 `SHIFT_001` | 404 `SHIFT_001` |
+| ADMIN・DEPUTY_ADMIN・SYSTEM_ADMIN・user_rolesのみのADMIN | 200 | 200 |
+
+SUPPORTER の実在 ID と不在 ID の応答差は従来契約 D-2127-1 のままとし、公開状態による差を新設しない。
+不在・対象スケジュール自身の論理削除は全主体で 404 `SHIFT_001`。チーム削除の新しい保証は本件に含めない。
+枠がない管理者のサマリは `summaryByDate=[]` とする。認可後の集計本体は対象を再取得し、
+scope 解決後にスケジュールが削除された場合も 404 とする。
+
+scope 解決は1回で、詳細DTO取得や集計SQLを追加しない。追加の認可読取は未公開経路の定数回に限る。
+存在秘匿と管理者ゲートはトランザクションの外に置き、詳細・枠・PDF・一覧・交代の契約は変更しない。
+`ShiftScheduleSummaryVisibilitySecurityContractIT` が実JWT・実Security・実MySQLのHTTP境界と削除後再取得を、
+`ShiftScheduleFacadeTest` がnull状態と集計非実行・scope解決1回を検査する。
+
+---
+
 ## 4. 404 / 403 の方針と既存契約との整合
 
 ### 4.1 方針（マスター御裁可 B）
@@ -372,17 +399,13 @@ scheduleId を総当りすることで「このチームに未公開シフトが
 さらに `04_security_operations.md` §6【v2.2】が
 「他チームのスケジュール ID を URL 直打ちされた場合は `404`（情報隠蔽）」と宣言している。
 
-### 4.2 二層の順序（既存 403 契約を 1 件も変えないための要）
+### 4.2 入力リソースの生存確認・認可・可視性の順序
 
-1. **認可（誰が）の 403 が先。** `checkTeamReadAccess` が走り、
-   非メンバー・SUPPORTER・別 scope は従来どおり **403**。
-2. **可視性（何が）の 404 が後。** その関門を通過した「当該チームの正当な閲覧者」に対してのみ
-   可視性判定が働き、未公開なら **404**。
-3. **SYSTEM_ADMIN 短絡は 1 より前。** 全ステータス・全層を開ける。
+1. **個別ID入力は親の生存確認が先。** `scheduleId`起点は404 `SHIFT_001`、`slotId`起点の交代作成は404 `SHIFT_002`、`swapId`起点の承諾・承認/却下・非本人取消は404 `SHIFT_005`、`runId`起点の確定・破棄・詳細・目視確認は404 `SHIFT_024`へ、親の不在・論理削除も畳む。SYSTEM_ADMINも同じ順序を通り、認可後の業務TX再読・親ロック待ち中の削除でも同じ応答にする。
+2. **認可を通った主体に可視性を判定する。** 個別IDへの越境は不在とstatus・code・messageを一致させる。同scopeの権限不足は既存の403を維持する。ただしrun詳細・目視確認は既存仕様どおり同scopeの一般メンバーにも404 `SHIFT_024`とする。生存中の親に対する正当管理者・SYSTEM_ADMINの許可は維持する。
+3. **`teamId`入力の一覧は403を維持する。** 非メンバーの応答はチームの実在・visibility・シフトの状態に依らず同一であり、個別IDと一律に揃えない。
 
-この順序により既存の 403 契約は 1 件も変わらない。**403 テストを 404 に書き換える必要は無い。**
-逆順にすると、別チームの ADMIN が 403/404 の差で「そのチームに未公開シフトがある」ことを観測できる
-（存在オラクルが場所を変えて残る）。
+根拠は `docs/security/01_authorization_baseline.md` §3.3.1・§3.3.2。swap本人のPENDING取消だけは従来どおり親の存在に依存しない。作成資格はPUBLISHED・本人担当を維持し、非PUBLISHEDは409 `SHIFT_012`、本人外・未割当は403 `SHIFT_019`とする。
 
 ---
 
@@ -508,11 +531,12 @@ AC-4 は暫定を外して確定形に書き換えた（§7）。
 | R3 | 希望提出リマインド通知 | `ShiftPreferenceReminderBatchService`（:229-262）は COLLECTING のシフト名を通知する**正規仕様**。バッチ経路に閲覧者依存の可視性判定を持ち込むと通知が壊れる | バッチ経路には可視性判定を入れない（バッチに「閲覧者」は存在しない）。T18 が緑のまま |
 | R4 | 管理者の調整画面・D&D ボード | `toSlotResponse`（:316 付近）自体でマスクすると `board.vue`・`shift/[id]/edit.vue` の割当編集が空になる。マスクは `listSlots` / `getSlot` の側で行う | 管理者で ADJUSTING のボードに既存割当が表示される |
 | R5 | FE の null 安全 | `assignedUserIds` を `null` にする（案B でも `null` は禁止。空配列 + `assignmentMasked=true`） | メンバーで COLLECTING の枠一覧を開いて TypeError が出ない |
-| R6 | 既存の 403 契約 | 可視性判定を認可判定より前に置く | `ShiftScheduleScopeContractIT` / `ShiftSlotScopeContractIT` の 403 系（T8・T10）が全て緑のまま |
-| R7 | 自動割当・公開ゲート・サマリ | `getScheduleSummary`（:290-292）・`assertNoUnreviewedRuns` は管理者専用経路。可視性判定を足す必要は無い | 管理者の summary が従来どおり。T14 が緑のまま |
+| R6 | 既存の 403 契約・入力軸ごとの認可契約 | 可視性判定を認可判定より前に置く。その際も一覧teamIdの403・個別ID越境の不在404・同scope権限不足の403を混同しない | `ShiftScheduleScopeContractIT` / `ShiftSlotScopeContractIT` の 403 系（T8・T10）と `ShiftDeletedParentConcealmentContractIT` の対応する正常・拒否ケースが全て緑のまま |
+| R7 | 自動割当・公開ゲート | `assertNoUnreviewedRuns` 等の管理者専用操作は既存の認可を維持する。サマリの存在秘匿は別途 R11 で検査する | T14 が緑のまま |
 | R8 | 検索の既存挙動 | 取得後 Java フィルタで実装する（上限 10 件を取ってから削るため結果がさらに減る） | 絞りが SQL 述語側で行われている |
 | R9 | 交代リクエスト作成ダイアログ | `ShiftSwapRequestFormDialog.vue`（:110-128）が `assignedUserIds` を走査して候補者を作る。公開済みシフトでマスクが誤発火すると候補が空になる | 公開済みシフトで交代相手の候補が出る |
 | R10 | `PUBLISHED` かつ `publishedAt = NULL` の行 | 「publishedAt が入っていること」を PUBLISHED の判定条件にする | `ShiftSwapScopeContractIT`（:472-483）・`ShiftMapperTest`（:70-78）が緑のまま（T15・T17） |
+| R11 | サマリの未公開存在秘匿と既存の管理者限定契約 | 管理者限定を理由に可視性を省くと、一般メンバーの未公開403と不在404が割れる | §3.7 の応答表と不在本文一致、管理者全状態成功、SUPPORTER全状態403を実Security契約ITで検査する |
 
 ### 6.1 FE 側に必要な変更
 
@@ -615,10 +639,8 @@ BE が未公開を返さなくなる以上、FE 側の絞り込みは冗長で�
   （非メンバーの SYSTEM_ADMIN は可視性判定を通過した直後にこの行で 403 になる）。
   → 無いと、`ShiftPdfService` の非対称が温存され、「SYSTEM_ADMIN は全部見られる」という
      ドメイン全体の約束が PDF だけ破れたまま残る。
-- **AC-12**: 既存の認可 403 契約が 1 件も変わらない。すなわち
-  別 scope の ADMIN・SUPPORTER・無所属ユーザーは、**シフト表のステータスに依らず常に 403** を受け取る。
-  → 403 より先に 404 を返すと、別チームの ADMIN が応答コードの差で
-     「そのチームに未公開シフトがある」ことを観測できる（存在オラクルが場所を変えて残る）。
+- **AC-12（現行方針へ同期）**: 非メンバーのteamId一覧はチームの実在・visibility・シフト状態に依らず同じ403、個別IDへの越境と親削除はその入力リソースの不在と同じ404（status・code・message一致）、同scopeの権限不足は既存の403を維持する。run詳細・目視確認の同scope一般メンバー404とswap本人取消の例外も維持する。
+  → ステータスを一律に揃えるのでなく、同じ入力軸に対する応答の差から子の実在・親の削除状態が漏れないことを検証する。
 - **AC-13（修正）**: §5.1 の影響表で「赤」と判定した **T1・T4・T6・T9（および T2）** が、
   **期待値の書き換えではなく `PUBLISHED` のフィクスチャを用意する形で緑化される**。
   加えて未公開に対する 404 のケースが新規に足される。
@@ -673,7 +695,7 @@ BE が未公開を返さなくなる以上、FE 側の絞り込みは冗長で�
 | B-4 | `ShiftChangeRequestService#list`（:110-122）/ `#get`（:141-153）に status 境界が無い | §1.2 X4 | 低〜中。認可自体は効いている |
 | B-5 | **`ShiftSwapService#createOpenCall`（:222-235）に認可が一切無い。** `slotId` の所属チーム検証もしていないため、任意の slotId に対してオープンコールを作成できる | §1.2 X6 | **高。本件とは別系統の欠陥で、書込 API の無認可**。単独で早期起票を推奨 |
 | B-6 | `ShiftPdfService#checkMemberAndNotSupporter`（:100-106）が SYSTEM_ADMIN を短絡しない | §1.2 X7 | 低。ただし**本設計の AC-11(b) で今回まとめて直す**ため、別起票は不要になる可能性がある。射程判断は殿に委ねる |
-| B-7 | shift ドメイン内で越境時の応答が 403（`ShiftScheduleService` / `ShiftSlotService`）と 404（`ShiftChangeRequestService` / `ShiftAutoAssignService`）に割れている | §1.3 | 中。本設計は「認可 403・可視性 404」の二層で当座を整理するが、越境そのものの応答は未統一のまま残る |
+| B-7 | shiftの越境・親削除応答を入力リソースごとに整理する | §1.3・§4.2 | CMP-260903-0657でswap/runの親不在も入力リソースの不在コードへ統一。teamId一覧403と個別ID不在404の差自体は正規仕様であり、一律統一しない。時給削除Facadeは本件の対象外 |
 | B-8 | `transitionStatus`（:214-241）/ `ShiftScheduleEntity#archive()`（:171-173）が遷移元を検査せず、DRAFT → ARCHIVED / PUBLISHED → COLLECTING 等の逆行・飛び越しを許す。`04_security_operations.md` §6 の「許可されていないステータス遷移はアプリ層で厳密にブロック」という宣言と矛盾する | §1.3・§2.2(e) | 中。本設計は fail-closed でこの欠陥に耐えるが、欠陥自体は残る |
 | B-9 | `shift_schedules.published_at`（`V3.070`）に `status` との整合制約が無く、`PUBLISHED + published_at IS NULL` を作れる。DB 制約または投入経路の一元化 | §2.2(e) | 低〜中。本設計は「PUBLISHED は publishedAt を見ない」ことで回避しているが、不変条件が無い状態は残る。制約追加は既存違反行のマイグレーション失敗リスクを伴うため単独で扱うべき |
 | B-10 | グローバル検索の全 9 種別が総件数を持たず、`counts` が上限 `SEARCH_LIMIT = 10` で頭打ちになる（`GlobalSearchService`:78,133）。count query または `Page<T>` 返却への移行 | §3.5.1 | 中。ユーザーからは「11 件以上あっても 10 件と表示される」と見える。9 種別横断の改修になるため単独の戦役が要る |
@@ -683,6 +705,7 @@ BE が未公開を返さなくなる以上、FE 側の絞り込みは冗長で�
 
 ## 9. 変更履歴
 
+- **v1.3 (2026-11-07)**: CMP-260905-1630 のサマリ存在秘匿を §3.7 / R11 へ追補。R7 の「管理者専用なら可視性不要」というサマリの設計漏れを是正し、SUPPORTER・越境・管理者の既存契約、対象スケジュール自身の削除境界、トランザクションと読取回数の制約を明記。
 - **v1.2 (2026-09-03)**: 未決事項 U-1 にマスターの裁可（**案B**）が下りたため設計を締めた。
   - AC-4 を暫定から**確定形**へ書き換え（`assignmentMasked: boolean` の新設・空配列の維持・
     FE の分岐箇所・OpenAPI 生成型の再生成を 5 項目で明記）。

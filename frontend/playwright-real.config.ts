@@ -48,7 +48,16 @@ export default defineConfig({
       testMatch: '**/real/**/*.spec.ts',
       // 所有fixture契約の8件はplaywright.restore.config.tsで省略せず別実行する。
       // F01.2.1 の実機E2E は作成データの後始末を globalTeardown で行うため、専用設定 playwright-f0121.config.ts で実行する。
-      testIgnore: ['**/real/team-restore-ui.spec.ts', '**/real/f0121-*.real.spec.ts', '**/real/n1p1-regression.real.spec.ts', '**/real/cmp1507-*.real.spec.ts'],
+      // L1-M の実機E2Eは検体入り BE（./gradlew bootRunModuleEventE2e）が無いと必ず失敗するため、L1M_E2E=1 の時だけ流す。
+      testIgnore: [
+        '**/real/team-restore-ui.spec.ts',
+        '**/real/f0121-*.real.spec.ts',
+        '**/real/n1p1-regression.real.spec.ts',
+        '**/real/cmp1507-*.real.spec.ts',
+        // 専用設定 playwright-actionmemo-split.config.ts でのみ実行（wsl.exe と専用コンテナを使う）
+        '**/real/action-memo-team-post-split.spec.ts',
+        ...(process.env.L1M_E2E === '1' ? [] : ['**/real/l1m-module-events.real.spec.ts']),
+      ],
       dependencies: ['setup-real-user', 'setup-real-admin'],
     },
   ],

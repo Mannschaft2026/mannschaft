@@ -35,6 +35,10 @@ object ShardAssignment {
                 if (idx < 0) return@mapNotNull null
                 val key = line.substring(0, idx).trim()
                 val value = line.substring(idx + 1).trim().toDoubleOrNull() ?: return@mapNotNull null
+                // 負値・NaN・Infinity は LPT を壊す（偏り・不定動作）ので、黙って通さずクラス名付きで拒否する
+                require(value.isFinite() && value >= 0.0) {
+                    "shard-weights の値が不正です（0 以上の有限値のみ許可）: $key=$value (${weightsFile.name})"
+                }
                 key to value
             }
             .toMap()
@@ -114,7 +118,137 @@ object ShardAssignment {
         if (!path.endsWith(".class")) return false
         return isMigrationReplayClass(fqcnTopLevelFromClassPath(path))
     }
+
+    // -------------------------------------------------------------------------
+    // CMP-261111-0508: 実行集合ベースの割り当て（試練で置いたシグネチャ。本体は出陣で実装）
+    // 呼び出し側（Test.exclude 側と verifyShardCoverage）は「実行対象のトップレベルクラス集合」を
+    // executableTopLevelClasses() で同じ方法で作り、assignShards() に重み表と共に渡す。
+    // 重み表に無いクラスはハッシュではなく既定重み（defaultWeight）付きで LPT に参加させる。
+    // -------------------------------------------------------------------------
+
+    /** 重み表が空、または全重みが 0 のときに使う既定重み（秒）。 */
+    const val FALLBACK_DEFAULT_WEIGHT: Double = 1.0
+
+    /**
+     * 未掲載クラスの既定重み = 重み表の値の中央値（件数が偶数なら中央2値の平均）。
+     * 重み表が空・全重み 0 のときは [FALLBACK_DEFAULT_WEIGHT]。
+     */
+    fun defaultWeight(weights: Map<String, Double>): Double {
+        val sorted = weights.values.sorted()
+        if (sorted.isEmpty()) return FALLBACK_DEFAULT_WEIGHT
+        val n = sorted.size
+        val median = if (n % 2 == 1) sorted[n / 2] else (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+        return if (median > 0.0) median else FALLBACK_DEFAULT_WEIGHT
+    }
+
+    /**
+     * 実行対象のトップレベルクラス集合を LPT で shardTotal 個へ割り付ける。
+     * 重みは weights[fqcn]、未掲載なら [defaultWeight]。
+     * 結果は集合の列挙順に依存しない（同重みは FQCN 昇順、合計が同じ shard は index の小さい方を選ぶ）。
+     * 戻り値のキーは executableTopLevelClasses と一致し、値は 0..shardTotal-1。
+     * 集合が空なら空 map。shardTotal がクラス数より大きければ空 shard が生じてよい。
+     */
+    fun assignShards(
+        executableTopLevelClasses: Collection<String>,
+        weights: Map<String, Double>,
+        shardTotal: Int
+    ): Map<String, Int> {
+        val classes = executableTopLevelClasses.toSet()
+        if (classes.isEmpty()) return emptyMap()
+        val fallback = defaultWeight(weights)
+        val shardTotals = DoubleArray(shardTotal)
+        val assignment = LinkedHashMap<String, Int>()
+        // 重い順、同重みは FQCN 昇順（列挙順に依存させない）
+        classes
+            .map { it to (weights[it] ?: fallback) }
+            .sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first })
+            .forEach { (fqcn, seconds) ->
+                var minIdx = 0
+                for (i in 1 until shardTotal) {
+                    if (shardTotals[i] < shardTotals[minIdx]) minIdx = i
+                }
+                assignment[fqcn] = minIdx
+                shardTotals[minIdx] += seconds
+            }
+        return assignment
+    }
+
+    /**
+     * [assignShards] の結果を使う exclude 述語（Test.exclude と verifyShardCoverage が共用する）。
+     * パス正規化（ネストクラスはトップレベルへ寄せる）→ 割り当て参照 → 否定 までを含む。
+     *
+     * 【どのクラスも必ずただ 1 つの shard】実行対象集合に入らなかったクラス（走査の取りこぼし・抽象・ヘルパー・
+     * 別タスクが実行するクラス）は、割り当て表に無い。以前はこれを「どの shard でも除外しない」としていたため、
+     * 走査が取りこぼした本物のテストが全 shard で重複実行されて、番人にも検出されなかった（検分P1）。
+     * 今は割り当て表に無いクラスも従来の FQCN ハッシュ（[hashBucket]）でちょうど 1 つの shard へ決定的に入れる。
+     */
+    fun shouldExcludeForAssignedShard(
+        path: String,
+        isDirectory: Boolean,
+        shardIndex: Int,
+        shardTotal: Int,
+        assignment: Map<String, Int>
+    ): Boolean {
+        if (isDirectory) return false
+        if (!path.endsWith(".class")) return false
+        val fqcnTopLevel = fqcnTopLevelFromClassPath(path)
+        return bucketOf(fqcnTopLevel, shardTotal, assignment) != shardIndex
+    }
+
+    /**
+     * コンパイル済みテストクラスファイル群から「実行対象のトップレベルクラス集合」を作る。
+     * 数え方: トップレベルクラス自身が抽象でなく、かつ自身またはそのネストクラスのうち**抽象でない**ものが
+     * テストメソッドを持つもの（抽象 static ネストクラスだけにテストがある外側は JUnit が検出しないので数えない。
+     * 具象のサブクラスが継承したテストは、そのサブクラスの hasTestMethods として数える）。
+     * ネストクラスは個別に数えない。抽象クラス・ヘルパー（テストメソッドなし）は含めない。
+     * [jupiterOnly] が true なら、ArchUnit の @AnalyzeClasses だけで「テストあり」になるクラスを数えない
+     * （通常の `:test` は junit-jupiter エンジンのみで、@AnalyzeClasses は `archUnitTest` が実行するため）。
+     */
+    fun executableTopLevelClasses(
+        classFiles: Collection<CompiledTestClassFile>,
+        jupiterOnly: Boolean = false
+    ): Set<String> {
+        val byTop = classFiles.groupBy { fqcnTopLevelFromClassPath(it.path) }
+        return byTop.filter { (top, files) ->
+            val topFile = files.firstOrNull { fqcnTopLevelFromClassPath(it.path) == top && !it.path.contains('$') }
+            topFile != null && !topFile.isAbstract &&
+                files.any { !it.isAbstract && (if (jupiterOnly) it.hasJupiterTests else it.hasTestMethods) }
+        }.keys.toSortedSet()
+    }
+
+    /** 全 runner 必須の専用 stage（archUnitFreezeStoreIntegrityTest）として別走するため、通常の shard 割り当てから外すクラス。 */
+    const val FREEZE_INTEGRITY_CLASS: String = "com.mannschaft.app.common.architecture.ArchUnitFreezeStoreIntegrityTest"
+
+    /**
+     * 「この実行で実際に走るトップレベルクラス集合」。Test.exclude 側と verifyShardCoverage が必ずこの関数で作る。
+     * [executableTopLevelClasses] から専用 stage のクラスを外し、-PexcludeMigrationTests=true なら
+     * migration+Flyway クラスも外す（従来の「除外予定のクラスを貪欲法の対象に含めない」意味を保つ）。
+     */
+    fun runnableTopLevelClasses(
+        classFiles: Collection<CompiledTestClassFile>,
+        excludeMigrationTests: Boolean,
+        archUnitTask: Boolean = false
+    ): Set<String> =
+        // 通常 :test（archUnitTask=false）は @AnalyzeClasses だけのクラスを数えない（archUnitTest が実行する）。
+        // archUnitTest 側の集合は従来どおり（@AnalyzeClasses も数える）。
+        executableTopLevelClasses(classFiles, jupiterOnly = !archUnitTask)
+            .filter { it != FREEZE_INTEGRITY_CLASS }
+            .filter { !excludeMigrationTests || !isMigrationReplayClass(it) }
+            .toSortedSet()
 }
+
+/**
+ * 実行集合の算出に使う「コンパイル済みテストクラスファイル1件」の情報（CMP-261111-0508）。
+ * path は Gradle FileTreeElement.path と同じ "/" 区切りの相対パス（".class" 付き）。
+ * hasTestMethods は継承したテストメソッドも含めて判定した値（@AnalyzeClasses 付きも true）。
+ * hasJupiterTests は JUnit Jupiter 系のテストメソッドだけを数えた値（既定は hasTestMethods と同じ）。
+ */
+data class CompiledTestClassFile(
+    val path: String,
+    val isAbstract: Boolean,
+    val hasTestMethods: Boolean,
+    val hasJupiterTests: Boolean = hasTestMethods
+)
 
 /** verifyShardCoverage が扱う「コンパイル済み .class ファイル1件」の生パスとトップレベルFQCN。 */
 class ShardCoverageClassFile(val path: String, val topLevelFqcn: String)

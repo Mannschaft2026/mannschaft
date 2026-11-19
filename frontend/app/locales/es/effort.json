@@ -1,0 +1,86 @@
+{
+  "effort": {
+    "title": "Registros de esfuerzo",
+    "subtitle": "Guarda registros personales de estudio, ejercicio, peso y más, y revísalos.",
+    "record": "Registro",
+    "review": "Revisión",
+    "template": "Tipo",
+    "recordedOn": "Fecha",
+    "privateNote": "Nota privada",
+    "privateNoteHint": "Solo tú puedes ver la nota privada.",
+    "privateSave": "Guardar solo para mí",
+    "newTitle": "Nuevo registro",
+    "editTitle": "Editar registro",
+    "newRecord": "Cambiar a un registro nuevo",
+    "edit": "Editar",
+    "saved": "Guardado",
+    "savedReconciled": "Ya estaba guardado (se verificó el reenvío)",
+    "deleted": "Eliminado",
+    "status": {
+      "private": "Guardado como registro personal"
+    },
+    "error": {
+      "required": "{field} es obligatorio",
+      "recordedOnRequired": "Introduce la fecha del registro",
+      "conflict": "Otra edición se guardó antes. Se muestra el contenido guardado más reciente.",
+      "recordedOnInvalid": "Introduce una fecha real de hoy o anterior como fecha del registro",
+      "noContent": "Rellena al menos un campo"
+    },
+    "delete": {
+      "header": "Eliminar registro",
+      "message": "Se eliminará este registro. ¿Continuar?",
+      "reject": "Cancelar",
+      "accept": "Eliminar"
+    },
+    "list": {
+      "title": "Registros",
+      "empty": "Aún no hay registros",
+      "more": "Mostrar más"
+    },
+    "period": {
+      "week": "Semana",
+      "month": "Mes",
+      "year": "Año",
+      "custom": "Personalizado",
+      "prev": "Periodo anterior",
+      "next": "Periodo siguiente",
+      "from": "Fecha de inicio",
+      "to": "Fecha de fin",
+      "invalid": "Elige un rango de hasta 366 días, de inicio a fin.",
+      "invalidMissing": "Introduce la fecha de inicio y la de fin.",
+      "invalidOrder": "La fecha de fin debe ser igual o posterior a la de inicio."
+    },
+    "chart": {
+      "kind": "Gráfico",
+      "bar": "Gráfico de barras",
+      "line": "Gráfico de líneas",
+      "pie": "Gráfico circular",
+      "noData": "No hay registros en este periodo",
+      "zeroTotal": "El total es 0, por lo que no se muestra el gráfico circular",
+      "unspecifiedSubject": "Sin asignatura",
+      "notRecorded": "Sin registrar",
+      "category": "Categoría",
+      "value": "Valor",
+      "share": "Proporción",
+      "total": "Total",
+      "period": "Periodo"
+    },
+    "preset": {
+      "study": "Estudio",
+      "exercise": "Ejercicio",
+      "weight": "Peso"
+    },
+    "field": {
+      "subject": "Asignatura",
+      "duration": "Duración",
+      "weight": "Peso",
+      "intensity": "Intensidad",
+      "menu": "Menú"
+    },
+    "unit": {
+      "MINUTE": "min",
+      "KILOGRAM": "kg",
+      "RPE": "RPE"
+    }
+  }
+}

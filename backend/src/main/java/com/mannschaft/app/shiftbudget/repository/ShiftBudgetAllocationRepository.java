@@ -152,6 +152,31 @@ public interface ShiftBudgetAllocationRepository
             @Param("teamId") Long teamId, @Param("date") LocalDate date);
 
     /**
+     * 閉区間 {@code [from, to]} に重なる予算割当候補を一括で返す（CMP-261115-1821 公開時給ガードの公開 TX 外の取得）。
+     *
+     * <p>{@link #findOrganizationIdsWithTeamAllocationContaining}（チーム個別）と
+     * {@link #findOrganizationIdsWithOrgWideAllocationContaining}（組織全体）の和集合を、日付ごとではなく期間で
+     * 1 回に引く。いずれもチームが ACTIVE 加盟している組織の生存割当に限る。日付ごとの採否（チーム個別優先・
+     * 組織全体へのフォールバック）は呼び出し側が値で判定する。</p>
+     *
+     * <p>列は {@code organization_id, team_id(NULL=組織全体), period_start, period_end}。ネイティブのスカラー投影の
+     * DATE は JDBC 既定型（{@code java.sql.Date}）で戻りうるため、呼び出し側で {@code LocalDate} へ変換する。</p>
+     */
+    @Query(value =
+            "SELECT a.organization_id, a.team_id, a.period_start, a.period_end "
+                    + "FROM shift_budget_allocations a "
+                    + "INNER JOIN team_org_memberships tom "
+                    + "   ON tom.organization_id = a.organization_id AND tom.team_id = :teamId "
+                    + "  AND tom.status = 'ACTIVE' "
+                    + "WHERE (a.team_id = :teamId OR a.team_id IS NULL) "
+                    + "  AND a.period_start <= :to AND a.period_end >= :from "
+                    + "  AND a.deleted_at IS NULL "
+                    + "ORDER BY a.organization_id, a.period_start, a.id",
+            nativeQuery = true)
+    List<Object[]> findPublicationCandidatesOverlapping(
+            @Param("teamId") Long teamId, @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /**
      * {@code consumed_amount} をアトミックに加算する（マスター御裁可 Q4 採用方針）。
      *
      * <p>{@code @Version} を介さない直接 UPDATE のため、楽観ロック競合を発生させずに
