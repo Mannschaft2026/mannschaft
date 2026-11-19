@@ -313,3 +313,69 @@ describe('試練108 AC31α 締め日設定画面: 権限', () => {
     expect(changeClosingSetting).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * CMP-260909-2152 Codex 検分3 P2-2: 組織切替時に旧組織の設定を破棄し、取得時の組織とリクエスト世代が現在も有効な応答だけ反映する。
+ * 旧組織の応答が後着して新組織の画面（締め日・履歴・revision）を上書きし、旧 revision で新組織へ送信する事故を防ぐ。
+ */
+describe('CMP-260909-2152 Codex 検分3 P2-2 組織切替時に旧組織の応答を反映しない', () => {
+  function settingsB() {
+    return settings({
+      closing_day: 15,
+      revision: 7,
+      changes: [
+        { revision: 7, effective_period_key: '2026-10', closing_day: 15, previous_closing_day: 0,
+          reason: '組織Bの変更', actor_user_id: 8, created_at: '2026-09-20T01:00:00Z' },
+      ],
+    })
+  }
+
+  it('組織A取得中に組織Bへ切り替え、Aの応答が後着しても B の締め日・履歴・revision で表示・送信する', async () => {
+    let finishA!: (v: unknown) => void
+    getClosingSettings.mockImplementation((orgId: string) => orgId === '10'
+      ? new Promise((resolve) => { finishA = resolve })
+      : Promise.resolve(settingsB()))
+    const wrapper = await mountSuspended(Settings)
+    expect(getClosingSettings).toHaveBeenCalledWith('10')
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    expect(getClosingSettings).toHaveBeenCalledWith('20')
+    finishA(settings())
+    await flushPromises()
+    expect(wrapper.find('[data-testid="closing-history-row-7"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="closing-history-row-2"]').exists()).toBe(false)
+    await fillForm(wrapper, 20, '2026-12', '組織Bを20日締めへ')
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(changeClosingSetting).toHaveBeenCalledTimes(1)
+    expect(changeClosingSetting).toHaveBeenCalledWith('20', expect.objectContaining({ expected_revision: 7 }))
+  })
+
+  it('組織A取得中に組織Bへ切り替え、Aの失敗が後着しても B の画面に取得失敗を出さない', async () => {
+    let failA!: (e: unknown) => void
+    getClosingSettings.mockImplementation((orgId: string) => orgId === '10'
+      ? new Promise((_, reject) => { failA = reject })
+      : Promise.resolve(settingsB()))
+    const wrapper = await mountSuspended(Settings)
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    failA(new Error('A failed'))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="closing-settings-load-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="closing-history-row-7"]').exists()).toBe(true)
+  })
+
+  it('組織を切り替えた直後（B 取得中）は A の設定を表示せず、A の revision で送信できない', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-testid="closing-history-row-2"]').exists()).toBe(true)
+    getClosingSettings.mockReturnValue(new Promise(() => {}))
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    expect(wrapper.find('[data-testid="closing-history-row-2"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="closing-current"]').exists()).toBe(false)
+    const submit = wrapper.find('[data-testid="closing-submit"]')
+    if (submit.exists()) await submit.trigger('click')
+    await flushPromises()
+    expect(changeClosingSetting).not.toHaveBeenCalled()
+  })
+})

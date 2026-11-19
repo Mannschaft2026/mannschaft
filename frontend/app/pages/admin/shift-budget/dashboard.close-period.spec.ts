@@ -33,11 +33,12 @@ const executeMonthlyClose = vi.fn()
 const notifySuccess = vi.fn()
 const notifyError = vi.fn()
 const notifyInfo = vi.fn()
+const notifyWarn = vi.fn()
 
 mockNuxtImport('useScopeStore', () => () => scope)
 const userTimezone = ref('Asia/Tokyo')
 mockNuxtImport('useDatetime', () => () => ({ userTimezone }))
-mockNuxtImport('useNotification', () => () => ({ error: notifyError, success: notifySuccess, info: notifyInfo }))
+mockNuxtImport('useNotification', () => () => ({ error: notifyError, success: notifySuccess, info: notifyInfo, warn: notifyWarn }))
 mockNuxtImport('useShiftBudgetApi', () => () => ({
   listAllocations, getConsumptionSummary: vi.fn(), listClosePeriods, executeMonthlyClose,
 }))
@@ -93,12 +94,13 @@ beforeEach(async () => {
   listAllocations.mockReset().mockResolvedValue({ items: [], total: 0, page: 0, size: 100 })
   listClosePeriods.mockReset().mockResolvedValue(periods())
   executeMonthlyClose.mockReset().mockResolvedValue({
-    year_month: '2026-11', closed_allocations: 1, already_closed_allocations: 0, closed_consumptions: 5,
+    year_month: '2026-11', closed_allocations: 1, already_closed_allocations: 0, failed_allocations: 0, closed_consumptions: 5,
     processed_organization_ids: [10], failed_organization_ids: [], already_closed_organization_ids: [],
   })
   notifySuccess.mockReset()
   notifyError.mockReset()
   notifyInfo.mockReset()
+  notifyWarn.mockReset()
 })
 
 afterEach(() => {
@@ -233,5 +235,72 @@ describe('試練108 AC31α 月次締め: 権限と導線', () => {
     const link = wrapper.find('[data-testid="closing-settings-link"]')
     expect(link.exists()).toBe(true)
     expect(link.attributes('href')).toBe('/admin/shift-budget/settings')
+  })
+})
+
+/**
+ * CMP-260909-2152 Codex 検分3 P2-1: 段取り役は Post 失敗・ABORTED を HTTP 200 の failed_allocations>0 に集計する。
+ * 画面は失敗件数を見て、全件失敗・部分成功・締め済みを区別して通知する。
+ * - 全件失敗（closed=0・failed>0）: 成功／情報を出さず、失敗件数と未締めの割当が残る旨をエラー通知し、ダイアログを閉じない（再実行できる）。
+ * - 部分成功（closed>0・failed>0）: 成功ではなく警告で、締めた件数・失敗件数・未締めが残る旨を出し、ダイアログを閉じて再読込する。
+ * - 締め済み（already>0・closed=0・failed=0）: 情報通知。失敗が混ざれば失敗を優先する。
+ */
+function closeResult(closed: number, already: number, failed: number) {
+  return {
+    year_month: '2026-11', closed_allocations: closed, already_closed_allocations: already, failed_allocations: failed,
+    closed_consumptions: closed * 3,
+    processed_organization_ids: closed > 0 ? [10] : [],
+    failed_organization_ids: failed > 0 ? [10] : [],
+    already_closed_organization_ids: already > 0 ? [10] : [],
+  }
+}
+
+async function runClose(result: ReturnType<typeof closeResult>) {
+  executeMonthlyClose.mockResolvedValue(result)
+  const wrapper = await openDialog()
+  await executeButton(wrapper)!.trigger('click')
+  await flushPromises()
+  return wrapper
+}
+
+describe('CMP-260909-2152 Codex 検分3 P2-1 締め結果の失敗件数を通知に反映する', () => {
+  it('全件失敗は成功を出さず、失敗件数と未締めが残る旨をエラー通知し、ダイアログを閉じない', async () => {
+    const wrapper = await runClose(closeResult(0, 0, 2))
+    expect(notifySuccess).not.toHaveBeenCalled()
+    expect(notifyInfo).not.toHaveBeenCalled()
+    expect(notifyError).toHaveBeenCalledTimes(1)
+    const message = String(notifyError.mock.calls[0]![0])
+    expect(message).toContain('2026-11-17')
+    expect(message).toContain('失敗 2 件')
+    expect(message).toContain('未締め')
+    expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(true)
+  })
+
+  it('部分成功は成功ではなく警告で、締めた件数・失敗件数・未締めが残る旨を出し、ダイアログを閉じる', async () => {
+    const wrapper = await runClose(closeResult(1, 0, 1))
+    expect(notifySuccess).not.toHaveBeenCalled()
+    expect(notifyWarn).toHaveBeenCalledTimes(1)
+    const message = String(notifyWarn.mock.calls[0]![0])
+    expect(message).toContain('締め 1 件')
+    expect(message).toContain('失敗 1 件')
+    expect(message).toContain('未締め')
+    expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(false)
+  })
+
+  it('締め済みと失敗が混在（closed=0・already>0・failed>0）は締め済み扱いにせず失敗として通知する', async () => {
+    const wrapper = await runClose(closeResult(0, 3, 1))
+    expect(notifyInfo).not.toHaveBeenCalled()
+    expect(notifySuccess).not.toHaveBeenCalled()
+    expect(notifyError).toHaveBeenCalledTimes(1)
+    expect(String(notifyError.mock.calls[0]![0])).toContain('失敗 1 件')
+    expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(true)
+  })
+
+  it('締め済みのみ（already>0・closed=0・failed=0）は締め済みの情報通知を出し、ダイアログを閉じる', async () => {
+    const wrapper = await runClose(closeResult(0, 3, 0))
+    expect(notifyInfo).toHaveBeenCalledTimes(1)
+    expect(notifySuccess).not.toHaveBeenCalled()
+    expect(notifyError).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(false)
   })
 })
