@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# 同一run/attemptの全6 fresh runtimeから通常:testのクラス実時間を再生成する。
-# CLI形式は従来どおり。backend-ciはfull profileの証明不足として拒否し、既定は最新成功nightly。
+# 同一run/attemptの全N（run の job/step 名から導出。6 または 8）fresh runtimeから通常:testのクラス実時間を再生成する。
+# 使い方: regen-shard-weights.sh [RUN_ID[,RUN_ID...]] [nightly-full]
+#   RUN_ID をカンマ区切りで複数渡すと、クラスごとの「観測できた run」だけで平均する（未観測を 0 秒で薄めない）。
+#   全 run を検証し終えてから 1 回だけ原子的に置換する（途中で 1 本でも失敗したら既存の重み表は不変）。
+# backend-ciはfull profileの証明不足として拒否し、既定は最新成功nightly。
 # runtime artifactは保持7日。XMLへのfallbackやfailed runのwarn続行はしない。
 # 未観測/削除/arch/perf/skipと現在sourceとの差は別manifestで検分する。
 # historical runと現在HEADの一致は要求しない。割当と4profile guardは既存のまま。
@@ -93,21 +96,47 @@ def parse_shard(files):
         name.startswith(other + '$') for other in names if other != name)) for top, names in groups.items()}
 
 
+def expected_shard_total(jobs, kind):
+    """run の job 名・step 名から期待 shard 数 N を決める（job 数・step の '/ N' が全て一致しなければ拒否）。"""
+    require(kind == 'nightly-full', 'backend-ci full profile cannot be established; use nightly-full')
+    prefix = 'Full test' if kind == 'nightly-full' else 'Test'
+    job_pattern = re.compile(re.escape(prefix) + r' \(shard (\d+)\)')
+    step_pattern = re.compile(r'Run tests \(shard (\d+) / (\d+)\b')
+    indexes, totals = [], set()
+    for job in jobs:
+        match = job_pattern.fullmatch(job['name'])
+        if match is None:
+            continue
+        index = int(match.group(1))
+        require(index not in indexes, f'duplicate shard job: {index}')
+        indexes.append(index)
+        steps = [step_pattern.match(step['name']) for step in job['steps']]
+        steps = [m for m in steps if m is not None and int(m.group(1)) == index]
+        require(len(steps) == 1, f'shard total mismatch: shard {index} test step missing/duplicate')
+        totals.add(int(steps[0].group(2)))
+    require(indexes, 'shard total mismatch: no shard job')
+    require(len(totals) == 1 and totals == {len(indexes)} and set(indexes) == set(range(len(indexes))),
+            f'shard total mismatch: jobs={sorted(indexes)} step totals={sorted(totals)}')
+    return len(indexes)
+
+
 def build_weights(run, jobs, shards, kind):
     require(kind == 'nightly-full', 'backend-ci full profile cannot be established; use nightly-full')
     require(kind in WORKFLOWS and run.get('path', '').split('@')[0].split('/')[-1] == WORKFLOWS[kind], 'workflow mismatch')
     require(run['status'] == 'completed' and run['conclusion'] == 'success', 'completed successful run required')
     require(re.fullmatch(r'[0-9a-f]{40}', run['head_sha']) and type(run['run_attempt']) is int and run['run_attempt'] > 0,
             'run head/attempt invalid')
-    require(set(shards) == set(range(6)), 'all six shards required')
+    total = expected_shard_total(jobs, kind)
+    require(set(shards) == set(range(total)),
+            f'shard index set mismatch: expected 0..{total - 1}, got {sorted(shards)}')
     prefix = 'Full test' if kind == 'nightly-full' else 'Test'
     weights = {}
-    for n in range(6):
+    for n in range(total):
         selected = [j for j in jobs if j['name'] == f'{prefix} (shard {n})']
         require(len(selected) == 1 and selected[0]['status'] == 'completed' and selected[0]['conclusion'] == 'success', 'shard job invalid')
         require(selected[0]['run_id'] == run['id'] and selected[0]['run_attempt'] == run['run_attempt']
                 and selected[0]['head_sha'] == run['head_sha'], 'shard job run/head/attempt mismatch')
-        steps = [s for s in selected[0]['steps'] if s['name'].startswith(f'Run tests (shard {n} / 6')]
+        steps = [s for s in selected[0]['steps'] if s['name'].startswith(f'Run tests (shard {n} / {total}')]
         require(len(steps) == 1 and steps[0]['conclusion'] == 'success', 'shard test step invalid')
         meta, files = shards[n]
         expected = (rf'nightly-runtime-diag-shard-{n}-attempt-{run["run_attempt"]}' if kind == 'nightly-full' else
@@ -122,18 +151,55 @@ def build_weights(run, jobs, shards, kind):
     return weights
 
 
+def build_weights_multi(inputs, kind):
+    """複数 run を検証し、クラスごとに「観測できた run」だけで平均する。戻り値は (平均ミリ秒, 観測 run 数)。"""
+    require(inputs, 'at least one run required')
+    ids = [run['id'] for run, _, _ in inputs]
+    require(len(set(ids)) == len(ids), 'duplicate run id')
+    sums, observed = collections.defaultdict(float), collections.Counter()
+    for run, jobs, shards in inputs:
+        try:
+            current = build_weights(run, jobs, shards, kind)
+        except (ValueError, KeyError) as error:
+            raise ValueError(f'run {run.get("id")}: {error}') from error
+        for name, millis in current.items():
+            sums[name] += millis
+            observed[name] += 1
+    return {name: sums[name] / observed[name] for name in sums}, dict(observed)
+
+
 def render(run, weights):
     migration = {k: v for k, v in weights.items() if '.migration.' in k and 'Flyway' in k.rsplit('.', 1)[-1]}
     header = (f'# CI shard weights: metric=class-suite-elapsed-ms (normal :test)\n'
               f'# run={run["id"]} head={run["head_sha"]} attempt={run["run_attempt"]} conclusion=success\n'
               f'# workflow={run["path"]} branch={run["head_branch"]} created={run["created_at"]}\n'
-              '# 全6 fresh runtime。outer suiteは子を二重加算せず、nested-onlyは独立最外suiteを合算。\n'
+              '# 全 shard fresh runtime。outer suiteは子を二重加算せず、nested-onlyは独立最外suiteを合算。\n'
               '# XML testsuite.timeやMFA内部サービス計測値とは異なる。historical sourceの実測。\n'
               f'# classes={len(weights)} migration+Flyway={len(migration)} seconds={sum(migration.values()) / 1000:.3f}\n'
               '# 現在sourceの未計測/削除/arch/perf/skip分類と適用判断は別manifestで検分する。\n'
               '# backend/build.gradle.ktsの既存LPT/hashと4profile guardを維持する。\n'
               '# 再生成: backend/scripts/regen-shard-weights.sh [RUN_ID] [nightly-full|backend-ci]\n')
     return header + ''.join(f'{name}={weights[name] / 1000:.3f}\n' for name in sorted(weights))
+
+
+def render_multi(runs, weights, observed):
+    """複数 run の平均を重み表へ。来歴（全 run の id/head/attempt）と、観測 run が少ないクラスの分母を # 行で残す。"""
+    migration = {k: v for k, v in weights.items() if '.migration.' in k and 'Flyway' in k.rsplit('.', 1)[-1]}
+    lines = ['# CI shard weights: metric=class-suite-elapsed-ms (normal :test)',
+             f'# runs={len(runs)} 各クラスは観測できた run だけで平均（未観測を 0 秒として分母に入れない）']
+    for run in runs:
+        lines.append(f'# run={run["id"]} head={run["head_sha"]} attempt={run["run_attempt"]} conclusion=success '
+                     f'workflow={run["path"]} branch={run["head_branch"]} created={run["created_at"]}')
+    lines += ['# 全 shard fresh runtime。outer suiteは子を二重加算せず、nested-onlyは独立最外suiteを合算。',
+              '# XML testsuite.timeやMFA内部サービス計測値とは異なる。historical sourceの実測。',
+              f'# classes={len(weights)} migration+Flyway={len(migration)} seconds={sum(migration.values()) / 1000:.3f}',
+              '# 現在sourceの未計測/削除/arch/perf/skip分類と適用判断は別manifestで検分する。',
+              '# 再生成: backend/scripts/regen-shard-weights.sh [RUN_ID[,RUN_ID...]] [nightly-full]']
+    partial = sorted(name for name in weights if observed[name] < len(runs))
+    for name in partial:
+        lines.append(f'# {name} observed={observed[name]}/{len(runs)}')
+    lines += [f'{name}={weights[name] / 1000:.3f}' for name in sorted(weights)]
+    return '\n'.join(lines) + '\n'
 
 
 def atomic_write(target, content):
@@ -152,7 +218,7 @@ def atomic_write(target, content):
             temporary.unlink(missing_ok=True)
 
 
-def main(repo, run_id, kind, target):
+def main(repo, run_ids, kind, target):
     require(kind in WORKFLOWS, 'source kind must be nightly-full or backend-ci')
     require(kind == 'nightly-full', 'backend-ci full profile cannot be established; use nightly-full')
     def gh(*args):
@@ -161,35 +227,49 @@ def main(repo, run_id, kind, target):
         return result.stdout
     def api(path):
         return json.loads(gh('api', f'repos/{repo}/{path}'))
-    if not run_id:
+    if not run_ids:
         candidates = json.loads(gh('run', 'list', '-R', repo, '--workflow', WORKFLOWS[kind], '--status', 'success',
                                    '--limit', '1', '--json', 'databaseId'))
         require(candidates, 'successful run not found')
-        run_id = str(candidates[0]['databaseId'])
-    require(run_id.isdecimal(), 'numeric run ID required')
-    run = api(f'actions/runs/{run_id}')
-    require(run['status'] == 'completed' and run['conclusion'] == 'success', 'successful completed run required')
-    jobs = api(f'actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
-    artifacts, page = [], 1
-    while True:
-        response = api(f'actions/runs/{run_id}/artifacts?per_page=100&page={page}')
-        artifacts.extend(response['artifacts'])
-        if len(artifacts) >= response['total_count']:
-            break
-        page += 1
-    shards = {}
-    for n in range(6):
-        pattern = (rf'nightly-runtime-diag-shard-{n}-attempt-{run["run_attempt"]}' if kind == 'nightly-full' else
-                   rf'backend-runtime-diag-pr-(?:manual|\d+)-shard-{n}-attempt-{run["run_attempt"]}')
-        matches = [m for m in artifacts if re.fullmatch(pattern, m['name'])]
-        require(len(matches) == 1, f'shard {n} runtime missing/duplicate; no XML fallback')
-        meta = matches[0]
-        require(not meta['expired'] and meta['size_in_bytes'] <= 4 * 1024 * 1024, 'artifact expired/oversized')
-        data = gh('api', f'repos/{repo}/actions/artifacts/{meta["id"]}/zip')
-        shards[n] = (meta, safe_zip(meta, data))
-    weights = build_weights(run, jobs, shards, kind)
-    atomic_write(target, render(run, weights))
-    print(f'[OK] run={run_id} attempt={run["run_attempt"]} classes={len(weights)} metric=class-suite-elapsed-ms')
+        run_ids = str(candidates[0]['databaseId'])
+    ids = run_ids.split(',')
+    require(all(i.isdecimal() for i in ids), 'numeric run ID required')
+    require(len(set(ids)) == len(ids), 'duplicate run ID')
+    def fetch(run_id):
+        run = api(f'actions/runs/{run_id}')
+        require(run['status'] == 'completed' and run['conclusion'] == 'success', 'successful completed run required')
+        jobs = api(f'actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
+        total = expected_shard_total(jobs, kind)
+        require(total <= 64, 'shard total implausible')
+        artifacts, page = [], 1
+        while True:
+            response = api(f'actions/runs/{run_id}/artifacts?per_page=100&page={page}')
+            artifacts.extend(response['artifacts'])
+            if len(artifacts) >= response['total_count']:
+                break
+            page += 1
+        shards = {}
+        pattern = re.compile(rf'nightly-runtime-diag-shard-(\d+)-attempt-{run["run_attempt"]}')
+        for meta in artifacts:
+            match = pattern.fullmatch(meta['name'])
+            if match is None:
+                continue
+            n = int(match.group(1))
+            require(n not in shards, f'shard {n} runtime duplicate; no XML fallback')
+            require(not meta['expired'] and meta['size_in_bytes'] <= 4 * 1024 * 1024, 'artifact expired/oversized')
+            data = gh('api', f'repos/{repo}/actions/artifacts/{meta["id"]}/zip')
+            shards[n] = (meta, safe_zip(meta, data))
+        return run, jobs, shards
+    inputs = []
+    for run_id in ids:
+        try:
+            inputs.append(fetch(run_id))
+        except (ValueError, KeyError) as error:
+            raise ValueError(f'run {run_id}: {error}') from error
+    weights, observed = build_weights_multi(inputs, kind)
+    atomic_write(target, render_multi([run for run, _, _ in inputs], weights, observed))
+    summary = ' '.join(f'run={r["id"]}/attempt={r["run_attempt"]}' for r, _, _ in inputs)
+    print(f'[OK] {summary} classes={len(weights)} metric=class-suite-elapsed-ms')
 
 
 if __name__ == '__main__':

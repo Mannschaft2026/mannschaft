@@ -34,6 +34,7 @@ import org.hibernate.mapping.Selectable;
 import org.hibernate.mapping.ToOne;
 import org.hibernate.mapping.Value;
 import org.hibernate.type.BasicType;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +44,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy;
@@ -337,6 +341,214 @@ class FlywayFromScratchMigrationTest {
         } finally {
             StandardServiceRegistryBuilder.destroy(registry);
         }
+    }
+
+    /**
+     * Entity がないアーカイブ表の列欠落を、設計書に明記された4組だけで検査する。
+     * 型・NULL・DEFAULT・PK・索引・列順は比較せず、アーカイブ専用列を許容する。
+     */
+    @Test
+    @Order(2)
+    void cmp0012_実Flywayの既知4組に本体の全列がある() throws SQLException {
+        migrateFromScratch();
+        assertThat(archiveColumnViolations(readActualSchema()))
+                .as("本体の全列を対応するarchiveへ保持する（CMP-260924-0012）")
+                .isEmpty();
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_同じ列を持つ4組は合格する() {
+        assertThat(archiveColumnViolations(archiveColumnFixture())).isEmpty();
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_アーカイブ専用列は許容する() {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        schema.forEach((table, columns) -> {
+            if (table.endsWith("_archive")) {
+                columns.add("archived_at");
+            }
+        });
+        assertThat(archiveColumnViolations(schema)).isEmpty();
+    }
+
+    @ParameterizedTest(name = "列欠落 [{index}] {0}.{1}")
+    @CsvSource({
+            "content_reports, content_hidden",
+            "report_actions, note",
+            "direct_mail_logs, body_html",
+            "direct_mail_recipients, status"
+    })
+    @Order(2)
+    void cmp0012_各組のアーカイブ列欠落を検出する(String sourceTable, String column) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        String archiveTable = sourceTable + "_archive";
+        assertThat(schema.get(archiveTable).remove(column)).as("欠落検体の前提").isTrue();
+
+        assertThat(archiveColumnViolations(schema))
+                .containsExactly(sourceTable + " -> " + archiveTable + "." + column);
+    }
+
+    @ParameterizedTest(name = "表欠落 [{index}] {0}")
+    @ValueSource(strings = {"content_reports", "content_reports_archive"})
+    @Order(2)
+    void cmp0012_片側テーブルの欠落を合格にしない(String table) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        assertThat(schema.remove(table)).as("欠落検体の前提").isNotNull();
+
+        assertThat(archiveColumnViolations(schema)).containsExactly(table + " … テーブルが存在しない");
+    }
+
+    @ParameterizedTest(name = "空列集合 [{index}] {0}")
+    @ValueSource(strings = {"content_reports", "content_reports_archive"})
+    @Order(2)
+    void cmp0012_片側の空列集合を合格にしない(String table) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        schema.get(table).clear();
+
+        assertThat(archiveColumnViolations(schema)).containsExactly(table + " … 列集合が空");
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_archiveのsender_typeはNOT_NULLでDEFAULTを持たない() throws Exception {
+        migrateFromScratch();
+        try (Connection conn = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())) {
+            assertThat(senderTypeDefinition(conn)).isEqualTo("varchar|20|NO|null");
+            // 新規保存では送信者種類を必須にする（DEFAULT で黙って埋めない）
+            try (Statement st = conn.createStatement()) {
+                org.junit.jupiter.api.Assertions.assertThrows(SQLException.class,
+                        () -> st.executeUpdate(archiveInsertSql(null)));
+            }
+        }
+    }
+
+    /**
+     * 既存値の保持・途中再開（既に列がある状態で migration を再実行）・想定外定義の検出を、
+     * 追加のコンテナや全 migration の再走行なしに、V262 の SQL だけを同じスキーマへ再実行して確かめる。
+     */
+    @Test
+    @Order(2)
+    void cmp0012_archiveのsender_type追加は再実行で既存値を保持し想定外定義を検出する() throws Exception {
+        migrateFromScratch();
+        String script = new String(new PathMatchingResourcePatternResolver()
+                .getResources("classpath*:db/migration/V262.*__add_sender_type_to_direct_mail_logs_archive.sql")[0]
+                .getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        List<String> statements = new ArrayList<>();
+        StringBuilder body = new StringBuilder();
+        for (String line : script.split("\\R")) {
+            if (!line.trim().startsWith("--")) {
+                body.append(line).append('\n');
+            }
+        }
+        for (String part : body.toString().split(";")) {
+            if (!part.isBlank()) {
+                statements.add(part.trim());
+            }
+        }
+        try (Connection conn = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+             Statement st = conn.createStatement()) {
+            try {
+                st.executeUpdate(archiveInsertSql("SYSTEM_AD"));
+                st.executeUpdate(archiveInsertSql("unknown"));
+                // 再実行しても定義・既存値（大文字小文字を含む）は変わらない
+                for (String sql : statements) {
+                    st.execute(sql);
+                }
+                assertThat(senderTypeDefinition(conn)).isEqualTo("varchar|20|NO|null");
+                try (ResultSet rs = st.executeQuery(
+                        "SELECT sender_type FROM direct_mail_logs_archive WHERE subject = 'cmp0012-seed' ORDER BY id")) {
+                    List<String> values = new ArrayList<>();
+                    while (rs.next()) {
+                        values.add(rs.getString(1));
+                    }
+                    assertThat(values).containsExactly("SYSTEM_AD", "unknown");
+                }
+                // 想定外の NULL 可否は握りつぶさず失敗する
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NULL");
+                org.junit.jupiter.api.Assertions.assertThrows(SQLException.class, () -> {
+                    for (String sql : statements) {
+                        st.execute(sql);
+                    }
+                });
+                // 後始末（検出で中断しても一時表が残らないよう接続を閉じる前に落とす）
+                st.execute("DROP TEMPORARY TABLE IF EXISTS cmp0012_sender_type_guard");
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NOT NULL");
+            } finally {
+                st.executeUpdate("DELETE FROM direct_mail_logs_archive WHERE subject = 'cmp0012-seed'");
+                st.execute("DROP TEMPORARY TABLE IF EXISTS cmp0012_sender_type_guard");
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NOT NULL");
+            }
+        }
+    }
+
+    private static String senderTypeDefinition(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT "
+                     + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                     + "AND TABLE_NAME = 'direct_mail_logs_archive' AND COLUMN_NAME = 'sender_type'")) {
+            assertThat(rs.next()).as("direct_mail_logs_archive.sender_type が存在すること").isTrue();
+            return rs.getString(1) + "|" + rs.getLong(2) + "|" + rs.getString(3) + "|" + rs.getString(4);
+        }
+    }
+
+    private static String archiveInsertSql(String senderType) {
+        return "INSERT INTO direct_mail_logs_archive (scope_type, scope_id, sender_id, "
+                + (senderType == null ? "" : "sender_type, ")
+                + "subject, body_markdown, body_html, recipient_type, archived_at) VALUES ('TEAM', 1, 1, "
+                + (senderType == null ? "" : "'" + senderType + "', ")
+                + "'cmp0012-seed', 'm', 'h', 'ALL', NOW())";
+    }
+
+    /**
+     * F10.1とF09.6が同一スキーマと定めた4組の列存在だけを検査する。
+     * 表の欠落や空集合を合格にせず、archive専用列は許容する。
+     */
+    static List<String> archiveColumnViolations(Map<String, Set<String>> schema) {
+        List<String> violations = new ArrayList<>();
+        for (String sourceTable : List.of("content_reports", "report_actions",
+                "direct_mail_logs", "direct_mail_recipients")) {
+            String archiveTable = sourceTable + "_archive";
+            boolean invalidTable = false;
+            for (String table : List.of(sourceTable, archiveTable)) {
+                Set<String> columns = schema.get(table);
+                if (columns == null) {
+                    violations.add(table + " … テーブルが存在しない");
+                    invalidTable = true;
+                } else if (columns.isEmpty()) {
+                    violations.add(table + " … 列集合が空");
+                    invalidTable = true;
+                }
+            }
+            if (invalidTable) {
+                continue;
+            }
+            Set<String> archiveColumns = schema.get(archiveTable);
+            schema.get(sourceTable).stream()
+                    .filter(column -> !archiveColumns.contains(column))
+                    .sorted()
+                    .forEach(column -> violations.add(sourceTable + " -> " + archiveTable + "." + column));
+        }
+        return violations;
+    }
+
+    /** 他の組の欠落で対照が失敗しないよう、常に4組全部を備えた変更可能な検体を返す。 */
+    private static Map<String, Set<String>> archiveColumnFixture() {
+        Map<String, Set<String>> sourceColumns = Map.of(
+                "content_reports", Set.of("id", "content_hidden"),
+                "report_actions", Set.of("id", "note"),
+                "direct_mail_logs", Set.of("id", "body_html"),
+                "direct_mail_recipients", Set.of("id", "status"));
+        Map<String, Set<String>> schema = new HashMap<>();
+        sourceColumns.forEach((table, columns) -> {
+            schema.put(table, new HashSet<>(columns));
+            schema.put(table + "_archive", new HashSet<>(columns));
+        });
+        return schema;
     }
 
     /**

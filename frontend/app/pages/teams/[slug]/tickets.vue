@@ -6,6 +6,8 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 
 const notification = useNotification()
+const { t } = useI18n()
+const { handleApiError } = useErrorHandler()
 const { getProducts, getBooks, createProduct } = useTicketApi()
 
 const products = ref<TicketProductResponse[]>([])
@@ -31,8 +33,8 @@ async function load() {
     const [pRes, bRes] = await Promise.all([getProducts(teamSlug), getBooks(teamSlug)])
     products.value = pRes.data
     books.value = bRes.data
-  } catch {
-    notification.error('回数券情報の取得に失敗しました')
+  } catch (error) {
+    handleApiError(error)
   } finally {
     loading.value = false
   }
@@ -69,11 +71,11 @@ async function handleCreate() {
       validityDays: form.value.validityDays,
       isOnlinePurchaseEnabled: form.value.isOnlinePurchaseEnabled,
     })
-    notification.success('商品を追加しました')
+    notification.success(t('payment.ticket.create_success'))
     showCreateDialog.value = false
     await load()
-  } catch {
-    notification.error('商品の追加に失敗しました')
+  } catch (error) {
+    handleApiError(error)
   } finally {
     saving.value = false
   }
