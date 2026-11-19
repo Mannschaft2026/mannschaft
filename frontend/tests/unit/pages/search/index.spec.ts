@@ -155,6 +155,33 @@ describe('pages/search/index.vue — グローバル検索', () => {
     expect(timeout.text()).not.toContain('globalSearch.')
   })
 
+  it('GS-06: 種別タブ選択後に検索語を変えて再検索すると、他種別の件数は新しい検索語のものになる', async () => {
+    const emptyOverview: SearchResponse = {
+      data: { results: [], typeCounts: counts({}), query: '新語', timedOutTypes: [], zeroResultsHelp: null },
+      meta: { viewMode: 'OVERVIEW', total: 0, page: 0, size: 5, totalPages: 0 },
+    }
+    const emptyDetail: SearchResponse = {
+      data: { results: [], typeCounts: counts({}), query: '新語', timedOutTypes: [], zeroResultsHelp: null },
+      meta: { viewMode: 'DETAIL', total: 0, page: 0, size: 20, totalPages: 0 },
+    }
+    search.mockImplementation(async (params: { q: string, types?: string[] }) => {
+      if (params.q === '新語') return params.types ? emptyDetail : emptyOverview
+      return params.types ? DETAIL : OVERVIEW
+    })
+    const wrapper = await mountPage()
+    await wrapper.find('[data-testid="global-search-tab-TEAM"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="global-search-tab-USER"]').text()).toContain('(2)')
+
+    await wrapper.find('[data-testid="global-search-input"]').setValue('新語')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="global-search-tab-USER"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="global-search-tab-ALL"]').text()).not.toContain('(2)')
+    expect(wrapper.find('[data-testid="global-search-tab-ALL"]').text()).not.toContain('(9)')
+  })
+
   it('GS-05: BE が失敗したら失敗通知を出す', async () => {
     search.mockRejectedValue(new Error('500'))
     await mountPage()

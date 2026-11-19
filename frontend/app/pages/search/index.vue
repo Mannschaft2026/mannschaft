@@ -24,6 +24,8 @@ const activeType = ref<ContentType | 'ALL'>(typeFromRoute())
 const results = ref<SearchResult[]>([])
 /** 種別タブの件数。概要ビューの typeCounts を保持し、詳細ビューでは該当種別だけ更新する */
 const typeCounts = ref<Partial<Record<ContentType, number>>>({})
+/** typeCounts がどの検索語の概要件数か。検索語が変わったら概要を取り直し、別検索の件数を混在させない */
+const countsQuery = ref('')
 const timedOutTypes = ref<ContentType[]>([])
 const zeroHelp = ref<SearchResponse['data']['zeroResultsHelp']>(null)
 const viewMode = ref<SearchResponse['meta']['viewMode']>('OVERVIEW')
@@ -47,12 +49,18 @@ async function performSearch(page = 0) {
   loading.value = true
   try {
     const detailType = activeType.value === 'ALL' ? null : activeType.value
-    const res = await searchApi.search({
-      q: trimmedQuery.value,
-      types: detailType ? [detailType] : undefined,
-      page: detailType ? page : undefined,
-      size: detailType ? DETAIL_PAGE_SIZE : undefined,
-    })
+    const q = trimmedQuery.value
+    // 詳細ビューで検索語が変わった場合は、他種別の件数が前の検索語のまま残らないよう概要も取り直す
+    const needsOverview = detailType !== null && countsQuery.value !== q
+    const [res, overview] = await Promise.all([
+      searchApi.search({
+        q,
+        types: detailType ? [detailType] : undefined,
+        page: detailType ? page : undefined,
+        size: detailType ? DETAIL_PAGE_SIZE : undefined,
+      }),
+      needsOverview ? searchApi.search({ q }) : Promise.resolve(null),
+    ])
     results.value = res.data.results
     timedOutTypes.value = res.data.timedOutTypes
     zeroHelp.value = res.data.zeroResultsHelp ?? null
@@ -61,10 +69,12 @@ async function performSearch(page = 0) {
     currentPage.value = res.meta.page
     totalPages.value = res.meta.totalPages
     if (detailType) {
-      typeCounts.value = { ...typeCounts.value, [detailType]: res.data.typeCounts[detailType] ?? 0 }
+      const base = overview ? overview.data.typeCounts : typeCounts.value
+      typeCounts.value = { ...base, [detailType]: res.data.typeCounts[detailType] ?? 0 }
     } else {
       typeCounts.value = { ...res.data.typeCounts }
     }
+    countsQuery.value = q
     searched.value = true
     await router.replace({
       query: detailType ? { q: trimmedQuery.value, type: detailType } : { q: trimmedQuery.value },
