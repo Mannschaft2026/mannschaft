@@ -611,7 +611,7 @@ class ShiftScheduleServiceTest {
             // Given
             ShiftScheduleEntity entity = createScheduleEntity();
             ShiftScheduleResponse response = createScheduleResponse();
-            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.save(entity)).willReturn(entity);
             given(shiftMapper.toScheduleResponse(entity)).willReturn(response);
 
@@ -629,7 +629,7 @@ class ShiftScheduleServiceTest {
             // Given
             ShiftScheduleEntity entity = createScheduleEntity();
             ShiftScheduleResponse response = createScheduleResponse();
-            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.save(entity)).willReturn(entity);
             given(shiftMapper.toScheduleResponse(entity)).willReturn(response);
 
@@ -662,6 +662,7 @@ class ShiftScheduleServiceTest {
             assertThat(entity.getStatus()).isEqualTo(ShiftScheduleStatus.PUBLISHED);
             assertThat(entity.getPublishedAt()).isNotNull();
             assertThat(entity.getPublishedBy()).isEqualTo(USER_ID);
+            assertThat(entity.getPublicationGeneration()).isEqualTo(1L);
         }
 
         @Test
@@ -670,7 +671,7 @@ class ShiftScheduleServiceTest {
             // Given
             ShiftScheduleEntity entity = createScheduleEntity();
             ShiftScheduleResponse response = createScheduleResponse();
-            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.save(entity)).willReturn(entity);
             given(shiftMapper.toScheduleResponse(entity)).willReturn(response);
 
@@ -686,7 +687,7 @@ class ShiftScheduleServiceTest {
         void ステータス遷移_DRAFT_BusinessException() {
             // Given
             ShiftScheduleEntity entity = createScheduleEntity();
-            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.of(entity));
 
             // When & Then
             assertThatThrownBy(() -> shiftScheduleService.transitionStatus(SCHEDULE_ID, "DRAFT", USER_ID))
