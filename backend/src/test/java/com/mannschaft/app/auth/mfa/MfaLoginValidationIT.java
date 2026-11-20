@@ -42,7 +42,7 @@ class MfaLoginValidationIT extends MfaItSupport {
 
     /**
      * AC-7: validate(BACKUP_CODE) に正しい未使用 8 桁でトークン発行、backup_codes から当該 1 件だけ削除、
-     * LoginSuccessEvent(method=BACKUP_CODE, ip・UA 非 null)。
+     * LoginSuccessEvent(method=入口方式 PASSWORD・mfaFactor=BACKUP_CODE, ip・UA 非 null)。
      */
     @Test
     @DisplayName("AC-7 正しい未使用バックアップコードでトークン発行・1件削除・LoginSuccessEventにip/UA")
@@ -61,7 +61,8 @@ class MfaLoginValidationIT extends MfaItSupport {
         assertThat(success).as("AC-7 LoginSuccessEvent").hasSize(1);
         LoginSuccessEvent ev = success.get(0);
         assertThat(ev.getUserId()).isEqualTo(u.userId());
-        assertThat(ev.getMethod()).as("AC-7 method").isEqualTo("BACKUP_CODE");
+        assertThat(ev.getMethod()).as("AC-7 method は入口方式（判断①）").isEqualTo("PASSWORD");
+        assertThat(ev.getMfaFactor()).as("AC-7 mfaFactor は使用要素（判断①）").isEqualTo("BACKUP_CODE");
         assertThat(ev.getIpAddress()).as("AC-7 ip 非 null").isNotBlank();
         assertThat(ev.getUserAgent()).as("AC-7 UA 非 null").isEqualTo(USER_AGENT);
     }

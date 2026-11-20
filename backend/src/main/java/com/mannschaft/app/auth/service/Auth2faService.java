@@ -25,7 +25,6 @@ import com.mannschaft.app.auth.dto.BackupCodesResponse;
 import com.mannschaft.app.auth.dto.MessageResponse;
 import com.mannschaft.app.auth.dto.TokenResponse;
 import com.mannschaft.app.auth.dto.TotpSetupResponse;
-import com.mannschaft.app.auth.event.LoginSuccessEvent;
 import com.mannschaft.app.auth.event.MfaDisabledEvent;
 import com.mannschaft.app.auth.event.MfaEnabledEvent;
 import com.mannschaft.app.auth.event.MfaRecoveryRequestedEvent;
@@ -86,6 +85,8 @@ public class Auth2faService {
     private final MfaEmailOtpService mfaEmailOtpService;
     private final MfaFailureAuditRecorder mfaFailureAuditRecorder;
     private final MfaEmailTwoFactorService mfaEmailTwoFactorService;
+    /** 2FA 完了後のセッション発行（共通発行器。同パッケージの package-private 入口を使う）。 */
+    private final AuthService authService;
     /** LocalDateTime 列（revoked_at / used_at）と突き合わせる現在時刻の源（壁時計。datetime_policy_utc_instant_vs_wallclock.md）。 */
     @Qualifier("wallClock")
     private final Clock wallClock;
@@ -388,6 +389,9 @@ public class Auth2faService {
      *   <li>成功: セッションキー DEL の戻り値で勝者を 1 人に決め（敗者は AUTH_073 で TX ロールバック）、トークン発行</li>
      * </ol>
      *
+     * <p>発行は {@link AuthService#completeMfaLogin} へ委譲する（ip/UA・端末指紋・新端末検知・セッション上限・
+     * 最終ログイン・LOGIN_SUCCESS をパスワード直経路と揃える。roles はサーバ側で解決）。</p>
+     *
      * <p>D-3T 番人: トークン発行（RoleClaimResolver → role.UserRoleRepository）を含むため本メソッドは
      * 他ドメイン Repository に到達する TX 入口である。旧 {@code validateTotp} の凍結行を本メソッドへ置き換えた
      * （負債の件数は増やさない入れ替え）。</p>
@@ -446,8 +450,11 @@ public class Auth2faService {
         }
         mfaSessionService.resetUserFailures(userId);
 
-        TokenResponse tokenResponse = issueTokenPair(userId);
-        eventPublisher.publish(new LoginSuccessEvent(userId, ipAddress, userAgent, method.name()));
+        // 発行は パスワード直経路・OAuth と共通の AuthService 発行器へ委譲する（CMP-261012-0911）。
+        // LOGIN_SUCCESS（method=入口方式・mfaFactor=使用要素・ip/UA・sessionHash）もそこで 1 件だけ出る。
+        TokenResponse tokenResponse = authService.completeMfaLogin(
+                findUserOrThrow(userId), ipAddress, userAgent, session.loginMethod(), method,
+                roleClaimResolver.resolveRoles(userId));
         if (backupCodesRemaining != null) {
             eventPublisher.publish(new MfaBackupCodeUsedEvent(userId, backupCodesRemaining, ipAddress, userAgent));
         }
