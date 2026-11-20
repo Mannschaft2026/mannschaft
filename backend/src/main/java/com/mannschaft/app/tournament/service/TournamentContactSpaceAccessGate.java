@@ -221,4 +221,17 @@ public class TournamentContactSpaceAccessGate {
                 : divisionRepository.findById(scopeId).map(d -> d.getTournamentId());
         return tournamentId.flatMap(tournamentRepository::findById).map(TournamentEntity::getOrganizationId);
     }
+
+    /**
+     * スペース群の閲覧水準を例外なしで一括解決する（CMP-261118-0900 §10.3.5）。
+     *
+     * <p>閲覧できない行はマップに含めない（NONE は返さない）。全 (scope, kind) について
+     * {@link #requireViewResolvingLevel} の戻り値（例外になるものは不在）と一致する不変条件を持つ。</p>
+     *
+     * @return スペース ID から水準への写像
+     */
+    public java.util.Map<java.util.UUID, ContactAccessLevel> resolveLevelsForSpaces(
+            Long userId, Long tournamentId, java.util.Collection<TournamentContactSpaceEntity> spaces) {
+        throw new UnsupportedOperationException("CMP-261118-0900 未実装");
+    }
 }
