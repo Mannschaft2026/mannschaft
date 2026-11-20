@@ -49,7 +49,7 @@ fi
 date +%s > "$CI_DIAGNOSTIC_DIR/started-at-epoch"
 printf 'null\n' > "$CI_DIAGNOSTIC_DIR/command-exit-code"
 # この呼出し専用の観測ファイルを初期化し、過去の正常終端を流用しない。
-for name in class-progress.log task-state.log case-intervals.log mfa-intervals.log mfa-resources.log; do
+for name in class-progress.log task-state.log case-intervals.log mfa-intervals.log mfa-resources.log context-progress.log; do
   : > "$CI_DIAGNOSTIC_DIR/$name"
 done
 write_result null ''
@@ -85,6 +85,17 @@ gradle.allprojects { project ->
             if (descriptor.className in [mfaClass, billingClass]) emit('case-intervals.log', "[ci-case-end] task=${task.path} class=${descriptor.className} startEpochMillis=${result.startTime} endEpochMillis=${result.endTime} result=${result.resultType}")
         }
         task.onOutput { descriptor, event ->
+            // CMP-261111-0508: [ci-ctx]（コンテキスト起動の計測）と [ci-ctx-orderer]（並べ替えの計測）を :test だけから集める。
+            // 出力側（Listener）も :test でしか出さない（mannschaft.ci.ctx.log=true）が、収集側でもタスクを絞って二重に守る。
+            // 値（プロパティ値等）は元から出ない。形式に合う行だけを書き、重み計算には使わない。
+            if (task.path == ':test') {
+                event.message.readLines().findAll {
+                    it ==~ /\[ci-ctx\] jvm=\S+ seq=\d+ class=\S+ key=[0-9a-f]{12} event=(load|hit|reload|error) loadMs=\d+ cacheSize=-?\d+( error=\S+)?/ ||
+                        it ==~ /\[ci-ctx-orderer\] classes=\d+ fallback=\d+ ms=\d+/
+                }.each {
+                    emit('context-progress.log', it)
+                }
+            }
             if (descriptor.className == mfaClass) {
                 event.message.readLines().findAll { it ==~ /\[mfa-latency\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ elapsedMillis=\d+ limitMillis=\d+ pid=\d+/ }.each {
                     emit('mfa-intervals.log', it)

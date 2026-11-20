@@ -1,6 +1,7 @@
 package com.mannschaft.app.auth;
 
 import com.mannschaft.app.auth.entity.RefreshTokenEntity;
+import com.mannschaft.app.auth.TwoFactorMethod;
 import com.mannschaft.app.auth.entity.TwoFactorAuthEntity;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.RefreshTokenRepository;
@@ -12,6 +13,8 @@ import com.mannschaft.app.auth.service.AuthService;
 import com.mannschaft.app.auth.service.AuthSessionService;
 import com.mannschaft.app.auth.service.AuthTokenRotationService;
 import com.mannschaft.app.auth.service.AuthTokenService;
+import com.mannschaft.app.auth.service.MfaMethodPolicy;
+import com.mannschaft.app.auth.service.MfaSessionService;
 import com.mannschaft.app.auth.service.NewDeviceDetectionService;
 import com.mannschaft.app.auth.dto.LoginRequest;
 import com.mannschaft.app.auth.dto.LoginResponse;
@@ -102,6 +105,10 @@ class AuthServiceTest {
 
     @Mock
     private com.mannschaft.app.auth.service.StatusClaimResolver statusClaimResolver;
+
+    // CMP-261012-0911: 2FA 有効時の MFA チャレンジ発行は OAuth 経路と共通の MfaSessionService に集約
+    @Mock
+    private MfaSessionService mfaSessionService;
 
     @InjectMocks
     private AuthService authService;
@@ -266,7 +273,6 @@ class AuthServiceTest {
             given(userRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(user));
             given(passwordEncoder.matches(TEST_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
             given(redisTemplate.hasKey(anyString())).willReturn(false);
-            given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
             TwoFactorAuthEntity mfa = TwoFactorAuthEntity.builder()
                     .userId(1L)
@@ -275,6 +281,9 @@ class AuthServiceTest {
                     .isEnabled(true)
                     .build();
             given(twoFactorAuthRepository.findByUserId(any())).willReturn(Optional.of(mfa));
+            given(mfaSessionService.issueChallenge(any(), any(), eq(TwoFactorMethod.TOTP), eq("PASSWORD")))
+                    .willReturn(new MfaRequiredResponse("mfa-token", TwoFactorMethod.TOTP,
+                            MfaMethodPolicy.availableMethods(TwoFactorMethod.TOTP, true)));
 
             // When
             ApiResponse<?> response = authService.login(req, TEST_IP, TEST_USER_AGENT);

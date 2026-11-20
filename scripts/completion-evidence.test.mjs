@@ -230,6 +230,7 @@ test('pull_request_targetはbase trusted validatorだけを実行しPR headを�
   assert.match(workflow, /await import\(pathToFileURL\(validatorPath\)\.href\)/);
   assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths, \{ ancestorTaskList \}\)/);
   assert.match(workflow, /github\.rest\.git\.getTree/);
+  assert.match(workflow, /github\.rest\.git\.getBlob/);
   assert.doesNotMatch(workflow, /github\.rest\.repos\.getContent\(\{ owner, repo, path: ref/);
   assert.match(workflow, /file\.status === 'removed'/);
   assert.match(workflow, /file\.previous_filename === validatorPathInBase/);
@@ -429,4 +430,69 @@ test('開発規約backend/.claudecode.mdだけはtooling、テストとの混在
     assert.equal(infer([appPath]), 'app', appPath);
     assert.equal(infer([convention, testJava, appPath]), 'app', appPath);
   }
+});
+
+async function createLargeCliFixture(t, { size = 1024 * 1024, completed = null } = {}) {
+  const env = { ...process.env };
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_COMMON_DIR']) delete env[key];
+  const repo = await mkdtemp(join(tmpdir(), 'completion-large-transition-'));
+  t.diagnostic(`fixture: ${repo}`);
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', env });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const commit = () => {
+    git('add', '.');
+    git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture');
+    return git('rev-parse', 'HEAD');
+  };
+  git('init', '-q');
+  await mkdir(join(repo, 'docs', 'evidence'), { recursive: true });
+  await mkdir(join(repo, 'scripts'));
+  const padding = `\n<!-- ${'x'.repeat(size)} -->\n`;
+  const writeList = (state, proof) => writeFile(join(repo, 'docs', 'task-list.md'), `${headers}\n${row(state, proof)}${padding}`);
+  await writeFile(join(repo, 'scripts', 'acceptance.mjs'), 'export const checked = true;\n');
+  await writeFile(join(repo, 'docs', 'evidence', 'review.md'), 'review\n');
+  await writeList('実装中', '説明');
+  const baseRef = commit();
+  let headRef = baseRef;
+  if (completed) {
+    if (completed === 'valid') {
+      const fixtureEvidence = {
+        schemaVersion: 1,
+        cmpId: 'CMP-260101-0101',
+        scope: 'tooling',
+        implementation: { pr: 42, sha: baseRef },
+        acceptanceCriteria: [{ id: 'AC-1', description: 'fixture', tests: [{ name: 'positive', evidence: 'scripts/acceptance.mjs' }] }],
+        ci: [{ runId: 123 }],
+        stages: { review: { status: 'passed', evidence: 'docs/evidence/review.md' }, real: n_a, exploratory: n_a },
+        regressions: [],
+      };
+      await writeFile(join(repo, 'docs', 'evidence', 'CMP-260101-0101.json'), JSON.stringify(fixtureEvidence));
+    }
+    await writeList('完了', completed === 'valid' ? '[証拠](evidence/CMP-260101-0101.json)' : '説明');
+    headRef = commit();
+  }
+  const cli = fileURLToPath(new URL('./completion-evidence.mjs', import.meta.url));
+  return spawnSync(process.execPath, [cli, '--base', baseRef, '--head', headRef], { cwd: repo, encoding: 'utf8', env });
+}
+
+test('1MiB超の台帳で有効な完了遷移を通常CLIが受理する', async (t) => {
+  const result = await createLargeCliFixture(t, { completed: 'valid' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /完了証拠の構造を確認/);
+});
+
+test('1MiB超の台帳で証拠なし完了を通常CLIが拒否する', async (t) => {
+  const result = await createLargeCliFixture(t, { completed: 'invalid' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /証拠JSON/);
+});
+
+test('16MiBを超える台帳を通常CLIが容量上限で拒否する', async (t) => {
+  const result = await createLargeCliFixture(t, { size: 17 * 1024 * 1024 });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /ENOBUFS/);
 });

@@ -1,6 +1,7 @@
 package com.mannschaft.app.support.test;
 
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -59,6 +60,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *       （Docker 未起動環境でテストが skip されず、{@code DockerClientProviderStrategy} が例外を投げる）。</li>
  * </ul>
  */
+// 構成キーの統合（CMP-261111-0508 追撃①）: MockMvc を使う派生（@AutoConfigureMockMvc）と使わない派生で
+// MergedContextConfiguration が分かれ、Spring TestContext Cache のエントリ（=起動する context 数）が倍加していた。
+// 基底で MockMvc を自動構成して両者を同じキーに揃える。addFilters は既定（true）のまま:
+// セキュリティフィルタを実効にする側へ寄せることで、フィルタを通す試験の意味を変えない。
+// addFilters=false を宣言する派生は従来どおり別キーになる（意図した分離。変更しない）。
+@AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @Testcontainers
 @ActiveProfiles("test")
@@ -121,6 +128,25 @@ public abstract class AbstractMySqlIntegrationTest {
         org.springframework.data.redis.core.ValueOperations<String, String> ops =
                 org.mockito.Mockito.mock(org.springframework.data.redis.core.ValueOperations.class);
         org.mockito.Mockito.when(redisTemplate.opsForValue()).thenReturn(ops);
+    }
+
+    /**
+     * 共有コンテキストの users.locale キャッシュ（Bean が無い縮小構成では null）。
+     *
+     * <p>CMP-261119-1855: 本基底クラスは単一の MySQL を共有し、テスト環境は {@code ddl-auto=create} のため、
+     * 別構成のコンテキストが起動するたびにスキーマが作り直され users の id が 1 から再採番される。
+     * 共有コンテキストの {@code UserLocaleCache}（TTL 5 分）は userId をキーに前テストの値を保持し続けるため、
+     * 再利用された id の新ユーザーに前テストの locale（ja）が返り、早期拒否応答などが
+     * 英語にならない順序依存の失敗になった。各テストの前に破棄して持ち越しを断つ。</p>
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.mannschaft.app.common.i18n.UserLocaleCache sharedUserLocaleCache;
+
+    @org.junit.jupiter.api.BeforeEach
+    protected void clearSharedUserLocaleCache() {
+        if (sharedUserLocaleCache != null) {
+            sharedUserLocaleCache.clear();
+        }
     }
 
     @DynamicPropertySource

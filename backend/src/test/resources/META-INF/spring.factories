@@ -1,0 +1,8 @@
+# CMP-261111-0508: Spring テストコンテキストのロード計測（`[ci-ctx]`）。
+# load/reload: ContextLoadObservingCustomizer（ContextCustomizerFactory。ローダーの構築中＝実際のロード地点で観測。リスナー順序に依存しない）
+# hit: ContextKeyTestExecutionListener（order 2100。DI 2000 の後）
+# 標準出力は system property mannschaft.ci.ctx.log=true（:test だけ）のときに限る。
+org.springframework.test.context.ContextCustomizerFactory=\
+com.mannschaft.app.common.testing.ContextLoadObservingCustomizer$Factory
+org.springframework.test.context.TestExecutionListener=\
+com.mannschaft.app.common.testing.ContextKeyTestExecutionListener
