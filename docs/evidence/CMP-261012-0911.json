@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261012-0911",
+  "scope": "app",
+  "implementation": {
+    "pr": 4677,
+    "sha": "872247b669be5fc2d11ab37a5ad9b629d10a6197"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "2FA 有効ユーザーの既存連携 OAuth ログインは MFA 要求のみを返し、トークン・Cookie・LOGIN_SUCCESS を発行しない（TOTP / EMAIL 主手段、GOOGLE / LINE / APPLE）",
+      "tests": [
+        {
+          "name": "AC-1/AC-16: 2FA(TOTP) 有効ユーザーの既存連携ログインは MFA 要求のみ返す",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-1: EMAIL 主手段の 2FA ユーザーは primaryMethod=EMAIL・提示要素 [EMAIL, BACKUP_CODE]",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "issueChallenge: セッションキーと方式キーを同 TTL で保存し主手段と提示要素を返す",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/MfaSessionServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "OAuth 由来 challenge を 2FA で完了するとトークンと Cookie が発行され、LOGIN_SUCCESS に method・ip・UA・session_hash が正しく入る",
+      "tests": [
+        {
+          "name": "AC-2/判断①②: OAuth 由来 challenge を TOTP で完了すると Cookie とトークン、LOGIN_SUCCESS が正しい",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "2FA 無効ユーザーの OAuth ログイン・新規登録は従来どおり即発行",
+      "tests": [
+        {
+          "name": "AC-3: 2FA 無効ユーザーの既存連携ログインは従来どおり即トークン発行",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "OAuth ログインの単体回帰",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/AuthOAuthServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "2FA 有効ユーザーの連携確認 API（/oauth/link/confirm）も MFA 要求のみ返し、連携トークン再利用は拒否される",
+      "tests": [
+        {
+          "name": "AC-4: 連携確認は 2FA 有効なら MFA 要求のみ、連携トークン再利用は AUTH_031",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "OAuth 由来セッションも試行上限・ロック・他人の要素では成功しない（セッションあたり 5 回で AUTH_075、ユーザー単位で 30 分 10 回の失敗合算ロック）",
+      "tests": [
+        {
+          "name": "AC-5: OAuth 由来セッションも 5 回目の失敗で AUTH_075・以後は AUTH_073",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-5 改: PASSWORD と OAuth の失敗合算とロック",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-5 改: A のセッション＋B の認証要素では成功しない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-5 改: 10 回目の失敗と成功の並列はロックと整合する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "パスワード＋2FA の LOGIN_SUCCESS にも session_hash・ip・UA・method=PASSWORD が入る",
+      "tests": [
+        {
+          "name": "AC-6/判断①: パスワード＋2FA の LOGIN_SUCCESS",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "MFA セッションは新旧形式で双方向に互換（方式キー欠落は PASSWORD とみなす）",
+      "tests": [
+        {
+          "name": "AC-7 改: 方式キーが無い旧形式セッションは PASSWORD として解決する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/MfaSessionServiceTest.java"
+        },
+        {
+          "name": "AC-7 改: 旧形式セッションの互換と単回消費",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "FE の OAuth コールバックは MFA 要求なら setTokens せず /2fa-verify へ session・primary・methods を引き継ぐ",
+      "tests": [
+        {
+          "name": "AC-8: MFA 要求なら setTokens を呼ばず /2fa-verify へ引き継ぐ",
+          "evidence": "frontend/tests/unit/pages/oauth-callback.spec.ts"
+        },
+        {
+          "name": "AC-8: トークン応答なら従来どおり /dashboard へ",
+          "evidence": "frontend/tests/unit/pages/oauth-callback.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "2FA 有効の Google ユーザーが実ブラウザで Google から 2FA を経てダッシュボードへ到達できる（実機）",
+      "tests": [
+        {
+          "name": "実機 E2E E2（TOTP / EMAIL）",
+          "evidence": "docs/evidence/CMP-261012-0911-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "/2fa-verify のセッション無し・偽セッションでの直打ちは弾かれ、2FA 前の /dashboard 直打ちも未認証扱い（実機）",
+      "tests": [
+        {
+          "name": "実機 E2E E3",
+          "evidence": "docs/evidence/CMP-261012-0911-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "別チーム所属の 2FA ユーザーも通過後は自スコープのみ参照できる（実機）",
+      "tests": [
+        {
+          "name": "実機 E2E E4・E5",
+          "evidence": "docs/evidence/CMP-261012-0911-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "description": "challenge は単回消費で、成功後・上限失敗後の再利用と同時成功の二重発行が起きない",
+      "tests": [
+        {
+          "name": "AC-12: OAuth 由来 challenge は成功後の再利用を AUTH_073 で拒否",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-12: 同一 challenge への同時成功でも発行・LOGIN_SUCCESS は各 1 件",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-12: 消費は 1 回だけ成功し方式キーも同時に消える",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/MfaSessionServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "description": "OAuth 応答の三択（トークン / MFA 要求 / 連携競合）を FE が正しく分岐する",
+      "tests": [
+        {
+          "name": "AC-13: 連携競合応答なら setTokens せず /login?oauthConflict=true へ",
+          "evidence": "frontend/tests/unit/pages/oauth-callback.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "description": "連携確認経路の完走（2FA 有効は MFA 後に発行、無効は即発行）と途中放棄後の再ログイン",
+      "tests": [
+        {
+          "name": "AC-14: 連携確認由来の challenge を完了すると method=OAUTH_GOOGLE",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-14: 2FA 無効ユーザーの連携確認は即発行",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-14: 連携確認後の途中放棄から再ログイン",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "description": "2FA 経由の発行でも端末指紋・有効期限・last_login_at・新端末通知・セッション上限がパスワード直経路と同じ",
+      "tests": [
+        {
+          "name": "AC-15: 2FA 経由の発行の副作用がパスワード直経路と同じ",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-15: 2FA 経由の発行でもセッション上限（10）を適用する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "description": "全入口（GOOGLE / LINE / APPLE）・EMAIL・バックアップコード、challenge 後の 2FA 無効化の拒否",
+      "tests": [
+        {
+          "name": "AC-16: EMAIL 方式で完走",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-16: バックアップコードでも完走",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-16: challenge 発行後に 2FA が無効化されたら AUTH_073",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "description": "FE の Google ログインが認可コードをクエリ（?code=）で送り、BE の契約と一致して実ブラウザで 200 になる",
+      "tests": [
+        {
+          "name": "AC-17: 認可コードは BE の契約どおりクエリで送り本文では送らない",
+          "evidence": "frontend/app/composables/useAuthApi.spec.ts"
+        },
+        {
+          "name": "AC-17: BE は認可コードをクエリで受ける契約を維持する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AC-17: loginWithOAuth を provider=google・認可コードで呼ぶ",
+          "evidence": "frontend/tests/unit/pages/oauth-callback.spec.ts"
+        },
+        {
+          "name": "実機 E2E E1",
+          "evidence": "docs/evidence/CMP-261012-0911-real.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44748825198
+    },
+    {
+      "runId": 44748825504
+    },
+    {
+      "runId": 44748825789
+    },
+    {
+      "runId": 44748825345
+    },
+    {
+      "runId": 44748825385
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4677"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261012-0911-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261012-0911-real.md"
+    }
+  },
+  "regressions": []
+}
