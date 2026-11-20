@@ -221906,6 +221906,10 @@
           "endsNextDay": {
             "type": "boolean"
           },
+          "moveRequestsConfirmed": {
+            "type": "boolean",
+            "description": "枠の日付変更に伴う希望の日付移動を確認したか。省略・null・false は未確認"
+          },
           "note": {
             "type": "string",
             "maxLength": 200,
