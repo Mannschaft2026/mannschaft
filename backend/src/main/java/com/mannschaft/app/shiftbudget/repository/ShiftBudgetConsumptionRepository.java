@@ -190,50 +190,30 @@ public interface ShiftBudgetConsumptionRepository
 
     // ───────────────────────── 取消履歴の退避（CMP-260909-2152 α 再検分 P2） ─────────────────────────
 
-    /** 同じ枠×人の、退避済み（論理削除済み）CANCELLED の deleted_at の最大（無ければ null）。 */
-    @Query(value = "SELECT MAX(deleted_at) FROM shift_budget_consumptions WHERE slot_id = :slotId AND user_id = :userId "
-            + "AND status = 'CANCELLED' AND deleted_at IS NOT NULL", nativeQuery = true)
-    Object findLatestRetiredCancelledAt(@Param("slotId") Long slotId, @Param("userId") Long userId);
-
-    /** 同じ枠×人の生存 CANCELLED（UNIQUE により高々1行）に deleted_at を付けて退避する。行・取消理由・金額は変えない。 */
-    @Modifying(flushAutomatically = true)
-    @Query(value = "UPDATE shift_budget_consumptions SET deleted_at = :retiredAt WHERE slot_id = :slotId AND user_id = :userId "
-            + "AND status = 'CANCELLED' AND deleted_at IS NULL", nativeQuery = true)
-    int retireLiveCancelled(@Param("slotId") Long slotId, @Param("userId") Long userId,
-                            @Param("retiredAt") LocalDateTime retiredAt);
-
     /**
-     * PLANNED を CANCELLED に遷移する<b>直前</b>に必ず呼ぶ。同じ枠×人の旧 CANCELLED を論理削除して {@code deleted_at_uq} をずらし、
-     * 新しい CANCELLED が {@code uq_sbc_slot_user_status (slot_id, user_id, status, deleted_at_uq)} に当たらないようにする
-     * （内容の変わる再公開・取消を同じ枠×人で繰り返すと、2回目以降の取消が UNIQUE 違反で TX ごと失敗していた）。
+     * PLANNED を CANCELLED に遷移する<b>直前</b>に必ず呼ぶ。同じ枠×人の生存 CANCELLED（UNIQUE により高々1行）に
+     * {@code deleted_at} を付けて退避し {@code deleted_at_uq} をずらして、新しい CANCELLED が
+     * {@code uq_sbc_slot_user_status (slot_id, user_id, status, deleted_at_uq)} に当たらないようにする
+     * （CMP-260909-2152 α 再検分 P2。内容の変わる再公開・取消を同じ枠×人で繰り返すと、2回目以降の取消が UNIQUE 違反で
+     * TX ごと失敗していた）。
      *
      * <p>履歴は失わない: 行は物理削除も上書きもせず、状態・取消理由・取消時刻・金額・時給・時間をそのまま残す。CANCELLED を読む
-     * reader・集計は無い（すべて PLANNED／CONFIRMED に限る）ため見え方は変わらない。退避時刻は DATETIME（秒精度）で同キーの
-     * 既存の退避時刻と重ならないよう、既存の最大より1秒以上後にする。呼出側は枠×人の PLANNED を FOR UPDATE で保持しており、
-     * 同じ枠×人の取消は直列化される。</p>
+     * reader・集計は無い（すべて PLANNED／CONFIRMED に限る）ため見え方は変わらない。</p>
+     *
+     * <p>退避時刻は DB の格納基準（UTC 壁時計）どおり {@code UTC_TIMESTAMP()} で SQL 側に作る（生 SQL へ Java の壁時計を
+     * 束縛しない。CMP-260909-1446）。DATETIME は秒精度なので、同キーの既存の退避時刻と重ならないよう既存の最大＋1秒との
+     * 遅い方にする（集計を含む派生表は実体化されるので、更新対象表の自己参照にならない）。呼出側は枠×人の PLANNED を
+     * FOR UPDATE で保持しており、同じ枠×人の取消は直列化される。</p>
      */
-    default void retireLiveCancelledBeforeCancel(Long slotId, Long userId) {
-        LocalDateTime retiredAt = LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
-        LocalDateTime latest = toLocalDateTime(findLatestRetiredCancelledAt(slotId, userId));
-        if (latest != null && !retiredAt.isAfter(latest)) {
-            retiredAt = latest.truncatedTo(java.time.temporal.ChronoUnit.SECONDS).plusSeconds(1);
-        }
-        retireLiveCancelled(slotId, userId, retiredAt);
-    }
-
-    /** ネイティブ集計の DATETIME（LocalDateTime／Timestamp）を LocalDateTime に直す。 */
-    private static LocalDateTime toLocalDateTime(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof LocalDateTime t) {
-            return t;
-        }
-        if (value instanceof java.sql.Timestamp t) {
-            return t.toLocalDateTime();
-        }
-        return LocalDateTime.parse(String.valueOf(value).replace(' ', 'T'));
-    }
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE shift_budget_consumptions c "
+            + "JOIN (SELECT GREATEST(UTC_TIMESTAMP(), COALESCE(MAX(r.deleted_at) + INTERVAL 1 SECOND, UTC_TIMESTAMP())) AS retired "
+            + "      FROM shift_budget_consumptions r WHERE r.slot_id = :slotId AND r.user_id = :userId "
+            + "      AND r.status = 'CANCELLED' AND r.deleted_at IS NOT NULL) m "
+            + "SET c.deleted_at = m.retired "
+            + "WHERE c.slot_id = :slotId AND c.user_id = :userId AND c.status = 'CANCELLED' AND c.deleted_at IS NULL",
+            nativeQuery = true)
+    int retireLiveCancelledBeforeCancel(@Param("slotId") Long slotId, @Param("userId") Long userId);
 
     /** {@link #findLiveSlotUsers(Collection)} の射影。 */
     interface SlotUserRow {
