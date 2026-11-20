@@ -13,6 +13,8 @@ const login = read('app/pages/login.vue')
 const verify = read('app/pages/2fa-verify.vue')
 const recovery = read('app/pages/2fa-recovery.vue')
 const authApi = read('app/composables/useAuthApi.ts')
+// 2fa-verify への遷移先組み立ては login.vue と OAuth コールバックの共通関数（CMP-261012-0911）
+const mfaTarget = read('app/utils/mfaVerifyTarget.ts')
 
 const LANGS = ['ja', 'en', 'zh', 'ko', 'es', 'de'] as const
 
@@ -32,10 +34,11 @@ function flatten(obj: Record<string, unknown>, prefix = ''): string[] {
 
 describe('login.vue: 方式情報の引継ぎ (AC-53)', () => {
   it('primaryMethod / availableMethods を 2fa-verify のクエリへ渡す', () => {
-    expect(login).toContain('primaryMethod')
-    expect(login).toContain('availableMethods')
-    expect(login).toContain("mfaQuery.set('primary'")
-    expect(login).toContain("mfaQuery.set('methods'")
+    expect(login).toContain('buildMfaVerifyTarget(')
+    expect(mfaTarget).toContain('primaryMethod')
+    expect(mfaTarget).toContain('availableMethods')
+    expect(mfaTarget).toContain("query.set('primary'")
+    expect(mfaTarget).toContain("query.set('methods'")
   })
 })
 

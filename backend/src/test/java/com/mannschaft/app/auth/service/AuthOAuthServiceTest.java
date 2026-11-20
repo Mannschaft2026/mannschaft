@@ -364,13 +364,15 @@ class AuthOAuthServiceTest {
             given(refreshTokenRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
 
             // When
-            ApiResponse<TokenResponse> response = authOAuthService.confirmOAuthLinkage(rawToken);
+            ApiResponse<?> response = authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT);
 
             // Then
-            assertThat(response.getData().getAccessToken()).isEqualTo("jwt-access-token");
-            assertThat(response.getData().getRefreshToken()).isEqualTo("raw-refresh-token");
+            TokenResponse data = (TokenResponse) response.getData();
+            assertThat(data.getAccessToken()).isEqualTo("jwt-access-token");
+            assertThat(data.getRefreshToken()).isEqualTo("raw-refresh-token");
             verify(oauthAccountRepository).save(any(OAuthAccountEntity.class));
-            verify(eventPublisher).publish(any());
+            // OAuthLinkedEvent + LoginSuccessEvent（CMP-261012-0911: 連携確認でも LOGIN_SUCCESS を出す）
+            verify(eventPublisher, times(2)).publish(any());
         }
 
         @Test
@@ -383,7 +385,7 @@ class AuthOAuthServiceTest {
                     .willReturn(Optional.empty());
 
             // When / Then
-            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken))
+            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_031"));
@@ -408,7 +410,7 @@ class AuthOAuthServiceTest {
             given(oauthLinkTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(expiredToken));
 
             // When / Then
-            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken))
+            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_031"));
@@ -434,7 +436,7 @@ class AuthOAuthServiceTest {
             given(oauthLinkTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(usedToken));
 
             // When / Then
-            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken))
+            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_031"));
