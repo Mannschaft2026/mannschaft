@@ -43,6 +43,9 @@ ENV NUXT_INTERNAL_API_BASE=${NUXT_INTERNAL_API_BASE}
 ENV NODE_OPTIONS=--max-old-space-size=8192
 
 RUN npm run build
+# 成果物検証は承認pack（public/ranch/approved）の実在を要求する。素材を展開していない（sparse checkout の）作業木から
+# docker build すると、CI の有無にかかわらずここで失敗する（素材なしを配布可能と検証しない）。
+# 先に素材を展開してからビルドすること: node scripts/worktree-assets.mjs expand
 RUN node scripts/verify-ranch-production-artifact.mjs
 
 # ============================================================

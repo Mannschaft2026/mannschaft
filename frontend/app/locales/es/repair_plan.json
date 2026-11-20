@@ -85,6 +85,7 @@
     },
     "handover": {
       "builder": {
+        "generate_failed": "Error al generar el paquete de traspaso",
         "title": "Generar Paquete de Traspaso",
         "select_term": "Seleccionar Período",
         "pii_level": "Nivel de Información Personal",
@@ -110,6 +111,7 @@
         "failed": "Fallido"
       },
       "term": {
+        "count": "{count} mandatos | {count} mandato | {count} mandatos",
         "manager_title": "Gestión de Mandatos de Directivos",
         "col_name": "Nombre",
         "col_role": "Cargo",

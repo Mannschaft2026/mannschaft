@@ -107,7 +107,7 @@ function handleSaveError(error: unknown) {
     return
   }
   captureQuiet(error, { context: 'InboxLabelManager: ラベル保存' })
-  notification.error(t('common.error.unknown'))
+  notification.error(t('error.unknown'))
 }
 
 function openDeleteDialog(label: InboxLabel) {
@@ -129,7 +129,7 @@ async function confirmDelete() {
     closeDeleteDialog()
   } catch (error) {
     captureQuiet(error, { context: 'InboxLabelManager: ラベル削除' })
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   } finally {
     deleting.value = false
   }

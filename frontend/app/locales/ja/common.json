@@ -123,6 +123,7 @@
       },
       "card": {
         "pending": "{scope} への招待が届いています",
+        "scopeDeleted": "削除されたチーム",
         "waiting": "相手の承諾待ち",
         "statusPending": "承諾待ち",
         "join": "参加する",
@@ -147,6 +148,79 @@
         "joinFailed": "参加に失敗しました",
         "declineFailed": "辞退に失敗しました"
       }
+    },
+    "channelList": {
+      "title": "チャット",
+      "newConversation": "新しい会話",
+      "addChannel": "チャンネル追加",
+      "dmSection": "Kabine(DM)",
+      "noDm": "DMはありません",
+      "roomSection": "Zimmer(部屋)",
+      "noRoom": "Zimmer(部屋)がありません",
+      "loadFailed": "Zimmer一覧の取得に失敗しました",
+      "detailLoadFailed": "チャンネル情報の取得に失敗しました"
+    },
+    "create": {
+      "typeDm": "Kabine(DM)",
+      "typeRoom": "Zimmer(部屋)",
+      "dmOpened": "Kabine(DM)を開きました",
+      "roomCreated": "Zimmer(部屋)を作成しました",
+      "conversationFailed": "会話の作成に失敗しました",
+      "roomCreateFailed": "Zimmer(部屋)の作成に失敗しました",
+      "header": "新しい会話を始める",
+      "tabContacts": "連絡先から選ぶ",
+      "tabCreateRoom": "Zimmer(部屋)を作成",
+      "searchByName": "名前で検索...",
+      "selectedSummary": "{count}人選択中 → {type}として開始されます",
+      "startAs": "{type}を開始",
+      "roomName": "Zimmer(部屋)名",
+      "roomNamePlaceholder": "例: general",
+      "descriptionOptional": "説明（任意）",
+      "descriptionPlaceholder": "Zimmer(部屋)の説明",
+      "privateRoom": "プライベートZimmer(部屋)（招待制）",
+      "inviteMembersOptional": "メンバーを招待（任意）",
+      "create": "作成"
+    },
+    "inviteZimmer": {
+      "header": "Zimmerに招待する",
+      "tooltip": "Zimmerに招待",
+      "failed": "招待に失敗しました",
+      "noMembers": "招待できるメンバーがいません",
+      "candidatesLoadFailed": "招待できるメンバーの一覧を取得できませんでした。時間をおいて再度お試しください。",
+      "shareQuestion": "既存のチャット内容を共有しますか？",
+      "share": "共有する",
+      "shareHint": "これまでのメッセージが新しいZimmerに引き継がれます",
+      "noShare": "共有しない",
+      "noShareHint": "新しいZimmerは空の状態で始まります",
+      "createZimmer": "Zimmerを作成"
+    },
+    "memberSelect": {
+      "notFound": "メンバーが見つかりません"
+    },
+    "activeThreadsEmpty": "進行中のスレッドはありません",
+    "tabAriaLabel": "{name} のタブ",
+    "unnamedChannel": "名称未設定のグループ",
+    "message": {
+      "deleted": "このメッセージは削除されました",
+      "unknownSender": "不明",
+      "edited": "(編集済み)",
+      "loadOlder": "過去のメッセージを読み込む",
+      "empty": "まだメッセージがありません",
+      "sendFailed": "メッセージの送信に失敗しました",
+      "inputPlaceholder": "メッセージを入力...",
+      "inputDisabled": "このZimmer(部屋)には投稿できません",
+      "loadFailed": "メッセージの取得に失敗しました",
+      "reactionFailed": "リアクションに失敗しました",
+      "pinned": "ピン留めしました",
+      "unpinned": "ピン解除しました",
+      "pinFailed": "ピン操作に失敗しました",
+      "deleteSuccess": "メッセージを削除しました",
+      "deleteFailed": "削除に失敗しました",
+      "bookmarkFailed": "ブックマークに失敗しました",
+      "markReadFailed": "既読にできませんでした",
+      "editHeader": "メッセージを編集",
+      "editSuccess": "メッセージを編集しました",
+      "editFailed": "編集に失敗しました"
     }
   },
   "button": {
@@ -345,7 +419,10 @@
     "delete_timetable": "削除",
     "delete_timetable_confirm": "時間割「{name}」を削除しますか？この操作は取り消せません。",
     "delete_timetable_success": "時間割を削除しました",
-    "delete_timetable_error": "時間割の削除に失敗しました"
+    "delete_timetable_error": "時間割の削除に失敗しました",
+    "create_error_out_of_term": "時間割の有効期間が学期の範囲外です。学期の開始日から終了日の間で指定してください",
+    "create_error_term_not_found": "選んだ学期が見つかりません。学期の一覧を開き直してください",
+    "effective_until_before_from": "適用終了日は適用開始日以降の日付にしてください"
   },
   "error": {
     "server": "サーバーエラーが発生しました",
@@ -357,6 +434,7 @@
     "unauthorized": "ログインが必要です",
     "section_load_failed": "この項目の取得に失敗しました（再読み込みしてください）",
     "unknown": "エラーが発生しました",
+    "notFound": "見つかりません",
     "TEAM_001": "チームが見つかりません",
     "TEAM_006": "このチームは削除されていないため、復元できません",
     "COMMON_001": "入力内容に不備があります",
@@ -1131,6 +1209,7 @@
       "edit_title": "マイルストーン編集",
       "title_label": "タイトル",
       "title_placeholder": "マイルストーン名",
+      "title_required": "タイトルを入力してください",
       "due_date_label": "期限",
       "add": "追加"
     },
@@ -1775,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "戻る",
     "cancel": "キャンセル",
     "search": "検索",
     "edit": "編集",
@@ -3011,7 +3091,11 @@
     "justNow": "たった今",
     "minutesAgo": "{count}分前",
     "hoursAgo": "{count}時間前",
-    "daysAgo": "{count}日前"
+    "daysAgo": "{count}日前",
+    "soon": "まもなく",
+    "inMinutes": "あと{count}分",
+    "inHours": "あと{count}時間",
+    "inDays": "あと{count}日"
   },
   "error_page": {
     "not_found_title": "このページは見つかりませんでした",
@@ -3246,6 +3330,10 @@
     "save_success": "表示設定を保存しました",
     "nav": "ナビ"
   },
+  "integrationSettings": {
+    "lineSubtitle": "LINE Messaging API との連携設定",
+    "snsSubtitle": "Instagram・X のフィード連携を管理します"
+  },
   "secret_token": {
     "issued_dialog": {
       "title": "リンクを発行しました",
@@ -3262,15 +3350,35 @@
       "not_shown_hint": "セキュリティのため、発行済みのリンクは再表示されません。必要な場合は再発行してください。",
       "revoked_by_migration": "セキュリティ強化のため失効しました",
       "reissue": "再発行",
-      "reissue_hint": "再発行すると新しいリンクが作られ、古いリンクは使えなくなります。",
+      "links_hint": "リンクを失くした場合は新規作成で再発行してください。不要になった古いリンクは × で無効にしてください。",
       "label_with_id": "リンク #{id}",
       "created_at": "発行日時",
       "expires_at": "有効期限",
       "used_count": "利用回数"
     }
   },
-  "integrationSettings": {
-    "lineSubtitle": "LINE Messaging API との連携設定",
-    "snsSubtitle": "Instagram・X のフィード連携を管理します"
+  "globalSearch": {
+    "title": "検索",
+    "placeholder": "キーワードで検索（2文字以上）",
+    "submit": "検索",
+    "failed": "検索に失敗しました",
+    "tooShort": "2文字以上で入力してください",
+    "empty": "検索結果がありません",
+    "didYouMean": "もしかして:",
+    "broaderQuery": "より広い検索:",
+    "timedOut": "一部の種別の検索がタイムアウトしました: {types}",
+    "noLink": "リンクはありません",
+    "types": {
+      "ALL": "すべて",
+      "POST": "投稿",
+      "MESSAGE": "メッセージ",
+      "THREAD": "スレッド",
+      "ARTICLE": "記事",
+      "FILE": "ファイル",
+      "USER": "ユーザー",
+      "TEAM": "チーム",
+      "ORGANIZATION": "組織",
+      "ACTIVITY": "活動記録"
+    }
   }
 }

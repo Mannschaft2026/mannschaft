@@ -85,6 +85,7 @@
     },
     "handover": {
       "builder": {
+        "generate_failed": "申し送りパックの生成に失敗しました",
         "title": "申し送りパック生成",
         "select_term": "対象任期を選択",
         "pii_level": "個人情報レベル",
@@ -110,6 +111,7 @@
         "failed": "失敗"
       },
       "term": {
+        "count": "{count}件 | {count}件 | {count}件",
         "manager_title": "理事任期管理",
         "col_name": "氏名",
         "col_role": "役職",

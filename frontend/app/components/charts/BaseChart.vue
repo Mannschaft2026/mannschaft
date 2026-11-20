@@ -2,7 +2,7 @@
 /**
  * F08.10 共通チャートラッパー（04_frontend_and_ux.md §G.3 / §G.8）。
  *
- * chart.js@4 を流用し、radar / line / doughnut / bar を 1 つの土台で扱う。
+ * chart.js@4 を流用し、radar / line / doughnut / bar / pie を 1 つの土台で扱う。
  * Phase 3-C（個人分析）・Phase 3-D（チーム分析）双方で再利用する。
  *
  * 設計ポイント:
@@ -28,6 +28,7 @@ import {
   LineController,
   LineElement,
   LinearScale,
+  PieController,
   PointElement,
   RadarController,
   RadialLinearScale,
@@ -46,6 +47,7 @@ ChartJS.register(
   LineController,
   RadarController,
   DoughnutController,
+  PieController,
   // scales
   CategoryScale,
   LinearScale,
@@ -62,14 +64,14 @@ ChartJS.register(
 )
 
 /** 本ラッパーが扱うチャート種別（コア 4 種・§G.3 の表に対応） */
-type SupportedChartType = Extract<ChartType, 'radar' | 'line' | 'doughnut' | 'bar'>
+type SupportedChartType = Extract<ChartType, 'radar' | 'line' | 'doughnut' | 'bar' | 'pie'>
 
 const props = withDefaults(
   defineProps<{
     /** チャート種別 */
     type: SupportedChartType
     /** chart.js の data（labels + datasets） */
-    data: ChartData<SupportedChartType>
+    data: ChartData<SupportedChartType> | ChartData<SupportedChartType, Array<number | null>>
     /** chart.js の options（未指定時は responsive 既定を使う） */
     options?: ChartOptions<SupportedChartType>
     /** 空状態に表示するメッセージ（i18n 済みの文字列を渡す） */
@@ -103,6 +105,9 @@ const hasRenderableData = computed<boolean>(() => {
   if (datasets.length === 0) return false
   return datasets.some((ds) => {
     const arr = (ds.data ?? []) as unknown[]
+    // pie は「分母が 0（全て 0 / null）なら円を描かない」。0 の扇形は描けず、NaN や架空 100% を
+    // 作らないため、正の値が 1 つも無ければ描画不可とする（F06.4.1 §3.1）。
+    if (props.type === 'pie') return arr.some((v) => typeof v === 'number' && v > 0)
     return arr.some((v) => v !== null && v !== undefined)
   })
 })
@@ -137,6 +142,17 @@ watch(
   },
   { deep: true },
 )
+
+// canvas は <ClientOnly> 内にあり、ClientOnly は mount 後の次 tick でスロットを描く。
+// そのため onMounted 時点では canvasRef が未マウントで、props も変わらないと一度も描かれず
+// 真っ白な canvas（300x150）になる。canvas の出現・差し替えそのものを契機に描画する。
+watch(canvasRef, (el) => {
+  if (el) renderChart()
+  else {
+    chartInstance?.destroy()
+    chartInstance = null
+  }
+}, { flush: 'post' })
 
 onMounted(renderChart)
 onUnmounted(() => {

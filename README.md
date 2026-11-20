@@ -1,6 +1,12 @@
 # Mannschaft — 汎用組織管理プラットフォーム（バックエンド）
 
+シフト予算の失敗イベントは対応3種だけを再実行し、非対応種別は元診断を保った手動補正へ案内します。再失敗でも初回診断を保持し、再実行応答には確定済みの更新日時を返します（[仕様](docs/features/F08.7_shift_budget_integration.md)、[復旧手順](docs/operations/f087_monthly_close_recovery.md)）。
+
 あらゆる組織・チーム・個人をシームレスに管理するWebアプリケーション。
+
+確実配信イベントの隔離一覧と理由付き1件再開は SYSTEM_ADMIN 向けAPIで扱う。専用再開監査の保持・匿名化方針と未完了の実装、操作手順、既存通知での遅延・隔離・実復旧の確認と検証境界は[モジュールイベント運用](docs/operations/module-event-operations.md)を参照する。
+
+お気に入りのチーム・組織名称編集は、正準URLの詳細取得時versionを使用します。固定source8afdでformal作成2件＋残12件の分割実機と、その後の新独立3住民探索を範囲採用済みです。探索は部分達成・未実証の気づき2件を含みます。PR #3644の正準URL提供を含む支援成果を検証用に統合し、最終CI・main採用は待機中です（[検証範囲と残務](docs/evidence/CMP-261028-2304-l1r-normalizer.md)、[仕様と制約](docs/features/F02.9_favorites_widget.md#53-クイック編集ダイアログfavoritequickeditdialogvue)）。
 
 チーム・組織ダッシュボードの出席確認状況は、出席（一部出席を含む）・欠席・未定（未回答を含む）の人数を表示し、予定・人数から理由付き詳細へ遷移する。見出しからは出席確認対象の専用一覧を開く。詳細は [F02.2 ダッシュボード](docs/features/F02.2_dashboard.md) の「出席確認状況」を参照。
 
@@ -8,7 +14,7 @@
 
 [チームポイント（F18.1）](docs/features/F18.1_team_loyalty_points.md) を実装し、受け入れ検証中です。本人は共通会員QR・残高・特典・履歴・受付申請を利用し、管理者が設定、管理者と明示委任副管理者が付与・交換・承認を行います。QR期限の位相ずれは単体回帰6件で修正確認済みです。3住民・26観測による対象アリシゼーションと操作域/説明の回帰7件・9画像確認を完了しました。正式19件は18成功・1timeoutで、該当1件の同60秒予算追試は成功しましたが原因は未確定です。ユーザー指示により大規模性能試験を後続へ延期し、timeout調査と最新main統合を進めています。統合前のFE/BE/E2E CIは成功、統合後CIは待ちです。物理iPhone・キーボード・読み上げは別途未実施、全32AC合格とはせず、未実施事項を残して統合後CIと調査結果をもとにマージ判断します（詳細は仕様書§13とPR #3920）。
 
-[本人の恐竜アバター Phase 1](docs/features/F04.7_dinosaur_ranch/05_acceptance_rollout.md) は製造中で、73受け入れ条件・実機・アリシゼーションの全体合格は未完了です。正式診断64・出生81の対応表と本番公開用512素材は未承認・未登録で、本番公開 gate は OFF を維持します。明示した非本番の隔離 fixture は実装検証専用で、正式公開用素材の登録や本番公開準備の証拠には数えません。
+[本人の恐竜アバター Phase 1](docs/features/F04.7_dinosaur_ranch/05_acceptance_rollout.md) は製造中で、73受け入れ条件・実機・アリシゼーションの全体合格は未完了です。診断64・出生81対応と24問/同点6軸の六言語原稿は採択され、正式16種×4外見のmasterと512tuple素材を明示登録できる構成を追加しています。登録は公開許可と独立し、`mannschaft.ranch.approved-visuals-available` の既定falseと本番公開 gate OFFを維持します。結果identity/対応説明の不変保存と専用検証設定は[正式対応・結果保存契約](docs/features/F04.7_dinosaur_ranch/mapping_runtime_20261108.md)を参照してください。明示した非本番の隔離 fixture は実装検証専用で、正式公開用素材の登録や本番公開準備の証拠には数えません。
 
 隔離開発環境では、明示的な opt-in により開発専用 catalog v3 の16基礎種を牧場とダッシュボードのウィジェットで表示します。孵化後の3成長段階とドット／通常2Dの各表示に、待機・歩行・食事・喜びと同じ個体の静止 fallback を接続します。480 PNG は `frontend/dev-fixtures/ranch/base16-v3/` に置き、開発時だけ配信します。既存 catalog v2 の個体・選定済み卵・保存 ACK を保持し、正式64タイプの割当と512件公開素材ゲートの承認状態は変更しません。検証範囲と公開境界は [受入・展開計画](docs/features/F04.7_dinosaur_ranch/05_acceptance_rollout.md) を参照してください。
 
@@ -16,13 +22,13 @@
 
 恐竜の部屋の「遊び方」は、ページを移動せず共通ダイアログで確認できます。準備中の素材・対応表や停止中のお世話も区別して案内します。
 
-本人の64タイプ診断結果は、保存した六軸の極ラベルから本人の傾向を表示し、同点時は本人の選択を示します。旧結果は元の本人セッションに保存した定義から表示だけを補足し、保存説明を変更しません。初期草案の質問・翻訳は未承認と明示し、恐竜対応付けと公開 gate は引き続き閉じています。
+本人の64タイプ診断結果は、保存した六軸の極ラベルから本人の傾向を表示し、同点時は本人の選択を示します。旧結果は元の本人セッションに保存した定義から表示だけを補足し、保存説明を変更しません。正式質問版は採択済み216翻訳値を保ち、明示登録された新しい結果だけへ当時の対応版・種・外見・catalog版・六言語説明を固定します。旧null結果の表示は維持し、新しい正式割当へは読み替えません。本番公開 gate は引き続き閉じています。
 
 本人の診断結果一覧は1〜100件を取得し、版・本人・診断方式・MICROS時刻・UUIDに束縛した署名付きcursorで続きを指定します。旧無署名cursorや別本人・別方式・改ざんcursorは400で拒否します。0/1/100/101件・limit境界・一定query数の試験コードを追加しましたが、新しい実MySQL試験とCI実証は未実行です。
 
 本人の未完了診断は `GET /api/v1/me/diagnoses/sessions/pending` で最新の途中回答を取得して再開します。未完了がない場合は200の `data: null`、取得失敗は再試行として区別します。既存セッションの質問定義と回答を保持し、牧場参加を必要としません。
 
-承認素材の登録は `frontend/scripts/verify-ranch-production-assets.mjs` に pack directory・manifest SHA256・master file/SHA256 を明示して行います。全512組の実 bytes・hash・PNG atlas/fallback を照合し、`--repository` に指定した隔離 checkout 内へ同じ artifact の BE classpath/FE public と有限 TS registry を配置します。TS は両配置の後に原子的に置換し、別 bytes の既存 pack は上書きしません。現在の対応形式は静的8bit RGB/RGBA・非 interlace PNG の均等 atlas（PIXEL は96×96）です。care 公開設定とは独立した素材登録であり、検証器の合成試験は素材承認を代行しません。
+承認素材の登録は `frontend/scripts/verify-ranch-production-assets.mjs` に pack directory・manifest SHA256・master file/SHA256 を明示して行います。全512組の実 bytes・hash・PNG atlas/fallback を照合し、隔離 checkout 内へ同じ artifact の BE classpath/FE public と有限 TS registry を配置します。v2は512tuple内に4動作を保持し、PIXEL96/PAINT_2D384の元cellと112/448の描画面を区別します。正式素材は承認済み6144frameを変更せず再利用し、卵128tupleは従来SVG由来の共通PNG2件を参照します。`--frontend-only`で担当外のBE配置を省けます。BEの明示的な素材可用性が無効・未取得・取得失敗なら同梱512件があっても正式描画・新規割当を無効に保ちます。本人結果の保存説明は公開状態に関係なく閲覧できます。[正式素材pack v2](docs/features/F04.7_dinosaur_ranch/approved_visual_pack_v2.md)を参照してください。
 Scene は登録された同個体・同段階の静止 fallback を動き抑制時と atlas 取得失敗時に使用し、静止画像も失敗した場合は状態文字を保ちます。初回非表示では画像を取得せず、公開素材 pack 未登録の現在は本番表示 gate が閉じています。canvas の実画素・実ブラウザ資源停止は別の実機確認対象です。
 運営の源配送集計・明示再予約は現在の SYSTEM_ADMIN/ACTIVE 資格で源の専用窓口へ接続します。4源の実 provider が未閉束の間は利用不可として表示し、正常なゼロ件を捏造しません。保存 ACK を照会できない503では同じ再送 key/body を保持します。実 HTTP のロール横断・4源配送と E2E の全体合格は未証明です。
 ログインはメール＋パスワード、パスキー、Googleの順に利用できる。パスキーはメールだけで開始し、署名・UP/UVと一回限りのチャレンジを検証する。通常ログインと同じ状態確認・セッション管理・認証Cookieを適用する。詳細は[F01.1 認証](docs/features/F01.1_auth.md#webauthn-ログインフロー)を参照。
@@ -30,6 +36,8 @@ Scene は登録された同個体・同段階の静止 fallback を動き抑制�
 チーム・組織の参加申請管理一覧は、所属する ADMIN / DEPUTY_ADMIN が公開範囲によらず取得できる。非公開化後の申請履歴と0件の空ページも取得でき、非公開スコープの権限がない利用者には不存在と同じ404を返す。新規申請・承認・却下の公開条件と、削除・アーカイブ・事前作成中のスコープの拒否条件は維持する。
 
 活動記録の認証付き詳細と予定連携は、[F06.4 §13](docs/features/F06.4_activity_records.md#13-認証付き詳細と予定連携cmp-261007-1510)で設計する。予定から下書きを作成し、予定由来の未編集項目だけを追従させる。公開済み・手動編集済みの項目は差分を選択して反映し、本文・結果・添付・実参加者を保全する。実装・検証の完了状態は[戦役台帳](docs/task-list.md)を正本とする。
+
+個人の頑張り記録（[F06.4.1](docs/features/F06.4.1_personal_effort_records.md)）は、PR-1 として個人 API（標準プリセット・原本の作成/一覧/詳細/更新/削除・期間別集計 BAR/LINE/PIE、Idempotency-Key、暗号化 cursor）の BE を実装した。チーム共有・チーム定義・FE・導線は未実装で、導線は PR-4 まで非表示。完了状態は[戦役台帳](docs/task-list.md)を正本とする。
 
 チーム・組織の具体予定を保存すると活動記録に「予定・未公開」が自動表示され、終了日時経過後の毎分処理で「予定」が外れる。実績を自動公開せず、一般所属には元予定の閲覧範囲内の予定情報だけを表示する。活動記録の削除は元予定を残す。[F06.4 §14](docs/features/F06.4_activity_records.md#14-予定作成時の自動活動記録cmp-261008-1203)に契約と実証範囲を記載し、追加の認可・取消API・JDBC binder性能試験も照合済みで、PR #3729の最終CI・検分・マージ（a41c06d5）を確認した。2026-10-09の稼働反映では既存期限超過予定846件が0件へ収束し、手動活動59件と内容digestを保持した。FEは匿名実Browserでlogin表示・HTTP200と実import経由のcompiled source 5件のGit blob一致も確認した。
 
@@ -133,6 +141,8 @@ Scene は登録された同個体・同段階の静止 fallback を動き抑制�
 | テスト | Vitest + Vue Test Utils |
 | SSR対象 | SEOが必要な公開ページ（ブログ、チーム紹介、活動記録等） |
 | SPA対象 | ログイン後のダッシュボード、チャット等のインタラクティブ画面 |
+
+DatePickerの手入力は共通補正で扱う。日付の桁・区切りを保持し、日時欄・時刻のみの欄の24時間表記ではAM/PMを省略して入力できる（[補正と回帰試験](frontend/app/utils/primevueDatePickerManualTime.spec.ts)）。実画面の保存・再取得とロール横断の確認は別工程とし、完了状態は[戦役台帳](docs/task-list.md)を正本とする。
 
 ## アプリケーション形態
 
@@ -500,6 +510,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 
 #### 3. タイムライン・コミュニケーション
 - X（旧Twitter）風UIのチーム内限定投稿・交流（クローズドタイムライン）
+- 非公開投稿（DRAFT/SCHEDULED/HIDDEN）は作成者本人かつ既存スコープの資格を満たす場合だけ参照でき、返信・リポスト・投票・みたよ・ブックマーク追加にも同じ境界を適用する。
 - タイムライン上部の「更新」でフィードだけを再取得できる。投稿フォームの草稿と周辺の画面状態は保持する。
 - プラットフォーム全体のパブリックタイムライン（ソーシャルプロフィールによる匿名投稿 + チーム/組織の公式投稿）— **初回リリースでは無効、アップデートで解放**
 - ソーシャルプロフィール（匿名人格、1ユーザー最大3つ）+ フォロー機能 — パブリックタイムラインと同時解放
@@ -522,6 +533,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 - **チーム間メッセージング**: 組織を横断したコミュニケーション
 
 #### 6. プッシュ通知
+- 通知の固定文面は日本語・英語・中国語・韓国語・スペイン語・ドイツ語のリソースバンドルで管理。4翻訳辞書は残存日本語・日本語原文のコピーとプレースホルダーを検査する（通知設定ラベル45鍵とシフト予算APIエラー9鍵の既存日本語フォールバックは対象外）。
 - 予約リマインド（予約時間が近づいたら自動通知）
 - 出欠督促、お知らせ配信
 - LINE連携による自動通知
@@ -581,7 +593,9 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 #### 14. 多言語対応 (i18n)
 - 初期対応: 日本語 / 英語
 - メッセージ・ラベルの外部化（Spring MessageSource + フロントエンドi18nプラグイン）
+- 共通の「戻る」ラベルは `common.back` を6言語で解決し、既存の `button.back` と同じ訳を使う（CMP-260930-1535）
 - 将来の言語追加に対応可能な設計
+- フロントエンドの literal `t()` / `$t()` による `common.*` 参照は、[番人](frontend/tests/unit/i18n/common-literal-resolution.spec.ts)で6言語の登録辞書を登録順に統合し、フォールバックなしで検証する。動的キーと同居テストは対象外。任期件数の0・1・2・多件も実際の翻訳で検証する。
 
 #### 15. スケジュール・出欠管理
 
@@ -790,12 +804,18 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 - アルバム管理・閲覧権限設定
 
 #### 7. シフト管理
+
+枠の日付を変更するときは旧日付と新日付、紐付く希望も移動する説明を確認して保存します。キャンセルでは更新せず、保存時は枠と生存する同枠希望の日付をまとめて変更します。日単位の希望や削除済みの希望は変更しません（[詳細](docs/features/F03.5_shift/06_manual_authoring.md#11513-枠と希望の日付の同時移動)）。
 - 管理者が週/月単位のシフト表を作成・編集・確定・公開
+- 割当の現在状態は枠のJSONを正本とし、自動割当の部分確定でも既存の手動担当を保持する。割当履歴から過去の担当を復活させない
+- 充足状況サマリは管理者専用。一般メンバーの未公開シフト照会は不在と同じ404で秘匿し、閲覧可能状態のサマリは従来どおり403とする（[サマリの存在秘匿契約](docs/features/F03.5_shift/05_unpublished_visibility.md#37-充足状況サマリの存在秘匿cmp-260905-1630)）。
+- シフト枠の削除前に、提出済み希望が希望一覧と本人履歴から非表示になり、通常操作では元に戻せないことを確認する
 - 時給の登録・同日訂正は当該チームの ADMIN / DEPUTY_ADMIN（および SYSTEM_ADMIN）に限定し、一般メンバーは本人の時給履歴・有効時給を閲覧できる
 - メンバーが希望日時を事前に提出（希望収集フェーズ）
 - 確定後はメンバーへプッシュ通知、個人ダッシュボードへ自動反映
 - マイシフトの個別交代依頼は所属チームの全メンバーから候補を選択でき、候補0件と取得失敗を区別して再試行できる
 - 交代依頼の作成は公開済み（PUBLISHED）の本人担当枠に限定する。ADMIN・DEPUTY_ADMIN・SYSTEM_ADMINにも同じ作成資格を適用し、状態・担当変更と直列化して確認する
+- 交代依頼の承諾・承認/却下・非本人取消、自動割当runの確定・破棄、枠指定の交代作成は、親スケジュール・枠の削除時も入力リソースの不在と同じ404を返し、子の実在を秘匿する
 - 同じ枠・申請者の未決交代依頼（PENDING / ACCEPTED）は1件に限定し、再送や宛先・募集モードを変えた重複は409で拒否する。別の現在担当者の依頼は共存できる
 - 交代依頼の承認は申請者だけを受諾者へ同位置で差替し、他担当と人数を保持する。承認状態・担当・割当履歴を同時に保存し、資格変更や競合時は全体を拒否する
 - スタッフ別・日付別の一覧表示
@@ -966,7 +986,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 | 3 | スケジュール・出欠、個人スケジュール、Googleカレンダー連携、予約管理、シフト管理、緊急安否確認、順番待ち、イベント管理 | [F03.1](docs/features/F03.1_schedule_shared.md), [F03.2](docs/features/F03.2_schedule_personal.md), [F03.3](docs/features/F03.3_google_calendar.md), [F03.4](docs/features/F03.4_reservation.md)（v2枝番: [F03.4.1 メニュー](docs/features/F03.4.1_reservation_menu.md), [F03.4.2 枠テンプレート](docs/features/F03.4.2_reservation_slot_template.md), [F03.4.3 予約グループ](docs/features/F03.4.3_reservation_group_booking.md), [F03.4.4 マトリックスUI](docs/features/F03.4.4_reservation_matrix_ui.md)）, [F03.5](docs/features/F03.5_shift.md), [F03.6](docs/features/F03.6_safety_check.md), [F03.7](docs/features/F03.7_queue.md), [F03.8](docs/features/F03.8_event_management.md) |
 | 4 | タイムライン、チャット（自分の連絡先QR管理への入口）、プッシュ通知、ソーシャルプロフィール・フォロー、通報・モデレーション、グローバル検索、ゲーミフィケーション | [F04.1](docs/features/F04.1_timeline.md), [F04.2](docs/features/F04.2_chat.md), [F04.3](docs/features/F04.3_push_notification.md), [F04.4](docs/features/F04.4_social_profiles.md), [F04.5](docs/features/F04.5_moderation.md), [F04.6](docs/features/F04.6_search.md), [F04.7](docs/features/F04.7_gamification.md), [F04.8](docs/features/F04.8_contact.md) |
 | 5 | 掲示板、回覧板、電子印鑑、アンケート・投票、ファイル共有、ワークフロー・承認、フォームビルダー | [F05.1](docs/features/F05.1_bulletin_board.md), [F05.2](docs/features/F05.2_circular.md), [F05.3](docs/features/F05.3_digital_seal.md), [F05.4](docs/features/F05.4_survey_vote.md), [F05.5](docs/features/F05.5_file_sharing.md), [F05.6](docs/features/F05.6_workflow_approval.md), [F05.7](docs/features/F05.7_form_builder.md) |
-| 6 | CMS・ブログ、メンバー紹介・ギャラリー、タイムラインダイジェスト、活動記録、ナレッジベース | [F06.1](docs/features/F06.1_cms_blog.md), [F06.2](docs/features/F06.2_member_gallery.md), [F06.3](docs/features/F06.3_timeline_digest.md), [F06.4](docs/features/F06.4_activity_records.md), [F06.5](docs/features/F06.5_knowledge_base.md) |
+| 6 | CMS・ブログ、メンバー紹介・ギャラリー、タイムラインダイジェスト（6言語）、活動記録、ナレッジベース | [F06.1](docs/features/F06.1_cms_blog.md), [F06.2](docs/features/F06.2_member_gallery.md), [F06.3](docs/features/F06.3_timeline_digest.md), [F06.4](docs/features/F06.4_activity_records.md), [F06.5](docs/features/F06.5_knowledge_base.md) |
 | 7 | サービス記録、パフォーマンス管理、備品管理、カルテ、スキル・資格管理、インシデント管理 | [F07.1](docs/features/F07.1_service_records.md), [F07.2](docs/features/F07.2_performance.md), [F07.3](docs/features/F07.3_equipment.md), [F07.4](docs/features/F07.4_chart.md), [F07.5](docs/features/F07.5_skill_certification.md), [F07.6](docs/features/F07.6_incident_management.md) |
 | 8 | マッチング、大会・リーグ管理、決済・会費・入退室、議決権行使・委任状、領収書、回数券、予算・会計管理 | [F08.1](docs/features/F08.1_matching.md), [F08.2](docs/features/F08.2_payments_access_control.md), [F08.3](docs/features/F08.3_voting_proxy.md), [F08.4](docs/features/F08.4_receipt.md), [F08.5](docs/features/F08.5_ticket_book.md), [F08.6](docs/features/F08.6_budget_accounting.md), [F08.7](docs/features/F08.7_tournament_league.md) |
 | 9 | 住民台帳、プロモーション配信、駐車場区画、LINE/SNS連携、施設予約、ダイレクトメール、広告、コルクボード、Webhook/外部API、デジタルサイネージ、メール配信基盤 | [F09.1](docs/features/F09.1_resident_registry.md), [F09.2](docs/features/F09.2_promotion_targeting.md), [F09.3](docs/features/F09.3_parking.md), [F09.4](docs/features/F09.4_line_sns.md), [F09.5](docs/features/F09.5_facility_booking.md), [F09.6](docs/features/F09.6_direct_mail.md), [F09.7](docs/features/F09.7_advertising.md), [F09.8](docs/features/F09.8_corkboard.md), [F09.9](docs/features/F09.9_webhook_api.md), [F09.10](docs/features/F09.10_digital_signage.md), [F09.18](docs/features/F09.18_email_delivery_infrastructure.md) |
@@ -1214,6 +1234,7 @@ CI では `openapi.json` と生成型の乖離を自動検出します。`docs/o
 | `/撤収` | 開発環境の終了 |
 
 開発ハーネスの診断・検査範囲・再現性計測は [`docs/development/harness-engineering.md`](docs/development/harness-engineering.md) を参照。環境準備は [`docs/development/harness-environment.md`](docs/development/harness-environment.md)。
+生SQL時刻列・日時のソース番人は、走査を30秒のプリエンプティブな上限と割込み可能な正規表現入力で打ち切る。凍結件数・検出パターンは維持し、キャンセルを正常な空結果へ変えない。
 
 ---
 
@@ -1230,6 +1251,8 @@ CI では `openapi.json` と生成型の乖離を自動検出します。`docs/o
 > - パフォーマンス最適化（LCP < 2.5s）: `FRONTEND_CODING_CONVENTION.md` §10
 > - Flyway マイグレーション: `.claudecode.md` §18
 > - E-R 図（実スキーマから自動生成・ドメイン単位）: [`docs/architecture/er/README.md`](docs/architecture/er/README.md)。再生成は `cd backend && ./gradlew generateErDiagrams`、仕組みは `.claudecode.md` §10.1。migration／Entity を変更したら再生成してコミットする（CI の ER Diagram Drift Check が検出）。`docs/features` の手描き図は設計意図、`er/` は現実のスキーマ
+
+名称正規化は組織ドメインが所有し、Java公開窓口 `organization.api.DuplicateNameNormalizerApi.trimSpaces` から利用する。既存の `common.duplicatename.DuplicateNameNormalizer` は、呼出側のL2移行・L5撤去まで互換委譲を維持する（[L1-R初回ロットの検証状況](docs/evidence/CMP-261028-2304-l1r-normalizer.md)）。
 
 ### フィーチャーフラグ（Phase 制御）
 
@@ -1269,7 +1292,15 @@ Phase 9 以降で実装される機能（**広告表示 #27・コルクボード
 - ディレクトリ構成は機能別（Feature-based）パッケージングを採用すること。
 - 開発フローの制約（AI/人間の区別）は `.claudecode.md` §17 を参照すること。
 
+### モジュールイベントの再開監査と本人データ（実装・検証中）
+
+再開理由は専用監査に保存し、本人の全履歴4項目を開示し、強匿名化時に理由を `[REDACTED]` に置換する設計です。監査はUTCの暦年2年より古い行を削除します。強匿名化後の理由再生を防ぐM所有の `module_event_resume_actor_states`（UUIDv7 id・一意なactor_user_id・不可逆なpurged）は、監査削除後もTTLなしで保持します。本人stateのid/purgedも既存audit_logsカテゴリ内の別JSONへ出力する方針です。M内部の本人監査・state取得、期限削除、再開fenceと強匿名化の本文は接続済みです。新fenceとstate取得の業務REDはCIで確認済みですが、接続後の実DB green、PRIVACY/Cへの正式引渡しと実ZIP検証は未完了です。詳細は[運用仕様](docs/operations/module-event-operations.md)と[個人データ仕様](docs/features/F12.3_gdpr_personal_data.md)を参照してください。
+
+保持削除は毎日03:00 UTCの `module-event-resume-audit-retention-daily` と同じ登録名の手動入口から、既存M privacy APIへ一度だけ委譲します。瞬時TTLではありません。独立TXのquery予算は300秒、leaseは接続取得と取消・rollback/commit・解放の余裕を含めて30分と推定しています。実MySQLの先行4試験で未実装stubによる業務REDをCI確認後に本文を接続しましたが、接続後のgreen・短TX取消試験・実機起動は未測定です。leaseは障害時を含む完走時間の保証ではありません。
+
 ### チームの予算・会計画面
 
 `/teams/{slug}/budget` では管理者・副管理者が会計年度を追加し、年度ごとの収入・支出・残高と費目別の予算・実績・消化率を確認できます。選択した年度の開始日・終了日は作成後や年度切替後にも表示し、集計取得に失敗しても確認できます。戻るリンクはチームトップへ移動します。ページ上部の「使い方」には、閲覧権限を持つ利用者向けであることと、一般メンバーの管理者への相談先を案内しています。会計APIでは、費目の削除と取引のない年度の削除は論理削除とし、予算配分・取引の履歴と集計金額を保持します。取引のある年度は削除できません。見出しと操作は画面幅に応じて折り返し、日本語・ドイツ語の360/390px幅でもページを横に広げません。見出しのヘルプ・年度フォーム・日付選択・ガイドの操作領域は44×44px以上を確保しています。費目の作成や収支の直接入力はこの画面の対象外です。
+
+牧場の正式画像はPWA初回登録時に全packを先読みせず、表示に必要な画像を既存の画像cacheへ取得します。production配布検査は生成Service Workerの正式画像precache混入も拒否します。詳しくは[正式画像pack v2](docs/features/F04.7_dinosaur_ranch/approved_visual_pack_v2.md)を参照してください。
 

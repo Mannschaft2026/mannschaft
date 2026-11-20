@@ -123,6 +123,7 @@
       },
       "card": {
         "pending": "{scope} 참가 초대가 도착했습니다",
+        "scopeDeleted": "삭제된 팀",
         "waiting": "상대방의 수락 대기 중",
         "statusPending": "수락 대기",
         "join": "참가하기",
@@ -147,6 +148,79 @@
         "joinFailed": "참가에 실패했습니다",
         "declineFailed": "거절에 실패했습니다"
       }
+    },
+    "channelList": {
+      "title": "채팅",
+      "newConversation": "새 대화",
+      "addChannel": "채널 추가",
+      "dmSection": "Kabine(DM)",
+      "noDm": "DM이 없습니다",
+      "roomSection": "Zimmer(방)",
+      "noRoom": "방이 없습니다",
+      "loadFailed": "방 목록을 불러오지 못했습니다",
+      "detailLoadFailed": "채널 정보를 불러오지 못했습니다"
+    },
+    "create": {
+      "typeDm": "Kabine(DM)",
+      "typeRoom": "Zimmer(방)",
+      "dmOpened": "Kabine(DM)을 열었습니다",
+      "roomCreated": "Zimmer(방)를 만들었습니다",
+      "conversationFailed": "대화를 만들지 못했습니다",
+      "roomCreateFailed": "Zimmer(방)를 만들지 못했습니다",
+      "header": "새 대화 시작",
+      "tabContacts": "연락처에서 선택",
+      "tabCreateRoom": "Zimmer(방) 만들기",
+      "searchByName": "이름으로 검색...",
+      "selectedSummary": "{count}명 선택됨 → {type}(으)로 시작합니다",
+      "startAs": "{type} 시작",
+      "roomName": "Zimmer(방) 이름",
+      "roomNamePlaceholder": "예: general",
+      "descriptionOptional": "설명(선택)",
+      "descriptionPlaceholder": "Zimmer(방) 설명",
+      "privateRoom": "비공개 Zimmer(초대 전용)",
+      "inviteMembersOptional": "멤버 초대(선택)",
+      "create": "만들기"
+    },
+    "inviteZimmer": {
+      "header": "Zimmer에 초대",
+      "tooltip": "Zimmer에 초대",
+      "failed": "초대하지 못했습니다",
+      "noMembers": "초대할 수 있는 멤버가 없습니다",
+      "candidatesLoadFailed": "초대할 수 있는 멤버 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      "shareQuestion": "기존 채팅 내용을 공유할까요?",
+      "share": "공유하기",
+      "shareHint": "지금까지의 메시지가 새 Zimmer로 이어집니다",
+      "noShare": "공유하지 않기",
+      "noShareHint": "새 Zimmer는 빈 상태로 시작합니다",
+      "createZimmer": "Zimmer 만들기"
+    },
+    "memberSelect": {
+      "notFound": "멤버를 찾을 수 없습니다"
+    },
+    "activeThreadsEmpty": "진행 중인 스레드가 없습니다",
+    "tabAriaLabel": "{name} 탭",
+    "unnamedChannel": "이름 없는 그룹",
+    "message": {
+      "deleted": "삭제된 메시지입니다",
+      "unknownSender": "알 수 없음",
+      "edited": "(수정됨)",
+      "loadOlder": "이전 메시지 불러오기",
+      "empty": "아직 메시지가 없습니다",
+      "sendFailed": "메시지를 보내지 못했습니다",
+      "inputPlaceholder": "메시지를 입력...",
+      "inputDisabled": "이 Zimmer(방)에는 게시할 수 없습니다",
+      "loadFailed": "메시지를 불러오지 못했습니다",
+      "reactionFailed": "리액션에 실패했습니다",
+      "pinned": "고정했습니다",
+      "unpinned": "고정을 해제했습니다",
+      "pinFailed": "고정 작업에 실패했습니다",
+      "deleteSuccess": "메시지를 삭제했습니다",
+      "deleteFailed": "삭제하지 못했습니다",
+      "bookmarkFailed": "북마크에 실패했습니다",
+      "markReadFailed": "읽음 처리하지 못했습니다",
+      "editHeader": "메시지 수정",
+      "editSuccess": "메시지를 수정했습니다",
+      "editFailed": "수정하지 못했습니다"
     }
   },
   "button": {
@@ -345,7 +419,10 @@
     "delete_timetable": "삭제",
     "delete_timetable_confirm": "시간표 \"{name}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
     "delete_timetable_success": "시간표를 삭제했습니다",
-    "delete_timetable_error": "시간표를 삭제하지 못했습니다"
+    "delete_timetable_error": "시간표를 삭제하지 못했습니다",
+    "create_error_out_of_term": "시간표의 적용 기간이 학기 범위를 벗어났습니다. 학기의 시작일과 종료일 사이로 지정해 주세요.",
+    "create_error_term_not_found": "선택한 학기를 찾을 수 없습니다. 학기 목록을 다시 열어 주세요.",
+    "effective_until_before_from": "적용 종료일은 적용 시작일과 같거나 이후여야 합니다."
   },
   "error": {
     "server": "서버 오류가 발생했습니다",
@@ -357,6 +434,7 @@
     "unauthorized": "로그인이 필요합니다",
     "section_load_failed": "이 항목을 불러오지 못했습니다. 새로고침해 주세요.",
     "unknown": "오류가 발생했습니다",
+    "notFound": "찾을 수 없습니다",
     "TEAM_001": "팀을 찾을 수 없습니다.",
     "TEAM_006": "이 팀은 삭제되지 않았으므로 복원할 수 없습니다.",
     "COMMON_001": "입력 내용에 오류가 있습니다",
@@ -1131,6 +1209,7 @@
       "edit_title": "마일스톤 편집",
       "title_label": "제목",
       "title_placeholder": "마일스톤 이름",
+      "title_required": "제목을 입력해 주세요.",
       "due_date_label": "마감일",
       "add": "추가"
     },
@@ -1775,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "뒤로",
     "cancel": "취소",
     "search": "검색",
     "edit": "편집",
@@ -3011,7 +3091,11 @@
     "justNow": "방금",
     "minutesAgo": "{count}분 전",
     "hoursAgo": "{count}시간 전",
-    "daysAgo": "{count}일 전"
+    "daysAgo": "{count}일 전",
+    "soon": "곧",
+    "inMinutes": "{count}분 후",
+    "inHours": "{count}시간 후",
+    "inDays": "{count}일 후"
   },
   "error_page": {
     "not_found_title": "페이지를 찾을 수 없습니다",
@@ -3246,6 +3330,10 @@
     "save_success": "표시 설정을 저장했습니다",
     "nav": "길 안내"
   },
+  "integrationSettings": {
+    "lineSubtitle": "LINE Messaging API 연동 설정",
+    "snsSubtitle": "Instagram 및 X 피드 연동 관리"
+  },
   "secret_token": {
     "issued_dialog": {
       "title": "링크를 발급했습니다",
@@ -3262,15 +3350,35 @@
       "not_shown_hint": "보안을 위해 발급된 링크는 다시 표시되지 않습니다. 필요하면 다시 발급해 주세요.",
       "revoked_by_migration": "보안 강화로 인해 만료되었습니다",
       "reissue": "재발급",
-      "reissue_hint": "재발급하면 새 링크가 만들어지고 이전 링크는 사용할 수 없게 됩니다.",
+      "links_hint": "링크를 잃어버렸다면 새로 만들어 다시 발급하세요. 더 이상 필요 없는 이전 링크는 ×로 비활성화하세요.",
       "label_with_id": "링크 #{id}",
       "created_at": "발급 일시",
       "expires_at": "유효 기간",
       "used_count": "사용 횟수"
     }
   },
-  "integrationSettings": {
-    "lineSubtitle": "LINE Messaging API 연동 설정",
-    "snsSubtitle": "Instagram 및 X 피드 연동 관리"
+  "globalSearch": {
+    "title": "검색",
+    "placeholder": "키워드로 검색 (2자 이상)",
+    "submit": "검색",
+    "failed": "검색에 실패했습니다",
+    "tooShort": "2자 이상 입력해 주세요",
+    "empty": "검색 결과가 없습니다",
+    "didYouMean": "혹시 이것을 찾으셨나요:",
+    "broaderQuery": "더 넓은 검색:",
+    "timedOut": "일부 유형의 검색이 시간 초과되었습니다: {types}",
+    "noLink": "링크가 없습니다",
+    "types": {
+      "ALL": "전체",
+      "POST": "게시물",
+      "MESSAGE": "메시지",
+      "THREAD": "스레드",
+      "ARTICLE": "기사",
+      "FILE": "파일",
+      "USER": "사용자",
+      "TEAM": "팀",
+      "ORGANIZATION": "조직",
+      "ACTIVITY": "활동 기록"
+    }
   }
 }

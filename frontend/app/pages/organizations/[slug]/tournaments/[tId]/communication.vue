@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ChatChannelResponse } from '~/types/chat'
+import type { BulletinThreadResponse } from '~/types/bulletin'
 import type { TournamentContactSpace, TournamentDivision } from '~/types/tournament'
 
 definePageMeta({ layout: 'organization', middleware: 'auth' })
@@ -20,6 +21,16 @@ const activeTab = ref<'bulletin' | 'chat'>('bulletin')
 
 /** アクティブスコープ: 'tournament'=大会全体 / divisionId */
 const activeScope = ref<'tournament' | number>('tournament')
+
+/** 掲示板で詳細表示中のスレッド（null=一覧表示） */
+const selectedThread = ref<BulletinThreadResponse | null>(null)
+/** 新規スレッド作成ダイアログの表示状態 */
+const showCreateDialog = ref(false)
+const listRef = ref<{ refresh: () => void } | null>(null)
+
+function onBulletinSaved() {
+  listRef.value?.refresh()
+}
 
 /** 大会レベルの連絡スペース */
 const tournamentSpaces = ref<TournamentContactSpace[]>([])
@@ -43,15 +54,18 @@ const currentSpaces = computed<TournamentContactSpace[]>(() => {
 })
 
 const activeBulletinSpace = computed<TournamentContactSpace | null>(() => {
-  return currentSpaces.value.find(s => s.bulletinRefId !== null) ?? null
+  return findBulletinSpace(currentSpaces.value)
 })
 
+/** 掲示板 API のスコープ。得られないとき null（API を呼ばず、状態として表示する） */
+const activeBulletinScope = computed(() => resolveBulletinScope(activeBulletinSpace.value))
+
 const activeChatSpace = computed<TournamentContactSpace | null>(() => {
-  return currentSpaces.value.find(s => s.chatChannelId !== null) ?? null
+  return findChatSpace(currentSpaces.value)
 })
 
 const activeChatChannel = computed<ChatChannelResponse | null>(() => {
-  const channelId = activeChatSpace.value?.chatChannelId
+  const channelId = resolveChatChannelId(activeChatSpace.value)
   if (!channelId) return null
   return chatChannelCache.value[channelId] ?? null
 })
@@ -102,6 +116,9 @@ async function loadChatChannel(channelId: number) {
 
 async function onScopeChange(scope: 'tournament' | number) {
   activeScope.value = scope
+  // 別スコープのスレッド・作成フォームを持ち越さない
+  selectedThread.value = null
+  showCreateDialog.value = false
   if (scope !== 'tournament') {
     await loadDivisionSpaces(scope as number)
   }
@@ -112,9 +129,9 @@ async function onScopeChange(scope: 'tournament' | number) {
 }
 
 async function loadChatForCurrentScope() {
-  const space = activeChatSpace.value
-  if (space?.chatChannelId) {
-    await loadChatChannel(space.chatChannelId)
+  const channelId = resolveChatChannelId(activeChatSpace.value)
+  if (channelId) {
+    await loadChatChannel(channelId)
   }
 }
 
@@ -267,13 +284,40 @@ onMounted(async () => {
           <div v-if="spacesLoading" class="flex justify-center py-8">
             <LoadingBounce />
           </div>
-          <template v-else-if="activeBulletinSpace">
-            <BulletinThreadList
-              scope-type="TOURNAMENT"
-              :scope-id="activeBulletinSpace.bulletinRefId!"
-              :can-manage="isAdminOrDeputy"
-            />
+          <template v-else-if="activeBulletinScope">
+            <div v-if="selectedThread" class="mx-auto max-w-3xl">
+              <BulletinThreadDetail
+                :thread-id="selectedThread.id"
+                :can-manage="isAdminOrDeputy"
+                @back="selectedThread = null"
+              />
+            </div>
+            <template v-else>
+              <!-- 作成ボタンは出す。投稿権（主催ADMIN・参加チーム代表）の最終判定はサーバー（403 TOUR_031） -->
+              <BulletinThreadList
+                :key="`${activeBulletinScope.scopeType}-${activeBulletinScope.scopeId}`"
+                ref="listRef"
+                :scope-type="activeBulletinScope.scopeType"
+                :scope-id="activeBulletinScope.scopeId"
+                :can-manage="isAdminOrDeputy"
+                :can-create="true"
+                @select="(thread) => selectedThread = thread"
+                @create="showCreateDialog = true"
+              />
+              <BulletinThreadForm
+                :key="`form-${activeBulletinScope.scopeType}-${activeBulletinScope.scopeId}`"
+                v-model:visible="showCreateDialog"
+                :scope-type="activeBulletinScope.scopeType"
+                :scope-id="activeBulletinScope.scopeId"
+                @saved="onBulletinSaved"
+              />
+            </template>
           </template>
+          <DashboardEmptyState
+            v-else-if="activeBulletinSpace"
+            icon="pi pi-exclamation-triangle"
+            :message="$t('tournament.communication.bulletin_scope_unresolved')"
+          />
           <DashboardEmptyState
             v-else
             icon="pi pi-clipboard"

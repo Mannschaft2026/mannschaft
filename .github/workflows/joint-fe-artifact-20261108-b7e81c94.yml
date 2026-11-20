@@ -1,4 +1,4 @@
-# 承認用資料。まだ .github/workflows に配置しない。
+# 最新4 PR の製品実機 E2E 用。frozen H2 用成果物とは別。
 name: joint FE production artifact b7e81c94
 'on':
   push:
@@ -39,19 +39,19 @@ jobs:
           python3 - <<'PY'
           import hashlib,json,os,pathlib,subprocess,shutil,platform
           R=pathlib.Path(os.environ['RUNNER_TEMP'])/'joint-fe-b7e81c94'
-          H='0647a7f2aa98bdabaeb18708dd420a677009cad4'
+          H='6a5f6711292b7891ad6ab84db18b754814057df3'
           WF='.github/workflows/joint-fe-artifact-20261108-b7e81c94.yml'
           def git(*a):return subprocess.check_output(['git',*a])
           actual=git('rev-parse','HEAD').decode().strip()
           assert actual==os.environ['GITHUB_SHA']
-          parents=git('show','-s','--format=%P','HEAD').decode().split();assert parents==['95b5a591623015cefc471f3475c0bf22d2718235','d37c830673c71ae01d9bf2b85e547db1ee398a3f']
-          BASE='d37c830673c71ae01d9bf2b85e547db1ee398a3f'
+          parents=git('show','-s','--format=%P','HEAD').decode().split();assert parents==['961db9751e8eeecca98a75a2ec5901fb1fd50dbb','6a5f6711292b7891ad6ab84db18b754814057df3']
+          BASE='6a5f6711292b7891ad6ab84db18b754814057df3'
           if subprocess.run(['git','cat-file','-e',BASE+'^{commit}'],capture_output=True).returncode:
               subprocess.run(['git','fetch','--no-tags','--depth=1','origin',BASE],check=True)
           assert git('diff','--name-status',BASE,'HEAD').decode().splitlines()==['A\t'+WF]
-          assert git('rev-parse',BASE+'^{tree}').decode().strip()=='df0204e2b0ba26b5d914f569598e0587e359bfd8'
+          assert git('rev-parse',BASE+'^{tree}').decode().strip()=='cdffb01ec21bd304a6b5995b10f5b024e1786d97'
           ft=git('rev-parse','HEAD:frontend').decode().strip()
-          assert ft==git('rev-parse',BASE+':frontend').decode().strip()=='17e5648808c917713d993a16672e5255a49c6e02'
+          assert ft==git('rev-parse',BASE+':frontend').decode().strip()=='c323e3cc1f6fecc3989c5f9b774ba3516affb847'
           paths=['frontend','.github','scripts','config','public','test-fixtures','.githooks','.gitattributes','.nvmrc','.npmrc','package.json','package-lock.json','npm-shrinkwrap.json','.github/workflows/frontend-ci.yml','frontend/package.json','frontend/package-lock.json','frontend/nuxt.config.ts','scripts/verification-run.mjs','docs/openapi.json','backend/scripts','backend/src/main/resources','backend/src/main/java/com/mannschaft/app/social/SocialErrorCode.java','backend/src/main/java/com/mannschaft/app/social/announcement/AnnouncementSourceType.java','backend/src/main/java/com/mannschaft/app/tournament/TournamentErrorCode.java','backend/src/main/java/com/mannschaft/app/school/entity/AbsenceReason.java','backend/src/main/java/com/mannschaft/app/diagnosis/controller/DiagnosisController.java','backend/src/main/java/com/mannschaft/app/ranch/controller/RanchAssignmentController.java','backend/src/main/java/com/mannschaft/app/ranch/dto/AssignmentResult.java']
           def inputs(ref):
               out={}
@@ -78,7 +78,7 @@ jobs:
           mem.update(diskFreeBytes=shutil.disk_usage('.').free)
           (R/'initial-resources.json').write_text(json.dumps(mem,indent=2)+'\n')
           print(json.dumps({'initialResourceBytes':mem}),flush=True)
-          record={'sourceHead':BASE,'originalLocalJointHeadH':H,'equivalentSourceS':BASE,'producerHeadP':actual,'directParent':parents[0],'directParents':parents,'sourceTree':'df0204e2b0ba26b5d914f569598e0587e359bfd8','actualCheckoutCommit':actual,'producerTree':git('rev-parse','HEAD^{tree}').decode().strip(),'frontendTree':ft,'workflowOnlyDifference':WF,'workflowSHA256':hashlib.sha256(pathlib.Path(WF).read_bytes()).hexdigest(),'inputBaseline':baseline,'inputActual':current,'all28Equivalent':False,'expectedOnlyDifferentInput':'.github','toolVersions':{'node':'v22.23.2','npm':'10.9.8'},'os':{'machine':platform.machine(),'kernel':platform.release()},'tools':tools,'initialResources':dict(mem,diskFreeBytes=shutil.disk_usage('.').free),'runId':os.environ['GITHUB_RUN_ID'],'runAttempt':os.environ['GITHUB_RUN_ATTEMPT'],'repository':os.environ['GITHUB_REPOSITORY'],'ref':os.environ['GITHUB_REF']}
+          record={'sourceHead':BASE,'latestJointHead':H,'purpose':'latest four PR product E2E; separate from frozen H2','producerHeadP':actual,'directParent':parents[0],'directParents':parents,'sourceTree':'cdffb01ec21bd304a6b5995b10f5b024e1786d97','actualCheckoutCommit':actual,'producerTree':git('rev-parse','HEAD^{tree}').decode().strip(),'frontendTree':ft,'workflowOnlyDifference':WF,'workflowSHA256':hashlib.sha256(pathlib.Path(WF).read_bytes()).hexdigest(),'inputBaseline':baseline,'inputActual':current,'all28Equivalent':False,'expectedOnlyDifferentInput':'.github','toolVersions':{'node':'v22.23.2','npm':'10.9.8'},'os':{'machine':platform.machine(),'kernel':platform.release()},'tools':tools,'initialResources':dict(mem,diskFreeBytes=shutil.disk_usage('.').free),'runId':os.environ['GITHUB_RUN_ID'],'runAttempt':os.environ['GITHUB_RUN_ATTEMPT'],'repository':os.environ['GITHUB_REPOSITORY'],'ref':os.environ['GITHUB_REF']}
           (R/'source.json').write_text(json.dumps(record,indent=2)+'\n')
           assert mem['MemAvailable']>=14*1024**3
           PY
@@ -321,7 +321,7 @@ jobs:
                   assert item.type in (tarfile.REGTYPE,tarfile.AREGTYPE) and item.name not in seen and item.name in expected
                   row=expected[item.name];assert item.size==row['bytes'] and hashlib.sha256(tf.extractfile(item).read()).hexdigest()==row['sha256'];seen.add(item.name)
           assert seen==set(expected)
-          receipt={'state':'PACKAGED_FOR_OFFICIAL_UPLOAD_NOT_RUNTIME_ADOPTION','archiveBytes':p.stat().st_size,'archiveSHA256':hashlib.sha256(p.read_bytes()).hexdigest(),'manifestSHA256':hashlib.sha256((R/'manifest.json').read_bytes()).hexdigest(),'logicalBytes':m['logicalBytes'],'regularNoSymlinkArchiveVerified':True,'actualCheckoutCommit':m['actualCheckoutCommit'],'sourceHead':m['sourceHead'],'originalLocalJointHeadH':m['originalLocalJointHeadH'],'equivalentSourceS':m['equivalentSourceS'],'producerHeadP':m['producerHeadP'],'directParent':m['directParent'],'directParents':m['directParents'],'frontendTree':m['frontendTree'],'runId':m['runId'],'runAttempt':m['runAttempt'],'buildActualExit':m['buildActualExit'],'rawArtifactBodyPrinted':False,'secretEnvironmentDumped':False}
+          receipt={'state':'PACKAGED_FOR_OFFICIAL_UPLOAD_NOT_RUNTIME_ADOPTION','archiveBytes':p.stat().st_size,'archiveSHA256':hashlib.sha256(p.read_bytes()).hexdigest(),'manifestSHA256':hashlib.sha256((R/'manifest.json').read_bytes()).hexdigest(),'logicalBytes':m['logicalBytes'],'regularNoSymlinkArchiveVerified':True,'actualCheckoutCommit':m['actualCheckoutCommit'],'sourceHead':m['sourceHead'],'latestJointHead':m['latestJointHead'],'purpose':m['purpose'],'producerHeadP':m['producerHeadP'],'directParent':m['directParent'],'directParents':m['directParents'],'frontendTree':m['frontendTree'],'runId':m['runId'],'runAttempt':m['runAttempt'],'buildActualExit':m['buildActualExit'],'rawArtifactBodyPrinted':False,'secretEnvironmentDumped':False}
           (R/'producer-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
           PY
       - name: 公式artifactへ限定3fileを1日保存
@@ -329,7 +329,7 @@ jobs:
         if: ${{ success() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: joint-fe-h2-0647a7f2-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          name: joint-fe-latest-four-pr-6a5f6711-${{ github.run_id }}-attempt${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/joint-fe-b7e81c94/payload/frontend-output.tar.gz
             ${{ runner.temp }}/joint-fe-b7e81c94/payload/manifest.json
@@ -384,7 +384,7 @@ jobs:
           summary={'diagnosticOnly':True,'successEvidence':False,'jobStatusAtCollection':os.environ['DIAG_JOB_STATUS'],'stepOutcomes':{k:os.environ.get('DIAG_'+k,'unknown') for k in ['SOURCE','DEPS','AUDIT','BUILD','PRODUCTION_GATE','PACKAGE','PRODUCTION_UPLOAD']},'initialResources':resources('initial-resources.json'),'prebuildResources':resources('prebuild-resources.json'),'npmCi':exit_value('npm-ci-exit.json'),'build':exit_value('build-exit.json'),'productionGate':exit_value('ranch-production-exit.json')}
           source=obj('source.json');summary['source']={'state':'unknown'}
           if source is not None:
-              keys=['sourceHead','originalLocalJointHeadH','equivalentSourceS','producerHeadP','directParent','sourceTree','actualCheckoutCommit','producerTree','frontendTree','workflowSHA256']
+              keys=['sourceHead','latestJointHead','producerHeadP','directParent','sourceTree','actualCheckoutCommit','producerTree','frontendTree','workflowSHA256']
               summary['source']={'state':'observed',**{k:source[k] for k in keys if isinstance(source.get(k),str) and re.fullmatch('[0-9a-f]{40}|[0-9a-f]{64}',source[k])}}
           if source is not None and isinstance(source.get('directParents'),list) and len(source['directParents'])==2 and all(isinstance(x,str) and re.fullmatch('[0-9a-f]{40}',x) for x in source['directParents']):summary['source']['directParents']=source['directParents']
           v=obj('tool-versions.json');summary['toolVersions']={'state':'unknown'}

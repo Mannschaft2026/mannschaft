@@ -302,8 +302,14 @@ export default defineNuxtConfig({
       ],
     },
     workbox: {
+      // F04.3 / F11.1: Web Push の push / notificationclick（public/sw-custom.js）を生成 SW に取り込む。
+      // 指定が無いと生成 sw.js にリスナーが無く、通知の表示もタップ遷移も動かない（CMP-261029-0620）。
+      // Background Sync の処理（public/sw-background-sync.js）は未結線のため載せない。
+      importScripts: ['/sw-custom.js'],
       navigateFallback: '/',
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+      // 正式画像は必要時だけ取得し、SW installで全packを先読みしない。
+      globIgnores: ['**/node_modules/**/*', 'ranch/approved/**'],
       runtimeCaching: [
         // ─────────────────────────────────────────────────────────────────
         // API キャッシュポリシー（セキュリティ上重要）
@@ -539,6 +545,7 @@ export default defineNuxtConfig({
           'ja/shiftBudget.json',
           'ja/dashboard.json',
           'ja/activity.json',
+          'ja/effort.json',
           'ja/settings.json',
           'ja/timetable.json',
           'ja/member-info.json',
@@ -622,6 +629,7 @@ export default defineNuxtConfig({
           'en/shiftBudget.json',
           'en/dashboard.json',
           'en/activity.json',
+          'en/effort.json',
           'en/settings.json',
           'en/timetable.json',
           'en/member-info.json',
@@ -705,6 +713,7 @@ export default defineNuxtConfig({
           'zh/shiftBudget.json',
           'zh/dashboard.json',
           'zh/activity.json',
+          'zh/effort.json',
           'zh/settings.json',
           'zh/timetable.json',
           'zh/member-info.json',
@@ -788,6 +797,7 @@ export default defineNuxtConfig({
           'ko/shiftBudget.json',
           'ko/dashboard.json',
           'ko/activity.json',
+          'ko/effort.json',
           'ko/settings.json',
           'ko/timetable.json',
           'ko/member-info.json',
@@ -871,6 +881,7 @@ export default defineNuxtConfig({
           'es/shiftBudget.json',
           'es/dashboard.json',
           'es/activity.json',
+          'es/effort.json',
           'es/settings.json',
           'es/timetable.json',
           'es/member-info.json',
@@ -954,6 +965,7 @@ export default defineNuxtConfig({
           'de/shiftBudget.json',
           'de/dashboard.json',
           'de/activity.json',
+          'de/effort.json',
           'de/settings.json',
           'de/timetable.json',
           'de/member-info.json',
