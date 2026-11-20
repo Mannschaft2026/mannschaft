@@ -1,0 +1,242 @@
+# 最新4 PR の製品実機 E2E 用バックエンド成果物。
+name: joint BE production artifact 6a5f6711
+'on':
+  push:
+    branches: ['feature/october-joint-fe-artifact-20261108-78469caf']
+    paths: ['.github/workflows/joint-be-artifact-20261120-6a5f6711.yml']
+permissions:
+  contents: read
+concurrency:
+  group: joint-be-artifact-6a5f6711
+  cancel-in-progress: false
+jobs:
+  produce:
+    if: github.repository == 'kenta-0420/mannschaft' && github.event_name == 'push' && github.ref == 'refs/heads/feature/october-joint-fe-artifact-20261108-78469caf'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 固定pushと二世代の親をcheckout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 3
+          persist-credentials: false
+
+      - name: ソースと製品入力を照合
+        id: source
+        run: |
+          set -euo pipefail
+          umask 077
+          root=$(mktemp -d "$RUNNER_TEMP/joint-be-6a5f6711.XXXXXXXX")
+          identity=$(stat -c '%d:%i' -- "$root")
+          printf 'root=%s\nroot_identity=%s\n' "$root" "$identity" >> "$GITHUB_OUTPUT"
+          export ARTIFACT_ROOT="$root"
+          mkdir "$root/payload" "$root/gradle"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          source = '6a5f6711292b7891ad6ab84db18b754814057df3'
+          previous = '83f99716a2be4aaee749761c66bb8ba099af6fd3'
+          branch_parent = '961db9751e8eeecca98a75a2ec5901fb1fd50dbb'
+          source_tree = 'cdffb01ec21bd304a6b5995b10f5b024e1786d97'
+          backend_tree = '1fcbeedbe73ee17308e42ec077c0f4d157ea12a4'
+          fe_workflow = '.github/workflows/joint-fe-artifact-20261108-b7e81c94.yml'
+          be_workflow = '.github/workflows/joint-be-artifact-20261120-6a5f6711.yml'
+          root = Path(os.environ['ARTIFACT_ROOT'])
+
+          def git(*args):
+              return subprocess.check_output(['git', *args]).decode().strip()
+
+          def changes(base, head):
+              return set(git('diff', '--no-renames', '--name-status', base, head).splitlines())
+
+          producer = git('rev-parse', 'HEAD')
+          producer_parents = git('show', '-s', '--format=%P', producer).split()
+          previous_parents = git('show', '-s', '--format=%P', previous).split()
+          assert producer == os.environ['GITHUB_SHA'] == os.environ['GITHUB_WORKFLOW_SHA'], 'PUSH_CHECKOUT_MISMATCH'
+          assert producer_parents == [previous], 'PRODUCER_PARENT_MISMATCH'
+          assert previous_parents == [branch_parent, source], 'FE_PRODUCER_PARENTS_MISMATCH'
+          assert git('rev-parse', f'{source}^{{tree}}') == source_tree, 'SOURCE_TREE_MISMATCH'
+          assert git('rev-parse', f'{source}:backend', 'HEAD:backend').splitlines() == [backend_tree, backend_tree], 'BACKEND_TREE_MISMATCH'
+          assert changes(source, producer) == {f'A\t{fe_workflow}', f'A\t{be_workflow}'}, 'PRODUCT_INPUT_CHANGED'
+          assert changes(previous, producer) == {f'A\t{be_workflow}'}, 'PRODUCER_DELTA_MISMATCH'
+          assert not git('status', '--porcelain', '--untracked-files=all'), 'DIRTY_CHECKOUT'
+          record = {
+              'sourceHead': source,
+              'sourceTree': source_tree,
+              'backendTree': backend_tree,
+              'producerHead': producer,
+              'producerTree': git('rev-parse', 'HEAD^{tree}'),
+              'producerParents': producer_parents,
+              'previousProducerParents': previous_parents,
+              'workflowOnlyAdditions': [be_workflow, fe_workflow],
+              'workflowSHA256': hashlib.sha256(Path(be_workflow).read_bytes()).hexdigest(),
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'event': os.environ['GITHUB_EVENT_NAME'],
+              'ref': os.environ['GITHUB_REF'],
+              'runId': os.environ['GITHUB_RUN_ID'],
+              'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+          }
+          (root / 'source.json').write_text(json.dumps(record, indent=2) + '\n')
+          print(f'Source {source}, producer {producer}, backend tree {backend_tree}')
+          PY
+
+      - name: Java 21 をセットアップ
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          overwrite-settings: false
+          cache-jdk: false
+
+      - name: 資源を確認し既存の bootJar 経路でビルド
+        id: build
+        working-directory: backend
+        env:
+          ARTIFACT_ROOT: ${{ steps.source.outputs.root }}
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          printf '0\n' > /proc/self/coredump_filter
+          test ! -e build/libs && test ! -L build/libs
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+
+          root = Path(os.environ['ARTIFACT_ROOT'])
+          gib = 1024 ** 3
+          meminfo = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())
+          available = int(meminfo['MemAvailable'].split()[0]) * 1024
+          minimum = 5 * gib
+          memory_cap = Path('/sys/fs/cgroup/memory.max')
+          cap = None
+          if memory_cap.is_file() and memory_cap.read_text().strip() != 'max':
+              cap = max(0, int(memory_cap.read_text()) - int(memory_cap.with_name('memory.current').read_text()))
+          disk = {'project': shutil.disk_usage('.').free, 'runnerTemp': shutil.disk_usage(root).free}
+          resources = {'memoryAvailableBytes': available, 'cgroupRemainingBytes': cap, 'diskFreeBytes': disk}
+          (root / 'resources.json').write_text(json.dumps(resources, indent=2) + '\n')
+          print(json.dumps(resources), flush=True)
+          # 最大ヒープ2GiBとメタスペース768MiBに加え、Gradleクライアント、workerとOS用の余裕を取る。
+          assert available >= minimum and (cap is None or cap >= minimum), 'INSUFFICIENT_BUILD_MEMORY'
+          # Wrapper・依存物・ビルド出力と最大512MiBのJarを保存する。
+          assert min(disk.values()) >= 5 * gib, 'INSUFFICIENT_BUILD_DISK'
+          PY
+          isolated_env=(env -u GITHUB_TOKEN -u GH_TOKEN -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN
+            "GRADLE_USER_HOME=$ARTIFACT_ROOT/gradle" LANG=C.UTF-8 TZ=UTC CI=true)
+          "${isolated_env[@]}" java -version > "$ARTIFACT_ROOT/java-version.txt" 2>&1
+          "${isolated_env[@]}" bash ./gradlew --version --no-daemon > "$ARTIFACT_ROOT/gradle-version.txt"
+          "${isolated_env[@]}" bash ./scripts/gradle-turnstile.sh bash ./gradlew bootJar -x test --no-daemon
+
+      - name: bootJar と照合情報を確定
+        env:
+          ARTIFACT_ROOT: ${{ steps.source.outputs.root }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import stat
+          import subprocess
+          import zipfile
+
+          root = Path(os.environ['ARTIFACT_ROOT'])
+          payload = root / 'payload'
+          limit = 512 * 1024 ** 2
+          assert not subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all']), 'DIRTY_BUILD_INPUT'
+          for directory in (Path('backend'), Path('backend/build'), Path('backend/build/libs')):
+              assert stat.S_ISDIR(directory.lstat().st_mode), 'JAR_DIRECTORY_NOT_REGULAR'
+          jars = [entry for entry in directory.iterdir() if entry.suffix == '.jar' and not entry.name.endswith('-plain.jar')]
+          assert len(jars) == 1, 'EXPECTED_ONE_BOOT_JAR'
+          source = jars[0]
+          assert stat.S_ISREG(source.lstat().st_mode), 'JAR_NOT_REGULAR'
+          jar = payload / 'backend-boot.jar'
+          digest = hashlib.sha256()
+          size = 0
+          with os.fdopen(os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as src, jar.open('xb') as dst:
+              before = os.fstat(src.fileno())
+              assert stat.S_ISREG(before.st_mode) and 0 < before.st_size <= limit, 'JAR_SIZE_OR_TYPE'
+              for chunk in iter(lambda: src.read(1024 ** 2), b''):
+                  size += len(chunk)
+                  assert size <= limit, 'JAR_SIZE_LIMIT'
+                  digest.update(chunk)
+                  dst.write(chunk)
+              after = os.fstat(src.fileno())
+              assert size == before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns, 'JAR_CHANGED_DURING_COPY'
+          os.chmod(jar, 0o644)
+          with zipfile.ZipFile(jar) as archive:
+              names = archive.namelist()
+              assert names.count('META-INF/MANIFEST.MF') == 1, 'BOOT_MANIFEST_MISSING_OR_DUPLICATE'
+              assert any(name.startswith('BOOT-INF/classes/') for name in names), 'BOOT_CLASSES_MISSING'
+              assert any(name.startswith('BOOT-INF/lib/') and name.endswith('.jar') for name in names), 'BOOT_LIBRARIES_MISSING'
+              with archive.open('META-INF/MANIFEST.MF') as member:
+                  jar_manifest = member.read(32769)
+              assert len(jar_manifest) <= 32768, 'BOOT_MANIFEST_TOO_LARGE'
+              assert re.search(rb'^Main-Class: org\.springframework\.boot\.loader\.(launch\.)?JarLauncher\r?$', jar_manifest, re.M), 'BOOT_MAIN_CLASS_MISMATCH'
+              assert re.search(rb'^Start-Class: [\w.$]+\r?$', jar_manifest, re.M), 'BOOT_START_CLASS_MISSING'
+
+          java = (root / 'java-version.txt').read_text().splitlines()[0]
+          gradle_output = (root / 'gradle-version.txt').read_text()
+          gradle = re.search(r'^Gradle (\S+)\s*$', gradle_output, re.M)
+          assert re.search(r'\bversion "21(?:[.\-+"]|$)', java) and gradle and gradle[1] == '8.14.4', 'JDK_OR_GRADLE_VERSION_MISMATCH'
+          jar_info = {'file': jar.name, 'sourceName': source.name, 'bytes': size, 'sha256': digest.hexdigest(),
+                      'mode': oct(stat.S_IMODE(jar.stat().st_mode)), 'sourceMode': oct(stat.S_IMODE(before.st_mode))}
+          manifest = dict(json.loads((root / 'source.json').read_text()), schema=1, purpose='latest four PR product E2E',
+                          java=java, gradle=gradle[1], resources=json.loads((root / 'resources.json').read_text()), jar=jar_info,
+                          buildCommand=['bash', './scripts/gradle-turnstile.sh', 'bash', './gradlew', 'bootJar', '-x', 'test', '--no-daemon'],
+                          buildExit=0)
+          raw_manifest = (json.dumps(manifest, indent=2) + '\n').encode()
+          (payload / 'manifest.json').write_bytes(raw_manifest)
+          receipt = {key: manifest[key] for key in ('sourceHead', 'sourceTree', 'backendTree', 'producerHead', 'event', 'ref', 'runId', 'runAttempt')}
+          receipt.update(schema=1, state='PACKAGED_FOR_OFFICIAL_UPLOAD', buildExit=0, jar=jar_info,
+                         manifestSHA256=hashlib.sha256(raw_manifest).hexdigest())
+          (payload / 'producer-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          print(json.dumps(receipt), flush=True)
+          PY
+
+      - name: 公式artifactに3ファイルを1日保存
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: joint-be-latest-four-pr-6a5f6711-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: |
+            ${{ steps.source.outputs.root }}/payload/backend-boot.jar
+            ${{ steps.source.outputs.root }}/payload/manifest.json
+            ${{ steps.source.outputs.root }}/payload/producer-receipt.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 1
+          compression-level: 0
+
+      - name: このjobの一時領域を片付ける
+        if: ${{ always() && steps.source.outputs.root != '' }}
+        env:
+          ARTIFACT_ROOT: ${{ steps.source.outputs.root }}
+          ARTIFACT_ROOT_IDENTITY: ${{ steps.source.outputs.root_identity }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+          import stat
+
+          root = Path(os.environ['ARTIFACT_ROOT'])
+          assert root.parent == Path(os.environ['RUNNER_TEMP']) and re.fullmatch(r'joint-be-6a5f6711\.[A-Za-z0-9]{8}', root.name), 'INVALID_CLEANUP_ROOT'
+          if root.exists() or root.is_symlink():
+              identity = root.lstat()
+              assert stat.S_ISDIR(identity.st_mode), 'UNSAFE_CLEANUP_ROOT'
+              assert f'{identity.st_dev}:{identity.st_ino}' == os.environ['ARTIFACT_ROOT_IDENTITY'], 'CLEANUP_ROOT_CHANGED'
+              shutil.rmtree(root)
+          PY
