@@ -173,16 +173,27 @@ LRU で追い出されて同じ構成が再ロードされる。これを減ら�
   - **認可型 override の追加**（クラスごと。新規クラスは空集合と比べる）。認可型は denylist（`AccessGuard`・`AccessControlService`・`AuthTokenService`・`UserLocaleCache`・
     `ScopeConcealingAccessGate`・`UserRoleRepository`・接尾辞 `*Guard`/`*Authorizer`/`*PermissionEvaluator`）と、明示リスト（`GoogleCalendarWebhookService` など、認可判定を持つ型。
     `ContextOverrideCensus.AUTHZ_EXPLICIT`）の両方。**認可型 override の追加は殿の判断事項**であり、スナップショットの再生成で通してはならない。
-  - 既知の対象（スナップショットの ZERO・OVERRIDES 行）の **override 集合の変化**（意図した変更なら再生成で固定する。C2 で移すクラスの差分もここで固定する）。
+  - 認可型ではない override（外部アダプタの mock など）の増減は **照合しない**（red にならず、再生成も要らない）。スナップショットには認可型 override だけを載せる。
+    理由: 目的は認可 Bean の mock 化を防ぐことで、無関係な `@MockitoBean` の変更に全 PR へ再生成を強いるのは摩擦が大きい。
   - **既知の対象の解析失敗・新規の未分類（スナップショットに無い解析失敗）・対象クラスの脱落**（削除・改名・Spring 非使用化）。
   - **distinct key 数のラチェット**: 実測が `!distinctKeysBaseline` を超えたら red。構成キーを増やす変更は共通構成へ寄せる。第一陣 A の後は基準値−1 以下になる想定で、
     減ったら再生成して基準値を下げる（下げ忘れても red にはしないが、次の増加を見逃さないよう同じ PR で下げる）。
 - **スナップショットの生成・再生成手順**（初期値は 2026-11-20 の main の実測から生成した）:
+  再生成が要るのは、認可型 override の削除（基準値を下げる）・クラスの削除や改名・解析失敗の解消・distinct key 数の減少のときに限る。
   1. `cd backend && ./scripts/gradle-turnstile.sh ./gradlew test --tests com.mannschaft.app.common.testing.ContextOverrideCensusGuardTest` を実行する（red でもよい）。
      番人は毎回、実測を `backend/build/context-override-census/snapshot.tsv` に書き出す（`distinctKeysBaseline`・`authzOverrideBaseline` は実測値）。
   2. 差分を確かめてから `cp build/context-override-census/snapshot.tsv src/test/resources/context-override-census/snapshot.tsv` で写し、同じ PR でコミットする。
      **認可型 override の行が増えていないこと**と、増えた構成キーの理由を PR 本文に書く。手で編集しない。
   3. もう一度 1. を実行し green を確かめる。
+- **基底の MockMvc 自動構成（第一陣 A）**: `AbstractMySqlIntegrationTest` は `@AutoConfigureMockMvc`（addFilters は既定の true）を持つ。
+  MockMvc を使う派生と使わない派生で MCC が分かれ、構成キー（起動する context 数）が倍加していたのを 1 つに揃えるため。派生クラスは `@AutoConfigureMockMvc` を再宣言しない。
+  **`addFilters = false` を宣言した派生は従来どおり別キー**（意図した分離。認可フィルタを通さない試験）で、数を増やさない目的でも勝手に外さない・足さない。
+  フィルタを通す側（true）は未認証の 401 など「フィルタでしか起きない拒否」が実効になる。実効値は `MockMvcAddFiltersEffectiveValueTest` が全派生で宣言どおりかを検査する。
+  A の後の基準値は distinct key 338（A の前は 347）、認可型 override は 1124 件で不変。
+- **番人自体の CI 時間**: `ContextOverrideCensusGuardTest`（実測 約 280 秒。全テストクラスの MCC を構築する）と `MockMvcAddFiltersEffectiveValueTest`（約 30 秒）は
+  全クラスを走査するため重い。shard-weights.properties に実測に近い重みを登録し、LPT に計算させている（登録が無いと中央値の重みで割り付き、特定 shard の Run tests が静かに伸びる）。
+  走査結果の JVM 内共有は採らない: forkEvery=180・8 shard で 2 つのクラスが同じ JVM・同じ shard に入る保証が無く、効果が偶然になるため。
+  重み表の再生成（regen-shard-weights.sh）は実測から上書きするので、以後は自動で追随する。
 - **関連する試練**（CMP-261111-0508 追撃①。A の前は red のものを含む）: `MockMvcAddFiltersEffectiveValueTest`（AC-2(a) addFilters の実効値。直接・中間基底・合成注釈・@Nested の false 宣言は false のまま、
   それ以外の派生は true）、`MockMvcFilterAppliedIT` / `MockMvcFilterNotAppliedIT`（AC-2(b) フィルタでしか起きない応答: 本文なしの 401・X-Frame-Options）、
   `MockMvcContextUnificationTest` / `MockMvcContextUnificationIT`（AC-2(c) 旧「基底のみ」と旧「MockMvc=true」の MCC 統合・context 共有・MockMvc と builder の構築）、

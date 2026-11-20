@@ -47,6 +47,9 @@ import org.springframework.test.context.bean.override.BeanOverrideHandler;
  */
 public final class ContextOverrideCensus {
 
+    /** スナップショット行の分類（Spring 対象。ZERO・OVERRIDES を区別しない）。 */
+    static final String SPRING_ROW = "SPRING";
+
     /** 凍結スナップショットのクラスパス上の位置。 */
     public static final String SNAPSHOT_RESOURCE = "context-override-census/snapshot.tsv";
 
@@ -381,7 +384,8 @@ public final class ContextOverrideCensus {
 
         /**
          * スナップショット形式（TSV）。非 Spring のクラスは行に含めず件数だけ持つ（判定対象は Spring のクラスと解析失敗）。
-         * 行: {@code FQCN <TAB> 分類 <TAB> override...}（FAILED は理由を 3 列目に置く）。
+         * 行: {@code FQCN <TAB> SPRING <TAB> 認可型 override...}（FAILED は理由を 3 列目に置く）。
+         * 認可型ではない override（外部アダプタの mock など）は載せない。増減しても番人は red にならず、再生成も要らない。
          */
         public String toSnapshot(int distinctKeysBaseline) {
             StringBuilder text = new StringBuilder();
@@ -394,11 +398,12 @@ public final class ContextOverrideCensus {
                 if (entry.status() == Status.NON_SPRING) {
                     continue;
                 }
-                text.append(entry.className()).append('\t').append(entry.status());
+                text.append(entry.className()).append('\t')
+                        .append(entry.status() == Status.FAILED ? Status.FAILED.name() : SPRING_ROW);
                 if (entry.status() == Status.FAILED) {
                     text.append('\t').append(entry.failure());
                 } else {
-                    entry.overrides().forEach(override -> text.append('\t').append(override));
+                    entry.authzOverrides().forEach(override -> text.append('\t').append(override));
                 }
                 text.append('\n');
             }
@@ -427,7 +432,8 @@ public final class ContextOverrideCensus {
                     continue;
                 }
                 String[] cells = line.split("\t");
-                Status status = Status.valueOf(cells[1]);
+                // SPRING は Spring 対象（認可型 override だけを持つ）。解析結果の ZERO・OVERRIDES とは区別せず OVERRIDES で読む。
+                Status status = cells[1].equals(SPRING_ROW) ? Status.OVERRIDES : Status.valueOf(cells[1]);
                 List<String> overrides = new ArrayList<>();
                 String failure = null;
                 if (status == Status.FAILED) {
@@ -451,7 +457,7 @@ public final class ContextOverrideCensus {
      *
      * <ul>
      *   <li>認可型 override の追加（クラスごと。新規クラスはスナップショットの集合を空とみなす）</li>
-     *   <li>既知の対象（ZERO・OVERRIDES）の override 集合の変化（許容差分はスナップショットの再生成で固定する）</li>
+     *   <li>認可型ではない override の増減は照合しない（認可 Bean の mock 化を防ぐのが目的で、無関係な変更に再生成を強いない）</li>
      *   <li>既知の対象の解析失敗・新規の未分類（スナップショットに無い解析失敗）・対象クラスの脱落（AC-3）</li>
      *   <li>distinct key 数の基準値超え（AC-4 のラチェット）</li>
      * </ul>
@@ -487,9 +493,6 @@ public final class ContextOverrideCensus {
                 result.add("[対象クラスの脱落] " + frozen.className() + " が棚卸しから消えた（削除・改名ならスナップショットを再生成する）");
             } else if (now.status() == Status.NON_SPRING) {
                 result.add("[対象クラスの脱落] " + frozen.className() + " が Spring のテストとして解析されなくなった");
-            } else if (now.status() != Status.FAILED && !now.overrides().equals(frozen.overrides())) {
-                result.add("[override の差分] " + frozen.className() + " 凍結=" + frozen.overrides() + " 実測="
-                        + now.overrides() + "（意図した変更ならスナップショットを再生成する）");
             }
         }
         if (census.distinctKeys() > snapshot.distinctKeysBaseline()) {

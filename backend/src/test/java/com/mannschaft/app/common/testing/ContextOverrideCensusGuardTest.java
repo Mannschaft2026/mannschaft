@@ -145,7 +145,7 @@ class ContextOverrideCensusGuardTest {
     }
 
     @Test
-    @DisplayName("AC-1 検体: 既知クラスに認可型 override を1件足すと red、非認可型の追加は認可違反にならない（差分としては red）")
+    @DisplayName("AC-1 検体: 既知クラスに認可型 override を1件足すと red、非認可型の追加は red にならない")
     void 検体_既知クラスへの追加() throws IOException {
         Entry known = census().entries().stream().filter(entry -> entry.status() == Status.OVERRIDES).findFirst()
                 .orElseThrow();
@@ -160,8 +160,8 @@ class ContextOverrideCensusGuardTest {
                 census().with(new Entry(known.className(), Status.OVERRIDES, known.key(), sorted(plain), null)));
 
         assertThat(authzViolations).anyMatch(line -> line.startsWith("[認可型 override の追加] " + known.className()));
-        assertThat(plainViolations).noneMatch(line -> line.startsWith("[認可型 override の追加]"))
-                .anyMatch(line -> line.startsWith("[override の差分] " + known.className()));
+        // 認可型ではない override の増減は照合しない（無関係な @MockitoBean の変更に全 PR へ再生成を強いない）。
+        assertThat(plainViolations).isEmpty();
     }
 
     @Test
