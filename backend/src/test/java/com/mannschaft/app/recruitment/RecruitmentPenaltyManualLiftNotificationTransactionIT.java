@@ -11,6 +11,7 @@ import com.mannschaft.app.recruitment.service.RecruitmentPenaltyService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.awaitility.Awaitility.await;
 
 /** 実MySQLで手動解除の通知・コミット境界・競合する解除処理を検証する。 */
+@EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 class RecruitmentPenaltyManualLiftNotificationTransactionIT extends AbstractMySqlIntegrationTest {
 
     private static final Duration WAIT_LIMIT = Duration.ofSeconds(10);
