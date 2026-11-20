@@ -36,7 +36,6 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -255,8 +254,7 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
     }
 
     private LocalDateTime lastLoginAt(long userId) {
-        Timestamp ts = jdbcTemplate.queryForObject("SELECT last_login_at FROM users WHERE id = ?", Timestamp.class, userId);
-        return ts == null ? null : ts.toLocalDateTime();
+        return jdbcTemplate.queryForObject("SELECT last_login_at FROM users WHERE id = ?", LocalDateTime.class, userId);
     }
 
     private Map<String, Object> awaitLoginAuditRow(long userId) {
@@ -817,8 +815,8 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
         assertThat(r.getResponse().getStatus()).as("前提: %s", body(r)).isEqualTo(200);
         Map<String, Object> rt = latestRefreshRow(u.userId());
         assertThat(rt.get("device_fingerprint")).as("AC-15 端末指紋").isNotNull();
-        LocalDateTime createdAt = ((Timestamp) rt.get("created_at")).toLocalDateTime();
-        LocalDateTime expiresAt = ((Timestamp) rt.get("expires_at")).toLocalDateTime();
+        LocalDateTime createdAt = (LocalDateTime) rt.get("created_at");
+        LocalDateTime expiresAt = (LocalDateTime) rt.get("expires_at");
         assertThat(Duration.between(createdAt, expiresAt).getSeconds())
                 .as("AC-15 有効期限はパスワード直経路と同じ設定値")
                 .isBetween(authTokenService.getRefreshTokenExpirationSeconds() - 60,
