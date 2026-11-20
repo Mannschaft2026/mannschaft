@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } fr
 import path from 'node:path'
 import { test, expect, type Page, type Browser } from '@playwright/test'
 import {
-  API, FE, createActor, createOrg, createTeam, joinAsMember, must, openAs, gotoAndHydrate, sql, RUN,
+  API, FE, createActor, createOrg, createTeam, joinAsMember, must, openAs, gotoAndHydrate, sql, RUN, readAssets,
   type Actor, type ApiBody, type Scope,
 } from './helpers/n1p1-world'
+import { moveNewAssetsToOwnLedger, WORLD_FILE } from './helpers/cmp0726-global-teardown'
 
 /**
  * 戦役 CMP-261116-0726「大会連絡スペースの存在オラクル是正」（PR #4643）の回帰用 実機E2E。
@@ -39,7 +40,6 @@ import {
 const EVID = process.env.EVIDENCE_DIR || path.resolve('test-results', 'cmp0726-evidence')
 mkdirSync(EVID, { recursive: true })
 const LOG = path.join(EVID, 'responses.jsonl')
-const WORLD_FILE = path.resolve('tests', 'e2e', '.auth', 'cmp0726-world.json')
 const ABSENT = 999999990 // 存在しない ID（大会・スレッド・返信・添付・フォルダ・ファイル共通）
 const SYS = { email: process.env.TEST_ADMIN_EMAIL ?? 'e2e-admin@test.mannschaft.local', password: process.env.TEST_ADMIN_PASSWORD ?? 'TestPass2026!' }
 
@@ -102,9 +102,15 @@ async function shot(page: Page, name: string) {
 const commUrl = (slug: string, tId: number) => `/organizations/${slug}/tournaments/${tId}/communication`
 
 // 失敗でワーカーが再起動しても世界を作り直さない（世界ファイルがあれば必ず再利用。新規に作り直すときはファイルを消して実行する）
+// 前提作成の途中で失敗しても、作った組織・チームの記録は専用台帳へ移す（n1p1 の台帳に残さない）
 test.beforeAll(async () => {
   test.setTimeout(600_000)
   if (existsSync(WORLD_FILE)) { W = JSON.parse(readFileSync(WORLD_FILE, 'utf8')); return }
+  const ledgerBefore = readAssets()
+  try { await buildWorld() } finally { moveNewAssetsToOwnLedger(ledgerBefore) }
+})
+
+async function buildWorld() {
   const orgAdmin = await createActor('og')
   const orgMember = await createActor('om')
   const pAdmin = await createActor('pa')
@@ -187,7 +193,7 @@ test.beforeAll(async () => {
   mkdirSync(path.dirname(WORLD_FILE), { recursive: true })
   writeFileSync(WORLD_FILE, JSON.stringify(W, null, 2))
   void foreignAdmin
-})
+}
 
 test('00 前提: 検証 BE が起動しており本 PR head の応答を返す', async () => {
   expect(W.t1).toBeGreaterThan(0)
@@ -573,15 +579,17 @@ test('40 [AC-5/7 差し戻し修正] 主催ADMIN: 返信を持つスレッドを
   await shot(page, '40-thD-after-delete')
   expect(sqlNum(`SELECT COUNT(*) FROM bulletin_threads WHERE id=${W.thD} AND deleted_at IS NULL;`)).toBe(0)
   // 削除後: 返信（親スレッドが論理削除済み）への各操作は、存在しない ID と同じ応答（BULLETIN_003）、添付は BULLETIN_007
-  const same = async (label: string, method: string, real: string, absent: string, body: unknown, code: string) => {
-    const a = await expectSameAsAbsent(label, page, method, real, absent, body)
+  const same = async (label: string, method: string, real: string, absent: string, body: unknown, code: string, absentBody?: unknown) => {
+    // 実在側と不在側が同一 URL・同一本文の自己比較にならないよう、同一 URL の入口は不在側の本文を必ず渡す
+    if (real === absent && absentBody === undefined) throw new Error(`${label}: 実在・不在が同一の比較になっている`)
+    const a = await expectSameAsAbsent(label, page, method, real, absent, body, absentBody)
     expect.soft(a.status, label).toBe(404); expect.soft(a.code, label).toBe(code)
   }
   for (const rid of [W.rD1, W.rD2]) {
     await same(`40 reply#${rid} への返信`, 'POST', `${T}/replies/${rid}/replies`, `${T}/replies/${ABSENT}/replies`, { body: 'x' }, 'BULLETIN_003')
     await same(`40 reply#${rid} 編集`, 'PUT', `${T}/replies/${rid}`, `${T}/replies/${ABSENT}`, { body: 'y' }, 'BULLETIN_003')
     await same(`40 reply#${rid} 削除`, 'DELETE', `${T}/replies/${rid}`, `${T}/replies/${ABSENT}`, undefined, 'BULLETIN_003')
-    await same(`40 reply#${rid} リアクション追加`, 'POST', `${T}/reactions`, `${T}/reactions`, { targetType: 'REPLY', targetId: rid, emoji: '👍' }, 'BULLETIN_003')
+    await same(`40 reply#${rid} リアクション追加`, 'POST', `${T}/reactions`, `${T}/reactions`, { targetType: 'REPLY', targetId: rid, emoji: '👍' }, 'BULLETIN_003', { targetType: 'REPLY', targetId: ABSENT, emoji: '👍' })
   }
   await same('40 添付削除(削除済スレッドの添付)', 'DELETE', `${T}/attachments/${W.attD}`, `${T}/attachments/${ABSENT}`, undefined, 'BULLETIN_007')
   await same('40 添付DL URL', 'GET', `${T}/attachments/${W.attD}/download-url`, `${T}/attachments/${ABSENT}/download-url`, undefined, 'BULLETIN_007')
