@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.shift.AssignmentStrategyType;
+import com.mannschaft.app.shift.ShiftAssignedUserIds;
 import com.mannschaft.app.shift.ShiftAssignmentRunStatus;
 import com.mannschaft.app.shift.ShiftAssignmentStatus;
 import com.mannschaft.app.shift.ShiftErrorCode;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * シフト自動割当サービス。割当アルゴリズムの実行・確定・取消・履歴管理を担当する。
@@ -359,9 +361,9 @@ public class ShiftAutoAssignService {
      * run 実体から所属チーム ID を解決する。
      *
      * <p>{@code expectedScheduleId} が非 null（パスにスケジュールを持つ確定・破棄）の場合は、run 実体の
-     * scheduleId と突合し、食い違えば存在を秘匿して {@code ASSIGNMENT_RUN_NOT_FOUND}、スケジュールが不在なら
-     * {@code SHIFT_SCHEDULE_NOT_FOUND}。null（パスにスコープを持たない詳細・目視確認）の場合は、
-     * スケジュールが不在でも {@code ASSIGNMENT_RUN_NOT_FOUND}（是正前の応答と同一）。</p>
+     * scheduleId と突合する。食い違い・親スケジュールの不在はいずれも入力runの
+     * {@code ASSIGNMENT_RUN_NOT_FOUND} へ畳む。null（パスにスコープを持たない詳細・目視確認）も
+     * 同じ親生存確認を行い、SYSTEM_ADMINの短絡より前に存在を秘匿する。</p>
      *
      * @param runId              実行ログ ID
      * @param expectedScheduleId パス変数由来のスケジュール ID（突合しない経路は null）
@@ -369,11 +371,10 @@ public class ShiftAutoAssignService {
      */
     public Long resolveRunTeamId(Long runId, Long expectedScheduleId) {
         ShiftAssignmentRunEntity run = findRunOrThrow(runId);
-        if (expectedScheduleId == null) {
-            return traceTeamIdOfRunConcealed(run);
+        if (expectedScheduleId != null) {
+            assertRunBelongsToPathSchedule(run, expectedScheduleId);
         }
-        assertRunBelongsToPathSchedule(run, expectedScheduleId);
-        return findScheduleOrThrow(run.getScheduleId()).getTeamId();
+        return traceTeamIdOfRunConcealed(run);
     }
 
     /**
@@ -393,7 +394,7 @@ public class ShiftAutoAssignService {
     private void lockScheduleOfRun(ShiftAssignmentRunEntity run, Long expectedScheduleId) {
         assertRunBelongsToPathSchedule(run, expectedScheduleId);
         scheduleRepository.findByIdForUpdate(run.getScheduleId())
-                .orElseThrow(() -> new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND));
     }
 
     /**
@@ -414,24 +415,23 @@ public class ShiftAutoAssignService {
     }
 
     /**
-     * スロットの assignedUserIds を確定済み割当から再構築して更新する。
+     * 現在の割当JSONを保持し、今回選択された確定済み担当だけを追加する。
      */
     private void updateSlotAssignedUsers(List<ShiftAssignmentEntity> confirmedAssignments) {
         // slotId → userId リストを集約
         Map<Long, List<Long>> slotUserMap = confirmedAssignments.stream()
+                .filter(a -> a.getStatus() == ShiftAssignmentStatus.CONFIRMED)
                 .collect(Collectors.groupingBy(
                         ShiftAssignmentEntity::getSlotId,
                         Collectors.mapping(ShiftAssignmentEntity::getUserId, Collectors.toList())));
 
         for (Map.Entry<Long, List<Long>> entry : slotUserMap.entrySet()) {
             slotRepository.findById(entry.getKey()).ifPresent(slot -> {
-                // 既存の CONFIRMED 割当ユーザーも含めて再構築
-                List<ShiftAssignmentEntity> allConfirmed = assignmentRepository
-                        .findAllBySlotId(slot.getId()).stream()
-                        .filter(a -> a.getStatus() == ShiftAssignmentStatus.CONFIRMED)
-                        .toList();
-                List<Long> userIds = allConfirmed.stream()
-                        .map(ShiftAssignmentEntity::getUserId)
+                // 現在の正本はJSON。履歴から再構築すると手動担当が消え、過去担当が復活する。
+                // 既存の順序を先に保持し、今回確定した担当だけを重複なく追加する。
+                List<Long> userIds = Stream.concat(
+                                ShiftAssignedUserIds.parse(slot.getAssignedUserIds()).stream(),
+                                entry.getValue().stream())
                         .distinct()
                         .toList();
 

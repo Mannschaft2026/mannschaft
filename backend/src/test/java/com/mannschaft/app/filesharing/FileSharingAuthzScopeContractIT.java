@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing;
 
 import com.mannschaft.app.common.storage.PresignedUploadResult;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
 import com.mannschaft.app.common.storage.R2StorageService;
 import com.mannschaft.app.common.storage.acl.StorageAclAttachmentBinding;
 import com.mannschaft.app.common.storage.acl.StorageAclContentReference;
@@ -277,11 +278,12 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
     class ListLinks {
 
         @Test
-        @DisplayName("FileLinkController#listLinks: 未認証はチームファイルの公開リンク一覧に到達しない（403）")
-        void 未認証は到達しない() throws Exception {
+        @DisplayName("FileLinkController#listLinks: 未認証はチームファイルの公開リンク一覧に到達しない（401）")
+        void 未認証は401() throws Exception {
+            // Controller 前段ガードが SecurityUtils#getCurrentUserId を呼ぶため、未認証は COMMON_000 → 401（createLink と同じ）
             SecurityContextHolder.clearContext();
             mockMvc.perform(get("/api/v1/files/{fileId}/links", teamOpenFileId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -552,7 +554,7 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(get("/api/v1/files/{fileId}/stars/me", teamOpenFileId))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data[*].fileId", hasItem(teamOpenFileId.intValue())))
-                    .andExpect(jsonPath("$.data[*].userId", not(hasItem(personalOwnerId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].userId", not(hasLongId(personalOwnerId))));
         }
     }
 

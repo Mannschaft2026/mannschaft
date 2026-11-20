@@ -77,6 +77,9 @@ class ShiftSlotServiceTest {
     private ShiftRequestRepository requestRepository;
 
     @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Mock
     private Clock wallClock;
 
     @InjectMocks

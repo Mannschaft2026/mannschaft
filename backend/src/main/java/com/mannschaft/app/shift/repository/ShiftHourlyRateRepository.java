@@ -111,4 +111,28 @@ public interface ShiftHourlyRateRepository extends JpaRepository<ShiftHourlyRate
             @Param("teamId") Long teamId,
             @Param("date") LocalDate date,
             @Param("userIds") List<Long> userIds);
+    /**
+     * 複数勤務日の時給照合に必要な履歴を 1 クエリで取得する（CMP-261115-1821 公開時給ガード）。
+     *
+     * <p>対象ユーザーごとに「{@code minDate} 時点で有効な最後の 1 行」と「{@code (minDate, maxDate]} の改定行」を返す。
+     * 呼び出し側は各勤務日について {@code effectiveFrom <= 勤務日} の最大行（floor）を選ぶ。1 人 × 1 日ごとの
+     * クエリにしない（N+1 回避）。全履歴の無制限読取もしない。</p>
+     *
+     * @param teamId  チームID
+     * @param userIds 対象ユーザー。<b>空リストを渡してはならない</b>
+     * @param minDate 最小の勤務日
+     * @param maxDate 最大の勤務日
+     * @return 時給履歴（userId・effectiveFrom の昇順）
+     */
+    @Query("SELECT r FROM ShiftHourlyRateEntity r "
+            + "WHERE r.teamId = :teamId AND r.userId IN :userIds AND r.effectiveFrom <= :maxDate "
+            + "AND (r.effectiveFrom > :minDate OR r.effectiveFrom = ("
+            + "  SELECT MAX(r2.effectiveFrom) FROM ShiftHourlyRateEntity r2 "
+            + "  WHERE r2.userId = r.userId AND r2.teamId = :teamId AND r2.effectiveFrom <= :minDate"
+            + ")) ORDER BY r.userId, r.effectiveFrom")
+    List<ShiftHourlyRateEntity> findRateHistoryForPeriod(
+            @Param("teamId") Long teamId,
+            @Param("userIds") List<Long> userIds,
+            @Param("minDate") LocalDate minDate,
+            @Param("maxDate") LocalDate maxDate);
 }

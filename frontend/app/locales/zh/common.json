@@ -434,6 +434,7 @@
     "unauthorized": "请先登录",
     "section_load_failed": "该项目获取失败，请重新加载。",
     "unknown": "发生错误",
+    "notFound": "未找到",
     "TEAM_001": "未找到此团队。",
     "TEAM_006": "此团队尚未删除，无法恢复。",
     "COMMON_001": "输入内容有误",
@@ -1853,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "返回",
     "cancel": "取消",
     "search": "搜索",
     "edit": "编辑",
@@ -3348,6 +3350,30 @@
       "created_at": "生成时间",
       "expires_at": "有效期限",
       "used_count": "使用次数"
+    }
+  },
+  "globalSearch": {
+    "title": "搜索",
+    "placeholder": "按关键词搜索（至少2个字符）",
+    "submit": "搜索",
+    "failed": "搜索失败",
+    "tooShort": "请输入至少2个字符",
+    "empty": "没有搜索结果",
+    "didYouMean": "您是不是要找:",
+    "broaderQuery": "更宽泛的搜索:",
+    "timedOut": "部分类型的搜索已超时: {types}",
+    "noLink": "没有链接",
+    "types": {
+      "ALL": "全部",
+      "POST": "帖子",
+      "MESSAGE": "消息",
+      "THREAD": "主题帖",
+      "ARTICLE": "文章",
+      "FILE": "文件",
+      "USER": "用户",
+      "TEAM": "团队",
+      "ORGANIZATION": "组织",
+      "ACTIVITY": "活动记录"
     }
   }
 }

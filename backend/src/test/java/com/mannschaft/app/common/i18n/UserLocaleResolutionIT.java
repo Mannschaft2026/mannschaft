@@ -82,6 +82,9 @@ class UserLocaleResolutionIT extends AbstractMySqlIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private UserLocaleCache userLocaleCache;
+
     @PersistenceContext
     private EntityManager em;
 
@@ -94,6 +97,9 @@ class UserLocaleResolutionIT extends AbstractMySqlIntegrationTest {
         // CI 環境依存で red/green が揺れないよう、ここで明示的に en へ固定する。
         originalDefaultLocale = Locale.getDefault();
         Locale.setDefault(Locale.ENGLISH);
+
+        // 別コンテキスト再作成で userId が再利用されても、旧コンテキスト由来の locale を拾わない。
+        userLocaleCache.clear();
 
         insertUserWithLocale(JA_USER_ID, "ja");
     }

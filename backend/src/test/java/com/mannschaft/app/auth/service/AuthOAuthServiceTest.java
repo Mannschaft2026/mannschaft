@@ -1,6 +1,7 @@
 package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.entity.OAuthAccountEntity;
+import com.mannschaft.app.auth.event.LoginSuccessEvent;
 import com.mannschaft.app.auth.entity.OAuthLinkTokenEntity;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.entity.WebAuthnCredentialEntity;
@@ -154,6 +155,169 @@ class AuthOAuthServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_028"));
+        }
+    }
+
+    // ========================================
+    // loginWithOAuth: LoginSuccessEvent の引数順（CMP-261020-1530）
+    // 外部プロバイダは JDK 標準の HttpServer で偽装し、実 WebClient 経路を通す。
+    // ========================================
+
+    @Nested
+    @DisplayName("loginWithOAuth の LoginSuccessEvent 引数")
+    class LoginSuccessEventArguments {
+
+        private com.sun.net.httpserver.HttpServer fakeProvider;
+
+        @org.junit.jupiter.api.BeforeEach
+        void startFakeProvider() throws java.io.IOException {
+            fakeProvider = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+            fakeProvider.createContext("/token", ex -> respond(ex, "{\"access_token\":\"fake-at\"}"));
+            fakeProvider.createContext("/userinfo", ex -> respond(ex,
+                    "{\"sub\":\"google-sub-1\",\"email\":\"" + TEST_EMAIL + "\","
+                            + "\"given_name\":\"太郎\",\"family_name\":\"山田\",\"name\":\"yamada\"}"));
+            fakeProvider.start();
+            String base = "http://127.0.0.1:" + fakeProvider.getAddress().getPort();
+            given(oAuthProperties.getGoogleTokenUri()).willReturn(base + "/token");
+            given(oAuthProperties.getGoogleUserinfoUri()).willReturn(base + "/userinfo");
+            given(oAuthProperties.getGoogleRedirectUri()).willReturn("http://localhost/callback");
+            org.springframework.test.util.ReflectionTestUtils.invokeMethod(authOAuthService, "initWebClient");
+        }
+
+        @org.junit.jupiter.api.AfterEach
+        void stopFakeProvider() {
+            fakeProvider.stop(0);
+        }
+
+        private void respond(com.sun.net.httpserver.HttpExchange ex, String json) throws java.io.IOException {
+            byte[] body = json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            try (java.io.OutputStream os = ex.getResponseBody()) {
+                os.write(body);
+            }
+        }
+
+        private LoginSuccessEvent capturedLoginSuccess() {
+            org.mockito.ArgumentCaptor<com.mannschaft.app.common.event.DomainEvent> captor =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.common.event.DomainEvent.class);
+            verify(eventPublisher, atLeastOnce()).publish(captor.capture());
+            return captor.getAllValues().stream()
+                    .filter(LoginSuccessEvent.class::isInstance)
+                    .map(LoginSuccessEvent.class::cast)
+                    .findFirst().orElseThrow();
+        }
+
+        private void stubExistingLink() {
+            OAuthAccountEntity account = OAuthAccountEntity.builder()
+                    .userId(TEST_USER_ID)
+                    .provider(OAuthAccountEntity.OAuthProvider.GOOGLE)
+                    .providerUserId("google-sub-1")
+                    .providerEmail(TEST_EMAIL)
+                    .build();
+            given(oauthAccountRepository.findByProviderAndProviderUserId(
+                    OAuthAccountEntity.OAuthProvider.GOOGLE, "google-sub-1")).willReturn(Optional.of(account));
+            given(userRepository.findById(TEST_USER_ID)).willReturn(Optional.of(createActiveUser()));
+            stubTokenIssue();
+        }
+
+        private void stubTokenIssue() {
+            given(authTokenService.issueAccessToken(any(), any(), anyBoolean())).willReturn("at");
+            given(authTokenService.generateRefreshToken()).willReturn("rt");
+            given(authTokenService.hashToken(any())).willReturn("hash");
+            given(refreshTokenRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+        }
+
+        private void stubNewUser() {
+            given(oauthAccountRepository.findByProviderAndProviderUserId(any(), any())).willReturn(Optional.empty());
+            given(userRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.empty());
+            given(encryptionService.hmac(any())).willReturn("h");
+            given(userRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+            stubTokenIssue();
+        }
+
+        @Test
+        @DisplayName("AC-1: 既存連携ログインで ip=引数IP・UA=引数UA・method=OAUTH_GOOGLE")
+        void 既存連携_引数順が正しい() {
+            stubExistingLink();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
+
+            LoginSuccessEvent event = capturedLoginSuccess();
+            assertThat(event.getIpAddress()).isEqualTo(TEST_IP);
+            assertThat(event.getUserAgent()).isEqualTo(TEST_USER_AGENT);
+            assertThat(event.getMethod()).isEqualTo("OAUTH_GOOGLE");
+        }
+
+        @Test
+        @DisplayName("AC-2: OAuth 新規ユーザー登録経路でも ip・UA・method が正しい位置に入る")
+        void 新規登録_引数順が正しい() {
+            stubNewUser();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
+
+            LoginSuccessEvent event = capturedLoginSuccess();
+            assertThat(event.getIpAddress()).isEqualTo(TEST_IP);
+            assertThat(event.getUserAgent()).isEqualTo(TEST_USER_AGENT);
+            assertThat(event.getMethod()).isEqualTo("OAUTH_GOOGLE");
+        }
+
+        @Test
+        @DisplayName("AC-3: userAgent が null なら LoginSuccessEvent.userAgent も null のまま（既存連携）")
+        void 既存連携_UAがnullならnullのまま() {
+            stubExistingLink();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, null);
+
+            LoginSuccessEvent event = capturedLoginSuccess();
+            assertThat(event.getIpAddress()).isEqualTo(TEST_IP);
+            assertThat(event.getUserAgent()).isNull();
+            assertThat(event.getMethod()).isEqualTo("OAUTH_GOOGLE");
+        }
+
+        @Test
+        @DisplayName("AC-3: userAgent が null なら LoginSuccessEvent.userAgent も null のまま（新規登録）")
+        void 新規登録_UAがnullならnullのまま() {
+            stubNewUser();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, null);
+
+            LoginSuccessEvent event = capturedLoginSuccess();
+            assertThat(event.getUserAgent()).isNull();
+            assertThat(event.getIpAddress()).isEqualTo(TEST_IP);
+        }
+
+        private String capturedRefreshTokenJti() {
+            org.mockito.ArgumentCaptor<com.mannschaft.app.auth.entity.RefreshTokenEntity> captor =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.entity.RefreshTokenEntity.class);
+            verify(refreshTokenRepository).save(captor.capture());
+            return captor.getValue().getJti();
+        }
+
+        @Test
+        @DisplayName("jti: 既存連携ログインで保存する RefreshToken の jti が非 null、sessionHash = SHA-256(jti)")
+        void 既存連携_jtiが設定されsessionHashと一致する() {
+            stubExistingLink();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
+
+            String jti = capturedRefreshTokenJti();
+            assertThat(jti).isNotNull();
+            assertThat(capturedLoginSuccess().getSessionHash())
+                    .isEqualTo(com.mannschaft.app.common.util.SessionHashUtil.hash(jti));
+        }
+
+        @Test
+        @DisplayName("jti: 新規登録ログインで保存する RefreshToken の jti が非 null、sessionHash = SHA-256(jti)")
+        void 新規登録_jtiが設定されsessionHashと一致する() {
+            stubNewUser();
+
+            authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
+
+            String jti = capturedRefreshTokenJti();
+            assertThat(jti).isNotNull();
+            assertThat(capturedLoginSuccess().getSessionHash())
+                    .isEqualTo(com.mannschaft.app.common.util.SessionHashUtil.hash(jti));
         }
     }
 

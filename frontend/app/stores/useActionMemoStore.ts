@@ -166,6 +166,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
         mood: this.settings.moodEnabled ? (payload.mood ?? null) : null,
         relatedTodoId: payload.relatedTodoId ?? null,
         timelinePostId: null,
+        teamTimelinePostId: null,
         tags: [],
         createdAt: nowIso(),
         // Phase 3 フィールド

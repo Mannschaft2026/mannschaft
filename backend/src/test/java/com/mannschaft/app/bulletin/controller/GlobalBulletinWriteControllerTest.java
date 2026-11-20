@@ -11,6 +11,7 @@ import com.mannschaft.app.bulletin.dto.ReadStatusResponse;
 import com.mannschaft.app.bulletin.dto.ReplyResponse;
 import com.mannschaft.app.bulletin.dto.UpdateCategoryRequest;
 import com.mannschaft.app.bulletin.dto.UpdateReplyRequest;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinCategoryService;
 import com.mannschaft.app.bulletin.service.BulletinReadStatusService;
 import com.mannschaft.app.bulletin.service.BulletinReplyResponseEnricher;
@@ -202,6 +203,9 @@ class GlobalBulletinWriteControllerTest {
         private BulletinReplyResponseEnricher responseEnricher = new BulletinReplyResponseEnricher(
                 org.mockito.Mockito.mock(NameResolverService.class));
 
+        @Mock
+        private BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
+
         @InjectMocks
         private GlobalBulletinReplyController controller;
 
@@ -286,6 +290,9 @@ class GlobalBulletinWriteControllerTest {
 
         @Mock
         private BulletinScopeIdResolver scopeIdResolver;
+
+        @Mock
+        private BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
         @InjectMocks
         private GlobalBulletinThreadController controller;
