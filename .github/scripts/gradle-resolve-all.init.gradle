@@ -11,7 +11,8 @@ allprojects {
             def count = 0
             configurations.findAll { it.canBeResolved && it.name ==~ pattern }.each { c ->
                 c.incoming.files.files.each { f ->
-                    if (!f.exists()) {
+                    // プロジェクト内の生成物（build/ 配下）は対象外。Gradle ユーザーホームの依存 jar だけを確認する。
+                    if (f.absolutePath.startsWith(gradle.gradleUserHomeDir.absolutePath) && !f.exists()) {
                         throw new GradleException("依存ファイルが実在しません: ${f} (configuration ${project.path}:${c.name})")
                     }
                 }
