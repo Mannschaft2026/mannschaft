@@ -203,4 +203,4 @@ LRU で追い出されて同じ構成が再ロードされる。これを減ら�
   それ以外の派生は true）、`MockMvcFilterAppliedIT` / `MockMvcFilterNotAppliedIT`（AC-2(b) フィルタでしか起きない応答: 本文なしの 401・X-Frame-Options）、
   `MockMvcContextUnificationTest` / `MockMvcContextUnificationIT`（AC-2(c) 旧「基底のみ」と旧「MockMvc=true」の MCC 統合・context 共有・MockMvc と builder の構築）、
   `ContextKeyTestExecutionListenerTest` の AC-5（共有キーの起動失敗は両クラスの失敗として残り、`[ci-ctx]` の error にしない）、
-  build-logic の `CiTestRuntimeConfigPinTest`（AC-4: 既定 maxSize 10・CI の `-Pspring.test.context.cache.maxSize=5`・forkEvery 180・maxParallelForks 2・shard 8・timeout 85/105・100/120 を変えない）。
+  build-logic の `CiTestRuntimeConfigPinTest`（AC-4: 既定 maxSize 10・CI の `-Pspring.test.context.cache.maxSize=5`・forkEvery 180・maxParallelForks 2・shard 8・timeout は PR Check の test 95/110・job 110/120、deploy の test 85/105・job 100/120、nightly の test 105・job 120 を変えない（条件付きの値は通常/migration ありの順））。
