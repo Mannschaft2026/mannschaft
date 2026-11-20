@@ -929,6 +929,10 @@ public void dispatch() { ... }
 - クラスごとの `@Disabled`、例外の握りつぶしは禁止。実素材に依存しない単位は分けて通常実行する（`src/test/resources` の合成素材で足りるなら合成素材を使う）。
 - 判定実装は `com.mannschaft.app.support.test.sparse.SparseExcludedAssets`、その単体テストは `SparseExcludedAssetsTest`。
 
+## 9.9 SecurityContext は共通拡張で自動クリアされる
+
+`SecurityContextClearExtension`（`com.mannschaft.app.common.testing`）が JUnit 5 の自動検出（`junit-platform.properties` と `META-INF/services/org.junit.jupiter.api.extension.Extension`）で全テストに効き、各テストの後（afterEach）とクラスの後（afterAll）に `SecurityContextHolder` と `TestSecurityContextHolder` を空にする。単体テストが `setAuthentication` したまま終わっても、同じ JVM の後続 Spring IT に認証が漏れない。そのため各テストで `clearContext()` を手書きする必要はない。beforeEach では消さないので、`@BeforeAll` で作った認証や `@WithMockUser` は従来どおり使える。
+
 ## 10. テストに関する禁止事項
 
 | 禁止事項 | 理由 |
