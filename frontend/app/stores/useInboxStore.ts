@@ -819,11 +819,11 @@ export const useInboxStore = defineStore('inbox', {
       }
       const status = err?.status ?? err?.response?.status
       if (status === 401 || status === 403) {
-        this.error = 'common.error.unauthorized'
+        this.error = 'error.unauthorized'
       } else if (status === 404) {
-        this.error = 'common.error.notFound'
+        this.error = 'error.notFound'
       } else {
-        this.error = 'common.error.unknown'
+        this.error = 'error.unknown'
       }
     },
   },
