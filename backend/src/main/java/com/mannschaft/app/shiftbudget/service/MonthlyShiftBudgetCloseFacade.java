@@ -40,7 +40,7 @@ public class MonthlyShiftBudgetCloseFacade {
         MonthlyShiftBudgetCloseCoordinator.CloseResult result = coordinator.close(organizationId, periodKey);
         ShiftBudgetClosePeriodResolver.ResolvedPeriod period = periodResolver.resolve(organizationId, periodKey);
         auditLogService.record("SHIFT_BUDGET_MONTHLY_CLOSED", userId, null, null, organizationId, null, null, null,
-                String.format("{\"period_key\":\"%s\",\"period_start\":\"%s\",\"period_end\":\"%s\","
+                String.format("{\"trigger\":\"MANUAL\",\"period_key\":\"%s\",\"period_start\":\"%s\",\"period_end\":\"%s\","
                                 + "\"closed_allocations\":%d,\"failed_allocations\":%d,\"closed_consumption_count\":%d}",
                         periodKey, period.start(), period.end(), result.closedAllocations(), result.failedAllocations(),
                         result.closedConsumptions()));

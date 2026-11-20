@@ -122,6 +122,13 @@ const canSubmit = computed(() =>
  */
 let loadGeneration = 0
 
+/**
+ * 組織の世代。組織を切り替えるたびに進める。変更の送信時に組織と世代を控え、応答の反映時に現在の画面と一致するときだけ
+ * フォーム・エラーを更新する（CMP-260909-2152 α 検分 P2-3）。旧組織への送信の成功応答が新組織の入力を消したり、
+ * 失敗・409 が新組織の画面にエラーや再取得・入力の補正を起こしたりしないようにする。
+ */
+let scopeGeneration = 0
+
 function statusOf(e: unknown): number | undefined {
   return (e as { statusCode?: number, status?: number }).statusCode
     ?? (e as { status?: number }).status
@@ -165,21 +172,27 @@ async function submit() {
   if (!organizationId.value || !settings.value || !canSubmit.value) return
   const { day, effective, reason } = form.value
   if (day === null || effective === null) return
+  const orgId = organizationId.value
+  const generation = scopeGeneration
+  const isCurrentScope = () => generation === scopeGeneration && orgId === organizationId.value
   submitting.value = true
   submitError.value = ''
   fieldErrors.value = {}
   try {
-    await api.changeClosingSetting(organizationId.value, {
+    await api.changeClosingSetting(orgId, {
       expected_revision: settings.value.revision,
       closing_day: day,
       effective_period_key: effective,
       reason: reason.trim(),
     })
+    // 変更は受理された（組織を切り替えていても成功は知らせる）。フォームと再取得は送信時の組織の画面のときだけ
     notification.success(t('shiftBudget.closingDay.success'))
+    if (!isCurrentScope()) return
     resetForm()
     await load()
   }
   catch (e) {
+    if (!isCurrentScope()) return
     const status = statusOf(e)
     submitError.value = status === 409
       ? t('shiftBudget.closingDay.conflict')
@@ -189,6 +202,7 @@ async function submit() {
       // revision 競合: 画面が古いままだと再送しても 409 が続くため、最新の現在値・履歴・revision を取り直す。
       // 入力は保持する（設計書に定めなし。差分を見て再送できるようにする）。
       await load()
+      if (!isCurrentScope()) return
       const min = settings.value?.min_effective_period_key
       if (form.value.effective !== null && (!min || form.value.effective < min)) {
         form.value.effective = null
@@ -196,7 +210,8 @@ async function submit() {
     }
   }
   finally {
-    submitting.value = false
+    // 組織を切り替えた後は切替時に解除済み。新組織の送信中フラグを旧組織の応答で外さない
+    if (isCurrentScope()) submitting.value = false
   }
 }
 
@@ -205,7 +220,9 @@ function formatDateTime(value: string): string {
 }
 
 watch(organizationId, () => {
-  // 旧組織の設定（締め日・履歴・revision）と入力・エラーを破棄してから新組織を取得する
+  // 旧組織の設定（締め日・履歴・revision）と入力・エラー・送信中を破棄してから新組織を取得する
+  scopeGeneration++
+  submitting.value = false
   settings.value = null
   submitError.value = ''
   fieldErrors.value = {}

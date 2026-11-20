@@ -1,5 +1,6 @@
 package com.mannschaft.app.shiftbudget.service;
 
+import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.budget.dto.ShiftBudgetMonthlyPostCommand;
 import com.mannschaft.app.budget.dto.ShiftBudgetMonthlyPostResult;
 import com.mannschaft.app.budget.service.ShiftBudgetMonthlyJournalService;
@@ -64,6 +65,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
     private final ShiftBudgetFeatureService featureService;
     private final ShiftBudgetBusinessDateProvider dateProvider;
     private final ShiftBudgetLockStepHooks hooks;
+    private final AuditLogService auditLogService;
 
     /**
      * 手動締めの本体（認可済み前提）。指定の期間キー M を締め、各割当の M 以前の未締め終了済み期間を古い順に先に締める（追いつき）。
@@ -88,11 +90,18 @@ public class MonthlyShiftBudgetCloseCoordinator {
             return new CloseResult(0, 0, 0, 0);
         }
         ShiftBudgetCloseActorContext.set(ShiftBudgetCloseActorKind.BATCH, null);
+        CloseResult result;
         try {
-            return process(organizationId, periodKey, false);
+            result = process(organizationId, periodKey, false);
         } finally {
             ShiftBudgetCloseActorContext.clear();
         }
+        // バッチ経路の監査（手動 close() の監査は Facade が記録するので、ここでは記録しない）
+        if (result.closedAllocations() > 0) {
+            auditBatchClose(organizationId, periodResolver.resolve(organizationId, periodKey), result.closedAllocations(),
+                    result.failedAllocations(), result.closedConsumptions());
+        }
+        return result;
     }
 
     /**
@@ -318,14 +327,23 @@ public class MonthlyShiftBudgetCloseCoordinator {
             }
             keys++;
             ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), yesterday);
+            int keyClosed = 0;
+            int keyFailed = 0;
+            int keyConsumptions = 0;
             for (ShiftBudgetAllocationEntity allocation : targets) {
                 AllocationResult r = closeOne(allocation, entry.getKey(), period);
                 markIfInterrupted(interrupted, allocation, r);
                 if (r.kind() == AllocationResult.Kind.CLOSED) {
-                    closed++;
+                    keyClosed++;
+                    keyConsumptions += r.lines();
                 } else if (r.kind() == AllocationResult.Kind.FAILED) {
-                    failed++;
+                    keyFailed++;
                 }
+            }
+            closed += keyClosed;
+            failed += keyFailed;
+            if (keyClosed > 0) {
+                auditBatchClose(organizationId, period, keyClosed, keyFailed, keyConsumptions);
             }
         }
         return new OrganizationBatch(keys, closed, failed);
@@ -445,6 +463,24 @@ public class MonthlyShiftBudgetCloseCoordinator {
             }
         } catch (Exception e) {
             log.error("F08.7 期間締め: 遅延記録の再実行に失敗（回収バッチに任せる）: eventId={}", eventId, e);
+        }
+    }
+
+    /**
+     * バッチ経路で成功した締め（1件以上 CLOSED にした組織×期間）を監査ログ {@code SHIFT_BUDGET_MONTHLY_CLOSED} に記録する
+     * （CMP-260909-2152 α 検分 P2-2。F08.7 §9.1「月次締めバッチ完了時」）。段取り役は TX を持たないので業務 TX の外で記録される。
+     * 手動締め（API #11）は Facade が記録するため、手動入口からは呼ばない（二重記録しない）。監査の失敗で締めの結果を変えない。
+     */
+    private void auditBatchClose(Long organizationId, ShiftBudgetClosePeriodResolver.ResolvedPeriod period, int closed,
+                                 int failed, int consumptions) {
+        try {
+            auditLogService.record("SHIFT_BUDGET_MONTHLY_CLOSED", null, null, null, organizationId, null, null, null,
+                    String.format("{\"trigger\":\"BATCH\",\"period_key\":\"%s\",\"period_start\":\"%s\",\"period_end\":\"%s\","
+                                    + "\"closed_allocations\":%d,\"failed_allocations\":%d,\"closed_consumption_count\":%d}",
+                            period.periodKey(), period.start(), period.end(), closed, failed, consumptions));
+        } catch (Exception e) {
+            log.error("F08.7 期間締め: 監査ログの記録に失敗（締めは確定済み）: orgId={}, key={}", organizationId,
+                    period.periodKey(), e);
         }
     }
 

@@ -206,10 +206,11 @@ public class ShiftBudgetConsumptionService {
                 return RecordResult.SKIPPED_CLOSED;
             }
 
-            // 同内容の PLANNED が既にあれば何もしない（取消→再作成は同 (slot,user,CANCELLED) の UNIQUE に当たり、結果も同じ）
-            if (existingPlanned != null && existingPlanned.getAllocationId().equals(allocationId)
-                    && workDate.equals(existingPlanned.getWorkDate())
-                    && amount.compareTo(existingPlanned.getAmount()) == 0) {
+            // 同内容の PLANNED が既にあれば何もしない（取消→再作成は同 (slot,user,CANCELLED) の UNIQUE に当たり、結果も同じ）。
+            // 同内容は 割当・勤務日・金額に加え、時給スナップショットと勤務時間も一致すること（CMP-260909-2152 α 検分 P2-1）。
+            // 金額だけで判定すると 1,000円×4h → 2,000円×2h のような同額の再公開で古い時給・勤務時間が残り、
+            // 勤務時間の集計（ShiftBudgetSummaryService）と記録時給の表示（#4527）が誤る。
+            if (existingPlanned != null && isSameContent(existingPlanned, allocationId, workDate, hourlyRate, hours, amount)) {
                 return RecordResult.RECORDED;
             }
 
@@ -239,6 +240,20 @@ public class ShiftBudgetConsumptionService {
                     allocationId, slotId, userId, hours, amount);
             return RecordResult.RECORDED;
         });
+    }
+
+    /** 既存 PLANNED が、これから記録する内容（割当・勤務日・時給・勤務時間・金額）と同じか。数値は scale を無視して比べる。 */
+    private static boolean isSameContent(ShiftBudgetConsumptionEntity existing, Long allocationId, LocalDate workDate,
+                                         BigDecimal hourlyRate, BigDecimal hours, BigDecimal amount) {
+        return existing.getAllocationId().equals(allocationId)
+                && workDate.equals(existing.getWorkDate())
+                && sameNumber(hourlyRate, existing.getHourlyRateSnapshot())
+                && sameNumber(hours, existing.getHours())
+                && sameNumber(amount, existing.getAmount());
+    }
+
+    private static boolean sameNumber(BigDecimal a, BigDecimal b) {
+        return a != null && b != null && a.compareTo(b) == 0;
     }
 
     /** 公開中（PUBLISHED かつ未論理削除）か。スケジュール行を FOR SHARE で読む（TX コミットまで保持）。 */
