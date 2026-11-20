@@ -150,15 +150,16 @@ export interface AssetRecord {
   path: string
   owner: { email: string; password: string }
 }
-export function readAssets(): AssetRecord[] {
-  return existsSync(ASSET_FILE) ? (JSON.parse(readFileSync(ASSET_FILE, 'utf8')) as AssetRecord[]) : []
+// ledger を省略すると従来どおり n1p1 の台帳（ASSET_FILE）。別 spec は自前の台帳ファイルを渡して記録先を分ける。
+export function readAssets(ledger: string = ASSET_FILE): AssetRecord[] {
+  return existsSync(ledger) ? (JSON.parse(readFileSync(ledger, 'utf8')) as AssetRecord[]) : []
 }
-export function writeAssets(records: AssetRecord[]): void {
-  mkdirSync(path.dirname(ASSET_FILE), { recursive: true })
-  writeFileSync(ASSET_FILE, JSON.stringify(records, null, 2))
+export function writeAssets(records: AssetRecord[], ledger: string = ASSET_FILE): void {
+  mkdirSync(path.dirname(ledger), { recursive: true })
+  writeFileSync(ledger, JSON.stringify(records, null, 2))
 }
-export function recordAsset(label: string, deletePath: string, owner: Actor): void {
-  writeAssets([...readAssets(), { label, path: deletePath, owner: { email: owner.email, password: owner.password } }])
+export function recordAsset(label: string, deletePath: string, owner: Actor, ledger: string = ASSET_FILE): void {
+  writeAssets([...readAssets(ledger), { label, path: deletePath, owner: { email: owner.email, password: owner.password } }], ledger)
 }
 
 export interface Scope {
@@ -179,16 +180,16 @@ function uniqueSlug(prefix: string): string {
   return `${prefix}-${RUN}-${Math.random().toString(36).slice(2, 7)}`
 }
 
-export async function createOrg(owner: Actor, name: string, visibility = 'PUBLIC'): Promise<Scope> {
+export async function createOrg(owner: Actor, name: string, visibility = 'PUBLIC', ledger: string = ASSET_FILE): Promise<Scope> {
   const body = await must(owner, 'POST', '/api/v1/organizations', { slug: uniqueSlug('n1o'), name, visibility, orgType: 'ASSOCIATION' })
-  recordAsset(`org ${body.data.slug}`, `/api/v1/organizations/${body.data.slug}`, owner)
+  recordAsset(`org ${body.data.slug}`, `/api/v1/organizations/${body.data.slug}`, owner, ledger)
   await settleMemberPermissions(owner, 'ORGANIZATION', body.data.numericId)
   return { slug: body.data.slug, numericId: body.data.numericId, name }
 }
 
-export async function createTeam(owner: Actor, name: string, visibility = 'PUBLIC'): Promise<Scope> {
+export async function createTeam(owner: Actor, name: string, visibility = 'PUBLIC', ledger: string = ASSET_FILE): Promise<Scope> {
   const body = await must(owner, 'POST', '/api/v1/teams', { slug: uniqueSlug('n1t'), name, visibility })
-  recordAsset(`team ${body.data.slug}`, `/api/v1/teams/${body.data.slug}`, owner)
+  recordAsset(`team ${body.data.slug}`, `/api/v1/teams/${body.data.slug}`, owner, ledger)
   await settleMemberPermissions(owner, 'TEAM', body.data.numericId)
   return { slug: body.data.slug, numericId: body.data.numericId, name }
 }

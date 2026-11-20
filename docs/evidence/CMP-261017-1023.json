@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "scope": "app",
+  "implementation": {
+    "pr": 3954,
+    "sha": "0b67099ecdcf6d970a46264e9656dba8d809fff3"
+  },
+  "ci": [
+    {
+      "runId": 39211725428
+    },
+    {
+      "runId": 39211725539
+    },
+    {
+      "runId": 39211725689
+    },
+    {
+      "runId": 39211725483
+    },
+    {
+      "runId": 39211725595
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3954"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+    }
+  },
+  "cmpId": "CMP-261017-1023",
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "本人のCookieと信頼済み認証文脈に基づきrefreshとaccessを失効する",
+      "tests": [
+        {
+          "name": "無引数POST_本人Cookieだけ失効して他端末と別人を維持する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        },
+        {
+          "name": "logout_正常_トークン失効",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthSessionServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "任意のuserId・JTI・期限で対象や有効期間を拡大せず、本人の他端末と他人を保護する",
+      "tests": [
+        {
+          "name": "他人Cookieと偽造query_本人accessだけ失効し別人に到達しない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        },
+        {
+          "name": "両Cookie_rawを優先してlegacyの他端末を維持する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "旧Cookie経路・Cookie属性・自己スコープとValkey fail-openを維持し、本人DB失効を確定しDB障害を成功扱いしない",
+      "tests": [
+        {
+          "name": "legacyCookie_本人セッションを失効する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        },
+        {
+          "name": "Valkey障害_本人refresh失効は実commitされる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        },
+        {
+          "name": "logout_DB検索障害を成功として握りつぶさない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthSessionServiceTest.java"
+        },
+        {
+          "name": "POST /logout — access_token と refresh_token の両方を maxAge=0 でクリアする",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLoginControllerTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "匿名・不正・不一致の認証情報を安全に扱う",
+      "tests": [
+        {
+          "name": "匿名_失効処理へ到達しない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        },
+        {
+          "name": "無効JWT_有効refreshCookieがあっても失効しない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        },
+        {
+          "name": "空や不正refreshCookie_本人accessだけ失効する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthLogoutScopeContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "通常UIでの失効と利用者視点の探索を確認する",
+      "tests": [
+        {
+          "name": "通常UI実機6ケース38チェックと3人の目的達成探索",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+        }
+      ]
+    }
+  ],
+  "regressions": [
+    {
+      "description": "通常ログアウトで本人セッションが失効しない回帰",
+      "test": "AuthLogoutScopeContractIT",
+      "redEvidence": "docs/evidence/session-auth-acceptance.md",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+    }
+  ]
+}

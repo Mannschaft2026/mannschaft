@@ -2,6 +2,7 @@ package com.mannschaft.app.search;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.architecture.ProductionClasses;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.search.service.GlobalSearchRequest;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -45,7 +46,8 @@ class GlobalSearchShiftExclusionTest {
     @ValueSource(strings = {"SHIFT", "SHIFTS", "SHIFT_SCHEDULE", "shifts", "POST,SHIFT"})
     @DisplayName("type にシフト系を指定しても検索は実行されず SEARCH_007（400）になる")
     void シフト種別の指定は400(String type) {
-        assertThatThrownBy(() -> GlobalSearchRequest.parse("ab", type, null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> GlobalSearchRequest.parse("ab", type, null, null, null, null, null, null, null,
+                UserZoneLocalDateTimeParser.SERVER_ZONE))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(SearchErrorCode.INVALID_TYPE);
