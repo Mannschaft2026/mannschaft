@@ -12,8 +12,11 @@
     "board": {
       "title": "Schichtplan-Board",
       "memberPool": "Nicht zugewiesene Mitglieder",
+      "noUnassignedMembers": "Keine nicht zugewiesenen Mitglieder",
+      "noMatchingMembers": "Keine Mitglieder entsprechen Ihrer Suche",
       "dragHint": "Mitglieder per Drag & Drop zuweisen",
-      "unassignedSlots": "{count} nicht zugewiesene Schichten"
+      "unassignedSlots": "{count} nicht zugewiesene Schichten",
+      "backToList": "Zurück zur Schichtliste"
     },
     "autoAssign": {
       "button": "Automatisch zuweisen",
@@ -415,6 +418,7 @@
       }
     },
     "entry": {
+      "notStarted": "Die Abgabe von Schichtwünschen hat noch nicht begonnen.",
       "sectionTitle": "Wünsche einreichen / Schichtboard",
       "bulkRequest": "Wünsche gesammelt einreichen",
       "board": "Schichtboard",
