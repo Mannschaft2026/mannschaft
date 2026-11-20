@@ -510,7 +510,13 @@ class GlobalSearchArticleVisibilityIT extends AbstractGlobalSearchIT {
         private void assertExactlyVisible(Long viewer, Set<Long> neverVisible, Long... expected) throws Exception {
             JsonNode detail = search(viewer, Map.of("q", kw, "type", ARTICLE, "size", "50"));
             assertThat(resultIds(detail, ARTICLE)).as("viewer=%s の結果", viewer)
-                    .containsExactlyInAnyOrder(expected).doesNotContainAnyElementsOf(neverVisible);
+                    .containsExactlyInAnyOrder(expected);
+            // AssertJ の doesNotContainAnyElementsOf は空集合を渡すと IllegalArgumentException になるため、
+            // 不可視の指定があるときだけ確かめる（containsExactlyInAnyOrder が既に余分な ID を許さない）
+            if (!neverVisible.isEmpty()) {
+                assertThat(resultIds(detail, ARTICLE)).as("viewer=%s の結果（不可視）", viewer)
+                        .doesNotContainAnyElementsOf(neverVisible);
+            }
             assertThat(typeCount(detail, ARTICLE)).as("viewer=%s の typeCounts", viewer).isEqualTo(expected.length);
             assertThat(detail.path("meta").path("total").asLong()).as("viewer=%s の meta.total", viewer)
                     .isEqualTo(expected.length);
