@@ -163,27 +163,13 @@ class FriendContentForwardControllerTest {
         }
 
         @Test
-        @DisplayName("share_with_friends=FALSE 投稿 → 400 Bad Request (SOCIAL_123)")
-        void forward_共有対象外_400() throws Exception {
-            willThrow(new BusinessException(SocialErrorCode.FRIEND_FORWARD_NOT_SHARABLE))
-                    .given(forwardService)
-                    .forward(eq(TEAM_ID), eq(POST_ID), any(ForwardRequest.class), eq(USER_ID));
-
-            String body = """
-                    { "target": "MEMBER" }
-                    """;
-
-            mockMvc.perform(post("/api/v1/teams/{id}/friend-feed/{postId}/forward", TEAM_ID, POST_ID)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(body))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error.code").value("SOCIAL_123"));
-        }
-
-        @Test
-        @DisplayName("フレンド関係なし: 404 Not Found (SOCIAL_124)")
-        void forward_フレンド関係なし_404() throws Exception {
-            willThrow(new BusinessException(SocialErrorCode.FRIEND_FORWARD_RELATION_NOT_FOUND))
+        @DisplayName("CMP-261103-0823: 非共有・非フレンド・越境も Service が不在と同じ SOURCE_POST_NOT_FOUND に畳む → 404 SOCIAL_122（旧: 400 SOCIAL_123 / 404 SOCIAL_124）")
+        void forward_許可されない転送元は不在と同じ404() throws Exception {
+            // 旧仕様では非共有を 400 SOCIAL_123、非フレンドを 404 SOCIAL_124 と別応答にしており、
+            // 投稿の実在・共有設定・フレンド関係が外から判別できた（存在オラクル）。
+            // 新仕様では Service が一律に FRIEND_FORWARD_SOURCE_POST_NOT_FOUND を投げる。
+            // 実データでの畳み込みは FriendContentForwardExistenceOracleContractIT が検査する。
+            willThrow(new BusinessException(SocialErrorCode.FRIEND_FORWARD_SOURCE_POST_NOT_FOUND))
                     .given(forwardService)
                     .forward(eq(TEAM_ID), eq(POST_ID), any(ForwardRequest.class), eq(USER_ID));
 
@@ -195,7 +181,7 @@ class FriendContentForwardControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
                     .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.error.code").value("SOCIAL_124"));
+                    .andExpect(jsonPath("$.error.code").value("SOCIAL_122"));
         }
 
         @Test

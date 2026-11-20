@@ -1,0 +1,8 @@
+{
+  "description": "足軽 worktree の sparse checkout から除く追跡ディレクトリの唯一の正本。増減は docs/development/worktree_operations.md の手順に従う。",
+  "exclusions": [
+    { "path": "frontend/dev-fixtures/ranch", "reason": "牧場 PNG 素材（開発用フィクスチャ）。巨大でコード作業に不要" },
+    { "path": "frontend/public/ranch/approved", "reason": "牧場 PNG 素材（承認済み公開アセット）。巨大でコード作業に不要" },
+    { "path": "backend/src/main/resources/ranch/approved", "reason": "牧場 PNG 素材（BE 同梱アセット）。巨大でコード作業に不要" }
+  ]
+}

@@ -16,7 +16,7 @@ import java.util.Optional;
  * シフト希望リポジトリ。
  */
 public interface ShiftRequestRepository extends JpaRepository<ShiftRequestEntity, Long>,
-        JpaSpecificationExecutor<ShiftRequestEntity> {
+        JpaSpecificationExecutor<ShiftRequestEntity>, ShiftRequestRepositoryCustom {
 
     /**
      * スケジュールの全希望を取得する。
@@ -32,6 +32,31 @@ public interface ShiftRequestRepository extends JpaRepository<ShiftRequestEntity
      * スケジュールと日付で希望を取得する。
      */
     List<ShiftRequestEntity> findByScheduleIdAndSlotDate(Long scheduleId, LocalDate slotDate);
+
+    /**
+     * 親スケジュールの排他ロック後、RR の古い snapshot に依存せず生存希望の存在を調べる。
+     * 全件取得・集計はせず、先行して commit した提出も current read で確認する。
+     */
+    @Query(value = """
+            SELECT id FROM shift_requests
+            WHERE schedule_id = :scheduleId AND slot_id = :slotId AND deleted_at IS NULL
+            LIMIT 1 FOR UPDATE
+            """, nativeQuery = true)
+    Optional<Long> findLiveIdBySlotForUpdate(@Param("scheduleId") Long scheduleId,
+                                           @Param("slotId") Long slotId);
+
+    /**
+     * 親ロック下で同枠の生存希望の日付だけを一括変更する。日単位・削除済み希望は保持する。
+     * updated_at の自己代入は本番DDLの ON UPDATE CURRENT_TIMESTAMP による内容更新日時の変更を防ぐ。
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            UPDATE shift_requests SET slot_date = :slotDate, updated_at = updated_at
+            WHERE schedule_id = :scheduleId AND slot_id = :slotId AND deleted_at IS NULL
+            """, nativeQuery = true)
+    int moveLiveSlotRequests(@Param("scheduleId") Long scheduleId,
+                             @Param("slotId") Long slotId,
+                             @Param("slotDate") LocalDate slotDate);
 
     /**
      * スケジュール・ユーザー・<b>枠</b>で希望を検索する（枠単位の重複チェック用。設計 §11.5.1）。

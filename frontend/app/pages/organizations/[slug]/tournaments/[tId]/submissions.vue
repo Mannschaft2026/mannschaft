@@ -168,12 +168,12 @@ async function saveRequirement() {
       }
       await createRequirement(body)
     }
-    notification.success(t('common.saved'))
+    notification.success(t('memberInfo.response.saved'))
     showCreateForm.value = false
     editingReq.value = null
     await loadRequirements()
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('memberProfile.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -182,14 +182,14 @@ async function saveRequirement() {
 async function confirmDelete(reqId: number) {
   try {
     await deleteRequirement(reqId)
-    notification.success(t('common.deleted'))
+    notification.success(t('disclosure.deleted'))
     requirements.value = requirements.value.filter(r => r.id !== reqId)
     if (selectedReqId.value === reqId) {
       selectedReqId.value = null
       dashboard.value = null
     }
   } catch {
-    notification.error(t('common.delete_failed'))
+    notification.error(t('memberProfile.deleteFailed'))
   }
 }
 

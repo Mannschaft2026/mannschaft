@@ -94,9 +94,8 @@ public class ShiftRequestEntity {
      *
      * <ul>
      *   <li>移行前の既存行は {@code slotId} / {@code slotDate} の整合検証を一度も通っていない。</li>
-     *   <li>{@code ShiftSlotService#updateSlot} は枠の {@code slotDate} を書き換えるが
-     *       {@code shift_requests} には触れないため、枠の日付を後から変えると希望側が取り残される
-     *       （射程外の既存欠陥として起票済み）。</li>
+     *   <li>希望の日付追随の導入前には、枠の日付変更で希望側が取り残される経路があった。
+     *       現在は確認後に同一TXで追随させるが、過去の行も含め一意性は日付に依存させない。</li>
      * </ul>
      *
      * <p>一方、日単位の希望（{@code slot_id} が null）は <b>{@code slotDate} で一意</b>でなければならない

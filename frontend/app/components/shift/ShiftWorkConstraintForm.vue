@@ -184,7 +184,7 @@ async function remove() {
     <div class="flex justify-end gap-2">
       <Button
         v-if="constraint"
-        :label="t('common.delete')"
+        :label="t('button.delete')"
         icon="pi pi-trash"
         severity="danger"
         text
