@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261118-0636",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4645,
+    "sha": "6b35b3137e2261ab19c3d4d903c396cf09ae904e"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "全 shard が timeout 内に余裕を持って終わる（コンテキスト種別でテストクラスを並べる ContextGroupClassOrderer の導入。後続の PR #4678 と合わせ全 shard 78 分以下を2回連続で達成）",
+      "tests": [
+        {
+          "name": "ContextGroupClassOrdererTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/ContextGroupClassOrdererTest.java"
+        },
+        {
+          "name": "ContextKeyTestExecutionListenerTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/ContextKeyTestExecutionListenerTest.java"
+        },
+        {
+          "name": "ContextOrdererSettingsTest",
+          "evidence": "backend/build-logic/src/test/kotlin/ContextOrdererSettingsTest.kt"
+        },
+        {
+          "name": "Backend CI run 44719267579",
+          "evidence": "https://github.com/kenta-0420/mannschaft/actions/runs/44719267579"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44540730874
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4645"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI 基盤とテスト構成の変更で画面導線なし"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI 基盤とテスト構成の変更で画面導線なし"
+    }
+  },
+  "regressions": []
+}

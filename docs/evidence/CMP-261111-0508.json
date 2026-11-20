@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261111-0508",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4678,
+    "sha": "cceebeaea668a475be03e5942661852ab59cde1a"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "テストコンテキスト構成キーを削減し、認可型 override の増加を番人が検出する",
+      "tests": [
+        {
+          "name": "ContextOverrideCensusGuardTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/ContextOverrideCensusGuardTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "基底への MockMvc 追加で addFilters の実効値とフィルタ適用の有無が保たれ、context が共有される",
+      "tests": [
+        {
+          "name": "MockMvcAddFiltersEffectiveValueTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/MockMvcAddFiltersEffectiveValueTest.java"
+        },
+        {
+          "name": "MockMvcContextUnificationIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/MockMvcContextUnificationIT.java"
+        },
+        {
+          "name": "MockMvcFilterAppliedIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/MockMvcFilterAppliedIT.java"
+        },
+        {
+          "name": "MockMvcFilterNotAppliedIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/testing/MockMvcFilterNotAppliedIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "distinct key 数のラチェットと CI 構成値の固定",
+      "tests": [
+        {
+          "name": "CiTestRuntimeConfigPinTest",
+          "evidence": "backend/build-logic/src/test/kotlin/CiTestRuntimeConfigPinTest.kt"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "migration 込み PR CI で全 shard の Run tests が 78 分以下を2回連続で達成する（run1 最大 75.0 分、run2 最大 64.9 分）",
+      "tests": [
+        {
+          "name": "Backend CI run 44719267579",
+          "evidence": "https://github.com/kenta-0420/mannschaft/actions/runs/44719267579"
+        },
+        {
+          "name": "Backend CI run 44688121241",
+          "evidence": "https://github.com/kenta-0420/mannschaft/actions/runs/44688121241"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44719267579
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4678"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI 基盤とテスト構成の変更で画面導線なし"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI 基盤とテスト構成の変更で画面導線なし"
+    }
+  },
+  "regressions": []
+}
