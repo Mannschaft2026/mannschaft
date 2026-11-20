@@ -30,6 +30,9 @@
 # 権限: read のみ。pull_request_target は使わない（fork からの PR でも secrets 無しで完走する）。
 # concurrency: 検査は打ち切らない（cancel-in-progress: false）。過去に「cancel-in-progress で
 # 常に打ち切られ、緑の実績がゼロなのに誰も気づかない」事故があるため（secret-scan.yml と同方針）。
+# 仕様差: 秘密情報スキャンは、後続の push（force push を含む）で範囲から外れうるコミットも走査し切るため、
+# 従来から走りかけを捨てない方針。統合ジョブはこれに合わせた。旧 Harness / Worktree guard / lockfile 検証は
+# cancel-in-progress: true だったので、連続 push 時は古い run も最後まで走る点が変わる（1 run は数分）。
 # =============================================================================
 
 name: PR 軽量検査
@@ -202,7 +205,9 @@ jobs:
         run: |
           set -euo pipefail
           base="$(git merge-base "origin/${BASE_REF}" HEAD)"
-          if git diff --name-only "$base" HEAD -- frontend/package-lock.json frontend/package.json | grep -q .; then
+          # git diff の失敗（不正 revision 等）を「変更なし」に化けさせないため、単独代入で受けて set -e で落とす
+          changed_files="$(git diff --name-only "$base" HEAD -- frontend/package-lock.json frontend/package.json)"
+          if [ -n "$changed_files" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "lockfile / package.json に変更あり → 検証する"
           else

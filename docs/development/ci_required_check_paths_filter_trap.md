@@ -131,6 +131,7 @@ CI の遅さの主因は、実行数秒のジョブが GitHub ランナーの順
 - 旧3 workflow は PR 以外の trigger が無かったため削除した。`secret-scan.yml` は main push 差分と週次全履歴のために残している（PR 起動のみ外した）。
 - 起動範囲は step の `if`（`github.base_ref == 'main'`・lockfile 変更判定 step の出力）で従来と同じに保つ。対象外は step を skip しジョブは成功する。
 - 各 step は `!cancelled()` 付きで、1つ失敗しても残りを走らせ、最後にジョブが赤になる。lockfile の変更判定 step が失敗した場合も、判定 step 自身が赤のままジョブを失敗させる。
+- concurrency は `cancel-in-progress: false` のまま。秘密情報スキャンは、後続の push（force push を含む）で範囲から外れうるコミットも走査し切るため、従来から走りかけを捨てない方針で、統合ジョブはこれに合わせた。旧 Harness / Worktree guard / lockfile 検証は `cancel-in-progress: true` だったので、連続 push 時は古い run も最後まで走る点が変わる（1 run は数分）。
 - 旧4 workflow のチェック名（`Harness CI` 等）は main の必須チェックではなかった。新ジョブ名は `PR 軽量検査`。
 - 新しい軽量検査は、ここへ step として足す（別 workflow・別ジョブを増やさない）。重い検査（backend-ci・frontend-ci 等）は従来どおり別 workflow。
 - `scripts/test-secret-scan.py` は、PR 差分は `pr-light-checks.yml`、main push 差分と全履歴は `secret-scan.yml` を読んで3経路を検証する。
