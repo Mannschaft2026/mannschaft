@@ -829,10 +829,15 @@ class AuthOAuthServiceTest {
             UserEntity user = createActiveUser();
             org.springframework.test.util.ReflectionTestUtils.setField(user, "id", TEST_USER_ID);
             lenient().when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
+            List<String> resolvedRoles = List.of("ROLE_UNIQUE_LINK");
+            given(roleClaimResolver.resolveRoles(TEST_USER_ID)).willReturn(resolvedRoles);
 
             ApiResponse<?> res = linkageConfirm().confirmOAuthLinkage("link-raw-2", TEST_IP, TEST_USER_AGENT);
 
             assertThat(res.getData()).isInstanceOf(TokenResponse.class);
+            // TX の外で対象ユーザー ID から解決した roles が、そのままトークン発行へ渡る
+            verify(roleClaimResolver).resolveRoles(TEST_USER_ID);
+            verify(authTokenService).issueAccessToken(eq(TEST_USER_ID), same(resolvedRoles), anyBoolean());
             List<LoginSuccessEvent> events = publishedLoginSuccess();
             assertThat(events).as("AC-14 LOGIN_SUCCESS を 1 件出す").hasSize(1);
             assertThat(events.get(0).getIpAddress()).isEqualTo(TEST_IP);

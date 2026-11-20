@@ -836,12 +836,16 @@ class Auth2faServiceTest {
                     new MfaSessionService.MfaSession(TEST_SESSION_HASH, TEST_USER_ID, loginMethod);
             UserEntity user = createActiveUser();
             stubSuccessfulBackupCode(session, user);
+            List<String> resolvedRoles = List.of("ROLE_UNIQUE_" + loginMethod);
+            given(roleClaimResolver.resolveRoles(TEST_USER_ID)).willReturn(resolvedRoles);
 
             ApiResponse<com.mannschaft.app.auth.dto.MfaLoginTokenResponse> res = auth2faService.validateMfaLogin(
                     TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA);
 
+            // roles は対象ユーザー ID で解決され、その戻り値がそのまま completeMfaLogin へ渡る（越境は呼び出し元側に閉じる）
+            verify(roleClaimResolver).resolveRoles(TEST_USER_ID);
             verify(authService).completeMfaLogin(same(user), eq(TEST_IP), eq(TEST_UA), eq(loginMethod),
-                    eq(MfaVerificationMethod.BACKUP_CODE), any());
+                    eq(MfaVerificationMethod.BACKUP_CODE), same(resolvedRoles));
             assertThat(res.getData().getAccessToken()).as("委譲先のトークンを返す").isEqualTo("delegated-at");
             assertThat(res.getData().getMethod()).isEqualTo(MfaVerificationMethod.BACKUP_CODE);
             assertThat(res.getData().getBackupCodesRemaining()).isEqualTo(1);
