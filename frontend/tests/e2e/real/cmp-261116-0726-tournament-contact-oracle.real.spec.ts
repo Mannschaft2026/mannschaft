@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } fr
 import path from 'node:path'
 import { test, expect, type Page, type Browser } from '@playwright/test'
 import {
-  API, FE, createActor, createOrg, createTeam, joinAsMember, must, openAs, gotoAndHydrate, sql, RUN, readAssets,
+  API, FE, createActor, createOrg, createTeam, joinAsMember, must, openAs, gotoAndHydrate, sql, RUN,
   type Actor, type ApiBody, type Scope,
 } from './helpers/n1p1-world'
-import { moveNewAssetsToOwnLedger, WORLD_FILE } from './helpers/cmp0726-global-teardown'
+import { OWN_LEDGER, WORLD_FILE } from './helpers/cmp0726-global-teardown'
 
 /**
  * 戦役 CMP-261116-0726「大会連絡スペースの存在オラクル是正」（PR #4643）の回帰用 実機E2E。
@@ -102,12 +102,11 @@ async function shot(page: Page, name: string) {
 const commUrl = (slug: string, tId: number) => `/organizations/${slug}/tournaments/${tId}/communication`
 
 // 失敗でワーカーが再起動しても世界を作り直さない（世界ファイルがあれば必ず再利用。新規に作り直すときはファイルを消して実行する）
-// 前提作成の途中で失敗しても、作った組織・チームの記録は専用台帳へ移す（n1p1 の台帳に残さない）
+// 組織・チームは作った時点から専用台帳（OWN_LEDGER）へ記録する。n1p1 の台帳には触れない。
 test.beforeAll(async () => {
   test.setTimeout(600_000)
   if (existsSync(WORLD_FILE)) { W = JSON.parse(readFileSync(WORLD_FILE, 'utf8')); return }
-  const ledgerBefore = readAssets()
-  try { await buildWorld() } finally { moveNewAssetsToOwnLedger(ledgerBefore) }
+  await buildWorld()
 })
 
 async function buildWorld() {
@@ -118,12 +117,12 @@ async function buildWorld() {
   const wAdmin = await createActor('wa')
   const outsider = await createActor('out')
   const foreignAdmin = await createActor('fa')
-  const orgO = await createOrg(orgAdmin, `0726主催${RUN}`)
-  const orgF = await createOrg(foreignAdmin, `0726他組織${RUN}`)
+  const orgO = await createOrg(orgAdmin, `0726主催${RUN}`, 'PUBLIC', OWN_LEDGER)
+  const orgF = await createOrg(foreignAdmin, `0726他組織${RUN}`, 'PUBLIC', OWN_LEDGER)
   await joinAsMember('organizations', orgAdmin, orgO.slug, orgMember)
-  const teamP = await createTeam(pAdmin, `0726参加P${RUN}`)
+  const teamP = await createTeam(pAdmin, `0726参加P${RUN}`, 'PUBLIC', OWN_LEDGER)
   await joinAsMember('teams', pAdmin, teamP.slug, pMember)
-  const teamW = await createTeam(wAdmin, `0726脱退W${RUN}`)
+  const teamW = await createTeam(wAdmin, `0726脱退W${RUN}`, 'PUBLIC', OWN_LEDGER)
   // チームの組織加盟: 組織 ADMIN が招待 → チーム代表が承諾（公開 API）
   for (const [t, teamAdmin] of [[teamP, pAdmin], [teamW, wAdmin]] as const) {
     const invite = await must(orgAdmin, 'POST', `/api/v1/organizations/${orgO.slug}/team-invites`, { teamSlug: t.slug })
