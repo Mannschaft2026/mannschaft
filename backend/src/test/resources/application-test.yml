@@ -11,6 +11,10 @@ spring:
         # totalCount()=0 で「上限以下」と判定され、N+1 を素通しする偽 green になる（Issue #2782）。
         session_factory:
           statement_inspector: com.mannschaft.app.common.visibility.perf.SqlIntentCounter
+        # CMP-261116-0722 PR-2: ddl-auto: create はエンティティから FULLTEXT INDEX を作れないため、本番 migration と
+        # 同じ FULLTEXT INDEX を create 直後に補う（グローバル検索の MATCH ... AGAINST がテスト実行順に依存して落ちないように）。
+        hbm2ddl:
+          import_files: /test-schema-fulltext-indexes.sql
         jdbc:
           # Issue #2486 で共有 application.yml にも同じ UTC 指定が入ったため、この行は現在は冗長。
           # ただし本ファイルは「テストの格納基準は UTC である」という前提を明示する場所として意味があり、

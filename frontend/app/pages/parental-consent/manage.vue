@@ -35,7 +35,7 @@ async function handleRemoveParent(linkId: string) {
     if (code === 'AUTH_064') {
       notification.error(t('parental_consent.error_auth_064'))
     } else {
-      notification.error(t('common.error.unknown'))
+      notification.error(t('error.unknown'))
     }
   }
 }
@@ -50,7 +50,7 @@ async function handleRemoveChild(linkId: string) {
     if (code === 'AUTH_065') {
       notification.error(t('parental_consent.error_auth_065'))
     } else {
-      notification.error(t('common.error.unknown'))
+      notification.error(t('error.unknown'))
     }
   }
 }

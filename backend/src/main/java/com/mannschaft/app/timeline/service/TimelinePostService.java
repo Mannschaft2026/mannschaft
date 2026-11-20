@@ -345,6 +345,57 @@ public class TimelinePostService {
     }
 
     /**
+     * 指定 ID 群のうち「操作者自身の個人（PERSONAL）投稿」だけを論理削除する。
+     *
+     * <p>行動メモ publishDaily の旧個人投稿差し替え用。投稿の取得・所有者／スコープ確認・論理削除を
+     * timeline ドメイン内に閉じる。チーム投稿・他人の投稿・存在しない ID は無視する。
+     * 取得は {@code findAllById} 1 回のみ（ループ内で Repository を呼ばない）。managed エンティティの
+     * 変更はコミット時の dirty checking で反映するため save は呼ばない。</p>
+     *
+     * <p>正規の {@code deletePost} の副作用（返信数・ストレージ枠など）は通らない。</p>
+     *
+     * @param postIds 削除候補の投稿 ID 群（空・null なら何もしない）
+     * @param userId  操作者（scopeId・投稿者のいずれも一致するものだけ対象）
+     */
+    @Transactional
+    public void softDeleteOwnPersonalPosts(java.util.Collection<Long> postIds, Long userId) {
+        if (postIds == null || postIds.isEmpty() || userId == null) {
+            return;
+        }
+        for (TimelinePostEntity post : postRepository.findAllById(postIds)) {
+            if (post.getScopeType() == PostScopeType.PERSONAL
+                    && java.util.Objects.equals(post.getScopeId(), userId)
+                    && java.util.Objects.equals(post.getUserId(), userId)) {
+                post.softDelete();
+            }
+        }
+    }
+
+    /**
+     * 行動メモ（actionmemo）由来の投稿を、指定スコープへ本文のみで保存し投稿 ID を返す。
+     *
+     * <p>{@code createPost} と異なり、通知・ストレージ枠計上・メンション処理・イベント発行などの副作用は
+     * 一切行わない。行動メモ公開サービスが従来 {@code TimelinePostRepository#save} で行っていた
+     * 「スコープ・投稿者・本文だけの INSERT」をそのまま timeline ドメイン内へ移したもの。</p>
+     *
+     * @param scopeType 投稿先スコープ（PERSONAL / TEAM）
+     * @param scopeId   スコープ ID（PERSONAL なら userId、TEAM なら teamId）
+     * @param userId    投稿者 ID
+     * @param content   本文
+     * @return 保存した投稿の ID
+     */
+    @Transactional
+    public Long saveActionMemoPost(PostScopeType scopeType, Long scopeId, Long userId, String content) {
+        TimelinePostEntity post = TimelinePostEntity.builder()
+                .scopeType(scopeType)
+                .scopeId(scopeId)
+                .userId(userId)
+                .content(content)
+                .build();
+        return postRepository.save(post).getId();
+    }
+
+    /**
      * 指定 ID 群のうち生存している（timeline {@code deleted_at} でない）当該村の VILLAGE 投稿 ID を返す
      * （F17.2 Wave2 ③・実況一覧/村史編纂の削除済み除外・AC-17c）。
      */
@@ -538,8 +589,8 @@ public class TimelinePostService {
         TimelinePostEntity repostOriginal = null;
         if (req.getRepostOfId() != null) {
             repostOriginal = postRepository.findById(req.getRepostOfId()).orElse(null);
-            if (enforceScopeAuthorization && repostOriginal != null
-                    && !postVisibilityGuard.isVisible(repostOriginal, userId)) {
+            if (enforceScopeAuthorization
+                    && (repostOriginal == null || !postVisibilityGuard.isVisible(repostOriginal, userId))) {
                 throw new BusinessException(TimelineErrorCode.POST_NOT_FOUND);
             }
         }
@@ -919,7 +970,7 @@ public class TimelinePostService {
      * {@link TimelinePostVisibilityAccessGuard#isVisible} を用い、到達できない場合は読取経路と
      * 同一の {@link TimelineErrorCode#POST_NOT_FOUND} に倒して対象 ID の実在を秘匿する。</p>
      *
-     * <p>VILLAGE スコープだけは本メソッドで判定しない。村への投稿権限は下流の
+     * <p>公開状態は VILLAGE でも必ず検証する。VILLAGE のスコープ認可だけは下流の
      * {@link PostingIdentityService#validatePostingIdentity} が
      * <b>投稿主体（USER / TEAM / ORGANIZATION）単位</b>で検証しており、ここで呼び出し元
      * {@code userId} 単位の村メンバー判定を重ねると、チーム／組織としての正当な代理投稿の
@@ -930,6 +981,9 @@ public class TimelinePostService {
      * @param userId     呼び出し元ユーザー ID
      */
     private void requireReplyableParent(TimelinePostEntity parentPost, Long userId) {
+        if (!TimelinePostVisibilityAccessGuard.isStatusVisible(parentPost, userId)) {
+            throw new BusinessException(TimelineErrorCode.POST_NOT_FOUND);
+        }
         if (parentPost.getScopeType() == PostScopeType.VILLAGE) {
             return;
         }

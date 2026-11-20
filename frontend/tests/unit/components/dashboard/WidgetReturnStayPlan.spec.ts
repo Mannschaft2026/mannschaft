@@ -185,7 +185,7 @@ describe('WidgetReturnStayPlan.vue', () => {
     await flushPromises()
     expect(document.body.textContent).toContain('Could not load plans')
 
-    const retryButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('common.retry'))
+    const retryButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Retry')
     expect(retryButton).toBeTruthy()
     retryButton!.click()
     await flushPromises()

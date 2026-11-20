@@ -14,7 +14,6 @@ import com.mannschaft.app.bulletin.repository.BulletinThreadRepository;
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.service.TournamentContactAccessService;
 import com.mannschaft.app.village.entity.enums.VillageSubjectType;
@@ -241,10 +240,9 @@ public class BulletinReplyService {
     public Page<ReplyResponse> listRepliesGlobal(Long threadId, Long userId, Pageable pageable) {
         BulletinThreadEntity thread = findThreadByIdOrThrow(threadId);
         if (isTournamentScope(thread.getScopeType())) {
-            // F08.7.1: 大会/ディビジョン連絡は閲覧認可（canView）に委譲する。
+            // F08.7.1: 大会/ディビジョン連絡の閲覧は Controller が tx 外で認可済み
+            // （BulletinTournamentScopeAccessGuard#checkThreadView・存在秘匿つき・D-3T。CMP-261116-0726）。
             // checkMembership は membership.domain.ScopeType に TOURNAMENT が無く 500 になるため通さない。
-            tournamentContactAccessService.checkView(
-                    toContactScope(thread.getScopeType()), thread.getScopeId(), ContactSpaceKind.BULLETIN, userId);
             Page<BulletinReplyEntity> tournamentPage =
                     replyRepository.findByThreadIdAndParentIdIsNullOrderByCreatedAtAsc(threadId, pageable);
             return tournamentPage.map(this::toReplyWithChildren);

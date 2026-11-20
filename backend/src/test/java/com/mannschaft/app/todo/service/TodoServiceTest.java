@@ -1216,4 +1216,15 @@ class TodoServiceTest {
                             .isEqualTo("TODO_010"));
         }
     }
+
+    @Test
+    @DisplayName("findActiveTitle: 未削除 TODO のタイトルを返し、無ければ empty")
+    void findActiveTitle_returnsTitleOrEmpty() {
+        TodoEntity todo = TodoEntity.builder().title("重要タスク").build();
+        given(todoRepository.findByIdAndDeletedAtIsNull(42L)).willReturn(java.util.Optional.of(todo));
+        given(todoRepository.findByIdAndDeletedAtIsNull(43L)).willReturn(java.util.Optional.empty());
+
+        assertThat(todoService.findActiveTitle(42L)).contains("重要タスク");
+        assertThat(todoService.findActiveTitle(43L)).isEmpty();
+    }
 }

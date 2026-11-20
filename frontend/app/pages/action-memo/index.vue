@@ -243,7 +243,7 @@ function goTags() {
       <ActionMemoInput />
 
       <!-- Phase 3: カテゴリ選択（常時表示） -->
-      <div class="flex items-center gap-2 px-1">
+      <div class="flex flex-wrap items-center gap-2 px-1">
         <span class="text-xs text-surface-500 dark:text-surface-400">
           {{ t('action_memo.phase3.category.label') }}:
         </span>

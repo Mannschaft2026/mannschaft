@@ -434,6 +434,7 @@
     "unauthorized": "Please log in",
     "section_load_failed": "Failed to load this section. Please reload.",
     "unknown": "An error occurred",
+    "notFound": "Not found",
     "TEAM_001": "Team not found.",
     "TEAM_006": "This team cannot be restored because it has not been deleted.",
     "COMMON_001": "There are errors in the input",
@@ -1853,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "Back",
     "cancel": "Cancel",
     "search": "Search",
     "edit": "Edit",
@@ -3348,6 +3350,30 @@
       "created_at": "Issued at",
       "expires_at": "Expires at",
       "used_count": "Times used"
+    }
+  },
+  "globalSearch": {
+    "title": "Search",
+    "placeholder": "Search by keyword (2+ characters)",
+    "submit": "Search",
+    "failed": "Search failed",
+    "tooShort": "Please enter at least 2 characters",
+    "empty": "No results found",
+    "didYouMean": "Did you mean:",
+    "broaderQuery": "Broader search:",
+    "timedOut": "Search timed out for some types: {types}",
+    "noLink": "No link available",
+    "types": {
+      "ALL": "All",
+      "POST": "Posts",
+      "MESSAGE": "Messages",
+      "THREAD": "Threads",
+      "ARTICLE": "Articles",
+      "FILE": "Files",
+      "USER": "Users",
+      "TEAM": "Teams",
+      "ORGANIZATION": "Organizations",
+      "ACTIVITY": "Activity records"
     }
   }
 }

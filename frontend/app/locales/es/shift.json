@@ -127,6 +127,19 @@
       "formNote": "Nota",
       "formNotePlaceholder": "Opcional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "No se puede publicar: faltan tarifas por hora",
+        "description": "Hay personas asignadas sin una tarifa por hora válida en días laborables vinculados al presupuesto. Configure sus tarifas y vuelva a publicar.",
+        "unknownUser": "ID de usuario {id}",
+        "goSettings": "Abrir configuración de tarifa por hora"
+      },
+      "conflict": {
+        "title": "El turno ha cambiado",
+        "description": "El turno cambió mientras se comprobaba la publicación. Recargue la página, revise el contenido y publique de nuevo."
+      },
+      "close": "Cerrar"
+    },
     "detail": {
       "tabOverview": "Resumen",
       "tabEdit": "Editar",
@@ -165,10 +178,23 @@
       "notePlaceholder": "Opcional",
       "dayOfWeek": "Día de la semana",
       "dayOfWeekHint": "Las franjas se crean solo en los días seleccionados",
+      "moveDateTitle": "Confirmar cambio de fecha",
+      "moveDateMessage": "La fecha cambiará de {oldDate} a {newDate}. Si hay solicitudes ya enviadas para este turno, también se moverán a la nueva fecha.",
+      "moveDateAccept": "Mover turno y preferencias",
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",
       "assignmentMasked": "En ajuste",
-      "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno"
+      "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
+      "deleteTitle": "Eliminar turno",
+      "deleteConfirmPlain": "¿Eliminar este turno?",
+
+      "deleteConfirmBoth": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno y sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmRequestsOnly": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno. No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmAssignmentsOnly": "¿Eliminar este turno? También se eliminarán sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmUnknown": "¿Eliminar este turno? Si hay solicitudes enviadas para este turno o asignaciones, también se eliminarán. No se puede deshacer con las operaciones habituales."
     },
     "requests": {
       "submissionRate": "Tasa de envío",

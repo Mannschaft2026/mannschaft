@@ -1,0 +1,86 @@
+{
+  "effort": {
+    "title": "頑張り記録",
+    "subtitle": "勉強・運動・体重などを自分だけの記録として残し、振り返ります。",
+    "record": "記録",
+    "review": "振り返り",
+    "template": "種類",
+    "recordedOn": "記録日",
+    "privateNote": "私的メモ",
+    "privateNoteHint": "私的メモは自分だけが見られます。",
+    "privateSave": "自分だけに保存",
+    "newTitle": "新しい記録",
+    "editTitle": "記録を編集",
+    "newRecord": "新規記録に切り替え",
+    "edit": "編集",
+    "saved": "保存しました",
+    "savedReconciled": "保存済みです（再送の結果を確認しました）",
+    "deleted": "削除しました",
+    "status": {
+      "private": "個人記録として保存済み"
+    },
+    "error": {
+      "required": "{field}は必須です",
+      "recordedOnRequired": "記録日を入力してください",
+      "conflict": "別の編集が先に保存されていました。最新の保存内容を表示しています。",
+      "recordedOnInvalid": "記録日は今日以前の実在する日付で入力してください",
+      "noContent": "少なくとも1項目を入力してください"
+    },
+    "delete": {
+      "header": "記録の削除",
+      "message": "この記録を削除します。よろしいですか？",
+      "reject": "キャンセル",
+      "accept": "削除"
+    },
+    "list": {
+      "title": "記録の一覧",
+      "empty": "まだ記録がありません",
+      "more": "さらに表示"
+    },
+    "period": {
+      "week": "週",
+      "month": "月",
+      "year": "年",
+      "custom": "任意",
+      "prev": "前の期間",
+      "next": "次の期間",
+      "from": "開始日",
+      "to": "終了日",
+      "invalid": "期間は開始日から終了日まで、366日以内で指定してください。",
+      "invalidMissing": "開始日と終了日の両方を入力してください。",
+      "invalidOrder": "終了日は開始日以降の日付を指定してください。"
+    },
+    "chart": {
+      "kind": "グラフ",
+      "bar": "棒グラフ",
+      "line": "折れ線グラフ",
+      "pie": "円グラフ",
+      "noData": "この期間の記録はありません",
+      "zeroTotal": "合計が0のため円グラフは表示しません",
+      "unspecifiedSubject": "科目未指定",
+      "notRecorded": "未記録",
+      "category": "区分",
+      "value": "値",
+      "share": "割合",
+      "total": "合計",
+      "period": "期間"
+    },
+    "preset": {
+      "study": "勉強",
+      "exercise": "運動",
+      "weight": "体重"
+    },
+    "field": {
+      "subject": "科目",
+      "duration": "時間",
+      "weight": "体重",
+      "intensity": "強度",
+      "menu": "メニュー"
+    },
+    "unit": {
+      "MINUTE": "分",
+      "KILOGRAM": "kg",
+      "RPE": "RPE"
+    }
+  }
+}

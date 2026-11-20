@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -561,6 +561,39 @@ test('[6] Linux: 実プロセスの /proc/<pid>/cwd が worktree 内なら拒否
     const r = await exec(wt, ['shrink'], { listProcesses: defaultListProcesses });
     assert.notEqual(r.code, 0, r.all);
     assert.match(r.all, new RegExp(`pid ${child.pid}`));
+  } finally {
+    child.kill();
+  }
+});
+
+test('[#4588] Windows のプロセス一覧コマンドは PowerShell 出力を UTF-8 に固定し、ASCII のみで書かれている', () => {
+  const cmd = assets.WIN_LIST_PROCESSES_COMMAND;
+  const encodingIdx = cmd.indexOf('[Console]::OutputEncoding');
+  assert.ok(encodingIdx >= 0, 'OutputEncoding の指定が無い');
+  assert.match(cmd, /UTF8Encoding \$false/);
+  assert.ok(encodingIdx < cmd.indexOf('Get-CimInstance'), 'エンコーディング指定は出力前に置く');
+  assert.match(cmd, /^[\x20-\x7e]+$/, 'ASCII のみ');
+  const stopIdx = cmd.indexOf("$ErrorActionPreference = 'Stop'");
+  assert.ok(stopIdx >= 0 && stopIdx < encodingIdx, '設定失敗を終端エラーにする指定が OutputEncoding より前に無い');
+  assert.ok(cmd.indexOf("$ErrorActionPreference = 'Continue'") > encodingIdx, 'Stop は OutputEncoding 設定だけに限定する');
+});
+
+test('[#4588] Windows 実機: OutputEncoding の設定失敗は非0終了になる（成功扱いで返らない）', { skip: process.platform !== 'win32' }, () => {
+  // 設定失敗を模擬: 代入先を失敗させる同じ構造（Stop の下で例外を起こす）
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = $null; $ErrorActionPreference = 'Continue'; Write-Output ok"], { encoding: 'utf8', windowsHide: true });
+  assert.notEqual(r.status, 0);
+  assert.ok(!r.stdout.includes('ok'));
+});
+
+test('[#4588] Windows 実機: 日本語を含むコマンドラインのプロセスが文字化けせず一覧に出る', { skip: process.platform !== 'win32' }, async () => {
+  const { spawn } = await import('node:child_process');
+  const marker = '日本語テスト4588';
+  const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)', marker], { stdio: 'ignore' });
+  try {
+    await new Promise((r) => setTimeout(r, 1000));
+    const found = defaultListProcesses().find((p) => p.pid === child.pid);
+    assert.ok(found, 'プロセスが一覧に無い');
+    assert.ok(found.cmd.includes(marker), `コマンドラインが化けている: ${found.cmd}`);
   } finally {
     child.kill();
   }

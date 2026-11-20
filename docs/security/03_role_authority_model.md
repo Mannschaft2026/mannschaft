@@ -551,6 +551,7 @@ tournament ドメインに `TournamentContactAccessService` を新設し、read�
 | 公開トグル切替 | 主催組織 ADMIN / SYSTEM_ADMIN のみ | チーム代表には開放しない |
 
 - 存在しない/論理削除済みスペースは一律 **404**（IDOR 対策・存在を漏らさない）。
+- **閲覧権のない者への拒否も不在と同一の 404**（スコープ系 `TOUR_029`、子リソース ID 指定は子の不在コード）。閲覧できるが投稿・管理権のない者だけが 403（投稿 `TOUR_031`、公開トグル切替 `TOUR_032`）。公開トグルでは、そのスコープのいずれかのスペースを閲覧できる者を「存在を知り得る者」とし、知り得ない者は 404 `TOUR_029`。大会とディビジョンの帰属不一致も 404。旧 `TOUR_030`（閲覧 403）は欠番（CMP-261116-0726）。詳細は [01_authorization_baseline.md §3.3.2](./01_authorization_baseline.md)。
 - クロスドメインの所属判定は `TeamMembershipRepository` / `AccessControlService` を **ID 参照の読み取り**でのみ呼ぶ（クロスドメイン FK なし＝アーキ原則 1）。
 
 ### 15.2 PUBLIC 公開時の露出方針（成績 / chat）
