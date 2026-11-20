@@ -4,7 +4,6 @@ import com.mannschaft.app.auth.AuthErrorCode;
 import com.mannschaft.app.auth.MfaEmailOtpPurpose;
 import com.mannschaft.app.auth.TwoFactorMethod;
 import com.mannschaft.app.auth.dto.MfaRequiredResponse;
-import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.event.AccountLockedEvent;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.DomainEventPublisher;
@@ -127,21 +126,23 @@ public class MfaSessionService {
      * セッションキー（値は userId のまま。旧プロセスとの互換のため形式を変えない）と入口方式キーを
      * 同 TTL で保存し、主手段・提示要素付きの {@link MfaRequiredResponse} を返す。</p>
      *
-     * @param user          一次認証を通過したユーザー
+     * @param userId        一次認証を通過したユーザーの ID（Entity を公開 API に出さない）
+     * @param email         ユーザーのメールアドレス（メール OTP を提示できるかの判定用）
      * @param primaryMethod 2FA 主手段
      * @param loginMethod   入口方式（PASSWORD / OAUTH_GOOGLE / OAUTH_LINE / OAUTH_APPLE）
      * @return MFA 要求レスポンス
      */
-    public MfaRequiredResponse issueChallenge(UserEntity user, TwoFactorMethod primaryMethod, String loginMethod) {
+    public MfaRequiredResponse issueChallenge(Long userId, String email, TwoFactorMethod primaryMethod,
+                                             String loginMethod) {
         String mfaSessionToken = UUID.randomUUID().toString();
         String sessionHash = authTokenService.hashToken(mfaSessionToken);
         long ttlSeconds = SESSION_TTL.getSeconds();
-        redisTemplate.opsForValue().set(sessionKey(sessionHash), String.valueOf(user.getId()),
+        redisTemplate.opsForValue().set(sessionKey(sessionHash), String.valueOf(userId),
                 ttlSeconds, TimeUnit.SECONDS);
         redisTemplate.opsForValue().set(sessionMethodKey(sessionHash), loginMethod, ttlSeconds, TimeUnit.SECONDS);
         // CMP-261012-0910 AC-27: 主手段と、このログインで提示できる要素を返す
         return new MfaRequiredResponse(mfaSessionToken, primaryMethod,
-                MfaMethodPolicy.availableMethods(primaryMethod, MfaMethodPolicy.isEmailDeliverable(user.getEmail())));
+                MfaMethodPolicy.availableMethods(primaryMethod, MfaMethodPolicy.isEmailDeliverable(email)));
     }
 
     /** アカウントロックキー。 */

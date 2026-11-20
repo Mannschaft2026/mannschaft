@@ -265,7 +265,8 @@ public class AuthOAuthService {
         Optional<TwoFactorAuthEntity> twoFactor = findEnabledTwoFactor(linkToken.getUserId());
         if (twoFactor.isPresent()) {
             UserEntity user = findUserOrThrow(linkToken.getUserId());
-            return ApiResponse.of(mfaSessionService.issueChallenge(user, primaryMethodOf(twoFactor.get()), loginMethod));
+            return ApiResponse.of(mfaSessionService.issueChallenge(
+                    user.getId(), user.getEmail(), primaryMethodOf(twoFactor.get()), loginMethod));
         }
 
         // 5. 2FA 無効 → Access Token + Refresh Token発行 + LOGIN_SUCCESS（要求元 ip/UA 付き）
@@ -351,7 +352,8 @@ public class AuthOAuthService {
      */
     private Optional<MfaRequiredResponse> challengeIfTwoFactorEnabled(UserEntity user, String loginMethod) {
         return findEnabledTwoFactor(user.getId())
-                .map(tfa -> mfaSessionService.issueChallenge(user, primaryMethodOf(tfa), loginMethod));
+                .map(tfa -> mfaSessionService.issueChallenge(
+                        user.getId(), user.getEmail(), primaryMethodOf(tfa), loginMethod));
     }
 
     /**

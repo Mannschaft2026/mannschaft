@@ -240,7 +240,7 @@ public class AuthService {
             // 2FA有効: MFAセッションの発行は OAuth 経路と共通の MfaSessionService に集約（CMP-261012-0911）
             TwoFactorMethod primaryMethod = mfaOpt.get().getMethod() != null
                     ? mfaOpt.get().getMethod() : TwoFactorMethod.TOTP;
-            return ApiResponse.of(mfaSessionService.issueChallenge(user, primaryMethod,
+            return ApiResponse.of(mfaSessionService.issueChallenge(user.getId(), user.getEmail(), primaryMethod,
                     MfaSessionService.LOGIN_METHOD_PASSWORD));
         }
 

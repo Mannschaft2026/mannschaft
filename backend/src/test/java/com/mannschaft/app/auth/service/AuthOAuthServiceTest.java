@@ -719,14 +719,14 @@ class AuthOAuthServiceTest {
             UserEntity user = linkedUser(provider);
             twoFactorEnabled(com.mannschaft.app.auth.TwoFactorMethod.TOTP);
             com.mannschaft.app.auth.dto.MfaRequiredResponse expected = challenge(com.mannschaft.app.auth.TwoFactorMethod.TOTP);
-            lenient().when(mfaSessionService.issueChallenge(same(user), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
+            lenient().when(mfaSessionService.issueChallenge(eq(TEST_USER_ID), eq(TEST_EMAIL), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
                     eq("OAUTH_" + provider.name()))).thenReturn(expected);
 
             ApiResponse<?> res = authOAuthService.loginWithOAuth(
                     provider.name().toLowerCase(), "code", TEST_IP, TEST_USER_AGENT);
 
             assertThat(res.getData()).as("AC-1 MFA 要求を返す").isSameAs(expected);
-            verify(mfaSessionService).issueChallenge(same(user), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
+            verify(mfaSessionService).issueChallenge(eq(TEST_USER_ID), eq(TEST_EMAIL), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
                     eq("OAUTH_" + provider.name()));
             verify(authTokenService, never()).issueAccessToken(any(), any(), anyBoolean());
             verify(refreshTokenRepository, never()).save(any());
@@ -740,7 +740,7 @@ class AuthOAuthServiceTest {
             UserEntity user = linkedUser(OAuthAccountEntity.OAuthProvider.GOOGLE);
             twoFactorEnabled(com.mannschaft.app.auth.TwoFactorMethod.EMAIL);
             com.mannschaft.app.auth.dto.MfaRequiredResponse expected = challenge(com.mannschaft.app.auth.TwoFactorMethod.EMAIL);
-            lenient().when(mfaSessionService.issueChallenge(same(user), eq(com.mannschaft.app.auth.TwoFactorMethod.EMAIL),
+            lenient().when(mfaSessionService.issueChallenge(eq(TEST_USER_ID), eq(TEST_EMAIL), eq(com.mannschaft.app.auth.TwoFactorMethod.EMAIL),
                     eq("OAUTH_GOOGLE"))).thenReturn(expected);
 
             ApiResponse<?> res = authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
@@ -760,7 +760,7 @@ class AuthOAuthServiceTest {
             ApiResponse<?> res = authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
 
             assertThat(res.getData()).isInstanceOf(TokenResponse.class);
-            verify(mfaSessionService, never()).issueChallenge(any(), any(), any());
+            verify(mfaSessionService, never()).issueChallenge(any(), any(), any(), any());
             assertThat(publishedLoginSuccess()).singleElement()
                     .satisfies(e -> assertThat(e.getMethod()).isEqualTo("OAUTH_GOOGLE"));
         }
@@ -777,7 +777,7 @@ class AuthOAuthServiceTest {
             ApiResponse<?> res = authOAuthService.loginWithOAuth("google", "code", TEST_IP, TEST_USER_AGENT);
 
             assertThat(res.getData()).isInstanceOf(com.mannschaft.app.auth.dto.OAuthConflictResponse.class);
-            verify(mfaSessionService, never()).issueChallenge(any(), any(), any());
+            verify(mfaSessionService, never()).issueChallenge(any(), any(), any(), any());
             verify(refreshTokenRepository, never()).save(any());
         }
 
@@ -805,7 +805,7 @@ class AuthOAuthServiceTest {
             lenient().when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
             twoFactorEnabled(com.mannschaft.app.auth.TwoFactorMethod.TOTP);
             com.mannschaft.app.auth.dto.MfaRequiredResponse expected = challenge(com.mannschaft.app.auth.TwoFactorMethod.TOTP);
-            lenient().when(mfaSessionService.issueChallenge(same(user), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
+            lenient().when(mfaSessionService.issueChallenge(eq(TEST_USER_ID), eq(TEST_EMAIL), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
                     eq("OAUTH_GOOGLE"))).thenReturn(expected);
 
             ApiResponse<?> res = authOAuthService.confirmOAuthLinkage("link-raw", TEST_IP, TEST_USER_AGENT);

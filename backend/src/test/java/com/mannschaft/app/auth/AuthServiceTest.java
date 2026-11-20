@@ -281,7 +281,7 @@ class AuthServiceTest {
                     .isEnabled(true)
                     .build();
             given(twoFactorAuthRepository.findByUserId(any())).willReturn(Optional.of(mfa));
-            given(mfaSessionService.issueChallenge(user, TwoFactorMethod.TOTP, "PASSWORD"))
+            given(mfaSessionService.issueChallenge(any(), any(), eq(TwoFactorMethod.TOTP), eq("PASSWORD")))
                     .willReturn(new MfaRequiredResponse("mfa-token", TwoFactorMethod.TOTP,
                             MfaMethodPolicy.availableMethods(TwoFactorMethod.TOTP, true)));
 

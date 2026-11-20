@@ -72,7 +72,7 @@ class MfaSessionServiceTest {
     @Test
     @DisplayName("AC-1/判断①: OAuth 入口のチャレンジはセッションキー=userId・方式キー=OAUTH_GOOGLE を同TTLで保存し、主手段と提示要素を返す")
     void issueChallenge_OAuth入口_セッションと方式キーを保存() {
-        MfaRequiredResponse res = service.issueChallenge(user(), TwoFactorMethod.TOTP, "OAUTH_GOOGLE");
+        MfaRequiredResponse res = service.issueChallenge(USER_ID, EMAIL, TwoFactorMethod.TOTP, "OAUTH_GOOGLE");
 
         assertThat(res).as("AC-1 MfaRequiredResponse が返る").isNotNull();
         assertThat(res.isMfaRequired()).isTrue();
@@ -96,7 +96,7 @@ class MfaSessionServiceTest {
     @Test
     @DisplayName("AC-1: EMAIL 主手段のチャレンジは EMAIL・BACKUP_CODE を提示する")
     void issueChallenge_EMAIL主手段() {
-        MfaRequiredResponse res = service.issueChallenge(user(), TwoFactorMethod.EMAIL, "OAUTH_LINE");
+        MfaRequiredResponse res = service.issueChallenge(USER_ID, EMAIL, TwoFactorMethod.EMAIL, "OAUTH_LINE");
 
         assertThat(res).isNotNull();
         assertThat(res.getPrimaryMethod()).isEqualTo(TwoFactorMethod.EMAIL);
@@ -107,7 +107,7 @@ class MfaSessionServiceTest {
     @Test
     @DisplayName("AC-1/判断①: 発行したチャレンジを resolve すると userId と入口方式が得られる")
     void issueChallenge_resolveで入口方式が得られる() {
-        MfaRequiredResponse res = service.issueChallenge(user(), TwoFactorMethod.TOTP, "OAUTH_APPLE");
+        MfaRequiredResponse res = service.issueChallenge(USER_ID, EMAIL, TwoFactorMethod.TOTP, "OAUTH_APPLE");
         assertThat(res).isNotNull();
 
         MfaSessionService.MfaSession session = service.resolve(res.getMfaSessionToken());
@@ -143,7 +143,7 @@ class MfaSessionServiceTest {
     @Test
     @DisplayName("AC-12: 消費は 1 回だけ成功し、方式キーもセッションと同時に消える")
     void consume_単回消費と方式キー同時削除() {
-        MfaRequiredResponse res = service.issueChallenge(user(), TwoFactorMethod.TOTP, "OAUTH_GOOGLE");
+        MfaRequiredResponse res = service.issueChallenge(USER_ID, EMAIL, TwoFactorMethod.TOTP, "OAUTH_GOOGLE");
         assertThat(res).as("前提: チャレンジ発行").isNotNull();
         MfaSessionService.MfaSession session = service.resolve(res.getMfaSessionToken());
 
