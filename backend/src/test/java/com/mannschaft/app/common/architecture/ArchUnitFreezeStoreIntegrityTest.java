@@ -39,7 +39,7 @@ class ArchUnitFreezeStoreIntegrityTest {
     private static final int EXPECTED_LINES_AUTHZ_WAVE4 = 0;
     private static final int EXPECTED_LINES_CROSS_DOMAIN_ENTITY_D1 = 2146;
     private static final int EXPECTED_LINES_CROSS_DOMAIN_TX_D3 = 1320;
-    private static final int EXPECTED_LINES_CROSS_DOMAIN_TX_D3T = 7333;
+    private static final int EXPECTED_LINES_CROSS_DOMAIN_TX_D3T = 7321;
     private static final int EXPECTED_LINES_UUID_V7_D2B = 569;
     private static final int EXPECTED_LINES_CROSS_DOMAIN_REPO_D5 = 1866;
     private static final int EXPECTED_LINES_SERVICE_API = 600;

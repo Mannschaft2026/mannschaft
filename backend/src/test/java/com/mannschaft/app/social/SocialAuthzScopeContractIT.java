@@ -1,6 +1,8 @@
 package com.mannschaft.app.social;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
+import static com.mannschaft.app.support.JsonLongIdMatchers.longId;
 import com.mannschaft.app.social.entity.FollowEntity;
 import com.mannschaft.app.social.entity.UserSocialProfileEntity;
 import com.mannschaft.app.social.repository.FollowRepository;
@@ -175,7 +177,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of("followedType", "USER", "followedId", privateTargetId))))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.data.followerId").value(userBId.intValue()));
+                    .andExpect(jsonPath("$.data.followerId").value(longId(userBId)));
 
             assertThat(followRepository.existsByFollowerTypeAndFollowerIdAndFollowedTypeAndFollowedId(
                     FollowerType.USER, userBId, FollowerType.USER, privateTargetId)).isTrue();
@@ -251,7 +253,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userBId);
             mockMvc.perform(get("/api/v1/social/follows/following"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", not(hasItem(userAToPublicFollowId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].id", not(hasLongId(userAToPublicFollowId))));
         }
 
         @Test
@@ -260,7 +262,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userAId);
             mockMvc.perform(get("/api/v1/social/follows/following"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", hasItem(userAToPublicFollowId.intValue())));
+                    .andExpect(jsonPath("$.data[*].id", hasLongId(userAToPublicFollowId)));
         }
     }
 
@@ -286,7 +288,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userBId);
             mockMvc.perform(get("/api/v1/social/follows/followers"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", not(hasItem(userAToPublicFollowId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].id", not(hasLongId(userAToPublicFollowId))));
         }
 
         @Test
@@ -295,7 +297,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(publicTargetId);
             mockMvc.perform(get("/api/v1/social/follows/followers"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", hasItem(userAToPublicFollowId.intValue())));
+                    .andExpect(jsonPath("$.data[*].id", hasLongId(userAToPublicFollowId)));
         }
     }
 
@@ -363,7 +365,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of("handle", handle))))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.data.userId").value(userAId.intValue()));
+                    .andExpect(jsonPath("$.data.userId").value(longId(userAId)));
 
             assertThat(profileRepository.findByUserId(userAId)).isPresent();
         }
@@ -391,7 +393,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(activeProfileUserId);
             mockMvc.perform(get("/api/v1/social/profiles/me"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.userId").value(activeProfileUserId.intValue()));
+                    .andExpect(jsonPath("$.data.userId").value(longId(activeProfileUserId)));
 
             setAuth(userAId);
             mockMvc.perform(get("/api/v1/social/profiles/me"))
@@ -464,7 +466,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userAId);
             mockMvc.perform(get("/api/v1/social/profiles/handle/{handle}", activeProfileHandle))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.userId").value(activeProfileUserId.intValue()));
+                    .andExpect(jsonPath("$.data.userId").value(longId(activeProfileUserId)));
         }
     }
 
@@ -500,7 +502,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userAId);
             mockMvc.perform(get("/api/v1/social/profiles/users/{userId}", activeProfileUserId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.userId").value(activeProfileUserId.intValue()));
+                    .andExpect(jsonPath("$.data.userId").value(longId(activeProfileUserId)));
         }
     }
 
@@ -563,7 +565,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userBId);
             mockMvc.perform(get("/api/v1/users/{userId}/following", userAId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", hasItem(userAToPublicFollowId.intValue())));
+                    .andExpect(jsonPath("$.data[*].id", hasLongId(userAToPublicFollowId)));
         }
 
         @Test
@@ -607,7 +609,7 @@ class SocialAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(userBId);
             mockMvc.perform(get("/api/v1/users/{userId}/followers", publicTargetId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", hasItem(userAToPublicFollowId.intValue())));
+                    .andExpect(jsonPath("$.data[*].id", hasLongId(userAToPublicFollowId)));
         }
     }
 

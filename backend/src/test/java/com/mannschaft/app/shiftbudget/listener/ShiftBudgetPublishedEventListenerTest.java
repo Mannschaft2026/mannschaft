@@ -321,6 +321,13 @@ class ShiftBudgetPublishedEventListenerTest {
 
     /** 時給未設定シナリオの共通スタブ（org 解決 → フラグ ON → slot 1 件 → allocation あり → 時給なし）。 */
     private void givenMissingHourlyRate() {
+        givenResolvedSlotForUser();
+        given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), any()))
+                .willReturn(Optional.empty());
+    }
+
+    /** org 解決 → フラグ ON → slot 1 件 → allocation あり（時給は各テストで与える）。 */
+    private void givenResolvedSlotForUser() {
         given(allocationRepository.findOrganizationIdsWithTeamAllocationContaining(eq(TEAM_ID), any()))
                 .willReturn(List.of(ORG_ID));
         given(featureService.isEnabled(ORG_ID)).willReturn(true);
@@ -328,8 +335,6 @@ class ShiftBudgetPublishedEventListenerTest {
                 .willReturn(List.of(sampleSlotWithUser(7L, USER_ID)));
         given(allocationRepository.findContainingPeriod(eq(ORG_ID), eq(TEAM_ID), any()))
                 .willReturn(Optional.of(allocationWithId()));
-        given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), any()))
-                .willReturn(Optional.empty());
     }
 
     @Test
@@ -441,6 +446,101 @@ class ShiftBudgetPublishedEventListenerTest {
                 eq(USER_ID), eq(null), eq(TEAM_ID), eq(ORG_ID), any(), any(), any(), any());
         verify(auditLogService).record(eq("SHIFT_BUDGET_CONSUMPTION_RECORDED"),
                 eq(USER_ID), eq(null), eq(TEAM_ID), eq(orgY), any(), any(), any(), any());
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> capturedFailurePayload() {
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload =
+                org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(failedEventService).recordFailure(eq(ORG_ID),
+                eq(com.mannschaft.app.shiftbudget.ShiftBudgetFailedEventType.CONSUMPTION_RECORD),
+                eq(SCHEDULE_ID), payload.capture(), any());
+        return payload.getValue();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "CMP-261115-1821 G08: 時給 {0} は計上せず通知と組織別 failed_event に残す")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "-1"})
+    void 非正数の時給は計上せず通知とfailedEventに残す(String rateText) {
+        givenResolvedSlotForUser();
+        given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), any()))
+                .willReturn(Optional.of(ShiftHourlyRateEntity.builder()
+                        .userId(USER_ID).teamId(TEAM_ID).hourlyRate(new BigDecimal(rateText))
+                        .effectiveFrom(LocalDate.of(2026, 1, 1)).build()));
+        given(rateQueryRepository.findTeamSlugByTeamId(TEAM_ID)).willReturn(Optional.of("team-alpha"));
+
+        listener.onShiftPublished(new ShiftPublishedEvent(SCHEDULE_ID, TEAM_ID, USER_ID, java.time.LocalDateTime.now()));
+
+        verify(consumptionService, never()).recordSingleConsumption(any(), any(), any(), any(), any(), any(), anyLong());
+        verify(eventPublisher).publishEvent(
+                eq(new com.mannschaft.app.shiftbudget.event.ShiftBudgetHourlyRateMissingEvent(
+                        ORG_ID, TEAM_ID, "team-alpha", SCHEDULE_ID, List.of(USER_ID))));
+        java.util.Map<String, Object> payload = capturedFailurePayload();
+        org.assertj.core.api.Assertions.assertThat(payload)
+                .containsEntry("schema_version", 1)
+                .containsEntry("reason", "NON_POSITIVE")
+                .containsEntry("shift_schedule_id", SCHEDULE_ID)
+                .containsEntry("team_id", TEAM_ID)
+                .containsEntry("slot_id", 7L)
+                .containsEntry("user_id", USER_ID)
+                .containsEntry("slot_date", "2026-06-15")
+                .containsEntry("allocation_id", ALLOCATION_ID)
+                .containsEntry("organization_id", ORG_ID)
+                .as("欠測値を 0 へ置換しない").doesNotContainKeys("hourly_rate", "hours");
+    }
+
+    @Test
+    @DisplayName("CMP-261115-1821 G08: 時給行が無い場合も理由 MISSING で組織別 failed_event に残す")
+    void 時給未設定はfailedEventにMISSINGで残す() {
+        givenMissingHourlyRate();
+        given(rateQueryRepository.findTeamSlugByTeamId(TEAM_ID)).willReturn(Optional.of("team-alpha"));
+
+        listener.onShiftPublished(new ShiftPublishedEvent(SCHEDULE_ID, TEAM_ID, USER_ID, java.time.LocalDateTime.now()));
+
+        org.assertj.core.api.Assertions.assertThat(capturedFailurePayload())
+                .containsEntry("reason", "MISSING")
+                .doesNotContainKeys("hourly_rate", "hours");
+    }
+
+    @Test
+    @DisplayName("CMP-261115-1821 G10: 個別の記録失敗は当該組織の failed_event に実計上入力を残し、残りの (slot,user) を続ける")
+    void 個別記録失敗はfailedEventに残して続行する() throws Exception {
+        long publicationGeneration = 2L;
+        given(consumptionService.cancelOldPlannedForPublication(
+                SCHEDULE_ID, publicationGeneration, java.util.Set.of(ORG_ID)))
+                .willReturn(new ShiftBudgetConsumptionService.PublicationCleanup(true,
+                        ShiftBudgetConsumptionService.CancellationResult.empty()));
+        Long otherUser = 101L;
+        ShiftSlotEntity slot = slotOn(7L, USER_ID, LocalDate.of(2026, 6, 15));
+        ShiftSlotEntity slot2 = slotOn(8L, otherUser, LocalDate.of(2026, 6, 15));
+        given(allocationRepository.findOrganizationIdsWithTeamAllocationContaining(eq(TEAM_ID), any()))
+                .willReturn(List.of(ORG_ID));
+        given(featureService.isEnabled(ORG_ID)).willReturn(true);
+        given(slotRepository.findByScheduleIdOrderBySlotDateAscStartTimeAsc(SCHEDULE_ID))
+                .willReturn(List.of(slot, slot2));
+        given(allocationRepository.findContainingPeriod(eq(ORG_ID), eq(TEAM_ID), any()))
+                .willReturn(Optional.of(allocationWithId()));
+        given(hourlyRateRepository.findEffectiveRate(any(), eq(TEAM_ID), any()))
+                .willReturn(Optional.of(ShiftHourlyRateEntity.builder()
+                        .userId(USER_ID).teamId(TEAM_ID).hourlyRate(new BigDecimal("1200"))
+                        .effectiveFrom(LocalDate.of(2026, 1, 1)).build()));
+        org.mockito.BDDMockito.willThrow(new RuntimeException("insert failed"))
+                .given(consumptionService).recordSingleConsumption(
+                        eq(ALLOCATION_ID), eq(SCHEDULE_ID), eq(7L), eq(USER_ID), any(), any(), eq(publicationGeneration));
+
+        listener.onShiftPublished(new ShiftPublishedEvent(SCHEDULE_ID, TEAM_ID, USER_ID, java.time.LocalDateTime.now(),
+                publicationGeneration));
+
+        verify(consumptionService).recordSingleConsumption(
+                eq(ALLOCATION_ID), eq(SCHEDULE_ID), eq(8L), eq(otherUser), any(), any(), eq(publicationGeneration));
+        org.assertj.core.api.Assertions.assertThat(capturedFailurePayload())
+                .containsEntry("reason", "RECORD_FAILED")
+                .containsEntry("publication_generation", publicationGeneration)
+                .containsEntry("slot_id", 7L)
+                .containsEntry("user_id", USER_ID)
+                .containsEntry("hourly_rate", "1200")
+                .containsEntry("hours", "4.00");
+        verify(auditLogService, never()).record(eq("SHIFT_BUDGET_CONSUMPTION_FAILED"),
+                any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private ShiftSlotEntity slotOn(Long slotId, Long userId, LocalDate date) throws Exception {

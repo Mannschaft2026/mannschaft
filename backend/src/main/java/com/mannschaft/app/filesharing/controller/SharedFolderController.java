@@ -4,6 +4,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.filesharing.dto.CreateFolderRequest;
 import com.mannschaft.app.filesharing.dto.FolderDetailResponse;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import com.mannschaft.app.filesharing.service.SharedFolderQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,6 +41,8 @@ import java.util.List;
 public class SharedFolderController {
 
     private final SharedFolderQueryService folderQueryService;
+    /** 大会スコープの存在秘匿つき投稿認可（Controller 前段・tx なし。CMP-261116-0726）。 */
+    private final FolderScopeAccessGuard folderScopeAccessGuard;
 
     /**
      * フォルダ詳細（サブフォルダ・ファイル・パンくず込み）を取得する。
@@ -93,7 +96,9 @@ public class SharedFolderController {
     @Operation(summary = "フォルダ削除（カスケード）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteFolder(@PathVariable Long folderId) {
-        folderQueryService.deleteFolder(folderId, SecurityUtils.getCurrentUserId());
+        Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFolderId(folderId, actorId);
+        folderQueryService.deleteFolder(folderId, actorId);
         return ResponseEntity.noContent().build();
     }
 }

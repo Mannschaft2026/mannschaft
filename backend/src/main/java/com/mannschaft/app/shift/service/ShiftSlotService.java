@@ -22,6 +22,9 @@ import com.mannschaft.app.shift.repository.ShiftPositionRepository;
 import com.mannschaft.app.shift.repository.ShiftRequestRepository;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -62,6 +65,7 @@ public class ShiftSlotService {
     /** 手動割当の操作履歴（誰がいつ割り当て・解除したか）を記録するための履歴表。 */
     private final ShiftAssignmentRepository assignmentRepository;
     private final ShiftRequestRepository requestRepository;
+    private final EntityManager entityManager;
 
     // ═════════════════════════════════════════════════════════════════════
     // scope 解決（Facade が認可の前に呼ぶ readOnly の素の読み取り。戻り値は record で Entity は返さない）
@@ -197,7 +201,17 @@ public class ShiftSlotService {
     @Transactional
     public ShiftSlotResponse updateSlot(Long slotId, UpdateShiftSlotRequest req, Long userId) {
         ShiftSlotEntity entity = findSlotOrThrow(slotId);
-        lockParentForUpdate(entity.getScheduleId(), ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        Long scheduleId = entity.getScheduleId();
+        lockParentForUpdate(scheduleId, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        // 先読みした managed entity は親ロック待機中に古くなる。ロック順は親→枠で統一する。
+        try {
+            entityManager.refresh(entity, LockModeType.PESSIMISTIC_WRITE);
+        } catch (EntityNotFoundException e) {
+            throw new BusinessException(ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        }
+        if (entity.getDeletedAt() != null || !scheduleId.equals(entity.getScheduleId())) {
+            throw new BusinessException(ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        }
 
         // 枠時刻の検証（設計 F03.5 §11.2.5）。部分更新のため、リクエストで指定されなかった側は
         // 既存値と合成して検証する。時刻・日跨ぎのいずれも指定されていない更新（note のみ等）は
@@ -207,6 +221,15 @@ public class ShiftSlotService {
                     req.getStartTime() != null ? req.getStartTime() : entity.getStartTime(),
                     req.getEndTime() != null ? req.getEndTime() : entity.getEndTime(),
                     req.getEndsNextDay() != null ? req.getEndsNextDay() : entity.isEndsNextDay());
+        }
+
+        if (req.getSlotDate() != null && !req.getSlotDate().equals(entity.getSlotDate())) {
+            if (!Boolean.TRUE.equals(req.getMoveRequestsConfirmed())
+                    && requestRepository.findLiveIdBySlotForUpdate(scheduleId, slotId).isPresent()) {
+                throw new BusinessException(ShiftErrorCode.REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED);
+            }
+            // 枠を変更する前に一括更新する。後続の枠保存・flush が失敗すれば希望も同じ TX で戻る。
+            requestRepository.moveLiveSlotRequests(scheduleId, slotId, req.getSlotDate());
         }
 
         // 履歴記録のため更新前の割当を控える（CMP-260908-2117）。

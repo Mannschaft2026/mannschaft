@@ -129,6 +129,7 @@ INDEX idx_shift_slots_schedule_position (schedule_id, position_id, slot_date)  -
 - `assigned_user_ids` は JSON 配列で管理。正規化テーブルも検討したが、シフト枠あたりの割り当て人数が少数（通常1〜5人）のため JSON で十分。配列内の各 user_id はチームメンバーであることを Service 層で検証する。`GET /shifts/my` での検索（`JSON_CONTAINS`）はインデックスが効かないため、パフォーマンスが課題になった場合は Valkey キャッシュ（`mannschaft:cache:user-shifts:{userId}`、TTL 30分、シフト公開・変更時に無効化）で対応する
 - `position_id`: FK → shift_positions。ポジションマスターから選択。`ON DELETE SET NULL` によりポジション削除時もスロットは保持（ポジション無指定扱いになる）。API レスポンスでは `position` オブジェクト（`{ "id": 1, "name": "ホール" }`）として返却
 - 単独のスロット削除も `deleted_at DATETIME NULL` による論理削除とし、枠に紐づく割当と枠指定希望へ同じ削除日時を連鎖する。日単位希望は巻き込まない。親シフト表の削除時は全子へ親と同じ削除日時を連鎖する。
+- 枠編集画面の削除操作では、確認ダイアログを開くたびに `GET /api/v1/shifts/requests?scheduleId=` を取り直し、`slotId` が対象枠に一致する希望件数（日単位希望は数えない）と `assignedUserIds` の割当件数を文言に添える（希望・割当とも0件なら「この枠を削除しますか？」のみ。件数がある場合は削除される旨と通常操作で復元できない旨を警告）。希望一覧の取得失敗時は件数なしの安全側文言で続行し、エラーを通知する。割当が伏せられている（`assignmentMasked`）場合は割当件数を出さない。取消時はDELETEを送信せず、承諾後だけ既存APIを呼ぶ。失敗時は枠を一覧に残す（CMP-260909-2153）。
 - `required_count` と `assigned_user_ids` の要素数が一致しない場合は「欠員」として UI で表示する
 - `version`: 楽観的ロック。複数の ADMIN/DEPUTY_ADMIN が同一スロットの `assigned_user_ids` を同時編集する競合を防止。PUT 更新時に競合検出、409 Conflict を返却
 - **既存スロットの移行（v2）**: v1 時点で存在する単一時間帯スロットはそのまま有効。v2 UI は同一日の複数スロットを時間軸に沿ってタイムラインで描画する
@@ -348,7 +349,7 @@ INDEX idx_hourly_rates_team (team_id, user_id)                                 -
 
 #### `shift_assignments`【v2 新規】
 
-自動割当の実行結果を保存する監査・差し戻し用のテーブル。`shift_slots.assigned_user_ids` は「現在の割当状態」を示すキャッシュ的な JSON 配列であるのに対し、本テーブルは「誰がいつどの戦略で割り当てたか」を個別レコードとして履歴保持する。手動割当も自動割当も同じテーブルに記録する。
+自動割当の実行結果を保存する監査・差し戻し用のテーブル。`shift_slots.assigned_user_ids` は「現在の割当状態」の正本となる JSON 配列であるのに対し、本テーブルは「誰がいつどの戦略で割り当てたか」を個別レコードとして履歴保持する。手動割当も自動割当も同じテーブルに記録する。
 
 ##### 二表の役割分担（正本はどちらか）— CMP-260908-2117
 
@@ -410,6 +411,7 @@ UNIQUE KEY uq_shift_assignments_slot_user_active (slot_id, user_id, status)  -- 
 **制約・備考**
 - ステータス: `PROPOSED`（自動割当の提案）→ `CONFIRMED`（管理者が確定）/ `REVOKED`（取り消し）
 - `PROPOSED` 状態の割当は `shift_slots.assigned_user_ids` には反映されない。管理者が UI で確認・修正してから「確定」アクションで `CONFIRMED` に遷移し、同時に `shift_slots.assigned_user_ids` を一括更新する
+- 自動割当の部分確定では、現在の JSON の順序を先に保持し、今回選択された `CONFIRMED` の担当だけを一意に追加する。未選択の提案・選択された `REVOKED`・過去の `CONFIRMED` 履歴から現在状態を再構築しない。これにより、履歴のない手動担当も保持し、解除済みの過去担当を復活させない。内部の空選択は更新せず、同じ選択の反復確定も重複を作らない（CMP-260909-2148）
 - `REVOKED` 状態は履歴として残す（監査証跡）。物理削除は行わない
 - `assigned_by_strategy` の列挙値は Java 側の `AssignmentStrategyType` Enum（`MANUAL / GREEDY_V1 / CSP_V1`）と一致させる。CHECK 制約で値を限定
 - `run_id` が NULL の場合は手動割当（D&D 操作・PUT `/slots/{id}` 等）。非 NULL の場合は自動割当バッチ経由

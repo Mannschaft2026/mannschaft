@@ -16,6 +16,7 @@ import com.mannschaft.app.shift.event.ShiftPublishedEvent;
 import com.mannschaft.app.shift.repository.ShiftHourlyRateRepository;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
+import com.mannschaft.app.shift.service.ShiftScheduleFacade;
 import com.mannschaft.app.shift.service.ShiftScheduleService;
 import com.mannschaft.app.shiftbudget.batch.ShiftBudgetConsumptionReconcileBatchService;
 import com.mannschaft.app.shiftbudget.dto.AllocationCreateRequest;
@@ -121,6 +122,8 @@ class ShiftBudgetMultiParentIT extends AbstractMySqlIntegrationTest {
     private ShiftScheduleRepository scheduleRepository;
     @Autowired
     private ShiftScheduleService scheduleService;
+    @Autowired
+    private ShiftScheduleFacade scheduleFacade;
     @Autowired
     @Qualifier("event-pool")
     private ThreadPoolTaskExecutor eventExecutor;
@@ -316,7 +319,7 @@ class ShiftBudgetMultiParentIT extends AbstractMySqlIntegrationTest {
         jdbcTemplate.update("UPDATE shift_budget_allocations SET period_end = ? WHERE id = ?", JUL_1, allocY);
         setAuth(sysAdminId);
         assertThat(featureService.isEnabled(orgY)).isTrue();
-        scheduleService.transitionStatus(f.scheduleId(), "PUBLISHED", sysAdminId);
+        scheduleFacade.transitionStatus(f.scheduleId(), "PUBLISHED", sysAdminId);
         await().atMost(20, TimeUnit.SECONDS).untilAsserted(() -> assertThat(consumptionCount(allocY)).isEqualTo(1));
         await().atMost(20, TimeUnit.SECONDS).until(() -> eventExecutor.getActiveCount() == 0
                 && eventExecutor.getThreadPoolExecutor().getQueue().isEmpty());
@@ -349,7 +352,7 @@ class ShiftBudgetMultiParentIT extends AbstractMySqlIntegrationTest {
         scheduleService.transitionStatus(f.scheduleId(), "ADJUSTING", sysAdminId);
         await().atMost(20, TimeUnit.SECONDS).until(() -> eventExecutor.getActiveCount() == 0
                 && eventExecutor.getThreadPoolExecutor().getQueue().isEmpty());
-        scheduleService.transitionStatus(f.scheduleId(), "PUBLISHED", sysAdminId);
+        scheduleFacade.transitionStatus(f.scheduleId(), "PUBLISHED", sysAdminId);
         await().atMost(20, TimeUnit.SECONDS).untilAsserted(() -> assertThat(consumptionCount(allocX)).isEqualTo(1));
         await().atMost(20, TimeUnit.SECONDS).until(() -> eventExecutor.getActiveCount() == 0
                 && eventExecutor.getThreadPoolExecutor().getQueue().isEmpty());

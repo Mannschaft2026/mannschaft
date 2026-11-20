@@ -34,6 +34,17 @@ public interface TeamRepository
     List<com.mannschaft.app.team.service.TeamFollowTargetSummary> findDisclosableFollowTargetSummaries(
             @Param("ids") Collection<Long> ids);
 
+    /**
+     * 指定 ID のうち ACTIVE（承諾済み）かつ未アーカイブ・未削除のチーム ID だけを返す
+     * （グローバル検索の閲覧者スコープ解決。CMP-261116-0722）。
+     */
+    @Query("""
+            SELECT t.id FROM TeamEntity t WHERE t.id IN :ids
+              AND t.lifecycleStatus = com.mannschaft.app.team.entity.TeamEntity.LifecycleStatus.ACTIVE
+              AND t.archivedAt IS NULL AND t.deletedAt IS NULL
+            """)
+    List<Long> findActiveIdsByIdIn(@Param("ids") Collection<Long> ids);
+
     /** 受付投影に必要なteam scalar状態だけを読む。 */
     interface ActiveStateRow {
         Long getId();

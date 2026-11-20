@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261117-1337",
+  "scope": "tooling",
+  "implementation": { "pr": 4602, "sha": "35b659f1f638f5dcade8786a126f3ffd76de62f0" },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "【合格】日本語を含むコマンドラインのプロセスが、文字化けせずに一覧へ返る（Windows 実機で、修正前は日本語引数のプロセスが文字化けで見つからず、修正後は見つかることを足軽が確認。日本語 Windows 以外のロケールと PowerShell 7 は未確認）",
+      "tests": [
+        { "name": "worktree-assets 単体テスト（issue #4588 の3件、Windows 実機を含む）", "evidence": "scripts/worktree-assets.test.mjs" },
+        { "name": "PR #4602", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4602" }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "【一部のみ確認】出力エンコーディングの設定に失敗したら非0終了し、文字化けした一覧を成功扱いで返さない（設定失敗を模擬したテストと Codex 検分で確認。実際にコンソールハンドルを持たない環境（FreeConsole 後）での再現は未確認）",
+      "tests": [
+        { "name": "worktree-assets 単体テスト（静的検証と実機の設定失敗の模擬）", "evidence": "scripts/worktree-assets.test.mjs" },
+        { "name": "PR #4602（Codex 検分の P2 指摘を 35b659f1f6 で修正し、再検分で指摘なし）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4602" }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "【合格】一覧取得に失敗したときは、既存の「確認できないため拒否」の経路に倒れる（shrink を許さない）",
+      "tests": [
+        { "name": "worktree-assets 単体テスト", "evidence": "scripts/worktree-assets.test.mjs" },
+        { "name": "PR #4602", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4602" }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "【合格】追加した実機テストは Windows 以外で skip され、起動した子プロセスを後始末する",
+      "tests": [
+        { "name": "worktree-assets 単体テスト", "evidence": "scripts/worktree-assets.test.mjs" },
+        { "name": "PR #4602", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4602" }
+      ]
+    }
+  ],
+  "ci": [{ "runId": 44012575456 }, { "runId": 44012575455 }, { "runId": 44020510844 }],
+  "stages": {
+    "review": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4602" },
+    "real": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4602" },
+    "exploratory": { "status": "not-applicable", "scope": "tooling", "reason": "UI を持たない開発ツールの変更で、利用者が触る画面・導線が無い" }
+  },
+  "regressions": []
+}

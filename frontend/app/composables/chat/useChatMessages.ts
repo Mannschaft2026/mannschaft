@@ -109,12 +109,14 @@ export function useChatMessages() {
   // === Search ===
   // BE 検索は `ApiResponse<List<...>>` で meta が欠落しうる。mapBeMessageList が
   // meta 欠落時に nextCursor=null / hasMore=false を合成する。
+  // BE の契約: `keyword`（必須）と `limit`（任意）のみ。cursor / q は受けない
+  // （CMP-261116-0721: `q` を送って常に 400 COMMON_001 になっていた）。
   async function searchMessages(
     channelId: number,
-    q: string,
-    cursor?: string,
+    keyword: string,
+    limit?: number,
   ): Promise<ChatMessageListResponse> {
-    const qs = buildQuery({ q, cursor })
+    const qs = buildQuery({ keyword, limit })
     const raw = await api<BeMessageListResponse>(
       `/api/v1/chat/channels/${channelId}/messages/search?${qs}`,
     )

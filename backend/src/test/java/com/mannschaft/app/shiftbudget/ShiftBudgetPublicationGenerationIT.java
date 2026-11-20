@@ -9,9 +9,12 @@ import com.mannschaft.app.shift.event.ShiftScheduleClosedEvent;
 import com.mannschaft.app.shift.repository.ShiftHourlyRateRepository;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
+import com.mannschaft.app.shift.service.ShiftPublicationBudgetContext;
+import com.mannschaft.app.shift.service.ShiftPublicationBudgetContextPort;
 import com.mannschaft.app.shift.service.ShiftScheduleService;
 import com.mannschaft.app.shift.service.ShiftSlotService;
 import com.mannschaft.app.shiftbudget.batch.ShiftBudgetConsumptionReconcileBatchService;
+import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.service.ShiftBudgetConsumptionService;
 import com.mannschaft.app.shiftbudget.listener.ShiftBudgetConsumptionCancelListener;
 import com.mannschaft.app.shiftbudget.listener.ShiftBudgetConsumptionRecordListener;
@@ -97,6 +100,7 @@ class ShiftBudgetPublicationGenerationIT extends AbstractMySqlIntegrationTest {
     @Autowired private ShiftHourlyRateRepository rates;
     @Autowired private ShiftBudgetAllocationRepository allocations;
     @Autowired private ShiftScheduleService scheduleService;
+    @Autowired private ShiftPublicationBudgetContextPort publicationBudgetContextPort;
     @Autowired private ShiftSlotService slotService;
     @Autowired private ShiftBudgetConsumptionReconcileBatchService reconcileBatch;
     @Autowired @Qualifier("event-pool") private ThreadPoolTaskExecutor eventExecutor;
@@ -341,7 +345,7 @@ class ShiftBudgetPublicationGenerationIT extends AbstractMySqlIntegrationTest {
 
     private void stalePublicationAfter(String status) throws Exception {
         holdNextPublication.set(true);
-        scheduleService.transitionStatus(scheduleId, "PUBLISHED", firstUserId);
+        scheduleService.transitionStatus(scheduleId, "PUBLISHED", firstUserId, publicationBudgetContext());
         ShiftPublishedEvent held = required(enteredPublications, "旧publishの実配送入口");
         assertThat(held.getPublicationGeneration()).isEqualTo(1L);
         if ("DELETE".equals(status)) {
@@ -564,8 +568,9 @@ class ShiftBudgetPublicationGenerationIT extends AbstractMySqlIntegrationTest {
     @Timeout(120)
     @DisplayName("AC07 公開TXのrollbackは世代・状態を戻しAFTER_COMMIT消化を発生させない")
     void 公開のrollbackでは世代も消化も進めない() {
+        var context = publicationBudgetContext();
         transactionTemplate.executeWithoutResult(tx -> {
-            scheduleService.transitionStatus(scheduleId, "PUBLISHED", firstUserId);
+            scheduleService.transitionStatus(scheduleId, "PUBLISHED", firstUserId, context);
             tx.setRollbackOnly();
         });
         awaitEventsFinished();
@@ -653,20 +658,32 @@ class ShiftBudgetPublicationGenerationIT extends AbstractMySqlIntegrationTest {
 
     @Test
     @Timeout(120)
-    @DisplayName("AC08 設定済み時給0は実MySQLで有効なPLANNEDとして0円計上する")
-    void 設定済み0円時給は記録成功として完了する() throws Exception {
-        transactionTemplate.executeWithoutResult(tx -> rates.findEffectiveRate(firstUserId, teamId,
-                ShiftBudgetPublicationGenerationTestFixture.SLOT_DATE).orElseThrow().changeRate(BigDecimal.ZERO));
-        publishAndAwait();
-        awaitEventsFinished();
-        await().atMost(LIMIT).untilAsserted(() -> assertThat(recordedAuditCount()).isEqualTo(1));
-        assertAll(
-                () -> assertThat(plannedCount(firstUserId)).as("0円でも有効な消化を1件記録").isEqualTo(1),
-                () -> assertThat(plannedAmount(firstUserId)).isEqualByComparingTo(BigDecimal.ZERO),
-                () -> assertThat(consumedAmount()).isEqualByComparingTo(BigDecimal.ZERO),
-                () -> assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM shift_budget_failed_events "
-                        + "WHERE organization_id = ? AND event_type = 'CONSUMPTION_RECORD' AND source_id = ?",
-                        Integer.class, organizationId, scheduleId)).isZero());
+    @DisplayName("AC08 既存0円のPLANNEDは一度だけ取り消し、正数時給の再公開で新しい消化を作る")
+    void 既存0円消化の取消と正数時給の再公開を分離する() throws Exception {
+        transactionTemplate.executeWithoutResult(tx -> {
+            var legacy = schedules.findById(scheduleId).orElseThrow();
+            legacy.publish(firstUserId);
+            em.persist(ShiftBudgetConsumptionEntity.builder()
+                    .allocationId(allocationId).shiftId(scheduleId).slotId(slotId).userId(firstUserId)
+                    .publicationGeneration(0L).hourlyRateSnapshot(BigDecimal.ZERO).hours(new BigDecimal("8.00"))
+                    .amount(BigDecimal.ZERO).currency("JPY").status(ShiftBudgetConsumptionStatus.PLANNED)
+                    .recordedAt(legacy.getPublishedAt()).build());
+        });
+        assertThat(plannedCount(firstUserId)).isEqualTo(1);
+        assertThat(plannedAmount(firstUserId)).isEqualByComparingTo(BigDecimal.ZERO);
+
+        ShiftScheduleClosedEvent close = closeAndAwait();
+        assertThat(close.getPublicationGeneration()).isZero();
+        assertThat(plannedCount(firstUserId)).isZero();
+        assertThat(cancelledCount(firstUserId)).isEqualTo(1);
+        assertThat(consumedAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        repeatCloseAndAssertUnchanged(close);
+
+        assertThat(publishAndAwait().getPublicationGeneration()).isEqualTo(1L);
+        assertThat(cancelledCount(firstUserId)).isEqualTo(1);
+        assertThat(plannedCount(firstUserId)).isEqualTo(1);
+        assertThat(plannedAmount(firstUserId)).isEqualByComparingTo(FIRST_AMOUNT);
+        assertThat(consumedAmount()).isEqualByComparingTo(FIRST_AMOUNT);
     }
 
     @Test
@@ -840,8 +857,14 @@ class ShiftBudgetPublicationGenerationIT extends AbstractMySqlIntegrationTest {
                 + "AND event_type = 'SHIFT_BUDGET_CONSUMPTION_RECORDED'", Integer.class, teamId);
     }
 
+    private ShiftPublicationBudgetContext publicationBudgetContext() {
+        var range = scheduleService.findSlotDateRange(scheduleId);
+        return range.isEmpty() ? ShiftPublicationBudgetContext.noSlots()
+                : publicationBudgetContextPort.load(teamId, range.from(), range.to());
+    }
+
     private ShiftPublishedEvent publishAndAwait() throws InterruptedException {
-        scheduleService.transitionStatus(scheduleId, "PUBLISHED", firstUserId);
+        scheduleService.transitionStatus(scheduleId, "PUBLISHED", firstUserId, publicationBudgetContext());
         ShiftPublishedEvent event = required(completedPublications, "公開イベントの実記録listener完了");
         assertThat(event.getScheduleId()).isEqualTo(scheduleId);
         assertThat(deliveryFailure.get()).isNull();

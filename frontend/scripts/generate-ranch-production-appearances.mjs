@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
+import { requireExpandedForWrite } from './lib/sparse-assets.mjs'
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 const normalizedHash = bytes => hash(Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n')))
@@ -15,6 +16,8 @@ const packVersion = 'ranch-approved-20261108-v1'
 const { values } = parseArgs({ options: { originals: { type: 'string' }, 'sharp-module': { type: 'string' },
   'master-assets': { type: 'string' }, evidence: { type: 'string' }, adoption: { type: 'string' } } })
 assert.ok(values.originals && values['master-assets'] && values.evidence && values.adoption, '原本root・採択証拠・master出力・証拠出力を明示')
+// 素材を読み書きする生成ツール。sparse checkout（未展開）の worktree では何も書かずに展開手順つきで止める。
+requireExpandedForWrite({ repoRoot: path.resolve(frontend, '..'), targets: ['frontend/public/ranch/approved', 'frontend/dev-fixtures/ranch'] })
 const require = createRequire(import.meta.url)
 const sharp = require(values['sharp-module'] ? path.resolve(values['sharp-module']) : 'sharp')
 const adoption = JSON.parse(fs.readFileSync(values.adoption, 'utf8').replace(/^\uFEFF/, ''))

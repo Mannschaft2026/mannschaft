@@ -72,7 +72,8 @@ public class ShiftBudgetConsumptionService {
      * @param shiftScheduleId    シフトスケジュールID
      * @param slotId             スロットID
      * @param userId             ユーザーID
-     * @param hourlyRate         適用時給（NULL/0 はそのまま受け入れ。設計書 §11 「時給未設定」参照）
+     * @param hourlyRate         適用時給（正数のみ。null・0・負数は既存消化の取消など副作用の前に
+     *                           {@link IllegalArgumentException} で拒否する）
      * @param hours              勤務時間
      * @param publicationGeneration 記録対象の公開世代
      * @return 実際に新規記録した場合だけtrue
@@ -90,6 +91,11 @@ public class ShiftBudgetConsumptionService {
         if (publication.isEmpty() || !publication.get().accepts(publicationGeneration)) {
             return false;
         }
+        // 不受理の世代は副作用なしで終え、現在世代の時給は消化を読み書きする前に検証する。
+        if (hourlyRate == null || hourlyRate.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "hourlyRate must be positive: slot=" + slotId + ", user=" + userId);
+        }
         var planned = consumptionRepository.findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(
                 slotId, userId, ShiftBudgetConsumptionStatus.PLANNED);
         if (planned.isPresent()) {
@@ -103,12 +109,11 @@ public class ShiftBudgetConsumptionService {
                 slotId, userId, ShiftBudgetConsumptionStatus.CONFIRMED).isPresent()) {
             throw new IllegalStateException("CONFIRMED record already exists: slot=" + slotId + ", user=" + userId);
         }
-        BigDecimal safeRate = hourlyRate != null ? hourlyRate : BigDecimal.ZERO;
-        BigDecimal amount = safeRate.multiply(hours).setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal amount = hourlyRate.multiply(hours).setScale(2, java.math.RoundingMode.HALF_UP);
         consumptionRepository.save(ShiftBudgetConsumptionEntity.builder()
                 .allocationId(allocationId).shiftId(shiftScheduleId).slotId(slotId).userId(userId)
                 .publicationGeneration(publicationGeneration)
-                .hourlyRateSnapshot(safeRate).hours(hours).amount(amount).currency(DEFAULT_CURRENCY)
+                .hourlyRateSnapshot(hourlyRate).hours(hours).amount(amount).currency(DEFAULT_CURRENCY)
                 .status(ShiftBudgetConsumptionStatus.PLANNED)
                 .recordedAt(LocalDateTime.now(wallClock)).build());
         requireAllocationUpdate(allocationRepository.incrementConsumedAmount(allocationId, amount), allocationId);

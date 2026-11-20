@@ -114,7 +114,7 @@ function toggleExpand(teamId: number) {
           />
         </div>
         <Button
-          :label="$t('common.load')"
+          :label="$t('tournament.roster.load_match')"
           icon="pi pi-search"
           :disabled="!matchIdInput"
           @click="selectMatch"

@@ -73,6 +73,16 @@ public interface ShiftSlotRepository extends JpaRepository<ShiftSlotEntity, Long
     List<ShiftSlotEntity> findByScheduleIdOrderBySlotDateAscStartTimeAsc(Long scheduleId);
 
     /**
+     * スケジュールの生存枠の日付の最小値・最大値を返す（CMP-261115-1821）。枠が無ければ両方 null の 1 行。
+     *
+     * <p>公開の予算連動判定に使う候補の取得範囲を、公開 TX の外（認可の後）で決めるために使う。
+     * 公開 TX は親ロックの後に枠を読み直し、この範囲から外れていれば再操作を促す。</p>
+     */
+    @Query("SELECT new com.mannschaft.app.shift.service.ShiftSlotDateRange(MIN(s.slotDate), MAX(s.slotDate)) "
+            + "FROM ShiftSlotEntity s WHERE s.scheduleId = :scheduleId")
+    com.mannschaft.app.shift.service.ShiftSlotDateRange findSlotDateRange(@Param("scheduleId") Long scheduleId);
+
+    /**
      * スケジュールの特定日のシフト枠を取得する。
      */
     List<ShiftSlotEntity> findByScheduleIdAndSlotDateOrderByStartTimeAsc(Long scheduleId, LocalDate slotDate);

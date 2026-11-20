@@ -53,6 +53,20 @@ public class OrganizationQueryService {
         return result;
     }
 
+    /**
+     * 指定 ID のうち ACTIVE（承諾済み）かつ未アーカイブ・未削除の組織 ID を 1 SQL で返す。
+     * 空入力は SQL を発行しない（グローバル検索の閲覧者スコープ解決。CMP-261116-0722）。
+     *
+     * @param orgIds 対象組織 ID
+     * @return 有効な組織 ID の集合
+     */
+    public java.util.Set<Long> findActiveIds(Collection<Long> orgIds) {
+        if (orgIds == null || orgIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(organizationRepository.findActiveIdsByIdIn(orgIds));
+    }
+
     /** 他ドメイン向けの組織の表示用要約（ID・名前・slug だけ）。 */
     public record OrganizationSummary(Long id, String name, String slug) {
     }

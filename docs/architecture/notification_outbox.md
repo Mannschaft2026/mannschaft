@@ -211,7 +211,7 @@ P1時点の上表は履歴として保持する。現在の `AUDITED_REVERSE_POR
 
 例外は上記完全修飾メソッド1件だけの追加であり、既存Q4キー/理由、未知の逆向きポートの拒否、
 実違反集合との完全一致検査、D-3P-1/3と検出器を維持する。D3Tも記録/旧世代清掃の2入口から
-`ShiftScheduleRepository` への実測2キーだけを追加し、他storeやcreation/refreeze/除外設定は変更しない。
+`ShiftScheduleRepository` への実測2キーだけを追加する。追従時点の main の7,319行に対し、合成ストアと上限を7,321行に揃える。他storeやcreation/refreeze/除外設定は変更しない。
 
 ## 9. 範囲外（今回やらない）
 
