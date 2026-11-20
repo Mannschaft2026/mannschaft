@@ -5,3 +5,4 @@
 -- 「Can't find FULLTEXT index matching the column list」で落ちる（グローバル検索 POST 種別が timedOutTypes に入る）。
 -- 1 行 1 文で書くこと（既定の SQL 抽出は 1 行を 1 文として扱う）。定義は本番 V4.001 と一致させる。
 ALTER TABLE timeline_posts ADD FULLTEXT INDEX ft_timeline_posts_content (content) WITH PARSER ngram;
+ALTER TABLE chat_messages ADD FULLTEXT INDEX ft_msg_body (body) WITH PARSER ngram;
