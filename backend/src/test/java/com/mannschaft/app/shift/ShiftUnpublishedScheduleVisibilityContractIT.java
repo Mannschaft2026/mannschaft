@@ -1,6 +1,7 @@
 package com.mannschaft.app.shift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
 import com.mannschaft.app.admin.repository.FeatureFlagRepository;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -359,7 +360,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
             setAuth(memberId);
             mockMvc.perform(get(SCHEDULES_PATH + "/{id}/slots", scheduleIds.get(fixture)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasItem(memberId.intValue())))
+                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasLongId(memberId)))
                     .andExpect(jsonPath("$.data[0].assignmentMasked").value(false));
         }
     }
@@ -442,7 +443,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
             setAuth(memberId);
             mockMvc.perform(get(SCHEDULES_PATH + "/{id}/slots", id))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasItem(memberId.intValue())));
+                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasLongId(memberId)));
         }
     }
 
@@ -598,7 +599,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
         setAuth(userId);
         mockMvc.perform(get(SCHEDULES_PATH + "/{id}/slots", scheduleId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].assignedUserIds", hasItem(memberId.intValue())))
+                .andExpect(jsonPath("$.data[0].assignedUserIds", hasLongId(memberId)))
                 .andExpect(jsonPath("$.data[0].assignmentMasked").value(false));
     }
 

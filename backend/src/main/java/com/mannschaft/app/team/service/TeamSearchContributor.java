@@ -12,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,6 @@ import java.util.Map;
 public class TeamSearchContributor implements SearchContributor {
 
     private final TeamKeywordSearchRepository teamKeywordSearchRepository;
-    private final Clock clock;
 
     @Override
     public SearchType type() {
@@ -74,7 +72,7 @@ public class TeamSearchContributor implements SearchContributor {
             highlights.put("title", range);
         }
         return new SearchHit(SearchType.TEAM, team.getId(), team.getName(), null, highlights, null, null, null,
-                team.getCreatedAt() == null ? null : team.getCreatedAt().atZone(clock.getZone()).toOffsetDateTime(),
+                SearchHit.createdAtOf(team.getCreatedAt()),
                 "/teams/" + team.getSlug(), List.of());
     }
 }

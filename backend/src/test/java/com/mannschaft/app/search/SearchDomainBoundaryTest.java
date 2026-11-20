@@ -1,15 +1,23 @@
 package com.mannschaft.app.search;
 
 import com.mannschaft.app.common.architecture.ProductionClasses;
+import com.tngtech.archunit.core.domain.Dependency;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.mannschaft.app.common.architecture.ArchUnitTestTag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -36,6 +44,66 @@ class SearchDomainBoundaryTest {
                         .and(not(resideInAPackage("com.mannschaft.app.search.."))))
                 .because("search は SearchContributor 契約の集約のみを担い、各種別の検索は各ドメインが実装する")
                 .check(productionClasses);
+    }
+
+    /** {@code com.mannschaft.app.<domain>.} の domain 部分。 */
+    private static final Pattern DOMAIN = Pattern.compile("^com\\.mannschaft\\.app\\.([^.]+)\\..*");
+
+    /** 本番の {@link SearchContributor} 実装クラス（インタフェース自身を除く）。 */
+    private List<JavaClass> contributorImplementations() {
+        return productionClasses.stream()
+                .filter(c -> !c.isInterface() && c.isAssignableTo(SearchContributor.class))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("CMP-261116-0722 PR-2: POST 種別の SearchContributor が timeline ドメイン内に実装されている")
+    void PR2_POSTのContributorはtimelineドメインにある() {
+        List<String> timelineContributors = contributorImplementations().stream()
+                .filter(c -> c.getPackageName().startsWith("com.mannschaft.app.timeline"))
+                .map(JavaClass::getName)
+                .toList();
+        assertThat(timelineContributors)
+                .as("timeline ドメインに POST 用 SearchContributor が 1 つあること（search 側に実装しない）")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("CMP-261116-0722 PR-3: MESSAGE 種別の SearchContributor が chat ドメイン内に実装されている")
+    void PR3_MESSAGEのContributorはchatドメインにある() {
+        List<String> chatContributors = contributorImplementations().stream()
+                .filter(c -> c.getPackageName().startsWith("com.mannschaft.app.chat"))
+                .map(JavaClass::getName)
+                .toList();
+        assertThat(chatContributors)
+                .as("chat ドメインに MESSAGE 用 SearchContributor が 1 つあること（search 側に実装しない）")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("D3: 各 SearchContributor 実装は自ドメイン外の repository パッケージに直接依存しない")
+    void D3_Contributorは自ドメイン外のRepositoryに依存しない() {
+        List<String> violations = new ArrayList<>();
+        for (JavaClass contributor : contributorImplementations()) {
+            String own = domainOf(contributor.getPackageName());
+            for (Dependency dependency : contributor.getDirectDependenciesFromSelf()) {
+                String targetPackage = dependency.getTargetClass().getPackageName();
+                if (!targetPackage.contains(".repository")) {
+                    continue;
+                }
+                String target = domainOf(targetPackage);
+                if (target != null && !target.equals(own)) {
+                    violations.add(contributor.getSimpleName() + " -> " + dependency.getTargetClass().getName());
+                }
+            }
+        }
+        assertThat(violations).as("SearchContributor は自ドメインの Repository だけを使う（他ドメインは公開 Service 経由）")
+                .isEmpty();
+    }
+
+    private static String domainOf(String packageName) {
+        Matcher m = DOMAIN.matcher(packageName + ".");
+        return m.matches() ? m.group(1) : null;
     }
 
     @Test

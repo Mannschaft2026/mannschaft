@@ -3,6 +3,7 @@ import type {
   TotpSetupResponse,
   BackupCodesResponse,
   TokenResponse,
+  OAuthLoginResponse,
   AuthSessionResponse,
   WebAuthnCredentialResponse,
   WebAuthnRegisterBeginResponse,
@@ -183,10 +184,14 @@ export function useAuthApi() {
     return api<{ data: { authUrl: string } }>('/api/v1/auth/oauth/google/auth-url')
   }
 
-  async function loginWithOAuth(provider: string, body: Record<string, unknown>) {
-    return api<{ data: TokenResponse }>(`/api/v1/auth/oauth/${provider}`, {
+  /**
+   * OAuth ログイン。BE は認可コードを @RequestParam で受けるため、クエリで送る（本文では 400 になる）。
+   * 応答は TokenResponse / MfaRequiredResponse / OAuthConflictResponse のいずれか（呼び出し側で分岐する）。
+   */
+  async function loginWithOAuth(provider: string, params: { code: string }) {
+    return api<{ data: OAuthLoginResponse }>(`/api/v1/auth/oauth/${provider}`, {
       method: 'POST',
-      body,
+      query: { code: params.code },
     })
   }
 

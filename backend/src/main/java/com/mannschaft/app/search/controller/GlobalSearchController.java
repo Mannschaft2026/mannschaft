@@ -4,6 +4,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.search.SearchErrorCode;
 import com.mannschaft.app.search.SearchQueryText;
 import com.mannschaft.app.search.dto.GlobalSearchResponse;
@@ -63,7 +64,9 @@ public class GlobalSearchController {
             @RequestParam(required = false) String page,
             @RequestParam(required = false) String size) {
         GlobalSearchRequest request = GlobalSearchRequest.parse(
-                q, type, scopeType, scopeId, dateFrom, dateTo, authorId, page, size);
+                q, type, scopeType, scopeId, dateFrom, dateTo, authorId, page, size,
+                // 閲覧者 TZ は ThreadLocal なので、Contributor の別スレッドへ渡る前にここで解決して条件に載せる
+                UserZoneLocalDateTimeParser.requestZone());
         return ResponseEntity.ok(globalSearchQueryService.search(SecurityUtils.getCurrentUserId(), request));
     }
 

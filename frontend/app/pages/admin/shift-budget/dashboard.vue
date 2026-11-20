@@ -240,7 +240,7 @@ onMounted(() => {
             </Column>
             <Column :header="t('shiftBudget.allocation.consumed')">
               <template #body="{ data }: { data: AllocationResponse }">
-                <span>{{ data.consumed_amount?.toLocaleString() ?? '0' }}</span>
+                <span>{{ data.consumed_amount?.toLocaleString() ?? '0' }} {{ data.currency }}</span>
               </template>
             </Column>
             <Column :header="t('shiftBudget.allocation.rate')" style="width: 200px">

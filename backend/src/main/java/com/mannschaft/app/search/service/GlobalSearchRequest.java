@@ -8,6 +8,7 @@ import com.mannschaft.app.search.SearchType;
 import com.mannschaft.app.search.SearchViewer;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.EnumSet;
 import java.util.List;
@@ -44,11 +45,13 @@ public record GlobalSearchRequest(SearchCriteria criteria, Set<SearchType> types
     /**
      * 生のクエリパラメータを検証する。
      *
+     * @param viewerZone 閲覧者 TZ（リクエストスレッドで {@code UserZoneLocalDateTimeParser#requestZone()} により
+     *                   解決した値。期間の日付境界に使う）
      * @throws BusinessException 不正な入力（400）
      */
     public static GlobalSearchRequest parse(String q, String type, String scopeType, String scopeId,
                                             String dateFrom, String dateTo, String authorId,
-                                            String page, String size) {
+                                            String page, String size, ZoneId viewerZone) {
         String query = parseQuery(q);
         Set<SearchType> types = parseTypes(type);
         boolean detail = type != null && !type.isBlank() && types.size() == 1;
@@ -84,7 +87,7 @@ public record GlobalSearchRequest(SearchCriteria criteria, Set<SearchType> types
         }
 
         SearchCriteria criteria = new SearchCriteria(query, SearchQueryText.terms(query), normalizedScopeType,
-                parsedScopeId, from, to, author);
+                parsedScopeId, from, to, author, viewerZone);
         return new GlobalSearchRequest(criteria, types, detail, parsedPage, parsedSize);
     }
 
