@@ -8,12 +8,30 @@ export interface BackupCodesResponse {
   backupCodes: string[]
 }
 
+/** MFA 要求レスポンス（BE MfaRequiredResponse。旧 BE 応答では方式情報が欠落しうる）。 */
+export interface MfaChallengePayload {
+  mfaRequired?: boolean
+  mfaSessionToken?: string | null
+  primaryMethod?: 'TOTP' | 'EMAIL' | 'BACKUP_CODE' | null
+  availableMethods?: Array<'TOTP' | 'EMAIL' | 'BACKUP_CODE'> | null
+}
+
+/** OAuth 連携競合レスポンス（BE OAuthConflictResponse。連携確認メール送信済み）。 */
+export interface OAuthConflictPayload {
+  message: string
+  email: string
+  provider: string
+}
+
 export interface TokenResponse {
   accessToken: string
   refreshToken: string
   tokenType: string
   expiresIn: number
 }
+
+/** OAuth ログインの応答三択: トークン発行 / MFA 要求（2FA 有効） / 連携競合（メール一致の既存アカウント）。 */
+export type OAuthLoginResponse = TokenResponse | MfaChallengePayload | OAuthConflictPayload
 
 // === Sessions ===
 export interface AuthSessionResponse {

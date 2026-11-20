@@ -2,6 +2,8 @@ package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
 import com.mannschaft.app.auth.MfaEmailOtpPurpose;
+import com.mannschaft.app.auth.TwoFactorMethod;
+import com.mannschaft.app.auth.dto.MfaRequiredResponse;
 import com.mannschaft.app.auth.event.AccountLockedEvent;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.DomainEventPublisher;
@@ -15,6 +17,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -41,8 +44,16 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class MfaSessionService {
 
+    /** 入口方式の既定値（方式キー欠落＝旧形式セッションはパスワード由来とみなす）。 */
+    public static final String LOGIN_METHOD_PASSWORD = "PASSWORD";
+
     /** MFA セッションキー接頭辞（値は userId）。F01.1・AuthService と共通。 */
     public static final String SESSION_KEY_PREFIX = "mannschaft:auth:mfa_session_token:";
+    /**
+     * MFA セッションの入口方式キー接頭辞（値は PASSWORD / OAUTH_GOOGLE 等。CMP-261012-0911）。
+     * セッションキーと同 TTL・同時削除。キーが無ければ PASSWORD とみなす（旧形式との双方向互換）。
+     */
+    public static final String SESSION_METHOD_KEY_PREFIX = "mannschaft:auth:mfa_session_method:";
     /** セッション単位の試行回数（照合前 INCR）。 */
     static final String ATTEMPT_COUNT_KEY_PREFIX = "mannschaft:auth:mfa_session_attempt_count:";
     /** ユーザー単位の MFA 失敗回数（30 分窓）。 */
@@ -77,7 +88,16 @@ public class MfaSessionService {
      * @param sessionHash 生トークンの SHA-256（Valkey キー・ログイン用メールOTP の紐付けに使う）
      * @param userId      パスワード認証を通過したユーザー
      */
-    public record MfaSession(String sessionHash, Long userId) {
+    public record MfaSession(String sessionHash, Long userId, String loginMethod) {
+
+        /**
+         * 入口方式を持たない旧形式の互換コンストラクタ。
+         *
+         * <p>方式キー欠落時と同じく、入口方式は PASSWORD とみなす。</p>
+         */
+        public MfaSession(String sessionHash, Long userId) {
+            this(sessionHash, userId, LOGIN_METHOD_PASSWORD);
+        }
     }
 
     /**
@@ -92,6 +112,37 @@ public class MfaSessionService {
     /** MFA セッションキー。 */
     public static String sessionKey(String sessionHash) {
         return SESSION_KEY_PREFIX + sessionHash;
+    }
+
+    /** MFA セッションの入口方式キー（CMP-261012-0911）。 */
+    public static String sessionMethodKey(String sessionHash) {
+        return SESSION_METHOD_KEY_PREFIX + sessionHash;
+    }
+
+    /**
+     * 一次認証（パスワード・OAuth）を通過したユーザーに MFA チャレンジを発行する（CMP-261012-0911）。
+     *
+     * <p>パスワード経路・OAuth 既存連携・OAuth 連携確認の全入口がここで MFA セッションを発行する。
+     * セッションキー（値は userId のまま。旧プロセスとの互換のため形式を変えない）と入口方式キーを
+     * 同 TTL で保存し、主手段・提示要素付きの {@link MfaRequiredResponse} を返す。</p>
+     *
+     * @param userId        一次認証を通過したユーザーの ID（Entity を公開 API に出さない）
+     * @param email         ユーザーのメールアドレス（メール OTP を提示できるかの判定用）
+     * @param primaryMethod 2FA 主手段
+     * @param loginMethod   入口方式（PASSWORD / OAUTH_GOOGLE / OAUTH_LINE / OAUTH_APPLE）
+     * @return MFA 要求レスポンス
+     */
+    public MfaRequiredResponse issueChallenge(Long userId, String email, TwoFactorMethod primaryMethod,
+                                             String loginMethod) {
+        String mfaSessionToken = UUID.randomUUID().toString();
+        String sessionHash = authTokenService.hashToken(mfaSessionToken);
+        long ttlSeconds = SESSION_TTL.getSeconds();
+        redisTemplate.opsForValue().set(sessionKey(sessionHash), String.valueOf(userId),
+                ttlSeconds, TimeUnit.SECONDS);
+        redisTemplate.opsForValue().set(sessionMethodKey(sessionHash), loginMethod, ttlSeconds, TimeUnit.SECONDS);
+        // CMP-261012-0910 AC-27: 主手段と、このログインで提示できる要素を返す
+        return new MfaRequiredResponse(mfaSessionToken, primaryMethod,
+                MfaMethodPolicy.availableMethods(primaryMethod, MfaMethodPolicy.isEmailDeliverable(email)));
     }
 
     /** アカウントロックキー。 */
@@ -115,7 +166,10 @@ public class MfaSessionService {
             throw new BusinessException(AuthErrorCode.AUTH_073);
         }
         try {
-            return new MfaSession(sessionHash, Long.valueOf(userIdStr));
+            Long userId = Long.valueOf(userIdStr);
+            String method = redisTemplate.opsForValue().get(sessionMethodKey(sessionHash));
+            return new MfaSession(sessionHash, userId,
+                    method == null || method.isBlank() ? LOGIN_METHOD_PASSWORD : method);
         } catch (NumberFormatException e) {
             log.error("MFA セッションの値が userId として解釈できない（キー破損）");
             throw new BusinessException(AuthErrorCode.AUTH_073);
@@ -244,11 +298,17 @@ public class MfaSessionService {
         if (remaining >= 0 && remaining >= ttl.getSeconds()) {
             return true;
         }
-        return Boolean.TRUE.equals(redisTemplate.expire(key, ttl.getSeconds(), TimeUnit.SECONDS));
+        boolean extended = Boolean.TRUE.equals(redisTemplate.expire(key, ttl.getSeconds(), TimeUnit.SECONDS));
+        if (extended) {
+            // 入口方式キーもセッションと同 TTL に保つ（先に消えると OAuth 由来が PASSWORD 扱いになる）
+            redisTemplate.expire(sessionMethodKey(session.sessionHash()), ttl.getSeconds(), TimeUnit.SECONDS);
+        }
+        return extended;
     }
 
     private void cleanUpSessionScopedKeys(MfaSession session) {
         redisTemplate.delete(List.of(
+                sessionMethodKey(session.sessionHash()),
                 ATTEMPT_COUNT_KEY_PREFIX + session.sessionHash(),
                 MfaEmailOtpKeys.codeKey(MfaEmailOtpPurpose.LOGIN, session.sessionHash())));
     }

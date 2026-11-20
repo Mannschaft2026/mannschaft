@@ -1,5 +1,6 @@
 package com.mannschaft.app.auth.controller;
 
+import com.mannschaft.app.auth.service.AuthOAuthLinkageConfirmService;
 import com.mannschaft.app.auth.service.AuthOAuthService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.featuregate.AlwaysReachable;
@@ -47,6 +48,8 @@ import java.util.Map;
 public class AuthOAuthController {
 
     private final AuthOAuthService authOAuthService;
+    /** 連携確認（TX を持たない入口。roles 解決を TX の外へ出す）。 */
+    private final AuthOAuthLinkageConfirmService authOAuthLinkageConfirmService;
 
     /**
      * Google OAuth 認証 URL を取得する。
@@ -90,8 +93,11 @@ public class AuthOAuthController {
     @Operation(summary = "OAuth連携確認")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "連携完了")
     public ResponseEntity<ApiResponse<?>> confirmOAuthLinkage(
-            @RequestParam String token) {
+            @RequestParam String token,
+            HttpServletRequest request) {
 
-        return ResponseEntity.ok(authOAuthService.confirmOAuthLinkage(token));
+        String ipAddress = com.mannschaft.app.common.IpAddressUtils.getClientIp(request);
+        String userAgent = request.getHeader("User-Agent");
+        return ResponseEntity.ok(authOAuthLinkageConfirmService.confirmOAuthLinkage(token, ipAddress, userAgent));
     }
 }
