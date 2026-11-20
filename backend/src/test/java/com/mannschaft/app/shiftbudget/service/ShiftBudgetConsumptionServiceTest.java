@@ -1,6 +1,9 @@
 package com.mannschaft.app.shiftbudget.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus;
+import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
+import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetMonthlyCloseEventRepository;
@@ -18,10 +21,16 @@ import org.springframework.transaction.PlatformTransactionManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -94,6 +103,65 @@ class ShiftBudgetConsumptionServiceTest {
 
             // 発見の SELECT すら行わない = 既存 PLANNED の取消・減算が起きない
             verifyNoInteractions(consumptionRepository, deferralRepository, eventRepository);
+            verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
+            verify(allocationRepository, never()).decrementConsumedAmount(any(), any());
+        }
+    }
+
+    /**
+     * CMP-260909-2152 α Codex 全体検分 P2-1: 同じ割当・勤務日の再公開で、合計額が同じでも時給・勤務時間が変わったら
+     * 消化行を作り直す（取消→再作成）。合計額だけで省略すると古い時給・勤務時間が残り、勤務時間集計・記録時給の表示が誤る。
+     */
+    @Nested
+    @DisplayName("再公開の同内容判定（時給・勤務時間を含める）")
+    class RepublishSameContent {
+
+        private ShiftBudgetConsumptionEntity existing;
+
+        @BeforeEach
+        void stubLockedState() {
+            existing = ShiftBudgetConsumptionEntity.builder()
+                    .allocationId(ALLOCATION_ID).shiftId(SHIFT_ID).slotId(SLOT_ID).userId(USER_ID).workDate(WORK_DATE)
+                    .hourlyRateSnapshot(new BigDecimal("1000.00")).hours(new BigDecimal("4.00"))
+                    .amount(new BigDecimal("4000.00")).currency("JPY").status(ShiftBudgetConsumptionStatus.PLANNED)
+                    .build();
+            when(consumptionRepository.findLiveAllocationIdsBySlotAndUser(SLOT_ID, USER_ID)).thenReturn(List.of(ALLOCATION_ID));
+            when(allocationRepository.findByIdForUpdate(ALLOCATION_ID))
+                    .thenReturn(Optional.of(mock(ShiftBudgetAllocationEntity.class)));
+            when(consumptionRepository.lockLiveBySlotAndUser(SLOT_ID, USER_ID)).thenReturn(List.of(existing));
+            when(rateQueryRepository.lockScheduleStatusForShare(SHIFT_ID))
+                    .thenReturn(List.<Object[]>of(new Object[]{"PUBLISHED", false}));
+        }
+
+        @Test
+        @DisplayName("1,000円×4h → 2,000円×2h（合計同額）は旧行を取消し、新しい時給・勤務時間で作り直す")
+        void 合計同額でも時給と勤務時間が変われば作り直す() {
+            ShiftBudgetConsumptionService.RecordResult result = service.recordSingleConsumption(
+                    ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID, new BigDecimal("2000"), new BigDecimal("2.0"), WORK_DATE);
+
+            assertThat(result).isEqualTo(ShiftBudgetConsumptionService.RecordResult.RECORDED);
+            assertThat(existing.getStatus()).isEqualTo(ShiftBudgetConsumptionStatus.CANCELLED);
+            verify(consumptionRepository).save(argThat((ShiftBudgetConsumptionEntity e) ->
+                    e.getStatus() == ShiftBudgetConsumptionStatus.PLANNED
+                            && e.getHourlyRateSnapshot().compareTo(new BigDecimal("2000")) == 0
+                            && e.getHours().compareTo(new BigDecimal("2")) == 0
+                            && e.getAmount().compareTo(new BigDecimal("4000")) == 0));
+            verify(allocationRepository).decrementConsumedAmount(eq(ALLOCATION_ID),
+                    argThat(a -> a.compareTo(new BigDecimal("4000")) == 0));
+            verify(allocationRepository).incrementConsumedAmount(eq(ALLOCATION_ID),
+                    argThat(a -> a.compareTo(new BigDecimal("4000")) == 0));
+        }
+
+        @Test
+        @DisplayName("時給・勤務時間・金額・割当・勤務日がすべて同じなら何もしない（取消→再作成の UNIQUE 衝突を避ける）")
+        void 完全に同内容なら何もしない() {
+            ShiftBudgetConsumptionService.RecordResult result = service.recordSingleConsumption(
+                    ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID, new BigDecimal("1000"), new BigDecimal("4.0"), WORK_DATE);
+
+            assertThat(result).isEqualTo(ShiftBudgetConsumptionService.RecordResult.RECORDED);
+            assertThat(existing.getStatus()).isEqualTo(ShiftBudgetConsumptionStatus.PLANNED);
+            verify(consumptionRepository, never()).save(any());
+            verify(consumptionRepository, never()).saveAndFlush(any());
             verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
             verify(allocationRepository, never()).decrementConsumedAmount(any(), any());
         }
