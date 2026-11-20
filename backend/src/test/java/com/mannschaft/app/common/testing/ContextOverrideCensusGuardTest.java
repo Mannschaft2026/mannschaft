@@ -211,12 +211,21 @@ class ContextOverrideCensusGuardTest {
     @DisplayName("AC-4 検体: 新しい構成キーを1つ足すと distinct key 数のラチェットで red になる")
     void 検体_新しい構成キーはラチェットでredになる() throws IOException {
         Census actual = census();
-        assertThat(actual.distinctKeys()).isEqualTo(snapshot().distinctKeysBaseline())
-                .as("試練時点では基準値＝現在値（A の後は基準値−1 以下を想定）");
+        // 凍結基準値には依存しない（構成キーを減らして実測が基準値を下回る正当な改善でも、この検体は成り立つ）。
+        // 検体専用の基準値を実測値から作る: 基準値 = 実測値のとき +1 キーは red、基準値 = 実測値+1 のとき（実測は基準値−1）は green、+1 キーで等値も green。
+        int measured = actual.distinctKeys();
         Entry extra = new Entry("com.mannschaft.app.SpecimenNewKeyIT", Status.ZERO, "fffffffffff0", List.of(), null);
+        Snapshot atMeasured = Snapshot.parse(actual.toSnapshot(measured));
+        Snapshot aboveMeasured = Snapshot.parse(actual.toSnapshot(measured + 1));
 
-        assertThat(ContextOverrideCensus.violations(snapshot(), actual.with(extra)))
+        assertThat(ContextOverrideCensus.violations(atMeasured, actual))
+                .noneMatch(line -> line.startsWith("[distinct key 数のラチェット]"));
+        assertThat(ContextOverrideCensus.violations(atMeasured, actual.with(extra)))
                 .anyMatch(line -> line.startsWith("[distinct key 数のラチェット]"));
+        assertThat(ContextOverrideCensus.violations(aboveMeasured, actual))
+                .noneMatch(line -> line.startsWith("[distinct key 数のラチェット]"));
+        assertThat(ContextOverrideCensus.violations(aboveMeasured, actual.with(extra)))
+                .noneMatch(line -> line.startsWith("[distinct key 数のラチェット]"));
     }
 
     @Test
