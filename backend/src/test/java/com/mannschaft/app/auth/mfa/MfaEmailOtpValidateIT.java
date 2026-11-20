@@ -68,7 +68,8 @@ class MfaEmailOtpValidateIT extends MfaEmailOtpItSupport {
         assertThat(valkey.liveKeysMatching(LOGIN_OTP_KEY_MARK)).as("AC-22 成功でコードを削除").isEmpty();
         List<LoginSuccessEvent> success = events.stream(LoginSuccessEvent.class).toList();
         assertThat(success).as("AC-22 LoginSuccessEvent").hasSize(1);
-        assertThat(success.get(0).getMethod()).as("AC-22 LoginSuccessEvent.method").isEqualTo("EMAIL");
+        assertThat(success.get(0).getMethod()).as("AC-22 LoginSuccessEvent.method は入口方式（判断①）").isEqualTo("PASSWORD");
+        assertThat(success.get(0).getMfaFactor()).as("AC-22 LoginSuccessEvent.mfaFactor は使用要素").isEqualTo("EMAIL");
         assertThat(success.get(0).getUserAgent()).as("AC-22 UA").isEqualTo(USER_AGENT);
     }
 

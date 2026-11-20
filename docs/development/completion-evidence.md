@@ -95,7 +95,7 @@ workflowは固定したbase SHA・head SHAの比較APIから共通祖先SHAを�
 
 head側でも行を変更した場合はこの免除を適用せず、mainの過去完了行・リンクの保護を維持する。行が共通祖先から無変更でも、PRによる証拠JSONの変更・削除・改名があれば免除しない。改名は旧pathも検査する。PR自身の新規完了化・証拠リンク追加は共通祖先から検出し、mainも独立に完了化済みの場合でも検査する。比較APIの失敗、共通祖先SHAの不正、台帳の取得失敗は拒否する。現在PRの変更ファイル一覧も `changed_files` の非負整数と取得件数の一致を要求し、欠測・不正・一覧不足からJSON操作を見逃さない。
 
-この判定は `ready_for_review`・`edited`・`synchronize` で共通であり、実行するvalidatorは引き続きtrusted baseのものだけである。ローカルCLIの明示的な `--base` / `--head` 比較は従来どおり指定した2時点を比較する。
+この判定は `ready_for_review`・`edited`・`synchronize` で共通であり、実行するvalidatorは引き続きtrusted baseのものだけである。ローカルCLIの明示的な `--base` / `--head` 比較は従来どおり指定した2時点を比較する。CLIの `git show` 読取は台帳・証拠JSON・参照ファイルそれぞれに有限の16 MiB上限を設ける。
 
 ## 検証限界
 

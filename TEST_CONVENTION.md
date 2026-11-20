@@ -247,10 +247,10 @@ MockMvc は本プロジェクトで既に **196 ファイル・3531 箇所** で
 | 検査する契約 | 起動設定・経路 | 観測する実物 |
 |---|---|---|
 | 内部 Service・トランザクション・通知境界 | `AbstractMySqlIntegrationTest` の `MOCK` を継承。Service proxy / `TransactionTemplate` 経由 | 実 Bean・実 MySQL・実 commit / rollback。HTTPサーバーは不要 |
-| API契約・Securityフィルタの認可境界 | 同基底の `MOCK` + `@AutoConfigureMockMvc` | 実 Controller・DTO変換・実 Security フィルタ・実 MySQL。認可を検査するときは `addFilters=false` を使わない |
+| API契約・Securityフィルタの認可境界 | 同基底の `MOCK`（基底が `@AutoConfigureMockMvc` を持つので `MockMvc` を `@Autowired` するだけ。再宣言しない） | 実 Controller・DTO変換・実 Security フィルタ・実 MySQL。認可を検査するときは `addFilters=false` を使わない |
 | 実HTTPクライアントの往復・WebSocket/STOMP | `RANDOM_PORT`。共通MySQL構成を使う場合は同基底の WebEnvironment だけ上書き | 自動採番した実TCPへ接続し、実HTTP/接続/購読の契約を検査 |
 
-`MOCK` は WebEnvironment の名称であり、業務 Bean・DB・認可をモックへ置き換える指定ではない。TCPリスナーを起動せずに実 Bean と実DBを検査できる。内部試験や MockMvc 試験では `@SpringBootTest` を派生クラスで再宣言せず、基底設定を継承する。実TCP試験は必要な接続契約を Javadoc に記し、`@DirtiesContext(AFTER_CLASS)` で専用 context を閉じる。共通MySQL構成を使う実TCP試験では、WebEnvironment 以外の共通設定・MySQL singleton・外部依存設定を基底から継承する。既存の専用接続・複数ノード試験は必要な独立context・broker等の資源構成を保持する。試験種別の違いだけを理由に別フレームワークや新しい基底を増やさない。
+`MOCK` は WebEnvironment の名称であり、業務 Bean・DB・認可をモックへ置き換える指定ではない。TCPリスナーを起動せずに実 Bean と実DBを検査できる。内部試験や MockMvc 試験では `@SpringBootTest` を派生クラスで再宣言せず、基底設定を継承する。実TCP試験は必要な接続契約を Javadoc に記し、`@DirtiesContext(AFTER_CLASS)` で専用 context を閉じる。共通MySQL構成を使う実TCP試験では、WebEnvironment 以外の共通設定・MySQL singleton・外部依存設定を基底から継承する。既存の専用接続・複数ノード試験は必要な独立context・broker等の資源構成を保持する。試験種別の違いだけを理由に別フレームワークや新しい基底を増やさない。基底は `@AutoConfigureMockMvc`（addFilters=true）を持ち、MockMvc の有無で構成キー（context 数）を割らない。`addFilters=false` を宣言した派生だけが別キーになるので、認可を検査しない明確な理由があるときに限る（規約 31「基底の MockMvc 自動構成」・番人 `ContextOverrideCensusGuardTest`）。
 
 通知配送・AFTER_COMMIT の観測は §9.7 に従い、テスト全体を自動rollbackする `@Transactional` で包まず、fixtureを明示commitして所有行をcleanupする。TCPを起動したことやMockMvcを使ったことだけではcommit観測の代わりにならない。red確認では、起動・依存・fixtureの失敗と、受け入れ条件の実アサーション失敗を結果XML・原因連鎖で区別する。
 
@@ -928,6 +928,10 @@ public void dispatch() { ... }
 - skip の理由には対象ディレクトリと「`node scripts/worktree-assets.mjs expand` で展開すれば実行される」旨が出る。
 - クラスごとの `@Disabled`、例外の握りつぶしは禁止。実素材に依存しない単位は分けて通常実行する（`src/test/resources` の合成素材で足りるなら合成素材を使う）。
 - 判定実装は `com.mannschaft.app.support.test.sparse.SparseExcludedAssets`、その単体テストは `SparseExcludedAssetsTest`。
+
+## 9.9 SecurityContext は共通拡張で自動クリアされる
+
+`SecurityContextClearExtension`（`com.mannschaft.app.common.testing`）が JUnit 5 の自動検出（`junit-platform.properties` と `META-INF/services/org.junit.jupiter.api.extension.Extension`）で全テストに効き、各テストの後（afterEach）とクラスの後（afterAll）に `SecurityContextHolder` と `TestSecurityContextHolder` を空にする。単体テストが `setAuthentication` したまま終わっても、同じ JVM の後続 Spring IT に認証が漏れない。そのため各テストで `clearContext()` を手書きする必要はない。beforeEach では消さないので、`@BeforeAll` で作った認証や `@WithMockUser` は従来どおり使える。
 
 ## 10. テストに関する禁止事項
 
