@@ -1,7 +1,6 @@
 package com.mannschaft.app.filesharing.repository;
 
 import com.mannschaft.app.filesharing.FileScopeType;
-import com.mannschaft.app.filesharing.entity.SharedFileEntity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
@@ -87,14 +86,19 @@ public class SharedFileKeywordSearchRepository {
     }
 
     /**
-     * 1 件分の取得結果。
+     * 1 件分の取得結果（すべて可視性を判定した同じ SQL の行から取った値）。
      *
-     * @param file      ファイル
-     * @param team      直属フォルダがチームスコープなら true（false なら組織スコープ）
-     * @param scopeId   直属フォルダのスコープ ID
-     * @param relevance FULLTEXT の関連度
+     * @param id           ファイル ID
+     * @param name         ファイル名
+     * @param description  説明（null 可）
+     * @param createdBy    アップロード者（null 可）
+     * @param createdAtUtc 作成日時の DB 格納値（UTC 壁時計、{@code yyyy-MM-dd HH:mm:ss.SSSSSS}。null 可）
+     * @param team         直属フォルダがチームスコープなら true（false なら組織スコープ）
+     * @param scopeId      直属フォルダのスコープ ID
+     * @param relevance    FULLTEXT の関連度
      */
-    public record ScoredFile(SharedFileEntity file, boolean team, Long scopeId, double relevance) {
+    public record ScoredFile(Long id, String name, String description, Long createdBy, String createdAtUtc,
+                             boolean team, Long scopeId, double relevance) {
     }
 
     /** 可視ファイルの件数（{@link #find} と同一の述語）。 */
@@ -107,11 +111,20 @@ public class SharedFileKeywordSearchRepository {
         return ((Number) query.getSingleResult()).longValue();
     }
 
-    /** 可視ファイルを関連度→新しい順に 1 ページ分取得する（{@link #count} と同一の述語）。 */
+    /**
+     * 可視ファイルを関連度→新しい順に 1 ページ分取得する（{@link #count} と同一の述語）。
+     *
+     * <p>結果に載せる列（名前・説明・アップロード者・作成日時・直属フォルダのスコープ）は、可視性を判定した
+     * <b>同じ SQL の SELECT 列</b>から取る。ID だけを取って別クエリで行を読み直すと、その間にフォルダ移動と説明文の
+     * 更新が同時にコミットされた場合に、移動前の可視性で通った行の移動後の内容を返してしまう（CMP-261116-0722 PR-6
+     * 検分 P1）。作成日時は DB の UTC 格納値を文字列で返す（{@link ScoredFile#createdAtUtc}）。</p>
+     */
     public List<ScoredFile> find(Condition condition, int offset, int limit) {
         Map<String, Object> params = new HashMap<>();
         String sql = withFolderPath(condition, params)
-                + "SELECT sf.id, fo.scope_type, fo.team_id, fo.organization_id, " + MATCH + " AS relevance"
+                + "SELECT sf.id, sf.name, sf.description, sf.created_by,"
+                + " DATE_FORMAT(sf.created_at, '%Y-%m-%d %H:%i:%s.%f') AS created_at_utc,"
+                + " fo.scope_type, fo.team_id, fo.organization_id, " + MATCH + " AS relevance"
                 + " FROM shared_files sf JOIN shared_folders fo ON fo.id = sf.folder_id"
                 + visibleWhere(condition, params)
                 + " ORDER BY relevance DESC, sf.created_at DESC, sf.id DESC LIMIT :limit OFFSET :offset";
@@ -121,34 +134,29 @@ public class SharedFileKeywordSearchRepository {
         query.setParameter("offset", offset);
         @SuppressWarnings("unchecked")
         List<Object[]> rows = query.getResultList();
-        if (rows.isEmpty()) {
-            return List.of();
-        }
-        List<Long> ids = new ArrayList<>(rows.size());
-        for (Object[] row : rows) {
-            ids.add(((Number) row[0]).longValue());
-        }
-        Map<Long, SharedFileEntity> byId = new HashMap<>();
-        for (SharedFileEntity file : em.createQuery(
-                "SELECT sf FROM SharedFileEntity sf WHERE sf.id IN :ids", SharedFileEntity.class)
-                .setParameter("ids", ids).getResultList()) {
-            byId.put(file.getId(), file);
-        }
         List<ScoredFile> result = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
-            SharedFileEntity file = byId.get(((Number) row[0]).longValue());
-            if (file == null) {
+            boolean team = FileScopeType.TEAM.name().equals(String.valueOf(row[5]));
+            Long scopeId = toLong(team ? row[6] : row[7]);
+            if (scopeId == null) {
                 continue;
             }
-            boolean team = FileScopeType.TEAM.name().equals(String.valueOf(row[1]));
-            Object scope = team ? row[2] : row[3];
-            if (scope == null) {
-                continue;
-            }
-            result.add(new ScoredFile(file, team, ((Number) scope).longValue(),
-                    row[4] == null ? 0d : ((Number) row[4]).doubleValue()));
+            result.add(new ScoredFile(toLong(row[0]), text(row[1]), text(row[2]), toLong(row[3]), text(row[4]),
+                    team, scopeId, relevance(row[8])));
         }
         return result;
+    }
+
+    private static Long toLong(Object value) {
+        return value == null ? null : ((Number) value).longValue();
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static double relevance(Object value) {
+        return value == null ? 0d : ((Number) value).doubleValue();
     }
 
     /**

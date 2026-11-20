@@ -1,7 +1,6 @@
 package com.mannschaft.app.cms.service;
 
 import com.mannschaft.app.cms.Visibility;
-import com.mannschaft.app.cms.entity.BlogPostEntity;
 import com.mannschaft.app.cms.repository.BlogPostKeywordSearchRepository;
 import com.mannschaft.app.cms.repository.BlogPostKeywordSearchRepository.BaseCondition;
 import com.mannschaft.app.cms.repository.BlogPostKeywordSearchRepository.CandidateScopes;
@@ -121,14 +120,13 @@ public class BlogPostSearchContributor implements SearchContributor {
         Set<Long> teamIds = new HashSet<>();
         Set<Long> orgIds = new HashSet<>();
         for (ScoredPost s : scored) {
-            BlogPostEntity p = s.post();
-            if (p.getAuthorId() != null) {
-                authorIds.add(p.getAuthorId());
+            if (s.authorId() != null) {
+                authorIds.add(s.authorId());
             }
-            if (p.getTeamId() != null) {
-                teamIds.add(p.getTeamId());
-            } else if (p.getOrganizationId() != null) {
-                orgIds.add(p.getOrganizationId());
+            if (s.teamId() != null) {
+                teamIds.add(s.teamId());
+            } else if (s.organizationId() != null) {
+                orgIds.add(s.organizationId());
             }
         }
         Map<Long, String> displayNames = nameResolverService.resolveUserDisplayNames(authorIds);
@@ -138,29 +136,29 @@ public class BlogPostSearchContributor implements SearchContributor {
 
         List<SearchHit> hits = new ArrayList<>(scored.size());
         for (ScoredPost s : scored) {
-            BlogPostEntity p = s.post();
-            boolean team = p.getTeamId() != null;
-            Long scopeId = team ? p.getTeamId() : p.getOrganizationId();
-            if (scopeId == null || p.getSlug() == null || p.getSlug().isBlank()) {
+            // 返却列はすべて可視性を判定した同じ SQL の行の値（ID で読み直さない。PR-6 検分 P1 の横展開）
+            boolean team = s.teamId() != null;
+            Long scopeId = team ? s.teamId() : s.organizationId();
+            if (scopeId == null || s.slug() == null || s.slug().isBlank()) {
                 // 遷移先を組み立てられない記事は出さない（SQL 側で除外済みのはずだが安全側）
                 continue;
             }
-            Long authorId = p.getAuthorId();
+            Long authorId = s.authorId();
             SearchHit.Author author = authorId == null ? null
                     : new SearchHit.Author(authorId, displayNames.get(authorId), avatarUrls.get(authorId));
             Map<String, List<Integer>> highlights = new HashMap<>();
-            List<Integer> range = SearchTextHighlighter.titleRange(p.getTitle(), criteria.terms());
+            List<Integer> range = SearchTextHighlighter.titleRange(s.title(), criteria.terms());
             if (range != null) {
                 highlights.put("title", range);
             }
             SearchHit.ScopeRef scope = team
                     ? new SearchHit.ScopeRef(SearchViewer.TEAM, scopeId, teamNames.get(scopeId))
                     : new SearchHit.ScopeRef(SearchViewer.ORGANIZATION, scopeId, orgNames.get(scopeId));
-            String url = "/blog/posts/" + encodeUriComponent(p.getSlug())
+            String url = "/blog/posts/" + encodeUriComponent(s.slug())
                     + (team ? "?teamId=" : "?organizationId=") + scopeId;
-            hits.add(new SearchHit(SearchType.ARTICLE, p.getId(), p.getTitle(),
-                    SearchTextHighlighter.snippet(plainText(p.getBody()), criteria.terms()), highlights,
-                    s.relevance(), author, scope, SearchHit.createdAtOf(p.getCreatedAt()), url, List.of()));
+            hits.add(new SearchHit(SearchType.ARTICLE, s.id(), s.title(),
+                    SearchTextHighlighter.snippet(plainText(s.body()), criteria.terms()), highlights,
+                    s.relevance(), author, scope, SearchHit.createdAtOfStoredUtc(s.createdAtUtc()), url, List.of()));
         }
         return hits;
     }
