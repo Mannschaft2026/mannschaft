@@ -16,6 +16,7 @@ const { userTimezone } = useDatetime()
 const scopeStore = useScopeStore()
 const notification = useNotification()
 const api = useShiftBudgetApi()
+const { getFieldErrors } = useErrorHandler()
 const { canManageBudget, ensureLoaded: ensureBudgetAdminAccess } = useShiftBudgetAdminAccess()
 
 /** 適用開始に選べる期間数（最も早い期間から数える） */
@@ -126,12 +127,6 @@ function statusOf(e: unknown): number | undefined {
     ?? (e as { status?: number }).status
 }
 
-function fieldErrorsOf(e: unknown): Record<string, string> {
-  const list = (e as { data?: { error?: { fieldErrors?: { field: string, message: string }[] } } })
-    .data?.error?.fieldErrors ?? []
-  return Object.fromEntries(list.map(fe => [fe.field, fe.message]))
-}
-
 async function load() {
   const generation = ++loadGeneration
   const orgId = organizationId.value
@@ -189,7 +184,7 @@ async function submit() {
     submitError.value = status === 409
       ? t('shiftBudget.closingDay.conflict')
       : t('shiftBudget.closingDay.error')
-    if (status === 400) fieldErrors.value = fieldErrorsOf(e)
+    if (status === 400) fieldErrors.value = getFieldErrors(e)
     if (status === 409) {
       // revision 競合: 画面が古いままだと再送しても 409 が続くため、最新の現在値・履歴・revision を取り直す。
       // 入力は保持する（設計書に定めなし。差分を見て再送できるようにする）。
