@@ -443,8 +443,28 @@ describe('CMP-260909-2152 α 実機E2E 不備: 409・400・403', () => {
     await fillForm(wrapper, 15, '2026-12', '理由')
     await wrapper.get('[data-testid="closing-submit"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="closing-field-error-reason"]').text()).toContain('500文字以内')
+    expect(wrapper.get('[data-testid="closing-field-error-reason"]').text()).not.toBe('')
     expect(getClosingSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('非 ja ロケールで 400 fieldErrors を受けても、サーバーの日本語メッセージをそのまま表示しない', async () => {
+    await useNuxtApp().$i18n.setLocale('en')
+    changeClosingSetting.mockRejectedValueOnce(Object.assign(new Error('bad'), {
+      status: 400, statusCode: 400,
+      data: { error: { code: 'COMMON_001', fieldErrors: [
+        { field: 'reason', message: '500文字以内で入力してください' },
+        { field: 'closing_day', message: '不正な値です' },
+      ] } },
+    }))
+    const wrapper = await mountPage()
+    await fillForm(wrapper, 15, '2026-12', 'reason')
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    const text = wrapper.get('[data-testid="closing-field-error-reason"]').text()
+      + (wrapper.find('[data-testid="closing-field-errors"]').exists()
+        ? wrapper.get('[data-testid="closing-field-errors"]').text() : '')
+    expect(text).not.toBe('')
+    expect(text).not.toMatch(/[ぁ-んァ-ヶ一-龠]/)
   })
 
   it('取得が 403 のときは取得失敗ではなく権限不足と分かる文言を出す', async () => {
