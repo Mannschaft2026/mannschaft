@@ -103,7 +103,9 @@ jobs:
         if: steps.changes.outputs.er_related == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは main への push だけに限る（CMP-261120-1042。使用範囲の違うジョブが書くと jar 欠落の部分集合が復元される）。
+          cache-read-only: ${{ github.event_name != 'push' }}
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
@@ -111,6 +113,11 @@ jobs:
       - name: Grant Gradle wrapper execute permission
         if: steps.changes.outputs.er_related == 'true'
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        if: steps.changes.outputs.er_related == 'true'
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       # Docker 不在は skip ではなく失敗にする（-Der.requireDocker=true）。走らない番人は最悪。
       - name: Check ER diagrams

@@ -1,0 +1,23 @@
+// CMP-261120-1042: Gradle 依存キャッシュの整合性検証用 init script（backend-ci 等から -I で渡す）。
+// 復元したキャッシュで「メタデータ（POM/module）はあるが jar が無い」状態を検出するため、
+// ビルドが実際に使う解決可能な構成（コンパイル/実行クラスパス、アノテーションプロセッサ、jacoco）を全て解決する。
+// jar が欠けていれば Could not find で失敗する（--offline で呼ぶと壊れたキャッシュを必ず検出できる）。
+allprojects {
+    tasks.register('verifyCachedDependencies') {
+        group = 'verification'
+        description = 'Resolve every classpath-like configuration to verify the Gradle dependency cache is complete.'
+        doLast {
+            def pattern = ~/(?i).*(compileClasspath|runtimeClasspath|annotationProcessor)$|jacocoAgent|jacocoAnt/
+            def count = 0
+            configurations.findAll { it.canBeResolved && it.name ==~ pattern }.each { c ->
+                c.incoming.files.files.each { f ->
+                    if (!f.exists()) {
+                        throw new GradleException("依存ファイルが実在しません: ${f} (configuration ${project.path}:${c.name})")
+                    }
+                }
+                count++
+            }
+            println "verifyCachedDependencies: ${project.path} で ${count} 構成を解決し、全ファイルの実在を確認"
+        }
+    }
+}
