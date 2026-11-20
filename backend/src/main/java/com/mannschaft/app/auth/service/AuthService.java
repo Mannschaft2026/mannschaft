@@ -1,6 +1,7 @@
 package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
+import com.mannschaft.app.auth.MfaVerificationMethod;
 import com.mannschaft.app.auth.dto.ConfirmPasswordResetRequest;
 import com.mannschaft.app.auth.dto.LoginHistoryResponse;
 import com.mannschaft.app.auth.dto.LoginRequest;
@@ -268,6 +269,25 @@ public class AuthService {
     TokenResponse completePasskeyLogin(UserEntity user, String ipAddress, String userAgent,
                                               List<String> resolvedRoles) {
         return issueLoginSession(user, null, false, ipAddress, userAgent, "WEBAUTHN", resolvedRoles);
+    }
+
+    /**
+     * 2FA を完了したユーザーへ、パスワード直経路と共通のセッションを発行する（CMP-261012-0911）。
+     *
+     * <p>TODO(CMP-261012-0911 出陣): 試練用の骨格（未実装）。{@code issueLoginSession} へ委譲し、
+     * 新端末検知・セッション上限・最終ログイン・LoginSuccessEvent（method=入口方式、mfaFactor=使用要素）を揃えること。</p>
+     *
+     * @param user        MFA セッションのユーザー
+     * @param ipAddress   2FA 検証要求の IP
+     * @param userAgent   2FA 検証要求の User-Agent
+     * @param loginMethod 入口方式（PASSWORD / OAUTH_x）
+     * @param factor      2FA で使用した要素
+     * @return トークン
+     */
+    @Transactional
+    TokenResponse completeMfaLogin(UserEntity user, String ipAddress, String userAgent, String loginMethod,
+                                   MfaVerificationMethod factor) {
+        return null;
     }
 
     // ========================================

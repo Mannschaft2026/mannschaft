@@ -248,6 +248,22 @@ public class AuthOAuthService {
     }
 
     /**
+     * OAuth連携を確認する（要求元 IP / User-Agent 付き。CMP-261012-0911）。
+     *
+     * <p>TODO(CMP-261012-0911 出陣): 試練用の骨格。2FA 有効なら MfaRequiredResponse、無効なら
+     * トークン発行＋ip/UA 付き LoginSuccessEvent にすること（現状は旧メソッドへ素通し）。</p>
+     *
+     * @param token     OAuth連携トークン（平文）
+     * @param ipAddress リクエスト元IPアドレス
+     * @param userAgent ユーザーエージェント
+     * @return トークンレスポンスまたは MFA 要求レスポンス
+     */
+    @Transactional
+    public ApiResponse<?> confirmOAuthLinkage(String token, String ipAddress, String userAgent) {
+        return confirmOAuthLinkage(token);
+    }
+
+    /**
      * ユーザーの連携済みOAuthプロバイダ一覧を取得する。
      *
      * @param userId ユーザーID

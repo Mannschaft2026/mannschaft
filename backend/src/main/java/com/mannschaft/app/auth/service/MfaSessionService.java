@@ -2,6 +2,9 @@ package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
 import com.mannschaft.app.auth.MfaEmailOtpPurpose;
+import com.mannschaft.app.auth.TwoFactorMethod;
+import com.mannschaft.app.auth.dto.MfaRequiredResponse;
+import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.event.AccountLockedEvent;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.DomainEventPublisher;
@@ -43,6 +46,11 @@ public class MfaSessionService {
 
     /** MFA セッションキー接頭辞（値は userId）。F01.1・AuthService と共通。 */
     public static final String SESSION_KEY_PREFIX = "mannschaft:auth:mfa_session_token:";
+    /**
+     * MFA セッションの入口方式キー接頭辞（値は PASSWORD / OAUTH_GOOGLE 等。CMP-261012-0911）。
+     * セッションキーと同 TTL・同時削除。キーが無ければ PASSWORD とみなす（旧形式との双方向互換）。
+     */
+    public static final String SESSION_METHOD_KEY_PREFIX = "mannschaft:auth:mfa_session_method:";
     /** セッション単位の試行回数（照合前 INCR）。 */
     static final String ATTEMPT_COUNT_KEY_PREFIX = "mannschaft:auth:mfa_session_attempt_count:";
     /** ユーザー単位の MFA 失敗回数（30 分窓）。 */
@@ -77,7 +85,16 @@ public class MfaSessionService {
      * @param sessionHash 生トークンの SHA-256（Valkey キー・ログイン用メールOTP の紐付けに使う）
      * @param userId      パスワード認証を通過したユーザー
      */
-    public record MfaSession(String sessionHash, Long userId) {
+    public record MfaSession(String sessionHash, Long userId, String loginMethod) {
+
+        /**
+         * 入口方式を持たない旧形式の互換コンストラクタ。
+         *
+         * <p>TODO(CMP-261012-0911 出陣): 試練用の骨格。方式キー欠落時の PASSWORD 解決は未実装。</p>
+         */
+        public MfaSession(String sessionHash, Long userId) {
+            this(sessionHash, userId, null);
+        }
     }
 
     /**
@@ -92,6 +109,26 @@ public class MfaSessionService {
     /** MFA セッションキー。 */
     public static String sessionKey(String sessionHash) {
         return SESSION_KEY_PREFIX + sessionHash;
+    }
+
+    /** MFA セッションの入口方式キー（CMP-261012-0911）。 */
+    public static String sessionMethodKey(String sessionHash) {
+        return SESSION_METHOD_KEY_PREFIX + sessionHash;
+    }
+
+    /**
+     * 一次認証（パスワード・OAuth）を通過したユーザーに MFA チャレンジを発行する（CMP-261012-0911）。
+     *
+     * <p>TODO(CMP-261012-0911 出陣): 試練用の骨格（未実装）。セッションキー（値は userId のまま）と
+     * 入口方式キーを同 TTL で保存し、主手段・提示要素付きの {@link MfaRequiredResponse} を返すこと。</p>
+     *
+     * @param user          一次認証を通過したユーザー
+     * @param primaryMethod 2FA 主手段
+     * @param loginMethod   入口方式（PASSWORD / OAUTH_GOOGLE / OAUTH_LINE / OAUTH_APPLE）
+     * @return MFA 要求レスポンス
+     */
+    public MfaRequiredResponse issueChallenge(UserEntity user, TwoFactorMethod primaryMethod, String loginMethod) {
+        return null;
     }
 
     /** アカウントロックキー。 */
