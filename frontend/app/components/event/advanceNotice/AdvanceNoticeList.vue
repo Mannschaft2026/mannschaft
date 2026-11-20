@@ -64,7 +64,7 @@ function reasonLabel(notice: AdvanceNoticeResponse): string {
         text
         size="small"
         :loading="loading"
-        :aria-label="t('common.reload')"
+        :aria-label="t('shift.swap.list.reload')"
         data-testid="advance-notice-list-reload"
         @click="loadAdvanceNotices"
       />
