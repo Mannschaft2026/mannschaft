@@ -87,7 +87,7 @@ public class RecruitmentPenaltyRecomputeBatch {
                 break;
             }
 
-            List<RecruitmentUserPenaltyEntity> toSave = new ArrayList<>();
+            List<RecruitmentUserPenaltyEntity> toLift = new ArrayList<>();
             for (RecruitmentUserPenaltyEntity penalty : chunk) {
                 scanned++;
 
@@ -96,10 +96,7 @@ public class RecruitmentPenaltyRecomputeBatch {
                         .findById(penalty.getTriggeredBySettingId())
                         .orElse(null);
                 if (setting == null || !setting.isEnabled()) {
-                    // 設定が無効化された場合は解除
-                    penalty.lift(null, PenaltyLiftReason.DISPUTE_REVOKED);
-                    toSave.add(penalty);
-                    revoked++;
+                    toLift.add(penalty);
                     continue;
                 }
 
@@ -110,22 +107,20 @@ public class RecruitmentPenaltyRecomputeBatch {
                         setting.getScopeType().name(), setting.getScopeId());
 
                 if (currentCount < setting.getThresholdCount()) {
-                    // 閾値を下回った → ペナルティ解除
-                    penalty.lift(null, PenaltyLiftReason.DISPUTE_REVOKED);
-                    toSave.add(penalty);
-                    revoked++;
-                    log.info("F03.11 Phase5b ペナルティ再計算解除: penaltyId={}, userId={}, noShowCount={}",
-                            penalty.getId(), penalty.getUserId(), currentCount);
+                    toLift.add(penalty);
                 }
             }
 
-            if (!toSave.isEmpty()) {
-                penaltyRepository.saveAll(toSave);
-                for (RecruitmentUserPenaltyEntity penalty : toSave) {
-                    eventPublisher.publishEvent(new RecruitmentPenaltyLiftedNotificationEvent(
-                            penalty.getId(), penalty.getUserId(), penalty.getScopeType(), penalty.getScopeId(),
-                            PenaltyLiftReason.DISPUTE_REVOKED));
+            for (RecruitmentUserPenaltyEntity penalty : toLift) {
+                if (penaltyRepository.liftUnliftedPenalty(
+                        penalty.getId(), LocalDateTime.now(), PenaltyLiftReason.DISPUTE_REVOKED) == 0) {
+                    continue;
                 }
+
+                revoked++;
+                eventPublisher.publishEvent(new RecruitmentPenaltyLiftedNotificationEvent(
+                        penalty.getId(), penalty.getUserId(), penalty.getScopeType(), penalty.getScopeId(),
+                        PenaltyLiftReason.DISPUTE_REVOKED));
             }
 
             // カーソルを直前チャンクの最終 id まで前進させる（キーセットページング）
@@ -141,7 +136,6 @@ public class RecruitmentPenaltyRecomputeBatch {
                     MAX_PAGES, scanned, revoked);
         }
 
-        // TODO: F04.9 実装後に解除対象ユーザーへ RECRUITMENT_PENALTY_LIFTED 通知
         log.info("F03.11 Phase5b ペナルティ再計算バッチ完了: scanned={}件, revoked={}件", scanned, revoked);
     }
 }

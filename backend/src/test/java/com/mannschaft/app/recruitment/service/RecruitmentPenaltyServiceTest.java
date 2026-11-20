@@ -218,6 +218,7 @@ class RecruitmentPenaltyServiceTest {
             given(penaltyRepository.findById(PENALTY_ID)).willReturn(Optional.of(penalty));
             given(settingRepository.findById(5L)).willReturn(Optional.of(
                     RecruitmentPenaltySettingEntity.builder().scopeType(SCOPE_TYPE).scopeId(SCOPE_ID).build()));
+            given(penaltyRepository.lockUnliftedPenalty(PENALTY_ID)).willReturn(Optional.of(PENALTY_ID));
 
             assertThatThrownBy(() -> service.liftPenalty(PENALTY_ID, ADMIN_ID))
                     .isInstanceOf(BusinessException.class)
@@ -241,7 +242,7 @@ class RecruitmentPenaltyServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(RecruitmentErrorCode.PENALTY_NOT_FOUND);
-            verify(penaltyRepository, never()).save(any());
+            verify(penaltyRepository, never()).saveAndFlush(any());
             verifyNoInteractions(eventPublisher);
         }
 
@@ -257,14 +258,32 @@ class RecruitmentPenaltyServiceTest {
             given(settingRepository.findById(5L)).willReturn(Optional.of(
                     RecruitmentPenaltySettingEntity.builder().scopeType(SCOPE_TYPE).scopeId(SCOPE_ID).build()));
             ReflectionTestUtils.setField(penalty, "id", PENALTY_ID);
-            given(penaltyRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+            given(penaltyRepository.lockUnliftedPenalty(PENALTY_ID)).willReturn(Optional.of(PENALTY_ID));
+            given(penaltyRepository.saveAndFlush(any())).willAnswer(inv -> inv.getArgument(0));
 
             RecruitmentUserPenaltyEntity result = service.liftPenalty(PENALTY_ID, ADMIN_ID);
 
             assertThat(result.isActive()).isFalse();
-            verify(penaltyRepository).save(penalty);
+            verify(penaltyRepository).saveAndFlush(penalty);
             verify(eventPublisher).publishEvent(new RecruitmentPenaltyLiftedNotificationEvent(
                     PENALTY_ID, USER_ID, SCOPE_TYPE, SCOPE_ID, PenaltyLiftReason.ADMIN_MANUAL));
+        }
+
+        @Test
+        void 先に解除された行は有効な管理中Entityを持っていても通知しない() {
+            RecruitmentUserPenaltyEntity penalty = RecruitmentUserPenaltyEntity.builder()
+                    .userId(USER_ID).scopeType(SCOPE_TYPE).scopeId(SCOPE_ID).triggeredBySettingId(5L)
+                    .expiresAt(LocalDateTime.now().plusDays(1)).build();
+            given(penaltyRepository.findById(PENALTY_ID)).willReturn(Optional.of(penalty));
+            given(settingRepository.findById(5L)).willReturn(Optional.of(
+                    RecruitmentPenaltySettingEntity.builder().scopeType(SCOPE_TYPE).scopeId(SCOPE_ID).build()));
+            given(penaltyRepository.lockUnliftedPenalty(PENALTY_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.liftPenalty(PENALTY_ID, ADMIN_ID))
+                    .isInstanceOfSatisfying(BusinessException.class, e ->
+                            assertThat(e.getErrorCode()).isEqualTo(RecruitmentErrorCode.INVALID_STATE_TRANSITION));
+            verify(penaltyRepository, never()).saveAndFlush(any());
+            verifyNoInteractions(eventPublisher);
         }
     }
 }

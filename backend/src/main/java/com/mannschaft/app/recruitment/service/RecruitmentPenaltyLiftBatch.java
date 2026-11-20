@@ -53,12 +53,12 @@ public class RecruitmentPenaltyLiftBatch {
 
         int lifted = 0;
         for (RecruitmentUserPenaltyEntity penalty : expired) {
-            penalty.lift(null, PenaltyLiftReason.AUTO_EXPIRED);
-            lifted++;
-        }
-        penaltyRepository.saveAll(expired);
+            if (penaltyRepository.liftUnliftedPenalty(
+                    penalty.getId(), LocalDateTime.now(), PenaltyLiftReason.AUTO_EXPIRED) == 0) {
+                continue;
+            }
 
-        for (RecruitmentUserPenaltyEntity penalty : expired) {
+            lifted++;
             eventPublisher.publishEvent(new RecruitmentPenaltyLiftedNotificationEvent(
                     penalty.getId(), penalty.getUserId(), penalty.getScopeType(), penalty.getScopeId(),
                     PenaltyLiftReason.AUTO_EXPIRED));
