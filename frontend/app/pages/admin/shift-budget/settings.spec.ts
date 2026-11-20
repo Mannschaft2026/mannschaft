@@ -379,3 +379,79 @@ describe('CMP-260909-2152 Codex 検分3 P2-2 組織切替時に旧組織の応�
     expect(changeClosingSetting).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * CMP-260909-2152 α 実機E2E 不備の根治（revision 競合後の再取得・理由の文字数制限・403 の文言）。
+ * 設計書に 409 後の入力の扱いの定めは無いため、入力は保持し、現在値・履歴・revision だけを最新化する。
+ */
+describe('CMP-260909-2152 α 実機E2E 不備: 409・400・403', () => {
+  function conflict409() {
+    return Object.assign(new Error('conflict'), { status: 409, statusCode: 409 })
+  }
+
+  it('409 のあと最新の設定を再取得して現在値・履歴・revision を更新し、入力は保持する', async () => {
+    changeClosingSetting.mockRejectedValueOnce(conflict409())
+    const wrapper = await mountPage()
+    await fillForm(wrapper, 15, '2026-12', '給与計算に合わせる')
+    getClosingSettings.mockResolvedValue(settings({
+      closing_day: 20,
+      revision: 3,
+      changes: [
+        { revision: 3, effective_period_key: '2026-11', closing_day: 20, previous_closing_day: 0,
+          reason: '他の管理者の変更', actor_user_id: 9, created_at: '2026-11-16T01:00:00Z' },
+      ],
+    }))
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(getClosingSettings).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="closing-settings-error"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="closing-current"]').text()).toContain('20')
+    expect(wrapper.find('[data-testid="closing-history-row-3"]').exists()).toBe(true)
+    expect((wrapper.get('[data-testid="closing-reason"]').element as HTMLTextAreaElement).value)
+      .toBe('給与計算に合わせる')
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(changeClosingSetting).toHaveBeenLastCalledWith('10', expect.objectContaining({
+      expected_revision: 3, closing_day: 15, effective_period_key: '2026-12',
+    }))
+  })
+
+  it('409 後の再取得で適用開始の下限が進み、選んだ期間が選べなくなったら選択を外す', async () => {
+    changeClosingSetting.mockRejectedValueOnce(conflict409())
+    const wrapper = await mountPage()
+    await fillForm(wrapper, 15, '2026-11', '理由')
+    getClosingSettings.mockResolvedValue(settings({ revision: 3, min_effective_period_key: '2026-12' }))
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="closing-submit"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('理由の入力欄は 500 字までで、文字数を表示する', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.get('[data-testid="closing-reason"]').attributes('maxlength')).toBe('500')
+    await wrapper.get('[data-testid="closing-reason"]').setValue('あいう')
+    expect(wrapper.get('[data-testid="closing-reason-count"]').text()).toContain('3')
+    expect(wrapper.get('[data-testid="closing-reason-count"]').text()).toContain('500')
+  })
+
+  it('400 の fieldErrors があれば項目別に表示する', async () => {
+    changeClosingSetting.mockRejectedValueOnce(Object.assign(new Error('bad'), {
+      status: 400, statusCode: 400,
+      data: { error: { code: 'COMMON_001', fieldErrors: [{ field: 'reason', message: '500文字以内で入力してください' }] } },
+    }))
+    const wrapper = await mountPage()
+    await fillForm(wrapper, 15, '2026-12', '理由')
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="closing-field-error-reason"]').text()).toContain('500文字以内')
+    expect(getClosingSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('取得が 403 のときは取得失敗ではなく権限不足と分かる文言を出す', async () => {
+    getClosingSettings.mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403, statusCode: 403 }))
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-testid="closing-settings-forbidden"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="closing-settings-load-error"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('現在のアカウントでは表示できない画面です')
+  })
+})
