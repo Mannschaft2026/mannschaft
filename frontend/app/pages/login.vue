@@ -138,15 +138,9 @@ async function handleLogin() {
     })
     const data = await loginRequest
     if (data.data.mfaRequired) {
-      // 方式情報を 2fa-verify へ引き継ぐ（AC-53）。欠落時は 2fa-verify 側が TOTP にフォールバックする。
-      const mfaQuery = new URLSearchParams({ session: data.data.mfaSessionToken ?? '' })
-      if (data.data.primaryMethod) mfaQuery.set('primary', data.data.primaryMethod)
-      if (data.data.availableMethods?.length) {
-        mfaQuery.set('methods', data.data.availableMethods.join(','))
-      }
-      // ログイン後の遷移先指定（redirect）も 2FA 通過後まで保持する。
-      if (typeof route.query.redirect === 'string') mfaQuery.set('redirect', route.query.redirect)
-      navigationTarget = `/2fa-verify?${mfaQuery.toString()}`
+      // 方式情報（AC-53）とログイン後の遷移先指定（redirect）を 2fa-verify へ引き継ぐ。
+      // 組み立ては OAuth コールバックと共通（utils/mfaVerifyTarget.ts）。
+      navigationTarget = buildMfaVerifyTarget(data.data, route.query.redirect)
     } else {
       navigationTarget = await completeLogin(data.data, data.data)
     }
