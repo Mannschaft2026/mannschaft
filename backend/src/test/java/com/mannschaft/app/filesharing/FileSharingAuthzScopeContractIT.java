@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing;
 
 import com.mannschaft.app.common.storage.PresignedUploadResult;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
 import com.mannschaft.app.common.storage.R2StorageService;
 import com.mannschaft.app.common.storage.acl.StorageAclAttachmentBinding;
 import com.mannschaft.app.common.storage.acl.StorageAclContentReference;
@@ -553,7 +554,7 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(get("/api/v1/files/{fileId}/stars/me", teamOpenFileId))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data[*].fileId", hasItem(teamOpenFileId.intValue())))
-                    .andExpect(jsonPath("$.data[*].userId", not(hasItem(personalOwnerId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].userId", not(hasLongId(personalOwnerId))));
         }
     }
 
