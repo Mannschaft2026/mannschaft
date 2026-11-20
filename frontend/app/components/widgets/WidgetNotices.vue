@@ -50,8 +50,24 @@ type TabKey =
   | { kind: 'folder', scopeType: ScopeType, folderId: number }
 
 const notices = ref<Notice[]>([])
-const loading = ref(true)
 const currentTab = ref<TabKey>({ kind: 'all' })
+const tabStates = ref(new Map<string, 'pending' | 'settled'>())
+/** 選択中タブの本文が取得待ちか。本文側のスピナーにだけ使い、タブ列は消さない。 */
+const loading = computed(() => tabStates.value.get(tabCacheKey(currentTab.value)) !== 'settled')
+/**
+ * 選択中タブの本文を一度でも表示したか。DashboardWidgetCard は loading 中にスロット全体
+ * （タブ列を含む）を外すため、カードのスケルトンは初回表示までに限る。以降の取得待ちは
+ * 本文だけをスピナーにし、取得済みタブへ戻れるようにする。
+ */
+const firstContentShown = ref(false)
+const cardLoading = computed(() => !firstContentShown.value && loading.value)
+let requestGeneration = 0
+let disposed = false
+let folderBootstrap: Promise<void> | null = null
+
+function isCurrentRequest(generation: number): boolean {
+  return !disposed && generation === requestGeneration
+}
 
 /**
  * `/api/v1/notifications` のレスポンス（PagedResponse 形）の最低限の形。
@@ -132,6 +148,27 @@ function tabCacheKey(tab: TabKey): string {
 /** タブ別データキャッシュ。初回マウント時に全タブ分を一括取得して保持する。 */
 const noticeCache = new Map<string, Notice[]>()
 
+/**
+ * 既読化に成功した通知 ID。取得の応答待ち中に既読化が成功すると、後から届いた応答は
+ * 既読化前の状態（未読）を持ちうるため、キャッシュへ入れる前に適用する。
+ * その ID が既読化済みであることは確実で、既読は未読へ戻らないため refresh をまたいでも保持する。
+ */
+const readIds = new Set<number>()
+
+/**
+ * 「全て既読」の成功回数。全件既読は BE で実行時点の通知だけを既読にするため、応答に推測で
+ * 当てはめると既読化後の新着まで既読にしてしまう。取得中に成功した場合は応答を破棄して取り直す。
+ */
+let markAllReadCount = 0
+
+/** 既読化に成功した ID を、後着の応答へ反映する。 */
+function applyKnownReads(list: Notice[]): Notice[] {
+  for (const n of list) {
+    if (readIds.has(n.id)) n.isRead = true
+  }
+  return list
+}
+
 /** 指定タブのデータを API から取得して返す。 */
 async function fetchForTab(tab: TabKey): Promise<Notice[]> {
   if (tab.kind === 'all') {
@@ -174,69 +211,99 @@ async function fetchForTab(tab: TabKey): Promise<Notice[]> {
 }
 
 /** 要対応タブ: API からアイテム一覧を取得。 */
-async function loadActionRequired() {
+async function loadActionRequired(generation: number) {
   if (actionRequiredLoaded.value) return
   actionRequiredLoading.value = true
   try {
-    const res = await fetchActionRequired()
+    const res = await fetchActionRequired({ shareInitial: generation === 1 })
+    if (!isCurrentRequest(generation)) return
     actionRequiredItems.value = res.items
     actionRequiredLoaded.value = true
   }
   catch (error) {
+    if (!isCurrentRequest(generation)) return
     captureQuiet(error, { context: 'WidgetNotices: 要対応取得' })
     actionRequiredItems.value = []
   }
   finally {
-    actionRequiredLoading.value = false
+    if (isCurrentRequest(generation)) actionRequiredLoading.value = false
   }
 }
 
 /** 運営お知らせタブ: API からアイテム一覧を取得。 */
-async function loadPlatformAnnouncements() {
+async function loadPlatformAnnouncements(generation: number) {
   if (platformAnnouncementsLoaded.value) return
   platformAnnouncementsLoading.value = true
   try {
     const res = await getPlatformAnnouncements()
+    if (!isCurrentRequest(generation)) return
     platformAnnouncements.value = res.data
     platformAnnouncementsLoaded.value = true
   }
   catch {
+    if (!isCurrentRequest(generation)) return
     platformAnnouncements.value = []
   }
   finally {
-    platformAnnouncementsLoading.value = false
+    if (isCurrentRequest(generation)) platformAnnouncementsLoading.value = false
   }
 }
 
-/** 全タブ分を並列プリフェッチしてキャッシュに保存し、現在タブを表示する。 */
-async function load() {
-  loading.value = true
-  noticeCache.clear()
-  actionRequiredLoaded.value = false
-  platformAnnouncementsLoaded.value = false
+/** 非選択タブはキャッシュだけ更新し、現在タブの完了を独立して表示する。 */
+async function loadTab(tab: TabKey, generation: number) {
+  const key = tabCacheKey(tab)
+  if (!isCurrentRequest(generation) || tabStates.value.has(key)) return
+  tabStates.value.set(key, 'pending')
   try {
-    await Promise.all(
-      tabs.value.map(async (tabDef) => {
-        if (tabDef.tab.kind === 'action-required') return // 別ステートで管理
-        if (tabDef.tab.kind === 'platform-announcements') return // 別ステートで管理
-        try {
-          noticeCache.set(tabCacheKey(tabDef.tab), await fetchForTab(tabDef.tab))
-        }
-        catch (error) {
-          captureQuiet(error, { context: `WidgetNotices: ${tabDef.key} 取得` })
-          noticeCache.set(tabCacheKey(tabDef.tab), [])
-        }
-      }),
-    )
-    // 要対応タブ・運営お知らせタブも並列取得
-    await Promise.all([loadActionRequired(), loadPlatformAnnouncements()])
+    if (tab.kind === 'action-required') await loadActionRequired(generation)
+    else if (tab.kind === 'platform-announcements') await loadPlatformAnnouncements(generation)
+    else {
+      let result: Notice[]
+      let markAllReadCountAtStart: number
+      // 取得中に「全て既読」が成功した応答は、既読化前か既読化後の新着を含むか判別できないため破棄して取り直す。
+      // 取り直しは取得中に全件既読が新たに成功した場合に限るので、利用者の操作なしに続くことはない。
+      do {
+        markAllReadCountAtStart = markAllReadCount
+        result = await fetchForTab(tab)
+        if (!isCurrentRequest(generation)) return
+      } while (markAllReadCountAtStart !== markAllReadCount)
+      noticeCache.set(key, applyKnownReads(result))
+    }
+  }
+  catch (error) {
+    if (!isCurrentRequest(generation)) return
+    captureQuiet(error, { context: `WidgetNotices: ${key} 取得` })
+    noticeCache.set(key, [])
   }
   finally {
-    if (currentTab.value.kind !== 'action-required' && currentTab.value.kind !== 'platform-announcements') {
-      notices.value = noticeCache.get(tabCacheKey(currentTab.value)) ?? []
+    if (isCurrentRequest(generation)) {
+      tabStates.value.set(key, 'settled')
+      if (key === tabCacheKey(currentTab.value)) firstContentShown.value = true
+      if (tab.kind !== 'action-required' && tab.kind !== 'platform-announcements' && key === tabCacheKey(currentTab.value)) {
+        notices.value = noticeCache.get(key) ?? []
+      }
     }
-    loading.value = false
   }
+}
+
+/** 既知タブをすぐ開始し、一覧取得後に増えたフォルダも先読みする。 */
+async function load() {
+  if (disposed) return
+  if (!tabs.value.some(({ tab }) => tabCacheKey(tab) === tabCacheKey(currentTab.value))) {
+    currentTab.value = { kind: 'all' }
+  }
+  const generation = ++requestGeneration
+  noticeCache.clear()
+  tabStates.value = new Map()
+  actionRequiredLoaded.value = false
+  platformAnnouncementsLoaded.value = false
+  await Promise.all([
+    ...tabs.value.map(({ tab }) => loadTab(tab, generation)),
+    ensureFoldersLoaded().then(async () => {
+      if (!isCurrentRequest(generation)) return
+      await Promise.all(tabs.value.map(({ tab }) => loadTab(tab, generation)))
+    }),
+  ])
 }
 
 async function onMarkRead(id: number) {
@@ -250,6 +317,8 @@ async function onMarkRead(id: number) {
     captureQuiet(error, { context: 'WidgetNotices: 既読化' })
     return
   }
+  // 応答待ちのタブ取得が後から届いても未読へ戻らないよう、成功した ID を記録する。
+  readIds.add(id)
   // 表示中のタブはリアクティブ経由で更新し（再描画のため先に行う）、
   // 応答待ちの間にタブが切り替わっても、押した通知を ID で全タブのキャッシュから既読にする。
   const current = notices.value.find(n => n.id === id)
@@ -263,23 +332,42 @@ async function onMarkRead(id: number) {
 
 async function onMarkAllRead() {
   await markAllNoticesRead()
+  // 応答待ちのタブ取得が後から届いても未読へ戻らないよう、成功を記録する。
+  markAllReadCount++
   notices.value.forEach((n) => {
     n.isRead = true
   })
+  // 取得済みの他タブは、取得が既読化の BE 実行より後だった場合に既読化後の新着を含みうるため、
+  // 推測で既読にせず取り直す（表示中の一覧は押下前から表示していたので既読化の対象で確実）。
+  // 取得中のタブは loadTab 側で応答を破棄して取り直す。
+  const currentKey = tabCacheKey(currentTab.value)
+  const staleKeys = [...noticeCache.keys()].filter(key => key !== currentKey)
+  for (const key of staleKeys) {
+    noticeCache.delete(key)
+    tabStates.value.delete(key)
+  }
+  for (const { tab } of tabs.value) {
+    if (staleKeys.includes(tabCacheKey(tab))) void loadTab(tab, requestGeneration)
+  }
   notification.success(t('dashboard.widgets.notices.markedAllRead'))
 }
 
 const unreadCount = computed(() => notices.value.filter(n => !n.isRead).length)
 
-/** タブ切替。キャッシュから即座に表示するだけ（API呼び出しなし）。 */
+/** 取得済みタブは表示し、未完了ならloadingを継続、未取得なら取得を開始する。 */
 function switchTab(tab: TabKey) {
   currentTab.value = tab
   if (tab.kind !== 'action-required' && tab.kind !== 'platform-announcements') {
     notices.value = noticeCache.get(tabCacheKey(tab)) ?? []
   }
   if (tab.kind === 'platform-announcements') {
-    loadPlatformAnnouncements()
+    // 失敗した運営タブは、従来どおり次の選択時に再試行する。
+    const key = tabCacheKey(tab)
+    if (!platformAnnouncementsLoaded.value && tabStates.value.get(key) === 'settled') {
+      tabStates.value.delete(key)
+    }
   }
+  void loadTab(tab, requestGeneration)
 }
 
 /**
@@ -299,19 +387,24 @@ async function refreshSummaries() {
 }
 
 /** フォルダ一覧をストアからロード（未取得の場合のみ）。 */
-async function ensureFoldersLoaded() {
-  try {
-    if (foldersStore.foldersFor('TEAM').length === 0) {
-      await foldersStore.fetchAll('TEAM')
+function ensureFoldersLoaded(): Promise<void> {
+  // refreshが初期取得と重なっても、共有store.loadingを使う一覧取得を重複させない。
+  folderBootstrap ??= (async () => {
+    try {
+      if (foldersStore.foldersFor('TEAM').length === 0) {
+        await foldersStore.fetchAll('TEAM')
+      }
+      if (disposed) return
+      if (foldersStore.foldersFor('ORGANIZATION').length === 0) {
+        await foldersStore.fetchAll('ORGANIZATION')
+      }
     }
-    if (foldersStore.foldersFor('ORGANIZATION').length === 0) {
-      await foldersStore.fetchAll('ORGANIZATION')
+    catch (error) {
+      // フォルダ一覧取得失敗は致命的でないため、「すべて」タブだけで動作継続
+      if (!disposed) captureQuiet(error, { context: 'WidgetNotices: フォルダ一覧取得' })
     }
-  }
-  catch (error) {
-    // フォルダ一覧取得失敗は致命的でないため、「すべて」タブだけで動作継続
-    captureQuiet(error, { context: 'WidgetNotices: フォルダ一覧取得' })
-  }
+  })()
+  return folderBootstrap
 }
 
 interface FolderTabDef {
@@ -455,10 +548,13 @@ function onAttendanceSubmitted() {
   }
 }
 
-onMounted(async () => {
-  await ensureFoldersLoaded()
-  await refreshSummaries()
-  await load()
+onMounted(() => {
+  void load()
+  void refreshSummaries()
+})
+onBeforeUnmount(() => {
+  disposed = true
+  requestGeneration++
 })
 </script>
 
@@ -467,7 +563,7 @@ onMounted(async () => {
     :title="t('dashboard.widgets.notices.title')"
     icon="pi pi-bell"
     to="/notifications"
-    :loading="loading"
+    :loading="cardLoading"
     refreshable
     @refresh="load"
   >
@@ -503,8 +599,18 @@ onMounted(async () => {
       </button>
     </div>
 
+    <!-- 選択中タブの取得待ち（タブ列は残し、本文だけをローディング表示にする） -->
+    <div
+      v-if="loading"
+      class="flex justify-center py-4"
+      aria-busy="true"
+      data-testid="widget-notices-body-loading"
+    >
+      <i class="pi pi-spin pi-spinner text-xl text-surface-400" />
+    </div>
+
     <!-- 通常タブ（すべて・フォルダ別） -->
-    <template v-if="currentTab.kind !== 'action-required' && currentTab.kind !== 'platform-announcements'">
+    <template v-else-if="currentTab.kind !== 'action-required' && currentTab.kind !== 'platform-announcements'">
       <div v-if="notices.length > 0">
         <div class="mb-2 flex items-center justify-between">
           <Badge v-if="unreadCount > 0" :value="unreadCount" severity="danger" />
