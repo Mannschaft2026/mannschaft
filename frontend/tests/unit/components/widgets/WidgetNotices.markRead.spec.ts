@@ -200,4 +200,109 @@ describe('WidgetNotices 既読化（CMP-261030-0652）', () => {
     expect(dotOf(wrapper, 1).classes()).toContain('bg-surface-300')
     wrapper.unmount()
   })
+  /** フォルダ通知の応答を後から返すための遅延 Promise。 */
+  function deferFolderResponse() {
+    let resolveFolder: (value: { data: unknown[] }) => void = () => {}
+    mocks.api.mockImplementation(() => new Promise((resolve) => {
+      resolveFolder = resolve
+    }))
+    return (items: Array<{ id: number, isRead: boolean }>) => resolveFolder({
+      data: items.map(({ id, isRead }) => ({
+        id, notificationType: 'SYSTEM', title: `通知${id}`, body: null, isRead,
+        actionUrl: null, createdAt: '2026-11-10T09:00:00',
+      })),
+    })
+  }
+
+  it('フォルダ取得の応答待ち中に「すべて」で既読にした通知は、後着のフォルダ応答でも既読のまま', async () => {
+    const resolveFolder = deferFolderResponse()
+    const wrapper = await mountWidget([apiNotice(1, false, null)])
+
+    await wrapper.findAll('p').find(p => p.text() === '通知1')!.trigger('click')
+    await flushPromises()
+    expect(mocks.markNoticeRead).toHaveBeenCalledWith(1)
+    // 既読化の成功後に、既読化前の状態（未読）を持つフォルダ応答が届く
+    resolveFolder([{ id: 1, isRead: false }, { id: 2, isRead: false }])
+    await flushPromises()
+    await wrapper.get('[data-testid="widget-notices-tab-TEAM-11"]').trigger('click')
+    await flushPromises()
+
+    expect(dotOf(wrapper, 1).classes()).toContain('bg-surface-300')
+    // 既読化していない通知は未読のまま
+    expect(dotOf(wrapper, 2).classes()).toContain('bg-primary')
+    wrapper.unmount()
+  })
+
+  it('フォルダ取得の応答待ち中に「全て既読」が成功すると、後着の応答は破棄して取り直し、取り直した状態を表示する', async () => {
+    mocks.markAllNoticesRead.mockResolvedValue(undefined)
+    const resolveFolder = deferFolderResponse()
+    const wrapper = await mountWidget([apiNotice(1, false, null)])
+
+    await wrapper.get('button:not([role="tab"])').trigger('click')
+    await flushPromises()
+    expect(mocks.markAllNoticesRead).toHaveBeenCalledTimes(1)
+    expect(mocks.api).toHaveBeenCalledTimes(1)
+    // 既読化前の状態を持つ後着応答は採用しない
+    resolveFolder([{ id: 2, isRead: false }])
+    await flushPromises()
+    expect(mocks.api).toHaveBeenCalledTimes(2)
+    resolveFolder([{ id: 2, isRead: true }])
+    await flushPromises()
+    // 取り直しは1回で止まる
+    expect(mocks.api).toHaveBeenCalledTimes(2)
+    await wrapper.get('[data-testid="widget-notices-tab-TEAM-11"]').trigger('click')
+    await flushPromises()
+
+    expect(dotOf(wrapper, 2).classes()).toContain('bg-surface-300')
+    wrapper.unmount()
+  })
+
+  it('取得中に「全て既読」が成功し、後着応答に既読化後の新着（未読）が含まれる場合、新着は未読のまま表示され、クリックで POST される', async () => {
+    mocks.markAllNoticesRead.mockResolvedValue(undefined)
+    const resolveFolder = deferFolderResponse()
+    const wrapper = await mountWidget([apiNotice(1, false, null)])
+
+    await wrapper.get('button:not([role="tab"])').trigger('click')
+    await flushPromises()
+    // 既読化後に作られた新着 3 を含む応答（BE の全件既読は実行時点の通知だけを既読にする）
+    resolveFolder([{ id: 2, isRead: true }, { id: 3, isRead: false }])
+    await flushPromises()
+    resolveFolder([{ id: 2, isRead: true }, { id: 3, isRead: false }])
+    await flushPromises()
+    await wrapper.get('[data-testid="widget-notices-tab-TEAM-11"]').trigger('click')
+    await flushPromises()
+
+    expect(dotOf(wrapper, 3).classes()).toContain('bg-primary')
+    await wrapper.findAll('p').find(p => p.text() === '通知3')!.trigger('click')
+    await flushPromises()
+    expect(mocks.markNoticeRead).toHaveBeenCalledWith(3)
+    expect(dotOf(wrapper, 3).classes()).toContain('bg-surface-300')
+    wrapper.unmount()
+  })
+
+  it('「全て既読」は取得済みの他タブを推測で既読にせず取り直し、新着の未読を保つ', async () => {
+    mocks.markAllNoticesRead.mockResolvedValue(undefined)
+    const wrapper = await mountWidget([apiNotice(1, false, null)])
+    expect(mocks.api).toHaveBeenCalledTimes(1)
+    mocks.api.mockResolvedValue({
+      data: [2, 3].map(id => ({
+        id, notificationType: 'SYSTEM', title: `通知${id}`, body: null, isRead: id === 2,
+        actionUrl: null, createdAt: '2026-11-10T09:00:00',
+      })),
+    })
+
+    await wrapper.get('button:not([role="tab"])').trigger('click')
+    await flushPromises()
+    expect(mocks.api).toHaveBeenCalledTimes(2)
+    await wrapper.get('[data-testid="widget-notices-tab-TEAM-11"]').trigger('click')
+    await flushPromises()
+
+    expect(dotOf(wrapper, 2).classes()).toContain('bg-surface-300')
+    expect(dotOf(wrapper, 3).classes()).toContain('bg-primary')
+    // 表示中だった「すべて」は既読化の対象だったため既読表示のまま
+    await wrapper.get('[data-testid="widget-notices-tab-all"]').trigger('click')
+    await flushPromises()
+    expect(dotOf(wrapper, 1).classes()).toContain('bg-surface-300')
+    wrapper.unmount()
+  })
 })
