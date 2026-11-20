@@ -5,8 +5,13 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.filesharing.controller.SharedFileController;
+import com.mannschaft.app.filesharing.dto.CreateFileRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.SharedFilePresignRequest;
+import com.mannschaft.app.filesharing.dto.UpdateFileRequest;
+import com.mannschaft.app.tournament.TournamentErrorCode;
 import com.mannschaft.app.filesharing.service.SharedFileService;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -48,6 +54,9 @@ class SharedFileControllerTest {
 
     @Mock
     private SharedFileService fileService;
+
+    @Mock
+    private FolderScopeAccessGuard folderScopeAccessGuard;
 
     @InjectMocks
     private SharedFileController controller;
@@ -190,6 +199,85 @@ class SharedFileControllerTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(FileSharingErrorCode.FOLDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("CMP-261116-0726: 大会スコープの存在秘匿つき投稿認可は Service より前に通す")
+    class ConcealedPostGuard {
+
+        @BeforeEach
+        void auth() {
+            authenticate();
+        }
+
+        @Test
+        @DisplayName("ファイル削除: 前段ガードが 404 を投げたら Service は呼ばれない")
+        void 削除_前段ガード拒否でServiceを呼ばない() {
+            willThrow(new BusinessException(FileSharingErrorCode.FILE_NOT_FOUND))
+                    .given(folderScopeAccessGuard).requirePostConcealedByFileId(FILE_ID, USER_ID);
+
+            assertThatThrownBy(() -> controller.deleteFile(FILE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(FileSharingErrorCode.FILE_NOT_FOUND));
+            verify(fileService, never()).deleteFile(any(), any());
+        }
+
+        @Test
+        @DisplayName("ファイル更新: 前段ガードをファイル ID で呼び、拒否なら Service は呼ばれない")
+        void 更新_前段ガード拒否でServiceを呼ばない() {
+            UpdateFileRequest request = org.mockito.Mockito.mock(UpdateFileRequest.class);
+            willThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN))
+                    .given(folderScopeAccessGuard).requirePostConcealedByFileId(FILE_ID, USER_ID);
+
+            assertThatThrownBy(() -> controller.updateFile(FILE_ID, request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(TournamentErrorCode.CONTACT_SPACE_POST_FORBIDDEN));
+            verify(fileService, never()).updateFile(any(), any());
+        }
+
+        @Test
+        @DisplayName("ファイル更新: 移動先フォルダ指定時は移動先も同じ秘匿規則で判定する")
+        void 更新_移動先フォルダも判定() {
+            UpdateFileRequest request = org.mockito.Mockito.mock(UpdateFileRequest.class);
+            given(request.getFolderId()).willReturn(FOLDER_ID);
+            willThrow(new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND))
+                    .given(folderScopeAccessGuard).requirePostConcealedByFolderId(FOLDER_ID, USER_ID);
+
+            assertThatThrownBy(() -> controller.updateFile(FILE_ID, request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(FileSharingErrorCode.FOLDER_NOT_FOUND));
+            verify(fileService, never()).updateFile(any(), any());
+        }
+
+        @Test
+        @DisplayName("ファイル作成: 前段ガードをフォルダ ID で呼び、拒否なら Service は呼ばれない")
+        void 作成_前段ガード拒否でServiceを呼ばない() {
+            CreateFileRequest request = org.mockito.Mockito.mock(CreateFileRequest.class);
+            given(request.getFolderId()).willReturn(FOLDER_ID);
+            willThrow(new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND))
+                    .given(folderScopeAccessGuard).requirePostConcealedByFolderId(FOLDER_ID, USER_ID);
+
+            assertThatThrownBy(() -> controller.createFile(request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(FileSharingErrorCode.FOLDER_NOT_FOUND));
+            verify(fileService, never()).createFile(any(), any());
+        }
+
+        @Test
+        @DisplayName("presign-upload: 前段ガードをフォルダ ID で呼び、拒否なら URL を発行しない")
+        void presign_前段ガード拒否で発行しない() {
+            SharedFilePresignRequest request = new SharedFilePresignRequest(FOLDER_ID, "a.pdf", "application/pdf", 1L);
+            willThrow(new BusinessException(FileSharingErrorCode.FOLDER_NOT_FOUND))
+                    .given(folderScopeAccessGuard).requirePostConcealedByFolderId(FOLDER_ID, USER_ID);
+
+            assertThatThrownBy(() -> controller.presignUpload(request))
+                    .isInstanceOf(BusinessException.class);
+            verify(fileService, never()).presignUpload(any(), any(), any());
         }
     }
 }

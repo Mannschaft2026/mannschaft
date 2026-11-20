@@ -1,7 +1,5 @@
 package com.mannschaft.app.notification.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.NotificationSourceTypeMapper;
 import com.mannschaft.app.common.visibility.ReferenceType;
@@ -41,7 +39,12 @@ public class NotificationDispatchService {
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationMapper notificationMapper;
     private final WebPushService webPushService;
-    private final ObjectMapper objectMapper;
+
+    /**
+     * Web Push のペイロード（設計書 F04.3「Push ペイロード」の形）を組み立てる。
+     * WebSocket の {@link NotificationResponse} とは別契約（CMP-261029-0620）。
+     */
+    private final WebPushPayloadFactory webPushPayloadFactory;
 
     /**
      * fan-out 抜本改修 P1: チャンク配信（{@link #dispatchBatch}）の設定/種別/購読を
@@ -63,6 +66,7 @@ public class NotificationDispatchService {
      * <p>設計書: {@code docs/features/F00_content_visibility_resolver.md} §11.1 / §13.5。
      */
     private final ContentVisibilityChecker visibilityChecker;
+    private final com.mannschaft.app.moduleevent.api.ModuleEventNoticeOutboxApi moduleEventNotices;
 
     /**
      * 通知を配信する。ユーザーの設定を確認し、有効なチャネルに送信する。
@@ -253,6 +257,30 @@ public class NotificationDispatchService {
      * @return アクセス可能または判定対象外なら true
      */
     private boolean isAccessibleForRecipient(NotificationEntity notification) {
+        // M通知は未解決sourceを許可する既存互換分岐より先に、公開窓口で現在判定する。
+        if ("MODULE_EVENT_NOTICE".equals(notification.getSourceType())) {
+            if (notification.getSourceId() == null || notification.getSourceId() <= 0
+                    || notification.getUserId() == null || notification.getUserId() <= 0
+                    || !"MODULE_EVENT_NOTICE".equals(notification.getNotificationType())) return false;
+            try {
+                var descriptor = moduleEventNotices.readDescriptor(notification.getSourceId());
+                if (descriptor.isEmpty()) return false;
+                var impact = descriptor.get().getImpact();
+                if (notification.getScopeType() == null
+                        || !notification.getScopeType().name().equals(impact.getScopeType().name())
+                        || !Objects.equals(notification.getScopeId(), impact.getScopeId())
+                        || !Objects.equals(notification.getOrganizationId(), impact.getOrganizationId())
+                        || notification.getActorId() != null || notification.getActionUrl() != null) return false;
+                return moduleEventNotices.eligibleRecipients(notification.getSourceId(), List.of(notification.getUserId()))
+                        .map(recipients -> recipients.stream().anyMatch(r -> notification.getUserId().equals(r.getUserId())))
+                        .orElse(false);
+            } catch (RuntimeException unresolved) {
+                // fail-closed を維持しつつ、配送判定の障害を握りつぶさず記録する（PII は出さない）。
+                log.warn("M通知の配送判定に失敗したため配送しない (fail-closed): notificationId={}, sourceId={}, userId={}",
+                        notification.getId(), notification.getSourceId(), notification.getUserId(), unresolved);
+                return false;
+            }
+        }
         Long sourceId = notification.getSourceId();
         if (sourceId == null) {
             return true;
@@ -319,26 +347,11 @@ public class NotificationDispatchService {
             return;
         }
 
-        String jsonPayload = buildPushPayload(notification);
+        // 配信1件につき1回だけ生成し、全購読へ同じ JSON を送る
+        String jsonPayload = webPushPayloadFactory.build(notification);
 
         for (PushSubscriptionEntity subscription : subscriptions) {
             webPushService.sendPushNotification(subscription, jsonPayload);
-        }
-    }
-
-    /**
-     * 通知エンティティから Web Push ペイロード JSON を生成する。
-     * 生成に失敗した場合はシンプルな代替 JSON を返す。
-     */
-    private String buildPushPayload(NotificationEntity notification) {
-        try {
-            NotificationResponse response = notificationMapper.toNotificationResponse(notification);
-            return objectMapper.writeValueAsString(response);
-        } catch (JsonProcessingException e) {
-            log.warn("WebPushペイロードJSON生成失敗: notificationId={}, error={}",
-                    notification.getId(), e.getMessage());
-            // フォールバック: 最低限の情報を含む JSON
-            return "{\"type\":\"" + notification.getNotificationType() + "\"}";
         }
     }
 }

@@ -68,6 +68,7 @@ function makeChannel(options: MakeChannelOptions = {}): ChatChannelResponse {
     audit: { createdBy: null, createdAt: null, updatedAt: null },
     memberCount: 5,
     dmPartner,
+    derivedName: null,
     viewer: { unreadCount: 0, isMuted: false, isPinned: false, category: null, role: null },
   }
 }

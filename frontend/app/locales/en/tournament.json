@@ -111,6 +111,7 @@
       "empty_history": "No transfer history"
     },
     "roster": {
+      "load_match": "Load",
       "title": "Match Roster",
       "submit": "Submit",
       "apply_template": "Apply Template",
@@ -165,6 +166,7 @@
       "private": "Private",
       "empty": "No communication spaces have been set up",
       "no_bulletin": "No bulletin board space",
+      "bulletin_scope_unresolved": "The bulletin board cannot be shown because its scope could not be determined",
       "no_chat": "No chat space",
       "visibility_saved": "Visibility updated",
       "visibility_failed": "Failed to update visibility",

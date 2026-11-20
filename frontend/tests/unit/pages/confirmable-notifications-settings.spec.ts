@@ -70,10 +70,10 @@ vi.mock('~/composables/useTeamApi', () => ({
 }))
 
 const orgNumericId = ref(456)
-vi.mock('~/composables/useOrgShellContext', () => ({
-  useOrgShellContext: () => ({
-    org: computed(() => ({ numericId: orgNumericId.value })),
-  }),
+// 組織ページは親シェルの org に依存せず、slug から getOrganization で数値IDを自前解決する（CMP-261115-1635）
+const getOrganization = vi.fn(async () => ({ data: { numericId: orgNumericId.value } }))
+vi.mock('~/composables/useOrganizationApi', () => ({
+  useOrganizationApi: () => ({ getOrganization }),
 }))
 
 async function mountTeamSidebar() {

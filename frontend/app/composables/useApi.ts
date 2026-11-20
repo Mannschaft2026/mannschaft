@@ -309,6 +309,17 @@ export function useApi() {
       const meta = options as typeof options & { _authSessionSnapshot?: AuthSessionSnapshot }
       meta._authSessionSnapshot ??= session.capture()
       if (!session.current(meta._authSessionSnapshot) || options.signal?.aborted) throw new Error('AUTH_SESSION_CHANGED')
+      // CMP-261113-1507: BE は未ログイン時に Accept-Language でエラー文言の言語を決める（ログイン済みは users.locale 優先）。
+      // 送らないとブラウザ既定（SSR ではサーバー側の値）に倒れて画面とエラー文言の言語が食い違うため、
+      // 現在の UI 言語を全リクエストに付ける。呼び出し側が明示した値は上書きしない。
+      const uiLocale = nuxtApp.$i18n?.locale?.value
+      if (uiLocale) {
+        const langHeaders = new Headers(options.headers)
+        if (!langHeaders.has('Accept-Language')) {
+          langHeaders.set('Accept-Language', uiLocale)
+          options.headers = langHeaders
+        }
+      }
       // Cookie認証でも、認証済みの紙ピン留めには代理入力ヘッダーを付与する。
       if (authStore.accessToken || (proxyDeskStore.isPinned && authStore.isAuthenticated)) {
         const headers = new Headers(options.headers)

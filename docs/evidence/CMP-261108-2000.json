@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261108-2000",
+  "scope": "app",
+  "implementation": {
+    "pr": 4410,
+    "sha": "e011aa01973251df02e26ef181eb4b1476e5942c"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "全7storeの差分由来と上限を照合し、store本体/番人緩和なしでexpected線数を一致させる",
+      "tests": [
+        {
+          "name": "ストアUUID対応の裏取り / 凍結ストアの行数が期待値と一致する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/architecture/ArchUnitFreezeStoreIntegrityTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "適格Nightly同attempt全6fresh/全3218key分類を保持し正式weights全blobを維持する",
+      "tests": [
+        {
+          "name": "Nightly43093835182 attempt2 input qualification / canonical3218 weights保持",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "compiled全4profile coverage・Integrity・全CI・独立検分を確認する",
+      "tests": [
+        {
+          "name": "compiled verifyShardCoverage 4profiles / production Integrity / independent review",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "PR全体に含まれる依存WSのapp実機/探索資格を親rootへ結ぶ",
+      "tests": [
+        {
+          "name": "root限定R14機能実機＋R15AC36",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43581628753
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4410",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "本締め固有のstore上限引下げ/適格weights更新と、依存WSの実Spring送信競合回帰を区別する。依存回帰は正式red→greenへ対応し、過去timeout原因解消は主張しない。",
+      "test": "StompTerminalErrorFlushContractTest / ArchUnitFreezeStoreIntegrityTest / qualified weights provenance",
+      "redEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}

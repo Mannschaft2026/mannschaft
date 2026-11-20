@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import * as validator from './completion-evidence.mjs';
 import {
   parseTaskList,
@@ -36,6 +37,96 @@ const validationOptions = {
   implementation: { repository: 'owner/repo', merged: true, sha: 'a'.repeat(40), checks: ['success'], files: ['scripts/check.mjs'] },
   runs: new Map([[100, { repository: 'owner/repo', sha: 'a'.repeat(40), conclusion: 'success' }]]),
 };
+
+const completed = `${headers}\n${row('完了', proofLink)}\n`;
+const oldCompleted = `${headers}\n${row('完了')}\n`;
+const proofPath = 'docs/evidence/CMP-260101-0101.json';
+const ancestry = ancestorTaskList => ({ ...validationOptions, ancestorTaskList });
+
+test('1957 AC2: mainだけの完了行・完了化・リンク追加はPRの削除にしない', () => {
+  for (const ancestor of [headers, base, oldCompleted]) {
+    assert.deepEqual(selectEvidencePaths(completed, ancestor, [], ancestry(ancestor)), []);
+    assert.doesNotThrow(() => validateCompletionChanges(completed, ancestor, {}, ancestry(ancestor)));
+  }
+});
+
+test('1957 AC3: PR自身の行・リンク・JSON削除とmain-onlyへの競合変更は拒否', () => {
+  for (const head of [headers, oldCompleted, `${headers}\n${row('完了', '説明変更')}\n`]) {
+    assert.throws(() => selectEvidencePaths(completed, head, [], ancestry(completed)), /削除/);
+    assert.throws(() => validateCompletionChanges(completed, head, {}, ancestry(completed)), /削除/);
+  }
+  const conflictingHead = `${headers}\n${row('実装中', 'PR側の注記変更')}\n`;
+  assert.throws(() => selectEvidencePaths(completed, conflictingHead, [], ancestry(base)), /削除/);
+  assert.throws(() => validateCompletionChanges(completed, conflictingHead, {}, ancestry(base)), /削除/);
+  for (const change of ['modified', 'removed', 'renamed']) {
+    // 行はancestorから無変更でも、PRのJSON操作があればmain-only免除を使わない。
+    assert.throws(() => selectEvidencePaths(completed, oldCompleted, [proofPath], ancestry(oldCompleted)), /削除/, change);
+    assert.throws(() => validateCompletionChanges(completed, oldCompleted, {}, {
+      ...ancestry(oldCompleted), evidenceChanged: new Set([proofPath]),
+      evidenceDeleted: new Set(change === 'modified' ? [] : [proofPath]),
+    }), /削除/, change);
+  }
+});
+
+test('1957 AC4: mainも完了済でもPR自身の新完了は祖先から検出して検査', () => {
+  for (const ancestor of [base, oldCompleted]) {
+    assert.deepEqual(selectEvidencePaths(completed, completed, [], ancestry(ancestor)), [proofPath]);
+    assert.throws(() => validateCompletionChanges(completed, completed, {}, ancestry(ancestor)), /JSON/);
+    assert.doesNotThrow(() => validateCompletionChanges(completed, completed, { [proofPath]: evidence }, ancestry(ancestor)));
+  }
+});
+
+// 実workflow scriptを実行する。GitHub APIだけをスタブし、trusted validatorは実物をimportする。
+async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = oldCompleted, files = [], changedFiles = files.length, compareError, invalidAncestor, missingAncestor = false } = {}) {
+  const workflow = readFileSync(new URL('../.github/workflows/task-list-pr-gate.yml', import.meta.url), 'utf8');
+  const script = workflow.replaceAll('\r\n', '\n').split('          script: |\n')[1].split('\n').map(line => line.replace(/^            /, '')).join('\n');
+  const refs = { ['a'.repeat(40)]: completed, ['b'.repeat(40)]: head, ['c'.repeat(40)]: ancestor };
+  const calls = [];
+  const github = {
+    paginate: async (fn, args) => fn(args),
+    rest: {
+      pulls: { listFiles: async () => files },
+      repos: {
+        compareCommitsWithBasehead: async ({ basehead }) => {
+          calls.push(basehead);
+          if (compareError) throw new Error('compare unavailable');
+          return { data: { merge_base_commit: { sha: invalidAncestor ? 'not-a-sha' : 'c'.repeat(40) } } };
+        },
+        getContent: async ({ path, ref }) => {
+          if (missingAncestor && ref === 'c'.repeat(40)) throw Object.assign(new Error('missing'), { status: 404 });
+          if (path !== 'docs/task-list.md' || !(ref in refs)) throw new Error(`Unexpected data read: ${path}@${ref}`);
+          return { data: { type: 'file', encoding: 'base64', content: Buffer.from(refs[ref]).toString('base64') } };
+        },
+      },
+    },
+  };
+  const context = { eventName: 'pull_request_target', repo: { owner: 'owner', repo: 'repo' }, payload: {
+    action, pull_request: { number: 1957, changed_files: changedFiles, created_at: '2026-11-15T00:00:00Z', base: { sha: 'a'.repeat(40), ref: 'main' }, head: { sha: 'b'.repeat(40) } },
+  } };
+  const core = { info() {}, notice() {}, error() {}, setFailed(message) { throw new Error(message); } };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  await new AsyncFunction('require', 'github', 'context', 'core', script)(createRequire(import.meta.url), github, context, core);
+  assert.deepEqual(calls, [`${'a'.repeat(40)}...${'b'.repeat(40)}`]);
+}
+
+for (const action of ['ready_for_review', 'edited', 'synchronize']) {
+  test(`1957 AC1/5: ${action}で実workflowがmain-onlyを許し真削除を拒否`, async () => {
+    await runCompletionWorkflow(action);
+    await assert.rejects(runCompletionWorkflow(action, { ancestor: completed, head: oldCompleted }), /削除/);
+    await assert.rejects(runCompletionWorkflow(action, { compareError: true }), /compare unavailable/);
+    await assert.rejects(runCompletionWorkflow(action, { missingAncestor: true }), /ancestor|共通祖先/);
+    await assert.rejects(runCompletionWorkflow(action, { invalidAncestor: true }), /ancestor/);
+    for (const changedFiles of [null, -1, 1.5, '0', 1]) {
+      await assert.rejects(runCompletionWorkflow(action, { changedFiles }), /incomplete/);
+    }
+    for (const status of ['modified', 'removed', 'renamed']) {
+      await assert.rejects(runCompletionWorkflow(action, { files: [{
+        filename: status === 'renamed' ? 'docs/evidence/moved.json' : proofPath,
+        previous_filename: status === 'renamed' ? proofPath : undefined, status,
+      }] }), /削除/, status);
+    }
+  });
+}
 
 test('台帳をエスケープ済み縦棒込みで7列に分解しCMP重複を検出する', () => {
   const parsed = parseTaskList(`${headers}\n${row('実装中', '文字列 a\\|b')}\n`);
@@ -137,8 +228,9 @@ test('pull_request_targetはbase trusted validatorだけを実行しPR headを�
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /await import\(pathToFileURL\(validatorPath\)\.href\)/);
-  assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths\)/);
+  assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths, \{ ancestorTaskList \}\)/);
   assert.match(workflow, /github\.rest\.git\.getTree/);
+  assert.match(workflow, /github\.rest\.git\.getBlob/);
   assert.doesNotMatch(workflow, /github\.rest\.repos\.getContent\(\{ owner, repo, path: ref/);
   assert.match(workflow, /file\.status === 'removed'/);
   assert.match(workflow, /file\.previous_filename === validatorPathInBase/);

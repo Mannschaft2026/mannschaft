@@ -729,6 +729,7 @@
     "group": {
       "title": "Group booking",
       "slot_count": "30 min × {n} slots",
+      "slot_count_total": "30 min × {n} slot ({total} min) | 30 min × {n} slots ({total} min)",
       "time_range": "Time range",
       "auto_selected": "Automatically selected {n} slots needed for {menu}",
       "extend": "Extend slots",

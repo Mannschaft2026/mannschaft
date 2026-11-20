@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261107-2216",
+  "scope": "app",
+  "implementation": {
+    "pr": 4376,
+    "sha": "9b30b8d71481f2bb40f43e34149e75fe1e6388e7"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "220px級を含む狭幅/広幅/長名で非空名称の正幅と横はみ出し抑制を確認する",
+      "tests": [
+        {
+          "name": "postformal-responsive-r1 / postformal-long-l1",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "開く/編集/削除・同ID種別権限・ドラッグ並替えを維持する",
+      "tests": [
+        {
+          "name": "formal-r14-f1作成2＋formal-r14-f2残12 / postformal-same-id-i2 / postformal-normal2-n1 / postformal-unavailable-u2",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "0件/利用不可/null由来空名称でも表示・削除・復旧が成立する",
+      "tests": [
+        {
+          "name": "card2216-empty-remove-e1 / postformal-unavailable-u2 / postformal-visual-after-A-v1 / postformal-positive-after-B-p1",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "既存回帰/型検査/実機後独立探索を対象資格で満たす",
+      "tests": [
+        {
+          "name": "既存Favorite回帰とFrontend CI、R14 name/favorite独立3担当",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43522038681
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4376",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "実機で非空名称が描画幅0となった発見を、R14の狭幅/長名実geometryと選別画像による機能採用へ対応する。PR新spec0でunit red/greenへ読み替えない。",
+      "test": "postformal-responsive-r1 / postformal-long-l1 / postformal-unavailable-u2",
+      "redEvidence": "docs/task-list.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}

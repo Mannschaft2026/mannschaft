@@ -94,6 +94,8 @@ export interface ActivityTemplateField {
   unit: string | null
   isAggregatable: boolean
   sortOrder: number
+  /** 数値項目の小数桁数（任意。頑張り記録の snapshot scale。未指定は部品の既定） */
+  scale?: number | null
 }
 
 export interface ActivityTemplate {

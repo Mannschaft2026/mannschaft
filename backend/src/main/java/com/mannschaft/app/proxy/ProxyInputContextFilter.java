@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.auth.guardianship.GuardianshipSwitchService;
 import com.mannschaft.app.auth.guardianship.GuardianshipSwitchService.SwitchVerdict;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.i18n.EarlyErrorResponseWriter;
 import com.mannschaft.app.proxy.entity.ProxyInputConsentEntity;
 import com.mannschaft.app.proxy.entity.ProxyInputConsentScopeEntity;
 import com.mannschaft.app.proxy.entity.ProxyInputConsentScopeEntity.FeatureScope;
@@ -16,6 +17,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -25,7 +27,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -75,6 +76,8 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
      */
     private final ObjectProvider<GuardianshipSwitchService> guardianshipSwitchServiceProvider;
 
+    private EarlyErrorResponseWriter earlyErrorResponseWriter;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -104,8 +107,8 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
 
         if (inputSourceHeader == null || storageHeader == null
                 || storageHeader.isBlank()) {
-            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "代理入力ヘッダーが不完全です。X-Proxy-Input-Source, X-Proxy-Original-Storage は必須です。");
+            sendError(request, response, HttpServletResponse.SC_BAD_REQUEST,
+                    ProxyInputErrorCode.HEADERS_INCOMPLETE);
             return;
         }
 
@@ -114,8 +117,8 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
             originalStorageLocation = normalizeOriginalStorage(storageHeader,
                     request.getHeader(HEADER_PROXY_STORAGE_ENCODING));
         } catch (IllegalArgumentException e) {
-            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "X-Proxy-Original-Storage の転送形式または原本保管場所が不正です。");
+            sendError(request, response, HttpServletResponse.SC_BAD_REQUEST,
+                    ProxyInputErrorCode.ORIGINAL_STORAGE_INVALID);
             return;
         }
 
@@ -126,8 +129,8 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
             subjectUserId = Long.parseLong(proxyForHeader.trim());
             consentId = Long.parseLong(consentIdHeader.trim());
         } catch (NumberFormatException e) {
-            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "X-Proxy-For-User-Id または X-Proxy-Consent-Id の形式が不正です。");
+            sendError(request, response, HttpServletResponse.SC_BAD_REQUEST,
+                    ProxyInputErrorCode.IDS_INVALID);
             return;
         }
 
@@ -135,16 +138,16 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
         try {
             ProxyInputRecordEntity.InputSource.valueOf(inputSourceHeader.trim());
         } catch (IllegalArgumentException e) {
-            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "X-Proxy-Input-Source の値が不正です。PAPER_FORM / PHONE_INTERVIEW / IN_PERSON のいずれかを指定してください。");
+            sendError(request, response, HttpServletResponse.SC_BAD_REQUEST,
+                    ProxyInputErrorCode.INPUT_SOURCE_INVALID);
             return;
         }
 
         // SecurityContext からリクエスト者（代理者）のIDを取得
         Long proxyUserId = extractCurrentUserId();
         if (proxyUserId == null) {
-            sendError(response, HttpServletResponse.SC_UNAUTHORIZED,
-                    "代理入力を行うには認証が必要です。");
+            sendError(request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                    ProxyInputErrorCode.AUTHENTICATION_REQUIRED);
             return;
         }
 
@@ -154,8 +157,8 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
 
         if (consentOpt.isEmpty()) {
             log.warn("代理入力の同意書検証失敗: consentId={}, proxyUserId={}", consentId, proxyUserId);
-            sendError(response, HttpServletResponse.SC_FORBIDDEN,
-                    "有効な代理入力の同意書が見つかりません。同意書が承認済みかつ有効期限内であることを確認してください。");
+            sendError(request, response, HttpServletResponse.SC_FORBIDDEN,
+                    ProxyInputErrorCode.CONSENT_NOT_FOUND);
             return;
         }
 
@@ -164,8 +167,8 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
         // subjectUserIdの一致確認
         if (!consent.getSubjectUserId().equals(subjectUserId)) {
             log.warn("代理入力の対象ユーザー不一致: requested={}, consent={}", subjectUserId, consent.getSubjectUserId());
-            sendError(response, HttpServletResponse.SC_FORBIDDEN,
-                    "指定された代理対象ユーザーと同意書の内容が一致しません。");
+            sendError(request, response, HttpServletResponse.SC_FORBIDDEN,
+                    ProxyInputErrorCode.SUBJECT_MISMATCH);
             return;
         }
 
@@ -200,16 +203,16 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
         try {
             childUserId = Long.parseLong(proxyForHeader.trim());
         } catch (NumberFormatException e) {
-            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "X-Proxy-For-User-Id の形式が不正です。");
+            sendError(request, response, HttpServletResponse.SC_BAD_REQUEST,
+                    ProxyInputErrorCode.SWITCH_TARGET_INVALID);
             return;
         }
 
         // リクエスト者（保護者）の認証確認
         Long guardianUserId = extractCurrentUserId();
         if (guardianUserId == null) {
-            sendError(response, HttpServletResponse.SC_UNAUTHORIZED,
-                    "後見切替を行うには認証が必要です。");
+            sendError(request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                    ProxyInputErrorCode.SWITCH_AUTHENTICATION_REQUIRED);
             return;
         }
 
@@ -221,15 +224,15 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
             case LINK_NOT_FOUND -> {
                 log.warn("後見切替の再検証失敗（リンクなし）: guardianUserId={}, childUserId={}",
                         guardianUserId, childUserId);
-                sendError(response, HttpServletResponse.SC_FORBIDDEN,
-                        "有効な保護者リンクが見つからないため後見切替できません。");
+                sendError(request, response, HttpServletResponse.SC_FORBIDDEN,
+                        ProxyInputErrorCode.SWITCH_LINK_NOT_FOUND);
                 return;
             }
             case AGE_LOCKED -> {
                 log.warn("後見切替の再検証失敗（年齢封印）: guardianUserId={}, childUserId={}",
                         guardianUserId, childUserId);
-                sendError(response, HttpServletResponse.SC_FORBIDDEN,
-                        "このお子さまは年齢到達のため後見切替できません。");
+                sendError(request, response, HttpServletResponse.SC_FORBIDDEN,
+                        ProxyInputErrorCode.SWITCH_AGE_LOCKED);
                 return;
             }
             case ALLOWED -> {
@@ -305,9 +308,22 @@ public class ProxyInputContextFilter extends OncePerRequestFilter {
         return SecurityUtils.getCurrentUserIdOrNull();
     }
 
-    private void sendError(HttpServletResponse response, int status, String message) throws IOException {
-        response.setStatus(status);
-        response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(objectMapper.writeValueAsString(Map.of("error", message)));
+    /**
+     * 早期拒否の応答を書く（CMP-261113-1507）。共通の {@code ErrorResponse} 形式で、利用者の言語
+     * （users.locale → Accept-Language）へ訳す。部品の Bean が無い縮小構成では ja 正本で同じ形を書く。
+     */
+    private void sendError(HttpServletRequest request, HttpServletResponse response, int status,
+                           ProxyInputErrorCode code) throws IOException {
+        if (earlyErrorResponseWriter != null) {
+            earlyErrorResponseWriter.write(request, response, status, code);
+        } else {
+            EarlyErrorResponseWriter.writeJapanese(response, status, code);
+        }
+    }
+
+    /** 早期拒否応答の部品（任意注入。既存の構築箇所・スライステストのコンストラクタを変えないため setter で受ける）。 */
+    @Autowired(required = false)
+    public void setEarlyErrorResponseWriter(EarlyErrorResponseWriter earlyErrorResponseWriter) {
+        this.earlyErrorResponseWriter = earlyErrorResponseWriter;
     }
 }

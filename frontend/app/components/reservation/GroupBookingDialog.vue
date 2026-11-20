@@ -409,7 +409,7 @@ async function confirm() {
 
         <div class="flex items-center justify-center gap-2" data-testid="group-slot-stepper">
           <Button data-testid="group-reduce" icon="pi pi-minus" text rounded :disabled="!canReduceNow" @click="reduce" />
-          <span class="min-w-28 text-center text-sm font-medium">{{ t('reservation.group.slot_count', { n: selectedIndices.length }) }}（{{ selectedIndices.length * 30 }}分）</span>
+          <span class="min-w-28 text-center text-sm font-medium">{{ t('reservation.group.slot_count_total', { n: selectedIndices.length, total: selectedIndices.length * 30 }, selectedIndices.length) }}</span>
           <Button data-testid="group-extend" icon="pi pi-plus" text rounded :disabled="!canExtendNow" :title="!canExtendNow ? t('reservation.matrix.cannot_extend') : undefined" @click="extend" />
         </div>
 
