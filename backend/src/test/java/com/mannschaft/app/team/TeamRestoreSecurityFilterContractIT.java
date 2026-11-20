@@ -475,7 +475,7 @@ class TeamRestoreSecurityFilterContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private Long saveUser() {
-        Long userId = (UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE);
+        Long userId = Math.abs(UUID.randomUUID().getMostSignificantBits() % 1_000_000_000L) + 80_000_000L;
         assertThat(userId).isPositive();
         Number count = (Number) em.createNativeQuery("SELECT COUNT(*) FROM users WHERE id = :id")
                 .setParameter("id", userId).getSingleResult();

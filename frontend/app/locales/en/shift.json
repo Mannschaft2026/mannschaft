@@ -12,8 +12,11 @@
     "board": {
       "title": "Shift Board",
       "memberPool": "Unassigned Members",
+      "noUnassignedMembers": "No unassigned members",
+      "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
-      "unassignedSlots": "{count} unassigned slots"
+      "unassignedSlots": "{count} unassigned slots",
+      "backToList": "Back to shift list"
     },
     "autoAssign": {
       "button": "Auto Assign",
@@ -189,6 +192,9 @@
       "notePlaceholder": "Optional",
       "dayOfWeek": "Day of week",
       "dayOfWeekHint": "Slots will be created only on the selected days of week",
+      "moveDateTitle": "Confirm date change",
+      "moveDateMessage": "This changes the date from {oldDate} to {newDate}. Any requests already submitted for this slot will be moved to the new date as well.",
+      "moveDateAccept": "Move slot and requests",
       "saveSuccess": "Slot saved",
       "deleteSuccess": "Slot deleted",
       "assignmentMasked": "In adjustment",
@@ -412,6 +418,7 @@
       "confirmSubmit": "Submit with these settings?"
     },
     "entry": {
+      "notStarted": "Preference submission has not started yet.",
       "sectionTitle": "Submit requests / Shift board",
       "bulkRequest": "Submit requests in bulk",
       "board": "Shift board",

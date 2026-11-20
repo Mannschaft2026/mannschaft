@@ -4,8 +4,6 @@ import com.mannschaft.app.bulletin.repository.BulletinThreadKeywordSearchReposit
 import com.mannschaft.app.bulletin.repository.BulletinThreadKeywordSearchRepository.Condition;
 import com.mannschaft.app.bulletin.repository.BulletinThreadKeywordSearchRepository.DateBound;
 import com.mannschaft.app.bulletin.repository.BulletinThreadKeywordSearchRepository.ScoredThread;
-import com.mannschaft.app.bulletin.ScopeType;
-import com.mannschaft.app.bulletin.entity.BulletinThreadEntity;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.search.SearchContributor;
 import com.mannschaft.app.search.SearchCriteria;
@@ -82,14 +80,13 @@ public class BulletinThreadSearchContributor implements SearchContributor {
         Set<Long> teamIds = new HashSet<>();
         Set<Long> orgIds = new HashSet<>();
         for (ScoredThread s : scored) {
-            BulletinThreadEntity t = s.thread();
-            if (t.getAuthorId() != null) {
-                authorIds.add(t.getAuthorId());
+            if (s.authorId() != null) {
+                authorIds.add(s.authorId());
             }
-            if (t.getScopeType() == ScopeType.TEAM) {
-                teamIds.add(t.getScopeId());
-            } else if (t.getScopeType() == ScopeType.ORGANIZATION) {
-                orgIds.add(t.getScopeId());
+            if (SearchViewer.TEAM.equals(s.scopeType())) {
+                teamIds.add(s.scopeId());
+            } else if (SearchViewer.ORGANIZATION.equals(s.scopeType())) {
+                orgIds.add(s.scopeId());
             }
         }
         Map<Long, String> displayNames = nameResolverService.resolveUserDisplayNames(authorIds);
@@ -101,28 +98,28 @@ public class BulletinThreadSearchContributor implements SearchContributor {
 
         List<SearchHit> hits = new ArrayList<>(scored.size());
         for (ScoredThread s : scored) {
-            BulletinThreadEntity t = s.thread();
-            boolean team = t.getScopeType() == ScopeType.TEAM;
-            String slug = (team ? teamSlugs : orgSlugs).get(t.getScopeId());
+            // 返却列はすべて可視性を判定した同じ SQL の行の値（ID で読み直さない。PR-6 検分 P1 の横展開）
+            boolean team = SearchViewer.TEAM.equals(s.scopeType());
+            String slug = (team ? teamSlugs : orgSlugs).get(s.scopeId());
             if (slug == null) {
                 // 遷移先を組み立てられない（スコープが取得時点で消えた等）結果は出さない
                 continue;
             }
-            Long authorId = t.getAuthorId();
+            Long authorId = s.authorId();
             SearchHit.Author author = authorId == null ? null
                     : new SearchHit.Author(authorId, displayNames.get(authorId), avatarUrls.get(authorId));
             Map<String, List<Integer>> highlights = new HashMap<>();
-            List<Integer> range = SearchTextHighlighter.titleRange(t.getTitle(), criteria.terms());
+            List<Integer> range = SearchTextHighlighter.titleRange(s.title(), criteria.terms());
             if (range != null) {
                 highlights.put("title", range);
             }
             SearchHit.ScopeRef scope = team
-                    ? new SearchHit.ScopeRef(SearchViewer.TEAM, t.getScopeId(), teamNames.get(t.getScopeId()))
-                    : new SearchHit.ScopeRef(SearchViewer.ORGANIZATION, t.getScopeId(), orgNames.get(t.getScopeId()));
-            String url = (team ? "/teams/" : "/organizations/") + slug + "/bulletin?threadId=" + t.getId();
-            hits.add(new SearchHit(SearchType.THREAD, t.getId(), t.getTitle(),
-                    SearchTextHighlighter.snippet(t.getBody(), criteria.terms()), highlights, s.relevance(),
-                    author, scope, SearchHit.createdAtOf(t.getCreatedAt()), url, List.of()));
+                    ? new SearchHit.ScopeRef(SearchViewer.TEAM, s.scopeId(), teamNames.get(s.scopeId()))
+                    : new SearchHit.ScopeRef(SearchViewer.ORGANIZATION, s.scopeId(), orgNames.get(s.scopeId()));
+            String url = (team ? "/teams/" : "/organizations/") + slug + "/bulletin?threadId=" + s.id();
+            hits.add(new SearchHit(SearchType.THREAD, s.id(), s.title(),
+                    SearchTextHighlighter.snippet(s.body(), criteria.terms()), highlights, s.relevance(),
+                    author, scope, SearchHit.createdAtOfStoredUtc(s.createdAtUtc()), url, List.of()));
         }
         return hits;
     }

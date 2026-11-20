@@ -4,7 +4,6 @@ import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.filesharing.FileVisibilityRole;
-import com.mannschaft.app.filesharing.entity.SharedFileEntity;
 import com.mannschaft.app.filesharing.repository.SharedFileKeywordSearchRepository;
 import com.mannschaft.app.filesharing.repository.SharedFileKeywordSearchRepository.BaseCondition;
 import com.mannschaft.app.filesharing.repository.SharedFileKeywordSearchRepository.Condition;
@@ -107,8 +106,8 @@ public class SharedFileSearchContributor implements SearchContributor {
         Set<Long> teamIds = new HashSet<>();
         Set<Long> orgIds = new HashSet<>();
         for (ScoredFile s : scored) {
-            if (s.file().getCreatedBy() != null) {
-                authorIds.add(s.file().getCreatedBy());
+            if (s.createdBy() != null) {
+                authorIds.add(s.createdBy());
             }
             (s.team() ? teamIds : orgIds).add(s.scopeId());
         }
@@ -119,12 +118,12 @@ public class SharedFileSearchContributor implements SearchContributor {
 
         List<SearchHit> hits = new ArrayList<>(scored.size());
         for (ScoredFile s : scored) {
-            SharedFileEntity f = s.file();
-            Long authorId = f.getCreatedBy();
+            // 返却列はすべて可視性を判定した同じ SQL の行の値（ID で読み直さない。PR-6 検分 P1）
+            Long authorId = s.createdBy();
             SearchHit.Author author = authorId == null ? null
                     : new SearchHit.Author(authorId, displayNames.get(authorId), avatarUrls.get(authorId));
             Map<String, List<Integer>> highlights = new HashMap<>();
-            List<Integer> range = SearchTextHighlighter.titleRange(f.getName(), criteria.terms());
+            List<Integer> range = SearchTextHighlighter.titleRange(s.name(), criteria.terms());
             if (range != null) {
                 highlights.put("title", range);
             }
@@ -145,9 +144,9 @@ public class SharedFileSearchContributor implements SearchContributor {
             // slug を解決できないときはリンク不可（null）とし、結果と件数の一致は崩さない
             String url = slug == null || slug.isBlank() ? null
                     : (s.team() ? "/teams/" : "/organizations/") + encodeUriComponent(slug) + "/files";
-            hits.add(new SearchHit(SearchType.FILE, f.getId(), f.getName(),
-                    SearchTextHighlighter.snippet(f.getDescription(), criteria.terms()), highlights,
-                    s.relevance(), author, scope, SearchHit.createdAtOf(f.getCreatedAt()), url, List.of()));
+            hits.add(new SearchHit(SearchType.FILE, s.id(), s.name(),
+                    SearchTextHighlighter.snippet(s.description(), criteria.terms()), highlights,
+                    s.relevance(), author, scope, SearchHit.createdAtOfStoredUtc(s.createdAtUtc()), url, List.of()));
         }
         return hits;
     }

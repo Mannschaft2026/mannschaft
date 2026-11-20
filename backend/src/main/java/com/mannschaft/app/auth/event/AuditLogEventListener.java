@@ -50,8 +50,24 @@ public class AuditLogEventListener {
             event.getIpAddress(),
             event.getUserAgent(),
             event.getSessionHash(),
-            null
+            loginSuccessMetadata(event)
         );
+    }
+
+    /**
+     * LOGIN_SUCCESS の metadata（入口方式 {@code method}・2FA 実施有無 {@code mfa}・使用要素 {@code mfa_factor}。
+     * 2FA を経ないログインは {@code mfa_factor} を載せない。CMP-261012-0911 判断②）。
+     */
+    private String loginSuccessMetadata(LoginSuccessEvent event) {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        if (event.getMethod() != null) {
+            metadata.put("method", event.getMethod());
+        }
+        metadata.put("mfa", event.getMfaFactor() != null);
+        if (event.getMfaFactor() != null) {
+            metadata.put("mfa_factor", event.getMfaFactor());
+        }
+        return toJson(metadata);
     }
 
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
