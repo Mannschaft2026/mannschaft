@@ -1,5 +1,7 @@
 # Mannschaft — 汎用組織管理プラットフォーム（バックエンド）
 
+シフト予算の失敗イベントは対応3種だけを再実行し、非対応種別は元診断を保った手動補正へ案内します。再失敗でも初回診断を保持し、再実行応答には確定済みの更新日時を返します（[仕様](docs/features/F08.7_shift_budget_integration.md)、[復旧手順](docs/operations/f087_monthly_close_recovery.md)）。
+
 あらゆる組織・チーム・個人をシームレスに管理するWebアプリケーション。
 
 確実配信イベントの隔離一覧と理由付き1件再開は SYSTEM_ADMIN 向けAPIで扱う。専用再開監査の保持・匿名化方針と未完了の実装、操作手順、既存通知での遅延・隔離・実復旧の確認と検証境界は[モジュールイベント運用](docs/operations/module-event-operations.md)を参照する。
