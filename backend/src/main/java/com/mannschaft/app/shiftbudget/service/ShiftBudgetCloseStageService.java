@@ -224,6 +224,7 @@ public class ShiftBudgetCloseStageService {
     /** 勤務枠の移動で取消す（キャッシュを減算し、必要なら失敗イベントを残す）。 */
     private void cancelMoved(ShiftBudgetAllocationEntity allocation, ShiftBudgetConsumptionEntity row,
                              ShiftBudgetCancelReason reason, YearMonth periodKey, LocalDate movedTo, boolean recordFailure) {
+        consumptionRepository.retireLiveCancelledBeforeCancel(row.getSlotId(), row.getUserId());
         row.cancel(reason);
         consumptionRepository.save(row);
         allocationRepository.decrementConsumedAmount(allocation.getId(), row.getAmount());

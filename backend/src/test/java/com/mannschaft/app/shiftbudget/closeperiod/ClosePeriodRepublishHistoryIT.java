@@ -31,7 +31,9 @@ class ClosePeriodRepublishHistoryIT extends ClosePeriodTestBase {
     private void change(long slotId, String rate, String end) {
         jdbc.update("UPDATE shift_hourly_rates SET hourly_rate = ? WHERE user_id = ? AND team_id = ?",
                 new BigDecimal(rate), workerId, teamId);
-        jdbc.update("UPDATE shift_slots SET end_time = ? WHERE id = ?", end, slotId);
+        // 時刻は JPA と同じ経路で書く（素の JDBC 文字列は接続タイムゾーン変換の対象外で、読み戻しがずれる）
+        tx.executeWithoutResult(s -> em.createQuery("UPDATE ShiftSlotEntity s SET s.endTime = :t WHERE s.id = :id")
+                .setParameter("t", java.time.LocalTime.parse(end)).setParameter("id", slotId).executeUpdate());
     }
 
     private List<Map<String, Object>> rows(long slotId) {

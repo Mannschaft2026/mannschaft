@@ -128,7 +128,11 @@ public class ShiftBudgetConsumptionEntity extends BaseEntity {
     @Column(name = "cancel_reason", length = 40)
     private ShiftBudgetCancelReason cancelReason;
 
-    /** 論理削除タイムスタンプ（運用上は status 遷移を優先するが UNIQUE 制約用に保持） */
+    /**
+     * 論理削除タイムスタンプ（運用上は status 遷移を優先するが UNIQUE 制約用に保持）。
+     * CANCELLED 行では「同じ枠×人で後の取消に置き換えられた取消履歴の退避時刻」として使う
+     * （{@code ShiftBudgetConsumptionRepository#retireLiveCancelledBeforeCancel}。行・内容は残す）。
+     */
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

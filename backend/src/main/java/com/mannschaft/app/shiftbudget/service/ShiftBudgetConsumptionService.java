@@ -206,7 +206,7 @@ public class ShiftBudgetConsumptionService {
                 return RecordResult.SKIPPED_CLOSED;
             }
 
-            // 同内容の PLANNED が既にあれば何もしない（取消→再作成は同 (slot,user,CANCELLED) の UNIQUE に当たり、結果も同じ）。
+            // 同内容の PLANNED が既にあれば何もしない（取消→再作成しても結果は同じで、取消履歴を無意味に増やすだけ）。
             // 同内容は 割当・勤務日・金額に加え、時給スナップショットと勤務時間も一致すること（CMP-260909-2152 α 検分 P2-1）。
             // 金額だけで判定すると 1,000円×4h → 2,000円×2h のような同額の再公開で古い時給・勤務時間が残り、
             // 勤務時間の集計（ShiftBudgetSummaryService）と記録時給の表示（#4527）が誤る。
@@ -216,6 +216,7 @@ public class ShiftBudgetConsumptionService {
 
             // (1') 既存 PLANNED → CANCELLED 遷移 + consumed_amount 減算
             if (existingPlanned != null) {
+                consumptionRepository.retireLiveCancelledBeforeCancel(slotId, userId);
                 existingPlanned.cancel(ShiftBudgetCancelReason.RE_PUBLISHED);
                 consumptionRepository.saveAndFlush(existingPlanned);
                 allocationRepository.decrementConsumedAmount(existingPlanned.getAllocationId(), existingPlanned.getAmount());
@@ -357,6 +358,7 @@ public class ShiftBudgetConsumptionService {
                         continue;
                     }
                 }
+                consumptionRepository.retireLiveCancelledBeforeCancel(row.getSlotId(), row.getUserId());
                 row.cancel(published ? ShiftBudgetCancelReason.USER_UNASSIGNED : ShiftBudgetCancelReason.SHIFT_DELETED);
                 consumptionRepository.saveAndFlush(row);
                 allocationRepository.decrementConsumedAmount(row.getAllocationId(), row.getAmount());
@@ -443,6 +445,7 @@ public class ShiftBudgetConsumptionService {
         requiresNewTx.executeWithoutResult(status -> consumptionRepository
                 .findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(slotId, userId, ShiftBudgetConsumptionStatus.PLANNED)
                 .ifPresent(c -> {
+                    consumptionRepository.retireLiveCancelledBeforeCancel(slotId, userId);
                     c.cancel(reason);
                     consumptionRepository.save(c);
                     allocationRepository.decrementConsumedAmount(c.getAllocationId(), c.getAmount());
