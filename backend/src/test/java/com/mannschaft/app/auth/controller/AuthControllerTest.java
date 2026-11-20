@@ -439,16 +439,19 @@ class AuthControllerTest {
         void confirmOAuthLinkage_正常_200() {
             // Given
             TokenResponse token = new TokenResponse("link-access", "refresh-token", 3600);
+            HttpServletRequest httpRequest = mock(HttpServletRequest.class, withSettings().strictness(org.mockito.quality.Strictness.LENIENT));
+            given(httpRequest.getRemoteAddr()).willReturn("127.0.0.1");
+            given(httpRequest.getHeader("User-Agent")).willReturn("Mozilla/5.0");
             org.mockito.Mockito.doReturn(ApiResponse.of(token))
-                    .when(authOAuthService).confirmOAuthLinkage("link-token");
+                    .when(authOAuthService).confirmOAuthLinkage(eq("link-token"), anyString(), anyString());
 
             // When
             ResponseEntity<ApiResponse<?>> response =
-                    authOAuthController.confirmOAuthLinkage("link-token");
+                    authOAuthController.confirmOAuthLinkage("link-token", httpRequest);
 
             // Then
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-            verify(authOAuthService).confirmOAuthLinkage("link-token");
+            verify(authOAuthService).confirmOAuthLinkage(eq("link-token"), anyString(), anyString());
         }
     }
 }

@@ -10,7 +10,11 @@ import com.mannschaft.app.auth.entity.RefreshTokenEntity;
 import com.mannschaft.app.auth.repository.RefreshTokenRepository;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
+import com.mannschaft.app.auth.repository.TwoFactorAuthRepository;
+import com.mannschaft.app.auth.entity.TwoFactorAuthEntity;
+import com.mannschaft.app.auth.TwoFactorMethod;
 import com.mannschaft.app.auth.repository.WebAuthnCredentialRepository;
+import com.mannschaft.app.auth.dto.MfaRequiredResponse;
 import com.mannschaft.app.auth.dto.OAuthConflictResponse;
 import com.mannschaft.app.auth.dto.OAuthProviderResponse;
 import com.mannschaft.app.auth.dto.TokenResponse;
@@ -70,6 +74,10 @@ public class AuthOAuthService {
     private final OAuthProperties oAuthProperties;
     private final RoleClaimResolver roleClaimResolver;
     private final StatusClaimResolver statusClaimResolver;
+    /** 2FA 設定の参照（OAuth 経路でも 2FA を迂回させない。CMP-261012-0911）。 */
+    private final TwoFactorAuthRepository twoFactorAuthRepository;
+    /** 2FA 有効ユーザーへの MFA チャレンジ発行（パスワード経路と共通）。 */
+    private final MfaSessionService mfaSessionService;
 
     /** OAuthプロバイダとのHTTP通信に使用するWebClient。@PostConstructで初期化する。 */
     private WebClient webClient;
@@ -88,7 +96,7 @@ public class AuthOAuthService {
      *   <li>プロバイダAPIでユーザー情報取得</li>
      *   <li>既存連携の確認と処理分岐:
      *     <ul>
-     *       <li>連携あり → トークン発行</li>
+     *       <li>連携あり → 2FA 有効なら MFA 要求（MfaRequiredResponse）、無効ならトークン発行</li>
      *       <li>連携なし + メール一致 → 連携確認メール（OAuthConflictResponse, 202）</li>
      *       <li>連携なし + 新規 → ユーザー作成 + OAuth連携 + トークン発行</li>
      *     </ul>
@@ -99,7 +107,7 @@ public class AuthOAuthService {
      * @param authorizationCode 認可コード
      * @param ipAddress         リクエスト元IPアドレス
      * @param userAgent         ユーザーエージェント
-     * @return トークンレスポンスまたはOAuth競合レスポンス
+     * @return トークンレスポンス・MFA 要求レスポンス・OAuth競合レスポンスのいずれか
      */
     @PlaintextTokenDebt(cmp = "CMP-261103-2059") // ハッシュ保存済みだが乱数源が UUID で金庫（SecretTokenVault）未使用。金庫への統合が債務
     @Transactional
@@ -117,9 +125,14 @@ public class AuthOAuthService {
                 .findByProviderAndProviderUserId(oauthProvider, oauthUserInfo.providerUserId());
 
         if (existingAccount.isPresent()) {
-            // 既存連携あり → Access Token + Refresh Token発行
+            // 既存連携あり → 2FA 有効なら MFA チャレンジ（トークンは発行しない）、無効なら Access/Refresh Token 発行
             Long userId = existingAccount.get().getUserId();
             UserEntity user = findUserOrThrow(userId);
+            Optional<MfaRequiredResponse> challenge = challengeIfTwoFactorEnabled(
+                    user, "OAUTH_" + oauthProvider.name());
+            if (challenge.isPresent()) {
+                return ApiResponse.of(challenge.get());
+            }
             user.updateLastLoginAt();
             userRepository.save(user);
 
@@ -205,13 +218,19 @@ public class AuthOAuthService {
     }
 
     /**
-     * OAuth連携を確認する。連携トークンを検証し、アカウントを連携してトークンを発行する。
+     * OAuth連携を確認する。連携トークンを検証してアカウントを連携し、2FA 有効ユーザーには MFA チャレンジ、
+     * 無効ユーザーにはトークンを発行する（CMP-261012-0911）。
      *
-     * @param token OAuth連携トークン（平文）
-     * @return トークンレスポンス
+     * <p>連携確認はメールのリンクだけで成立するため、2FA 有効ユーザーを 2FA なしでログインさせてはならない。
+     * 2FA 有効なら連携の作成までを行い、トークンは MFA 完了後にのみ発行する。</p>
+     *
+     * @param token     OAuth連携トークン（平文）
+     * @param ipAddress リクエスト元IPアドレス
+     * @param userAgent ユーザーエージェント
+     * @return トークンレスポンスまたは MFA 要求レスポンス
      */
     @Transactional
-    public ApiResponse<TokenResponse> confirmOAuthLinkage(String token) {
+    public ApiResponse<?> confirmOAuthLinkage(String token, String ipAddress, String userAgent) {
         String tokenHash = authTokenService.hashToken(token);
 
         // 1. トークン検証
@@ -238,13 +257,22 @@ public class AuthOAuthService {
                 .build();
         oauthAccountRepository.save(oauthAccount);
 
-        // 3. Access Token + Refresh Token発行
-        TokenResponse tokenResponse = issueTokenPair(linkToken.getUserId(), null, null).tokenResponse();
-
-        // 4. イベント発行
+        // 3. 連携完了イベント
         eventPublisher.publish(new OAuthLinkedEvent(linkToken.getUserId(), linkToken.getProvider().name()));
 
-        return ApiResponse.of(tokenResponse);
+        // 4. 2FA 有効なら MFA チャレンジ（トークンは発行しない）
+        String loginMethod = "OAUTH_" + linkToken.getProvider().name();
+        Optional<TwoFactorAuthEntity> twoFactor = findEnabledTwoFactor(linkToken.getUserId());
+        if (twoFactor.isPresent()) {
+            UserEntity user = findUserOrThrow(linkToken.getUserId());
+            return ApiResponse.of(mfaSessionService.issueChallenge(user, primaryMethodOf(twoFactor.get()), loginMethod));
+        }
+
+        // 5. 2FA 無効 → Access Token + Refresh Token発行 + LOGIN_SUCCESS（要求元 ip/UA 付き）
+        IssuedTokens issued = issueTokenPair(linkToken.getUserId(), ipAddress, userAgent);
+        eventPublisher.publish(new LoginSuccessEvent(
+                linkToken.getUserId(), ipAddress, userAgent, loginMethod, issued.sessionHash()));
+        return ApiResponse.of(issued.tokenResponse());
     }
 
     /**
@@ -307,6 +335,24 @@ public class AuthOAuthService {
     }
 
     // === ヘルパーメソッド ===
+
+    /** 有効な 2FA 設定を返す（未設定・無効は empty）。 */
+    private Optional<TwoFactorAuthEntity> findEnabledTwoFactor(Long userId) {
+        return twoFactorAuthRepository.findByUserId(userId)
+                .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()));
+    }
+
+    private TwoFactorMethod primaryMethodOf(TwoFactorAuthEntity twoFactor) {
+        return twoFactor.getMethod() != null ? twoFactor.getMethod() : TwoFactorMethod.TOTP;
+    }
+
+    /**
+     * 2FA 有効ユーザーなら MFA チャレンジを発行して返す（無効なら empty＝呼び出し側がトークンを発行する）。
+     */
+    private Optional<MfaRequiredResponse> challengeIfTwoFactorEnabled(UserEntity user, String loginMethod) {
+        return findEnabledTwoFactor(user.getId())
+                .map(tfa -> mfaSessionService.issueChallenge(user, primaryMethodOf(tfa), loginMethod));
+    }
 
     /**
      * OAuthプロバイダ名を検証し、Enum値を返す。
