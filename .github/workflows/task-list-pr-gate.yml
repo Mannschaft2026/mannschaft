@@ -67,6 +67,9 @@ jobs:
             const validatorPath = path.join(process.cwd(), 'scripts', 'completion-evidence.mjs');
             const validatorAvailable = fs.existsSync(validatorPath);
             const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pull.number, per_page: 100 });
+            if (!Number.isSafeInteger(pull.changed_files) || pull.changed_files < 0 || files.length !== pull.changed_files) {
+              throw new Error(`PR file list is incomplete or its count is invalid (${files.length}/${pull.changed_files}); evidence changes cannot be determined.`);
+            }
             const validatorPathInBase = 'scripts/completion-evidence.mjs';
             const validatorRemoval = files.find(file =>
               file.filename === validatorPathInBase && file.status === 'removed'
@@ -79,8 +82,13 @@ jobs:
               async function readContent(filePath, ref) {
                 try {
                   const response = await github.rest.repos.getContent({ owner, repo, path: filePath, ref });
-                  if (Array.isArray(response.data) || response.data.type !== 'file' || response.data.encoding !== 'base64') throw new Error(`Expected a base64 file: ${filePath}@${ref}`);
-                  return Buffer.from(response.data.content, 'base64').toString('utf8');
+                  if (Array.isArray(response.data) || response.data.type !== 'file') throw new Error(`Expected a file: ${filePath}@${ref}`);
+                  if (response.data.encoding === 'base64') return Buffer.from(response.data.content, 'base64').toString('utf8');
+                  // 1MiB 超のファイルは contents API が encoding:"none" で本文を返さない。blob API（100MB まで）で読む。
+                  if (response.data.encoding !== 'none' || !response.data.sha) throw new Error(`Expected a base64 file: ${filePath}@${ref}`);
+                  const blob = await github.rest.git.getBlob({ owner, repo, file_sha: response.data.sha });
+                  if (blob.data.encoding !== 'base64') throw new Error(`Expected a base64 blob: ${filePath}@${ref}`);
+                  return Buffer.from(blob.data.content, 'base64').toString('utf8');
                 } catch (error) {
                   if (error.status === 404) return null;
                   throw error;
@@ -88,16 +96,22 @@ jobs:
               }
               const baseRef = pull.base.sha;
               const headRef = pull.head.sha;
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${baseRef}...${headRef}` });
+              const ancestorRef = comparison.data.merge_base_commit?.sha;
+              if (!/^[0-9a-f]{40}$/i.test(ancestorRef || '')) throw new Error('A valid common ancestor SHA could not be read.');
               const baseTaskList = await readContent('docs/task-list.md', baseRef);
               const headTaskList = await readContent('docs/task-list.md', headRef);
+              const ancestorTaskList = await readContent('docs/task-list.md', ancestorRef);
               if (baseTaskList === null || headTaskList === null) throw new Error('docs/task-list.md could not be read from base and PR head.');
+              if (ancestorTaskList === null) throw new Error('docs/task-list.md could not be read from the common ancestor.');
               const { pathToFileURL } = require('node:url');
               trustedValidator = await import(pathToFileURL(validatorPath).href);
-              const changedEvidencePaths = files.filter(file => /^docs\/evidence\/CMP-(?:\d{6}-\d{4}|\d{3})\.json$/.test(file.filename)).map(file => file.filename);
-              const selectedEvidencePaths = trustedValidator.selectEvidencePaths(baseTaskList, headTaskList, changedEvidencePaths);
+              const evidencePathPattern = /^docs\/evidence\/CMP-(?:\d{6}-\d{4}|\d{3})\.json$/;
+              const changedEvidencePaths = [...new Set(files.flatMap(file => [file.filename, file.previous_filename]).filter(filePath => evidencePathPattern.test(filePath)))];
+              const selectedEvidencePaths = trustedValidator.selectEvidencePaths(baseTaskList, headTaskList, changedEvidencePaths, { ancestorTaskList });
               const evidenceByPath = {};
               const evidenceChanged = new Set(changedEvidencePaths.filter(filePath => selectedEvidencePaths.includes(filePath)));
-              const evidenceDeleted = new Set(files.filter(file => file.status === 'removed' && selectedEvidencePaths.includes(file.filename)).map(file => file.filename));
+              const evidenceDeleted = new Set(files.flatMap(file => file.status === 'removed' ? [file.filename] : file.previous_filename ? [file.previous_filename] : []).filter(filePath => selectedEvidencePaths.includes(filePath)));
               const evidenceObjects = [];
               for (const filePath of selectedEvidencePaths) {
                 const after = await readContent(filePath, headRef);
@@ -154,7 +168,7 @@ jobs:
                 runs.push({ runId: ci.runId, repository: response.data.repository?.full_name, sha: response.data.head_sha, conclusion: response.data.conclusion });
               }
               const input = {
-                repository: `${owner}/${repo}`, baseTaskList, headTaskList, evidenceByPath,
+                repository: `${owner}/${repo}`, baseTaskList, headTaskList, ancestorTaskList, evidenceByPath,
                 evidenceChanged: [...evidenceChanged], evidenceDeleted: [...evidenceDeleted], existingFiles: [...existingFiles],
                 implementations, runs,
               };
@@ -162,6 +176,7 @@ jobs:
               const implementationsByPr = input.implementations;
               trustedValidator.validateCompletionChanges(input.baseTaskList, input.headTaskList, input.evidenceByPath, {
                 repository: input.repository,
+                ancestorTaskList: input.ancestorTaskList,
                 fileExists: filePath => input.existingFiles.includes(filePath),
                 evidenceChanged: new Set(input.evidenceChanged),
                 evidenceDeleted: new Set(input.evidenceDeleted),
@@ -192,8 +207,17 @@ jobs:
             }
             const cmpId = references[0];
             const response = await github.rest.repos.getContent({ owner, repo, path: 'docs/task-list.md', ref: pull.base.ref });
-            if (Array.isArray(response.data) || response.data.encoding !== 'base64') throw new Error('Could not read docs/task-list.md from the PR base branch.');
-            const taskList = Buffer.from(response.data.content, 'base64').toString('utf8');
+            if (Array.isArray(response.data) || response.data.type !== 'file') throw new Error('Could not read docs/task-list.md from the PR base branch.');
+            let taskListBase64 = response.data.content;
+            if (response.data.encoding === 'none' && response.data.sha) {
+              // 1MiB 超は contents API が本文を返さないため blob API で読む。
+              const blob = await github.rest.git.getBlob({ owner, repo, file_sha: response.data.sha });
+              if (blob.data.encoding !== 'base64') throw new Error('Could not read docs/task-list.md blob from the PR base branch.');
+              taskListBase64 = blob.data.content;
+            } else if (response.data.encoding !== 'base64') {
+              throw new Error('Could not read docs/task-list.md from the PR base branch.');
+            }
+            const taskList = Buffer.from(taskListBase64, 'base64').toString('utf8');
             const matchedRow = trustedValidator
               ? trustedValidator.parseTaskList(taskList).byId.get(cmpId)
               : taskList.split(/\r?\n/).filter(line => line.startsWith('|') && line.includes(cmpId)).map(line => line.split('|').map(cell => cell.trim())).find(cells => cells[1] === cmpId);

@@ -240,6 +240,8 @@ erDiagram
 | [disclosure](disclosure.md) | `disclosure_form_drafts` | `created_by` | ID参照 | `users` |
 | [disclosure](disclosure.md) | `disclosure_form_drafts` | `updated_by` | ID参照 | `users` |
 | [disclosure](disclosure.md) | `disclosure_form_templates` | `created_by` | ID参照 | `users` |
+| [effortrecord](effortrecord.md) | `effort_operation_receipts` | `actor_user_id` | ID参照 | `users` |
+| [effortrecord](effortrecord.md) | `effort_records` | `owner_user_id` | ID参照 | `users` |
 | [equipment](equipment.md) | `equipment_assignments` | `assigned_by_user_id` | ID参照 | `users` |
 | [equipment](equipment.md) | `equipment_assignments` | `assigned_to_user_id` | ID参照 | `users` |
 | [equipment](equipment.md) | `equipment_assignments` | `returned_by_user_id` | ID参照 | `users` |
@@ -372,6 +374,8 @@ erDiagram
 | [moderation](moderation.md) | `warning_re_reviews` | `user_id` | ID参照 | `users` |
 | [moderation](moderation.md) | `yabai_unflag_requests` | `reviewed_by` | ID参照 | `users` |
 | [moderation](moderation.md) | `yabai_unflag_requests` | `user_id` | ID参照 | `users` |
+| [moduleevent](moduleevent.md) | `module_event_resume_actor_states` | `actor_user_id` | ID参照 | `users` |
+| [moduleevent](moduleevent.md) | `module_event_resume_audits` | `actor_user_id` | ID参照 | `users` |
 | [navsettings](navsettings.md) | `user_nav_settings` | `user_id` | ID参照 | `users` |
 | [notification](notification.md) | `confirmable_notification_recipients` | `excluded_by` | ID参照 | `users` |
 | [notification](notification.md) | `confirmable_notification_recipients` | `user_id` | ID参照 | `users` |
@@ -559,6 +563,7 @@ erDiagram
 | [returnstayplan](returnstayplan.md) | `return_stay_plan_owner_locks` | `owner_user_id` | ID参照 | `users` |
 | [returnstayplan](returnstayplan.md) | `return_stay_plans` | `owner_user_id` | ID参照 | `users` |
 | [role](role.md) | `archived_membership_grants` | `granted_by` | ID参照 | `users` |
+| [role](role.md) | `invite_token_claims` | `user_id` | ID参照 | `users` |
 | [role](role.md) | `invite_tokens` | `created_by` | ID参照 | `users` |
 | [role](role.md) | `invite_tokens` | `target_user_id` | ID参照 | `users` |
 | [role](role.md) | `ownership_transfer_offers` | `issued_by` | ID参照 | `users` |

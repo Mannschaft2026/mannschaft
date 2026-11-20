@@ -15,9 +15,6 @@ import com.mannschaft.app.bulletin.repository.BulletinReplyRepository;
 import com.mannschaft.app.bulletin.repository.BulletinThreadRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.EnumInputParser;
-import com.mannschaft.app.tournament.ContactSpaceKind;
-import com.mannschaft.app.tournament.ContactSpaceScopeType;
-import com.mannschaft.app.tournament.service.TournamentContactAccessService;
 import com.mannschaft.app.village.service.VillageBulletinAccessService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,8 +41,6 @@ public class BulletinReactionService {
     private final BulletinReplyRepository replyRepository;
     private final BulletinMapper bulletinMapper;
     private final BulletinAccessGuard accessGuard;
-    /** F08.7.1 連絡機能: 大会/ディビジョンスコープの閲覧認可を委譲する（クロスドメイン・原則1）。 */
-    private final TournamentContactAccessService tournamentContactAccessService;
     /** F17.1 村掲示板: 村スコープの閲覧認可を委譲する（BulletinAccessGuard は村を判定できない）。 */
     private final VillageBulletinAccessService villageBulletinAccessService;
 
@@ -156,13 +151,11 @@ public class BulletinReactionService {
             thread = threadRepository.findById(reply.getThreadId())
                     .orElseThrow(() -> new BusinessException(BulletinErrorCode.THREAD_NOT_FOUND));
         }
-        // F08.7.1: 大会/ディビジョン連絡はリアクション付与/削除/閲覧とも canView に委譲する。
-        // リアクションは「閲覧者が押せる」のが自然（設計書 §4.1 で閲覧は参加チーム全メンバーに開放）であり、
-        // canPost（代表/主催者のみ）まで絞ると一般メンバーがリアクションできず不自然になるため canView を採用する。
+        // F08.7.1: 大会/ディビジョン連絡はリアクション付与/削除/閲覧とも閲覧権で足りる
+        // （設計書 §4.1 で閲覧は参加チーム全メンバーに開放）。閲覧判定は Controller が tx 外で認可済み
+        // （BulletinTournamentScopeAccessGuard#checkReactionTarget・存在秘匿つき・D-3T。CMP-261116-0726）。
         // checkMembership は membership.domain.ScopeType に TOURNAMENT が無く 500 になるため通さない。
         if (isTournamentScope(thread.getScopeType())) {
-            tournamentContactAccessService.checkView(
-                    toContactScope(thread.getScopeType()), thread.getScopeId(), ContactSpaceKind.BULLETIN, userId);
             return;
         }
         // 村スコープは村ドメインの可視性認可へ委譲する（BulletinAccessGuard は村を判定できない）。
@@ -178,12 +171,5 @@ public class BulletinReactionService {
     /** リアクション対象スレッドが大会/ディビジョン連絡スペースか。 */
     private static boolean isTournamentScope(ScopeType scopeType) {
         return scopeType == ScopeType.TOURNAMENT || scopeType == ScopeType.TOURNAMENT_DIVISION;
-    }
-
-    /** bulletin {@link ScopeType} を連絡スペースの {@link ContactSpaceScopeType} に変換する。 */
-    private static ContactSpaceScopeType toContactScope(ScopeType scopeType) {
-        return scopeType == ScopeType.TOURNAMENT
-                ? ContactSpaceScopeType.TOURNAMENT
-                : ContactSpaceScopeType.TOURNAMENT_DIVISION;
     }
 }

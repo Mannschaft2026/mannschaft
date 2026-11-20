@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261116-0726",
+  "scope": "app",
+  "implementation": { "pr": 4643, "sha": "b490ffbb54a557bb14fddd0147a885c9f2d85696" },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "閲覧権なし（部外者・主催組織一般会員・他テナントADMIN・WITHDRAWN/DISQUALIFIEDチーム会員）が実在大会・ディビジョンの GET threads / GET categories / POST read-all を呼ぶと、不在IDと status・code・message が完全一致する（404 TOUR_029）",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-1）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（5 ロールの応答比較）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "閲覧権なしのスレッド作成は 404 TOUR_029 で不在と一致し、DB に行が作られない",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-2）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "閲覧できるが投稿権の無い者（参加チーム一般会員・公開スペースの部外者）のスレッド作成は 403 TOUR_031 のまま",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-3）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（参加チーム代表・一般・SYSTEM_ADMIN・公開スペースの部外者）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-4a",
+      "description": "スレッドID閲覧系（詳細・read・readers・replies GET）は、閲覧権なしなら不在スレッドIDと一致（404 BULLETIN_002）、閲覧可なら 200",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-4a）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-4b",
+      "description": "スレッドID投稿・管理系は、閲覧権なしなら BULLETIN_002 で不在と一致、閲覧可・権限なしなら 403 TOUR_031",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-4b）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "返信ID系（返信への返信、返信の更新・削除）は、不在の返信IDと一致する（BULLETIN_003）",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-5）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（返信を持つスレッドを画面で削除した後の応答比較。修正前の不合格と修正後の応答ログを記録）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "リアクション4入口は、targetType に応じた不在対象と一致し、行が作られない",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-6）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "添付は入口別に不在と一致する（一覧は threadId で 002・replyId で 025、DL URL は 007、upload-url・confirm は 025、削除は 007）。presign 発行・行作成なし",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-7）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（修正前は DL URL が 025 で不合格、修正後の応答ログで 240 組一致）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "大会フォルダの一覧・作成は、未認証を含む閲覧権なしで不在と単一コード（TOUR_029）で一致し、閲覧可・書込不可は 403 TOUR_031",
+      "tests": [
+        { "name": "大会スコープのファイル共有 契約 IT（AC-8）", "evidence": "backend/src/test/java/com/mannschaft/app/filesharing/TournamentScopedFileSharingOracleContractIT.java" },
+        { "name": "大会フォルダサービスの単体テスト（AC-8）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentFolderServiceTest.java" }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "大会スコープのフォルダID・ファイルIDを受けるファイル共有の入口は、不在のフォルダ・ファイルと一致する（子リソースIDの入口は対象外）",
+      "tests": [
+        { "name": "大会スコープのファイル共有 契約 IT（AC-9）", "evidence": "backend/src/test/java/com/mannschaft/app/filesharing/TournamentScopedFileSharingOracleContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "大会チャットの CHAT_001/002 の秘匿が維持され（回帰）、閲覧可・投稿不可は 403 TOUR_031",
+      "tests": [
+        { "name": "チャットのアクセススコープ契約 IT（AC-10）", "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatChannelAccessScopeContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "公開設定 API は、知り得ない者に 404 TOUR_029、知り得るが管理権なしに 403 TOUR_032",
+      "tests": [
+        { "name": "公開設定の存在オラクル契約 IT（AC-11）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentContactSpaceVisibilityOracleContractIT.java" },
+        { "name": "実機E2E（公開設定を画面で切替）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "description": "正常系の回帰（主催ADMIN・参加チーム代表・SYSTEM_ADMIN は 200/201、公開スペースの部外者の閲覧は 200）",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-12）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "公開設定の存在オラクル契約 IT（AC-12）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentContactSpaceVisibilityOracleContractIT.java" },
+        { "name": "実機E2E（主催ADMIN の画面操作）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "description": "未認証は、認証必須の入口で実在・不在とも同一の 401",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-13）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "公開設定の存在オラクル契約 IT（AC-13）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentContactSpaceVisibilityOracleContractIT.java" },
+        { "name": "実機E2E（未認証の URL 直打ち）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "description": "文書（01_communication、04_file_storage、security 03、認可基準書 §3.3.2、TOUR_030 欠番注記）が実装と一致する",
+      "tests": [
+        { "name": "連絡スペース設計書", "evidence": "docs/features/F08.7.1_tournament_extensions/01_communication.md" },
+        { "name": "ファイル置き場設計書", "evidence": "docs/features/F08.7.1_tournament_extensions/04_file_storage.md" },
+        { "name": "ロール権限モデル", "evidence": "docs/security/03_role_authority_model.md" },
+        { "name": "認可基準書", "evidence": "docs/security/01_authorization_baseline.md" }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "description": "readers は、通常+INDIVIDUAL=200、通常+COUNT_ONLY=200 空配列、unread+非モデレーター=403 COMMON_002 で、いずれも 500 にならない",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-15）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "実機E2E（readers 3 ケース）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "description": "投稿後に資格を失った本人の、非公開スペースでの自スレッド・返信の更新削除と添付削除は、不在と一致し、内容・件数・使用量が変わらない",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-16）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "アクセスゲートの単体テスト（AC-16）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGateTest.java" }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "description": "同一大会で掲示板を公開しチャットを非公開（およびその逆）にしても、公開側は 403 TOUR_031、非公開側は各入口の不在応答になる",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-17）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "アクセスゲートの単体テスト（AC-17）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGateTest.java" },
+        { "name": "実機E2E（掲示板=非公開・チャット=公開に画面で付け替え）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-18",
+      "description": "正ディビジョンの主催ADMINでも、パスの大会IDが不一致なら公開設定の GET/PATCH は 404 で不在と一致し、設定・監査ログが変わらない",
+      "tests": [
+        { "name": "公開設定の存在オラクル契約 IT（AC-18）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentContactSpaceVisibilityOracleContractIT.java" },
+        { "name": "アクセスゲートの単体テスト（AC-18）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGateTest.java" }
+      ]
+    },
+    {
+      "id": "AC-19",
+      "description": "大会と参加資格を残して掲示板スペースだけが欠落・論理削除された場合、参加チーム代表のスレッド作成・フォルダ作成は 404 TOUR_029 で、DB が変わらない",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（AC-19）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "大会スコープのファイル共有 契約 IT（AC-19）", "evidence": "backend/src/test/java/com/mannschaft/app/filesharing/TournamentScopedFileSharingOracleContractIT.java" },
+        { "name": "大会フォルダサービスの単体テスト（AC-19）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentFolderServiceTest.java" },
+        { "name": "実機E2E（スペース欠落の大会）", "evidence": "docs/evidence/CMP-261116-0726-real.md" }
+      ]
+    },
+    {
+      "id": "AC-20",
+      "description": "追加の認可SQLは件数に比例せず（参加チーム数・返却件数を増やしても認可SQL本数が変わらない）、成功経路で閲覧判定を二重に走らせない。実機では観測できないため IT と単体テストで担保した",
+      "tests": [
+        { "name": "掲示板の存在オラクル契約 IT（参加チーム数と閲覧者の所属チーム数を増やしても閲覧系の SQL 本数が変わらない）", "evidence": "backend/src/test/java/com/mannschaft/app/bulletin/BulletinTournamentContactExistenceOracleContractIT.java" },
+        { "name": "アクセスゲートの単体テスト（参加チーム代表は許可し閲覧判定を走らせない）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGateTest.java" }
+      ]
+    }
+  ],
+  "ci": [{ "runId": 44523520830 }, { "runId": 44523520944 }, { "runId": 44523520747 }, { "runId": 44523520797 }],
+  "stages": {
+    "review": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4643" },
+    "real": { "status": "passed", "evidence": "docs/evidence/CMP-261116-0726-real.md" },
+    "exploratory": { "status": "passed", "evidence": "docs/evidence/CMP-261116-0726-exploratory.md" }
+  },
+  "regressions": []
+}

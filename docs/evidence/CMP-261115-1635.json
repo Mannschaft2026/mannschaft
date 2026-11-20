@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261115-1635",
+  "scope": "app",
+  "implementation": {
+    "pr": 4531,
+    "sha": "5562170ba6bc03a683772a4b76f541a00b08797a"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "組織の確認通知設定画面が組織詳細を自前で取得して数値の組織 ID を解決し、API の要求 URL に組織 ID が入る",
+      "tests": [
+        {
+          "name": "confirmable-notifications-settings.spec.ts",
+          "evidence": "frontend/tests/unit/pages/confirmable-notifications-settings.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "組織管理者が URL 直打ち・アプリ内遷移の両方で設定画面の各機能を使える",
+      "tests": [
+        {
+          "name": "confirmable-notifications.spec.ts",
+          "evidence": "frontend/app/pages/organizations/[slug]/settings/confirmable-notifications.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 43701104778 },
+    { "runId": 43701104769 },
+    { "runId": 43701104763 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4531"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-1635-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-1635-exploratory.md"
+    }
+  },
+  "regressions": []
+}

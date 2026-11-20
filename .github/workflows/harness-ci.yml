@@ -31,3 +31,9 @@ jobs:
           scripts/guard-coverage.test.mjs
           scripts/boundary-coordination.test.mjs
           scripts/unicode-checkout.test.mjs
+          scripts/openapi-preflight.test.mjs
+          scripts/worktree-sparse-paths.test.mjs
+          frontend/scripts/lib/sparse-assets.test.mjs
+          frontend/scripts/verify-ranch-sparse.test.mjs
+      - name: Check worktree sparse paths
+        run: node scripts/worktree-sparse-paths.mjs --check --require-configured

@@ -87,6 +87,22 @@ public abstract class AbstractMySqlIntegrationTest {
     static {
         if (isDockerAvailable()) {
             MYSQL.start();
+            grantProcessToAppUser();
+        }
+    }
+
+    /**
+     * アプリ接続ユーザーに PROCESS 権限を与える。TRIGGER 内で実行中の文は {@code information_schema.PROCESSLIST} 上で
+     * DEFINER（root）のスレッドとして表示されるため、権限が無いと「処理中」の窓を観測できない
+     * （F06.4.1 の冪等 receipt 試験が同時実行中の状態を PROCESSLIST で検出する）。専用 Testcontainer 内だけの権限。
+     */
+    private static void grantProcessToAppUser() {
+        try (java.sql.Connection connection = java.sql.DriverManager.getConnection(
+                     MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("GRANT PROCESS ON *.* TO '" + MYSQL.getUsername() + "'@'%'");
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException("テスト用 MySQL への PROCESS 権限付与に失敗しました", e);
         }
     }
 
@@ -105,6 +121,25 @@ public abstract class AbstractMySqlIntegrationTest {
         org.springframework.data.redis.core.ValueOperations<String, String> ops =
                 org.mockito.Mockito.mock(org.springframework.data.redis.core.ValueOperations.class);
         org.mockito.Mockito.when(redisTemplate.opsForValue()).thenReturn(ops);
+    }
+
+    /**
+     * 共有コンテキストの users.locale キャッシュ（Bean が無い縮小構成では null）。
+     *
+     * <p>CMP-261119-1855: 本基底クラスは単一の MySQL を共有し、テスト環境は {@code ddl-auto=create} のため、
+     * 別構成のコンテキストが起動するたびにスキーマが作り直され users の id が 1 から再採番される。
+     * 共有コンテキストの {@code UserLocaleCache}（TTL 5 分）は userId をキーに前テストの値を保持し続けるため、
+     * 再利用された id の新ユーザーに前テストの locale（ja）が返り、早期拒否応答などが
+     * 英語にならない順序依存の失敗になった。各テストの前に破棄して持ち越しを断つ。</p>
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.mannschaft.app.common.i18n.UserLocaleCache sharedUserLocaleCache;
+
+    @org.junit.jupiter.api.BeforeEach
+    protected void clearSharedUserLocaleCache() {
+        if (sharedUserLocaleCache != null) {
+            sharedUserLocaleCache.clear();
+        }
     }
 
     @DynamicPropertySource

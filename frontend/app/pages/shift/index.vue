@@ -291,7 +291,7 @@ function openDetail(scheduleId: number) {
       <template #footer>
         <Button :label="t('common.cancel')" text @click="showCreateDialog = false" />
         <Button
-          :label="t('common.create')"
+          :label="t('button.create')"
           icon="pi pi-check"
           :loading="creating"
           :disabled="!createForm.title || !createForm.startDate || !createForm.endDate"

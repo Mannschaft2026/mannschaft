@@ -124,6 +124,19 @@
       "formNote": "메모",
       "formNotePlaceholder": "선택 사항"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "시급이 설정되지 않아 게시할 수 없습니다",
+        "description": "예산과 연동된 근무일에 유효한 시급이 설정되지 않은 담당자가 있습니다. 아래 담당자의 시급을 설정한 뒤 다시 게시하세요.",
+        "unknownUser": "사용자 ID {id}",
+        "goSettings": "시급 설정 열기"
+      },
+      "conflict": {
+        "title": "근무표 내용이 변경되었습니다",
+        "description": "게시 확인 중에 근무표 내용이 바뀌었습니다. 화면을 새로 불러와 내용을 확인한 뒤 다시 게시하세요."
+      },
+      "close": "닫기"
+    },
     "detail": {
       "tabOverview": "개요",
       "tabEdit": "편집",
@@ -162,10 +175,23 @@
       "notePlaceholder": "선택 사항",
       "dayOfWeek": "요일",
       "dayOfWeekHint": "선택한 요일에만 슬롯을 생성합니다",
+      "moveDateTitle": "날짜 변경 확인",
+      "moveDateMessage": "날짜를 {oldDate}에서 {newDate}(으)로 변경합니다. 이 근무 칸에 제출된 희망이 있으면 새 날짜로 함께 이동합니다.",
+      "moveDateAccept": "근무 시간대와 희망 이동",
       "saveSuccess": "슬롯을 저장했습니다",
       "deleteSuccess": "슬롯을 삭제했습니다",
       "assignmentMasked": "조정 중",
-      "assignmentMaskedHint": "공개 전이므로 배정은 표시되지 않습니다"
+      "assignmentMaskedHint": "공개 전이므로 배정은 표시되지 않습니다",
+      "deleteTitle": "근무 시간대 삭제",
+      "deleteConfirmPlain": "이 시간대를 삭제하시겠습니까?",
+
+      "deleteConfirmBoth": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망 {requests}건과 배정 {assignments}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
+
+      "deleteConfirmRequestsOnly": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망 {requests}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
+
+      "deleteConfirmAssignmentsOnly": "이 시간대를 삭제하시겠습니까? 이 시간대의 배정 {assignments}건도 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다.",
+
+      "deleteConfirmUnknown": "이 시간대를 삭제하시겠습니까? 이 시간대에 제출된 희망과 배정이 있다면 함께 삭제됩니다. 일반적인 조작으로는 되돌릴 수 없습니다."
     },
     "requests": {
       "submissionRate": "제출률",
