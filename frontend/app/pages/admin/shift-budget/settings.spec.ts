@@ -475,3 +475,83 @@ describe('CMP-260909-2152 α 実機E2E 不備: 409・400・403', () => {
     expect(wrapper.text()).toContain('現在のアカウントでは表示できない画面です')
   })
 })
+
+/**
+ * CMP-260909-2152 α Codex 全体検分 P2-3: 変更の送信中に組織を切り替えたら、旧組織の応答（成功・失敗・409 後の再取得）で
+ * 新組織のフォーム・エラーを書き換えない。送信時の組織と組織の世代が現在の画面と一致するときだけ反映する。
+ */
+describe('CMP-260909-2152 α 検分 P2-3 送信中の組織切替で旧組織の応答を新組織に反映しない', () => {
+  function settingsB() {
+    return settings({
+      closing_day: 15,
+      revision: 7,
+      changes: [
+        { revision: 7, effective_period_key: '2026-10', closing_day: 15, previous_closing_day: 0,
+          reason: '組織Bの変更', actor_user_id: 8, created_at: '2026-09-20T01:00:00Z' },
+      ],
+    })
+  }
+
+  async function startSubmitThenSwitch() {
+    let finishA!: (v: unknown) => void
+    let failA!: (e: unknown) => void
+    changeClosingSetting.mockReturnValueOnce(new Promise((resolve, reject) => {
+      finishA = resolve
+      failA = reject
+    }))
+    getClosingSettings.mockImplementation((orgId: string) =>
+      Promise.resolve(orgId === '20' ? settingsB() : settings()))
+    const wrapper = await mountPage()
+    await fillForm(wrapper, 15, '2026-12', '組織Aの理由')
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(changeClosingSetting).toHaveBeenCalledWith('10', expect.anything())
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    expect(wrapper.find('[data-testid="closing-history-row-7"]').exists()).toBe(true)
+    await fillForm(wrapper, 20, '2026-12', '組織Bの理由')
+    const callsBefore = getClosingSettings.mock.calls.length
+    return { wrapper, finishA, failA, callsBefore }
+  }
+
+  function reasonOf(wrapper: VueWrapper) {
+    return (wrapper.get('[data-testid="closing-reason"]').element as HTMLTextAreaElement).value
+  }
+
+  it('A の成功が後着しても B の入力を消さず、A の再取得もしない', async () => {
+    const { wrapper, finishA, callsBefore } = await startSubmitThenSwitch()
+    finishA(settings({ closing_day: 15, revision: 3 }))
+    await flushPromises()
+    expect(reasonOf(wrapper)).toBe('組織Bの理由')
+    expect(getClosingSettings.mock.calls.length).toBe(callsBefore)
+    expect(wrapper.find('[data-testid="closing-history-row-7"]').exists()).toBe(true)
+  })
+
+  it('A の失敗（500）が後着しても B の画面にエラーを出さない', async () => {
+    const { wrapper, failA } = await startSubmitThenSwitch()
+    failA(Object.assign(new Error('server'), { status: 500, statusCode: 500 }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="closing-settings-error"]').exists()).toBe(false)
+    expect(reasonOf(wrapper)).toBe('組織Bの理由')
+  })
+
+  it('A の 409 が後着しても B のエラー表示・再取得・入力の補正をしない', async () => {
+    const { wrapper, failA, callsBefore } = await startSubmitThenSwitch()
+    failA(Object.assign(new Error('conflict'), { status: 409, statusCode: 409 }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="closing-settings-error"]').exists()).toBe(false)
+    expect(getClosingSettings.mock.calls.length).toBe(callsBefore)
+    expect(reasonOf(wrapper)).toBe('組織Bの理由')
+  })
+
+  it('A の送信中でも B では送信でき、B へ B の revision で送る', async () => {
+    const { wrapper, finishA } = await startSubmitThenSwitch()
+    changeClosingSetting.mockResolvedValueOnce(settingsB())
+    expect(wrapper.get('[data-testid="closing-submit"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="closing-submit"]').trigger('click')
+    await flushPromises()
+    expect(changeClosingSetting).toHaveBeenLastCalledWith('20', expect.objectContaining({ expected_revision: 7 }))
+    finishA(settings({ closing_day: 15, revision: 3 }))
+    await flushPromises()
+  })
+})
