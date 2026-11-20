@@ -230,6 +230,7 @@ test('pull_request_targetはbase trusted validatorだけを実行しPR headを�
   assert.match(workflow, /await import\(pathToFileURL\(validatorPath\)\.href\)/);
   assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths, \{ ancestorTaskList \}\)/);
   assert.match(workflow, /github\.rest\.git\.getTree/);
+  assert.match(workflow, /github\.rest\.git\.getBlob/);
   assert.doesNotMatch(workflow, /github\.rest\.repos\.getContent\(\{ owner, repo, path: ref/);
   assert.match(workflow, /file\.status === 'removed'/);
   assert.match(workflow, /file\.previous_filename === validatorPathInBase/);

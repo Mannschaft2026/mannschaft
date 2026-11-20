@@ -100,6 +100,24 @@ public final class UserZoneLocalDateTimeParser {
     }
 
     /**
+     * 現在のリクエストの<b>閲覧者 TZ</b>（日付境界・オフセット無し入力の解釈に使うゾーン）を返す。
+     *
+     * <p>{@code users.timezone} が解決済み（{@link TimezoneContextHolder#isResolved()}）ならその TZ、
+     * 未解決（未認証・バッチ・解決失敗）なら {@link #SERVER_ZONE}。{@link TimezoneContextHolder#get()} の
+     * 未セット既定値（UTC）は「ユーザー由来でない値」なので使わない（.claudecode.md §20 の受信側の解釈規則）。</p>
+     *
+     * <p>ThreadLocal を読むため、<b>リクエストスレッドで</b>呼ぶこと。別スレッドへ処理を渡す場合は、
+     * ここで得た値を引数に載せて非同期境界を越えて渡す。</p>
+     *
+     * @return 閲覧者の ZoneId（null にならない）
+     */
+    public static ZoneId requestZone() {
+        return TimezoneContextHolder.isResolved()
+                ? TimezoneContextHolder.get()
+                : SERVER_ZONE;
+    }
+
+    /**
      * 日時文字列をサーバー保持形式（{@link #SERVER_ZONE} の壁時計）へ解釈する。
      *
      * @param text 入力文字列（トリム済みであること・空でないこと）
@@ -135,9 +153,7 @@ public final class UserZoneLocalDateTimeParser {
      * @return サーバー保持形式の {@link LocalDateTime}
      */
     private static LocalDateTime toServerWallClock(LocalDateTime wallClock) {
-        ZoneId inputZone = TimezoneContextHolder.isResolved()
-                ? TimezoneContextHolder.get()
-                : SERVER_ZONE;
+        ZoneId inputZone = requestZone();
         if (SERVER_ZONE.equals(inputZone)) {
             // 恒等変換（国内ユーザー・バッチ・未認証）。無駄な TZ 往復を避ける
             return wallClock;

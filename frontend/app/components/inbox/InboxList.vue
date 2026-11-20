@@ -67,7 +67,7 @@ async function onBulkArchive() {
       t('inbox.bulk.result', { processed: result.processed, skipped: result.skipped }),
     )
   } else {
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 
@@ -80,7 +80,7 @@ async function onBulkSnooze(preset: InboxSnoozePreset) {
       t('inbox.bulk.result', { processed: result.processed, skipped: result.skipped }),
     )
   } else {
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 
@@ -92,7 +92,7 @@ async function onBulkAddLabel(label: InboxLabel) {
       t('inbox.bulk.result', { processed: result.processed, skipped: result.skipped }),
     )
   } else {
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 
@@ -118,7 +118,7 @@ async function onSnoozePreset(
     if (ok) {
       notification.success(t('inbox.action.snoozed'))
     } else {
-      notification.error(t('common.error.unknown'))
+      notification.error(t('error.unknown'))
     }
   } catch (error) {
     captureQuiet(error, { context: 'InboxList: スヌーズ実行' })
@@ -251,7 +251,7 @@ async function onSuggestionApply(
     notification.success(t('inbox.label.assigned'))
   } else {
     // _handleError が error をセットし、ここではトーストを出す
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 

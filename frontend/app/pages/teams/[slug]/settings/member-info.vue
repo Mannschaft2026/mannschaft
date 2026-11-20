@@ -58,7 +58,7 @@ async function loadFields() {
     const res = await memberInfoApi.getFields(teamSlug)
     fields.value = res.data
   } catch {
-    notification.error(t('common.error.loadFailed'))
+    notification.error(t('memberProfile.fields.loadFailed'))
   } finally {
     fieldsLoading.value = false
   }
@@ -95,11 +95,11 @@ async function saveField() {
       }
       await memberInfoApi.createField(teamSlug, req)
     }
-    notification.success(t('common.saved'))
+    notification.success(t('memberInfo.response.saved'))
     showFieldDialog.value = false
     await loadFields()
   } catch {
-    notification.error(t('common.error.saveFailed'))
+    notification.error(t('memberProfile.saveFailed'))
   } finally {
     fieldSaving.value = false
   }
@@ -115,11 +115,11 @@ async function deleteField() {
   fieldDeleting.value = true
   try {
     await memberInfoApi.deleteField(teamSlug, deletingField.value.id)
-    notification.success(t('common.deleted'))
+    notification.success(t('disclosure.deleted'))
     showDeleteConfirm.value = false
     await loadFields()
   } catch {
-    notification.error(t('common.error.saveFailed'))
+    notification.error(t('memberProfile.deleteFailed'))
   } finally {
     fieldDeleting.value = false
   }
@@ -160,7 +160,7 @@ async function onDrop(toIndex: number) {
   try {
     await memberInfoApi.reorderFields(teamSlug, { orders })
   } catch {
-    notification.error(t('common.error.saveFailed'))
+    notification.error(t('project.reorder_failed'))
     await loadFields()
   }
 }
@@ -181,7 +181,7 @@ async function loadStatus() {
     const res = await memberInfoApi.getResponseStatus(teamSlug)
     statusData.value = res.data
   } catch {
-    notification.error(t('common.error.loadFailed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     statusLoading.value = false
   }
@@ -197,7 +197,7 @@ async function sendRemind(userId: number) {
     if (status === 429) {
       notification.warn(t('memberInfo.settings.remindTooSoon'))
     } else {
-      notification.error(t('common.error.saveFailed'))
+      notification.error(t('shift.reminder.failedTitle'))
     }
   } finally {
     remindingMap.value[userId] = false
@@ -338,7 +338,7 @@ onMounted(async () => {
                 <div class="py-8 text-center text-surface-400">{{ $t('memberInfo.status.completed') }}</div>
               </template>
 
-              <Column field="displayName" :header="$t('common.name')" style="min-width: 8rem">
+              <Column field="displayName" :header="$t('label.name')" style="min-width: 8rem">
                 <template #body="{ data }">
                   <span>{{ data.displayName || `ID: ${data.userId}` }}</span>
                 </template>
@@ -380,7 +380,7 @@ onMounted(async () => {
             <div class="mt-3 flex justify-end">
               <Button
                 icon="pi pi-refresh"
-                :label="$t('common.refresh')"
+                :label="$t('timeline.refresh')"
                 outlined
                 size="small"
                 @click="loadStatus"
@@ -464,7 +464,7 @@ onMounted(async () => {
       <template #footer>
         <Button :label="$t('common.cancel')" text @click="showDeleteConfirm = false" />
         <Button
-          :label="$t('common.delete')"
+          :label="$t('button.delete')"
           severity="danger"
           :loading="fieldDeleting"
           @click="deleteField"

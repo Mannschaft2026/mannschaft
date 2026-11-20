@@ -1,5 +1,6 @@
 package com.mannschaft.app.search.service;
 
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.search.SearchContributor;
 import com.mannschaft.app.search.SearchCriteria;
 import com.mannschaft.app.search.SearchHit;
@@ -181,7 +182,8 @@ public class GlobalSearchQueryService {
         }
         if (items.size() < limit) {
             SearchViewer viewer = viewerResolver.resolve(userId);
-            SearchCriteria criteria = new SearchCriteria(prefix, List.of(prefix), null, null, null, null, null);
+            SearchCriteria criteria = new SearchCriteria(prefix, List.of(prefix), null, null, null, null, null,
+                    UserZoneLocalDateTimeParser.requestZone());
             Map<SearchType, Future<List<SearchHit>>> futures = new EnumMap<>(SearchType.class);
             for (SearchType type : SUGGEST_ENTITY_TYPES) {
                 SearchContributor contributor = contributors.get(type);
