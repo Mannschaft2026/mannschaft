@@ -1,6 +1,7 @@
 package com.mannschaft.app.support.test;
 
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -59,6 +60,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *       （Docker 未起動環境でテストが skip されず、{@code DockerClientProviderStrategy} が例外を投げる）。</li>
  * </ul>
  */
+// 構成キーの統合（CMP-261111-0508 追撃①）: MockMvc を使う派生（@AutoConfigureMockMvc）と使わない派生で
+// MergedContextConfiguration が分かれ、Spring TestContext Cache のエントリ（=起動する context 数）が倍加していた。
+// 基底で MockMvc を自動構成して両者を同じキーに揃える。addFilters は既定（true）のまま:
+// セキュリティフィルタを実効にする側へ寄せることで、フィルタを通す試験の意味を変えない。
+// addFilters=false を宣言する派生は従来どおり別キーになる（意図した分離。変更しない）。
+@AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @Testcontainers
 @ActiveProfiles("test")

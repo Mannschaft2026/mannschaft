@@ -36,7 +36,13 @@ class GlobalSearchRateLimitIT extends AbstractGlobalSearchIT {
         counters.clear();
         doAnswer(invocation -> {
             List<String> keys = invocation.getArgument(1);
-            return counters.computeIfAbsent(keys.get(0), k -> new AtomicLong()).incrementAndGet();
+            // 時刻依存フレークの根治: redisKey は mannschaft:rate:{zone}:{key}:{windowStart}（壁時計の分）。
+            // 61 回のリクエスト中に分の境界をまたぐと windowStart が変わりカウントが 1 に戻り、61 回目が 200 になる。
+            // 本テストはフィルタ結線・ユーザー単位の分離・429/Retry-After の検証が責務で、固定ウィンドウ境界の挙動は
+            // ValkeyRateLimiterTest の責務なので、windowStart を落として集計する（同種の WiringIT と同じ方針）。
+            String redisKey = keys.get(0);
+            String counterKey = redisKey.substring(0, redisKey.lastIndexOf(':'));
+            return counters.computeIfAbsent(counterKey, k -> new AtomicLong()).incrementAndGet();
         }).when(redisTemplate).execute(
                 ArgumentMatchers.<RedisScript<Long>>any(), ArgumentMatchers.<List<String>>any(),
                 ArgumentMatchers.<Object>any());
