@@ -12,8 +12,11 @@
     "board": {
       "title": "Shift Board",
       "memberPool": "Unassigned Members",
+      "noUnassignedMembers": "No unassigned members",
+      "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
-      "unassignedSlots": "{count} unassigned slots"
+      "unassignedSlots": "{count} unassigned slots",
+      "backToList": "Back to shift list"
     },
     "autoAssign": {
       "button": "Auto Assign",
@@ -415,6 +418,7 @@
       "confirmSubmit": "Submit with these settings?"
     },
     "entry": {
+      "notStarted": "Preference submission has not started yet.",
       "sectionTitle": "Submit requests / Shift board",
       "bulkRequest": "Submit requests in bulk",
       "board": "Shift board",

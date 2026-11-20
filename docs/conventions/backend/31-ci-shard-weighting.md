@@ -163,3 +163,44 @@ LRU で追い出されて同じ構成が再ロードされる。これを減ら�
   **REQUIRED ではなく、重み計算にも使わない**（有無で重み表は変わらない）。
 - 検査: `ContextGroupClassOrdererTest`・`ContextKeyTestExecutionListenerTest`（BE。PER_CLASS・MOCK Web・BEFORE/AFTER_EACH_TEST_METHOD・@BeforeEach の遅延と失敗の検体を含む）、`ContextOrdererSettingsTest`（build-logic）、
   `ContextProgressLogCompatibilityTest`（`scripts/test_regen_shard_weights.py`）。
+
+### 構成キーの棚卸しと認可 override の番人（CMP-261111-0508 追撃①）
+
+構成キー（MCC）の種類を減らす施策（第一陣 A: 基底 `AbstractMySqlIntegrationTest` への `@AutoConfigureMockMvc`、第二陣 C2: 外部境界だけを mock する中間基底）の前提として、
+全テストクラスの「Spring が実際に適用する BeanOverride」と構成キーを棚卸しし、凍結スナップショットと照合する番人を置いている。
+
+- **棚卸し**（`ContextOverrideCensus`。`backend/src/test/java/com/mannschaft/app/common/testing/`）: テスト出力ディレクトリの全 .class を静的初期化なしで読み、
+  JUnit のテストクラス（具象・テストメソッドを継承込みで持つ・@Nested を含む）ごとに `BootstrapUtils` で MCC を構築し（コンテキストは起動しない）、
+  その `ContextCustomizer` のうち BeanOverride 系 customizer（`BeanOverrideContextCustomizer` の handlers。Boot の旧 `@MockBean` 系も読む）から実効 override を読む。
+  `BeanOverrideHandler.forTestClass` は外側クラス（@Nested）とクラス上の宣言を探索しないので使わない。読み方を知らない BeanOverride 系 customizer は解析失敗にする。
+  分類は **非 Spring・override 0 件（正常な結果）・override あり・解析失敗** の4つで、別々に集計する（`[ctx-census] classes=… nonSpring=… zero=… overrides=… failed=… distinctKeys=… authzOverrides=…`）。
+- **番人**（`ContextOverrideCensusGuardTest`）: 凍結スナップショット `backend/src/test/resources/context-override-census/snapshot.tsv` と照合し、次を red にする。
+  - **認可型 override の追加**（クラスごと。新規クラスは空集合と比べる）。認可型は denylist（`AccessGuard`・`AccessControlService`・`AuthTokenService`・`UserLocaleCache`・
+    `ScopeConcealingAccessGate`・`UserRoleRepository`・接尾辞 `*Guard`/`*Authorizer`/`*PermissionEvaluator`）と、明示リスト（`GoogleCalendarWebhookService` など、認可判定を持つ型。
+    `ContextOverrideCensus.AUTHZ_EXPLICIT`）の両方。**認可型 override の追加は殿の判断事項**であり、スナップショットの再生成で通してはならない。
+  - 認可型ではない override（外部アダプタの mock など）の増減は **照合しない**（red にならず、再生成も要らない）。スナップショットには認可型 override だけを載せる。
+    理由: 目的は認可 Bean の mock 化を防ぐことで、無関係な `@MockitoBean` の変更に全 PR へ再生成を強いるのは摩擦が大きい。
+  - **既知の対象の解析失敗・新規の未分類（スナップショットに無い解析失敗）・対象クラスの脱落**（削除・改名・Spring 非使用化）。
+  - **distinct key 数のラチェット**: 実測が `!distinctKeysBaseline` を超えたら red。構成キーを増やす変更は共通構成へ寄せる。第一陣 A の後は基準値−1 以下になる想定で、
+    減ったら再生成して基準値を下げる（下げ忘れても red にはしないが、次の増加を見逃さないよう同じ PR で下げる）。
+- **スナップショットの生成・再生成手順**（初期値は 2026-11-20 の main の実測から生成した）:
+  再生成が要るのは、認可型 override の削除（基準値を下げる）・クラスの削除や改名・解析失敗の解消・distinct key 数の減少のときに限る。
+  1. `cd backend && ./scripts/gradle-turnstile.sh ./gradlew test --tests com.mannschaft.app.common.testing.ContextOverrideCensusGuardTest` を実行する（red でもよい）。
+     番人は毎回、実測を `backend/build/context-override-census/snapshot.tsv` に書き出す（`distinctKeysBaseline`・`authzOverrideBaseline` は実測値）。
+  2. 差分を確かめてから `cp build/context-override-census/snapshot.tsv src/test/resources/context-override-census/snapshot.tsv` で写し、同じ PR でコミットする。
+     **認可型 override の行が増えていないこと**と、増えた構成キーの理由を PR 本文に書く。手で編集しない。
+  3. もう一度 1. を実行し green を確かめる。
+- **基底の MockMvc 自動構成（第一陣 A）**: `AbstractMySqlIntegrationTest` は `@AutoConfigureMockMvc`（addFilters は既定の true）を持つ。
+  MockMvc を使う派生と使わない派生で MCC が分かれ、構成キー（起動する context 数）が倍加していたのを 1 つに揃えるため。派生クラスは `@AutoConfigureMockMvc` を再宣言しない。
+  **`addFilters = false` を宣言した派生は従来どおり別キー**（意図した分離。認可フィルタを通さない試験）で、数を増やさない目的でも勝手に外さない・足さない。
+  フィルタを通す側（true）は未認証の 401 など「フィルタでしか起きない拒否」が実効になる。実効値は `MockMvcAddFiltersEffectiveValueTest` が全派生で宣言どおりかを検査する。
+  A の後の基準値は distinct key 338（A の前は 347）、認可型 override は 1124 件で不変。
+- **番人自体の CI 時間**: `ContextOverrideCensusGuardTest`（実測 約 280 秒。全テストクラスの MCC を構築する）と `MockMvcAddFiltersEffectiveValueTest`（約 30 秒）は
+  全クラスを走査するため重い。shard-weights.properties に実測に近い重みを登録し、LPT に計算させている（登録が無いと中央値の重みで割り付き、特定 shard の Run tests が静かに伸びる）。
+  走査結果の JVM 内共有は採らない: forkEvery=180・8 shard で 2 つのクラスが同じ JVM・同じ shard に入る保証が無く、効果が偶然になるため。
+  重み表の再生成（regen-shard-weights.sh）は実測から上書きするので、以後は自動で追随する。
+- **関連する試練**（CMP-261111-0508 追撃①。A の前は red のものを含む）: `MockMvcAddFiltersEffectiveValueTest`（AC-2(a) addFilters の実効値。直接・中間基底・合成注釈・@Nested の false 宣言は false のまま、
+  それ以外の派生は true）、`MockMvcFilterAppliedIT` / `MockMvcFilterNotAppliedIT`（AC-2(b) フィルタでしか起きない応答: 本文なしの 401・X-Frame-Options）、
+  `MockMvcContextUnificationTest` / `MockMvcContextUnificationIT`（AC-2(c) 旧「基底のみ」と旧「MockMvc=true」の MCC 統合・context 共有・MockMvc と builder の構築）、
+  `ContextKeyTestExecutionListenerTest` の AC-5（共有キーの起動失敗は両クラスの失敗として残り、`[ci-ctx]` の error にしない）、
+  build-logic の `CiTestRuntimeConfigPinTest`（AC-4: 既定 maxSize 10・CI の `-Pspring.test.context.cache.maxSize=5`・forkEvery 180・maxParallelForks 2・shard 8・timeout 85/105・100/120 を変えない）。

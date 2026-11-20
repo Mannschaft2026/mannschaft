@@ -255,13 +255,21 @@ jobs:
       - name: Set up Gradle（依存＋ビルドキャッシュ。shard ジョブと同じキーを共有）
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは shard 0 だけに限る（CMP-261120-1042）。複数ジョブが同じ依存キャッシュへ使用範囲の違う状態を
+          # 書くと、部分集合の状態が他ジョブに復元されて jar 欠落（Could not find）が起きるため。
+          cache-read-only: true
+          # 未使用ファイルの削除（cache cleanup）を止める。cleanup が jar だけを削り、メタデータが残る状態を作るため。
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
 
       - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       # build-logic（ShardAssignment / ShardBalanceGuard）の単体テスト。割り当て・番人の仕様をここで守る。
       - name: build-logic 単体テスト（割り当て・番人）
@@ -304,13 +312,21 @@ jobs:
       - name: Set up Gradle（依存＋ビルドキャッシュ。shard ジョブと同じキーを共有）
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは shard 0 だけに限る（CMP-261120-1042）。複数ジョブが同じ依存キャッシュへ使用範囲の違う状態を
+          # 書くと、部分集合の状態が他ジョブに復元されて jar 欠落（Could not find）が起きるため。
+          cache-read-only: true
+          # 未使用ファイルの削除（cache cleanup）を止める。cleanup が jar だけを削り、メタデータが残る状態を作るため。
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
 
       - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       - name: Run ArchUnit tests（archTest・別 JVM）
         run: ./gradlew archTest --no-daemon --continue --build-cache
@@ -371,13 +387,21 @@ jobs:
       - name: Set up Gradle（依存＋ビルドキャッシュ）
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは shard 0 だけに限る（CMP-261120-1042）。複数ジョブが同じ依存キャッシュへ使用範囲の違う状態を
+          # 書くと、部分集合の状態が他ジョブに復元されて jar 欠落（Could not find）が起きるため。
+          cache-read-only: true
+          # 未使用ファイルの削除（cache cleanup）を止める。cleanup が jar だけを削り、メタデータが残る状態を作るため。
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
 
       - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       - name: 明示ゾーン化済み範囲を America/Los_Angeles で検証
         run: >-
@@ -443,22 +467,31 @@ jobs:
       #
       # 本 workflow は on: pull_request のみで main への push では起動しないため、
       # setup-gradle 既定の「default ブランチのみ書き込み」だとキャッシュが永久に
-      # 育たない。そのため cache-read-only: false を明示し、PR ビルドでも
-      # read-write でキャッシュを更新する。
-      #
-      # 各 shard は同じ依存・コンパイル成果物を使うため、shard 間でキャッシュキーを
-      # 共有できるよう cache-encryption-key 等は使わず既定キーに任せる。最初に走った
-      # shard が暖めたビルドキャッシュ（compileJava 等）を後続 shard が再利用できる。
+      # 育たない。そのため PR ビルドでも書き込みを許可する。ただし書き込むのは shard 0 だけ
+      # （他ジョブ・他 shard は read-only）。使用範囲の違うジョブが同じ依存キャッシュへ書くと、
+      # 部分集合の状態が他ジョブに復元されて「Could not find xxx.jar」になる（CMP-261120-1042）。
+      # cache-cleanup: never も同じ理由（未使用 jar だけを削る cleanup を止める）。
+      # 復元直後に「Gradle 依存キャッシュの整合性検証」ステップで必要な構成を全て解決し、
+      # jar 欠落があれば modules-2 を破棄して再取得する（失敗ジョブが壊れた状態を保存する経路への保険）。
+      # cache-encryption-key 等は使わず既定キーに任せる。
       - name: Set up Gradle（依存＋ビルドキャッシュ）
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは shard 0 だけに限る（CMP-261120-1042）。複数ジョブが同じ依存キャッシュへ使用範囲の違う状態を
+          # 書くと、部分集合の状態が他ジョブに復元されて jar 欠落（Could not find）が起きるため。
+          cache-read-only: ${{ matrix.shard != 0 }}
+          # 未使用ファイルの削除（cache cleanup）を止める。cleanup が jar だけを削り、メタデータが残る状態を作るため。
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
 
       - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       # Compile all source sets first so compilation errors surface quickly
       # before the slower test run starts.（各 shard で実行。ビルドキャッシュにより
