@@ -85,6 +85,7 @@
     },
     "handover": {
       "builder": {
+        "generate_failed": "인수인계 패키지 생성에 실패했습니다",
         "title": "인수인계 패키지 생성",
         "select_term": "대상 임기 선택",
         "pii_level": "개인정보 수준",
@@ -110,6 +111,7 @@
         "failed": "실패"
       },
       "term": {
+        "count": "임기 {count}개 | 임기 {count}개 | 임기 {count}개",
         "manager_title": "이사 임기 관리",
         "col_name": "이름",
         "col_role": "직책",

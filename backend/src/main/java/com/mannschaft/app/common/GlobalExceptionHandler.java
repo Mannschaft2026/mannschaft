@@ -661,6 +661,7 @@ public class GlobalExceptionHandler {
             // CMP-261010-1432: 自己審査の禁止は明確な認可拒否 → 403、枠間移動の移動元不一致は状態競合 → 409
             Map.entry("SHIFT_045", HttpStatus.FORBIDDEN),                   // SELF_REVIEW_FORBIDDEN
             Map.entry("SHIFT_046", HttpStatus.CONFLICT),                    // MOVE_SOURCE_NOT_ASSIGNED
+            Map.entry("SHIFT_048", HttpStatus.CONFLICT),                    // REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED
             // F08.7 シフト予算 (Phase 9-α: 逆算 API)
             Map.entry("SHIFT_BUDGET_001", HttpStatus.SERVICE_UNAVAILABLE),  // FEATURE_DISABLED
             Map.entry("SHIFT_BUDGET_002", HttpStatus.BAD_REQUEST),          // EMPTY_POSITION_LIST

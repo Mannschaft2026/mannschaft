@@ -1,6 +1,7 @@
 package com.mannschaft.app.chat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
 import com.mannschaft.app.chat.entity.ChatChannelEntity;
 import com.mannschaft.app.chat.entity.ChatChannelMemberEntity;
 import com.mannschaft.app.chat.entity.ChatMessageAttachmentEntity;
@@ -293,7 +294,7 @@ class ChatAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(outsiderId);
             mockMvc.perform(get("/api/v1/chat/bookmarks"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", not(hasItem(ownerBookmarkId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].id", not(hasLongId(ownerBookmarkId))));
         }
 
         @Test
@@ -302,7 +303,7 @@ class ChatAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(ownerId);
             mockMvc.perform(get("/api/v1/chat/bookmarks"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", hasItem(ownerBookmarkId.intValue())));
+                    .andExpect(jsonPath("$.data[*].id", hasLongId(ownerBookmarkId)));
         }
     }
 
