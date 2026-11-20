@@ -172,12 +172,14 @@ jobs:
 
       # backend-ci.yml と同じ作法で Gradle 依存・wrapper・ビルドキャッシュを共有する。
       # 本 workflow は on: pull_request 主体で main への push では起動しないため、
-      # PR ビルドでもキャッシュを育てられるよう cache-read-only: false を明示する。
+      # 書き込みは行わない（read-only。CMP-261120-1042）。
       - name: Set up Gradle（依存＋ビルドキャッシュ）
         if: steps.changes.outputs.openapi_related == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは main への push だけに限る（CMP-261120-1042。使用範囲の違うジョブが書くと jar 欠落の部分集合が復元される）。
+          cache-read-only: true
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
@@ -185,6 +187,11 @@ jobs:
       - name: Grant Gradle wrapper execute permission
         if: steps.changes.outputs.openapi_related == 'true'
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        if: steps.changes.outputs.openapi_related == 'true'
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       # openapi-gen プロファイル（H2・:8082 フォーク・MySQL/Redis 不要）で docs/openapi.json を生成。
       # 生成先は build.gradle.kts の openApi{} 設定によりリポジトリルートの docs/openapi.json。
