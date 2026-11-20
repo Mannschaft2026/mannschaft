@@ -747,6 +747,40 @@ class UserServiceTest {
             }
         }
 
+        // ============================================================
+        // CMP-261120-0200: PUT /users/me の avatarUrl は無視され既存値が保持される（実 JSON から生成）
+        // ============================================================
+
+        private UpdateProfileRequest fromJson(String json) throws Exception {
+            return com.fasterxml.jackson.databind.json.JsonMapper.builder().findAndAddModules().build()
+                    .readValue(json, UpdateProfileRequest.class);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "avatarUrl={0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {
+                "\"https://h/bucket/user/1/icon/new.png?X-Amz-Signature=a\"",
+                "\"user/1/icon/new.png\"",
+                "\"user/999/icon/other.png\"",
+                "null",
+                "\"\""})
+        @DisplayName("CMP-261120-0200 AC2: avatarUrl が http(s)/キー/他人キー/null/空文字で来ても既存の avatarUrl は変わらない")
+        void updateProfile_avatarUrlは無視され既存値保持(String avatarJson) throws Exception {
+            UserEntity user = createActiveUser();
+            user.updateAvatarUrl("user/1/icon/current.png");
+            given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+            given(encryptionService.hmac(anyString())).willReturn("hashed-value");
+            given(userRepository.save(any(UserEntity.class))).willAnswer(inv -> inv.getArgument(0));
+            given(twoFactorAuthRepository.findByUserId(USER_ID)).willReturn(Optional.empty());
+            given(webauthnCredentialRepository.findByUserId(USER_ID)).willReturn(List.of());
+            given(oauthAccountRepository.findByUserId(USER_ID)).willReturn(List.of());
+
+            UpdateProfileRequest req = fromJson("{\"locale\":\"en\",\"avatarUrl\":" + avatarJson + "}");
+            userService.updateProfile(USER_ID, req);
+
+            assertThat(user.getAvatarUrl()).isEqualTo("user/1/icon/current.png");
+            assertThat(user.getLocale()).isEqualTo("en");
+        }
+
         @Test
         @DisplayName("#2487: timezone 変更時、evict はコミット前には走らず afterCommit で初めて走る")
         void updateProfile_timezone変更_evictはコミット後() {
