@@ -20,6 +20,8 @@ import java.util.Objects;
 /**
  * 関連詳細/添付の最新 F00 と準備中判定を leaf の読取 TX の外で行う。
  * 旧来の所属認可と他 scope の閲覧認可は leaf に残し、作成・更新・一覧を変更しない。
+ * 大会/ディビジョン連絡スペースの閲覧判定は leaf から撤去し、本 Facade が逆引き済みのスコープで行う
+ * （tx 外・存在秘匿つき。CMP-261116-0726）。
  */
 @Service
 @RequiredArgsConstructor
@@ -32,6 +34,8 @@ public class BulletinReadFacade {
     private final OrganizationService organizationService;
     private final BulletinThreadVisibilityResolver threadVisibilityResolver;
     private final BulletinAnnouncementPreviewReader announcementPreviewReader;
+    /** 大会/ディビジョン連絡スペースの閲覧判定（tx 外・存在秘匿つき。CMP-261116-0726）。 */
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     public ThreadResponse getThread(ScopeType type, Long scopeId, Long threadId, Long viewer) {
         var metadata = threadService.getReadMetadata(threadId);
@@ -41,7 +45,9 @@ public class BulletinReadFacade {
     }
 
     public ThreadResponse getThreadGlobal(Long threadId, Long viewer) {
-        assertReadable(threadService.getReadMetadata(threadId), viewer);
+        var metadata = threadService.getReadMetadata(threadId);
+        assertTournamentReadable(metadata, viewer, BulletinErrorCode.THREAD_NOT_FOUND);
+        assertReadable(metadata, viewer);
         return threadService.getThreadGlobal(threadId, viewer);
     }
 
@@ -76,18 +82,34 @@ public class BulletinReadFacade {
     }
 
     public List<AttachmentResponse> listThreadAttachments(Long threadId, Long viewer) {
-        assertReadable(threadService.getReadMetadata(threadId), viewer);
+        var metadata = threadService.getReadMetadata(threadId);
+        assertTournamentReadable(metadata, viewer, BulletinErrorCode.THREAD_NOT_FOUND);
+        assertReadable(metadata, viewer);
         return attachmentService.listThreadAttachments(threadId, viewer);
     }
 
     public List<AttachmentResponse> listReplyAttachments(Long replyId, Long viewer) {
-        assertReadable(attachmentService.getReplyReadMetadata(replyId), viewer);
+        var metadata = attachmentService.getReplyReadMetadata(replyId);
+        assertTournamentReadable(metadata, viewer, BulletinErrorCode.ATTACHMENT_TARGET_NOT_FOUND);
+        assertReadable(metadata, viewer);
         return attachmentService.listReplyAttachments(replyId, viewer);
     }
 
     public AttachmentDownloadUrlResponse generateDownloadUrl(Long attachmentId, Long viewer) {
-        assertReadable(attachmentService.getAttachmentReadMetadata(attachmentId), viewer);
+        var metadata = attachmentService.getAttachmentReadMetadata(attachmentId);
+        assertTournamentReadable(metadata, viewer, BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+        assertReadable(metadata, viewer);
         return attachmentService.generateDownloadUrl(attachmentId, viewer);
+    }
+
+    /**
+     * 大会/ディビジョン連絡スペースのスレッドなら閲覧を要求する（CMP-261116-0726）。閲覧権なしは入口の不在コード
+     * （{@code notFound}）と同一応答にする。leaf の読取 tx は大会の閲覧判定を持たないため、ここが唯一の閲覧門である。
+     */
+    private void assertTournamentReadable(BulletinThreadService.PreviewMetadata metadata, Long viewer,
+                                          BulletinErrorCode notFound) {
+        tournamentScopeAccessGuard.checkScopeViewConcealed(
+                ScopeType.valueOf(metadata.scopeType()), metadata.scopeId(), viewer, notFound);
     }
 
     private void assertReadable(BulletinThreadService.PreviewMetadata metadata, Long viewer) {

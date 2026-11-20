@@ -85,6 +85,7 @@
     },
     "handover": {
       "builder": {
+        "generate_failed": "Das Übergabepaket konnte nicht erstellt werden",
         "title": "Übergabepaket generieren",
         "select_term": "Zielamtszeit auswählen",
         "pii_level": "Datenschutzstufe",
@@ -110,6 +111,7 @@
         "failed": "Fehlgeschlagen"
       },
       "term": {
+        "count": "{count} Amtszeiten | {count} Amtszeit | {count} Amtszeiten",
         "manager_title": "Verwaltung der Vorstandsamtszeiten",
         "col_name": "Name",
         "col_role": "Funktion",

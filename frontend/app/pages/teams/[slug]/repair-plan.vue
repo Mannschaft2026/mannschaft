@@ -86,7 +86,7 @@ async function loadKanbans() {
   try {
     kanbans.value = await listKanbans('teams', teamSlug.value, organizationId.value)
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     kanbanLoading.value = false
   }
@@ -133,7 +133,7 @@ async function handleCreateKanban() {
     await loadKanbans()
     notification.success(t('repair_plan.kanban.created'))
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('memberProfile.saveFailed'))
   }
 }
 
@@ -148,7 +148,7 @@ async function handleCardMoved(cardId: string, newStage: KanbanStage) {
     const refreshed = updated.find((k) => k.id === selectedKanban.value!.id)
     if (refreshed) selectedKanban.value = refreshed
   } catch {
-    notification.error(t('common.save_failed'))
+    notification.error(t('memberProfile.saveFailed'))
   }
 }
 

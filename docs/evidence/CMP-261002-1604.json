@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261002-1604",
+  "scope": "app",
+  "implementation": {
+    "pr": 3594,
+    "sha": "e0613449c9dc9821594175eafb4ca0555135f5ae"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "越境アクセス（他スコープの実在 ID）と不在アクセスで、ステータス・エラーコード・メッセージが一致する",
+      "tests": [
+        {
+          "name": "AC-1/C4: 部外者・他スコープADMINが実スコープと実在IDを付けた応答は、不在IDの応答と完全一致（404）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/notification/confirmable/ConfirmableNotificationExistenceOracleContractIT.java"
+        },
+        {
+          "name": "AC-1: 自スコープのパスに他スコープの実在IDを付けた応答は、不在IDの応答と完全一致（SCOPE_MISMATCH を出さない）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/notification/confirmable/ConfirmableNotificationExistenceOracleContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "同スコープの正規ユーザーの権限判定（書込系の権限不足は 403）は従来どおり維持される",
+      "tests": [
+        {
+          "name": "AC-2: 同スコープのMEMBERとSEND_NOTIFICATIONの無いDEPUTY_ADMINは、書込系で403 COMMON_002のまま",
+          "evidence": "backend/src/test/java/com/mannschaft/app/notification/confirmable/ConfirmableNotificationExistenceOracleContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "組織管理者が画面で確認通知を見て操作でき、権限なし・他テナントでは画面が出ない",
+      "tests": [
+        {
+          "name": "confirmable-notifications-settings.spec.ts",
+          "evidence": "frontend/tests/unit/pages/confirmable-notifications-settings.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 37015008170 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3594"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261002-1604-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261002-1604-exploratory.md"
+    }
+  },
+  "regressions": []
+}

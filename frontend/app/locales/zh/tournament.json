@@ -111,6 +111,7 @@
       "empty_history": "没有移籍历史"
     },
     "roster": {
+      "load_match": "加载",
       "title": "比赛球员名单",
       "submit": "提交",
       "apply_template": "应用模板",
@@ -165,6 +166,7 @@
       "private": "非公开",
       "empty": "联络空间尚未准备好",
       "no_bulletin": "没有公告板空间",
+      "bulletin_scope_unresolved": "无法确定公告板的范围，因此无法显示",
       "no_chat": "没有聊天空间",
       "visibility_saved": "已更改公开设置",
       "visibility_failed": "更改公开设置失败",

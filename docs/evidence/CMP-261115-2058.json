@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261115-2058",
+  "scope": "app",
+  "implementation": {
+    "pr": 4547,
+    "sha": "c90d943462d1bae5dbad8d3f6ab4392ac31443f6"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "掲示板スペースは spaceKind=BULLETIN の行だけから選び、チャット行は選ばない",
+      "tests": [
+        {
+          "name": "spaceKind=BULLETIN の行だけを掲示板スペースとして選ぶ（チャット行は選ばない）",
+          "evidence": "frontend/tests/unit/utils/tournamentContactSpace.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "掲示板 API のスコープは契約どおり scopeType / scopeId から解決し、scope_id を欠いて要求しない",
+      "tests": [
+        {
+          "name": "掲示板 API のスコープは契約どおり scopeType / scopeId から解決し、undefined を渡さない",
+          "evidence": "frontend/tests/unit/utils/tournamentContactSpace.spec.ts"
+        },
+        {
+          "name": "scopeId が得られないときは null を返し、掲示板 API を空のまま呼ばせない",
+          "evidence": "frontend/tests/unit/utils/tournamentContactSpace.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "チャットは spaceKind=CHAT の refId をチャンネル ID として読む",
+      "tests": [
+        {
+          "name": "チャットは spaceKind=CHAT の refId をチャンネルIDとして読む",
+          "evidence": "frontend/tests/unit/utils/tournamentContactSpace.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 43722034304 },
+    { "runId": 43722034577 },
+    { "runId": 43722034345 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4547"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-2058-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-2058-exploratory.md"
+    }
+  },
+  "regressions": []
+}

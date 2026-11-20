@@ -46,7 +46,7 @@ async function handleSendInvitation() {
       AUTH_068: 'parental_consent.error_auth_068',
       AUTH_069: 'parental_consent.error_auth_069',
     }
-    notification.error(t(keyMap[code] ?? 'common.error.unknown'))
+    notification.error(t(keyMap[code] ?? 'error.unknown'))
   } finally {
     sending.value = false
   }
@@ -58,7 +58,7 @@ async function handleCancelInvitation(linkId: string) {
     notification.success(t('parental_consent.invite_cancelled'))
     await loadData()
   } catch {
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 

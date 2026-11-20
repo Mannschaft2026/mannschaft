@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261110-2011",
+  "scope": "app",
+  "implementation": {
+    "pr": 4459,
+    "sha": "870bd9829e8fd96e5ea33ad1c2881a9ef0275d65"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "正常送信経路ではERROR実送信後closeし、送信競合でも順序を保つ",
+      "tests": [
+        {
+          "name": "競合なしではERROR送信後に閉じる / CONNECTED送信競合でもERROR送信後に閉じる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/config/websocket/StompTerminalErrorFlushContractTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "既存sendTimeLimit期限・例外/他status優先・期限一回/取消とscheduler終了を維持する",
+      "tests": [
+        {
+          "name": "期限予約は一回でpending後新規送信をdropする / 期限発火とlastActive再試行でも実close一回 / sendIOExceptionを主原因にcloseIOExceptionをsuppressedへ残す",
+          "evidence": "backend/src/test/java/com/mannschaft/app/config/websocket/DeferredProtocolCloseWebSocketSessionTest.java"
+        },
+        {
+          "name": "実schedulerBean停止後の予約拒否を実際に通してcloseへ到達する / 実scheduler登録が遅れ停止した場合も予約拒否とcloseを確認する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/config/websocket/ProtocolCloseSchedulerLifecycleTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "fatal後の後続/queuedフレームを遮断し、偽造不可/session分離/DISCONNECT清掃を守る",
+      "tests": [
+        {
+          "name": "nativeHeaderだけではfatalを偽造できない / samePayload先頭拒否後のSENDをpreSendで業務dispatchさせない / preSend通過済みqueued後続はbeforeHandleで落とす / fatalでもsyntheticDISCONNECTを両入口で通す",
+          "evidence": "backend/src/test/java/com/mannschaft/app/config/websocket/FatalStompSessionGateTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "両SockJS/TCP・既存認証認可順序・broker/context終了を維持する",
+      "tests": [
+        {
+          "name": "実構成はcustomHandlerとgate先行を持ち既存認証認可順序を保つ / 両SockJSBaseのhandlerMappingを維持する / 両TCPTransportで実CONNECTとPrincipal登録が成立する / fatal拒否後に実broker購読とSimpUserRegistryが片付く",
+          "evidence": "backend/src/test/java/com/mannschaft/app/config/websocket/WebSocketTerminalLifecycleIT.java"
+        },
+        {
+          "name": "実AppContextStopはGOINGAWAYを優先し予約とsessionを片付ける / 実AppContextCloseはGOINGAWAYを優先し予約とsessionを片付ける",
+          "evidence": "backend/src/test/java/com/mannschaft/app/config/websocket/WebSocketTerminalContextShutdownIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "機能別限定実機と実機後の独立3目的探索を行う",
+      "tests": [
+        {
+          "name": "R14 EC e2 / Match m2+remaining-only resume / SG s4 / 旧Chat通知source継承、R15新3担当AC36",
+          "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43543300356
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4459",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "実SpringのCONNECTED送信競合下でERROR送信よりcloseが先行する正式redを、同じ契約試験greenと期限/fatal清掃の回帰へ対応する。旧CI失敗/85分timeout原因未確定を成功へ書き換えない。",
+      "test": "StompTerminalErrorFlushContractTest CONNECTED送信競合でもERROR送信後に閉じる",
+      "redEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}

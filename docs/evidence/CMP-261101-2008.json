@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261101-2008",
+  "scope": "app",
+  "implementation": {
+    "pr": 4329,
+    "sha": "e6bfe09d96b76929ecbd0521e33cf736b2c363ff"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC1",
+      "description": "ダッシュボードのお知らせ応答（FULL）に target_team_ids キーが無い",
+      "tests": [
+        {
+          "name": "FULL告知は他チームID一覧を出さず保持キーを返す",
+          "evidence": "backend/src/test/java/com/mannschaft/app/dashboard/service/DashboardServiceVisibilityFilterTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "description": "LOCKED 応答にも target_team_ids キーが無い",
+      "tests": [
+        {
+          "name": "teamAnnouncementsApplyPaymentGateState",
+          "evidence": "backend/src/test/java/com/mannschaft/app/dashboard/service/DashboardServiceVisibilityFilterTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "description": "target_audience・source_type・source_id・excerpt_cache は従来どおり返る",
+      "tests": [
+        {
+          "name": "FULL告知は他チームID一覧を出さず保持キーを返す",
+          "evidence": "backend/src/test/java/com/mannschaft/app/dashboard/service/DashboardServiceVisibilityFilterTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "description": "targetTeamIds が null・空でもキーが出ない。お知らせ0件は空配列",
+      "tests": [
+        {
+          "name": "targetTeamIdsがnullや空でもキーを出さない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/dashboard/service/DashboardServiceVisibilityFilterTest.java"
+        },
+        {
+          "name": "お知らせ0件は空配列",
+          "evidence": "backend/src/test/java/com/mannschaft/app/dashboard/service/DashboardServiceVisibilityFilterTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 42193457822 },
+    { "runId": 42193457840 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4329"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261101-2008-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261101-2008-exploratory.md"
+    }
+  },
+  "regressions": []
+}

@@ -272,6 +272,9 @@
           "ERROR": "エラー"
         }
       }
+    },
+    "ticket": {
+      "create_success": "商品を追加しました"
     }
   }
 }

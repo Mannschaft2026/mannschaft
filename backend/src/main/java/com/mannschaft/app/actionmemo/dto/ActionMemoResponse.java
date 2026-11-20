@@ -55,8 +55,13 @@ public class ActionMemoResponse {
     @JsonProperty("completes_todo")
     private boolean completesTodo;
 
+    /** 個人タイムライン投稿ID（publish-daily 専用。チーム投稿IDは含まない） */
     @JsonProperty("timeline_post_id")
     private Long timelinePostId;
+
+    /** チームタイムライン投稿ID（publish-to-team 専用） */
+    @JsonProperty("team_timeline_post_id")
+    private Long teamTimelinePostId;
 
     /** Phase 3: チームタイムライン投稿済みチームID */
     @JsonProperty("posted_team_id")

@@ -77,6 +77,7 @@ erDiagram
 
 | 参照元ドメイン | 参照元テーブル | 列 | 種別 | 参照先テーブル |
 | --- | --- | --- | --- | --- |
+| [effortrecord](effortrecord.md) | `effort_records` | `grant_membership_id` | ID参照 | `memberships` |
 | [role](role.md) | `archived_membership_grants` | `membership_id` | ID参照 | `memberships` |
 
 ## 多態参照（線を引かない）

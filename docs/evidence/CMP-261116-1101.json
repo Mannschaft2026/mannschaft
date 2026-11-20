@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261116-1101",
+  "scope": "tooling",
+  "implementation": { "pr": 4580, "sha": "9e07fbbedeca72a5ba7c98273dcec14ba855ee55" },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "【合格】設定投入後の足軽 worktree に除外3ディレクトリのファイルが展開されず git status が空（隔離クローンの独立検証と、2026-11-17 に Claude Code の Agent(isolation:worktree) で実際に作った worktree で確認）",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（実地確認）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" },
+        { "name": "worktree-sparse-paths 単体テスト", "evidence": "scripts/worktree-sparse-paths.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "【合格】除外以外の追跡ファイルは全て実在し、除外ディレクトリの祖先直下のファイル（application.yml、package.json 等）も展開される",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" },
+        { "name": "worktree-sparse-paths 単体テスト", "evidence": "scripts/worktree-sparse-paths.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "【合格】worktree に .claude/settings.json・.claude/commands/・CLAUDE.md・AGENTS.md がある",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "【合格】1ファイル変更して git add -A && git commit しても除外ファイルの削除が記録されない",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "【合格】worktree-assets.mjs expand で全展開・status 空。展開後は素材検証が実際に実行されて通る",
+      "tests": [
+        { "name": "worktree-assets 単体テスト", "evidence": "scripts/worktree-assets.test.mjs" },
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "【未確認（独立した実機検証の記録なし）】shrink は除外配下に未コミット変更・未追跡、稼働中プロセス、index lock があれば何も変えず非0。単体テストと CI は緑だが、台帳に独立検証の合格記録がない。なお shrink は日本語環境で不具合あり（issue #4588）",
+      "tests": [
+        { "name": "worktree-assets 単体テスト", "evidence": "scripts/worktree-assets.test.mjs" },
+        { "name": "shrink の日本語環境での不具合（既知の残件）", "evidence": "https://github.com/kenta-0420/mannschaft/issues/4588" }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "【未確認（独立した実機検証の記録なし）】expand/shrink の途中失敗は非0・到達状態と復旧手順を表示・既存変更と ignore 済みを失わず再実行可。単体テストと CI は緑だが、台帳に独立検証の合格記録がない",
+      "tests": [
+        { "name": "worktree-assets 単体テスト", "evidence": "scripts/worktree-assets.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "【未確認（独立した実機検証の記録なし）】本陣からの shrink は変更前に拒否、操作は現在の worktree 限定。単体テストと CI は緑だが、台帳に独立検証の合格記録がない",
+      "tests": [
+        { "name": "worktree-assets 単体テスト", "evidence": "scripts/worktree-assets.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "【合格】sparse でもメタデータ検査と合成 fixture テストは実行、不正メタデータは非0。省略は実バイト検査だけ（独立検証済み）",
+      "tests": [
+        { "name": "sparse 判定の単体テスト", "evidence": "frontend/scripts/lib/sparse-assets.test.mjs" },
+        { "name": "sparse 時の verify スクリプト群のテスト", "evidence": "frontend/scripts/verify-ranch-sparse.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "【合格】省略条件は対象追跡パス1件以上＋欠落が全て意図した sparse 除外のみ。0件・git 失敗・未マージ・部分展開・手削除は失敗（独立検証済み）",
+      "tests": [
+        { "name": "sparse 判定の単体テスト", "evidence": "frontend/scripts/lib/sparse-assets.test.mjs" },
+        { "name": "sparse 時の verify スクリプト群のテスト", "evidence": "frontend/scripts/verify-ranch-sparse.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "【合格】展開済み素材の改ざんは失敗。CI=true で素材なしは失敗（独立検証済み）",
+      "tests": [
+        { "name": "sparse 時の verify スクリプト群のテスト", "evidence": "frontend/scripts/verify-ranch-sparse.test.mjs" },
+        { "name": "開発用外観検証のテスト", "evidence": "frontend/scripts/verify-ranch-development-appearances.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "description": "【未確認（独立した実機検証の記録なし）】検証モジュールは import だけではプロセスを終了しない。単体テストと CI は緑だが、台帳に独立検証の合格記録がない",
+      "tests": [
+        { "name": "sparse 判定の単体テスト", "evidence": "frontend/scripts/lib/sparse-assets.test.mjs" },
+        { "name": "sparse 時の verify スクリプト群のテスト", "evidence": "frontend/scripts/verify-ranch-sparse.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "description": "【合格】RanchProductionMasterRegistryTest は sparse でも通常実行、実素材依存の単位だけ理由つき skip。PR #4576 の全展開 CI で牧場テスト5クラス（DiagnosisFormalMappingPersistenceIT、RanchApprovedAssetPackValidatorTest、RanchFormalMappingResourceTest、RanchProductionMasterRegistryTest、SparseExcludedAssetsTest）が skip されず成功。sparse worktree での skip 挙動は部隊4の実測で確認",
+      "tests": [
+        { "name": "SparseExcludedAssetsTest", "evidence": "backend/src/test/java/com/mannschaft/app/support/test/sparse/SparseExcludedAssetsTest.java" },
+        { "name": "RanchProductionMasterRegistryTest", "evidence": "backend/src/test/java/com/mannschaft/app/ranch/service/RanchProductionMasterRegistryTest.java" },
+        { "name": "RanchApprovedAssetPackValidatorTest", "evidence": "backend/src/test/java/com/mannschaft/app/ranch/service/RanchApprovedAssetPackValidatorTest.java" },
+        { "name": "RanchFormalMappingResourceTest", "evidence": "backend/src/test/java/com/mannschaft/app/ranch/service/RanchFormalMappingResourceTest.java" },
+        { "name": "DiagnosisFormalMappingPersistenceIT", "evidence": "backend/src/test/java/com/mannschaft/app/diagnosis/DiagnosisFormalMappingPersistenceIT.java" },
+        { "name": "PR #4576（BE 牧場テストの sparse 時 skip）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4576" }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "description": "【合格】配置 CLI verify-ranch-production-assets.mjs は省略しない。展開が要るなら書き込み前に非0＋expand 手順（独立検証済み）",
+      "tests": [
+        { "name": "配置 CLI のテスト", "evidence": "frontend/scripts/verify-ranch-production-assets.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "description": "【合格】gitleaks 再検査 verify-ranch-public-identity-gitleaks.mjs は成功スキップしない（独立検証済み）",
+      "tests": [
+        { "name": "sparse 時の verify スクリプト群のテスト", "evidence": "frontend/scripts/verify-ranch-sparse.test.mjs" },
+        { "name": "gitleaks 再検査スクリプト", "evidence": "frontend/scripts/verify-ranch-public-identity-gitleaks.mjs" }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "description": "【合格】素材なしのローカルビルド出力を配布可能と検証成功にしない。成果物検証は CI の有無に関わらず不足で失敗（独立検証済み）",
+      "tests": [
+        { "name": "成果物検証のテスト", "evidence": "frontend/scripts/verify-ranch-production-artifact.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "description": "【未確認（一部のみ）】sparse worktree での FE lint / typecheck / vitest / nuxt build / nuxt dev は未実施。素材検証スクリプト側の sparse 対応は単体テストで確認したにとどまる",
+      "tests": [
+        { "name": "sparse 時の verify スクリプト群のテスト（一部のみ）", "evidence": "frontend/scripts/verify-ranch-sparse.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-18",
+      "description": "【未確認（独立した実機検証の記録なし）】番人: 設定一覧≠生成結果、またはどちらにも属さない追跡パスで失敗。単体テストと Harness CI は緑だが、台帳に独立検証の合格記録がない",
+      "tests": [
+        { "name": "worktree-sparse-paths 単体テスト", "evidence": "scripts/worktree-sparse-paths.test.mjs" },
+        { "name": "Harness CI（番人の実行）", "evidence": ".github/workflows/harness-ci.yml" }
+      ]
+    },
+    {
+      "id": "AC-19",
+      "description": "【未確認（独立した実機検証の記録なし）】番人: 除外リストのディレクトリ不在で失敗。除外リスト空なら全ディレクトリ。単体テストと Harness CI は緑だが、台帳に独立検証の合格記録がない",
+      "tests": [
+        { "name": "worktree-sparse-paths 単体テスト", "evidence": "scripts/worktree-sparse-paths.test.mjs" },
+        { "name": "除外リスト", "evidence": "scripts/worktree-sparse-exclusions.json" }
+      ]
+    },
+    {
+      "id": "AC-20",
+      "description": "【合格】既存 sparse worktree が main の新ディレクトリ＋設定更新を merge/rebase 後、所定手順で新ファイル実在・既存変更保持（独立検証済み）",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-21",
+      "description": "【合格】sparse で merge/rebase、main 側の除外配下変更は競合なし。自分も変えて競合なら git が展開して競合表示（独立検証済み）",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-22",
+      "description": "【合格】本陣は全展開のまま、投入前後で不変（独立検証済み）",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-23",
+      "description": "【未確認（独立した実機検証の記録なし）】陣払いが従来と同じ判定を保つ。単体テストと CI は緑だが、台帳に独立検証の合格記録がない",
+      "tests": [
+        { "name": "worktree-cleanup 単体テスト", "evidence": "scripts/worktree-cleanup.test.mjs" }
+      ]
+    },
+    {
+      "id": "AC-24",
+      "description": "【合格】sparse worktree から作った WSL 検証コピーに素材が全て含まれる（独立検証済み）",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（独立検証）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    },
+    {
+      "id": "AC-25",
+      "description": "【未確認（一部のみ）】効果測定。容量は 1,170,412,582 B から 251,314,323 B へ 876.5 MiB 減で合格（実地では 1,118.1 MiB・26,668 ファイルから 241.6 MiB・20,421 ファイル）。作成時間は負荷のため2回の計測では結論が出ず未確定",
+      "tests": [
+        { "name": "PR #4580 本文の結果表（容量の測定）", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" }
+      ]
+    }
+  ],
+  "ci": [{ "runId": 43832797366 }, { "runId": 43832797330 }],
+  "stages": {
+    "review": { "status": "passed", "evidence": "https://github.com/kenta-0420/mannschaft/pull/4580" },
+    "real": { "status": "not-applicable", "scope": "tooling", "reason": "開発者ツールの変更で、利用者が触る画面・API を持たない。代わりに実際の足軽 worktree 作成で実地確認した" },
+    "exploratory": { "status": "not-applicable", "scope": "tooling", "reason": "開発者ツールの変更で、利用者が触る画面・API を持たない。代わりに実際の足軽 worktree 作成で実地確認した" }
+  },
+  "regressions": []
+}

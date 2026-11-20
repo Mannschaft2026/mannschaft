@@ -38,4 +38,18 @@ public class TeamQueryService {
         }
         return result;
     }
+
+    /**
+     * 指定 ID のうち ACTIVE（承諾済み）かつ未アーカイブ・未削除のチーム ID を 1 SQL で返す。
+     * 空入力は SQL を発行しない（グローバル検索の閲覧者スコープ解決。CMP-261116-0722）。
+     *
+     * @param teamIds 対象チーム ID
+     * @return 有効なチーム ID の集合
+     */
+    public java.util.Set<Long> findActiveIds(Collection<Long> teamIds) {
+        if (teamIds == null || teamIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(teamRepository.findActiveIdsByIdIn(teamIds));
+    }
 }

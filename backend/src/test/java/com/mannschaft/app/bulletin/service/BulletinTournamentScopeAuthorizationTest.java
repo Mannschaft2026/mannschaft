@@ -11,7 +11,6 @@ import com.mannschaft.app.bulletin.repository.BulletinReactionRepository;
 import com.mannschaft.app.bulletin.repository.BulletinReplyRepository;
 import com.mannschaft.app.bulletin.repository.BulletinThreadRepository;
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.tournament.ContactSpaceKind;
 import com.mannschaft.app.tournament.ContactSpaceScopeType;
 import com.mannschaft.app.tournament.TournamentErrorCode;
 import com.mannschaft.app.tournament.service.TournamentContactAccessService;
@@ -47,9 +46,10 @@ import static org.mockito.Mockito.verify;
  * <ul>
  *   <li>TOURNAMENT / TOURNAMENT_DIVISION スコープで {@link BulletinAccessGuard#checkMembership} に
  *       <b>到達しない</b>こと（membership.domain.ScopeType に TOURNAMENT が無く 500 になる穴を塞ぐ）。</li>
- *   <li>閲覧系は {@link TournamentContactAccessService#checkView}、投稿/モデレーション系は
- *       {@link TournamentContactAccessService#checkPost} へ委譲すること。</li>
- *   <li>非権限者（canView/canPost が例外）は弾かれること（情報漏洩・権限昇格防止）。</li>
+ *   <li>閲覧系は tx 内で他ドメインの閲覧判定を撃たないこと（閲覧判定は Controller／Facade が tx 外の
+ *       {@link BulletinTournamentScopeAccessGuard} で存在秘匿つきに行う。CMP-261116-0726・D-3T）。</li>
+ *   <li>投稿/モデレーション系は tx 内多層防御として {@link TournamentContactAccessService#checkPost} へ委譲し、
+ *       非権限者（canPost が例外）は弾かれること（権限昇格防止）。</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -93,8 +93,8 @@ class BulletinTournamentScopeAuthorizationTest {
         @InjectMocks private BulletinReplyService service;
 
         @Test
-        @DisplayName("listRepliesGlobal: TOURNAMENT は canView を呼び checkMembership に落ちない")
-        void listReplies大会はcanView() {
+        @DisplayName("listRepliesGlobal: TOURNAMENT は tx 内で閲覧判定を撃たず checkMembership にも落ちない")
+        void listReplies大会はtx内で閲覧判定しない() {
             BulletinThreadEntity thread = tournamentThread();
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(thread));
             given(replyRepository.findByThreadIdAndParentIdIsNullOrderByCreatedAtAsc(eq(THREAD_ID), any(Pageable.class)))
@@ -102,22 +102,7 @@ class BulletinTournamentScopeAuthorizationTest {
 
             service.listRepliesGlobal(THREAD_ID, USER_ID, PageRequest.of(0, 20));
 
-            verify(tournamentContactAccessService).checkView(
-                    eq(ContactSpaceScopeType.TOURNAMENT), eq(SCOPE_ID), eq(ContactSpaceKind.BULLETIN), eq(USER_ID));
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("listRepliesGlobal: 非権限者（canView 例外）は閲覧不可")
-        void listReplies非権限者は不可() {
-            BulletinThreadEntity thread = tournamentThread();
-            given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(thread));
-            doThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .when(tournamentContactAccessService)
-                    .checkView(any(), any(), any(), any());
-
-            assertThatThrownBy(() -> service.listRepliesGlobal(THREAD_ID, USER_ID, PageRequest.of(0, 20)))
-                    .isInstanceOf(BusinessException.class);
+            verify(tournamentContactAccessService, never()).checkView(any(), any(), any(), any());
             verify(accessGuard, never()).checkMembership(any(), any(), any());
         }
 
@@ -181,12 +166,12 @@ class BulletinTournamentScopeAuthorizationTest {
         @Mock private BulletinReplyRepository replyRepository;
         @Mock private BulletinMapper bulletinMapper;
         @Mock private BulletinAccessGuard accessGuard;
-        @Mock private TournamentContactAccessService tournamentContactAccessService;
+        @Mock private VillageBulletinAccessService villageBulletinAccessService;
         @InjectMocks private BulletinReactionService service;
 
         @Test
-        @DisplayName("addReaction(THREAD): TOURNAMENT は canView を呼び checkMembership に落ちない")
-        void addReaction大会はcanView() {
+        @DisplayName("addReaction(THREAD): TOURNAMENT は tx 内で閲覧判定を撃たず checkMembership にも落ちない")
+        void addReaction大会はtx内で閲覧判定しない() {
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(tournamentThread()));
             given(reactionRepository.existsByTargetTypeAndTargetIdAndUserIdAndEmoji(any(), any(), any(), any()))
                     .willReturn(false);
@@ -194,23 +179,9 @@ class BulletinTournamentScopeAuthorizationTest {
 
             service.addReaction(USER_ID, new CreateReactionRequest(TargetType.THREAD.name(), THREAD_ID, "👍"));
 
-            verify(tournamentContactAccessService).checkView(
-                    eq(ContactSpaceScopeType.TOURNAMENT), eq(SCOPE_ID), eq(ContactSpaceKind.BULLETIN), eq(USER_ID));
+            verify(reactionRepository).save(any());
             verify(accessGuard, never()).checkMembership(any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("addReaction: 非権限者（canView 例外）はリアクションできない")
-        void addReaction非権限者は不可() {
-            given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(tournamentThread()));
-            doThrow(new BusinessException(TournamentErrorCode.CONTACT_SPACE_VIEW_FORBIDDEN))
-                    .when(tournamentContactAccessService).checkView(any(), any(), any(), any());
-
-            assertThatThrownBy(() -> service.addReaction(
-                    USER_ID, new CreateReactionRequest(TargetType.THREAD.name(), THREAD_ID, "👍")))
-                    .isInstanceOf(BusinessException.class);
-            verify(reactionRepository, never()).save(any());
-            verify(accessGuard, never()).checkMembership(any(), any(), any());
+            verify(villageBulletinAccessService, never()).checkVillageBulletinViewAccess(any(), any());
         }
     }
 }

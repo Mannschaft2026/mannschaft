@@ -10,7 +10,8 @@ import com.mannschaft.app.chat.entity.ChatChannelEntity;
 import com.mannschaft.app.chat.service.ChatAttachmentService;
 import com.mannschaft.app.chat.service.ChatChannelService;
 import com.mannschaft.app.chat.service.ChatMemberService;
-import com.mannschaft.app.chat.service.ChatMessageService;
+import com.mannschaft.app.chat.service.ChatChannelFacade;
+import com.mannschaft.app.chat.service.ChatMessageFacade;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.i18n.UserLocaleCache;
 import com.mannschaft.app.common.storage.PresignedUploadResult;
@@ -65,8 +66,10 @@ class ChatChannelControllerTest {
 
     @MockitoBean private ChatChannelService channelService;
     @MockitoBean private ChatMemberService memberService;
-    @MockitoBean private ChatMessageService messageService;
+    @MockitoBean private ChatChannelFacade channelFacade;
+    @MockitoBean private ChatMessageFacade messageFacade;
     @MockitoBean private ChatAttachmentService attachmentService;
+    @MockitoBean private com.mannschaft.app.chat.service.ChatGroupDmDerivedNameResolver derivedNameResolver;
 
     // F11.3 / F14.1 共通フィルター・コンテキストの依存補完
     @MockitoBean private AuthTokenService authTokenService;
@@ -170,7 +173,7 @@ class ChatChannelControllerTest {
                     .viewer(new ChannelResponse.ViewerStateDto(3, true, false, "仕事", "OWNER"))
                     .dmPartner(new ChannelResponse.DmPartnerDto(200L, "田中太郎", "http://x/a.png"))
                     .build();
-            given(channelService.getChannel(eq(CHANNEL_ID), eq(USER_ID))).willReturn(response);
+            given(channelFacade.getChannel(eq(CHANNEL_ID), eq(USER_ID))).willReturn(response);
 
             mockMvc.perform(get("/api/v1/chat/channels/{id}", CHANNEL_ID))
                     .andExpect(status().isOk())

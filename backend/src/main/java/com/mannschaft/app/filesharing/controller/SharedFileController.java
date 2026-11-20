@@ -9,6 +9,7 @@ import com.mannschaft.app.filesharing.dto.SharedFileDownloadUrlResponse;
 import com.mannschaft.app.filesharing.dto.SharedFilePresignRequest;
 import com.mannschaft.app.filesharing.dto.SharedFilePresignResponse;
 import com.mannschaft.app.filesharing.dto.UpdateFileRequest;
+import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import com.mannschaft.app.filesharing.service.SharedFileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class SharedFileController {
 
     private final SharedFileService fileService;
+    /** 大会スコープの存在秘匿つき投稿認可（Controller 前段・tx なし。CMP-261116-0726）。 */
+    private final FolderScopeAccessGuard folderScopeAccessGuard;
 
 
     /**
@@ -77,7 +80,9 @@ public class SharedFileController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "作成成功")
     public ResponseEntity<ApiResponse<FileResponse>> createFile(
             @Valid @RequestBody CreateFileRequest request) {
-        FileResponse response = fileService.createFile(SecurityUtils.getCurrentUserId(), request);
+        Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFolderId(request.getFolderId(), actorId);
+        FileResponse response = fileService.createFile(actorId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -90,6 +95,12 @@ public class SharedFileController {
     public ResponseEntity<ApiResponse<FileResponse>> updateFile(
             @PathVariable Long fileId,
             @Valid @RequestBody UpdateFileRequest request) {
+        Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFileId(fileId, actorId);
+        // 移動先フォルダが指定された場合は、移動先の存在も同じ秘匿規則で判定する。
+        if (request.getFolderId() != null) {
+            folderScopeAccessGuard.requirePostConcealedByFolderId(request.getFolderId(), actorId);
+        }
         FileResponse response = fileService.updateFile(fileId, request);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -102,7 +113,9 @@ public class SharedFileController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteFile(
             @PathVariable Long fileId) {
-        fileService.deleteFile(fileId, SecurityUtils.getCurrentUserId());
+        Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFileId(fileId, actorId);
+        fileService.deleteFile(fileId, actorId);
         return ResponseEntity.noContent().build();
     }
 
@@ -140,6 +153,7 @@ public class SharedFileController {
     public ResponseEntity<ApiResponse<SharedFilePresignResponse>> presignUpload(
             @Valid @RequestBody SharedFilePresignRequest request) {
         Long actorId = SecurityUtils.getCurrentUserId();
+        folderScopeAccessGuard.requirePostConcealedByFolderId(request.folderId(), actorId);
         SharedFilePresignResponse response =
                 fileService.presignUpload(request.folderId(), actorId, request);
         return ResponseEntity.ok(ApiResponse.of(response));

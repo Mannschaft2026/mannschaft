@@ -1,10 +1,13 @@
 package com.mannschaft.app.config;
 
+import com.mannschaft.app.auth.AuthErrorCode;
+import com.mannschaft.app.common.i18n.EarlyErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -48,13 +51,15 @@ import java.util.Map;
 public class ParentalConsentGateFilter extends OncePerRequestFilter {
 
     /**
-     * 既存 {@code accessDeniedHandler}（SecurityConfig）と同スキーマの手書き 403 ボディ。
-     * {@code {"error":{"code":"AUTH_070","message":<非空>,"fieldErrors":[]}}}。
+     * 403 本文 {@code {"error":{"code":"AUTH_070","message":<利用者の言語>,"fieldErrors":[]}}} を書く部品
+     * （CMP-261113-1507。任意注入。Bean が無い縮小構成では ja 正本で同じ形を書く）。
      */
-    private static final String AUTH_070_BODY =
-            "{\"error\":{\"code\":\"AUTH_070\","
-            + "\"message\":\"保護者の同意が完了するまで、この操作は利用できません\","
-            + "\"fieldErrors\":[]}}";
+    private EarlyErrorResponseWriter earlyErrorResponseWriter;
+
+    @Autowired(required = false)
+    public void setEarlyErrorResponseWriter(EarlyErrorResponseWriter earlyErrorResponseWriter) {
+        this.earlyErrorResponseWriter = earlyErrorResponseWriter;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -63,9 +68,13 @@ public class ParentalConsentGateFilter extends OncePerRequestFilter {
 
         if (isPendingParentalConsent() && !isAllowed(request)) {
             // 401 ではなく 403 固定（useApi.ts の 401 → 無限リフレッシュ回避）。
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write(AUTH_070_BODY);
+            if (earlyErrorResponseWriter != null) {
+                earlyErrorResponseWriter.write(request, response, HttpServletResponse.SC_FORBIDDEN,
+                        AuthErrorCode.AUTH_070);
+            } else {
+                EarlyErrorResponseWriter.writeJapanese(response, HttpServletResponse.SC_FORBIDDEN,
+                        AuthErrorCode.AUTH_070);
+            }
             log.debug("保護者同意待ちユーザーの保護 API アクセスを遮断: {} {}",
                     request.getMethod(), request.getServletPath());
             return;
