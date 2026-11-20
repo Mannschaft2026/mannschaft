@@ -449,6 +449,11 @@ tasks.withType<Test> {
         "spring.test.context.cache.maxSize",
         contextCacheMaxSizeOverride ?: "10"
     )
+    // CMP-261111-0508: コンテキスト構成ごとの並べ替え（ContextGroupClassOrderer）と起動計測（[ci-ctx]）は :test だけに効かせる。
+    // archTest / archUnitTest / archUnitFreezeStoreIntegrityTest ほかには何も渡さない（決定は ContextOrdererSettings に集約）。
+    // -PcontextOrderer=false で Orderer だけ外せる（計測ログは常に有効）。
+    val contextOrdererOption = providers.gradleProperty(ContextOrdererSettings.GRADLE_PROPERTY).orNull
+    ContextOrdererSettings.systemProperties(name, contextOrdererOption).forEach { (key, value) -> systemProperty(key, value) }
     // SpringTestContextCacheMaxSizeGuardTest が「既定値 10 が本当に効いているか」と
     // 「-P で明示的に上書きされたか」を区別するためのフラグ。
     // これが無いと、ガードは期待値も実測値も同じ system property から読むため、

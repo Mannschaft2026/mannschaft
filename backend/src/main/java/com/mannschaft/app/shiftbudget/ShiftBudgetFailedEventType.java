@@ -25,5 +25,10 @@ public enum ShiftBudgetFailedEventType {
      * 月次（期間）締めの失敗（CMP-260909-2152）。payload.operation に POST_FY_CLOSED／JOURNAL_CONFLICT／COMMIT_MISMATCH／
      * CANCEL_AFTER_CLOSE／DEFERRAL_REPLAY_FAILED／CLOSE_FAILED などを持つ。自動再試行の対象外（手作業・手動の再締めで回収）。
      */
-    MONTHLY_CLOSE
+    MONTHLY_CLOSE;
+
+    /** 再実行アダプタが存在する種別だけを許可する。追加種別は明示対応まで許可しない（MONTHLY_CLOSE・CONSUMPTION_* は手動補正運用で対象外）。 */
+    public boolean supportsRetry() {
+        return this == THRESHOLD_ALERT || this == WORKFLOW_START || this == NOTIFICATION_SEND;
+    }
 }

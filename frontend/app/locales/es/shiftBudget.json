@@ -165,6 +165,7 @@
       "statusValue": {
         "PENDING": "Pendiente",
         "RETRYING": "Reintentando",
+        "SUCCEEDED": "Reintento correcto",
         "EXHAUSTED": "Límite de reintentos alcanzado",
         "MANUAL_RESOLVED": "Resuelto manualmente"
       }
