@@ -137,7 +137,8 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
     private static String idToken(String code) {
         String[] subEmail = splitCode(code);
         String payload = "{\"sub\":\"" + subEmail[0] + "\",\"email\":\"" + subEmail[1] + "\",\"name\":\"oauth-mfa-it\"}";
-        return "eyJhbGciOiJub25lIn0."
+        return Base64.getUrlEncoder().withoutPadding().encodeToString("{\"alg\":\"none\"}".getBytes(StandardCharsets.UTF_8))
+                + "."
                 + Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8))
                 + ".sig";
     }

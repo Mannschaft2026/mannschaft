@@ -633,7 +633,9 @@ class AuthOAuthServiceTest {
         @org.junit.jupiter.api.BeforeEach
         void startFakeProviders() throws java.io.IOException {
             fakeProvider = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
-            String idToken = "eyJhbGciOiJub25lIn0."
+            String idToken = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    "{\"alg\":\"none\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            + "."
                     + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
                             ("{\"sub\":\"" + SUB + "\",\"email\":\"" + TEST_EMAIL + "\",\"name\":\"yamada\"}")
                                     .getBytes(java.nio.charset.StandardCharsets.UTF_8))
