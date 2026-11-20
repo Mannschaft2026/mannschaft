@@ -116,7 +116,7 @@ class AuthServiceMfaCompletionTest {
     void completeMfaLogin_OAuth入口_LoginSuccess() {
         stubIssue();
 
-        TokenResponse tokens = authService.completeMfaLogin(user(), IP, UA, "OAUTH_GOOGLE", MfaVerificationMethod.TOTP);
+        TokenResponse tokens = authService.completeMfaLogin(user(), IP, UA, "OAUTH_GOOGLE", MfaVerificationMethod.TOTP, List.of("MEMBER"));
 
         assertThat(tokens).as("トークンが返る").isNotNull();
         assertThat(tokens.getAccessToken()).isEqualTo("access-jwt");
@@ -137,7 +137,7 @@ class AuthServiceMfaCompletionTest {
     void completeMfaLogin_PASSWORD入口() {
         stubIssue();
 
-        authService.completeMfaLogin(user(), IP, UA, "PASSWORD", MfaVerificationMethod.BACKUP_CODE);
+        authService.completeMfaLogin(user(), IP, UA, "PASSWORD", MfaVerificationMethod.BACKUP_CODE, List.of("MEMBER"));
 
         LoginSuccessEvent e = loginSuccessEvents().get(0);
         assertThat(e.getMethod()).isEqualTo("PASSWORD");
@@ -153,7 +153,7 @@ class AuthServiceMfaCompletionTest {
         stubIssue();
         UserEntity u = user();
 
-        authService.completeMfaLogin(u, IP, UA, "OAUTH_LINE", MfaVerificationMethod.EMAIL);
+        authService.completeMfaLogin(u, IP, UA, "OAUTH_LINE", MfaVerificationMethod.EMAIL, List.of("MEMBER"));
 
         RefreshTokenEntity saved = savedRefreshToken();
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
@@ -170,13 +170,13 @@ class AuthServiceMfaCompletionTest {
     }
 
     @Test
-    @DisplayName("AC-15: roles は HTTP 入力でなくサーバ側（RoleClaimResolver）で解決する")
+    @DisplayName("AC-15: roles は呼び出し元がサーバ側で解決した値を受け取り、自身は RoleClaimResolver へ越境しない（D-3T）")
     void completeMfaLogin_rolesはサーバ側解決() {
         stubIssue();
 
-        authService.completeMfaLogin(user(), IP, UA, "OAUTH_APPLE", MfaVerificationMethod.TOTP);
+        authService.completeMfaLogin(user(), IP, UA, "OAUTH_APPLE", MfaVerificationMethod.TOTP, List.of("MEMBER"));
 
-        verify(roleClaimResolver).resolveRoles(USER_ID);
+        verify(roleClaimResolver, org.mockito.Mockito.never()).resolveRoles(any());
         verify(authTokenService).issueAccessToken(USER_ID, List.of("MEMBER"), false);
     }
 }

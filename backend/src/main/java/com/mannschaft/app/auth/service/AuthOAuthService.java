@@ -218,19 +218,20 @@ public class AuthOAuthService {
     }
 
     /**
-     * OAuth連携を確認する。連携トークンを検証してアカウントを連携し、2FA 有効ユーザーには MFA チャレンジ、
-     * 無効ユーザーにはトークンを発行する（CMP-261012-0911）。
+     * OAuth連携確認の前半（auth のみの TX）。連携トークンを検証・消費し、OAuthAccount を作成して、
+     * 2FA 有効ユーザーには MFA チャレンジを発行する（CMP-261012-0911）。
      *
      * <p>連携確認はメールのリンクだけで成立するため、2FA 有効ユーザーを 2FA なしでログインさせてはならない。
      * 2FA 有効なら連携の作成までを行い、トークンは MFA 完了後にのみ発行する。</p>
      *
-     * @param token     OAuth連携トークン（平文）
-     * @param ipAddress リクエスト元IPアドレス
-     * @param userAgent ユーザーエージェント
-     * @return トークンレスポンスまたは MFA 要求レスポンス
+     * <p>roles の解決（role ドメインの読み取り）を含まないよう、トークン発行は {@link #issueLinkedLoginTokens}
+     * へ分離してある（D-3T）。両者を束ねる入口は {@link AuthOAuthLinkageConfirmService}（TX を持たない）。</p>
+     *
+     * @param token OAuth連携トークン（平文）
+     * @return 連携結果（2FA 有効なら challenge が非 null）
      */
     @Transactional
-    public ApiResponse<?> confirmOAuthLinkage(String token, String ipAddress, String userAgent) {
+    public LinkConsumption consumeLinkToken(String token) {
         String tokenHash = authTokenService.hashToken(token);
 
         // 1. トークン検証
@@ -265,16 +266,30 @@ public class AuthOAuthService {
         Optional<TwoFactorAuthEntity> twoFactor = findEnabledTwoFactor(linkToken.getUserId());
         if (twoFactor.isPresent()) {
             UserEntity user = findUserOrThrow(linkToken.getUserId());
-            return ApiResponse.of(mfaSessionService.issueChallenge(
+            return new LinkConsumption(user.getId(), loginMethod, mfaSessionService.issueChallenge(
                     user.getId(), user.getEmail(), primaryMethodOf(twoFactor.get()), loginMethod));
         }
-
-        // 5. 2FA 無効 → Access Token + Refresh Token発行 + LOGIN_SUCCESS（要求元 ip/UA 付き）
-        IssuedTokens issued = issueTokenPair(linkToken.getUserId(), ipAddress, userAgent);
-        eventPublisher.publish(new LoginSuccessEvent(
-                linkToken.getUserId(), ipAddress, userAgent, loginMethod, issued.sessionHash()));
-        return ApiResponse.of(issued.tokenResponse());
+        return new LinkConsumption(linkToken.getUserId(), loginMethod, null);
     }
+
+    /**
+     * OAuth連携確認の後半（auth のみの TX）。呼び出し元が TX の外で解決した roles を受け取り、
+     * Access Token + Refresh Token を発行して LOGIN_SUCCESS（要求元 ip/UA 付き）を出す。
+     *
+     * @param userId        連携済みユーザー
+     * @param loginMethod   入口方式（OAUTH_x）
+     * @param resolvedRoles TX の外で RoleClaimResolver が解決した roles（HTTP 入力は禁止）
+     */
+    @Transactional
+    public TokenResponse issueLinkedLoginTokens(Long userId, String loginMethod, List<String> resolvedRoles,
+                                                String ipAddress, String userAgent) {
+        IssuedTokens issued = issueTokenPair(userId, resolvedRoles, ipAddress, userAgent);
+        eventPublisher.publish(new LoginSuccessEvent(userId, ipAddress, userAgent, loginMethod, issued.sessionHash()));
+        return issued.tokenResponse();
+    }
+
+    /** {@link #consumeLinkToken} の結果。challenge が非 null なら 2FA 有効（トークンは未発行）。 */
+    public record LinkConsumption(Long userId, String loginMethod, MfaRequiredResponse challenge) {}
 
     /**
      * ユーザーの連携済みOAuthプロバイダ一覧を取得する。
@@ -380,7 +395,12 @@ public class AuthOAuthService {
      */
     private IssuedTokens issueTokenPair(Long userId, String ipAddress, String userAgent) {
         // 認可基盤完全根治 Phase 1（§3.2）: RoleClaimResolver で SYSTEM_ADMIN を判定して roles に載せる。
-        String accessToken = authTokenService.issueAccessToken(userId, roleClaimResolver.resolveRoles(userId),
+        return issueTokenPair(userId, roleClaimResolver.resolveRoles(userId), ipAddress, userAgent);
+    }
+
+    /** roles を呼び出し元が解決済みで渡す版（auth ドメインの永続化のみ。D-3T で role へ越境しない）。 */
+    private IssuedTokens issueTokenPair(Long userId, List<String> resolvedRoles, String ipAddress, String userAgent) {
+        String accessToken = authTokenService.issueAccessToken(userId, resolvedRoles,
                 statusClaimResolver.isPendingParentalConsent(userId));
         String refreshToken = authTokenService.generateRefreshToken();
         String refreshTokenHash = authTokenService.hashToken(refreshToken);

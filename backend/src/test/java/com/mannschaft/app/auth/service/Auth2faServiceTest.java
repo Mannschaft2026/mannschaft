@@ -811,7 +811,7 @@ class Auth2faServiceTest {
             lenient().when(passwordEncoder.matches(BACKUP_CODE, "hashed1")).thenReturn(true);
             lenient().when(mfaSessionService.consume(session)).thenReturn(true);
             lenient().when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
-            lenient().when(authService.completeMfaLogin(any(), any(), any(), any(), any()))
+            lenient().when(authService.completeMfaLogin(any(), any(), any(), any(), any(), any()))
                     .thenReturn(new TokenResponse("delegated-at", "delegated-rt", 99L, 900L));
             // 委譲前の現行実装（自前 issueTokenPair）でも NPE で落ちず、委譲の有無を assertion で判定できるようにする
             lenient().when(refreshTokenRepository.save(any(RefreshTokenEntity.class)))
@@ -841,7 +841,7 @@ class Auth2faServiceTest {
                     TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA);
 
             verify(authService).completeMfaLogin(same(user), eq(TEST_IP), eq(TEST_UA), eq(loginMethod),
-                    eq(MfaVerificationMethod.BACKUP_CODE));
+                    eq(MfaVerificationMethod.BACKUP_CODE), any());
             assertThat(res.getData().getAccessToken()).as("委譲先のトークンを返す").isEqualTo("delegated-at");
             assertThat(res.getData().getMethod()).isEqualTo(MfaVerificationMethod.BACKUP_CODE);
             assertThat(res.getData().getBackupCodesRemaining()).isEqualTo(1);
@@ -875,7 +875,7 @@ class Auth2faServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_073"));
             verify(mfaSessionService).terminate(session);
-            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any());
+            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any(), any());
             verify(refreshTokenRepository, never()).save(any());
         }
 
@@ -896,7 +896,7 @@ class Auth2faServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_003"));
             verify(mfaSessionService, times(2)).assertNotLocked(TEST_USER_ID);
-            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any());
+            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -911,7 +911,7 @@ class Auth2faServiceTest {
                     TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_073"));
-            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any());
+            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any(), any());
             verify(refreshTokenRepository, never()).save(any());
         }
     }

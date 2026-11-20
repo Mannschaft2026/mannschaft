@@ -87,6 +87,11 @@ class AuthOAuthServiceTest {
     @InjectMocks
     private AuthOAuthService authOAuthService;
 
+    /** 連携確認の入口（TX を持たない。roles 解決は TX の外）。実 AuthOAuthService を束ねて従来の振る舞いを検証する。 */
+    private AuthOAuthLinkageConfirmService linkageConfirm() {
+        return new AuthOAuthLinkageConfirmService(authOAuthService, roleClaimResolver);
+    }
+
     // ========================================
     // テスト用定数・ヘルパー
     // ========================================
@@ -364,7 +369,7 @@ class AuthOAuthServiceTest {
             given(refreshTokenRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
 
             // When
-            ApiResponse<?> response = authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT);
+            ApiResponse<?> response = linkageConfirm().confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT);
 
             // Then
             TokenResponse data = (TokenResponse) response.getData();
@@ -385,7 +390,7 @@ class AuthOAuthServiceTest {
                     .willReturn(Optional.empty());
 
             // When / Then
-            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
+            assertThatThrownBy(() -> linkageConfirm().confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_031"));
@@ -410,7 +415,7 @@ class AuthOAuthServiceTest {
             given(oauthLinkTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(expiredToken));
 
             // When / Then
-            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
+            assertThatThrownBy(() -> linkageConfirm().confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_031"));
@@ -436,7 +441,7 @@ class AuthOAuthServiceTest {
             given(oauthLinkTokenRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(usedToken));
 
             // When / Then
-            assertThatThrownBy(() -> authOAuthService.confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
+            assertThatThrownBy(() -> linkageConfirm().confirmOAuthLinkage(rawToken, TEST_IP, TEST_USER_AGENT))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("AUTH_031"));
@@ -808,7 +813,7 @@ class AuthOAuthServiceTest {
             lenient().when(mfaSessionService.issueChallenge(eq(TEST_USER_ID), eq(TEST_EMAIL), eq(com.mannschaft.app.auth.TwoFactorMethod.TOTP),
                     eq("OAUTH_GOOGLE"))).thenReturn(expected);
 
-            ApiResponse<?> res = authOAuthService.confirmOAuthLinkage("link-raw", TEST_IP, TEST_USER_AGENT);
+            ApiResponse<?> res = linkageConfirm().confirmOAuthLinkage("link-raw", TEST_IP, TEST_USER_AGENT);
 
             assertThat(res.getData()).as("AC-4 MFA 要求を返す").isSameAs(expected);
             verify(oauthAccountRepository).save(any(OAuthAccountEntity.class));
@@ -825,7 +830,7 @@ class AuthOAuthServiceTest {
             org.springframework.test.util.ReflectionTestUtils.setField(user, "id", TEST_USER_ID);
             lenient().when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
 
-            ApiResponse<?> res = authOAuthService.confirmOAuthLinkage("link-raw-2", TEST_IP, TEST_USER_AGENT);
+            ApiResponse<?> res = linkageConfirm().confirmOAuthLinkage("link-raw-2", TEST_IP, TEST_USER_AGENT);
 
             assertThat(res.getData()).isInstanceOf(TokenResponse.class);
             List<LoginSuccessEvent> events = publishedLoginSuccess();

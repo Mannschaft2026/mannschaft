@@ -409,6 +409,9 @@ class AuthControllerTest {
         @Mock
         private AuthOAuthService authOAuthService;
 
+        @Mock
+        private com.mannschaft.app.auth.service.AuthOAuthLinkageConfirmService authOAuthLinkageConfirmService;
+
         @InjectMocks
         private AuthOAuthController authOAuthController;
 
@@ -443,7 +446,7 @@ class AuthControllerTest {
             given(httpRequest.getRemoteAddr()).willReturn("127.0.0.1");
             given(httpRequest.getHeader("User-Agent")).willReturn("Mozilla/5.0");
             org.mockito.Mockito.doReturn(ApiResponse.of(token))
-                    .when(authOAuthService).confirmOAuthLinkage(eq("link-token"), anyString(), anyString());
+                    .when(authOAuthLinkageConfirmService).confirmOAuthLinkage(eq("link-token"), anyString(), anyString());
 
             // When
             ResponseEntity<ApiResponse<?>> response =
@@ -451,7 +454,7 @@ class AuthControllerTest {
 
             // Then
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-            verify(authOAuthService).confirmOAuthLinkage(eq("link-token"), anyString(), anyString());
+            verify(authOAuthLinkageConfirmService).confirmOAuthLinkage(eq("link-token"), anyString(), anyString());
         }
     }
 }

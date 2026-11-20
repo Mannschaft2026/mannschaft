@@ -453,7 +453,8 @@ public class Auth2faService {
         // 発行は パスワード直経路・OAuth と共通の AuthService 発行器へ委譲する（CMP-261012-0911）。
         // LOGIN_SUCCESS（method=入口方式・mfaFactor=使用要素・ip/UA・sessionHash）もそこで 1 件だけ出る。
         TokenResponse tokenResponse = authService.completeMfaLogin(
-                findUserOrThrow(userId), ipAddress, userAgent, session.loginMethod(), method);
+                findUserOrThrow(userId), ipAddress, userAgent, session.loginMethod(), method,
+                roleClaimResolver.resolveRoles(userId));
         if (backupCodesRemaining != null) {
             eventPublisher.publish(new MfaBackupCodeUsedEvent(userId, backupCodesRemaining, ipAddress, userAgent));
         }

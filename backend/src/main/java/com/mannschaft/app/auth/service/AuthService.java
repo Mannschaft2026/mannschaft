@@ -266,20 +266,22 @@ public class AuthService {
      *
      * <p>{@code issueLoginSession} へ委譲し、新端末検知・セッション上限・最終ログイン・
      * LoginSuccessEvent（method=入口方式、mfaFactor=使用要素）をパスワード直経路と揃える。
-     * roles は HTTP 入力でなくサーバ側（RoleClaimResolver）で解決する。</p>
+     * roles は HTTP 入力でなくサーバ側（RoleClaimResolver）で解決した値を呼び出し元から受け取る
+     * （本メソッド自身は role ドメインへ越境しない。D-3T）。</p>
      *
      * @param user        MFA セッションのユーザー
      * @param ipAddress   2FA 検証要求の IP
      * @param userAgent   2FA 検証要求の User-Agent
      * @param loginMethod 入口方式（PASSWORD / OAUTH_x）
      * @param factor      2FA で使用した要素
+     * @param resolvedRoles 呼び出し元がサーバ側で解決した roles（HTTP 入力は禁止）
      * @return トークン
      */
     @Transactional
     TokenResponse completeMfaLogin(UserEntity user, String ipAddress, String userAgent, String loginMethod,
-                                   MfaVerificationMethod factor) {
+                                   MfaVerificationMethod factor, List<String> resolvedRoles) {
         return issueLoginSession(user, null, false, ipAddress, userAgent, loginMethod,
-                roleClaimResolver.resolveRoles(user.getId()), factor.name());
+                resolvedRoles, factor.name());
     }
 
     // ========================================
