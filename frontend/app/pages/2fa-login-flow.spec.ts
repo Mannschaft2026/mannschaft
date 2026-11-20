@@ -40,6 +40,17 @@ describe('login.vue: 方式情報の引継ぎ (AC-53)', () => {
     expect(mfaTarget).toContain("query.set('primary'")
     expect(mfaTarget).toContain("query.set('methods'")
   })
+
+  it('login.vue は MFA 応答（session/primary/methods）と route.query.redirect を共通関数へそのまま渡す', () => {
+    // 引数: 第1=MFA 応答（mfaSessionToken・primaryMethod・availableMethods を持つ data.data）、第2=ログイン後の遷移先
+    expect(login).toContain('buildMfaVerifyTarget(data.data, route.query.redirect)')
+    // 共通関数は session / primary / methods / redirect を /2fa-verify のクエリへ載せる
+    expect(mfaTarget).toContain("new URLSearchParams({ session: challenge.mfaSessionToken ?? '' })")
+    expect(mfaTarget).toContain("query.set('primary', challenge.primaryMethod)")
+    expect(mfaTarget).toContain("query.set('methods', challenge.availableMethods.join(','))")
+    expect(mfaTarget).toContain("query.set('redirect', redirect)")
+    expect(mfaTarget).toContain('/2fa-verify?')
+  })
 })
 
 describe('2fa-verify.vue (AC-13 / AC-28 / AC-38)', () => {

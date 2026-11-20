@@ -522,6 +522,48 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
         assertThat(refreshTokenCount(b.userId())).isZero();
     }
 
+    @Test
+    @DisplayName("AC-5 改: 9 回失敗後の「10 回目の失敗」と「正しいコードの成功」を並列に投げても、ロック確定後は発行されず、発行は 1 件以下で整合する")
+    void 十回目の失敗と成功の並列はロックと整合する() throws Exception {
+        MfaUser u = totpUser();
+        String sub = link(u.userId(), OAuthAccountEntity.OAuthProvider.GOOGLE);
+        // ユーザー単位の失敗を 9 回（OAuth セッション 5 回＋パスワードセッション 4 回。セッション上限 5 回には達しない構成）
+        String failA = oauthMfaSession(OAuthAccountEntity.OAuthProvider.GOOGLE, sub);
+        String failB = loginForMfaSession(u);
+        for (int i = 0; i < 5; i++) {
+            validateFrom(failA, "TOTP", wrongTotp(u.totpSecret()));
+        }
+        for (int i = 0; i < 4; i++) {
+            validateFrom(failB, "TOTP", wrongTotp(u.totpSecret()));
+        }
+        String failing = oauthMfaSession(OAuthAccountEntity.OAuthProvider.GOOGLE, sub);
+        String winning = oauthMfaSession(OAuthAccountEntity.OAuthProvider.GOOGLE, sub);
+        String wrong = wrongTotp(u.totpSecret());
+        String correct = currentTotp(u.totpSecret());
+
+        List<String> outcomes = runConcurrentlyOutcomes(
+                () -> auth2faService.validateMfaLogin(failing, MfaVerificationMethod.TOTP, wrong, ip, UA_VALIDATE),
+                () -> auth2faService.validateMfaLogin(winning, MfaVerificationMethod.TOTP, correct, ip, UA_VALIDATE));
+
+        // 許される結果集合:
+        //  (a) 失敗が先にロックを掛けた → 成功側は行ロック取得後の再確認で AUTH_003（発行 0 件）
+        //  (b) 成功が先に行ロックを取った → 成功側は発行 1 件（失敗側は AUTH_074。成功で失敗計数がリセットされ、ロックは掛からない）
+        assertThat(outcomes.get(0)).as("失敗側は常に拒否される（AUTH_074 か、ロック確定後の AUTH_003）")
+                .isIn("AUTH_074", "AUTH_003");
+        assertThat(outcomes.get(1)).as("成功側は発行されるか、ロック確定後の AUTH_003 のどちらか").isIn("OK", "AUTH_003");
+        int issued = "OK".equals(outcomes.get(1)) ? 1 : 0;
+        assertThat(refreshTokenCount(u.userId())).as("発行数は成功した要求数と一致する").isEqualTo(issued);
+        if (issued == 0) {
+            // ロック確定後も OAuth ログイン自体は通りチャレンジが発行されるが、検証は全拒否される
+            assertThat(errorCode(validateFrom(oauthMfaSession(OAuthAccountEntity.OAuthProvider.GOOGLE, sub),
+                    "TOTP", currentTotp(u.totpSecret()))))
+                    .as("ロック確定後は新しいセッションでも全拒否").isEqualTo("AUTH_003");
+            assertThat(loginSuccess(u.userId())).as("拒否された側は LOGIN_SUCCESS を出さない").isEmpty();
+        } else {
+            assertThat(loginSuccess(u.userId())).as("発行 1 件なら LOGIN_SUCCESS も 1 件").hasSize(1);
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════
     // AC-16 要素ごとの完走・設定変化
     // ═════════════════════════════════════════════════════════════
@@ -648,6 +690,82 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
         assertThat(loginAuditCount(u.userId())).as("AC-12 LOGIN_SUCCESS 監査は 1 件").isEqualTo(1);
         Map<String, Object> audit = awaitLoginAuditRow(u.userId());
         assertThat(objectMapper.readTree((String) audit.get("metadata")).path("method").asText()).isEqualTo("OAUTH_GOOGLE");
+    }
+
+    /** 方式キーの無い旧形式の MFA セッション（値は userId のみ）を Valkey に直接置く。 */
+    private String legacySession(MfaUser u) {
+        oauthUserIds.add(u.userId());
+        String raw = "legacy-" + UUID.randomUUID();
+        valkey.rawSet(MFA_SESSION_KEY_PREFIX + authTokenService.hashToken(raw), String.valueOf(u.userId()), Duration.ofMinutes(5));
+        return raw;
+    }
+
+    @Test
+    @DisplayName("AC-12/AC-7 改: 方式キーの無い旧形式セッションへの同時成功でも発行・LOGIN_SUCCESS(監査) は各 1 件（method=PASSWORD）")
+    void 旧形式セッションの同時成功は1件() throws Exception {
+        MfaUser u = totpUser();
+        String session = legacySession(u);
+        String code0 = u.backupCodes().get(0);
+        String code1 = u.backupCodes().get(1);
+
+        int successes = runConcurrently(
+                () -> auth2faService.validateMfaLogin(session, MfaVerificationMethod.BACKUP_CODE, code0, ip, UA_VALIDATE),
+                () -> auth2faService.validateMfaLogin(session, MfaVerificationMethod.BACKUP_CODE, code1, ip, UA_VALIDATE));
+
+        assertThat(successes).as("AC-12 旧形式でも成功は 1 件").isEqualTo(1);
+        assertThat(refreshTokenCount(u.userId())).isEqualTo(1);
+        awaitLoginAuditRow(u.userId());
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(loginAuditCount(u.userId())).as("AC-12 LOGIN_SUCCESS 監査は 1 件").isEqualTo(1);
+        Map<String, Object> audit = awaitLoginAuditRow(u.userId());
+        assertThat(objectMapper.readTree((String) audit.get("metadata")).path("method").asText())
+                .as("AC-7 方式キー欠落→PASSWORD").isEqualTo("PASSWORD");
+    }
+
+    @Test
+    @DisplayName("AC-12/AC-7 改: 旧形式セッションも 5 回目の失敗で AUTH_075・以後は正しいコードでも AUTH_073（再利用拒否・発行なし）")
+    void 旧形式セッションの上限失敗後は再利用拒否() throws Exception {
+        MfaUser u = totpUser();
+        String session = legacySession(u);
+        for (int i = 0; i < 4; i++) {
+            assertThat(errorCode(validateFrom(session, "TOTP", wrongTotp(u.totpSecret())))).isEqualTo("AUTH_074");
+        }
+
+        MvcResult fifth = validateFrom(session, "TOTP", wrongTotp(u.totpSecret()));
+        MvcResult after = validateFrom(session, "TOTP", currentTotp(u.totpSecret()));
+
+        assertThat(errorCode(fifth)).isEqualTo("AUTH_075");
+        assertThat(errorCode(after)).as("AC-12 上限失敗後の再利用は拒否").isEqualTo("AUTH_073");
+        assertThat(refreshTokenCount(u.userId())).isZero();
+        assertThat(loginSuccess(u.userId())).isEmpty();
+    }
+
+    /** 2 本を同時開始し、各結果（OK か業務エラーコード）を渡した順で返す。 */
+    private List<String> runConcurrentlyOutcomes(Callable<?> a, Callable<?> b) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<String>> futures = new ArrayList<>();
+            for (Callable<?> task : List.of(a, b)) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    try {
+                        task.call();
+                        return "OK";
+                    } catch (BusinessException ex) {
+                        return ex.getErrorCode().getCode();
+                    }
+                }));
+            }
+            start.countDown();
+            List<String> outcomes = new ArrayList<>();
+            for (Future<String> f : futures) {
+                outcomes.add(f.get(60, TimeUnit.SECONDS));
+            }
+            return outcomes;
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private int runConcurrently(Callable<?> a, Callable<?> b) throws Exception {
