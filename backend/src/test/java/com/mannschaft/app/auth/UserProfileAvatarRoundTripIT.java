@@ -73,7 +73,7 @@ class UserProfileAvatarRoundTripIT extends AbstractMySqlIntegrationTest {
             // 旧 FE の挙動: GET で受けた（署名付き）avatarUrl をそのまま送り返す
             putBody.put("avatarUrl", data.path("avatarUrl").isNull() ? "https://signed.example/bucket/" + key + "?X-Amz-Signature=abc"
                     : data.path("avatarUrl").asText());
-            MvcResult result = put(putBody, user);
+            MvcResult result = doPut(putBody, user);
             assertThat(result.getResponse().getStatus()).as("PUT %d 回目", i + 1).isEqualTo(200);
             assertThat(avatarInDb(user)).as("%d 回目の後も生キーのまま".formatted(i + 1)).isEqualTo(key);
         }
@@ -96,7 +96,7 @@ class UserProfileAvatarRoundTripIT extends AbstractMySqlIntegrationTest {
             case "NULL" -> putBody.putNull("avatarUrl");
             default -> putBody.put("avatarUrl", "");
         }
-        MvcResult result = put(putBody, user);
+        MvcResult result = doPut(putBody, user);
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(avatarInDb(user)).as("avatarUrl は無視され既存キーが保持される").isEqualTo(key);
         em.flush();
@@ -114,7 +114,7 @@ class UserProfileAvatarRoundTripIT extends AbstractMySqlIntegrationTest {
         ObjectNode putBody = objectMapper.createObjectNode();
         putBody.put("locale", "ja");
         putBody.put("avatarUrl", foreign);
-        MvcResult result = put(putBody, me);
+        MvcResult result = doPut(putBody, me);
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(avatarInDb(me)).as("他人のキーは保存されない").isNull();
 
@@ -125,7 +125,7 @@ class UserProfileAvatarRoundTripIT extends AbstractMySqlIntegrationTest {
 
     // ---- helpers ----
 
-    private MvcResult put(ObjectNode json, UserEntity user) throws Exception {
+    private MvcResult doPut(ObjectNode json, UserEntity user) throws Exception {
         return mockMvc.perform(put(ME).with(authentication(auth(user)))
                 .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(json))).andReturn();
     }

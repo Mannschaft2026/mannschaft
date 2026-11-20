@@ -752,7 +752,8 @@ class UserServiceTest {
         // ============================================================
 
         private UpdateProfileRequest fromJson(String json) throws Exception {
-            return com.fasterxml.jackson.databind.json.JsonMapper.builder().findAndAddModules().build()
+            return com.fasterxml.jackson.databind.json.JsonMapper.builder().findAndAddModules()
+                    .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build()
                     .readValue(json, UpdateProfileRequest.class);
         }
 
@@ -786,7 +787,7 @@ class UserServiceTest {
         void updateProfile_timezone変更_evictはコミット後() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, null, null, "America/Los_Angeles",
-                    null, null, null, null, null);
+                    null, null, null, null);
 
             List<TransactionSynchronization> syncs = updateProfileWithinTransaction(req);
 
@@ -806,7 +807,7 @@ class UserServiceTest {
         void updateProfile_locale変更_evictはコミット後() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, "en", null, null,
-                    null, null, null, null, null);
+                    null, null, null, null);
 
             List<TransactionSynchronization> syncs = updateProfileWithinTransaction(req);
 
@@ -822,7 +823,7 @@ class UserServiceTest {
         void updateProfile_ロールバック時はevictしない() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, "en", null, "America/Los_Angeles",
-                    null, null, null, null, null);
+                    null, null, null, null);
 
             // afterCommit を発火させない ＝ ロールバックされた世界線
             updateProfileWithinTransaction(req);
@@ -837,7 +838,7 @@ class UserServiceTest {
             // createActiveUser と同値（locale=ja / timezone=Asia/Tokyo）＝実質未変更
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, "ja", null, "Asia/Tokyo",
-                    null, null, null, null, null);
+                    null, null, null, null);
 
             List<TransactionSynchronization> syncs = updateProfileWithinTransaction(req);
 
@@ -853,7 +854,7 @@ class UserServiceTest {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     "佐藤", "次郎", "サトウ", "ジロウ",
                     "sato-jiro", null, "ja", null, "Asia/Tokyo",
-                    false, null, "090-1234-5678", null, null);
+                    false, "090-1234-5678", null, null);
             UserEntity user = createActiveUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
             given(encryptionService.hmac(anyString())).willReturn("hashed-value");
@@ -877,7 +878,7 @@ class UserServiceTest {
         void updateProfile_郵便番号フォーマット不正_AUTH072例外() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, null, null, null,
-                    null, null, null, "111", null);
+                    null, null, "111", null);
             UserEntity user = createActiveUser(); // locale=ja → JP（対応国）
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
 
@@ -894,7 +895,7 @@ class UserServiceTest {
         void updateProfile_正値ハイフンあり_成功() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, null, null, null,
-                    null, null, null, "123-4567", null);
+                    null, null, "123-4567", null);
             UserEntity user = createActiveUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
             given(encryptionService.hmac(anyString())).willReturn("hashed-value");
@@ -915,7 +916,7 @@ class UserServiceTest {
         void updateProfile_正値ハイフンなし_成功() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, null, null, null,
-                    null, null, null, "1234567", null);
+                    null, null, "1234567", null);
             UserEntity user = createActiveUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
             given(encryptionService.hmac(anyString())).willReturn("hashed-value");
@@ -936,7 +937,7 @@ class UserServiceTest {
         void updateProfile_郵便番号空文字クリア_AUTH071例外() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     null, null, null, null, null, null, null, null, null,
-                    null, null, null, "", null);
+                    null, null, "", null);
             UserEntity user = createActiveUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
 
@@ -953,7 +954,7 @@ class UserServiceTest {
         void updateProfile_郵便番号null据置_検証スキップ_成功() {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     "佐藤", null, null, null, null, null, null, null, null,
-                    null, null, null, null, null);
+                    null, null, null, null);
             UserEntity user = createActiveUser();
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
             given(encryptionService.hmac(anyString())).willReturn("hashed-value");
@@ -1270,7 +1271,7 @@ class UserServiceTest {
             UpdateProfileRequest req = new UpdateProfileRequest(
                     "佐藤", "次郎", "サトウ", "ジロウ",
                     "sato-jiro", null, "ja", null, "Asia/Tokyo",
-                    false, null, "090-1234-5678", null, null);
+                    false, "090-1234-5678", null, null);
             UserEntity user = createActiveUser();
             setId(user, EXISTING_ID);
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
