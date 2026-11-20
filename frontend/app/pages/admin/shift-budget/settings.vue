@@ -23,6 +23,8 @@ const EFFECTIVE_PERIOD_COUNT = 24
 /** 締め日の値。0 は末日 */
 const END_OF_MONTH = 0
 const MAX_CLOSING_DAY = 28
+/** 変更理由の最大文字数（API の ClosingDayChangeRequest.reason と同じ） */
+const REASON_MAX = 500
 
 const organizationId = computed(() => {
   if (scopeStore.current.type !== 'organization') return null
@@ -32,8 +34,11 @@ const organizationId = computed(() => {
 const settings = ref<ClosingSettingsResponse | null>(null)
 const loading = ref(false)
 const loadFailed = ref(false)
+const loadForbidden = ref(false)
 const submitting = ref(false)
 const submitError = ref('')
+/** 400 の項目別エラー（field -> message） */
+const fieldErrors = ref<Record<string, string>>({})
 
 const form = ref<{ day: number | null, effective: string | null, reason: string }>({
   day: null,
@@ -116,6 +121,17 @@ const canSubmit = computed(() =>
  */
 let loadGeneration = 0
 
+function statusOf(e: unknown): number | undefined {
+  return (e as { statusCode?: number, status?: number }).statusCode
+    ?? (e as { status?: number }).status
+}
+
+function fieldErrorsOf(e: unknown): Record<string, string> {
+  const list = (e as { data?: { error?: { fieldErrors?: { field: string, message: string }[] } } })
+    .data?.error?.fieldErrors ?? []
+  return Object.fromEntries(list.map(fe => [fe.field, fe.message]))
+}
+
 async function load() {
   const generation = ++loadGeneration
   const orgId = organizationId.value
@@ -123,20 +139,23 @@ async function load() {
     settings.value = null
     loading.value = false
     loadFailed.value = false
+    loadForbidden.value = false
     return
   }
   const isCurrent = () => generation === loadGeneration && orgId === organizationId.value
   loading.value = true
   loadFailed.value = false
+  loadForbidden.value = false
   try {
     const res = await api.getClosingSettings(orgId)
     if (!isCurrent()) return
     settings.value = res
   }
-  catch {
+  catch (e) {
     if (!isCurrent()) return
     settings.value = null
-    loadFailed.value = true
+    if (statusOf(e) === 403) loadForbidden.value = true
+    else loadFailed.value = true
   }
   finally {
     if (isCurrent()) loading.value = false
@@ -153,6 +172,7 @@ async function submit() {
   if (day === null || effective === null) return
   submitting.value = true
   submitError.value = ''
+  fieldErrors.value = {}
   try {
     await api.changeClosingSetting(organizationId.value, {
       expected_revision: settings.value.revision,
@@ -165,11 +185,20 @@ async function submit() {
     await load()
   }
   catch (e) {
-    const status = (e as { statusCode?: number, status?: number }).statusCode
-      ?? (e as { status?: number }).status
+    const status = statusOf(e)
     submitError.value = status === 409
       ? t('shiftBudget.closingDay.conflict')
       : t('shiftBudget.closingDay.error')
+    if (status === 400) fieldErrors.value = fieldErrorsOf(e)
+    if (status === 409) {
+      // revision 競合: 画面が古いままだと再送しても 409 が続くため、最新の現在値・履歴・revision を取り直す。
+      // 入力は保持する（設計書に定めなし。差分を見て再送できるようにする）。
+      await load()
+      const min = settings.value?.min_effective_period_key
+      if (form.value.effective !== null && (!min || form.value.effective < min)) {
+        form.value.effective = null
+      }
+    }
   }
   finally {
     submitting.value = false
@@ -184,6 +213,7 @@ watch(organizationId, () => {
   // 旧組織の設定（締め日・履歴・revision）と入力・エラーを破棄してから新組織を取得する
   settings.value = null
   submitError.value = ''
+  fieldErrors.value = {}
   resetForm()
   load()
   ensureBudgetAdminAccess()
@@ -207,6 +237,17 @@ onMounted(() => {
     </Message>
 
     <PageLoading v-else-if="loading && !settings" />
+
+    <Message
+      v-else-if="loadForbidden"
+      severity="warn"
+      :closable="false"
+      class="my-4"
+      data-testid="closing-settings-forbidden"
+    >
+      <p class="font-medium">{{ t('loadErrorState.states.forbidden.title') }}</p>
+      <p>{{ t('loadErrorState.states.forbidden.message') }}</p>
+    </Message>
 
     <Message
       v-else-if="loadFailed"
@@ -266,9 +307,20 @@ onMounted(() => {
             v-model="form.reason"
             data-testid="closing-reason"
             rows="3"
+            :maxlength="REASON_MAX"
             :disabled="!canManageBudget"
             class="w-full"
           />
+          <p class="mt-1 text-right text-xs text-surface-400" data-testid="closing-reason-count">
+            {{ form.reason.length }} / {{ REASON_MAX }}
+          </p>
+          <p
+            v-if="fieldErrors.reason"
+            class="mt-1 text-xs text-red-500"
+            data-testid="closing-field-error-reason"
+          >
+            {{ fieldErrors.reason }}
+          </p>
           <p v-if="canManageBudget && form.reason.trim() === ''" class="mt-1 text-xs text-surface-500">
             {{ t('shiftBudget.closingDay.reasonRequired') }}
           </p>
@@ -286,6 +338,11 @@ onMounted(() => {
           </p>
         </div>
 
+        <ul v-if="Object.keys(fieldErrors).some(k => k !== 'reason')" class="mt-3 text-xs text-red-500" data-testid="closing-field-errors">
+          <li v-for="(message, field) in fieldErrors" :key="field">
+            <template v-if="field !== 'reason'">{{ field }}: {{ message }}</template>
+          </li>
+        </ul>
         <Message
           v-if="submitError"
           severity="error"

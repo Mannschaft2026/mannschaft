@@ -188,7 +188,7 @@
       "historyEmpty": "Keine Änderungen vorhanden",
       "readOnly": "Nur Budgetverwalter können den Abschlusstag ändern. Sie haben nur Lesezugriff.",
       "loadError": "Die Abschlusstag-Einstellungen konnten nicht geladen werden",
-      "conflict": "Die Änderung kollidierte mit einer anderen Änderung. Bitte prüfen Sie die aktuellen Einstellungen.",
+      "conflict": "Die Änderung kollidierte mit einer anderen Änderung. Die aktuellen Einstellungen wurden geladen. Ihre Eingaben bleiben erhalten; prüfen Sie den aktuellen Abschlusstag und den Verlauf und senden Sie erneut.",
       "revision": "Version",
       "appliedFrom": "Gültig ab",
       "previousDay": "Bisheriger Abschlusstag",

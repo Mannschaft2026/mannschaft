@@ -188,7 +188,7 @@
       "historyEmpty": "No changes yet",
       "readOnly": "Only budget administrators can change the closing day. You have read-only access.",
       "loadError": "Failed to load closing day settings",
-      "conflict": "The change conflicted with another change. Please check the latest settings.",
+      "conflict": "The change conflicted with another change. The latest settings have been loaded. Your input is kept; check the current closing day and history, then submit again.",
       "revision": "Revision",
       "appliedFrom": "Effective from",
       "previousDay": "Previous closing day",

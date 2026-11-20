@@ -188,7 +188,7 @@
       "historyEmpty": "No hay cambios",
       "readOnly": "Solo los administradores de presupuesto pueden cambiar el día de cierre. Solo tienes acceso de lectura.",
       "loadError": "No se pudo obtener la configuración del día de cierre",
-      "conflict": "El cambio entró en conflicto con otro cambio. Revisa la configuración más reciente.",
+      "conflict": "El cambio entró en conflicto con otro cambio. Se cargó la configuración más reciente. Tus datos se conservan; revisa el día de cierre actual y el historial y vuelve a enviar.",
       "revision": "Revisión",
       "appliedFrom": "Vigente desde",
       "previousDay": "Día de cierre anterior",
