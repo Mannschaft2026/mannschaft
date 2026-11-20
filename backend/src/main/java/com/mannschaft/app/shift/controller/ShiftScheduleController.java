@@ -118,6 +118,10 @@ public class ShiftScheduleController {
     @PostMapping("/{scheduleId}/transition")
     @Operation(summary = "シフトスケジュールステータス遷移")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "遷移成功")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+            description = "公開時に予算連動の勤務日の割当者へ有効な正数時給が無い（SHIFT_047）。欠落した対象者・勤務日を details で返す",
+            content = @io.swagger.v3.oas.annotations.media.Content(schema = @io.swagger.v3.oas.annotations.media.Schema(
+                    implementation = com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse.class)))
     @RequireFeature("FEATURE_SHIFT_ENABLED")
     public ResponseEntity<ApiResponse<ShiftScheduleResponse>> transitionStatus(
             @PathVariable Long scheduleId,

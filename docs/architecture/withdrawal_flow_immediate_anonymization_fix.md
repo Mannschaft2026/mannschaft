@@ -238,6 +238,7 @@ public void withdrawUser(Long userId) {
 | AccountPurgedEvent | `com.mannschaft.app.weather.event.WeatherLocationCleanupListener` | weather | `user_weather_locations`を物理削除し、所有TXのcommit後に完了記録 |
 | AccountPurgedEvent | `com.mannschaft.app.ranch.event.RanchPurgeEventListener` | ranch | 本人の牧場・恐竜・報酬・所持品・操作記録を独立TXで物理削除し、commit後に完了記録 |
 | AccountPurgedEvent | `com.mannschaft.app.diagnosis.event.DiagnosisPurgeEventListener` | diagnosis | 本人の診断回答・診断結果・出生派生結果を独立TXで物理削除し、commit後に完了記録。失敗時は未完了として再試行 |
+| AccountPurgedEvent | `com.mannschaft.app.effortrecord.event.EffortRecordPurgeEventListener` | effortrecord | 本人の冪等 receipt（`effort_operation_receipts`）と未共有の頑張り記録（`effort_records`）を独立TXで物理削除。共有許可を持つ原本は私的メモ・値・定義snapshot・共有mappingを消した tombstone として残し、commit後に完了記録 |
 | AccountPurgedEvent | `com.mannschaft.app.shift.event.ShiftAvailabilityPurgeEventListener` | shift | `member_availability_defaults`を所有列で一括物理削除し、所有TXのcommit後に完了記録（CMP-260822-1243 第2陣） |
 | AccountPurgedEvent | `com.mannschaft.app.parking.event.ParkingWatchlistPurgeEventListener` | parking | `parking_watchlist`を所有列で一括物理削除し、所有TXのcommit後に完了記録（CMP-260822-1243 第2陣） |
 | AccountPurgedEvent | `com.mannschaft.app.advertising.campaign.event.UserAdPreferencePurgeEventListener` | advertising | `user_ad_preferences`を所有列で一括物理削除し、所有TXのcommit後に完了記録（CMP-260822-1243 第2陣） |

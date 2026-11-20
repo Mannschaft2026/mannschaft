@@ -201,6 +201,7 @@ HTTP|com.mannschaft.app.disclosure.controller.DisclosureExportController|6|6
 HTTP|com.mannschaft.app.disclosure.controller.DisclosureFormDraftController|6|6
 HTTP|com.mannschaft.app.disclosure.controller.DisclosureFormTemplateController|2|2
 HTTP|com.mannschaft.app.disclosure.controller.DisclosureFormTemplateEditController|3|3
+HTTP|com.mannschaft.app.effortrecord.controller.EffortRecordMeController|7|7
 HTTP|com.mannschaft.app.equipment.controller.EquipmentMyAssignmentsController|1|1
 HTTP|com.mannschaft.app.equipment.controller.OrganizationEquipmentController|15|16
 HTTP|com.mannschaft.app.equipment.controller.TeamEquipmentController|16|16
@@ -596,7 +597,7 @@ HTTP|com.mannschaft.app.seal.controller.SealAdminController|2|2
 HTTP|com.mannschaft.app.seal.controller.SealController|8|8
 HTTP|com.mannschaft.app.seal.controller.SealStampController|5|5
 HTTP|com.mannschaft.app.search.controller.GlobalSearchController|2|2
-HTTP|com.mannschaft.app.search.controller.SearchHistoryController|5|5
+HTTP|com.mannschaft.app.search.controller.SearchHistoryController|6|6
 HTTP|com.mannschaft.app.securityincident.controller.SystemAdminSecurityIncidentController|3|3
 HTTP|com.mannschaft.app.service.controller.ServiceRecordController|17|17
 HTTP|com.mannschaft.app.service.controller.ServiceRecordFieldController|7|7

@@ -48,6 +48,19 @@
       "formNote": "メモ",
       "formNotePlaceholder": "任意"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "時給が未設定のため公開できません",
+        "description": "予算に連動する勤務日に、有効な時給が未設定の担当者がいます。次の担当者の時給を設定してから、もう一度公開してください。",
+        "unknownUser": "ユーザーID {id}",
+        "goSettings": "時給設定を開く"
+      },
+      "conflict": {
+        "title": "シフト内容が変更されました",
+        "description": "公開の確認中にシフトの内容が変わりました。画面を読み込み直して内容を確認し、もう一度公開してください。"
+      },
+      "close": "閉じる"
+    },
     "detail": {
       "tabOverview": "概要",
       "tabEdit": "編集",
@@ -86,10 +99,23 @@
       "notePlaceholder": "任意",
       "dayOfWeek": "曜日",
       "dayOfWeekHint": "選択した曜日にのみスロットを作成します",
+      "moveDateTitle": "日付変更の確認",
+      "moveDateMessage": "{oldDate} から {newDate} に変更します。この枠に提出済みの希望があれば、新しい日付へ一緒に移動します。",
+      "moveDateAccept": "枠と希望を移動",
       "saveSuccess": "スロットを保存しました",
       "deleteSuccess": "スロットを削除しました",
       "assignmentMasked": "調整中",
-      "assignmentMaskedHint": "公開前のため割当は表示されません"
+      "assignmentMaskedHint": "公開前のため割当は表示されません",
+      "deleteTitle": "シフト枠を削除",
+      "deleteConfirmPlain": "この枠を削除しますか？",
+
+      "deleteConfirmBoth": "この枠を削除しますか？この枠に出された希望 {requests} 件・割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmRequestsOnly": "この枠を削除しますか？この枠に出された希望 {requests} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmAssignmentsOnly": "この枠を削除しますか？この枠の割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmUnknown": "この枠を削除しますか？この枠に出された希望と割当があれば、それも削除されます。通常の操作では元に戻せません。"
     },
     "requests": {
       "submissionRate": "提出率",

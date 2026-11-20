@@ -113,7 +113,7 @@ onBeforeUnmount(() => {
           {{ t('teamAffiliations.permission_groups.load_error') }}
         </Message>
         <Button
-          :label="t('common.retry')"
+          :label="t('loadErrorState.retry')"
           icon="pi pi-refresh"
           size="small"
           outlined

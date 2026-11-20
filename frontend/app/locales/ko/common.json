@@ -434,6 +434,7 @@
     "unauthorized": "로그인이 필요합니다",
     "section_load_failed": "이 항목을 불러오지 못했습니다. 새로고침해 주세요.",
     "unknown": "오류가 발생했습니다",
+    "notFound": "찾을 수 없습니다",
     "TEAM_001": "팀을 찾을 수 없습니다.",
     "TEAM_006": "이 팀은 삭제되지 않았으므로 복원할 수 없습니다.",
     "COMMON_001": "입력 내용에 오류가 있습니다",
@@ -1853,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "뒤로",
     "cancel": "취소",
     "search": "검색",
     "edit": "편집",
@@ -3362,6 +3364,30 @@
       "freeText": "자유 텍스트",
       "freeImage": "자유 이미지",
       "clock": "시계"
+    }
+  },
+  "globalSearch": {
+    "title": "검색",
+    "placeholder": "키워드로 검색 (2자 이상)",
+    "submit": "검색",
+    "failed": "검색에 실패했습니다",
+    "tooShort": "2자 이상 입력해 주세요",
+    "empty": "검색 결과가 없습니다",
+    "didYouMean": "혹시 이것을 찾으셨나요:",
+    "broaderQuery": "더 넓은 검색:",
+    "timedOut": "일부 유형의 검색이 시간 초과되었습니다: {types}",
+    "noLink": "링크가 없습니다",
+    "types": {
+      "ALL": "전체",
+      "POST": "게시물",
+      "MESSAGE": "메시지",
+      "THREAD": "스레드",
+      "ARTICLE": "기사",
+      "FILE": "파일",
+      "USER": "사용자",
+      "TEAM": "팀",
+      "ORGANIZATION": "조직",
+      "ACTIVITY": "활동 기록"
     }
   }
 }

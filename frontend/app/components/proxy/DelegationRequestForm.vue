@@ -55,7 +55,7 @@ async function fetchMembers() {
       members.value = (res as { data: MemberResponse[] }).data ?? []
     }
   } catch {
-    notification.error(t('common.fetch_failed'))
+    notification.error(t('tournament.submission.error_load'))
   } finally {
     loadingMembers.value = false
   }

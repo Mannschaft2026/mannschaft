@@ -35,6 +35,12 @@
 #   env.SHARD_TOTAL と matrix.shard を同じ N に揃えるだけで済む
 #   （build.gradle.kts のシャードフィルタはプロパティ駆動のため無改修）。
 #   詳細な数値と N 選定の根拠・残る課題はファイル末尾の備考を参照。
+# 2026-11-18 CMP-261111-0508: shard を 6 → 8 分割へ拡張。Nightly fu
+# ll / PR の最長 shard が step 上限（85/105 分）・job 上限（100/120 分）に迫り
+# 、時間切れが再発したため。上限値・必須チェック名・集約ジョブの構造は変えない。あわせて重み表に無いクラスを既定重み（
+# 重み表の中央値）付きで LPT に参加させ、未掲載数と予測偏り比を verifyShardCoverage の番人で
+# 検査する。詳細は docs/conventions/backend/31-ci-shard-weighting.md
+# 。
 # =============================================================================
 
 name: Backend — CI (PR Check)
@@ -52,8 +58,8 @@ concurrency:
 
 env:
   JAVA_VERSION: "21"
-  # テストシャード数。N=6 を既定とする（理由はファイル末尾の備考を参照）。
-  SHARD_TOTAL: "6"
+  # テストシャード数。N=8 を既定とする（理由はファイル末尾の備考を参照）。
+  SHARD_TOTAL: "8"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -110,7 +116,7 @@ jobs:
           fi
 
           # Flyway マイグレーション（db/migration/**）の変更有無を判定する。
-          # 変更があれば Flyway 再生テスト（65 クラス）を従来どおり実行し、
+          # 変更があれば Flyway 再生テスト（クラス数・時間占有は shard-weights.properties の実測に従う）を従来どおり実行し、
           # 無ければ除外して壁時計を短縮する（build.gradle.kts の
           # -PexcludeMigrationTests を参照）。
           # マイグレーションテスト本体・build.gradle.kts・本 workflow の変更時も
@@ -214,7 +220,7 @@ jobs:
   # shard-coverage-guard: CI テストシャード重み付け振り分けの取りこぼし番人
   #
   # build.gradle.kts の verifyShardCoverage タスクを 1 回だけ実行する。
-  # 6 shard それぞれで重複実行すると無駄なため、gate 系の軽量ジョブとして独立させる
+  # 全 shard それぞれで重複実行すると無駄なため、gate 系の軽量ジョブとして独立させる
   # （Testcontainers 不要・コンパイルのみで完結するため Docker 不要・数分で終わる）。
   # 「重み表あり／なし双方で全テストクラスがちょうど1つの shard にのみ割り当たる」
   # ことを、実際の Test.exclude フィルタと同一の判定関数（ShardAssignment.isIncluded）
@@ -256,6 +262,10 @@ jobs:
 
       - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
+
+      # build-logic（ShardAssignment / ShardBalanceGuard）の単体テスト。割り当て・番人の仕様をここで守る。
+      - name: build-logic 単体テスト（割り当て・番人）
+        run: ./gradlew -p build-logic test --no-daemon --build-cache
 
       - name: verifyShardCoverage（全shard.total値で取りこぼし・重複割当を検証）
         run: >-
@@ -390,9 +400,9 @@ jobs:
           --tests "com.mannschaft.app.advertising.controller.StripeAdInvoiceWebhookControllerTest"
 
   # ---------------------------------------------------------------------------
-  # shard: compile + test を 6 並列で実行する（Docker required for Testcontainers）
+  # shard: compile + test を 8 並列で実行する（Docker required for Testcontainers）
   #
-  # matrix で shard=0..5 の 6 ランナーへ分散する。各 shard は build.gradle.kts の
+  # matrix で shard=0..7 の 8 ランナーへ分散する。各 shard は build.gradle.kts の
   # シャードフィルタ（-Pshard.total / -Pshard.index）で「完全修飾クラス名の安定
   # ハッシュ % total == index」のテストクラスのみを実行する。
   #
@@ -416,7 +426,7 @@ jobs:
       # 1 shard が失敗しても他 shard を最後まで走らせ、全失敗を一度に把握できるようにする。
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -461,7 +471,7 @@ jobs:
       # --continue: 全テスト失敗を収集（最初の失敗で打ち切りしない）
       # -Pshard.total / -Pshard.index: build.gradle.kts のシャードフィルタを起動
       # -PexcludeMigrationTests: db/migration/** 無変更の PR では Flyway 再生テスト
-      #   （65 クラス・計測テスト時間の 72〜88% を占める）を除外する。
+      #   （計測テスト時間の 72〜88% を占める。クラス数は重み表の実測に従う）を除外する。
       #   migration を触る PR では false となり従来どおり全件実行する。
       #   除外分は backend-nightly-full.yml が毎晩フル実行して担保する。
       # cache5診断のshard0完走を踏まえcontext保持を5に制限する。
@@ -679,6 +689,8 @@ jobs:
 #   フィードバック）や (b) Testcontainers のコンテナ再利用（singleton 化による
 #   固定コスト削減）の方が費用対効果が高い。
 #
+# - 【2026-11-18 追記】N=6 → 8 へ拡張した（CMP-261111-0508）。以下は N=6 時点の判断記録で、
+#   時間切れの再発により「固定コスト増より余裕回復を優先する」へ判断を改めた。
 # - N をさらに増やす（例 8）と 1 shard の実行は短くなるが、固定コストがランナー数
 #   ぶん multiplied され「総 CI 分数（GitHub の課金/枠消費）」が増大する。private
 #   リポジトリ化後はこの総分数がコストに直結するため、壁時計の短縮効果が逓減する

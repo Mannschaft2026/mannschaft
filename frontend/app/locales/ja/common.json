@@ -434,6 +434,7 @@
     "unauthorized": "ログインが必要です",
     "section_load_failed": "この項目の取得に失敗しました（再読み込みしてください）",
     "unknown": "エラーが発生しました",
+    "notFound": "見つかりません",
     "TEAM_001": "チームが見つかりません",
     "TEAM_006": "このチームは削除されていないため、復元できません",
     "COMMON_001": "入力内容に不備があります",
@@ -1853,6 +1854,7 @@
     }
   },
   "common": {
+    "back": "戻る",
     "cancel": "キャンセル",
     "search": "検索",
     "edit": "編集",
@@ -3362,6 +3364,30 @@
       "freeText": "フリーテキスト",
       "freeImage": "フリー画像",
       "clock": "時計"
+    }
+  },
+  "globalSearch": {
+    "title": "検索",
+    "placeholder": "キーワードで検索（2文字以上）",
+    "submit": "検索",
+    "failed": "検索に失敗しました",
+    "tooShort": "2文字以上で入力してください",
+    "empty": "検索結果がありません",
+    "didYouMean": "もしかして:",
+    "broaderQuery": "より広い検索:",
+    "timedOut": "一部の種別の検索がタイムアウトしました: {types}",
+    "noLink": "リンクはありません",
+    "types": {
+      "ALL": "すべて",
+      "POST": "投稿",
+      "MESSAGE": "メッセージ",
+      "THREAD": "スレッド",
+      "ARTICLE": "記事",
+      "FILE": "ファイル",
+      "USER": "ユーザー",
+      "TEAM": "チーム",
+      "ORGANIZATION": "組織",
+      "ACTIVITY": "活動記録"
     }
   }
 }

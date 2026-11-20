@@ -124,6 +124,12 @@ public class GlobalExceptionHandler {
             Map.entry("DIAGNOSIS_003", HttpStatus.CONFLICT),
             Map.entry("DIAGNOSIS_004", HttpStatus.CONFLICT),
             Map.entry("DIAGNOSIS_005", HttpStatus.SERVICE_UNAVAILABLE),
+            // F06.4.1 個人の頑張り記録: 不在/他人は存在秘匿で 404、状態競合 409、権限 403、基盤障害は 503
+            Map.entry("EFFORT_001", HttpStatus.NOT_FOUND),
+            Map.entry("EFFORT_002", HttpStatus.CONFLICT),
+            Map.entry("EFFORT_003", HttpStatus.FORBIDDEN),
+            Map.entry("EFFORT_004", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("EFFORT_005", HttpStatus.SERVICE_UNAVAILABLE),
             Map.entry("DIAGNOSIS_006", HttpStatus.BAD_REQUEST),
             // 本人操作の受付拒否と非ACTIVE拒否は既存認証エラーへ転用しない。
             Map.entry("RECALLSESSION_001", HttpStatus.CONFLICT),
@@ -655,6 +661,7 @@ public class GlobalExceptionHandler {
             // CMP-261010-1432: 自己審査の禁止は明確な認可拒否 → 403、枠間移動の移動元不一致は状態競合 → 409
             Map.entry("SHIFT_045", HttpStatus.FORBIDDEN),                   // SELF_REVIEW_FORBIDDEN
             Map.entry("SHIFT_046", HttpStatus.CONFLICT),                    // MOVE_SOURCE_NOT_ASSIGNED
+            Map.entry("SHIFT_048", HttpStatus.CONFLICT),                    // REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED
             // F08.7 シフト予算 (Phase 9-α: 逆算 API)
             Map.entry("SHIFT_BUDGET_001", HttpStatus.SERVICE_UNAVAILABLE),  // FEATURE_DISABLED
             Map.entry("SHIFT_BUDGET_002", HttpStatus.BAD_REQUEST),          // EMPTY_POSITION_LIST
@@ -2283,7 +2290,7 @@ public class GlobalExceptionHandler {
             Map.entry("TOUR_004", HttpStatus.CONFLICT),                  // INVALID_TOURNAMENT_STATUS
             Map.entry("TOUR_009", HttpStatus.CONFLICT),                  // MATCHES_NOT_COMPLETED
             Map.entry("TOUR_011", HttpStatus.CONFLICT),                  // PROMOTION_ALREADY_EXECUTED
-            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（存在は隠さず権限拒否）
+            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（欠番: CMP-261116-0726 で不送出・番号は再利用しない）
             Map.entry("TOUR_031", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_POST_FORBIDDEN
             Map.entry("TOUR_032", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VISIBILITY_FORBIDDEN
 
@@ -2469,6 +2476,7 @@ public class GlobalExceptionHandler {
             // F04.6 グローバル検索（SearchErrorCode）の残り未登録分。
             Map.entry("SEARCH_003", HttpStatus.NOT_FOUND),               // SAVED_QUERY_NOT_FOUND
             Map.entry("SEARCH_004", HttpStatus.NOT_FOUND),               // HISTORY_NOT_FOUND
+            Map.entry("SEARCH_005", HttpStatus.CONFLICT),                // MAX_SAVED_QUERIES_EXCEEDED（CMP-261116-0722: 上限10件・11件目は 409）
 
             // F01.5 サポーター申請・管理機能（SupporterErrorCode）の残り未登録分。
             Map.entry("SUPPORTER_001", HttpStatus.CONFLICT),             // 既にサポーター申請済み
@@ -2668,7 +2676,8 @@ public class GlobalExceptionHandler {
                     new ErrorResponse.ErrorDetail(errorCode.getCode(), message, List.of()));
         } else {
             body = new ErrorResponse(
-                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message, ex.getFieldErrors()));
+                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message,
+                            localizeFieldErrors(ex.getFieldErrors())));
         }
         ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
         if (isPrivateSelfInput(request)) response.header(HttpHeaders.CACHE_CONTROL, "no-store");
@@ -2724,6 +2733,18 @@ public class GlobalExceptionHandler {
         BillingConflictErrorResponse body =
                 new BillingConflictErrorResponse(ex.getErrorCode().getCode(), message, ex.getDetails());
         return ResponseEntity.status(resolveHttpStatus(ex.getErrorCode())).body(body);
+    }
+
+    /**
+     * CMP-261115-1821: 公開前の勤務日時給欠落（SHIFT_047・400）。対象者・勤務日を details で返す。
+     */
+    @ExceptionHandler(com.mannschaft.app.shift.ShiftHourlyRateMissingException.class)
+    public ResponseEntity<com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse> handleShiftHourlyRateMissing(
+            com.mannschaft.app.shift.ShiftHourlyRateMissingException ex) {
+        log.warn("ShiftHourlyRateMissingException: missingCount={}", ex.getMissingHourlyRates().size());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                new com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse(
+                        ex.getErrorCode().getCode(), resolveMessage(ex.getErrorCode()), ex.getMissingHourlyRates()));
     }
 
     /**
@@ -3268,6 +3289,19 @@ public class GlobalExceptionHandler {
         return errorMessageResolver.resolve(errorCode, messageArgs);
     }
 
+    /**
+     * 訳キーを持つフィールドエラー（{@link ErrorResponse.FieldError#ofKey}）の message を利用者の言語へ解決する。
+     * キーを持たないものはそのまま返す。
+     */
+    private List<ErrorResponse.FieldError> localizeFieldErrors(List<ErrorResponse.FieldError> fieldErrors) {
+        java.util.Locale locale = org.springframework.context.i18n.LocaleContextHolder.getLocale();
+        return fieldErrors.stream()
+                .map(fe -> fe.getMessageKey() == null ? fe
+                        : fe.withMessage(errorMessageResolver.resolveKey(
+                                fe.getMessageKey(), fe.getMessage(), locale)))
+                .toList();
+    }
+
     /** 利用者の言語で message を解決した {@link ErrorResponse}（フィールドエラーなし）。 */
     private ErrorResponse localized(ErrorCode errorCode) {
         return localized(errorCode, List.of());
@@ -3345,7 +3379,7 @@ public class GlobalExceptionHandler {
                 || path.matches("/api/v1/teams/[^/]+/loyalty(?:/.*)?")) return true;
         if (path.matches("/api/v1/me/reflections/entries/[^/]+/recall-sessions")) return true;
         for (String prefix : List.of("/api/v1/me/birth-profile", "/api/v1/me/diagnoses", "/api/v1/me/ranch",
-                "/api/v1/me/reflections/recall-sessions")) {
+                "/api/v1/me/reflections/recall-sessions", "/api/v1/effort-records/me")) {
             if (path.equals(prefix) || path.startsWith(prefix + "/")) return true;
         }
         return false;

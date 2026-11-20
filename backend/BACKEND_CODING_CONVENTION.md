@@ -132,6 +132,7 @@ API のエラー応答 `error.message` は BE が利用者の言語（ログイ�
 Request DTO に Jakarta Bean Validation アノテーションを付与し、「入力値の形式」を検証する。
 - `@NotBlank`, `@NotNull`, `@Size`, `@Email`, `@Pattern`, `@Min`, `@Max` 等
 - 「このフィールドは必須」「8文字以上」「メール形式」といった、ビジネスロジックに依存しない形式検証が対象
+- **ID・要素のリストを受けるリクエスト DTO には必ず `@Size(max = …)` を付ける**（無制限リスト＝無制限クエリ・DoS）。上限は業務上の最大件数で決める。
 
 #### Service層（コード内チェック）— ビジネスルールチェック
 Service メソッド内でビジネスルールを検証し、違反時は `BusinessException` をスローする。
@@ -209,327 +210,59 @@ main の実在例は `recruitment/dto/RecruitmentListingSearchRequest`）にす�
 
 ## 5. データアクセスと開発環境
 
-### STRING永続化enumの定数追加
-
-`@Enumerated(EnumType.STRING)` の定数を足すときは、`.claudecode.md` §23 と
-[`二段階展開の作法`](../docs/development/persisted_enum_deployment.md) に従う。
-定数だけを全タスクへ配り、旧タスクの退場を確認してから別リリースで書込みを始める。
-番人 `PersistedEnumCompatibilityArchTest` が検知した追加を互換性台帳へ反映する前に、
-PRで書込み経路・二段階計画・rollback下限をレビューする。
-
-### データアクセス (Spring Data JPA + QueryDSL)
-* **基本方式**: データアクセスには **Spring Data JPA** を使用する。各機能パッケージ内に `[Feature]Repository` インターフェースを作成し、`JpaRepository<Entity, Long>` を継承すること。
-* **クエリ戦略**:
-    * **単純なCRUDおよび名前ベースのクエリ**: Spring Data JPA の派生クエリメソッド（`findByEmail`, `findByStatusAndCreatedAtAfter` 等）を優先的に使用する。
-    * **動的フィルタリング**: `.claudecode.md` §13 で定めたフィルタリング規約（`?status=active&price_min=1000` 等）の実装には **QueryDSL** を使用する。`BooleanBuilder` または `BooleanExpression` を用いてタイプセーフに条件を組み立てること。文字列ベースの `@Query` で動的条件を結合する方式は禁止する。
-    * **固定的な複雑クエリ**: JOIN が多い集計クエリやレポート用クエリなど、動的条件を伴わない固定的な複雑クエリは `@Query`（JPQL）で記述してよい。ネイティブSQL（`nativeQuery = true`）は最終手段とし、使用時はコメントで理由を記載すること。
-* **QueryDSL 設定**: Spring Boot 3.x (Jakarta EE) 環境では、`querydsl-jpa` に **`:jakarta` クラシファイア**を指定すること（`javax` → `jakarta` 名前空間対応）。Gradle の APT（Annotation Processing Tool）を導入し、`Q` クラスを自動生成する。生成されたクラスは `build/generated` 配下に出力し、バージョン管理対象外とする。
-```kotlin
-// build.gradle.kts
-dependencies {
-    implementation("com.querydsl:querydsl-jpa:5.1.0:jakarta")
-    annotationProcessor("com.querydsl:querydsl-apt:5.1.0:jakarta")
-    annotationProcessor("jakarta.persistence:jakarta.persistence-api")
-}
-```
-* **N+1 問題の防止**: リレーションの取得には `@EntityGraph` またはJPQLの `JOIN FETCH` を明示的に使用し、Lazy Loading による N+1 問題を防止すること。
-
-### 派生クエリの引数型は Entity 属性の型と一致させる — `@Enumerated` 属性に `String` を渡さない（2026-07-30〜）
-
-#### 問題：`@Enumerated(EnumType.STRING)` の属性を `String` で受けると実行時に必ず 500 になる
-
-Spring Data JPA の派生クエリ（`findByXxx`）の**バインド型はエンティティ属性側で決まる**。
-DB のカラムが `VARCHAR` であっても、Entity 側が enum なら `String` を渡した時点で Hibernate のパラメータ束縛が失敗する。
-
-```java
-// Entity: enum 属性（列は VARCHAR だが JPA 上の型は enum）
-@Enumerated(EnumType.STRING)
-@Column(nullable = false, length = 20)
-private NotificationScopeType scopeType;
-
-// NG: String で受ける派生クエリ
-Page<NotificationEntity> findByScopeTypeAndScopeIdOrderByCreatedAtDesc(
-        String scopeType, Long scopeId, Pageable pageable);
-// 呼び出し側は自然と .name() を書いてしまう
-repo.findByScopeTypeAndScopeIdOrderByCreatedAtDesc(NotificationScopeType.FRIEND_TEAM.name(), teamId, pageable);
-```
-
-実行時にこうなる（**コンパイルは通り、アプリ起動も成功する。実際にそのクエリが呼ばれた瞬間に初めて落ちる**）:
-
-```
-org.springframework.dao.InvalidDataAccessApiUsageException:
-  Argument [FRIEND_TEAM] of type [java.lang.String] did not match parameter type
-  [com.mannschaft.app.notification.NotificationScopeType (n/a)]
-```
-
-`GlobalExceptionHandler` に `DataAccessException` 系の個別ハンドラは無いため、汎用 `@ExceptionHandler(Exception.class)` に落ちて **HTTP 500** になる。
-
-```java
-// OK: Entity 属性と同じ enum 型で受ける
-Page<NotificationEntity> findByScopeTypeAndScopeIdOrderByCreatedAtDesc(
-        NotificationScopeType scopeType, Long scopeId, Pageable pageable);
-```
-
-#### なぜ従来のテストで検出できなかったか
-
-**リポジトリをモックした Service 単体テストでは原理的に検出できない。** モックは「`.name()` の文字列で呼ばれたこと」しか検証せず、Hibernate のパラメータ束縛が発生しないため、壊れたクエリが恒久的に偽グリーンになる。
-
-- 実際に 2026-07-30 に `NotificationRepository` で 4 本（うち本番稼働経路 3 本）が同時に発覚した
-- 該当経路は `@SpringBootTest` + Testcontainers で一度も実行されておらず、実機で初めて 500 として表面化した
-
-#### ルール
-
-1. 派生クエリの引数型は **Entity の属性型をそのまま書く**。`@Enumerated` 属性なら enum、`String` 属性なら `String`。
-2. 呼び出し側で `.name()` / `valueOf()` を書きたくなったら、**それは引数型が間違っているサイン**。変換ではなく宣言を直すこと。
-3. **ドメインをまたいで enum を渡す場合**（例: `scopefolder.ScopeType` → `notification.NotificationScopeType`）は、写像専用メソッドを 1 つ設けて明示的に写像する。**このとき `switch` を使ってはならない**（下記「⚠️ 罠」参照）。`==` による enum 参照比較で分岐し、未知値は `IllegalStateException` を投げること。黙って `null` や空リストを返して握りつぶすのは禁止。
-    * ⚠️ **罠: 別ドメインの enum に対する `switch` は ArchUnit D-1 を落とす。** javac は enum switch のために `$SwitchMap$...` を保持する**合成クラス（`OuterClass$1`）を自動生成**する。この合成クラスは外側クラスの依存をそのまま写して持つため、`CrossDomainEntityImportArchTest`（D-1）が**新しいクラス名の新規違反**として検出し CI が落ちる（外側クラス本体の依存が凍結ストア済みでも、合成クラスは別名なので凍結に当たらない）。D-1 は合成クラスを除外していない。
-    * `switch` を捨てるとコンパイル時の網羅性保証が失われるため、**必ずテストで肩代わりすること**。写像元 enum の `values()` を**全件ループ**して 1 つずつ写像が成功することを検査する番人テストを置く（定数を個別に書き並べる形にすると、新定数が増えても何も落ちない）。実例: `NotificationScopeTypeMappingTest`。
-4. **enum 属性を条件に含む派生クエリは、実 DB（Testcontainers）を通すテストを必ず 1 本置く**。モック単体テストだけで済ませてはならない。
-5. ネイティブクエリ（`nativeQuery = true`）は SQL 文字列として評価されるため `String` で正しい。JPQL / 派生クエリのみが本ルールの対象。
-
-### Entity 更新パターン規約 — managed entity の直接ミューテートで行う（`toBuilder().build() → save` 禁止）（2026-06-19〜）
-
-#### 問題：`toBuilder().build()` で再構築して `save()` すると INSERT 化する
-
-`BaseEntity` / `UuidV7Entity` を継承したエンティティを以下のように更新しようとすると、**静かに INSERT が発行される**という致命的なバグが発生する。
-
-```java
-// NG: toBuilder().build() で再構築して save
-MyEntity updated = entity.toBuilder()
-    .name(request.name())
-    .build();
-myRepository.save(updated);  // → INSERT が発行される（id=null のため）
-```
-
-**原因（歴史的）**: かつて一部の Entity が（継承しているにもかかわらず）`@Builder` を使用していた。Lombok の素の `@Builder(toBuilder = true)` による `toBuilder()` は**同一クラスのフィールドのみ**をコピーし、`BaseEntity` / `UuidV7Entity` 等の**親クラス由来の継承フィールド（`id`）はコピーしない**。その結果、再構築されたインスタンスの `id` が `null` になり、JPA は新規INSERT と判断する。
-
-**現在の実態**: 継承する Entity（`UuidV7Entity` / `BaseEntity` を継承するクラス）は **`@SuperBuilder(toBuilder = true)` が標準**（コードベースに 600 以上）。`@SuperBuilder` は親クラスのフィールド（`id` を含む）も `toBuilder()` でコピーするため、上記の toBuilder corruption は**構造的に解消済み**である。継承を持たない単純 DTO（例: `bulletin.dto.ThreadResponse`）はそのまま `@Builder` でよい（コピー対象がそのクラスのフィールドのみで完結するため安全）。
-
-- 一意制約があれば `500 Internal Server Error` が発生する
-- 一意制約がなければ**行が静かに二重化**する（検知が困難で非常に危険）
-
-この問題は Service のユニットテストでは検出できず、**実際の DB を使う統合テスト・実機テストでしか発覚しない**（2026-06-19 横断根治キャンペーンで約45箇所を修正）。
-
-#### ルール：managed entity に直接ミューテートして save する
-
-既存エンティティの更新は、`findById` で取得した **managed entity に対してドメインメソッドでその場でフィールドをミューテートし、そのまま `save(entity)`** で行うこと。
-
-```java
-// OK: managed entity を直接ミューテートして save
-MyEntity entity = myRepository.findById(id)
-    .orElseThrow(() -> new NotFoundException("リソースが見つかりません"));
-
-entity.applyUpdate(request);  // ← ドメインメソッドでミューテート
-myRepository.save(entity);    // → UPDATE が発行される（id が保持されているため）
-```
-
-Entity 側にドメインメソッドを定義する:
-
-```java
-// Entity 側のドメインメソッド
-public void applyUpdate(UpdateMyRequest request) {
-    if (request.name() != null) {
-        this.name = request.name();
-    }
-    if (request.description() != null) {
-        this.description = request.description();
-    }
-    // ... 他のフィールドも同様に
-}
-```
-
-#### `toBuilder()` / `builder()` が許可される用途
-
-**限定例外（CMP-260820-1017）**: `ResidentRegistryEntity` は、新規登録の安全な16入力だけを受け取る private constructor に `@Builder` を付ける。公開 builder に死亡・転出・論理削除・監査・派生状態や継承 ID／日時を含めず、`toBuilder()` は提供しない。初期状態は Entity 内で定め、更新は既存の業務メソッドで managed entity に直接行う。JPA 用の protected 無引数 constructor は維持する。
-
-以下の用途では `id` 消失の問題が発生しないため、引き続き使用してよい。
-
-| 用途 | 説明 |
-|---|---|
-| **新規エンティティの作成** | `Entity.builder()...build()` による新規行作成（`id` は自動生成されるため問題なし） |
-| **レスポンス DTO の組み立て** | DTO は `BaseEntity` を継承しないため問題なし |
-| **`@Id` を自前宣言しているエンティティ** | 親クラスから `id` を継承していないため `toBuilder()` でもコピーされる |
-| **TestFixture での複製** | 新規行を作ることが目的の文脈（テストデータ生成）は許可 |
-
-#### 移行時の注意事項
-
-`toBuilder().build() → save` を managed entity の直接ミューテートへ書き換える際、以下の点に注意すること。
-
-**① null ガードのセマンティクスを正確に再現する**
-
-旧コードで「リクエストが `null` のフィールドは既存値を維持する」という部分更新セマンティクスがある場合、`applyUpdate` メソッド内または呼び出し側で同じ null ガードを実装すること。
-
-```java
-// 旧コード（NG）の null ガードを applyUpdate に移植する例
-public void applyUpdate(UpdateMyRequest request) {
-    if (request.name() != null) {          // null ガードを applyUpdate 内で再現
-        this.name = request.name();
-    }
-}
-```
-
-**② 旧値の先行キャプチャ（副作用がある場合）**
-
-監査ログ・通知・状態遷移など、**旧値と新値を比較して副作用を起こす処理**がある場合は、ミューテートで旧値が上書きされる前に、必ずローカル変数に旧値を退避してから比較・記録すること。
-
-```java
-// NG: ミューテート後に entity.getOldField() を参照すると常に新値になる
-entity.applyUpdate(request);
-if (entity.getName().equals(request.name())) { ... }  // 常に true になる
-
-// OK: 先に旧値を退避してからミューテート
-String oldName = entity.getName();   // ← 先に旧値をキャプチャ
-entity.applyUpdate(request);
-if (!oldName.equals(entity.getName())) {
-    auditLog.record("名前変更: {} → {}", oldName, entity.getName());
-}
-```
-
-#### 背景・参考
-
-2026-06-19 の横断根治キャンペーンで約45箇所の `toBuilder().build() → save` を修正した。
-手本 PR: #1643（`EventService.updateEvent` + `EventEntity.applyUpdate` の直接ミューテートへの書き換え）、他 #1648 / #1651 / #1656 / #1667 等。
-
-継承する Entity は `@SuperBuilder(toBuilder = true)` を標準とすることで、継承フィールド（`id`）も
-`toBuilder()` でコピーされ、本問題は**構造的に回避**される。これにより `id=null` 起因の意図しない INSERT は発生しない。
-ただし「managed entity を直接ミューテートして save する」上記ルールは、監査ログの旧値キャプチャや
-更新意図の明確化の観点から引き続き推奨する（`@SuperBuilder` 化は安全網であって、更新フローの正準ではない）。
-非継承の単純 DTO は `@Builder`（`@SuperBuilder` ではない）でよい。
-
-### Entity フィールドの @Column(name) 必須ルール
-
-#### 数字を挟む略語フィールドは @Column(name=...) を必ず明示すること
-
-Hibernate の物理命名戦略（`CamelCaseToUnderscoresNamingStrategy`）は
-**小文字→大文字の境界**でのみアンダースコアを挿入する。数字→大文字の境界では挿入しない。
-
-そのため `S3Key` / `S3Url` / `Pdf2` 等のように数字と大文字が隣接するフィールド名では、
-Hibernate が生成する列名と Flyway の DDL で定義した列名が食い違う。
-
-| フィールド名 | Hibernate 生成（誤）| DDL 実列名（正）|
-|---|---|---|
-| `scannedDocumentS3Key` | `scanned_documents3key` | `scanned_document_s3_key` |
-| `guardianCertificateS3Key` | `guardian_certificates3key` | `guardian_certificate_s3_key` |
-| `photoS3Key` | `photos3key` | `photo_s3_key` |
-| `imageS3Key` | `images3key` | `image_s3_key` |
-| `coverImageS3Key` | `cover_images3key` | `cover_image_s3_key` |
-| `certificateS3Key` | `certificates3key` | `certificate_s3_key` |
-
-**根治事例**: 2026-06-06 実機テストで `ProxyInputConsentEntity` の S3Key フィールド列名不一致が
-`ProxyInputContextFilter` 経由の全リクエストで SQLSyntaxErrorException を引き起こす致命的バグとして発覚。
-`ddl-auto=create` を使う UT/IT では Hibernate が誤った列名でテーブルを作成してしまうため
-自己整合で通過してしまい検出不能だった（CI が通っても実 Flyway スキーマで壊れるパターン）。
-
-**ルール**:
-
-```java
-// NG: name 未指定（Hibernate が誤った列名を生成する）
-@Column(length = 512)
-private String scannedDocumentS3Key;
-
-// OK: DDL の実列名に合わせて明示する
-@Column(name = "scanned_document_s3_key", length = 512)
-private String scannedDocumentS3Key;
-```
-
-**影響を受けるパターン（これらを含むフィールド名は必ず `name=` を明示）**:
-- `S3Key` / `S3Url` / `S3Bucket` — S3 関連
-- `PdfUrl` / `PdfKey` / `Pdf2` — PDF 関連
-- `HtmlUrl` / `HtmlContent` — HTML 関連（H が大文字で前が数字の場合）
-- その他「数字→大文字」が連続する略語を含むフィールド全般
-
-**再発防止テスト**: `ddl-auto=create` のみのテスト（通常の `AbstractMySqlIntegrationTest` 派生クラス）では検出不能。
-S3Key 系フィールドを持つ Entity には、専用の Flyway 実スキーマテストクラスを作成すること。
-
-**機械的な番人（2026-08-20 / Issue #2856 で追加）**: `backend/src/test/java/com/mannschaft/app/common/architecture/EntityDigitBoundaryColumnNameGuardTest.java` が全 `@Entity` を反射で走査し、フィールド名に「数字→大文字」の並びを含むのに `@Column(name=...)` が未指定なものを機械的に落とす（Docker 不要・第一防衛線）。実 Flyway スキーマに対する経験的な再現は`backend/src/test/java/com/mannschaft/app/common/schema/EntityDigitBoundaryColumnFlywaySchemaIT.java`が担う（Issue #2856 では `data_exports.s3_key` ほか 7 Entity の不一致をこの 2 本で赤→緑にした）。
-
-実装パターン（`@SpringBootTest` プロパティ上書き + ネイティブ SQL 列名直接確認）:
-
-```java
-@SpringBootTest(properties = {
-        "spring.flyway.enabled=true",
-        "spring.jpa.hibernate.ddl-auto=none"   // Flyway 適用済みスキーマをそのまま使う
-})
-@Testcontainers
-@Transactional
-@EnabledIf("com.example.XxxS3KeyFlywaySchemaTest#isDockerAvailable")
-@DisplayName("Xxx S3Key 列名マッピング再発防止テスト（Flyway 実スキーマ）")
-class XxxS3KeyFlywaySchemaTest {
-
-    @SuppressWarnings("resource")
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
-            .withDatabaseName("mannschaft_s3key_flyway")
-            .withUsername("test").withPassword("test")
-            .withTmpFs(Map.of("/var/lib/mysql", "rw"))   // WSL2 VHD 遅延対策（定石）
-            .withCommand("--log_bin_trust_function_creators=1");  // TRIGGER 作成権限
-
-    static { if (isDockerAvailable()) MYSQL.start(); }
-
-    @MockitoBean
-    org.springframework.data.redis.core.StringRedisTemplate redisTemplate;  // 外部依存モック化
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
-        registry.add("spring.datasource.username", MYSQL::getUsername);
-        registry.add("spring.datasource.password", MYSQL::getPassword);
-    }
-
-    public static boolean isDockerAvailable() { ... }
-
-    @PersistenceContext EntityManager em;
-
-    @Test
-    void s3KeyColumnsMatchFlywaySchema() {
-        // 1. S3 キーを指定して永続化・flush
-        em.persist(entity); em.flush(); em.clear();
-
-        // 2. JPA 往復確認
-        XxxEntity loaded = em.find(XxxEntity.class, entity.getId());
-        assertThat(loaded.getSomeS3Key()).isEqualTo(expectedKey);
-
-        // 3. ネイティブ SQL で Flyway DDL 定義の実列名を直接指定して確認
-        //    → JPA 側と DB 側の「両方が誤列名」という見逃しパターンを排除
-        List<Object[]> rows = em.createNativeQuery(
-                "SELECT some_s3_key FROM xxx_table WHERE id = :id")
-                .setParameter("id", entity.getId()).getResultList();
-        assertThat(rows.get(0)[0]).isEqualTo(expectedKey);
-    }
-}
-```
-
-**注意**: `@SpringBootTest(properties=...)` でプロパティを上書きすると、`AbstractMySqlIntegrationTest` とは
-別の ApplicationContext が生成される（OOM 回避のため、このパターンのクラスを不必要に増やさないこと）。
-参照実装: `ProxyInputConsentS3KeyFlywaySchemaTest`。
-
-### コネクションプール (HikariCP)
-* **使用ライブラリ**: Spring Boot 標準の **HikariCP** をそのまま使用する。別のプールライブラリへの変更は禁止する。
-* **設定指針**:
-    * `maximum-pool-size`: デフォルト `10`。本番環境ではDB接続数の上限とアプリケーションインスタンス数を考慮して調整する（目安: `DB max_connections / インスタンス数 - 余裕`）。
-    * `minimum-idle`: `maximum-pool-size` と同値に設定し、コネクションの急増減を防ぐ（HikariCP 推奨設定）。
-    * `connection-timeout`: `30000`ms（30秒）。これを超えた場合は `SQLException` がスローされる。
-    * `leak-detection-threshold`: 開発環境では `2000`ms に設定し、コネクションリークを早期検出する。本番環境では `0`（無効）でよい。
-* **環境別設定**: プール設定は `application-{profile}.yml` でプロファイル別に管理する。
-
-### 開発環境ツール
-* **Spring Boot DevTools**:
-    * 開発時の `spring-boot-devtools` 依存を追加し、コード変更時の自動リスタートとライブリロードを有効化する。
-    * `build.gradle.kts` では `developmentOnly` スコープで追加し、本番ビルドに含めないこと。
-    * テンプレートファイルやプロパティ変更時のキャッシュ無効化も自動で行われる。
-* **Spring Boot Docker Compose Support**（Spring Boot 3.1+）:
-    * プロジェクトルートに `compose.yml`（MySQL + Valkey）を配置し、`gradle bootRun` 実行時にコンテナを自動起動・自動停止させる。
-    * `spring-boot-docker-compose` 依存を追加し、手動での `docker compose up/down` を不要にする。
-    * CI 環境では Docker Compose Support を無効化し、Testcontainers を使用すること（`spring.docker.compose.enabled=false`）。
-
-### APIドキュメント (Springdoc OpenAPI) 設定規約
-* **グループ化**:
-    * `Public API`（`/api/v1/...`）、`Admin API`（`/api/v1/admin/...`）、`System Admin API`（`/api/v1/system-admin/...`）、`Internal API`（`/internal/...`）の4区分でグループを定義する。
-* **認証スキーマ**:
-    * JWT Bearer 認証を `SecurityScheme` として定義し、Swagger UI 上で全エンドポイントに対してトークンを送信できる構成にする。
-* **レスポンス記述**:
-    * 各 API には、正常系（200/201）だけでなく、想定される異常系（400, 401, 403, 404）のレスポンス例を明記する。
-* **自動同期**:
-    * この OpenAPI 仕様を「唯一の正解（Single Source of Truth）」とし、フロントエンドの Zod スキーマ生成のソースとして活用する（FRONTEND_CODING_CONVENTION.md §7「フロント・バック間のバリデーション同期」参照）。
+> **詳細ファイル（必読）**: 本節の本文（コード例・経緯・番人の細則を含む）は [`docs/conventions/backend/05-data-access-dev-env.md`](../docs/conventions/backend/05-data-access-dev-env.md) に逐語で移設した。Repository・派生クエリ・Entity 更新・`@Column` を触る作業、Testcontainers／実スキーマテストを書く作業では、必ず詳細ファイルを開いて読むこと。以下は必須・禁止規則の要点である。
+
+### 要点
+
+**STRING永続化enumの定数追加**
+- `@Enumerated(EnumType.STRING)` の定数を足すときは、`.claudecode.md` §23 と [`二段階展開の作法`](../docs/development/persisted_enum_deployment.md) に従う。
+- 定数だけを全タスクへ配り、旧タスクの退場を確認してから別リリースで書込みを始める。
+- 番人 `PersistedEnumCompatibilityArchTest` が検知した追加を互換性台帳へ反映する前に、PRで書込み経路・二段階計画・rollback下限をレビューする。
+
+**データアクセス (Spring Data JPA + QueryDSL)**
+- データアクセスは **Spring Data JPA**。各機能パッケージ内に `[Feature]Repository` を作り、`JpaRepository<Entity, Long>` を継承する。
+- 単純なCRUD・名前ベースのクエリは、派生クエリメソッド（`findByEmail` 等）を優先する。
+- 動的フィルタリング（`.claudecode.md` §13 のフィルタリング規約）は **QueryDSL**（`BooleanBuilder` / `BooleanExpression`）でタイプセーフに組み立てる。**文字列ベースの `@Query` で動的条件を結合する方式は禁止**。
+- 動的条件を伴わない固定的な複雑クエリ（JOIN の多い集計・レポート）は `@Query`（JPQL）で書いてよい。ネイティブSQL（`nativeQuery = true`）は最終手段で、使用時はコメントで理由を記載する。
+- QueryDSL は `querydsl-jpa` に **`:jakarta` クラシファイア**を指定し、Gradle の APT で `Q` クラスを自動生成する。生成物は `build/generated` 配下に出力し、バージョン管理対象外とする。
+- N+1 防止のため、リレーション取得には `@EntityGraph` または JPQL の `JOIN FETCH` を明示的に使う（Lazy Loading による N+1 を防ぐ）。**ループ（`for` / `forEach` / `stream`）内で Repository・他 Service の単件取得・`count`・`exists`・`save` を呼ばない**（ID を集めて `findAllById` / `…In` / `GROUP BY` / `saveAll` にする）。`@Transactional` 内の managed エンティティへの `save()` は不要。内部の `PageRequest.of(0, 10000)` / `Pageable.unpaged()` は `max-page-size` が効かない。詳細・例は [05 データアクセス](../docs/conventions/backend/05-data-access-dev-env.md) の「N+1 問題の防止」。
+
+**派生クエリの引数型は Entity 属性の型と一致させる（`@Enumerated` 属性に `String` を渡さない）**
+- 派生クエリの引数型は **Entity の属性型をそのまま書く**（`@Enumerated` 属性なら enum、`String` 属性なら `String`）。`String` で受けるとコンパイル・起動は通るが、そのクエリが呼ばれた瞬間に必ず HTTP 500 になる。
+- 呼び出し側で `.name()` / `valueOf()` を書きたくなったら引数型が間違っているサイン。変換ではなく宣言を直す。
+- ドメインをまたいで enum を渡すときは、写像専用メソッドを 1 つ設けて明示的に写像する。**このとき `switch` を使ってはならない**（別ドメイン enum への `switch` は合成クラス `OuterClass$1` が生成され ArchUnit D-1 `CrossDomainEntityImportArchTest` を落とす）。`==` による enum 参照比較で分岐し、未知値は `IllegalStateException` を投げる。黙って `null` や空リストを返して握りつぶすのは禁止。
+- `switch` を捨てる代わりに、写像元 enum の `values()` を**全件ループ**して 1 つずつ写像が成功することを検査する番人テストを必ず置く（定数を個別に書き並べる形は不可。実例 `NotificationScopeTypeMappingTest`）。
+- **enum 属性を条件に含む派生クエリは、実 DB（Testcontainers）を通すテストを必ず 1 本置く**。リポジトリをモックした単体テストだけで済ませてはならない（モックでは原理的に検出できない）。
+- ネイティブクエリ（`nativeQuery = true`）は SQL 文字列として評価されるので `String` で正しい。JPQL／派生クエリのみが本ルールの対象。
+
+**Entity 更新パターン — managed entity の直接ミューテートで行う（`toBuilder().build() → save` 禁止）**
+- 既存エンティティの更新は、`findById` で取得した **managed entity にドメインメソッド（`applyUpdate` 等）でその場でミューテートし、そのまま `save(entity)`** する。`toBuilder().build()` で再構築して `save()` する方式は禁止（`id` が落ちて静かに INSERT 化／行の二重化を招く）。
+- `toBuilder()` / `builder()` を使ってよい用途は、新規エンティティの作成、レスポンス DTO の組み立て、`@Id` を自前宣言しているエンティティ、TestFixture での複製に限る。
+- 継承する Entity（`UuidV7Entity` / `BaseEntity` 継承）は **`@SuperBuilder(toBuilder = true)` が標準**。継承を持たない単純 DTO は `@Builder` でよい。
+- 限定例外（CMP-260820-1017）: `ResidentRegistryEntity` は、新規登録の安全な16入力だけを受け取る private constructor に `@Builder` を付ける。公開 builder に死亡・転出・論理削除・監査・派生状態や継承 ID／日時を含めず、`toBuilder()` は提供しない。初期状態は Entity 内で定め、更新は既存の業務メソッドで managed entity に直接行う。JPA 用の protected 無引数 constructor は維持する。
+- 移行時の注意①: 旧コードの null ガード（「リクエストが `null` のフィールドは既存値を維持する」）のセマンティクスを `applyUpdate` 内または呼び出し側で正確に再現する。
+- 移行時の注意②: 監査ログ・通知・状態遷移など旧値と新値を比較して副作用を起こす処理がある場合は、ミューテートの**前に**旧値をローカル変数へ退避してから比較・記録する。
+
+**Entity フィールドの `@Column(name)` 必須ルール**
+- フィールド名に「数字→大文字」の並び（`S3Key` / `S3Url` / `S3Bucket`、`PdfUrl` / `PdfKey` / `Pdf2`、`HtmlUrl` / `HtmlContent`、その他数字と大文字が隣接する略語全般）を含む場合は、**`@Column(name = "...")` を DDL の実列名に合わせて必ず明示する**（Hibernate の物理命名戦略は数字→大文字の境界で `_` を挿入せず、Flyway の列名と食い違うため）。
+- `ddl-auto=create` のテストでは自己整合で通過して検出できない。S3Key 系フィールドを持つ Entity には、専用の Flyway 実スキーマテストクラスを作成する（JPA 往復確認に加え、ネイティブ SQL で DDL 実列名を直接確認する）。
+- 機械的な番人: `EntityDigitBoundaryColumnNameGuardTest`（全 `@Entity` を反射走査）と `EntityDigitBoundaryColumnFlywaySchemaIT`（実 Flyway スキーマ）。
+- `@SpringBootTest(properties=...)` でプロパティを上書きすると別の ApplicationContext が生成される（OOM 回避のため、このパターンのクラスを不必要に増やさない）。参照実装は `ProxyInputConsentS3KeyFlywaySchemaTest`。
+
+**コネクションプール (HikariCP)**
+- Spring Boot 標準の **HikariCP** をそのまま使い、別のプールライブラリへの変更は禁止。
+- `maximum-pool-size` は既定 `10`（本番は DB 接続数上限とインスタンス数を考慮して調整）、`minimum-idle` は `maximum-pool-size` と同値、`connection-timeout` は `30000`ms、`leak-detection-threshold` は開発 `2000`ms・本番 `0`（無効）でよい。
+- プール設定は `application-{profile}.yml` でプロファイル別に管理する。
+
+**開発環境ツール**
+- Spring Boot DevTools は `build.gradle.kts` の **`developmentOnly`** スコープで追加し、本番ビルドに含めない。
+- Docker Compose Support（Spring Boot 3.1+）は、プロジェクトルートの `compose.yml`（MySQL + Valkey）と `spring-boot-docker-compose` 依存で `gradle bootRun` 時にコンテナを自動起動・停止する。**CI 環境では無効化し、Testcontainers を使う**（`spring.docker.compose.enabled=false`）。
+
+**APIドキュメント (Springdoc OpenAPI)**
+- グループは `Public API`（`/api/v1/...`）、`Admin API`（`/api/v1/admin/...`）、`System Admin API`（`/api/v1/system-admin/...`）、`Internal API`（`/internal/...`）の4区分で定義する。
+- JWT Bearer 認証を `SecurityScheme` として定義し、Swagger UI 上で全エンドポイントにトークンを送信できる構成にする。
+- 各 API に、正常系（200/201）だけでなく想定される異常系（400, 401, 403, 404）のレスポンス例を明記する。
+- この OpenAPI 仕様を「唯一の正解（Single Source of Truth）」とし、フロントエンドの Zod スキーマ生成のソースにする（FRONTEND_CODING_CONVENTION.md §7 参照）。
 
 ---
 
@@ -575,259 +308,97 @@ CI/CD パイプラインの詳細設定（ワークフロー YAML、JaCoCo 集�
 * **保存期間**: セキュリティおよびコンプライアンスの観点から、最低 **2年間** は検索可能な状態で保持する（README.md DB設計と統一。設定変更可）。
 
 ## 8. セキュリティ
-* **機密情報の保護**: APIキー、パスワード、暗号化鍵などをソースコードに直接記述（ハードコード）することを厳禁とします。
-* **インジェクション対策**: SQL発行時は文字列結合を避け、必ず **プレースホルダ** を使用してください。
-* **情報の秘匿**: パスワードや機密性の高い個人情報をログに出力しないでください。
-* **認可 (Authorization)**: ID等のパラメータを書き換えて他者のデータにアクセスできないよう、処理の入り口で必ず**実行権限チェック**を行ってください。
-* **XSS対策**: ユーザー入力値を画面表示する際は、サニタイズ（エスケープ）処理を徹底してください。
 
-### パスワード保存・管理規約
-* **生パスワード保持の厳禁**: データベースにパスワードを平文（そのままの文字列）で保存することをいかなる理由があっても禁止する。
-* **ハッシュ化アルゴリズム**: `bcrypt` を使用し、適切にソルト（Salt）を付与して保存すること。
-* **ストレッチング設定**: `bcrypt` のコストファクター（計算負荷）は、現在のサーバー性能に合わせて **10〜12** 程度（またはそれ以上）を設定し、総当たり攻撃への耐性を高める。
+> **詳細ファイル（必読）**: 本節の本文（設定値・コード例・手順を含む）は [`docs/conventions/backend/08-security.md`](../docs/conventions/backend/08-security.md) に逐語で移設した。認証・認可・JWT・WebSocket・レートリミット・CORS・Pre-signed URL・CSP を触る作業、および静的解析（Checkstyle / SpotBugs）・EditorConfig・IDE 設定・pre-commit フック・TestFixture・テスト実行環境（本節末尾に同居）を触る作業では、必ず詳細ファイルを開いて読むこと。以下は必須・禁止規則の要点である。
 
-### パスワードポリシー
-* **最低文字数**: 8文字以上（推奨12文字以上）とする。
-* **複雑性要件**: 英大文字・小文字・数字・記号のうち **3種類以上** を組み合わせることを必須とする。
-* **禁止事項**: ユーザーIDと同じ文字列や、一般的すぎるパスワード（`123456`, `password` 等）を拒否するチェックを実装する。
+### 要点
 
-### JWT（JSON Web Token）運用規約
-* **有効期限の設定**:
-    * **Access Token**: **15分**（短期間に設定し、漏洩リスクを低減する）
-    * **Refresh Token**: **7日間**（ユーザーの利便性と安全性のバランスを考慮）
-* **トークンローテーション**: Refresh Token を使用して新しい Access Token を発行する際、Refresh Token 自体も新しく発行し、古いものは無効化する。
-* **ログアウト・無効化処理**: ログアウト時は該当トークンを Valkey 上の「ブラックリスト」に登録し、期限内であっても即座に使用不能とする。
-* **保存場所**: フロントエンドでは `localStorage` / `sessionStorage` に保存し、`Authorization: Bearer` ヘッダーで送信する。Cookie には格納しない（CSRF攻撃を構造的に排除するため）。
-* **デバイスバインディング（推奨）**: Refresh Token 使用時に、発行時のIPアドレスおよびUser-Agentとの一致を検証することを推奨する。不一致の場合はトークンを無効化し、再ログインを要求する。これにより、XSSで Refresh Token が漏洩した場合でも、異なるデバイスからの悪用を防止できる。
+**基本方針**
+- APIキー・パスワード・暗号化鍵などをソースコードに直接記述（ハードコード）することを厳禁とする。
+- SQL 発行時は文字列結合を避け、必ず**プレースホルダ**を使う。
+- パスワードや機密性の高い個人情報をログに出力しない。
+- ID 等のパラメータを書き換えて他者のデータにアクセスできないよう、処理の入り口で必ず**実行権限チェック**を行う。
+- ユーザー入力値を画面表示する際は、サニタイズ（エスケープ）を徹底する。
 
-### WebSocket (STOMP) 認証規約
-* **認証方式**: 利用者のJWTと端末capabilityを区別する。いずれもWebSocket URLのqueryを資格情報として受け付けない。
-* **JWT送付タイミング**: STOMP の `CONNECT` フレームで `Authorization: Bearer ...` を渡す。Bearer/Cookie/匿名の優先順位は `docs/security/01_authorization_baseline.md` §5を正本とし、端末capabilityでJWT Principal/userIdを置き換えない。
-* **掲示端末capability**: `CONNECT` の専用native header `X-Signage-Token` だけで渡す（F09.10 §6）。HTTP header・URL query・SUBSCRIBE/SEND headerから取得しない。CONNECT検証後はraw tokenをnative headerから除去し、server registryにはtoken ID・screen ID・直接peer IP・購読IDとexact宛先だけを保持する。匿名のtoken所持端末を許可し、所属/管理権限によるtokenlessバイパスは設けない。
-* **サーバー側検証**:
-    * `ChannelInterceptor` を実装し、`preSend` メソッドにて `CONNECT` コマンド受信時のヘッダー検証を行う。
-    * 明示した資格が無効なら接続を拒否する。資格なしの共通CONNECTは匿名として通し、各topicのSUBSCRIBEと配送境界で認可する。
-    * 掲示topicはSUBSCRIBE時とrecipientごとの配送時にtoken・画面の現在状態を検証する。購読時だけの検証で失効後の配送を許してはならない。
-* **ハンドシェイク時**: HTTP upgradeは許可Originで受け付ける。共通CONNECTでJWTの認証ソースを確定し、匿名を含む接続の各topicのSUBSCRIBE/配送境界で、そのtopicの許可契約を強制する。
+**パスワード保存・管理**
+- パスワードの平文保存はいかなる理由があっても禁止。`bcrypt` を使い、適切にソルトを付与する。コストファクターは **10〜12** 程度（またはそれ以上）。
 
-### レートリミット（リクエスト制限）規約
-* **必須適用箇所**:
-    * ログインAPI（認証試行）
-    * パスワードリセット・メール送信API
-    * 公開API全般（認証不要エンドポイントは特に厳格に適用すること）
-* **実装方針**: Spring Boot 環境において、`Bucket4j` または `Valkey` を用いたレートリミット機構を実装する。
-* **制限値の目安**:
-    * 認証系: 同一IPにつき「1分間に10回まで」等の厳格な制限。
-    * 一般API: サービスの特性に応じた妥当なバースト許容値を設定。
-    * **`POST /error-reports`（エラーレポート送信）**: 認証不要の公開エンドポイントのため以下の制限を適用する。
-        * 同一IPにつき **1分間に10回まで**（実装: ErrorReportRateLimitFilter、F12.5 §5.6）。
-        * 制限超過時は `429 Too Many Requests` を返し、`Retry-After` ヘッダーで再試行可能時刻を通知する
-* **レスポンス**: 制限超過時は、HTTPステータス `429 Too Many Requests` を返却すること。
+**パスワードポリシー**
+- 最低 8 文字以上（推奨 12 文字以上）。英大文字・小文字・数字・記号のうち **3 種類以上**の組み合わせを必須とする。
+- ユーザーIDと同じ文字列や一般的すぎるパスワード（`123456`, `password` 等）を拒否するチェックを実装する。
 
-### CORS（交差オリジンリソース共有）設定規約
-* **ワイルドカードの禁止**: `AllowedOrigins` に `*`（すべて許可）を設定することを禁止する。必ず信頼できる特定のドメインのみを許可すること。
-* **環境変数による管理**: 許可するドメイン（Origin）のリストは、コード内に直接記述（ハードコード）せず、`MANNSCHAFT_ALLOWED_ORIGINS` 環境変数として外部から注入する構成とする（`.claudecode.md` §21 命名規約に準拠）。
-* **環境別の設定**: 開発環境（localhost等）と本番環境で許可リストを適切に切り分け、本番環境に不要なドメインが含まれないよう徹底する。
+**JWT 運用**
+- Access Token は **15分**、Refresh Token は **7日間**。
+- Refresh Token での Access Token 発行時は Refresh Token 自体も新しく発行し、古いものを無効化する（ローテーション）。
+- ログアウト時は該当トークンを Valkey 上のブラックリストに登録し、期限内でも即座に使用不能にする。
+- 認証は二本立てである。**Web は `HttpOnly`・`SameSite=Strict` の Cookie**（`access_token` と `refresh_token`）、**ネイティブアプリは `Authorization: Bearer` ヘッダー**で送る。BE は Bearer を優先し、無ければ Cookie を読む（`JwtAuthenticationFilter`）。FE はトークンをメモリにだけ持ち、`localStorage` / `sessionStorage` には保存しない。CSRF は `SameSite=Strict` と同一オリジンで防ぐ（2026-11-17 マスター裁可により、実装と `docs/features/F01.1_auth.md`・`docs/security/02_cookie_and_session.md` に合わせて改訂）。
+- デバイスバインディング（推奨）: Refresh Token 使用時に発行時の IP アドレスと User-Agent の一致を検証し、不一致ならトークンを無効化して再ログインを要求する。
 
-### ストレージ（Pre-signed URL）運用規約
-* **有効期限の最小化**: アップロード/ダウンロード用に発行する Pre-signed URL の有効期限は、原則 **5〜15分** 以内に設定する。
-* **アップロード制限**:
-    * **ファイルサイズ**: 発行時に `content-length-range` を指定し、期待されるファイルサイズ（例：5MB以下）を超えるリクエストを拒否する。
-    * **ファイル形式**: `Content-Type` を固定し、予期せぬファイル形式のアップロードを防止する。
-* **一度限りの使用**: セキュリティ向上のため、1つのURLで実行できる操作は1回のみ（Single Use）とする実装を検討する。
+**WebSocket (STOMP) 認証**
+- 利用者の JWT と掲示端末 capability を区別し、WebSocket URL の query を資格情報として受け付けない。
+- JWT は STOMP `CONNECT` の `Authorization`、掲示端末 token は専用 native header `X-Signage-Token` で渡す。Bearer/Cookie/匿名の優先順位は `docs/security/01_authorization_baseline.md` §5 に従う。
+- 明示した無効資格は拒否し、資格なし CONNECT は匿名として各 topic の購読・配送境界で認可する。掲示端末は購読時と recipient ごとの配送時に token・画面の現在状態を検証する。
+- 詳細なヘッダー処理・保持情報・HTTP upgrade の契約は [§8 詳細](../docs/conventions/backend/08-security.md#websocket-stomp-認証規約) を正本とする。
 
-### コンテンツセキュリティポリシー (CSP) 運用規約
-* **基本方針**: XSS攻撃に対する多層防御として、HTTPレスポンスヘッダーに `Content-Security-Policy` を設定する。
-* **デフォルト設定**: `default-src 'self';` を基本とし、原則として自ドメイン以外のリソース読み込みを制限する。
-* **スクリプト制限**: `script-src 'self';` とし、HTML内に直接記述されたインラインスクリプトの実行を禁止する。
-* **外部リソースの許可**: Google Fonts、外部分析ツール（GA等）、特定の外部APIなど、業務上必要なドメインのみを明示的にホワイトリストへ追加する。
-* **運用開始ステップ**: 開発初期は `Content-Security-Policy-Report-Only` ヘッダーを使用し、正常な動作を妨げないことを確認してから正式に適用（Enforce）する。
+**レートリミット**
+- 必須適用箇所: ログイン API（認証試行）、パスワードリセット・メール送信 API、公開 API 全般（認証不要エンドポイントは特に厳格に）。
+- `Bucket4j` または `Valkey` を用いたレートリミット機構を実装する。
+- 目安: 認証系は同一 IP につき「1 分間に 10 回まで」等の厳格な制限。一般 API はサービス特性に応じた妥当なバースト許容値を設定。
+- `POST /error-reports`（認証不要の公開エンドポイント）は同一 IP につき **1 分間に 10 回まで**（実装 `ErrorReportRateLimitFilter`、F12.5 §5.6）。超過時は `429 Too Many Requests` と `Retry-After` ヘッダーで再試行可能時刻を通知する。
+- 制限超過時は HTTP ステータス `429 Too Many Requests` を返す。
 
-### APIリクエストサイズ制限
-* **リクエストボディ**: Spring Boot のデフォルト設定をベースに、APIエンドポイントのリクエストボディは原則 **1MB以下** に制限する。
-* **ファイルアップロード**: ファイルのアップロードは Pre-signed URL 経由で行うため、API サーバーにファイルを直接送信しない。`spring.servlet.multipart.max-file-size` は小さく設定し（例: 1MB）、不正な大容量リクエストを遮断する。
-* **例外**: アバター画像など小さなファイルを API 経由で受け付ける場合は、エンドポイントごとに個別設定する。
+**CORS**
+- `AllowedOrigins` に `*`（すべて許可）を設定することを**禁止**。信頼できる特定ドメインのみ許可する。
+- 許可 Origin はコードにハードコードせず、`MANNSCHAFT_ALLOWED_ORIGINS` 環境変数として外部から注入する（`.claudecode.md` §21 命名規約に準拠）。
+- 開発環境（localhost 等）と本番環境で許可リストを切り分け、本番に不要なドメインが含まれないようにする。
 
-### 静的解析 (Checkstyle)
-* **導入方針**: Gradle の Checkstyle プラグインを導入し、`gradle checkstyleMain` でコーディング規約への準拠を自動検証する。
-* **設定ファイル**: `config/checkstyle/checkstyle.xml` にプロジェクト共通のルールセットを配置する。Google Java Style をベースに、本規約に合わせてカスタマイズする。
-* **主な検査項目**:
-    * インデント（半角スペース4つ）
-    * 命名規則（camelCase / PascalCase / UPPER_SNAKE_CASE）
-    * メソッド行数上限（200行）
-    * ネスト深度上限（3階層）
-    * `import` の整理（ワイルドカードインポート `*` の禁止、未使用インポートの検出）
-    * Javadoc の存在チェック（クラスレベル必須）
-* **CI 統合**: GitHub Actions の CI パイプラインに `checkstyleMain` タスクを組み込み、違反がある場合はビルドを失敗させる。
-* **抑制**: やむを得ず規約に従えない箇所は `@SuppressWarnings("checkstyle:ルール名")` で個別に抑制し、理由をコメントに残すこと。ファイル単位での抑制（`suppressions.xml`）は原則禁止する。
+**ストレージ（Pre-signed URL）**
+- 有効期限は原則 **5〜15分** 以内。
+- 発行時に `content-length-range` を指定して期待サイズ（例: 5MB 以下）超過を拒否し、`Content-Type` を固定して予期せぬ形式を防ぐ。
+- 1 つの URL で実行できる操作を 1 回のみ（Single Use）とする実装を検討する。
 
-### 静的バグ検出 (SpotBugs)
-* **導入方針**: Gradle の SpotBugs プラグインを導入し、`gradle spotbugsMain` でバグパターンを自動検出する。Checkstyle がスタイルを検査するのに対し、SpotBugs は**実際のバグ**（NullPointerException、リソースリーク、並行処理の不具合等）を検出する。両者は役割が異なるため併用する。
-* **検出レベル**: 報告レベルは `medium` 以上、検出努力（effort）は `max` を基本設定とする。
-* **主な検出カテゴリ**:
-    * Null参照の可能性（`NP_NULL_ON_SOME_PATH` 等）
-    * リソースの閉じ忘れ（`OBL_UNSATISFIED_OBLIGATION` 等）
-    * 並行処理の問題（`IS2_INCONSISTENT_SYNC` 等）
-    * 無意味な比較・計算（`EC_UNRELATED_TYPES` 等）
-* **CI 統合**: GitHub Actions の CI パイプラインに `spotbugsMain` タスクを組み込み、`medium` 以上のバグが検出された場合はビルドを失敗させる。
-* **抑制**: 誤検知の場合は `@SuppressFBWarnings(value = "ルール名", justification = "理由")` で個別に抑制し、理由を必ず明記すること。
+**CSP**
+- HTTP レスポンスヘッダーに `Content-Security-Policy` を設定する。`default-src 'self';` を基本とし、`script-src 'self';` としてインラインスクリプトの実行を禁止する。
+- 外部リソースは業務上必要なドメインのみを明示的にホワイトリストへ追加する。
+- 開発初期は `Content-Security-Policy-Report-Only` で動作を妨げないことを確認してから正式に適用（Enforce）する。
 
-### EditorConfig
-* **目的**: IDE やエディタ間でインデント・改行コード・文字コードを統一し、環境差異によるフォーマット崩れを防止する。
-* **設定ファイル**: プロジェクトルートに `.editorconfig` を配置する。
-* **主な設定内容**:
-    * `charset = utf-8`
-    * `end_of_line = lf`（改行コードを LF に統一し、Git の CRLF 警告を解消する）
-    * `indent_style = space`
-    * Java ファイル: `indent_size = 4`
-    * Vue / TypeScript / JSON / YAML ファイル: `indent_size = 2`
-    * `trim_trailing_whitespace = true`
-    * `insert_final_newline = true`
-* **適用範囲**: バックエンド・フロントエンド共通で適用する。
+**API リクエストサイズ制限**
+- リクエストボディは原則 **1MB 以下**。
+- ファイルアップロードは Pre-signed URL 経由とし、API サーバーに直接送信しない。`spring.servlet.multipart.max-file-size` は小さく設定する（例: 1MB）。
+- 例外: アバター画像など小さなファイルを API 経由で受ける場合は、エンドポイントごとに個別設定する。
 
-### IDE 設定（バックエンド）
-開発者がコーディング中にリアルタイムで規約違反に気づけるよう、以下の IDE 設定を整備する。
+**静的解析 (Checkstyle)**
+- Gradle の Checkstyle プラグインを導入し、`gradle checkstyleMain` で検証する。設定は `config/checkstyle/checkstyle.xml`（Google Java Style ベース）。
+- 主な検査項目: インデント（半角スペース4つ）、命名規則（camelCase / PascalCase / UPPER_SNAKE_CASE）、メソッド行数上限（200行）、ネスト深度上限（3階層）、`import` の整理（ワイルドカード `*` 禁止・未使用検出）、Javadoc の存在チェック（クラスレベル必須）。
+- CI に `checkstyleMain` を組み込み、違反があればビルドを失敗させる。
+- やむを得ない抑制は `@SuppressWarnings("checkstyle:ルール名")` で個別に行い理由をコメントに残す。**ファイル単位の抑制（`suppressions.xml`）は原則禁止**。
 
-#### VS Code
-* **推奨拡張機能**: プロジェクトルートに `.vscode/extensions.json` を配置し、チーム全体で統一する。
-```json
-{
-  "recommendations": [
-    "vscjava.vscode-java-pack",
-    "shengchen.vscode-checkstyle",
-    "editorconfig.editorconfig",
-    "eamodio.gitlens"
-  ]
-}
-```
-* **ワークスペース設定**: `.vscode/settings.json` を配置する。
-```json
-{
-  "java.format.settings.url": "config/checkstyle/checkstyle.xml",
-  "java.format.enabled": true,
-  "editor.formatOnSave": true,
-  "java.checkstyle.configuration": "${workspaceFolder}/config/checkstyle/checkstyle.xml",
-  "java.checkstyle.version": "10.17.0",
-  "files.eol": "\n",
-  "files.trimTrailingWhitespace": true,
-  "files.insertFinalNewline": true
-}
-```
+**静的バグ検出 (SpotBugs)**
+- Gradle の SpotBugs プラグインを導入し、`gradle spotbugsMain` で検出する。Checkstyle とは役割が異なるため併用する。
+- 報告レベルは `medium` 以上、検出努力（effort）は `max` を基本とする。
+- CI に `spotbugsMain` を組み込み、`medium` 以上のバグが検出されたらビルドを失敗させる。
+- 誤検知の抑制は `@SuppressFBWarnings(value = "ルール名", justification = "理由")` で個別に行い、理由を必ず明記する。
 
-#### IntelliJ IDEA
-* **推奨プラグイン**: `CheckStyle-IDEA`, `Save Actions`（または IDE 標準の Save Actions）。
-* **Checkstyle 連携**: `CheckStyle-IDEA` プラグインで `config/checkstyle/checkstyle.xml` を読み込み、リアルタイムインスペクションを有効化する。
-* **保存時アクション**: `Settings → Tools → Actions on Save` で以下を有効化する。
-    * `Reformat code`（コードフォーマット）
-    * `Optimize imports`（未使用インポートの除去）
-* **コードスタイル同期**: `Settings → Editor → Code Style → Java → Import Scheme → Checkstyle configuration` で Checkstyle 設定をインポートし、IDE のフォーマッタと規約を一致させる。
-* **設定ファイル**: `.idea/` 配下の設定は `.gitignore` で除外し、プロジェクト共有が必要な設定は `README` またはセットアップガイドに手順を記載する。
+**EditorConfig**
+- プロジェクトルートに `.editorconfig` を配置し、バックエンド・フロントエンド共通で適用する。
+- 主な設定: `charset = utf-8`、`end_of_line = lf`、`indent_style = space`、Java は `indent_size = 4`、Vue / TypeScript / JSON / YAML は `indent_size = 2`、`trim_trailing_whitespace = true`、`insert_final_newline = true`。
 
-### pre-commit フック
-* **目的**: コミット前に静的解析・フォーマットチェックを自動実行し、規約違反がリポジトリに混入するのを防止する。CI まで待たずにローカルで即検知できるため、フィードバックループが短縮される。
+**IDE 設定（バックエンド）**
+- VS Code: `.vscode/extensions.json` に推奨拡張機能（`vscjava.vscode-java-pack` / `shengchen.vscode-checkstyle` / `editorconfig.editorconfig` / `eamodio.gitlens`）、`.vscode/settings.json` にワークスペース設定を置く。
+- IntelliJ IDEA: `CheckStyle-IDEA` と Save Actions を使い、保存時に `Reformat code` と `Optimize imports` を有効化し、Checkstyle 設定を Import Scheme でインポートして IDE のフォーマッタと規約を一致させる。`.idea/` 配下は `.gitignore` で除外し、共有が必要な設定は README かセットアップガイドに手順を記載する。
 
-#### バックエンド セットアップ手順
-`gradle-git-hooks` プラグインを使用し、Gradle ビルドと Git フックを統合する。
+**pre-commit フック**
+- コミット前に静的解析・フォーマットチェックを自動実行する。バックエンドは `gradle-git-hooks` プラグイン（`preCommit = "checkstyleMain spotbugsMain"`、クローン後に `./gradlew installGitHooks`）または `.githooks/pre-commit` ＋ `git config core.hooksPath .githooks`。フロントエンド（`frontend/`）は **Husky + lint-staged**（ステージ済みファイルのみ対象）。
+- フックのスキップ（`git commit --no-verify`）は緊急時のみに限定し、通常の開発では**禁止**。
+- 新規開発者のオンボーディング手順に `./gradlew installGitHooks`（バックエンド）と `npm install`（フロントエンド、Husky が `prepare` で自動設定）を含める。
 
-1. **`build.gradle.kts` にプラグイン追加**:
-```kotlin
-plugins {
-    id("com.github.niclasvoss.gradle-git-hooks") version "0.0.3"
-}
+**テストデータ作成パターン（TestFixture 方式）**
+- テストデータ生成は **TestFixture クラス**に集約する。配置は共通が `src/test/java/com/mannschaft/app/common/TestFixture.java`、機能固有が `[feature]/[Feature]TestFixture.java`。「最低限有効なデフォルト値」を持つ static メソッドを用意し、テストごとに必要なフィールドだけオーバーライドする。
+- DB に保存する場合は **Repository 経由**で行う。**手書きの INSERT SQL は禁止**（エンティティの変更に追従できなくなるため）。
+- テスト間でデータが干渉しないよう、`@Transactional`（自動ロールバック）または `@BeforeEach` でクリーンアップする。
+- テストメソッド名は日本語を許容する（テストの意図を明確にすることを優先）。
 
-gitHooks {
-    preCommit = "checkstyleMain spotbugsMain"
-}
-```
-
-2. **フック登録**: プロジェクトのクローン後に以下を実行する。
-```bash
-./gradlew installGitHooks
-```
-
-3. **代替方式（手動スクリプト）**: プラグインを使用しない場合は、`.githooks/pre-commit` にシェルスクリプトを配置し、`git config core.hooksPath .githooks` で有効化する。
-```bash
-#!/bin/sh
-echo "Running pre-commit checks..."
-./gradlew checkstyleMain spotbugsMain --daemon
-if [ $? -ne 0 ]; then
-  echo "Pre-commit checks failed. Commit aborted."
-  exit 1
-fi
-```
-
-#### フロントエンド セットアップ手順（`frontend/` ディレクトリ）
-**Husky** + **lint-staged** を導入する。
-
-1. **依存インストールとHusky初期化**:
-```bash
-npm install -D husky lint-staged
-npx husky init
-```
-
-2. **`.husky/pre-commit` を編集**:
-```bash
-npx lint-staged
-```
-
-3. **`package.json` に lint-staged 設定を追加**:
-```json
-{
-  "lint-staged": {
-    "*.{ts,vue}": ["eslint --fix", "prettier --write"],
-    "*.{json,md,yml}": ["prettier --write"]
-  }
-}
-```
-
-4. **動作確認**: ステージされたファイルのみを対象に `eslint --fix` および `prettier --write` が実行される。全ファイルを対象にしないことで高速性を維持する。
-
-#### 強制力
-* フックのスキップ（`git commit --no-verify`）は緊急時のみに限定し、通常の開発では禁止する。
-* 新規開発者のオンボーディング手順に `./gradlew installGitHooks`（バックエンド）および `npm install`（フロントエンド、Husky が `prepare` スクリプト経由で自動設定）を含めること。
-
-### テストデータ作成パターン（TestFixture 方式）
-
-テストデータの生成を集約するため、**TestFixture クラス**を作成する。
-
-#### 配置ルール
-```
-src/test/java/com/mannschaft/app/
-├── common/
-│   └── TestFixture.java          # 共通ヘルパー（User, Team 等の頻出エンティティ）
-└── [feature]/
-    └── [Feature]TestFixture.java  # 機能固有のテストデータ
-```
-
-#### 書き方
-```java
-public class TestFixture {
-    // 「最低限有効なデフォルト値」を持つ static メソッドを用意する
-    public static UserEntity defaultUser() {
-        return UserEntity.builder()
-            .email("test@example.com")
-            .lastName("テスト")
-            .firstName("太郎")
-            .displayName("テスト太郎")
-            .build();
-    }
-
-    // テストごとに必要なフィールドだけオーバーライドする
-    public static UserEntity userWithRole(RoleType role) {
-        return defaultUser().toBuilder()
-            .role(role)
-            .build();
-    }
-}
-```
-
-#### ルール
-- DB に保存する場合は **Repository 経由**で行う: `userRepository.save(TestFixture.defaultUser())`
-- **手書きの INSERT SQL は禁止**（エンティティの変更に追従できなくなるため）
-- テスト間でデータが干渉しないよう、`@Transactional`（自動ロールバック）または `@BeforeEach` でクリーンアップする
-- テストメソッド名は日本語を許容する（例: `void 管理者のみチーム作成が可能()`）。テストの意図を明確にすることを優先する
-
-### テスト実行環境
-* **統合テスト**: データベースを用いた統合テストには **Testcontainers** (MySQL 8.0) を使用する。ローカル環境に MySQL をインストールする必要はない。
-* **CI/CD**: GitHub Actions 等の CI パイプラインでも Testcontainers を実行する。Docker-in-Docker または Docker Socket マウント方式を使用すること。
-* **テスト分離**: 統合テストとユニットテストは Gradle タスクで分離可能にする（例: `gradle test` でユニット、`gradle integrationTest` で統合テスト）。
+**テスト実行環境**
+- DB を用いた統合テストには **Testcontainers**（MySQL 8.0）を使う（ローカルに MySQL のインストールは不要）。
+- CI でも Testcontainers を実行する（Docker-in-Docker または Docker Socket マウント方式）。
+- 統合テストとユニットテストは Gradle タスクで分離可能にする（例: `gradle test` でユニット、`gradle integrationTest` で統合）。

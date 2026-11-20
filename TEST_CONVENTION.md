@@ -7,11 +7,11 @@
 | 内容 | 参照先 |
 |------|--------|
 | JUnit 5 / Mockito / JaCoCo 80% / テスト容易性 | `backend/BACKEND_CODING_CONVENTION.md` §4 |
-| TestFixture 方式（テストデータ作成パターン） | `backend/BACKEND_CODING_CONVENTION.md` テストデータ作成パターン |
-| テスト実行環境（Testcontainers / CI / テスト分離） | `backend/BACKEND_CODING_CONVENTION.md` テスト実行環境 |
+| TestFixture 方式（テストデータ作成パターン） | `docs/conventions/backend/08-security.md`（BACKEND_CODING_CONVENTION.md §8 の詳細ファイル）のテストデータ作成パターン |
+| テスト実行環境（Testcontainers / CI / テスト分離） | `docs/conventions/backend/08-security.md`（BACKEND_CODING_CONVENTION.md §8 の詳細ファイル）のテスト実行環境 |
 | Vitest / Vue Test Utils / テスト対象優先順位 / 配置ルール | `frontend/FRONTEND_CODING_CONVENTION.md` §11 |
 | 新モジュール追加時のテスト要件 | `backend/.claudecode.md` §7 |
-| pre-commit フック（Checkstyle / SpotBugs / ESLint） | `backend/BACKEND_CODING_CONVENTION.md` pre-commit フック |
+| pre-commit フック（Checkstyle / SpotBugs / ESLint） | `docs/conventions/backend/08-security.md`（BACKEND_CODING_CONVENTION.md §8 の詳細ファイル）のpre-commit フック |
 
 ---
 
@@ -448,7 +448,7 @@ src/test/java/com/mannschaft/app/
     └── [Feature]TestFixture.java             # 機能固有テストデータ
 ```
 
-- 配置は `backend/BACKEND_CODING_CONVENTION.md` テストデータ作成パターンのルールに従う
+- 配置は `docs/conventions/backend/08-security.md` のテストデータ作成パターンのルールに従う
 - 単体テストと結合テストは同一パッケージに配置し、クラス名のサフィックスで区別する
 
 ### 6.2 フロントエンド
@@ -524,7 +524,7 @@ Spring のテストコンテキストを使わない。通常の `test` はタ�
   導出したクラス別件数に照合する。件数欠落、重複 case、failure/error/skip は失敗となる。
   store のバイト同値だけを実行の証明とせず、実行後の Integrity 2 case と合わせて確認する。
   `archUnitTest` は heap 4g・forkEvery=0・maxParallelForks=1 とし、全 compiled class の選別を
-  1 JVM にまとめる。通常 `test` の180 class毎のfork・parallel・6 shardの割当は維持する。
+  1 JVM にまとめる。通常 `test` の180 class毎のfork・parallelは維持し、mainと同じ8 shardに割り当てる。
 
 - `@Tag(ArchUnitTestTag.ARCHUNIT)` を付けた **junit-jupiter** のテストクラスは `archTest`（heap 3g・
   1 JVM）が走らせる。
@@ -781,6 +781,20 @@ void cleanup() {
     - 決済フロー（Stripe テストモード）
 - ヘッドレスモードで CI 上で実行する
 
+#### 完了条件（新規 E2E spec）
+
+- 新規に追加する E2E spec は、再試行なし（`--retries=0`）で、`--workers=1` で5回連続して成功し、かつ既定の並列ワーカー数で1回成功して、はじめて完了とする
+- 理由: 直列の連続実行で不安定さ（flaky）を、並列実行で共有状態の衝突を検出するため。再試行を許すと失敗が隠れるので `--retries=0` を付ける
+- 並列の確認は、環境変数 `CI` を設定していないローカルで行う。`frontend/playwright.config.ts` は `CI` が有効だと `workers: 1`（かつ `retries: 2`）になり、並列にならないため
+
+```bash
+cd frontend
+npx playwright test <spec> --workers=1 --repeat-each=5 --retries=0
+npx playwright test <spec> --retries=0
+```
+
+- 実行の前提（接続先、サーバーの起動条件、project や専用 config の選択）は `frontend/playwright.config.ts` と、その spec が属する実行手順（実機 E2E は `docs/testing/real_e2e_setup.md`）に従う。上のコマンドは既定の config で実行できる spec の例である
+
 ### 9.3 E2E テストの配置
 
 ```
@@ -928,7 +942,7 @@ public void dispatch() { ... }
 | 本番 DB や外部 API に直接接続するテスト | Testcontainers またはモックを使用する |
 | テスト専用の `if (isTest)` 分岐をプロダクションコードに入れる | DI やプロファイルで切り替える |
 | `@Disabled` を理由なく放置する | 一時的な無効化は許容するが、理由をコメントに記載し、1スプリント以内に解決する |
-| 手書きの INSERT SQL でテストデータを作成する | TestFixture 経由で作成する（`backend/BACKEND_CODING_CONVENTION.md` テストデータ作成パターン参照） |
+| 手書きの INSERT SQL でテストデータを作成する | TestFixture 経由で作成する（`docs/conventions/backend/08-security.md` のテストデータ作成パターン参照） |
 | **Controller を `@Autowired` して直接メソッド呼び出しでテストする** | HTTP 層を迂回し、URL パス・HTTP メソッド・enum バインド・JSON 形状・`@Valid`・例外→ステータス変換を一切検証できない。村ドメインで契約不一致 17 件を素通しにした実害あり。MockMvc を使うこと（**§3.1.1** に詳細）|
 | **ArchUnit を使うテストに `@Tag(ArchUnitTestTag.ARCHUNIT)`（`@AnalyzeClasses` なら `@ArchTag(ArchUnitTestTag.ARCHUNIT)`）を付けない／タグ付きテストで Spring のテストコンテキストを使う** | ArchUnit の本番取り込み（約 1.1GB）が Spring 系 IT と同じ JVM に乗り、shard 5 が OOM した（CMP-261002-1606）。ArchUnit テストは通常の `test` から除外され、専用タスク `archTest`（別 JVM・shard 分割なし）で走る。番人 `ArchUnitTestTagGuardTest` がタグ漏れ・Spring 混在・shard 重み表への混入を拒否する（詳細: `backend/.claudecode.md` §30）|
 | **ArchUnit で本番全体を `ClassFileImporter` で手動取り込みする／`JavaClasses` を static フィールドで保持する** | 取り込み結果が JVM 内に何コピーも残り、全量 CI の shard が `Java heap space` で落ちた（CMP-261002-1606）。本番全体は共有ホルダ `ProductionClasses.get()` だけを使う。番人 `ProductionClassImportGuardTest` が拒否する（詳細: `backend/.claudecode.md` §30）|

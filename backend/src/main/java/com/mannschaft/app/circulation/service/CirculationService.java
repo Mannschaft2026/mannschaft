@@ -303,7 +303,8 @@ public class CirculationService {
         if (mode == CirculationMode.UNKNOWN) {
             throw new BusinessException(
                     CommonErrorCode.COMMON_001,
-                    List.of(new ErrorResponse.FieldError("circulationMode", "定義されていない値です")));
+                    List.of(ErrorResponse.FieldError.ofKey("circulationMode",
+                            EnumInputParser.INVALID_ENUM_KEY, EnumInputParser.INVALID_ENUM_MESSAGE)));
         }
 
         CirculationDocumentEntity.CirculationDocumentEntityBuilder<?, ?> builder =

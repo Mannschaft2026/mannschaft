@@ -2,7 +2,7 @@
 # Backend — Nightly Full Test（マイグレーションテスト込みフル実行）
 # =============================================================================
 # backend-ci.yml（PR チェック）は db/migration/** を触らない PR で Flyway
-# マイグレーション再生テスト（65 クラス）を -PexcludeMigrationTests=true により
+# マイグレーション再生テスト（クラス数は重み表の実測に従う）を -PexcludeMigrationTests=true により
 # 除外する。実測（PR #2380）でこれらが各 shard の計測テスト時間の 72〜88% を
 # 占めており、V1 → 最新の 150 本超を毎回リプレイして 1 件 assert するだけの
 # 内容が全 PR の壁時計を支配していたためである。
@@ -38,12 +38,12 @@ concurrency:
 
 env:
   JAVA_VERSION: "21"
-  # backend-ci.yml の SHARD_TOTAL と揃える
-  SHARD_TOTAL: "6"
+  # backend-ci.yml の SHARD_TOTAL と揃える（2026-11-18 CMP-261111-0508: 6 → 8）
+  SHARD_TOTAL: "8"
 
 jobs:
   # ---------------------------------------------------------------------------
-  # full-test: 除外なしの全テストを 6 並列で実行する
+  # full-test: 除外なしの全テストを 8 並列で実行する
   #
   # -PexcludeMigrationTests を渡さず、既定 false で全量を検証する。
   # test / archTest は --rerun で実走を保証し、依存 compile の build cache は維持する。
@@ -59,7 +59,7 @@ jobs:
       # 1 shard が失敗しても他 shard を最後まで走らせ、全失敗を一度に把握する
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
