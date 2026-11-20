@@ -18,7 +18,7 @@
 | POST | `/api/v1/shifts/schedules/{id}/slots` | 必要 | スロット作成 |
 | POST | `/api/v1/shifts/schedules/{id}/slots/bulk` | 必要 | スロット一括作成 |
 | PATCH | `/api/v1/shifts/slots/{id}` | 必要 | スロット更新（部分更新、PUT から PATCH へ変更） |
-| DELETE | `/api/v1/shifts/slots/{id}` | 必要 | スロット削除（物理削除） |
+| DELETE | `/api/v1/shifts/slots/{id}` | 必要 | スロット削除（論理削除） |
 | PATCH | `/api/v1/shifts/slots/{id}/assignments` | 必要 | **【v2】D&D UI 用の差分割当 API（個別ユーザー追加・削除）** |
 | POST | `/api/v1/shifts/slots/{id}/assignments/move` | 必要 | **【CMP-261010-1432】枠間移動（1 トランザクションで移動元から外し移動先へ入れる）** |
 | GET | `/api/v1/shifts/requests` | 必要 | 希望一覧取得（管理者用、クエリパラメータ `scheduleId` でスケジュール絞り込み。旧 `GET /shifts/schedules/{id}/requests` を統合） |
@@ -343,6 +343,36 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 > ※ 旧設計は `PATCH /status` + `PATCH /publish` の 2 本。Phase 2 で `POST /transition` 1 本に統合し、リクエストボディの `target_status` で遷移先を指定する方式に変更。以降のサブセクションは旧設計の参考情報として残す。
 
+**公開時の時給必須ガード（CMP-261115-1821）**
+
+`ADJUSTING → PUBLISHED` の遷移では、予算連動の勤務日に割り当てられた全メンバーに、勤務日時点で有効な**正数の時給**があることを検証する。予算連動とは、勤務日が有効な予算割当（チーム個別優先・組織共通フォールバック）の期間に入り、かつ予算機能が有効な日を指す。予算連動の勤務日が1日もない、または割当者がいないシフト表は従来どおり公開できる。一般参加者には時給を要求しない。
+
+| ステータス | エラーコード | 条件 |
+|-----------|-------------|------|
+| 400 | `SHIFT_047`（`HOURLY_RATE_MISSING_FOR_PUBLICATION`） | 予算連動の勤務日の割当者に、有効な正数時給（null・0・負数は不可）が無い。公開は全体がロールバックされ、公開イベントも発行されない |
+| 409 | `COMMON_003` | 公開の検証後から確定までの間に、勤務日が検証範囲の外へ出た、または空だった割当が非空へ変わった。更新・イベントとも0件で拒否する。画面を読み込み直してから再操作する |
+
+400 の応答は、時給を確認できなかった（userId, 勤務日）を重複なしで昇順に全件返す。金額は載せない。
+
+```json
+{
+  "error": {
+    "code": "SHIFT_047",
+    "message": "...",
+    "fieldErrors": [],
+    "details": {
+      "missingHourlyRates": [
+        { "userId": 7, "slotDate": "2026-11-20" }
+      ]
+    }
+  }
+}
+```
+
+応答スキーマは OpenAPI の `ShiftHourlyRateMissingErrorResponse`。公開時と、公開後の予算消化額の実計上（非同期）との間の原子性は保証しない。計上側も正数時給を必須とし、時給が無い場合は計上せず失敗として記録する。
+
+FE は公開操作（シフト表一覧の公開ボタン、シフト詳細の「確定公開」）で 400 を受けると、対象者名と勤務日の一覧を表示し、ADMIN には時給設定画面（`/teams/{slug}/settings/hourly-rate`）への導線を出す。409 では読み込み直してから再操作するよう案内する。
+
 #### 【旧】`PATCH /api/v1/shifts/schedules/{id}/status`
 
 シフトスケジュールのステータスを変更する。許可される遷移のみ受け付ける。
@@ -612,7 +642,7 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 #### `DELETE /api/v1/shifts/slots/{id}`
 
-スロットを物理削除する。`PUBLISHED` / `ARCHIVED` 状態では削除不可。
+スロットを論理削除し、枠指定希望・割当へ削除日時を連鎖する。希望の行は保持するが、`SLOT_DELETED` の希望は通常一覧・本人履歴には返さない。日単位希望は対象外。枠編集画面は確認ダイアログを開く際に希望一覧APIで対象枠の希望件数を取得し、件数（希望・割当）と通常操作で復元できないことを警告して、明示的な承諾後に本APIを呼ぶ（件数0なら素の確認のみ）（CMP-260909-2153）。`PUBLISHED` / `ARCHIVED` 状態では削除不可。
 
 **レスポンス（204 No Content）**
 

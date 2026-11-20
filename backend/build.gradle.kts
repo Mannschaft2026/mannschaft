@@ -41,6 +41,55 @@ tasks.withType<JavaCompile> {
     ))
 }
 
+// 公開verifyを既存ArchUnitとは別のJVMで一度実行し、境界違反だけをTXTへ記録する。
+// 解析・保存の障害は通常どおり失敗させ、PR/nightly共通のarch結果収集へ載せる。
+val modulithVerificationReport = tasks.register<JavaExec>("modulithVerificationReport") {
+    group = "verification"
+    description = "本番モジュールの境界違反をreport-onlyで記録する"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.mannschaft.app.moduleevent.report.ProductionModuleVerificationReport")
+    workingDir = projectDir
+    // Test型の設定は継承されないため、既存archTestと同じ上限を明示する。
+    maxHeapSize = "3g"
+    dependsOn("testClasses")
+}
+tasks.named("archTest") {
+    finalizedBy(modulithVerificationReport)
+}
+
+// L1-M 実機E2E: 通常の本番クラスパスに、試験用の検体（moduleevent/e2e パッケージ）だけを足して起動する。
+// test の出力全体を載せると他の試験用 bean・application-test.yml が混入するため、検体パッケージだけを JAR に切り出す。
+// 使い方（backend で実行。DB/Valkey は通常の bootRun と同じ application-local.yml に従う）:
+//   MANNSCHAFT_ALLOWED_ORIGINS=http://localhost:3001,http://localhost:8081 ./gradlew bootRunModuleEventE2e
+// 既定ポートは 8081（検証用 worktree の規約）。--args で上書き可。停止は Ctrl+C（検体データを撤去してから終了する）。
+val moduleEventE2eFixtureJar = tasks.register<Jar>("moduleEventE2eFixtureJar") {
+    group = "verification"
+    description = "L1-M 実機E2E の検体クラスだけを JAR にする"
+    archiveBaseName.set("module-event-e2e-fixture")
+    destinationDirectory.set(layout.buildDirectory.dir("module-event-e2e"))
+    from(sourceSets["test"].output.classesDirs) {
+        include("com/mannschaft/app/moduleevent/e2e/**")
+        exclude("**/*Test.class", "**/*Test$*.class")
+    }
+    dependsOn("testClasses")
+}
+tasks.register<JavaExec>("bootRunModuleEventE2e") {
+    group = "application"
+    description = "L1-M 実機E2E 用 BE（本番クラス＋試験用 ReliableEvent 検体）を 8081 で起動する"
+    classpath = sourceSets["main"].runtimeClasspath + files(moduleEventE2eFixtureJar)
+    mainClass.set("com.mannschaft.app.moduleevent.e2e.ModuleEventRealE2eApplication")
+    workingDir = projectDir
+    args("--server.port=8081")
+    // ヒープ・GC・MySQL cleanup スレッド抑止は bootRun と同じ
+    jvmArgs(
+        "-Xmx1g",
+        "-XX:+UseG1GC",
+        "-XX:+HeapDumpOnOutOfMemoryError",
+        "-XX:HeapDumpPath=logs/heap-dump.hprof",
+        "-Dcom.mysql.cj.disableAbandonedConnectionCleanup=true"
+    )
+}
+
 // F09.14 Phase 3-B: 重要事項説明書 Word テンプレート docx 生成タスク。
 // `./gradlew generateDisclosureWordTemplates` で 6 種の docx を
 // src/main/resources/docx/disclosure/ および src/test/resources/docx/disclosure/ に出力する。

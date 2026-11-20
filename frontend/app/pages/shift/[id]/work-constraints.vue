@@ -326,7 +326,7 @@ function confirmAddMember() {
       <template #footer>
         <Button :label="t('common.cancel')" text @click="showAddMemberDialog = false" />
         <Button
-          :label="t('common.next')"
+          :label="t('button.next')"
           icon="pi pi-check"
           :disabled="!addMemberUserId"
           @click="confirmAddMember"

@@ -7,6 +7,7 @@ import com.mannschaft.app.bulletin.dto.GlobalCreateCategoryRequest;
 import com.mannschaft.app.bulletin.dto.UpdateCategoryRequest;
 import com.mannschaft.app.bulletin.service.BulletinCategoryService;
 import com.mannschaft.app.bulletin.service.BulletinScopeIdResolver;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -60,6 +61,7 @@ public class GlobalBulletinCategoryController {
 
     private final BulletinCategoryService categoryService;
     private final BulletinScopeIdResolver scopeIdResolver;
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     /**
      * カテゴリ一覧を取得する（グローバル方式）。
@@ -86,8 +88,14 @@ public class GlobalBulletinCategoryController {
             }
             categories = categoryService.listVillageCategories(scopeVillageId, currentUserId);
         } else {
-            Long resolvedScopeId = scopeIdResolver.resolve(type, scopeId);
-            categories = categoryService.listCategories(type, resolvedScopeId, currentUserId);
+            Long resolvedScopeId = scopeIdResolver.resolveGlobal(type, scopeId);
+            if (BulletinTournamentScopeAccessGuard.isTournamentScope(type)) {
+                // 大会/ディビジョンの閲覧認可は取引外（D-3T）。サービス呼び出しの前に通す。
+                tournamentScopeAccessGuard.checkListView(type, resolvedScopeId, currentUserId);
+                categories = categoryService.listTournamentCategories(type, resolvedScopeId);
+            } else {
+                categories = categoryService.listCategories(type, resolvedScopeId, currentUserId);
+            }
         }
         return ResponseEntity.ok(ApiResponse.of(categories));
     }
