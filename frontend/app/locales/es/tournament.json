@@ -111,6 +111,7 @@
       "empty_history": "No hay historial de transferencias"
     },
     "roster": {
+      "load_match": "Cargar",
       "title": "Lista de jugadores del partido",
       "submit": "Enviar",
       "apply_template": "Aplicar plantilla",

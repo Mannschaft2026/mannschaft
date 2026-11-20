@@ -102,7 +102,7 @@ async function onDeleteFile(file: SharedFile) {
   try {
     await deleteFile(file.id)
     files.value = files.value.filter(f => f.id !== file.id)
-    showSuccess(t('common.deleted'))
+    showSuccess(t('disclosure.deleted'))
   }
   catch {
     showError(t('error.network'))
@@ -258,7 +258,7 @@ onMounted(() => loadFolder(null))
             text
             rounded
             size="small"
-            :aria-label="$t('common.download')"
+            :aria-label="$t('disclosure.actions.download')"
             @click="onDownload(file)"
           />
           <Button
@@ -268,7 +268,7 @@ onMounted(() => loadFolder(null))
             rounded
             size="small"
             severity="danger"
-            :aria-label="$t('common.delete')"
+            :aria-label="$t('button.delete')"
             @click="onDeleteFile(file)"
           />
         </div>
