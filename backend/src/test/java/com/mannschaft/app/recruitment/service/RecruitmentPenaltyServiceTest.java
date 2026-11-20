@@ -3,6 +3,7 @@ package com.mannschaft.app.recruitment.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.recruitment.PenaltyApplyScope;
+import com.mannschaft.app.recruitment.PenaltyLiftReason;
 import com.mannschaft.app.recruitment.RecruitmentErrorCode;
 import com.mannschaft.app.recruitment.RecruitmentScopeType;
 import com.mannschaft.app.recruitment.entity.RecruitmentPenaltySettingEntity;
@@ -11,6 +12,7 @@ import com.mannschaft.app.recruitment.repository.RecruitmentNoShowRecordReposito
 import com.mannschaft.app.recruitment.repository.RecruitmentPenaltySettingRepository;
 import com.mannschaft.app.recruitment.repository.RecruitmentUserPenaltyRepository;
 import com.mannschaft.app.recruitment.event.RecruitmentPenaltyAppliedNotificationEvent;
+import com.mannschaft.app.recruitment.event.RecruitmentPenaltyLiftedNotificationEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -32,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * {@link RecruitmentPenaltyService} の単体テスト。
@@ -196,6 +200,7 @@ class RecruitmentPenaltyServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(RecruitmentErrorCode.PENALTY_NOT_FOUND);
+            verifyNoInteractions(eventPublisher);
         }
 
         @Test
@@ -218,6 +223,7 @@ class RecruitmentPenaltyServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(RecruitmentErrorCode.INVALID_STATE_TRANSITION);
+            verifyNoInteractions(eventPublisher);
         }
 
         @Test
@@ -236,25 +242,29 @@ class RecruitmentPenaltyServiceTest {
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(RecruitmentErrorCode.PENALTY_NOT_FOUND);
             verify(penaltyRepository, never()).save(any());
+            verifyNoInteractions(eventPublisher);
         }
 
         @Test
-        @DisplayName("有効なペナルティは解除され保存される（認可は Facade の責務で本体は見ない）")
+        @DisplayName("GLOBALの手動解除を保存し、発動元のスコープで本人向けイベントを1件発行する")
         void liftPenalty_active_lifts() {
             RecruitmentUserPenaltyEntity penalty = RecruitmentUserPenaltyEntity.builder()
-                    .userId(USER_ID).scopeType(SCOPE_TYPE).scopeId(SCOPE_ID).triggeredBySettingId(5L)
+                    .userId(USER_ID).scopeType(RecruitmentScopeType.GLOBAL).triggeredBySettingId(5L)
                     .startedAt(LocalDateTime.now().minusDays(1))
                     .expiresAt(LocalDateTime.now().plusDays(10))
                     .build();
             given(penaltyRepository.findById(PENALTY_ID)).willReturn(Optional.of(penalty));
             given(settingRepository.findById(5L)).willReturn(Optional.of(
                     RecruitmentPenaltySettingEntity.builder().scopeType(SCOPE_TYPE).scopeId(SCOPE_ID).build()));
+            ReflectionTestUtils.setField(penalty, "id", PENALTY_ID);
             given(penaltyRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
             RecruitmentUserPenaltyEntity result = service.liftPenalty(PENALTY_ID, ADMIN_ID);
 
             assertThat(result.isActive()).isFalse();
             verify(penaltyRepository).save(penalty);
+            verify(eventPublisher).publishEvent(new RecruitmentPenaltyLiftedNotificationEvent(
+                    PENALTY_ID, USER_ID, SCOPE_TYPE, SCOPE_ID, PenaltyLiftReason.ADMIN_MANUAL));
         }
     }
 }

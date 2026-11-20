@@ -57,7 +57,20 @@ class RecruitmentPenaltyLiftedNotificationListenerTest {
         assertThat(request.scopeType()).isEqualTo(NotificationScopeType.TEAM);
         assertThat(request.scopeId()).isEqualTo(33L);
         assertThat(request.actionUrl()).isNull();
-        assertThat(request.body()).contains("AUTO_EXPIRED", "#11", "TEAM #33");
+        assertThat(request.body()).isEqualTo("ペナルティ #11（TEAM #33）は、期限到来（AUTO_EXPIRED）により自動解除されました。");
+    }
+
+    @Test
+    void 管理者の手動解除を本文に明示する() {
+        listener.onPenaltyLifted(new RecruitmentPenaltyLiftedNotificationEvent(
+                11L, 22L, RecruitmentScopeType.ORGANIZATION, 33L, PenaltyLiftReason.ADMIN_MANUAL));
+
+        ArgumentCaptor<NotificationDeliveryRequest> captor = ArgumentCaptor.forClass(NotificationDeliveryRequest.class);
+        verify(notificationDeliveryRunner).sendOne(captor.capture());
+        assertThat(captor.getValue().body())
+                .isEqualTo("ペナルティ #11（ORGANIZATION #33）は、管理者により手動解除されました。");
+        assertThat(captor.getValue().scopeType()).isEqualTo(NotificationScopeType.ORGANIZATION);
+        assertThat(captor.getValue().scopeId()).isEqualTo(33L);
     }
 
     @Test
@@ -75,7 +88,7 @@ class RecruitmentPenaltyLiftedNotificationListenerTest {
 
         ArgumentCaptor<NotificationDeliveryRequest> captor = ArgumentCaptor.forClass(NotificationDeliveryRequest.class);
         verify(notificationDeliveryRunner).sendOne(captor.capture());
-        assertThat(captor.getValue().body()).contains("DISPUTE_REVOKED");
+        assertThat(captor.getValue().body()).isEqualTo("ペナルティ #11（TEAM #33）は、再計算（DISPUTE_REVOKED）により解除されました。");
     }
 
     @Test
