@@ -88,6 +88,8 @@ jobs:
           scripts/unicode-checkout.test.mjs
           scripts/openapi-preflight.test.mjs
           scripts/worktree-sparse-paths.test.mjs
+          scripts/detect-changed-files.test.mjs
+          scripts/ci-merge-group-workflows.test.mjs
           frontend/scripts/lib/sparse-assets.test.mjs
           frontend/scripts/verify-ranch-sparse.test.mjs
 

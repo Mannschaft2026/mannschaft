@@ -95,8 +95,8 @@ for (const wf of WORKFLOWS) {
     } else {
       assert.equal(jobIf, wf.requiredJob.jobIf);
     }
-    // 同名の required check を報告するジョブは1つだけ
-    const sameName = text.split('\n').filter((l) => l.trim() === `name: ${wf.requiredJob.name}`);
+    // 同名の required check を報告するジョブは1つだけ（workflow 名の name: は数えない）
+    const sameName = topLevelBlock(text, 'jobs').filter((l) => l === `    name: ${wf.requiredJob.name}`);
     assert.equal(sameName.length, 1, `name: ${wf.requiredJob.name} が複数ある`);
   });
 
