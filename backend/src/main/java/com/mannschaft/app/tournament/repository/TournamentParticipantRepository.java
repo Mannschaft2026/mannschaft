@@ -246,6 +246,8 @@ public interface TournamentParticipantRepository extends JpaRepository<Tournamen
     /**
      * 指定部門群のうち、当該ユーザーが参加チームの ADMIN/DEPUTY_ADMIN である部門 ID を返す（集約 1 本）。
      * 条件は {@link #countTeamAdminOfDivisionParticipantTeam} と同一。
+     * 大会では絞らないため、大会への帰属は呼び出し側が確かめた部門 ID だけを渡すこと。
+     * native の {@code IN ()} は MySQL で構文エラーになるため、空のコレクションを渡さないこと。
      */
     @Query(value = "SELECT DISTINCT p.division_id FROM tournament_participants p " +
             "JOIN user_roles ur ON ur.team_id = p.team_id AND ur.user_id = :userId " +
@@ -260,6 +262,8 @@ public interface TournamentParticipantRepository extends JpaRepository<Tournamen
     /**
      * 指定部門群のうち、当該ユーザーが参加チームの有効メンバーである部門 ID を返す（集約 1 本）。
      * 条件は {@link #countActiveMemberOfDivisionParticipantTeam} と同一。
+     * 大会では絞らないため、大会への帰属は呼び出し側が確かめた部門 ID だけを渡すこと。
+     * native の {@code IN ()} は MySQL で構文エラーになるため、空のコレクションを渡さないこと。
      */
     @Query(value = "SELECT DISTINCT p.division_id FROM tournament_participants p " +
             "JOIN memberships m ON m.scope_type = 'TEAM' AND m.scope_id = p.team_id " +
