@@ -121,8 +121,8 @@ for (const wf of WORKFLOWS) {
     assert.doesNotMatch(block, /github\.event_name \}\}" != "pull_request"/);
     // 判定スクリプトをインラインの git diff で迂回していない
     assert.doesNotMatch(block, /git diff --name-only "\$\{BASE_SHA\}\.\.\.\$\{HEAD_SHA\}"/);
-    // queue 先行エントリ込みの差分で判定する旨を明記している（AC-6b）
-    assert.match(block, /先行エントリ/);
+    // merge_group はこのエントリ自身の差分で判定する旨を明記している（AC-6b 改訂）
+    assert.match(block, /このエントリ自身の差分/);
   });
 
   test(`${wf.file}: 判定スクリプト自体の変更も実行条件に含める（AC-8b）`, () => {
@@ -131,9 +131,11 @@ for (const wf of WORKFLOWS) {
   });
 }
 
-test('backend-ci.yml: migration 判定器（パターンファイル）の変更で backend_changed=true になる（AC-8b）', () => {
+test('backend-ci.yml: migration 判定器（パターンファイル・判定スクリプト）の変更で backend_changed=true になる（AC-8b）', () => {
   const block = jobBlock(read('.github/workflows/backend-ci.yml'), 'detect').join('\n');
   assert.match(block, /\\\.github\/scripts\/migration-sensitive-paths\\\.regex\$/);
+  assert.match(block, /\\\.github\/scripts\/detect-migration-changes\\\.sh\$/);
+  assert.match(block, /\\\.github\/scripts\/detect-changed-files\\\.sh\$/);
 });
 
 test('migration-sensitive-paths.regex: 判定器自身の変更で migrations_changed=true になる（AC-8b）', () => {
@@ -174,4 +176,5 @@ test('pr-light-checks.yml: merge queue 対応の試験2本が Harness に登録�
   const text = read('.github/workflows/pr-light-checks.yml');
   assert.match(text, /scripts\/detect-changed-files\.test\.mjs/);
   assert.match(text, /scripts\/ci-merge-group-workflows\.test\.mjs/);
+  assert.match(text, /scripts\/ci-change-detection-steps\.test\.mjs/);
 });

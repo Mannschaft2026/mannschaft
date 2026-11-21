@@ -79,18 +79,21 @@ test('pull_request: base...head の3ドット差分で PR が加えた変更だ�
   assert.deepEqual(result.files, ['docs/guide.md']);
 });
 
-test('merge_group: base_sha...head_sha の差分（queue 先行エントリ込み）全体を返す', (t) => {
-  const { root, initial } = makeRepo(t);
-  // queue の先行エントリ（backend 変更）と自エントリ（docs 変更）を積んだ merge group commit を模す
-  git(root, 'checkout', '-q', '-b', 'gh-readonly-queue/main/pr-2');
+test('merge_group: base_sha（先行エントリの合成コミット）...head_sha で、このエントリ自身の差分だけを返す', (t) => {
+  const { root } = makeRepo(t);
+  // queue で先行するエントリの merge group（合成コミット）。base_sha はここを指す。
+  // 先行エントリは自身の merge group で検証済みで、落ちればキューが後続を再構築する。
+  git(root, 'checkout', '-q', '-b', 'gh-readonly-queue/main/pr-1');
   write(root, 'backend/src/main/resources/db/migration/V2__add.sql', 'select 2;\n');
-  commit(root, 'queue 先行エントリ');
+  const precedingComposite = commit(root, 'queue 先行エントリの合成コミット');
+  // このエントリの merge group は先行エントリの合成コミットの上に自エントリを積む
+  git(root, 'checkout', '-q', '-b', 'gh-readonly-queue/main/pr-2');
   write(root, 'docs/guide.md', 'doc\n');
   const head = commit(root, '自エントリ');
 
-  const result = detect(root, 'merge_group', initial, head);
+  const result = detect(root, 'merge_group', precedingComposite, head);
   assert.equal(result.status, EXIT_OK, result.stderr);
-  assert.deepEqual(result.files, ['backend/src/main/resources/db/migration/V2__add.sql', 'docs/guide.md']);
+  assert.deepEqual(result.files, ['docs/guide.md']);
 });
 
 test('merge_group: 関連変更が無ければ空の一覧で正常終了する', (t) => {

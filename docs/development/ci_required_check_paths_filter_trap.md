@@ -130,15 +130,16 @@ GitHub merge queue を使うと、queue に入った PR ごとに「対象ブラ
 |---|---|---|
 | 1 | `on:` に `merge_group` が無いとチェックが報告されない | `merge_group: { types: [checks_requested] }` を追加。ジョブ名・required ジョブの `if: always()`（または job-level `if` 無し）は PR と同じに保つ |
 | 2 | `concurrency.group` を `github.event.pull_request.number` だけで作ると、merge_group / workflow_dispatch では空文字になり全 run が同じ group に入って互いをキャンセルする | `${{ github.event.pull_request.number \|\| github.ref }}` でフォールバックする（merge_group の ref はエントリごとに一意） |
-| 3 | merge_group には `pull_request.base.sha` / `head.sha` が無い。旧来の「pull_request 以外はフル実行」分岐のままだと queue で毎回フル実行になる | `github.event.merge_group.base_sha...head_sha` で差分を取る。この差分は **queue 先行エントリ込み** であり、先行エントリも一緒にマージされる以上その差分全体で判定する |
+| 3 | merge_group には `pull_request.base.sha` / `head.sha` が無い。旧来の「pull_request 以外はフル実行」分岐のままだと queue で毎回フル実行になる | `github.event.merge_group.base_sha...head_sha` で差分を取る。`base_sha` は queue で先行するエントリの合成コミット（先頭なら対象ブランチ先端）を指すので、この差分は **このエントリ自身の差分** になる（先行エントリの変更は含まない）。先行エントリは各自の merge group で検証済みで、先行が落ちればキューが後続を再構築して検証し直すため、自身の差分だけで判定してよい |
 | 4 | 差分取得の失敗（SHA 空・`git diff` 失敗）を「変更なし」に倒すと検査が黙って skip される | 共通スクリプト `.github/scripts/detect-changed-files.sh` が非0で終了し、呼び出し側は全実行（`migrations_changed=true` を含む）に倒す |
 | 5 | 改名・削除で旧パスを見落とす | `git diff --no-renames` で旧パス・新パスの両方を拾う |
-| 6 | 判定スクリプト・パターンファイル自体の変更で検査が走らない | `detect-changed-files.sh` と `migration-sensitive-paths.regex` を各検査の実行条件（migration 判定を含む）に入れている |
+| 6 | 判定スクリプト・パターンファイル自体の変更で検査が走らない | `detect-changed-files.sh`・`detect-migration-changes.sh`・`migration-sensitive-paths.regex` を各検査の実行条件に入れている（backend-ci では `backend_changed=true` かつ `migrations_changed=true`） |
 | 7 | `pull_request_target` は merge_group では発火しない | merge queue の必須チェックにしたい workflow は `pull_request_target` だけに頼らず `merge_group` を明示する |
 
 共通スクリプトの終了コード: `0`=一覧出力 / `2`=SHA・イベント名が空（判定不能）/ `3`=`git diff` 失敗（判定不能）/ `10`=差分判定の対象外イベント（workflow_dispatch・push 等。フル実行）。
 回帰は `scripts/detect-changed-files.test.mjs`（一時 git リポジトリで各分岐を検証）と
-`scripts/ci-merge-group-workflows.test.mjs`（3本の YAML の静的検査）が `pr-light-checks.yml` の `[Harness]` で検出する。
+`scripts/ci-merge-group-workflows.test.mjs`（3本の YAML の静的検査）・
+`scripts/ci-change-detection-steps.test.mjs`（3本の判定ステップの `run:` を YAML から抜き出し、一時 git リポジトリで実行して `GITHUB_OUTPUT` の値を検証）が `pr-light-checks.yml` の `[Harness]` で検出する。
 
 ---
 

@@ -63,7 +63,7 @@ jobs:
           fetch-depth: 0
 
       # 関連変更パス検出。3 ドット（merge-base...head）で PR が実際に加えた変更のみ見る。
-      # merge_group は merge_group.base_sha...head_sha（queue 先行エントリ込みの差分全体）で判定する。
+      # merge_group は merge_group.base_sha...head_sha（このエントリ自身の差分。先行エントリは各自の merge group で検証済み）で判定する。
       # それ以外のイベント（push to main / workflow_dispatch）と判定不能時は安全側で常に全件照合する。
       - name: 関連変更パス検出
         id: changes
@@ -71,8 +71,9 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           # pull_request は PR の base/head、merge_group は queue の base/head を渡す。
-          # merge_group の base_sha...head_sha は queue 先行エントリ込みの差分になる
-          # （先行エントリも一緒にマージされるため、その差分全体で判定する。AC-6b）。
+          # merge_group の base_sha は queue で先行するエントリの合成コミット（先頭エントリなら対象ブランチ先端）を
+          # 指すため、base_sha...head_sha は「このエントリ自身の差分」になる。先行エントリは各自の merge group で
+          # 検証済みであり、先行が落ちればキューが後続を再構築するので、自身の差分だけで判定してよい（AC-6b）。
           BASE_SHA: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
         run: |

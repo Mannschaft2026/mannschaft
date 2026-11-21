@@ -12,10 +12,10 @@
 #   - pull_request: pull_request.base.sha...pull_request.head.sha（3ドット =
 #     merge-base...head）。base が分岐後に進めた変更は含めない（従来どおり）。
 #   - merge_group : merge_group.base_sha...merge_group.head_sha。
-#     merge queue の head は「対象ブランチの先端 + queue の先行エントリ + 自エントリ」を
-#     積んだ一時 commit なので、この差分は **queue 先行エントリ込み** になる。
-#     先行エントリの変更も一緒にマージされる以上、その差分全体で判定するのが正しい
-#     （自エントリだけを見ると先行エントリの backend/migration 変更を取りこぼす）。
+#     base_sha は queue で先行するエントリの合成コミット（先頭エントリなら対象ブランチの
+#     先端）を指すため、この差分は **このエントリ自身の差分** になる（先行エントリの変更は
+#     含まない）。先行エントリは各自の merge group で検証済みであり、先行が落ちれば
+#     キューが後続のエントリを再構築して検証し直すので、自身の差分だけで判定してよい。
 #     base_sha は head の祖先なので 3ドットと2ドットは同じ結果になる。
 #   - それ以外（workflow_dispatch / push / schedule 等）: 差分判定の対象外。
 #     呼び出し側はフル実行（安全側）にすること。
