@@ -16,7 +16,16 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = Path(sys.argv.pop(1)).resolve() if len(sys.argv) > 1 else ROOT / 'gitleaks'
-WORKFLOW = (ROOT / '.github/workflows/secret-scan.yml').read_text(encoding='utf-8')
+# PR差分スキャンは軽量PR検査（pr-light-checks.yml）、main push差分と週次全履歴は secret-scan.yml が持つ。
+# 3経路それぞれが読む workflow と job を対応づけ、すべてを検証対象に保つ。
+PR_WORKFLOW = (ROOT / '.github/workflows/pr-light-checks.yml').read_text(encoding='utf-8')
+SCAN_WORKFLOW = (ROOT / '.github/workflows/secret-scan.yml').read_text(encoding='utf-8')
+SCAN_SOURCES = {
+    'pr-diff': (PR_WORKFLOW, 'light-checks'),
+    'push-diff': (SCAN_WORKFLOW, 'diff-scan'),
+    'full-history': (SCAN_WORKFLOW, 'full-history-scan'),
+}
+DIFF_PATHS = ('pr-diff', 'push-diff')
 CONFIG = ROOT / '.gitleaks.toml'
 TARGET = 'docs/evidence/CMP-261021-0647/root-historical-roundtrip-applicability.json'
 STARTED = time.monotonic()
@@ -34,8 +43,9 @@ def command(args, cwd, expected=(0,)):
     return result
 
 
-def scanner_commands(job, scan_range, report):
-    section = re.search(r'(?ms)^  ' + re.escape(job) + r':\n(.*?)(?=^  [a-z][\w-]*:|\Z)', WORKFLOW)
+def scanner_commands(path, scan_range, report):
+    workflow, job = SCAN_SOURCES[path]
+    section = re.search(r'(?ms)^  ' + re.escape(job) + r':\n(.*?)(?=^  [a-z][\w-]*:|\Z)', workflow)
     if section is None:
         raise AssertionError('workflow job missing')
     scan = re.search(r'(?m)^          \./gitleaks detect \\\n(?:          .*\n?)+', section.group(1))
@@ -60,9 +70,10 @@ class SecretScanRegression(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         actual = command([str(BINARY), 'version'], ROOT).stdout.decode().strip()
-        configured = re.search(r'GITLEAKS_VERSION: "([^"]+)"', WORKFLOW).group(1)
-        if actual != configured or actual != '8.28.0':
-            raise AssertionError('scanner must match pinned workflow version 8.28.0')
+        for workflow in (PR_WORKFLOW, SCAN_WORKFLOW):
+            configured = re.search(r'GITLEAKS_VERSION: "([^"]+)"', workflow).group(1)
+            if actual != configured or actual != '8.28.0':
+                raise AssertionError('scanner must match pinned workflow version 8.28.0')
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='secret-scan-regression-')
@@ -116,11 +127,17 @@ class SecretScanRegression(unittest.TestCase):
         parents = self.git('show', '-s', '--format=%P', 'HEAD').split()
         self.assertEqual(len(parents), len(branches) + 1, 'fixture must be a real multi-parent merge')
 
-    def scan(self, job='diff-scan', scan_range=None, expected_exit=1, expected_count=1):
+    def scan_diffs(self, **kwargs):
+        # PR差分（pr-light-checks.yml）とmain push差分（secret-scan.yml）の両経路で同じ契約を確認する。
+        for path in DIFF_PATHS:
+            with self.subTest(path=path):
+                self.scan(path, **kwargs)
+
+    def scan(self, path='pr-diff', scan_range=None, expected_exit=1, expected_count=1):
         report = Path(self.temporary.name) / 'report.sarif'
         scan_range = scan_range if scan_range is not None else self.base + '..' + self.sha()
         report.unlink(missing_ok=True)
-        preflight, argv = scanner_commands(job, scan_range, report)
+        preflight, argv = scanner_commands(path, scan_range, report)
         result = command(preflight, self.repo, expected=(0, 128)) if preflight else None
         if result is None or result.returncode == 0:
             result = command(argv, self.repo, expected=(0, 1))
@@ -157,16 +174,16 @@ class SecretScanRegression(unittest.TestCase):
 
     def test_merge_only_addition_in_pr_and_push_range(self):
         self.make_merge()
-        self.scan()
+        self.scan_diffs()
 
     def test_merge_only_addition_in_full_history(self):
         self.make_merge()
-        self.scan('full-history-scan')
+        self.scan('full-history')
 
     def test_ordinary_commit_detection_is_preserved(self):
         self.write_detection()
         self.commit('ordinary addition')
-        self.scan()
+        self.scan_diffs()
 
     def test_side_branch_added_then_removed_value_remains_detectable(self):
         self.git('checkout', '-b', 'side')
@@ -176,37 +193,37 @@ class SecretScanRegression(unittest.TestCase):
         self.commit('side removal')
         self.git('checkout', 'main')
         self.git('merge', '--no-ff', '--no-edit', 'side')
-        self.scan()
+        self.scan_diffs()
 
     def test_no_detection_and_empty_range_are_successful(self):
         self.write('safe.md', 'ordinary content\n')
         self.commit('safe addition')
-        self.scan(expected_exit=0, expected_count=0)
-        self.scan(scan_range=self.sha() + '..' + self.sha(), expected_exit=0, expected_count=0)
+        self.scan_diffs(expected_exit=0, expected_count=0)
+        self.scan_diffs(scan_range=self.sha() + '..' + self.sha(), expected_exit=0, expected_count=0)
 
     def test_exact_allowed_path_and_value_are_excluded(self):
         self.write_detection(value='useApi/ofetch')
         self.commit('exact non-secret identifier')
-        self.scan(expected_exit=0, expected_count=0)
+        self.scan_diffs(expected_exit=0, expected_count=0)
 
     def test_allowed_value_in_other_path_is_detected(self):
         self.write_detection(relative='docs/evidence/CMP-261021-0647/neighbor.json', value='useApi/ofetch')
         self.commit('identifier outside allowed path')
-        self.scan()
+        self.scan_diffs()
 
     def test_other_value_in_allowed_path_is_detected(self):
         self.write_detection()
         self.commit('other synthetic value')
-        self.scan()
+        self.scan_diffs()
 
     def test_invalid_revision_fails_closed_without_value_leak(self):
         self.write_detection()
         self.commit('synthetic addition')
-        self.scan(scan_range='not-a-real-revision..HEAD', expected_exit=128, expected_count=0)
+        self.scan_diffs(scan_range='not-a-real-revision..HEAD', expected_exit=128, expected_count=0)
 
     def test_octopus_merge_addition_in_full_history(self):
         self.make_merge(octopus=True)
-        self.scan('full-history-scan')
+        self.scan('full-history')
 
 
 if __name__ == '__main__':
