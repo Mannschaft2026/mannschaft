@@ -47,12 +47,14 @@ function generateClientId(tempId: number): string {
 
 export function useOfflineQueue() {
   /**
-   * キューにペイロードを積む。Dexie 書き込みに失敗したらインメモリに退避する。
+   * 項目を 1 回の書き込みで積む（識別子を含めて保存し、書き込み後の更新による中間状態を作らない）。
+   * Dexie 書き込みに失敗したらインメモリに退避する。
    */
-  async function enqueue(
+  async function addItem(
     payload: CreateActionMemoPayload,
     tempId: number,
     publishTeamId?: number,
+    publishOnlyMemoId?: number,
   ): Promise<OfflineQueuedMemo> {
     const enqueuedAt = nowIso()
 
@@ -66,6 +68,7 @@ export function useOfflineQueue() {
             ...payload,
             _tempId: tempId,
             ...(publishTeamId != null ? { _publishTeamId: publishTeamId } : {}),
+            ...(publishOnlyMemoId != null ? { _publishOnlyMemoId: publishOnlyMemoId } : {}),
           } as unknown as Record<string, unknown>,
           version: null,
           status: 'PENDING',
@@ -74,7 +77,7 @@ export function useOfflineQueue() {
           createdAt: enqueuedAt,
           syncedAt: null,
         })
-        return { queueId: id as number, tempId, payload, enqueuedAt, publishTeamId }
+        return { queueId: id as number, tempId, payload, enqueuedAt, publishTeamId, publishOnlyMemoId }
       } catch {
         // Dexie 失敗時はフォールバック
       }
@@ -87,39 +90,29 @@ export function useOfflineQueue() {
       payload,
       enqueuedAt,
       publishTeamId,
+      publishOnlyMemoId,
     }
     _inMemory.items.push(fallback)
     return fallback
   }
 
   /**
+   * キューにペイロードを積む。
+   */
+  function enqueue(
+    payload: CreateActionMemoPayload,
+    tempId: number,
+    publishTeamId?: number,
+  ): Promise<OfflineQueuedMemo> {
+    return addItem(payload, tempId, publishTeamId)
+  }
+
+  /**
    * 作成済みメモの「公開のみ」項目を積む（オフライン同期で作成成功・公開失敗したとき用）。
    * メモは再作成せず、次回 flush で publish-to-team だけ再試行する。
    */
-  async function enqueuePublishOnly(memoId: number, teamId: number): Promise<OfflineQueuedMemo> {
-    const queued = await enqueue({ content: '' }, 0, teamId)
-    // enqueue は作成項目として積むため、公開のみ項目へ印を付け替える
-    const marked: OfflineQueuedMemo = { ...queued, publishTeamId: teamId, publishOnlyMemoId: memoId }
-    if (typeof queued.queueId === 'number') {
-      let updated = false
-      if (await isDexieAvailable()) {
-        try {
-          await offlineDb.offlineQueue.update(queued.queueId, {
-            body: { _tempId: 0, _publishTeamId: teamId, _publishOnlyMemoId: memoId } as unknown as Record<string, unknown>,
-          })
-          updated = true
-        } catch {
-          // Dexie 失敗時はフォールバック
-        }
-      }
-      const mem = _inMemory.items.find((i) => i.queueId === queued.queueId)
-      if (mem) {
-        mem.publishOnlyMemoId = memoId
-        updated = true
-      }
-      if (!updated) throw new Error('publish-only queue item could not be marked')
-    }
-    return marked
+  function enqueuePublishOnly(memoId: number, teamId: number): Promise<OfflineQueuedMemo> {
+    return addItem({ content: '' }, 0, teamId, memoId)
   }
 
   /**

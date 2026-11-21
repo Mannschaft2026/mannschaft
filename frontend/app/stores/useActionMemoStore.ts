@@ -52,6 +52,8 @@ interface ActionMemoStoreState {
   offlineQueueCount: number
   /** 現在オフラインかどうか（{@code navigator.onLine === false}）。SSR 時は false */
   isOffline: boolean
+  /** 直近の publishToTeam が既投稿（ACTION_MEMO_ALREADY_POSTED）で失敗したか。公開のみ項目の後始末の判定用 */
+  alreadyPostedFailure: boolean
   /** Phase 3: 週次まとめ一覧 */
   weeklySummaries: WeeklySummary[]
   /** Phase 3: 週次まとめ一覧の読み込み中フラグ */
@@ -165,6 +167,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
     lastError: null,
     offlineQueueCount: 0,
     isOffline: false,
+    alreadyPostedFailure: false,
     weeklySummaries: [],
     weeklyLoading: false,
     weeklyError: null,
@@ -294,9 +297,20 @@ export const useActionMemoStore = defineStore('actionMemo', {
         try {
           // 公開のみ項目: 作成済みメモは再作成せず publish-to-team だけ再試行する
           if (queued?.publishOnlyMemoId != null && queued.publishTeamId != null) {
-            const ok = await this.publishToTeam(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
+            let ok = await this.publishToTeam(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
+            if (!ok && this.alreadyPostedFailure) {
+              // 既投稿（ACTION_MEMO_ALREADY_POSTED）: 再試行しても永久に成功しないため、実態を確認して項目を片付ける
+              const memo = await api.getMemo(queued.publishOnlyMemoId)
+              ok = true // 項目は削除する（止まり続けない）。別チーム投稿済みならエラーだけ残す
+              if (memo.postedTeamId !== queued.publishTeamId) {
+                kept.v = { error: 'action_memo.error.publish_failed', lastError: 'PUBLISH_FAILED' }
+              } else {
+                this.error = null
+                this.lastError = null
+              }
+            }
             // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
-            if (!ok) kept.v = { error: this.error, lastError: this.lastError }
+            else if (!ok) kept.v = { error: this.error, lastError: this.lastError }
             return ok ? { id: queued.publishOnlyMemoId } : null
           }
           const created = await api.createMemo(payload)
@@ -648,6 +662,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
     async publishToTeam(memoId: number, payload: PublishToTeamPayload): Promise<boolean> {
       this.error = null
       this.lastError = null
+      this.alreadyPostedFailure = false
       try {
         const api = useActionMemoApi()
         await api.publishToTeam(memoId, payload)
@@ -659,7 +674,11 @@ export const useActionMemoStore = defineStore('actionMemo', {
           this.memos.splice(idx, 1, updated)
         }
         return true
-      } catch {
+      } catch (error) {
+        // 既投稿は flush 側で実態確認して片付けるため、判別できるよう印を残す
+        const err = error as { response?: { _data?: { code?: string } }; data?: { code?: string } }
+        const code = err?.response?._data?.code ?? err?.data?.code
+        this.alreadyPostedFailure = code === 'ACTION_MEMO_016'
         // 公開失敗はメモ保存の失敗ではない（メモは作成済み）。保存失敗文言を出さないよう専用の種別にする
         this.lastError = 'PUBLISH_FAILED'
         this.error = 'action_memo.error.publish_failed'
