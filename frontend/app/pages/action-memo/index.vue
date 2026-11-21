@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import type { ActionMemo, ActionMemoCategory, OrgVisibility } from '~/types/actionMemo'
+import type { ActionMemo, ActionMemoCategory, ActionMemoInputExtras, OrgVisibility } from '~/types/actionMemo'
 
 /**
  * F02.5 行動メモ メイン画面（ワンショット入力 + 選択日メモ一覧）。
@@ -61,6 +61,37 @@ const selectedProgressRate = ref<number | null>(null)
 const selectedCompletesTodo = ref(false)
 const selectedTeamId = ref<number | null>(store.settings.defaultPostTeamId ?? null)
 
+// ActionMemoInput へ渡す選択値（作成リクエストに反映される）
+const inputExtras = computed<ActionMemoInputExtras>(() => ({
+  category: selectedCategory.value,
+  durationMinutes: selectedDuration.value,
+  progressRate: selectedProgressRate.value,
+  completesTodo: selectedCompletesTodo.value,
+  teamId: selectedTeamId.value,
+}))
+
+// 送信成功後は 1 件ごとの値（所要時間・進捗率・TODO 完了）のみ戻す。カテゴリ・投稿先は連続入力のため保持する
+function onMemoCreated() {
+  selectedDuration.value = null
+  selectedProgressRate.value = null
+  selectedCompletesTodo.value = false
+}
+
+const publishPending = ref(false)
+
+// 下書きから復元した選択値。設定取得（既定カテゴリの反映）で上書きされないよう印を付ける
+let draftExtrasRestored = false
+let restoredTeamId: number | null = null
+
+function onDraftRestored(extras: ActionMemoInputExtras) {  draftExtrasRestored = true
+  if (extras.category) selectedCategory.value = extras.category
+  selectedDuration.value = extras.durationMinutes ?? null
+  selectedProgressRate.value = extras.progressRate ?? null
+  selectedCompletesTodo.value = extras.completesTodo === true
+  restoredTeamId = extras.teamId ?? null
+  selectedTeamId.value = restoredTeamId
+}
+
 // Phase 4-α: 組織スコープ
 const selectedOrgId = ref<number | null>(null)
 const selectedOrgVisibility = ref<OrgVisibility>('TEAM_ONLY')
@@ -79,8 +110,9 @@ function onOrgChange() {
 watch(
   () => store.settings,
   (s) => {
-    selectedCategory.value = s.defaultCategory ?? 'OTHER'
-    if (selectedTeamId.value === null) {
+    if (!draftExtrasRestored) selectedCategory.value = s.defaultCategory ?? 'OTHER'
+    // 下書き復元済みなら、明示的な「投稿なし」(null) も既定チームで上書きしない
+    if (selectedTeamId.value === null && !draftExtrasRestored) {
       selectedTeamId.value = s.defaultPostTeamId ?? null
     }
   },
@@ -98,12 +130,17 @@ onMounted(async () => {
     selectedDate.value = dayjs(queryDate).toDate()
   }
 
-  await Promise.all([
+  const [, , teamsLoaded] = await Promise.all([
     store.fetchSettings(),
     store.fetchMemosForDate(selectedDateStr.value),
     store.fetchAvailableTeams(),
     store.fetchAvailableOrgs(),
   ])
+  // 復元した投稿先が現在の選択肢に無ければ捨てる（他ユーザー・脱退済みチームへの誤投稿防止）。
+  // 取得に失敗したときは「所属なし」と区別できないため判定せず保持する（FRONTEND_CODING_CONVENTION: 取得失敗と0件の区別）
+  if (teamsLoaded && restoredTeamId !== null && !store.availableTeams.some((team) => team.id === restoredTeamId)) {
+    selectedTeamId.value = null
+  }
   await store.refreshOfflineQueueCount()
   // mood_enabled = true の場合のみ mood-stats を取得
   if (store.isMoodEnabled) {
@@ -240,7 +277,19 @@ function goTags() {
         {{ t(store.error) }}
       </div>
 
-      <ActionMemoInput />
+      <ActionMemoInput
+        :extras="inputExtras"
+        @created="onMemoCreated"
+        @draft-restored="onDraftRestored"
+        @pending-change="publishPending = $event"
+      />
+
+      <!-- 公開待ち（メモ保存済み・チーム投稿だけ失敗）の間は選択欄をロックし、再試行先がずれないようにする -->
+      <fieldset
+        :disabled="publishPending"
+        class="m-0 flex min-w-0 flex-col gap-3 border-0 p-0"
+        data-testid="action-memo-selectors"
+      >
 
       <!-- Phase 3: カテゴリ選択（常時表示） -->
       <div class="flex flex-wrap items-center gap-2 px-1">
@@ -323,6 +372,7 @@ function goTags() {
           </div>
         </div>
       </details>
+      </fieldset>
 
       <!-- 気分集計（mood_enabled = true の場合のみ表示） -->
       <MoodChart

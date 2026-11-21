@@ -135,6 +135,18 @@ export interface CreateActionMemoPayload {
   orgVisibility?: OrgVisibility | null
 }
 
+/**
+ * 行動メモ入力フォーム（ActionMemoInput）へ画面側の選択値を渡すための型。
+ * teamId は作成 API に項目が無いため、作成成功後の publish-to-team で使う（WORK のみ）。
+ */
+export interface ActionMemoInputExtras {
+  category?: ActionMemoCategory
+  durationMinutes?: number | null
+  progressRate?: number | null
+  completesTodo?: boolean
+  teamId?: number | null
+}
+
 export interface UpdateActionMemoPayload {
   content?: string
   memoDate?: string
@@ -264,6 +276,10 @@ export interface OfflineQueuedMemo {
   tempId: number
   /** 送信予定のペイロード */
   payload: CreateActionMemoPayload
+  /** 作成成功後に publish-to-team する投稿先チーム ID（任意。無い既存項目も後方互換で動く） */
+  publishTeamId?: number
+  /** 公開のみ項目: 作成済みの実メモ ID（あればメモは再作成せず publish-to-team だけ再試行する） */
+  publishOnlyMemoId?: number
   /** キューに積んだ時刻（ISO） */
   enqueuedAt: string
 }
