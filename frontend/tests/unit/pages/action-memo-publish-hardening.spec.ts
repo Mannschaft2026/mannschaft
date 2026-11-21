@@ -272,6 +272,39 @@ describe('7: 公開のみ再試行が既投稿(ACTION_MEMO_ALREADY_POSTED)で失
   })
 })
 
+describe('9: 公開再試行が既投稿(応答だけ失われていた)で失敗', () => {
+  const textareaValue = (w: Awaited<ReturnType<typeof mountInput>>) =>
+    (w.get('[data-testid="action-memo-input-textarea"]').element as HTMLTextAreaElement).value
+
+  it('同じチームに投稿済みなら成功として後片付けし、ロックが解ける', async () => {
+    apiMock.publishToTeam.mockRejectedValueOnce(new Error('response lost')).mockRejectedValueOnce(httpError(409, 'ACTION_MEMO_016'))
+    apiMock.getMemo.mockResolvedValue({ ...created, id: 501, postedTeamId: 7 })
+    const w = await mountInput()
+    await submit(w, '応答喪失')
+    expect(w.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(true)
+    await submit(w)
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(w.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(false)
+    expect(w.get('[data-testid="action-memo-input-textarea"]').attributes('disabled')).toBeUndefined()
+    expect(textareaValue(w)).toBe('')
+    expect(w.emitted('created')).toHaveLength(1)
+    expect(w.emitted('pending-change')?.at(-1)).toEqual([false])
+    expect(useActionMemoStore().error).toBeNull()
+  })
+
+  it('別チームに投稿済みならエラーを残しつつ、ロックは解ける', async () => {
+    apiMock.publishToTeam.mockRejectedValueOnce(new Error('response lost')).mockRejectedValueOnce(httpError(409, 'ACTION_MEMO_016'))
+    apiMock.getMemo.mockResolvedValue({ ...created, id: 501, postedTeamId: 8 })
+    const w = await mountInput()
+    await submit(w, '別チーム')
+    await submit(w)
+    expect(w.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(false)
+    expect(textareaValue(w)).toBe('')
+    expect(w.emitted('pending-change')?.at(-1)).toEqual([false])
+    expect(useActionMemoStore().error).toBe('action_memo.error.publish_failed')
+  })
+})
+
 describe('3: 公開失敗時は成功扱いにしない', () => {
   it('publishToTeam が false のとき入力を保持し、失敗文言を出し、再送信は公開だけ再試行する', async () => {
     apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
