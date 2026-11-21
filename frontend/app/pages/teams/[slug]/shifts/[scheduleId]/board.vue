@@ -307,7 +307,9 @@ async function initialize(): Promise<void> {
   // 権限不明のまま操作できてしまう。例外を伝播させず、取得失敗の状態として持つ。
   scheduleLoading.value = true
   try {
-    await Promise.all([loadSlots(), loadPositions(), loadMembers(), loadPermissions()])
+    const [, , , permissionResult] = await Promise.all([loadSlots(), loadPositions(), loadMembers(), loadPermissions()])
+    // loadPermissions は失敗しても例外を投げず ok:false を返す。権限不明のままボードを出さない。
+    if (!permissionResult.ok) throw permissionResult.error
     // 認可根治 Wave7: 実行履歴 API は管理者専用になったため、権限解決後に管理者のときだけ取得する。
     // 従来どおり Promise.all に混ぜたままだと、一般メンバーでは 403 で Promise.all ごと失敗し
     // ボード画面全体が描画されなくなる（エラーを握りつぶさず、そもそも呼ばない形で解消する）。

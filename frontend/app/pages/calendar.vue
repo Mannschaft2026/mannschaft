@@ -810,13 +810,20 @@ onMounted(async () => {
 
     <!-- カレンダービュー -->
     <!-- 予定の取得失敗は「予定なし」ではない。空のカレンダーに見せず、再試行を出す -->
+    <div
+      v-if="activeTab === 'calendar' && loadError && !loading && calendarLoading"
+      class="space-y-3"
+      data-testid="calendar-retrying"
+    >
+      <Skeleton v-for="i in 5" :key="i" height="2rem" />
+    </div>
     <DashboardErrorState
-      v-if="activeTab === 'calendar' && loadError && !loading"
+      v-else-if="activeTab === 'calendar' && loadError && !loading"
       testid="calendar-load-error-state"
       @retry="refresh"
     />
 
-    <div v-show="activeTab === 'calendar' && !loadError">
+    <div v-show="activeTab === 'calendar' && !loadError" data-testid="calendar-body">
       <!-- ===== モバイル（<768px）: リストビュー（F03.19 §6.8・Wave 3-c） =====
            狭幅では月グリッドが読めないため、共通コンポーネント ScheduleMobileListView を使う。
            週／アジェンダビュー本体（CalendarWeekGrid・CalendarAgendaList）は別戦役（W3-a/W3-b）の

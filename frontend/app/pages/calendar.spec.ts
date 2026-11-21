@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
 }))
 const loadError = ref(false)
 const loading = ref(false)
+const calendarLoading = ref(false)
 
 vi.mock('~/composables/useMyCalendarData', () => ({
   PERSONAL_KEY: 'personal',
@@ -23,7 +24,7 @@ vi.mock('~/composables/useMyCalendarData', () => ({
     currentYear: ref(2026),
     currentMonth: ref(11),
     loading,
-    calendarLoading: ref(false),
+    calendarLoading,
     loadError,
     refresh: state.refresh,
     onPrevMonth: vi.fn(),
@@ -101,6 +102,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   loadError.value = false
   loading.value = false
+  calendarLoading.value = false
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -114,9 +116,27 @@ describe('マイカレンダー: 予定の取得失敗', () => {
     await flushPromises()
 
     expect(wrapper!.find('[data-testid="calendar-load-error-state"]').exists()).toBe(true)
-    // カレンダー本体（月グリッド）は表示しない
-    const body = wrapper!.find('div[style*="display: none"]')
-    expect(body.exists()).toBe(true)
+    // カレンダー本体（月グリッドを含む領域）は隠れている
+    const body = wrapper!.get('[data-testid="calendar-body"]')
+    expect(body.attributes('style')).toContain('display: none')
+  })
+
+  it('取得に成功しているときはカレンダー本体が隠れない', async () => {
+    renderPage()
+    await flushPromises()
+
+    expect(wrapper!.get('[data-testid="calendar-body"]').attributes('style') ?? '').not.toContain('display: none')
+  })
+
+  it('再試行中は取得失敗の表示を出し続けず、読み込み中表示にする', async () => {
+    loadError.value = true
+    calendarLoading.value = true
+    renderPage()
+    await flushPromises()
+
+    expect(wrapper!.find('[data-testid="calendar-load-error-state"]').exists()).toBe(false)
+    expect(wrapper!.find('[data-testid="calendar-retrying"]').exists()).toBe(true)
+    expect(wrapper!.get('[data-testid="calendar-body"]').attributes('style')).toContain('display: none')
   })
 
   it('再試行を押すと予定を再取得する', async () => {

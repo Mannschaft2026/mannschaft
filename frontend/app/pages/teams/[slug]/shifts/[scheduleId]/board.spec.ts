@@ -89,7 +89,7 @@ beforeEach(() => {
   })
   mocks.getPositions.mockResolvedValue({ data: [] })
   mocks.getMembers.mockResolvedValue({ data: [{ userId: 2, displayName: 'メンバーB', avatarUrl: null }] })
-  mocks.loadPermissions.mockResolvedValue(undefined)
+  mocks.loadPermissions.mockResolvedValue({ ok: true })
   mocks.loadSlots.mockResolvedValue(undefined)
 })
 afterEach(() => {
@@ -176,5 +176,20 @@ describe('シフトボード: シフト表は取れたが枠・ポジション�
 
     expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(true)
     expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(false)
+  })
+
+  it('権限の取得が失敗（例外を投げず ok:false）のとき、権限不明のままボードを出さず取得失敗の表示と再試行を出す', async () => {
+    mocks.loadPermissions.mockResolvedValueOnce({ ok: false, error: httpError(500) })
+    renderPage()
+    await flushPromises()
+
+    expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(true)
+    expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(false)
+    expect(mocks.captureQuiet).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 500 }), expect.anything())
+
+    await wrapper!.get('[data-testid="load-error-state-retry"]').trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(false)
+    expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(true)
   })
 })
