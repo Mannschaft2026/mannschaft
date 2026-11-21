@@ -150,3 +150,31 @@ describe('シフトボード: シフト表の取得失敗（所属外の直打�
     expect(wrapper!.text()).toContain('メンバーB')
   })
 })
+
+describe('シフトボード: シフト表は取れたが枠・ポジション・権限の取得に失敗', () => {
+  it('枠の取得が 500 のとき、枠が無いボードに見せず取得失敗の表示と再試行を出す', async () => {
+    mocks.loadSlots.mockRejectedValueOnce(httpError(500))
+    renderPage()
+    await flushPromises()
+
+    expect(wrapper!.find('[data-testid="page-loading"]').exists()).toBe(false)
+    expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(true)
+    expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(false)
+    expect(mocks.captureQuiet).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 500 }), expect.anything())
+
+    // 再試行で成功すればボードを描画する
+    await wrapper!.get('[data-testid="load-error-state-retry"]').trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(false)
+    expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(true)
+  })
+
+  it('ポジションの取得が通信断のとき、取得失敗の表示を出す', async () => {
+    mocks.getPositions.mockRejectedValueOnce(new Error('network'))
+    renderPage()
+    await flushPromises()
+
+    expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(true)
+    expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(false)
+  })
+})
