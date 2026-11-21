@@ -8,8 +8,6 @@ import { useErrorHandler } from '~/composables/useErrorHandler'
 import { useAnnouncementFeed } from '~/composables/useAnnouncementFeed'
 import { useAnnouncementPreview } from '~/composables/useAnnouncementPreview'
 import { useRoleAccess } from '~/composables/useRoleAccess'
-import { useAuthStore } from '~/stores/useAuthStore'
-import { canRemoveAnnouncement } from '~/utils/announcementPermissions'
 
 const props = defineProps<{
   scopeType: AnnouncementScopeType
@@ -53,8 +51,6 @@ const { isAdmin } = useRoleAccess(
   props.scopeType === 'TEAM' ? 'team' : 'organization',
   props.scopeSlug ?? props.scopeId,
 )
-
-const authStore = useAuthStore()
 
 /** 操作対象のスコープ（このウィジェットのチーム/組織）の項目か */
 function isInScope(item: AnnouncementFeedItem): boolean {
@@ -213,7 +209,7 @@ async function onMarkAllRead() {
         :key="item.id"
         :item="item"
         :show-pin-control="isAdmin && isInScope(item)"
-        :can-remove="isInScope(item) && canRemoveAnnouncement(item, isAdmin, authStore.user?.id)"
+        :can-remove="isAdmin && isInScope(item)"
         @click="onItemClick"
         @pin="onTogglePin"
         @delete="onDelete"

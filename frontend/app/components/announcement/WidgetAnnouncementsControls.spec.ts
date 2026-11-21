@@ -58,11 +58,11 @@ describe('WidgetAnnouncements: ピン留め/解除の出し分け（D-3）', () 
   })
   afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
-  it('非 ADMIN の著者本人は解除(×)のみ。他人・著者なしには出ない', () => {
+  // ダッシュボード API の teamNotices には作者情報が無く著者判定できないため、
+  // ウィジェットは作者本人の解除を出さず ADMIN のみ（従来どおり）とする
+  it('非 ADMIN には、著者情報があっても何も出ない', () => {
     render()
-    expect(flags(1)).toEqual({ pin: 'false', remove: 'true' })
-    expect(flags(2)).toEqual({ pin: 'false', remove: 'false' })
-    expect(flags(3)).toEqual({ pin: 'false', remove: 'false' })
+    for (const id of [1, 2, 3]) expect(flags(id)).toEqual({ pin: 'false', remove: 'false' })
   })
 
   it('ADMIN はスコープ内の全項目でピン留めと解除ができる', () => {

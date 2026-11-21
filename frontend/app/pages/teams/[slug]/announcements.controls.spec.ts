@@ -3,12 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import AnnouncementsPage from '~/pages/teams/[slug]/announcements.vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { toAnnouncementItem } from '~/utils/announcementAdapter'
 
 const state = vi.hoisted(() => ({ admin: false }))
+// 実 BE 応答（authorId のみで author を持たない）を adapter に通した結果を一覧へ流す
+const raw = (id: number, title: string, authorId?: number) => ({
+  id, scopeType: 'TEAM', scopeId: 10, sourceType: 'BLOG_POST', sourceId: id, isPinned: false, isRead: true, titleCache: title, authorId,
+})
 const feed = ref([
-  { id: 1, scopeId: 10, isPinned: false, isRead: true, title: '自分の項目', author: { id: 7, displayName: '私' } },
-  { id: 2, scopeId: 10, isPinned: false, isRead: true, title: '他人の項目', author: { id: 8, displayName: '他人' } },
-  { id: 3, scopeId: 10, isPinned: false, isRead: true, title: '著者なし', author: null },
+  toAnnouncementItem(raw(1, '自分の項目', 7)),
+  toAnnouncementItem(raw(2, '他人の項目', 8)),
+  toAnnouncementItem(raw(3, '著者なし')),
 ])
 
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 't' } }))
