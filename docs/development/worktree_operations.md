@@ -263,6 +263,6 @@ Windows では、cwd だけが worktree 内にあるプロセス（`node server.
   - `node scripts/worktree-sparse-paths.mjs --check` — `.claude/settings.json` の `worktree.sparsePaths` が生成結果と集合として一致し（順序は無視）、全追跡ファイルが展開経路に属すること（未被覆ゼロ）を検査。未設定の間は成功扱い
   - `node scripts/worktree-sparse-paths.mjs --write` — settings.json へ書き込む
   - `node scripts/worktree-sparse-paths.mjs --check --require-configured` — 未設定を失敗にする（キー誤記の素通りを根治）。設定を有効化する後続PR（部隊1b）で CI の `--check` ステップに付ける。有効化前の現状は付けない
-- 番人: CI の `Harness CI`（`.github/workflows/harness-ci.yml`）が単体テスト `scripts/worktree-sparse-paths.test.mjs` と `--check` を実行する。main に新しいディレクトリが増えて一覧が古くなると `--check` が落ちるので、`--write` で更新してコミットする。
+- 番人: CI の `PR 軽量検査`（`.github/workflows/pr-light-checks.yml` の `[Harness]` step。旧 `harness-ci.yml`）が単体テスト `scripts/worktree-sparse-paths.test.mjs` と `--check` を実行する。main に新しいディレクトリが増えて一覧が古くなると `--check` が落ちるので、`--write` で更新してコミットする。
 - 除外を増減する手順: 正本 JSON を編集し、`--write` で settings.json を更新して同じ PR に含める。除外パスが追跡されなくなる（改名・削除）とエラーになるので、正本から外す。
 - 状態: 生成スクリプトと番人のみ導入済み。`.claude/settings.json` への有効化は後続 PR で行う。
