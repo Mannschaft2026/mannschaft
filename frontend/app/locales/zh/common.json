@@ -3367,6 +3367,12 @@
     }
   },
   "globalSearch": {
+    "header": {
+      "placeholder": "全站搜索",
+      "open": "打开搜索",
+      "suggestions": "搜索建议",
+      "keyword": "关键词"
+    },
     "title": "搜索",
     "placeholder": "按关键词搜索（至少2个字符）",
     "submit": "搜索",

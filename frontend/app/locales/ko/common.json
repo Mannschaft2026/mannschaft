@@ -3367,6 +3367,12 @@
     }
   },
   "globalSearch": {
+    "header": {
+      "placeholder": "전체 검색",
+      "open": "검색 열기",
+      "suggestions": "검색 추천",
+      "keyword": "키워드"
+    },
     "title": "검색",
     "placeholder": "키워드로 검색 (2자 이상)",
     "submit": "검색",
