@@ -172,7 +172,15 @@
       "visibility_failed": "Error al actualizar la visibilidad",
       "load_failed": "Error al cargar los espacios de contacto",
       "divisions_load_failed": "Error al cargar las divisiones",
-      "permissions_load_failed": "Error al cargar los permisos. Algunas acciones pueden no estar disponibles."
+      "permissions_load_failed": "Error al cargar los permisos. Algunas acciones pueden no estar disponibles.",
+      "participant": {
+        "title": "Espacio de contacto del torneo",
+        "open_link": "Abrir espacio de contacto",
+        "view_only_notice": "Solo lectura. Solo los administradores y subadministradores del equipo y los organizadores pueden publicar.",
+        "unavailable": "El espacio de contacto de este torneo no está disponible",
+        "unavailable_hint": "Solo pueden usarlo los miembros de los equipos participantes. Comprueba el estado de participación de tu equipo.",
+        "load_retry": "Volver a cargar"
+      }
     },
     "submission": {
       "title": "Recepción de documentos",

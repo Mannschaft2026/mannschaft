@@ -172,7 +172,15 @@
       "visibility_failed": "公開設定の変更に失敗しました",
       "load_failed": "連絡スペースの取得に失敗しました",
       "divisions_load_failed": "ディビジョン一覧の取得に失敗しました",
-      "permissions_load_failed": "権限情報の取得に失敗しました。操作が制限される場合があります"
+      "permissions_load_failed": "権限情報の取得に失敗しました。操作が制限される場合があります",
+      "participant": {
+        "title": "大会の連絡スペース",
+        "open_link": "連絡スペースを開く",
+        "view_only_notice": "閲覧のみです。投稿できるのはチームの代表・副代表と主催者です",
+        "unavailable": "この大会の連絡スペースを利用できません",
+        "unavailable_hint": "参加中のチームの会員のみ利用できます。チームの参加状況をご確認ください",
+        "load_retry": "再読み込み"
+      }
     },
     "submission": {
       "title": "書類提出受付",

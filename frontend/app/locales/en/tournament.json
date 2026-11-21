@@ -172,7 +172,15 @@
       "visibility_failed": "Failed to update visibility",
       "load_failed": "Failed to load communication spaces",
       "divisions_load_failed": "Failed to load divisions",
-      "permissions_load_failed": "Failed to load permissions. Some actions may be unavailable."
+      "permissions_load_failed": "Failed to load permissions. Some actions may be unavailable.",
+      "participant": {
+        "title": "Tournament contact space",
+        "open_link": "Open contact space",
+        "view_only_notice": "View only. Only team admins, deputy admins, and organizers can post.",
+        "unavailable": "The contact space for this tournament is not available",
+        "unavailable_hint": "Only members of participating teams can use it. Please check your team's participation status.",
+        "load_retry": "Reload"
+      }
     },
     "submission": {
       "title": "Document Submission",

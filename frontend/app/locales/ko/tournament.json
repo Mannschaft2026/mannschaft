@@ -172,7 +172,15 @@
       "visibility_failed": "공개 설정 변경에 실패했습니다",
       "load_failed": "연락 공간 불러오기에 실패했습니다",
       "divisions_load_failed": "디비전 목록 불러오기에 실패했습니다",
-      "permissions_load_failed": "권한 정보를 불러오지 못했습니다. 일부 작업이 제한될 수 있습니다"
+      "permissions_load_failed": "권한 정보를 불러오지 못했습니다. 일부 작업이 제한될 수 있습니다",
+      "participant": {
+        "title": "대회 연락 공간",
+        "open_link": "연락 공간 열기",
+        "view_only_notice": "보기 전용입니다. 팀 대표·부대표와 주최자만 게시할 수 있습니다.",
+        "unavailable": "이 대회의 연락 공간을 이용할 수 없습니다",
+        "unavailable_hint": "참가 중인 팀의 회원만 이용할 수 있습니다. 팀의 참가 상황을 확인해 주세요.",
+        "load_retry": "다시 불러오기"
+      }
     },
     "submission": {
       "title": "서류 제출 접수",
