@@ -37,6 +37,8 @@ const searched = ref(false)
 /** 実際に検索した条件（URL 同期の二重検索抑止に使う。編集中の入力値とは別物） */
 const searchedCondition = ref<{ q: string; type: ContentType | 'ALL' } | null>(null)
 let searchSeq = 0
+/** 画面自身の router.replace による URL 変化中か（ウォッチャが編集中の入力を上書きしないため） */
+let selfNavigating = false
 
 const trimmedQuery = computed(() => query.value.trim())
 const showPaginator = computed(() => viewMode.value === 'DETAIL' && totalPages.value > 1)
@@ -81,10 +83,15 @@ async function performSearch(page = 0) {
     }
     countsQuery.value = q
     searched.value = true
-    searchedCondition.value = { q, type: activeType.value }
-    await router.replace({
-      query: detailType ? { q: trimmedQuery.value, type: detailType } : { q: trimmedQuery.value },
-    })
+    // URL へ書き戻すのは検索開始時に確定した条件（応答待ち中に編集された入力値ではない）
+    searchedCondition.value = { q, type: detailType ?? 'ALL' }
+    selfNavigating = true
+    try {
+      await router.replace({ query: detailType ? { q, type: detailType } : { q } })
+      await nextTick()
+    } finally {
+      selfNavigating = false
+    }
   } catch (error: unknown) {
     // 失敗は利用者へ通知し、結果表示は前回のまま残す（握りつぶさない）
     console.error('[globalSearch] 検索に失敗', error)
@@ -145,6 +152,8 @@ watch(
   () => {
     const q = typeof route.query.q === 'string' ? route.query.q : ''
     const type = typeFromRoute()
+    // 画面自身が書き戻した URL は入力欄・進行中検索に触れない（応答待ち中に編集した入力を守る）
+    if (selfNavigating) return
     const done = searchedCondition.value
     if (done && q.trim() === done.q && type === done.type) {
       // 検索済み条件へ戻った（ブラウザの「戻る」等）。再検索はしないが、入力欄は URL に復元し、

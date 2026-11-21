@@ -95,6 +95,32 @@ describe('pages/search/index.vue — URL 同期', () => {
     expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe('チーム')
   })
 
+  it('RS-06: A の応答待ち中に入力を B へ編集しても、応答後の URL 書き換えは A のままで B は自動検索されず、編集中の入力も保たれる', async () => {
+    let resolveA: (v: SearchResponse) => void = () => {}
+    search.mockReset()
+    search.mockImplementationOnce(() => new Promise<SearchResponse>((r) => { resolveA = r }))
+    const replaceSpy = vi.spyOn(useRouter(), 'replace')
+    replaceSpy.mockReset()
+    // 実際のルーターと同様に、replace は route.query を書き換える
+    replaceSpy.mockImplementation(async (to) => {
+      const next = (to as { query?: Record<string, string> }).query
+      if (next) route.query = next
+      return undefined
+    })
+    const wrapper = await mountSuspended(SearchPage)
+    await flushPromises()
+    expect(search).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('[data-testid="global-search-input"]').setValue('サッカー')
+    search.mockResolvedValue(EMPTY)
+    resolveA(EMPTY)
+    await flushPromises()
+
+    expect(replaceSpy).toHaveBeenCalledWith({ query: { q: 'チーム' } })
+    expect(search).toHaveBeenCalledTimes(1)
+    expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe('サッカー')
+  })
+
   it('RS-04: 空の /search へ戻ると、前回の結果・件数タブ・入力が初期状態へ戻る', async () => {
     search.mockResolvedValue({
       ...EMPTY,

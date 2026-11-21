@@ -2,8 +2,8 @@
 /**
  * F04.6 全体検索の入口（CMP-261116-0722 PR-8 / AC-E4）。
  *
- * - デスクトップ(md 以上): ヘッダーに検索欄を置き、Enter で /search?q=...（/search 表示中は type も引き継ぐ）へ遷移する。
- * - モバイル: 検索欄は幅を取るため、虫眼鏡アイコンのリンクから /search へ遷移する（q・type があれば引き継ぐ）。
+ * - デスクトップ(lg=1024px 以上): ヘッダーに検索欄を置き、Enter で /search?q=...（/search 表示中は type も引き継ぐ）へ遷移する。
+ * - lg 未満（md 付近はロゴ・スコープ・操作ボタンで幅が埋まる）: 検索欄は幅を取るため、虫眼鏡アイコンのリンクから /search へ遷移する（q・type があれば引き継ぐ）。
  * - サジェストは BE の GET /search/suggestions（debounce 300ms）が返した候補だけを出す。FE で別データは取らない。
  * - q・type の正本は URL。/search 表示中は URL の値を入力欄へ復元・追従する。
  */
@@ -161,9 +161,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex items-center">
-    <!-- デスクトップ: 検索欄 -->
+    <!-- 検索欄は lg(1024px) 以上のみ。md 付近はロゴ・チーム/組織ドロップダウン・操作ボタンで幅が埋まり、横に溢れるため -->
     <form
-      class="relative hidden md:block"
+      class="relative hidden min-w-0 lg:block"
       role="search"
       data-testid="header-search-form"
       @submit.prevent="goSearch(keyword)"
@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
         <InputText
           v-model="keyword"
           type="search"
-          class="!h-10 w-56 lg:w-72"
+          class="!h-10 w-44 min-w-0 xl:w-60 2xl:w-72"
           autocomplete="off"
           role="combobox"
           aria-autocomplete="list"
@@ -215,10 +215,10 @@ onBeforeUnmount(() => {
       </ul>
     </form>
 
-    <!-- モバイル: アイコンから /search へ -->
+    <!-- lg 未満（モバイル・タブレット幅）: アイコンから /search へ -->
     <NuxtLink
       :to="mobileHref"
-      class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg p-2 transition-colors hover:bg-surface-100 md:hidden dark:hover:bg-surface-800"
+      class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg p-2 transition-colors hover:bg-surface-100 lg:hidden dark:hover:bg-surface-800"
       :aria-label="t('globalSearch.header.open')"
       :title="t('globalSearch.header.open')"
       data-testid="header-search-mobile-link"

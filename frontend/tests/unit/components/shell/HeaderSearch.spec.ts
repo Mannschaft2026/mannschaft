@@ -209,6 +209,21 @@ describe('components/shell/HeaderSearch.vue — ヘッダー検索欄', () => {
     expect(wrapper.find('[data-testid="header-search-suggestions"]').exists()).toBe(true)
   })
 
+  it('HS-11: 検索欄の展開表示は lg 以上に限定し（md 付近はロゴ・スコープ・操作ボタンで幅が埋まる）、未満はアイコン。縮小可能', async () => {
+    suggestions.mockResolvedValue([])
+    const wrapper = await mountBox()
+    const formClasses = wrapper.find('[data-testid="header-search-form"]').classes()
+    expect(formClasses).toContain('hidden')
+    expect(formClasses).toContain('lg:block')
+    expect(formClasses).not.toContain('md:block')
+    expect(formClasses).toContain('min-w-0')
+    const linkClasses = wrapper.find('[data-testid="header-search-mobile-link"]').classes()
+    expect(linkClasses).toContain('lg:hidden')
+    expect(linkClasses).not.toContain('md:hidden')
+    // 224px(w-56) 固定ではなく、狭い lg では小さい既定幅から始める
+    expect(wrapper.find('[data-testid="header-search-input"]').classes()).not.toContain('w-56')
+  })
+
   it('HS-06: suggestions が失敗しても候補は出ず、失敗はログに残す', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     suggestions.mockRejectedValue(new Error('boom'))
