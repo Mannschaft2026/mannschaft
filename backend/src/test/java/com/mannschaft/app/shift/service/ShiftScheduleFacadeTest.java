@@ -12,6 +12,7 @@ import com.mannschaft.app.shift.dto.ManualRemindResponse;
 import com.mannschaft.app.shift.dto.ShiftScheduleResponse;
 import com.mannschaft.app.shift.dto.ShiftScheduleSummaryResponse;
 import com.mannschaft.app.shift.dto.UpdateShiftScheduleRequest;
+import com.mannschaft.app.team.service.TeamService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +61,8 @@ class ShiftScheduleFacadeTest {
     @Mock
     private AccessControlService accessControlService;
     @Mock
+    private TeamService teamService;
+    @Mock
     private ShiftPublicationBudgetContextPort publicationBudgetContextPort;
 
     private ShiftScheduleFacade facade;
@@ -67,7 +71,7 @@ class ShiftScheduleFacadeTest {
     void setUp() {
         facade = new ShiftScheduleFacade(scheduleService, reminderService,
                 new ScopeConcealingAccessGate(accessControlService), accessControlService,
-                publicationBudgetContextPort);
+                teamService, publicationBudgetContextPort);
     }
 
     private static ShiftScheduleScope published() {
@@ -299,6 +303,8 @@ class ShiftScheduleFacadeTest {
         void SYSTEM_ADMINは短絡() {
             ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
             given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+            given(teamService.findTeamSummary(TEAM_ID))
+                    .willReturn(Optional.of(new TeamService.TeamSummary("実在チーム", false)));
             given(scheduleService.createSchedule(TEAM_ID, req, USER_ID)).willReturn(response);
 
             assertThat(facade.createSchedule(TEAM_ID, req, USER_ID)).isSameAs(response);
@@ -309,6 +315,8 @@ class ShiftScheduleFacadeTest {
         @DisplayName("チーム ADMIN は作成できる")
         void ADMINは作成できる() {
             ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+            given(teamService.findTeamSummary(TEAM_ID))
+                    .willReturn(Optional.of(new TeamService.TeamSummary("実在チーム", false)));
             given(scheduleService.createSchedule(TEAM_ID, req, USER_ID)).willReturn(response);
 
             assertThat(facade.createSchedule(TEAM_ID, req, USER_ID)).isSameAs(response);
