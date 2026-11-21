@@ -17,10 +17,17 @@ import { pathToFileURL } from 'node:url';
 const JAVA_SPACE = '[ \\t\\n\\x0B\\f\\r]';
 /** CMP-ID の形。日時形式を先に置く（CMP-\d+ を先にすると CMP-260819-2131 から CMP-260819 だけを拾う）。 */
 export const CMP_ID_FORM = 'CMP-\\d{6}-\\d{4}|CMP-\\d+';
+/**
+ * Java の (?m)^ と同じ「行頭」。Java は LF・CRLF・CR・U+0085(NEL)・U+2028・U+2029 を行終端とし、
+ * CR と LF の間は行頭にしない。JS の m フラグは NEL を行終端にしないため、後読みで明示する。
+ */
+const JAVA_LINE_START = '(?:^|(?<=[\\n\\x85\\u{2028}\\u{2029}])|(?<=\\r)(?!\\n))';
+/** Java の .（行終端以外の1文字）。 */
+const JAVA_DOT = '[^\\n\\r\\x85\\u{2028}\\u{2029}]';
 /** 表の行頭に現れる CMP-ID（Java: CMP_ID_ROW）。 */
-const CMP_ID_ROW = new RegExp('^\\|' + JAVA_SPACE + '*(' + CMP_ID_FORM + ')' + JAVA_SPACE + '*\\|', 'gm');
+const CMP_ID_ROW = new RegExp(JAVA_LINE_START + '\\|' + JAVA_SPACE + '*(' + CMP_ID_FORM + ')' + JAVA_SPACE + '*\\|', 'gu');
 /** 走査経路の自己検証用の緩い計数（Java: CMP_ID_ROW_LOOSE）。 */
-const CMP_ID_ROW_LOOSE = new RegExp('^\\|.*?(' + CMP_ID_FORM + ')', 'gm');
+const CMP_ID_ROW_LOOSE = new RegExp(JAVA_LINE_START + '\\|' + JAVA_DOT + '*?(' + CMP_ID_FORM + ')', 'gu');
 const CMP_ID_PREFIX = new RegExp('^(' + CMP_ID_FORM + ')');
 const CMP_ID_EXACT = new RegExp('^(' + CMP_ID_FORM + ')$');
 /** 1行の列数（ID / 戦役 / 状態 / 依存 / 完了条件 / 証拠(PR/テスト) / 台帳）。 */
@@ -73,8 +80,9 @@ export function checkTaskListStructure(content) {
     errors.push('docs/task-list.md が存在しない（読めない）。台帳が無い状態を「問題なし」とは判定しない。');
     return { ok: false, errors, stats };
   }
-  // CRLF の作業木（core.autocrlf）でも LF と同じ判定にする。
-  const text = content.replace(/\r\n/g, '\n');
+  // 改行は正規化しない。重複・件数照合は Java の (?m)^ と同じ行終端（LF・CRLF・CR・NEL・U+2028・U+2029）で、
+  // 列数・優先度は Java と同じく LF だけで行を分ける（CRLF の CR は末尾の空セルに入るだけで判定に影響しない）。
+  const text = content;
   if (text.trim() === '') {
     errors.push('docs/task-list.md が空である。台帳が空の状態を「問題なし」とは判定しない。');
     return { ok: false, errors, stats };

@@ -6,12 +6,11 @@ validatorは `pull_request_target` で動くため、workflowのbase SHAからch
 
 ### merge queue（`merge_group`）経路
 
-Task-List PR Gate は `merge_group`（`checks_requested`）でも同名ジョブ `Task-List PR Gate` を報告する（`pull_request_target` は `merge_group` で発火しないため、これが無いと必須チェックがキュー上で永久 pending になる）。経路はジョブ内の step の `if: github.event_name` で分ける。ジョブ単位の `if` で分けると skipped の同名チェックが報告され、必須チェックの判定に混ざるためである。
+`pull_request_target` は `merge_group` で発火しないため、merge queue 用に別 workflow `.github/workflows/task-list-pr-gate-merge-group.yml`（`on: merge_group` の `checks_requested` のみ）を置き、同名ジョブ `Task-List PR Gate` を報告させる。PR 側の `task-list-pr-gate.yml` には `merge_group` を入れない。同一 workflow 内でジョブ単位の `if` で分けると skipped の同名チェックが PR 側にも報告され、必須チェックの判定に混ざるためである。
 
-- `pull_request_target` 経路: 従来どおり（CMP-ID 登録・完了証拠の検査。checkout・権限・判定ロジックは不変）。
-- `merge_group` 経路: PR 本文検査・完了証拠検査は各 PR の `pull_request_target` で済んでいるため行わない。合成コミット（`merge_group.head_sha`）の `docs/task-list.md` の構造だけを `scripts/task-list-structure-check.mjs` で検査する。CMP-ID（新旧両形式）の重複、列数≠7、未完行の状態セル先頭の優先度 `P1`〜`P5` 欠落、ファイル不在・空・CMP 行0件・緩い走査と厳密抽出の件数不一致はいずれも理由を出力して fail にする。判定規則は Java 番人 `TaskListCmpIdDuplicateGuardTest` の移植で、規則を変えるときは両方と `scripts/task-list-structure-check.test.mjs` の共通 fixture を同時に直す。
-- 検査器は信頼できる `merge_group.base_sha` からワークスペース直下へ checkout したものだけを実行し、`head_sha` からは台帳1ファイルだけを sparse checkout で別ディレクトリ（`.merge-group-head/`）へ取得する。キュー内の PR が改変した検査器で自己承認することはできない。base に検査器が無い場合は合格にせず fail する（本経路を入れた PR が main に入るまでは merge queue を有効化しないこと）。
-- GitHub Actions の `permissions` は workflow 単位で既存経路と共有するため、`merge_group` 経路のトークン権限は `pull_request_target` 経路と同じ（`contents: read` ほか）である。`merge_group` 経路の step はトークンを checkout 以外に使わず、`persist-credentials: false` で作業木にも残さない。
+- PR 側（`pull_request_target`）: 従来どおり（CMP-ID 登録・完了証拠の検査。checkout・権限・判定ロジックは不変）。
+- merge_group 側: PR 本文検査・完了証拠検査は各 PR の `pull_request_target` で済んでいるため行わない。合成コミット（`merge_group.head_sha`）の `docs/task-list.md` の構造だけを `scripts/task-list-structure-check.mjs` で検査する。CMP-ID（新旧両形式）の重複、列数≠7、未完行の状態セル先頭の優先度 `P1`〜`P5` 欠落、ファイル不在・空・CMP 行0件・緩い走査と厳密抽出の件数不一致はいずれも理由を出力して fail にする。判定規則は Java 番人 `TaskListCmpIdDuplicateGuardTest` の移植で、行終端（LF・CRLF・CR・NEL・U+2028・U+2029）や空白・trim の扱いも Java に合わせている。規則を変えるときは両方と `scripts/task-list-structure-check.test.mjs` の共通 fixture を同時に直す。
+- 検査器は信頼できる `merge_group.base_sha` からワークスペース直下へ checkout したものだけを実行し、`head_sha` からは台帳1ファイルだけを sparse checkout で別ディレクトリ（`.merge-group-head/`）へ取得する。キュー内の PR が改変した検査器で自己承認することはできない。base に検査器が無い場合は合格にせず fail する（本 workflow を入れた PR が main に入るまでは merge queue を有効化しないこと）。権限は `contents: read` のみ、`persist-credentials: false`。
 
 ## JSON形式
 

@@ -4,10 +4,6 @@ on:
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, edited]
-  # merge queue（CMP-261121-1114）。pull_request_target は merge_group で発火しないため、
-  # これが無いと必須チェック "Task-List PR Gate" が merge queue 上で永久 pending になる。
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
 
 permissions:
@@ -26,18 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # 経路は event_name で分ける。ジョブ単位の if で分けると skipped の同名チェックが必須チェックとして
-      # 報告されてしまうため、ジョブは1つのまま step 単位で分岐する。
       # pull_request_target では必ずbase SHAをcheckoutする。PRのソースはcheckout/import/実行しない。
       - name: Checkout trusted base
-        if: github.event_name != 'merge_group'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
       - name: Validate registration and completion evidence
-        if: github.event_name != 'merge_group'
         uses: actions/github-script@v9
         with:
           script: |
@@ -233,37 +225,3 @@ jobs:
             const state = trustedValidator ? matchedRow.state : matchedRow[3]?.replace(/^\*\*(.*)\*\*$/, '$1').trim().replace(/^P[1-5]\s+/, '');
             if (state !== '\u5b9f\u88c5\u4e2d') throw new Error(`${cmpId} must be registered as 実装中 on ${pull.base.ref} (state: ${state || 'missing'}).`);
             core.info(`${cmpId} is registered as 実装中 on ${pull.base.ref}; checked ${codeFiles.length} code/configuration file(s).`);
-
-      # ---------------------------------------------------------------------
-      # merge_group 経路（merge queue）。PR 本文（CMP-ID 登録）と完了証拠の検査は各 PR の
-      # pull_request_target で済んでいるため行わず、合成コミット（merge_group.head_sha）の
-      # docs/task-list.md の構造（CMP-ID 重複・列数7・未完行の優先度）だけを検査する。
-      # 検査器は信頼できる merge_group.base_sha からワークスペース直下へ checkout したものだけを使い、
-      # head_sha からは台帳1ファイルだけを別ディレクトリへ取得する（キュー内 PR が改変した検査器で自己承認させない）。
-      # ---------------------------------------------------------------------
-      - name: Checkout trusted base (merge_group)
-        if: github.event_name == 'merge_group'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.merge_group.base_sha }}
-          persist-credentials: false
-
-      - name: Fetch task list from merge group head (merge_group)
-        if: github.event_name == 'merge_group'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.merge_group.head_sha }}
-          path: .merge-group-head
-          sparse-checkout: |
-            docs/task-list.md
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-
-      - name: Validate task list structure (merge_group)
-        if: github.event_name == 'merge_group'
-        run: |
-          if [ ! -f scripts/task-list-structure-check.mjs ]; then
-            echo "::error::信頼 base（merge_group.base_sha）に scripts/task-list-structure-check.mjs が無い。検査器なしで合格にはしない。"
-            exit 1
-          fi
-          node scripts/task-list-structure-check.mjs .merge-group-head/docs/task-list.md
