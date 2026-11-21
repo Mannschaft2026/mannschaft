@@ -14,7 +14,16 @@ import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Tag from 'primevue/tag'
 
+import {
+  basisPointsToPercent,
+  buildProductKeyOptions,
+  buildTaxCodeOptions,
+  isSelectableOption,
+  percentToBasisPoints,
+} from '~/utils/priceRevisionForm'
 import type {
+  BillingFeatureAdminResponse,
+  BillingPlanAdminResponse,
   BillingTaxCodeCreateRequest,
   BillingTaxCodeResponse,
   PriceRevisionBandInput,
@@ -143,8 +152,65 @@ const bandForm = reactive<{ bandNo: number; minMembers: number; maxMembers: numb
   taxCode: '',
 })
 
+// 商品キー・税コードの選択肢（BE の既存マスタ API から取得。存在しない値を送信前に防ぐ）
+const plans = ref<BillingPlanAdminResponse[]>([])
+const features = ref<BillingFeatureAdminResponse[]>([])
+const taxCodes = ref<BillingTaxCodeResponse[]>([])
+const createOptionsLoading = ref(false)
+
+const productKeyOptions = computed<string[]>(() =>
+  buildProductKeyOptions(form.productKind, plans.value, features.value))
+
+/** 適用開始日時の epoch ミリ秒（未入力・DST 不存在時刻は null → 税コードは選べない）。 */
+const effectiveFromMillis = computed<number | null>(() => {
+  if (!form.effectiveFrom) return null
+  // datetime-local の値は常に整形済み。DST で存在しない壁時計は null（税コードは選べない）。
+  const instant = toInstantPayload(form.effectiveFrom)
+  return instant === null ? null : Date.parse(instant)
+})
+
+/** 税コードマスタ（一覧ダイアログと共用）から、適用開始日時に有効なものだけを選択肢にする。 */
+const taxCodeChoices = computed(() => buildTaxCodeOptions(taxCodes.value, effectiveFromMillis.value))
+const taxCodeOptionValues = computed<string[]>(() => taxCodeChoices.value.map((c) => c.code))
+
 /** 参考税率（画面プレビュー専用。確定値はサーバー側 BillingTaxDerivationService が計算する）。 */
-const previewRateBasisPoints = ref(1000)
+const previewRateBasisPoints = computed<number>(() =>
+  taxCodeChoices.value.find((c) => c.code === bandForm.taxCode)?.rateBasisPoints ?? 0)
+
+/** 税コードの表示名（コード + 税率％）。 */
+function taxCodeOptionLabel(code: string): string {
+  const choice = taxCodeChoices.value.find((c) => c.code === code)
+  return choice ? `${choice.code}（${basisPointsToPercent(choice.rateBasisPoints)}%）` : code
+}
+
+async function loadCreateOptions() {
+  createOptionsLoading.value = true
+  try {
+    const [planResult, featureResult, taxCodeResult] = await Promise.all([
+      billingApi.listPlansAdmin(),
+      billingApi.listFeaturesAdmin(),
+      billingApi.listTaxCodes(),
+    ])
+    plans.value = planResult.data
+    features.value = featureResult.data
+    taxCodes.value = taxCodeResult
+  } catch (err) {
+    console.error('price-revisions/index.vue: loadCreateOptions failed', err)
+    notification.error(t('billing.priceRevisions.loadOptionsFailed'))
+    plans.value = []
+    features.value = []
+  } finally {
+    createOptionsLoading.value = false
+  }
+}
+
+// 商品種別・適用開始日時を変えたら、選択肢から外れた値は選択を解除する（古い値を送らない）。
+watch(productKeyOptions, (options) => {
+  if (form.productKey && !isSelectableOption(form.productKey, options)) form.productKey = ''
+})
+watch(taxCodeOptionValues, (options) => {
+  if (bandForm.taxCode && !isSelectableOption(bandForm.taxCode, options)) bandForm.taxCode = ''
+})
 
 const taxExcludedPreview = computed<number>(() => {
   if (!bandForm.inputAmount || !taxMode.value) return 0
@@ -166,13 +232,13 @@ const effectiveUntilDstInvalid = computed(() => isNonexistentDstTime(form.effect
 
 const canCreate = computed(() =>
   !creating.value
-  && form.productKey.trim().length > 0
+  && isSelectableOption(form.productKey, productKeyOptions.value)
   && form.effectiveFrom.length > 0
   && !effectiveFromDstInvalid.value
   && !effectiveUntilDstInvalid.value
   && !!taxMode.value
   && !!bandForm.inputAmount
-  && bandForm.taxCode.trim().length > 0)
+  && isSelectableOption(bandForm.taxCode, taxCodeOptionValues.value))
 
 function openCreateDialog() {
   form.productKind = 'PLAN'
@@ -187,6 +253,7 @@ function openCreateDialog() {
   bandForm.inputAmount = null
   bandForm.taxCode = ''
   createDialogOpen.value = true
+  void loadCreateOptions()
 }
 
 function onCreateDialogEsc(event: KeyboardEvent) {
@@ -194,6 +261,8 @@ function onCreateDialogEsc(event: KeyboardEvent) {
 }
 
 async function createPriceRevision() {
+  // 送信前に選択肢外の値（存在しない商品キー・税コード）を弾く。canCreate が同じ条件を含むが、
+  // 呼び出し経路に依らず必ずここで止める。
   if (!canCreate.value || !taxMode.value || !bandForm.inputAmount) return
   const effectiveFromInstant = toInstantPayload(form.effectiveFrom)
   const effectiveUntilInstant = form.effectiveUntil ? toInstantPayload(form.effectiveUntil) : null
@@ -210,11 +279,11 @@ async function createPriceRevision() {
       maxMembers: bandForm.maxMembers,
       inputAmount: bandForm.inputAmount,
       taxBehavior: taxMode.value,
-      taxCode: bandForm.taxCode.trim(),
+      taxCode: bandForm.taxCode,
     }]
     const result = await billingApi.createPriceRevision({
       productKind: form.productKind,
-      productKey: form.productKey.trim(),
+      productKey: form.productKey,
       scopeKind: form.scopeKind,
       effectiveFrom: effectiveFromInstant,
       effectiveUntil: effectiveUntilInstant,
@@ -240,11 +309,16 @@ async function createPriceRevision() {
 // ============================================================
 
 const taxCodesDialogOpen = ref(false)
-const taxCodes = ref<BillingTaxCodeResponse[]>([])
 const taxCodeLoading = ref(false)
 const taxCodeSaving = ref(false)
 
 /** 入力中の値。stripeTaxCode は入力欄の文字列で持ち、送信時に空なら null へ写す。 */
+/** 税率の入力値（％）。送信時に basis points へ変換する（`rateBasisPoints` は直接入力させない）。 */
+const taxRatePercent = ref<number | null>(10)
+const taxRateBasisPoints = computed(() => percentToBasisPoints(taxRatePercent.value))
+/** 入力済みだが範囲外（0〜100%以外）・0.01% 未満の端数。 */
+const taxRateInvalid = computed(() => taxRatePercent.value !== null && taxRateBasisPoints.value === null)
+
 const taxCodeForm = reactive<Omit<BillingTaxCodeCreateRequest, 'stripeTaxCode'> & { stripeTaxCode: string }>({
   code: '',
   displayName: '',
@@ -299,11 +373,14 @@ const taxCodeCreateDisabled = computed(() =>
   || !taxCodeForm.displayName.trim()
   || !taxCodeForm.validFrom
   || taxCodeValidFromDstInvalid.value
-  || stripeTaxCodeInvalid.value)
+  || stripeTaxCodeInvalid.value
+  || taxRateBasisPoints.value === null)
 
 async function submitCreateTaxCode() {
   if (!taxCodeForm.code.trim() || !taxCodeForm.displayName.trim() || !taxCodeForm.validFrom) return
   if (stripeTaxCodeInvalid.value) return
+  const rateBasisPoints = taxRateBasisPoints.value
+  if (rateBasisPoints === null) return
   const validFromInstant = toInstantPayload(taxCodeForm.validFrom)
   if (validFromInstant === null) {
     notification.error(t('billing.priceRevisions.errorNonexistentDstTime'))
@@ -314,6 +391,7 @@ async function submitCreateTaxCode() {
     await billingApi.createTaxCode({
       ...taxCodeForm,
       code: taxCodeForm.code.trim(),
+      rateBasisPoints,
       stripeTaxCode: taxCodeForm.stripeTaxCode.trim() || null,
       validFrom: validFromInstant,
     })
@@ -500,7 +578,16 @@ async function deactivateTaxCode(row: BillingTaxCodeResponse) {
         </div>
         <div>
           <label class="mb-1 block text-xs" for="pr-product-key">{{ t('billing.priceRevisions.productKey') }}</label>
-          <InputText id="pr-product-key" v-model="form.productKey" class="w-full" aria-label="product-key" />
+          <Dropdown
+            id="pr-product-key"
+            v-model="form.productKey"
+            :options="productKeyOptions"
+            :placeholder="t('billing.priceRevisions.selectProductKey')"
+            :loading="createOptionsLoading"
+            :empty-message="t('billing.priceRevisions.noProductOptions')"
+            class="w-full"
+            aria-label="product-key"
+          />
         </div>
         <div>
           <label class="mb-1 block text-xs" for="pr-scope-kind">{{ t('billing.priceRevisions.scopeKind') }}</label>
@@ -534,7 +621,17 @@ async function deactivateTaxCode(row: BillingTaxCodeResponse) {
         </div>
         <div>
           <label class="mb-1 block text-xs" for="pr-tax-code">{{ t('billing.priceRevisions.taxCode') }}</label>
-          <InputText id="pr-tax-code" v-model="bandForm.taxCode" class="w-full" aria-label="tax-code" />
+          <Dropdown
+            id="pr-tax-code"
+            v-model="bandForm.taxCode"
+            :options="taxCodeOptionValues"
+            :option-label="taxCodeOptionLabel"
+            :placeholder="t('billing.priceRevisions.selectTaxCode')"
+            :loading="createOptionsLoading"
+            :empty-message="form.effectiveFrom ? t('billing.priceRevisions.noTaxCodeOptions') : t('billing.priceRevisions.taxCodeNeedsEffectiveFrom')"
+            class="w-full"
+            aria-label="tax-code"
+          />
         </div>
       </div>
 
@@ -571,7 +668,27 @@ async function deactivateTaxCode(row: BillingTaxCodeResponse) {
       <div class="mb-4 grid grid-cols-2 items-start gap-2 md:grid-cols-3">
         <InputText v-model="taxCodeForm.code" :placeholder="t('billing.priceRevisions.taxCode')" aria-label="new-tax-code-code" />
         <InputText v-model="taxCodeForm.displayName" :placeholder="t('billing.priceRevisions.taxCodeDisplayName')" aria-label="new-tax-code-display-name" />
-        <InputNumber v-model="taxCodeForm.rateBasisPoints" :placeholder="t('billing.priceRevisions.taxCodeRate')" aria-label="new-tax-code-rate" />
+        <div>
+          <InputNumber
+            v-model="taxRatePercent"
+            :placeholder="t('billing.priceRevisions.taxCodeRate')"
+            :min="0"
+            :max="100"
+            :min-fraction-digits="0"
+            :max-fraction-digits="2"
+            suffix="%"
+            :invalid="taxRateInvalid"
+            class="w-full"
+            aria-label="new-tax-code-rate"
+          />
+          <p
+            v-if="taxRateInvalid"
+            class="mt-1 text-xs text-red-600 dark:text-red-400"
+            aria-label="tax-rate-format-error"
+          >
+            {{ t('billing.priceRevisions.errorInvalidTaxRate') }}
+          </p>
+        </div>
         <div>
           <InputText
             v-model="taxCodeForm.stripeTaxCode"
@@ -609,7 +726,11 @@ async function deactivateTaxCode(row: BillingTaxCodeResponse) {
       <DataTable :value="taxCodes" :loading="taxCodeLoading" data-key="id" class="text-sm">
         <Column field="code" :header="t('billing.priceRevisions.taxCode')" />
         <Column field="displayName" :header="t('billing.priceRevisions.taxCodeDisplayName')" />
-        <Column field="rateBasisPoints" :header="t('billing.priceRevisions.taxCodeRate')" />
+        <Column :header="t('billing.priceRevisions.taxCodeRate')">
+          <template #body="{ data: row }: { data: BillingTaxCodeResponse }">
+            {{ basisPointsToPercent(row.rateBasisPoints) }}%
+          </template>
+        </Column>
         <Column :header="t('billing.priceRevisions.stripeTaxCode')">
           <template #body="{ data: row }: { data: BillingTaxCodeResponse }">
             <span :aria-label="`stripe-tax-code-${row.id}`">{{ row.stripeTaxCode ?? t('billing.priceRevisions.stripeTaxCodeUnset') }}</span>
