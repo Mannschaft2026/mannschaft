@@ -54,8 +54,6 @@
       "announced": "Anunciado",
       "open": "Distribuir",
       "dialog_title": "Distribuir al exterior",
-      "field_content_type": "Contenido",
-      "field_content_id": "ID de destino",
       "field_custom_title": "Título",
       "field_custom_body": "Cuerpo",
       "field_headline": "Titular del anuncio (opcional)",
@@ -82,7 +80,8 @@
         "NONE": "No necesario",
         "OPTIONAL": "Opcional",
         "REQUIRED": "Obligatorio"
-      }
+      },
+      "deadline_past": "La fecha límite de confirmación no puede estar en el pasado"
     },
     "invitation": {
       "accept": "Unirse",

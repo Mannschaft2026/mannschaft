@@ -75,6 +75,80 @@ describe('pages/committees/[id]/distributions.vue — 取得失敗時のエラ�
   })
 })
 
+describe('pages/committees/[id]/distributions.vue — 検分指摘（CMP-260930-0231）', () => {
+  type Vm = { form: Record<string, unknown>; submitDistribution: () => Promise<void> }
+  beforeEach(() => {
+    listDistributions.mockReset()
+    getCommittee.mockReset()
+    distribute.mockReset()
+    notifySuccess.mockReset()
+    handleApiError.mockReset()
+    listDistributions.mockResolvedValue({ data: [], meta: { page: 0, size: 20, total: 0, totalPages: 0 } })
+    getCommittee.mockResolvedValue({ data: { id: 1, myRole: 'CHAIR' } })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+  })
+
+  it('CD-011: 確認期限が過去だと送信せず、利用者に分かる文言で拒否する', async () => {
+    const wrapper = await mountSuspended(DistributionsPage)
+    await flushMicrotasks()
+    await wrapper.find('[data-testid="distribution-open-button"]').trigger('click')
+    await flushMicrotasks()
+    const vm = wrapper.vm as unknown as Vm
+    vm.form.customTitle = '連絡'
+    vm.form.confirmationMode = 'REQUIRED'
+    vm.form.confirmationDeadlineAt = new Date(Date.now() - 60 * 60 * 1000)
+    await vm.submitDistribution()
+    await flushMicrotasks()
+
+    expect(distribute).not.toHaveBeenCalled()
+    expect(globalThis.confirm).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[data-testid="distribution-form-error"]')?.textContent).toContain('in the past')
+  })
+
+  it('CD-012: 連打しても API は1回だけ呼ばれる', async () => {
+    let resolve: (v: unknown) => void = () => {}
+    distribute.mockReturnValue(new Promise((r) => { resolve = r }))
+    const wrapper = await mountSuspended(DistributionsPage)
+    await flushMicrotasks()
+    const vm = wrapper.vm as unknown as Vm
+    vm.form.customTitle = '連絡'
+    const first = vm.submitDistribution()
+    const second = vm.submitDistribution()
+    resolve({ data: customLog })
+    await Promise.all([first, second])
+    expect(distribute).toHaveBeenCalledTimes(1)
+  })
+
+  it('CD-013: ボタン押下→ダイアログ→確認→API呼び出しの経路を通る', async () => {
+    distribute.mockResolvedValue({ data: customLog })
+    const wrapper = await mountSuspended(DistributionsPage)
+    await flushMicrotasks()
+    await wrapper.find('[data-testid="distribution-open-button"]').trigger('click')
+    await flushMicrotasks()
+
+    const vm = wrapper.vm as unknown as Vm
+    vm.form.customTitle = '連絡'
+    await flushMicrotasks()
+    const submit = document.body.querySelector('[data-testid="distribution-submit-button"]') as HTMLElement | null
+    expect(submit).not.toBeNull()
+    submit!.click()
+    await flushMicrotasks()
+
+    expect(globalThis.confirm).toHaveBeenCalled()
+    expect(distribute).toHaveBeenCalledTimes(1)
+    expect(distribute.mock.calls[0][1]).toMatchObject({ contentType: 'CUSTOM_MESSAGE', customTitle: '連絡' })
+  })
+
+  it('CD-014: 画面の配信種別は CUSTOM_MESSAGE のみ（対象ID入力欄を持たない）', async () => {
+    const wrapper = await mountSuspended(DistributionsPage)
+    await flushMicrotasks()
+    await wrapper.find('[data-testid="distribution-open-button"]').trigger('click')
+    await flushMicrotasks()
+    expect(document.body.querySelector('[data-testid="distribution-content-id"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="distribution-content-type"]')).toBeNull()
+  })
+})
+
 async function flushMicrotasks() {
   for (let i = 0; i < 5; i++) {
     await Promise.resolve()

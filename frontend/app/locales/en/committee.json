@@ -54,8 +54,6 @@
       "announced": "Announced",
       "open": "Distribute",
       "dialog_title": "Distribute externally",
-      "field_content_type": "Content",
-      "field_content_id": "Target ID",
       "field_custom_title": "Title",
       "field_custom_body": "Body",
       "field_headline": "Announcement headline (optional)",
@@ -82,7 +80,8 @@
         "NONE": "Not needed",
         "OPTIONAL": "Optional",
         "REQUIRED": "Required"
-      }
+      },
+      "deadline_past": "The confirmation deadline must not be in the past"
     },
     "invitation": {
       "accept": "Join",

@@ -54,8 +54,6 @@
       "announced": "告知済み",
       "open": "伝達する",
       "dialog_title": "外部へ伝達する",
-      "field_content_type": "伝達内容",
-      "field_content_id": "対象ID",
       "field_custom_title": "件名",
       "field_custom_body": "本文",
       "field_headline": "お知らせの見出し（任意）",
@@ -82,7 +80,8 @@
         "NONE": "不要",
         "OPTIONAL": "任意",
         "REQUIRED": "必須"
-      }
+      },
+      "deadline_past": "確認期限は現在より後の日時を指定してください"
     },
     "invitation": {
       "accept": "参加する",

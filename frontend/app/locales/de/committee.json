@@ -54,8 +54,6 @@
       "announced": "Angekündigt",
       "open": "Weiterleiten",
       "dialog_title": "Nach außen weiterleiten",
-      "field_content_type": "Inhalt",
-      "field_content_id": "Ziel-ID",
       "field_custom_title": "Titel",
       "field_custom_body": "Text",
       "field_headline": "Ankündigungstitel (optional)",
@@ -82,7 +80,8 @@
         "NONE": "Nicht nötig",
         "OPTIONAL": "Optional",
         "REQUIRED": "Pflicht"
-      }
+      },
+      "deadline_past": "Die Bestätigungsfrist darf nicht in der Vergangenheit liegen"
     },
     "invitation": {
       "accept": "Beitreten",

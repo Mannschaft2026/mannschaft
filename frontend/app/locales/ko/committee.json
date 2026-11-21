@@ -54,8 +54,6 @@
       "announced": "공지됨",
       "open": "전달하기",
       "dialog_title": "외부로 전달",
-      "field_content_type": "전달 내용",
-      "field_content_id": "대상 ID",
       "field_custom_title": "제목",
       "field_custom_body": "본문",
       "field_headline": "공지 제목(선택)",
@@ -82,7 +80,8 @@
         "NONE": "불필요",
         "OPTIONAL": "선택",
         "REQUIRED": "필수"
-      }
+      },
+      "deadline_past": "확인 기한은 현재 이후의 시각이어야 합니다"
     },
     "invitation": {
       "accept": "참여하기",

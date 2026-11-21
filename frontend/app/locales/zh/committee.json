@@ -54,8 +54,6 @@
       "announced": "已公告",
       "open": "传达",
       "dialog_title": "向外部传达",
-      "field_content_type": "传达内容",
-      "field_content_id": "对象ID",
       "field_custom_title": "标题",
       "field_custom_body": "正文",
       "field_headline": "公告标题（可选）",
@@ -82,7 +80,8 @@
         "NONE": "不需要",
         "OPTIONAL": "可选",
         "REQUIRED": "必须"
-      }
+      },
+      "deadline_past": "确认截止时间必须晚于当前时间"
     },
     "invitation": {
       "accept": "加入",

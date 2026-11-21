@@ -3,7 +3,6 @@ import dayjs from 'dayjs'
 import type {
   CommitteeConfirmationMode,
   CommitteeDistributeRequest,
-  CommitteeDistributionContentType,
   CommitteeDistributionLog,
   CommitteeDistributionScope,
   CommitteeRole,
@@ -27,17 +26,17 @@ const { page, rows, totalRecords, onPage } = usePagination()
 
 // --- 配信操作（BE: CHAIR / VICE_CHAIR / SECRETARY のみ可） ---
 const DISTRIBUTOR_ROLES: CommitteeRole[] = ['CHAIR', 'VICE_CHAIR', 'SECRETARY']
-const CONTENT_TYPES: CommitteeDistributionContentType[] = ['SURVEY_RESULT', 'ACTIVITY_RECORD', 'CIRCULATION_RESULT', 'CUSTOM_MESSAGE']
 const SCOPES: CommitteeDistributionScope[] = ['COMMITTEE_ONLY', 'PARENT_ORG', 'PARENT_ORG_AND_CHILDREN']
 const CONFIRMATION_MODES: CommitteeConfirmationMode[] = ['NONE', 'OPTIONAL', 'REQUIRED']
 
 const canDistribute = ref(false)
 const showDialog = ref(false)
 const submitting = ref(false)
-const formError = ref(false)
+/** 入力エラーの i18n キー。null ならエラーなし。 */
+const formErrorKey = ref<string | null>(null)
+/** 確認期限に選べる最小日時（現在以降）。ダイアログを開くたびに更新する。 */
+const minDeadline = ref(new Date())
 const form = reactive({
-  contentType: 'CUSTOM_MESSAGE' as CommitteeDistributionContentType,
-  contentId: null as number | null,
   customTitle: '',
   customBody: '',
   customHeadline: '',
@@ -47,11 +46,6 @@ const form = reactive({
   confirmationDeadlineAt: null as Date | null,
 })
 
-const isCustomMessage = computed(() => form.contentType === 'CUSTOM_MESSAGE')
-
-const contentTypeOptions = computed(() =>
-  CONTENT_TYPES.map((v) => ({ label: t(`committee.distributions.content_types.${v}`), value: v })),
-)
 const scopeOptions = computed(() =>
   SCOPES.map((v) => ({ label: t(`committee.distributions.scopes.${v}`), value: v })),
 )
@@ -76,37 +70,50 @@ async function loadPermission() {
 }
 
 function openDialog() {
-  formError.value = false
+  formErrorKey.value = null
+  minDeadline.value = new Date()
   showDialog.value = true
 }
 
-function buildRequest(): CommitteeDistributeRequest | null {
-  const custom = isCustomMessage.value
-  if (custom && !form.customTitle.trim()) return null
-  if (!custom && form.contentId == null) return null
-  if (form.confirmationMode === 'REQUIRED' && !form.confirmationDeadlineAt) return null
+/**
+ * 画面からの配信は CUSTOM_MESSAGE のみ。他の種別は対象IDを画面内で選べず、
+ * BE も contentId の実在を検証しないため、各コンテンツ詳細からの伝達（設計書 F04.10 の
+ * CommitteeDistributionModal）で実装する。
+ */
+function buildRequest(): { body: CommitteeDistributeRequest | null; errorKey: string | null } {
+  if (!form.customTitle.trim()) return { body: null, errorKey: 'committee.distributions.required_missing' }
+  if (form.confirmationMode === 'REQUIRED') {
+    if (!form.confirmationDeadlineAt) return { body: null, errorKey: 'committee.distributions.required_missing' }
+    if (form.confirmationDeadlineAt.getTime() <= Date.now()) {
+      return { body: null, errorKey: 'committee.distributions.deadline_past' }
+    }
+  }
   return {
-    contentType: form.contentType,
-    contentId: custom ? null : form.contentId,
-    customTitle: custom ? form.customTitle.trim() : null,
-    customBody: custom && form.customBody.trim() ? form.customBody.trim() : null,
-    targetScope: form.targetScope,
-    announcementEnabled: form.announcementEnabled,
-    confirmationMode: form.confirmationMode,
-    confirmationDeadlineAt: form.confirmationDeadlineAt
-      ? dayjs(form.confirmationDeadlineAt).format('YYYY-MM-DDTHH:mm:ss')
-      : null,
-    customHeadline: form.customHeadline.trim() || null,
+    errorKey: null,
+    body: {
+      contentType: 'CUSTOM_MESSAGE',
+      contentId: null,
+      customTitle: form.customTitle.trim(),
+      customBody: form.customBody.trim() || null,
+      targetScope: form.targetScope,
+      announcementEnabled: form.announcementEnabled,
+      confirmationMode: form.confirmationMode,
+      confirmationDeadlineAt: form.confirmationDeadlineAt
+        ? dayjs(form.confirmationDeadlineAt).format('YYYY-MM-DDTHH:mm:ss')
+        : null,
+      customHeadline: form.customHeadline.trim() || null,
+    },
   }
 }
 
 async function submitDistribution() {
-  const body = buildRequest()
+  if (submitting.value) return
+  const { body, errorKey } = buildRequest()
   if (!body) {
-    formError.value = true
+    formErrorKey.value = errorKey
     return
   }
-  formError.value = false
+  formErrorKey.value = null
   if (!confirm(t('committee.distributions.confirm_message'))) return
   submitting.value = true
   try {
@@ -234,32 +241,18 @@ onMounted(async () => {
       v-model:visible="showDialog"
       :header="$t('committee.distributions.dialog_title')"
       modal
+      :closable="!submitting"
+      :close-on-escape="!submitting"
       :style="{ width: '520px' }"
     >
       <div class="flex flex-col gap-4">
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_content_type') }}</label>
-          <Select
-            v-model="form.contentType"
-            :options="contentTypeOptions"
-            option-label="label"
-            option-value="value"
-            class="w-full"
-          />
+          <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_custom_title') }}</label>
+          <InputText v-model="form.customTitle" class="w-full" maxlength="200" />
         </div>
-        <template v-if="isCustomMessage">
-          <div>
-            <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_custom_title') }}</label>
-            <InputText v-model="form.customTitle" class="w-full" maxlength="200" />
-          </div>
-          <div>
-            <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_custom_body') }}</label>
-            <Textarea v-model="form.customBody" class="w-full" rows="4" maxlength="5000" />
-          </div>
-        </template>
-        <div v-else>
-          <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_content_id') }}</label>
-          <InputNumber v-model="form.contentId" :use-grouping="false" class="w-full" />
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_custom_body') }}</label>
+          <Textarea v-model="form.customBody" class="w-full" rows="4" maxlength="5000" />
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_scope') }}</label>
@@ -287,18 +280,24 @@ onMounted(async () => {
         </div>
         <div v-if="form.confirmationMode === 'REQUIRED'">
           <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_deadline') }}</label>
-          <DatePicker v-model="form.confirmationDeadlineAt" show-time hour-format="24" class="w-full" />
+          <DatePicker
+            v-model="form.confirmationDeadlineAt"
+            :min-date="minDeadline"
+            show-time
+            hour-format="24"
+            class="w-full"
+          />
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_headline') }}</label>
           <InputText v-model="form.customHeadline" class="w-full" maxlength="200" />
         </div>
-        <p v-if="formError" class="text-sm text-red-600" data-testid="distribution-form-error">
-          {{ $t('committee.distributions.required_missing') }}
+        <p v-if="formErrorKey" class="text-sm text-red-600" data-testid="distribution-form-error">
+          {{ $t(formErrorKey) }}
         </p>
       </div>
       <template #footer>
-        <Button :label="$t('button.cancel')" severity="secondary" @click="showDialog = false" />
+        <Button :label="$t('button.cancel')" severity="secondary" :disabled="submitting" @click="showDialog = false" />
         <Button
           :label="$t('committee.distributions.submit')"
           :loading="submitting"
