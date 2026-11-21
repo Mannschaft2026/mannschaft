@@ -133,6 +133,60 @@ describe('components/shell/HeaderSearch.vue — ヘッダー検索欄', () => {
     expect(href).toContain('type=TEAM')
   })
 
+  it('HS-07: 入力が変わったら保留中の古い候補リクエストは無効になり、後から解決しても出ない', async () => {
+    let resolveFirst: (v: Suggestion[]) => void = () => {}
+    suggestions.mockImplementationOnce(() => new Promise<Suggestion[]>((r) => { resolveFirst = r }))
+    const wrapper = await mountBox()
+    await typeAndWait(wrapper, 'グラ')
+    expect(suggestions).toHaveBeenCalledTimes(1)
+    await wrapper.find('[data-testid="header-search-input"]').setValue('サッカー')
+    resolveFirst([KEYWORD])
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(0)
+  })
+
+  it('HS-08: Enter で検索を確定したら保留中の debounce は解除され、遷移後に候補は再取得されない', async () => {
+    suggestions.mockResolvedValue([KEYWORD])
+    const wrapper = await mountBox()
+    await wrapper.find('[data-testid="header-search-input"]').setValue('サッカー')
+    await wrapper.find('[data-testid="header-search-form"]').trigger('submit')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(suggestions).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(0)
+  })
+
+  it('HS-09: 矢印キーで候補を選び Enter で確定、Esc で閉じる。未選択の Enter は通常検索（横取りしない）', async () => {
+    suggestions.mockResolvedValue([KEYWORD, USER, TEAM])
+    const wrapper = await mountBox()
+    await typeAndWait(wrapper, 'サッ')
+    const input = wrapper.find('[data-testid="header-search-input"]')
+    expect(input.attributes('role')).toBe('combobox')
+    expect(input.attributes('aria-expanded')).toBe('true')
+
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(push).not.toHaveBeenCalled()
+
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    const options = wrapper.findAll('[data-testid^="header-search-suggestion-"]')
+    expect(options[1]!.attributes('aria-selected')).toBe('true')
+    expect(options[0]!.attributes('aria-selected')).toBe('false')
+    expect(input.attributes('aria-activedescendant')).toBe(options[1]!.attributes('id'))
+
+    await input.trigger('keydown', { key: 'ArrowUp' })
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')[0]!.attributes('aria-selected')).toBe('true')
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(push).toHaveBeenLastCalledWith('/social/tanaka')
+
+    await typeAndWait(wrapper, 'サッカ')
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    await input.trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('[data-testid="header-search-suggestions"]').exists()).toBe(false)
+    expect(input.attributes('aria-expanded')).toBe('false')
+  })
+
   it('HS-06: suggestions が失敗しても候補は出ず、失敗はログに残す', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     suggestions.mockRejectedValue(new Error('boom'))

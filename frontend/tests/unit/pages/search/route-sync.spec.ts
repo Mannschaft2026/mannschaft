@@ -62,4 +62,40 @@ describe('pages/search/index.vue — URL 同期', () => {
     await flushPromises()
     expect(search).not.toHaveBeenCalled()
   })
+
+  it('RS-03: ページ内入力を未送信のまま B に編集し、ヘッダーから B を検索しても再検索する（比較は実際に検索した条件）', async () => {
+    const wrapper = await mountSuspended(SearchPage)
+    await flushPromises()
+    search.mockClear()
+    await wrapper.find('[data-testid="global-search-input"]').setValue('サッカー')
+    route.query = { q: 'サッカー' }
+    await flushPromises()
+    expect(search).toHaveBeenCalledWith({ q: 'サッカー', types: undefined, page: undefined, size: undefined })
+  })
+
+  it('RS-04: 空の /search へ戻ると、前回の結果・件数タブ・入力が初期状態へ戻る', async () => {
+    search.mockResolvedValue({
+      ...EMPTY,
+      data: {
+        ...EMPTY.data,
+        results: [{
+          type: 'TEAM', id: 1, title: 'チーム1', snippet: null, highlights: { title: [0, 2] }, relevance: null,
+          author: null, scope: null, createdAt: '2026-11-17T09:00:00', url: '/teams/t1', actions: [],
+        }],
+        typeCounts: { ...EMPTY.data.typeCounts, TEAM: 1 },
+      },
+      meta: { viewMode: 'OVERVIEW', total: 1, page: 0, size: 5, totalPages: 0 },
+    })
+    const wrapper = await mountSuspended(SearchPage)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="global-search-result-TEAM-1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="global-search-tab-ALL"]').exists()).toBe(true)
+
+    route.query = {}
+    await flushPromises()
+    expect(wrapper.find('[data-testid="global-search-result-TEAM-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="global-search-tab-ALL"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="global-search-empty"]').exists()).toBe(false)
+    expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe('')
+  })
 })

@@ -32,6 +32,8 @@ const routeType = computed<ContentType | null>(() => {
 const keyword = ref(routeQuery.value)
 const suggestions = ref<Suggestion[]>([])
 const open = ref(false)
+/** キーボードで選択中の候補（-1 = 未選択。未選択の Enter は通常検索） */
+const activeIndex = ref(-1)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let requestSeq = 0
 
@@ -51,6 +53,7 @@ function clearSuggestions() {
   requestSeq++
   suggestions.value = []
   open.value = false
+  activeIndex.value = -1
 }
 
 async function fetchSuggestions(text: string) {
@@ -59,6 +62,7 @@ async function fetchSuggestions(text: string) {
     const list = await searchApi.suggestions(text, SUGGEST_LIMIT)
     if (seq !== requestSeq) return
     suggestions.value = list
+    activeIndex.value = -1
     open.value = list.length > 0
   } catch (error: unknown) {
     // サジェストは補助機能のため通知はしないが、失敗は握りつぶさずログに残す
@@ -69,8 +73,18 @@ async function fetchSuggestions(text: string) {
   }
 }
 
+function cancelPendingSuggest() {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+}
+
 function onInput() {
-  if (debounceTimer) clearTimeout(debounceTimer)
+  cancelPendingSuggest()
+  // 入力が変わった時点で、保留中の古い候補リクエストの結果を無効にする
+  requestSeq++
+  activeIndex.value = -1
   const text = keyword.value.trim()
   if (text.length === 0) {
     clearSuggestions()
@@ -85,12 +99,14 @@ function goSearch(text: string) {
     notification.warn(t('globalSearch.tooShort'))
     return
   }
+  cancelPendingSuggest()
   clearSuggestions()
   router.push({ path: '/search', query: routeType.value ? { q, type: routeType.value } : { q } })
 }
 
 function selectSuggestion(item: Suggestion) {
   if (item.type !== 'KEYWORD' && item.url) {
+    cancelPendingSuggest()
     clearSuggestions()
     router.push(item.url)
     return
@@ -103,8 +119,38 @@ function suggestionLabel(item: Suggestion) {
   return item.type === 'KEYWORD' ? t('globalSearch.header.keyword') : t(`globalSearch.types.${item.type}`)
 }
 
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    open.value = false
+    activeIndex.value = -1
+    return
+  }
+  const count = suggestions.value.length
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    if (count === 0) return
+    event.preventDefault()
+    if (!open.value) {
+      open.value = true
+      activeIndex.value = event.key === 'ArrowDown' ? 0 : count - 1
+      return
+    }
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    // 未選択(-1)からの ArrowDown は先頭、ArrowUp は末尾へ。端では循環する
+    activeIndex.value = activeIndex.value === -1
+      ? (step === 1 ? 0 : count - 1)
+      : (activeIndex.value + step + count) % count
+    return
+  }
+  if (event.key === 'Enter' && open.value && activeIndex.value >= 0) {
+    // 候補を選択中の Enter だけ確定に使う。未選択は通常のフォーム送信（検索）に任せる
+    event.preventDefault()
+    const item = suggestions.value[activeIndex.value]
+    if (item) selectSuggestion(item)
+  }
+}
+
 onBeforeUnmount(() => {
-  if (debounceTimer) clearTimeout(debounceTimer)
+  cancelPendingSuggest()
 })
 </script>
 
@@ -124,15 +170,18 @@ onBeforeUnmount(() => {
           type="search"
           class="!h-10 w-56 lg:w-72"
           autocomplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          :aria-activedescendant="open && activeIndex >= 0 ? `header-search-option-${activeIndex}` : undefined"
           :placeholder="t('globalSearch.header.placeholder')"
           :aria-label="t('globalSearch.header.placeholder')"
           :aria-expanded="open"
           aria-controls="header-search-suggestions"
           data-testid="header-search-input"
           @input="onInput"
-          @blur="open = false"
+          @blur="open = false; activeIndex = -1"
           @focus="open = suggestions.length > 0"
-          @keydown.esc="open = false"
+          @keydown="onKeydown"
         />
       </IconField>
       <ul
@@ -146,9 +195,12 @@ onBeforeUnmount(() => {
       >
         <li
           v-for="(item, index) in suggestions"
+          :id="`header-search-option-${index}`"
           :key="`${item.type}-${item.text}-${index}`"
           role="option"
+          :aria-selected="index === activeIndex"
           class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-surface-100 dark:hover:bg-surface-800"
+          :class="{ 'bg-surface-100 dark:bg-surface-800': index === activeIndex }"
           :data-testid="`header-search-suggestion-${index}`"
           @click="selectSuggestion(item)"
         >
