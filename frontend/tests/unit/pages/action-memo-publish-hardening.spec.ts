@@ -122,6 +122,28 @@ describe('2: オフライン時の公開要求の保持', () => {
   })
 })
 
+describe('2b: オフライン同期で作成成功・公開失敗', () => {
+  it('公開のみのキュー項目を残し、残件とエラーを保持し、次回 flush は公開だけ再試行する', async () => {
+    onLineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const w = await mountInput()
+    await submit(w, 'オフライン公開失敗')
+    onLineSpy.mockReturnValue(true)
+    apiMock.createMemo.mockResolvedValue({ ...created, id: 900 })
+    apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(store.offlineQueueCount).toBe(1)
+    expect(store.error).not.toBeNull()
+
+    await store.flushOfflineQueue()
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(2)
+    expect(apiMock.publishToTeam).toHaveBeenLastCalledWith(900, expect.objectContaining({ teamId: 7 }))
+    expect(store.offlineQueueCount).toBe(0)
+  })
+})
+
 describe('3: 公開失敗時は成功扱いにしない', () => {
   it('publishToTeam が false のとき入力を保持し、失敗文言を出し、再送信は公開だけ再試行する', async () => {
     apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
