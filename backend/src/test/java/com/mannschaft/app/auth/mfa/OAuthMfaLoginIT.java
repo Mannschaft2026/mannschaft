@@ -12,6 +12,7 @@ import com.mannschaft.app.auth.repository.OAuthLinkTokenRepository;
 import com.mannschaft.app.auth.repository.RefreshTokenRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.util.SessionHashUtil;
+import com.mannschaft.app.support.test.FakeOAuthProviders;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,8 +48,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * CMP-261012-0911 試練: OAuth ログインが 2FA を迂回する欠陥の是正（HTTP 境界の受け入れテスト）。
  *
  * <p><b>構成</b>: 実 Controller → 実 Service → 実 MySQL（Testcontainers）・実 Security フィルタ（{@link MfaItSupport}）。
- * 外部境界のみ代役: Valkey は {@link MfaValkeyFake}、OAuth プロバイダ（Google / LINE / Apple）は {@link MfaFakeOAuthProviders}
- * （JDK 標準の HttpServer。{@code MfaItSupport} の {@code @DynamicPropertySource} で向ける）。
+ * 外部境界のみ代役: Valkey は {@link MfaValkeyFake}、OAuth プロバイダ（Google / LINE / Apple）は {@link FakeOAuthProviders}
+ * （JDK 標準の HttpServer。共通基底 {@code AbstractMySqlIntegrationTest} の {@code @DynamicPropertySource} で向けるため、
+ * 本クラスは基底と同じ構成キー・同じ ApplicationContext を使う）。
  * 偽プロバイダは認可コードに {@code <sub>~<email>} を埋めて返すため、テストごとに別の OAuth 利用者を作れる。</p>
  *
  * <p>本テストは {@code @Transactional} にしない（AFTER_COMMIT 監査を観測するため）。</p>
@@ -105,7 +107,7 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
     private MvcResult oauthLogin(OAuthAccountEntity.OAuthProvider provider, String sub, String email) throws Exception {
         return mockMvc.perform(withIp(post(OAUTH_PATH + provider.name().toLowerCase())
                                 .servletPath(OAUTH_PATH + provider.name().toLowerCase()), ip)
-                        .param("code", sub + "~" + email)
+                        .param("code", FakeOAuthProviders.code(sub, email))
                         .header("User-Agent", UA_LOGIN))
                 .andReturn();
     }
@@ -774,7 +776,7 @@ class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
         MvcResult bodyOnly = mockMvc.perform(withIp(post(OAUTH_PATH + "google").servletPath(OAUTH_PATH + "google"), ip)
                         .header("User-Agent", UA_LOGIN)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("code", sub + "~x@example.com"))))
+                        .content(objectMapper.writeValueAsString(Map.of("code", FakeOAuthProviders.code(sub, "x@example.com")))))
                 .andReturn();
         MvcResult query = oauthLogin(OAuthAccountEntity.OAuthProvider.GOOGLE, sub, "x@example.com");
 
