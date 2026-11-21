@@ -11,8 +11,8 @@ import { useShiftSwapApi } from './shift/useShiftSwapApi'
 import { useShiftUtilApi } from './shift/useShiftUtilApi'
 
 /**
- * 後方互換: 全サチEcomposable を�Eージして返す、E
- * 既存�E呼び出し�Eは useShiftApi() のままで引き続き動作する、E
+ * 後方互換: 全サブ composable をマージして返す。
+ * 既存の呼び出し元は useShiftApi() のままで引き続き動作する。
  */
 export function useShiftApi() {
   return {
