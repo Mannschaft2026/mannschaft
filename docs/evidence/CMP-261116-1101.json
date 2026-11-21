@@ -142,7 +142,7 @@
       "description": "【未確認（独立した実機検証の記録なし）】番人: 設定一覧≠生成結果、またはどちらにも属さない追跡パスで失敗。単体テストと Harness CI は緑だが、台帳に独立検証の合格記録がない",
       "tests": [
         { "name": "worktree-sparse-paths 単体テスト", "evidence": "scripts/worktree-sparse-paths.test.mjs" },
-        { "name": "Harness CI（番人の実行）", "evidence": ".github/workflows/harness-ci.yml" }
+        { "name": "PR軽量検査の[Harness] step（番人の実行。旧Harness CI）", "evidence": ".github/workflows/pr-light-checks.yml" }
       ]
     },
     {
