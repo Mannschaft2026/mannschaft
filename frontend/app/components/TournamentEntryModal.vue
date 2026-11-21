@@ -82,6 +82,8 @@ const overwriteExisting = ref(false)
 const savingTemplate = ref(false)
 const newTemplateName = ref('')
 const newTemplateDescription = ref('')
+/** テンプレート一覧の取得に失敗した（件数不明のため上限判定ができない） */
+const templatesLoadFailed = ref(false)
 
 /** 手動編集フォーム（候補ごとの背番号・ポジション） */
 interface MemberForm {
@@ -121,7 +123,8 @@ const templateLimitReached = computed(() => templates.value.length >= MAX_TEMPLA
 const canSaveTemplate = computed(() =>
   newTemplateName.value.trim() !== ''
   && entryMembers.value.length > 0
-  && !templateLimitReached.value,
+  && !templateLimitReached.value
+  && !templatesLoadFailed.value,
 )
 
 // ===== データ取得 =====
@@ -159,8 +162,10 @@ async function fetchTemplates() {
   try {
     const { data } = await getEntryTemplates(props.orgId, props.teamId)
     templates.value = data
+    templatesLoadFailed.value = false
   }
   catch (error) {
+    templatesLoadFailed.value = true
     reportEntryError(error)
   }
 }
@@ -368,6 +373,7 @@ watch(
       selectedTemplateId.value = null
       newTemplateName.value = ''
       newTemplateDescription.value = ''
+      templatesLoadFailed.value = false
     }
   },
   // 親は v-if でモーダルを生成するため、生成時点で isOpen は既に true。immediate で初回も取得する
@@ -496,6 +502,9 @@ watch(
             maxlength="200"
             class="min-h-11 w-full"
           />
+          <p v-if="templatesLoadFailed" class="text-xs text-red-600">
+            {{ t('tournament.entry.template.loadFailed') }}
+          </p>
           <p v-if="templateLimitReached" class="text-xs text-red-600">
             {{ t('tournament.entry.template.maxCount') }}
           </p>

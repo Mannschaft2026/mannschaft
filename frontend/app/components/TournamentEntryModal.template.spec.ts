@@ -165,6 +165,17 @@ describe('CMP-260930-0228 エントリーテンプレート保存', () => {
     expect(wrapper.text()).toContain('tournament.entry.template.maxCount')
   })
 
+  it('テンプレート一覧の取得に失敗したら通知し、保存を無効にして案内を出す', async () => {
+    const error = { statusCode: 404, data: { error: { code: 'TOUR_026' } } }
+    mocks.getEntryTemplates.mockRejectedValue(error)
+    const wrapper = await render()
+    await wrapper.get(NAME_INPUT).setValue('名前')
+
+    expect(mocks.handleApiError).toHaveBeenCalledExactlyOnceWith(error)
+    expect(saveButton(wrapper)!.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('tournament.entry.template.loadFailed')
+  })
+
   it('保存失敗は握りつぶさず通知し、成功toastを出さない', async () => {
     const error = { statusCode: 400, data: { error: { code: 'TOUR_025' } } }
     mocks.createEntryTemplate.mockRejectedValue(error)
