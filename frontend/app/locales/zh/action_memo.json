@@ -123,7 +123,8 @@
       "future_date": "不能记录到未来的日期。",
       "todo_not_found": "找不到要关联的待办事项。",
       "load_failed": "加载备忘失败。",
-      "save_failed": "保存备忘失败。"
+      "save_failed": "保存备忘失败。",
+      "publish_failed": "发布到团队失败。"
     },
     "dialog": {
       "title": "编辑备忘",

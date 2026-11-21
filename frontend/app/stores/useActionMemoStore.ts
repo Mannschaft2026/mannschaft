@@ -74,6 +74,7 @@ export type ActionMemoErrorCode =
   | 'DAILY_LIMIT'
   | 'FUTURE_DATE'
   | 'TODO_NOT_FOUND'
+  | 'PUBLISH_FAILED'
   | 'UNKNOWN'
 
 const DRAFT_KEY_PREFIX = 'action-memo-draft-'
@@ -608,8 +609,10 @@ export const useActionMemoStore = defineStore('actionMemo', {
           this.memos.splice(idx, 1, updated)
         }
         return true
-      } catch (error) {
-        this._handleError(error)
+      } catch {
+        // 公開失敗はメモ保存の失敗ではない（メモは作成済み）。保存失敗文言を出さないよう専用の種別にする
+        this.lastError = 'PUBLISH_FAILED'
+        this.error = 'action_memo.error.publish_failed'
         return false
       }
     },
