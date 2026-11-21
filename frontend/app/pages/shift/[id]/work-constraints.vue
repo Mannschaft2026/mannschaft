@@ -53,7 +53,7 @@ function isNotFoundError(error: unknown): boolean {
 /** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
 const loadError = ref<unknown>(null)
 
-// メンバー名の解決（AC-N3）。取得失敗は制約の表示を止めず、名前だけ「不明なユーザー」に倒す。
+// メンバー名の解決（AC-N3）。取得失敗は通常画面にも失敗表示＋再試行を出し、解決するまで編集・削除を塞ぐ。
 const members = ref<MemberResponse[]>([])
 const membersError = ref<unknown>(null)
 const membersLoading = ref(false)
@@ -79,6 +79,9 @@ async function loadMembers(): Promise<void> {
     membersLoading.value = false
   }
 }
+
+// 名前が引けない間（取得失敗・再取得中）は誰の制約か分からないため、編集・削除の入口を塞ぐ
+const membersUnresolved = computed(() => membersError.value !== null || membersLoading.value)
 
 const memberNameById = computed(() => new Map(members.value.map((m) => [m.userId, m.displayName])))
 
@@ -299,6 +302,15 @@ function confirmAddMember() {
           {{ t('shift.workConstraint.memberOverridesDescription') }}
         </p>
 
+        <DashboardErrorState
+          v-if="membersError"
+          class="mb-4"
+          :error="membersError"
+          :message="t('shift.workConstraint.membersLoadError')"
+          testid="work-constraint-page-members-error"
+          @retry="loadMembers"
+        />
+
         <div v-if="memberConstraints.length === 0">
           <DashboardEmptyState icon="pi pi-user" :message="t('shift.workConstraint.noOverrides')" />
         </div>
@@ -312,7 +324,9 @@ function confirmAddMember() {
           >
             <!-- アコーディオンヘッダー -->
             <button
-              class="flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-left"
+              :data-testid="`work-constraint-card-toggle-${constraint.userId}`"
+              class="flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="membersUnresolved"
               @click="toggleExpand(constraint.userId!)"
             >
               <span class="text-sm font-medium">
@@ -325,7 +339,7 @@ function confirmAddMember() {
             </button>
 
             <!-- 展開コンテンツ -->
-            <div v-if="expandedUserId === constraint.userId" class="border-t border-surface-100 px-4 pb-4 pt-3 dark:border-surface-700">
+            <div v-if="expandedUserId === constraint.userId && !membersUnresolved" class="border-t border-surface-100 px-4 pb-4 pt-3 dark:border-surface-700">
               <ShiftWorkConstraintForm
                 v-if="canManage && schedule"
                 :constraint="constraint"

@@ -206,6 +206,28 @@ describe('勤務制約ページ メンバー選択（AC-N1〜N3 / AC-N5）', () 
     expect(wrapper.text()).not.toMatch(/ユーザー\s*#\s*\d/)
   })
 
+  it('AC-N3: メンバー取得失敗は通常画面に失敗表示と再試行を出し、失敗中は編集・削除できず、再試行成功で名前が出る', async () => {
+    mocks.getAllMembers.mockRejectedValueOnce({ statusCode: 500 })
+    mocks.listConstraints.mockResolvedValue([constraint(1)])
+    const wrapper = await mountPage(ShiftDetailWorkConstraints)
+
+    // 通常画面（ダイアログを開かない状態）に失敗表示と再試行がある
+    expect(wrapper.find('[data-testid="work-constraint-page-members-error"]').exists()).toBe(true)
+    // 誰の制約か分からない状態では編集・削除の入口（カード展開）を塞ぐ
+    const toggle = wrapper.find('[data-testid="work-constraint-card-toggle-1"]')
+    expect(toggle.attributes('disabled')).toBeDefined()
+    await toggle.trigger('click')
+    expect(wrapper.find('[data-testid="work-constraint-card-1"] form, [data-testid="work-constraint-card-1"] button[type="submit"]').exists()).toBe(false)
+
+    mocks.getAllMembers.mockResolvedValue({ data: [member(1, '山田花子')] })
+    await wrapper.find('[data-testid="work-constraint-page-members-error-retry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="work-constraint-page-members-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="work-constraint-card-1"]').text()).toContain('山田花子')
+    expect(wrapper.find('[data-testid="work-constraint-card-toggle-1"]').attributes('disabled')).toBeUndefined()
+  })
+
   it('AC-N5: メンバー一覧の取得件数上限を超えるチームでも全員に到達できる（全件取得 API を使う）', async () => {
     const many = Array.from({ length: 250 }, (_, i) => member(i + 1, `メンバー${i + 1}`))
     mocks.getAllMembers.mockResolvedValue({ data: many })
