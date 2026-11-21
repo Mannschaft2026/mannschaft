@@ -54,6 +54,8 @@ interface ActionMemoStoreState {
   isOffline: boolean
   /** 直近の publishToTeam が既投稿（ACTION_MEMO_ALREADY_POSTED）で失敗したか。公開のみ項目の後始末の判定用 */
   alreadyPostedFailure: boolean
+  /** 直近の publishToTeam 失敗の HTTP ステータス（無ければ null）。公開のみ項目の恒久失敗判定用 */
+  publishFailureStatus: number | null
   /** Phase 3: 週次まとめ一覧 */
   weeklySummaries: WeeklySummary[]
   /** Phase 3: 週次まとめ一覧の読み込み中フラグ */
@@ -168,6 +170,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
     offlineQueueCount: 0,
     isOffline: false,
     alreadyPostedFailure: false,
+    publishFailureStatus: null,
     weeklySummaries: [],
     weeklyLoading: false,
     weeklyError: null,
@@ -310,7 +313,12 @@ export const useActionMemoStore = defineStore('actionMemo', {
               }
             }
             // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
-            else if (!ok) kept.v = { error: this.error, lastError: this.lastError }
+            else if (!ok) {
+              kept.v = { error: this.error, lastError: this.lastError }
+              // 403/404/410 は再試行しても成功しない恒久失敗（メモ削除済み・チーム脱退など）。
+              // 項目を片付けて後続を処理させる（失敗は kept のエラーとして利用者に見せる）。通信断・5xx は残して停止
+              if ([403, 404, 410].includes(this.publishFailureStatus ?? 0)) ok = true
+            }
             return ok ? { id: queued.publishOnlyMemoId } : null
           }
           const created = await api.createMemo(payload)
@@ -663,6 +671,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
       this.error = null
       this.lastError = null
       this.alreadyPostedFailure = false
+      this.publishFailureStatus = null
       try {
         const api = useActionMemoApi()
         await api.publishToTeam(memoId, payload)
@@ -676,9 +685,16 @@ export const useActionMemoStore = defineStore('actionMemo', {
         return true
       } catch (error) {
         // 既投稿は flush 側で実態確認して片付けるため、判別できるよう印を残す
-        const err = error as { response?: { _data?: { code?: string } }; data?: { code?: string } }
-        const code = err?.response?._data?.code ?? err?.data?.code
+        // BE の ErrorResponse は { error: { code } }（ofetch では data と response._data の両方に載る）
+        const err = error as {
+          status?: number
+          statusCode?: number
+          response?: { status?: number; _data?: { error?: { code?: string } } }
+          data?: { error?: { code?: string } }
+        }
+        const code = err?.data?.error?.code ?? err?.response?._data?.error?.code
         this.alreadyPostedFailure = code === 'ACTION_MEMO_016'
+        this.publishFailureStatus = err?.status ?? err?.statusCode ?? err?.response?.status ?? null
         // 公開失敗はメモ保存の失敗ではない（メモは作成済み）。保存失敗文言を出さないよう専用の種別にする
         this.lastError = 'PUBLISH_FAILED'
         this.error = 'action_memo.error.publish_failed'
