@@ -212,8 +212,42 @@ describe('6: 送信中・公開待ちの入力ロック', () => {
   })
 })
 
+// BE の ErrorResponse は { error: { code, message } }。ofetch の FetchError と同じく data / response._data の両方に載る
+function httpError(status: number, code: string) {
+  const body = { error: { code, message: 'x' } }
+  return Object.assign(new Error('http ' + status), { status, statusCode: status, data: body, response: { status, _data: body } })
+}
+
+describe('8: 公開のみ再試行の恒久失敗(404/403)は項目を片付けて後続を止めない', () => {
+  it('404 の公開のみ項目は削除され、PUBLISH_FAILED が残り、後続の作成は処理される', async () => {
+    const q = useOfflineQueue()
+    await q.enqueuePublishOnly(900, 7)
+    await q.enqueue({ content: '後続' }, -2)
+    apiMock.publishToTeam.mockRejectedValue(httpError(404, 'ACTION_MEMO_001'))
+    apiMock.createMemo.mockResolvedValue({ ...created, id: 902 })
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(store.offlineQueueCount).toBe(0)
+    expect(store.error).toBe('action_memo.error.publish_failed')
+    expect(store.lastError).toBe('PUBLISH_FAILED')
+  })
+
+  it('5xx は従来どおり項目を残して停止する', async () => {
+    const q = useOfflineQueue()
+    await q.enqueuePublishOnly(900, 7)
+    await q.enqueue({ content: '後続' }, -2)
+    apiMock.publishToTeam.mockRejectedValue(httpError(503, 'COMMON_503'))
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect(apiMock.createMemo).not.toHaveBeenCalled()
+    expect(store.offlineQueueCount).toBe(2)
+    expect(store.error).toBe('action_memo.error.publish_failed')
+  })
+})
+
 describe('7: 公開のみ再試行が既投稿(ACTION_MEMO_ALREADY_POSTED)で失敗', () => {
-  const alreadyPosted = () => Object.assign(new Error('conflict'), { status: 409, response: { status: 409, _data: { code: 'ACTION_MEMO_016', message: 'already posted' } } })
+  const alreadyPosted = () => httpError(409, 'ACTION_MEMO_016')
 
   it('指定チームに投稿済みなら完了扱いで項目を削除し、flush が止まり続けない', async () => {
     await useOfflineQueue().enqueuePublishOnly(900, 7)
