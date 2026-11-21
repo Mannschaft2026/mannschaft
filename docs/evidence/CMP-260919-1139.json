@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260919-1139",
+  "scope": "app",
+  "implementation": {
+    "pr": 4515,
+    "sha": "2460c35d8fa5df0cb57dcc6e047c0e336fccaa42"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "t('common.◯◯') のうちロケール JSON で解決できないものがゼロ",
+      "tests": [
+        {
+          "name": "common-literal-resolution",
+          "evidence": "frontend/tests/unit/i18n/common-literal-resolution.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "同種の誤りを CI で検出する番人（t() の参照先とロケール JSON の実構造を突合）がある",
+      "tests": [
+        {
+          "name": "common-literal-resolution",
+          "evidence": "frontend/tests/unit/i18n/common-literal-resolution.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "6言語すべてで検証される",
+      "tests": [
+        {
+          "name": "common-back.i18n.spec",
+          "evidence": "frontend/app/locales/common-back.i18n.spec.ts"
+        },
+        {
+          "name": "common-literal-resolution",
+          "evidence": "frontend/tests/unit/i18n/common-literal-resolution.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44621565147
+    },
+    {
+      "runId": 44621565138
+    },
+    {
+      "runId": 44621565426
+    },
+    {
+      "runId": 44621565156
+    },
+    {
+      "runId": 44621565368
+    },
+    {
+      "runId": 44621565423
+    },
+    {
+      "runId": 44621565237
+    },
+    {
+      "runId": 44621565122
+    },
+    {
+      "runId": 44621565163
+    },
+    {
+      "runId": 44621565157
+    },
+    {
+      "runId": 44621565219
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4515"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4515"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4515"
+    }
+  },
+  "regressions": []
+}
