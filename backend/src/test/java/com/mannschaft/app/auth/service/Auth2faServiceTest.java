@@ -96,6 +96,10 @@ class Auth2faServiceTest {
     @Mock
     private MfaFailureAuditRecorder mfaFailureAuditRecorder;
 
+    // CMP-261012-0911: 2FA 完了後のセッション発行の委譲先（パスワード直経路と共通の発行器）
+    @Mock
+    private AuthService authService;
+
     // LocalDateTime 列と突き合わせる壁時計（失効時刻の採取に使う）
     @Mock
     private java.time.Clock wallClock;
@@ -786,6 +790,133 @@ class Auth2faServiceTest {
 
             // Then
             assertThat(result).isFalse();
+        }
+    }
+
+    // ========================================
+    // CMP-261012-0911: 2FA 完了後の発行を AuthService の共通発行器へ委譲する（判断①③・AC-2/5/6/12/15/16）
+    // ========================================
+
+    @Nested
+    @DisplayName("CMP-261012-0911 validateMfaLogin の発行委譲と入口方式")
+    class MfaCompletionDelegation {
+
+        private static final String BACKUP_CODE = "12345678";
+
+        private void stubSuccessfulBackupCode(MfaSessionService.MfaSession session, UserEntity user) {
+            given(mfaSessionService.resolve(TEST_MFA_SESSION_TOKEN)).willReturn(session);
+            given(mfaSessionService.beginAttempt(session)).willReturn(1L);
+            given(twoFactorAuthRepository.findByUserIdForUpdate(TEST_USER_ID))
+                    .willReturn(Optional.of(createEnabledTwoFactorAuth()));
+            lenient().when(passwordEncoder.matches(BACKUP_CODE, "hashed1")).thenReturn(true);
+            lenient().when(mfaSessionService.consume(session)).thenReturn(true);
+            lenient().when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
+            lenient().when(authService.completeMfaLogin(any(), any(), any(), any(), any(), any()))
+                    .thenReturn(new TokenResponse("delegated-at", "delegated-rt", 99L, 900L));
+            // 委譲前の現行実装（自前 issueTokenPair）でも NPE で落ちず、委譲の有無を assertion で判定できるようにする
+            lenient().when(refreshTokenRepository.save(any(RefreshTokenEntity.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+        }
+
+        private List<com.mannschaft.app.auth.event.LoginSuccessEvent> publishedLoginSuccess() {
+            ArgumentCaptor<com.mannschaft.app.common.event.DomainEvent> captor =
+                    ArgumentCaptor.forClass(com.mannschaft.app.common.event.DomainEvent.class);
+            verify(eventPublisher, atLeast(0)).publish(captor.capture());
+            return captor.getAllValues().stream()
+                    .filter(com.mannschaft.app.auth.event.LoginSuccessEvent.class::isInstance)
+                    .map(com.mannschaft.app.auth.event.LoginSuccessEvent.class::cast)
+                    .toList();
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"OAUTH_GOOGLE", "OAUTH_LINE", "OAUTH_APPLE", "PASSWORD"})
+        @DisplayName("判断①③/AC-2/AC-6/AC-16: 2FA 成功は入口方式・使用要素・検証要求の ip/UA で AuthService.completeMfaLogin へ委譲し、その結果を返す")
+        void 成功は共通発行器へ委譲(String loginMethod) {
+            MfaSessionService.MfaSession session =
+                    new MfaSessionService.MfaSession(TEST_SESSION_HASH, TEST_USER_ID, loginMethod);
+            UserEntity user = createActiveUser();
+            stubSuccessfulBackupCode(session, user);
+            List<String> resolvedRoles = List.of("ROLE_UNIQUE_" + loginMethod);
+            given(roleClaimResolver.resolveRoles(TEST_USER_ID)).willReturn(resolvedRoles);
+
+            ApiResponse<com.mannschaft.app.auth.dto.MfaLoginTokenResponse> res = auth2faService.validateMfaLogin(
+                    TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA);
+
+            // roles は対象ユーザー ID で解決され、その戻り値がそのまま completeMfaLogin へ渡る（越境は呼び出し元側に閉じる）
+            verify(roleClaimResolver).resolveRoles(TEST_USER_ID);
+            verify(authService).completeMfaLogin(same(user), eq(TEST_IP), eq(TEST_UA), eq(loginMethod),
+                    eq(MfaVerificationMethod.BACKUP_CODE), same(resolvedRoles));
+            assertThat(res.getData().getAccessToken()).as("委譲先のトークンを返す").isEqualTo("delegated-at");
+            assertThat(res.getData().getMethod()).isEqualTo(MfaVerificationMethod.BACKUP_CODE);
+            assertThat(res.getData().getBackupCodesRemaining()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("AC-15: 委譲後は Auth2faService 自身が Refresh Token を保存せず LOGIN_SUCCESS も出さない（重複なし）")
+        void 委譲後は自前発行しない() {
+            MfaSessionService.MfaSession session =
+                    new MfaSessionService.MfaSession(TEST_SESSION_HASH, TEST_USER_ID, "OAUTH_GOOGLE");
+            stubSuccessfulBackupCode(session, createActiveUser());
+
+            auth2faService.validateMfaLogin(
+                    TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA);
+
+            verify(refreshTokenRepository, never()).save(any());
+            assertThat(publishedLoginSuccess()).as("LOGIN_SUCCESS は共通発行器の 1 件だけ").isEmpty();
+        }
+
+        @Test
+        @DisplayName("AC-16: OAuth 由来の challenge 発行後に 2FA が無効化されたら AUTH_073 で拒否しセッションを破棄（発行しない）")
+        void challenge後に2FA無効化なら拒否() {
+            MfaSessionService.MfaSession session =
+                    new MfaSessionService.MfaSession(TEST_SESSION_HASH, TEST_USER_ID, "OAUTH_GOOGLE");
+            given(mfaSessionService.resolve(TEST_MFA_SESSION_TOKEN)).willReturn(session);
+            given(mfaSessionService.beginAttempt(session)).willReturn(1L);
+            given(twoFactorAuthRepository.findByUserIdForUpdate(TEST_USER_ID)).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> auth2faService.validateMfaLogin(
+                    TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_073"));
+            verify(mfaSessionService).terminate(session);
+            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any(), any());
+            verify(refreshTokenRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("AC-5 改: OAuth 由来でも照合前と行ロック取得後の二重ロック確認を保持し、ロック検出時は発行しない")
+        void OAuth由来でも二重ロック確認() {
+            MfaSessionService.MfaSession session =
+                    new MfaSessionService.MfaSession(TEST_SESSION_HASH, TEST_USER_ID, "OAUTH_LINE");
+            given(mfaSessionService.resolve(TEST_MFA_SESSION_TOKEN)).willReturn(session);
+            given(mfaSessionService.beginAttempt(session)).willReturn(1L);
+            doNothing().doThrow(new BusinessException(com.mannschaft.app.auth.AuthErrorCode.AUTH_003))
+                    .when(mfaSessionService).assertNotLocked(TEST_USER_ID);
+            given(twoFactorAuthRepository.findByUserIdForUpdate(TEST_USER_ID))
+                    .willReturn(Optional.of(createEnabledTwoFactorAuth()));
+
+            assertThatThrownBy(() -> auth2faService.validateMfaLogin(
+                    TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_003"));
+            verify(mfaSessionService, times(2)).assertNotLocked(TEST_USER_ID);
+            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("AC-12: 消費に負けた（既に使用済みの）challenge は AUTH_073 で拒否し発行しない")
+        void 消費に負けたら発行しない() {
+            MfaSessionService.MfaSession session =
+                    new MfaSessionService.MfaSession(TEST_SESSION_HASH, TEST_USER_ID, "OAUTH_GOOGLE");
+            stubSuccessfulBackupCode(session, createActiveUser());
+            given(mfaSessionService.consume(session)).willReturn(false);
+
+            assertThatThrownBy(() -> auth2faService.validateMfaLogin(
+                    TEST_MFA_SESSION_TOKEN, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE, TEST_IP, TEST_UA))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_073"));
+            verify(authService, never()).completeMfaLogin(any(), any(), any(), any(), any(), any());
+            verify(refreshTokenRepository, never()).save(any());
         }
     }
 }

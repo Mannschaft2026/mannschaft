@@ -15,6 +15,10 @@ public class LoginSuccessEvent extends BaseEvent {
     private final String method;
     /** SHA-256(refresh_token_jti)。監査ログの session_hash に記録する。 */
     private final String sessionHash;
+    /**
+     * 2FA で使用した要素（TOTP / EMAIL / BACKUP_CODE）。2FA を経ないログインは null（CMP-261012-0911 判断②）。
+     */
+    private final String mfaFactor;
 
     public LoginSuccessEvent(Long userId, String ipAddress, String userAgent, String method) {
         super();
@@ -23,6 +27,7 @@ public class LoginSuccessEvent extends BaseEvent {
         this.userAgent = userAgent;
         this.method = method;
         this.sessionHash = null;
+        this.mfaFactor = null;
     }
 
     public LoginSuccessEvent(Long userId, String ipAddress, String userAgent, String method, String sessionHash) {
@@ -32,5 +37,17 @@ public class LoginSuccessEvent extends BaseEvent {
         this.userAgent = userAgent;
         this.method = method;
         this.sessionHash = sessionHash;
+        this.mfaFactor = null;
+    }
+
+    public LoginSuccessEvent(Long userId, String ipAddress, String userAgent, String method, String sessionHash,
+                             String mfaFactor) {
+        super();
+        this.userId = userId;
+        this.ipAddress = ipAddress;
+        this.userAgent = userAgent;
+        this.method = method;
+        this.sessionHash = sessionHash;
+        this.mfaFactor = mfaFactor;
     }
 }

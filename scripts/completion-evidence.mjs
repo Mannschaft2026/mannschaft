@@ -332,7 +332,7 @@ export function validateCompletionChanges(baseText, headText, evidenceByPath = {
 }
 
 function gitShow(ref, file) {
-  return execFileSync('git', ['show', `${ref}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  return execFileSync('git', ['show', `${ref}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
 }
 
 function cli() {
