@@ -1,6 +1,6 @@
 # CMP-261120-1301: PR 軽量検査の取消観測
 
-状態: **未実施**。この文書は採用済み PR 軽量検査について、自己専用 PR で取消と後続 run の解除を観測する計画と結果を記録する。戦役 CMP-261120-1301 全体の完了を示すものではない。
+状態: **初回は観測条件未達、追加観測は未実施**。この文書は採用済み PR 軽量検査について、自己専用 PR で取消と後続 run の解除を観測する計画と結果を記録する。戦役 CMP-261120-1301 全体の完了を示すものではない。
 観測用世代: B（後続 run の待機生成用）。
 
 ## 既存の証拠
@@ -10,7 +10,7 @@
 - 同 PR の [run 44829695264](https://github.com/kenta-0420/mannschaft/actions/runs/44829695264/job/136611204473) は故意の Worktree guard 構文エラー後も後続の gitleaks と lockfile 検査を実行し、ジョブ全体は failure だった。これは変更判定自体の失敗試験ではない。
 - これらの run は取消試験ではない。検証両 head と PR #4694 採用コミットの workflow blob は `e4b6be8133e65a76b47065a3a06b592aa44fdd0e` で一致する。
 
-## 今回の観測計画
+## 初回の観測計画
 
 自己専用の文書 PR で、同一 PR・workflow ID `425452928`・concurrency group の異なる head A、B を使う。run と job の ID、attempt、head SHA、時刻、状態、取得可能な runner と step の情報を記録する。
 
@@ -23,6 +23,19 @@ A が先に自然終端する、B の pending を観測できない、対象の�
 
 ## 結果と限界
 
-**未実施。** A/B の PR 番号、head SHA、run/job ID、各状態の観測時刻、取消応答、終端と B の結果は、観測後に追記する。
+初回は取消条件が揃わず、通常取消の POST は **0回**。PR [#4713](https://github.com/kenta-0420/mannschaft/pull/4713) の記録は次のとおり（時刻は UTC）。
+
+- A（head `7e43c7abcdd6aa9a57c8ae83411b29348e5bcb7d`）の [run 44863327854](https://github.com/kenta-0420/mannschaft/actions/runs/44863327854) は 03:53:13 に queued、job `136721381117` は 03:53:15 に queued と取得された。その後、job は 03:54:10 に開始し 03:55:54 に終了、run/job とも自然に completed/success となった。
+- B（head `1997aeb71bbc5d6900bc98cdc54b9fef33458a05`）の [run 44863552690](https://github.com/kenta-0420/mannschaft/actions/runs/44863552690) は 03:55:43 に作成され、03:56:38 の取得時は in_progress、後に completed/success。B の pending は観測されなかった。B の作成は A job 終了より前なので、pending が存在しなかったとは断定できない。
+
+したがって、初回は先行 run を取消して後続 pending が解放される条件を観測できなかった。
+
+## 改訂した追加観測計画（未実施）
+
+同じ専用 PR で追加は C/D の1ペアに限る。A/B と同じ workflow の先行 run が終端していること、対象の所有・PR・branch・head・attempt・workflow と単一 job を照合する。C が queued または in_progress の間に、事前準備した D を push し、D pending と C active を取消直前に近接して確認する。C に既知の失敗または timeout step がある場合は取消せず調査に戻る。
+
+条件成立時のみ C の固定 run に通常取消を1回送る（初回を含む POST 総数1）。応答不明でも再送せず、同一 attempt の唯一の job と run が completed/cancelled、active job が0になることを確認する。D が同じ attempt の pending から解放され最終 success となること、D の開始と取消要求の時系列を確認する。未観測の中間状態を推測しない。C/D の証跡または条件が揃わなければ未達として記録し、追加試行はしない。
+
+D の終端を待って結果を head E に確定し、E 自身の全適用 CI を確認する。E を D 終端前に push しない。C が in_progress の取消なら実行中の取消として記録し、未開始 queued の取消を実証したとは扱わない。
 
 この試行は文書のみの PR で行うため、lockfile の実処理中の取消を測らない。新構成の自己 run の通常取消と、それを待つ後続 run の解除を対象とする。旧 queued 残骸の解消、旧事象の厳密な原因、第三 head による pending 置換、すべての GitHub 障害の再発防止は証明しない。
