@@ -52,6 +52,8 @@
         "delete": "Eliminar plantilla",
         "maxCount": "Se pueden crear hasta 5 plantillas",
         "noTemplates": "No hay plantillas",
+        "createSuccess": "Plantilla guardada",
+        "saveHint": "Guarda la inscripción ya guardada (dorsales y posiciones) como plantilla. Guarde primero la inscripción.",
         "name": "Nombre de la plantilla",
         "description": "Descripción",
         "members": "Jugadores",

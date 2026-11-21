@@ -52,6 +52,8 @@
         "delete": "Vorlage löschen",
         "maxCount": "Bis zu 5 Vorlagen können erstellt werden",
         "noTemplates": "Keine Vorlagen vorhanden",
+        "createSuccess": "Vorlage gespeichert",
+        "saveHint": "Speichert die aktuell gespeicherte Meldung (Rückennummern und Positionen) als Vorlage. Speichern Sie zuerst die Meldung.",
         "name": "Vorlagenname",
         "description": "Beschreibung",
         "members": "Spieler",
