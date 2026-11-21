@@ -25,7 +25,7 @@ import java.util.Set;
  *       時刻方針 {@code datetime_policy_utc_instant_vs_wallclock.md} と番人 {@code RawSqlTimeColumnGuardTest}）。</li>
  *   <li>チーム記事か組織記事のどちらか一方だけ（{@code team_id} と {@code organization_id} の片方だけが非 NULL）。
  *       個人ブログ（{@code user_id} / {@code social_profile_id}）は対象外。</li>
- *   <li>{@link Condition#excludedIds()}（課金ゲート付き記事）に含まれない。</li>
+ *   <li>{@link Condition#excludedIds()}（閲覧者が支払い条件を満たさない課金ゲート付き記事）に含まれない。</li>
  *   <li>次のいずれか（1 つの WHERE の OR なので、両経路に該当しても 1 件として数える）:
  *     <ul>
  *       <li><b>所属経路</b>: {@link ScopeGroup} ごとに「スコープ ID の IN かつ visibility の IN」。グループは
@@ -74,7 +74,7 @@ public class BlogPostKeywordSearchRepository {
      * @param groups        所属経路のグループ（空可）
      * @param publicTeamIds 公開経路のチーム ID（空可）
      * @param publicOrgIds  公開経路の組織 ID（空可）
-     * @param excludedIds   除外する記事 ID（課金ゲート付き。空可）
+     * @param excludedIds   除外する記事 ID（閲覧者が支払い条件を満たさない課金ゲート付き。空可）
      */
     public record Condition(BaseCondition base, List<ScopeGroup> groups, List<Long> publicTeamIds,
                             List<Long> publicOrgIds, List<Long> excludedIds) {

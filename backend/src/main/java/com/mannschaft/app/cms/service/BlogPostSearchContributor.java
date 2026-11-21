@@ -14,7 +14,7 @@ import com.mannschaft.app.common.visibility.StandardVisibility;
 import com.mannschaft.app.common.visibility.mapping.CmsVisibilityMapper;
 import com.mannschaft.app.organization.service.OrganizationQueryService;
 import com.mannschaft.app.payment.constant.ContentGateType;
-import com.mannschaft.app.payment.service.PaymentGateService;
+import com.mannschaft.app.payment.service.ContentGateAccessService;
 import com.mannschaft.app.search.SearchContributor;
 import com.mannschaft.app.search.SearchCriteria;
 import com.mannschaft.app.search.SearchHit;
@@ -49,9 +49,11 @@ import java.util.Set;
  * <p><b>可視性</b>（述語の SQL と件数・取得の同一 WHERE は {@link BlogPostKeywordSearchRepository}）:</p>
  * <ul>
  *   <li><b>共通</b>: 未削除・{@code PUBLISHED}・公開日時を過ぎた、チーム記事か組織記事。個人ブログは対象外。
- *       課金ゲート（{@code content_payment_gates}）付きの記事は、payment の公開 Service
- *       {@link PaymentGateService#findGatedContentIds} から受け取った ID 集合で除外する（本文由来の snippet を返すため、
- *       行ごとの支払い判定ができない検索では fail-closed に倒す）。</li>
+ *       課金ゲート（{@code content_payment_gates}）付きの記事は、閲覧者が支払い条件を満たさないものを
+ *       payment の公開 Service {@link ContentGateAccessService#findUnsatisfiedGatedContentIds} から受け取った ID 集合で
+ *       件数・取得の同じ WHERE から除外する。判定は記事を開くときと同じ正準判定（受益者キー・全ゲート AND・有効期限と猶予・
+ *       記事と同スコープの項目）で、SYSTEM_ADMIN／スコープ ADMIN のバイパスはしない。{@code is_title_hidden=FALSE} の
+ *       「鍵付きタイトルだけ見せる」表示は、本文由来の snippet を返す検索では行わず、未充足なら出さない。</li>
  *   <li><b>所属経路</b>: 集約側 {@link SearchViewer}（SUPPORTER 以上・GUEST のみ除外・削除/アーカイブ/未稼働除外済み）の
  *       各スコープについて、<b>そのスコープでの</b>ロールから可視レベルを決める（全所属先の和集合で判定しない）。
  *       可視レベルの段は {@code MembershipBatchQueryService#resolveVisibleLevels} と同じ
@@ -67,7 +69,7 @@ import java.util.Set;
  * </ul>
  * <p>SYSTEM_ADMIN もバイパスしない（集約側が母集団を空にする）。</p>
  *
- * <p><b>{@code @Transactional} を付けない理由</b>: 公開スコープ判定・ゲート ID・名前の解決は他ドメインの公開 Service
+ * <p><b>{@code @Transactional} を付けない理由</b>: 公開スコープ判定・未充足ゲート ID・名前の解決は他ドメインの公開 Service
  * （自前の読み取りトランザクション）に委ねる。本クラスにトランザクションを張ると、その先の他ドメイン Repository まで
  * cms のトランザクションが越境する（D-3T）。件数と取得は別呼び出しで、同一スナップショットである必要はない。</p>
  */
@@ -89,7 +91,7 @@ public class BlogPostSearchContributor implements SearchContributor {
     private final BlogPostKeywordSearchRepository keywordSearchRepository;
     private final TeamQueryService teamQueryService;
     private final OrganizationQueryService organizationQueryService;
-    private final PaymentGateService paymentGateService;
+    private final ContentGateAccessService contentGateAccessService;
     private final NameResolverService nameResolverService;
 
     @Override
@@ -192,7 +194,9 @@ public class BlogPostSearchContributor implements SearchContributor {
         if (groups.isEmpty() && publicTeamIds.isEmpty() && publicOrgIds.isEmpty()) {
             return null;
         }
-        List<Long> excluded = sorted(paymentGateService.findGatedContentIds(ContentGateType.POST));
+        // 閲覧者が支払い条件を満たさない課金ゲート付き記事（記事を開くときと同じ正準判定。バイパスなし）
+        List<Long> excluded = sorted(
+                contentGateAccessService.findUnsatisfiedGatedContentIds(viewer.userId(), ContentGateType.POST));
         return new Condition(base, groups, publicTeamIds, publicOrgIds, excluded);
     }
 
