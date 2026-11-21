@@ -14,6 +14,21 @@ import com.mannschaft.app.effortrecord.dto.EffortRecordPage;
 import com.mannschaft.app.effortrecord.service.EffortDefinitionService;
 import com.mannschaft.app.effortrecord.service.EffortOperationReceiptCleanupBatchService;
 import com.mannschaft.app.effortrecord.service.EffortRecordOwnerService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.mannschaft.app.activity.ActivityScopeType;
+import com.mannschaft.app.activity.service.ActivityTemplateService;
+import com.mannschaft.app.effortrecord.service.EffortTeamDefinitionResolver;
+import com.mannschaft.app.effortrecord.service.EffortTeamDefinitionTxService;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,7 +53,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * F06.4.1 PR-1 の24時間失効（試練 / red 先行。CMP-261115-2145）。AC-9（receipt 24h 失効）/ AC-10（cursor 24h 失効）/
- * AC-62（期限削除バッチ）/ AC-20（PR-2: チーム定義 token の10分失効）。
+ * AC-62（期限削除バッチ）/ AC-20（PR-2: チーム定義 token の10分失効）。あわせて、同期の巻き戻し防止（古い activity 定義で新 revision を上書きしない）も
+ * 本クラスで検証する（CMP-261111-0508 の構成キー数ラチェットを増やさないため専用クラスを持たない）。
  *
  * <p><b>時計</b>: 期限判定は共通 {@code utcClock} Bean（{@code ClockConfig}）で行うことを契約とし、本クラスだけ
  * 可変時計へ差し替える（他 context に触れないよう {@link DirtiesContext} AFTER_CLASS で閉じる。前例
@@ -59,6 +75,9 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
     @Autowired private EffortRecordOwnerService ownerService;
     @Autowired private EffortOperationReceiptCleanupBatchService cleanup;
     @Autowired private EffortDefinitionService definitionService;
+    @Autowired private EffortTeamDefinitionResolver resolver;
+    /** 同期競合の再現用（実メソッドを呼ぶ spy。専用クラスにすると構成キーが増えるため、既に固有構成を持つ本クラスに同居させる）。 */
+    @MockitoSpyBean private ActivityTemplateService activityTemplateSpy;
 
     static Clock effortTemporalClock() {
         return new MovableClock(new AtomicReference<>(START), ZoneOffset.UTC);
@@ -233,6 +252,54 @@ class EffortRecordTemporalIT extends EffortRecordItSupport {
 
     private long receipts(Long actor) {
         return count("SELECT COUNT(*) FROM effort_operation_receipts WHERE actor_user_id = ?1", actor);
+    }
+
+    @Test
+    @DisplayName("旧定義を読んだ要求 A が、後から確定した新 revision を巻き戻さない")
+    void 古いactivity定義で新revisionを上書きしない() throws Exception {
+        Long team = team("競合同期");
+        Long admin = user("競合管理者");
+        teamAdmin(admin, team);
+        Long template = teamTemplate(admin, team, "練習", List.of(FieldSpec.number("reps", "回数", 0)));
+        EffortTeamDefinitionTxService.Current first = resolver.sync(team, template);
+        assertThat(first.revision()).isEqualTo(1);
+
+        CountDownLatch readOld = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean firstReadOfA = new AtomicBoolean(true);
+        doAnswer(invocation -> {
+            Object result = invocation.callRealMethod();
+            if ("race-A".equals(Thread.currentThread().getName()) && firstReadOfA.compareAndSet(true, false)) {
+                readOld.countDown();
+                assertThat(release.await(30, TimeUnit.SECONDS)).isTrue();
+            }
+            return result;
+        }).when(activityTemplateSpy).findInScope(anyLong(), any(ActivityScopeType.class), anyLong());
+
+        ExecutorService pool = Executors.newSingleThreadExecutor(r -> new Thread(r, "race-A"));
+        try {
+            Future<EffortTeamDefinitionTxService.Current> a = pool.submit(() -> resolver.sync(team, template));
+            assertThat(readOld.await(30, TimeUnit.SECONDS)).as("A が旧定義を読んだ").isTrue();
+
+            // B: テンプレートに項目を足して同期（revision 2 を確定）。
+            updateTeamTemplate(admin, template, "練習", List.of(FieldSpec.number("reps", "回数", 0),
+                    FieldSpec.text("memo", "追加メモ", 1)));
+            EffortTeamDefinitionTxService.Current b = resolver.sync(team, template);
+            assertThat(b.revision()).isEqualTo(2);
+
+            release.countDown();
+            EffortTeamDefinitionTxService.Current aResult = a.get(60, TimeUnit.SECONDS);
+            assertThat(aResult.revision()).as("A は B の確定内容に収束する").isEqualTo(2);
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+
+        String uuid = first.definitionUuid().toString();
+        assertThat(revisionCount(uuid)).as("旧定義で revision 3 を発行しない").isEqualTo(2);
+        JsonNode latest = storedRevision(uuid, 2);
+        assertThat(fieldOf(latest, "追加メモ").path("fieldKey").asText()).isNotEmpty();
+        assertThat(resolver.sync(team, template).snapshot().fields()).anyMatch(f -> "追加メモ".equals(f.label()));
     }
 
     private void time(Instant value) {
