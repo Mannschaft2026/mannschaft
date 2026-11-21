@@ -436,6 +436,7 @@ onBeforeUnmount(() => {
           role="tabpanel"
           :aria-labelledby="`scope-tab-${slot.panel}`"
           :aria-hidden="slot.index !== activeIndex"
+          :inert="slot.index !== activeIndex"
           class="w-full shrink-0 grow-0 basis-full"
         >
           <template v-if="activatedPanels.includes(slot.panel)">

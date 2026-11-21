@@ -100,6 +100,17 @@ async function beginDrag(view: VueWrapper, dx: number, dy = 0) {
 }
 
 describe('スコープbodyの初回選択と常設カルーセル', () => {
+  it.each(panels)('%s 選択時、非アクティブな tabpanel だけに inert が付く（Tab 順から外す）', async (initial) => {
+    const view = await render(initial)
+    const sections = view.findAll('section[role="tabpanel"]')
+    expect(sections).toHaveLength(3)
+    for (const section of sections) {
+      const active = section.attributes('id') === `scope-panel-${initial}`
+      expect(section.attributes('aria-hidden')).toBe(active ? 'false' : 'true')
+      expect(section.attributes('inert') !== undefined).toBe(!active)
+    }
+  })
+
   it.each(panels)('復元された%sだけを生成し、未訪問bodyのmount/取得を始めない', async (initial) => {
     const view = await render(initial)
     expect(view.findAll('section[role="tabpanel"]')).toHaveLength(3)
