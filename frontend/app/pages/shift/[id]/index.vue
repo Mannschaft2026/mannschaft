@@ -282,6 +282,8 @@ const tabs = computed(() => {
         <PageHeader :title="schedule.content.title" back-to="/shift">
           <ShiftStatusBadge :status="schedule.status.status" />
         </PageHeader>
+        <!-- 注: formatDate は instant を userTimezone で整形する。日付のみ（YYYY-MM-DD）を渡すと
+             ブラウザ TZ と userTimezone の差で 1 日ずれ得る既存パターンの限界がある（一覧カードと同じ扱い） -->
         <p class="mb-3 text-sm text-surface-500">
           {{ formatDate(schedule.period.startDate) }} 〜 {{ formatDate(schedule.period.endDate) }}
         </p>

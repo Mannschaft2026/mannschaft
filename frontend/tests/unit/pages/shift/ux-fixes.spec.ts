@@ -15,6 +15,7 @@ const listSlots = vi.fn()
 const listRequests = vi.fn()
 const getRequestSummary = vi.fn()
 const getAllMembers = vi.fn()
+const handleApiError = vi.fn()
 let role = 'MEMBER'
 let slug: string | undefined = 'alpha'
 
@@ -37,7 +38,7 @@ mockNuxtImport('useDatetime', () => () => ({
   userTimezone: ref('Asia/Tokyo'),
   formatDate: (iso: string) => iso.replace(/-/g, '/'),
 }))
-mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))
+mockNuxtImport('useErrorHandler', () => () => ({ handleApiError }))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), warn: vi.fn() }))
 mockNuxtImport('navigateTo', () => vi.fn())
 
@@ -125,6 +126,22 @@ describe('S4 希望一覧の表示名', () => {
     expect(w.text()).not.toContain('UID:')
     expect(w.text()).toContain('山田花子')
     expect(w.text()).toContain('Unknown member')
+  })
+})
+
+describe('S4 失敗系', () => {
+  it('members/all が失敗したら通知し、UID: でなく不明メンバー表示', async () => {
+    role = 'ADMIN'
+    getAllMembers.mockRejectedValue(new Error('boom'))
+    const w = await mount(ShiftRequestsPage)
+    expect(handleApiError).toHaveBeenCalled()
+    expect(w.text()).not.toContain('UID:')
+    expect(w.text()).toContain('Unknown member')
+  })
+  it('希望一覧のタブも 44px 以上', async () => {
+    role = 'ADMIN'
+    const w = await mount(ShiftRequestsPage)
+    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-11')
   })
 })
 

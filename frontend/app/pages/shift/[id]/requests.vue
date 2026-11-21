@@ -6,6 +6,7 @@ import type {
   ShiftPreference,
 } from '~/types/shift'
 import { preferenceToI18nKey } from '~/utils/shiftPreference'
+import dayjs from 'dayjs'
 import { useTeamMembers } from '~/composables/team/useTeamMembers'
 
 definePageMeta({ middleware: 'auth' })
@@ -147,7 +148,8 @@ function summaryCount(pref: ShiftPreference): number {
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
+  // 'YYYY-MM-DD' の new Date() は UTC 解釈で前日表示になり得るため、ローカル日付として解釈する
+  const d = dayjs(dateStr).toDate()
   const days = ['日', '月', '火', '水', '木', '金', '土']
   return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()] ?? ''})`
 }
@@ -177,22 +179,22 @@ const pendingCount = computed(() => summary.value?.pendingCount ?? 0)
     <nav class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700">
       <NuxtLink
         :to="`/shift/${scheduleId}`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
+        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
       >
         <i class="pi pi-calendar" />{{ t('shift.detail.tabOverview') }}
       </NuxtLink>
       <NuxtLink
         :to="`/shift/${scheduleId}/edit`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
+        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
       >
         <i class="pi pi-pencil" />{{ t('shift.detail.tabEdit') }}
       </NuxtLink>
-      <span class="flex shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
+      <span class="flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
         <i class="pi pi-list" />{{ t('shift.detail.tabRequests') }}
       </span>
       <NuxtLink
         :to="`/shift/${scheduleId}/work-constraints`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
+        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
       >
         <i class="pi pi-shield" />{{ t('shift.detail.tabConstraints') }}
       </NuxtLink>
