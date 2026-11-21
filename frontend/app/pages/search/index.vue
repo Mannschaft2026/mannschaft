@@ -114,6 +114,20 @@ function useSuggestion(text: string) {
 onMounted(() => {
   if (trimmedQuery.value.length >= 2) runSearch(0)
 })
+
+// ヘッダー検索欄・サジェスト・戻る操作で URL の q / type が変わったら画面へ反映して再検索する。
+// 画面自身が router.replace で書き戻した URL（現在の状態と同じ）では再検索しない。
+watch(
+  () => [route.query.q, route.query.type] as const,
+  () => {
+    const q = typeof route.query.q === 'string' ? route.query.q : ''
+    const type = typeFromRoute()
+    if (q.trim() === trimmedQuery.value && type === activeType.value) return
+    query.value = q
+    activeType.value = type
+    if (trimmedQuery.value.length >= 2) runSearch(0)
+  },
+)
 </script>
 
 <template>

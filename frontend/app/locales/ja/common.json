@@ -3353,6 +3353,12 @@
     }
   },
   "globalSearch": {
+    "header": {
+      "placeholder": "全体を検索",
+      "open": "検索を開く",
+      "suggestions": "検索候補",
+      "keyword": "キーワード"
+    },
     "title": "検索",
     "placeholder": "キーワードで検索（2文字以上）",
     "submit": "検索",
