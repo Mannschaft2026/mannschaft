@@ -74,8 +74,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       と sitemap（{@code findAllPublicPostsByTeam}: 非公開チーム配下の PUBLIC 記事を載せない理由を明記）と同じ
  *       条件に揃える。所属者には {@code public_visible} に関係なく出る（通常ビューは変わらない、という列の定義）。</li>
  *   <li><b>ペイウォール</b>: {@code content_payment_gates}（content_type = {@code ContentGateType.POST}）が付いた記事は、
- *       未払いの閲覧者に出さない。{@code BlogPostVisibilityResolver#visibleByAdditionalAxis} は title 秘匿なら拒否し、
- *       title 可視でも本文は課金でロックされるため、本文由来の snippet を返す検索では件数ごと除外する（安全側）。</li>
+ *       記事を開くときと同じ正準判定（{@code PaymentGateService#checkAccessBatch} の scope 束縛版。受益者キー・全ゲート
+ *       AND・PAID かつ {@code valid_until + grace_period_days >= 今日}・記事と同スコープの有効な非 DONATION 項目）を満たす
+ *       閲覧者にだけ、結果にも件数にも出す。満たさない閲覧者には、{@code is_title_hidden=FALSE} の「鍵付きタイトル」も
+ *       含めて件数ごと出さない（本文由来の snippet を返すため）。SYSTEM_ADMIN もバイパスしない。</li>
  * </ol>
  *
  * <p><b>SYSTEM_ADMIN</b> はバイパスしない（D5）。<b>スコープ指定時</b>はそのスコープ（所属確認済み）の記事だけを返し、
@@ -122,6 +124,10 @@ class GlobalSearchArticleVisibilityIT extends AbstractGlobalSearchIT {
                 em.createNativeQuery("DELETE FROM blog_posts WHERE id = :id").setParameter("id", id).executeUpdate();
             }
             for (Long id : createdPaymentItemIds) {
+                em.createNativeQuery("DELETE FROM member_payments WHERE payment_item_id = :id").setParameter("id", id)
+                        .executeUpdate();
+                em.createNativeQuery("DELETE FROM content_payment_gates WHERE payment_item_id = :id")
+                        .setParameter("id", id).executeUpdate();
                 em.createNativeQuery("DELETE FROM payment_items WHERE id = :id").setParameter("id", id)
                         .executeUpdate();
             }
@@ -487,7 +493,7 @@ class GlobalSearchArticleVisibilityIT extends AbstractGlobalSearchIT {
         }
 
         @Test
-        @DisplayName("ペイウォール: 課金ゲート付き記事（タイトル秘匿・タイトル可視とも）は未払いのメンバーに結果・件数ともに出ない（ゲートなしは出る）")
+        @DisplayName("ペイウォール: 課金ゲート付き記事（タイトル秘匿・タイトル可視とも）は未払いのメンバーに結果・件数ともに出ない（ゲートなしは出る。鍵付きタイトルだけの表示も検索では行わない）")
         void ペイウォール付き記事は未払い者に出ない() throws Exception {
             Long team = privateTeam("PW-" + kw);
             Long author = viewer("pw-author");
@@ -521,6 +527,166 @@ class GlobalSearchArticleVisibilityIT extends AbstractGlobalSearchIT {
             assertThat(detail.path("meta").path("total").asLong()).as("viewer=%s の meta.total", viewer)
                     .isEqualTo(expected.length);
             assertThat(typeCount(search(viewer, kw), ARTICLE)).as("viewer=%s の概要 typeCounts", viewer)
+                    .isEqualTo(expected.length);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ペイウォール: 支払い条件を満たした閲覧者にだけ出す（CMP-261116-0722 PR-5 改: マスター裁定）
+    // ═════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("ペイウォール解錠（支払い条件を満たした閲覧者にだけ出す）")
+    class PaywallUnlock {
+
+        @Test
+        @DisplayName("有効な支払い（本人・PAID・期限内）のあるメンバーには、課金ゲート付き記事（タイトル秘匿・可視とも）が結果にも typeCounts にも meta.total にも出る")
+        void 支払い済みメンバーには出る() throws Exception {
+            Long team = privateTeam("PU-" + kw);
+            Long author = viewer("pu-author");
+            teamMember(author, team);
+            Long paid = viewer("pu-paid");
+            teamMember(paid, team);
+            Long unpaid = viewer("pu-unpaid");
+            teamMember(unpaid, team);
+            Long hiddenTitle = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 有料タイトル秘匿", "有料本文");
+            Long visibleTitle = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 有料タイトル可視", "有料本文");
+            Long free = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 無料", "本文");
+            Long item1 = gate(team, hiddenTitle, true);
+            Long item2 = gate(team, visibleTitle, false);
+            payment(paid, item1, "PAID", null, null);
+            payment(paid, item2, "PAID", 30, null);
+
+            assertExactly(paid, free, hiddenTitle, visibleTitle);
+            assertExactly(unpaid, free);
+            assertExactly(author, free);
+        }
+
+        @Test
+        @DisplayName("期限切れ（valid_until + 猶予日数 < 今日）・PENDING・REFUNDED・CANCELLED の支払いでは出ない。猶予期間内は出る")
+        void 期限切れや未確定の支払いでは出ない() throws Exception {
+            Long team = privateTeam("PE-" + kw);
+            Long author = viewer("pe-author");
+            teamMember(author, team);
+            Long expired = viewer("pe-expired");
+            teamMember(expired, team);
+            Long pending = viewer("pe-pending");
+            teamMember(pending, team);
+            Long refunded = viewer("pe-refunded");
+            teamMember(refunded, team);
+            Long cancelled = viewer("pe-cancelled");
+            teamMember(cancelled, team);
+            Long inGrace = viewer("pe-grace");
+            teamMember(inGrace, team);
+            Long article = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 期限付き有料", "有料本文");
+            Long free = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 無料", "本文");
+            Long item = gate(team, article, false);
+            jdbc.update("UPDATE payment_items SET grace_period_days = 3 WHERE id = ?", item);
+            payment(expired, item, "PAID", -4, null);
+            payment(pending, item, "PENDING", 30, null);
+            payment(refunded, item, "REFUNDED", 30, null);
+            payment(cancelled, item, "CANCELLED", 30, null);
+            payment(inGrace, item, "PAID", -2, null);
+
+            for (Long v : List.of(expired, pending, refunded, cancelled)) {
+                assertExactly(v, free);
+            }
+            assertExactly(inGrace, free, article);
+        }
+
+        @Test
+        @DisplayName("支払い項目が複数のゲートはすべて支払って初めて出る（AND）。1つだけの支払いでは出ない")
+        void 複数ゲートはすべて支払いが必要() throws Exception {
+            Long team = privateTeam("PM-" + kw);
+            Long author = viewer("pm-author");
+            teamMember(author, team);
+            Long both = viewer("pm-both");
+            teamMember(both, team);
+            Long one = viewer("pm-one");
+            teamMember(one, team);
+            Long article = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 二重ゲート", "有料本文");
+            Long item1 = gate(team, article, false);
+            Long item2 = gate(team, article, false);
+            payment(both, item1, "PAID", null, null);
+            payment(both, item2, "PAID", null, null);
+            payment(one, item1, "PAID", null, null);
+
+            assertExactly(both, article);
+            assertExactly(one);
+        }
+
+        @Test
+        @DisplayName("他スコープの支払い項目だけを支払った閲覧者には出ない（記事と別チームの項目で組んだ不整合ゲートは、その項目を支払っても解錠しない）")
+        void 他スコープの支払い項目では出ない() throws Exception {
+            Long team = privateTeam("PS-" + kw);
+            Long other = privateTeam("PSO-" + kw);
+            Long author = viewer("ps-author");
+            teamMember(author, team);
+            Long me = viewer("ps-me");
+            teamMember(me, team);
+            teamMember(me, other);
+            Long proper = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 自チーム項目のゲート", "有料本文");
+            Long mismatched = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 他チーム項目のゲート", "有料本文");
+            gate(team, proper, false);
+            Long otherItem = gate(other, mismatched, false);
+            // 他チーム Y の項目を支払っても、自チームの項目のゲートは解錠しない
+            Long otherItem2 = item(other);
+            payment(me, otherItem2, "PAID", null, null);
+            // 記事と別スコープの項目で組まれたゲートは、その項目を支払っても解錠しない
+            payment(me, otherItem, "PAID", null, null);
+
+            assertExactly(me);
+        }
+
+        @Test
+        @DisplayName("受益者キー: 他人が受益者の支払い（自分が払い手）では出ない。自分が受益者なら払い手が別人でも出る")
+        void 受益者キーで判定する() throws Exception {
+            Long team = privateTeam("PB-" + kw);
+            Long author = viewer("pb-author");
+            teamMember(author, team);
+            Long payer = viewer("pb-payer");
+            teamMember(payer, team);
+            Long beneficiary = viewer("pb-beneficiary");
+            teamMember(beneficiary, team);
+            Long article = teamArticle(team, author, Visibility.MEMBERS_ONLY, kw + " 受益者キー", "有料本文");
+            Long item = gate(team, article, false);
+            payment(beneficiary, item, "PAID", null, payer);
+
+            assertExactly(beneficiary, article);
+            assertExactly(payer);
+        }
+
+        @Test
+        @DisplayName("SYSTEM_ADMIN はバイパスしない: 公開チームの PUBLIC な有料記事も、未払いなら出ない（支払えば一般利用者と同じく出る）")
+        void SYSTEM_ADMINも未払いなら出ない() throws Exception {
+            Long team = publicTeam("PA-" + kw);
+            Long author = viewer("pa-author");
+            teamMember(author, team);
+            Long admin = viewer("pa-sysadmin");
+            inTx(() -> {
+                MembershipTestHelper.insertUserRole(em, admin, "SYSTEM_ADMIN", null, null);
+                return null;
+            });
+            Long nobodyPaid = viewer("pa-nobody-paid");
+            Long gated = teamArticle(team, author, Visibility.PUBLIC, kw + " 公開の有料記事", "有料本文");
+            Long open = teamArticle(team, author, Visibility.PUBLIC, kw + " 公開の無料記事", "本文");
+            Long item = gate(team, gated, false);
+            payment(nobodyPaid, item, "PAID", null, null);
+
+            assertExactly(admin, open);
+            assertExactly(nobodyPaid, open, gated);
+        }
+
+        private void assertExactly(Long viewer, Long... expected) throws Exception {
+            JsonNode detail = search(viewer, Map.of("q", kw, "type", ARTICLE, "size", "50"));
+            assertThat(resultIds(detail, ARTICLE)).as("viewer=%s の結果", viewer).containsExactlyInAnyOrder(expected);
+            assertThat(typeCount(detail, ARTICLE)).as("viewer=%s の typeCounts", viewer).isEqualTo(expected.length);
+            assertThat(detail.path("meta").path("total").asLong()).as("viewer=%s の meta.total", viewer)
+                    .isEqualTo(expected.length);
+            JsonNode overview = search(viewer, kw);
+            assertThat(resultIds(overview, ARTICLE)).as("viewer=%s の概要結果", viewer)
+                    .containsExactlyInAnyOrder(expected);
+            assertThat(typeCount(overview, ARTICLE)).as("viewer=%s の概要 typeCounts", viewer)
                     .isEqualTo(expected.length);
         }
     }
@@ -978,19 +1144,44 @@ class GlobalSearchArticleVisibilityIT extends AbstractGlobalSearchIT {
         anchoredTeamIds.add(teamId);
     }
 
-    /** 記事に未払いの課金ゲートを付ける（チームの支払い項目）。 */
-    private void gate(Long teamId, Long articleId, boolean titleHidden) {
+    /** 記事に課金ゲートを付ける（チームの支払い項目を新規作成）。作成した支払い項目 ID を返す。 */
+    private Long gate(Long teamId, Long articleId, boolean titleHidden) {
+        Long itemId = item(teamId);
+        inTx(() -> {
+            em.persist(ContentPaymentGateEntity.builder().paymentItemId(itemId)
+                    .contentType(ContentGateType.POST).contentId(articleId).isTitleHidden(titleHidden).build());
+            em.flush();
+            return null;
+        });
+        return itemId;
+    }
+
+    /** チームの支払い項目（ITEM 型）を作る。 */
+    private Long item(Long teamId) {
         Long itemId = inTx(() -> {
             PaymentItemEntity item = PaymentItemEntity.builder().teamId(teamId).name("有料記事-" + kw)
                     .type(PaymentItemType.ITEM).amount(new BigDecimal("500")).build();
             em.persist(item);
             em.flush();
-            em.persist(ContentPaymentGateEntity.builder().paymentItemId(item.getId())
-                    .contentType(ContentGateType.POST).contentId(articleId).isTitleHidden(titleHidden).build());
-            em.flush();
             return item.getId();
         });
         createdPaymentItemIds.add(itemId);
+        return itemId;
+    }
+
+    /**
+     * 支払い記録を作る。{@code validUntilDaysFromToday} は DB の今日からの相対日数（null は無期限）。
+     * 日付は DB 側で計算し、Java の時刻を束縛しない。{@code payerUserId} は払い手（受益者と別人のとき）。
+     */
+    private void payment(Long beneficiaryUserId, Long itemId, String status, Integer validUntilDaysFromToday,
+                         Long payerUserId) {
+        String validUntil = validUntilDaysFromToday == null ? "NULL"
+                : "DATE_ADD(CURRENT_DATE, INTERVAL " + validUntilDaysFromToday.intValue() + " DAY)";
+        boolean paid = "PAID".equals(status);
+        jdbc.update("INSERT INTO member_payments (user_id, payment_item_id, amount_paid, currency, payment_method,"
+                + " status, valid_from, valid_until, paid_at, payer_user_id) VALUES (?, ?, 500, 'JPY', 'MANUAL', ?, "
+                + (paid ? "CURRENT_DATE" : "NULL") + ", " + validUntil + ", " + (paid ? "UTC_TIMESTAMP()" : "NULL")
+                + ", ?)", beneficiaryUserId, itemId, status, payerUserId);
     }
 
     private static LocalDateTime past() {
