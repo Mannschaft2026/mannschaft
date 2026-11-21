@@ -84,7 +84,7 @@ function confirmReview(): void {
 
     <div v-else-if="requests.length === 0" class="py-8 text-center text-surface-400">
       <i class="pi pi-inbox mb-2 block text-3xl" />
-      <p class="text-sm">{{ $t('shift.changeRequest.title') }}</p>
+      <p class="text-sm" data-testid="change-request-empty">{{ $t('shift.changeRequest.empty') }}</p>
     </div>
 
     <DataTable
@@ -103,7 +103,7 @@ function confirmReview(): void {
       </Column>
 
       <!-- 種別 -->
-      <Column :header="$t('shift.changeRequest.title')" field="requestInfo.requestType" style="min-width: 120px">
+      <Column :header="$t('shift.changeRequest.typeColumn')" field="requestInfo.requestType" style="min-width: 120px">
         <template #body="{ data }">
           <span class="text-xs">{{ typeLabel(data.requestInfo.requestType) }}</span>
         </template>
@@ -124,7 +124,8 @@ function confirmReview(): void {
       </Column>
 
       <!-- 操作 -->
-      <Column :header="$t('label.actions')" style="min-width: 180px">
+      <!-- 狭幅（スマホ）でも主要操作が画面外に出ないよう、操作列は右端に固定して他の列だけ横スクロールさせる -->
+      <Column :header="$t('label.actions')" frozen align-frozen="right" style="min-width: 150px">
         <template #body="{ data }">
           <div class="flex gap-2">
             <!-- 管理者: 他人の依頼の承認・却下 -->

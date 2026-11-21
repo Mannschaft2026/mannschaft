@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Solicitud de cambio",
+      "typeColumn": "Tipo de solicitud",
+      "empty": "Aún no hay solicitudes de cambio",
       "type": {
         "PRE_CONFIRM_EDIT": "Edición pre-confirmación",
         "INDIVIDUAL_SWAP": "Intercambio individual",

@@ -377,6 +377,8 @@
     },
     "changeRequest": {
       "title": "変更依頼",
+      "typeColumn": "依頼種別",
+      "empty": "変更依頼はまだありません",
       "type": {
         "PRE_CONFIRM_EDIT": "確定前変更",
         "INDIVIDUAL_SWAP": "個別交代",

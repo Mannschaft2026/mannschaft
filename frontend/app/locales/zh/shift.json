@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "变更申请",
+      "typeColumn": "申请类型",
+      "empty": "暂无变更申请",
       "type": {
         "PRE_CONFIRM_EDIT": "确定前变更",
         "INDIVIDUAL_SWAP": "个人替换",

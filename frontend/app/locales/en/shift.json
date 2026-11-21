@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Change Request",
+      "typeColumn": "Request type",
+      "empty": "No change requests yet",
       "type": {
         "PRE_CONFIRM_EDIT": "Pre-confirm Edit",
         "INDIVIDUAL_SWAP": "Individual Swap",

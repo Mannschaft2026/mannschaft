@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Änderungsantrag",
+      "typeColumn": "Anfragetyp",
+      "empty": "Noch keine Änderungsanfragen",
       "type": {
         "PRE_CONFIRM_EDIT": "Vorbestätigungs-Bearbeitung",
         "INDIVIDUAL_SWAP": "Individueller Tausch",

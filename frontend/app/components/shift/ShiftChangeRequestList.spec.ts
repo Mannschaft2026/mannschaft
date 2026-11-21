@@ -155,3 +155,23 @@ describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
     expect(text).not.toContain('90241')
   })
 })
+
+describe('ShiftChangeRequestList 見出し重複・狭幅（アリシゼーション）', () => {
+  it('空状態の文言はページ見出し「変更依頼」と重複しない', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { requests: [], currentUserId: 5 },
+    })
+    expect(wrapper.find('[data-testid="change-request-empty"]').text()).toBe('No change requests yet')
+  })
+
+  it('表の種別列ヘッダーは「変更依頼」ではなく専用キー、操作列は右端固定', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { requests: [OWN], currentUserId: 5 },
+    })
+    const headers = wrapper.findAll('th').map((h) => h.text())
+    expect(headers).toContain('Request type')
+    expect(headers).not.toContain('Change request')
+    const last = wrapper.findAll('th').at(-1)!
+    expect(last.classes().join(' ')).toMatch(/frozen/)
+  })
+})

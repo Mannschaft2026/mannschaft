@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "변경 요청",
+      "typeColumn": "요청 유형",
+      "empty": "변경 요청이 아직 없습니다",
       "type": {
         "PRE_CONFIRM_EDIT": "확정 전 변경",
         "INDIVIDUAL_SWAP": "개별 교대",
