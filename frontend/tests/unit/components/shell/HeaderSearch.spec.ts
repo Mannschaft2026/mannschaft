@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 import HeaderSearch from '~/components/shell/HeaderSearch.vue'
 import type { Suggestion } from '~/types/search'
 
@@ -17,7 +18,7 @@ import type { Suggestion } from '~/types/search'
 const suggestions = vi.fn()
 const push = vi.fn()
 const warn = vi.fn()
-const route = { path: '/dashboard', params: {}, query: {} as Record<string, string> }
+const route = reactive({ path: '/dashboard', params: {}, query: {} as Record<string, string> })
 
 vi.mock('~/composables/useSearchApi', () => ({
   useSearchApi: () => ({ suggestions }),
@@ -222,6 +223,44 @@ describe('components/shell/HeaderSearch.vue — ヘッダー検索欄', () => {
     expect(linkClasses).not.toContain('md:hidden')
     // 224px(w-56) 固定ではなく、狭い lg では小さい既定幅から始める
     expect(wrapper.find('[data-testid="header-search-input"]').classes()).not.toContain('w-56')
+  })
+
+  it('HS-12: 入力を変えた時点で表示済みの候補は消え、新しい応答が届くまで古い候補は選べない', async () => {
+    suggestions.mockResolvedValue([KEYWORD, USER])
+    const wrapper = await mountBox()
+    await typeAndWait(wrapper, 'グラ')
+    const input = wrapper.find('[data-testid="header-search-input"]')
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(2)
+
+    await input.setValue('グラウ') // debounce 前（応答未到着）
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(0)
+    expect(input.attributes('aria-expanded')).toBe('false')
+    expect(input.attributes('aria-activedescendant')).toBeUndefined()
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('HS-13: /search の URL が変わった（戻る等）ら、候補・保留中の取得を破棄し入力欄を URL に合わせる', async () => {
+    suggestions.mockResolvedValue([KEYWORD])
+    route.path = '/search'
+    route.query = { q: 'チーム' }
+    const wrapper = await mountBox()
+    await typeAndWait(wrapper, 'グラ')
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(1)
+
+    route.query = { q: 'サッカー' }
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(0)
+    expect((wrapper.find('[data-testid="header-search-input"]').element as HTMLInputElement).value).toBe('サッカー')
+
+    // 保留中の debounce も破棄される
+    suggestions.mockClear()
+    await wrapper.find('[data-testid="header-search-input"]').setValue('サッカ')
+    route.query = { q: 'チーム' }
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(300)
+    expect(suggestions).not.toHaveBeenCalled()
   })
 
   it('HS-06: suggestions が失敗しても候補は出ず、失敗はログに残す', async () => {

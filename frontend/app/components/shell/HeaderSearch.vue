@@ -40,6 +40,9 @@ let requestSeq = 0
 // /search の URL（再読込・戻る・サジェスト選択）に入力欄を追従させる
 watch(routeQuery, (q) => {
   keyword.value = q
+  // URL が変わったら、旧入力に対する保留中の取得と表示済みの候補は破棄する
+  cancelPendingSuggest()
+  clearSuggestions()
 })
 
 const mobileHref = computed(() => {
@@ -82,14 +85,11 @@ function cancelPendingSuggest() {
 
 function onInput() {
   cancelPendingSuggest()
-  // 入力が変わった時点で、保留中の古い候補リクエストの結果を無効にする
-  requestSeq++
-  activeIndex.value = -1
+  // 入力が変わった時点で、保留中の古い候補リクエストを無効にし、表示済みの候補も閉じる
+  // （新しい応答が届くまで古い候補は選べない）
+  clearSuggestions()
   const text = keyword.value.trim()
-  if (text.length === 0) {
-    clearSuggestions()
-    return
-  }
+  if (text.length === 0) return
   debounceTimer = setTimeout(() => fetchSuggestions(text), SUGGEST_DEBOUNCE_MS)
 }
 

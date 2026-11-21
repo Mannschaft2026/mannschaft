@@ -121,6 +121,53 @@ describe('pages/search/index.vue — URL 同期', () => {
     expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe('サッカー')
   })
 
+  // URL 変化の全分岐（空 / 最小長未満 / 検索済み条件と一致 / 新条件）で、
+  // 進行中リクエストの無効化と表示の整合が保たれる
+  describe('RS-07: 進行中の B 検索中に URL が変わった（分岐別）', () => {
+    const B_HIT = {
+      type: 'TEAM' as const, id: 9, title: 'チームB', snippet: null, highlights: { title: [0, 2] as [number, number] },
+      relevance: null, author: null, scope: null, createdAt: '2026-11-17T09:00:00', url: '/teams/b', actions: [],
+    }
+    const B_RES: SearchResponse = {
+      ...EMPTY,
+      data: { ...EMPTY.data, results: [B_HIT], typeCounts: { ...EMPTY.data.typeCounts, TEAM: 1 } },
+      meta: { viewMode: 'OVERVIEW', total: 1, page: 0, size: 5, totalPages: 0 },
+    }
+    const cases: { name: string; next: Record<string, string>; input: string; replacedWith: string | null }[] = [
+      { name: '空', next: {}, input: '', replacedWith: null },
+      { name: '最小長未満(1文字)', next: { q: 'あ' }, input: 'あ', replacedWith: null },
+      { name: '検索済み条件と一致', next: { q: 'チーム' }, input: 'チーム', replacedWith: null },
+      { name: '新条件(C)', next: { q: 'ラグビー' }, input: 'ラグビー', replacedWith: 'ラグビー' },
+    ]
+    it.each(cases)('$name', async ({ next, input, replacedWith }) => {
+      const wrapper = await mountSuspended(SearchPage)
+      await flushPromises()
+      const replaceSpy = vi.spyOn(useRouter(), 'replace')
+      replaceSpy.mockClear()
+      let resolveB: (v: SearchResponse) => void = () => {}
+      search.mockImplementationOnce(() => new Promise<SearchResponse>((r) => { resolveB = r }))
+      search.mockResolvedValue(EMPTY)
+
+      route.query = { q: 'サッカー' }
+      await flushPromises()
+      route.query = next
+      await flushPromises()
+      resolveB(B_RES)
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="global-search-result-TEAM-9"]').exists()).toBe(false)
+      expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe(input)
+      const replacedQs = replaceSpy.mock.calls.map(c => (c[0] as { query: { q: string } }).query.q)
+      expect(replacedQs).not.toContain('サッカー')
+      if (replacedWith === null) expect(replaceSpy).not.toHaveBeenCalled()
+      else expect(replacedQs).toContain(replacedWith)
+      if (input.trim().length < 2) {
+        // 検索できない長さの URL では件数タブ・結果が初期状態へ戻る
+        expect(wrapper.find('[data-testid="global-search-tab-ALL"]').exists()).toBe(false)
+      }
+    })
+  })
+
   it('RS-04: 空の /search へ戻ると、前回の結果・件数タブ・入力が初期状態へ戻る', async () => {
     search.mockResolvedValue({
       ...EMPTY,

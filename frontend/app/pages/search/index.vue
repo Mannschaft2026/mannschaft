@@ -168,11 +168,12 @@ watch(
     }
     query.value = q
     activeType.value = type
-    if (q.trim().length === 0) {
+    // 空・最小長未満の URL は検索できない。進行中の検索を無効化し、結果・件数・ページングを初期化する
+    if (q.trim().length < 2) {
       resetSearchState()
       return
     }
-    if (trimmedQuery.value.length >= 2) runSearch(0)
+    runSearch(0)
   },
 )
 </script>
