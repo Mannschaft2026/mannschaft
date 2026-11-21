@@ -92,6 +92,7 @@ function confirmReview(): void {
       :value="requests"
       :rows="10"
       paginator
+      scrollable
       striped-rows
       class="text-sm"
     >

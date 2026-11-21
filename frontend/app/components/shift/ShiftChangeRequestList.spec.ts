@@ -171,6 +171,8 @@ describe('ShiftChangeRequestList 見出し重複・狭幅（アリシゼーシ�
     const headers = wrapper.findAll('th').map((h) => h.text())
     expect(headers).toContain('Request type')
     expect(headers).not.toContain('Change request')
+    // sticky は scrollable でのみ効く。DataTable に scrollable 由来のクラスが付くこと
+    expect(wrapper.find('.p-datatable').classes()).toContain('p-datatable-scrollable')
     const last = wrapper.findAll('th').at(-1)!
     expect(last.classes().join(' ')).toMatch(/frozen/)
   })
