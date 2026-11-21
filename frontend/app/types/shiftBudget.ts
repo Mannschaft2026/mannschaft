@@ -123,12 +123,20 @@ export interface AllocationListResponse {
 // ===== 消化サマリ（§6.2.3） =====
 
 /**
- * ユーザー別消化額。BUDGET_ADMIN 保有時のみ実データが返る。
+ * 保存済みの記録時給ごとの消化内訳。
  */
+export interface HourlyRateConsumption {
+  hourly_rate_snapshot: number
+  hours: number
+  amount: number
+}
+
+/** ユーザー別の合計と記録時給別内訳。BUDGET_ADMIN 保有時のみ返る。 */
 export interface UserConsumption {
   user_id: number
   amount: number
   hours: number
+  rate_breakdown: HourlyRateConsumption[]
 }
 
 /**

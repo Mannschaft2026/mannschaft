@@ -40,6 +40,14 @@
       "deleteError": "Zuweisung konnte nicht gelöscht werden"
     },
     "consumption": {
+      "openByUser": "Aufschlüsselung je Mitglied",
+      "user": "Benutzer-ID: {id}",
+      "total": "Gesamt {amount} {currency} / {hours} Stunden",
+      "recordedRate": "Stundensatz bei der Erfassung",
+      "hours": "Stunden",
+      "zeroHistory": "Mit Nullbetrag erfasster Verlauf (Stundensatz prüfen)",
+      "empty": "Keine Verbrauchsaufschlüsselung erfasst",
+      "close": "Schließen",
       "summary": "Verbrauchsübersicht",
       "consumed": "Verbraucht",
       "remaining": "Verbleibend",

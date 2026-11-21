@@ -132712,11 +132712,16 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "消化サマリ",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MappingJacksonValue"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ConsumptionSummaryResponse"
+                    }
+                  }
                 }
               }
             }
@@ -241383,17 +241388,87 @@
           }
         }
       },
-      "FilterProvider": {
-        "type": "object"
-      },
-      "MappingJacksonValue": {
+      "ConsumptionSummaryResponse": {
         "type": "object",
         "properties": {
-          "filters": {
-            "$ref": "#/components/schemas/FilterProvider"
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertResponse"
+            }
           },
-          "value": {
-            "type": "object"
+          "allocated_amount": {
+            "type": "number"
+          },
+          "allocation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "by_user": {
+            "type": "array",
+            "description": "予算管理者だけに個人別・記録時給別の実データを返す。予算閲覧者は空配列。",
+            "items": {
+              "$ref": "#/components/schemas/UserConsumptionDto"
+            }
+          },
+          "confirmed_amount": {
+            "type": "number"
+          },
+          "consumed_amount": {
+            "type": "number"
+          },
+          "consumption_rate": {
+            "type": "number"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "planned_amount": {
+            "type": "number"
+          },
+          "remaining_amount": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "HourlyRateConsumptionDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "hourly_rate_snapshot": {
+            "type": "number"
+          },
+          "hours": {
+            "type": "number"
+          }
+        }
+      },
+      "UserConsumptionDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "hours": {
+            "type": "number"
+          },
+          "rate_breakdown": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HourlyRateConsumptionDto"
+            }
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

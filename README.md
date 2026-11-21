@@ -4,6 +4,8 @@
 
 あらゆる組織・チーム・個人をシームレスに管理するWebアプリケーション。
 
+シフト予算の人別消化内訳は、既存の合計を保ちながら保存された記録時給別の時間・金額を表示する（[形状・表示契約](docs/features/F08.7_shift_budget_team_owned.md#67-不変の規則)）。summaryの認可・feature確認は計算TXの外で行い、表示前にも担当権限を再確認する。現行画面は `/admin/shift-budget/dashboard` と組織スコープの API を使い、チーム所有化への移行は今回の内訳追加に含めない。実装・検証の完了状態は [戦役台帳](docs/task-list.md) を参照。
+
 確実配信イベントの隔離一覧と理由付き1件再開は SYSTEM_ADMIN 向けAPIで扱う。専用再開監査の保持・匿名化方針と未完了の実装、操作手順、既存通知での遅延・隔離・実復旧の確認と検証境界は[モジュールイベント運用](docs/operations/module-event-operations.md)を参照する。
 
 お気に入りのチーム・組織名称編集は、正準URLの詳細取得時versionを使用します。固定source8afdでformal作成2件＋残12件の分割実機と、その後の新独立3住民探索を範囲採用済みです。探索は部分達成・未実証の気づき2件を含みます。PR #3644の正準URL提供を含む支援成果を検証用に統合し、最終CI・main採用は待機中です（[検証範囲と残務](docs/evidence/CMP-261028-2304-l1r-normalizer.md)、[仕様と制約](docs/features/F02.9_favorites_widget.md#53-クイック編集ダイアログfavoritequickeditdialogvue)）。

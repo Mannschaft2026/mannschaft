@@ -40,6 +40,14 @@
       "deleteError": "删除分配失败"
     },
     "consumption": {
+      "openByUser": "成员明细",
+      "user": "用户 ID：{id}",
+      "total": "合计 {amount} {currency} / {hours} 小时",
+      "recordedRate": "记录时的时薪",
+      "hours": "小时",
+      "zeroHistory": "以零金额记录的历史（时薪待确认）",
+      "empty": "尚无已记录的消耗明细",
+      "close": "关闭",
       "summary": "消耗汇总",
       "consumed": "已消耗",
       "remaining": "剩余",

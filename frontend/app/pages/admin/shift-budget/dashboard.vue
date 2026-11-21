@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useShiftBudgetAdminAccess } from '~/composables/shift/useShiftBudgetAdminAccess'
 import dayjs from 'dayjs'
+import ConsumptionSummaryDialog from '~/components/shift-budget/ConsumptionSummaryDialog.vue'
 import type {
   AllocationResponse,
   ConsumptionStatus,
@@ -35,6 +36,7 @@ const { canManageBudget, ensureLoaded: ensureBudgetAdminAccess } = useShiftBudge
 
 const allocations = ref<AllocationResponse[]>([])
 const loading = ref(false)
+const summaryAllocation = ref<AllocationResponse | null>(null)
 
 const monthlyCloseVisible = ref(false)
 const monthlyCloseForm = ref<{ yearMonth: string }>({ yearMonth: '' })
@@ -133,8 +135,12 @@ async function executeMonthlyClose() {
 }
 
 watch(organizationId, () => {
+  summaryAllocation.value = null
   load()
   ensureBudgetAdminAccess()
+})
+watch(canManageBudget, (allowed) => {
+  if (!allowed) summaryAllocation.value = null
 })
 onMounted(() => {
   load()
@@ -242,6 +248,17 @@ onMounted(() => {
                 <ConsumptionRateBadge :rate="consumptionRate(data)" />
               </template>
             </Column>
+            <Column v-if="canManageBudget" :header="t('shiftBudget.allocation.actions')">
+              <template #body="{ data }: { data: AllocationResponse }">
+                <Button
+                  :label="t('shiftBudget.consumption.openByUser')"
+                  :data-testid="`consumption-summary-open-${data.id}`"
+                  severity="secondary"
+                  class="min-h-11 min-w-11"
+                  @click="summaryAllocation = data"
+                />
+              </template>
+            </Column>
           </DataTable>
         </template>
       </Card>
@@ -280,6 +297,13 @@ onMounted(() => {
         </NuxtLink>
       </div>
     </template>
+
+    <ConsumptionSummaryDialog
+      v-if="organizationId && canManageBudget"
+      :organization-id="organizationId"
+      :allocation="summaryAllocation"
+      @close="summaryAllocation = null"
+    />
 
     <!-- 月次締め実行モーダル -->
     <Dialog

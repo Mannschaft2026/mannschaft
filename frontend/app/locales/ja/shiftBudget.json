@@ -50,6 +50,14 @@
       "deleteError": "割当の削除に失敗しました"
     },
     "consumption": {
+      "openByUser": "人別内訳",
+      "user": "利用者 ID: {id}",
+      "total": "合計 {amount} {currency} / {hours} 時間",
+      "recordedRate": "記録時点の時給",
+      "hours": "時間",
+      "zeroHistory": "0円で記録された履歴（時給要確認）",
+      "empty": "記録された消化内訳はありません",
+      "close": "閉じる",
       "summary": "消化サマリ",
       "consumed": "消化額",
       "remaining": "残額",
