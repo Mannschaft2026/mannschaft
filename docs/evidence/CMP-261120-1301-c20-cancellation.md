@@ -1,8 +1,7 @@
 # CMP-261120-1301: PR 軽量検査の取消観測
 
-状態: **初回は観測条件未達、追加観測は未実施**。この文書は採用済み PR 軽量検査について、自己専用 PR で取消と後続 run の解除を観測する計画と結果を記録する。戦役 CMP-261120-1301 全体の完了を示すものではない。
-観測用世代: B（後続 run の待機生成用）。
-観測用世代: D（追加観測の後続 run 用）。
+状態: **取消の実測は未達、通常取消 POST は総数0回**。この文書は採用済み PR 軽量検査について、自己専用 PR で取消と後続 run の解除を観測する計画と結果を記録する。戦役 CMP-261120-1301 全体の完了を示すものではない。
+過去の観測用世代 B・D は、それぞれ初回・追加観測の後続 run を生成するために作成した。
 
 ## 既存の証拠
 
@@ -31,12 +30,15 @@ A が先に自然終端する、B の pending を観測できない、対象の�
 
 したがって、初回は先行 run を取消して後続 pending が解放される条件を観測できなかった。
 
-## 改訂した追加観測計画（未実施）
+## 追加観測の結果
 
-同じ専用 PR で追加は C/D の1ペアに限る。A/B と同じ workflow の先行 run が終端していること、対象の所有・PR・branch・head・attempt・workflow と単一 job を照合する。C が queued または in_progress の間に、事前準備した D を push し、D pending と C active を取消直前に近接して確認する。C に既知の失敗または timeout step がある場合は取消せず調査に戻る。
+C が active の間に D の pending を観測し、条件成立時に C を通常取消する計画だった。実際には最終確認時に C がすでに成功しており、active 条件の検査で停止した。取消処理には進まず、初回を含む通常取消 POST は総数 **0回**。
 
-条件成立時のみ C の固定 run に通常取消を1回送る（初回を含む POST 総数1）。応答不明でも再送せず、同一 attempt の唯一の job と run が completed/cancelled、active job が0になることを確認する。D が同じ attempt の pending から解放され最終 success となること、D の開始と取消要求の時系列を確認する。未観測の中間状態を推測しない。C/D の証跡または条件が揃わなければ未達として記録し、追加試行はしない。
+- C（head `151bf481f30b4366c664abc6cc3af2aee37d3812`）の [run 44864404601](https://github.com/kenta-0420/mannschaft/actions/runs/44864404601) は初期取得で in_progress。job `136724721804` は 04:06:05 に開始し 04:07:13 に completed/success、run は 04:07:16 の取得時に completed/success だった。
+- D（head `1e6f52049ce088cbe40e204de2fde3d51082a8de`）の [run 44864476897](https://github.com/kenta-0420/mannschaft/actions/runs/44864476897) は 04:06:58 に生成され、04:07:15 の取得時に queued。pending は観測されず、job `136725021534` は 04:07:16 に開始して 04:08:32 に completed/success、run も completed/success だった。時刻は UTC、run の状態は各取得時点、job の開始・終了は API の記録である。
 
-D の終端を待って結果を head E に確定し、E 自身の全適用 CI を確認する。E を D 終端前に push しない。C が in_progress の取消なら実行中の取消として記録し、未開始 queued の取消を実証したとは扱わない。
+追加観測でも先行 run の取消終端と、それを待つ後続 run の解除は実測できなかった。pending が存在しなかったとは断定できない。A/B・C/D の結果を保持し、追加の観測ペア、再走、取消は行わない。
+
+## 限界
 
 この試行は文書のみの PR で行うため、lockfile の実処理中の取消を測らない。新構成の自己 run の通常取消と、それを待つ後続 run の解除を対象とする。旧 queued 残骸の解消、旧事象の厳密な原因、第三 head による pending 置換、すべての GitHub 障害の再発防止は証明しない。
