@@ -496,6 +496,8 @@
       "selectProductKey": "Select a product key",
       "noProductOptions": "No products available",
       "selectTaxCode": "Select a tax code",
+      "taxCodeOption": "{code} ({rate}%)",
+      "taxPreviewNeedsTaxCode": "Select a tax code to see the preview",
       "noTaxCodeOptions": "No tax code is valid at the effective date",
       "taxCodeNeedsEffectiveFrom": "Enter the effective date first",
       "loadOptionsFailed": "Could not load the product key and tax code options",

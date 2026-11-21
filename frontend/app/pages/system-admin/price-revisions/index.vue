@@ -174,13 +174,18 @@ const taxCodeChoices = computed(() => buildTaxCodeOptions(taxCodes.value, effect
 const taxCodeOptionValues = computed<string[]>(() => taxCodeChoices.value.map((c) => c.code))
 
 /** 参考税率（画面プレビュー専用。確定値はサーバー側 BillingTaxDerivationService が計算する）。 */
-const previewRateBasisPoints = computed<number>(() =>
-  taxCodeChoices.value.find((c) => c.code === bandForm.taxCode)?.rateBasisPoints ?? 0)
+const previewRateBasisPoints = computed<number | null>(() =>
+  taxCodeChoices.value.find((c) => c.code === bandForm.taxCode)?.rateBasisPoints ?? null)
+
+/** 税コード選択済みのときだけプレビューを出す（未選択で税額0と表示して誤解させない）。 */
+const taxPreviewAvailable = computed(() => previewRateBasisPoints.value !== null)
 
 /** 税コードの表示名（コード + 税率％）。 */
 function taxCodeOptionLabel(code: string): string {
   const choice = taxCodeChoices.value.find((c) => c.code === code)
-  return choice ? `${choice.code}（${basisPointsToPercent(choice.rateBasisPoints)}%）` : code
+  return choice
+    ? t('billing.priceRevisions.taxCodeOption', { code: choice.code, rate: basisPointsToPercent(choice.rateBasisPoints) })
+    : code
 }
 
 async function loadCreateOptions() {
@@ -213,14 +218,16 @@ watch(taxCodeOptionValues, (options) => {
 })
 
 const taxExcludedPreview = computed<number>(() => {
-  if (!bandForm.inputAmount || !taxMode.value) return 0
+  const rate = previewRateBasisPoints.value
+  if (!bandForm.inputAmount || !taxMode.value || rate === null) return 0
   if (taxMode.value === 'EXCLUSIVE') return bandForm.inputAmount
-  return Math.round(bandForm.inputAmount / (1 + previewRateBasisPoints.value / 10000))
+  return Math.round(bandForm.inputAmount / (1 + rate / 10000))
 })
 
 const taxAmountPreview = computed<number>(() => {
-  if (!bandForm.inputAmount || !taxMode.value) return 0
-  return Math.round(taxExcludedPreview.value * (previewRateBasisPoints.value / 10000))
+  const rate = previewRateBasisPoints.value
+  if (!bandForm.inputAmount || !taxMode.value || rate === null) return 0
+  return Math.round(taxExcludedPreview.value * (rate / 10000))
 })
 
 const taxIncludedPreview = computed<number>(() => taxExcludedPreview.value + taxAmountPreview.value)
@@ -638,7 +645,10 @@ async function deactivateTaxCode(row: BillingTaxCodeResponse) {
       <!-- 税額プレビュー（確定前確認・AC-154） -->
       <div class="mt-4 rounded-md border border-surface-200 p-3 text-sm dark:border-surface-700">
         <p class="mb-2 font-medium">{{ t('billing.priceRevisions.taxPreviewTitle') }}</p>
-        <div class="grid grid-cols-3 gap-2 text-xs">
+        <p v-if="!taxPreviewAvailable" class="text-xs text-surface-500" aria-label="tax-preview-hint">
+          {{ t('billing.priceRevisions.taxPreviewNeedsTaxCode') }}
+        </p>
+        <div v-else class="grid grid-cols-3 gap-2 text-xs">
           <div>{{ t('billing.priceRevisions.amountExcludingTax') }}: {{ taxExcludedPreview }}</div>
           <div>{{ t('billing.priceRevisions.taxAmount') }}: {{ taxAmountPreview }}</div>
           <div>{{ t('billing.priceRevisions.amountIncludingTax') }}: {{ taxIncludedPreview }}</div>

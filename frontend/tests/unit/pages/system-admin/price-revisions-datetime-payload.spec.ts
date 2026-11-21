@@ -45,6 +45,8 @@ interface PageVm {
   taxMode: 'EXCLUSIVE' | 'INCLUSIVE' | null
   bandForm: { inputAmount: number | null; taxCode: string }
   taxRatePercent: number | null
+  taxPreviewAvailable: boolean
+  taxAmountPreview: number | null
   openCreateDialog: () => void
   createPriceRevision: () => Promise<void>
   taxCodeForm: { code: string; displayName: string; validFrom: string }
@@ -210,5 +212,25 @@ describe('/system-admin/price-revisions 日時送信値', () => {
     await vm.submitCreateTaxCode()
 
     expect(createTaxCode).not.toHaveBeenCalled()
+  })
+
+  it('税コード未選択のときは税額プレビューを出さない（税額0・税込=税抜と誤解させない）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as unknown as PageVm
+    await openCreate(vm)
+    vm.form.effectiveFrom = '2026-09-24T12:00'
+    await flushPromises()
+    vm.taxMode = 'EXCLUSIVE'
+    vm.bandForm.inputAmount = 1000
+    await flushPromises()
+
+    expect(vm.taxPreviewAvailable).toBe(false)
+    expect(wrapper.text()).not.toContain('billing.priceRevisions.amountIncludingTax')
+
+    vm.bandForm.taxCode = 'JP_STANDARD_10'
+    await flushPromises()
+
+    expect(vm.taxPreviewAvailable).toBe(true)
+    expect(vm.taxAmountPreview).toBe(100)
   })
 })

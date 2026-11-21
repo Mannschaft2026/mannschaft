@@ -496,6 +496,8 @@
       "selectProductKey": "Produktschlüssel auswählen",
       "noProductOptions": "Keine Produkte verfügbar",
       "selectTaxCode": "Steuercode auswählen",
+      "taxCodeOption": "{code} ({rate} %)",
+      "taxPreviewNeedsTaxCode": "Wählen Sie einen Steuercode, um die Vorschau zu sehen",
       "noTaxCodeOptions": "Zum Gültigkeitsbeginn ist kein Steuercode gültig",
       "taxCodeNeedsEffectiveFrom": "Geben Sie zuerst den Gültigkeitsbeginn ein",
       "loadOptionsFailed": "Die Auswahl für Produktschlüssel und Steuercode konnte nicht geladen werden",

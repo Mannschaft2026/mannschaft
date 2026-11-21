@@ -496,6 +496,8 @@
       "selectProductKey": "选择商品键",
       "noProductOptions": "没有可选择的商品",
       "selectTaxCode": "选择税码",
+      "taxCodeOption": "{code}（{rate}%）",
+      "taxPreviewNeedsTaxCode": "选择税码后将显示预览",
       "noTaxCodeOptions": "在生效日期没有有效的税码",
       "taxCodeNeedsEffectiveFrom": "请先输入生效日期",
       "loadOptionsFailed": "无法加载商品键和税码的选项",
