@@ -124,8 +124,10 @@ jobs:
             echo "migrations_changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # 判定スクリプト・migration パターンファイル自体の変更もフル実行の対象に含める（AC-8b）。
-          if echo "${CHANGED}" | grep -E '^(backend/|\.github/workflows/backend-ci\.yml$|\.github/scripts/detect-changed-files\.sh$|\.github/scripts/migration-sensitive-paths\.regex$)' > /dev/null; then
+          # 判定スクリプト・migration 判定器（パターンファイル・detect-migration-changes.sh）自体の変更も
+          # フル実行の対象に含める（AC-8b）。いずれも migration-sensitive-paths.regex にも載っているため
+          # backend_changed=true かつ migrations_changed=true になる。
+          if echo "${CHANGED}" | grep -E '^(backend/|\.github/workflows/backend-ci\.yml$|\.github/scripts/detect-changed-files\.sh$|\.github/scripts/migration-sensitive-paths\.regex$|\.github/scripts/detect-migration-changes\.sh$)' > /dev/null; then
             echo "[INFO] backend related changes detected → backend_changed=true"
             echo "backend_changed=true" >> "$GITHUB_OUTPUT"
           else
