@@ -13,7 +13,7 @@ const categories = computed<SidebarCategory[]>(() => [
     icon: 'pi pi-home',
     items: [
       { labelKey: 'teamSidebar.item.dashboard', icon: 'pi pi-th-large', path: '', moduleSlug: null, requiredRole: 'MEMBER' },
-      { labelKey: 'teamSidebar.item.announcements', icon: 'pi pi-bullhorn', path: 'announcements', moduleSlug: null, requiredRole: 'MEMBER' },
+      { labelKey: 'teamSidebar.item.announcements', icon: 'pi pi-megaphone', path: 'announcements', moduleSlug: null, requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.chat', icon: 'pi pi-comments', path: 'chat', moduleSlug: 'chat', requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.bulletin', icon: 'pi pi-clipboard', path: 'bulletin', moduleSlug: 'bulletin', requiredRole: 'MEMBER' },
     ],
