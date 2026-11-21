@@ -35,7 +35,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -68,7 +67,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 認可・取得・JWTはモックせず、外部R2のみ既存ReceiptPdfArchiveContractITと同じ方式で代替する。
  * 保存済みPDF原本を用い、フォント/生成障害を認可のredと混同しない。</p>
  */
-@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
+@AutoConfigureMockMvc
 @Transactional
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 class OrganizationAdminReadScopeContractIT extends AbstractMySqlIntegrationTest {
