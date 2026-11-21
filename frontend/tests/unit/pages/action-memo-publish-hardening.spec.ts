@@ -144,6 +144,42 @@ describe('2b: オフライン同期で作成成功・公開失敗', () => {
   })
 })
 
+describe('2c: 複数項目の flush で先の公開が失敗し後が成功', () => {
+  it('失敗時点の error/lastError を最後まで保持し、失敗分は公開のみ項目として残る', async () => {
+    const q = useOfflineQueue()
+    await q.enqueue({ content: 'a', category: 'WORK' }, -1, 7)
+    await q.enqueue({ content: 'b', category: 'WORK' }, -2, 7)
+    apiMock.createMemo.mockResolvedValueOnce({ ...created, id: 900 }).mockResolvedValueOnce({ ...created, id: 901 })
+    apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(undefined)
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(2)
+    expect(store.error).toBe('action_memo.error.publish_failed')
+    expect(store.lastError).toBe('PUBLISH_FAILED')
+    expect(store.offlineQueueCount).toBe(1)
+  })
+})
+
+describe('3b: 公開失敗後に画面を離れて戻っても重複作成しない', () => {
+  it('再マウントで本文と公開待ちが復元され、再送信は公開のみ再試行する', async () => {
+    apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
+    const w1 = await mountInput()
+    await submit(w1, '離脱前')
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    w1.unmount()
+
+    const w2 = await mountInput()
+    await flushPromises()
+    expect((w2.get('[data-testid="action-memo-input-textarea"]').element as HTMLTextAreaElement).value).toBe('離脱前')
+    expect(w2.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(true)
+    await submit(w2)
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(2)
+    expect(apiMock.publishToTeam).toHaveBeenLastCalledWith(501, expect.objectContaining({ teamId: 7 }))
+    expect((w2.get('[data-testid="action-memo-input-textarea"]').element as HTMLTextAreaElement).value).toBe('')
+  })
+})
+
 describe('3: 公開失敗時は成功扱いにしない', () => {
   it('publishToTeam が false のとき入力を保持し、失敗文言を出し、再送信は公開だけ再試行する', async () => {
     apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))

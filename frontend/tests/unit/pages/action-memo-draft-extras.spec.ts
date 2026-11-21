@@ -119,6 +119,25 @@ describe('下書きに選択値も保存・復元する', () => {
     expect(apiMock.publishToTeam).toHaveBeenCalledWith(501, expect.objectContaining({ teamId: 7 }))
   })
 
+  it('ページ: 下書きの「投稿なし」(teamId=null) は設定の既定チームで上書きされない', async () => {
+    apiMock.getSettings.mockResolvedValue({
+      moodEnabled: false,
+      defaultPostTeamId: 7,
+      defaultCategory: 'OTHER',
+      reminderEnabled: false,
+      reminderTime: null,
+    })
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({ v: 1, content: '非公開のつもり', extras: { category: 'WORK', teamId: null } }),
+    )
+    const w = await mountPage()
+    await w.get('[data-testid="action-memo-input-submit"]').trigger('submit')
+    await flushPromises()
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(apiMock.publishToTeam).not.toHaveBeenCalled()
+  })
+
   it('ページ: 現在の投稿先候補に無い teamId は捨てる（カテゴリ等は復元）', async () => {
     window.localStorage.setItem(
       KEY,
