@@ -58,7 +58,8 @@
       "submit": "Speichern",
       "draft_saved": "Entwurf gespeichert",
       "char_count": "{count} / 5000",
-      "shift_enter_hint": "Enter zum Senden / Shift+Enter für Zeilenumbruch"
+      "shift_enter_hint": "Enter zum Senden / Shift+Enter für Zeilenumbruch",
+      "publish_failed": "Die Notiz wurde gespeichert, aber das Posten ins Team ist fehlgeschlagen. Erneut senden wiederholt nur das Posten"
     },
     "card": {
       "edit": "Bearbeiten",

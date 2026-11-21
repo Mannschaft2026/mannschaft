@@ -58,7 +58,8 @@
       "submit": "记录",
       "draft_saved": "已自动保存草稿",
       "char_count": "{count} / 5000",
-      "shift_enter_hint": "Enter 提交 / Shift+Enter 换行"
+      "shift_enter_hint": "Enter 提交 / Shift+Enter 换行",
+      "publish_failed": "备忘已保存，但发布到团队失败。再次点击提交将仅重试发布"
     },
     "card": {
       "edit": "编辑",

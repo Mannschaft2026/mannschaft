@@ -276,6 +276,8 @@ export interface OfflineQueuedMemo {
   tempId: number
   /** 送信予定のペイロード */
   payload: CreateActionMemoPayload
+  /** 作成成功後に publish-to-team する投稿先チーム ID（任意。無い既存項目も後方互換で動く） */
+  publishTeamId?: number
   /** キューに積んだ時刻（ISO） */
   enqueuedAt: string
 }

@@ -52,6 +52,7 @@ export function useOfflineQueue() {
   async function enqueue(
     payload: CreateActionMemoPayload,
     tempId: number,
+    publishTeamId?: number,
   ): Promise<OfflineQueuedMemo> {
     const enqueuedAt = nowIso()
 
@@ -64,6 +65,7 @@ export function useOfflineQueue() {
           body: {
             ...payload,
             _tempId: tempId,
+            ...(publishTeamId != null ? { _publishTeamId: publishTeamId } : {}),
           } as unknown as Record<string, unknown>,
           version: null,
           status: 'PENDING',
@@ -72,7 +74,7 @@ export function useOfflineQueue() {
           createdAt: enqueuedAt,
           syncedAt: null,
         })
-        return { queueId: id as number, tempId, payload, enqueuedAt }
+        return { queueId: id as number, tempId, payload, enqueuedAt, publishTeamId }
       } catch {
         // Dexie 失敗時はフォールバック
       }
@@ -84,6 +86,7 @@ export function useOfflineQueue() {
       tempId,
       payload,
       enqueuedAt,
+      publishTeamId,
     }
     _inMemory.items.push(fallback)
     return fallback
@@ -107,6 +110,7 @@ export function useOfflineQueue() {
             tempId: (item.body as Record<string, unknown>)?._tempId as number ?? 0,
             payload: extractPayload(item.body),
             enqueuedAt: item.createdAt,
+            publishTeamId: extractPublishTeamId(item.body),
           }))
       } catch {
         // Dexie 失敗時はフォールバック
@@ -157,13 +161,14 @@ export function useOfflineQueue() {
   async function flushQueue(
     sender: (
       payload: CreateActionMemoPayload,
+      queued: OfflineQueuedMemo,
     ) => Promise<{ id: number } | null>,
   ): Promise<Array<{ queued: OfflineQueuedMemo; createdId: number }>> {
     const items = await getAll()
     const results: Array<{ queued: OfflineQueuedMemo; createdId: number }> = []
     for (const item of items) {
       try {
-        const created = await sender(item.payload)
+        const created = await sender(item.payload, item)
         if (created && typeof created.id === 'number') {
           results.push({ queued: item, createdId: created.id })
           if (typeof item.queueId === 'number') {
@@ -207,11 +212,17 @@ export function useOfflineQueue() {
   }
 }
 
+function extractPublishTeamId(body: Record<string, unknown>): number | undefined {
+  const v = body?._publishTeamId
+  return typeof v === 'number' ? v : undefined
+}
+
 /**
  * 汎用 body から CreateActionMemoPayload を抽出するヘルパー。
  */
 function extractPayload(body: Record<string, unknown>): CreateActionMemoPayload {
   const cleaned = { ...body }
   delete cleaned._tempId
+  delete cleaned._publishTeamId
   return cleaned as unknown as CreateActionMemoPayload
 }

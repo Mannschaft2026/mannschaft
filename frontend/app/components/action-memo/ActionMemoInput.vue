@@ -37,6 +37,8 @@ const selectedTagIds = ref<number[]>([])
 const submitting = ref(false)
 const draftSaveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const draftSavedFlash = ref(false)
+// 作成済みだが公開に失敗したメモ。再送信は作成せず公開だけ再試行する（入力は保持）
+const pendingPublish = ref<{ memo: ActionMemo; teamId: number; content: string } | null>(null)
 
 const userId = computed<number | string>(() => auth.user?.id ?? 'anon')
 
@@ -55,6 +57,8 @@ onMounted(() => {
 
 // === 下書きの自動保存 (debounce 1秒) ===
 watch(content, (next) => {
+  // 公開待ちのメモとは別の内容に編集されたら、再試行状態は破棄する（新規メモとして扱う）
+  if (pendingPublish.value && next !== pendingPublish.value.content) pendingPublish.value = null
   if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value)
   draftSaveTimer.value = setTimeout(() => {
     store.saveDraft(userId.value, next)
@@ -71,34 +75,56 @@ onBeforeUnmount(() => {
 })
 
 // === 送信処理 ===
+function resetAfterSuccess(created: ActionMemo) {
+  emit('created', created)
+  // 成功 → 入力欄クリア + mood + タグ リセット
+  content.value = ''
+  mood.value = null
+  selectedTagIds.value = []
+  pendingPublish.value = null
+  store.clearDraft(userId.value)
+}
+
 async function submit() {
   if (!canSubmit.value) return
   submitting.value = true
   try {
-    const created = await store.createMemo({
-      content: content.value,
-      mood: store.isMoodEnabled ? mood.value : null,
-      tagIds: selectedTagIds.value.length > 0 ? selectedTagIds.value : undefined,
-      category: props.extras?.category,
-      durationMinutes: props.extras?.durationMinutes ?? undefined,
-      progressRate: props.extras?.progressRate ?? undefined,
-      completesTodo: props.extras?.completesTodo ? true : undefined,
-    })
-    if (created) {
-      // チーム投稿は作成 API に項目が無いため別 API（個別即時投稿）。
-      // オフラインキュー行きの仮 ID（負数）は投稿できないためスキップする。
-      const teamId = props.extras?.teamId
-      if (props.extras?.category === 'WORK' && teamId != null && created.id > 0) {
-        await store.publishToTeam(created.id, { teamId })
+    // 公開だけ失敗している場合は、メモを再作成せず公開のみ再試行する
+    const pending = pendingPublish.value
+    if (pending) {
+      if (await store.publishToTeam(pending.memo.id, { teamId: pending.teamId })) {
+        resetAfterSuccess(pending.memo)
       }
-      emit('created', created)
-      // 成功 → 入力欄クリア + mood + タグ リセット
-      content.value = ''
-      mood.value = null
-      selectedTagIds.value = []
-      store.clearDraft(userId.value)
+      return
     }
-    // 失敗時は入力欄を保持（下書きとしてそのまま）
+
+    // 送信開始時に値を固定する（応答待ち中の画面側の選択変更を、送信済みメモに波及させない）
+    const snap = { ...props.extras }
+    const publishTeamId = snap.category === 'WORK' && snap.teamId != null ? snap.teamId : undefined
+    const created = await store.createMemo(
+      {
+        content: content.value,
+        mood: store.isMoodEnabled ? mood.value : null,
+        tagIds: selectedTagIds.value.length > 0 ? selectedTagIds.value : undefined,
+        category: snap.category,
+        durationMinutes: snap.durationMinutes ?? undefined,
+        progressRate: snap.progressRate ?? undefined,
+        completesTodo: snap.completesTodo ? true : undefined,
+      },
+      { publishTeamId },
+    )
+    if (!created) return // 失敗時は入力欄を保持（下書きとしてそのまま）
+
+    // チーム投稿は作成 API に項目が無いため別 API。オフライン（仮 ID=負数）はキューに公開要求を持たせ、
+    // 同期後に store が実行する。
+    if (publishTeamId != null && created.id > 0) {
+      const memoContent = content.value
+      if (!(await store.publishToTeam(created.id, { teamId: publishTeamId }))) {
+        pendingPublish.value = { memo: created, teamId: publishTeamId, content: memoContent }
+        return
+      }
+    }
+    resetAfterSuccess(created)
   } finally {
     submitting.value = false
   }
@@ -149,6 +175,14 @@ function onKeydown(event: KeyboardEvent) {
           </span>
           <span class="hidden text-surface-400 sm:inline">
             {{ t('action_memo.input.shift_enter_hint') }}
+          </span>
+          <span
+            v-if="pendingPublish"
+            class="text-rose-600"
+            role="alert"
+            data-testid="action-memo-input-publish-failed"
+          >
+            {{ t('action_memo.input.publish_failed') }}
           </span>
           <span
             v-if="draftSavedFlash"

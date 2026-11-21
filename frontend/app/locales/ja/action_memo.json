@@ -58,7 +58,8 @@
       "submit": "記録する",
       "draft_saved": "下書きを自動保存しました",
       "char_count": "{count} / 5000",
-      "shift_enter_hint": "Enterで送信 / Shift+Enterで改行"
+      "shift_enter_hint": "Enterで送信 / Shift+Enterで改行",
+      "publish_failed": "メモは保存しましたが、チームへの投稿に失敗しました。もう一度「記録する」を押すと投稿だけ再試行します"
     },
     "card": {
       "edit": "編集",

@@ -155,7 +155,10 @@ export const useActionMemoStore = defineStore('actionMemo', {
      * <p>オフライン時でも {@link ActionMemo#id} は負数の仮 ID が設定され、同期完了時に
      * {@link useOfflineQueue#flushQueue} 経由で本物の ID に置き換わる。</p>
      */
-    async createMemo(payload: CreateActionMemoPayload): Promise<ActionMemo | null> {
+    async createMemo(
+      payload: CreateActionMemoPayload,
+      options: { publishTeamId?: number } = {},
+    ): Promise<ActionMemo | null> {
       const tempId = nextTempId()
       const optimistic: ActionMemo = {
         id: tempId,
@@ -186,7 +189,8 @@ export const useActionMemoStore = defineStore('actionMemo', {
       if (this._isOffline()) {
         try {
           const queue = useOfflineQueue()
-          await queue.enqueue(payload, tempId)
+          // publishTeamId はオフライン中は実 ID が無いため、キューに保持して flush 後に publish-to-team する
+          await queue.enqueue(payload, tempId, options.publishTeamId)
           this.offlineQueueCount = await queue.count()
           this.isOffline = true
           // 下書きはクリアする（キューに積んだ時点で「ユーザーの入力」は成立）
@@ -241,9 +245,14 @@ export const useActionMemoStore = defineStore('actionMemo', {
     async flushOfflineQueue(): Promise<number> {
       const queue = useOfflineQueue()
       const api = useActionMemoApi()
-      const results = await queue.flushQueue(async (payload) => {
+      const results = await queue.flushQueue(async (payload, queued) => {
         try {
           const created = await api.createMemo(payload)
+          // オフライン中に選ばれた公開要求は、実 ID が得られた今ここで実行する。
+          // 作成は成立済みのため、公開失敗でも created を返して重複作成を避け、失敗は store.error に残す
+          if (queued?.publishTeamId != null) {
+            await this.publishToTeam(created.id, { teamId: queued.publishTeamId })
+          }
           return created
         } catch (error) {
           this._handleError(error)
