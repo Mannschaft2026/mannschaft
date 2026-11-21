@@ -298,6 +298,7 @@ brokerChannel には **3 種のメッセージ**が流れる。素朴に「broke
 | (ii) ユーザー宛・未解決    | `/user/123/queue/notifications`        | `convertAndSendToUser` 直後                                                                     | **中継する**（USER）      |
 | (iii) ユーザー宛・解決済み | `/queue/notifications-user{sessionId}` | `UserDestinationMessageHandler` が `SimpUserRegistry` で解決し brokerChannel へ**再送**したもの | **中継しない（無視）**    |
 
+- 共通 WebSocket handler は transport の ID を broker のキーに使わず、接続ごとにサーバー生成 UUID を割り当てる。同一 transport ID の別接続も独立し、受信・切断まで同じ内部 ID を使う。元の transport と属性は decorator の委譲先として維持する。
 - (iii) の sessionId は**発信ノードローカル**であり、他ノードでは無意味。中継すると (ii) と (iii) の両方が飛んで二重配信になる。
 - **判定規則（固定）**: destination が `/topic/` 始まり → BROADCAST 中継。`/user/` 始まり（未解決）→ USER 中継。**それ以外（解決済み `/queue/...-user*` を含む）→ 中継しない**。
 - **実装点と登録順（Y-2）**: 捕捉は brokerChannel の `ChannelInterceptor`（`preSend`・メッセージ非改変）で行う。**注意: brokerChannel への interceptor 登録に `@Order` は効かない**（`WebSocketMessageBrokerConfigurer` に brokerChannel 用の configure コールバックは存在しない）。**brokerChannel Bean を `@Qualifier("brokerChannel")` 付きで `AbstractMessageChannel` として注入し、初期化フック（`SmartInitializingSingleton` / `@PostConstruct`）で `addInterceptor(...)` を明示呼び出し**して登録する。順序は**挿入順**（既存登録の後尾に追加＝最終段）であり、アノテーション順序に依存しない。
