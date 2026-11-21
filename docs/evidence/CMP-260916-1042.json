@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260916-1042",
+  "scope": "app",
+  "implementation": {
+    "pr": 3644,
+    "sha": "609b42542a8b171391ef82fbc90d7e70fb7eefc2"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "同一ID TEAM/ORGANIZATIONの名前・URL・利用可否を種別ごとに保持する",
+      "tests": [
+        {
+          "name": "同一IDの異種登録は名前とslugURLを保持する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/favorite/FavoriteScopeContractIT.java"
+        },
+        {
+          "name": "閲覧不可チームと同一ID公開組織は混線しない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/favorite/FavoriteScopeContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "teamの開くをslug URLへ接続し、不在/不可視のmetadataを返さない",
+      "tests": [
+        {
+          "name": "slug一括取得に対象が無い場合は利用不可",
+          "evidence": "backend/src/test/java/com/mannschaft/app/favorite/resolver/impl/TeamFavoriteResolverTest.java"
+        },
+        {
+          "name": "resolveAll_notVisible_unavailable",
+          "evidence": "backend/src/test/java/com/mannschaft/app/favorite/resolver/impl/TeamFavoriteResolverTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "本人/他人/未認証のfavorite権限を維持し、実画面から正しい対象へ到達する",
+      "tests": [
+        {
+          "name": "他ユーザーの参照は403 / 他人のIDは404 / 本人は並び替えできる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/favorite/FavoriteScopeContractIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43521999414
+    },
+    {
+      "runId": 43521999225
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3644",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "favorite同ID異種のmetadata混線とteam数値URL404の実機発見を、種別付き解決とslug URL・同ID契約試験/実GUIで是正する。単体の正式red実行参照を未確認のまま追加しない。",
+      "test": "FavoriteScopeContractIT 同一IDの異種登録は名前とslugURLを保持する / 閲覧不可チームと同一ID公開組織は混線しない",
+      "redEvidence": "docs/task-list.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}

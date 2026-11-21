@@ -92,13 +92,18 @@ public enum TournamentErrorCode implements ErrorCode {
     /** 同一ユーザーが既にエントリー済み */
     DUPLICATE_ENTRY_MEMBER("TOUR_027", "このユーザーは既にエントリー済みです", Severity.WARN),
 
-    /** テンプレートとチームが一致しない */
+    /** テンプレートとチームが一致しない（未使用: apply-template は他チームのテンプレートを ENTRY_TEMPLATE_NOT_FOUND へ畳む。存在オラクル防止のため欠番扱い） */
     TEMPLATE_TEAM_MISMATCH("TOUR_028", "テンプレートのチームと参加チームが一致しません", Severity.WARN),
 
     /** 連絡スペースが見つからない（F08.7.1・IDOR 対策で 404 に統一） */
     CONTACT_SPACE_NOT_FOUND("TOUR_029", "連絡スペースが見つかりません", Severity.WARN),
 
-    /** 連絡スペースの閲覧権限がない（F08.7.1 §4.1） */
+    /**
+     * 連絡スペースの閲覧権限がない（F08.7.1 §4.1）。
+     *
+     * <p>欠番（CMP-261116-0726 で不送出。番号は再利用しない）。閲覧権なしは存在オラクルを塞ぐため
+     * 不在と同一の {@link #CONTACT_SPACE_NOT_FOUND}（TOUR_029）等へ畳んだ。FE ロケールの文言は残置。</p>
+     */
     CONTACT_SPACE_VIEW_FORBIDDEN("TOUR_030", "この連絡スペースを閲覧する権限がありません", Severity.WARN),
 
     /** 連絡スペースへの投稿権限がない（F08.7.1 §4.2） */

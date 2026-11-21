@@ -1,6 +1,8 @@
 package com.mannschaft.app.common.migration;
 
 import com.mannschaft.app.common.UuidV7;
+import com.mannschaft.app.common.entity.UuidV7Entity;
+import com.mannschaft.app.gdpr.entity.AccountPurgeCompletionStatusEntity;
 import com.mannschaft.app.circulation.RecipientStatus;
 import com.mannschaft.app.circulation.entity.CirculationRecipientEntity;
 import com.mannschaft.app.committee.entity.CommitteeDistributionLogEntity;
@@ -32,6 +34,7 @@ import org.hibernate.mapping.Selectable;
 import org.hibernate.mapping.ToOne;
 import org.hibernate.mapping.Value;
 import org.hibernate.type.BasicType;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +44,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy;
@@ -49,6 +55,7 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.MySQLContainer;
 
+import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -63,8 +70,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
@@ -331,6 +341,214 @@ class FlywayFromScratchMigrationTest {
         } finally {
             StandardServiceRegistryBuilder.destroy(registry);
         }
+    }
+
+    /**
+     * Entity がないアーカイブ表の列欠落を、設計書に明記された4組だけで検査する。
+     * 型・NULL・DEFAULT・PK・索引・列順は比較せず、アーカイブ専用列を許容する。
+     */
+    @Test
+    @Order(2)
+    void cmp0012_実Flywayの既知4組に本体の全列がある() throws SQLException {
+        migrateFromScratch();
+        assertThat(archiveColumnViolations(readActualSchema()))
+                .as("本体の全列を対応するarchiveへ保持する（CMP-260924-0012）")
+                .isEmpty();
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_同じ列を持つ4組は合格する() {
+        assertThat(archiveColumnViolations(archiveColumnFixture())).isEmpty();
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_アーカイブ専用列は許容する() {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        schema.forEach((table, columns) -> {
+            if (table.endsWith("_archive")) {
+                columns.add("archived_at");
+            }
+        });
+        assertThat(archiveColumnViolations(schema)).isEmpty();
+    }
+
+    @ParameterizedTest(name = "列欠落 [{index}] {0}.{1}")
+    @CsvSource({
+            "content_reports, content_hidden",
+            "report_actions, note",
+            "direct_mail_logs, body_html",
+            "direct_mail_recipients, status"
+    })
+    @Order(2)
+    void cmp0012_各組のアーカイブ列欠落を検出する(String sourceTable, String column) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        String archiveTable = sourceTable + "_archive";
+        assertThat(schema.get(archiveTable).remove(column)).as("欠落検体の前提").isTrue();
+
+        assertThat(archiveColumnViolations(schema))
+                .containsExactly(sourceTable + " -> " + archiveTable + "." + column);
+    }
+
+    @ParameterizedTest(name = "表欠落 [{index}] {0}")
+    @ValueSource(strings = {"content_reports", "content_reports_archive"})
+    @Order(2)
+    void cmp0012_片側テーブルの欠落を合格にしない(String table) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        assertThat(schema.remove(table)).as("欠落検体の前提").isNotNull();
+
+        assertThat(archiveColumnViolations(schema)).containsExactly(table + " … テーブルが存在しない");
+    }
+
+    @ParameterizedTest(name = "空列集合 [{index}] {0}")
+    @ValueSource(strings = {"content_reports", "content_reports_archive"})
+    @Order(2)
+    void cmp0012_片側の空列集合を合格にしない(String table) {
+        Map<String, Set<String>> schema = archiveColumnFixture();
+        schema.get(table).clear();
+
+        assertThat(archiveColumnViolations(schema)).containsExactly(table + " … 列集合が空");
+    }
+
+    @Test
+    @Order(2)
+    void cmp0012_archiveのsender_typeはNOT_NULLでDEFAULTを持たない() throws Exception {
+        migrateFromScratch();
+        try (Connection conn = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())) {
+            assertThat(senderTypeDefinition(conn)).isEqualTo("varchar|20|NO|null");
+            // 新規保存では送信者種類を必須にする（DEFAULT で黙って埋めない）
+            try (Statement st = conn.createStatement()) {
+                org.junit.jupiter.api.Assertions.assertThrows(SQLException.class,
+                        () -> st.executeUpdate(archiveInsertSql(null)));
+            }
+        }
+    }
+
+    /**
+     * 既存値の保持・途中再開（既に列がある状態で migration を再実行）・想定外定義の検出を、
+     * 追加のコンテナや全 migration の再走行なしに、V262 の SQL だけを同じスキーマへ再実行して確かめる。
+     */
+    @Test
+    @Order(2)
+    void cmp0012_archiveのsender_type追加は再実行で既存値を保持し想定外定義を検出する() throws Exception {
+        migrateFromScratch();
+        String script = new String(new PathMatchingResourcePatternResolver()
+                .getResources("classpath*:db/migration/V262.*__add_sender_type_to_direct_mail_logs_archive.sql")[0]
+                .getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        List<String> statements = new ArrayList<>();
+        StringBuilder body = new StringBuilder();
+        for (String line : script.split("\\R")) {
+            if (!line.trim().startsWith("--")) {
+                body.append(line).append('\n');
+            }
+        }
+        for (String part : body.toString().split(";")) {
+            if (!part.isBlank()) {
+                statements.add(part.trim());
+            }
+        }
+        try (Connection conn = DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+             Statement st = conn.createStatement()) {
+            try {
+                st.executeUpdate(archiveInsertSql("SYSTEM_AD"));
+                st.executeUpdate(archiveInsertSql("unknown"));
+                // 再実行しても定義・既存値（大文字小文字を含む）は変わらない
+                for (String sql : statements) {
+                    st.execute(sql);
+                }
+                assertThat(senderTypeDefinition(conn)).isEqualTo("varchar|20|NO|null");
+                try (ResultSet rs = st.executeQuery(
+                        "SELECT sender_type FROM direct_mail_logs_archive WHERE subject = 'cmp0012-seed' ORDER BY id")) {
+                    List<String> values = new ArrayList<>();
+                    while (rs.next()) {
+                        values.add(rs.getString(1));
+                    }
+                    assertThat(values).containsExactly("SYSTEM_AD", "unknown");
+                }
+                // 想定外の NULL 可否は握りつぶさず失敗する
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NULL");
+                org.junit.jupiter.api.Assertions.assertThrows(SQLException.class, () -> {
+                    for (String sql : statements) {
+                        st.execute(sql);
+                    }
+                });
+                // 後始末（検出で中断しても一時表が残らないよう接続を閉じる前に落とす）
+                st.execute("DROP TEMPORARY TABLE IF EXISTS cmp0012_sender_type_guard");
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NOT NULL");
+            } finally {
+                st.executeUpdate("DELETE FROM direct_mail_logs_archive WHERE subject = 'cmp0012-seed'");
+                st.execute("DROP TEMPORARY TABLE IF EXISTS cmp0012_sender_type_guard");
+                st.execute("ALTER TABLE direct_mail_logs_archive MODIFY COLUMN sender_type VARCHAR(20) NOT NULL");
+            }
+        }
+    }
+
+    private static String senderTypeDefinition(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT "
+                     + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                     + "AND TABLE_NAME = 'direct_mail_logs_archive' AND COLUMN_NAME = 'sender_type'")) {
+            assertThat(rs.next()).as("direct_mail_logs_archive.sender_type が存在すること").isTrue();
+            return rs.getString(1) + "|" + rs.getLong(2) + "|" + rs.getString(3) + "|" + rs.getString(4);
+        }
+    }
+
+    private static String archiveInsertSql(String senderType) {
+        return "INSERT INTO direct_mail_logs_archive (scope_type, scope_id, sender_id, "
+                + (senderType == null ? "" : "sender_type, ")
+                + "subject, body_markdown, body_html, recipient_type, archived_at) VALUES ('TEAM', 1, 1, "
+                + (senderType == null ? "" : "'" + senderType + "', ")
+                + "'cmp0012-seed', 'm', 'h', 'ALL', NOW())";
+    }
+
+    /**
+     * F10.1とF09.6が同一スキーマと定めた4組の列存在だけを検査する。
+     * 表の欠落や空集合を合格にせず、archive専用列は許容する。
+     */
+    static List<String> archiveColumnViolations(Map<String, Set<String>> schema) {
+        List<String> violations = new ArrayList<>();
+        for (String sourceTable : List.of("content_reports", "report_actions",
+                "direct_mail_logs", "direct_mail_recipients")) {
+            String archiveTable = sourceTable + "_archive";
+            boolean invalidTable = false;
+            for (String table : List.of(sourceTable, archiveTable)) {
+                Set<String> columns = schema.get(table);
+                if (columns == null) {
+                    violations.add(table + " … テーブルが存在しない");
+                    invalidTable = true;
+                } else if (columns.isEmpty()) {
+                    violations.add(table + " … 列集合が空");
+                    invalidTable = true;
+                }
+            }
+            if (invalidTable) {
+                continue;
+            }
+            Set<String> archiveColumns = schema.get(archiveTable);
+            schema.get(sourceTable).stream()
+                    .filter(column -> !archiveColumns.contains(column))
+                    .sorted()
+                    .forEach(column -> violations.add(sourceTable + " -> " + archiveTable + "." + column));
+        }
+        return violations;
+    }
+
+    /** 他の組の欠落で対照が失敗しないよう、常に4組全部を備えた変更可能な検体を返す。 */
+    private static Map<String, Set<String>> archiveColumnFixture() {
+        Map<String, Set<String>> sourceColumns = Map.of(
+                "content_reports", Set.of("id", "content_hidden"),
+                "report_actions", Set.of("id", "note"),
+                "direct_mail_logs", Set.of("id", "body_html"),
+                "direct_mail_recipients", Set.of("id", "status"));
+        Map<String, Set<String>> schema = new HashMap<>();
+        sourceColumns.forEach((table, columns) -> {
+            schema.put(table, new HashSet<>(columns));
+            schema.put(table + "_archive", new HashSet<>(columns));
+        });
+        return schema;
     }
 
     /**
@@ -652,6 +870,81 @@ class FlywayFromScratchMigrationTest {
     }
 
     /**
+     * M01: 採用済み Registry DDL の現契約を固定する characterization test。
+     * 初回から green になり得る。全体起動や公式 UUID の採番方式は別試験の責務とし、
+     * 本番マッピング走査の対象外であるライブラリ所有表も実 Flyway の列定義で検証する。
+     */
+    @Test
+    @Order(20)
+    @DisplayName("M01: Registry 2表の列型・精度・照合順序が正式Flyway実スキーマで成立する")
+    void moduleEventRegistryの2表と列定義がFlywayスキーマと一致する() throws SQLException {
+        migrateFromScratch();
+        assertThat(readActualSchema().get("event_publication"))
+                .as("公式 Registry は採用版の六列だけを持つ")
+                .containsExactlyInAnyOrder("completion_date", "publication_date", "id",
+                        "event_type", "listener_id", "serialized_event");
+        try (Connection conn = connect()) {
+            for (String table : List.of("event_publication", "event_publication_attempts")) {
+                try (var statement = conn.prepareStatement("SELECT TABLE_COLLATION FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?")) {
+                    statement.setString(1, table);
+                    try (ResultSet row = statement.executeQuery()) {
+                        assertThat(row.next()).as("%s が実在する", table).isTrue();
+                        assertThat(row.getString(1)).as("%s の照合順序", table).isEqualTo("utf8mb4_0900_ai_ci");
+                        assertThat(row.next()).isFalse();
+                    }
+                }
+            }
+            assertModuleEventColumn(conn, "event_publication", "id", "binary", "binary(16)", 16, false);
+            assertModuleEventColumn(conn, "event_publication", "completion_date", "datetime", "datetime(6)", null, true);
+            assertModuleEventColumn(conn, "event_publication", "publication_date", "datetime", "datetime(6)", null, false);
+            for (String column : List.of("event_type", "listener_id", "serialized_event")) {
+                assertModuleEventColumn(conn, "event_publication", column, "varchar", "varchar(255)", 255, false);
+            }
+            for (String column : List.of("id", "publication_id", "claim_token", "operation_id", "episode_id")) {
+                assertModuleEventColumn(conn, "event_publication_attempts", column, "binary", "binary(16)", 16,
+                        column.equals("operation_id") || column.equals("episode_id"));
+            }
+            for (String column : List.of("last_attempt_at", "lease_until", "quarantined_at", "created_at", "updated_at")) {
+                assertModuleEventColumn(conn, "event_publication_attempts", column, "datetime", "datetime(6)", null,
+                        !column.equals("created_at") && !column.equals("updated_at"));
+            }
+            assertModuleEventColumn(conn, "event_publication_attempts", "status", "varchar", "varchar(32)", 32, false);
+            assertModuleEventColumn(conn, "event_publication_attempts", "failure_code", "varchar", "varchar(64)", 64, true);
+            assertModuleEventColumn(conn, "event_publication_attempts", "resolver_key", "varchar", "varchar(100)", 100, true);
+            assertModuleEventColumn(conn, "event_publication_attempts", "scope_type", "varchar", "varchar(16)", 16, true);
+        }
+    }
+
+    /** M01 の列契約。期待値は V260（L1-M 新設 migration）の採用済み定義と DB 設計原則8に対応する。 */
+    private static void assertModuleEventColumn(Connection conn, String table, String column,
+            String dataType, String columnType, Integer length, boolean nullable) throws SQLException {
+        try (var statement = conn.prepareStatement("SELECT DATA_TYPE, COLUMN_TYPE, CHARACTER_MAXIMUM_LENGTH, "
+                + "IS_NULLABLE, DATETIME_PRECISION, CHARACTER_SET_NAME, COLLATION_NAME "
+                + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?")) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet row = statement.executeQuery()) {
+                assertThat(row.next()).as("%s.%s が実在する", table, column).isTrue();
+                assertThat(row.getString("DATA_TYPE")).as("%s.%s DATA_TYPE", table, column).isEqualTo(dataType);
+                assertThat(row.getString("COLUMN_TYPE")).as("%s.%s COLUMN_TYPE", table, column).isEqualTo(columnType);
+                assertThat(row.getObject("CHARACTER_MAXIMUM_LENGTH", Long.class))
+                        .as("%s.%s 長さ", table, column).isEqualTo(length == null ? null : length.longValue());
+                assertThat(row.getString("IS_NULLABLE")).as("%s.%s NULL可否", table, column)
+                        .isEqualTo(nullable ? "YES" : "NO");
+                if (dataType.equals("datetime")) {
+                    assertThat(row.getInt("DATETIME_PRECISION")).as("%s.%s 日時精度", table, column).isEqualTo(6);
+                }
+                if (dataType.equals("varchar")) {
+                    assertThat(row.getString("CHARACTER_SET_NAME")).as("%s.%s 文字セット", table, column).isEqualTo("utf8mb4");
+                    assertThat(row.getString("COLLATION_NAME")).as("%s.%s 照合順序", table, column).isEqualTo("utf8mb4_0900_ai_ci");
+                }
+                assertThat(row.next()).isFalse();
+            }
+        }
+    }
+
+    /**
      * 番人自身の検証（負のテスト）: 実スキーマの列型を食い違わせた入力を与えると、番人が違反を返すこと。
      * 「違反 0 件」が、検査が走っていない偽 green でないことを示す。
      */
@@ -730,6 +1023,22 @@ class FlywayFromScratchMigrationTest {
         } finally {
             StandardServiceRegistryBuilder.destroy(registry);
         }
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("CMP-1456: 本人申請履歴の索引が正式Flywayでrequester・作成時刻降順・ID降順に作られる")
+    void 本人申請履歴索引の列順と降順を確認する() throws SQLException {
+        List<String> columns = new java.util.ArrayList<>();
+        try (Connection conn = connect(); Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT COLUMN_NAME, COLLATION FROM information_schema.STATISTICS "
+                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'village_join_requests' "
+                     + "AND INDEX_NAME = 'idx_vjr_requester_created_at_id' ORDER BY SEQ_IN_INDEX")) {
+            while (rs.next()) {
+                columns.add(rs.getString("COLUMN_NAME") + ":" + rs.getString("COLLATION"));
+            }
+        }
+        assertThat(columns).containsExactly("requester_user_id:A", "created_at:D", "id:D");
     }
 
     /** 上記負のテスト用の検体（本番ソースセットではないため scanMappedClasses の対象外）。 */
@@ -1047,6 +1356,217 @@ class FlywayFromScratchMigrationTest {
         return counts;
     }
 
+    @Test
+    @DisplayName("GDPR CHAR64: 正式DDLで削除完了証跡の実Hibernate validateが通る")
+    void 削除完了証跡のメールハッシュを正式CHAR64スキーマで検証できる() throws Exception {
+        migrateFromScratch();
+        assertAccountPurgeHashColumn();
+        assertThatCode(() -> {
+            try (SessionFactory ignored = accountPurgeValidatedSessionFactory()) {
+                // SessionFactory構築時に、当Entityと正式Flywayスキーマの型を実検証する。
+            }
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("GDPR CHAR64: 64桁hexをcommit後の別Sessionから完全一致で読み戻せる")
+    void 削除完了証跡の64桁メールハッシュを永続化して再読込できる() throws Exception {
+        migrateFromScratch();
+        UUID ownedId = UuidV7.generate();
+        String emailHash = "0123456789abcdef".repeat(4);
+        try (SessionFactory sf = accountPurgeValidatedSessionFactory()) {
+            try (Session session = sf.openSession()) {
+                session.beginTransaction();
+                AccountPurgeCompletionStatusEntity status = new AccountPurgeCompletionStatusEntity();
+                status.setId(ownedId);
+                status.setUserId(9_215_100L); // クロスドメインFKを持たない参照値。
+                status.setEmailHash(emailHash);
+                status.setDomainName("role");
+                status.setStatus("PENDING");
+                status.setAttemptedAt(LocalDateTime.of(2026, 10, 8, 13, 0));
+                session.persist(status);
+                session.getTransaction().commit();
+            }
+            try (Session session = sf.openSession()) {
+                AccountPurgeCompletionStatusEntity found = session.find(AccountPurgeCompletionStatusEntity.class, ownedId);
+                assertThat(found).isNotNull();
+                assertThat(found.getEmailHash()).isEqualTo(emailHash).matches("[0-9a-f]{64}");
+            }
+            assertAccountPurgeHashColumn();
+        } finally {
+            // commit途中の失敗も、この試練が生成したUUIDの1行だけを後始末する。
+            try (Connection connection = connect();
+                 var statement = connection.prepareStatement("DELETE FROM account_purge_completion_status WHERE id = ?")) {
+                statement.setBytes(1, ByteBuffer.allocate(16).putLong(ownedId.getMostSignificantBits())
+                        .putLong(ownedId.getLeastSignificantBits()).array());
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("GDPR retry_count: 0・127・128・255をcommit後の別SessionとJDBCから保持できる")
+    void 削除完了証跡のretry回数はunsigned上限まで保持できる() throws Exception {
+        migrateFromScratch();
+        UUID ownedId = UuidV7.generate();
+        try (SessionFactory factory = accountPurgeValidatedSessionFactory()) {
+            boolean persisted = false;
+            for (int retryCount : new int[] {0, 127, 128, 255}) {
+                try (Session session = factory.openSession()) {
+                    session.beginTransaction();
+                    if (!persisted) {
+                        session.persist(accountPurgeRetryStatus(ownedId, retryCount));
+                    } else {
+                        session.find(AccountPurgeCompletionStatusEntity.class, ownedId).setRetryCount(retryCount);
+                    }
+                    session.getTransaction().commit();
+                    persisted = true;
+                }
+                try (Session session = factory.openSession()) {
+                    AccountPurgeCompletionStatusEntity found = session.find(AccountPurgeCompletionStatusEntity.class, ownedId);
+                    assertThat(found).isNotNull();
+                    assertThat(found.getRetryCount()).isEqualTo(retryCount);
+                }
+                assertThat(accountPurgeRetrySnapshot(ownedId).get("retry_count")).isEqualTo(Integer.toString(retryCount));
+            }
+            assertAccountPurgeRetryColumn();
+        } finally {
+            deleteOwnedAccountPurgeStatus(ownedId);
+        }
+    }
+
+    @Test
+    @DisplayName("GDPR retry_count: 256の更新拒否後もcommit済み255の全列を保持する")
+    void 削除完了証跡のretry回数は範囲外更新をrollbackして既存行を保全する() throws Exception {
+        migrateFromScratch();
+        UUID ownedId = UuidV7.generate();
+        try (SessionFactory factory = accountPurgeValidatedSessionFactory()) {
+            try (Session session = factory.openSession()) {
+                session.beginTransaction();
+                session.persist(accountPurgeRetryStatus(ownedId, 255));
+                session.getTransaction().commit();
+            }
+            Map<String, String> before = accountPurgeRetrySnapshot(ownedId);
+            assertThat(before.get("retry_count")).isEqualTo("255");
+            assertThatThrownBy(() -> {
+                try (Session session = factory.openSession()) {
+                    var transaction = session.beginTransaction();
+                    try {
+                        session.find(AccountPurgeCompletionStatusEntity.class, ownedId).setRetryCount(256);
+                        session.flush();
+                        transaction.commit();
+                    } catch (RuntimeException error) {
+                        if (transaction.isActive()) {
+                            transaction.rollback();
+                        }
+                        throw error;
+                    }
+                }
+            }).isInstanceOf(jakarta.persistence.PersistenceException.class).satisfies(error -> {
+                Throwable cause = error;
+                while (cause != null && !(cause instanceof SQLException)) {
+                    cause = cause.getCause();
+                }
+                assertThat(cause).isInstanceOf(SQLException.class);
+                SQLException sqlError = (SQLException) cause;
+                assertThat(sqlError.getErrorCode()).isEqualTo(1264);
+                // MySQLの範囲外拒否は22003。Connector/Jの書込みDataTruncationは22001を返す。
+                assertThat(sqlError.getSQLState()).isIn("22003", "22001");
+            });
+            try (Session session = factory.openSession()) {
+                assertThat(session.find(AccountPurgeCompletionStatusEntity.class, ownedId).getRetryCount()).isEqualTo(255);
+            }
+            assertThat(accountPurgeRetrySnapshot(ownedId)).isEqualTo(before);
+            assertAccountPurgeRetryColumn();
+        } finally {
+            deleteOwnedAccountPurgeStatus(ownedId);
+        }
+    }
+
+    private static AccountPurgeCompletionStatusEntity accountPurgeRetryStatus(UUID id, int retryCount) {
+        AccountPurgeCompletionStatusEntity status = new AccountPurgeCompletionStatusEntity();
+        status.setId(id);
+        status.setUserId(9_215_101L);
+        status.setEmailHash("0123456789abcdef".repeat(4));
+        status.setDomainName("role");
+        status.setStatus("PENDING");
+        status.setAttemptedAt(LocalDateTime.of(2026, 10, 8, 13, 0));
+        status.setRetryCount(retryCount);
+        return status;
+    }
+
+    private static Map<String, String> accountPurgeRetrySnapshot(UUID id) throws SQLException {
+        try (Connection connection = connect();
+             var statement = connection.prepareStatement("SELECT HEX(id) AS id, user_id, email_hash, domain_name, status, "
+                     + "attempted_at, completed_at, retry_count, last_retried_at FROM account_purge_completion_status WHERE id = ?")) {
+            statement.setBytes(1, ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array());
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                Map<String, String> row = new HashMap<>();
+                for (int index = 1; index <= result.getMetaData().getColumnCount(); index++) {
+                    row.put(result.getMetaData().getColumnLabel(index), result.getString(index));
+                }
+                assertThat(result.next()).isFalse();
+                return row;
+            }
+        }
+    }
+
+    private static void assertAccountPurgeRetryColumn() throws SQLException {
+        try (Connection connection = connect(); Statement statement = connection.createStatement();
+             ResultSet column = statement.executeQuery("SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT FROM information_schema.COLUMNS "
+                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'account_purge_completion_status' AND COLUMN_NAME = 'retry_count'")) {
+            assertThat(column.next()).isTrue();
+            assertThat(column.getString("COLUMN_TYPE")).isEqualTo("tinyint unsigned");
+            assertThat(column.getString("IS_NULLABLE")).isEqualTo("NO");
+            assertThat(column.getString("COLUMN_DEFAULT")).isEqualTo("0");
+            assertThat(column.next()).isFalse();
+        }
+    }
+
+    private static void deleteOwnedAccountPurgeStatus(UUID id) throws SQLException {
+        try (Connection connection = connect();
+             var statement = connection.prepareStatement("DELETE FROM account_purge_completion_status WHERE id = ?")) {
+            statement.setBytes(1, ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array());
+            statement.executeUpdate();
+        }
+    }
+
+    private static void assertAccountPurgeHashColumn() throws SQLException {
+        try (Connection connection = connect(); Statement statement = connection.createStatement();
+             ResultSet column = statement.executeQuery("SELECT COLUMN_TYPE, IS_NULLABLE FROM information_schema.COLUMNS "
+                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'account_purge_completion_status' "
+                     + "AND COLUMN_NAME = 'email_hash'")) {
+            assertThat(column.next()).isTrue();
+            assertThat(column.getString("COLUMN_TYPE")).isEqualTo("char(64)");
+            assertThat(column.getString("IS_NULLABLE")).isEqualTo("NO");
+            assertThat(column.next()).isFalse();
+        }
+    }
+
+    private static SessionFactory accountPurgeValidatedSessionFactory() {
+        StandardServiceRegistry registry = new StandardServiceRegistryBuilder()
+                .applySetting(AvailableSettings.DIALECT, MySQLDialect.class.getName())
+                .applySetting(AvailableSettings.JAKARTA_JDBC_DRIVER, "com.mysql.cj.jdbc.Driver")
+                .applySetting(AvailableSettings.JAKARTA_JDBC_URL, MYSQL.getJdbcUrl())
+                .applySetting(AvailableSettings.JAKARTA_JDBC_USER, MYSQL.getUsername())
+                .applySetting(AvailableSettings.JAKARTA_JDBC_PASSWORD, MYSQL.getPassword())
+                .applySetting(AvailableSettings.HBM2DDL_AUTO, "validate")
+                .build();
+        try {
+            return new MetadataSources(registry)
+                    .addAnnotatedClass(UuidV7Entity.class)
+                    .addAnnotatedClass(AccountPurgeCompletionStatusEntity.class)
+                    .getMetadataBuilder()
+                    .applyPhysicalNamingStrategy(new CamelCaseToUnderscoresNamingStrategy())
+                    .applyImplicitNamingStrategy(new SpringImplicitNamingStrategy())
+                    .build().buildSessionFactory();
+        } catch (RuntimeException error) {
+            StandardServiceRegistryBuilder.destroy(registry);
+            throw error;
+        }
+    }
+
     private static SessionFactory sessionFactory(Class<?> entity) {
         return UnpaidDriftRepaymentFixture.buildSessionFactory(
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword(), entity);
@@ -1190,5 +1710,386 @@ class FlywayFromScratchMigrationTest {
         }
         String location = domain.getCodeSource().getLocation().getPath();
         return location.contains("/classes/java/test");
+    }
+
+    @Test
+    @Order(90)
+    void チームポイント6表の所有境界と申請索引が存在する() throws Exception {
+        migrateFromScratch();
+        try (Connection connection = connect()) {
+            LoyaltyMigrationFixture.verify(connection);
+        }
+        try (Connection conn = connect(); Statement statement = conn.createStatement()) {
+            for (String suffix : List.of("programs", "rules", "rewards", "accounts", "transactions", "award_requests")) {
+                String table = "team_loyalty_" + suffix;
+                try (ResultSet columns = conn.getMetaData().getColumns(conn.getCatalog(), null, table, "id")) {
+                    assertThat(columns.next()).as(table + " UUID主キー").isTrue();
+                    assertThat(columns.getString("TYPE_NAME")).isEqualToIgnoringCase("BINARY");
+                    assertThat(columns.getInt("COLUMN_SIZE")).isEqualTo(16);
+                }
+                try (ResultSet result = statement.executeQuery("SELECT TABLE_COLLATION FROM information_schema.TABLES "
+                        + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='" + table + "'")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getString(1)).isEqualTo("utf8mb4_0900_ai_ci");
+                }
+                try (ResultSet keys = conn.getMetaData().getImportedKeys(conn.getCatalog(), null, table)) {
+                    while (keys.next()) {
+                        assertThat(keys.getString("PKTABLE_NAME")).as("他ドメインFKを作らない").startsWith("team_loyalty_");
+                        assertThat(keys.getShort("DELETE_RULE")).isEqualTo((short) DatabaseMetaData.importedKeyRestrict);
+                    }
+                }
+            }
+            try (ResultSet result = statement.executeQuery("SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                    + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='team_loyalty_award_requests' "
+                    + "AND INDEX_NAME='idx_tlar_pending_current' ORDER BY SEQ_IN_INDEX")) {
+                List<String> columns = new ArrayList<>();
+                while (result.next()) columns.add(result.getString(1));
+                assertThat(columns).containsExactly("team_id", "status", "program_version", "rule_version", "award_on", "expires_at", "id");
+            }
+            try (ResultSet result = statement.executeQuery("SELECT GENERATION_EXPRESSION,EXTRA FROM information_schema.COLUMNS "
+                    + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='team_loyalty_award_requests' AND COLUMN_NAME='pending_unique_key'")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).containsIgnoringCase("PENDING");
+                assertThat(result.getString(2)).contains("VIRTUAL GENERATED");
+            }
+            try (ResultSet result = statement.executeQuery("SELECT scope FROM permissions WHERE name='TEAM_LOYALTY_OPERATE'")) {
+                assertThat(result.next()).as("権限を実カタログへ登録する").isTrue();
+                assertThat(result.getString(1)).isEqualTo("TEAM");
+                assertThat(result.next()).isFalse();
+            }
+            try (ResultSet result = statement.executeQuery("SELECT r.name,rp.is_default FROM role_permissions rp "
+                    + "JOIN roles r ON r.id=rp.role_id JOIN permissions p ON p.id=rp.permission_id "
+                    + "WHERE p.name='TEAM_LOYALTY_OPERATE'")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo("ADMIN");
+                assertThat(result.getBoolean(2)).isTrue();
+                assertThat(result.next()).as("DEPUTY天井行も恒常付与も登録しない").isFalse();
+            }
+        }
+    }
+    @Test
+    @Order(2)
+    void PLATFORM一意制約は既存全scopeと履歴を保持し重複時は旧行を残して停止する() throws Exception {
+        migrateFromScratch();
+        try (Connection connection = connect()) {
+            PlatformCardMigrationFixture.verify(connection);
+        }
+    }
+
+    @Test
+    @Order(91)
+    void チームポイント追加migrationは旧F18カードと残高履歴を保持する() throws Exception {
+        migrateFromScratch();
+        // 同所有Testcontainersの専用接続だけでclone schemaを作り、共有DBやglobalGRANTへ触れない。
+        try (Connection connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword())) {
+            LoyaltyLegacyMigrationFixture.verify(connection);
+        }
+    }
+
+    @Test
+    @Order(25)
+    @DisplayName("CMP1730のUUIDv7進捗1行・singleton・cursor・retry制約が正式Flywayで成立する")
+    void reservationPendingExpireStateMigrationContract() throws SQLException {
+        migrateFromScratch();
+        var types = readActualColumnTypes().get("reservation_pending_expire_scan_state");
+        assertThat(types.get("id")).isEqualTo("binary(16)");
+        assertThat(types.get("updated_at")).isEqualTo("datetime(6)");
+        byte[] seedId;
+        try (Connection conn = connect(); Statement statement = conn.createStatement()) {
+            try (ResultSet row = statement.executeQuery("SELECT id, singleton_key, cycle_high_water, "
+                    + "last_inspected_id, run_epoch, retry_primary_ids, updated_at "
+                    + "FROM reservation_pending_expire_scan_state")) {
+                assertThat(row.next()).isTrue();
+                seedId = row.getBytes(1);
+                var bytes = java.nio.ByteBuffer.wrap(seedId);
+                var uuid = new java.util.UUID(bytes.getLong(), bytes.getLong());
+                assertThat(uuid.version()).isEqualTo(7);
+                assertThat(uuid.variant()).isEqualTo(2);
+                assertThat(row.getInt(2)).isEqualTo(1);
+                assertThat(row.getLong(3)).isZero();
+                assertThat(row.getLong(4)).isZero();
+                assertThat(row.getLong(5)).isZero();
+                assertThat(row.getString(6)).isEqualTo("[]");
+                assertThat(row.getTimestamp(7)).isNotNull();
+                assertThat(row.next()).isFalse();
+            }
+            try (ResultSet row = statement.executeQuery("SELECT TABLE_COLLATION FROM information_schema.TABLES "
+                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservation_pending_expire_scan_state'")) {
+                assertThat(row.next()).isTrue();
+                assertThat(row.getString(1)).isEqualTo("utf8mb4_0900_ai_ci");
+            }
+            // この試験が行う有効/不正更新はrollbackし、正式seedを他の相乗り試験へ保全する。
+            conn.setAutoCommit(false);
+            try {
+                for (String sql : List.of(
+                        "UPDATE reservation_pending_expire_scan_state SET singleton_key = 2",
+                        "UPDATE reservation_pending_expire_scan_state SET last_inspected_id = 1",
+                        "UPDATE reservation_pending_expire_scan_state SET run_epoch = -1",
+                        "UPDATE reservation_pending_expire_scan_state SET retry_primary_ids = '{}'",
+                        "INSERT INTO reservation_pending_expire_scan_state SELECT "
+                                + "UNHEX('01999999777770008000000000001730'), singleton_key, cycle_high_water, "
+                                + "last_inspected_id, run_epoch, retry_primary_ids, updated_at "
+                                + "FROM reservation_pending_expire_scan_state")) {
+                    org.assertj.core.api.Assertions.assertThatThrownBy(() -> statement.executeUpdate(sql))
+                            .isInstanceOf(SQLException.class);
+                }
+                String fiveHundred = java.util.stream.LongStream.rangeClosed(1, 500).mapToObj(Long::toString)
+                        .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+                try (var update = conn.prepareStatement("UPDATE reservation_pending_expire_scan_state "
+                        + "SET retry_primary_ids = ?")) {
+                    update.setString(1, fiveHundred);
+                    assertThat(update.executeUpdate()).isEqualTo(1);
+                    update.setString(1, fiveHundred.substring(0, fiveHundred.length() - 1) + ",501]");
+                    org.assertj.core.api.Assertions.assertThatThrownBy(update::executeUpdate)
+                            .isInstanceOf(SQLException.class);
+                }
+            } finally {
+                conn.rollback();
+            }
+        }
+        migrateFromScratch();
+        try (Connection conn = connect(); Statement statement = conn.createStatement();
+             ResultSet row = statement.executeQuery("SELECT id, retry_primary_ids FROM reservation_pending_expire_scan_state")) {
+            assertThat(row.next()).isTrue();
+            assertThat(row.getBytes(1)).containsExactly(seedId);
+            assertThat(row.getString(2)).isEqualTo("[]");
+            assertThat(row.next()).isFalse();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // CMP-260826-1457: 招待・共有トークンの平文保存をハッシュ保存へ統一（全失効）の検査枠
+    //
+    // 各波（W1〜W2）は「自分の表のメソッドを1つ足すだけ」にする（新しい試験クラスは作らない）。
+    // メソッドは表名のアルファベット順に、下の「各波の検査メソッド」の位置へ並べる（差分の衝突箇所を分散させる）。
+    // 共通ヘルパ（tokenHashMigration...）は W0 が置く。各波は列の形（平文列の削除・*_hash 列の型・一意索引）を
+    // ヘルパで検査し、AC-7（旧平文では照合に当たらない）・AC-8（行を削除しない）は自分の表専用の Migration IT で検査する。
+    // ---------------------------------------------------------------------------------------------
+
+    /** SHA-256 の hex 表記の長さ（ハッシュ列の長さ）。 */
+    private static final int TOKEN_HASH_COLUMN_LENGTH = 64;
+
+    /**
+     * 全失効の移行が済んだ表の期待形。
+     *
+     * @param table            表名
+     * @param plaintextColumn  移行前に平文を保存していた列（移行後は存在しない）
+     * @param hashColumn       移行後のハッシュ列
+     * @param hashNullable     ハッシュ列が NULL 許容か（preview_token 等の NULL 許容列の系統だけ true）
+     */
+    record TokenHashMigrationExpectation(String table, String plaintextColumn, String hashColumn, boolean hashNullable) {
+    }
+
+    /** 平文列が消え、ハッシュ列が SHA-256 hex64 の形（VARCHAR/CHAR(64)・NOT NULL 指定どおり・一意索引つき）であることを検査する。 */
+    private static void assertTokenHashMigrated(Connection conn, TokenHashMigrationExpectation expected) throws SQLException {
+        assertThat(columnExists(conn, expected.table(), expected.plaintextColumn()))
+                .as("%s.%s: 平文の列が残っていない（全失効・平文は捨てる）", expected.table(), expected.plaintextColumn())
+                .isFalse();
+        try (ResultSet column = conn.getMetaData().getColumns(conn.getCatalog(), null, expected.table(), expected.hashColumn())) {
+            assertThat(column.next())
+                    .as("%s.%s: ハッシュ列が存在する", expected.table(), expected.hashColumn()).isTrue();
+            assertThat(column.getInt("COLUMN_SIZE"))
+                    .as("%s.%s: SHA-256 hex64 の長さ", expected.table(), expected.hashColumn())
+                    .isEqualTo(TOKEN_HASH_COLUMN_LENGTH);
+            assertThat(column.getString("IS_NULLABLE"))
+                    .as("%s.%s: NULL 許容の指定", expected.table(), expected.hashColumn())
+                    .isEqualTo(expected.hashNullable() ? "YES" : "NO");
+        }
+        assertThat(hasSingleColumnUniqueIndex(conn, expected.table(), expected.hashColumn()))
+                .as("%s.%s: 照合に使う一意索引がある", expected.table(), expected.hashColumn()).isTrue();
+    }
+
+    private static boolean columnExists(Connection conn, String table, String column) throws SQLException {
+        try (ResultSet rs = conn.getMetaData().getColumns(conn.getCatalog(), null, table, column)) {
+            return rs.next();
+        }
+    }
+
+    /** 指定列だけを対象にする一意索引（主キーを含む）があるか。 */
+    private static boolean hasSingleColumnUniqueIndex(Connection conn, String table, String column) throws SQLException {
+        String sql = "SELECT INDEX_NAME FROM information_schema.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND NON_UNIQUE = 0 "
+                + "GROUP BY INDEX_NAME HAVING COUNT(*) = 1 AND MAX(COLUMN_NAME) = ?";
+        try (var statement = conn.prepareStatement(sql)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    // 各波の検査メソッド（表名のアルファベット順）。各波はここへ自分の表のメソッドを1つ足す:
+    //   @Test @Order(...) void <表名>のtokenはハッシュ化され全失効する() throws Exception {
+    //       migrateFromScratch();
+    //       try (Connection conn = connect()) {
+    //           assertTokenHashMigrated(conn, new TokenHashMigrationExpectation("<表名>", "<旧平文列>", "<hash列>", false));
+    //       }
+    //   }
+
+    /**
+     * P1（系統1）の移行直前の版。origin/main の最大版（#4371 招待承諾の分離で入った invite_token_claims 作成）で、
+     * invite_tokens.token が平文のまま残っている。P1 の移行 migration（V258）はこれより後の版になる
+     * （採番はマージ時点の最大 major+1）。
+     */
+    private static final String INVITE_TOKENS_PRE_HASH_TARGET = "257.20261107130657";
+
+    @Test
+    @Order(28)
+    @DisplayName("CMP-260826-1457 W1 P1: invite_tokens の token はハッシュ化され、移行前の招待は行を残したまま全失効する（AC-7・AC-8・AC-12e）")
+    void invite_tokensのtokenはハッシュ化され全失効する() throws Exception {
+        // 共有の検査用 DB を汚さないよう、同じコンテナに別 schema を作って「移行直前の版まで適用 → 平文行を置く → 残りを適用」する。
+        String schema = "cmp1457_invite_tokens";
+        String schemaUrl = MYSQL.getJdbcUrl().replaceFirst("/" + MYSQL.getDatabaseName() + "(?=$|\\?)", "/" + schema);
+        try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             Statement statement = root.createStatement()) {
+            statement.execute("DROP DATABASE IF EXISTS " + schema);
+            statement.execute("CREATE DATABASE " + schema + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+        }
+        try {
+            Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
+                    .outOfOrder(false).target(INVITE_TOKENS_PRE_HASH_TARGET).load().migrate();
+
+            String sharedPlaintext = java.util.UUID.randomUUID().toString();
+            String targetedPlaintext = java.util.UUID.randomUUID().toString();
+            String revokedPlaintext = java.util.UUID.randomUUID().toString();
+            LocalDateTime future = LocalDateTime.of(2099, 1, 2, 3, 4, 5);
+            LocalDateTime alreadyRevoked = LocalDateTime.of(2026, 1, 2, 3, 4, 5);
+            long sharedId;
+            long targetedId;
+            long revokedId;
+            try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
+                // 共有リンク型（有効）・宛先指定型の未解決（PENDING）・既に失効済み の 3 行
+                sharedId = insertPlaintextInvite(conn, sharedPlaintext, "team_id", 900001L, future, 10, 3, null, null);
+                targetedId = insertPlaintextInvite(conn, targetedPlaintext, "team_id", 900001L, future, 1, 0, null, 900777L);
+                revokedId = insertPlaintextInvite(conn, revokedPlaintext, "organization_id", 900002L, future, null, 0,
+                        alreadyRevoked, null);
+            }
+
+            Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
+                    .outOfOrder(false).load().migrate();
+
+            try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
+                assertTokenHashMigrated(conn, new TokenHashMigrationExpectation("invite_tokens", "token", "token_hash", false));
+
+                // AC-8: 行を削除しない（ID・スコープ・宛先・利用回数・上限・発行者が残る）
+                try (var select = conn.prepareStatement("SELECT id, team_id, organization_id, target_user_id, used_count, "
+                        + "max_uses, created_by, token_hash, revoked_at FROM invite_tokens WHERE id IN (?, ?, ?) ORDER BY id")) {
+                    select.setLong(1, sharedId);
+                    select.setLong(2, targetedId);
+                    select.setLong(3, revokedId);
+                    Map<Long, Map<String, Object>> rows = new HashMap<>();
+                    try (ResultSet rs = select.executeQuery()) {
+                        while (rs.next()) {
+                            Map<String, Object> row = new HashMap<>();
+                            row.put("team_id", rs.getObject("team_id"));
+                            row.put("organization_id", rs.getObject("organization_id"));
+                            row.put("target_user_id", rs.getObject("target_user_id"));
+                            row.put("used_count", rs.getInt("used_count"));
+                            row.put("max_uses", rs.getObject("max_uses"));
+                            row.put("created_by", rs.getObject("created_by"));
+                            row.put("token_hash", rs.getString("token_hash"));
+                            row.put("revoked_at", rs.getObject("revoked_at", LocalDateTime.class));
+                            rows.put(rs.getLong("id"), row);
+                        }
+                    }
+                    assertThat(rows).as("移行で招待の行が消えていない").containsOnlyKeys(sharedId, targetedId, revokedId);
+                    assertThat(((Number) rows.get(sharedId).get("team_id")).longValue()).isEqualTo(900001L);
+                    assertThat(rows.get(sharedId).get("used_count")).isEqualTo(3);
+                    assertThat(((Number) rows.get(sharedId).get("max_uses")).intValue()).isEqualTo(10);
+                    assertThat(((Number) rows.get(targetedId).get("target_user_id")).longValue()).isEqualTo(900777L);
+                    assertThat(((Number) rows.get(revokedId).get("organization_id")).longValue()).isEqualTo(900002L);
+                    for (Map<String, Object> row : rows.values()) {
+                        assertThat(((Number) row.get("created_by")).longValue()).isEqualTo(77L);
+                        assertThat((String) row.get("token_hash")).matches("^[0-9a-f]{64}$");
+                    }
+                    assertThat(rows.values().stream().map(row -> row.get("token_hash")).distinct().count())
+                            .as("乱数で埋めたハッシュは行ごとに異なる").isEqualTo(3L);
+
+                    // AC-8・AC-12e: 失効列のある表は失効状態になる（宛先指定型の未解決招待も業務状態のうえで終わる）。既失効の日時は保つ
+                    assertThat(rows.get(sharedId).get("revoked_at")).as("共有リンク型が失効していない").isNotNull();
+                    assertThat(rows.get(targetedId).get("revoked_at")).as("宛先指定型の未解決招待が失効していない").isNotNull();
+                    assertThat(rows.get(revokedId).get("revoked_at")).isEqualTo(alreadyRevoked);
+                }
+
+                // AC-7: 移行前の平文はどれも照合（hash(平文) の等値検索）に当たらない
+                try (var lookup = conn.prepareStatement("SELECT COUNT(*) FROM invite_tokens "
+                        + "WHERE token_hash IN (SHA2(?, 256), SHA2(?, 256), SHA2(?, 256))")) {
+                    lookup.setString(1, sharedPlaintext);
+                    lookup.setString(2, targetedPlaintext);
+                    lookup.setString(3, revokedPlaintext);
+                    try (ResultSet rs = lookup.executeQuery()) {
+                        assertThat(rs.next()).isTrue();
+                        assertThat(rs.getLong(1)).as("移行前の平文で照合に当たる行がある").isZero();
+                    }
+                }
+            }
+        } finally {
+            try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+                 Statement statement = root.createStatement()) {
+                statement.execute("DROP DATABASE IF EXISTS " + schema);
+            }
+        }
+    }
+
+    /** 移行直前の版の invite_tokens へ平文行を JDBC で置く（旧 schema には新 Entity を永続化できないため）。 */
+    private static long insertPlaintextInvite(Connection conn, String plaintext, String scopeColumn, Long scopeId,
+                                              LocalDateTime expiresAt, Integer maxUses, int usedCount,
+                                              LocalDateTime revokedAt, Long targetUserId) throws SQLException {
+        try (var insert = conn.prepareStatement("INSERT INTO invite_tokens (token, " + scopeColumn + ", role_id, "
+                + "expires_at, max_uses, used_count, revoked_at, target_user_id, created_by, created_at) "
+                + "SELECT ?, ?, id, ?, ?, ?, ?, ?, 77, UTC_TIMESTAMP() FROM roles WHERE name = 'MEMBER'",
+                Statement.RETURN_GENERATED_KEYS)) {
+            insert.setString(1, plaintext);
+            insert.setLong(2, scopeId);
+            insert.setObject(3, expiresAt);
+            insert.setObject(4, maxUses);
+            insert.setInt(5, usedCount);
+            insert.setObject(6, revokedAt);
+            insert.setObject(7, targetUserId);
+            assertThat(insert.executeUpdate()).isEqualTo(1);
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                assertThat(keys.next()).isTrue();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    @Test
+    @Order(26)
+    @DisplayName("CMP-260826-1457 W0: 全失効の検査ヘルパが、既にハッシュ保存の村招待表で成立する（枠の健全性）")
+    void 全失効の検査ヘルパは既にハッシュ保存の表で成立する() throws Exception {
+        migrateFromScratch();
+        try (Connection conn = connect()) {
+            assertTokenHashMigrated(conn,
+                    new TokenHashMigrationExpectation("village_invitations", "token", "token_hash", false));
+        }
+    }
+
+    @Test
+    @Order(27)
+    @DisplayName("CMP-260826-1457 W0: 全失効の検査ヘルパは、平文列が残る表を不合格にする（陰性対照）")
+    void 全失効の検査ヘルパは平文列が残る表を不合格にする() throws Exception {
+        migrateFromScratch();
+        try (Connection conn = connect()) {
+            // 移行前の形（平文列 token が残る表）は、各波が移行するまで不合格になるはず。
+            // P1 で invite_tokens を移行したため、まだ平文のままの contact_invite_tokens（系統2）を使う。
+            // その表の移行が入ったら、この陰性対照は別の未移行表（event_guest_invite_tokens など）へ付け替える。
+            if (columnExists(conn, "contact_invite_tokens", "token")) {
+                assertThatThrownBy(() -> assertTokenHashMigrated(conn,
+                        new TokenHashMigrationExpectation("contact_invite_tokens", "token", "token_hash", false)))
+                        .isInstanceOf(AssertionError.class);
+            }
+        }
+    }
+
+    @Test
+    @Order(26)
+    @DisplayName("CMP1243 refresh_tokens.user_id の FK が同domain ON DELETE CASCADE である（実purge完走は EntityDigitBoundaryColumnFlywaySchemaIT）")
+    void refreshTokensUserFkIsCascade() throws SQLException {
+        migrateFromScratch();
+        try (Connection conn = connect()) {
+            assertCascade(conn, "refresh_tokens", "user_id", "users");
+        }
     }
 }

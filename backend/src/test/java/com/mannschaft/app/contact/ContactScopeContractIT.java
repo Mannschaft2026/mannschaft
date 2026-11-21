@@ -1,6 +1,8 @@
 package com.mannschaft.app.contact;
 
 import com.mannschaft.app.contact.entity.ContactInviteTokenEntity;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
+import static com.mannschaft.app.support.JsonLongIdMatchers.longId;
 import com.mannschaft.app.contact.entity.ContactRequestBlockEntity;
 import com.mannschaft.app.contact.entity.ContactRequestEntity;
 import com.mannschaft.app.contact.repository.ContactInviteTokenRepository;
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -240,7 +243,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(attackerId);
             mockMvc.perform(get("/api/v1/contacts"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].user.id", not(hasItem(friendId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].user.id", not(hasLongId(friendId))));
         }
 
         @Test
@@ -258,7 +261,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(ownerId);
             mockMvc.perform(get("/api/v1/contacts"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].user.id", hasItem(friendId.intValue())));
+                    .andExpect(jsonPath("$.data[*].user.id", hasLongId(friendId)));
         }
     }
 
@@ -317,7 +320,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(attackerId);
             mockMvc.perform(get("/api/v1/contact-invite-tokens"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].id", not(hasItem(ownerTokenId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].id", not(hasLongId(ownerTokenId))));
         }
     }
 
@@ -516,7 +519,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(ownerId);
             mockMvc.perform(get("/api/v1/teams/{teamId}/members/contactable", privateTeamId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].userId", hasItem(friendId.intValue())));
+                    .andExpect(jsonPath("$.data[*].userId", hasLongId(friendId)));
         }
 
         @Test
@@ -525,7 +528,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(ownerId);
             mockMvc.perform(get("/api/v1/organizations/{orgId}/members/contactable", privateOrgId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[*].userId", hasItem(friendId.intValue())));
+                    .andExpect(jsonPath("$.data[*].userId", hasLongId(friendId)));
         }
 
         @Test
@@ -734,7 +737,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"targetUserId\":" + hiddenId + "}"))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.data.blockedUser.id").value(hiddenId.intValue()))
+                    .andExpect(jsonPath("$.data.blockedUser.id").value(longId(hiddenId)))
                     .andExpect(jsonPath("$.data.blockedUser.fullName").value(nullValue()))
                     .andExpect(jsonPath("$.data.blockedUser.contactHandle").value(nullValue()))
                     .andExpect(jsonPath("$.data.blockedUser.avatarUrl").value(nullValue()));
@@ -748,7 +751,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"targetUserId\":" + visibleId + "}"))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.data.blockedUser.id").value(visibleId.intValue()))
+                    .andExpect(jsonPath("$.data.blockedUser.id").value(longId(visibleId)))
                     .andExpect(jsonPath("$.data.blockedUser.fullName").value("CONTACTAUTHZ テスト"))
                     .andExpect(jsonPath("$.data.blockedUser.contactHandle").value(handleOf(visibleId)));
         }
@@ -882,7 +885,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             ContactInviteTokenEntity expiredToken = contactInviteTokenRepository.save(
                     ContactInviteTokenEntity.builder()
                             .userId(issuerId)
-                            .token("contactauthz-accept-expired-" + uniq)
+                            .token(UUID.randomUUID().toString())
                             .label("CONTACTAUTHZ 期限切れ用")
                             .expiresAt(LocalDateTime.now().minusDays(1))
                             .build());

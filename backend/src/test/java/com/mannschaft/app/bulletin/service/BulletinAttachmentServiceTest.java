@@ -153,6 +153,71 @@ class BulletinAttachmentServiceTest {
                 .contentType("application/pdf").createdBy(createdBy).build();
     }
 
+    private BulletinAttachmentEntity dangerousAttachment() {
+        return BulletinAttachmentEntity.builder().id(ATTACHMENT_ID).targetType(TargetType.THREAD).targetId(THREAD_ID)
+                .fileKey("bulletin/unsafe").originalFilename("unsafe.html").fileSize(1024L)
+                .contentType("text/html").createdBy(USER_ID).build();
+    }
+
+    @Test
+    @DisplayName("PREVIEW-15 危険な保存 MIME は添付一覧の署名対象にも含めない")
+    void 危険MIMEを一覧から除外する() {
+        given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(teamThread()));
+        given(attachmentRepository.findByTargetTypeAndTargetIdOrderByCreatedAtAsc(TargetType.THREAD, THREAD_ID))
+                .willReturn(List.of(dangerousAttachment()));
+        assertThat(service.listThreadAttachments(THREAD_ID, USER_ID)).isEmpty();
+        verify(storageAccessService).generateDownloadUrlsForList(eq(List.of()), any());
+        verify(accessGuard).checkMembership(USER_ID, ScopeType.TEAM, TEAM_ID);
+    }
+
+    @Test
+    @DisplayName("PREVIEW-16 危険 MIME の download は最新 ACL を確認後に拒否")
+    void 危険MIMEのdownloadを拒否する() {
+        given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(dangerousAttachment()));
+        given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(teamThread()));
+        given(storageAccessService.generateDownloadUrl(any(), any(), any(), any(), any())).willReturn("signed");
+        assertThatThrownBy(() -> service.generateDownloadUrl(ATTACHMENT_ID, USER_ID))
+                .isInstanceOf(BusinessException.class).extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BulletinErrorCode.ATTACHMENT_INVALID_CONTENT_TYPE);
+        verify(storageAccessService).generateDownloadUrl(eq("bulletin/unsafe"), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("PREVIEW-16 ACL 拒否は MIME 拒否より先に適用する")
+    void downloadの最新ACL拒否を維持する() {
+        given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(dangerousAttachment()));
+        given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(teamThread()));
+        given(storageAccessService.generateDownloadUrl(any(), any(), any(), any(), any()))
+                .willThrow(new BusinessException(CommonErrorCode.COMMON_002));
+        assertThatThrownBy(() -> service.generateDownloadUrl(ATTACHMENT_ID, USER_ID))
+                .isInstanceOf(BusinessException.class).extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.COMMON_002);
+    }
+
+    @Test
+    @DisplayName("CMP-261116-0726 AC-7: 添付ID指定の閲覧メタ取得は、親スレッドが削除済みなら添付の不在コード（BULLETIN_007）")
+    void 親スレッド欠落の閲覧メタは添付の不在コード() {
+        given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(attachment(USER_ID)));
+        given(threadRepository.findById(THREAD_ID)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> service.getAttachmentReadMetadata(ATTACHMENT_ID))
+                .isInstanceOf(BusinessException.class).extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("CMP-261116-0726 AC-7: 返信の親が欠落した添付の DL URL も添付の不在コード（BULLETIN_007）")
+    void 返信欠落の添付DLは添付の不在コード() {
+        BulletinAttachmentEntity replyAttachment = BulletinAttachmentEntity.builder()
+                .id(ATTACHMENT_ID).targetType(TargetType.REPLY).targetId(77L)
+                .fileKey("bulletin/key").originalFilename("doc.pdf").fileSize(1024L)
+                .contentType("application/pdf").createdBy(USER_ID).build();
+        given(attachmentRepository.findById(ATTACHMENT_ID)).willReturn(Optional.of(replyAttachment));
+        given(replyRepository.findById(77L)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> service.generateDownloadUrl(ATTACHMENT_ID, USER_ID))
+                .isInstanceOf(BusinessException.class).extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BulletinErrorCode.ATTACHMENT_NOT_FOUND);
+    }
+
     // ─────────────────────────────────────────────
     @Nested
     @DisplayName("presign（アップロード URL 発行）")
@@ -536,18 +601,14 @@ class BulletinAttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("一覧取得: TOURNAMENT は canView を呼び checkMembership に落ちない")
-        void listAttachments大会はcanView() {
+        @DisplayName("一覧取得: TOURNAMENT は tx 内で閲覧判定を撃たず（Facade で認可済み）checkMembership にも落ちない")
+        void listAttachments大会はtx内で閲覧判定しない() {
             given(threadRepository.findById(THREAD_ID)).willReturn(Optional.of(tournamentThread()));
             given(attachmentRepository.findByTargetTypeAndTargetIdOrderByCreatedAtAsc(TargetType.THREAD, THREAD_ID))
                     .willReturn(List.of());
             service.listThreadAttachments(THREAD_ID, USER_ID);
 
-            verify(tournamentContactAccessService).checkView(
-                    eq(com.mannschaft.app.tournament.ContactSpaceScopeType.TOURNAMENT),
-                    eq(T_SCOPE_ID),
-                    eq(com.mannschaft.app.tournament.ContactSpaceKind.BULLETIN),
-                    eq(USER_ID));
+            verify(tournamentContactAccessService, never()).checkView(any(), any(), any(), any());
             verify(accessGuard, never()).checkMembership(any(), any(), any());
         }
 

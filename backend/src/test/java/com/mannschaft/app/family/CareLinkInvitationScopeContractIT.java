@@ -1,6 +1,7 @@
 package com.mannschaft.app.family;
 
 import com.mannschaft.app.admin.repository.FeatureFlagRepository;
+import static com.mannschaft.app.support.JsonLongIdMatchers.longId;
 import com.mannschaft.app.family.entity.TeamCareNotificationOverrideEntity;
 import com.mannschaft.app.family.entity.UserCareLinkEntity;
 import com.mannschaft.app.family.repository.TeamCareNotificationOverrideRepository;
@@ -473,7 +474,7 @@ class CareLinkInvitationScopeContractIT extends AbstractMySqlIntegrationTest {
                             .content("{\"watcherUserId\":" + watcherId
                                     + ",\"careCategory\":\"MINOR\",\"relationship\":\"PARENT\"}"))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.data.careRecipientUserId").value(outsiderId.intValue()))
+                    .andExpect(jsonPath("$.data.careRecipientUserId").value(longId(outsiderId)))
                     .andExpect(jsonPath("$.data.status").value("PENDING"));
 
             mockMvc.perform(post("/api/v1/me/care-links/invite-recipient")
@@ -481,7 +482,7 @@ class CareLinkInvitationScopeContractIT extends AbstractMySqlIntegrationTest {
                             .content("{\"careRecipientUserId\":" + watcherId
                                     + ",\"careCategory\":\"ELDERLY\",\"relationship\":\"CHILD\"}"))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.data.watcherUserId").value(outsiderId.intValue()))
+                    .andExpect(jsonPath("$.data.watcherUserId").value(longId(outsiderId)))
                     .andExpect(jsonPath("$.data.status").value("PENDING"));
         }
 

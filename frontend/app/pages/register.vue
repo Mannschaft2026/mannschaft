@@ -1,19 +1,26 @@
 <script setup lang="ts">
+import { inviteRedirect } from '~/utils/inviteRedirect'
 import dayjs from 'dayjs'
 import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/zod'
+import { toTypedSchema } from '~/utils/toTypedSchema'
 import { z } from 'zod'
 import { resolveCountry } from '~/utils/resolveCountry'
+import { PRIVACY_POLICY_VERSION } from '~/constants/legalPolicy'
 
 definePageMeta({
   layout: 'auth',
   middleware: 'guest',
 })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const api = useApi()
 const { getGoogleAuthUrl } = useAuthApi()
 const route = useRoute()
+const returnPath = computed(() => inviteRedirect(route.query.redirect))
+const loginTarget = computed(() => ({
+  path: '/login',
+  query: returnPath.value ? { redirect: returnPath.value } : {},
+}))
 const notification = useNotification()
 const { userTimezone } = useDatetime()
 const loading = ref(false)
@@ -25,7 +32,7 @@ const privacyModalVisible = ref(false)
 // ブラウザ標準のフォーム送信が走って入力が失われるため、ハイドレーション完了まで送信を封じる。
 const hydrated = useHydrated()
 // ハイドレーション待ちの間もボタンをローディング表示にする（無反応に見える問題の解消）。
-// :disabled="!hydrated" は Enter キーによる implicit submission 抑止のため別途維持する
+// :disabled="submitting" は Enter キーによる implicit submission 抑止のため別途維持する
 // （PrimeVue の loading は内部的に disabled 相当になるが、明示指定で確実に塞ぐ）。
 const submitting = computed(() => loading.value || !hydrated.value)
 
@@ -44,7 +51,7 @@ async function registerWithGoogle() {
 const inviteToken = computed(() => route.query.invite as string | undefined)
 
 // 郵便番号バリデーション（レジストリ駆動）
-// 登録画面では locale='ja' 固定のため実効国 = JP
+// 実効国は現在の表示言語から解決する（BE も送信 locale から同じ規則で解決するため一致する）
 const { ensureLoaded, isSupported, validateFormat } = usePostalCodeValidation()
 
 // ページマウント時にポリシーを先読みしておく（フォームサブミット時の遅延を最小化）
@@ -59,11 +66,11 @@ const schema = toTypedSchema(
   z.object({
     email: z
       .string()
-      .min(1, 'メールアドレスは必須です')
-      .email('有効なメールアドレスを入力してください'),
+      .min(1, 'auth.register.err_email_required')
+      .email('auth.register.err_email_invalid'),
     password: z
       .string()
-      .min(8, 'パスワードは8文字以上で入力してください')
+      .min(8, 'auth.register.err_password_min')
       .refine((val) => {
         let count = 0
         if (/[A-Z]/.test(val)) count++
@@ -71,31 +78,33 @@ const schema = toTypedSchema(
         if (/[0-9]/.test(val)) count++
         if (/[^A-Za-z0-9]/.test(val)) count++
         return count >= 3
-      }, '大文字・小文字・数字・記号のうち3種以上含めてください'),
-    lastName: z.string().min(1, '姓は必須です').max(50, '姓は50文字以内で入力してください'),
-    firstName: z.string().min(1, '名は必須です').max(50, '名は50文字以内で入力してください'),
+      }, 'auth.register.err_password_complexity'),
+    lastName: z.string().min(1, 'auth.register.err_last_name_required').max(50, 'auth.register.err_last_name_max'),
+    firstName: z.string().min(1, 'auth.register.err_first_name_required').max(50, 'auth.register.err_first_name_max'),
     displayName: z
       .string()
-      .min(1, '表示名は必須です')
-      .max(50, '表示名は50文字以内で入力してください'),
+      .min(1, 'auth.register.err_display_name_required')
+      .max(50, 'auth.register.err_display_name_max'),
     postalCode: z
       .string()
       .superRefine(async (val, ctx) => {
         // レジストリ駆動郵便番号検証（ハードコード regex を廃止）
-        // 登録画面は locale='ja' 固定 → 実効国 JP
-        const effectiveCountry = resolveCountry(null, 'ja')
-        if (!effectiveCountry) return // 解決不能は検証スキップ
+        // 現在の表示言語から実効国を解決（送信する locale と同じ値）
+        const effectiveCountry = resolveCountry(null, locale.value)
+        // 解決不能は検証スキップ
+        if (!effectiveCountry) return
 
         // ポリシーをロード（既にキャッシュ済みの場合は即返る）
         await ensureLoaded()
 
-        if (!isSupported(effectiveCountry)) return // 未対応国は検証スキップ
+        // 未対応国は検証スキップ
+        if (!isSupported(effectiveCountry)) return
 
         // 必須チェック
         if (!val || val.length === 0) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: '郵便番号は必須です',
+            message: 'auth.register.err_postal_required',
           })
           return
         }
@@ -104,7 +113,7 @@ const schema = toTypedSchema(
         if (!validateFormat(effectiveCountry, val)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: '郵便番号の形式が正しくありません（例: 123-4567）',
+            message: 'auth.register.err_postal_format',
           })
         }
       }),
@@ -123,10 +132,10 @@ const schema = toTypedSchema(
         return d >= limit
       }, 'parental_consent.error_auth_053'),
     privacyPolicyAccepted: z.literal(true, {
-      errorMap: () => ({ message: 'auth.register.privacy_consent_required' }),
+      error: 'auth.register.privacy_consent_required',
     }),
     termsAccepted: z.literal(true, {
-      errorMap: () => ({ message: 'auth.register.terms_consent_required' }),
+      error: 'auth.register.terms_consent_required',
     }),
   }),
 )
@@ -160,6 +169,24 @@ const [termsAccepted, termsAcceptedProps] = defineField('termsAccepted')
 
 const submitted = ref(false)
 
+// ブラウザの IANA タイムゾーン名（例: Asia/Tokyo）。取得できない場合は既定の Asia/Tokyo。
+function browserTimezone(): string {
+  const fallback = 'Asia/Tokyo'
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  if (!tz) return fallback
+  try {
+    // 無効な IANA 名なら RangeError。UTC など "/" を含まない正当な名前はそのまま通す。
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+    return tz
+  } catch {
+    return fallback
+  }
+}
+
+// 送信開始前の再入ガード。handleSubmit は検証が非同期のため、loading だけでは同一フレームの
+// 連打（検証完了前に複数回 submit が来る）を防げない。submit 受付の瞬間に同期的に立てる。
+let submitInFlight = false
+
 const onSubmit = handleSubmit(async (values) => {
   submitted.value = true
   loading.value = true
@@ -174,38 +201,57 @@ const onSubmit = handleSubmit(async (values) => {
         nickname: values.displayName,
         postalCode: values.postalCode,
         birth_date: values.birthDate,
-        locale: 'ja',
-        timezone: 'Asia/Tokyo',
+        locale: locale.value,
+        timezone: browserTimezone(),
         privacyPolicyAccepted: true,
-        privacyPolicyVersion: '1.1.0',
+        // 同意した版は本文の版表示と同じ出どころ（~/constants/legalPolicy）から送る
+        privacyPolicyVersion: PRIVACY_POLICY_VERSION,
         ...(inviteToken.value ? { inviteToken: inviteToken.value } : {}),
       },
     })
-    notification.success('登録が完了しました。メールをご確認ください。')
-    navigateTo(`/verify-email?email=${encodeURIComponent(values.email)}`)
+    notification.success(t('auth.register.success_toast'))
+    navigateTo({
+      path: '/verify-email',
+      query: { email: values.email, ...(returnPath.value ? { redirect: returnPath.value } : {}) },
+    })
   } catch (e: unknown) {
     const err = e as { data?: { error?: { code?: string; message?: string } } }
     const code = err?.data?.error?.code
-    const message = err?.data?.error?.message || 'しばらく時間をおいて再度お試しください。'
+    const message = err?.data?.error?.message || t('auth.register.failed_default_message')
     if (code === 'AUTH_041') {
-      notification.error('このメールアドレスは使用できません', message + '　→ ログインして退会を取り消してください。')
+      notification.error(t('auth.register.email_unusable_title'), `${message} → ${t('auth.register.withdrawal_cancel_hint')}`)
     } else if (code === 'AUTH_042') {
       notification.error(t('auth.beta_invite_required'), t('auth.beta_invite_required_desc'))
     } else if (code === 'AUTH_043') {
       notification.error(t('auth.beta_invite_invalid'), t('auth.beta_invite_invalid_desc'))
     } else {
-      notification.error('登録に失敗しました', message)
+      notification.error(t('auth.register.failed_title'), message)
     }
   } finally {
     loading.value = false
   }
 })
+
+async function submitRegistration() {
+  if (submitInFlight || loading.value) return
+  submitInFlight = true
+  submitted.value = true
+  try {
+    await onSubmit()
+  } finally {
+    submitInFlight = false
+  }
+}
+
+function applyGeneratedPassword(value: string): void {
+  password.value = value
+}
 </script>
 
 <template>
   <form
     novalidate
-    @submit.prevent="submitted = true; onSubmit()"
+    @submit.prevent="submitRegistration"
   >
     <div class="flex flex-col gap-4">
       <!-- 戻るリンク -->
@@ -236,7 +282,7 @@ const onSubmit = handleSubmit(async (values) => {
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="email">メールアドレス <span class="text-red-500">※</span></label>
+        <label for="email">{{ $t('auth.register.email_label') }} <span class="text-red-500">※</span></label>
         <InputText
           id="email"
           v-model="email"
@@ -245,11 +291,11 @@ const onSubmit = handleSubmit(async (values) => {
           placeholder="example@mannschaft.app"
           :invalid="submitted && !!errors.email"
         />
-        <small v-if="submitted && errors.email" class="text-red-500">{{ errors.email }}</small>
+        <small v-if="submitted && errors.email" class="text-red-500">{{ $t(errors.email) }}</small>
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="password">パスワード <span class="text-red-500">※</span></label>
+        <label for="password">{{ $t('auth.register.password_label') }} <span class="text-red-500">※</span></label>
         <Password
           v-model="password"
           input-id="password"
@@ -258,18 +304,22 @@ const onSubmit = handleSubmit(async (values) => {
           toggle-mask
           fluid
           :invalid="submitted && !!errors.password"
+          :input-props="{ autocomplete: 'new-password' }"
         />
-        <small v-if="submitted && errors.password" class="text-red-500">{{
-          errors.password
-        }}</small>
+        <PasswordGeneratorActions
+          :password="password ?? ''"
+          :disabled="submitting"
+          @generated="applyGeneratedPassword"
+        />
+        <small v-if="submitted && errors.password" class="text-red-500">{{ $t(errors.password) }}</small>
         <small class="text-surface-500">
-          8文字以上、大文字・小文字・数字・記号のうち3種以上を含めてください。
+          {{ $t('auth.register.password_hint') }}
         </small>
-        <small class="text-surface-400">パスワードは暗号化された状態で保存されます。</small>
+        <small class="text-surface-400">{{ $t('auth.register.password_encrypted_note') }}</small>
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="postalCode">郵便番号 <span class="text-red-500">※</span></label>
+        <label for="postalCode">{{ $t('auth.register.postal_code_label') }} <span class="text-red-500">※</span></label>
         <InputText
           id="postalCode"
           v-model="postalCode"
@@ -278,10 +328,8 @@ const onSubmit = handleSubmit(async (values) => {
           maxlength="20"
           :invalid="submitted && !!errors.postalCode"
         />
-        <small v-if="submitted && errors.postalCode" class="text-red-500">{{
-          errors.postalCode
-        }}</small>
-        <small class="text-surface-400">郵便番号は暗号化された状態で保存されます。</small>
+        <small v-if="submitted && errors.postalCode" class="text-red-500">{{ $t(errors.postalCode) }}</small>
+        <small class="text-surface-400">{{ $t('auth.register.postal_encrypted_note') }}</small>
       </div>
 
       <div class="flex flex-col gap-2">
@@ -300,37 +348,33 @@ const onSubmit = handleSubmit(async (values) => {
 
       <div class="flex gap-4">
         <div class="flex min-w-0 flex-1 flex-col gap-2">
-          <label for="lastName">姓 <span class="text-red-500">※</span></label>
+          <label for="lastName">{{ $t('auth.register.last_name_label') }} <span class="text-red-500">※</span></label>
           <InputText
             id="lastName"
             v-model="lastName"
             v-bind="lastNameProps"
-            placeholder="山田"
+            :placeholder="$t('auth.register.last_name_placeholder')"
             :invalid="submitted && !!errors.lastName"
             class="w-full"
           />
-          <small v-if="submitted && errors.lastName" class="text-red-500">{{
-            errors.lastName
-          }}</small>
+          <small v-if="submitted && errors.lastName" class="text-red-500">{{ $t(errors.lastName) }}</small>
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-2">
-          <label for="firstName">名 <span class="text-red-500">※</span></label>
+          <label for="firstName">{{ $t('auth.register.first_name_label') }} <span class="text-red-500">※</span></label>
           <InputText
             id="firstName"
             v-model="firstName"
             v-bind="firstNameProps"
-            placeholder="太郎"
+            :placeholder="$t('auth.register.first_name_placeholder')"
             :invalid="submitted && !!errors.firstName"
             class="w-full"
           />
-          <small v-if="submitted && errors.firstName" class="text-red-500">{{
-            errors.firstName
-          }}</small>
+          <small v-if="submitted && errors.firstName" class="text-red-500">{{ $t(errors.firstName) }}</small>
         </div>
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="displayName">表示名 <span class="text-red-500">※</span></label>
+        <label for="displayName">{{ $t('auth.register.display_name_label') }} <span class="text-red-500">※</span></label>
         <InputText
           id="displayName"
           v-model="displayName"
@@ -338,9 +382,7 @@ const onSubmit = handleSubmit(async (values) => {
           placeholder="yamada_taro"
           :invalid="submitted && !!errors.displayName"
         />
-        <small v-if="submitted && errors.displayName" class="text-red-500">{{
-          errors.displayName
-        }}</small>
+        <small v-if="submitted && errors.displayName" class="text-red-500">{{ $t(errors.displayName) }}</small>
       </div>
 
       <div class="flex flex-col gap-1">
@@ -399,16 +441,16 @@ const onSubmit = handleSubmit(async (values) => {
 
       <Button
         type="submit"
-        label="アカウント作成"
+        :label="$t('auth.register.create_account')"
         icon="pi pi-user-plus"
         :loading="submitting"
-        :disabled="!hydrated"
+        :disabled="submitting"
         class="mt-2"
       />
 
       <div class="text-center">
-        <NuxtLink to="/login" class="text-sm text-primary hover:underline">
-          すでにアカウントをお持ちですか？
+        <NuxtLink :to="loginTarget" class="text-sm text-primary hover:underline">
+          {{ $t('auth.register.has_account_question') }}
         </NuxtLink>
       </div>
     </div>

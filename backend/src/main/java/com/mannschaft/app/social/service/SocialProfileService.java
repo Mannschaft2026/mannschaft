@@ -27,6 +27,26 @@ public class SocialProfileService {
     private final FollowRepository followRepository;
 
     /**
+     * 複数ユーザーの有効なソーシャルプロフィールのハンドルを 1 SQL で解決する。
+     * プロフィールが無い・無効なユーザーは結果に含めない（グローバル検索の結果 URL 解決。CMP-261116-0722）。
+     *
+     * @param userIds ユーザー ID
+     * @return ユーザー ID → ハンドル
+     */
+    public java.util.Map<Long, String> findActiveHandlesByUserIds(java.util.Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<Long, String> result = new java.util.HashMap<>();
+        for (UserSocialProfileEntity profile : profileRepository.findByUserIdInAndIsActiveTrue(userIds)) {
+            if (profile.getHandle() != null) {
+                result.put(profile.getUserId(), profile.getHandle());
+            }
+        }
+        return result;
+    }
+
+    /**
      * ソーシャルプロフィールを作成する。
      *
      * @param req    作成リクエスト

@@ -144,15 +144,16 @@ jobs:
           echo "----- changed files -----"
           echo "${CHANGED}"
           echo "-------------------------"
-          # 旧 on.pull_request.paths の 6 パターンを正規表現へ落としたもの（増減させないこと）:
+          # 旧 on.pull_request.paths の6パターンと、L1-Bで移設したbuild設定の検知:
           #   1. backend/src/main/java/**/controller/**
           #   2. backend/src/main/java/**/dto/**
           #   3. backend/src/main/java/**/config/OpenApiConfig.java
           #   4. backend/src/main/resources/application-openapi-gen.yml
           #   5. backend/build.gradle.kts
           #   6. .github/workflows/openapi-drift-check.yml
+          #   7. backend/build-logic/** および backend/settings.gradle.kts
           # glob の `**` は「0 個以上のパスセグメント」なので `(.*/)?` に対応させる。
-          PATTERN='^(backend/src/main/java/(.*/)?(controller|dto)/|backend/src/main/java/(.*/)?config/OpenApiConfig\.java$|backend/src/main/resources/application-openapi-gen\.yml$|backend/build\.gradle\.kts$|\.github/workflows/openapi-drift-check\.yml$)'
+          PATTERN='^(backend/src/main/java/(.*/)?(controller|dto)/|backend/src/main/java/(.*/)?config/OpenApiConfig\.java$|backend/src/main/resources/application-openapi-gen\.yml$|backend/build\.gradle\.kts$|backend/build-logic/|backend/settings\.gradle\.kts$|\.github/workflows/openapi-drift-check\.yml$)'
           if echo "${CHANGED}" | grep -E "${PATTERN}" > /dev/null; then
             echo "[INFO] OpenAPI 関連の変更を検出 → openapi_related=true（ドリフト検査を実行）"
             echo "openapi_related=true" >> "$GITHUB_OUTPUT"
@@ -163,7 +164,7 @@ jobs:
 
       - name: Set up Java ${{ env.JAVA_VERSION }}
         if: steps.changes.outputs.openapi_related == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
@@ -171,12 +172,14 @@ jobs:
 
       # backend-ci.yml と同じ作法で Gradle 依存・wrapper・ビルドキャッシュを共有する。
       # 本 workflow は on: pull_request 主体で main への push では起動しないため、
-      # PR ビルドでもキャッシュを育てられるよう cache-read-only: false を明示する。
+      # 書き込みは行わない（read-only。CMP-261120-1042）。
       - name: Set up Gradle（依存＋ビルドキャッシュ）
         if: steps.changes.outputs.openapi_related == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: false
+          # 書き込みは main への push だけに限る（CMP-261120-1042。使用範囲の違うジョブが書くと jar 欠落の部分集合が復元される）。
+          cache-read-only: true
+          cache-cleanup: never
           gradle-home-cache-includes: |
             caches
             notifications
@@ -184,6 +187,11 @@ jobs:
       - name: Grant Gradle wrapper execute permission
         if: steps.changes.outputs.openapi_related == 'true'
         run: chmod +x gradlew
+
+      # 復元した依存キャッシュの整合性を検証し、jar 欠落があれば破棄して再取得する（CMP-261120-1042）。
+      - name: Gradle 依存キャッシュの整合性検証
+        if: steps.changes.outputs.openapi_related == 'true'
+        run: bash ../.github/scripts/verify-gradle-dependency-cache.sh
 
       # openapi-gen プロファイル（H2・:8082 フォーク・MySQL/Redis 不要）で docs/openapi.json を生成。
       # 生成先は build.gradle.kts の openApi{} 設定によりリポジトリルートの docs/openapi.json。
@@ -216,7 +224,7 @@ jobs:
       # artifact をダウンロードして docs/openapi.json へ置き、`npm run generate:types` で生成型を作り直す。
       - name: Upload generated openapi.json（ドリフト検出時のみ）
         if: always() && steps.drift.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: generated-openapi-json
           path: docs/openapi.json

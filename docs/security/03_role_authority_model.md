@@ -1,8 +1,9 @@
 # 03. ロール・権限モデル（Role / Authority Model）— 認可基盤完全根治
 
 > **ステータス**: 🟢 Phase 0〜5 実装完了（Phase 6 性能最適化のみ未着手）
+> **方針更新**: 2026-11-15 の基本方針更新（§3.6）は記録済み。既存認可・UI の移行は未実施。
 > **実装フェーズ**: Security Hardening Phase 2（認可基盤完全根治）
-> **最終更新**: 2026-06-12
+> **最終更新**: 2026-11-15
 > **重大度**: ~~🔴 最重要セキュリティインシデント~~ → **🟢 根治済み（2026-06-02 点火）**
 > **関連ドキュメント**: [README](README.md), [01 認可基盤](01_authorization_baseline.md), [02 Cookie とセッション](02_cookie_and_session.md), F01.1 認証, F01.2-04 セキュリティ運用, F03.5-04 セキュリティ運用
 
@@ -188,6 +189,8 @@ per-scope ロールを JWT に載せない理由は **マルチテナントで�
 
 #### 3.3.1 新設 SpEL ガード Bean の設計
 
+> **旧方針・既存実装の記録**: 本項の SYSTEM_ADMIN 無条件許可は、2026-11-15 の最新方針（§3.6）ではテナント業務情報へのアクセス根拠にしない。以下は既存実装を説明する記録であり、新規実装の推奨ではない。認可コードの移行は未実施。
+
 既存 `AdminRoleChecker` / `QuickMemoAccessGuard` の定石（`@Component("name")` ＋ `Authentication` 引数）に倣い、**per-scope 認可専用の単一ガード Bean** を新設する。`AccessControlService` に判定を委譲し、ロジックの二重化を避ける。
 
 ```java
@@ -253,13 +256,17 @@ circulation / shift / chat / faq の一部 EP は、`@EnableMethodSecurity` 未�
 
 `isAuthenticated()` のみの 36 EP（§5）は「ログインさえしていれば誰でも」を意味するため、**本来は所有者ガードが必要な EP が紛れていないか Phase 3 で個別精査**する（特に media upload・personal timetable・announcement feed 系）。
 
-### 3.5 SYSTEM_ADMIN の UI 表示方針 — 「BE は常に通す」と「FE はスコープ管理者導線に出さない」は別の設計判断（CMP-260909-1509）
+### 3.5 SYSTEM_ADMIN の UI 表示方針 — BEの許可経路とFEのスコープ管理者導線（CMP-260909-1509）
+
+> **旧判断の記録**: 以下の2026-09-09判断のうち、SYSTEM_ADMIN 単独でのテナント業務アクセス許可と業務導線の一律除外は、2026-11-15 の最新方針（§3.6）で見直す。以下は既存方針・実装の経緯として保持し、現行の推奨とはしない。認可コードと UI の移行は未実施。
 
 **マスター判断（2026-09-09）**: プラットフォーム管理者（SYSTEM_ADMIN）は**運営専用の特別なアカウント**を想定しており、一般利用者アカウントとは**別の動作をするのが正**である。これは欠陥ではなく意図した設計であり、本節で明文化する。
 
 #### BE 側（不変・本節では変更しない）
 
-§3.3.1 のとおり、`AccessGuard` / `AccessControlService` 系の per-scope 判定は **SYSTEM_ADMIN を常に通す**（`isSystemAdmin(userId)` が true なら無条件許可）。この方針は変更しない。実例: `ShiftAutoAssignService`（`backend/src/main/java/com/mannschaft/app/shift/service/ShiftAutoAssignService.java:353,356,381,384,405,408`）は各 public 入口で `accessControlService.isSystemAdmin(userId)` を先に確認し、true なら即許可、false ならチームの `checkAdminOrAbove` / `isAdminOrAbove` へフォールバックする。**SYSTEM_ADMIN は当該チームの ADMIN/DEPUTY_ADMIN でなくても BE API は通る。**
+§3.3.1 のとおり、`AccessGuard` やSYSTEM_ADMIN短絡を明示したロール判定経路は **SYSTEM_ADMIN を通す**（`isSystemAdmin(userId)` が true なら無条件許可）。この方針は変更しない。実例: `ShiftAutoAssignService`（`backend/src/main/java/com/mannschaft/app/shift/service/ShiftAutoAssignService.java:353,356,381,384,405,408`）は各 public 入口で `accessControlService.isSystemAdmin(userId)` を先に確認し、true なら即許可、false ならチームの `checkAdminOrAbove` / `isAdminOrAbove` へフォールバックする。**SYSTEM_ADMIN は当該チームの ADMIN/DEPUTY_ADMIN でなくても BE API は通る。**
+
+**実効権限経路の区別（CMP-261021-0020）**: `AccessControlService.checkPermission` は対象チームの実効権限を判定し、SYSTEM_ADMIN 単独を無条件に許可しない。フレンドの follow/unfollow と `GET /teams/{id}/friends/pending` は `MANAGE_FRIEND_TEAMS` があれば MEMBER も許可し、SYSTEM_ADMIN 兼任者も対象チームの実効権限がある場合だけ許可する。この経路の FE は `can('MANAGE_FRIEND_TEAMS')` に合わせ、以下のロール限定 UI 方針を適用しない。ほかの API のロール方針は本変更の対象外。
 
 #### FE 側（本節で新規に明文化する方針）
 
@@ -278,6 +285,14 @@ const isScopeAdmin = computed(
 - 参照実装: `frontend/app/pages/teams/[slug]/shifts/[scheduleId]/board.vue` の `isScopeAdmin`（シフトボードの自動割当ボタン・履歴ボタン）、`frontend/app/pages/teams/[slug]/shifts.vue` の `isScopeAdmin`（「シフトボード」ボタン）。
 - **UI を隠すことは認可の代替ではない。** 上記のとおり BE は SYSTEM_ADMIN を常に許可するため、このボタンを消しても「SYSTEM_ADMIN がその API を叩けなくなる」わけではない。あくまで「運営専用アカウントに、一般利用者向けの業務導線を出さない」という UX 上の方針である。
 - **この等値比較は将来「バグだ」と誤解して `hasRoleOrAbove` 的な包含判定に書き換えないこと。** 書き換えると SYSTEM_ADMIN にもチーム運営導線が出てしまい、本節の方針に反する。
+
+### 3.6 SYSTEM_ADMIN とテナント業務情報の分離（2026-11-15 マスター判断）
+
+**最新方針**: プラットフォームの運営管理権限と、各チーム・組織の業務情報へのアクセス権限を分離する。セキュリティリスクを減らすため、SYSTEM_ADMIN であることだけを理由に各チーム・組織の業務情報へアクセスできないことを基本とする。SYSTEM_ADMIN を持つ利用者も、通常の所属先・役割・担当権限で許可される範囲では業務利用できる。
+
+**CMP-260930-0233 への適用**: 駐車場情報もこの方針に従い、SYSTEM_ADMIN 単独で全組織を閲覧する経路は認めない。この仕様判断は決着したが、実装・検証・戦役完了を意味しない。
+
+**記録時点の状態と範囲**: 本更新は方針の記録のみであり、§3.3.1・§3.5などに記載した既存の SYSTEM_ADMIN 短絡や UI を変更していない。新たな例外機能・バイパスの追加や、認可コード・UI の移行は実施していない。
 
 ---
 
@@ -366,6 +381,24 @@ method-security が無効な現状、以下は **認可が事実上ゼロ**で�
 | **A-3. TEACHER ロールを新規シードする** | `roles` に TEACHER を追加し per-scope ロールとして付与 | ドメイン語彙と一致 | ロール体系の拡張＝広範な影響。付与フロー新設が必要 |
 
 **✅ 決定（2026-05-30 マスター裁可）= A-1 を採用。** 出席開示の 3 EP（disclose/withhold/disclosure-history）は、`@PreAuthorize("hasRole('TEACHER') or hasRole('ADMIN')")` を **`@accessGuard.isScopeAdmin(authentication, #teamId, 'TEAM')`** に置換し、「学校チーム（クラス）の ADMIN/DEPUTY_ADMIN ＝教員相当」として per-scope 認可する。新ロールは追加しない。将来「教員＝管理者ではない」運用要件（F03.13 学校ドメイン）が確定した場合に A-2（permission `ATTENDANCE_DISCLOSE`）へ発展させる余地を残す。**Phase 2（per-scope SpEL 化＋生穴封鎖）で実装済み（Phase 3-a）**: `DisclosureService` に `checkAdminOrAbove(teamId, "TEAM")`（SYSTEM_ADMIN 短絡）を注入し、3 EP の注釈を `@accessGuard.isScopeAdmin(...)` へ置換。
+
+#### 7.1.1 学校出欠における担任判定の定義（CMP-261001-0630 第1段、2026-10-02 マスター裁可）
+
+上記 A-1（「ADMIN/DEPUTY_ADMIN ＝教員相当」）は**出席開示**の裁可である。学校出欠（F03.13）の日次・時限出欠は、これに**名簿（`class_homerooms`）と委任（`VIEW_ATTENDANCE`）を加えた**次の定義で認可する。A-1 は撤回せず、管理者は引き続き教員相当として扱う。
+
+| 記号 | 該当者 | 対象 |
+|---|---|---|
+| 閲覧 V | チームの ADMIN/DEPUTY_ADMIN、`class_homerooms` の現役の担任・副担任（チームの有効なメンバーに限る）、`VIEW_ATTENDANCE` を委任された者 | クラス全体の一覧・統計・CSV・集計・要注意者・位置一覧・保護者連絡一覧・アラート一覧 |
+| 登録 R | 現役の担任・副担任、または ADMIN/DEPUTY_ADMIN（代行を含む） | 点呼・時限出欠の登録と修正、アラート解決、保護者連絡の確認と反映、生徒単位の集計再計算、場所の変更、評価の実行と解消 |
+
+- **現役の判定**: `effective_from <= 今日(Asia/Tokyo) <= effective_until`（`effective_until` が null なら無期限）。複数行は和集合。副担任の JSON が不正なら副担任の資格だけを無効にする。
+- **名簿だけでは足りない**: 担任・副担任でも、チームの有効なメンバーでなくなっていれば資格を失う（退会・停止後に名簿が残る穴の封鎖）。
+- **SYSTEM_ADMIN 単独では見られない**（システム管理者は通常のテナント内アカウントではない）。組織規程の評価と解消は組織の ADMIN/DEPUTY_ADMIN のみ。
+- **生徒単位の閲覧**: 本人と `user_care_links` の保護者には全クラスの分、教員には自分が V を持つクラスの分だけを返す。
+- **失敗応答**: 権限がなければ 403 `COMMON_002`。`recordId` の越境は 404、`teamId` を持たない評価系 EP は 404 で秘匿する。
+- **教科担当**は第1段では扱わない（P = R）。第2段（CMP-261002-0801）で教科担当マスターと代理委任を導入する。
+- **実装構造**: Controller → Facade（TX なし）→ `SchoolAttendanceAccessPolicy` → `AccessControlService`。業務 Service は Policy を呼ばない（`@PreAuthorize` では表現できない名簿・日付・メンバー資格の判定を、トランザクションの外で行うため）。
+- 詳細: `docs/features/F03.13_school_daily_subject_attendance.md` §5・§8.1。
 
 ### 7.2 【論点 B・要判断】シフト PDF の認可（負論理 SUPPORTER）
 
@@ -518,6 +551,7 @@ tournament ドメインに `TournamentContactAccessService` を新設し、read�
 | 公開トグル切替 | 主催組織 ADMIN / SYSTEM_ADMIN のみ | チーム代表には開放しない |
 
 - 存在しない/論理削除済みスペースは一律 **404**（IDOR 対策・存在を漏らさない）。
+- **閲覧権のない者への拒否も不在と同一の 404**（スコープ系 `TOUR_029`、子リソース ID 指定は子の不在コード）。閲覧できるが投稿・管理権のない者だけが 403（投稿 `TOUR_031`、公開トグル切替 `TOUR_032`）。公開トグルでは、そのスコープのいずれかのスペースを閲覧できる者を「存在を知り得る者」とし、知り得ない者は 404 `TOUR_029`。大会とディビジョンの帰属不一致も 404。旧 `TOUR_030`（閲覧 403）は欠番（CMP-261116-0726）。詳細は [01_authorization_baseline.md §3.3.2](./01_authorization_baseline.md)。
 - クロスドメインの所属判定は `TeamMembershipRepository` / `AccessControlService` を **ID 参照の読み取り**でのみ呼ぶ（クロスドメイン FK なし＝アーキ原則 1）。
 
 ### 15.2 PUBLIC 公開時の露出方針（成績 / chat）
@@ -560,6 +594,7 @@ tournament ドメインに `TournamentContactAccessService` を新設し、read�
 
 | 日付 | 変更 |
 |---|---|
+| 2026-11-15 | §3.6に最新のマスター判断を記録。SYSTEM_ADMIN の運営管理権限とテナント業務情報へのアクセスを分離し、通常の所属・役割・担当権限に従う基本方針を明記。§3.3.1・§3.5の旧方針には注記を付し、認可コード・UI は未変更、CMP-260930-0233 の実装・完了とは区別。 |
 | 2026-06-12 | **ステータス追従**: Phase 1〜3 完了（#1266・2026-06-02 点火）を反映。冒頭ステータス・§1 概要・§5 カタログの「現状挙動」列・§8 段階計画の実装状態列を更新。根治済みの病巣記述に「根治済み注記」を追記。ShiftPdf 負論理(E)・出席開示(D)の根治（#1263・点火前の前哨修正）、統合テスト 11 シナリオ（#1266 `AuthorizationIntegrationTest`）の完了を実機コード（`ShiftPdfController.java:43` / `ShiftPdfService.checkMemberAndNotSupporter`）で裏取りして反映。残課題は Phase 6（性能最適化）のみ。 |
 | 2026-05-31 | §15 を F08.7.1 最新版に**改訂**: (a) §15.2 に**ファイル置き場の PUBLIC 露出方針**を追加（連絡スペースの `is_public` に追従・PUBLIC は VIEW/DOWNLOAD のみ・書込は代表＋主催者・`TournamentContactAccessService.canView/canPost` 流用）。(b) §15.3 リーグ移籍を**プッシュ＋承認の対称モデル**に改訂（昇格=下位 org 送り出し／降格=上位 org 送り出し → 受け入れ側 org が承認。送り先は親系列/子孫 ASSOCIATION に限定。チームは閲覧のみ）。(c) §15.4 **試合メンバー表**の認可を新設（提出=自チーム ADMIN/DEPUTY・閲覧/締切=主催組織 ADMIN・代理入力なし・締切後 409）。 |
 | 2026-06-02 | §8 段階計画テーブルに Phase 6「認可層性能最適化」（per-scope 判定結果を Valkey にキャッシュ TTL:60秒・N+1 解消）を追加 |

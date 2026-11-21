@@ -13,8 +13,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -50,6 +50,11 @@ class OrgTeamGroupAssignmentRateLimitWiringIT extends AbstractOrgTeamGroupAssign
 
     private static final int LIMIT = 20;
 
+    @Autowired
+    private ValkeyRateLimiter rateLimiter;
+
+    private Clock originalClock;
+
     /** Valkey の代役（zone+key ごとの固定ウィンドウカウンタ）。 */
     private final Map<String, AtomicLong> counters = new ConcurrentHashMap<>();
 
@@ -57,22 +62,22 @@ class OrgTeamGroupAssignmentRateLimitWiringIT extends AbstractOrgTeamGroupAssign
     private OrgTeamGroupEntity group;
     private String bulkPath;
 
-    @Autowired
-    private ValkeyRateLimiter rateLimiter;
-
-    private Clock originalClock;
-
     @BeforeEach
     void setUp() {
         originalClock = (Clock) ReflectionTestUtils.getField(rateLimiter, "clock");
-        // 結線・主体別カウンタの試験中に実時刻の分境界で別ウィンドウへ移ることを防ぐ。
-        ReflectionTestUtils.setField(rateLimiter, "clock",
-                Clock.fixed(Instant.parse("2026-03-03T00:00:30Z"), ZoneOffset.UTC));
+        assertThat(originalClock).isNotNull();
+        ReflectionTestUtils.invokeMethod(rateLimiter, "setClock",
+                Clock.fixed(Instant.parse("2026-10-08T00:35:30Z"), ZoneOffset.UTC));
         counters.clear();
         willAnswer(invocation -> {
             List<?> keys = invocation.getArgument(1);
             String redisKey = String.valueOf(keys.get(0));
-            return counters.computeIfAbsent(redisKey, k -> new AtomicLong()).incrementAndGet();
+            // 時刻依存フレークの根治: redisKey は mannschaft:rate:{zone}:{key}:{windowStart}（壁時計の分）。
+            // 21回のリクエスト中に分の境界をまたぐと windowStart が変わりカウントが1に戻って
+            // X-RateLimit-Remaining が割れる。本テストはフィルタ結線とヘッダ値の検証が責務であり、
+            // 固定ウィンドウ境界の挙動は ValkeyRateLimiterTest の責務なので、windowStart を落として集計する。
+            String counterKey = redisKey.substring(0, redisKey.lastIndexOf(':'));
+            return counters.computeIfAbsent(counterKey, k -> new AtomicLong()).incrementAndGet();
         }).given(redisTemplate).execute(any(RedisScript.class), anyList(), any());
 
         org = newOrg(true);
@@ -86,7 +91,9 @@ class OrgTeamGroupAssignmentRateLimitWiringIT extends AbstractOrgTeamGroupAssign
 
     @AfterEach
     void restoreClock() {
-        ReflectionTestUtils.setField(rateLimiter, "clock", originalClock);
+        if (originalClock != null) {
+            ReflectionTestUtils.invokeMethod(rateLimiter, "setClock", originalClock);
+        }
     }
 
     @Test

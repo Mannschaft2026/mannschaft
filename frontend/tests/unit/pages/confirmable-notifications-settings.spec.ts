@@ -24,11 +24,13 @@ const roleName = ref<string | null>('ADMIN')
 vi.mock('~/composables/useRoleAccess', () => ({
   useRoleAccess: () => ({
     roleName,
+    isScopeAdmin: computed(() => roleName.value === 'ADMIN'),
+    can: vi.fn(() => false),
     isAdmin: computed(() => roleName.value === 'ADMIN'),
     isAdminOrDeputy: computed(
       () => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN',
     ),
-    loadPermissions: vi.fn().mockResolvedValue(undefined),
+    loadPermissions: vi.fn().mockResolvedValue({ ok: true }),
   }),
 }))
 
@@ -68,10 +70,10 @@ vi.mock('~/composables/useTeamApi', () => ({
 }))
 
 const orgNumericId = ref(456)
-vi.mock('~/composables/useOrgShellContext', () => ({
-  useOrgShellContext: () => ({
-    org: computed(() => ({ numericId: orgNumericId.value })),
-  }),
+// 組織ページは親シェルの org に依存せず、slug から getOrganization で数値IDを自前解決する（CMP-261115-1635）
+const getOrganization = vi.fn(async () => ({ data: { numericId: orgNumericId.value } }))
+vi.mock('~/composables/useOrganizationApi', () => ({
+  useOrganizationApi: () => ({ getOrganization }),
 }))
 
 async function mountTeamSidebar() {

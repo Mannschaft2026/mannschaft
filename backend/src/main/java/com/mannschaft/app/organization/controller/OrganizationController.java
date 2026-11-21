@@ -2,6 +2,7 @@ package com.mannschaft.app.organization.controller;
 
 import com.mannschaft.app.common.dto.SlugAvailabilityResponse;
 import com.mannschaft.app.organization.service.OrgTeamListService;
+import com.mannschaft.app.organization.service.OrganizationDetailFacade;
 import com.mannschaft.app.organization.service.OrganizationService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
@@ -31,6 +32,7 @@ import com.mannschaft.app.role.dto.BlockRequest;
 import com.mannschaft.app.role.dto.BlockResponse;
 import com.mannschaft.app.role.dto.CreateInviteTokenRequest;
 import com.mannschaft.app.role.dto.EffectivePermissionsResponse;
+import com.mannschaft.app.role.dto.InviteTokenIssuedResponse;
 import com.mannschaft.app.role.dto.InviteTokenResponse;
 import com.mannschaft.app.role.dto.MemberResponse;
 import com.mannschaft.app.role.dto.PermissionGroupRequest;
@@ -84,6 +86,8 @@ public class OrganizationController {
     private static final String SCOPE_TYPE = "ORGANIZATION";
 
     private final OrganizationService organizationService;
+    /** 組織詳細（サポーター数の合成込み。CMP-261004-1942）。トランザクションの外で各ドメインを順に呼ぶ。 */
+    private final OrganizationDetailFacade organizationDetailFacade;
     private final RoleService roleService;
     private final AccessControlService accessControlService;
     private final OrgTeamListService orgTeamListService;
@@ -181,7 +185,7 @@ public class OrganizationController {
         // PUBLIC は未認証含め公開、PRIVATE は非メンバーに 403、不在は 404。
         contentVisibilityChecker.assertCanView(
                 ReferenceType.ORGANIZATION, id, SecurityUtils.getCurrentUserIdOrNull());
-        return ResponseEntity.ok(organizationService.getOrganization(slug));
+        return ResponseEntity.ok(organizationDetailFacade.getOrganization(slug));
     }
 
     @PatchMapping("/{slug}")
@@ -195,7 +199,7 @@ public class OrganizationController {
         // F00 正準: 組織そのものの設定変更は当該組織の ADMIN/DEPUTY 相当のみ許可する
         // （同一クラスの兄弟 EP renameSlug と同じ流儀に揃える）。
         accessControlService.checkAdminOrAbove(SecurityUtils.getCurrentUserId(), id, SCOPE_TYPE);
-        return ResponseEntity.ok(organizationService.updateOrganization(id, req));
+        return ResponseEntity.ok(organizationDetailFacade.updateOrganization(id, req));
     }
 
     @PutMapping("/{slug}/slug")
@@ -206,7 +210,7 @@ public class OrganizationController {
         Long id = organizationService.resolveOrgId(slug);
         // F00 正準: 当該組織の ADMIN/DEPUTY 相当のみ許可（独自 gate を作らず checkAdminOrAbove に委譲）
         accessControlService.checkAdminOrAbove(SecurityUtils.getCurrentUserId(), id, SCOPE_TYPE);
-        return ResponseEntity.ok(organizationService.renameSlug(id, req.getNewSlug()));
+        return ResponseEntity.ok(organizationDetailFacade.renameSlug(id, req.getNewSlug()));
     }
 
     @DeleteMapping("/{slug}")
@@ -443,7 +447,7 @@ public class OrganizationController {
     @PostMapping("/{slug}/invite-tokens")
     @Operation(summary = "招待トークン作成")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "作成成功")
-    public ResponseEntity<ApiResponse<InviteTokenResponse>> createInviteToken(
+    public ResponseEntity<ApiResponse<InviteTokenIssuedResponse>> createInviteToken(
             @PathVariable String slug, @Valid @RequestBody CreateInviteTokenRequest req) {
         Long id = organizationService.resolveOrgId(slug);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -577,7 +581,10 @@ public class OrganizationController {
         Long userId = SecurityUtils.getCurrentUserId();
         List<String> permissions = roleService.resolveEffectivePermissions(userId, id, SCOPE_TYPE);
         String roleName = accessControlService.getRoleName(userId, id, SCOPE_TYPE);
-        return ResponseEntity.ok(ApiResponse.of(new EffectivePermissionsResponse(roleName, permissions)));
+        boolean scopeAdmin = accessControlService.isAdmin(userId, id, SCOPE_TYPE);
+        boolean canGrantAdminOnly = accessControlService.canActAsScopeAdminOnly(userId, id, SCOPE_TYPE);
+        return ResponseEntity.ok(ApiResponse.of(
+                new EffectivePermissionsResponse(roleName, permissions, scopeAdmin, canGrantAdminOnly)));
     }
 
     /**

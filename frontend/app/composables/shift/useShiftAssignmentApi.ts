@@ -1,13 +1,15 @@
+import type { ShiftSlotResponse } from '~/types/shift'
+
 export function useShiftAssignmentApi() {
   const api = useApi()
-  const BASE = '/api/v1/shifts/schedules'
+  const BASE = '/api/v1/shifts'
 
   // === Slot Assignments (D&D) ===
   async function patchSlotAssignments(
     slotId: number,
     req: { addUserIds?: number[]; removeUserIds?: number[]; slotVersion: number },
   ) {
-    return api<{ data: unknown }>(`${BASE}/slots/${slotId}/assignments`, {
+    return api<{ data: ShiftSlotResponse }>(`${BASE}/slots/${slotId}/assignments`, {
       method: 'PATCH',
       body: req,
     })

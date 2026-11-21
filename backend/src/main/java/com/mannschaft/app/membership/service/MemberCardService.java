@@ -45,8 +45,52 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class MemberCardService {
+
+    /** ポイント読取用の検証済み共通会員証。更新処理の権限は表さない。 */
+    public record VerifiedPlatformCard(Long userId, Long memberCardId, long expiresAtEpoch) { }
+
+    /** activeな本人の共通会員証を確保する。停止済みカードは復活させない。 */
+    public ApiResponse<com.mannschaft.app.membership.dto.PlatformCardResponse> ensureMyPlatformCard(Long actorUserId) {
+        return platformCardService.ensure(actorUserId);
+    }
+
+    /** 共通会員QRを検証し、チェックイン等の副作用を起こさず本人を解決する。 */
+    @Transactional(readOnly = true)
+    public VerifiedPlatformCard verifyPlatformQr(String qrToken) {
+        if (qrToken == null || qrToken.length() > 512) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_021);
+        }
+        QrTokenService.MemberCardTokenPayload payload = qrTokenService.parseMemberCardToken(qrToken);
+        if (payload == null || !isCanonicalCardCode(payload.cardCode())
+                || !qrTokenService.hasValidMemberCardTimes(payload)) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_021);
+        }
+        MemberCardEntity card = memberCardRepository.findByCardCodeAndDeletedAtIsNull(payload.cardCode())
+                .filter(found -> found.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(MembershipErrorCode.MEMBERSHIP_007));
+        if (!qrTokenService.verifyMemberCardSignature(payload, card.getQrSecret())) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_006);
+        }
+        if (card.getScopeType() != ScopeType.PLATFORM || card.getScopeId() != null) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_012);
+        }
+        if (card.getStatus() != CardStatus.ACTIVE) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_003);
+        }
+        return new VerifiedPlatformCard(card.getUserId(), card.getId(), payload.expiresAt());
+    }
+
+    private boolean isCanonicalCardCode(String code) {
+        if (code == null || code.length() != 36) {
+            return false;
+        }
+        try {
+            return java.util.UUID.fromString(code).toString().equalsIgnoreCase(code);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
 
     private static final int CHECKIN_COOLDOWN_MINUTES = 5;
 
@@ -57,6 +101,7 @@ public class MemberCardService {
     private final ApplicationEventPublisher eventPublisher;
     private final NameResolverService nameResolverService;
     private final AccessControlService accessControlService;
+    private final PlatformCardService platformCardService;
 
     /**
      * 自分の会員証一覧を取得する。
@@ -64,6 +109,7 @@ public class MemberCardService {
      * @param userId ユーザーID
      * @return 会員証一覧
      */
+    @Transactional(readOnly = true)
     public ApiResponse<List<MemberCardResponse>> getMyCards(Long userId) {
         List<MemberCardEntity> cards = memberCardRepository
                 .findByUserIdAndDeletedAtIsNullOrderByIssuedAtAsc(userId);
@@ -82,12 +128,12 @@ public class MemberCardService {
      * @param userId リクエストユーザーID
      * @return 会員証詳細
      */
+    @Transactional(readOnly = true)
     public ApiResponse<MemberCardDetailResponse> getCardDetail(Long cardId, Long userId) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
-        // 本人 or ADMIN/DEPUTY_ADMIN なら閲覧可
-        accessControlService.checkOwnerOrAdmin(
-                userId, card.getUserId(), card.getScopeId(), card.getScopeType().name());
+        // 本人 or そのスコープの ADMIN/DEPUTY_ADMIN なら閲覧可。権限なしは不在と同じ 404 に畳む（存在秘匿）
+        requireOwnerOrScopeAdminOrConceal(card, userId);
 
         MemberCardDetailResponse response = new MemberCardDetailResponse(
                 card.getId(),
@@ -112,11 +158,13 @@ public class MemberCardService {
      * @param userId リクエストユーザーID
      * @return QRトークン
      */
+    @Transactional(readOnly = true)
     public ApiResponse<QrTokenResponse> getQrToken(Long cardId, Long userId) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
+        // 所有者以外は不在と同じ MEMBERSHIP_001（存在秘匿）。状態・ロール判定は所有者確認の後
         if (!card.getUserId().equals(userId)) {
-            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_002);
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
         }
 
         if (card.getStatus() != CardStatus.ACTIVE) {
@@ -150,12 +198,15 @@ public class MemberCardService {
     public ApiResponse<RegenerateResponse> regenerateQr(Long cardId, Long userId) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
+        // 所有者以外は不在と同じ MEMBERSHIP_001（存在秘匿）。状態・ロール判定は所有者確認の後
         if (!card.getUserId().equals(userId)) {
-            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_002);
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
         }
 
-        // SUPPORTERロール以上であることを検証（GUEST不可）
-        if (!accessControlService.hasRoleOrAbove(userId, card.getScopeId(), card.getScopeType().name(), "SUPPORTER")) {
+        // SUPPORTERロール以上であることを検証（GUEST不可）。
+        // PLATFORM（運営）会員証には実テナントが無くロール判定の対象外（所有者本人であることは上で確認済み）。
+        if (card.getScopeType() != ScopeType.PLATFORM
+                && !accessControlService.hasRoleOrAbove(userId, card.getScopeId(), card.getScopeType().name(), "SUPPORTER")) {
             throw new BusinessException(MembershipErrorCode.MEMBERSHIP_004);
         }
 
@@ -377,6 +428,7 @@ public class MemberCardService {
      * @param q             検索クエリ
      * @return 会員証一覧とメタ情報
      */
+    @Transactional(readOnly = true)
     public Map<String, Object> getScopeMemberCards(Long currentUserId, ScopeType scopeType, Long scopeId,
                                                     CardStatus status, String q) {
         // 認可: スコープの ADMIN/DEPUTY_ADMIN のみ。非管理者・非メンバー・他スコープ指定は 403。
@@ -432,8 +484,7 @@ public class MemberCardService {
     public ApiResponse<CardStatusResponse> suspend(Long cardId) {
         MemberCardEntity card = findCardOrThrow(cardId);
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        requireMemberOrConceal(card, currentUserId);
-        accessControlService.checkAdminOrAbove(currentUserId, card.getScopeId(), card.getScopeType().name());
+        requireScopeAccess(card, currentUserId);
 
         if (card.getStatus() == CardStatus.SUSPENDED) {
             throw new BusinessException(MembershipErrorCode.MEMBERSHIP_016);
@@ -464,8 +515,7 @@ public class MemberCardService {
     public ApiResponse<CardStatusResponse> reactivate(Long cardId) {
         MemberCardEntity card = findCardOrThrow(cardId);
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        requireMemberOrConceal(card, currentUserId);
-        accessControlService.checkAdminOrAbove(currentUserId, card.getScopeId(), card.getScopeType().name());
+        requireScopeAccess(card, currentUserId);
 
         if (card.getStatus() == CardStatus.REVOKED) {
             throw new BusinessException(MembershipErrorCode.MEMBERSHIP_017);
@@ -492,13 +542,13 @@ public class MemberCardService {
      * @param to     終了日時
      * @return チェックイン履歴
      */
+    @Transactional(readOnly = true)
     public ApiResponse<List<CheckinHistoryResponse>> getCheckinHistory(
             Long cardId, Long userId, LocalDateTime from, LocalDateTime to) {
         MemberCardEntity card = findCardOrThrow(cardId);
 
-        // 本人 or ADMIN/DEPUTY_ADMIN なら閲覧可
-        accessControlService.checkOwnerOrAdmin(
-                userId, card.getUserId(), card.getScopeId(), card.getScopeType().name());
+        // 本人 or そのスコープの ADMIN/DEPUTY_ADMIN なら閲覧可。権限なしは不在と同じ 404 に畳む（存在秘匿）
+        requireOwnerOrScopeAdminOrConceal(card, userId);
 
         if (from == null) {
             from = LocalDateTime.now().minusDays(30);
@@ -546,6 +596,7 @@ public class MemberCardService {
      * @param to        終了日時
      * @return チェックイン履歴
      */
+    @Transactional(readOnly = true)
     public ApiResponse<List<CheckinHistoryResponse>> getScopeCheckins(
             ScopeType scopeType, Long scopeId, LocalDateTime from, LocalDateTime to) {
         accessControlService.checkAdminOrAbove(SecurityUtils.getCurrentUserId(), scopeId, scopeType.name());
@@ -602,6 +653,39 @@ public class MemberCardService {
      * 存在を秘匿するため、通常の {@code checkAdminOrAbove}（403）ではなく会員証の NOT_FOUND
      * コード（404）を投げる（incident ドメイン {@code requireMemberOrConceal} と同じ設計）。
      */
+    /**
+     * suspend/reactivate の認可。PLATFORM（運営）会員証には実テナント（チーム/組織）が無く、
+     * ScopeType 由来のメンバー・ロール判定を行えない（ScopeType に PLATFORM が無い）ため、
+     * 所有者本人のみ可とし、他人には存在を秘匿して NOT_FOUND を返す。
+     * TEAM / ORGANIZATION は従来どおり（メンバー判定 404 + ADMIN 以上 403）。
+     */
+    private void requireScopeAccess(MemberCardEntity card, Long currentUserId) {
+        if (card.getScopeType() == ScopeType.PLATFORM) {
+            if (!card.getUserId().equals(currentUserId)) {
+                throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
+            }
+            return;
+        }
+        requireMemberOrConceal(card, currentUserId);
+        accessControlService.checkAdminOrAbove(currentUserId, card.getScopeId(), card.getScopeType().name());
+    }
+
+    /**
+     * 本人、またはその会員証のスコープの ADMIN/DEPUTY_ADMIN のみ通す。それ以外は会員証不在と同じ
+     * MEMBERSHIP_001（404）を投げ、他人の会員証の存在を秘匿する。PLATFORM 会員証は本人のみ。
+     * 共通部品 {@code checkOwnerOrAdmin}（403 COMMON_002）は存在を漏らすため使わない。
+     */
+    private void requireOwnerOrScopeAdminOrConceal(MemberCardEntity card, Long userId) {
+        if (card.getUserId().equals(userId)) {
+            return;
+        }
+        boolean admin = card.getScopeType() != ScopeType.PLATFORM
+                && accessControlService.isAdminOrAbove(userId, card.getScopeId(), card.getScopeType().name());
+        if (!admin) {
+            throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);
+        }
+    }
+
     private void requireMemberOrConceal(MemberCardEntity card, Long currentUserId) {
         if (!accessControlService.isMember(currentUserId, card.getScopeId(), card.getScopeType().name())) {
             throw new BusinessException(MembershipErrorCode.MEMBERSHIP_001);

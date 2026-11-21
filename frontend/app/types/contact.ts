@@ -57,6 +57,8 @@ export interface ContactPrivacySettings {
 }
 
 export interface HandleSearchResult {
+  /** false のとき見つからない（BE は 200 で found:false と null 群を返す） */
+  found: boolean
   userId: number
   fullName: string
   contactHandle: string
@@ -91,5 +93,5 @@ export interface SendContactRequestBody {
 export interface CreateInviteTokenBody {
   label?: string
   maxUses?: number | null
-  expiresIn?: '1d' | '7d' | '30d' | null
+  expiresIn?: '1d' | '7d' | '30d' | 'unlimited' | null
 }

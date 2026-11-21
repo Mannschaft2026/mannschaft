@@ -25,7 +25,7 @@ F08.7 大会・リーグ管理は **バックエンドの大会 CRUD・ディビ
 
 設計領域は 7 つに分かれ、それぞれ連番ファイルに詳述する:
 
-1. **連絡機能**（[01_communication.md](./01_communication.md)）— 大会全体＋各ディビジョンの二段で掲示板・チャットの連絡スペースを自動付帯。read/write 分離認可、公開トグル、自動生成フック、削除・退会の取り扱い。
+1. **連絡機能**（[01_communication.md](./01_communication.md)）— 大会全体＋各ディビジョンの二段で掲示板・チャットの連絡スペースを自動付帯。read/write 分離認可、公開トグル、自動生成フック、削除・退会の取り扱い。 参加者向けの入口（チーム側画面・一覧 API）は 01 §10（CMP-261118-0900）。
 2. **成績ウィジェット**（[02_dashboard_widgets.md](./02_dashboard_widgets.md)）— 自チーム成績／主催大会サマリ／順位表の 3 ウィジェットを F02.2 系の詳細ダッシュボードに追加。既存可視性インフラ（`dashboard_widget_role_visibility` / `dashboard_widget_settings`）に enum 追加だけで乗る。
 3. **リーグ・ピラミッド＋昇降格移籍**（[03_league_pyramid_and_transfer.md](./03_league_pyramid_and_transfer.md)）— 組織階層（`organizations.parent_organization_id`）からリーグ・ピラミッドを導出し、組織をまたぐ昇降格を **「プッシュ＋承認」の対称モデル**（手放す側 org が送り出し → 受け入れ側 org が承認）で `league_transfer` テーブルにより実現。通算成績・テンプレート・identity・順位履歴は team_id 串刺しで自動的に付いてくる。
 4. **リーグ単位ファイル置き場**（[04_file_storage.md](./04_file_storage.md)）— 既存 F05.5 ファイル共有を再利用し、フォルダスコープ enum＝`FileScopeType`（`com.mannschaft.app.filesharing`）に `TOURNAMENT` / `TOURNAMENT_DIVISION` を追加。大会/ディビジョン単位のフォルダを自動付帯し、アクセスは連絡スペースと同規則（閲覧=参加チーム＋公開トグル、書込=代表＋主催者）。クォータは主催組織に集約（クォータ計量 enum＝`StorageScopeType` は新値を追加せず `ORGANIZATION` 流用）。

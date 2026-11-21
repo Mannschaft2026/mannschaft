@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -216,7 +217,19 @@ public class ShiftRequestService {
         // 認可は Facade 済み。希望→親スケジュールを読み直し（親行は認可の後にここで FOR UPDATE）、
         // 認可の後に親が消えた競合は解決時と同じ SHIFT_003 の 404・DB 不変にする。
         ShiftRequestEntity entity = findRequestOrThrow(requestId);
+        Long scheduleId = entity.getScheduleId();
         ShiftScheduleEntity schedule = findParentScheduleOrConceal(entity);
+
+        // 親ロック前の希望・親は RR snapshot / 1次 cache に残る。最新の日付・撤回・状態を再検証する。
+        try {
+            requestRepository.refreshForPreferenceUpdate(schedule, entity);
+        } catch (EmptyResultDataAccessException e) {
+            throw new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
+        }
+        if (schedule.getDeletedAt() != null || entity.getDeletedAt() != null
+                || !scheduleId.equals(entity.getScheduleId())) {
+            throw new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
+        }
 
         validateCollectingStatus(schedule);
         validateRequestDeadline(schedule);

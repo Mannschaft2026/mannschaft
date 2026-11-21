@@ -327,7 +327,7 @@ function openDetail(scheduleId: number) {
           @click="showCreateDialog = false"
         />
         <Button
-          :label="t('shift.action.create')"
+          :label="t('button.create')"
           icon="pi pi-check"
           class="min-h-11 min-w-11"
           :loading="creating"

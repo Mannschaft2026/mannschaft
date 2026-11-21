@@ -321,6 +321,10 @@ public class NotificationFanoutJobService {
      * <p>呼び出し側にトランザクションが無いときに使う（ある場合はそのトランザクションに参加してしまうため、
      * 業務の書き込みトランザクションの中からは呼ばない）。</p>
      *
+     * <p><b>2-C は通知 outbox へ移行済み</b>（docs/architecture/notification_outbox.md §10）で、本番コードの呼び出し元は無い。
+     * notification 以外のドメインからの依存は番人 D-3P-3 が禁じる（{@code CrossDomainMandatoryPropagationArchTest}。
+     * 検出の陽性検体が本メソッドを参照している）。</p>
+     *
      * @param command enqueue の引数一式
      * @return 登録済み（新規または既存）の親ジョブ行の ID とシャード状態
      */
@@ -515,6 +519,44 @@ public class NotificationFanoutJobService {
         }
         // findReady は managed entity を返すため dirty checking で RUNNING がコミット時にフラッシュされる。
         return jobs;
+    }
+
+    /** M専用の開始窓口。現在行をロックし、終了済みjobの再開始を防ぐ。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean tryMarkModuleEventRunning(UUID jobId) {
+        NotificationFanoutJob job = jobRepository.findByIdForUpdate(jobId).orElse(null);
+        if (!isMutableModuleEventJob(job)) {
+            return false;
+        }
+        markRunning(jobId);
+        return true;
+    }
+
+    /** M専用のcursor窓口。現在位置より先への前進だけを一度加算する。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void advanceModuleEventCursor(UUID jobId, long newCursor, long addedCount) {
+        NotificationFanoutJob job = jobRepository.findByIdForUpdate(jobId).orElse(null);
+        if (!isMutableModuleEventJob(job) || newCursor <= job.getCursorSubjectId()) {
+            return;
+        }
+        advanceCursor(jobId, newCursor, addedCount);
+    }
+
+    /** M専用の失敗窓口。終了済みjobの状態と失敗counterを保持する。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordModuleEventFailure(UUID jobId, String error, int maxRetry, boolean immediateDeadLetter) {
+        NotificationFanoutJob job = jobRepository.findByIdForUpdate(jobId).orElse(null);
+        if (!isMutableModuleEventJob(job)) {
+            return;
+        }
+        recordFailure(jobId, error, maxRetry, immediateDeadLetter);
+    }
+
+    private boolean isMutableModuleEventJob(NotificationFanoutJob job) {
+        return job != null
+                && "MODULE_EVENT_NOTICE".equals(job.getNotificationType())
+                && job.getStatus() != NotificationFanoutJobStatus.DONE
+                && job.getStatus() != NotificationFanoutJobStatus.DEAD_LETTER;
     }
 
     /** ジョブを RUNNING に遷移させる（{@link #processOne} を直接呼ぶ経路の保険・独立コミット）。 */

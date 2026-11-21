@@ -11,6 +11,7 @@ const runtimeConfig = useRuntimeConfig()
 const api = useApi()
 const { t } = useI18n()
 const notification = useNotification()
+const { applyAccountLocale } = useLocale()
 
 const error = ref<string | null>(null)
 const loading = ref(true)
@@ -27,11 +28,19 @@ onMounted(async () => {
 
   try {
     const res = await loginWithOAuth('google', { code })
-    const tokenData = res.data
-    authStore.setTokens(tokenData.accessToken, tokenData.refreshToken)
-    // OAuth ログイン成立直後に先回りリフレッシュタイマーを武装する（capture 済み runtimeConfig を渡す）。
-    armProactiveRefresh(runtimeConfig, authStore)
-
+    const result = res.data
+    // 応答は三択: MFA 要求（2FA 有効。トークンは未発行） / 連携競合（メール一致の既存アカウント） / トークン発行。
+    // 2FA 有効ユーザーにトークンは返らないため、setTokens せず 2FA 検証画面へ進む（2FA を迂回させない）。
+    if ('mfaRequired' in result && result.mfaRequired) {
+      await router.push(buildMfaVerifyTarget(result))
+      return
+    }
+    if (!('accessToken' in result)) {
+      // 連携確認メール送信済み。ログイン画面で案内する
+      await router.push('/login?oauthConflict=true')
+      return
+    }
+    authStore.setTokens(result.accessToken, result.refreshToken)
     // プロフィールを取得してユーザー情報を更新
     try {
       const profile = await api<{
@@ -55,9 +64,14 @@ onMounted(async () => {
         timezone: profile.data.timezone ?? undefined,
         locale: profile.data.locale || undefined,
       })
+      // ログイン時もアカウント言語を正として Cookie と表示を揃える（CMP-261007-1243）。
+      await applyAccountLocale(profile.data.locale)
     } catch {
       // プロフィール取得失敗はサイレント（トークンは取得済み）
     }
+
+    // 本人の復元による世代更新が終わってからタイマーを武装する。
+    armProactiveRefresh(runtimeConfig, authStore)
 
     // ログイン成立直後にアカウント設定（外観・ナビ）をサーバーから同期する。
     // 新ブラウザ（シークレット等）で localStorage が空でも BEの保存済み設定が反映される。
@@ -69,13 +83,8 @@ onMounted(async () => {
     } else {
       await router.push('/dashboard')
     }
-  } catch (e: unknown) {
-    // 202: メール競合 → 連携確認メール送信済み
-    const status = (e as { response?: { status?: number } })?.response?.status
-    if (status === 202) {
-      await router.push('/login?oauthConflict=true')
-      return
-    }
+  } catch {
+    // 連携競合は 200 で返る（上の分岐）。ここへ来るのは API 失敗・遷移失敗のみで、画面にエラーを表示する
     error.value = t('auth.oauth.callback_error')
   } finally {
     loading.value = false

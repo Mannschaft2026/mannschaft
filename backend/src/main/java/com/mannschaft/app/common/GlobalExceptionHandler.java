@@ -7,20 +7,23 @@ import com.mannschaft.app.billing.api.dto.BillingConflictErrorResponse;
 import com.mannschaft.app.billing.api.dto.FeatureNotEntitledErrorResponse;
 import com.mannschaft.app.common.duplicatename.DuplicateNameConfirmationErrorResponse;
 import com.mannschaft.app.common.duplicatename.DuplicateNameConfirmationRequiredException;
+import com.mannschaft.app.common.i18n.ErrorMessageResolver;
 import com.mannschaft.app.errorreport.ErrorReportSeverity;
 import com.mannschaft.app.errorreport.service.ErrorReportNotifier;
 import com.mannschaft.app.errorreport.service.ErrorReportService;
 import com.mannschaft.app.recruitment.RecruitmentPenaltyActiveException;
 import com.mannschaft.app.recruitment.dto.RecruitmentPenaltyActiveErrorResponse;
+import com.mannschaft.app.todo.TodoErrorCode;
 import com.mannschaft.app.todo.exception.MilestoneLockedException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
-import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -51,7 +54,11 @@ import java.util.Set;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private final MessageSource messageSource;
+    /**
+     * CMP-261113-1507: 文言解決の正本。全ハンドラはここを通して利用者の言語で message を作る
+     * （enum 文言の直使い＝{@code ErrorResponse.of(errorCode)} は使わない）。
+     */
+    private final ErrorMessageResolver errorMessageResolver;
 
     /**
      * F10.6 Phase 10-β-1 — error_reports への記録経路。
@@ -79,7 +86,7 @@ public class GlobalExceptionHandler {
     public GlobalExceptionHandler(MessageSource messageSource,
                                   ObjectProvider<ErrorReportService> errorReportServiceProvider,
                                   ObjectProvider<ErrorReportNotifier> errorReportNotifierProvider) {
-        this.messageSource = messageSource;
+        this.errorMessageResolver = new ErrorMessageResolver(messageSource);
         this.errorReportServiceProvider = errorReportServiceProvider;
         this.errorReportNotifierProvider = errorReportNotifierProvider;
     }
@@ -90,6 +97,50 @@ public class GlobalExceptionHandler {
      */
     // 型推論限界回避のため明示型指定（エントリ数増加に伴う javac 推論破綻を根治）
     private static final Map<String, HttpStatus> ERROR_CODE_STATUS_MAP = Map.<String, HttpStatus>ofEntries(
+            // F18.1: 入力不正400と所有/認可/状態競合を区別する（設計§9）。
+            Map.entry("LOYALTY_001", HttpStatus.NOT_FOUND),
+            Map.entry("LOYALTY_002", HttpStatus.FORBIDDEN),
+            Map.entry("LOYALTY_003", HttpStatus.FORBIDDEN),
+            Map.entry("LOYALTY_005", HttpStatus.CONFLICT),
+            Map.entry("LOYALTY_006", HttpStatus.CONFLICT),
+            Map.entry("LOYALTY_007", HttpStatus.CONFLICT),
+            Map.entry("LOYALTY_011", HttpStatus.NOT_FOUND),
+            Map.entry("LOYALTY_012", HttpStatus.TOO_MANY_REQUESTS),
+            Map.entry("LOYALTY_013", HttpStatus.CONFLICT),
+            Map.entry("LOYALTY_014", HttpStatus.CONFLICT),
+            Map.entry("LOYALTY_015", HttpStatus.FORBIDDEN),
+            // 本人出生・診断の専用コード。既存authコードの意味は変更しない。
+            Map.entry("BIRTHPROFILE_001", HttpStatus.BAD_REQUEST),
+            Map.entry("BIRTHPROFILE_002", HttpStatus.CONFLICT),
+            Map.entry("BIRTHPROFILE_003", HttpStatus.NOT_FOUND),
+            Map.entry("BIRTHPROFILE_004", HttpStatus.CONFLICT),
+            Map.entry("BIRTHPROFILE_005", HttpStatus.CONFLICT),
+            Map.entry("BIRTHPROFILE_006", HttpStatus.CONFLICT),
+            Map.entry("BIRTHPROFILE_007", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("BIRTHPROFILE_008", HttpStatus.CONFLICT),
+            Map.entry("BIRTHPROFILE_009", HttpStatus.CONFLICT),
+            Map.entry("DIAGNOSIS_001", HttpStatus.BAD_REQUEST),
+            Map.entry("DIAGNOSIS_002", HttpStatus.NOT_FOUND),
+            Map.entry("DIAGNOSIS_003", HttpStatus.CONFLICT),
+            Map.entry("DIAGNOSIS_004", HttpStatus.CONFLICT),
+            Map.entry("DIAGNOSIS_005", HttpStatus.SERVICE_UNAVAILABLE),
+            // F06.4.1 個人の頑張り記録: 不在/他人は存在秘匿で 404、状態競合 409、権限 403、基盤障害は 503
+            Map.entry("EFFORT_001", HttpStatus.NOT_FOUND),
+            Map.entry("EFFORT_002", HttpStatus.CONFLICT),
+            Map.entry("EFFORT_003", HttpStatus.FORBIDDEN),
+            Map.entry("EFFORT_004", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("EFFORT_005", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("DIAGNOSIS_006", HttpStatus.BAD_REQUEST),
+            // 本人操作の受付拒否と非ACTIVE拒否は既存認証エラーへ転用しない。
+            Map.entry("RECALLSESSION_001", HttpStatus.CONFLICT),
+            Map.entry("RECALLSESSION_002", HttpStatus.CONFLICT),
+            Map.entry("RECALLSESSION_003", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("AUTHOPERATION_001", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("AUTHOPERATION_002", HttpStatus.FORBIDDEN),
+            Map.entry("SOURCEOUTBOX_001", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("SOURCEOUTBOX_002", HttpStatus.NOT_FOUND),
+            Map.entry("SOURCEOUTBOX_003", HttpStatus.CONFLICT),
+            Map.entry("SOURCEOUTBOX_004", HttpStatus.CONFLICT),
             // Storage ACL: 不在は存在秘匿、所有境界違反は権限拒否、claim 状態競合は再試行不能として返す。
             // Storage ACL: existence is hidden; permission, and claim conflicts retain their own statuses.
             Map.entry("STORAGE_005", HttpStatus.NOT_FOUND),
@@ -187,6 +238,8 @@ public class GlobalExceptionHandler {
             Map.entry("ROLE_012", HttpStatus.CONFLICT),             // オファー状態不整合/期限切れ/発行後状態変化 → 409
             Map.entry("ROLE_013", HttpStatus.NOT_FOUND),            // オファー不在（BOLA）/対象非所属 → 404
             Map.entry("ROLE_014", HttpStatus.UNPROCESSABLE_ENTITY), // 自己委譲など不正対象 → 422
+            // CMP-261001-0835: 応援者（SUPPORTER）の /me 自主退会はフォロー解除 API への案内のため 422
+            Map.entry("ROLE_015", HttpStatus.UNPROCESSABLE_ENTITY),
             // F15.4 Phase 5-α: 店舗詳細 Public API（IDOR対策で 404）
             Map.entry("TEAM_001", HttpStatus.NOT_FOUND),
             // 組織不在は 404（Severity.WARN 既定の 400 を上書き）。兄弟の TEAM_001 と流儀を揃える。
@@ -287,9 +340,8 @@ public class GlobalExceptionHandler {
             // 自己スコープの「不在」は 404（IDOR ではなく単純な not-found だが、既存 EP 契約と揃える）
             Map.entry("AUTH_029", HttpStatus.NOT_FOUND),    // OAuthプロバイダー未連携（解除対象が存在しない）
             // 状態競合 → 409（AUTH_032 は上記の別ブロックで既に登録済み）
-            // AUTH_018 は Auth2faService 内で「TOTPコード不正」（verifyTotpCode 失敗）と
-            // 「TOTPコード使用済み」（リプレイ検出）の意味の異なる 2 箇所から throw されており、
-            // 定数の意味が割れているため変更を見送る（Severity.WARN 既定の 400 のまま）。
+            // AUTH_018 は「TOTPコード使用済み」（リプレイ検出）専用（CMP-261012-0910 で TOTP 設定確定の誤コードは
+            // AUTH_074 に分離した）。入力した確認コードの不備として Severity.WARN 既定の 400 のまま据え置く。
             // AUTH_021（バックアップコード全使用済み）は throw 元が存在しない未使用定数のため対象外。
             Map.entry("AUTH_025", HttpStatus.CONFLICT),     // WebAuthnデバイス重複登録
             Map.entry("AUTH_030", HttpStatus.CONFLICT),     // OAuth連携解除時ログイン手段喪失
@@ -302,6 +354,12 @@ public class GlobalExceptionHandler {
             // 「取消可能な退会申請という状態が無い」ことを理由に拒否する状態遷移違反のため、
             // 兄弟の SCHEDULE_KEEP_006 等と同じく 409 Conflict が正準（入力不備の 400 ではない）。
             Map.entry("AUTH_032", HttpStatus.CONFLICT), // 退会申請が存在しない状態での取消要求 → 409
+            // CMP-261012-0910 多要素認証(2FA)の穴埋め（AUTH_073/074/080/081 は Severity.WARN 既定の 400 のまま）
+            Map.entry("AUTH_075", HttpStatus.TOO_MANY_REQUESTS), // MFA 試行回数上限 → 429
+            Map.entry("AUTH_076", HttpStatus.TOO_MANY_REQUESTS), // メールOTP 再送待ち → 429
+            Map.entry("AUTH_077", HttpStatus.TOO_MANY_REQUESTS), // メールOTP 送信回数上限 → 429
+            Map.entry("AUTH_078", HttpStatus.CONFLICT),          // 2FA 有効化済み → 409
+            Map.entry("AUTH_079", HttpStatus.CONFLICT),          // 2FA 未有効 → 409
             // F03.3 カレンダー同期: 非メンバーの同期トグルは IDOR 対策で 403 ではなく 404（存在秘匿）
             Map.entry("GCAL_010", HttpStatus.NOT_FOUND),
             // F02.5 行動メモ: IDOR 対策で 403 ではなく 404 を返す
@@ -600,6 +658,10 @@ public class GlobalExceptionHandler {
             Map.entry("SHIFT_036", HttpStatus.TOO_MANY_REQUESTS),
             // F03.5 §11.3.5: 完全一致の重複割当（状態競合）→ 409
             Map.entry("SHIFT_042", HttpStatus.CONFLICT),                    // DUPLICATE_ASSIGNMENT
+            // CMP-261010-1432: 自己審査の禁止は明確な認可拒否 → 403、枠間移動の移動元不一致は状態競合 → 409
+            Map.entry("SHIFT_045", HttpStatus.FORBIDDEN),                   // SELF_REVIEW_FORBIDDEN
+            Map.entry("SHIFT_046", HttpStatus.CONFLICT),                    // MOVE_SOURCE_NOT_ASSIGNED
+            Map.entry("SHIFT_048", HttpStatus.CONFLICT),                    // REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED
             // F08.7 シフト予算 (Phase 9-α: 逆算 API)
             Map.entry("SHIFT_BUDGET_001", HttpStatus.SERVICE_UNAVAILABLE),  // FEATURE_DISABLED
             Map.entry("SHIFT_BUDGET_002", HttpStatus.BAD_REQUEST),          // EMPTY_POSITION_LIST
@@ -1266,6 +1328,8 @@ public class GlobalExceptionHandler {
             Map.entry("RESERVATION_051", HttpStatus.NOT_FOUND),              // RECURRING_BLOCKED_TIME_NOT_FOUND（IDOR秘匿）
             // F03.4.5 §6.4 W2-6 予約作成レートリミット（単枠・グループ共通バケット）
             Map.entry("RESERVATION_053", HttpStatus.TOO_MANY_REQUESTS),      // RESERVATION_CREATE_RATE_LIMITED
+            // CMP-261104-0334 臨時休業通知の冪等性（同じキーで内容が異なる再送は 409。056=キー形式不正は既定 400）
+            Map.entry("RESERVATION_055", HttpStatus.CONFLICT),               // CLOSURE_IDEMPOTENCY_KEY_REUSED
             // F06.5 アクティブリコール学習（IDOR 対策で 404、上限/範囲外は 400、楽観排他/マスク中編集/再輸出は 409）
             Map.entry("REFLECTION_001", HttpStatus.NOT_FOUND),              // NOT_FOUND（他人所有も IDOR 対策で 404）
             Map.entry("REFLECTION_002", HttpStatus.BAD_REQUEST),           // THEME_LIMIT_EXCEEDED
@@ -1665,14 +1729,9 @@ public class GlobalExceptionHandler {
             Map.entry("MEMBERSHIP_001", HttpStatus.NOT_FOUND),           // 会員証不在（IDOR 秘匿 → 404）
             Map.entry("MEMBERSHIP_019", HttpStatus.NOT_FOUND),           // 拠点不在／越境（IDOR 秘匿 → 404）
             // 認可監査 Wave6 ロットC: F02.1 QR会員証機能の残り未登録分。
-            //  - MEMBERSHIP_002（他人の会員証への getQrToken/regenerateQr アクセス）は
-            //    MemberCardService.java 118-119/153-154行 実測で cardId 直指定＋所有者不一致検知のため、
-            //    兄弟 MEMBERSHIP_001（会員証不在）と同一の存在秘匿 → 404（403 だと「その cardId は
-            //    存在するが他人のもの」と漏らしてしまう）。
             //  - MEMBERSHIP_004（SUPPORTER によるQR再生成拒否）は明確な認可拒否 → 403
             //  - MEMBERSHIP_003/009/010/016/017/018 はいずれも状態競合（非ACTIVE・無効化済み・
             //    二重スキャン・既にSUSPENDED・REVOKED再有効化不可・非SUSPENDED再有効化不可）→ 409
-            Map.entry("MEMBERSHIP_002", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_003", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_004", HttpStatus.FORBIDDEN),
             Map.entry("MEMBERSHIP_009", HttpStatus.CONFLICT),
@@ -1827,7 +1886,8 @@ public class GlobalExceptionHandler {
             Map.entry("ANNOUNCE_008", HttpStatus.NOT_FOUND),             // テンプレート不在 → 404
             Map.entry("ANNOUNCE_009", HttpStatus.FORBIDDEN),             // テンプレート操作権限なし → 403
             Map.entry("ANNOUNCE_010", HttpStatus.CONFLICT),              // テンプレート上限超過 → 409
-            Map.entry("BROADCAST_003", HttpStatus.NOT_FOUND),            // 一斉配信テンプレート不在 → 404
+            Map.entry("ANNOUNCE_011", HttpStatus.SERVICE_UNAVAILABLE),  // 組織告知一覧の継続トークン（Valkey）障害 → 503
+            Map.entry("BROADCAST_003", HttpStatus.BAD_REQUEST),         // 一斉配信テンプレート不在・他スコープ → 400（F01.2.1 §8.6。存在を区別しない）
             Map.entry("ORG_064", HttpStatus.NOT_FOUND), // F01.2.1 §11 チームグループが見つかりません
             Map.entry("ORG_065", HttpStatus.CONFLICT), // F01.2.1 §11 同じ名前のチームグループがすでにあります
             Map.entry("ORG_066", HttpStatus.UNPROCESSABLE_ENTITY), // F01.2.1 §11 チームグループは1組織あたり100件までです
@@ -1960,6 +2020,9 @@ public class GlobalExceptionHandler {
             Map.entry("ACTIVITY_008", HttpStatus.FORBIDDEN),             // NOT_AUTHOR（自分の投稿以外は編集不可）
             Map.entry("ACTIVITY_016", HttpStatus.NOT_FOUND),             // PRESET_NOT_FOUND
             Map.entry("ACTIVITY_018", HttpStatus.CONFLICT),              // FIELD_TYPE_CHANGE_NOT_ALLOWED（既存フィールドとの型競合）
+            Map.entry("ACTIVITY_009", HttpStatus.CONFLICT),
+            Map.entry("ACTIVITY_022", HttpStatus.CONFLICT),
+            Map.entry("ACTIVITY_023", HttpStatus.CONFLICT),
 
             // F02.2 ダッシュボード: チャットフォルダの不在/所有者不一致・アイテム不在は 404/403、
             // 同名フォルダ重複は 409（Severity.WARN 既定 400 を上書き）
@@ -2070,6 +2133,8 @@ public class GlobalExceptionHandler {
             Map.entry("ERROR_REPORT_005", HttpStatus.CONFLICT),             // IGNORED時の工程更新拒否
             Map.entry("ERROR_REPORT_009", HttpStatus.CONFLICT),             // GitHub Issue作成の重複ロック
             Map.entry("ERROR_REPORT_012", HttpStatus.CONFLICT),             // GitHub Issue二重作成防止
+            Map.entry("ERROR_REPORT_013", HttpStatus.CONFLICT),             // 同hashの再活性化競合
+            Map.entry("ERROR_REPORT_014", HttpStatus.SERVICE_UNAVAILABLE),  // 管理更新のロック再試行超過
 
             // Webhook/外部API連携: エンドポイント不在は404。APIキー期限切れは認証失敗のため401。
             // WEBHOOK_005/007 は「受信・認証の失敗」と「管理系CRUDでの不在」の2意味で共用されて
@@ -2149,19 +2214,14 @@ public class GlobalExceptionHandler {
             // 409。SKILL_001 は「カテゴリ不在」「名称重複」「非アクティブカテゴリ」の3意味で割れて
             // いたため、不在（404・SKILL_001 に限定）／名称重複（409・SKILL_009）／非アクティブ
             // （409・SKILL_010）に分割した。
-            // SKILL_003（スコープ越境の拒否／本人でもADMINでもない場合の権限拒否）は
-            // PARKING_020 に起点を持つ「越境は存在秘匿で404」の流儀に揃え、404固定とする
-            // （equipment/membership/todo/corkboard/pointcard で既に同じ流儀を採用）。
-            // かつては WARN=400 の既定のままだったため、404（SKILL_001/002＝不在）と
-            // 400（SKILL_003＝越境）でステータスが割れ、攻撃者が応答の違いだけで
-            // 「そのIDが実在するか」を判別できる存在オラクルになっていた（CMP-052想定）。
-            // 越境も権限拒否も「対象の存在自体を隠す」という同じ目的のため、不在と同一の
-            // 404に畳むのが正しい（不在側を400にする逆方向は選ばない）。
-            // 契約は MemberSkillScopeContractIT / SkillCategoryScopeContractIT が
-            // 「不在と越境の応答が一致すること」として固定している。
+            // SKILL_003 は非推奨・未使用（CMP-261010-2226）。資格 API の拒否は、同チームの権限不足を
+            // COMMON_002（403）、越境（非メンバー）を不在と完全一致の SKILL_002（404）に統一した。
+            // 秘匿は status だけでなく error.code・error.message まで不在時と一致して初めて成立する。
+            // 写像は互換のため残す。契約は MemberSkillAccessConcealmentContractIT /
+            // MemberSkillScopeContractIT / SkillCategoryScopeContractIT が固定している。
             Map.entry("SKILL_001", HttpStatus.NOT_FOUND),                   // カテゴリ不在
             Map.entry("SKILL_002", HttpStatus.NOT_FOUND),                   // 資格不在
-            Map.entry("SKILL_003", HttpStatus.NOT_FOUND),                   // スコープ越境・権限拒否（存在秘匿）
+            Map.entry("SKILL_003", HttpStatus.NOT_FOUND),                   // 非推奨・未使用（互換のため残置）
             Map.entry("SKILL_009", HttpStatus.CONFLICT),                    // カテゴリ名称の重複
             Map.entry("SKILL_010", HttpStatus.CONFLICT),                    // 非アクティブカテゴリへの登録
             Map.entry("SKILL_005", HttpStatus.CONFLICT),                    // 同一資格の重複登録
@@ -2230,7 +2290,7 @@ public class GlobalExceptionHandler {
             Map.entry("TOUR_004", HttpStatus.CONFLICT),                  // INVALID_TOURNAMENT_STATUS
             Map.entry("TOUR_009", HttpStatus.CONFLICT),                  // MATCHES_NOT_COMPLETED
             Map.entry("TOUR_011", HttpStatus.CONFLICT),                  // PROMOTION_ALREADY_EXECUTED
-            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（存在は隠さず権限拒否）
+            Map.entry("TOUR_030", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VIEW_FORBIDDEN（欠番: CMP-261116-0726 で不送出・番号は再利用しない）
             Map.entry("TOUR_031", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_POST_FORBIDDEN
             Map.entry("TOUR_032", HttpStatus.FORBIDDEN),                 // CONTACT_SPACE_VISIBILITY_FORBIDDEN
 
@@ -2276,23 +2336,21 @@ public class GlobalExceptionHandler {
             Map.entry("ONBOARDING_015", HttpStatus.CONFLICT),            // 進行中の進捗がありテンプレート削除不可
 
             // 認可監査 Wave6 ロットE: メンバーシップ基盤（MembershipBasisErrorCode・F00.5）の残り未登録分。
-            // MEMBERSHIP_POSITION_SCOPE_MISMATCH は既存 PARKING_020 と同じ「越境は存在秘匿」の流儀で 404。
+            // 役職割当のスコープ越境は専用コードを廃し、不在と同一の MEMBERSHIP_POSITION_CATALOG_NOT_FOUND で返す（CMP-260821-1027）。
             Map.entry("MEMBERSHIP_LAST_ADMIN_BLOCKED", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_NOT_FOUND", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_ACTIVE_EXISTS", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_ALREADY_LEFT", HttpStatus.CONFLICT),
-            Map.entry("MEMBERSHIP_POSITION_SCOPE_MISMATCH", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_POSITION_ACTIVE_EXISTS", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_POSITION_NOT_FOUND", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_POSITION_CATALOG_NOT_FOUND", HttpStatus.NOT_FOUND),
 
             // 認可監査 Wave6 ロットE: 備品管理（EquipmentErrorCode）の残り未登録分。
-            // EQUIPMENT_009（SCOPE_MISMATCH）は既存 PARKING_020 と同じ「越境は存在秘匿」の流儀で 404。
+            // EQUIPMENT_009（SCOPE_MISMATCH）は廃止。他備品の貸出記録は不在と同一の EQUIPMENT_002 で返す（CMP-260821-1027）。
             Map.entry("EQUIPMENT_003", HttpStatus.CONFLICT),             // INSUFFICIENT_STOCK
             Map.entry("EQUIPMENT_004", HttpStatus.CONFLICT),             // ALREADY_RETURNED
             Map.entry("EQUIPMENT_005", HttpStatus.CONFLICT),             // NOT_CONSUMABLE（備品種別と操作の不整合）
             Map.entry("EQUIPMENT_008", HttpStatus.CONFLICT),             // HAS_ACTIVE_ASSIGNMENTS
-            Map.entry("EQUIPMENT_009", HttpStatus.NOT_FOUND),            // SCOPE_MISMATCH（越境は存在秘匿）
             Map.entry("EQUIPMENT_014", HttpStatus.CONFLICT),             // ITEM_NOT_AVAILABLE
 
             // ErrorCode ステータス写像是正ロットH: 残り未登録 enum の一括是正。
@@ -2418,6 +2476,7 @@ public class GlobalExceptionHandler {
             // F04.6 グローバル検索（SearchErrorCode）の残り未登録分。
             Map.entry("SEARCH_003", HttpStatus.NOT_FOUND),               // SAVED_QUERY_NOT_FOUND
             Map.entry("SEARCH_004", HttpStatus.NOT_FOUND),               // HISTORY_NOT_FOUND
+            Map.entry("SEARCH_005", HttpStatus.CONFLICT),                // MAX_SAVED_QUERIES_EXCEEDED（CMP-261116-0722: 上限10件・11件目は 409）
 
             // F01.5 サポーター申請・管理機能（SupporterErrorCode）の残り未登録分。
             Map.entry("SUPPORTER_001", HttpStatus.CONFLICT),             // 既にサポーター申請済み
@@ -2425,6 +2484,7 @@ public class GlobalExceptionHandler {
             Map.entry("SUPPORTER_004", HttpStatus.CONFLICT),             // 申請は既に処理済み
             Map.entry("SUPPORTER_005", HttpStatus.FORBIDDEN),            // ブロックされているため申請不可
             Map.entry("SUPPORTER_006", HttpStatus.FORBIDDEN),            // サポーター機能が無効（兄弟 MEMBERSHIP_SUPPORTER_DISABLED と同流儀）
+            Map.entry("SUPPORTER_007", HttpStatus.NOT_FOUND),            // フォロー解除対象（SUPPORTER所属/PENDING申請）不在 → 404
 
             // F01.3 テンプレート・モジュール管理機能（TemplateErrorCode）の残り未登録分。
             Map.entry("TMPL_001", HttpStatus.NOT_FOUND),                 // テンプレートが見つからない（兄弟 TMPL_002 と同流儀）
@@ -2563,7 +2623,17 @@ public class GlobalExceptionHandler {
             Map.entry("CONFIRMABLE_NOTIFICATION_RECIPIENTS_EMPTY", HttpStatus.CONFLICT),
             Map.entry("CONFIRMABLE_NOTIFICATION_GROUP_NAME_DUPLICATE", HttpStatus.CONFLICT),
             // NC_002（NotificationCreditErrorCode.CREDIT_INSUFFICIENT）と同じ 402 課金ゲートに統一する。
-            Map.entry("CONFIRMABLE_NOTIFICATION_CREDIT_INSUFFICIENT", HttpStatus.PAYMENT_REQUIRED)
+            Map.entry("CONFIRMABLE_NOTIFICATION_CREDIT_INSUFFICIENT", HttpStatus.PAYMENT_REQUIRED),
+            // CMP-261113-1507: F02.7 マイルストーンロック（専用ハンドラ handleMilestoneLocked と同じ 423）。
+            Map.entry("MILESTONE_LOCKED", HttpStatus.LOCKED),
+            // CMP-261113-1507: 早期拒否フィルタの ErrorCode 化（フィルタが書くステータスと一致させる）。
+            Map.entry("ADMIN_007", HttpStatus.FORBIDDEN),        // 管理者変身はシステム管理者のみ
+            Map.entry("PROXY_INPUT_005", HttpStatus.UNAUTHORIZED),
+            Map.entry("PROXY_INPUT_006", HttpStatus.FORBIDDEN),
+            Map.entry("PROXY_INPUT_007", HttpStatus.FORBIDDEN),
+            Map.entry("PROXY_INPUT_009", HttpStatus.UNAUTHORIZED),
+            Map.entry("PROXY_INPUT_010", HttpStatus.FORBIDDEN),
+            Map.entry("PROXY_INPUT_011", HttpStatus.FORBIDDEN)
     );
 
     /**
@@ -2586,7 +2656,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex,
                                                                   HttpServletRequest request) {
         ErrorCode errorCode = ex.getErrorCode();
-        String message = resolveMessage(errorCode);
+        String message = resolveMessage(errorCode, ex.getMessageArgs());
         log.warn("BusinessException: code={}, message={}", errorCode.getCode(), message);
 
         // スロー箇所固有のステータス上書きがあれば優先する（F04.12 ROLE_009 は
@@ -2606,11 +2676,12 @@ public class GlobalExceptionHandler {
                     new ErrorResponse.ErrorDetail(errorCode.getCode(), message, List.of()));
         } else {
             body = new ErrorResponse(
-                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message, ex.getFieldErrors()));
+                    new ErrorResponse.ErrorDetail(errorCode.getCode(), message,
+                            localizeFieldErrors(ex.getFieldErrors())));
         }
-        return ResponseEntity
-                .status(status)
-                .body(body);
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
+        if (isPrivateSelfInput(request)) response.header(HttpHeaders.CACHE_CONTROL, "no-store");
+        return response.body(body);
     }
 
     /**
@@ -2665,6 +2736,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * CMP-261115-1821: 公開前の勤務日時給欠落（SHIFT_047・400）。対象者・勤務日を details で返す。
+     */
+    @ExceptionHandler(com.mannschaft.app.shift.ShiftHourlyRateMissingException.class)
+    public ResponseEntity<com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse> handleShiftHourlyRateMissing(
+            com.mannschaft.app.shift.ShiftHourlyRateMissingException ex) {
+        log.warn("ShiftHourlyRateMissingException: missingCount={}", ex.getMissingHourlyRates().size());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                new com.mannschaft.app.shift.ShiftHourlyRateMissingErrorResponse(
+                        ex.getErrorCode().getCode(), resolveMessage(ex.getErrorCode()), ex.getMissingHourlyRates()));
+    }
+
+    /**
      * CMP-260901-1538 柱③-A 409 details 追補: {@link DuplicateNameConfirmationRequiredException}
      * 専用ハンドラ（金型: {@link #handleFeatureNotEntitled}）。
      *
@@ -2705,11 +2788,27 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * CMP-261012-0910: 「しばらく待てば通る」業務例外（{@link RetryAfterBusinessException}）のハンドラ。
+     *
+     * <p>本文・ステータスは {@link #handleBusinessException} と同じ（エラーコード既定。メールOTP の
+     * 再送待ち AUTH_076 / 送信上限 AUTH_077 は 429）で、{@code Retry-After} ヘッダ（残り秒数）だけを足す。</p>
+     */
+    @ExceptionHandler(RetryAfterBusinessException.class)
+    public ResponseEntity<ErrorResponse> handleRetryAfterBusinessException(
+            RetryAfterBusinessException ex, HttpServletRequest request) {
+        ResponseEntity<ErrorResponse> base = handleBusinessException(ex, request);
+        return ResponseEntity.status(base.getStatusCode())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.getRetryAfterSeconds()))
+                .body(base.getBody());
+    }
+
+    /**
      * Bean Validation エラー（@Valid 付きリクエストボディ）。
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(
             MethodArgumentNotValidException ex) {
+        if (isPrivateSelfInput(null)) return privateInputRejected("BINDING");
         List<ErrorResponse.FieldError> fieldErrors = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
@@ -2719,7 +2818,7 @@ public class GlobalExceptionHandler {
         log.warn("Validation failed: {} field error(s)", fieldErrors.size());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001, fieldErrors));
+                .body(localized(CommonErrorCode.COMMON_001, fieldErrors));
     }
 
     /**
@@ -2728,10 +2827,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
             HttpMessageNotReadableException ex) {
+        if (isPrivateSelfInput(null)) return privateInputRejected("JSON_PARSE");
         log.warn("Message not readable: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /**
@@ -2744,12 +2844,13 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        if (isPrivateSelfInput(null)) return privateInputRejected("CONSTRAINT");
         List<ErrorResponse.FieldError> fieldErrors = ex.getConstraintViolations()
                 .stream()
                 .map(GlobalExceptionHandler::toFieldError)
                 .toList();
         log.warn("ConstraintViolationException: {} field error(s)", fieldErrors.size());
-        ErrorResponse body = ErrorResponse.of(CommonErrorCode.COMMON_001, fieldErrors);
+        ErrorResponse body = localized(CommonErrorCode.COMMON_001, fieldErrors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
@@ -2762,10 +2863,29 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ErrorResponse> handleHandlerMethodValidation(HandlerMethodValidationException ex) {
-        log.warn("HandlerMethodValidationException: {}", ex.getMessage());
+        if (isPrivateSelfInput(null)) return privateInputRejected("METHOD_PARAMETER");
+        List<ErrorResponse.FieldError> fieldErrors = new java.util.ArrayList<>();
+        for (org.springframework.validation.method.ParameterValidationResult result
+                : ex.getParameterValidationResults()) {
+            String paramName = result.getMethodParameter().getParameterName();
+            if (result instanceof org.springframework.validation.method.ParameterErrors errors) {
+                // @Valid 付きリクエストボディ等: MethodArgumentNotValidException と同じくフィールド名で返す
+                errors.getFieldErrors().forEach(fe ->
+                        fieldErrors.add(new ErrorResponse.FieldError(fe.getField(), fe.getDefaultMessage())));
+                errors.getGlobalErrors().forEach(ge ->
+                        fieldErrors.add(new ErrorResponse.FieldError(
+                                paramName != null ? paramName : ge.getObjectName(), ge.getDefaultMessage())));
+            } else {
+                // @Min / @NotBlank 等を付けたパス・クエリ引数: 引数名を field に入れる
+                result.getResolvableErrors().forEach(re ->
+                        fieldErrors.add(new ErrorResponse.FieldError(
+                                paramName != null ? paramName : "parameter", re.getDefaultMessage())));
+            }
+        }
+        log.warn("HandlerMethodValidationException: {} field error(s)", fieldErrors.size());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001, fieldErrors));
     }
 
     /**
@@ -2774,6 +2894,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(
             MethodArgumentTypeMismatchException ex) {
+        if (isPrivateSelfInput(null)) return privateInputRejected("TYPE_CONVERSION");
         // (1) 変換器が明示的に 404 を投げ、原因連鎖に残っているケースを honor する。
         ResponseStatusException rse = findResponseStatusExceptionCause(ex);
         boolean notFound = rse != null && rse.getStatusCode().value() == HttpStatus.NOT_FOUND.value();
@@ -2790,12 +2911,12 @@ public class GlobalExceptionHandler {
             log.debug("スコープ識別子の解決失敗（404）: parameter={}, value={}", ex.getName(), ex.getValue());
             return ResponseEntity
                     .status(HttpStatus.NOT_FOUND)
-                    .body(ErrorResponse.of(CommonErrorCode.COMMON_005));
+                    .body(localized(CommonErrorCode.COMMON_005));
         }
         log.warn("Type mismatch: parameter={}, value={}", ex.getName(), ex.getValue());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /** team / organization のスラッグ解決に使うパス変数名。 */
@@ -2847,7 +2968,7 @@ public class GlobalExceptionHandler {
         log.warn("Missing parameter: {}", ex.getParameterName());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /**
@@ -2862,7 +2983,7 @@ public class GlobalExceptionHandler {
         log.warn("Missing header: {}", ex.getHeaderName());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_001));
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 
     /**
@@ -2875,7 +2996,7 @@ public class GlobalExceptionHandler {
         log.warn("メソッド不一致: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_004));
+                .body(localized(CommonErrorCode.COMMON_004));
     }
 
     /**
@@ -2893,7 +3014,7 @@ public class GlobalExceptionHandler {
         log.debug("リソース未検出: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_005));
+                .body(localized(CommonErrorCode.COMMON_005));
     }
 
     /**
@@ -2905,7 +3026,7 @@ public class GlobalExceptionHandler {
         log.warn("Optimistic lock conflict: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_003));
+                .body(localized(CommonErrorCode.COMMON_003));
     }
 
     /**
@@ -2915,17 +3036,27 @@ public class GlobalExceptionHandler {
      * {@link MilestoneLockedException} が送出される。レスポンスにはエラーコード
      * {@code MILESTONE_LOCKED} とロック解除条件（前マイルストーンタイトル）を含める。</p>
      */
+    /** マイルストーンロック応答の解除条件（details.unlock_condition）の訳キーと ja 正本。{0}=前マイルストーンのタイトル。 */
+    private static final String MILESTONE_UNLOCK_CONDITION_KEY = "todo.milestone.unlock_condition";
+    private static final String MILESTONE_UNLOCK_CONDITION_JA = "前マイルストーン『{0}』を完了";
+
     @ExceptionHandler(MilestoneLockedException.class)
     public ResponseEntity<ErrorResponse> handleMilestoneLocked(MilestoneLockedException ex) {
         log.warn("MilestoneLockedException: milestoneId={}, lockedBy={}",
                 ex.getMilestoneId(), ex.getLockedByMilestoneTitle());
-        String unlockCondition = "前マイルストーン『" + ex.getLockedByMilestoneTitle() + "』を完了";
+        // CMP-261113-1507: 文言は TodoErrorCode.MILESTONE_LOCKED（ja 正本）と訳 properties から解決する。
+        // ID は MessageFormat の桁区切り（1,234）を避けるため文字列で渡す。
+        String milestoneId = String.valueOf(ex.getMilestoneId());
+        String title = ex.getLockedByMilestoneTitle();
+        String message = resolveMessage(TodoErrorCode.MILESTONE_LOCKED, new Object[] {milestoneId, title});
+        String unlockCondition = errorMessageResolver.resolveKey(MILESTONE_UNLOCK_CONDITION_KEY,
+                MILESTONE_UNLOCK_CONDITION_JA, LocaleContextHolder.getLocale(), title);
         List<ErrorResponse.FieldError> details = List.of(
-                new ErrorResponse.FieldError("milestone_id", String.valueOf(ex.getMilestoneId())),
+                new ErrorResponse.FieldError("milestone_id", milestoneId),
                 new ErrorResponse.FieldError("unlock_condition", unlockCondition)
         );
         ErrorResponse body = new ErrorResponse(
-                new ErrorResponse.ErrorDetail("MILESTONE_LOCKED", ex.getMessage(), details));
+                new ErrorResponse.ErrorDetail(TodoErrorCode.MILESTONE_LOCKED.getCode(), message, details));
         return ResponseEntity.status(HttpStatus.LOCKED).body(body);
     }
 
@@ -2946,13 +3077,13 @@ public class GlobalExceptionHandler {
             log.warn("ゲート更新競合: {}", msg);
             return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body(ErrorResponse.of(CommonErrorCode.COMMON_003));
+                    .body(localized(CommonErrorCode.COMMON_003));
         }
         log.error("IllegalStateException", ex);
         recordBackendException(ex, request, ErrorReportSeverity.HIGH);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_999));
+                .body(localized(CommonErrorCode.COMMON_999));
     }
 
     /**
@@ -2979,7 +3110,7 @@ public class GlobalExceptionHandler {
         log.debug("Access denied: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_002));
+                .body(localized(CommonErrorCode.COMMON_002));
     }
 
     /**
@@ -3013,6 +3144,13 @@ public class GlobalExceptionHandler {
      * {@code ResponseStatusException} を新規に書く際は、reason に内部状態・SQL・内部 ID・
      * 他ユーザーの情報などの機微情報を書かないこと。利用者にそのまま見せてよい文言のみを入れる。
      * 5xx の reason のみ本ハンドラが伏せる。</p>
+     *
+     * <p><b>多言語化（CMP-261113-1507）:</b> reason は実装者が書いた日本語の自由文で訳を持たない。
+     * 利用者の言語が ja 以外（en/de/zh/ko/es）で reason が日本語を含むときは、reason を捨てて
+     * ステータス別の共通コード（{@link #resolveCommonErrorCode}）の訳文を返す（日本語を混ぜない）。
+     * そのため reason にしか無い埋め込み値（上限枚数・Content-Type 等）は ja 以外では失われる。
+     * 根治は各 throw を {@link BusinessException}（訳あり ErrorCode・MessageFormat 引数）へ置き換えること
+     * （throw 箇所 74 件・17 ファイル。後続の戦役で順次移行する）。新規コードで本例外を書かないこと。</p>
      */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex,
@@ -3025,17 +3163,31 @@ public class GlobalExceptionHandler {
             recordBackendException(ex, request, ErrorReportSeverity.MEDIUM);
             return ResponseEntity.status(status)
                     .headers(ex.getHeaders())
-                    .body(ErrorResponse.of(errorCode));
+                    .body(localized(errorCode));
         }
 
         String reason = ex.getReason();
-        String message = (reason != null && !reason.isBlank()) ? reason : resolveMessage(errorCode);
+        String message = usableReason(reason) ? reason : resolveMessage(errorCode);
         log.warn("ResponseStatusException: status={}, code={}, reason={}",
                 status.value(), errorCode.getCode(), reason);
         return ResponseEntity.status(status)
                 .headers(ex.getHeaders())
                 .body(new ErrorResponse(
                         new ErrorResponse.ErrorDetail(errorCode.getCode(), message, List.of())));
+    }
+
+    /** 日本語（かな・漢字・半角カナ）を含むか。 */
+    private static final java.util.regex.Pattern JAPANESE_TEXT =
+            java.util.regex.Pattern.compile("[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uFF66-\uFF9F]");
+
+    /**
+     * {@link ResponseStatusException#getReason()} をそのまま利用者へ返してよいか。
+     * 空でなく、かつ「利用者の言語が ja 系」または「reason が日本語を含まない」場合に限る。
+     */
+    private static boolean usableReason(String reason) {
+        if (reason == null || reason.isBlank()) return false;
+        return !ErrorMessageResolver.isTranslated(LocaleContextHolder.getLocale())
+                || !JAPANESE_TEXT.matcher(reason).find();
     }
 
     /**
@@ -3075,7 +3227,7 @@ public class GlobalExceptionHandler {
         recordBackendException(ex, request, ErrorReportSeverity.HIGH);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.of(CommonErrorCode.COMMON_999));
+                .body(localized(CommonErrorCode.COMMON_999));
     }
 
     /**
@@ -3121,34 +3273,44 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * ErrorCode から多言語メッセージを解決する。
-     * messages_{locale}.properties のキー形式: error.{ドメイン小文字}.{番号}
-     * 例: TEAM_001 → error.team.001, COMMON_001 → error.common.001
-     * キーが存在しない場合は ErrorCode.getMessage()（日本語）にフォールバック。
+     * ErrorCode から多言語メッセージを解決する（規則の正本は {@link ErrorMessageResolver}）。
+     * ja・未対応言語は enum 文言、en/de/zh/ko/es は {@code messages_{lang}.properties} の
+     * {@code error.{ドメイン小文字}.{番号}}（例: TEAM_001 → error.team.001）。キー欠落・想定外例外は enum 文言へ倒す。
      */
     private String resolveMessage(ErrorCode errorCode) {
-        String code = errorCode.getCode();
-        // TEAM_001 → "error.team.001" に変換
-        int lastUnderscore = code.lastIndexOf('_');
-        String messageKey;
-        if (lastUnderscore > 0) {
-            String domain = code.substring(0, lastUnderscore).toLowerCase().replace('_', '.');
-            String number = code.substring(lastUnderscore + 1);
-            messageKey = "error." + domain + "." + number;
-        } else {
-            messageKey = "error." + code.toLowerCase();
-        }
+        return resolveMessage(errorCode, new Object[0]);
+    }
 
-        try {
-            return messageSource.getMessage(
-                    messageKey,
-                    null,
-                    LocaleContextHolder.getLocale()
-            );
-        } catch (NoSuchMessageException e) {
-            // properties にキーがない場合は日本語の getMessage() にフォールバック
-            return errorCode.getMessage();
-        }
+    /**
+     * プレースホルダへ値を差し込んで文言を解決する（{@link BusinessException#withMessageArgs}）。
+     * 値が空なら MessageFormat を通さず固定文言を返す。
+     */
+    private String resolveMessage(ErrorCode errorCode, Object[] messageArgs) {
+        return errorMessageResolver.resolve(errorCode, messageArgs);
+    }
+
+    /**
+     * 訳キーを持つフィールドエラー（{@link ErrorResponse.FieldError#ofKey}）の message を利用者の言語へ解決する。
+     * キーを持たないものはそのまま返す。
+     */
+    private List<ErrorResponse.FieldError> localizeFieldErrors(List<ErrorResponse.FieldError> fieldErrors) {
+        java.util.Locale locale = org.springframework.context.i18n.LocaleContextHolder.getLocale();
+        return fieldErrors.stream()
+                .map(fe -> fe.getMessageKey() == null ? fe
+                        : fe.withMessage(errorMessageResolver.resolveKey(
+                                fe.getMessageKey(), fe.getMessage(), locale)))
+                .toList();
+    }
+
+    /** 利用者の言語で message を解決した {@link ErrorResponse}（フィールドエラーなし）。 */
+    private ErrorResponse localized(ErrorCode errorCode) {
+        return localized(errorCode, List.of());
+    }
+
+    /** 利用者の言語で message を解決した {@link ErrorResponse}。 */
+    private ErrorResponse localized(ErrorCode errorCode, List<ErrorResponse.FieldError> fieldErrors) {
+        return new ErrorResponse(new ErrorResponse.ErrorDetail(
+                errorCode.getCode(), resolveMessage(errorCode), fieldErrors));
     }
 
     /**
@@ -3202,5 +3364,32 @@ public class GlobalExceptionHandler {
             case WARN -> HttpStatus.BAD_REQUEST;
             case INFO -> HttpStatus.OK;
         };
+    }
+
+    /** 本人機密入力とloyaltyのQR/照合コードだけを値なし拒否へ限定する。 */
+    private static boolean isPrivateSelfInput(HttpServletRequest explicitRequest) {
+        HttpServletRequest request = explicitRequest;
+        if (request == null && RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+            request = attributes.getRequest();
+        }
+        if (request == null) return false;
+        String path = request.getRequestURI();
+        if (path == null) return false;
+        if (path.equals("/api/v1/loyalty") || path.startsWith("/api/v1/loyalty/")
+                || path.matches("/api/v1/teams/[^/]+/loyalty(?:/.*)?")) return true;
+        if (path.matches("/api/v1/me/reflections/entries/[^/]+/recall-sessions")) return true;
+        for (String prefix : List.of("/api/v1/me/birth-profile", "/api/v1/me/diagnoses", "/api/v1/me/ranch",
+                "/api/v1/me/reflections/recall-sessions", "/api/v1/effort-records/me")) {
+            if (path.equals(prefix) || path.startsWith(prefix + "/")) return true;
+        }
+        return false;
+    }
+
+    /** 例外message・cause・入力値・URIをログや応答へコピーしない。 */
+    private ResponseEntity<ErrorResponse> privateInputRejected(String category) {
+        log.warn("本人APIの入力を拒否: classification={}", category);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(localized(CommonErrorCode.COMMON_001));
     }
 }

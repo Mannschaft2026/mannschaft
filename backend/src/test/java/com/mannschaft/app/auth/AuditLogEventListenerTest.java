@@ -50,17 +50,44 @@ class AuditLogEventListenerTest {
     class AuthCategory {
 
         @Test
-        @DisplayName("LoginSuccessEvent → LOGIN_SUCCESS として記録")
-        void handleLoginSuccess() {
+        @DisplayName("LoginSuccessEvent → LOGIN_SUCCESS として記録し、metadata に method と mfa=false を残す（CMP-261012-0911 判断②）")
+        void handleLoginSuccess() throws Exception {
             var event = new LoginSuccessEvent(1L, "192.168.0.1", "Mozilla/5.0", "PASSWORD");
 
             listener.handleLoginSuccess(event);
 
+            ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
             verify(auditLogService).record(
                     eq("LOGIN_SUCCESS"), eq(1L), isNull(),
                     isNull(), isNull(),
-                    eq("192.168.0.1"), eq("Mozilla/5.0"), isNull(), isNull()
+                    eq("192.168.0.1"), eq("Mozilla/5.0"), isNull(), metadataCaptor.capture()
             );
+            assertThat(metadataCaptor.getValue()).as("判断②: method・mfa 実施有無を最小限で保存").isNotNull();
+            var metadata = new ObjectMapper().readTree(metadataCaptor.getValue());
+            assertThat(metadata.path("method").asText()).isEqualTo("PASSWORD");
+            assertThat(metadata.path("mfa").isBoolean()).isTrue();
+            assertThat(metadata.path("mfa").asBoolean()).isFalse();
+            assertThat(metadata.has("mfa_factor")).as("2FA を経ないログインは使用要素なし").isFalse();
+        }
+
+        @Test
+        @DisplayName("CMP-261012-0911 判断①②: 2FA 経由の LOGIN_SUCCESS は sessionHash を渡し、metadata に入口方式・mfa=true・使用要素を残す")
+        void handleLoginSuccess_2FA経由() throws Exception {
+            var event = new LoginSuccessEvent(1L, "203.0.113.9", "UA/2fa", "OAUTH_GOOGLE", "session-hash-1", "TOTP");
+
+            listener.handleLoginSuccess(event);
+
+            ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
+            verify(auditLogService).record(
+                    eq("LOGIN_SUCCESS"), eq(1L), isNull(),
+                    isNull(), isNull(),
+                    eq("203.0.113.9"), eq("UA/2fa"), eq("session-hash-1"), metadataCaptor.capture()
+            );
+            assertThat(metadataCaptor.getValue()).isNotNull();
+            var metadata = new ObjectMapper().readTree(metadataCaptor.getValue());
+            assertThat(metadata.path("method").asText()).isEqualTo("OAUTH_GOOGLE");
+            assertThat(metadata.path("mfa").asBoolean()).isTrue();
+            assertThat(metadata.path("mfa_factor").asText()).isEqualTo("TOTP");
         }
 
         @Test
@@ -230,7 +257,8 @@ class AuditLogEventListenerTest {
 
             verify(auditLogService).record(
                     eq("MFA_ENABLED"), eq(1L), isNull(),
-                    isNull(), isNull(), isNull(), isNull(), isNull(), isNull()
+                    // CMP-261012-0910 AC-35: MFA_ENABLED は method を metadata に持つ（旧コンストラクタは TOTP）
+                    isNull(), isNull(), isNull(), isNull(), isNull(), eq("{\"method\":\"TOTP\"}")
             );
         }
     }

@@ -528,6 +528,19 @@ public class TodoService {
     // --- ヘルパーメソッド（他サービスからも利用可能） ---
 
     /**
+     * 削除されていない TODO のタイトルを返す。存在しない・論理削除済みなら空を返す。
+     *
+     * <p>他ドメイン（行動メモの関連 TODO 表示など）が {@code TodoRepository} を直接参照せずに
+     * タイトルだけを引くための公開口。</p>
+     *
+     * @param todoId TODO ID
+     * @return タイトル（未削除の TODO が無ければ empty）
+     */
+    public java.util.Optional<String> findActiveTitle(Long todoId) {
+        return todoRepository.findByIdAndDeletedAtIsNull(todoId).map(TodoEntity::getTitle);
+    }
+
+    /**
      * TODOを取得する。存在しない場合は例外をスローする。
      * {@link TodoStatusService} / {@link TodoAssigneeService} からも利用される。
      */

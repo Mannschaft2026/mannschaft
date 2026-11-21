@@ -20,7 +20,7 @@ import type { CalendarEventItem } from '~/composables/useCalendarEvents'
 import { monthGridDates } from '~/utils/calendarWeek'
 
 const { userTimezone } = useDatetime()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = withDefaults(defineProps<{
   year: number
@@ -61,7 +61,12 @@ function onEventClick(event: CalendarEventItem) {
 }
 
 const { getHoliday } = useHolidays()
-const daysOfWeek = ['日', '月', '火', '水', '木', '金', '土']
+// 曜日見出し（日曜始まり）。表示言語に合わせて Intl で整形する（ja は「日」〜「土」）。
+// 2024-01-07 は日曜日。ローカル日付で生成するのでタイムゾーンの影響を受けない。
+const daysOfWeek = computed(() => {
+  const fmt = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
+  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 7 + i)))
+})
 
 // レイアウト定数
 const DATE_HEADER_H = 30  // p-1(4) + h-6(24) + mb-0.5(2) = 30px
@@ -129,6 +134,19 @@ const calendarDays = computed<DayInfo[]>(() =>
     isCurrentMonth,
     dateStr,
   })))
+
+// 表示42日分だけを保持する。国・言語・年月が変われば更新し、予定だけの再描画では再判定しない。
+// 色は国既定言語の祝日有無、ラベルはlocaleの名前という既存の判定を分けて維持する。
+const holidaysByDate = computed(() => {
+  const results = new Map<string, { isHoliday: boolean; name: string | null }>()
+  for (const day of calendarDays.value) {
+    results.set(day.dateStr, {
+      isHoliday: !!getHoliday(day.dateStr),
+      name: getHoliday(day.dateStr, locale.value),
+    })
+  }
+  return results
+})
 
 const weeks = computed<WeekData[]>(() =>
   Array.from({ length: 6 }, (_, w) => {
@@ -219,7 +237,7 @@ function fmtTime(iso: string): string {
 
 function dateColorClass(dateStr: string, isCurrentMonth: boolean, col: number): string {
   if (isToday(dateStr)) return ''
-  const holiday = !!getHoliday(dateStr)
+  const holiday = holidaysByDate.value.get(dateStr)?.isHoliday ?? false
   if (holiday || col === 0) return isCurrentMonth ? 'text-red-500' : 'text-red-300'
   if (col === 6) return isCurrentMonth ? 'text-blue-500' : 'text-blue-300'
   return isCurrentMonth ? '' : 'text-surface-400'
@@ -260,7 +278,9 @@ function laneOverflowStyle(di: number, visibleBarLaneCap: number): Record<string
   }
 }
 
-const monthLabel = computed(() => `${props.year}年${props.month}月`)
+const monthLabel = computed(() =>
+  new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'long' }).format(new Date(props.year, props.month - 1, 1)),
+)
 
 // ---- 日別ポップオーバー（§6.2・AC-12/AC-12b） ----
 // 実体は週ビューと共有する ScheduleDayDetailPopover（対象日の予定の抽出条件を含め一元化）。
@@ -304,9 +324,9 @@ defineExpose({ focusToday })
     <!-- ヘッダー -->
     <div class="mb-4 flex items-center justify-between">
       <div class="flex items-center gap-1">
-        <Button icon="pi pi-chevron-left" text rounded @click="emit('prevMonth')" />
+        <Button icon="pi pi-chevron-left" class="min-h-11 min-w-11" text rounded @click="emit('prevMonth')" />
         <h2 class="text-lg font-extrabold">{{ monthLabel }}</h2>
-        <Button icon="pi pi-chevron-right" text rounded @click="emit('nextMonth')" />
+        <Button icon="pi pi-chevron-right" class="min-h-11 min-w-11" text rounded @click="emit('nextMonth')" />
       </div>
       <!-- 「今日」ボタン（§6.3・AC-12d）: 既に当月表示中でも押すたびフォーカスは今日のセルへ移る。
            showTodayButton=true の呼び出し元（統合カレンダー）でのみ表示する。 -->
@@ -362,10 +382,10 @@ defineExpose({ focusToday })
           <div :style="{ height: `${week.lanesUsed}px` }" />
           <!-- 祝日名 -->
           <div
-            v-if="getHoliday(day.dateStr)"
+            v-if="holidaysByDate.get(day.dateStr)?.name"
             class="truncate text-[10px] font-medium text-red-400"
           >
-            {{ getHoliday(day.dateStr) }}
+            {{ holidaysByDate.get(day.dateStr)?.name }}
           </div>
           <!-- 1日イベント -->
           <div class="space-y-0.5">

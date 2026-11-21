@@ -71,6 +71,7 @@ describe('ActionMemoInput.vue', () => {
       mood: null,
       relatedTodoId: null,
       timelinePostId: null,
+      teamTimelinePostId: null,
       tags: [],
       createdAt: '2026-04-09T08:00:00',
     })

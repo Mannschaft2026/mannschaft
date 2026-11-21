@@ -91,6 +91,10 @@ class ShiftScheduleServiceTest {
     @Mock
     private DomainEventPublisher eventPublisher;
 
+    /** CMP-261115-1821 公開 TX 内の勤務日時給検証（検証ロジックは ShiftPublicationHourlyRateVerifierTest で固定）。 */
+    @Mock
+    private com.mannschaft.app.shift.service.ShiftPublicationHourlyRateVerifier hourlyRateVerifier;
+
     /**
      * CMP-260909-1445 で {@code ShiftScheduleService} に追加された依存（{@code ClockConfig#wallClock}）。
      *
@@ -647,14 +651,19 @@ class ShiftScheduleServiceTest {
             ShiftScheduleEntity entity = createScheduleEntity().toBuilder()
                     .status(ShiftScheduleStatus.ADJUSTING).publishedAt(null).publishedBy(null).build();
             ShiftScheduleResponse response = createScheduleResponse();
-            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            com.mannschaft.app.shift.service.ShiftPublicationBudgetContext context =
+                    com.mannschaft.app.shift.service.ShiftPublicationBudgetContext.noSlots();
+            // CMP-261115-1821: 公開は親を FOR UPDATE してから枠を現在読み取りで読み直す
+            given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(slotRepository.findByScheduleIdForShare(SCHEDULE_ID)).willReturn(List.of());
             given(scheduleRepository.save(entity)).willReturn(entity);
             given(shiftMapper.toScheduleResponse(entity)).willReturn(response);
 
             // When
-            shiftScheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID);
+            shiftScheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID, context);
 
             // Then
+            org.mockito.Mockito.verify(hourlyRateVerifier).verify(entity.getTeamId(), List.of(), context);
             assertThat(entity.getStatus()).isEqualTo(ShiftScheduleStatus.PUBLISHED);
             assertThat(entity.getPublishedAt()).isNotNull();
             assertThat(entity.getPublishedBy()).isEqualTo(USER_ID);

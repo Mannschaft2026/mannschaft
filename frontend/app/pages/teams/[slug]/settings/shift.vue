@@ -33,7 +33,7 @@ async function loadSettings() {
       reminder12hEnabled: res.reminder12hEnabled,
     }
   } catch {
-    notification.error(t('common.error.loadFailed'))
+    notification.error(t('settings.notification.load_error'))
   } finally {
     loading.value = false
   }
@@ -61,7 +61,7 @@ async function saveSettings() {
     settings.value = res
     notification.success(t('teamShiftSettings.saved'))
   } catch {
-    notification.error(t('common.error.saveFailed'))
+    notification.error(t('memberProfile.saveFailed'))
   } finally {
     saving.value = false
   }

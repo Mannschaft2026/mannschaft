@@ -8,6 +8,9 @@ import {
   type BeReaction,
 } from '~/composables/chat/chatMessageMapper'
 import { useChatMembershipInvite } from '~/composables/chat/useChatMembershipInvite'
+import { useChatReadSync } from '~/composables/chat/useChatReadSync'
+import { useChatListSync } from '~/composables/chat/useChatListSync'
+import { isMembershipGatedChannelType } from '~/utils/chatChannelType'
 import type { ActiveThreadItem } from './message-panel/ChatActiveThreadsDrawer.vue'
 
 const props = defineProps<{
@@ -31,10 +34,10 @@ const { t } = useI18n()
 const {
   getMessages,
   sendTyping,
-  markAsRead,
   addReaction,
   removeReaction,
   togglePin,
+  editMessage,
   deleteMessage,
   bookmarkMessage,
   removeBookmark,
@@ -42,9 +45,25 @@ const {
   subscribeChannel,
   unsubscribeChannel,
   wsConnectionFailed,
+  wsUnauthenticated,
+  isChannelDenied,
 } = useChatApi()
+// 購読拒否（閲覧権限なし）と未認証（再ログインが必要）は別の状態として出し分ける。
+const channelDenied = computed(() => isChannelDenied(props.channel.id))
 const { showSuccess, showError } = useNotification()
 const authStore = useAuthStore()
+const { markChannelRead } = useChatReadSync()
+// 編集・削除は BE が部屋のプレビュー・未読数を更新する。一覧へ伝えて取り直させる（CMP-261105-1507）
+const { notifyChannelContentChanged } = useChatListSync()
+
+/**
+ * 他人の投稿も削除できるか（F04.2 §5）。ページが渡す管理者フラグ（スコープ ADMIN）に加え、
+ * チャンネルの OWNER / ADMIN も他人の投稿を削除できる。本人の投稿は ChatMessageList が isMine で判定する。
+ */
+const canDeleteOthers = computed(() => {
+  const role = props.channel.viewer?.role
+  return Boolean(props.canDelete) || role === 'OWNER' || role === 'ADMIN'
+})
 
 useChatChannelEventListener(props.channel.id)
 
@@ -131,11 +150,28 @@ async function loadMessages(cursor?: string) {
     }
     nextCursor.value = res.meta.nextCursor
     hasMore.value = res.meta.hasMore
-    markAsRead(props.channel.id)
   } catch {
-    showError('メッセージの取得に失敗しました')
+    showError(t('chat.message.loadFailed'))
+    return
   } finally {
     loading.value = false
+  }
+  await markCurrentChannelRead()
+}
+
+/**
+ * 表示中チャンネルを既読にする（CMP-261105-1507）。完了を待ち、成功したら一覧・タブの未読バッジを消す。
+ * 既読の対象はメンバー行を持つ種別（DM・グループ DM・チーム/組織チャンネル）だけ。本文を読めた時点で利用者は
+ * メンバーである。村ロビー・イベント・大会チャットはメンバー行を持たないので対象外。
+ * viewer の有無では判定しない（作成・招待の応答は viewer を持たないため、正規のメンバーでも既読にならなかった）。
+ * 失敗は握りつぶさずに通知する。
+ */
+async function markCurrentChannelRead() {
+  if (!isMembershipGatedChannelType(props.channel.identity?.channelType)) return
+  try {
+    await markChannelRead(props.channel.id)
+  } catch {
+    showError(t('chat.message.markReadFailed'))
   }
 }
 
@@ -164,7 +200,7 @@ async function onReaction(messageId: number, emoji: string) {
       msg.reactionSummary[emoji] = (msg.reactionSummary[emoji] || 0) + 1
     }
   } catch {
-    showError('リアクションに失敗しました')
+    showError(t('chat.message.reactionFailed'))
   }
 }
 
@@ -174,9 +210,9 @@ async function onPin(messageId: number) {
   try {
     await togglePin(messageId, !msg.isPinned)
     msg.isPinned = !msg.isPinned
-    showSuccess(msg.isPinned ? 'ピン留めしました' : 'ピン解除しました')
+    showSuccess(msg.isPinned ? t('chat.message.pinned') : t('chat.message.unpinned'))
   } catch {
-    showError('ピン操作に失敗しました')
+    showError(t('chat.message.pinFailed'))
   }
 }
 
@@ -189,9 +225,46 @@ async function onDelete(messageId: number) {
       msg.body = null
       msg.sender = null
     }
-    showSuccess('メッセージを削除しました')
+    notifyChannelContentChanged(props.channel.id)
+    showSuccess(t('chat.message.deleteSuccess'))
   } catch {
-    showError('削除に失敗しました')
+    showError(t('chat.message.deleteFailed'))
+  }
+}
+
+// --- 本人の投稿の編集（CMP-261105-1507） ---
+const editingMessageId = ref<number | null>(null)
+const editingBody = ref('')
+const editSaving = ref(false)
+const showEditDialog = computed({
+  get: () => editingMessageId.value !== null,
+  set: (open: boolean) => {
+    if (!open) editingMessageId.value = null
+  },
+})
+
+function onEdit(messageId: number) {
+  const msg = messages.value.find((m) => m.id === messageId)
+  if (!msg) return
+  editingBody.value = msg.body ?? ''
+  editingMessageId.value = messageId
+}
+
+async function onEditSave(body: string) {
+  const messageId = editingMessageId.value
+  if (messageId === null) return
+  editSaving.value = true
+  try {
+    const res = await editMessage(messageId, body)
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx !== -1) messages.value[idx] = res.data
+    editingMessageId.value = null
+    notifyChannelContentChanged(props.channel.id)
+    showSuccess(t('chat.message.editSuccess'))
+  } catch {
+    showError(t('chat.message.editFailed'))
+  } finally {
+    editSaving.value = false
   }
 }
 
@@ -207,12 +280,14 @@ async function onBookmark(messageId: number) {
       msg.isBookmarked = true
     }
   } catch {
-    showError('ブックマークに失敗しました')
+    showError(t('chat.message.bookmarkFailed'))
   }
 }
 
 function onSent() {
   loadMessages()
+  // 一覧のプレビュー（最後の発言）・並びを最新にする（重複通知は一覧側の reloadSilently がまとめる）
+  notifyChannelContentChanged(props.channel.id)
 }
 
 // ============================================================
@@ -220,7 +295,7 @@ function onSent() {
 // ============================================================
 
 /** 承諾/辞退 API 実行中の招待トークン（招待カードのボタンローディング用・多重送信防止）。 */
-const pendingInviteToken = ref<string | null>(null)
+const pendingInviteToken = ref<number | null>(null)
 
 /**
  * 招待カードの状態をローカルで差し替える（設計書 A-2）。
@@ -236,11 +311,11 @@ function updateInviteStatus(messageId: number, status: 'JOINED' | 'REVOKED') {
   }
 }
 
-async function onInviteJoin(messageId: number, token: string) {
+async function onInviteJoin(messageId: number, tokenId: number) {
   if (pendingInviteToken.value) return
-  pendingInviteToken.value = token
+  pendingInviteToken.value = tokenId
   try {
-    await joinInvite(token)
+    await joinInvite(tokenId)
     updateInviteStatus(messageId, 'JOINED')
     showSuccess(t('chat.invite.joinedSuccess'))
   } catch {
@@ -250,11 +325,11 @@ async function onInviteJoin(messageId: number, token: string) {
   }
 }
 
-async function onInviteDecline(messageId: number, token: string) {
+async function onInviteDecline(messageId: number, tokenId: number) {
   if (pendingInviteToken.value) return
-  pendingInviteToken.value = token
+  pendingInviteToken.value = tokenId
   try {
-    await declineInvite(token)
+    await declineInvite(tokenId)
     updateInviteStatus(messageId, 'REVOKED')
     showSuccess(t('chat.invite.declinedSuccess'))
   } catch {
@@ -296,18 +371,22 @@ const offWsEvent = wsEventBus.on((event) => {
       messages.value.push(newMsg)
       nextTick(() => scrollToBottom())
     }
+    // 他者の新着・自分の送信の WS 反射でも、一覧のプレビューを最新にする
+    notifyChannelContentChanged(props.channel.id)
   } else if (event.type === 'MESSAGE_UPDATED') {
     const updated = mapBeMessage(event.data as BeMessageResponse, currentUserId)
     const idx = messages.value.findIndex((m) => m.id === updated.id)
     if (idx !== -1) {
       messages.value[idx] = updated
     }
+    notifyChannelContentChanged(props.channel.id)
   } else if (event.type === 'MESSAGE_DELETED') {
     const deleted = event.data as { id: number }
     const idx = messages.value.findIndex((m) => m.id === deleted.id)
     if (idx !== -1) {
       messages.value[idx] = { ...messages.value[idx]!, isDeleted: true, body: null, sender: null }
     }
+    notifyChannelContentChanged(props.channel.id)
   } else if (event.type === 'REACTION_UPDATED') {
     // BE は { messageId, reactions[] }（生）を送るため、ここで集計形へ変換する
     const reaction = event.data as { messageId: number; reactions: BeReaction[] }
@@ -371,7 +450,13 @@ onUnmounted(() => {
 <template>
   <div class="flex h-full flex-col">
     <!-- 接続失敗バナー -->
-    <div v-if="wsConnectionFailed" class="reconnect-warning">
+    <div v-if="wsUnauthenticated" class="reconnect-warning" role="status">
+      <span>{{ $t('chat.connection.unauthenticated') }}</span>
+    </div>
+    <div v-else-if="channelDenied" class="reconnect-warning" role="status">
+      <span>{{ $t('chat.connection.denied') }}</span>
+    </div>
+    <div v-else-if="wsConnectionFailed" class="reconnect-warning">
       <span>{{ $t('chat.connection.failed') }}</span>
     </div>
 
@@ -403,12 +488,13 @@ onUnmounted(() => {
           :has-more="hasMore"
           :next-cursor="nextCursor"
           :can-pin="canPin"
-          :can-delete="canDelete"
+          :can-delete="canDeleteOthers"
           :pending-invite-token="pendingInviteToken"
           @load-more="(cursor: string) => loadMessages(cursor)"
           @reaction="onReaction"
           @pin="onPin"
           @delete="onDelete"
+          @edit="onEdit"
           @bookmark="onBookmark"
           @reply="openThread"
           @invite-join="onInviteJoin"
@@ -436,6 +522,7 @@ onUnmounted(() => {
           <ChatThreadPanel
             :root-message-id="threadRootMessageId"
             :channel-id="channel.id"
+            :can-delete="canDeleteOthers"
             @close="closeThread"
           />
         </div>
@@ -462,6 +549,13 @@ onUnmounted(() => {
     :team-id="teamId"
     :organization-id="organizationId"
     @created="(ch) => emit('channelCreated', ch)"
+  />
+
+  <ChatMessageEditDialog
+    v-model:visible="showEditDialog"
+    :initial-body="editingBody"
+    :saving="editSaving"
+    @save="onEditSave"
   />
 
   <!-- チーム/組織への承諾型招待モーダル（F04.12）。発行後にメッセージを再取得してカードを反映する -->

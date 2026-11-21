@@ -9,6 +9,8 @@
 
 ## 変更履歴
 
+- **v2.5.2 (2026-11-07)**: 未公開サマリの存在秘匿を `05_unpublished_visibility.md` §3.7 に追補（CMP-260905-1630）。一般メンバーの未公開と不在は404 `SHIFT_001`へ揃え、公開状態のサマリ403・SUPPORTER全状態403・管理者全状態許可を維持する。
+- **v2.5.1 (2026-10-10)**: 破棄された旧案「シフト希望への時刻カラム追加」（`06_request_time_window.md`）を `archive/06_request_time_window_旧案.md` に参考保存（CMP-261006-0421）。正本ではない。章一覧は変更なし
 - **v2.5 (2026-09-09)**: **方針転換** — 自動割当をいったん停止し、シフトは手動作成を前提とする作成支援へ舵を切る（マスター裁可）。`06_manual_authoring.md`（§11 手動シフト作成支援）と `07_authoring_cost.md`（§12 人件費（概算））を追補。あわせて CMP-260909-1142 の「シフト希望への時刻カラム追加」は破棄し、CMP-260909-1143（同日 2 枠目の希望が出せない）の是正を §11 の射程へ取り込んだ。実装は未着手
 - **v2.4 (2026-09-03)**: 未公開シフト表（DRAFT/COLLECTING/ADJUSTING/未公開 ARCHIVED）の API 遮断方針を `05_unpublished_visibility.md` として追補（CMP-260826-2127）。実装は未着手
 - **v2.3.2 (2026-05-17)**: API 乖離スキャナ Stage 3 第二陣 2-α triage 反映。§4 API 仕様表のメソッド/パスを実装に整合（PUT→PATCH 4 件、PATCH→POST 統合 5 件、`/shifts/my` → `/shifts/my/requests`、work-constraints をチームスコープに階層化、`POST /shifts/schedules/{id}/duplicate` `GET /shifts/requests/summary` `DELETE /shifts/availability` を追記、未実装の `summary`/`remind`/`hourly-rates 複数形` に注記）。詳細は `docs/internal/triage_log/shifts.md` 参照
@@ -44,6 +46,8 @@ v2 では以下を拡張する:
 - **D&D シフト編集 UI**（`vuedraggable` ベースのマトリクス編集）
 - **希望提出リマインド強化**（24h/48h 前の段階通知、提出率ベースのアラート）
 
+シフトボードの時間帯は秒を省いたHH:mmで表示する。未割当メンバーは取得中・取得失敗・取得成功を区別し、失敗時は同じ取得処理で再試行できる。取得成功後も未割当0件と検索一致0件を別の文言で案内する（CMP-260910-1609 AC5/6）。
+
 v2.1 では以下を追補する:
 - **シフト変更依頼 3 パターン**:
   - (A-1) **確定前の変更依頼**（`DRAFT / COLLECTING / ADJUSTING` 中に作成者＝管理者へ「この日の割当を変えてほしい」等を依頼する新テーブル `shift_change_requests`）
@@ -55,6 +59,8 @@ v2.2 では以下を追補する:
 - **シフト表PDF出力**: `GET /api/v1/shifts/schedules/{id}/pdf` を新設。`layout=team`（マトリクス）/ `layout=personal`（個人タイムライン）の 2 パターンを提供し、紙運用施設（整骨院・飲食店・美容室・ジム等）での掲示・配布・個人への手渡しを支援。F12.1 PDF 生成共通基盤を使用した**同期生成**、Flyway マイグレーションは不要（監査ログ `SHIFT_PDF_EXPORTED` を `audit_logs` 既存テーブルに追加するのみ）。SUPPORTER は PDF 出力不可（情報二次配布リスクで画面閲覧と権限を分離）。未公開状態 PDF は ADMIN のみ「内部確認用」ウォーターマーク付で出力可
 
 ---
+
+チームのシフト管理画面では、シフト表の作成成功後に一覧を再取得し、ページの再読込なしで作成した行を表示する。一覧の再取得に失敗した場合は既存の取得失敗表示と再試行ボタンを使い、再試行で作成POSTを再送しない（CMP-260910-1600）。
 
 ## 2. スコープ
 

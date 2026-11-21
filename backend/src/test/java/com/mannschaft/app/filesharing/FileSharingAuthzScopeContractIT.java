@@ -1,6 +1,7 @@
 package com.mannschaft.app.filesharing;
 
 import com.mannschaft.app.common.storage.PresignedUploadResult;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
 import com.mannschaft.app.common.storage.R2StorageService;
 import com.mannschaft.app.common.storage.acl.StorageAclAttachmentBinding;
 import com.mannschaft.app.common.storage.acl.StorageAclContentReference;
@@ -153,7 +154,7 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
      * （{@code BudgetFlatWriteScopeContractIT} / {@code CirculationExportScopeContractIT} と同一方針）。</p>
      */
     @MockitoBean
-    private R2StorageService storageService;
+    private R2StorageService r2StorageService;
 
     @PersistenceContext
     private EntityManager em;
@@ -277,11 +278,12 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
     class ListLinks {
 
         @Test
-        @DisplayName("FileLinkController#listLinks: 未認証はチームファイルの公開リンク一覧に到達しない（403）")
-        void 未認証は到達しない() throws Exception {
+        @DisplayName("FileLinkController#listLinks: 未認証はチームファイルの公開リンク一覧に到達しない（401）")
+        void 未認証は401() throws Exception {
+            // Controller 前段ガードが SecurityUtils#getCurrentUserId を呼ぶため、未認証は COMMON_000 → 401（createLink と同じ）
             SecurityContextHolder.clearContext();
             mockMvc.perform(get("/api/v1/files/{fileId}/links", teamOpenFileId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -552,7 +554,7 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(get("/api/v1/files/{fileId}/stars/me", teamOpenFileId))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data[*].fileId", hasItem(teamOpenFileId.intValue())))
-                    .andExpect(jsonPath("$.data[*].userId", not(hasItem(personalOwnerId.intValue()))));
+                    .andExpect(jsonPath("$.data[*].userId", not(hasLongId(personalOwnerId))));
         }
     }
 
@@ -830,11 +832,11 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
 
     /** 署名 URL 発行が決定的な値を返すようにする（認可通過後に外部依存でステータスが揺れないようにする）。 */
     private void stubStorageService() {
-        given(storageService.generateUploadUrl(any(), any(), any()))
+        given(r2StorageService.generateUploadUrl(any(), any(), any()))
                 .willAnswer(invocation -> new PresignedUploadResult(
                         "https://storage.test.invalid/upload/" + invocation.getArgument(0),
                         invocation.getArgument(0), 900L));
-        given(storageService.generateDownloadUrl(any(), any()))
+        given(r2StorageService.generateDownloadUrl(any(), any()))
                 .willAnswer(invocation ->
                         "https://storage.test.invalid/download/" + invocation.getArgument(0));
     }

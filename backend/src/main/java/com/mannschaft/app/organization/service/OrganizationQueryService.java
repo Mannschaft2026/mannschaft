@@ -1,6 +1,11 @@
 package com.mannschaft.app.organization.service;
 
 import com.mannschaft.app.organization.entity.OrganizationEntity;
+import com.mannschaft.app.organization.OrganizationQueryMapper;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +27,45 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrganizationQueryService {
 
     private final OrganizationRepository organizationRepository;
+    private final OrganizationQueryMapper organizationQueryMapper;
+
+    /** 他ドメイン向けの一覧用情報。Entityやそのenumを境界外へ公開しない。 */
+    public record OrganizationListItem(Long id, String slug, String name, String visibility,
+                                       Instant archivedAt) {
+    }
+
+    /**
+     * 一覧用の組織情報を1 SQLで取得する。不存在・論理削除済みの組織は含めない。
+     * アーカイブ状態は呼び出し元のincludeArchived判定に使うため、そのまま返す。
+     *
+     * @param orgIds 一覧の対象組織ID
+     * @return 組織IDごとの一覧用情報。空入力は空のMap
+     */
+    public Map<Long, OrganizationListItem> findListItemsByIds(Collection<Long> orgIds) {
+        Map<Long, OrganizationListItem> result = new LinkedHashMap<>();
+        if (orgIds == null || orgIds.isEmpty()) {
+            return result;
+        }
+        for (OrganizationEntity org : organizationRepository.findAllById(orgIds)) {
+            OrganizationListItem item = organizationQueryMapper.toListItem(org);
+            result.put(item.id(), item);
+        }
+        return result;
+    }
+
+    /**
+     * 指定 ID のうち ACTIVE（承諾済み）かつ未アーカイブ・未削除の組織 ID を 1 SQL で返す。
+     * 空入力は SQL を発行しない（グローバル検索の閲覧者スコープ解決。CMP-261116-0722）。
+     *
+     * @param orgIds 対象組織 ID
+     * @return 有効な組織 ID の集合
+     */
+    public java.util.Set<Long> findActiveIds(Collection<Long> orgIds) {
+        if (orgIds == null || orgIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(organizationRepository.findActiveIdsByIdIn(orgIds));
+    }
 
     /** 他ドメイン向けの組織の表示用要約（ID・名前・slug だけ）。 */
     public record OrganizationSummary(Long id, String name, String slug) {

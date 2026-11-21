@@ -73,7 +73,7 @@ public class NotificationFanoutWorker {
      * <p>Spring が {@link FanoutChunkSink} 実装のすべてを自動収集する。{@code job.getNotificationType()} に
      * 一致する実装があれば {@link #processOne} 内でそちらへ委譲し（{@link ConfirmableFanoutChunkSink} 等）、
      * 無ければ既存の {@link #bulkFanoutService} 経路（{@code insertAndDispatchChunk}）を使う。
-     * 一致する実装が無い既存ジョブの挙動は 1 バイトも変わらない（陣立て書 §3.4「既存は無変更」）。</p>
+     * 一致する実装が無いジョブは、受信者戦略に応じた保存スコープを既定のバルク経路へ渡す。</p>
      */
     private final List<FanoutChunkSink> chunkSinks;
     /** ロケール別・描画済み文面の子表リポジトリ（Issue #2871）。 */
@@ -167,7 +167,12 @@ public class NotificationFanoutWorker {
      * 一方、シャード分割・配信の失敗は一過性（DB 一時障害等）でありうるため従来どおりリトライ→上限超で DEAD_LETTER。</p>
      */
     public void processOne(NotificationFanoutJob job) {
-        jobService.markRunning(job.getId());
+        boolean moduleEventNotice = "MODULE_EVENT_NOTICE".equals(job.getNotificationType());
+        if (moduleEventNotice) {
+            if (!jobService.tryMarkModuleEventRunning(job.getId())) return;
+        } else {
+            jobService.markRunning(job.getId());
+        }
         try {
             java.util.Optional<FanoutRecipientSource> resolved =
                     recipientSourceRegistry.resolve(job.getScopeType());
@@ -175,7 +180,11 @@ public class NotificationFanoutWorker {
                 // 未登録 scope_type はリトライ不能な恒久失敗。即 DEAD_LETTER へ短絡し RUNNING 残置を断つ。
                 String reason = "未登録の fan-out scope_type: " + job.getScopeType() + "（jobId=" + job.getId() + "）";
                 log.warn("fan-out ジョブ: {}（即 DEAD_LETTER）", reason);
-                jobService.recordFailure(job.getId(), "IllegalStateException: " + reason, MAX_RETRY, true);
+                if (moduleEventNotice) {
+                    jobService.recordModuleEventFailure(job.getId(), "IllegalStateException: " + reason, MAX_RETRY, true);
+                } else {
+                    jobService.recordFailure(job.getId(), "IllegalStateException: " + reason, MAX_RETRY, true);
+                }
                 return;
             }
             FanoutRecipientSource source = resolved.get();
@@ -199,6 +208,16 @@ public class NotificationFanoutWorker {
                 return;
             }
 
+            // F01.2.1 §6.7: 加盟通知は受信者側のスコープで本人フォルダから検索できるよう保存する。
+            // custom sink の契約には介入せず、既定経路でジョブ1件につき1回だけ解決する。
+            NotificationScopeType scopeType = switch (job.getScopeType()) {
+                case "TEAM_AFFILIATION_OPS" -> NotificationScopeType.TEAM;
+                case "ORGANIZATION_ADMINS" -> NotificationScopeType.ORGANIZATION;
+                default -> NotificationScopeType.SYSTEM;
+            };
+            Long scopeId = scopeType == NotificationScopeType.SYSTEM
+                    ? null : Long.parseLong(job.getScopeRef());
+
             // Issue #2871: ロケール別の描画済み文面をジョブ 1 件につき 1 回だけ読む（高々 6 行）。
             // チャンクごと・受信者ごとに引かない（チャンク数にも受信者数にも比例させない）。
             Map<String, NotificationFanoutJobMessage> messagesByLocale = loadMessages(job.getId());
@@ -219,7 +238,7 @@ public class NotificationFanoutWorker {
                     break;
                 }
                 // P1 バルク INSERT ＋ チャンクコミット ＋ 専用プール配信を再利用。
-                // 通知行の per-row スコープは現行の村行事還流と同一（SYSTEM / scopeId=null）。
+                // 同一ジョブの全チャンクへ同じ保存スコープを渡す。他の戦略は従来の SYSTEM / null。
                 //
                 // Issue #2871: 行ごとに title / body を差し替える。notifications への多値 INSERT は
                 // 元から 1 行 14 列で title / body を per-row に持っており、共有引数になっていたのは
@@ -229,7 +248,7 @@ public class NotificationFanoutWorker {
                         toRows(page, messagesByLocale),
                         job.getNotificationType(), job.getPriority(),
                         job.getSourceType(), job.getSourceId(),
-                        NotificationScopeType.SYSTEM, null,
+                        scopeType, scopeId,
                         job.getActionUrl(), job.getActorId(), job.getOrganizationId());
 
                 // 再開カーソルは user_id ただ 1 本のまま（locale はカーソルに含めない・AC-4）。
@@ -238,13 +257,21 @@ public class NotificationFanoutWorker {
                 // in-memory カーソル前進（ループ終了条件）＋ 独立コミットで耐久化（クラッシュ再開の要・AC-2）。
                 // 順序は「INSERT 確定 → カーソル前進」を厳守する（逆にすると欠落する）。
                 job.setCursorSubjectId(newCursor);
-                jobService.advanceCursor(job.getId(), newCursor, added);
+                if (moduleEventNotice) {
+                    jobService.advanceModuleEventCursor(job.getId(), newCursor, added);
+                } else {
+                    jobService.advanceCursor(job.getId(), newCursor, added);
+                }
             }
         } catch (Exception ex) {
             // 配信失敗＝リトライ／DEAD_LETTER へ落とす（耐久キューの正常動作。握り潰しではなく状態に残す）。
             log.warn("fan-out ジョブ配信失敗: jobId={} scopeType={} scopeRef={} cursor={}",
                     job.getId(), job.getScopeType(), job.getScopeRef(), job.getCursorSubjectId(), ex);
-            jobService.recordFailure(job.getId(), ex.getClass().getSimpleName() + ": " + ex.getMessage(), MAX_RETRY);
+            if (moduleEventNotice) {
+                jobService.recordModuleEventFailure(job.getId(), ex.getClass().getSimpleName() + ": " + ex.getMessage(), MAX_RETRY, false);
+            } else {
+                jobService.recordFailure(job.getId(), ex.getClass().getSimpleName() + ": " + ex.getMessage(), MAX_RETRY);
+            }
         }
     }
 
@@ -292,7 +319,11 @@ public class NotificationFanoutWorker {
             }
             long newCursor = page.get(page.size() - 1).userId();
             job.setCursorSubjectId(newCursor);
-            jobService.advanceCursor(job.getId(), newCursor, result.addedCount());
+            if ("MODULE_EVENT_NOTICE".equals(job.getNotificationType())) {
+                jobService.advanceModuleEventCursor(job.getId(), newCursor, result.addedCount());
+            } else {
+                jobService.advanceCursor(job.getId(), newCursor, result.addedCount());
+            }
         }
     }
 

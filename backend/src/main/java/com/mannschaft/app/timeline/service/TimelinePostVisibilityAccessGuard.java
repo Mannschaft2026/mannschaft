@@ -21,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
  * ブックマーク）が独自の可視性判定を書く」事故を防ぐ。</p>
  *
  * <ul>
- *   <li>PUBLIC: 常に可視</li>
+ *   <li>公開状態: PUBLISHED は下記スコープで判定し、DRAFT/SCHEDULED/HIDDEN は作成者本人に限定する</li>
+ *   <li>PUBLIC: 公開状態の条件を満たせば可視</li>
  *   <li>TEAM/ORGANIZATION: 呼び出し元がそのスコープのメンバーであること</li>
  *   <li>VILLAGE: 呼び出し元がその村の現役 USER メンバーであること</li>
  *   <li>PERSONAL: 呼び出し元が投稿者本人であること</li>
@@ -37,7 +38,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class TimelinePostVisibilityAccessGuard {
 
     private final TimelinePostRepository postRepository;
@@ -56,7 +56,11 @@ public class TimelinePostVisibilityAccessGuard {
      * @param userId 呼び出し元ユーザー ID
      * @return 可視なら true
      */
+    @Transactional(readOnly = true)
     public boolean isVisible(TimelinePostEntity post, Long userId) {
+        if (!isStatusVisible(post, userId) || post.getScopeType() == null) {
+            return false;
+        }
         return switch (post.getScopeType()) {
             case PUBLIC -> true;
             case TEAM -> accessControlService.isMember(userId, post.getScopeId(), "TEAM");
@@ -74,6 +78,37 @@ public class TimelinePostVisibilityAccessGuard {
     }
 
     /**
+     * 対象投稿自身の公開状態だけを判定する。スコープ認可の代わりにはならない。
+     * 村への返信では、この判定の後に既存の投稿主体資格検証を通す。
+     * 予約時刻では公開せず、PUBLISHED への状態遷移を公開の条件とする。
+     *
+     * @param post 判定対象の投稿
+     * @param userId 呼び出し元ユーザー ID
+     * @return 公開状態の条件を満たす場合だけ true
+     */
+    static boolean isStatusVisible(TimelinePostEntity post, Long userId) {
+        if (post == null || post.getDeletedAt() != null || post.getStatus() == null) {
+            return false;
+        }
+        return switch (post.getStatus()) {
+            case PUBLISHED -> true;
+            case DRAFT, SCHEDULED, HIDDEN -> userId != null && userId.equals(post.getUserId());
+            default -> false;
+        };
+    }
+
+    /**
+     * 投稿 ID の不存在・不可視を false で返し、既存の可視性規則を再利用する。
+     * 呼出元の ContentVisibilityChecker.canViewTimelineIsolated がPRIMARYの独立TXを所有し、
+     * このメソッドは新しいドメインTXを開始しない。取得と判定は同じ呼出元TX内で行う。
+     */
+    public boolean canViewPost(Long postId, Long userId) {
+        return postRepository.findById(postId)
+                .map(post -> isVisible(post, userId))
+                .orElse(false);
+    }
+
+    /**
      * 投稿 ID から可視性を検証する（投票・みたよ！・ブックマーク等、投稿に付随する
      * 子リソースの書き込み/読取入口向け）。不可視・不存在は区別せず
      * {@link TimelineErrorCode#POST_NOT_FOUND}（404）に倒す。
@@ -83,6 +118,7 @@ public class TimelinePostVisibilityAccessGuard {
      * @return 可視な投稿 entity
      * @throws BusinessException 投稿が存在しない、または不可視の場合（POST_NOT_FOUND）
      */
+    @Transactional(readOnly = true)
     public TimelinePostEntity requireVisiblePost(Long postId, Long userId) {
         TimelinePostEntity post = postRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(TimelineErrorCode.POST_NOT_FOUND));

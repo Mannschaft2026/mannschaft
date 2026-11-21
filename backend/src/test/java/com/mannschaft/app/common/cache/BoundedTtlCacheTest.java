@@ -24,6 +24,20 @@ class BoundedTtlCacheTest {
     private static final Duration TTL = Duration.ofMinutes(5);
 
     @Test
+    @DisplayName("clear すると全エントリが即時に消える")
+    void clearで全件消える() {
+        BoundedTtlCache<Long, String> cache = new BoundedTtlCache<>(10, TTL);
+        cache.put(1L, "a");
+        cache.put(2L, "b");
+
+        cache.clear();
+
+        assertThat(cache.size()).isZero();
+        assertThat(cache.get(1L)).isNull();
+        assertThat(cache.get(2L)).isNull();
+    }
+
+    @Test
     @DisplayName("put した値は TTL 内なら get で返る")
     void TTL内は取得できる() {
         MutableClock clock = new MutableClock(Instant.parse("2026-07-29T00:00:00Z"));
