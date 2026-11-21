@@ -305,6 +305,40 @@ describe('9: 公開再試行が既投稿(応答だけ失われていた)で失�
   })
 })
 
+describe('10: 作成成功〜公開応答待ちの間のキューの中身', () => {
+  it('公開応答待ちの時点で、元の作成項目は実 ID つきの公開のみ項目に置き換わっている（再読み込みで再作成されない）', async () => {
+    const q = useOfflineQueue()
+    await q.enqueue({ content: '再作成されない', category: 'WORK' }, -1, 7)
+    apiMock.createMemo.mockResolvedValue({ ...created, id: 900 })
+    let resolvePublish: () => void = () => {}
+    apiMock.publishToTeam.mockReturnValue(new Promise<void>((r) => { resolvePublish = r }))
+    const store = useActionMemoStore()
+    const flushing = store.flushOfflineQueue()
+    await vi.waitFor(() => expect(apiMock.publishToTeam).toHaveBeenCalledTimes(1))
+    const items = await q.getAll()
+    expect(items).toHaveLength(1)
+    expect(items[0]).toEqual(expect.objectContaining({ publishOnlyMemoId: 900, publishTeamId: 7 }))
+    resolvePublish()
+    await flushing
+    expect(await q.count()).toBe(0)
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+  })
+
+  it('通信断で公開に失敗しても公開のみ項目のまま残り、次回は公開だけ再試行する', async () => {
+    const q = useOfflineQueue()
+    await q.enqueue({ content: 'x', category: 'WORK' }, -1, 7)
+    apiMock.createMemo.mockResolvedValue({ ...created, id: 900 })
+    apiMock.publishToTeam.mockRejectedValueOnce(httpError(503, 'COMMON_503')).mockResolvedValueOnce(undefined)
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect((await q.getAll())[0]).toEqual(expect.objectContaining({ publishOnlyMemoId: 900 }))
+    await store.flushOfflineQueue()
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(2)
+    expect(await q.count()).toBe(0)
+  })
+})
+
 describe('3: 公開失敗時は成功扱いにしない', () => {
   it('publishToTeam が false のとき入力を保持し、失敗文言を出し、再送信は公開だけ再試行する', async () => {
     apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
