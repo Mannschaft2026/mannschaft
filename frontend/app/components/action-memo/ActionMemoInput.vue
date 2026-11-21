@@ -144,12 +144,14 @@ async function submit() {
     // チーム投稿は作成 API に項目が無いため別 API。オフライン（仮 ID=負数）はキューに公開要求を持たせ、
     // 同期後に store が実行する。
     if (publishTeamId != null && created.id > 0) {
+      // 公開 API を呼ぶ前に、作成済み ID と投稿先を下書きへ永続化する。
+      // 応答待ちの間に再読み込みされても、debounce 保存が ID なしの下書きで上書きしても（pendingForDraft が常に含める）、
+      // 復元後の送信は重複作成せず公開だけ（既投稿なら実態確認して）片付ける。応答待ち中の編集は readonly で防いでいる
       const memoContent = content.value
+      pendingPublish.value = { memoId: created.id, teamId: publishTeamId, content: memoContent }
+      store.saveDraft(userId.value, memoContent, props.extras, pendingForDraft())
       if (!(await store.publishToTeam(created.id, { teamId: publishTeamId }))) {
-        pendingPublish.value = { memoId: created.id, teamId: publishTeamId, content: memoContent }
-        // 即時に下書きへ保存（debounce を待たずに画面を離れても、再送信で重複作成させない）
-        store.saveDraft(userId.value, memoContent, props.extras, pendingForDraft())
-        return
+        return // 失敗: pendingPublish を残す（再送信は公開のみ再試行）
       }
     }
     resetAfterSuccess(created.id)
@@ -207,7 +209,7 @@ function onKeydown(event: KeyboardEvent) {
             {{ t('action_memo.input.shift_enter_hint') }}
           </span>
           <span
-            v-if="pendingPublish"
+            v-if="pendingPublish && !submitting"
             class="text-rose-600"
             role="alert"
             data-testid="action-memo-input-publish-failed"
