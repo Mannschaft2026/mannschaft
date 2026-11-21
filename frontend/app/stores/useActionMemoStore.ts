@@ -245,13 +245,24 @@ export const useActionMemoStore = defineStore('actionMemo', {
     async flushOfflineQueue(): Promise<number> {
       const queue = useOfflineQueue()
       const api = useActionMemoApi()
+      let publishFailed = false
       const results = await queue.flushQueue(async (payload, queued) => {
         try {
+          // 公開のみ項目: 作成済みメモは再作成せず publish-to-team だけ再試行する
+          if (queued?.publishOnlyMemoId != null && queued.publishTeamId != null) {
+            const ok = await this.publishToTeam(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
+            if (!ok) publishFailed = true
+            return ok ? { id: queued.publishOnlyMemoId } : null
+          }
           const created = await api.createMemo(payload)
           // オフライン中に選ばれた公開要求は、実 ID が得られた今ここで実行する。
-          // 作成は成立済みのため、公開失敗でも created を返して重複作成を避け、失敗は store.error に残す
+          // 作成は成立済みのため created を返して重複作成を避け、公開失敗は「公開のみ」項目として残す
           if (queued?.publishTeamId != null) {
-            await this.publishToTeam(created.id, { teamId: queued.publishTeamId })
+            const ok = await this.publishToTeam(created.id, { teamId: queued.publishTeamId })
+            if (!ok) {
+              publishFailed = true
+              await queue.enqueuePublishOnly(created.id, queued.publishTeamId)
+            }
           }
           return created
         } catch (error) {
@@ -262,9 +273,15 @@ export const useActionMemoStore = defineStore('actionMemo', {
       // 仮 ID を本物の ID に置換するため、一度だけ fetchMemos で再取得する
       // （flushQueue の返す createdId だけでは、並列送信された別デバイスのメモや
       //  同日の並び順を正しく反映できないため）
+      // fetchMemosForDate が error を消すため、公開失敗のエラーは退避して復元する
+      const keptError = publishFailed ? { error: this.error, lastError: this.lastError } : null
       if (results.length > 0) {
         const targetDate = results[0]?.queued.payload.memoDate ?? today()
         await this.fetchMemosForDate(targetDate)
+      }
+      if (keptError) {
+        this.error = keptError.error
+        this.lastError = keptError.lastError
       }
       this.offlineQueueCount = await queue.count()
       this.isOffline = this._isOffline()

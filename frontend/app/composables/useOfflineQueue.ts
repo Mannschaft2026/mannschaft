@@ -93,6 +93,36 @@ export function useOfflineQueue() {
   }
 
   /**
+   * 作成済みメモの「公開のみ」項目を積む（オフライン同期で作成成功・公開失敗したとき用）。
+   * メモは再作成せず、次回 flush で publish-to-team だけ再試行する。
+   */
+  async function enqueuePublishOnly(memoId: number, teamId: number): Promise<OfflineQueuedMemo> {
+    const queued = await enqueue({ content: '' }, 0, teamId)
+    // enqueue は作成項目として積むため、公開のみ項目へ印を付け替える
+    const marked: OfflineQueuedMemo = { ...queued, publishTeamId: teamId, publishOnlyMemoId: memoId }
+    if (typeof queued.queueId === 'number') {
+      let updated = false
+      if (await isDexieAvailable()) {
+        try {
+          await offlineDb.offlineQueue.update(queued.queueId, {
+            body: { _tempId: 0, _publishTeamId: teamId, _publishOnlyMemoId: memoId } as unknown as Record<string, unknown>,
+          })
+          updated = true
+        } catch {
+          // Dexie 失敗時はフォールバック
+        }
+      }
+      const mem = _inMemory.items.find((i) => i.queueId === queued.queueId)
+      if (mem) {
+        mem.publishOnlyMemoId = memoId
+        updated = true
+      }
+      if (!updated) throw new Error('publish-only queue item could not be marked')
+    }
+    return marked
+  }
+
+  /**
    * キュー内の全項目を enqueuedAt 昇順で取得する。
    */
   async function getAll(): Promise<OfflineQueuedMemo[]> {
@@ -111,6 +141,7 @@ export function useOfflineQueue() {
             payload: extractPayload(item.body),
             enqueuedAt: item.createdAt,
             publishTeamId: extractPublishTeamId(item.body),
+            publishOnlyMemoId: extractNumber(item.body, '_publishOnlyMemoId'),
           }))
       } catch {
         // Dexie 失敗時はフォールバック
@@ -203,6 +234,7 @@ export function useOfflineQueue() {
 
   return {
     enqueue,
+    enqueuePublishOnly,
     getAll,
     remove,
     hasQueuedItems,
@@ -212,9 +244,13 @@ export function useOfflineQueue() {
   }
 }
 
-function extractPublishTeamId(body: Record<string, unknown>): number | undefined {
-  const v = body?._publishTeamId
+function extractNumber(body: Record<string, unknown>, key: string): number | undefined {
+  const v = body?.[key]
   return typeof v === 'number' ? v : undefined
+}
+
+function extractPublishTeamId(body: Record<string, unknown>): number | undefined {
+  return extractNumber(body, '_publishTeamId')
 }
 
 /**
@@ -224,5 +260,6 @@ function extractPayload(body: Record<string, unknown>): CreateActionMemoPayload 
   const cleaned = { ...body }
   delete cleaned._tempId
   delete cleaned._publishTeamId
+  delete cleaned._publishOnlyMemoId
   return cleaned as unknown as CreateActionMemoPayload
 }

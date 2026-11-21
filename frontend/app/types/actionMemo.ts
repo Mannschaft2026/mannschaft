@@ -278,6 +278,8 @@ export interface OfflineQueuedMemo {
   payload: CreateActionMemoPayload
   /** 作成成功後に publish-to-team する投稿先チーム ID（任意。無い既存項目も後方互換で動く） */
   publishTeamId?: number
+  /** 公開のみ項目: 作成済みの実メモ ID（あればメモは再作成せず publish-to-team だけ再試行する） */
+  publishOnlyMemoId?: number
   /** キューに積んだ時刻（ISO） */
   enqueuedAt: string
 }
