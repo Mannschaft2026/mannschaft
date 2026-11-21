@@ -84,7 +84,7 @@ fullregen候補の新規68キーのうち、各Javaテストblobが適用元と�
 
 ## 原本・未実行検証
 
-8 ZIPはnightly-runtime-diag-shard-N-attempt-1、使用memberはclass-progress.log。全65の開始/終了原文行・値・source blob・対応ZIPとmemberのdigestは、版管理された[65件の実測manifest](CMP-261114-0713-shard-weights-delta-20261121.json)に保持する。JSONはrootが検分した原本をbyte変更せず収録し、私用絶対pathや認証情報を含まない。
+8 ZIPはnightly-runtime-diag-shard-N-attempt-1、使用memberはclass-progress.log。全65の開始/終了原文行・値・source blob・対応ZIPとmemberのdigestは、版管理された[65件の実測manifest](CMP-261114-0713/shard-weights-delta-20261121.json)に保持する。JSONはrootが検分した原本のJSON値と原文イベントを維持して収録し、Gitによる改行正規化がある。私用絶対pathや認証情報を含まない。
 
 未掲載104→39は同じeligible集合かつ65がその集合に含まれることを前提とする推計で、compiled exact guardのgreenではない。現在のcompiled inventoryを保有していないため、verifyShardCoverageの4通常+2Arch profile・一意割当・full/normal偏り再計測は次CIへ持ち越す。Arch18/37・Integrity2・3fixture cleanup・上限100/1.10の実装はいずれも変更0であり、新CI成功は未主張。
 
