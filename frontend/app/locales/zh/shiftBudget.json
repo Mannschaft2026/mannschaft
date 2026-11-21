@@ -173,8 +173,8 @@
         "UNKNOWN": "未知类型"
       },
       "summaryValue": {
-        "CONSUMPTION_RECORD": "班次消耗记录失败。运营团队将进行确认，联系时请提供 ID。",
-        "CONSUMPTION_CANCEL": "班次消耗撤销失败。运营团队将进行确认，联系时请提供 ID。",
+        "CONSUMPTION_RECORD": "班次消耗记录失败。联系时请提供 ID。",
+        "CONSUMPTION_CANCEL": "班次消耗撤销失败。联系时请提供 ID。",
         "THRESHOLD_ALERT": "阈值警报处理失败。可以重新执行；若仍未解决，请附上 ID 联系我们。",
         "WORKFLOW_START": "审批流程启动失败。可以重新执行；若仍未解决，请附上 ID 联系我们。",
         "NOTIFICATION_SEND": "通知发送失败。可以重新执行；若仍未解决，请附上 ID 联系我们。",

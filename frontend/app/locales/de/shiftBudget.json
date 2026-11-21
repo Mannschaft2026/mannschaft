@@ -173,8 +173,8 @@
         "UNKNOWN": "Unbekannter Typ"
       },
       "summaryValue": {
-        "CONSUMPTION_RECORD": "Die Erfassung des Schichtverbrauchs ist fehlgeschlagen. Der Betrieb prüft dies; nennen Sie bei Rückfragen die ID.",
-        "CONSUMPTION_CANCEL": "Die Stornierung des Schichtverbrauchs ist fehlgeschlagen. Der Betrieb prüft dies; nennen Sie bei Rückfragen die ID.",
+        "CONSUMPTION_RECORD": "Die Erfassung des Schichtverbrauchs ist fehlgeschlagen. Nennen Sie bei Rückfragen die ID.",
+        "CONSUMPTION_CANCEL": "Die Stornierung des Schichtverbrauchs ist fehlgeschlagen. Nennen Sie bei Rückfragen die ID.",
         "THRESHOLD_ALERT": "Die Verarbeitung des Schwellenwert-Alarms ist fehlgeschlagen. Sie können es erneut ausführen; bei anhaltendem Problem kontaktieren Sie uns mit der ID.",
         "WORKFLOW_START": "Der Start des Freigabeablaufs ist fehlgeschlagen. Sie können es erneut ausführen; bei anhaltendem Problem kontaktieren Sie uns mit der ID.",
         "NOTIFICATION_SEND": "Der Versand der Benachrichtigung ist fehlgeschlagen. Sie können es erneut ausführen; bei anhaltendem Problem kontaktieren Sie uns mit der ID.",

@@ -173,8 +173,8 @@
         "UNKNOWN": "Unknown type"
       },
       "summaryValue": {
-        "CONSUMPTION_RECORD": "Recording the shift consumption failed. Operations will investigate; please quote the ID when contacting us.",
-        "CONSUMPTION_CANCEL": "Cancelling the shift consumption failed. Operations will investigate; please quote the ID when contacting us.",
+        "CONSUMPTION_RECORD": "Recording the shift consumption failed. Please quote the ID when contacting us.",
+        "CONSUMPTION_CANCEL": "Cancelling the shift consumption failed. Please quote the ID when contacting us.",
         "THRESHOLD_ALERT": "Processing the threshold alert failed. You can retry it; if it persists, contact us with the ID.",
         "WORKFLOW_START": "Starting the approval workflow failed. You can retry it; if it persists, contact us with the ID.",
         "NOTIFICATION_SEND": "Sending the notification failed. You can retry it; if it persists, contact us with the ID.",
