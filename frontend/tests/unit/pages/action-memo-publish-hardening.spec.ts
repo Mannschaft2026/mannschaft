@@ -16,6 +16,7 @@ const apiMock = {
   publishToTeam: vi.fn(),
   getSettings: vi.fn(),
   getTags: vi.fn(),
+  getMemo: vi.fn(),
 }
 
 vi.mock('~/composables/useActionMemoApi', () => ({
@@ -208,6 +209,32 @@ describe('6: 送信中・公開待ちの入力ロック', () => {
     expect(w.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(false)
     expect(window.localStorage.getItem('action-memo-draft-42')).toBeNull()
     expect(w.emitted('pending-change')?.at(-1)).toEqual([false])
+  })
+})
+
+describe('7: 公開のみ再試行が既投稿(ACTION_MEMO_ALREADY_POSTED)で失敗', () => {
+  const alreadyPosted = () => Object.assign(new Error('conflict'), { status: 409, response: { status: 409, _data: { code: 'ACTION_MEMO_016', message: 'already posted' } } })
+
+  it('指定チームに投稿済みなら完了扱いで項目を削除し、flush が止まり続けない', async () => {
+    await useOfflineQueue().enqueuePublishOnly(900, 7)
+    apiMock.publishToTeam.mockRejectedValue(alreadyPosted())
+    apiMock.getMemo.mockResolvedValue({ ...created, id: 900, postedTeamId: 7 })
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect(store.offlineQueueCount).toBe(0)
+    expect(store.error).toBeNull()
+    await store.flushOfflineQueue()
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it('別チームに投稿済みならエラーを残しつつ項目は削除する（永久ブロックしない）', async () => {
+    await useOfflineQueue().enqueuePublishOnly(900, 7)
+    apiMock.publishToTeam.mockRejectedValue(alreadyPosted())
+    apiMock.getMemo.mockResolvedValue({ ...created, id: 900, postedTeamId: 8 })
+    const store = useActionMemoStore()
+    await store.flushOfflineQueue()
+    expect(store.offlineQueueCount).toBe(0)
+    expect(store.error).toBe('action_memo.error.publish_failed')
   })
 })
 
