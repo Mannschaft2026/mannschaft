@@ -11,6 +11,7 @@
  * 権限: チームメンバー以上（middleware: auth で保護）
  */
 import type { GateCheckResponse } from '~/types/payment'
+import { canRemoveAnnouncement } from '~/utils/announcementPermissions'
 import type { SpotlightItem } from '~/composables/useSpotlightApi'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
@@ -23,11 +24,9 @@ const { handleApiError } = useErrorHandler()
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug)
 const authStore = useAuthStore()
 
-/** 解除(×)は ADMIN または著者本人のみ（BE deleteAnnouncement の isAuthor || isAdmin に合わせる）。ピン留めは ADMIN のみ。 */
+/** 解除(×)は ADMIN または著者本人のみ。ピン留めは ADMIN のみ。 */
 function canRemove(item: { author: { id: number } | null }): boolean {
-  if (isAdmin.value) return true
-  const userId = authStore.user?.id
-  return userId != null && item.author?.id === userId
+  return canRemoveAnnouncement(item, isAdmin.value, authStore.user?.id)
 }
 
 const {
