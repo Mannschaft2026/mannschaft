@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "cmpId": "CMP-261120-0925",
-  "scope": "tooling",
+  "scope": "test-only",
   "implementation": {
     "pr": 4686,
     "sha": "688ab97dd08cd23bcaee3c5ad9fb82f957d6114d"
@@ -47,17 +47,17 @@
   "stages": {
     "review": {
       "status": "passed",
-      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4686"
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4686"
     },
     "real": {
       "status": "not-applicable",
-      "scope": "tooling",
-      "reason": "テスト基盤のみの変更で利用者向け画面・API に変化がない"
+      "scope": "test-only",
+      "reason": "テストコードとテスト設定のみの変更で、利用者向け画面・API に変化がない"
     },
     "exploratory": {
       "status": "not-applicable",
-      "scope": "tooling",
-      "reason": "テスト基盤のみの変更で利用者向け画面・API に変化がない"
+      "scope": "test-only",
+      "reason": "テストコードとテスト設定のみの変更で、利用者向け画面・API に変化がない"
     }
   },
   "regressions": []
