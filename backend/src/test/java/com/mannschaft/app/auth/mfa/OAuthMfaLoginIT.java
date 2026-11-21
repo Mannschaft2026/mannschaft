@@ -47,8 +47,35 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * CMP-261012-0911 試練: OAuth ログインが 2FA を迂回する欠陥の是正（HTTP 境界の受け入れテスト）。
  *
  * <p><b>構成</b>: 実 Controller → 実 Service → 実 MySQL（Testcontainers）・実 Security フィルタ（{@link MfaItSupport}）。
- * 外部境界のみ代役: Valkey は {@link MfaValkeyFake}、OAuth プロバイダ（Google / LINE / Apple）は JDK 標準の
+ * 外部境界のみ代役: Valkey は {@link MfaValkeyFake}、OAuth プロバイダ（Google / LINE / Apple）は {@link MfaFakeOAuthProviders}
+ * （JDK 標準の HttpServer。{@code MfaItSupport} の {@code @DynamicPropertySource} で向ける）。
+ * 偽プロバイダは認可コードに {@code <sub>~<email>} を埋めて返すため、テストごとに別の OAuth 利用者を作れる。</p>
+ *
+ * <p>本テストは {@code @Transactional} にしない（AFTER_COMMIT 監査を観測するため）。</p>
+ *
+ * <p>対象 AC: AC-1〜7・AC-12・AC-14〜17（AC-13 は FE 単体、AC-8〜11 は実機）。判断①（method=入口方式）・②（監査 metadata）。</p>
+ */
+@RecordApplicationEvents
+@EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
+@DisplayName("CMP-261012-0911 OAuth ログインの 2FA ゲート（HTTP 境界）")
+class OAuthMfaLoginIT extends MfaEmailOtpItSupport {
 
+    private static final String OAUTH_PATH = "/api/v1/auth/oauth/";
+    private static final String CONFIRM_PATH = "/api/v1/auth/oauth/link/confirm";
+    private static final String UA_LOGIN = "OAuthMfaIT/1.0 (login)";
+    private static final String UA_VALIDATE = "OAuthMfaIT/1.0 (validate)";
+    private static final String MFA_METHOD_KEY_PREFIX = "mannschaft:auth:mfa_session_method:";
+
+    @Autowired
+    private ApplicationEvents events;
+    @Autowired
+    private OAuthAccountRepository oauthAccountRepository;
+    @Autowired
+    private OAuthLinkTokenRepository oauthLinkTokenRepository;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    private final List<Long> oauthUserIds = new CopyOnWriteArrayList<>();
 
     @AfterEach
     void cleanUpOAuthRows() {
