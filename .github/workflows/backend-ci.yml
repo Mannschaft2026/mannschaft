@@ -601,8 +601,8 @@ jobs:
   # ★ 名前を変えると全 PR がマージ不能になるため絶対に変更しないこと。           ★
   #
   # detect と shard の結果を集約して最終的な success/fail を 1 つに束ねる。
-  # if: always() で常に起動し（shard が skip/失敗しても必ず走る）、必須チェックが
-  # 確実に生成されるようにする。
+  # workflow の取消時は集約を起動せず、後続の run に実行枠を渡す。
+  # 取消されていない場合は shard が skip/失敗しても集約して必須チェックを生成する。
   #
   # 【2026-08-21 是正・既存の gate 偽 green 穴も併せて是正】
   #   旧ロジックは「backend_changed != 'true' なら無条件で success」としていたが、
@@ -633,7 +633,7 @@ jobs:
   gate:
     name: Compile & Test
     needs: [detect, shard, lint, shard-coverage-guard, non-jst-timezone, arch-test]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
