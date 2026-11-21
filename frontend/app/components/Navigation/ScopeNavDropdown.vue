@@ -27,6 +27,8 @@ const teamStore = useTeamStore()
 const orgStore = useOrganizationStore()
 
 const popoverRef = ref()
+const menuEl = ref<HTMLElement | null>(null)
+const toggleEl = ref<HTMLButtonElement | null>(null)
 const isPopoverOpen = ref(false)
 const showCreateDialog = ref(false)
 
@@ -176,8 +178,41 @@ async function ensureFoldersLoaded() {
   }
 }
 
+/** メニュー内のフォーカス可能な menuitem を DOM 順で返す。 */
+function menuItems(): HTMLElement[] {
+  return Array.from(menuEl.value?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? [])
+}
+
+/**
+ * メニューのキーボード操作（WAI-ARIA menu パターン）。
+ * ArrowDown/ArrowUp: 次/前の項目（端で循環）、Home/End: 先頭/末尾、Esc: 閉じてトリガーへフォーカスを戻す。
+ */
+function onMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    close()
+    toggleEl.value?.focus()
+    return
+  }
+  const items = menuItems()
+  if (items.length === 0) return
+  const current = items.indexOf(document.activeElement as HTMLElement)
+  let next: number
+  switch (event.key) {
+    case 'ArrowDown': next = current < 0 ? 0 : (current + 1) % items.length; break
+    case 'ArrowUp': next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length; break
+    case 'Home': next = 0; break
+    case 'End': next = items.length - 1; break
+    default: return
+  }
+  event.preventDefault()
+  items[next]?.focus()
+}
+
 function onPopoverShow() {
   isPopoverOpen.value = true
+  // PrimeVue Popover は [autofocus] 要素にしかフォーカスしないため、最初の項目へ明示的にフォーカスする
+  nextTick(() => menuItems()[0]?.focus())
   // フォルダ一覧と個別スコープ一覧を並列フェッチ
   // ストアが空のままだと myScopes computed が空になりジャンプリンクが表示されないため
   const scopeFetch = props.scopeType === 'TEAM'
@@ -205,6 +240,7 @@ function onPopoverHide() {
       @saved="onFolderSaved"
     />
     <button
+      ref="toggleEl"
       type="button"
       class="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-surface-600 dark:text-surface-400 transition-colors hover:bg-surface-100 dark:hover:bg-surface-800"
       aria-haspopup="menu"
@@ -224,7 +260,14 @@ function onPopoverHide() {
       @show="onPopoverShow"
       @hide="onPopoverHide"
     >
-      <div class="flex max-h-[calc(100dvh-16px)] flex-col" style="width: min(520px, calc(100vw - 16px)); max-width: calc(100vw - 16px)">
+      <div
+        ref="menuEl"
+        role="menu"
+        :aria-label="label"
+        class="flex max-h-[calc(100dvh-16px)] flex-col"
+        data-testid="scope-nav-dropdown-menu"
+        style="width: min(520px, calc(100vw - 16px)); max-width: calc(100vw - 16px)"
+        @keydown="onMenuKeydown">
         <!-- メインコンテンツ: モバイルは縦積み、デスクトップは2カラム -->
         <div class="flex min-h-0 flex-1 flex-col gap-0 divide-y divide-surface-200 overflow-y-auto dark:divide-surface-700 md:flex-row md:divide-x md:divide-y-0">
           <!-- 左カラム: フォルダ一覧 -->
@@ -252,6 +295,7 @@ function onPopoverHide() {
               <button
                 type="button"
                 class="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded hover:bg-surface-200 focus:bg-surface-200 focus:outline-none dark:hover:bg-surface-700 dark:focus:bg-surface-700"
+                role="menuitem"
                 :title="t('scopeFolder.nav.showAll')"
                 :aria-label="t('scopeFolder.nav.showAll')"
                 :data-testid="`scope-nav-dropdown-all-hub-${scopeType}`"
@@ -344,6 +388,7 @@ function onPopoverHide() {
                 <button
                   type="button"
                   class="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded hover:bg-surface-200 focus:bg-surface-200 focus:outline-none dark:hover:bg-surface-700 dark:focus:bg-surface-700"
+                  role="menuitem"
                   :title="t('scopeFolder.nav.manage')"
                   :aria-label="t('scopeFolder.nav.manage')"
                   :data-testid="`scope-nav-dropdown-folder-hub-${folder.id}`"
@@ -419,8 +464,9 @@ function onPopoverHide() {
         <!-- フッター: アクションボタン -->
         <div class="flex flex-wrap items-center justify-between gap-1 border-t border-surface-200 px-2 py-2 dark:border-surface-700">
           <button
+            role="menuitem"
             type="button"
-            class="flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 focus:outline-none"
+            class="flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 focus:bg-surface-100 dark:focus:bg-surface-800 focus:outline-none"
             @click="goAllHub"
           >
             <i class="pi pi-list text-xs" aria-hidden="true" />
@@ -429,8 +475,9 @@ function onPopoverHide() {
 
           <div class="flex flex-wrap items-center gap-1">
             <button
+              role="menuitem"
               type="button"
-              class="flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-primary hover:bg-primary-50 dark:hover:bg-primary-900/30 focus:outline-none"
+              class="flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-primary hover:bg-primary-50 dark:hover:bg-primary-900/30 focus:bg-primary-50 dark:focus:bg-primary-900/30 focus:outline-none"
               @click="goCreateNew"
             >
               <i class="pi pi-plus text-xs" aria-hidden="true" />
@@ -438,8 +485,9 @@ function onPopoverHide() {
             </button>
 
             <button
+              role="menuitem"
               type="button"
-              class="flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 focus:outline-none"
+              class="flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 focus:bg-surface-100 dark:focus:bg-surface-800 focus:outline-none"
               @click="goManage"
             >
               <i class="pi pi-cog text-xs text-surface-500" aria-hidden="true" />
