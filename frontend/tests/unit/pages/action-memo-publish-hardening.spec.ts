@@ -339,6 +339,42 @@ describe('10: 作成成功〜公開応答待ちの間のキューの中身', () 
   })
 })
 
+describe('11: オンライン作成成功〜公開応答待ちの間の永続化', () => {
+  const KEY = 'action-memo-draft-42'
+  const draft = () => JSON.parse(window.localStorage.getItem(KEY) ?? 'null') as { content: string; pendingPublish?: { memoId: number; teamId: number } } | null
+
+  it('公開応答待ちの時点で作成済み ID と投稿先が下書きに永続化され、debounce 保存で消えない。再読み込み後の送信は重複作成せず既投稿を実態確認して片付ける', async () => {
+    let rejectPublish: (e: unknown) => void = () => {}
+    apiMock.publishToTeam.mockReturnValueOnce(new Promise((_, rej) => { rejectPublish = rej }))
+    const w1 = await mountInput()
+    await w1.get('[data-testid="action-memo-input-textarea"]').setValue('応答待ち中に再読み込み')
+    void w1.get('[data-testid="action-memo-input-submit"]').trigger('submit')
+    await flushPromises()
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(1)
+    expect(draft()?.pendingPublish).toEqual({ memoId: 501, teamId: 7 })
+    // 応答待ちの間に debounce 保存が走っても、ID なしの下書きで上書きしない
+    await new Promise((r) => setTimeout(r, 1300))
+    expect(draft()?.pendingPublish).toEqual({ memoId: 501, teamId: 7 })
+    // 応答待ちの間は「公開に失敗」とは表示しない
+    expect(w1.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(false)
+    // 再読み込み相当（応答は失われる）
+    w1.unmount()
+    rejectPublish(new Error('connection lost'))
+    await flushPromises()
+
+    apiMock.publishToTeam.mockReset()
+    apiMock.publishToTeam.mockRejectedValue(httpError(409, 'ACTION_MEMO_016'))
+    apiMock.getMemo.mockResolvedValue({ ...created, id: 501, postedTeamId: 7 })
+    const w2 = await mountInput()
+    await flushPromises()
+    expect(w2.get('[data-testid="action-memo-input-textarea"]').attributes('disabled')).toBeDefined()
+    await submit(w2)
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(w2.get('[data-testid="action-memo-input-textarea"]').attributes('disabled')).toBeUndefined()
+    expect(window.localStorage.getItem(KEY)).toBeNull()
+  })
+})
+
 describe('3: 公開失敗時は成功扱いにしない', () => {
   it('publishToTeam が false のとき入力を保持し、失敗文言を出し、再送信は公開だけ再試行する', async () => {
     apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
