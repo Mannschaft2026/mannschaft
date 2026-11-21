@@ -73,6 +73,28 @@ describe('pages/search/index.vue — URL 同期', () => {
     expect(search).toHaveBeenCalledWith({ q: 'サッカー', types: undefined, page: undefined, size: undefined })
   })
 
+  it('RS-05: A 表示後に B の検索を始め、応答前に「戻る」で A へ戻ったら、入力は A に復元され B の結果・URL 書き換えは起きない', async () => {
+    const wrapper = await mountSuspended(SearchPage)
+    await flushPromises()
+    const replaceSpy = vi.spyOn(useRouter(), 'replace')
+    replaceSpy.mockClear()
+    let resolveB: (v: SearchResponse) => void = () => {}
+    search.mockImplementationOnce(() => new Promise<SearchResponse>((r) => { resolveB = r }))
+
+    route.query = { q: 'サッカー' }
+    await flushPromises()
+    expect(search).toHaveBeenLastCalledWith({ q: 'サッカー', types: undefined, page: undefined, size: undefined })
+
+    route.query = { q: 'チーム' }
+    await flushPromises()
+    expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe('チーム')
+
+    resolveB({ ...EMPTY, data: { ...EMPTY.data, query: 'サッカー' } })
+    await flushPromises()
+    expect(replaceSpy).not.toHaveBeenCalled()
+    expect((wrapper.find('[data-testid="global-search-input"]').element as HTMLInputElement).value).toBe('チーム')
+  })
+
   it('RS-04: 空の /search へ戻ると、前回の結果・件数タブ・入力が初期状態へ戻る', async () => {
     search.mockResolvedValue({
       ...EMPTY,

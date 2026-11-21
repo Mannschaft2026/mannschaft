@@ -187,6 +187,28 @@ describe('components/shell/HeaderSearch.vue — ヘッダー検索欄', () => {
     expect(input.attributes('aria-expanded')).toBe('false')
   })
 
+  it('HS-10: IME 変換中（isComposing / keyCode 229）の矢印・Enter・Esc は候補操作にも検索確定にも使わない', async () => {
+    suggestions.mockResolvedValue([KEYWORD, USER])
+    const wrapper = await mountBox()
+    await typeAndWait(wrapper, 'さっ')
+    const input = wrapper.find('[data-testid="header-search-input"]')
+
+    await input.trigger('keydown', { key: 'ArrowDown', isComposing: true })
+    expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')[0]!.attributes('aria-selected')).toBe('false')
+
+    // 通常操作で 1 件選択中でも、変換確定の Enter では候補を確定しない
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(push).not.toHaveBeenCalled()
+    await input.trigger('keydown', { key: 'Enter', keyCode: 229 })
+    expect(push).not.toHaveBeenCalled()
+
+    await input.trigger('keydown', { key: 'Escape', isComposing: true })
+    expect(wrapper.find('[data-testid="header-search-suggestions"]').exists()).toBe(true)
+    await input.trigger('keydown', { key: 'Escape', keyCode: 229 })
+    expect(wrapper.find('[data-testid="header-search-suggestions"]').exists()).toBe(true)
+  })
+
   it('HS-06: suggestions が失敗しても候補は出ず、失敗はログに残す', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     suggestions.mockRejectedValue(new Error('boom'))

@@ -120,6 +120,11 @@ function suggestionLabel(item: Suggestion) {
 }
 
 function onKeydown(event: KeyboardEvent) {
+  // IME 変換中のキーは変換操作用。候補操作にも検索確定にも使わない（確定 Enter での暗黙のフォーム送信も止める）
+  if (event.isComposing || event.keyCode === 229) {
+    if (event.key === 'Enter') event.preventDefault()
+    return
+  }
   if (event.key === 'Escape') {
     open.value = false
     activeIndex.value = -1

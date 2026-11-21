@@ -146,7 +146,17 @@ watch(
     const q = typeof route.query.q === 'string' ? route.query.q : ''
     const type = typeFromRoute()
     const done = searchedCondition.value
-    if (done && q.trim() === done.q && type === done.type) return
+    if (done && q.trim() === done.q && type === done.type) {
+      // 検索済み条件へ戻った（ブラウザの「戻る」等）。再検索はしないが、入力欄は URL に復元し、
+      // 進行中の別条件の検索は無効化する（完了後に結果と URL が書き換わるのを防ぐ）
+      query.value = q
+      activeType.value = type
+      if (loading.value) {
+        searchSeq++
+        loading.value = false
+      }
+      return
+    }
     query.value = q
     activeType.value = type
     if (q.trim().length === 0) {
