@@ -83,6 +83,12 @@ class ActivityScheduleSyncConcurrencyIntegrationTest extends AbstractMySqlIntegr
             em.createNativeQuery("DELETE FROM memberships WHERE scope_type='TEAM' AND scope_id=:id").setParameter("id", teamId).executeUpdate();
             em.createNativeQuery("DELETE FROM user_roles WHERE team_id=:id").setParameter("id", teamId).executeUpdate();
             em.createNativeQuery("DELETE FROM teams WHERE id=:id").setParameter("id", teamId).executeUpdate();
+            // 独立TXでcommit済みの固定IDユーザー（team_id=NULLのSYSTEM_ADMIN含む）も消す。
+            // 残すと同一JVMの後続試験（SYSTEM_ADMIN人数を数える試験等）の前提が崩れる。
+            List<Long> owned = List.of(AUTHOR, OPERATOR);
+            em.createNativeQuery("DELETE FROM memberships WHERE user_id IN (:ids)").setParameter("ids", owned).executeUpdate();
+            em.createNativeQuery("DELETE FROM user_roles WHERE user_id IN (:ids)").setParameter("ids", owned).executeUpdate();
+            em.createNativeQuery("DELETE FROM users WHERE id IN (:ids)").setParameter("ids", owned).executeUpdate();
         });
     }
 
