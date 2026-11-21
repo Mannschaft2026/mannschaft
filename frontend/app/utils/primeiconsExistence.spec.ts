@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 /**
  * app 内で使う `pi pi-*` クラスが primeicons.css に実在することの番人。
  * 実在しない名前は無言でアイコンが欠落する（例: pi-bullhorn → pi-megaphone）。
+ * 抽出対象は `pi pi-xxx` と引用符付きの単独 'pi-xxx'。`pi ${...}` 等の動的組み立ては対象外。
  * 既知の未対応は KNOWN_MISSING に退避（棚卸し用。増やさず、直したら削る）。
  */
 const KNOWN_MISSING = new Set<string>()
@@ -33,7 +34,7 @@ describe('primeicons 実在検査', () => {
   it('使用中の pi-* が primeicons に存在する（既知の未対応を除く）', () => {
     const used = new Map<string, string>()
     for (const f of walk(appDir)) {
-      for (const m of readFileSync(f, 'utf8').matchAll(/\bpi pi-([a-z0-9-]+)/g)) {
+      for (const m of readFileSync(f, 'utf8').matchAll(/(?<![\w-])(?:pi pi-|['"`]pi-)([a-z0-9-]+)(?=['"` ])/g)) {
         if (!used.has(m[1]!)) used.set(m[1]!, f)
       }
     }
