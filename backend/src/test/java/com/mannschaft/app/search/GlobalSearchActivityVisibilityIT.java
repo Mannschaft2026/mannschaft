@@ -237,11 +237,14 @@ class GlobalSearchActivityVisibilityIT extends AbstractGlobalSearchIT {
             assertThat(detail.path("meta").path("total").asLong()).isEqualTo(resultIds(detail, ACTIVITY).size());
             assertThat(typeCount(search(admin, kw), ACTIVITY)).isEqualTo(resultIds(detail, ACTIVITY).size());
 
-            // 対照: 同じ fixture で、自チームの公開済み記録は SYSTEM_ADMIN（所属者として）にも出る
+            // 対照: 同じ記録群で、通常の所属者には他チーム・下書き以外の自チームの公開済み記録だけが出る
+            // （SYSTEM_ADMIN は集約側の母集団を持たないため、所属者であっても対照には使わない）
+            Long member = viewer("sa-member");
+            teamMember(member, own);
             Long visible = teamActivity(own, author, kw + " 自チーム", ActivityVisibility.MEMBERS_ONLY);
-            JsonNode after = search(admin, kw, ACTIVITY);
-            assertThat(resultIds(after, ACTIVITY)).containsExactly(visible);
-            assertThat(typeCount(after, ACTIVITY)).isEqualTo(1);
+            JsonNode memberBody = search(member, kw, ACTIVITY);
+            assertThat(resultIds(memberBody, ACTIVITY)).containsExactly(visible);
+            assertThat(typeCount(memberBody, ACTIVITY)).isEqualTo(1);
         }
 
         @Test

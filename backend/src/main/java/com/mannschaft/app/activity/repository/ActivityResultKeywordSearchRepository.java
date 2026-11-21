@@ -8,7 +8,6 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Repository;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,8 +35,9 @@ import java.util.Set;
  *
  * <p><b>時刻列</b>: 期間指定は閲覧者 TZ の壁時計とオフセットを渡し、SQL の {@code CONVERT_TZ} で UTC 格納基準へ
  * 変換してから {@code created_at} と比較する（Java の時刻値は束縛しない。番人 {@code RawSqlTimeColumnGuardTest}）。
- * 作成日時は {@code created_at}（UTC 格納値）を Unix 紀元からのマイクロ秒として SQL で算出して読み、瞬間として扱う
- * （セッション TZ にも JDBC の時刻変換にも依存しない）。値はすべてバインドする。</p>
+ * 作成日時は {@code created_at} の DB 格納値（UTC 壁時計）を {@code DATE_FORMAT} で文字列として読み、呼び出し側が
+ * {@code SearchHit#createdAtOfStoredUtc} で瞬間へ直す（セッション TZ にも JDBC の時刻変換にも依存しない。
+ * 他の検索種別と同じ方式）。値はすべてバインドする。</p>
  */
 @Repository
 public class ActivityResultKeywordSearchRepository {
@@ -109,11 +109,11 @@ public class ActivityResultKeywordSearchRepository {
      * @param scopeId     スコープ ID
      * @param title       題名
      * @param description 説明（null 可）
-     * @param createdBy   作成者（null 可）
-     * @param createdAt   作成日時の瞬間（null 可）
+     * @param createdBy    作成者（null 可）
+     * @param createdAtUtc 作成日時の DB 格納値（UTC 壁時計、{@code yyyy-MM-dd HH:mm:ss.SSSSSS}。null 可）
      */
     public record ActivityRow(Long id, String scopeType, Long scopeId, String title, String description,
-                              Long createdBy, Instant createdAt) {
+                              Long createdBy, String createdAtUtc) {
     }
 
     /**
@@ -149,7 +149,7 @@ public class ActivityResultKeywordSearchRepository {
     public List<ActivityRow> find(Condition condition, int offset, int limit) {
         Map<String, Object> params = new HashMap<>();
         String sql = "SELECT ar.id, ar.scope_type, ar.scope_id, ar.title, ar.description, ar.created_by,"
-                + " TIMESTAMPDIFF(MICROSECOND, '1970-01-01 00:00:00', ar.created_at) AS created_epoch_micros"
+                + " DATE_FORMAT(ar.created_at, '%Y-%m-%d %H:%i:%s.%f') AS created_at_utc"
                 + " FROM activity_results ar" + visibleWhere(condition, params)
                 + " ORDER BY ar.created_at DESC, ar.id DESC LIMIT :limit OFFSET :offset";
         Query query = em.createNativeQuery(sql);
@@ -160,19 +160,18 @@ public class ActivityResultKeywordSearchRepository {
         List<Object[]> rows = query.getResultList();
         List<ActivityRow> result = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
-            Long micros = toLong(row[6]);
-            Instant createdAt = micros == null ? null
-                    : Instant.ofEpochSecond(Math.floorDiv(micros, 1_000_000L),
-                            Math.floorMod(micros, 1_000_000L) * 1_000L);
             result.add(new ActivityRow(toLong(row[0]), String.valueOf(row[1]), toLong(row[2]),
-                    row[3] == null ? null : row[3].toString(), row[4] == null ? null : row[4].toString(),
-                    toLong(row[5]), createdAt));
+                    text(row[3]), text(row[4]), toLong(row[5]), text(row[6])));
         }
         return result;
     }
 
     private static Long toLong(Object value) {
         return value == null ? null : ((Number) value).longValue();
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : value.toString();
     }
 
     /** 本体の述語: 候補条件 ＋（手動記録 OR 許可済み自動生成記録）。 */

@@ -11,7 +11,6 @@ import com.mannschaft.app.activity.repository.ActivityResultKeywordSearchReposit
 import com.mannschaft.app.activity.repository.ActivityResultKeywordSearchRepository.ScopeGroup;
 import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.common.NameResolverService;
-import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.common.visibility.mapping.ActivityVisibilityMapper;
 import com.mannschaft.app.schedule.dto.ScheduleActivitySource;
@@ -123,6 +122,7 @@ public class ActivityResultSearchContributor implements SearchContributor {
 
         List<SearchHit> hits = new ArrayList<>(rows.size());
         for (ActivityRow r : rows) {
+            // 返却列はすべて可視性を判定した同じ SQL の行の値（ID で読み直さない。PR-6 検分 P1）
             boolean team = SearchViewer.TEAM.equals(r.scopeType());
             if (!team && !SearchViewer.ORGANIZATION.equals(r.scopeType())) {
                 // SQL 側で TEAM / ORGANIZATION に限定済みだが安全側
@@ -143,10 +143,7 @@ public class ActivityResultSearchContributor implements SearchContributor {
             String url = "/activities/" + r.id();
             hits.add(new SearchHit(SearchType.ACTIVITY, r.id(), r.title(),
                     SearchTextHighlighter.snippet(r.description(), criteria.terms()), highlights,
-                    null, author, scope,
-                    r.createdAt() == null ? null
-                            : r.createdAt().atZone(UserZoneLocalDateTimeParser.SERVER_ZONE).toOffsetDateTime(),
-                    url, List.of()));
+                    null, author, scope, SearchHit.createdAtOfStoredUtc(r.createdAtUtc()), url, List.of()));
         }
         return hits;
     }
