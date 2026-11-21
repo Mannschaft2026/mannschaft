@@ -6,6 +6,7 @@ import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.notification.dto.NotificationResponse;
 import com.mannschaft.app.notification.dto.SnoozeRequest;
 import com.mannschaft.app.notification.dto.UnreadCountResponse;
+import com.mannschaft.app.notification.service.NotificationListQueryService;
 import com.mannschaft.app.notification.service.NotificationService;
 import com.mannschaft.app.scopefolder.entity.enums.ScopeType;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,7 @@ import com.mannschaft.app.common.security.SelfScopedEndpoint;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final NotificationListQueryService notificationListQueryService;
 
 
     /**
@@ -48,7 +50,7 @@ public class NotificationController {
      * フィルタを適用する。既読条件はフォルダ指定の有無に関わらず適用する。</p>
      */
     // 認可根治戦役 Wave4 ロットD: userId は常に SecurityUtils.getCurrentUserId()。
-    // folderId 指定時も notificationService.listNotificationsByFolder が
+    // フォルダ条件を適用する場合は notificationListQueryService が
     // myScopeFolderQueryService.getScopeIdsInFolder(userId, folderId)（IDOR防止込み・所有者検証あり）を
     // 通してから絞り込む。
     @AuthorizedInService
@@ -66,9 +68,8 @@ public class NotificationController {
             @RequestParam(name = "is_read", required = false) Boolean isRead,
             Pageable pageable) {
         Long userId = SecurityUtils.getCurrentUserId();
-        Page<NotificationResponse> page = (folderId != null && scopeType != null)
-                ? notificationService.listNotificationsByFolder(userId, folderId, scopeType, isRead, pageable)
-                : notificationService.listNotifications(userId, isRead, pageable);
+        Page<NotificationResponse> page =
+                notificationListQueryService.listNotifications(userId, folderId, scopeType, isRead, pageable);
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 page.getTotalElements(), page.getNumber(), page.getSize(), page.getTotalPages());
         return ResponseEntity.ok(PagedResponse.of(page.getContent(), meta));

@@ -7,6 +7,7 @@ import com.mannschaft.app.notification.dto.NotificationResponse;
 import com.mannschaft.app.notification.dto.NotificationStatsResponse;
 import com.mannschaft.app.notification.dto.SnoozeRequest;
 import com.mannschaft.app.notification.dto.UnreadCountResponse;
+import com.mannschaft.app.notification.service.NotificationListQueryService;
 import com.mannschaft.app.notification.service.NotificationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,9 @@ class NotificationControllerTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private NotificationListQueryService notificationListQueryService;
+
     @InjectMocks
     private NotificationController notificationController;
 
@@ -98,9 +102,9 @@ class NotificationControllerTest {
                 mocked.when(SecurityUtils::getCurrentUserId).thenReturn(USER_ID);
                 Pageable pageable = PageRequest.of(0, 10);
                 NotificationResponse response = createNotificationResponse().toBuilder().isRead(true).build();
-                given(notificationService.listNotifications(USER_ID, null, pageable))
+                given(notificationListQueryService.listNotifications(USER_ID, null, null, null, pageable))
                         .willReturn(new PageImpl<>(List.of(response), pageable, 1));
-                given(notificationService.listNotifications(USER_ID, false, pageable))
+                given(notificationListQueryService.listNotifications(USER_ID, null, null, false, pageable))
                         .willReturn(Page.empty(pageable));
                 MockMvc mockMvc = MockMvcBuilders.standaloneSetup(notificationController)
                         .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
@@ -120,8 +124,8 @@ class NotificationControllerTest {
                                 .param("size", "10")
                                 .param("is_read", "invalid"))
                         .andExpect(status().isBadRequest());
-                verify(notificationService).listNotifications(USER_ID, null, pageable);
-                verify(notificationService).listNotifications(USER_ID, false, pageable);
+                verify(notificationListQueryService).listNotifications(USER_ID, null, null, null, pageable);
+                verify(notificationListQueryService).listNotifications(USER_ID, null, null, false, pageable);
             }
         }
     }
