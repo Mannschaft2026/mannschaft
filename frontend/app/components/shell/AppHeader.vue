@@ -123,6 +123,8 @@ function handleLogoClick() {
       <div class="flex items-center gap-1">
         <ClientOnly>
           <template v-if="authStore.isAuthenticated">
+            <!-- F04.6 全体検索の入口（デスクトップ=検索欄、モバイル=虫眼鏡アイコン。どちらも /search へ） -->
+            <HeaderSearch />
             <!-- AC-16: チーム/組織ドロップダウン・目安箱・受信箱・PWA・ログアウト・Syncは
                  デスクトップ(md=768px)以上のみヘッダーに残置する。モバイルはハンバーガー経由の
                  ドロワー（GlobalSidebar force-wide 内の退避セクション）へ移設し、横パンを根治する。 -->
