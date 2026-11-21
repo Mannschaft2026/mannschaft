@@ -115,6 +115,29 @@ FE だけの PR、ドキュメントだけの PR がすべて足止め**され�
 
 ---
 
+## 軽量 PR 検査は1ジョブに統合している（CMP-261120-1301）
+
+CI の遅さの主因は、実行数秒のジョブが GitHub ランナーの順番待ちで 30〜100 分止まることである。
+ジョブ本数そのものが待ち行列を長くするため、軽い PR 時検査は `.github/workflows/pr-light-checks.yml` の
+**1ジョブ（`light-checks`）** にまとめた。統合前の対応は次のとおり。
+
+| 旧 workflow / ジョブ | 現在 | 起動範囲 |
+|---|---|---|
+| `harness-ci.yml`（Harness CI） | `[Harness]` step 群（Node 24） | main 向け PR |
+| `worktree-cleanup.yml`（Worktree cleanup guard） | `[Worktree guard]` step 群（Node 22） | main 向け PR |
+| `frontend-lockfile-verify.yml`（変更検出 / 内容検査 / glibc / musl） | `[lockfile]` step 群（musl は `docker run node:22.23.2-alpine`） | main 向け PR かつ `frontend/package-lock.json`・`package.json` に変更あり |
+| `secret-scan.yml` の PR 差分スキャン | `[gitleaks]` step 群 | 全 PR |
+
+- 旧3 workflow は PR 以外の trigger が無かったため削除した。`secret-scan.yml` は main push 差分と週次全履歴のために残している（PR 起動のみ外した）。
+- 起動範囲は step の `if`（`github.base_ref == 'main'`・lockfile 変更判定 step の出力）で従来と同じに保つ。対象外は step を skip しジョブは成功する。
+- 各 step は `!cancelled()` 付きで、1つ失敗しても残りを走らせ、最後にジョブが赤になる。lockfile の変更判定 step が失敗した場合も、判定 step 自身が赤のままジョブを失敗させる。
+- concurrency は `cancel-in-progress: false` のまま。秘密情報スキャンは、後続の push（force push を含む）で範囲から外れうるコミットも走査し切るため、従来から走りかけを捨てない方針で、統合ジョブはこれに合わせた。旧 Harness / Worktree guard / lockfile 検証は `cancel-in-progress: true` だったので、連続 push 時は古い run も最後まで走る点が変わる（1 run は数分）。
+- 旧4 workflow のチェック名（`Harness CI` 等）は main の必須チェックではなかった。新ジョブ名は `PR 軽量検査`。
+- 新しい軽量検査は、ここへ step として足す（別 workflow・別ジョブを増やさない）。重い検査（backend-ci・frontend-ci 等）は従来どおり別 workflow。
+- `scripts/test-secret-scan.py` は、PR 差分は `pr-light-checks.yml`、main push 差分と全履歴は `secret-scan.yml` を読んで3経路を検証する。
+
+---
+
 ## 参考
 
 - `.github/workflows/backend-ci.yml` 冒頭コメント（2026-05-25 の項）
