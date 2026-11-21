@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "cmpId": "CMP-261118-0636",
-  "scope": "tooling",
+  "scope": "app",
   "implementation": {
     "pr": 4645,
     "sha": "6b35b3137e2261ab19c3d4d903c396cf09ae904e"
@@ -41,14 +41,14 @@
       "evidence": "https://github.com/kenta-0420/mannschaft/pull/4645"
     },
     "real": {
-      "status": "not-applicable",
-      "scope": "tooling",
-      "reason": "CI 基盤とテスト構成の変更で画面導線なし"
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/actions/runs/44719267579",
+      "note": "画面のない CI 基盤・テスト構成の変更のため、実機＝本番相当の実行環境である GitHub Actions 実行機で migration 込み CI を2回実測。全 8 shard の Run tests ≤78分（最大 75.0 / 64.9 分）。マスター裁可（2026-11-21）により実機をCI実行機と読み替え"
     },
     "exploratory": {
-      "status": "not-applicable",
-      "scope": "tooling",
-      "reason": "CI 基盤とテスト構成の変更で画面導線なし"
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/actions/runs/44835312495",
+      "note": "#4678 マージ後の main を base にした筋書きなしの他 PR の BE CI を観測。run 44835312495（全shard 45.5〜61.6分）、44831900048（45.5〜75.8分）、PR #4706 の run 44874500577（36.0〜52.9分）。いずれも78分以内。観測中に構成キー番人の基準値ずれ（PR #4677 の OAuthMfaLoginIT 由来）を発見し PR #4706 で再生成済み。マスター裁可（2026-11-21）によりアリシゼーションを本観測で読み替え"
     }
   },
   "regressions": []
