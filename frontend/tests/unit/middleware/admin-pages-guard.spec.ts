@@ -40,28 +40,38 @@ const SYSTEM_ADMIN_PAGES = [
   'villages/creation-requests.vue',
 ]
 
-/** スコープ（チーム/組織）の ADMIN 系ロールが対象のページ。ガード方式は棚卸し文書に記載（本番人の対象外）。 */
-const SCOPE_ADMIN_PAGES = [
+/** スコープ（チーム/組織）の ADMIN 系ロールが対象で、ページ内に入口ガード（useAdminScopeGuard）を持つページ。 */
+const SCOPE_GUARDED_PAGES = [
   'bulletin-categories.vue',
+  'line-settings.vue',
+  'receipt-settings.vue',
+  'receipts.vue',
+  'schedule-settings.vue',
+  'sns-settings.vue',
+  'vendors/index.vue',
+]
+
+/**
+ * スコープ ADMIN 系だが入口ガードが無いページ（要判断。最低ロール・個人スコープの扱いが未決のため未実装）。
+ * shift-budget 4ページは useShiftBudgetAdminAccess で導線を出し分けるだけで、URL 直打ちの遷移は止めない。
+ * ガードを実装したら、このリストから SCOPE_GUARDED_PAGES へ移すこと（移し忘れは下の検査が赤で知らせる）。
+ */
+const SCOPE_PENDING_DECISION_PAGES = [
   'dashboard.vue',
   'feedbacks.vue',
-  'line-settings.vue',
   'member-permissions.vue',
   'permission-groups.vue',
   'promotions.vue',
   'proxy-desk.vue',
   'proxy/consents.vue',
   'proxy/records.vue',
-  'receipt-settings.vue',
-  'receipts.vue',
-  'schedule-settings.vue',
   'shift-budget/alerts.vue',
   'shift-budget/allocations.vue',
   'shift-budget/dashboard.vue',
   'shift-budget/failed-events.vue',
-  'sns-settings.vue',
-  'vendors/index.vue',
 ]
+
+const SCOPE_ADMIN_PAGES = [...SCOPE_GUARDED_PAGES, ...SCOPE_PENDING_DECISION_PAGES]
 
 const ROOT = join(process.cwd(), 'app', 'pages', 'admin')
 
@@ -95,5 +105,26 @@ describe('admin 配下ページのガード網羅（番人）', () => {
       (p) => !/middleware:\s*(\[[^\]]*)?'auth'/.test(readFileSync(join(ROOT, p), 'utf8')),
     )
     expect(missing).toEqual([])
+  })
+
+  it('SYSTEM_ADMIN 専用ページとスコープ系ページの分類が重複していない', () => {
+    expect(SYSTEM_ADMIN_PAGES.filter((p) => SCOPE_ADMIN_PAGES.includes(p))).toEqual([])
+    expect(SCOPE_GUARDED_PAGES.filter((p) => SCOPE_PENDING_DECISION_PAGES.includes(p))).toEqual([])
+  })
+
+  it('スコープ系の「ガード済み」ページは useAdminScopeGuard を呼んでいる（ガードが外れたら赤）', () => {
+    const missing = SCOPE_GUARDED_PAGES.filter(
+      (p) => !/useAdminScopeGuard\(/.test(readFileSync(join(ROOT, p), 'utf8')),
+    )
+    expect(missing).toEqual([])
+  })
+
+  it('「要判断」リストのページは入口ガード未実装のまま（実装したらリストを更新する）', () => {
+    const nowGuarded = SCOPE_PENDING_DECISION_PAGES.filter((p) =>
+      /useAdminScopeGuard\(|middleware:\s*\[[^\]]*'(system-admin|org-role-guard|admin-console)'/.test(
+        readFileSync(join(ROOT, p), 'utf8'),
+      ),
+    )
+    expect(nowGuarded).toEqual([])
   })
 })
