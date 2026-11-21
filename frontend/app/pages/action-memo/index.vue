@@ -77,6 +77,20 @@ function onMemoCreated() {
   selectedCompletesTodo.value = false
 }
 
+// 下書きから復元した選択値。設定取得（既定カテゴリの反映）で上書きされないよう印を付ける
+let draftExtrasRestored = false
+let restoredTeamId: number | null = null
+
+function onDraftRestored(extras: ActionMemoInputExtras) {
+  draftExtrasRestored = true
+  if (extras.category) selectedCategory.value = extras.category
+  selectedDuration.value = extras.durationMinutes ?? null
+  selectedProgressRate.value = extras.progressRate ?? null
+  selectedCompletesTodo.value = extras.completesTodo === true
+  restoredTeamId = extras.teamId ?? null
+  selectedTeamId.value = restoredTeamId
+}
+
 // Phase 4-α: 組織スコープ
 const selectedOrgId = ref<number | null>(null)
 const selectedOrgVisibility = ref<OrgVisibility>('TEAM_ONLY')
@@ -95,7 +109,7 @@ function onOrgChange() {
 watch(
   () => store.settings,
   (s) => {
-    selectedCategory.value = s.defaultCategory ?? 'OTHER'
+    if (!draftExtrasRestored) selectedCategory.value = s.defaultCategory ?? 'OTHER'
     if (selectedTeamId.value === null) {
       selectedTeamId.value = s.defaultPostTeamId ?? null
     }
@@ -120,6 +134,10 @@ onMounted(async () => {
     store.fetchAvailableTeams(),
     store.fetchAvailableOrgs(),
   ])
+  // 復元した投稿先が現在の選択肢に無ければ捨てる（他ユーザー・脱退済みチームへの誤投稿防止）
+  if (restoredTeamId !== null && !store.availableTeams.some((team) => team.id === restoredTeamId)) {
+    selectedTeamId.value = null
+  }
   await store.refreshOfflineQueueCount()
   // mood_enabled = true の場合のみ mood-stats を取得
   if (store.isMoodEnabled) {
@@ -256,7 +274,7 @@ function goTags() {
         {{ t(store.error) }}
       </div>
 
-      <ActionMemoInput :extras="inputExtras" @created="onMemoCreated" />
+      <ActionMemoInput :extras="inputExtras" @created="onMemoCreated" @draft-restored="onDraftRestored" />
 
       <!-- Phase 3: カテゴリ選択（常時表示） -->
       <div class="flex flex-wrap items-center gap-2 px-1">

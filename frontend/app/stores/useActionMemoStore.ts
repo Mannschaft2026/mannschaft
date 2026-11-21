@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { defineStore } from 'pinia'
 import type {
   ActionMemo,
+  ActionMemoInputExtras,
   ActionMemoSettings,
   ActionMemoTag,
   AvailableOrg,
@@ -81,6 +82,34 @@ const DRAFT_KEY_PREFIX = 'action-memo-draft-'
 
 function draftKey(userId: number | string): string {
   return `${DRAFT_KEY_PREFIX}${userId}`
+}
+
+/**
+ * 下書きの読み取り。新形式は {v:1, content, extras} の JSON、旧形式は本文だけの文字列。
+ * JSON として読めても形式が合わなければ（本文がたまたま JSON 風でも）全体を本文として扱う。
+ */
+function readDraft(userId: number | string): { content: string; extras: ActionMemoInputExtras | null } {
+  if (typeof window === 'undefined') return { content: '', extras: null }
+  let raw = ''
+  try {
+    raw = localStorage.getItem(draftKey(userId)) ?? ''
+  } catch {
+    // Storage 無効環境は下書き無しとして扱う
+  }
+  {
+    if (raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw) as { v?: unknown; content?: unknown; extras?: unknown }
+        if (parsed && parsed.v === 1 && typeof parsed.content === 'string') {
+          const extras = parsed.extras && typeof parsed.extras === 'object' ? (parsed.extras as ActionMemoInputExtras) : null
+          return { content: parsed.content, extras }
+        }
+      } catch {
+        // JSON ではない本文
+      }
+    }
+    return { content: raw, extras: null }
+  }
 }
 
 /** 楽観的 UI の一時 ID。負値で本物の ID と被らないようにする */
@@ -636,22 +665,25 @@ export const useActionMemoStore = defineStore('actionMemo', {
 
     // === Draft ===
 
-    /** localStorage から下書きを復元 */
+    /** localStorage から下書き本文を復元（旧形式の文字列のみの下書きも本文として読む） */
     loadDraft(userId: number | string): string {
-      if (typeof window === 'undefined') return ''
-      try {
-        return localStorage.getItem(draftKey(userId)) ?? ''
-      } catch {
-        return ''
-      }
+      return readDraft(userId).content
     },
 
-    /** localStorage に下書きを保存 */
-    saveDraft(userId: number | string, content: string): void {
+    /** 下書きと一緒に保存した選択値（カテゴリ・投稿先・所要時間など）を復元。旧形式・未保存は null */
+    loadDraftExtras(userId: number | string): ActionMemoInputExtras | null {
+      return readDraft(userId).extras
+    },
+
+    /** localStorage に下書きを保存（extras があれば選択値も一緒に保存する） */
+    saveDraft(userId: number | string, content: string, extras?: ActionMemoInputExtras): void {
       if (typeof window === 'undefined') return
       try {
         if (content && content.length > 0) {
-          localStorage.setItem(draftKey(userId), content)
+          localStorage.setItem(
+            draftKey(userId),
+            extras ? JSON.stringify({ v: 1, content, extras }) : content,
+          )
         } else {
           localStorage.removeItem(draftKey(userId))
         }

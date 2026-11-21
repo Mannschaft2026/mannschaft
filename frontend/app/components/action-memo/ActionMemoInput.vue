@@ -22,6 +22,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   created: [memo: ActionMemo]
+  /** 下書きと一緒に保存されていた選択値（カテゴリ・投稿先・所要時間など）を復元したとき */
+  'draft-restored': [extras: ActionMemoInputExtras]
 }>()
 
 const store = useActionMemoStore()
@@ -52,16 +54,19 @@ onMounted(() => {
   const draft = store.loadDraft(userId.value)
   if (draft) {
     content.value = draft
+    const savedExtras = store.loadDraftExtras(userId.value)
+    if (savedExtras) emit('draft-restored', savedExtras)
   }
 })
 
 // === 下書きの自動保存 (debounce 1秒) ===
-watch(content, (next) => {
+// 本文の変更に加え、画面側の選択値の変更も下書きへ反映する（選択値は送信対象のため一緒に保存）
+watch([content, () => props.extras], ([next]) => {
   // 公開待ちのメモとは別の内容に編集されたら、再試行状態は破棄する（新規メモとして扱う）
   if (pendingPublish.value && next !== pendingPublish.value.content) pendingPublish.value = null
   if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value)
   draftSaveTimer.value = setTimeout(() => {
-    store.saveDraft(userId.value, next)
+    store.saveDraft(userId.value, content.value, props.extras)
     if (next.length > 0) {
       draftSavedFlash.value = true
       setTimeout(() => (draftSavedFlash.value = false), 1500)

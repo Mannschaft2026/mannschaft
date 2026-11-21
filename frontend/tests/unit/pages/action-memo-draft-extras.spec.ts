@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import ActionMemoInput from '~/components/action-memo/ActionMemoInput.vue'
 import { useActionMemoStore } from '~/stores/useActionMemoStore'
 import ActionMemoPage from '~/pages/action-memo/index.vue'
 
@@ -83,12 +82,6 @@ async function mountPage() {
   const w = await mountSuspended(ActionMemoPage)
   await flushPromises()
   return w
-}
-
-async function submit(w: Awaited<ReturnType<typeof mountPage>>, text: string) {
-  await w.get('[data-testid="action-memo-input-textarea"]').setValue(text)
-  await w.get('[data-testid="action-memo-input-submit"]').trigger('submit')
-  await flushPromises()
 }
 
 describe('下書きに選択値も保存・復元する', () => {
