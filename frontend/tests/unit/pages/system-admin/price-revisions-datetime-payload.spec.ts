@@ -233,4 +233,24 @@ describe('/system-admin/price-revisions 日時送信値', () => {
     expect(vm.taxPreviewAvailable).toBe(true)
     expect(vm.taxAmountPreview).toBe(100)
   })
+
+  it('税率0%の税コードを選ぶと税額0を正しく表示し、未選択（案内文）と区別される', async () => {
+    listTaxCodes.mockResolvedValue([{ ...TAX_CODE, id: 't0', code: 'JP_EXEMPT_0', rateBasisPoints: 0 }])
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as unknown as PageVm
+    await openCreate(vm)
+    vm.form.effectiveFrom = '2026-09-24T12:00'
+    await flushPromises()
+    vm.taxMode = 'EXCLUSIVE'
+    vm.bandForm.inputAmount = 1000
+    await flushPromises()
+    expect(vm.taxPreviewAvailable).toBe(false)
+
+    vm.bandForm.taxCode = 'JP_EXEMPT_0'
+    await flushPromises()
+
+    expect(vm.taxPreviewAvailable).toBe(true)
+    expect(vm.taxAmountPreview).toBe(0)
+    expect(wrapper.find('[aria-label="tax-preview-hint"]').exists()).toBe(false)
+  })
 })
