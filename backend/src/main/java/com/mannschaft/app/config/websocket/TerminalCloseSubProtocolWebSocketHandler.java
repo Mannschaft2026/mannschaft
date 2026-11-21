@@ -60,8 +60,10 @@ public class TerminalCloseSubProtocolWebSocketHandler extends SubProtocolWebSock
         InternalSession internal = sessions.get(session);
         if (internal == null) return;
         synchronized (internal) {
-            if (sessions.get(session) == internal) super.handleMessage(internal, message);
+            if (sessions.get(session) != internal) return;
         }
+        // 受理済みの処理がDB待ちでも、切断callbackを妨げない。
+        super.handleMessage(internal, message);
     }
 
     @Override
@@ -69,8 +71,9 @@ public class TerminalCloseSubProtocolWebSocketHandler extends SubProtocolWebSock
         InternalSession internal = sessions.get(session);
         if (internal == null) return;
         synchronized (internal) {
-            if (sessions.get(session) == internal) super.handleTransportError(internal, exception);
+            if (sessions.get(session) != internal) return;
         }
+        super.handleTransportError(internal, exception);
     }
 
     @Override

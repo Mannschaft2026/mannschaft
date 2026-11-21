@@ -121,7 +121,7 @@ class TerminalCloseSubProtocolWebSocketHandlerTest {
     }
 
     @Test
-    void 受信中のcloseは受信完了後に処理し以降の受信を拒否する() throws Exception {
+    void 受信中もcloseは完了し以降の受信を拒否する() throws Exception {
         SubProtocolHandler protocol = mock(SubProtocolHandler.class);
         when(protocol.getSupportedProtocols()).thenReturn(List.of("test"));
         TerminalCloseSubProtocolWebSocketHandler handler = new TerminalCloseSubProtocolWebSocketHandler(
@@ -151,12 +151,8 @@ class TerminalCloseSubProtocolWebSocketHandlerTest {
         try {
             assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
             close.start();
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-            while (close.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) {
-                Thread.onSpinWait();
-            }
-            assertThat(close.getState()).isEqualTo(Thread.State.BLOCKED);
-            assertThat(closed.getCount()).isEqualTo(1);
+            assertThat(closed.await(5, TimeUnit.SECONDS)).as("受信処理の完了前にcloseが完了する").isTrue();
+            verify(protocol).afterSessionEnded(any(), eq(CloseStatus.NORMAL), any());
         } finally {
             release.countDown();
             receive.join(5000);
@@ -172,6 +168,7 @@ class TerminalCloseSubProtocolWebSocketHandlerTest {
     private static WebSocketSession session() {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn("same");
+        when(session.getPrincipal()).thenReturn(mock(java.security.Principal.class));
         when(session.isOpen()).thenReturn(true);
         when(session.getAcceptedProtocol()).thenReturn("test");
         when(session.getAttributes()).thenReturn(new ConcurrentHashMap<String, Object>());

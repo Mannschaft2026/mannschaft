@@ -90,6 +90,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
         assertThat(heartbeats).as("実SockJSのheartbeat経路を検査する").isNotEmpty();
         AtomicReference<WebSocketSession> peer = new AtomicReference<>();
         AtomicReference<String> serverId = new AtomicReference<>();
+        String marker = UUID.randomUUID().toString();
         var disconnected = new LinkedBlockingQueue<String>();
         var authorizationCompleted = new LinkedBlockingQueue<String>();
         var disconnectCompleted = new LinkedBlockingQueue<String>();
@@ -98,6 +99,16 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
         };
         events.addApplicationListener(listener);
         ChannelInterceptor afterAuthorization = new ChannelInterceptor() {
+            @Override
+            public Message<?> preSend(Message<?> message, MessageChannel channel) {
+                var accessor = StompHeaderAccessor.wrap(message);
+                if ((accessor.getCommand() == StompCommand.CONNECT || accessor.getCommand() == StompCommand.STOMP)
+                        && marker.equals(accessor.getFirstNativeHeader("X-Test-Connection-Marker"))) {
+                    serverId.compareAndSet(null, accessor.getSessionId());
+                }
+                return message;
+            }
+
             @Override
             public void afterSendCompletion(Message<?> message, MessageChannel channel, boolean sent, Exception exception) {
                 var accessor = StompHeaderAccessor.wrap(message);
@@ -109,7 +120,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                 }
             }
         };
-        // 本物の認可を置換しない。先頭で完了callbackだけを登録し、後段の成功/拒否の両方を待つ。
+        // 実CONNECTの内部IDを認可前に捕捉し、後段の成功/拒否の完了も待つ。
         inboundChannel.addInterceptor(0, afterAuthorization);
         StandardWebSocketClient delegate = new StandardWebSocketClient();
         WebSocketClient tracked = new WebSocketClient() {
@@ -117,8 +128,6 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                 return delegate.execute(handler, uri, args).thenApply(session -> { peer.set(session); return session; });
             }
             public CompletableFuture<WebSocketSession> execute(WebSocketHandler handler, WebSocketHttpHeaders headers, URI uri) {
-                String[] parts = uri.getPath().split("/");
-                serverId.set(parts[parts.length - 2]);
                 return delegate.execute(handler, headers, uri).thenApply(session -> { peer.set(session); return session; });
             }
         };
@@ -132,6 +141,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
             try {
                 var headers = new StompHeaders();
                 headers.set("X-Signage-Token", token.getToken());
+                headers.set("X-Test-Connection-Marker", marker);
                 var handshake = new WebSocketHttpHeaders();
                 handshake.setOrigin("http://localhost:3000");
                 var connected = client.connectAsync("ws://127.0.0.1:" + port + "/ws", handshake, headers,
@@ -140,7 +150,7 @@ class SignageSocketDatabaseIT extends SignageSocketIntegrationFixture {
                         "SELECT COUNT(*) FROM information_schema.processlist WHERE id <> CONNECTION_ID() "
                                 + "AND state LIKE '%lock%' AND info LIKE 'select %' AND info LIKE '%signage_access_tokens%'",
                         Integer.class) > 0);
-                assertThat(serverId.get()).as("実SockJS session IDを取得済み").isNotBlank();
+                assertThat(serverId.get()).as("実CONNECTの内部session IDを取得済み").isNotBlank();
                 assertThat(peer.get()).isInstanceOf(StandardWebSocketSession.class);
                 var nativePeer = ((StandardWebSocketSession) peer.get()).getNativeSession();
                 assertThat(nativePeer).as("固定Tomcat実clientで物理切断を検査する").isInstanceOf(WsSession.class);
