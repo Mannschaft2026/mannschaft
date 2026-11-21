@@ -72,23 +72,23 @@
   "stages": {
     "review": {
       "status": "passed",
-      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4712"
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4712"
     },
     "real": {
       "status": "passed",
-      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4712"
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4712"
     },
     "exploratory": {
       "status": "passed",
-      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4712"
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4712"
     }
   },
   "regressions": [
     {
       "description": "アリシゼーションで発覚した、再読み込みで下書きのカテゴリ・投稿先・所要時間が失われる不具合",
       "test": "frontend/tests/unit/pages/action-memo-draft-extras.spec.ts",
-      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/22f8ad2f5d901d72a2b9d9b46827044096c08bd6",
-      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/c8dfcccf7f167f35e74f9637461b7b8da1e70750"
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/commit/22f8ad2f5d901d72a2b9d9b46827044096c08bd6",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/commit/c8dfcccf7f167f35e74f9637461b7b8da1e70750"
     }
   ]
 }
