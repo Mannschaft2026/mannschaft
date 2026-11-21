@@ -34,6 +34,10 @@ const suggestions = ref<Suggestion[]>([])
 const open = ref(false)
 /** キーボードで選択中の候補（-1 = 未選択。未選択の Enter は通常検索） */
 const activeIndex = ref(-1)
+/** 入力欄にフォーカスがあるか（フォーカスが無い間は、遅れて届いた応答でも候補を出さない） */
+const focused = ref(false)
+/** Escape で閉じた状態（入力し直すまで、遅れて届いた応答でも候補を出さない） */
+const dismissed = ref(false)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let requestSeq = 0
 
@@ -64,6 +68,8 @@ async function fetchSuggestions(text: string) {
   try {
     const list = await searchApi.suggestions(text, SUGGEST_LIMIT)
     if (seq !== requestSeq) return
+    // 多層防御: 閉じられた状態・フォーカスが無い状態では、応答が届いても表示しない
+    if (dismissed.value || !focused.value) return
     suggestions.value = list
     activeIndex.value = -1
     open.value = list.length > 0
@@ -83,7 +89,16 @@ function cancelPendingSuggest() {
   }
 }
 
+/** 閉じる操作（Escape・blur）の共通処理。保留中の debounce と取得中リクエストを無効化して閉じる */
+function closeSuggestions() {
+  cancelPendingSuggest()
+  clearSuggestions()
+}
+
 function onInput() {
+  // 入力は再開の合図（フォーカスあり・閉じていない状態に戻す）
+  focused.value = true
+  dismissed.value = false
   cancelPendingSuggest()
   // 入力が変わった時点で、保留中の古い候補リクエストを無効にし、表示済みの候補も閉じる
   // （新しい応答が届くまで古い候補は選べない）
@@ -126,8 +141,8 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
   if (event.key === 'Escape') {
-    open.value = false
-    activeIndex.value = -1
+    dismissed.value = true
+    closeSuggestions()
     return
   }
   const count = suggestions.value.length
@@ -184,8 +199,8 @@ onBeforeUnmount(() => {
           aria-controls="header-search-suggestions"
           data-testid="header-search-input"
           @input="onInput"
-          @blur="open = false; activeIndex = -1"
-          @focus="open = suggestions.length > 0"
+          @blur="focused = false; closeSuggestions()"
+          @focus="focused = true"
           @keydown="onKeydown"
         />
       </IconField>

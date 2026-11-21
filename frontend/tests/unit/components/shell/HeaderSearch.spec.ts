@@ -263,6 +263,47 @@ describe('components/shell/HeaderSearch.vue — ヘッダー検索欄', () => {
     expect(suggestions).not.toHaveBeenCalled()
   })
 
+  // 閉じる操作（Escape / blur=Tab・外クリック）の全経路で、保留中の debounce と取得中リクエストを無効化する
+  describe('HS-14: 閉じる操作の後は遅れて届いた応答でも候補を再表示しない', () => {
+    const closers: { name: string; close: (input: { trigger: (e: string, o?: object) => Promise<void> }) => Promise<void> }[] = [
+      { name: 'Escape', close: input => input.trigger('keydown', { key: 'Escape' }) },
+      { name: 'blur（Tab・外クリック）', close: input => input.trigger('blur') },
+    ]
+    for (const { name, close } of closers) {
+      it(`${name}: 取得中（応答待ち）に閉じる`, async () => {
+        let resolveFirst: (v: Suggestion[]) => void = () => {}
+        suggestions.mockImplementationOnce(() => new Promise<Suggestion[]>((r) => { resolveFirst = r }))
+        const wrapper = await mountBox()
+        await typeAndWait(wrapper, 'グラ')
+        expect(suggestions).toHaveBeenCalledTimes(1)
+        await close(wrapper.find('[data-testid="header-search-input"]'))
+        resolveFirst([KEYWORD])
+        await flushPromises()
+        expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(0)
+      })
+
+      it(`${name}: debounce 待ちに閉じると取得自体が走らない`, async () => {
+        suggestions.mockResolvedValue([KEYWORD])
+        const wrapper = await mountBox()
+        await wrapper.find('[data-testid="header-search-input"]').setValue('グラ')
+        await close(wrapper.find('[data-testid="header-search-input"]'))
+        await vi.advanceTimersByTimeAsync(300)
+        await flushPromises()
+        expect(suggestions).not.toHaveBeenCalled()
+        expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(0)
+      })
+    }
+
+    it('閉じた後に入力し直せば、新しい入力の候補は再び出る', async () => {
+      suggestions.mockResolvedValue([KEYWORD])
+      const wrapper = await mountBox()
+      await typeAndWait(wrapper, 'グラ')
+      await wrapper.find('[data-testid="header-search-input"]').trigger('keydown', { key: 'Escape' })
+      await typeAndWait(wrapper, 'グラウ')
+      expect(wrapper.findAll('[data-testid^="header-search-suggestion-"]')).toHaveLength(1)
+    })
+  })
+
   it('HS-06: suggestions が失敗しても候補は出ず、失敗はログに残す', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     suggestions.mockRejectedValue(new Error('boom'))
