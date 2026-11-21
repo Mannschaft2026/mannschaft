@@ -8,10 +8,7 @@ import { describe, expect, it } from 'vitest'
  * 実在しない名前は無言でアイコンが欠落する（例: pi-bullhorn → pi-megaphone）。
  * 既知の未対応は KNOWN_MISSING に退避（棚卸し用。増やさず、直したら削る）。
  */
-const KNOWN_MISSING = new Set([
-  'archive', 'calendar-check', 'check-double', 'feather', 'gavel', 'grip-vertical',
-  'handshake', 'puzzle', 'stamp', 'toggle-on', 'yen',
-])
+const KNOWN_MISSING = new Set<string>()
 
 const appDir = resolve(__dirname, '..')
 const cssPath = resolve(appDir, '../node_modules/primeicons/primeicons.css')
