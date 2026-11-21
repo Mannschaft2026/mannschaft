@@ -117,9 +117,10 @@ async function submit() {
     // 公開だけ失敗している場合は、メモを再作成せず公開のみ再試行する
     const pending = pendingPublish.value
     if (pending) {
-      if (await store.publishToTeam(pending.memoId, { teamId: pending.teamId })) {
-        resetAfterSuccess(pending.memoId)
-      }
+      // 既投稿（初回が成功して応答だけ失われた場合）の判定はストアに一本化している。
+      // 'conflict'（別チームに投稿済み）も再試行不能なので、エラーを残したままロックを解いて後片付けする
+      const result = await store.publishToTeamReconciled(pending.memoId, { teamId: pending.teamId })
+      if (result !== 'failed') resetAfterSuccess(pending.memoId)
       return
     }
 

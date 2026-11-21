@@ -300,17 +300,12 @@ export const useActionMemoStore = defineStore('actionMemo', {
         try {
           // 公開のみ項目: 作成済みメモは再作成せず publish-to-team だけ再試行する
           if (queued?.publishOnlyMemoId != null && queued.publishTeamId != null) {
-            let ok = await this.publishToTeam(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
-            if (!ok && this.alreadyPostedFailure) {
-              // 既投稿（ACTION_MEMO_ALREADY_POSTED）: 再試行しても永久に成功しないため、実態を確認して項目を片付ける
-              const memo = await api.getMemo(queued.publishOnlyMemoId)
-              ok = true // 項目は削除する（止まり続けない）。別チーム投稿済みならエラーだけ残す
-              if (memo.postedTeamId !== queued.publishTeamId) {
-                kept.v = { error: 'action_memo.error.publish_failed', lastError: 'PUBLISH_FAILED' }
-              } else {
-                this.error = null
-                this.lastError = null
-              }
+            const result = await this.publishToTeamReconciled(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
+            let ok = result === 'posted'
+            if (result === 'conflict') {
+              // 別チーム投稿済み: 再試行しても成功しないため項目は片付け、エラーだけ残す
+              ok = true
+              kept.v = { error: this.error, lastError: this.lastError }
             }
             // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
             else if (!ok) {
@@ -700,6 +695,41 @@ export const useActionMemoStore = defineStore('actionMemo', {
         this.error = 'action_memo.error.publish_failed'
         return false
       }
+    },
+
+    /**
+     * 公開の再試行用。publishToTeam が既投稿（ACTION_MEMO_ALREADY_POSTED）で失敗したら、
+     * 初回が成功して応答だけ失われた可能性があるため getMemo で実態を確認する（オンライン再試行とオフライン同期で共通）。
+     *
+     * @returns 'posted': 指定チームへ投稿済み（成功扱い・error 解除）/
+     *          'conflict': 別チームへ投稿済みで再試行不能（publish_failed を残す）/
+     *          'failed': それ以外の失敗（通信断・5xx・恒久失敗など。publishFailureStatus で判別）
+     */
+    async publishToTeamReconciled(
+      memoId: number,
+      payload: PublishToTeamPayload,
+    ): Promise<'posted' | 'conflict' | 'failed'> {
+      if (await this.publishToTeam(memoId, payload)) return 'posted'
+      if (!this.alreadyPostedFailure) return 'failed'
+      const status = this.publishFailureStatus
+      let memo: ActionMemo
+      try {
+        memo = await useActionMemoApi().getMemo(memoId)
+      } catch {
+        // 実態を確認できない（通信断など）。失敗として残し、次回に再確認する
+        this.alreadyPostedFailure = true
+        this.publishFailureStatus = status
+        return 'failed'
+      }
+      if (memo.postedTeamId === payload.teamId) {
+        const idx = this.memos.findIndex((m) => m.id === memoId)
+        const existing = idx >= 0 ? this.memos[idx] : undefined
+        if (existing) this.memos.splice(idx, 1, { ...existing, postedTeamId: payload.teamId })
+        this.error = null
+        this.lastError = null
+        return 'posted'
+      }
+      return 'conflict' // error は publishToTeam が設定した publish_failed のまま
     },
 
     /**
