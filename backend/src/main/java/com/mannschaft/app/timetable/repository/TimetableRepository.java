@@ -35,4 +35,27 @@ public interface TimetableRepository extends JpaRepository<TimetableEntity, Long
             + " AND t.effectiveFrom <= :date"
             + " AND (t.effectiveUntil IS NULL OR t.effectiveUntil >= :date)")
     List<TimetableEntity> findEffective(@Param("teamId") Long teamId, @Param("date") LocalDate date);
+
+    /**
+     * {@link #findEffective} のチーム ID 群版（ダッシュボード N+1 解消用）。
+     * チーム ID・主キー順で返す。
+     */
+    @Query("SELECT t FROM TimetableEntity t WHERE t.teamId IN :teamIds"
+            + " AND t.status = 'ACTIVE'"
+            + " AND t.effectiveFrom <= :date"
+            + " AND (t.effectiveUntil IS NULL OR t.effectiveUntil >= :date)"
+            + " ORDER BY t.teamId ASC, t.id ASC")
+    List<TimetableEntity> findEffectiveByTeamIds(@Param("teamIds") java.util.Collection<Long> teamIds,
+                                                 @Param("date") LocalDate date);
+
+    /**
+     * 学期を参照する未削除の時間割の件数。論理削除済みは数えない（学期は論理削除なので学期削除を妨げない。
+     * CMP-261105-1507 B1）。
+     *
+     * <p>{@code FOR UPDATE} の現在読み取りにする。学期削除は REPEATABLE READ のスナップショットが先に張られていても、
+     * 並行してコミットされた時間割を見落とさないため（学期行のロックと合わせて作成との競合を直列化する）。</p>
+     */
+    @Query(value = "SELECT COUNT(*) FROM timetables WHERE term_id = :termId AND deleted_at IS NULL FOR UPDATE",
+            nativeQuery = true)
+    long countLiveByTermIdLocked(@Param("termId") Long termId);
 }

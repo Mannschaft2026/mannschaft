@@ -9,14 +9,33 @@ interface EffectivePermissions {
    * 旧 BE は返さない（undefined）。
    */
   scopeAdmin?: boolean
+  /**
+   * ADMIN 専用権限（MANAGE_ORG_AFFILIATION 等）を含む権限グループの作成・更新・割当（付与・剥奪）ができるか。
+   * BE の AccessControlService#canActAsScopeAdminOnly（スコープ ADMIN 本人で、かつ SYSTEM_ADMIN でない）。
+   * SYSTEM_ADMIN 兼任者は scopeAdmin=true でも false。旧 BE は返さない（undefined）。
+   */
+  canGrantAdminOnlyPermissions?: boolean
 }
 
-export function useRoleAccess(scopeType: 'team' | 'organization', scopeId: Ref<string> | string) {
+export function useRoleAccess(
+  scopeType: 'team' | 'organization',
+  scopeId: Ref<string> | string,
+  options: { watchScope?: boolean } = {},
+) {
   const api = useApi()
+  const auth = useAuthStore()
   const permissions = ref<string[]>([])
   const roleName = ref<RoleName | null>(null)
   const scopeAdminFromApi = ref<boolean | null>(null)
+  const canGrantFromApi = ref<boolean | null>(null)
   const loading = ref(false)
+  /**
+   * ロール解決が完了したか（成功・失敗いずれでも true）。roleName=null は「読込中」「未所属」
+   * 「取得失敗」で同じになるため、呼び出し元がこの2つの状態で区別する（CMP-261013-1226）。
+   */
+  const roleResolved = ref(false)
+  /** 直近のロール解決が失敗したか（roleResolved=true かつ true のとき取得失敗）。 */
+  const roleLoadFailed = ref(false)
 
   const resolvedId = computed(() => isRef(scopeId) ? scopeId.value : scopeId)
 
@@ -65,6 +84,9 @@ export function useRoleAccess(scopeType: 'team' | 'organization', scopeId: Ref<s
         permissions.value = response.data.permissions
         roleName.value = response.data.roleName
         scopeAdminFromApi.value = response.data.scopeAdmin ?? null
+        roleResolved.value = true
+        roleLoadFailed.value = false
+        canGrantFromApi.value = response.data.canGrantAdminOnlyPermissions ?? null
       }
       result = { ok: true }
     }
@@ -74,6 +96,9 @@ export function useRoleAccess(scopeType: 'team' | 'organization', scopeId: Ref<s
         permissions.value = []
         roleName.value = null
         scopeAdminFromApi.value = null
+        roleResolved.value = true
+        roleLoadFailed.value = true
+        canGrantFromApi.value = null
       }
       result = { ok: false, error }
     }
@@ -103,6 +128,14 @@ export function useRoleAccess(scopeType: 'team' | 'organization', scopeId: Ref<s
     scopeAdminFromApi.value ?? roleName.value === 'ADMIN',
   )
 
+  /**
+   * ADMIN 専用権限を含む権限グループを操作できるか（BE の checkScopeAdminOnly と同じ結果を BE が返す）。
+   * 返さない旧 BE では roleName === 'ADMIN'（SYSTEM_ADMIN は roleName が SYSTEM_ADMIN になるため不可）で代用する。
+   */
+  const canGrantAdminOnlyPermissions = computed(() =>
+    canGrantFromApi.value ?? roleName.value === 'ADMIN',
+  )
+
   const isAdminOrDeputy = computed(() =>
     isAdmin.value || roleName.value === 'DEPUTY_ADMIN',
   )
@@ -112,21 +145,40 @@ export function useRoleAccess(scopeType: 'team' | 'organization', scopeId: Ref<s
     isAdminOrDeputy.value || roleName.value === 'MEMBER',
   )
 
-  // scopeIdがリアクティブな場合、変更時に自動リロード
-  if (isRef(scopeId)) {
-    watch(scopeId, (newId) => {
-      if (newId) loadPermissions()
-    })
+  // scope/本人切替の瞬間に旧権限を破棄し、旧応答も反映させない。
+  function invalidatePermissions() {
+    ++requestSeq
+    latestRequest = null
+    roleName.value = null
+    permissions.value = []
+    scopeAdminFromApi.value = null
+    canGrantFromApi.value = null
+    roleResolved.value = false
+    roleLoadFailed.value = false
+    loading.value = false
   }
+  if (isRef(scopeId) && options.watchScope !== false) {
+    watch(scopeId, (newId) => {
+      invalidatePermissions()
+      if (newId) void loadPermissions()
+    }, { flush: 'sync' })
+  }
+  watch(() => auth.user?.id, (userId) => {
+    invalidatePermissions()
+    if (userId && resolvedId.value) void loadPermissions()
+  }, { flush: 'sync' })
 
   return {
     permissions,
     roleName,
+    roleResolved,
+    roleLoadFailed,
     loading,
     loadPermissions,
     can,
     isAdmin,
     isScopeAdmin,
+    canGrantAdminOnlyPermissions,
     isAdminOrDeputy,
     isMember,
   }

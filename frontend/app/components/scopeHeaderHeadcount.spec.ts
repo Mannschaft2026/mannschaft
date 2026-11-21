@@ -9,6 +9,7 @@ import type { FollowUiStatus } from '~/composables/useFollowSelfStatus'
 import type { JoinRequestUiStatus } from '~/composables/useJoinRequestApi'
 import TeamPageHeader from '~/components/team/TeamPageHeader.vue'
 import OrgPageHeader from '~/components/organization/OrgPageHeader.vue'
+import FavoriteToggleButton from '~/components/favorites/FavoriteToggleButton.vue'
 
 /**
  * チーム・組織ヘッダの人数表示（メンバー／サポーター）の試練（CMP-261004-1943）。
@@ -19,8 +20,8 @@ import OrgPageHeader from '~/components/organization/OrgPageHeader.vue'
  *   （app/locales/{ja,en,zh,ko,es,de}/common.json）のキーで6言語描画する。
  *
  * キー（推奨・本試練で確定）: `common.scopeShell.memberCount` / `common.scopeShell.supporterCount`。
- * 値は `{count}` を含む単一形の文（複数形の `|` は使わない）。ヘッダは人数部分を
- * `{count}` に差し込んで描画する（`<strong>` 等で囲むのは自由。比較は空白正規化した textContent）。
+ * 値は `{count}` を含む文。en/es/de は単数・複数の2形、ja/zh/ko は単一形とする。
+ * ヘッダは数値で複数形を選び、未取得は「—」を名前付き補間して描画する（`<strong>` 等で囲むのは自由。比較は空白正規化した textContent）。
  *
  * 欄の特定: メンバー欄 `data-testid="scope-header-member-count"`、
  * サポーター欄 `data-testid="scope-header-supporter-count"`（どちらも新設）。
@@ -46,8 +47,11 @@ function messageOf(locale: Locale, key: string): string {
   return value as string
 }
 
+// vue-i18n の 2 択複数形（`単数 | 複数`）。単数形は count=1 のときだけ。「—」等の非数は複数形側。
 function expected(locale: Locale, key: string, count: string): string {
-  return normalize(messageOf(locale, key).replace(/\{\s*count\s*\}/g, count))
+  const forms = messageOf(locale, key).split('|').map(f => f.trim())
+  const form = forms.length === 2 && count === '1' ? forms[0]! : forms[forms.length - 1]!
+  return normalize(form.replace(/\{\s*count\s*\}/g, count))
 }
 
 function normalize(text: string): string {
@@ -88,10 +92,10 @@ const commonProps = {
   joinRequestLoading: false,
 }
 
-async function mountTeam(c: Counts) {
+async function mountTeam(c: Counts, numericId: number | null = 1) {
   const team = {
-    id: 1,
-    numericId: 1,
+    id: 'team-a',
+    ...(numericId !== null ? { numericId } : {}),
     slug: 'team-a',
     visibility: { visibility: 'PUBLIC', supporterEnabled: c.supporterEnabled ?? true },
     metadata: 'memberCount' in c ? { memberCount: c.memberCount } : {},
@@ -112,10 +116,10 @@ async function mountTeam(c: Counts) {
   return wrapper
 }
 
-async function mountOrg(c: Counts) {
+async function mountOrg(c: Counts, numericId: number | null = 1) {
   const org = {
     id: 'org-a',
-    numericId: 1,
+    ...(numericId !== null ? { numericId } : {}),
     basicInfo: { name: '組織A' },
     visibility: { visibility: 'PUBLIC', supporterEnabled: c.supporterEnabled ?? true },
     metadata: 'memberCount' in c ? { memberCount: c.memberCount } : {},
@@ -134,6 +138,20 @@ const HEADERS = [
   ['TeamPageHeader', mountTeam],
   ['OrgPageHeader', mountOrg],
 ] as const
+
+describe.each(HEADERS)('%s のお気に入り識別子', (_name, mount) => {
+  it('公開 slug と異なる数値 ID を文字列で渡す', async () => {
+    const wrapper = await mount({}, 42)
+
+    expect(wrapper.getComponent(FavoriteToggleButton).props('entityId')).toBe('42')
+  })
+
+  it('数値 ID が欠落していればお気に入りボタンを描画しない', async () => {
+    const wrapper = await mount({}, null)
+
+    expect(wrapper.findComponent(FavoriteToggleButton).exists()).toBe(false)
+  })
+})
 
 function memberEl(wrapper: VueWrapper) {
   return wrapper.find('[data-testid="scope-header-member-count"]')
@@ -154,7 +172,9 @@ describe('ロケール辞書に人数表示のキーがある（AC-14・CMP-2610
     for (const key of [KEY_MEMBER, KEY_SUPPORTER]) {
       const msg = messageOf(locale, key)
       expect(msg).toMatch(/\{\s*count\s*\}/)
-      expect(msg).not.toContain('|')
+      // 単複の区別が無い言語（ja/zh/ko）は単一形。en/es/de は 2 択複数形（`|` 1 個まで）
+      expect(msg.split('|').length).toBeLessThanOrEqual(2)
+      if (['ja', 'zh', 'ko'].includes(locale)) expect(msg).not.toContain('|')
     }
   })
 
@@ -163,6 +183,47 @@ describe('ロケール辞書に人数表示のキーがある（AC-14・CMP-2610
       expect(messageOf('en', key)).not.toMatch(/メンバー|サポーター|人/)
     }
   })
+})
+
+const PLURAL_CASES: Array<[Locale, string, string, string, string]> = [
+  ['en', 'member', 'members', 'supporter', 'supporters'],
+  ['es', 'miembro', 'miembros', 'seguidor', 'seguidores'],
+  ['de', 'Mitglied', 'Mitglieder', 'Unterstützer', 'Unterstützer'],
+]
+
+describe.each(HEADERS)('%s の人数の単複形（CMP-261010-1131）', (_name, mount) => {
+  it.each(PLURAL_CASES)('%s: 0/1/2/null/未取得を正しく描画する', async (locale, memberOne, memberMany, supporterOne, supporterMany) => {
+    for (const count of [0, 1, 2, null, undefined]) {
+      const wrapper = await mount({ memberCount: count, supporterCount: count })
+      try {
+        await switchLocale(wrapper, locale)
+        const display = count ?? MISSING
+        expect(normalize(memberEl(wrapper).text())).toBe(`${display} ${count === 1 ? memberOne : memberMany}`)
+        expect(normalize(supporterEl(wrapper).text())).toBe(`${display} ${count === 1 ? supporterOne : supporterMany}`)
+      }
+      finally {
+        await switchLocale(wrapper, 'ja')
+        wrapper.unmount()
+      }
+    }
+  }, 300000)
+
+  it.each([
+    ['ja', 'メンバー 1人', 'サポーター 1人'],
+    ['zh', '成员 1 人', '支持者 1 人'],
+    ['ko', '멤버 1명', '서포터 1명'],
+  ] as const)('%s: 単複を区別しない言語の1人表示を維持する', async (locale, member, supporter) => {
+    const wrapper = await mount({ memberCount: 1, supporterCount: 1 })
+    try {
+      await switchLocale(wrapper, locale)
+      expect(normalize(memberEl(wrapper).text())).toBe(member)
+      expect(normalize(supporterEl(wrapper).text())).toBe(supporter)
+    }
+    finally {
+      await switchLocale(wrapper, 'ja')
+      wrapper.unmount()
+    }
+  }, 300000)
 })
 
 describe.each(HEADERS)('%s の人数表示（AC-13・CMP-261004-1943）', (_name, mount) => {

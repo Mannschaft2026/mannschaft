@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { parseApiError } from '~/utils/apiError'
+import { normalizeProjectDetail, toProgressPercent } from '~/utils/projectDetail'
 import type {
   ProjectResponse,
   UpdateProjectRequest,
@@ -17,6 +19,7 @@ const projectApi = useProjectApi()
 const notification = useNotification()
 const { error: showError } = notification
 const { t } = useI18n()
+const confirmDialog = useConfirm()
 
 const project = ref<ProjectResponse | null>(null)
 const milestones = ref<MilestoneResponse[]>([])
@@ -24,6 +27,7 @@ const todos = ref<TodoResponse[]>([])
 const loading = ref(true)
 const showEditDialog = ref(false)
 const showMilestoneDialog = ref(false)
+const milestoneFieldErrors = ref<Record<string, string>>({})
 const editingMilestone = ref<MilestoneResponse | null>(null)
 
 const editForm = reactive<UpdateProjectRequest>({
@@ -48,9 +52,9 @@ async function load() {
       projectApi.listOrgMilestones(orgSlug, projectId),
       projectApi.getOrgProjectTodos(orgSlug, projectId),
     ])
-    project.value = pRes.data
+    project.value = normalizeProjectDetail(pRes.data)
     milestones.value = mRes.data
-    todos.value = (tRes.data ?? []) as TodoResponse[]
+    todos.value = tRes.data ?? []
   } catch {
     showError(t('project.error.fetch_failed'))
   } finally {
@@ -69,9 +73,9 @@ function openEdit() {
   showEditDialog.value = true
 }
 
-async function saveProject() {
+async function saveProject(form: UpdateProjectRequest) {
   try {
-    await projectApi.updateOrgProject(orgSlug, projectId, editForm)
+    await projectApi.updateOrgProject(orgSlug, projectId, form)
     showEditDialog.value = false
     await load()
   } catch {
@@ -95,12 +99,14 @@ async function toggleComplete() {
 
 function openCreateMilestone() {
   editingMilestone.value = null
+  milestoneFieldErrors.value = {}
   Object.assign(milestoneForm, { title: '', dueDate: '', sortOrder: milestones.value.length })
   showMilestoneDialog.value = true
 }
 
 function openEditMilestone(ms: MilestoneResponse) {
   editingMilestone.value = ms
+  milestoneFieldErrors.value = {}
   Object.assign(milestoneForm, {
     title: ms.title,
     dueDate: ms.dueDate ?? '',
@@ -109,17 +115,21 @@ function openEditMilestone(ms: MilestoneResponse) {
   showMilestoneDialog.value = true
 }
 
-async function saveMilestone() {
+async function saveMilestone(form: CreateMilestoneRequest) {
   try {
     if (editingMilestone.value) {
-      await projectApi.updateOrgMilestone(orgSlug, projectId, editingMilestone.value.id, milestoneForm)
+      await projectApi.updateOrgMilestone(orgSlug, projectId, editingMilestone.value.id, form)
     } else {
-      await projectApi.createOrgMilestone(orgSlug, projectId, milestoneForm)
+      await projectApi.createOrgMilestone(orgSlug, projectId, form)
     }
     showMilestoneDialog.value = false
     await load()
-  } catch {
-    showError(t('project.error.milestone_save_failed'))
+  } catch (error) {
+    // 400 の fieldErrors は該当欄に出す。理由が分からないときだけ汎用のトーストを出す。
+    milestoneFieldErrors.value = parseApiError(error).fieldErrors
+    if (Object.keys(milestoneFieldErrors.value).length === 0) {
+      showError(t('project.error.milestone_save_failed'))
+    }
   }
 }
 
@@ -132,14 +142,23 @@ async function toggleMilestoneComplete(ms: MilestoneResponse) {
   }
 }
 
-async function removeMilestone(ms: MilestoneResponse) {
-  if (!confirm(`「${ms.title}」を削除しますか？`)) return
-  try {
-    await projectApi.deleteOrgMilestone(orgSlug, projectId, ms.id)
-    await load()
-  } catch {
-    showError(t('project.error.delete_failed'))
-  }
+function removeMilestone(ms: MilestoneResponse) {
+  confirmDialog.require({
+    message: t('project.delete_confirm', { title: ms.title }),
+    header: t('project.delete_confirm_header'),
+    icon: 'pi pi-exclamation-triangle',
+    acceptClass: 'p-button-danger',
+    acceptLabel: t('button.delete'),
+    rejectLabel: t('button.cancel'),
+    accept: async () => {
+      try {
+        await projectApi.deleteOrgMilestone(orgSlug, projectId, ms.id)
+        await load()
+      } catch {
+        showError(t('project.error.delete_failed'))
+      }
+    },
+  })
 }
 
 onMounted(async () => {
@@ -154,7 +173,7 @@ onMounted(async () => {
 
     <div v-else-if="project">
       <div class="mb-6">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-3">
             <span v-if="project.emoji" class="text-3xl">{{ project.emoji }}</span>
             <PageHeader
@@ -184,7 +203,7 @@ onMounted(async () => {
         <div class="mb-2 grid gap-4 sm:grid-cols-4">
           <div>
             <p class="text-xs text-surface-400">{{ $t('project.stats.progress') }}</p>
-            <p class="text-2xl font-bold">{{ Math.round(project.progressRate * 100) }}%</p>
+            <p class="text-2xl font-bold">{{ toProgressPercent(project.progressRate) }}%</p>
           </div>
           <div>
             <p class="text-xs text-surface-400">{{ $t('project.stats.tasks') }}</p>
@@ -207,7 +226,7 @@ onMounted(async () => {
           </div>
         </div>
         <ProgressBar
-          :value="Math.round(project.progressRate * 100)"
+          :value="toProgressPercent(project.progressRate)"
           :show-value="false"
           style="height: 8px"
         />
@@ -253,6 +272,7 @@ onMounted(async () => {
     <ProjectMilestoneDialog
       v-model:visible="showMilestoneDialog"
       :form="milestoneForm"
+      :field-errors="milestoneFieldErrors"
       :editing="editingMilestone"
       @save="saveMilestone"
     />

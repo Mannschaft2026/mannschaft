@@ -11,6 +11,10 @@ spring:
         # totalCount()=0 で「上限以下」と判定され、N+1 を素通しする偽 green になる（Issue #2782）。
         session_factory:
           statement_inspector: com.mannschaft.app.common.visibility.perf.SqlIntentCounter
+        # CMP-261116-0722 PR-2: ddl-auto: create はエンティティから FULLTEXT INDEX を作れないため、本番 migration と
+        # 同じ FULLTEXT INDEX を create 直後に補う（グローバル検索の MATCH ... AGAINST がテスト実行順に依存して落ちないように）。
+        hbm2ddl:
+          import_files: /test-schema-fulltext-indexes.sql
         jdbc:
           # Issue #2486 で共有 application.yml にも同じ UTC 指定が入ったため、この行は現在は冗長。
           # ただし本ファイルは「テストの格納基準は UTC である」という前提を明示する場所として意味があり、
@@ -28,6 +32,14 @@ spring:
 
   cache:
     type: none
+
+# CMP-260910-1811: Gradle test は本ファイルを優先し、main 側の同名ファイルを隠蔽する。
+# 予算機能は有効化する。月次締め・再試行は各試験から手動実行し、自動起動しない。
+feature:
+  shift-budget:
+    enabled: true
+    monthly-close-cron-enabled: false
+    retry-batch-enabled: false
 
 # F10.5 Phase 10-α: テスト環境での Actuator 設定。
 # - `/actuator/health` は DB component を含めると Testcontainer 起動タイミング次第で
@@ -59,6 +71,23 @@ mannschaft:
   # F09.18: テスト環境では実 SES を叩かない（simulate=true でログのみ送信）
   email:
     simulate: true
+  # CMP-261012-0910: メール方式 2FA（永続 enum EMAIL の書込み）を試験では解禁する（本番・既定は false）
+  auth:
+    mfa:
+      email-method-enabled: true
+  # F09.4 §6: test / openapi-gen は off。署名検証の単体試験は各モードを明示して検査する。
+  line:
+    signature-verify:
+      mode: "off"
+  # main の test プロファイルと同じ試験専用ダミー鍵。本物の秘密鍵は使用しない。
+  security:
+    internal-signing-key: test-internal-pdf-signing-key-fixed-32bytes-xxxxx
+  # 試験中の集約・ヘルスポーリングを自動起動しない。対象の単体試験は処理を直接検査する。
+  error-monitoring:
+    aggregation:
+      enabled: false
+    health-polling:
+      enabled: false
   # 通知 outbox の起こし（AFTER_COMMIT・@Async の即時 drain）を試験では止める（docs/architecture/notification_outbox.md §7）。
   # IT は NotificationOutboxRelay#drainAll() を同期で呼んで取り込む（起こしと IT の drain が競合して結果が揺れないように）。
   # 起こし自体を検証する IT（NotificationOutboxNudgeIT）だけ @TestPropertySource で true にする。
@@ -100,3 +129,8 @@ mannschaft:
         - kid: v1
           secret: test-qr-signing-key-fixed-32bytes-testingxxxx
           active: true
+
+# 定期再マッチは試験中に自動登録しない。バッチ本体は Mockito の単体試験で検査する。
+pointcard:
+  rematch-batch:
+    enabled: false

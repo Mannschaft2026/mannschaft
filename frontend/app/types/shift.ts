@@ -95,6 +95,9 @@ export interface ShiftPositionResponse {
  * `assignedUserIds` / `assignmentMasked` / `note` はトップレベルのまま。
  */
 export interface ShiftSlotResponse {
+  version: number
+  /** 割当更新の警告。参照応答では未判定。 */
+  warnings?: { code: string; conflictingSlotIds: number[] }[] | null
   id: number
   scheduleId: number
   time: {
@@ -306,6 +309,8 @@ export interface UpdateShiftSlotRequest {
   note?: string
   /** 翌日終了（日跨ぎ）。未指定は現値維持（部分更新） */
   endsNextDay?: boolean
+  /** 日付変更時に提出済みの枠指定希望も移動することを確認済みか。未指定は未確認。 */
+  moveRequestsConfirmed?: boolean
 }
 
 /** シフト希望提出リクエスト */

@@ -3,7 +3,9 @@ package com.mannschaft.app.bulletin.controller;
 import com.mannschaft.app.bulletin.dto.GlobalCreateReplyRequest;
 import com.mannschaft.app.bulletin.dto.ReplyResponse;
 import com.mannschaft.app.bulletin.dto.UpdateReplyRequest;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinReplyService;
+import com.mannschaft.app.bulletin.service.BulletinReplyResponseEnricher;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -56,6 +58,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class GlobalBulletinReplyController {
 
     private final BulletinReplyService replyService;
+    private final BulletinReplyResponseEnricher responseEnricher;
+    /** 大会/ディビジョン連絡スペースの存在秘匿つき認可（取引外・D-3T 回避。CMP-261116-0726）。 */
+    private final BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
     /**
      * スレッドの返信一覧を取得する（グローバル方式）。トップレベル返信をページングし子返信を同梱する。
@@ -72,8 +77,10 @@ public class GlobalBulletinReplyController {
             @PathVariable Long threadId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        Page<ReplyResponse> result = replyService.listRepliesGlobal(
-                threadId, SecurityUtils.getCurrentUserId(), PageRequest.of(page, size));
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadView(threadId, currentUserId);
+        Page<ReplyResponse> result = responseEnricher.enrich(replyService.listRepliesGlobal(
+                threadId, currentUserId, PageRequest.of(page, size)));
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 result.getTotalElements(), result.getNumber(), result.getSize(), result.getTotalPages());
         return ResponseEntity.ok(PagedResponse.of(result.getContent(), meta));
@@ -92,8 +99,10 @@ public class GlobalBulletinReplyController {
     public ResponseEntity<ApiResponse<ReplyResponse>> createReply(
             @PathVariable Long threadId,
             @Valid @RequestBody GlobalCreateReplyRequest request) {
-        ReplyResponse response = replyService.createReplyGlobal(
-                threadId, null, SecurityUtils.getCurrentUserId(), request.getBody());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkThreadPost(threadId, currentUserId);
+        ReplyResponse response = responseEnricher.enrich(replyService.createReplyGlobal(
+                threadId, null, currentUserId, request.getBody()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -112,8 +121,10 @@ public class GlobalBulletinReplyController {
     public ResponseEntity<ApiResponse<ReplyResponse>> createNestedReply(
             @PathVariable Long replyId,
             @Valid @RequestBody GlobalCreateReplyRequest request) {
-        ReplyResponse response = replyService.createNestedReplyGlobal(
-                replyId, SecurityUtils.getCurrentUserId(), request.getBody());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReplyPost(replyId, currentUserId);
+        ReplyResponse response = responseEnricher.enrich(replyService.createNestedReplyGlobal(
+                replyId, currentUserId, request.getBody()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -130,8 +141,10 @@ public class GlobalBulletinReplyController {
     public ResponseEntity<ApiResponse<ReplyResponse>> updateReply(
             @PathVariable Long replyId,
             @Valid @RequestBody UpdateReplyRequest request) {
-        ReplyResponse response = replyService.updateReplyGlobal(
-                replyId, SecurityUtils.getCurrentUserId(), request.getBody());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReplyAuthorOrPost(replyId, currentUserId, true);
+        ReplyResponse response = responseEnricher.enrich(replyService.updateReplyGlobal(
+                replyId, currentUserId, request.getBody()));
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
@@ -145,7 +158,9 @@ public class GlobalBulletinReplyController {
     @Operation(summary = "返信削除（グローバル）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteReply(@PathVariable Long replyId) {
-        replyService.deleteReplyGlobal(replyId, SecurityUtils.getCurrentUserId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        tournamentScopeAccessGuard.checkReplyAuthorOrPost(replyId, currentUserId, false);
+        replyService.deleteReplyGlobal(replyId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 }

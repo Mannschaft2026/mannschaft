@@ -1,4 +1,5 @@
-import Aura from '@primeuix/themes/aura'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 import { buildGateRouteRules } from './app/constants/featureGates'
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -10,6 +11,10 @@ import { buildGateRouteRules } from './app/constants/featureGates'
 // E2E プロキシ（NUXT_API_PROXY=true）時は API が Nuxt 同一オリジン経由になるため 'self' で足りる。
 // 本番（Cloudflare 経由 FE/BE 同一オリジン構成）では NUXT_PUBLIC_API_BASE='' (空文字) で運用する。
 const apiBase = process.env.NUXT_PUBLIC_API_BASE ?? 'http://localhost:8080'
+// v3未公開素材は明示opt-inのdevelopment配信だけ。本番public出力へ含めない。
+const ranchDevelopmentClips =
+  process.env.NODE_ENV !== 'production' &&
+  process.env.NUXT_PUBLIC_RANCH_DEVELOPMENT_CLIPS === 'true'
 
 // CSP 違反レポートの送信先（report-uri）。
 // バックエンド受信エンドポイント `POST /api/v1/security/csp-reports`（permitAll・PR #1274）へ向ける。
@@ -64,6 +69,11 @@ const connectSrc = [
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
+  typescript: {
+    tsConfig: {
+      exclude: ['../test-results/**'],
+    },
+  },
   // 本番では Nuxt DevTools を無効化（情報露出・バンドル肥大の抑止）。
   // Nuxt DevTools の専用パネルは利用方針により全環境で無効化する（インストール時の互換パッチは維持）。
   devtools: { enabled: false },
@@ -292,8 +302,14 @@ export default defineNuxtConfig({
       ],
     },
     workbox: {
+      // F04.3 / F11.1: Web Push の push / notificationclick（public/sw-custom.js）を生成 SW に取り込む。
+      // 指定が無いと生成 sw.js にリスナーが無く、通知の表示もタップ遷移も動かない（CMP-261029-0620）。
+      // Background Sync の処理（public/sw-background-sync.js）は未結線のため載せない。
+      importScripts: ['/sw-custom.js'],
       navigateFallback: '/',
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+      // 正式画像は必要時だけ取得し、SW installで全packを先読みしない。
+      globIgnores: ['**/node_modules/**/*', 'ranch/approved/**'],
       runtimeCaching: [
         // ─────────────────────────────────────────────────────────────────
         // API キャッシュポリシー（セキュリティ上重要）
@@ -425,6 +441,8 @@ export default defineNuxtConfig({
       // 設計書: docs/features/F18_point_card_wallet.md §1.4 / §16 / §17
       // 既定 false（凍結中）。再開時は NUXT_PUBLIC_F18_BALANCE_ENABLED=true で復活可能。
       f18BalanceEnabled: process.env.NUXT_PUBLIC_F18_BALANCE_ENABLED === 'true',
+      ranchDevelopmentVisuals: process.env.NUXT_PUBLIC_RANCH_DEVELOPMENT_VISUALS === 'true',
+      ranchDevelopmentClips,
       // F08.9 P5 継続課金（Stripe.js）公開可能キー。
       // クライアントで `loadStripe(publishableKey)` に渡す。公開鍵は秘匿情報ではない（pk_*）が、
       // 環境（test/live）で切り替えるため値はコミットせず環境変数から注入する。
@@ -459,6 +477,20 @@ export default defineNuxtConfig({
   // CSP 受信 EP のみに限定し、FE の通常 API 呼び出し（useApi の :8080 絶対URL）には干渉しない。
   // NUXT_API_PROXY=true（E2E 全 API プロキシ）時は routeRules 側が全 /api/v1/** を担うため二重化を避けて無効化。
   nitro: {
+    publicAssets: ranchDevelopmentClips
+      ? [
+          {
+            dir: fileURLToPath(new URL('./dev-fixtures/ranch/base16-v3', import.meta.url)),
+            baseURL: '/dev-fixtures/ranch/base16-v3',
+            maxAge: 0,
+          },
+          {
+            dir: fileURLToPath(new URL('./dev-fixtures/ranch/appearance64-v4', import.meta.url)),
+            baseURL: '/dev-fixtures/ranch/appearance64-v4',
+            maxAge: 0,
+          },
+        ]
+      : [],
     devProxy:
       process.env.NUXT_API_PROXY === 'true'
         ? {}
@@ -482,6 +514,7 @@ export default defineNuxtConfig({
         name: '日本語',
         files: [
           'ja/common.json',
+          'ja/ranch.json',
           'ja/auth.json',
           'ja/validation.json',
           'ja/landing.json',
@@ -512,9 +545,11 @@ export default defineNuxtConfig({
           'ja/shiftBudget.json',
           'ja/dashboard.json',
           'ja/activity.json',
+          'ja/effort.json',
           'ja/settings.json',
           'ja/timetable.json',
           'ja/member-info.json',
+          'ja/member-card.json',
           'ja/property.json',
           'ja/disclosure.json',
           'ja/error_report.json',
@@ -522,11 +557,13 @@ export default defineNuxtConfig({
           'ja/team_sidebar.json',
           'ja/team_affiliation.json',
           'ja/org_member_teams.json',
+          'ja/team_affiliations.json',
           'ja/repair_plan.json',
           'ja/succession.json',
           'ja/wallet.json',
           'ja/village.json',
           'ja/system_admin_batch.json',
+          'ja/system_admin_email_outbox.json',
           'ja/system_admin_gdpr.json',
           'ja/system_admin_security_scan.json',
           'ja/system_admin_fee_policy.json',
@@ -561,6 +598,7 @@ export default defineNuxtConfig({
         name: 'English',
         files: [
           'en/common.json',
+          'en/ranch.json',
           'en/auth.json',
           'en/validation.json',
           'en/landing.json',
@@ -591,9 +629,11 @@ export default defineNuxtConfig({
           'en/shiftBudget.json',
           'en/dashboard.json',
           'en/activity.json',
+          'en/effort.json',
           'en/settings.json',
           'en/timetable.json',
           'en/member-info.json',
+          'en/member-card.json',
           'en/property.json',
           'en/disclosure.json',
           'en/error_report.json',
@@ -601,11 +641,13 @@ export default defineNuxtConfig({
           'en/team_sidebar.json',
           'en/team_affiliation.json',
           'en/org_member_teams.json',
+          'en/team_affiliations.json',
           'en/repair_plan.json',
           'en/succession.json',
           'en/wallet.json',
           'en/village.json',
           'en/system_admin_batch.json',
+          'en/system_admin_email_outbox.json',
           'en/system_admin_gdpr.json',
           'en/system_admin_security_scan.json',
           'en/system_admin_fee_policy.json',
@@ -640,6 +682,7 @@ export default defineNuxtConfig({
         name: '中文（简体）',
         files: [
           'zh/common.json',
+          'zh/ranch.json',
           'zh/auth.json',
           'zh/validation.json',
           'zh/landing.json',
@@ -670,9 +713,11 @@ export default defineNuxtConfig({
           'zh/shiftBudget.json',
           'zh/dashboard.json',
           'zh/activity.json',
+          'zh/effort.json',
           'zh/settings.json',
           'zh/timetable.json',
           'zh/member-info.json',
+          'zh/member-card.json',
           'zh/property.json',
           'zh/disclosure.json',
           'zh/error_report.json',
@@ -680,11 +725,13 @@ export default defineNuxtConfig({
           'zh/team_sidebar.json',
           'zh/team_affiliation.json',
           'zh/org_member_teams.json',
+          'zh/team_affiliations.json',
           'zh/repair_plan.json',
           'zh/succession.json',
           'zh/wallet.json',
           'zh/village.json',
           'zh/system_admin_batch.json',
+          'zh/system_admin_email_outbox.json',
           'zh/system_admin_gdpr.json',
           'zh/system_admin_security_scan.json',
           'zh/system_admin_fee_policy.json',
@@ -719,6 +766,7 @@ export default defineNuxtConfig({
         name: '한국어',
         files: [
           'ko/common.json',
+          'ko/ranch.json',
           'ko/auth.json',
           'ko/validation.json',
           'ko/landing.json',
@@ -749,9 +797,11 @@ export default defineNuxtConfig({
           'ko/shiftBudget.json',
           'ko/dashboard.json',
           'ko/activity.json',
+          'ko/effort.json',
           'ko/settings.json',
           'ko/timetable.json',
           'ko/member-info.json',
+          'ko/member-card.json',
           'ko/property.json',
           'ko/disclosure.json',
           'ko/error_report.json',
@@ -759,11 +809,13 @@ export default defineNuxtConfig({
           'ko/team_sidebar.json',
           'ko/team_affiliation.json',
           'ko/org_member_teams.json',
+          'ko/team_affiliations.json',
           'ko/repair_plan.json',
           'ko/succession.json',
           'ko/wallet.json',
           'ko/village.json',
           'ko/system_admin_batch.json',
+          'ko/system_admin_email_outbox.json',
           'ko/system_admin_gdpr.json',
           'ko/system_admin_security_scan.json',
           'ko/system_admin_fee_policy.json',
@@ -798,6 +850,7 @@ export default defineNuxtConfig({
         name: 'Español',
         files: [
           'es/common.json',
+          'es/ranch.json',
           'es/auth.json',
           'es/validation.json',
           'es/landing.json',
@@ -828,9 +881,11 @@ export default defineNuxtConfig({
           'es/shiftBudget.json',
           'es/dashboard.json',
           'es/activity.json',
+          'es/effort.json',
           'es/settings.json',
           'es/timetable.json',
           'es/member-info.json',
+          'es/member-card.json',
           'es/property.json',
           'es/disclosure.json',
           'es/error_report.json',
@@ -838,11 +893,13 @@ export default defineNuxtConfig({
           'es/team_sidebar.json',
           'es/team_affiliation.json',
           'es/org_member_teams.json',
+          'es/team_affiliations.json',
           'es/repair_plan.json',
           'es/succession.json',
           'es/wallet.json',
           'es/village.json',
           'es/system_admin_batch.json',
+          'es/system_admin_email_outbox.json',
           'es/system_admin_gdpr.json',
           'es/system_admin_security_scan.json',
           'es/system_admin_fee_policy.json',
@@ -877,6 +934,7 @@ export default defineNuxtConfig({
         name: 'Deutsch',
         files: [
           'de/common.json',
+          'de/ranch.json',
           'de/auth.json',
           'de/validation.json',
           'de/landing.json',
@@ -907,9 +965,11 @@ export default defineNuxtConfig({
           'de/shiftBudget.json',
           'de/dashboard.json',
           'de/activity.json',
+          'de/effort.json',
           'de/settings.json',
           'de/timetable.json',
           'de/member-info.json',
+          'de/member-card.json',
           'de/property.json',
           'de/disclosure.json',
           'de/error_report.json',
@@ -917,11 +977,13 @@ export default defineNuxtConfig({
           'de/team_sidebar.json',
           'de/team_affiliation.json',
           'de/org_member_teams.json',
+          'de/team_affiliations.json',
           'de/repair_plan.json',
           'de/succession.json',
           'de/wallet.json',
           'de/village.json',
           'de/system_admin_batch.json',
+          'de/system_admin_email_outbox.json',
           'de/system_admin_gdpr.json',
           'de/system_admin_security_scan.json',
           'de/system_admin_fee_policy.json',
@@ -966,6 +1028,8 @@ export default defineNuxtConfig({
   },
 
   primevue: {
+    // 巨大なpresetをpublic runtimeConfigへ複製せずSSR/CSRの正規importで共有する。
+    importTheme: { as: 'MannschaftTheme', from: '~/themes/mannschaft' },
     autoImport: true,
     components: {
       prefix: '',
@@ -973,14 +1037,6 @@ export default defineNuxtConfig({
     options: {
       ripple: true,
       inputVariant: 'filled',
-      theme: {
-        preset: Aura,
-        options: {
-          prefix: 'p',
-          darkModeSelector: '.p-dark',
-          cssLayer: false,
-        },
-      },
     },
   },
 
@@ -990,6 +1046,16 @@ export default defineNuxtConfig({
     // nuxt:ssr-styles:client プラグインの静的解析時にエラーが発生する。
     // transpile に指定することで Vite がパッケージを直接バンドルし解消する。
     transpile: ['frappe-gantt'],
+  },
+
+  hooks: {
+    // SSR が未訪問ページの JS をログイン画面でも大量に prefetch しないようにする。
+    // import 関係と必須資産の preload は変更せず、クライアント遷移時に取得する。
+    'build:manifest'(manifest) {
+      for (const resource of Object.values(manifest)) {
+        resource.prefetch = false
+      }
+    },
   },
 
   // Lighthouse CI（nuxt generate）では SSR バンドルロード自体が 4GB OOM を引き起こすため
@@ -1026,11 +1092,39 @@ export default defineNuxtConfig({
         'chart.js',
         'dompurify',
         'vuedraggable',
+        // 連絡先QRへの初回SPA遷移で遅延依存の検出による再読み込みを避ける。
+        'qrcode',
         'marked',
         'zod',
-        '@vee-validate/zod',
         'vee-validate',
       ],
+    },
+  },
+
+  $development: {
+    hooks: {
+      'vite:extendConfig'(config, { isServer }) {
+        if (!isServer) return
+        if (!config.plugins) throw new Error('SSR Vite plugins are missing')
+        // i18n pluginの設定後、SSRのappをdevtools待機キューに保持しないNode用bundleへ解決する。
+        config.plugins.push({
+          name: 'mannschaft:ssr-i18n-node',
+          config: {
+            order: 'post',
+            handler() {
+              return {
+                resolve: {
+                  alias: {
+                    'vue-i18n': createRequire(import.meta.url).resolve(
+                      'vue-i18n/dist/vue-i18n.node.mjs',
+                    ),
+                  },
+                },
+              }
+            },
+          },
+        })
+      },
     },
   },
 

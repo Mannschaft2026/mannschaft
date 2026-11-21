@@ -12,10 +12,15 @@ export type AnnouncementSourceType =
   | 'BLOG_POST'
   | 'BULLETIN_THREAD'
   | 'TIMELINE_POST'
+  | 'CIRCULATION_DOCUMENT'
+  /** 旧クライアント表示との互換用。BEの返却値はCIRCULATION_DOCUMENT。 */
   | 'CIRCULATION'
   | 'SURVEY'
   | 'TODO'
   | 'SCHEDULE'
+  | 'COMMITTEE_DECISION'
+  | 'COMMITTEE_MINUTES'
+  | 'ADVERTISER_CAMPAIGN'
 
 export type AnnouncementPriority = 'URGENT' | 'IMPORTANT' | 'NORMAL'
 
@@ -139,6 +144,16 @@ export interface MarkAllReadResponse {
    * 未読が残っているか。true のとき「未読 0」と表示してはならない（#2530 ①）。
    */
   hasMoreUnread: boolean
+}
+
+/** POST /api/v1/organizations/{orgId}/announcements/read-batch の要求（feedIds は 1〜50 件）。 */
+export interface ReadBatchRequest {
+  feedIds: number[]
+}
+
+/** read-batch の応答。宛先外などで通らなかった ID は黙って飛ばされ、件数だけが返る。 */
+export interface ReadBatchResponse {
+  markedCount: number
 }
 
 export interface AnnouncementFeedParams {

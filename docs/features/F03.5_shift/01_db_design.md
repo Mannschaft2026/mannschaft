@@ -129,6 +129,7 @@ INDEX idx_shift_slots_schedule_position (schedule_id, position_id, slot_date)  -
 - `assigned_user_ids` は JSON 配列で管理。正規化テーブルも検討したが、シフト枠あたりの割り当て人数が少数（通常1〜5人）のため JSON で十分。配列内の各 user_id はチームメンバーであることを Service 層で検証する。`GET /shifts/my` での検索（`JSON_CONTAINS`）はインデックスが効かないため、パフォーマンスが課題になった場合は Valkey キャッシュ（`mannschaft:cache:user-shifts:{userId}`、TTL 30分、シフト公開・変更時に無効化）で対応する
 - `position_id`: FK → shift_positions。ポジションマスターから選択。`ON DELETE SET NULL` によりポジション削除時もスロットは保持（ポジション無指定扱いになる）。API レスポンスでは `position` オブジェクト（`{ "id": 1, "name": "ホール" }`）として返却
 - 単独のスロット削除も `deleted_at DATETIME NULL` による論理削除とし、枠に紐づく割当と枠指定希望へ同じ削除日時を連鎖する。日単位希望は巻き込まない。親シフト表の削除時は全子へ親と同じ削除日時を連鎖する。
+- 枠編集画面の削除操作では、確認ダイアログを開くたびに `GET /api/v1/shifts/requests?scheduleId=` を取り直し、`slotId` が対象枠に一致する希望件数（日単位希望は数えない）と `assignedUserIds` の割当件数を文言に添える（希望・割当とも0件なら「この枠を削除しますか？」のみ。件数がある場合は削除される旨と通常操作で復元できない旨を警告）。希望一覧の取得失敗時は件数なしの安全側文言で続行し、エラーを通知する。割当が伏せられている（`assignmentMasked`）場合は割当件数を出さない。取消時はDELETEを送信せず、承諾後だけ既存APIを呼ぶ。失敗時は枠を一覧に残す（CMP-260909-2153）。
 - `required_count` と `assigned_user_ids` の要素数が一致しない場合は「欠員」として UI で表示する
 - `version`: 楽観的ロック。複数の ADMIN/DEPUTY_ADMIN が同一スロットの `assigned_user_ids` を同時編集する競合を防止。PUT 更新時に競合検出、409 Conflict を返却
 - **既存スロットの移行（v2）**: v1 時点で存在する単一時間帯スロットはそのまま有効。v2 UI は同一日の複数スロットを時間軸に沿ってタイムラインで描画する
@@ -223,7 +224,7 @@ INDEX idx_shift_swap_requests_target (target_user_id, status)         -- 【v2.1
   - **個別交代（is_open_call=FALSE, target_user_id=NOT NULL）**: `PENDING` → `ACCEPTED`（指名相手が引き受け）→ `APPROVED`（管理者承認）/ `REJECTED`（管理者却下）/ `CANCELLED`（依頼者取下）
   - **オープンコール（is_open_call=TRUE, target_user_id=NULL）**: `PENDING`（募集中）→ `ACCEPTED` → `APPROVED` / `REJECTED` / `CANCELLED`。**【CMP-260903-0655】** 当初設計の `OPEN_CALL` → `CLAIMED`（手挙げ→候補者選定）の2段階は、作成経路が status を `PENDING` のままにしており到達不能な半実装だったため削除した。`claimed_by` / `claimed_at` / `version` 列と `PATCH /{id}/claim` の記述も同時に失効している
 - `APPROVED` 時の処理: スロットの `assigned_user_ids` から `requester_id` を除去し `accepter_id` を追加（1トランザクション内）。両メンバーにプッシュ通知
-- 同一スロットに `PENDING` / `ACCEPTED` の交代リクエストは1件のみ（Service 層バリデーション）
+- 同一スロット・同一申請者に `PENDING` / `ACCEPTED` の交代リクエストは最大1件。宛先・理由・募集モードは同一性に含めず、別の現在担当者の依頼は共存できる（CMP-261021-0649）。Serviceで親スケジュールの排他をcommitまで保持し、作成メソッド限定のREAD_COMMITTEDで未決を最大1行照会する。DB一意制約の追加や既存重複行の修復は行わない
 - `PUBLISHED` 状態のスケジュールに属するスロットのみ交代リクエスト可能
 - **【v2.1】`is_open_call` と `target_user_id` の排他**: CHECK 制約で `(is_open_call = TRUE AND target_user_id IS NULL) OR (is_open_call = FALSE)` を強制
 - ~~**【v2.1】`claimed_by` のレース条件対策**~~ → **廃止（CMP-260903-0655）**。手挙げ API ごと削除したため、`claimed_by` / `claimed_at` は書き込まれない（列は既存行のため残置）
@@ -342,12 +343,13 @@ INDEX idx_hourly_rates_team (team_id, user_id)                                 -
 - 時給は履歴管理。改定時は新しい `effective_from` のレコードを追加し、過去の時給は保持（過去シフトの給与概算に使用）
 - 現在の時給 = `effective_from <= TODAY` の最新レコード
 - 時給の閲覧権限: **本人 + ADMIN / DEPUTY_ADMIN（MANAGE_SHIFTS）のみ**。他メンバーの時給は非公開
+- 時給の登録・同日訂正: 当該チームの **ADMIN / DEPUTY_ADMIN** に限定し、対象メンバーの在籍を確認する。一般メンバーは本人の時給も変更できない。SYSTEM_ADMIN の既存例外は維持する（CMP-261021-0659。閲覧権限とは分離）
 - 時給未設定のメンバーには給与概算を表示しない（`null` として返却）
 - 給与概算の計算: スロットの勤務時間（hours）× 適用時給。深夜跨ぎスロットの勤務時間は実時間で計算
 
 #### `shift_assignments`【v2 新規】
 
-自動割当の実行結果を保存する監査・差し戻し用のテーブル。`shift_slots.assigned_user_ids` は「現在の割当状態」を示すキャッシュ的な JSON 配列であるのに対し、本テーブルは「誰がいつどの戦略で割り当てたか」を個別レコードとして履歴保持する。手動割当も自動割当も同じテーブルに記録する。
+自動割当の実行結果を保存する監査・差し戻し用のテーブル。`shift_slots.assigned_user_ids` は「現在の割当状態」の正本となる JSON 配列であるのに対し、本テーブルは「誰がいつどの戦略で割り当てたか」を個別レコードとして履歴保持する。手動割当も自動割当も同じテーブルに記録する。
 
 ##### 二表の役割分担（正本はどちらか）— CMP-260908-2117
 
@@ -409,6 +411,7 @@ UNIQUE KEY uq_shift_assignments_slot_user_active (slot_id, user_id, status)  -- 
 **制約・備考**
 - ステータス: `PROPOSED`（自動割当の提案）→ `CONFIRMED`（管理者が確定）/ `REVOKED`（取り消し）
 - `PROPOSED` 状態の割当は `shift_slots.assigned_user_ids` には反映されない。管理者が UI で確認・修正してから「確定」アクションで `CONFIRMED` に遷移し、同時に `shift_slots.assigned_user_ids` を一括更新する
+- 自動割当の部分確定では、現在の JSON の順序を先に保持し、今回選択された `CONFIRMED` の担当だけを一意に追加する。未選択の提案・選択された `REVOKED`・過去の `CONFIRMED` 履歴から現在状態を再構築しない。これにより、履歴のない手動担当も保持し、解除済みの過去担当を復活させない。内部の空選択は更新せず、同じ選択の反復確定も重複を作らない（CMP-260909-2148）
 - `REVOKED` 状態は履歴として残す（監査証跡）。物理削除は行わない
 - `assigned_by_strategy` の列挙値は Java 側の `AssignmentStrategyType` Enum（`MANUAL / GREEDY_V1 / CSP_V1`）と一致させる。CHECK 制約で値を限定
 - `run_id` が NULL の場合は手動割当（D&D 操作・PUT `/slots/{id}` 等）。非 NULL の場合は自動割当バッチ経由

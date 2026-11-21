@@ -12,8 +12,11 @@
     "board": {
       "title": "Tablero de turnos",
       "memberPool": "Miembros sin asignar",
+      "noUnassignedMembers": "No hay miembros sin asignar",
+      "noMatchingMembers": "Ningún miembro coincide con la búsqueda",
       "dragHint": "Arrastra miembros para asignar",
-      "unassignedSlots": "{count} turnos sin asignar"
+      "unassignedSlots": "{count} turnos sin asignar",
+      "backToList": "Volver a la lista de turnos"
     },
     "autoAssign": {
       "button": "Asignación automática",
@@ -131,6 +134,19 @@
       "formNote": "Nota",
       "formNotePlaceholder": "Opcional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "No se puede publicar: faltan tarifas por hora",
+        "description": "Hay personas asignadas sin una tarifa por hora válida en días laborables vinculados al presupuesto. Configure sus tarifas y vuelva a publicar.",
+        "unknownUser": "ID de usuario {id}",
+        "goSettings": "Abrir configuración de tarifa por hora"
+      },
+      "conflict": {
+        "title": "El turno ha cambiado",
+        "description": "El turno cambió mientras se comprobaba la publicación. Recargue la página, revise el contenido y publique de nuevo."
+      },
+      "close": "Cerrar"
+    },
     "detail": {
       "tabOverview": "Resumen",
       "tabEdit": "Editar",
@@ -171,10 +187,23 @@
       "notePlaceholder": "Opcional",
       "dayOfWeek": "Día de la semana",
       "dayOfWeekHint": "Las franjas se crean solo en los días seleccionados",
+      "moveDateTitle": "Confirmar cambio de fecha",
+      "moveDateMessage": "La fecha cambiará de {oldDate} a {newDate}. Si hay solicitudes ya enviadas para este turno, también se moverán a la nueva fecha.",
+      "moveDateAccept": "Mover turno y preferencias",
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",
       "assignmentMasked": "En ajuste",
-      "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno"
+      "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
+      "deleteTitle": "Eliminar turno",
+      "deleteConfirmPlain": "¿Eliminar este turno?",
+
+      "deleteConfirmBoth": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno y sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmRequestsOnly": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno. No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmAssignmentsOnly": "¿Eliminar este turno? También se eliminarán sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
+
+      "deleteConfirmUnknown": "¿Eliminar este turno? Si hay solicitudes enviadas para este turno o asignaciones, también se eliminarán. No se puede deshacer con las operaciones habituales."
     },
     "requests": {
       "submissionRate": "Tasa de envío",
@@ -289,16 +318,17 @@
         "label": "Destinatarios",
         "specific": "Especificar Miembros",
         "template": "Por Período de Turno",
-        "openCall": "Abierto a Todos"
+        "openCall": "Convocatoria abierta en el equipo"
       },
       "targetUsers": {
         "label": "Candidatos al Cambio",
         "placeholder": "Seleccionar miembros...",
         "dayShift": "Miembros del turno de día",
         "nightShift": "Miembros del turno de noche",
-        "selectedCount": "{count} seleccionados"
+        "selectedCount": "{count} seleccionados",
+        "empty": "No hay miembros disponibles"
       },
-      "templateHint": "Enviar a todos los miembros del turno {period} en el mismo horario",
+      "templateHint": "Enviar a todos los {period} del mismo horario",
       "list": {
         "title": "Solicitudes de cambio de turno",
         "requester": "Solicitante n.º {id}",
@@ -404,6 +434,7 @@
       }
     },
     "entry": {
+      "notStarted": "La recepción de preferencias aún no ha comenzado.",
       "sectionTitle": "Enviar preferencias / Tablero de turnos",
       "bulkRequest": "Enviar preferencias en bloque",
       "board": "Tablero de turnos",
@@ -484,7 +515,7 @@
       "title": "Consultar los detalles del turno",
       "body": "Toca una fecha concreta para ver los detalles de ese turno, como el nombre del equipo, el puesto, el horario y el nombre del calendario.",
       "steps": {
-        "step1": "[Vista mensual] Toca una celda de fecha para abrir el panel de detalles en el lado derecho de la pantalla",
+        "step1": "[Vista mensual] Toca una celda de fecha para abrir el panel de detalles de la fecha seleccionada",
         "step2": "[Vista semanal] Toca el encabezado de una tarjeta de fecha para expandirla y mostrar la lista de turnos",
         "step3": "En la vista mensual, vuelve a tocar la misma fecha para cerrar el panel de detalles"
       }
@@ -494,7 +525,7 @@
       "body": "Si quieres cambiar un turno confirmado con otro miembro, puedes enviar la solicitud de tres maneras. Tras enviarla, la lista de turnos se actualiza automáticamente.",
       "steps": {
         "step1": "Haz clic en el botón «Crear solicitud de cambio» en los detalles del turno",
-        "step2": "Elige el método de envío: «Indicar miembros» (selecciona uno o más) / «Por franja de turno» (todas las personas del turno de día o de noche del mismo día) / «Abierto a todos» (cualquiera puede ofrecerse)",
+        "step2": "Elige el método de envío: «Indicar miembros» (selecciona uno o más) / «Por franja de turno» (todas las personas del turno de día o de noche del mismo día) / «Convocatoria abierta en el equipo» (los miembros del equipo pueden ofrecerse)",
         "step3": "Si lo necesitas, escribe un motivo (opcional)",
         "step4": "Haz clic en el botón «Enviar» para enviar la solicitud"
       },

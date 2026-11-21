@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Install only production + build-time deps via ci for reproducibility
 COPY package.json package-lock.json ./
-COPY scripts/prepare-devtools-simple-git.mjs ./scripts/prepare-devtools-simple-git.mjs
+COPY scripts/patch-nuxt-devtools-simple-git.mjs ./scripts/patch-nuxt-devtools-simple-git.mjs
 RUN npm ci
 
 # ============================================================
@@ -43,6 +43,10 @@ ENV NUXT_INTERNAL_API_BASE=${NUXT_INTERNAL_API_BASE}
 ENV NODE_OPTIONS=--max-old-space-size=8192
 
 RUN npm run build
+# 成果物検証は承認pack（public/ranch/approved）の実在を要求する。素材を展開していない（sparse checkout の）作業木から
+# docker build すると、CI の有無にかかわらずここで失敗する（素材なしを配布可能と検証しない）。
+# 先に素材を展開してからビルドすること: node scripts/worktree-assets.mjs expand
+RUN node scripts/verify-ranch-production-artifact.mjs
 
 # ============================================================
 # Stage 3: Runtime
@@ -67,9 +71,9 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-# Health check — hits Nuxt's built-in /_nuxt/... or the root page
+# HOST=0.0.0.0 のIPv4待受に合わせ、localhostのIPv6解決に依存しない。
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 
 # Nuxt 3 standalone entry point
 CMD ["node", "server/index.mjs"]

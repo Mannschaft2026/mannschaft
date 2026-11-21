@@ -24,6 +24,17 @@ import java.util.stream.Collectors;
 public interface OrganizationRepository extends JpaRepository<OrganizationEntity, Long> {
 
     /**
+     * 指定 ID のうち ACTIVE（承諾済み）かつ未アーカイブ・未削除の組織 ID だけを返す
+     * （グローバル検索の閲覧者スコープ解決。CMP-261116-0722）。
+     */
+    @Query("""
+            SELECT o.id FROM OrganizationEntity o WHERE o.id IN :ids
+              AND o.lifecycleStatus = com.mannschaft.app.organization.entity.OrganizationEntity.LifecycleStatus.ACTIVE
+              AND o.archivedAt IS NULL AND o.deletedAt IS NULL
+            """)
+    List<Long> findActiveIdsByIdIn(@Param("ids") Collection<Long> ids);
+
+    /**
      * カスタムスラッグで組織を取得する（URL識別子）。
      *
      * @param slug URL に使用するカスタムスラッグ

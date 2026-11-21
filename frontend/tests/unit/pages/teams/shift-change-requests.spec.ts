@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { computed, nextTick } from 'vue'
 import { useAuthStore } from '~/stores/useAuthStore'
 import ChangeRequestsPage from '~/pages/teams/[slug]/shifts/[scheduleId]/change-requests.vue'
 import type { ChangeRequest, ShiftScheduleResponse } from '~/types/shift'
@@ -43,7 +43,7 @@ mockNuxtImport('useShiftApi', () => () => ({
 }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
 mockNuxtImport('useRoleAccess', () => () => ({
-  isAdminOrDeputy: mocks.isAdminOrDeputy,
+  roleName: computed(() => (mocks.isAdminOrDeputy.value ? 'ADMIN' : 'MEMBER')),
   loadPermissions: mocks.loadPermissions,
 }))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: vi.fn() }))

@@ -12,8 +12,11 @@
     "board": {
       "title": "Schichtplan-Board",
       "memberPool": "Nicht zugewiesene Mitglieder",
+      "noUnassignedMembers": "Keine nicht zugewiesenen Mitglieder",
+      "noMatchingMembers": "Keine Mitglieder entsprechen Ihrer Suche",
       "dragHint": "Mitglieder per Drag & Drop zuweisen",
-      "unassignedSlots": "{count} nicht zugewiesene Schichten"
+      "unassignedSlots": "{count} nicht zugewiesene Schichten",
+      "backToList": "Zurück zur Schichtliste"
     },
     "autoAssign": {
       "button": "Automatisch zuweisen",
@@ -131,6 +134,19 @@
       "formNote": "Notiz",
       "formNotePlaceholder": "Optional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "Veröffentlichung nicht möglich: Stundensätze fehlen",
+        "description": "Für budgetgebundene Arbeitstage haben zugewiesene Personen keinen gültigen Stundensatz. Legen Sie die Stundensätze fest und veröffentlichen Sie erneut.",
+        "unknownUser": "Benutzer-ID {id}",
+        "goSettings": "Stundensatz-Einstellungen öffnen"
+      },
+      "conflict": {
+        "title": "Der Dienstplan wurde geändert",
+        "description": "Der Dienstplan hat sich während der Prüfung der Veröffentlichung geändert. Laden Sie die Seite neu, prüfen Sie den Inhalt und veröffentlichen Sie erneut."
+      },
+      "close": "Schließen"
+    },
     "detail": {
       "tabOverview": "Übersicht",
       "tabEdit": "Bearbeiten",
@@ -171,10 +187,23 @@
       "notePlaceholder": "Optional",
       "dayOfWeek": "Wochentag",
       "dayOfWeekHint": "Slots werden nur an den gewählten Wochentagen angelegt",
+      "moveDateTitle": "Datumsänderung bestätigen",
+      "moveDateMessage": "Das Datum wird von {oldDate} auf {newDate} geändert. Bereits für diese Schicht eingereichte Wünsche werden, falls vorhanden, ebenfalls auf das neue Datum verschoben.",
+      "moveDateAccept": "Schicht und Wünsche verschieben",
       "saveSuccess": "Slot gespeichert",
       "deleteSuccess": "Slot gelöscht",
       "assignmentMasked": "In Abstimmung",
-      "assignmentMaskedHint": "Zuweisungen werden bis zur Veröffentlichung ausgeblendet"
+      "assignmentMaskedHint": "Zuweisungen werden bis zur Veröffentlichung ausgeblendet",
+      "deleteTitle": "Schichtzeit löschen",
+      "deleteConfirmPlain": "Diese Schichtzeit löschen?",
+
+      "deleteConfirmBoth": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche und {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
+
+      "deleteConfirmRequestsOnly": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
+
+      "deleteConfirmAssignmentsOnly": "Diese Schichtzeit löschen? Die {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
+
+      "deleteConfirmUnknown": "Diese Schichtzeit löschen? Eingereichte Wünsche und Zuweisungen dafür, falls vorhanden, werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen."
     },
     "requests": {
       "submissionRate": "Einreichungsquote",
@@ -289,16 +318,17 @@
         "label": "Empfänger",
         "specific": "Mitglieder angeben",
         "template": "Nach Schichtzeit",
-        "openCall": "Für alle öffnen"
+        "openCall": "Offene Anfrage im Team"
       },
       "targetUsers": {
         "label": "Tauschkandidaten",
         "placeholder": "Mitglieder auswählen...",
         "dayShift": "Tagschicht-Mitglieder",
         "nightShift": "Nachtschicht-Mitglieder",
-        "selectedCount": "{count} ausgewählt"
+        "selectedCount": "{count} ausgewählt",
+        "empty": "Keine Mitglieder verfügbar"
       },
-      "templateHint": "An alle {period}-Schichtmitglieder im gleichen Plan senden",
+      "templateHint": "An alle {period} im gleichen Plan senden",
       "list": {
         "title": "Schichttausch-Anfragen",
         "requester": "Antragsteller #{id}",
@@ -404,6 +434,7 @@
       }
     },
     "entry": {
+      "notStarted": "Die Abgabe von Schichtwünschen hat noch nicht begonnen.",
       "sectionTitle": "Wünsche einreichen / Schichtboard",
       "bulkRequest": "Wünsche gesammelt einreichen",
       "board": "Schichtboard",
@@ -484,7 +515,7 @@
       "title": "Schichtdetails ansehen",
       "body": "Tippen Sie auf ein bestimmtes Datum, um Details zur Schicht wie Teamname, Position, Uhrzeit und Planname anzuzeigen.",
       "steps": {
-        "step1": "[Monatsansicht] Tippen Sie auf ein Datumsfeld, um rechts auf dem Bildschirm das Detailfenster zu öffnen",
+        "step1": "[Monatsansicht] Tippen Sie auf ein Datumsfeld, um das Detailfenster für das ausgewählte Datum zu öffnen",
         "step2": "[Wochenansicht] Tippen Sie auf die Kopfzeile einer Datumskarte, um die Karte zu erweitern und die Schichtliste anzuzeigen",
         "step3": "In der Monatsansicht schließt ein erneutes Tippen auf dasselbe Datum das Detailfenster"
       }
@@ -494,7 +525,7 @@
       "body": "Wenn Sie eine bestätigte Schicht mit einem anderen Mitglied tauschen möchten, können Sie die Anfrage auf drei Arten senden. Nach dem Senden wird die Schichtliste automatisch aktualisiert.",
       "steps": {
         "step1": "Klicken Sie in den Schichtdetails auf die Schaltfläche „Tauschanfrage erstellen“",
-        "step2": "Wählen Sie die Sendeart: „Mitglieder festlegen“ (mindestens ein Mitglied auswählen) / „Nach Schichtzeit“ (alle, die am selben Tag in der Tag- oder Nachtschicht arbeiten) / „Für alle öffnen“ (jeder kann sich melden)",
+        "step2": "Wählen Sie die Sendeart: „Mitglieder festlegen“ (mindestens ein Mitglied auswählen) / „Nach Schichtzeit“ (alle, die am selben Tag in der Tag- oder Nachtschicht arbeiten) / „Offene Anfrage im Team“ (Teammitglieder können sich melden)",
         "step3": "Geben Sie bei Bedarf einen Grund an (optional)",
         "step4": "Klicken Sie zum Senden auf die Schaltfläche „Einreichen“"
       },

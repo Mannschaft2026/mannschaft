@@ -1,36 +1,50 @@
 <script setup lang="ts">
+import { inviteRedirect } from '~/utils/inviteRedirect'
 definePageMeta({
   layout: 'auth',
 })
 
 const route = useRoute()
+const returnPath = computed(() => inviteRedirect(route.query.redirect))
+const loginTarget = computed(() => ({
+  path: '/login',
+  query: returnPath.value ? { redirect: returnPath.value } : {},
+}))
 const api = useApi()
 const notification = useNotification()
+const { t } = useI18n()
 
 const token = computed(() => route.query.token as string | undefined)
 const email = computed(() => route.query.email as string | undefined)
 
 const verifying = ref(false)
 const verified = ref(false)
-const verifyError = ref(false)
+// 検証失敗時の本文（BE の message 優先・無ければ既定文言）。null は未失敗。
+const verifyError = ref<string | null>(null)
 const resending = ref(false)
+
+// BE は利用者の言語で data.error.message を返す。code の有無を問わず優先する。
+function apiErrorMessage(err: unknown): string | undefined {
+  const message = (err as { data?: { error?: { message?: unknown } } } | null)?.data?.error?.message
+  return typeof message === 'string' && message ? message : undefined
+}
 
 async function verifyToken() {
   if (!token.value) return
   verifying.value = true
-  verifyError.value = false
+  verifyError.value = null
   try {
     await api('/api/v1/auth/verify-email', {
       method: 'POST',
       body: { token: token.value },
     })
     verified.value = true
-    notification.success('メール認証が完了しました')
-    setTimeout(() => navigateTo('/login'), 2000)
+    notification.success(t('auth.verify_email.success_toast'))
+    setTimeout(() => navigateTo(loginTarget.value), 2000)
   }
-  catch {
-    verifyError.value = true
-    notification.error('メール認証に失敗しました', 'リンクが無効または期限切れです。')
+  catch (err) {
+    verifyError.value = apiErrorMessage(err) || t('auth.verify_email.failed_description')
+    notification.error(t('auth.verify_email.failed_toast_title'), verifyError.value)
   }
   finally {
     verifying.value = false
@@ -45,10 +59,13 @@ async function resendVerification() {
       method: 'POST',
       body: { email: email.value },
     })
-    notification.success('確認メールを再送信しました')
+    notification.success(t('auth.verify_email.resend_success'))
   }
-  catch {
-    notification.error('再送信に失敗しました', 'しばらく時間をおいて再度お試しください。')
+  catch (err) {
+    notification.error(
+      t('auth.verify_email.resend_failed_title'),
+      apiErrorMessage(err) || t('auth.verify_email.resend_failed_message'),
+    )
   }
   finally {
     resending.value = false
@@ -68,39 +85,39 @@ onMounted(() => {
     <template v-if="token">
       <template v-if="verifying">
         <LoadingBounce />
-        <p class="text-center text-lg">メールアドレスを認証しています...</p>
+        <p class="text-center text-lg">{{ $t('auth.verify_email.verifying') }}</p>
       </template>
 
       <template v-else-if="verified">
         <i class="pi pi-check-circle text-5xl text-green-500" />
-        <h2 class="text-xl font-bold">認証が完了しました</h2>
+        <h2 class="text-xl font-bold">{{ $t('auth.verify_email.success_title') }}</h2>
         <p class="text-center text-surface-500">
-          メールアドレスの認証が完了しました。ログインしてください。
+          {{ $t('auth.verify_email.success_description') }}
         </p>
         <Button
-          label="ログインへ"
+          :label="$t('auth.verify_email.to_login')"
           icon="pi pi-sign-in"
           class="w-full"
-          @click="navigateTo('/login')"
+          @click="navigateTo(loginTarget)"
         />
       </template>
 
-      <template v-else-if="verifyError">
+      <template v-else-if="verifyError !== null">
         <i class="pi pi-times-circle text-5xl text-red-500" />
-        <h2 class="text-xl font-bold">認証に失敗しました</h2>
+        <h2 class="text-xl font-bold">{{ $t('auth.verify_email.failed_title') }}</h2>
         <p class="text-center text-surface-500">
-          リンクが無効または期限切れです。確認メールを再送信してください。
+          {{ verifyError }}
         </p>
         <Button
           v-if="email"
-          label="確認メールを再送信"
+          :label="$t('auth.verify_email.resend_button')"
           icon="pi pi-envelope"
           :loading="resending"
           class="w-full"
           @click="resendVerification"
         />
-        <NuxtLink to="/login" class="text-sm text-primary hover:underline">
-          ログインページへ戻る
+        <NuxtLink :to="loginTarget" class="text-sm text-primary hover:underline">
+          {{ $t('auth.verify_email.back_to_login') }}
         </NuxtLink>
       </template>
     </template>
@@ -108,22 +125,21 @@ onMounted(() => {
     <!-- トークンなし（登録直後の案内画面） -->
     <template v-else>
       <i class="pi pi-envelope text-5xl text-primary" />
-      <h2 class="text-xl font-bold">確認メールを送信しました</h2>
+      <h2 class="text-xl font-bold">{{ $t('auth.verify_email.sent_title') }}</h2>
       <p class="text-center text-surface-500">
-        <span v-if="email" class="font-semibold">{{ email }}</span>
-        に確認メールを送信しました。メール内のリンクをクリックして認証を完了してください。
+        {{ email ? $t('auth.verify_email.sent_description_to', { email }) : $t('auth.verify_email.sent_description') }}
       </p>
       <Button
         v-if="email"
-        label="確認メールを再送信"
+        :label="$t('auth.verify_email.resend_button')"
         icon="pi pi-envelope"
         outlined
         :loading="resending"
         class="w-full"
         @click="resendVerification"
       />
-      <NuxtLink to="/login" class="text-sm text-primary hover:underline">
-        ログインページへ戻る
+      <NuxtLink :to="loginTarget" class="text-sm text-primary hover:underline">
+        {{ $t('auth.verify_email.back_to_login') }}
       </NuxtLink>
     </template>
   </div>

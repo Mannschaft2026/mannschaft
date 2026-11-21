@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ShiftReminderButton from '~/components/shift/ShiftReminderButton.vue'
+import ShiftPublishErrorDialog from '~/components/shift/ShiftPublishErrorDialog.vue'
 import type {
   ShiftScheduleResponse,
   ShiftSlotResponse,
@@ -9,6 +10,7 @@ import type {
 import dayjs from 'dayjs'
 import { statusToStep } from '~/utils/shiftStatus'
 import { isSlotUnderStaffed } from '~/utils/shiftSlot'
+import { parseShiftPublishError, type ShiftPublishErrorInfo } from '~/utils/shiftPublishError'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -67,6 +69,11 @@ onMounted(async () => {
 // ステータス遷移
 // =====================================================
 const transitioning = ref(false)
+/** 公開が拒否されたときの案内（時給未設定 400 / 競合 409）。null なら非表示。 */
+const publishError = ref<ShiftPublishErrorInfo | null>(null)
+const publishErrorTeamSlug = computed(
+  () => teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug ?? null,
+)
 
 const nextStatusMap: Record<ShiftScheduleStatus, ShiftScheduleStatus | null> = {
   DRAFT: 'COLLECTING',
@@ -95,7 +102,14 @@ async function handleTransition() {
     schedule.value = await transitionStatus(scheduleId.value, nextStatus.value)
     success(t('shift.detail.transitionSuccess'))
   } catch (error) {
-    handleApiError(error)
+    const info = nextStatus.value === 'PUBLISHED' ? parseShiftPublishError(error) : null
+    if (!info) {
+      handleApiError(error)
+      return
+    }
+    publishError.value = info
+    // 競合（409）は表示が古い可能性が高いので、案内と同時に最新の状態へ読み込み直す。
+    if (info.kind === 'conflict') await load()
   } finally {
     transitioning.value = false
   }
@@ -430,5 +444,10 @@ const currentStep = computed(() =>
         <Button :label="t('common.save')" icon="pi pi-check" :loading="saving" @click="saveEdit" />
       </template>
     </Dialog>
+    <ShiftPublishErrorDialog
+      :info="publishError"
+      :team-slug="publishErrorTeamSlug"
+      @close="publishError = null"
+    />
   </div>
 </template>

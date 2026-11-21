@@ -18,7 +18,7 @@
 | POST | `/api/v1/shifts/schedules/{id}/slots` | 必要 | スロット作成 |
 | POST | `/api/v1/shifts/schedules/{id}/slots/bulk` | 必要 | スロット一括作成 |
 | PATCH | `/api/v1/shifts/slots/{id}` | 必要 | スロット更新（部分更新、PUT から PATCH へ変更） |
-| DELETE | `/api/v1/shifts/slots/{id}` | 必要 | スロット削除（物理削除） |
+| DELETE | `/api/v1/shifts/slots/{id}` | 必要 | スロット削除（論理削除） |
 | PATCH | `/api/v1/shifts/slots/{id}/assignments` | 必要 | **【v2】D&D UI 用の差分割当 API（個別ユーザー追加・削除）** |
 | POST | `/api/v1/shifts/slots/{id}/assignments/move` | 必要 | **【CMP-261010-1432】枠間移動（1 トランザクションで移動元から外し移動先へ入れる）** |
 | GET | `/api/v1/shifts/requests` | 必要 | 希望一覧取得（管理者用、クエリパラメータ `scheduleId` でスケジュール絞り込み。旧 `GET /shifts/schedules/{id}/requests` を統合） |
@@ -42,7 +42,7 @@
 | PUT | `/api/v1/shifts/availability` | 必要 | デフォルト可否プロファイル一括更新 |
 | DELETE | `/api/v1/shifts/availability` | 必要 | デフォルト可否プロファイルを削除（既定値に戻す） |
 | GET | `/api/v1/shifts/hourly-rate` | 必要 | 自分の時給設定取得 |
-| POST | `/api/v1/shifts/hourly-rate` | 必要 | 自分の時給設定登録・更新（旧 PUT → POST に変更、Service 側 upsert 動作） |
+| POST | `/api/v1/shifts/hourly-rate` | 必要 | 管理者によるメンバーの時給登録・訂正（Service 側 upsert 動作） |
 | GET | `/api/v1/shifts/hourly-rates` | 必要 | チームメンバーの有効時給を一括取得（ADMIN/DEPUTY_ADMIN 用・CMP-260912-1525 で実装） |
 | PUT | `/api/v1/shifts/hourly-rates/{userId}` | 必要 | メンバーの時給設定（管理者用） **【v2 計画、現状未実装】** |
 | POST | `/api/v1/shifts/schedules/{id}/auto-assign` | 必要 | **【v2】自動割当を実行（PROPOSED 状態で shift_assignments にドラフト書き込み）** |
@@ -343,6 +343,36 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 > ※ 旧設計は `PATCH /status` + `PATCH /publish` の 2 本。Phase 2 で `POST /transition` 1 本に統合し、リクエストボディの `target_status` で遷移先を指定する方式に変更。以降のサブセクションは旧設計の参考情報として残す。
 
+**公開時の時給必須ガード（CMP-261115-1821）**
+
+`ADJUSTING → PUBLISHED` の遷移では、予算連動の勤務日に割り当てられた全メンバーに、勤務日時点で有効な**正数の時給**があることを検証する。予算連動とは、勤務日が有効な予算割当（チーム個別優先・組織共通フォールバック）の期間に入り、かつ予算機能が有効な日を指す。予算連動の勤務日が1日もない、または割当者がいないシフト表は従来どおり公開できる。一般参加者には時給を要求しない。
+
+| ステータス | エラーコード | 条件 |
+|-----------|-------------|------|
+| 400 | `SHIFT_047`（`HOURLY_RATE_MISSING_FOR_PUBLICATION`） | 予算連動の勤務日の割当者に、有効な正数時給（null・0・負数は不可）が無い。公開は全体がロールバックされ、公開イベントも発行されない |
+| 409 | `COMMON_003` | 公開の検証後から確定までの間に、勤務日が検証範囲の外へ出た、または空だった割当が非空へ変わった。更新・イベントとも0件で拒否する。画面を読み込み直してから再操作する |
+
+400 の応答は、時給を確認できなかった（userId, 勤務日）を重複なしで昇順に全件返す。金額は載せない。
+
+```json
+{
+  "error": {
+    "code": "SHIFT_047",
+    "message": "...",
+    "fieldErrors": [],
+    "details": {
+      "missingHourlyRates": [
+        { "userId": 7, "slotDate": "2026-11-20" }
+      ]
+    }
+  }
+}
+```
+
+応答スキーマは OpenAPI の `ShiftHourlyRateMissingErrorResponse`。公開時と、公開後の予算消化額の実計上（非同期）との間の原子性は保証しない。計上側も正数時給を必須とし、時給が無い場合は計上せず失敗として記録する。
+
+FE は公開操作（シフト表一覧の公開ボタン、シフト詳細の「確定公開」）で 400 を受けると、対象者名と勤務日の一覧を表示し、ADMIN には時給設定画面（`/teams/{slug}/settings/hourly-rate`）への導線を出す。409 では読み込み直してから再操作するよう案内する。
+
 #### 【旧】`PATCH /api/v1/shifts/schedules/{id}/status`
 
 シフトスケジュールのステータスを変更する。許可される遷移のみ受け付ける。
@@ -612,7 +642,7 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 #### `DELETE /api/v1/shifts/slots/{id}`
 
-スロットを物理削除する。`PUBLISHED` / `ARCHIVED` 状態では削除不可。
+スロットを論理削除し、枠指定希望・割当へ削除日時を連鎖する。希望の行は保持するが、`SLOT_DELETED` の希望は通常一覧・本人履歴には返さない。日単位希望は対象外。枠編集画面は確認ダイアログを開く際に希望一覧APIで対象枠の希望件数を取得し、件数（希望・割当）と通常操作で復元できないことを警告して、明示的な承諾後に本APIを呼ぶ（件数0なら素の確認のみ）（CMP-260909-2153）。`PUBLISHED` / `ARCHIVED` 状態では削除不可。
 
 **レスポンス（204 No Content）**
 
@@ -1090,6 +1120,10 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 メンバーがシフト交代リクエストを作成する。`PUBLISHED` 状態のスケジュールに属する、自分がアサインされているスロットのみ対象。**v2.1 より 2 つのモードをサポート**: (A-2) 特定メンバー指名、(A-3) オープンコール（全体募集）。
 
+**受付資格（CMP-261021-0647）**: 現在の`assigned_user_ids`に本人を含むことを、スコープ認可後の業務TXで状態・割当変更と直列化して確認する。ADMIN / DEPUTY_ADMIN / SYSTEM_ADMINにも同じ資格を適用する。未割当は拒否し、公開履歴があってもARCHIVEDは受け付けない。
+
+**未決重複（CMP-261021-0649）**: 同一枠・同一申請者に`PENDING` / `ACCEPTED`があれば409 `SHIFT_013`。宛先・順序・理由・募集モードを変えても再作成できない。別の現在担当者の依頼は共存でき、`APPROVED` / `REJECTED` / `CANCELLED`だけなら現在の作成資格を満たす限り新規作成できる。既存依頼は変更・修復しない。
+
 **リクエストボディ（A-2 個別指名）**
 ```json
 {
@@ -1123,11 +1157,13 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 **エラーレスポンス**
 | ステータス | 条件 |
 |-----------|------|
-| 400 | 自分がアサインされていないスロット / 同一スロットに未解決の交代リクエストが既存 / `is_open_call=true` かつ `target_user_id` 指定（排他違反） |
-| 403 | チームメンバーではない |
-| 404 | スロットが存在しない / 指名した `target_user_id` がチームメンバーではない |
-| 409 | `PUBLISHED` 以外のステータス |
+| 400 | `is_open_call=true` かつ `target_user_id` 指定（排他違反） |
+| 403 | スコープ認可で拒否（SUPPORTER等は`COMMON_002`）/ 本人外・未割当（`SHIFT_019`） |
+| 404 | スロットが存在しない・越境（`SHIFT_002`）/ 親スケジュールが存在しない（`SHIFT_001`）/ 指名した `target_user_id` がチームメンバーではない（既存設計条件、本件では未変更・未検証） |
+| 409 | `PUBLISHED` 以外のステータス（`SHIFT_012`）/ 同一枠・同一申請者に未決依頼が既存（`SHIFT_013`） |
 | 429 | **【v2.1】** オープンコール月間上限（3件/月/ユーザー）超過 |
+
+**検証範囲（CMP-261021-0647）**: 本件は作成者の状態・担当資格とスコープ境界を検証した。指名対象のチーム所属条件、400の既存条件、429の月間上限は変更・検証していない別条件として保持する。上記ボディの `target_user_id` / `is_open_call` は既存設計の記述であり、現DTOの `targetUserIds` / `openCall` との乖離も本件では変更しない。
 
 ---
 
@@ -1396,7 +1432,7 @@ status を既定の `PENDING` のままにしており、`OPEN_CALL` へ遷移�
 
 > ※ 旧設計は PUT。実装は POST に変更（`ShiftAvailabilityController#createHourlyRate`、Service 側で upsert）。
 
-自分の時給を登録・更新する。
+管理者が対象メンバーの時給を登録・訂正する。本人による閲覧は引き続き可能だが、一般メンバーの自己登録・自己訂正は許可しない（CMP-261021-0659）。
 
 **リクエストボディ**
 ```json
@@ -1411,19 +1447,21 @@ status を既定の `PENDING` のままにしており、`OPEN_CALL` へ遷移�
 - `effective_from`: 必須。未来日も過去日も指定可能（過去日指定で「入社時の時給を遡って登録」に対応）
 - 同一 `effective_from` のレコードが既存の場合は上書き更新
 
-**レスポンス（200 OK）**: 更新後の全時給履歴を返却
+**レスポンス（201 Created）**: 設定した時給を単票（`HourlyRateResponse`）で返却
 
-**認可**（認可根治 Wave6 追加戦 / 実装は `ShiftHourlyRateService#checkHourlyRateAccess`）
+**認可**（CMP-261021-0659 / 実装は `ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess`）
 
-参照（`GET /api/v1/shifts/hourly-rate`）と同一の判定を書込にも適用する。
-ボディの `user_id` が本人以外を指す場合は、呼び出し元が当該チームの ADMIN / DEPUTY_ADMIN であり、
+登録・同日訂正は、対象が本人か他人かにかかわらず、呼び出し元が当該チームの ADMIN / DEPUTY_ADMIN であり、
 かつ**対象ユーザーも当該チームのメンバーである**ことを要求する（対象側 BOLA 封鎖）。
+SYSTEM_ADMIN は従来どおり所属判定を短絡して許可する。管理者の判定は既存の `checkAdminOrAbove` を使い、新しい permission 条件を加えない。
+拒否は upsert より前に行い、時給・履歴を変更しない。参照は従来の本人 + 管理者という判定を維持する。
 
 **エラーレスポンス**
 | ステータス | 条件 |
 |-----------|------|
 | 400 | バリデーションエラー |
-| 403 | チームメンバーではない / 他メンバーの時給を管理権限なしで登録した / 対象ユーザーが当該チームの非メンバー |
+| 401 | 未認証 |
+| 403 | 当該チームの管理権限がない（本人への登録・訂正を含む） / 対象ユーザーが当該チームの非メンバー |
 
 ---
 

@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * API の mapped method が feature gate または明示的な常時到達理由を宣言することを監査する番人。
- * HTTP は 3,566 件（ブログ・スケジュール画像の完了確認2エンドポイント追加後）、
+ * HTTP は 3,732 件（既存3,730件＋モジュールイベント管理GET/POST各1本）、
  * STOMP は Chat の 2 件と VillageLobbyPresenceController の 3 件、計 5 件を走査する。
  */
 class ApiGateDeclarationGuardTest {
@@ -42,7 +42,27 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3645);   // main 3643 + F01.2.1 2-D 離脱1（TeamOrgMembershipLeaveController）・除名1（OrgTeamMembershipRemovalController）
+                .isEqualTo(3742);   // 3741 + CMP-261116-0722 PR-1 保存済み検索の個別削除 SearchHistoryController DELETE /saved/{savedQueryId} 1本
+                                    //   （既存5本と同じく feature gate 未宣言の流儀で 5|5 → 6|6。認可は @AuthorizedInService＋findByIdAndUserId の所有者照合）。
+                                    // 3741 = 3734 + CMP-261115-2145 F06.4.1 個人の頑張り記録 EffortRecordMeController 7本（feature gate 未宣言の流儀で 7|7）。
+                                    // 3734 = 3732 + L1-M モジュールイベント管理GET/POST各1本。未宣言増加0。
+                                    // 3732 = 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
+                                    //   どちらも @AlwaysReachable(CORE) を宣言済みで未宣言増加0。3|4 → 3|6）。QR-PDF は旧 GET を POST へ置換（1|1 のまま・純増0）。
+                                    // 3730 = 3729 + CMP-261011-0035 ALIC-1 組織告知の一括既読 POST read-batch 1本（AnnouncementFeedOrgController・
+                                    //   @AuthorizedInService＋@AlwaysReachable(CORE) 宣言済みで未宣言増加0。6|6 → 6|7）。
+                                    // 3729 = 3725 + CMP-261025-2202 TEAM/ORG表示設定GET/PUT各2本。未宣言増加0。
+                                    // ネストSwagger注釈へのclass mapping誤帰属2件は自己試験で防ぐ。
+                                    // 3725 = 3723 + CMP-261024-2051 申請元候補・受信申請の2GET。CORE宣言済みで未宣言増加0。
+                                    // 3723 = main 3722 + CMP-261021-0020 pending一覧1本。CORE宣言済みで未宣言増加0。
+                                    // main 3716 + CMP-261012-0910 多要素認証の穴埋め 6（Auth2faController の
+                                    //   email/send・email/setup・email/enable・reauth/email/send・disable・status）。
+                                    //   6本とも @AlwaysReachable(CORE) を宣言済みのため未宣言数は増えない（6|6 → 6|12）
+                                    // 3716 = 最新main統合後の実走査: 3688 + 管理公開設定2 + 削除済みチーム一覧1 + 共通本人QR1 + チームポイント24。
+                                    // 3688 = main 3646 + 牧場/診断42本。双方のHTTP台帳を保持。
+                                    // 新GETは理由付き@AlwaysReachable(GATE_CONTROL_PLANE)宣言済み。既存未宣言6件は維持（6|7）。
+                                    // 新 GET は CORE 宣言済みのため未宣言は既存 PATCH 2本のまま（AdminPublicSettingsController: 2|4）。
+                                    // 3646 = 3645 + F01.2.1 8-D 権限カタログ GET /api/v1/permissions 1本（PermissionCatalogController・@AlwaysReachable(CORE) 宣言済みで未宣言数は増えない 0|1）
+                                    // 3645 = main 3643 + F01.2.1 2-D 離脱1（TeamOrgMembershipLeaveController）・除名1（OrgTeamMembershipRemovalController）
                                     // main 3643 = 3642 + CMP-261010-1432 シフト枠間移動1（ShiftSlotController の既存 EP と同じく未宣言 7|7）
                                     // main 3642 = 3639 + F01.2.1 2-B2 組織側の受信申請3（OrgTeamApplicationController: 一覧・承認・拒否）
                                     // main 3639 = 3638 + CMP-260826-1456 本人参加申請履歴1
@@ -137,6 +157,21 @@ class ApiGateDeclarationGuardTest {
                 @RequestMapping("/base") public class NoFalsePositive {
                   public void helper() {} @GetMapping("/real") public void endpoint() {}
                 }""")).extracting(Entry::type).containsExactly(Type.HTTP);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("合成対照: ネストしたSwagger応答注釈をHTTP methodとして数えない")
+    void nestedSwaggerAnnotationsDoNotCreateMappedMethods() {
+        assertThat(analyze("sample.SwaggerResponses", """
+                @RequestMapping("/base")
+                @ApiResponses({
+                  @ApiResponse(responseCode = "200", useReturnTypeSchema = true),
+                  @ApiResponse(responseCode = "403")
+                })
+                public class SwaggerResponses {
+                  @GetMapping public void get() {}
+                  @PutMapping public void put() {}
+                }""")).extracting(Entry::type).containsExactly(Type.HTTP, Type.HTTP);
     }
 
     @Test
@@ -243,7 +278,7 @@ class ApiGateDeclarationGuardTest {
             Matcher annotation = ANNOTATION.matcher(masked);
             if (!annotation.find(cursor) || annotation.start() != cursor) break;
             names.add(simpleName(annotation.group(1)));
-            cursor = skipAnnotationArguments(annotation.end(), masked);
+            cursor = skipAnnotationArguments(annotation.start() + 1 + annotation.group(1).length(), masked);
         }
         int wordStart = cursor;
         for (int i = cursor; i < masked.length(); i++) {
@@ -306,7 +341,7 @@ class ApiGateDeclarationGuardTest {
         Map<Integer, Set<Integer>> offsets = new TreeMap<>();
         Matcher annotations = ANNOTATION.matcher(masked);
         while (annotations.find()) {
-            MethodAnnotations method = methodAfter(annotations.end(), masked);
+            MethodAnnotations method = methodAfter(annotations.start() + 1 + annotations.group(1).length(), masked);
             if (method == null) continue;
             names.computeIfAbsent(method.openParen(), ignored -> new ArrayList<>()).add(simpleName(annotations.group(1)));
             offsets.computeIfAbsent(method.openParen(), ignored -> new HashSet<>()).add(annotations.start());

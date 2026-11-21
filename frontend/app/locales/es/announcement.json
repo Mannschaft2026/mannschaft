@@ -10,7 +10,8 @@
       "load_failed": "No se pudo cargar el contenido",
       "locked": "Necesitas acceso para ver este contenido",
       "image_failed": "No se pudo mostrar la imagen",
-      "read_failed": "No se pudo marcar como leído"
+      "read_failed": "No se pudo marcar como leído",
+      "delegated_source_note": "La página original y los archivos adjuntos solo pueden abrirlos los miembros de la organización."
     },
     "widget_title": "Anuncios",
     "all_announcements": "Todos los anuncios",
@@ -28,7 +29,13 @@
       "BULLETIN_THREAD": "Tablón",
       "TIMELINE_POST": "Línea de tiempo",
       "CIRCULATION": "Circular",
-      "SURVEY": "Encuesta"
+      "CIRCULATION_DOCUMENT": "Circular",
+      "SURVEY": "Encuesta",
+      "TODO": "Tarea",
+      "SCHEDULE": "Calendario",
+      "COMMITTEE_DECISION": "Decisión del comité",
+      "COMMITTEE_MINUTES": "Acta del comité",
+      "ADVERTISER_CAMPAIGN": "Campaña del anunciante"
     },
     "mark_all_read": "Marcar todo como leído",
     "remove_from_announcements": "Eliminar de anuncios",
@@ -115,7 +122,7 @@
         "body": "Elige un destino entre Tablón, Línea de tiempo, Blog, TODO, Agenda y Encuesta.",
         "steps": {
           "step1": "Elige una de las 6 tarjetas",
-          "step2": "Pulsa «Siguiente». Nota: si la plantilla tiene un canal predeterminado, se omite esta pantalla"
+          "step2": "Revisa o cambia aquí el canal predeterminado de la plantilla y pulsa «Siguiente» para introducir el contenido"
         }
       },
       "content": {

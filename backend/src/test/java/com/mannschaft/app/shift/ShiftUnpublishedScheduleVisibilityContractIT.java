@@ -1,6 +1,7 @@
 package com.mannschaft.app.shift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import static com.mannschaft.app.support.JsonLongIdMatchers.hasLongId;
 import com.mannschaft.app.admin.repository.FeatureFlagRepository;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -75,6 +76,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li><b>AC-14</b> — {@code ShiftPreferenceReminderBatchService} のリマインド通知。
  *       バッチ経路に閲覧者は存在せず、既存 UT が番人となる。</li>
  *   <li><b>AC-15</b> — {@code ShiftScheduleList.vue} の FE フィルタ削除。FE の担当。</li>
+ *   <li><b>AC-6</b>（グローバル検索から未公開シフト表が消える）— CMP-261116-0722 でグローバル検索が
+ *       F04.6 の用途（投稿・メッセージ等 9 種別）へ作り直され、シフト表は検索対象から外れたため撤去。</li>
  * </ul>
  *
  * <p>金型は同ドメインの {@code ShiftScheduleScopeContractIT}
@@ -87,7 +90,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrationTest {
 
     private static final String SCHEDULES_PATH = "/api/v1/shifts/schedules";
-    private static final String SEARCH_PATH = "/api/v1/search";
 
     /** 検索用の共通キーワード（全フィクスチャのタイトルに含める） */
     private static final String TITLE_KEYWORD = "Cmp2127Kw";
@@ -134,7 +136,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
 
     /** 非管理者から見た可視性の 3 分類（設計書 §3.6） */
     private enum Visibility {
-        /** 存在ごと秘匿（一覧から除外・単体404・枠404・PDF404・検索ヒットせず） */
+        /** 存在ごと秘匿（一覧から除外・単体404・枠404・PDF404） */
         HIDDEN,
         /** メタと骨格は開き、割当のみ伏せる */
         MASKED,
@@ -358,7 +360,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
             setAuth(memberId);
             mockMvc.perform(get(SCHEDULES_PATH + "/{id}/slots", scheduleIds.get(fixture)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasItem(memberId.intValue())))
+                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasLongId(memberId)))
                     .andExpect(jsonPath("$.data[0].assignmentMasked").value(false));
         }
     }
@@ -395,45 +397,6 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // AC-6: グローバル検索から未公開シフト表が消える（note 経由も含む）
-    // ═════════════════════════════════════════════════════════════════════
-
-    @Nested
-    @DisplayName("AC-6: 非管理者のグローバル検索に未公開シフト表が出ない")
-    class Ac6SearchExcludesHidden {
-
-        @ParameterizedTest(name = "{0} は検索結果に出ない")
-        @EnumSource(value = Fixture.class, names = {"DRAFT", "ARCHIVED_WITHOUT_TIMESTAMP"})
-        @DisplayName("タイトル検索で未公開シフト表がヒットしない")
-        void 未公開はタイトル検索でヒットしない(Fixture fixture) throws Exception {
-            setAuth(memberId);
-            mockMvc.perform(get(SEARCH_PATH).param("q", TITLE_KEYWORD))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.results.shifts[*].title", not(hasItem(title(fixture)))));
-        }
-
-        @ParameterizedTest(name = "{0} は note 検索でもヒットしない")
-        @EnumSource(value = Fixture.class, names = {"DRAFT", "ARCHIVED_WITHOUT_TIMESTAMP"})
-        @DisplayName("note にしかない語で検索してもヒットしない（総当りによる note 推定の封鎖）")
-        void 未公開はnote検索でもヒットしない(Fixture fixture) throws Exception {
-            setAuth(memberId);
-            mockMvc.perform(get(SEARCH_PATH).param("q", noteToken(fixture)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.results.shifts", empty()));
-        }
-
-        @Test
-        @DisplayName("★正常系★ 管理者の検索では未公開シフト表がヒットする")
-        void 管理者の検索では未公開もヒットする() throws Exception {
-            setAuth(adminId);
-            mockMvc.perform(get(SEARCH_PATH).param("q", noteToken(Fixture.DRAFT)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.results.shifts[*].title",
-                            hasItem(title(Fixture.DRAFT))));
-        }
-    }
-
-    // ═════════════════════════════════════════════════════════════════════
     // AC-7 / AC-17: publishedAt の非対称な扱い
     // ═════════════════════════════════════════════════════════════════════
 
@@ -461,11 +424,6 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
             setAuth(memberId);
             mockMvc.perform(get(SCHEDULES_PATH + "/{id}/pdf", id).param("layout", "team"))
                     .andExpect(status().isNotFound());
-
-            setAuth(memberId);
-            mockMvc.perform(get(SEARCH_PATH).param("q", noteToken(fixture)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.results.shifts", empty()));
         }
 
         @Test
@@ -485,12 +443,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
             setAuth(memberId);
             mockMvc.perform(get(SCHEDULES_PATH + "/{id}/slots", id))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasItem(memberId.intValue())));
-
-            setAuth(memberId);
-            mockMvc.perform(get(SEARCH_PATH).param("q", noteToken(fixture)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.results.shifts[*].title", hasItem(title(fixture))));
+                    .andExpect(jsonPath("$.data[0].assignedUserIds", hasLongId(memberId)));
         }
     }
 
@@ -597,9 +550,9 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
     @DisplayName("AC-12: 一覧認可403を維持し、未公開の単体参照は404")
     class Ac12AuthorizationUnchanged {
 
-        @ParameterizedTest(name = "SUPPORTER の {0} は一覧403・秘匿対象の単体404")
+        @ParameterizedTest(name = "SUPPORTER の {0} は一覧・単体とも403")
         @EnumSource(Fixture.class)
-        @DisplayName("SUPPORTER は一覧403、未公開の単体参照は404")
+        @DisplayName("SUPPORTER は一覧・単体とも公開状態に依らず403")
         void サポーターは常に403(Fixture fixture) throws Exception {
             assertAlwaysForbidden(supporterId, fixture);
         }
@@ -646,7 +599,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
         setAuth(userId);
         mockMvc.perform(get(SCHEDULES_PATH + "/{id}/slots", scheduleId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].assignedUserIds", hasItem(memberId.intValue())))
+                .andExpect(jsonPath("$.data[0].assignedUserIds", hasLongId(memberId)))
                 .andExpect(jsonPath("$.data[0].assignmentMasked").value(false));
     }
 
@@ -654,14 +607,14 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
      * 一覧の認可は 403 を維持しつつ、単体参照では未公開の存在を 404 で秘匿する。
      *
      * <p>本メソッドは<b>同一チーム内で権限が足りないだけ</b>の利用者（SUPPORTER）専用。
-     * SUPPORTER は当該チームのメンバーであり存在自体を隠す理由が無いため、
-     * 公開済みは従来どおり 403、未公開だけ {@link #checkScheduleVisible} により 404 となる。
+     * SUPPORTER は当該チームのメンバーだが閲覧権限が無く、公開状態に依らず一律 403 とする
+     * （CMP-260826-2127 D-2127-1: 404/403 の差で公開状態を読ませない）。
      * 越境（別チーム/無所属）は {@link #assertCrossTeamAlwaysNotFound} を使うこと
      * （CMP-260917-1137: 越境と同一メソッドで畳むと存在オラクルが再発する）。</p>
      */
     private void assertAlwaysForbidden(Long userId, Fixture fixture) throws Exception {
         Long scheduleId = scheduleIds.get(fixture);
-        int detailStatus = fixture.visibility == Visibility.HIDDEN ? 404 : 403;
+        int detailStatus = 403;
 
         setAuth(userId);
         mockMvc.perform(get(SCHEDULES_PATH).param("teamId", teamId.toString()))
@@ -706,7 +659,7 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
         return TITLE_KEYWORD + "-" + fixture.name();
     }
 
-    /** そのシフト表の note にしか出現しない語（AC-6 の note 経由推定の検証に使う） */
+    /** そのシフト表の note にしか出現しない語（フィクスチャ識別用。旧 AC-6 の横断検索検証は CMP-261116-0722 で業務データ種別ごと撤去） */
     private static String noteToken(Fixture fixture) {
         return "Cmp2127Note" + fixture.name().replace("_", "");
     }

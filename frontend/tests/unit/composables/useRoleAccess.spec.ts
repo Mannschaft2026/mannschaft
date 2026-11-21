@@ -87,10 +87,66 @@ describe('useRoleAccess', () => {
     expect(await loadScopeAdmin('SYSTEM_ADMIN')).toBe(false)
   })
 
+  // ADMIN 専用権限（MANAGE_ORG_AFFILIATION 等）を権限グループへ含めて付与・剥奪できるか。
+  // BE の AccessControlService#checkScopeAdminOnly（SYSTEM_ADMIN は不可・ADMIN 割当が必要）の結果で、BE が返す。
+  async function loadCanGrant(roleName: string, canGrant?: boolean, scopeAdmin?: boolean) {
+    mockFetch.mockResolvedValueOnce({
+      data: { roleName, permissions: [], scopeAdmin, canGrantAdminOnlyPermissions: canGrant },
+    })
+    const access = useRoleAccess('team', 'team-1')
+    await access.loadPermissions()
+    return access.canGrantAdminOnlyPermissions.value
+  }
+
+  it('ROLE-011: BE が返す canGrantAdminOnlyPermissions に従う（SYSTEM_ADMIN 兼任は scopeAdmin=true でも false）', async () => {
+    expect(await loadCanGrant('ADMIN', true, true)).toBe(true)
+    expect(await loadCanGrant('SYSTEM_ADMIN', false, true)).toBe(false)
+    expect(await loadCanGrant('DEPUTY_ADMIN', false, false)).toBe(false)
+  })
+
+  it('ROLE-012: 項目を返さない旧応答は roleName === ADMIN のときだけ true（SYSTEM_ADMIN は不可）', async () => {
+    expect(await loadCanGrant('ADMIN')).toBe(true)
+    expect(await loadCanGrant('SYSTEM_ADMIN')).toBe(false)
+  })
+
+  it('ROLE-013: 取得失敗時は false', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('500'))
+    const access = useRoleAccess('team', 'team-1')
+    await access.loadPermissions()
+    expect(access.canGrantAdminOnlyPermissions.value).toBe(false)
+  })
+
   it('ROLE-010: 取得失敗時は isScopeAdmin=false', async () => {
     mockFetch.mockRejectedValueOnce(new Error('500'))
     const access = useRoleAccess('organization', 'org-1')
     await access.loadPermissions()
     expect(access.isScopeAdmin.value).toBe(false)
+  })
+
+  // CMP-261013-1226 AC-14: roleName=null の「読込中／未所属／取得失敗」を呼び出し元が区別できる
+  it('ROLE-RES-1: 取得前は roleResolved=false・roleLoadFailed=false', () => {
+    const access = useRoleAccess('team', 'team-1')
+    expect(access.roleResolved.value).toBe(false)
+    expect(access.roleLoadFailed.value).toBe(false)
+  })
+
+  it('ROLE-RES-2: 正常応答で roleResolved=true・roleLoadFailed=false（未所属の roleName=null も解決済み）', async () => {
+    mockFetch.mockResolvedValueOnce({ data: { roleName: null, permissions: [] } })
+    const access = useRoleAccess('team', 'team-1')
+    await access.loadPermissions()
+    expect(access.roleName.value).toBeNull()
+    expect(access.roleResolved.value).toBe(true)
+    expect(access.roleLoadFailed.value).toBe(false)
+  })
+
+  it('ROLE-RES-3: 取得失敗は roleResolved=true・roleLoadFailed=true、再取得成功で failed が戻る', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('boom'))
+    const access = useRoleAccess('team', 'team-1')
+    await access.loadPermissions()
+    expect(access.roleResolved.value).toBe(true)
+    expect(access.roleLoadFailed.value).toBe(true)
+    mockFetch.mockResolvedValueOnce({ data: { roleName: 'MEMBER', permissions: [] } })
+    await access.loadPermissions()
+    expect(access.roleLoadFailed.value).toBe(false)
   })
 })

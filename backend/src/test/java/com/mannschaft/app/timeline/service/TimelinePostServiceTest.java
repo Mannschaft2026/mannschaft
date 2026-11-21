@@ -358,7 +358,10 @@ class TimelinePostServiceTest {
             PostResponse result = timelinePostService.createPost(req, USER_ID);
 
             // then
-            assertThat(result).isEqualTo(expected);
+            assertThat(result).usingRecursiveComparison().isEqualTo(expected);
+            assertThat(result.isMitayo()).isFalse();
+            assertThat(result.getMitayoCount()).isZero();
+            then(reactionRepository).shouldHaveNoInteractions();
             verify(postRepository).save(any(TimelinePostEntity.class));
         }
 
@@ -1182,6 +1185,9 @@ class TimelinePostServiceTest {
 
             // then: 正常に投稿が作成される
             assertThat(result).isNotNull();
+            assertThat(result.isMitayo()).isFalse();
+            assertThat(result.getMitayoCount()).isZero();
+            then(reactionRepository).shouldHaveNoInteractions();
             verify(postRepository).save(any(TimelinePostEntity.class));
             // メンバーシップチェックは呼ばれないこと
             then(accessControlService).shouldHaveNoInteractions();
@@ -1205,10 +1211,29 @@ class TimelinePostServiceTest {
 
             // then: 正常に投稿が作成される
             assertThat(result).isNotNull();
+            assertThat(result.isMitayo()).isFalse();
+            assertThat(result.getMitayoCount()).isZero();
+            then(reactionRepository).shouldHaveNoInteractions();
             verify(postRepository).save(any(TimelinePostEntity.class));
             // メンバーシップチェックは呼ばれないこと
             then(accessControlService).shouldHaveNoInteractions();
         }
+    }
+
+    @Test
+    @DisplayName("新規の村行事投稿は未反応0件を返しリアクションを集計しない")
+    void newVillagePostDoesNotQueryReactions() {
+        UUID villageId = UUID.randomUUID();
+        given(postRepository.save(any(TimelinePostEntity.class))).willReturn(createPost());
+        given(timelineMapper.toPostResponse(any(TimelinePostEntity.class))).willReturn(createPostResponse());
+
+        PostResponse result = timelinePostService.createSystemVillagePost(villageId,
+                com.mannschaft.app.village.entity.enums.VillageEventNotificationType.EVENT_UPCOMING,
+                UUID.randomUUID(), "村行事投稿");
+
+        assertThat(result.isMitayo()).isFalse();
+        assertThat(result.getMitayoCount()).isZero();
+        then(reactionRepository).shouldHaveNoInteractions();
     }
 
     // ========================================
@@ -1236,7 +1261,7 @@ class TimelinePostServiceTest {
             PostResponse result = timelinePostService.updatePost(POST_ID, req, USER_ID);
 
             // then
-            assertThat(result).isEqualTo(expected);
+            assertThat(result).usingRecursiveComparison().isEqualTo(expected);
             verify(editRepository).save(any(TimelinePostEditEntity.class));
         }
 
@@ -1825,7 +1850,7 @@ class TimelinePostServiceTest {
             PostResponse result = timelinePostService.togglePin(POST_ID, true, USER_ID);
 
             // then
-            assertThat(result).isEqualTo(expected);
+            assertThat(result).usingRecursiveComparison().isEqualTo(expected);
         }
     }
 
@@ -2998,5 +3023,145 @@ class TimelinePostServiceTest {
 
             assertThat(result.getAttachments()).isEmpty();
         }
+    }
+    @Test
+    @DisplayName("CMP-261026-1912: feedの実JSONがみたよ状態と件数を必ず持つ")
+    void feedJsonContainsMitayoContract() {
+        given(postRepository.findFeedByScopeType(eq(PostScopeType.PUBLIC), eq(0L), any(PageRequest.class)))
+                .willReturn(List.of(createPost()));
+        given(timelineMapper.toPostResponseList(any())).willReturn(List.of(createPostResponse()));
+
+        List<PostResponse> result = timelinePostService.getFeed("PUBLIC", 0L, null, 10, USER_ID);
+        com.fasterxml.jackson.databind.JsonNode json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .findAndRegisterModules().valueToTree(result);
+
+        assertThat(json.get(0).has("mitayo")).isTrue();
+        assertThat(json.get(0).get("mitayo").isBoolean()).isTrue();
+        assertThat(json.get(0).get("mitayo").booleanValue()).isFalse();
+        assertThat(json.get(0).has("mitayoCount")).isTrue();
+        assertThat(json.get(0).get("mitayoCount").isIntegralNumber()).isTrue();
+        assertThat(json.get(0).get("mitayoCount").intValue()).isZero();
+    }
+    @Test
+    @DisplayName("CMP-261026-1912: 混在500投稿のみたよ集計は1回で著者と閲覧者を区別する")
+    void mitayoBatchHandlesFiveHundredPosts() {
+        List<PostResponse> posts = java.util.stream.LongStream.rangeClosed(1, 500)
+                .mapToObj(id -> createPostResponse().toBuilder().id(id).build()).toList();
+        given(postRepository.findPinnedPosts(PostScopeType.PUBLIC, 0L)).willReturn(List.of());
+        given(timelineMapper.toPostResponseList(List.of())).willReturn(posts);
+        given(reactionRepository.summarizeByPostIds(any(), eq(OTHER_USER_ID))).willReturn(List.of(
+                reactionSummary(1L, 3, 1), reactionSummary(2L, 2, 0), reactionSummary(500L, 1, 1)));
+
+        List<PostResponse> result = timelinePostService.getPinnedPosts("PUBLIC", 0L, OTHER_USER_ID);
+
+        assertThat(result).hasSize(500);
+        assertThat(result.get(0).isMitayo()).isTrue();
+        assertThat(result.get(0).getMitayoCount()).isEqualTo(3);
+        assertThat(result.get(1).isMitayo()).isFalse();
+        assertThat(result.get(1).getMitayoCount()).isEqualTo(2);
+        assertThat(result.get(2).isMitayo()).isFalse();
+        assertThat(result.get(2).getMitayoCount()).isZero();
+        assertThat(result.get(499).isMitayo()).isTrue();
+        verify(reactionRepository).summarizeByPostIds(posts.stream().map(PostResponse::getId).toList(), OTHER_USER_ID);
+        verify(reactionRepository, never()).existsByTimelinePostIdAndUserId(any(), any());
+        verify(reactionRepository, never()).countByTimelinePostId(any());
+    }
+
+    @Test
+    @DisplayName("CMP-261026-1912: 空フィードではみたよ集計を呼ばない")
+    void emptyFeedDoesNotQueryMitayo() {
+        given(postRepository.findPinnedPosts(PostScopeType.PUBLIC, 0L)).willReturn(List.of());
+        given(timelineMapper.toPostResponseList(List.of())).willReturn(List.of());
+        assertThat(timelinePostService.getPinnedPosts("PUBLIC", 0L, USER_ID)).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(reactionRepository);
+    }
+
+    @Test
+    @DisplayName("CMP-261026-1912: みたよ集計の失敗を未反応0件として隠さない")
+    void mitayoQueryFailurePropagates() {
+        given(postRepository.findPinnedPosts(PostScopeType.PUBLIC, 0L)).willReturn(List.of());
+        given(timelineMapper.toPostResponseList(List.of())).willReturn(List.of(createPostResponse()));
+        given(reactionRepository.summarizeByPostIds(List.of(POST_ID), USER_ID))
+                .willThrow(new IllegalStateException("集計失敗"));
+        assertThatThrownBy(() -> timelinePostService.getPinnedPosts("PUBLIC", 0L, USER_ID))
+                .isInstanceOf(IllegalStateException.class).hasMessage("集計失敗");
+    }
+
+    @Test
+    @DisplayName("softDeleteOwnPersonalPosts: 自分の PERSONAL 投稿だけ論理削除・取得は1回・save しない")
+    void softDeleteOwnPersonalPosts_deletesOnlyOwnPersonal() {
+        TimelinePostEntity own = createPersonalPost(11L, USER_ID, USER_ID);
+        TimelinePostEntity team = TimelinePostEntity.builder()
+                .scopeType(PostScopeType.TEAM).scopeId(42L).userId(USER_ID).content("t").build();
+        TimelinePostEntity othersPersonal = createPersonalPost(13L, OTHER_USER_ID, OTHER_USER_ID);
+        TimelinePostEntity foreignAuthored = createPersonalPost(14L, USER_ID, OTHER_USER_ID);
+        List<Long> ids = List.of(11L, 12L, 13L, 14L);
+        given(postRepository.findAllById(ids)).willReturn(List.of(own, team, othersPersonal, foreignAuthored));
+
+        timelinePostService.softDeleteOwnPersonalPosts(ids, USER_ID);
+
+        assertThat(own.getDeletedAt()).isNotNull();
+        assertThat(team.getDeletedAt()).isNull();
+        assertThat(othersPersonal.getDeletedAt()).isNull();
+        assertThat(foreignAuthored.getDeletedAt()).isNull();
+        verify(postRepository, org.mockito.Mockito.times(1)).findAllById(ids);
+        verify(postRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("softDeleteOwnPersonalPosts: 空・null なら Repository を呼ばない")
+    void softDeleteOwnPersonalPosts_emptyDoesNothing() {
+        timelinePostService.softDeleteOwnPersonalPosts(List.of(), USER_ID);
+        timelinePostService.softDeleteOwnPersonalPosts(null, USER_ID);
+        org.mockito.Mockito.verifyNoInteractions(postRepository);
+    }
+
+    @Test
+    @DisplayName("softDeleteOwnPersonalPosts: 既に削除済み・存在しない ID でも例外にならない")
+    void softDeleteOwnPersonalPosts_missingOrAlreadyDeleted() {
+        TimelinePostEntity deleted = createPersonalPost(21L, USER_ID, USER_ID);
+        deleted.softDelete();
+        given(postRepository.findAllById(List.of(21L, 22L))).willReturn(List.of(deleted));
+
+        timelinePostService.softDeleteOwnPersonalPosts(List.of(21L, 22L), USER_ID);
+
+        assertThat(deleted.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("saveActionMemoPost: 指定スコープ・投稿者・本文だけで保存し ID を返す（副作用の Service は呼ばない）")
+    void saveActionMemoPost_savesOnlyGivenValues() {
+        given(postRepository.save(org.mockito.ArgumentMatchers.any(TimelinePostEntity.class)))
+                .willAnswer(inv -> {
+                    TimelinePostEntity p = inv.getArgument(0);
+                    org.springframework.test.util.ReflectionTestUtils.setField(p, "id", 7777L);
+                    return p;
+                });
+
+        Long id = timelinePostService.saveActionMemoPost(PostScopeType.TEAM, 42L, USER_ID, "本文");
+
+        assertThat(id).isEqualTo(7777L);
+        org.mockito.ArgumentCaptor<TimelinePostEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(TimelinePostEntity.class);
+        verify(postRepository, org.mockito.Mockito.times(1)).save(captor.capture());
+        assertThat(captor.getValue().getScopeType()).isEqualTo(PostScopeType.TEAM);
+        assertThat(captor.getValue().getScopeId()).isEqualTo(42L);
+        assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
+        assertThat(captor.getValue().getContent()).isEqualTo("本文");
+    }
+
+    private TimelinePostEntity createPersonalPost(Long id, Long scopeId, Long authorId) {
+        TimelinePostEntity post = TimelinePostEntity.builder()
+                .scopeType(PostScopeType.PERSONAL).scopeId(scopeId).userId(authorId).content("p").build();
+        org.springframework.test.util.ReflectionTestUtils.setField(post, "id", id);
+        return post;
+    }
+
+    private TimelinePostReactionRepository.PostReactionSummary reactionSummary(Long postId, long count, long viewerCount) {
+        return new TimelinePostReactionRepository.PostReactionSummary() {
+            public Long getPostId() { return postId; }
+            public long getReactionCount() { return count; }
+            public long getViewerReactionCount() { return viewerCount; }
+        };
     }
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import ShiftReminderButton from './ShiftReminderButton.vue'
+import ShiftPublishErrorDialog from './ShiftPublishErrorDialog.vue'
 import type { ShiftScheduleResponse } from '~/types/shift'
 import { isAcceptingShiftRequests } from '~/utils/shiftStatus'
+import { parseShiftPublishError, type ShiftPublishErrorInfo } from '~/utils/shiftPublishError'
 
 const props = defineProps<{
   /** バックエンドAPIが要求するチームの数値ID。 */
@@ -35,6 +37,8 @@ const schedules = ref<ShiftScheduleResponse[]>([])
 const loading = ref(true)
 const loadFailed = ref(false)
 const { handleApiError } = useErrorHandler()
+/** 公開が拒否されたときの案内（時給未設定 400 / 競合 409）。null なら非表示。 */
+const publishError = ref<ShiftPublishErrorInfo | null>(null)
 
 // CMP-260826-2127 / AC-15: 「どのシフト表を出すか」はサーバーが決める。
 // かつてここで非管理者に PUBLISHED のみを出していたが、BE 側で未公開シフト表を
@@ -77,7 +81,19 @@ async function publish(id: number) {
     acceptLabel: '公開する',
     rejectLabel: 'キャンセル',
     accept: async () => {
-      await shiftApi.transitionStatus(id, 'PUBLISHED')
+      try {
+        await shiftApi.transitionStatus(id, 'PUBLISHED')
+      } catch (error) {
+        const info = parseShiftPublishError(error)
+        if (!info) {
+          handleApiError(error, 'シフト公開')
+          return
+        }
+        publishError.value = info
+        // 競合（409）は表示が古い可能性が高いので、案内と同時に最新の状態へ読み込み直す。
+        if (info.kind === 'conflict') await load()
+        return
+      }
       notification.success('シフトを公開しました')
       await load()
     },
@@ -111,6 +127,7 @@ function goToBoard(scheduleId: number) {
   navigateTo(`/teams/${props.teamSlug}/shifts/${scheduleId}/board`)
 }
 
+defineExpose({ refresh: load })
 onMounted(load)
 </script>
 
@@ -197,6 +214,9 @@ onMounted(load)
             outlined
             @click="goToBulkRequest()"
           />
+          <span v-else-if="s.status.status === 'DRAFT'" class="text-xs text-surface-500">
+            {{ t('shift.entry.notStarted') }}
+          </span>
           <span v-else class="text-xs text-surface-500">
             {{ t('shift.entry.closed') }}
           </span>
@@ -225,5 +245,10 @@ onMounted(load)
       </div>
     </div>
     <DashboardEmptyState v-else icon="pi pi-table" :message="t('shift.empty.noSchedules')" />
+    <ShiftPublishErrorDialog
+      :info="publishError"
+      :team-slug="teamSlug"
+      @close="publishError = null"
+    />
   </div>
 </template>

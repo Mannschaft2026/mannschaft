@@ -37,6 +37,21 @@ public class PermissionScopeQueryService {
     }
 
     /**
+     * 指定ユーザーが指定チームの在籍者（user_roles または memberships 由来）かを返す。
+     *
+     * <p>{@link UserRoleRepository#existsByUserIdAndTeamId(Long, Long)} へそのまま委譲する薄い公開口で、
+     * 判定内容（ACTIVE かつ未削除ユーザーの在籍。role_kind は問わない）は変えない。
+     * 他ドメインが {@code UserRoleRepository} を直接参照せずに済むようにするためのもの。</p>
+     *
+     * @param userId ユーザー ID
+     * @param teamId チーム ID
+     * @return 在籍していれば true
+     */
+    public boolean existsByUserIdAndTeamId(Long userId, Long teamId) {
+        return userRoleRepository.existsByUserIdAndTeamId(userId, teamId);
+    }
+
+    /**
      * 指定チーム群のうち、当該ユーザーが「DEPUTY_ADMIN かつ指定 Permission 保有」であるチーム ID を返す（SQL 1 本）。
      *
      * <p>入力が空・ユーザー未指定なら SQL を発行せず空集合を返す（対象 0 件で 0 本の契約）。</p>
@@ -77,6 +92,20 @@ public class PermissionScopeQueryService {
             return Set.of();
         }
         return toIdSet(userRoleRepository.findTeamIdsWithAdminOrGroupPermission(userId, permissionName));
+    }
+
+    /**
+     * 指定チーム群のうち、当該ユーザーがチーム ADMIN であるチーム ID を返す（SQL 1 本・CMP-261103-1225）。
+     *
+     * <p>判定は {@link UserRoleRepository#findAdminUserIdsByTeamId} をチームごとに呼んで
+     * {@code contains(userId)} を見る単票版と同一（ADMIN ロール・非削除・ACTIVE ユーザー）。
+     * 入力が空・ユーザー未指定なら SQL を発行せず空集合を返す。</p>
+     */
+    public Set<Long> findAdminTeamIds(Long userId, Collection<Long> teamIds) {
+        if (userId == null || teamIds == null || teamIds.isEmpty()) {
+            return Set.of();
+        }
+        return toIdSet(userRoleRepository.findAdminTeamIdsByUserIdAndTeamIds(userId, teamIds));
     }
 
     /**

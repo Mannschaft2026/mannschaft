@@ -109,9 +109,12 @@ export interface UpdateOrganizationRequest {
 }
 
 export interface OrgTeam {
-  id: number
+  /** URL 識別子（スラッグ）。BE は数値ではなくスラッグ文字列を返す。 */
+  id: string
   /** チームスラッグ（URLルーティング用）。{@code /teams/{slug}} に使用する。 */
   slug: string
+  /** チームの内部 BIGINT ID。URL には使わない。 */
+  numericId?: number
   name: string
   nickname1: string | null
   iconUrl: string | null
@@ -121,6 +124,18 @@ export interface OrgTeam {
    * 所属するチームグループ（F01.2.1）。グループ機能 off・未分類・閲覧者が組織の MEMBER 以上でない場合は null / 未設定。
    */
   teamGroup?: { id: string, name: string, sortOrder: number } | null
+}
+
+/**
+ * 権限グループ一覧（OrgPermissionGroupList）が表示に使う最小の形。組織・チームで共用する。
+ * チームの権限グループは対象ロール（targetRole）を持つ。
+ */
+export interface PermissionGroupListItem {
+  id: number
+  name: string
+  description?: string | null
+  permissions: string[]
+  targetRole?: string
 }
 
 export interface OrgPermissionGroup {

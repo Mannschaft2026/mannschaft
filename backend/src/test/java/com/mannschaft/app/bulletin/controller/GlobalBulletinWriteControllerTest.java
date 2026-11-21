@@ -11,14 +11,17 @@ import com.mannschaft.app.bulletin.dto.ReadStatusResponse;
 import com.mannschaft.app.bulletin.dto.ReplyResponse;
 import com.mannschaft.app.bulletin.dto.UpdateCategoryRequest;
 import com.mannschaft.app.bulletin.dto.UpdateReplyRequest;
+import com.mannschaft.app.bulletin.service.BulletinTournamentScopeAccessGuard;
 import com.mannschaft.app.bulletin.service.BulletinCategoryService;
 import com.mannschaft.app.bulletin.service.BulletinReadStatusService;
+import com.mannschaft.app.bulletin.service.BulletinReplyResponseEnricher;
 import com.mannschaft.app.bulletin.service.BulletinReplyService;
 import com.mannschaft.app.bulletin.service.BulletinScopeIdResolver;
 import com.mannschaft.app.bulletin.service.BulletinThreadService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.PagedResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -195,6 +199,13 @@ class GlobalBulletinWriteControllerTest {
         @Mock
         private BulletinReplyService replyService;
 
+        @Spy
+        private BulletinReplyResponseEnricher responseEnricher = new BulletinReplyResponseEnricher(
+                org.mockito.Mockito.mock(NameResolverService.class));
+
+        @Mock
+        private BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
+
         @InjectMocks
         private GlobalBulletinReplyController controller;
 
@@ -279,6 +290,9 @@ class GlobalBulletinWriteControllerTest {
 
         @Mock
         private BulletinScopeIdResolver scopeIdResolver;
+
+        @Mock
+        private BulletinTournamentScopeAccessGuard tournamentScopeAccessGuard;
 
         @InjectMocks
         private GlobalBulletinThreadController controller;

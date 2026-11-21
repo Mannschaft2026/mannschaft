@@ -10,7 +10,8 @@
       "load_failed": "无法加载正文",
       "locked": "您需要满足访问条件才能查看正文",
       "image_failed": "无法显示图片",
-      "read_failed": "无法更新已读状态"
+      "read_failed": "无法更新已读状态",
+      "delegated_source_note": "原页面和附件仅组织成员可以打开。"
     },
     "widget_title": "公告",
     "all_announcements": "所有公告",
@@ -28,7 +29,13 @@
       "BULLETIN_THREAD": "公告板",
       "TIMELINE_POST": "时间线",
       "CIRCULATION": "传阅文件",
-      "SURVEY": "问卷"
+      "CIRCULATION_DOCUMENT": "传阅文件",
+      "SURVEY": "问卷",
+      "TODO": "任务",
+      "SCHEDULE": "日程",
+      "COMMITTEE_DECISION": "委员会决议",
+      "COMMITTEE_MINUTES": "委员会会议记录",
+      "ADVERTISER_CAMPAIGN": "广告主活动"
     },
     "mark_all_read": "全部标为已读",
     "remove_from_announcements": "从公告中移除",
@@ -115,7 +122,7 @@
         "body": "从公告板、时间线、博客、待办、日程、问卷中选择一个发布渠道。",
         "steps": {
           "step1": "从6张卡片中选择一个",
-          "step2": "点击“下一步”。※如果模板设有默认渠道，则会跳过此画面"
+          "step2": "在此确认或更改模板的默认渠道，然后点击“下一步”填写内容"
         }
       },
       "content": {

@@ -10,7 +10,8 @@
       "load_failed": "본문을 불러올 수 없습니다",
       "locked": "본문을 보려면 이용 조건을 충족해야 합니다",
       "image_failed": "이미지를 표시할 수 없습니다",
-      "read_failed": "읽음 상태를 업데이트할 수 없습니다"
+      "read_failed": "읽음 상태를 업데이트할 수 없습니다",
+      "delegated_source_note": "원본 페이지와 첨부 파일은 조직 멤버만 열 수 있습니다."
     },
     "widget_title": "공지사항",
     "all_announcements": "모든 공지사항",
@@ -28,7 +29,13 @@
       "BULLETIN_THREAD": "게시판",
       "TIMELINE_POST": "타임라인",
       "CIRCULATION": "회람 문서",
-      "SURVEY": "설문"
+      "CIRCULATION_DOCUMENT": "회람 문서",
+      "SURVEY": "설문",
+      "TODO": "할 일",
+      "SCHEDULE": "일정",
+      "COMMITTEE_DECISION": "위원회 의결",
+      "COMMITTEE_MINUTES": "위원회 회의록",
+      "ADVERTISER_CAMPAIGN": "광고주 캠페인"
     },
     "mark_all_read": "모두 읽음 처리",
     "remove_from_announcements": "공지에서 제거",
@@ -115,7 +122,7 @@
         "body": "게시판·타임라인·블로그·TODO·일정·설문 중에서 전달할 곳을 하나 고릅니다.",
         "steps": {
           "step1": "6개의 카드 중 하나를 고른다",
-          "step2": "「다음」을 누른다. ※템플릿에 기본 채널이 있으면 이 화면은 건너뜁니다"
+          "step2": "이 화면에서 템플릿의 기본 채널을 확인하거나 변경한 후 「다음」을 눌러 내용을 입력합니다"
         }
       },
       "content": {

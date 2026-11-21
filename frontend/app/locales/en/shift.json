@@ -12,8 +12,11 @@
     "board": {
       "title": "Shift Board",
       "memberPool": "Unassigned Members",
+      "noUnassignedMembers": "No unassigned members",
+      "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
-      "unassignedSlots": "{count} unassigned slots"
+      "unassignedSlots": "{count} unassigned slots",
+      "backToList": "Back to shift list"
     },
     "autoAssign": {
       "button": "Auto Assign",
@@ -145,6 +148,19 @@
       "formNote": "Note",
       "formNotePlaceholder": "Optional"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "Cannot publish: hourly rates are missing",
+        "description": "Some assigned members have no valid hourly rate on budget-linked work days. Set their hourly rates, then publish again.",
+        "unknownUser": "User ID {id}",
+        "goSettings": "Open hourly rate settings"
+      },
+      "conflict": {
+        "title": "The shift was changed",
+        "description": "The shift changed while the publication was being checked. Reload the page, review the content, and publish again."
+      },
+      "close": "Close"
+    },
     "detail": {
       "tabOverview": "Overview",
       "tabEdit": "Edit",
@@ -185,10 +201,23 @@
       "notePlaceholder": "Optional",
       "dayOfWeek": "Day of week",
       "dayOfWeekHint": "Slots will be created only on the selected days of week",
+      "moveDateTitle": "Confirm date change",
+      "moveDateMessage": "This changes the date from {oldDate} to {newDate}. Any requests already submitted for this slot will be moved to the new date as well.",
+      "moveDateAccept": "Move slot and requests",
       "saveSuccess": "Slot saved",
       "deleteSuccess": "Slot deleted",
       "assignmentMasked": "In adjustment",
-      "assignmentMaskedHint": "Assignments are hidden until the shift is published"
+      "assignmentMaskedHint": "Assignments are hidden until the shift is published",
+      "deleteTitle": "Delete shift slot",
+      "deleteConfirmPlain": "Delete this slot?",
+
+      "deleteConfirmBoth": "Delete this slot? The {requests} request(s) submitted for it and its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmRequestsOnly": "Delete this slot? The {requests} request(s) submitted for it will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmAssignmentsOnly": "Delete this slot? Its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmUnknown": "Delete this slot? Any requests submitted for it and any assignments will also be deleted. This cannot be undone through normal operations."
     },
     "requests": {
       "submissionRate": "Submission rate",
@@ -303,16 +332,17 @@
         "label": "Recipients",
         "specific": "Specify Members",
         "template": "By Shift Period",
-        "openCall": "Open to All"
+        "openCall": "Open Call within Team"
       },
       "targetUsers": {
         "label": "Swap Candidates",
         "placeholder": "Select members...",
         "dayShift": "Day shift members",
         "nightShift": "Night shift members",
-        "selectedCount": "{count} selected"
+        "selectedCount": "{count} selected",
+        "empty": "No members available"
       },
-      "templateHint": "Send to all {period} shift members in the same schedule",
+      "templateHint": "Send to all {period} in the same schedule",
       "list": {
         "title": "Shift swap requests",
         "requester": "Requester #{id}",
@@ -404,6 +434,7 @@
       "confirmSubmit": "Submit with these settings?"
     },
     "entry": {
+      "notStarted": "Preference submission has not started yet.",
       "sectionTitle": "Submit requests / Shift board",
       "bulkRequest": "Submit requests in bulk",
       "board": "Shift board",
@@ -484,7 +515,7 @@
       "title": "Check shift details",
       "body": "Tap a specific date to see details of that shift, such as the team name, position, time, and schedule name.",
       "steps": {
-        "step1": "[Month view] Tap a date cell to open the detail panel on the right side of the screen",
+        "step1": "[Month view] Tap a date cell to open the detail panel for the selected date",
         "step2": "[Week view] Tap the header of a date card to expand the card and show the list of shifts",
         "step3": "In the month view, tap the same date again to close the detail panel"
       }
@@ -494,7 +525,7 @@
       "body": "If you want to swap a confirmed shift with another member, you can send a request in one of three ways. After sending, the shift list is updated automatically.",
       "steps": {
         "step1": "Click the \"Create swap request\" button in the shift details",
-        "step2": "Choose how to send it: \"Specify members\" (select one or more) / \"By shift period\" (everyone working the day or night shift on the same day) / \"Open to everyone\" (anyone can volunteer)",
+        "step2": "Choose how to send it: \"Specify members\" (select one or more) / \"By shift period\" (everyone working the day or night shift on the same day) / \"Open Call within Team\" (team members can volunteer)",
         "step3": "Enter a reason if needed (optional)",
         "step4": "Click the \"Submit\" button to send"
       },

@@ -132,9 +132,12 @@ export interface TournamentParticipant {
   id: number
   divisionId: number
   teamId: number
-  teamName: string
-  teamLogoUrl: string | null
-  registeredAt: string
+  seed: number | null
+  displayName: string | null
+  status: string
+  joinedAt: string | null
+  /** チーム名（BE が team ドメインから一括解決。解決不能なら null） */
+  teamName: string | null
 }
 
 export interface TournamentMatchday {
@@ -471,7 +474,7 @@ export interface TeamMemberCandidate {
   displayName: string
   memberNumber: string | null
   position: string | null
-  isAlreadyEntered: boolean
+  alreadyEntered: boolean
 }
 
 export interface EntryMemberListResponse {
@@ -647,14 +650,16 @@ export interface OrganizationTournamentSummary {
 export interface TournamentContactSpace {
   /** 連絡スペースID（UUID）。 */
   id: string
-  /** 掲示板参照ID。null の場合は掲示板スペースなし。 */
-  bulletinRefId: number | null
-  /** チャットチャンネルID。null の場合はチャットスペースなし。 */
-  chatChannelId: number | null
+  /** スコープ種別（大会 / ディビジョン）。 */
+  scopeType?: 'TOURNAMENT' | 'TOURNAMENT_DIVISION'
+  /** スコープID（大会ID / ディビジョンID）。掲示板 API の scope_id はこれを使う。 */
+  scopeId?: number
+  /** スペース種別。1 行 = 1 スペース（掲示板とチャットは別行）。 */
+  spaceKind?: 'BULLETIN' | 'CHAT'
+  /** 払い出し先実体ID（BULLETIN=掲示板カテゴリID / CHAT=チャットチャンネルID）。 */
+  refId?: number
   /** 公開フラグ。false の場合は参加者のみ閲覧可能。 */
   isPublic: boolean
-  /** スペース名称（任意）。 */
-  name?: string | null
 }
 
 /** 連絡スペース一覧レスポンス。 */

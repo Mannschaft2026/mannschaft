@@ -1,14 +1,28 @@
+import type { components } from '~/types/generated'
 import type { MemberResponse } from '~/types/member'
 
-interface InviteTokenResponse {
+/** チームの権限グループ（生成型 PermissionGroupResponse の必須項目を確定させた形）。 */
+export type TeamPermissionGroup = Required<
+  Pick<components['schemas']['PermissionGroupResponse'], 'id' | 'name' | 'permissions'>
+> & Pick<components['schemas']['PermissionGroupResponse'], 'targetRole' | 'createdAt'> & {
+  /** ADMIN 専用権限を含むか（生成型の差し替え前の暫定。BE の PermissionGroupResponse.containsAdminOnlyPermission）。 */
+  containsAdminOnlyPermission?: boolean
+}
+
+/** 一覧の 1 行。平文トークンは持たない（サーバーにはハッシュしか残らず、再表示できない）。 */
+interface InviteTokenSummary {
   id: number
-  token: string
   roleName: string
   expiresAt: string | null
   maxUses: number | null
   usedCount: number
   revokedAt: string | null
   createdAt: string
+}
+
+/** 発行応答。平文 token を含むのは発行時の一度きり。 */
+interface InviteTokenIssuedResponse extends InviteTokenSummary {
+  token: string
 }
 
 interface PagedData<T> {
@@ -77,14 +91,14 @@ export function useTeamMembers() {
     teamSlug: string,
     body: { roleId: number; expiresIn: string | null; maxUses: number | null },
   ) {
-    return api<{ data: InviteTokenResponse }>(`/api/v1/teams/${teamSlug}/invite-tokens`, {
+    return api<{ data: InviteTokenIssuedResponse }>(`/api/v1/teams/${teamSlug}/invite-tokens`, {
       method: 'POST',
       body,
     })
   }
 
   async function getInviteTokens(teamSlug: string) {
-    return api<{ data: InviteTokenResponse[] }>(`/api/v1/teams/${teamSlug}/invite-tokens`)
+    return api<{ data: InviteTokenSummary[] }>(`/api/v1/teams/${teamSlug}/invite-tokens`)
   }
 
   async function deleteInviteToken(teamSlug: string, tokenId: number) {
@@ -93,20 +107,13 @@ export function useTeamMembers() {
 
   // === 権限グループ管理 ===
   async function getPermissionGroups(teamSlug: string) {
-    return api<{
-      data: Array<{
-        id: number
-        name: string
-        description: string | null
-        permissions: string[]
-        createdAt: string
-      }>
-    }>(`/api/v1/teams/${teamSlug}/permission-groups`)
+    return api<{ data: TeamPermissionGroup[] }>(`/api/v1/teams/${teamSlug}/permission-groups`)
   }
 
+  /** BE（PermissionGroupRequest）は権限名ではなく permissionIds と targetRole を受け取る。 */
   async function createPermissionGroup(
     teamSlug: string,
-    body: { name: string; description?: string; permissions: string[] },
+    body: { name: string; targetRole: string; permissionIds: number[] },
   ) {
     return api(`/api/v1/teams/${teamSlug}/permission-groups`, { method: 'POST', body })
   }
@@ -114,7 +121,7 @@ export function useTeamMembers() {
   async function updatePermissionGroup(
     teamSlug: string,
     groupId: number,
-    body: { name?: string; description?: string; permissions?: string[] },
+    body: { name: string; targetRole: string; permissionIds: number[] },
   ) {
     return api(`/api/v1/teams/${teamSlug}/permission-groups/${groupId}`, { method: 'PATCH', body })
   }

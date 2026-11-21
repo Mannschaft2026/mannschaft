@@ -551,11 +551,23 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
     @ParameterizedTest(name = "AC-18: {0}")
     @EnumSource(MeasuredWrite.class)
     @DisplayName("AC-18/AC-19: 管理者の書き込み — 認可クエリは是正前と同数、認可の前は素の読み取り 1 本ずつ・FOR UPDATE 0、"
-            + "認可の後に自ドメインの読み直しが 1 本ずつ（FOR UPDATE は認可の後だけ。remind はロックなしの読み直しでよい）")
+            + "認可の後は原則 1 本ずつ、枠更新だけ枠の先読み＋親ロック後の current read の 2 本（枠 FOR UPDATE は 1 本）")
     void 管理者の書き込みのクエリ回数(MeasuredWrite w) throws Exception {
+        assertMeasuredWrite(w, false);
+    }
+
+    @Test
+    @DisplayName("AC-18: 別スレッドの実MySQL SQLはCREATE_SLOTの認可クエリ数に含めない")
+    void 別スレッドSQLを認可クエリ数に含めない() throws Exception {
+        assertMeasuredWrite(MeasuredWrite.CREATE_SLOT, true);
+    }
+
+    private void assertMeasuredWrite(MeasuredWrite w, boolean injectForeignSql) throws Exception {
         long baseline = adminCheckBaseline();
-        Measured m = measure(adminId, measuredRequest(w));
-        m.print(w.name());
+        Measured m = measure(adminId, measuredRequest(w), injectForeignSql);
+        if (!injectForeignSql) {
+            m.print(w.name());
+        }
         assertThat(m.status).isEqualTo(w.status);
         assertThat(m.authzSql).as("認可のクエリ数は是正前（isSystemAdmin＋isAdminOrAbove 単体）と同じ").isEqualTo(baseline);
         // 在籍判定は拒否経路だけ（許可経路では足さない）。
@@ -564,7 +576,14 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
                 .as("認可の前に FOR UPDATE を発行しない").isEmpty();
         for (String table : w.scopeTables) {
             assertThat(m.selects(m.beforeAuthz(), table)).as(table + " 認可の前の素の読み取り（scope 解決）").isEqualTo(1);
-            assertThat(m.selects(m.afterAuthz(), table)).as(table + " 認可の後の読み直し（tx 本体）").isEqualTo(1);
+            long expectedAfterAuthz = w == MeasuredWrite.UPDATE_SLOT && table.equals("shift_slots") ? 2 : 1;
+            assertThat(m.selects(m.afterAuthz(), table)).as(table + " 認可の後の読み直し（tx 本体）")
+                    .isEqualTo(expectedAfterAuthz);
+        }
+        if (w == MeasuredWrite.UPDATE_SLOT) {
+            assertThat(m.afterAuthz().stream()
+                    .filter(s -> isSelectFrom(s, "shift_slots") && isForUpdate(s)).count())
+                    .as("枠更新は親ロック後に枠を FOR UPDATE の current read で 1 本読み直す").isEqualTo(1);
         }
         if (w != MeasuredWrite.UPDATE_SCHEDULE && w != MeasuredWrite.REMIND) {
             // 殿の判断 6: 削除・枠の書き込みは tx の中で親スケジュールを FOR UPDATE でたどり直す。
@@ -613,10 +632,12 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
     private long countSql(Runnable action) {
         action.run();
         SqlIntentCounter.reset();
-        action.run();
-        long count = SqlIntentCounter.totalCount();
-        Mockito.clearInvocations(accessControlService);
-        return count;
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
+            action.run();
+            long count = capture.totalCount();
+            Mockito.clearInvocations(accessControlService);
+            return count;
+        }
     }
 
     /** 1 リクエストの計測結果。認可呼び出し（最外側）の区間で、SQL 記録を「前・後」に分ける。 */
@@ -651,21 +672,45 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
      * 入れ子（checkAdminOrAbove → isAdminOrAbove 等）は最外側だけを数える。
      */
     private Measured measure(Long actor, MockHttpServletRequestBuilder request) throws Exception {
+        return measure(actor, request, false);
+    }
+
+    private Measured measure(Long actor, MockHttpServletRequestBuilder request, boolean injectForeignSql)
+            throws Exception {
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
+            return measure(actor, request, injectForeignSql, capture);
+        }
+    }
+
+    private Measured measure(Long actor, MockHttpServletRequestBuilder request, boolean injectForeignSql,
+                             SqlIntentCounter.CurrentThreadCapture capture) throws Exception {
         Measured m = new Measured();
+        AtomicBoolean foreignSqlInserted = new AtomicBoolean();
         ThreadLocal<Integer> depth = ThreadLocal.withInitial(() -> 0);
         Answer<Object> wrap = inv -> {
+            if (!capture.isCurrentThread()) {
+                return inv.callRealMethod();
+            }
             int d = depth.get();
             depth.set(d + 1);
-            int start = SqlIntentCounter.totalCount();
+            int start = capture.totalCount();
             if (d == 0 && m.firstAuthzStart < 0) {
                 m.firstAuthzStart = start;
             }
             try {
+                if (d == 0 && injectForeignSql && foreignSqlInserted.compareAndSet(false, true)) {
+                    // start/end の間で別threadの実SQLを完了させる。業務Bean・認可は実物のまま。
+                    CompletableFuture.runAsync(() -> tx.executeWithoutResult(status -> {
+                        Object result = em.createNativeQuery("SELECT 1").getSingleResult();
+                        assertThat(((Number) result).intValue()).as("別スレッドの実MySQL SQLが完了したこと")
+                                .isEqualTo(1);
+                    }), executor).get(10, TimeUnit.SECONDS);
+                }
                 return inv.callRealMethod();
             } finally {
                 depth.set(d);
                 if (d == 0) {
-                    int end = SqlIntentCounter.totalCount();
+                    int end = capture.totalCount();
                     m.authzSql += end - start;
                     m.lastAuthzEnd = end;
                 }
@@ -682,8 +727,11 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
         setAuth(actor);
         SqlIntentCounter.reset();
         MvcResult result = mockMvc.perform(request).andReturn();
-        m.sqls = new ArrayList<>(SqlIntentCounter.capturedSqls());
+        m.sqls = new ArrayList<>(capture.capturedSqls());
         m.status = result.getResponse().getStatus();
+        if (injectForeignSql) {
+            assertThat(foreignSqlInserted).as("別スレッドSQLを測定窓へ一度挿入したこと").isTrue();
+        }
         assertThat(m.sqls).as("SQL 記録が有効であること").isNotEmpty();
         assertThat(m.firstAuthzStart).as("認可の呼び出しがあること").isNotNegative();
         return m;

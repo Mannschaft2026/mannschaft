@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ConfirmableRecipientGroup, ConfirmableTarget } from '~/types/confirmable'
 
-const props = defineProps<{ scopeType: 'TEAM' | 'ORGANIZATION'; scopeId: string }>()
+const props = defineProps<{ scopeType: 'TEAM' | 'ORGANIZATION'; scopeId: string; scopeSlug?: string }>()
 const emit = defineEmits<{ changed: [] }>()
 const { listRecipientGroups, createRecipientGroup, updateRecipientGroup, deleteRecipientGroup } = useConfirmableNotificationApi()
 const { handleApiError } = useErrorHandler()
@@ -12,6 +12,8 @@ const saving = ref(false)
 const editingId = ref<string | null>(null)
 const name = ref('')
 const targets = ref<ConfirmableTarget[]>([])
+const targetNames = ref<Record<string, string>>({})
+function onResolved(value: { target: ConfirmableTarget; name: string }) { targetNames.value[`${value.target.type}:${value.target.id}`] = value.name }
 
 async function load() {
   if (!props.scopeId) return
@@ -41,7 +43,11 @@ async function remove(groupId: string) {
   try { await deleteRecipientGroup(props.scopeType, props.scopeId, groupId); if (editingId.value === groupId) reset(); await load(); emit('changed') }
   catch (error) { handleApiError(error, 'confirmable recipient group delete') }
 }
-function targetLabel(target: ConfirmableTarget) { return `${t(`confirmable.target_type.${target.type}`)} #${target.id}` }
+function targetLabel(target: ConfirmableTarget) {
+  const typeLabel = t(`confirmable.target_type.${target.type}`)
+  const resolved = targetNames.value[`${target.type}:${target.id}`]
+  return resolved ? `${resolved} (${typeLabel})` : `${typeLabel} #${target.id}`
+}
 watch(() => props.scopeId, load, { immediate: true })
 </script>
 <template>
@@ -49,7 +55,7 @@ watch(() => props.scopeId, load, { immediate: true })
     <div class="flex flex-col gap-3">
       <p class="text-sm text-surface-500">{{ $t('confirmable.recipient_groups_help') }}</p>
       <InputText v-model="name" data-testid="recipient-group-name" :placeholder="$t('confirmable.group_name')" />
-      <ConfirmableTargetPicker v-model="targets" :scope-type="scopeType" :scope-id="scopeId" />
+      <ConfirmableTargetPicker v-model="targets" :scope-type="scopeType" :scope-id="scopeId" :scope-slug="scopeSlug" @resolved="onResolved" />
       <div class="flex gap-2">
         <Button data-testid="recipient-group-save" :label="editingId ? $t('button.save') : $t('button.create')" :loading="saving" :disabled="!name.trim() || !targets.length" @click="save" />
         <Button v-if="editingId" :label="$t('button.cancel')" text @click="reset" />

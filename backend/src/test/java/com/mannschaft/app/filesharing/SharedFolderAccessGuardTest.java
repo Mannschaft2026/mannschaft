@@ -727,4 +727,59 @@ class SharedFolderAccessGuardTest {
                     .doesNotThrowAnyException();
         }
     }
+
+    // ============================================================
+    // CMP-261116-0726: 大会系のファイル ID 経路は FILE_SHARING_002 に寄せる
+    // ============================================================
+
+    @Nested
+    @DisplayName("大会スコープのファイル ID 経路（存在オラクル是正）")
+    class TournamentFileRoute {
+
+        @Test
+        @DisplayName("authorizeFileView: 大会フォルダはファイル ID 経路（checkFolderViewByFileId）で判定し、フォルダ ID 経路は使わない")
+        void ファイル閲覧はファイルID経路() {
+            SharedFolderEntity folder = tournamentFolder();
+            SharedFileEntity file = fileIn(folder, null, false);
+
+            guard.authorizeFileView(folder, file, USER_ID);
+
+            verify(folderScopeAccessGuard).checkFolderViewByFileId(FILE_ID, USER_ID);
+            verify(folderScopeAccessGuard, never()).checkFolderViewByFolderId(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("authorizeFileView: ファイル ID 経路の不在応答（FILE_NOT_FOUND）がそのまま伝播する")
+        void ファイル閲覧の不在応答が伝播() {
+            SharedFolderEntity folder = tournamentFolder();
+            SharedFileEntity file = fileIn(folder, null, false);
+            willThrow(new BusinessException(FileSharingErrorCode.FILE_NOT_FOUND))
+                    .given(folderScopeAccessGuard).checkFolderViewByFileId(FILE_ID, USER_ID);
+
+            assertThatThrownBy(() -> guard.authorizeFileView(folder, file, USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(FileSharingErrorCode.FILE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("authorizeDownload: 大会フォルダもファイル ID 経路で閲覧認可を通す")
+        void ダウンロードもファイルID経路() {
+            SharedFolderEntity folder = tournamentFolder();
+            SharedFileEntity file = fileIn(folder, null, false);
+
+            guard.authorizeDownload(folder, file, USER_ID);
+
+            verify(folderScopeAccessGuard).checkFolderViewByFileId(FILE_ID, USER_ID);
+        }
+
+        @Test
+        @DisplayName("authorizeTournamentFilePost: ファイル ID 経路の投稿認可（checkFolderPostByFileId）へ委譲し、フォルダ ID 経路は使わない")
+        void 大会ファイル投稿認可はファイルID経路() {
+            guard.authorizeTournamentFilePost(FILE_ID, USER_ID);
+
+            verify(folderScopeAccessGuard).checkFolderPostByFileId(FILE_ID, USER_ID);
+            verify(folderScopeAccessGuard, never()).checkFolderPostByFolderId(anyLong(), any());
+        }
+    }
 }

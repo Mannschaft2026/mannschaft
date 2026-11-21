@@ -1,6 +1,7 @@
 package com.mannschaft.app.support.test;
 
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -59,6 +60,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *       （Docker 未起動環境でテストが skip されず、{@code DockerClientProviderStrategy} が例外を投げる）。</li>
  * </ul>
  */
+// 構成キーの統合（CMP-261111-0508 追撃①）: MockMvc を使う派生（@AutoConfigureMockMvc）と使わない派生で
+// MergedContextConfiguration が分かれ、Spring TestContext Cache のエントリ（=起動する context 数）が倍加していた。
+// 基底で MockMvc を自動構成して両者を同じキーに揃える。addFilters は既定（true）のまま:
+// セキュリティフィルタを実効にする側へ寄せることで、フィルタを通す試験の意味を変えない。
+// addFilters=false を宣言する派生は従来どおり別キーになる（意図した分離。変更しない）。
+@AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @Testcontainers
 @ActiveProfiles("test")
@@ -78,6 +85,8 @@ public abstract class AbstractMySqlIntegrationTest {
             .withUsername("test")
             .withPassword("test")
             .withReuse(false)
+            // 専用Testcontainerで実SQLのtriggerを作成可能にし、既存Flyway試験と同じ条件に揃える。
+            .withCommand("--log-bin-trust-function-creators=1")
             // WSL2 環境でMySQL初期化がVHDのI/O待ちで2分超になりTestcontainersのタイムアウトを超える問題を回避するため、
             // /var/lib/mysql をtmpfs(RAM)に置くことで初期化を数秒に短縮する。
             .withTmpFs(java.util.Map.of("/var/lib/mysql", "rw"));
@@ -85,12 +94,60 @@ public abstract class AbstractMySqlIntegrationTest {
     static {
         if (isDockerAvailable()) {
             MYSQL.start();
+            grantProcessToAppUser();
+        }
+    }
+
+    /**
+     * アプリ接続ユーザーに PROCESS 権限を与える。TRIGGER 内で実行中の文は {@code information_schema.PROCESSLIST} 上で
+     * DEFINER（root）のスレッドとして表示されるため、権限が無いと「処理中」の窓を観測できない
+     * （F06.4.1 の冪等 receipt 試験が同時実行中の状態を PROCESSLIST で検出する）。専用 Testcontainer 内だけの権限。
+     */
+    private static void grantProcessToAppUser() {
+        try (java.sql.Connection connection = java.sql.DriverManager.getConnection(
+                     MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("GRANT PROCESS ON *.* TO '" + MYSQL.getUsername() + "'@'%'");
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException("テスト用 MySQL への PROCESS 権限付与に失敗しました", e);
         }
     }
 
     /** Redis は外部依存のため Mock 化（全派生テストで共通に必要）。 */
     @MockitoBean
     protected org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+
+    /**
+     * Mock 化した {@code StringRedisTemplate} は既定で {@code opsForValue()} が null を返す。本番コードの Valkey 呼び出しが
+     * NPE になり、障害時フォールバック（DataAccessException の捕捉）と区別できなくなるため、実物と同じく
+     * {@code ValueOperations} を返す既定を共通設定として置く（get は null＝キー無し）。個別の試験は上書きしてよい。
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void stubRedisTemplateValueOperations() {
+        @SuppressWarnings("unchecked")
+        org.springframework.data.redis.core.ValueOperations<String, String> ops =
+                org.mockito.Mockito.mock(org.springframework.data.redis.core.ValueOperations.class);
+        org.mockito.Mockito.when(redisTemplate.opsForValue()).thenReturn(ops);
+    }
+
+    /**
+     * 共有コンテキストの users.locale キャッシュ（Bean が無い縮小構成では null）。
+     *
+     * <p>CMP-261119-1855: 本基底クラスは単一の MySQL を共有し、テスト環境は {@code ddl-auto=create} のため、
+     * 別構成のコンテキストが起動するたびにスキーマが作り直され users の id が 1 から再採番される。
+     * 共有コンテキストの {@code UserLocaleCache}（TTL 5 分）は userId をキーに前テストの値を保持し続けるため、
+     * 再利用された id の新ユーザーに前テストの locale（ja）が返り、早期拒否応答などが
+     * 英語にならない順序依存の失敗になった。各テストの前に破棄して持ち越しを断つ。</p>
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.mannschaft.app.common.i18n.UserLocaleCache sharedUserLocaleCache;
+
+    @org.junit.jupiter.api.BeforeEach
+    protected void clearSharedUserLocaleCache() {
+        if (sharedUserLocaleCache != null) {
+            sharedUserLocaleCache.clear();
+        }
+    }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {

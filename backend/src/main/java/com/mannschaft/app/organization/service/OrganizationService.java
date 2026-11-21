@@ -17,6 +17,7 @@ import com.mannschaft.app.organization.repository.OrganizationSlugHistoryReposit
 import com.mannschaft.app.common.dto.SlugAvailabilityResponse;
 import com.mannschaft.app.common.dto.SlugResolveResponse;
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.common.event.PersonalInviteScopeClosedEvent;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.PagedResponse;
@@ -27,8 +28,6 @@ import com.mannschaft.app.organization.dto.OrgAllMembersResponse;
 import com.mannschaft.app.organization.dto.OrganizationResponse;
 import com.mannschaft.app.organization.dto.OrganizationSummaryResponse;
 import com.mannschaft.app.organization.dto.UpdateOrganizationRequest;
-import com.mannschaft.app.role.entity.InviteTokenEntity;
-import com.mannschaft.app.role.repository.InviteTokenRepository;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.UserRoleRepository;
@@ -77,7 +76,6 @@ public class OrganizationService {
     private final OrganizationSlugHistoryRepository organizationSlugHistoryRepository;
     private final UserRoleRepository userRoleRepository;
     private final RoleRepository roleRepository;
-    private final InviteTokenRepository inviteTokenRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final OrganizationMembershipService organizationMembershipService;
     private final OrganizationHierarchyService organizationHierarchyService;
@@ -87,6 +85,29 @@ public class OrganizationService {
     private final DuplicateNameGuardService duplicateNameGuardService;
     private final OrgTeamGroupRepository orgTeamGroupRepository;
     private final java.time.Clock clock;
+
+    /**
+     * 組織 ID 群の表示名とアイコン URL をまとめて返す（SQL 1 本・CMP-261103-1225 の N+1 解消用）。
+     *
+     * <p>個人ダッシュボードの「今後の予定」が予定ごとに {@code organizationRepository.findById} で
+     * 名前とアイコンを引いていたのを置き換える。{@code findById} と同じ取得（{@code findAllById}）で、
+     * 見つかる範囲も同一である。Entity は外へ渡さない。</p>
+     *
+     * @param ids 組織 ID 群（null・空なら空 Map）
+     * @return 組織 ID → 名前・アイコン（見つかったものだけ）
+     */
+    public Map<Long, com.mannschaft.app.organization.dto.OrganizationNameIconView> getNameIconsByIds(
+            Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, com.mannschaft.app.organization.dto.OrganizationNameIconView> result = new java.util.HashMap<>();
+        for (OrganizationEntity org : organizationRepository.findAllById(ids)) {
+            result.put(org.getId(), new com.mannschaft.app.organization.dto.OrganizationNameIconView(
+                    org.getId(), org.getName(), org.getIconUrl()));
+        }
+        return result;
+    }
 
     /**
      * 組織を作成し、作成者をADMINロールで紐付ける。
@@ -464,6 +485,14 @@ public class OrganizationService {
     }
 
     /**
+     * 組織が存在し、論理削除されていないか（非アクティブ組織の判定。ALIC-1 §2.3 / F00 §11.6）。
+     * {@link OrganizationEntity} は {@code @SQLRestriction("deleted_at IS NULL")} のため、削除済みの組織は {@code findById} で返らない。
+     */
+    public boolean isActiveOrganization(Long orgId) {
+        return organizationRepository.findById(orgId).isPresent();
+    }
+
+    /**
      * 柱②-2 販促プロビジョニング専用: 指定組織の {@code lifecycle_status} を
      * {@code PROVISIONED} から {@code ACTIVE} へ遷移させ、組織名を返す。
      * 存在しなければ empty。
@@ -713,7 +742,6 @@ public class OrganizationService {
      * 本メソッドは認可済み呼び出しを前提とする。</p>
      */
     @Transactional
-    // TODO: OrganizationドメインとRoleドメインをまたいでいる。将来はOrganizationDeletedEventで分離予定
     @CacheEvict(value = "org-detail", allEntries = true)
     public void deleteOrganization(Long orgId, Long userId) {
         // F01.2.1 §4.5: 閉鎖の世代番号（closure_generation）を組織行のロックの下で進める。申請の作成（チーム行 → 組織行）・
@@ -721,10 +749,8 @@ public class OrganizationService {
         OrganizationEntity org = organizationRepository.findByIdForUpdate(orgId)
                 .orElseThrow(() -> new BusinessException(OrgErrorCode.ORG_001));
         org.softDelete();
-
-        // 招待トークン一括失効
-        inviteTokenRepository.findByOrganizationIdAndRevokedAtIsNull(orgId)
-                .forEach(InviteTokenEntity::revoke);
+        // role更新は親TXへ持ち込まない。個人招待だけをcommit後にstrict旧世代で片付ける。
+        eventPublisher.publishEvent(new PersonalInviteScopeClosedEvent("ORGANIZATION", orgId, org.getClosureGeneration()));
 
         // F01.2.1 §4.5: チームグループは同じ organization ドメインなので、同じトランザクションで全件を論理削除する
         // （加盟の PENDING・制限の片付けは team ドメインが OrganizationDeletedEvent の AFTER_COMMIT で行う）
@@ -762,6 +788,7 @@ public class OrganizationService {
             throw new BusinessException(OrgErrorCode.ORG_003);
         }
         org.archive();
+        eventPublisher.publishEvent(new PersonalInviteScopeClosedEvent("ORGANIZATION", orgId, org.getClosureGeneration()));
         // 当該組織の PENDING（申請・招待）の片付けは team ドメインが AFTER_COMMIT で行う（§4.5。ACTIVE は残す）
         eventPublisher.publishEvent(new OrganizationArchivedEvent(null, orgId));
         log.info("組織アーカイブ完了: orgId={}", orgId);

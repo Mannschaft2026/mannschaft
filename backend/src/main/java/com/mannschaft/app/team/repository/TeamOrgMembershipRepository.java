@@ -511,9 +511,24 @@ public interface TeamOrgMembershipRepository extends JpaRepository<TeamOrgMember
      * チームが ACTIVE で加盟している組織と、その所属グループ ID（未分類は NULL）を返す（告知の表示判定。§8.2）。
      */
     @Query("SELECT m.organizationId AS organizationId, m.groupId AS groupId FROM TeamOrgMembershipEntity m "
+        + "JOIN TeamEntity t ON t.id = m.teamId "
         + "WHERE m.teamId = :teamId "
-        + "AND m.status = com.mannschaft.app.team.entity.TeamOrgMembershipEntity$Status.ACTIVE")
+        + "AND m.status = com.mannschaft.app.team.entity.TeamOrgMembershipEntity$Status.ACTIVE "
+        + "AND t.archivedAt IS NULL AND t.deletedAt IS NULL")
     List<TeamOrgGroupProjection> findActiveOrgGroupsByTeamId(@Param("teamId") Long teamId);
+
+    /**
+     * 組織に ACTIVE で加盟している指定チームと所属グループ ID（未分類は NULL）を、チーム数に依らず 1 本の SQL で返す
+     * （組織告知の宛先資格 Qa の判定。F01.2.1 §8.2・ALIC-1 §2.7）。アーカイブ済み・論理削除済みのチームは返らない（M3）。
+     */
+    @Query("SELECT m.teamId AS teamId, m.groupId AS groupId FROM TeamOrgMembershipEntity m "
+        + "JOIN TeamEntity t ON t.id = m.teamId "
+        + "WHERE m.organizationId = :organizationId "
+        + "AND m.status = com.mannschaft.app.team.entity.TeamOrgMembershipEntity$Status.ACTIVE "
+        + "AND t.archivedAt IS NULL AND t.deletedAt IS NULL "
+        + "AND m.teamId IN :teamIds ORDER BY m.teamId ASC")
+    List<TeamGroupAssignmentProjection> findActiveTeamGroupAssignmentsByOrganizationIdAndTeamIdIn(
+            @Param("organizationId") Long organizationId, @Param("teamIds") java.util.Collection<Long> teamIds);
 
     // ========================================================================
     // F01.2.1 2-B2: 組織側の受信申請一覧・承認・拒否（§6.2・§6.3・§6.4・§10.6）
@@ -693,6 +708,45 @@ public interface TeamOrgMembershipRepository extends JpaRepository<TeamOrgMember
             + "OR (m.status = 'PENDING' AND m.team_closure_generation < t.closure_generation) ORDER BY m.team_id",
             nativeQuery = true)
     List<Number> findTeamIdsNeedingLifecycleCleanup();
+
+    // ========================================================================
+    // F01.2.1 7-A: PENDING の期限切れバッチ（§6.8）と孤児 group_id の修復バッチ（§7.3）
+    // ========================================================================
+
+    /**
+     * 期限切れバッチの候補: 作成日時（{@code invited_at}。UTC の壁時計）が期限より前の PENDING（申請・招待の両方向）の ID を
+     * 昇順に返す（ロックしない。最終の判定は {@link #findExpiredPendingByIdForUpdate} がロックの下で行う）。
+     * 期限はエポック秒で渡し、{@code TIMESTAMPADD} で UTC の壁時計へ戻す（§4.6。JDBC のタイムゾーン変換に依存しない）。
+     * 索引 {@code (status, invited_at)} を使う。
+     */
+    @Query(value = "SELECT m.id FROM team_org_memberships m WHERE m.status = 'PENDING' "
+            + "AND m.invited_at < TIMESTAMPADD(SECOND, :thresholdEpochSecond, '1970-01-01 00:00:00') ORDER BY m.id",
+            nativeQuery = true)
+    List<Number> findExpiredPendingIds(@Param("thresholdEpochSecond") long thresholdEpochSecond);
+
+    /**
+     * 加盟行のチーム ID だけを読む（期限切れでチーム行 → 加盟行の順にロックするため。Entity を永続化コンテキストに載せない）。
+     */
+    @Query("SELECT m.teamId FROM TeamOrgMembershipEntity m WHERE m.id = :id")
+    Optional<Long> findTeamIdById(@Param("id") Long id);
+
+    /**
+     * 期限切れの再確認: 加盟行を {@code SELECT ... FOR UPDATE} で取り、ロックの下でまだ PENDING で作成日時が期限より前のときだけ
+     * 返す（承認・承諾・拒否・取下げ・片付けが先に確定していれば空。§6.8）。
+     */
+    @Query(value = "SELECT * FROM team_org_memberships WHERE id = :id AND status = 'PENDING' "
+            + "AND invited_at < TIMESTAMPADD(SECOND, :thresholdEpochSecond, '1970-01-01 00:00:00') FOR UPDATE",
+            nativeQuery = true)
+    Optional<TeamOrgMembershipEntity> findExpiredPendingByIdForUpdate(
+            @Param("id") Long id, @Param("thresholdEpochSecond") long thresholdEpochSecond);
+
+    /**
+     * 孤児修復バッチの候補: グループが割り当てられている (組織, グループ) の組を重複なく返す（ACTIVE・PENDING とも。ロックしない）。
+     * グループの生存は organization ドメインのポートで確かめる（グループの表は team ドメインから JOIN しない）。
+     */
+    @Query("SELECT DISTINCT m.organizationId AS organizationId, m.groupId AS groupId FROM TeamOrgMembershipEntity m "
+        + "WHERE m.groupId IS NOT NULL")
+    List<TeamOrgGroupProjection> findDistinctOrganizationGroupPairs();
 
     /**
      * GDPR の個人データ収集（F01.2.1 §15・AC-G127）: そのユーザーが起こした（{@code invited_by}）か応答した

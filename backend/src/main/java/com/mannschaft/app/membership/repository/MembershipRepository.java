@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +25,23 @@ import java.util.Optional;
  * <p>設計書: docs/features/F00.5_membership_basis.md §5 / §7</p>
  */
 public interface MembershipRepository extends JpaRepository<MembershipEntity, Long> {
+
+    /** TEAM資格のscalar投影。本人activeはUserService側の別責務。 */
+    interface TeamMembershipStateRow {
+        Long getTeamId();
+        Long getUserId();
+        RoleKind getRoleKind();
+        Boolean getActive();
+    }
+
+    @Query("SELECT m.scopeId AS teamId, m.userId AS userId, m.roleKind AS roleKind, "
+            + "CASE WHEN m.leftAt IS NULL AND m.archivedAt IS NULL THEN true ELSE false END AS active FROM MembershipEntity m "
+            + "WHERE m.scopeType = com.mannschaft.app.membership.domain.ScopeType.TEAM "
+            + "AND m.scopeId IN :teamIds AND m.userId IN :userIds "
+            + "AND m.leftAt IS NULL AND m.archivedAt IS NULL")
+    List<TeamMembershipStateRow> findTeamMembershipStateRows(
+            @Param("teamIds") Collection<Long> teamIds, @Param("userIds") Collection<Long> userIds);
+
 
     /**
      * 個人横断表示で使う現役所属を、最近参加した順に安定取得する。
@@ -133,6 +151,22 @@ public interface MembershipRepository extends JpaRepository<MembershipEntity, Lo
     long countActiveByScopeAndRoleKind(
             @Param("scopeType") ScopeType scopeType,
             @Param("scopeId") Long scopeId,
+            @Param("roleKind") RoleKind roleKind);
+
+    /**
+     * 複数スコープの指定 {@link RoleKind} のアクティブメンバー数を 1 本の SQL で数える
+     * （CMP-261103-1225。{@link #countActiveByScopeAndRoleKind} の一括版）。
+     * 該当者が 1 人もいないスコープは結果に含まれない。
+     *
+     * @param scopeIds 対象スコープ ID（空を渡してはならない。呼び出し側で早期 return すること）
+     * @return 各要素は {@code [スコープ ID (Long), 件数 (Long)]}
+     */
+    @Query("SELECT m.scopeId, COUNT(m) FROM MembershipEntity m " +
+            "WHERE m.scopeType = :scopeType AND m.scopeId IN :scopeIds " +
+            "AND m.roleKind = :roleKind AND m.leftAt IS NULL GROUP BY m.scopeId")
+    List<Object[]> countActiveGroupByScopeIdInAndRoleKind(
+            @Param("scopeType") ScopeType scopeType,
+            @Param("scopeIds") Collection<Long> scopeIds,
             @Param("roleKind") RoleKind roleKind);
 
     /**

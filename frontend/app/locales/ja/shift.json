@@ -48,6 +48,19 @@
       "formNote": "メモ",
       "formNotePlaceholder": "任意"
     },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "時給が未設定のため公開できません",
+        "description": "予算に連動する勤務日に、有効な時給が未設定の担当者がいます。次の担当者の時給を設定してから、もう一度公開してください。",
+        "unknownUser": "ユーザーID {id}",
+        "goSettings": "時給設定を開く"
+      },
+      "conflict": {
+        "title": "シフト内容が変更されました",
+        "description": "公開の確認中にシフトの内容が変わりました。画面を読み込み直して内容を確認し、もう一度公開してください。"
+      },
+      "close": "閉じる"
+    },
     "detail": {
       "tabOverview": "概要",
       "tabEdit": "編集",
@@ -88,10 +101,23 @@
       "notePlaceholder": "任意",
       "dayOfWeek": "曜日",
       "dayOfWeekHint": "選択した曜日にのみスロットを作成します",
+      "moveDateTitle": "日付変更の確認",
+      "moveDateMessage": "{oldDate} から {newDate} に変更します。この枠に提出済みの希望があれば、新しい日付へ一緒に移動します。",
+      "moveDateAccept": "枠と希望を移動",
       "saveSuccess": "スロットを保存しました",
       "deleteSuccess": "スロットを削除しました",
       "assignmentMasked": "調整中",
-      "assignmentMaskedHint": "公開前のため割当は表示されません"
+      "assignmentMaskedHint": "公開前のため割当は表示されません",
+      "deleteTitle": "シフト枠を削除",
+      "deleteConfirmPlain": "この枠を削除しますか？",
+
+      "deleteConfirmBoth": "この枠を削除しますか？この枠に出された希望 {requests} 件・割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmRequestsOnly": "この枠を削除しますか？この枠に出された希望 {requests} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmAssignmentsOnly": "この枠を削除しますか？この枠の割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmUnknown": "この枠を削除しますか？この枠に出された希望と割当があれば、それも削除されます。通常の操作では元に戻せません。"
     },
     "requests": {
       "submissionRate": "提出率",
@@ -206,16 +232,17 @@
         "label": "送信先",
         "specific": "メンバーを指定",
         "template": "シフト帯でまとめて",
-        "openCall": "全員に公開"
+        "openCall": "チーム内で公開募集"
       },
       "targetUsers": {
         "label": "交代候補者",
         "placeholder": "メンバーを選択...",
         "dayShift": "昼シフト担当者",
         "nightShift": "夜シフト担当者",
-        "selectedCount": "{count}名を選択中"
+        "selectedCount": "{count}名を選択中",
+        "empty": "交代候補者はいません"
       },
-      "templateHint": "同じスケジュールの{period}シフト担当者に一括送信します",
+      "templateHint": "同じスケジュールの{period}に一括送信します",
       "list": {
         "title": "シフト交換リクエスト",
         "requester": "申請者 #{id}",
@@ -309,8 +336,11 @@
     "board": {
       "title": "シフトボード",
       "memberPool": "未割当メンバー",
+      "noUnassignedMembers": "未割当のメンバーはいません",
+      "noMatchingMembers": "検索条件に一致するメンバーはいません",
       "dragHint": "メンバーをドラッグして割り当て",
-      "unassignedSlots": "{count}件未割当"
+      "unassignedSlots": "{count}件未割当",
+      "backToList": "シフト一覧に戻る"
     },
     "autoAssign": {
       "button": "自動割当",
@@ -404,6 +434,7 @@
       }
     },
     "entry": {
+      "notStarted": "希望の受付はまだ開始されていません",
       "sectionTitle": "希望の提出・シフトボード",
       "bulkRequest": "まとめて希望を出す",
       "board": "シフトボード",
@@ -484,7 +515,7 @@
       "title": "シフト詳細を確認する",
       "body": "特定の日付をタップすると、そのシフトのチーム名・ポジション・時刻・スケジュール名などの詳細を確認できます。",
       "steps": {
-        "step1": "【月次ビュー】日付セルをタップすると、画面右側に詳細パネルが開きます",
+        "step1": "【月次ビュー】日付セルをタップすると、選択日の詳細パネルが開きます",
         "step2": "【週次ビュー】日付カードのヘッダーをタップすると、カードが展開してシフト一覧が表示されます",
         "step3": "月次ビューでは同じ日付をもう一度タップすると詳細パネルが閉じます"
       }
@@ -494,7 +525,7 @@
       "body": "確定シフトを他のメンバーと交代したい場合、3つの方式で依頼を送れます。送信後は自動的にシフト一覧が更新されます。",
       "steps": {
         "step1": "シフト詳細内の「交代依頼を作成」ボタンをクリックします",
-        "step2": "送信方式を選びます：「メンバーを指定」（1名以上選択）／「シフト帯でまとめて」（同日の昼または夜シフト担当者全員）／「全員に公開」（誰でも立候補可）",
+        "step2": "送信方式を選びます：「メンバーを指定」（1名以上選択）／「シフト帯でまとめて」（同日の昼または夜シフト担当者全員）／「チーム内で公開募集」（チームメンバーが立候補可）",
         "step3": "必要であれば理由を記入します（任意）",
         "step4": "「提出」ボタンをクリックして送信します"
       },
