@@ -180,6 +180,37 @@ describe('3b: 公開失敗後に画面を離れて戻っても重複作成しな
   })
 })
 
+describe('6: 送信中・公開待ちの入力ロック', () => {
+  it('応答待ち中は textarea が readonly（編集が消えない）', async () => {
+    let resolveCreate: (v: typeof created) => void = () => {}
+    apiMock.createMemo.mockReturnValue(new Promise((r) => { resolveCreate = r }))
+    const w = await mountInput()
+    await w.get('[data-testid="action-memo-input-textarea"]').setValue('送信中')
+    void w.get('[data-testid="action-memo-input-submit"]').trigger('submit')
+    await flushPromises()
+    expect(w.get('[data-testid="action-memo-input-textarea"]').attributes('readonly')).toBeDefined()
+    resolveCreate(created)
+    await flushPromises()
+    expect(w.get('[data-testid="action-memo-input-textarea"]').attributes('readonly')).toBeUndefined()
+  })
+
+  it('公開待ちの間は textarea が disabled、「投稿せず閉じる」でメモは再作成せず入力と下書きをクリアする', async () => {
+    apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))
+    const w = await mountInput()
+    await submit(w, '公開待ち')
+    expect(w.get('[data-testid="action-memo-input-textarea"]').attributes('disabled')).toBeDefined()
+    expect(w.emitted('pending-change')?.at(-1)).toEqual([true])
+    await w.get('[data-testid="action-memo-input-publish-giveup"]').trigger('click')
+    await flushPromises()
+    expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
+    expect(apiMock.publishToTeam).toHaveBeenCalledTimes(1)
+    expect((w.get('[data-testid="action-memo-input-textarea"]').element as HTMLTextAreaElement).value).toBe('')
+    expect(w.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(false)
+    expect(window.localStorage.getItem('action-memo-draft-42')).toBeNull()
+    expect(w.emitted('pending-change')?.at(-1)).toEqual([false])
+  })
+})
+
 describe('3: 公開失敗時は成功扱いにしない', () => {
   it('publishToTeam が false のとき入力を保持し、失敗文言を出し、再送信は公開だけ再試行する', async () => {
     apiMock.publishToTeam.mockRejectedValueOnce(new Error('boom'))

@@ -152,6 +152,33 @@ describe('下書きに選択値も保存・復元する', () => {
     expect(apiMock.publishToTeam).not.toHaveBeenCalled()
   })
 
+  it('ページ: 投稿先候補の取得に失敗したときは、復元した投稿先を捨てない', async () => {
+    useActionMemoStore(useNuxtApp().$pinia).availableTeams = []
+    apiMock.fetchAvailableTeams.mockRejectedValue(new Error('network'))
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({ v: 1, content: '取得失敗', extras: { category: 'WORK', teamId: 7 } }),
+    )
+    const w = await mountPage()
+    await w.get('[data-testid="action-memo-input-submit"]').trigger('submit')
+    await flushPromises()
+    expect(apiMock.publishToTeam).toHaveBeenCalledWith(501, expect.objectContaining({ teamId: 7 }))
+  })
+
+  it('ページ: 公開待ちの間は選択欄（カテゴリ・投稿先など）がロックされる', async () => {
+    apiMock.publishToTeam.mockRejectedValue(new Error('boom'))
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({ v: 1, content: 'ロック確認', extras: { category: 'WORK', teamId: 7 } }),
+    )
+    const w = await mountPage()
+    const sel = '[data-testid="action-memo-selectors"]'
+    expect(w.get(sel).attributes('disabled')).toBeUndefined()
+    await w.get('[data-testid="action-memo-input-submit"]').trigger('submit')
+    await flushPromises()
+    expect(w.get(sel).attributes('disabled')).toBeDefined()
+  })
+
   it('ページ: 現在の投稿先候補に無い teamId は捨てる（カテゴリ等は復元）', async () => {
     window.localStorage.setItem(
       KEY,
