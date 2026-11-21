@@ -153,6 +153,10 @@ describe('3: 公開失敗時は成功扱いにしない', () => {
     expect((w.get('[data-testid="action-memo-input-textarea"]').element as HTMLTextAreaElement).value).toBe('公開失敗')
     expect(w.find('[data-testid="action-memo-input-publish-failed"]').exists()).toBe(true)
     expect(w.emitted('created')).toBeUndefined()
+    // 公開失敗は「メモの保存失敗」として扱わない（保存済みの入力欄文言と矛盾させない）
+    const store = useActionMemoStore()
+    expect(store.error).toBe('action_memo.error.publish_failed')
+    expect(store.lastError).toBe('PUBLISH_FAILED')
 
     await submit(w)
     expect(apiMock.createMemo).toHaveBeenCalledTimes(1)
