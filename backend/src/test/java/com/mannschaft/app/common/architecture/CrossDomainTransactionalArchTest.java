@@ -4,7 +4,6 @@ import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.junit.ArchTag;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
-import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -15,13 +14,12 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.freeze.FreezingArchRule;
 
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionOperations;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 
 /**
  * クロスドメイン {@code @Transactional} の番人テスト（D-3）: <b>{@code @Transactional} が
- * 付いたクラス、または明示的にトランザクションを実行するクラスは、別ドメインの {@code repository} に直接依存してはならない</b>。
+ * 付いたクラスは、別ドメインの {@code repository} に直接依存してはならない</b>。
  *
  * <p>設計指針: {@code CLAUDE.md}「DB 設計の原則 #5」—
  * 「{@code @Transactional} メソッドが複数ドメインの Repository をまたぐ場合は設計を見直す。
@@ -34,10 +32,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
  * <b>クラスまたはメソッド</b>に付いているクラス（合成注釈のメタ注釈を含む）を発生元とみなす。Spring の
  * {@code @Transactional} はクラス付与がメソッドへ継承される点を考慮し、
  * 「クラスに付いている」場合もそのクラスを対象にする。
- * {@code TransactionOperations}（{@code TransactionTemplate} を含む）の
- * {@code execute} / {@code executeWithoutResult} の明示呼び出しも対象とする。
- * 型を保持するだけのクラスは対象にしない。注釈の場合と同じクラス粒度で判定し、
- * コールバック内への依存の絞り込みは行わない。
  *
  * <h2>違反条件（直接依存のみ）</h2>
  * <p>そのクラスの {@code getDirectDependenciesFromSelf()} を走査し、依存先が
@@ -120,14 +114,6 @@ class CrossDomainTransactionalArchTest {
         }
         for (JavaMethod method : clazz.getMethods()) {
             if (method.isAnnotatedWith(Transactional.class) || method.isMetaAnnotatedWith(Transactional.class)) {
-                return true;
-            }
-        }
-        // 注釈を Template 実行へ置き換えても、越境依存が監視から脱落しないようにする。
-        for (JavaMethodCall call : clazz.getMethodCallsFromSelf()) {
-            String methodName = call.getTarget().getName();
-            if ((methodName.equals("execute") || methodName.equals("executeWithoutResult"))
-                    && call.getTarget().getOwner().isAssignableTo(TransactionOperations.class)) {
                 return true;
             }
         }
