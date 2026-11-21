@@ -296,40 +296,40 @@ export const useActionMemoStore = defineStore('actionMemo', {
       const queue = useOfflineQueue()
       const api = useActionMemoApi()
       const kept: { v: { error: string | null; lastError: ActionMemoErrorCode | null } | null } = { v: null }
+      // 公開を試み、キュー項目を片付けてよいか（true）を返す。失敗は kept に退避して利用者に見せる
+      const settlePublish = async (memoId: number, teamId: number): Promise<boolean> => {
+        const result = await this.publishToTeamReconciled(memoId, { teamId })
+        if (result === 'posted') return true
+        // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
+        kept.v = { error: this.error, lastError: this.lastError }
+        // conflict（別チーム投稿済み）と 403/404/410（メモ削除済み・チーム脱退など）は再試行しても成功しない恒久失敗。
+        // 項目を片付けて後続を処理させる。通信断・5xx は項目を残して停止する
+        return result === 'conflict' || [403, 404, 410].includes(this.publishFailureStatus ?? 0)
+      }
       const results = await queue.flushQueue(async (payload, queued) => {
         try {
           // 公開のみ項目: 作成済みメモは再作成せず publish-to-team だけ再試行する
           if (queued?.publishOnlyMemoId != null && queued.publishTeamId != null) {
-            const result = await this.publishToTeamReconciled(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
-            let ok = result === 'posted'
-            if (result === 'conflict') {
-              // 別チーム投稿済み: 再試行しても成功しないため項目は片付け、エラーだけ残す
-              ok = true
-              kept.v = { error: this.error, lastError: this.lastError }
-            }
-            // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
-            else if (!ok) {
-              kept.v = { error: this.error, lastError: this.lastError }
-              // 403/404/410 は再試行しても成功しない恒久失敗（メモ削除済み・チーム脱退など）。
-              // 項目を片付けて後続を処理させる（失敗は kept のエラーとして利用者に見せる）。通信断・5xx は残して停止
-              if ([403, 404, 410].includes(this.publishFailureStatus ?? 0)) ok = true
-            }
+            const ok = await settlePublish(queued.publishOnlyMemoId, queued.publishTeamId)
             return ok ? { id: queued.publishOnlyMemoId } : null
           }
           const created = await api.createMemo(payload)
           // オフライン中に選ばれた公開要求は、実 ID が得られた今ここで実行する。
-          // 作成は成立済みのため created を返して重複作成を避け、公開失敗は「公開のみ」項目として残す
+          // 公開の応答待ちの間に再読み込みされても同じメモを再作成しないよう、公開を試みる前に
+          // 元項目を実 ID つきの「公開のみ」項目へ 1 回の書き込みで置き換えて永続化する。
+          // 置き換えに失敗しても作成は成立済みのため再作成は避ける（完了扱い・公開失敗は error として残す）
           if (queued?.publishTeamId != null) {
-            const ok = await this.publishToTeam(created.id, { teamId: queued.publishTeamId })
-            if (!ok) {
-              kept.v = { error: this.error, lastError: this.lastError }
+            let converted = false
+            if (typeof queued.queueId === 'number') {
               try {
-                await queue.enqueuePublishOnly(created.id, queued.publishTeamId)
+                await queue.convertToPublishOnly(queued.queueId, created.id, queued.publishTeamId)
+                converted = true
               } catch {
-                // 公開のみ項目を永続化できなくても作成は成立済み。再作成を避けるため完了扱いとし、
-                // 公開失敗は error として残す（kept で最後に復元）
+                // 永続化できなくても、再作成を避ける方針（上記）
               }
             }
+            const ok = await settlePublish(created.id, queued.publishTeamId)
+            return { id: created.id, keepQueued: converted && !ok }
           }
           return created
         } catch (error) {

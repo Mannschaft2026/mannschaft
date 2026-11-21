@@ -23,7 +23,7 @@ vi.mock('~/composables/useOfflineQueue', async (importOriginal) => {
     ...orig,
     useOfflineQueue: () => ({
       ...orig.useOfflineQueue(),
-      enqueuePublishOnly: vi.fn().mockRejectedValue(new Error('indexeddb failed')),
+      convertToPublishOnly: vi.fn().mockRejectedValue(new Error('indexeddb failed')),
     }),
   }
 })
