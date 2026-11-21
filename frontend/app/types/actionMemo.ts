@@ -135,6 +135,18 @@ export interface CreateActionMemoPayload {
   orgVisibility?: OrgVisibility | null
 }
 
+/**
+ * 行動メモ入力フォーム（ActionMemoInput）へ画面側の選択値を渡すための型。
+ * teamId は作成 API に項目が無いため、作成成功後の publish-to-team で使う（WORK のみ）。
+ */
+export interface ActionMemoInputExtras {
+  category?: ActionMemoCategory
+  durationMinutes?: number | null
+  progressRate?: number | null
+  completesTodo?: boolean
+  teamId?: number | null
+}
+
 export interface UpdateActionMemoPayload {
   content?: string
   memoDate?: string

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Mood } from '~/types/actionMemo'
+import type { ActionMemo, ActionMemoInputExtras, Mood } from '~/types/actionMemo'
 
 /**
  * F02.5 行動メモ入力フォーム。
@@ -11,8 +11,18 @@ import type { Mood } from '~/types/actionMemo'
  *   <li>{@code mood_enabled = true} の場合のみ MoodSelector を表示</li>
  *   <li>下書き自動保存（debounce 1秒）→ 送信成功でクリア</li>
  *   <li>送信失敗時は入力欄をクリアしない（書きかけを失わせない）</li>
+ *   <li>画面側で選んだカテゴリ・所要時間・進捗率・TODO 完了・チーム投稿先は {@code extras} で受け取り、
+ *       作成リクエストに載せる（チームは作成成功後に publish-to-team。WORK のみ）</li>
  * </ul>
  */
+
+const props = defineProps<{
+  extras?: ActionMemoInputExtras
+}>()
+
+const emit = defineEmits<{
+  created: [memo: ActionMemo]
+}>()
 
 const store = useActionMemoStore()
 const auth = useAuthStore()
@@ -69,8 +79,19 @@ async function submit() {
       content: content.value,
       mood: store.isMoodEnabled ? mood.value : null,
       tagIds: selectedTagIds.value.length > 0 ? selectedTagIds.value : undefined,
+      category: props.extras?.category,
+      durationMinutes: props.extras?.durationMinutes ?? undefined,
+      progressRate: props.extras?.progressRate ?? undefined,
+      completesTodo: props.extras?.completesTodo ? true : undefined,
     })
     if (created) {
+      // チーム投稿は作成 API に項目が無いため別 API（個別即時投稿）。
+      // オフラインキュー行きの仮 ID（負数）は投稿できないためスキップする。
+      const teamId = props.extras?.teamId
+      if (props.extras?.category === 'WORK' && teamId != null && created.id > 0) {
+        await store.publishToTeam(created.id, { teamId })
+      }
+      emit('created', created)
       // 成功 → 入力欄クリア + mood + タグ リセット
       content.value = ''
       mood.value = null

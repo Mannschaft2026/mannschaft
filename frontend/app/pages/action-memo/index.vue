@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import type { ActionMemo, ActionMemoCategory, OrgVisibility } from '~/types/actionMemo'
+import type { ActionMemo, ActionMemoCategory, ActionMemoInputExtras, OrgVisibility } from '~/types/actionMemo'
 
 /**
  * F02.5 行動メモ メイン画面（ワンショット入力 + 選択日メモ一覧）。
@@ -60,6 +60,22 @@ const selectedDuration = ref<number | null>(null)
 const selectedProgressRate = ref<number | null>(null)
 const selectedCompletesTodo = ref(false)
 const selectedTeamId = ref<number | null>(store.settings.defaultPostTeamId ?? null)
+
+// ActionMemoInput へ渡す選択値（作成リクエストに反映される）
+const inputExtras = computed<ActionMemoInputExtras>(() => ({
+  category: selectedCategory.value,
+  durationMinutes: selectedDuration.value,
+  progressRate: selectedProgressRate.value,
+  completesTodo: selectedCompletesTodo.value,
+  teamId: selectedTeamId.value,
+}))
+
+// 送信成功後は 1 件ごとの値（所要時間・進捗率・TODO 完了）のみ戻す。カテゴリ・投稿先は連続入力のため保持する
+function onMemoCreated() {
+  selectedDuration.value = null
+  selectedProgressRate.value = null
+  selectedCompletesTodo.value = false
+}
 
 // Phase 4-α: 組織スコープ
 const selectedOrgId = ref<number | null>(null)
@@ -240,7 +256,7 @@ function goTags() {
         {{ t(store.error) }}
       </div>
 
-      <ActionMemoInput />
+      <ActionMemoInput :extras="inputExtras" @created="onMemoCreated" />
 
       <!-- Phase 3: カテゴリ選択（常時表示） -->
       <div class="flex flex-wrap items-center gap-2 px-1">
