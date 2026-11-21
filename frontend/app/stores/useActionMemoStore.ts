@@ -88,8 +88,17 @@ function draftKey(userId: number | string): string {
  * 下書きの読み取り。新形式は {v:1, content, extras} の JSON、旧形式は本文だけの文字列。
  * JSON として読めても形式が合わなければ（本文がたまたま JSON 風でも）全体を本文として扱う。
  */
-function readDraft(userId: number | string): { content: string; extras: ActionMemoInputExtras | null } {
-  if (typeof window === 'undefined') return { content: '', extras: null }
+interface DraftPendingPublish {
+  memoId: number
+  teamId: number
+}
+
+function readDraft(userId: number | string): {
+  content: string
+  extras: ActionMemoInputExtras | null
+  pendingPublish: DraftPendingPublish | null
+} {
+  if (typeof window === 'undefined') return { content: '', extras: null, pendingPublish: null }
   let raw = ''
   try {
     raw = localStorage.getItem(draftKey(userId)) ?? ''
@@ -99,16 +108,21 @@ function readDraft(userId: number | string): { content: string; extras: ActionMe
   {
     if (raw.startsWith('{')) {
       try {
-        const parsed = JSON.parse(raw) as { v?: unknown; content?: unknown; extras?: unknown }
+        const parsed = JSON.parse(raw) as { v?: unknown; content?: unknown; extras?: unknown; pendingPublish?: unknown }
         if (parsed && parsed.v === 1 && typeof parsed.content === 'string') {
           const extras = parsed.extras && typeof parsed.extras === 'object' ? (parsed.extras as ActionMemoInputExtras) : null
-          return { content: parsed.content, extras }
+          const pp = parsed.pendingPublish as Partial<DraftPendingPublish> | undefined
+          const pendingPublish =
+            pp && typeof pp.memoId === 'number' && typeof pp.teamId === 'number'
+              ? { memoId: pp.memoId, teamId: pp.teamId }
+              : null
+          return { content: parsed.content, extras, pendingPublish }
         }
       } catch {
         // JSON ではない本文
       }
     }
-    return { content: raw, extras: null }
+    return { content: raw, extras: null, pendingPublish: null }
   }
 }
 
@@ -275,13 +289,14 @@ export const useActionMemoStore = defineStore('actionMemo', {
     async flushOfflineQueue(): Promise<number> {
       const queue = useOfflineQueue()
       const api = useActionMemoApi()
-      let publishFailed = false
+      const kept: { v: { error: string | null; lastError: ActionMemoErrorCode | null } | null } = { v: null }
       const results = await queue.flushQueue(async (payload, queued) => {
         try {
           // 公開のみ項目: 作成済みメモは再作成せず publish-to-team だけ再試行する
           if (queued?.publishOnlyMemoId != null && queued.publishTeamId != null) {
             const ok = await this.publishToTeam(queued.publishOnlyMemoId, { teamId: queued.publishTeamId })
-            if (!ok) publishFailed = true
+            // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
+            if (!ok) kept.v = { error: this.error, lastError: this.lastError }
             return ok ? { id: queued.publishOnlyMemoId } : null
           }
           const created = await api.createMemo(payload)
@@ -290,7 +305,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
           if (queued?.publishTeamId != null) {
             const ok = await this.publishToTeam(created.id, { teamId: queued.publishTeamId })
             if (!ok) {
-              publishFailed = true
+              kept.v = { error: this.error, lastError: this.lastError }
               await queue.enqueuePublishOnly(created.id, queued.publishTeamId)
             }
           }
@@ -304,14 +319,13 @@ export const useActionMemoStore = defineStore('actionMemo', {
       // （flushQueue の返す createdId だけでは、並列送信された別デバイスのメモや
       //  同日の並び順を正しく反映できないため）
       // fetchMemosForDate が error を消すため、公開失敗のエラーは退避して復元する
-      const keptError = publishFailed ? { error: this.error, lastError: this.lastError } : null
       if (results.length > 0) {
         const targetDate = results[0]?.queued.payload.memoDate ?? today()
         await this.fetchMemosForDate(targetDate)
       }
-      if (keptError) {
-        this.error = keptError.error
-        this.lastError = keptError.lastError
+      if (kept.v) {
+        this.error = kept.v.error
+        this.lastError = kept.v.lastError
       }
       this.offlineQueueCount = await queue.count()
       this.isOffline = this._isOffline()
@@ -675,14 +689,24 @@ export const useActionMemoStore = defineStore('actionMemo', {
       return readDraft(userId).extras
     },
 
-    /** localStorage に下書きを保存（extras があれば選択値も一緒に保存する） */
-    saveDraft(userId: number | string, content: string, extras?: ActionMemoInputExtras): void {
+    /** 作成済みだが公開に失敗したメモ（画面を離れて戻っても重複作成せず公開だけ再試行するため下書きに持つ）。無ければ null */
+    loadDraftPendingPublish(userId: number | string): DraftPendingPublish | null {
+      return readDraft(userId).pendingPublish
+    },
+
+    /** localStorage に下書きを保存（extras があれば選択値も、pendingPublish があれば公開待ちも一緒に保存する） */
+    saveDraft(
+      userId: number | string,
+      content: string,
+      extras?: ActionMemoInputExtras,
+      pendingPublish?: DraftPendingPublish | null,
+    ): void {
       if (typeof window === 'undefined') return
       try {
         if (content && content.length > 0) {
           localStorage.setItem(
             draftKey(userId),
-            extras ? JSON.stringify({ v: 1, content, extras }) : content,
+            extras ? JSON.stringify({ v: 1, content, extras, pendingPublish: pendingPublish ?? undefined }) : content,
           )
         } else {
           localStorage.removeItem(draftKey(userId))

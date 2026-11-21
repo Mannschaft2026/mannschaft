@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ActionMemo, ActionMemoInputExtras, Mood } from '~/types/actionMemo'
+import type { ActionMemoInputExtras, Mood } from '~/types/actionMemo'
 
 /**
  * F02.5 行動メモ入力フォーム。
@@ -21,7 +21,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  created: [memo: ActionMemo]
+  created: [memoId: number]
   /** 下書きと一緒に保存されていた選択値（カテゴリ・投稿先・所要時間など）を復元したとき */
   'draft-restored': [extras: ActionMemoInputExtras]
 }>()
@@ -40,7 +40,12 @@ const submitting = ref(false)
 const draftSaveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const draftSavedFlash = ref(false)
 // 作成済みだが公開に失敗したメモ。再送信は作成せず公開だけ再試行する（入力は保持）
-const pendingPublish = ref<{ memo: ActionMemo; teamId: number; content: string } | null>(null)
+// 下書きにも保存し、画面を離れて戻っても重複作成せず公開だけ再試行できるようにする
+const pendingPublish = ref<{ memoId: number; teamId: number; content: string } | null>(null)
+
+function pendingForDraft() {
+  return pendingPublish.value ? { memoId: pendingPublish.value.memoId, teamId: pendingPublish.value.teamId } : null
+}
 
 const userId = computed<number | string>(() => auth.user?.id ?? 'anon')
 
@@ -56,6 +61,8 @@ onMounted(() => {
     content.value = draft
     const savedExtras = store.loadDraftExtras(userId.value)
     if (savedExtras) emit('draft-restored', savedExtras)
+    const pp = store.loadDraftPendingPublish(userId.value)
+    if (pp) pendingPublish.value = { memoId: pp.memoId, teamId: pp.teamId, content: draft }
   }
 })
 
@@ -66,7 +73,7 @@ watch([content, () => props.extras], ([next]) => {
   if (pendingPublish.value && next !== pendingPublish.value.content) pendingPublish.value = null
   if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value)
   draftSaveTimer.value = setTimeout(() => {
-    store.saveDraft(userId.value, content.value, props.extras)
+    store.saveDraft(userId.value, content.value, props.extras, pendingForDraft())
     if (next.length > 0) {
       draftSavedFlash.value = true
       setTimeout(() => (draftSavedFlash.value = false), 1500)
@@ -80,8 +87,8 @@ onBeforeUnmount(() => {
 })
 
 // === 送信処理 ===
-function resetAfterSuccess(created: ActionMemo) {
-  emit('created', created)
+function resetAfterSuccess(memoId: number) {
+  emit('created', memoId)
   // 成功 → 入力欄クリア + mood + タグ リセット
   content.value = ''
   mood.value = null
@@ -97,8 +104,8 @@ async function submit() {
     // 公開だけ失敗している場合は、メモを再作成せず公開のみ再試行する
     const pending = pendingPublish.value
     if (pending) {
-      if (await store.publishToTeam(pending.memo.id, { teamId: pending.teamId })) {
-        resetAfterSuccess(pending.memo)
+      if (await store.publishToTeam(pending.memoId, { teamId: pending.teamId })) {
+        resetAfterSuccess(pending.memoId)
       }
       return
     }
@@ -125,11 +132,13 @@ async function submit() {
     if (publishTeamId != null && created.id > 0) {
       const memoContent = content.value
       if (!(await store.publishToTeam(created.id, { teamId: publishTeamId }))) {
-        pendingPublish.value = { memo: created, teamId: publishTeamId, content: memoContent }
+        pendingPublish.value = { memoId: created.id, teamId: publishTeamId, content: memoContent }
+        // 即時に下書きへ保存（debounce を待たずに画面を離れても、再送信で重複作成させない）
+        store.saveDraft(userId.value, memoContent, props.extras, pendingForDraft())
         return
       }
     }
-    resetAfterSuccess(created)
+    resetAfterSuccess(created.id)
   } finally {
     submitting.value = false
   }

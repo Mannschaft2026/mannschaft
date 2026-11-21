@@ -81,8 +81,7 @@ function onMemoCreated() {
 let draftExtrasRestored = false
 let restoredTeamId: number | null = null
 
-function onDraftRestored(extras: ActionMemoInputExtras) {
-  draftExtrasRestored = true
+function onDraftRestored(extras: ActionMemoInputExtras) {  draftExtrasRestored = true
   if (extras.category) selectedCategory.value = extras.category
   selectedDuration.value = extras.durationMinutes ?? null
   selectedProgressRate.value = extras.progressRate ?? null
@@ -110,7 +109,8 @@ watch(
   () => store.settings,
   (s) => {
     if (!draftExtrasRestored) selectedCategory.value = s.defaultCategory ?? 'OTHER'
-    if (selectedTeamId.value === null) {
+    // 下書き復元済みなら、明示的な「投稿なし」(null) も既定チームで上書きしない
+    if (selectedTeamId.value === null && !draftExtrasRestored) {
       selectedTeamId.value = s.defaultPostTeamId ?? null
     }
   },

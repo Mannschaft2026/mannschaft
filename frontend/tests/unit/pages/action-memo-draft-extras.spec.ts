@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
@@ -59,6 +59,12 @@ const created = {
   orgVisibility: null,
 }
 
+// 前のテストの Input が残ると、下書き保存の debounce タイマーが次のテストの下書きを書き換える
+const mounted: Array<{ unmount: () => void }> = []
+afterEach(() => {
+  while (mounted.length > 0) mounted.pop()!.unmount()
+})
+
 beforeEach(() => {
   setActivePinia(createPinia())
   for (const fn of Object.values(apiMock)) fn.mockReset()
@@ -81,6 +87,7 @@ beforeEach(() => {
 async function mountPage() {
   const w = await mountSuspended(ActionMemoPage)
   await flushPromises()
+  mounted.push(w)
   return w
 }
 
@@ -127,6 +134,13 @@ describe('下書きに選択値も保存・復元する', () => {
       reminderEnabled: false,
       reminderTime: null,
     })
+    // 1 件だけだと TeamPostSwitch が自動選択する（別機構）ため、2 件で既定チームの上書きだけを検証する
+    apiMock.fetchAvailableTeams.mockResolvedValue([
+      { id: 7, name: 'チームA', isDefault: true },
+      { id: 8, name: 'チームB', isDefault: false },
+    ])
+    // mountSuspended は Nuxt アプリの pinia を使うため、前のテストの投稿先候補(1件)が残り得る。空にして切り離す
+    useActionMemoStore(useNuxtApp().$pinia).availableTeams = []
     window.localStorage.setItem(
       KEY,
       JSON.stringify({ v: 1, content: '非公開のつもり', extras: { category: 'WORK', teamId: null } }),
