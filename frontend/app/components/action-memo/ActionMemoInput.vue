@@ -24,6 +24,8 @@ const emit = defineEmits<{
   created: [memoId: number]
   /** 下書きと一緒に保存されていた選択値（カテゴリ・投稿先・所要時間など）を復元したとき */
   'draft-restored': [extras: ActionMemoInputExtras]
+  /** 公開待ち（メモは保存済みで公開だけ失敗）の状態が変わったとき。page が選択欄をロックする */
+  'pending-change': [pending: boolean]
 }>()
 
 const store = useActionMemoStore()
@@ -39,7 +41,8 @@ const selectedTagIds = ref<number[]>([])
 const submitting = ref(false)
 const draftSaveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const draftSavedFlash = ref(false)
-// 作成済みだが公開に失敗したメモ。再送信は作成せず公開だけ再試行する（入力は保持）
+// 作成済みだが公開に失敗したメモ。再送信は作成せず公開だけ再試行する。
+// 公開待ちの間は本文・選択欄をロックして（page 側へ pending-change で通知）、再試行先がずれないようにする。
 // 下書きにも保存し、画面を離れて戻っても重複作成せず公開だけ再試行できるようにする
 const pendingPublish = ref<{ memoId: number; teamId: number; content: string } | null>(null)
 
@@ -53,6 +56,18 @@ const charCount = computed(() => content.value.length)
 const tooLong = computed(() => charCount.value > MAX_LENGTH)
 const isEmpty = computed(() => content.value.trim().length === 0)
 const canSubmit = computed(() => !isEmpty.value && !tooLong.value && !submitting.value)
+
+watch(
+  () => pendingPublish.value !== null,
+  (pending) => emit('pending-change', pending),
+  { immediate: true },
+)
+
+// 公開をあきらめる: メモは保存済みのまま、入力と下書きだけ片付ける
+function giveUpPublish() {
+  const pending = pendingPublish.value
+  if (pending) resetAfterSuccess(pending.memoId)
+}
 
 // === 下書きの復元 ===
 onMounted(() => {
@@ -69,8 +84,6 @@ onMounted(() => {
 // === 下書きの自動保存 (debounce 1秒) ===
 // 本文の変更に加え、画面側の選択値の変更も下書きへ反映する（選択値は送信対象のため一緒に保存）
 watch([content, () => props.extras], ([next]) => {
-  // 公開待ちのメモとは別の内容に編集されたら、再試行状態は破棄する（新規メモとして扱う）
-  if (pendingPublish.value && next !== pendingPublish.value.content) pendingPublish.value = null
   if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value)
   draftSaveTimer.value = setTimeout(() => {
     store.saveDraft(userId.value, content.value, props.extras, pendingForDraft())
@@ -165,6 +178,8 @@ function onKeydown(event: KeyboardEvent) {
         data-testid="action-memo-input-textarea"
         :placeholder="t('action_memo.input.placeholder')"
         rows="3"
+        :readonly="submitting"
+        :disabled="pendingPublish !== null"
         class="w-full resize-y rounded-lg border border-surface-200 bg-transparent p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:border-surface-700"
         @keydown="onKeydown"
       />
@@ -197,6 +212,14 @@ function onKeydown(event: KeyboardEvent) {
             data-testid="action-memo-input-publish-failed"
           >
             {{ t('action_memo.input.publish_failed') }}
+            <button
+              type="button"
+              class="ml-1 underline"
+              data-testid="action-memo-input-publish-giveup"
+              @click="giveUpPublish"
+            >
+              {{ t('action_memo.input.publish_giveup') }}
+            </button>
           </span>
           <span
             v-if="draftSavedFlash"

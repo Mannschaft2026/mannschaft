@@ -59,7 +59,8 @@
       "draft_saved": "Borrador guardado",
       "char_count": "{count} / 5000",
       "shift_enter_hint": "Enter para enviar / Shift+Enter para nueva línea",
-      "publish_failed": "La nota se guardó, pero falló la publicación en el equipo. Pulsa enviar de nuevo para reintentar solo la publicación"
+      "publish_failed": "La nota se guardó, pero falló la publicación en el equipo. Pulsa enviar de nuevo para reintentar solo la publicación",
+      "publish_giveup": "Cerrar sin publicar"
     },
     "card": {
       "edit": "Editar",

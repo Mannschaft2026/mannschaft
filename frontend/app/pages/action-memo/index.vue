@@ -77,6 +77,8 @@ function onMemoCreated() {
   selectedCompletesTodo.value = false
 }
 
+const publishPending = ref(false)
+
 // 下書きから復元した選択値。設定取得（既定カテゴリの反映）で上書きされないよう印を付ける
 let draftExtrasRestored = false
 let restoredTeamId: number | null = null
@@ -128,14 +130,15 @@ onMounted(async () => {
     selectedDate.value = dayjs(queryDate).toDate()
   }
 
-  await Promise.all([
+  const [, , teamsLoaded] = await Promise.all([
     store.fetchSettings(),
     store.fetchMemosForDate(selectedDateStr.value),
     store.fetchAvailableTeams(),
     store.fetchAvailableOrgs(),
   ])
-  // 復元した投稿先が現在の選択肢に無ければ捨てる（他ユーザー・脱退済みチームへの誤投稿防止）
-  if (restoredTeamId !== null && !store.availableTeams.some((team) => team.id === restoredTeamId)) {
+  // 復元した投稿先が現在の選択肢に無ければ捨てる（他ユーザー・脱退済みチームへの誤投稿防止）。
+  // 取得に失敗したときは「所属なし」と区別できないため判定せず保持する（FRONTEND_CODING_CONVENTION: 取得失敗と0件の区別）
+  if (teamsLoaded && restoredTeamId !== null && !store.availableTeams.some((team) => team.id === restoredTeamId)) {
     selectedTeamId.value = null
   }
   await store.refreshOfflineQueueCount()
@@ -274,7 +277,19 @@ function goTags() {
         {{ t(store.error) }}
       </div>
 
-      <ActionMemoInput :extras="inputExtras" @created="onMemoCreated" @draft-restored="onDraftRestored" />
+      <ActionMemoInput
+        :extras="inputExtras"
+        @created="onMemoCreated"
+        @draft-restored="onDraftRestored"
+        @pending-change="publishPending = $event"
+      />
+
+      <!-- 公開待ち（メモ保存済み・チーム投稿だけ失敗）の間は選択欄をロックし、再試行先がずれないようにする -->
+      <fieldset
+        :disabled="publishPending"
+        class="m-0 flex min-w-0 flex-col gap-3 border-0 p-0"
+        data-testid="action-memo-selectors"
+      >
 
       <!-- Phase 3: カテゴリ選択（常時表示） -->
       <div class="flex flex-wrap items-center gap-2 px-1">
@@ -357,6 +372,7 @@ function goTags() {
           </div>
         </div>
       </details>
+      </fieldset>
 
       <!-- 気分集計（mood_enabled = true の場合のみ表示） -->
       <MoodChart

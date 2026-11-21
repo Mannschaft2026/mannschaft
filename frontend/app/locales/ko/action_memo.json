@@ -59,7 +59,8 @@
       "draft_saved": "임시 저장됨",
       "char_count": "{count} / 5000",
       "shift_enter_hint": "Enter로 전송 / Shift+Enter로 줄바꿈",
-      "publish_failed": "메모는 저장되었지만 팀 게시에 실패했습니다. 다시 전송을 누르면 게시만 재시도합니다"
+      "publish_failed": "메모는 저장되었지만 팀 게시에 실패했습니다. 다시 전송을 누르면 게시만 재시도합니다",
+      "publish_giveup": "게시하지 않고 닫기"
     },
     "card": {
       "edit": "편집",

@@ -306,7 +306,12 @@ export const useActionMemoStore = defineStore('actionMemo', {
             const ok = await this.publishToTeam(created.id, { teamId: queued.publishTeamId })
             if (!ok) {
               kept.v = { error: this.error, lastError: this.lastError }
-              await queue.enqueuePublishOnly(created.id, queued.publishTeamId)
+              try {
+                await queue.enqueuePublishOnly(created.id, queued.publishTeamId)
+              } catch {
+                // 公開のみ項目を永続化できなくても作成は成立済み。再作成を避けるため完了扱いとし、
+                // 公開失敗は error として残す（kept で最後に復元）
+              }
             }
           }
           return created
@@ -602,14 +607,16 @@ export const useActionMemoStore = defineStore('actionMemo', {
      * チーム投稿先候補を取得する。
      * {@code GET /api/v1/action-memos/available-teams}
      */
-    async fetchAvailableTeams(): Promise<void> {
+    async fetchAvailableTeams(): Promise<boolean> {
       this.error = null
       this.lastError = null
       try {
         const api = useActionMemoApi()
         this.availableTeams = await api.fetchAvailableTeams()
+        return true
       } catch (error) {
         this._handleError(error)
+        return false
       }
     },
 

@@ -59,7 +59,8 @@
       "draft_saved": "Draft saved automatically",
       "char_count": "{count} / 5000",
       "shift_enter_hint": "Enter to submit / Shift+Enter for newline",
-      "publish_failed": "The memo was saved, but posting to the team failed. Press Submit again to retry posting only"
+      "publish_failed": "The memo was saved, but posting to the team failed. Press Submit again to retry posting only",
+      "publish_giveup": "Close without posting"
     },
     "card": {
       "edit": "Edit",
