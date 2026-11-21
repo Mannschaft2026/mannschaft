@@ -517,6 +517,111 @@ class CiShardWorkflowStaticTest(unittest.TestCase):
             self.assertIn(f"needs.detect.outputs.{key}", gate, f"gate が {key} の outcome を検査すること")
 
 
+def find_bash():
+    """bash を探す。Windows では WSL の System32\\bash.exe を避け Git for Windows の bash を優先する。"""
+    import os
+    import shutil
+    candidates = [os.environ.get("BASH")]
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramW6432"), os.environ.get("ProgramFiles(x86)")):
+        if base:
+            candidates.append(str(Path(base) / "Git" / "bin" / "bash.exe"))
+    candidates.append(shutil.which("bash"))
+    for c in candidates:
+        if c and Path(c).exists() and "system32" not in c.lower():
+            return c
+    return None
+
+
+def load_gate_step():
+    """backend-ci.yml の gate ジョブの判定 step から (run スクリプト, env キー一覧) を返す。"""
+    import re
+    text = (WORKFLOWS_DIR / "backend-ci.yml").read_text(encoding="utf-8")
+    try:
+        import yaml
+    except ImportError:
+        yaml = None
+    if yaml is not None:
+        steps = yaml.safe_load(text)["jobs"]["gate"]["steps"]
+        step = next(s for s in steps if "run" in s and "env" in s)
+        return step["run"], list(step["env"].keys())
+    # PyYAML が無い環境向けの素朴な抽出（job_block の行構造に依拠）
+    lines = job_block("backend-ci.yml", "gate").splitlines()
+    env_at = next(i for i, l in enumerate(lines) if l.strip() == "env:")
+    keys = []
+    for l in lines[env_at + 1:]:
+        m = re.match(r"^ {10}([A-Z0-9_]+):", l)
+        if m:
+            keys.append(m.group(1))
+        elif l.strip() and not l.strip().startswith("#"):
+            break
+    run_at = next(i for i, l in enumerate(lines) if l.strip() == "run: |")
+    body = []
+    for l in lines[run_at + 1:]:
+        if l.strip() and not l.startswith(" " * 10):
+            break
+        body.append(l[10:])
+    return "\n".join(body), keys
+
+
+class GateJudgementExecutionTest(unittest.TestCase):
+    """gate ジョブの判定 run スクリプトを bash で実際に実行し、終了コードで合否を検証する。"""
+
+    COLOCATED = ["D5_LINT_OUTCOME", "REGEN_TEST_OUTCOME", "BUILD_LOGIC_TEST_OUTCOME", "SHARD_COVERAGE_OUTCOME"]
+    ALL_SUCCESS = {
+        "DETECT_RESULT": "success", "CHANGED": "true", "SHARD_RESULT": "success", "NON_JST_RESULT": "success",
+        "ARCH_TEST_RESULT": "success", "D5_LINT_OUTCOME": "success", "REGEN_TEST_OUTCOME": "success",
+        "BUILD_LOGIC_TEST_OUTCOME": "success", "SHARD_COVERAGE_OUTCOME": "success",
+    }
+    BAD = ["failure", "cancelled", "skipped", ""]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.script, cls.keys = load_gate_step()
+        cls.bash = find_bash()
+        if cls.bash is None:
+            raise AssertionError("bash が見つからない。gate 判定の実行検証は skip せず失敗とする（CI では必ず実行する）")
+
+    def run_gate(self, **overrides):
+        import os
+        import subprocess
+        values = dict(self.ALL_SUCCESS)
+        values.update(overrides)
+        self.assertEqual(set(values), set(self.keys), "step の env キーとテスト値のキーが一致すること（キー追加時はここも更新）")
+        env = dict(os.environ)
+        env.update(values)
+        env["GITHUB_OUTPUT"] = os.devnull
+        return subprocess.run([self.bash, "-c", self.script], env=env, capture_output=True, timeout=60).returncode
+
+    def test_all_success_passes(self):
+        self.assertEqual(self.run_gate(), 0)
+
+    def test_backend_unchanged_passes_with_skipped_checks(self):
+        skipped = {k: "skipped" for k in self.COLOCATED}
+        skipped.update(SHARD_RESULT="skipped", NON_JST_RESULT="skipped", ARCH_TEST_RESULT="skipped", CHANGED="false")
+        self.assertEqual(self.run_gate(**skipped), 0)
+
+    def test_detect_not_success_fails(self):
+        for result in self.BAD:
+            for changed in ("true", "false", ""):
+                with self.subTest(detect=result, changed=changed):
+                    self.assertNotEqual(self.run_gate(DETECT_RESULT=result, CHANGED=changed), 0)
+
+    def test_backend_changed_empty_fails(self):
+        self.assertNotEqual(self.run_gate(CHANGED=""), 0)
+
+    def test_each_colocated_outcome_not_success_fails(self):
+        for key in self.COLOCATED:
+            for bad in self.BAD:
+                with self.subTest(key=key, value=bad):
+                    self.assertNotEqual(self.run_gate(**{key: bad}), 0)
+
+    def test_each_job_result_not_success_fails_when_backend_changed(self):
+        for key in ("SHARD_RESULT", "NON_JST_RESULT", "ARCH_TEST_RESULT"):
+            for bad in ("failure", "cancelled", "skipped"):
+                with self.subTest(key=key, value=bad):
+                    self.assertNotEqual(self.run_gate(**{key: bad}), 0)
+
+
 # ---------------------------------------------------------------------------
 # CMP-261111-0508 試練（甲）K-7: regen 互換。
 # runtime-diag artifact に context-progress.log（[ci-ctx] 行）が入っても regen が通り、
