@@ -492,14 +492,29 @@ class CiShardWorkflowStaticTest(unittest.TestCase):
         self.assertIn("    name: Compile & Test", job_block("backend-ci.yml", "gate"))
 
     def test_ac11_build_logic_unit_tests_are_configured_and_run_in_shard_coverage_guard(self):
+        # CMP-261120-1301 PR-B: shard-coverage-guard / lint は独立ジョブをやめ detect ジョブの step へ同居した。
         import re
         build = (BUILD_LOGIC / "build.gradle.kts").read_text(encoding="utf-8")
         self.assertIn("useJUnitPlatform()", build)
         self.assertTrue(list((BUILD_LOGIC / "src" / "test" / "kotlin").glob("*Test.kt")), "build-logic の単体テストが存在すること")
-        guard = job_block("backend-ci.yml", "shard-coverage-guard")
+        guard = job_block("backend-ci.yml", "detect")
         self.assertRegex(guard, r"gradlew\b[^\n]*(?:-p\s+build-logic\b[^\n]*\btest\b|:(?:mannschaft-)?build-logic:test\b)",
-                         "shard-coverage-guard ジョブで build-logic の test タスクを実行すること")
-        self.assertIn("    needs: detect", guard)
+                         "detect ジョブ（同居した shard-coverage-guard）で build-logic の test タスクを実行すること")
+        self.assertIn("verifyShardCoverage", guard)
+        self.assertIn("test_regen_shard_weights.py", guard)
+
+    def test_cmp_261120_1301_colocated_checks_are_steps_of_detect_and_gate_requires_their_outcomes(self):
+        text = (WORKFLOWS_DIR / "backend-ci.yml").read_text(encoding="utf-8")
+        for removed in ("  lint:", "  shard-coverage-guard:"):
+            self.assertNotIn(removed, text.splitlines(), f"独立ジョブ {removed} は残さない（同居済み）")
+        gate = job_block("backend-ci.yml", "gate")
+        self.assertNotRegex(gate, r"needs:[^\n]*\b(lint|shard-coverage-guard)\b", "gate の needs から外すこと")
+        detect = job_block("backend-ci.yml", "detect")
+        self.assertIn("timeout-minutes: 20", detect)
+        self.assertNotIn("continue-on-error", detect, "同居 step に continue-on-error は使わない")
+        for key in ("d5_lint", "regen_test", "build_logic_test", "shard_coverage"):
+            self.assertIn(f"steps.{key}.outcome", detect, f"detect の outputs に {key} の outcome を出すこと")
+            self.assertIn(f"needs.detect.outputs.{key}", gate, f"gate が {key} の outcome を検査すること")
 
 
 # ---------------------------------------------------------------------------
