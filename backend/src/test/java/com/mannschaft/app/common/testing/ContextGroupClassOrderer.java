@@ -131,7 +131,8 @@ public final class ContextGroupClassOrderer implements ClassOrderer {
         }
     }
 
-    private static boolean usesSpringExtension(Class<?> type) {
+    /** Spring の拡張（SpringExtension）を使うクラスか。ContextOverrideCensus も同じ判定を使う（パッケージ内公開）。 */
+    static boolean usesSpringExtension(Class<?> type) {
         // @Nested クラスは enclosing class の拡張（SpringExtension）を JUnit が継承するので、外側も辿る。
         for (Class<?> current = type; current != null; current = current.getEnclosingClass()) {
             boolean spring = MergedAnnotations.from(current, SearchStrategy.TYPE_HIERARCHY).stream(ExtendWith.class)

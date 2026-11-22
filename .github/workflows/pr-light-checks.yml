@@ -1,0 +1,332 @@
+# =============================================================================
+# 軽量 PR 検査（1ジョブ統合） — CMP-261120-1301
+# =============================================================================
+# 目的:
+# CI の遅さの主因は、GitHub ランナーの順番待ち（実行数秒のジョブが 30〜100 分待つ）である。
+# 待ち行列に並ぶジョブ本数を減らすため、実行が軽い PR 時検査を **1ジョブ** にまとめた。
+# 以前は次の4 workflow（計 7 ジョブ）が別々にランナーを取り合っていた:
+#   - harness-ci.yml                （Harness CI）
+#   - worktree-cleanup.yml          （Worktree cleanup guard）
+#   - frontend-lockfile-verify.yml  （FE lockfile 検証: 変更検出 / 内容検査 / glibc / musl）
+#   - secret-scan.yml の PR 差分スキャン
+# 検査の中身・バージョン固定・起動範囲は従来のまま（弱めていない）。
+#
+# 起動範囲（従来と同一）:
+#   - 秘密情報スキャン（gitleaks）: 全 PR
+#   - Harness / Worktree guard / FE lockfile: main 向け PR のみ（それ以外は step を skip し、ジョブは成功）
+#   - FE lockfile の重い検査は frontend/package-lock.json か frontend/package.json に変更があるときだけ
+#   paths フィルタを使わない理由は docs/development/ci_required_check_paths_filter_trap.md を参照。
+#
+# 失敗の扱い:
+#   各 step は !cancelled() 付きで、1つ失敗しても残りを走らせる。失敗した step があればジョブは赤になる
+#   （skip が緑に化けることはない）。lockfile 変更判定 step が失敗した場合は、後続を「変更なし」と
+#   見なさず、判定 step 自身が赤のままジョブを失敗させる。
+#
+# 残した workflow:
+#   - secret-scan.yml: main push 差分スキャンと週次の全履歴スキャン（PR 起動のみ外した）
+#   - harness-ci.yml / worktree-cleanup.yml / frontend-lockfile-verify.yml は PR 以外の trigger が
+#     無かったため削除した（二重に走らせない）。
+#
+# 権限: read のみ。pull_request_target は使わない（fork からの PR でも secrets 無しで完走する）。
+# concurrency: 検査は打ち切らない（cancel-in-progress: false）。過去に「cancel-in-progress で
+# 常に打ち切られ、緑の実績がゼロなのに誰も気づかない」事故があるため（secret-scan.yml と同方針）。
+# 仕様差: 秘密情報スキャンは、後続の push（force push を含む）で範囲から外れうるコミットも走査し切るため、
+# 従来から走りかけを捨てない方針。統合ジョブはこれに合わせた。旧 Harness / Worktree guard / lockfile 検証は
+# cancel-in-progress: true だったので、連続 push 時は古い run も最後まで走る点が変わる（1 run は数分）。
+# =============================================================================
+
+name: PR 軽量検査
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: pr-light-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  # 殿の実測環境（8.28.0）に合わせて固定する（secret-scan.yml と同じ版。latest は使わない）。
+  GITLEAKS_VERSION: "8.28.0"
+
+jobs:
+  light-checks:
+    name: PR 軽量検査
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # 全検査が使う唯一の checkout。lockfile の base 比較と gitleaks の範囲指定が全履歴を要するため
+      # fetch-depth: 0 に揃える（Harness / Worktree guard は従来の浅い checkout でも同じ結果になる）。
+      - name: Checkout PR merge result（履歴を含めて取得）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -----------------------------------------------------------------------
+      # Harness CI（main 向け PR のみ。Node 24）
+      # -----------------------------------------------------------------------
+      - name: "[Harness] Node.js 24"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: "[Harness] harness と guard coverage の試験"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        timeout-minutes: 15
+        run: >-
+          node --test
+          scripts/harness-doctor.test.mjs
+          scripts/harness-benchmark.test.mjs
+          scripts/completion-evidence.test.mjs
+          scripts/guard-coverage.test.mjs
+          scripts/boundary-coordination.test.mjs
+          scripts/unicode-checkout.test.mjs
+          scripts/openapi-preflight.test.mjs
+          scripts/worktree-sparse-paths.test.mjs
+          frontend/scripts/lib/sparse-assets.test.mjs
+          frontend/scripts/verify-ranch-sparse.test.mjs
+          scripts/task-list-structure-check.test.mjs
+          scripts/task-list-pr-gate-workflow.test.mjs
+          scripts/detect-changed-files.test.mjs
+          scripts/ci-merge-group-workflows.test.mjs
+          scripts/ci-change-detection-steps.test.mjs
+
+      - name: "[Harness] worktree sparse paths の一覧検査"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node scripts/worktree-sparse-paths.mjs --check --require-configured
+
+      # -----------------------------------------------------------------------
+      # Worktree cleanup guard（main 向け PR のみ。Node 22）
+      # -----------------------------------------------------------------------
+      - name: "[Worktree guard] Node.js 22"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: "[Worktree guard] Verify script syntax"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node --check scripts/worktree-cleanup.mjs
+
+      - name: "[Worktree guard] Run safety fixtures"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node --test scripts/worktree-cleanup.test.mjs
+
+      - name: "[Worktree guard] Verify verification runner syntax"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node --check scripts/verification-run.mjs
+
+      - name: "[Worktree guard] Verify Linux copy lifecycle"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node --test scripts/verification-run.test.mjs
+
+      - name: "[Worktree guard] Verify worktree assets script syntax"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node --check scripts/worktree-assets.mjs
+
+      - name: "[Worktree guard] Run worktree assets fixtures"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        run: node --test scripts/worktree-assets.test.mjs
+
+      # -----------------------------------------------------------------------
+      # 秘密情報スキャン（gitleaks）PR 差分（全 PR が対象）
+      # バイナリ・レポートをワークスペース直下に置くため、Harness / Worktree guard の後に走らせる。
+      # -----------------------------------------------------------------------
+      - name: "[gitleaks] バイナリを取得"
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          curl -sSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+          ./gitleaks version
+
+      - name: "[gitleaks] 秘密情報スキャンの実Git回帰試験"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: python3 scripts/test-secret-scan.py ./gitleaks
+
+      - name: "[gitleaks] 走査範囲を決定（ベース〜HEAD 差分）"
+        if: ${{ !cancelled() }}
+        id: range
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "log_opts=${BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: "[gitleaks] 実行（差分スキャン・ログに秘密を出力しない）"
+        if: ${{ !cancelled() }}
+        id: gitleaks
+        run: |
+          set -euo pipefail
+          # gitleaks 8.28.0はgit logの不正revisionを成功扱いするため、範囲だけを先に検証する。
+          git log --format= --max-count=0 "${{ steps.range.outputs.log_opts }}" > /dev/null
+          mkdir -p reports
+          ./gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --log-opts="--diff-merges=first-parent ${{ steps.range.outputs.log_opts }}" \
+            --redact \
+            --report-format sarif \
+            --report-path reports/gitleaks-diff.sarif \
+            --exit-code 1 \
+            --verbose
+
+      - name: "[gitleaks] スキャンレポートをアップロード"
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gitleaks-diff-report-${{ github.run_number }}
+          path: reports/gitleaks-diff.sarif
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # -----------------------------------------------------------------------
+      # FE lockfile 検証（CMP-260822-1006。main 向け PR で lockfile / package.json に変更があるときだけ）
+      # -----------------------------------------------------------------------
+      # 経緯:
+      # 開発機は Node 24 / npm 11、CI と本番 Docker は Node 22 / npm 10 で2メジャー離れていた。
+      # この状態で Windows の npm 11 が package-lock.json を再生成すると、**Linux 用の optional 依存が
+      # 静かに削られる**（実測 79 箇所）。Windows 上では検知できず、実際に FE の本番ビルドが壊れた。
+      # 固定はあくまで宣言であり、誤った環境で再生成された lockfile の混入は防げない。そこで
+      # 実際に Linux で npm ci が通るかを機械的に確かめる。
+      #
+      # glibc（ubuntu）と musl（alpine）の両方を回す理由:
+      # 本番コンテナは alpine（musl）で動く。glibc だけ通しても musl 用の optional 依存の欠落は捕まらない。
+      # 従来は別ランナーだったが、同一ジョブでは musl を先に docker run（本番 Dockerfile と同じ固定イメージ）で
+      # 実行し、git clean で node_modules 等を消してから glibc を実行する（成果物を混用しない）。
+      - name: "[lockfile] lockfile 変更の有無を判定"
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        id: lockfile_detect
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          base="$(git merge-base "origin/${BASE_REF}" HEAD)"
+          # git diff の失敗（不正 revision 等）を「変更なし」に化けさせないため、単独代入で受けて set -e で落とす
+          changed_files="$(git diff --name-only "$base" HEAD -- frontend/package-lock.json frontend/package.json)"
+          if [ -n "$changed_files" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "lockfile / package.json に変更あり → 検証する"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "lockfile に変更なし → 検証をスキップ（ジョブは成功で抜ける）"
+          fi
+
+      # lockfile そのものの中身を、**base ブランチのものと突き合わせて**検査する。
+      #
+      # なぜ「0件チェック」では駄目か（実測に基づく）:
+      # 実際に事故を起こした破損版 lockfile を検体として測ったところ、
+      #   健全版: optional=244 linux=118 musl=42
+      #   破損版: optional=199 linux=94  musl=33
+      # と、**ゼロにはならなかった**。破損は「ネストされた依存ツリーの Linux バイナリ
+      # 一式が丸ごと落ちる」形で起き（@dxup/nuxt/node_modules/@oxc-parser/binding-linux-*
+      # など計45件）、トップレベルの分は残るためである。
+      # したがって絶対数を見る門番は本物の事故を素通りさせる。base との差分で判定する。
+      #
+      # 依存を意図的に減らした場合もここで止まるが、その場合はログに出る欠落一覧を見て
+      # 意図どおりであることを確認した上で、PR の説明にその旨を書いてから
+      # ALLOW_LOCKFILE_SHRINK ラベルを付けて再実行すればよい。
+      - name: "[lockfile] Node.js 22.23.2"
+        if: ${{ !cancelled() && github.base_ref == 'main' && steps.lockfile_detect.outputs.changed == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+
+      - name: "[lockfile] base の lockfile を取り出す"
+        if: ${{ !cancelled() && github.base_ref == 'main' && steps.lockfile_detect.outputs.changed == 'true' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git show "origin/${BASE_REF}:frontend/package-lock.json" > "$RUNNER_TEMP/base-lock.json"
+          wc -c "$RUNNER_TEMP/base-lock.json"
+
+      - name: "[lockfile] プラットフォーム固有依存が base より減っていないか"
+        if: ${{ !cancelled() && github.base_ref == 'main' && steps.lockfile_detect.outputs.changed == 'true' }}
+        env:
+          # ラベルは **実行時に API から取り直す**。
+          # github.event.pull_request.labels を使ってはならない: 失敗後にラベルを付けて
+          # 「再実行」しても、再実行は元の pull_request イベントペイロードを再利用するため
+          # 後から付けたラベルが反映されず、解除手段が実質存在しなくなる。
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          ALLOW_SHRINK=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq 'any(.[]; .name == "ALLOW_LOCKFILE_SHRINK")')
+          echo "ALLOW_LOCKFILE_SHRINK=${ALLOW_SHRINK}"
+          export ALLOW_SHRINK
+          node -e '
+            const fs = require("fs");
+            const load = (f) => JSON.parse(fs.readFileSync(f, "utf8")).packages || {};
+            const base = load(process.env.RUNNER_TEMP + "/base-lock.json");
+            const head = load("frontend/package-lock.json");
+
+            const isPlatform = (name, meta) =>
+              (meta && Array.isArray(meta.os) && meta.os.includes("linux")) || /musl/.test(name);
+
+            const pick = (pkgs) => new Set(
+              Object.entries(pkgs).filter(([n, m]) => m && typeof m === "object" && isPlatform(n, m)).map(([n]) => n)
+            );
+
+            const b = pick(base), h = pick(head);
+            const missing = [...b].filter((n) => !h.has(n));
+
+            console.log(`base=${b.size} head=${h.size} 欠落=${missing.length}`);
+
+            if (missing.length === 0) {
+              console.log("プラットフォーム固有依存の欠落なし");
+              process.exit(0);
+            }
+
+            console.log("--- base にあって head に無いパッケージ ---");
+            missing.slice(0, 40).forEach((n) => console.log("  " + n));
+            if (missing.length > 40) console.log(`  ... 他 ${missing.length - 40} 件`);
+
+            if (process.env.ALLOW_SHRINK === "true") {
+              console.log("::warning::プラットフォーム固有依存が減っているが ALLOW_LOCKFILE_SHRINK ラベルにより許可された");
+              process.exit(0);
+            }
+
+            console.log("::error::package-lock.json から Linux/musl 向けの依存が " + missing.length +
+              " 件失われている。Windows の npm で再生成していないか確認すること。" +
+              "再生成は必ず Linux で行う: docker run --rm -v \"$PWD\":/w -w /w node:22.23.2-alpine sh -c \"npm install --package-lock-only\"。" +
+              "意図的に依存を減らした場合は、欠落一覧が意図どおりであることを確認のうえ PR に ALLOW_LOCKFILE_SHRINK ラベルを付けて再実行すること。");
+            process.exit(1);
+          '
+
+      # musl（Alpine）。本番コンテナと同じ環境で回す。イメージは frontend/Dockerfile と同じ版に固定する。
+      - name: "[lockfile] npm ci（Alpine / musl）"
+        if: ${{ !cancelled() && github.base_ref == 'main' && steps.lockfile_detect.outputs.changed == 'true' }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -v "$GITHUB_WORKSPACE/frontend":/w \
+            -w /w \
+            node:22.23.2-alpine \
+            sh -c 'node -v && npm -v && npm ci'
+
+      # musl 側の node_modules / .nuxt を消し、glibc 側と成果物を混用しない。
+      - name: "[lockfile] musl の成果物を削除（glibc と混用しない）"
+        if: ${{ !cancelled() && github.base_ref == 'main' && steps.lockfile_detect.outputs.changed == 'true' }}
+        run: |
+          set -euo pipefail
+          git clean -ffdx -- frontend
+          test ! -e frontend/node_modules
+
+      - name: "[lockfile] npm ci（Ubuntu / glibc）"
+        if: ${{ !cancelled() && github.base_ref == 'main' && steps.lockfile_detect.outputs.changed == 'true' }}
+        working-directory: frontend
+        run: |
+          node -v
+          npm -v
+          npm ci

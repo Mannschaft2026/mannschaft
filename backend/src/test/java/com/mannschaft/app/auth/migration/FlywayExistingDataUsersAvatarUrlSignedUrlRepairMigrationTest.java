@@ -24,7 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * <b>CMP-261120-0200 AC4: users.avatar_url の署名付き URL 破損を修復する migration（V264）の既存データ移行の番人テスト。</b>
+ * <b>CMP-261120-0200 AC4: users.avatar_url の署名付き URL 破損を修復する migration（V265）の既存データ移行の番人テスト。</b>
  *
  * <p>最終的に残してよいのは「本人の正規アイコンキー（{@code user/{id}/icon/<ファイル名>}）」だけ。
  * http(s) URL はパス部分がちょうど {@code /<bucket>/<本人の正規キー>}（その後は ? か終端）の場合のみキーを復元し、
@@ -32,15 +32,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 生キー（本人）・NULL の行は不変。VARCHAR(500) ちょうどの行も処理できること。</p>
  *
  * <p>方針は既存の {@code FlywayExistingData*MigrationTest} に倣う（Spring 非起動・Testcontainers MySQL 8.0 へ
- * {@link Flyway} を直接実行。V264 直前まで適用 → 既存行をシード → 残りを適用して検証）。</p>
+ * {@link Flyway} を直接実行。V265 直前まで適用 → 既存行をシード → 残りを適用して検証）。</p>
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @EnabledIf("com.mannschaft.app.auth.migration.FlywayExistingDataUsersAvatarUrlSignedUrlRepairMigrationTest#isDockerAvailable")
-@DisplayName("Flyway 既存データ users.avatar_url 署名付きURL破損の修復（V264）番人テスト")
+@DisplayName("Flyway 既存データ users.avatar_url 署名付きURL破損の修復（V265）番人テスト")
 class FlywayExistingDataUsersAvatarUrlSignedUrlRepairMigrationTest {
 
-    /** V264 の直前バージョン（origin/main 全体最大）。 */
-    private static final String PRE_V264_TARGET = "263.20261118093938";
+    /** V265 の直前バージョン（origin/main 全体最大）。 */
+    private static final String PRE_V265_TARGET = "264.20261120054205";
 
     @SuppressWarnings("resource")
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
@@ -78,8 +78,8 @@ class FlywayExistingDataUsersAvatarUrlSignedUrlRepairMigrationTest {
         MigrateResult pre = Flyway.configure()
                 .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration").outOfOrder(false)
-                .target(MigrationVersion.fromVersion(PRE_V264_TARGET)).load().migrate();
-        assertThat(pre.success).as("V264 直前までの適用が成功すること").isTrue();
+                .target(MigrationVersion.fromVersion(PRE_V265_TARGET)).load().migrate();
+        assertThat(pre.success).as("V265 直前までの適用が成功すること").isTrue();
 
         long signedId; long otherKeyUrlId; long rawOwnId; long nullId; long longId;
         long partialPathId; long queryOnlyId; long foreignRawId; long garbageId; long nestedId;
@@ -131,7 +131,7 @@ class FlywayExistingDataUsersAvatarUrlSignedUrlRepairMigrationTest {
         MigrateResult rest = Flyway.configure()
                 .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration").outOfOrder(false).load().migrate();
-        assertThat(rest.success).as("V264 を含む残りの migration が成功すること").isTrue();
+        assertThat(rest.success).as("V265 を含む残りの migration が成功すること").isTrue();
 
         try (Connection c = conn()) {
             assertThat(avatar(c, signedId)).as("本人キー入りの署名付き URL はキーへ復元").isEqualTo(signedKey);

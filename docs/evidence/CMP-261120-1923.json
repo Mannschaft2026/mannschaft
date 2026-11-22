@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-1923",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4689,
+    "sha": "392f549c47f420dbedfa530930663dcd5988a79b"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "1 MiB超16 MiB未満の有効な台帳の完了遷移を通常CLIで読む",
+      "tests": [
+        {
+          "name": "1MiB超の台帳で有効な完了遷移を通常CLIが受理する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "実Git fixtureでredからgreenを確認し証拠なし完了を拒否",
+      "tests": [
+        {
+          "name": "1MiB超の台帳で有効な完了遷移を通常CLIが受理する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        },
+        {
+          "name": "1MiB超の台帳で証拠なし完了を通常CLIが拒否する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "git showの上限を有限16 MiBとし判定を維持",
+      "tests": [
+        {
+          "name": "16MiBを超える台帳を通常CLIが容量上限で拒否する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        },
+        {
+          "name": "1MiB超の台帳で証拠なし完了を通常CLIが拒否する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "既存テストを含む単体テストを通す",
+      "tests": [
+        {
+          "name": "1MiB超の台帳で有効な完了遷移を通常CLIが受理する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        },
+        {
+          "name": "1MiB超の台帳で証拠なし完了を通常CLIが拒否する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        },
+        {
+          "name": "16MiBを超える台帳を通常CLIが容量上限で拒否する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        },
+        {
+          "name": "JSONの空・null・AC重複・実装SHA差・CI失敗を拒否する",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44783291525
+    },
+    {
+      "runId": 44783287546
+    },
+    {
+      "runId": 44783291358
+    },
+    {
+      "runId": 44783291522
+    },
+    {
+      "runId": 44783291292
+    },
+    {
+      "runId": 44783291419
+    },
+    {
+      "runId": 44783291329
+    },
+    {
+      "runId": 44783291232
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261120-1923-acceptance.md"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CLI内部の読取上限のみの変更で、アプリの画面・APIは対象外"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "アプリの画面導線やユーザー操作を変更しない"
+    }
+  },
+  "regressions": [
+    {
+      "description": "1 MiB超の台帳を通常CLIがENOBUFSで読めない",
+      "test": "1MiB超の台帳で有効な完了遷移を通常CLIが受理する",
+      "redEvidence": "docs/evidence/CMP-261120-1923-acceptance.md",
+      "greenEvidence": "docs/evidence/CMP-261120-1923-acceptance.md"
+    }
+  ]
+}
