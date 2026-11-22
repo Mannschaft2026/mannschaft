@@ -46,7 +46,7 @@ public class InviteTokenClaimEntity extends UuidV7Entity {
     private String status;
 
     /**
-     * この claim によるロール付与（T7）がコミットされた時刻（CMP-261107-1833）。NULL は未付与。
+     * この claim によるロール付与（T7）がコミットされた時刻（CMP-261107-1833）。legacy_grant_unknown_at も NULL なら未付与（旧データは付与されたか不明）。
      * 付与と同じトランザクションで native の条件付き UPDATE が立てる。立っている claim は補償（release）しない。
      */
     @Column(name = "grant_committed_at", updatable = false)

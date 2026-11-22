@@ -10,7 +10,7 @@
 -- 許さない）。在籍済みでの片付けでは確定し、在籍していなければ再承認の付与で付与印が立つ。
 -- 既存の GRANTED 行は付与が確定しているので付与印を補う。
 ALTER TABLE invite_token_claims
-    ADD COLUMN grant_committed_at DATETIME(6) NULL COMMENT 'この claim によるロール付与がコミットされた時刻（UTC）。NULL は未付与' AFTER status,
+    ADD COLUMN grant_committed_at DATETIME(6) NULL COMMENT 'この claim によるロール付与がコミットされた時刻（UTC）。legacy_grant_unknown_at も NULL なら未付与（旧データは付与されたか不明）' AFTER status,
     ADD COLUMN legacy_grant_unknown_at DATETIME(6) NULL COMMENT '付与印の導入前から CLAIMED だった旧データの印（UTC）。付与されたか不明なので自動では戻さない' AFTER grant_committed_at;
 
 UPDATE invite_token_claims SET grant_committed_at = updated_at WHERE status = 'GRANTED';
