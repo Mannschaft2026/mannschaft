@@ -398,6 +398,7 @@
       "withdrawn": "取り下げました",
       "submitError": "変更依頼に失敗しました",
       "reviewError": "審査に失敗しました",
+      "reviewedAt": "審査日時",
       "reviewConflict": "他の人が先に更新しました。一覧を再読み込みしました。最新の状態をご確認ください",
       "withdrawError": "取り下げに失敗しました"
     },

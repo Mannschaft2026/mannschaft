@@ -80,6 +80,7 @@
       "withdrawn": "Request withdrawn",
       "submitError": "Failed to submit change request",
       "reviewError": "Failed to review change request",
+      "reviewedAt": "Reviewed at",
       "reviewConflict": "This request was updated by someone else first. The list has been reloaded; please check the latest status",
       "withdrawError": "Failed to withdraw change request"
     },

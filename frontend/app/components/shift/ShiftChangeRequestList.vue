@@ -2,6 +2,13 @@
 import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
 
 const props = defineProps<{
+  /** 審査を実行する。成功なら true、失敗（通知は呼び出し側で済み）なら false */
+  submitReview: (
+    id: number,
+    decision: 'ACCEPTED' | 'REJECTED',
+    comment: string | undefined,
+    version: number,
+  ) => Promise<boolean>
   requests: ChangeRequest[]
   currentUserId: number
   isAdmin?: boolean
@@ -11,15 +18,16 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  review: [id: number, decision: 'ACCEPTED' | 'REJECTED', comment: string | undefined, version: number]
   withdraw: [id: number]
 }>()
 
 const { t } = useI18n()
+const { formatDateTime } = useDatetime()
 
 const reviewDialogVisible = ref(false)
 const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED'; version: number } | null>(null)
 const reviewComment = ref('')
+const isReviewing = ref(false)
 
 function memberName(userId: number): string {
   return props.memberNames?.get(userId) ?? t('shift.requests.unknownMember')
@@ -55,16 +63,37 @@ function openReviewDialog(data: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'
   reviewDialogVisible.value = true
 }
 
-function confirmReview(): void {
-  if (!reviewTarget.value) return
-  emit(
-    'review',
-    reviewTarget.value.id,
-    reviewTarget.value.decision,
-    reviewComment.value.trim() || undefined,
-    reviewTarget.value.version,
-  )
-  reviewDialogVisible.value = false
+async function confirmReview(): Promise<void> {
+  const target = reviewTarget.value
+  if (!target || isReviewing.value) return
+  isReviewing.value = true
+  try {
+    const ok = await props.submitReview(
+      target.id,
+      target.decision,
+      reviewComment.value.trim() || undefined,
+      target.version,
+    )
+    if (ok) {
+      reviewDialogVisible.value = false
+      reviewComment.value = ''
+      return
+    }
+    // 失敗: コメントを残してダイアログも開いたままにする。
+    // ただし 409 の再取得で対象がすでに審査済み・消滅していれば、審査できないので閉じる。
+    const latest = props.requests.find((r) => r.id === target.id)
+    if (!latest || latest.reviewInfo.status !== 'OPEN') {
+      reviewDialogVisible.value = false
+      reviewComment.value = ''
+    }
+  } finally {
+    isReviewing.value = false
+  }
+}
+
+/** 審査結果（コメント・日時）を申請者にも見せるか */
+function hasReviewResult(data: ChangeRequest): boolean {
+  return !!(data.reviewInfo.reviewComment || data.reviewInfo.reviewedAt)
 }
 </script>
 
@@ -111,6 +140,19 @@ function confirmReview(): void {
       <Column :header="$t('label.status')" field="reviewInfo.status" style="min-width: 100px">
         <template #body="{ data }">
           <Tag :value="statusLabel(data.reviewInfo.status)" :severity="statusSeverity(data.reviewInfo.status)" />
+          <!-- 審査結果（申請者が却下理由などを確認できる）。狭い画面でも折り返す -->
+          <div
+            v-if="hasReviewResult(data)"
+            class="mt-1 max-w-[16rem] whitespace-normal break-words text-xs text-surface-500"
+            :data-testid="`change-request-review-${data.id}`"
+          >
+            <p v-if="data.reviewInfo.reviewedAt">
+              {{ $t('shift.changeRequest.reviewedAt') }}: {{ formatDateTime(data.reviewInfo.reviewedAt) }}
+            </p>
+            <p v-if="data.reviewInfo.reviewComment">
+              {{ $t('shift.changeRequest.reviewComment') }}: {{ data.reviewInfo.reviewComment }}
+            </p>
+          </div>
         </template>
       </Column>
 
@@ -176,6 +218,7 @@ function confirmReview(): void {
         <Button
           :label="reviewTarget?.decision === 'ACCEPTED' ? $t('shift.changeRequest.approve') : $t('shift.changeRequest.reject')"
           :severity="reviewTarget?.decision === 'ACCEPTED' ? 'success' : 'danger'"
+          :loading="isReviewing"
           @click="confirmReview"
         />
       </template>

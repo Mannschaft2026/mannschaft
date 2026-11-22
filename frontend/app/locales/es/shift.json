@@ -80,6 +80,7 @@
       "withdrawn": "Solicitud retirada",
       "submitError": "No se pudo enviar la solicitud de cambio",
       "reviewError": "No se pudo revisar la solicitud",
+      "reviewedAt": "Revisado el",
       "reviewConflict": "Otra persona actualizó la solicitud antes. Se recargó la lista; revise el estado más reciente",
       "withdrawError": "No se pudo retirar la solicitud"
     },

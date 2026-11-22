@@ -40,8 +40,14 @@ async function onReview(
   decision: 'ACCEPTED' | 'REJECTED',
   comment: string | undefined,
   version: number,
-): Promise<void> {
-  await review(id, decision, comment, version)
+): Promise<boolean> {
+  try {
+    await review(id, decision, comment, version)
+    return true
+  } catch {
+    // 通知（競合専用文言・汎用エラー）と一覧再取得は review() 側で済んでいる。ここで再通知しない
+    return false
+  }
 }
 
 async function onWithdraw(id: number): Promise<void> {
@@ -68,7 +74,7 @@ async function onWithdraw(id: number): Promise<void> {
         :is-admin="isAdmin"
         :is-loading="isLoading"
         :member-names="memberNames"
-        @review="onReview"
+        :submit-review="onReview"
         @withdraw="onWithdraw"
       />
     </SectionCard>

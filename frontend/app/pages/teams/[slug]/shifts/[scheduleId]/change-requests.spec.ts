@@ -45,6 +45,7 @@ let rows: ChangeRequest[]
 let permissionError: boolean
 let listError: boolean
 let membersError: boolean
+let reviewFailure: unknown
 let wrapper: VueWrapper | undefined
 function respond(url: string, options?: { body?: { decision: ChangeRequestStatus } }) {
   if (url.endsWith('/me/permissions')) {
@@ -53,7 +54,10 @@ function respond(url: string, options?: { body?: { decision: ChangeRequestStatus
   if (url.endsWith('/members/all')) {
     return membersError ? Promise.reject(new Error('members unavailable')) : Promise.resolve({ data: [{ userId: 2, displayName: '山田花子' }] })
   }
-  if (url.includes('/review')) return Promise.resolve({ data: request(options!.body!.decision) })
+  if (url.includes('/review')) {
+    if (reviewFailure) return Promise.reject(reviewFailure)
+    return Promise.resolve({ data: request(options!.body!.decision) })
+  }
   if (url.includes('/change-requests?')) {
     return listError ? Promise.reject(new Error('list unavailable')) : Promise.resolve({ data: rows })
   }
@@ -89,6 +93,7 @@ beforeEach(() => {
   permissionError = false
   listError = false
   membersError = false
+  reviewFailure = undefined
   mocks.api.mockImplementation(respond)
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
@@ -257,5 +262,75 @@ describe('変更依頼ページ: 戻る導線', () => {
     expect(wrapper!.findAll('.pi-arrow-left')).toHaveLength(0)
     expect(wrapper!.findAll('a')).toHaveLength(0)
     expect(wrapper!.findComponent(PageHeader).props('backTo')).toBe('/teams/team-a/shifts')
+  })
+})
+
+describe('審査の失敗・競合時の扱い', () => {
+  const unhandled: unknown[] = []
+  const onUnhandled = (e: unknown) => { unhandled.push(e) }
+  beforeEach(() => { unhandled.length = 0; process.on('unhandledRejection', onUnhandled) })
+  afterEach(() => { process.off('unhandledRejection', onUnhandled) })
+
+  async function openAndSubmit(comment: string) {
+    renderPage()
+    await flushPromises()
+    await reviewButtons()[0]!.trigger('click')
+    wrapper!.getComponent('textarea-stub').vm.$emit('update:modelValue', comment)
+    await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
+    await flushPromises()
+  }
+
+  it('成功時はダイアログを閉じる', async () => {
+    await openAndSubmit('承認します')
+    expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(false)
+  })
+
+  it('失敗（500）では未処理の例外を出さず、ダイアログと入力コメントを残す', async () => {
+    reviewFailure = { statusCode: 500 }
+    await openAndSubmit('承認します')
+    expect(unhandled).toHaveLength(0)
+    expect(mocks.error).toHaveBeenCalledWith('shift.changeRequest.reviewError')
+    expect(mocks.error).toHaveBeenCalledTimes(1)
+    expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(true)
+    expect(wrapper!.get('textarea-stub').attributes('modelvalue')).toBe('承認します')
+  })
+
+  it('409 で依頼が審査済みになったら、未処理例外なくダイアログを閉じ、競合文言は1回だけ', async () => {
+    reviewFailure = { statusCode: 409, data: { error: { code: 'SHIFT_031' } } }
+    renderPage()
+    await flushPromises()
+    await reviewButtons()[0]!.trigger('click')
+    rows = [request('ACCEPTED')]
+    await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
+    await flushPromises()
+    expect(unhandled).toHaveLength(0)
+    expect(mocks.error).toHaveBeenCalledWith('shift.changeRequest.reviewConflict')
+    expect(mocks.error).toHaveBeenCalledTimes(1)
+    expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(false)
+  })
+
+  it('409 でも依頼がまだ OPEN（楽観ロック競合）なら、ダイアログとコメントを残す', async () => {
+    reviewFailure = { statusCode: 409, data: { error: { code: 'SHIFT_018' } } }
+    await openAndSubmit('保持して')
+    expect(unhandled).toHaveLength(0)
+    expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(true)
+    expect(wrapper!.get('textarea-stub').attributes('modelvalue')).toBe('保持して')
+  })
+})
+
+describe('申請者への審査結果の表示', () => {
+  it('審査コメントと審査日時を行の下に表示する', async () => {
+    role = 'MEMBER'
+    rows = [{ ...request('REJECTED'), reviewInfo: { status: 'REJECTED', reviewerId: 9, reviewComment: '人数が足りません', reviewedAt: '2026-10-28T09:30:00' } }]
+    renderPage()
+    await flushPromises()
+    const el = wrapper!.get('[data-testid="change-request-review-7"]')
+    expect(el.text()).toContain('人数が足りません')
+    expect(el.text()).toContain('shift.changeRequest.reviewedAt')
+  })
+  it('未審査の依頼には審査結果欄を出さない', async () => {
+    renderPage()
+    await flushPromises()
+    expect(wrapper!.find('[data-testid="change-request-review-7"]').exists()).toBe(false)
   })
 })
