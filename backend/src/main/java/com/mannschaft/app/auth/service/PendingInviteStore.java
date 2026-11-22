@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -38,16 +40,21 @@ public class PendingInviteStore {
 
     private final RegistrationPendingInviteRepository repository;
     private final DomainEventPublisher eventPublisher;
+    /** 作成・更新時刻の基準（既定の UTC Clock。瞬間は Instant で持ち、エンティティは現在時刻を自ら取得しない）。 */
+    private final Clock clock;
 
     /** 登録と同じトランザクションで PENDING 行を作る（ハッシュのみ保存）。 */
     @Transactional
     public void createPending(Long userId, String tokenHash, String scopeType, Long scopeId) {
+        Instant now = Instant.now(clock);
         repository.saveAndFlush(RegistrationPendingInviteEntity.builder()
                 .userId(userId)
                 .tokenHash(tokenHash)
                 .scopeType(scopeType)
                 .scopeId(scopeId)
                 .status(PendingInviteStatus.PENDING)
+                .createdAt(now)
+                .updatedAt(now)
                 .build());
         log.info("招待付き登録の保留を作成: userId={}, scopeType={}, scopeId={}", userId, scopeType, scopeId);
     }

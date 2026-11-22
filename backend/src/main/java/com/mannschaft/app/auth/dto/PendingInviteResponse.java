@@ -1,6 +1,6 @@
 package com.mannschaft.app.auth.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -14,6 +14,6 @@ public record PendingInviteResponse(
         String roleName,
         boolean joinable,
         String publicPath,
-        LocalDateTime reissueRequestedAt,
-        LocalDateTime retryAvailableAt) {
+        Instant reissueRequestedAt,
+        Instant retryAvailableAt) {
 }

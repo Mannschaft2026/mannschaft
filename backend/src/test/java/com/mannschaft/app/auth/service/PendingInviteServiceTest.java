@@ -27,7 +27,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
@@ -410,13 +411,13 @@ class PendingInviteServiceTest {
         @Test
         @DisplayName("§9-4: ACCEPTING は retryAvailableAt = accepting_started_at + 5分 を返す")
         void accepting_retryAvailableAt() {
-            LocalDateTime started = LocalDateTime.of(2026, 11, 22, 3, 0);
+            Instant started = Instant.parse("2026-11-22T03:00:00Z");
             given(store.find(USER_ID)).willReturn(Optional.of(new PendingInviteSnapshot(
                     UUID.fromString("01938a00-0000-7000-8000-0000000000c1"), USER_ID, HASH, "TEAM", TEAM_ID,
                     PendingInviteStatus.ACCEPTING, null, started, null)));
             givenJoinability(false);
 
-            assertThat(service.findMine(USER_ID).retryAvailableAt()).isEqualTo(started.plusMinutes(5));
+            assertThat(service.findMine(USER_ID).retryAvailableAt()).isEqualTo(started.plus(Duration.ofMinutes(5)));
         }
     }
 }

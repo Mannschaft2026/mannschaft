@@ -19,7 +19,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
@@ -72,8 +73,8 @@ public class PendingInviteService {
         }
         PendingInviteSnapshot row = found.get();
         ScopeView scope = scopeView(row.scopeType(), row.scopeId());
-        LocalDateTime retryAvailableAt = row.status() == PendingInviteStatus.ACCEPTING && row.acceptingStartedAt() != null
-                ? row.acceptingStartedAt().plusMinutes(ACCEPTING_RETRY_MINUTES)
+        Instant retryAvailableAt = row.status() == PendingInviteStatus.ACCEPTING && row.acceptingStartedAt() != null
+                ? row.acceptingStartedAt().plus(Duration.ofMinutes(ACCEPTING_RETRY_MINUTES))
                 : null;
         return new PendingInviteResponse(
                 row.id(),

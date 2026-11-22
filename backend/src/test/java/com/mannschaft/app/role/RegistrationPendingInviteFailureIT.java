@@ -11,7 +11,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -39,18 +38,16 @@ import static org.mockito.Mockito.doAnswer;
  * CMP-261107-1833 §9-3・§9-4（追加 AC7）: 保留承認の途中失敗からの復旧と、古い attempt との競合。
  *
  * <p>止め所は既存 Bean の spy（{@link MembershipGrantService}・{@link InviteAcceptanceWriter}）で作る
- * （{@link InviteAcceptanceFailureIT} と同流儀。spy を持つため専用 context）。保留行は試験が直接作る
+ * （{@link InviteAcceptanceFailureIT} と同流儀。spy の集合は中間基底 {@link InviteAcceptanceSpyItSupport} で揃え、同じ context を共有する）。保留行は試験が直接作る
  * （登録経路は {@link RegistrationPendingInviteIT}）。いずれも maxUses=1 で、復旧が使用回数を二重に進めれば
  * ROLE_003→EXPIRED になってしまう形にしてある。</p>
  */
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("CMP-261107-1833 保留承認の途中失敗・古い attempt（§9-3・§9-4）")
-class RegistrationPendingInviteFailureIT extends InviteAcceptanceItSupport {
+class RegistrationPendingInviteFailureIT extends InviteAcceptanceSpyItSupport {
 
     static final String PENDING_TABLE = "registration_pending_invites";
 
-    @MockitoSpyBean private MembershipGrantService grantSpy;
-    @MockitoSpyBean private InviteAcceptanceWriter writerSpy;
 
     private final List<Long> pendingUsers = Collections.synchronizedList(new ArrayList<>());
 

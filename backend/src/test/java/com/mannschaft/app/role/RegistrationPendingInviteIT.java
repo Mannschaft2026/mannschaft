@@ -16,6 +16,7 @@ import com.mannschaft.app.auth.service.PendingInviteService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
+import com.mannschaft.app.common.timezone.TimezoneContextHolder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +37,6 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -160,7 +160,9 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
     }
 
     private static LocalDate today() {
-        return LocalDate.now(ZoneId.of("Asia/Tokyo"));
+        // 本番コード（AuthRegistrationService#verifyEmail）は年齢判定の「今日」を TimezoneContextHolder.get() で取る。
+        // メール認証は未認証リクエストで、ホルダー未セット時は UTC。JST 固定にすると JST 0〜9 時台に 18 歳境界がずれる。
+        return LocalDate.now(TimezoneContextHolder.get());
     }
 
     private PendingInviteService pending() {
@@ -369,7 +371,7 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
         Scope scope = scope("ORGANIZATION");
         InviteTokenEntity token = token(scope, 0, null, 3, 0, null, null);
         Registered r = registerAdult(plaintext(token));
-        jdbc.update("UPDATE users SET created_at = ? WHERE id = ?", LocalDateTime.now().minusDays(8), r.userId());
+        jdbc.update("UPDATE users SET created_at = ? WHERE id = ?", utcNow().minusDays(8), r.userId());
 
         cleanupBatch.cleanupExpiredUnverifiedAccounts();
 
@@ -423,7 +425,7 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
         Scope scope = scope(type);
         InviteTokenEntity token = token(scope, 0, null, 3, 0, null, null);
         Registered r = registerAndVerifyAdult(token);
-        jdbc.update("UPDATE invite_tokens SET expires_at = ? WHERE id = ?", LocalDateTime.now().minusMinutes(1), token.getId());
+        jdbc.update("UPDATE invite_tokens SET expires_at = ? WHERE id = ?", utcNow().minusMinutes(1), token.getId());
 
         assertThat(acceptStatus(r.userId())).isEqualTo("EXPIRED");
 
@@ -598,7 +600,7 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
         InviteTokenEntity token = token(scope, 0, null, 3, 0, null, null);
         Registered r = registerAndVerifyAdult(token);
         makePrivate(scope);
-        jdbc.update("UPDATE invite_tokens SET revoked_at = ? WHERE id = ?", LocalDateTime.now(), token.getId());
+        jdbc.update("UPDATE invite_tokens SET revoked_at = ? WHERE id = ?", utcNow(), token.getId());
         assertThat(acceptStatus(r.userId())).isEqualTo("EXPIRED");
 
         assertThat(pending().requestReissue(r.userId()).alreadyRequested()).isFalse();
@@ -621,7 +623,7 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
         InviteTokenEntity token = token(scope, 0, null, 3, 0, null, null);
         Registered r = registerAndVerifyAdult(token);
         makePrivate(scope);
-        jdbc.update("UPDATE invite_tokens SET revoked_at = ? WHERE id = ?", LocalDateTime.now(), token.getId());
+        jdbc.update("UPDATE invite_tokens SET revoked_at = ? WHERE id = ?", utcNow(), token.getId());
         acceptStatus(r.userId());
         pending().requestReissue(r.userId());
         awaitNotification(admin, 1);

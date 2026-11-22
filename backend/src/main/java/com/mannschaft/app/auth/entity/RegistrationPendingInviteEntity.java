@@ -6,7 +6,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.AccessLevel;
@@ -14,7 +13,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -57,25 +56,18 @@ public class RegistrationPendingInviteEntity extends UuidV7Entity {
     private UUID acceptAttemptId;
 
     @Column(name = "accepting_started_at", updatable = false)
-    private LocalDateTime acceptingStartedAt;
+    private Instant acceptingStartedAt;
 
     @Column(name = "reissue_requested_at", updatable = false)
-    private LocalDateTime reissueRequestedAt;
+    private Instant reissueRequestedAt;
 
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false, updatable = false)
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-    }
+    private Instant updatedAt;
 }

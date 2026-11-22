@@ -2,7 +2,7 @@ package com.mannschaft.app.auth.dto;
 
 import com.mannschaft.app.auth.PendingInviteStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -18,6 +18,6 @@ public record PendingInviteSnapshot(
         Long scopeId,
         PendingInviteStatus status,
         String failureCode,
-        LocalDateTime acceptingStartedAt,
-        LocalDateTime reissueRequestedAt) {
+        Instant acceptingStartedAt,
+        Instant reissueRequestedAt) {
 }
