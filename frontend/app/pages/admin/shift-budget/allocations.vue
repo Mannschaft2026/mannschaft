@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useShiftBudgetAdminAccess } from '~/composables/shift/useShiftBudgetAdminAccess'
+import { parseApiError } from '~/utils/apiError'
 import type {
   AllocationCreateRequest,
   AllocationResponse,
@@ -43,9 +44,29 @@ const total = ref(0)
 const page = ref(0)
 const pageSize = ref(20)
 const loading = ref(false)
+/** 一覧取得の失敗。空配列のまま「割当が登録されていません」に化けさせないために保持する。 */
+const loadError = ref<unknown>(null)
+const loadFailed = ref(false)
 
 const formVisible = ref(false)
 const editingAllocation = ref<AllocationResponse | null>(null)
+
+/** 保存 API が返した理由。ダイアログ内に出す（握りつぶさない）。 */
+const formFieldErrors = ref<Record<string, string>>({})
+const formError = ref('')
+
+function clearFormErrors() {
+  formFieldErrors.value = {}
+  formError.value = ''
+}
+
+/** 保存失敗時、BE の理由を画面へ出す。理由が無いときだけ汎用文言に落とす。 */
+function reportSaveError(error: unknown, fallbackKey: string) {
+  const parsed = parseApiError(error)
+  formFieldErrors.value = parsed.fieldErrors
+  formError.value = parsed.message ?? ''
+  notification.error(parsed.message || Object.values(parsed.fieldErrors)[0] || t(fallbackKey))
+}
 
 const deleteConfirmVisible = ref(false)
 const deleteTarget = ref<AllocationResponse | null>(null)
@@ -57,12 +78,18 @@ async function load() {
     return
   }
   loading.value = true
+  loadFailed.value = false
+  loadError.value = null
   try {
     const res = await api.listAllocations(organizationId.value, page.value, pageSize.value)
     allocations.value = res.items
     total.value = res.total
   }
-  catch {
+  catch (error) {
+    allocations.value = []
+    total.value = 0
+    loadError.value = error
+    loadFailed.value = true
     notification.error(t('shiftBudget.allocation.loadError'))
   }
   finally {
@@ -71,38 +98,42 @@ async function load() {
 }
 
 function openCreate() {
+  clearFormErrors()
   editingAllocation.value = null
   formVisible.value = true
 }
 
 function openEdit(allocation: AllocationResponse) {
+  clearFormErrors()
   editingAllocation.value = allocation
   formVisible.value = true
 }
 
 async function handleCreate(payload: AllocationCreateRequest) {
   if (!organizationId.value) return
+  clearFormErrors()
   try {
     await api.createAllocation(organizationId.value, payload)
     notification.success(t('shiftBudget.allocation.createSuccess'))
     formVisible.value = false
     await load()
   }
-  catch {
-    notification.error(t('shiftBudget.allocation.createError'))
+  catch (error) {
+    reportSaveError(error, 'shiftBudget.allocation.createError')
   }
 }
 
 async function handleUpdate(args: { id: number; request: AllocationUpdateRequest }) {
   if (!organizationId.value) return
+  clearFormErrors()
   try {
     await api.updateAllocation(organizationId.value, args.id, args.request)
     notification.success(t('shiftBudget.allocation.updateSuccess'))
     formVisible.value = false
     await load()
   }
-  catch {
-    notification.error(t('shiftBudget.allocation.updateError'))
+  catch (error) {
+    reportSaveError(error, 'shiftBudget.allocation.updateError')
   }
 }
 
@@ -165,6 +196,13 @@ onMounted(() => {
     </Message>
 
     <PageLoading v-else-if="loading" />
+
+    <DashboardErrorState
+      v-else-if="loadFailed"
+      :error="loadError"
+      testid="shift-budget-allocations-error-state"
+      @retry="load"
+    />
 
     <DataTable
       v-else
@@ -242,6 +280,8 @@ onMounted(() => {
     <AllocationFormModal
       v-model:visible="formVisible"
       :allocation="editingAllocation"
+      :field-errors="formFieldErrors"
+      :form-error="formError"
       @submit-create="handleCreate"
       @submit-update="handleUpdate"
     />

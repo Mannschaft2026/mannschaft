@@ -62,6 +62,7 @@ watch(
 )
 
 async function save() {
+  if (saving.value) return
   saving.value = true
   try {
     const payload: MemberWorkConstraintRequest = {

@@ -38,8 +38,15 @@ final class FakeOAuthProviders {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             try {
-                server.createContext("/google/token", ex -> respond(ex,
-                        "{\"access_token\":\"" + codeOf(ex) + "\"}"));
+                server.createContext("/google/token", ex -> {
+                    String code = codeOf(ex);
+                    if (code.startsWith("fail~")) {
+                        // プロバイダ認証失敗（invalid_grant）を再現する
+                        respond(ex, 400, "{\"error\":\"invalid_grant\"}");
+                        return;
+                    }
+                    respond(ex, 200, "{\"access_token\":\"" + code + "\"}");
+                });
                 server.createContext("/google/userinfo", ex -> {
                     String[] subEmail = splitCode(ex.getRequestHeaders().getFirst("Authorization")
                             .substring("Bearer ".length()));
@@ -103,9 +110,13 @@ final class FakeOAuthProviders {
     }
 
     private static void respond(HttpExchange ex, String json) throws IOException {
+        respond(ex, 200, json);
+    }
+
+    private static void respond(HttpExchange ex, int status, String json) throws IOException {
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
+        ex.sendResponseHeaders(status, body.length);
         try (OutputStream os = ex.getResponseBody()) {
             os.write(body);
         }
