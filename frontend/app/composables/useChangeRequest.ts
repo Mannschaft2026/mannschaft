@@ -47,8 +47,8 @@ export function useChangeRequest(scheduleId: Ref<number>) {
   async function review(
     id: number,
     decision: 'ACCEPTED' | 'REJECTED',
-    comment?: string,
-    version = 0,
+    comment: string | undefined,
+    version: number,
   ): Promise<void> {
     try {
       const updated = await shiftApi.reviewChangeRequest(id, {

@@ -22,6 +22,7 @@ const created = {
   requestInfo: { requestedBy: 2, requestType: 'PRE_CONFIRM_EDIT', reason: null },
   reviewInfo: { status: 'OPEN', reviewerId: null, reviewComment: null, reviewedAt: null },
   timing: { createdAt: '2026-10-27T12:00:00', expiresAt: null },
+  version: 2,
 }
 
 beforeEach(() => { vi.clearAllMocks() })
@@ -54,7 +55,7 @@ describe('useChangeRequest: 完了・失敗のトースト文言', () => {
     mocks.api.reviewChangeRequest.mockRejectedValue(new Error('x'))
     mocks.api.withdrawChangeRequest.mockRejectedValue(new Error('x'))
     await expect(c.createRequest({ scheduleId: 1, requestType: 'PRE_CONFIRM_EDIT' })).rejects.toThrow()
-    await expect(c.review(7, 'ACCEPTED')).rejects.toThrow()
+    await expect(c.review(7, 'ACCEPTED', undefined, 2)).rejects.toThrow()
     await expect(c.withdraw(7)).rejects.toThrow()
     expect(mocks.error.mock.calls.map(([k]) => k)).toEqual([
       'shift.changeRequest.submitError',
