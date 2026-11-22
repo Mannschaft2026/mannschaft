@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -48,6 +52,10 @@ class BlogPostScopeSlugIT extends AbstractMySqlIntegrationTest {
 
     private static final String MY_POST = "/api/v1/users/me/blog/posts/{id}";
     private static final String MY_POSTS = "/api/v1/users/me/blog/posts";
+    private static final String MY_PUBLISH = "/api/v1/users/me/blog/posts/{id}/publish";
+    private static final String POSTS = "/api/v1/blog/posts";
+    private static final String POST = "/api/v1/blog/posts/{id}";
+    private static final String PUBLISH = "/api/v1/blog/posts/{id}/publish";
 
     @Autowired
     private MockMvc mockMvc;
@@ -168,6 +176,87 @@ class BlogPostScopeSlugIT extends AbstractMySqlIntegrationTest {
         assertThat(scopes.get(personalPost).get("organizationSlug").isNull()).isTrue();
     }
 
+    // ── 書込み応答（編集画面は公開・削除・承認の応答と読込応答の slug で遷移先を作る。不具合の本丸は changeStatus） ──
+
+    @Test
+    @DisplayName("チーム記事の公開（changeStatus）の応答: 所属行の無い作者でも scope.teamSlug が返る")
+    void チーム記事のchangeStatus応答はteamSlugを返す() throws Exception {
+        Long postId = savePost(teamId, null, PostStatus.DRAFT);
+
+        JsonNode scope = scopeOf(mockMvc.perform(patch(PUBLISH, postId).with(user(authorId.toString()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PUBLISHED\"}"))
+                .andExpect(status().isOk()));
+
+        assertThat(scope.path("teamSlug").asText()).isEqualTo(teamSlug);
+        assertThat(scope.has("organizationSlug")).isTrue();
+        assertThat(scope.get("organizationSlug").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("チーム記事の作成（create）の応答: scope.teamSlug が返る")
+    void チーム記事のcreate応答はteamSlugを返す() throws Exception {
+        // 作成は所属の確認があるため、作者をチームの MEMBER にしておく（slug の付与は所属と無関係）。
+        MembershipTestHelper.insertMembership(em, authorId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
+        em.flush();
+
+        JsonNode scope = scopeOf(mockMvc.perform(post(POSTS).with(user(authorId.toString()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "teamId", teamId.toString(), "title", "slug 契約の作成", "body", "本文"))))
+                .andExpect(status().isCreated()));
+
+        assertThat(scope.path("teamId").asLong()).isEqualTo(teamId);
+        assertThat(scope.path("teamSlug").asText()).isEqualTo(teamSlug);
+    }
+
+    @Test
+    @DisplayName("チーム記事の更新（update）の応答: scope.teamSlug が返る")
+    void チーム記事のupdate応答はteamSlugを返す() throws Exception {
+        Long postId = savePost(teamId, null, PostStatus.DRAFT);
+
+        JsonNode scope = scopeOf(mockMvc.perform(put(POST, postId).with(user(authorId.toString()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "改題", "body", "更新本文"))))
+                .andExpect(status().isOk()));
+
+        assertThat(scope.path("teamSlug").asText()).isEqualTo(teamSlug);
+    }
+
+    @Test
+    @DisplayName("組織記事の公開（changeStatus）の応答: scope.organizationSlug が返る")
+    void 組織記事のchangeStatus応答はorganizationSlugを返す() throws Exception {
+        Long postId = savePost(null, orgId, PostStatus.DRAFT);
+
+        JsonNode scope = scopeOf(mockMvc.perform(patch(PUBLISH, postId).with(user(authorId.toString()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PUBLISHED\"}"))
+                .andExpect(status().isOk()));
+
+        assertThat(scope.path("organizationSlug").asText()).isEqualTo(orgSlug);
+        assertThat(scope.has("teamSlug")).isTrue();
+        assertThat(scope.get("teamSlug").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("個人記事の公開（PersonalBlogController#changeStatus）の応答: slug は null（キーは返す）")
+    void 個人記事のchangeStatus応答はslugがnull() throws Exception {
+        Long postId = savePost(null, null, PostStatus.DRAFT);
+
+        JsonNode scope = scopeOf(mockMvc.perform(patch(MY_PUBLISH, postId).with(user(authorId.toString()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PUBLISHED\"}"))
+                .andExpect(status().isOk()));
+
+        assertThat(scope.path("userId").asLong()).isEqualTo(authorId);
+        assertThat(scope.has("teamSlug")).isTrue();
+        assertThat(scope.get("teamSlug").isNull()).isTrue();
+        assertThat(scope.has("organizationSlug")).isTrue();
+        assertThat(scope.get("organizationSlug").isNull()).isTrue();
+    }
+
+    private JsonNode scopeOf(org.springframework.test.web.servlet.ResultActions result) throws Exception {
+        String body = result.andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("data").path("scope");
+    }
+
     private JsonNode getMyPostScope(Long postId) throws Exception {
         String body = mockMvc.perform(get(MY_POST, postId).with(user(authorId.toString())))
                 .andExpect(status().isOk())
@@ -176,10 +265,14 @@ class BlogPostScopeSlugIT extends AbstractMySqlIntegrationTest {
     }
 
     private Long savePost(Long scopeTeamId, Long scopeOrgId) {
+        return savePost(scopeTeamId, scopeOrgId, PostStatus.PUBLISHED);
+    }
+
+    private Long savePost(Long scopeTeamId, Long scopeOrgId, PostStatus postStatus) {
         BlogPostEntity entity = BlogPostEntity.builder()
                 .teamId(scopeTeamId).organizationId(scopeOrgId).userId(authorId).authorId(authorId)
                 .title("slug 契約の記事").slug("slug-contract-" + UUID.randomUUID().toString().substring(0, 12))
-                .body("本文").postType(PostType.BLOG).visibility(Visibility.PUBLIC).status(PostStatus.PUBLISHED)
+                .body("本文").postType(PostType.BLOG).visibility(Visibility.PUBLIC).status(postStatus)
                 .readingTimeMinutes((short) 1)
                 .build();
         em.persist(entity);
