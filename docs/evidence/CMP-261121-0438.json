@@ -105,7 +105,7 @@
         },
         {
           "name": "AuthOAuthLoginAuditContractIT（OAuth ログイン監査契約）",
-          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/AuthOAuthLoginAuditContractIT.java"
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthOAuthLoginAuditContractIT.java"
         },
         {
           "name": "実機 E2E J7",
