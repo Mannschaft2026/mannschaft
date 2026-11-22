@@ -68,4 +68,11 @@ describe('/admin/shift-budget/failed-events の内部情報非表示', () => {
     expect(wrapper.text()).not.toContain('CONSUMPTION_RECORD')
     expect(wrapper.text()).not.toContain('NOTIFICATION_SEND')
   })
+
+  it('概要列に最小幅があり、表全体も横スクロールで読める幅を持つ（概要が縦書きに潰れない）', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync(new URL('./failed-events.vue', import.meta.url), 'utf8')
+    expect(src).toMatch(/shiftBudget\.failedEvent\.summary'\)"\s+style="min-width: 20rem"/)
+    expect(src).toMatch(/<DataTable[^>]*table-style="min-width: 95rem"/)
+  })
 })
