@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261121-0438",
+  "scope": "app",
+  "implementation": {
+    "pr": 4715,
+    "sha": "7cb0f7e2d0c588b9d635df707032105b47e456c4"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "既存連携・2FA 無効の OAuth ログインが access_token と refresh_token の 2 つの Set-Cookie を AuthTokenCookies と同じ属性で発行し、本文にもトークンを返す",
+      "tests": [
+        {
+          "name": "AC-1: 既存連携・2FA 無効の OAuth ログインは 2 つの Set-Cookie と本文のトークン",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthLoginRefreshCookieIT.java"
+        },
+        {
+          "name": "loginWithOAuth_正常_200",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/controller/AuthControllerTest.java"
+        },
+        {
+          "name": "実機 E2E J1・J1b",
+          "evidence": "docs/evidence/CMP-261121-0438-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "OAuth 新規ユーザー登録経路（2FA 無し）でも 2 つの Set-Cookie と本文のトークンを返す",
+      "tests": [
+        {
+          "name": "AC-2: OAuth 新規ユーザー登録経路でも 2 つの Set-Cookie と本文のトークン",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthLoginRefreshCookieIT.java"
+        },
+        {
+          "name": "実機 E2E J5",
+          "evidence": "docs/evidence/CMP-261121-0438-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "2FA 無効ユーザーの /oauth/link/confirm 成功でも 2 つの Set-Cookie と本文のトークンを返す",
+      "tests": [
+        {
+          "name": "AC-3: /link/confirm 成功でも 2 つの Set-Cookie と本文のトークン",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthLoginRefreshCookieIT.java"
+        },
+        {
+          "name": "confirmOAuthLinkage_正常_200",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/controller/AuthControllerTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "OAuth ログインで得た refresh_token Cookie だけで /refresh が 200 になり Cookie が再発行され、旧 refresh 行は失効し新しい行は有効（ログイン直後のリロードでセッションが維持される）",
+      "tests": [
+        {
+          "name": "AC-4: OAuth ログインの refresh_token Cookie だけで /refresh が通りローテーションする",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthLoginRefreshCookieIT.java"
+        },
+        {
+          "name": "実機 E2E J1・J1b・J2",
+          "evidence": "docs/evidence/CMP-261121-0438-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "MFA 要求（TOTP・メール 2FA・link/confirm）、連携競合、無効・期限切れ・使用済みの連携トークン、プロバイダ認証失敗の各応答には Set-Cookie もトークンも付かない（実機では 2FA 経由は検証完了後にのみ発行）",
+      "tests": [
+        {
+          "name": "AC-5: Cookie もトークンも出さない応答（TOTP・EMAIL・confirm MFA・競合・不正/期限切れ/使用済みトークン・プロバイダ失敗）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthLoginRefreshCookieIT.java"
+        },
+        {
+          "name": "実機 E2E J4",
+          "evidence": "docs/evidence/CMP-261121-0438-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "OAuth ログイン後の logout は両 Cookie を Max-Age=0 で消去し、旧 refresh Cookie での /refresh は Cookie を再発行しない",
+      "tests": [
+        {
+          "name": "AC-6: OAuth ログイン後の logout で両 Cookie を消去し refresh_tokens 行を失効する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthLoginRefreshCookieIT.java"
+        },
+        {
+          "name": "実機 E2E J6",
+          "evidence": "docs/evidence/CMP-261121-0438-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "既存の OAuth 2FA ログインと監査契約の挙動が変わらない（回帰なし。パスワードログインも実機で回帰なし）",
+      "tests": [
+        {
+          "name": "OAuthMfaLoginIT（既存の OAuth + 2FA 契約）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        },
+        {
+          "name": "AuthOAuthLoginAuditContractIT（OAuth ログイン監査契約）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/AuthOAuthLoginAuditContractIT.java"
+        },
+        {
+          "name": "実機 E2E J7",
+          "evidence": "docs/evidence/CMP-261121-0438-real.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44982943906
+    },
+    {
+      "runId": 44982943936
+    },
+    {
+      "runId": 44982943898
+    },
+    {
+      "runId": 44982943957
+    },
+    {
+      "runId": 44982943899
+    },
+    {
+      "runId": 44982941027
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4715"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261121-0438-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261121-0438-real.md"
+    }
+  },
+  "regressions": []
+}
