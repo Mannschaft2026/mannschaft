@@ -148,12 +148,11 @@ class ModuleEventLoadIT extends AbstractMySqlIntegrationTest {
             assertThat(await(this::idle, TAIL)).as("自己poolの終端を待ってからDBを照合する").isTrue();
             long[] latency = normal.stream().mapToLong(e -> e.finished.get() == 0 || e.arrived == 0
                     ? Long.MAX_VALUE : e.finished.get() - e.arrived).sorted().toArray();
-            long[] buckets = new long[300];
-            for (ModuleEventLoadTestFixture.Entry entry : normal) {
-                long bucket = entry.arrived == 0 ? -1 : (entry.arrived - start) / TimeUnit.SECONDS.toNanos(1);
-                if (bucket >= 0 && bucket < buckets.length) buckets[(int) bucket]++;
-            }
-            report.put("actualPerSecond", buckets);
+            // 窓外（300秒以後）の到着も超過bucketに保持し、母集団から落とさない。
+            long[] buckets = ModuleEventLoadJudgement.arrivalBuckets(start,
+                    normal.stream().mapToLong(e -> e.arrived).toArray(), 300);
+            report.put("actualPerSecond", java.util.Arrays.copyOf(buckets, 300));
+            report.put("arrivedAfterWindow", buckets[300]);
             report.put("normalCompleted", normal.stream().filter(e -> e.finished.get() != 0).count());
             report.put("p50Ns", percentile(latency, 0.50));
             report.put("p95Ns", percentile(latency, 0.95));

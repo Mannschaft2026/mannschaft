@@ -1,6 +1,7 @@
 package com.mannschaft.app.moduleevent;
 
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 /**
  * M18の統計判定（純関数）。外れ値1件で落とさず、仕様の指標（nearest-rank p99）で判定する。
@@ -38,15 +39,33 @@ final class ModuleEventLoadJudgement {
     }
 
     /**
-     * 各秒bucketが毎秒perSecond件であること。遅れた1件は隣のbucketへ1件ずらすだけなので、
-     * 許容は遅延件数lateCountに限る（それ以外のずれは供給不良として落とす）。合計は常に厳密一致。
+     * 窓[start, start+seconds秒)の到着を秒bucketへ数え、窓の終端以後の到着は末尾の超過bucket（index=seconds）に保持する。
+     * 末尾slotの遅延到着を捨てると合計が欠けて単発遅延で落ちるため、母集団から落とさない。
+     * 未供給（arrived==0）と開始前の到着はどのbucketにも入らない（合計の厳密一致で落ちる）。
+     */
+    static long[] arrivalBuckets(long start, long[] arrived, int seconds) {
+        long[] buckets = new long[seconds + 1];
+        long second = TimeUnit.SECONDS.toNanos(1);
+        for (long a : arrived) {
+            if (a == 0 || a < start) continue;
+            buckets[(int) Math.min((a - start) / second, seconds)]++;
+        }
+        return buckets;
+    }
+
+    /**
+     * 各秒bucketが毎秒perSecond件であること（bucketsは{@link #arrivalBuckets}の戻り値。末尾は窓外の超過bucket）。
+     * 遅れた1件は隣のbucket（末尾slotなら超過bucket）へ1件ずらすだけなので、窓内各bucketのずれと超過件数の許容は
+     * 遅延件数lateCountに限る（それ以外のずれは供給不良として落とす）。超過を含む合計は常に厳密一致。
      */
     static boolean bucketsMatch(long[] buckets, long perSecond, int lateCount) {
+        int seconds = buckets.length - 1;
         long sum = 0;
-        for (long b : buckets) {
-            if (Math.abs(b - perSecond) > lateCount) return false;
-            sum += b;
+        for (int i = 0; i < seconds; i++) {
+            if (Math.abs(buckets[i] - perSecond) > lateCount) return false;
+            sum += buckets[i];
         }
-        return sum == perSecond * buckets.length;
+        long overflow = buckets[seconds];
+        return overflow <= lateCount && sum + overflow == perSecond * seconds;
     }
 }

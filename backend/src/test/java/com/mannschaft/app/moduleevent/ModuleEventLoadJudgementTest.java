@@ -53,8 +53,8 @@ class ModuleEventLoadJudgementTest {
 
     @Test
     void 遅延1件の隣bucketへのずれは許容しそれ以外のずれは許さない() {
-        long[] buckets = new long[300];
-        java.util.Arrays.fill(buckets, 10L);
+        long[] buckets = new long[301];
+        java.util.Arrays.fill(buckets, 0, 300, 10L);
         assertThat(ModuleEventLoadJudgement.bucketsMatch(buckets, 10, 0)).isTrue();
         buckets[5] = 9; buckets[6] = 11;
         assertThat(ModuleEventLoadJudgement.bucketsMatch(buckets, 10, 0)).isFalse();
@@ -65,10 +65,50 @@ class ModuleEventLoadJudgementTest {
 
     @Test
     void bucket合計が欠けると落ちる() {
-        long[] buckets = new long[300];
-        java.util.Arrays.fill(buckets, 10L);
+        long[] buckets = new long[301];
+        java.util.Arrays.fill(buckets, 0, 300, 10L);
         buckets[0] = 9;
         assertThat(ModuleEventLoadJudgement.bucketsMatch(buckets, 10, 1)).isFalse();
+    }
+
+    private static boolean judgeAll(long[][] p) {
+        if (!ModuleEventLoadJudgement.supplyWithinSlot(p[0], p[1], SLOT)) return false;
+        int late = ModuleEventLoadJudgement.lateCount(p[0], p[1], SLOT);
+        long[] buckets = ModuleEventLoadJudgement.arrivalBuckets(1_000L, p[1], 300);
+        return ModuleEventLoadJudgement.bucketsMatch(buckets, 10, late);
+    }
+
+    @Test
+    void 単発131ms遅延は先頭_中間_末尾のどこでも供給とbucketの両判定を通る() {
+        for (int idx : new int[] {0, 1500, 2999}) {
+            long[][] p = population(3000, new int[] {idx}, 131, new int[0]);
+            assertThat(ModuleEventLoadJudgement.lateCount(p[0], p[1], SLOT)).as("idx=%d", idx).isEqualTo(1);
+            assertThat(judgeAll(p)).as("idx=%d", idx).isTrue();
+        }
+    }
+
+    @Test
+    void 判定一式では1パーセント超の遅延_未供給_早着は引き続き落ちる() {
+        int[] late = new int[31];
+        for (int i = 0; i < late.length; i++) late[i] = 2969 + i;
+        assertThat(judgeAll(population(3000, late, 131, new int[0]))).as("末尾に31件遅延").isFalse();
+        assertThat(judgeAll(population(3000, new int[0], 0, new int[] {2999}))).as("末尾1件未供給").isFalse();
+        assertThat(judgeAll(population(3000, new int[0], 0, new int[] {0}))).as("先頭1件未供給").isFalse();
+        long[][] early = population(3000, new int[0], 0, new int[0]);
+        early[1][1500] = early[0][1500] - 1;
+        assertThat(judgeAll(early)).as("早着").isFalse();
+    }
+
+    @Test
+    void 窓外到着は超過bucketに保持され遅延件数を超えれば落ちる() {
+        long[][] p = population(3000, new int[] {2999}, 131, new int[0]);
+        long[] buckets = ModuleEventLoadJudgement.arrivalBuckets(1_000L, p[1], 300);
+        assertThat(buckets).hasSize(301);
+        assertThat(buckets[299]).isEqualTo(9L);
+        assertThat(buckets[300]).isEqualTo(1L);
+        assertThat(java.util.Arrays.stream(buckets).sum()).isEqualTo(3000L);
+        assertThat(ModuleEventLoadJudgement.bucketsMatch(buckets, 10, 1)).isTrue();
+        assertThat(ModuleEventLoadJudgement.bucketsMatch(buckets, 10, 0)).isFalse();
     }
 
     @Test
