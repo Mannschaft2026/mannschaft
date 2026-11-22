@@ -29,6 +29,7 @@ function request(status: ChangeRequestStatus = 'OPEN', id = 7): ChangeRequest {
     requestInfo: { requestedBy: 2, requestType: 'PRE_CONFIRM_EDIT', reason: 'reason' },
     reviewInfo: { status, reviewerId: null, reviewComment: null, reviewedAt: null },
     timing: { createdAt: '2026-10-27T12:00:00', expiresAt: null },
+    version: 0,
   }
 }
 function permissions(roleName: string | null, scopeAdmin = false) {

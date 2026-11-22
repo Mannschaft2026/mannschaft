@@ -50,7 +50,7 @@ function typeLabel(type: string): string {
 }
 
 function openReviewDialog(data: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'): void {
-  reviewTarget.value = { id: data.id, decision, version: data.version ?? 0 }
+  reviewTarget.value = { id: data.id, decision, version: data.version }
   reviewComment.value = ''
   reviewDialogVisible.value = true
 }

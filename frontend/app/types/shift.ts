@@ -492,8 +492,8 @@ export interface ChangeRequest {
     expiresAt: string | null
     createdAt: string
   }
-  /** 楽観ロック用バージョン（BE のレスポンスが返す場合のみ。未返却なら 0 で審査する） */
-  version?: number
+  /** 楽観ロック用バージョン（審査時にそのまま送る。BE は不一致を 409 SHIFT_018 にする） */
+  version: number
 }
 
 export interface CreateChangeRequestPayload {
