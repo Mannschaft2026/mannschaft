@@ -8,6 +8,8 @@ import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.AssignPositionRequest;
+import com.mannschaft.app.membership.dto.EffortShareQualification;
+import com.mannschaft.app.membership.dto.EffortShareQualificationQuery;
 import com.mannschaft.app.membership.dto.EndPositionRequest;
 import com.mannschaft.app.membership.dto.MemberPositionDto;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
@@ -551,6 +553,22 @@ public class MembershipService {
         return membershipRepository.findAllActiveByScope(scopeType, scopeId).stream()
                 .map(MembershipEntity::getUserId)
                 .toList();
+    }
+
+    /**
+     * F06.4.1: チーム共有資格を一括で判定する（データ設計 §8。内部専用・Controller へ公開しない）。
+     *
+     * <p>呼出元の read TX・REPLICA・先に開いた REPEATABLE READ snapshot を使わず、PRIMARY へ接続する
+     * 独立した新 TX（REQUIRES_NEW・readOnly=false・READ_COMMITTED）で最新の committed 状態を読む。
+     * 1 回の呼び出しの照会数は件数 N に比例させない。資格は「grantMembershipId がその user/team の現在有効な
+     * 直接所属 ID と一致する」ことで、ロール（SUPPORTER を含む）では除外せず、所属していない SYSTEM_ADMIN は資格なし。</p>
+     *
+     * @param queries (teamId, userId, grantMembershipId) の組
+     * @return 照会と同じ組ごとの判定結果
+     */
+    public List<EffortShareQualification> getEffortShareQualificationsBatch(
+            Collection<EffortShareQualificationQuery> queries) {
+        throw new UnsupportedOperationException("F06.4.1 PR-3a: 未実装（試練の骨格）");
     }
 
 }
