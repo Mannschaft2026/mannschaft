@@ -337,10 +337,24 @@ test('AC-3: test-onlyのPRはapp申告なら通り、tooling申告は拒否、�
   for (const name of jsonFiles) {
     const item = JSON.parse(readFileSync(new URL(name, evidenceDir), 'utf8'));
     assert.doesNotThrow(() => validateEvidence(item, name.replace(/\.json$/, ''), {
-      repository: 'kenta-0420/mannschaft',
+      repository: 'Mannschaft2026/mannschaft',
       fileExists: ref => headFiles.has(ref),
     }), name);
   }
+});
+
+
+test('AC-3b: リポジトリ移管後も現在名基準で旧名URL・大文字小文字違いが通り、無関係リポジトリは拒否される', () => {
+  const withUrl = url => ({ ...evidence, acceptanceCriteria: [{ id: 'AC-1', description: '検査する', tests: [{ name: 'unit', evidence: url }] }] });
+  const options = { repository: 'Mannschaft2026/mannschaft' };
+  const check = url => validateEvidence(withUrl(url), 'CMP-260101-0101', options);
+  assert.doesNotThrow(() => check('https://github.com/Mannschaft2026/mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/kenta-0420/mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/KENTA-0420/Mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/mannschaft2026/MANNSCHAFT/pull/1'));
+  assert.throws(() => check('https://github.com/someone-else/mannschaft/pull/1'), /同一GitHubリポジトリ/);
+  assert.throws(() => check('https://github.com/kenta-0420/other/pull/1'), /同一GitHubリポジトリ/);
+  assert.throws(() => validateEvidence(withUrl('https://github.com/kenta-0420/mannschaft/pull/1'), 'CMP-260101-0101', { repository: 'someone-else/mannschaft' }), /同一GitHubリポジトリ/);
 });
 
 test('AC-4: files空はthrow、null・数値・filename欠落はapp、check0件とmergedAt欠落は拒否', () => {

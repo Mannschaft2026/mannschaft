@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261122-0017",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4750,
+    "sha": "711ef0f7c9268b267f84b27f7cff9dd868fcc462"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "同一リポジトリ判定が現在名と既知の旧名を同一視し、大文字小文字を区別せず、無関係リポジトリのURLは拒否する",
+      "tests": [
+        {
+          "name": "AC-3b: リポジトリ移管後も現在名基準で旧名URL・大文字小文字違いが通り、無関係リポジトリは拒否される",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "現在名基準で既存の完了証拠全件と新規の証拠が通る",
+      "tests": [
+        {
+          "name": "AC-3: test-onlyのPRはapp申告なら通り、tooling申告は拒否、既存docs/evidence全件は新validatorを通る",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44919368998
+    },
+    {
+      "runId": 44919369028
+    },
+    {
+      "runId": 44919380516
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4750"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "利用者向け画面・APIの変更がない検証スクリプトのみの修正"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "利用者向け画面・APIの変更がない検証スクリプトのみの修正"
+    }
+  },
+  "regressions": [
+    {
+      "description": "リポジトリ移管後、旧名URLの証拠参照が同一リポジトリ判定で拒否され台帳締めPRが通らない",
+      "test": "AC-3b: リポジトリ移管後も現在名基準で旧名URL・大文字小文字違いが通り、無関係リポジトリは拒否される",
+      "redEvidence": "https://github.com/kenta-0420/mannschaft/commit/945accb115",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/commit/711ef0f7c9"
+    }
+  ]
+}
