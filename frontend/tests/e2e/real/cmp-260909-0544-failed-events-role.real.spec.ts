@@ -209,7 +209,9 @@ ROLES.forEach(({ key, label, who }, index) => {
 // ↓ 実装欠陥の確認: failed-events.vue は取得失敗（403 など）を握りつぶして空配列のまま描画するため、
 //   「失敗イベントはありません」と表示してしまう（CMP-260909-0543 が allocations / dashboard / alerts で直したのと同型）。
 //   本番コードは直さず、欠陥として FAIL のまま記録する。
+// 実装欠陥（failed-events.vue の load() の catch）が直るまで失敗することを期待する。直ったらこの行を外す。
 test('FAILED-04 (AC-2・実装欠陥の確認): 権限なし・他テナントが開いたとき、取得失敗が「失敗イベントはありません」の空状態に化けない', async () => {
+  test.fail(true, '実装欠陥: failed-events.vue の load() の catch が取得失敗を握りつぶす（修正は別行）')
   for (const { label, who } of ROLES) {
     const page = who()
     const response = await openFailedEvents(page)
