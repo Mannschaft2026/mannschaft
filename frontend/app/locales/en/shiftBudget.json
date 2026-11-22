@@ -28,7 +28,12 @@
         "periodStart": "Start date",
         "periodEnd": "End date",
         "save": "Save",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "fiscalYearRequired": "Enter a fiscal year ID",
+        "categoryRequired": "Enter a category ID",
+        "periodStartRequired": "Enter a start date",
+        "periodEndRequired": "Enter an end date",
+        "periodEndBeforeStart": "The end date must be on or after the start date"
       },
       "empty": "No allocations registered",
       "loadError": "Failed to load allocations",
@@ -139,7 +144,7 @@
       "id": "ID",
       "eventType": "Event type",
       "sourceId": "Source ID",
-      "errorMessage": "Error message",
+      "summary": "Summary",
       "retryCount": "Retry count",
       "lastRetriedAt": "Last retried at",
       "status": "Status",
@@ -163,6 +168,22 @@
         "SUCCEEDED": "Retry succeeded",
         "EXHAUSTED": "Retry limit reached",
         "MANUAL_RESOLVED": "Manually resolved"
+      },
+      "eventTypeValue": {
+        "CONSUMPTION_RECORD": "Consumption record",
+        "CONSUMPTION_CANCEL": "Consumption cancellation",
+        "THRESHOLD_ALERT": "Threshold alert",
+        "WORKFLOW_START": "Workflow start",
+        "NOTIFICATION_SEND": "Notification delivery",
+        "UNKNOWN": "Unknown type"
+      },
+      "summaryValue": {
+        "CONSUMPTION_RECORD": "Recording the shift consumption failed. Please quote the ID when contacting us.",
+        "CONSUMPTION_CANCEL": "Cancelling the shift consumption failed. Please quote the ID when contacting us.",
+        "THRESHOLD_ALERT": "Processing the threshold alert failed. You can retry it; if it persists, contact us with the ID.",
+        "WORKFLOW_START": "Starting the approval workflow failed. You can retry it; if it persists, contact us with the ID.",
+        "NOTIFICATION_SEND": "Sending the notification failed. You can retry it; if it persists, contact us with the ID.",
+        "UNKNOWN": "Processing failed. Please quote the ID when contacting us."
       }
     }
   }
