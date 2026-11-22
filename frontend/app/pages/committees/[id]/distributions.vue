@@ -249,6 +249,7 @@ onMounted(async () => {
           <DatePicker
             v-model="form.confirmationDeadlineAt"
             :min-date="minDeadline"
+            input-id="distribution-deadline-input"
             show-time
             hour-format="24"
             class="w-full"

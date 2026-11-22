@@ -131,7 +131,6 @@ describe('pages/committees/[id]/distributions.vue — 履歴の描画（CMP-2609
   })
 })
 
-
 /** ダイアログは body へ teleport されるため document.body から探す。 */
 function dialogEl<T extends HTMLElement>(testid: string): T | null {
   return document.body.querySelector(`[data-testid="${testid}"]`) as T | null
@@ -240,7 +239,7 @@ describe('pages/committees/[id]/distributions.vue — 配信操作（CMP-260930-
     expect(dialogEl('distribution-form-error')?.textContent).toContain('required')
   })
 
-  it('CD-012: 連打しても API は1回だけ呼ばれる', async () => {
+  it('CD-012: 連打しても API は1回だけ呼ばれる（再描画前に連続クリックしても submitting ガードで止まる）', async () => {
     getCommittee.mockResolvedValue({ data: { id: 1, myRole: 'CHAIR' } })
     let resolve: (v: unknown) => void = () => {}
     distribute.mockReturnValue(new Promise((r) => { resolve = r }))
@@ -248,11 +247,41 @@ describe('pages/committees/[id]/distributions.vue — 配信操作（CMP-260930-
     await flushMicrotasks()
     await openDialog(wrapper)
     typeInto('distribution-title-input', '連絡')
-    await clickSubmit()
-    await clickSubmit()
+    const submit = dialogEl<HTMLElement>('distribution-submit-button')
+    expect(submit).not.toBeNull()
+    // 同期で続けてクリックする。Button の disabled/loading は再描画後に反映されるため、
+    // 2回目のクリックも発火し、止めるのは submitDistribution 先頭のガードだけになる。
+    submit!.click()
+    submit!.click()
+    await flushMicrotasks()
     resolve({ data: customLog })
     await flushMicrotasks()
     expect(distribute).toHaveBeenCalledTimes(1)
+  })
+
+  it('CD-015: 確認必須で期限が過去になっていたら API を呼ばず、画面に deadline_past の文言を出す', async () => {
+    getCommittee.mockResolvedValue({ data: { id: 1, myRole: 'CHAIR', defaultConfirmationMode: 'REQUIRED' } })
+    const wrapper = await mountSuspended(DistributionsPage)
+    await flushMicrotasks()
+    await openDialog(wrapper)
+    typeInto('distribution-title-input', '連絡')
+    // 期限を画面の入力欄から選ぶ（ダイアログを開いた時点では未来の日時）
+    const deadline = document.body.querySelector<HTMLInputElement>('#distribution-deadline-input')
+    expect(deadline).not.toBeNull()
+    deadline!.value = '12/31/2030 10:00'
+    deadline!.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushMicrotasks()
+    // ダイアログを開いたまま時間が経ち、選んだ期限が過去になった状況
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(new Date('2031-01-01T00:00:00').getTime())
+    try {
+      await clickSubmit()
+    } finally {
+      nowSpy.mockRestore()
+    }
+
+    expect(distribute).not.toHaveBeenCalled()
+    expect(globalThis.confirm).not.toHaveBeenCalled()
+    expect(dialogEl('distribution-form-error')?.textContent).toContain('in the past')
   })
 
   it('CD-014: 画面の配信種別は CUSTOM_MESSAGE のみ（対象ID入力欄を持たない）', async () => {

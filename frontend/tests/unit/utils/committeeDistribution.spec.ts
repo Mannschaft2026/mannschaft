@@ -50,4 +50,14 @@ describe('buildCommitteeDistributeRequest', () => {
     const res = buildCommitteeDistributeRequest(form({ confirmationMode: 'NONE' }), NOW)
     expect(res).toMatchObject({ ok: true, body: { confirmationDeadlineAt: null } })
   })
+
+  it('UT-006: 期限が現在時刻ちょうどなら拒否する（境界は <= で判定）', () => {
+    const res = buildCommitteeDistributeRequest(form({ confirmationMode: 'REQUIRED', confirmationDeadlineAt: new Date(NOW) }), NOW)
+    expect(res).toEqual({ ok: false, errorKey: 'committee.distributions.deadline_past' })
+  })
+
+  it('UT-007: 期限が現在時刻の1ms後なら通る', () => {
+    const res = buildCommitteeDistributeRequest(form({ confirmationMode: 'REQUIRED', confirmationDeadlineAt: new Date(NOW + 1) }), NOW)
+    expect(res.ok).toBe(true)
+  })
 })
