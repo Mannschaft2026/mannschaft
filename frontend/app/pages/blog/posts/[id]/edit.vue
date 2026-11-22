@@ -75,10 +75,17 @@ function onMediaInserted(markdownText: string) {
   body.value = body.value ? `${body.value}\n\n${markdownText}` : markdownText
 }
 
-function publishRedirectPath(): string {
-  if (scopeType.value === 'TEAM' && scopeId.value) return `/teams/${scopeId.value}/blog`
-  if (scopeType.value === 'ORGANIZATION' && scopeId.value) return `/organizations/${scopeId.value}`
-  return '/dashboard'
+// チーム・組織ページは slug 前提のため、数値 scopeId をそのまま URL にしない。
+const teamStore = useTeamStore()
+const orgStore = useOrganizationStore()
+
+async function publishRedirectPath(): Promise<string> {
+  if (scopeType.value === 'TEAM') await teamStore.fetchMyTeams()
+  if (scopeType.value === 'ORGANIZATION') await orgStore.fetchMyOrganizations()
+  return blogPublishRedirectPath(scopeType.value, scopeId.value, {
+    teams: teamStore.myTeams,
+    organizations: orgStore.myOrganizations,
+  })
 }
 
 async function load() {
@@ -146,7 +153,7 @@ async function publish() {
       })
     }
     success('記事を公開しました')
-    await navigateTo(publishRedirectPath())
+    await navigateTo(await publishRedirectPath())
   } catch {
     showError('公開に失敗しました')
   } finally {
@@ -189,7 +196,7 @@ async function selfReviewDelete() {
   try {
     await selfReviewPost(postId, { action: 'DELETE' })
     success('投稿を削除しました')
-    await navigateTo(publishRedirectPath())
+    await navigateTo(await publishRedirectPath())
   } catch {
     showError('削除に失敗しました')
   } finally {
@@ -208,7 +215,7 @@ async function adminApprove() {
     })
     status.value = 'PUBLISHED'
     success('記事を承認・公開しました')
-    await navigateTo(publishRedirectPath())
+    await navigateTo(await publishRedirectPath())
   } catch {
     showError('承認に失敗しました')
   } finally {
