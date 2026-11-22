@@ -3,6 +3,7 @@
 # 作法: docs/development/persisted_enum_deployment.md
 # FeatureDisplayScope初回2定数: 新設表のみ、旧mainに読取経路なしの親検分承認。F01.3.1 §5参照。配布済みの証明ではない。
 # 本人診断6定数: 読取り互換性を全taskへ先配布し、旧task0の証跡後に別releaseで書込み開始。実展開済みの証明ではない。
+# F06.4.1 PR-3a 6定数（EffortTeamShareState・EffortShareDisposition）: 新設表 effort_team_shares と memberships の新列のみ。旧mainのEntityは列を写像せず読取経路なし。書込み開始は同PRの実装。配布済みの証明ではない。
 com.mannschaft.app.actionmemo.ActionMemoMood#BAD
 com.mannschaft.app.actionmemo.ActionMemoMood#GOOD
 com.mannschaft.app.actionmemo.ActionMemoMood#GREAT
@@ -501,6 +502,10 @@ com.mannschaft.app.effortrecord.enums.EffortShareState#REVOKED
 com.mannschaft.app.effortrecord.enums.EffortShareState#VISIBLE
 com.mannschaft.app.effortrecord.enums.EffortSourceType#PRESET
 com.mannschaft.app.effortrecord.enums.EffortSourceType#TEAM
+com.mannschaft.app.effortrecord.enums.EffortTeamShareState#MODERATED
+com.mannschaft.app.effortrecord.enums.EffortTeamShareState#PENDING
+com.mannschaft.app.effortrecord.enums.EffortTeamShareState#REVOKED
+com.mannschaft.app.effortrecord.enums.EffortTeamShareState#VISIBLE
 com.mannschaft.app.equipment.EquipmentStatus#ALL_ASSIGNED
 com.mannschaft.app.equipment.EquipmentStatus#AVAILABLE
 com.mannschaft.app.equipment.EquipmentStatus#MAINTENANCE
@@ -2193,6 +2198,8 @@ com.mannschaft.app.loyalty.RequestOperation#REDEEM
 com.mannschaft.app.loyalty.RequestOperation#REJECT
 com.mannschaft.app.loyalty.RequestOperation#SELF_SUBMIT
 com.mannschaft.app.loyalty.RequestOperation#STAFF_AWARD
+com.mannschaft.app.membership.domain.EffortShareDisposition#RETAINED_ACCOUNT_WITHDRAWAL
+com.mannschaft.app.membership.domain.EffortShareDisposition#REVOKED
 com.mannschaft.app.template.FeatureDisplayScope#TEAM
 com.mannschaft.app.template.FeatureDisplayScope#ORGANIZATION
 # L1-M初回5定数: 基盤をreader先配布し、全task旧版0の証跡後の別releaseでC/F業務writerを採用する。
