@@ -66,7 +66,7 @@ async function mountList(canManage: boolean, scopeType: 'TEAM' | 'ORGANIZATION' 
   const wrapper = await mountSuspended(CirculationList, {
     props: { scopeType, scopeId: 'slug-x', canManage },
     global: {
-      plugins: [createI18n({ legacy: false, locale: 'ja', fallbackLocale: false, messages: { ja: jaCirculation } })],
+      plugins: [createI18n<[typeof jaCirculation], 'ja', false>({ legacy: false, locale: 'ja', fallbackLocale: false, messages: { ja: jaCirculation } })],
     },
   })
   await new Promise(resolve => setTimeout(resolve, 0))
