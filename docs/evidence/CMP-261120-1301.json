@@ -3,8 +3,8 @@
   "cmpId": "CMP-261120-1301",
   "scope": "tooling",
   "implementation": {
-    "pr": 4708,
-    "sha": "6dc5c90d7afd2b846d935ccad23b2945d50c4826"
+    "pr": 4694,
+    "sha": "859e04962b1b6078de11cb783009aa4404cce350"
   },
   "acceptanceCriteria": [
     {
@@ -85,7 +85,7 @@
     },
     {
       "id": "AC-7",
-      "description": "Backend CI のジョブ数 14→12、軽量 workflow 7ジョブ相当→1ジョブで合計8本減。Detect changes は0.4分→1.8分。待ち時間全体の短縮幅は混雑度に左右されるため未計測",
+      "description": "Backend CI のジョブ数 14→12、軽量 workflow 7ジョブ相当→1ジョブで合計8本減。Detect changes は0.4分→1.8分。待ち時間全体の短縮幅は混雑度に左右されるため未計測。実装 PR は #4694 と #4708 の2本で、#4708 は CI 番人スクリプトと build-logic のコメント修正を含み検査器の tooling 範囲外と判定されるため、全ファイルが tooling 範囲の #4694 を代表とした",
       "tests": [
         {
           "name": "旧構成の run",
@@ -104,19 +104,19 @@
   ],
   "ci": [
     {
-      "runId": 44967139903
+      "runId": 44853098619
     },
     {
-      "runId": 44967139904
+      "runId": 44853098618
     },
     {
-      "runId": 44967139986
+      "runId": 44853098607
     },
     {
-      "runId": 44967139964
+      "runId": 44853098632
     },
     {
-      "runId": 44967139943
+      "runId": 44853095965
     }
   ],
   "stages": {
