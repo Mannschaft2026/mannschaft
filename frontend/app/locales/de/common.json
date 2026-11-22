@@ -1197,7 +1197,8 @@
           "step3": "Sobald alles gelesen ist, springt auch das Glockenabzeichen auf 0"
         }
       }
-    }
+    },
+    "settingsTitle": "Benachrichtigungseinstellungen"
   },
   "project": {
     "back_label": "Projektliste",
@@ -3353,6 +3354,12 @@
     }
   },
   "globalSearch": {
+    "header": {
+      "placeholder": "Alles durchsuchen",
+      "open": "Suche öffnen",
+      "suggestions": "Suchvorschläge",
+      "keyword": "Stichwort"
+    },
     "title": "Suche",
     "placeholder": "Nach Stichwort suchen (mindestens 2 Zeichen)",
     "submit": "Suchen",

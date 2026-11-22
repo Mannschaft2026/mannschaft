@@ -133,7 +133,7 @@ node scripts/boundary-coordination.mjs handoff --lane L1-A --owner <自UUID> --f
 
 ## 検証と受け入れ条件
 
-`node --test scripts/boundary-coordination.test.mjs` がAC1〜9の根拠である。ローカルbareを使う実Git競合、異なる領地の再試行、応答喪失/送信失敗、担当保持、UUID/移管、入口/gate、共有resource、L2並行、L5終結排他、依頼追記、dirty作業木/index/調整用追跡ref以外のref不変を検証する。Harness CIでも同じ試験を実行する。
+`node --test scripts/boundary-coordination.test.mjs` がAC1〜9の根拠である。ローカルbareを使う実Git競合、異なる領地の再試行、応答喪失/送信失敗、担当保持、UUID/移管、入口/gate、共有resource、L2並行、L5終結排他、依頼追記、dirty作業木/index/調整用追跡ref以外のref不変を検証する。PR軽量検査（`.github/workflows/pr-light-checks.yml` の `[Harness]` step。旧Harness CI）でも同じ試験を実行する。
 
 L0-M依存免除の追加試験は `計測免除AC1/2`（L1-B着手・完了、L0-Mと他lane不変、schema/keys/digest不変）、`計測免除AC3` の2本（build/weights・owner・L5排他、L1-G/L2入口・measurement停止条件）、`計測免除AC4`（status APIと実CLI全体/gradleの裁可表示）の4本。既存のL1-M未解消依存試験も維持し、CAS・通信失敗・dirty資産保全試験を削除しない。
 
