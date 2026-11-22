@@ -2,7 +2,6 @@
 import dayjs from 'dayjs'
 import type {
   CommitteeConfirmationMode,
-  CommitteeDistributeRequest,
   CommitteeDistributionLog,
   CommitteeDistributionScope,
   CommitteeRole,
@@ -75,49 +74,18 @@ function openDialog() {
   showDialog.value = true
 }
 
-/**
- * 画面からの配信は CUSTOM_MESSAGE のみ。他の種別は対象IDを画面内で選べず、
- * BE も contentId の実在を検証しないため、各コンテンツ詳細からの伝達（設計書 F04.10 の
- * CommitteeDistributionModal）で実装する。
- */
-function buildRequest(): { body: CommitteeDistributeRequest | null; errorKey: string | null } {
-  if (!form.customTitle.trim()) return { body: null, errorKey: 'committee.distributions.required_missing' }
-  if (form.confirmationMode === 'REQUIRED') {
-    if (!form.confirmationDeadlineAt) return { body: null, errorKey: 'committee.distributions.required_missing' }
-    if (form.confirmationDeadlineAt.getTime() <= Date.now()) {
-      return { body: null, errorKey: 'committee.distributions.deadline_past' }
-    }
-  }
-  return {
-    errorKey: null,
-    body: {
-      contentType: 'CUSTOM_MESSAGE',
-      contentId: null,
-      customTitle: form.customTitle.trim(),
-      customBody: form.customBody.trim() || null,
-      targetScope: form.targetScope,
-      announcementEnabled: form.announcementEnabled,
-      confirmationMode: form.confirmationMode,
-      confirmationDeadlineAt: form.confirmationDeadlineAt
-        ? dayjs(form.confirmationDeadlineAt).format('YYYY-MM-DDTHH:mm:ss')
-        : null,
-      customHeadline: form.customHeadline.trim() || null,
-    },
-  }
-}
-
 async function submitDistribution() {
   if (submitting.value) return
-  const { body, errorKey } = buildRequest()
-  if (!body) {
-    formErrorKey.value = errorKey
+  const built = buildCommitteeDistributeRequest(form)
+  if (!built.ok) {
+    formErrorKey.value = built.errorKey
     return
   }
   formErrorKey.value = null
   if (!confirm(t('committee.distributions.confirm_message'))) return
   submitting.value = true
   try {
-    await committeeApi.distribute(committeeId, body)
+    await committeeApi.distribute(committeeId, built.body)
     notification.success(t('committee.distributions.success'))
     showDialog.value = false
     page.value = 0
@@ -128,8 +96,6 @@ async function submitDistribution() {
     submitting.value = false
   }
 }
-
-defineExpose({ form, submitDistribution })
 
 function changePage(event: { page: number; rows: number }) {
   onPage(event)
@@ -248,11 +214,11 @@ onMounted(async () => {
       <div class="flex flex-col gap-4">
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_custom_title') }}</label>
-          <InputText v-model="form.customTitle" class="w-full" maxlength="200" />
+          <InputText v-model="form.customTitle" class="w-full" maxlength="200" data-testid="distribution-title-input" />
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_custom_body') }}</label>
-          <Textarea v-model="form.customBody" class="w-full" rows="4" maxlength="5000" />
+          <Textarea v-model="form.customBody" class="w-full" rows="4" maxlength="5000" data-testid="distribution-body-input" />
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">{{ $t('committee.distributions.field_scope') }}</label>
