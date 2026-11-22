@@ -3,7 +3,6 @@ import { useShiftAssignmentApi } from './shift/useShiftAssignmentApi'
 import { useShiftAutoAssignApi } from './shift/useShiftAutoAssignApi'
 import { useShiftAvailabilityApi } from './shift/useShiftAvailabilityApi'
 import { useShiftChangeRequestApi } from './shift/useShiftChangeRequestApi'
-import { useShiftConstraintApi } from './shift/useShiftConstraintApi'
 import { useShiftHourlyRateApi } from './shift/useShiftHourlyRateApi'
 import { useShiftPositionApi } from './shift/useShiftPositionApi'
 import { useShiftRequestApi } from './shift/useShiftRequestApi'
@@ -25,7 +24,6 @@ export function useShiftApi() {
     ...useShiftAvailabilityApi(),
     ...useShiftHourlyRateApi(),
     ...useShiftAutoAssignApi(),
-    ...useShiftConstraintApi(),
     ...useShiftChangeRequestApi(),
     ...useShiftAssignmentApi(),
     ...useShiftUtilApi(),

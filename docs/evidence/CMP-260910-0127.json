@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260910-0127",
+  "scope": "app",
+  "implementation": {
+    "pr": 4528,
+    "sha": "8c487aa3ed3b7074b270b2f2c5712a7821c0c600"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "枠の日付変更時に同枠の希望（shift_requests.slot_date）が枠と整合する（確認後に同一トランザクションで同時移動）",
+      "tests": [
+        {
+          "name": "ShiftSlotDateMoveContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftSlotDateMoveContractIT.java"
+        },
+        {
+          "name": "ShiftSlotServiceTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftSlotServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "希望を持つ枠の日付変更は確認なしの直接 API では 409 で拒否される",
+      "tests": [
+        {
+          "name": "ShiftSlotDateMoveContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftSlotDateMoveContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "画面で旧日付→新日付と希望も移動する確認を表示し、取消時は API を呼ばない",
+      "tests": [
+        {
+          "name": "ShiftSlotEditDialog.spec",
+          "evidence": "frontend/app/components/shift/ShiftSlotEditDialog.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44655004461
+    },
+    {
+      "runId": 44655004465
+    },
+    {
+      "runId": 44655004432
+    },
+    {
+      "runId": 44655004396
+    },
+    {
+      "runId": 44655004492
+    },
+    {
+      "runId": 44655004574
+    },
+    {
+      "runId": 44655004586
+    },
+    {
+      "runId": 44655004449
+    },
+    {
+      "runId": 44655004380
+    },
+    {
+      "runId": 44655004311
+    },
+    {
+      "runId": 44655004377
+    },
+    {
+      "runId": 44655004356
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4528"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4528"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4528"
+    }
+  },
+  "regressions": []
+}

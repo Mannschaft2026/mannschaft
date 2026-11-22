@@ -47,11 +47,14 @@ function generateClientId(tempId: number): string {
 
 export function useOfflineQueue() {
   /**
-   * キューにペイロードを積む。Dexie 書き込みに失敗したらインメモリに退避する。
+   * 項目を 1 回の書き込みで積む（識別子を含めて保存し、書き込み後の更新による中間状態を作らない）。
+   * Dexie 書き込みに失敗したらインメモリに退避する。
    */
-  async function enqueue(
+  async function addItem(
     payload: CreateActionMemoPayload,
     tempId: number,
+    publishTeamId?: number,
+    publishOnlyMemoId?: number,
   ): Promise<OfflineQueuedMemo> {
     const enqueuedAt = nowIso()
 
@@ -64,6 +67,8 @@ export function useOfflineQueue() {
           body: {
             ...payload,
             _tempId: tempId,
+            ...(publishTeamId != null ? { _publishTeamId: publishTeamId } : {}),
+            ...(publishOnlyMemoId != null ? { _publishOnlyMemoId: publishOnlyMemoId } : {}),
           } as unknown as Record<string, unknown>,
           version: null,
           status: 'PENDING',
@@ -72,7 +77,7 @@ export function useOfflineQueue() {
           createdAt: enqueuedAt,
           syncedAt: null,
         })
-        return { queueId: id as number, tempId, payload, enqueuedAt }
+        return { queueId: id as number, tempId, payload, enqueuedAt, publishTeamId, publishOnlyMemoId }
       } catch {
         // Dexie 失敗時はフォールバック
       }
@@ -84,9 +89,57 @@ export function useOfflineQueue() {
       tempId,
       payload,
       enqueuedAt,
+      publishTeamId,
+      publishOnlyMemoId,
     }
     _inMemory.items.push(fallback)
     return fallback
+  }
+
+  /**
+   * キューにペイロードを積む。
+   */
+  function enqueue(
+    payload: CreateActionMemoPayload,
+    tempId: number,
+    publishTeamId?: number,
+  ): Promise<OfflineQueuedMemo> {
+    return addItem(payload, tempId, publishTeamId)
+  }
+
+  /**
+   * 作成済みメモの「公開のみ」項目を積む（オフライン同期で作成成功・公開失敗したとき用）。
+   * メモは再作成せず、次回 flush で publish-to-team だけ再試行する。
+   */
+  function enqueuePublishOnly(memoId: number, teamId: number): Promise<OfflineQueuedMemo> {
+    return addItem({ content: '' }, 0, teamId, memoId)
+  }
+
+  /**
+   * 作成済みになった項目を、実メモ ID つきの「公開のみ」項目へ 1 回の書き込みで置き換える（同じ行の body 更新）。
+   * 作成成功〜公開応答待ちの間に再読み込みされても、同じメモが再作成されないようにするため。
+   * 置き換えに失敗したら例外を投げる（呼び出し側は作成要求を再実行しない方針）。
+   */
+  async function convertToPublishOnly(queueId: number, memoId: number, teamId: number): Promise<void> {
+    let done = false
+    if (await isDexieAvailable()) {
+      try {
+        const n = await offlineDb.offlineQueue.update(queueId, {
+          body: { _tempId: 0, _publishTeamId: teamId, _publishOnlyMemoId: memoId } as unknown as Record<string, unknown>,
+        })
+        done = n > 0
+      } catch {
+        // Dexie 失敗時はフォールバック
+      }
+    }
+    const mem = _inMemory.items.find((i) => i.queueId === queueId)
+    if (mem) {
+      mem.payload = { content: '' }
+      mem.publishTeamId = teamId
+      mem.publishOnlyMemoId = memoId
+      done = true
+    }
+    if (!done) throw new Error('queue item could not be converted to publish-only')
   }
 
   /**
@@ -107,6 +160,8 @@ export function useOfflineQueue() {
             tempId: (item.body as Record<string, unknown>)?._tempId as number ?? 0,
             payload: extractPayload(item.body),
             enqueuedAt: item.createdAt,
+            publishTeamId: extractPublishTeamId(item.body),
+            publishOnlyMemoId: extractNumber(item.body, '_publishOnlyMemoId'),
           }))
       } catch {
         // Dexie 失敗時はフォールバック
@@ -157,16 +212,18 @@ export function useOfflineQueue() {
   async function flushQueue(
     sender: (
       payload: CreateActionMemoPayload,
-    ) => Promise<{ id: number } | null>,
+      queued: OfflineQueuedMemo,
+    ) => Promise<{ id: number; keepQueued?: boolean } | null>,
   ): Promise<Array<{ queued: OfflineQueuedMemo; createdId: number }>> {
     const items = await getAll()
     const results: Array<{ queued: OfflineQueuedMemo; createdId: number }> = []
     for (const item of items) {
       try {
-        const created = await sender(item.payload)
+        const created = await sender(item.payload, item)
         if (created && typeof created.id === 'number') {
           results.push({ queued: item, createdId: created.id })
-          if (typeof item.queueId === 'number') {
+          // keepQueued: 公開のみ項目へ置き換え済みで、公開が未完（通信断など）のため項目を残す
+          if (typeof item.queueId === 'number' && !created.keepQueued) {
             await remove(item.queueId)
           }
         } else {
@@ -198,6 +255,8 @@ export function useOfflineQueue() {
 
   return {
     enqueue,
+    enqueuePublishOnly,
+    convertToPublishOnly,
     getAll,
     remove,
     hasQueuedItems,
@@ -207,11 +266,22 @@ export function useOfflineQueue() {
   }
 }
 
+function extractNumber(body: Record<string, unknown>, key: string): number | undefined {
+  const v = body?.[key]
+  return typeof v === 'number' ? v : undefined
+}
+
+function extractPublishTeamId(body: Record<string, unknown>): number | undefined {
+  return extractNumber(body, '_publishTeamId')
+}
+
 /**
  * 汎用 body から CreateActionMemoPayload を抽出するヘルパー。
  */
 function extractPayload(body: Record<string, unknown>): CreateActionMemoPayload {
   const cleaned = { ...body }
   delete cleaned._tempId
+  delete cleaned._publishTeamId
+  delete cleaned._publishOnlyMemoId
   return cleaned as unknown as CreateActionMemoPayload
 }
