@@ -2356,7 +2356,8 @@
       "action": "删除",
       "confirm": "将删除活动记录。原日程不会被删除。",
       "success": "活动记录已删除"
-    }
+    },
+    "templateLink": "活动模板"
   },
   "dashboard": {
     "team_reservation_link": "预约管理"

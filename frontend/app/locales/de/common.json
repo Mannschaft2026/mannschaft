@@ -2356,7 +2356,8 @@
       "action": "Löschen",
       "confirm": "Dieser Aktivitätsbericht wird gelöscht. Der ursprüngliche Termin bleibt erhalten.",
       "success": "Aktivitätsbericht gelöscht"
-    }
+    },
+    "templateLink": "Aktivitätsvorlagen"
   },
   "dashboard": {
     "team_reservation_link": "Reservierungen"

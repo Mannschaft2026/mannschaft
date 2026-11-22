@@ -1,6 +1,7 @@
 package com.mannschaft.app.activity.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.mannschaft.app.activity.dto.CreateTemplateRequest.TemplateFieldInput;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -38,7 +39,7 @@ public class UpdateTemplateRequest {
 
     /** 項目定義。件数の上限（15）は Service で ACTIVITY_006 として検査する。ここの上限は巨大入力を弾くための防壁。 */
     @Size(max = 100)
-    private final List<@NotNull @Valid CreateTemplateRequest.TemplateFieldInput> fields;
+    private final List<@NotNull @Valid TemplateFieldInput> fields;
 
     /** 削除する既存項目の fieldKey（省略は空）。{@code fields} を省略したときの指定は 400。 */
     @Size(max = 100)

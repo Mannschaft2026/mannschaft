@@ -2356,7 +2356,8 @@
       "action": "삭제",
       "confirm": "활동 기록을 삭제합니다. 원래 일정은 삭제되지 않습니다.",
       "success": "활동 기록을 삭제했습니다"
-    }
+    },
+    "templateLink": "활동 템플릿"
   },
   "dashboard": {
     "team_reservation_link": "예약 관리"

@@ -2356,7 +2356,8 @@
       "action": "Delete",
       "confirm": "Delete this activity record. The source schedule will remain.",
       "success": "Activity record deleted"
-    }
+    },
+    "templateLink": "Activity templates"
   },
   "dashboard": {
     "team_reservation_link": "Reservations"
