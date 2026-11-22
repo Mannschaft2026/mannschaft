@@ -47,11 +47,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * CMP-261012-0911 試練: OAuth ログインが 2FA を迂回する欠陥の是正（HTTP 境界の受け入れテスト）。
  *
  * <p><b>構成</b>: 実 Controller → 実 Service → 実 MySQL（Testcontainers）・実 Security フィルタ（{@link MfaItSupport}）。
- * 外部境界のみ代役: Valkey は {@link MfaValkeyFake}、OAuth プロバイダ（Google / LINE / Apple）は {@link MfaFakeOAuthProviders}
- * （JDK 標準の HttpServer。{@code MfaItSupport} の {@code @DynamicPropertySource} で向ける）。
+ * 外部境界のみ代役: Valkey は {@link MfaValkeyFake}、OAuth プロバイダ（Google / LINE / Apple）は共通の
+ * ループバック HTTP サーバで偽装する。MySQL 統合試験の基底が接続先を登録する。</p>
+ *
+ * <p>偽プロバイダの接続先は JVM 内で固定するため、他の MySQL 統合試験と構成を共有できる。
  * 偽プロバイダは認可コードに {@code <sub>~<email>} を埋めて返すため、テストごとに別の OAuth 利用者を作れる。</p>
  *
- * <p>本テストは {@code @Transactional} にしない（AFTER_COMMIT 監査を観測するため）。</p>
+ * <p>AFTER_COMMIT の監査を観測するため、本テストは {@code @Transactional} にしない。</p>
  *
  * <p>対象 AC: AC-1〜7・AC-12・AC-14〜17（AC-13 は FE 単体、AC-8〜11 は実機）。判断①（method=入口方式）・②（監査 metadata）。</p>
  */
