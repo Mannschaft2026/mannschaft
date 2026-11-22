@@ -3,6 +3,7 @@ import type { AnnouncementFeedItem, AnnouncementScopeType } from '~/types/announ
 import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { runKeepingPinFocus } from '~/utils/announcementFocus'
 import { useApi } from '~/composables/useApi'
 import { useErrorHandler } from '~/composables/useErrorHandler'
 import { useAnnouncementFeed } from '~/composables/useAnnouncementFeed'
@@ -107,7 +108,7 @@ async function onItemClick(item: (typeof feed.value)[number], trigger: HTMLEleme
 }
 
 async function onTogglePin(id: number) {
-  try { await togglePin(id) } catch (error) { handleApiError(error) }
+  try { await runKeepingPinFocus(id, () => togglePin(id)) } catch (error) { handleApiError(error) }
 }
 
 async function onDelete(id: number) {
