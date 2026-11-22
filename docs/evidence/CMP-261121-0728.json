@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261121-0728",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4702,
+    "sha": "1d702c5811f3be81c0bb493636b1dcec09da2080"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "Git管理外の完全・欠損・書込fixtureを祖先探索から隔離し、実検査と欠損拒否を維持する",
+      "tests": [
+        {
+          "name": "指摘4: git リポジトリの外（.git 無しの検証コピー）で素材が全て在れば従来どおり全検査を走らせる",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        },
+        {
+          "name": "指摘4: git リポジトリの外で1つでも欠ければ省略せず失敗（bytes は呼ばない）",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        },
+        {
+          "name": "AC-14: 書き込み前の展開要求。sparse なら expand の手順を出して失敗、全展開と git 管理外は通る、壊れた git は失敗",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "祖先のlocal core.worktreeが子を指す実Gitケースで境界なしred・限定隔離後greenを確認する",
+      "tests": [
+        {
+          "name": "C19: 祖先 core.worktree が子を指すGit管理外コピーで欠損を拒否する",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "本番module・CI判定・書込および成果物保護を変えず通常の外部gitdir sparse保護を維持する",
+      "tests": [
+        {
+          "name": "AC-10: 本物の cone sparse で全て範囲外なら omitted",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        },
+        {
+          "name": "AC-11/指摘3: CI では省略しない（CI=true・1、GITHUB_ACTIONS=true かつ CI=false/空 のいずれも失敗）",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        },
+        {
+          "name": "AC-14: 書き込み前の展開要求。sparse なら expand の手順を出して失敗、全展開と git 管理外は通る、壊れた git は失敗",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "対象全テストと同一headに適用されるCIが成功する",
+      "tests": [
+        {
+          "name": "C19: 祖先 core.worktree が子を指すGit管理外コピーで欠損を拒否する",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        },
+        {
+          "name": "指摘4: git リポジトリの外（.git 無しの検証コピー）で素材が全て在れば従来どおり全検査を走らせる",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        },
+        {
+          "name": "指摘4: git リポジトリの外で1つでも欠ければ省略せず失敗（bytes は呼ばない）",
+          "evidence": "frontend/scripts/lib/sparse-assets.test.mjs"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44840111698
+    },
+    {
+      "runId": 44840111709
+    },
+    {
+      "runId": 44840152240
+    },
+    {
+      "runId": 44840111759
+    },
+    {
+      "runId": 44840111784
+    },
+    {
+      "runId": 44840111795
+    },
+    {
+      "runId": 44840111805
+    },
+    {
+      "runId": 44840111841
+    },
+    {
+      "runId": 44840111920
+    },
+    {
+      "runId": 44840112028
+    },
+    {
+      "runId": 44840119580
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261121-0728-acceptance.md"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で画面・API・DBの挙動を変更しない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で画面導線を変更しない"
+    }
+  },
+  "regressions": [
+    {
+      "description": "Git管理外コピーが祖先のcore.worktreeに捕捉され欠損をno-tracked-pathsと判定する",
+      "test": "C19: 祖先 core.worktree が子を指すGit管理外コピーで欠損を拒否する",
+      "redEvidence": "docs/evidence/CMP-261121-0728-acceptance.md",
+      "greenEvidence": "docs/evidence/CMP-261121-0728-acceptance.md"
+    }
+  ]
+}

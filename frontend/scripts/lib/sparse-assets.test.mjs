@@ -29,15 +29,23 @@ function git(cwd, ...args) {
   assert.equal(run.status, 0, `git ${args.join(' ')} 失敗: ${run.stderr}`)
   return run.stdout
 }
-function makeRepo({ withExclusions = true } = {}) {
-  const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'sparse-assets-'))
-  git(dir, 'init', '--quiet')
+// Git管理外を想定するfixtureだけ、祖先リポジトリの探索を止める。
+const outsideEnv = dir => ({ ...quiet, GIT_CEILING_DIRECTORIES: path.dirname(fs.realpathSync(dir)) })
+
+// .git を作って消す途中の残留に依存せず、検証コピーを初めからGit管理外として作る。
+function makePlainCopy({ withExclusions = true, parent = fs.realpathSync(os.tmpdir()) } = {}) {
+  const dir = fs.mkdtempSync(path.join(parent, 'sparse-assets-'))
   fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true })
   if (withExclusions) fs.writeFileSync(path.join(dir, 'scripts/worktree-sparse-exclusions.json'), EXCLUSIONS)
   for (const name of [...FILES, OTHER]) {
     fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true })
     fs.writeFileSync(path.join(dir, name), `bytes ${name}`)
   }
+  return dir
+}
+function makeRepo({ withExclusions = true } = {}) {
+  const dir = makePlainCopy({ withExclusions })
+  git(dir, 'init', '--quiet')
   git(dir, 'add', '.')
   git(dir, 'commit', '--quiet', '-m', 'init')
   return dir
@@ -282,11 +290,10 @@ test('失敗判定（partial など）では bytes を呼ばず失敗する', as
 })
 
 test('指摘4: git リポジトリの外（.git 無しの検証コピー）で素材が全て在れば従来どおり全検査を走らせる', async () => {
-  const dir = makeRepo()
+  const dir = makePlainCopy()
   try {
-    fs.rmSync(path.join(dir, '.git'), { recursive: true, force: true })
     let called = false
-    const outcome = await runWithSparseOmission({ repoRoot: dir, targets: [TARGET], expected: FILES, env: quiet, label: '試験', log: () => {},
+    const outcome = await runWithSparseOmission({ repoRoot: dir, targets: [TARGET], expected: FILES, env: outsideEnv(dir), label: '試験', log: () => {},
       metadata: () => {}, bytes: () => { called = true } })
     assert.equal(called, true)
     assert.equal(outcome.bytesVerified, true)
@@ -294,12 +301,11 @@ test('指摘4: git リポジトリの外（.git 無しの検証コピー）で�
 })
 
 test('指摘4: git リポジトリの外で1つでも欠ければ省略せず失敗（bytes は呼ばない）', async () => {
-  const dir = makeRepo()
+  const dir = makePlainCopy()
   try {
-    fs.rmSync(path.join(dir, '.git'), { recursive: true, force: true })
     fs.rmSync(path.join(dir, FILES[1]))
     let called = false
-    await assert.rejects(runWithSparseOmission({ repoRoot: dir, targets: [TARGET], expected: FILES, env: quiet, label: '試験', log: () => {},
+    await assert.rejects(runWithSparseOmission({ repoRoot: dir, targets: [TARGET], expected: FILES, env: outsideEnv(dir), label: '試験', log: () => {},
       metadata: () => {}, bytes: () => { called = true } }), /missing-outside-git/)
     assert.equal(called, false)
   } finally { cleanup(dir) }
@@ -332,8 +338,22 @@ test('AC-14: 書き込み前の展開要求。sparse なら expand の手順を�
   } finally { cleanup(dir) }
   const plain = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'sparse-assets-plain-'))
   try {
-    assert.doesNotThrow(() => requireExpandedForWrite({ repoRoot: plain, targets: [TARGET], env: quiet }))
+    assert.doesNotThrow(() => requireExpandedForWrite({ repoRoot: plain, targets: [TARGET], env: outsideEnv(plain) }))
   } finally { cleanup(plain) }
+})
+
+test('C19: 祖先 core.worktree が子を指すGit管理外コピーで欠損を拒否する', async () => {
+  const parent = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'c19-parent-'))
+  try {
+    git(parent, 'init', '--quiet')
+    const dir = makePlainCopy({ parent })
+    git(parent, 'config', '--local', 'core.worktree', fs.realpathSync(dir))
+    fs.rmSync(path.join(dir, FILES[1]))
+    let called = false
+    await assert.rejects(runWithSparseOmission({ repoRoot: dir, targets: [TARGET], expected: FILES, env: outsideEnv(dir), label: '試験', log: () => {},
+      metadata: () => {}, bytes: () => { called = true } }), /missing-outside-git/)
+    assert.equal(called, false)
+  } finally { cleanup(parent) }
 })
 
 test('AC-12: import しただけでは出力もプロセス終了もしない', () => {

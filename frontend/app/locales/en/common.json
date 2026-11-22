@@ -3353,6 +3353,12 @@
     }
   },
   "globalSearch": {
+    "header": {
+      "placeholder": "Search everything",
+      "open": "Open search",
+      "suggestions": "Search suggestions",
+      "keyword": "Keyword"
+    },
     "title": "Search",
     "placeholder": "Search by keyword (2+ characters)",
     "submit": "Search",
