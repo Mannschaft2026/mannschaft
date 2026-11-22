@@ -79,6 +79,10 @@ class AnnouncementFeedControllerTest {
     @MockitoBean
     private AnnouncementScopedFeedVisibilityGuard visibilityGuard;
 
+    // お知らせ化の元コンテンツ公開状態の入口判定（N9。判定そのものは単体・IT で検証する）
+    @MockitoBean
+    private AnnouncementSourcePublicationGuard publicationGuard;
+
     // JwtAuthenticationFilter の依存解決用
     @MockitoBean
     private AuthTokenService authTokenService;
@@ -248,6 +252,26 @@ class AnnouncementFeedControllerTest {
                             .content(requestBody))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("ANNOUNCE_002"));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST お知らせ化 — 元コンテンツが非公開（N9）")
+    class CreateAnnouncementUnpublishedSource {
+
+        @Test
+        @DisplayName("異常系: 元が下書き等（Guard が ANNOUNCE_006）→ 404。お知らせ化の Service には進まない")
+        void createAnnouncement_元が非公開_404() throws Exception {
+            willThrow(new BusinessException(AnnouncementErrorCode.ANNOUNCE_006))
+                    .given(publicationGuard).assertPublished(AnnouncementSourceType.BLOG_POST, SOURCE_ID);
+
+            mockMvc.perform(post("/api/v1/teams/{teamId}/announcements", TEAM_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"sourceType\": \"BLOG_POST\", \"sourceId\": %d}".formatted(SOURCE_ID)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_006"));
+
+            org.mockito.Mockito.verifyNoInteractions(announcementFeedService);
         }
     }
 

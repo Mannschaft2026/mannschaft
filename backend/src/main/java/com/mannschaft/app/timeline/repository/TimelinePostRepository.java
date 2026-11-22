@@ -16,6 +16,9 @@ import java.util.UUID;
  */
 public interface TimelinePostRepository extends JpaRepository<TimelinePostEntity, Long> {
 
+    /** 指定状態の未削除投稿が存在するか（{@code TimelinePostPublicationStatusService} 用）。 */
+    boolean existsByIdAndStatus(Long id, com.mannschaft.app.timeline.PostStatus status);
+
     /**
      * F17.2 Wave2 ①: 村行事のシステム自動投稿の冪等判定（設計書 §3.7）。
      *
