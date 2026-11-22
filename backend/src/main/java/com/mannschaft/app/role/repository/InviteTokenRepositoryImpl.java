@@ -158,9 +158,10 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     @Override
     public int markClaimReleased(UUID claimId) {
-        // この claim による付与がコミット済みなら戻さない（共有中の claim を別 attempt が解放しない。CMP-261107-1833）。
+        // この claim による付与がコミット済み、または付与されたか不明な旧データなら戻さない（CMP-261107-1833）。
         return em.createNativeQuery("UPDATE " + CLAIMS + " SET status = 'RELEASED', updated_at = UTC_TIMESTAMP(6) "
-                        + "WHERE id = UNHEX(:id) AND status = 'CLAIMED' AND grant_committed_at IS NULL")
+                        + "WHERE id = UNHEX(:id) AND status = 'CLAIMED' AND grant_committed_at IS NULL "
+                        + "AND legacy_grant_unknown_at IS NULL")
                 .setParameter("id", hex(claimId))
                 .executeUpdate();
     }
@@ -176,7 +177,7 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     @Override
     public Optional<InviteClaimLock> lockClaim(UUID claimId) {
-        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL FROM " + CLAIMS
+        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL, legacy_grant_unknown_at IS NOT NULL FROM " + CLAIMS
                         + " WHERE id = UNHEX(:id) FOR UPDATE")
                 .setParameter("id", hex(claimId))
                 .getResultList();
@@ -193,10 +194,10 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     @Override
     public Optional<InviteClaimLock> findClaimedForUpdate(Long tokenId, Long userId) {
-        // 付与印のある claim を優先する（印のある claim が残っていれば、それが参加に使われた claim）。
-        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL FROM " + CLAIMS
+        // 付与印のある claim、次に旧データ（付与されたか不明）を優先する（参加に使われた可能性の高い順）。
+        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL, legacy_grant_unknown_at IS NOT NULL FROM " + CLAIMS
                         + " WHERE token_id = :tokenId AND user_id = :userId AND status = 'CLAIMED' "
-                        + "ORDER BY grant_committed_at IS NULL, id LIMIT 1 FOR UPDATE")
+                        + "ORDER BY grant_committed_at IS NULL, legacy_grant_unknown_at IS NULL, id LIMIT 1 FOR UPDATE")
                 .setParameter("tokenId", tokenId)
                 .setParameter("userId", userId)
                 .getResultList();
@@ -204,7 +205,8 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
     }
 
     private static InviteClaimLock claimLock(Object[] row) {
-        return new InviteClaimLock(uuid((String) row[0]), (String) row[1], ((Number) row[2]).intValue() == 1);
+        return new InviteClaimLock(uuid((String) row[0]), (String) row[1], ((Number) row[2]).intValue() == 1,
+                ((Number) row[3]).intValue() == 1);
     }
 
     @Override

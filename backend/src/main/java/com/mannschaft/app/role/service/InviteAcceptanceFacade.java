@@ -274,7 +274,10 @@ public class InviteAcceptanceFacade {
             // 確保に付与印が無ければ別経路の参加なので戻す。付与印があれば別 attempt がこの確保で先に付与したので、
             // 戻さず確定する（共有中の確保を解放して「参加済みなのに使用回数0」にしない。Codex 検分 P1/P2）。
             BusinessException conflict = new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
-            if (release(ticket, conflict) == InviteAcceptanceWriter.ReleaseOutcome.GRANT_COMMITTED) {
+            InviteAcceptanceWriter.ReleaseOutcome released = release(ticket, conflict);
+            if (released == InviteAcceptanceWriter.ReleaseOutcome.GRANT_COMMITTED
+                    || released == InviteAcceptanceWriter.ReleaseOutcome.GRANT_UNKNOWN) {
+                // 付与印あり、または付与されたか不明な旧データ（在籍済みなのでこの確保で参加した側に倒す）。
                 recordJoinedOrLog(ticket);
             }
             throw conflict;

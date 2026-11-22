@@ -309,6 +309,19 @@ class InviteAcceptanceWriterTest {
         }
 
         @Test
+        @DisplayName("Codex P2（旧データ）: 付与印の導入前からの CLAIMED（付与されたか不明）は戻さず GRANT_UNKNOWN")
+        void 旧データは戻さない() {
+            given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.of(TOKEN_ID));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(0);
+            given(inviteTokenRepository.lockClaim(CLAIM_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false, true)));
+
+            assertThat(writer.releaseClaim(CLAIM_ID)).isEqualTo(InviteAcceptanceWriter.ReleaseOutcome.GRANT_UNKNOWN);
+
+            verify(inviteTokenRepository, never()).decrementUsedCount(anyLong());
+        }
+
+        @Test
         @DisplayName("存在しない claim は IllegalStateException")
         void 不存在() {
             given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.empty());
@@ -368,6 +381,21 @@ class InviteAcceptanceWriterTest {
         }
 
         @Test
+        @DisplayName("Codex P2（旧データ）: 付与されたか不明な旧 claim は、招待が期限切れでも戻さず ROLE_002（CLAIMED のまま）")
+        void 旧データは期限切れでも戻さない() {
+            lock(expiredToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false, true)));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(0);
+            given(inviteTokenRepository.lockClaim(CLAIM_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false, true)));
+
+            assertThatThrownBy(() -> writer.claimOrResume(LOCATOR, USER_ID, false, null))
+                    .satisfies(t -> assertCode(t, RoleErrorCode.ROLE_002, null));
+            verify(inviteTokenRepository, never()).decrementUsedCount(anyLong());
+        }
+
+        @Test
         @DisplayName("付与印の無い claim で判定が通れば、使用回数を進めず resumed=true・grantCommitted=false で返す")
         void 付与印なしは再開() {
             lock(validToken());
@@ -420,6 +448,23 @@ class InviteAcceptanceWriterTest {
             verify(inviteTokenRepository).decrementUsedCount(TOKEN_ID);
             verify(inviteTokenRepository, never()).markClaimGranted(any());
             verify(eventPublisher, never()).publishEvent(any(Object.class));
+        }
+
+        @Test
+        @DisplayName("Codex P2（旧データ）: 付与されたか不明な旧 claim は、在籍済みなので戻さず GRANTED に確定する")
+        void 旧データは確定() {
+            lock(validToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false, true)));
+            given(inviteTokenRepository.markClaimGranted(CLAIM_ID)).willReturn(1);
+            given(inviteTokenRepository.findClaimAuditContext(CLAIM_ID))
+                    .willReturn(Optional.of(new InviteClaimAuditContext(USER_ID, TEAM_ID, null, 2L)));
+
+            assertThat(writer.settleOrphanClaim(LOCATOR, USER_ID))
+                    .isEqualTo(InviteAcceptanceWriter.OrphanSettlement.CONFIRMED);
+
+            verify(inviteTokenRepository, never()).markClaimReleased(any());
+            verify(inviteTokenRepository, never()).decrementUsedCount(anyLong());
         }
 
         @Test

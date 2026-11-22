@@ -52,6 +52,13 @@ public class InviteTokenClaimEntity extends UuidV7Entity {
     @Column(name = "grant_committed_at", updatable = false)
     private Instant grantCommittedAt;
 
+    /**
+     * 付与印の導入（V266）前から CLAIMED だった旧データの印。付与されたか不明なので自動では戻さない。
+     * 新しく作る claim では常に NULL（V266 の移行だけが立てる）。
+     */
+    @Column(name = "legacy_grant_unknown_at", updatable = false)
+    private Instant legacyGrantUnknownAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

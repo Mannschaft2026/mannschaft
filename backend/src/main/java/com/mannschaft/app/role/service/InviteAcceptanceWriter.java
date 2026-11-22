@@ -55,6 +55,11 @@ public class InviteAcceptanceWriter {
         RELEASED,
         /** この claim による付与がコミット済み（付与印あり）なので戻さなかった。確定（T9）すべき確保である。 */
         GRANT_COMMITTED,
+        /**
+         * 付与印の導入前から CLAIMED だった旧データで、付与されたか不明なので戻さなかった（使用回数を戻さない安全側）。
+         * 在籍済みなら確定（T9）してよい。
+         */
+        GRANT_UNKNOWN,
         /** 既に GRANTED／RELEASED で何もしなかった（冪等）。 */
         SETTLED
     }
@@ -63,7 +68,7 @@ public class InviteAcceptanceWriter {
     public enum OrphanSettlement {
         /** 残った CLAIMED が無い。 */
         NONE,
-        /** 付与印のある確保を GRANTED に確定した。 */
+        /** 付与印のある確保、または付与されたか不明な旧データの確保を GRANTED に確定した。 */
         CONFIRMED,
         /** 付与印の無い（参加に使われていない）確保を戻した。 */
         RELEASED
@@ -131,7 +136,8 @@ public class InviteAcceptanceWriter {
      *       印が無ければ別経路の参加として確保を戻す）、失効・期限切れ・宛先違い・特権ロール・閉鎖世代・ブロック・
      *       フォルダの判定は残す。掛かったら同じトランザクションで確保を戻してから例外を投げる（業務例外では巻き戻さない）。
      *       確保の行はロック済みなので、並行する古い attempt の付与（T7 は claim 行をロックしてから印を立てる）とは
-     *       直列化され、印の有無の判定と戻しの間に付与が割り込むことはない。</li>
+     *       直列化され、印の有無の判定と戻しの間に付与が割り込むことはない。付与印の導入前からの旧データ
+     *       （付与されたか不明）は判定に掛かっても戻さない（CLAIMED のまま残し、使用回数を戻さない）。</li>
      * </ul>
      *
      * <p>残った確保が無ければ {@link #claim} と同じ判定と確保を行う。</p>
@@ -167,7 +173,9 @@ public class InviteAcceptanceWriter {
      * 在籍済みの利用者について、同じ招待・同じ利用者に残った CLAIMED の確保を片付ける（CMP-261107-1833 設計 §9-3）。
      *
      * <p>招待行 → 確保の順にロックし、付与印があれば（前回の attempt がこの確保で付与をコミットした）GRANTED に
-     * 確定して招待監査を出す。付与印が無ければ、在籍は別経路（参加申請の承認・別の招待など）によるもので
+     * 確定して招待監査を出す。付与印の導入前から CLAIMED だった旧データ（付与されたか不明）も、在籍済みなので
+     * 確定する（戻すと上限を超えて招待を使わせうるため、使われた側に倒す）。付与印が無ければ、在籍は別経路
+     * （参加申請の承認・別の招待など）によるもので
      * この確保は参加に使われていないので、戻して使用回数を1戻す（Codex 検分 P2）。残った確保が無ければ何もしない。</p>
      */
     @Transactional
@@ -181,7 +189,8 @@ public class InviteAcceptanceWriter {
             return OrphanSettlement.NONE;
         }
         UUID claimId = orphan.get().claimId();
-        if (orphan.get().grantCommitted()) {
+        if (orphan.get().grantCommitted() || orphan.get().grantUnknown()) {
+            // 付与印あり、または付与されたか不明な旧データ（在籍済みなので、この確保で参加した側に倒す。戻さない）。
             confirmLocked(claimId);
             return OrphanSettlement.CONFIRMED;
         }
@@ -286,7 +295,8 @@ public class InviteAcceptanceWriter {
     /**
      * 付与されなかった確保を戻す（T8）。CLAIMED かつ付与印なし→RELEASED が1行のときだけ使用回数を1戻す。
      * 付与印のある確保（この確保による付与がコミット済み）は戻さず {@link ReleaseOutcome#GRANT_COMMITTED} を返す
-     * （呼び出し元は確定する）。2回目以降・GRANTED・RELEASED への呼び出しは何もしない（冪等）。
+     * （呼び出し元は確定する）。付与印の導入前からの旧データ（付与されたか不明）も戻さず
+     * {@link ReleaseOutcome#GRANT_UNKNOWN} を返す（自動では戻さない安全側）。2回目以降・GRANTED・RELEASED への呼び出しは何もしない（冪等）。
      * 招待行 → 確保の順にロックする（T6' と同じ順。逆順だとデッドロックしうる）。2本のUPDATEは1TXで、
      * 2本目が失敗すれば全巻き戻しで CLAIMED のまま残る。
      *
@@ -316,6 +326,11 @@ public class InviteAcceptanceWriter {
         if (state.claimed() && state.grantCommitted()) {
             log.info("claim の補償は行わない（この claim による付与がコミット済み）: claimId={}", claimId);
             return ReleaseOutcome.GRANT_COMMITTED;
+        }
+        if (state.claimed() && state.grantUnknown()) {
+            log.warn("claim の補償は行わない（付与印の導入前からの旧データで付与されたか不明。CLAIMED のまま残す）: claimId={}",
+                    claimId);
+            return ReleaseOutcome.GRANT_UNKNOWN;
         }
         log.info("claim の補償は無効（状態 {} のため何もしない）: claimId={}", state.status(), claimId);
         return ReleaseOutcome.SETTLED;

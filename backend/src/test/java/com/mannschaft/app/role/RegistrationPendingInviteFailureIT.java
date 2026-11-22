@@ -462,4 +462,62 @@ class RegistrationPendingInviteFailureIT extends InviteAcceptanceItSupport {
         assertThat(usedCount(token.getId())).isZero();
         assertThat(inviteAuditCount("ORGANIZATION", events)).isZero();
     }
+
+    // ------------------------------------------------------------------
+    // Codex 再検分 P2: 付与印の導入（V266）前からの CLAIMED は「付与されたか不明」。自動では戻さない
+    // ------------------------------------------------------------------
+
+    /** V266 前の版が残した CLAIMED 行（使用回数を消費済み・旧データの印あり）を置く。 */
+    private UUID legacyClaim(Long tokenId, Long userId) {
+        UUID claimId = insertClaim(tokenId, userId, "CLAIMED", utcNow().minusHours(1), true);
+        jdbc.update("UPDATE " + CLAIMS + " SET legacy_grant_unknown_at = UTC_TIMESTAMP(6) WHERE id = UNHEX(?)",
+                claimId.toString().replace("-", ""));
+        return claimId;
+    }
+
+    @Test
+    @DisplayName("Codex 再検分 P2: 旧版で T7 コミット後・T9 前に止まった旧 CLAIMED（在籍済み）を再承認→解放せず GRANTED・使用回数1")
+    void legacyClaimOfJoinedUserIsConfirmedNotReleased() {
+        Scope scope = scope("TEAM");
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Long userId = userWithPendingInvite(scope, token);
+        UUID claimId = legacyClaim(token.getId(), userId);
+        insertUserRole(scope, userId);
+        insertMembership(scope, userId, "MEMBER");
+
+        assertThat(acceptStatus(userId)).isEqualTo("JOINED");
+
+        assertThat(claimStatus(claimId)).as("付与されたか不明な旧データは戻さない").isEqualTo("GRANTED");
+        assertThat(usedCount(token.getId())).as("使用回数を戻さない").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Codex 再検分 P2: 旧 CLAIMED が残り、招待が期限切れ（未在籍）→再承認は EXPIRED だが claim は解放せず CLAIMED・使用回数1")
+    void legacyClaimIsNotReleasedOnExpiry() {
+        Scope scope = scope("TEAM");
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Long userId = userWithPendingInvite(scope, token);
+        UUID claimId = legacyClaim(token.getId(), userId);
+        jdbc.update("UPDATE invite_tokens SET expires_at = ? WHERE id = ?", utcNow().minusDays(1), token.getId());
+
+        assertThat(acceptStatus(userId)).isEqualTo("EXPIRED");
+
+        assertThat(claimStatus(claimId)).as("付与されたか不明な旧データは自動では戻さない").isEqualTo("CLAIMED");
+        assertThat(usedCount(token.getId())).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Codex 再検分 P2: 旧 CLAIMED が残り、未在籍で招待が有効→再承認はその claim を再開して付与し GRANTED・使用回数1")
+    void legacyClaimOfNotJoinedUserIsResumed() {
+        Scope scope = scope("ORGANIZATION");
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Long userId = userWithPendingInvite(scope, token);
+        UUID claimId = legacyClaim(token.getId(), userId);
+
+        assertThat(acceptStatus(userId)).isEqualTo("JOINED");
+
+        assertThat(claimStatus(claimId)).isEqualTo("GRANTED");
+        assertThat(usedCount(token.getId())).as("再開は使用回数を進めない").isEqualTo(1);
+        assertThat(userRoleCount(userId, scope)).isEqualTo(1);
+    }
 }

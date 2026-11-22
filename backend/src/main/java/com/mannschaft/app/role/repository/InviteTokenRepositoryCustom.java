@@ -57,8 +57,8 @@ public interface InviteTokenRepositoryCustom {
     int markClaimGranted(UUID claimId);
 
     /**
-     * CLAIMED→RELEASED の条件付き UPDATE。この claim による付与がコミット済み（{@code grant_committed_at} あり）なら
-     * 戻さない（0 行）。 @return 更新行数
+     * CLAIMED→RELEASED の条件付き UPDATE。この claim による付与がコミット済み（{@code grant_committed_at} あり）、
+     * または付与されたか不明な旧データ（{@code legacy_grant_unknown_at} あり）なら戻さない（0 行）。 @return 更新行数
      */
     int markClaimReleased(UUID claimId);
 

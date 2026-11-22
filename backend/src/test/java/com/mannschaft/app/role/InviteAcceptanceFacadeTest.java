@@ -355,6 +355,21 @@ class InviteAcceptanceFacadeTest {
         }
 
         @Test
+        @DisplayName("Codex P2（旧データ）: ALREADY_JOINED で claim が付与されたか不明な旧データ → 戻さず確定し 409 TEAM_003")
+        void ALREADY_JOINEDで旧データは確定() {
+            claimableByHash(resumed);
+            given(membershipGrantService.grantRole(anyString(), anyLong(), anyLong(), anyLong(), anyLong(), anyString()))
+                    .willReturn(GrantOutcome.ALREADY_JOINED);
+            given(writer.releaseClaim(CLAIM_ID)).willReturn(InviteAcceptanceWriter.ReleaseOutcome.GRANT_UNKNOWN);
+
+            assertThatThrownBy(() -> facade.joinByInviteTokenHash(HASH, USER_ID))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_003));
+            verify(writer).recordJoined(CLAIM_ID);
+            verifyNoInteractions(placementService);
+        }
+
+        @Test
         @DisplayName("P1: 再開した claim の付与がコミット済み（grantCommitted）→ T7 を行わず確定と配置だけ行う")
         void 付与コミット済みの再開はT7なしで確定() {
             claimableByHash(new InviteClaimTicket(CLAIM_ID, 100L, "TEAM", TEAM_ID, 3L, 2L, true, true));

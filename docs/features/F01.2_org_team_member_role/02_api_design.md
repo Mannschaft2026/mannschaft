@@ -525,6 +525,9 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
     claim を戻して 409 `TEAM_003`（保留は `JOINED`）。印があれば別 attempt がこの claim で付与済みなので確定する。
   - 承認前に在籍済みのとき（`settleOrphanClaim`）も同じで、残った claim に印があれば確定、無ければ戻す。
   - T7 の時点で claim が既に戻されていれば（別 attempt が失効を検出して戻した）付与せず `ROLE_002`。
+  - 付与印の導入（V266）前から `CLAIMED` だった旧データは「付与されたか不明」として `legacy_grant_unknown_at` で区別し、
+    自動では戻さない（使用回数を戻さない安全側。戻すと上限を超えて招待を使わせうる）。在籍済みなら確定し、
+    在籍していなければ再承認の付与で付与印が立つ。判定に掛かって参加できない場合も `CLAIMED` のまま残す（監視対象）。
   - 印の受け渡しは `InviteClaimGrantScope`（同一スレッドの呼び出し範囲）で行い、`grantRole` の署名と D-3T の入口は変えない。
     参加申請承認（`grantMemberRole`）は claim に触れない。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
