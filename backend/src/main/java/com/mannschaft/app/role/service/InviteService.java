@@ -163,6 +163,15 @@ public class InviteService {
     }
 
     /**
+     * 新規登録時に招待トークンを読む（CMP-261107-1833 設計 §4）。不在なら空。
+     *
+     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     */
+    public java.util.Optional<com.mannschaft.app.role.dto.RegistrationInviteInfo> findRegistrationInvite(String tokenStr) {
+        throw new UnsupportedOperationException("CMP-261107-1833 未実装");
+    }
+
+    /**
      * 招待トークンをプレビューする。未認証ユーザーにも表示可能。
      */
     public ApiResponse<InvitePreviewResponse> previewInvite(String tokenStr) {

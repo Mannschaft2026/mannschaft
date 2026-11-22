@@ -105,6 +105,25 @@ public class InviteAcceptanceFacade {
         accept(new InviteLocator.ById(tokenId), userId, folderId);
     }
 
+    /**
+     * 招待のハッシュで参加する（新規登録の保留承認専用の入口。CMP-261107-1833 設計 §2・§9-3）。
+     * 呼び出し元は PendingInviteService のみ。
+     *
+     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     */
+    public void joinByInviteTokenHash(String tokenHash, Long userId) {
+        throw new UnsupportedOperationException("CMP-261107-1833 未実装");
+    }
+
+    /**
+     * 在籍済みのとき、同じ招待・同じ利用者に残った CLAIMED を GRANTED に確定する（CMP-261107-1833 設計 §9-3）。
+     *
+     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     */
+    public void settleOrphanClaim(String tokenHash, Long userId) {
+        throw new UnsupportedOperationException("CMP-261107-1833 未実装");
+    }
+
     private void accept(InviteLocator locator, Long userId, Long folderId) {
 
         // T1: user 行を先にロックする（inactive/absent user の存在を token 検証前に oracle 化させない）。
