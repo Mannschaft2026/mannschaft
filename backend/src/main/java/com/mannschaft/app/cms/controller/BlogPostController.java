@@ -11,6 +11,7 @@ import com.mannschaft.app.cms.dto.PublishRequest;
 import com.mannschaft.app.cms.dto.UpdateBlogPostRequest;
 import com.mannschaft.app.cms.service.BlogFeedService;
 import com.mannschaft.app.cms.service.BlogPostService;
+import com.mannschaft.app.cms.service.BlogPostScopeSlugResolver;
 import com.mannschaft.app.cms.service.BlogScopeAccessGuard;
 import com.mannschaft.app.cms.service.BlogReactionService;
 import com.mannschaft.app.common.ApiResponse;
@@ -54,6 +55,8 @@ public class BlogPostController {
     private final BlogScopeAccessGuard scopeAccessGuard;
     private final BlogFeedService feedService;
     private final BlogReactionService reactionService;
+    /** 記事応答のスコープ slug の付与。BlogPostService の取引の外で他ドメインの slug を引く（D-3T）。 */
+    private final BlogPostScopeSlugResolver scopeSlugResolver;
 
 
     /**
@@ -90,7 +93,7 @@ public class BlogPostController {
         }
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 result.getTotalElements(), result.getNumber(), result.getSize(), result.getTotalPages());
-        return ResponseEntity.ok(PagedResponse.of(result.getContent(), meta));
+        return ResponseEntity.ok(PagedResponse.of(scopeSlugResolver.attachAll(result.getContent()), meta));
     }
 
     /**
@@ -126,7 +129,7 @@ public class BlogPostController {
         // リアクション情報（みたよ！）を付与する
         BlogReactionResponse reactionStatus = reactionService.getReactionStatus(response.getId(), currentUserId);
         response = response.withReaction(reactionStatus.isMitayo(), reactionStatus.getMitayoCount());
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -138,7 +141,7 @@ public class BlogPostController {
     public ResponseEntity<ApiResponse<BlogPostResponse>> createPost(
             @Valid @RequestBody CreateBlogPostRequest request) {
         BlogPostResponse response = postService.createPost(SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -151,7 +154,7 @@ public class BlogPostController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateBlogPostRequest request) {
         BlogPostResponse response = postService.updatePost(id, SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -178,7 +181,7 @@ public class BlogPostController {
         BlogPostResponse response = ranchNative.changeStatus(id, actor, request,
                 servletRequest.getAttribute("originalAdminId") != null)
                 .orElseGet(() -> postService.changeStatus(id, actor, request));
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -191,7 +194,7 @@ public class BlogPostController {
             @PathVariable Long id,
             @Valid @RequestBody AutoSaveRequest request) {
         BlogPostResponse response = postService.autoSave(id, SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -242,7 +245,7 @@ public class BlogPostController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "複製成功")
     public ResponseEntity<ApiResponse<BlogPostResponse>> duplicatePost(@PathVariable Long id) {
         BlogPostResponse response = postService.duplicatePost(id, SecurityUtils.getCurrentUserId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -267,7 +270,7 @@ public class BlogPostController {
             @PathVariable Long id,
             @PathVariable Long revisionId) {
         BlogPostResponse response = postService.restoreRevision(id, revisionId, SecurityUtils.getCurrentUserId());
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -279,7 +282,7 @@ public class BlogPostController {
     @AuthorizedInService // BlogPostShareService#issuePreviewToken の checkWriteAccess が投稿者本人/スコープADMIN以上を検証する
     public ResponseEntity<ApiResponse<BlogPostResponse>> issuePreviewToken(@PathVariable Long id) {
         BlogPostResponse response = postService.issuePreviewToken(id, SecurityUtils.getCurrentUserId());
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**

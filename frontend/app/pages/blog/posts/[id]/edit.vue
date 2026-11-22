@@ -76,15 +76,16 @@ function onMediaInserted(markdownText: string) {
 }
 
 // チーム・組織ページは slug 前提のため、数値 scopeId をそのまま URL にしない。
-const teamStore = useTeamStore()
-const orgStore = useOrganizationStore()
+// 遷移先の slug は記事応答の scope.teamSlug / organizationSlug（BE が記事のスコープから付与する）から作る。
+// 閲覧者の所属一覧（/me/teams 等）からは引かない: 所属行の無い管理者やアーカイブ済みチームで引けないため。
+const teamSlug = ref<string | null>(null)
+const organizationSlug = ref<string | null>(null)
 
-async function publishRedirectPath(): Promise<string> {
-  if (scopeType.value === 'TEAM') await teamStore.fetchMyTeams()
-  if (scopeType.value === 'ORGANIZATION') await orgStore.fetchMyOrganizations()
-  return blogPublishRedirectPath(scopeType.value, scopeId.value, {
-    teams: teamStore.myTeams,
-    organizations: orgStore.myOrganizations,
+function publishRedirectPath(): string {
+  return blogPublishRedirectPath({
+    scopeType: scopeType.value,
+    teamSlug: teamSlug.value,
+    organizationSlug: organizationSlug.value,
   })
 }
 
@@ -102,6 +103,8 @@ async function load() {
     scopeType.value = post.scope?.organizationId ? 'ORGANIZATION' : post.scope?.teamId ? 'TEAM' : null
     const rawScopeId = post.scope?.organizationId ?? post.scope?.teamId ?? null
     scopeId.value = rawScopeId != null ? String(rawScopeId) : null
+    teamSlug.value = post.scope?.teamSlug ?? null
+    organizationSlug.value = post.scope?.organizationSlug ?? null
     rejectionReason.value = (post as unknown as Record<string, unknown>).rejectionReason as string | null ?? null
   } catch (err) {
     console.error('[blog] 記事読み込みに失敗しました:', err)
@@ -153,7 +156,7 @@ async function publish() {
       })
     }
     success('記事を公開しました')
-    await navigateTo(await publishRedirectPath())
+    await navigateTo(publishRedirectPath())
   } catch {
     showError('公開に失敗しました')
   } finally {
@@ -196,7 +199,7 @@ async function selfReviewDelete() {
   try {
     await selfReviewPost(postId, { action: 'DELETE' })
     success('投稿を削除しました')
-    await navigateTo(await publishRedirectPath())
+    await navigateTo(publishRedirectPath())
   } catch {
     showError('削除に失敗しました')
   } finally {
@@ -215,7 +218,7 @@ async function adminApprove() {
     })
     status.value = 'PUBLISHED'
     success('記事を承認・公開しました')
-    await navigateTo(await publishRedirectPath())
+    await navigateTo(publishRedirectPath())
   } catch {
     showError('承認に失敗しました')
   } finally {

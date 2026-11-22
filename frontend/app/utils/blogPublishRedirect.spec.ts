@@ -1,24 +1,62 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { MockInstance } from 'vitest'
 import { blogPublishRedirectPath } from './blogPublishRedirect'
 
-const teams = [{ id: 1, slug: 'tokyo-fc' }, { id: 2, slug: 'osaka-fc' }]
-const organizations = [{ id: 10, slug: 'kanto-league' }]
-
 describe('blogPublishRedirectPath', () => {
-  it('チームは数値IDではなく slug のブログへ遷移する', () => {
-    expect(blogPublishRedirectPath('TEAM', '1', { teams, organizations })).toBe('/teams/tokyo-fc/blog')
+  let consoleError: MockInstance<typeof console.error>
+
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  it('組織は数値IDではなく slug へ遷移する', () => {
-    expect(blogPublishRedirectPath('ORGANIZATION', '10', { teams, organizations })).toBe('/organizations/kanto-league')
+  afterEach(() => {
+    consoleError.mockRestore()
   })
 
-  it('個人スコープは /dashboard', () => {
-    expect(blogPublishRedirectPath(null, null, { teams, organizations })).toBe('/dashboard')
+  it('チーム記事は数値IDではなく記事応答の teamSlug のブログへ遷移する', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'TEAM', teamSlug: 'tokyo-fc', organizationSlug: null }))
+      .toBe('/teams/tokyo-fc/blog')
+    expect(consoleError).not.toHaveBeenCalled()
   })
 
-  it('slug を解決できないスコープは数値IDのURLを作らず /dashboard', () => {
-    expect(blogPublishRedirectPath('TEAM', '999', { teams, organizations })).toBe('/dashboard')
-    expect(blogPublishRedirectPath('ORGANIZATION', '999', { teams, organizations })).toBe('/dashboard')
+  it('組織記事は数値IDではなく記事応答の organizationSlug へ遷移する', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'ORGANIZATION', teamSlug: null, organizationSlug: 'kanto-league' }))
+      .toBe('/organizations/kanto-league')
+    expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it('個人記事は /dashboard（契約違反ではないので痕跡を残さない）', () => {
+    expect(blogPublishRedirectPath({ scopeType: null, teamSlug: null, organizationSlug: null })).toBe('/dashboard')
+    expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it('slug は URL エンコードする', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'TEAM', teamSlug: 'a b', organizationSlug: null }))
+      .toBe('/teams/a%20b/blog')
+  })
+
+  it('チーム記事なのに teamSlug が無い（BE の契約違反）は console.error を残して /dashboard', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'TEAM', teamSlug: null, organizationSlug: null })).toBe('/dashboard')
+    expect(consoleError).toHaveBeenCalledTimes(1)
+    expect(String(consoleError.mock.calls[0]?.[0])).toContain('teamSlug')
+  })
+
+  it('チーム記事に組織の slug しか無くても、組織ページへは遷移しない', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'TEAM', teamSlug: '', organizationSlug: 'kanto-league' }))
+      .toBe('/dashboard')
+    expect(consoleError).toHaveBeenCalledTimes(1)
+  })
+
+  it('組織記事なのに organizationSlug が無い（BE の契約違反）は console.error を残して /dashboard', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'ORGANIZATION', teamSlug: null, organizationSlug: null }))
+      .toBe('/dashboard')
+    expect(consoleError).toHaveBeenCalledTimes(1)
+    expect(String(consoleError.mock.calls[0]?.[0])).toContain('organizationSlug')
+  })
+
+  it('不明な scopeType は console.error を残して /dashboard', () => {
+    expect(blogPublishRedirectPath({ scopeType: 'PUBLIC', teamSlug: 'tokyo-fc', organizationSlug: null }))
+      .toBe('/dashboard')
+    expect(consoleError).toHaveBeenCalledTimes(1)
   })
 })
