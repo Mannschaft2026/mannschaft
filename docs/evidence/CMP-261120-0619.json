@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-0619",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4663,
+    "sha": "0d2f0e3723bc1eebd0cf9ede268611e4baf1bea2"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "users.id の比較を intValue の切り詰めから Long 比較（JsonLongIdMatchers）へ直す",
+      "tests": [
+        {
+          "name": "ShiftUnpublishedScheduleVisibilityContractIT（Long 比較）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftUnpublishedScheduleVisibilityContractIT.java"
+        },
+        {
+          "name": "ChatAuthzScopeContractIT（Long 比較）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/chat/ChatAuthzScopeContractIT.java"
+        },
+        {
+          "name": "ContactScopeContractIT（Long 比較）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/contact/ContactScopeContractIT.java"
+        },
+        {
+          "name": "CareLinkInvitationScopeContractIT（Long 比較）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/family/CareLinkInvitationScopeContractIT.java"
+        },
+        {
+          "name": "FileSharingAuthzScopeContractIT（Long 比較）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/filesharing/FileSharingAuthzScopeContractIT.java"
+        },
+        {
+          "name": "SocialAuthzScopeContractIT（Long 比較）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/social/SocialAuthzScopeContractIT.java"
+        },
+        {
+          "name": "JsonLongIdMatchers（hasLongId / longId）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/support/JsonLongIdMatchers.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "巨大 ID の投入をやめ users の AUTO_INCREMENT を汚さない",
+      "tests": [
+        {
+          "name": "TeamRestoreSecurityFilterContractIT（users.id を有界範囲に変更）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/team/TeamRestoreSecurityFilterContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "6 IT が shard の割り当てに依らず緑（実装PRの Backend CI が成功）",
+      "tests": [
+        {
+          "name": "Backend — CI (PR Check)",
+          "evidence": "https://github.com/kenta-0420/mannschaft/actions/runs/44600470362"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44649112811
+    },
+    {
+      "runId": 44600470386
+    },
+    {
+      "runId": 44600470342
+    },
+    {
+      "runId": 44600470305
+    },
+    {
+      "runId": 44600470459
+    },
+    {
+      "runId": 44600470359
+    },
+    {
+      "runId": 44600470362
+    },
+    {
+      "runId": 44600470290
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4663"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で画面・APIの挙動を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で導線を変えない"
+    }
+  },
+  "regressions": []
+}
