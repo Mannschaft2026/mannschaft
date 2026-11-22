@@ -34,9 +34,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 /**
- * N9: 元コンテンツが公開状態でないお知らせは、チームのお知らせ一覧に出ない（タイトル・抜粋のキャッシュを漏らさない）。
+ * N9: 元コンテンツが公開状態でないお知らせは、お知らせ一覧に出ない（タイトル・抜粋のキャッシュを漏らさない）。
  *
- * <p>公開→下書きに戻した記事のお知らせも一覧から消える（元の状態に追従）。実 MySQL・Controller 経由で検証する。</p>
+ * <p>公開→下書きに戻した記事のお知らせも一覧から消える（元の状態に追従）。元が論理削除済み・存在しない
+ * （孤児）のブログ・タイムライン投稿のお知らせも出さない（fail-closed。「公開済みの元が存在する」ときだけ出す）。
+ * チーム一覧・組織一覧・個人横断（/announcements/me）を、実 MySQL・Controller 経由で検証する。</p>
  */
 @AutoConfigureMockMvc(addFilters = false)
 @Transactional
@@ -50,6 +52,7 @@ class AnnouncementSourceStatusFeedIT extends AbstractMySqlIntegrationTest {
     @PersistenceContext private EntityManager em;
 
     private Long teamId;
+    private Long orgId;
     private Long memberId;
 
     @BeforeEach
@@ -70,6 +73,13 @@ class AnnouncementSourceStatusFeedIT extends AbstractMySqlIntegrationTest {
         memberId = ((Number) em.createNativeQuery("SELECT id FROM users WHERE email = :e")
                 .setParameter("e", "n9-" + key + "@example.com").getSingleResult()).longValue();
         MembershipTestHelper.insertMembership(em, memberId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
+        em.createNativeQuery("INSERT INTO organizations (name, org_type, visibility, hierarchy_visibility, "
+                        + "supporter_enabled, version, slug, created_at, updated_at) "
+                        + "VALUES (:n, 'OTHER', 'PUBLIC', 'NONE', 1, 0, :s, NOW(), NOW())")
+                .setParameter("n", "N9 組織 " + key).setParameter("s", "n9o-" + key).executeUpdate();
+        orgId = ((Number) em.createNativeQuery("SELECT id FROM organizations WHERE name = :n")
+                .setParameter("n", "N9 組織 " + key).getSingleResult()).longValue();
+        MembershipTestHelper.insertMembership(em, memberId, ScopeType.ORGANIZATION, orgId, RoleKind.MEMBER);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(memberId.toString(), null, List.of()));
     }
@@ -90,19 +100,46 @@ class AnnouncementSourceStatusFeedIT extends AbstractMySqlIntegrationTest {
         return post;
     }
 
+    private BlogPostEntity orgBlog(PostStatus status) {
+        BlogPostEntity post = BlogPostEntity.builder().organizationId(orgId).authorId(memberId).title("N9 組織記事")
+                .slug("n9o-" + UUID.randomUUID()).body("本文").visibility(Visibility.MEMBERS_ONLY)
+                .postType(PostType.BLOG).status(status)
+                .publishedAt(status == PostStatus.PUBLISHED ? LocalDateTime.now().minusDays(1) : null).build();
+        em.persist(post);
+        return post;
+    }
+
     private Long feed(AnnouncementSourceType type, Long sourceId) {
+        return feed(AnnouncementScopeType.TEAM, teamId, type, sourceId);
+    }
+
+    private Long feed(AnnouncementScopeType scopeType, Long scopeId, AnnouncementSourceType type, Long sourceId) {
         AnnouncementFeedEntity feed = feedRepository.saveAndFlush(AnnouncementFeedEntity.builder()
-                .scopeType(AnnouncementScopeType.TEAM).scopeId(teamId).sourceType(type).sourceId(sourceId)
+                .scopeType(scopeType).scopeId(scopeId).sourceType(type).sourceId(sourceId)
                 .authorId(memberId).titleCache("N9 タイトル").excerptCache("N9 抜粋")
                 .visibility(AnnouncementVisibility.MEMBERS_AND_ABOVE).build());
         return feed.getId();
     }
 
     private List<Long> listedIds() throws Exception {
+        return idsOf(get("/api/v1/teams/{teamId}/announcements", teamId));
+    }
+
+    private List<Long> orgListedIds() throws Exception {
+        return idsOf(get("/api/v1/organizations/{orgId}/announcements", orgId).param("limit", "50"));
+    }
+
+    private List<Long> personalListedIds() throws Exception {
+        return idsOf(get("/api/v1/announcements/me").param("limit", "50").param("include_read", "true"));
+    }
+
+    private List<Long> idsOf(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request)
+            throws Exception {
         em.flush();
         em.clear();
-        String body = mockMvc.perform(get("/api/v1/teams/{teamId}/announcements", teamId))
-                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        var result = mockMvc.perform(request).andReturn();
+        assertThat(result.getResponse().getStatus()).as("一覧は 200").isEqualTo(200);
+        String body = result.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         JsonNode data = objectMapper.readTree(body).path("data");
         List<Long> ids = new ArrayList<>();
         data.forEach(n -> ids.add(n.path("id").asLong()));
@@ -150,5 +187,64 @@ class AnnouncementSourceStatusFeedIT extends AbstractMySqlIntegrationTest {
                 timeline(com.mannschaft.app.timeline.PostStatus.HIDDEN).getId());
         List<Long> ids = listedIds();
         assertThat(ids).contains(published).doesNotContain(draft, hidden);
+    }
+
+    @Test
+    @DisplayName("論理削除したブログのお知らせは一覧に出ない（@SQLRestriction で元が見えなくても fail-closed）")
+    void deletedBlogNotListed() throws Exception {
+        BlogPostEntity post = blog(PostStatus.PUBLISHED);
+        Long id = feed(AnnouncementSourceType.BLOG_POST, post.getId());
+        assertThat(listedIds()).contains(id);
+
+        post = em.find(BlogPostEntity.class, post.getId());
+        post.softDelete();
+        assertThat(listedIds()).as("論理削除したブログ由来のお知らせは一覧に出ない").doesNotContain(id);
+    }
+
+    @Test
+    @DisplayName("論理削除したタイムライン投稿のお知らせは一覧に出ない")
+    void deletedTimelineNotListed() throws Exception {
+        TimelinePostEntity post = timeline(com.mannschaft.app.timeline.PostStatus.PUBLISHED);
+        Long id = feed(AnnouncementSourceType.TIMELINE_POST, post.getId());
+        assertThat(listedIds()).contains(id);
+
+        post = em.find(TimelinePostEntity.class, post.getId());
+        post.softDelete();
+        assertThat(listedIds()).as("論理削除したタイムライン投稿由来のお知らせは一覧に出ない").doesNotContain(id);
+    }
+
+    @Test
+    @DisplayName("元が存在しない（孤児）ブログ・タイムライン投稿のお知らせは一覧に出ない")
+    void orphanNotListed() throws Exception {
+        Long blogOrphan = feed(AnnouncementSourceType.BLOG_POST, Long.MAX_VALUE - 9);
+        Long timelineOrphan = feed(AnnouncementSourceType.TIMELINE_POST, Long.MAX_VALUE - 9);
+        assertThat(listedIds()).as("公開済みの元が存在しないお知らせは出さない").doesNotContain(blogOrphan, timelineOrphan);
+    }
+
+    @Test
+    @DisplayName("個人横断（/announcements/me）: 公開済みは出る・下書き/論理削除は出ない")
+    void personalFeedExcludesUnpublished() throws Exception {
+        Long published = feed(AnnouncementSourceType.BLOG_POST, blog(PostStatus.PUBLISHED).getId());
+        Long draft = feed(AnnouncementSourceType.BLOG_POST, blog(PostStatus.DRAFT).getId());
+        BlogPostEntity deletedPost = blog(PostStatus.PUBLISHED);
+        Long deleted = feed(AnnouncementSourceType.BLOG_POST, deletedPost.getId());
+        em.find(BlogPostEntity.class, deletedPost.getId()).softDelete();
+
+        assertThat(personalListedIds()).contains(published).doesNotContain(draft, deleted);
+    }
+
+    @Test
+    @DisplayName("組織一覧: 公開済みは出る・下書き/論理削除は出ない")
+    void orgFeedExcludesUnpublished() throws Exception {
+        Long published = feed(AnnouncementScopeType.ORGANIZATION, orgId, AnnouncementSourceType.BLOG_POST,
+                orgBlog(PostStatus.PUBLISHED).getId());
+        Long draft = feed(AnnouncementScopeType.ORGANIZATION, orgId, AnnouncementSourceType.BLOG_POST,
+                orgBlog(PostStatus.DRAFT).getId());
+        BlogPostEntity deletedPost = orgBlog(PostStatus.PUBLISHED);
+        Long deleted = feed(AnnouncementScopeType.ORGANIZATION, orgId, AnnouncementSourceType.BLOG_POST,
+                deletedPost.getId());
+        em.find(BlogPostEntity.class, deletedPost.getId()).softDelete();
+
+        assertThat(orgListedIds()).contains(published).doesNotContain(draft, deleted);
     }
 }
