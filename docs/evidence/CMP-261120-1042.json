@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-1042",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4674,
+    "sha": "01ec1abc51dc0bc90495148927360f6bb7259fb7"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "setup-gradle に復元直後の依存検証・cache-read-only・cache-cleanup 停止を入れ、壊れた依存キャッシュで落ちない",
+      "tests": [
+        {
+          "name": "verify-gradle-dependency-cache.sh",
+          "evidence": ".github/scripts/verify-gradle-dependency-cache.sh"
+        },
+        {
+          "name": "backend-ci.yml",
+          "evidence": ".github/workflows/backend-ci.yml"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44784589147
+    },
+    {
+      "runId": 44784589121
+    },
+    {
+      "runId": 44784588994
+    },
+    {
+      "runId": 44784589157
+    },
+    {
+      "runId": 44784589071
+    },
+    {
+      "runId": 44784589154
+    },
+    {
+      "runId": 44784589270
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4674"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI ワークフロー・補助スクリプトのみの変更でアプリの画面・API・導線を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI ワークフロー・補助スクリプトのみの変更でアプリの画面・API・導線を変えない"
+    }
+  },
+  "regressions": []
+}
