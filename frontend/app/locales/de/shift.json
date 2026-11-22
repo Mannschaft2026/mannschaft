@@ -133,6 +133,7 @@
       "formStart": "Startdatum",
       "formEnd": "Enddatum",
       "formDeadline": "Einsendeschluss",
+      "formDeadlineInvalid": "Geben Sie für den Einsendeschluss ein gültiges Datum mit Uhrzeit ein, z. B. 2026/12/31 23:59",
       "formNote": "Notiz",
       "formNotePlaceholder": "Optional"
     },

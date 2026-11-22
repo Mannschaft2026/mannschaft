@@ -45,6 +45,7 @@
       "formStart": "開始日",
       "formEnd": "終了日",
       "formDeadline": "希望締切",
+      "formDeadlineInvalid": "希望締切は実在する日時を「2026/12/31 23:59」の形式で入力してください",
       "formNote": "メモ",
       "formNotePlaceholder": "任意"
     },
