@@ -13,13 +13,14 @@ import ShiftChangeRequestList from '~/components/shift/ShiftChangeRequestList.vu
 import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
 
 // ページ・権限composable・変更依頼API・子一覧は実物。通信境界だけ応答を差し替える。
-const mocks = vi.hoisted(() => ({ api: vi.fn(), error: vi.fn(), success: vi.fn() }))
+const mocks = vi.hoisted(() => ({ api: vi.fn(), handleApiError: vi.fn(), error: vi.fn(), success: vi.fn() }))
 const params = reactive({ slug: 'team-a', scheduleId: '425' })
 const auth = reactive({ user: { id: 1, systemRole: 'MEMBER' }, get currentUser() { return this.user } })
 mockNuxtImport('useRoute', () => () => ({ params }))
 mockNuxtImport('useAuthStore', () => () => auth)
 mockNuxtImport('useApi', () => () => mocks.api)
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
+mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError }))
 mockNuxtImport('useNotification', () => () => ({ error: mocks.error, success: mocks.success }))
 
 function request(status: ChangeRequestStatus = 'OPEN', id = 7): ChangeRequest {
@@ -42,10 +43,14 @@ let role: string | null
 let rows: ChangeRequest[]
 let permissionError: boolean
 let listError: boolean
+let membersError: boolean
 let wrapper: VueWrapper | undefined
 function respond(url: string, options?: { body?: { decision: ChangeRequestStatus } }) {
   if (url.endsWith('/me/permissions')) {
     return permissionError ? Promise.reject(new Error('permissions unavailable')) : Promise.resolve(permissions(role, true))
+  }
+  if (url.endsWith('/members/all')) {
+    return membersError ? Promise.reject(new Error('members unavailable')) : Promise.resolve({ data: [{ userId: 2, displayName: '山田花子' }] })
   }
   if (url.includes('/review')) return Promise.resolve({ data: request(options!.body!.decision) })
   if (url.includes('/change-requests?')) {
@@ -82,9 +87,28 @@ beforeEach(() => {
   rows = [request()]
   permissionError = false
   listError = false
+  membersError = false
   mocks.api.mockImplementation(respond)
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
+
+describe('変更依頼一覧のメンバー表示名', () => {
+  it('生の userId でなく表示名を出し、解決できない依頼者は不明なメンバー', async () => {
+    rows = [request('OPEN', 7), { ...request('OPEN', 8), requestInfo: { requestedBy: 99, requestType: 'PRE_CONFIRM_EDIT', reason: 'r' } }]
+    renderPage()
+    await flushPromises()
+    expect(mocks.api).toHaveBeenCalledWith('/api/v1/teams/team-a/members/all')
+    expect(wrapper!.text()).toContain('山田花子')
+    expect(wrapper!.text()).toContain('shift.requests.unknownMember')
+  })
+  it('members/all の取得失敗は handleApiError に渡し、不明なメンバー表示にする', async () => {
+    membersError = true
+    renderPage()
+    await flushPromises()
+    expect(mocks.handleApiError).toHaveBeenCalled()
+    expect(wrapper!.text()).toContain('shift.requests.unknownMember')
+  })
+})
 
 describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () => {
   it.each(['ACCEPTED', 'REJECTED'] as const)('AC1 純チームADMINが%sを画面から送信できる', async (decision) => {

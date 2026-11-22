@@ -116,6 +116,14 @@ describe('ShiftScheduleList 手動リマインド', () => {
   })
 })
 
+describe('期間の日付書式', () => {
+  it('ハイフンの ISO 文字列のまま出さない（詳細画面と同じ formatDate）', async () => {
+    const wrapper = await mountList(false)
+    expect(wrapper.text()).not.toContain('2026-10-01')
+    expect(wrapper.text()).not.toContain('2026-10-07')
+  })
+})
+
 describe('CMP-260910-1609 AC7: 希望受付の案内と入力導線', () => {
   beforeEach(() => {
     // Dateだけを差し替え、mountListのsetTimeoutやNuxtの非同期描画は止めない。

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTeamMembers } from '~/composables/team/useTeamMembers'
+
 definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
@@ -13,7 +15,21 @@ const isAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 
 const { requests, isLoading, fetchRequests, review, withdraw } =
   useChangeRequest(scheduleId)
 
-onMounted(() => Promise.all([fetchRequests(), loadPermissions()]))
+const { handleApiError } = useErrorHandler()
+const { getAllMembers } = useTeamMembers()
+/** userId → 表示名（GET /teams/{slug}/members/all）。取得失敗は通知し、一覧は「不明なメンバー」で代替する */
+const memberNames = ref<Map<number, string>>(new Map())
+async function loadMemberNames(): Promise<void> {
+  try {
+    const res = await getAllMembers(teamSlug.value)
+    memberNames.value = new Map(res.data.map(m => [m.userId, m.displayName]))
+  } catch (error) {
+    memberNames.value = new Map()
+    handleApiError(error)
+  }
+}
+
+onMounted(() => Promise.all([fetchRequests(), loadPermissions(), loadMemberNames()]))
 
 async function onSubmitted(): Promise<void> {
   await fetchRequests()
@@ -46,6 +62,7 @@ async function onWithdraw(id: number): Promise<void> {
         :current-user-id="authStore.currentUser?.id ?? 0"
         :is-admin="isAdmin"
         :is-loading="isLoading"
+        :member-names="memberNames"
         @review="onReview"
         @withdraw="onWithdraw"
       />

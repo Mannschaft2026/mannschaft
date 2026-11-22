@@ -164,7 +164,7 @@ function confirmAddMember() {
     </div>
 
     <!-- タブ -->
-    <nav class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700">
+    <nav class="mb-6 flex flex-wrap gap-x-1 border-b border-surface-200 dark:border-surface-700">
       <NuxtLink
         :to="`/shift/${scheduleId}`"
         class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"

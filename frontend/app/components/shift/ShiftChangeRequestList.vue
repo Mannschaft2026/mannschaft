@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
 
-defineProps<{
+const props = defineProps<{
   requests: ChangeRequest[]
   currentUserId: number
   isAdmin?: boolean
   isLoading?: boolean
+  /** userId → 表示名。引けない依頼者は「不明なメンバー」を出す */
+  memberNames?: Map<number, string>
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +20,10 @@ const { t } = useI18n()
 const reviewDialogVisible = ref(false)
 const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED' } | null>(null)
 const reviewComment = ref('')
+
+function memberName(userId: number): string {
+  return props.memberNames?.get(userId) ?? t('shift.requests.unknownMember')
+}
 
 function statusSeverity(status: ChangeRequestStatus): string {
   switch (status) {
@@ -76,7 +82,7 @@ function confirmReview(): void {
       <!-- 依頼者 -->
       <Column :header="$t('shift.hourlyRate.column.member')" field="requestInfo.requestedBy" style="min-width: 100px">
         <template #body="{ data }">
-          <span class="font-medium">{{ data.requestInfo.requestedBy }}</span>
+          <span class="font-medium">{{ memberName(data.requestInfo.requestedBy) }}</span>
         </template>
       </Column>
 

@@ -167,6 +167,42 @@ describe('S7 / S17 編集画面・詳細画面', () => {
   })
 })
 
+describe('狭幅での折れ防止（実機E2E 不合格 1〜4）', () => {
+  it('会員の概要: 「調整中」バッジは縦折れせず、時刻は折り返さず、ポジション名は縮む', async () => {
+    listSlots.mockResolvedValue([{ ...slot, assignmentMasked: true, position: { positionId: 1, positionName: 'UI検証ポジション', requiredCount: 2 } }])
+    const w = await mount(ShiftDetailPage)
+    const badge = w.find('td [title]')
+    expect(badge.classes()).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']))
+    const spans = w.findAll('td a > span')
+    expect(spans[0]!.classes()).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']))
+    expect(spans[1]!.classes()).toContain('min-w-0')
+  })
+  it('管理者の概要: 操作ボタン群は折り返し可能で、ボタン文字は折れない', async () => {
+    role = 'ADMIN'
+    const w = await mount(ShiftDetailPage)
+    const actions = w.get('[data-testid="shift-detail-actions"]')
+    expect(actions.classes()).toContain('flex-wrap')
+    for (const b of actions.findAll('button')) expect(b.classes()).toContain('whitespace-nowrap')
+  })
+  it('概要のタブ列は折り返して全タブが見える', async () => {
+    role = 'ADMIN'
+    const w = await mount(ShiftDetailPage)
+    const nav = w.get('nav')
+    expect(nav.classes()).toContain('flex-wrap')
+    expect(nav.classes()).not.toContain('overflow-x-auto')
+  })
+  it('編集画面: スロットカードは折り返し可能で、時刻は折れずポジション名は単語単位', async () => {
+    role = 'ADMIN'
+    listSlots.mockResolvedValue([{ ...slot, position: { positionId: 1, positionName: 'UI検証ポジション', requiredCount: 2 } }])
+    const w = await mount(ShiftEditPage)
+    const time = w.findAll('p').find(p => p.text().includes('09:00'))!
+    expect(time.classes()).toContain('whitespace-nowrap')
+    const name = w.findAll('p').find(p => p.text().includes('UI検証ポジション'))!
+    expect(name.classes()).toContain('break-words')
+    expect(time.element.parentElement!.parentElement!.classList.contains('flex-wrap')).toBe(true)
+  })
+})
+
 describe('locale（6言語）', () => {
   const langs = ['ja', 'en', 'zh', 'ko', 'es', 'de']
   const load = (l: string) =>

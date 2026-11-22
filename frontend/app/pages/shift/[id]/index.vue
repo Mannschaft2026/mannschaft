@@ -295,12 +295,13 @@ const tabs = computed(() => {
         >
           <i class="pi pi-sync" />{{ t('shift.detail.changeRequestLink') }}
         </NuxtLink>
-        <div v-if="canManage" class="flex items-center gap-2">
+        <div v-if="canManage" data-testid="shift-detail-actions" class="flex flex-wrap items-center gap-2">
           <Button
             icon="pi pi-pencil"
             :label="t('common.edit')"
             severity="secondary"
             size="small"
+            class="whitespace-nowrap"
             @click="openEdit"
           />
           <Button
@@ -308,6 +309,7 @@ const tabs = computed(() => {
             icon="pi pi-arrow-right"
             :label="t(nextStatusLabelMap[schedule.status.status])"
             size="small"
+            class="whitespace-nowrap"
             :loading="transitioning"
             @click="handleTransition"
           />
@@ -319,6 +321,7 @@ const tabs = computed(() => {
             severity="danger"
             outlined
             size="small"
+            class="whitespace-nowrap"
             :loading="deleting"
             @click="confirmDelete"
           />
@@ -362,7 +365,7 @@ const tabs = computed(() => {
 
       <!-- タブナビ -->
       <nav
-        class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700"
+        class="mb-6 flex flex-wrap gap-x-1 border-b border-surface-200 dark:border-surface-700"
       >
         <NuxtLink
           v-for="tab in tabs"
@@ -434,32 +437,32 @@ const tabs = computed(() => {
                       v-for="slot in slotsByDate.get(date)"
                       :key="slot.id"
                       :to="`/shift/${scheduleId}/edit`"
-                      class="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
+                      class="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
                       :class="
                         isSlotUnderStaffed(slot)
                           ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-300'
                           : 'border-surface-200 bg-surface-50 text-surface-700 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-300'
                       "
                     >
-                      <span
+                      <span class="shrink-0 whitespace-nowrap"
                         >{{ slot.time.startTime.slice(0, 5) }}〜{{
                           slot.time.endTime.slice(0, 5)
                         }}</span
                       >
-                      <span v-if="slot.position.positionName" class="text-surface-400"
+                      <span v-if="slot.position.positionName" class="min-w-0 break-words text-surface-400"
                         >/{{ slot.position.positionName }}</span
                       >
                       <!-- 割当バッジ。サーバーが割当を伏せている間は人数を出さず中立表示にする -->
                       <span
                         v-if="slot.assignmentMasked"
-                        class="rounded bg-surface-100 px-1 font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
+                        class="shrink-0 whitespace-nowrap rounded bg-surface-100 px-1 font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
                         :title="$t('shift.slot.assignmentMaskedHint')"
                       >
                         {{ $t('shift.slot.assignmentMasked') }}
                       </span>
                       <span
                         v-else
-                        class="rounded px-1 font-medium"
+                        class="shrink-0 whitespace-nowrap rounded px-1 font-medium"
                         :class="
                           isSlotUnderStaffed(slot)
                             ? 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200'
