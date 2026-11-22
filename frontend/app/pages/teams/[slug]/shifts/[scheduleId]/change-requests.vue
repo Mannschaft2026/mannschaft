@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ReviewOutcome } from '~/components/shift/ShiftChangeRequestList.vue'
 import { useTeamMembers } from '~/composables/team/useTeamMembers'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
@@ -40,13 +41,17 @@ async function onReview(
   decision: 'ACCEPTED' | 'REJECTED',
   comment: string | undefined,
   version: number,
-): Promise<boolean> {
+): Promise<ReviewOutcome> {
   try {
     await review(id, decision, comment, version)
-    return true
-  } catch {
+    return { status: 'ok' }
+  } catch (e) {
     // 通知（競合専用文言・汎用エラー）と一覧再取得は review() 側で済んでいる。ここで再通知しない
-    return false
+    if (e instanceof Error && e.message === 'review conflict') {
+      // 再取得は review() 内で完了済み。最新の依頼をここで引いて返す
+      return { status: 'conflict', latest: requests.value.find((r) => r.id === id) ?? null }
+    }
+    return { status: 'error' }
   }
 }
 

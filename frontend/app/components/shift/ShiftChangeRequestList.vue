@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
 
+export type ReviewOutcome =
+  | { status: 'ok' }
+  | { status: 'conflict'; latest: ChangeRequest | null }
+  | { status: 'error' }
+
 const props = defineProps<{
-  /** 審査を実行する。成功なら true、失敗（通知は呼び出し側で済み）なら false */
+  /**
+   * 審査を実行する（通知は呼び出し側で済み）。
+   * conflict の latest は 409 後に再取得した最新の依頼（消えていれば null）。
+   */
   submitReview: (
     id: number,
     decision: 'ACCEPTED' | 'REJECTED',
     comment: string | undefined,
     version: number,
-  ) => Promise<boolean>
+  ) => Promise<ReviewOutcome>
   requests: ChangeRequest[]
   currentUserId: number
   isAdmin?: boolean
@@ -68,24 +76,26 @@ async function confirmReview(): Promise<void> {
   if (!target || isReviewing.value) return
   isReviewing.value = true
   try {
-    const ok = await props.submitReview(
+    const outcome = await props.submitReview(
       target.id,
       target.decision,
       reviewComment.value.trim() || undefined,
       target.version,
     )
-    if (ok) {
+    if (outcome.status === 'ok') {
       reviewDialogVisible.value = false
       reviewComment.value = ''
-      return
+    } else if (outcome.status === 'conflict') {
+      if (outcome.latest && outcome.latest.reviewInfo.status === 'OPEN') {
+        // まだ OPEN: コメントは残し、最新の version に差し替えて再送できるようにする
+        reviewTarget.value = { ...target, version: outcome.latest.version }
+      } else {
+        // 審査済み・消滅: もう審査できないので閉じる
+        reviewDialogVisible.value = false
+        reviewComment.value = ''
+      }
     }
-    // 失敗: コメントを残してダイアログも開いたままにする。
-    // ただし 409 の再取得で対象がすでに審査済み・消滅していれば、審査できないので閉じる。
-    const latest = props.requests.find((r) => r.id === target.id)
-    if (!latest || latest.reviewInfo.status !== 'OPEN') {
-      reviewDialogVisible.value = false
-      reviewComment.value = ''
-    }
+    // error: ダイアログとコメントをそのまま残す
   } finally {
     isReviewing.value = false
   }

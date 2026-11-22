@@ -309,6 +309,25 @@ describe('審査の失敗・競合時の扱い', () => {
     expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(false)
   })
 
+  it('SHIFT_018 後は最新の version に差し替わり、再送が成功してダイアログが閉じる', async () => {
+    reviewFailure = { statusCode: 409, data: { error: { code: 'SHIFT_018' } } }
+    renderPage()
+    await flushPromises()
+    await reviewButtons()[0]!.trigger('click')
+    wrapper!.getComponent('textarea-stub').vm.$emit('update:modelValue', '再送します')
+    rows = [{ ...request(), version: 5 }]
+    await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(true)
+    reviewFailure = undefined
+    await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
+    await flushPromises()
+    expect(mocks.api).toHaveBeenLastCalledWith('/api/v1/shifts/change-requests/7/review', {
+      method: 'PATCH', body: { decision: 'ACCEPTED', reviewComment: '再送します', version: 5 },
+    })
+    expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(false)
+  })
+
   it('409 でも依頼がまだ OPEN（楽観ロック競合）なら、ダイアログとコメントを残す', async () => {
     reviewFailure = { statusCode: 409, data: { error: { code: 'SHIFT_018' } } }
     await openAndSubmit('保持して')
