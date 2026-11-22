@@ -40,8 +40,8 @@ import java.util.Optional;
  *  T3  [team|org RO] ブロック判定（boolean）
  *  T5  [scopefolder] 配置先フォルダの事前確認（folderId 指定時のみ。結果を返し例外にしない）
  *  T6  [role]        claim: 招待行を最新値でロックして判定 → 使用回数+1 → 確保記録（CLAIMED）
- *  T7  [role+membership] ロール付与 + 入会（GRANTED / ALREADY_JOINED）
- *  T8  [role]        付与されなかった確保を戻す（ちょうど1回）
+ *  T7  [role+membership] ロール付与 + 入会（GRANTED / ALREADY_JOINED）。付与したら同じTXで確保に付与印を立てる
+ *  T8  [role]        付与されなかった確保を戻す（ちょうど1回。付与印のある確保は戻さない）
  *  T9  [role]        確保を確定（GRANTED）し招待監査を発行
  *  T10/T11 [scopefolder] 既定フォルダ取得/作成 → フォルダ配置
  * </pre>
@@ -50,7 +50,10 @@ import java.util.Optional;
  * <p>T7 で付与されなかったと確定できる場合だけ確保を戻す: {@code ALREADY_JOINED} が正常に返った場合、または
  * T7 本体で投げられた {@link BusinessException} がトランザクション境界をそのまま越えてきた場合
  * （ロールバックが正常に完了した証拠）。それ以外の例外（ロック待ちタイムアウト、コミット成否不明、
- * rollback 失敗など）では戻さない。確保は CLAIMED のまま残り、監視（gauge）で可視化される。</p>
+ * rollback 失敗など）では戻さない。確保は CLAIMED のまま残り、監視（gauge）で可視化される。
+ * ただし確保に付与印（この確保による付与がコミット済み。T7 が付与と同じTXで立てる）があれば、どの条件でも戻さない
+ * （戻しの条件付き UPDATE 自体が印の無いことを条件にしている）。印の無い確保は付与に使われていない
+ * （CMP-261107-1833・Codex 検分 P1/P2）。</p>
  *
  * <h2>部分成功（案1・陣立て書 §10）</h2>
  * <p>外側トランザクションが無い通常の HTTP 経路では、<b>参加（ロール付与・入会・使用回数・監査）の確定後に
@@ -111,9 +114,15 @@ public class InviteAcceptanceFacade {
      *
      * <p>手順は {@link #joinByInvite(String, Long)} と同じ（フォルダ指定なし＝既定フォルダへ配置）。ただし T6 は
      * {@link InviteAcceptanceWriter#claimOrResume} で、前回の承認が途中で失敗して同じ利用者の確保（CLAIMED）が
-     * 残っていれば、使用回数を進めずにその確保を再開する。T7 が {@code ALREADY_JOINED} を返した場合は、確保が新規でも
-     * 再開でも戻さず確定（T9）する（新規の確保では、別 attempt が同じ確保を再開して先に付与した。409 TEAM_003 を返し、
-     * 配置はその attempt に任せる）。</p>
+     * 残っていれば、使用回数を進めずにその確保を再開する。保留の ACCEPTING が 5 分を超えて取り直されると、
+     * 1つの確保を新旧の attempt が共有しうるため、確保を戻すか確定するかは確保の付与印（T7 と同じトランザクションで
+     * 立つ）で決める（Codex 検分 P1/P2）。</p>
+     * <ul>
+     *   <li>再開した確保に付与印がある: 付与はコミット済み。T7 を行わず確定（T9）と配置だけ行う
+     *       （招待がその後に失効していても戻さない）。</li>
+     *   <li>T7 が {@code ALREADY_JOINED}: 確保に付与印が無ければ別経路の参加なので戻して 409 TEAM_003（通常の承諾と同じ）。
+     *       付与印があれば（別 attempt がこの確保で先に付与した）戻さず確定して 409 TEAM_003（配置はその attempt に任せる）。</li>
+     * </ul>
      */
     public void joinByInviteTokenHash(String tokenHash, Long userId) {
         InviteLocator locator = new InviteLocator.ByTokenHash(tokenHash);
@@ -130,16 +139,16 @@ public class InviteAcceptanceFacade {
         // T6'
         InviteClaimTicket ticket = writer.claimOrResume(locator, userId, blocked, null);
 
-        // T7〜T8（ALREADY_JOINED では確保を戻さない。grantByHash の javadoc 参照）
-        GrantOutcome outcome = grantByHash(ticket, userId);
+        if (ticket.grantCommitted()) {
+            log.info("再開した確保による付与はコミット済み（付与は行わず確定する）: claimId={}, userId={}",
+                    ticket.claimId(), userId);
+        } else {
+            // T7〜T8（通常の承諾と同じ。ALREADY_JOINED は付与印で戻すか確定するかを決めて 409）
+            grantOrRelease(ticket, userId);
+        }
 
         // T9
         recordJoinedOrLog(ticket);
-
-        if (outcome == GrantOutcome.ALREADY_JOINED && !ticket.resumed()) {
-            // 新しく確保したのに在籍済み = 同じ保留の別 attempt（確保を再開した側）が先に付与した。配置はその側が行う。
-            throw new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
-        }
 
         log.info("招待付き登録の保留承認による参加完了: userId={}, scopeType={}, scopeId={}, resumed={}",
                 userId, ticket.scopeType(), ticket.scopeId(), ticket.resumed());
@@ -149,28 +158,23 @@ public class InviteAcceptanceFacade {
     }
 
     /**
-     * 在籍済みのとき、同じ招待・同じ利用者に残った CLAIMED を GRANTED に確定する（CMP-261107-1833 設計 §9-3）。
+     * 在籍済みのとき、同じ招待・同じ利用者に残った CLAIMED を片付ける（CMP-261107-1833 設計 §9-3）。
      * 呼び出し元は {@code PendingInviteService} のみ。残った確保が無ければ何もしない。
      *
-     * <p>T9 と同じく、確定に失敗しても参加は成立しているので ERROR を記録して先へ進む（CLAIMED のまま監視対象）。</p>
+     * <p>確保に付与印があれば（前回の attempt がこの確保で付与をコミットした）GRANTED に確定し、無ければ
+     * 在籍は別経路の参加によるもので確保は使われていないので戻す（{@link InviteAcceptanceWriter#settleOrphanClaim}）。
+     * 失敗しても参加は成立しているので ERROR を記録して先へ進む（CLAIMED のまま監視対象）。</p>
      */
     public void settleOrphanClaim(String tokenHash, Long userId) {
-        Optional<java.util.UUID> orphan;
         try {
-            orphan = writer.findOrphanClaim(new InviteLocator.ByTokenHash(tokenHash), userId);
-        } catch (RuntimeException e) {
-            log.error("残った招待 claim の確認に失敗（参加は成立済み。CLAIMED のまま監視対象）: userId={}", userId, e);
-            return;
-        }
-        orphan.ifPresent(claimId -> {
-            try {
-                writer.recordJoined(claimId);
-                log.info("残っていた招待 claim を確定: claimId={}, userId={}", claimId, userId);
-            } catch (RuntimeException e) {
-                log.error("残った招待 claim の確定に失敗（参加は成立済み。CLAIMED のまま監視対象）: claimId={}, userId={}",
-                        claimId, userId, e);
+            InviteAcceptanceWriter.OrphanSettlement settled =
+                    writer.settleOrphanClaim(new InviteLocator.ByTokenHash(tokenHash), userId);
+            if (settled != InviteAcceptanceWriter.OrphanSettlement.NONE) {
+                log.info("残っていた招待 claim を片付けた: result={}, userId={}", settled, userId);
             }
-        });
+        } catch (RuntimeException e) {
+            log.error("残った招待 claim の片付けに失敗（参加は成立済み。CLAIMED のまま監視対象）: userId={}", userId, e);
+        }
     }
 
     /** 招待のハッシュで、付与するロールの名前を引く（保留承認の表示用。CMP-261107-1833 設計 §2）。 */
@@ -251,8 +255,10 @@ public class InviteAcceptanceFacade {
     private void grantOrRelease(InviteClaimTicket ticket, Long userId) {
         GrantOutcome outcome;
         try {
-            outcome = membershipGrantService.grantRole(ticket.scopeType(), ticket.scopeId(), userId,
-                    ticket.roleId(), ticket.invitedBy(), SOURCE_INVITE_TOKEN);
+            // 付与の元の claim を渡す。grantRole は同じトランザクションで claim をロックし、付与したら付与印を立てる。
+            outcome = InviteClaimGrantScope.call(ticket.claimId(), () -> membershipGrantService.grantRole(
+                    ticket.scopeType(), ticket.scopeId(), userId, ticket.roleId(), ticket.invitedBy(),
+                    SOURCE_INVITE_TOKEN));
         } catch (BusinessException e) {
             // T7 本体の業務例外がそのまま境界を越えた = ロールバック完了。未付与が確定したので戻す。
             release(ticket, e);
@@ -264,43 +270,15 @@ public class InviteAcceptanceFacade {
             throw e;
         }
         if (outcome == GrantOutcome.ALREADY_JOINED) {
-            // 競合者が先に付与した（user ロック下の現在読みで確定）。既メンバーの二重参加は 409。招待監査は出さない。
+            // 在籍済み（user ロック下の現在読みで確定）。既メンバーの二重参加は 409。
+            // 確保に付与印が無ければ別経路の参加なので戻す。付与印があれば別 attempt がこの確保で先に付与したので、
+            // 戻さず確定する（共有中の確保を解放して「参加済みなのに使用回数0」にしない。Codex 検分 P1/P2）。
             BusinessException conflict = new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
-            release(ticket, conflict);
+            if (release(ticket, conflict) == InviteAcceptanceWriter.ReleaseOutcome.GRANT_COMMITTED) {
+                recordJoinedOrLog(ticket);
+            }
             throw conflict;
         }
-    }
-
-    /**
-     * 保留承認の入口（hash 入口）でのロール付与（T7〜T8。CMP-261107-1833 設計 §9-3・§9-4）。
-     *
-     * <p>{@code ALREADY_JOINED} では、確保が新規でも再開でも<b>戻さない</b>（呼び出し元が T9 で確定する）。
-     * 再開した確保なら前回の付与がコミット済みだった証である。新規の確保でも、保留の ACCEPTING が5分を超えて
-     * 別の attempt に取り直され、その attempt が同じ確保を再開して付与をコミットした後に、古い attempt が
-     * T7 へ進んだ場合に起こる。このとき確保は両 attempt で共有されており、古い側が戻すと「参加済みなのに
-     * 使用回数0・確保 RELEASED」になる（Codex 検分 P1）。在籍は user ロック下の現在読みで確定しているので、
-     * 確保は参加に使われたものとして確定するのが正しい。</p>
-     *
-     * <p>業務例外（ロールバック完了）では確保を戻し、技術例外（コミット成否不明）では戻さない（{@link #accept} と同じ）。</p>
-     */
-    private GrantOutcome grantByHash(InviteClaimTicket ticket, Long userId) {
-        GrantOutcome outcome;
-        try {
-            outcome = membershipGrantService.grantRole(ticket.scopeType(), ticket.scopeId(), userId,
-                    ticket.roleId(), ticket.invitedBy(), SOURCE_INVITE_TOKEN);
-        } catch (BusinessException e) {
-            release(ticket, e);
-            throw e;
-        } catch (RuntimeException | Error e) {
-            log.error("ロール付与の結果が不明（確保は CLAIMED のまま残し監視に任せる）: claimId={}, tokenId={}, userId={}, resumed={}",
-                    ticket.claimId(), ticket.tokenId(), userId, ticket.resumed(), e);
-            throw e;
-        }
-        if (outcome == GrantOutcome.ALREADY_JOINED) {
-            log.info("在籍済みのため確保は戻さず確定する（前回または並行 attempt の付与がコミット済み）: claimId={}, userId={}, resumed={}",
-                    ticket.claimId(), userId, ticket.resumed());
-        }
-        return outcome;
     }
 
     private void recordJoinedOrLog(InviteClaimTicket ticket) {
@@ -312,13 +290,15 @@ public class InviteAcceptanceFacade {
         }
     }
 
-    private void release(InviteClaimTicket ticket, RuntimeException primary) {
+    /** 確保を戻す。失敗は元の例外の抑制例外に残し null を返す。 */
+    private InviteAcceptanceWriter.ReleaseOutcome release(InviteClaimTicket ticket, RuntimeException primary) {
         try {
-            writer.releaseClaim(ticket.claimId());
+            return writer.releaseClaim(ticket.claimId());
         } catch (RuntimeException releaseFailure) {
             log.error("招待 claim の補償に失敗（CLAIMED のまま残り監視対象）: claimId={}, tokenId={}",
                     ticket.claimId(), ticket.tokenId(), releaseFailure);
             primary.addSuppressed(releaseFailure);
+            return null;
         }
     }
 

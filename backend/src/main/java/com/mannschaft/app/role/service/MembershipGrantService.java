@@ -7,8 +7,10 @@ import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.role.RoleErrorCode;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
+import com.mannschaft.app.role.repository.InviteTokenRepository;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.team.TeamErrorCode;
@@ -18,6 +20,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * スコープ（TEAM/ORGANIZATION）へのロール付与＋メンバーシップ入会を行う共通経路。
@@ -29,12 +34,24 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>越境トランザクション方針（原則5）: 本サービスは role ドメイン（{@link UserRoleRepository}）と
  * membership ドメイン（{@link MembershipService}）にまたがるため、公開メソッドに {@code @Transactional}
  * を持ち、呼び出し元のトランザクションに相乗りできる。クラス単位の {@code @Transactional} は付けない
- * （付けると private ヘルパ {@code doGrant} が D-3T の入口になる）。</p>
+ * （付けると private ヘルパ {@code grant} が D-3T の入口になる）。</p>
  *
  * <h2>ロック順（CMP-260826-1457 §7）</h2>
  * <p>全経路で「user 行 → スコープ管理者行 → user_roles → memberships」の順に取る
  * （{@code RoleService#removeMemberWithoutAdminCheck} と同じ）。最初のクエリを user 行の
- * {@code FOR UPDATE} にするので、待たされた後の在籍判定はロック取得後に始まる。</p>
+ * {@code FOR UPDATE} にするので、待たされた後の在籍判定はロック取得後に始まる。
+ * 招待承諾で付与の元の claim があるときは、user 行の次に claim 行をロックする（下記）。</p>
+ *
+ * <h2>付与の元の claim（CMP-261107-1833・Codex 検分 P1/P2）</h2>
+ * <p>{@link InviteAcceptanceFacade} が {@link InviteClaimGrantScope} の範囲内で {@link #grantRole} を呼んだときは、
+ * 同じトランザクションで claim 行をロックし、次の順に判定する。</p>
+ * <ol>
+ *   <li>この claim の付与印が既にある（別 attempt がこの claim で付与をコミット済み）→ 何も書かず {@code ALREADY_JOINED}</li>
+ *   <li>在籍済み（別経路の参加）→ 何も書かず {@code ALREADY_JOINED}（印は立てないので、呼び出し元は claim を戻せる）</li>
+ *   <li>claim が CLAIMED でない（別 attempt が戻した）→ ROLE_002（付与しない）</li>
+ *   <li>付与し、同じトランザクションで claim に付与印を立てて {@code GRANTED}</li>
+ * </ol>
+ * <p>付与と印は一緒にコミット（またはロールバック）されるので、claim を戻すか確定するかは印だけで決まる。</p>
  *
  * <h2>2つの入口の差（現状維持の範囲）</h2>
  * <ul>
@@ -61,6 +78,7 @@ public class MembershipGrantService {
     private final RoleRepository roleRepository;
     private final MembershipService membershipService;
     private final UserRowLockService userRowLockService;
+    private final InviteTokenRepository inviteTokenRepository;
 
     private static final String MEMBER_ROLE_NAME = "MEMBER";
 
@@ -77,11 +95,25 @@ public class MembershipGrantService {
      */
     @Transactional
     public void grantMemberRole(String scopeType, Long scopeId, Long userId, Long grantedBy, String source) {
-        doGrant(Mode.JOIN_REQUEST, scopeType, scopeId, userId, null, grantedBy, source);
+        // 1. user 行を先にロックする（最初のクエリ）。参加申請承認は現行どおり ACTIVE を問わない。
+        userRowLockService.lock(userId);
+        ScopeType st = toScopeType(scopeType);
+        // 2. 冪等性チェック（P1-2）。
+        if (isAlreadyJoined(Mode.JOIN_REQUEST, st, scopeId, userId)) {
+            logSkipped(scopeType, scopeId, userId, source);
+            return;
+        }
+        Long grantRoleId = memberRoleId();
+        grant(scopeType, scopeId, userId, grantRoleId, grantedBy, source, false);
+        logGranted(scopeType, scopeId, userId, grantRoleId, source);
     }
 
     /**
      * 指定ロールを {@code user_roles} に割当て、{@code memberships} へ MEMBER として入会させる（招待承諾用）。
+     *
+     * <p>{@link InviteClaimGrantScope} の範囲内で呼ばれたときは、付与の元の claim を同じトランザクションで判定し、
+     * 付与したら付与印を立てる（クラス javadoc「付与の元の claim」）。参加申請承認（{@link #grantMemberRole}）は
+     * claim に触れない（招待の確保記録へ到達する経路を参加申請側の越境TXに持ち込まない）。</p>
      *
      * @param scopeType  "TEAM" または "ORGANIZATION"
      * @param scopeId    スコープ ID
@@ -90,12 +122,62 @@ public class MembershipGrantService {
      * @param grantedBy  付与を行った操作者ユーザー ID（招待者・承認者等）
      * @param source     入会経路（{@code MembershipCreateRequest#source}。例: INVITE_TOKEN）
      * @return 付与した（{@code GRANTED}）か、既に在籍で何もしなかった（{@code ALREADY_JOINED}）か
-     * @throws BusinessException ROLE_002（user が ACTIVE でない）、TEAM_003（競合して在籍が先に確定した）
+     * @throws BusinessException ROLE_002（user が ACTIVE でない、または付与の元の claim が既に戻されていた）、
+     *                           TEAM_003（競合して在籍が先に確定した）
      */
     @Transactional
     public GrantOutcome grantRole(String scopeType, Long scopeId, Long userId, Long roleId, Long grantedBy,
                                   String source) {
-        return doGrant(Mode.INVITE, scopeType, scopeId, userId, roleId, grantedBy, source);
+        // 1. user 行を先にロックする（最初のクエリ。ロック待ちの後に在籍判定が始まるようにする）。
+        // 2. ACTIVE を確認する。退会競合は user ロック下のこの確認で直列化される。
+        if (userRowLockService.lock(userId) != UserRowLockService.UserState.ACTIVE) {
+            throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+
+        // 2b. 付与の元の claim を、user 行の次にロックして読む（クラス javadoc「付与の元の claim」）。
+        InviteClaimLock claim = lockGrantingClaim().orElse(null);
+        if (claim != null && claim.grantCommitted()) {
+            log.info("ロール付与をスキップ（この claim による付与は別 attempt がコミット済み）: claimId={}, userId={}",
+                    claim.claimId(), userId);
+            return GrantOutcome.ALREADY_JOINED;
+        }
+
+        // 3. 冪等性チェック（P1-2）: 既に当該スコープのメンバーであれば二重割当・重複入会を行わない。
+        if (isAlreadyJoined(Mode.INVITE, toScopeType(scopeType), scopeId, userId)) {
+            logSkipped(scopeType, scopeId, userId, source);
+            return GrantOutcome.ALREADY_JOINED;
+        }
+
+        if (claim != null && !claim.claimed()) {
+            // 付与の前に別 attempt がこの claim を戻した（招待の失効・期限切れ等）。使用回数の裏付けが無いので付与しない。
+            log.info("ロール付与を中止（付与の元の claim が既に {}）: claimId={}, userId={}", claim.status(),
+                    claim.claimId(), userId);
+            throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+
+        Long grantRoleId = roleId != null ? roleId : memberRoleId();
+        try {
+            grant(scopeType, scopeId, userId, grantRoleId, grantedBy, source, true);
+        } catch (DataIntegrityViolationException e) {
+            // user ロック下の現在読みを通った後の一意制約違反は、並行して在籍が確定した競合。
+            // TX は巻き戻る。業務エラーに変換するので、呼び出し側は確保した使用回数を戻せる。
+            log.warn("ロール付与で一意制約違反（並行して在籍が確定）: scopeType={}, scopeId={}, userId={}",
+                    scopeType, scopeId, userId);
+            throw new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
+        }
+
+        if (claim != null && inviteTokenRepository.markClaimGrantCommitted(claim.claimId()) != 1) {
+            // claim 行はロック済みで CLAIMED・未付与を確かめているので起こりえない。付与ごと巻き戻す。
+            throw new IllegalStateException("付与の元の claim に付与印を立てられない: claimId=" + claim.claimId());
+        }
+
+        logGranted(scopeType, scopeId, userId, grantRoleId, source);
+        return GrantOutcome.GRANTED;
+    }
+
+    private Long memberRoleId() {
+        return roleRepository.findByName(MEMBER_ROLE_NAME)
+                .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001)).getId();
     }
 
     private enum Mode {
@@ -105,44 +187,28 @@ public class MembershipGrantService {
         JOIN_REQUEST
     }
 
-    private GrantOutcome doGrant(Mode mode, String scopeType, Long scopeId, Long userId, Long roleId,
-                                 Long grantedBy, String source) {
-        // 1. user 行を先にロックする（最初のクエリ。ロック待ちの後に在籍判定が始まるようにする）。
-        UserRowLockService.UserState userState = userRowLockService.lock(userId);
-        // 2. 招待のみ ACTIVE を確認する。退会競合は user ロック下のこの確認で直列化される。
-        if (mode == Mode.INVITE && userState != UserRowLockService.UserState.ACTIVE) {
-            throw new BusinessException(RoleErrorCode.ROLE_002);
-        }
+    private static ScopeType toScopeType(String scopeType) {
+        return "TEAM".equals(scopeType) ? ScopeType.TEAM : ScopeType.ORGANIZATION;
+    }
 
-        ScopeType st = "TEAM".equals(scopeType) ? ScopeType.TEAM : ScopeType.ORGANIZATION;
+    private static void logSkipped(String scopeType, Long scopeId, Long userId, String source) {
+        log.info("ロール付与をスキップ（既にメンバー・冪等）: scopeType={}, scopeId={}, userId={}, source={}",
+                scopeType, scopeId, userId, source);
+    }
 
-        // 3. 冪等性チェック（P1-2）: 既に当該スコープのメンバーであれば二重割当・重複入会を行わない。
-        if (isAlreadyJoined(mode, st, scopeId, userId)) {
-            log.info("ロール付与をスキップ（既にメンバー・冪等）: scopeType={}, scopeId={}, userId={}, source={}",
-                    scopeType, scopeId, userId, source);
-            return GrantOutcome.ALREADY_JOINED;
-        }
-
-        Long grantRoleId = roleId != null ? roleId : roleRepository.findByName(MEMBER_ROLE_NAME)
-                .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001)).getId();
-
-        if (mode == Mode.INVITE) {
-            try {
-                grant(scopeType, scopeId, userId, grantRoleId, grantedBy, source, true);
-            } catch (DataIntegrityViolationException e) {
-                // user ロック下の現在読みを通った後の一意制約違反は、並行して在籍が確定した競合。
-                // TX は巻き戻る。業務エラーに変換するので、呼び出し側は確保した使用回数を戻せる。
-                log.warn("ロール付与で一意制約違反（並行して在籍が確定）: scopeType={}, scopeId={}, userId={}",
-                        scopeType, scopeId, userId);
-                throw new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
-            }
-        } else {
-            grant(scopeType, scopeId, userId, grantRoleId, grantedBy, source, false);
-        }
-
+    private static void logGranted(String scopeType, Long scopeId, Long userId, Long roleId, String source) {
         log.info("ロール付与・入会完了: scopeType={}, scopeId={}, userId={}, roleId={}, source={}",
-                scopeType, scopeId, userId, grantRoleId, source);
-        return GrantOutcome.GRANTED;
+                scopeType, scopeId, userId, roleId, source);
+    }
+
+    /** {@link InviteClaimGrantScope} の claim をロック付きで読む。範囲外なら空。claim が無ければ不変式違反。 */
+    private Optional<InviteClaimLock> lockGrantingClaim() {
+        Optional<UUID> claimId = InviteClaimGrantScope.current();
+        if (claimId.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(inviteTokenRepository.lockClaim(claimId.get())
+                .orElseThrow(() -> new IllegalStateException("付与の元の claim が存在しない: claimId=" + claimId.get())));
     }
 
     private boolean isAlreadyJoined(Mode mode, ScopeType st, Long scopeId, Long userId) {

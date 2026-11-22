@@ -3,6 +3,7 @@ package com.mannschaft.app.role;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.organization.event.OrganizationMemberAuditEvent;
 import com.mannschaft.app.role.dto.InviteClaimAuditContext;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.dto.InviteClaimTicket;
 import com.mannschaft.app.role.dto.InviteDeclineResult;
 import com.mannschaft.app.role.dto.InviteLocator;
@@ -266,25 +267,43 @@ class InviteAcceptanceWriterTest {
     class Release {
 
         @Test
-        @DisplayName("CLAIMED→RELEASED が1行のときだけ使用回数を1戻す")
+        @DisplayName("招待行 → claim の順にロックし、CLAIMED→RELEASED が1行のときだけ使用回数を1戻す")
         void 戻す() {
-            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(1);
             given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.of(TOKEN_ID));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(1);
             given(inviteTokenRepository.decrementUsedCount(TOKEN_ID)).willReturn(1);
 
-            writer.releaseClaim(CLAIM_ID);
+            assertThat(writer.releaseClaim(CLAIM_ID)).isEqualTo(InviteAcceptanceWriter.ReleaseOutcome.RELEASED);
 
-            verify(inviteTokenRepository).decrementUsedCount(TOKEN_ID);
-            verify(inviteTokenRepository).refreshIfManaged(TOKEN_ID);
+            org.mockito.InOrder order = org.mockito.Mockito.inOrder(inviteTokenRepository);
+            order.verify(inviteTokenRepository).lockSnapshotById(TOKEN_ID);
+            order.verify(inviteTokenRepository).markClaimReleased(CLAIM_ID);
+            order.verify(inviteTokenRepository).decrementUsedCount(TOKEN_ID);
+            order.verify(inviteTokenRepository).refreshIfManaged(TOKEN_ID);
         }
 
         @Test
         @DisplayName("既に RELEASED／GRANTED なら何もしない（冪等）")
         void 冪等() {
+            given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.of(TOKEN_ID));
             given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(0);
-            given(inviteTokenRepository.findClaimStatusLocked(CLAIM_ID)).willReturn(Optional.of("GRANTED"));
+            given(inviteTokenRepository.lockClaim(CLAIM_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "GRANTED", true)));
 
-            writer.releaseClaim(CLAIM_ID);
+            assertThat(writer.releaseClaim(CLAIM_ID)).isEqualTo(InviteAcceptanceWriter.ReleaseOutcome.SETTLED);
+
+            verify(inviteTokenRepository, never()).decrementUsedCount(anyLong());
+        }
+
+        @Test
+        @DisplayName("P1: 付与印のある CLAIMED（この claim の付与がコミット済み）は戻さず GRANT_COMMITTED")
+        void 付与印ありは戻さない() {
+            given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.of(TOKEN_ID));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(0);
+            given(inviteTokenRepository.lockClaim(CLAIM_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", true)));
+
+            assertThat(writer.releaseClaim(CLAIM_ID)).isEqualTo(InviteAcceptanceWriter.ReleaseOutcome.GRANT_COMMITTED);
 
             verify(inviteTokenRepository, never()).decrementUsedCount(anyLong());
         }
@@ -292,20 +311,127 @@ class InviteAcceptanceWriterTest {
         @Test
         @DisplayName("存在しない claim は IllegalStateException")
         void 不存在() {
-            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(0);
-            given(inviteTokenRepository.findClaimStatusLocked(CLAIM_ID)).willReturn(Optional.empty());
+            given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> writer.releaseClaim(CLAIM_ID)).isInstanceOf(IllegalStateException.class);
+            verify(inviteTokenRepository, never()).markClaimReleased(any());
         }
 
         @Test
         @DisplayName("使用回数を戻せない（既に0）なら IllegalStateException で全巻き戻し")
         void 使用回数が既に0() {
-            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(1);
             given(inviteTokenRepository.findClaimTokenId(CLAIM_ID)).willReturn(Optional.of(TOKEN_ID));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(1);
             given(inviteTokenRepository.decrementUsedCount(TOKEN_ID)).willReturn(0);
 
             assertThatThrownBy(() -> writer.releaseClaim(CLAIM_ID)).isInstanceOf(IllegalStateException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("claimOrResume（保留承認の T6'。CMP-261107-1833・Codex 検分 P1）")
+    class ClaimOrResume {
+
+        private InviteTokenSnapshot expiredToken() {
+            return token(NOW.minusSeconds(1), 1, 1, null, null);
+        }
+
+        @Test
+        @DisplayName("P1: 残った claim に付与印があれば、招待が期限切れでも戻さず grantCommitted=true で返す")
+        void 付与印ありは期限切れでも戻さない() {
+            lock(expiredToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", true)));
+
+            InviteClaimTicket ticket = writer.claimOrResume(LOCATOR, USER_ID, false, null);
+
+            assertThat(ticket.claimId()).isEqualTo(CLAIM_ID);
+            assertThat(ticket.resumed()).isTrue();
+            assertThat(ticket.grantCommitted()).isTrue();
+            verify(inviteTokenRepository, never()).markClaimReleased(any());
+            verify(inviteTokenRepository, never()).decrementUsedCount(anyLong());
+            verify(inviteTokenRepository, never()).incrementUsedCountIfAvailable(anyLong());
+        }
+
+        @Test
+        @DisplayName("付与印の無い claim で招待が期限切れなら、同じTXで戻して ROLE_002")
+        void 付与印なしで期限切れは戻す() {
+            lock(expiredToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false)));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(1);
+            given(inviteTokenRepository.decrementUsedCount(TOKEN_ID)).willReturn(1);
+
+            assertThatThrownBy(() -> writer.claimOrResume(LOCATOR, USER_ID, false, null))
+                    .satisfies(t -> assertCode(t, RoleErrorCode.ROLE_002, null));
+            verify(inviteTokenRepository).decrementUsedCount(TOKEN_ID);
+        }
+
+        @Test
+        @DisplayName("付与印の無い claim で判定が通れば、使用回数を進めず resumed=true・grantCommitted=false で返す")
+        void 付与印なしは再開() {
+            lock(validToken());
+            memberRole();
+            given(scopeStates.isCurrent("TEAM", TEAM_ID, 0L)).willReturn(true);
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false)));
+
+            InviteClaimTicket ticket = writer.claimOrResume(LOCATOR, USER_ID, false, null);
+
+            assertThat(ticket.resumed()).isTrue();
+            assertThat(ticket.grantCommitted()).isFalse();
+            verify(inviteTokenRepository, never()).incrementUsedCountIfAvailable(anyLong());
+        }
+    }
+
+    @Nested
+    @DisplayName("settleOrphanClaim（在籍済みでの残 claim の片付け。CMP-261107-1833・Codex 検分 P2）")
+    class SettleOrphanClaim {
+
+        @Test
+        @DisplayName("付与印のある残 claim は GRANTED に確定して監査を出す")
+        void 付与印ありは確定() {
+            lock(validToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", true)));
+            given(inviteTokenRepository.markClaimGranted(CLAIM_ID)).willReturn(1);
+            given(inviteTokenRepository.findClaimAuditContext(CLAIM_ID))
+                    .willReturn(Optional.of(new InviteClaimAuditContext(USER_ID, TEAM_ID, null, 2L)));
+
+            assertThat(writer.settleOrphanClaim(LOCATOR, USER_ID))
+                    .isEqualTo(InviteAcceptanceWriter.OrphanSettlement.CONFIRMED);
+
+            verify(eventPublisher).publishEvent(any(TeamMemberAuditEvent.class));
+            verify(inviteTokenRepository, never()).markClaimReleased(any());
+        }
+
+        @Test
+        @DisplayName("P2: 付与印の無い残 claim は別経路の参加なので戻して使用回数を1戻す（確定・監査はしない）")
+        void 付与印なしは戻す() {
+            lock(validToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID))
+                    .willReturn(Optional.of(new InviteClaimLock(CLAIM_ID, "CLAIMED", false)));
+            given(inviteTokenRepository.markClaimReleased(CLAIM_ID)).willReturn(1);
+            given(inviteTokenRepository.decrementUsedCount(TOKEN_ID)).willReturn(1);
+
+            assertThat(writer.settleOrphanClaim(LOCATOR, USER_ID))
+                    .isEqualTo(InviteAcceptanceWriter.OrphanSettlement.RELEASED);
+
+            verify(inviteTokenRepository).decrementUsedCount(TOKEN_ID);
+            verify(inviteTokenRepository, never()).markClaimGranted(any());
+            verify(eventPublisher, never()).publishEvent(any(Object.class));
+        }
+
+        @Test
+        @DisplayName("残 claim が無ければ何もしない")
+        void 残claimなし() {
+            lock(validToken());
+            given(inviteTokenRepository.findClaimedForUpdate(TOKEN_ID, USER_ID)).willReturn(Optional.empty());
+
+            assertThat(writer.settleOrphanClaim(LOCATOR, USER_ID))
+                    .isEqualTo(InviteAcceptanceWriter.OrphanSettlement.NONE);
+            verify(inviteTokenRepository, never()).markClaimReleased(any());
+            verify(inviteTokenRepository, never()).markClaimGranted(any());
         }
     }
 

@@ -166,6 +166,7 @@ erDiagram
 | `token_id` | `bigint unsigned` | NO | （なし） |  |
 | `user_id` | `bigint unsigned` | NO | （なし） |  |
 | `status` | `varchar(16)` | NO | （なし） |  |
+| `grant_committed_at` | `datetime(6)` | YES | NULL | この claim によるロール付与がコミットされた時刻（UTC）。NULL は未付与 |
 | `created_at` | `datetime(6)` | NO | （なし） |  |
 | `updated_at` | `datetime(6)` | NO | （なし） |  |
 

@@ -36,7 +36,8 @@ import java.util.UUID;
  * <ol>
  *   <li>PENDING（または 5 分を超えて止まった ACCEPTING）を新しい attempt で ACCEPTING にする。取れなければ
  *       現状態で応える（JOINED なら 200 JOINED、処理中なら AUTH_086、終了・辞退済みなら AUTH_085、無ければ AUTH_084）</li>
- *   <li>既に在籍済みなら招待を使わず、残った確保（CLAIMED）だけ確定して JOINED</li>
+ *   <li>既に在籍済みなら招待を使わず、残った確保（CLAIMED）を片付けて JOINED（付与印があれば確定、
+ *       無ければ別経路の参加なので戻す）</li>
  *   <li>招待のハッシュで参加する</li>
  *   <li>結果を写像して自分の attempt で確定する。成功・在籍済み（TEAM_003）・参加後のフォルダ配置失敗は JOINED、
  *       失効・期限切れ（ROLE_002）・上限到達（ROLE_003）は EXPIRED、ブロック（TEAM_004）・特権ロール等（ROLE_009）は
@@ -100,7 +101,8 @@ public class PendingInviteService {
         String failureCode = null;
         try {
             if (accessControlService.isMember(userId, row.scopeId(), row.scopeType())) {
-                // 別経路で既に参加済み、または前回の承認で付与だけコミットされていた。招待は使わず、残った確保だけ確定する。
+                // 別経路で既に参加済み、または前回の承認で付与だけコミットされていた。招待は使わず、残った確保を
+                // 付与印で片付ける（印があれば確定、無ければ別経路の参加なので戻す）。
                 facade.settleOrphanClaim(row.tokenHash(), userId);
             } else {
                 facade.joinByInviteTokenHash(row.tokenHash(), userId);
@@ -166,7 +168,7 @@ public class PendingInviteService {
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_084));
         return switch (row.status()) {
             case JOINED -> {
-                // 二重押しの負け側・前回の確定（T9）失敗の後。残った確保があれば確定しておく。
+                // 二重押しの負け側・前回の確定（T9）失敗の後。残った確保があれば付与印で片付けておく。
                 facade.settleOrphanClaim(row.tokenHash(), userId);
                 yield new PendingInviteAcceptResponse(PendingInviteStatus.JOINED.name());
             }

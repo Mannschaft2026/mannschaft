@@ -514,8 +514,19 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
 - 二重押し・並行: `ACCEPTING` は1つの attempt だけが取れる。負け側は `JOINED` 済みなら 200 `JOINED`、処理中なら `AUTH_086`（409）。
   `ACCEPTING` のまま5分を超えたら新しい attempt で取り直せ、古い attempt の完了・差し戻しは何も書かない。
 - 途中失敗の復旧: 前回の承認がロール付与の前後で失敗して同じ利用者の claim（`CLAIMED`）が残っていれば、次の承認は
-  使用回数を進めずにその claim を再開する（`InviteAcceptanceWriter#claimOrResume`）。付与がコミット済みなら claim を確定（`GRANTED`）する。
-  hash 入口では T7 が在籍済み（`ALREADY_JOINED`）を返しても claim を戻さず確定する（5 分超で取り直した attempt が同じ claim を再開して先に付与した後に、古い attempt が T7 へ進んだ場合に、共有中の claim を古い側が解放して「参加済みなのに使用回数0」になるのを防ぐ）。
+  使用回数を進めずにその claim を再開する（`InviteAcceptanceWriter#claimOrResume`）。
+- claim の付与印（`invite_token_claims.grant_committed_at`）: `ACCEPTING` が5分を超えて取り直されると、1つの claim を新旧の
+  attempt が共有しうる。claim を戻す（`RELEASED`・使用回数-1）か確定する（`GRANTED`）かは、在籍の有無からの推測ではなく
+  付与印で決める。付与印はロール付与（T7。`MembershipGrantService#grantRole`）が、user 行の次に claim 行をロックして判定し、
+  付与と同じトランザクションで立てる（付与がロールバックされれば印も残らない）。
+  - 付与印のある claim はどの経路でも戻さない（戻しの条件付き UPDATE が「印なし」を条件にする）。再開した claim に印があれば、
+    招待がその後に失効・期限切れになっていても付与は行わず確定（T9）と配置だけ行う。
+  - T7 が在籍済み（`ALREADY_JOINED`）を返したとき、claim に印が無ければ在籍は別経路（参加申請の承認・別の招待など）なので
+    claim を戻して 409 `TEAM_003`（保留は `JOINED`）。印があれば別 attempt がこの claim で付与済みなので確定する。
+  - 承認前に在籍済みのとき（`settleOrphanClaim`）も同じで、残った claim に印があれば確定、無ければ戻す。
+  - T7 の時点で claim が既に戻されていれば（別 attempt が失効を検出して戻した）付与せず `ROLE_002`。
+  - 印の受け渡しは `InviteClaimGrantScope`（同一スレッドの呼び出し範囲）で行い、`grantRole` の署名と D-3T の入口は変えない。
+    参加申請承認（`grantMemberRole`）は claim に触れない。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
   7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
   期間内の再押下は通知せず `alreadyRequested: true`。

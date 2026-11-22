@@ -1,6 +1,7 @@
 package com.mannschaft.app.role.repository;
 
 import com.mannschaft.app.role.dto.InviteClaimAuditContext;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
@@ -55,17 +56,26 @@ public interface InviteTokenRepositoryCustom {
     /** CLAIMED→GRANTED の条件付き UPDATE。 @return 更新行数 */
     int markClaimGranted(UUID claimId);
 
-    /** CLAIMED→RELEASED の条件付き UPDATE。 @return 更新行数 */
+    /**
+     * CLAIMED→RELEASED の条件付き UPDATE。この claim による付与がコミット済み（{@code grant_committed_at} あり）なら
+     * 戻さない（0 行）。 @return 更新行数
+     */
     int markClaimReleased(UUID claimId);
 
     /**
-     * 同じ招待・同じ利用者に残った CLAIMED の確保を、ロック付きの最新値で1件引く（CMP-261107-1833 §9-3）。
-     * 招待行をロックした後に呼ぶこと。
+     * CLAIMED かつ未付与の claim に「この claim による付与がコミット済み」の印を立てる条件付き UPDATE
+     * （ロール付与と同じトランザクションで呼ぶ。CMP-261107-1833）。 @return 更新行数
      */
-    Optional<UUID> findClaimedIdForUpdate(Long tokenId, Long userId);
+    int markClaimGrantCommitted(UUID claimId);
 
-    /** 招待のハッシュと利用者で、残った CLAIMED の確保を1件引く（ロックなし。CMP-261107-1833 §9-3）。 */
-    Optional<UUID> findClaimedIdByTokenHash(String tokenHash, Long userId);
+    /** claim の状態と付与印を、ロック付きの最新値で読む（CMP-261107-1833）。 */
+    Optional<InviteClaimLock> lockClaim(UUID claimId);
+
+    /**
+     * 同じ招待・同じ利用者に残った CLAIMED の確保を、ロック付きの最新値で1件引く（CMP-261107-1833 §9-3）。
+     * 招待行をロックした後に呼ぶこと（ロック順: 招待行 → claim）。
+     */
+    Optional<InviteClaimLock> findClaimedForUpdate(Long tokenId, Long userId);
 
     /** 招待のハッシュで、付与するロールの名前を引く（ロックなし。CMP-261107-1833 §2）。 */
     Optional<String> findRoleNameByTokenHash(String tokenHash);
