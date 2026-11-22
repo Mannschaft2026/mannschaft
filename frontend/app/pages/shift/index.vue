@@ -212,6 +212,7 @@ async function handleCreate() {
   ) {
     return
   }
+  if (creating.value) return
   creating.value = true
   try {
     const payload: CreateShiftScheduleRequest = {

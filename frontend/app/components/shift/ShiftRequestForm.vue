@@ -25,7 +25,7 @@ const form = ref({
 })
 
 async function submit() {
-  if (!form.value.slotDate) return
+  if (!form.value.slotDate || submitting.value) return
   submitting.value = true
   try {
     const slotDate = dayjs(form.value.slotDate).tz(userTimezone.value).format('YYYY-MM-DD')
