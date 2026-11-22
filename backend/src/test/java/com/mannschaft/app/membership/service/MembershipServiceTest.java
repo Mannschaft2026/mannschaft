@@ -5,6 +5,7 @@ import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.role.service.AdminRoleMutationLockService;
 import com.mannschaft.app.membership.domain.LeaveReason;
+import com.mannschaft.app.membership.domain.MembershipEndCause;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -414,7 +415,8 @@ class MembershipServiceTest {
         @DisplayName("leaveReason NULLは自己呼出の副作用前に拒否する")
         void nullLeaveReasonRejectedBeforeWork() {
             assertThatThrownBy(() ->
-                    service.leaveByUserAndScope(99L, ScopeType.TEAM, 100L, null, null))
+                    service.leaveByUserAndScope(99L, ScopeType.TEAM, 100L, null, null,
+                            MembershipEndCause.EXPLICIT_MEMBERSHIP_END))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("leaveReason");
             verifyNoInteractions(userRowLockService, membershipRepository, eventPublisher);

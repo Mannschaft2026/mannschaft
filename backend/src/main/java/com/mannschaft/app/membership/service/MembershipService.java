@@ -3,8 +3,10 @@ package com.mannschaft.app.membership.service;
 import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.auth.service.UserRowLockService;
+import com.mannschaft.app.membership.domain.EffortShareDisposition;
 import com.mannschaft.app.membership.domain.LeaveReason;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
+import com.mannschaft.app.membership.domain.MembershipEndCause;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.AssignPositionRequest;
@@ -19,6 +21,7 @@ import com.mannschaft.app.membership.entity.MemberPositionEntity;
 import com.mannschaft.app.membership.entity.MembershipEntity;
 import com.mannschaft.app.membership.entity.PositionEntity;
 import com.mannschaft.app.membership.event.MembershipEndedEvent;
+import com.mannschaft.app.membership.event.TeamEffortMembershipRevokedEvent;
 import com.mannschaft.app.membership.repository.MemberPositionRepository;
 import com.mannschaft.app.membership.repository.MembershipRepository;
 import com.mannschaft.app.membership.repository.PositionRepository;
@@ -34,13 +37,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * F00.5 メンバーシップ基盤再設計の中核サービス。
@@ -160,9 +168,25 @@ public class MembershipService {
      *   <li>紐付く現役 member_positions を自動 ended_at セット</li>
      *   <li>MembershipChangedEvent(REMOVED) を発火</li>
      * </ol>
+     *
+     * <p>F06.4.1（データ設計 §8）: 本窓口は明示的な加入期間の終了（endCause=EXPLICIT_MEMBERSHIP_END）であり、
+     * TEAM の加入期間には {@code effort_share_disposition=REVOKED} を同じ TX で確定し、
+     * {@link TeamEffortMembershipRevokedEvent} を発行する（購読側が AFTER_COMMIT で受ける）。
+     * 退会処理の所属整理で既に終わった（RETAINED_ACCOUNT_WITHDRAWAL の）同じ加入期間に対しては、
+     * left_at を動かさず disposition だけを REVOKED へ上書きして正常終了する（明示終了を優先する）。
+     * それ以外の終了済み行は従来どおり ALREADY_LEFT。</p>
      */
     @Transactional
     public MembershipDto leave(Long membershipId, MembershipLeaveRequest req) {
+        return endMembership(membershipId, req, MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
+    }
+
+    /**
+     * 加入期間の終了本体。{@code endCause} は退会処理の内部経路だけが ACCOUNT_WITHDRAWAL を渡す
+     * （外部リクエストの任意 reason からは指定させない）。呼出元の TX に参加する。
+     */
+    private MembershipDto endMembership(Long membershipId, MembershipLeaveRequest req, MembershipEndCause endCause) {
+        Objects.requireNonNull(endCause, "endCause must not be null");
         Objects.requireNonNull(req, "req must not be null");
         Objects.requireNonNull(req.getLeaveReason(), "leaveReason must not be null");
         Long userId = membershipRepository.findUserIdById(membershipId)
@@ -177,6 +201,16 @@ public class MembershipService {
         entityManager.refresh(entity, LockModeType.PESSIMISTIC_WRITE);
 
         if (!entity.isActive()) {
+            if (isRevocableRetainedTeamMembership(entity, endCause)) {
+                // F06.4.1 §8: 退会整理が先に left_at を設定していても、同じ加入期間の明示終了は REVOKED を優先する。
+                // left_at・leave_reason・在籍系イベントは退会整理のまま動かさない。
+                entity.setEffortShareDisposition(EffortShareDisposition.REVOKED);
+                membershipRepository.save(entity);
+                publishTeamEffortRevoked(entity);
+                log.info("加入期間の共有扱いを明示終了で REVOKED へ上書き: membershipId={}, userId={}, teamId={}",
+                        entity.getId(), entity.getUserId(), entity.getScopeId());
+                return MembershipDto.from(entity, false);
+            }
             throw new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_ALREADY_LEFT);
         }
 
@@ -189,7 +223,13 @@ public class MembershipService {
         LocalDateTime now = LocalDateTime.now();
         entity.setLeftAt(now);
         entity.setLeaveReason(req.getLeaveReason());
+        // F06.4.1 §8: TEAM の加入期間は終了と同じ TX で共有の扱いを確定する（leaveReason から推測しない）。
+        EffortShareDisposition disposition = dispositionFor(entity, endCause);
+        entity.setEffortShareDisposition(disposition);
         membershipRepository.save(entity);
+        if (disposition == EffortShareDisposition.REVOKED) {
+            publishTeamEffortRevoked(entity);
+        }
         rolePermissionCleanupService.removeMismatched(
                 entity.getUserId(), entity.getScopeId(), entity.getScopeType().name(), null);
 
@@ -252,14 +292,20 @@ public class MembershipService {
      * @param userId      対象ユーザー ID
      * @param scopeType   スコープ種別（TEAM / ORGANIZATION）
      * @param scopeId     スコープ ID
+     * <p>F06.4.1（データ設計 §8）: {@code endCause} を明示して渡す。通常の除名・自主退会は
+     * EXPLICIT_MEMBERSHIP_END（REVOKED）、退会処理（AccountPurge）内部の所属整理だけが ACCOUNT_WITHDRAWAL
+     * （RETAINED_ACCOUNT_WITHDRAWAL）。どちらも同じ leaveReason=REMOVED を使いうるため、leaveReason から推測しない。</p>
+     *
      * @param leaveReason 退会理由
      * @param removedBy   除名を実行した操作者 ID（自主退会・システム処理では null）
+     * @param endCause    加入期間を終える理由の区分
      * @return アクティブ membership を退会させた場合 true、対象が無く何もしなかった場合 false
      */
     @Transactional
     public boolean leaveByUserAndScope(Long userId, ScopeType scopeType, Long scopeId,
-                                       LeaveReason leaveReason, Long removedBy) {
+                                       LeaveReason leaveReason, Long removedBy, MembershipEndCause endCause) {
         Objects.requireNonNull(leaveReason, "leaveReason must not be null");
+        Objects.requireNonNull(endCause, "endCause must not be null");
         lockUser(userId);
         Optional<MembershipEntity> active =
                 membershipRepository.findActiveByUserAndScope(userId, scopeType, scopeId);
@@ -269,7 +315,7 @@ public class MembershipService {
         MembershipLeaveRequest req = new MembershipLeaveRequest();
         req.setLeaveReason(leaveReason);
         req.setRemovedBy(removedBy);
-        leave(active.get().getId(), req);
+        endMembership(active.get().getId(), req, endCause);
         return true;
     }
 
@@ -302,6 +348,32 @@ public class MembershipService {
 
     private void lockUser(Long userId) {
         userRowLockService.lock(userId);
+    }
+
+    /** F06.4.1 §8: 終了する加入期間の共有の扱い。TEAM 以外の所属には付けない。 */
+    private static EffortShareDisposition dispositionFor(MembershipEntity entity, MembershipEndCause endCause) {
+        if (entity.getScopeType() != ScopeType.TEAM) {
+            return null;
+        }
+        return endCause == MembershipEndCause.ACCOUNT_WITHDRAWAL
+                ? EffortShareDisposition.RETAINED_ACCOUNT_WITHDRAWAL
+                : EffortShareDisposition.REVOKED;
+    }
+
+    /** 退会整理だけで終わった TEAM の加入期間を、明示終了が REVOKED へ上書きできるか。 */
+    private static boolean isRevocableRetainedTeamMembership(MembershipEntity entity, MembershipEndCause endCause) {
+        return endCause == MembershipEndCause.EXPLICIT_MEMBERSHIP_END
+                && entity.getScopeType() == ScopeType.TEAM
+                && entity.getEffortShareDisposition() == EffortShareDisposition.RETAINED_ACCOUNT_WITHDRAWAL;
+    }
+
+    /**
+     * 終了 TX の中で失効イベントを発行する。購読側（PR-3b の coordinator）は AFTER_COMMIT で受け、
+     * endedMembershipId に束縛された共有だけを失効させる。ロールバックした TX からは届かない。
+     */
+    private void publishTeamEffortRevoked(MembershipEntity entity) {
+        eventPublisher.publishEvent(new TeamEffortMembershipRevokedEvent(
+                entity.getScopeId(), entity.getUserId(), entity.getId()));
     }
 
     /**
@@ -566,9 +638,49 @@ public class MembershipService {
      * @param queries (teamId, userId, grantMembershipId) の組
      * @return 照会と同じ組ごとの判定結果
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED, readOnly = false)
     public List<EffortShareQualification> getEffortShareQualificationsBatch(
             Collection<EffortShareQualificationQuery> queries) {
-        throw new UnsupportedOperationException("F06.4.1 PR-3a: 未実装（試練の骨格）");
+        Objects.requireNonNull(queries, "queries must not be null");
+        if (queries.isEmpty()) {
+            return List.of();
+        }
+        if (queries.size() > MAX_EFFORT_SHARE_QUALIFICATION_BATCH) {
+            // 呼出元は scope/ページ単位の bounded batch で呼ぶ契約（データ設計 §8）。上限超過は呼出元の不具合。
+            throw new IllegalArgumentException("資格 batch の件数が上限を超えています: " + queries.size());
+        }
+        List<Long> grantIds = queries.stream()
+                .map(EffortShareQualificationQuery::grantMembershipId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, MembershipRepository.EffortShareMembershipRow> rows = grantIds.isEmpty()
+                ? Map.of()
+                : membershipRepository.findEffortShareRowsByIds(grantIds).stream()
+                        .collect(Collectors.toMap(MembershipRepository.EffortShareMembershipRow::getId,
+                                Function.identity()));
+        return queries.stream()
+                .map(q -> judgeEffortShareQualification(q, rows.get(q.grantMembershipId())))
+                .toList();
+    }
+
+    /** 資格 batch 1 回あたりの照会件数の上限（呼出元はページ単位で区切る）。 */
+    static final int MAX_EFFORT_SHARE_QUALIFICATION_BATCH = 500;
+
+    /**
+     * 加入期間 ID がその user/team の行であり、かつ現在も在籍中（left_at IS NULL）のときだけ資格あり。
+     * 別人・別チーム・架空の ID は資格なしで、disposition も返さない（ID だけでは許可しない）。
+     * ロール（SUPPORTER・ADMIN 等）では区別せず、SYSTEM_ADMIN でも所属していなければ資格なし。
+     */
+    private static EffortShareQualification judgeEffortShareQualification(
+            EffortShareQualificationQuery q, MembershipRepository.EffortShareMembershipRow row) {
+        boolean sameGrant = row != null
+                && row.getScopeType() == ScopeType.TEAM
+                && Objects.equals(row.getScopeId(), q.teamId())
+                && Objects.equals(row.getUserId(), q.userId());
+        boolean eligible = sameGrant && Boolean.TRUE.equals(row.getActive());
+        EffortShareDisposition disposition = sameGrant ? row.getDisposition() : null;
+        return new EffortShareQualification(q.teamId(), q.userId(), q.grantMembershipId(), eligible, disposition);
     }
 
 }

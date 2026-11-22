@@ -2,6 +2,7 @@ package com.mannschaft.app.role;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.LeaveReason;
+import com.mannschaft.app.membership.domain.MembershipEndCause;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
@@ -463,13 +464,15 @@ class RoleServiceTest {
                     .willReturn(Optional.of(current));
             given(roleRepository.findById(MEMBER_ROLE_ID)).willReturn(Optional.of(createMemberRole()));
             given(membershipService.leaveByUserAndScope(
-                    TARGET_USER_ID, ScopeType.ORGANIZATION, SCOPE_ID, LeaveReason.REMOVED, USER_ID))
+                    TARGET_USER_ID, ScopeType.ORGANIZATION, SCOPE_ID, LeaveReason.REMOVED, USER_ID,
+                    MembershipEndCause.EXPLICIT_MEMBERSHIP_END))
                     .willReturn(true);
 
             roleService.removeMember(SCOPE_ID, "ORGANIZATION", TARGET_USER_ID, USER_ID);
 
             verify(membershipService).leaveByUserAndScope(
-                    TARGET_USER_ID, ScopeType.ORGANIZATION, SCOPE_ID, LeaveReason.REMOVED, USER_ID);
+                    TARGET_USER_ID, ScopeType.ORGANIZATION, SCOPE_ID, LeaveReason.REMOVED, USER_ID,
+                    MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
         }
 
         @Test
@@ -490,7 +493,8 @@ class RoleServiceTest {
             order.verify(userRoleRepository).delete(current);
             order.verify(userRoleRepository).flush();
             order.verify(membershipService).leaveByUserAndScope(
-                    TARGET_USER_ID, ScopeType.ORGANIZATION, SCOPE_ID, LeaveReason.REMOVED, USER_ID);
+                    TARGET_USER_ID, ScopeType.ORGANIZATION, SCOPE_ID, LeaveReason.REMOVED, USER_ID,
+                    MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
         }
 
         @Test
@@ -506,7 +510,7 @@ class RoleServiceTest {
             given(roleRepository.findById(MEMBER_ROLE_ID)).willReturn(Optional.of(createMemberRole()));
             // 委譲先（MembershipService.leave）が REMOVED イベントを発火する経路。
             given(membershipService.leaveByUserAndScope(
-                    any(), any(), any(), any(), any())).willReturn(true);
+                    any(), any(), any(), any(), any(), any())).willReturn(true);
 
             roleService.removeMember(SCOPE_ID, "ORGANIZATION", TARGET_USER_ID, USER_ID);
 
@@ -525,7 +529,7 @@ class RoleServiceTest {
                     .willReturn(Optional.of(current));
             given(roleRepository.findById(MEMBER_ROLE_ID)).willReturn(Optional.of(createMemberRole()));
             given(membershipService.leaveByUserAndScope(
-                    any(), any(), any(), any(), any())).willReturn(false);
+                    any(), any(), any(), any(), any(), any())).willReturn(false);
 
             roleService.removeMember(SCOPE_ID, "ORGANIZATION", TARGET_USER_ID, USER_ID);
 
@@ -589,7 +593,7 @@ class RoleServiceTest {
             roleService.removeMemberWithoutAdminCheck(SCOPE_ID, "TEAM", TARGET_USER_ID);
 
             verify(membershipService).leaveByUserAndScope(
-                    TARGET_USER_ID, ScopeType.TEAM, SCOPE_ID, LeaveReason.REMOVED, null);
+                    TARGET_USER_ID, ScopeType.TEAM, SCOPE_ID, LeaveReason.REMOVED, null, MembershipEndCause.ACCOUNT_WITHDRAWAL);
         }
 
         @Test
@@ -722,7 +726,8 @@ class RoleServiceTest {
             roleService.leaveScope(USER_ID, SCOPE_ID, "TEAM");
 
             verify(membershipService).leaveByUserAndScope(
-                    USER_ID, ScopeType.TEAM, SCOPE_ID, LeaveReason.SELF, null);
+                    USER_ID, ScopeType.TEAM, SCOPE_ID, LeaveReason.SELF, null,
+                    MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
         }
     }
 
