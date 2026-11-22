@@ -278,6 +278,64 @@ class InviteAcceptanceFacadeTest {
     }
 
     @Nested
+    @DisplayName("joinByInviteTokenHash（保留承認の入口。CMP-261107-1833 §9-3・§9-4）")
+    class JoinByHash {
+
+        private final InviteClaimTicket resumed = new InviteClaimTicket(CLAIM_ID, 100L, "TEAM", TEAM_ID, 3L, 2L, true);
+
+        private void claimableByHash(InviteClaimTicket ticket) {
+            active();
+            given(writer.inspectScope(new InviteLocator.ByTokenHash(HASH)))
+                    .willReturn(Optional.of(new InviteScopeRef("TEAM", TEAM_ID)));
+            given(writer.claimOrResume(any(), eq(USER_ID), anyBoolean(), isNull())).willReturn(ticket);
+        }
+
+        @Test
+        @DisplayName("新規 claim で ALREADY_JOINED（古い attempt が、再開した側の付与コミット後に再開）: 共有中の claim を解放せず確定し 409 TEAM_003")
+        void 新規claimのALREADY_JOINEDは解放せず確定() {
+            claimableByHash(TICKET);
+            given(membershipGrantService.grantRole(anyString(), anyLong(), anyLong(), anyLong(), anyLong(), anyString()))
+                    .willReturn(GrantOutcome.ALREADY_JOINED);
+
+            assertThatThrownBy(() -> facade.joinByInviteTokenHash(HASH, USER_ID))
+                    .isInstanceOfSatisfying(BusinessException.class, e -> {
+                        assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_003);
+                        assertThat(e.getHttpStatusOverride()).isEqualTo(HttpStatus.CONFLICT);
+                    });
+            verify(writer, never()).releaseClaim(any());
+            verify(writer).recordJoined(CLAIM_ID);
+            verifyNoInteractions(placementService);
+        }
+
+        @Test
+        @DisplayName("再開した claim で ALREADY_JOINED: 解放せず確定し、配置まで進む")
+        void 再開claimのALREADY_JOINEDは確定して配置() {
+            claimableByHash(resumed);
+            given(membershipGrantService.grantRole(anyString(), anyLong(), anyLong(), anyLong(), anyLong(), anyString()))
+                    .willReturn(GrantOutcome.ALREADY_JOINED);
+
+            facade.joinByInviteTokenHash(HASH, USER_ID);
+
+            verify(writer, never()).releaseClaim(any());
+            verify(writer).recordJoined(CLAIM_ID);
+            verify(placementService).place(USER_ID, null, "TEAM", TEAM_ID);
+        }
+
+        @Test
+        @DisplayName("新規 claim で T7 の業務例外（ロールバック完了）は従来どおり解放して再送する")
+        void 新規claimの業務例外は解放() {
+            claimableByHash(TICKET);
+            BusinessException original = new BusinessException(RoleErrorCode.ROLE_002);
+            given(membershipGrantService.grantRole(anyString(), anyLong(), anyLong(), anyLong(), anyLong(), anyString()))
+                    .willThrow(original);
+
+            assertThatThrownBy(() -> facade.joinByInviteTokenHash(HASH, USER_ID)).isSameAs(original);
+            verify(writer).releaseClaim(CLAIM_ID);
+            verify(writer, never()).recordJoined(any());
+        }
+    }
+
+    @Nested
     @DisplayName("declineInvite")
     class Decline {
 

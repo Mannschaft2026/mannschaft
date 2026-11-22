@@ -515,6 +515,7 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
   `ACCEPTING` のまま5分を超えたら新しい attempt で取り直せ、古い attempt の完了・差し戻しは何も書かない。
 - 途中失敗の復旧: 前回の承認がロール付与の前後で失敗して同じ利用者の claim（`CLAIMED`）が残っていれば、次の承認は
   使用回数を進めずにその claim を再開する（`InviteAcceptanceWriter#claimOrResume`）。付与がコミット済みなら claim を確定（`GRANTED`）する。
+  hash 入口では T7 が在籍済み（`ALREADY_JOINED`）を返しても claim を戻さず確定する（5 分超で取り直した attempt が同じ claim を再開して先に付与した後に、古い attempt が T7 へ進んだ場合に、共有中の claim を古い側が解放して「参加済みなのに使用回数0」になるのを防ぐ）。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
   7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
   期間内の再押下は通知せず `alreadyRequested: true`。

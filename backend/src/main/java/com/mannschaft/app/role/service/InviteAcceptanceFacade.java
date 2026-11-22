@@ -111,8 +111,9 @@ public class InviteAcceptanceFacade {
      *
      * <p>手順は {@link #joinByInvite(String, Long)} と同じ（フォルダ指定なし＝既定フォルダへ配置）。ただし T6 は
      * {@link InviteAcceptanceWriter#claimOrResume} で、前回の承認が途中で失敗して同じ利用者の確保（CLAIMED）が
-     * 残っていれば、使用回数を進めずにその確保を再開する。再開した確保で T7 が {@code ALREADY_JOINED} を返した場合は、
-     * 前回の付与がコミット済みだったとみなして確保を戻さず確定（T9）する。</p>
+     * 残っていれば、使用回数を進めずにその確保を再開する。T7 が {@code ALREADY_JOINED} を返した場合は、確保が新規でも
+     * 再開でも戻さず確定（T9）する（新規の確保では、別 attempt が同じ確保を再開して先に付与した。409 TEAM_003 を返し、
+     * 配置はその attempt に任せる）。</p>
      */
     public void joinByInviteTokenHash(String tokenHash, Long userId) {
         InviteLocator locator = new InviteLocator.ByTokenHash(tokenHash);
@@ -129,15 +130,16 @@ public class InviteAcceptanceFacade {
         // T6'
         InviteClaimTicket ticket = writer.claimOrResume(locator, userId, blocked, null);
 
-        // T7〜T8
-        if (ticket.resumed()) {
-            grantResumed(ticket, userId);
-        } else {
-            grantOrRelease(ticket, userId);
-        }
+        // T7〜T8（ALREADY_JOINED では確保を戻さない。grantByHash の javadoc 参照）
+        GrantOutcome outcome = grantByHash(ticket, userId);
 
         // T9
         recordJoinedOrLog(ticket);
+
+        if (outcome == GrantOutcome.ALREADY_JOINED && !ticket.resumed()) {
+            // 新しく確保したのに在籍済み = 同じ保留の別 attempt（確保を再開した側）が先に付与した。配置はその側が行う。
+            throw new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
+        }
 
         log.info("招待付き登録の保留承認による参加完了: userId={}, scopeType={}, scopeId={}, resumed={}",
                 userId, ticket.scopeType(), ticket.scopeId(), ticket.resumed());
@@ -270,10 +272,18 @@ public class InviteAcceptanceFacade {
     }
 
     /**
-     * 再開した確保（前回の承認が途中で失敗した）でのロール付与。{@code ALREADY_JOINED} は前回の付与がコミット済み
-     * だった証なので、確保を戻さずに確定へ進む。業務例外（ロールバック完了）では確保を戻す。
+     * 保留承認の入口（hash 入口）でのロール付与（T7〜T8。CMP-261107-1833 設計 §9-3・§9-4）。
+     *
+     * <p>{@code ALREADY_JOINED} では、確保が新規でも再開でも<b>戻さない</b>（呼び出し元が T9 で確定する）。
+     * 再開した確保なら前回の付与がコミット済みだった証である。新規の確保でも、保留の ACCEPTING が5分を超えて
+     * 別の attempt に取り直され、その attempt が同じ確保を再開して付与をコミットした後に、古い attempt が
+     * T7 へ進んだ場合に起こる。このとき確保は両 attempt で共有されており、古い側が戻すと「参加済みなのに
+     * 使用回数0・確保 RELEASED」になる（Codex 検分 P1）。在籍は user ロック下の現在読みで確定しているので、
+     * 確保は参加に使われたものとして確定するのが正しい。</p>
+     *
+     * <p>業務例外（ロールバック完了）では確保を戻し、技術例外（コミット成否不明）では戻さない（{@link #accept} と同じ）。</p>
      */
-    private void grantResumed(InviteClaimTicket ticket, Long userId) {
+    private GrantOutcome grantByHash(InviteClaimTicket ticket, Long userId) {
         GrantOutcome outcome;
         try {
             outcome = membershipGrantService.grantRole(ticket.scopeType(), ticket.scopeId(), userId,
@@ -282,13 +292,15 @@ public class InviteAcceptanceFacade {
             release(ticket, e);
             throw e;
         } catch (RuntimeException | Error e) {
-            log.error("ロール付与の結果が不明（再開した確保は CLAIMED のまま残し監視に任せる）: claimId={}, tokenId={}, userId={}",
-                    ticket.claimId(), ticket.tokenId(), userId, e);
+            log.error("ロール付与の結果が不明（確保は CLAIMED のまま残し監視に任せる）: claimId={}, tokenId={}, userId={}, resumed={}",
+                    ticket.claimId(), ticket.tokenId(), userId, ticket.resumed(), e);
             throw e;
         }
         if (outcome == GrantOutcome.ALREADY_JOINED) {
-            log.info("再開した確保は前回の付与がコミット済み（確保を確定する）: claimId={}, userId={}", ticket.claimId(), userId);
+            log.info("在籍済みのため確保は戻さず確定する（前回または並行 attempt の付与がコミット済み）: claimId={}, userId={}, resumed={}",
+                    ticket.claimId(), userId, ticket.resumed());
         }
+        return outcome;
     }
 
     private void recordJoinedOrLog(InviteClaimTicket ticket) {

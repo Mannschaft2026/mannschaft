@@ -253,4 +253,65 @@ class RegistrationPendingInviteFailureIT extends InviteAcceptanceItSupport {
         assertThat(usedCount(token.getId())).isEqualTo(1);
         assertThat(userRoleCount(userId, scope)).isEqualTo(1);
     }
+    @Test
+    @DisplayName("AC7/§9-4（Codex P1）: A が新規 claim を確保して T7 前で停止→5分超で B が同じ claim を再開し T7 をコミット→"
+            + "B の T9 前に A が再開して ALREADY_JOINED。A は共有中の claim を解放せず、参加済み・使用回数1・claim GRANTED・招待監査1回")
+    void staleAttemptAlreadyJoinedMustNotReleaseResumedClaim() throws Exception {
+        Scope scope = scope("TEAM");
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Long userId = userWithPendingInvite(scope, token);
+        CountDownLatch aEntered = new CountDownLatch(1);
+        CountDownLatch resumeA = new CountDownLatch(1);
+        CountDownLatch bAtT9 = new CountDownLatch(1);
+        CountDownLatch resumeB = new CountDownLatch(1);
+        AtomicInteger grantCalls = new AtomicInteger();
+        AtomicInteger recordCalls = new AtomicInteger();
+        onGrantRole(inv -> {
+            if (grantCalls.getAndIncrement() == 0) {
+                // A: 新規 claim を確保した後、T7 の実処理前で止まる。
+                aEntered.countDown();
+                assertThat(resumeA.await(30, TimeUnit.SECONDS)).isTrue();
+            }
+            return inv.callRealMethod();
+        });
+        doAnswer(inv -> {
+            if (recordCalls.getAndIncrement() == 0) {
+                // B: T7 をコミットした直後、T9 の前で止まる（A はまだ T7 前で止まっているので最初の T9 は B）。
+                bAtT9.countDown();
+                assertThat(resumeB.await(30, TimeUnit.SECONDS)).isTrue();
+            }
+            return inv.callRealMethod();
+        }).when(writerTarget()).recordJoined(any(UUID.class));
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<String> events;
+        try (AuditCapture capture = capture(userId)) {
+            Future<Throwable> a = pool.submit(() -> catchThrowable(() -> pending().accept(userId)));
+            assertThat(aEntered.await(30, TimeUnit.SECONDS)).as("A が新規 claim を確保して T7 に入った").isTrue();
+            assertThat(claimStatuses(token.getId())).containsExactly("CLAIMED");
+
+            jdbc.update("UPDATE " + PENDING_TABLE + " SET accepting_started_at = ? WHERE user_id = ?",
+                    utcNow().minusMinutes(6), userId);
+            Future<String> b = pool.submit(() -> acceptStatus(userId));
+            assertThat(bAtT9.await(30, TimeUnit.SECONDS)).as("B が同じ claim を再開し T7 をコミットして T9 の前で停止").isTrue();
+            assertThat(userRoleCount(userId, scope)).as("B の付与はコミット済み").isEqualTo(1);
+
+            resumeA.countDown();
+            assertThat(a.get(30, TimeUnit.SECONDS)).as("A は ALREADY_JOINED を受けても失敗しない").isNull();
+
+            resumeB.countDown();
+            assertThat(b.get(30, TimeUnit.SECONDS)).as("B").isEqualTo("JOINED");
+            events = capture.events();
+        } finally {
+            resumeA.countDown();
+            resumeB.countDown();
+            pool.shutdownNow();
+        }
+        assertThat(pendingStatus(userId)).isEqualTo("JOINED");
+        assertThat(userRoleCount(userId, scope)).isEqualTo(1);
+        assertThat(membershipCount(userId, scope)).isEqualTo(1);
+        assertThat(claimStatuses(token.getId())).as("共有中の claim は解放されない").containsExactly("GRANTED");
+        assertThat(usedCount(token.getId())).as("参加済みなのに使用回数が0へ戻らない").isEqualTo(1);
+        assertThat(inviteAuditCount("TEAM", events)).as("招待監査は1回").isEqualTo(1);
+    }
 }
