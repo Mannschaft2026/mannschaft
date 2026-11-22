@@ -185,6 +185,8 @@ function goTo(idx: number) {
  * 選択はクリックと同じ goTo を使い、フォーカスは移動先のタブへ移す。
  */
 function onTabKeydown(e: KeyboardEvent, idx: number) {
+  // Alt+←（戻る）・Ctrl+Home・Cmd+←・Shift+矢印などブラウザ/OS のショートカットは奪わない。
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
   let target: number
   if (e.key === 'ArrowRight') target = (idx + 1) % PANEL_COUNT
   else if (e.key === 'ArrowLeft') target = (idx - 1 + PANEL_COUNT) % PANEL_COUNT

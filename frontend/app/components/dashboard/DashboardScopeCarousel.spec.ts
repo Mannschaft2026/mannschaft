@@ -247,6 +247,28 @@ describe('スコープbodyの初回選択と常設カルーセル', () => {
       expect(tab(view, 'PERSONAL').attributes('tabindex')).toBe('0')
     })
 
+    it.each(['altKey', 'ctrlKey', 'metaKey', 'shiftKey'])('%s 付きの矢印/Home/End では切り替えない', async (mod) => {
+      const view = await render('TEAM', true)
+      for (const key of ['ArrowRight', 'ArrowLeft', 'Home', 'End']) {
+        await tab(view, 'TEAM').trigger('keydown', { key, [mod]: true })
+      }
+      await flushPromises()
+      expect(state.store.activePanel).toBe('TEAM')
+    })
+
+    it('タブ上の ArrowRight は window まで bubble しても 1 ステップだけ進む（二重切替しない）', async () => {
+      const view = await render('PERSONAL', true)
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      host.appendChild(view.element)
+      tab(view, 'PERSONAL').element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+      )
+      await flushPromises()
+      expect(state.store.activePanel).toBe('TEAM')
+      host.remove()
+    })
+
     it('移動先のタブにフォーカスが当たる', async () => {
       const view = await render('PERSONAL', true)
       const host = document.createElement('div')
