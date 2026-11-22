@@ -80,6 +80,7 @@
       "withdrawn": "Antrag zurückgezogen",
       "submitError": "Änderungsantrag konnte nicht gestellt werden",
       "reviewError": "Prüfung fehlgeschlagen",
+      "reviewConflict": "Jemand anderes hat die Anfrage zuvor aktualisiert. Die Liste wurde neu geladen; bitte prüfen Sie den aktuellen Stand",
       "withdrawError": "Zurückziehen fehlgeschlagen"
     },
     "pdf": {

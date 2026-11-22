@@ -65,7 +65,13 @@ export function useChangeRequest(scheduleId: Ref<number>) {
           ? t('shift.changeRequest.approved')
           : t('shift.changeRequest.rejected'),
       )
-    } catch {
+    } catch (e) {
+      if (isConflictError(e)) {
+        // 409（SHIFT_018 楽観ロック競合 / SHIFT_031 審査済み）: 競合専用の文言を出し、最新の一覧を再取得する
+        showError(t('shift.changeRequest.reviewConflict'))
+        await fetchRequests()
+        throw new Error('review conflict')
+      }
       showError(t('shift.changeRequest.reviewError'))
       throw new Error('review failed')
     }

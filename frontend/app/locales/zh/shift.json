@@ -80,6 +80,7 @@
       "withdrawn": "已撤回",
       "submitError": "变更申请提交失败",
       "reviewError": "审核失败",
+      "reviewConflict": "其他人已先行更新。列表已重新加载，请确认最新状态",
       "withdrawError": "撤回失败"
     },
     "pdf": {

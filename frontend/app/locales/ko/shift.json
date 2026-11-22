@@ -80,6 +80,7 @@
       "withdrawn": "철회했습니다",
       "submitError": "변경 요청 제출에 실패했습니다",
       "reviewError": "심사에 실패했습니다",
+      "reviewConflict": "다른 사람이 먼저 업데이트했습니다. 목록을 다시 불러왔으니 최신 상태를 확인해 주세요",
       "withdrawError": "철회에 실패했습니다"
     },
     "pdf": {

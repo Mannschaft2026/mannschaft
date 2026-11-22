@@ -64,3 +64,24 @@ describe('useChangeRequest: 完了・失敗のトースト文言', () => {
     ])
   })
 })
+
+describe('useChangeRequest: 審査の 409（楽観ロック競合・審査済み）', () => {
+  it.each(['SHIFT_018', 'SHIFT_031'])('409 %s は競合専用の文言を出し、一覧を再取得して、エラーを再送出する', async (code) => {
+    mocks.api.reviewChangeRequest.mockRejectedValue({ statusCode: 409, data: { error: { code } } })
+    mocks.api.listChangeRequests.mockResolvedValue([created])
+    const c = useChangeRequest(ref(1))
+    await expect(c.review(7, 'ACCEPTED', undefined, 2)).rejects.toThrow()
+    expect(mocks.error).toHaveBeenCalledWith('shift.changeRequest.reviewConflict')
+    expect(mocks.error).not.toHaveBeenCalledWith('shift.changeRequest.reviewError')
+    expect(mocks.api.listChangeRequests).toHaveBeenCalledWith(1)
+    expect(c.requests.value).toHaveLength(1)
+  })
+
+  it('409 以外（500）は従来の汎用文言で、一覧は再取得しない', async () => {
+    mocks.api.reviewChangeRequest.mockRejectedValue({ statusCode: 500 })
+    const c = useChangeRequest(ref(1))
+    await expect(c.review(7, 'ACCEPTED', undefined, 2)).rejects.toThrow()
+    expect(mocks.error).toHaveBeenCalledWith('shift.changeRequest.reviewError')
+    expect(mocks.api.listChangeRequests).not.toHaveBeenCalled()
+  })
+})
