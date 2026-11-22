@@ -48,6 +48,13 @@ const removeLabel = computed(() => itemTitle.value
   : t('announcement.remove_from_announcements'))
 const showPriorityBadge = computed(() => props.item.priority !== 'NORMAL')
 
+/** メタ行（種別・作者・相対時刻）。空の要素は除き、区切りは残った要素の間にだけ入れる */
+const metaParts = computed(() => [
+  props.item.sourceType ? t(`announcement.source_type.${props.item.sourceType}`) : t('announcement.preview.locked'),
+  props.item.author?.displayName?.trim() ?? '',
+  relativeTime(props.item.createdAt),
+].filter((part) => part !== ''))
+
 /** F09.17: 広告フィードかどうか */
 const isAd = computed(() => props.item.isAdvertisement === true)
 
@@ -154,10 +161,10 @@ function handleClick(event: MouseEvent | KeyboardEvent) {
       <BroadcastAudienceSummary v-if="item.targetAudience" class="mt-1" :audience="item.targetAudience" />
 
       <!-- メタ情報 -->
-      <div class="mt-1 flex items-center gap-2 text-xs text-surface-400">
-        <span>{{ item.sourceType ? t(`announcement.source_type.${item.sourceType}`) : t('announcement.preview.locked') }}</span>
-        <span v-if="item.author">• {{ item.author.displayName }}</span>
-        <span>• {{ relativeTime(item.createdAt) }}</span>
+      <div data-testid="announcement-meta" class="mt-1 flex items-center gap-2 text-xs text-surface-400">
+        <template v-for="(part, index) in metaParts" :key="index">
+          <span>{{ index > 0 ? `• ${part}` : part }}</span>
+        </template>
         <span v-if="item.expiresAt" class="text-orange-500">
           {{ t('announcement.expires_at') }}: {{ formatDate(item.expiresAt) }}
         </span>
