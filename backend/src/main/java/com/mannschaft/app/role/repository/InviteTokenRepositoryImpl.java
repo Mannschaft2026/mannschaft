@@ -169,6 +169,36 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
     }
 
     @Override
+    public Optional<UUID> findClaimedIdForUpdate(Long tokenId, Long userId) {
+        List<?> rows = em.createNativeQuery("SELECT HEX(id) FROM " + CLAIMS + " WHERE token_id = :tokenId "
+                        + "AND user_id = :userId AND status = 'CLAIMED' ORDER BY id LIMIT 1 FOR UPDATE")
+                .setParameter("tokenId", tokenId)
+                .setParameter("userId", userId)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(uuid((String) rows.get(0)));
+    }
+
+    @Override
+    public Optional<UUID> findClaimedIdByTokenHash(String tokenHash, Long userId) {
+        List<?> rows = em.createNativeQuery("SELECT HEX(c.id) FROM " + CLAIMS + " c JOIN invite_tokens t "
+                        + "ON t.id = c.token_id WHERE t.token_hash = :tokenHash AND c.user_id = :userId "
+                        + "AND c.status = 'CLAIMED' ORDER BY c.id LIMIT 1")
+                .setParameter("tokenHash", tokenHash)
+                .setParameter("userId", userId)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(uuid((String) rows.get(0)));
+    }
+
+    @Override
+    public Optional<String> findRoleNameByTokenHash(String tokenHash) {
+        List<?> rows = em.createNativeQuery("SELECT r.name FROM invite_tokens t JOIN roles r ON r.id = t.role_id "
+                        + "WHERE t.token_hash = :tokenHash")
+                .setParameter("tokenHash", tokenHash)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable((String) rows.get(0));
+    }
+
+    @Override
     public Optional<Long> findClaimTokenId(UUID claimId) {
         List<?> rows = em.createNativeQuery("SELECT token_id FROM " + CLAIMS + " WHERE id = UNHEX(:id)")
                 .setParameter("id", hex(claimId))
@@ -217,6 +247,10 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     private static String hex(UUID id) {
         return id.toString().replace("-", "");
+    }
+
+    private static UUID uuid(String hex32) {
+        return UUID.fromString(hex32.replaceFirst("(.{8})(.{4})(.{4})(.{4})(.{12})", "$1-$2-$3-$4-$5"));
     }
 
     private static Long longOrNull(Object value) {

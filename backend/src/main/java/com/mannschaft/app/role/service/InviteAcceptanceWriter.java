@@ -94,7 +94,85 @@ public class InviteAcceptanceWriter {
     public InviteClaimTicket claim(InviteLocator locator, Long userId, boolean blocked, ErrorCode folderError) {
         InviteTokenSnapshot token = lockSnapshot(locator)
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_002));
+        return claimLocked(locator, token, userId, blocked, folderError);
+    }
 
+    /**
+     * 確保、または同じ招待・同じ利用者に残った確保の再開（T6'。新規登録の保留承認の入口専用。CMP-261107-1833 設計 §9-3）。
+     *
+     * <p>招待行をロックした後、同じ利用者の CLAIMED が残っていれば（前回の承認がロール付与の前後で失敗した）、
+     * <b>使用回数を進めずに</b>その確保を {@code resumed=true} で返す。このとき上限到達の判定と在籍済みの判定は
+     * 飛ばす（使用回数はその確保が既に消費しており、在籍済みは前回の付与がコミットされた証であるため、
+     * Facade が付与の結果で確定する）。失効・期限切れ・宛先違い・特権ロール・閉鎖世代・ブロック・フォルダの判定は
+     * 残し、掛かったら同じトランザクションで確保を戻してから例外を投げる（業務例外では巻き戻さない）。</p>
+     *
+     * <p>残った確保が無ければ {@link #claim} と同じ判定と確保を行う。</p>
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public InviteClaimTicket claimOrResume(InviteLocator locator, Long userId, boolean blocked, ErrorCode folderError) {
+        InviteTokenSnapshot token = lockSnapshot(locator)
+                .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_002));
+        Optional<UUID> orphan = inviteTokenRepository.findClaimedIdForUpdate(token.id(), userId);
+        if (orphan.isEmpty()) {
+            return claimLocked(locator, token, userId, blocked, folderError);
+        }
+        UUID claimId = orphan.get();
+        try {
+            verifyResumable(locator, token, userId, blocked, folderError);
+        } catch (BusinessException rejected) {
+            releaseClaim(claimId);
+            throw rejected;
+        }
+        log.info("残っていた招待の確保を再開（使用回数は進めない）: claimId={}, tokenId={}, userId={}",
+                claimId, token.id(), userId);
+        return new InviteClaimTicket(claimId, token.id(), token.scopeType(), token.scopeId(), token.roleId(),
+                token.createdBy(), true);
+    }
+
+    /** 同じ招待・同じ利用者に残った CLAIMED の確保を引く（在籍済みでの確定用。CMP-261107-1833 設計 §9-3）。 */
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOrphanClaim(InviteLocator locator, Long userId) {
+        return switch (locator) {
+            case InviteLocator.ByTokenHash byHash -> inviteTokenRepository.findClaimedIdByTokenHash(byHash.tokenHash(), userId);
+            case InviteLocator.ById byId -> inviteTokenRepository.findClaimedIdForUpdate(byId.id(), userId);
+        };
+    }
+
+    /** 招待のハッシュで、付与するロールの名前を引く（保留承認の表示用。CMP-261107-1833 設計 §2）。 */
+    @Transactional(readOnly = true)
+    public Optional<String> findRoleName(String tokenHash) {
+        return inviteTokenRepository.findRoleNameByTokenHash(tokenHash);
+    }
+
+    private void verifyResumable(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,
+                                 ErrorCode folderError) {
+        if (locator.concealsNonTarget() && !userId.equals(token.targetUserId())) {
+            throw locator.targetMismatch();
+        }
+        // 上限は確保済みの1回を含むため判定しない（失効・期限切れだけを見る）。
+        if (!InviteTokenEntity.isValidState(token.revokedAt(), token.expiresAt(), null, 0, token.dbNow())) {
+            throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+        if (token.targetUserId() != null && !token.targetUserId().equals(userId)) {
+            throw locator.targetMismatch();
+        }
+        RoleEntity grantRole = roleRepository.findById(token.roleId()).orElse(null);
+        if (grantRole != null && PRIVILEGED_INVITE_ROLES.contains(grantRole.getName())) {
+            throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (!scopeStates.isCurrent(token.scopeType(), token.scopeId(), token.scopeClosureGeneration())) {
+            throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+        if (blocked) {
+            throw new BusinessException(TeamErrorCode.TEAM_004);
+        }
+        if (folderError != null) {
+            throw new BusinessException(folderError);
+        }
+    }
+
+    private InviteClaimTicket claimLocked(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,
+                                          ErrorCode folderError) {
         // ID 入口: 宛先本人でない・共有リンク型は、招待の状態（上限・期限）を明かす前に不在と同じ応答にする。
         if (locator.concealsNonTarget() && !userId.equals(token.targetUserId())) {
             throw locator.targetMismatch();

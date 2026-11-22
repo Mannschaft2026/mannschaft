@@ -107,21 +107,73 @@ public class InviteAcceptanceFacade {
 
     /**
      * 招待のハッシュで参加する（新規登録の保留承認専用の入口。CMP-261107-1833 設計 §2・§9-3）。
-     * 呼び出し元は PendingInviteService のみ。
+     * 呼び出し元は {@code PendingInviteService} のみ。平文トークンは保存していないため、登録時に保存したハッシュで指す。
      *
-     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     * <p>手順は {@link #joinByInvite(String, Long)} と同じ（フォルダ指定なし＝既定フォルダへ配置）。ただし T6 は
+     * {@link InviteAcceptanceWriter#claimOrResume} で、前回の承認が途中で失敗して同じ利用者の確保（CLAIMED）が
+     * 残っていれば、使用回数を進めずにその確保を再開する。再開した確保で T7 が {@code ALREADY_JOINED} を返した場合は、
+     * 前回の付与がコミット済みだったとみなして確保を戻さず確定（T9）する。</p>
      */
     public void joinByInviteTokenHash(String tokenHash, Long userId) {
-        throw new UnsupportedOperationException("CMP-261107-1833 未実装");
+        InviteLocator locator = new InviteLocator.ByTokenHash(tokenHash);
+
+        // T1
+        if (userRowLockService.lock(userId) != UserRowLockService.UserState.ACTIVE) {
+            throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+
+        // T2〜T3
+        Optional<InviteScopeRef> scope = writer.inspectScope(locator);
+        boolean blocked = scope.isPresent() && isBlocked(scope.get(), userId);
+
+        // T6'
+        InviteClaimTicket ticket = writer.claimOrResume(locator, userId, blocked, null);
+
+        // T7〜T8
+        if (ticket.resumed()) {
+            grantResumed(ticket, userId);
+        } else {
+            grantOrRelease(ticket, userId);
+        }
+
+        // T9
+        recordJoinedOrLog(ticket);
+
+        log.info("招待付き登録の保留承認による参加完了: userId={}, scopeType={}, scopeId={}, resumed={}",
+                userId, ticket.scopeType(), ticket.scopeId(), ticket.resumed());
+
+        // T10/T11
+        placementService.place(userId, null, ticket.scopeType(), ticket.scopeId());
     }
 
     /**
      * 在籍済みのとき、同じ招待・同じ利用者に残った CLAIMED を GRANTED に確定する（CMP-261107-1833 設計 §9-3）。
+     * 呼び出し元は {@code PendingInviteService} のみ。残った確保が無ければ何もしない。
      *
-     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     * <p>T9 と同じく、確定に失敗しても参加は成立しているので ERROR を記録して先へ進む（CLAIMED のまま監視対象）。</p>
      */
     public void settleOrphanClaim(String tokenHash, Long userId) {
-        throw new UnsupportedOperationException("CMP-261107-1833 未実装");
+        Optional<java.util.UUID> orphan;
+        try {
+            orphan = writer.findOrphanClaim(new InviteLocator.ByTokenHash(tokenHash), userId);
+        } catch (RuntimeException e) {
+            log.error("残った招待 claim の確認に失敗（参加は成立済み。CLAIMED のまま監視対象）: userId={}", userId, e);
+            return;
+        }
+        orphan.ifPresent(claimId -> {
+            try {
+                writer.recordJoined(claimId);
+                log.info("残っていた招待 claim を確定: claimId={}, userId={}", claimId, userId);
+            } catch (RuntimeException e) {
+                log.error("残った招待 claim の確定に失敗（参加は成立済み。CLAIMED のまま監視対象）: claimId={}, userId={}",
+                        claimId, userId, e);
+            }
+        });
+    }
+
+    /** 招待のハッシュで、付与するロールの名前を引く（保留承認の表示用。CMP-261107-1833 設計 §2）。 */
+    public Optional<String> findInviteRoleName(String tokenHash) {
+        return writer.findRoleName(tokenHash);
     }
 
     private void accept(InviteLocator locator, Long userId, Long folderId) {
@@ -150,12 +202,7 @@ public class InviteAcceptanceFacade {
         grantOrRelease(ticket, userId);
 
         // T9: 確保の確定と招待監査。失敗しても参加は成立しているので ERROR を記録して先へ進む。
-        try {
-            writer.recordJoined(ticket.claimId());
-        } catch (RuntimeException e) {
-            log.error("招待 claim の確定に失敗（参加は成立済み。CLAIMED のまま監視対象）: claimId={}, tokenId={}",
-                    ticket.claimId(), ticket.tokenId(), e);
-        }
+        recordJoinedOrLog(ticket);
 
         log.info("招待トークンによる参加完了: userId={}, scopeType={}, scopeId={}",
                 userId, ticket.scopeType(), ticket.scopeId());
@@ -219,6 +266,37 @@ public class InviteAcceptanceFacade {
             BusinessException conflict = new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
             release(ticket, conflict);
             throw conflict;
+        }
+    }
+
+    /**
+     * 再開した確保（前回の承認が途中で失敗した）でのロール付与。{@code ALREADY_JOINED} は前回の付与がコミット済み
+     * だった証なので、確保を戻さずに確定へ進む。業務例外（ロールバック完了）では確保を戻す。
+     */
+    private void grantResumed(InviteClaimTicket ticket, Long userId) {
+        GrantOutcome outcome;
+        try {
+            outcome = membershipGrantService.grantRole(ticket.scopeType(), ticket.scopeId(), userId,
+                    ticket.roleId(), ticket.invitedBy(), SOURCE_INVITE_TOKEN);
+        } catch (BusinessException e) {
+            release(ticket, e);
+            throw e;
+        } catch (RuntimeException | Error e) {
+            log.error("ロール付与の結果が不明（再開した確保は CLAIMED のまま残し監視に任せる）: claimId={}, tokenId={}, userId={}",
+                    ticket.claimId(), ticket.tokenId(), userId, e);
+            throw e;
+        }
+        if (outcome == GrantOutcome.ALREADY_JOINED) {
+            log.info("再開した確保は前回の付与がコミット済み（確保を確定する）: claimId={}, userId={}", ticket.claimId(), userId);
+        }
+    }
+
+    private void recordJoinedOrLog(InviteClaimTicket ticket) {
+        try {
+            writer.recordJoined(ticket.claimId());
+        } catch (RuntimeException e) {
+            log.error("招待 claim の確定に失敗（参加は成立済み。CLAIMED のまま監視対象）: claimId={}, tokenId={}",
+                    ticket.claimId(), ticket.tokenId(), e);
         }
     }
 

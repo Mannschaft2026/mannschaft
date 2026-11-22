@@ -58,6 +58,18 @@ public interface InviteTokenRepositoryCustom {
     /** CLAIMED→RELEASED の条件付き UPDATE。 @return 更新行数 */
     int markClaimReleased(UUID claimId);
 
+    /**
+     * 同じ招待・同じ利用者に残った CLAIMED の確保を、ロック付きの最新値で1件引く（CMP-261107-1833 §9-3）。
+     * 招待行をロックした後に呼ぶこと。
+     */
+    Optional<UUID> findClaimedIdForUpdate(Long tokenId, Long userId);
+
+    /** 招待のハッシュと利用者で、残った CLAIMED の確保を1件引く（ロックなし。CMP-261107-1833 §9-3）。 */
+    Optional<UUID> findClaimedIdByTokenHash(String tokenHash, Long userId);
+
+    /** 招待のハッシュで、付与するロールの名前を引く（ロックなし。CMP-261107-1833 §2）。 */
+    Optional<String> findRoleNameByTokenHash(String tokenHash);
+
     /** claim が指す招待の主キー。 */
     Optional<Long> findClaimTokenId(UUID claimId);
 

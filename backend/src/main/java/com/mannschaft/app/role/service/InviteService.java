@@ -16,6 +16,7 @@ import com.mannschaft.app.role.dto.CreateInviteTokenRequest;
 import com.mannschaft.app.role.dto.InvitePreviewResponse;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.role.dto.BetaInviteScope;
+import com.mannschaft.app.role.dto.RegistrationInviteInfo;
 import com.mannschaft.app.role.dto.InviteTokenIssuedResponse;
 import com.mannschaft.app.role.dto.InviteTokenResponse;
 import com.mannschaft.app.role.dto.SharedInviteTokenCommand;
@@ -163,12 +164,15 @@ public class InviteService {
     }
 
     /**
-     * 新規登録時に招待トークンを読む（CMP-261107-1833 設計 §4）。不在なら空。
+     * 新規登録時に招待トークンを読む（CMP-261107-1833 設計 §4）。平文で受け取り、ハッシュで照合する。不在なら空。
      *
-     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     * <p>登録では参加させないため、招待行だけを読む（ロール・閉鎖世代・招待先の状態は見ない。それらは本人が
+     * 承認したときの参加処理が判定する）。{@code valid} は失効・期限切れ・上限到達でないこと。</p>
      */
-    public java.util.Optional<com.mannschaft.app.role.dto.RegistrationInviteInfo> findRegistrationInvite(String tokenStr) {
-        throw new UnsupportedOperationException("CMP-261107-1833 未実装");
+    public java.util.Optional<RegistrationInviteInfo> findRegistrationInvite(String tokenStr) {
+        return inviteTokenRepository.findByTokenHash(vault.hash(tokenStr))
+                .map(token -> new RegistrationInviteInfo(token.getTeamId(), token.getOrganizationId(),
+                        token.getTargetUserId() != null, token.isValid()));
     }
 
     /**
