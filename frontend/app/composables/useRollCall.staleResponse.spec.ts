@@ -21,7 +21,15 @@ function deferred<T>() {
 }
 
 function candidate(userId: number): RollCallCandidate {
-  return { userId, displayName: `user-${userId}` } as RollCallCandidate
+  return {
+    userId,
+    fullName: `user-${userId}`,
+    avatarUrl: null,
+    rsvpStatus: null,
+    isAlreadyCheckedIn: false,
+    isUnderCare: false,
+    watcherCount: 0,
+  }
 }
 
 async function mountRollCall() {
