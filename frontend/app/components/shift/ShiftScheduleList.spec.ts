@@ -10,6 +10,7 @@ const mockRemindUnsubmitted = vi.fn()
 const mockNotifySuccess = vi.fn()
 const mockNotifyInfo = vi.fn()
 const mockNotifyError = vi.fn()
+const mockNavigateTo = vi.hoisted(() => vi.fn())
 let confirmAcceptCallback: (() => void | Promise<void>) | null = null
 
 mockNuxtImport('useShiftApi', () => () => ({
@@ -26,6 +27,7 @@ mockNuxtImport('useConfirm', () => () => ({
     confirmAcceptCallback = options.accept
   },
 }))
+mockNuxtImport('navigateTo', () => mockNavigateTo)
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))
 
 function schedule(status = 'COLLECTING'): ShiftScheduleResponse {
@@ -65,6 +67,49 @@ beforeEach(() => {
   mockNotifyInfo.mockReset()
   mockNotifyError.mockReset()
   confirmAcceptCallback = null
+})
+
+async function mountListWith(
+  props: { canManage: boolean; canManageBoard: boolean; canRequestChange: boolean },
+  schedules = [schedule()],
+) {
+  mockListSchedules.mockResolvedValue(schedules)
+  const wrapper = await mountSuspended(ShiftScheduleList, {
+    props: { teamId: 12, teamSlug: 'team-12', ...props },
+  })
+  await new Promise(resolve => setTimeout(resolve, 0))
+  return wrapper
+}
+
+describe('ShiftScheduleList 変更依頼ボタン（CMP-261010-1432 AC-J1 / J2 / J4）', () => {
+  it('AC-J1: 変更依頼を出せる利用者は行の「変更依頼」ボタンから change-requests へ遷移する', async () => {
+    const wrapper = await mountListWith({ canManage: false, canManageBoard: false, canRequestChange: true })
+    const button = wrapper.find('[data-testid="shift-change-request-399"]')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    expect(mockNavigateTo).toHaveBeenCalledWith('/teams/team-12/shifts/399/change-requests')
+  })
+
+  it('AC-J1: 変更依頼を出せない利用者（SUPPORTER 等）には行の変更依頼ボタンを出さない', async () => {
+    const wrapper = await mountListWith({ canManage: false, canManageBoard: false, canRequestChange: false })
+    expect(wrapper.find('[data-testid="shift-change-request-399"]').exists()).toBe(false)
+  })
+
+  it('AC-J2: ボードへのボタンは canManageBoard のときだけ（一般メンバーには変更依頼だけ）', async () => {
+    const member = await mountListWith({ canManage: false, canManageBoard: false, canRequestChange: true })
+    expect(member.find('[data-testid="shift-board-399"]').exists()).toBe(false)
+    expect(member.find('[data-testid="shift-change-request-399"]').exists()).toBe(true)
+    member.unmount()
+
+    const admin = await mountListWith({ canManage: true, canManageBoard: true, canRequestChange: true })
+    expect(admin.find('[data-testid="shift-board-399"]').exists()).toBe(true)
+  })
+
+  it('AC-J4: シフト表が0件のときは空状態だけを描画し、変更依頼ボタンを出さない', async () => {
+    const wrapper = await mountListWith({ canManage: false, canManageBoard: false, canRequestChange: true }, [])
+    expect(wrapper.find('[data-testid="shift-change-request-399"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Change request')
+  })
 })
 
 describe('ShiftScheduleList 手動リマインド', () => {
@@ -171,5 +216,27 @@ describe('CMP-260910-1609 AC7: 希望受付の案内と入力導線', () => {
     // 案内の見た目だけでなく、実際に希望ダイアログを開くイベントも照合する。
     await wrapper.get('.space-y-2 > div').trigger('click')
     expect(wrapper.emitted('select')).toEqual(accepting ? [[399]] : undefined)
+  })
+})
+
+describe('CMP-260910-1605: チーム画面の一覧から枠編集への導線', () => {
+  beforeEach(() => mockNavigateTo.mockReset())
+
+  it('編集権限ありなら全ステータスで編集導線を表示し /shift/{id}/edit へ遷移する', async () => {
+    for (const status of ['DRAFT', 'COLLECTING', 'ADJUSTING', 'PUBLISHED', 'ARCHIVED']) {
+      const wrapper = await mountList(true, [schedule(status)])
+      const link = wrapper.find('[data-testid="shift-edit-399"]')
+      expect(link.exists(), status).toBe(true)
+      await link.trigger('click')
+      expect(mockNavigateTo).toHaveBeenLastCalledWith('/shift/399/edit')
+      // 行クリック（希望ダイアログ）へ伝播しない。
+      expect(wrapper.emitted('select')).toBeUndefined()
+      wrapper.unmount()
+    }
+  })
+
+  it('編集権限なしでは編集導線を表示しない', async () => {
+    const wrapper = await mountList(false)
+    expect(wrapper.find('[data-testid="shift-edit-399"]').exists()).toBe(false)
   })
 })

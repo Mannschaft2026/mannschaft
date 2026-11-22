@@ -1,7 +1,7 @@
 # CMP-261111-0508 追撃①: テストコンテキストの BeanOverride 棚卸し（凍結スナップショット）。手で編集しない。
 # 再生成: docs/conventions/backend/31-ci-shard-weighting.md の「構成キーの棚卸しと認可 override の番人」節。
-# summary classes=8756 nonSpring=5996 zero=25 overrides=2735 failed=0 distinctKeys=339 authzOverrides=1124
-!distinctKeysBaseline=339
+# summary classes=8786 nonSpring=5997 zero=25 overrides=2764 failed=0 distinctKeys=337 authzOverrides=1124
+!distinctKeysBaseline=337
 !authzOverrideBaseline=1124
 com.mannschaft.app.MannschaftApplicationTests	SPRING
 com.mannschaft.app.actionmemo.ActionMemoIntegrationTest	SPRING
@@ -173,6 +173,7 @@ com.mannschaft.app.auth.mfa.MfaRecoveryFlowIT$TokenInvalidation	SPRING
 com.mannschaft.app.auth.mfa.MfaRegenerateReauthIT	SPRING
 com.mannschaft.app.auth.mfa.MfaSecurityNoticeIT	SPRING
 com.mannschaft.app.auth.mfa.MfaSessionAttemptIT	SPRING
+com.mannschaft.app.auth.mfa.OAuthLoginRefreshCookieIT	SPRING
 com.mannschaft.app.auth.mfa.OAuthMfaLoginIT	SPRING
 com.mannschaft.app.auth.mfa.TotpResetupAndRecoverySessionIT	SPRING
 com.mannschaft.app.auth.mfa.TotpResetupAndRecoverySessionIT$RecoveryInvalidSession	SPRING
@@ -663,6 +664,8 @@ com.mannschaft.app.disclosure.controller.DisclosureExportControllerIntegrationTe
 com.mannschaft.app.disclosure.controller.DisclosureFormDraftControllerIntegrationTest	SPRING
 com.mannschaft.app.disclosure.controller.DisclosureFormTemplateControllerIntegrationTest	SPRING
 com.mannschaft.app.disclosure.controller.DisclosureFormTemplateEditControllerIntegrationTest	SPRING
+com.mannschaft.app.effortrecord.EffortDefinitionSnapshotContractIT	SPRING
+com.mannschaft.app.effortrecord.EffortFrozenSnapshotContractIT	SPRING
 com.mannschaft.app.effortrecord.EffortRecordGdprExportIT	SPRING
 com.mannschaft.app.effortrecord.EffortRecordIdempotencyIT	SPRING
 com.mannschaft.app.effortrecord.EffortRecordInputValidationContractIT	SPRING
@@ -670,7 +673,11 @@ com.mannschaft.app.effortrecord.EffortRecordListCursorContractIT	SPRING
 com.mannschaft.app.effortrecord.EffortRecordObservabilityIT	SPRING
 com.mannschaft.app.effortrecord.EffortRecordOwnerApiContractIT	SPRING
 com.mannschaft.app.effortrecord.EffortRecordTemporalIT	SPRING
+com.mannschaft.app.effortrecord.EffortSeriesKeyContractIT	SPRING
 com.mannschaft.app.effortrecord.EffortStatsContractIT	SPRING
+com.mannschaft.app.effortrecord.EffortTeamOrganizationIndependenceContractIT	SPRING
+com.mannschaft.app.effortrecord.EffortTeamRecordCreateContractIT	SPRING
+com.mannschaft.app.effortrecord.EffortTemplateSettingsContractIT	SPRING
 com.mannschaft.app.equipment.EquipmentReturnBodyParityContractIT	SPRING
 com.mannschaft.app.equipment.EquipmentScopeContractIT	SPRING
 com.mannschaft.app.equipment.EquipmentScopeContractIT$AssignEquipment	SPRING
@@ -1501,6 +1508,7 @@ com.mannschaft.app.recruitment.RecruitmentNoShowScopeContractIT$SelfDispute	SPRI
 com.mannschaft.app.recruitment.RecruitmentNotificationTransactionIT	SPRING
 com.mannschaft.app.recruitment.RecruitmentPayeeJudgementNoRollbackOnlyIT	SPRING
 com.mannschaft.app.recruitment.RecruitmentPenaltyLiftNotificationTransactionIT	SPRING
+com.mannschaft.app.recruitment.RecruitmentPenaltyManualLiftNotificationTransactionIT	SPRING
 com.mannschaft.app.recruitment.RecruitmentPenaltyRecomputeNotificationTransactionIT	SPRING
 com.mannschaft.app.recruitment.RecruitmentReminderTargetIT	SPRING
 com.mannschaft.app.recruitment.RecruitmentScopeContractIT	SPRING
@@ -1936,10 +1944,25 @@ com.mannschaft.app.search.GlobalSearchApiContractIT	SPRING
 com.mannschaft.app.search.GlobalSearchApiContractIT$Escaping	SPRING
 com.mannschaft.app.search.GlobalSearchApiContractIT$Validation	SPRING
 com.mannschaft.app.search.GlobalSearchApiContractIT$Views	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$Counting	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$Deleted	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$EscapingUrlAndTime	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$PaywallUnlock	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$PublicationStatus	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$ScopeBoundary	SPRING
+com.mannschaft.app.search.GlobalSearchArticleVisibilityIT$VisibilityLevels	SPRING
 com.mannschaft.app.search.GlobalSearchContributorFailureIT	SPRING
 com.mannschaft.app.search.GlobalSearchDateTimeZoneIT	SPRING
 com.mannschaft.app.search.GlobalSearchDateTimeZoneIT$CreatedAtInstant	SPRING
 com.mannschaft.app.search.GlobalSearchDateTimeZoneIT$DateRangeInViewerZone	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT$Counting	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT$Deleted	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT$EscapingUrlAndTime	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT$IndividualPermission	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT$MinVisibleRole	SPRING
+com.mannschaft.app.search.GlobalSearchFileVisibilityIT$ScopeBoundary	SPRING
 com.mannschaft.app.search.GlobalSearchMessageVisibilityIT	SPRING
 com.mannschaft.app.search.GlobalSearchMessageVisibilityIT$Counts	SPRING
 com.mannschaft.app.search.GlobalSearchMessageVisibilityIT$Deleted	SPRING
@@ -1958,6 +1981,12 @@ com.mannschaft.app.search.GlobalSearchScopeVisibilityIT$Organizations	SPRING
 com.mannschaft.app.search.GlobalSearchScopeVisibilityIT$Teams	SPRING
 com.mannschaft.app.search.GlobalSearchScopeVisibilityIT$UserSpecific	SPRING
 com.mannschaft.app.search.GlobalSearchScopeVisibilityIT$Users	SPRING
+com.mannschaft.app.search.GlobalSearchThreadVisibilityIT	SPRING
+com.mannschaft.app.search.GlobalSearchThreadVisibilityIT$Counts	SPRING
+com.mannschaft.app.search.GlobalSearchThreadVisibilityIT$Deleted	SPRING
+com.mannschaft.app.search.GlobalSearchThreadVisibilityIT$EscapingUrlAndTime	SPRING
+com.mannschaft.app.search.GlobalSearchThreadVisibilityIT$ScopeBoundary	SPRING
+com.mannschaft.app.search.GlobalSearchThreadVisibilityIT$ThreadSpecific	SPRING
 com.mannschaft.app.search.SearchHistoryContractIT	SPRING
 com.mannschaft.app.search.SearchHistoryContractIT$History	SPRING
 com.mannschaft.app.search.SearchHistoryContractIT$OthersHistory	SPRING
