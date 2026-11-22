@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Mood } from '~/types/actionMemo'
+import type { ActionMemoInputExtras, Mood } from '~/types/actionMemo'
 
 /**
  * F02.5 行動メモ入力フォーム。
@@ -11,8 +11,22 @@ import type { Mood } from '~/types/actionMemo'
  *   <li>{@code mood_enabled = true} の場合のみ MoodSelector を表示</li>
  *   <li>下書き自動保存（debounce 1秒）→ 送信成功でクリア</li>
  *   <li>送信失敗時は入力欄をクリアしない（書きかけを失わせない）</li>
+ *   <li>画面側で選んだカテゴリ・所要時間・進捗率・TODO 完了・チーム投稿先は {@code extras} で受け取り、
+ *       作成リクエストに載せる（チームは作成成功後に publish-to-team。WORK のみ）</li>
  * </ul>
  */
+
+const props = defineProps<{
+  extras?: ActionMemoInputExtras
+}>()
+
+const emit = defineEmits<{
+  created: [memoId: number]
+  /** 下書きと一緒に保存されていた選択値（カテゴリ・投稿先・所要時間など）を復元したとき */
+  'draft-restored': [extras: ActionMemoInputExtras]
+  /** 公開待ち（メモは保存済みで公開だけ失敗）の状態が変わったとき。page が選択欄をロックする */
+  'pending-change': [pending: boolean]
+}>()
 
 const store = useActionMemoStore()
 const auth = useAuthStore()
@@ -27,6 +41,14 @@ const selectedTagIds = ref<number[]>([])
 const submitting = ref(false)
 const draftSaveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const draftSavedFlash = ref(false)
+// 作成済みだが公開に失敗したメモ。再送信は作成せず公開だけ再試行する。
+// 公開待ちの間は本文・選択欄をロックして（page 側へ pending-change で通知）、再試行先がずれないようにする。
+// 下書きにも保存し、画面を離れて戻っても重複作成せず公開だけ再試行できるようにする
+const pendingPublish = ref<{ memoId: number; teamId: number; content: string } | null>(null)
+
+function pendingForDraft() {
+  return pendingPublish.value ? { memoId: pendingPublish.value.memoId, teamId: pendingPublish.value.teamId } : null
+}
 
 const userId = computed<number | string>(() => auth.user?.id ?? 'anon')
 
@@ -35,19 +57,36 @@ const tooLong = computed(() => charCount.value > MAX_LENGTH)
 const isEmpty = computed(() => content.value.trim().length === 0)
 const canSubmit = computed(() => !isEmpty.value && !tooLong.value && !submitting.value)
 
+watch(
+  () => pendingPublish.value !== null,
+  (pending) => emit('pending-change', pending),
+  { immediate: true },
+)
+
+// 公開をあきらめる: メモは保存済みのまま、入力と下書きだけ片付ける
+function giveUpPublish() {
+  const pending = pendingPublish.value
+  if (pending) resetAfterSuccess(pending.memoId)
+}
+
 // === 下書きの復元 ===
 onMounted(() => {
   const draft = store.loadDraft(userId.value)
   if (draft) {
     content.value = draft
+    const savedExtras = store.loadDraftExtras(userId.value)
+    if (savedExtras) emit('draft-restored', savedExtras)
+    const pp = store.loadDraftPendingPublish(userId.value)
+    if (pp) pendingPublish.value = { memoId: pp.memoId, teamId: pp.teamId, content: draft }
   }
 })
 
 // === 下書きの自動保存 (debounce 1秒) ===
-watch(content, (next) => {
+// 本文の変更に加え、画面側の選択値の変更も下書きへ反映する（選択値は送信対象のため一緒に保存）
+watch([content, () => props.extras], ([next]) => {
   if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value)
   draftSaveTimer.value = setTimeout(() => {
-    store.saveDraft(userId.value, next)
+    store.saveDraft(userId.value, content.value, props.extras, pendingForDraft())
     if (next.length > 0) {
       draftSavedFlash.value = true
       setTimeout(() => (draftSavedFlash.value = false), 1500)
@@ -61,23 +100,61 @@ onBeforeUnmount(() => {
 })
 
 // === 送信処理 ===
+function resetAfterSuccess(memoId: number) {
+  emit('created', memoId)
+  // 成功 → 入力欄クリア + mood + タグ リセット
+  content.value = ''
+  mood.value = null
+  selectedTagIds.value = []
+  pendingPublish.value = null
+  store.clearDraft(userId.value)
+}
+
 async function submit() {
   if (!canSubmit.value) return
   submitting.value = true
   try {
-    const created = await store.createMemo({
-      content: content.value,
-      mood: store.isMoodEnabled ? mood.value : null,
-      tagIds: selectedTagIds.value.length > 0 ? selectedTagIds.value : undefined,
-    })
-    if (created) {
-      // 成功 → 入力欄クリア + mood + タグ リセット
-      content.value = ''
-      mood.value = null
-      selectedTagIds.value = []
-      store.clearDraft(userId.value)
+    // 公開だけ失敗している場合は、メモを再作成せず公開のみ再試行する
+    const pending = pendingPublish.value
+    if (pending) {
+      // 既投稿（初回が成功して応答だけ失われた場合）の判定はストアに一本化している。
+      // 'conflict'（別チームに投稿済み）も再試行不能なので、エラーを残したままロックを解いて後片付けする
+      const result = await store.publishToTeamReconciled(pending.memoId, { teamId: pending.teamId })
+      if (result !== 'failed') resetAfterSuccess(pending.memoId)
+      return
     }
-    // 失敗時は入力欄を保持（下書きとしてそのまま）
+
+    // 送信開始時に値を固定する（応答待ち中の画面側の選択変更を、送信済みメモに波及させない）
+    const snap = { ...props.extras }
+    const publishTeamId = snap.category === 'WORK' && snap.teamId != null ? snap.teamId : undefined
+    const created = await store.createMemo(
+      {
+        content: content.value,
+        mood: store.isMoodEnabled ? mood.value : null,
+        tagIds: selectedTagIds.value.length > 0 ? selectedTagIds.value : undefined,
+        category: snap.category,
+        durationMinutes: snap.durationMinutes ?? undefined,
+        progressRate: snap.progressRate ?? undefined,
+        completesTodo: snap.completesTodo ? true : undefined,
+      },
+      { publishTeamId },
+    )
+    if (!created) return // 失敗時は入力欄を保持（下書きとしてそのまま）
+
+    // チーム投稿は作成 API に項目が無いため別 API。オフライン（仮 ID=負数）はキューに公開要求を持たせ、
+    // 同期後に store が実行する。
+    if (publishTeamId != null && created.id > 0) {
+      // 公開 API を呼ぶ前に、作成済み ID と投稿先を下書きへ永続化する。
+      // 応答待ちの間に再読み込みされても、debounce 保存が ID なしの下書きで上書きしても（pendingForDraft が常に含める）、
+      // 復元後の送信は重複作成せず公開だけ（既投稿なら実態確認して）片付ける。応答待ち中の編集は readonly で防いでいる
+      const memoContent = content.value
+      pendingPublish.value = { memoId: created.id, teamId: publishTeamId, content: memoContent }
+      store.saveDraft(userId.value, memoContent, props.extras, pendingForDraft())
+      if (!(await store.publishToTeam(created.id, { teamId: publishTeamId }))) {
+        return // 失敗: pendingPublish を残す（再送信は公開のみ再試行）
+      }
+    }
+    resetAfterSuccess(created.id)
   } finally {
     submitting.value = false
   }
@@ -104,6 +181,8 @@ function onKeydown(event: KeyboardEvent) {
         data-testid="action-memo-input-textarea"
         :placeholder="t('action_memo.input.placeholder')"
         rows="3"
+        :readonly="submitting"
+        :disabled="pendingPublish !== null"
         class="w-full resize-y rounded-lg border border-surface-200 bg-transparent p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:border-surface-700"
         @keydown="onKeydown"
       />
@@ -128,6 +207,22 @@ function onKeydown(event: KeyboardEvent) {
           </span>
           <span class="hidden text-surface-400 sm:inline">
             {{ t('action_memo.input.shift_enter_hint') }}
+          </span>
+          <span
+            v-if="pendingPublish && !submitting"
+            class="text-rose-600"
+            role="alert"
+            data-testid="action-memo-input-publish-failed"
+          >
+            {{ t('action_memo.input.publish_failed') }}
+            <button
+              type="button"
+              class="ml-1 underline"
+              data-testid="action-memo-input-publish-giveup"
+              @click="giveUpPublish"
+            >
+              {{ t('action_memo.input.publish_giveup') }}
+            </button>
           </span>
           <span
             v-if="draftSavedFlash"

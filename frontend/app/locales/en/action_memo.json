@@ -58,7 +58,9 @@
       "submit": "Save",
       "draft_saved": "Draft saved automatically",
       "char_count": "{count} / 5000",
-      "shift_enter_hint": "Enter to submit / Shift+Enter for newline"
+      "shift_enter_hint": "Enter to submit / Shift+Enter for newline",
+      "publish_failed": "The memo was saved, but posting to the team failed. Press Submit again to retry posting only",
+      "publish_giveup": "Close without posting"
     },
     "card": {
       "edit": "Edit",
@@ -122,7 +124,8 @@
       "future_date": "You can't write to a future date.",
       "todo_not_found": "The TODO you tried to link was not found.",
       "load_failed": "Failed to load memos.",
-      "save_failed": "Failed to save memo."
+      "save_failed": "Failed to save memo.",
+      "publish_failed": "Failed to post to the team."
     },
     "dialog": {
       "title": "Edit memo",
