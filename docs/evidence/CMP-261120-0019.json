@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-0019",
+  "scope": "app",
+  "implementation": {
+    "pr": 4677,
+    "sha": "872247b669be5fc2d11ab37a5ad9b629d10a6197"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "FE の loginWithOAuth が認可コードを BE の契約どおりクエリ（?code=）で送り、本文では送らない（FE composable の回帰テスト）",
+      "tests": [
+        {
+          "name": "認可コードは BE の @RequestParam 契約どおりクエリ（?code=）で送り、本文では送らない",
+          "evidence": "frontend/app/composables/useAuthApi.spec.ts"
+        },
+        {
+          "name": "AC-17: loginWithOAuth を provider=google・認可コードで呼ぶ",
+          "evidence": "frontend/tests/unit/pages/oauth-callback.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "BE は認可コードをクエリ（?code=）で受ける契約を維持し、JSON body だけでは 400 になる（BE 契約テスト）",
+      "tests": [
+        {
+          "name": "AC-17: BE は認可コードをクエリ（?code=）で受ける契約を維持する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/OAuthMfaLoginIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "実ブラウザの /login の「Googleでログイン」から /dashboard まで到達し、POST が ?code= 付きで 200 になる（実機E2E E1。同一の実機記録を 2FA 是正の証拠と共用）",
+      "tests": [
+        {
+          "name": "実機 E2E E1（AC-17）",
+          "evidence": "docs/evidence/CMP-261012-0911-real.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44748825198
+    },
+    {
+      "runId": 44748825504
+    },
+    {
+      "runId": 44748825789
+    },
+    {
+      "runId": 44748825345
+    },
+    {
+      "runId": 44748825385
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4677"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261012-0911-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261012-0911-real.md"
+    }
+  },
+  "regressions": []
+}

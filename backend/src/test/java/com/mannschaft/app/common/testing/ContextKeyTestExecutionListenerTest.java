@@ -195,6 +195,51 @@ class ContextKeyTestExecutionListenerTest {
         assertThat(found).as("起動失敗の原因がそのまま残ること: %s", cause).isTrue();
     }
 
+    @Test
+    @DisplayName("追撃① AC-5: 同じ構成キーを共有する2クラスで起動に失敗しても、両クラスが JUnit の失敗として残り、原因の連鎖を握りつぶさず、[ci-ctx] の error にもしない")
+    void AC5_統合したキーの起動失敗は両クラスの失敗として残りci_ctxのerrorにしない() {
+        assertThat(ContextGroupClassOrderer.contextKey(C2SharedBrokenFirst.class))
+                .as("2クラスは同じ構成キー（統合したキー）")
+                .isEqualTo(ContextGroupClassOrderer.contextKey(C3SharedBrokenSecond.class));
+        List<String> lines;
+        TestExecutionSummary summary;
+        try (ContextKeyTestExecutionListener.Capture capture = ContextKeyTestExecutionListener.startCapture()) {
+            summary = run(C2SharedBrokenFirst.class, C3SharedBrokenSecond.class);
+            lines = List.copyOf(capture.lines());
+        }
+
+        assertThat(summary.getTestsFoundCount()).isEqualTo(2);
+        assertThat(summary.getTestsSucceededCount()).as("起動に失敗したキーのテストを成功扱いにしない").isZero();
+        assertThat(summary.getTestsSkippedCount()).as("起動失敗を skip に化けさせない").isZero();
+        assertThat(summary.getTotalFailureCount()).as("2クラスとも失敗として残る").isEqualTo(2);
+        Throwable first = summary.getFailures().stream()
+                .filter(failure -> failure.getTestIdentifier().getUniqueId().contains(C2SharedBrokenFirst.class.getSimpleName()))
+                .findFirst().orElseThrow().getException();
+        assertThat(chainContains(first, "検体: 共有キーの起動失敗"))
+                .as("最初のクラスの失敗に起動失敗の原因の連鎖が残ること: %s", first).isTrue();
+        Throwable second = summary.getFailures().stream()
+                .filter(failure -> failure.getTestIdentifier().getUniqueId().contains(C3SharedBrokenSecond.class.getSimpleName()))
+                .findFirst().orElseThrow().getException();
+        assertThat(chainContains(second, "検体: 共有キーの起動失敗") || chainContains(second, "failure threshold"))
+                .as("2クラス目も起動失敗（原因または Spring の失敗しきい値）として失敗すること: %s", second).isTrue();
+        assertThat(lines).as("[ci-ctx] の error は計測失敗に限る（起動失敗を error にしない）")
+                .noneMatch(line -> line.contains(" event=error"));
+        assertThat(lines).as("起動に失敗したキーを load として数えない")
+                .noneMatch(line -> line.contains(" event=load") || line.contains(" event=reload"));
+    }
+
+    private static boolean chainContains(Throwable failure, String text) {
+        for (Throwable t = failure; t != null; t = t.getCause()) {
+            if (String.valueOf(t.getMessage()).contains(text)) {
+                return true;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
+    }
+
     // ---------------------------------------------------------------- 補助
 
     private static TestExecutionSummary run(Class<?>... fixtures) {
@@ -441,6 +486,31 @@ class ContextKeyTestExecutionListenerTest {
     static class B1MeasurementFailure {
         @Test
         void passesEvenIfMeasurementFails() {
+        }
+    }
+
+    /** 共有キーで起動が必ず失敗する構成（追撃① AC-5）。 */
+    @Configuration(proxyBeanMethods = false)
+    static class SharedBrokenConfiguration {
+        @Bean
+        String sharedBroken() {
+            throw new IllegalStateException("検体: 共有キーの起動失敗");
+        }
+    }
+
+    @SpringJUnitConfig(SharedBrokenConfiguration.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class C2SharedBrokenFirst {
+        @Test
+        void failsBecauseSharedContextCannotStart() {
+        }
+    }
+
+    @SpringJUnitConfig(SharedBrokenConfiguration.class)
+    @EnabledIf("com.mannschaft.app.common.testing.ContextKeyTestExecutionListenerTest#fixtureMode")
+    static class C3SharedBrokenSecond {
+        @Test
+        void alsoFailsBecauseSharedContextCannotStart() {
         }
     }
 

@@ -12,8 +12,11 @@
     "board": {
       "title": "Tablero de turnos",
       "memberPool": "Miembros sin asignar",
+      "noUnassignedMembers": "No hay miembros sin asignar",
+      "noMatchingMembers": "Ningún miembro coincide con la búsqueda",
       "dragHint": "Arrastra miembros para asignar",
-      "unassignedSlots": "{count} turnos sin asignar"
+      "unassignedSlots": "{count} turnos sin asignar",
+      "backToList": "Volver a la lista de turnos"
     },
     "autoAssign": {
       "button": "Asignación automática",
@@ -50,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Solicitud de cambio",
+      "typeColumn": "Tipo de solicitud",
+      "empty": "Aún no hay solicitudes de cambio",
       "type": {
         "PRE_CONFIRM_EDIT": "Edición pre-confirmación",
         "INDIVIDUAL_SWAP": "Intercambio individual",
@@ -70,7 +75,14 @@
       "reject": "Rechazar",
       "reviewComment": "Comentario de revisión",
       "openCallLimit": "Las convocatorias abiertas están limitadas a 3 por mes",
-      "fetchError": "Error al obtener las solicitudes de cambio"
+      "fetchError": "Error al obtener las solicitudes de cambio",
+      "requester": "Solicitante",
+      "unknownRequester": "Usuario desconocido",
+      "createSuccess": "Solicitud de cambio enviada",
+      "approveSuccess": "Solicitud de cambio aprobada",
+      "rejectSuccess": "Solicitud de cambio rechazada",
+      "withdrawSuccess": "Solicitud de cambio retirada",
+      "closedForNew": "Este turno ya está publicado, por lo que ya no se aceptan nuevas solicitudes de cambio."
     },
     "pdf": {
       "teamLayout": "PDF del horario del equipo",
@@ -156,7 +168,9 @@
       "colDate": "Fecha",
       "colSlots": "Franjas",
       "editDialogTitle": "Editar turno",
-      "accessDeniedRedirect": "No tienes permiso para ver esta página"
+      "accessDeniedRedirect": "No tienes permiso para ver esta página",
+      "tabBoard": "Tablero de turnos",
+      "tabChangeRequests": "Solicitudes de cambio"
     },
     "slot": {
       "createTitle": "Crear franja",
@@ -267,7 +281,14 @@
       "userId": "ID de usuario",
       "userIdPlaceholder": "Ingrese el ID de usuario",
       "saveSuccess": "Restricciones guardadas",
-      "deleteSuccess": "Restricciones eliminadas"
+      "deleteSuccess": "Restricciones eliminadas",
+      "unknownMember": "Usuario desconocido",
+      "selectMember": "Seleccionar un miembro",
+      "searchMember": "Buscar por nombre",
+      "noSelectableMembers": "No hay miembros que se puedan añadir",
+      "membersLoadError": "No se pudo cargar la lista de miembros",
+      "deleteTitle": "Eliminar restricción laboral",
+      "deleteConfirm": "¿Eliminar esta restricción laboral?"
     },
     "validation": {
       "atLeastOneConstraint": "Por favor especifique al menos una restricción"
@@ -415,11 +436,13 @@
       }
     },
     "entry": {
+      "notStarted": "La recepción de preferencias aún no ha comenzado.",
       "sectionTitle": "Enviar preferencias / Tablero de turnos",
       "bulkRequest": "Enviar preferencias en bloque",
       "board": "Tablero de turnos",
       "weeklyDefault": "Configurar valores por día de la semana",
-      "closed": "El plazo de preferencias ha terminado"
+      "closed": "El plazo de preferencias ha terminado",
+      "changeRequest": "Solicitud de cambio"
     },
     "submitConfirm": {
       "title": "¿Enviar con este contenido?",

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "scope": "app",
+  "implementation": {
+    "pr": 3954,
+    "sha": "0b67099ecdcf6d970a46264e9656dba8d809fff3"
+  },
+  "ci": [
+    {
+      "runId": 39211725428
+    },
+    {
+      "runId": 39211725539
+    },
+    {
+      "runId": 39211725689
+    },
+    {
+      "runId": 39211725483
+    },
+    {
+      "runId": 39211725595
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3954"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+    }
+  },
+  "cmpId": "CMP-261017-1026",
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "認証セッションschemaを一意化しwireのcurrentを維持する",
+      "tests": [
+        {
+          "name": "認証と代理投票のschemaが互いの項目を上書きしない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/SessionResponseSchemaTest.java"
+        },
+        {
+          "name": "認証sessionのwireはcurrentを維持する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/SessionResponseSchemaTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "代理投票の既存schemaと契約を保護し、OpenAPIと生成型を整合する",
+      "tests": [
+        {
+          "name": "認証と代理投票のschemaが互いの項目を上書きしない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/SessionResponseSchemaTest.java"
+        },
+        {
+          "name": "公式OpenAPI生成と代理投票25 path・43 componentの不変確認",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+        }
+      ]
+    }
+  ],
+  "regressions": [
+    {
+      "description": "認証と代理投票のセッション応答schema名の衝突",
+      "test": "認証と代理投票のschemaが互いの項目を上書きしない",
+      "redEvidence": "docs/evidence/session-auth-acceptance.md",
+      "greenEvidence": "https://github.com/kenta-0420/mannschaft/pull/3938"
+    }
+  ]
+}

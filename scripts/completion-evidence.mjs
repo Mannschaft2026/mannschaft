@@ -207,12 +207,27 @@ function evidenceReferences(evidence) {
   return refs;
 }
 
+// リポジトリ移管（kenta-0420/mannschaft から Mannschaft2026/mannschaft）後の名前。旧名は GitHub がリダイレクトするため、
+// 過去の証拠URLも同一リポジトリとみなす。名前を増やすときはここだけを直す。GitHub の仕様どおり大文字小文字は区別しない。
+const CURRENT_REPOSITORY = 'mannschaft2026/mannschaft';
+const REPOSITORY_FORMER_NAMES = ['kenta-0420/mannschaft'];
+
+function repositoryIdentity(name) {
+  const lower = String(name).toLowerCase();
+  return REPOSITORY_FORMER_NAMES.includes(lower) ? CURRENT_REPOSITORY : lower;
+}
+
+export function isSameRepository(actual, expected) {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  return repositoryIdentity(actual) === repositoryIdentity(expected);
+}
+
 function validateReference(reference, cmpId, options) {
   if (typeof reference !== 'string' || !reference.trim()) throw new Error(`${cmpId}: 証拠参照が空です`);
   if (/^https:\/\//i.test(reference)) {
     let url;
     try { url = new URL(reference); } catch { throw new Error(`${cmpId}: 証拠URLが不正です`); }
-    if (url.hostname !== 'github.com' || url.pathname.split('/').slice(1, 3).join('/') !== options.repository) {
+    if (url.hostname !== 'github.com' || !isSameRepository(url.pathname.split('/').slice(1, 3).join('/'), options.repository)) {
       throw new Error(`${cmpId}: 証拠URLは同一GitHubリポジトリを指す必要があります`);
     }
     return;
@@ -276,7 +291,7 @@ export function validateEvidence(evidence, cmpId, options = {}) {
   if (options.implementations && !implementationMeta) throw new Error(`${cmpId}: 実装PR ${evidence.implementation.pr} のGitHub照合情報がありません`);
   if (implementationMeta) {
     const implementation = implementationMeta;
-    if (implementation.repository !== options.repository || implementation.merged !== true) throw new Error(`${cmpId}: 実装PRが同一repoでmergedではありません`);
+    if (!isSameRepository(implementation.repository, options.repository) || implementation.merged !== true) throw new Error(`${cmpId}: 実装PRが同一repoでmergedではありません`);
     if (implementation.sha !== evidence.implementation.sha) throw new Error(`${cmpId}: 実装PR head SHAが証拠JSONと一致しません`);
     const acceptableChecks = new Set(['success', 'skipped', 'neutral']);
     if (!Array.isArray(implementation.checks) || implementation.checks.length === 0 || !implementation.checks.includes('success') || implementation.checks.some(conclusion => !acceptableChecks.has(conclusion))) {
@@ -288,7 +303,7 @@ export function validateEvidence(evidence, cmpId, options = {}) {
   if (options.runs) {
     for (const ci of evidence.ci) {
       const run = options.runs instanceof Map ? options.runs.get(ci.runId) : options.runs[ci.runId];
-      if (!run || run.repository !== options.repository || run.sha !== evidence.implementation.sha || run.conclusion !== 'success') {
+      if (!run || !isSameRepository(run.repository, options.repository) || run.sha !== evidence.implementation.sha || run.conclusion !== 'success') {
         throw new Error(`${cmpId}: CI run ${ci.runId} が同一repo・実装SHAのsuccessではありません`);
       }
     }
@@ -332,7 +347,7 @@ export function validateCompletionChanges(baseText, headText, evidenceByPath = {
 }
 
 function gitShow(ref, file) {
-  return execFileSync('git', ['show', `${ref}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  return execFileSync('git', ['show', `${ref}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
 }
 
 function cli() {
