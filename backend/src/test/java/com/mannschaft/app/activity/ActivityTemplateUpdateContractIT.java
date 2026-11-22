@@ -299,7 +299,9 @@ class ActivityTemplateUpdateContractIT extends AbstractMySqlIntegrationTest {
 
         ResultActions res = update(id, body.get(), admin);
 
-        res.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("COMMON_001"));
+        // 項目数の上限超過だけは既存の ACTIVITY_006 を維持する（殿裁定。それ以外は COMMON_001）
+        String expectedCode = label.startsWith("項目数16") ? "ACTIVITY_006" : "COMMON_001";
+        res.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value(expectedCode));
         assertFieldErrors(res, expectedFields);
         assertThat(snapshot(id)).as("失敗時は name・項目とも rollback され不変").isEqualTo(before);
     }

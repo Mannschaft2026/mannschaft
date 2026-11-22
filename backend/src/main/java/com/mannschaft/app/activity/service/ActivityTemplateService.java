@@ -17,6 +17,8 @@ import com.mannschaft.app.activity.repository.ActivityTemplateFieldRepository;
 import com.mannschaft.app.activity.repository.ActivityTemplateRepository;
 import com.mannschaft.app.activity.repository.SystemActivityTemplatePresetRepository;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.EnumInputParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +27,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -59,7 +65,16 @@ public class ActivityTemplateService {
         checkScopeMembership(userId, scopeType, scopeId);
         List<ActivityTemplateEntity> templates =
                 templateRepository.findByScopeTypeAndScopeIdOrderBySortOrderAsc(scopeType, scopeId);
-        return templates.stream().map(this::toResponseWithFields).collect(Collectors.toList());
+        if (templates.isEmpty()) {
+            return List.of();
+        }
+        // 項目はテンプレート件数に関わらず 1 クエリで一括取得する（N+1 回避）
+        Map<Long, List<ActivityTemplateFieldEntity>> fieldsByTemplate = fieldRepository
+                .findByTemplateIdInOrderBySortOrderAsc(templates.stream().map(ActivityTemplateEntity::getId).toList())
+                .stream().collect(Collectors.groupingBy(ActivityTemplateFieldEntity::getTemplateId));
+        return templates.stream()
+                .map(t -> toResponse(t, fieldsByTemplate.getOrDefault(t.getId(), List.of())))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -88,8 +103,11 @@ public class ActivityTemplateService {
         }
 
         // フィールド数チェック
-        if (request.getFields() != null && request.getFields().size() > MAX_FIELDS_PER_TEMPLATE) {
-            throw new BusinessException(ActivityErrorCode.FIELD_LIMIT_EXCEEDED);
+        if (request.getFields() != null) {
+            checkFieldLimit(request.getFields());
+            List<ErrorResponse.FieldError> errors = new ArrayList<>();
+            validateFieldKeys(request.getFields(), Set.of(), errors);
+            throwIfAny(errors);
         }
 
         ActivityVisibility visibility = request.getDefaultVisibility() != null
@@ -145,74 +163,154 @@ public class ActivityTemplateService {
         ActivityVisibility visibility = request.getDefaultVisibility() != null
                 ? EnumInputParser.parse(ActivityVisibility.class, request.getDefaultVisibility(), "defaultVisibility") : entity.getDefaultVisibility();
 
+        // 検証はすべて変更の前に行う（失敗時に途中まで変えた状態を残さない）
+        List<ActivityTemplateFieldEntity> existingFields = fieldRepository.findByTemplateIdOrderBySortOrderAsc(id);
+        validateFieldUpdate(request, existingFields);
+
         entity.update(request.getName(), request.getDescription(), request.getIcon(),
                 request.getColor(),
                 request.getIsParticipantRequired() != null ? request.getIsParticipantRequired() : entity.getIsParticipantRequired(),
                 visibility, entity.getSortOrder());
 
-        // フィールドの更新（field_key ベースの差分更新）
+        // フィールドの更新（field_key ベースの差分更新）。fields 省略時は項目に触れない
         if (request.getFields() != null) {
-            if (request.getFields().size() > MAX_FIELDS_PER_TEMPLATE) {
-                throw new BusinessException(ActivityErrorCode.FIELD_LIMIT_EXCEEDED);
-            }
-
-            List<ActivityTemplateFieldEntity> existingFields =
-                    fieldRepository.findByTemplateIdOrderBySortOrderAsc(id);
-            Map<String, ActivityTemplateFieldEntity> existingByKey = existingFields.stream()
-                    .collect(Collectors.toMap(ActivityTemplateFieldEntity::getFieldKey, Function.identity()));
-
-            // リクエストの field_key を収集
-            Map<String, CreateTemplateRequest.TemplateFieldInput> requestByKey = request.getFields().stream()
-                    .collect(Collectors.toMap(CreateTemplateRequest.TemplateFieldInput::getFieldKey, Function.identity()));
-
-            // 既存にあってリクエストにない → 削除
-            for (ActivityTemplateFieldEntity existing : existingFields) {
-                if (!requestByKey.containsKey(existing.getFieldKey())) {
-                    fieldRepository.delete(existing);
-                }
-            }
-
-            int order = 0;
-            for (CreateTemplateRequest.TemplateFieldInput field : request.getFields()) {
-                ActivityTemplateFieldEntity existing = existingByKey.get(field.getFieldKey());
-                if (existing != null) {
-                    // field_type 変更チェック
-                    if (!existing.getFieldType().name().equals(field.getFieldType())) {
-                        throw new BusinessException(ActivityErrorCode.FIELD_TYPE_CHANGE_NOT_ALLOWED);
-                    }
-                    // 更新
-                    existing.update(
-                            field.getFieldLabel(),
-                            field.getIsRequired() != null ? field.getIsRequired() : existing.getIsRequired(),
-                            field.getOptionsJson(),
-                            field.getPlaceholder(),
-                            field.getUnit(),
-                            field.getIsAggregatable() != null ? field.getIsAggregatable() : existing.getIsAggregatable(),
-                            field.getSortOrder() != null ? field.getSortOrder() : order++
-                    );
-                    fieldRepository.save(existing);
-                } else {
-                    // 新規追加
-                    ActivityTemplateFieldEntity fieldEntity = ActivityTemplateFieldEntity.builder()
-                            .templateId(id)
-                            .fieldKey(field.getFieldKey())
-                            .fieldLabel(field.getFieldLabel())
-                            .fieldType(FieldType.valueOf(field.getFieldType()))
-                            .isRequired(field.getIsRequired() != null && field.getIsRequired())
-                            .optionsJson(field.getOptionsJson())
-                            .placeholder(field.getPlaceholder())
-                            .unit(field.getUnit())
-                            .isAggregatable(field.getIsAggregatable() != null && field.getIsAggregatable())
-                            .sortOrder(field.getSortOrder() != null ? field.getSortOrder() : order++)
-                            .build();
-                    fieldRepository.save(fieldEntity);
-                }
-            }
+            applyFieldChanges(id, request, existingFields);
         }
 
         ActivityTemplateEntity saved = templateRepository.save(entity);
         log.info("テンプレート更新: templateId={}", id);
         return toResponseWithFields(saved);
+    }
+
+    // ── fieldKey 契約（F06.4.1 設計書 §7.1） ──
+
+    /** 新規項目の fieldKey の書式。既存キー（旧書式を含む）は検査しない。 */
+    private static final java.util.regex.Pattern NEW_FIELD_KEY_PATTERN =
+            java.util.regex.Pattern.compile("[a-z][a-z0-9_]{0,49}");
+
+    private void checkFieldLimit(List<CreateTemplateRequest.TemplateFieldInput> inputs) {
+        if (inputs.size() > MAX_FIELDS_PER_TEMPLATE) {
+            throw new BusinessException(ActivityErrorCode.FIELD_LIMIT_EXCEEDED,
+                    List.of(new ErrorResponse.FieldError("fields",
+                            "項目は" + MAX_FIELDS_PER_TEMPLATE + "個までです")));
+        }
+    }
+
+    /** fieldKey の重複と、既存に無いキー（新規項目）の書式を検査する。 */
+    private void validateFieldKeys(List<CreateTemplateRequest.TemplateFieldInput> inputs,
+                                   Set<String> existingKeys, List<ErrorResponse.FieldError> errors) {
+        Map<String, List<Integer>> indexesByKey = new LinkedHashMap<>();
+        for (int i = 0; i < inputs.size(); i++) {
+            indexesByKey.computeIfAbsent(inputs.get(i).getFieldKey(), k -> new ArrayList<>()).add(i);
+        }
+        for (int i = 0; i < inputs.size(); i++) {
+            String key = inputs.get(i).getFieldKey();
+            String path = "fields[" + i + "].fieldKey";
+            if (indexesByKey.get(key).size() > 1) {
+                errors.add(new ErrorResponse.FieldError(path, "fieldKey が重複しています"));
+            } else if (!existingKeys.contains(key) && !NEW_FIELD_KEY_PATTERN.matcher(key).matches()) {
+                errors.add(new ErrorResponse.FieldError(path,
+                        "新規項目の fieldKey は英小文字で始まる英小文字・数字・アンダースコアの50字以内です"));
+            }
+        }
+    }
+
+    private void throwIfAny(List<ErrorResponse.FieldError> errors) {
+        if (!errors.isEmpty()) {
+            throw new BusinessException(CommonErrorCode.COMMON_001, errors);
+        }
+    }
+
+    /** 更新リクエストの項目まわりをすべて検証する（変更前に呼ぶ）。 */
+    private void validateFieldUpdate(UpdateTemplateRequest request, List<ActivityTemplateFieldEntity> existingFields) {
+        List<String> removed = request.getRemovedFieldKeys() != null ? request.getRemovedFieldKeys() : List.of();
+        List<ErrorResponse.FieldError> errors = new ArrayList<>();
+        if (request.getFields() == null) {
+            for (int i = 0; i < removed.size(); i++) {
+                errors.add(new ErrorResponse.FieldError("removedFieldKeys[" + i + "]",
+                        "fields を省略したときは removedFieldKeys を指定できません"));
+            }
+            throwIfAny(errors);
+            return;
+        }
+        List<CreateTemplateRequest.TemplateFieldInput> inputs = request.getFields();
+        checkFieldLimit(inputs);
+
+        Map<String, ActivityTemplateFieldEntity> existingByKey = existingFields.stream()
+                .collect(Collectors.toMap(ActivityTemplateFieldEntity::getFieldKey, Function.identity(), (a, b) -> a));
+        validateFieldKeys(inputs, existingByKey.keySet(), errors);
+
+        Set<String> requestKeys = inputs.stream().map(CreateTemplateRequest.TemplateFieldInput::getFieldKey)
+                .collect(Collectors.toSet());
+        Set<String> seenRemoved = new HashSet<>();
+        for (int i = 0; i < removed.size(); i++) {
+            String key = removed.get(i);
+            if (!existingByKey.containsKey(key)) {
+                errors.add(new ErrorResponse.FieldError("removedFieldKeys[" + i + "]",
+                        "removedFieldKeys に既存項目に無い fieldKey があります"));
+            } else if (requestKeys.contains(key) || !seenRemoved.add(key)) {
+                errors.add(new ErrorResponse.FieldError("removedFieldKeys[" + i + "]",
+                        "removedFieldKeys の fieldKey が fields と重複しています"));
+            }
+        }
+        // 照合: 既存キーは fields か removedFieldKeys のどちらかに必ず含まれる
+        List<String> missing = existingFields.stream().map(ActivityTemplateFieldEntity::getFieldKey)
+                .filter(k -> !requestKeys.contains(k) && !removed.contains(k)).toList();
+        if (!missing.isEmpty()) {
+            errors.add(new ErrorResponse.FieldError("fields",
+                    "既存項目が fields にも removedFieldKeys にもありません: " + String.join(", ", missing)));
+        }
+        throwIfAny(errors);
+
+        // 型変更は検証の最後（変更前）に弾く
+        for (CreateTemplateRequest.TemplateFieldInput input : inputs) {
+            ActivityTemplateFieldEntity existing = existingByKey.get(input.getFieldKey());
+            if (existing != null && !existing.getFieldType().name().equals(input.getFieldType())) {
+                throw new BusinessException(ActivityErrorCode.FIELD_TYPE_CHANGE_NOT_ALLOWED);
+            }
+        }
+    }
+
+    /** 検証済みの項目変更を適用する。removedFieldKeys の項目だけを削除し、既存は fieldKey で更新、無いキーは追加する。 */
+    private void applyFieldChanges(Long id, UpdateTemplateRequest request,
+                                   List<ActivityTemplateFieldEntity> existingFields) {
+        List<String> removed = request.getRemovedFieldKeys() != null ? request.getRemovedFieldKeys() : List.of();
+        Map<String, ActivityTemplateFieldEntity> existingByKey = existingFields.stream()
+                .collect(Collectors.toMap(ActivityTemplateFieldEntity::getFieldKey, Function.identity(), (a, b) -> a));
+        for (ActivityTemplateFieldEntity existing : existingFields) {
+            if (removed.contains(existing.getFieldKey())) {
+                fieldRepository.delete(existing);
+            }
+        }
+        int order = 0;
+        for (CreateTemplateRequest.TemplateFieldInput field : request.getFields()) {
+            ActivityTemplateFieldEntity existing = existingByKey.get(field.getFieldKey());
+            if (existing != null) {
+                existing.update(
+                        field.getFieldLabel(),
+                        field.getIsRequired() != null ? field.getIsRequired() : existing.getIsRequired(),
+                        field.getOptionsJson(),
+                        field.getPlaceholder(),
+                        field.getUnit(),
+                        field.getIsAggregatable() != null ? field.getIsAggregatable() : existing.getIsAggregatable(),
+                        field.getSortOrder() != null ? field.getSortOrder() : order++
+                );
+                fieldRepository.save(existing);
+            } else {
+                fieldRepository.save(ActivityTemplateFieldEntity.builder()
+                        .templateId(id)
+                        .fieldKey(field.getFieldKey())
+                        .fieldLabel(field.getFieldLabel())
+                        .fieldType(FieldType.valueOf(field.getFieldType()))
+                        .isRequired(field.getIsRequired() != null && field.getIsRequired())
+                        .optionsJson(field.getOptionsJson())
+                        .placeholder(field.getPlaceholder())
+                        .unit(field.getUnit())
+                        .isAggregatable(field.getIsAggregatable() != null && field.getIsAggregatable())
+                        .sortOrder(field.getSortOrder() != null ? field.getSortOrder() : order++)
+                        .build());
+            }
+        }
     }
 
     /**
@@ -399,8 +497,10 @@ public class ActivityTemplateService {
     }
 
     private ActivityTemplateResponse toResponseWithFields(ActivityTemplateEntity entity) {
-        List<ActivityTemplateFieldEntity> fields =
-                fieldRepository.findByTemplateIdOrderBySortOrderAsc(entity.getId());
+        return toResponse(entity, fieldRepository.findByTemplateIdOrderBySortOrderAsc(entity.getId()));
+    }
+
+    private ActivityTemplateResponse toResponse(ActivityTemplateEntity entity, List<ActivityTemplateFieldEntity> fields) {
         List<ActivityTemplateResponse.TemplateFieldResponse> fieldResponses =
                 activityMapper.toTemplateFieldResponseList(fields);
         return new ActivityTemplateResponse(

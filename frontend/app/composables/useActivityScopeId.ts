@@ -18,7 +18,8 @@ interface MyOrganizationItem {
  * （いずれも {@code id} が数値・{@code slug} 付き）を引いて当該スコープの数値 id を得る。</p>
  *
  * <p>数値文字列が渡された場合は API 往復を省いて {@code Number()} で数値化して返す。
- * 解決不能（未所属・不通）の場合は null を返す（呼び出し側で null ガード・症状は隠さない）。</p>
+ * 取得に成功して該当なし（未所属）のときだけ null を返す。取得に失敗したときは例外を投げる
+ * （呼び出し側で try/catch し、エラー表示と再試行を出す）。</p>
  */
 export function useActivityScopeId() {
   const api = useApi()
@@ -31,20 +32,15 @@ export function useActivityScopeId() {
     if (Number.isInteger(numeric) && numeric > 0 && String(numeric) === scopeRef) {
       return numeric
     }
-    try {
-      if (scopeType === 'TEAM') {
-        const res = await api<{ data: MyTeamItem[] }>('/api/v1/me/teams')
-        const team = (res.data ?? []).find((tm) => tm.slug === scopeRef)
-        return team ? team.id : null
-      }
-      const res = await api<{ data: MyOrganizationItem[] }>('/api/v1/me/organizations')
-      const org = (res.data ?? []).find((o) => o.slug === scopeRef)
-      return org ? org.id : null
-    } catch {
-      // 不通・未所属いずれも null に潰れる。取得失敗を沈黙させないためログに残す（呼び出し側は null ガード）。
-      console.warn('[useActivityScopeId] スコープID解決に失敗しました', { scopeType, scopeRef })
-      return null
+    // 取得に失敗したら例外をそのまま投げる（未所属の null と区別するため、ここで握りつぶさない）
+    if (scopeType === 'TEAM') {
+      const res = await api<{ data: MyTeamItem[] }>('/api/v1/me/teams')
+      const team = (res.data ?? []).find((tm) => tm.slug === scopeRef)
+      return team ? team.id : null
     }
+    const res = await api<{ data: MyOrganizationItem[] }>('/api/v1/me/organizations')
+    const org = (res.data ?? []).find((o) => o.slug === scopeRef)
+    return org ? org.id : null
   }
 
   return { resolveScopeId }

@@ -67,8 +67,14 @@ const submit = handleSubmit(async (values) => {
 })
 
 onMounted(async () => {
-  orgId.value = await resolveScopeId('ORGANIZATION', orgSlug.value)
-  resolving.value = false
+  try {
+    orgId.value = await resolveScopeId('ORGANIZATION', orgSlug.value)
+  } catch (error: unknown) {
+    // 取得失敗は未所属（null）と区別して通知する
+    handleApiError(error, 'payment-request.organization.scope')
+  } finally {
+    resolving.value = false
+  }
 })
 </script>
 
