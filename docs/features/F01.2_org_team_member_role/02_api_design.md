@@ -478,6 +478,49 @@ MEMBER / SUPPORTER / GUEST またはチーム非メンバー（PUBLIC / ORGANIZA
 - `targetType`: `TEAM` または `ORGANIZATION`。組織招待も同じ形状。
 - `targetName`: 対象が削除された場合は `null` になり得る。画面は参加先の代替文言を表示する。
 - 参加先ID・アイコン・説明・有効期限は現在のプレビュー応答に含まない。
+
+#### 招待付き新規登録の保留承認（CMP-261107-1833）
+
+招待リンクから新規登録した利用者は、登録時点では参加しない。`POST /api/v1/auth/register` の `inviteToken` が
+共有招待（宛先なし）を指していれば、users と同じトランザクションで保留（`registration_pending_invites`。招待トークンの
+ハッシュと招待先だけを持ち、平文は保存しない）を1件作る。宛先付き（承諾型）招待での登録は `AUTH_083`（403）で拒否し、
+users も作らない。存在しない招待はベータ制限 OFF なら保留を作らず登録だけ通す。
+
+メール確認（18歳未満は保護者同意）・ログインの後、本人が次の API で承認・辞退する。利用者は SecurityContext のみから取り、
+パスに ID を持たない（他人の保留に触れられない）。応答は招待のハッシュを含まない。保護者同意待ちのトークンは
+`AUTH_070`（403）で遮断される。
+
+| メソッド | パス | 内容 |
+|---|---|---|
+| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null` |
+| POST | `/api/v1/me/pending-invite/accept` | 承認して参加。応答 `{status}`（`JOINED`/`EXPIRED`/`UNAVAILABLE`） |
+| POST | `/api/v1/me/pending-invite/decline` | 辞退（`PENDING`→`DECLINED`。共有招待そのものは失効させない） |
+| POST | `/api/v1/me/pending-invite/reissue-request` | 失効した招待の再発行を招待権限者へ要請。応答 `{alreadyRequested}` |
+| POST | `/api/v1/me/pending-invite/dismiss` | 失効の案内を閉じる（`EXPIRED`/`REISSUE_REQUESTED`→`DISMISSED`） |
+
+GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joinable`（公開・非アーカイブ・非 PROVISIONED）・
+`publicPath`（`joinable` のときだけ `/teams/{slug}` または `/organizations/{slug}`。参加申し込みへの導線）・
+`reissueRequestedAt`・`retryAvailableAt`（`ACCEPTING` のときだけ。処理開始から5分後）。
+
+状態: `PENDING`→`ACCEPTING`→`JOINED`/`EXPIRED`/`UNAVAILABLE`（原因不明の失敗は `PENDING` に戻す）、
+`PENDING`→`DECLINED`、`EXPIRED`→`REISSUE_REQUESTED`、`EXPIRED`/`REISSUE_REQUESTED`→`DISMISSED`、
+未終了→`DISCARDED`（7日間メール未確認の掃除・保護者全員の拒否）。
+
+- 承認は `PendingInviteService`（TX なし）→ `PendingInviteStore`（auth の短TX。条件付き UPDATE で `ACCEPTING` を取る）→
+  `InviteAcceptanceFacade#joinByInviteTokenHash`（通常の招待承諾と同じ短TXの連鎖）。使用回数・claim・監査は通常の承諾と同等。
+- 結果の写像: 成功・在籍済み（`TEAM_003`）・参加後のフォルダ配置失敗は `JOINED`、失効・期限切れ（`ROLE_002`）・上限到達
+  （`ROLE_003`）は `EXPIRED`、ブロック（`TEAM_004`）・特権ロール（`ROLE_009`）は `UNAVAILABLE`。承認前に別経路で在籍済みなら
+  招待を使わず `JOINED`。
+- 二重押し・並行: `ACCEPTING` は1つの attempt だけが取れる。負け側は `JOINED` 済みなら 200 `JOINED`、処理中なら `AUTH_086`（409）。
+  `ACCEPTING` のまま5分を超えたら新しい attempt で取り直せ、古い attempt の完了・差し戻しは何も書かない。
+- 途中失敗の復旧: 前回の承認がロール付与の前後で失敗して同じ利用者の claim（`CLAIMED`）が残っていれば、次の承認は
+  使用回数を進めずにその claim を再開する（`InviteAcceptanceWriter#claimOrResume`）。付与がコミット済みなら claim を確定（`GRANTED`）する。
+- 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
+  7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
+  期間内の再押下は通知せず `alreadyRequested: true`。
+- エラー: `AUTH_084`（404・保留なし）、`AUTH_085`（409・状態不正）、`AUTH_086`（409・処理中）。
+- 画面（招待画面の新規登録導線・ログイン後の承認ダイアログ）は後続 PR で対応する。それまで招待画面は従来どおり
+  チーム・組織のトークンを `inviteToken` として送らない（上記の段落）。
 - `valid=false` または `ROLE_002` は無効招待として表示する。それ以外の取得失敗は取得エラーとして表示し、同じ取得処理による再試行を提供する。
 - 有効なプレビューでは対象種別に応じた任意のフォルダ選択と参加操作を提供する（F15.3 §7.4）。
 
