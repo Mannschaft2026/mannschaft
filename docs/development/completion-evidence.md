@@ -93,7 +93,7 @@ test-onlyの例:
 }
 ```
 
-証拠参照は `https://github.com/<同一owner>/<同一repo>/...` または相対リポジトリファイルとする。絶対パス、別リポジトリURL、`..`を含むパスは拒否する。回帰を修正した場合は `regressions` に説明、テスト名、red/green両方の証拠を記録する。該当する回帰が無い場合は空配列でよい。
+証拠参照は `https://github.com/<同一owner>/<同一repo>/...` または相対リポジトリファイルとする。絶対パス、別リポジトリURL、`..`を含むパスは拒否する。リポジトリは `kenta-0420/mannschaft` から `Mannschaft2026/mannschaft` へ移管されたため、同一リポジトリの判定は現在名と旧名を同一とみなし（旧名の一覧は `scripts/completion-evidence.mjs` の `REPOSITORY_FORMER_NAMES` の1か所）、大文字小文字は区別しない。回帰を修正した場合は `regressions` に説明、テスト名、red/green両方の証拠を記録する。該当する回帰が無い場合は空配列でよい。
 
 過去の完了行は移動や注記の編集ができるが、行そのもの、既存の証拠JSON、証拠リンクを削除・差替えできない。証拠JSONを編集するPRでは、その完了行の証拠全体を再検査する。
 
