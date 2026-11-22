@@ -5,10 +5,7 @@ import com.mannschaft.app.auth.entity.OAuthAccountEntity;
 import com.mannschaft.app.auth.entity.OAuthLinkTokenEntity;
 import com.mannschaft.app.auth.repository.OAuthAccountRepository;
 import com.mannschaft.app.auth.repository.OAuthLinkTokenRepository;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 import jakarta.servlet.http.Cookie;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,19 +13,10 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -45,9 +33,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <p><b>構成</b>: {@link OAuthMfaLoginIT} と同じ。実 Controller → 実 Service → 実 MySQL（Testcontainers）・
  * 実 Security フィルタ（{@link MfaItSupport}）。外部境界のみ代役: Valkey は {@link MfaValkeyFake}、
- * OAuth プロバイダ（Google / LINE / Apple）は JDK 標準の {@link HttpServer} で偽装する。
- * 偽プロバイダは認可コードに {@code <sub>~<email>} を埋めて返す。{@code fail~} で始まるコードは token
- * エンドポイントが 400 を返す（プロバイダ認証失敗）。</p>
+ * OAuth プロバイダ（Google / LINE / Apple）は基底の共通偽プロバイダ（FakeOAuthProviders）に任せる。
+ * 認可コードは {@code <sub>~<email>}。{@code fail~} で始まるコードは共通偽が token エンドポイントで 400 を返す（プロバイダ認証失敗）。</p>
  *
  * <p><b>Cookie 属性の基準</b>: パスワードログイン（{@code AuthLoginController#login} → {@code AuthTokenCookies}）の
  * Set-Cookie を同じ context で採り、値と {@code Expires} を除いた属性集合が一致することを確かめる。
@@ -55,7 +42,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <p>本テストは {@code @Transactional} にしない（refresh のローテーションを確定状態で観測するため）。</p>
  */
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("CMP-261121-0438 OAuth 即発行経路の refresh Cookie（HTTP 境界）")
 class OAuthLoginRefreshCookieIT extends MfaEmailOtpItSupport {
@@ -67,91 +53,12 @@ class OAuthLoginRefreshCookieIT extends MfaEmailOtpItSupport {
     private static final String UA = "OAuthRefreshCookieIT/1.0";
     private static final String FAIL_PREFIX = "fail~";
 
-    private static final HttpServer FAKE_PROVIDERS = startFakeProviders();
-
     @Autowired
     private OAuthAccountRepository oauthAccountRepository;
     @Autowired
     private OAuthLinkTokenRepository oauthLinkTokenRepository;
 
     private final List<Long> oauthUserIds = new CopyOnWriteArrayList<>();
-
-    // ─────────────────────────────────────────────────────────────
-    // 偽 OAuth プロバイダ（OAuthMfaLoginIT と同方式）
-    // ─────────────────────────────────────────────────────────────
-
-    private static HttpServer startFakeProviders() {
-        try {
-            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            server.createContext("/google/token", ex -> {
-                String code = codeOf(ex);
-                if (code.startsWith(FAIL_PREFIX)) {
-                    respond(ex, 400, "{\"error\":\"invalid_grant\"}");
-                    return;
-                }
-                respond(ex, 200, "{\"access_token\":\"" + code + "\"}");
-            });
-            server.createContext("/google/userinfo", ex -> {
-                String[] subEmail = splitCode(ex.getRequestHeaders().getFirst("Authorization").substring("Bearer ".length()));
-                respond(ex, 200, "{\"sub\":\"" + subEmail[0] + "\",\"email\":\"" + subEmail[1]
-                        + "\",\"given_name\":\"Taro\",\"family_name\":\"Yamada\",\"name\":\"oauth-refresh-it\"}");
-            });
-            server.createContext("/line/token", ex -> respond(ex, 200,
-                    "{\"access_token\":\"fake-at\",\"id_token\":\"" + idToken(codeOf(ex)) + "\"}"));
-            server.createContext("/apple/token", ex -> respond(ex, 200,
-                    "{\"id_token\":\"" + idToken(codeOf(ex)) + "\"}"));
-            server.start();
-            return server;
-        } catch (IOException e) {
-            throw new IllegalStateException("偽 OAuth プロバイダの起動に失敗しました", e);
-        }
-    }
-
-    private static String codeOf(HttpExchange ex) throws IOException {
-        String form = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        for (String pair : form.split("&")) {
-            if (pair.startsWith("code=")) {
-                return URLDecoder.decode(pair.substring("code=".length()), StandardCharsets.UTF_8);
-            }
-        }
-        throw new IllegalStateException("code が送られていない: " + form);
-    }
-
-    private static String[] splitCode(String code) {
-        return code.split("~", 2);
-    }
-
-    /** 署名なしの偽 id_token を実行時に組み立てる（トークン風リテラルを書かない）。 */
-    private static String idToken(String code) {
-        String[] subEmail = splitCode(code);
-        String payload = "{\"sub\":\"" + subEmail[0] + "\",\"email\":\"" + subEmail[1] + "\",\"name\":\"oauth-refresh-it\"}";
-        Base64.Encoder enc = Base64.getUrlEncoder().withoutPadding();
-        return enc.encodeToString("{\"alg\":\"none\"}".getBytes(StandardCharsets.UTF_8))
-                + "." + enc.encodeToString(payload.getBytes(StandardCharsets.UTF_8)) + ".sig";
-    }
-
-    private static void respond(HttpExchange ex, int status, String json) throws IOException {
-        byte[] body = json.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().add("Content-Type", "application/json");
-        ex.sendResponseHeaders(status, body.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            os.write(body);
-        }
-    }
-
-    @DynamicPropertySource
-    static void configureFakeProviders(DynamicPropertyRegistry registry) {
-        String base = "http://127.0.0.1:" + FAKE_PROVIDERS.getAddress().getPort();
-        registry.add("mannschaft.google.token-uri", () -> base + "/google/token");
-        registry.add("mannschaft.google.userinfo-uri", () -> base + "/google/userinfo");
-        registry.add("mannschaft.line.token-uri", () -> base + "/line/token");
-        registry.add("mannschaft.apple.token-uri", () -> base + "/apple/token");
-    }
-
-    @AfterAll
-    static void stopFakeProviders() {
-        FAKE_PROVIDERS.stop(0);
-    }
 
     @AfterEach
     void cleanUpOAuthRows() {
