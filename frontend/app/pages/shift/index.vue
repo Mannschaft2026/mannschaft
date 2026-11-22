@@ -152,7 +152,58 @@ const createForm = ref<CreateForm>({
   note: '',
 })
 
+// 締切 DatePicker の手入力検証（不正入力は黙って空にせず、エラー表示して送信を止める）
+const deadlineInvalid = ref(false)
+// カレンダー選択直前の値（日付だけ選んだ初回かを判定する）
+let deadlineBeforeSelect: Date | null = null
+const DEADLINE_TEXT = /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/
+
+/** 手入力文字列が実在する日時なら true（空は「締切なし」で有効）。 */
+function isValidDeadlineText(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed === '') return true
+  const m = DEADLINE_TEXT.exec(trimmed)
+  if (!m) return false
+  const [y, mo, d, h, mi] = [m[1], m[2], m[3], m[4] ?? '0', m[5] ?? '0'].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
+  if (h > 23 || mi > 59) return false
+  const date = new Date(y, mo - 1, d, h, mi)
+  return date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d
+}
+
+function onDeadlineTextInput(text: string) {
+  deadlineInvalid.value = !isValidDeadlineText(text)
+}
+
+function onDeadlineInput(event: Event) {
+  onDeadlineTextInput((event.target as HTMLInputElement | null)?.value ?? '')
+}
+
+function onDeadlineBlur(event: { value?: string }) {
+  onDeadlineTextInput(event.value ?? '')
+}
+
+function onDeadlineUpdate(value: Date | Date[] | (Date | null)[] | null | undefined) {
+  deadlineBeforeSelect = createForm.value.requestDeadline
+  createForm.value.requestDeadline = value instanceof Date ? value : null
+  deadlineInvalid.value = false
+}
+
+/** 日付だけ選んだ初回は、現在時刻ではなくその日の終わり（23:59）を既定にする。 */
+function onDeadlineDateSelect(value: Date) {
+  if (deadlineBeforeSelect === null && value instanceof Date) {
+    const d = new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59)
+    createForm.value.requestDeadline = d
+  }
+}
+
 async function handleCreate() {
+  if (deadlineInvalid.value) return
   if (
     !selectedTeamId.value ||
     !createForm.value.title ||
@@ -176,6 +227,7 @@ async function handleCreate() {
     success(t('shift.index.createSuccess'))
     showCreateDialog.value = false
     createForm.value = { title: '', startDate: '', endDate: '', requestDeadline: null, note: '' }
+    deadlineInvalid.value = false
     await load()
   } catch (error) {
     handleApiError(error)
@@ -302,13 +354,21 @@ function openDetail(scheduleId: number) {
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formDeadline') }}</label>
           <DatePicker
-            v-model="createForm.requestDeadline"
+            :model-value="createForm.requestDeadline"
             date-format="yy/mm/dd"
             show-time
             hour-format="24"
             class="w-full"
             input-class="min-h-11 text-base"
+            :invalid="deadlineInvalid"
+            @update:model-value="onDeadlineUpdate"
+            @date-select="onDeadlineDateSelect"
+            @input="onDeadlineInput"
+            @blur="onDeadlineBlur"
           />
+          <small v-if="deadlineInvalid" class="mt-1 block text-sm text-red-600" role="alert">{{
+            t('shift.index.formDeadlineInvalid')
+          }}</small>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formNote') }}</label>

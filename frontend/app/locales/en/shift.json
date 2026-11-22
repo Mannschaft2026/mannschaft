@@ -147,6 +147,7 @@
       "formStart": "Start date",
       "formEnd": "End date",
       "formDeadline": "Request deadline",
+      "formDeadlineInvalid": "Enter a valid date and time for the request deadline, e.g. 2026/12/31 23:59",
       "formNote": "Note",
       "formNotePlaceholder": "Optional"
     },

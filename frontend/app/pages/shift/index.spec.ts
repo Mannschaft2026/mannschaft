@@ -79,6 +79,31 @@ describe('シフト新規作成のAPI契約', () => {
     )
     expect(vm.createForm.requestDeadline).toBeNull()
   })
+  it('不正な締切入力はエラーを表示し、作成を送信しない', async () => {
+    const { wrapper, vm } = await mountPage()
+    const picker = wrapper.findComponent({ name: 'DatePicker' })
+    for (const text of ['2026/12/31 24:00', '2026/02/30']) {
+      picker.vm.$emit('blur', { value: text })
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+      await vm.handleCreate()
+      expect(createSchedule).not.toHaveBeenCalled()
+    }
+    picker.vm.$emit('blur', { value: '2026/12/31 23:59' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await vm.handleCreate()
+    expect(createSchedule).toHaveBeenCalledTimes(1)
+  })
+  it('日付だけ選ぶと時刻は23:59になる', async () => {
+    const { wrapper, vm } = await mountPage()
+    const picker = wrapper.findComponent({ name: 'DatePicker' })
+    const picked = new Date(2026, 11, 31, 9, 17)
+    picker.vm.$emit('update:modelValue', picked)
+    picker.vm.$emit('date-select', picked)
+    await wrapper.vm.$nextTick()
+    expect(vm.createForm.requestDeadline).toEqual(new Date(2026, 11, 31, 23, 59))
+  })
   it('任意締切が未入力ならJSON payloadから省略される', async () => {
     const { vm } = await mountPage()
     vm.createForm.requestDeadline = null
