@@ -119,7 +119,8 @@
       "error": "Monatsabschluss fehlgeschlagen",
       "period": "Zielperiode",
       "periodHint": "Nur beendete Perioden können ausgewählt werden",
-      "periodLoadError": "Die Abschlussperioden konnten nicht geladen werden"
+      "periodLoadError": "Die Abschlussperioden konnten nicht geladen werden",
+      "organizationMismatch": "Die Organisation wurde gewechselt, daher wurde der Abschluss nicht ausgeführt. Bitte prüfen Sie den Zeitraum der aktuellen Organisation erneut"
     },
     "nav": {
       "menuLabel": "Schichtbudget",

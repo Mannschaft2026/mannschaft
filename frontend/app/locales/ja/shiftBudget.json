@@ -136,7 +136,8 @@
       "error": "月次締めに失敗しました",
       "period": "対象期間",
       "periodHint": "終了日を迎えた期間のみ選べます",
-      "periodLoadError": "締め期間の取得に失敗しました"
+      "periodLoadError": "締め期間の取得に失敗しました",
+      "organizationMismatch": "組織が切り替わったため締めを実行しませんでした。現在の組織で期間を確認し直してください"
     },
     "failedEvent": {
       "title": "失敗イベント管理",

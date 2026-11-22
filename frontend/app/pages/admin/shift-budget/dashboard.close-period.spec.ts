@@ -304,3 +304,119 @@ describe('CMP-260909-2152 Codex 検分3 P2-1 締め結果の失敗件数を通�
     expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(false)
   })
 })
+
+/**
+ * CMP-260909-2152 α Codex 検分 P2: 締めダイアログを開いたまま組織を切り替えると、旧組織の期間一覧・選択・期間表示が残り、
+ * executeMonthlyClose が現在（新）組織を使うため、旧組織の期間を確認した操作で新組織を締めてしまう。
+ * - 組織変更時にダイアログと選択を破棄する。
+ * - 期間一覧の応答は取得元組織とリクエスト世代が現在と一致するときだけ反映する（旧応答を反映しない）。
+ * - 締め実行時、ダイアログが表示している期間の取得元組織と現在の組織が一致しなければ close API を呼ばない。
+ */
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => { resolve = r })
+  return { promise, resolve }
+}
+
+function periodsOfOrg20() {
+  return {
+    items: [
+      { period_key: '2026-10', period_start: '2026-10-01', period_end: '2026-10-31', closing_day: 0, ended: true },
+      { period_key: '2026-11', period_start: '2026-11-01', period_end: '2026-11-30', closing_day: 0, ended: false },
+    ],
+  }
+}
+
+async function openMonthlyCloseButton(wrapper: VueWrapper) {
+  const button = wrapper.findAll('button').find(b => b.text().includes('月次締め'))
+  expect(button, '月次締めボタン').toBeDefined()
+  await button!.trigger('click')
+  await flushPromises()
+}
+
+describe('CMP-260909-2152 α Codex 検分 P2 組織切替で締めダイアログの期間を持ち越さない', () => {
+  it('ダイアログを開いたまま組織を切り替えるとダイアログと選択を破棄し、close API を呼ばない', async () => {
+    const wrapper = await openDialog()
+    expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(true)
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    expect(wrapper.find('[data-testid="monthly-close-confirm"]').exists()).toBe(false)
+    expect(wrapper.findAllComponents(Select).some(c => c.attributes('data-testid') === 'monthly-close-period-select')).toBe(false)
+    expect(executeButton(wrapper)).toBeUndefined()
+    expect(executeMonthlyClose).not.toHaveBeenCalled()
+  })
+
+  it('切替後に新組織でダイアログを開き直すと、新組織の期間だけを出す（旧組織の選択を持ち越さない）', async () => {
+    const wrapper = await openDialog()
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    listClosePeriods.mockResolvedValue(periodsOfOrg20())
+    await openMonthlyCloseButton(wrapper)
+    expect(listClosePeriods).toHaveBeenLastCalledWith('20', expect.any(String), expect.any(String))
+    const options = periodSelect(wrapper).props('options') as { value: string, label: string }[]
+    expect(options.map(o => o.value)).toEqual(['2026-10', '2026-11'])
+    expect(periodSelect(wrapper).props('modelValue')).toBe('2026-10')
+    expect(wrapper.get('[data-testid="monthly-close-confirm"]').text()).toContain('2026-10-31')
+  })
+
+  it('期間一覧の取得中に組織を切り替えると、旧組織の応答を反映しない', async () => {
+    const pendingA = deferred<ReturnType<typeof periods>>()
+    listClosePeriods.mockReturnValueOnce(pendingA.promise)
+    const wrapper = await openDialog()
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    listClosePeriods.mockResolvedValueOnce(periodsOfOrg20())
+    await openMonthlyCloseButton(wrapper)
+    // 旧組織（10）の応答が後着する
+    pendingA.resolve(periods())
+    await flushPromises()
+    const options = periodSelect(wrapper).props('options') as { value: string }[]
+    expect(options.map(o => o.value)).toEqual(['2026-10', '2026-11'])
+    expect(periodSelect(wrapper).props('modelValue')).toBe('2026-10')
+    expect(wrapper.get('[data-testid="monthly-close-confirm"]').text()).toContain('2026-10-31')
+    expect(wrapper.get('[data-testid="monthly-close-confirm"]').text()).not.toContain('2026-11-17')
+  })
+
+  it('期間一覧の取得中に組織を切り替えると、旧組織の取得失敗も新組織の画面にエラーを出さない', async () => {
+    let rejectA!: (e: unknown) => void
+    listClosePeriods.mockReturnValueOnce(new Promise((_, reject) => { rejectA = reject }))
+    await openDialog()
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    rejectA(new Error('network'))
+    await flushPromises()
+    expect(notifyError).not.toHaveBeenCalled()
+  })
+
+  it('ダイアログが表示している期間の取得元組織と現在の組織が一致しなければ close API を呼ばない', async () => {
+    const wrapper = await openDialog()
+    const exec = executeButton(wrapper)
+    expect(exec).toBeDefined()
+    // 組織切替の watcher が走る前（同じ tick）に実行を押しても、旧組織の期間で新組織を締めない
+    scope.current = { type: 'organization', id: '20' }
+    await exec!.trigger('click')
+    await flushPromises()
+    expect(executeMonthlyClose).not.toHaveBeenCalled()
+    expect(notifyError).toHaveBeenCalledTimes(1)
+    expect(String(notifyError.mock.calls[0]![0])).toContain('組織')
+  })
+
+  it('割当一覧の取得中に組織を切り替えると、旧組織の応答で割当一覧を上書きしない', async () => {
+    const pendingA = deferred<{ items: unknown[], total: number, page: number, size: number }>()
+    listAllocations.mockReturnValueOnce(pendingA.promise)
+    const wrapper = await mountSuspended(Dashboard, { global: { stubs: { Dialog: InlineDialog } } })
+    listAllocations.mockResolvedValueOnce({
+      items: [{ id: 2002, period_start: '2026-11-01', period_end: '2026-11-30', allocated_amount: 100, consumed_amount: 10, currency: 'JPY' }],
+      total: 1, page: 0, size: 100,
+    })
+    scope.current = { type: 'organization', id: '20' }
+    await flushPromises()
+    pendingA.resolve({
+      items: [{ id: 1001, period_start: '2026-10-18', period_end: '2026-11-17', allocated_amount: 100, consumed_amount: 10, currency: 'JPY' }],
+      total: 1, page: 0, size: 100,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('2026-11-30')
+    expect(wrapper.text()).not.toContain('2026-11-17')
+  })
+})

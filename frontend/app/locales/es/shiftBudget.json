@@ -119,7 +119,8 @@
       "error": "Error en el cierre mensual",
       "period": "Período objetivo",
       "periodHint": "Solo se pueden seleccionar períodos ya finalizados",
-      "periodLoadError": "No se pudieron obtener los períodos de cierre"
+      "periodLoadError": "No se pudieron obtener los períodos de cierre",
+      "organizationMismatch": "Se cambió la organización, por lo que no se ejecutó el cierre. Revise de nuevo el período de la organización actual"
     },
     "nav": {
       "menuLabel": "Presupuesto de turnos",

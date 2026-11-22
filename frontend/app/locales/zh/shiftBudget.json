@@ -119,7 +119,8 @@
       "error": "月度结算失败",
       "period": "目标期间",
       "periodHint": "只能选择已结束的期间",
-      "periodLoadError": "获取结算期间失败"
+      "periodLoadError": "获取结算期间失败",
+      "organizationMismatch": "组织已切换，因此未执行结算。请在当前组织中重新确认期间"
     },
     "nav": {
       "menuLabel": "班次预算",

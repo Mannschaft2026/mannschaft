@@ -119,7 +119,8 @@
       "error": "Monthly closing failed",
       "period": "Target period",
       "periodHint": "Only periods that have ended can be selected",
-      "periodLoadError": "Failed to load closing periods"
+      "periodLoadError": "Failed to load closing periods",
+      "organizationMismatch": "The organization was switched, so the close was not executed. Please review the period for the current organization"
     },
     "nav": {
       "menuLabel": "Shift Budget",
