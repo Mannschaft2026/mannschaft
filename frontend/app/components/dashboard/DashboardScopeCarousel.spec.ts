@@ -212,4 +212,49 @@ describe('スコープbodyの初回選択と常設カルーセル', () => {
     expect(state.store.activePanel).toBe('PERSONAL')
     expectMountedOnce(['PERSONAL'])
   })
+  describe('タブの WAI-ARIA キーボード操作', () => {
+    const tab = (view: VueWrapper, panel: ActivePanel) => view.get(`[data-testid="scope-segment-${panel}"]`)
+    async function press(view: VueWrapper, from: ActivePanel, key: string) {
+      await tab(view, from).trigger('keydown', { key })
+      await flushPromises()
+    }
+
+    it('選択中のタブだけ tabindex=0、他は -1', async () => {
+      const view = await render('TEAM')
+      expect(tab(view, 'PERSONAL').attributes('tabindex')).toBe('-1')
+      expect(tab(view, 'TEAM').attributes('tabindex')).toBe('0')
+      expect(tab(view, 'ORGANIZATION').attributes('tabindex')).toBe('-1')
+    })
+
+    it('ArrowRight/ArrowLeft で選択とフォーカスが移り、端で循環する', async () => {
+      const view = await render('PERSONAL', true)
+      await press(view, 'PERSONAL', 'ArrowRight')
+      expect(tab(view, 'TEAM').attributes('aria-selected')).toBe('true')
+      expect(state.store.activePanel).toBe('TEAM')
+      await press(view, 'TEAM', 'ArrowLeft')
+      await press(view, 'PERSONAL', 'ArrowLeft')
+      expect(tab(view, 'ORGANIZATION').attributes('aria-selected')).toBe('true')
+      await press(view, 'ORGANIZATION', 'ArrowRight')
+      expect(tab(view, 'PERSONAL').attributes('aria-selected')).toBe('true')
+    })
+
+    it('Home/End で先頭・末尾へ移る', async () => {
+      const view = await render('TEAM', true)
+      await press(view, 'TEAM', 'End')
+      expect(tab(view, 'ORGANIZATION').attributes('aria-selected')).toBe('true')
+      await press(view, 'ORGANIZATION', 'Home')
+      expect(tab(view, 'PERSONAL').attributes('aria-selected')).toBe('true')
+      expect(tab(view, 'PERSONAL').attributes('tabindex')).toBe('0')
+    })
+
+    it('移動先のタブにフォーカスが当たる', async () => {
+      const view = await render('PERSONAL', true)
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      host.appendChild(view.element)
+      await press(view, 'PERSONAL', 'ArrowRight')
+      expect(document.activeElement).toBe(tab(view, 'TEAM').element)
+      host.remove()
+    })
+  })
 })
