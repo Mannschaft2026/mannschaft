@@ -17,6 +17,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import com.mannschaft.app.cms.service.BlogPostPublicationStatusService;
+import com.mannschaft.app.timeline.service.TimelinePostPublicationStatusService;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -52,6 +55,7 @@ import com.mannschaft.app.common.security.AccessGuard;
  * </p>
  */
 @WebMvcTest(AnnouncementFeedController.class)
+@Import(AnnouncementSourcePublicationGuard.class)
 @AutoConfigureMockMvc(addFilters = false)
 @DisplayName("AnnouncementFeedController 結合テスト")
 class AnnouncementFeedControllerTest {
@@ -79,9 +83,12 @@ class AnnouncementFeedControllerTest {
     @MockitoBean
     private AnnouncementScopedFeedVisibilityGuard visibilityGuard;
 
-    // お知らせ化の元コンテンツ公開状態の入口判定（N9。判定そのものは単体・IT で検証する）
+    // お知らせ化の元コンテンツ公開状態（N9）。入口判定の部品（AnnouncementSourcePublicationGuard）は本物を @Import し、
+    // 元ドメインへの問い合わせ（cms・timeline の Service）だけを差し替える（認可型の部品を mock にしない）。
     @MockitoBean
-    private AnnouncementSourcePublicationGuard publicationGuard;
+    private BlogPostPublicationStatusService blogPostPublicationStatusService;
+    @MockitoBean
+    private TimelinePostPublicationStatusService timelinePostPublicationStatusService;
 
     // JwtAuthenticationFilter の依存解決用
     @MockitoBean
@@ -106,6 +113,8 @@ class AnnouncementFeedControllerTest {
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(USER_ID.toString(), null, List.of());
         SecurityContextHolder.getContext().setAuthentication(auth);
+        // お知らせ化の元（SOURCE_ID のブログ記事）は公開済みとする。非公開の場合は個別のテストで上書きする。
+        given(blogPostPublicationStatusService.isPublished(SOURCE_ID)).willReturn(true);
     }
 
     // ── ヘルパー: テスト用エンティティ生成 ──
@@ -204,6 +213,20 @@ class AnnouncementFeedControllerTest {
     class CreateAnnouncement {
 
         @Test
+        @DisplayName("異常系: 元が下書き等（公開済みでない）→ 404 ANNOUNCE_006。お知らせ化の Service には進まない（N9）")
+        void createAnnouncement_元が非公開_404() throws Exception {
+            given(blogPostPublicationStatusService.isPublished(SOURCE_ID)).willReturn(false);
+
+            mockMvc.perform(post("/api/v1/teams/{teamId}/announcements", TEAM_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"sourceType\": \"BLOG_POST\", \"sourceId\": %d}".formatted(SOURCE_ID)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_006"));
+
+            org.mockito.Mockito.verifyNoInteractions(announcementFeedService);
+        }
+
+        @Test
         @DisplayName("正常系: 201 Created + sourceType/sourceId が処理されること")
         void createAnnouncement_正常系_201() throws Exception {
             // Given
@@ -252,26 +275,6 @@ class AnnouncementFeedControllerTest {
                             .content(requestBody))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("ANNOUNCE_002"));
-        }
-    }
-
-    @Nested
-    @DisplayName("POST お知らせ化 — 元コンテンツが非公開（N9）")
-    class CreateAnnouncementUnpublishedSource {
-
-        @Test
-        @DisplayName("異常系: 元が下書き等（Guard が ANNOUNCE_006）→ 404。お知らせ化の Service には進まない")
-        void createAnnouncement_元が非公開_404() throws Exception {
-            willThrow(new BusinessException(AnnouncementErrorCode.ANNOUNCE_006))
-                    .given(publicationGuard).assertPublished(AnnouncementSourceType.BLOG_POST, SOURCE_ID);
-
-            mockMvc.perform(post("/api/v1/teams/{teamId}/announcements", TEAM_ID)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"sourceType\": \"BLOG_POST\", \"sourceId\": %d}".formatted(SOURCE_ID)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_006"));
-
-            org.mockito.Mockito.verifyNoInteractions(announcementFeedService);
         }
     }
 

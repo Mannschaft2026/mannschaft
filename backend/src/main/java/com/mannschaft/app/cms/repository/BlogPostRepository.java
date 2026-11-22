@@ -30,6 +30,10 @@ public interface BlogPostRepository extends JpaRepository<BlogPostEntity, Long> 
     /** 指定状態の未削除記事が存在するか（{@code BlogPostPublicationStatusService} 用）。 */
     boolean existsByIdAndStatus(Long id, PostStatus status);
 
+    /** 指定 ID のうち、指定状態の未削除記事の ID（{@code BlogPostPublicationStatusService} の一括判定用）。 */
+    @Query("SELECT p.id FROM BlogPostEntity p WHERE p.id IN :ids AND p.status = :status")
+    List<Long> findIdsByIdInAndStatus(@Param("ids") Collection<Long> ids, @Param("status") PostStatus status);
+
     boolean existsByIdAndOrganizationId(Long id, Long organizationId);
 
     String SEARCH_BY_TEAM = "SELECT * FROM blog_posts WHERE team_id = :teamId AND MATCH(title, body) AGAINST(:keyword IN BOOLEAN MODE) AND deleted_at IS NULL";

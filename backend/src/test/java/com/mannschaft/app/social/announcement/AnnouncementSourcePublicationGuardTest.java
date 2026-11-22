@@ -61,4 +61,27 @@ class AnnouncementSourcePublicationGuardTest {
     void otherTypesUntouched() {
         assertThatCode(() -> guard.assertPublished(AnnouncementSourceType.SURVEY, ID)).doesNotThrowAnyException();
     }
+
+    @Test
+    @DisplayName("ソース種別 null は公開済みではない（fail-closed）")
+    void nullTypeIsNotPublished() {
+        assertThat(guard.isPublished(null, ID)).isFalse();
+    }
+
+    @Test
+    @DisplayName("一括判定: 種別ごとに 1 回ずつ問い合わせ、公開済みの元を持つ要素だけを順序どおり残す")
+    void retainPublished() {
+        record Row(AnnouncementSourceType type, Long sourceId) { }
+        Row blogOk = new Row(AnnouncementSourceType.BLOG_POST, 1L);
+        Row blogNg = new Row(AnnouncementSourceType.BLOG_POST, 2L);
+        Row tlOk = new Row(AnnouncementSourceType.TIMELINE_POST, 1L);
+        Row tlNg = new Row(AnnouncementSourceType.TIMELINE_POST, 3L);
+        Row survey = new Row(AnnouncementSourceType.SURVEY, 9L);
+        Row nullType = new Row(null, 1L);
+        given(blogStatus.findPublishedIds(java.util.List.of(1L, 2L))).willReturn(java.util.Set.of(1L));
+        given(timelineStatus.findPublishedIds(java.util.List.of(1L, 3L))).willReturn(java.util.Set.of(1L));
+
+        assertThat(guard.retainPublished(java.util.List.of(blogOk, blogNg, tlOk, tlNg, survey, nullType),
+                Row::type, Row::sourceId)).containsExactly(blogOk, tlOk, survey);
+    }
 }

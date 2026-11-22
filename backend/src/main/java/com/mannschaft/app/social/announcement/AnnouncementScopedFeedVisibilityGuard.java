@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
  *   <li>パスのスコープ（チーム / 組織）に帰属している（他スコープのお知らせを自スコープの URL 経由で操作させない）</li>
  *   <li>要求者がそのお知らせを閲覧できる（既読と同じ基準。課金 HIDDEN・未知の visibility は不可視。
  *       {@link AnnouncementReadCommandService#isReadableInScope}）</li>
+ *   <li>元コンテンツがブログ記事・タイムライン投稿なら、公開済みの元が存在する（N9。下書きに戻した・論理削除した元の
+ *       お知らせを ID 指定でピン留めし、タイトル・抜粋を含む応答を受け取ることを防ぐ。{@link AnnouncementSourcePublicationGuard}）</li>
  * </ol>
  * <p>閲覧資格がある者の著者・ADMIN 判定と、権限不足の 403 {@link AnnouncementErrorCode#ANNOUNCE_002} は
  * {@link AnnouncementFeedService} に委ねる（閲覧できる者には存在情報が新たに漏れない）。</p>

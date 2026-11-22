@@ -6,6 +6,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * タイムライン投稿の公開状態を他ドメインへ答える窓口（ドメイン境界の Service 経由の参照）。
  *
@@ -22,5 +26,16 @@ public class TimelinePostPublicationStatusService {
     @Transactional(readOnly = true)
     public boolean isPublished(Long postId) {
         return postId != null && timelinePostRepository.existsByIdAndStatus(postId, PostStatus.PUBLISHED);
+    }
+
+    /**
+     * 指定 ID のうち、未削除で {@code status = PUBLISHED} のものの ID 集合（一括判定。存在しない ID は含まない）。
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> findPublishedIds(Collection<Long> postIds) {
+        if (postIds == null || postIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(timelinePostRepository.findIdsByIdInAndStatus(postIds, PostStatus.PUBLISHED));
     }
 }

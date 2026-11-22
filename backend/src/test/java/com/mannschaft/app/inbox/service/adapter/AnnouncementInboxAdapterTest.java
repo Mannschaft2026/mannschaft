@@ -70,16 +70,20 @@ class AnnouncementInboxAdapterTest {
             mock(AnnouncementReadStatusRepository.class);
     private final InboxPriorityNormalizer normalizer = new InboxPriorityNormalizer();
     private final PaymentGateService paymentGateService = mock(PaymentGateService.class);
+    /** 元コンテンツの公開状態（N9）。本テストの関心外なので「公開済み」とする（判定は IT で検証する）。 */
+    private final com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard sourcePublication =
+            mock(com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard.class);
     @org.mockito.Captor
     private org.mockito.ArgumentCaptor<List<Long>> historyChunks;
 
     private final AnnouncementInboxAdapter adapter = new AnnouncementInboxAdapter(
             membershipScopeQueryService, roleResolver, feedQueryRepository, feedRepository,
             readStatusRepository, normalizer,
-            new com.mannschaft.app.inbox.service.InboxDedupeKeyResolver(), paymentGateService);
+            new com.mannschaft.app.inbox.service.InboxDedupeKeyResolver(), paymentGateService, sourcePublication);
 
     @BeforeEach
     void 既存表示認可契約は履歴候補を元scope全件として通す() {
+        org.mockito.Mockito.lenient().when(sourcePublication.isPublished(any(), any())).thenReturn(true);
         given(feedQueryRepository.findScopeIdsWithHistory(any(), any()))
                 .willAnswer(invocation -> invocation.getArgument(1));
     }

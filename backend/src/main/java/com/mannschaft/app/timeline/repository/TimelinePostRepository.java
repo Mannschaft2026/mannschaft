@@ -19,6 +19,11 @@ public interface TimelinePostRepository extends JpaRepository<TimelinePostEntity
     /** 指定状態の未削除投稿が存在するか（{@code TimelinePostPublicationStatusService} 用）。 */
     boolean existsByIdAndStatus(Long id, com.mannschaft.app.timeline.PostStatus status);
 
+    /** 指定 ID のうち、指定状態の未削除投稿の ID（{@code TimelinePostPublicationStatusService} の一括判定用）。 */
+    @Query("SELECT p.id FROM TimelinePostEntity p WHERE p.id IN :ids AND p.status = :status")
+    List<Long> findIdsByIdInAndStatus(@Param("ids") java.util.Collection<Long> ids,
+                                      @Param("status") com.mannschaft.app.timeline.PostStatus status);
+
     /**
      * F17.2 Wave2 ①: 村行事のシステム自動投稿の冪等判定（設計書 §3.7）。
      *
