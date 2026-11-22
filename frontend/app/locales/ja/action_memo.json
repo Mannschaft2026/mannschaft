@@ -58,7 +58,9 @@
       "submit": "記録する",
       "draft_saved": "下書きを自動保存しました",
       "char_count": "{count} / 5000",
-      "shift_enter_hint": "Enterで送信 / Shift+Enterで改行"
+      "shift_enter_hint": "Enterで送信 / Shift+Enterで改行",
+      "publish_failed": "メモは保存しましたが、チームへの投稿に失敗しました。もう一度「記録する」を押すと投稿だけ再試行します",
+      "publish_giveup": "投稿せず閉じる"
     },
     "card": {
       "edit": "編集",
@@ -122,7 +124,8 @@
       "future_date": "未来の日付には書けません",
       "todo_not_found": "紐付けようとした TODO が見つかりません",
       "load_failed": "メモの取得に失敗しました",
-      "save_failed": "メモの保存に失敗しました"
+      "save_failed": "メモの保存に失敗しました",
+      "publish_failed": "チームへの投稿に失敗しました"
     },
     "dialog": {
       "title": "メモを編集",
