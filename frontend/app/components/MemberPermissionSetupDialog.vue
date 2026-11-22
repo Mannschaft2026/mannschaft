@@ -89,8 +89,11 @@ async function save(): Promise<void> {
  * ページ内の「メニュー」ボタン、無ければ main の先頭へ移す。
  */
 function restoreFocusAfterClose(): void {
-  const target = document.querySelector<HTMLElement>('[data-testid="scope-sidebar-toggle"]')
-    ?? document.querySelector<HTMLElement>('main')
+  // モバイル専用ボタンはデスクトップ幅では非表示のため、可視のときだけ復帰先にする
+  const toggle = document.querySelector<HTMLElement>('[data-testid="scope-sidebar-toggle"]')
+  const target = toggle && isElementVisible(toggle)
+    ? toggle
+    : document.querySelector<HTMLElement>('main')
   if (!target) return
   if (!target.matches('button, a[href], input, select, textarea, [tabindex]')) target.setAttribute('tabindex', '-1')
   target.focus()

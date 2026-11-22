@@ -100,4 +100,13 @@ describe('ScopeNavDropdown キーボード操作', () => {
     expect(document.querySelector('[role="menu"]')).toBeNull()
     expect(document.activeElement).toBe(document.querySelector('[data-testid="scope-nav-dropdown-toggle-TEAM"]'))
   })
+
+  it('display:none の項目は矢印キー移動の対象から除外される', async () => {
+    await openMenu()
+    const list = items()
+    list[1]!.style.display = 'none'
+    await press('ArrowDown')
+    expect(document.activeElement).toBe(list[2] ?? list[0])
+    expect(document.activeElement).not.toBe(list[1])
+  })
 })

@@ -165,6 +165,22 @@ describe('MemberPermissionSetupDialog フォーカス管理', () => {
     toggle.remove()
   })
 
+  it('scope-sidebar-toggle が非表示（display:none）なら main にフォーカスが移る', async () => {
+    const toggle = document.createElement('button')
+    toggle.setAttribute('data-testid', 'scope-sidebar-toggle')
+    toggle.style.display = 'none'
+    const main = document.createElement('main')
+    document.body.appendChild(toggle)
+    document.body.appendChild(main)
+    const wrapper = await mountWithSlots()
+    ;(wrapper.vm as unknown as { dismiss: () => void }).dismiss()
+    await flushPromises()
+    expect(document.activeElement).toBe(main)
+    wrapper.unmount()
+    toggle.remove()
+    main.remove()
+  })
+
   it('メニューボタンが無ければ main にフォーカスが移る', async () => {
     const main = document.createElement('main')
     document.body.appendChild(main)

@@ -181,6 +181,7 @@ async function ensureFoldersLoaded() {
 /** メニュー内のフォーカス可能な menuitem を DOM 順で返す。 */
 function menuItems(): HTMLElement[] {
   return Array.from(menuEl.value?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? [])
+    .filter(isElementVisible)
 }
 
 /**
