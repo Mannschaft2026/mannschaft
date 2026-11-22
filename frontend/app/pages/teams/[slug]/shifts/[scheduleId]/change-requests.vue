@@ -35,8 +35,13 @@ async function onSubmitted(): Promise<void> {
   await fetchRequests()
 }
 
-async function onReview(id: number, decision: 'ACCEPTED' | 'REJECTED'): Promise<void> {
-  await review(id, decision)
+async function onReview(
+  id: number,
+  decision: 'ACCEPTED' | 'REJECTED',
+  comment: string | undefined,
+  version: number,
+): Promise<void> {
+  await review(id, decision, comment, version)
 }
 
 async function onWithdraw(id: number): Promise<void> {

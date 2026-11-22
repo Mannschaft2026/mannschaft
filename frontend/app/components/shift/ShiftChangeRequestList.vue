@@ -11,14 +11,14 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  review: [id: number, decision: 'ACCEPTED' | 'REJECTED']
+  review: [id: number, decision: 'ACCEPTED' | 'REJECTED', comment: string | undefined, version: number]
   withdraw: [id: number]
 }>()
 
 const { t } = useI18n()
 
 const reviewDialogVisible = ref(false)
-const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED' } | null>(null)
+const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED'; version: number } | null>(null)
 const reviewComment = ref('')
 
 function memberName(userId: number): string {
@@ -49,15 +49,21 @@ function typeLabel(type: string): string {
   return t(`shift.changeRequest.type.${type}`)
 }
 
-function openReviewDialog(id: number, decision: 'ACCEPTED' | 'REJECTED'): void {
-  reviewTarget.value = { id, decision }
+function openReviewDialog(data: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'): void {
+  reviewTarget.value = { id: data.id, decision, version: data.version ?? 0 }
   reviewComment.value = ''
   reviewDialogVisible.value = true
 }
 
 function confirmReview(): void {
   if (!reviewTarget.value) return
-  emit('review', reviewTarget.value.id, reviewTarget.value.decision)
+  emit(
+    'review',
+    reviewTarget.value.id,
+    reviewTarget.value.decision,
+    reviewComment.value.trim() || undefined,
+    reviewTarget.value.version,
+  )
   reviewDialogVisible.value = false
 }
 </script>
@@ -76,6 +82,7 @@ function confirmReview(): void {
       :value="requests"
       :rows="10"
       paginator
+      scrollable
       striped-rows
       class="text-sm"
     >
@@ -117,13 +124,13 @@ function confirmReview(): void {
                 :label="$t('shift.changeRequest.approve')"
                 severity="success"
                 size="small"
-                @click="openReviewDialog(data.id, 'ACCEPTED')"
+                @click="openReviewDialog(data, 'ACCEPTED')"
               />
               <Button
                 :label="$t('shift.changeRequest.reject')"
                 severity="danger"
                 size="small"
-                @click="openReviewDialog(data.id, 'REJECTED')"
+                @click="openReviewDialog(data, 'REJECTED')"
               />
             </template>
 

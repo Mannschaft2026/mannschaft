@@ -124,6 +124,26 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     })
   })
 
+  it('審査ダイアログのコメントと対象依頼の version を review に渡す', async () => {
+    rows = [{ ...request(), version: 3 }]
+    renderPage()
+    await flushPromises()
+    await reviewButtons()[0]!.trigger('click')
+    wrapper!.getComponent('[data-testid="review-dialog"] textarea-stub, textarea-stub').vm.$emit('update:modelValue', '承認します')
+    await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
+    await flushPromises()
+    expect(mocks.api).toHaveBeenCalledWith('/api/v1/shifts/change-requests/7/review', {
+      method: 'PATCH', body: { decision: 'ACCEPTED', reviewComment: '承認します', version: 3 },
+    })
+  })
+
+  it('390px のカードで操作列に届くよう DataTable は横スクロール可能', async () => {
+    renderPage()
+    await flushPromises()
+    const table = wrapper!.findComponent(DataTable)
+    expect(table.props('scrollable')).toBe(true)
+  })
+
   it('AC2 DEPUTY_ADMINも審査ボタンを表示する', async () => {
     role = 'DEPUTY_ADMIN'
     renderPage()

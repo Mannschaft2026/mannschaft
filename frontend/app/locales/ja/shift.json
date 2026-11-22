@@ -391,7 +391,14 @@
       "reject": "却下",
       "reviewComment": "審査コメント",
       "openCallLimit": "オープンコールは月3件まで",
-      "fetchError": "変更依頼の取得に失敗しました"
+      "fetchError": "変更依頼の取得に失敗しました",
+      "submitted": "依頼しました",
+      "approved": "承認しました",
+      "rejected": "却下しました",
+      "withdrawn": "取り下げました",
+      "submitError": "変更依頼に失敗しました",
+      "reviewError": "審査に失敗しました",
+      "withdrawError": "取り下げに失敗しました"
     },
     "pdf": {
       "teamLayout": "チーム全体表 PDF",

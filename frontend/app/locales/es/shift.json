@@ -73,7 +73,14 @@
       "reject": "Rechazar",
       "reviewComment": "Comentario de revisión",
       "openCallLimit": "Las convocatorias abiertas están limitadas a 3 por mes",
-      "fetchError": "Error al obtener las solicitudes de cambio"
+      "fetchError": "Error al obtener las solicitudes de cambio",
+      "submitted": "Solicitud de cambio enviada",
+      "approved": "Solicitud aprobada",
+      "rejected": "Solicitud rechazada",
+      "withdrawn": "Solicitud retirada",
+      "submitError": "No se pudo enviar la solicitud de cambio",
+      "reviewError": "No se pudo revisar la solicitud",
+      "withdrawError": "No se pudo retirar la solicitud"
     },
     "pdf": {
       "teamLayout": "PDF del horario del equipo",

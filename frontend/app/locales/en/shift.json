@@ -73,7 +73,14 @@
       "reject": "Reject",
       "reviewComment": "Review Comment",
       "openCallLimit": "Open calls are limited to 3 per month",
-      "fetchError": "Failed to fetch change requests"
+      "fetchError": "Failed to fetch change requests",
+      "submitted": "Change request submitted",
+      "approved": "Request approved",
+      "rejected": "Request rejected",
+      "withdrawn": "Request withdrawn",
+      "submitError": "Failed to submit change request",
+      "reviewError": "Failed to review change request",
+      "withdrawError": "Failed to withdraw change request"
     },
     "pdf": {
       "teamLayout": "Team Schedule PDF",

@@ -492,6 +492,8 @@ export interface ChangeRequest {
     expiresAt: string | null
     createdAt: string
   }
+  /** 楽観ロック用バージョン（BE のレスポンスが返す場合のみ。未返却なら 0 で審査する） */
+  version?: number
 }
 
 export interface CreateChangeRequestPayload {

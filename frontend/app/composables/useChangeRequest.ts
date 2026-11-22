@@ -36,9 +36,9 @@ export function useChangeRequest(scheduleId: Ref<number>) {
     try {
       const created = await shiftApi.createChangeRequest(payload)
       requests.value.unshift(created)
-      showSuccess(t('shift.changeRequest.submit'))
+      showSuccess(t('shift.changeRequest.submitted'))
     } catch {
-      showError(t('shift.changeRequest.fetchError'))
+      showError(t('shift.changeRequest.submitError'))
       throw new Error('createRequest failed')
     }
   }
@@ -62,11 +62,11 @@ export function useChangeRequest(scheduleId: Ref<number>) {
       }
       showSuccess(
         decision === 'ACCEPTED'
-          ? t('shift.changeRequest.approve')
-          : t('shift.changeRequest.reject'),
+          ? t('shift.changeRequest.approved')
+          : t('shift.changeRequest.rejected'),
       )
     } catch {
-      showError(t('shift.changeRequest.fetchError'))
+      showError(t('shift.changeRequest.reviewError'))
       throw new Error('review failed')
     }
   }
@@ -83,9 +83,9 @@ export function useChangeRequest(scheduleId: Ref<number>) {
           reviewInfo: { ...target.reviewInfo, status: 'WITHDRAWN' },
         }
       }
-      showSuccess(t('shift.changeRequest.withdraw'))
+      showSuccess(t('shift.changeRequest.withdrawn'))
     } catch {
-      showError(t('shift.changeRequest.fetchError'))
+      showError(t('shift.changeRequest.withdrawError'))
       throw new Error('withdraw failed')
     }
   }

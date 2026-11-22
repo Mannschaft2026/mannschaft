@@ -73,7 +73,14 @@
       "reject": "거절",
       "reviewComment": "심사 코멘트",
       "openCallLimit": "오픈 콜은 월 3건까지",
-      "fetchError": "변경 요청 조회에 실패했습니다"
+      "fetchError": "변경 요청 조회에 실패했습니다",
+      "submitted": "변경 요청을 제출했습니다",
+      "approved": "승인했습니다",
+      "rejected": "거절했습니다",
+      "withdrawn": "철회했습니다",
+      "submitError": "변경 요청 제출에 실패했습니다",
+      "reviewError": "심사에 실패했습니다",
+      "withdrawError": "철회에 실패했습니다"
     },
     "pdf": {
       "teamLayout": "팀 전체 표 PDF",

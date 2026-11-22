@@ -73,7 +73,14 @@
       "reject": "Ablehnen",
       "reviewComment": "Prüfungskommentar",
       "openCallLimit": "Offene Ausschreibungen sind auf 3 pro Monat begrenzt",
-      "fetchError": "Fehler beim Abrufen der Änderungsanträge"
+      "fetchError": "Fehler beim Abrufen der Änderungsanträge",
+      "submitted": "Änderungsantrag gestellt",
+      "approved": "Antrag genehmigt",
+      "rejected": "Antrag abgelehnt",
+      "withdrawn": "Antrag zurückgezogen",
+      "submitError": "Änderungsantrag konnte nicht gestellt werden",
+      "reviewError": "Prüfung fehlgeschlagen",
+      "withdrawError": "Zurückziehen fehlgeschlagen"
     },
     "pdf": {
       "teamLayout": "Team-Schichtplan PDF",
