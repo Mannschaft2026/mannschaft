@@ -428,7 +428,26 @@
         "winPoints": "Puntos por victoria",
         "drawPoints": "Puntos por empate",
         "lossPoints": "Puntos por derrota"
-      }
+      },
+      "title": "Crear torneo",
+      "openButton": "Crear torneo",
+      "submit": "Crear",
+      "cancel": "Cancelar",
+      "success": "Torneo creado",
+      "namePlaceholder": "p. ej. Liga de primavera 2026",
+      "nameRequired": "Introduzca el nombre del torneo",
+      "seasonRequired": "Introduzca el año de la temporada"
+    },
+    "list": {
+      "title": "Torneos y ligas",
+      "empty": "No hay torneos",
+      "loadError": "No se pudo cargar la lista de torneos",
+      "scoreSummary": "V{win} E{draw} D{loss}"
+    },
+    "formats": {
+      "LEAGUE": "Liga",
+      "KNOCKOUT": "Eliminatoria",
+      "GROUP_KNOCKOUT": "Fase de grupos + eliminatoria"
     }
   },
   "dashboard_widgets": {

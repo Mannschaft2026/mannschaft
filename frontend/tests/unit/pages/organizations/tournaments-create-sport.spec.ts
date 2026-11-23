@@ -41,7 +41,7 @@ async function openCreateDialog() {
   await flushPromises()
   const openBtn = wrapper
     .findAllComponents({ name: 'Button' })
-    .find((b) => b.text().includes('大会を作成'))
+    .find((b) => b.attributes('data-testid') === 'create-open')
   expect(openBtn).toBeTruthy()
   await openBtn!.trigger('click')
   await flushPromises()
@@ -58,7 +58,7 @@ async function fillRequired(title: string) {
 function findCreateButton(wrapper: VueWrapper) {
   return wrapper
     .findAllComponents({ name: 'Button' })
-    .find((b) => b.text().includes('作成') && !b.text().includes('大会を作成'))
+    .find((b) => b.attributes('data-testid') === 'create-submit')
 }
 
 async function submit(wrapper: VueWrapper) {

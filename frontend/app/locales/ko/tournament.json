@@ -428,7 +428,26 @@
         "winPoints": "승점",
         "drawPoints": "무승부 점수",
         "lossPoints": "패점"
-      }
+      },
+      "title": "대회 만들기",
+      "openButton": "대회 만들기",
+      "submit": "만들기",
+      "cancel": "취소",
+      "success": "대회를 만들었습니다",
+      "namePlaceholder": "예: 2026년 봄 리그",
+      "nameRequired": "대회명을 입력해 주세요",
+      "seasonRequired": "시즌 연도를 입력해 주세요"
+    },
+    "list": {
+      "title": "대회・리그",
+      "empty": "대회가 없습니다",
+      "loadError": "대회 목록을 불러오지 못했습니다",
+      "scoreSummary": "승{win} 무{draw} 패{loss}"
+    },
+    "formats": {
+      "LEAGUE": "리그전",
+      "KNOCKOUT": "토너먼트",
+      "GROUP_KNOCKOUT": "그룹+토너먼트"
     }
   },
   "dashboard_widgets": {

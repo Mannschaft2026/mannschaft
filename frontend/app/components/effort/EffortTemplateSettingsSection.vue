@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EffortFieldSetting, EffortTemplateSettings } from '~/composables/useEffortTemplateSettingsApi'
-import { extractEffortFieldErrors } from '~/utils/effortFields'
+import { extractApiFieldErrors } from '~/utils/apiFieldErrors'
 import { classifyLoadError, getLoadErrorHttpStatus } from '~/utils/loadError'
 
 type Semantic = EffortFieldSetting['semantic']
@@ -180,7 +180,7 @@ async function save() {
     if (status === 409) {
       conflict.value = true
     } else if (status === 400) {
-      const errs = extractEffortFieldErrors(e)
+      const errs = extractApiFieldErrors(e)
       if (errs.length > 0) {
         fieldErrors.value = Object.fromEntries(errs.map((fe) => [fe.field, fe.message]))
       } else {

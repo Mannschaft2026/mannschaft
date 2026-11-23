@@ -428,7 +428,26 @@
         "winPoints": "Win points",
         "drawPoints": "Draw points",
         "lossPoints": "Loss points"
-      }
+      },
+      "title": "Create tournament",
+      "openButton": "Create tournament",
+      "submit": "Create",
+      "cancel": "Cancel",
+      "success": "Tournament created",
+      "namePlaceholder": "e.g. 2026 Spring League",
+      "nameRequired": "Enter a tournament name",
+      "seasonRequired": "Enter a season year"
+    },
+    "list": {
+      "title": "Tournaments & leagues",
+      "empty": "No tournaments",
+      "loadError": "Failed to load tournaments",
+      "scoreSummary": "W{win} D{draw} L{loss}"
+    },
+    "formats": {
+      "LEAGUE": "League",
+      "KNOCKOUT": "Knockout",
+      "GROUP_KNOCKOUT": "Group stage + knockout"
     }
   },
   "dashboard_widgets": {

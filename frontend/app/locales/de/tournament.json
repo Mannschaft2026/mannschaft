@@ -428,7 +428,26 @@
         "winPoints": "Punkte für Sieg",
         "drawPoints": "Punkte für Unentschieden",
         "lossPoints": "Punkte für Niederlage"
-      }
+      },
+      "title": "Turnier erstellen",
+      "openButton": "Turnier erstellen",
+      "submit": "Erstellen",
+      "cancel": "Abbrechen",
+      "success": "Turnier erstellt",
+      "namePlaceholder": "z. B. Frühjahrsliga 2026",
+      "nameRequired": "Turniernamen eingeben",
+      "seasonRequired": "Saisonjahr eingeben"
+    },
+    "list": {
+      "title": "Turniere & Ligen",
+      "empty": "Keine Turniere",
+      "loadError": "Turnierliste konnte nicht geladen werden",
+      "scoreSummary": "S{win} U{draw} N{loss}"
+    },
+    "formats": {
+      "LEAGUE": "Liga",
+      "KNOCKOUT": "K.-o.-Runde",
+      "GROUP_KNOCKOUT": "Gruppenphase + K.-o.-Runde"
     }
   },
   "dashboard_widgets": {
