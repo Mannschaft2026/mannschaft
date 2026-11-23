@@ -18,7 +18,9 @@ import java.time.Instant;
  * <p>承諾を「確保（claim）→ロール付与 → 確定」の短いトランザクションの連鎖に分けたため、使用回数の消費を
  * この1行と結び付け、補償（release）をちょうど1回に限る。状態遷移は {@code CLAIMED→GRANTED}
  * （確定）と {@code CLAIMED→RELEASED}（補償）のみで、いずれも native の条件付き UPDATE で行う
- * （本 Entity は INSERT 専用。状態を Entity 経由で書き換えない）。</p>
+ * （本 Entity は INSERT 専用。状態を Entity 経由で書き換えない）。
+ * {@code grantCommittedAt} は「この claim による付与がコミット済み」の印で、付与（T7）と同じトランザクションで立つ。
+ * 印のある claim は戻さず、印の無い claim は付与に使われていない（CMP-261107-1833）。</p>
  *
  * <p>{@code userId} は auth ドメインのため DB の FK を張らない。{@code tokenId} は同ドメインの
  * {@code invite_tokens} への FK（CASCADE なし）。</p>
@@ -42,6 +44,20 @@ public class InviteTokenClaimEntity extends UuidV7Entity {
 
     @Column(name = "status", nullable = false, length = 16, updatable = false)
     private String status;
+
+    /**
+     * この claim によるロール付与（T7）がコミットされた時刻（CMP-261107-1833）。legacy_grant_unknown_at も NULL なら未付与（旧データは付与されたか不明）。
+     * 付与と同じトランザクションで native の条件付き UPDATE が立てる。立っている claim は補償（release）しない。
+     */
+    @Column(name = "grant_committed_at", updatable = false)
+    private Instant grantCommittedAt;
+
+    /**
+     * 付与印の導入（V266）前から CLAIMED だった旧データの印。付与されたか不明なので自動では戻さない。
+     * 新しく作る claim では常に NULL（V266 の移行だけが立てる）。
+     */
+    @Column(name = "legacy_grant_unknown_at", updatable = false)
+    private Instant legacyGrantUnknownAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

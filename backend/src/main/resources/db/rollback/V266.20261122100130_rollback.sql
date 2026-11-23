@@ -1,0 +1,7 @@
+-- CMP-261107-1833 V266.20261122100130 ロールバック手順（手動実行用、Flyway 自動実行されない）
+-- 配置場所: db/rollback/ 配下は Flyway スキャン対象外であり、手動コピー＆実行のテンプレートとして使用する。
+-- ⚠ 巻き戻すと claim の「付与コミット済み」の印と旧データの印が失われ、共有中の claim を戻すか確定するかを
+--   判定できなくなる。アプリを V266 前の版へ戻してから実行すること。
+--
+-- ALTER TABLE invite_token_claims DROP CHECK chk_itc_grant_committed;
+-- ALTER TABLE invite_token_claims DROP COLUMN legacy_grant_unknown_at, DROP COLUMN grant_committed_at;
