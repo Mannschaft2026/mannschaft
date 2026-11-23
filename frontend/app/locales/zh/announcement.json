@@ -19,6 +19,10 @@
     "display_in_announcement_hint": "将在仪表板顶部的显眼位置显示。",
     "pin": "置顶",
     "unpin": "取消置顶",
+    "pin_titled": "置顶“{title}”",
+    "unpin_titled": "取消置顶“{title}”",
+    "remove_titled": "将“{title}”从公告中移除",
+    "pinned_status": "已置顶",
     "priority": {
       "URGENT": "紧急",
       "IMPORTANT": "重要",

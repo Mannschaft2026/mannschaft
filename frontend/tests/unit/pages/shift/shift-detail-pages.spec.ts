@@ -29,6 +29,9 @@ const mocks = vi.hoisted(() => ({
   handleApiError: vi.fn(),
 }))
 
+vi.mock('~/composables/team/useTeamMembers', () => ({
+  useTeamMembers: () => ({ getAllMembers: mocks.getAllMembers }),
+}))
 mockNuxtImport('useRoute', () => () => ({ params: { id: '10' }, path: '/shift/10' }))
 mockNuxtImport('useTeamStore', () => () => ({
   myTeams: [{ id: 12, slug: 'team-a', name: 'A', role: 'ADMIN' }],

@@ -30,9 +30,13 @@ const mocks = await vi.hoisted(async () => {
     loadPermissions: vi.fn(),
     isAdminOrDeputy: ref(false),
     handleApiError: vi.fn(),
+    getAllMembers: vi.fn(),
   }
 })
 
+vi.mock('~/composables/team/useTeamMembers', () => ({
+  useTeamMembers: () => ({ getAllMembers: mocks.getAllMembers }),
+}))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-a', scheduleId: '10' } }))
 mockNuxtImport('useShiftApi', () => () => ({
   getSchedule: mocks.getSchedule,
@@ -63,6 +67,7 @@ function schedule(status: ShiftScheduleResponse['status']['status'] = 'COLLECTIN
 function request(id: number, requestedBy: number): ChangeRequest {
   return {
     id,
+    version: 1,
     scheduleId: 10,
     slotId: null,
     requestInfo: { requestType: 'PRE_CONFIRM_EDIT', reason: '理由', requestedBy },
@@ -90,6 +95,7 @@ beforeEach(() => {
   mocks.getTeam.mockResolvedValue({ data: { numericId: 12 } })
   mocks.listChangeRequests.mockResolvedValue([request(1, 7), request(2, 5)])
   mocks.loadPermissions.mockResolvedValue({ ok: true })
+  mocks.getAllMembers.mockResolvedValue({ data: [] })
 })
 
 describe('change-requests.vue 審査ボタンの判定（AC-A1 / AC-A2）', () => {

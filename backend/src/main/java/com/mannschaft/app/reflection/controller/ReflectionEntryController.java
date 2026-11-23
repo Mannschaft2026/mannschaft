@@ -103,7 +103,14 @@ public class ReflectionEntryController {
         return ResponseEntity.ok(ApiResponse.of(result));
     }
 
-    /** ブログ輸出（§7 #13・元エントリ残存）。 */
+    /**
+     * ブログ輸出（§7 #13・元エントリ残存）。
+     *
+     * <p>応答の {@code scope.teamSlug} / {@code organizationSlug} は cms の {@code BlogPostScopeSlugResolver} を
+     * 通さないが、輸出先は常に個人ブログ（{@code ReflectionEntryService#exportToBlog} が teamId・organizationId を
+     * null で作成する）なので、両 slug が常に null であることが正しい。チーム・組織への輸出を足すときは
+     * slug の付与も併せて行うこと。</p>
+     */
     @PostMapping("/entries/{entryId}/export-to-blog")
     @Operation(summary = "ブログ輸出（元エントリ残存）")
     public ResponseEntity<ApiResponse<BlogPostResponse>> exportToBlog(

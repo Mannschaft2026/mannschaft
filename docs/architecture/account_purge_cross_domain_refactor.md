@@ -1050,6 +1050,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `refresh_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `refunds` | `refunded_by_user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み） |
 | `registered_vehicles` | `user_id` | 要裁可 | 本人の車両情報・定期来客（区画契約の根拠か本人データか） |
+| `registration_pending_invites` | `user_id` | 要裁可 | 招待付き新規登録の保留（CMP-261107-1833）。招待トークンのハッシュ・招待先ID・状態のみで氏名等は持たない。users の物理削除で CASCADE 削除されるが、論理削除・強匿名化では残る。auth 側の強消去リスナーで消すか、invite_token_claims と同じく保持とするかは未裁定 |
 | `reservation_lines` | `default_staff_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `reservation_slot_templates` | `staff_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `reservation_slots` | `staff_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |

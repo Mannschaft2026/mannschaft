@@ -51,7 +51,8 @@ const tabs = computed<Tab[]>(() => {
       { key: 'constraints', label: t('shift.detail.tabConstraints'), icon: 'pi pi-shield', to: `${base}/work-constraints`, current: props.current === 'constraints' },
     )
   }
-  if (team.value) {
+  // slug が引けないチームには teams 配下の URL を作れない（/teams/undefined/... を出さない）
+  if (team.value?.slug) {
     const teamBase = `/teams/${team.value.slug}/shifts/${props.scheduleId}`
     if (canOpenBoard.value) {
       list.push({ key: 'board', label: t('shift.detail.tabBoard'), icon: 'pi pi-th-large', to: `${teamBase}/board`, current: false })

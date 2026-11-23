@@ -128,7 +128,7 @@ class ShiftChangeRequestServiceAuthzTest {
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
         given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(true);
-        given(changeRequestRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+        given(changeRequestRepository.saveAndFlush(any())).willAnswer(inv -> inv.getArgument(0));
 
         // 例外なく審査が確定する
         service.review(REQUEST_ID, reviewReq(), REVIEWER_ID);
@@ -136,7 +136,7 @@ class ShiftChangeRequestServiceAuthzTest {
         // SYSTEM_ADMIN 短絡したので per-scope 判定は呼ばれない
         verify(accessControlService, never()).isAdminOrAbove(any(), any(), any());
         verify(accessControlService, never()).isMember(any(), any(), any());
-        verify(changeRequestRepository).save(any());
+        verify(changeRequestRepository).saveAndFlush(any());
     }
 
     // ════════════════════════════════════════════════════════════

@@ -49,6 +49,8 @@ watch(
   () => props.visible,
   (visible) => {
     if (!visible) return
+    // 開き直したときだけ保存可能に戻す（成功後は閉じ終わるまで再入させない）
+    saving.value = false
     if (props.slotData) {
       form.value = {
         slotDate: props.slotData.time.slotDate,
@@ -131,12 +133,15 @@ async function save(moveRequestsConfirmed = false) {
       saved = await createSlot(props.scheduleId, payload)
     }
     success(t('shift.slot.saveSuccess'))
+    // 成功時は saving を解除しない。閉じるアニメーション中も保存ボタンは DOM に残るため、
+    // ここで解除すると遅れて届いた連打が同じ内容で再保存（二重作成）してしまう。
+    // 次に開かれたとき（visible の watch）に解除する。
     emit('saved', saved)
     close()
   } catch (error) {
-    handleApiError(error)
-  } finally {
+    // 失敗時は再試行できるようボタンを戻す
     saving.value = false
+    handleApiError(error)
   }
 }
 

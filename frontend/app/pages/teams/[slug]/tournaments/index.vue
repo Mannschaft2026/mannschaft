@@ -135,30 +135,51 @@ onMounted(() => load())
       <!-- 参加履歴タブ -->
       <template v-if="activeTab === 'history'">
         <div v-if="history.length > 0" class="grid gap-4 sm:grid-cols-2">
-          <NuxtLink
+          <!--
+            カードは「本文リンク」と「下部のアクション行」に分ける。
+            リンクの入れ子（a の中の a）は不正な HTML になるため、連絡スペースへのリンクは本文リンクの外に置く。
+            カードは参加行（部門）単位で出るため、同じ大会の連絡スペースへのリンクが重複することがある（リンク先は大会単位で同一）。
+          -->
+          <div
             v-for="t in history"
             :key="`${t.identifiers?.tournamentId}-${t.meta?.divisionName}`"
-            :to="`/organizations/${t.organizationId}/tournaments/${t.identifiers?.tournamentId}`"
-            class="block rounded-xl border border-surface-300 bg-surface-0 p-4 transition hover:border-primary-400 hover:shadow-sm"
+            class="flex flex-col rounded-xl border border-surface-300 bg-surface-0 transition hover:border-primary-400 hover:shadow-sm"
           >
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <span class="rounded bg-surface-100 px-2 py-0.5 text-xs text-surface-600">
-                {{ t.meta?.season }}
-              </span>
-              <span :class="getFinalRankClass(t.meta?.finalRank ?? null)" class="text-sm">
-                {{ getFinalRankLabel(t.meta?.finalRank ?? null) }}
-              </span>
+            <NuxtLink
+              :to="`/organizations/${t.organizationId}/tournaments/${t.identifiers?.tournamentId}`"
+              class="block flex-1 p-4"
+            >
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <span class="rounded bg-surface-100 px-2 py-0.5 text-xs text-surface-600">
+                  {{ t.meta?.season }}
+                </span>
+                <span :class="getFinalRankClass(t.meta?.finalRank ?? null)" class="text-sm">
+                  {{ getFinalRankLabel(t.meta?.finalRank ?? null) }}
+                </span>
+              </div>
+              <h3 class="text-sm font-semibold">{{ t.meta?.tournamentName }}</h3>
+              <p class="mt-0.5 text-xs text-surface-400">{{ t.meta?.divisionName }}</p>
+              <div class="mt-3 flex items-center gap-3 text-xs text-surface-500">
+                <span>{{ t.record?.played }}試合</span>
+                <span class="text-green-600">{{ t.record?.wins }}勝</span>
+                <span>{{ t.record?.draws }}分</span>
+                <span class="text-red-500">{{ t.record?.losses }}敗</span>
+                <span class="ml-auto font-medium">{{ t.record?.points }}pt</span>
+              </div>
+            </NuxtLink>
+            <div
+              v-if="t.identifiers?.tournamentId != null"
+              class="flex justify-end border-t border-surface-200 px-4 py-2 dark:border-surface-700"
+            >
+              <NuxtLink
+                :to="`/teams/${teamSlug}/tournaments/${t.identifiers.tournamentId}/communication`"
+                class="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline"
+              >
+                <i class="pi pi-comments" aria-hidden="true" />
+                {{ $t('tournament.communication.participant.open_link') }}
+              </NuxtLink>
             </div>
-            <h3 class="text-sm font-semibold">{{ t.meta?.tournamentName }}</h3>
-            <p class="mt-0.5 text-xs text-surface-400">{{ t.meta?.divisionName }}</p>
-            <div class="mt-3 flex items-center gap-3 text-xs text-surface-500">
-              <span>{{ t.record?.played }}試合</span>
-              <span class="text-green-600">{{ t.record?.wins }}勝</span>
-              <span>{{ t.record?.draws }}分</span>
-              <span class="text-red-500">{{ t.record?.losses }}敗</span>
-              <span class="ml-auto font-medium">{{ t.record?.points }}pt</span>
-            </div>
-          </NuxtLink>
+          </div>
         </div>
 
         <DashboardEmptyState

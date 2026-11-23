@@ -42,7 +42,11 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3745);   // 3741 + 本PR(F06.4.1 PR-2)の3本 + CMP-261116-0722 PR-1 の1本。
+                .isEqualTo(3751);   // 3751 = 3746 + CMP-261107-1833 招待付き新規登録の保留承認 MePendingInviteController 5本
+                                    //   （GET /api/v1/me/pending-invite・POST accept|decline|reissue-request|dismiss。feature gate 未宣言の流儀で 新規 5|5。
+                                    //   認可は @PreAuthorize("isAuthenticated()")＋本人の保留行のみ）。
+                                    // 3746 = 3745 + CMP-261118-0900 参加者向け連絡スペース一覧 ParticipantContactSpaceController GET 1本（feature gate 未宣言 1|1）。
+                                    // 3745 = 3741 + F06.4.1 PR-2 の3本 + CMP-261116-0722 PR-1 の1本。
                                     //   (F06.4.1 PR-2) CMP-261115-2145 F06.4.1 PR-2 の3本（EffortRecordMeController の definition-snapshots 1本・
                                     //   EffortTeamTemplateSettingsController の指標設定 GET/PUT 2本）。3本とも @AlwaysReachable(CORE) を
                                     //   宣言済みで未宣言増加0（7|7 → 7|8、新規 0|2）。

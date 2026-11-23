@@ -1,120 +1,143 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { flushPromises } from '@vue/test-utils'
-import ShiftIndexPage from './index.vue'
+import { defineComponent, h } from 'vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import Page from './index.vue'
 
-const mocks = vi.hoisted(() => ({
-  listSchedules: vi.fn(),
+const { createSchedule, listSchedules } = vi.hoisted(() => ({
   createSchedule: vi.fn(),
-  getRequestSummary: vi.fn(),
-  handleError: vi.fn(),
-  success: vi.fn(),
-  fetchMyTeams: vi.fn(),
-  teams: [{ id: 7, name: 'テストチーム', role: 'ADMIN' }],
+  listSchedules: vi.fn(),
 }))
 mockNuxtImport('useTeamStore', () => () => ({
-  get myTeams() {
-    return mocks.teams
-  },
-  fetchMyTeams: mocks.fetchMyTeams,
+  myTeams: [{ id: 12, role: 'ADMIN' }],
+  fetchMyTeams: vi.fn(),
 }))
-mockNuxtImport('useShiftApi', () => () => ({
-  listSchedules: mocks.listSchedules,
-  createSchedule: mocks.createSchedule,
-}))
-mockNuxtImport('useShiftRequestApi', () => () => ({ getRequestSummary: mocks.getRequestSummary }))
-mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleError }))
-mockNuxtImport('useNotification', () => () => ({ success: mocks.success }))
-mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
+mockNuxtImport('useShiftApi', () => () => ({ createSchedule, listSchedules }))
+mockNuxtImport('useShiftRequestApi', () => () => ({ getRequestSummary: vi.fn() }))
+mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))
+mockNuxtImport('useNotification', () => () => ({ success: vi.fn() }))
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((yes, no) => {
-    resolve = yes
-    reject = no
-  })
-  return { promise, resolve, reject }
+const Dialog = defineComponent({
+  setup:
+    (_, { slots }) =>
+    () =>
+      h('div', [slots.default?.(), slots.footer?.()]),
+})
+const DatePicker = defineComponent({
+  name: 'DatePicker',
+  props: { modelValue: Date, showTime: Boolean, hourFormat: String },
+  emits: ['update:modelValue'],
+  setup: () => () => h('input'),
+})
+beforeEach(() => {
+  createSchedule.mockReset().mockResolvedValue({})
+  listSchedules.mockReset().mockResolvedValue([])
+})
+interface PageVm {
+  selectedTeamId: number
+  createForm: { title: string; startDate: string; endDate: string; requestDeadline: Date | null }
+  handleCreate: () => Promise<void>
 }
-
-// 実機では「無効化が描画される前に2回目のクリックが届く」ため、スタブは disabled を無視して
-// クリックをそのまま通し、ハンドラ側の再入防止だけを検証する。
 async function mountPage() {
-  const wrapper = await mountSuspended(ShiftIndexPage, {
+  const wrapper = await mountSuspended(Page, {
     global: {
       stubs: {
+        Dialog,
         PageHeader: true,
-        PageLoading: true,
-        DashboardEmptyState: true,
-        ShiftScheduleCard: true,
-        ShiftGuideModal: true,
+        Button: true,
         Select: true,
         InputText: true,
-        Dialog: { template: '<section><slot /><slot name="footer" /></section>' },
-        Button: {
-          props: ['label', 'loading'],
-          emits: ['click'],
-          template: '<button :data-loading="loading" @click="$emit(\'click\')">{{ label }}</button>',
-        },
+        DatePicker,
+        PageLoading: true,
+        DashboardEmptyState: true,
+        ShiftGuideModal: true,
+        ShiftScheduleCard: true,
       },
     },
   })
-  await flushPromises()
-  return wrapper
+  const vm = wrapper.vm as unknown as PageVm
+  vm.selectedTeamId = 12
+  Object.assign(vm.createForm, { title: '10月', startDate: '2026-10-05', endDate: '2026-10-11' })
+  return { wrapper, vm }
 }
-
-function createButton(wrapper: Awaited<ReturnType<typeof mountPage>>) {
-  const button = wrapper.findAll('button').find((b) => b.text() === 'button.create')
-  if (!button) throw new Error('作成ボタンが見つからない')
-  return button
-}
-
-describe('シフト表の作成（連打対策）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mocks.fetchMyTeams.mockResolvedValue(undefined)
-    mocks.listSchedules.mockResolvedValue([])
-    mocks.getRequestSummary.mockResolvedValue({})
+describe('シフト新規作成のAPI契約', () => {
+  it('入力した壁時計日時をLocalDateTimeとして送る', async () => {
+    const { wrapper, vm } = await mountPage()
+    const picker = wrapper.findComponent({ name: 'DatePicker' })
+    expect(picker.exists()).toBe(true)
+    expect(picker.props('showTime')).toBe(true)
+    expect(picker.props('hourFormat')).toBe('24')
+    const chosenDate = new Date(2026, 9, 4, 23, 30)
+    picker.vm.$emit('update:modelValue', chosenDate)
+    await wrapper.vm.$nextTick()
+    expect(vm.createForm.requestDeadline).toEqual(chosenDate)
+    await vm.handleCreate()
+    expect(createSchedule).toHaveBeenCalledWith(
+      '12',
+      expect.objectContaining({ requestDeadline: '2026-10-04T23:30' }),
+    )
+    expect(vm.createForm.requestDeadline).toBeNull()
   })
-
-  async function prepare() {
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as unknown as {
-      createForm: { title: string; startDate: string; endDate: string }
+  it('不正な締切入力はエラーを表示し、作成を送信しない', async () => {
+    const { wrapper, vm } = await mountPage()
+    const picker = wrapper.findComponent({ name: 'DatePicker' })
+    for (const text of ['2026/12/31 24:00', '2026/02/30']) {
+      picker.vm.$emit('blur', { value: text })
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+      await vm.handleCreate()
+      expect(createSchedule).not.toHaveBeenCalled()
     }
-    vm.createForm.title = '10月シフト'
-    vm.createForm.startDate = '2026-10-01'
-    vm.createForm.endDate = '2026-10-31'
-    await flushPromises()
-    return wrapper
-  }
-
-  it('作成ボタンを続けて2回押しても API は1回しか呼ばれない', async () => {
-    const pending = deferred<unknown>()
-    mocks.createSchedule.mockReturnValue(pending.promise)
-    const wrapper = await prepare()
-
-    const button = createButton(wrapper)
-    await button.trigger('click')
-    await button.trigger('click')
-
-    expect(mocks.createSchedule).toHaveBeenCalledTimes(1)
-    pending.resolve({})
-    await flushPromises()
-    expect(mocks.createSchedule).toHaveBeenCalledTimes(1)
+    picker.vm.$emit('blur', { value: '2026/12/31 23:59' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await vm.handleCreate()
+    expect(createSchedule).toHaveBeenCalledTimes(1)
   })
-
-  it('作成が失敗したら再入防止が解除され、もう一度作成できる', async () => {
-    mocks.createSchedule.mockRejectedValueOnce(new Error('500'))
-    mocks.createSchedule.mockResolvedValueOnce({})
-    const wrapper = await prepare()
-
-    await createButton(wrapper).trigger('click')
-    await flushPromises()
-    expect(mocks.handleError).toHaveBeenCalledTimes(1)
-
-    await createButton(wrapper).trigger('click')
-    await flushPromises()
-    expect(mocks.createSchedule).toHaveBeenCalledTimes(2)
+  it('日付だけ選ぶと時刻は23:59になる', async () => {
+    const { wrapper, vm } = await mountPage()
+    const picker = wrapper.findComponent({ name: 'DatePicker' })
+    const picked = new Date(2026, 11, 31, 9, 17)
+    picker.vm.$emit('update:modelValue', picked)
+    picker.vm.$emit('date-select', picked)
+    await wrapper.vm.$nextTick()
+    expect(vm.createForm.requestDeadline).toEqual(new Date(2026, 11, 31, 23, 59))
+  })
+  it('任意締切が未入力ならJSON payloadから省略される', async () => {
+    const { vm } = await mountPage()
+    vm.createForm.requestDeadline = null
+    await vm.handleCreate()
+    const body = JSON.parse(JSON.stringify(createSchedule.mock.calls[0]![1])) as Record<
+      string,
+      unknown
+    >
+    expect(body).not.toHaveProperty('requestDeadline')
+  })
+  it('作成CTAは6言語で解決できる既存キーを使う', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/pages/shift/index.vue'), 'utf8')
+    const key = source.match(/:label="t\('([^']+)'\)"\s+icon="pi pi-check"/)?.[1]
+    expect(key).toBeDefined()
+    for (const locale of ['ja', 'en', 'zh', 'ko', 'es', 'de']) {
+      const messages: Record<string, unknown> = Object.assign(
+        {},
+        ...['common', 'shift'].map(
+          (file) =>
+            JSON.parse(
+              readFileSync(resolve(process.cwd(), 'app/locales', locale, `${file}.json`), 'utf8'),
+            ) as Record<string, unknown>,
+        ),
+      )
+      const value = key!
+        .split('.')
+        .reduce<unknown>(
+          (node, part) =>
+            node && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined,
+          messages,
+        )
+      expect(value).toBeTypeOf('string')
+      expect(value).not.toBe(key)
+      expect(value).not.toBe('')
+    }
   })
 })

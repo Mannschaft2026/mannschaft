@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261119-2032",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4794,
+    "sha": "95c914a727eef8027efd02d21f76e0aeead1e9fa"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "設計書で想定された閲覧導線を確認する（F02.5 §5.4 に閲覧先の記述なし。:686 は /timeline に出る想定だが /timeline/my は PERSONAL を含まない）",
+      "tests": [
+        {
+          "name": "調査記録（設計書・BE・FE の突き合わせ）",
+          "evidence": "docs/evidence/CMP-261119-2032.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "導線が欠落していれば方針を決める（マスター裁可 2026-11-23: 行動メモ画面から /timeline/{postId} への導線追加＋設計書是正、個人投稿一覧は任意）",
+      "tests": [
+        {
+          "name": "方針決定の記録",
+          "evidence": "docs/evidence/CMP-261119-2032.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "必要な修正行を台帳に起票する（CMP-261123-1201・1202・1203）",
+      "tests": [
+        {
+          "name": "台帳への起票 PR",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4794"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45103770708
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4794"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "調査行で画面・APIの挙動を変えない。導線欠落の観測は実機E2Eとアリシゼーション（2026-11-19）で得たもの"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "調査行で導線を変えない。導線の修正は起票した別行で実機・探索を行う"
+    }
+  },
+  "regressions": []
+}

@@ -16,6 +16,7 @@ import com.mannschaft.app.social.announcement.AnnouncementFeedQueryRepository;
 import com.mannschaft.app.social.announcement.AnnouncementFeedRepository;
 import com.mannschaft.app.social.announcement.AnnouncementReadStatusRepository;
 import com.mannschaft.app.social.announcement.AnnouncementScopeType;
+import com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard;
 import com.mannschaft.app.social.announcement.AnnouncementVisibility;
 import com.mannschaft.app.payment.constant.ContentGateType;
 import com.mannschaft.app.payment.dto.GateCheckResponse;
@@ -63,6 +64,7 @@ public class AnnouncementInboxAdapter implements InboxSourceAdapter {
     private final InboxPriorityNormalizer priorityNormalizer;
     private final InboxDedupeKeyResolver dedupeKeyResolver;
     private final PaymentGateService paymentGateService;
+    private final AnnouncementSourcePublicationGuard sourcePublication;
 
     @Override
     public InboxSourceType sourceType() {
@@ -143,6 +145,10 @@ public class AnnouncementInboxAdapter implements InboxSourceAdapter {
             return false;
         }
         if (feed.getExpiresAt() != null && !feed.getExpiresAt().isAfter(LocalDateTime.now())) {
+            return false;
+        }
+        // 元のブログ・タイムライン投稿が公開済みでない（下書き・論理削除・不在）なら不可視（N9。一覧クエリと同じ定義）。
+        if (!sourcePublication.isPublished(feed.getSourceType(), feed.getSourceId())) {
             return false;
         }
         // 当該 feed のスコープがユーザーの所属スコープに含まれ、かつ role の visibility 範囲に収まるか。

@@ -72,6 +72,9 @@ class BlogPostPublicVisibleControllerTest {
     @MockitoBean
     private BlogReactionService reactionService;
 
+    @MockitoBean
+    private com.mannschaft.app.cms.service.BlogPostScopeSlugResolver scopeSlugResolver;
+
     /** @WebMvcTest コンテキスト用: JwtAuthenticationFilter 依存解決 */
     @MockitoBean
     private AuthTokenService authTokenService;

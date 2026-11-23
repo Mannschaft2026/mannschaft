@@ -141,3 +141,41 @@ describe('枠の日付移動確認', () => {
     expect(mocks.success).not.toHaveBeenCalled()
   })
 })
+
+describe('保存成功後の再入防止（閉じるアニメーション中の連打）', () => {
+  it('新規作成が成功して閉じ始めた後の2回目の保存クリックでAPIを再送しない', async () => {
+    const wrapper = await mountForm(null)
+    await wrapper.find('input[type="date"]').setValue('2027-01-01')
+    await save(wrapper)
+    expect(mocks.create).toHaveBeenCalledOnce()
+    expect(wrapper.emitted('update:visible')).toEqual([[false]])
+
+    // 親はまだ visible を false に反映しておらず、保存ボタンが DOM に残っている状態で再度クリックが届く
+    await save(wrapper)
+    await save(wrapper)
+    expect(mocks.create).toHaveBeenCalledOnce()
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+  })
+
+  it('保存失敗後は再試行できる', async () => {
+    mocks.create.mockRejectedValueOnce({ statusCode: 500 })
+    const wrapper = await mountForm(null)
+    await wrapper.find('input[type="date"]').setValue('2027-01-01')
+    await save(wrapper)
+    expect(mocks.error).toHaveBeenCalledOnce()
+    await save(wrapper)
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+  })
+
+  it('閉じてから開き直せば、再び保存できる', async () => {
+    const wrapper = await mountForm(null)
+    await wrapper.find('input[type="date"]').setValue('2027-01-01')
+    await save(wrapper)
+    await wrapper.setProps({ visible: false })
+    await wrapper.setProps({ visible: true })
+    await wrapper.find('input[type="date"]').setValue('2027-01-02')
+    await save(wrapper)
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+  })
+})
