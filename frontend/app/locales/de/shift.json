@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Änderungsantrag",
+      "typeColumn": "Anfragetyp",
+      "empty": "Noch keine Änderungsanfragen",
       "type": {
         "PRE_CONFIRM_EDIT": "Vorbestätigungs-Bearbeitung",
         "INDIVIDUAL_SWAP": "Individueller Tausch",
@@ -74,15 +76,15 @@
       "reviewComment": "Prüfungskommentar",
       "openCallLimit": "Offene Ausschreibungen sind auf 3 pro Monat begrenzt",
       "fetchError": "Fehler beim Abrufen der Änderungsanträge",
-      "submitted": "Änderungsantrag gestellt",
-      "approved": "Antrag genehmigt",
-      "rejected": "Antrag abgelehnt",
-      "withdrawn": "Antrag zurückgezogen",
-      "submitError": "Änderungsantrag konnte nicht gestellt werden",
-      "reviewError": "Prüfung fehlgeschlagen",
+      "requester": "Antragsteller",
+      "unknownRequester": "Unbekannter Benutzer",
+      "createSuccess": "Änderungsantrag gesendet",
+      "approveSuccess": "Änderungsantrag genehmigt",
+      "rejectSuccess": "Änderungsantrag abgelehnt",
+      "withdrawSuccess": "Änderungsantrag zurückgezogen",
+      "closedForNew": "Dieser Schichtplan ist bereits veröffentlicht, daher werden keine neuen Änderungsanträge mehr angenommen.",
       "reviewedAt": "Geprüft am",
-      "reviewConflict": "Jemand anderes hat die Anfrage zuvor aktualisiert. Die Liste wurde neu geladen; bitte prüfen Sie den aktuellen Stand",
-      "withdrawError": "Zurückziehen fehlgeschlagen"
+      "reviewConflict": "Jemand anderes hat die Anfrage zuvor aktualisiert. Die Liste wurde neu geladen; bitte prüfen Sie den aktuellen Stand"
     },
     "pdf": {
       "teamLayout": "Team-Schichtplan PDF",
@@ -170,7 +172,9 @@
       "colDate": "Datum",
       "colSlots": "Slots",
       "editDialogTitle": "Schicht bearbeiten",
-      "accessDeniedRedirect": "Sie haben keine Berechtigung, diese Seite anzuzeigen"
+      "accessDeniedRedirect": "Sie haben keine Berechtigung, diese Seite anzuzeigen",
+      "tabBoard": "Schichtboard",
+      "tabChangeRequests": "Änderungsanträge"
     },
     "slot": {
       "createTitle": "Slot anlegen",
@@ -282,7 +286,14 @@
       "userId": "Benutzer-ID",
       "userIdPlaceholder": "Benutzer-ID eingeben",
       "saveSuccess": "Arbeitsbeschränkungen gespeichert",
-      "deleteSuccess": "Arbeitsbeschränkungen gelöscht"
+      "deleteSuccess": "Arbeitsbeschränkungen gelöscht",
+      "unknownMember": "Unbekannter Benutzer",
+      "selectMember": "Mitglied auswählen",
+      "searchMember": "Nach Name suchen",
+      "noSelectableMembers": "Keine Mitglieder zum Hinzufügen verfügbar",
+      "membersLoadError": "Mitgliederliste konnte nicht geladen werden",
+      "deleteTitle": "Arbeitsbeschränkung löschen",
+      "deleteConfirm": "Diese Arbeitsbeschränkung löschen?"
     },
     "validation": {
       "atLeastOneConstraint": "Bitte geben Sie mindestens eine Beschränkung an"
@@ -434,8 +445,10 @@
       "sectionTitle": "Wünsche einreichen / Schichtboard",
       "bulkRequest": "Wünsche gesammelt einreichen",
       "board": "Schichtboard",
+      "edit": "Schichten bearbeiten",
       "weeklyDefault": "Wochentags-Standard festlegen",
-      "closed": "Die Wunschabgabe ist beendet"
+      "closed": "Die Wunschabgabe ist beendet",
+      "changeRequest": "Änderungsantrag"
     },
     "submitConfirm": {
       "title": "Mit diesem Inhalt senden?",

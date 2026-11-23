@@ -10,6 +10,7 @@ import com.mannschaft.app.cms.dto.SharePostRequest;
 import com.mannschaft.app.cms.dto.SharePostResponse;
 import com.mannschaft.app.cms.dto.UpdateBlogSettingsRequest;
 import com.mannschaft.app.cms.service.BlogPostService;
+import com.mannschaft.app.cms.service.BlogPostScopeSlugResolver;
 import com.mannschaft.app.cms.service.BlogReactionService;
 import com.mannschaft.app.cms.service.UserBlogSettingsService;
 import com.mannschaft.app.common.ApiResponse;
@@ -49,6 +50,8 @@ public class PersonalBlogController {
     private final com.mannschaft.app.cms.service.BlogRanchNativeOperationFacade ranchNative;
     private final UserBlogSettingsService settingsService;
     private final BlogReactionService reactionService;
+    /** 記事応答のスコープ slug の付与。BlogPostService の取引の外で他ドメインの slug を引く（D-3T）。 */
+    private final BlogPostScopeSlugResolver scopeSlugResolver;
 
 
     /**
@@ -64,7 +67,7 @@ public class PersonalBlogController {
         Page<BlogPostResponse> result = postService.listByUser(userId, PageRequest.of(page, size));
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 result.getTotalElements(), result.getNumber(), result.getSize(), result.getTotalPages());
-        return ResponseEntity.ok(PagedResponse.of(result.getContent(), meta));
+        return ResponseEntity.ok(PagedResponse.of(scopeSlugResolver.attachAll(result.getContent()), meta));
     }
 
     /**
@@ -81,7 +84,7 @@ public class PersonalBlogController {
         Long currentUserId = SecurityUtils.getCurrentUserIdOrNull();
         BlogReactionResponse reactionStatus = reactionService.getReactionStatus(response.getId(), currentUserId);
         response = response.withReaction(reactionStatus.isMitayo(), reactionStatus.getMitayoCount());
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -97,7 +100,7 @@ public class PersonalBlogController {
     public ResponseEntity<ApiResponse<BlogPostResponse>> getMyPost(
             @PathVariable Long id) {
         BlogPostResponse response = postService.getMyPostById(id, SecurityUtils.getCurrentUserId());
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -115,7 +118,7 @@ public class PersonalBlogController {
         Page<BlogPostResponse> result = postService.listByUser(userId, PageRequest.of(page, size));
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 result.getTotalElements(), result.getNumber(), result.getSize(), result.getTotalPages());
-        return ResponseEntity.ok(PagedResponse.of(result.getContent(), meta));
+        return ResponseEntity.ok(PagedResponse.of(scopeSlugResolver.attachAll(result.getContent()), meta));
     }
 
     /**
@@ -127,7 +130,7 @@ public class PersonalBlogController {
     public ResponseEntity<ApiResponse<BlogPostResponse>> createPost(
             @Valid @RequestBody CreateBlogPostRequest request) {
         BlogPostResponse response = postService.createPost(SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -140,7 +143,7 @@ public class PersonalBlogController {
             @PathVariable Long id,
             @Valid @RequestBody com.mannschaft.app.cms.dto.UpdateBlogPostRequest request) {
         BlogPostResponse response = postService.updatePost(id, SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -167,7 +170,7 @@ public class PersonalBlogController {
         BlogPostResponse response = ranchNative.changeStatus(id, actor, request,
                 servletRequest.getAttribute("originalAdminId") != null)
                 .orElseGet(() -> postService.changeStatus(id, actor, request));
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**
@@ -211,7 +214,7 @@ public class PersonalBlogController {
         BlogPostResponse response = ranchNative.selfReview(id, actor, request,
                 servletRequest.getAttribute("originalAdminId") != null)
                 .orElseGet(() -> postService.selfReview(id, actor, request));
-        return ResponseEntity.ok(ApiResponse.of(response));
+        return ResponseEntity.ok(ApiResponse.of(scopeSlugResolver.attach(response)));
     }
 
     /**

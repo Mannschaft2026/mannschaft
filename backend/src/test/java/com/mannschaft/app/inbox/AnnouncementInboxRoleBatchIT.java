@@ -87,7 +87,7 @@ class AnnouncementInboxRoleBatchIT extends AbstractMySqlIntegrationTest {
     private void persistFeed(long user, long team) {
         em.persist(AnnouncementFeedEntity.builder()
                 .scopeType(AnnouncementScopeType.TEAM).scopeId(team)
-                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(1L).authorId(user)
+                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(publishedBlog(team)).authorId(user)
                 .titleCache("候補保持タイトル").excerptCache("候補保持本文")
                 .visibility("MEMBERS_AND_ABOVE").build());
     }
@@ -144,7 +144,7 @@ class AnnouncementInboxRoleBatchIT extends AbstractMySqlIntegrationTest {
             before = ViewerRole.ADMIN;
         }
         var feed = AnnouncementFeedEntity.builder().scopeType(AnnouncementScopeType.TEAM).scopeId(team)
-                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(1L).authorId(user)
+                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(publishedBlog(team)).authorId(user)
                 .titleCache("内輪タイトル").excerptCache("内輪本文").visibility("MEMBERS_AND_ABOVE").build();
         em.persist(feed);
         em.flush();
@@ -192,7 +192,7 @@ class AnnouncementInboxRoleBatchIT extends AbstractMySqlIntegrationTest {
         long outsider = insertUser();
         long team = addTeams(owner, 1).getFirst();
         var feed = AnnouncementFeedEntity.builder().scopeType(AnnouncementScopeType.TEAM).scopeId(team)
-                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(1L).authorId(owner)
+                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(publishedBlog(team)).authorId(owner)
                 .titleCache("別スコープタイトル").excerptCache("別スコープ本文").visibility("PUBLIC").build();
         em.persist(feed);
         em.flush();
@@ -311,5 +311,10 @@ class AnnouncementInboxRoleBatchIT extends AbstractMySqlIntegrationTest {
         String table = "TEAM".equals(type) ? "teams" : "organizations";
         return ((Number) em.createNativeQuery("SELECT id FROM " + table + " WHERE slug=:slug")
                 .setParameter("slug", slug).getSingleResult()).longValue();
+    }
+
+    /** 元は公開済みの実在記事（元が公開済みでないお知らせはインボックスにも出さない。N9）。 */
+    private long publishedBlog(long team) {
+        return com.mannschaft.app.social.announcement.AnnouncementSourceFixtures.publishedTeamBlog(em, team, null);
     }
 }

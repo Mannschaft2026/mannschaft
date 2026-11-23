@@ -7,10 +7,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.http.MediaType;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -124,6 +130,81 @@ class SearchHistoryContractIT extends AbstractGlobalSearchIT {
             assertThat(recent).hasSize(20);
             assertThat(recent.get(0).path("query").asText()).isEqualTo(kw + "newest");
             assertThat(recent.get(1).path("query").asText()).isEqualTo(kw + "old49");
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // AC-C14（並行）: 同一ユーザー・同一語の同時検索
+    // ═════════════════════════════════════════════════════════════════════
+
+    /**
+     * 実機E2E で再現した不具合の固定（CMP-261116-0722）: 種別タブ選択中のヘッダー検索で FE が同じ q の
+     * 検索を 2 本同時に送ると、履歴記録の check-then-insert が競合して一意キー違反で 500 になっていた。
+     * 履歴は 1 行への原子的な UPSERT でなければならない。
+     */
+    @Nested
+    @DisplayName("AC-C14: 並行検索でも履歴は 1 行に UPSERT される")
+    class ConcurrentHistory {
+
+        private static final int PARALLEL = 6;
+        private static final int ROUNDS = 5;
+
+        /** 同じ q の検索を {@link #PARALLEL} 本同時に投げ、各応答ステータスを返す。 */
+        private List<Integer> searchConcurrently(Long actor, String q) throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(PARALLEL);
+            try {
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Integer>> futures = new ArrayList<>();
+                for (int i = 0; i < PARALLEL; i++) {
+                    futures.add(pool.submit(() -> {
+                        start.await();
+                        return http(get(SEARCH).param("q", q), actor).andReturn().getResponse().getStatus();
+                    }));
+                }
+                start.countDown();
+                List<Integer> statuses = new ArrayList<>();
+                for (Future<Integer> f : futures) {
+                    statuses.add(f.get(60, TimeUnit.SECONDS));
+                }
+                return statuses;
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        @DisplayName("AC-C14: 初出の語を同時に検索しても全件 200 で、履歴は 1 行だけ")
+        void AC_C14_初出語の並行検索は500にならず1行() throws Exception {
+            Long me = viewer("hist-race-new");
+
+            for (int round = 0; round < ROUNDS; round++) {
+                String q = kw + "race" + round;
+                assertThat(searchConcurrently(me, q)).as("round %d: 並行検索がすべて 200", round)
+                        .containsOnly(200);
+            }
+
+            List<String> expected = new ArrayList<>();
+            for (int round = ROUNDS - 1; round >= 0; round--) {
+                expected.add(kw + "race" + round);
+            }
+            assertThat(historyQueries(me)).as("語ごとに 1 行（重複行なし）").containsExactlyInAnyOrderElementsOf(expected);
+        }
+
+        @Test
+        @DisplayName("AC-C14: 既存の語を同時に検索すると 1 行のまま searched_at が UTC の現在時刻へ更新される")
+        void AC_C14_既存語の並行検索はsearched_atを更新() throws Exception {
+            Long me = viewer("hist-race-old");
+            seedHistory(me, kw + "again", LocalDateTime.of(2026, 1, 1, 0, 0));
+
+            assertThat(searchConcurrently(me, kw + "again")).containsOnly(200);
+
+            assertThat(historyQueries(me)).containsExactly(kw + "again");
+            Number driftSeconds = inTx(() -> (Number) em.createNativeQuery(
+                            "SELECT ABS(TIMESTAMPDIFF(SECOND, searched_at, UTC_TIMESTAMP())) FROM search_histories"
+                                    + " WHERE user_id = :u AND query = :q")
+                    .setParameter("u", me).setParameter("q", kw + "again").getSingleResult());
+            assertThat(driftSeconds.longValue()).as("searched_at は UTC 壁時計で格納される（JPA 経路と同じ基準）")
+                    .isLessThan(Duration.ofMinutes(5).toSeconds());
         }
     }
 

@@ -1796,6 +1796,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{teamId}/effort-records/template-settings/{templateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** テンプレートの指標設定を取得 */
+        get: operations["getEffortTemplateSettings"];
+        /** テンプレートの指標設定を更新（全置換） */
+        put: operations["updateEffortTemplateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{teamId}/dwelling-units/{id}": {
         parameters: {
             query?: never;
@@ -23049,6 +23067,23 @@ export interface paths {
         put?: never;
         /** 原本の作成 */
         post: operations["create_77"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/effort-records/me/definition-snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** チーム定義 snapshot の登録（10 分有効 token） */
+        post: operations["registerDefinitionSnapshot"];
         delete?: never;
         options?: never;
         head?: never;
@@ -51055,7 +51090,6 @@ export interface components {
             variant?: "LAST_NAME" | "FULL_NAME" | "FIRST_NAME";
         };
         UpdateProfileRequest: {
-            avatarUrl?: string;
             countryCode?: string;
             /** @enum {string} */
             dmReceiveFrom?: "ANYONE" | "TEAM_MEMBERS_ONLY" | "CONTACTS_ONLY";
@@ -51397,8 +51431,12 @@ export interface components {
             authorId?: number;
             /** Format: int64 */
             organizationId?: number;
+            /** @description 組織記事の組織 slug（組織記事以外・論理削除済み組織は null） */
+            organizationSlug: string | null;
             /** Format: int64 */
             teamId?: number;
+            /** @description チーム記事のチーム slug（チーム記事以外・論理削除済みチームは null） */
+            teamSlug: string | null;
             /** Format: int64 */
             userId?: number;
         };
@@ -53302,6 +53340,67 @@ export interface components {
             teamId?: number;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        FieldSetting: {
+            /** @enum {string} */
+            aggregation: "SUM" | "LATEST" | "NONE";
+            fieldKey: string;
+            /** @enum {string} */
+            semantic: "DURATION" | "WEIGHT" | "INTENSITY" | "SUBJECT" | "MENU" | "NUMBER" | "TEXT" | "DATE" | "DATETIME" | "CHECKBOX";
+            unit: string;
+        };
+        UpdateEffortTemplateSettingsRequest: {
+            durationFieldKey?: string;
+            fields: components["schemas"]["FieldSetting"][];
+            subjectFieldKey?: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ApiResponseEffortTemplateSettingsResponse: {
+            data?: components["schemas"]["EffortTemplateSettingsResponse"];
+        };
+        EffortDefinitionSnapshot: {
+            /** Format: uuid */
+            definitionUuid?: string;
+            durationFieldKey?: string;
+            fields?: components["schemas"]["EffortFieldDefinition"][];
+            presetCode?: string;
+            /** Format: int32 */
+            revision?: number;
+            /** @enum {string} */
+            source?: "PRESET" | "TEAM";
+            subjectFieldKey?: string;
+            /** Format: int64 */
+            teamTemplateId?: number;
+            templateName?: string;
+        };
+        EffortFieldDefinition: {
+            /** @enum {string} */
+            aggregation?: "SUM" | "LATEST" | "NONE";
+            fieldKey?: string;
+            label?: string;
+            labelKey?: string;
+            max?: string;
+            min?: string;
+            options?: components["schemas"]["Option"][];
+            required?: boolean;
+            /** Format: int32 */
+            scale?: number;
+            /** @enum {string} */
+            semantic?: "DURATION" | "WEIGHT" | "INTENSITY" | "SUBJECT" | "MENU" | "NUMBER" | "TEXT" | "DATE" | "DATETIME" | "CHECKBOX";
+            /** @enum {string} */
+            type?: "NUMBER" | "TEXT" | "SELECT" | "DATE" | "DATETIME" | "CHECKBOX";
+            unit?: string;
+        };
+        EffortTemplateSettingsResponse: {
+            definition?: components["schemas"]["EffortDefinitionSnapshot"];
+            /** Format: int64 */
+            version?: number;
+        };
+        Option: {
+            key?: string;
+            label?: string;
+            labelKey?: string;
         };
         CreateDwellingUnitRequest: {
             areaSqm?: number;
@@ -57332,39 +57431,6 @@ export interface components {
         ApiResponseEffortOwnerRecordResponse: {
             data?: components["schemas"]["EffortOwnerRecordResponse"];
         };
-        EffortDefinitionSnapshot: {
-            /** Format: uuid */
-            definitionUuid?: string;
-            durationFieldKey?: string;
-            fields?: components["schemas"]["EffortFieldDefinition"][];
-            presetCode?: string;
-            /** Format: int32 */
-            revision?: number;
-            /** @enum {string} */
-            source?: "PRESET" | "TEAM";
-            subjectFieldKey?: string;
-            /** Format: int64 */
-            teamTemplateId?: number;
-            templateName?: string;
-        };
-        EffortFieldDefinition: {
-            /** @enum {string} */
-            aggregation?: "SUM" | "LATEST" | "NONE";
-            fieldKey?: string;
-            label?: string;
-            labelKey?: string;
-            max?: string;
-            min?: string;
-            options?: components["schemas"]["Option"][];
-            required?: boolean;
-            /** Format: int32 */
-            scale?: number;
-            /** @enum {string} */
-            semantic?: "DURATION" | "WEIGHT" | "INTENSITY" | "SUBJECT" | "MENU" | "NUMBER" | "TEXT" | "DATE" | "DATETIME" | "CHECKBOX";
-            /** @enum {string} */
-            type?: "NUMBER" | "TEXT" | "SELECT" | "DATE" | "DATETIME" | "CHECKBOX";
-            unit?: string;
-        };
         EffortOwnerRecordResponse: {
             /** Format: int64 */
             contentRevision?: number;
@@ -57401,11 +57467,6 @@ export interface components {
             updatedAt?: string;
             /** Format: int64 */
             version?: number;
-        };
-        Option: {
-            key?: string;
-            label?: string;
-            labelKey?: string;
         };
         UpdateWidgetSettingsRequest: {
             scopeId?: string;
@@ -70429,6 +70490,21 @@ export interface components {
             /** Format: date */
             recordedOn: string;
             values: components["schemas"]["EffortFieldValue"][];
+        };
+        CreateDefinitionSnapshotRequest: {
+            /** Format: int64 */
+            teamId: number;
+            /** Format: int64 */
+            teamTemplateId: number;
+        };
+        ApiResponseEffortDefinitionTokenResponse: {
+            data?: components["schemas"]["EffortDefinitionTokenResponse"];
+        };
+        EffortDefinitionTokenResponse: {
+            definition?: components["schemas"]["EffortDefinitionSnapshot"];
+            definitionToken?: string;
+            /** Format: date-time */
+            expiresAt?: string;
         };
         CreateCardRequest: {
             /** Format: date-time */
@@ -92154,6 +92230,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getEffortTemplateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: number;
+                templateId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortTemplateSettingsResponse"];
+                };
+            };
+        };
+    };
+    updateEffortTemplateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: number;
+                templateId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEffortTemplateSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortTemplateSettingsResponse"];
+                };
             };
         };
     };
@@ -136994,6 +137120,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
+    registerDefinitionSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDefinitionSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortDefinitionTokenResponse"];
                 };
             };
         };

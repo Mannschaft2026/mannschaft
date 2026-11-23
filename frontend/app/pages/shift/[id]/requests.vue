@@ -72,9 +72,12 @@ watch(
   { immediate: true },
 )
 
-onMounted(async () => {
-  await teamStore.fetchMyTeams()
+/** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
+const loadError = ref<unknown>(null)
+
+async function load() {
   loading.value = true
+  loadError.value = null
   try {
     schedule.value = await getSchedule(scheduleId.value)
     if (!canManage.value) return
@@ -86,10 +89,18 @@ onMounted(async () => {
     requests.value = reqs
     summary.value = sum
   } catch (error) {
-    handleApiError(error)
+    schedule.value = null
+    requests.value = []
+    summary.value = null
+    loadError.value = error
   } finally {
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  await teamStore.fetchMyTeams()
+  await load()
 })
 
 // =====================================================
@@ -175,34 +186,19 @@ const pendingCount = computed(() => summary.value?.pendingCount ?? 0)
       <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" class="shrink-0 whitespace-nowrap" />
     </div>
 
-    <!-- タブ -->
-    <nav class="mb-6 flex flex-wrap gap-x-1 border-b border-surface-200 dark:border-surface-700">
-      <NuxtLink
-        :to="`/shift/${scheduleId}`"
-        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-calendar" />{{ t('shift.detail.tabOverview') }}
-      </NuxtLink>
-      <NuxtLink
-        :to="`/shift/${scheduleId}/edit`"
-        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-pencil" />{{ t('shift.detail.tabEdit') }}
-      </NuxtLink>
-      <span class="flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
-        <i class="pi pi-list" />{{ t('shift.detail.tabRequests') }}
-      </span>
-      <NuxtLink
-        :to="`/shift/${scheduleId}/work-constraints`"
-        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-shield" />{{ t('shift.detail.tabConstraints') }}
-      </NuxtLink>
-    </nav>
+    <DashboardErrorState
+      v-if="loadError"
+      :error="loadError"
+      testid="shift-load-error"
+      @retry="load"
+    />
 
-    <PageLoading v-if="loading" />
+    <PageLoading v-else-if="loading" />
 
     <template v-else>
+      <!-- タブ -->
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="requests" />
+
       <!-- サマリーカード -->
       <div v-if="summary" class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <!-- 提出率 -->

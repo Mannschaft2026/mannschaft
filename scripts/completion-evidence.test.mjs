@@ -321,6 +321,9 @@ test('AC-2: 同居spec・frontend/testsだけはtest-only、scriptsとテスト�
   assert.equal(infer(['scripts/check.mjs', '.github/workflows/x.yml']), 'tooling');
 });
 
+// 現行のリポジトリ名と、移管前（2026-11-21 に kenta-0420/mannschaft から移管）に記録された旧名。
+const REPOSITORY_NAMES = ['Mannschaft2026/mannschaft', 'kenta-0420/mannschaft'];
+
 test('AC-3: test-onlyのPRはapp申告なら通り、tooling申告は拒否、既存docs/evidence全件は新validatorを通る', () => {
   const appPassed = { ...evidence, scope: 'app', stages: { review: passed, real: passed, exploratory: passed } };
   assert.doesNotThrow(() => validateEvidence(appPassed, 'CMP-260101-0101', withFiles(TEST_ONLY_3841)));
@@ -336,11 +339,34 @@ test('AC-3: test-onlyのPRはapp申告なら通り、tooling申告は拒否、�
   const headFiles = new Set(tree.stdout.split('\n').filter(Boolean));
   for (const name of jsonFiles) {
     const item = JSON.parse(readFileSync(new URL(name, evidenceDir), 'utf8'));
-    assert.doesNotThrow(() => validateEvidence(item, name.replace(/\.json$/, ''), {
-      repository: 'kenta-0420/mannschaft',
-      fileExists: ref => headFiles.has(ref),
-    }), name);
+    const cmpId = name.replace(/\.json$/, '');
+    // 移管前に記録された証拠は旧リポジトリ名の URL を持つため、どちらかの名前で通れば合格とする。
+    let lastError;
+    const passed = REPOSITORY_NAMES.some(repository => {
+      try {
+        validateEvidence(item, cmpId, { repository, fileExists: ref => headFiles.has(ref) });
+        return true;
+      } catch (error) {
+        lastError = error;
+        return false;
+      }
+    });
+    if (!passed) throw lastError;
   }
+});
+
+
+test('AC-3b: リポジトリ移管後も現在名基準で旧名URL・大文字小文字違いが通り、無関係リポジトリは拒否される', () => {
+  const withUrl = url => ({ ...evidence, acceptanceCriteria: [{ id: 'AC-1', description: '検査する', tests: [{ name: 'unit', evidence: url }] }] });
+  const options = { repository: 'Mannschaft2026/mannschaft' };
+  const check = url => validateEvidence(withUrl(url), 'CMP-260101-0101', options);
+  assert.doesNotThrow(() => check('https://github.com/Mannschaft2026/mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/kenta-0420/mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/KENTA-0420/Mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/mannschaft2026/MANNSCHAFT/pull/1'));
+  assert.throws(() => check('https://github.com/someone-else/mannschaft/pull/1'), /同一GitHubリポジトリ/);
+  assert.throws(() => check('https://github.com/kenta-0420/other/pull/1'), /同一GitHubリポジトリ/);
+  assert.throws(() => validateEvidence(withUrl('https://github.com/kenta-0420/mannschaft/pull/1'), 'CMP-260101-0101', { repository: 'someone-else/mannschaft' }), /同一GitHubリポジトリ/);
 });
 
 test('AC-4: files空はthrow、null・数値・filename欠落はapp、check0件とmergedAt欠落は拒否', () => {

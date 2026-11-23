@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ReviewOutcome } from '~/components/shift/ShiftChangeRequestList.vue'
+import type { ReviewOutcome, ShiftScheduleResponse } from '~/types/shift'
+import { isAcceptingChangeRequests } from '~/utils/shiftStatus'
 import { useTeamMembers } from '~/composables/team/useTeamMembers'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
@@ -9,16 +10,30 @@ const teamSlug = computed(() => String(route.params.slug))
 const scheduleId = computed(() => Number(route.params.scheduleId))
 
 const authStore = useAuthStore()
-const { roleName, loadPermissions } = useRoleAccess('team', teamSlug)
-// 運営専用のSYSTEM_ADMINは業務導線に含めない（docs/security/03_role_authority_model.md §3.5）。
-const isAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
+const { getSchedule } = useShiftApi()
+const { getTeam } = useTeamApi()
 
-const { requests, isLoading, fetchRequests, review, withdraw } =
-  useChangeRequest(scheduleId)
+// 審査してよいか（チーム ADMIN / DEPUTY_ADMIN）。BE（ShiftChangeRequestFacade）の判定に揃える。
+// プラットフォームの systemRole ではなく、このチームでの実効ロールで判定する。
+// 権限取得に失敗したときは roleName が null のままなので審査ボタンは出ない（権限なしに倒れる側）。
+// 運営専用の SYSTEM_ADMIN は業務導線に含めない（docs/security/03_role_authority_model.md §3.5、#4164）ため、
+// isAdminOrDeputy（SYSTEM_ADMIN を含む）ではなく roleName で判定する。
+const { roleName, loadPermissions } = useRoleAccess('team', teamSlug)
+const canReview = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
+
+const {
+  requests,
+  isLoading,
+  processingIds,
+  loadError: listError,
+  fetchRequests,
+  reviewWithOutcome,
+  withdraw,
+} = useChangeRequest(scheduleId)
 
 const { handleApiError } = useErrorHandler()
 const { getAllMembers } = useTeamMembers()
-/** userId → 表示名（GET /teams/{slug}/members/all）。取得失敗は通知し、一覧は「不明なメンバー」で代替する */
+/** userId → 表示名（GET /teams/{slug}/members/all）。取得失敗は通知し、一覧は「不明なユーザー」で代替する */
 const memberNames = ref<Map<number, string>>(new Map())
 async function loadMemberNames(): Promise<void> {
   try {
@@ -30,29 +45,73 @@ async function loadMemberNames(): Promise<void> {
   }
 }
 
-onMounted(() => Promise.all([fetchRequests(), loadPermissions(), loadMemberNames()]))
+const schedule = ref<ShiftScheduleResponse | null>(null)
+const loading = ref(true)
+/** 初回取得の失敗 */
+const initialError = ref<unknown>(null)
+/**
+ * 取得失敗（空状態とは区別して DashboardErrorState で出す）。
+ * 初回取得に加え、作成・審査・取り下げ後の一覧再取得の失敗もここに載る。再試行は初回と同じ load。
+ */
+const loadError = computed(() => initialError.value ?? listError.value)
+
+const canCreate = computed(() =>
+  schedule.value ? isAcceptingChangeRequests(schedule.value.status.status) : false,
+)
+
+async function load(): Promise<void> {
+  loading.value = true
+  initialError.value = null
+  try {
+    const [scheduleRes, teamRes, fetchFailure, permissions] = await Promise.all([
+      getSchedule(scheduleId.value),
+      getTeam(teamSlug.value),
+      fetchRequests(),
+      loadPermissions(),
+      loadMemberNames(),
+    ])
+    if (fetchFailure) {
+      initialError.value = fetchFailure
+      return
+    }
+    // 権限取得の失敗を捨てない。審査ボタンは出さないまま、取得エラーと再試行を見せる。
+    if (!permissions.ok) {
+      initialError.value = permissions.error
+      return
+    }
+    // URL の slug のチームとシフト表のチームが食い違う画面は存在しないものとして扱う
+    // （他チームのシフト表 ID を slug 違いで開かせない。存在オラクルを作らないため 404 相当）。
+    const urlTeamId = teamRes.data.numericId
+    if (urlTeamId === undefined) {
+      initialError.value = new Error('team_numeric_id_missing')
+      return
+    }
+    if (scheduleRes.teamId !== urlTeamId) {
+      initialError.value = { statusCode: 404 }
+      return
+    }
+    schedule.value = scheduleRes
+  } catch (error) {
+    initialError.value = error
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 
 async function onSubmitted(): Promise<void> {
   await fetchRequests()
 }
 
-async function onReview(
+/** 通知（成功・競合専用文言・汎用エラー）と一覧再取得は composable 側で済んでいる。ここでは結果だけ返す */
+function onReview(
   id: number,
   decision: 'ACCEPTED' | 'REJECTED',
   comment: string | undefined,
   version: number,
 ): Promise<ReviewOutcome> {
-  try {
-    await review(id, decision, comment, version)
-    return { status: 'ok' }
-  } catch (e) {
-    // 通知（競合専用文言・汎用エラー）と一覧再取得は review() 側で済んでいる。ここで再通知しない
-    if (e instanceof Error && e.message === 'review conflict') {
-      // 再取得は review() 内で完了済み。最新の依頼をここで引いて返す
-      return { status: 'conflict', latest: requests.value.find((r) => r.id === id) ?? null }
-    }
-    return { status: 'error' }
-  }
+  return reviewWithOutcome(id, decision, comment, version)
 }
 
 async function onWithdraw(id: number): Promise<void> {
@@ -65,23 +124,44 @@ async function onWithdraw(id: number): Promise<void> {
     <!-- ページヘッダー（戻る導線は PageHeader の back-to に一本化） -->
     <PageHeader :title="$t('shift.changeRequest.title')" :back-to="`/teams/${teamSlug}/shifts`" />
 
-    <!-- 変更依頼作成フォーム -->
-    <ShiftChangeRequestForm
-      :schedule-id="scheduleId"
-      @submitted="onSubmitted"
-    />
-
-    <!-- 変更依頼一覧 -->
-    <SectionCard>
-      <ShiftChangeRequestList
-        :requests="requests"
-        :current-user-id="authStore.currentUser?.id ?? 0"
-        :is-admin="isAdmin"
-        :is-loading="isLoading"
-        :member-names="memberNames"
-        :submit-review="onReview"
-        @withdraw="onWithdraw"
+    <SectionCard v-if="loadError">
+      <DashboardErrorState
+        :error="loadError"
+        testid="change-request-load-error"
+        @retry="load"
       />
     </SectionCard>
+
+    <PageLoading v-else-if="loading" />
+
+    <template v-else>
+      <!-- 変更依頼作成フォーム。受付外（PUBLISHED 以降）は出さず案内に替える -->
+      <ShiftChangeRequestForm
+        v-if="canCreate"
+        :schedule-id="scheduleId"
+        @submitted="onSubmitted"
+      />
+      <p
+        v-else
+        data-testid="change-request-closed-notice"
+        class="rounded-lg border border-surface-200 bg-surface-50 px-3 py-2 text-sm text-surface-600"
+      >
+        {{ $t('shift.changeRequest.closedForNew') }}
+      </p>
+
+      <!-- 変更依頼一覧 -->
+      <SectionCard>
+        <ShiftChangeRequestList
+          :requests="requests"
+          :current-user-id="authStore.currentUser?.id ?? null"
+          :can-review="canReview"
+          :is-loading="isLoading"
+          :processing-ids="processingIds"
+          :member-names="memberNames"
+          :submit-review="onReview"
+          @withdraw="onWithdraw"
+        />
+      </SectionCard>
+    </template>
   </div>
 </template>

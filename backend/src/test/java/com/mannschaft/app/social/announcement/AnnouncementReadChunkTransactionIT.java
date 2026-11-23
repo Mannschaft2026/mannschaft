@@ -97,6 +97,7 @@ class AnnouncementReadChunkTransactionIT extends AbstractMySqlIntegrationTest {
         SecurityContextHolder.clearContext();
         jdbc.update("DELETE FROM announcement_read_status WHERE user_id IN (?, ?)", memberM, authorId);
         jdbc.update("DELETE FROM announcement_feeds WHERE title_cache LIKE ?", "alic-tx-" + key + "%");
+        jdbc.update("DELETE FROM blog_posts WHERE team_id = ? AND slug LIKE ?", t1, "alic-tx-" + key + "%");
         jdbc.update("DELETE FROM team_org_memberships WHERE team_id = ?", t1);
         jdbc.update("DELETE FROM memberships WHERE user_id IN (?, ?)", memberM, authorId);
         jdbc.update("DELETE FROM teams WHERE id = ?", t1);
@@ -224,11 +225,18 @@ class AnnouncementReadChunkTransactionIT extends AbstractMySqlIntegrationTest {
                 + "UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9";
         String nums = "SELECT a.d + 10 * b.d + 100 * c.d + 1000 * e.d AS n FROM (" + d + ") a CROSS JOIN (" + d
                 + ") b CROSS JOIN (" + d + ") c CROSS JOIN (" + d + ") e";
+        // 元は公開済みの実在ブログ記事（1 告知に 1 記事。元が公開済みでない告知は一括既読の対象外。N9）
+        jdbc.update("INSERT INTO blog_posts (" + AnnouncementSourceFixtures.BULK_PUBLISHED_BLOG_COLUMNS + ") "
+                        + "SELECT " + AnnouncementSourceFixtures.BULK_PUBLISHED_BLOG_VALUES.formatted(
+                                "?", "?", "CONCAT(?, n)", "CONCAT(?, n)")
+                        + " FROM (" + nums + ") x WHERE n < ? ORDER BY n",
+                t1, authorId, "alic-tx-" + key + "-t-", "alic-tx-" + key + "-t-", count);
         jdbc.update("INSERT INTO announcement_feeds (scope_type, scope_id, source_type, source_id, author_id, "
                         + "title_cache, priority, is_pinned, visibility, include_unassigned, is_advertisement, "
-                        + "created_at, updated_at) SELECT 'TEAM', ?, 'BLOG_POST', ? + n, ?, CONCAT(?, n), 'NORMAL', 0, "
-                        + "'MEMBERS_AND_ABOVE', 0, 0, NOW(), NOW() FROM (" + nums + ") x WHERE n < ? ORDER BY n",
-                t1, 8_800_000L + Math.abs(key.hashCode() % 100_000) * 10L, authorId, "alic-tx-" + key + "-t-", count);
+                        + "created_at, updated_at) SELECT 'TEAM', ?, 'BLOG_POST', b.id, ?, b.title, 'NORMAL', 0, "
+                        + "'MEMBERS_AND_ABOVE', 0, 0, NOW(), NOW() FROM blog_posts b WHERE b.team_id = ? "
+                        + "AND b.slug LIKE ? ORDER BY b.id",
+                t1, authorId, t1, "alic-tx-" + key + "-t-%");
         List<Long> ids = jdbc.queryForList("SELECT id FROM announcement_feeds WHERE title_cache LIKE ? ORDER BY id",
                 Long.class, "alic-tx-" + key + "-t-%");
         assertThat(ids).hasSize(count);

@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Solicitud de cambio",
+      "typeColumn": "Tipo de solicitud",
+      "empty": "Aún no hay solicitudes de cambio",
       "type": {
         "PRE_CONFIRM_EDIT": "Edición pre-confirmación",
         "INDIVIDUAL_SWAP": "Intercambio individual",
@@ -74,15 +76,15 @@
       "reviewComment": "Comentario de revisión",
       "openCallLimit": "Las convocatorias abiertas están limitadas a 3 por mes",
       "fetchError": "Error al obtener las solicitudes de cambio",
-      "submitted": "Solicitud de cambio enviada",
-      "approved": "Solicitud aprobada",
-      "rejected": "Solicitud rechazada",
-      "withdrawn": "Solicitud retirada",
-      "submitError": "No se pudo enviar la solicitud de cambio",
-      "reviewError": "No se pudo revisar la solicitud",
+      "requester": "Solicitante",
+      "unknownRequester": "Usuario desconocido",
+      "createSuccess": "Solicitud de cambio enviada",
+      "approveSuccess": "Solicitud de cambio aprobada",
+      "rejectSuccess": "Solicitud de cambio rechazada",
+      "withdrawSuccess": "Solicitud de cambio retirada",
+      "closedForNew": "Este turno ya está publicado, por lo que ya no se aceptan nuevas solicitudes de cambio.",
       "reviewedAt": "Revisado el",
-      "reviewConflict": "Otra persona actualizó la solicitud antes. Se recargó la lista; revise el estado más reciente",
-      "withdrawError": "No se pudo retirar la solicitud"
+      "reviewConflict": "Otra persona actualizó la solicitud antes. Se recargó la lista; revise el estado más reciente"
     },
     "pdf": {
       "teamLayout": "PDF del horario del equipo",
@@ -170,7 +172,9 @@
       "colDate": "Fecha",
       "colSlots": "Franjas",
       "editDialogTitle": "Editar turno",
-      "accessDeniedRedirect": "No tienes permiso para ver esta página"
+      "accessDeniedRedirect": "No tienes permiso para ver esta página",
+      "tabBoard": "Tablero de turnos",
+      "tabChangeRequests": "Solicitudes de cambio"
     },
     "slot": {
       "createTitle": "Crear franja",
@@ -282,7 +286,14 @@
       "userId": "ID de usuario",
       "userIdPlaceholder": "Ingrese el ID de usuario",
       "saveSuccess": "Restricciones guardadas",
-      "deleteSuccess": "Restricciones eliminadas"
+      "deleteSuccess": "Restricciones eliminadas",
+      "unknownMember": "Usuario desconocido",
+      "selectMember": "Seleccionar un miembro",
+      "searchMember": "Buscar por nombre",
+      "noSelectableMembers": "No hay miembros que se puedan añadir",
+      "membersLoadError": "No se pudo cargar la lista de miembros",
+      "deleteTitle": "Eliminar restricción laboral",
+      "deleteConfirm": "¿Eliminar esta restricción laboral?"
     },
     "validation": {
       "atLeastOneConstraint": "Por favor especifique al menos una restricción"
@@ -434,8 +445,10 @@
       "sectionTitle": "Enviar preferencias / Tablero de turnos",
       "bulkRequest": "Enviar preferencias en bloque",
       "board": "Tablero de turnos",
+      "edit": "Editar turnos",
       "weeklyDefault": "Configurar valores por día de la semana",
-      "closed": "El plazo de preferencias ha terminado"
+      "closed": "El plazo de preferencias ha terminado",
+      "changeRequest": "Solicitud de cambio"
     },
     "submitConfirm": {
       "title": "¿Enviar con este contenido?",

@@ -482,6 +482,11 @@ export interface ChangeRequest {
     reason: string | null
     requestedBy: number
   }
+  /**
+   * 依頼者の表示名（BE が ChangeRequestResponse のトップレベルに足す契約）。
+   * 名前を解決できない（退会者等）ときは null。BE 反映前の応答では未定義。
+   */
+  requesterName?: string | null
   reviewInfo: {
     status: ChangeRequestStatus
     reviewerId: number | null
@@ -495,6 +500,12 @@ export interface ChangeRequest {
   /** 楽観ロック用バージョン（審査時にそのまま送る。BE は不一致を 409 SHIFT_018 にする） */
   version: number
 }
+
+/** 審査の結果。conflict の latest は 409 後に再取得した最新の依頼（消えていれば null） */
+export type ReviewOutcome =
+  | { status: 'ok' }
+  | { status: 'conflict'; latest: ChangeRequest | null }
+  | { status: 'error' }
 
 export interface CreateChangeRequestPayload {
   scheduleId: number

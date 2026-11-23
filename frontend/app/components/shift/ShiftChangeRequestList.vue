@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
-
-export type ReviewOutcome =
-  | { status: 'ok' }
-  | { status: 'conflict'; latest: ChangeRequest | null }
-  | { status: 'error' }
+import type { ChangeRequest, ChangeRequestStatus, ReviewOutcome } from '~/types/shift'
 
 const props = defineProps<{
   /**
@@ -18,10 +13,14 @@ const props = defineProps<{
     version: number,
   ) => Promise<ReviewOutcome>
   requests: ChangeRequest[]
-  currentUserId: number
-  isAdmin?: boolean
+  /** ログイン中の利用者 ID。未解決（null）の間は審査・取り下げのボタンを出さない。 */
+  currentUserId: number | null
+  /** 審査してよいか（チーム ADMIN / DEPUTY_ADMIN）。判定は呼び出し側の useRoleAccess。 */
+  canReview?: boolean
   isLoading?: boolean
-  /** userId → 表示名。引けない依頼者は「不明なメンバー」を出す */
+  /** 審査・取り下げの処理中の依頼 ID（二重送信防止のため disabled / loading にする） */
+  processingIds?: number[]
+  /** userId → 表示名。requesterName が無い依頼者の補完に使う（引けなければ「不明なユーザー」） */
   memberNames?: Map<number, string>
 }>()
 
@@ -37,10 +36,6 @@ const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED'; versio
 const reviewComment = ref('')
 const isReviewing = ref(false)
 
-function memberName(userId: number): string {
-  return props.memberNames?.get(userId) ?? t('shift.requests.unknownMember')
-}
-
 function statusSeverity(status: ChangeRequestStatus): string {
   switch (status) {
     case 'OPEN':
@@ -49,9 +44,6 @@ function statusSeverity(status: ChangeRequestStatus): string {
       return 'success'
     case 'REJECTED':
       return 'danger'
-    case 'WITHDRAWN':
-    case 'EXPIRED':
-      return 'secondary'
     default:
       return 'secondary'
   }
@@ -65,13 +57,32 @@ function typeLabel(type: string): string {
   return t(`shift.changeRequest.type.${type}`)
 }
 
-function openReviewDialog(data: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'): void {
-  reviewTarget.value = { id: data.id, decision, version: data.version }
+/** 依頼者の表示名。userId は表示しない（解決できなければ「不明なユーザー」）。 */
+function requesterLabel(row: ChangeRequest): string {
+  return row.requesterName ?? props.memberNames?.get(row.requestInfo.requestedBy) ?? t('shift.changeRequest.unknownRequester')
+}
+
+function isOwn(row: ChangeRequest): boolean {
+  return props.currentUserId !== null && row.requestInfo.requestedBy === props.currentUserId
+}
+
+function isProcessing(id: number): boolean {
+  return props.processingIds?.includes(id) ?? false
+}
+
+/** 自分の依頼は審査できない（BE も 403 SHIFT_045）。本人の確定は取り下げで代替する。 */
+function canReviewRow(row: ChangeRequest): boolean {
+  return !!props.canReview && props.currentUserId !== null && !isOwn(row) && row.reviewInfo.status === 'OPEN'
+}
+
+function openReviewDialog(row: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'): void {
+  reviewTarget.value = { id: row.id, decision, version: row.version }
   reviewComment.value = ''
   reviewDialogVisible.value = true
 }
 
 async function confirmReview(): Promise<void> {
+  // 確定ボタンの連打で同じ審査を重ねて送らない
   const target = reviewTarget.value
   if (!target || isReviewing.value) return
   isReviewing.value = true
@@ -108,12 +119,12 @@ function hasReviewResult(data: ChangeRequest): boolean {
 </script>
 
 <template>
-  <div>
+  <div data-testid="change-request-list">
     <PageLoading v-if="isLoading" size="32px" />
 
     <div v-else-if="requests.length === 0" class="py-8 text-center text-surface-400">
       <i class="pi pi-inbox mb-2 block text-3xl" />
-      <p class="text-sm">{{ $t('shift.changeRequest.title') }}</p>
+      <p class="text-sm" data-testid="change-request-empty">{{ $t('shift.changeRequest.empty') }}</p>
     </div>
 
     <DataTable
@@ -126,14 +137,14 @@ function hasReviewResult(data: ChangeRequest): boolean {
       class="text-sm"
     >
       <!-- 依頼者 -->
-      <Column :header="$t('shift.hourlyRate.column.member')" field="requestInfo.requestedBy" style="min-width: 100px">
+      <Column :header="$t('shift.changeRequest.requester')" style="min-width: 100px">
         <template #body="{ data }">
-          <span class="font-medium">{{ memberName(data.requestInfo.requestedBy) }}</span>
+          <span class="font-medium">{{ requesterLabel(data) }}</span>
         </template>
       </Column>
 
       <!-- 種別 -->
-      <Column :header="$t('shift.changeRequest.title')" field="requestInfo.requestType" style="min-width: 120px">
+      <Column :header="$t('shift.changeRequest.typeColumn')" field="requestInfo.requestType" style="min-width: 120px">
         <template #body="{ data }">
           <span class="text-xs">{{ typeLabel(data.requestInfo.requestType) }}</span>
         </template>
@@ -167,32 +178,44 @@ function hasReviewResult(data: ChangeRequest): boolean {
       </Column>
 
       <!-- 操作 -->
-      <Column :header="$t('label.actions')" style="min-width: 180px">
+      <!-- 狭幅（スマホ）でも主要操作が画面外に出ないよう、操作列は右端に固定して他の列だけ横スクロールさせる -->
+      <Column :header="$t('label.actions')" frozen align-frozen="right" style="min-width: 150px">
         <template #body="{ data }">
           <div class="flex gap-2">
-            <!-- ADMIN: 承認・却下 -->
-            <template v-if="isAdmin && data.reviewInfo.status === 'OPEN'">
+            <!-- 管理者: 他人の依頼の承認・却下 -->
+            <template v-if="canReviewRow(data)">
               <Button
+                :data-testid="`change-request-approve-${data.id}`"
                 :label="$t('shift.changeRequest.approve')"
+                class="min-h-[44px]"
                 severity="success"
                 size="small"
+                :disabled="isProcessing(data.id)"
+                :loading="isProcessing(data.id)"
                 @click="openReviewDialog(data, 'ACCEPTED')"
               />
               <Button
+                :data-testid="`change-request-reject-${data.id}`"
                 :label="$t('shift.changeRequest.reject')"
+                class="min-h-[44px]"
                 severity="danger"
                 size="small"
+                :disabled="isProcessing(data.id)"
                 @click="openReviewDialog(data, 'REJECTED')"
               />
             </template>
 
             <!-- 依頼者本人: 取下 -->
             <Button
-              v-if="data.requestInfo.requestedBy === currentUserId && data.reviewInfo.status === 'OPEN'"
+              v-if="isOwn(data) && data.reviewInfo.status === 'OPEN'"
+              :data-testid="`change-request-withdraw-${data.id}`"
               :label="$t('shift.changeRequest.withdraw')"
+              class="min-h-[44px]"
               severity="secondary"
               size="small"
               outlined
+              :disabled="isProcessing(data.id)"
+              :loading="isProcessing(data.id)"
               @click="emit('withdraw', data.id)"
             />
           </div>
@@ -205,7 +228,7 @@ function hasReviewResult(data: ChangeRequest): boolean {
       v-model:visible="reviewDialogVisible"
       :header="$t('shift.changeRequest.review')"
       modal
-      :style="{ width: '400px' }"
+      :style="{ width: '400px', maxWidth: '95vw' }"
     >
       <div class="space-y-3">
         <label class="block text-sm text-surface-600">
@@ -213,6 +236,7 @@ function hasReviewResult(data: ChangeRequest): boolean {
         </label>
         <Textarea
           v-model="reviewComment"
+          data-testid="change-request-review-comment"
           :placeholder="$t('shift.changeRequest.reviewComment')"
           rows="3"
           class="w-full"
@@ -226,6 +250,7 @@ function hasReviewResult(data: ChangeRequest): boolean {
           @click="reviewDialogVisible = false"
         />
         <Button
+          data-testid="change-request-review-confirm"
           :label="reviewTarget?.decision === 'ACCEPTED' ? $t('shift.changeRequest.approve') : $t('shift.changeRequest.reject')"
           :severity="reviewTarget?.decision === 'ACCEPTED' ? 'success' : 'danger'"
           :loading="isReviewing"

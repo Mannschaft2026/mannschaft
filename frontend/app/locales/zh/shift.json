@@ -53,6 +53,8 @@
     },
     "changeRequest": {
       "title": "变更申请",
+      "typeColumn": "申请类型",
+      "empty": "暂无变更申请",
       "type": {
         "PRE_CONFIRM_EDIT": "确定前变更",
         "INDIVIDUAL_SWAP": "个人替换",
@@ -74,15 +76,15 @@
       "reviewComment": "审核评论",
       "openCallLimit": "公开招募每月最多3次",
       "fetchError": "获取变更申请失败",
-      "submitted": "已提交变更申请",
-      "approved": "已批准",
-      "rejected": "已驳回",
-      "withdrawn": "已撤回",
-      "submitError": "变更申请提交失败",
-      "reviewError": "审核失败",
+      "requester": "申请人",
+      "unknownRequester": "未知用户",
+      "createSuccess": "已提交变更申请",
+      "approveSuccess": "已批准变更申请",
+      "rejectSuccess": "已驳回变更申请",
+      "withdrawSuccess": "已撤回变更申请",
+      "closedForNew": "该排班表已发布，不再接受新的变更申请",
       "reviewedAt": "审核时间",
-      "reviewConflict": "其他人已先行更新。列表已重新加载，请确认最新状态",
-      "withdrawError": "撤回失败"
+      "reviewConflict": "其他人已先行更新。列表已重新加载，请确认最新状态"
     },
     "pdf": {
       "teamLayout": "团队排班表 PDF",
@@ -170,7 +172,9 @@
       "colDate": "日期",
       "colSlots": "时段",
       "editDialogTitle": "编辑班次",
-      "accessDeniedRedirect": "您无权查看此页面"
+      "accessDeniedRedirect": "您无权查看此页面",
+      "tabBoard": "排班看板",
+      "tabChangeRequests": "变更申请"
     },
     "slot": {
       "createTitle": "创建时段",
@@ -282,7 +286,14 @@
       "userId": "用户ID",
       "userIdPlaceholder": "请输入用户ID",
       "saveSuccess": "工作限制已保存",
-      "deleteSuccess": "工作限制已删除"
+      "deleteSuccess": "工作限制已删除",
+      "unknownMember": "未知用户",
+      "selectMember": "选择成员",
+      "searchMember": "按姓名搜索",
+      "noSelectableMembers": "没有可添加的成员",
+      "membersLoadError": "无法获取成员列表",
+      "deleteTitle": "删除工作限制",
+      "deleteConfirm": "确定要删除此工作限制吗？"
     },
     "validation": {
       "atLeastOneConstraint": "请至少指定一个限制条件"
@@ -434,8 +445,10 @@
       "sectionTitle": "提交排班意愿 / 排班板",
       "bulkRequest": "批量提交意愿",
       "board": "排班板",
+      "edit": "编辑排班时段",
       "weeklyDefault": "设置每周默认",
-      "closed": "意愿提交已截止"
+      "closed": "意愿提交已截止",
+      "changeRequest": "变更申请"
     },
     "submitConfirm": {
       "title": "确认以此内容提交？",

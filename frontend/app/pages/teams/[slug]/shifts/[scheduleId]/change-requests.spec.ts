@@ -51,6 +51,9 @@ function respond(url: string, options?: { body?: { decision: ChangeRequestStatus
   if (url.endsWith('/me/permissions')) {
     return permissionError ? Promise.reject(new Error('permissions unavailable')) : Promise.resolve(permissions(role, true))
   }
+  // PR 版の page が呼ぶシフト表・チーム取得（チーム一致検証）。teamId と numericId を一致させる。
+  if (/\/shifts\/schedules\/\d+$/.test(url)) return Promise.resolve({ data: { id: 425, teamId: 12, status: { status: 'COLLECTING' } } })
+  if (/\/api\/v1\/teams\/[^/]+$/.test(url)) return Promise.resolve({ data: { numericId: 12 } })
   if (url.endsWith('/members/all')) {
     return membersError ? Promise.reject(new Error('members unavailable')) : Promise.resolve({ data: [{ userId: 2, displayName: '山田花子' }] })
   }
@@ -73,6 +76,7 @@ function renderPage() {
       SectionCard: { template: '<section><slot /></section>' },
       NuxtLink: { template: '<a><slot /></a>' },
       Tag: true, Textarea: true, PageLoading: true,
+      DashboardErrorState: { template: '<div data-testid="change-request-load-error" />' },
       Dialog: { props: ['visible'], template: '<div v-if="visible" data-testid="review-dialog"><slot /><slot name="footer" /></div>' },
     },
   } })
@@ -105,14 +109,14 @@ describe('変更依頼一覧のメンバー表示名', () => {
     await flushPromises()
     expect(mocks.api).toHaveBeenCalledWith('/api/v1/teams/team-a/members/all')
     expect(wrapper!.text()).toContain('山田花子')
-    expect(wrapper!.text()).toContain('shift.requests.unknownMember')
+    expect(wrapper!.text()).toContain('shift.changeRequest.unknownRequester')
   })
   it('members/all の取得失敗は handleApiError に渡し、不明なメンバー表示にする', async () => {
     membersError = true
     renderPage()
     await flushPromises()
     expect(mocks.handleApiError).toHaveBeenCalled()
-    expect(wrapper!.text()).toContain('shift.requests.unknownMember')
+    expect(wrapper!.text()).toContain('shift.changeRequest.unknownRequester')
   })
 })
 
@@ -237,11 +241,11 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     expect(reviewButtons()).toHaveLength(0)
   })
 
-  it('AC6 一覧GET失敗は既存のエラー通知を保ち、審査操作を出さない', async () => {
+  it('AC6 一覧GET失敗は失敗を利用者に見せ（取得エラー表示。旧: 通知）、審査操作を出さない', async () => {
     listError = true
     renderPage()
     await flushPromises()
-    expect(mocks.error).toHaveBeenCalledWith('shift.changeRequest.fetchError')
+    expect(wrapper!.find('[data-testid="change-request-load-error"]').exists()).toBe(true)
     expect(reviewButtons()).toHaveLength(0)
   })
 
@@ -289,8 +293,8 @@ describe('審査の失敗・競合時の扱い', () => {
     reviewFailure = { statusCode: 500 }
     await openAndSubmit('承認します')
     expect(unhandled).toHaveLength(0)
-    expect(mocks.error).toHaveBeenCalledWith('shift.changeRequest.reviewError')
-    expect(mocks.error).toHaveBeenCalledTimes(1)
+    expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
+    expect(mocks.error).not.toHaveBeenCalled()
     expect(wrapper!.find('[data-testid="review-dialog"]').exists()).toBe(true)
     expect(wrapper!.get('textarea-stub').attributes('modelvalue')).toBe('承認します')
   })
