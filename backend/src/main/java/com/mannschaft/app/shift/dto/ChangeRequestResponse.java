@@ -28,6 +28,9 @@ public class ChangeRequestResponse {
     ChangeRequestStatusDto reviewInfo;   // status, reviewerId, reviewComment, reviewedAt
     ChangeRequestTimingDto timing;       // expiresAt, createdAt
 
+    /** 楽観ロック用バージョン。審査（review）リクエストにそのまま送る。 */
+    Long version;
+
     public record ChangeRequestTypeDto(ChangeRequestType requestType, String reason, Long requestedBy) {}
     public record ChangeRequestStatusDto(ChangeRequestStatus status, Long reviewerId, String reviewComment, LocalDateTime reviewedAt) {}
     public record ChangeRequestTimingDto(LocalDateTime expiresAt, LocalDateTime createdAt) {}

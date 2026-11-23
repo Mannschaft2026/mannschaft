@@ -360,7 +360,8 @@ public class TeamService {
                         team.getName(),
                         team.getArchivedAt() != null,
                         team.getVisibility() == TeamEntity.Visibility.PUBLIC,
-                        team.getLifecycleStatus() == TeamEntity.LifecycleStatus.PROVISIONED));
+                        team.getLifecycleStatus() == TeamEntity.LifecycleStatus.PROVISIONED,
+                        team.getSlug()));
     }
 
     /**
@@ -370,8 +371,16 @@ public class TeamService {
      * @param archived    アーカイブ済みか
      * @param isPublic    可視性が PUBLIC か
      * @param provisioned PROVISIONED（承諾前の事前作成状態）か
+     * @param slug        URL 識別子（公開ページ・招待管理画面への導線用。CMP-261107-1833）
      */
-    public record JoinabilitySummary(String name, boolean archived, boolean isPublic, boolean provisioned) {
+    public record JoinabilitySummary(String name, boolean archived, boolean isPublic, boolean provisioned,
+                                     String slug) {
+
+        /** slug を使わない呼び出し元向け（slug は null）。 */
+        public JoinabilitySummary(String name, boolean archived, boolean isPublic, boolean provisioned) {
+            this(name, archived, isPublic, provisioned, null);
+        }
+
         public boolean joinable() {
             return !archived && !provisioned && isPublic;
         }

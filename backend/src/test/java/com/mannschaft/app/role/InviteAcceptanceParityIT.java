@@ -29,13 +29,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
  * CMP-260826-1457 W1 前段: 承諾・辞退の外部挙動パリティ（AC B1・B2・B3・D1・F2・M1）。
+ * F2 は CMP-261107-1833（招待付き新規登録の保留承認方式）で反転した（AC1）。
  *
  * <p>「特性」と付いた試験は現行（main）の外部挙動を固定するもので main でも緑が正しい（承諾は Facade があれば Facade、
  * 無ければ現行 InviteService を呼ぶ）。「red」と付いた試験は新設の claims／Facade を要求し main では落ちる。</p>
@@ -392,16 +392,17 @@ class InviteAcceptanceParityIT extends InviteAcceptanceItSupport {
     }
 
     // ------------------------------------------------------------------
-    // F2: 招待付き登録（特性・別戦役 (d) = CMP-261107-1833）
-    //   現行は登録直後が PENDING_VERIFICATION のため T1 で ROLE_002 となり登録ごと巻き戻る。
-    //   ベータ制限有効時は招待必須なので、招待付き登録が常に失敗する疑い。本 PR は現状を固定するだけで直さない。
-    //   資格方針の見直しは別戦役 CMP-261107-1833 で扱う（この試験はその戦役で意図的に書き換える）。
+    // F2: 招待付き登録（CMP-261107-1833 で反転。AC1）
+    //   旧: 登録直後が PENDING_VERIFICATION のため T1 で ROLE_002 となり登録ごと巻き戻っていた。
+    //   新: 登録時は参加せず、ハッシュだけを持つ保留（registration_pending_invites）を users と同TXで作る。
+    //       参加はログイン後に本人が承認したとき（RegistrationPendingInviteIT）。
     // ------------------------------------------------------------------
 
     @ParameterizedTest
     @ValueSource(strings = {"TEAM", "ORGANIZATION"})
-    @DisplayName("F2 特性（別戦役 (d)・陣立て書 §13）: 有効招待付き登録は ROLE_002 で登録ごと巻き戻る")
-    void registrationWithInviteRollsBackEntirely(String type) {
+    @DisplayName("AC1 F2 反転（CMP-261107-1833）: 有効招待付き登録は 200、users PENDING_VERIFICATION、保留1行（ハッシュのみ）、"
+            + "used_count 0・claims 0・権限/在籍 0、UserRegisteredEvent あり")
+    void registrationWithInviteCreatesPendingInvite(String type) {
         Scope scope = scope(type);
         InviteTokenEntity token = token(scope, 0, null, 3, 0, null, null);
         @SuppressWarnings("unchecked")
@@ -421,19 +422,34 @@ class InviteAcceptanceParityIT extends InviteAcceptanceItSupport {
         ApplicationEventMulticaster multicaster = context.getBean("applicationEventMulticaster", ApplicationEventMulticaster.class);
         multicaster.addApplicationListener(listener);
         try {
-            assertThatThrownBy(() -> registration.register(req, "203.0.113." + (int) (Math.random() * 200)))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            e -> assertThat(e.getErrorCode()).isEqualTo(RoleErrorCode.ROLE_002));
+            registration.register(req, "203.0.113." + (int) (Math.random() * 200));
         } finally {
             multicaster.removeApplicationListener(listener);
         }
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email = ?", Long.class, email))
-                .as("users 行は残らない").isZero();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM email_verification_tokens t LEFT JOIN users u ON u.id = t.user_id "
-                + "WHERE u.id IS NULL", Long.class)).as("孤児のメール確認トークン行なし").isZero();
-        assertThat(usedCount(token.getId())).isZero();
-        assertThat(claimCountOrZero(token.getId())).isZero();
-        assertThat(registeredEvent).as("UserRegisteredEvent 無し").isFalse();
+        Long userId = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+        try {
+            assertThat(jdbc.queryForObject("SELECT status FROM users WHERE id = ?", String.class, userId))
+                    .isEqualTo("PENDING_VERIFICATION");
+            List<Map<String, Object>> pending = jdbc.queryForList(
+                    "SELECT token_hash, scope_type, scope_id, status FROM registration_pending_invites WHERE user_id = ?", userId);
+            assertThat(pending).as("保留は1行").hasSize(1);
+            Map<String, Object> row = pending.get(0);
+            assertThat(row.get("token_hash")).as("ハッシュのみ保存（平文を持たない）")
+                    .isEqualTo(new com.mannschaft.app.common.token.SecretTokenVault().hash(plaintext(token)))
+                    .isNotEqualTo(plaintext(token));
+            assertThat(row.get("scope_type")).isEqualTo(type);
+            assertThat(((Number) row.get("scope_id")).longValue()).isEqualTo(scope.id());
+            assertThat(row.get("status")).isEqualTo("PENDING");
+            assertThat(usedCount(token.getId())).as("登録時は使用回数を進めない").isZero();
+            assertThat(claimCountOrZero(token.getId())).as("登録時は claim を作らない").isZero();
+            assertThat(userRoleCount(userId, scope)).isZero();
+            assertThat(membershipCount(userId, scope)).isZero();
+            assertThat(registeredEvent).as("UserRegisteredEvent あり").isTrue();
+        } finally {
+            jdbc.update("DELETE FROM registration_pending_invites WHERE user_id = ?", userId);
+            jdbc.update("DELETE FROM email_verification_tokens WHERE user_id = ?", userId);
+            jdbc.update("DELETE FROM users WHERE id = ?", userId);
+        }
     }
 
     // ------------------------------------------------------------------

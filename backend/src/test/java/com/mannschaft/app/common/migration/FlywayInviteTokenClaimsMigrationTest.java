@@ -106,4 +106,24 @@ class FlywayInviteTokenClaimsMigrationTest {
             }
         }
     }
+
+    @Test
+    @DisplayName("CMP-261107-1833: 付与印 grant_committed_at（DATETIME(6)・NULL 可）と、RELEASED に印を持たせない CHECK がある")
+    void 付与印の列とCHECKが揃う() throws Exception {
+        try (Connection c = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+             Statement s = c.createStatement()) {
+            try (ResultSet rs = s.executeQuery("SELECT COLUMN_TYPE, IS_NULLABLE FROM information_schema.COLUMNS "
+                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" + TABLE + "' AND COLUMN_NAME = 'grant_committed_at'")) {
+                assertThat(rs.next()).as("grant_committed_at 列").isTrue();
+                assertThat(rs.getString("COLUMN_TYPE")).isEqualTo("datetime(6)");
+                assertThat(rs.getString("IS_NULLABLE")).isEqualTo("YES");
+            }
+            try (ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" + TABLE + "' "
+                    + "AND CONSTRAINT_TYPE = 'CHECK' AND CONSTRAINT_NAME = 'chk_itc_grant_committed'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getLong(1)).isEqualTo(1);
+            }
+        }
+    }
 }

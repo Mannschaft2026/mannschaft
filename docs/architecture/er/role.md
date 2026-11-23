@@ -166,6 +166,8 @@ erDiagram
 | `token_id` | `bigint unsigned` | NO | （なし） |  |
 | `user_id` | `bigint unsigned` | NO | （なし） |  |
 | `status` | `varchar(16)` | NO | （なし） |  |
+| `grant_committed_at` | `datetime(6)` | YES | NULL | この claim によるロール付与がコミットされた時刻（UTC）。legacy_grant_unknown_at も NULL なら未付与（旧データは付与されたか不明） |
+| `legacy_grant_unknown_at` | `datetime(6)` | YES | NULL | 付与印の導入前から CLAIMED だった旧データの印（UTC）。付与されたか不明なので自動では戻さない |
 | `created_at` | `datetime(6)` | NO | （なし） |  |
 | `updated_at` | `datetime(6)` | NO | （なし） |  |
 

@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 17
+- テーブル数: 18
 - ビュー数: 0
 
 ## ER 図
@@ -77,6 +77,10 @@ erDiagram
         bigint user_id FK
         varchar token_hash UK
     }
+    registration_pending_invites {
+        binary id PK
+        bigint user_id FK, UK
+    }
     two_factor_auth {
         bigint id PK
         bigint user_id FK, UK
@@ -117,6 +121,7 @@ erDiagram
     users |o..o{ parental_consent_links : "ID参照(FKなし) revoked_by"
     users ||--o{ password_reset_tokens : "user_id"
     users ||--o{ refresh_tokens : "user_id"
+    users ||--o| registration_pending_invites : "user_id"
     users ||--o| two_factor_auth : "user_id"
     users ||..o{ user_interest_tags : "ID参照(FKなし) user_id"
     users |o..o{ users : "ID参照(FKなし) account_created_by_watcher_user_id"
@@ -789,6 +794,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | --- | --- | --- |
 | `audit_logs` | `target_type` | `target_id` |
 | `birth_profile_commands` | `command_type` | `command_id` |
+| `registration_pending_invites` | `scope_type` | `scope_id` |
 
 ## 推定不能参照
 
@@ -799,6 +805,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `birth_profile_confirmations` | `withdrawal_attempt_id` | 参照先テーブルを特定できない |
 | `oauth_accounts` | `provider_user_id` | 型が参照先 users.id と不一致（varchar ≠ bigint） |
 | `oauth_link_tokens` | `provider_user_id` | 型が参照先 users.id と不一致（varchar ≠ bigint） |
+| `registration_pending_invites` | `accept_attempt_id` | 参照先テーブルを特定できない |
 | `users` | `withdrawal_attempt_id` | 参照先テーブルを特定できない |
 | `webauthn_credentials` | `credential_id` | 参照先テーブルを特定できない |
 
@@ -983,6 +990,24 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `revoked_at` | `datetime` | YES | NULL |  |
 | `created_at` | `datetime` | NO | （なし） |  |
 | `jti` | `varchar(36)` | NO | （空文字） |  |
+
+### `registration_pending_invites`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `user_id` | `bigint unsigned` | NO | （なし） | 登録した利用者 |
+| `token_hash` | `char(64)` | NO | （なし） | 招待トークンのハッシュ（平文は保存しない） |
+| `scope_type` | `varchar(20)` | NO | （なし） | 招待先の種類（TEAM または ORGANIZATION） |
+| `scope_id` | `bigint unsigned` | NO | （なし） | 招待先のチームまたは組織の ID |
+| `status` | `varchar(20)` | NO | （なし） | 保留の状態 |
+| `failure_code` | `varchar(20)` | YES | NULL | 参加できなかった理由のエラーコード |
+| `accept_attempt_id` | `binary(16)` | YES | NULL | 処理中（ACCEPTING）の承認試行の世代 |
+| `accepting_started_at` | `datetime(6)` | YES | NULL | 承認処理を始めた時刻（UTC） |
+| `reissue_requested_at` | `datetime(6)` | YES | NULL | 再招待を最後に要請した時刻（UTC） |
+| `version` | `bigint` | NO | `0` |  |
+| `created_at` | `datetime(6)` | NO | （なし） |  |
+| `updated_at` | `datetime(6)` | NO | （なし） |  |
 
 ### `two_factor_auth`
 

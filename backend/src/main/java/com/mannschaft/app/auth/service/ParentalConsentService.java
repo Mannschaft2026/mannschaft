@@ -41,6 +41,7 @@ public class ParentalConsentService {
     private final AuthTokenService authTokenService;
     private final StringRedisTemplate redisTemplate;
     private final EmailOutboxService emailOutboxService;
+    private final PendingInviteStore pendingInviteStore;
 
     /** 招待メールのレートリミット: 24時間で最大10回 */
     private static final int INVITE_MAX_ATTEMPTS = 10;
@@ -360,6 +361,8 @@ public class ParentalConsentService {
             UserEntity childUser = locked.child();
             childUser.requestDeletion();
             userRepository.save(childUser);
+            // 招待付き登録の保留は参加させずに破棄する（CMP-261107-1833 設計 §5）
+            pendingInviteStore.discardOpen(childUserId);
             log.info("保護者同意全拒否 → 子アカウント論理削除: childUserId={}", childUserId);
         }
 
