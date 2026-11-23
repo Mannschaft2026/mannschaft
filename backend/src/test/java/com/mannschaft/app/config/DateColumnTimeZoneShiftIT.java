@@ -118,6 +118,8 @@ class DateColumnTimeZoneShiftIT extends AbstractMySqlIntegrationTest {
         while (pool.getIdleConnections() < hikari.getMinimumIdle() && System.currentTimeMillis() < deadline) {
             Thread.sleep(50);
         }
-        assertThat(pool.getIdleConnections()).as("UTC で再作成された接続が揃っていること").isGreaterThan(0);
+        assertThat(pool.getIdleConnections())
+                .as("UTC で再作成された接続が最小アイドル数まで揃っていること（未達だと JST 作成の接続が混ざり得る）")
+                .isGreaterThanOrEqualTo(hikari.getMinimumIdle());
     }
 }

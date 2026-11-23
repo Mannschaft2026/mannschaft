@@ -165,8 +165,10 @@ class TimeZoneStorageBasisGuardTest {
         List<String> violations = new ArrayList<>();
         for (Path yml : listProfileConfigFiles()) {
             Properties p = loadYaml(yml);
-            for (String key : p.stringPropertyNames()) {
-                String v = p.getProperty(key);
+            // 真偽値は Boolean のまま格納されるため stringPropertyNames() は使わない（見落とし防止）
+            for (Object rawKey : p.keySet()) {
+                String key = String.valueOf(rawKey);
+                String v = String.valueOf(p.get(rawKey));
                 if (v != null && v.contains("jdbc:") && v.toLowerCase().contains("cachedefaulttimezone=true")) {
                     violations.add(yml + " [" + key + "]");
                 }
