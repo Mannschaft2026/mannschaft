@@ -245,7 +245,7 @@ jobs:
         id: regen_test
         if: steps.changes.outputs.backend_changed == 'true'
         working-directory: ./backend
-        run: python3 -m unittest scripts/test_regen_shard_weights.py
+        run: python3 -m unittest scripts/test_regen_shard_weights.py scripts/test_run_ci_observability_patterns.py
 
       - name: Set up Java ${{ env.JAVA_VERSION }}
         if: steps.changes.outputs.backend_changed == 'true'

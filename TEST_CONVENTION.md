@@ -164,7 +164,7 @@ WARN/ERROR と例外スタックを保持する。個別ロガーの INFO/DEBUG 
 レベル変更を引き継いでも実行順に依存する。ログが無いことを検証する場合も、検査対象の
 レベルを明示し、意図せず低レベルの漏出を見逃す空虚な緑を避ける。
 
-MFA単発性能ITの補助観測は既存の計測区間外で採り、`[mfa-latency]` と同じpathKind・wall窓・PIDの `[mfa-resources]` にcurrent-thread CPU差分(ns)とJVM全体のGC回数・時間差分(ms)を記録する。採取窓はwall窓を外側から含み、未対応・無効・未取得は `-1`（0とは区別）とする。JMX設定・性能上限は変えない。CIでは別ファイル `mfa-resources.log` に回収し、shard0は既存case開始/終了行を利用してMFA中のみ1秒周期・最大240回、窓外は300秒周期の引数なし数値psを採る（監視は1秒待機の判定最大6000回・caseログ総読取1MiB。これは診断monitorの有限上限でありテスト上限時間は変更せず、採取上限到達は専用行へ明記する）。shard3の既存300秒観測は維持する。 shard5は初回即時・以後300秒待機で最大23回、最後の後は待機せず、psは5秒timeoutで未取得/非0を明記する（待機とtimeoutの合計上限6715秒、test/job上限は不変更）。psのtimeはプロセス累積・pcpuはlifetime平均・RSSは採取時点であり、既存class窓と時刻対応させても個別classへの厳密なCPU帰属やGC/DB原因を主張しない。
+MFA単発性能IT（AC-54）の合否は `PasswordEncoder#matches` の照合回数（8回ちょうど）で判定し、壁時計の閾値は持たない（CMP-261123-1434）。所要時間は診断用に `[mfa-latency] pathKind=(all-mismatch|last-match) startEpochMillis=… endEpochMillis=… elapsedMillis=… pid=…`（上限値 `limitMillis` は出さない）として出力し、CIは `backend/scripts/run-ci-tests-with-observability.sh` の完全一致正規表現で `mfa-intervals.log` に回収する。出力形式を変えるときは収集側の正規表現を同時に直し、`backend/scripts/test_run_ci_observability_patterns.py`（出力側書式と収集側正規表現を実ファイルから突き合わせる）を緑にすること。補助観測は既存の計測区間外で採り、`[mfa-latency]` と同じpathKind・wall窓・PIDの `[mfa-resources]` にcurrent-thread CPU差分(ns)とJVM全体のGC回数・時間差分(ms)を記録する。採取窓はwall窓を外側から含み、未対応・無効・未取得は `-1`（0とは区別）とする。JMX設定・性能上限は変えない。CIでは別ファイル `mfa-resources.log` に回収し、shard0は既存case開始/終了行を利用してMFA中のみ1秒周期・最大240回、窓外は300秒周期の引数なし数値psを採る（監視は1秒待機の判定最大6000回・caseログ総読取1MiB。これは診断monitorの有限上限でありテスト上限時間は変更せず、採取上限到達は専用行へ明記する）。shard3の既存300秒観測は維持する。 shard5は初回即時・以後300秒待機で最大23回、最後の後は待機せず、psは5秒timeoutで未取得/非0を明記する（待機とtimeoutの合計上限6715秒、test/job上限は不変更）。psのtimeはプロセス累積・pcpuはlifetime平均・RSSは採取時点であり、既存class窓と時刻対応させても個別classへの厳密なCPU帰属やGC/DB原因を主張しない。
 
 ---
 
