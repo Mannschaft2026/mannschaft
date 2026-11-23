@@ -44,7 +44,7 @@
 
 `LocalDateTime` の値を見ても、それが「ある瞬間を記録したものか」「ある土地の約束を記録したものか」は型からは一切分からない。読む人は毎回、そのフィールドがどちらの意味で使われているかをコードの文脈や比較相手から推測しなければならない。これが「東京時間基準はUTC計算に比べて頭を使う」の実体であり、バグの温床になっている。
 
-そして **`TimeZoneConfig`（`backend/src/main/java/com/mannschaft/app/config/TimeZoneConfig.java`）の旧実装は `@PostConstruct` で JVM 既定タイムゾーンを `Asia/Tokyo` に強制しているのは、まさにこの曖昧さを塗り潰すための処置である**（事実。同ファイル9行目のコメント「JVM のデフォルトタイムゾーンを Asia/Tokyo に設定（.claudecode.md §20）」）。`LocalDateTime.now()` は本来「今」という1つの瞬間を表せない（ゾーンが無いと壁時計の値に変換できない）が、JVM既定ゾーンをJSTに固定することで、コード中のあらゆる `LocalDateTime.now()` を暗黙に「東京の壁時計としての今」に統一し、辻褄を合わせている。
+そして **JVM 既定タイムゾーンを `Asia/Tokyo`（`UserZoneLocalDateTimeParser.SERVER_ZONE`）に強制しているのは、まさにこの曖昧さを塗り潰すための処置である**（事実。現行は `backend/src/main/java/com/mannschaft/app/config/ServerTimeZoneEnvironmentPostProcessor.java` が起動時に設定する。CMP-261123-1335 以前は `TimeZoneConfig` の `@PostConstruct` が同じ設定をしており、同ファイルのコメント「JVM のデフォルトタイムゾーンを Asia/Tokyo に設定（.claudecode.md §20）」がその意図を示していた）。`LocalDateTime.now()` は本来「今」という1つの瞬間を表せない（ゾーンが無いと壁時計の値に変換できない）が、JVM既定ゾーンをJSTに固定することで、コード中のあらゆる `LocalDateTime.now()` を暗黙に「東京の壁時計としての今」に統一し、辻褄を合わせている。
 
 **この1行（`TimeZoneConfig`）は型の曖昧さを消しているのではなく、「全部JSTだと決め打つことで曖昧さの問題自体を発生させない」という力業である。** 型で「瞬間」と「壁時計」を区別すれば、`LocalDateTime.now()` がJVM既定ゾーンで何になるかに依存する必要がなくなり、この強制の存在理由が失われる。これが根治であり、単なる「JSTをUTCに置き換える」だけの表面的な対処と本方針が違う点である。
 

@@ -20,6 +20,12 @@ import java.util.TimeZone;
  * {@link DataSourceConfig}（primary / replica / routing）と {@link ArchiveDataSourceConfig} を
  * 有効化した場合も同じ順序保証が効く。</p>
  *
+ * <p><b>この番人の限界:</b> 検査するのは「DataSource Bean の生成時点の既定 TZ」だけである。
+ * 「最初の接続より前」を保証しているのは {@link ServerTimeZoneEnvironmentPostProcessor} であり、
+ * 番人は補助にすぎない。DataSource 生成後に誰かが {@code TimeZone.setDefault} を呼ぶ場合や、
+ * 番人の登録より前に DataSource が早期生成される場合は素通りする。最終防衛は接続設定
+ * {@code cacheDefaultTimeZone=false}（防波堤の PR。接続が既定 TZ を固定しない）である。</p>
+ *
  * <p>基準ゾーンを環境変数で可変にしない理由は従来どおり（DB の既存 LocalDateTime 列の解釈が壊れる。
  * 受け皿は CMP-023）。</p>
  */

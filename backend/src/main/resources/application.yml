@@ -552,7 +552,8 @@ app:
   datasource:
     replica:
       enabled: false
-      # 接続作成時の JVM 既定 TZ を接続に固定させない（二重の守り。一次防衛は ServerTimeZoneEnvironmentPostProcessor。CMP-261123-1335）
+      # replica のみ（archive は読み取り専用で DATE を書かないため不要）。接続作成時の JVM 既定 TZ を接続に固定させない二重の守り。
+      # 一次防衛は ServerTimeZoneEnvironmentPostProcessor。
       data-source-properties:
         cacheDefaultTimeZone: false
       # jdbc-url: ${DB_REPLICA_URL:${spring.datasource.url}}

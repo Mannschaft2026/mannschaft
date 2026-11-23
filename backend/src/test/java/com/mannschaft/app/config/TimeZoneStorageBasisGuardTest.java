@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * <b>DB 格納時刻の基準タイムゾーン（＝ UTC）を固定する番人テスト</b>（Issue #2486）。
  *
  * <h2>背景 — 「格納基準が環境ごとに割れていた」</h2>
- * <p>本アプリの JVM 既定 TZ は {@link TimeZoneConfig} が {@code Asia/Tokyo} に強制し、
+ * <p>本アプリの JVM 既定 TZ は {@link ServerTimeZoneEnvironmentPostProcessor} が起動時に {@code Asia/Tokyo} へ確定し、
  * エンティティの {@code @PrePersist} は素の {@code LocalDateTime.now()}（＝ JST 壁時計）で
  * 時刻を採る。この {@code LocalDateTime} が <b>DB にどの壁時計として書かれるか</b>を決めるのが
  * {@code spring.jpa.properties.hibernate.jdbc.time_zone} である。</p>

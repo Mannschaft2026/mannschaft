@@ -447,6 +447,17 @@ jobs:
           -x jacocoTestReport
           --tests "com.mannschaft.app.config.ServerTimeZoneBootstrapTest"
           --tests "com.mannschaft.app.config.JacksonTimeTypeSymmetryGuardTest"
+          --tests "com.mannschaft.app.config.NonJstTimezoneContractTest"
+          --tests "com.mannschaft.app.reservation.service.ReservationPendingExpireServiceClockZoneTest"
+          --tests "com.mannschaft.app.schedule.ScheduleAttendanceServiceTest"
+          --tests "com.mannschaft.app.shift.service.ShiftRequestServiceTest"
+          --tests "com.mannschaft.app.ticket.TicketExpiryBatchServiceTest"
+          --tests "com.mannschaft.app.parking.service.ParkingVisitorReservationServiceTest"
+          --tests "com.mannschaft.app.timetable.personal.PersonalTimetableSlotServiceTest"
+          --tests "com.mannschaft.app.actionmemo.service.ActionMemoWeeklySummaryServiceTest"
+          --tests "com.mannschaft.app.actionmemo.service.ActionMemoReminderBatchServiceTest"
+          --tests "com.mannschaft.app.admin.service.AdminBusinessAlertServiceTest"
+          --tests "com.mannschaft.app.advertising.campaign.service.AdFrequencyCapServiceTest"
 
   # ---------------------------------------------------------------------------
   # shard: compile + test を 8 並列で実行する（Docker required for Testcontainers）
