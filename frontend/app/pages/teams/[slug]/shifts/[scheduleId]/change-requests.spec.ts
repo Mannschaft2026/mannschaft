@@ -7,6 +7,7 @@ import PrimeVue from 'primevue/config'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
+import Textarea from 'primevue/textarea'
 import Page from './change-requests.vue'
 import PageHeader from '~/components/PageHeader.vue'
 import ShiftChangeRequestList from '~/components/shift/ShiftChangeRequestList.vue'
@@ -139,7 +140,7 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     renderPage()
     await flushPromises()
     await reviewButtons()[0]!.trigger('click')
-    wrapper!.getComponent('[data-testid="review-dialog"] textarea-stub, textarea-stub').vm.$emit('update:modelValue', '承認します')
+    wrapper!.getComponent(Textarea).vm.$emit('update:modelValue', '承認します')
     await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
     await flushPromises()
     expect(mocks.api).toHaveBeenCalledWith('/api/v1/shifts/change-requests/7/review', {
@@ -279,7 +280,7 @@ describe('審査の失敗・競合時の扱い', () => {
     renderPage()
     await flushPromises()
     await reviewButtons()[0]!.trigger('click')
-    wrapper!.getComponent('textarea-stub').vm.$emit('update:modelValue', comment)
+    wrapper!.getComponent(Textarea).vm.$emit('update:modelValue', comment)
     await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
     await flushPromises()
   }
@@ -318,7 +319,7 @@ describe('審査の失敗・競合時の扱い', () => {
     renderPage()
     await flushPromises()
     await reviewButtons()[0]!.trigger('click')
-    wrapper!.getComponent('textarea-stub').vm.$emit('update:modelValue', '再送します')
+    wrapper!.getComponent(Textarea).vm.$emit('update:modelValue', '再送します')
     rows = [{ ...request(), version: 5 }]
     await wrapper!.get('[data-testid="review-dialog"]').findAll('button').at(-1)!.trigger('click')
     await flushPromises()
