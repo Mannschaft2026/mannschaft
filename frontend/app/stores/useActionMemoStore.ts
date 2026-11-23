@@ -72,6 +72,12 @@ interface ActionMemoStoreState {
   availableOrgs: AvailableOrg[]
   /** Phase 4-α: 次回作成時に付与する組織スコープ（折りたたみパネルで設定） */
   pendingOrgScope: { organizationId: number | null; orgVisibility: OrgVisibility | null }
+  /**
+   * CMP-261123-1201: 公開応答で得た個人投稿 ID（キーは memoDate = YYYY-MM-DD）。
+   * 公開後のメモ再取得が失敗しても、公開した投稿へのリンクを出せるよう保持する。
+   * 再取得が成功し当日メモに非 null の timelinePostId があれば、そちらを正として破棄する。
+   */
+  publishedPostIdOverrides: Record<string, number>
 }
 
 export type ActionMemoErrorCode =
@@ -179,6 +185,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
     availableTeams: [],
     availableOrgs: [],
     pendingOrgScope: { organizationId: null, orgVisibility: null },
+    publishedPostIdOverrides: {},
   }),
 
   getters: {
@@ -189,6 +196,20 @@ export const useActionMemoStore = defineStore('actionMemo', {
         state.memos.filter((m) => m.memoDate === date),
 
     isMoodEnabled: (state): boolean => state.settings.moodEnabled,
+
+    /**
+     * 指定日に公開した個人投稿の ID（無ければ null）。
+     * 公開応答の ID を最優先し、無ければ当日メモの非 null な timelinePostId の最初の値。
+     * チーム投稿 ID（teamTimelinePostId）は対象にしない。
+     */
+    publishedPostId:
+      (state) =>
+      (date: string): number | null => {
+        const override = state.publishedPostIdOverrides[date]
+        if (override != null) return override
+        const memo = state.memos.find((m) => m.memoDate === date && m.timelinePostId != null)
+        return memo?.timelinePostId ?? null
+      },
   },
 
   actions: {
@@ -374,6 +395,12 @@ export const useActionMemoStore = defineStore('actionMemo', {
         const api = useActionMemoApi()
         const res = await api.fetchMemos({ date, limit: 200 })
         this.memos = res.data
+        // 再取得できた日は、メモ側の個人投稿 ID を正とする（他端末の再公開で古い ID が優先され続けるのを防ぐ）
+        if (this.publishedPostIdOverrides[date] != null && res.data.some((m) => m.memoDate === date && m.timelinePostId != null)) {
+          this.publishedPostIdOverrides = Object.fromEntries(
+            Object.entries(this.publishedPostIdOverrides).filter(([key]) => key !== date),
+          )
+        }
       } catch (error) {
         this._handleError(error)
       } finally {
@@ -462,8 +489,12 @@ export const useActionMemoStore = defineStore('actionMemo', {
       try {
         const api = useActionMemoApi()
         const response = await api.publishDaily(payload)
-        // 各メモの timeline_post_id を反映するため対象日を再取得する
         const targetDate = payload.memoDate ?? response.memoDate ?? today()
+        // 再取得に失敗しても公開した投稿へリンクできるよう、応答の ID を対象日について保持する
+        if (response.timelinePostId != null) {
+          this.publishedPostIdOverrides = { ...this.publishedPostIdOverrides, [targetDate]: response.timelinePostId }
+        }
+        // 各メモの timeline_post_id を反映するため対象日を再取得する
         await this.fetchMemosForDate(targetDate)
         return response
       } catch (error) {

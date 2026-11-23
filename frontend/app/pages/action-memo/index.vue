@@ -34,9 +34,18 @@ const isToday = computed(() => selectedDateStr.value === todayStr.value)
 
 const selectedMemos = computed(() => store.currentDayMemos(selectedDateStr.value))
 
-// 日付変更時に対象日のメモを取得
+// 公開応答で得た個人投稿 ID（メモの再取得に失敗した間もリンクできるよう store が保持）
+const overridePostId = computed(() => store.publishedPostIdOverrides[selectedDateStr.value] ?? null)
+
+// 日付変更時に対象日のメモを取得し、選択日を URL の ?date= に同期する
+// （投稿詳細へ移動して戻ったとき、同じ日を開き直せるようにする）
 watch(selectedDate, async () => {
-  await store.fetchMemosForDate(selectedDateStr.value)
+  const date = selectedDateStr.value
+  // ナビゲーション（ミドルウェア解決を含む）の完了を待たずにメモ取得を始める
+  await Promise.all([
+    route.query.date !== date ? router.replace({ query: { ...route.query, date } }) : Promise.resolve(),
+    store.fetchMemosForDate(date),
+  ])
 })
 
 /**
@@ -414,6 +423,7 @@ function goTags() {
             {{ t('action_memo.page.selected_date_memos', { date: selectedDateStr }) }}
           </template>
         </h2>
+        <ActionMemoPublishedPostLink :memos="selectedMemos" :override-post-id="overridePostId" />
         <ActionMemoList
           :memos="selectedMemos"
           :loading="store.loading"

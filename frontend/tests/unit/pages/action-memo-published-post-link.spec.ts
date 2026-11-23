@@ -154,7 +154,8 @@ describe('行動メモ画面: 公開済み個人投稿への導線', () => {
     const w = await mountAt(PAST)
     ;(w.vm as unknown as { selectedDate: Date }).selectedDate = new Date(`${OTHER_PAST}T12:00:00`)
     await flushPromises()
-    expect(router.currentRoute.value.query.date).toBe(OTHER_PAST)
+    // router.replace はルートミドルウェアの動的 import を含み、flushPromises 1回では完了しないことがあるため待つ
+    await vi.waitFor(() => expect(router.currentRoute.value.query.date).toBe(OTHER_PAST), { timeout: 10000 })
     expect(apiMock.fetchMemos).toHaveBeenLastCalledWith(expect.objectContaining({ date: OTHER_PAST }))
   })
 })
