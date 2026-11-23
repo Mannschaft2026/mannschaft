@@ -252,35 +252,35 @@ function formatDate(dateStr: string): string {
   <div class="mx-auto max-w-5xl px-4 py-6">
     <!-- ナビゲーション -->
     <div class="mb-4 flex items-center gap-2">
-      <BackButton :to="`/shift/${scheduleId}`" />
+      <BackButton :to="`/shift/${scheduleId}`" class="shrink-0 whitespace-nowrap" />
       <h1 class="text-xl font-bold text-surface-800 dark:text-surface-100">
         {{ schedule?.content.title ?? '...' }}
       </h1>
-      <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" />
+      <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" class="shrink-0 whitespace-nowrap" />
     </div>
 
     <!-- タブ -->
-    <nav class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700">
+    <nav class="mb-6 flex flex-wrap gap-x-1 border-b border-surface-200 dark:border-surface-700">
       <NuxtLink
         :to="`/shift/${scheduleId}`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
+        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
       >
         <i class="pi pi-calendar" />{{ t('shift.detail.tabOverview') }}
       </NuxtLink>
-      <span class="flex shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
+      <span class="flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
         <i class="pi pi-pencil" />{{ t('shift.detail.tabEdit') }}
       </span>
       <NuxtLink
         v-if="canManage"
         :to="`/shift/${scheduleId}/requests`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
+        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
       >
         <i class="pi pi-list" />{{ t('shift.detail.tabRequests') }}
       </NuxtLink>
       <NuxtLink
         v-if="canManage"
         :to="`/shift/${scheduleId}/work-constraints`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
+        class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
       >
         <i class="pi pi-shield" />{{ t('shift.detail.tabConstraints') }}
       </NuxtLink>
@@ -315,7 +315,7 @@ function formatDate(dateStr: string): string {
         <div
           v-for="slot in sortedSlots"
           :key="slot.id"
-          class="flex items-center gap-3 rounded-lg border border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-900"
+          class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-900"
         >
           <!-- 日付 -->
           <div class="w-24 shrink-0">
@@ -325,11 +325,11 @@ function formatDate(dateStr: string): string {
           </div>
 
           <!-- 時間・ポジション -->
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">
+          <div class="min-w-[9rem] flex-1">
+            <p class="whitespace-nowrap text-sm font-medium">
               {{ slot.time.startTime.slice(0, 5) }} 〜 {{ slot.time.endTime.slice(0, 5) }}
             </p>
-            <p v-if="slot.position.positionName" class="text-xs text-surface-500">
+            <p v-if="slot.position.positionName" class="break-words text-xs text-surface-500">
               {{ slot.position.positionName }}
             </p>
           </div>
@@ -338,7 +338,7 @@ function formatDate(dateStr: string): string {
           <div class="shrink-0 text-center">
             <span
               v-if="slot.assignmentMasked"
-              class="rounded-full bg-surface-100 px-2 py-0.5 text-xs font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
+              class="shrink-0 whitespace-nowrap rounded-full bg-surface-100 px-2 py-0.5 text-xs font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
               :title="t('shift.slot.assignmentMaskedHint')"
             >
               {{ t('shift.slot.assignmentMasked') }}

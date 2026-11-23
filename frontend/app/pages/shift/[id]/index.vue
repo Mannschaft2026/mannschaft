@@ -18,7 +18,7 @@ const { t } = useI18n()
 const route = useRoute()
 const teamStore = useTeamStore()
 const { getSchedule, updateSchedule, transitionStatus, deleteSchedule } = useShiftApi()
-const { userTimezone } = useDatetime()
+const { userTimezone, formatDate } = useDatetime()
 const { listSlots } = useShiftSlotApi()
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
@@ -68,6 +68,12 @@ const transitioning = ref(false)
 const publishError = ref<ShiftPublishErrorInfo | null>(null)
 const publishErrorTeamSlug = computed(
   () => teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug ?? null,
+)
+/** 変更依頼画面（会員も申請できる）への導線。チームの slug が引けないときは出さない。 */
+const changeRequestPath = computed(() =>
+  publishErrorTeamSlug.value
+    ? `/teams/${publishErrorTeamSlug.value}/shifts/${scheduleId.value}/change-requests`
+    : null,
 )
 
 const nextStatusMap: Record<ShiftScheduleStatus, ShiftScheduleStatus | null> = {
@@ -140,19 +146,24 @@ const slotsByDate = computed<Map<string, ShiftSlotResponse[]>>(() => {
   return map
 })
 
+// 'YYYY-MM-DD' を new Date() に渡すと UTC 解釈になり、UTC より西の環境で前日表示になる。ローカル日付として解釈する。
+function parseLocalDate(dateStr: string): Date {
+  return dayjs(dateStr).toDate()
+}
+
 function formatDateShort(dateStr: string): string {
-  const d = new Date(dateStr)
+  const d = parseLocalDate(dateStr)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
 function formatDayOfWeek(dateStr: string): string {
   const days = ['日', '月', '火', '水', '木', '金', '土']
-  const d = new Date(dateStr)
+  const d = parseLocalDate(dateStr)
   return days[d.getDay()] ?? ''
 }
 
 function isWeekend(dateStr: string): boolean {
-  const d = new Date(dateStr)
+  const d = parseLocalDate(dateStr)
   return d.getDay() === 0 || d.getDay() === 6
 }
 
@@ -271,15 +282,26 @@ const tabs = computed(() => {
         <PageHeader :title="schedule.content.title" back-to="/shift">
           <ShiftStatusBadge :status="schedule.status.status" />
         </PageHeader>
+        <!-- 注: formatDate は instant を userTimezone で整形する。日付のみ（YYYY-MM-DD）を渡すと
+             ブラウザ TZ と userTimezone の差で 1 日ずれ得る既存パターンの限界がある（一覧カードと同じ扱い） -->
         <p class="mb-3 text-sm text-surface-500">
-          {{ schedule.period.startDate }} 〜 {{ schedule.period.endDate }}
+          {{ formatDate(schedule.period.startDate) }} 〜 {{ formatDate(schedule.period.endDate) }}
         </p>
-        <div v-if="canManage" class="flex items-center gap-2">
+        <NuxtLink
+          v-if="changeRequestPath"
+          :to="changeRequestPath"
+          data-testid="shift-change-request-link"
+          class="mb-3 inline-flex min-h-11 items-center gap-1.5 text-sm text-primary hover:underline"
+        >
+          <i class="pi pi-sync" />{{ t('shift.detail.changeRequestLink') }}
+        </NuxtLink>
+        <div v-if="canManage" data-testid="shift-detail-actions" class="flex flex-wrap items-center gap-2">
           <Button
             icon="pi pi-pencil"
             :label="t('common.edit')"
             severity="secondary"
             size="small"
+            class="whitespace-nowrap"
             @click="openEdit"
           />
           <Button
@@ -287,6 +309,7 @@ const tabs = computed(() => {
             icon="pi pi-arrow-right"
             :label="t(nextStatusLabelMap[schedule.status.status])"
             size="small"
+            class="whitespace-nowrap"
             :loading="transitioning"
             @click="handleTransition"
           />
@@ -298,6 +321,7 @@ const tabs = computed(() => {
             severity="danger"
             outlined
             size="small"
+            class="whitespace-nowrap"
             :loading="deleting"
             @click="confirmDelete"
           />
@@ -341,13 +365,13 @@ const tabs = computed(() => {
 
       <!-- タブナビ -->
       <nav
-        class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700"
+        class="mb-6 flex flex-wrap gap-x-1 border-b border-surface-200 dark:border-surface-700"
       >
         <NuxtLink
           v-for="tab in tabs"
           :key="tab.to"
           :to="tab.to"
-          class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors"
+          class="flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors"
           :class="
             $route.path === tab.to
               ? 'border-b-2 border-primary text-primary'
@@ -413,32 +437,32 @@ const tabs = computed(() => {
                       v-for="slot in slotsByDate.get(date)"
                       :key="slot.id"
                       :to="`/shift/${scheduleId}/edit`"
-                      class="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
+                      class="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
                       :class="
                         isSlotUnderStaffed(slot)
                           ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-300'
                           : 'border-surface-200 bg-surface-50 text-surface-700 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-300'
                       "
                     >
-                      <span
+                      <span class="shrink-0 whitespace-nowrap"
                         >{{ slot.time.startTime.slice(0, 5) }}〜{{
                           slot.time.endTime.slice(0, 5)
                         }}</span
                       >
-                      <span v-if="slot.position.positionName" class="text-surface-400"
+                      <span v-if="slot.position.positionName" class="min-w-0 break-words text-surface-400"
                         >/{{ slot.position.positionName }}</span
                       >
                       <!-- 割当バッジ。サーバーが割当を伏せている間は人数を出さず中立表示にする -->
                       <span
                         v-if="slot.assignmentMasked"
-                        class="rounded bg-surface-100 px-1 font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
+                        class="shrink-0 whitespace-nowrap rounded bg-surface-100 px-1 font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
                         :title="$t('shift.slot.assignmentMaskedHint')"
                       >
                         {{ $t('shift.slot.assignmentMasked') }}
                       </span>
                       <span
                         v-else
-                        class="rounded px-1 font-medium"
+                        class="shrink-0 whitespace-nowrap rounded px-1 font-medium"
                         :class="
                           isSlotUnderStaffed(slot)
                             ? 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200'

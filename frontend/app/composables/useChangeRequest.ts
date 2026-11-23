@@ -36,9 +36,9 @@ export function useChangeRequest(scheduleId: Ref<number>) {
     try {
       const created = await shiftApi.createChangeRequest(payload)
       requests.value.unshift(created)
-      showSuccess(t('shift.changeRequest.submit'))
+      showSuccess(t('shift.changeRequest.submitted'))
     } catch {
-      showError(t('shift.changeRequest.fetchError'))
+      showError(t('shift.changeRequest.submitError'))
       throw new Error('createRequest failed')
     }
   }
@@ -47,8 +47,8 @@ export function useChangeRequest(scheduleId: Ref<number>) {
   async function review(
     id: number,
     decision: 'ACCEPTED' | 'REJECTED',
-    comment?: string,
-    version = 0,
+    comment: string | undefined,
+    version: number,
   ): Promise<void> {
     try {
       const updated = await shiftApi.reviewChangeRequest(id, {
@@ -62,11 +62,17 @@ export function useChangeRequest(scheduleId: Ref<number>) {
       }
       showSuccess(
         decision === 'ACCEPTED'
-          ? t('shift.changeRequest.approve')
-          : t('shift.changeRequest.reject'),
+          ? t('shift.changeRequest.approved')
+          : t('shift.changeRequest.rejected'),
       )
-    } catch {
-      showError(t('shift.changeRequest.fetchError'))
+    } catch (e) {
+      if (isConflictError(e)) {
+        // 409（SHIFT_018 楽観ロック競合 / SHIFT_031 審査済み）: 競合専用の文言を出し、最新の一覧を再取得する
+        showError(t('shift.changeRequest.reviewConflict'))
+        await fetchRequests()
+        throw new Error('review conflict')
+      }
+      showError(t('shift.changeRequest.reviewError'))
       throw new Error('review failed')
     }
   }
@@ -83,9 +89,9 @@ export function useChangeRequest(scheduleId: Ref<number>) {
           reviewInfo: { ...target.reviewInfo, status: 'WITHDRAWN' },
         }
       }
-      showSuccess(t('shift.changeRequest.withdraw'))
+      showSuccess(t('shift.changeRequest.withdrawn'))
     } catch {
-      showError(t('shift.changeRequest.fetchError'))
+      showError(t('shift.changeRequest.withdrawError'))
       throw new Error('withdraw failed')
     }
   }

@@ -519,7 +519,7 @@ onMounted(async () => {
       >
         <h3 class="text-sm font-semibold text-surface-800">{{ selectedSchedule.content.title }}</h3>
         <p class="mt-0.5 text-xs text-surface-500">
-          {{ selectedSchedule.period.startDate }} 〜 {{ selectedSchedule.period.endDate }}
+          {{ formatIsoDate(selectedSchedule.period.startDate) }} 〜 {{ formatIsoDate(selectedSchedule.period.endDate) }}
         </p>
       </SectionCard>
 

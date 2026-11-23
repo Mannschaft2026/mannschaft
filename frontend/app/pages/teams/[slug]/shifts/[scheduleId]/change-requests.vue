@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { ReviewOutcome } from '~/components/shift/ShiftChangeRequestList.vue'
+import { useTeamMembers } from '~/composables/team/useTeamMembers'
+
 definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
@@ -13,14 +16,43 @@ const isAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 
 const { requests, isLoading, fetchRequests, review, withdraw } =
   useChangeRequest(scheduleId)
 
-onMounted(() => Promise.all([fetchRequests(), loadPermissions()]))
+const { handleApiError } = useErrorHandler()
+const { getAllMembers } = useTeamMembers()
+/** userId → 表示名（GET /teams/{slug}/members/all）。取得失敗は通知し、一覧は「不明なメンバー」で代替する */
+const memberNames = ref<Map<number, string>>(new Map())
+async function loadMemberNames(): Promise<void> {
+  try {
+    const res = await getAllMembers(teamSlug.value)
+    memberNames.value = new Map(res.data.map(m => [m.userId, m.displayName]))
+  } catch (error) {
+    memberNames.value = new Map()
+    handleApiError(error)
+  }
+}
+
+onMounted(() => Promise.all([fetchRequests(), loadPermissions(), loadMemberNames()]))
 
 async function onSubmitted(): Promise<void> {
   await fetchRequests()
 }
 
-async function onReview(id: number, decision: 'ACCEPTED' | 'REJECTED'): Promise<void> {
-  await review(id, decision)
+async function onReview(
+  id: number,
+  decision: 'ACCEPTED' | 'REJECTED',
+  comment: string | undefined,
+  version: number,
+): Promise<ReviewOutcome> {
+  try {
+    await review(id, decision, comment, version)
+    return { status: 'ok' }
+  } catch (e) {
+    // 通知（競合専用文言・汎用エラー）と一覧再取得は review() 側で済んでいる。ここで再通知しない
+    if (e instanceof Error && e.message === 'review conflict') {
+      // 再取得は review() 内で完了済み。最新の依頼をここで引いて返す
+      return { status: 'conflict', latest: requests.value.find((r) => r.id === id) ?? null }
+    }
+    return { status: 'error' }
+  }
 }
 
 async function onWithdraw(id: number): Promise<void> {
@@ -46,7 +78,8 @@ async function onWithdraw(id: number): Promise<void> {
         :current-user-id="authStore.currentUser?.id ?? 0"
         :is-admin="isAdmin"
         :is-loading="isLoading"
-        @review="onReview"
+        :member-names="memberNames"
+        :submit-review="onReview"
         @withdraw="onWithdraw"
       />
     </SectionCard>

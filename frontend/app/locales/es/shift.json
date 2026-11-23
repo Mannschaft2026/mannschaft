@@ -73,7 +73,16 @@
       "reject": "Rechazar",
       "reviewComment": "Comentario de revisión",
       "openCallLimit": "Las convocatorias abiertas están limitadas a 3 por mes",
-      "fetchError": "Error al obtener las solicitudes de cambio"
+      "fetchError": "Error al obtener las solicitudes de cambio",
+      "submitted": "Solicitud de cambio enviada",
+      "approved": "Solicitud aprobada",
+      "rejected": "Solicitud rechazada",
+      "withdrawn": "Solicitud retirada",
+      "submitError": "No se pudo enviar la solicitud de cambio",
+      "reviewError": "No se pudo revisar la solicitud",
+      "reviewedAt": "Revisado el",
+      "reviewConflict": "Otra persona actualizó la solicitud antes. Se recargó la lista; revise el estado más reciente",
+      "withdrawError": "No se pudo retirar la solicitud"
     },
     "pdf": {
       "teamLayout": "PDF del horario del equipo",
@@ -114,6 +123,7 @@
       "createDialog": "Crear nuevo turno",
       "createSuccess": "Turno creado",
       "selectTeam": "Seleccionar equipo",
+      "statusFilterLabel": "Estado",
       "fromDate": "Desde",
       "toDate": "Hasta",
       "noSchedule": "No hay turnos",
@@ -145,6 +155,7 @@
       "tabEdit": "Editar",
       "tabRequests": "Solicitudes",
       "tabConstraints": "Restricciones",
+      "changeRequestLink": "Solicitudes de cambio",
       "startCollecting": "Iniciar recopilación",
       "startAdjusting": "Iniciar ajuste",
       "publish": "Publicar",
@@ -168,7 +179,7 @@
       "bulkCreateSuccess": "Se crearon {count} franjas",
       "noSlot": "No hay franjas",
       "noPosition": "Sin posición",
-      "assigned": "Asignado",
+      "assigned": "Personas asignadas",
       "date": "Fecha",
       "startTime": "Hora de inicio",
       "endTime": "Hora de fin",
@@ -202,6 +213,7 @@
       "matrixTitle": "Matriz de preferencias",
       "noRequests": "No hay solicitudes",
       "colUser": "Miembro",
+      "unknownMember": "Miembro desconocido",
       "legend": "Leyenda"
     },
     "preference": {
@@ -550,9 +562,9 @@
     },
     "requests": {
       "title": "Recopilar y revisar las preferencias de turno de los miembros",
-      "body": "Cuando el estado pasa a «Recopilando», los miembros pueden enviar sus preferencias. En la pestaña «Lista de preferencias» de la página de detalles puedes ver el estado de todos en una matriz.",
+      "body": "Cuando el estado pasa a «Recopilando», los miembros pueden enviar sus preferencias. Los administradores pueden ver, en la pestaña «Lista de preferencias» de la página de detalles (solo administradores), el estado de todos en una matriz.",
       "steps": {
-        "step1": "Haz clic en la pestaña «Lista de preferencias» de la página de detalles",
+        "step1": "(Solo administradores) Haz clic en la pestaña «Lista de preferencias» de la página de detalles",
         "step2": "Consulta en las tarjetas de resumen la tasa de entrega y el número de miembros que no han enviado nada",
         "step3": "Consulta en la tabla matriz el nivel de preferencia de cada miembro para cada fecha",
         "step4": "Se muestra en cinco niveles: «Quiere trabajar / Sin preferencia / Podría trabajar / Prefiere descansar / Debe descansar»"

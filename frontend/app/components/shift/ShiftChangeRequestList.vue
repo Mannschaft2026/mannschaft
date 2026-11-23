@@ -1,23 +1,45 @@
 <script setup lang="ts">
 import type { ChangeRequest, ChangeRequestStatus } from '~/types/shift'
 
-defineProps<{
+export type ReviewOutcome =
+  | { status: 'ok' }
+  | { status: 'conflict'; latest: ChangeRequest | null }
+  | { status: 'error' }
+
+const props = defineProps<{
+  /**
+   * 審査を実行する（通知は呼び出し側で済み）。
+   * conflict の latest は 409 後に再取得した最新の依頼（消えていれば null）。
+   */
+  submitReview: (
+    id: number,
+    decision: 'ACCEPTED' | 'REJECTED',
+    comment: string | undefined,
+    version: number,
+  ) => Promise<ReviewOutcome>
   requests: ChangeRequest[]
   currentUserId: number
   isAdmin?: boolean
   isLoading?: boolean
+  /** userId → 表示名。引けない依頼者は「不明なメンバー」を出す */
+  memberNames?: Map<number, string>
 }>()
 
 const emit = defineEmits<{
-  review: [id: number, decision: 'ACCEPTED' | 'REJECTED']
   withdraw: [id: number]
 }>()
 
 const { t } = useI18n()
+const { formatDateTime } = useDatetime()
 
 const reviewDialogVisible = ref(false)
-const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED' } | null>(null)
+const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED'; version: number } | null>(null)
 const reviewComment = ref('')
+const isReviewing = ref(false)
+
+function memberName(userId: number): string {
+  return props.memberNames?.get(userId) ?? t('shift.requests.unknownMember')
+}
 
 function statusSeverity(status: ChangeRequestStatus): string {
   switch (status) {
@@ -43,16 +65,45 @@ function typeLabel(type: string): string {
   return t(`shift.changeRequest.type.${type}`)
 }
 
-function openReviewDialog(id: number, decision: 'ACCEPTED' | 'REJECTED'): void {
-  reviewTarget.value = { id, decision }
+function openReviewDialog(data: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'): void {
+  reviewTarget.value = { id: data.id, decision, version: data.version }
   reviewComment.value = ''
   reviewDialogVisible.value = true
 }
 
-function confirmReview(): void {
-  if (!reviewTarget.value) return
-  emit('review', reviewTarget.value.id, reviewTarget.value.decision)
-  reviewDialogVisible.value = false
+async function confirmReview(): Promise<void> {
+  const target = reviewTarget.value
+  if (!target || isReviewing.value) return
+  isReviewing.value = true
+  try {
+    const outcome = await props.submitReview(
+      target.id,
+      target.decision,
+      reviewComment.value.trim() || undefined,
+      target.version,
+    )
+    if (outcome.status === 'ok') {
+      reviewDialogVisible.value = false
+      reviewComment.value = ''
+    } else if (outcome.status === 'conflict') {
+      if (outcome.latest && outcome.latest.reviewInfo.status === 'OPEN') {
+        // まだ OPEN: コメントは残し、最新の version に差し替えて再送できるようにする
+        reviewTarget.value = { ...target, version: outcome.latest.version }
+      } else {
+        // 審査済み・消滅: もう審査できないので閉じる
+        reviewDialogVisible.value = false
+        reviewComment.value = ''
+      }
+    }
+    // error: ダイアログとコメントをそのまま残す
+  } finally {
+    isReviewing.value = false
+  }
+}
+
+/** 審査結果（コメント・日時）を申請者にも見せるか */
+function hasReviewResult(data: ChangeRequest): boolean {
+  return !!(data.reviewInfo.reviewComment || data.reviewInfo.reviewedAt)
 }
 </script>
 
@@ -70,13 +121,14 @@ function confirmReview(): void {
       :value="requests"
       :rows="10"
       paginator
+      scrollable
       striped-rows
       class="text-sm"
     >
       <!-- 依頼者 -->
       <Column :header="$t('shift.hourlyRate.column.member')" field="requestInfo.requestedBy" style="min-width: 100px">
         <template #body="{ data }">
-          <span class="font-medium">{{ data.requestInfo.requestedBy }}</span>
+          <span class="font-medium">{{ memberName(data.requestInfo.requestedBy) }}</span>
         </template>
       </Column>
 
@@ -98,6 +150,19 @@ function confirmReview(): void {
       <Column :header="$t('label.status')" field="reviewInfo.status" style="min-width: 100px">
         <template #body="{ data }">
           <Tag :value="statusLabel(data.reviewInfo.status)" :severity="statusSeverity(data.reviewInfo.status)" />
+          <!-- 審査結果（申請者が却下理由などを確認できる）。狭い画面でも折り返す -->
+          <div
+            v-if="hasReviewResult(data)"
+            class="mt-1 max-w-[16rem] whitespace-normal break-words text-xs text-surface-500"
+            :data-testid="`change-request-review-${data.id}`"
+          >
+            <p v-if="data.reviewInfo.reviewedAt">
+              {{ $t('shift.changeRequest.reviewedAt') }}: {{ formatDateTime(data.reviewInfo.reviewedAt) }}
+            </p>
+            <p v-if="data.reviewInfo.reviewComment">
+              {{ $t('shift.changeRequest.reviewComment') }}: {{ data.reviewInfo.reviewComment }}
+            </p>
+          </div>
         </template>
       </Column>
 
@@ -111,13 +176,13 @@ function confirmReview(): void {
                 :label="$t('shift.changeRequest.approve')"
                 severity="success"
                 size="small"
-                @click="openReviewDialog(data.id, 'ACCEPTED')"
+                @click="openReviewDialog(data, 'ACCEPTED')"
               />
               <Button
                 :label="$t('shift.changeRequest.reject')"
                 severity="danger"
                 size="small"
-                @click="openReviewDialog(data.id, 'REJECTED')"
+                @click="openReviewDialog(data, 'REJECTED')"
               />
             </template>
 
@@ -163,6 +228,7 @@ function confirmReview(): void {
         <Button
           :label="reviewTarget?.decision === 'ACCEPTED' ? $t('shift.changeRequest.approve') : $t('shift.changeRequest.reject')"
           :severity="reviewTarget?.decision === 'ACCEPTED' ? 'success' : 'danger'"
+          :loading="isReviewing"
           @click="confirmReview"
         />
       </template>

@@ -66361,6 +66361,8 @@ export interface components {
             /** Format: int64 */
             slotId?: number;
             timing?: components["schemas"]["ChangeRequestTimingDto"];
+            /** Format: int64 */
+            version?: number;
         };
         ChangeRequestStatusDto: {
             reviewComment?: string;

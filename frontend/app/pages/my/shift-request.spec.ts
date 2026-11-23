@@ -47,4 +47,23 @@ describe('シフト希望提出ページ: シフト表選択', () => {
     expect(text).not.toMatch(/\d{2}Z/)
     expect(text).not.toContain('2026-12-01')
   })
+
+  it('カード選択後の期間表示も ISO のハイフン表記にしない', async () => {
+    mocks.listSchedules.mockResolvedValue([{
+      id: 5, teamId: 1,
+      content: { title: '12月シフト', periodType: null, note: null },
+      period: { startDate: '2026-12-01', endDate: '2026-12-31', requestDeadline: '2099-11-25T14:59:59Z' },
+      status: { status: 'COLLECTING', publishedAt: null, publishedBy: null },
+      audit: { createdBy: 1, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' },
+    }])
+    const wrapper = await mountSuspended(ShiftRequestPage)
+    await flushPromises()
+    await wrapper.find('.cursor-pointer').trigger('click')
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('12月シフト')
+    expect(text).not.toContain('2026-12-01')
+    expect(text).not.toContain('2026-12-31')
+  })
 })
