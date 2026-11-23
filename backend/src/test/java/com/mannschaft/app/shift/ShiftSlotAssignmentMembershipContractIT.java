@@ -33,6 +33,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -73,6 +74,9 @@ class ShiftSlotAssignmentMembershipContractIT extends AbstractMySqlIntegrationTe
     private Long memberBId;
     private Long outsiderId;
     private Long slotA;
+    private Long slotA2;
+    private Long frozenMemberId;
+    private Long deletedMemberId;
 
     @BeforeEach
     void setUp() {
@@ -93,7 +97,17 @@ class ShiftSlotAssignmentMembershipContractIT extends AbstractMySqlIntegrationTe
         MembershipTestHelper.insertMembership(em, supporterAId, ScopeType.TEAM, teamAId, RoleKind.SUPPORTER);
         MembershipTestHelper.insertMembership(em, memberBId, ScopeType.TEAM, teamBId, RoleKind.MEMBER);
 
+        frozenMemberId = insertUser("slot-mem-frozen@example.com");
+        deletedMemberId = insertUser("slot-mem-deleted@example.com");
+        MembershipTestHelper.insertMembership(em, frozenMemberId, ScopeType.TEAM, teamAId, RoleKind.MEMBER);
+        MembershipTestHelper.insertMembership(em, deletedMemberId, ScopeType.TEAM, teamAId, RoleKind.MEMBER);
+        em.createNativeQuery("UPDATE users SET status = 'FROZEN' WHERE id = :id")
+                .setParameter("id", frozenMemberId).executeUpdate();
+        em.createNativeQuery("UPDATE users SET deleted_at = NOW() WHERE id = :id")
+                .setParameter("id", deletedMemberId).executeUpdate();
+
         Long scheduleA = insertSchedule(teamAId);
+        slotA2 = insertSlot(scheduleA, LocalTime.of(13, 0), LocalTime.of(17, 0), 3, List.of());
         slotA = insertSlot(scheduleA, LocalTime.of(9, 0), LocalTime.of(12, 0), 3, List.of());
         em.flush();
         em.clear();
@@ -169,6 +183,94 @@ class ShiftSlotAssignmentMembershipContractIT extends AbstractMySqlIntegrationTe
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("SHIFT_002"));
         assertThat(assignedOf(slotA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("凍結（ACTIVE でない）ユーザーは追加できない")
+    void 凍結ユーザーは追加できない() throws Exception {
+        setAuth(adminAId);
+        patchAdd(slotA, frozenMemberId)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_049"));
+        assertThat(assignedOf(slotA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("論理削除済みユーザーは追加できない")
+    void 論理削除ユーザーは追加できない() throws Exception {
+        setAuth(adminAId);
+        patchAdd(slotA, deletedMemberId)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_049"));
+        assertThat(assignedOf(slotA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("サポーターを拒否しても割当は変わらない")
+    void サポーター拒否で割当は変わらない() throws Exception {
+        setAuth(adminAId);
+        patchAdd(slotA, memberAId).andExpect(status().isOk());
+        patchAdd(slotA, supporterAId).andExpect(status().isBadRequest());
+        assertThat(assignedOf(slotA)).containsExactly(memberAId);
+    }
+
+    @Test
+    @DisplayName("枠更新（PATCH /slots/{id}）の assignedUserIds 置換でも、他チームのユーザーは入れられない")
+    void 枠更新の置換で他チームは入れられない() throws Exception {
+        setAuth(adminAId);
+        patchSlot(slotA, List.of(memberBId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_049"));
+        patchSlot(slotA, List.of(memberAId, outsiderId)).andExpect(status().isBadRequest());
+        assertThat(assignedOf(slotA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("枠更新の置換で自チームのメンバーは入れられる")
+    void 枠更新の置換で自チームは入れられる() throws Exception {
+        setAuth(adminAId);
+        patchSlot(slotA, List.of(memberAId)).andExpect(status().isOk());
+        assertThat(assignedOf(slotA)).containsExactly(memberAId);
+    }
+
+    @Test
+    @DisplayName("枠更新の置換で、既に入っている人は（その後に脱退していても）再検査されず残せる")
+    void 枠更新の置換で既存の割当は再検査されない() throws Exception {
+        setAuth(adminAId);
+        patchAdd(slotA, memberAId).andExpect(status().isOk());
+        em.createNativeQuery("UPDATE users SET status = 'FROZEN' WHERE id = :id")
+                .setParameter("id", memberAId).executeUpdate();
+        patchSlot(slotA, List.of(memberAId)).andExpect(status().isOk());
+        assertThat(assignedOf(slotA)).containsExactly(memberAId);
+    }
+
+    @Test
+    @DisplayName("枠間移動の移動先に、現在は不適格なユーザー（SUPPORTER 化）を持ち込めない")
+    void 枠間移動で不適格者を持ち込めない() throws Exception {
+        setAuth(adminAId);
+        patchAdd(slotA, memberAId).andExpect(status().isOk());
+        em.createNativeQuery("UPDATE memberships SET role_kind = 'SUPPORTER' WHERE user_id = :id")
+                .setParameter("id", memberAId).executeUpdate();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("targetSlotId", slotA2);
+        body.put("userId", memberAId);
+        body.put("sourceSlotVersion", versionOf(slotA).intValue());
+        body.put("targetSlotVersion", versionOf(slotA2).intValue());
+        mockMvc.perform(post("/api/v1/shifts/slots/{id}/assignments/move", slotA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_049"));
+        assertThat(assignedOf(slotA)).containsExactly(memberAId);
+        assertThat(assignedOf(slotA2)).isEmpty();
+    }
+
+    private org.springframework.test.web.servlet.ResultActions patchSlot(Long slotId, List<Long> assigned) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("assignedUserIds", assigned);
+        return mockMvc.perform(patch("/api/v1/shifts/slots/{id}", slotId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
     }
 
     private org.springframework.test.web.servlet.ResultActions patchAdd(Long slotId, Long addUserId) throws Exception {

@@ -117,7 +117,13 @@ public class ShiftSlotFacade {
      * @return 更新されたシフト枠
      */
     public ShiftSlotResponse updateSlot(Long slotId, UpdateShiftSlotRequest req, Long userId) {
-        requireSlotAdmin(slotId, userId);
+        Long teamId = requireSlotAdmin(slotId, userId);
+        if (req.getAssignedUserIds() != null) {
+            // 割当の丸ごと置換。新たに入る人（現在の割当に無い人）だけを検査する。
+            List<Long> current = slotService.findAssignedUserIds(slotId);
+            requireAssignableMembers(
+                    req.getAssignedUserIds().stream().filter(id -> !current.contains(id)).toList(), teamId);
+        }
         return slotService.updateSlot(slotId, req, userId);
     }
 
@@ -148,7 +154,9 @@ public class ShiftSlotFacade {
      * @return 両枠の更新後の状態
      */
     public SlotAssignmentMoveResponse moveAssignment(Long slotId, SlotAssignmentMoveRequest request, Long userId) {
-        requireSlotAdmin(slotId, userId);
+        Long teamId = requireSlotAdmin(slotId, userId);
+        // 移動先に新たに入る人。移動元に居る間に脱退・SUPPORTER 化した人を、別の枠へ持ち込ませない。
+        requireAssignableMembers(List.of(request.userId()), teamId);
         return slotService.moveAssignment(slotId, request, userId);
     }
 
@@ -191,8 +199,7 @@ public class ShiftSlotFacade {
         }
         for (Long addUserId : addUserIds.stream().distinct().toList()) {
             if (addUserId == null
-                    || !accessControlService.isMember(addUserId, teamId, TEAM)
-                    || accessControlService.isSupporter(addUserId, teamId, TEAM)
+                    || !accessControlService.isRegularMemberOrAbove(addUserId, teamId, TEAM)
                     || !userStatusLookupService.isActive(addUserId)) {
                 throw new BusinessException(ShiftErrorCode.ASSIGNEE_NOT_TEAM_MEMBER);
             }

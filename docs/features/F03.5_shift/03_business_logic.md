@@ -177,7 +177,7 @@ Facadeのスコープ認可（越境は不在と同じ404、SUPPORTER等は403�
    b. 依頼者と引き受け者に通知
 ```
 
-**手動割当の追加先所属検証（CMP-261123-1821）**: `PATCH /slots/{id}/assignments` の `add_user_ids` は、枠のシフト表のチームの現役メンバー（SUPPORTER・非 ACTIVE・他チーム・非所属・不在を除く）に限る。違反は 400 `SHIFT_049`（全体拒否・不在と他チームは同一応答）。ボード画面は URL の slug のチームとシフト表の `teamId` が食い違えば 404 相当の取得失敗表示にし、他チームのメンバーを未割当プールに出さない。
+**手動割当の追加先所属検証（CMP-261123-1821）**: 枠の割当に新たに入る人は、枠のシフト表のチームの現役メンバー（MEMBER 以上・SUPPORTER でない・ACTIVE・論理削除なし。他チーム・非所属・不在は不可）に限る。対象は `PATCH /slots/{id}/assignments` の `addUserIds`、`PATCH /slots/{id}` の `assignedUserIds` 置換（差分のみ）、`POST /slots/{id}/assignments/move` の移動先。違反は 400 `SHIFT_049`（全体拒否・不在と他チームは同一応答）。範囲外: 自動割当の確定時の再検査、検査と書き込みが別トランザクションである窓。ボード画面は URL の slug のチームとシフト表の `teamId` が食い違えば 404 相当の取得失敗表示にし、他チームのメンバーを未割当プールに出さない。未割当プールには SUPPORTER も出さない。
 
 **承認時の担当差替（CMP-261021-0648）**: 実API `POST /swap-requests/{id}/resolve` の `APPROVE` は、ACCEPTEDの申請者Aを現在担当の同じ位置で受諾者Bへ置換し、他担当の順序・人数・枠の日時等を保持する。非PUBLISHEDは409 `SHIFT_012`、不正状態・Bがnull/自己交代は409 `SHIFT_013`、現在担当にAがちょうど1回含まれない場合・Bの脱退/非ACTIVE/論理削除/SUPPORTER化・資格確認後のB変更は409 `SHIFT_018`、Bが既担当または同一表の完全同時刻別枠に担当済みなら409 `SHIFT_042`。部分重なりは許可し、別表を探索しない。
 

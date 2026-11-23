@@ -9,6 +9,7 @@ import type { ShiftScheduleResponse } from '~/types/shift'
  * シフトボード画面で、URL の slug のチームとシフト表のチーム（schedule.teamId）が食い違う場合の AC。
  *   AC-M1 食い違えば 404 相当の取得失敗表示にし、slug 側チームのメンバー一覧を取得・表示しない
  *   AC-M2 一致していれば従来どおりメンバーを取得する
+ *   AC-M3 SUPPORTER は未割当メンバーに並べない
  */
 const mocks = await vi.hoisted(async () => {
   return {
@@ -50,7 +51,7 @@ beforeEach(() => {
   Object.values(mocks).forEach((m) => m.mockReset())
   mocks.getPositions.mockResolvedValue({ data: [] })
   mocks.getShiftSlots.mockResolvedValue({ data: [] })
-  mocks.getMembers.mockResolvedValue({ data: [{ userId: 12, displayName: '他チームの人', avatarUrl: null }] })
+  mocks.getMembers.mockResolvedValue({ data: [{ userId: 12, displayName: '他チームの人', avatarUrl: null, roleName: 'MEMBER' }] })
   mocks.loadPermissions.mockResolvedValue({ ok: true })
   mocks.getTeam.mockResolvedValue({ data: { numericId: 1 } })
 })
@@ -72,5 +73,19 @@ describe('board.vue URL の slug とシフト表のチームの照合', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="shift-board-load-error"]').exists()).toBe(false)
     expect(mocks.getMembers).toHaveBeenCalledTimes(1)
+  })
+
+  it('AC-M3: SUPPORTER は未割当メンバーに並べない', async () => {
+    mocks.getShiftSchedule.mockResolvedValue({ data: schedule(1) })
+    mocks.getMembers.mockResolvedValue({
+      data: [
+        { userId: 21, displayName: '正式メンバー太郎', avatarUrl: null, roleName: 'MEMBER' },
+        { userId: 22, displayName: 'サポーター花子', avatarUrl: null, roleName: 'SUPPORTER' },
+      ],
+    })
+    const wrapper = await mountSuspended(BoardPage)
+    await flushPromises()
+    expect(wrapper.text()).toContain('正式メンバー太郎')
+    expect(wrapper.text()).not.toContain('サポーター花子')
   })
 })

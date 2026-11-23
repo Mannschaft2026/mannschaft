@@ -277,7 +277,7 @@ class ShiftSlotFacadeTest {
             given(slotService.updateSlot(SLOT_ID, updateReq, USER_ID)).willReturn(updated);
             given(slotService.patchSlotAssignments(SLOT_ID, patchReq, USER_ID)).willReturn(updated);
             // 追加先（patchReq の 1L）は枠のチームの現役メンバー（CMP-261123-1821）
-            given(accessControlService.isMember(1L, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.isRegularMemberOrAbove(1L, TEAM_ID, "TEAM")).willReturn(true);
             given(userStatusLookupService.isActive(1L)).willReturn(true);
 
             assertThat(facade.updateSlot(SLOT_ID, updateReq, USER_ID)).isSameAs(updated);

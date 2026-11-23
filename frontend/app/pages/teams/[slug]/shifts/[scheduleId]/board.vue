@@ -360,7 +360,8 @@ async function loadMembers(): Promise<void> {
   membersError.value = undefined
   try {
     const res = await teamApi.getMembers(teamSlug.value, { size: 200 })
-    allMembers.value = res.data.map((m) => ({
+    // SUPPORTER は割当対象外（BE も SHIFT_049 で拒否する）ため、未割当メンバーに並べない。
+    allMembers.value = res.data.filter((m) => m.roleName !== 'SUPPORTER').map((m) => ({
       userId: m.userId,
       displayName: m.displayName || String(m.userId),
       avatarUrl: m.avatarUrl,

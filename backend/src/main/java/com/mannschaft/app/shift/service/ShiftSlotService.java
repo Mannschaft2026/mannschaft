@@ -103,6 +103,16 @@ public class ShiftSlotService {
     }
 
     /**
+     * 枠の現在の割当ユーザー ID を返す（認可後に、置換で新たに入る人を求めるために使う）。
+     *
+     * @param slotId 枠 ID
+     * @return 現在の割当ユーザー ID（順序保持）
+     */
+    public List<Long> findAssignedUserIds(Long slotId) {
+        return deserializeUserIds(findSlotOrThrow(slotId).getAssignedUserIds());
+    }
+
+    /**
      * スケジュールのシフト枠一覧を取得する。
      *
      * <p>tx の中で親スケジュールを読み直し、未公開（{@code DRAFT} / {@code ARCHIVED} かつ {@code publishedAt} が
