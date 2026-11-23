@@ -278,6 +278,12 @@ async function buildWorld(): Promise<World> {
 }
 
 let W: World
+/** 世界構築で記録した ID を取り出す。未記録なら undefined を黙って渡さず明示的に失敗させる */
+function idOf(key: string): number {
+  const v = W.ids[key]
+  if (v === undefined) throw new Error('世界に ID が記録されていない: ' + key)
+  return v
+}
 test.beforeAll(async () => {
   test.setTimeout(600_000)
   if (existsSync(WORLD_FILE)) {
@@ -416,7 +422,9 @@ async function collectAll(s: Session, label: string): Promise<Collected> {
     for (let i = 0; i < n; i++) {
       const el = list.nth(i)
       const tid = (await el.getAttribute('data-testid'))!.replace('global-search-result-', '')
-      const [type, id] = [tid.split('-')[0], tid.split('-').slice(1).join('-')]
+      const type = tid.split('-')[0]
+      if (!type) throw new Error('結果カードの data-testid から種別を取り出せない: ' + tid)
+      const id = tid.split('-').slice(1).join('-')
       hits.push({ type, id, text: (await el.innerText()).replace(/\s+/g, ' '), href: await el.getAttribute('href') })
     }
   }
@@ -557,10 +565,15 @@ test('T5 outsider-b: 組織A側のデータが結果・件数・サジェスト�
     expect(body, k + ': 組織A側（sidea）が出ない').not.toContain('sidea')
   }
   log({ step: 'outsider scope direct urls', seen: Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, { counts: v.counts, ids: v.ids, apiUrl: v.apiUrl }])) })
-  expect(seen.teamA.counts, 'TEAM: 実在 A1 ID と実在しない ID で件数表示が同じ').toEqual(seen.teamAbsent.counts)
-  expect(seen.teamA.ids, 'TEAM: 実在 A1 ID と実在しない ID で結果が同じ').toEqual(seen.teamAbsent.ids)
-  expect(seen.orgA.counts, 'ORG: 実在 A ID と実在しない ID で件数表示が同じ').toEqual(seen.orgAbsent.counts)
-  expect(seen.orgA.ids, 'ORG: 実在 A ID と実在しない ID で結果が同じ').toEqual(seen.orgAbsent.ids)
+  const seenOf = (k: string) => {
+    const v = seen[k]
+    if (!v) throw new Error('scope 直打ちの観測結果が無い: ' + k)
+    return v
+  }
+  expect(seenOf('teamA').counts, 'TEAM: 実在 A1 ID と実在しない ID で件数表示が同じ').toEqual(seenOf('teamAbsent').counts)
+  expect(seenOf('teamA').ids, 'TEAM: 実在 A1 ID と実在しない ID で結果が同じ').toEqual(seenOf('teamAbsent').ids)
+  expect(seenOf('orgA').counts, 'ORG: 実在 A ID と実在しない ID で件数表示が同じ').toEqual(seenOf('orgAbsent').counts)
+  expect(seenOf('orgA').ids, 'ORG: 実在 A ID と実在しない ID で結果が同じ').toEqual(seenOf('orgAbsent').ids)
 
   // 結果詳細 URL（a-admin が T1 で得たリンク）の直打ち
   const adminHits = JSON.parse(readFileSync(path.join(path.dirname(WORLD_FILE), 'cmp0722-admin-hits.json'), 'utf8')) as Hit[]
@@ -577,7 +590,8 @@ test('T5 outsider-b: 組織A側のデータが結果・件数・サジェスト�
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined)
     await page.waitForTimeout(3_000)
     const body = (await page.locator('body').innerText()).toLowerCase()
-    const marker = label.split(':')[1].split(' ').pop()!
+    const marker = label.split(':')[1]?.split(' ').pop()
+    if (!marker) throw new Error('直打ち対象のラベルから marker を取り出せない: ' + label)
     directResults[label] = page.url() + ' | ' + body.replace(/\s+/g, ' ').slice(0, 300)
     await shot(page, 'T5-outsider-direct-' + label.replace(/[^a-z0-9]+/gi, '_'))
     if (label.startsWith('ACTIVITY')) {
@@ -587,7 +601,7 @@ test('T5 outsider-b: 組織A側のデータが結果・件数・サジェスト�
       expect.soft(body, label + ' を outsider-b が直打ちしても中身（' + marker + '）が出ない').not.toContain(marker)
     }
   }
-  directResults['ACTIVITY:/activities/{id} actmem'] = await recordActivityDetail(page, 'outsider', W.ids['sidea-actmem'], 'sidea-actmem')
+  directResults['ACTIVITY:/activities/{id} actmem'] = await recordActivityDetail(page, 'outsider', idOf('sidea-actmem'), 'sidea-actmem')
   log({ step: 'outsider direct detail urls', directResults })
   expect(s.searchStatuses.filter((x) => x !== 200)).toEqual([])
   await s.context.close()
@@ -614,8 +628,8 @@ test('T5b a-supporter（正規サポーター）: MEMBERS_ONLY 活動記録の�
   test.setTimeout(600_000)
   test.skip(!W.supporterOk, 'SUPPORTER を正規経路で作れなかった（evidence.jsonl 参照）')
   const s = await open(browser, W.actors.aSupporter)
-  const out = await recordActivityDetail(s.page, 'supporter', W.ids['sidea-actmem'], 'sidea-actmem')
-  const pub = await recordActivityDetail(s.page, 'supporter', W.ids['sidea-actpub'], 'sidea-actpub')
+  const out = await recordActivityDetail(s.page, 'supporter', idOf('sidea-actmem'), 'sidea-actmem')
+  const pub = await recordActivityDetail(s.page, 'supporter', idOf('sidea-actpub'), 'sidea-actpub')
   log({ step: 'supporter activity detail', actmem: out, actpub: pub })
   await s.context.close()
 })
