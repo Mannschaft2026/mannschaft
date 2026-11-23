@@ -537,3 +537,34 @@ data: {
 ### 10.12 要裁可・未確定事項
 
 なし（§10.2 に確定）。残る実装時の確定値は、AC-P20 のクエリ本数の定数上限のみ（実測で決める）。
+
+### 10.13 実装メモ（CMP-261118-0900）
+
+実際のコードに基づく事実のみを記す。
+
+**BE**
+
+- `ParticipantContactSpaceController`: `GET /api/v1/teams/{teamSlug}/tournaments/{tournamentId}/contact-spaces`。
+- `ParticipantContactSpaceFacade`: `@Transactional` を持たない。チーム slug は例外を投げない Optional 版（`resolveFollowableTeamId`）で解決する。チーム不在・アーカイブ済み・PROVISIONED・非所属・大会不在・非参加などの拒否はすべて 404 `TOUR_029` に合流し、区別しない。
+- `TournamentContactSpaceAccessGate.resolveLevelsForSpaces`: 既存の単体判定と等価な判定をスペース群に対して一括で行う。
+- SQL 本数は部門数・参加チーム数によらず 12 本で一定（`ParticipantContactSpaceQueryCountIT` で固定。上限定数は 12）。
+- Flyway（DB マイグレーション）の変更なし。
+
+**FE**
+
+- 新ページ `frontend/app/pages/teams/[slug]/tournaments/[tId]/communication.vue`。
+- 共用パネル `frontend/app/components/tournament/TournamentContactPanel.vue`（主催側ページから切り出し）。主催専用の公開トグルは `#scope-tools` スロットで差し込む。
+- 部品（`ChatThreadPanel`・`ChatMessagePanel`・`BulletinThreadDetail` 等）に `canReply` / `canSend` prop を追加（既定 true）。
+- 参加大会カードに連絡スペースへのリンクを追加。
+- i18n キー `tournament.communication.participant.*`。
+
+**既知の制限（範囲外として残したもの）**
+
+- 閲覧のみの利用者にも、チャットのリアクション・編集 UI が残る。
+- 参加大会カードに既存の直書き日本語が残る。
+- AC-P32 は欠番。
+
+**テストの所在**
+
+- BE: `ParticipantContactSpaceControllerContractTest`、`ParticipantContactSpaceFacadeTest`、`TournamentContactSpaceAccessGateTest`、`ParticipantContactSpaceListContractIT`、`ParticipantContactSpaceQueryCountIT`（フィクスチャ `ParticipantContactSpaceFixture`）。
+- FE: `frontend/tests/unit/pages/tournaments/team-communication-participant.spec.ts`、`communication-bulletin-wiring.spec.ts`、`team-tournaments-index-communication-link.spec.ts`、`frontend/tests/unit/i18n/tournament-communication-participant-keys.spec.ts`、`frontend/tests/unit/utils/tournamentContactSpace.spec.ts`、`frontend/app/components/bulletin/BulletinThreadDetail.spec.ts`。
