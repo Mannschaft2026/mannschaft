@@ -44,6 +44,16 @@ function requesterLabel(row: ChangeRequest): string {
   return row.requesterName ?? props.memberNames?.get(row.requestInfo.requestedBy) ?? t('shift.changeRequest.unknownRequester')
 }
 
+/** 表（DataTable rows=10）と同じ件数でカードもページングする */
+const PAGE_SIZE = 10
+const cardFirst = ref(0)
+const pagedRequests = computed(() => {
+  // 件数が減って現在ページが範囲外になったら最終ページに寄せる
+  const maxFirst = Math.max(0, Math.ceil(props.requests.length / PAGE_SIZE) - 1) * PAGE_SIZE
+  const first = Math.min(cardFirst.value, maxFirst)
+  return props.requests.slice(first, first + PAGE_SIZE)
+})
+
 function isOwn(row: ChangeRequest): boolean {
   return props.currentUserId !== null && row.requestInfo.requestedBy === props.currentUserId
 }
@@ -114,7 +124,7 @@ async function confirmReview(): Promise<void> {
            表と同じ情報・同じ操作を出す。前例: EmergencyClosureHistory -->
       <ul class="space-y-3 md:hidden" data-testid="change-request-cards">
         <li
-          v-for="row in requests"
+          v-for="row in pagedRequests"
           :key="row.id"
           :data-testid="`change-request-card-${row.id}`"
           class="rounded-md border border-surface-200 p-3 text-sm dark:border-surface-700"
@@ -153,6 +163,14 @@ async function confirmReview(): Promise<void> {
           />
         </li>
       </ul>
+      <Paginator
+        v-if="requests.length > PAGE_SIZE"
+        v-model:first="cardFirst"
+        class="md:hidden"
+        data-testid="change-request-cards-paginator"
+        :rows="PAGE_SIZE"
+        :total-records="requests.length"
+      />
 
       <!-- md 以上: 表 -->
       <DataTable

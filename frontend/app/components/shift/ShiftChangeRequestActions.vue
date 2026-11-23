@@ -27,7 +27,7 @@ const emit = defineEmits<{
       <Button
         :data-testid="`${testidPrefix}-approve-${requestId}`"
         :label="$t('shift.changeRequest.approve')"
-        class="min-h-[44px]"
+        class="min-h-[44px] min-w-[44px]"
         severity="success"
         size="small"
         :disabled="processing"
@@ -37,7 +37,7 @@ const emit = defineEmits<{
       <Button
         :data-testid="`${testidPrefix}-reject-${requestId}`"
         :label="$t('shift.changeRequest.reject')"
-        class="min-h-[44px]"
+        class="min-h-[44px] min-w-[44px]"
         severity="danger"
         size="small"
         :disabled="processing"
@@ -48,7 +48,7 @@ const emit = defineEmits<{
       v-if="canWithdraw"
       :data-testid="`${testidPrefix}-withdraw-${requestId}`"
       :label="$t('shift.changeRequest.withdraw')"
-      class="min-h-[44px]"
+      class="min-h-[44px] min-w-[44px]"
       severity="secondary"
       size="small"
       outlined

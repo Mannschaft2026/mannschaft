@@ -182,6 +182,9 @@ describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
     expect(wrapper.text()).toContain('Requester')
     expect(wrapper.text()).toContain('Status')
     expect(wrapper.text()).toContain('Actions')
+    // 表（広幅）側のヘッダーに限定しても同じ
+    const headers = wrapper.findAll('[data-testid="change-request-table"] th').map((h) => h.text())
+    expect(headers).toEqual(['Requester', 'Request type', 'Reason (optional)', 'Status', 'Actions'])
   })
 
   it('AC-M3: 依頼者列に名前が出て、null は「不明なユーザー」。userId は表示しない', async () => {
@@ -197,6 +200,9 @@ describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
     expect(text).toContain('山田花子')
     expect(text).toContain('Unknown user')
     expect(text).not.toContain('90241')
+    // 表の依頼者列（td）に限定した確認
+    const cells = wrapper.findAll('[data-testid="change-request-table"] tbody tr').map((tr) => tr.findAll('td')[0]!.text())
+    expect(cells).toEqual(['山田花子', 'Unknown user'])
   })
 })
 
@@ -212,6 +218,8 @@ describe('ShiftChangeRequestList 依頼者名の補完・審査結果', () => {
     })
     expect(wrapper.text()).toContain('佐藤太郎')
     expect(wrapper.text()).toContain('Unknown user')
+    const cells = wrapper.findAll('[data-testid="change-request-table"] tbody tr').map((tr) => tr.findAll('td')[0]!.text())
+    expect(cells).toEqual(['佐藤太郎', 'Unknown user'])
   })
 
   it('審査済みの依頼には審査日時と審査コメントを出す', async () => {
@@ -223,6 +231,8 @@ describe('ShiftChangeRequestList 依頼者名の補完・審査結果', () => {
     const box = wrapper.find('[data-testid="change-request-review-6"]')
     expect(box.exists()).toBe(true)
     expect(box.text()).toContain('人手が足りません')
+    // 表のステータス列（td）の中にある
+    expect(wrapper.find('[data-testid="change-request-table"] td [data-testid="change-request-review-6"]').exists()).toBe(true)
   })
 })
 
@@ -245,6 +255,9 @@ describe('ShiftChangeRequestList 見出し重複・狭幅（アリシゼーシ�
     expect(wrapper.find('.p-datatable').classes()).toContain('p-datatable-scrollable')
     const last = wrapper.findAll('th').at(-1)!
     expect(last.classes().join(' ')).toMatch(/frozen/)
+    // 表の操作列（td）に取り下げボタンが入る
+    const tds = wrapper.findAll('[data-testid="change-request-table"] tbody tr td')
+    expect(tds.at(-1)!.find('[data-testid="change-request-withdraw-2"]').exists()).toBe(true)
   })
 })
 
@@ -296,6 +309,7 @@ describe('ShiftChangeRequestList 狭幅カード表示', () => {
       const b = wrapper.find(`[data-testid="${id}"]`)
       expect(b.exists(), id).toBe(true)
       expect(b.classes()).toContain('min-h-[44px]')
+      expect(b.classes()).toContain('min-w-[44px]')
     }
     expect(wrapper.find('[data-testid="change-request-card-approve-2"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="change-request-card-withdraw-1"]').exists()).toBe(false)
@@ -325,5 +339,17 @@ describe('ShiftChangeRequestList 狭幅カード表示', () => {
     expect(wrapper.emitted('withdraw')).toEqual([[2]])
     await wrapper.setProps({ processingIds: [2] })
     expect(wrapper.find('[data-testid="change-request-card-withdraw-2"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('11 件以上ならカードも表と同じ 10 件でページングし、次ページで残りを出す', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => row({ id: 100 + i, requestedBy: 7, requesterName: `依頼者${i}` }))
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: many, currentUserId: 5 },
+    })
+    expect(wrapper.findAll('[data-testid^="change-request-card-1"]').filter((c) => /^change-request-card-\d+$/.test(c.attributes('data-testid')!))).toHaveLength(10)
+    const next = wrapper.find('[data-testid="change-request-cards-paginator"] .p-paginator-next')
+    await next.trigger('click')
+    await nextTick()
+    expect(wrapper.findAll('[data-testid^="change-request-card-1"]').filter((c) => /^change-request-card-\d+$/.test(c.attributes('data-testid')!))).toHaveLength(2)
   })
 })

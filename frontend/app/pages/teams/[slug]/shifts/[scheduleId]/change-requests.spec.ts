@@ -149,7 +149,7 @@ describe('変更依頼のチーム権限による審査UI（CMP1432-A）', () =>
     })
   })
 
-  it('390px のカードで操作列に届くよう DataTable は横スクロール可能', async () => {
+  it('md 以上の表は DataTable が横スクロール可能（狭幅はカード表示）', async () => {
     renderPage()
     await flushPromises()
     const table = wrapper!.findComponent(DataTable)
