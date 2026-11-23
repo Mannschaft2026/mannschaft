@@ -1,6 +1,7 @@
 package com.mannschaft.app.cms.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -30,13 +31,39 @@ public class BlogPostResponse {
     /** 課金合成状態（FULL/LOCKED）。HIDDEN は404または一覧除外のため返さない。 */
     private String accessState;
 
-    /** 投稿スコープ（チーム/組織/ユーザー/投稿者ID）。 */
+    /**
+     * 投稿スコープ（チーム/組織/ユーザー/投稿者ID と、チーム・組織の slug）。
+     *
+     * <p>チーム・組織ページの URL は slug が前提のため、FE が記事のスコープへ遷移するときに使う
+     * {@code teamSlug} / {@code organizationSlug} を返す。閲覧者の所属とは無関係に、記事のスコープそのものの slug を
+     * {@code BlogPostScopeSlugResolver} が Controller 層で一括付与する（論理削除済みのチーム・組織と、
+     * 該当スコープでない側は null）。キーは null でも常に応答に含める。</p>
+     */
     public record BlogPostScopeDto(
             Long teamId,
             Long organizationId,
             Long userId,
-            Long authorId
-    ) {}
+            Long authorId,
+            @JsonInclude(JsonInclude.Include.ALWAYS)
+            @Schema(description = "チーム記事のチーム slug（チーム記事以外・論理削除済みチームは null）",
+                    types = {"string", "null"}, requiredMode = Schema.RequiredMode.REQUIRED)
+            String teamSlug,
+            @JsonInclude(JsonInclude.Include.ALWAYS)
+            @Schema(description = "組織記事の組織 slug（組織記事以外・論理削除済み組織は null）",
+                    types = {"string", "null"}, requiredMode = Schema.RequiredMode.REQUIRED)
+            String organizationSlug
+    ) {
+        /** slug 未解決のスコープ（Entity からの変換直後）。slug は {@link #withSlugs} で付与する。 */
+        public BlogPostScopeDto(Long teamId, Long organizationId, Long userId, Long authorId) {
+            this(teamId, organizationId, userId, authorId, null, null);
+        }
+
+        /** チーム・組織の slug を付与した新しいインスタンスを返す。 */
+        public BlogPostScopeDto withSlugs(String resolvedTeamSlug, String resolvedOrganizationSlug) {
+            return new BlogPostScopeDto(teamId, organizationId, userId, authorId,
+                    resolvedTeamSlug, resolvedOrganizationSlug);
+        }
+    }
 
     /** 投稿コンテンツ（タイトル/スラッグ/本文/要約/サムネイル）。 */
     public record BlogPostContentDto(
@@ -97,6 +124,11 @@ public class BlogPostResponse {
                         mitayoCount
                 ))
                 .build();
+    }
+
+    /** スコープ（slug 付与済み）を差し替えた新しいインスタンスを返す。 */
+    public BlogPostResponse withScope(BlogPostScopeDto newScope) {
+        return this.toBuilder().scope(newScope).build();
     }
 
     public BlogPostResponse withAccessState(String state) {

@@ -192,7 +192,9 @@ public class AnnouncementReadService {
      * 対象お知らせが当該スコープに帰属し、元が削除されておらず、期限内であることを確認する。違反時は
      * {@link AnnouncementErrorCode#ANNOUNCE_001}（存在しない・越境・削除済み・期限切れを同一コードに畳む）。
      *
-     * <p>可視性・宛先・課金の判定は呼び出し元の判定部品が済ませている。これらの条件は一覧クエリ
+     * <p>可視性・宛先・課金、および元コンテンツ（ブログ・タイムライン投稿）が公開済みか（N9）の判定は、呼び出し元の
+     * 判定部品（{@link AnnouncementReadCommandService}。tx なし）が済ませている。元の公開状態は他ドメイン（cms・timeline）への
+     * 問い合わせなので、この {@code @Transactional} の内側では行わない（D-3T）。これらの条件は一覧クエリ
      * （{@link AnnouncementFeedQueryRepository#findByScope}）の WHERE 句・{@code AnnouncementInboxAdapter#isVisibleTo} と
      * 揃えてある。</p>
      */
