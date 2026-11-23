@@ -9,8 +9,8 @@ CREATE TABLE action_memo_daily_posts (
     user_id          BIGINT UNSIGNED NOT NULL COMMENT '所有ユーザー（users.id への ID 参照・FKなし）',
     memo_date        DATE            NOT NULL COMMENT '公開した行動日',
     timeline_post_id BIGINT UNSIGNED NOT NULL COMMENT 'その日の個人（PERSONAL）投稿の timeline_posts.id（ID 参照・FKなし）',
-    created_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at       DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '作成した瞬間（UTC）',
+    updated_at       DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '最後に投稿IDを更新した瞬間（UTC）',
     PRIMARY KEY (id),
     UNIQUE KEY uq_amdp_user_date (user_id, memo_date),
     KEY idx_amdp_timeline_post (timeline_post_id)

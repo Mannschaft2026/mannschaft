@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashSet;
@@ -146,12 +147,14 @@ public class ActionMemoPublishingService {
 
             // 7b. 日ごとの公開記録を upsert（初回は INSERT、再公開は投稿 ID を更新）
             if (dailyPost.isPresent()) {
-                dailyPost.get().setTimelinePostId(savedPostId);
+                dailyPost.get().replacePost(savedPostId, Instant.now(wallClock));
             } else {
                 dailyPostRepository.save(ActionMemoDailyPostEntity.builder()
                         .userId(userId)
                         .memoDate(memoDate)
                         .timelinePostId(savedPostId)
+                        .createdAt(Instant.now(wallClock))
+                        .updatedAt(Instant.now(wallClock))
                         .build());
             }
 

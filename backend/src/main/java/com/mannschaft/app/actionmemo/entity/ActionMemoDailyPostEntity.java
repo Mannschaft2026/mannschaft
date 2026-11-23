@@ -3,17 +3,14 @@ package com.mannschaft.app.actionmemo.entity;
 import com.mannschaft.app.common.entity.UuidV7Entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 /**
  * F02.5 行動メモの日ごとの公開記録。
@@ -35,29 +32,20 @@ public class ActionMemoDailyPostEntity extends UuidV7Entity {
     @Column(nullable = false, updatable = false)
     private LocalDate memoDate;
 
-    @Setter
     @Column(nullable = false)
     private Long timelinePostId;
 
+    /** 作成した瞬間（UTC の瞬間。datetime_policy_utc_instant_vs_wallclock.md）。呼び出し側が Clock から渡す。 */
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
+    /** 最後に投稿 ID を更新した瞬間。 */
     @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
-    @PrePersist
-    void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = LocalDateTime.now();
+    /** 再公開で個人投稿 ID を差し替える。 */
+    public void replacePost(Long newTimelinePostId, Instant now) {
+        this.timelinePostId = newTimelinePostId;
+        this.updatedAt = now;
     }
 }
