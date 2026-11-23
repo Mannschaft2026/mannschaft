@@ -133,6 +133,7 @@
       "formStart": "开始日期",
       "formEnd": "结束日期",
       "formDeadline": "申请截止日",
+      "formDeadlineInvalid": "请以“2026/12/31 23:59”的格式输入有效的申请截止日期和时间",
       "formNote": "备注",
       "formNotePlaceholder": "可选"
     },
