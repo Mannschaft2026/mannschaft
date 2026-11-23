@@ -10,6 +10,7 @@ import com.mannschaft.app.cms.dto.PublishRequest;
 import com.mannschaft.app.cms.dto.UpdateBlogPostRequest;
 import com.mannschaft.app.cms.dto.BlogReactionResponse;
 import com.mannschaft.app.cms.service.BlogFeedService;
+import com.mannschaft.app.cms.service.BlogPostScopeSlugResolver;
 import com.mannschaft.app.cms.service.BlogPostService;
 import com.mannschaft.app.cms.service.BlogReactionService;
 import com.mannschaft.app.cms.service.BlogScopeAccessGuard;
@@ -37,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -61,6 +63,10 @@ class BlogPostControllerTest {
     @Mock
     private BlogReactionService reactionService;
 
+    /** スコープ slug の付与はこの単体テストの関心外のため、入力をそのまま返す（付与自体は BlogPostScopeSlugResolverTest・BlogPostScopeSlugIT）。 */
+    @Mock
+    private BlogPostScopeSlugResolver scopeSlugResolver;
+
     @InjectMocks
     private BlogPostController controller;
 
@@ -74,6 +80,8 @@ class BlogPostControllerTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(scopeSlugResolver.attach(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(scopeSlugResolver.attachAll(any())).thenAnswer(inv -> inv.getArgument(0));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(USER_ID.toString(), null, List.of()));
     }

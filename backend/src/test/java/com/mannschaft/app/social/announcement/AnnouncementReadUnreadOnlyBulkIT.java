@@ -83,7 +83,6 @@ class AnnouncementReadUnreadOnlyBulkIT extends AbstractMySqlIntegrationTest {
     private Long supporterId;
     private Long outsiderId;
 
-    private long sourceIdSeq = 700_000L;
 
     @BeforeEach
     void setUp() {
@@ -506,12 +505,14 @@ class AnnouncementReadUnreadOnlyBulkIT extends AbstractMySqlIntegrationTest {
     }
 
     private Long saveFeed(String visibility, LocalDateTime sourceDeletedAt, LocalDateTime expiresAt) {
+        long sourceId = AnnouncementSourceFixtures.publishedTeamBlog(em, teamId, null);
         AnnouncementFeedEntity feed = AnnouncementFeedEntity.builder()
                 .scopeType(AnnouncementScopeType.TEAM)
                 .scopeId(teamId)
                 .sourceType(AnnouncementSourceType.BLOG_POST)
-                .sourceId(++sourceIdSeq)
-                .titleCache("BULK お知らせ " + sourceIdSeq)
+                // 元は公開済みの実在記事（元が公開済みでないお知らせは一覧・既読の対象外。N9）
+                .sourceId(sourceId)
+                .titleCache("BULK お知らせ " + sourceId)
                 .visibility(visibility)
                 .sourceDeletedAt(sourceDeletedAt)
                 .expiresAt(expiresAt)

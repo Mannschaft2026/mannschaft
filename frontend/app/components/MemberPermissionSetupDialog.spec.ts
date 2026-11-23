@@ -122,3 +122,73 @@ describe('MemberPermissionSetupDialog フッターのボタン折返し', () => 
     }
   })
 })
+
+// N5: 表示時のフォーカス先と閉じた後のフォーカス復帰
+describe('MemberPermissionSetupDialog フォーカス管理', () => {
+  async function mountWithSlots() {
+    apiMock.mockReset().mockResolvedValueOnce(initialResponse)
+    sessionStorage.clear()
+    const wrapper = await mountSuspended(MemberPermissionSetupDialog, {
+      props: { scopeType: 'TEAM', scopeId: 12, slug: 'team-12', roleName: 'ADMIN' },
+      attachTo: document.body,
+      global: {
+        stubs: {
+          Dialog: { template: '<div><slot /><slot name="footer" /></div>' },
+          Button: { props: ['label'], template: '<button>{{ label }}</button>' },
+          ToggleSwitch: true,
+          NuxtLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('初期フォーカス対象は非破壊な「あとで決める」ボタン（autofocus）で、確定ボタンには付かない', async () => {
+    const wrapper = await mountWithSlots()
+    const buttons = wrapper.get('[data-testid="member-permission-setup-footer"]').findAll('button')
+    expect(buttons[0]!.attributes('autofocus')).toBeDefined()
+    expect(buttons[0]!.attributes('data-testid')).toBe('member-permission-setup-later')
+    expect(buttons[1]!.attributes('autofocus')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('閉じた後は scope-sidebar-toggle にフォーカスが移る', async () => {
+    const toggle = document.createElement('button')
+    toggle.setAttribute('data-testid', 'scope-sidebar-toggle')
+    document.body.appendChild(toggle)
+    const wrapper = await mountWithSlots()
+    ;(wrapper.vm as unknown as { dismiss: () => void }).dismiss()
+    await flushPromises()
+    expect(document.activeElement).toBe(toggle)
+    wrapper.unmount()
+    toggle.remove()
+  })
+
+  it('scope-sidebar-toggle が非表示（display:none）なら main にフォーカスが移る', async () => {
+    const toggle = document.createElement('button')
+    toggle.setAttribute('data-testid', 'scope-sidebar-toggle')
+    toggle.style.display = 'none'
+    const main = document.createElement('main')
+    document.body.appendChild(toggle)
+    document.body.appendChild(main)
+    const wrapper = await mountWithSlots()
+    ;(wrapper.vm as unknown as { dismiss: () => void }).dismiss()
+    await flushPromises()
+    expect(document.activeElement).toBe(main)
+    wrapper.unmount()
+    toggle.remove()
+    main.remove()
+  })
+
+  it('メニューボタンが無ければ main にフォーカスが移る', async () => {
+    const main = document.createElement('main')
+    document.body.appendChild(main)
+    const wrapper = await mountWithSlots()
+    ;(wrapper.vm as unknown as { dismiss: () => void }).dismiss()
+    await flushPromises()
+    expect(document.activeElement).toBe(main)
+    wrapper.unmount()
+    main.remove()
+  })
+})
