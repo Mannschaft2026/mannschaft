@@ -672,7 +672,7 @@ NO_ARG_NOW|com.mannschaft.app.scopefolder.entity.MyScopeFolderEntity|7
 NO_ARG_NOW|com.mannschaft.app.scopefolder.entity.MyScopeFolderItemEntity|1
 NO_ARG_NOW|com.mannschaft.app.seal.entity.ElectronicSealEntity|1
 NO_ARG_NOW|com.mannschaft.app.seal.entity.SealStampLogEntity|3
-NO_ARG_NOW|com.mannschaft.app.search.entity.SearchHistoryEntity|2
+NO_ARG_NOW|com.mannschaft.app.search.entity.SearchHistoryEntity|1
 NO_ARG_NOW|com.mannschaft.app.search.entity.SearchSavedQueryEntity|1
 NO_ARG_NOW|com.mannschaft.app.securityincident.dto.SecurityIncidentResponse|1
 NO_ARG_NOW|com.mannschaft.app.securityincident.entity.SecurityIncidentEntity|2

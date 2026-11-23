@@ -13,6 +13,7 @@ import com.mannschaft.app.social.announcement.AnnouncementFeedService;
 import com.mannschaft.app.social.announcement.AnnouncementReadCommandService;
 import com.mannschaft.app.social.announcement.AnnouncementReadService;
 import com.mannschaft.app.social.announcement.AnnouncementScopeType;
+import com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard;
 import com.mannschaft.app.social.announcement.AnnouncementScopedFeedVisibilityGuard;
 import com.mannschaft.app.social.announcement.AnnouncementSourceType;
 import com.mannschaft.app.social.announcement.OrgAnnouncementFeedQueryService;
@@ -81,6 +82,7 @@ public class AnnouncementFeedOrgController {
     private final OrgAnnouncementFeedQueryService orgAnnouncementFeedQueryService;
     private final RoleResolver roleResolver;
     private final AccessControlService accessControlService;
+    private final AnnouncementSourcePublicationGuard publicationGuard;
 
     // ═════════════════════════════════════════════════════════════
     // GET /api/v1/organizations/{orgId}/announcements — 一覧取得
@@ -153,6 +155,10 @@ public class AnnouncementFeedOrgController {
 
         Long userId = SecurityUtils.getCurrentUserId();
         AnnouncementSourceType sourceType = EnumInputParser.parse(AnnouncementSourceType.class, request.getSourceType(), "sourceType");
+
+        // 元コンテンツが公開状態でなければ不在と同じ ANNOUNCE_006（下書き等のタイトルを漏らさない。N9）。
+        // スコープ・個人ブログ判定（Service 内の Resolver）より前に行い、存在オラクルを作らない。
+        publicationGuard.assertPublished(sourceType, request.getSourceId());
 
         var entity = announcementFeedService.createAnnouncement(
                 AnnouncementScopeType.ORGANIZATION, orgId, sourceType, request.getSourceId(), userId);

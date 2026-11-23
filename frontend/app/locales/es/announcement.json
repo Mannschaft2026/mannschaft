@@ -19,6 +19,10 @@
     "display_in_announcement_hint": "Se mostrará en un lugar destacado en la parte superior del panel.",
     "pin": "Fijar",
     "unpin": "Desfijar",
+    "pin_titled": "Fijar \"{title}\"",
+    "unpin_titled": "Desfijar \"{title}\"",
+    "remove_titled": "Eliminar \"{title}\" de anuncios",
+    "pinned_status": "Fijado",
     "priority": {
       "URGENT": "Urgente",
       "IMPORTANT": "Importante",
