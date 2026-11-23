@@ -19,6 +19,10 @@
     "display_in_announcement_hint": "대시보드 상단의 눈에 띄는 위치에 표시됩니다.",
     "pin": "고정",
     "unpin": "고정 해제",
+    "pin_titled": "\"{title}\" 고정",
+    "unpin_titled": "\"{title}\" 고정 해제",
+    "remove_titled": "\"{title}\" 공지에서 제거",
+    "pinned_status": "고정됨",
     "priority": {
       "URGENT": "긴급",
       "IMPORTANT": "중요",

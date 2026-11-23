@@ -27,6 +27,13 @@ public interface BlogPostRepository extends JpaRepository<BlogPostEntity, Long> 
 
     boolean existsByIdAndTeamId(Long id, Long teamId);
 
+    /** 指定状態の未削除記事が存在するか（{@code BlogPostPublicationStatusService} 用）。 */
+    boolean existsByIdAndStatus(Long id, PostStatus status);
+
+    /** 指定 ID のうち、指定状態の未削除記事の ID（{@code BlogPostPublicationStatusService} の一括判定用）。 */
+    @Query("SELECT p.id FROM BlogPostEntity p WHERE p.id IN :ids AND p.status = :status")
+    List<Long> findIdsByIdInAndStatus(@Param("ids") Collection<Long> ids, @Param("status") PostStatus status);
+
     boolean existsByIdAndOrganizationId(Long id, Long organizationId);
 
     String SEARCH_BY_TEAM = "SELECT * FROM blog_posts WHERE team_id = :teamId AND MATCH(title, body) AGAINST(:keyword IN BOOLEAN MODE) AND deleted_at IS NULL";
@@ -126,6 +133,17 @@ public interface BlogPostRepository extends JpaRepository<BlogPostEntity, Long> 
      * @param ids 射影対象 blog_post_id 集合（空でない）
      * @return 実存する BlogPost の Projection リスト
      */
+    /**
+     * 課金ゲート判定用に、未削除記事の {@code id / team_id / organization_id} を生値のまま SQL 1 本で返す
+     * （{@code BlogPostContentGateResolver#resolveForAccessBatch}。グローバル検索 ARTICLE のゲート判定）。
+     *
+     * @param ids 記事 ID 集合（空でない）
+     * @return {@code [id, teamId, organizationId]} の行
+     */
+    @Query("SELECT bp.id, bp.teamId, bp.organizationId FROM BlogPostEntity bp"
+            + " WHERE bp.id IN :ids AND bp.deletedAt IS NULL")
+    List<Object[]> findGateTargetRowsByIdIn(@Param("ids") Collection<Long> ids);
+
     @Query("""
             SELECT new com.mannschaft.app.cms.visibility.BlogPostVisibilityProjection(
                 bp.id,

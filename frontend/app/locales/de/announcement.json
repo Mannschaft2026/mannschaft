@@ -19,6 +19,10 @@
     "display_in_announcement_hint": "Wird oben auf dem Dashboard an prominenter Stelle angezeigt.",
     "pin": "Anheften",
     "unpin": "Lösen",
+    "pin_titled": "\"{title}\" anheften",
+    "unpin_titled": "\"{title}\" lösen",
+    "remove_titled": "\"{title}\" aus Ankündigungen entfernen",
+    "pinned_status": "Angeheftet",
     "priority": {
       "URGENT": "Dringend",
       "IMPORTANT": "Wichtig",
