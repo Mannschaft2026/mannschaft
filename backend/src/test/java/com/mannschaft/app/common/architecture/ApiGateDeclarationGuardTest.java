@@ -42,7 +42,8 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3750);   // 3741 + α 5本 + F06.4.1 PR-2 の3本 + CMP-261116-0722 PR-1 の1本。
+                .isEqualTo(3751);   // 3746 + α 5本。3746 = 3745 + CMP-261118-0900 参加者向け連絡スペース一覧 ParticipantContactSpaceController GET 1本（tournament 系の流儀で feature gate 未宣言 1|1）。
+                                    // 3745 = 3741 + F06.4.1 PR-2 の3本 + CMP-261116-0722 PR-1 の1本。
                                     //   (α) CMP-260909-2152 α 締め期間GET3本（ShiftBudgetClosePeriodController）・締め日設定GET1本＋POST1本（ShiftBudgetClosingSettingController）。
                                     //   α はクラス単位 @RequireFeature("FEATURE_SHIFT_ENABLED") 宣言済みで未宣言増加0（0|3・0|2）。
                                     //   (F06.4.1 PR-2) CMP-261115-2145 F06.4.1 PR-2 の3本（EffortRecordMeController の definition-snapshots 1本・

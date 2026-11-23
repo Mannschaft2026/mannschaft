@@ -60,43 +60,28 @@ class SearchHistoryServiceTest {
     class RecordHistory {
 
         @Test
-        @DisplayName("正常系: 新規クエリの場合は新規作成される")
-        void 新規クエリの場合は新規作成される() {
+        @DisplayName("正常系: 履歴は 1 文の UPSERT で記録し、上限以内なら削除しない")
+        void 履歴はUPSERTで記録される() {
             // given
-            given(searchHistoryRepository.findByUserIdAndQuery(USER_ID, "テスト"))
-                    .willReturn(Optional.empty());
+            given(searchHistoryRepository.findByUserIdOrderBySearchedAtDescIdDesc(USER_ID))
+                    .willReturn(List.of(SearchHistoryEntity.builder().id(1L).userId(USER_ID).query("テスト").build()));
 
             // when
             searchHistoryService.recordHistory(USER_ID, "テスト");
 
             // then
-            verify(searchHistoryRepository).save(any(SearchHistoryEntity.class));
-        }
-
-        @Test
-        @DisplayName("正常系: 既存クエリの場合は検索日時が更新される")
-        void 既存クエリの場合は検索日時が更新される() {
-            // given
-            SearchHistoryEntity existing = SearchHistoryEntity.builder()
-                    .userId(USER_ID).query("テスト").build();
-            given(searchHistoryRepository.findByUserIdAndQuery(USER_ID, "テスト"))
-                    .willReturn(Optional.of(existing));
-
-            // when
-            searchHistoryService.recordHistory(USER_ID, "テスト");
-
-            // then
+            verify(searchHistoryRepository).upsertSearchedNow(USER_ID, "テスト");
             verify(searchHistoryRepository, never()).save(any(SearchHistoryEntity.class));
+            verify(searchHistoryRepository, never()).deleteByUserIdAndIdIn(anyLong(), anyList());
         }
 
         @Test
-        @DisplayName("正常系: 51件目を記録すると最古の1件だけが削除される")
+        @DisplayName("正常系: 51件目を記録すると最古の1件だけが ID 指定で削除される")
         void 上限超過分は最古から削除される() {
             // given
-            given(searchHistoryRepository.findByUserIdAndQuery(USER_ID, "新しい語")).willReturn(Optional.empty());
             List<SearchHistoryEntity> all = new java.util.ArrayList<>();
             for (int i = 0; i < 51; i++) {
-                all.add(SearchHistoryEntity.builder().userId(USER_ID).query("語" + i).build());
+                all.add(SearchHistoryEntity.builder().id(1000L - i).userId(USER_ID).query("語" + i).build());
             }
             given(searchHistoryRepository.findByUserIdOrderBySearchedAtDescIdDesc(USER_ID)).willReturn(all);
 
@@ -104,7 +89,8 @@ class SearchHistoryServiceTest {
             searchHistoryService.recordHistory(USER_ID, "新しい語");
 
             // then
-            verify(searchHistoryRepository).deleteAllInBatch(List.of(all.get(50)));
+            verify(searchHistoryRepository).upsertSearchedNow(USER_ID, "新しい語");
+            verify(searchHistoryRepository).deleteByUserIdAndIdIn(USER_ID, List.of(950L));
         }
     }
 

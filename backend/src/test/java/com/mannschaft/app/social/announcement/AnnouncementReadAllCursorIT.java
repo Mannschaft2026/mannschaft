@@ -89,7 +89,6 @@ class AnnouncementReadAllCursorIT extends AbstractMySqlIntegrationTest {
     private Long memberB;
     private Long authorId;
     private Long paymentItemId;
-    private long sourceSeq = 9_100_000L;
 
     @BeforeEach
     void setUp() {
@@ -360,19 +359,30 @@ class AnnouncementReadAllCursorIT extends AbstractMySqlIntegrationTest {
                 new UsernamePasswordAuthenticationToken(userId.toString(), null, List.of()));
     }
 
-    /** チームの告知を {@code count} 件まとめて作り、ID 昇順で返す（10,000 件級でも1文で作る）。 */
+    /**
+     * チームの告知を {@code count} 件まとめて作り、ID 昇順で返す（10,000 件級でも1文で作る）。
+     *
+     * <p>元は公開済みの実在ブログ記事（1 告知に 1 記事。元が公開済みでない告知は一覧・一括既読の対象外。N9）。
+     * 記事も 1 文でまとめて作り、記事の ID 順＝連番順に告知を作る。</p>
+     */
     @SuppressWarnings("unchecked")
     private List<Long> bulkTeamFeeds(int count, String tag, String visibility) {
-        long base = sourceSeq;
-        sourceSeq += count + 10;
         String uniqueTag = tag + "-" + UUID.randomUUID().toString().substring(0, 6);
+        em.createNativeQuery("INSERT INTO blog_posts (" + AnnouncementSourceFixtures.BULK_PUBLISHED_BLOG_COLUMNS + ") "
+                        + "SELECT " + AnnouncementSourceFixtures.BULK_PUBLISHED_BLOG_VALUES.formatted(
+                                ":tid", ":author", "CONCAT(:tag, ' ', n)", "CONCAT(:tag, '-', n)")
+                        + " FROM (" + digits() + ") nums WHERE n < :cnt ORDER BY n")
+                .setParameter("tid", t1).setParameter("author", authorId)
+                .setParameter("tag", uniqueTag).setParameter("cnt", count)
+                .executeUpdate();
         em.createNativeQuery("INSERT INTO announcement_feeds (scope_type, scope_id, source_type, source_id, "
                         + "author_id, title_cache, priority, is_pinned, visibility, include_unassigned, "
                         + "is_advertisement, created_at, updated_at) "
-                        + "SELECT 'TEAM', :tid, 'BLOG_POST', :base + n, :author, CONCAT(:tag, ' ', n), 'NORMAL', 0, "
-                        + ":vis, 0, 0, NOW(), NOW() FROM (" + digits() + ") nums WHERE n < :cnt ORDER BY n")
-                .setParameter("tid", t1).setParameter("base", base).setParameter("author", authorId)
-                .setParameter("tag", uniqueTag).setParameter("vis", visibility).setParameter("cnt", count)
+                        + "SELECT 'TEAM', :tid, 'BLOG_POST', b.id, :author, b.title, 'NORMAL', 0, "
+                        + ":vis, 0, 0, NOW(), NOW() FROM blog_posts b WHERE b.team_id = :tid "
+                        + "AND b.slug LIKE CONCAT(:tag, '-%') ORDER BY b.id")
+                .setParameter("tid", t1).setParameter("author", authorId)
+                .setParameter("tag", uniqueTag).setParameter("vis", visibility)
                 .executeUpdate();
         List<Number> ids = em.createNativeQuery("SELECT id FROM announcement_feeds WHERE title_cache LIKE :tag "
                         + "ORDER BY id").setParameter("tag", uniqueTag + " %").getResultList();
@@ -405,7 +415,8 @@ class AnnouncementReadAllCursorIT extends AbstractMySqlIntegrationTest {
     private Long orgFeed(String visibility) {
         AnnouncementFeedEntity feed = AnnouncementFeedEntity.builder()
                 .scopeType(AnnouncementScopeType.ORGANIZATION).scopeId(orgX)
-                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(++sourceSeq).authorId(authorId)
+                .sourceType(AnnouncementSourceType.BLOG_POST)
+                .sourceId(AnnouncementSourceFixtures.publishedOrgBlog(em, orgX, authorId)).authorId(authorId)
                 .titleCache("組織告知").visibility(visibility).build();
         em.persist(feed);
         return feed.getId();

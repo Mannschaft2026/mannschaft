@@ -200,3 +200,82 @@ describe('受信した子返信と投稿結果を表示する', () => {
     expect(view.get('textarea').element.value).toBe('再送する本文')
   })
 })
+
+/**
+ * CMP-261118-0900（設計書 F08.7.1 01_communication.md §10.5）:
+ * 参加者画面の VIEW 利用者には返信欄を出さない（canReply、既定 true）。
+ * 未ロックのスレッドで canReply=false のとき「ロックされています」と誤表示しない（v-else → v-else-if）。
+ * canManage は渡さない（参加者画面と同じ条件。管理ボタンのロックアイコンと混同しないため）。
+ */
+describe('返信可否（canReply）とロック表示', () => {
+  function renderWithReply(isLocked: boolean, canReply?: boolean) {
+    mocks.getThread.mockResolvedValue({ data: { ...thread('山田太郎'), isLocked } })
+    const errors: unknown[] = []
+    const props: Record<string, unknown> = { threadId: 163 }
+    if (canReply !== undefined) props.canReply = canReply
+    const view = mount(BulletinThreadDetail, {
+      props: props as { threadId: number },
+      global: { stubs, config: { errorHandler: error => errors.push(error) } },
+    })
+    return { view, errors }
+  }
+  function replyFormShown(view: ReturnType<typeof mount>) {
+    return view.find('textarea').exists() || view.findAll('button').some(b => b.text() === '返信')
+  }
+  function lockNoticeShown(view: ReturnType<typeof mount>) {
+    return view.find('i.pi-lock').exists() || view.text().includes('ロックされています')
+  }
+
+  it('AC-P25: canReply=false・未ロックでは返信欄もロック表示も出さない（VIEW）', async () => {
+    const { view, errors } = renderWithReply(false, false)
+    await flushPromises()
+    expect(view.find('h2').text()).toBe('アンケートの題名')
+    expect(replyFormShown(view)).toBe(false)
+    expect(lockNoticeShown(view)).toBe(false)
+    expect(errors).toEqual([])
+  })
+
+  it('AC-P25: canReply=false・ロック済みでは返信欄を出さずロック表示を出す（VIEW）', async () => {
+    const { view, errors } = renderWithReply(true, false)
+    await flushPromises()
+    expect(replyFormShown(view)).toBe(false)
+    expect(lockNoticeShown(view)).toBe(true)
+    expect(errors).toEqual([])
+  })
+
+  it('AC-P25: canReply=true・未ロックでは返信欄を出しロック表示を出さない（POST）', async () => {
+    const { view, errors } = renderWithReply(false, true)
+    await flushPromises()
+    expect(view.find('textarea').exists()).toBe(true)
+    expect(lockNoticeShown(view)).toBe(false)
+    expect(errors).toEqual([])
+  })
+
+  it('AC-P25: canReply=true・ロック済みでは返信欄を出さずロック表示を出す（POST）', async () => {
+    const { view, errors } = renderWithReply(true, true)
+    await flushPromises()
+    expect(replyFormShown(view)).toBe(false)
+    expect(lockNoticeShown(view)).toBe(true)
+    expect(errors).toEqual([])
+  })
+
+  it('AC-P31: canReply 未指定（既存の呼び出し元）は従来どおり返信欄を出し、返信できる', async () => {
+    mocks.createReply.mockResolvedValue({ data: { ...reply, body: '既定で返信できる' } })
+    const { view, errors } = renderWithReply(false)
+    await flushPromises()
+    expect(view.find('textarea').exists()).toBe(true)
+    expect(lockNoticeShown(view)).toBe(false)
+    await view.get('textarea').setValue('既定で返信できる')
+    await view.findAll('button').find(button => button.text() === '返信')!.trigger('click')
+    await flushPromises()
+    expect(mocks.createReply).toHaveBeenCalledWith(163, '既定で返信できる')
+    expect(errors).toEqual([])
+  })
+
+  it('AC-P31: canReply 未指定・ロック済みは従来どおりロック表示を出す', async () => {
+    const { view } = renderWithReply(true)
+    await flushPromises()
+    expect(replyFormShown(view)).toBe(false)
+    expect(lockNoticeShown(view)).toBe(true)
+  })
+})
