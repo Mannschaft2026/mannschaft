@@ -119,8 +119,9 @@ test.describe('A. 正の視点: SYSTEM_ADMIN は各ページの本体が表示�
     page.on('response', (r) => {
       if (r.request().method() === 'GET' && r.url().includes('/api/v1/')) baselineApis.add(norm(r.url()))
     })
+    const navLoaded = page.waitForResponse((r) => norm(r.url()) === `${API}/api/v1/settings/nav`, { timeout: 120_000 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(8_000)
+    await navLoaded
     expect(page.url()).toContain('/dashboard')
     await page.close()
   })
@@ -132,17 +133,17 @@ test.describe('A. 正の視点: SYSTEM_ADMIN は各ページの本体が表示�
       page.on('response', (r) => {
         if (r.request().method() === 'GET' && r.url().includes('/api/v1/')) apis.push(norm(r.url()))
       })
-      await page.goto(`/admin/${p}`, { waitUntil: 'domcontentloaded' })
+      // 初回 API の応答を条件待ちにする（G の対象表と実測の一致も、ここで確認する）。
+      const expectedResponses = (ADMIN_APIS[p] ?? []).map((path) =>
+        page.waitForResponse((r) => norm(r.url()) === `${API}${path}`, { timeout: 120_000 }),
+      )
+      await Promise.all([page.goto(`/admin/${p}`, { waitUntil: 'domcontentloaded' }), ...expectedResponses])
       await expect(page.locator('h1').first()).toBeVisible({ timeout: 120_000 })
-      await page.waitForTimeout(3_000)
       expect(new URL(page.url()).pathname).toBe(`/admin/${p}`)
       await expect(page.getByText(TITLE, { exact: true })).toHaveCount(0)
       const h1 = ((await page.locator('h1').first().textContent()) ?? '').trim()
       const specific = [...new Set(apis)].filter((u) => !baselineApis.has(u))
       pageApis.set(p, specific)
-      for (const path of ADMIN_APIS[p] ?? []) {
-        expect(specific, `G の対象表と実測が食い違う: ${path}`).toContain(`${API}${path}`)
-      }
       console.log(`PAGE|${p}|h1=${h1}|apis=${specific.join(',')}`)
       await page.close()
     })
@@ -221,7 +222,6 @@ test.describe('D. アプリ内遷移（クライアント遷移）でも止ま�
           const el = document.querySelector('#__nuxt') as (HTMLElement & { __vue_app__?: unknown }) | null
           return !!el?.__vue_app__
         }, undefined, { timeout: 120_000 })
-        await page.waitForTimeout(2_000)
         await page.evaluate((path) => {
           const el = document.querySelector('#__nuxt') as unknown as {
             __vue_app__: { config: { globalProperties: { $router: { push: (p: string) => Promise<unknown> } } } }
@@ -242,8 +242,11 @@ test.describe('E. 導線: 一般ユーザー・チーム ADMIN の画面に SYST
   for (const role of ['user', 'teamAdmin'] as const) {
     test(`E-${role} /dashboard に 23 ページへのリンクが無い`, async () => {
       const page = await newPageIn(role)
+      // ナビ設定の応答を待ってから導線を数える（固定待ちにしない）。
+      const navLoaded = page.waitForResponse((r) => norm(r.url()) === `${API}/api/v1/settings/nav`, { timeout: 120_000 })
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-      await page.waitForTimeout(8_000)
+      await navLoaded
+      await expect(page.locator('#__nuxt *').first()).toBeVisible()
       const hrefs = await page.locator('a[href^="/admin/"]').evaluateAll((as) =>
         as.map((a) => (a as HTMLAnchorElement).getAttribute('href')),
       )
@@ -343,10 +346,34 @@ test.describe('G. BE 側: 権限なしでは各ページの管理系 API が 403
         expect.soft(userStatus).toBe(403)
         expect.soft(teamStatus).toBe(403)
         expect.soft(anonStatus).toBe(401)
-        // 管理者で 2xx にならない場合は、画面が呼ぶ API が BE に無い等の実装欠陥。
-        expect.soft(adminStatus, `管理者で ${path} が成功しない`).toBeLessThan(300)
       }
       await anon.dispose()
+    })
+  }
+})
+
+/**
+ * 既知の実装欠陥: 管理者でも初回 API が 404（BE に Controller が無い）。入口ガードとは別件で、台帳の別行で追跡する。
+ * test.fail() で固定してあるため、BE が実装されて 2xx になるとこのテストが「想定外の成功」で赤になり、固定を外す合図になる。
+ * 入口ガード側の検査（G の 403/401、B/C/F の直打ち）は通常のテストのまま。
+ */
+const KNOWN_ADMIN_API_DEFECTS: Record<string, string> = {
+  campaigns: 'CMP-260917-0121: BE に system-admin/discount-campaigns の Controller が無い',
+  'tax-settings': 'CMP-260917-0123: BE に system-admin/tax-settings の Controller が無い（税設定は billing/tax-codes のみ）',
+  'module-pricing': 'CMP-261123-1833: BE に system-admin/module-pricing の Controller が無い',
+  packages: 'CMP-261123-1833: BE に system-admin/packages の Controller が無い',
+  'storage-plans': 'CMP-261123-1833: BE に system-admin/storage-plans・storage-usage の Controller が無い',
+}
+
+test.describe('H. BE 側: 管理者では各ページの初回 API が 2xx（既知の欠陥 5 ページは test.fail で固定）', () => {
+  for (const p of PAGES.filter((x) => ADMIN_APIS[x])) {
+    test(`H /admin/${p} の管理者 API が成功する`, async () => {
+      const known = KNOWN_ADMIN_API_DEFECTS[p]
+      if (known) test.fail(true, known)
+      for (const path of ADMIN_APIS[p]!) {
+        const status = await statusOf(contexts.sysadmin.request, `${API}${path}`)
+        expect(status, `管理者で ${path} が成功しない`).toBeLessThan(300)
+      }
     })
   }
 })
