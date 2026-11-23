@@ -19,6 +19,10 @@
     "display_in_announcement_hint": "ダッシュボード上部で目立つ位置に表示されます",
     "pin": "ピン留めする",
     "unpin": "ピン留め解除",
+    "pin_titled": "「{title}」をピン留めする",
+    "unpin_titled": "「{title}」のピン留め解除",
+    "remove_titled": "「{title}」をお知らせから外す",
+    "pinned_status": "ピン留め中",
     "priority": {
       "URGENT": "緊急",
       "IMPORTANT": "重要",

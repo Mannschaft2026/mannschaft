@@ -100,6 +100,17 @@ async function beginDrag(view: VueWrapper, dx: number, dy = 0) {
 }
 
 describe('スコープbodyの初回選択と常設カルーセル', () => {
+  it.each(panels)('%s 選択時、非アクティブな tabpanel だけに inert が付く（Tab 順から外す）', async (initial) => {
+    const view = await render(initial)
+    const sections = view.findAll('section[role="tabpanel"]')
+    expect(sections).toHaveLength(3)
+    for (const section of sections) {
+      const active = section.attributes('id') === `scope-panel-${initial}`
+      expect(section.attributes('aria-hidden')).toBe(active ? 'false' : 'true')
+      expect(section.attributes('inert') !== undefined).toBe(!active)
+    }
+  })
+
   it.each(panels)('復元された%sだけを生成し、未訪問bodyのmount/取得を始めない', async (initial) => {
     const view = await render(initial)
     expect(view.findAll('section[role="tabpanel"]')).toHaveLength(3)
@@ -200,5 +211,72 @@ describe('スコープbodyの初回選択と常設カルーセル', () => {
     await vertical.trigger('touchend')
     expect(state.store.activePanel).toBe('PERSONAL')
     expectMountedOnce(['PERSONAL'])
+  })
+  describe('タブの WAI-ARIA キーボード操作', () => {
+    const tab = (view: VueWrapper, panel: ActivePanel) => view.get(`[data-testid="scope-segment-${panel}"]`)
+    async function press(view: VueWrapper, from: ActivePanel, key: string) {
+      await tab(view, from).trigger('keydown', { key })
+      await flushPromises()
+    }
+
+    it('選択中のタブだけ tabindex=0、他は -1', async () => {
+      const view = await render('TEAM')
+      expect(tab(view, 'PERSONAL').attributes('tabindex')).toBe('-1')
+      expect(tab(view, 'TEAM').attributes('tabindex')).toBe('0')
+      expect(tab(view, 'ORGANIZATION').attributes('tabindex')).toBe('-1')
+    })
+
+    it('ArrowRight/ArrowLeft で選択とフォーカスが移り、端で循環する', async () => {
+      const view = await render('PERSONAL', true)
+      await press(view, 'PERSONAL', 'ArrowRight')
+      expect(tab(view, 'TEAM').attributes('aria-selected')).toBe('true')
+      expect(state.store.activePanel).toBe('TEAM')
+      await press(view, 'TEAM', 'ArrowLeft')
+      await press(view, 'PERSONAL', 'ArrowLeft')
+      expect(tab(view, 'ORGANIZATION').attributes('aria-selected')).toBe('true')
+      await press(view, 'ORGANIZATION', 'ArrowRight')
+      expect(tab(view, 'PERSONAL').attributes('aria-selected')).toBe('true')
+    })
+
+    it('Home/End で先頭・末尾へ移る', async () => {
+      const view = await render('TEAM', true)
+      await press(view, 'TEAM', 'End')
+      expect(tab(view, 'ORGANIZATION').attributes('aria-selected')).toBe('true')
+      await press(view, 'ORGANIZATION', 'Home')
+      expect(tab(view, 'PERSONAL').attributes('aria-selected')).toBe('true')
+      expect(tab(view, 'PERSONAL').attributes('tabindex')).toBe('0')
+    })
+
+    it.each(['altKey', 'ctrlKey', 'metaKey', 'shiftKey'])('%s 付きの矢印/Home/End では切り替えない', async (mod) => {
+      const view = await render('TEAM', true)
+      for (const key of ['ArrowRight', 'ArrowLeft', 'Home', 'End']) {
+        await tab(view, 'TEAM').trigger('keydown', { key, [mod]: true })
+      }
+      await flushPromises()
+      expect(state.store.activePanel).toBe('TEAM')
+    })
+
+    it('タブ上の ArrowRight は window まで bubble しても 1 ステップだけ進む（二重切替しない）', async () => {
+      const view = await render('PERSONAL', true)
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      host.appendChild(view.element)
+      tab(view, 'PERSONAL').element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+      )
+      await flushPromises()
+      expect(state.store.activePanel).toBe('TEAM')
+      host.remove()
+    })
+
+    it('移動先のタブにフォーカスが当たる', async () => {
+      const view = await render('PERSONAL', true)
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      host.appendChild(view.element)
+      await press(view, 'PERSONAL', 'ArrowRight')
+      expect(document.activeElement).toBe(tab(view, 'TEAM').element)
+      host.remove()
+    })
   })
 })
