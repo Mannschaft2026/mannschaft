@@ -22,9 +22,6 @@
  *     -c playwright-real.config.ts --project chromium-real --reporter=list
  */
 
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import {
   test,
   expect,
@@ -196,13 +193,10 @@ async function createAndDeleteRateCard(page: Page, lang: Lang, testInfo: TestInf
   }
 }
 
-/** LC-01 が測った「BE が返す通知種別ラベルのうち日本語のままのもの」（言語別）を LC-07 へ渡す一時ファイル。 */
-const BE_LABEL_FILE = path.join(os.tmpdir(), 'i18n-ad-rate-cards-notifications-be-labels.json')
-
 /**
  * /settings/notifications を確認する。FE の文言（見出し・説明・ボタンなど）に日本語が残らないことを検証する。
  * 通知種別の名前（`tp.label`）は BE が利用者の言語で返す値（GET /api/v1/notification-type-preferences）で、
- * FE の i18n の対象外のため、FE の直書き検査からは外し、日本語のまま返ったものを別に数えて LC-07 で検証する。
+ * FE の i18n の対象外のため、FE の直書き検査からは外し、日本語のまま返ったものは LC-07 で検証する。
  */
 async function checkNotificationsScreen(page: Page, lang: Lang, testInfo: TestInfo): Promise<void> {
   const beLabels: string[] = []
@@ -225,14 +219,6 @@ async function checkNotificationsScreen(page: Page, lang: Lang, testInfo: TestIn
     const residue = lines.filter((l) => !beLabels.includes(l))
     await note(testInfo, `${lang} の /settings/notifications: FE 文言に残った日本語行`, residue)
     await note(testInfo, `${lang} の通知種別ラベル（BE 応答）のうち日本語のもの`, { total: beLabels.length, japanese: beJapanese.length, sample: beJapanese.slice(0, 5) })
-    let all: Record<string, { total: number; japanese: number }> = {}
-    try {
-      all = JSON.parse(fs.readFileSync(BE_LABEL_FILE, 'utf8')) as typeof all
-    } catch {
-      all = {}
-    }
-    all[lang] = { total: beLabels.length, japanese: beJapanese.length }
-    fs.writeFileSync(BE_LABEL_FILE, JSON.stringify(all))
     expect(residue, `${lang} で FE の日本語直書きが残っていない`).toEqual([])
   }
 }
@@ -304,12 +290,40 @@ test('LC-01 /admin/ad-rate-cards と /settings/notifications: ja で日本語、
 // LC-07 通知種別ラベル（BE が返す名前）も ja 以外で日本語が残らない
 //   既知の実装欠陥: BE の messages_de / zh / ko / es には notification.type.*.label が 5 件しか無く、
 //   残りは既定（日本語）へフォールバックする。FE の i18n（本 PR の範囲）の外のため、FAIL（実装欠陥）として
-//   test.fail() で明示する（直った場合は逆に緑→赤の反転で気付ける。skip にはしない）。
+//   「de の日本語件数 0」の 1 点の expect だけを期待どおり失敗として扱う（前提の準備で落ちれば通常の赤。skip にしない）。
 // ===========================================================================
-test.fail('LC-07 /settings/notifications: ja 以外（de）でも通知種別の名前が日本語のまま返らない（既知の実装欠陥: BE の messages_de に通知種別ラベルが 5/50 件しか無い）', async () => {
-  const all = JSON.parse(fs.readFileSync(BE_LABEL_FILE, 'utf8')) as Record<string, { total: number; japanese: number }>
-  expect(all.en?.japanese, 'en は通知種別の名前がすべて訳で返る').toBe(0)
-  expect(all.de?.japanese, 'de でも通知種別の名前がすべて訳で返る').toBe(0)
+test('LC-07 /settings/notifications: 通知種別の名前（BE の label）が de でも日本語のまま返らない（既知の実装欠陥: BE の messages_de に 5/50 件しか無い）', async ({ browser }, testInfo) => {
+  // 自己完結: 自分でアカウント言語を en / de にして label を取得し、終了時に元の言語へ戻す。
+  const { context, page } = await newLoggedInPage(browser, ADMIN)
+  const me = await page.request.get(`${BE}/api/v1/users/me`)
+  const original = ((await me.json()) as { data: { locale: string; timezone: string; countryCode?: string | null } }).data
+  const japaneseCount: Record<string, number> = {}
+  try {
+    for (const lang of ['en', 'de'] as const) {
+      const put = await page.request.put(`${BE}/api/v1/users/me`, { data: { locale: lang, timezone: original.timezone, countryCode: original.countryCode ?? null } })
+      expect(put.status(), `${lang} へのアカウント言語の更新`).toBeLessThan(300)
+      const res = await page.request.get(`${BE}/api/v1/notification-type-preferences`)
+      expect(res.status()).toBe(200)
+      const rows = ((await res.json()) as { data: { label?: string }[] }).data
+      expect(rows.length, `${lang} の通知種別が取得できる`).toBeGreaterThan(0)
+      japaneseCount[lang] = rows.filter((r) => r.label && JAPANESE.test(r.label)).length
+      await note(testInfo, `${lang} の通知種別ラベル`, { total: rows.length, japanese: japaneseCount[lang] })
+    }
+  } finally {
+    const restore = await page.request.put(`${BE}/api/v1/users/me`, { data: { locale: original.locale, timezone: original.timezone, countryCode: original.countryCode ?? null } })
+    expect(restore.status(), '言語の復元').toBeLessThan(300)
+    await context.close()
+  }
+  expect(japaneseCount.en, 'en は通知種別の名前がすべて訳で返る').toBe(0)
+  // 既知の実装欠陥（de で日本語が残る）の 1 点だけを「失敗が期待どおり」とする。直ると下の確認が赤になり気付ける。
+  let defectPresent = false
+  try {
+    expect(japaneseCount.de, 'de でも通知種別の名前がすべて訳で返る').toBe(0)
+  } catch (error) {
+    defectPresent = true
+    await note(testInfo, '既知の実装欠陥（de の通知種別名が日本語のまま）を再現', String(error).slice(0, 200))
+  }
+  expect(defectPresent, '欠陥が直った: この期待どおり失敗の扱いを外して通常の検証にする').toBe(true)
 })
 
 // ===========================================================================
