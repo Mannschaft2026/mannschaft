@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 4
+- テーブル数: 5
 - ビュー数: 0
 
 ## ER 図
@@ -11,6 +11,11 @@
 
 ```mermaid
 erDiagram
+    action_memo_daily_posts {
+        binary id PK
+        bigint user_id "ID参照"
+        bigint timeline_post_id "ID参照"
+    }
     action_memo_tag_links {
         bigint id PK
         bigint memo_id FK
@@ -38,6 +43,8 @@ erDiagram
     timeline_posts
     todos
     users
+    timeline_posts ||..o{ action_memo_daily_posts : "ID参照(FKなし) timeline_post_id"
+    users ||..o{ action_memo_daily_posts : "ID参照(FKなし) user_id"
     action_memo_tags ||--o{ action_memo_tag_links : "tag_id"
     action_memos ||--o{ action_memo_tag_links : "memo_id"
     users ||..o{ action_memo_tags : "ID参照(FKなし) user_id"
@@ -58,6 +65,17 @@ erDiagram
 なし
 
 ## テーブル定義
+
+### `action_memo_daily_posts`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） | UUIDv7 |
+| `user_id` | `bigint unsigned` | NO | （なし） | 所有ユーザー（users.id への ID 参照・FKなし） |
+| `memo_date` | `date` | NO | （なし） | 公開した行動日 |
+| `timeline_post_id` | `bigint unsigned` | NO | （なし） | その日の個人（PERSONAL）投稿の timeline_posts.id（ID 参照・FKなし） |
+| `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
+| `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
 
 ### `action_memo_tag_links`
 

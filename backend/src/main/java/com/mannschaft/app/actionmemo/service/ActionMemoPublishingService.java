@@ -9,9 +9,11 @@ import com.mannschaft.app.actionmemo.dto.PublishDailyToTeamRequest;
 import com.mannschaft.app.actionmemo.dto.PublishDailyToTeamResponse;
 import com.mannschaft.app.actionmemo.dto.PublishToTeamRequest;
 import com.mannschaft.app.actionmemo.dto.PublishToTeamResponse;
+import com.mannschaft.app.actionmemo.entity.ActionMemoDailyPostEntity;
 import com.mannschaft.app.actionmemo.entity.ActionMemoEntity;
 import com.mannschaft.app.actionmemo.entity.UserActionMemoSettingsEntity;
 import com.mannschaft.app.actionmemo.enums.ActionMemoCategory;
+import com.mannschaft.app.actionmemo.repository.ActionMemoDailyPostRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.security.HtmlSanitizer;
@@ -28,10 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * F02.5 行動メモ投稿サービス。
@@ -53,6 +56,7 @@ public class ActionMemoPublishingService {
             DateTimeFormatter.ofPattern("HH:mm");
 
     private final ActionMemoRepository memoRepository;
+    private final ActionMemoDailyPostRepository dailyPostRepository;
     private final TimelinePostService timelinePostService;
     private final PermissionScopeQueryService permissionScopeQueryService;
     private final ActionMemoSettingsService settingsService;
@@ -98,7 +102,12 @@ public class ActionMemoPublishingService {
                     ? request.getMemoDate()
                     : LocalDate.now(wallClock);
 
-            // 2. 対象日のメモを時系列順に取得
+            // 2a. 同じ利用者・同じ日の公開を直列化する（CMP-261123-1201）。
+            //     旧投稿 ID・当日メモを読む前に当日メモ行を悲観ロックし、公開完了（コミット）まで保持する。
+            //     これが無いと、2要求が同じ旧 ID を読み、それぞれ新投稿を作って生存投稿が2件残る。
+            memoRepository.lockByUserIdAndMemoDate(userId, memoDate);
+
+            // 2b. 対象日のメモを時系列順に取得
             List<ActionMemoEntity> memos = memoRepository.findByUserIdAndMemoDate(userId, memoDate);
 
             // 3. 0件チェック → 400
@@ -107,10 +116,17 @@ public class ActionMemoPublishingService {
             }
 
             // 4. 冪等性: 既存投稿の論理削除（同日に publish-daily が呼ばれた場合の上書き再投稿）
-            Set<Long> oldTimelinePostIds = memos.stream()
+            //     旧投稿は「日ごとの公開記録」と「当日メモの timeline_post_id」の和集合から探す。
+            //     メモの日付変更で timeline_post_id が外れていても、記録から旧投稿を追える。
+            //     記録は FOR UPDATE で読み、先行する公開のコミット後の最新 ID を確実に読む。
+            Optional<ActionMemoDailyPostEntity> dailyPost =
+                    dailyPostRepository.findByUserIdAndMemoDateForUpdate(userId, memoDate);
+            Set<Long> oldTimelinePostIds = new LinkedHashSet<>();
+            dailyPost.map(ActionMemoDailyPostEntity::getTimelinePostId).ifPresent(oldTimelinePostIds::add);
+            memos.stream()
                     .map(ActionMemoEntity::getTimelinePostId)
                     .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
+                    .forEach(oldTimelinePostIds::add);
             // 旧個人投稿の取得・所有者／スコープ確認・論理削除は timeline ドメインのサービスへ委譲する
             // （自分の PERSONAL 投稿だけが対象。チーム投稿・他人の投稿は消えない）。
             if (!oldTimelinePostIds.isEmpty()) {
@@ -127,6 +143,17 @@ public class ActionMemoPublishingService {
             // 7. TimelinePost 新規作成（PERSONAL スコープ）
             Long savedPostId = timelinePostService.saveActionMemoPost(
                     PostScopeType.PERSONAL, userId, userId, content);
+
+            // 7b. 日ごとの公開記録を upsert（初回は INSERT、再公開は投稿 ID を更新）
+            if (dailyPost.isPresent()) {
+                dailyPost.get().setTimelinePostId(savedPostId);
+            } else {
+                dailyPostRepository.save(ActionMemoDailyPostEntity.builder()
+                        .userId(userId)
+                        .memoDate(memoDate)
+                        .timelinePostId(savedPostId)
+                        .build());
+            }
 
             // 8. 各メモの timelinePostId を更新
             // memos は managed エンティティのため dirty checking で永続化される（save 不要）

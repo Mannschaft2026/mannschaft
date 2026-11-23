@@ -136,6 +136,7 @@ erDiagram
 | [_unmapped](_unmapped.md) | `direct_mail_recipients_archive` | `user_id` | ID参照 | `users` |
 | [_unmapped](_unmapped.md) | `notifications_archive` | `user_id` | ID参照 | `users` |
 | [_unmapped](_unmapped.md) | `report_actions_archive` | `action_by` | ID参照 | `users` |
+| [actionmemo](actionmemo.md) | `action_memo_daily_posts` | `user_id` | ID参照 | `users` |
 | [actionmemo](actionmemo.md) | `action_memo_tags` | `user_id` | ID参照 | `users` |
 | [actionmemo](actionmemo.md) | `action_memos` | `user_id` | ID参照 | `users` |
 | [actionmemo](actionmemo.md) | `user_action_memo_settings` | `user_id` | ID参照 | `users` |
