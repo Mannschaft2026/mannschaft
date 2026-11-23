@@ -560,7 +560,9 @@ app:
   datasource:
     replica:
       enabled: false
-      # replica のみ（archive は読み取り専用で DATE を書かないため不要）。接続作成時の JVM 既定 TZ を接続に固定させない二重の守り。
+      # replica にだけ置く。archive（ArchiveDataSourceConfig）は JdbcTemplate で DATETIME を LocalDateTime の setObject で扱うだけで、現状の実害は小さい
+      # （検索条件の DATE バインドで同じずれが起きうるため、DATE を条件に使う処理を足すときは同設定を入れること）。
+      # 接続作成時の JVM 既定 TZ を接続に固定させない二重の守り。
       # 一次防衛は ServerTimeZoneEnvironmentPostProcessor。
       data-source-properties:
         cacheDefaultTimeZone: false

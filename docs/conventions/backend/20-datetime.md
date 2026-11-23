@@ -126,6 +126,7 @@ public void postProcessEnvironment(ConfigurableEnvironment env, SpringApplicatio
     TimeZone.setDefault(TimeZone.getTimeZone(UserZoneLocalDateTimeParser.SERVER_ZONE));
 }
 ```
+  ⚠️ **`-Duser.timezone` は Spring コンテキストを起動するテストでは効かない**: EnvironmentPostProcessor が JVM 既定 TZ を無条件に `SERVER_ZONE` へ上書きするため、`-Ptest.timezone=America/Los_Angeles` や `UTC` でテスト JVM を起動しても、`@SpringBootTest` / `SpringApplication` を使うテストは黙って JST で動く。Non-JST ジョブ（`backend-ci.yml`）へ Spring コンテキストを使うテストを足しても非 JST の検証にならない。ここへ足すのは Spring を使わない単体テストか、`ServerTimeZoneBootstrapTest` のように意図して UTC を再現するテストに限ること。
   `TimeZoneConfig` の番人が、全 DataSource（自動構成・replica・archive）の生成時点で既定 TZ が `SERVER_ZONE` と食い違えば起動を失敗させる。正本は `SERVER_ZONE` の1つで Dockerfile・Terraform・`TZ` 環境変数には併記しない。
 - ⚠️ **JVM 既定 TZ が JST であることと、DB 格納基準が UTC であることは矛盾しない**（上の「二層モデル」参照）。
   JVM の JST 固定は `LocalDateTime.now()` が JST 壁時計を返すこと・API 直列化のオフセットが `+09:00` になることを

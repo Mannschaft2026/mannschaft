@@ -26,6 +26,13 @@ import java.util.TimeZone;
  * 番人の登録より前に DataSource が早期生成される場合は素通りする。最終防衛は接続設定
  * {@code cacheDefaultTimeZone=false}（防波堤の PR。接続が既定 TZ を固定しない）である。</p>
  *
+ * <p><b>本番構成での素通り:</b> {@link ShedLockConfig} の {@code LockProvider(DataSource)} や Advisor 基盤が
+ * BeanPostProcessor の登録中に primary DataSource を先に生成する可能性があり、その場合、番人は primary を
+ * 検査しない（本番相当の全コンテキストでの検査実績は無い。検査対象になることを確かめたのは、最小構成の
+ * {@code ServerTimeZoneBootstrapTest} まで）。ただし既定 TZ の<b>設定本体</b>は Environment 準備段階の
+ * EnvironmentPostProcessor であり、Bean 生成より前なのでデータの安全には影響しない。番人は設定漏れを
+ * 検出するための補助である。</p>
+ *
  * <p>基準ゾーンを環境変数で可変にしない理由は従来どおり（DB の既存 LocalDateTime 列の解釈が壊れる。
  * 受け皿は CMP-023）。</p>
  */
