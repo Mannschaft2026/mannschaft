@@ -36,6 +36,8 @@ const dialogVisible = computed({
 const recipientMode = ref<RecipientMode>('SPECIFIC')
 const reason = ref('')
 const submitting = ref(false)
+// 送信が成功済み（閉じるアニメーション中の再入を止めるため submitting を残している）
+let submittedOk = false
 
 // ---- SPECIFIC モード ----
 const selectedUserIds = ref<number[]>([])
@@ -51,6 +53,12 @@ watch(
   async ([visible]) => {
     selectedUserIds.value = []
     if (!visible) return
+    // 送信成功後に閉じたダイアログを開き直したときだけ送信可能に戻す
+    // （送信中の再表示では解除しない。成功後は閉じ終わるまで再入させない）
+    if (submittedOk) {
+      submittedOk = false
+      submitting.value = false
+    }
     recipientMode.value = 'SPECIFIC'
     reason.value = ''
     templatePeriod.value = 'day'
@@ -126,12 +134,15 @@ async function submit() {
 
     await createSwapRequest(body)
     showSuccess(t('shift.notification.submitSuccess'))
+    // 成功時は submitting を解除しない（閉じるアニメーション中の連打で二重送信させない）。
+    // 次に開かれたとき（visible の watch）に解除する。
+    submittedOk = true
     emit('submitted')
     dialogVisible.value = false
   } catch {
-    showError(t('shift.notification.errorSubmit'))
-  } finally {
+    // 失敗時は再試行できるようボタンを戻す
     submitting.value = false
+    showError(t('shift.notification.errorSubmit'))
   }
 }
 

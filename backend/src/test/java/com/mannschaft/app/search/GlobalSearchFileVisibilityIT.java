@@ -989,13 +989,6 @@ class GlobalSearchFileVisibilityIT extends AbstractGlobalSearchIT {
         });
     }
 
-    private void teamSupporter(Long userId, Long teamId) {
-        inTx(() -> {
-            MembershipTestHelper.insertMembership(em, userId, ScopeType.TEAM, teamId, RoleKind.SUPPORTER);
-            return null;
-        });
-    }
-
     /** チーム T を組織 O に ACTIVE で所属させる（T の所属者は O の直接所属者ではない）。 */
     private void anchorTeam(Long teamId, Long orgId) {
         inTx(() -> {

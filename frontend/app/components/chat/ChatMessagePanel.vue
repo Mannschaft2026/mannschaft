@@ -13,13 +13,19 @@ import { useChatListSync } from '~/composables/chat/useChatListSync'
 import { isMembershipGatedChannelType } from '~/utils/chatChannelType'
 import type { ActiveThreadItem } from './message-panel/ChatActiveThreadsDrawer.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   channel: ChatChannelResponse
   canPin?: boolean
   canDelete?: boolean
+  /** 送信できるか（既定 true。false なら入力欄を無効化し、スレッド返信も送れない） */
+  canSend?: boolean
   teamId?: string
   organizationId?: string
-}>()
+}>(), {
+  canSend: true,
+  teamId: undefined,
+  organizationId: undefined,
+})
 
 const emit = defineEmits<{
   channelCreated: [channel: ChatChannelResponse]
@@ -507,7 +513,7 @@ onUnmounted(() => {
         <!-- 入力 -->
         <ChatMessageInput
           :channel-id="channel.id"
-          :disabled="channel.settings.isArchived"
+          :disabled="channel.settings.isArchived || !canSend"
           @sent="onSent"
           @typing="debouncedSendTyping"
         />
@@ -523,6 +529,7 @@ onUnmounted(() => {
             :root-message-id="threadRootMessageId"
             :channel-id="channel.id"
             :can-delete="canDeleteOthers"
+            :can-send="canSend"
             @close="closeThread"
           />
         </div>

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import type { ChatMessageResponse } from '~/types/chat'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   rootMessageId: number
   channelId: number
   /** 他人の返信も削除できるか（チャンネル OWNER/ADMIN・スコープ管理者。F04.2 §5） */
   canDelete?: boolean
-}>()
+  /** 返信を送れるか（既定 true。false なら入力欄・送信を出さない） */
+  canSend?: boolean
+}>(), {
+  canSend: true,
+})
 
 const emit = defineEmits<{
   close: []
@@ -62,7 +66,7 @@ async function loadThread(cursor?: string) {
 }
 
 async function sendReply() {
-  if (!replyBody.value.trim()) return
+  if (!props.canSend || !replyBody.value.trim()) return
   replySending.value = true
   try {
     await sendMessage(props.channelId, replyBody.value.trim(), props.rootMessageId)
@@ -239,7 +243,7 @@ watch(() => props.rootMessageId, () => {
     </div>
 
     <!-- 返信入力 -->
-    <div class="border-t border-surface-200 p-3 dark:border-surface-700">
+    <div v-if="canSend" class="border-t border-surface-200 p-3 dark:border-surface-700">
       <div class="flex gap-2">
         <InputText
           v-model="replyBody"
