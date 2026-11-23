@@ -492,7 +492,7 @@ users も作らない。存在しない招待はベータ制限 OFF なら保留
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null` |
+| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null`。`PENDING` のまま本人が既に在籍していれば（`/invite/<token>` など別経路で参加済み）、`JOINED` へ確定して返す（条件付き UPDATE。`invite_token_claims`・`used_count` には触れない） |
 | POST | `/api/v1/me/pending-invite/accept` | 承認して参加。応答 `{status}`（`JOINED`/`EXPIRED`/`UNAVAILABLE`） |
 | POST | `/api/v1/me/pending-invite/decline` | 辞退（`PENDING`→`DECLINED`。共有招待そのものは失効させない） |
 | POST | `/api/v1/me/pending-invite/reissue-request` | 失効した招待の再発行を招待権限者へ要請。応答 `{alreadyRequested}` |
@@ -539,7 +539,7 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
     参加申請承認（`grantMemberRole`）は claim に触れない。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
   7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
-  期間内の再押下は通知せず `alreadyRequested: true`。
+  期間内の再押下は通知せず `alreadyRequested: true`。通知は受信者の言語で、本文に要請者の表示名（メールアドレスは載せない）と招待先の名前を入れ、遷移先は対象の招待管理画面（`/teams/{slug}/invites` 等）。
 - エラー: `AUTH_084`（404・保留なし）、`AUTH_085`（409・状態不正）、`AUTH_086`（409・処理中）。
 - 画面（招待画面の新規登録導線・ログイン後の承認ダイアログ）は後続 PR で対応する。それまで招待画面は従来どおり
   チーム・組織のトークンを `inviteToken` として送らない（上記の段落）。
