@@ -360,6 +360,11 @@ public class GlobalExceptionHandler {
             Map.entry("AUTH_077", HttpStatus.TOO_MANY_REQUESTS), // メールOTP 送信回数上限 → 429
             Map.entry("AUTH_078", HttpStatus.CONFLICT),          // 2FA 有効化済み → 409
             Map.entry("AUTH_079", HttpStatus.CONFLICT),          // 2FA 未有効 → 409
+            // CMP-261107-1833 招待付き新規登録の保留承認
+            Map.entry("AUTH_083", HttpStatus.FORBIDDEN),         // 宛先付き招待で新規登録 → 403
+            Map.entry("AUTH_084", HttpStatus.NOT_FOUND),         // 自分の保留が無い → 404
+            Map.entry("AUTH_085", HttpStatus.CONFLICT),          // 保留の状態不正 → 409
+            Map.entry("AUTH_086", HttpStatus.CONFLICT),          // 保留の参加処理が進行中 → 409
             // F03.3 カレンダー同期: 非メンバーの同期トグルは IDOR 対策で 403 ではなく 404（存在秘匿）
             Map.entry("GCAL_010", HttpStatus.NOT_FOUND),
             // F02.5 行動メモ: IDOR 対策で 403 ではなく 404 を返す

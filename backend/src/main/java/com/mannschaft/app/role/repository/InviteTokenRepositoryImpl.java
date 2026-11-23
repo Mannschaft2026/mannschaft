@@ -1,6 +1,7 @@
 package com.mannschaft.app.role.repository;
 
 import com.mannschaft.app.role.dto.InviteClaimAuditContext;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
 import com.mannschaft.app.role.entity.InviteTokenClaimEntity;
@@ -157,7 +158,30 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     @Override
     public int markClaimReleased(UUID claimId) {
-        return transition(claimId, InviteTokenClaimEntity.RELEASED);
+        // この claim による付与がコミット済み、または付与されたか不明な旧データなら戻さない（CMP-261107-1833）。
+        return em.createNativeQuery("UPDATE " + CLAIMS + " SET status = 'RELEASED', updated_at = UTC_TIMESTAMP(6) "
+                        + "WHERE id = UNHEX(:id) AND status = 'CLAIMED' AND grant_committed_at IS NULL "
+                        + "AND legacy_grant_unknown_at IS NULL")
+                .setParameter("id", hex(claimId))
+                .executeUpdate();
+    }
+
+    @Override
+    public int markClaimGrantCommitted(UUID claimId) {
+        return em.createNativeQuery("UPDATE " + CLAIMS + " SET grant_committed_at = UTC_TIMESTAMP(6), "
+                        + "updated_at = UTC_TIMESTAMP(6) WHERE id = UNHEX(:id) AND status = 'CLAIMED' "
+                        + "AND grant_committed_at IS NULL")
+                .setParameter("id", hex(claimId))
+                .executeUpdate();
+    }
+
+    @Override
+    public Optional<InviteClaimLock> lockClaim(UUID claimId) {
+        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL, legacy_grant_unknown_at IS NOT NULL FROM " + CLAIMS
+                        + " WHERE id = UNHEX(:id) FOR UPDATE")
+                .setParameter("id", hex(claimId))
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(claimLock((Object[]) rows.get(0)));
     }
 
     private int transition(UUID claimId, String to) {
@@ -166,6 +190,32 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
                 .setParameter("to", to)
                 .setParameter("id", hex(claimId))
                 .executeUpdate();
+    }
+
+    @Override
+    public Optional<InviteClaimLock> findClaimedForUpdate(Long tokenId, Long userId) {
+        // 付与印のある claim、次に旧データ（付与されたか不明）を優先する（参加に使われた可能性の高い順）。
+        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL, legacy_grant_unknown_at IS NOT NULL FROM " + CLAIMS
+                        + " WHERE token_id = :tokenId AND user_id = :userId AND status = 'CLAIMED' "
+                        + "ORDER BY grant_committed_at IS NULL, legacy_grant_unknown_at IS NULL, id LIMIT 1 FOR UPDATE")
+                .setParameter("tokenId", tokenId)
+                .setParameter("userId", userId)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(claimLock((Object[]) rows.get(0)));
+    }
+
+    private static InviteClaimLock claimLock(Object[] row) {
+        return new InviteClaimLock(uuid((String) row[0]), (String) row[1], ((Number) row[2]).intValue() == 1,
+                ((Number) row[3]).intValue() == 1);
+    }
+
+    @Override
+    public Optional<String> findRoleNameByTokenHash(String tokenHash) {
+        List<?> rows = em.createNativeQuery("SELECT r.name FROM invite_tokens t JOIN roles r ON r.id = t.role_id "
+                        + "WHERE t.token_hash = :tokenHash")
+                .setParameter("tokenHash", tokenHash)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable((String) rows.get(0));
     }
 
     @Override
@@ -217,6 +267,10 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     private static String hex(UUID id) {
         return id.toString().replace("-", "");
+    }
+
+    private static UUID uuid(String hex32) {
+        return UUID.fromString(hex32.replaceFirst("(.{8})(.{4})(.{4})(.{4})(.{12})", "$1-$2-$3-$4-$5"));
     }
 
     private static Long longOrNull(Object value) {
