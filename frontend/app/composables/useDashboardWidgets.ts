@@ -295,7 +295,7 @@ const ALL_WIDGETS: WidgetDefinition[] = [
     label: 'チームのお知らせ',
     labelKey: 'dashboard.widget_labels.team-announcements',
     icon: 'pi pi-users',
-    description: '所属チームからの掲示板・お知らせ',
+    description: '所属チームからのお知らせ',
     descriptionKey: 'dashboard.widget_descriptions.team-announcements',
     scope: ['personal'],
   },
