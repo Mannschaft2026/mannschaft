@@ -14,6 +14,8 @@ const props = withDefaults(defineProps<{
   message?: string
   /** 再試行ボタンの表示を明示的に上書きする。 */
   showRetry?: boolean
+  /** 個別画面で再試行ボタンの文言を上書きする場合の文言。 */
+  retryLabel?: string
   /** ルート要素に付与する data-testid。 */
   testid?: string
 }>(), {
@@ -22,6 +24,7 @@ const props = withDefaults(defineProps<{
   title: undefined,
   message: undefined,
   showRetry: undefined,
+  retryLabel: undefined,
   testid: undefined,
 })
 
@@ -67,7 +70,7 @@ const testid = computed(() => props.testid ?? 'load-error-state')
     </div>
     <Button
       v-if="shouldShowRetry"
-      :label="t('loadErrorState.retry')"
+      :label="retryLabel ?? t('loadErrorState.retry')"
       icon="pi pi-refresh"
       severity="secondary"
       outlined
