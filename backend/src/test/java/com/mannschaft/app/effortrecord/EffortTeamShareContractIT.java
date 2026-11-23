@@ -54,6 +54,27 @@ class EffortTeamShareContractIT extends EffortTeamShareItSupport {
         return response.getContentAsString(StandardCharsets.UTF_8);
     }
 
+    /**
+     * 検索応答から、利用者自身が送った検索語のエコー（値が検索語と完全一致する {@code query} フィールド）だけを除く
+     * （殿裁定 2026-11-24: エコーは漏洩ではない。結果・件数・ページ情報に canary が無いことを判定する）。
+     */
+    private String withoutQueryEcho(String json, String q) throws Exception {
+        JsonNode root = mapper.readTree(json);
+        removeQueryEcho(root, q);
+        return root.toString();
+    }
+
+    private static void removeQueryEcho(JsonNode node, String q) {
+        if (node instanceof com.fasterxml.jackson.databind.node.ObjectNode object) {
+            if (q.equals(object.path("query").asText(null))) {
+                object.remove("query");
+            }
+            object.forEach(child -> removeQueryEcho(child, q));
+        } else if (node.isArray()) {
+            node.forEach(child -> removeQueryEcho(child, q));
+        }
+    }
+
     // ═══════════════════════════════ AC-7（E05） ═══════════════════════════════
 
     @Test
@@ -339,8 +360,10 @@ class EffortTeamShareContractIT extends EffortTeamShareItSupport {
         assertNoCanary("B のフィード", body(http(get(TIMELINE + "/my"), w.viewer())), canaries);
         assertNoCanary("投稿詳細", body(http(get(TIMELINE + "/posts/{id}", postId), w.viewer())), canaries);
         for (String q : List.of(note, memo)) {
-            assertNoCanary("全体検索", body(http(get("/api/v1/search").param("q", q), w.viewer())), canaries);
-            assertNoCanary("timeline 検索", body(http(get(TIMELINE + "/search").param("q", q), w.viewer())), canaries);
+            assertNoCanary("全体検索", withoutQueryEcho(body(http(get("/api/v1/search").param("q", q), w.viewer())), q),
+                    canaries);
+            assertNoCanary("timeline 検索", withoutQueryEcho(body(http(get(TIMELINE + "/search").param("q", q), w.viewer())), q),
+                    canaries);
         }
         // 対照: 共有自体は見えている（漏れないことは見える状態で確かめる）
         assertThat(listedShareIds(w.viewer(), w.team())).containsExactly(sid);

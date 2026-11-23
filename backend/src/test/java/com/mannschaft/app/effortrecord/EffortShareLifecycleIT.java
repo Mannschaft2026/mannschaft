@@ -216,6 +216,9 @@ class EffortShareLifecycleIT extends EffortTeamShareItSupport {
             eventPublisher.publishEvent(new AccountPurgedEvent(w.owner(), "hash"));
             return null;
         });
+        // purge リスナーは purge-pool の非同期（殿裁定 2026-11-24）。完了を上限付きで待ってから検査する（検査内容は変えない）
+        await().atMost(SYNC_WAIT).pollInterval(Duration.ofMillis(100))
+                .until(() -> Boolean.TRUE.equals(ownerRow(id(visible)).get("purged")));
         Map<String, Object> purged = ownerRow(id(visible));
         assertThat(purged.get("purged")).isEqualTo(true);
         assertThat(String.valueOf(purged.get("values"))).isEqualTo("{}");
@@ -238,7 +241,9 @@ class EffortShareLifecycleIT extends EffortTeamShareItSupport {
             eventPublisher.publishEvent(new AccountPurgedEvent(w.owner(), "hash"));
             return null;
         });
-        assertThat(ownerRow(id(visible))).as("purge は冪等").isEqualTo(purged);
+        // 2 回目の purge も非同期。実行の機会を与えたうえで、行が 1 回目と変わらないことを上限付きで確かめる
+        await().pollDelay(Duration.ofSeconds(1)).atMost(SYNC_WAIT).pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> assertThat(ownerRow(id(visible))).as("purge は冪等").isEqualTo(purged));
         assertThat(listedShareIds(w.viewer(), w.team())).containsExactly(sid);
     }
 

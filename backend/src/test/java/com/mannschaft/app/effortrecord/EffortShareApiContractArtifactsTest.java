@@ -90,7 +90,12 @@ class EffortShareApiContractArtifactsTest {
                 .as("チーム詳細・管理者非表示").isTrue();
         assertThat(paths.path(TEAM + "/definitions").has("get")).as("定義候補").isTrue();
         List<String> listParams = new ArrayList<>();
-        paths.path(TEAM).path("get").path("parameters").forEach(p -> listParams.add(p.path("name").asText()));
+        // 殿裁定 2026-11-24: パスパラメータ（teamId）は既存規約どおり camelCase。snake_case の判定は query パラメータだけ
+        paths.path(TEAM).path("get").path("parameters").forEach(p -> {
+            if ("query".equals(p.path("in").asText())) {
+                listParams.add(p.path("name").asText());
+            }
+        });
         assertThat(listParams).contains("date_from", "date_to", "definition_uuid", "cursor", "limit", "user_id")
                 .noneMatch(name -> name.matches(".*[A-Z].*"));
         List<String> revokeParams = new ArrayList<>();
