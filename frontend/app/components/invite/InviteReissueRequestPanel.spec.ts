@@ -95,12 +95,13 @@ describe('InviteReissueRequestPanel', () => {
     const wrapper = await mountPanel()
     const rows = wrapper.findAll(q('invite-reissue-row'))
     expect(rows).toHaveLength(1)
-    expect(rows[0].text()).toContain('<b>山田</b>')
-    expect(rows[0].find('b').exists()).toBe(false)
-    expect(rows[0].text()).toContain('2026-11-20T00:00:00Z')
-    expect(rows[0].text()).toMatch(/MEMBER|role\.MEMBER/)
-    expect(rows[0].find(q('invite-reissue-reissue')).exists()).toBe(true)
-    expect(rows[0].find(q('invite-reissue-decline')).exists()).toBe(true)
+    const first = rows[0]!
+    expect(first.text()).toContain('<b>山田</b>')
+    expect(first.find('b').exists()).toBe(false)
+    expect(first.text()).toContain('2026-11-20T00:00:00Z')
+    expect(first.text()).toMatch(/MEMBER|role\.MEMBER/)
+    expect(first.find(q('invite-reissue-reissue')).exists()).toBe(true)
+    expect(first.find(q('invite-reissue-decline')).exists()).toBe(true)
   })
 
   it('IRP-04: 「再招待する」で POST …/{id}/reissue', async () => {

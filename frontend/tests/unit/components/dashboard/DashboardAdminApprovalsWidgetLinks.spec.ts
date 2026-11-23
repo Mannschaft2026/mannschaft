@@ -50,6 +50,6 @@ describe('DashboardAdminApprovalsWidget の内訳行（N4）', () => {
     expect(items).toHaveLength(2)
     const hrefs = items.map(li => li.find('a').exists() ? li.find('a').attributes('href') : null)
     expect(hrefs).toEqual(['/teams/fc/admin/reservations?status=PENDING', '/teams/fc/invites#reissue-requests'])
-    expect(items[1].text()).toContain('2')
+    expect(items[1]!.text()).toContain('2')
   })
 })
