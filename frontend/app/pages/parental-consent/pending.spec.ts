@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getParents: vi.fn(),
   navigate: vi.fn(),
   refresh: vi.fn(),
+  logout: vi.fn(),
+  error: vi.fn(),
 }))
 mockNuxtImport('useParentalConsentApi', () => () => ({
   sendInvitation: vi.fn(),
@@ -19,7 +21,8 @@ mockNuxtImport('useParentalConsentApi', () => () => ({
 }))
 mockNuxtImport('performTokenRefresh', () => mocks.refresh)
 mockNuxtImport('navigateTo', () => mocks.navigate)
-mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: vi.fn() }))
+mockNuxtImport('handleAuthFailureLogout', () => mocks.logout)
+mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: mocks.error }))
 mockNuxtImport('useDatetime', () => () => ({ formatDate: (v: string) => v }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 
@@ -59,6 +62,29 @@ describe('parental-consent/pending.vue の承認検出とトークン更新', ()
     await mountSuspended(PendingPage, options)
     await flushPromises()
     expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+  it.each(['transient', 'session_changed'])('PPC-04: 更新結果が %s なら遷移しない', async (result) => {
+    mocks.getParents.mockResolvedValue([{ parentUserId: 9 }])
+    mocks.refresh.mockResolvedValue(result)
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+    expect(mocks.navigate).not.toHaveBeenCalled()
+    expect(mocks.logout).not.toHaveBeenCalled()
+  })
+  it('PPC-05: 一時的な更新失敗は利用者に伝える（握りつぶさない）', async () => {
+    mocks.getParents.mockResolvedValue([{ parentUserId: 9 }])
+    mocks.refresh.mockResolvedValue('transient')
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+    expect(mocks.error).toHaveBeenCalledTimes(1)
+  })
+  it('PPC-06: 更新が auth_failed なら既存の共通処理でログアウトし、遷移しない', async () => {
+    mocks.getParents.mockResolvedValue([{ parentUserId: 9 }])
+    mocks.refresh.mockResolvedValue('auth_failed')
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+    expect(mocks.logout).toHaveBeenCalledTimes(1)
     expect(mocks.navigate).not.toHaveBeenCalled()
   })
 })

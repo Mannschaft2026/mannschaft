@@ -26,8 +26,16 @@ async function loadData() {
     if (parents.length > 0) {
       // 更新前のトークンは同意待ち（ppc）の印を持ったままで、参加待ち招待の GET が AUTH_070 になる。
       // 更新の完了を待ってから遷移する（CMP-261107-1833 設計 §9-1）
-      await performTokenRefresh(runtimeConfig, authStore)
-      await navigateTo('/parental-consent/manage')
+      // 失敗しても例外は投げず結果で返る。成功のときだけ遷移し、失敗は既存の呼び出し元（stompAuth）と同じ扱いにする
+      const refreshed = await performTokenRefresh(runtimeConfig, authStore)
+      if (refreshed === 'refreshed') {
+        await navigateTo('/parental-consent/manage')
+      } else if (refreshed === 'auth_failed') {
+        await handleAuthFailureLogout(authStore)
+      } else if (refreshed === 'transient') {
+        notification.error(t('error.unknown'))
+      }
+      // session_changed: 別の本人へ切り替わっているため何もしない
     }
   } finally {
     loading.value = false

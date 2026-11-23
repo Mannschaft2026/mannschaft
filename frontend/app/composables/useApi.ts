@@ -404,7 +404,10 @@ export function useApi() {
       // 403: 認証済みだが権限不足の場合（Forbidden）。
       // ログアウトせず、呼び出し元でエラーを処理する（例: 「アクセス権がありません」表示）。
       // 未認証状態（user が null）での 403 は想定外だが、フォールバックとしてログインへ誘導する。
-      if (response.status === 403 && !authStore.user) {
+      // ただし業務エラーコード付きの 403（未ログインの公開 API が返す AUTH_083 など）は呼び出し元が扱う業務エラーで、
+      // 遷移すると入力内容や招待の戻り先を失うため、ログインへは飛ばさない。
+      const forbiddenBody = response._data as { error?: { code?: unknown } } | undefined
+      if (response.status === 403 && !authStore.user && typeof forbiddenBody?.error?.code !== 'string') {
         await navigateTo('/login')
         return
       }

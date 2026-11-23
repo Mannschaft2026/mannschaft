@@ -424,6 +424,36 @@ describe('ACCEPTING: 参加処理中と再試行（§9-4）', () => {
   })
 })
 
+describe('検分指摘の根治', () => {
+  it('PID-60: 旧トークンの GET が終わる前にトークンが更新されたら、旧 GET が AUTH_070 で終わった後に取り直す', async () => {
+    let rejectFirst: (e: unknown) => void = () => {}
+    let n = 0
+    route('GET', BASE, () => {
+      n += 1
+      if (n === 1) return new Promise((_, rej) => (rejectFirst = rej))
+      return Promise.resolve({ data: current })
+    })
+    const wrapper = await mountDialog()
+    expect(calls('GET', BASE)).toHaveLength(1)
+    auth.accessToken = 'access-after-consent'
+    await nextTick()
+    await flushPromises()
+    rejectFirst(apiError('AUTH_070', 403))
+    await flushPromises()
+    expect(calls('GET', BASE)).toHaveLength(2)
+    expect(wrapper.find(q('pending-invite-pending')).exists()).toBe(true)
+  })
+  it('PID-61: 公開先の参加申し込みリンクを押したらモーダルを閉じ、案内を終了（dismiss）する', async () => {
+    current = invite({ status: 'EXPIRED', joinable: true, publicPath: '/teams/fc-mannschaft' })
+    route('POST', BASE + '/dismiss', async () => ({ data: null }))
+    const wrapper = await mountDialog()
+    await wrapper.find(q('pending-invite-join-request-link')).trigger('click')
+    await flushPromises()
+    expect(shownViews(wrapper)).toEqual([])
+    expect(calls('POST', BASE + '/dismiss')).toHaveLength(1)
+  })
+})
+
 describe('UNAVAILABLE: 参加できない案内（殿の裁定）', () => {
   const SEEN_KEY = 'mannschaft.pendingInvite.unavailableSeen'
   beforeEach(() => {
