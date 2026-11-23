@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * <b>DB 格納時刻の基準タイムゾーン（＝ UTC）を固定する番人テスト</b>（Issue #2486）。
  *
  * <h2>背景 — 「格納基準が環境ごとに割れていた」</h2>
- * <p>本アプリの JVM 既定 TZ は {@link TimeZoneConfig} が {@code Asia/Tokyo} に強制し、
+ * <p>本アプリの JVM 既定 TZ は {@link ServerTimeZoneEnvironmentPostProcessor} が起動時に {@code Asia/Tokyo} へ確定し、
  * エンティティの {@code @PrePersist} は素の {@code LocalDateTime.now()}（＝ JST 壁時計）で
  * 時刻を採る。この {@code LocalDateTime} が <b>DB にどの壁時計として書かれるか</b>を決めるのが
  * {@code spring.jpa.properties.hibernate.jdbc.time_zone} である。</p>
@@ -144,8 +144,9 @@ class TimeZoneStorageBasisGuardTest {
 
     /**
      * Connector/J の既定（{@code cacheDefaultTimeZone=true}）は、接続作成時の JVM 既定 TZ をキャッシュして
-     * Calendar 無しの {@code setDate} を整形する。{@link TimeZoneConfig} が起動途中に JVM 既定 TZ を UTC から JST へ
-     * 切り替えるため、切替前に作られた接続では DATE 列が 1 日前に書かれ、更新のたびにさらにずれた。
+     * Calendar 無しの {@code setDate} を整形する。旧実装は起動途中の {@code @PostConstruct} で JVM 既定 TZ を UTC から JST へ
+     * 切り替えていたため、切替前に作られた接続では DATE 列が 1 日前に書かれ、更新のたびにさらにずれた
+     * （CMP-261123-1335 で Bean 生成前の確定へ移し解消済み。この設定は最終防衛として残す）。
      * 共有 yml の Hikari data-source-properties で {@code false} を宣言し続けること。挙動は
      * {@code DateColumnTimeZoneShiftDriverContractTest} / {@code DateColumnTimeZoneShiftIT} が実 MySQL で固定する。
      */
