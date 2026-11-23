@@ -139,6 +139,47 @@ class TimeZoneStorageBasisGuardTest {
     }
 
     // ============================================================
+    // CMP-261123-1334（AC-7）
+    // ============================================================
+
+    /**
+     * Connector/J の既定（{@code cacheDefaultTimeZone=true}）は、接続作成時の JVM 既定 TZ をキャッシュして
+     * Calendar 無しの {@code setDate} を整形する。{@link TimeZoneConfig} が起動途中に JVM 既定 TZ を UTC から JST へ
+     * 切り替えるため、切替前に作られた接続では DATE 列が 1 日前に書かれ、更新のたびにさらにずれた。
+     * 共有 yml の Hikari data-source-properties で {@code false} を宣言し続けること。挙動は
+     * {@code DateColumnTimeZoneShiftDriverContractTest} / {@code DateColumnTimeZoneShiftIT} が実 MySQL で固定する。
+     */
+    @Test
+    @DisplayName("AC-7: 共有 application.yml が Hikari data-source-properties で cacheDefaultTimeZone=false を宣言し、JDBC URL で true に戻していない")
+    void 共有applicationYmlがcacheDefaultTimeZoneをfalseにしている() throws IOException {
+        Properties props = loadYaml(SHARED_APPLICATION_YML);
+
+        Object value = props.get("spring.datasource.hikari.data-source-properties.cacheDefaultTimeZone");
+
+        assertThat(value)
+                .as("%s に spring.datasource.hikari.data-source-properties.cacheDefaultTimeZone が無い"
+                        + "（DATE 列が保存・更新のたびに 1 日前へずれる。CMP-261123-1334）", SHARED_APPLICATION_YML)
+                .isNotNull();
+        assertThat(String.valueOf(value).trim()).isEqualToIgnoringCase("false");
+
+        List<String> violations = new ArrayList<>();
+        for (Path yml : listProfileConfigFiles()) {
+            Properties p = loadYaml(yml);
+            for (String key : p.stringPropertyNames()) {
+                String v = p.getProperty(key);
+                if (v != null && v.contains("jdbc:") && v.toLowerCase().contains("cachedefaulttimezone=true")) {
+                    violations.add(yml + " [" + key + "]");
+                }
+                if (key.endsWith("data-source-properties.cacheDefaultTimeZone")
+                        && !"false".equalsIgnoreCase(String.valueOf(p.get(key)).trim())) {
+                    violations.add(yml + " [" + key + "] = " + p.get(key));
+                }
+            }
+        }
+        assertThat(violations).as("cacheDefaultTimeZone を true に戻す設定がある").isEmpty();
+    }
+
+    // ============================================================
     // AC-2
     // ============================================================
 
