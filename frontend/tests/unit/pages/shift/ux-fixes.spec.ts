@@ -141,7 +141,7 @@ describe('S4 失敗系', () => {
   it('希望一覧のタブも 44px 以上', async () => {
     role = 'ADMIN'
     const w = await mount(ShiftRequestsPage)
-    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-11')
+    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-[44px]')
   })
 })
 
@@ -158,12 +158,12 @@ describe('S7 / S17 編集画面・詳細画面', () => {
     role = 'ADMIN'
     const w = await mount(ShiftEditPage)
     expect(w.text()).toContain('Assigned headcount')
-    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-11')
+    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-[44px]')
     expect(w.find('.p-tag').classes()).toContain('whitespace-nowrap')
   })
   it('詳細画面のタブも 44px 以上', async () => {
     const w = await mount(ShiftDetailPage)
-    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-11')
+    for (const a of w.findAll('nav a')) expect(a.classes()).toContain('min-h-[44px]')
   })
 })
 
