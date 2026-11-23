@@ -46,6 +46,8 @@ class TimelinePostControllerTest {
     private TimelineScopeIdResolver scopeIdResolver;
 
     @Mock private com.mannschaft.app.timeline.service.TimelineRanchNativeOperationFacade ranchNative;
+    /** F06.4.1 努力由来の投稿の F00 ガード（本テストの対象外。通常の投稿として通す）。 */
+    @Mock private com.mannschaft.app.timeline.service.TimelineEffortReadGuard effortReadGuard;
     private final org.springframework.mock.web.MockHttpServletRequest servletRequest = new org.springframework.mock.web.MockHttpServletRequest();
     private TimelinePostController controller;
     private MockedStatic<SecurityUtils> securityUtils;
@@ -56,7 +58,8 @@ class TimelinePostControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new TimelinePostController(postService, ranchNative, servletRequest, scopeIdResolver);
+        controller = new TimelinePostController(postService, ranchNative, servletRequest, scopeIdResolver, effortReadGuard);
+        Mockito.lenient().when(effortReadGuard.isVisible(Mockito.any(), Mockito.any())).thenReturn(true);
         securityUtils = Mockito.mockStatic(SecurityUtils.class);
         securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(USER_ID);
     }

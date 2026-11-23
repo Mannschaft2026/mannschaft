@@ -61,16 +61,35 @@ public class EffortCursorCodec {
         }
     }
 
+    /** チーム一覧の filter hash（期間・定義・投稿者を束ねる）。 */
+    public String filterHash(LocalDate dateFrom, LocalDate dateTo, UUID definitionUuid, Long userId) {
+        return filterHash(dateFrom, dateTo, definitionUuid) + (userId == null ? "" : "-u" + userId);
+    }
+
+    /** チーム一覧の認証 scope（team と閲覧者を束ねる。別チーム・別の閲覧者の cursor を拒否する）。 */
+    public static String teamScope(Long teamId, Long viewerUserId) {
+        return "t" + teamId + "v" + viewerUserId;
+    }
+
     public String encode(Long ownerUserId, String filterHash, Position position) {
+        return encode(String.valueOf(ownerUserId), filterHash, position);
+    }
+
+    public Position decode(Long ownerUserId, String filterHash, String cursor) {
+        return decode(String.valueOf(ownerUserId), filterHash, cursor);
+    }
+
+    /** 認証 scope を文字列で束ねる版（チーム一覧は {@link #teamScope}）。scope は区切り文字を含まないこと。 */
+    public String encode(String scope, String filterHash, Position position) {
         Instant expiresAt = clock.instant().plus(TTL);
-        String plain = String.join(SEPARATOR, VERSION, String.valueOf(ownerUserId), filterHash,
+        String plain = String.join(SEPARATOR, VERSION, scope, filterHash,
                 String.valueOf(expiresAt.getEpochSecond()), position.recordedOn().toString(),
                 String.valueOf(micros(position.createdAt())), position.id().toString());
         return Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(encryption.encrypt(plain).getBytes(StandardCharsets.US_ASCII));
     }
 
-    public Position decode(Long ownerUserId, String filterHash, String cursor) {
+    public Position decode(String scope, String filterHash, String cursor) {
         if (cursor == null || cursor.isBlank() || cursor.length() > MAX_LENGTH) {
             throw invalid();
         }
@@ -78,7 +97,7 @@ public class EffortCursorCodec {
             String standard = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.US_ASCII);
             String[] parts = encryption.decrypt(standard).split("\\|", -1);
             if (parts.length != 7 || !VERSION.equals(parts[0])
-                    || !String.valueOf(ownerUserId).equals(parts[1]) || !filterHash.equals(parts[2])) {
+                    || !scope.equals(parts[1]) || !filterHash.equals(parts[2])) {
                 throw invalid();
             }
             if (Instant.ofEpochSecond(Long.parseLong(parts[3])).isBefore(clock.instant())) {

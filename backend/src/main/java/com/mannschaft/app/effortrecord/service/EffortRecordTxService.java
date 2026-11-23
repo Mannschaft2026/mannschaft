@@ -19,7 +19,9 @@ import com.mannschaft.app.effortrecord.repository.EffortRecordQueryRepository;
 import com.mannschaft.app.effortrecord.repository.EffortRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.mannschaft.app.effortrecord.event.EffortShareRevokedEvent;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +60,8 @@ public class EffortRecordTxService {
     private final EffortCursorCodec cursors;
     private final EffortRecordMetrics metrics;
     private final DomainEventPublisher events;
+    private final EffortShareTxService shares;
+    private final ApplicationEventPublisher applicationEvents;
     private final ObjectMapper objectMapper;
     @Qualifier("utcClock")
     private final Clock clock;
@@ -163,9 +167,16 @@ public class EffortRecordTxService {
         return metrics.measure("get", () -> mapper.toResponse(owned(ownerUserId, id)));
     }
 
-    /** 原本を全置換更新する（version 一致必須。不一致は COMMON_003 / 409）。 */
+    /**
+     * 原本を全置換更新する（version 一致必須。不一致は COMMON_003 / 409）。
+     *
+     * <p>resyncShare が true（共有先チームが有効で、共有に束縛された加入期間が今も有効だと呼出元が TX の外で確認済み）なら、
+     * 凍結した共有定義・mapping・allowlist で新しい contentRevision の共有内容を作り、同じ share UUID の同期を要求する
+     * （share.state=PENDING・shareVersion は不変。API 契約 §3）。false なら私的な更新だけを行い、旧共有を再同期しない。</p>
+     */
     @Transactional
-    public EffortOwnerRecordResponse update(Long ownerUserId, UUID id, UpdateEffortRecordRequest request, ZoneId userZone) {
+    public EffortOwnerRecordResponse update(Long ownerUserId, UUID id, UpdateEffortRecordRequest request, ZoneId userZone,
+                                            boolean resyncShare) {
         return metrics.measure("update", () -> {
             EffortRecordEntity entity = owned(ownerUserId, id);
             if (entity.getVersion() != request.version().longValue()) {
@@ -180,7 +191,11 @@ public class EffortRecordTxService {
             entity.setPrivateNote(validated.privateNote());
             entity.setContentRevision(entity.getContentRevision() + 1);
             entity.setUpdatedAt(now());
+            boolean resync = resyncShare && shares.prepareCorrection(entity);
             EffortRecordEntity saved = records.saveAndFlush(entity);
+            if (resync) {
+                applicationEvents.publishEvent(shares.requested(saved));
+            }
             log.info("頑張り記録を更新: ownerUserId={}, recordId={}, version={}", ownerUserId, saved.getId(), saved.getVersion());
             return mapper.toResponse(saved);
         });
@@ -208,10 +223,16 @@ public class EffortRecordTxService {
             Instant now = now();
             entity.setDeletedAt(now);
             entity.setUpdatedAt(now);
+            // 共有中の原本は削除と同じ owner TX で共有許可を失効させる（後処理を待たずに読めなくなる。AC-8）
+            boolean revokedShare = shares.revokeOnDelete(entity);
             EffortRecordEntity saved = records.saveAndFlush(entity);
             EffortDeleteResponse response = new EffortDeleteResponse(saved.getId(), saved.getVersion(), "DELETED");
             receipts.complete(handle.receiptId(), 200, toJson(response));
             events.publish(new EffortRecordDeletedEvent(ownerUserId, saved.getId(), saved.getVersion()));
+            if (revokedShare) {
+                applicationEvents.publishEvent(new EffortShareRevokedEvent(saved.getId(), ownerUserId, saved.getShareId(),
+                        saved.getShareTeamId(), saved.getShareVersion(), false));
+            }
             log.info("頑張り記録を削除: ownerUserId={}, recordId={}, version={}", ownerUserId, saved.getId(), saved.getVersion());
             return response;
         });

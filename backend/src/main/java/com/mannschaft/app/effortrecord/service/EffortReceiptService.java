@@ -73,11 +73,21 @@ public class EffortReceiptService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public Handle begin(Long ownerUserId, String operationPath, UUID key, String requestHash) {
+        return begin(EffortReceiptRouteKind.OWNER, ownerUserId, ownerUserId, operationPath, key, requestHash);
+    }
+
+    /**
+     * 経路（OWNER=本人 user・TEAM=team ID）を指定して receipt を確保する（管理者非表示は TEAM、route_id=teamId。
+     * データ設計 §2）。
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Handle begin(EffortReceiptRouteKind routeKind, Long routeId, Long actorUserId, String operationPath, UUID key,
+                        String requestHash) {
         String operationKey = key.toString();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Optional<EffortOperationReceiptEntity> existing = receipts
                 .findByRouteKindAndRouteIdAndActorUserIdAndOperationPathAndOperationKey(
-                        EffortReceiptRouteKind.OWNER, ownerUserId, ownerUserId, operationPath, operationKey);
+                        routeKind, routeId, actorUserId, operationPath, operationKey);
         if (existing.isPresent()) {
             EffortOperationReceiptEntity receipt = existing.get();
             if (receipt.getExpiresAt().isAfter(now)) {
@@ -104,16 +114,17 @@ public class EffortReceiptService {
                             "INSERT INTO effort_operation_receipts "
                                     + "(id, route_kind, route_id, actor_user_id, operation_key, operation_path, request_hash, "
                                     + "response_status, response_json, created_at, updated_at, expires_at) "
-                                    + "VALUES (UNHEX(REPLACE(?1, '-', '')), 'OWNER', ?2, ?3, ?4, ?5, ?6, NULL, NULL, ?7, ?8, ?9)")
+                                    + "VALUES (UNHEX(REPLACE(?1, '-', '')), ?10, ?2, ?3, ?4, ?5, ?6, NULL, NULL, ?7, ?8, ?9)")
                     .setParameter(1, receiptId.toString())
-                    .setParameter(2, ownerUserId)
-                    .setParameter(3, ownerUserId)
+                    .setParameter(2, routeId)
+                    .setParameter(3, actorUserId)
                     .setParameter(4, operationKey)
                     .setParameter(5, operationPath)
                     .setParameter(6, requestHash)
                     .setParameter(7, now)
                     .setParameter(8, now)
                     .setParameter(9, now.plus(RETENTION))
+                    .setParameter(10, routeKind.name())
                     .executeUpdate();
         } catch (RuntimeException e) {
             if (isInProgress(e)) {
@@ -134,10 +145,17 @@ public class EffortReceiptService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<StoredResponse> findCompleted(Long ownerUserId, String operationPath, UUID key, String requestHash) {
+        return findCompleted(EffortReceiptRouteKind.OWNER, ownerUserId, ownerUserId, operationPath, key, requestHash);
+    }
+
+    /** 経路を指定した {@link #findCompleted(Long, String, UUID, String)}。 */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<StoredResponse> findCompleted(EffortReceiptRouteKind routeKind, Long routeId, Long actorUserId,
+                                                  String operationPath, UUID key, String requestHash) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Optional<EffortOperationReceiptEntity> live = receipts
                 .findByRouteKindAndRouteIdAndActorUserIdAndOperationPathAndOperationKey(
-                        EffortReceiptRouteKind.OWNER, ownerUserId, ownerUserId, operationPath, key.toString())
+                        routeKind, routeId, actorUserId, operationPath, key.toString())
                 .filter(r -> r.getExpiresAt().isAfter(now));
         if (live.isPresent() && !live.get().getRequestHash().equals(requestHash)) {
             throw new BusinessException(CommonErrorCode.COMMON_003);

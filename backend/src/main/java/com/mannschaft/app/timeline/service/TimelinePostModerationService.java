@@ -23,6 +23,17 @@ public class TimelinePostModerationService {
 
     private final TimelinePostRepository postRepository;
     private final TimelinePostVisibilityAccessGuard postVisibilityGuard;
+    private final org.springframework.context.ApplicationEventPublisher events;
+
+    /**
+     * 通報・モデレーションで投稿を非表示にしたことを伝える（F06.4.1 データ設計 §7.2）。呼出元の TX の中でイベントを
+     * 発行するだけで、Repository へは到達しない（購読側が commit 後に努力由来かを判定し、effort の MODERATED へ寄せる）。
+     *
+     * @param postId 非表示にした投稿 ID
+     */
+    public void notifyHiddenByModeration(Long postId) {
+        events.publishEvent(new com.mannschaft.app.timeline.event.TimelinePostHiddenByModerationEvent(postId));
+    }
 
     /**
      * 通報対象の投稿（または返信）を、通報者が閲覧できる場合に限り返す。

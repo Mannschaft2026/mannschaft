@@ -21,8 +21,12 @@ public enum EffortErrorCode implements ErrorCode {
     /** チームテンプレート廃止・revision 変更により新規共有できない */
     EFFORT_002("EFFORT_002", "このテンプレートは変更または廃止されたため共有できません", Severity.WARN),
 
-    /** 努力由来 source への like/mitayo/comment/reply/quote/repost/通常本文更新 */
-    EFFORT_003("EFFORT_003", "この投稿には操作できません", Severity.WARN),
+    /**
+     * 努力由来 source への通常操作すべて（like/mitayo/comment/reply/quote/repost/通常本文更新/deletePost/pin/bookmark/
+     * フレンドチーム転送/公開化）。既定文言は全操作に通じる形で、取消 API へ誘導する（API 契約 §6）。
+     */
+    EFFORT_003("EFFORT_003", "この投稿には操作できません。共有をやめるときは、記録の『共有を取り消す』から行ってください",
+            Severity.WARN),
 
     /** F00/source 照会障害。障害を空一覧に置換せず取得失敗とする */
     EFFORT_004("EFFORT_004", "記録の取得に失敗しました。時間をおいて再度お試しください", Severity.ERROR),

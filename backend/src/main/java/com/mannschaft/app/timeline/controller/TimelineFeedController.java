@@ -38,6 +38,8 @@ public class TimelineFeedController {
     private final TimelinePostService postService;
     /** slug/Long 文字列 → 内部 Long ID の共有リゾルバ（書き込み経路と共通）。 */
     private final TimelineScopeIdResolver scopeIdResolver;
+    /** F06.4.1 努力由来の投稿を F00 に通す共通 source guard（timeline の read TX の外で判定する）。 */
+    private final com.mannschaft.app.timeline.service.TimelineEffortReadGuard effortReadGuard;
 
     /**
      * スコープ別フィードを取得する。
@@ -84,10 +86,11 @@ public class TimelineFeedController {
         int pageSize = requestedLimit > 0 ? Math.min(requestedLimit, 50) : 20;
         Long userId = SecurityUtils.getCurrentUserId();
         Long resolvedScopeId = scopeIdResolver.resolve(scopeType, scopeId);
-        List<PostResponse> posts = postService.getFeedPage(
-                scopeType, resolvedScopeId, scopeVillageId, cursor, pageSize, userId);
+        List<PostResponse> posts = effortReadGuard.filterVisible(postService.getFeedPage(
+                scopeType, resolvedScopeId, scopeVillageId, cursor, pageSize, userId), userId);
         List<PostResponse> pinned = cursor == null
-                ? postService.getPinnedPosts(scopeType, resolvedScopeId, scopeVillageId, userId)
+                ? effortReadGuard.filterVisible(
+                        postService.getPinnedPosts(scopeType, resolvedScopeId, scopeVillageId, userId), userId)
                 : List.of();
         return ResponseEntity.ok(TimelineFeedResponse.of(pinned, posts, pageSize));
     }
@@ -126,7 +129,7 @@ public class TimelineFeedController {
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int limit) {
         Long userId = SecurityUtils.getCurrentUserId();
-        List<PostResponse> posts = postService.getMyFeed(userId, cursor, limit);
+        List<PostResponse> posts = effortReadGuard.filterVisible(postService.getMyFeed(userId, cursor, limit), userId);
         return ResponseEntity.ok(TimelineFeedResponse.ofMyFeed(posts, limit));
     }
 

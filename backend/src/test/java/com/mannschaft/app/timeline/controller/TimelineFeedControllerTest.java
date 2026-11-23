@@ -52,6 +52,10 @@ class TimelineFeedControllerTest {
     @Mock
     private TimelineScopeIdResolver scopeIdResolver;
 
+    /** F06.4.1 努力由来の投稿の F00 ガード（本テストの対象外。入力をそのまま通す）。 */
+    @Mock
+    private com.mannschaft.app.timeline.service.TimelineEffortReadGuard effortReadGuard;
+
     @InjectMocks
     private TimelineFeedController controller;
 
@@ -66,6 +70,8 @@ class TimelineFeedControllerTest {
     void setUpSecurityUtils() {
         securityUtils = Mockito.mockStatic(SecurityUtils.class);
         securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(USER_ID);
+        Mockito.lenient().when(effortReadGuard.filterVisible(Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 

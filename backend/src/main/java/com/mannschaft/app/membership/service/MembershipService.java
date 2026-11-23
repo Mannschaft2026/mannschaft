@@ -667,6 +667,23 @@ public class MembershipService {
                 .toList();
     }
 
+    /**
+     * F06.4.1: 共有許可に束縛する加入期間 ID（その user/team の現在有効な直接 TEAM 所属の memberships.id）を返す
+     * （データ設計 §8。preview・共有 PUT で token / desired command へ束縛する）。
+     *
+     * <p>{@link #getEffortShareQualificationsBatch} と同じく、呼出元の read TX・REPLICA を使わず PRIMARY の独立した新 TX
+     * （REQUIRES_NEW・READ_COMMITTED）で最新の committed 状態を読む。ロールでは除外しない（SUPPORTER を含む）。
+     * 在籍していなければ empty。</p>
+     *
+     * @param userId 本人
+     * @param teamId チーム ID
+     * @return 現在の加入期間 ID
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED, readOnly = false)
+    public Optional<Long> findActiveEffortGrantMembershipId(Long userId, Long teamId) {
+        return membershipRepository.findActiveByUserAndScope(userId, ScopeType.TEAM, teamId).map(MembershipEntity::getId);
+    }
+
     /** 資格 batch 1 回あたりの照会件数の上限（呼出元はページ単位で区切る）。 */
     static final int MAX_EFFORT_SHARE_QUALIFICATION_BATCH = 500;
 

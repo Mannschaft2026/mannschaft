@@ -684,7 +684,19 @@ public enum AuditEventType {
      * F06.4.1 本人が頑張り記録の原本を削除した。metadata は recordId・version のみ
      * （体重・科目・メモ・snapshot は含めない。AC-61）。
      */
-    EFFORT_RECORD_DELETED(AuditEventCategory.EFFORT);
+    EFFORT_RECORD_DELETED(AuditEventCategory.EFFORT),
+
+    /**
+     * F06.4.1 本人がチーム共有を取り消した（原本削除に伴う取消を含まない）。metadata は recordId・shareId・teamId・
+     * shareVersion のみ（値・note・token は含めない。AC-61）。
+     */
+    EFFORT_SHARE_REVOKED(AuditEventCategory.EFFORT),
+
+    /**
+     * F06.4.1 チーム管理者（ADMIN・委任 DEPUTY_ADMIN）が共有を非表示（MODERATED）にした。
+     * metadata は shareId・teamId・version のみ（値・note は含めない。AC-61）。
+     */
+    EFFORT_SHARE_MODERATED(AuditEventCategory.EFFORT);
 
     private final AuditEventCategory category;
 }
