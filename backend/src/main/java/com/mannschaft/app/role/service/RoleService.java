@@ -31,6 +31,7 @@ import com.mannschaft.app.membership.domain.MembershipEndCause;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
+import com.mannschaft.app.membership.dto.MembershipLeaveRequest;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.team.event.TeamMemberAuditEvent;
 import com.mannschaft.app.organization.event.OrganizationMemberAuditEvent;
@@ -372,8 +373,7 @@ public class RoleService {
         log.info("メンバー除名完了: scopeType={}, scopeId={}, userId={}", scopeType, scopeId, targetUserId);
 
         // F00.5 認可基盤: memberships の在籍も同時に終了させる（在籍が認可の真実の源）。
-        leaveMembershipForRoleRevoke(targetUserId, scopeId, scopeType, LeaveReason.REMOVED, operatorUserId,
-                MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
+        leaveMembershipForRoleRevoke(targetUserId, scopeId, scopeType, LeaveReason.REMOVED, operatorUserId);
     }
 
     /**
@@ -417,9 +417,22 @@ public class RoleService {
         // 本メソッドは ADMIN 保護をバイパスする安全弁だが、直前の user_roles 削除を flush 済みのため
         // membership 側の最後の ADMIN 保護（user_roles 参照）も同様に発火せず、保護バイパスの性質を保つ。
         // F06.4.1 §8: 本メソッドの呼出元は退会処理（AccountPurge → RolePurgeScopeExecutor・孤児補正バッチ）の
-        // 内部経路だけなので ACCOUNT_WITHDRAWAL を明示する（leaveReason=REMOVED は通常除名と同じため推測に使わない）。
-        leaveMembershipForRoleRevoke(targetUserId, scopeId, scopeType, LeaveReason.REMOVED, null,
-                MembershipEndCause.ACCOUNT_WITHDRAWAL);
+        // 内部経路だけなので、加入期間の終了理由に ACCOUNT_WITHDRAWAL を明示する（leaveReason=REMOVED は通常除名と
+        // 同じため推測に使わない）。終了本体は MembershipService#leave に委譲し、在籍行が無ければ
+        // leaveMembershipForRoleRevoke と同じく MembershipChangedEvent(REMOVED) を補填発火する。
+        // 対象 user は冒頭で行ロック済みなので、在籍行 ID の取得から終了までの間に他の終了は割り込まない。
+        ScopeType membershipScope = "TEAM".equals(scopeType) ? ScopeType.TEAM : ScopeType.ORGANIZATION;
+        Optional<Long> activeMembershipId =
+                membershipService.findActiveMembershipIdForUpdate(targetUserId, membershipScope, scopeId);
+        if (activeMembershipId.isPresent()) {
+            MembershipLeaveRequest withdrawal = new MembershipLeaveRequest();
+            withdrawal.setLeaveReason(LeaveReason.REMOVED);
+            withdrawal.setEndCause(MembershipEndCause.ACCOUNT_WITHDRAWAL);
+            membershipService.leave(activeMembershipId.get(), withdrawal);
+        } else {
+            eventPublisher.publishEvent(new MembershipChangedEvent(
+                    targetUserId, scopeType, scopeId, MembershipChangedEvent.ChangeType.REMOVED));
+        }
     }
 
     /**
@@ -458,8 +471,7 @@ public class RoleService {
         log.info("スコープ退会完了: scopeType={}, scopeId={}, userId={}", scopeType, scopeId, userId);
 
         // F00.5 認可基盤: memberships の在籍も同時に終了させる（在籍が認可の真実の源）。
-        leaveMembershipForRoleRevoke(userId, scopeId, scopeType, LeaveReason.SELF, null,
-                MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
+        leaveMembershipForRoleRevoke(userId, scopeId, scopeType, LeaveReason.SELF, null);
     }
 
     /**
@@ -969,10 +981,9 @@ public class RoleService {
      * 将来のイベント駆動化候補として記録する。</p>
      */
     private void leaveMembershipForRoleRevoke(Long userId, Long scopeId, String scopeType,
-                                              LeaveReason leaveReason, Long removedBy, MembershipEndCause endCause) {
+                                              LeaveReason leaveReason, Long removedBy) {
         ScopeType scope = "TEAM".equals(scopeType) ? ScopeType.TEAM : ScopeType.ORGANIZATION;
-        boolean ended = membershipService.leaveByUserAndScope(
-                userId, scope, scopeId, leaveReason, removedBy, endCause);
+        boolean ended = membershipService.leaveByUserAndScope(userId, scope, scopeId, leaveReason, removedBy);
         if (!ended) {
             // F02.2.1: メンバーシップ変更イベントを発火（ダッシュボードキャッシュ無効化用）。
             eventPublisher.publishEvent(new MembershipChangedEvent(

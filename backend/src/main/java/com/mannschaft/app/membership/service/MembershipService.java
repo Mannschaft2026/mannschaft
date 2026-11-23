@@ -169,8 +169,8 @@ public class MembershipService {
      *   <li>MembershipChangedEvent(REMOVED) を発火</li>
      * </ol>
      *
-     * <p>F06.4.1（データ設計 §8）: 本窓口は明示的な加入期間の終了（endCause=EXPLICIT_MEMBERSHIP_END）であり、
-     * TEAM の加入期間には {@code effort_share_disposition=REVOKED} を同じ TX で確定し、
+     * <p>F06.4.1（データ設計 §8）: 加入期間を終える理由は {@link MembershipLeaveRequest#getEndCause()}（既定は明示終了
+     * EXPLICIT_MEMBERSHIP_END）。明示終了なら TEAM の加入期間には {@code effort_share_disposition=REVOKED} を同じ TX で確定し、
      * {@link TeamEffortMembershipRevokedEvent} を発行する（購読側が AFTER_COMMIT で受ける）。
      * 退会処理の所属整理で既に終わった（RETAINED_ACCOUNT_WITHDRAWAL の）同じ加入期間に対しては、
      * left_at を動かさず disposition だけを REVOKED へ上書きして正常終了する（明示終了を優先する）。
@@ -178,16 +178,9 @@ public class MembershipService {
      */
     @Transactional
     public MembershipDto leave(Long membershipId, MembershipLeaveRequest req) {
-        return endMembership(membershipId, req, MembershipEndCause.EXPLICIT_MEMBERSHIP_END);
-    }
-
-    /**
-     * 加入期間の終了本体。{@code endCause} は退会処理の内部経路だけが ACCOUNT_WITHDRAWAL を渡す
-     * （外部リクエストの任意 reason からは指定させない）。呼出元の TX に参加する。
-     */
-    private MembershipDto endMembership(Long membershipId, MembershipLeaveRequest req, MembershipEndCause endCause) {
-        Objects.requireNonNull(endCause, "endCause must not be null");
         Objects.requireNonNull(req, "req must not be null");
+        // 退会処理の内部経路だけが ACCOUNT_WITHDRAWAL を設定する（MembershipLeaveRequest#endCause は JSON で受け付けない）。
+        MembershipEndCause endCause = Objects.requireNonNull(req.getEndCause(), "endCause must not be null");
         Objects.requireNonNull(req.getLeaveReason(), "leaveReason must not be null");
         Long userId = membershipRepository.findUserIdById(membershipId)
                 .orElseThrow(() -> new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_NOT_FOUND));
@@ -292,20 +285,18 @@ public class MembershipService {
      * @param userId      対象ユーザー ID
      * @param scopeType   スコープ種別（TEAM / ORGANIZATION）
      * @param scopeId     スコープ ID
-     * <p>F06.4.1（データ設計 §8）: {@code endCause} を明示して渡す。通常の除名・自主退会は
-     * EXPLICIT_MEMBERSHIP_END（REVOKED）、退会処理（AccountPurge）内部の所属整理だけが ACCOUNT_WITHDRAWAL
-     * （RETAINED_ACCOUNT_WITHDRAWAL）。どちらも同じ leaveReason=REMOVED を使いうるため、leaveReason から推測しない。</p>
+     * <p>F06.4.1（データ設計 §8）: 本窓口は明示的な加入期間の終了（EXPLICIT_MEMBERSHIP_END）。退会処理の内部経路は
+     * {@link #findActiveMembershipIdForUpdate} で加入期間 ID を得て、endCause=ACCOUNT_WITHDRAWAL の
+     * {@link #leave(Long, MembershipLeaveRequest)} を呼ぶ（leaveReason=REMOVED は通常除名と同じなので推測に使わない）。</p>
      *
      * @param leaveReason 退会理由
      * @param removedBy   除名を実行した操作者 ID（自主退会・システム処理では null）
-     * @param endCause    加入期間を終える理由の区分
      * @return アクティブ membership を退会させた場合 true、対象が無く何もしなかった場合 false
      */
     @Transactional
     public boolean leaveByUserAndScope(Long userId, ScopeType scopeType, Long scopeId,
-                                       LeaveReason leaveReason, Long removedBy, MembershipEndCause endCause) {
+                                       LeaveReason leaveReason, Long removedBy) {
         Objects.requireNonNull(leaveReason, "leaveReason must not be null");
-        Objects.requireNonNull(endCause, "endCause must not be null");
         lockUser(userId);
         Optional<MembershipEntity> active =
                 membershipRepository.findActiveByUserAndScope(userId, scopeType, scopeId);
@@ -315,7 +306,7 @@ public class MembershipService {
         MembershipLeaveRequest req = new MembershipLeaveRequest();
         req.setLeaveReason(leaveReason);
         req.setRemovedBy(removedBy);
-        endMembership(active.get().getId(), req, endCause);
+        leave(active.get().getId(), req);
         return true;
     }
 
@@ -580,6 +571,16 @@ public class MembershipService {
     @Transactional
     public boolean isActiveMemberForUpdate(Long userId, ScopeType scopeType, Long scopeId) {
         return membershipRepository.findActiveByUserAndScopeForUpdate(userId, scopeType, scopeId).isPresent();
+    }
+
+    /**
+     * F06.4.1（データ設計 §8）: user 行ロック後の終了処理向けに、現在の在籍行 ID を悲観ロック読取で返す。
+     * 退会処理の内部経路が endCause=ACCOUNT_WITHDRAWAL で {@link #leave(Long, MembershipLeaveRequest)} を呼ぶために使う。
+     */
+    @Transactional
+    public Optional<Long> findActiveMembershipIdForUpdate(Long userId, ScopeType scopeType, Long scopeId) {
+        return membershipRepository.findActiveByUserAndScopeForUpdate(userId, scopeType, scopeId)
+                .map(MembershipEntity::getId);
     }
 
     /** authz統合用にactive direct membershipのrole_kindだけを返す。 */
