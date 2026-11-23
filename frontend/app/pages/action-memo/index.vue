@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
+import { toLocalDateString } from '~/utils/localDate'
 import type { ActionMemo, ActionMemoCategory, ActionMemoInputExtras, OrgVisibility } from '~/types/actionMemo'
 
 /**
@@ -18,17 +19,26 @@ const { t } = useI18n()
 const store = useActionMemoStore()
 const authStore = useAuthStore()
 
-// 選択中の日付（Date型 — PrimeVue DatePicker とのバインド用）
-const selectedDate = ref<Date>(new Date())
-
-// 文字列形式の選択日（API/表示に使用）
-const selectedDateStr = computed(() =>
-  dayjs(selectedDate.value).tz(authStore.user?.timezone ?? 'Asia/Tokyo').format('YYYY-MM-DD'),
-)
-
+// 利用者タイムゾーンの「今日」（YYYY-MM-DD）
 const todayStr = computed(() =>
   dayjs().tz(authStore.user?.timezone ?? 'Asia/Tokyo').format('YYYY-MM-DD'),
 )
+
+/**
+ * YYYY-MM-DD をピッカー用の壁時計 Date（端末ローカル 0:00）にする。
+ * DatePicker の Date は「利用者が画面で指した壁時計」なので、日付の取り出しも toLocalDateString（壁時計成分）で行い、
+ * ?date= の保存と復元で端末TZと利用者TZの差によるずれを出さない（utils/localDate.ts の設計原則）。
+ */
+function wallClockDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(y!, m! - 1, d!)
+}
+
+// 選択中の日付（Date型 — PrimeVue DatePicker とのバインド用。初期値は利用者TZの今日）
+const selectedDate = ref<Date>(wallClockDate(todayStr.value))
+
+// 文字列形式の選択日（API/表示に使用）
+const selectedDateStr = computed(() => toLocalDateString(selectedDate.value))
 
 const isToday = computed(() => selectedDateStr.value === todayStr.value)
 
@@ -136,7 +146,7 @@ onMounted(async () => {
   // 通知からのディープリンク: ?date=YYYY-MM-DD があれば選択日を上書きして当日メモへ直遷移
   const queryDate = route.query.date
   if (typeof queryDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
-    selectedDate.value = dayjs(queryDate).toDate()
+    selectedDate.value = wallClockDate(queryDate)
   }
 
   const [, , teamsLoaded] = await Promise.all([
@@ -186,7 +196,7 @@ async function onManualSync() {
 }
 
 function backToToday() {
-  selectedDate.value = new Date()
+  selectedDate.value = wallClockDate(todayStr.value)
 }
 
 function goSettings() {

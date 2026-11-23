@@ -123,6 +123,20 @@ describe('useActionMemoStore: 公開した個人投稿 ID（CMP-261123-1201）',
     expect(store.publishedPostId('2026-11-19')).toBeNull()
   })
 
+  it('P2: clear() で公開応答の ID とメモを破棄し、別の利用者に前の利用者の投稿リンクが出ない', async () => {
+    const store = useActionMemoStore()
+    store.memos = [makeMemo({ id: 1 })]
+    apiMock.publishDaily.mockResolvedValueOnce({ timelinePostId: 900, memoCount: 1, memoDate: DATE })
+    apiMock.fetchMemos.mockRejectedValueOnce(Object.assign(new Error('network'), { status: 500 }))
+    await store.publishDaily({ memoDate: DATE })
+    expect(store.publishedPostId(DATE)).toBe(900)
+
+    store.clear()
+
+    expect(store.publishedPostId(DATE)).toBeNull()
+    expect(store.memos).toEqual([])
+  })
+
   it('公開 API 自体が失敗したら ID を保持せず、例外は呼び出し側へ再送出される', async () => {
     const store = useActionMemoStore()
     apiMock.publishDaily.mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500 }))

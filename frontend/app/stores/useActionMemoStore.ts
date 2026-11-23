@@ -503,6 +503,18 @@ export const useActionMemoStore = defineStore('actionMemo', {
       }
     },
 
+    /**
+     * 利用者固有の状態を破棄する。logout（useAuthStore.logout）から呼ばれ、
+     * 次にログインする別の利用者へ前の利用者のメモ・公開した投稿 ID が残らないようにする。
+     */
+    clear(): void {
+      this.memos = []
+      this.publishedPostIdOverrides = {}
+      this.moodStats = null
+      this.error = null
+      this.lastError = null
+    },
+
     // === Tag CRUD (Phase 4) ===
 
     /**
