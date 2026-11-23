@@ -56,7 +56,7 @@ public class EffortShareController {
     @PostMapping("/preview")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "本人の記録をチームへ共有する前の確認。所有者とチーム所属の認可だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チーム共有の preview（DB を変えない・10 分有効 token）")
+    @Operation(operationId = "previewEffortTeamShare", summary = "チーム共有の preview（DB を変えない・10 分有効 token）")
     public ResponseEntity<ApiResponse<EffortSharePreviewResponse>> preview(
             @PathVariable UUID id, @Valid @RequestBody EffortSharePreviewRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -66,7 +66,7 @@ public class EffortShareController {
     @PutMapping
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "本人の記録をチームへ共有する。所有者とチーム所属の認可だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チーム共有（202 PENDING）")
+    @Operation(operationId = "shareEffortRecordToTeam", summary = "チーム共有（202 PENDING）")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> share(
             @PathVariable UUID id,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
@@ -79,7 +79,7 @@ public class EffortShareController {
     @PostMapping("/retry")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "共有の同期失敗から本人が明示的に再試行する。所有者とチーム所属の認可だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チーム共有の再試行（202。FAILED または 60 秒超の PENDING だけ）")
+    @Operation(operationId = "retryEffortTeamShare", summary = "チーム共有の再試行（202。FAILED または 60 秒超の PENDING だけ）")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> retry(
             @PathVariable UUID id,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
@@ -92,7 +92,7 @@ public class EffortShareController {
     @DeleteMapping
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "本人によるチーム共有の取消。脱退後でも所有者の照合だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チーム共有の本人取消（200 REVOKED）")
+    @Operation(operationId = "revokeEffortTeamShare", summary = "チーム共有の本人取消（200 REVOKED）")
     public ResponseEntity<ApiResponse<EffortOwnerRecordResponse>> revoke(
             @PathVariable UUID id,
             @RequestParam(name = "version") Long version,

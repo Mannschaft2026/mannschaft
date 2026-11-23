@@ -56,7 +56,7 @@ public class EffortTeamRecordController {
     @GetMapping
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "チームに共有された頑張り記録の履歴。チーム所属と F00 の判定だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チームに共有された記録の一覧（カーソルページング）")
+    @Operation(operationId = "listEffortTeamRecords", summary = "チームに共有された記録の一覧（カーソルページング）")
     public ResponseEntity<CursorPagedResponse<EffortSharedRecord>> list(
             @PathVariable Long teamId,
             @RequestParam(name = "date_from", required = false)
@@ -79,7 +79,7 @@ public class EffortTeamRecordController {
     @GetMapping("/definitions")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "チーム履歴の絞り込み候補。チーム所属と F00 の判定だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チーム履歴の定義候補（VISIBLE の履歴がある定義だけ）")
+    @Operation(operationId = "listEffortTeamDefinitions", summary = "チーム履歴の定義候補（VISIBLE の履歴がある定義だけ）")
     public ResponseEntity<ApiResponse<List<EffortTeamDefinitionCandidate>>> definitions(
             @PathVariable Long teamId, HttpServletRequest request) {
         EffortShareController.rejectUnknownQuery(request, NO_QUERY);
@@ -90,7 +90,7 @@ public class EffortTeamRecordController {
     @GetMapping("/{shareId}")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "チームに共有された頑張り記録の詳細。チーム所属と F00 の判定だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チームに共有された記録の詳細")
+    @Operation(operationId = "getEffortTeamRecord", summary = "チームに共有された記録の詳細")
     public ResponseEntity<ApiResponse<EffortSharedRecord>> detail(
             @PathVariable Long teamId, @PathVariable String shareId, HttpServletRequest request) {
         EffortShareController.rejectUnknownQuery(request, NO_QUERY);
@@ -101,7 +101,7 @@ public class EffortTeamRecordController {
     @DeleteMapping("/{shareId}")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "チーム管理者による共有の非表示。既存のテンプレート管理権限だけで提供し機能フラグに依存させない")
-    @Operation(summary = "チームに共有された記録の管理者非表示（200 MODERATED）")
+    @Operation(operationId = "moderateEffortTeamRecord", summary = "チームに共有された記録の管理者非表示（200 MODERATED）")
     public ResponseEntity<ApiResponse<EffortModerateResponse>> moderate(
             @PathVariable Long teamId,
             @PathVariable String shareId,

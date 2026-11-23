@@ -145,7 +145,7 @@ public class EffortTeamShareTxService {
 
     /** share UUID のチーム側共有行（読み取りのみ）。 */
     @Transactional(readOnly = true)
-    public Optional<EffortTeamShareEntity> find(UUID shareId) {
+    Optional<EffortTeamShareEntity> find(UUID shareId) {
         return teamShares.findById(shareId);
     }
 

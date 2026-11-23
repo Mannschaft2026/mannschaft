@@ -11,7 +11,7 @@ import com.mannschaft.app.membership.domain.EffortShareDisposition;
 import com.mannschaft.app.membership.dto.EffortShareQualification;
 import com.mannschaft.app.membership.dto.EffortShareQualificationQuery;
 import com.mannschaft.app.membership.service.MembershipService;
-import com.mannschaft.app.team.service.TeamService;
+import com.mannschaft.app.common.NameResolverService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -54,7 +54,8 @@ public class EffortTeamShareVisibility {
     private final EffortTeamShareQueryRepository queries;
     private final MembershipService membershipService;
     private final AccessControlService accessControl;
-    private final TeamService teamService;
+    /** チームの有効性（削除済みは返らない）を一括で引く。TeamService は F00 の Checker と循環するため使わない。 */
+    private final NameResolverService names;
     private final EffortShareMetrics metrics;
 
     /**
@@ -169,10 +170,12 @@ public class EffortTeamShareVisibility {
         }
         Map<AccessControlService.TeamUserKey, AccessControlService.TeamMembershipState> states =
                 accessControl.getTeamMembershipStates(keys);
+        // チーム削除は所属行が残っていても即 deny（論理削除済みのチームは名前の一括解決に返らない）
+        Set<Long> liveTeams = names.resolveTeamNames(keys.stream().map(AccessControlService.TeamUserKey::teamId).toList())
+                .keySet();
         for (AccessControlService.TeamUserKey key : keys) {
             AccessControlService.TeamMembershipState state = states.get(key);
-            // チーム削除は所属行が残っていても即 deny（タイムライン経路はチーム数が閲覧者の所属数で上限づけられる）
-            if (state != null && state.active() && teamService.findTeamSummary(key.teamId()).isPresent()) {
+            if (state != null && state.active() && liveTeams.contains(key.teamId())) {
                 readable.add(key.teamId());
             }
         }

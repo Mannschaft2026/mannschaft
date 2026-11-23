@@ -5254,6 +5254,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/effort-records/me/{id}/team-share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** チーム共有（202 PENDING） */
+        put: operations["shareEffortRecordToTeam"];
+        post?: never;
+        /** チーム共有の本人取消（200 REVOKED） */
+        delete: operations["revokeEffortTeamShare"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/widgets": {
         parameters: {
             query?: never;
@@ -23073,6 +23091,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/effort-records/me/{id}/team-share/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** チーム共有の再試行（202。FAILED または 60 秒超の PENDING だけ） */
+        post: operations["retryEffortTeamShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/effort-records/me/{id}/team-share/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** チーム共有の preview（DB を変えない・10 分有効 token） */
+        post: operations["previewEffortTeamShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/effort-records/me/definition-snapshots": {
         parameters: {
             query?: never;
@@ -36582,6 +36634,58 @@ export interface paths {
         };
         /** 臨時休業プレビュー */
         get: operations["previewClosure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{teamId}/effort-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** チームに共有された記録の一覧（カーソルページング） */
+        get: operations["listEffortTeamRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{teamId}/effort-records/{shareId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** チームに共有された記録の詳細 */
+        get: operations["getEffortTeamRecord"];
+        put?: never;
+        post?: never;
+        /** チームに共有された記録の管理者非表示（200 MODERATED） */
+        delete: operations["moderateEffortTeamRecord"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{teamId}/effort-records/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** チーム履歴の定義候補（VISIBLE の履歴がある定義だけ） */
+        get: operations["listEffortTeamDefinitions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -57465,6 +57569,11 @@ export interface components {
             /** Format: int64 */
             version?: number;
         };
+        EffortShareRequest: {
+            previewToken?: string;
+            /** Format: int64 */
+            version: number;
+        };
         UpdateWidgetSettingsRequest: {
             scopeId?: string;
             scopeType?: string;
@@ -70486,6 +70595,86 @@ export interface components {
             recordedOn: string;
             values: components["schemas"]["EffortFieldValue"][];
         };
+        EffortShareRetryRequest: {
+            /** Format: int64 */
+            shareVersion: number;
+            /** Format: int64 */
+            version: number;
+        };
+        EffortShareMapping: {
+            sourceFieldKey?: string;
+            targetFieldKey?: string;
+            valueOverride?: string;
+        };
+        EffortSharePreviewRequest: {
+            definitionToken?: string;
+            mappings: components["schemas"]["EffortShareMapping"][];
+            selectedFieldKeys: string[];
+            /** Format: int64 */
+            teamId: number;
+            /** Format: int64 */
+            version: number;
+        };
+        ApiResponseEffortSharePreviewResponse: {
+            data?: components["schemas"]["EffortSharePreviewResponse"];
+        };
+        Author: {
+            avatarUrl?: string;
+            displayName?: string;
+            /** Format: int64 */
+            userId?: number;
+        };
+        EffortSharePreviewResponse: {
+            /** Format: int64 */
+            contentRevision?: number;
+            /** Format: int32 */
+            definitionRevision?: number;
+            /** Format: date-time */
+            expiresAt?: string;
+            previewToken?: string;
+            projection?: components["schemas"]["EffortSharedRecord"];
+            /** Format: int64 */
+            recordVersion?: number;
+        };
+        EffortSharedRecord: {
+            author?: components["schemas"]["Author"];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: uuid */
+            definitionUuid?: string;
+            fields?: components["schemas"]["Field"][];
+            /** Format: uuid */
+            id?: string;
+            interactions?: components["schemas"]["Interactions"];
+            recordTimezone?: string;
+            /** Format: date */
+            recordedOn?: string;
+            /** Format: int64 */
+            teamId?: number;
+            templateName?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+        };
+        Field: {
+            displayValue?: string;
+            fieldKey?: string;
+            label?: string;
+            semantic?: string;
+            /** @enum {string} */
+            type?: "NUMBER" | "TEXT" | "SELECT" | "DATE" | "DATETIME" | "CHECKBOX";
+            unit?: string;
+            value?: string;
+        };
+        Interactions: {
+            canComment?: boolean;
+            canLike?: boolean;
+            canMitayo?: boolean;
+            canQuote?: boolean;
+            canReply?: boolean;
+            canRepost?: boolean;
+        };
         CreateDefinitionSnapshotRequest: {
             /** Format: int64 */
             teamId: number;
@@ -77909,6 +78098,22 @@ export interface components {
             startDate?: string;
             /** @example 14:30:00 */
             startTime?: string;
+        };
+        CursorPagedResponseEffortSharedRecord: {
+            data?: components["schemas"]["EffortSharedRecord"][];
+            meta?: components["schemas"]["CursorMeta"];
+        };
+        ApiResponseEffortSharedRecord: {
+            data?: components["schemas"]["EffortSharedRecord"];
+        };
+        ApiResponseListEffortTeamDefinitionCandidate: {
+            data?: components["schemas"]["EffortTeamDefinitionCandidate"][];
+        };
+        EffortTeamDefinitionCandidate: {
+            /** Format: uuid */
+            definitionUuid?: string;
+            isRetired?: boolean;
+            templateName?: string;
         };
         PagedResponseDwellingUnitResponse: {
             data?: components["schemas"]["DwellingUnitResponse"][];
@@ -86674,6 +86879,16 @@ export interface components {
         };
         CancelBookingRequest: {
             cancellationReason?: string;
+        };
+        ApiResponseEffortModerateResponse: {
+            data?: components["schemas"]["EffortModerateResponse"];
+        };
+        EffortModerateResponse: {
+            /** Format: uuid */
+            id?: string;
+            state?: string;
+            /** Format: int64 */
+            version?: number;
         };
         ApiResponseDeleteLocationResponse: {
             data?: components["schemas"]["DeleteLocationResponse"];
@@ -101764,6 +101979,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResponseEffortDeleteResponse"];
+                };
+            };
+        };
+    };
+    shareEffortRecordToTeam: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EffortShareRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
+    revokeEffortTeamShare: {
+        parameters: {
+            query: {
+                version: number;
+                share_version: number;
+            };
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
                 };
             };
         };
@@ -137119,6 +137389,60 @@ export interface operations {
             };
         };
     };
+    retryEffortTeamShare: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EffortShareRetryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortOwnerRecordResponse"];
+                };
+            };
+        };
+    };
+    previewEffortTeamShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EffortSharePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortSharePreviewResponse"];
+                };
+            };
+        };
+    };
     registerDefinitionSnapshot: {
         parameters: {
             query?: never;
@@ -161255,6 +161579,107 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseEmergencyClosurePreviewResponse"];
+                };
+            };
+        };
+    };
+    listEffortTeamRecords: {
+        parameters: {
+            query?: {
+                date_from?: string;
+                date_to?: string;
+                definition_uuid?: string;
+                user_id?: number;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                teamId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPagedResponseEffortSharedRecord"];
+                };
+            };
+        };
+    };
+    getEffortTeamRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: number;
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortSharedRecord"];
+                };
+            };
+        };
+    };
+    moderateEffortTeamRecord: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                teamId: number;
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseEffortModerateResponse"];
+                };
+            };
+        };
+    };
+    listEffortTeamDefinitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponseListEffortTeamDefinitionCandidate"];
                 };
             };
         };

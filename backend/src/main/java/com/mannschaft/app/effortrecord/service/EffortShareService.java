@@ -81,14 +81,15 @@ public class EffortShareService {
         ownerAccess.requireOwner(userId, recordId);
         teamAccess.requireMember(userId, request.teamId());
         return metrics.measure("preview", () -> {
-            EffortRecordEntity record = tx.owned(userId, recordId);
-            if (record.getVersion() != request.version().longValue()) {
-                throw new BusinessException(CommonErrorCode.COMMON_003);
-            }
+            // 入力の検証（定義 token の不正・別チームの token は 400）を版の競合（409）より先に行う
             EffortDefinitionTokenCodec.Claims definitionClaims =
                     definitionTokens.verifyForUser(request.definitionToken(), userId);
             if (!definitionClaims.teamId().equals(request.teamId())) {
                 throw EffortDefinitionTokenCodec.invalid();
+            }
+            EffortRecordEntity record = tx.owned(userId, recordId);
+            if (record.getVersion() != request.version().longValue()) {
+                throw new BusinessException(CommonErrorCode.COMMON_003);
             }
             EffortTeamDefinitionTxService.Current current = currentDefinition(request.teamId(), definitionClaims.definitionUuid(),
                     definitionClaims.revision(), definitionClaims.definitionHash());
@@ -205,7 +206,7 @@ public class EffortShareService {
      * 共有に束縛された加入期間 ID が今も有効な直接所属か（PRIMARY の独立 TX。データ設計 §8）。
      * 加入期間 ID が無い共有は false。
      */
-    public boolean isCurrentGrant(EffortRecordEntity record) {
+    boolean isCurrentGrant(EffortRecordEntity record) {
         if (record.getGrantMembershipId() == null || record.getShareTeamId() == null) {
             return false;
         }

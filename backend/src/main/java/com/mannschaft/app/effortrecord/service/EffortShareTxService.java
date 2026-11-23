@@ -71,7 +71,7 @@ public class EffortShareTxService {
 
     /** 本人の原本（不在・他人・削除済み・purged は区別せず EFFORT_001）。 */
     @Transactional(readOnly = true)
-    public EffortRecordEntity owned(Long ownerUserId, UUID recordId) {
+    EffortRecordEntity owned(Long ownerUserId, UUID recordId) {
         return records.findByIdAndOwnerUserId(recordId, ownerUserId)
                 .orElseThrow(() -> new BusinessException(EffortErrorCode.EFFORT_001));
     }
@@ -84,14 +84,14 @@ public class EffortShareTxService {
 
     /** (team, 原本) のチーム側共有行。 */
     @Transactional(readOnly = true)
-    public Optional<EffortTeamShareEntity> teamShare(Long teamId, UUID recordId) {
+    Optional<EffortTeamShareEntity> teamShare(Long teamId, UUID recordId) {
         return teamShares.findByTeamIdAndSourceRecordId(teamId, recordId);
     }
 
     /**
      * 共有先を検証する（preview・共有 PUT 共通）。別チームに有効な共有がある・同じチームで MODERATED（終端）なら 409。
      */
-    public void checkTarget(EffortRecordEntity record, Long teamId, Optional<EffortTeamShareEntity> teamRow) {
+    void checkTarget(EffortRecordEntity record, Long teamId, Optional<EffortTeamShareEntity> teamRow) {
         if (record.getShareState() != null && ACTIVE.contains(record.getShareState())
                 && !teamId.equals(record.getShareTeamId())) {
             throw conflict();
@@ -105,7 +105,7 @@ public class EffortShareTxService {
     }
 
     /** 予約 share UUID: 同じチームに過去の共有行があればその UUID を再利用し、なければ新規に採番する（データ設計 §2）。 */
-    public UUID reserveShareId(EffortRecordEntity record, Long teamId, Optional<EffortTeamShareEntity> teamRow) {
+    UUID reserveShareId(EffortRecordEntity record, Long teamId, Optional<EffortTeamShareEntity> teamRow) {
         if (teamRow.isPresent()) {
             return teamRow.get().getId();
         }
@@ -243,7 +243,7 @@ public class EffortShareTxService {
      * allowlist から新しい contentRevision の desired projection を作り、PENDING にする（shareVersion は不変）。
      * 同期を要求したときだけ true を返す（呼出元が保存後に {@link #requested} のイベントを発行する）。
      */
-    public boolean prepareCorrection(EffortRecordEntity record) {
+    boolean prepareCorrection(EffortRecordEntity record) {
         if (record.getShareId() == null || !ACTIVE.contains(record.getShareState())
                 || record.getShareDefinitionSnapshot() == null || record.getShareMappingJson() == null
                 || record.getSelectedFieldKeys() == null) {
@@ -262,7 +262,7 @@ public class EffortShareTxService {
     }
 
     /** 原本削除と同じ owner TX で共有許可を失効させる（REVOKED・shareVersion+1）。失効させたら true。 */
-    public boolean revokeOnDelete(EffortRecordEntity record) {
+    boolean revokeOnDelete(EffortRecordEntity record) {
         if (record.getShareId() == null || !ACTIVE.contains(record.getShareState())) {
             return false;
         }
@@ -273,7 +273,7 @@ public class EffortShareTxService {
     }
 
     /** 保存済みの原本から同期要求イベントを作る。 */
-    public EffortShareRequestedEvent requested(EffortRecordEntity saved) {
+    EffortShareRequestedEvent requested(EffortRecordEntity saved) {
         return new EffortShareRequestedEvent(saved.getId(), saved.getOwnerUserId(), saved.getShareId(),
                 saved.getShareTeamId(), saved.getContentRevision(), saved.getShareVersion(), saved.getGrantMembershipId());
     }
@@ -293,51 +293,40 @@ public class EffortShareTxService {
     }
 
     /**
-     * owner ack: 同じ shareId・shareVersion・contentRevision・hash で PENDING のままなら VISIBLE を確定する
+     * owner ack: 同じ shareId・shareVersion・contentRevision・加入期間 ID・hash で PENDING のままなら VISIBLE を確定する
      * （不一致は古い ack として捨てる）。確定したら要求からの経過時間を返す。
+     *
+     * <p>後処理による状態の確定（ack・失敗記録・MODERATED の反映）は本人の版（@Version）を進めない。本人が直前の GET の版で
+     * preview・retry・取消を送ったときに、非同期の後処理と競合させないため（内容の版は contentRevision、許可の版は
+     * shareVersion が担う）。条件付き UPDATE で desired command と一致する行だけを更新する。</p>
      */
     @Transactional
     public Optional<Duration> ack(EffortShareCommand command) {
-        return records.findByIdForUpdate(command.recordId())
-                .filter(r -> matches(r, command) && r.getShareState() == EffortShareState.PENDING)
-                .map(r -> {
-                    Instant requestedAt = r.getShareUpdatedAt();
-                    r.setShareState(EffortShareState.VISIBLE);
-                    r.setSyncedSourceVersion(r.getContentRevision());
-                    r.setLastErrorCode(null);
-                    r.setShareUpdatedAt(now());
-                    records.saveAndFlush(r);
-                    return requestedAt == null ? Duration.ZERO : Duration.between(requestedAt, now());
-                });
+        Optional<Instant> requestedAt = lockPendingRequestedAt(command);
+        if (requestedAt.isEmpty()) {
+            return Optional.empty();
+        }
+        int updated = updateWhenPending(command, "share_state = 'VISIBLE', synced_source_version = content_revision, "
+                + "last_error_code = NULL");
+        return updated == 0 ? Optional.empty() : Optional.of(Duration.between(requestedAt.get(), now()));
     }
 
     /** 同期失敗を記録する（同じ command で PENDING のときだけ FAILED。別 TX で確定する）。 */
     @Transactional
     public boolean recordFailed(EffortShareCommand command) {
-        return records.findByIdForUpdate(command.recordId())
-                .filter(r -> matches(r, command) && r.getShareState() == EffortShareState.PENDING)
-                .map(r -> {
-                    r.setShareState(EffortShareState.FAILED);
-                    r.setLastErrorCode(SYNC_FAILED);
-                    r.setShareUpdatedAt(now());
-                    records.saveAndFlush(r);
-                    return true;
-                })
-                .orElse(false);
+        return updateWhenPending(command, "share_state = 'FAILED', last_error_code = '" + SYNC_FAILED + "'") > 0;
     }
 
-    /** チーム側の MODERATED（終端）を owner 行へ反映する（同じ share のときだけ）。 */
+    /** チーム側の MODERATED（終端）を owner 行へ反映する（同じ share のときだけ。本人の版は進めない）。 */
     @Transactional
     public boolean markModerated(UUID recordId, UUID shareId) {
-        return records.findByIdForUpdate(recordId)
-                .filter(r -> shareId.equals(r.getShareId()) && r.getShareState() != EffortShareState.MODERATED)
-                .map(r -> {
-                    r.setShareState(EffortShareState.MODERATED);
-                    r.setShareUpdatedAt(now());
-                    records.saveAndFlush(r);
-                    return true;
-                })
-                .orElse(false);
+        return entityManager.createNativeQuery("UPDATE effort_records SET share_state = 'MODERATED', "
+                        + "share_updated_at = UTC_TIMESTAMP(6), updated_at = UTC_TIMESTAMP(6) "
+                        + "WHERE id = UNHEX(REPLACE(?1, '-', '')) AND share_id = UNHEX(REPLACE(?2, '-', '')) "
+                        + "AND share_state <> 'MODERATED'")
+                .setParameter(1, recordId.toString())
+                .setParameter(2, shareId.toString())
+                .executeUpdate() > 0;
     }
 
     /**
@@ -359,12 +348,45 @@ public class EffortShareTxService {
 
     // ───────────────────────────── 内部 ─────────────────────────────
 
-    private static boolean matches(EffortRecordEntity r, EffortShareCommand command) {
-        return command.shareId().equals(r.getShareId()) && command.teamId().equals(r.getShareTeamId())
-                && r.getShareVersion() == command.shareVersion() && r.getContentRevision() == command.contentRevision()
-                && command.grantMembershipId().equals(r.getGrantMembershipId())
-                && command.projectionHash().equals(r.getDesiredHash());
+    /** desired command と一致する PENDING 行を行ロックし、共有要求の時刻を返す。 */
+    private Optional<Instant> lockPendingRequestedAt(EffortShareCommand command) {
+        @SuppressWarnings("unchecked")
+        java.util.List<Object> rows = entityManager.createNativeQuery("SELECT DATE_FORMAT(share_updated_at, "
+                        + "'%Y-%m-%dT%H:%i:%s.%fZ') FROM effort_records " + PENDING_COMMAND_WHERE + " FOR UPDATE")
+                .setParameter(1, command.recordId().toString())
+                .setParameter(2, command.shareId().toString())
+                .setParameter(3, command.teamId())
+                .setParameter(4, command.shareVersion())
+                .setParameter(5, command.contentRevision())
+                .setParameter(6, command.grantMembershipId())
+                .setParameter(7, command.projectionHash())
+                .getResultList();
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Object at = rows.get(0);
+        return Optional.of(at == null ? now() : Instant.parse(String.valueOf(at)));
     }
+
+    /** desired command と一致する PENDING 行だけを条件付きで更新する（本人の @Version は進めない）。 */
+    private int updateWhenPending(EffortShareCommand command, String assignments) {
+        return entityManager.createNativeQuery("UPDATE effort_records SET " + assignments
+                        + ", share_updated_at = UTC_TIMESTAMP(6), updated_at = UTC_TIMESTAMP(6) " + PENDING_COMMAND_WHERE)
+                .setParameter(1, command.recordId().toString())
+                .setParameter(2, command.shareId().toString())
+                .setParameter(3, command.teamId())
+                .setParameter(4, command.shareVersion())
+                .setParameter(5, command.contentRevision())
+                .setParameter(6, command.grantMembershipId())
+                .setParameter(7, command.projectionHash())
+                .executeUpdate();
+    }
+
+    /** desired command と一致し PENDING の原本（削除済み・purge 済みは対象外）。 */
+    private static final String PENDING_COMMAND_WHERE = "WHERE id = UNHEX(REPLACE(?1, '-', '')) "
+            + "AND share_id = UNHEX(REPLACE(?2, '-', '')) AND share_team_id = ?3 AND share_version = ?4 "
+            + "AND content_revision = ?5 AND grant_membership_id = ?6 AND desired_hash = ?7 AND share_state = 'PENDING' "
+            + "AND deleted_at IS NULL AND purged_at IS NULL";
 
     private Instant now() {
         return clock.instant().truncatedTo(ChronoUnit.MICROS);
