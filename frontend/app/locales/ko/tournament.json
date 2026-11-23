@@ -414,6 +414,21 @@
         "invalidUserId": "사용자 ID는 양의 정수로 입력하세요",
         "searchFailed": "회원 검색에 실패했습니다"
       }
+    },
+    "create": {
+      "createFailed": "대회 생성에 실패했습니다",
+      "createFailedHint": "입력 내용을 확인해 주세요",
+      "fields": {
+        "name": "대회명",
+        "season": "시즌",
+        "format": "방식",
+        "sport": "종목",
+        "description": "설명",
+        "visibility": "공개 범위",
+        "winPoints": "승점",
+        "drawPoints": "무승부 점수",
+        "lossPoints": "패점"
+      }
     }
   },
   "dashboard_widgets": {

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
+import type { components } from '~/types/generated'
 import type { TournamentResponse, TournamentSport } from '~/types/tournament'
 import { TOURNAMENT_SPORTS } from '~/types/tournament'
 import {
   TOURNAMENT_VISIBILITY_LEVELS,
   type TournamentVisibility,
 } from '~/utils/tournamentStandings'
+import { extractEffortFieldErrors } from '~/utils/effortFields'
 
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
@@ -39,13 +41,13 @@ const loading = ref(false)
 
 const showCreateDialog = ref(false)
 const saving = ref(false)
+/** BE の 400 fieldErrors（field → message）。作成リクエストのキー名と一致する欄に表示する。 */
+const fieldErrors = ref<Record<string, string>>({})
 const form = ref({
-  title: '',
-  sportCategory: '',
+  name: '',
   sport: 'SOCCER' as TournamentSport,
   format: 'LEAGUE' as 'LEAGUE' | 'KNOCKOUT' | 'GROUP_KNOCKOUT',
   seasonYear: dayjs().tz(userTimezone.value).year(),
-  isPublic: false,
   visibility: 'PUBLIC' as TournamentVisibility,
   description: '',
   winPoints: 3,
@@ -95,43 +97,48 @@ function getFormatLabel(f: string): string {
 
 function openCreateDialog() {
   form.value = {
-    title: '',
-    sportCategory: '',
+    name: '',
     sport: 'SOCCER',
     format: 'LEAGUE',
     seasonYear: dayjs().tz(userTimezone.value).year(),
-    isPublic: false,
     visibility: 'PUBLIC',
     description: '',
     winPoints: 3,
     drawPoints: 1,
     lossPoints: 0,
   }
+  fieldErrors.value = {}
   showCreateDialog.value = true
 }
 
 async function handleCreate() {
-  if (!form.value.title.trim() || !form.value.sportCategory.trim()) return
+  if (!form.value.name.trim()) return
   saving.value = true
+  fieldErrors.value = {}
+  // BE の CreateTournamentRequest（生成型）と一致するボディのみ送る
+  const body: components['schemas']['CreateTournamentRequest'] = {
+    name: form.value.name.trim(),
+    sport: form.value.sport,
+    format: form.value.format,
+    season: String(form.value.seasonYear),
+    visibility: form.value.visibility,
+    description: form.value.description || undefined,
+    winPoints: form.value.winPoints,
+    drawPoints: form.value.drawPoints,
+    lossPoints: form.value.lossPoints,
+  }
   try {
-    await createTournament(orgId, {
-      title: form.value.title,
-      sportCategory: form.value.sportCategory,
-      sport: form.value.sport,
-      format: form.value.format,
-      seasonYear: form.value.seasonYear,
-      isPublic: form.value.isPublic,
-      visibility: form.value.visibility,
-      description: form.value.description || undefined,
-      winPoints: form.value.winPoints,
-      drawPoints: form.value.drawPoints,
-      lossPoints: form.value.lossPoints,
-    })
+    await createTournament(orgId, body)
     notification.success('大会を作成しました')
     showCreateDialog.value = false
     await load()
-  } catch {
-    notification.error('大会の作成に失敗しました')
+  } catch (e) {
+    const errors = extractEffortFieldErrors(e)
+    fieldErrors.value = Object.fromEntries(errors.map((fe) => [fe.field, fe.message]))
+    const detail = errors
+      .map((fe) => `${t(`tournament.create.fields.${fe.field}`, fe.field)}: ${fe.message}`)
+      .join(' / ')
+    notification.error(t('tournament.create.createFailed'), detail || t('tournament.create.createFailedHint'))
   } finally {
     saving.value = false
   }
@@ -174,21 +181,26 @@ onMounted(() => {
       <DashboardEmptyState v-if="tournaments.length === 0" class="col-span-full" icon="pi pi-trophy" message="大会がありません" />
     </div>
 
-    <Dialog v-model:visible="showCreateDialog" modal header="大会を作成" :style="{ width: '30rem' }">
+    <Dialog v-model:visible="showCreateDialog" modal header="大会を作成" :style="{ width: '30rem', maxWidth: '95vw' }">
       <div class="flex flex-col gap-4 py-2">
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">大会名 <span class="text-red-500">*</span></label>
-          <InputText v-model="form.title" placeholder="例: 2026年度春季リーグ" class="w-full" />
+          <InputText v-model="form.name" placeholder="例: 2026年度春季リーグ" class="w-full" :invalid="!!fieldErrors.name" />
+          <small v-if="fieldErrors.name" class="text-xs text-red-600" data-testid="create-error-name">{{ fieldErrors.name }}</small>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">競技種目 <span class="text-red-500">*</span></label>
-            <InputText v-model="form.sportCategory" placeholder="例: サッカー" class="w-full" />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">年度 <span class="text-red-500">*</span></label>
-            <InputNumber v-model="form.seasonYear" :min="2000" :max="2100" class="w-full" />
-          </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-sm font-medium">{{ $t('tournament.create.fields.season') }} <span class="text-red-500">*</span></label>
+          <InputNumber
+            v-model="form.seasonYear"
+            :min="2000"
+            :max="2100"
+            :use-grouping="false"
+            :invalid="!!fieldErrors.season"
+            class="w-full"
+            input-class="w-full"
+            data-testid="create-season"
+          />
+          <small v-if="fieldErrors.season" class="text-xs text-red-600" data-testid="create-error-season">{{ fieldErrors.season }}</small>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">{{ $t('tournament.sport.label') }}</label>
@@ -201,6 +213,7 @@ onMounted(() => {
             data-testid="create-sport-select"
           />
           <p class="text-xs text-surface-500">{{ $t('tournament.sport.help') }}</p>
+          <small v-if="fieldErrors.sport" class="text-xs text-red-600" data-testid="create-error-sport">{{ fieldErrors.sport }}</small>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">形式 <span class="text-red-500">*</span></label>
@@ -215,10 +228,12 @@ onMounted(() => {
             option-value="value"
             class="w-full"
           />
+          <small v-if="fieldErrors.format" class="text-xs text-red-600" data-testid="create-error-format">{{ fieldErrors.format }}</small>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">説明</label>
           <Textarea v-model="form.description" rows="2" class="w-full" />
+          <small v-if="fieldErrors.description" class="text-xs text-red-600" data-testid="create-error-description">{{ fieldErrors.description }}</small>
         </div>
         <div v-if="isAdminOrDeputy" class="flex flex-col gap-1">
           <label class="text-sm font-medium">{{ $t('tournament.visibility.title') }}</label>
@@ -240,24 +255,24 @@ onMounted(() => {
           <p class="text-xs text-surface-500">
             {{ $t(`tournament.visibility.levels.${form.visibility}.description`) }}
           </p>
+          <small v-if="fieldErrors.visibility" class="text-xs text-red-600" data-testid="create-error-visibility">{{ fieldErrors.visibility }}</small>
         </div>
-        <div class="grid grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 [&>*]:min-w-0">
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">勝点</label>
-            <InputNumber v-model="form.winPoints" :min="0" class="w-full" />
+            <label class="text-sm font-medium">{{ $t('tournament.create.fields.winPoints') }}</label>
+            <InputNumber v-model="form.winPoints" :min="0" :invalid="!!fieldErrors.winPoints" class="w-full" input-class="w-full min-w-0" />
+            <small v-if="fieldErrors.winPoints" class="text-xs text-red-600" :data-testid="'create-error-winPoints'">{{ fieldErrors.winPoints }}</small>
           </div>
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">引分点</label>
-            <InputNumber v-model="form.drawPoints" :min="0" class="w-full" />
+            <label class="text-sm font-medium">{{ $t('tournament.create.fields.drawPoints') }}</label>
+            <InputNumber v-model="form.drawPoints" :min="0" :invalid="!!fieldErrors.drawPoints" class="w-full" input-class="w-full min-w-0" />
+            <small v-if="fieldErrors.drawPoints" class="text-xs text-red-600" :data-testid="'create-error-drawPoints'">{{ fieldErrors.drawPoints }}</small>
           </div>
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">敗点</label>
-            <InputNumber v-model="form.lossPoints" :min="0" class="w-full" />
+            <label class="text-sm font-medium">{{ $t('tournament.create.fields.lossPoints') }}</label>
+            <InputNumber v-model="form.lossPoints" :min="0" :invalid="!!fieldErrors.lossPoints" class="w-full" input-class="w-full min-w-0" />
+            <small v-if="fieldErrors.lossPoints" class="text-xs text-red-600" :data-testid="'create-error-lossPoints'">{{ fieldErrors.lossPoints }}</small>
           </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <Checkbox v-model="form.isPublic" :binary="true" input-id="public" />
-          <label for="public" class="text-sm">公開大会にする</label>
         </div>
       </div>
       <template #footer>

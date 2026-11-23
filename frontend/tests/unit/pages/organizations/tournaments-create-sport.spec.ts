@@ -48,11 +48,10 @@ async function openCreateDialog() {
   return wrapper
 }
 
-/** 必須項目（大会名・競技種目）を埋める。ダイアログ内 input の先頭 2 つが対象。 */
-async function fillRequired(title: string, sportCategory: string) {
+/** 必須項目（大会名）を埋める。ダイアログ内 input の先頭が対象。 */
+async function fillRequired(title: string) {
   const inputs = document.querySelectorAll<HTMLInputElement>('.p-inputtext')
   setNativeInput(inputs[0]!, title)
-  setNativeInput(inputs[1]!, sportCategory)
   await flushPromises()
 }
 
@@ -79,7 +78,7 @@ describe('organizations/[slug]/tournaments.vue 大会作成 — sport 選択', (
 
   it('SPORT-UI-001: 既定 sport=SOCCER が作成ペイロードに乗る', async () => {
     const wrapper = await openCreateDialog()
-    await fillRequired('テスト大会', 'サッカー')
+    await fillRequired('テスト大会')
     await submit(wrapper)
 
     expect(createTournament).toHaveBeenCalledTimes(1)
@@ -89,7 +88,7 @@ describe('organizations/[slug]/tournaments.vue 大会作成 — sport 選択', (
 
   it('SPORT-UI-002: 選択した sport が作成ペイロードに乗る', async () => {
     const wrapper = await openCreateDialog()
-    await fillRequired('バレー大会', 'バレーボール')
+    await fillRequired('バレー大会')
 
     // PrimeVue Select の内部 DOM 操作は脆いため、update:modelValue 経由で選択を再現する。
     // ダイアログは teleport されるため data-testid を持つ Select コンポーネントを直接探す。

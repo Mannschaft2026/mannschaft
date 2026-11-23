@@ -414,6 +414,21 @@
         "invalidUserId": "Die Benutzer-ID muss eine positive ganze Zahl sein",
         "searchFailed": "Mitgliedersuche fehlgeschlagen"
       }
+    },
+    "create": {
+      "createFailed": "Das Turnier konnte nicht erstellt werden",
+      "createFailedHint": "Bitte Eingaben prüfen",
+      "fields": {
+        "name": "Turniername",
+        "season": "Saison",
+        "format": "Format",
+        "sport": "Sportart",
+        "description": "Beschreibung",
+        "visibility": "Sichtbarkeit",
+        "winPoints": "Punkte für Sieg",
+        "drawPoints": "Punkte für Unentschieden",
+        "lossPoints": "Punkte für Niederlage"
+      }
     }
   },
   "dashboard_widgets": {

@@ -414,6 +414,21 @@
         "invalidUserId": "ユーザーIDは正の整数で入力してください",
         "searchFailed": "会員検索に失敗しました"
       }
+    },
+    "create": {
+      "createFailed": "大会の作成に失敗しました",
+      "createFailedHint": "入力内容を確認してください",
+      "fields": {
+        "name": "大会名",
+        "season": "年度",
+        "format": "形式",
+        "sport": "競技",
+        "description": "説明",
+        "visibility": "公開範囲",
+        "winPoints": "勝点",
+        "drawPoints": "引分点",
+        "lossPoints": "敗点"
+      }
     }
   },
   "dashboard_widgets": {

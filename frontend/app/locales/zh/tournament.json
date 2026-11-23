@@ -414,6 +414,21 @@
         "invalidUserId": "用户 ID 必须为正整数",
         "searchFailed": "会员搜索失败"
       }
+    },
+    "create": {
+      "createFailed": "创建赛事失败",
+      "createFailedHint": "请检查输入内容",
+      "fields": {
+        "name": "赛事名称",
+        "season": "赛季",
+        "format": "赛制",
+        "sport": "项目",
+        "description": "说明",
+        "visibility": "公开范围",
+        "winPoints": "胜场积分",
+        "drawPoints": "平局积分",
+        "lossPoints": "负场积分"
+      }
     }
   },
   "dashboard_widgets": {

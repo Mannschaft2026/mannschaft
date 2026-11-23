@@ -414,6 +414,21 @@
         "invalidUserId": "El ID de usuario debe ser un entero positivo",
         "searchFailed": "No se pudo buscar miembros"
       }
+    },
+    "create": {
+      "createFailed": "No se pudo crear el torneo",
+      "createFailedHint": "Revise los datos introducidos",
+      "fields": {
+        "name": "Nombre del torneo",
+        "season": "Temporada",
+        "format": "Formato",
+        "sport": "Deporte",
+        "description": "Descripción",
+        "visibility": "Visibilidad",
+        "winPoints": "Puntos por victoria",
+        "drawPoints": "Puntos por empate",
+        "lossPoints": "Puntos por derrota"
+      }
     }
   },
   "dashboard_widgets": {

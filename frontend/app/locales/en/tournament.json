@@ -414,6 +414,21 @@
         "invalidUserId": "User ID must be a positive integer",
         "searchFailed": "Failed to search members"
       }
+    },
+    "create": {
+      "createFailed": "Failed to create the tournament",
+      "createFailedHint": "Please check your input",
+      "fields": {
+        "name": "Tournament name",
+        "season": "Season",
+        "format": "Format",
+        "sport": "Sport",
+        "description": "Description",
+        "visibility": "Visibility",
+        "winPoints": "Win points",
+        "drawPoints": "Draw points",
+        "lossPoints": "Loss points"
+      }
     }
   },
   "dashboard_widgets": {
