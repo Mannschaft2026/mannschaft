@@ -175,7 +175,15 @@
       "visibility_failed": "Fehler beim Aktualisieren der Sichtbarkeit",
       "load_failed": "Kontaktbereiche konnten nicht geladen werden",
       "divisions_load_failed": "Divisionen konnten nicht geladen werden",
-      "permissions_load_failed": "Berechtigungen konnten nicht geladen werden. Einige Aktionen sind möglicherweise nicht verfügbar."
+      "permissions_load_failed": "Berechtigungen konnten nicht geladen werden. Einige Aktionen sind möglicherweise nicht verfügbar.",
+      "participant": {
+        "title": "Kontaktbereich des Turniers",
+        "open_link": "Kontaktbereich öffnen",
+        "view_only_notice": "Nur Lesezugriff. Nur Teamleitung, stellvertretende Teamleitung und Veranstalter können Beiträge verfassen.",
+        "unavailable": "Der Kontaktbereich dieses Turniers ist nicht verfügbar",
+        "unavailable_hint": "Nur Mitglieder teilnehmender Teams können ihn nutzen. Bitte prüfe den Teilnahmestatus deines Teams.",
+        "load_retry": "Neu laden"
+      }
     },
     "submission": {
       "title": "Dokumenteneinreichung",

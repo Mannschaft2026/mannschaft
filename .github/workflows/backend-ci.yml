@@ -459,6 +459,19 @@ jobs:
           --tests "com.mannschaft.app.admin.service.AdminBusinessAlertServiceTest"
           --tests "com.mannschaft.app.advertising.campaign.service.AdFrequencyCapServiceTest"
 
+      # DATE 列が保存・更新のたびに 1 日前へずれる不具合の防波堤（CMP-261123-1334）。
+      # 通常のテストは -Duser.timezone=Asia/Tokyo で動くため、「JVM を UTC で起動 → 旧実装が起動途中に JST へ切替（CMP-261123-1335 で解消済み。最終防衛として維持）」
+      # という本番と同じ順序（切替前に作られた接続の存在）が再現されず、CI では検出できなかった。
+      # JVM を UTC で起動して、実 MySQL（Testcontainers）で DATE / DATETIME / TIME の格納を検証する。
+      - name: JVM を UTC で起動して DATE 列の格納を検証
+        run: >-
+          ./gradlew test --no-daemon --build-cache
+          -Ptest.timezone=UTC
+          -x jacocoTestReport
+          --tests "com.mannschaft.app.config.DateColumnTimeZoneShiftDriverContractTest"
+          --tests "com.mannschaft.app.config.DateColumnTimeZoneShiftIT"
+          --tests "com.mannschaft.app.config.TimeZoneStorageBasisGuardTest"
+
   # ---------------------------------------------------------------------------
   # shard: compile + test を 8 並列で実行する（Docker required for Testcontainers）
   #

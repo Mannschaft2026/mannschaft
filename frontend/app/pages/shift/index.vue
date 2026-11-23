@@ -5,6 +5,7 @@ import type {
   ShiftRequestSummaryResponse,
   CreateShiftScheduleRequest,
 } from '~/types/shift'
+import { toLocalDateTimeString } from '~/utils/localDate'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -107,7 +108,10 @@ async function load() {
     )
     summaryMap.value = new Map(
       summaryEntries
-        .filter((r): r is PromiseFulfilledResult<{ id: number; summary: ShiftRequestSummaryResponse }> => r.status === 'fulfilled')
+        .filter(
+          (r): r is PromiseFulfilledResult<{ id: number; summary: ShiftRequestSummaryResponse }> =>
+            r.status === 'fulfilled',
+        )
         .map((r) => [r.value.id, r.value.summary]),
     )
   } catch (error) {
@@ -136,7 +140,7 @@ interface CreateForm {
   title: string
   startDate: string
   endDate: string
-  requestDeadline: string
+  requestDeadline: Date | null
   note: string
 }
 
@@ -144,12 +148,68 @@ const createForm = ref<CreateForm>({
   title: '',
   startDate: '',
   endDate: '',
-  requestDeadline: '',
+  requestDeadline: null,
   note: '',
 })
 
+// 締切 DatePicker の手入力検証（不正入力は黙って空にせず、エラー表示して送信を止める）
+const deadlineInvalid = ref(false)
+// カレンダー選択直前の値（日付だけ選んだ初回かを判定する）
+let deadlineBeforeSelect: Date | null = null
+const DEADLINE_TEXT = /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/
+
+/** 手入力文字列が実在する日時なら true（空は「締切なし」で有効）。 */
+function isValidDeadlineText(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed === '') return true
+  const m = DEADLINE_TEXT.exec(trimmed)
+  if (!m) return false
+  const [y, mo, d, h, mi] = [m[1], m[2], m[3], m[4] ?? '0', m[5] ?? '0'].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
+  if (h > 23 || mi > 59) return false
+  const date = new Date(y, mo - 1, d, h, mi)
+  return date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d
+}
+
+function onDeadlineTextInput(text: string) {
+  deadlineInvalid.value = !isValidDeadlineText(text)
+}
+
+function onDeadlineInput(event: Event) {
+  onDeadlineTextInput((event.target as HTMLInputElement | null)?.value ?? '')
+}
+
+function onDeadlineBlur(event: { value?: string }) {
+  onDeadlineTextInput(event.value ?? '')
+}
+
+function onDeadlineUpdate(value: Date | Date[] | (Date | null)[] | null | undefined) {
+  deadlineBeforeSelect = createForm.value.requestDeadline
+  createForm.value.requestDeadline = value instanceof Date ? value : null
+  deadlineInvalid.value = false
+}
+
+/** 日付だけ選んだ初回は、現在時刻ではなくその日の終わり（23:59）を既定にする。 */
+function onDeadlineDateSelect(value: Date) {
+  if (deadlineBeforeSelect === null && value instanceof Date) {
+    const d = new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59)
+    createForm.value.requestDeadline = d
+  }
+}
+
 async function handleCreate() {
-  if (!selectedTeamId.value || !createForm.value.title || !createForm.value.startDate || !createForm.value.endDate) {
+  if (deadlineInvalid.value) return
+  if (
+    !selectedTeamId.value ||
+    !createForm.value.title ||
+    !createForm.value.startDate ||
+    !createForm.value.endDate
+  ) {
     return
   }
   if (creating.value) return
@@ -159,13 +219,16 @@ async function handleCreate() {
       title: createForm.value.title.trim(),
       startDate: createForm.value.startDate,
       endDate: createForm.value.endDate,
-      requestDeadline: createForm.value.requestDeadline || undefined,
+      requestDeadline: createForm.value.requestDeadline
+        ? toLocalDateTimeString(createForm.value.requestDeadline)
+        : undefined,
       note: createForm.value.note.trim() || undefined,
     }
     await createSchedule(String(selectedTeamId.value), payload)
     success(t('shift.index.createSuccess'))
     showCreateDialog.value = false
-    createForm.value = { title: '', startDate: '', endDate: '', requestDeadline: '', note: '' }
+    createForm.value = { title: '', startDate: '', endDate: '', requestDeadline: null, note: '' }
+    deadlineInvalid.value = false
     await load()
   } catch (error) {
     handleApiError(error)
@@ -188,6 +251,7 @@ function openDetail(scheduleId: number) {
           v-if="canManage"
           icon="pi pi-plus"
           :label="t('shift.index.createNew')"
+          class="min-h-11 min-w-11"
           @click="showCreateDialog = true"
         />
       </template>
@@ -268,32 +332,65 @@ function openDetail(scheduleId: number) {
       <div class="flex flex-col gap-4">
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formTitle') }}</label>
-          <InputText v-model="createForm.title" class="w-full" :placeholder="t('shift.index.formTitlePlaceholder')" />
+          <InputText
+            v-model="createForm.title"
+            class="min-h-11 w-full text-base"
+            :placeholder="t('shift.index.formTitlePlaceholder')"
+          />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formStart') }}</label>
-            <InputText v-model="createForm.startDate" type="date" class="w-full" />
+            <InputText
+              v-model="createForm.startDate"
+              type="date"
+              class="min-h-11 w-full text-base"
+            />
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formEnd') }}</label>
-            <InputText v-model="createForm.endDate" type="date" class="w-full" />
+            <InputText v-model="createForm.endDate" type="date" class="min-h-11 w-full text-base" />
           </div>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formDeadline') }}</label>
-          <InputText v-model="createForm.requestDeadline" type="date" class="w-full" />
+          <DatePicker
+            :model-value="createForm.requestDeadline"
+            date-format="yy/mm/dd"
+            show-time
+            hour-format="24"
+            class="w-full"
+            input-class="min-h-11 text-base"
+            :invalid="deadlineInvalid"
+            @update:model-value="onDeadlineUpdate"
+            @date-select="onDeadlineDateSelect"
+            @input="onDeadlineInput"
+            @blur="onDeadlineBlur"
+          />
+          <small v-if="deadlineInvalid" class="mt-1 block text-sm text-red-600" role="alert">{{
+            t('shift.index.formDeadlineInvalid')
+          }}</small>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shift.index.formNote') }}</label>
-          <InputText v-model="createForm.note" class="w-full" :placeholder="t('shift.index.formNotePlaceholder')" />
+          <InputText
+            v-model="createForm.note"
+            class="min-h-11 w-full text-base"
+            :placeholder="t('shift.index.formNotePlaceholder')"
+          />
         </div>
       </div>
       <template #footer>
-        <Button :label="t('common.cancel')" text @click="showCreateDialog = false" />
+        <Button
+          :label="t('common.cancel')"
+          class="min-h-11 min-w-11"
+          text
+          @click="showCreateDialog = false"
+        />
         <Button
           :label="t('button.create')"
           icon="pi pi-check"
+          class="min-h-11 min-w-11"
           :loading="creating"
           :disabled="!createForm.title || !createForm.startDate || !createForm.endDate"
           @click="handleCreate"

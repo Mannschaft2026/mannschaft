@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import type { BulletinThreadResponse, BulletinReplyResponse, BulletinAttachment } from '~/types/bulletin'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   threadId: number
   canManage?: boolean
-}>()
+  /** 返信欄を出すか（参加者画面の VIEW 利用者は false。既定 true） */
+  canReply?: boolean
+}>(), {
+  canReply: true,
+})
 
 const emit = defineEmits<{
   back: []
@@ -232,13 +236,13 @@ watch(() => props.threadId, () => loadThread())
     </div>
 
     <!-- 返信フォーム -->
-    <SectionCard v-if="!thread.isLocked" class="mt-4">
+    <SectionCard v-if="canReply && !thread.isLocked" class="mt-4">
       <Textarea v-model="replyBody" placeholder="返信を入力..." auto-resize rows="2" class="mb-2 w-full" />
       <div class="flex justify-end">
         <Button label="返信" size="small" class="min-h-11 min-w-11 whitespace-nowrap" :loading="submitting" :disabled="!replyBody.trim()" @click="onReply" />
       </div>
     </SectionCard>
-    <div v-else class="mt-4 rounded-lg bg-surface-100 p-3 text-center text-sm text-surface-400">
+    <div v-else-if="thread.isLocked" class="mt-4 rounded-lg bg-surface-100 p-3 text-center text-sm text-surface-400">
       <i class="pi pi-lock" /> このスレッドはロックされています
     </div>
   </div>
