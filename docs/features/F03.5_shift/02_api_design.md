@@ -1843,8 +1843,9 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 
 塞いだ経路（すべて枠起点の管理操作で、認可の後に検査する）:
 1. `PATCH /slots/{id}/assignments` の `addUserIds`（`addUserIds` / `removeUserIds` は各 200 件まで。超過は 400）。
-2. `PATCH /slots/{id}` の `assignedUserIds`（割当の丸ごと置換）。**現在の割当に無い人（差分）だけ**を検査する。既に入っている人は、その後に脱退・凍結していても置換で残せる（外す操作を妨げない）。
+2. `PATCH /slots/{id}` の `assignedUserIds`（割当の丸ごと置換）。**親・枠のロック取得後の現在の割当に無い人（差分）だけ**を、書き込みと同じトランザクションの中で検査する（並行する `removeUserIds` で外れたばかりの不適格者が、古い一覧との比較で「既存」扱いになるのを防ぐ。検査本体は Facade が関数として渡し、Service は `AccessControlService` に依存しない）。既に入っている人は、その後に脱退・凍結していても置換で残せる（外す操作を妨げない）。
 3. `POST /slots/{id}/assignments/move` の `userId`（移動先に新たに入る人。移動元で適格だった人が、その後に不適格になっていても持ち込めない）。
+- `PATCH /slots/{id}` の `assignedUserIds` は 200 件まで（超過は 400）。
 - 枠の作成・一括作成（`POST /schedules/{id}/slots` ほか）は初期割当を受け取らない（`assignedUserIds` を持たない）ため対象外。
 
 範囲外（意図的）:

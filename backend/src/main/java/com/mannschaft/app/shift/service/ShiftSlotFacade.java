@@ -118,13 +118,8 @@ public class ShiftSlotFacade {
      */
     public ShiftSlotResponse updateSlot(Long slotId, UpdateShiftSlotRequest req, Long userId) {
         Long teamId = requireSlotAdmin(slotId, userId);
-        if (req.getAssignedUserIds() != null) {
-            // 割当の丸ごと置換。新たに入る人（現在の割当に無い人）だけを検査する。
-            List<Long> current = slotService.findAssignedUserIds(slotId);
-            requireAssignableMembers(
-                    req.getAssignedUserIds().stream().filter(id -> !current.contains(id)).toList(), teamId);
-        }
-        return slotService.updateSlot(slotId, req, userId);
+        // 置換で新たに入る人の検査は、親・枠のロック取得後の現在値との差分に対して tx の中で行う（並行 PATCH 対策）。
+        return slotService.updateSlot(slotId, req, userId, newIds -> requireAssignableMembers(newIds, teamId));
     }
 
     /**
