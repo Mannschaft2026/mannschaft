@@ -29,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { formatDate } = useDatetime()
 const shiftApi = useShiftApi()
 const notification = useNotification()
 const confirm = useConfirm()
@@ -172,7 +173,7 @@ onMounted(load)
           <div>
             <p class="font-medium">{{ s.content.title }}</p>
             <p class="text-xs text-surface-500">
-              {{ s.period.startDate }} 〜 {{ s.period.endDate }}
+              {{ formatDate(s.period.startDate) }} 〜 {{ formatDate(s.period.endDate) }}
             </p>
           </div>
           <div class="flex items-center gap-2">

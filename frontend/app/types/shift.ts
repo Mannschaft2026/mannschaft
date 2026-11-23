@@ -497,7 +497,15 @@ export interface ChangeRequest {
     expiresAt: string | null
     createdAt: string
   }
+  /** 楽観ロック用バージョン（審査時にそのまま送る。BE は不一致を 409 SHIFT_018 にする） */
+  version: number
 }
+
+/** 審査の結果。conflict の latest は 409 後に再取得した最新の依頼（消えていれば null） */
+export type ReviewOutcome =
+  | { status: 'ok' }
+  | { status: 'conflict'; latest: ChangeRequest | null }
+  | { status: 'error' }
 
 export interface CreateChangeRequestPayload {
   scheduleId: number
