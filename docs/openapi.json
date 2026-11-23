@@ -161117,15 +161117,33 @@
             "type": "integer",
             "format": "int64"
           },
+          "organizationSlug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "組織記事の組織 slug（組織記事以外・論理削除済み組織は null）"
+          },
           "teamId": {
             "type": "integer",
             "format": "int64"
+          },
+          "teamSlug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "チーム記事のチーム slug（チーム記事以外・論理削除済みチームは null）"
           },
           "userId": {
             "type": "integer",
             "format": "int64"
           }
-        }
+        },
+        "required": [
+          "organizationSlug",
+          "teamSlug"
+        ]
       },
       "BlogPostSeriesDto": {
         "type": "object",
