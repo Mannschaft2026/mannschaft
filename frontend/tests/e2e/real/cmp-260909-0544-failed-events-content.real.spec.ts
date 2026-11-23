@@ -32,10 +32,16 @@ const SHOT = process.env.EVIDENCE_DIR ?? '../docs/evidence/CMP-260909-0544'
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(120_000)
 
+/** テスト DB（docker コンテナ）への接続。環境変数で上書きでき、既定値はコンテナの既定（既存の実機 E2E 補助と同じ）。 */
+const DB_CONTAINER = process.env.E2E_MYSQL_CONTAINER ?? 'mannschaft-mysql'
+const DB_USER = process.env.E2E_MYSQL_USER ?? 'root'
+const DB_PASSWORD = process.env.E2E_MYSQL_PASSWORD ?? 'root'
+const DB_NAME = process.env.E2E_MYSQL_DATABASE ?? 'mannschaft'
+
 function mysql(sql: string): string {
   return execFileSync(
     'docker',
-    ['exec', '-i', 'mannschaft-mysql', 'mysql', '-uroot', '-proot', '-N', '--default-character-set=utf8mb4', 'mannschaft'],
+    ['exec', '-i', '-e', `MYSQL_PWD=${DB_PASSWORD}`, DB_CONTAINER, 'mysql', `-u${DB_USER}`, '-N', '--default-character-set=utf8mb4', DB_NAME],
     { input: sql, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
   ).trim()
 }

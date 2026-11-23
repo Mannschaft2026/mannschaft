@@ -1,29 +1,23 @@
 /**
- * CMP-260909-0544 実機 E2E（権限・空状態の部分） — 失敗イベント画面
+ * CMP-260909-0544 実機 E2E（ロール横断・空状態） — 失敗イベント画面
  *
  * 対象画面: /admin/shift-budget/failed-events
  *
  * 受け入れ条件（台帳の完了条件 + PR #4743）
- *   AC-1 画面に SQL 文・テーブル名・カラム名・Java 例外クラス名・生の enum コードが出ない  ← 実データが必要
- *   AC-2 権限あり（閲覧できる）/ 権限なし（到達できない）をロール横断で確認する
+ *   AC-1 画面に SQL 文・テーブル名・カラム名・Java 例外クラス名・生の enum コードが出ない
+ *        → 同じ PR の cmp-260909-0544-failed-events-content.real.spec.ts で実施（失敗イベントの行を投入して確認）
+ *   AC-2 権限あり（閲覧できる）/ 権限なし（到達できない）をロール横断で確認する  ← このスペック
  *
- * このスペックが扱う範囲
- *   - 実行できるのは AC-2（ロール横断）と、失敗イベントが 0 件のときの空状態まで。
- *   - AC-1 は「実データ（失敗イベントの行）」が画面に出ている状態が前提だが、実 BE に失敗イベントを
- *     発生させる正当な操作が無い（後述）ため **未実施**。共有 DB への直接 DML は禁止されているので作っていない。
+ * このスペックは失敗イベントが 0 件の組織で、権限あり（空状態）と権限なし・他テナント（URL 直打ち）を見る。
+ * データは作らない（行の投入は content spec が前提作成として行い、自分の分だけ削除する）。
  *
- * 失敗イベントが発生する経路（BE を読んだ結果）
- *   失敗イベントは API から作成できない。以下の内部処理が例外を捕まえたときにだけ記録される。
- *   - シフト公開後の消化記録（ShiftBudgetConsumptionRecordListener）: 公開前に SHIFT_047 で
- *     「正数の時給が無い」公開自体が拒否されるため、時給欠落・非正数の経路には到達できない。
- *     記録処理は再公開に対して冪等（既存 PLANNED を取消して作り直す）で、通常操作では例外にならない。
- *   - 月次締めバッチ（closeAll）の組織単位の例外、100% 到達時のワークフロー起動失敗、通知配送の失敗。
- *     いずれも BE 内部の障害が前提で、画面・API から正当に起こす手段は無い。
+ * FAILED-04 は既知の実装欠陥（failed-events.vue の load() の catch が 403 を握りつぶし、空一覧を表示する）を
+ * test.fail() で固定している。修正は別の台帳行で追跡する。直ったら test.fail() を外す。
  *
- * 前提: feature.shift-budget.enabled=true の BE（既定は OFF のため、検証用 BE を別ポートで起動して実施する）
+ * 前提: feature.shift-budget.enabled=true の BE と、それに向いた FE
  *
  * 実行例:
- *   BASE_URL=http://localhost:3002 API_BASE_URL=http://localhost:8081 \
+ *   BASE_URL=http://localhost:3001 API_BASE_URL=http://localhost:8080 \
  *     npx playwright test tests/e2e/real/cmp-260909-0544-failed-events-role.real.spec.ts
  */
 
@@ -206,20 +200,27 @@ ROLES.forEach(({ key, label, who }, index) => {
   })
 })
 
-// ↓ 実装欠陥の確認: failed-events.vue は取得失敗（403 など）を握りつぶして空配列のまま描画するため、
-//   「失敗イベントはありません」と表示してしまう（CMP-260909-0543 が allocations / dashboard / alerts で直したのと同型）。
-//   本番コードは直さず、欠陥として FAIL のまま記録する。
-// 実装欠陥（failed-events.vue の load() の catch）が直るまで失敗することを期待する。直ったらこの行を外す。
-test('FAILED-04 (AC-2・実装欠陥の確認): 権限なし・他テナントが開いたとき、取得失敗が「失敗イベントはありません」の空状態に化けない', async () => {
-  test.fail(true, '実装欠陥: failed-events.vue の load() の catch が取得失敗を握りつぶす（修正は別行）')
+// 既知の実装欠陥の固定: failed-events.vue は取得失敗（403 など）を握りつぶし「失敗イベントはありません」と表示する。
+// 前提（BE が 403 を返すこと・画面が開くこと）は通常の expect で、崩れたらこのテスト自体が落ちる。
+// 固定するのは「空一覧に化けない」という 1 点だけ。欠陥が再現している間は通る（期待どおりの失敗）。
+// 欠陥が直って空一覧が出なくなったら、このテストが落ちるので、下の「期待」を通常の
+// expect(...).toHaveCount(0) に置き換える。
+test('FAILED-04 (AC-2・既知の欠陥): 権限なし・他テナントが開くと、取得失敗なのに「失敗イベントはありません」が出る（欠陥の固定）', async () => {
   for (const { label, who } of ROLES) {
     const page = who()
     const response = await openFailedEvents(page)
-    expect(response.status(), `${label}: BE は 403`).toBe(403)
+    expect(response.status(), `${label}: BE は 403（前提）`).toBe(403)
     await page.waitForTimeout(PERSIST_MS)
-    await expect.soft(
-      page.getByText('失敗イベントはありません'),
-      `${label}: 取得失敗なのに「失敗イベントはありません」と読める空状態が出てはならない`,
-    ).toHaveCount(0)
+    await expect(page.getByText('失敗イベント管理').first(), `${label}: 画面は開いている（前提）`).toBeVisible()
+
+    let emptyMasquerade = true
+    try {
+      await expect(page.getByText('失敗イベントはありません')).toHaveCount(0, { timeout: 1_000 })
+      emptyMasquerade = false
+    }
+    catch {
+      // 空状態が出ている = 既知の欠陥が再現している
+    }
+    expect(emptyMasquerade, `${label}: 既知の欠陥（403 が空一覧に化ける）が再現する。直ったら通常の expect に戻す`).toBe(true)
   }
 })
