@@ -336,7 +336,7 @@ async function assertScheduleBelongsToUrlTeam(): Promise<void> {
   if (urlTeamId === undefined) throw new Error('team_numeric_id_missing')
   if (schedule.value?.teamId !== urlTeamId) {
     // 他チームのシフト表の題名・操作導線を残さない。
-    schedule.value = undefined
+    schedule.value = null
     throw Object.assign(new Error('schedule_team_mismatch'), { statusCode: 404 })
   }
 }
