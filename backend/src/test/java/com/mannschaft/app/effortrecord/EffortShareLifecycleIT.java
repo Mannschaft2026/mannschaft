@@ -160,25 +160,48 @@ class EffortShareLifecycleIT extends EffortTeamShareItSupport {
 
     // ═══════════════════════════════ AC-50（E13） ═══════════════════════════════
 
+    /** 退会申請前に発行した既存トークンで private API を呼ぶ（http() は呼び出しごとに新しいトークンを発行するため使わない）。 */
+    private MockHttpServletResponse withToken(String token, String recordId) throws Exception {
+        return mvc.perform(get(ME + "/{id}", recordId).header("Authorization", "Bearer " + token)).andReturn().getResponse();
+    }
+
+    /**
+     * 退会申請が private API を止める現行の仕組みに沿って検査する。UserService#requestWithdrawal は
+     * AuthTokenService#setUserInvalidationTimestamp で Valkey に user_invalidated_at を書き、以後の検証で
+     * それより前に発行された access token を拒否する（401）。Valkey は外部境界のため基底の Mock
+     * （StringRedisTemplate）を使い、書かれた値を読み出しに返して実 Valkey の振る舞いを再現する（構成キーは増やさない）。
+     * 撤回（cancelWithdrawal）は無効化時刻を消さないので、既存トークンは拒否のまま、撤回後に発行したトークン
+     * （再ログイン相当）で private API が戻る。
+     */
     @Test
-    @DisplayName("AC-50: 退会申請中も共有の read は続き、申請を撤回しても再投稿しない（投稿は1件のまま）")
+    @DisplayName("AC-50: 退会申請で既存トークンの private API は 401 になり、共有の read は続く。撤回後の新しいトークンで戻り、再投稿はしない")
     void AC50_退会申請と撤回() throws Exception {
         World w = world("AC50撤回");
         JsonNode visible = shareVisible(w, teamRecord(w.owner(), w, "30", "腕立て", null), "時間");
         String sid = shareId(visible);
         Long postId = effortPostId(sid);
+        String issuedBefore = tokens.issueAccessToken(w.owner(), List.of("MEMBER"));
+        expect(withToken(issuedBefore, id(visible)), 200);
+        Thread.sleep(1100); // iat（秒）を無効化時刻より前にする
 
         userService.requestWithdrawal(w.owner(), new RequestWithdrawalRequest(null));
-        MockHttpServletResponse privateApi = http(get(ME + "/{id}", id(visible)), w.owner());
-        assertThat(privateApi.getStatus()).as("退会申請中は private API を止める").isNotEqualTo(200);
-        assertThat(listedShareIds(w.viewer(), w.team())).as("共有の read は続く").containsExactly(sid);
+        String key = "mannschaft:auth:user_invalidated_at:" + w.owner();
+        org.mockito.ArgumentCaptor<String> invalidatedAt = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(redisTemplate.opsForValue()).set(org.mockito.ArgumentMatchers.eq(key),
+                invalidatedAt.capture(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.when(redisTemplate.opsForValue().get(key)).thenReturn(invalidatedAt.getValue());
+
+        expect(withToken(issuedBefore, id(visible)), 401);
+        assertThat(listedShareIds(w.viewer(), w.team())).as("退会申請中も共有の read は続く").containsExactly(sid);
 
         userService.cancelWithdrawal(w.owner());
-        assertThat(ownerShareState(w.owner(), id(visible))).as("撤回で private API が戻る").isEqualTo("VISIBLE");
+        assertThat(ownerShareState(w.owner(), id(visible))).as("撤回後に発行したトークンで private API が戻る")
+                .isEqualTo("VISIBLE");
         Thread.sleep(1000);
         assertThat(effortSourceCount(w.team())).as("撤回で再投稿しない").isEqualTo(1);
         assertThat(effortPostId(sid)).isEqualTo(postId);
         assertThat(livePostCount(w.team())).isEqualTo(1);
+        assertThat(listedShareIds(w.viewer(), w.team())).containsExactly(sid);
     }
 
     @Test
@@ -233,8 +256,8 @@ class EffortShareLifecycleIT extends EffortTeamShareItSupport {
         assertThat(listedShareIds(w.viewer(), w.team())).as("親組織が0件になっても見える").containsExactly(sid);
 
         expect(http(delete(TEAMS + "/{slug}", slug(w.team())), w.admin()), 204);
-        assertThat(teamList(w.viewer(), w.team()).getStatus()).as("削除の直後から deny").isIn(403, 404);
-        assertThat(teamDetail(w.viewer(), w.team(), sid).getStatus()).isIn(403, 404);
+        assertThat(teamList(w.viewer(), w.team()).getStatus()).as("削除の直後から deny（存在しないチームと同じ 404）").isEqualTo(404);
+        assertThat(teamDetail(w.viewer(), w.team(), sid).getStatus()).as("詳細も存在しないチームと同じ 404").isEqualTo(404);
         await().atMost(SYNC_WAIT).until(() -> Boolean.TRUE.equals(teamShareRow(sid).get("deleted")));
         assertThat(teamShareRow(sid)).as("物理削除しない").isNotEmpty();
 
@@ -242,7 +265,7 @@ class EffortShareLifecycleIT extends EffortTeamShareItSupport {
         assertThat(valueOf(original, keyOf(original.path("definition"), "時間")).asText()).isEqualTo("30");
         MockHttpServletResponse retry = postRetry(w.owner(), id(original), version(original), shareVersion(original),
                 UUID.randomUUID().toString());
-        assertThat(retry.getStatus()).as("削除済みチームへは retry できない").isIn(403, 409);
+        expectError(retry, 409, "COMMON_003");
     }
 
     // ═══════════════════════════════ AC-52（E14） ═══════════════════════════════
@@ -310,7 +333,7 @@ class EffortShareLifecycleIT extends EffortTeamShareItSupport {
         JsonNode owner = ownerRecord(w.owner(), id(visible));
         MockHttpServletResponse retry = postRetry(w.owner(), id(owner), version(owner), shareVersion(owner),
                 UUID.randomUUID().toString());
-        assertThat(retry.getStatus()).as("retry で復活させない").isNotEqualTo(202);
+        expectError(retry, 409, "COMMON_003");
         expect(putRecord(w.owner(), owner, "50", "腕立て", null), 200);
         Thread.sleep(1500);
         assertThat(teamShareRow(sid).get("state")).isEqualTo("MODERATED");

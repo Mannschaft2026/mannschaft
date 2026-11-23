@@ -33,6 +33,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * チーム一覧・詳細は F00 を通った許可 snapshot だけを返し、私的 note・未選択の値・private UUID・加入期間 ID を出さない。
  * 冪等は Idempotency-Key（同 key 同 hash は同応答・別 hash は 409 COMMON_003・処理中は 409 + Retry-After:1・欠落は 400）。
  * 共有の後処理を待つ箇所は owner の GET で VISIBLE を待つ（{@link #awaitShareState}）。</p>
+ *
+ * <p>AC-27 の「リンク展開」: リンク展開の BE 機能は現存しないので、投稿詳細 GET（{@code /timeline/posts/{id}}）で代替する。
+ * エラーコードは一つに固定する（定義 token の差替は 400 COMMON_001・field=definitionToken、preview 後の定義変更・廃止は
+ * 409 EFFORT_002、COMMON_003 は preview 失効・version 競合・key 不一致・別チームの有効共有に限る）。</p>
  */
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("F06.4.1 PR-3b 共有 API の契約")
@@ -283,8 +287,9 @@ class EffortTeamShareContractIT extends EffortTeamShareItSupport {
         // (1) team=1 のまま team2 の定義 token へ差し替える
         JsonNode snap2 = snapshot(w.owner(), team2, template2);
         MockHttpServletResponse swapped = postPreview(w.owner(), id(record), previewBody(record, w.team(), snap2, "時間"));
-        assertThat(swapped.getStatus()).as(body(swapped)).isIn(400, 409);
-        assertThat(json(swapped).at("/error/code").asText()).isIn("COMMON_001", "COMMON_003");
+        JsonNode swapError = expectError(swapped, 400, "COMMON_001");
+        assertThat(swapError.at("/error/fieldErrors/0/field").asText()).as("拒否理由は definitionToken（API 契約 §3）")
+                .isEqualTo("definitionToken");
         // (2) 他人（同じチームの B）が A の原本を preview → 404（存在を区別しない）
         JsonNode snapB = snapshot(w.viewer(), w.team(), w.template());
         expectError(postPreview(w.viewer(), id(record), previewBody(record, w.team(), snapB, "時間")), 404, "EFFORT_001");
@@ -543,8 +548,7 @@ class EffortTeamShareContractIT extends EffortTeamShareItSupport {
         updateTeamTemplate(w.admin(), w.template(), "AC32練習", renamed);
         MockHttpServletResponse changed = putShare(w.owner(), id(record), version(record),
                 preview.path("previewToken").asText(), UUID.randomUUID().toString());
-        assertThat(changed.getStatus()).as(body(changed)).isEqualTo(409);
-        assertThat(json(changed).at("/error/code").asText()).isIn("COMMON_003", "EFFORT_002");
+        expectError(changed, 409, "EFFORT_002");
         assertThat(teamShares(w.team())).isZero();
 
         // 廃止後の新規共有・取消後の再共有: preview は廃止前に取り、共有 PUT を廃止後に送る

@@ -73,7 +73,7 @@ class EffortTeamRecordListContractIT extends EffortTeamShareItSupport {
         member(outsider, otherTeam);
 
         expectError(teamList(outsider, w.team()), 403, "COMMON_002");
-        assertThat(teamList(w.viewer(), Long.MAX_VALUE - 7).getStatus()).isIn(403, 404);
+        assertThat(teamList(w.viewer(), Long.MAX_VALUE - 7).getStatus()).as("存在しないチームは 404").isEqualTo(404);
         JsonNode empty = expect(teamList(w.viewer(), w.team(), "user_id", String.valueOf(outsider)), 200);
         assertThat(empty.path("data")).isEmpty();
         assertThat(empty.at("/meta/hasNext").asBoolean()).isFalse();
@@ -129,13 +129,15 @@ class EffortTeamRecordListContractIT extends EffortTeamShareItSupport {
     }
 
     @Test
-    @DisplayName("AC-42: /definitions は VISIBLE 履歴のある有効定義と廃止定義（isRetired）を返し、非表示の履歴しかない定義は出さない。{shareId} より先に解決する")
+    @DisplayName("AC-42: /definitions は当該チームで VISIBLE 履歴が1件以上ある定義だけを返し（有効・廃止は isRetired）、非表示の履歴しかない定義・履歴0件の有効テンプレートは出さない。{shareId} より先に解決する")
     void AC42_定義候補() throws Exception {
         World w = world("AC42定義");
         Long retiredTemplate = teamTemplate(w.admin(), w.team(), "AC42廃止", shareFields());
         Long revokedOnly = teamTemplate(w.admin(), w.team(), "AC42取消のみ", shareFields());
         Long moderatedOnly = teamTemplate(w.admin(), w.team(), "AC42非表示のみ", shareFields());
         Long pendingOnly = teamTemplate(w.admin(), w.team(), "AC42同期中のみ", shareFields());
+        Long noHistory = teamTemplate(w.admin(), w.team(), "AC42履歴なし", shareFields());
+        String noHistoryUuid = snapshot(w.owner(), w.team(), noHistory).at("/definition/definitionUuid").asText();
 
         JsonNode active = shareOn(w.owner(), w, w.template(), DAY1, "10");
         JsonNode retired = shareOn(w.owner(), w, retiredTemplate, DAY2, "20");
@@ -160,6 +162,9 @@ class EffortTeamRecordListContractIT extends EffortTeamShareItSupport {
         assertThat(candidates).containsEntry(definitionUuid(active), false).containsEntry(definitionUuid(retired), true);
         assertThat(candidates).as("非表示・同期中の履歴しかない定義は候補に出さない")
                 .doesNotContainKeys(definitionUuid(revoked), definitionUuid(moderated), definitionUuid(pendingRecord));
+        assertThat(candidates).as("履歴0件の有効テンプレートは返さない（FE が既存のテンプレート一覧と合わせて候補を作る）")
+                .doesNotContainKey(noHistoryUuid);
+        assertThat(candidates).as("VISIBLE 履歴のある定義だけ（有効・廃止を問わず isRetired で区別）").hasSize(2);
         assertThat(names.get(definitionUuid(retired))).isEqualTo("AC42廃止");
         expectError(teamDefinitions(user("AC42非所属"), w.team()), 403, "COMMON_002");
     }

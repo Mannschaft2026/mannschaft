@@ -1,7 +1,10 @@
 package com.mannschaft.app.effortrecord;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mannschaft.app.social.entity.TeamFriendEntity;
+import com.mannschaft.app.social.repository.TeamFriendRepository;
 import com.mannschaft.app.timeline.PostScopeType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,6 +34,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * <p>努力由来の投稿は {@link #seedEffortPost} で直接作る（対応表の share_uuid はどの共有にも一致しないため F00 を通らない）。
  * 共有の後処理の実装に依存させず、各 BE 入口のガードだけを検査する。</p>
+ *
+ * <p>「公開化」: 努力由来の投稿を公開へ切り替える専用の BE 入口は現存しないため、PUBLIC スコープへの repost の拒否と、
+ * share_with_friends が false のまま変わらないことの確認で代替する。「リンク展開」の BE 機能も現存しないので、
+ * 投稿詳細 GET で代替する。フレンドチーム転送は、フレンド関係の判定より先に EFFORT_003 を返す前提で検査する。</p>
  */
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("F06.4.1 PR-3b タイムラインのガードと読み取り経路")
@@ -38,6 +45,8 @@ class EffortTimelineGuardIT extends EffortTeamShareItSupport {
 
     private static final String CONSONANTS = "bcdfghjklmnpqrstvwxz";
     private static final String POSTS = TIMELINE + "/posts";
+
+    @Autowired private TeamFriendRepository teamFriends;
 
     private String kw;
     private World w;
@@ -175,7 +184,7 @@ class EffortTimelineGuardIT extends EffortTeamShareItSupport {
         @DisplayName("AC-66: bookmark は 403 EFFORT_003（行を作らない）。通常の投稿は成功する（対照を先に確かめる）")
         void AC66_bookmark() throws Exception {
             MockHttpServletResponse normal = http(post(TIMELINE + "/bookmarks/{postId}", normalPost), w.viewer());
-            assertThat(normal.getStatus()).as(normal.getContentAsString()).isBetween(200, 299);
+            assertThat(normal.getStatus()).as(normal.getContentAsString()).isEqualTo(201);
             assertEffort003(http(post(TIMELINE + "/bookmarks/{postId}", effortPost), w.viewer()), "bookmark");
             assertThat(count("SELECT COUNT(*) FROM timeline_bookmarks WHERE timeline_post_id = ?1", effortPost)).isZero();
         }
@@ -243,6 +252,52 @@ class EffortTimelineGuardIT extends EffortTeamShareItSupport {
                 tx(() -> em.createNativeQuery("ALTER TABLE timeline_posts ADD FULLTEXT INDEX ft_timeline_posts_content (content) "
                         + "WITH PARSER ngram").executeUpdate());
             }
+        }
+
+        @Test
+        @DisplayName("AC-40: フレンドフィード（管理者フィード）に share_with_friends=true の努力由来の投稿が出ない（通常の共有投稿は出る）")
+        void AC40_フレンドフィード() throws Exception {
+            Long friendTeam = team("ガードのフレンド先");
+            Long friendAdmin = user("フレンド先管理者");
+            teamAdmin(friendAdmin, friendTeam);
+            tx(() -> teamFriends.save(TeamFriendEntity.builder().teamAId(Math.min(w.team(), friendTeam))
+                    .teamBId(Math.max(w.team(), friendTeam)).establishedAt(java.time.LocalDateTime.now())
+                    .aFollowId(0L).bFollowId(0L).build()));
+            tx(() -> em.createNativeQuery("UPDATE timeline_posts SET share_with_friends = TRUE WHERE id IN (:ids)")
+                    .setParameter("ids", List.of(effortPost, normalPost)).executeUpdate());
+
+            // test プロファイルは role_permissions が空のため、ADMIN へ MANAGE_FRIEND_TEAMS を与える（既存の
+            // FriendContentForwardExistenceOracleContractIT と同じ作法）。この試験が足した行だけを後で消す。
+            List<Runnable> undo = grantToAdmin("MANAGE_FRIEND_TEAMS");
+            JsonNode feed;
+            try {
+                feed = expect(http(get("/api/v1/teams/{teamId}/friend-feed", friendTeam), friendAdmin), 200);
+            } finally {
+                undo.forEach(Runnable::run);
+            }
+            List<Long> ids = new ArrayList<>();
+            feed.path("data").forEach(p -> ids.add(p.path("postId").asLong()));
+            assertThat(ids).contains(normalPost).doesNotContain(effortPost);
+        }
+
+        /** roles.ADMIN に permission を付ける。足した行（permission・role_permissions）を消す処理を返す。 */
+        private List<Runnable> grantToAdmin(String permission) {
+            List<Runnable> undo = new ArrayList<>();
+            Long roleId = count("SELECT id FROM roles WHERE name = 'ADMIN'");
+            if (count("SELECT COUNT(*) FROM permissions WHERE name = ?1", permission) == 0) {
+                tx(() -> em.createNativeQuery("INSERT INTO permissions (name, display_name, scope, created_at, updated_at) "
+                        + "VALUES (:n, :n, 'TEAM', NOW(), NOW())").setParameter("n", permission).executeUpdate());
+                undo.add(() -> tx(() -> em.createNativeQuery("DELETE FROM permissions WHERE name = :n")
+                        .setParameter("n", permission).executeUpdate()));
+            }
+            Long permissionId = count("SELECT id FROM permissions WHERE name = ?1", permission);
+            if (count("SELECT COUNT(*) FROM role_permissions WHERE role_id = ?1 AND permission_id = ?2", roleId, permissionId) == 0) {
+                tx(() -> em.createNativeQuery("INSERT INTO role_permissions (role_id, permission_id, is_default, created_at) "
+                        + "VALUES (:r, :p, 1, NOW())").setParameter("r", roleId).setParameter("p", permissionId).executeUpdate());
+                undo.add(0, () -> tx(() -> em.createNativeQuery("DELETE FROM role_permissions WHERE role_id = :r AND permission_id = :p")
+                        .setParameter("r", roleId).setParameter("p", permissionId).executeUpdate()));
+            }
+            return undo;
         }
 
         @Test

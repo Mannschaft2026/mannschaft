@@ -84,6 +84,8 @@ abstract class EffortTeamShareItSupport extends EffortShareItSupport {
                             + "(SELECT id FROM timeline_posts WHERE scope_type = 'TEAM' AND scope_id = :id) p)")
                             .setParameter("id", id).executeUpdate();
                 }
+                em.createNativeQuery("DELETE FROM team_friends WHERE team_a_id = :id OR team_b_id = :id")
+                        .setParameter("id", id).executeUpdate();
                 em.createNativeQuery("DELETE FROM timeline_effort_sources WHERE team_id = :id").setParameter("id", id).executeUpdate();
                 em.createNativeQuery("DELETE FROM effort_team_shares WHERE team_id = :id").setParameter("id", id).executeUpdate();
                 em.createNativeQuery("DELETE FROM effort_operation_receipts WHERE route_kind = 'TEAM' AND route_id = :id")
