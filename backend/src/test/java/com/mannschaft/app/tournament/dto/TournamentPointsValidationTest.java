@@ -88,4 +88,26 @@ class TournamentPointsValidationTest {
                 "{\"version\":1,\"winPoints\":255,\"drawPoints\":0,\"lossPoints\":1}"))
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName("テンプレート作成: 範囲外は 3 項目とも 400 の対象、0〜255 は許容")
+    void createTemplate_range() throws Exception {
+        assertThat(invalidFields(CreateTemplateRequest.class,
+                "{\"name\":\"T\",\"supportedFormats\":\"LEAGUE\",\"winPoints\":300,\"drawPoints\":256,\"lossPoints\":-1}"))
+                .containsExactlyInAnyOrder("winPoints", "drawPoints", "lossPoints");
+        assertThat(invalidFields(CreateTemplateRequest.class,
+                "{\"name\":\"T\",\"supportedFormats\":\"LEAGUE\",\"winPoints\":255,\"drawPoints\":0,\"lossPoints\":1}"))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("テンプレート更新: 範囲外は 3 項目とも 400 の対象、0〜255 は許容")
+    void updateTemplate_range() throws Exception {
+        assertThat(invalidFields(UpdateTemplateRequest.class,
+                "{\"version\":1,\"winPoints\":300,\"drawPoints\":256,\"lossPoints\":-1}"))
+                .containsExactlyInAnyOrder("winPoints", "drawPoints", "lossPoints");
+        assertThat(invalidFields(UpdateTemplateRequest.class,
+                "{\"version\":1,\"winPoints\":255,\"drawPoints\":0,\"lossPoints\":1}"))
+                .isEmpty();
+    }
 }
