@@ -12,6 +12,7 @@
  */
 import type { GateCheckResponse } from '~/types/payment'
 import { canRemoveAnnouncement } from '~/utils/announcementPermissions'
+import { runKeepingPinFocus } from '~/utils/announcementFocus'
 import type { SpotlightItem } from '~/composables/useSpotlightApi'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
@@ -195,7 +196,7 @@ async function onMarkAllRead() {
 
 /** ピン留め切り替え */
 async function onTogglePin(id: number) {
-  await togglePin(id)
+  await runKeepingPinFocus(id, () => togglePin(id))
 }
 
 /** 削除確認ダイアログ表示 */

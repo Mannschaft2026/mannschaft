@@ -90,3 +90,26 @@ describe('一覧 API の著者表現（実 BE 応答: authorId のみ）', () =>
     expect(toAnnouncementItem(base).author).toBeNull()
   })
 })
+
+describe('日時のオフセット正規化（BE はオフセット無しの JST 壁時計を返す）', () => {
+  const base = { id: 1, scopeType: 'TEAM', scopeId: 8 }
+
+  it('オフセット無しは JST として解釈する（UTC 基準で 9 時間前の瞬間）', () => {
+    const item = toAnnouncementItem({ ...base, createdAt: '2026-11-21T20:35:23',
+      startsAt: '2026-11-21T09:00:00', expiresAt: '2026-11-30T23:59:59' })
+    expect(new Date(item.createdAt).toISOString()).toBe('2026-11-21T11:35:23.000Z')
+    expect(new Date(item.startsAt!).toISOString()).toBe('2026-11-21T00:00:00.000Z')
+    expect(new Date(item.expiresAt!).toISOString()).toBe('2026-11-30T14:59:59.000Z')
+  })
+
+  it('オフセット付き（Z / +09:00 / -05:00）は変えない', () => {
+    for (const value of ['2026-11-21T11:35:23Z', '2026-11-21T20:35:23+09:00', '2026-11-21T06:35:23-05:00']) {
+      expect(toAnnouncementItem({ ...base, createdAt: value }).createdAt).toBe(value)
+    }
+  })
+
+  it('未設定・空は従来どおり', () => {
+    const item = toAnnouncementItem({ ...base })
+    expect(item).toMatchObject({ createdAt: '', startsAt: null, expiresAt: null })
+  })
+})
