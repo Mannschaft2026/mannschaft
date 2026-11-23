@@ -133,6 +133,7 @@
       "formStart": "Fecha de inicio",
       "formEnd": "Fecha de fin",
       "formDeadline": "Plazo de solicitud",
+      "formDeadlineInvalid": "Introduzca una fecha y hora válidas para el plazo de solicitud, p. ej. 2026/12/31 23:59",
       "formNote": "Nota",
       "formNotePlaceholder": "Opcional"
     },

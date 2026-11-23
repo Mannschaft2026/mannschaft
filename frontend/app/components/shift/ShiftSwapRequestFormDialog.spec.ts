@@ -355,6 +355,15 @@ describe('交代依頼の二重送信防止', () => {
       )
       expect(wrapper.emitted('submitted')).toHaveLength(1)
       expect(wrapper.emitted('update:visible')).toEqual([[false]])
+      // 成功後は閉じ終わるまで再入させない（閉じるアニメーション中の連打で二重送信しない）
+      await submitButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(mocks.create).toHaveBeenCalledOnce()
+
+      // 閉じて開き直せば、再び送信できる
+      await wrapper.setProps({ visible: false })
+      await wrapper.setProps({ visible: true })
+      await flushPromises()
       expect(submitButton(wrapper).attributes('data-loading')).toBe('false')
     },
   )
