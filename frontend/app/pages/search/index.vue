@@ -56,7 +56,10 @@ async function performSearch(page = 0) {
   try {
     const detailType = activeType.value === 'ALL' ? null : activeType.value
     const q = trimmedQuery.value
-    // 詳細ビューで検索語が変わった場合は、他種別の件数が前の検索語のまま残らないよう概要も取り直す
+    // 詳細ビューで検索語が変わった場合は、他種別の件数が前の検索語のまま残らないよう概要も取り直す。
+    // 詳細ビューの応答は選択種別の件数しか持たないため、他タブの件数には概要の 2 本目が設計上必要
+    // （同じ q の 2 本同時送信になる）。BE は検索履歴を (user_id, query) の原子的 UPSERT で記録するため、
+    // 並行でも履歴は 1 行に保たれ 500 にならない（F04.6 §5 search_histories）。
     const needsOverview = detailType !== null && countsQuery.value !== q
     const [res, overview] = await Promise.all([
       searchApi.search({

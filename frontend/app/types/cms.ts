@@ -35,6 +35,13 @@ export interface BlogPostScope2 {
   organizationId: number | null
   userId: number | null
   authorId?: number | null
+  /**
+   * チーム記事のチーム slug（BE が記事応答に常に含める。チーム記事以外・論理削除済みチームは null）。
+   * チームページの URL は slug 前提のため、遷移先はこれから作る（数値 teamId で URL を作らない）。
+   */
+  teamSlug: string | null
+  /** 組織記事の組織 slug（BE が記事応答に常に含める。組織記事以外・論理削除済み組織は null）。 */
+  organizationSlug: string | null
 }
 
 export interface BlogPostStats {

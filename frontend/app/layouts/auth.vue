@@ -1,6 +1,6 @@
 <template>
   <div class="flex min-h-screen items-center justify-center dark:bg-surface-900" style="background-color: var(--bg-color, #f3efe0)">
-    <div class="w-full max-w-md px-4">
+    <main id="main-content" class="w-full max-w-md px-4">
       <div class="mb-8 text-center">
         <h1
           class="text-5xl font-bold text-primary"
@@ -19,6 +19,6 @@
           </div>
         </template>
       </Card>
-    </div>
+    </main>
   </div>
 </template>

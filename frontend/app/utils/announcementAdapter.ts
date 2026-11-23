@@ -1,5 +1,30 @@
 import type { AnnouncementFeedDto, AnnouncementFeedItem } from '~/types/announcement'
 import type { BroadcastTargetAudience } from '~/types/announcement_broadcast'
+import dayjs from 'dayjs'
+import timezone from 'dayjs/plugin/timezone'
+import utc from 'dayjs/plugin/utc'
+import { parseWallClockInTz } from '~/utils/wallClock'
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
+/** BE（TimeZoneConfig / UserZoneLocalDateTimeParser.SERVER_ZONE）の壁時計ゾーン。一覧 API の LocalDateTime はこの壁時計。 */
+const SERVER_ZONE = 'Asia/Tokyo'
+const HAS_OFFSET = /(Z|[+-]\d{2}:?\d{2})$/i
+const WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/
+
+/**
+ * オフセット無しの日時（BE の JST 壁時計）を +09:00 付きへ正規化する。
+ * ブラウザのローカル TZ で解釈されて相対時刻がずれるのを防ぐ。オフセット付き・解釈不能な値は変えない。
+ * 恒久策は BE の DTO を OffsetDateTime 化すること。
+ */
+function normalizeWallClock(value: string): string
+function normalizeWallClock(value: string | null | undefined): string | null | undefined
+function normalizeWallClock(value: string | null | undefined): string | null | undefined {
+  if (!value || HAS_OFFSET.test(value) || !WALL_CLOCK.test(value)) return value
+  const parsed = parseWallClockInTz(value, SERVER_ZONE)
+  return parsed.isValid() ? parsed.format() : value
+}
 
 /** generated DTO から表示名だけを変換する。古い実在 sourceUrl は保持し、URL を捏造しない。 */
 type FeedInput = Partial<AnnouncementFeedDto> & Partial<Pick<AnnouncementFeedItem,
@@ -26,12 +51,13 @@ export function toAnnouncementItem(input: FeedInput): AnnouncementFeedItem {
     isRead: input.isRead === true,
     pinnedAt: input.pinnedAt ?? null,
     visibility: (input.visibility ?? 'PUBLIC') as AnnouncementFeedItem['visibility'],
-    author: input.author ?? null,
+    // BE の一覧 API は author を持たず authorId のみ返す。既存の author があれば優先
+    author: input.author ?? (input.authorId != null ? { id: input.authorId } : null),
     sourceMeta: locked ? null : input.sourceMeta ?? null,
     targetAudience: locked ? null : input.targetAudience ?? null,
-    startsAt: input.startsAt ?? null,
-    expiresAt: input.expiresAt ?? null,
-    createdAt: input.createdAt ?? '',
+    startsAt: normalizeWallClock(input.startsAt) ?? null,
+    expiresAt: normalizeWallClock(input.expiresAt) ?? null,
+    createdAt: normalizeWallClock(input.createdAt) ?? '',
     accessState: locked ? 'LOCKED' : 'FULL',
     contentPreviewAvailable: input.contentPreviewAvailable
       ?? (!locked && (sourceType === 'BLOG_POST' || sourceType === 'BULLETIN_THREAD')),
