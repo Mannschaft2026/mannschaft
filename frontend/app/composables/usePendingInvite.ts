@@ -1,5 +1,6 @@
 // CMP-261107-1833 PR2（AC13）: ログイン後の参加待ち招待ダイアログの状態と操作（components/auth/PendingInviteDialog.vue から使う）。
 // 設計正本 §6・§9-1・§9-4。API は /api/v1/me/pending-invite（GET / POST accept・decline・reissue-request・dismiss）。
+// PR3: 見送られた再招待（REISSUE_DECLINED）の案内と、通知の遷移先 ?pendingInvite=open（「あとで」を無視して取り直す）。
 import type { components } from '~/types/generated'
 
 type PendingInvite = components['schemas']['PendingInviteResponse']
@@ -39,15 +40,19 @@ export function usePendingInvite() {
     return (err as { data?: { error?: { code?: string } } })?.data?.error?.code
   }
 
-  const status = computed(() => invite.value?.status)
+  // 生成型の status 列挙に REISSUE_DECLINED が載るまでは string として扱う（BE の enum と同じ値）
+  const status = computed<string | undefined>(() => invite.value?.status)
+  const route = useRoute()
+  const router = useRouter()
   const visible = computed(() => {
     const current = invite.value
     if (!current || closed.value) return false
-    switch (current.status) {
+    switch (current.status as string) {
       case 'PENDING':
         return current.id !== laterId.value
       case 'EXPIRED':
       case 'REISSUE_REQUESTED':
+      case 'REISSUE_DECLINED':
       case 'ACCEPTING':
         return true
       case 'UNAVAILABLE':
@@ -60,6 +65,7 @@ export function usePendingInvite() {
   const isExpiredView = computed(() => status.value === 'EXPIRED' || status.value === 'REISSUE_REQUESTED')
   const header = computed(() => {
     if (isExpiredView.value) return t('auth.pending_invite.title_expired')
+    if (status.value === 'REISSUE_DECLINED') return t('auth.pending_invite.title_reissue_declined')
     if (status.value === 'ACCEPTING') return t('auth.pending_invite.title_accepting')
     if (status.value === 'UNAVAILABLE') return t('auth.pending_invite.title_unavailable')
     return t('auth.pending_invite.title_pending')
@@ -134,6 +140,30 @@ export function usePendingInvite() {
         return
       }
       if (!fetched) void fetchInvite()
+    },
+    { immediate: true },
+  )
+
+  // 通知（INVITE_REISSUED / INVITE_REISSUE_DECLINED）の遷移先 /dashboard?pendingInvite=open:
+  // 「あとで」の記録を捨てて取り直し、ダイアログを出す。クエリは消費したら消す（再読込で繰り返し開かない）。
+  async function openFromQuery() {
+    sessionStorage.removeItem(LATER_KEY)
+    laterId.value = null
+    closed.value = false
+    // 取得中ならその取得が（記録を消した後に）結果を反映する。そうでなければ取り直す
+    if (!loading) {
+      fetched = false
+      await fetchInvite()
+    }
+    const rest = { ...route.query }
+    delete rest.pendingInvite
+    await router.replace({ path: route.path, query: rest, hash: route.hash })
+  }
+
+  watch(
+    () => [authStore.user, route.query.pendingInvite] as const,
+    ([user, open]) => {
+      if (user && open === 'open') void openFromQuery()
     },
     { immediate: true },
   )

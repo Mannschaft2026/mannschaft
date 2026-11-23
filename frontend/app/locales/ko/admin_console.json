@@ -83,7 +83,8 @@
           "RESERVATION": "예약",
           "SHIFT_REQUEST": "근무",
           "MATCHING": "매칭",
-          "PAYMENT": "결제"
+          "PAYMENT": "결제",
+          "INVITE_REISSUE": "재초대 요청"
         }
       },
       "payments": {

@@ -180,7 +180,8 @@ describe('通知からの遷移 ?pendingInvite=open（F1）', () => {
     sessionStorage.setItem(LATER_KEY, ID)
     const wrapper = await mountDialog()
     expect(wrapper.find(q('pending-invite-dialog')).exists()).toBe(false)
-    expect(mocks.replace).not.toHaveBeenCalled()
+    // mountSuspended 自身が router.replace('/')（文字列）を呼ぶため、クエリを消す呼び出し（オブジェクト）だけを見る
+    expect(mocks.replace.mock.calls.filter(([to]) => typeof to !== 'string')).toEqual([])
   })
 })
 

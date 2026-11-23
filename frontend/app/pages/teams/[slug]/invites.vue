@@ -14,6 +14,13 @@ definePageMeta({
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 
+// 「再招待の依頼」欄は ADMIN、または INVITE_MEMBERS を持つ DEPUTY_ADMIN だけに出す（BE の InviteIssuerPolicy#canIssue に合わせる）。
+const { roleName: myRoleName, permissions, loadPermissions } = useRoleAccess('team', teamSlug)
+const canManageReissue = computed(() => canManageInviteReissue(myRoleName.value, permissions.value))
+onMounted(() => {
+  void loadPermissions()
+})
+
 const { isAdminOrDeputy, roleName } = useTeamShellContext()
 
 // 直リンク防御: 権限が確定（roleName 非 null）した時点で管理権限が無ければ戻す。
@@ -30,6 +37,11 @@ watch(
 
 <template>
   <div class="mt-4">
+    <InviteReissueRequestPanel
+      v-if="canManageReissue"
+      scope-type="team"
+      :slug="teamSlug"
+    />
     <InviteTokenList
       v-if="isAdminOrDeputy"
       scope-type="team"

@@ -14,6 +14,13 @@ definePageMeta({
 const route = useRoute()
 const orgSlug = computed(() => String(route.params.slug))
 
+// 「再招待の依頼」欄は ADMIN、または INVITE_MEMBERS を持つ DEPUTY_ADMIN だけに出す（BE の InviteIssuerPolicy#canIssue に合わせる）。
+const { roleName: myRoleName, permissions, loadPermissions } = useRoleAccess('organization', orgSlug)
+const canManageReissue = computed(() => canManageInviteReissue(myRoleName.value, permissions.value))
+onMounted(() => {
+  void loadPermissions()
+})
+
 const { isAdminOrDeputy, roleName } = useOrgShellContext()
 
 watch(
@@ -29,6 +36,11 @@ watch(
 
 <template>
   <div class="mt-4">
+    <InviteReissueRequestPanel
+      v-if="canManageReissue"
+      scope-type="organization"
+      :slug="orgSlug"
+    />
     <InviteTokenList
       v-if="isAdminOrDeputy"
       scope-type="organization"
