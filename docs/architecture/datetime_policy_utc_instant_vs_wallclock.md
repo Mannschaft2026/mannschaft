@@ -44,7 +44,7 @@
 
 `LocalDateTime` の値を見ても、それが「ある瞬間を記録したものか」「ある土地の約束を記録したものか」は型からは一切分からない。読む人は毎回、そのフィールドがどちらの意味で使われているかをコードの文脈や比較相手から推測しなければならない。これが「東京時間基準はUTC計算に比べて頭を使う」の実体であり、バグの温床になっている。
 
-そして **`TimeZoneConfig`（`backend/src/main/java/com/mannschaft/app/config/TimeZoneConfig.java`）が `@PostConstruct` で JVM 既定タイムゾーンを `Asia/Tokyo` に強制しているのは、まさにこの曖昧さを塗り潰すための処置である**（事実。同ファイル9行目のコメント「JVM のデフォルトタイムゾーンを Asia/Tokyo に設定（.claudecode.md §20）」）。`LocalDateTime.now()` は本来「今」という1つの瞬間を表せない（ゾーンが無いと壁時計の値に変換できない）が、JVM既定ゾーンをJSTに固定することで、コード中のあらゆる `LocalDateTime.now()` を暗黙に「東京の壁時計としての今」に統一し、辻褄を合わせている。
+そして **`TimeZoneConfig`（`backend/src/main/java/com/mannschaft/app/config/TimeZoneConfig.java`）の旧実装は `@PostConstruct` で JVM 既定タイムゾーンを `Asia/Tokyo` に強制しているのは、まさにこの曖昧さを塗り潰すための処置である**（事実。同ファイル9行目のコメント「JVM のデフォルトタイムゾーンを Asia/Tokyo に設定（.claudecode.md §20）」）。`LocalDateTime.now()` は本来「今」という1つの瞬間を表せない（ゾーンが無いと壁時計の値に変換できない）が、JVM既定ゾーンをJSTに固定することで、コード中のあらゆる `LocalDateTime.now()` を暗黙に「東京の壁時計としての今」に統一し、辻褄を合わせている。
 
 **この1行（`TimeZoneConfig`）は型の曖昧さを消しているのではなく、「全部JSTだと決め打つことで曖昧さの問題自体を発生させない」という力業である。** 型で「瞬間」と「壁時計」を区別すれば、`LocalDateTime.now()` がJVM既定ゾーンで何になるかに依存する必要がなくなり、この強制の存在理由が失われる。これが根治であり、単なる「JSTをUTCに置き換える」だけの表面的な対処と本方針が違う点である。
 
@@ -218,6 +218,8 @@ JDBC の `serverTimezone=UTC` はドライバ側の `Timestamp` 解釈を決め�
 
 ## 5. `TimeZoneConfig` の位置づけと撤去条件
 
+> **2026-11-23 更新（CMP-261123-1335）**: JVM 既定 TZ の設定は `@PostConstruct` をやめ、`ServerTimeZoneEnvironmentPostProcessor`（`META-INF/spring.factories`）が ApplicationContext 生成前に `UserZoneLocalDateTimeParser.SERVER_ZONE` へ確定する。`TimeZoneConfig` は DataSource 生成時点の既定 TZ を検査して食い違えば起動失敗にする番人だけを持つ。理由は、Bean 生成中の切替だと DB 接続が先に作られ、Connector/J が旧 TZ を固定して DATE 列が前日で保存されたため。撤去条件・正本（`SERVER_ZONE` の1つ）は変わらない。
+
 - **なぜ今存在するのか**: 2.2節で述べた通り、`LocalDateTime` を瞬間・壁時計の両方の意味で使っている現状において、`LocalDateTime.now()` の意味を「東京の壁時計としての今」に統一するための力業である。これを外すと、JVM既定ゾーンがOS依存（多くの場合UTC）に戻り、`LocalDateTime.now()` の意味がすべての呼び出し箇所で変わってしまう。
 - **撤去できる条件**: 「瞬間」を意味する箇所がすべて `Instant`/`OffsetDateTime`（JVM既定ゾーンに依存しない型）に置き換わり、かつ「壁時計」を意味する箇所がすべて `LocalDate`/`LocalTime` ＋ 明示的なTZ参照（`ZoneId.systemDefault()` のような暗黙のJVM既定ゾーン依存ではなく）に置き換わっていること。つまり **コードベースのどこにも `ZoneId.systemDefault()` や無引数の `LocalDateTime.now()` / `LocalDate.now()` に依存する箇所が残っていない状態**が撤去条件である。
 - 棚卸し文書（A-3）によれば `ZoneId.systemDefault()` / `LocalDateTime.now()` / `LocalDate.now()`（引数なし直書き）は約1932箇所に及ぶため、**撤去は本方針の最終段階であり、当面は残す**（撤去時期そのものはマスター判断事項であり本文書では断定しない）。
@@ -230,7 +232,7 @@ JDBC の `serverTimezone=UTC` はドライバ側の `Timestamp` 解釈を決め�
 
 | 層 | §20 の現行規約 |
 |---|---|
-| アプリ層（`LocalDateTime`） | JST（Asia/Tokyo）固定。`TimeZoneConfig` がJVM既定TZをJSTに固定することで実現 |
+| アプリ層（`LocalDateTime`） | JST（Asia/Tokyo）固定。`ServerTimeZoneEnvironmentPostProcessor` がJVM既定TZを `SERVER_ZONE`（JST）へBean生成前に確定することで実現 |
 | DB格納値（`DATETIME`カラム） | UTC（`hibernate.jdbc.time_zone: UTC`） |
 | API入出力 | JST前提のISO 8601文字列（`LocalDateTimeTimezoneSerializer`/`Deserializer` がJVM既定TZ＝JSTを介して変換） |
 

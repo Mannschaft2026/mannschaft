@@ -552,6 +552,9 @@ app:
   datasource:
     replica:
       enabled: false
+      # 接続作成時の JVM 既定 TZ を接続に固定させない（二重の守り。一次防衛は ServerTimeZoneEnvironmentPostProcessor。CMP-261123-1335）
+      data-source-properties:
+        cacheDefaultTimeZone: false
       # jdbc-url: ${DB_REPLICA_URL:${spring.datasource.url}}
       # username: ${DB_REPLICA_USER:${spring.datasource.username}}
       # password: ${DB_REPLICA_PASSWORD:${spring.datasource.password}}

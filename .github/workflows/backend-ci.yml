@@ -439,6 +439,15 @@ jobs:
           --tests "com.mannschaft.app.advertising.campaign.service.AdFrequencyCapServiceTest"
           --tests "com.mannschaft.app.advertising.controller.StripeAdInvoiceWebhookControllerTest"
 
+      # CMP-261123-1335: JVM を UTC で起動しても、DataSource の最初の接続より前に既定 TZ が SERVER_ZONE へ確定することを検証する。
+      - name: JVM を UTC で起動しても DataSource 生成前に既定 TZ が確定することを検証
+        run: >-
+          ./gradlew test --no-daemon --build-cache
+          -Ptest.timezone=UTC
+          -x jacocoTestReport
+          --tests "com.mannschaft.app.config.ServerTimeZoneBootstrapTest"
+          --tests "com.mannschaft.app.config.JacksonTimeTypeSymmetryGuardTest"
+
   # ---------------------------------------------------------------------------
   # shard: compile + test を 8 並列で実行する（Docker required for Testcontainers）
   #
