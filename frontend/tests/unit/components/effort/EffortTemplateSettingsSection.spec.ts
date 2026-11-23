@@ -131,15 +131,15 @@ describe('ActivityTemplateForm の出し分け', () => {
   })
 
   it('管理権限があり保存済みテンプレートのときだけ指標セクションを出す', async () => {
-    const allowed = await mountSuspended(ActivityTemplateForm, { props: { template, visible: true, canManageEffortSettings: true } })
+    const allowed = await mountSuspended(ActivityTemplateForm, { props: { template, visible: true, canManageEffortSettings: true, scopeType: 'TEAM', scopeId: 1 } })
     await flushPromises()
     expect(allowed.findComponent(EffortTemplateSettingsSection).exists()).toBe(true)
 
-    const denied = await mountSuspended(ActivityTemplateForm, { props: { template, visible: true, canManageEffortSettings: false } })
+    const denied = await mountSuspended(ActivityTemplateForm, { props: { template, visible: true, canManageEffortSettings: false, scopeType: 'TEAM', scopeId: 1 } })
     await flushPromises()
     expect(denied.findComponent(EffortTemplateSettingsSection).exists()).toBe(false)
 
-    const creating = await mountSuspended(ActivityTemplateForm, { props: { template: null, visible: true, canManageEffortSettings: true } })
+    const creating = await mountSuspended(ActivityTemplateForm, { props: { template: null, visible: true, canManageEffortSettings: true, scopeType: 'TEAM', scopeId: 1 } })
     await flushPromises()
     expect(creating.findComponent(EffortTemplateSettingsSection).exists()).toBe(false)
   })
