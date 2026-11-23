@@ -424,6 +424,48 @@ describe('ACCEPTING: 参加処理中と再試行（§9-4）', () => {
   })
 })
 
+describe('UNAVAILABLE: 参加できない案内（殿の裁定）', () => {
+  const SEEN_KEY = 'mannschaft.pendingInvite.unavailableSeen'
+  beforeEach(() => {
+    localStorage.clear()
+    current = invite({ status: 'UNAVAILABLE' })
+  })
+  it('PID-50: 参加できない案内を出し、閉じると localStorage に保留 ID を記録して API は呼ばない', async () => {
+    const wrapper = await mountDialog()
+    expect(wrapper.find(q('pending-invite-unavailable')).exists()).toBe(true)
+    await wrapper.find(q('pending-invite-dismiss')).trigger('click')
+    await flushPromises()
+    expect(shownViews(wrapper)).toEqual([])
+    expect(localStorage.getItem(SEEN_KEY)).toBe(invite().id)
+    expect(calls('POST', BASE + '/dismiss')).toHaveLength(0)
+  })
+  it('PID-51: 確認済みの保留 ID は次回以降表示しない。別の保留 ID なら表示する', async () => {
+    localStorage.setItem(SEEN_KEY, invite().id as string)
+    const seen = await mountDialog()
+    expect(shownViews(seen)).toEqual([])
+    seen.unmount()
+    localStorage.setItem(SEEN_KEY, '0193f000-0000-7000-8000-0000000000ff')
+    const other = await mountDialog()
+    expect(other.find(q('pending-invite-unavailable')).exists()).toBe(true)
+  })
+})
+
+describe('ACCEPTING: 時間経過での再試行有効化', () => {
+  it('PID-34: 画面を開いたまま retryAvailableAt を過ぎたら再試行ボタンが有効になる', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    try {
+      current = invite({ status: 'ACCEPTING', retryAvailableAt: new Date(Date.now() + MIN).toISOString() })
+      const wrapper = await mountDialog()
+      expect(wrapper.find(q('pending-invite-retry')).attributes('disabled')).toBeDefined()
+      await vi.advanceTimersByTimeAsync(MIN + 1000)
+      await flushPromises()
+      expect(wrapper.find(q('pending-invite-retry')).attributes('disabled')).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('i18n（6言語）と直書き禁止', () => {
   const here = __dirname
   const JA = /[぀-ヿ一-鿿]/

@@ -9,6 +9,8 @@ const { t } = useI18n()
 const { sendInvitation, getInvitations, cancelInvitation, getParents } = useParentalConsentApi()
 const notification = useNotification()
 const { formatDate } = useDatetime()
+const authStore = useAuthStore()
+const runtimeConfig = useRuntimeConfig()
 
 const invitations = ref<InvitationResponse[]>([])
 const loading = ref(true)
@@ -22,6 +24,9 @@ async function loadData() {
     invitations.value = invs
     // 承認済み保護者がいれば → 保護者管理画面へ
     if (parents.length > 0) {
+      // 更新前のトークンは同意待ち（ppc）の印を持ったままで、参加待ち招待の GET が AUTH_070 になる。
+      // 更新の完了を待ってから遷移する（CMP-261107-1833 設計 §9-1）
+      await performTokenRefresh(runtimeConfig, authStore)
       await navigateTo('/parental-consent/manage')
     }
   } finally {

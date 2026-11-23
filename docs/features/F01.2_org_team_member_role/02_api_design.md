@@ -513,6 +513,13 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
   招待を使わず `JOINED`。
 - 二重押し・並行: `ACCEPTING` は1つの attempt だけが取れる。負け側は `JOINED` 済みなら 200 `JOINED`、処理中なら `AUTH_086`（409）。
   `ACCEPTING` のまま5分を超えたら新しい attempt で取り直せ、古い attempt の完了・差し戻しは何も書かない。
+- FE（`components/auth/PendingInviteDialog.vue`、`layouts/default.vue` の `<ClientOnly>` 内）: ログイン後（`authStore.user` あり）に GET を1回
+  取得する。`AUTH_070` は黙って待ち、保護者承認後のトークン更新（`parental-consent/pending.vue` が `performTokenRefresh` 完了後に遷移）で取り直す。
+  `PENDING` は「参加する／断る／あとで」（あとでは `sessionStorage` の `mannschaft.pendingInvite.later` に保留 ID を記録）、
+  `EXPIRED`/`REISSUE_REQUESTED` は失効案内（`joinable` なら `publicPath` へのリンク、非公開なら再招待依頼）、`ACCEPTING` は処理中表示で
+  `retryAvailableAt` 経過後に再試行を有効化（`setTimeout` で開いたままでも有効化）、`UNAVAILABLE` は「参加できません」の案内で、閉じたら
+  `localStorage` の `mannschaft.pendingInvite.unavailableSeen` に保留 ID を記録して次回以降出さない（BE はこの状態の dismiss を受け付けない）。
+  `invite/[token]` の未ログイン「新規登録」は `/register?invite=<token>` へ遷移し、`AUTH_083` は専用トースト（`auth.register.invite_targeted_*`）。
 - 途中失敗の復旧: 前回の承認がロール付与の前後で失敗して同じ利用者の claim（`CLAIMED`）が残っていれば、次の承認は
   使用回数を進めずにその claim を再開する（`InviteAcceptanceWriter#claimOrResume`）。
 - claim の付与印（`invite_token_claims.grant_committed_at`）: `ACCEPTING` が5分を超えて取り直されると、1つの claim を新旧の

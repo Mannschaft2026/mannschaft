@@ -84,6 +84,9 @@ async function joinWithToken() {
 }
 
 function goToAuth(path: '/login' | '/register') {
+  // 新規登録は招待トークンだけを引き継ぐ。登録時に保留として記録し、ログイン後のダイアログで承認する。
+  // redirect で招待画面へ戻すと保留と二重の参加導線になるため付けない（CMP-261107-1833 設計 §6）。
+  if (path === '/register') return navigateTo({ path, query: { invite: token.value } })
   return navigateTo({ path, query: { redirect: route.fullPath } })
 }
 
