@@ -522,12 +522,17 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
 
     @ParameterizedTest
     @ValueSource(strings = {"TEAM", "ORGANIZATION"})
-    @DisplayName("I5: PROVISIONED の招待先は既存のエラー（423 PROV_008）。トークンは作らず、保留も不変")
+    @DisplayName("I5: PROVISIONED の招待先は既存のエラー（slug 解決が ACTIVE の招待先だけを引くため 404 TEAM_001/ORG_001）。"
+            + "トークンは作らず、保留も不変")
     void provisionedScopeIsRejected(String type) throws Exception {
+        // 出陣での修正: 試練は 423 PROV_008 を期待していたが、slug→ID の解決（TeamService#resolveTeamId /
+        // OrganizationService#resolveOrgId）は柱②-3 P1-2 の根治で PROVISIONED を認可より前に解決させないため、
+        // 既存のエラーは 404 TEAM_001/ORG_001 になる（ProvisioningGate#requireActive は司令塔に二重防御として残す）。
         ReissueFixtures.Case c = fx.reissueRequested(type);
         jdbc.update("UPDATE " + c.scope().table() + " SET lifecycle_status = 'PROVISIONED' WHERE id = ?", c.scope().id());
         try {
-            reissue(c, c.admin()).andExpect(status().isLocked()).andExpect(jsonPath("$.error.code").value("PROV_008"));
+            reissue(c, c.admin()).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("TEAM".equals(type) ? "TEAM_001" : "ORG_001"));
             assertThat(fx.tokensFor(c)).isEmpty();
             assertThat(fx.pendingStatus(c.requester())).isEqualTo("REISSUE_REQUESTED");
         } finally {

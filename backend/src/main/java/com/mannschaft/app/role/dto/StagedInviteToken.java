@@ -5,8 +5,6 @@ package com.mannschaft.app.role.dto;
  *
  * <p>仮発行は {@code revoked_at = created_at}（仮発行の印）で作り、平文は破棄する。保留の確定（auth）で
  * 新しいハッシュを保留へ書くため、ハッシュだけを持つ。ハッシュはログ・応答に出さない（{@link #toString()} で伏せる）。</p>
- *
- * <p><b>試練スタブ</b>: 形だけを置いた。</p>
  */
 public record StagedInviteToken(Long tokenId, String tokenHash) {
 

@@ -96,18 +96,24 @@
 | `SHIFT_REQUEST` | ✅ | ❌ | `ShiftChangeRequestEntity`/`ShiftSwapRequestEntity` は schedule→team 経由の team スコープ。org スコープのシフトはない |
 | `MATCHING` | ✅ | ❌ | `MatchRequestEntity.teamId` / `MatchProposalEntity.proposingTeamId`。team スコープのみ。org の試合マッチングは実装なし |
 | `PAYMENT` | ❌ | ✅ | `PaymentRequestEntity` は `issuer_scope_kind=ORG` が請求を発行し `payer_scope_kind=TEAM` が受信。「組織が発行した請求の処理状況」は org スコープで意味を持つ（§3.4 で承認待ちの定義を限定） |
+| `INVITE_REISSUE` | ✅（招待権限者のみ） | ✅（招待権限者のみ） | 失効した招待から登録した利用者の再招待依頼（`registration_pending_invites.status = REISSUE_REQUESTED`。CMP-261107-1833 PR3）。招待権限は `InviteIssuerPolicy#canIssue`（ADMIN、または `INVITE_MEMBERS` を持つ DEPUTY_ADMIN）。権限の無い DEPUTY には含めない |
 | `MEMBERSHIP_APPLICATION` | ❌ | ❌ | team/org への「入会申請」ドメインは**存在しない**（招待 `InviteService` のみ）。集約対象から除外。村（village）の入村申請は別スコープ（`/villages/...`）であり本コンソール（team/org）の対象外 |
 
 **結論**:
-- **team スコープ**の `domains[]` = `RESERVATION` / `SHIFT_REQUEST` / `MATCHING` の3ドメイン。
-- **organization スコープ**の `domains[]` = `PAYMENT` の1ドメイン。
+- **team スコープ**の `domains[]` = `RESERVATION` / `SHIFT_REQUEST` / `MATCHING` の3ドメイン（招待権限者には `INVITE_REISSUE` を加えた4ドメイン）。
+- **organization スコープ**の `domains[]` = `PAYMENT` の1ドメイン（招待権限者には `INVITE_REISSUE` を加えた2ドメイン）。
+- `INVITE_REISSUE` は**閲覧者の権限で集合が変わる唯一のドメイン**（CMP-261107-1833 PR3）。`INVITE_MEMBERS` を持たない DEPUTY_ADMIN には欄も件数も出さず、集計も行わない。
 - スコープに対して無効なドメインは `domains[]` に**含めない**（`enabled:false` で空枠を出すこともしない）。FE はレスポンスの `domains` 配列をそのまま描画すればよく、固定順の空枠を仮定しない。
 
 ### 3.3 フィールド定義
 
 - `total_pending`: レスポンスに含まれる（=当該スコープで有効な）全ドメインの `pending_count` の合計。L1 レンズ ③ / L2 ハブの「承認待ち」バッジに表示。**ただし `degraded: true` のドメインの件数は不確定のため `total_pending` には加算しない**（0 件と集計失敗を区別する。§4.3）。
 - `domains[]`: 当該スコープで有効なドメインのみ（§3.2）。`pending_count` が 0 のドメインも、有効でありさえすれば配列に含める（FE が枠を描画できる）。無効ドメインは含めない。
-- `domain`: enum（`RESERVATION` / `SHIFT_REQUEST` / `MATCHING` / `PAYMENT`）。
+- `domain`: enum（`RESERVATION` / `SHIFT_REQUEST` / `MATCHING` / `PAYMENT` / `INVITE_REISSUE`）。
+- `INVITE_REISSUE` の `list_route`・`detail_route` はどちらも `/{teams|organizations}/{slug}/invites#reissue-requests`（招待管理画面の再招待依頼の欄）。
+  プレビューの `id` は保留の UUID、`title`・`requested_by` は依頼者の表示名、`requested_at` は依頼日時。件数は再招待依頼の一覧
+  （`GET /api/v1/{teams|organizations}/{slug}/invite-reissue-requests`）の `totalElements` と同じ述語（`status=REISSUE_REQUESTED`・スコープ一致・
+  依頼者 ACTIVE・論理削除なし）で数え、両者は一致する。`preview_size=0` は COUNT の1本だけで、表示名を引く SQL を出さない。
 - `degraded`: boolean（camelCase ではなく snake_case の `degraded`。API は snake_case 規約・§3.5）。当該ドメインの集計が**一時障害（DB 接続断・タイムアウト）で取得できなかった**場合のみ `true`。FE は当該ドメインを「集計失敗（再試行可）」として 0 件と区別して表示する（§4.3）。認可エラー・プログラミングエラーでは `degraded` は立たず、API 全体が当該ステータスを返す（握りつぶさない・§4.3）。
 - `list_route`（DomainSection 単位）: FE が遷移する**一覧ルート**文字列（status / tab 付き）。当該ドメインの承認待ち一覧へ飛ぶ。**BE がスラッグを解決して返す**（FE が ID から再構築しない）。スラッグ解決は他ドメイン Entity を直接参照せず `TeamService.getSlugsByIds(ids): Map<Long,String>` 等のプリミティブ返却 Service メソッド経由（ArchUnit 越境依存 D-1 を避ける。メモリ `project_slug_e2e_open_issues` の教訓）。ルートは §01.4 の実在ルートに整合させる（例: team のシフト承認待ちは `/teams/{slug}/shifts`）。
 - `detail_route`（PreviewItem 単位）: その依頼を扱う**個別画面またはコンテキスト一覧**のルート文字列。`list_route` と**別物**で、**主キー（id）をパスに含める**個別画面、または既存の対象一覧に飛ぶ（例 `/teams/{slug}/admin/reservations/{id}`・`/teams/{slug}/admin/matching/{id}`・`/organizations/{slug}/admin/payments/{id}`）。`list_route` 同様に BE がスラッグ・必要な識別子を解決して返す。シフト変更依頼は `/teams/{slug}/shifts/{scheduleId}/change-requests`、交代申請は `/teams/{slug}/shifts?tab=swaps` を使う。対象依頼への自動定位は行わない。
@@ -182,6 +188,7 @@ CLAUDE.md 障害対応原則（症状を隠さない・対処療法禁止）に�
 | `SHIFT_REQUEST` | team | `ShiftRequestAdminQueryService.pendingForTeam`（新設） | `ShiftChangeRequestService` / `ShiftSwapService`（実在・team 単位集約は新設） |
 | `MATCHING` | team | `MatchingAdminQueryService.pendingReceivedForTeam`（新設） | `MatchProposalService` / `MatchProposalRepository`（実在・募集側視点は新設） |
 | `PAYMENT` | organization | `PaymentAdminQueryService.unsettledForOrg`（薄く新設） | `PaymentRequestService.findForOrg` / `PaymentRequestRepository`（実在） |
+| `INVITE_REISSUE` | team / organization（招待権限者のみ） | `PendingInviteAdminQueryService.reissueRequestsFor`（auth・新設。CMP-261107-1833 PR3） | `PendingInviteStore#countReissueRequests`/`pageReissueRequests`（一覧と共有の述語） |
 
 > 各 Query Service は当該ドメインのパッケージに属し、ファサードはそれらの戻り値をメモリ上で合成するのみ。ファサード自身は SQL を発行しない。team/org への入会申請（MEMBERSHIP_APPLICATION）の集約元は**存在しないため新設しない**（招待のみ・§3.2）。
 
@@ -249,6 +256,7 @@ CLAUDE.md 障害対応原則（症状を隠さない・対処療法禁止）に�
 - ADMIN で team を叩く → 200・`domains` に `RESERVATION`/`SHIFT_REQUEST`/`MATCHING` の3ドメインが（0件でも）含まれ、`PAYMENT` は含まれない。
 - ADMIN で organization を叩く → 200・`domains` に `PAYMENT` のみ含まれ、team 系3ドメインは含まれない（スコープ別動的集合の検証）。
 - `preview_size=0` → `items` 空・`pending_count` のみ。
+- （CMP-261107-1833 PR3）招待権限者には `INVITE_REISSUE` を含め、`INVITE_MEMBERS` の無い DEPUTY には含めない。`pending_count` は再招待依頼の一覧の `totalElements` と一致。`INVITE_REISSUE` の一時障害は他ドメインと同じく `degraded`（`AdminActionRequiredFacadeInviteReissueTest`・`InviteReissueRequestContractIT`・`InviteReissueRequestQueryCountIT`）。
 - 他組織の orgId → 403（IDOR。入口認可＋スコープ絞り込みの二重防御）。
 - 1ドメイン Query Service が `DataAccessException` を投げる → 当該ドメインのみ `degraded=true`・`pending_count=0`・他は正常・`total_pending` に縮退分を加算しない（縮退の検証）。
 - 1ドメイン Query Service が `NullPointerException` を投げる → **API 全体が 500**（縮退で握りつぶさないことの検証）。

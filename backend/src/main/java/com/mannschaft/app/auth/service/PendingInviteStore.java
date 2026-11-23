@@ -3,7 +3,10 @@ package com.mannschaft.app.auth.service;
 import com.mannschaft.app.auth.PendingInviteStatus;
 import com.mannschaft.app.auth.dto.PendingInviteSnapshot;
 import com.mannschaft.app.auth.entity.RegistrationPendingInviteEntity;
+import com.mannschaft.app.auth.dto.PendingReissueRequestRow;
+import com.mannschaft.app.auth.dto.PendingReissueTarget;
 import com.mannschaft.app.auth.event.InviteReissueRequestedEvent;
+import com.mannschaft.app.auth.event.PendingInviteReissueDeclinedEvent;
 import com.mannschaft.app.auth.repository.RegistrationPendingInviteRepository;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.common.UuidV7;
@@ -134,21 +137,70 @@ public class PendingInviteStore {
      * 再招待の確定（REISSUE_REQUESTED→PENDING）。id・スコープ一致・status=REISSUE_REQUESTED・依頼者 ACTIVE のときだけ効く
      * 条件付き UPDATE で、token_hash を新しいハッシュに替え、failure_code・accept_attempt_id・accepting_started_at・
      * reissue_requested_at を NULL に戻す。0 行なら false（競合で負けた）。
-     *
-     * <p><b>試練スタブ</b>（CMP-261107-1833 PR3 設計 c・e）: 出陣で実装する。</p>
      */
+    @Transactional
     public boolean confirmReissue(UUID pendingId, String scopeType, Long scopeId, String newTokenHash) {
-        throw new UnsupportedOperationException("未実装: PendingInviteStore#confirmReissue（CMP-261107-1833 PR3）");
+        return repository.confirmReissue(hex(pendingId), scopeType, scopeId, newTokenHash) == 1;
     }
 
     /**
      * 再招待の見送り（REISSUE_REQUESTED→REISSUE_DECLINED）。条件付き UPDATE で、0 行なら false。
      * 記録できたら同じトランザクションで見送りのイベントを発行する。
-     *
-     * <p><b>試練スタブ</b>（CMP-261107-1833 PR3 設計 e）: 出陣で実装する。</p>
      */
+    @Transactional
     public boolean declineReissue(UUID pendingId, String scopeType, Long scopeId) {
-        throw new UnsupportedOperationException("未実装: PendingInviteStore#declineReissue（CMP-261107-1833 PR3）");
+        if (repository.resolveReissueRequest(hex(pendingId), scopeType, scopeId,
+                PendingInviteStatus.REISSUE_DECLINED.name()) != 1) {
+            return false;
+        }
+        RegistrationPendingInviteEntity row = repository.findById(pendingId)
+                .orElseThrow(() -> new IllegalStateException("見送りを記録した保留が引けない: pendingId=" + pendingId));
+        eventPublisher.publish(new PendingInviteReissueDeclinedEvent(row.getUserId(), scopeType, scopeId));
+        log.info("再招待の依頼を見送り: pendingId={}, scopeType={}, scopeId={}", pendingId, scopeType, scopeId);
+        return true;
+    }
+
+    /**
+     * 依頼者が既に在籍していたときの確定（REISSUE_REQUESTED→JOINED。CMP-261107-1833 PR3 設計 e-3）。0 行なら false。
+     */
+    @Transactional
+    public boolean joinReissueRequest(UUID pendingId, String scopeType, Long scopeId) {
+        return repository.resolveReissueRequest(hex(pendingId), scopeType, scopeId,
+                PendingInviteStatus.JOINED.name()) == 1;
+    }
+
+    /**
+     * 指定スコープの保留を、依頼者が参加できる状態（ACTIVE・論理削除なし）かと併せて引く。
+     * 他スコープの ID・不在は空（呼び出し側が同じ 404 に畳む）。
+     */
+    @Transactional(readOnly = true)
+    public Optional<PendingReissueTarget> findForScope(UUID pendingId, String scopeType, Long scopeId) {
+        return repository.findByIdAndScopeTypeAndScopeId(pendingId, scopeType, scopeId)
+                .map(row -> new PendingReissueTarget(row.getId(), row.getUserId(), row.getTokenHash(), row.getStatus(),
+                        repository.countActiveUser(row.getUserId()) == 1));
+    }
+
+    /** 再招待依頼の件数（一覧・集約で共有する述語）。 */
+    @Transactional(readOnly = true)
+    public long countReissueRequests(String scopeType, Long scopeId) {
+        return repository.countReissueRequests(scopeType, scopeId);
+    }
+
+    /** 再招待依頼の 1 ページ（古い順。件数と同じ述語）。表示名はここでは引かない（TX の外で合成する）。 */
+    @Transactional(readOnly = true)
+    public List<PendingReissueRequestRow> pageReissueRequests(String scopeType, Long scopeId, int page, int size) {
+        return repository.findReissueRequestPage(scopeType, scopeId, size, (long) page * size).stream()
+                .map(row -> new PendingReissueRequestRow(row.getId(), row.getUserId(), row.getTokenHash(),
+                        row.getReissueRequestedAt()))
+                .toList();
+    }
+
+    /**
+     * PENDING のまま招待が使えなくなったときに EXPIRED へ進める（CMP-261107-1833 PR3 設計 g）。0 行なら false。
+     */
+    @Transactional
+    public boolean expirePending(Long userId, String failureCode) {
+        return repository.expirePending(userId, failureCode) == 1;
     }
 
     private static PendingInviteSnapshot toSnapshot(RegistrationPendingInviteEntity row) {

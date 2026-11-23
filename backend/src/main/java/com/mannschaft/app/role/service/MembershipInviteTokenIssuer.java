@@ -2,12 +2,15 @@ package com.mannschaft.app.role.service;
 
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.service.AuditLogService;
+import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.common.token.SecretTokenVault;
+import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.MembershipInviteIssuedToken;
 import com.mannschaft.app.role.dto.MembershipInviteTokenCommand;
 import com.mannschaft.app.role.dto.StagedInviteToken;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
+import com.mannschaft.app.role.event.InviteReissuedEvent;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +39,7 @@ public class MembershipInviteTokenIssuer {
     private final InviteTokenRepository inviteTokenRepository;
     private final AuditLogService auditLogService;
     private final SecretTokenVault vault;
+    private final DomainEventPublisher eventPublisher;
 
     /**
      * 宛先付き承諾型トークンを発行する（{@code target_user_id} 非 NULL・{@code max_uses = 1}）。
@@ -66,24 +70,55 @@ public class MembershipInviteTokenIssuer {
     }
 
     /**
-     * 再招待の仮発行（CMP-261107-1833 PR3 設計 c）。宛先付き・max_uses=1・期限 7 日・現在の世代・作成者は管理者で、
-     * {@code revoked_at = created_at}（仮発行の印）にして作る。平文は破棄し、ハッシュだけを返す。
+     * 再招待の仮発行（CMP-261107-1833 PR3 設計 c）。宛先付き・max_uses=1・期限（呼び出し側が 7 日で渡す）・現在の世代・
+     * 作成者は管理者で、{@code revoked_at = created_at}（仮発行の印）にして作る。平文は破棄し、ハッシュだけを返す。
      *
-     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     * <p>印のある招待は失効扱いなので、承諾（tokenId 指定を含む）・DM 招待の重複判定・管理者の招待一覧のいずれにも
+     * 現れない。保留の確定（auth）の後に {@link #activateStaged} で有効にする。</p>
      */
+    @Transactional
     public StagedInviteToken stageForReissue(MembershipInviteTokenCommand command) {
-        throw new UnsupportedOperationException("未実装: MembershipInviteTokenIssuer#stageForReissue（CMP-261107-1833 PR3）");
+        String tokenHash = vault.issueBase64Url().hash();
+        var builder = InviteTokenEntity.builder()
+                .tokenHash(tokenHash)
+                .roleId(command.roleId())
+                .createdBy(command.createdBy())
+                .expiresAt(LocalDateTime.ofInstant(command.expiresAt(), UserZoneLocalDateTimeParser.SERVER_ZONE))
+                .maxUses(1)
+                .usedCount(0)
+                .targetUserId(command.targetUserId())
+                .scopeClosureGeneration(command.scopeClosureGeneration());
+        if ("TEAM".equals(command.scopeType())) {
+            builder.teamId(command.scopeId());
+        } else {
+            builder.organizationId(command.scopeId());
+        }
+        InviteTokenEntity token = inviteTokenRepository.saveAndFlush(builder.build());
+        if (inviteTokenRepository.markStaged(token.getId()) != 1) {
+            throw new IllegalStateException("仮発行した招待に印を付けられない: tokenId=" + token.getId());
+        }
+        log.info("再招待の招待を仮発行: tokenId={}, scopeType={}, scopeId={}, targetUserId={}",
+                token.getId(), command.scopeType(), command.scopeId(), command.targetUserId());
+        return new StagedInviteToken(token.getId(), tokenHash);
     }
 
     /**
      * 仮発行したトークンの有効化（CMP-261107-1833 PR3 設計 c）。
      * {@code UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0
-     * AND revoked_at = created_at}。同じトランザクションで再招待のイベントを発行する。0 行なら false。
-     *
-     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     * AND revoked_at = created_at}（作成から 60 秒の窓を過ぎたものは有効にしない）。同じトランザクションで
+     * {@link InviteReissuedEvent} を発行する（通知はコミット後に依頼者へ配送される）。0 行なら false。
      */
+    @Transactional
     public boolean activateStaged(Long tokenId, Long targetUserId) {
-        throw new UnsupportedOperationException("未実装: MembershipInviteTokenIssuer#activateStaged（CMP-261107-1833 PR3）");
+        if (inviteTokenRepository.activateStaged(tokenId, targetUserId) != 1) {
+            return false;
+        }
+        inviteTokenRepository.refreshIfManaged(tokenId);
+        InviteScopeRef scope = inviteTokenRepository.findScopeById(tokenId)
+                .orElseThrow(() -> new IllegalStateException("有効化した招待が引けない: tokenId=" + tokenId));
+        eventPublisher.publish(new InviteReissuedEvent(targetUserId, scope.scopeType(), scope.scopeId()));
+        log.info("再招待の招待を有効化: tokenId={}, scopeType={}, scopeId={}", tokenId, scope.scopeType(), scope.scopeId());
+        return true;
     }
 
     /**

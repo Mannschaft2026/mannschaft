@@ -12,6 +12,7 @@ import com.mannschaft.app.role.dto.InviteClaimTicket;
 import com.mannschaft.app.role.dto.InviteDeclineResult;
 import com.mannschaft.app.role.dto.InviteLocator;
 import com.mannschaft.app.role.dto.InviteScopeRef;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.service.MembershipGrantService.GrantOutcome;
 import com.mannschaft.app.scopefolder.ScopeFolderErrorCode;
 import com.mannschaft.app.scopefolder.dto.InviteFolderCheck;
@@ -180,6 +181,14 @@ public class InviteAcceptanceFacade {
     /** 招待のハッシュで、付与するロールの名前を引く（保留承認の表示用。CMP-261107-1833 設計 §2）。 */
     public Optional<String> findInviteRoleName(String tokenHash) {
         return writer.findRoleName(tokenHash);
+    }
+
+    /**
+     * 招待のハッシュで、有効性（失効・再招待の仮発行中・期限切れ・上限到達）を DB の現在時刻で引く
+     * （保留承認の参照時の期限判定と承認時の処理中判定用。CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     */
+    public Optional<InviteValidity> findInviteValidity(String tokenHash) {
+        return writer.findValidity(tokenHash);
     }
 
     private void accept(InviteLocator locator, Long userId, Long folderId) {

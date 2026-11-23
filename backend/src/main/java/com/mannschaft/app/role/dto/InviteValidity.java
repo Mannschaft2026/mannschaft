@@ -13,8 +13,6 @@ import java.time.LocalDateTime;
  *   <li>{@link #EXPIRED}: 期限切れ。ROLE_002</li>
  *   <li>{@link #EXHAUSTED}: 使用回数の上限に到達。ROLE_003</li>
  * </ul>
- *
- * <p><b>試練スタブ</b>: 判定は出陣で実装する。</p>
  */
 public enum InviteValidity {
     VALID,
@@ -38,11 +36,28 @@ public enum InviteValidity {
      */
     public static InviteValidity evaluate(LocalDateTime revokedAt, LocalDateTime createdAt, LocalDateTime expiresAt,
                                           Integer maxUses, int usedCount, LocalDateTime now) {
-        throw new UnsupportedOperationException("未実装: InviteValidity#evaluate（CMP-261107-1833 PR3）");
+        if (revokedAt != null) {
+            boolean staged = revokedAt.equals(createdAt);
+            if (staged && createdAt != null && !createdAt.plus(STAGING_WINDOW).isBefore(now)) {
+                return STAGING;
+            }
+            return REVOKED;
+        }
+        if (expiresAt != null && expiresAt.isBefore(now)) {
+            return EXPIRED;
+        }
+        if (maxUses != null && usedCount >= maxUses) {
+            return EXHAUSTED;
+        }
+        return VALID;
     }
 
     /** 保留へ記録する失敗コード（REVOKED/EXPIRED は ROLE_002、EXHAUSTED は ROLE_003、それ以外は null）。 */
     public String failureCode() {
-        throw new UnsupportedOperationException("未実装: InviteValidity#failureCode（CMP-261107-1833 PR3）");
+        return switch (this) {
+            case REVOKED, EXPIRED -> "ROLE_002";
+            case EXHAUSTED -> "ROLE_003";
+            case VALID, STAGING -> null;
+        };
     }
 }

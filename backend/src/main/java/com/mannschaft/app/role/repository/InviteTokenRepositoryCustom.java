@@ -4,8 +4,11 @@ import com.mannschaft.app.role.dto.InviteClaimAuditContext;
 import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -79,6 +82,24 @@ public interface InviteTokenRepositoryCustom {
 
     /** 招待のハッシュで、付与するロールの名前を引く（ロックなし。CMP-261107-1833 §2）。 */
     Optional<String> findRoleNameByTokenHash(String tokenHash);
+
+    /**
+     * 招待のハッシュで、有効性（失効・仮発行中・期限切れ・上限到達）を DB の現在時刻で判定する（ロックなし。
+     * CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     */
+    Optional<InviteValidity> findValidityByTokenHash(String tokenHash);
+
+    /** 招待のハッシュ群から、付与するロールの名前をまとめて引く（1 本の SQL。CMP-261107-1833 PR3 L4）。 */
+    Map<String, String> findRoleNamesByTokenHashes(Collection<String> tokenHashes);
+
+    /** 作成直後の招待に仮発行の印（{@code revoked_at = created_at}）を付ける（CMP-261107-1833 PR3 設計 c）。 @return 更新行数 */
+    int markStaged(Long tokenId);
+
+    /**
+     * 仮発行の印がある未使用の宛先付き招待を有効にする（{@code revoked_at = NULL}）。印の窓（作成から
+     * {@link InviteValidity#STAGING_WINDOW}）を過ぎたものは有効にしない（CMP-261107-1833 PR3 設計 c）。 @return 更新行数
+     */
+    int activateStaged(Long tokenId, Long targetUserId);
 
     /** claim が指す招待の主キー。 */
     Optional<Long> findClaimTokenId(UUID claimId);

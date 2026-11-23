@@ -261,6 +261,66 @@
 - イベント未配送・失効失敗は日次03:40 JSTの`invite-token-closure-cleanup`が、親専属primary readとrole専属失効TXを分けて回復する。失敗scopeは記録して次回へ残し、他scopeの処理を継続する。親欠落時は利用を拒否し、不明な世代を推測して一括失効しない。
 - 解除・復元は世代を戻さず旧tokenを復元しない。組織休止では所属team自身の状態・世代・個人招待・既存在籍を変更しない。月次の非活動休止実装は別課題#3915で追跡し、本件で実装済みとはしない。
 
+### 再招待依頼の受け手側フロー（CMP-261107-1833 PR3）
+
+失効した招待から登録した利用者の再招待依頼（`registration_pending_invites.status = REISSUE_REQUESTED`）を、招待権限者
+（ADMIN、または `INVITE_MEMBERS` を持つ DEPUTY_ADMIN）が再招待または見送りする。司令塔は
+`InviteReissueRequestService`（role・`@Transactional` なし）。保留の状態は auth の短TX（`PendingInviteStore`）、
+招待の仮発行と有効化は role の短TX（`MembershipInviteTokenIssuer#stageForReissue`/`#activateStaged`）、監査は TX の外で行う。
+
+#### 再招待の手順
+
+1. slug→スコープ ID。`InviteIssuerPolicy#canIssue` が偽なら 403 `COMMON_002`
+2. `PendingInviteStore#findForScope`（id・スコープ一致）。無し・他スコープは 404 `ROLE_016`、`REISSUE_REQUESTED` 以外は 409 `ROLE_017`、
+   依頼者が非 ACTIVE（退会・停止・論理削除）またはブロック中なら 409 `ROLE_018`
+3. 依頼者が既に在籍していれば `REISSUE_REQUESTED`→`JOINED`（条件付き UPDATE）で 200 `ALREADY_MEMBER`。招待は作らない
+4. `ProvisioningGate#requireActive`（PROVISIONED は `PROV_008`）と招待先の状態（閉鎖中は 404 `ROLE_002`）
+5. **仮発行**: 宛先付き招待を、宛先=依頼者・`max_uses=1`・期限7日・現在の閉鎖世代・作成者=管理者で作り、同じ TX で
+   `revoked_at = created_at`（仮発行の印）にする。平文は破棄し、ハッシュだけを持つ。続けて閉鎖世代を再確認し、偽なら仮発行は放置して `ROLE_002`
+6. **auth の確定**: 条件付き UPDATE（id・スコープ一致・`status=REISSUE_REQUESTED`・依頼者 ACTIVE）で `PENDING` にし、`token_hash` を新しい
+   ハッシュに替え、`failure_code`・`accept_attempt_id`・`accepting_started_at`・`reissue_requested_at` を NULL に戻す
+7. **有効化**: `UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0 AND revoked_at = created_at`
+   （作成から60秒を過ぎたものは有効にしない）。同じ TX で `InviteReissuedEvent` を発行し、コミット後に依頼者へ `INVITE_REISSUED` を通知する
+8. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
+
+#### 失敗時の扱い（補償による失効は行わない）
+
+| 失敗箇所 | 応答 | 保留 | 招待 | 通知・監査 |
+|---|---|---|---|---|
+| auth の確定が0行（見送り・別の再招待が先に確定） | 409 `ROLE_017` | 勝った側の状態 | 仮発行の印のまま無効（tokenId 指定の承諾は `ROLE_002`、DM 招待の重複判定にも入らない） | なし |
+| auth の確定で DB 例外 | 500 | 不変（`REISSUE_REQUESTED`） | 無効のまま | なし |
+| 有効化が0行・DB 例外 | 500 `ROLE_019`（ERROR ログ） | `PENDING`（使えない招待を指す） | 無効のまま | なし |
+| 監査の記録に失敗 | 200（確定は維持） | 確定どおり | 確定どおり | 通知は届く |
+
+有効化に失敗した保留は、60秒の窓を過ぎた次の参照（GET）または承認で `EXPIRED`（`ROLE_002`）になる。`reissue_requested_at` は
+NULL に戻っているので、依頼者はすぐ再依頼でき、招待権限者へ再び通知が届く（回復する）。
+
+#### 仮発行の窓（60秒）
+
+仮発行の印（`revoked_at = created_at`）があり作成から60秒以内の招待は「処理中」として扱う: 保留の承認は 409 `AUTH_086`
+（保留は `PENDING` のまま）、GET は `PENDING` のまま返す。60秒を過ぎたら失効扱いで、GET で `EXPIRED`（`ROLE_002`）になる。
+判定は `InviteValidity#evaluate`（DB の現在時刻）。印は既存の `revoked_at` 列の意味に乗る規約なので、印のある招待は
+既存の失効判定（`isValidState`・`RevokedAtIsNull` の検索・閉鎖時の一括失効 `revoked_at IS NULL`）からは失効として見え、
+誰にも使えない。`revoked_at` を書く他の経路（手動失効・補償失効・閉鎖時の一括失効）はいずれも `revoked_at IS NULL` のときだけ書くため、
+印を上書きしない。
+
+#### 付与ロール
+
+元の招待のロールが MEMBER/SUPPORTER/GUEST なら引き継ぐ。ADMIN/DEPUTY_ADMIN（宛先付き招待の承認では `ROLE_009`＝`UNAVAILABLE`
+になる）や、元の招待・ロールが引けない場合は MEMBER。一覧の `roleName` と発行で同じ `resolveGrantRole` を使う。
+
+#### 見送り
+
+条件付き UPDATE で `REISSUE_REQUESTED`→`REISSUE_DECLINED`。同じ TX で `PendingInviteReissueDeclinedEvent` を発行し、コミット後に
+依頼者へ `INVITE_REISSUE_DECLINED` を通知する。監査 `TEAM_INVITE_REISSUE_DECLINED` / `ORGANIZATION_INVITE_REISSUE_DECLINED`
+（metadata `{pending_id}`）。招待は作らない。依頼者側は `REISSUE_DECLINED` の案内を閉じられる（`DISMISSED`）が、再依頼はできない（`AUTH_085`）。
+
+#### 競合
+
+勝敗は auth の条件付き UPDATE（`REISSUE_REQUESTED` のときだけ効く）で決まる。再招待が勝てば有効な招待1件・`INVITE_REISSUED` だけ、
+見送りが勝てば有効な招待0件・`INVITE_REISSUE_DECLINED` だけになり、負けた側は 409 `ROLE_017`。同時の再招待（二重押し）でも
+200 は1件で、負けた側の仮発行は無効のまま残る。FE は処理中の行のボタンを押せなくし、409 なら一覧を取り直す。
+
 ### オーナー委譲 承諾フロー（2ステップ・承諾型 / 2026-07-18 マスター御裁可）
 
 **方針転換の背景**: 従来のオーナー委譲は「即時型」（操作者が押した瞬間に対象ユーザーを ADMIN 昇格＋自分を降格し、事後通知のみ）だった。しかし **指名相手の承諾がないまま管理責任を押し付けられる** 問題があり、[`account_purge_last_admin_succession.md` §10.11](../../architecture/account_purge_last_admin_succession.md) で未解決事項として残されていた。**2026-07-18 のマスター御裁可により、オーナー委譲も承諾型（オファー→承諾）に統一する。** これは F04.12（チャットからの承諾型招待）・team-invites/org-invites の PENDING→ACTIVE と同一の「承諾型オファー」思想である。

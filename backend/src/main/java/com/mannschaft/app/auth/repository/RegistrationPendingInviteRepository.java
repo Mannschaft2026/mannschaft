@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,6 +52,66 @@ public interface RegistrationPendingInviteRepository extends JpaRepository<Regis
             + "AND (reissue_requested_at IS NULL OR reissue_requested_at < UTC_TIMESTAMP(6) - INTERVAL 7 DAY)",
             nativeQuery = true)
     int markReissueRequested(@Param("userId") Long userId);
+
+    /**
+     * PENDING のまま招待が使えなくなった（失効・期限切れ・上限到達）ときだけ EXPIRED にする（CMP-261107-1833 PR3 設計 g）。
+     */
+    @Modifying
+    @Query(value = "UPDATE registration_pending_invites SET status = 'EXPIRED', failure_code = :failureCode, "
+            + "version = version + 1, updated_at = UTC_TIMESTAMP(6) WHERE user_id = :userId AND status = 'PENDING'",
+            nativeQuery = true)
+    int expirePending(@Param("userId") Long userId, @Param("failureCode") String failureCode);
+
+    // ------------------------------------------------------------------
+    // 再招待依頼の受け手側（CMP-261107-1833 PR3 設計 b・f）。一覧と件数は同じ述語
+    // （status=REISSUE_REQUESTED・スコープ一致・依頼者 ACTIVE・論理削除なし）を使う。
+    // ------------------------------------------------------------------
+
+    /** 指定スコープの保留 1 件（他スコープの ID は引けない）。 */
+    Optional<RegistrationPendingInviteEntity> findByIdAndScopeTypeAndScopeId(UUID id, String scopeType, Long scopeId);
+
+    /** 利用者が ACTIVE かつ論理削除されていなければ 1。 */
+    @Query(value = "SELECT COUNT(*) FROM users WHERE id = :userId AND status = 'ACTIVE' AND deleted_at IS NULL",
+            nativeQuery = true)
+    long countActiveUser(@Param("userId") Long userId);
+
+    /** 再招待依頼の件数（一覧の totalElements・集約の pending_count の正本）。 */
+    @Query(value = "SELECT COUNT(*) FROM registration_pending_invites p JOIN users u ON u.id = p.user_id "
+            + "WHERE p.scope_type = :scopeType AND p.scope_id = :scopeId AND p.status = 'REISSUE_REQUESTED' "
+            + "AND u.status = 'ACTIVE' AND u.deleted_at IS NULL", nativeQuery = true)
+    long countReissueRequests(@Param("scopeType") String scopeType, @Param("scopeId") Long scopeId);
+
+    /** 再招待依頼の 1 ページ（古い順。件数と同じ述語）。 */
+    @Query(value = "SELECT p.* FROM registration_pending_invites p JOIN users u ON u.id = p.user_id "
+            + "WHERE p.scope_type = :scopeType AND p.scope_id = :scopeId AND p.status = 'REISSUE_REQUESTED' "
+            + "AND u.status = 'ACTIVE' AND u.deleted_at IS NULL "
+            + "ORDER BY p.reissue_requested_at ASC, p.id ASC LIMIT :limit OFFSET :offset", nativeQuery = true)
+    List<RegistrationPendingInviteEntity> findReissueRequestPage(@Param("scopeType") String scopeType,
+                                                                  @Param("scopeId") Long scopeId,
+                                                                  @Param("limit") int limit,
+                                                                  @Param("offset") long offset);
+
+    /**
+     * 再招待の確定（REISSUE_REQUESTED→PENDING）。依頼者が ACTIVE のときだけ効き、新しいハッシュへ替えて
+     * 承認・失敗・依頼の列を NULL に戻す。
+     */
+    @Modifying
+    @Query(value = "UPDATE registration_pending_invites p JOIN users u ON u.id = p.user_id "
+            + "SET p.status = 'PENDING', p.token_hash = :tokenHash, p.failure_code = NULL, p.accept_attempt_id = NULL, "
+            + "p.accepting_started_at = NULL, p.reissue_requested_at = NULL, p.version = p.version + 1, "
+            + "p.updated_at = UTC_TIMESTAMP(6) WHERE p.id = UNHEX(:idHex) AND p.scope_type = :scopeType "
+            + "AND p.scope_id = :scopeId AND p.status = 'REISSUE_REQUESTED' AND u.status = 'ACTIVE' "
+            + "AND u.deleted_at IS NULL", nativeQuery = true)
+    int confirmReissue(@Param("idHex") String idHex, @Param("scopeType") String scopeType,
+                       @Param("scopeId") Long scopeId, @Param("tokenHash") String tokenHash);
+
+    /** REISSUE_REQUESTED のときだけ to（REISSUE_DECLINED / JOINED）へ進める（id・スコープ一致）。 */
+    @Modifying
+    @Query(value = "UPDATE registration_pending_invites SET status = :to, version = version + 1, "
+            + "updated_at = UTC_TIMESTAMP(6) WHERE id = UNHEX(:idHex) AND scope_type = :scopeType "
+            + "AND scope_id = :scopeId AND status = 'REISSUE_REQUESTED'", nativeQuery = true)
+    int resolveReissueRequest(@Param("idHex") String idHex, @Param("scopeType") String scopeType,
+                              @Param("scopeId") Long scopeId, @Param("to") String to);
 
     /** 未終了（PENDING/ACCEPTING/EXPIRED/REISSUE_REQUESTED）の行を DISCARDED にする。 */
     @Modifying

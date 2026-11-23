@@ -11,6 +11,7 @@ import com.mannschaft.app.role.dto.InviteDeclineResult;
 import com.mannschaft.app.role.dto.InviteLocator;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
@@ -202,6 +203,15 @@ public class InviteAcceptanceWriter {
     @Transactional(readOnly = true)
     public Optional<String> findRoleName(String tokenHash) {
         return inviteTokenRepository.findRoleNameByTokenHash(tokenHash);
+    }
+
+    /**
+     * 招待のハッシュで、有効性を DB の現在時刻で判定する（保留の参照時の期限判定・承認時の処理中判定用。
+     * CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     */
+    @Transactional(readOnly = true)
+    public Optional<InviteValidity> findValidity(String tokenHash) {
+        return inviteTokenRepository.findValidityByTokenHash(tokenHash);
     }
 
     private void verifyResumable(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,
