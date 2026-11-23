@@ -201822,6 +201822,10 @@
           },
           "timing": {
             "$ref": "#/components/schemas/ChangeRequestTimingDto"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
