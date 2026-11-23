@@ -204,16 +204,12 @@
           "evidence": "docs/development/merge_queue_operations.md"
         },
         {
-          "name": "凱旋.md",
-          "evidence": ".claude/commands/凱旋.md"
-        },
-        {
-          "name": "物見.md",
-          "evidence": ".claude/commands/物見.md"
-        },
-        {
           "name": "必須チェック表",
           "evidence": "docs/development/ci_required_check_paths_filter_trap.md"
+        },
+        {
+          "name": "凱旋・物見・手助け系の改訂（#4758）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4758"
         }
       ]
     },
