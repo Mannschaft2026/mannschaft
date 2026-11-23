@@ -192,6 +192,80 @@ class FlywayRegistrationPendingInvitesMigrationTest {
         }
     }
 
+    // ------------------------------------------------------------------
+    // CMP-261107-1833 PR3（再招待の受け手側）: alter_registration_pending_invites_reissue
+    // ------------------------------------------------------------------
+
+    private static final String REISSUE_SCRIPT_SUFFIX = "__alter_registration_pending_invites_reissue.sql";
+
+    @Test
+    @DisplayName("PR3 A2: alter_registration_pending_invites_reissue の migration が1本あり適用済み、create より後の版（V{major}.{yyyyMMddHHmmss}）")
+    void reissueMigrationExistsAndIsApplied() {
+        Flyway again = flyway().load();
+        List<MigrationInfo> scripts = Arrays.stream(again.info().all())
+                .filter(i -> i.getScript().endsWith(REISSUE_SCRIPT_SUFFIX))
+                .toList();
+        assertThat(scripts).as(REISSUE_SCRIPT_SUFFIX + " の migration").hasSize(1);
+        assertThat(scripts.get(0).getState().isApplied()).isTrue();
+        assertThat(scripts.get(0).getVersion().getVersion()).as("V{major}.{yyyyMMddHHmmss}").matches("\\d+\\.\\d{14}");
+        MigrationInfo create = Arrays.stream(again.info().all())
+                .filter(i -> i.getScript().endsWith(SCRIPT_SUFFIX)).findFirst().orElseThrow();
+        assertThat(scripts.get(0).getVersion().compareTo(create.getVersion())).as("create より後").isPositive();
+    }
+
+    @Test
+    @DisplayName("PR3 A2: CHECK(status) が REISSUE_DECLINED を含む 10 状態を受け、それ以外を拒否する")
+    void checkAcceptsReissueDeclined() throws Exception {
+        try (Connection c = connection(); Statement s = c.createStatement()) {
+            long userId = insertUser(s, "pending-invite-reissue-check@example.com");
+            for (String status : List.of("PENDING", "ACCEPTING", "JOINED", "EXPIRED", "UNAVAILABLE", "DECLINED",
+                    "REISSUE_REQUESTED", "REISSUE_DECLINED", "DISMISSED", "DISCARDED")) {
+                assertThat(s.executeUpdate(row(userId, status))).as(status).isEqualTo(1);
+                s.executeUpdate("DELETE FROM " + TABLE + " WHERE user_id = " + userId);
+            }
+            assertThatThrownBy(() -> s.executeUpdate(row(userId, "REISSUE_BOGUS"))).as("不正な status")
+                    .isInstanceOf(SQLException.class);
+            s.executeUpdate("DELETE FROM users WHERE id = " + userId);
+        }
+    }
+
+    @Test
+    @DisplayName("PR3 A2: 索引 idx_rpi_scope_status(scope_type, scope_id, status, reissue_requested_at)（一覧・件数の述語用）")
+    void scopeStatusIndex() throws Exception {
+        try (Connection c = connection(); Statement s = c.createStatement();
+             ResultSet rs = s.executeQuery("SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) FROM information_schema.STATISTICS "
+                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" + TABLE + "' AND INDEX_NAME = 'idx_rpi_scope_status'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString(1)).isEqualTo("scope_type,scope_id,status,reissue_requested_at");
+        }
+    }
+
+    @Test
+    @DisplayName("PR3 L8: users を物理削除すると REISSUE_DECLINED の保留も CASCADE で消える")
+    void cascadeDeletesReissueDeclined() throws Exception {
+        try (Connection c = connection(); Statement s = c.createStatement()) {
+            long userId = insertUser(s, "pending-invite-reissue-cascade@example.com");
+            assertThat(s.executeUpdate(row(userId, "REISSUE_DECLINED"))).isEqualTo(1);
+            s.executeUpdate("DELETE FROM users WHERE id = " + userId);
+            try (ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM " + TABLE + " WHERE user_id = " + userId)) {
+                rs.next();
+                assertThat(rs.getLong(1)).as("users 物理削除で REISSUE_DECLINED も CASCADE").isZero();
+            }
+        }
+    }
+
+    private static long insertUser(Statement s, String email) throws SQLException {
+        s.executeUpdate("INSERT INTO users (email, last_name, first_name, display_name, status, is_searchable, "
+                + "handle_searchable, contact_approval_required, online_visibility, dm_receive_from, encryption_key_version, "
+                + "locale, timezone, reporting_restricted, follow_list_visibility, care_notification_enabled, offline_only, "
+                + "created_at, updated_at) VALUES ('" + email + "', '移行', '再招待', '再招待試練', "
+                + "'ACTIVE', 1, 1, 1, 'NOBODY', 'ANYONE', 1, 'ja', 'Asia/Tokyo', 0, 'PUBLIC', 1, 0, NOW(), NOW())");
+        try (ResultSet rs = s.executeQuery("SELECT id FROM users WHERE email = '" + email + "'")) {
+            rs.next();
+            return rs.getLong(1);
+        }
+    }
+
     private static String row(long userId, String status) {
         return "INSERT INTO " + TABLE + " (id, user_id, token_hash, scope_type, scope_id, status, version, created_at, updated_at) "
                 + "VALUES (UNHEX(REPLACE(UUID(),'-','')), " + userId + ", REPEAT('a', 64), 'TEAM', 1, '" + status

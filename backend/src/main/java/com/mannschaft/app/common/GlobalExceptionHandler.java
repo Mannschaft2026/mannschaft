@@ -240,6 +240,10 @@ public class GlobalExceptionHandler {
             Map.entry("ROLE_014", HttpStatus.UNPROCESSABLE_ENTITY), // 自己委譲など不正対象 → 422
             // CMP-261001-0835: 応援者（SUPPORTER）の /me 自主退会はフォロー解除 API への案内のため 422
             Map.entry("ROLE_015", HttpStatus.UNPROCESSABLE_ENTITY),
+            // CMP-261107-1833 PR3: 再招待の受け手側（依頼不在/他スコープ=404・対応済み/競合=409・依頼者が参加不可=409）
+            Map.entry("ROLE_016", HttpStatus.NOT_FOUND),
+            Map.entry("ROLE_017", HttpStatus.CONFLICT),
+            Map.entry("ROLE_018", HttpStatus.CONFLICT),
             // F15.4 Phase 5-α: 店舗詳細 Public API（IDOR対策で 404）
             Map.entry("TEAM_001", HttpStatus.NOT_FOUND),
             // 組織不在は 404（Severity.WARN 既定の 400 を上書き）。兄弟の TEAM_001 と流儀を揃える。

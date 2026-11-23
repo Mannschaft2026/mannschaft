@@ -6,6 +6,7 @@ import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.role.dto.MembershipInviteIssuedToken;
 import com.mannschaft.app.role.dto.MembershipInviteTokenCommand;
+import com.mannschaft.app.role.dto.StagedInviteToken;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,27 @@ public class MembershipInviteTokenIssuer {
         log.info("承諾型招待トークン発行: tokenId={}, scopeType={}, scopeId={}, targetUserId={}",
                 token.getId(), command.scopeType(), command.scopeId(), command.targetUserId());
         return new MembershipInviteIssuedToken(token.getId());
+    }
+
+    /**
+     * 再招待の仮発行（CMP-261107-1833 PR3 設計 c）。宛先付き・max_uses=1・期限 7 日・現在の世代・作成者は管理者で、
+     * {@code revoked_at = created_at}（仮発行の印）にして作る。平文は破棄し、ハッシュだけを返す。
+     *
+     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     */
+    public StagedInviteToken stageForReissue(MembershipInviteTokenCommand command) {
+        throw new UnsupportedOperationException("未実装: MembershipInviteTokenIssuer#stageForReissue（CMP-261107-1833 PR3）");
+    }
+
+    /**
+     * 仮発行したトークンの有効化（CMP-261107-1833 PR3 設計 c）。
+     * {@code UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0
+     * AND revoked_at = created_at}。同じトランザクションで再招待のイベントを発行する。0 行なら false。
+     *
+     * <p><b>試練スタブ</b>: 出陣で実装する。</p>
+     */
+    public boolean activateStaged(Long tokenId, Long targetUserId) {
+        throw new UnsupportedOperationException("未実装: MembershipInviteTokenIssuer#activateStaged（CMP-261107-1833 PR3）");
     }
 
     /**

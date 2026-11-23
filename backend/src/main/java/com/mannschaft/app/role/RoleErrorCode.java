@@ -75,7 +75,27 @@ public enum RoleErrorCode implements ErrorCode {
      * SUPPORTER は memberships のみを持ち、専用のフォロー解除 API（{@code SupporterService#unfollow}）
      * から解除すべきであり、一般会員向け自主退会 API からは解除できない（→ 422）。
      */
-    ROLE_015("ROLE_015", "応援（サポーター）の解除はフォロー解除から行ってください", Severity.WARN);
+    ROLE_015("ROLE_015", "応援（サポーター）の解除はフォロー解除から行ってください", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 再招待の依頼が無い。不在と他スコープの ID を同一コードに畳む（存在秘匿）。→ 404。
+     */
+    ROLE_016("ROLE_016", "再招待の依頼が見つかりません", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 再招待の依頼が既に対応済み（REISSUE_REQUESTED 以外の状態・競合の負け側）。→ 409。
+     */
+    ROLE_017("ROLE_017", "再招待の依頼は既に対応済みです", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 依頼者が参加できない状態（退会・停止などの非 ACTIVE、またはブロック中）。→ 409。
+     */
+    ROLE_018("ROLE_018", "依頼者が参加できない状態です", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 仮発行した招待の有効化に失敗した。保留は PENDING で、次の参照で EXPIRED になり再依頼できる。→ 500。
+     */
+    ROLE_019("ROLE_019", "招待の有効化に失敗しました", Severity.ERROR);
 
     private final String code;
     private final String message;

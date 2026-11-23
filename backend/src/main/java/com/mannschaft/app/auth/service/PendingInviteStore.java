@@ -130,6 +130,27 @@ public class PendingInviteStore {
         return repository.discardOpen(userIds);
     }
 
+    /**
+     * 再招待の確定（REISSUE_REQUESTED→PENDING）。id・スコープ一致・status=REISSUE_REQUESTED・依頼者 ACTIVE のときだけ効く
+     * 条件付き UPDATE で、token_hash を新しいハッシュに替え、failure_code・accept_attempt_id・accepting_started_at・
+     * reissue_requested_at を NULL に戻す。0 行なら false（競合で負けた）。
+     *
+     * <p><b>試練スタブ</b>（CMP-261107-1833 PR3 設計 c・e）: 出陣で実装する。</p>
+     */
+    public boolean confirmReissue(UUID pendingId, String scopeType, Long scopeId, String newTokenHash) {
+        throw new UnsupportedOperationException("未実装: PendingInviteStore#confirmReissue（CMP-261107-1833 PR3）");
+    }
+
+    /**
+     * 再招待の見送り（REISSUE_REQUESTED→REISSUE_DECLINED）。条件付き UPDATE で、0 行なら false。
+     * 記録できたら同じトランザクションで見送りのイベントを発行する。
+     *
+     * <p><b>試練スタブ</b>（CMP-261107-1833 PR3 設計 e）: 出陣で実装する。</p>
+     */
+    public boolean declineReissue(UUID pendingId, String scopeType, Long scopeId) {
+        throw new UnsupportedOperationException("未実装: PendingInviteStore#declineReissue（CMP-261107-1833 PR3）");
+    }
+
     private static PendingInviteSnapshot toSnapshot(RegistrationPendingInviteEntity row) {
         return new PendingInviteSnapshot(row.getId(), row.getUserId(), row.getTokenHash(), row.getScopeType(),
                 row.getScopeId(), row.getStatus(), row.getFailureCode(), row.getAcceptingStartedAt(),
