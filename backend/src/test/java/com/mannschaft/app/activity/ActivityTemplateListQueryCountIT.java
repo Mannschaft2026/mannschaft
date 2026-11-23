@@ -84,9 +84,9 @@ class ActivityTemplateListQueryCountIT extends AbstractMySqlIntegrationTest {
         }
         inTx(() -> {
             em.createNativeQuery("DELETE FROM activity_template_fields WHERE template_id IN "
-                            + "(SELECT id FROM activity_templates WHERE scope_id = :id)")
+                            + "(SELECT id FROM activity_templates WHERE scope_type = 'TEAM' AND scope_id = :id)")
                     .setParameter("id", team.getId()).executeUpdate();
-            em.createNativeQuery("DELETE FROM activity_templates WHERE scope_id = :id")
+            em.createNativeQuery("DELETE FROM activity_templates WHERE scope_type = 'TEAM' AND scope_id = :id")
                     .setParameter("id", team.getId()).executeUpdate();
             em.createNativeQuery("DELETE FROM user_roles WHERE user_id = :id").setParameter("id", admin).executeUpdate();
             em.createNativeQuery("DELETE FROM memberships WHERE user_id = :id").setParameter("id", admin).executeUpdate();

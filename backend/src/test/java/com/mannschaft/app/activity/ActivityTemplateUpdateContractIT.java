@@ -120,12 +120,16 @@ class ActivityTemplateUpdateContractIT extends AbstractMySqlIntegrationTest {
             return;
         }
         inTx(() -> {
-            List<Long> scopeIds = List.of(team.getId(), organization.getId());
+            // 数値 ID は scope_type ごとに別採番のため、(scope_type, scope_id) の組で限定する
+            String scopeMatch = "((scope_type = 'TEAM' AND scope_id = :teamId) "
+                    + "OR (scope_type = 'ORGANIZATION' AND scope_id = :orgId))";
             em.createNativeQuery("DELETE FROM activity_template_fields WHERE template_id IN "
-                            + "(SELECT id FROM activity_templates WHERE scope_id IN (:ids))")
-                    .setParameter("ids", scopeIds).executeUpdate();
-            em.createNativeQuery("DELETE FROM activity_templates WHERE scope_id IN (:ids)")
-                    .setParameter("ids", scopeIds).executeUpdate();
+                            + "(SELECT id FROM activity_templates WHERE " + scopeMatch + ")")
+                    .setParameter("teamId", team.getId()).setParameter("orgId", organization.getId())
+                    .executeUpdate();
+            em.createNativeQuery("DELETE FROM activity_templates WHERE " + scopeMatch)
+                    .setParameter("teamId", team.getId()).setParameter("orgId", organization.getId())
+                    .executeUpdate();
             for (Long userId : List.of(admin, member)) {
                 em.createNativeQuery("DELETE FROM user_roles WHERE user_id = :id")
                         .setParameter("id", userId).executeUpdate();
