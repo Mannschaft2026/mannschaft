@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261121-1114",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4727,
+    "sha": "9eca8684d753b5ed34279ed42bdae1fb7a7c5fb7"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "必須チェックの workflow の on: に merge_group(checks_requested) がある（台帳ゲートは別 workflow task-list-pr-gate-merge-group.yml）",
+      "tests": [
+        {
+          "name": "ci-merge-group-workflows.test.mjs on.merge_group",
+          "evidence": "scripts/ci-merge-group-workflows.test.mjs"
+        },
+        {
+          "name": "task-list-pr-gate-workflow.test.mjs",
+          "evidence": "scripts/task-list-pr-gate-workflow.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "merge_group で必須4チェックと同名のジョブが報告される（静的検査と queue 実地）",
+      "tests": [
+        {
+          "name": "ci-merge-group-workflows.test.mjs 必須ジョブ名",
+          "evidence": "scripts/ci-merge-group-workflows.test.mjs"
+        },
+        {
+          "name": "#4758 の merge_group run（4本 success）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/actions/runs/45070836973"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "concurrency group が PR 番号空でも github.ref へフォールバックし一意",
+      "tests": [
+        {
+          "name": "ci-merge-group-workflows.test.mjs concurrency 式",
+          "evidence": "scripts/ci-merge-group-workflows.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "merge_group で backend 変更なし → backend_changed=false・shard skip・Compile & Test success",
+      "tests": [
+        {
+          "name": "ci-change-detection-steps.test.mjs merge_group 関連変更なし",
+          "evidence": "scripts/ci-change-detection-steps.test.mjs"
+        },
+        {
+          "name": "#4758 merge_group BE run（shard skipped）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/actions/runs/45070836973"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "merge_group で backend 変更あり・migration 変更なし → backend_changed=true・migrations_changed=false",
+      "tests": [
+        {
+          "name": "ci-change-detection-steps.test.mjs merge_group backend 変更",
+          "evidence": "scripts/ci-change-detection-steps.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "merge_group で migration 変更あり → migrations_changed=true。差分はエントリ自身（base_sha...head_sha）",
+      "tests": [
+        {
+          "name": "detect-changed-files.test.mjs merge_group 自エントリ差分",
+          "evidence": "scripts/detect-changed-files.test.mjs"
+        },
+        {
+          "name": "ci-change-detection-steps.test.mjs migration 変更",
+          "evidence": "scripts/ci-change-detection-steps.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "SHA 空・git diff 失敗時はフル実行（backend_changed=true・migrations_changed=true）。openapi/er も同様",
+      "tests": [
+        {
+          "name": "ci-change-detection-steps.test.mjs 空SHA/不正SHA",
+          "evidence": "scripts/ci-change-detection-steps.test.mjs"
+        },
+        {
+          "name": "detect-changed-files.test.mjs exit 2/3",
+          "evidence": "scripts/detect-changed-files.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "openapi/er: merge_group で関連変更なしは重いステップ skip、ありは実行。判定器自身の変更と改名（--no-renames）も拾う",
+      "tests": [
+        {
+          "name": "ci-change-detection-steps.test.mjs openapi/er",
+          "evidence": "scripts/ci-change-detection-steps.test.mjs"
+        },
+        {
+          "name": "detect-changed-files.test.mjs 改名",
+          "evidence": "scripts/detect-changed-files.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "差分取得は .github/scripts/detect-changed-files.sh に切り出し、各分岐を単体テストし pr-light-checks に登録",
+      "tests": [
+        {
+          "name": "detect-changed-files.test.mjs",
+          "evidence": "scripts/detect-changed-files.test.mjs"
+        },
+        {
+          "name": "ci-merge-group-workflows.test.mjs pr-light-checks 登録",
+          "evidence": "scripts/ci-merge-group-workflows.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "台帳ゲート pull_request_target 経路の既存挙動は不変",
+      "tests": [
+        {
+          "name": "task-list-pr-gate-workflow.test.mjs",
+          "evidence": "scripts/task-list-pr-gate-workflow.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "merge_group 経路で合成コミットの台帳の CMP-ID 重複・列数≠7・優先度欠落を fail",
+      "tests": [
+        {
+          "name": "task-list-structure-check.test.mjs",
+          "evidence": "scripts/task-list-structure-check.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "description": "merge_group 経路の検査器は base_sha から取り、head からは台帳1ファイルだけ読む",
+      "tests": [
+        {
+          "name": "task-list-pr-gate-workflow.test.mjs base checkout",
+          "evidence": "scripts/task-list-pr-gate-workflow.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "description": "台帳不在・空・CMP行0件は明示的に fail",
+      "tests": [
+        {
+          "name": "task-list-structure-check.test.mjs 不在/空",
+          "evidence": "scripts/task-list-structure-check.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "description": "Ruleset に merge_queue（SQUASH/ALLGREEN/timeout150）追加・strict=false、他ルール・bypass 不変を GET で照合",
+      "tests": [
+        {
+          "name": "運用文書の設定値（GET 照合済み）",
+          "evidence": "docs/development/merge_queue_operations.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "description": "docs-only PR が queue 経由で必須4チェック green → マージ（#4758、約7分）",
+      "tests": [
+        {
+          "name": "#4758 queue 経由 MERGED",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4758"
+        }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "description": "BE 変更 PR が queue 経由で migrations_changed=false のシャード実行でマージ（#4350）",
+      "tests": [
+        {
+          "name": "#4350 merge_group BE run（migrations_changed=false）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/actions/runs/45071102497"
+        }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "description": "凱旋・物見・手助け系・claude-md-details・必須チェック表を queue 前提に改訂し、投入（enqueuePullRequest）と状態判定（state/mergedAt・queue 脱落）を記載",
+      "tests": [
+        {
+          "name": "merge_queue_operations.md",
+          "evidence": "docs/development/merge_queue_operations.md"
+        },
+        {
+          "name": "凱旋.md",
+          "evidence": ".claude/commands/凱旋.md"
+        },
+        {
+          "name": "物見.md",
+          "evidence": ".claude/commands/物見.md"
+        },
+        {
+          "name": "必須チェック表",
+          "evidence": "docs/development/ci_required_check_paths_filter_trap.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-18",
+      "description": "--admin 常用前提を廃止し queue 障害時のみ・マスター確認必須とする（ローカル記憶も改訂済み。リポジトリ側の正本は運用文書）",
+      "tests": [
+        {
+          "name": "merge_queue_operations.md --admin 節",
+          "evidence": "docs/development/merge_queue_operations.md"
+        },
+        {
+          "name": "claude-md-details.md",
+          "evidence": "docs/development/claude-md-details.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-19",
+      "description": "queue 脱落時は完了扱いにせず原因を直して再投入。脱落は RemovedFromMergeQueueEvent で判定（#3655 の checks_timed_out で実地確認）",
+      "tests": [
+        {
+          "name": "merge_queue_operations.md 脱落時の扱い",
+          "evidence": "docs/development/merge_queue_operations.md"
+        },
+        {
+          "name": "#3655 timeline（RemovedFromMergeQueueEvent）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/3655"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44967529196
+    },
+    {
+      "runId": 44967526539
+    },
+    {
+      "runId": 44967529325
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4727"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI workflow・Ruleset・運用文書だけの変更で画面・API を変えない。実地確認は queue 経由のマージ（#4758・#4350）で代替"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "UI・導線の変更がない"
+    }
+  },
+  "regressions": []
+}
