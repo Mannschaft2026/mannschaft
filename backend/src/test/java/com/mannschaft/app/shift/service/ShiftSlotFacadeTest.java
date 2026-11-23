@@ -1,5 +1,6 @@
 package com.mannschaft.app.shift.service;
 
+import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -54,13 +55,15 @@ class ShiftSlotFacadeTest {
     private ShiftSlotService slotService;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private UserStatusLookupService userStatusLookupService;
 
     private ShiftSlotFacade facade;
 
     @BeforeEach
     void setUp() {
         facade = new ShiftSlotFacade(slotService, new ScopeConcealingAccessGate(accessControlService),
-                accessControlService);
+                accessControlService, userStatusLookupService);
     }
 
     private static ShiftScheduleScope published() {
@@ -273,6 +276,9 @@ class ShiftSlotFacadeTest {
             ShiftSlotResponse updated = ShiftSlotResponse.builder().id(SLOT_ID).build();
             given(slotService.updateSlot(SLOT_ID, updateReq, USER_ID)).willReturn(updated);
             given(slotService.patchSlotAssignments(SLOT_ID, patchReq, USER_ID)).willReturn(updated);
+            // 追加先（patchReq の 1L）は枠のチームの現役メンバー（CMP-261123-1821）
+            given(accessControlService.isMember(1L, TEAM_ID, "TEAM")).willReturn(true);
+            given(userStatusLookupService.isActive(1L)).willReturn(true);
 
             assertThat(facade.updateSlot(SLOT_ID, updateReq, USER_ID)).isSameAs(updated);
             assertThat(facade.patchSlotAssignments(SLOT_ID, patchReq, USER_ID)).isSameAs(updated);

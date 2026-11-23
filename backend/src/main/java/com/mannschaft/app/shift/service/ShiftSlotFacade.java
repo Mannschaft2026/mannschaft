@@ -1,5 +1,6 @@
 package com.mannschaft.app.shift.service;
 
+import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -52,6 +53,7 @@ public class ShiftSlotFacade {
     private final ShiftSlotService slotService;
     private final ScopeConcealingAccessGate accessGate;
     private final AccessControlService accessControlService;
+    private final UserStatusLookupService userStatusLookupService;
 
     /**
      * スケジュールのシフト枠一覧を取得する。
@@ -128,7 +130,8 @@ public class ShiftSlotFacade {
      * @return 更新後のシフト枠レスポンス
      */
     public ShiftSlotResponse patchSlotAssignments(Long slotId, SlotAssignmentPatchRequest request, Long userId) {
-        requireSlotAdmin(slotId, userId);
+        Long teamId = requireSlotAdmin(slotId, userId);
+        requireAssignableMembers(request.addUserIds(), teamId);
         return slotService.patchSlotAssignments(slotId, request, userId);
     }
 
@@ -171,8 +174,28 @@ public class ShiftSlotFacade {
      * 枠起点の管理操作の認可。枠・親スケジュールの不在はどちらも {@code SHIFT_002}、越境も {@code SHIFT_002}、
      * 権限不足は 403。
      */
-    private void requireSlotAdmin(Long slotId, Long userId) {
+    private Long requireSlotAdmin(Long slotId, Long userId) {
         Long teamId = slotService.resolveSlotTeamId(slotId);
         accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        return teamId;
+    }
+
+    /**
+     * 割当の追加先が、枠のシフト表のチームの現役メンバー（MEMBER 以上・SUPPORTER でない・ACTIVE）であることを検査する
+     * （CMP-261123-1821）。操作者の権限とは別の検査で、他チーム・非所属・不在のユーザーは同一の
+     * {@code SHIFT_049} にして、ユーザー ID の存在オラクルにしない。1人でも不適格なら全体を拒否する。
+     */
+    private void requireAssignableMembers(List<Long> addUserIds, Long teamId) {
+        if (addUserIds == null) {
+            return;
+        }
+        for (Long addUserId : addUserIds.stream().distinct().toList()) {
+            if (addUserId == null
+                    || !accessControlService.isMember(addUserId, teamId, TEAM)
+                    || accessControlService.isSupporter(addUserId, teamId, TEAM)
+                    || !userStatusLookupService.isActive(addUserId)) {
+                throw new BusinessException(ShiftErrorCode.ASSIGNEE_NOT_TEAM_MEMBER);
+            }
+        }
     }
 }

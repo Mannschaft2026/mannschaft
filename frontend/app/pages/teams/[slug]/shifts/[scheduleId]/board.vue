@@ -293,6 +293,10 @@ async function initialize(): Promise<void> {
   scheduleError.value = undefined
   try {
     await loadSchedule()
+    // URL の slug のチームとシフト表のチームが食い違う画面は存在しないものとして扱う
+    // （slug 違いで他チームのシフト表を開かせると、slug 側チームのメンバーが「未割当メンバー」に並び、
+    // 他チームのユーザーを割り当てる導線になる。存在オラクルを作らないため 404 相当。change-requests.vue と同じ）。
+    await assertScheduleBelongsToUrlTeam()
   } catch (error) {
     // 所属外の直打ち（404/403）や通信断で取得できないとき、例外を未処理のまま捨てると
     // 後続の取得に到達せずメンバー欄が読み込み中のまま残る。画面の状態として持ち、
@@ -323,6 +327,17 @@ async function initialize(): Promise<void> {
     captureQuiet(error, { context: 'ShiftBoard: ボード構成データ取得' })
   } finally {
     scheduleLoading.value = false
+  }
+}
+
+async function assertScheduleBelongsToUrlTeam(): Promise<void> {
+  const teamRes = await teamApi.getTeam(teamSlug.value)
+  const urlTeamId = teamRes.data.numericId
+  if (urlTeamId === undefined) throw new Error('team_numeric_id_missing')
+  if (schedule.value?.teamId !== urlTeamId) {
+    // 他チームのシフト表の題名・操作導線を残さない。
+    schedule.value = undefined
+    throw Object.assign(new Error('schedule_team_mismatch'), { statusCode: 404 })
   }
 }
 
