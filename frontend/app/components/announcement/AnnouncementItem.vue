@@ -38,7 +38,22 @@ const priorityColorMap: Record<string, string> = {
 const sourceIcon = computed(() => props.item.sourceType ? sourceTypeIconMap[props.item.sourceType] ?? 'pi pi-info-circle' : 'pi pi-lock')
 const priorityClass = computed(() => priorityColorMap[props.item.priority] ?? '')
 const showActions = computed(() => props.showPinControl === true || props.canRemove === true)
+const itemTitle = computed(() => props.item.title?.trim() ?? '')
+const pinLabel = computed(() => {
+  const key = props.item.isPinned ? 'unpin' : 'pin'
+  return itemTitle.value ? t(`announcement.${key}_titled`, { title: itemTitle.value }) : t(`announcement.${key}`)
+})
+const removeLabel = computed(() => itemTitle.value
+  ? t('announcement.remove_titled', { title: itemTitle.value })
+  : t('announcement.remove_from_announcements'))
 const showPriorityBadge = computed(() => props.item.priority !== 'NORMAL')
+
+/** メタ行（種別・作者・相対時刻）。空の要素は除き、区切りは残った要素の間にだけ入れる */
+const metaParts = computed(() => [
+  props.item.sourceType ? t(`announcement.source_type.${props.item.sourceType}`) : t('announcement.preview.locked'),
+  props.item.author?.displayName?.trim() ?? '',
+  relativeTime(props.item.createdAt),
+].filter((part) => part !== ''))
 
 /** F09.17: 広告フィードかどうか */
 const isAd = computed(() => props.item.isAdvertisement === true)
@@ -101,7 +116,10 @@ function handleClick(event: MouseEvent | KeyboardEvent) {
   >
     <!-- ピン留めインジケーター -->
     <div class="mt-0.5 flex-shrink-0">
-      <i v-if="item.isPinned" class="pi pi-bookmark-fill text-sm text-primary" aria-hidden="true" />
+      <template v-if="item.isPinned">
+        <i class="pi pi-bookmark-fill text-sm text-primary" aria-hidden="true" />
+        <span class="sr-only" data-testid="announcement-pinned-status">{{ t('announcement.pinned_status') }}</span>
+      </template>
       <span v-else class="inline-block w-4" />
     </div>
 
@@ -143,10 +161,10 @@ function handleClick(event: MouseEvent | KeyboardEvent) {
       <BroadcastAudienceSummary v-if="item.targetAudience" class="mt-1" :audience="item.targetAudience" />
 
       <!-- メタ情報 -->
-      <div class="mt-1 flex items-center gap-2 text-xs text-surface-400">
-        <span>{{ item.sourceType ? t(`announcement.source_type.${item.sourceType}`) : t('announcement.preview.locked') }}</span>
-        <span v-if="item.author">• {{ item.author.displayName }}</span>
-        <span>• {{ relativeTime(item.createdAt) }}</span>
+      <div data-testid="announcement-meta" class="mt-1 flex items-center gap-2 text-xs text-surface-400">
+        <template v-for="(part, index) in metaParts" :key="index">
+          <span>{{ index > 0 ? `• ${part}` : part }}</span>
+        </template>
         <span v-if="item.expiresAt" class="text-orange-500">
           {{ t('announcement.expires_at') }}: {{ formatDate(item.expiresAt) }}
         </span>
@@ -177,8 +195,8 @@ function handleClick(event: MouseEvent | KeyboardEvent) {
         v-if="showPinControl"
         data-testid="announcement-pin"
         :icon="item.isPinned ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
-        :title="item.isPinned ? t('announcement.unpin') : t('announcement.pin')"
-        :aria-label="item.isPinned ? t('announcement.unpin') : t('announcement.pin')"
+        :title="pinLabel"
+        :aria-label="pinLabel"
         :class="[item.isPinned ? 'text-primary' : 'text-surface-400', 'focus-visible:opacity-100']"
         text
         rounded
@@ -189,8 +207,8 @@ function handleClick(event: MouseEvent | KeyboardEvent) {
       <Button
         data-testid="announcement-remove"
         icon="pi pi-times"
-        :title="t('announcement.remove_from_announcements')"
-        :aria-label="t('announcement.remove_from_announcements')"
+        :title="removeLabel"
+        :aria-label="removeLabel"
         class="text-surface-400 hover:text-red-500 focus-visible:opacity-100"
         text
         rounded

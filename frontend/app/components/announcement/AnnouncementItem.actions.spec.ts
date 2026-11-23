@@ -6,7 +6,7 @@ import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import AnnouncementItem from './AnnouncementItem.vue'
 import type { AnnouncementFeedItem } from '~/types/announcement'
 
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string, params?: { title?: string }) => (params?.title ? `${key}|${params.title}` : key) }) }))
 vi.mock('~/composables/useDatetime', () => ({ useDatetime: () => ({ formatDate: () => '日付', fromNow: () => '現在' }) }))
 mockNuxtImport('useRouter', () => () => ({ push: vi.fn() }))
 
@@ -20,13 +20,13 @@ afterEach(() => {
   wrapper = undefined
 })
 
-function render(props: { isPinned?: boolean, showPinControl?: boolean, canRemove?: boolean }) {
-  const { isPinned = false, ...controls } = props
+function render(props: { itemTitle?: string, isPinned?: boolean, showPinControl?: boolean, canRemove?: boolean }) {
+  const { isPinned = false, itemTitle = '', ...controls } = props
   wrapper = mount(AnnouncementItem, {
     props: {
       item: {
         id: 1, scopeType: 'TEAM', scopeId: '2', sourceType: 'BLOG_POST', sourceId: 3,
-        title: 'お知らせ', excerpt: null, priority: 'NORMAL', isPinned, isRead: false,
+        title: itemTitle, excerpt: null, priority: 'NORMAL', isPinned, isRead: false,
         createdAt: '2026-10-05T12:00:00',
       } as AnnouncementFeedItem,
       ...controls,
@@ -63,6 +63,23 @@ describe('管理者・著者アクション（D-2/D-3）', () => {
     expect(unpinnedClass).not.toContain('pi-bookmark-fill')
     expect(pinned.attributes('aria-label')).toBe('announcement.unpin')
     expect(unpinnedLabel).toBe('announcement.pin')
+  })
+
+  it('タイトルがあれば aria-label にタイトルを含める（N6）', () => {
+    const view = render({ showPinControl: true, itemTitle: '定例会' })
+    expect(view.get('[data-testid="announcement-pin"]').attributes('aria-label')).toBe('announcement.pin_titled|定例会')
+    expect(view.get('[data-testid="announcement-remove"]').attributes('aria-label')).toBe('announcement.remove_titled|定例会')
+    wrapper?.unmount()
+    const pinned = render({ showPinControl: true, isPinned: true, itemTitle: '定例会' })
+    expect(pinned.get('[data-testid="announcement-pin"]').attributes('aria-label')).toBe('announcement.unpin_titled|定例会')
+  })
+
+  it('ピン留め時だけ sr-only の「ピン留め中」を出す（N10）', () => {
+    const pinned = render({ isPinned: true }).get('[data-testid="announcement-pinned-status"]')
+    expect(pinned.classes()).toContain('sr-only')
+    expect(pinned.text()).toBe('announcement.pinned_status')
+    wrapper?.unmount()
+    expect(render({ isPinned: false }).find('[data-testid="announcement-pinned-status"]').exists()).toBe(false)
   })
 
   it('canRemove のみ true なら解除(×)だけ表示しピン留めは出ない', () => {
