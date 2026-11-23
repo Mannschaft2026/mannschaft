@@ -374,6 +374,82 @@ class ActionMemoServiceCoreTest {
     }
 
     // ------------------------------------------------------------------
+    // CMP-261123-1201 P2-1: メモの日付変更と個人投稿ID
+    // ------------------------------------------------------------------
+
+    /**
+     * 個人投稿（timeline_post_id）は「その日の全メモをまとめた1日分の投稿」を指す。
+     * メモを別の日へ動かしても旧投稿IDを持ち越すと、移動先の日に旧日の投稿へのリンクが出る
+     * （再公開で旧投稿が論理削除されれば削除済み投稿へのリンクになる）ため、日付変更で null に戻す。
+     * team_timeline_post_id は日付に依存しない独立のチーム投稿の記録なので触らない。
+     */
+    @Nested
+    @DisplayName("日付変更と個人投稿ID（CMP-261123-1201）")
+    class MemoDateChangeTest {
+
+        private ActionMemoEntity postedMemo(LocalDate memoDate) {
+            ActionMemoEntity memo = ActionMemoEntity.builder()
+                    .userId(USER_ID)
+                    .memoDate(memoDate)
+                    .content("公開済みメモ")
+                    .timelinePostId(7001L)
+                    .teamTimelinePostId(7002L)
+                    .postedTeamId(55L)
+                    .build();
+            given(memoRepository.findByIdAndUserId(MEMO_ID, USER_ID)).willReturn(Optional.of(memo));
+            lenient().when(memoRepository.save(any(ActionMemoEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+            lenient().when(tagLinkRepository.findByMemoId(any())).thenReturn(List.of());
+            return memo;
+        }
+
+        @Test
+        @DisplayName("別の日へ変更すると timeline_post_id が null になり、team_timeline_post_id / posted_team_id は残る")
+        void changeDate_clearsPersonalPostId_keepsTeamPost() {
+            LocalDate original = LocalDate.now().minusDays(3);
+            ActionMemoEntity memo = postedMemo(original);
+
+            UpdateActionMemoRequest req = new UpdateActionMemoRequest();
+            req.setMemoDate(original.minusDays(1));
+
+            ActionMemoResponse response = actionMemoService.updateMemo(MEMO_ID, req, USER_ID);
+
+            assertThat(memo.getMemoDate()).isEqualTo(original.minusDays(1));
+            assertThat(memo.getTimelinePostId()).as("移動先に旧日の個人投稿IDを持ち越さない").isNull();
+            assertThat(response.getTimelinePostId()).isNull();
+            assertThat(memo.getTeamTimelinePostId()).as("チーム投稿の記録は日付変更で消さない").isEqualTo(7002L);
+            assertThat(memo.getPostedTeamId()).isEqualTo(55L);
+        }
+
+        @Test
+        @DisplayName("同じ日付を指定しただけなら timeline_post_id は維持される")
+        void sameDate_keepsPersonalPostId() {
+            LocalDate original = LocalDate.now().minusDays(3);
+            ActionMemoEntity memo = postedMemo(original);
+
+            UpdateActionMemoRequest req = new UpdateActionMemoRequest();
+            req.setMemoDate(original);
+
+            actionMemoService.updateMemo(MEMO_ID, req, USER_ID);
+
+            assertThat(memo.getTimelinePostId()).isEqualTo(7001L);
+        }
+
+        @Test
+        @DisplayName("本文だけの更新では timeline_post_id は維持される")
+        void contentOnly_keepsPersonalPostId() {
+            ActionMemoEntity memo = postedMemo(LocalDate.now().minusDays(3));
+
+            UpdateActionMemoRequest req = new UpdateActionMemoRequest();
+            req.setContent("本文だけ更新");
+
+            actionMemoService.updateMemo(MEMO_ID, req, USER_ID);
+
+            assertThat(memo.getTimelinePostId()).isEqualTo(7001L);
+            assertThat(memo.getTeamTimelinePostId()).isEqualTo(7002L);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // CategoryDefaultTest
     // ------------------------------------------------------------------
 
