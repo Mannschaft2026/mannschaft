@@ -84,7 +84,8 @@ function renderPage() {
   return wrapper
 }
 function reviewButtons() {
-  return wrapper!.findAll('button').filter((button) =>
+  // 広幅の表と狭幅のカードに同じ操作が重複して出るので、表の側だけ数える
+  return wrapper!.findAll('[data-testid="change-request-table"] button').filter((button) =>
     ['shift.changeRequest.approve', 'shift.changeRequest.reject'].includes(button.text()))
 }
 
