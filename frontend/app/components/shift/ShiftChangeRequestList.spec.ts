@@ -247,3 +247,83 @@ describe('ShiftChangeRequestList 見出し重複・狭幅（アリシゼーシ�
     expect(last.classes().join(' ')).toMatch(/frozen/)
   })
 })
+
+/**
+ * 狭幅（md 未満）はカード縦積み。jsdom は CSS を解決しないので、
+ * 「カードが DOM にあり md:hidden（md 以上で隠れる）」「表は max-md:hidden（md 未満で隠れる）」と、
+ * 各カードに全項目・全操作が揃っていることを確かめる。実際の見え方は Playwright で撮って確認する。
+ */
+describe('ShiftChangeRequestList 狭幅カード表示', () => {
+  const REVIEWED = {
+    ...row({ id: 3, requestedBy: 5, requesterName: '自分', status: 'REJECTED' }),
+    reviewInfo: {
+      status: 'REJECTED' as const,
+      reviewerId: 9,
+      reviewComment: '人手が足りません',
+      reviewedAt: '2026-10-02T09:30:00',
+    },
+  }
+
+  it('カード一覧は md 以上で隠れ、表は md 未満で隠れる', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [OTHERS], currentUserId: 5, canReview: true },
+    })
+    const cards = wrapper.find('[data-testid="change-request-cards"]')
+    expect(cards.exists()).toBe(true)
+    expect(cards.classes()).toContain('md:hidden')
+    expect(wrapper.find('[data-testid="change-request-table"]').classes()).toContain('max-md:hidden')
+  })
+
+  it('カードに依頼者・種別・理由・ステータス・審査日時とコメントが全部出る', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [REVIEWED], currentUserId: 5 },
+    })
+    const card = wrapper.find('[data-testid="change-request-card-3"]')
+    expect(card.exists()).toBe(true)
+    const text = card.text()
+    expect(text).toContain('自分')
+    expect(text).toContain('理由')
+    expect(text).toContain('Rejected')
+    expect(text).toContain('人手が足りません')
+    expect(card.find('[data-testid="change-request-card-review-3"]').text()).toContain('2026')
+  })
+
+  it('カードに承認・却下（他人の依頼）と取り下げ（本人の依頼）が出て、タップ領域は 44px 以上', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [OTHERS, OWN], currentUserId: 5, canReview: true },
+    })
+    for (const id of ['change-request-card-approve-1', 'change-request-card-reject-1', 'change-request-card-withdraw-2']) {
+      const b = wrapper.find(`[data-testid="${id}"]`)
+      expect(b.exists(), id).toBe(true)
+      expect(b.classes()).toContain('min-h-[44px]')
+    }
+    expect(wrapper.find('[data-testid="change-request-card-approve-2"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="change-request-card-withdraw-1"]').exists()).toBe(false)
+  })
+
+  it('カードの却下ボタンから審査ダイアログが開き、コメント付きで submitReview に渡る', async () => {
+    const submitReview = noopReview()
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview, requests: [OTHERS], currentUserId: 5, canReview: true },
+    })
+    await wrapper.find('[data-testid="change-request-card-reject-1"]').trigger('click')
+    await nextTick()
+    const input = document.body.querySelector('[data-testid="change-request-review-comment"]') as HTMLTextAreaElement
+    input.value = '無理です'
+    input.dispatchEvent(new Event('input'))
+    await nextTick()
+    ;(document.body.querySelector('[data-testid="change-request-review-confirm"]') as HTMLElement).click()
+    await flushPromises()
+    expect(submitReview).toHaveBeenCalledWith(1, 'REJECTED', '無理です', 5)
+  })
+
+  it('カードの取り下げは withdraw を発火し、処理中は disabled', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5, processingIds: [] },
+    })
+    await wrapper.find('[data-testid="change-request-card-withdraw-2"]').trigger('click')
+    expect(wrapper.emitted('withdraw')).toEqual([[2]])
+    await wrapper.setProps({ processingIds: [2] })
+    expect(wrapper.find('[data-testid="change-request-card-withdraw-2"]').attributes('disabled')).toBeDefined()
+  })
+})

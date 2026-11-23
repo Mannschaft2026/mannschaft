@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChangeRequest, ChangeRequestStatus, ReviewOutcome } from '~/types/shift'
+import type { ChangeRequest, ReviewOutcome } from '~/types/shift'
 
 const props = defineProps<{
   /**
@@ -29,29 +29,11 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { formatDateTime } = useDatetime()
 
 const reviewDialogVisible = ref(false)
 const reviewTarget = ref<{ id: number; decision: 'ACCEPTED' | 'REJECTED'; version: number } | null>(null)
 const reviewComment = ref('')
 const isReviewing = ref(false)
-
-function statusSeverity(status: ChangeRequestStatus): string {
-  switch (status) {
-    case 'OPEN':
-      return 'info'
-    case 'ACCEPTED':
-      return 'success'
-    case 'REJECTED':
-      return 'danger'
-    default:
-      return 'secondary'
-  }
-}
-
-function statusLabel(status: ChangeRequestStatus): string {
-  return t(`shift.changeRequest.status.${status}`)
-}
 
 function typeLabel(type: string): string {
   return t(`shift.changeRequest.type.${type}`)
@@ -73,6 +55,11 @@ function isProcessing(id: number): boolean {
 /** 自分の依頼は審査できない（BE も 403 SHIFT_045）。本人の確定は取り下げで代替する。 */
 function canReviewRow(row: ChangeRequest): boolean {
   return !!props.canReview && props.currentUserId !== null && !isOwn(row) && row.reviewInfo.status === 'OPEN'
+}
+
+/** 本人の OPEN 依頼だけ取り下げられる */
+function canWithdrawRow(row: ChangeRequest): boolean {
+  return isOwn(row) && row.reviewInfo.status === 'OPEN'
 }
 
 function openReviewDialog(row: ChangeRequest, decision: 'ACCEPTED' | 'REJECTED'): void {
@@ -111,11 +98,6 @@ async function confirmReview(): Promise<void> {
     isReviewing.value = false
   }
 }
-
-/** 審査結果（コメント・日時）を申請者にも見せるか */
-function hasReviewResult(data: ChangeRequest): boolean {
-  return !!(data.reviewInfo.reviewComment || data.reviewInfo.reviewedAt)
-}
 </script>
 
 <template>
@@ -127,101 +109,102 @@ function hasReviewResult(data: ChangeRequest): boolean {
       <p class="text-sm" data-testid="change-request-empty">{{ $t('shift.changeRequest.empty') }}</p>
     </div>
 
-    <DataTable
-      v-else
-      :value="requests"
-      :rows="10"
-      paginator
-      scrollable
-      striped-rows
-      class="text-sm"
-    >
-      <!-- 依頼者 -->
-      <Column :header="$t('shift.changeRequest.requester')" style="min-width: 100px">
-        <template #body="{ data }">
-          <span class="font-medium">{{ requesterLabel(data) }}</span>
-        </template>
-      </Column>
+    <template v-else>
+      <!-- md 未満: カード縦積み（表だと横スクロールで操作列が他の列を覆うため）。
+           表と同じ情報・同じ操作を出す。前例: EmergencyClosureHistory -->
+      <ul class="space-y-3 md:hidden" data-testid="change-request-cards">
+        <li
+          v-for="row in requests"
+          :key="row.id"
+          :data-testid="`change-request-card-${row.id}`"
+          class="rounded-md border border-surface-200 p-3 text-sm dark:border-surface-700"
+        >
+          <dl class="min-w-0 space-y-2">
+            <div>
+              <dt class="text-xs font-medium text-surface-500">{{ $t('shift.changeRequest.requester') }}</dt>
+              <dd class="break-words font-medium [overflow-wrap:anywhere]">{{ requesterLabel(row) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-surface-500">{{ $t('shift.changeRequest.typeColumn') }}</dt>
+              <dd class="break-words [overflow-wrap:anywhere]">{{ typeLabel(row.requestInfo.requestType) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-surface-500">{{ $t('shift.changeRequest.reason') }}</dt>
+              <dd class="break-words text-surface-600 [overflow-wrap:anywhere] dark:text-surface-300">{{ row.requestInfo.reason ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-surface-500">{{ $t('label.status') }}</dt>
+              <dd>
+                <ShiftChangeRequestStatus :request="row" testid-prefix="change-request-card-review" />
+              </dd>
+            </div>
+          </dl>
+          <ShiftChangeRequestActions
+            v-if="canReviewRow(row) || canWithdrawRow(row)"
+            class="mt-3"
+            :request-id="row.id"
+            :can-review="canReviewRow(row)"
+            :can-withdraw="canWithdrawRow(row)"
+            :processing="isProcessing(row.id)"
+            testid-prefix="change-request-card"
+            @approve="openReviewDialog(row, 'ACCEPTED')"
+            @reject="openReviewDialog(row, 'REJECTED')"
+            @withdraw="emit('withdraw', row.id)"
+          />
+        </li>
+      </ul>
 
-      <!-- 種別 -->
-      <Column :header="$t('shift.changeRequest.typeColumn')" field="requestInfo.requestType" style="min-width: 120px">
-        <template #body="{ data }">
-          <span class="text-xs">{{ typeLabel(data.requestInfo.requestType) }}</span>
-        </template>
-      </Column>
+      <!-- md 以上: 表 -->
+      <DataTable
+        :value="requests"
+        :rows="10"
+        paginator
+        scrollable
+        striped-rows
+        class="text-sm max-md:hidden"
+        data-testid="change-request-table"
+      >
+        <Column :header="$t('shift.changeRequest.requester')" style="min-width: 100px">
+          <template #body="{ data }">
+            <span class="font-medium">{{ requesterLabel(data) }}</span>
+          </template>
+        </Column>
 
-      <!-- 理由 -->
-      <Column :header="$t('shift.changeRequest.reason')" field="requestInfo.reason" style="min-width: 140px">
-        <template #body="{ data }">
-          <span class="line-clamp-1 text-xs text-surface-500">{{ data.requestInfo.reason ?? '—' }}</span>
-        </template>
-      </Column>
+        <Column :header="$t('shift.changeRequest.typeColumn')" field="requestInfo.requestType" style="min-width: 120px">
+          <template #body="{ data }">
+            <span class="text-xs">{{ typeLabel(data.requestInfo.requestType) }}</span>
+          </template>
+        </Column>
 
-      <!-- ステータス -->
-      <Column :header="$t('label.status')" field="reviewInfo.status" style="min-width: 100px">
-        <template #body="{ data }">
-          <Tag :value="statusLabel(data.reviewInfo.status)" :severity="statusSeverity(data.reviewInfo.status)" />
-          <!-- 審査結果（申請者が却下理由などを確認できる）。狭い画面でも折り返す -->
-          <div
-            v-if="hasReviewResult(data)"
-            class="mt-1 max-w-[16rem] whitespace-normal break-words text-xs text-surface-500"
-            :data-testid="`change-request-review-${data.id}`"
-          >
-            <p v-if="data.reviewInfo.reviewedAt">
-              {{ $t('shift.changeRequest.reviewedAt') }}: {{ formatDateTime(data.reviewInfo.reviewedAt) }}
-            </p>
-            <p v-if="data.reviewInfo.reviewComment">
-              {{ $t('shift.changeRequest.reviewComment') }}: {{ data.reviewInfo.reviewComment }}
-            </p>
-          </div>
-        </template>
-      </Column>
+        <Column :header="$t('shift.changeRequest.reason')" field="requestInfo.reason" style="min-width: 140px">
+          <template #body="{ data }">
+            <span class="line-clamp-1 text-xs text-surface-500">{{ data.requestInfo.reason ?? '—' }}</span>
+          </template>
+        </Column>
 
-      <!-- 操作 -->
-      <!-- 狭幅（スマホ）でも主要操作が画面外に出ないよう、操作列は右端に固定して他の列だけ横スクロールさせる -->
-      <Column :header="$t('label.actions')" frozen align-frozen="right" style="min-width: 150px">
-        <template #body="{ data }">
-          <div class="flex gap-2">
-            <!-- 管理者: 他人の依頼の承認・却下 -->
-            <template v-if="canReviewRow(data)">
-              <Button
-                :data-testid="`change-request-approve-${data.id}`"
-                :label="$t('shift.changeRequest.approve')"
-                class="min-h-[44px]"
-                severity="success"
-                size="small"
-                :disabled="isProcessing(data.id)"
-                :loading="isProcessing(data.id)"
-                @click="openReviewDialog(data, 'ACCEPTED')"
-              />
-              <Button
-                :data-testid="`change-request-reject-${data.id}`"
-                :label="$t('shift.changeRequest.reject')"
-                class="min-h-[44px]"
-                severity="danger"
-                size="small"
-                :disabled="isProcessing(data.id)"
-                @click="openReviewDialog(data, 'REJECTED')"
-              />
-            </template>
+        <Column :header="$t('label.status')" field="reviewInfo.status" style="min-width: 100px">
+          <template #body="{ data }">
+            <ShiftChangeRequestStatus :request="data" testid-prefix="change-request-review" />
+          </template>
+        </Column>
 
-            <!-- 依頼者本人: 取下 -->
-            <Button
-              v-if="isOwn(data) && data.reviewInfo.status === 'OPEN'"
-              :data-testid="`change-request-withdraw-${data.id}`"
-              :label="$t('shift.changeRequest.withdraw')"
-              class="min-h-[44px]"
-              severity="secondary"
-              size="small"
-              outlined
-              :disabled="isProcessing(data.id)"
-              :loading="isProcessing(data.id)"
-              @click="emit('withdraw', data.id)"
+        <!-- 操作列は右端に固定（md 以上の幅があるので他の列を覆わない） -->
+        <Column :header="$t('label.actions')" frozen align-frozen="right" style="min-width: 150px">
+          <template #body="{ data }">
+            <ShiftChangeRequestActions
+              :request-id="data.id"
+              :can-review="canReviewRow(data)"
+              :can-withdraw="canWithdrawRow(data)"
+              :processing="isProcessing(data.id)"
+              testid-prefix="change-request"
+              @approve="openReviewDialog(data, 'ACCEPTED')"
+              @reject="openReviewDialog(data, 'REJECTED')"
+              @withdraw="emit('withdraw', data.id)"
             />
-          </div>
-        </template>
-      </Column>
-    </DataTable>
+          </template>
+        </Column>
+      </DataTable>
+    </template>
 
     <!-- 審査コメントダイアログ -->
     <Dialog
