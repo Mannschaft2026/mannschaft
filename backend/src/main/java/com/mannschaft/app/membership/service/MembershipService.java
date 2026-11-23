@@ -660,8 +660,10 @@ public class MembershipService {
                 : membershipRepository.findEffortShareRowsByIds(grantIds).stream()
                         .collect(Collectors.toMap(MembershipRepository.EffortShareMembershipRow::getId,
                                 Function.identity()));
+        // 加入期間 ID が null の組は照会の有無（rows の実装）によらず行なし＝資格なしとして組み立てる。
         return queries.stream()
-                .map(q -> judgeEffortShareQualification(q, rows.get(q.grantMembershipId())))
+                .map(q -> judgeEffortShareQualification(q,
+                        q.grantMembershipId() == null ? null : rows.get(q.grantMembershipId())))
                 .toList();
     }
 

@@ -346,6 +346,49 @@ class EffortShareQualificationBoundaryIT extends EffortShareItSupport {
         assertThat(result).hasSize(3).allSatisfy(q -> assertThat(q.isCurrentEligible()).isFalse());
     }
 
+    @Test
+    @DisplayName("資格境界: 加入期間 ID が全件 null でもバッチは落ちず、全件を資格なし（disposition なし）で返す")
+    void 加入期間IDが全件nullなら全件資格なし() {
+        Long team = team("資格-ID全件null");
+        Long admin = user("資格管理者");
+        Long owner = user("資格本人");
+        teamAdmin(admin, team);
+        member(owner, team);
+
+        List<EffortShareQualification> result = membershipService.getEffortShareQualificationsBatch(List.of(
+                new EffortShareQualificationQuery(team, owner, null),
+                new EffortShareQualificationQuery(team, admin, null)));
+
+        assertThat(result).hasSize(2).allSatisfy(q -> {
+            assertThat(q.grantMembershipId()).isNull();
+            assertThat(q.isCurrentEligible()).isFalse();
+            assertThat(q.disposition()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("資格境界: 加入期間 ID が一部 null なら null の組だけ資格なしで、他の組は通常どおり判定する")
+    void 加入期間IDが一部nullならその組だけ資格なし() {
+        Long team = team("資格-ID一部null");
+        Long admin = user("資格管理者");
+        Long owner = user("資格本人");
+        teamAdmin(admin, team);
+        member(owner, team);
+        Long m1 = activeMembershipId(owner, team);
+
+        List<EffortShareQualification> result = membershipService.getEffortShareQualificationsBatch(List.of(
+                new EffortShareQualificationQuery(team, owner, null),
+                new EffortShareQualificationQuery(team, owner, m1)));
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).grantMembershipId()).isNull();
+        assertThat(result.get(0).isCurrentEligible()).isFalse();
+        assertThat(result.get(0).disposition()).isNull();
+        assertThat(result.get(1).grantMembershipId()).isEqualTo(m1);
+        assertThat(result.get(1).isCurrentEligible()).isTrue();
+        assertThat(result.get(1).disposition()).isNull();
+    }
+
     // ───────────────────────────── 性能 ─────────────────────────────
 
     @Test
