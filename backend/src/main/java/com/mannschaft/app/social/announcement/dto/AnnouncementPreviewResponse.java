@@ -10,7 +10,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
-/** F02.6 本文プレビュー。LOCKED の参照・本文は省略せず明示 null にする。 */
+/**
+ * F02.6 本文プレビュー。LOCKED の参照・本文は省略せず明示 null にする。
+ *
+ * <p>{@code blogPost.scope.teamSlug} / {@code organizationSlug} は付与していない（常に null）。
+ * slug の付与は cms の {@code BlogPostScopeSlugResolver} が他ドメイン（team / organization）を呼んで行うが、
+ * announcement ドメインからそれを呼ぶとドメインの取引の内側から他ドメインへ越境しうる（D-3T）ため呼ばない。
+ * FE はプレビューの {@code blogPost.scope} の slug を遷移先に使わないこと。</p>
+ */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record AnnouncementPreviewResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Long feedId,

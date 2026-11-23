@@ -878,7 +878,9 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
                 .scopeType(scopeType)
                 .scopeId(scopeId)
                 .sourceType(AnnouncementSourceType.BLOG_POST)
-                .sourceId(sourceId)
+                // 元は公開済みの実在記事（元が公開済みでないお知らせは一覧・ID 指定の経路で不在扱い。N9）。
+                // 引数の sourceId はタイトルの識別ラベルとしてだけ使う。
+                .sourceId(AnnouncementSourceFixtures.publishedBlog(em, scopeType, scopeId, null))
                 .titleCache("ANNAUTHZ お知らせ " + sourceId)
                 .visibility(visibility)
                 .sourceDeletedAt(sourceDeletedAt)

@@ -60,6 +60,8 @@ class AnnouncementFeedVisibilityResolverTest {
     private AuditLogService auditLogService;
 
     private VisibilityMetrics visibilityMetrics;
+    /** 元コンテンツの公開状態（N9）。本テストの関心外なので「全件公開済み」とする（判定は IT で検証する）。 */
+    private com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard sourcePublication;
     private AnnouncementFeedVisibilityResolver resolver;
 
     private static final Long TEAM_ID = 100L;
@@ -71,9 +73,17 @@ class AnnouncementFeedVisibilityResolverTest {
     @BeforeEach
     void setUp() {
         visibilityMetrics = new VisibilityMetrics(new SimpleMeterRegistry());
+        sourcePublication = org.mockito.Mockito.mock(
+                com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard.class);
+        org.mockito.Mockito.lenient().when(sourcePublication.retainPublished(
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> new java.util.ArrayList<>(
+                        (java.util.Collection<?>) invocation.getArgument(0)));
         resolver = new AnnouncementFeedVisibilityResolver(
                 announcementFeedRepository,
                 paymentGateService,
+                sourcePublication,
                 membershipBatchQueryService,
                 templateEvaluator,
                 visibilityMetrics,
@@ -300,6 +310,7 @@ class AnnouncementFeedVisibilityResolverTest {
         return new AnnouncementFeedVisibilityResolver(
                 announcementFeedRepository,
                 paymentGateService,
+                sourcePublication,
                 membershipBatchQueryService,
                 templateEvaluator,
                 visibilityMetrics,

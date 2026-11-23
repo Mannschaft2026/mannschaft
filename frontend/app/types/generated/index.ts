@@ -51431,8 +51431,12 @@ export interface components {
             authorId?: number;
             /** Format: int64 */
             organizationId?: number;
+            /** @description 組織記事の組織 slug（組織記事以外・論理削除済み組織は null） */
+            organizationSlug: string | null;
             /** Format: int64 */
             teamId?: number;
+            /** @description チーム記事のチーム slug（チーム記事以外・論理削除済みチームは null） */
+            teamSlug: string | null;
             /** Format: int64 */
             userId?: number;
         };

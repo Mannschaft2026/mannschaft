@@ -113,6 +113,17 @@ export function useAnnouncementFeed(scopeType: AnnouncementScopeType, scopeId: s
     feed.value = items.filter(item => !unavailableIds.has(item.id))
   }
 
+  /** ピン留め優先 → 作成日時の新しい順 → id の大きい順（BE と同じ並び） */
+  function sortFeed(items: AnnouncementFeedItem[]): AnnouncementFeedItem[] {
+    return [...items].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
+      const ta = Date.parse(a.createdAt)
+      const tb = Date.parse(b.createdAt)
+      if (ta !== tb && !Number.isNaN(ta) && !Number.isNaN(tb)) return tb - ta
+      return b.id - a.id
+    })
+  }
+
   /** スコープに応じた API ベースパスを返す */
   function basePath() {
     if (scopeType === 'TEAM') return `/api/v1/teams/${unref(scopeId)}/announcements`
@@ -204,6 +215,8 @@ export function useAnnouncementFeed(scopeType: AnnouncementScopeType, scopeId: s
         isPinned: res.data.isPinned,
         pinnedAt: res.data.pinnedAt,
       }
+      // BE 仕様（ピン留め優先→新着順）に合わせて、読込済み分をローカルで並べ替える
+      feed.value = sortFeed(feed.value)
     }
   }
 
