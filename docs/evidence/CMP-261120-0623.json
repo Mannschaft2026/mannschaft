@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-0623",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4766,
+    "sha": "c40c5c17afb23555d10cff4b7c1a6963567f89be"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "ModuleEventLoadIT の供給到着遅延を、外れ値1件で落ちない全母集団 p99 < 100ms（nearest-rank、未供給は母集団に残す）で判定する",
+      "tests": [
+        {
+          "name": "ModuleEventLoadJudgementTest 外れ値1件は通る／1%超は落ちる／未供給も母集団",
+          "evidence": "backend/src/test/java/com/mannschaft/app/moduleevent/ModuleEventLoadJudgementTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "各秒の bucket 判定は遅延件数分のずれのみ許容し、合計は厳密一致。閾値（p99<=5秒・拒否0など）は変更しない",
+      "tests": [
+        {
+          "name": "ModuleEventLoadJudgementTest bucket 判定・早着は落ちる",
+          "evidence": "backend/src/test/java/com/mannschaft/app/moduleevent/ModuleEventLoadJudgementTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "判定を純関数 ModuleEventLoadJudgement に切り出し、ModuleEventLoadIT から利用する",
+      "tests": [
+        {
+          "name": "ModuleEventLoadIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/moduleevent/ModuleEventLoadIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45033888672
+    },
+    {
+      "runId": 45033888645
+    },
+    {
+      "runId": 45033888607
+    },
+    {
+      "runId": 45033888606
+    },
+    {
+      "runId": 45033886240
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4766"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で画面・API の挙動を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で導線を変えない"
+    }
+  },
+  "regressions": []
+}
