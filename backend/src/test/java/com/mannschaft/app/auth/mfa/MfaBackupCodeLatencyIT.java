@@ -3,6 +3,7 @@ package com.mannschaft.app.auth.mfa;
 import com.mannschaft.app.auth.MfaVerificationMethod;
 import com.mannschaft.app.auth.TwoFactorMethod;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.support.test.PasswordMatchCounter;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -10,8 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.lang.management.CompilationMXBean;
 import java.lang.management.GarbageCollectorMXBean;
@@ -27,10 +26,6 @@ import java.util.function.ToLongFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 /**
  * CMP-261012-0910 試練: バックアップコード照合の単発所要時間の上限（AC-54）。
@@ -53,6 +48,8 @@ import static org.mockito.Mockito.verify;
  * <b>呼び出し回数</b>（全不一致は 8 回ちょうど、最後一致は 8 回ちょうど）で行い、壁時計の閾値は判定に使わない。
  * 重複照合・全件 2 周・照合後の再読込による再照合は回数の超過として確実に検出できる。
  * 所要時間は診断ログ（{@code [mfa-latency]}）にのみ残す。</p>
+ * <p>照合回数は {@link PasswordMatchCounter}（全テストコンテキストに一様に載る計数ラッパー。呼び出しスレッド単位）で数える。
+ * {@code @MockitoSpyBean(PasswordEncoder)} は本クラスだけ構成キーを分岐させ、規約 31 の distinct key ラチェットを超えるため使わない。</p>
  *
  * <p>（旧記述）上限超過は「8 件を超える重複照合（全件 2 周・照合後の再読込での再照合等）」や「ロック待ち・N+1」の混入を示す。
  * 計測は Service 単発呼び出し（MockMvc を含めない）で、JIT・接続確立の影響を除くため事前に 1 回空打ちする。</p>
@@ -60,7 +57,6 @@ import static org.mockito.Mockito.verify;
  */
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("CMP-261012-0910 バックアップコード照合の単発所要時間（AC-54）")
-@MockitoSpyBean(types = PasswordEncoder.class)
 class MfaBackupCodeLatencyIT extends MfaItSupport {
 
     /** バックアップコードの保存件数＝照合回数の上限（AC-54）。 */
@@ -131,7 +127,8 @@ class MfaBackupCodeLatencyIT extends MfaItSupport {
         // wall記録と出力は既存nanoTime計測区間の外に置く。
         logJit(caseKind, "all-mismatch", "before-timing");
         ResourceSnapshot resourcesBefore = snapshotResources();
-        clearInvocations(passwordEncoder);
+        assertThat(PasswordMatchCounter.isCounting(passwordEncoder)).as("AC-54 前提: 照合回数の計数が効いている").isTrue();
+        PasswordMatchCounter.reset();
         long startEpochMillis = System.currentTimeMillis();
         long start = System.nanoTime();
         assertThatThrownBy(() -> auth2faService.validateMfaLogin(
@@ -140,6 +137,7 @@ class MfaBackupCodeLatencyIT extends MfaItSupport {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode()).isEqualTo("AUTH_074"));
         long elapsed = Duration.ofNanos(System.nanoTime() - start).toMillis();
+        int matches = PasswordMatchCounter.currentThreadCount();
         long endEpochMillis = System.currentTimeMillis();
         ResourceSnapshot resourcesAfter = snapshotResources();
         logJit(caseKind, "all-mismatch", "after-timing");
@@ -148,7 +146,7 @@ class MfaBackupCodeLatencyIT extends MfaItSupport {
         logResources("all-mismatch", startEpochMillis, endEpochMillis, resourcesBefore, resourcesAfter);
 
         // 壁時計ではなく照合回数で判定する（CMP-261123-1434）。8 件すべてを 1 回ずつ。
-        verify(passwordEncoder, times(BACKUP_CODE_COUNT)).matches(any(), any());
+        assertThat(matches).as("AC-54 全不一致の照合回数").isEqualTo(BACKUP_CODE_COUNT);
     }
 
     private void assertLastMatchWithin(MfaUser u, String caseKind) throws Exception {
@@ -162,12 +160,14 @@ class MfaBackupCodeLatencyIT extends MfaItSupport {
         // wall記録と出力は既存nanoTime計測区間の外に置く。
         logJit(caseKind, "last-match", "before-timing");
         ResourceSnapshot resourcesBefore = snapshotResources();
-        clearInvocations(passwordEncoder);
+        assertThat(PasswordMatchCounter.isCounting(passwordEncoder)).as("AC-54 前提: 照合回数の計数が効いている").isTrue();
+        PasswordMatchCounter.reset();
         long startEpochMillis = System.currentTimeMillis();
         long start = System.nanoTime();
         var response = auth2faService.validateMfaLogin(
                 session, MfaVerificationMethod.BACKUP_CODE, last, IP, USER_AGENT);
         long elapsed = Duration.ofNanos(System.nanoTime() - start).toMillis();
+        int matches = PasswordMatchCounter.currentThreadCount();
         long endEpochMillis = System.currentTimeMillis();
         ResourceSnapshot resourcesAfter = snapshotResources();
         logJit(caseKind, "last-match", "after-timing");
@@ -177,7 +177,7 @@ class MfaBackupCodeLatencyIT extends MfaItSupport {
 
         assertThat(response.getData().getAccessToken()).as("AC-54 前提: 最後の 1 件で一致して成功").isNotBlank();
         // 8 件目で一致して打ち切る。重複照合・再照合があれば 8 回を超える。
-        verify(passwordEncoder, times(BACKUP_CODE_COUNT)).matches(any(), any());
+        assertThat(matches).as("AC-54 最後一致の照合回数").isEqualTo(BACKUP_CODE_COUNT);
     }
 
     /** 固定allowlistのgetterだけを読む。未対応・未取得は-1、booleanは0/1。 */
