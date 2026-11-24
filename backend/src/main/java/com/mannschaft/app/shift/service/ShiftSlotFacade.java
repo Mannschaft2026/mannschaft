@@ -1,5 +1,6 @@
 package com.mannschaft.app.shift.service;
 
+import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -52,6 +53,7 @@ public class ShiftSlotFacade {
     private final ShiftSlotService slotService;
     private final ScopeConcealingAccessGate accessGate;
     private final AccessControlService accessControlService;
+    private final UserStatusLookupService userStatusLookupService;
 
     /**
      * スケジュールのシフト枠一覧を取得する。
@@ -115,8 +117,9 @@ public class ShiftSlotFacade {
      * @return 更新されたシフト枠
      */
     public ShiftSlotResponse updateSlot(Long slotId, UpdateShiftSlotRequest req, Long userId) {
-        requireSlotAdmin(slotId, userId);
-        return slotService.updateSlot(slotId, req, userId);
+        Long teamId = requireSlotAdmin(slotId, userId);
+        // 置換で新たに入る人の検査は、親・枠のロック取得後の現在値との差分に対して tx の中で行う（並行 PATCH 対策）。
+        return slotService.updateSlot(slotId, req, userId, newIds -> requireAssignableMembers(newIds, teamId));
     }
 
     /**
@@ -128,7 +131,8 @@ public class ShiftSlotFacade {
      * @return 更新後のシフト枠レスポンス
      */
     public ShiftSlotResponse patchSlotAssignments(Long slotId, SlotAssignmentPatchRequest request, Long userId) {
-        requireSlotAdmin(slotId, userId);
+        Long teamId = requireSlotAdmin(slotId, userId);
+        requireAssignableMembers(request.addUserIds(), teamId);
         return slotService.patchSlotAssignments(slotId, request, userId);
     }
 
@@ -145,7 +149,9 @@ public class ShiftSlotFacade {
      * @return 両枠の更新後の状態
      */
     public SlotAssignmentMoveResponse moveAssignment(Long slotId, SlotAssignmentMoveRequest request, Long userId) {
-        requireSlotAdmin(slotId, userId);
+        Long teamId = requireSlotAdmin(slotId, userId);
+        // 移動先に新たに入る人。移動元に居る間に脱退・SUPPORTER 化した人を、別の枠へ持ち込ませない。
+        requireAssignableMembers(List.of(request.userId()), teamId);
         return slotService.moveAssignment(slotId, request, userId);
     }
 
@@ -171,8 +177,27 @@ public class ShiftSlotFacade {
      * 枠起点の管理操作の認可。枠・親スケジュールの不在はどちらも {@code SHIFT_002}、越境も {@code SHIFT_002}、
      * 権限不足は 403。
      */
-    private void requireSlotAdmin(Long slotId, Long userId) {
+    private Long requireSlotAdmin(Long slotId, Long userId) {
         Long teamId = slotService.resolveSlotTeamId(slotId);
         accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
+        return teamId;
+    }
+
+    /**
+     * 割当の追加先が、枠のシフト表のチームの現役メンバー（MEMBER 以上・SUPPORTER でない・ACTIVE）であることを検査する
+     * （CMP-261123-1821）。操作者の権限とは別の検査で、他チーム・非所属・不在のユーザーは同一の
+     * {@code SHIFT_049} にして、ユーザー ID の存在オラクルにしない。1人でも不適格なら全体を拒否する。
+     */
+    private void requireAssignableMembers(List<Long> addUserIds, Long teamId) {
+        if (addUserIds == null) {
+            return;
+        }
+        for (Long addUserId : addUserIds.stream().distinct().toList()) {
+            if (addUserId == null
+                    || !accessControlService.isRegularMemberOrAbove(addUserId, teamId, TEAM)
+                    || !userStatusLookupService.isActive(addUserId)) {
+                throw new BusinessException(ShiftErrorCode.ASSIGNEE_NOT_TEAM_MEMBER);
+            }
+        }
     }
 }

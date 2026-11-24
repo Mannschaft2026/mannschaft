@@ -36,7 +36,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -80,8 +79,6 @@ public class InviteReissueRequestService {
 
     private static final String TEAM = "TEAM";
     private static final String DEFAULT_GRANT_ROLE = "MEMBER";
-    /** 再招待で引き継ぐ非特権ロール。特権（ADMIN/DEPUTY_ADMIN）は宛先付き招待では ROLE_009 になるため MEMBER へ寄せる。 */
-    private static final Set<String> INHERITABLE_ROLES = Set.of("MEMBER", "SUPPORTER", "GUEST");
 
     private final PendingInviteStore pendingStore;
     private final InviteIssuerPolicy issuerPolicy;
@@ -100,11 +97,12 @@ public class InviteReissueRequestService {
     private final Clock clock;
 
     /**
-     * 再招待で付与するロール（設計 d）。非特権（MEMBER/SUPPORTER/GUEST）は引き継ぎ、特権（ADMIN/DEPUTY_ADMIN）や
+     * 再招待で付与するロール（設計 d）。招待で付与できるロール（{@link InviteRolePolicy#isInvitable}: MEMBER/SUPPORTER。
+     * CMP-261124-0157）は引き継ぎ、それ以外（特権 ADMIN/DEPUTY_ADMIN、GUEST、SYSTEM_ADMIN。承諾で 422 ROLE_009 になる）や
      * 元のトークン・ロールが引けない（null）場合は MEMBER。一覧の roleName と発行で同じ判定を使う。
      */
     public static String resolveGrantRole(String originalRoleName) {
-        return originalRoleName != null && INHERITABLE_ROLES.contains(originalRoleName)
+        return originalRoleName != null && InviteRolePolicy.isInvitable(originalRoleName)
                 ? originalRoleName : DEFAULT_GRANT_ROLE;
     }
 

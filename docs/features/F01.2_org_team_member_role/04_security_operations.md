@@ -286,10 +286,10 @@ V{major}.{yyyyMMddHHmmss}__create_ownership_transfer_offers_table.sql
 > **教訓（slug 二重移行の退行）**: V71 系は当初 `public_id`（UUID）→ slug への置換として実装され、`public_id` 列を DROP した。さらに **`CreateTeamRequest` から slug 入力欄が失われ、name からの自動生成のみ**になった結果、ASCII 3 字未満（日本語名等）のチーム／組織には `team-000017` のような**意味の無い連番 slug** が backfill で付与された。正準仕様は「ユーザーが任意 slug を入力する村方式」（§5.9）であり、連番付与・public_id(UUID) 路線は不採用。既存連番 slug の是正は §5.9.4、public_id 不採用の根拠は §5.9.6 を参照。
 
 ```
-V267.20261124005518__alter_registration_pending_invites_reissue.sql（CMP-261107-1833 PR3）
+V268.20261124173054__alter_registration_pending_invites_reissue.sql（CMP-261107-1833 PR3）
   -- registration_pending_invites の CHECK(status) を張り直して REISSUE_DECLINED を追加（10 状態）
   -- INDEX idx_rpi_scope_status (scope_type, scope_id, status, reissue_requested_at)（再招待依頼の一覧・件数の述語用）
-  -- テーブルは増やさない。rollback は db/rollback/V267.20261124005518_rollback.sql（REISSUE_DECLINED を DISMISSED へ寄せてから旧 CHECK に戻す）
+  -- テーブルは増やさない。rollback は db/rollback/V268.20261124173054_rollback.sql（REISSUE_DECLINED を DISMISSED へ寄せてから旧 CHECK に戻す）
 ```
 
 **マイグレーション上の注意点**
@@ -383,7 +383,8 @@ V267.20261124005518__alter_registration_pending_invites_reissue.sql（CMP-261107
 | 2026-09-25 | F01.2.1 第1パス精査の反映: ① 1チームの複数組織への同時加盟を正式に保証し、単一親前提の読み手22件（BE 18・FE 4）の改修を F01.2.1 §9 に定義 ② 取下げ・取消に24時間の冷却、PENDING の60日期限、組織・チームの削除／アーカイブ時の PENDING 片付けを追加 ③ 招待先チームの可視性チェック（見えないチームは不在と同じ 404）④ 索引を `(organization_id, group_id, status)` 等に見直し |
 | 2026-10-16 | **マスター判断（Issue #3892）**: 組織の手動・自動アーカイブによるチームの連動アーカイブを廃止。加盟が当該組織だけの場合も、チームの休止状態・個人加入用招待・既存在籍へ影響させず、チームは自身の条件でのみ休止する。組織自身の招待失効・解除後非復元は維持する。招待世代方式のカラム追加と業務TX例外なしの方針は裁可済みだが、詳細は別途設計する。12か月境界は本変更の対象外。 |
 | 2026-10-20 | **F01.2.1 の実装に追従（9-A）**: 加盟の書き込み API（招待・申請・承認・拒否・取下げ・取消・離脱・除名）、申請受付設定、チームグループ、割当、宛先プレビューが実装済みになったため、`02_api_design`・`03_business_logic`・`01_db_design` の「未実装」「追加予定」の注記を改めた。加盟の通知は同一 tx の outbox 書き込み（relay が fan-out へ取り込む）に改まった旨と、Flyway の確定版（V231・V232・V234・V238〜V242）を記した。実機E2E・アリシゼーションは未実施 |
-| 2026-11-24 | **再招待依頼の受け手側（CMP-261107-1833 PR3）**: ① 招待権限者向け API `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests`（一覧・再招待・見送り。TEAM/ORG 各3メソッド）を追加 ② 保留に `REISSUE_DECLINED` を追加し、再依頼の集合（REISSUABLE）と閉じる集合（DISMISSIBLE）を分離 ③ GET 時の期限判定（`PENDING`→`EXPIRED`）④ 再招待は仮発行（`revoked_at = created_at`）→ auth の確定 → 有効化の順で、補償の失効は行わない。仮発行の窓60秒 ⑤ 依頼者への通知 `INVITE_REISSUED`/`INVITE_REISSUE_DECLINED`、依頼通知の遷移先を `…/invites#reissue-requests` に ⑥ 監査 `*_INVITE_REISSUED`/`*_INVITE_REISSUE_DECLINED` ⑦ Flyway V267.20261124005518（CHECK 張り直し・索引）⑧ ErrorCode `ROLE_016`(404)〜`ROLE_019`(500) |
+| 2026-11-24 | CMP-261124-0157: 招待参加が招待ロールに関係なく memberships を MEMBER で作り user_roles に招待ロール行を作っていた欠陥を修正（SUPPORTER 招待で正式メンバー扱いになりメンバー限定の記事等が見えていた）。招待ロール→書き先を 03_business_logic.md「招待参加フロー」手順8の表に確定し、共有・個人招待で付与できるロールを MEMBER / SUPPORTER に限定（ADMIN / DEPUTY_ADMIN / GUEST / SYSTEM_ADMIN は発行・承諾とも 422 ROLE_009。SYSTEM_ADMIN ロールの招待で参加するとスコープ内で SYSTEM_ADMIN 相当になる経路も塞いだ）。既存データは V267.20261124005850 で是正 |
+| 2026-11-24 | **再招待依頼の受け手側（CMP-261107-1833 PR3）**: ① 招待権限者向け API `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests`（一覧・再招待・見送り。TEAM/ORG 各3メソッド）を追加 ② 保留に `REISSUE_DECLINED` を追加し、再依頼の集合（REISSUABLE）と閉じる集合（DISMISSIBLE）を分離 ③ GET 時の期限判定（`PENDING`→`EXPIRED`）④ 再招待は仮発行（`revoked_at = created_at`）→ auth の確定 → 有効化の順で、補償の失効は行わない。仮発行の窓60秒 ⑤ 依頼者への通知 `INVITE_REISSUED`/`INVITE_REISSUE_DECLINED`、依頼通知の遷移先を `…/invites#reissue-requests` に ⑥ 監査 `*_INVITE_REISSUED`/`*_INVITE_REISSUE_DECLINED` ⑦ Flyway V268.20261124173054（CHECK 張り直し・索引）⑧ ErrorCode `ROLE_016`(404)〜`ROLE_019`(500) |
 
 ---
 

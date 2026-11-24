@@ -10,7 +10,7 @@ import java.util.UUID;
  * @param requesterDisplayName 依頼者の表示名（利用者入力。FE は補間のみで表示する）
  * @param requesterAvatarUrl   依頼者のアバター表示 URL（未設定なら null）
  * @param requestedAt          依頼日時
- * @param roleName             再招待で実際に付与するロール（MEMBER/SUPPORTER/GUEST）
+ * @param roleName             再招待で実際に付与するロール（MEMBER/SUPPORTER）
  */
 public record InviteReissueRequestResponse(UUID id, String requesterDisplayName, String requesterAvatarUrl,
                                            Instant requestedAt, String roleName) {

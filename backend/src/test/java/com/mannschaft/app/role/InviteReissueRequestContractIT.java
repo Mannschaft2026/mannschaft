@@ -448,7 +448,7 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
     }
 
     @ParameterizedTest
-    @CsvSource({"MEMBER,MEMBER", "SUPPORTER,SUPPORTER", "GUEST,GUEST", "ADMIN,MEMBER", "DEPUTY_ADMIN,MEMBER", ",MEMBER"})
+    @CsvSource({"MEMBER,MEMBER", "SUPPORTER,SUPPORTER", "GUEST,MEMBER", "ADMIN,MEMBER", "DEPUTY_ADMIN,MEMBER", ",MEMBER"})
     @DisplayName("I2: 付与ロールは非特権なら引き継ぎ、特権・元の招待が引けなければ MEMBER。一覧の roleName と一致し、"
             + "承認で ROLE_009（UNAVAILABLE）にならない")
     void grantRoleIsConsistent(String original, String expected) throws Exception {

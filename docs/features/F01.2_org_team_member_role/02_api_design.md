@@ -578,8 +578,8 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
   `PendingInviteStore#countReissueRequests`/`pageReissueRequests`）。一覧の `totalElements` と管理者向け集約
   （`INVITE_REISSUE`）の `pending_count` は一致する。ブロック中の依頼者は述語に入れず一覧に残る（操作時に判定）。
   閉鎖中（アーカイブ）のスコープの一覧は0件で、再開すると戻る。
-- 付与ロール（`InviteReissueRequestService#resolveGrantRole`）: 元の招待のロールが非特権（MEMBER/SUPPORTER/GUEST）なら引き継ぎ、
-  ADMIN/DEPUTY_ADMIN（宛先付き招待では `ROLE_009` になる）や元の招待・ロールが引けない場合は MEMBER。一覧の `roleName` と
+- 付与ロール（`InviteReissueRequestService#resolveGrantRole`）: 元の招待のロールが招待で付与できるロール（MEMBER/SUPPORTER。
+  `InviteRolePolicy`・CMP-261124-0157）なら引き継ぎ、ADMIN/DEPUTY_ADMIN/GUEST/SYSTEM_ADMIN（承諾で 422 `ROLE_009` になる）や元の招待・ロールが引けない場合は MEMBER。一覧の `roleName` と
   発行で同じ判定を使う。
 - 再招待の手順: slug→ID → 招待権限の確認（403）→ 依頼の確認（不在・他スコープ `ROLE_016`、`REISSUE_REQUESTED` 以外
   `ROLE_017`、依頼者が非 ACTIVE・ブロック中 `ROLE_018`）→ 在籍済みなら `JOINED` にして `ALREADY_MEMBER`（招待は作らない）→

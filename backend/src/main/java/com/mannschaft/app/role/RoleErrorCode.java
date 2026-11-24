@@ -38,7 +38,8 @@ public enum RoleErrorCode implements ErrorCode {
     /**
      * 宛先不一致（F04.12 / F01.2 承諾型オファー）。
      * 他人宛ての招待・委譲オファーを第三者が承諾/辞退しようとした場合の 403（IDOR 防止）。
-     * 発行時に特権ロール（ADMIN/DEPUTY_ADMIN）を指定した場合の 422 にも流用する（設計書 §6・C-1）。
+     * 発行時・承諾時に招待で付与できないロール（特権 ADMIN/DEPUTY_ADMIN は C-1、GUEST/SYSTEM_ADMIN は
+     * CMP-261124-0157）を指定した場合の 422 にも流用する（設計書 §6・C-1・{@code InviteRolePolicy}）。
      */
     ROLE_009("ROLE_009", "この招待はあなた宛てではありません", Severity.WARN),
 
