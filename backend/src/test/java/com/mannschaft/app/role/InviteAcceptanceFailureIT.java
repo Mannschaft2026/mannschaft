@@ -28,7 +28,6 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.transaction.UnexpectedRollbackException;
@@ -64,11 +63,8 @@ import static org.mockito.Mockito.doReturn;
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @ExtendWith(OutputCaptureExtension.class)
 @DisplayName("CMP-1457 招待承諾の障害・部分失敗・補償")
-class InviteAcceptanceFailureIT extends InviteAcceptanceItSupport {
+class InviteAcceptanceFailureIT extends InviteAcceptanceSpyItSupport {
 
-    @MockitoSpyBean private MembershipGrantService grantSpy;
-    @MockitoSpyBean private MyScopeFolderService folderSpy;
-    @MockitoSpyBean private ChatMembershipInviteCardService cardSpy;
     @Autowired private MeterRegistry meterRegistry;
     @Autowired private MembershipInviteService membershipInvites;
     @Autowired private MembershipInviteTokenIssuer membershipIssuer;

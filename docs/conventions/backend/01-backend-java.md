@@ -14,7 +14,7 @@ src/main/java/com/mannschaft/app/
 │   ├── CorsConfig.java
 │   ├── SwaggerConfig.java
 │   ├── AsyncConfig.java             # @EnableAsync + スレッドプール定義（§15）
-│   ├── TimeZoneConfig.java          # JVM タイムゾーン設定（§20）
+│   ├── TimeZoneConfig.java          # DataSource 生成時の JVM TZ 番人（§20）。設定本体は ServerTimeZoneEnvironmentPostProcessor
 │   ├── RequestLoggingFilter.java    # MDC requestId/traceId 設定（§27）
 │   └── SpringEventPublisher.java    # DomainEventPublisher 実装（§6）
 ├── common/                          # 共通部品

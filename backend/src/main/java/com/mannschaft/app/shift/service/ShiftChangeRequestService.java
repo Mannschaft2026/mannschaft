@@ -192,7 +192,8 @@ public class ShiftChangeRequestService {
             default -> throw new BusinessException(ShiftErrorCode.INVALID_CHANGE_REQUEST_STATUS);
         }
 
-        entity = changeRequestRepository.save(entity);
+        // 応答の version を更新後の値にするため、その場で flush する
+        entity = changeRequestRepository.saveAndFlush(entity);
         log.info("シフト変更依頼審査: id={}, decision={}, reviewerId={}", id, request.decision(), userId);
         return toResponse(entity);
     }
@@ -315,6 +316,7 @@ public class ShiftChangeRequestService {
                         entity.getStatus(), entity.getReviewerId(), entity.getReviewComment(), entity.getReviewedAt()))
                 .timing(new ChangeRequestResponse.ChangeRequestTimingDto(
                         entity.getExpiresAt(), entity.getCreatedAt()))
+                .version(entity.getVersion())
                 .build();
     }
 }

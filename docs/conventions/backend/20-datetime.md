@@ -14,7 +14,7 @@
 
 | 層 | 壁時計 | 決めているもの |
 |---|---|---|
-| **アプリ層**（`LocalDateTime`）| **JST**（Asia/Tokyo）| JVM 既定 TZ。`TimeZoneConfig` が `Asia/Tokyo` に固定 |
+| **アプリ層**（`LocalDateTime`）| **JST**（Asia/Tokyo）| JVM 既定 TZ。`ServerTimeZoneEnvironmentPostProcessor` が Bean 生成前に `SERVER_ZONE`（`Asia/Tokyo`）へ確定 |
 | **DB 格納値**（`DATETIME` カラム）| **UTC** | `spring.jpa.properties.hibernate.jdbc.time_zone: UTC`（`application.yml`）|
 
 - Hibernate はこの設定があるとき `setTimestamp(i, ts, Calendar.getInstance(UTC))` で書く。
@@ -84,7 +84,7 @@ TZ 変換が起きる。ボディ（JSON）は `@Primary ObjectMapper`（`Jackso
 > 無視して値がずれる」という静かなデータ破壊になる。ズレ幅は（ユーザー TZ のオフセット）−（+09:00）で、
 > **日本のユーザーだけ偶然 0 になるため発覚が遅れる**。
 > なお `LocalDateTimeTimezoneSerializer` は `ZoneId.systemDefault()`、デシリアライザは定数
-> `SERVER_ZONE` を見る**非対称な参照**なので、`TimeZoneConfig` を変えるなら両方同時に変えること
+> `SERVER_ZONE` を見る**非対称な参照**なので、`SERVER_ZONE` を変えるなら両方同時に変えること
 > （この一致も同番人が固定している）。
 
 #### 環境側で揃えるべき設定（ズレると 9 時間の静かなバグになる）
@@ -119,16 +119,15 @@ test プロファイルにしか存在せず、実態は **test=UTC / local・ci
 - 裁可済みの[日時方針](../../architecture/datetime_policy_utc_instant_vs_wallclock.md)に従い、新規の「起きた瞬間」は **`Instant` / `OffsetDateTime`** を使い、UTCで保持する。
 - 土地の約束（壁時計）は **`LocalDate` / `LocalTime` ＋店・チームのTZ** で保持し、壁時計そのものをUTC化しない。
 - 既存の `LocalDateTime` は日時方針の段階移行に従う。新規コードで瞬間と壁時計を混同する型として追加せず、既存フィールドの一括変更は行わない。
-- JVM のデフォルトタイムゾーンを起動時に `Asia/Tokyo` に設定する（`com.mannschaft.app.config` に配置）:
+- JVM のデフォルトタイムゾーンは **ApplicationContext 生成前**に `UserZoneLocalDateTimeParser.SERVER_ZONE`（`Asia/Tokyo`）へ設定する。`@PostConstruct` など Bean 生成中の切替は禁止（DataSource の最初の接続が先に作られ DATE 列が前日で保存される。CMP-261123-1335）:
 ```java
-@Configuration
-public class TimeZoneConfig {
-    @PostConstruct
-    public void initTimeZone() {
-        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Tokyo"));
-    }
+// com.mannschaft.app.config.ServerTimeZoneEnvironmentPostProcessor（META-INF/spring.factories に登録）
+public void postProcessEnvironment(ConfigurableEnvironment env, SpringApplication app) {
+    TimeZone.setDefault(TimeZone.getTimeZone(UserZoneLocalDateTimeParser.SERVER_ZONE));
 }
 ```
+  ⚠️ **`-Duser.timezone` は Spring コンテキストを起動するテストでは効かない**: EnvironmentPostProcessor が JVM 既定 TZ を無条件に `SERVER_ZONE` へ上書きするため、`-Ptest.timezone=America/Los_Angeles` や `UTC` でテスト JVM を起動しても、`@SpringBootTest` / `SpringApplication` を使うテストは黙って JST で動く。Non-JST ジョブ（`backend-ci.yml`）へ Spring コンテキストを使うテストを足しても非 JST の検証にならない。ここへ足すのは Spring を使わない単体テストか、`ServerTimeZoneBootstrapTest` のように意図して UTC を再現するテストに限ること。
+  `TimeZoneConfig` の番人が、全 DataSource（自動構成・replica・archive）の生成時点で既定 TZ が `SERVER_ZONE` と食い違えば起動を失敗させる。正本は `SERVER_ZONE` の1つで Dockerfile・Terraform・`TZ` 環境変数には併記しない。
 - ⚠️ **JVM 既定 TZ が JST であることと、DB 格納基準が UTC であることは矛盾しない**（上の「二層モデル」参照）。
   JVM の JST 固定は `LocalDateTime.now()` が JST 壁時計を返すこと・API 直列化のオフセットが `+09:00` になることを
   保証するためのものであり、DB へ書く際の基準は `hibernate.jdbc.time_zone: UTC` が別途決めている。

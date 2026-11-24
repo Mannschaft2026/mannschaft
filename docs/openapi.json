@@ -80901,6 +80901,92 @@
         }
       }
     },
+    "/api/v1/me/pending-invite/reissue-request": {
+      "post": {
+        "tags": [
+          "招待付き新規登録の保留承認"
+        ],
+        "summary": "失効した招待の再発行を要請",
+        "description": "非公開の招待先の招待権限者へ通知する。7 日以内の再要請は通知せず alreadyRequested\u003dtrue。公開の招待先は 409 AUTH_085",
+        "operationId": "requestReissue",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponsePendingInviteReissueResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/pending-invite/dismiss": {
+      "post": {
+        "tags": [
+          "招待付き新規登録の保留承認"
+        ],
+        "summary": "失効した招待の案内を閉じる",
+        "operationId": "dismiss",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/pending-invite/decline": {
+      "post": {
+        "tags": [
+          "招待付き新規登録の保留承認"
+        ],
+        "summary": "参加待ちの招待を辞退",
+        "operationId": "decline_2",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/pending-invite/accept": {
+      "post": {
+        "tags": [
+          "招待付き新規登録の保留承認"
+        ],
+        "summary": "参加待ちの招待を承認して参加",
+        "description": "承認後の状態（JOINED/EXPIRED/UNAVAILABLE）を返す。処理中は 409 AUTH_086、辞退済み等は 409 AUTH_085",
+        "operationId": "accept_3",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponsePendingInviteAcceptResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/payment-methods/setup-intent": {
       "post": {
         "tags": [
@@ -104877,7 +104963,7 @@
         ],
         "summary": "代理承認",
         "description": "F03.10 §4.1: 代理人が代理を承認する",
-        "operationId": "accept_3",
+        "operationId": "accept_4",
         "parameters": [
           {
             "name": "delegationId",
@@ -111806,7 +111892,7 @@
         ],
         "summary": "代理承認",
         "description": "F03.10 §4.2: 代理人が代理を承認する",
-        "operationId": "accept_4",
+        "operationId": "accept_5",
         "parameters": [
           {
             "name": "delegationId",
@@ -144958,6 +145044,28 @@
         }
       }
     },
+    "/api/v1/me/pending-invite": {
+      "get": {
+        "tags": [
+          "招待付き新規登録の保留承認"
+        ],
+        "summary": "自分の参加待ち招待を取得",
+        "description": "招待付きで新規登録した参加待ちの招待を返す。無ければ data は null",
+        "operationId": "get_40",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponsePendingInviteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/payments": {
       "get": {
         "tags": [
@@ -148561,7 +148669,7 @@
         "tags": [
           "disclosure-form-template-controller"
         ],
-        "operationId": "get_40",
+        "operationId": "get_41",
         "parameters": [
           {
             "name": "templateId",
@@ -201822,6 +201930,10 @@
           },
           "timing": {
             "$ref": "#/components/schemas/ChangeRequestTimingDto"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -204528,7 +204640,9 @@
           },
           "drawPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "endDate": {
             "type": "string",
@@ -204558,7 +204672,9 @@
           },
           "lossPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "name": {
             "type": "string",
@@ -204609,7 +204725,9 @@
           },
           "winPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           }
         },
         "required": [
@@ -209808,6 +209926,38 @@
             "type": "string",
             "maxLength": 50,
             "minLength": 0
+          }
+        }
+      },
+      "ApiResponsePendingInviteReissueResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PendingInviteReissueResponse"
+          }
+        }
+      },
+      "PendingInviteReissueResponse": {
+        "type": "object",
+        "properties": {
+          "alreadyRequested": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ApiResponsePendingInviteAcceptResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PendingInviteAcceptResponse"
+          }
+        }
+      },
+      "PendingInviteAcceptResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -222952,7 +223102,9 @@
           },
           "drawPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "endDate": {
             "type": "string",
@@ -222982,7 +223134,9 @@
           },
           "lossPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "name": {
             "type": "string",
@@ -223033,7 +223187,9 @@
           },
           "winPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           }
         },
         "required": [
@@ -249382,6 +249538,49 @@
             "type": "string"
           },
           "week_pattern": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiResponsePendingInviteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PendingInviteResponse"
+          }
+        }
+      },
+      "PendingInviteResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "joinable": {
+            "type": "boolean"
+          },
+          "publicPath": {
+            "type": "string"
+          },
+          "reissueRequestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retryAvailableAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "roleName": {
+            "type": "string"
+          },
+          "scopeName": {
+            "type": "string"
+          },
+          "scopeType": {
+            "type": "string"
+          },
+          "status": {
             "type": "string"
           }
         }

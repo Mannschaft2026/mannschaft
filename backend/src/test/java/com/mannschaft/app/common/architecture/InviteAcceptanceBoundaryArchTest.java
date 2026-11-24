@@ -34,6 +34,9 @@ import static org.assertj.core.api.Assertions.fail;
  * 凍結しない番人であり、凍結ストアを読み書きしない。D-3T 判定は本番番人
  * {@link CrossDomainTransactionalTransitiveArchTest#findViolations} をそのまま呼ぶ。</p>
  *
+ * <p>CMP-261107-1833（招待付き新規登録の保留承認）で、register が Facade を呼ばなくなったことに合わせて
+ * {@code callersUseFacade}・{@code registerReachSetIsUnchanged} を書き換え、{@link PendingInviteBoundary} を足した。</p>
+ *
  * <p>新設型はまだ存在しないため {@link Class#forName} で引き、存在しなければ assertion で落とす（red）。
  * 「特性（main で緑）」と注記した試験は現行の不変条件を固定するもので、main でも緑が正しい。</p>
  */
@@ -182,10 +185,11 @@ class InviteAcceptanceBoundaryArchTest {
         }
 
         @Test
-        @DisplayName("S2: 呼び出し側（InviteController・AuthRegistrationService）は Facade を呼び、InviteService の承諾・辞退を呼ばない")
+        @DisplayName("S2: 呼び出し側（InviteController）は Facade を呼び、InviteService の承諾・辞退を呼ばない"
+                + "（AuthRegistrationService は CMP-261107-1833 で Facade を呼ばなくなった。PendingInviteBoundary を参照）")
         void callersUseFacade() {
             require(FACADE);
-            for (String caller : List.of(CONTROLLER, REGISTRATION)) {
+            for (String caller : List.of(CONTROLLER)) {
                 JavaClass clazz = imported(caller);
                 List<String> legacyCalls = clazz.getMethodCallsFromSelf().stream()
                         .filter(call -> call.getTargetOwner().getName().equals(INVITE_SERVICE))
@@ -301,7 +305,8 @@ class InviteAcceptanceBoundaryArchTest {
     class Invariants {
 
         @Test
-        @DisplayName("S2/§4.4: AuthRegistrationService.register の D-3T 到達集合は既存9件と完全一致する")
+        @DisplayName("AC11（CMP-261107-1833）: AuthRegistrationService.register の D-3T 到達集合は Beta・InviteToken の2件だけ"
+                + "（Facade 経路の7件は消え、凍結ストアから削除する）")
         void registerReachSetIsUnchanged() {
             String prefix = "@Transactional entry com.mannschaft.app.auth.service.AuthRegistrationService.register("
                     + "com.mannschaft.app.auth.dto.RegisterRequest, java.lang.String) (domain 'auth') reaches other-domain repository ";
@@ -310,14 +315,7 @@ class InviteAcceptanceBoundaryArchTest {
                     .toList();
             assertThat(keys).containsExactlyInAnyOrder(
                     prefix + "com.mannschaft.app.admin.repository.BetaRestrictionConfigRepository (domain 'admin') [D-3T]",
-                    prefix + "com.mannschaft.app.membership.repository.MembershipRepository (domain 'membership') [D-3T]",
-                    prefix + "com.mannschaft.app.organization.repository.OrganizationBlockRepository (domain 'organization') [D-3T]",
-                    prefix + "com.mannschaft.app.role.repository.InviteTokenRepository (domain 'role') [D-3T]",
-                    prefix + "com.mannschaft.app.role.repository.RoleRepository (domain 'role') [D-3T]",
-                    prefix + "com.mannschaft.app.role.repository.UserRoleRepository (domain 'role') [D-3T]",
-                    prefix + "com.mannschaft.app.scopefolder.repository.MyScopeFolderItemRepository (domain 'scopefolder') [D-3T]",
-                    prefix + "com.mannschaft.app.scopefolder.repository.MyScopeFolderRepository (domain 'scopefolder') [D-3T]",
-                    prefix + "com.mannschaft.app.team.repository.TeamBlockRepository (domain 'team') [D-3T]");
+                    prefix + "com.mannschaft.app.role.repository.InviteTokenRepository (domain 'role') [D-3T]");
         }
 
         @Test
@@ -340,6 +338,170 @@ class InviteAcceptanceBoundaryArchTest {
             grant.getMethod("grantMemberRole", String.class, Long.class, Long.class, Long.class, String.class);
             assertThat(grant.isAnnotationPresent(Transactional.class))
                     .as("クラス単位 @Transactional を付けると private ヘルパ doGrant が D-3T 入口になる").isFalse();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // CMP-261107-1833: 招待付き新規登録の保留承認（AC11・設計 §2・§4・§5・§9-2・§9-3）
+    // ------------------------------------------------------------------
+
+    static final String PENDING_SERVICE = "com.mannschaft.app.auth.service.PendingInviteService";
+    static final String PENDING_STORE = "com.mannschaft.app.auth.service.PendingInviteStore";
+    static final String PENDING_CONTROLLER = "com.mannschaft.app.auth.controller.MePendingInviteController";
+    static final String ISSUER_POLICY = "com.mannschaft.app.role.service.InviteIssuerPolicy";
+    static final String RECIPIENT_RESOLVER = "com.mannschaft.app.role.service.InviteReissueRecipientResolver";
+    static final String REISSUE_LISTENER = "com.mannschaft.app.role.event.InviteReissueNotificationListener";
+    static final String MEMBERSHIP_INVITE_SERVICE = "com.mannschaft.app.role.service.MembershipInviteService";
+    static final String CLEANUP_BATCH = "com.mannschaft.app.auth.service.AuthCleanupBatchService";
+    static final String PARENTAL_CONSENT = "com.mannschaft.app.auth.service.ParentalConsentService";
+    static final String ERROR_CODE = "com.mannschaft.app.common.ErrorCode";
+    /** D-3T（CrossDomainTransactionalTransitiveArchTest）の凍結ストア。 */
+    static final String D3T_STORE = "archunit_store/296295dd-06cf-4f7b-bf82-315ba12ff501";
+
+    @Nested
+    @DisplayName("CMP-261107-1833 保留承認の構造（AC11）")
+    class PendingInviteBoundary {
+
+        @Test
+        @DisplayName("AC11: AuthRegistrationService は InviteAcceptanceFacade に一切依存しない（注入も呼び出しもしない）")
+        void registrationDoesNotUseFacade() {
+            JavaClass registration = imported(REGISTRATION);
+            List<String> facadeDeps = registration.getDirectDependenciesFromSelf().stream()
+                    .filter(d -> d.getTargetClass().getName().equals(FACADE))
+                    .map(d -> d.getDescription())
+                    .distinct()
+                    .toList();
+            assertThat(facadeDeps).as("AuthRegistrationService → Facade の依存").isEmpty();
+        }
+
+        @Test
+        @DisplayName("AC11: Facade は joinByInviteTokenHash(String,Long)・settleOrphanClaim(String,Long) を公開し、@Transactional を持たない")
+        void facadeHasHashEntry() {
+            Class<?> facade = require(FACADE);
+            assertThat(method(facade, "joinByInviteTokenHash", String.class, Long.class).getReturnType()).isEqualTo(void.class);
+            assertThat(method(facade, "settleOrphanClaim", String.class, Long.class).getReturnType()).isEqualTo(void.class);
+            assertNoTransactional(facade);
+        }
+
+        @Test
+        @DisplayName("AC11: hash 入口（joinByInviteTokenHash・settleOrphanClaim）を呼ぶ本番クラスは PendingInviteService だけ")
+        void hashEntryCalledOnlyByPendingInviteService() {
+            require(PENDING_SERVICE);
+            for (String entry : List.of("joinByInviteTokenHash", "settleOrphanClaim")) {
+                Set<String> callers = ProductionClasses.get().stream()
+                        .flatMap(c -> c.getMethodCallsFromSelf().stream())
+                        .filter(call -> call.getTargetOwner().getName().equals(FACADE))
+                        .filter(call -> call.getName().equals(entry))
+                        .map(call -> call.getOriginOwner().getName())
+                        .filter(owner -> !owner.equals(FACADE))
+                        .collect(Collectors.toCollection(TreeSet::new));
+                assertThat(callers).as(entry + " の呼び出し元").containsExactly(PENDING_SERVICE);
+            }
+        }
+
+        @Test
+        @DisplayName("AC11(§9-3): Writer#claimOrResume(InviteLocator, Long, boolean, ErrorCode) は REQUIRED の書き込みTX")
+        void writerHasClaimOrResume() throws Exception {
+            Class<?> writer = require(WRITER);
+            Method m = method(writer, "claimOrResume", require(LOCATOR), Long.class, boolean.class, require(ERROR_CODE));
+            Transactional tx = effectiveTransactional(writer, m);
+            assertThat(tx).as("claimOrResume は @Transactional").isNotNull();
+            assertThat(tx.readOnly()).isFalse();
+            assertThat(tx.propagation()).isEqualTo(Propagation.REQUIRED);
+        }
+
+        @Test
+        @DisplayName("AC11: PendingInviteService は @Transactional を持たない（Facade の各段の短TXを外側TXなしで呼ぶ）")
+        void pendingServiceHasNoTransaction() {
+            assertNoTransactional(require(PENDING_SERVICE));
+        }
+
+        @Test
+        @DisplayName("AC11: PendingInviteStore の書き込みは auth の短TX（REQUIRED・readOnly でない）")
+        void storeWritesAreShortTransactions() {
+            Class<?> store = require(PENDING_STORE);
+            for (String name : List.of("createPending", "tryStartAccepting", "completeAttempt", "revertAttempt",
+                    "transition", "markReissueRequested", "discardOpen")) {
+                Method m = publicMethod(store, name);
+                Transactional tx = effectiveTransactional(store, m);
+                assertThat(tx).as(name + " は @Transactional").isNotNull();
+                assertThat(tx.readOnly()).as(name + " は readOnly でない").isFalse();
+                assertThat(tx.propagation()).as(name + " は REQUIRED（登録の users と同TXに参加する）")
+                        .isEqualTo(Propagation.REQUIRED);
+            }
+        }
+
+        @Test
+        @DisplayName("AC11(§9-2): 新3クラス（InviteIssuerPolicy・InviteReissueRecipientResolver・InviteReissueNotificationListener）は @Transactional を持たない")
+        void newThreeClassesHaveNoTransaction() {
+            for (String name : List.of(ISSUER_POLICY, RECIPIENT_RESOLVER, REISSUE_LISTENER)) {
+                assertNoTransactional(require(name));
+            }
+        }
+
+        @Test
+        @DisplayName("AC11: 新設クラスの D-3T 違反は 0 件")
+        void newClassesHaveNoTransitiveViolation() {
+            for (String name : List.of(PENDING_SERVICE, PENDING_STORE, PENDING_CONTROLLER, ISSUER_POLICY,
+                    RECIPIENT_RESOLVER, REISSUE_LISTENER)) {
+                assertThat(d3t(imported(name))).as(name + " の D-3T").isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("AC11(§9-2): MembershipInviteService は canIssueWithRole を持たず InviteIssuerPolicy に委譲する")
+        void membershipInviteServiceDelegatesToPolicy() {
+            require(ISSUER_POLICY);
+            Class<?> service = require(MEMBERSHIP_INVITE_SERVICE);
+            assertThat(Arrays.stream(service.getDeclaredMethods()).map(Method::getName)).doesNotContain("canIssueWithRole");
+            boolean callsPolicy = imported(MEMBERSHIP_INVITE_SERVICE).getMethodCallsFromSelf().stream()
+                    .anyMatch(call -> call.getTargetOwner().getName().equals(ISSUER_POLICY));
+            assertThat(callsPolicy).as("MembershipInviteService → InviteIssuerPolicy の呼び出し").isTrue();
+        }
+
+        @Test
+        @DisplayName("AC11: register・MembershipInviteService・InviteService の D-3T は凍結ストアにある行だけ（削除のみ・追記なし）")
+        void transitiveKeysAreSubsetOfFrozenStore() {
+            Set<String> frozen = frozenD3tKeys();
+            for (String name : List.of(REGISTRATION, MEMBERSHIP_INVITE_SERVICE, INVITE_SERVICE)) {
+                List<String> added = d3t(imported(name)).stream().filter(k -> !frozen.contains(k)).toList();
+                assertThat(added).as(name + " の凍結ストアに無い D-3T（新たに踏んだ）").isEmpty();
+            }
+            assertThat(d3t(imported(MEMBERSHIP_INVITE_SERVICE)))
+                    .as("canIssueWithRole は InviteIssuerPolicy へ移り D-3T 入口でなくなる")
+                    .noneMatch(k -> k.contains("MembershipInviteService.canIssueWithRole("));
+        }
+
+        @Test
+        @DisplayName("AC11: 凍結ストアから register の Facade 経路7行が削除され、Beta・InviteToken の2行だけが残る")
+        void frozenStoreHasOnlyTwoRegisterLines() {
+            String prefix = "@Transactional entry com.mannschaft.app.auth.service.AuthRegistrationService.register(";
+            List<String> registerLines = frozenD3tKeys().stream().filter(k -> k.startsWith(prefix)).sorted().toList();
+            assertThat(registerLines).hasSize(2);
+            assertThat(registerLines).anyMatch(k -> k.contains("BetaRestrictionConfigRepository"));
+            assertThat(registerLines).anyMatch(k -> k.contains("InviteTokenRepository"));
+        }
+
+        @Test
+        @DisplayName("AC3/§5: 未確認アカウント掃除と保護者全員拒否は PendingInviteStore#discardOpen で保留を DISCARDED にする")
+        void discardPathsCallStore() {
+            require(PENDING_STORE);
+            for (String caller : List.of(CLEANUP_BATCH, PARENTAL_CONSENT)) {
+                boolean discards = imported(caller).getMethodCallsFromSelf().stream()
+                        .anyMatch(call -> call.getTargetOwner().getName().equals(PENDING_STORE)
+                                && call.getName().equals("discardOpen"));
+                assertThat(discards).as(caller + " → PendingInviteStore#discardOpen").isTrue();
+            }
+        }
+    }
+
+    private static Set<String> frozenD3tKeys() {
+        try (java.io.InputStream in = InviteAcceptanceBoundaryArchTest.class.getClassLoader().getResourceAsStream(D3T_STORE)) {
+            assertThat(in).as("D-3T 凍結ストア " + D3T_STORE).isNotNull();
+            String text = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return text.lines().map(String::strip).filter(l -> !l.isEmpty()).collect(Collectors.toCollection(TreeSet::new));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
         }
     }
 

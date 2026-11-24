@@ -35,6 +35,7 @@ mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApi
 
 function row(id: number, status: ChangeRequest['reviewInfo']['status'] = 'OPEN'): ChangeRequest {
   return {
+    version: 3,
     id,
     scheduleId: 10,
     slotId: null,
@@ -70,8 +71,8 @@ describe('useChangeRequest 成功文言（AC-D1）', () => {
     api.requests.value = [row(2), row(3), row(4)]
 
     await api.createRequest({ scheduleId: 10, requestType: 'PRE_CONFIRM_EDIT' })
-    await api.review(2, 'ACCEPTED')
-    await api.review(3, 'REJECTED')
+    await api.review(2, 'ACCEPTED', undefined, 3)
+    await api.review(3, 'REJECTED', undefined, 3)
     await api.withdraw(4)
 
     const messages = mocks.success.mock.calls.map(c => String(c[0]))
@@ -99,7 +100,7 @@ describe('useChangeRequest 失敗（AC-D2）', () => {
     api.requests.value = [row(2), row(4)]
 
     await expect(api.createRequest({ scheduleId: 10, requestType: 'PRE_CONFIRM_EDIT' })).resolves.toBe(false)
-    await expect(api.review(2, 'ACCEPTED')).resolves.toBe(false)
+    await expect(api.review(2, 'ACCEPTED', undefined, 3)).resolves.toBe(false)
     await expect(api.withdraw(4)).resolves.toBe(false)
 
     expect(mocks.handleApiError).toHaveBeenCalledTimes(3)
@@ -113,11 +114,11 @@ describe('useChangeRequest 失敗（AC-D2）', () => {
     mocks.reviewChangeRequest.mockResolvedValue(row(2, 'REJECTED'))
     api.requests.value = [row(2)]
 
-    await api.review(2, 'REJECTED', '人手が足りません')
+    await api.review(2, 'REJECTED', '人手が足りません', 3)
 
     expect(mocks.reviewChangeRequest).toHaveBeenCalledWith(
       2,
-      expect.objectContaining({ decision: 'REJECTED', reviewComment: '人手が足りません' }),
+      expect.objectContaining({ decision: 'REJECTED', reviewComment: '人手が足りません', version: 3 }),
     )
   })
 })
@@ -149,8 +150,8 @@ describe('useChangeRequest 再入ガードと 409（AC-I1 / AC-I3）', () => {
     )
     api.requests.value = [row(2)]
 
-    const first = api.review(2, 'ACCEPTED')
-    const second = api.review(2, 'ACCEPTED')
+    const first = api.review(2, 'ACCEPTED', undefined, 3)
+    const second = api.review(2, 'ACCEPTED', undefined, 3)
     release(row(2, 'ACCEPTED'))
     await Promise.all([first, second])
 
@@ -179,9 +180,35 @@ describe('useChangeRequest 再入ガードと 409（AC-I1 / AC-I3）', () => {
     mocks.listChangeRequests.mockResolvedValue([row(2, 'WITHDRAWN')])
     api.requests.value = [row(2)]
 
-    await api.review(2, 'ACCEPTED')
+    await api.review(2, 'ACCEPTED', undefined, 3)
 
     expect(mocks.listChangeRequests).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useChangeRequest 審査の楽観ロック（409）', () => {
+  it.each(['SHIFT_018', 'SHIFT_031'])('審査が %s の 409 のとき競合専用の文言を出し、一覧を再取得し、最新の依頼つき conflict を返す', async (code) => {
+    const api = await useIt()
+    mocks.reviewChangeRequest.mockRejectedValue({ statusCode: 409, data: { error: { code } } })
+    mocks.listChangeRequests.mockResolvedValue([{ ...row(2), version: 4 }])
+    api.requests.value = [row(2)]
+
+    const outcome = await api.reviewWithOutcome(2, 'ACCEPTED', undefined, 3)
+
+    expect(outcome).toEqual({ status: 'conflict', latest: expect.objectContaining({ id: 2, version: 4 }) })
+    expect(mocks.error).toHaveBeenCalledWith('This request was updated by someone else first. The list has been reloaded; please check the latest status')
+    expect(mocks.handleApiError).not.toHaveBeenCalled()
+    expect(mocks.listChangeRequests).toHaveBeenCalledTimes(1)
+  })
+
+  it('409 以外（500）は error を返し、一覧は再取得しない', async () => {
+    const api = await useIt()
+    mocks.reviewChangeRequest.mockRejectedValue({ statusCode: 500 })
+    api.requests.value = [row(2)]
+
+    expect(await api.reviewWithOutcome(2, 'ACCEPTED', undefined, 3)).toEqual({ status: 'error' })
+    expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
+    expect(mocks.listChangeRequests).not.toHaveBeenCalled()
   })
 })
 

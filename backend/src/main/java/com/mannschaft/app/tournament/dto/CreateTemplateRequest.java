@@ -1,6 +1,8 @@
 package com.mannschaft.app.tournament.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -27,8 +29,11 @@ public class CreateTemplateRequest {
     @NotNull
     private final String supportedFormats;
 
+    @Min(0) @Max(255)
     private final Integer winPoints;
+    @Min(0) @Max(255)
     private final Integer drawPoints;
+    @Min(0) @Max(255)
     private final Integer lossPoints;
     private final Boolean hasDraw;
     private final Boolean hasSets;

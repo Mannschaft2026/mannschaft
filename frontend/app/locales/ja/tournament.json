@@ -414,6 +414,40 @@
         "invalidUserId": "ユーザーIDは正の整数で入力してください",
         "searchFailed": "会員検索に失敗しました"
       }
+    },
+    "create": {
+      "createFailed": "大会の作成に失敗しました",
+      "createFailedHint": "入力内容を確認してください",
+      "fields": {
+        "name": "大会名",
+        "season": "年度",
+        "format": "形式",
+        "sport": "競技",
+        "description": "説明",
+        "visibility": "公開範囲",
+        "winPoints": "勝点",
+        "drawPoints": "引分点",
+        "lossPoints": "敗点"
+      },
+      "title": "大会を作成",
+      "openButton": "大会を作成",
+      "submit": "作成",
+      "cancel": "キャンセル",
+      "success": "大会を作成しました",
+      "namePlaceholder": "例: 2026年度春季リーグ",
+      "nameRequired": "大会名を入力してください",
+      "seasonRequired": "年度を入力してください"
+    },
+    "list": {
+      "title": "大会・リーグ",
+      "empty": "大会がありません",
+      "loadError": "大会一覧の取得に失敗しました",
+      "scoreSummary": "勝{win} 分{draw} 負{loss}"
+    },
+    "formats": {
+      "LEAGUE": "リーグ戦",
+      "KNOCKOUT": "トーナメント",
+      "GROUP_KNOCKOUT": "グループ+トーナメント"
     }
   },
   "dashboard_widgets": {
