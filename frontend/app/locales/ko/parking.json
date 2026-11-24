@@ -30,7 +30,75 @@
       "allocation": {
         "FIRST_COME": "선착순",
         "LOTTERY": "추첨"
+      },
+      "refreshError": "구역 목록을 새로 고치지 못했습니다. 표시된 내용이 최신이 아닐 수 있습니다."
+    },
+    "apply": {
+      "button": "주차 신청",
+      "dialogTitle": "구역 사용 신청",
+      "space": "구역",
+      "spacePlaceholder": "구역 선택",
+      "noSpaces": "현재 신청을 받는 구역이 없습니다.",
+      "vehicle": "차량",
+      "vehiclePlaceholder": "차량 선택",
+      "noVehicle": "등록된 차량이 없습니다. 신청하려면 차량을 등록해야 합니다.",
+      "loadVehiclesError": "차량 정보를 불러오지 못했습니다.",
+      "retry": "다시 시도",
+      "message": "메시지(선택)",
+      "messageHint": "최대 {max}자",
+      "submit": "신청",
+      "close": "닫기",
+      "success": "신청이 접수되었습니다",
+      "successLottery": "추첨 신청이 접수되었습니다"
+    },
+    "vehicle": {
+      "register": "차량 등록",
+      "type": "종류",
+      "plate": "번호판",
+      "nickname": "별명(선택)",
+      "save": "등록",
+      "kind": {
+        "CAR": "자동차",
+        "MOTORCYCLE": "오토바이",
+        "BICYCLE": "자전거"
       }
+    },
+    "applications": {
+      "title": "내 신청",
+      "titleAll": "신청 목록",
+      "empty": "신청 내역이 없습니다",
+      "vehicle": "차량",
+      "rejectionReason": "반려 사유: {reason}",
+      "cancel": "취소",
+      "cancelled": "신청을 취소했습니다",
+      "cancelConfirm": {
+        "header": "신청 취소",
+        "message": "구역 {space} 신청을 취소하시겠습니까?",
+        "accept": "취소하기",
+        "reject": "그만두기"
+      },
+      "status": {
+        "PENDING": "심사 대기",
+        "APPROVED": "승인됨",
+        "REJECTED": "반려됨",
+        "CANCELLED": "취소됨",
+        "LOTTERY_PENDING": "추첨 대기"
+      }
+    },
+    "errors": {
+      "spaceNotFound": "구역을 찾을 수 없습니다. 목록을 새로 고쳤습니다.",
+      "vehicleNotFound": "선택한 차량을 찾을 수 없습니다. 다시 선택해 주세요.",
+      "applicationNotFound": "신청을 찾을 수 없습니다. 목록을 새로 고쳤습니다.",
+      "spaceNotVacant": "이 구역은 더 이상 비어 있지 않습니다. 목록을 새로 고쳤습니다.",
+      "maxSpacesExceeded": "1인당 최대 사용 구역 수를 초과했습니다.",
+      "notAccepting": "이 구역은 현재 신청을 받지 않습니다.",
+      "alreadyApplied": "이미 이 구역에 신청했습니다.",
+      "invalidStatus": "이미 결정된 신청이라 처리할 수 없습니다.",
+      "plateDuplicate": "이미 등록된 번호판입니다.",
+      "forbidden": "이 작업을 수행할 권한이 없습니다.",
+      "notFound": "대상을 찾을 수 없습니다. 목록을 새로 고쳤습니다.",
+      "conflict": "상태가 바뀌어 작업을 완료할 수 없습니다. 목록을 새로 고쳤습니다.",
+      "unprocessable": "이 구역은 현재 신청할 수 없습니다. 목록을 새로 고쳤습니다."
     }
   }
 }
