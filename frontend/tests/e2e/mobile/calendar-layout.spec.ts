@@ -50,6 +50,8 @@ async function stubBoundary(page: Page, authenticated = true, emptyReceipts = fa
       '/api/v1/chat/channels': [], '/api/v1/mentions': [],
       '/api/v1/inbox/summary': { byState: {}, byPriority: {}, bySourceType: {} },
       '/api/v1/active-incidents': { incidents: [] },
+      // layouts/default の PendingInviteDialog がログイン後に呼ぶ。参加待ち招待なしは data:null
+      '/api/v1/me/pending-invite': null,
       '/api/v1/notification-preferences': [],
       '/api/v1/notification-settings': { priorityAutoDelivery: true },
       '/api/v1/notification-type-preferences': [{ notificationType: 'URGENT', label: 'Urgent', isLocked: true, isEnabled: true, channelOverride: false, inAppEnabled: true, pushEnabled: true }],

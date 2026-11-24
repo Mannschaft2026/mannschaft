@@ -156,6 +156,8 @@ async function handleEndSwitch() {
       />
       <!-- F10.1: 管理者変身中バナー -->
       <AdminImpersonationBanner />
+      <!-- CMP-261107-1833: 招待付き新規登録で保留された招待の参加確認 -->
+      <PendingInviteDialog />
     </ClientOnly>
   </div>
 </template>
