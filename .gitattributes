@@ -13,6 +13,3 @@ backend/src/main/resources/diagnosis/approved/** -text
 
 # CI の変更判定スクリプトは Windows checkout でも LF 固定（CRLF だと bash が $'\r' で落ち、node --test の試験も落ちる）
 .github/scripts/detect-changed-files.sh text eol=lf
-
-# 台帳は末尾追記どうしが衝突する。手元の git merge では両側の行を残して自動解消する（GitHub のサーバ側マージには効かない。重複は構造検査が検出する）。CMP-261124-1222
-docs/task-list.md merge=union
