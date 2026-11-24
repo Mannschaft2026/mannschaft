@@ -3,6 +3,7 @@ package com.mannschaft.app.tournament.service;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.ReferenceType;
+import com.mannschaft.app.organization.service.OrganizationQueryService;
 import com.mannschaft.app.tournament.TournamentMapper;
 import com.mannschaft.app.tournament.dto.MatrixResponse;
 import com.mannschaft.app.tournament.dto.StandingResponse;
@@ -44,6 +45,7 @@ public class StandingsQueryService {
     private final TournamentFixtureRepository matchRepository;
     private final TournamentMapper mapper;
     private final ContentVisibilityChecker contentVisibilityChecker;
+    private final OrganizationQueryService organizationQueryService;
 
     /**
      * 順位表を取得する。
@@ -141,9 +143,21 @@ public class StandingsQueryService {
                             played, wins, draws, losses, points))
                     .build());
         }
+        // 主催組織の slug を1回の一括取得で付与する（組織ページ URL は slug が正準。削除済み組織は null のまま）
+        Set<Long> orgIds = new HashSet<>();
+        for (var e : entries) {
+            if (e.getOrganizationId() != null) orgIds.add(e.getOrganizationId());
+        }
+        Map<Long, String> slugByOrgId = new HashMap<>();
+        for (var summary : organizationQueryService.findSummariesByIds(orgIds)) {
+            slugByOrgId.put(summary.id(), summary.slug());
+        }
+        List<TeamTournamentHistoryResponse.TournamentHistoryEntry> withSlug = entries.stream()
+                .map(e -> e.toBuilder().organizationSlug(slugByOrgId.get(e.getOrganizationId())).build())
+                .toList();
         return TeamTournamentHistoryResponse.builder()
                 .teamId(teamId)
-                .history(entries)
+                .history(withSlug)
                 .build();
     }
 

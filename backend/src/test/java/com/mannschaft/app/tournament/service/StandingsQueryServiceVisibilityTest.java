@@ -63,6 +63,7 @@ class StandingsQueryServiceVisibilityTest {
     @Mock private TournamentFixtureRepository matchRepository;
     @Mock private TournamentMapper mapper;
     @Mock private ContentVisibilityChecker contentVisibilityChecker;
+    @Mock private com.mannschaft.app.organization.service.OrganizationQueryService organizationQueryService;
 
     @InjectMocks
     private StandingsQueryService service;

@@ -229196,6 +229196,9 @@
             "type": "integer",
             "format": "int64"
           },
+          "organizationSlug": {
+            "type": "string"
+          },
           "record": {
             "$ref": "#/components/schemas/TournamentHistoryEntryRecord"
           }
