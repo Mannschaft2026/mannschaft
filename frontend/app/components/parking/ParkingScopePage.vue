@@ -126,27 +126,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <SectionCard :title="t('parking.spaces.title')">
-      <PageLoading v-if="loading && spaces.length === 0" />
-      <DashboardErrorState
-        v-else-if="loadError && spaces.length === 0"
-        :error="loadError"
-        @retry="loadSpaces"
-      />
-      <DashboardEmptyState
-        v-else-if="spaces.length === 0"
-        icon="pi pi-car"
-        :message="t('parking.spaces.empty')"
-      />
-      <template v-else>
-        <p v-if="loadError" class="mb-2 text-sm text-red-600" data-testid="parking-spaces-refresh-error">
-          {{ t('parking.spaces.refreshError') }}
-          <Button :label="t('parking.apply.retry')" text size="small" @click="loadSpaces" />
-        </p>
-        <ParkingSpaceGrid :spaces="spaces" />
-      </template>
-    </SectionCard>
-
     <SectionCard
       :title="canManage ? t('parking.applications.titleAll') : t('parking.applications.title')"
     >
@@ -173,6 +152,27 @@ onMounted(async () => {
         @cancel="onCancel"
         @page="flow.loadApplications"
       />
+    </SectionCard>
+
+    <SectionCard :title="t('parking.spaces.title')">
+      <PageLoading v-if="loading && spaces.length === 0" />
+      <DashboardErrorState
+        v-else-if="loadError && spaces.length === 0"
+        :error="loadError"
+        @retry="loadSpaces"
+      />
+      <DashboardEmptyState
+        v-else-if="spaces.length === 0"
+        icon="pi pi-car"
+        :message="t('parking.spaces.empty')"
+      />
+      <template v-else>
+        <p v-if="loadError" class="mb-2 text-sm text-red-600" data-testid="parking-spaces-refresh-error">
+          {{ t('parking.spaces.refreshError') }}
+          <Button :label="t('parking.apply.retry')" text size="small" @click="loadSpaces" />
+        </p>
+        <ParkingSpaceGrid :spaces="spaces" />
+      </template>
     </SectionCard>
 
     <ParkingApplicationForm

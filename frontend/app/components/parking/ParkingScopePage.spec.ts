@@ -70,4 +70,15 @@ describe('ParkingScopePage の権限出し分け', () => {
     const wrapper = await mountPage()
     expect(wrapper.text()).not.toContain('parking.spaces.add')
   })
+
+  it('申請一覧は区画一覧より DOM 上で先に来る（モバイルで申請結果が見えるように）', async () => {
+    Object.assign(access, { roleName: 'MEMBER', isScopeAdmin: false, isAdmin: false, permissions: [] })
+    const wrapper = await mountPage()
+    const html = wrapper.html()
+    const apps = html.indexOf('parking.applications.title')
+    const spaces = html.indexOf('parking.spaces.title')
+    expect(apps).toBeGreaterThan(-1)
+    expect(spaces).toBeGreaterThan(-1)
+    expect(apps).toBeLessThan(spaces)
+  })
 })

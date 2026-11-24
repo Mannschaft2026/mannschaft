@@ -3,7 +3,6 @@ import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import {
   API,
-  FE,
   apiAs,
   createActor,
   createOrg,
@@ -137,9 +136,9 @@ test.beforeAll(async () => {
   for (const a of [admin, depPerm, depNo, memA, memB, supporter]) await newVehicle(a, `PK-${a.label}-${run}`)
 
   // 他人の申請（前提）。memA・memB の申請は画面で作るため、ここでは作らない
-  appAdmin = await applyByApi(admin, T(), spaceIds['P-10'])
-  appDepPerm = await applyByApi(depPerm, T(), spaceIds['P-11'])
-  appDepNo = await applyByApi(depNo, T(), spaceIds['P-12'])
+  appAdmin = await applyByApi(admin, T(), spaceIds['P-10']!)
+  appDepPerm = await applyByApi(depPerm, T(), spaceIds['P-11']!)
+  appDepNo = await applyByApi(depNo, T(), spaceIds['P-12']!)
 
   // 組織スコープ
   org = await createOrg(orgAdmin, `PKAPP 組織 ${Date.now().toString(36)}`)

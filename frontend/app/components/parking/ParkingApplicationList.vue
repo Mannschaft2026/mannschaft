@@ -92,8 +92,8 @@ function vehicleName(app: ApplicationResponse): string {
           v-if="canCancel(app)"
           :label="t('parking.applications.cancel')"
           severity="danger"
-          text
-          size="small"
+          outlined
+          class="min-h-11 min-w-11"
           data-testid="parking-application-cancel"
           @click="emit('cancel', app)"
         />

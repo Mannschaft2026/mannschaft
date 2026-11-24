@@ -54,6 +54,9 @@ describe('ParkingApplicationList', () => {
     })
     await wrapper.find('[data-testid="parking-application-cancel"]').trigger('click')
     expect(wrapper.emitted('cancel')?.[0]?.[0]).toMatchObject({ id: 1 })
+    expect(wrapper.find('[data-testid="parking-application-cancel"]').classes()).toEqual(
+      expect.arrayContaining(['min-h-11', 'min-w-11']),
+    )
   })
 
   it('区画・車両が引けないときは ID 表示にフォールバックする', async () => {
