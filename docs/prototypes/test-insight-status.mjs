@@ -647,3 +647,104 @@ describe('AC7 validate-beta-inventory-board.mjs が状態ファイルを検証�
     assert.match(result.stderr, /insight-status/);
   });
 });
+
+// ---------------------------------------------------------------- 検分指摘 R1〜R5（回帰）
+describe('R1 日付のみの updatedAt はその日の終わり（JST 23:59:59.999）として比較する', () => {
+  const dayFile = () => statusFile({ [ORIGINAL_ID]: { status: 'fixing', pr: '', updatedAt: '2026-11-24', note: '' } });
+
+  test('ローカルが JST 当日内（2026-11-24T10:00:00Z = JST 19:00）ならファイル優先で fixing', () => {
+    const core = loadCore();
+    const { insight } = resolveOne(core, aliRecord(ORIGINAL_ID, { status: 'done', updatedAt: ms('2026-11-24T10:00:00Z') }), dayFile());
+    assert.equal(insight.status, 'fixing');
+    assert.equal(insight.statusOrigin, 'file');
+  });
+
+  test('ローカルが JST 翌日（2026-11-24T15:30:00Z = JST 翌 00:30）なら local-unexported', () => {
+    const core = loadCore();
+    const { insight } = resolveOne(core, aliRecord(ORIGINAL_ID, { status: 'done', updatedAt: ms('2026-11-24T15:30:00Z') }), dayFile());
+    assert.equal(insight.status, 'done');
+    assert.equal(insight.statusOrigin, 'local-unexported');
+  });
+
+  test('タイムゾーン無しの日時（2026-11-24T10:00）は不正として警告になり適用されない', () => {
+    const core = loadCore();
+    const file = statusFile({ [ORIGINAL_ID]: { status: 'done', updatedAt: '2026-11-24T10:00' } });
+    const result = core.validateStatusFile(file);
+    assert.equal(result.warnings.length, 1);
+    assert.deepEqual(Object.keys(result.items), []);
+  });
+});
+
+describe('R2 書き出し時、inbox の項目は pr を出力しない', () => {
+  test('ファイル done/#4240 をローカルで inbox に戻した（新しい）場合、pr が無く status inbox、note は保持', () => {
+    const core = loadCore();
+    const file = statusFile({ [ORIGINAL_ID]: { status: 'done', pr: '#4240', updatedAt: '2026-11-24', note: '差し戻し' } });
+    const records = [aliRecord(ORIGINAL_ID, { status: 'inbox', updatedAt: ms('2026-11-25T03:00:00Z') })];
+    const evaluated = evaluateStatusSource(core.buildStatusFileSource(records, file, { overlayRunId: RUN_ID }));
+    const item = evaluated.items[ORIGINAL_ID];
+    assert.equal(item.status, 'inbox');
+    assert.ok(!('pr' in item), 'inbox の項目に pr が残っている');
+    assert.equal(item.note, '差し戻し');
+  });
+});
+
+describe('R3 不正項目は書き出し時に元のまま保持し、ファイル全体が不正なら書き出しを拒否する（例外）', () => {
+  test('未知 status の項目は warnings に載りつつ、書き出しでは元のまま保持される', () => {
+    const core = loadCore();
+    const broken = { status: 'closed', updatedAt: '2026-11-24', extra: 1 };
+    const file = statusFile({ [ORIGINAL_ID]: { status: 'done', pr: '#4240', updatedAt: '2026-11-24', note: '' }, BROKEN: broken });
+    assert.equal(core.validateStatusFile(file).warnings.length, 1);
+    const evaluated = evaluateStatusSource(core.buildStatusFileSource([], file, { overlayRunId: RUN_ID }));
+    assert.deepEqual(evaluated.items.BROKEN, broken);
+    assert.ok(evaluated.items[ORIGINAL_ID]);
+  });
+
+  test('schemaVersion 不一致のファイルでは buildStatusFileSource が例外を投げる', () => {
+    const core = loadCore();
+    assert.throws(() => core.buildStatusFileSource([], statusFile({}, 2), { overlayRunId: RUN_ID }), /schemaVersion/);
+  });
+
+  test('items がオブジェクトでないファイルでは buildStatusFileSource が例外を投げる', () => {
+    const core = loadCore();
+    assert.throws(() => core.buildStatusFileSource([], { schemaVersion: 1, items: [] }, { overlayRunId: RUN_ID }), /items/);
+  });
+
+  test('html は書き出しを try/catch で止めて理由をトースト表示し、不正項目の残置件数を伝える', () => {
+    const source = fs.readFileSync(htmlPath, 'utf8');
+    const handler = source.slice(source.indexOf("querySelector('#exportInsightStatus').addEventListener"));
+    const body = handler.slice(0, handler.indexOf("querySelector('#insightStatusWarnings')"));
+    assert.match(body, /try\s*\{/);
+    assert.match(body, /catch/);
+    assert.match(body, /書き出せません|書き出しを中止/);
+    assert.match(body, /不正な項目 \$\{[^}]+\}件はそのまま残しました/);
+  });
+});
+
+describe('R4 サイドバー集計（気づき表示）で fixing が数えられる', () => {
+  test('課題化済の集計に fixing（修正中）が含まれ、ラベルにも修正中が出る', () => {
+    const source = fs.readFileSync(htmlPath, 'utf8');
+    assert.match(source, /selectedView === 'insights' \? visibleInsights\.filter\([^\n]*fixing[^\n]*\)\.length/);
+    assert.match(source, /selectedView === 'insights' \? '[^'\n]*修正中[^'\n]*'/);
+  });
+});
+
+describe('R5 readInsights 失敗時も警告件数を更新し、__proto__ キーで汚染されない', () => {
+  test('html の readInsights 失敗の catch でも状態ファイルの警告表示を更新する', () => {
+    const source = fs.readFileSync(htmlPath, 'utf8');
+    const tail = source.slice(source.lastIndexOf('readInsights()'));
+    const catchPart = tail.slice(tail.indexOf('.catch('));
+    assert.match(catchPart, /refreshInsightStatusWarnings\(\)/);
+    assert.match(catchPart, /保存済みメモを読めませんでした/);
+  });
+
+  test('状態ファイルの __proto__ キーは通常のキーとして扱われ、プロトタイプを汚染しない', () => {
+    const core = loadCore();
+    const file = JSON.parse(`{"schemaVersion":1,"items":{"__proto__":{"status":"done","updatedAt":"2026-11-24"}}}`);
+    const result = core.validateStatusFile(file);
+    assert.equal(result.items.status, undefined, 'items のプロトタイプが書き換わっている');
+    assert.deepEqual(Object.keys(result.items), ['__proto__']);
+    assert.equal(({}).status, undefined);
+    const resolved = core.resolveInsightStatuses([noteRecord('NOTE-261122-080000-000')], file, { overlayRunId: RUN_ID });
+    assert.equal(resolved.insights[0].statusOrigin, 'local');
+  });
+});
