@@ -64,6 +64,7 @@ gh api graphql -f query='query{repository(owner:"Mannschaft2026",name:"mannschaf
 2. merge_group の失敗 run から原因を特定し、根治する（rerun だけで済ませない。flaky と判断する場合も証拠を残す）。
 3. 修正を push し、`gh pr merge <PR> --squash` で予約し直す（緑になると自動で queue へ入る）。
 4. 先行エントリの失敗による巻き添え（自分の変更に原因が無い）は、queue が再構築するため通常は自動で再検証される。脱落したときだけ再投入する。
+5. 台帳 `docs/task-list.md` に行を足す PR どうしは、先に入った側が末尾を変えると `merge_conflict` で脱落し、auto-merge の予約も消える。GitHub のサーバ側マージは `.gitattributes` の `merge=union` を尊重しないため、queue の中では衝突が避けられない。手元で `git merge origin/main` すれば `.gitattributes` の `merge=union` で末尾衝突が自動で解ける（両側の行が残る）。続けて `node scripts/task-list-structure-check.mjs docs/task-list.md` で重複と列数を確かめてから push し、予約し直す。同じ行を両側で書き換えていた場合は旧行と新行が両方残り、構造検査が重複として赤にするので、手で片方を消す（CMP-261124-1222）。
 
 ## queue 無効時（移行前・障害で無効化している間）
 
