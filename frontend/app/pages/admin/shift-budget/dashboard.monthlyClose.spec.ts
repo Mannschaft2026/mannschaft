@@ -206,4 +206,20 @@ describe('月次締めダイアログ 未終了月の制御', () => {
     )
     expect(notify.error).toHaveBeenCalledWith('shiftBudget.monthlyClose.notEnded:2026-10')
   })
+
+  it.each([
+    ['403', { status: 403, data: { error: { code: 'SHIFT_BUDGET_027', message: 'x' } } }],
+    ['409 SHIFT_BUDGET_028', { status: 409, data: { error: { code: 'SHIFT_BUDGET_028', message: 'x' } } }],
+  ])('032 以外のエラー(%s)は汎用エラー通知で、notEnded は出さない', async (_l, err) => {
+    api.executeMonthlyClose.mockRejectedValue(err)
+    const wrapper = mountPage()
+    await flushPromises()
+    await openDialog(wrapper)
+    await setMonth(wrapper, '2026-10')
+    await execButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(notify.error).toHaveBeenCalledWith('shiftBudget.monthlyClose.error')
+    expect(notify.error).not.toHaveBeenCalledWith(expect.stringContaining('notEnded'))
+    expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.notEnded')
+  })
 })
