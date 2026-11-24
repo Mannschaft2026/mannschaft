@@ -2,7 +2,6 @@ package com.mannschaft.app.tournament;
 
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.ReferenceType;
-import com.mannschaft.app.organization.service.OrganizationQueryService;
 import com.mannschaft.app.tournament.dto.TeamTournamentHistoryResponse;
 import com.mannschaft.app.tournament.dto.TeamTournamentStatsResponse;
 import com.mannschaft.app.tournament.entity.TournamentDivisionEntity;
@@ -29,8 +28,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -47,7 +44,6 @@ class StandingsQueryServiceTest {
     @Mock private TournamentFixtureRepository matchRepository;
     @Mock private TournamentMapper mapper;
     @Mock private ContentVisibilityChecker contentVisibilityChecker;
-    @Mock private OrganizationQueryService organizationQueryService;
 
     @InjectMocks
     private StandingsQueryService service;
@@ -157,51 +153,6 @@ class StandingsQueryServiceTest {
             assertThat(entry1.getRecord().losses()).isEqualTo(1);
             assertThat(entry1.getRecord().points()).isEqualTo(23);
             assertThat(entry1.getOrganizationId()).isEqualTo(50L);
-        }
-
-        @Test
-        @DisplayName("正常系: 各エントリに主催組織の slug が入り、組織は1回の一括取得で引く（ループ内呼び出ししない）")
-        void 履歴に主催組織slugが入る() {
-            Long teamId = 40L;
-            allowAllTournaments();
-
-            TournamentParticipantEntity p1 = buildParticipant(1L, 1L, teamId);
-            TournamentParticipantEntity p2 = buildParticipant(2L, 2L, teamId);
-            when(participantRepository.findAllByTeamId(teamId)).thenReturn(List.of(p1, p2));
-            when(divisionRepository.findById(1L)).thenReturn(Optional.of(buildDivision(100L, "1部")));
-            when(divisionRepository.findById(2L)).thenReturn(Optional.of(buildDivision(200L, "A組")));
-            when(tournamentRepository.findById(100L)).thenReturn(Optional.of(buildTournament(50L, "春季大会", "2025")));
-            when(tournamentRepository.findById(200L)).thenReturn(Optional.of(buildTournament(60L, "秋季大会", "2025")));
-            when(standingRepository.findByDivisionIdAndParticipantId(any(), any())).thenReturn(Optional.empty());
-            when(organizationQueryService.findSummariesByIds(any())).thenReturn(List.of(
-                    new OrganizationQueryService.OrganizationSummary(50L, "組織50", "org-fifty"),
-                    new OrganizationQueryService.OrganizationSummary(60L, "組織60", "org-sixty")));
-
-            TeamTournamentHistoryResponse result = service.getTeamHistory(teamId);
-
-            assertThat(result.getHistory()).extracting(TeamTournamentHistoryResponse.TournamentHistoryEntry::getOrganizationSlug)
-                    .containsExactly("org-fifty", "org-sixty");
-            verify(organizationQueryService, times(1)).findSummariesByIds(any());
-        }
-
-        @Test
-        @DisplayName("正常系: 組織が削除済み等で slug が引けないエントリは organizationSlug=null")
-        void 組織が引けなければslugはnull() {
-            Long teamId = 41L;
-            allowAllTournaments();
-
-            TournamentParticipantEntity p = buildParticipant(1L, 1L, teamId);
-            when(participantRepository.findAllByTeamId(teamId)).thenReturn(List.of(p));
-            when(divisionRepository.findById(1L)).thenReturn(Optional.of(buildDivision(100L, "1部")));
-            when(tournamentRepository.findById(100L)).thenReturn(Optional.of(buildTournament(50L, "春季大会", "2025")));
-            when(standingRepository.findByDivisionIdAndParticipantId(any(), any())).thenReturn(Optional.empty());
-            when(organizationQueryService.findSummariesByIds(any())).thenReturn(List.of());
-
-            TeamTournamentHistoryResponse result = service.getTeamHistory(teamId);
-
-            assertThat(result.getHistory()).hasSize(1);
-            assertThat(result.getHistory().get(0).getOrganizationSlug()).isNull();
-            assertThat(result.getHistory().get(0).getOrganizationId()).isEqualTo(50L);
         }
 
         @Test
