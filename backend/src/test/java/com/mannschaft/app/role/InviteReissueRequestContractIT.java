@@ -611,6 +611,19 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
         assertCode(catchThrowable(() -> pending().requestReissue(c.requester())), "AUTH_085");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"TEAM", "ORGANIZATION"})
+    @DisplayName("D3: 依頼済み（REISSUE_REQUESTED）の間に依頼者が閉じても取り下げにならない。dismiss は 409 AUTH_085、"
+            + "状態は REISSUE_REQUESTED のまま、管理者の一覧に残る")
+    void dismissWhileRequestedKeepsRequest(String type) throws Exception {
+        ReissueFixtures.Case c = fx.reissueRequested(type);
+
+        assertCode(catchThrowable(() -> pending().dismiss(c.requester())), "AUTH_085");
+
+        assertThat(fx.pendingStatus(c.requester())).isEqualTo("REISSUE_REQUESTED");
+        assertThat(ids(list(c, c.admin(), "").andExpect(status().isOk()))).contains(c.pendingId().toString());
+    }
+
     // ------------------------------------------------------------------
     // C1・C2（順序が決まった場合）・C4
     // ------------------------------------------------------------------

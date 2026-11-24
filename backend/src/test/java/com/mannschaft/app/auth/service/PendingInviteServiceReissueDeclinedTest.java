@@ -69,7 +69,7 @@ class PendingInviteServiceReissueDeclinedTest {
     }
 
     @Test
-    @DisplayName("D2: 見送りの案内を閉じる（REISSUE_DECLINED→DISMISSED）。dismiss の遷移元に REISSUE_DECLINED を含める")
+    @DisplayName("D2: 見送りの案内を閉じる（REISSUE_DECLINED→DISMISSED）。dismiss の遷移元は EXPIRED と REISSUE_DECLINED だけ")
     void dismissAcceptsDeclined() {
         given(store.find(USER_ID)).willReturn(Optional.of(row(PendingInviteStatus.REISSUE_DECLINED)));
         given(store.transition(eq(USER_ID), any(), eq(PendingInviteStatus.DISMISSED))).willAnswer(inv -> {
@@ -83,7 +83,22 @@ class PendingInviteServiceReissueDeclinedTest {
         ArgumentCaptor<Set<PendingInviteStatus>> from = ArgumentCaptor.forClass(Set.class);
         verify(store).transition(eq(USER_ID), from.capture(), eq(PendingInviteStatus.DISMISSED));
         assertThat(from.getValue()).containsExactlyInAnyOrder(PendingInviteStatus.EXPIRED,
-                PendingInviteStatus.REISSUE_REQUESTED, PendingInviteStatus.REISSUE_DECLINED);
+                PendingInviteStatus.REISSUE_DECLINED);
+    }
+
+    @Test
+    @DisplayName("D3: 依頼済み（REISSUE_REQUESTED）の間は閉じても取り下げにならない。dismiss は 409 AUTH_085 で状態は変わらない")
+    void dismissWhileRequestedIsRejected() {
+        given(store.find(USER_ID)).willReturn(Optional.of(row(PendingInviteStatus.REISSUE_REQUESTED)));
+        given(store.transition(eq(USER_ID), any(), eq(PendingInviteStatus.DISMISSED))).willAnswer(inv -> {
+            Set<PendingInviteStatus> from = inv.getArgument(1);
+            return from.contains(PendingInviteStatus.REISSUE_REQUESTED);
+        });
+
+        Throwable thrown = catchThrowable(() -> service.dismiss(USER_ID));
+
+        assertThat(thrown).isInstanceOf(BusinessException.class);
+        assertThat(((BusinessException) thrown).getErrorCode().getCode()).isEqualTo("AUTH_085");
     }
 
     @Test

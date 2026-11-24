@@ -496,7 +496,7 @@ users も作らない。存在しない招待はベータ制限 OFF なら保留
 | POST | `/api/v1/me/pending-invite/accept` | 承認して参加。応答 `{status}`（`JOINED`/`EXPIRED`/`UNAVAILABLE`） |
 | POST | `/api/v1/me/pending-invite/decline` | 辞退（`PENDING`→`DECLINED`。共有招待そのものは失効させない） |
 | POST | `/api/v1/me/pending-invite/reissue-request` | 失効した招待の再発行を招待権限者へ要請。応答 `{alreadyRequested}` |
-| POST | `/api/v1/me/pending-invite/dismiss` | 失効・見送りの案内を閉じる（`EXPIRED`/`REISSUE_REQUESTED`/`REISSUE_DECLINED`→`DISMISSED`） |
+| POST | `/api/v1/me/pending-invite/dismiss` | 失効・見送りの案内を閉じる（`EXPIRED`/`REISSUE_DECLINED`→`DISMISSED`）。依頼済み（`REISSUE_REQUESTED`）は 409 `AUTH_085`（閉じても依頼の取り下げにならない） |
 
 GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joinable`（公開・非アーカイブ・非 PROVISIONED）・
 `publicPath`（`joinable` のときだけ `/teams/{slug}` または `/organizations/{slug}`。参加申し込みへの導線）・
@@ -505,12 +505,13 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
 状態: `PENDING`→`ACCEPTING`→`JOINED`/`EXPIRED`/`UNAVAILABLE`（原因不明の失敗は `PENDING` に戻す）、
 `PENDING`→`DECLINED`、`PENDING`→`EXPIRED`（参照時の期限判定）、`EXPIRED`→`REISSUE_REQUESTED`、
 `REISSUE_REQUESTED`→`PENDING`（招待権限者の再招待）、`REISSUE_REQUESTED`→`REISSUE_DECLINED`（招待権限者の見送り）、
-`REISSUE_REQUESTED`→`JOINED`（再招待の時点で在籍済み）、`EXPIRED`/`REISSUE_REQUESTED`/`REISSUE_DECLINED`→`DISMISSED`、
+`REISSUE_REQUESTED`→`JOINED`（再招待の時点で在籍済み）、`EXPIRED`/`REISSUE_DECLINED`→`DISMISSED`、
 未終了（`PENDING`/`ACCEPTING`/`EXPIRED`/`REISSUE_REQUESTED`）→`DISCARDED`（7日間メール未確認の掃除・保護者全員の拒否）。
 `REISSUE_DECLINED` は未終了に含めない（破棄の対象外）。
 
 状態の集合（CMP-261107-1833 PR3）: 再依頼できる `REISSUABLE`={`EXPIRED`,`REISSUE_REQUESTED`}（`reissue-request`）と、
-閉じられる `DISMISSIBLE`={`EXPIRED`,`REISSUE_REQUESTED`,`REISSUE_DECLINED`}（`dismiss`）を分ける。見送られた依頼は
+閉じられる `DISMISSIBLE`={`EXPIRED`,`REISSUE_DECLINED`}（`dismiss`）を分ける。依頼済み（`REISSUE_REQUESTED`）は閉じられない
+（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない。dismiss は他の状態不一致と同じ 409 `AUTH_085` で、状態は変わらず管理者の一覧に残る）。見送られた依頼は
 閉じる前でも後でも再依頼できない（409 `AUTH_085`）。
 
 参照時の期限判定（PR3 設計 g）: GET は A-1 の在籍判定の後、`PENDING` なら保留が指す招待の有効性を DB の現在時刻で判定する

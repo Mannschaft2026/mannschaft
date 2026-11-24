@@ -341,6 +341,8 @@ NULL に戻っているので、依頼者はすぐ再依頼でき、招待権限
 条件付き UPDATE で `REISSUE_REQUESTED`→`REISSUE_DECLINED`。同じ TX で `PendingInviteReissueDeclinedEvent` を発行し、コミット後に
 依頼者へ `INVITE_REISSUE_DECLINED` を通知する。監査 `TEAM_INVITE_REISSUE_DECLINED` / `ORGANIZATION_INVITE_REISSUE_DECLINED`
 （metadata `{pending_id}`）。招待は作らない。依頼者側は `REISSUE_DECLINED` の案内を閉じられる（`DISMISSED`）が、再依頼はできない（`AUTH_085`）。
+依頼済み（`REISSUE_REQUESTED`）の間は閉じられない（`REISSUE_REQUESTED`→`DISMISSED` の遷移は無い。dismiss は 409 `AUTH_085`）。
+閉じても依頼の取り下げにはならず、管理者の欄に残る（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない）。
 
 #### 競合
 

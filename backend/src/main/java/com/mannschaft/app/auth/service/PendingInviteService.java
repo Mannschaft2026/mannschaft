@@ -61,9 +61,13 @@ public class PendingInviteService {
     static final Set<PendingInviteStatus> REISSUABLE =
             EnumSet.of(PendingInviteStatus.EXPIRED, PendingInviteStatus.REISSUE_REQUESTED);
 
-    /** 失効・見送りの案内を閉じられる状態（CMP-261107-1833 PR3 設計 a）。 */
-    static final Set<PendingInviteStatus> DISMISSIBLE = EnumSet.of(PendingInviteStatus.EXPIRED,
-            PendingInviteStatus.REISSUE_REQUESTED, PendingInviteStatus.REISSUE_DECLINED);
+    /**
+     * 失効・見送りの案内を閉じられる状態（CMP-261107-1833 PR3 設計 a）。依頼済み（REISSUE_REQUESTED）は含めない:
+     * 閉じても依頼の取り下げにはしない（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない）。依頼済みへの dismiss は
+     * 他の状態不一致と同じ 409 AUTH_085。
+     */
+    static final Set<PendingInviteStatus> DISMISSIBLE =
+            EnumSet.of(PendingInviteStatus.EXPIRED, PendingInviteStatus.REISSUE_DECLINED);
 
     private final PendingInviteStore store;
     private final InviteAcceptanceFacade facade;
@@ -191,7 +195,7 @@ public class PendingInviteService {
         return new PendingInviteReissueResponse(!requested);
     }
 
-    /** 失効・見送りの案内を閉じる（EXPIRED/REISSUE_REQUESTED/REISSUE_DECLINED→DISMISSED）。 */
+    /** 失効・見送りの案内を閉じる（EXPIRED/REISSUE_DECLINED→DISMISSED）。依頼済み（REISSUE_REQUESTED）は 409 AUTH_085。 */
     public void dismiss(Long userId) {
         if (!store.transition(userId, DISMISSIBLE, PendingInviteStatus.DISMISSED)) {
             throw stateError(userId);
