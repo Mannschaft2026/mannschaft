@@ -78,6 +78,15 @@ let scopeContextRequestId = 0
 const draftQuestions = ref<QuestionDraft[]>([])
 const draftQuestionsSubmitting = ref(false)
 
+// 保存済みの設問（BE は DRAFT でも設問を保存・返却する）。読み取り専用で表示し、公開時に再送しない。
+const savedQuestions = computed(() =>
+  [...(survey.value?.questions ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+)
+// BE は設問0件の公開を NO_QUESTIONS で拒否するため、保存済み＋追加入力の合計で公開可否を判定する。
+const hasPublishableQuestions = computed(
+  () => savedQuestions.value.length + draftQuestions.value.length > 0,
+)
+
 /** DRAFTの設問を一括保存 → publish する */
 async function onSaveQuestionsAndPublish() {
   if (!survey.value) return
@@ -85,12 +94,14 @@ async function onSaveQuestionsAndPublish() {
   try {
     // 設問を順次追加。FE ドメイン形のまま渡し、BE 形への翻訳（questionType の enum 値・
     // sortOrder → displayOrder）は useSurveyApi 側に集約している。
+    // 追加入力した設問だけを送る（保存済み設問の後ろに並ぶよう sortOrder を保存済み件数ぶんずらす）
+    const offset = savedQuestions.value.length
     for (const q of draftQuestions.value) {
       await addQuestion(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId, {
         questionText: q.questionText.trim(),
         questionType: q.questionType,
         isRequired: q.isRequired,
-        sortOrder: q.sortOrder,
+        sortOrder: offset + q.sortOrder,
         options:
           q.questionType !== 'TEXT' && q.questionType !== 'DATE' && q.options?.length
             ? q.options.map((o) => ({ optionText: o.optionText.trim(), sortOrder: o.sortOrder }))
@@ -527,6 +538,15 @@ onMounted(async () => {
           <p class="text-xs text-amber-600 dark:text-amber-300">
             {{ t('surveys.detail.draftAddQuestionsHint') }}
           </p>
+          <p
+            v-if="canManage && !hasPublishableQuestions"
+            class="mt-2 text-sm font-medium text-red-600 dark:text-red-300"
+            role="alert"
+            data-testid="survey-publish-blocked-reason"
+          >
+            <i class="pi pi-exclamation-triangle mr-1" />
+            {{ t('surveys.detail.publishNoQuestions') }}
+          </p>
         </div>
 
         <!-- 管理操作可（作成者 or 権限保有管理者）: 設問追加 & 公開 -->
@@ -536,7 +556,28 @@ onMounted(async () => {
             <p class="mb-3 text-sm font-medium text-surface-700 dark:text-surface-200">
               {{ t('surveys.detail.draftQuestionsSection') }}
             </p>
-            <SurveyQuestionEditor v-model="draftQuestions" />
+            <!-- 保存済み設問（読み取り専用） -->
+            <ol
+              v-if="savedQuestions.length > 0"
+              class="mb-3 flex flex-col gap-2"
+              data-testid="survey-saved-questions"
+            >
+              <li
+                v-for="q in savedQuestions"
+                :key="q.id"
+                class="rounded-lg border border-surface-200 bg-surface-50 p-3 text-sm dark:border-surface-700 dark:bg-surface-900"
+              >
+                <p class="font-medium text-surface-800 dark:text-surface-100">
+                  {{ q.sortOrder }}. {{ q.questionText }}
+                  <span v-if="q.isRequired" class="ml-1 text-red-500">*</span>
+                </p>
+                <p class="text-xs text-surface-500">{{ t(`surveys.questionType.${q.questionType}`) }}</p>
+                <ul v-if="q.options.length > 0" class="mt-1 list-disc pl-5 text-surface-600 dark:text-surface-300">
+                  <li v-for="o in q.options" :key="o.id">{{ o.optionText }}</li>
+                </ul>
+              </li>
+            </ol>
+            <SurveyQuestionEditor v-model="draftQuestions" :hide-empty="savedQuestions.length > 0" />
           </div>
 
           <!-- 操作ボタン群 -->
@@ -551,13 +592,14 @@ onMounted(async () => {
               class="min-h-11 min-w-11"
               @click="onSaveQuestionsAndPublish"
             />
-            <!-- 設問なしでそのまま公開（設問ゼロでも可、グレー強調） -->
+            <!-- 保存済み設問だけで公開（設問が1件もない間は押せない） -->
             <Button
               :label="t('surveys.detail.publishButton')"
               icon="pi pi-send"
               :severity="draftQuestions.length > 0 ? 'secondary' : 'primary'"
               :outlined="draftQuestions.length > 0"
               :loading="actionLoading || draftQuestionsSubmitting"
+              :disabled="!hasPublishableQuestions"
               data-testid="survey-publish-button"
               class="min-h-11 min-w-11"
               @click="onPublish"

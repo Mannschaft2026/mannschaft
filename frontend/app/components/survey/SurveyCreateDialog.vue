@@ -27,7 +27,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { createSurvey } = useSurveyApi()
+const { createSurvey, publishSurvey } = useSurveyApi()
 const { error: showError, success: showSuccess } = useNotification()
 const { handleApiError } = useErrorHandler()
 const authStore = useAuthStore()
@@ -56,6 +56,10 @@ const deadline = ref<Date | null>(null)
 const questions = ref<QuestionDraft[]>([])
 
 const submitting = ref(false)
+// ダイアログ内に常設表示する検証・公開失敗の理由（トーストだけで消えないようにする）
+const formError = ref<string | null>(null)
+// 「公開して作成」で作成は成功したが公開に失敗した場合の下書き（再試行時は作成せず公開だけ行う）
+const createdDraft = ref<SurveyResponse | null>(null)
 
 // === useFormDraft（ADHD配慮・自動保存）===
 // キーにuserId・scopeType・scopeIdを含めてスコープ間の衝突を防ぐ
@@ -160,6 +164,8 @@ function resetForm() {
   unrespondedVisibility.value = 'CREATOR_AND_ADMIN'
   deadline.value = null
   questions.value = []
+  formError.value = null
+  createdDraft.value = null
 }
 
 function close() {
@@ -208,16 +214,41 @@ function validate(mode: 'draft' | 'publish'): string | null {
   return null
 }
 
+// 作成済みのアンケートを公開する。失敗時は成功トーストを出さず、理由をダイアログ内に表示する。
+async function publishCreated(created: SurveyResponse) {
+  const firstAttempt = createdDraft.value === null
+  try {
+    await publishSurvey(props.scopeType, props.scopeId, created.id)
+  } catch {
+    createdDraft.value = created
+    formError.value = t('surveys.create.publishFailedAfterCreate')
+    // 下書きは作成済みなので一覧には反映する（ダイアログは開いたまま理由を見せる）
+    if (firstAttempt) emit('created', created)
+    return
+  }
+  showSuccess(t('surveys.create.successToast'))
+  if (!firstAttempt) emit('created', created)
+  resetForm()
+  close()
+}
+
 // === 送信共通処理 ===
 async function submitWith(mode: 'draft' | 'publish') {
+  formError.value = null
   const errorMsg = validate(mode)
   if (errorMsg) {
-    showError(errorMsg)
+    formError.value = errorMsg
     return
   }
 
   submitting.value = true
   try {
+    // 公開に失敗して下書きが残っている場合は、作成し直さず公開だけ再試行する
+    if (createdDraft.value) {
+      await publishCreated(createdDraft.value)
+      return
+    }
+
     const body: CreateSurveyRequest = {
       title: title.value.trim(),
       description: description.value.trim() || undefined,
@@ -249,18 +280,19 @@ async function submitWith(mode: 'draft' | 'publish') {
 
     const res = await createSurvey(props.scopeType, props.scopeId, body)
 
-    // 成功 → 下書き削除
+    // 作成成功 → 入力途中の下書きを削除
     clearDraft()
 
     if (mode === 'draft') {
       showSuccess(t('surveys.create.draftSuccessToast'))
-    } else {
-      showSuccess(t('surveys.create.successToast'))
+      emit('created', res.data)
+      resetForm()
+      close()
+      return
     }
 
-    emit('created', res.data)
-    resetForm()
-    close()
+    // 「公開して作成」: 作成後に公開 API を呼んで公開まで行う
+    await publishCreated(res.data)
   } catch (e) {
     // BE エラーコード（例: SURVEY_023 匿名×チーム別内訳の併用禁止）があれば
     // それを優先表示し、無ければ汎用の失敗トーストにフォールバックする。
@@ -420,6 +452,17 @@ function submitAndPublish() {
           :placeholder="t('surveys.create.deadlinePlaceholder')"
           data-testid="survey-create-deadline"
         />
+      </div>
+
+      <!-- 検証・公開失敗の理由（常設表示） -->
+      <div
+        v-if="formError"
+        class="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-200"
+        role="alert"
+        data-testid="survey-create-error"
+      >
+        <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
+        <span>{{ formError }}</span>
       </div>
 
       <!-- 設問エディタ（任意: 下書き保存は設問ゼロでも可） -->

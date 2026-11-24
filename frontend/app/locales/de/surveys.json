@@ -59,6 +59,7 @@
       "draftHint": "Fragen können später hinzugefügt werden. Speichere zunächst nur mit einem Titel.",
       "successToast": "Umfrage erstellt",
       "draftSuccessToast": "Als Entwurf gespeichert. Fragen hinzufügen und veröffentlichen.",
+      "publishFailedAfterCreate": "Der Entwurf wurde erstellt, aber die Veröffentlichung ist fehlgeschlagen. Klicke erneut auf \"Veröffentlichen und erstellen\" oder veröffentliche ihn auf der Detailseite.",
       "failureToast": "Umfrage konnte nicht erstellt werden",
       "validation": {
         "titleRequired": "Bitte einen Titel eingeben",
@@ -114,7 +115,8 @@
       "responseCount": "Antworten",
       "anonymous": "Anonym",
       "draftHint": "Diese Umfrage ist ein Entwurf. Vor der Veröffentlichung werden keine Antworten angenommen.",
-      "draftAddQuestionsHint": "Fragen hinzufügen, bevor die Umfrage veröffentlicht wird. Ohne Fragen ist keine Beantwortung möglich.",
+      "draftAddQuestionsHint": "Füge vor der Veröffentlichung mindestens eine Frage hinzu. Eine Umfrage ohne Fragen kann nicht veröffentlicht werden.",
+      "publishNoQuestions": "Die Umfrage kann nicht veröffentlicht werden, da sie keine Fragen enthält. Füge mindestens eine Frage hinzu.",
       "draftQuestionsSection": "Fragen hinzufügen",
       "publishButton": "Veröffentlichen",
       "publishSuccess": "Umfrage veröffentlicht",

@@ -59,6 +59,7 @@
       "draftHint": "Puedes añadir preguntas después. Guarda solo con el título por ahora.",
       "successToast": "Encuesta creada",
       "draftSuccessToast": "Guardado como borrador. Añade preguntas y publícala cuando estés listo.",
+      "publishFailedAfterCreate": "El borrador se creó, pero falló la publicación. Pulsa de nuevo \"Publicar y crear\" o publícalo desde el detalle de la encuesta.",
       "failureToast": "No se pudo crear la encuesta",
       "validation": {
         "titleRequired": "Introduce un título",
@@ -114,7 +115,8 @@
       "responseCount": "Respuestas",
       "anonymous": "Anónima",
       "draftHint": "Esta encuesta es un borrador. No aceptará respuestas hasta que se publique.",
-      "draftAddQuestionsHint": "Añade preguntas antes de publicar. Se puede publicar sin preguntas, pero los encuestados no podrán responder.",
+      "draftAddQuestionsHint": "Añade al menos una pregunta antes de publicar. Una encuesta sin preguntas no se puede publicar.",
+      "publishNoQuestions": "No se puede publicar porque no tiene preguntas. Añade al menos una pregunta.",
       "draftQuestionsSection": "Añadir preguntas",
       "publishButton": "Publicar",
       "publishSuccess": "Encuesta publicada",

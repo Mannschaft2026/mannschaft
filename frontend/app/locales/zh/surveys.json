@@ -59,6 +59,7 @@
       "draftHint": "可以之后再添加题目。现在仅用标题保存即可。",
       "successToast": "问卷已创建",
       "draftSuccessToast": "已保存为草稿。请添加题目后发布。",
+      "publishFailedAfterCreate": "草稿已创建，但发布失败。请再次点击“发布并创建”，或在问卷详情页发布。",
       "failureToast": "无法创建问卷",
       "validation": {
         "titleRequired": "请输入标题",
@@ -114,7 +115,8 @@
       "responseCount": "回答",
       "anonymous": "匿名",
       "draftHint": "该问卷为草稿状态。发布前不会接受回答。",
-      "draftAddQuestionsHint": "发布前请添加题目。没有题目也可发布，但回答者将无法作答。",
+      "draftAddQuestionsHint": "请至少添加一道题目后再发布。没有题目的问卷无法发布。",
+      "publishNoQuestions": "没有任何题目，无法发布。请添加题目。",
       "draftQuestionsSection": "添加题目",
       "publishButton": "发布",
       "publishSuccess": "问卷已发布",

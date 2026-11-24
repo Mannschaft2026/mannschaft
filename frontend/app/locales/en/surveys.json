@@ -59,6 +59,7 @@
       "draftHint": "You can add questions later. Save with just a title for now.",
       "successToast": "Survey created",
       "draftSuccessToast": "Saved as draft. Add questions and publish when ready.",
+      "publishFailedAfterCreate": "The draft was created, but publishing failed. Press \"Publish and create\" again, or publish it from the survey detail page.",
       "failureToast": "Failed to create survey",
       "validation": {
         "titleRequired": "Please enter a title",
@@ -114,7 +115,8 @@
       "responseCount": "Responses",
       "anonymous": "Anonymous",
       "draftHint": "This survey is a draft. It will not accept responses until published.",
-      "draftAddQuestionsHint": "Add questions before publishing. You can publish without questions, but respondents won't be able to answer.",
+      "draftAddQuestionsHint": "Add at least one question before publishing. A survey without questions cannot be published.",
+      "publishNoQuestions": "This survey cannot be published because it has no questions. Add at least one question.",
       "draftQuestionsSection": "Add questions",
       "publishButton": "Publish",
       "publishSuccess": "Survey published",

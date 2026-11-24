@@ -59,6 +59,7 @@
       "draftHint": "設問は後で追加・編集できます。まずタイトルだけで下書き保存できます。",
       "successToast": "アンケートを作成しました",
       "draftSuccessToast": "下書きとして保存しました。設問を追加して公開してください。",
+      "publishFailedAfterCreate": "下書きは作成しましたが、公開に失敗しました。もう一度「公開して作成」を押すか、詳細画面から公開してください。",
       "failureToast": "アンケートの作成に失敗しました",
       "validation": {
         "titleRequired": "タイトルを入力してください",
@@ -114,7 +115,8 @@
       "responseCount": "回答",
       "anonymous": "匿名",
       "draftHint": "このアンケートは下書き状態です。公開するまで回答を受け付けません。",
-      "draftAddQuestionsHint": "設問を追加してから公開してください。設問がなくても公開できますが、回答者は回答できません。",
+      "draftAddQuestionsHint": "設問を1つ以上追加してから公開してください。設問がないアンケートは公開できません。",
+      "publishNoQuestions": "設問が1つもないため公開できません。設問を追加してください。",
       "draftQuestionsSection": "設問を追加",
       "publishButton": "公開する",
       "publishSuccess": "アンケートを公開しました",
