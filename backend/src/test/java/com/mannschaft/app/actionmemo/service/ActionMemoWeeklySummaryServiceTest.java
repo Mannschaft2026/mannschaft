@@ -76,6 +76,9 @@ class ActionMemoWeeklySummaryServiceTest {
     @Mock
     private Clock wallClock;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private ActionMemoWeeklySummaryService weeklySummaryService;
 
@@ -154,6 +157,49 @@ class ActionMemoWeeklySummaryServiceTest {
                     TODAY.minusDays(7), TODAY.minusDays(1));
             verify(actionMemoMetrics, times(1)).recordWeeklySummaryGenerated();
             verify(actionMemoMetrics, never()).recordWeeklySummaryFailed();
+        }
+    }
+
+    // ==================================================================
+    // 再生成（同一週の既存記事の差し替え）
+    // ==================================================================
+
+    @Nested
+    @DisplayName("再生成の冪等性")
+    class RegenerationTest {
+
+        @Test
+        @DisplayName("同 slug の既存記事は論理削除を flush で確定させてから新規 INSERT する（生存行の slug 一意制約を避ける）")
+        void regenerateForUser_softDeleteIsFlushedBeforeInsert() {
+            LocalDate from = TODAY.minusDays(7);
+            LocalDate to = TODAY.minusDays(1);
+            given(memoRepository.findByUserIdAndMemoDateBetweenOrderByMemoDateAscCreatedAtAsc(
+                    eq(USER_A), any(), any()))
+                    .willReturn(List.of(memo(USER_A, TODAY.minusDays(2), "朝散歩した", null)));
+            BlogPostEntity existing = BlogPostEntity.builder()
+                    .userId(USER_A).authorId(USER_A).title("旧").slug("weekly-20260405-20260411").body("旧本文")
+                    .build();
+            given(blogPostRepository.findByUserIdAndSlug(USER_A, "weekly-20260405-20260411"))
+                    .willReturn(Optional.of(existing));
+            given(blogPostRepository.save(any(BlogPostEntity.class))).willAnswer(inv -> inv.getArgument(0));
+
+            org.springframework.test.util.ReflectionTestUtils.setField(weeklySummaryService, "entityManager", entityManager);
+            // regenerateForUser は @Transactional（単体テストではプロキシが無いため、トランザクション中の状態を再現する）
+            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+            try {
+                assertThat(weeklySummaryService.regenerateForUser(USER_A, from, to)).isTrue();
+            } finally {
+                org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+            }
+
+            assertThat(existing.getDeletedAt()).isNotNull();
+            org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(blogPostRepository, entityManager);
+            inOrder.verify(blogPostRepository).save(existing);
+            inOrder.verify(entityManager).flush();
+            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
+            inOrder.verify(blogPostRepository).save(captor.capture());
+            assertThat(captor.getValue()).isNotSameAs(existing);
+            assertThat(captor.getValue().getSlug()).isEqualTo("weekly-20260405-20260411");
         }
     }
 
