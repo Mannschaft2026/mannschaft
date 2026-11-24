@@ -246,9 +246,9 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
     void staleGetDoesNotExpireReissuedPending() {
         Scope scope = scope("TEAM");
         Long requester = user();
-        InviteTokenEntity expired = token(scope, 0, utcNow().minusMinutes(5), 3, 0, null, null);
+        InviteTokenEntity expired = token(scope, 0, java.time.LocalDateTime.now().minusMinutes(5), 3, 0, null, null); // JPA 経由は JVM 既定ゾーンの壁時計で渡す
         fx.insertPending(requester, scope, "PENDING", expired.getTokenHash(), null);
-        InviteTokenEntity fresh = token(scope, 0, utcNow().plusDays(7), 1, 0, requester, null);
+        InviteTokenEntity fresh = token(scope, 0, java.time.LocalDateTime.now().plusDays(7), 1, 0, requester, null);
         doAnswer(inv -> {
             // GET が古い招待を「期限切れ」と判定した後、UPDATE の前に再招待の確定が割り込んだ
             jdbc.update("UPDATE " + ReissueFixtures.PENDING_TABLE + " SET token_hash = ?, version = version + 1 "
@@ -291,24 +291,46 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
         return AopTestUtils.getUltimateTargetObject(writerSpy);
     }
 
-    /** InnoDB の行ロック待ちの件数（information_schema.innodb_trx の LOCK WAIT）。 */
-    private long lockWaits() {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'",
-                Long.class);
+    /**
+     * 観測用の管理者接続（root）。アプリの接続ユーザーは performance_schema を読めない（SELECT 権限が無く BadSqlGrammar）ため、
+     * 既存の道具 ConcurrentOnEvent と同じく root で繋ぐ。アプリの接続プール・TX とは独立。
+     */
+    private static org.springframework.jdbc.core.JdbcTemplate admin() {
+        return new org.springframework.jdbc.core.JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                MYSQL.getJdbcUrl(), "root", MYSQL.getPassword()));
+    }
+
+    /** 失効の CAS（invite_tokens への UPDATE）が、他の TX に塞がれて LOCK WAIT 中である件数。 */
+    private static long casLockWaits(org.springframework.jdbc.core.JdbcTemplate admin) {
+        return admin.queryForObject("SELECT COUNT(*) FROM performance_schema.data_lock_waits w "
+                + "JOIN information_schema.INNODB_TRX r ON r.trx_id = w.REQUESTING_ENGINE_TRANSACTION_ID "
+                + "WHERE r.trx_state = 'LOCK WAIT' AND r.trx_query LIKE '%invite_tokens%'", Long.class);
+    }
+
+    /** 観測に失敗したときの診断（各 TX の状態・待っている文・invite_tokens のロック）。 */
+    private static String lockDiagnostics(org.springframework.jdbc.core.JdbcTemplate admin) {
+        return "trx=" + admin.queryForList("SELECT trx_id, trx_state, trx_isolation_level, trx_rows_locked, "
+                + "LEFT(trx_query, 200) AS q FROM information_schema.INNODB_TRX")
+                + " locks=" + admin.queryForList("SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, "
+                + "LOCK_STATUS, LOCK_DATA FROM performance_schema.data_locks WHERE OBJECT_NAME = 'invite_tokens'");
     }
 
     @Test
     @DisplayName("3・4回目: 有効化が窓の内で UPDATE し未コミットの間に、別接続の GET が窓の外と読んで失効 CAS に到達し、行ロックで待つ"
-            + "（spy で到達、innodb_trx で LOCK WAIT を観測）。有効化がコミットされると CAS は 0 行で、確定読みは VALID、保留は PENDING")
+            + "（spy で到達、performance_schema.data_lock_waits で LOCK WAIT を観測）。有効化がコミットされると CAS は 0 行で、"
+            + "確定読みは VALID、保留は PENDING")
     void activationCommittedFirstWinsOverGetRevoke() throws Exception {
         ReissueFixtures.Case c = fx.reissueRequested("TEAM");
         CountDownLatch updated = new CountDownLatch(1);
         CountDownLatch commit = new CountDownLatch(1);
         CountDownLatch casReached = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<Object> activated = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<Object> casResult = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean casFinished = new java.util.concurrent.atomic.AtomicBoolean();
         doAnswer(inv -> {
             restage(inv.getArgument(0), 59_000); // 窓の内（あと約 1 秒で窓の外）
             Object result = inv.callRealMethod(); // UPDATE は成功し、まだコミットしない（proxy の TX の中）
+            activated.set(result);
             updated.countDown();
             assertThat(commit.await(60, TimeUnit.SECONDS)).isTrue();
             return result;
@@ -317,6 +339,7 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
             casReached.countDown();
             Object result = inv.callRealMethod(); // 未コミットの有効化の行ロックで待つ
             casResult.set(result);
+            casFinished.set(true);
             return result;
         }).when(writerTarget()).revokeExpiredStaged(anyString(), anyLong());
 
@@ -324,16 +347,20 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
         try {
             Future<Integer> reissue = pool.submit(() -> reissue(c).andReturn().getResponse().getStatus());
             assertThat(updated.await(30, TimeUnit.SECONDS)).isTrue();
+            assertThat(activated.get()).as("前提: 有効化の UPDATE は 1 行（行ロックを保持して未コミット）").isEqualTo(true);
             TimeUnit.MILLISECONDS.sleep(1500); // 作成から 60 秒を過ぎる（コミット済みの旧値は revoked_at = created_at のまま）
-            long waitsBefore = lockWaits();
             Future<String> get = pool.submit(() -> pending().findMine(c.requester()).status());
 
             assertThat(casReached.await(30, TimeUnit.SECONDS)).as("GET は失効の CAS に到達する").isTrue();
+            org.springframework.jdbc.core.JdbcTemplate admin = admin();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-            while (lockWaits() <= waitsBefore && System.nanoTime() < deadline) {
+            long waits = 0;
+            while (!casFinished.get() && System.nanoTime() < deadline && (waits = casLockWaits(admin)) == 0) {
                 TimeUnit.MILLISECONDS.sleep(50);
             }
-            assertThat(lockWaits()).as("失効の CAS が未コミットの有効化の行ロックで待っている").isGreaterThan(waitsBefore);
+            assertThat(waits).as("失効の CAS が未コミットの有効化の行ロックで待っている（CAS 完了済み=" + casFinished.get()
+                    + "）: " + lockDiagnostics(admin)).isPositive();
+            assertThat(casFinished.get()).as("CAS は有効化のコミットまで終わらない").isFalse();
             assertThat(get.isDone()).isFalse();
 
             commit.countDown();

@@ -234,7 +234,11 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
         Long deputy = fx.deputyWithInviteMembers(c.scope());
         list(c, deputy, "").andExpect(status().isOk());
 
-        fx.revokeInviteMembers(deputy);
+        // 本番の剥奪経路（権限グループ割当の更新）で外す。権限は role-permissions キャッシュ（スコープ世代で無効化）に載るため、
+        // 生の DELETE では世代が進まず剥奪が反映されない（CI で発覚した試験の前提の誤り。本番の経路は世代を進める）。
+        context.getBean(com.mannschaft.app.role.service.PermissionGroupService.class).assignUserPermissionGroups(deputy,
+                c.scope().id(), c.scope().type(),
+                new com.mannschaft.app.role.dto.UserPermissionGroupAssignRequest(List.of()), c.admin());
 
         list(c, deputy, "").andExpect(status().isForbidden());
         reissue(c, deputy).andExpect(status().isForbidden());
@@ -433,7 +437,8 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
         assertThat(((Number) token.get("used_count")).intValue()).isZero();
         assertThat(((Number) token.get("created_by")).longValue()).isEqualTo(c.admin());
         assertThat(((Number) token.get("scope_closure_generation")).longValue()).isZero();
-        LocalDateTime expires = ((java.sql.Timestamp) token.get("expires_at")).toLocalDateTime();
+        Object rawExpires = token.get("expires_at"); // ドライバにより LocalDateTime か Timestamp（DB 格納の UTC 壁時計）
+        LocalDateTime expires = rawExpires instanceof java.sql.Timestamp ts ? ts.toLocalDateTime() : (LocalDateTime) rawExpires;
         assertThat(Duration.between(before.plusDays(7), expires).abs()).isLessThan(Duration.ofMinutes(5));
         assertThat(JsonPath.<String>read(json, "$.data.expiresAt")).isNotBlank();
 
@@ -688,10 +693,14 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
     void getExpiresPendingByValidity(String type) {
         Scope scope = scope(type);
         Long valid = user();
-        InviteTokenEntity validToken = token(scope, 0, utcNow().plusMinutes(5), 3, 0, null, null);
+        // 期限は DB の UTC 壁時計で直接書く。token() は JPA 経由で、JVM 既定ゾーン（JST）の LocalDateTime として UTC へ変換して
+        // 格納するため、utcNow() を渡すと 9 時間前の期限になってしまう（CI で発覚した試験の前提の誤り。実装は正しく EXPIRED にしていた）。
+        InviteTokenEntity validToken = token(scope, 0, null, 3, 0, null, null);
+        jdbc.update("UPDATE invite_tokens SET expires_at = UTC_TIMESTAMP() + INTERVAL 5 MINUTE WHERE id = ?", validToken.getId());
         fx.insertPending(valid, scope, "PENDING", new SecretTokenVault().hash(plaintext(validToken)), null);
         Long expired = user();
-        InviteTokenEntity expiredToken = token(scope, 0, utcNow().minusSeconds(2), 3, 0, null, null);
+        InviteTokenEntity expiredToken = token(scope, 0, null, 3, 0, null, null);
+        jdbc.update("UPDATE invite_tokens SET expires_at = UTC_TIMESTAMP() - INTERVAL 2 SECOND WHERE id = ?", expiredToken.getId());
         fx.insertPending(expired, scope, "PENDING", new SecretTokenVault().hash(plaintext(expiredToken)), null);
         Long exhausted = user();
         InviteTokenEntity exhaustedToken = token(scope, 0, null, 1, 1, null, null);

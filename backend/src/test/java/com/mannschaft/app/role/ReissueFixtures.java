@@ -165,10 +165,6 @@ final class ReissueFixtures {
                 userId, group);
     }
 
-    void revokeInviteMembers(Long userId) {
-        it.jdbc.update("DELETE FROM user_permission_groups WHERE user_id = ?", userId);
-    }
-
     // ------------------------------------------------------------------
     // 観測
     // ------------------------------------------------------------------
