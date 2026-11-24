@@ -245,6 +245,10 @@
         "event_deleted": "备忘录已删除",
         "event_todo_reverted": "TODO已撤回"
       }
+    },
+    "published_post": {
+      "view_link": "查看已发布的帖子",
+      "published_note": "已发布（仅自己可见）"
     }
   }
 }

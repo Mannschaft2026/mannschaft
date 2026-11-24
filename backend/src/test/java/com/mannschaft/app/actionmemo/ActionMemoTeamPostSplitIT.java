@@ -1,11 +1,13 @@
 package com.mannschaft.app.actionmemo;
 
 import com.mannschaft.app.actionmemo.dto.PublishDailyRequest;
+import com.mannschaft.app.actionmemo.dto.UpdateActionMemoRequest;
 import com.mannschaft.app.actionmemo.dto.PublishToTeamRequest;
 import com.mannschaft.app.actionmemo.entity.ActionMemoEntity;
 import com.mannschaft.app.actionmemo.enums.ActionMemoCategory;
 import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.actionmemo.service.ActionMemoPublishingService;
+import com.mannschaft.app.actionmemo.service.ActionMemoService;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -65,6 +67,7 @@ class ActionMemoTeamPostSplitIT extends AbstractMySqlIntegrationTest {
     private static final LocalDate MEMO_DATE = LocalDate.of(2026, 3, 15);
 
     @Autowired private ActionMemoPublishingService publishingService;
+    @Autowired private ActionMemoService actionMemoService;
     @Autowired private ActionMemoRepository memoRepository;
     @Autowired private TransactionTemplate transactionTemplate;
     @Autowired private JdbcTemplate jdbcTemplate;
@@ -183,6 +186,40 @@ class ActionMemoTeamPostSplitIT extends AbstractMySqlIntegrationTest {
                 .andExpect(jsonPath("$.data[0].team_timeline_post_id").value(teamPost));
     }
 
+    @Test
+    @DisplayName("CMP-261123-1201 メモの日付を変えると timeline_post_id だけ null になり、元の日を再公開しても移動先に削除済み投稿が紐づかない（別トランザクションで読み直し）")
+    void 日付変更で個人投稿IDが外れ元の日の再公開でも戻らない() {
+        Long moved = transactionTemplate.execute(tx -> memoRepository.save(ActionMemoEntity.builder()
+                .userId(ownerId)
+                .memoDate(MEMO_DATE)
+                .content("日付を動かすメモ")
+                .category(ActionMemoCategory.WORK)
+                .build()).getId());
+        Long teamPost = publishingService.publishToTeam(moved, new PublishToTeamRequest(teamId, null), ownerId)
+                .getTimelinePostId();
+        Long personal1 = publishDaily();
+
+        setAuthentication(ownerId);
+        LocalDate newDate = MEMO_DATE.minusDays(1);
+        UpdateActionMemoRequest req = new UpdateActionMemoRequest();
+        req.setMemoDate(newDate);
+        actionMemoService.updateMemo(moved, req, ownerId);
+
+        Map<String, Object> movedRow = memoRowOf(moved);
+        assertThat(toLong(movedRow.get("timeline_post_id"))).as("移動したメモは個人投稿IDを持ち越さない").isNull();
+        assertThat(toLong(movedRow.get("team_timeline_post_id"))).as("チーム投稿の記録は残す").isEqualTo(teamPost);
+        assertThat(toLong(movedRow.get("posted_team_id"))).isEqualTo(teamId);
+        assertThat(toLong(memoRow().get("timeline_post_id"))).as("元の日に残ったメモは旧投稿のまま").isEqualTo(personal1);
+        assertThat(deletedAtOf(teamPost)).as("チーム投稿は生存").isNull();
+
+        // 元の日を再公開すると旧個人投稿は論理削除されるが、移動したメモは新旧どちらの投稿にも紐づかない
+        Long personal2 = publishDaily();
+        assertThat(personal2).isNotEqualTo(personal1);
+        assertThat(deletedAtOf(personal1)).isNotNull();
+        assertThat(toLong(memoRowOf(moved).get("timeline_post_id"))).isNull();
+        assertThat(toLong(memoRow().get("timeline_post_id"))).isEqualTo(personal2);
+    }
+
     // ── helpers ────────────────────────────────────────────────
 
     private Long publishDaily() {
@@ -212,6 +249,12 @@ class ActionMemoTeamPostSplitIT extends AbstractMySqlIntegrationTest {
         return jdbcTemplate.queryForMap(
                 "SELECT timeline_post_id, team_timeline_post_id, posted_team_id FROM action_memos WHERE id = ?",
                 memoId);
+    }
+
+    private Map<String, Object> memoRowOf(Long id) {
+        return jdbcTemplate.queryForMap(
+                "SELECT timeline_post_id, team_timeline_post_id, posted_team_id FROM action_memos WHERE id = ?",
+                id);
     }
 
     private static Long toLong(Object v) {
