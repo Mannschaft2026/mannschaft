@@ -327,7 +327,8 @@ describe('AC4 状態ファイルの不正項目は警告一覧として返し、
     const core = loadCore();
     const result = core.validateStatusFile(statusFile({ NULL: null, TEXT: 'done' }));
     assert.deepEqual(Object.keys(result.items), []);
-    assert.deepEqual(result.warnings.map((warning) => warning.key).sort(), ['NULL', 'TEXT']);
+    // 別レルム配列の比較不備の修正（期待値は不変）: vm 由来の配列を plain() で正規化してから比較する
+    assert.deepEqual(plain(result.warnings.map((warning) => warning.key).sort()), ['NULL', 'TEXT']);
   });
 
   test('schemaVersion 不一致ならファイル全体を適用せず警告を返す', () => {
