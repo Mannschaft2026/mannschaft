@@ -16,6 +16,14 @@ import java.util.UUID;
  */
 public interface TimelinePostRepository extends JpaRepository<TimelinePostEntity, Long> {
 
+    /** 指定状態の未削除投稿が存在するか（{@code TimelinePostPublicationStatusService} 用）。 */
+    boolean existsByIdAndStatus(Long id, com.mannschaft.app.timeline.PostStatus status);
+
+    /** 指定 ID のうち、指定状態の未削除投稿の ID（{@code TimelinePostPublicationStatusService} の一括判定用）。 */
+    @Query("SELECT p.id FROM TimelinePostEntity p WHERE p.id IN :ids AND p.status = :status")
+    List<Long> findIdsByIdInAndStatus(@Param("ids") java.util.Collection<Long> ids,
+                                      @Param("status") com.mannschaft.app.timeline.PostStatus status);
+
     /**
      * F06.4.1: 投稿が努力由来（対応表 {@code timeline_effort_sources} に行がある。取消済みを含む）か。
      * 通常操作の EFFORT_003 ガードと転送元の候補からの除外が使う（投稿の論理削除の有無は見ない）。

@@ -196,7 +196,7 @@ onMounted(() => {
 
     <PageLoading v-else-if="loading" />
 
-    <DataTable v-else :value="events" striped-rows data-key="id">
+    <DataTable v-else :value="events" striped-rows data-key="id" table-style="min-width: 95rem">
       <template #empty>
         <div class="py-8 text-center text-surface-500">{{ t('shiftBudget.failedEvent.empty') }}</div>
       </template>
@@ -211,7 +211,7 @@ onMounted(() => {
           <span>{{ data.source_id ?? '-' }}</span>
         </template>
       </Column>
-      <Column :header="t('shiftBudget.failedEvent.summary')">
+      <Column :header="t('shiftBudget.failedEvent.summary')" style="min-width: 20rem">
         <template #body="{ data }: { data: FailedEventResponse }">
           <span class="text-sm">{{ eventSummary(data.event_type) }}</span>
         </template>

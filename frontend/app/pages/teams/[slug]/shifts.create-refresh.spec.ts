@@ -36,7 +36,7 @@ mockNuxtImport('useRoleAccess', () => () => ({
   loadPermissions: vi.fn(async () => undefined),
 }))
 mockNuxtImport('useShiftApi', () => () => ({ listSchedules, createSchedule }))
-mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))
+mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo'), formatDate: (value: string) => value }))
 mockNuxtImport('useNotification', () => () => ({ success, error }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError }))
 mockNuxtImport('useConfirm', () => () => ({ require: vi.fn() }))

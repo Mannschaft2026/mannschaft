@@ -7,8 +7,10 @@ import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.role.RoleErrorCode;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
+import com.mannschaft.app.role.repository.InviteTokenRepository;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.role.service.MembershipGrantService.GrantOutcome;
@@ -27,6 +29,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,6 +38,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * {@link MembershipGrantService} の単体テスト。
@@ -59,6 +63,9 @@ class MembershipGrantServiceTest {
 
     @Mock
     private UserRowLockService userRowLockService;
+
+    @Mock
+    private InviteTokenRepository inviteTokenRepository;
 
     @InjectMocks
     private MembershipGrantService service;
@@ -185,6 +192,93 @@ class MembershipGrantServiceTest {
                         assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_003);
                         assertThat(e.getHttpStatusOverride()).isEqualTo(HttpStatus.CONFLICT);
                     });
+        }
+    }
+
+    @Nested
+    @DisplayName("grantRole（付与の元の claim あり。CMP-261107-1833・Codex 検分 P1/P2）")
+    class GrantRoleWithClaim {
+
+        private final UUID claimId = UUID.fromString("00000000-0000-7000-8000-0000000000c1");
+
+        private GrantOutcome grantWithClaim() {
+            return InviteClaimGrantScope.call(claimId,
+                    () -> service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN"));
+        }
+
+        private void claimIs(String status, boolean grantCommitted) {
+            given(inviteTokenRepository.lockClaim(claimId))
+                    .willReturn(Optional.of(new InviteClaimLock(claimId, status, grantCommitted)));
+        }
+
+        @Test
+        @DisplayName("付与したら同じTXで claim に付与印を立てる。ロック順は user 行 → claim → user_roles → memberships")
+        void 付与と同時に付与印() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            claimIs("CLAIMED", false);
+            given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
+            given(inviteTokenRepository.markClaimGrantCommitted(claimId)).willReturn(1);
+
+            assertThat(grantWithClaim()).isEqualTo(GrantOutcome.GRANTED);
+
+            InOrder order = inOrder(userRowLockService, inviteTokenRepository, userRoleRepository, membershipService);
+            order.verify(userRowLockService).lock(USER_ID);
+            order.verify(inviteTokenRepository).lockClaim(claimId);
+            order.verify(userRoleRepository).findByUserIdAndTeamIdForUpdate(USER_ID, TEAM_ID);
+            order.verify(userRoleRepository).save(any(UserRoleEntity.class));
+            order.verify(membershipService).join(any(MembershipCreateRequest.class));
+            order.verify(inviteTokenRepository).markClaimGrantCommitted(claimId);
+        }
+
+        @Test
+        @DisplayName("P1: claim の付与印が既にある（別 attempt がこの claim で付与済み）→ 何も書かず ALREADY_JOINED")
+        void 付与印ありはALREADY_JOINED() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            claimIs("CLAIMED", true);
+
+            assertThat(grantWithClaim()).isEqualTo(GrantOutcome.ALREADY_JOINED);
+
+            verify(userRoleRepository, never()).save(any(UserRoleEntity.class));
+            verify(membershipService, never()).join(any(MembershipCreateRequest.class));
+            verify(inviteTokenRepository, never()).markClaimGrantCommitted(any());
+        }
+
+        @Test
+        @DisplayName("P2: 別経路で在籍済み → ALREADY_JOINED で付与印を立てない（呼び出し元が claim を戻せる）")
+        void 別経路の在籍は付与印なし() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            claimIs("CLAIMED", false);
+            given(membershipService.isActiveMemberForUpdate(USER_ID, ScopeType.TEAM, TEAM_ID)).willReturn(true);
+
+            assertThat(grantWithClaim()).isEqualTo(GrantOutcome.ALREADY_JOINED);
+
+            verify(inviteTokenRepository, never()).markClaimGrantCommitted(any());
+            verify(userRoleRepository, never()).save(any(UserRoleEntity.class));
+        }
+
+        @Test
+        @DisplayName("付与の前に別 attempt が claim を戻していた（RELEASED）→ ROLE_002 で付与しない")
+        void 戻されたclaimでは付与しない() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            claimIs("RELEASED", false);
+
+            assertThatThrownBy(this::grantWithClaim)
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(RoleErrorCode.ROLE_002));
+            verify(userRoleRepository, never()).save(any(UserRoleEntity.class));
+            verify(membershipService, never()).join(any(MembershipCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("claim の範囲外（直接呼び出し）では claim を読まない。範囲は呼び出し後に必ず外れる")
+        void 範囲外はclaimを読まない() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
+
+            service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN");
+
+            verifyNoInteractions(inviteTokenRepository);
+            assertThat(InviteClaimGrantScope.current()).isEmpty();
         }
     }
 

@@ -180,6 +180,25 @@ function goTo(idx: number) {
   step(dir)
 }
 
+/**
+ * タブの WAI-ARIA Tabs パターン（矢印で循環 / Home / End）。
+ * 選択はクリックと同じ goTo を使い、フォーカスは移動先のタブへ移す。
+ */
+function onTabKeydown(e: KeyboardEvent, idx: number) {
+  // Alt+←（戻る）・Ctrl+Home・Cmd+←・Shift+矢印などブラウザ/OS のショートカットは奪わない。
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+  let target: number
+  if (e.key === 'ArrowRight') target = (idx + 1) % PANEL_COUNT
+  else if (e.key === 'ArrowLeft') target = (idx - 1 + PANEL_COUNT) % PANEL_COUNT
+  else if (e.key === 'Home') target = 0
+  else if (e.key === 'End') target = PANEL_COUNT - 1
+  else return
+  e.preventDefault()
+  goTo(target)
+  const panel = PANELS[target]?.panel
+  if (panel) void nextTick(() => document.getElementById(`scope-tab-${panel}`)?.focus())
+}
+
 function next() {
   step(1)
 }
@@ -382,6 +401,7 @@ onBeforeUnmount(() => {
           :data-testid="`scope-segment-${p.panel}`"
           :aria-selected="idx === activeIndex"
           :aria-controls="`scope-panel-${p.panel}`"
+          :tabindex="idx === activeIndex ? 0 : -1"
           class="flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors md:px-4"
           :class="
             idx === activeIndex
@@ -389,6 +409,7 @@ onBeforeUnmount(() => {
               : 'text-surface-600 hover:bg-surface-200 dark:text-surface-300 dark:hover:bg-surface-700'
           "
           @click="goTo(idx)"
+          @keydown.stop="onTabKeydown($event, idx)"
         >
           <i
             :class="p.icon"
@@ -436,6 +457,7 @@ onBeforeUnmount(() => {
           role="tabpanel"
           :aria-labelledby="`scope-tab-${slot.panel}`"
           :aria-hidden="slot.index !== activeIndex"
+          :inert="slot.index !== activeIndex"
           class="w-full shrink-0 grow-0 basis-full"
         >
           <template v-if="activatedPanels.includes(slot.panel)">

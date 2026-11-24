@@ -53,6 +53,36 @@ public class AnnouncementFeedQueryRepository {
     }
 
     /**
+     * 元コンテンツが公開済みのお知らせだけを残す条件（N9）。ブログ・タイムライン投稿の状態に追従する。
+     *
+     * <p>{@code BLOG_POST}・{@code TIMELINE_POST} の行は「公開済み（{@code status = PUBLISHED}）で論理削除されていない元が
+     * <b>存在する</b>」ときだけ出す（fail-closed）。下書きのまま作られた既存行・公開後に下書きへ戻された記事・
+     * 論理削除された元（ブログの論理削除、タイムラインの {@code softDelete}）・元が存在しない孤児行のお知らせは、
+     * タイトル・抜粋のキャッシュごと一覧に出さない。両エンティティは {@code @SQLRestriction("deleted_at IS NULL")} を持ち、
+     * 「非公開の元が存在しない」で判定すると論理削除済みの元が見えずに素通りするため、存在を正として判定する
+     * （{@code deletedAt IS NULL} も明示する）。元コンテンツの削除は {@code ContentDeletedEvent}（現状どこからも発行されない）
+     * に頼らない。状態が復帰（再公開）すれば条件を満たして一覧に戻る。</p>
+     *
+     * <p>元コンテンツのドメインへは FK を張らず、ID 参照の相関サブクエリで読む
+     * （{@code FriendFeedQueryRepository} がタイムライン投稿を読むのと同じ作法）。ID 指定の経路は同じ定義を
+     * {@link AnnouncementSourcePublicationGuard} で判定する。他のソース種別は対象外。</p>
+     */
+    private static final String SOURCE_PUBLISHED_CONDITION = """
+              AND (a.sourceType NOT IN (com.mannschaft.app.social.announcement.AnnouncementSourceType.BLOG_POST,
+                                        com.mannschaft.app.social.announcement.AnnouncementSourceType.TIMELINE_POST)
+                   OR (a.sourceType = com.mannschaft.app.social.announcement.AnnouncementSourceType.BLOG_POST
+                       AND EXISTS (SELECT 1 FROM BlogPostEntity sb
+                                   WHERE sb.id = a.sourceId
+                                     AND sb.status = com.mannschaft.app.cms.PostStatus.PUBLISHED
+                                     AND sb.deletedAt IS NULL))
+                   OR (a.sourceType = com.mannschaft.app.social.announcement.AnnouncementSourceType.TIMELINE_POST
+                       AND EXISTS (SELECT 1 FROM TimelinePostEntity st
+                                   WHERE st.id = a.sourceId
+                                     AND st.status = com.mannschaft.app.timeline.PostStatus.PUBLISHED
+                                     AND st.deletedAt IS NULL)))
+            """;
+
+    /**
      * 「そのスコープでその閲覧者に<b>可視な</b>お知らせ」を表す正準 WHERE 句（#2494）。
      *
      * <p><b>この定数が可視性判定の単一の真実源である。</b>
@@ -69,6 +99,7 @@ public class AnnouncementFeedQueryRepository {
      *   <li>{@code expiresAt IS NULL OR expiresAt > CURRENT_TIMESTAMP} — 期限切れ除外（<b>厳密な {@code >}</b>）</li>
      *   <li>{@code sourceDeletedAt IS NULL} — 元コンテンツ削除済み除外</li>
      *   <li>{@code visibility IN :allowedVisibilities} — 可視性</li>
+     *   <li>{@link #SOURCE_PUBLISHED_CONDITION} — ブログ・タイムライン投稿は公開済みの元が存在する行だけ（N9。孤児・論理削除も除外）</li>
      * </ul>
      */
     private static final String VISIBLE_IN_SCOPE_WHERE = """
@@ -77,7 +108,7 @@ public class AnnouncementFeedQueryRepository {
               AND (a.expiresAt IS NULL OR a.expiresAt > CURRENT_TIMESTAMP)
               AND a.sourceDeletedAt IS NULL
               AND a.visibility IN :allowedVisibilities
-            """;
+            """ + SOURCE_PUBLISHED_CONDITION;
 
     private final EntityManager em;
 
@@ -127,7 +158,8 @@ public class AnnouncementFeedQueryRepository {
             return List.of();
         }
         jpql.append(") AND (a.expiresAt IS NULL OR a.expiresAt > :now)")
-                .append(" AND a.sourceDeletedAt IS NULL");
+                .append(" AND a.sourceDeletedAt IS NULL")
+                .append(SOURCE_PUBLISHED_CONDITION);
         if (!includeRead) {
             jpql.append(" AND NOT EXISTS (SELECT r.id FROM AnnouncementReadStatusEntity r")
                     .append(" WHERE r.announcementFeedId = a.id AND r.userId = :userId)");

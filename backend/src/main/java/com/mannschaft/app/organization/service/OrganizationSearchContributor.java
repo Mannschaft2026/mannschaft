@@ -1,10 +1,12 @@
 package com.mannschaft.app.organization.service;
 
+import com.mannschaft.app.common.visibility.mapping.OrganizationVisibilityMapper;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
 import com.mannschaft.app.organization.repository.OrganizationKeywordSearchRepository;
 import com.mannschaft.app.search.SearchContributor;
 import com.mannschaft.app.search.SearchCriteria;
 import com.mannschaft.app.search.SearchHit;
+import com.mannschaft.app.search.SearchScopeVisibilityPredicate;
 import com.mannschaft.app.search.SearchTextHighlighter;
 import com.mannschaft.app.search.SearchType;
 import com.mannschaft.app.search.SearchViewer;
@@ -19,8 +21,10 @@ import java.util.Map;
 /**
  * グローバル検索 ORGANIZATION 種別の {@link SearchContributor}（F04.6 §6、CMP-261116-0722）。
  *
- * <p>可視性: (PUBLIC または本人所属) かつ ACTIVE かつ未アーカイブ かつ未削除。件数と取得は
- * {@link OrganizationKeywordSearchRepository} の同一 WHERE 句から出す。</p>
+ * <p>可視性: 組織の公開範囲の段を満たす（組織詳細の正準 {@code ContentVisibilityChecker} と同じ規則。
+ * PUBLIC は誰でも、PRIVATE は SCOPE_AFFILIATED＝その組織の所属者。サポーターも含む）かつ ACTIVE かつ未アーカイブ
+ * かつ未削除。件数と取得は同一の {@link SearchScopeVisibilityPredicate} から
+ * {@link OrganizationKeywordSearchRepository} の同一 WHERE 句で出す。</p>
  *
  * <p>スコープ絞り込み: {@code scopeType=ORGANIZATION} はその組織自身だけ（所属は集約側で確認済み）、
  * {@code scopeType=TEAM} は該当なし。</p>
@@ -43,7 +47,7 @@ public class OrganizationSearchContributor implements SearchContributor {
             return 0L;
         }
         return organizationKeywordSearchRepository.count(
-                criteria.terms(), viewer.organizationIds(), onlyOrgId(criteria));
+                criteria.terms(), visibility(viewer), onlyOrgId(criteria));
     }
 
     @Override
@@ -52,10 +56,15 @@ public class OrganizationSearchContributor implements SearchContributor {
             return List.of();
         }
         return organizationKeywordSearchRepository
-                .find(criteria.terms(), viewer.organizationIds(), onlyOrgId(criteria), offset, limit)
+                .find(criteria.terms(), visibility(viewer), onlyOrgId(criteria), offset, limit)
                 .stream()
                 .map(org -> toHit(org, criteria.terms()))
                 .toList();
+    }
+
+    private static SearchScopeVisibilityPredicate<OrganizationEntity.Visibility> visibility(SearchViewer viewer) {
+        return SearchScopeVisibilityPredicate.of(OrganizationEntity.Visibility.class,
+                OrganizationVisibilityMapper::toStandard, viewer, SearchViewer.ORGANIZATION);
     }
 
     private static boolean excludedByScope(SearchCriteria criteria) {

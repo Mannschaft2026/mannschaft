@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import type { ChangeRequest, CreateChangeRequestPayload } from '~/types/shift'
+import type { ChangeRequest, CreateChangeRequestPayload, ReviewOutcome } from '~/types/shift'
 
 /** 一覧を最新に取り直すべき競合（他者が先に状態を変えた）のエラーコード。 */
 const CONFLICT_CODES = ['SHIFT_031', 'COMMON_003']
@@ -20,7 +20,7 @@ function isConflict(error: unknown): boolean {
  */
 export function useChangeRequest(scheduleId: Ref<number>) {
   const shiftApi = useShiftApi()
-  const { success: showSuccess } = useNotification()
+  const { success: showSuccess, error: showError } = useNotification()
   const { handleApiError } = useErrorHandler()
   const { t } = useI18n()
 
@@ -69,55 +69,87 @@ export function useChangeRequest(scheduleId: Ref<number>) {
     }
   }
 
-  /** 同一依頼への操作を直列化して実行する。処理中なら何もせず false。 */
-  async function runExclusive(
+  type ExecResult = 'ok' | 'busy' | 'conflict' | 'error'
+
+  /**
+   * 同一依頼への操作を直列化して実行する。処理中なら何もせず 'busy'。
+   * conflictMessage を渡すと、409 はそれを通知して handleApiError は呼ばない。
+   */
+  async function execute(
     id: number,
     context: string,
     action: () => Promise<void>,
-  ): Promise<boolean> {
-    if (processingIds.value.includes(id)) return false
+    conflictMessage?: string,
+  ): Promise<ExecResult> {
+    if (processingIds.value.includes(id)) return 'busy'
     processingIds.value = [...processingIds.value, id]
     try {
       await action()
-      return true
+      return 'ok'
     } catch (error) {
-      handleApiError(error, context)
+      const conflict = isConflict(error)
+      if (conflict && conflictMessage) showError(conflictMessage)
+      else handleApiError(error, context)
       // 他者が先に状態を変えた競合は、一覧を最新に取り直して正しい状態を見せる
-      if (isConflict(error)) await fetchRequests()
-      return false
+      if (conflict) await fetchRequests()
+      return conflict ? 'conflict' : 'error'
     } finally {
       processingIds.value = processingIds.value.filter(x => x !== id)
     }
   }
 
-  /** 変更依頼を審査する（チーム ADMIN / DEPUTY_ADMIN）。成功なら true */
-  function review(
+  /**
+   * 変更依頼を審査する（チーム ADMIN / DEPUTY_ADMIN）。
+   * version は依頼の楽観ロック値（不一致は BE が 409 SHIFT_018）。
+   * 409 は競合専用の文言を出し、一覧を再取得して conflict（最新の依頼つき）を返す。
+   */
+  async function reviewWithOutcome(
     id: number,
     decision: 'ACCEPTED' | 'REJECTED',
-    comment?: string,
-    version = 0,
+    comment: string | undefined,
+    version: number,
+  ): Promise<ReviewOutcome> {
+    const result = await execute(
+      id,
+      'シフト変更依頼の審査',
+      async () => {
+        const updated = await shiftApi.reviewChangeRequest(id, {
+          decision,
+          reviewComment: comment || undefined,
+          version,
+        })
+        const idx = requests.value.findIndex(r => r.id === id)
+        if (idx !== -1) {
+          requests.value[idx] = { ...requests.value[idx], ...updated, requesterName: updated.requesterName ?? requests.value[idx]!.requesterName }
+        }
+        showSuccess(
+          decision === 'ACCEPTED'
+            ? t('shift.changeRequest.approveSuccess')
+            : t('shift.changeRequest.rejectSuccess'),
+        )
+      },
+      t('shift.changeRequest.reviewConflict'),
+    )
+    if (result === 'ok') return { status: 'ok' }
+    if (result === 'conflict') {
+      return { status: 'conflict', latest: requests.value.find(r => r.id === id) ?? null }
+    }
+    return { status: 'error' }
+  }
+
+  /** 変更依頼を審査する。成功なら true */
+  async function review(
+    id: number,
+    decision: 'ACCEPTED' | 'REJECTED',
+    comment: string | undefined,
+    version: number,
   ): Promise<boolean> {
-    return runExclusive(id, 'シフト変更依頼の審査', async () => {
-      const updated = await shiftApi.reviewChangeRequest(id, {
-        decision,
-        reviewComment: comment || undefined,
-        version,
-      })
-      const idx = requests.value.findIndex(r => r.id === id)
-      if (idx !== -1) {
-        requests.value[idx] = { ...requests.value[idx], ...updated, requesterName: updated.requesterName ?? requests.value[idx]!.requesterName }
-      }
-      showSuccess(
-        decision === 'ACCEPTED'
-          ? t('shift.changeRequest.approveSuccess')
-          : t('shift.changeRequest.rejectSuccess'),
-      )
-    })
+    return (await reviewWithOutcome(id, decision, comment, version)).status === 'ok'
   }
 
   /** 変更依頼を取り下げる（依頼者のみ）。成功なら true */
   function withdraw(id: number): Promise<boolean> {
-    return runExclusive(id, 'シフト変更依頼の取り下げ', async () => {
+    return execute(id, 'シフト変更依頼の取り下げ', async () => {
       await shiftApi.withdrawChangeRequest(id)
       const idx = requests.value.findIndex(r => r.id === id)
       if (idx !== -1) {
@@ -128,7 +160,7 @@ export function useChangeRequest(scheduleId: Ref<number>) {
         }
       }
       showSuccess(t('shift.changeRequest.withdrawSuccess'))
-    })
+    }).then(result => result === 'ok')
   }
 
   return {
@@ -139,6 +171,7 @@ export function useChangeRequest(scheduleId: Ref<number>) {
     fetchRequests,
     createRequest,
     review,
+    reviewWithOutcome,
     withdraw,
   }
 }

@@ -14,6 +14,7 @@ import com.mannschaft.app.payment.constant.ContentGateType;
 import com.mannschaft.app.payment.service.PaymentGateService;
 import com.mannschaft.app.social.announcement.AnnouncementFeedEntity;
 import com.mannschaft.app.social.announcement.AnnouncementFeedRepository;
+import com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard;
 import com.mannschaft.app.visibility.service.VisibilityTemplateEvaluator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,7 +57,8 @@ import com.mannschaft.app.payment.spi.ContentGateTarget;
  * 本 Resolver は個別可視性判定（{@link #canView}/{@link #decide}/{@link #filterAccessible}）に使用する。</p>
  *
  * <p><strong>status 軸</strong>: {@code announcement_feeds} はステータスを持たないため
- * {@link ContentStatus#PUBLISHED} 固定（既定実装を踏襲）。</p>
+ * {@link ContentStatus#PUBLISHED} 固定（既定実装を踏襲）。元のブログ記事・タイムライン投稿が公開済みでないお知らせは、
+ * {@link #loadProjections} が投影から外す（不在扱い。N9）。</p>
  */
 @Slf4j
 @Component
@@ -65,10 +67,12 @@ public class AnnouncementFeedVisibilityResolver
 
     private final AnnouncementFeedRepository announcementFeedRepository;
     private final PaymentGateService paymentGateService;
+    private final AnnouncementSourcePublicationGuard sourcePublication;
 
     public AnnouncementFeedVisibilityResolver(
             AnnouncementFeedRepository announcementFeedRepository,
             PaymentGateService paymentGateService,
+            AnnouncementSourcePublicationGuard sourcePublication,
             MembershipBatchQueryService membershipBatchQueryService,
             VisibilityTemplateEvaluator templateEvaluator,
             VisibilityMetrics visibilityMetrics,
@@ -78,6 +82,7 @@ public class AnnouncementFeedVisibilityResolver
                 followBatchService, auditLogService);
         this.announcementFeedRepository = announcementFeedRepository;
         this.paymentGateService = paymentGateService;
+        this.sourcePublication = sourcePublication;
     }
 
     @Override
@@ -90,10 +95,16 @@ public class AnnouncementFeedVisibilityResolver
      *
      * <p>{@link AnnouncementFeedEntity} を ID 集合で一括取得し、
      * {@link AnnouncementFeedVisibilityProjection#from(AnnouncementFeedEntity)} で変換する。</p>
+     *
+     * <p><b>元コンテンツの公開状態（N9）</b>: ブログ記事・タイムライン投稿の元が公開済みでない（下書き・論理削除・不在）
+     * お知らせは投影に含めない＝<b>不在と同じ扱い</b>（閲覧不可・{@code NOT_FOUND}）にする。一覧クエリと同じ定義を
+     * {@link AnnouncementSourcePublicationGuard} で一括判定する。</p>
      */
     @Override
     protected List<AnnouncementFeedVisibilityProjection> loadProjections(Collection<Long> ids) {
-        List<AnnouncementFeedEntity> entities = announcementFeedRepository.findByIdIn(ids);
+        List<AnnouncementFeedEntity> entities = sourcePublication.retainPublished(
+                announcementFeedRepository.findByIdIn(ids),
+                AnnouncementFeedEntity::getSourceType, AnnouncementFeedEntity::getSourceId);
         return entities.stream()
                 .map(AnnouncementFeedVisibilityProjection::from)
                 .toList();

@@ -106,7 +106,9 @@ class PersonalAnnouncementFeedQueryIntegrationTest extends AbstractMySqlIntegrat
     private AnnouncementFeedEntity feed(long scopeId, String visibility, LocalDateTime deletedAt) {
         AnnouncementFeedEntity entity = AnnouncementFeedEntity.builder()
                 .scopeType(AnnouncementScopeType.TEAM).scopeId(scopeId)
-                .sourceType(AnnouncementSourceType.BLOG_POST).sourceId(System.nanoTime())
+                // 元は公開済みの実在記事（元が公開済みでないお知らせは個人横断にも出さない。N9）
+                .sourceType(AnnouncementSourceType.BLOG_POST)
+                .sourceId(AnnouncementSourceFixtures.publishedTeamBlog(em, scopeId, USER_ID))
                 .titleCache("test").visibility(visibility).sourceDeletedAt(deletedAt).build();
         em.persist(entity);
         return entity;

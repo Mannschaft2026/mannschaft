@@ -21444,6 +21444,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/pending-invite/reissue-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 失効した招待の再発行を要請
+         * @description 非公開の招待先の招待権限者へ通知する。7 日以内の再要請は通知せず alreadyRequested=true。公開の招待先は 409 AUTH_085
+         */
+        post: operations["requestReissue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 失効した招待の案内を閉じる */
+        post: operations["dismiss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 参加待ちの招待を辞退 */
+        post: operations["decline_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 参加待ちの招待を承認して参加
+         * @description 承認後の状態（JOINED/EXPIRED/UNAVAILABLE）を返す。処理中は 409 AUTH_086、辞退済み等は 409 AUTH_085
+         */
+        post: operations["accept_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/payment-methods/setup-intent": {
         parameters: {
             query?: never;
@@ -29545,7 +29619,7 @@ export interface paths {
          * 代理承認
          * @description F03.10 §4.1: 代理人が代理を承認する
          */
-        patch: operations["accept_3"];
+        patch: operations["accept_4"];
         trace?: never;
     };
     "/api/v1/safety-checks/templates/{templateId}": {
@@ -31563,7 +31637,7 @@ export interface paths {
          * 代理承認
          * @description F03.10 §4.2: 代理人が代理を承認する
          */
-        patch: operations["accept_4"];
+        patch: operations["accept_5"];
         trace?: never;
     };
     "/api/v1/event-categories/{categoryId}": {
@@ -34340,6 +34414,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{teamSlug}/tournaments/{tournamentId}/contact-spaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 参加者向け連絡スペース一覧（チーム文脈） */
+        get: operations["list_82"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{teamSlug}/org-invites": {
         parameters: {
             query?: never;
@@ -34365,7 +34456,7 @@ export interface paths {
             cookie?: never;
         };
         /** チームが止めている招待の一覧（チームの加盟操作者） */
-        get: operations["list_82"];
+        get: operations["list_83"];
         put?: never;
         post?: never;
         delete?: never;
@@ -35343,7 +35434,7 @@ export interface paths {
             cookie?: never;
         };
         /** 受信した協会請求の一覧 */
-        get: operations["list_83"];
+        get: operations["list_84"];
         put?: never;
         post?: never;
         delete?: never;
@@ -35394,7 +35485,7 @@ export interface paths {
             cookie?: never;
         };
         /** 立替/精算記録の一覧 */
-        get: operations["list_84"];
+        get: operations["list_85"];
         put?: never;
         post?: never;
         delete?: never;
@@ -35530,7 +35621,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_85"];
+        get: operations["list_86"];
         put?: never;
         post?: never;
         delete?: never;
@@ -36939,7 +37030,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_86"];
+        get: operations["list_87"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38013,7 +38104,7 @@ export interface paths {
             cookie?: never;
         };
         /** プロビジョニング招待の一覧を取得する */
-        get: operations["list_87"];
+        get: operations["list_88"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38030,7 +38121,7 @@ export interface paths {
             cookie?: never;
         };
         /** 課金状況一覧 */
-        get: operations["list_88"];
+        get: operations["list_89"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38296,7 +38387,7 @@ export interface paths {
             cookie?: never;
         };
         /** エラーレポート一覧取得 */
-        get: operations["list_89"];
+        get: operations["list_90"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38994,7 +39085,7 @@ export interface paths {
          * 通報一覧
          * @description status / reasonCode で任意に絞り込んだ通報を created_at DESC で取得する。campaignId（メッセージ型）/ operationalCampaignId（運用型）を併記する。
          */
-        get: operations["list_90"];
+        get: operations["list_91"];
         put?: never;
         post?: never;
         delete?: never;
@@ -39042,7 +39133,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_91"];
+        get: operations["list_92"];
         put?: never;
         post?: never;
         delete?: never;
@@ -39078,7 +39169,7 @@ export interface paths {
          * 審査キュー一覧
          * @description 運用型キャンペーンを status フィルタ（既定 PENDING_REVIEW）・created_at DESC で取得する。
          */
-        get: operations["list_92"];
+        get: operations["list_93"];
         put?: never;
         post?: never;
         delete?: never;
@@ -39617,7 +39708,7 @@ export interface paths {
             cookie?: never;
         };
         /** 失敗イベント一覧を取得 (status で絞り込み可、新しい順) */
-        get: operations["list_93"];
+        get: operations["list_94"];
         put?: never;
         post?: never;
         delete?: never;
@@ -40144,7 +40235,7 @@ export interface paths {
          * キャンセル料記録の一覧
          * @description 受取先側の管理者・受取先本人・運営管理者が、自分が受け取るべきキャンセル料の記録を一覧する（免除対象を選ぶための一覧）。ページングはカーソル方式で、続きは meta.nextCursor を cursor に渡して取得する。
          */
-        get: operations["list_94"];
+        get: operations["list_95"];
         put?: never;
         post?: never;
         delete?: never;
@@ -41072,7 +41163,7 @@ export interface paths {
             cookie?: never;
         };
         /** 権限カタログ一覧（スコープの ADMIN+） */
-        get: operations["list_95"];
+        get: operations["list_96"];
         put?: never;
         post?: never;
         delete?: never;
@@ -41336,7 +41427,7 @@ export interface paths {
             cookie?: never;
         };
         /** 組織が止めている申請の一覧（組織 ADMIN） */
-        get: operations["list_96"];
+        get: operations["list_97"];
         put?: never;
         post?: never;
         delete?: never;
@@ -42866,7 +42957,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_97"];
+        get: operations["list_98"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43278,7 +43369,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_98"];
+        get: operations["list_99"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43449,7 +43540,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_99"];
+        get: operations["list_100"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43829,7 +43920,7 @@ export interface paths {
             cookie?: never;
         };
         /** 村でなれる投稿主体一覧を取得する（村人のみ） */
-        get: operations["list_100"];
+        get: operations["list_101"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43897,7 +43988,7 @@ export interface paths {
             cookie?: never;
         };
         /** メモ添付一覧 */
-        get: operations["list_101"];
+        get: operations["list_102"];
         put?: never;
         post?: never;
         delete?: never;
@@ -44416,6 +44507,26 @@ export interface paths {
         };
         /** 今日のコマ（A/B 週適用済み） */
         get: operations["today_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 自分の参加待ち招待を取得
+         * @description 招待付きで新規登録した参加待ちの招待を返す。無ければ data は null
+         */
+        get: operations["get_40"];
         put?: never;
         post?: never;
         delete?: never;
@@ -45121,7 +45232,7 @@ export interface paths {
          * 請求書一覧
          * @description 指定スコープの請求書を period_end 降順で返す。cursor は不透明値。
          */
-        get: operations["list_102"];
+        get: operations["list_103"];
         put?: never;
         post?: never;
         delete?: never;
@@ -45703,7 +45814,7 @@ export interface paths {
             cookie?: never;
         };
         /** 家族メンバーの個人時間割一覧（status=ACTIVE のみ、共有設定済みのみ） */
-        get: operations["list_103"];
+        get: operations["list_104"];
         put?: never;
         post?: never;
         delete?: never;
@@ -46017,7 +46128,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_40"];
+        get: operations["get_41"];
         put?: never;
         post?: never;
         delete?: never;
@@ -51194,7 +51305,6 @@ export interface components {
             variant?: "LAST_NAME" | "FULL_NAME" | "FIRST_NAME";
         };
         UpdateProfileRequest: {
-            avatarUrl?: string;
             countryCode?: string;
             /** @enum {string} */
             dmReceiveFrom?: "ANYONE" | "TEAM_MEMBERS_ONLY" | "CONTACTS_ONLY";
@@ -51536,8 +51646,12 @@ export interface components {
             authorId?: number;
             /** Format: int64 */
             organizationId?: number;
+            /** @description 組織記事の組織 slug（組織記事以外・論理削除済み組織は null） */
+            organizationSlug: string | null;
             /** Format: int64 */
             teamId?: number;
+            /** @description チーム記事のチーム slug（チーム記事以外・論理削除済みチームは null） */
+            teamSlug: string | null;
             /** Format: int64 */
             userId?: number;
         };
@@ -66528,6 +66642,8 @@ export interface components {
             /** Format: int64 */
             slotId?: number;
             timing?: components["schemas"]["ChangeRequestTimingDto"];
+            /** Format: int64 */
+            version?: number;
         };
         ChangeRequestStatusDto: {
             reviewComment?: string;
@@ -69371,6 +69487,18 @@ export interface components {
             effective_until?: string;
             name?: string;
             term_label?: string;
+        };
+        ApiResponsePendingInviteReissueResponse: {
+            data?: components["schemas"]["PendingInviteReissueResponse"];
+        };
+        PendingInviteReissueResponse: {
+            alreadyRequested?: boolean;
+        };
+        ApiResponsePendingInviteAcceptResponse: {
+            data?: components["schemas"]["PendingInviteAcceptResponse"];
+        };
+        PendingInviteAcceptResponse: {
+            status?: string;
         };
         ApiResponseSetupIntentResponse: {
             data?: components["schemas"]["SetupIntentResponse"];
@@ -76182,6 +76310,37 @@ export interface components {
         };
         ApiResponseListModuleSummaryResponse: {
             data?: components["schemas"]["ModuleSummaryResponse"][];
+        };
+        ApiResponseParticipantContactSpacesResponse: {
+            data?: components["schemas"]["ParticipantContactSpacesResponse"];
+        };
+        DivisionItem: {
+            /** Format: int64 */
+            divisionId?: number;
+            name?: string;
+        };
+        ParticipantContactSpacesResponse: {
+            divisions?: components["schemas"]["DivisionItem"][];
+            spaces?: components["schemas"]["SpaceItem"][];
+            /** Format: int64 */
+            tournamentId?: number;
+            tournamentName?: string;
+        };
+        SpaceItem: {
+            /** @enum {string} */
+            accessLevel?: "VIEW" | "POST";
+            divisionName?: string;
+            /** Format: uuid */
+            id?: string;
+            isPublic?: boolean;
+            /** Format: int64 */
+            refId?: number;
+            /** Format: int64 */
+            scopeId?: number;
+            /** @enum {string} */
+            scopeType?: "TOURNAMENT" | "TOURNAMENT_DIVISION";
+            /** @enum {string} */
+            spaceKind?: "BULLETIN" | "CHAT";
         };
         PagedResponseTeamOrgAffiliationResponse: {
             data?: components["schemas"]["TeamOrgAffiliationResponse"][];
@@ -84042,6 +84201,23 @@ export interface components {
             subject_name?: string;
             teacher_name?: string;
             week_pattern?: string;
+        };
+        ApiResponsePendingInviteResponse: {
+            data?: components["schemas"]["PendingInviteResponse"];
+        };
+        PendingInviteResponse: {
+            /** Format: uuid */
+            id?: string;
+            joinable?: boolean;
+            publicPath?: string;
+            /** Format: date-time */
+            reissueRequestedAt?: string;
+            /** Format: date-time */
+            retryAvailableAt?: string;
+            roleName?: string;
+            scopeName?: string;
+            scopeType?: string;
+            status?: string;
         };
         ApiResponseListPaymentRequirementResponse: {
             data?: components["schemas"]["PaymentRequirementResponse"][];
@@ -134315,6 +134491,86 @@ export interface operations {
             };
         };
     };
+    requestReissue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePendingInviteReissueResponse"];
+                };
+            };
+        };
+    };
+    dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    decline_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    accept_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePendingInviteAcceptResponse"];
+                };
+            };
+        };
+    };
     createSetupIntent: {
         parameters: {
             query?: never;
@@ -149427,7 +149683,7 @@ export interface operations {
             };
         };
     };
-    accept_3: {
+    accept_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -153639,7 +153895,7 @@ export interface operations {
             };
         };
     };
-    accept_4: {
+    accept_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -158054,6 +158310,29 @@ export interface operations {
             };
         };
     };
+    list_82: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamSlug: string;
+                tournamentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseParticipantContactSpacesResponse"];
+                };
+            };
+        };
+    };
     listReceivedInvites: {
         parameters: {
             query?: {
@@ -158088,7 +158367,7 @@ export interface operations {
             };
         };
     };
-    list_82: {
+    list_83: {
         parameters: {
             query?: {
                 page?: number;
@@ -159525,7 +159804,7 @@ export interface operations {
             };
         };
     };
-    list_83: {
+    list_84: {
         parameters: {
             query?: never;
             header?: never;
@@ -159593,7 +159872,7 @@ export interface operations {
             };
         };
     };
-    list_84: {
+    list_85: {
         parameters: {
             query?: never;
             header?: never;
@@ -159805,7 +160084,7 @@ export interface operations {
             };
         };
     };
-    list_85: {
+    list_86: {
         parameters: {
             query: {
                 status?: "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
@@ -162023,7 +162302,7 @@ export interface operations {
             };
         };
     };
-    list_86: {
+    list_87: {
         parameters: {
             query: {
                 fiscalYearId: number;
@@ -163530,7 +163809,7 @@ export interface operations {
             };
         };
     };
-    list_87: {
+    list_88: {
         parameters: {
             query?: never;
             header?: never;
@@ -163550,7 +163829,7 @@ export interface operations {
             };
         };
     };
-    list_88: {
+    list_89: {
         parameters: {
             query?: {
                 billingStatus?: string;
@@ -163879,7 +164158,7 @@ export interface operations {
             };
         };
     };
-    list_89: {
+    list_90: {
         parameters: {
             query?: {
                 status?: string;
@@ -164808,7 +165087,7 @@ export interface operations {
             };
         };
     };
-    list_90: {
+    list_91: {
         parameters: {
             query?: {
                 status?: "NEW" | "REVIEWING" | "RESOLVED" | "DISMISSED";
@@ -164881,7 +165160,7 @@ export interface operations {
             };
         };
     };
-    list_91: {
+    list_92: {
         parameters: {
             query?: {
                 status?: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
@@ -164926,7 +165205,7 @@ export interface operations {
             };
         };
     };
-    list_92: {
+    list_93: {
         parameters: {
             query?: {
                 status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "PAUSED" | "ENDED";
@@ -165667,7 +165946,7 @@ export interface operations {
             };
         };
     };
-    list_93: {
+    list_94: {
         parameters: {
             query?: {
                 status?: "PENDING" | "RETRYING" | "SUCCEEDED" | "EXHAUSTED" | "MANUAL_RESOLVED";
@@ -166406,7 +166685,7 @@ export interface operations {
             };
         };
     };
-    list_94: {
+    list_95: {
         parameters: {
             query?: {
                 status?: ("NOT_REQUIRED" | "PENDING" | "PAID" | "WAIVED" | "FAILED" | "UNCOLLECTIBLE")[];
@@ -167623,7 +167902,7 @@ export interface operations {
             };
         };
     };
-    list_95: {
+    list_96: {
         parameters: {
             query: {
                 scopeType: string;
@@ -168049,7 +168328,7 @@ export interface operations {
             };
         };
     };
-    list_96: {
+    list_97: {
         parameters: {
             query?: {
                 page?: number;
@@ -170270,7 +170549,7 @@ export interface operations {
             };
         };
     };
-    list_97: {
+    list_98: {
         parameters: {
             query: {
                 status?: "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
@@ -170844,7 +171123,7 @@ export interface operations {
             };
         };
     };
-    list_98: {
+    list_99: {
         parameters: {
             query: {
                 fiscalYearId: number;
@@ -171083,7 +171362,7 @@ export interface operations {
             };
         };
     };
-    list_99: {
+    list_100: {
         parameters: {
             query?: {
                 status?: "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
@@ -171589,7 +171868,7 @@ export interface operations {
             };
         };
     };
-    list_100: {
+    list_101: {
         parameters: {
             query?: never;
             header?: never;
@@ -171673,7 +171952,7 @@ export interface operations {
             };
         };
     };
-    list_101: {
+    list_102: {
         parameters: {
             query?: never;
             header?: never;
@@ -172384,6 +172663,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListPersonalTimetableSlotResponse"];
+                };
+            };
+        };
+    };
+    get_40: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePendingInviteResponse"];
                 };
             };
         };
@@ -173349,7 +173648,7 @@ export interface operations {
             };
         };
     };
-    list_102: {
+    list_103: {
         parameters: {
             query: {
                 scopeKind: "USER" | "TEAM" | "ORG";
@@ -174228,7 +174527,7 @@ export interface operations {
             };
         };
     };
-    list_103: {
+    list_104: {
         parameters: {
             query?: never;
             header?: never;
@@ -174677,7 +174976,7 @@ export interface operations {
             };
         };
     };
-    get_40: {
+    get_41: {
         parameters: {
             query: {
                 organizationId: number;
