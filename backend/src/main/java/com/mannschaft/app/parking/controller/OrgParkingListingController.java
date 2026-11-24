@@ -99,6 +99,7 @@ public class OrgParkingListingController {
             @PathVariable Long organizationId, @PathVariable Long id,
             @Valid @RequestBody ListingApplyRequest request) {
         parkingAccessGuard.requireScopeMember(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        parkingAccessGuard.requireOwnedVehicle(SecurityUtils.getCurrentUserId(), request.getVehicleId());
         List<Long> spaceIds = spaceService.getSpaceIds(SCOPE_TYPE, organizationId);
         ApplicationResponse result = listingService.apply(spaceIds, id, SecurityUtils.getCurrentUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(result));

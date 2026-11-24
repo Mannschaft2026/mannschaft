@@ -49,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ParkingAccessGuard {
 
     private final AccessControlService accessControlService;
+    private final RegisteredVehicleService vehicleService;
 
     /**
      * 指定スコープ（organizationId / teamId）のメンバーであることを要求する（read・自己申請系の入口）。
@@ -72,5 +73,12 @@ public class ParkingAccessGuard {
      */
     public void requireScopeAdmin(String scopeType, Long scopeId, Long userId) {
         accessControlService.checkAdminOrAbove(userId, scopeId, scopeType);
+    }
+
+    /**
+     * 申請に使う車両が申請者本人の所有であることを要求する。他人/不存在は 404（PARKING_002）。
+     */
+    public void requireOwnedVehicle(Long applicantUserId, Long vehicleId) {
+        vehicleService.requireOwnedVehicle(applicantUserId, vehicleId);
     }
 }
