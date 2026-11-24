@@ -176,6 +176,27 @@ describe('通知からの遷移 ?pendingInvite=open（F1）', () => {
     expect(wrapper.find(q('pending-invite-pending')).exists()).toBe(true)
   })
 
+  it('PIR-13 P2-4: 取得中に通知（?pendingInvite=open）を押しても、その取得の完了後に必ず取り直し、取り直しの後でクエリを消す', async () => {
+    let release!: () => void
+    mocks.api.mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ data: invite({ status: 'REISSUE_REQUESTED' as PendingInvite['status'] }) })
+    }))
+    const wrapper = await mountDialog()
+    current = invite({ status: 'PENDING' })
+    route.query = { pendingInvite: 'open' }
+    route.fullPath = '/dashboard?pendingInvite=open'
+    await nextTick()
+    await flushPromises()
+    // 取得が終わるまでクエリは消さない
+    expect(mocks.replace.mock.calls.filter(([to]) => typeof to !== 'string')).toEqual([])
+    release()
+    await flushPromises()
+    expect(gets().length).toBe(2)
+    expect(wrapper.find(q('pending-invite-pending')).exists()).toBe(true)
+    expect(wrapper.find(q('pending-invite-reissue-requested')).exists()).toBe(false)
+    expect(mocks.replace.mock.calls.filter(([to]) => typeof to !== 'string').length).toBeGreaterThan(0)
+  })
+
   it('PIR-12: クエリが無ければ「あとで」の記録どおり出さない（従来どおり）', async () => {
     sessionStorage.setItem(LATER_KEY, ID)
     const wrapper = await mountDialog()

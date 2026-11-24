@@ -26,7 +26,16 @@ const {
   decline,
 } = useInviteReissueRequests(toRef(props, 'scopeType'), toRef(props, 'slug'))
 
-onMounted(init)
+const route = useRoute()
+
+// 通知・承認待ちの内訳からの遷移先 …/invites#reissue-requests。欄は権限確定後に現れるため、アンカーのスクロールは欄の側で行う
+onMounted(async () => {
+  await init()
+  if (route.hash === '#reissue-requests') {
+    await nextTick()
+    document.getElementById('reissue-requests')?.scrollIntoView({ block: 'start' })
+  }
+})
 
 function roleLabel(role: string): string {
   return te(`role.${role}`) ? t(`role.${role}`) : role

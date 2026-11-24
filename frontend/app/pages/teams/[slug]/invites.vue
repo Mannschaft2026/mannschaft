@@ -15,10 +15,10 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 
 // 「再招待の依頼」欄は ADMIN、または INVITE_MEMBERS を持つ DEPUTY_ADMIN だけに出す（BE の InviteIssuerPolicy#canIssue に合わせる）。
-const { roleName: myRoleName, permissions, loadPermissions } = useRoleAccess('team', teamSlug)
-const canManageReissue = computed(() => canManageInviteReissue(myRoleName.value, permissions.value))
+// canManageInviteReissue の判定は useInviteReissueAccess が持つ。権限の取得失敗は欄の位置にエラーと再試行を出す。
+const { canManage: canManageReissue, loadFailed: reissueAccessFailed, load: loadReissueAccess } = useInviteReissueAccess('team', teamSlug)
 onMounted(() => {
-  void loadPermissions()
+  void loadReissueAccess()
 })
 
 const { isAdminOrDeputy, roleName } = useTeamShellContext()
@@ -37,6 +37,17 @@ watch(
 
 <template>
   <div class="mt-4">
+    <div v-if="reissueAccessFailed" class="mb-4 space-y-2" data-testid="invite-reissue-access-error">
+      <p class="text-sm text-red-600 dark:text-red-400">{{ $t('inviteReissue.load_error') }}</p>
+      <Button
+        :label="$t('inviteReissue.retry')"
+        severity="secondary"
+        size="small"
+        class="min-h-11"
+        data-testid="invite-reissue-access-retry"
+        @click="loadReissueAccess"
+      />
+    </div>
     <InviteReissueRequestPanel
       v-if="canManageReissue"
       scope-type="team"

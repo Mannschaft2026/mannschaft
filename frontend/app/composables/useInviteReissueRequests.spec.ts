@@ -221,6 +221,8 @@ describe('useInviteReissueRequests: 再招待・見送り（I・D・C3・エラ�
     await m.init()
     expect(m.forbidden.value).toBe(true)
     expect(m.error.value).toBe(false)
+    // P2-5: 欄を黙って消さず、理由を表示する
+    expect(notified('inviteReissue.forbidden')).toBe(true)
   })
 })
 

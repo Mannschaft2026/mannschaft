@@ -103,8 +103,9 @@ export function useInviteReissueRequests(scopeType: Ref<InviteReissueScopeType>,
     catch (err: unknown) {
       if (seq !== fetchSeq) return
       if (httpStatus(err) === 403) {
-        // 権限を外された。失敗として扱わず、欄を閉じる
+        // 権限を外された。欄を閉じ、理由を表示する（黙って消さない）
         closePanel()
+        notification.error(t('inviteReissue.forbidden'))
         return
       }
       error.value = true

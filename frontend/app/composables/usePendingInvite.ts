@@ -29,6 +29,8 @@ export function usePendingInvite() {
   // 取得に成功したら、そのログインの間は取り直さない（AUTH_070 や失敗時だけ次のトークン変化で取り直す）
   let fetched = false
   let loading = false
+  // 取得が終わると解決する。取得中に通知から開かれたとき、完了を待って取り直すために使う
+  let loadingDone: Promise<void> | null = null
   // 取得中にトークンが更新された（保護者承認後など）場合、完了後に必ず取り直す
   let refetchRequested = false
   const laterId = ref<string | null>(null)
@@ -112,6 +114,8 @@ export function usePendingInvite() {
       return
     }
     loading = true
+    let finishLoading: () => void = () => {}
+    loadingDone = new Promise<void>((resolve) => { finishLoading = resolve })
     try {
       const result = await api<ApiResponse<PendingInvite>>(BASE)
       invite.value = result.data ?? null
@@ -123,6 +127,8 @@ export function usePendingInvite() {
       if (errorCode(err) !== 'AUTH_070') handleApiError(err, t('auth.pending_invite.load_context'))
     } finally {
       loading = false
+      loadingDone = null
+      finishLoading()
       if (refetchRequested) {
         refetchRequested = false
         if (!fetched) void fetchInvite()
@@ -150,11 +156,10 @@ export function usePendingInvite() {
     sessionStorage.removeItem(LATER_KEY)
     laterId.value = null
     closed.value = false
-    // 取得中ならその取得が（記録を消した後に）結果を反映する。そうでなければ取り直す
-    if (!loading) {
-      fetched = false
-      await fetchInvite()
-    }
+    // 取得中なら、その取得（通知より前の状態かもしれない）の完了を待ってから取り直す。クエリを消すのは取り直しの後
+    if (loadingDone) await loadingDone
+    fetched = false
+    await fetchInvite()
     const rest = { ...route.query }
     delete rest.pendingInvite
     await router.replace({ path: route.path, query: rest, hash: route.hash })
