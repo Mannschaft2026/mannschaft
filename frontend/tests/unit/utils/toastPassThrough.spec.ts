@@ -17,6 +17,13 @@ describe('appToastPt（Toast の閉じるボタン タップ領域）', () => {
     expect(appToastPt.closeButton).toBeDefined()
   })
 
+  it('テーマ由来の負マージン / right オフセット（margin:-25% 0 0 0; right:-25%）を打ち消す', () => {
+    const cls = String((appToastPt.closeButton as { class: string }).class).split(/\s+/)
+    // 拡大したボタンがトースト外へはみ出さないよう、マージンと right を important で 0 に戻す
+    expect(cls).toContain('!m-0')
+    expect(cls).toContain('!right-0')
+  })
+
   it('実際に描画された閉じるボタンに 44px 下限クラスが付く', async () => {
     const Host = defineComponent({
       setup() {
