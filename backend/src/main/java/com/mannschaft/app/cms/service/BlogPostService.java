@@ -311,12 +311,12 @@ public class BlogPostService {
         PostPriority priority = request.getPriority() != null
                 ? EnumInputParser.parse(PostPriority.class, request.getPriority(), "priority") : PostPriority.NORMAL;
 
-        String slug = request.getSlug() != null ? request.getSlug() : generateSlug(request.getTitle());
         short readingTime = calculateReadingTime(request.getBody());
 
         // teamId / organizationId の文字列（UUID or Long文字列）を内部Long IDに解決する
         Long resolvedTeamId = request.getTeamId() != null ? resolveTeamId(request.getTeamId()) : null;
         Long resolvedOrgId = request.getOrganizationId() != null ? resolveOrganizationId(request.getOrganizationId()) : null;
+        Long slugUserId = resolvedTeamId == null && resolvedOrgId == null ? userId : null;
 
         // メンバーシップチェック: チームまたは組織への帰属確認（非メンバーは403）
         if (resolvedTeamId != null) {
@@ -324,6 +324,11 @@ public class BlogPostService {
         } else if (resolvedOrgId != null) {
             accessControlService.checkMembership(userId, resolvedOrgId, "ORGANIZATION");
         }
+
+        // slug 決定: 明示指定は重複なら 409（CMS_005）、自動生成は同一スコープで一意になるまで連番を付与する
+        String slug = request.getSlug() != null
+                ? requireUniqueSlug(resolvedTeamId, resolvedOrgId, slugUserId, request.getSlug())
+                : uniqueSlug(resolvedTeamId, resolvedOrgId, slugUserId, generateSlug(request.getTitle()));
 
         // F19.1 Phase 2: チーム/組織が REAL_NAME モードの場合に投稿者本名スナップショットを取得する（§4.7 非対称切替ルール対応）
         String authorRealNameSnapshot;
@@ -385,7 +390,10 @@ public class BlogPostService {
                 ? EnumInputParser.parse(Visibility.class, request.getVisibility(), "visibility") : entity.getVisibility();
         PostPriority priority = request.getPriority() != null
                 ? EnumInputParser.parse(PostPriority.class, request.getPriority(), "priority") : entity.getPriority();
-        String slug = request.getSlug() != null ? request.getSlug() : entity.getSlug();
+        String slug = request.getSlug() != null && !request.getSlug().equals(entity.getSlug())
+                ? requireUniqueSlug(entity.getTeamId(), entity.getOrganizationId(), entity.getUserId(),
+                        request.getSlug())
+                : entity.getSlug();
         short readingTime = calculateReadingTime(request.getBody());
 
         // PUBLISHED 記事を再編集する場合、リビジョンを自動保存
@@ -448,7 +456,8 @@ public class BlogPostService {
     public BlogPostResponse duplicatePost(Long id, Long userId) {
         BlogPostEntity original = findPostOrThrow(id);
         checkWriteAccess(original, userId);
-        String newSlug = generateSlug(original.getTitle() + "-copy");
+        String newSlug = uniqueSlug(original.getTeamId(), original.getOrganizationId(), original.getUserId(),
+                generateSlug(original.getTitle() + "-copy"));
         short readingTime = calculateReadingTime(original.getBody());
 
         BlogPostEntity copy = BlogPostEntity.builder()
@@ -898,6 +907,44 @@ public class BlogPostService {
         int charCount = body.length();
         int minutes = (int) Math.ceil((double) charCount / 500);
         return (short) Math.max(1, minutes);
+    }
+
+    /** 同一スコープ（チーム・組織・個人）に生存中の同 slug があるか。論理削除済みは数えない。 */
+    private boolean slugExists(Long teamId, Long organizationId, Long userId, String slug) {
+        if (teamId != null) {
+            return postRepository.existsByTeamIdAndSlug(teamId, slug);
+        }
+        if (organizationId != null) {
+            return postRepository.existsByOrganizationIdAndSlug(organizationId, slug);
+        }
+        // 個人スコープ。userId が null のときに user_id IS NULL（チーム・組織記事）へ一致させない
+        return userId != null && postRepository.existsByUserIdAndSlug(userId, slug);
+    }
+
+    /**
+     * 明示指定された slug が同一スコープで未使用であることを確認する。使用済みなら 409（CMS_005）。
+     * 更新で自分自身の slug をそのまま送る場合は呼ばない（呼び出し側で除外済み）。
+     */
+    private String requireUniqueSlug(Long teamId, Long organizationId, Long userId, String slug) {
+        if (slugExists(teamId, organizationId, userId, slug)) {
+            throw new BusinessException(CmsErrorCode.DUPLICATE_SLUG);
+        }
+        return slug;
+    }
+
+    /** 自動生成した base が使用済みなら -2, -3 ... の連番を付けて同一スコープで一意にする。 */
+    private String uniqueSlug(Long teamId, Long organizationId, Long userId, String base) {
+        if (!slugExists(teamId, organizationId, userId, base)) {
+            return base;
+        }
+        for (int n = 2; n <= 1000; n++) {
+            String candidate = base + "-" + n;
+            if (!slugExists(teamId, organizationId, userId, candidate)) {
+                return candidate;
+            }
+        }
+        // 連番が尽きた場合は乱数サフィックスで確定させる（base は 180 文字以内なので 200 文字に収まる）
+        return base + "-" + java.util.UUID.randomUUID().toString().substring(0, 8);
     }
 
     /**

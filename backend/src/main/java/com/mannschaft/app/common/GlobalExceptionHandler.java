@@ -1779,6 +1779,7 @@ public class GlobalExceptionHandler {
             //    （TODO_073 SYSTEM_LABEL_IMMUTABLE と同じ流儀）
             //  - CMS_022（リアクション不在）/024（チーム不在）/025（組織不在）は not-found → 404
             //    （CMS_024/025 は兄弟 TEAM_001/ORG_001 と揃える）
+            Map.entry("CMS_005", HttpStatus.CONFLICT),                   // DUPLICATE_SLUG（同一スコープの slug 重複）
             Map.entry("CMS_006", HttpStatus.CONFLICT),
             Map.entry("CMS_008", HttpStatus.CONFLICT),
             Map.entry("CMS_010", HttpStatus.CONFLICT),
