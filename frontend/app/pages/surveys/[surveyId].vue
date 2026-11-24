@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SurveyDetailResponse } from '~/types/survey'
+import type { SurveyDetailResponse, SurveyQuestion } from '~/types/survey'
 import type { BulletinThreadResponse } from '~/types/bulletin'
 import type { QuestionDraft } from '~/components/survey/SurveyQuestionEditor.vue'
 import SurveyRespondentsList from '~/components/survey/SurveyRespondentsList.vue'
@@ -79,8 +79,12 @@ const draftQuestions = ref<QuestionDraft[]>([])
 const draftQuestionsSubmitting = ref(false)
 
 // 保存済みの設問（BE は DRAFT でも設問を保存・返却する）。読み取り専用で表示し、公開時に再送しない。
+// この画面で addQuestion に成功した設問（公開に失敗して再試行しても再送しないよう、保存済み扱いにする）。
+const sentQuestions = ref<SurveyQuestion[]>([])
 const savedQuestions = computed(() =>
-  [...(survey.value?.questions ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+  [...(survey.value?.questions ?? []), ...sentQuestions.value].sort(
+    (a, b) => a.sortOrder - b.sortOrder,
+  ),
 )
 // BE は設問0件の公開を NO_QUESTIONS で拒否するため、保存済み＋追加入力の合計で公開可否を判定する。
 const hasPublishableQuestions = computed(
@@ -94,25 +98,42 @@ async function onSaveQuestionsAndPublish() {
   try {
     // 設問を順次追加。FE ドメイン形のまま渡し、BE 形への翻訳（questionType の enum 値・
     // sortOrder → displayOrder）は useSurveyApi 側に集約している。
-    // 追加入力した設問だけを送る（保存済み設問の後ろに並ぶよう sortOrder を保存済み件数ぶんずらす）
-    const offset = savedQuestions.value.length
-    for (const q of draftQuestions.value) {
+    // 追加入力した設問だけを送る。1件成功するごとに保存済み一覧へ移して入力側から除くため、
+    // 途中や公開で失敗して再試行しても送信済みの設問は再送されない。
+    // sortOrder は保存済み設問の後ろに続く連番にする。
+    for (const q of [...draftQuestions.value]) {
+      const sortOrder = savedQuestions.value.length + 1
+      const options =
+        q.questionType !== 'TEXT' && q.questionType !== 'DATE' && q.options?.length
+          ? q.options.map((o) => ({ optionText: o.optionText.trim(), sortOrder: o.sortOrder }))
+          : undefined
       await addQuestion(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId, {
         questionText: q.questionText.trim(),
         questionType: q.questionType,
         isRequired: q.isRequired,
-        sortOrder: offset + q.sortOrder,
-        options:
-          q.questionType !== 'TEXT' && q.questionType !== 'DATE' && q.options?.length
-            ? q.options.map((o) => ({ optionText: o.optionText.trim(), sortOrder: o.sortOrder }))
-            : undefined,
+        sortOrder,
+        options,
       })
+      sentQuestions.value = [
+        ...sentQuestions.value,
+        {
+          // BE 採番前の表示用 ID（保存済み設問の実 ID と衝突しない負数）
+          id: -(sentQuestions.value.length + 1),
+          questionText: q.questionText.trim(),
+          questionType: q.questionType,
+          isRequired: q.isRequired,
+          sortOrder,
+          options: (options ?? []).map((o, i) => ({ id: -(i + 1), ...o })),
+        },
+      ]
+      draftQuestions.value = draftQuestions.value.slice(1)
     }
     // 公開
     await publishSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
     showSuccess(t('surveys.detail.publishSuccess'))
     draftQuestions.value = []
     await fetchDetail()
+    sentQuestions.value = []
   } catch {
     showError(t('surveys.detail.publishFailed'))
   } finally {
