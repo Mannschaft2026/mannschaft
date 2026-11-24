@@ -70,6 +70,7 @@ gh api graphql -f query='query{repository(owner:"Mannschaft2026",name:"mannschaf
    - **構造検査**: union 後の台帳を main 側の `scripts/task-list-structure-check.mjs` で検査し、合格したときだけ merge commit を fast-forward で push する（force しない。先に head が動いていれば次回に回す）。push 後、予約が消えていれば `enablePullRequestAutoMerge(SQUASH, expectedHeadOid=作成した merge commit)` で予約し直し（push 後に誰かが head を進めていたら予約せず、その旨をコメントする）、PR に merge commit SHA を書いたコメントを1件残す（予約失敗もそのコメントに書く）。
    - **構造検査 NG は人手**: 同じ行を PR と main の両方で編集すると union は旧行と新行を両方残し、CMP-ID 重複になる。このときは push せず PR にコメントする（同じ head には1回だけ）。main を取り込んで手で解消し、`gh pr merge <PR> --squash` で予約し直す。
    - **除外と上限**: 自動修復させたくない PR には `no-ledger-autofix` ラベルを付ける。暴走防止に、同じ PR を直近24時間で3回直したらそれ以上は直さず、その旨をコメントする（以後は人手）。回数はコメントではなく PR の commit 履歴で数える（作者/コミッタが App の bot、またはメッセージに固定印 `Ledger-Autofix: task-list-conflict-autofix` がある commit）。コメント投稿の失敗は握りつぶさず run を赤にする。
+   - **手元で直すとき**: リポジトリの `.gitattributes` にも `docs/task-list.md merge=union` を入れてあるので、`git merge origin/main` で末尾衝突は自動で解ける（両側の行が残り、自分の行が末尾でなくなることがある）。続けて `node scripts/task-list-structure-check.mjs docs/task-list.md` を通してから push する。
    - 手動実行は Actions の workflow_dispatch（`dry_run` 既定 true。判定だけ出す）。App の設定が無い環境では失敗させずにスキップする。
 
 ## queue 無効時（移行前・障害で無効化している間）
