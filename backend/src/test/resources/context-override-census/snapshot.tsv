@@ -2128,6 +2128,7 @@ com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodBatchIT	SPRING
 com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodCloseIT	SPRING
 com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodConcurrencyIT	SPRING
 com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodDecisionAdditionsIT	SPRING
+com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodDeletedSlotIT	SPRING
 com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodRepublishHistoryIT	SPRING
 com.mannschaft.app.shiftbudget.closeperiod.ClosePeriodStageIT	SPRING
 com.mannschaft.app.shiftbudget.closeperiod.ClosingSettingApiIT	SPRING

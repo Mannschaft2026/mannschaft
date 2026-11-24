@@ -85,7 +85,7 @@ public class ShiftBudgetCloseStageService {
         for (ShiftBudgetConsumptionEntity row : unmarked) {
             LocalDate current = slotDates.get(row.getSlotId());
             if (current == null) {
-                // 枠なし → 整合バッチ（CMP-260909-1445）に任せ、締め対象外
+                // 枠なし・枠が論理削除済み → 整合バッチ（CMP-260909-1445）に任せ、締め対象外
                 continue;
             }
             if (!current.equals(row.getWorkDate())) {

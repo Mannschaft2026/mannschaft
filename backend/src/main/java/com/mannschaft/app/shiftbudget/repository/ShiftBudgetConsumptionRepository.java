@@ -77,7 +77,8 @@ public interface ShiftBudgetConsumptionRepository
     /**
      * CMP-260909-1445: 孤児 PLANNED 消化を抱えるシフトを列挙する（整合バッチ用）。
      *
-     * <p>「シフトが ARCHIVED もしくは論理削除済みなのに PLANNED 消化が残っている」行が孤児である。
+     * <p>「シフトが ARCHIVED もしくは論理削除済み、または消化行の勤務枠が論理削除済み（公開中のまま
+     * {@code ShiftSlotService.deleteSlot} で枠だけ消された。取消イベントは発行されない）なのに PLANNED 消化が残っている」行が孤児である。
      * 原因系（イベント未発行・リスナー失敗・将来の新経路での書き漏れ）に依らず、状態だけを見て
      * 収束させるための検出クエリ。</p>
      *
@@ -94,7 +95,8 @@ public interface ShiftBudgetConsumptionRepository
                     + "FROM shift_budget_consumptions c "
                     + "INNER JOIN shift_schedules s ON s.id = c.shift_id "
                     + "WHERE c.status = 'PLANNED' AND c.deleted_at IS NULL "
-                    + "  AND (s.status = 'ARCHIVED' OR s.deleted_at IS NOT NULL) "
+                    + "  AND (s.status = 'ARCHIVED' OR s.deleted_at IS NOT NULL "
+                    + "       OR EXISTS (SELECT 1 FROM shift_slots sl WHERE sl.id = c.slot_id AND sl.deleted_at IS NOT NULL)) "
                     + "GROUP BY s.id, s.team_id "
                     + "ORDER BY s.id "
                     + "LIMIT :limit",

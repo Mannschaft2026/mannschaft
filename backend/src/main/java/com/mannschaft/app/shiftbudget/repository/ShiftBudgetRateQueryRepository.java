@@ -168,11 +168,18 @@ public interface ShiftBudgetRateQueryRepository
             + "WHERE s.id = :scheduleId FOR SHARE", nativeQuery = true)
     List<Object[]> lockScheduleStatusForShare(@Param("scheduleId") Long scheduleId);
 
-    /** 勤務枠の現在日付（Prepare の勤務枠日付追従。列は {@code id, slot_date}）。 */
-    @Query(value = "SELECT sl.id, sl.slot_date FROM shift_slots sl WHERE sl.id IN (:slotIds)", nativeQuery = true)
+    /**
+     * 勤務枠の現在日付（Prepare の勤務枠日付追従。列は {@code id, slot_date}）。
+     *
+     * <p>論理削除済み（{@code shift_slots.deleted_at IS NOT NULL}）の勤務枠は返さない。ネイティブ SQL には
+     * {@code @SQLRestriction} が効かないため明示する。削除済みの勤務枠は「枠なし」と同じに扱われ、Prepare の締め対象から
+     * 外れて整合バッチの取消に回り、記録のやり直しは計上先を解決せずに終わる。</p>
+     */
+    @Query(value = "SELECT sl.id, sl.slot_date FROM shift_slots sl WHERE sl.id IN (:slotIds) AND sl.deleted_at IS NULL",
+            nativeQuery = true)
     List<Object[]> findSlotDates(@Param("slotIds") java.util.Collection<Long> slotIds);
 
-    /** 勤務枠の現在日付を1件読む（計上先の解決のやり直し用）。枠が無ければ空。 */
+    /** 勤務枠の現在日付を1件読む（計上先の解決のやり直し用）。枠が無い・論理削除済みなら空。 */
     default Optional<LocalDate> findSlotDate(Long slotId) {
         List<Object[]> rows = findSlotDates(java.util.List.of(slotId));
         if (rows.isEmpty()) {
@@ -188,8 +195,14 @@ public interface ShiftBudgetRateQueryRepository
         return Optional.of(LocalDate.parse(String.valueOf(v)));
     }
 
-    /** シフトの現在の勤務枠と担当（整合取消の「現在の有効な (slot, user) 集合」。列は {@code id, assigned_user_ids}）。 */
-    @Query(value = "SELECT sl.id, sl.assigned_user_ids FROM shift_slots sl WHERE sl.schedule_id = :scheduleId", nativeQuery = true)
+    /**
+     * シフトの現在の勤務枠と担当（整合取消の「現在の有効な (slot, user) 集合」。列は {@code id, assigned_user_ids}）。
+     *
+     * <p>論理削除済みの勤務枠は除く。{@code ShiftSlotService.deleteSlot} は担当者 JSON を残したまま
+     * {@code deleted_at} を設定するため、除かないと削除済みの担当を有効と判定し PLANNED を取り消さない。</p>
+     */
+    @Query(value = "SELECT sl.id, sl.assigned_user_ids FROM shift_slots sl WHERE sl.schedule_id = :scheduleId "
+            + "AND sl.deleted_at IS NULL", nativeQuery = true)
     List<Object[]> findSlotAssignments(@Param("scheduleId") Long scheduleId);
 
     /** シフトの属するチームと公開状態（再実行がイベントを組み立てるため。列は {@code team_id, status, deleted}）。 */
@@ -198,23 +211,23 @@ public interface ShiftBudgetRateQueryRepository
     List<Object[]> findScheduleBasics(@Param("scheduleId") Long scheduleId);
 
     /**
-     * 未計上候補の元になる勤務枠（チーム個別の割当用。公開済み・未削除のスケジュールの枠。列は
+     * 未計上候補の元になる勤務枠（チーム個別の割当用。公開済み・未削除のスケジュールの、未削除の枠。列は
      * {@code slot_id, slot_date, assigned_user_ids, schedule_id}）。
      */
     @Query(value = "SELECT sl.id, sl.slot_date, sl.assigned_user_ids, sl.schedule_id FROM shift_slots sl "
             + "JOIN shift_schedules s ON s.id = sl.schedule_id "
-            + "WHERE s.status = 'PUBLISHED' AND s.deleted_at IS NULL AND s.team_id = :teamId "
+            + "WHERE s.status = 'PUBLISHED' AND s.deleted_at IS NULL AND sl.deleted_at IS NULL AND s.team_id = :teamId "
             + "AND sl.slot_date BETWEEN :from AND :to ORDER BY sl.slot_date, sl.id", nativeQuery = true)
     List<Object[]> findPublishedSlotsForTeam(@Param("teamId") Long teamId, @Param("from") LocalDate from,
                                              @Param("to") LocalDate to);
 
     /**
-     * 未計上候補の元になる勤務枠（組織全体の割当用。組織に ACTIVE 加盟するチームの公開済み・未削除のスケジュールの枠）。列は
-     * {@code slot_id, slot_date, assigned_user_ids, schedule_id}。
+     * 未計上候補の元になる勤務枠（組織全体の割当用。組織に ACTIVE 加盟するチームの公開済み・未削除のスケジュールの、未削除の枠）。
+     * 列は {@code slot_id, slot_date, assigned_user_ids, schedule_id}。
      */
     @Query(value = "SELECT sl.id, sl.slot_date, sl.assigned_user_ids, sl.schedule_id FROM shift_slots sl "
             + "JOIN shift_schedules s ON s.id = sl.schedule_id "
-            + "WHERE s.status = 'PUBLISHED' AND s.deleted_at IS NULL AND s.team_id IN ("
+            + "WHERE s.status = 'PUBLISHED' AND s.deleted_at IS NULL AND sl.deleted_at IS NULL AND s.team_id IN ("
             + "     SELECT tom.team_id FROM team_org_memberships tom WHERE tom.organization_id = :organizationId "
             + "     AND tom.status = 'ACTIVE') "
             + "AND sl.slot_date BETWEEN :from AND :to ORDER BY sl.slot_date, sl.id", nativeQuery = true)
