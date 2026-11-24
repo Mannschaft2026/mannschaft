@@ -85,6 +85,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
     private Long memberId;           // 依頼者になる一般メンバー
     private Long otherMemberId;      // 同じチームの別の一般メンバー（宛先外）
     private Long otherTeamAdminId;   // 他チームの ADMIN（宛先外）
+    private Long leftAdminId;        // ロールだけ残って退会済み（memberships.left_at 設定済み）の ADMIN（宛先外）
     private Long scheduleId;
 
     @BeforeEach
@@ -102,6 +103,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
             memberId = insertUser("cr-member-" + sfx + "@example.com");
             otherMemberId = insertUser("cr-member2-" + sfx + "@example.com");
             otherTeamAdminId = insertUser("cr-other-admin-" + sfx + "@example.com");
+            leftAdminId = insertUser("cr-left-admin-" + sfx + "@example.com");
 
             for (Long uid : List.of(adminId, deputyWithId, deputyWithoutId, memberId, otherMemberId)) {
                 MembershipTestHelper.insertMembership(em, uid, ScopeType.TEAM, teamId, RoleKind.MEMBER);
@@ -109,6 +111,11 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
             MembershipTestHelper.insertUserRole(em, adminId, "ADMIN", teamId, null);
             MembershipTestHelper.insertUserRole(em, deputyWithId, "DEPUTY_ADMIN", teamId, null);
             MembershipTestHelper.insertUserRole(em, deputyWithoutId, "DEPUTY_ADMIN", teamId, null);
+            // 退会済み ADMIN: user_roles は残っているが所属（memberships）は left_at 済み。
+            MembershipTestHelper.insertMembership(em, leftAdminId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
+            em.createNativeQuery("UPDATE memberships SET left_at = NOW() WHERE user_id = :uid AND scope_id = :tid")
+                    .setParameter("uid", leftAdminId).setParameter("tid", teamId).executeUpdate();
+            MembershipTestHelper.insertUserRole(em, leftAdminId, "ADMIN", teamId, null);
             grantManageShiftsViaGroup(deputyWithId, teamId, sfx);
 
             MembershipTestHelper.insertMembership(em, otherTeamAdminId, ScopeType.TEAM, otherTeamId, RoleKind.MEMBER);
@@ -161,6 +168,36 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
 
         assertRecipients(TYPE_REVIEWED, requestId, Set.of(memberId));
         assertActionUrl(TYPE_REVIEWED, requestId, memberId);
+        // コメントあり: bodyWithNote（コメントを含む）
+        assertThat(bodyOf(TYPE_REVIEWED, requestId, memberId))
+                .contains("受諾されました").contains("調整しました");
+    }
+
+    @Test
+    @DisplayName("受諾（コメントなし）: 本文はコメントなしの文言（コメント区切りを含まない）")
+    void acceptWithoutCommentUsesPlainBody() throws Exception {
+        Long requestId = insertRequest(memberId);
+
+        setAuth(adminId);
+        review(requestId, "ACCEPTED", null);
+
+        assertRecipients(TYPE_REVIEWED, requestId, Set.of(memberId));
+        assertThat(bodyOf(TYPE_REVIEWED, requestId, memberId)).isEqualTo("シフトの変更依頼が受諾されました。");
+    }
+
+    @Test
+    @DisplayName("管理者の宛先: role_permissions（is_default=1）経由で MANAGE_SHIFTS を持つ副管理者にも作られる")
+    void deputyViaDefaultRolePermissionIsNotified() throws Exception {
+        grantDefaultRolePermission();
+        try {
+            setAuth(memberId);
+            Long requestId = create(memberId);
+
+            // MANAGE_SHIFTS 無しだった副管理者も、ロール定義で既定付与されたので宛先になる。
+            assertRecipients(TYPE_CREATED, requestId, Set.of(adminId, deputyWithId, deputyWithoutId));
+        } finally {
+            revokeDefaultRolePermission();
+        }
     }
 
     @Test
@@ -322,6 +359,30 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
                 .setParameter("uid", userId)
                 .setParameter("gid", groupId)
                 .executeUpdate();
+    }
+
+    private void grantDefaultRolePermission() {
+        transactionTemplate.executeWithoutResult(tx -> {
+            em.createNativeQuery("INSERT INTO permissions (name, display_name, scope, created_at, updated_at) "
+                            + "SELECT 'MANAGE_SHIFTS', 'MANAGE_SHIFTS', 'TEAM', NOW(), NOW() FROM DUAL "
+                            + "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE name = 'MANAGE_SHIFTS')")
+                    .executeUpdate();
+            em.createNativeQuery("INSERT INTO role_permissions (role_id, permission_id, is_default, created_at) "
+                            + "SELECT r.id, p.id, 1, NOW() FROM roles r CROSS JOIN permissions p "
+                            + "WHERE r.name = 'DEPUTY_ADMIN' AND p.name = 'MANAGE_SHIFTS' "
+                            + "AND NOT EXISTS (SELECT 1 FROM role_permissions rp "
+                            + "WHERE rp.role_id = r.id AND rp.permission_id = p.id)")
+                    .executeUpdate();
+        });
+    }
+
+    /** 他の IT に影響しないよう、本テストが足した DEPUTY_ADMIN の既定付与を必ず外す。 */
+    private void revokeDefaultRolePermission() {
+        transactionTemplate.executeWithoutResult(tx -> em.createNativeQuery(
+                        "DELETE rp FROM role_permissions rp JOIN roles r ON r.id = rp.role_id "
+                                + "JOIN permissions p ON p.id = rp.permission_id "
+                                + "WHERE r.name = 'DEPUTY_ADMIN' AND p.name = 'MANAGE_SHIFTS'")
+                .executeUpdate());
     }
 
     private Long insertTeam(String name) {

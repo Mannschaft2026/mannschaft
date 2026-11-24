@@ -45,6 +45,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -551,9 +552,10 @@ public class RoleService {
      * 指定チームの「ADMIN、または指定権限を持つ DEPUTY_ADMIN」のユーザー ID 一覧を返す。
      *
      * <p>シフト変更依頼の管理者宛通知（ADMIN ＋ MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の受信者解決用。
-     * 既存の {@code findAdminUserIdsByTeamId}（ADMIN のみ）と
+     * 所属中の ADMIN（{@code findActiveAdminUserIdsByTeamId}。ロールだけ残って退会済みの ADMIN は除く）と
      * {@code findDeputyAdminUserIdsByTeamIdAndPermission}（権限を持つ DEPUTY_ADMIN。ロール定義・
-     * 権限グループの両経路、チーム所属中のみ）を合わせるだけで、新規クエリは持たない。
+     * 権限グループの両経路、チーム所属中のみ）を合わせる。既存の {@code findAdminUserIdsByTeamId}
+     * （他の呼び出し元あり）の挙動は変えない。
      * 宛先は引数のチームの管理者だけで、他チームの管理者は含まれない。</p>
      *
      * @param teamId         対象チーム ID
@@ -561,10 +563,10 @@ public class RoleService {
      * @return 重複のない受信者のユーザー ID 一覧
      */
     public List<Long> getAdminAndPermittedDeputyUserIdsByTeamId(Long teamId, String permissionName) {
-        java.util.LinkedHashSet<Long> ids = new java.util.LinkedHashSet<>(
-                userRoleRepository.findAdminUserIdsByTeamId(teamId));
+        LinkedHashSet<Long> ids = new LinkedHashSet<>(
+                userRoleRepository.findActiveAdminUserIdsByTeamId(teamId));
         ids.addAll(userRoleRepository.findDeputyAdminUserIdsByTeamIdAndPermission(teamId, permissionName));
-        return new java.util.ArrayList<>(ids);
+        return new ArrayList<>(ids);
     }
 
     /**
