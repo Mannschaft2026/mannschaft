@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261123-1202",
+  "scope": "app",
+  "implementation": {
+    "pr": 4814,
+    "sha": "dc8cb8e86653fbc124577aa0d987aa8341584cda"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "F02.5 §5.4 に閲覧導線（公開後は /action-memo の投稿リンクから /timeline/{個人投稿ID}）が追記されている",
+      "tests": [
+        {
+          "name": "設計書の記述（grep で main への反映を確認）",
+          "evidence": "docs/features/F02.5_action_memo.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "F02.5 §7.3 の終業投稿の実機E2E 項目が、/timeline に出る前提から実際の導線へ直されている",
+      "tests": [
+        {
+          "name": "設計書の記述（grep で main への反映を確認）",
+          "evidence": "docs/features/F02.5_action_memo.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "F04.1 に PERSONAL は /timeline/my に含まれず、本人は投稿詳細と feed?scopeType=PERSONAL で参照する旨の注記がある",
+      "tests": [
+        {
+          "name": "設計書の記述（grep で main への反映を確認）",
+          "evidence": "docs/features/F04.1_timeline.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45308927394
+    },
+    {
+      "runId": 45308927525
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4814"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-1201.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-1201.md"
+    }
+  },
+  "regressions": []
+}
