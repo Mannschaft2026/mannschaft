@@ -145271,7 +145271,7 @@
         ],
         "summary": "自分の参加待ち招待を取得",
         "description": "招待付きで新規登録した参加待ちの招待を返す。無ければ data は null",
-        "operationId": "get_40",
+        "operationId": "get_41",
         "responses": {
           "200": {
             "description": "OK",
@@ -148889,7 +148889,7 @@
         "tags": [
           "disclosure-form-template-controller"
         ],
-        "operationId": "get_41",
+        "operationId": "get_42",
         "parameters": [
           {
             "name": "templateId",

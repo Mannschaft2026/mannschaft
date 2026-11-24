@@ -44507,7 +44507,7 @@ export interface paths {
          * 自分の参加待ち招待を取得
          * @description 招待付きで新規登録した参加待ちの招待を返す。無ければ data は null
          */
-        get: operations["get_40"];
+        get: operations["get_41"];
         put?: never;
         post?: never;
         delete?: never;
@@ -46109,7 +46109,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_41"];
+        get: operations["get_42"];
         put?: never;
         post?: never;
         delete?: never;
@@ -172525,7 +172525,7 @@ export interface operations {
             };
         };
     };
-    get_40: {
+    get_41: {
         parameters: {
             query?: never;
             header?: never;
@@ -174834,7 +174834,7 @@ export interface operations {
             };
         };
     };
-    get_41: {
+    get_42: {
         parameters: {
             query: {
                 organizationId: number;
