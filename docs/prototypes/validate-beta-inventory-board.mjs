@@ -2,6 +2,45 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const prototypeDirectory = new URL('./', import.meta.url);
+
+// 気づき箱の状態ファイル（insight-status.js）の検証（CMP-261124-2306）。data.js 系の検査とは独立しているため最初に実行する。
+{
+  const optionIndex = process.argv.indexOf('--insight-status');
+  const statusUrl = optionIndex >= 0 && process.argv[optionIndex + 1]
+    ? new URL(process.argv[optionIndex + 1], `file://${process.cwd()}/`)
+    : new URL('insight-status.js', prototypeDirectory);
+  const coreContext = { window: {} };
+  vm.runInNewContext(fs.readFileSync(new URL('insight-status-core.js', prototypeDirectory), 'utf8'), coreContext, { filename: 'insight-status-core.js' });
+  const statusCore = coreContext.window.InsightStatusCore;
+  if (!statusCore) throw new Error('insight-status-core.js が window.InsightStatusCore を公開していません');
+  let statusFileText;
+  try {
+    statusFileText = fs.readFileSync(statusUrl, 'utf8');
+  } catch (error) {
+    console.error(`insight-status: 状態ファイルを読めません: ${error.message}`);
+    process.exit(1);
+  }
+  const statusContext = { window: {} };
+  try {
+    vm.runInNewContext(statusFileText, statusContext, { filename: 'insight-status.js' });
+  } catch (error) {
+    console.error(`insight-status: 状態ファイルを評価できません: ${error.message}`);
+    process.exit(1);
+  }
+  const statusFile = statusContext.window.BETA_INSIGHT_STATUS;
+  if (statusFile === undefined) {
+    console.error('insight-status: window.BETA_INSIGHT_STATUS が定義されていません');
+    process.exit(1);
+  }
+  const statusResult = statusCore.validateStatusFile(JSON.parse(JSON.stringify(statusFile)));
+  if (statusResult.warnings.length) {
+    console.error(`insight-status: 状態ファイルに不正があります（${statusResult.warnings.length}件）`);
+    for (const warning of statusResult.warnings) console.error(`insight-status:   ${warning.key}: ${warning.reason}`);
+    process.exit(1);
+  }
+  console.log(`insight-status.js: OK（${Object.keys(statusResult.items).length}件）`);
+}
+
 const dataSource = fs.readFileSync(new URL('beta-inventory-board-data.js', prototypeDirectory), 'utf8');
 const html = fs.readFileSync(new URL('beta-inventory-board.html', prototypeDirectory), 'utf8');
 const taskList = fs.readFileSync(new URL('../task-list.md', prototypeDirectory), 'utf8');
@@ -285,7 +324,13 @@ for (const requiredUiSource of [
   'selectedInsightSource',
   'personaArchetype',
   'journeyId',
-  'runId'
+  'runId',
+  'id="exportInsightStatus"',
+  'id="insightStatusWarnings"',
+  'InsightStatusCore',
+  'insight-status.js',
+  'insight-status-core.js',
+  '修正中'
 ]) {
   if (!html.includes(requiredUiSource)) throw new Error(`テーマ・気づき統合UIの必須要素がありません: ${requiredUiSource}`);
 }
