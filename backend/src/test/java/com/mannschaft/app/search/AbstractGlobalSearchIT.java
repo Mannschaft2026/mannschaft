@@ -206,6 +206,22 @@ abstract class AbstractGlobalSearchIT extends AbstractMySqlIntegrationTest {
         });
     }
 
+    /** チームのサポーター（memberships.role_kind=SUPPORTER。user_roles 行は作らない）。 */
+    protected void teamSupporter(Long userId, Long teamId) {
+        inTx(() -> {
+            MembershipTestHelper.insertMembership(em, userId, ScopeType.TEAM, teamId, RoleKind.SUPPORTER);
+            return null;
+        });
+    }
+
+    /** 組織のサポーター（memberships.role_kind=SUPPORTER。user_roles 行は作らない）。 */
+    protected void orgSupporter(Long userId, Long orgId) {
+        inTx(() -> {
+            MembershipTestHelper.insertMembership(em, userId, ScopeType.ORGANIZATION, orgId, RoleKind.SUPPORTER);
+            return null;
+        });
+    }
+
     /** チームの GUEST ロールだけを付ける（memberships 行は作らない）。 */
     protected void teamGuest(Long userId, Long teamId) {
         inTx(() -> {
@@ -272,6 +288,30 @@ abstract class AbstractGlobalSearchIT extends AbstractMySqlIntegrationTest {
 
     protected JsonNode search(Long actor, String q, String type) throws Exception {
         return search(actor, Map.of("q", q, "type", type));
+    }
+
+    /** {@code GET /api/v1/search/suggestions} を actor として呼び、200 を確認して本文全体を返す。 */
+    protected JsonNode suggest(Long actor, String q) throws Exception {
+        String body = http(get(SEARCH + "/suggestions").param("q", q).param("limit", "10"), actor)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return mapper.readTree(body);
+    }
+
+    /**
+     * サジェスト応答 {@code data.suggestions} のうち指定種別の ID 一覧。
+     *
+     * @param idField 種別ごとの ID 列（{@code teamId} / {@code organizationId} / {@code userId}）
+     */
+    protected List<Long> suggestionIds(JsonNode body, String type, String idField) {
+        JsonNode items = body.path("data").path("suggestions");
+        assertThat(items.isArray()).as("data.suggestions が配列であること（応答: %s）", body).isTrue();
+        List<Long> ids = new ArrayList<>();
+        for (JsonNode item : items) {
+            if (type.equals(item.path("type").asText())) {
+                ids.add(item.path(idField).asLong());
+            }
+        }
+        return ids;
     }
 
     /** {@code data.typeCounts[type]}。キーが無ければ失敗させる。 */

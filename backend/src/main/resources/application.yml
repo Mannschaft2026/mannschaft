@@ -59,7 +59,7 @@ spring:
       data-source-properties:
         rewriteBatchedStatements: true
         # DATE 列が保存・更新のたびに 1 日前へずれる不具合の防波堤（台帳 CMP-261123-1334）。
-        # 原因: TimeZoneConfig が起動途中（@PostConstruct）で JVM 既定 TZ を UTC→JST に切り替える。Hibernate は LocalDate を
+        # 旧原因（CMP-261123-1335 で解消済み。本設定は最終防衛として残す）: 旧 TimeZoneConfig が起動途中（@PostConstruct）で JVM 既定 TZ を UTC→JST に切り替えていた。Hibernate は LocalDate を
         # java.sql.Date.valueOf（その時点の JVM 既定 TZ の 0 時）で Calendar 無しの setDate に渡し、Connector/J は既定
         # （cacheDefaultTimeZone=true）だと「接続作成時の JVM 既定 TZ」で整形する。切替前（UTC）に作られた接続では前日になり、
         # Hibernate は更新時に全列を書き直すため更新のたびにさらにずれる（max-lifetime で接続が作り直されると直るため間欠的）。
@@ -83,7 +83,7 @@ spring:
           # DB へ書き込む時刻の基準タイムゾーン（Issue #2486）。全プロファイル共通で UTC に統一する。
           #
           # なぜ必要か:
-          #   JVM 既定 TZ は TimeZoneConfig が Asia/Tokyo に強制しており、Entity の @PrePersist は
+          #   JVM 既定 TZ は ServerTimeZoneEnvironmentPostProcessor が Asia/Tokyo に確定しており、Entity の @PrePersist は
           #   素の LocalDateTime.now()（= JST 壁時計）で時刻を採る。この LocalDateTime が DB に
           #   「どの壁時計として」書かれるかを決めるのがこの設定である。指定があると Hibernate は
           #   setTimestamp(i, ts, Calendar.getInstance(UTC)) を使い、格納値は UTC 壁時計になる
@@ -560,6 +560,12 @@ app:
   datasource:
     replica:
       enabled: false
+      # replica にだけ置く。archive（ArchiveDataSourceConfig）は JdbcTemplate で DATETIME を LocalDateTime の setObject で扱うだけで、現状の実害は小さい
+      # （検索条件の DATE バインドで同じずれが起きうるため、DATE を条件に使う処理を足すときは同設定を入れること）。
+      # 接続作成時の JVM 既定 TZ を接続に固定させない二重の守り。
+      # 一次防衛は ServerTimeZoneEnvironmentPostProcessor。
+      data-source-properties:
+        cacheDefaultTimeZone: false
       # jdbc-url: ${DB_REPLICA_URL:${spring.datasource.url}}
       # username: ${DB_REPLICA_USER:${spring.datasource.username}}
       # password: ${DB_REPLICA_PASSWORD:${spring.datasource.password}}

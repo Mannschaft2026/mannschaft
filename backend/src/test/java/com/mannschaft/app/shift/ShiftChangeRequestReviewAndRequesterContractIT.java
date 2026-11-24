@@ -11,6 +11,7 @@ import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import com.jayway.jsonpath.JsonPath;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -319,6 +321,70 @@ class ShiftChangeRequestReviewAndRequesterContractIT extends AbstractMySqlIntegr
     }
 
     // ═════════════════════════════════════════════════════════════════════
+    // version: 楽観ロック用 version の返却
+    // ═════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("V. 応答の version と審査の楽観ロック")
+    class VersionRoundTrip {
+
+        @Test
+        @DisplayName("AC-V1: 一覧応答の各依頼に DB と同じ version が入る（更新済みの依頼は 0 以外）")
+        void AC_V1_一覧にversionが入る() throws Exception {
+            Long fresh = insertRequest(memberId);
+            Long updated = insertRequest(memberId);
+            setVersion(updated, 3L);
+
+            setAuth(adminId);
+            mockMvc.perform(get(BASE).param("scheduleId", scheduleId.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[?(@.id == " + fresh + ")].version").value(0))
+                    .andExpect(jsonPath("$.data[?(@.id == " + updated + ")].version").value(3));
+        }
+
+        @Test
+        @DisplayName("AC-V2: 一度更新された依頼も、応答の version で審査でき、審査後の応答は更新後の version を返す")
+        void AC_V2_更新済み依頼を応答のversionで審査できる() throws Exception {
+            Long requestId = insertRequest(memberId);
+            setVersion(requestId, 3L);
+
+            setAuth(adminId);
+            MvcResult list = mockMvc.perform(get(BASE).param("scheduleId", scheduleId.toString()))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            List<Integer> versions = JsonPath.read(list.getResponse().getContentAsString(),
+                    "$.data[?(@.id == " + requestId + ")].version");
+            int version = versions.get(0);
+
+            mockMvc.perform(patch(BASE + "/{id}/review", requestId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(reviewBody("ACCEPTED", version))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.reviewInfo.status").value("ACCEPTED"))
+                    .andExpect(jsonPath("$.data.version").value(4));
+        }
+
+        @Test
+        @DisplayName("AC-V3: 古い version（画面取得後に他者が更新）での審査は409 SHIFT_018で、status は変わらない")
+        void AC_V3_古いversionの審査は409() throws Exception {
+            Long requestId = insertRequest(memberId);
+            setVersion(requestId, 3L);
+
+            setAuth(adminId);
+            mockMvc.perform(patch(BASE + "/{id}/review", requestId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(reviewBody("ACCEPTED", 2))))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_018"));
+
+            em.flush();
+            em.clear();
+            assertThat(changeRequestRepository.findById(requestId).orElseThrow().getStatus())
+                    .isEqualTo(ChangeRequestStatus.OPEN);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
     // ヘルパー
     // ═════════════════════════════════════════════════════════════════════
 
@@ -333,6 +399,13 @@ class ShiftChangeRequestReviewAndRequesterContractIT extends AbstractMySqlIntegr
                 .requestedBy(requester)
                 .reason("CMP1432 試練")
                 .build()).getId();
+    }
+
+    private void setVersion(Long requestId, long version) {
+        em.flush();
+        em.createNativeQuery("UPDATE shift_change_requests SET version = :v WHERE id = :id")
+                .setParameter("v", version).setParameter("id", requestId).executeUpdate();
+        em.clear();
     }
 
     private Long insertSchedule(ShiftScheduleStatus status) {

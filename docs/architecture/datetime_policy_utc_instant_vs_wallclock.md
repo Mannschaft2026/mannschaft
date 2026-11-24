@@ -44,9 +44,9 @@
 
 `LocalDateTime` の値を見ても、それが「ある瞬間を記録したものか」「ある土地の約束を記録したものか」は型からは一切分からない。読む人は毎回、そのフィールドがどちらの意味で使われているかをコードの文脈や比較相手から推測しなければならない。これが「東京時間基準はUTC計算に比べて頭を使う」の実体であり、バグの温床になっている。
 
-そして **`TimeZoneConfig`（`backend/src/main/java/com/mannschaft/app/config/TimeZoneConfig.java`）が `@PostConstruct` で JVM 既定タイムゾーンを `Asia/Tokyo` に強制しているのは、まさにこの曖昧さを塗り潰すための処置である**（事実。同ファイル9行目のコメント「JVM のデフォルトタイムゾーンを Asia/Tokyo に設定（.claudecode.md §20）」）。`LocalDateTime.now()` は本来「今」という1つの瞬間を表せない（ゾーンが無いと壁時計の値に変換できない）が、JVM既定ゾーンをJSTに固定することで、コード中のあらゆる `LocalDateTime.now()` を暗黙に「東京の壁時計としての今」に統一し、辻褄を合わせている。
+そして **JVM 既定タイムゾーンを `Asia/Tokyo`（`UserZoneLocalDateTimeParser.SERVER_ZONE`）に強制しているのは、まさにこの曖昧さを塗り潰すための処置である**（事実。現行は `backend/src/main/java/com/mannschaft/app/config/ServerTimeZoneEnvironmentPostProcessor.java` が起動時に設定する。CMP-261123-1335 以前は `TimeZoneConfig` の `@PostConstruct` が同じ設定をしており、同ファイルのコメント「JVM のデフォルトタイムゾーンを Asia/Tokyo に設定（.claudecode.md §20）」がその意図を示していた）。`LocalDateTime.now()` は本来「今」という1つの瞬間を表せない（ゾーンが無いと壁時計の値に変換できない）が、JVM既定ゾーンをJSTに固定することで、コード中のあらゆる `LocalDateTime.now()` を暗黙に「東京の壁時計としての今」に統一し、辻褄を合わせている。
 
-**この1行（`TimeZoneConfig`）は型の曖昧さを消しているのではなく、「全部JSTだと決め打つことで曖昧さの問題自体を発生させない」という力業である。** 型で「瞬間」と「壁時計」を区別すれば、`LocalDateTime.now()` がJVM既定ゾーンで何になるかに依存する必要がなくなり、この強制の存在理由が失われる。これが根治であり、単なる「JSTをUTCに置き換える」だけの表面的な対処と本方針が違う点である。
+**この1行（JVM 既定 TZ の `SERVER_ZONE` 固定。現行は `ServerTimeZoneEnvironmentPostProcessor`）は型の曖昧さを消しているのではなく、「全部JSTだと決め打つことで曖昧さの問題自体を発生させない」という力業である。** 型で「瞬間」と「壁時計」を区別すれば、`LocalDateTime.now()` がJVM既定ゾーンで何になるかに依存する必要がなくなり、この強制の存在理由が失われる。これが根治であり、単なる「JSTをUTCに置き換える」だけの表面的な対処と本方針が違う点である。
 
 ---
 
@@ -218,6 +218,8 @@ JDBC の `serverTimezone=UTC` はドライバ側の `Timestamp` 解釈を決め�
 
 ## 5. `TimeZoneConfig` の位置づけと撤去条件
 
+> **2026-11-23 更新（CMP-261123-1335）**: JVM 既定 TZ の設定は `@PostConstruct` をやめ、`ServerTimeZoneEnvironmentPostProcessor`（`META-INF/spring.factories`）が ApplicationContext 生成前に `UserZoneLocalDateTimeParser.SERVER_ZONE` へ確定する。`TimeZoneConfig` は DataSource 生成時点の既定 TZ を検査して食い違えば起動失敗にする番人だけを持つ。理由は、Bean 生成中の切替だと DB 接続が先に作られ、Connector/J が旧 TZ を固定して DATE 列が前日で保存されたため。撤去条件・正本（`SERVER_ZONE` の1つ）は変わらない。
+
 - **なぜ今存在するのか**: 2.2節で述べた通り、`LocalDateTime` を瞬間・壁時計の両方の意味で使っている現状において、`LocalDateTime.now()` の意味を「東京の壁時計としての今」に統一するための力業である。これを外すと、JVM既定ゾーンがOS依存（多くの場合UTC）に戻り、`LocalDateTime.now()` の意味がすべての呼び出し箇所で変わってしまう。
 - **撤去できる条件**: 「瞬間」を意味する箇所がすべて `Instant`/`OffsetDateTime`（JVM既定ゾーンに依存しない型）に置き換わり、かつ「壁時計」を意味する箇所がすべて `LocalDate`/`LocalTime` ＋ 明示的なTZ参照（`ZoneId.systemDefault()` のような暗黙のJVM既定ゾーン依存ではなく）に置き換わっていること。つまり **コードベースのどこにも `ZoneId.systemDefault()` や無引数の `LocalDateTime.now()` / `LocalDate.now()` に依存する箇所が残っていない状態**が撤去条件である。
 - 棚卸し文書（A-3）によれば `ZoneId.systemDefault()` / `LocalDateTime.now()` / `LocalDate.now()`（引数なし直書き）は約1932箇所に及ぶため、**撤去は本方針の最終段階であり、当面は残す**（撤去時期そのものはマスター判断事項であり本文書では断定しない）。
@@ -230,7 +232,7 @@ JDBC の `serverTimezone=UTC` はドライバ側の `Timestamp` 解釈を決め�
 
 | 層 | §20 の現行規約 |
 |---|---|
-| アプリ層（`LocalDateTime`） | JST（Asia/Tokyo）固定。`TimeZoneConfig` がJVM既定TZをJSTに固定することで実現 |
+| アプリ層（`LocalDateTime`） | JST（Asia/Tokyo）固定。`ServerTimeZoneEnvironmentPostProcessor` がJVM既定TZを `SERVER_ZONE`（JST）へBean生成前に確定することで実現 |
 | DB格納値（`DATETIME`カラム） | UTC（`hibernate.jdbc.time_zone: UTC`） |
 | API入出力 | JST前提のISO 8601文字列（`LocalDateTimeTimezoneSerializer`/`Deserializer` がJVM既定TZ＝JSTを介して変換） |
 
@@ -238,7 +240,7 @@ JDBC の `serverTimezone=UTC` はドライバ側の `Timestamp` 解釈を決め�
 
 1. **「瞬間」と「壁時計」を型で区別する発想が §20 にはない。** §20 は用途を問わず一律 `LocalDateTime` を使い、DB格納だけをUTCにする設計であり、本方針が求める「型で意味を区別する」（方針3点目）と真っ向から異なる。§20 の下では `ReservationEntity.bookedAt`（瞬間）も `ReservationSlotEntity` の関連ロジックで扱う締切判定（壁時計）も、コード上は同じ `LocalDateTime` 型で表現され、区別がつかない。
 2. **§20 はアプリ層をJST固定とし、本方針は「瞬間はUTC、壁時計は土地のTZ（必ずしもJSTではない）」とする。** §20 の「アプリ層＝JST」という前提は、単一TZ（日本国内）運用を暗黙の前提にしており、海外拠点（本方針転換の動機そのもの）を想定していない。本方針では「壁時計」は店・チームごとに異なるTZを持ちうる。
-3. **§20 の `TimeZoneConfig` 撤去条件が §20 には存在しない。** §20 はむしろ `TimeZoneConfig` を規約の中核として位置づけている（`backend/.claudecode.md` §1 のディレクトリ構成表（[docs/conventions/backend/01-backend-java.md](../conventions/backend/01-backend-java.md)）にも明記）。本方針は5章で示した通り、これを最終的に撤去する方向を示しており、方向性が逆である。
+3. **§20 の JVM 既定 TZ 固定（`ServerTimeZoneEnvironmentPostProcessor`。旧 `TimeZoneConfig`）の撤去条件が §20 には存在しない。** §20 はむしろこの固定を規約の中核として位置づけている（`backend/.claudecode.md` §1 のディレクトリ構成表（[docs/conventions/backend/01-backend-java.md](../conventions/backend/01-backend-java.md)）にも明記）。本方針は5章で示した通り、これを最終的に撤去する方向を示しており、方向性が逆である。
 4. **§20 の「受信側の解釈規則」（未解決時はAsia/Tokyoとみなす）は、個人TZの入力解釈としては本方針と両立しうるが、「壁時計＝土地のTZ」という概念（店・チームのTZ）を扱っていない。** 既存の `common/timezone/` 基盤（`UserTimezoneFilter`/`UserZoneLocalDateTimeParser`）は個人TZの解決に特化しており、棚卸し文書 D-0 が指摘する通り「テナント（チーム・組織）TZ」は一切扱っていない。本方針の「壁時計は店の時計」を実現するには、この基盤とは別に店・チームTZの解決経路が必要になる。
 
 **規約側への提案（提案のみ・実際には直さない）**:
@@ -275,7 +277,7 @@ reservation・schedule のように棚卸しが完了しているドメインか
 
 選択肢Cの最小の一歩として、業務ローカル時刻（壁時計）の `Clock` Bean `wallClock` を導入した（issue #2616 のブログ予約公開で先行適用）。
 
-- 基準ゾーンは**既存の唯一の正である `UserZoneLocalDateTimeParser.SERVER_ZONE`** を参照する。`TimeZoneConfig`（JVM 既定ゾーンの設定）・`ClockConfig#wallClock`（判定に使う基準時刻）・`UserZoneLocalDateTimeParser`（API 入力の解釈）の**三者が同一のソース**を見るため、食い違いは構造的に起こらない。
+- 基準ゾーンは**既存の唯一の正である `UserZoneLocalDateTimeParser.SERVER_ZONE`** を参照する。`ServerTimeZoneEnvironmentPostProcessor`（JVM 既定ゾーンの設定。`TimeZoneConfig` は DataSource 生成時の番人）・`ClockConfig#wallClock`（判定に使う基準時刻）・`UserZoneLocalDateTimeParser`（API 入力の解釈）の**三者が同一のソース**を見るため、食い違いは構造的に起こらない。
 - **ゾーンは環境変数で可変にしていない。** 実行時に差し替えられるようにしても、DB に既に書かれた `LocalDateTime` 列は旧ゾーンの壁時計のままであり、変えた瞬間に既存データの解釈が壊れる（「設定できるように見えて変えると壊れるつまみ」）。テナント別 TZ の導入は格納形式・入力変換・判定基準を一体で設計し直す必要があるため、**CMP-023「時刻設計の全域是正＋テナントTZ導入」**が受け皿である。
 - 既定の `Clock`（`utcClock`・`@Primary`）は UTC 固定のまま。`LocalDateTime` 列と突き合わせる処理だけが `@Qualifier("wallClock")` で明示的に壁時計を選ぶ（取り違えは 9 時間ずれとして表面化するため、暗黙の既定に混ぜない）。`@Qualifier` をコンストラクタ引数へ伝えるため `backend/lombok.config` に `lombok.copyableAnnotations` を追加している。
 - 呼び出し側が基準時刻を取り、**エンティティは現在時刻を自ら取得しない**（`BlogPostEntity#publish/unpublish/changeStatus` は基準時刻を引数で受け取る）。これにより状態遷移の判定が決定的になり、`Clock.fixed` でテスト可能になる。

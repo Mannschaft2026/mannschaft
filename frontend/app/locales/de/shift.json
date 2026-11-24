@@ -82,7 +82,9 @@
       "approveSuccess": "Änderungsantrag genehmigt",
       "rejectSuccess": "Änderungsantrag abgelehnt",
       "withdrawSuccess": "Änderungsantrag zurückgezogen",
-      "closedForNew": "Dieser Schichtplan ist bereits veröffentlicht, daher werden keine neuen Änderungsanträge mehr angenommen."
+      "closedForNew": "Dieser Schichtplan ist bereits veröffentlicht, daher werden keine neuen Änderungsanträge mehr angenommen.",
+      "reviewedAt": "Geprüft am",
+      "reviewConflict": "Jemand anderes hat die Anfrage zuvor aktualisiert. Die Liste wurde neu geladen; bitte prüfen Sie den aktuellen Stand"
     },
     "pdf": {
       "teamLayout": "Team-Schichtplan PDF",
@@ -123,6 +125,7 @@
       "createDialog": "Neue Schicht anlegen",
       "createSuccess": "Schicht erfolgreich angelegt",
       "selectTeam": "Team auswählen",
+      "statusFilterLabel": "Status",
       "fromDate": "Von",
       "toDate": "Bis",
       "noSchedule": "Keine Schichten vorhanden",
@@ -155,6 +158,7 @@
       "tabEdit": "Bearbeiten",
       "tabRequests": "Anfragen",
       "tabConstraints": "Beschränkungen",
+      "changeRequestLink": "Änderungsanfragen",
       "startCollecting": "Sammlung starten",
       "startAdjusting": "Anpassung starten",
       "publish": "Veröffentlichen",
@@ -180,7 +184,7 @@
       "bulkCreateSuccess": "{count} Slots angelegt",
       "noSlot": "Keine Slots",
       "noPosition": "Keine Position",
-      "assigned": "Zugewiesen",
+      "assigned": "Zugewiesene Personen",
       "date": "Datum",
       "startTime": "Startzeit",
       "endTime": "Endzeit",
@@ -214,6 +218,7 @@
       "matrixTitle": "Präferenzmatrix",
       "noRequests": "Keine Anfragen eingereicht",
       "colUser": "Mitglied",
+      "unknownMember": "Unbekanntes Mitglied",
       "legend": "Legende"
     },
     "preference": {
@@ -571,9 +576,9 @@
     },
     "requests": {
       "title": "Schichtwünsche der Mitglieder einholen und prüfen",
-      "body": "Sobald der Status „Wird gesammelt“ erreicht ist, können Mitglieder ihre Wünsche einreichen. Im Tab „Wunschliste“ auf der Detailseite sehen Sie den Stand aller in einer Matrix.",
+      "body": "Sobald der Status „Wird gesammelt“ erreicht ist, können Mitglieder ihre Wünsche einreichen. Administratoren sehen im Tab „Wunschliste“ auf der Detailseite (nur für Administratoren) den Stand aller in einer Matrix.",
       "steps": {
-        "step1": "Klicken Sie auf der Detailseite auf den Tab „Wunschliste“",
+        "step1": "(Nur für Administratoren) Klicken Sie auf der Detailseite auf den Tab „Wunschliste“",
         "step2": "Prüfen Sie auf den Übersichtskarten die Einreichungsquote und die Zahl der Mitglieder ohne Einreichung",
         "step3": "Prüfen Sie in der Matrixtabelle die Wunschstärke jedes Mitglieds je Datum",
         "step4": "Angezeigt in fünf Stufen: „Möchte arbeiten / Keine Angabe / Notfalls möglich / Lieber frei / Unbedingt frei“"
