@@ -287,6 +287,14 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
     }
 
     @Override
+    public int revokeExpiredStaged(String tokenHash) {
+        em.flush();
+        return em.createNativeQuery(REVOKE_EXPIRED_STAGED_SQL)
+                .setParameter("tokenHash", tokenHash)
+                .executeUpdate();
+    }
+
+    @Override
     public Optional<Long> findClaimTokenId(UUID claimId) {
         List<?> rows = em.createNativeQuery("SELECT token_id FROM " + CLAIMS + " WHERE id = UNHEX(:id)")
                 .setParameter("id", hex(claimId))

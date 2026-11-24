@@ -214,6 +214,15 @@ public class InviteAcceptanceWriter {
         return inviteTokenRepository.findValidityByTokenHash(tokenHash, userId);
     }
 
+    /**
+     * 仮発行の印があり窓の外の招待を、参照時に恒久失効させる CAS（role の短TX。CMP-261107-1833 PR3 3 回目の検分）。
+     * 有効化と同じ行を取り合い、未コミットの有効化があればロックで待つ。 @return 1: 失効が勝った / 0: 失効しなかった
+     */
+    @Transactional
+    public int revokeExpiredStaged(String tokenHash) {
+        return inviteTokenRepository.revokeExpiredStaged(tokenHash);
+    }
+
     private void verifyResumable(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,
                                  ErrorCode folderError) {
         if (locator.concealsNonTarget() && !userId.equals(token.targetUserId())) {

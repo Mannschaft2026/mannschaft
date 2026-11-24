@@ -7,6 +7,7 @@ import com.mannschaft.app.auth.service.PendingInviteStore;
 import com.mannschaft.app.notification.service.NotificationHelper;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
+import com.mannschaft.app.role.service.InviteAcceptanceWriter;
 import com.mannschaft.app.role.service.MembershipInviteTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,11 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -255,30 +261,134 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
     }
 
     // ------------------------------------------------------------------
-    // PR3 再検分: 本人の承認が有効化と競っても、正常な再招待を失効させない
+    // PR3 3 回目の検分: 有効化と参照時の失効は、仮発行の行の上の CAS で先にコミットした方だけが勝つ（実 DB・別接続）
     // ------------------------------------------------------------------
 
-    @ParameterizedTest
-    @ValueSource(strings = {"TEAM", "ORGANIZATION"})
-    @DisplayName("再検分: auth の確定の後・有効化の前に本人が承認を押しても（仮発行の窓の内なので 409 AUTH_086 で PENDING に戻る）、"
-            + "再招待は 200 REISSUED で招待は有効なまま。その後の承認で JOINED")
-    void requesterAcceptRacingActivationDoesNotRevoke(String type) throws Exception {
-        ReissueFixtures.Case c = fx.reissueRequested(type);
-        java.util.concurrent.atomic.AtomicReference<Throwable> raced = new java.util.concurrent.atomic.AtomicReference<>();
+    /**
+     * 別スレッド（＝別接続・別 TX）で実行して待つ。spy の中は有効化の TX が現スレッドに束縛されているため、
+     * そこで jdbc やサービスを呼ぶと同じ TX に合流してしまう。
+     */
+    private static <T> T onOtherThread(java.util.concurrent.Callable<T> work) throws Exception {
+        ExecutorService other = Executors.newSingleThreadExecutor();
+        try {
+            return other.submit(work).get(60, TimeUnit.SECONDS);
+        } finally {
+            other.shutdownNow();
+        }
+    }
+
+    /** 仮発行の印（revoked_at = created_at）を、DB 時刻から指定ミリ秒前の作成として付け直す（別接続で自動コミット）。 */
+    private void restage(Long tokenId, long millisAgo) throws Exception {
+        onOtherThread(() -> jdbc.update("UPDATE invite_tokens SET created_at = UTC_TIMESTAMP(6) - INTERVAL ? MICROSECOND, "
+                + "revoked_at = created_at WHERE id = ?", millisAgo * 1000, tokenId));
+    }
+
+    private InviteAcceptanceWriter writerTarget() {
+        return AopTestUtils.getUltimateTargetObject(writerSpy);
+    }
+
+    @Test
+    @DisplayName("3回目: 有効化が窓の内で UPDATE し未コミットの間に、別接続の GET が窓の外と読んで失効 CAS を打つと行ロックで待つ。"
+            + "有効化がコミットされると失効は 0 行で、GET は読み直して VALID とし、保留を EXPIRED にしない")
+    void activationCommittedFirstWinsOverGetRevoke() throws Exception {
+        ReissueFixtures.Case c = fx.reissueRequested("TEAM");
+        CountDownLatch updated = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
         doAnswer(inv -> {
-            raced.set(org.assertj.core.api.Assertions.catchThrowable(() -> pending().accept(c.requester())));
+            restage(inv.getArgument(0), 59_000); // 窓の内（あと約 1 秒で窓の外）
+            Object result = inv.callRealMethod(); // UPDATE は成功し、まだコミットしない（proxy の TX の中）
+            updated.countDown();
+            assertThat(commit.await(60, TimeUnit.SECONDS)).isTrue();
+            return result;
+        }).when(issuer()).activateStaged(anyLong(), anyLong());
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> reissue = pool.submit(() -> reissue(c).andReturn().getResponse().getStatus());
+            assertThat(updated.await(30, TimeUnit.SECONDS)).isTrue();
+            TimeUnit.MILLISECONDS.sleep(1500); // 作成から 60 秒を過ぎる（コミット済みの旧値は revoked_at = created_at のまま）
+            Future<String> get = pool.submit(() -> pending().findMine(c.requester()).status());
+            TimeUnit.MILLISECONDS.sleep(1500);
+            assertThat(get.isDone()).as("GET の失効 CAS は未コミットの有効化の行ロックで待つ").isFalse();
+
+            commit.countDown();
+            assertThat(reissue.get(30, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(get.get(30, TimeUnit.SECONDS)).as("有効化が勝った").isEqualTo("PENDING");
+        } finally {
+            commit.countDown();
+            pool.shutdownNow();
+        }
+        assertThat(fx.pendingStatus(c.requester())).isEqualTo("PENDING");
+        assertThat(fx.activeTokens(c)).isEqualTo(1);
+        assertThat(pending().accept(c.requester()).status()).isEqualTo("JOINED");
+    }
+
+    @Test
+    @DisplayName("3回目: 参照時の失効 CAS が先にコミットすると、有効化は窓の内の時刻でも 0 行で 500 ROLE_019。"
+            + "保留は EXPIRED（ROLE_002）で、すぐ再依頼できる")
+    void getRevokeCommittedFirstWinsOverActivation() throws Exception {
+        ReissueFixtures.Case c = fx.reissueRequested("TEAM");
+        doAnswer(inv -> {
+            Long tokenId = inv.getArgument(0);
+            restage(tokenId, 61_000); // 窓の外
+            assertThat(onOtherThread(() -> pending().findMine(c.requester()).status())).as("GET の失効が先にコミット")
+                    .isEqualTo("EXPIRED");
+            // 失効の勝ちは時刻ではなく印で決まることを示すため、作成時刻だけを窓の内へ戻す（revoked_at は恒久失効の値のまま）
+            onOtherThread(() -> jdbc.update("UPDATE invite_tokens SET created_at = UTC_TIMESTAMP(6) - INTERVAL 10 SECOND "
+                    + "WHERE id = ?", tokenId));
             return inv.callRealMethod();
         }).when(issuer()).activateStaged(anyLong(), anyLong());
 
-        reissue(c).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("REISSUED"));
+        reissue(c).andExpect(status().isInternalServerError()).andExpect(jsonPath("$.error.code").value("ROLE_019"));
 
-        assertThat(raced.get()).isInstanceOf(com.mannschaft.app.common.BusinessException.class);
-        assertThat(((com.mannschaft.app.common.BusinessException) raced.get()).getErrorCode().getCode()).isEqualTo("AUTH_086");
-        assertThat(fx.pendingStatus(c.requester())).isEqualTo("PENDING");
-        assertThat(fx.activeTokens(c)).as("正常な承認との競合で招待を失効させない").isEqualTo(1);
-        ReissueFixtures.await(() -> fx.notifications(c.requester(), "INVITE_REISSUED"), 1, "INVITE_REISSUED");
-        assertThat(pending().accept(c.requester()).status()).isEqualTo("JOINED");
+        assertThat(fx.pendingStatus(c.requester())).isEqualTo("EXPIRED");
+        assertThat(fx.pendingRow(c.requester()).get("failure_code")).isEqualTo("ROLE_002");
+        assertThat(fx.activeTokens(c)).isZero();
+        assertThat(pending().requestReissue(c.requester()).alreadyRequested()).isFalse();
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TEAM", "ORGANIZATION"})
+    @DisplayName("3回目（Codex P3）: 別スレッドで本人の承認が ACCEPTING を確定して止まっている間に有効化を完了させても、"
+            + "再招待は 200 REISSUED で招待は有効なまま。承認を再開すると JOINED")
+    void acceptingHeldWhileActivationCompletes(String type) throws Exception {
+        ReissueFixtures.Case c = fx.reissueRequested(type);
+        CountDownLatch accepting = new CountDownLatch(1);
+        CountDownLatch resume = new CountDownLatch(1);
+        String acceptThread = "reissue-accept-" + c.requester();
+        doAnswer(inv -> {
+            if (acceptThread.equals(Thread.currentThread().getName())) {
+                // ACCEPTING は auth の短TXでコミット済み。招待の有効性を読む直前で止める
+                accepting.countDown();
+                assertThat(resume.await(60, TimeUnit.SECONDS)).isTrue();
+            }
+            return inv.callRealMethod();
+        }).when(writerTarget()).findValidity(anyString(), anyLong());
+
+        ExecutorService pool = Executors.newSingleThreadExecutor(r -> new Thread(r, acceptThread));
+        try {
+            doAnswer(inv -> {
+                Future<String> accept = pool.submit(() -> pending().accept(c.requester()).status());
+                assertThat(accepting.await(30, TimeUnit.SECONDS)).isTrue();
+                assertThat(onOtherThread(() -> fx.pendingStatus(c.requester()))).as("本人の承認は ACCEPTING を確定済み")
+                        .isEqualTo("ACCEPTING");
+                acceptFuture = accept;
+                return inv.callRealMethod();
+            }).when(issuer()).activateStaged(anyLong(), anyLong());
+
+            reissue(c).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("REISSUED"));
+            assertThat(fx.activeTokens(c)).as("正常な承認との競合で招待を失効させない").isEqualTo(1);
+
+            resume.countDown();
+            assertThat(acceptFuture.get(30, TimeUnit.SECONDS)).isEqualTo("JOINED");
+        } finally {
+            resume.countDown();
+            pool.shutdownNow();
+        }
+        assertThat(fx.pendingStatus(c.requester())).isEqualTo("JOINED");
+    }
+
+    private volatile Future<String> acceptFuture;
 
     // ------------------------------------------------------------------
     // PR3 検分 N5: 通知の配送が失敗しても確定は維持

@@ -109,10 +109,12 @@ public class MembershipInviteTokenIssuer {
      * {@link com.mannschaft.app.role.dto.InviteValidity#STAGING_OPEN_SQL} で参照時の判定と同じ定義）。0 行なら false。
      * 有効化できたら同じトランザクションで {@link InviteReissuedEvent} を発行する（通知はコミット後に依頼者へ配送される）。
      *
-     * <p>有効化の後に保留を再確認・補償失効しない（殿の裁定・PR3 再検分）。窓は参照時と同じ述語・単調に進む DB 時刻で判定するので、
-     * 参照が窓の外（EXPIRED）と判定した後にこの UPDATE が成功することはない。auth の確定の後の保留は新しいハッシュの PENDING で、
-     * ハッシュを書き換える経路は無い。本人の辞退が割り込んだ場合に本人宛ての1回限りの招待が有効なまま残るのは許容する
-     * （tokenId を明示して承諾しない限り使われない）。</p>
+     * <p>有効化の後に保留を再確認・補償失効しない（殿の裁定・PR3 再検分）。参照時（GET・承認）が仮発行のまま窓を過ぎたと読んだ招待は、
+     * 参照側が恒久失効の CAS（{@code InviteTokenRepositoryCustom#REVOKE_EXPIRED_STAGED_SQL}）を打ち、この有効化の CAS と同じ行を取り合う。
+     * 先にコミットした方だけが勝つ（行ロックで直列化。時刻の述語だけでは保証しない）。失効が勝てば有効化は 0 行で ROLE_019、
+     * 保留は EXPIRED で再依頼できる。有効化が勝てば参照側は読み直して VALID とし、EXPIRED にしない。auth の確定の後の保留は
+     * 新しいハッシュの PENDING で、ハッシュを書き換える経路は無い。本人の辞退が割り込んだ場合に本人宛ての1回限りの招待が
+     * 有効なまま残るのは許容する（tokenId を明示して承諾しない限り使われない）。</p>
      */
     @Transactional
     public boolean activateStaged(Long tokenId, Long targetUserId) {

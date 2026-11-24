@@ -62,10 +62,11 @@ import java.util.UUID;
  *       EXPIRED に回復する）→ 監査</li>
  * </ol>
  * <p>補償による失効は行わない（仮発行の招待は印のまま無効で、誰も使えない）。勝敗は auth の条件付き UPDATE で決まる。</p>
- * <p>有効化の後に保留を再確認・失効しない（殿の裁定・PR3 再検分）。窓は参照時と有効化で同じ述語
- * （{@code InviteValidity#STAGING_OPEN_SQL}・{@code UTC_TIMESTAMP(6)}）で判定し、DB 時刻は単調に進むので、参照が窓の外と判定した後に
- * 有効化が成功することはない（DB 境界試験で固定）。auth の確定の後、保留のハッシュを書き換える経路は無い。本人の辞退が割り込んだ
- * 場合に本人宛ての1回限りの招待が有効なまま残るのは許容する（tokenId を明示して承諾しない限り使われない）。</p>
+ * <p>有効化の後に保留を再確認・失効しない（殿の裁定）。有効化と参照時の失効は、仮発行の行の上の 2 つの CAS
+ * （{@code InviteTokenRepositoryCustom#ACTIVATE_STAGED_SQL} と {@code #REVOKE_EXPIRED_STAGED_SQL}。どちらも仮発行の印を条件にする）で、
+ * 先にコミットした方だけが勝つ。窓の述語（{@code InviteValidity#STAGING_OPEN_SQL}）は「有効化が長く遅れたときに参照側が失効させてよいか」の
+ * 判断基準で、時刻の単調性による保証ではない（PR3 3 回目の検分で撤回）。auth の確定の後、保留のハッシュを書き換える経路は無い。本人の辞退が
+ * 割り込んだ場合に本人宛ての1回限りの招待が有効なまま残るのは許容する（tokenId を明示して承諾しない限り使われない）。</p>
  */
 @Service
 @RequiredArgsConstructor

@@ -285,11 +285,20 @@
 8. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
 
 有効化の後に保留を再確認・補償失効しない（殿の裁定・PR3 再検分。再確認は本人の正常な承認（`ACCEPTING`）を競合と取り違え、
-補償失効の失敗は有効な招待を残したまま回収できなかったため撤去）。根拠:
+補償失効の失敗は有効な招待を残したまま回収できなかったため撤去）。
 
-- 窓は参照時（GET）と有効化で同じ述語 `InviteValidity#STAGING_OPEN_SQL`（`UTC_TIMESTAMP(6)`）で判定する。有効化の SQL は
-  `InviteTokenRepositoryCustom#ACTIVATE_STAGED_SQL` が唯一の定義。DB 時刻は単調に進むので、GET が窓の外（`EXPIRED`）と判定した後に
-  有効化の UPDATE が成功することはない（`FlywayRegistrationPendingInvitesMigrationTest` で、窓の外は 0 行・窓の内でだけ 1 行を固定）。
+**有効化と参照時の失効は CAS で取り合う（PR3 3 回目の検分・殿の裁定）**: 仮発行の行の上で、有効化
+（`InviteTokenRepositoryCustom#ACTIVATE_STAGED_SQL`: `revoked_at = NULL`。印あり・窓の内・未使用が条件）と、参照時の失効
+（`#REVOKE_EXPIRED_STAGED_SQL`: `revoked_at = UTC_TIMESTAMP(6)` で印を消す。印あり・窓の外が条件）の 2 つの条件付き UPDATE のうち、
+先にコミットした 1 つだけが勝つ。参照（GET・承認。`InviteAcceptanceFacade#findInviteValidity`）は、招待を失効と読んだら role の短TXで
+失効の CAS を打つ。1 行なら失効が勝ったので保留を `EXPIRED` にする（`token_hash` 照合は従来どおり）。0 行なら読み直し、有効化が先に
+コミットしていれば `VALID` として `EXPIRED` にしない。未コミットの有効化と同じ行への UPDATE は InnoDB の行ロックで待たされ、
+コミット後の値で条件を評価し直すので、必ずどちらか一方に決まる。有効化が 0 行（失効が先に勝った・窓の外）なら 500 `ROLE_019` で、
+保留は `EXPIRED` になっていて再依頼できる。
+
+- 窓の述語（`InviteValidity#STAGING_OPEN_SQL`）の役割は「有効化が長く遅れたときに参照側が失効させてよいか」の判断基準だけである。
+  `UTC_TIMESTAMP(6)` は文の開始時刻で固定され、ロック待ちの後に成功した UPDATE の時刻とも一致しないので、時刻の述語だけでは競合を防げない
+  （前版の「DB 時刻の単調性で保証」という説明は撤回する）。境界値（60 秒ちょうどは内、60.5 秒は外）は DB 試験で固定している。
 - auth の確定の後、保留は新しいハッシュの `PENDING` である。見送り・再招待・dismiss は `REISSUE_REQUESTED` か `EXPIRED` 系にしか作用せず、
   ハッシュを書き換える経路は無い。本人が承認を押しても窓の内なので `AUTH_086` で `PENDING` に戻り、有効化の後に承認できる。
 - **リスク（許容）**: 確定から有効化までに本人の辞退（`PENDING`→`DECLINED`）が割り込むと、本人宛ての1回限りの招待が有効なまま残る。

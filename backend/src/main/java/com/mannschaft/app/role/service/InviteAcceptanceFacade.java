@@ -189,6 +189,16 @@ public class InviteAcceptanceFacade {
      */
     public Optional<InviteValidity> findInviteValidity(String tokenHash, Long userId) {
         // userId 本人の確保（CLAIMED）が残っていれば上限は判定しない（承認経路の再開と同じ規則。PR3 検分 P1）
+        Optional<InviteValidity> validity = writer.findValidity(tokenHash, userId);
+        if (validity.orElse(null) != InviteValidity.REVOKED) {
+            return validity;
+        }
+        // 失効と読めた。仮発行の印のまま窓を過ぎたものなら、有効化と CAS で取り合ってから確定する（PR3 3 回目の検分・殿の裁定）。
+        // 失効が勝てば REVOKED。0 行（通常の失効・有効化が先にコミット）なら読み直す（有効化が勝っていれば VALID）。
+        if (writer.revokeExpiredStaged(tokenHash) == 1) {
+            log.info("仮発行のまま窓を過ぎた招待を参照時に失効させた");
+            return validity;
+        }
         return writer.findValidity(tokenHash, userId);
     }
 
