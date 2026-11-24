@@ -695,6 +695,12 @@
       badge.title = insightStatusWarnings.map((warning) => `${warning.key}: ${warning.reason}`).join('\n');
     }
 
+    // readInsights が失敗しても、状態ファイル自体の警告件数は表示する
+    function refreshInsightStatusWarnings() {
+      insightStatusWarnings = window.InsightStatusCore.validateStatusFile(window.BETA_INSIGHT_STATUS).warnings;
+      renderInsightStatusWarnings();
+    }
+
     function collectAlicizationInsights() {
       const overlay = baseInventory.b0RunOverlay;
       if (!overlay) return [];
@@ -1201,7 +1207,7 @@
         : visible.filter((feature) => feature.status === 'incomplete' || feature.status === 'verifying').length;
       const nextCount = selectedView === 'campaigns'
         ? visibleCampaigns.filter((campaign) => ['blocked', 'not-started', 'on-hold', 'unknown'].includes(campaign.status)).length
-        : selectedView === 'insights' ? visibleInsights.filter((insight) => insight.status === 'planned').length
+        : selectedView === 'insights' ? visibleInsights.filter((insight) => insight.status === 'planned' || insight.status === 'fixing').length
         : visible.filter((feature) => feature.status === 'blocked' || feature.status === 'unknown').length;
       document.querySelector('#activeCount').textContent = activeCount;
       document.querySelector('#nextCount').textContent = nextCount;
@@ -1210,7 +1216,7 @@
         : selectedView === 'insights' ? '未整理の気づき' : '実装未完・検証中';
       document.querySelector('#nextLabel').textContent = selectedView === 'campaigns'
         ? '未着手・保留などCMP'
-        : selectedView === 'insights' ? '課題化済' : '不備・未棚卸';
+        : selectedView === 'insights' ? '課題化済・修正中' : '不備・未棚卸';
       document.querySelector('#publishableCount').textContent = features.filter((feature) => feature.status === 'ready' && feature.gate === '適用完了').length;
       document.querySelector('#gateCount').textContent = `${doneGates}/${gateFoundation.length}`;
 
@@ -1673,9 +1679,18 @@ ${insight.detail}
       }
     });
     document.querySelector('#exportInsightStatus').addEventListener('click', () => {
-      const source = window.InsightStatusCore.buildStatusFileSource(rawInsights, window.BETA_INSIGHT_STATUS, { overlayRunId: overlayRunId() });
+      let source;
+      try {
+        source = window.InsightStatusCore.buildStatusFileSource(rawInsights, window.BETA_INSIGHT_STATUS, { overlayRunId: overlayRunId() });
+      } catch (error) {
+        showToast(`書き出せません: ${error?.message || '状態ファイルが不正です'}`);
+        return;
+      }
       downloadBlob(new Blob([source], { type: 'text/javascript;charset=utf-8' }), 'insight-status.js');
-      showToast('insight-status.js を書き出しました。リポジトリの docs/prototypes/ へ置き、PR で更新してください');
+      const invalidCount = insightStatusWarnings.filter((warning) => warning.key !== '(file)').length;
+      showToast(invalidCount
+        ? `insight-status.js を書き出しました。不正な項目 ${invalidCount}件はそのまま残しました。リポジトリの docs/prototypes/ へ置き、PR で更新してください`
+        : 'insight-status.js を書き出しました。リポジトリの docs/prototypes/ へ置き、PR で更新してください');
     });
     document.querySelector('#insightStatusWarnings').addEventListener('click', () => {
       alert(insightStatusWarnings.map((warning) => `${warning.key}: ${warning.reason}`).join('\n'));
@@ -1703,7 +1718,10 @@ ${insight.detail}
         insights = applyInsightStatuses(storedInsights);
         if (selectedView === 'insights') renderBoard();
       })
-      .catch((error) => showToast(`保存済みメモを読めませんでした: ${error?.message || 'IndexedDBエラー'}`));
+      .catch((error) => {
+        refreshInsightStatusWarnings();
+        showToast(`保存済みメモを読めませんでした: ${error?.message || 'IndexedDBエラー'}`);
+      });
   </script>
 </body>
 </html>

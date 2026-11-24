@@ -6,7 +6,7 @@
   const STATUSES = ['inbox', 'planned', 'fixing', 'done'];
   const STATUS_LABELS = { inbox: '未整理', planned: '課題化済', fixing: '修正中', done: '対応済' };
   const SCHEMA_VERSION = 1;
-  const ISO_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+  const ISO_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))?$/;
 
   function sanitizeRunId(runId) {
     return String(runId).replace(/[^A-Za-z0-9_-]/g, '-');
@@ -16,7 +16,7 @@
     return value !== null && typeof value === 'object' && !Array.isArray(value);
   }
 
-  // ISO 8601（日付のみ、または日時＋任意のタイムゾーン）だけを受け付け、時刻（ms）を返す。不正なら null。
+  // ISO 8601（日付のみ、またはタイムゾーン付きの日時）だけを受け付け、時刻（ms）を返す。不正なら null。
   function parseIsoTime(value) {
     if (typeof value !== 'string') return null;
     const match = ISO_PATTERN.exec(value);
@@ -30,7 +30,8 @@
       if (Number(match[4]) > 23 || Number(match[5]) > 59) return null;
       if (match[6] !== undefined && Number(match[6]) > 59) return null;
     }
-    const time = Date.parse(value);
+    // 日付のみはその日の終わり（日本時間 23:59:59.999）として扱う。タイムゾーン無しの日時は上の正規表現で不正にしている
+    const time = match[4] === undefined ? Date.parse(`${value}T23:59:59.999+09:00`) : Date.parse(value);
     return Number.isNaN(time) ? null : time;
   }
 
@@ -60,7 +61,7 @@
       return { items: {}, warnings: [{ key: '(file)', reason: `schemaVersion が ${SCHEMA_VERSION} ではありません（${JSON.stringify(file.schemaVersion)}）。ファイル全体を適用しません` }] };
     }
     if (!isPlainObject(file.items)) return { items: {}, warnings: [{ key: '(file)', reason: 'items がオブジェクトではありません' }] };
-    const items = {};
+    const items = Object.create(null);
     const warnings = [];
     for (const [key, entry] of Object.entries(file.items)) {
       if (!isPlainObject(entry)) {
@@ -117,28 +118,40 @@
 
   function cleanEntry(entry) {
     const result = { status: entry.status };
-    if (entry.pr !== undefined) result.pr = entry.pr;
+    // 未整理へ戻した項目に古い PR を残さない
+    if (entry.pr !== undefined && entry.status !== 'inbox') result.pr = entry.pr;
     result.updatedAt = entry.updatedAt;
     if (entry.note !== undefined) result.note = entry.note;
     return result;
   }
 
+  // 状態ファイルを書き出す。ファイル全体が不正（schemaVersion 不一致・items 不正など）なら Error を投げて書き出しを拒否する。
+  // 不正な項目は黙って消さず、元のまま出力に残す（警告は validateStatusFile で確認できる）。
   function buildStatusFileSource(records, file, options) {
     const overlayRunId = options && options.overlayRunId;
-    const items = {};
-    for (const [key, entry] of Object.entries(validateStatusFile(file).items)) items[key] = cleanEntry(entry);
+    const validated = validateStatusFile(file);
+    const fileLevel = validated.warnings.find((warning) => warning.key === '(file)');
+    if (fileLevel) throw new Error(`状態ファイルが不正なため書き出せません: ${fileLevel.reason}`);
+    const items = Object.create(null);
+    if (file !== undefined) {
+      for (const [key, entry] of Object.entries(file.items)) {
+        items[key] = Object.prototype.hasOwnProperty.call(validated.items, key) ? cleanEntry(entry) : entry;
+      }
+    }
     for (const record of records || []) {
-      const found = findEntry(record, items, overlayRunId);
+      const found = findEntry(record, validated.items, overlayRunId);
       const stamp = Number.isFinite(Number(record.updatedAt)) ? new Date(Number(record.updatedAt)).toISOString() : null;
       if (found) {
         if (stamp !== null && isLocalNewer(record, found.entry)) {
           items[found.key] = cleanEntry({ ...found.entry, status: record.status, updatedAt: stamp });
         }
       } else if (STATUSES.includes(record.status) && record.status !== 'inbox' && stamp !== null) {
-        items[originalInsightId(record, overlayRunId) || record.id] = { status: record.status, pr: '', updatedAt: stamp, note: '' };
+        const newKey = originalInsightId(record, overlayRunId) || record.id;
+        // 同じキーに不正項目がある場合は上書きせず元のまま残す
+        if (!Object.prototype.hasOwnProperty.call(items, newKey)) items[newKey] = { status: record.status, pr: '', updatedAt: stamp, note: '' };
       }
     }
-    const sorted = {};
+    const sorted = Object.create(null);
     for (const key of Object.keys(items).sort()) sorted[key] = items[key];
     return `window.BETA_INSIGHT_STATUS = ${JSON.stringify({ schemaVersion: SCHEMA_VERSION, items: sorted }, null, 2)};\n`;
   }

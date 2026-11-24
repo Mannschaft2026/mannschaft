@@ -461,11 +461,13 @@ describe('AC5 状態ファイルとローカル未書き出し変更をマージ
     assert.deepEqual(Object.keys(evaluated.items).sort(), ['ALIC-CMP0035-B-YA-01', 'ALIC-NEW-02', 'NOTE-261122-080000-000']);
   });
 
-  test('不正項目は書き出しへ持ち込まない', () => {
+  // 検分指摘 R3: 不正項目を黙って消すのは症状隠しにあたるため、書き出しでは元のまま保持する仕様に変更
+  test('不正項目は書き出しで元のまま保持される（黙って消さない）', () => {
     const core = loadCore();
-    const file = statusFile({ ...baseFile().items, BROKEN: { status: 'closed', updatedAt: '2026-11-24' } });
+    const broken = { status: 'closed', updatedAt: '2026-11-24' };
+    const file = statusFile({ ...baseFile().items, BROKEN: broken });
     const { evaluated } = buildItems(core, file);
-    assert.ok(!('BROKEN' in evaluated.items));
+    assert.deepEqual(evaluated.items.BROKEN, broken);
   });
 });
 
