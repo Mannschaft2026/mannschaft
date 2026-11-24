@@ -52,6 +52,8 @@ public class MonthlyShiftBudgetCloseCoordinator {
     static final int MAX_KEYS_PER_ORGANIZATION = 36;
     /** 遅延記録の回収で1回に処理する最大件数。 */
     private static final int RECOVER_LIMIT = 200;
+    /** 選定の後・確定の前に締め日変更が割り込んだときに対象を選び直す上限（確定した期間行は不変なので通常は2回で収束する）。 */
+    static final int MAX_SELECTION_ATTEMPTS = 3;
 
     private final ShiftBudgetAllocationRepository allocationRepository;
     private final ShiftBudgetMonthlyCloseEventRepository eventRepository;
@@ -175,20 +177,95 @@ public class MonthlyShiftBudgetCloseCoordinator {
 
     private CloseResult process(Long organizationId, YearMonth periodKey, boolean catchUp) {
         LocalDate today = dateProvider.today();
+        int closed = 0;
+        int failed = 0;
+        int consumptions = 0;
+        int alreadyByResult = 0;
+        Set<Long> interrupted = new HashSet<>();
+        // この実行で指定期間 M を締めた割当（選び直し後の選定で「締め済み」に数え直さない）
+        Set<Long> closedForTarget = new HashSet<>();
+        Set<Long> alreadyAtSelection = Set.of();
+        for (int attempt = 1; attempt <= MAX_SELECTION_ATTEMPTS; attempt++) {
+            Selection selection = select(organizationId, periodKey, catchUp, today);
+            alreadyAtSelection = selection.alreadyClosed();
+            boolean reselect = false;
+            for (Map.Entry<YearMonth, List<ShiftBudgetAllocationEntity>> entry : selection.byKey().entrySet()) {
+                List<ShiftBudgetAllocationEntity> targets = continuing(entry.getValue(), interrupted);
+                if (targets.isEmpty()) {
+                    continue;
+                }
+                ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), today);
+                if (boundaryChanged(entry.getKey(), selection.closingDay(), period)) {
+                    if (attempt < MAX_SELECTION_ATTEMPTS) {
+                        // 選定の後・確定の前に締め日変更が受理された。確定済みの期間（以後は不変）で対象を選び直す
+                        log.info("F08.7 期間締め: 選定後に境界が変わったため選び直します: orgId={}, key={}, fixed={}〜{}",
+                                organizationId, entry.getKey(), period.start(), period.end());
+                        reselect = true;
+                        break;
+                    }
+                    List<ShiftBudgetAllocationEntity> kept = overlapping(targets, period);
+                    targets.stream().filter(a -> !kept.contains(a)).forEach(a -> interrupted.add(a.getId()));
+                    targets = kept;
+                }
+                for (ShiftBudgetAllocationEntity allocation : targets) {
+                    AllocationResult r = closeOne(allocation, entry.getKey(), period);
+                    markIfInterrupted(interrupted, allocation, r);
+                    switch (r.kind()) {
+                        case CLOSED -> {
+                            closed++;
+                            consumptions += r.lines();
+                            if (entry.getKey().equals(periodKey)) {
+                                closedForTarget.add(allocation.getId());
+                            }
+                        }
+                        case ALREADY_CLOSED -> alreadyByResult++;
+                        case FAILED -> failed++;
+                        case SKIPPED -> {
+                        }
+                    }
+                }
+            }
+            if (!reselect) {
+                break;
+            }
+        }
+        int already = alreadyByResult;
+        for (Long id : alreadyAtSelection) {
+            if (!closedForTarget.contains(id)) {
+                already++;
+            }
+        }
+        log.info("F08.7 期間締め完了: orgId={}, key={}, closed={}, alreadyClosed={}, failed={}, consumptions={}",
+                organizationId, periodKey, closed, already, failed, consumptions);
+        return new CloseResult(closed, already, failed, consumptions);
+    }
+
+    /**
+     * 締め対象の選定結果。
+     *
+     * @param byKey         期間キーごとの未締めの割当（古い順）
+     * @param alreadyClosed 指定期間 M が既に締め済みの割当
+     * @param closingDay    選定に用いた締め日履歴（確定した期間と境界を照合する）
+     */
+    private record Selection(TreeMap<YearMonth, List<ShiftBudgetAllocationEntity>> byKey, Set<Long> alreadyClosed,
+                             Function<YearMonth, Integer> closingDay) {
+    }
+
+    /** 締め日履歴を読み直して対象を選ぶ。指定期間 M が未終了なら 409 SHIFT_BUDGET_036。 */
+    private Selection select(Long organizationId, YearMonth periodKey, boolean catchUp, LocalDate today) {
         ShiftBudgetClosePeriodResolver.ResolvedPeriod target = periodResolver.resolve(organizationId, periodKey);
         if (target.end().isAfter(today)) {
             throw new BusinessException(ShiftBudgetErrorCode.CLOSE_PERIOD_NOT_ENDED);
         }
+        Function<YearMonth, Integer> closingDay = periodResolver.closingDayFunction(organizationId);
+        TreeMap<YearMonth, List<ShiftBudgetAllocationEntity>> byKey = new TreeMap<>();
+        Set<Long> already = new LinkedHashSet<>();
         List<ShiftBudgetAllocationEntity> allocations =
                 allocationRepository.findLiveByOrgStartingOnOrBefore(organizationId, target.end());
         if (allocations.isEmpty()) {
-            return new CloseResult(0, 0, 0, 0);
+            return new Selection(byKey, already, closingDay);
         }
-        Function<YearMonth, Integer> closingDay = periodResolver.closingDayFunction(organizationId);
         Map<Long, Map<String, ShiftBudgetCloseEventState>> events = activeEventStates(allocations);
-
-        TreeMap<YearMonth, List<ShiftBudgetAllocationEntity>> byKey = new TreeMap<>();
-        int already = 0;
         for (ShiftBudgetAllocationEntity a : allocations) {
             YearMonth first = ShiftBudgetClosePeriodCalculator.periodKeyOf(a.getPeriodStart(), closingDay);
             YearMonth lastOfAllocation = ShiftBudgetClosePeriodCalculator.periodKeyOf(a.getPeriodEnd(), closingDay);
@@ -196,7 +273,7 @@ public class MonthlyShiftBudgetCloseCoordinator {
             // 結果の already に数える（CMP-260909-2152 Codex 検分3 P2-3。数えないと再実行が「締め済み」と判別できない）。
             // 追いつき対象の M より前の締め済み期間は数えない（再実行のたびに過去期間の数だけ膨らませない）。
             if (!first.isAfter(periodKey) && !lastOfAllocation.isBefore(periodKey) && isClosed(events, a, periodKey)) {
-                already++;
+                already.add(a.getId());
             }
             if (!catchUp) {
                 if (!first.isAfter(periodKey) && !lastOfAllocation.isBefore(periodKey)) {
@@ -209,35 +286,25 @@ public class MonthlyShiftBudgetCloseCoordinator {
                 addIfOpen(byKey, events, a, k);
             }
         }
+        return new Selection(byKey, already, closingDay);
+    }
 
-        int closed = 0;
-        int failed = 0;
-        int consumptions = 0;
-        Set<Long> interrupted = new HashSet<>();
-        for (Map.Entry<YearMonth, List<ShiftBudgetAllocationEntity>> entry : byKey.entrySet()) {
-            List<ShiftBudgetAllocationEntity> targets = continuing(entry.getValue(), interrupted);
-            if (targets.isEmpty()) {
-                continue;
-            }
-            ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), today);
-            for (ShiftBudgetAllocationEntity allocation : targets) {
-                AllocationResult r = closeOne(allocation, entry.getKey(), period);
-                markIfInterrupted(interrupted, allocation, r);
-                switch (r.kind()) {
-                    case CLOSED -> {
-                        closed++;
-                        consumptions += r.lines();
-                    }
-                    case ALREADY_CLOSED -> already++;
-                    case FAILED -> failed++;
-                    case SKIPPED -> {
-                    }
-                }
-            }
-        }
-        log.info("F08.7 期間締め完了: orgId={}, key={}, closed={}, alreadyClosed={}, failed={}, consumptions={}",
-                organizationId, periodKey, closed, already, failed, consumptions);
-        return new CloseResult(closed, already, failed, consumptions);
+    /**
+     * 選定に用いた締め日履歴で算出した期間キー key の境界が、確定した期間行と食い違うか（CMP-260909-2152 Codex 指摘）。
+     * 選定の後・確定の前に締め日変更が受理されると食い違う。確定した期間行は以後変わらない（締め日変更は確定済みの最大キーより後のみ）。
+     */
+    private static boolean boundaryChanged(YearMonth key, Function<YearMonth, Integer> closingDay,
+                                           ShiftBudgetClosePeriodResolver.ResolvedPeriod fixed) {
+        ShiftBudgetClosePeriodCalculator.ClosePeriod selected = ShiftBudgetClosePeriodCalculator.period(key, closingDay);
+        return !selected.start().equals(fixed.start()) || !selected.end().equals(fixed.end());
+    }
+
+    /** 確定した期間と1日以上重なる割当だけを残す（選び直しの上限に達したときの安全側の絞り込み）。 */
+    private static List<ShiftBudgetAllocationEntity> overlapping(List<ShiftBudgetAllocationEntity> allocations,
+                                                                 ShiftBudgetClosePeriodResolver.ResolvedPeriod period) {
+        return allocations.stream()
+                .filter(a -> !a.getPeriodStart().isAfter(period.end()) && !a.getPeriodEnd().isBefore(period.start()))
+                .toList();
     }
 
     /**
@@ -327,6 +394,18 @@ public class MonthlyShiftBudgetCloseCoordinator {
             }
             keys++;
             ShiftBudgetClosePeriodResolver.ResolvedPeriod period = ensureFixed(organizationId, entry.getKey(), yesterday);
+            if (boundaryChanged(entry.getKey(), closingDay, period)) {
+                // 選定の後に締め日変更が受理され、旧境界で選んだ割当が確定期間とずれた。確定期間と重なる割当だけを締め、
+                // 重ならない割当はこの実行では後続の期間へも進めない（翌日の実行が新しい境界で選び直す）
+                log.warn("F08.7 期間締め 日次バッチ: 選定後に境界が変わったため確定期間と重なる割当だけ締めます: orgId={}, key={}",
+                        organizationId, entry.getKey());
+                List<ShiftBudgetAllocationEntity> kept = overlapping(targets, period);
+                targets.stream().filter(a -> !kept.contains(a)).forEach(a -> interrupted.add(a.getId()));
+                targets = kept;
+                if (targets.isEmpty()) {
+                    continue;
+                }
+            }
             int keyClosed = 0;
             int keyFailed = 0;
             int keyConsumptions = 0;

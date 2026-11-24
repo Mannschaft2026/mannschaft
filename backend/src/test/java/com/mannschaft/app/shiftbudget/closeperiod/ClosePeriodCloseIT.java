@@ -237,6 +237,46 @@ class ClosePeriodCloseIT extends ClosePeriodTestBase {
     }
 
     @Test
+    @DisplayName("試練114c AC44 対象選定の後・期間確定の前に締め日変更（月末→15日）が割り込んだら、確定した期間で選び直し、期間と重ならない割当は締めない")
+    void 試練114c_選定後の締め日変更割り込みは確定期間で選び直す() throws Exception {
+        // 月末締めの 2026-05 を 5/31 に締める。選定（旧境界 5/1〜5/31）の後、確定の前に 2026-05 から15日締めへ変更が受理される
+        Long inside = allocation(d("2026-05-01"), d("2026-05-10"));
+        Long outside = allocation(d("2026-05-20"), d("2026-05-31"));
+        long[] si = worked(d("2026-05-05"), workerId);
+        long[] so = worked(d("2026-05-25"), workerId);
+        today(d("2026-05-31"));
+        java.util.concurrent.atomic.AtomicInteger interrupted = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(inv -> {
+            if (interrupted.getAndIncrement() == 0) {
+                setClosingDay(15, "2026-05");
+            }
+            return null;
+        }).when(hooks).beforeEnsureFixed(org.mockito.ArgumentMatchers.anyLong(), any());
+
+        JsonNode res = data(close("2026-05").andExpect(status().isOk()));
+
+        assertThat(interrupted.get()).as("割り込みフックが呼ばれた").isPositive();
+        assertThat(res.path("period_start").asText()).isEqualTo("2026-05-01");
+        assertThat(res.path("period_end").asText()).as("確定した新しい境界").isEqualTo("2026-05-15");
+        assertThat(res.path("closed_allocations").asInt()).as("確定期間と重なる割当だけを締める").isEqualTo(1);
+        List<Map<String, Object>> fixed = fixedPeriods(orgId);
+        assertThat(fixed).hasSize(1);
+        assertThat(fixed.get(0).get("period_end").toString()).isEqualTo("2026-05-15");
+
+        // 確定期間（5/1〜5/15）と重なる割当は締まる
+        assertThat(liveStatus(si[1], workerId)).isEqualTo("CONFIRMED");
+        List<Map<String, Object>> j = journals(inside);
+        assertThat(j).hasSize(1);
+        assertThat(j.get(0).get("transaction_date").toString()).isEqualTo("2026-05-10");
+        assertThat(closedEvents(inside)).hasSize(1);
+
+        // 確定期間と重ならない割当（新境界では 2026-06 に属する）には仕訳も締めイベントも作らない
+        assertThat(journals(outside)).as("0円仕訳を作らない").isEmpty();
+        assertThat(closeEvents(outside)).as("CLOSED イベントを作らない").isEmpty();
+        assertThat(liveStatus(so[1], workerId)).isEqualTo("PLANNED");
+    }
+
+    @Test
     @DisplayName("試練114a AC37 未来の期間キー（2026-12）も 409 SHIFT_BUDGET_036")
     void 試練114a_未来キー() throws Exception {
         allocation(d("2026-12-01"), d("2026-12-31"));
