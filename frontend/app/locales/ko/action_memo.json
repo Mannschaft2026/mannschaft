@@ -245,6 +245,10 @@
         "event_deleted": "메모를 삭제했습니다",
         "event_todo_reverted": "TODO를 되돌렸습니다"
       }
+    },
+    "published_post": {
+      "view_link": "게시한 글 보기",
+      "published_note": "게시됨 (나만 볼 수 있어요)"
     }
   }
 }
