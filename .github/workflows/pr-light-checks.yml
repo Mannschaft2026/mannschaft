@@ -93,6 +93,7 @@ jobs:
           scripts/task-list-structure-check.test.mjs
           scripts/task-list-pr-gate-workflow.test.mjs
           scripts/detect-changed-files.test.mjs
+          scripts/deploy-aws-check.test.mjs
           scripts/ci-merge-group-workflows.test.mjs
           scripts/ci-change-detection-steps.test.mjs
 
