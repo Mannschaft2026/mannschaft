@@ -315,9 +315,11 @@ class PendingInviteServiceTest {
         }
 
         @Test
-        @DisplayName("AC6: 閉じるは EXPIRED/REISSUE_REQUESTED→DISMISSED、それ以外は AUTH_085")
+        @DisplayName("AC6: 閉じるは EXPIRED/REISSUE_REQUESTED/REISSUE_DECLINED→DISMISSED、それ以外は AUTH_085")
         void dismiss() {
-            Set<PendingInviteStatus> from = Set.of(PendingInviteStatus.EXPIRED, PendingInviteStatus.REISSUE_REQUESTED);
+            // CMP-261107-1833 PR3: 見送られた依頼（REISSUE_DECLINED）の案内も閉じられる（DISMISSIBLE に追加）。
+            Set<PendingInviteStatus> from = Set.of(PendingInviteStatus.EXPIRED, PendingInviteStatus.REISSUE_REQUESTED,
+                    PendingInviteStatus.REISSUE_DECLINED);
             given(store.transition(USER_ID, from, PendingInviteStatus.DISMISSED)).willReturn(true, false);
             given(store.find(USER_ID)).willReturn(Optional.of(row(PendingInviteStatus.PENDING)));
 
