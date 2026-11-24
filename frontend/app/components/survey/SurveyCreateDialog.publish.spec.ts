@@ -12,6 +12,9 @@
  *  - `survey-create-error` … ダイアログ内に常設表示する検証・公開失敗の理由
  * 文言は既存キー `surveys.create.validation.questionsRequired` を使う前提。
  */
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, ref } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
@@ -48,7 +51,13 @@ mockNuxtImport('useFormDraft', () => () => ({
   savedFlash: ref(false),
 }))
 
-const QUESTIONS_REQUIRED = jaSurveys.surveys.create.validation.questionsRequired
+// i18n プラグインが import した JSON を AST 化するため、期待文言は raw 読みに変更（期待値は不変）
+const rawJaSurveys = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../locales/ja/surveys.json'), 'utf8'),
+) as Record<string, unknown>
+const QUESTIONS_REQUIRED = (
+  rawJaSurveys as { surveys: { create: { validation: { questionsRequired: string } } } }
+).surveys.create.validation.questionsRequired
 
 const createdSurvey: SurveyResponse = {
   id: 99,
