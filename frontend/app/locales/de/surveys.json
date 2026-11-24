@@ -59,7 +59,7 @@
       "draftHint": "Fragen können später hinzugefügt werden. Speichere zunächst nur mit einem Titel.",
       "successToast": "Umfrage erstellt",
       "draftSuccessToast": "Als Entwurf gespeichert. Fragen hinzufügen und veröffentlichen.",
-      "publishFailedAfterCreate": "Der Entwurf wurde erstellt, aber die Veröffentlichung ist fehlgeschlagen. Klicke erneut auf \"Veröffentlichen und erstellen\" oder veröffentliche ihn auf der Detailseite.",
+      "publishFailedAfterCreate": "Der Entwurf wurde erstellt, aber die Veröffentlichung ist fehlgeschlagen.",
       "failureToast": "Umfrage konnte nicht erstellt werden",
       "validation": {
         "titleRequired": "Bitte einen Titel eingeben",
@@ -92,13 +92,19 @@
       },
       "teamBreakdownEnabled": "Nach Team auswerten",
       "teamBreakdownHint": "Wertet die Antworten je untergeordnetem Team aus (nur Organisationsverteilung).",
-      "teamBreakdownAnonymousConflict": "Die Team-Aufschlüsselung ist bei anonymen Umfragen nicht verfügbar."
+      "teamBreakdownAnonymousConflict": "Die Team-Aufschlüsselung ist bei anonymen Umfragen nicht verfügbar.",
+      "lockedNote": "Der Entwurf wurde bereits erstellt. Klicke auf \"Veröffentlichung wiederholen\" oder schließe mit \"Als Entwurf schließen\" (der Entwurf bleibt erhalten und kann auf der Detailseite veröffentlicht werden). Die Eingaben können nicht mehr geändert werden.",
+      "closeAsDraft": "Als Entwurf schließen",
+      "retryPublish": "Veröffentlichung wiederholen"
     },
     "detail": {
       "scopeMissing": "Bereichsinformationen zur Umfrage fehlen",
       "scopeContext": {
         "label": "Umfrageziel",
-        "type": { "TEAM": "Zielteam", "ORGANIZATION": "Zielorganisation" },
+        "type": {
+          "TEAM": "Zielteam",
+          "ORGANIZATION": "Zielorganisation"
+        },
         "loading": "Name wird geladen…",
         "nameUnavailable": "Name nicht verfügbar",
         "management": {
@@ -160,7 +166,8 @@
         "title": "Befragte",
         "toggleShow": "Anzeigen",
         "toggleHide": "Ausblenden"
-      }
+      },
+      "addQuestionFailed": "Die Fragen konnten nicht gespeichert werden. Die Umfrage wurde nicht veröffentlicht."
     },
     "respondents": {
       "summary": "{responded} / {total} Mitglieder",

@@ -43,6 +43,7 @@ const { getSurvey, publishSurvey, closeSurvey, deleteSurvey, addQuestion } =
 const { getSurveyThread } = useSurveyBulletinThread()
 const { error: showError, success: showSuccess } = useNotification()
 const { confirmAction } = useConfirmDialog()
+const { resolveMessage } = useErrorHandler()
 const authStore = useAuthStore()
 const teamApi = useTeamApi()
 const organizationApi = useOrganizationApi()
@@ -91,18 +92,29 @@ const hasPublishableQuestions = computed(
   () => savedQuestions.value.length + draftQuestions.value.length > 0,
 )
 
+// 「公開する」（追加入力なし）は保存済み設問だけで判定する。追加入力だけの場合は「保存して公開」を使う。
+const hasSavedQuestions = computed(() => savedQuestions.value.length > 0)
+
+/** BE エラーコードがあればその理由、無ければ fallback の文言を返す */
+function failureReason(e: unknown, fallback: string): string {
+  const apiError = e as { data?: { error?: { code?: string; message?: string } } }
+  const code = apiError?.data?.error?.code
+  return code ? resolveMessage(code, apiError.data?.error?.message, 'surveyPublish') : fallback
+}
+
 /** DRAFTの設問を一括保存 → publish する */
 async function onSaveQuestionsAndPublish() {
   if (!survey.value) return
   draftQuestionsSubmitting.value = true
+  let stage: 'addQuestion' | 'publish' = 'addQuestion'
   try {
     // 設問を順次追加。FE ドメイン形のまま渡し、BE 形への翻訳（questionType の enum 値・
     // sortOrder → displayOrder）は useSurveyApi 側に集約している。
     // 追加入力した設問だけを送る。1件成功するごとに保存済み一覧へ移して入力側から除くため、
     // 途中や公開で失敗して再試行しても送信済みの設問は再送されない。
-    // sortOrder は保存済み設問の後ろに続く連番にする。
+    // sortOrder は保存済み設問の最大値の次から振る（欠番があっても衝突させない）。
     for (const q of [...draftQuestions.value]) {
-      const sortOrder = savedQuestions.value.length + 1
+      const sortOrder = Math.max(0, ...savedQuestions.value.map((sq) => sq.sortOrder)) + 1
       const options =
         q.questionType !== 'TEXT' && q.questionType !== 'DATE' && q.options?.length
           ? q.options.map((o) => ({ optionText: o.optionText.trim(), sortOrder: o.sortOrder }))
@@ -129,13 +141,20 @@ async function onSaveQuestionsAndPublish() {
       draftQuestions.value = draftQuestions.value.slice(1)
     }
     // 公開
+    stage = 'publish'
     await publishSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
     showSuccess(t('surveys.detail.publishSuccess'))
     draftQuestions.value = []
     await fetchDetail()
     sentQuestions.value = []
-  } catch {
-    showError(t('surveys.detail.publishFailed'))
+  } catch (e) {
+    // 設問の保存失敗と公開失敗を区別し、BE の理由があればそれを表示する
+    showError(
+      failureReason(
+        e,
+        t(stage === 'addQuestion' ? 'surveys.detail.addQuestionFailed' : 'surveys.detail.publishFailed'),
+      ),
+    )
   } finally {
     draftQuestionsSubmitting.value = false
   }
@@ -392,8 +411,8 @@ async function onPublish() {
     await publishSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
     showSuccess(t('surveys.detail.publishSuccess'))
     await fetchDetail()
-  } catch {
-    showError(t('surveys.detail.publishFailed'))
+  } catch (e) {
+    showError(failureReason(e, t('surveys.detail.publishFailed')))
   } finally {
     actionLoading.value = false
   }
@@ -620,7 +639,7 @@ onMounted(async () => {
               :severity="draftQuestions.length > 0 ? 'secondary' : 'primary'"
               :outlined="draftQuestions.length > 0"
               :loading="actionLoading || draftQuestionsSubmitting"
-              :disabled="!hasPublishableQuestions"
+              :disabled="!hasSavedQuestions"
               data-testid="survey-publish-button"
               class="min-h-11 min-w-11"
               @click="onPublish"

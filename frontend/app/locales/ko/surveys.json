@@ -59,7 +59,7 @@
       "draftHint": "문항은 나중에 추가할 수 있습니다. 지금은 제목만으로 저장할 수 있습니다.",
       "successToast": "설문을 작성했습니다",
       "draftSuccessToast": "초안으로 저장했습니다. 문항을 추가하고 게시하세요.",
-      "publishFailedAfterCreate": "초안은 만들어졌지만 게시에 실패했습니다. 다시 \"게시하고 만들기\"를 누르거나 설문 상세 화면에서 게시하세요.",
+      "publishFailedAfterCreate": "초안은 만들어졌지만 게시에 실패했습니다.",
       "failureToast": "설문 작성에 실패했습니다",
       "validation": {
         "titleRequired": "제목을 입력하세요",
@@ -92,13 +92,19 @@
       },
       "teamBreakdownEnabled": "팀별로 집계",
       "teamBreakdownHint": "하위 팀별로 응답 결과를 집계합니다(조직 배포만 해당).",
-      "teamBreakdownAnonymousConflict": "익명 설문에서는 팀별 집계를 사용할 수 없습니다."
+      "teamBreakdownAnonymousConflict": "익명 설문에서는 팀별 집계를 사용할 수 없습니다.",
+      "lockedNote": "초안은 이미 만들어졌습니다. \"게시 다시 시도\"를 누르거나 \"초안으로 닫기\"로 닫으세요(초안은 남아 있으며 상세 화면에서 게시할 수 있습니다). 입력 내용은 더 이상 수정할 수 없습니다.",
+      "closeAsDraft": "초안으로 닫기",
+      "retryPublish": "게시 다시 시도"
     },
     "detail": {
       "scopeMissing": "설문 범위 정보가 없습니다",
       "scopeContext": {
         "label": "설문 대상",
-        "type": { "TEAM": "대상 팀", "ORGANIZATION": "대상 조직" },
+        "type": {
+          "TEAM": "대상 팀",
+          "ORGANIZATION": "대상 조직"
+        },
         "loading": "이름 확인 중…",
         "nameUnavailable": "이름을 가져올 수 없습니다",
         "management": {
@@ -160,7 +166,8 @@
         "title": "응답자 목록",
         "toggleShow": "표시",
         "toggleHide": "숨기기"
-      }
+      },
+      "addQuestionFailed": "질문 저장에 실패했습니다. 게시는 이루어지지 않았습니다."
     },
     "respondents": {
       "summary": "{responded} / 총 {total}명",

@@ -59,7 +59,7 @@
       "draftHint": "You can add questions later. Save with just a title for now.",
       "successToast": "Survey created",
       "draftSuccessToast": "Saved as draft. Add questions and publish when ready.",
-      "publishFailedAfterCreate": "The draft was created, but publishing failed. Press \"Publish and create\" again, or publish it from the survey detail page.",
+      "publishFailedAfterCreate": "The draft was created, but publishing failed.",
       "failureToast": "Failed to create survey",
       "validation": {
         "titleRequired": "Please enter a title",
@@ -92,13 +92,19 @@
       },
       "teamBreakdownEnabled": "Aggregate by team",
       "teamBreakdownHint": "Aggregate responses per member team (organization distribution only).",
-      "teamBreakdownAnonymousConflict": "Team breakdown is not available for anonymous surveys."
+      "teamBreakdownAnonymousConflict": "Team breakdown is not available for anonymous surveys.",
+      "lockedNote": "The draft has already been created. Press \"Retry publish\", or close with \"Close as draft\" (the draft is kept and can be published from the detail page). The inputs can no longer be edited.",
+      "closeAsDraft": "Close as draft",
+      "retryPublish": "Retry publish"
     },
     "detail": {
       "scopeMissing": "Survey scope information is missing",
       "scopeContext": {
         "label": "Survey target",
-        "type": { "TEAM": "Target team", "ORGANIZATION": "Target organization" },
+        "type": {
+          "TEAM": "Target team",
+          "ORGANIZATION": "Target organization"
+        },
         "loading": "Loading name…",
         "nameUnavailable": "Name unavailable",
         "management": {
@@ -160,7 +166,8 @@
         "title": "Respondents",
         "toggleShow": "Show",
         "toggleHide": "Hide"
-      }
+      },
+      "addQuestionFailed": "Failed to save the questions. The survey was not published."
     },
     "respondents": {
       "summary": "{responded} / {total} members",

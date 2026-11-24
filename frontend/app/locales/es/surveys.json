@@ -59,7 +59,7 @@
       "draftHint": "Puedes añadir preguntas después. Guarda solo con el título por ahora.",
       "successToast": "Encuesta creada",
       "draftSuccessToast": "Guardado como borrador. Añade preguntas y publícala cuando estés listo.",
-      "publishFailedAfterCreate": "El borrador se creó, pero falló la publicación. Pulsa de nuevo \"Publicar y crear\" o publícalo desde el detalle de la encuesta.",
+      "publishFailedAfterCreate": "El borrador se creó, pero falló la publicación.",
       "failureToast": "No se pudo crear la encuesta",
       "validation": {
         "titleRequired": "Introduce un título",
@@ -92,13 +92,19 @@
       },
       "teamBreakdownEnabled": "Agrupar por equipo",
       "teamBreakdownHint": "Agrupa las respuestas por equipo subordinado (solo distribución de la organización).",
-      "teamBreakdownAnonymousConflict": "El desglose por equipo no esta disponible en encuestas anonimas."
+      "teamBreakdownAnonymousConflict": "El desglose por equipo no esta disponible en encuestas anonimas.",
+      "lockedNote": "El borrador ya está creado. Pulsa \"Reintentar publicación\" o cierra con \"Cerrar como borrador\" (el borrador se conserva y se puede publicar desde el detalle). Ya no se pueden editar los campos.",
+      "closeAsDraft": "Cerrar como borrador",
+      "retryPublish": "Reintentar publicación"
     },
     "detail": {
       "scopeMissing": "Falta la información de alcance de la encuesta",
       "scopeContext": {
         "label": "Destino de la encuesta",
-        "type": { "TEAM": "Equipo de destino", "ORGANIZATION": "Organización de destino" },
+        "type": {
+          "TEAM": "Equipo de destino",
+          "ORGANIZATION": "Organización de destino"
+        },
         "loading": "Cargando nombre…",
         "nameUnavailable": "Nombre no disponible",
         "management": {
@@ -160,7 +166,8 @@
         "title": "Encuestados",
         "toggleShow": "Mostrar",
         "toggleHide": "Ocultar"
-      }
+      },
+      "addQuestionFailed": "No se pudieron guardar las preguntas. La encuesta no se publicó."
     },
     "respondents": {
       "summary": "{responded} / {total} miembros",
