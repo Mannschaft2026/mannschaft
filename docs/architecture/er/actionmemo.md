@@ -74,8 +74,8 @@ erDiagram
 | `user_id` | `bigint unsigned` | NO | （なし） | 所有ユーザー（users.id への ID 参照・FKなし） |
 | `memo_date` | `date` | NO | （なし） | 公開した行動日 |
 | `timeline_post_id` | `bigint unsigned` | NO | （なし） | その日の個人（PERSONAL）投稿の timeline_posts.id（ID 参照・FKなし） |
-| `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
-| `updated_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
+| `created_at` | `datetime(6)` | NO | `CURRENT_TIMESTAMP(6)` （式） | 作成した瞬間（UTC） |
+| `updated_at` | `datetime(6)` | NO | `CURRENT_TIMESTAMP(6)` （式） | 最後に投稿IDを更新した瞬間（UTC） |
 
 ### `action_memo_tag_links`
 
