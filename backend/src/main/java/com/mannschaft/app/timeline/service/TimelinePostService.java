@@ -155,7 +155,7 @@ public class TimelinePostService {
     private final com.mannschaft.app.timeline.repository.UserMuteRepository muteRepository;
     /**
      * F06.4.1 努力由来の投稿への通常操作（返信・repost・引用・公開化・本文更新・削除・ピン留め）を 403 EFFORT_003 で
-     * 拒否する。既存の可視性判定で投稿が見える場合にだけ呼ぶ（見えない者には既存の応答を返し、存在を漏らさない）。
+     * 拒否する。既存の可視性・管理権限の判定の後に呼ぶ（見えない者には既存の応答を返し、存在を漏らさない）。
      */
     private final TimelineEffortOperationGuard effortOperationGuard;
 
@@ -735,8 +735,9 @@ public class TimelinePostService {
     @Transactional
     public PostResponse updatePost(Long postId, UpdatePostRequest req, Long userId) {
         TimelinePostEntity post = findPostOrThrow(postId);
-        rejectVisibleEffortSource(post, userId);
         postAccessGuard.checkCanEdit(userId, post);
+        // F06.4.1: 努力由来の投稿の本文更新は禁止（編集できる者にだけ返し、存在を漏らさない）
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         if (req.getContent() == null || req.getContent().isBlank()) {
             throw new BusinessException(TimelineErrorCode.EMPTY_POST_CONTENT);
@@ -771,8 +772,9 @@ public class TimelinePostService {
     @Transactional
     public void deletePost(Long postId, Long userId) {
         TimelinePostEntity post = findPostOrThrow(postId);
-        rejectVisibleEffortSource(post, userId);
         postAccessGuard.checkCanManage(userId, post);
+        // F06.4.1: 努力由来の投稿の通常の削除は禁止（取消 API へ誘導する。管理できる者にだけ返す）
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         // F13 Phase 4-γ: 削除前に添付ファイル情報を取得してクォータ減算に備える
         List<TimelinePostAttachmentEntity> attachments =
@@ -1528,8 +1530,9 @@ public class TimelinePostService {
     @Transactional
     public PostResponse togglePin(Long postId, boolean pinned, Long userId) {
         TimelinePostEntity post = findPostOrThrow(postId);
-        rejectVisibleEffortSource(post, userId);
         postAccessGuard.checkCanManage(userId, post);
+        // F06.4.1: 努力由来の投稿のピン留めは禁止（管理できる者にだけ返す）
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         post.setPinned(pinned);
         post = postRepository.save(post);
@@ -1561,16 +1564,6 @@ public class TimelinePostService {
     }
 
     // --- プライベートメソッド ---
-
-    /**
-     * F06.4.1: 呼び出し元から見える努力由来の投稿なら 403 EFFORT_003（本文更新・削除・ピン留めの入口で、
-     * 管理権限の判定より先に呼ぶ）。見えない投稿は判定せず、後続の既存ガードの応答に任せる（存在を漏らさない）。
-     */
-    private void rejectVisibleEffortSource(TimelinePostEntity post, Long userId) {
-        if (postVisibilityGuard.isVisible(post, userId)) {
-            effortOperationGuard.rejectIfEffortSource(post.getId());
-        }
-    }
 
     /**
      * 投稿を取得する。存在しない場合は例外をスローする。

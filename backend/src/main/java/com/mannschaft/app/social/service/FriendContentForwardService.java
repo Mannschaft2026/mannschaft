@@ -3,6 +3,7 @@ package com.mannschaft.app.social.service;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.effortrecord.EffortErrorCode;
 import com.mannschaft.app.social.SocialErrorCode;
 import com.mannschaft.app.social.dto.ForwardRequest;
 import com.mannschaft.app.social.dto.ForwardResponse;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * フレンドコンテンツ転送サービス（F01.5 Phase 1）。
@@ -102,8 +104,12 @@ public class FriendContentForwardService {
     public ForwardResponse forward(Long teamId, Long sourcePostId,
                                    ForwardRequest request, Long userId) {
         // 0. F06.4.1: 努力由来の投稿の転送は、権限・フレンド関係の判定より先に 403 EFFORT_003 で拒否する。
-        //    操作者から見える投稿に限って判定するため、見えない者には努力由来かどうかを漏らさない。
-        timelineFriendForwardPostService.rejectVisibleEffortSource(sourcePostId, userId);
+        //    投稿のチームに所属する（投稿が見えている）操作者に限って判定するため、見えない者には
+        //    努力由来かどうかを漏らさない（既存の 403 SOCIAL_105 / 404 SOCIAL_122 のまま）。
+        Optional<Long> effortTeamId = timelineFriendForwardPostService.findEffortSourceTeamId(sourcePostId);
+        if (effortTeamId.isPresent() && accessControlService.isMember(userId, effortTeamId.get(), SCOPE_TEAM)) {
+            throw new BusinessException(EffortErrorCode.EFFORT_003);
+        }
 
         // 1. 権限チェック
         requireManageFriendTeams(userId, teamId);
