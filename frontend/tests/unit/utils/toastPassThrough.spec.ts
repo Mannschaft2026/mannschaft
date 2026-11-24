@@ -4,7 +4,7 @@ import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
-import { defineComponent, h, nextTick } from 'vue'
+import { defineComponent, h, nextTick, onMounted } from 'vue'
 import { appToastPt } from '~/utils/toastPassThrough'
 
 /**
@@ -21,7 +21,9 @@ describe('appToastPt（Toast の閉じるボタン タップ領域）', () => {
     const Host = defineComponent({
       setup() {
         const toast = useToast()
-        toast.add({ severity: 'error', summary: 'エラー', detail: '失敗', life: 0 })
+        onMounted(() => {
+          toast.add({ severity: 'error', summary: 'エラー', detail: '失敗', life: 0 })
+        })
         return () => h(Toast, { pt: appToastPt })
       },
     })
