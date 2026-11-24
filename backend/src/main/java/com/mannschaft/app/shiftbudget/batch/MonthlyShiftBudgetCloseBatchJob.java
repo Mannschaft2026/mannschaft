@@ -7,10 +7,12 @@ import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.YearMonth;
 
 /**
@@ -41,6 +43,10 @@ public class MonthlyShiftBudgetCloseBatchJob {
 
     private final MonthlyShiftBudgetCloseService closeService;
 
+    /** 対象月（前月）を利用者の暦（JST）で決めるための壁時計（CMP-261021-0657）。 */
+    @Qualifier("wallClock")
+    private final Clock wallClock;
+
     /**
      * 毎月 1 日 02:00 JST に実行する。
      * <p>Phase 10-β: {@code closeAll} を使用。組織毎の失敗は failed_events に記録されつつ続行する。</p>
@@ -53,7 +59,7 @@ public class MonthlyShiftBudgetCloseBatchJob {
     @SchedulerLock(name = "MonthlyShiftBudgetCloseBatchJob",
             lockAtMostFor = "30m", lockAtLeastFor = "5m")
     public void run() {
-        YearMonth targetMonth = YearMonth.now().minusMonths(1);
+        YearMonth targetMonth = YearMonth.now(wallClock).minusMonths(1);
         log.info("F08.7 月次締め cron 起動: 対象月={}", targetMonth);
 
         MonthlyShiftBudgetCloseService.AllOrgsCloseResult result = closeService.closeAll(targetMonth);

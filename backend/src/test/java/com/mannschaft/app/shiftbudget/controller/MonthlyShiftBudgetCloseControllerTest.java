@@ -152,6 +152,23 @@ class MonthlyShiftBudgetCloseControllerTest {
     }
 
     @Test
+    @DisplayName("CMP-261021-0657 当月・未来月 → 409 (MONTH_NOT_ENDED, SHIFT_BUDGET_032)")
+    void close_月末未到来_409() throws Exception {
+        willThrow(new BusinessException(ShiftBudgetErrorCode.MONTH_NOT_ENDED))
+                .given(closeService).close(any(), any());
+
+        String body = objectMapper.writeValueAsString(java.util.Map.of(
+                "organization_id", ORG_ID,
+                "year_month", "2026-11"));
+
+        mockMvc.perform(post("/api/v1/shift-budget/monthly-close")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_032"));
+    }
+
+    @Test
     @DisplayName("organization_id が NULL → 400 (Bean Validation)")
     void close_organization_id必須_400() throws Exception {
         String body = "{\"year_month\":\"2026-06\"}";
