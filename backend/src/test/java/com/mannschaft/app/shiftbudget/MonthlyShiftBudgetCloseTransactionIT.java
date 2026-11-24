@@ -238,6 +238,28 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
                 .containsExactlyInAnyOrder("PLANNED", "PLANNED");
         assertThat(confirmedAmount(allocationId)).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(liveSummaryTransactionCount(allocationId)).isZero();
+        // 拒否は監査ログ記録（非同期）より前で起きるため、行が無いことをそのまま確かめてよい
+        assertThat(monthlyClosedAuditCount())
+                .as("拒否した締めの監査ログ SHIFT_BUDGET_MONTHLY_CLOSED が記録されてはならない")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("CMP-261021-0657 Gate 経由で前月の締めは成功する（Gate と Service のトランザクション境界が衝突しない）")
+    void Gate経由の前月締めは成功する() {
+        YearMonth previousMonth = YearMonth.now(wallClock).minusMonths(1);
+        Long allocationId = seedAllocationWithPlannedConsumptions(previousMonth, TOTAL);
+
+        MonthlyShiftBudgetCloseService.CloseResult result = closeGate.close(orgId, previousMonth);
+
+        assertThat(result.closedAllocations())
+                .as("Gate に @Transactional が付くと Service の Propagation.NEVER と衝突して失敗する")
+                .isEqualTo(1);
+        assertThat(result.closedConsumptions()).isEqualTo(2);
+        assertThat(confirmedAmount(allocationId)).isEqualByComparingTo(TOTAL);
+        assertThat(consumptionStatuses(allocationId))
+                .containsExactlyInAnyOrder("CONFIRMED", "CONFIRMED");
+        assertThat(liveSummaryTransactionCount(allocationId)).isEqualTo(1);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -601,6 +623,14 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
         return jdbcTemplate.queryForList(
                 "SELECT status FROM shift_budget_consumptions WHERE allocation_id = ? AND deleted_at IS NULL",
                 String.class, allocationId);
+    }
+
+    /** この組織の月次締め監査ログ（SHIFT_BUDGET_MONTHLY_CLOSED）の件数。 */
+    private int monthlyClosedAuditCount() {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE event_type = ? AND organization_id = ?",
+                Integer.class, "SHIFT_BUDGET_MONTHLY_CLOSED", orgId);
+        return n == null ? 0 : n;
     }
 
     /** 生存している（論理削除されていない）月次仕訳の件数。締めの重複判定が見るのはこちら。 */

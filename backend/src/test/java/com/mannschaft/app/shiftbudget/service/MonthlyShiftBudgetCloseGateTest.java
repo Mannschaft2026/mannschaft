@@ -188,6 +188,7 @@ class MonthlyShiftBudgetCloseGateTest {
         verify(budgetTransactionRepository, never()).save(any());
         verify(allocationRepository, never()).incrementConfirmedAmount(anyLong(), any());
         verify(consumptionRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

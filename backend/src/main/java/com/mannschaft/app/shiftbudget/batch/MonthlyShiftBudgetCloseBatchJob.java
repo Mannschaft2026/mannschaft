@@ -24,13 +24,16 @@ import java.time.YearMonth;
  * 起動制御は {@code feature.shift-budget.monthly-close-cron-enabled} で切替可能。
  * デフォルトは false（手動 API #11 でのみ動かす運用が安全）。</p>
  *
- * <p>Phase 10-β: {@link MonthlyShiftBudgetCloseService#closeAll} 経由に変更。
+ * <p>CMP-261021-0657: 入口 {@link MonthlyShiftBudgetCloseGate} を経由する。対象月は
+ * {@link MonthlyShiftBudgetCloseGate#previousMonth()}（壁時計 JST 基準の前月）で決め、
+ * {@link MonthlyShiftBudgetCloseGate#closeAll} が「月末を過ぎた月か」を組織ループ前に 1 回判定してから
+ * {@link MonthlyShiftBudgetCloseService#closeAll} へ委ねる（Phase 10-β の組織単位処理:
  * 1 組織の失敗が他組織を止めない + 失敗イベントを {@code shift_budget_failed_events} に記録 +
- * 運用者は管理 API / API #11 で個別再実行できる。</p>
+ * 運用者は管理 API / API #11 で個別再実行できる）。</p>
  *
  * <p>ShedLock により複数インスタンス環境でも 1 回だけ実行されることを保証する。
  * フィーチャーフラグ ({@code feature.shift-budget.enabled} の三値論理) は
- * {@link MonthlyShiftBudgetCloseService#closeFromBatch} 内で組織単位に再判定する
+ * Gate から委ねた先の {@link MonthlyShiftBudgetCloseService#closeFromBatch} 内で組織単位に再判定する
  * （バッチ全体で OFF でも、一部組織のみ ON のケースに対応する設計）。</p>
  */
 @Slf4j

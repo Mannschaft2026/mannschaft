@@ -23,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>「月末を過ぎていない月（当月・未来月）は締めない」判定は Gate が壁時計（JST）で行う。
  * {@link MonthlyShiftBudgetCloseService} のコンストラクタ署名は ArchUnit 凍結ストアのキーに含まれ、
  * 壁時計を注入できないため、Service 内部の共通経路で判定する多重防御の代わりに、
- * 締め処理（{@code close} / {@code closeAll} / {@code closeFromBatch}）を Gate 以外の本番クラスから
+ * 締め処理（{@code close} / {@code closeAll} / {@code closeFromBatch}、および allocation 単位で締める public の
+ * {@code closeOneAllocation}）を Gate 以外の本番クラスから
  * 直接呼ぶことを本番人で禁止する（新しい入口が判定を素通りするのを防ぐ）。</p>
  */
 @DisplayName("月次締めの入口は MonthlyShiftBudgetCloseGate に限る番人（CMP-261021-0657・凍結なし）")
@@ -32,7 +33,7 @@ class MonthlyShiftBudgetCloseGateGuardArchTest {
 
     private static final String SERVICE = MonthlyShiftBudgetCloseService.class.getName();
     private static final String GATE = MonthlyShiftBudgetCloseGate.class.getName();
-    private static final Set<String> CLOSE_METHODS = Set.of("close", "closeAll", "closeFromBatch");
+    private static final Set<String> CLOSE_METHODS = Set.of("close", "closeAll", "closeFromBatch", "closeOneAllocation");
 
     @Test
     @DisplayName("Gate 以外の本番クラスは MonthlyShiftBudgetCloseService の締め処理を直接呼ばない")
@@ -40,6 +41,7 @@ class MonthlyShiftBudgetCloseGateGuardArchTest {
         List<String> violations = new ArrayList<>();
         for (JavaClass clazz : ProductionClasses.get()) {
             String origin = clazz.getName();
+            // Service 自身（self() プロキシ経由の closeOneAllocation 等）と Gate は除外する
             if (origin.equals(SERVICE) || origin.equals(GATE)) {
                 continue;
             }
