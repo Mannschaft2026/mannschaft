@@ -1,35 +1,65 @@
 package com.mannschaft.app.config;
 
 import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
-import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import javax.sql.DataSource;
 import java.util.TimeZone;
 
 /**
- * JVM のデフォルトタイムゾーンを業務ローカル時刻の基準ゾーンに設定する（.claudecode.md §20）。
+ * JVM 既定タイムゾーンが {@link UserZoneLocalDateTimeParser#SERVER_ZONE} であることを
+ * DataSource の生成時点で検証する番人（.claudecode.md §20 / CMP-261123-1335）。
  *
- * <p>基準ゾーンは {@link UserZoneLocalDateTimeParser#SERVER_ZONE}（＝アプリ層の壁時計ゾーン）を
- * <b>唯一の正</b>として参照する。これにより</p>
- * <ul>
- *   <li>JVM 既定ゾーン（本クラス）</li>
- *   <li>壁時計 Clock（{@code ClockConfig#wallClock}）</li>
- *   <li>API 入力のパーサ（{@link UserZoneLocalDateTimeParser}）</li>
- * </ul>
- * <p>の三者が同一のソースを見る。片方だけ変わって判定が 9 時間ずれる事故が構造的に起こらない。</p>
+ * <p>既定 TZ の<b>設定</b>は {@link ServerTimeZoneEnvironmentPostProcessor} が Bean 生成より前に行う。
+ * 本クラスは設定が行われなかった・後から書き換えられた場合に、食い違ったまま DB 接続プールが作られて
+ * DATE 列が前日で保存される事故を、静かに進めず<b>起動失敗</b>として止める。</p>
  *
- * <p><b>なぜ環境変数で可変にしないのか:</b> ゾーンを実行時に差し替えられる「つまみ」にしても、
- * DB に既に書かれている {@code LocalDateTime} 列は旧ゾーンの壁時計のままであり、
- * 変更した瞬間に既存データの解釈が壊れる。ゾーンの多様化（テナント別 TZ）は
- * 格納形式・入力変換・判定基準を一体で設計し直す必要があり、
- * <b>CMP-023「時刻設計の全域是正＋テナント TZ 導入」</b>が受け皿である。
- * 中途半端に設定可能に見せることは「変えると壊れる嘘のつまみ」であり、ここでは行わない。</p>
+ * <p>番人は型 {@link DataSource} の全 Bean が対象。自動構成の単一 DataSource に加え、
+ * {@link DataSourceConfig}（primary / replica / routing）と {@link ArchiveDataSourceConfig} を
+ * 有効化した場合も同じ順序保証が効く。</p>
+ *
+ * <p><b>この番人の限界:</b> 検査するのは「DataSource Bean の生成時点の既定 TZ」だけである。
+ * 「最初の接続より前」を保証しているのは {@link ServerTimeZoneEnvironmentPostProcessor} であり、
+ * 番人は補助にすぎない。DataSource 生成後に誰かが {@code TimeZone.setDefault} を呼ぶ場合や、
+ * 番人の登録より前に DataSource が早期生成される場合は素通りする。最終防衛は接続設定
+ * {@code cacheDefaultTimeZone=false}（防波堤の PR。接続が既定 TZ を固定しない）である。</p>
+ *
+ * <p><b>本番構成での素通り:</b> {@link ShedLockConfig} の {@code LockProvider(DataSource)} や Advisor 基盤が
+ * BeanPostProcessor の登録中に primary DataSource を先に生成する可能性があり、その場合、番人は primary を
+ * 検査しない（本番相当の全コンテキストでの検査実績は無い。検査対象になることを確かめたのは、最小構成の
+ * {@code ServerTimeZoneBootstrapTest} まで）。ただし既定 TZ の<b>設定本体</b>は Environment 準備段階の
+ * EnvironmentPostProcessor であり、Bean 生成より前なのでデータの安全には影響しない。番人は設定漏れを
+ * 検出するための補助である。</p>
+ *
+ * <p>基準ゾーンを環境変数で可変にしない理由は従来どおり（DB の既存 LocalDateTime 列の解釈が壊れる。
+ * 受け皿は CMP-023）。</p>
  */
 @Configuration
 public class TimeZoneConfig {
 
-    @PostConstruct
-    public void initTimeZone() {
-        TimeZone.setDefault(TimeZone.getTimeZone(UserZoneLocalDateTimeParser.SERVER_ZONE));
+    @Bean
+    static BeanPostProcessor dataSourceTimeZoneGuard() {
+        return new DataSourceTimeZoneGuard();
+    }
+
+    /** DataSource Bean の初期化前に JVM 既定 TZ を検査する。 */
+    static class DataSourceTimeZoneGuard implements BeanPostProcessor {
+        @Override
+        public Object postProcessBeforeInitialization(Object bean, String beanName) {
+            if (bean instanceof DataSource) {
+                var actual = TimeZone.getDefault().toZoneId();
+                if (!actual.equals(UserZoneLocalDateTimeParser.SERVER_ZONE)) {
+                    throw new IllegalStateException(
+                            "DataSource '" + beanName + "' の生成時点で JVM 既定タイムゾーン(" + actual
+                                    + ")が SERVER_ZONE(" + UserZoneLocalDateTimeParser.SERVER_ZONE
+                                    + ")と一致しない。接続が誤ったゾーンで固定され DATE 列が日ずれするため起動を中止する。"
+                                    + "ServerTimeZoneEnvironmentPostProcessor（META-INF/spring.factories）が"
+                                    + "実行されていること、DataSource 生成前に TimeZone.setDefault を呼ばないことを確認すること。");
+                }
+            }
+            return bean;
+        }
     }
 }

@@ -53,7 +53,7 @@ public class ClockConfig {
      * <p>そこで基準ゾーンを {@link UserZoneLocalDateTimeParser#SERVER_ZONE}
      * （アプリ層の壁時計ゾーンの<b>唯一の正</b>）から組み立てる。{@code ZoneId.systemDefault()} を
      * 呼ばないため暗黙のゾーン依存が無く（番人 {@code DateTimeAndZoneGuardTest} / CMP-023）、
-     * {@code TimeZoneConfig}（JVM 既定ゾーン）・本 Bean（壁時計 Clock）・
+     * {@code ServerTimeZoneEnvironmentPostProcessor}（JVM 既定ゾーン）・本 Bean（壁時計 Clock）・
      * {@link UserZoneLocalDateTimeParser}（API 入力のパーサ）の三者が同一のソースを見るため、
      * 食い違いは構造的に起こらない。</p>
      *

@@ -40,7 +40,7 @@ class JacksonConfigTest {
 
     @BeforeEach
     void setUp() {
-        // JVM デフォルト TZ を Asia/Tokyo に固定（TimeZoneConfig と同じ）
+        // JVM デフォルト TZ を Asia/Tokyo に固定（ServerTimeZoneEnvironmentPostProcessor と同じ）
         originalTimeZone = TimeZone.getDefault();
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Tokyo"));
 

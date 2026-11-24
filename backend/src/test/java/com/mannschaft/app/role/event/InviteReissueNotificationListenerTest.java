@@ -1,6 +1,7 @@
 package com.mannschaft.app.role.event;
 
 import com.mannschaft.app.auth.event.InviteReissueRequestedEvent;
+import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.notification.NotificationScopeType;
 import com.mannschaft.app.notification.NotificationType;
@@ -9,9 +10,11 @@ import com.mannschaft.app.role.service.InviteReissueRecipientResolver;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.MessageSource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,16 +23,17 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 /**
@@ -46,20 +50,21 @@ class InviteReissueNotificationListenerTest {
 
     @Mock private NotificationHelper notificationHelper;
     @Mock private InviteReissueRecipientResolver resolver;
+    @Mock private NameResolverService nameResolverService;
+    @Mock private MessageSource messageSource;
 
     @InjectMocks private InviteReissueNotificationListener listener;
 
     @Test
-    @DisplayName("AC9: チームの招待権限者全員にだけ INVITE_REISSUE_REQUESTED を通知する（要請者は actor、actionUrl は招待管理画面）")
+    @DisplayName("AC9: チームの招待権限者全員にだけ INVITE_REISSUE_REQUESTED を通知する（要請者は actor、actionUrl は対象チームの招待管理画面）")
     void notifiesInvitersOfTeam() {
         given(resolver.findInviterUserIds("TEAM", 70L)).willReturn(List.of(11L, 12L));
+        given(resolver.findInviteManagementPath("TEAM", 70L)).willReturn(Optional.of("/teams/aoba/invites"));
 
         listener.onInviteReissueRequested(new InviteReissueRequestedEvent(700L, "TEAM", 70L));
 
-        for (Long inviter : List.of(11L, 12L)) {
-            verify(notificationHelper).notify(eq(inviter), eq(TYPE), anyString(), anyString(), anyString(), any(),
-                    eq(NotificationScopeType.TEAM), eq(70L), anyString(), eq(700L));
-        }
+        verify(notificationHelper).notifyAllLocalized(eq(List.of(11L, 12L)), eq(TYPE), eq("USER"), isNull(),
+                eq(NotificationScopeType.TEAM), eq(70L), eq("/teams/aoba/invites"), eq(700L), any());
         verifyNoMoreInteractions(notificationHelper);
     }
 
@@ -67,12 +72,39 @@ class InviteReissueNotificationListenerTest {
     @DisplayName("AC9: 組織の招待権限者へは ORGANIZATION スコープで通知する")
     void notifiesInvitersOfOrganization() {
         given(resolver.findInviterUserIds("ORGANIZATION", 80L)).willReturn(List.of(21L));
+        given(resolver.findInviteManagementPath("ORGANIZATION", 80L)).willReturn(Optional.of("/organizations/x/invites"));
 
         listener.onInviteReissueRequested(new InviteReissueRequestedEvent(700L, "ORGANIZATION", 80L));
 
-        verify(notificationHelper).notify(eq(21L), eq(TYPE), anyString(), anyString(), anyString(), any(),
-                eq(NotificationScopeType.ORGANIZATION), eq(80L), anyString(), eq(700L));
-        verifyNoMoreInteractions(notificationHelper);
+        verify(notificationHelper).notifyAllLocalized(eq(List.of(21L)), eq(TYPE), eq("USER"), isNull(),
+                eq(NotificationScopeType.ORGANIZATION), eq(80L), eq("/organizations/x/invites"), eq(700L), any());
+    }
+
+    @Test
+    @DisplayName("A-2: 本文に要請者の表示名と招待先の名前が入り、メールアドレスは入らない（受信者の言語で組み立てる）")
+    void bodyCarriesRequesterNameAndScopeName() {
+        given(resolver.findInviterUserIds("TEAM", 70L)).willReturn(List.of(11L));
+        given(resolver.findInviteManagementPath("TEAM", 70L)).willReturn(Optional.of("/teams/aoba/invites"));
+        given(nameResolverService.resolveUserDisplayName(700L)).willReturn("高橋");
+        given(nameResolverService.resolveScopeName("TEAM", 70L)).willReturn("青葉野球部");
+        given(messageSource.getMessage(eq("notification.inviteReissueRequested.title"), any(), eq(Locale.GERMAN)))
+                .willReturn("T");
+        given(messageSource.getMessage(eq("notification.inviteReissueRequested.body"), any(), eq(Locale.GERMAN)))
+                .willReturn("B");
+
+        listener.onInviteReissueRequested(new InviteReissueRequestedEvent(700L, "TEAM", 70L));
+
+        ArgumentCaptor<NotificationHelper.LocalizedMessageBuilder> captor =
+                ArgumentCaptor.forClass(NotificationHelper.LocalizedMessageBuilder.class);
+        verify(notificationHelper).notifyAllLocalized(any(), eq(TYPE), any(), any(), any(), any(), any(), any(),
+                captor.capture());
+        NotificationHelper.LocalizedMessage message = captor.getValue().build(11L, Locale.GERMAN);
+        assertThat(message.title()).isEqualTo("T");
+        assertThat(message.body()).isEqualTo("B");
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(messageSource).getMessage(eq("notification.inviteReissueRequested.body"), args.capture(),
+                eq(Locale.GERMAN));
+        assertThat(args.getValue()).containsExactly("高橋", "青葉野球部");
     }
 
     @Test
@@ -82,8 +114,7 @@ class InviteReissueNotificationListenerTest {
 
         listener.onInviteReissueRequested(new InviteReissueRequestedEvent(700L, "TEAM", 70L));
 
-        verify(notificationHelper, never()).notify(anyLong(), anyString(), anyString(), anyString(), anyString(), any(),
-                any(NotificationScopeType.class), anyLong(), any(), any());
+        verifyNoInteractions(notificationHelper);
     }
 
     @Test
