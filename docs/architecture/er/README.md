@@ -150,6 +150,6 @@ Docker が必要です。CI（`er-diagram-drift-check`）は migration・Entity�
 | [_unmapped](_unmapped.md) | 10 | 5 |
 
 - ドメイン数（`_unmapped` を除く）: 114
-- テーブル合計: 840（`flyway_schema_history` を除く）
+- テーブル合計: 841（`flyway_schema_history` を除く）
 - ビュー合計: 5
 - Entity 未紐付け（`_unmapped.md`）: テーブル 10 件 / ビュー 5 件

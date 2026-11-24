@@ -24,7 +24,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * <b>action_memo_daily_posts 作成 migration（V266）の既存データ backfill の番人テスト（CMP-261123-1201）。</b>
+ * <b>action_memo_daily_posts 作成 migration（V267）の既存データ backfill の番人テスト（CMP-261123-1201）。</b>
  *
  * <p>backfill は「投稿が生存・本人の PERSONAL 投稿・本文の日付見出しがメモの memo_date と一致」を満たす
  * (user_id, memo_date) だけを入れる。別の日へ移されたメモ（旧実装は日付変更後も投稿 ID を保持していた）の
@@ -32,15 +32,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 複数候補は最大の投稿 ID を採ることを検証する。</p>
  *
  * <p>方針は既存の {@code FlywayExistingData*MigrationTest} に倣い、Spring を起動せず Testcontainers の実 MySQL 8.0 に
- * Flyway を直接実行する。V266 直前（{@value #PRE_TARGET}）まで適用 → 既存行をシード → 残りを適用して検証する。</p>
+ * Flyway を直接実行する。V267 直前（{@value #PRE_TARGET}）まで適用 → 既存行をシード → 残りを適用して検証する。</p>
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @EnabledIf("com.mannschaft.app.actionmemo.migration.FlywayExistingDataActionMemoDailyPostsMigrationTest#isDockerAvailable")
-@DisplayName("Flyway 既存データ action_memo_daily_posts backfill（V266）番人テスト")
+@DisplayName("Flyway 既存データ action_memo_daily_posts backfill（V267）番人テスト")
 class FlywayExistingDataActionMemoDailyPostsMigrationTest {
 
-    /** V266 の直前バージョン（origin/main 全体最大）。 */
-    private static final String PRE_TARGET = "265.20261122105552";
+    /** V267 の直前バージョン（origin/main 全体最大）。 */
+    private static final String PRE_TARGET = "266.20261122100130";
 
     @SuppressWarnings("resource")
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
@@ -82,7 +82,7 @@ class FlywayExistingDataActionMemoDailyPostsMigrationTest {
                 .target(MigrationVersion.fromVersion(PRE_TARGET))
                 .load()
                 .migrate();
-        assertThat(pre.success).as("V266 直前までの適用が成功すること").isTrue();
+        assertThat(pre.success).as("V267 直前までの適用が成功すること").isTrue();
 
         final long userId;
         final long otherUserId;
@@ -95,7 +95,7 @@ class FlywayExistingDataActionMemoDailyPostsMigrationTest {
         final long multiHigh;
         final long deletedMemoOnlyPost;
         try (Connection c = conn()) {
-            assertThat(tableExists(c, "action_memo_daily_posts")).as("V266 直前には表は無い").isFalse();
+            assertThat(tableExists(c, "action_memo_daily_posts")).as("V267 直前には表は無い").isFalse();
 
             userId = insertUser(c, "daily-post-user@example.com");
             otherUserId = insertUser(c, "daily-post-other@example.com");
@@ -141,7 +141,7 @@ class FlywayExistingDataActionMemoDailyPostsMigrationTest {
                 .outOfOrder(false)
                 .load()
                 .migrate();
-        assertThat(rest.success).as("V266 を含む残りの migration が成功すること").isTrue();
+        assertThat(rest.success).as("V267 を含む残りの migration が成功すること").isTrue();
 
         try (Connection c = conn()) {
             Map<String, Long> rows = dailyPosts(c, userId);
