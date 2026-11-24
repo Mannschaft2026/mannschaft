@@ -163,6 +163,23 @@ class BlogPostSlugUniquenessIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
+    @DisplayName("更新で自分自身の slug を大文字小文字だけ変えるのは成功し、別記事の slug の大文字違いは 409")
+    void 更新で大文字小文字だけ変えるのは自分自身として扱う() throws Exception {
+        create(teamBody(teamAId, "t1", "taken-case"));
+        long id = create(teamBody(teamAId, "t2", "case-slug")).path("id").asLong();
+
+        // DB の照合順序は大文字小文字を区別しないため、文字列比較で自分を除くと自分自身に一致して 409 になっていた
+        MvcResult ok = mockMvc.perform(put(POSTS + "/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateBody("t2", "CASE-SLUG"))))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(objectMapper.readTree(ok.getResponse().getContentAsString())
+                .path("data").path("content").path("slug").asText()).isEqualTo("CASE-SLUG");
+        mockMvc.perform(put(POSTS + "/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateBody("t2", "TAKEN-CASE"))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     @DisplayName("複製を繰り返しても slug は一意")
     void 複製を繰り返しても一意() throws Exception {
         long id = create(teamBody(teamAId, JP_TITLE, null)).path("id").asLong();

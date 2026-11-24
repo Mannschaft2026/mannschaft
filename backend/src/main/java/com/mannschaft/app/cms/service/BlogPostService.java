@@ -48,6 +48,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -301,8 +302,13 @@ public class BlogPostService {
 
     /**
      * 記事を作成する。
+     *
+     * <p>slug の同時作成競合（事前確認後に別リクエストが同じ slug を確定させた一意制約違反）は、
+     * 自動採番なら {@link BlogSlugConflictRetryAspect} がトランザクションの外側から採番し直し、
+     * 明示指定なら 409（CMS_005）にする。</p>
      */
     @Transactional
+    @RetryOnAutoSlugConflict
     public BlogPostResponse createPost(Long userId, CreateBlogPostRequest request) {
         PostType postType = request.getPostType() != null
                 ? EnumInputParser.parse(PostType.class, request.getPostType(), "postType") : PostType.BLOG;
@@ -327,7 +333,7 @@ public class BlogPostService {
 
         // slug 決定: 明示指定は重複なら 409（CMS_005）、自動生成は同一スコープで一意になるまで連番を付与する
         String slug = request.getSlug() != null
-                ? requireUniqueSlug(resolvedTeamId, resolvedOrgId, slugUserId, request.getSlug())
+                ? requireUniqueSlug(resolvedTeamId, resolvedOrgId, slugUserId, request.getSlug(), null)
                 : uniqueSlug(resolvedTeamId, resolvedOrgId, slugUserId, generateSlug(request.getTitle()));
 
         // F19.1 Phase 2: チーム/組織が REAL_NAME モードの場合に投稿者本名スナップショットを取得する（§4.7 非対称切替ルール対応）
@@ -363,7 +369,7 @@ public class BlogPostService {
                 .authorRealNameSnapshot(authorRealNameSnapshot)
                 .build();
 
-        BlogPostEntity saved = postRepository.save(entity);
+        BlogPostEntity saved = saveAndFlushSlug(entity, request.getSlug() == null);
 
         mediaAclService.bindBodyMedia(saved, userId);
 
@@ -379,7 +385,7 @@ public class BlogPostService {
     }
 
     /**
-     * 記事を更新する。
+     * 記事を更新する。slug は明示指定のみなので、同時更新の一意制約違反は 409（CMS_005）。
      */
     @Transactional
     public BlogPostResponse updatePost(Long id, Long userId, UpdateBlogPostRequest request) {
@@ -390,9 +396,11 @@ public class BlogPostService {
                 ? EnumInputParser.parse(Visibility.class, request.getVisibility(), "visibility") : entity.getVisibility();
         PostPriority priority = request.getPriority() != null
                 ? EnumInputParser.parse(PostPriority.class, request.getPriority(), "priority") : entity.getPriority();
-        String slug = request.getSlug() != null && !request.getSlug().equals(entity.getSlug())
+        // 自分自身は除外して判定する。DB 照合順序は大文字小文字を区別しないため、文字列比較で自分を除くと
+        // "abc" → "ABC" の変更が自分自身に一致して 409 になる。
+        String slug = request.getSlug() != null
                 ? requireUniqueSlug(entity.getTeamId(), entity.getOrganizationId(), entity.getUserId(),
-                        request.getSlug())
+                        request.getSlug(), entity.getId())
                 : entity.getSlug();
         short readingTime = calculateReadingTime(request.getBody());
 
@@ -412,7 +420,7 @@ public class BlogPostService {
             }
         }
 
-        BlogPostEntity saved = postRepository.save(entity);
+        BlogPostEntity saved = saveAndFlushSlug(entity, false);
         log.info("記事更新: postId={}", id);
         mediaAclService.bindBodyMedia(saved, userId);
         return cmsMapper.toBlogPostResponse(saved);
@@ -450,9 +458,10 @@ public class BlogPostService {
     }
 
     /**
-     * 記事を複製する。
+     * 記事を複製する。slug は自動採番なので、同時作成の競合は {@link #createPost} と同じく採番し直す。
      */
     @Transactional
+    @RetryOnAutoSlugConflict
     public BlogPostResponse duplicatePost(Long id, Long userId) {
         BlogPostEntity original = findPostOrThrow(id);
         checkWriteAccess(original, userId);
@@ -476,7 +485,7 @@ public class BlogPostService {
                 .seriesId(original.getSeriesId())
                 .build();
 
-        BlogPostEntity saved = postRepository.save(copy);
+        BlogPostEntity saved = saveAndFlushSlug(copy, true);
         mediaCopyService.copyMedia(original, saved, userId);
 
         // タグのコピー
@@ -909,24 +918,59 @@ public class BlogPostService {
         return (short) Math.max(1, minutes);
     }
 
-    /** 同一スコープ（チーム・組織・個人）に生存中の同 slug があるか。論理削除済みは数えない。 */
-    private boolean slugExists(Long teamId, Long organizationId, Long userId, String slug) {
+    /**
+     * slug を確定させる INSERT/UPDATE を即時に flush し、slug 一意制約違反をこの場で判定する。
+     *
+     * <p>違反した永続化コンテキストとトランザクションはロールバック専用になるため、ここでは再試行しない。
+     * 自動採番なら {@link BlogSlugAutoConflictException} を投げ、{@link BlogSlugConflictRetryAspect} が
+     * トランザクションの外側で採番からやり直す。明示指定なら 409（CMS_005）。slug 以外の制約違反はそのまま投げる。</p>
+     */
+    private BlogPostEntity saveAndFlushSlug(BlogPostEntity entity, boolean autoSlug) {
+        try {
+            return postRepository.saveAndFlush(entity);
+        } catch (DataIntegrityViolationException e) {
+            if (!BlogSlugAutoConflictException.isSlugUniqueViolation(e)) {
+                throw e;
+            }
+            throw autoSlug
+                    ? new BlogSlugAutoConflictException(e)
+                    : new BusinessException(CmsErrorCode.DUPLICATE_SLUG, e);
+        }
+    }
+
+    /**
+     * 同一スコープ（チーム・組織・個人）に生存中の同 slug があるか。論理削除済みは数えない。
+     * 照合は DB の照合順序に従う（大文字小文字を区別しない＝一意制約と同じ基準）。
+     *
+     * @param excludeId 判定から除く記事 ID（更新時の自分自身）。作成時は {@code null}
+     */
+    private boolean slugExists(Long teamId, Long organizationId, Long userId, String slug, Long excludeId) {
         if (teamId != null) {
-            return postRepository.existsByTeamIdAndSlug(teamId, slug);
+            return excludeId == null
+                    ? postRepository.existsByTeamIdAndSlug(teamId, slug)
+                    : postRepository.existsByTeamIdAndSlugAndIdNot(teamId, slug, excludeId);
         }
         if (organizationId != null) {
-            return postRepository.existsByOrganizationIdAndSlug(organizationId, slug);
+            return excludeId == null
+                    ? postRepository.existsByOrganizationIdAndSlug(organizationId, slug)
+                    : postRepository.existsByOrganizationIdAndSlugAndIdNot(organizationId, slug, excludeId);
         }
         // 個人スコープ。userId が null のときに user_id IS NULL（チーム・組織記事）へ一致させない
-        return userId != null && postRepository.existsByUserIdAndSlug(userId, slug);
+        if (userId == null) {
+            return false;
+        }
+        return excludeId == null
+                ? postRepository.existsByUserIdAndSlug(userId, slug)
+                : postRepository.existsByUserIdAndSlugAndIdNot(userId, slug, excludeId);
     }
 
     /**
      * 明示指定された slug が同一スコープで未使用であることを確認する。使用済みなら 409（CMS_005）。
-     * 更新で自分自身の slug をそのまま送る場合は呼ばない（呼び出し側で除外済み）。
+     *
+     * @param excludeId 判定から除く記事 ID（更新時の自分自身）。作成時は {@code null}
      */
-    private String requireUniqueSlug(Long teamId, Long organizationId, Long userId, String slug) {
-        if (slugExists(teamId, organizationId, userId, slug)) {
+    private String requireUniqueSlug(Long teamId, Long organizationId, Long userId, String slug, Long excludeId) {
+        if (slugExists(teamId, organizationId, userId, slug, excludeId)) {
             throw new BusinessException(CmsErrorCode.DUPLICATE_SLUG);
         }
         return slug;
@@ -934,12 +978,12 @@ public class BlogPostService {
 
     /** 自動生成した base が使用済みなら -2, -3 ... の連番を付けて同一スコープで一意にする。 */
     private String uniqueSlug(Long teamId, Long organizationId, Long userId, String base) {
-        if (!slugExists(teamId, organizationId, userId, base)) {
+        if (!slugExists(teamId, organizationId, userId, base, null)) {
             return base;
         }
         for (int n = 2; n <= 1000; n++) {
             String candidate = base + "-" + n;
-            if (!slugExists(teamId, organizationId, userId, candidate)) {
+            if (!slugExists(teamId, organizationId, userId, candidate, null)) {
                 return candidate;
             }
         }
