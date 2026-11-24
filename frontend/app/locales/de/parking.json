@@ -3,7 +3,6 @@
     "title": "Parkplatzverwaltung",
     "spaces": {
       "title": "Stellplätze",
-      "add": "Stellplatz hinzufügen",
       "empty": "Es gibt keine Stellplätze.",
       "pricePerMonth": "{price} / Monat",
       "floor": "Etage {floor}",
@@ -68,6 +67,7 @@
       "titleAll": "Anträge",
       "empty": "Keine Anträge vorhanden",
       "vehicle": "Fahrzeug",
+      "otherVehicle": "Fahrzeug eines anderen Nutzers",
       "rejectionReason": "Ablehnungsgrund: {reason}",
       "cancel": "Zurückziehen",
       "cancelled": "Der Antrag wurde zurückgezogen",

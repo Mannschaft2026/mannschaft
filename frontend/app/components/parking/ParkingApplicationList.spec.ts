@@ -69,4 +69,17 @@ describe('ParkingApplicationList', () => {
     expect(wrapper.text()).toContain('#1')
     expect(wrapper.text()).toContain('#5')
   })
+
+  it('他の利用者の車両は ID を生表示せず「他の利用者の車両」と出す', async () => {
+    const wrapper = await mountSuspended(ParkingApplicationList, {
+      props: {
+        ...base,
+        vehicleLabels: {},
+        applications: [apps[3]!],
+      },
+      global: { stubs },
+    })
+    expect(wrapper.text()).toContain('parking.applications.otherVehicle')
+    expect(wrapper.text()).not.toContain('#5')
+  })
 })

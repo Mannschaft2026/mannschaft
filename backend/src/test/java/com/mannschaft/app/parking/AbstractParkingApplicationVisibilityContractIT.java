@@ -11,6 +11,8 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -409,6 +411,449 @@ abstract class AbstractParkingApplicationVisibilityContractIT extends AbstractMy
         em.flush();
         em.clear();
         assertThat(applicationStatus(appId)).isEqualTo("CANCELLED");
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-3 / AC-20: 非メンバー・非所属 SYSTEM_ADMIN
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-3: 非メンバーの申請一覧は 403（COMMON_002）・申請データを返さない")
+    void AC3_非メンバーの申請一覧は403() throws Exception {
+        insertApplication(spaceA1Id, memberAId, "PENDING");
+        em.flush();
+
+        MvcResult r = mockMvc.perform(as(outsiderId, get(parkingBase(scopeAId) + "/applications"))).andReturn();
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(403);
+        assertThat(errorCode(r)).isEqualTo("COMMON_002");
+        assertThat(objectMapper.readTree(r.getResponse().getContentAsString()).path("data").isMissingNode()
+                || objectMapper.readTree(r.getResponse().getContentAsString()).path("data").isNull())
+                .as("403 応答に申請データを含めない").isTrue();
+    }
+
+    @Test
+    @DisplayName("AC-20: 所属していない SYSTEM_ADMIN の申請一覧は 403")
+    void AC20_非所属SYSTEM_ADMINの申請一覧は403() throws Exception {
+        Long sysAdmin = insertUser(emailPrefix() + "-sysadmin");
+        MembershipTestHelper.insertUserRole(em, sysAdmin, "SYSTEM_ADMIN", null, null);
+        insertApplication(spaceA1Id, memberAId, "PENDING");
+        em.flush();
+
+        MvcResult r = mockMvc.perform(as(sysAdmin, get(parkingBase(scopeAId) + "/applications"))).andReturn();
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(403);
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-5 / AC-6
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-5: status フィルタ併用でも MEMBER は自分の申請のみ")
+    void AC5_status併用でも本人分のみ() throws Exception {
+        Long ownPending = insertApplication(spaceA1Id, memberAId, "PENDING");
+        insertApplication(spaceA2Id, memberAId, "REJECTED");
+        insertApplication(spaceA1Id, memberA2Id, "PENDING");
+        insertApplication(spaceA3Id, adminAId, "PENDING");
+        em.flush();
+
+        JsonNode body = getJson(memberAId, parkingBase(scopeAId) + "/applications?status=PENDING");
+
+        assertThat(idsOf(body)).containsExactly(ownPending);
+        assertThat(userIdsOf(body)).containsOnly(memberAId);
+    }
+
+    @Test
+    @DisplayName("AC-6: 申請0件の MEMBER は空配列で 200（他人の申請があっても見えない）")
+    void AC6_申請0件のMEMBERは空配列200() throws Exception {
+        insertApplication(spaceA1Id, memberA2Id, "PENDING");
+        insertApplication(spaceA2Id, adminAId, "APPROVED");
+        em.flush();
+
+        JsonNode body = getJson(memberAId, parkingBase(scopeAId) + "/applications");
+
+        assertThat(body.path("data").isArray()).isTrue();
+        assertThat(body.path("data")).as("自分の申請が無ければ空配列").isEmpty();
+        assertThat(body.path("meta").path("total").asLong()).isZero();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-13: 譲渡希望申込の車両所有
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-13: 他人の vehicleId で POST /listings/{id}/apply は 404・申込は作られない")
+    void AC13_譲渡希望申込で他人の車両は404() throws Exception {
+        Long listingId = insertOpenListing(spaceA1Id, memberA2Id);
+        Long othersVehicle = insertVehicle(adminAId);
+        em.flush();
+
+        MvcResult r = applyListing(memberAId, listingId, othersVehicle);
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(404);
+        assertThat(countApplicationsOf(memberAId)).isZero();
+    }
+
+    @Test
+    @DisplayName("AC-13: 存在しない vehicleId で POST /listings/{id}/apply は 404（他人の車両と同一コード）")
+    void AC13_譲渡希望申込で不存在の車両は404() throws Exception {
+        Long listingId = insertOpenListing(spaceA1Id, memberA2Id);
+        Long othersVehicle = insertVehicle(adminAId);
+        em.flush();
+
+        MvcResult missing = applyListing(memberAId, listingId, othersVehicle + 900_000L);
+        MvcResult others = applyListing(memberAId, listingId, othersVehicle);
+
+        assertThat(missing.getResponse().getStatus()).isEqualTo(404);
+        assertThat(errorCode(missing)).isEqualTo(errorCode(others));
+    }
+
+    @Test
+    @DisplayName("AC-13（対照）: 自分の vehicleId なら譲渡希望に申し込める（201）")
+    void AC13_譲渡希望申込で自分の車両は201() throws Exception {
+        Long listingId = insertOpenListing(spaceA1Id, memberA2Id);
+        Long ownVehicle = insertVehicle(memberAId);
+        em.flush();
+
+        MvcResult r = applyListing(memberAId, listingId, ownVehicle);
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(201);
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-14: 代理入力
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-14: 代理入力の申請は申請者(user_id)が代理対象者になり、本人の一覧に出る")
+    void AC14_代理入力の申請者は代理対象者() throws Exception {
+        Long subjectVehicle = insertVehicle(memberAId);
+        Long consentId = insertProxyConsent(memberAId, adminAId);
+        em.flush();
+
+        MvcResult r = postProxyApplication(adminAId, memberAId, consentId, spaceA1Id, subjectVehicle);
+
+        assertThat(r.getResponse().getStatus()).as("代理申請の応答: %s", r.getResponse().getContentAsString())
+                .isEqualTo(201);
+        JsonNode data = objectMapper.readTree(r.getResponse().getContentAsString()).path("data");
+        assertThat(data.path("userId").asLong()).as("申請者は代理者ではなく代理対象者").isEqualTo(memberAId);
+        Long appId = data.path("id").asLong();
+        Object isProxy = em.createNativeQuery("SELECT is_proxy_input FROM parking_applications WHERE id = :id")
+                .setParameter("id", appId).getSingleResult();
+        assertThat(isProxy.toString()).isIn("1", "true");
+
+        JsonNode subjectList = getJson(memberAId, parkingBase(scopeAId) + "/applications");
+        assertThat(idsOf(subjectList)).as("代理対象者本人の一覧に出る").contains(appId);
+    }
+
+    @Test
+    @DisplayName("AC-14: 代理入力の車両所有照合は代理対象者で行う（代理者の車両では 404）")
+    void AC14_代理入力の車両照合は代理対象者() throws Exception {
+        Long proxyOwnVehicle = insertVehicle(adminAId);
+        Long consentId = insertProxyConsent(memberAId, adminAId);
+        em.flush();
+
+        MvcResult r = postProxyApplication(adminAId, memberAId, consentId, spaceA1Id, proxyOwnVehicle);
+
+        assertThat(r.getResponse().getStatus()).as("代理者の車両は代理対象者の車両ではない").isEqualTo(404);
+        assertThat(countApplicationsOf(memberAId) + countApplicationsOf(adminAId)).isZero();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-15: SUPPORTER
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-15: SUPPORTER の POST /applications は 403（自分の車両でも申請不可）")
+    void AC15_SUPPORTERの申請は403() throws Exception {
+        Long supporter = insertUser(emailPrefix() + "-supporter");
+        makeSupporter(supporter, scopeAId);
+        Long ownVehicle = insertVehicle(supporter);
+        em.flush();
+
+        MvcResult r = postApplication(supporter, spaceA1Id, ownVehicle);
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(403);
+        assertThat(errorCode(r)).isEqualTo("COMMON_002");
+        assertThat(countApplicationsOf(supporter)).isZero();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-17: 一覧の入力検証（500 にしない）
+    // ═════════════════════════════════════════════════════════════════
+
+    @ParameterizedTest(name = "AC-17 query: {0}")
+    @ValueSource(strings = {"status=BOGUS", "status=pending", "page=-1", "size=0", "size=-5"})
+    @DisplayName("AC-17: status 不正値・page<0・size<=0 は 400（500 にしない）")
+    void AC17_不正な一覧パラメータは400(String query) throws Exception {
+        MvcResult r = mockMvc.perform(as(memberAId, get(parkingBase(scopeAId) + "/applications?" + query))).andReturn();
+
+        assertThat(r.getResponse().getStatus()).as("query=%s 応答=%s", query, r.getResponse().getContentAsString())
+                .isEqualTo(400);
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // ヘルパー
+    // ═════════════════════════════════════════════════════════════════
+
+    private MvcResult applyListing(Long userId, Long listingId, Long vehicleId) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("vehicleId", vehicleId);
+        return mockMvc.perform(as(userId, post(parkingBase(scopeAId) + "/listings/" + listingId + "/apply")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)))).andReturn();
+    }
+
+    private MvcResult postProxyApplication(Long proxyUserId, Long subjectUserId, Long consentId,
+                                           Long spaceId, Long vehicleId) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("spaceId", spaceId);
+        body.put("vehicleId", vehicleId);
+        return mockMvc.perform(as(proxyUserId, post(parkingBase(scopeAId) + "/applications")
+                .header("X-Proxy-For-User-Id", subjectUserId.toString())
+                .header("X-Proxy-Consent-Id", consentId.toString())
+                .header("X-Proxy-Input-Source", "PAPER_FORM")
+                .header("X-Proxy-Original-Storage", "cabinet-A-2026")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)))).andReturn();
+    }
+
+    /** 承認済み・有効期間内の代理入力同意書（PARKING_APPLICATION スコープ）を作る。 */
+    private Long insertProxyConsent(Long subjectUserId, Long proxyUserId) {
+        return insertProxyConsent(subjectUserId, proxyUserId, "PARKING_APPLICATION");
+    }
+
+    /** 承認済み・有効期間内の代理入力同意書を、指定の機能スコープ 1 つだけで作る。 */
+    private Long insertProxyConsent(Long subjectUserId, Long proxyUserId, String featureScope) {
+        em.createNativeQuery(
+                        "INSERT INTO proxy_input_consents (subject_user_id, proxy_user_id, organization_id, "
+                                + "consent_method, effective_from, effective_until, approved_by_user_id, approved_at, "
+                                + "created_at, updated_at) "
+                                + "VALUES (:subject, :proxy, :org, 'PAPER_SIGNED', DATE_SUB(CURDATE(), INTERVAL 1 DAY), "
+                                + "DATE_ADD(CURDATE(), INTERVAL 30 DAY), :approver, NOW(), NOW(), NOW())")
+                .setParameter("subject", subjectUserId)
+                .setParameter("proxy", proxyUserId)
+                .setParameter("org", scopeAId)
+                .setParameter("approver", adminBId)
+                .executeUpdate();
+        Long consentId = ((Number) em.createNativeQuery(
+                        "SELECT MAX(id) FROM proxy_input_consents WHERE subject_user_id = :s AND proxy_user_id = :p")
+                .setParameter("s", subjectUserId).setParameter("p", proxyUserId).getSingleResult()).longValue();
+        em.createNativeQuery(
+                        "INSERT INTO proxy_input_consent_scopes (proxy_input_consent_id, feature_scope, created_at) "
+                                + "VALUES (:cid, :scope, NOW())")
+                .setParameter("cid", consentId)
+                .setParameter("scope", featureScope)
+                .executeUpdate();
+        return consentId;
+    }
+
+    /** 他人（listedBy）に割り当て済みの区画に OPEN の譲渡希望を作る。 */
+    private Long insertOpenListing(Long spaceId, Long listedBy) {
+        em.createNativeQuery(
+                        "INSERT INTO parking_assignments (space_id, user_id, assigned_by, assigned_at, created_at, updated_at) "
+                                + "VALUES (:spaceId, :userId, :assignedBy, NOW(), NOW(), NOW())")
+                .setParameter("spaceId", spaceId)
+                .setParameter("userId", listedBy)
+                .setParameter("assignedBy", adminAId)
+                .executeUpdate();
+        Long assignmentId = ((Number) em.createNativeQuery("SELECT MAX(id) FROM parking_assignments")
+                .getSingleResult()).longValue();
+        em.createNativeQuery(
+                        "INSERT INTO parking_listings (space_id, assignment_id, listed_by, reason, status, "
+                                + "created_at, updated_at) "
+                                + "VALUES (:spaceId, :assignmentId, :listedBy, '転居のため', 'OPEN', NOW(), NOW())")
+                .setParameter("spaceId", spaceId)
+                .setParameter("assignmentId", assignmentId)
+                .setParameter("listedBy", listedBy)
+                .executeUpdate();
+        return ((Number) em.createNativeQuery("SELECT MAX(id) FROM parking_listings").getSingleResult()).longValue();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-21: 承認・却下・抽選の入口（権限判定を申請 ID の存在に先行させる）
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-21: MEMBER / 権限なし DEPUTY の approve・reject・lottery は 403（COMMON_002）・状態不変")
+    void AC21_権限のない者の承認却下抽選は403で状態不変() throws Exception {
+        for (Long actor : List.of(memberAId, deputyNoPermId)) {
+            Long appId = insertApplication(spaceA1Id, memberA2Id, "PENDING");
+            em.flush();
+
+            MvcResult approve = mockMvc.perform(as(actor,
+                    patch(parkingBase(scopeAId) + "/applications/" + appId + "/approve"))).andReturn();
+            MvcResult reject = rejectApplication(actor, appId);
+            MvcResult lottery = mockMvc.perform(as(actor,
+                    post(parkingBase(scopeAId) + "/applications/lottery?spaceId=" + spaceA1Id))).andReturn();
+
+            for (MvcResult r : List.of(approve, reject, lottery)) {
+                assertThat(r.getResponse().getStatus()).as("actor=%s 応答=%s", actor,
+                        r.getResponse().getContentAsString()).isEqualTo(403);
+                assertThat(errorCode(r)).isEqualTo("COMMON_002");
+            }
+            assertThat(applicationStatus(appId)).as("申請は PENDING のまま").isEqualTo("PENDING");
+        }
+    }
+
+    @Test
+    @DisplayName("AC-21: MEMBER が存在しない申請 ID を approve / reject しても存在する ID と同じ 403（存在オラクルなし）")
+    void AC21_不存在IDも存在IDと区別不能な403() throws Exception {
+        Long existing = insertApplication(spaceA1Id, memberA2Id, "PENDING");
+        em.flush();
+        long missing = existing + 900_000L;
+
+        MvcResult approveExisting = mockMvc.perform(as(memberAId,
+                patch(parkingBase(scopeAId) + "/applications/" + existing + "/approve"))).andReturn();
+        MvcResult approveMissing = mockMvc.perform(as(memberAId,
+                patch(parkingBase(scopeAId) + "/applications/" + missing + "/approve"))).andReturn();
+        MvcResult rejectExisting = rejectApplication(memberAId, existing);
+        MvcResult rejectMissing = rejectApplication(memberAId, missing);
+
+        assertThat(approveMissing.getResponse().getStatus()).isEqualTo(403);
+        assertThat(approveMissing.getResponse().getContentAsString())
+                .isEqualTo(approveExisting.getResponse().getContentAsString());
+        assertThat(rejectMissing.getResponse().getStatus()).isEqualTo(403);
+        assertThat(rejectMissing.getResponse().getContentAsString())
+                .isEqualTo(rejectExisting.getResponse().getContentAsString());
+    }
+
+    @Test
+    @DisplayName("AC-21: MANAGE_PARKING ありの DEPUTY_ADMIN の reject は成功（200・REJECTED）")
+    void AC21_権限ありDEPUTYの却下は成功() throws Exception {
+        Long appId = insertApplication(spaceA1Id, memberAId, "PENDING");
+        em.flush();
+
+        MvcResult r = rejectApplication(deputyWithPermId, appId);
+
+        assertThat(r.getResponse().getStatus()).as("応答: %s", r.getResponse().getContentAsString()).isEqualTo(200);
+        assertThat(applicationStatus(appId)).isEqualTo("REJECTED");
+    }
+
+    @Test
+    @DisplayName("AC-21: MANAGE_PARKING ありの DEPUTY_ADMIN の lottery は成功（200・申請が LOTTERY_PENDING）")
+    void AC21_権限ありDEPUTYの抽選は成功() throws Exception {
+        Long appId = insertApplication(spaceA1Id, memberAId, "PENDING");
+        em.flush();
+
+        MvcResult r = mockMvc.perform(as(deputyWithPermId,
+                post(parkingBase(scopeAId) + "/applications/lottery?spaceId=" + spaceA1Id))).andReturn();
+
+        assertThat(r.getResponse().getStatus()).as("応答: %s", r.getResponse().getContentAsString()).isEqualTo(200);
+        assertThat(applicationStatus(appId)).isEqualTo("LOTTERY_PENDING");
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-22: 代理入力の検査（同意書スコープ・subject の資格）
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-22: PARKING_APPLICATION を含まない同意書の代理申請は 403・申請は作られない")
+    void AC22_他機能スコープのみの同意書は403() throws Exception {
+        Long subjectVehicle = insertVehicle(memberAId);
+        Long consentId = insertProxyConsent(memberAId, adminAId, "SURVEY");
+        em.flush();
+
+        MvcResult r = postProxyApplication(adminAId, memberAId, consentId, spaceA1Id, subjectVehicle);
+
+        assertThat(r.getResponse().getStatus()).as("応答: %s", r.getResponse().getContentAsString()).isEqualTo(403);
+        assertThat(countApplicationsOf(memberAId)).isZero();
+    }
+
+    @Test
+    @DisplayName("AC-22: 代理対象者がスコープ非所属・SUPPORTER の代理申請は 403・申請は作られない")
+    void AC22_代理対象者が非所属またはSUPPORTERは403() throws Exception {
+        Long supporter = insertUser(emailPrefix() + "-proxy-supporter");
+        makeSupporter(supporter, scopeAId);
+        for (Long subject : List.of(outsiderId, supporter)) {
+            Long vehicle = insertVehicle(subject);
+            Long consentId = insertProxyConsent(subject, adminAId);
+            em.flush();
+
+            MvcResult r = postProxyApplication(adminAId, subject, consentId, spaceA1Id, vehicle);
+
+            assertThat(r.getResponse().getStatus()).as("subject=%s 応答=%s", subject,
+                    r.getResponse().getContentAsString()).isEqualTo(403);
+            assertThat(countApplicationsOf(subject)).isZero();
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // AC-23: 譲渡希望申込 POST /listings/{id}/apply の資格・代理入力
+    // ═════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("AC-23: SUPPORTER の譲渡希望申込は 403（自分の車両でも不可）・申込は作られない")
+    void AC23_SUPPORTERの譲渡希望申込は403() throws Exception {
+        Long listingId = insertOpenListing(spaceA1Id, memberA2Id);
+        Long supporter = insertUser(emailPrefix() + "-listing-supporter");
+        makeSupporter(supporter, scopeAId);
+        Long ownVehicle = insertVehicle(supporter);
+        em.flush();
+
+        MvcResult r = applyListing(supporter, listingId, ownVehicle);
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(403);
+        assertThat(errorCode(r)).isEqualTo("COMMON_002");
+        assertThat(countApplicationsOf(supporter)).isZero();
+    }
+
+    @Test
+    @DisplayName("AC-23: 代理入力の譲渡希望申込は申請者が代理対象者になり、車両照合も代理対象者で行う（201）")
+    void AC23_代理入力の譲渡希望申込は代理対象者() throws Exception {
+        Long listingId = insertOpenListing(spaceA1Id, memberA2Id);
+        Long subjectVehicle = insertVehicle(memberAId);
+        Long consentId = insertProxyConsent(memberAId, adminAId);
+        em.flush();
+
+        MvcResult r = applyListingAsProxy(adminAId, memberAId, consentId, listingId, subjectVehicle);
+
+        assertThat(r.getResponse().getStatus()).as("応答: %s", r.getResponse().getContentAsString()).isEqualTo(201);
+        assertThat(objectMapper.readTree(r.getResponse().getContentAsString()).path("data").path("userId").asLong())
+                .isEqualTo(memberAId);
+        assertThat(countApplicationsOf(adminAId)).isZero();
+    }
+
+    @Test
+    @DisplayName("AC-23: 代理入力の譲渡希望申込で代理者の車両は 404、他機能スコープ同意書・非所属の対象者は 403")
+    void AC23_代理入力の譲渡希望申込の異常系() throws Exception {
+        Long listingId = insertOpenListing(spaceA1Id, memberA2Id);
+        Long proxyOwnVehicle = insertVehicle(adminAId);
+        Long consentOk = insertProxyConsent(memberAId, adminAId);
+        Long surveyConsent = insertProxyConsent(memberA2Id, adminAId, "SURVEY");
+        Long subjectVehicle2 = insertVehicle(memberA2Id);
+        Long outsiderVehicle = insertVehicle(outsiderId);
+        Long outsiderConsent = insertProxyConsent(outsiderId, adminAId);
+        em.flush();
+
+        assertThat(applyListingAsProxy(adminAId, memberAId, consentOk, listingId, proxyOwnVehicle)
+                .getResponse().getStatus()).as("代理者の車両").isEqualTo(404);
+        assertThat(applyListingAsProxy(adminAId, memberA2Id, surveyConsent, listingId, subjectVehicle2)
+                .getResponse().getStatus()).as("他機能スコープのみ").isEqualTo(403);
+        assertThat(applyListingAsProxy(adminAId, outsiderId, outsiderConsent, listingId, outsiderVehicle)
+                .getResponse().getStatus()).as("非所属の対象者").isEqualTo(403);
+        assertThat(countApplicationsOf(memberAId) + countApplicationsOf(memberA2Id)
+                + countApplicationsOf(outsiderId) + countApplicationsOf(adminAId)).isZero();
+    }
+
+    private MvcResult rejectApplication(Long userId, long appId) throws Exception {
+        return mockMvc.perform(as(userId, patch(parkingBase(scopeAId) + "/applications/" + appId + "/reject")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"rejectionReason\":\"対象外\"}"))).andReturn();
+    }
+
+    private MvcResult applyListingAsProxy(Long proxyUserId, Long subjectUserId, Long consentId,
+                                          Long listingId, Long vehicleId) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("vehicleId", vehicleId);
+        return mockMvc.perform(as(proxyUserId, post(parkingBase(scopeAId) + "/listings/" + listingId + "/apply")
+                .header("X-Proxy-For-User-Id", subjectUserId.toString())
+                .header("X-Proxy-Consent-Id", consentId.toString())
+                .header("X-Proxy-Input-Source", "PAPER_FORM")
+                .header("X-Proxy-Original-Storage", "cabinet-A-2026")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)))).andReturn();
     }
 
     // ═════════════════════════════════════════════════════════════════

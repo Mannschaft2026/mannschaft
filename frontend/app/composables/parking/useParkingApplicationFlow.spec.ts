@@ -161,6 +161,52 @@ describe('useParkingApplicationFlow', () => {
     expect(flow.applications.value[0]?.status).toBe('APPROVED')
   })
 
+  it('車両登録の二重送信は 1 回だけ POST する（送信中ガード）', async () => {
+    let resolvePost: (v: unknown) => void = () => {}
+    mockApi
+      .mockImplementationOnce(() => new Promise((r) => { resolvePost = r }))
+      .mockResolvedValueOnce({ data: [] })
+    const flow = useParkingApplicationFlow('team', '5')
+    const body = { vehicleType: 'CAR' as const, plateNumber: '品川 500 あ 1234' }
+    const first = flow.registerVehicle(body)
+    const second = await flow.registerVehicle(body)
+    expect(second).toBeNull()
+    resolvePost({ data: { id: 1 } })
+    await first
+    expect(mockApi.mock.calls.filter((c) => c[1]?.method === 'POST')).toHaveLength(1)
+    expect(flow.registering.value).toBe(false)
+  })
+
+  it('同じ申請の取消の二重送信は 1 回だけ DELETE する（送信中ガード）', async () => {
+    let resolveDelete: (v: unknown) => void = () => {}
+    mockApi
+      .mockImplementationOnce(() => new Promise((r) => { resolveDelete = r }))
+      .mockResolvedValueOnce({ data: [], meta: { total: 0 } })
+    const flow = useParkingApplicationFlow('team', '5')
+    const first = flow.cancel({ id: 4, status: 'PENDING' })
+    const second = await flow.cancel({ id: 4, status: 'PENDING' })
+    expect(second).toBe(false)
+    resolveDelete(undefined)
+    await first
+    expect(mockApi.mock.calls.filter((c) => c[1]?.method === 'DELETE')).toHaveLength(1)
+    expect(flow.cancellingIds.value).toEqual([])
+  })
+
+  it('ページ切替で古い応答が遅れて届いても新しい表示を上書きしない', async () => {
+    let resolveOld: (v: unknown) => void = () => {}
+    mockApi
+      .mockImplementationOnce(() => new Promise((r) => { resolveOld = r }))
+      .mockResolvedValueOnce({ data: [{ id: 20 }], meta: { total: 30 } })
+    const flow = useParkingApplicationFlow('team', '5')
+    const old = flow.loadApplications(1)
+    await flow.loadApplications(2)
+    resolveOld({ data: [{ id: 10 }], meta: { total: 30 } })
+    await old
+    expect(flow.applications.value.map((a) => a.id)).toEqual([20])
+    expect(flow.page.value).toBe(2)
+    expect(flow.loading.value).toBe(false)
+  })
+
   it('車両の取得失敗は vehiclesError に残す', async () => {
     mockApi.mockRejectedValueOnce(apiError(500))
     const flow = useParkingApplicationFlow('team', '5')

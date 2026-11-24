@@ -3,7 +3,6 @@
     "title": "주차장 관리",
     "spaces": {
       "title": "구역 목록",
-      "add": "구역 추가",
       "empty": "주차 구역이 없습니다",
       "pricePerMonth": "월 {price}",
       "floor": "{floor}층",
@@ -68,6 +67,7 @@
       "titleAll": "신청 목록",
       "empty": "신청 내역이 없습니다",
       "vehicle": "차량",
+      "otherVehicle": "다른 이용자의 차량",
       "rejectionReason": "반려 사유: {reason}",
       "cancel": "취소",
       "cancelled": "신청을 취소했습니다",

@@ -16,7 +16,7 @@ const { t } = useI18n()
 const confirm = useConfirm()
 const auth = useAuthStore()
 const { getSpaces } = useParkingSpacesApi()
-const { loadPermissions, isAdmin, isMember, can } = useRoleAccess(props.scopeType, props.scopeId)
+const { loadPermissions, isScopeAdmin, roleName, can } = useRoleAccess(props.scopeType, props.scopeId)
 
 const spaces = ref<ParkingSpaceResponse[]>([])
 const loading = ref(false)
@@ -24,13 +24,16 @@ const loadError = ref<unknown>(null)
 const applyVisible = ref(false)
 
 /**
- * 管理操作（区画の追加など）を出せるか。BE は ADMIN / MANAGE_PARKING 保有者だけを通し、
- * それ以外は 403 を返す。FE の出し分けは導線の整理であり、認可は BE が守る。
+ * 申請の全件を見られるか。BE はスコープの ADMIN / MANAGE_PARKING 保有者だけを全件閲覧・承認に通す
+ * （所属のない SYSTEM_ADMIN は 403）ため、SYSTEM_ADMIN を含む isAdmin ではなく isScopeAdmin で判定する。
+ * FE の出し分けは導線の整理であり、認可は BE が守る。
  * 承認・却下・抽選の画面は別戦役（台帳 CMP-261124-2331）で作る。
  */
-const canManage = computed(() => isAdmin.value || can('MANAGE_PARKING'))
-/** 申請できるのは MEMBER 以上（SUPPORTER は BE が 403）。 */
-const canApply = computed(() => isMember.value)
+const canManage = computed(() => isScopeAdmin.value || can('MANAGE_PARKING'))
+/** 申請できるのはスコープの MEMBER 以上（SUPPORTER・所属のない SYSTEM_ADMIN は BE が 403）。 */
+const canApply = computed(
+  () => isScopeAdmin.value || roleName.value === 'DEPUTY_ADMIN' || roleName.value === 'MEMBER',
+)
 
 const applicableSpaces = computed(() => spaces.value.filter(isApplicableSpace))
 
@@ -120,7 +123,6 @@ onMounted(async () => {
           data-testid="parking-apply-open"
           @click="openApply"
         />
-        <Button v-if="canManage" :label="t('parking.spaces.add')" icon="pi pi-plus" severity="secondary" />
       </div>
     </div>
 

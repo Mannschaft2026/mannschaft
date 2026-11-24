@@ -3,7 +3,6 @@
     "title": "Parking",
     "spaces": {
       "title": "Parking spaces",
-      "add": "Add space",
       "empty": "There are no parking spaces.",
       "pricePerMonth": "{price} / month",
       "floor": "Floor {floor}",
@@ -68,6 +67,7 @@
       "titleAll": "Applications",
       "empty": "There are no applications.",
       "vehicle": "Vehicle",
+      "otherVehicle": "Another member's vehicle",
       "rejectionReason": "Reason for rejection: {reason}",
       "cancel": "Cancel",
       "cancelled": "The application has been cancelled",

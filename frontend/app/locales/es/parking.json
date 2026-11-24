@@ -3,7 +3,6 @@
     "title": "Gestión de aparcamiento",
     "spaces": {
       "title": "Plazas",
-      "add": "Añadir plaza",
       "empty": "No hay plazas de aparcamiento.",
       "pricePerMonth": "{price} al mes",
       "floor": "Planta {floor}",
@@ -68,6 +67,7 @@
       "titleAll": "Solicitudes",
       "empty": "No hay solicitudes",
       "vehicle": "Vehículo",
+      "otherVehicle": "Vehículo de otro usuario",
       "rejectionReason": "Motivo del rechazo: {reason}",
       "cancel": "Cancelar",
       "cancelled": "La solicitud se ha cancelado",

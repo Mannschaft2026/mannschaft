@@ -3,7 +3,6 @@
     "title": "駐車場管理",
     "spaces": {
       "title": "区画一覧",
-      "add": "区画を追加",
       "empty": "駐車区画がありません",
       "pricePerMonth": "月額 {price}",
       "floor": "{floor}階",
@@ -68,6 +67,7 @@
       "titleAll": "申請一覧",
       "empty": "申請はありません",
       "vehicle": "車両",
+      "otherVehicle": "他の利用者の車両",
       "rejectionReason": "却下理由: {reason}",
       "cancel": "取り消す",
       "cancelled": "申請を取り消しました",

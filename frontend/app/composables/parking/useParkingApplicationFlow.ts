@@ -35,6 +35,11 @@ export function useParkingApplicationFlow(
   const loading = ref(false)
   const loadError = ref<unknown>(null)
   const submitting = ref(false)
+  const registering = ref(false)
+  const cancellingIds = ref<number[]>([])
+  // 古い応答が新しい表示を上書きしないよう、最新の要求だけを反映する（要求連番）
+  let applicationsSeq = 0
+  let vehiclesSeq = 0
 
   const vehicles = ref<VehicleResponse[]>([])
   const vehiclesLoaded = ref(false)
@@ -51,6 +56,7 @@ export function useParkingApplicationFlow(
   }
 
   async function loadApplications(targetPage = page.value) {
+    const seq = ++applicationsSeq
     loading.value = true
     loadError.value = null
     try {
@@ -58,24 +64,29 @@ export function useParkingApplicationFlow(
         page: targetPage,
         size: APPLICATION_PAGE_SIZE,
       })
+      if (seq !== applicationsSeq) return
       applications.value = res.data ?? []
       total.value = res.meta?.total ?? applications.value.length
       page.value = targetPage
     } catch (e) {
+      if (seq !== applicationsSeq) return
       // 取得失敗は空一覧にせず、エラー状態として画面へ返す（表示中の一覧は保持）
       loadError.value = e
     } finally {
-      loading.value = false
+      if (seq === applicationsSeq) loading.value = false
     }
   }
 
   async function loadVehicles() {
+    const seq = ++vehiclesSeq
     vehiclesError.value = null
     try {
       const res = await vehiclesApi.getMyVehicles()
+      if (seq !== vehiclesSeq) return
       vehicles.value = res.data ?? []
       vehiclesLoaded.value = true
     } catch (e) {
+      if (seq !== vehiclesSeq) return
       vehiclesError.value = e
     }
   }
@@ -85,6 +96,8 @@ export function useParkingApplicationFlow(
     plateNumber: string
     nickname?: string
   }): Promise<VehicleResponse | null> {
+    if (registering.value) return null
+    registering.value = true
     try {
       const res = await vehiclesApi.addVehicle(body)
       await loadVehicles()
@@ -92,6 +105,8 @@ export function useParkingApplicationFlow(
     } catch (e) {
       reportError(e)
       return null
+    } finally {
+      registering.value = false
     }
   }
 
@@ -123,7 +138,9 @@ export function useParkingApplicationFlow(
 
   /** 申請を取り消す。成功したら true。 */
   async function cancel(app: ApplicationResponse): Promise<boolean> {
-    if (app.id == null) return false
+    if (app.id == null || cancellingIds.value.includes(app.id)) return false
+    const appId = app.id
+    cancellingIds.value = [...cancellingIds.value, appId]
     try {
       await applicationsApi.deleteApplication(scopeType, scopeId, app.id)
       notification.success(t('parking.applications.cancelled'))
@@ -137,6 +154,8 @@ export function useParkingApplicationFlow(
       if (isStaleStateError(e)) await loadApplications()
       await notifyStale(e)
       return false
+    } finally {
+      cancellingIds.value = cancellingIds.value.filter((id) => id !== appId)
     }
   }
 
@@ -147,6 +166,8 @@ export function useParkingApplicationFlow(
     loading,
     loadError,
     submitting,
+    registering,
+    cancellingIds,
     vehicles,
     vehiclesLoaded,
     vehiclesError,

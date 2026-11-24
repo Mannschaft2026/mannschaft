@@ -10,7 +10,6 @@ import com.mannschaft.app.parking.service.ParkingAccessGuard;
 import com.mannschaft.app.parking.service.ParkingApplicationAccessPolicy;
 import com.mannschaft.app.parking.service.ParkingApplicationService;
 import com.mannschaft.app.parking.service.ParkingSpaceService;
-import com.mannschaft.app.proxy.ProxyInputContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -38,7 +37,6 @@ public class TeamParkingApplicationController {
     private final ParkingApplicationService applicationService;
     private final ParkingSpaceService spaceService;
     private final ParkingAccessGuard parkingAccessGuard;
-    private final ProxyInputContext proxyInputContext;
     private final ParkingApplicationAccessPolicy accessPolicy;
 
     private static final String SCOPE_TYPE = ParkingScopeType.TEAM.name();
@@ -67,8 +65,7 @@ public class TeamParkingApplicationController {
             @Valid @RequestBody CreateApplicationRequest request) {
         Long actorId = SecurityUtils.getCurrentUserId();
         // SUPPORTER は申請不可（AC-15）。代理入力時の申請者は代理対象者（AC-14）
-        accessPolicy.requireRegularMember(SCOPE_TYPE, teamId, actorId);
-        Long applicantId = proxyInputContext.isProxy() ? proxyInputContext.getSubjectUserId() : actorId;
+        Long applicantId = accessPolicy.resolveApplicant(SCOPE_TYPE, teamId, actorId);
         parkingAccessGuard.requireOwnedVehicle(applicantId, request.getVehicleId());
         List<Long> spaceIds = spaceService.getSpaceIds(SCOPE_TYPE, teamId);
         ApplicationResponse result = applicationService.create(spaceIds, applicantId, request);
@@ -79,7 +76,7 @@ public class TeamParkingApplicationController {
     @Operation(summary = "チーム申請承認")
     public ResponseEntity<ApiResponse<ApplicationResponse>> approve(
             @PathVariable Long teamId, @PathVariable Long id) {
-        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, teamId, SecurityUtils.getCurrentUserId());
+        accessPolicy.requireManage(SCOPE_TYPE, teamId, SecurityUtils.getCurrentUserId());
         ApplicationResponse result = applicationService.approve(SCOPE_TYPE, teamId, id, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(result));
     }
@@ -89,7 +86,7 @@ public class TeamParkingApplicationController {
     public ResponseEntity<ApiResponse<ApplicationResponse>> reject(
             @PathVariable Long teamId, @PathVariable Long id,
             @Valid @RequestBody RejectApplicationRequest request) {
-        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, teamId, SecurityUtils.getCurrentUserId());
+        accessPolicy.requireManage(SCOPE_TYPE, teamId, SecurityUtils.getCurrentUserId());
         ApplicationResponse result = applicationService.reject(SCOPE_TYPE, teamId, id, request, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(result));
     }
@@ -107,7 +104,7 @@ public class TeamParkingApplicationController {
     public ResponseEntity<ApiResponse<List<ApplicationResponse>>> lottery(
             @PathVariable Long teamId,
             @RequestParam Long spaceId) {
-        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, teamId, SecurityUtils.getCurrentUserId());
+        accessPolicy.requireManage(SCOPE_TYPE, teamId, SecurityUtils.getCurrentUserId());
         List<ApplicationResponse> result = applicationService.executeLottery(SCOPE_TYPE, teamId, spaceId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(result));
     }

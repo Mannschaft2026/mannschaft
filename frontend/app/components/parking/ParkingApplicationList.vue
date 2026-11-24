@@ -52,7 +52,11 @@ function spaceName(app: ApplicationResponse): string {
   return (app.spaceId != null ? props.spaceNumbers[app.spaceId] : undefined) ?? `#${app.spaceId}`
 }
 function vehicleName(app: ApplicationResponse): string {
-  return (app.vehicleId != null ? props.vehicleLabels[app.vehicleId] : undefined) ?? `#${app.vehicleId}`
+  const label = app.vehicleId != null ? props.vehicleLabels[app.vehicleId] : undefined
+  if (label) return label
+  // 他の利用者の車両名は取得できないため、ID を生表示せず汎用ラベルにする
+  if (props.currentUserId != null && app.userId !== props.currentUserId) return t('parking.applications.otherVehicle')
+  return `#${app.vehicleId}`
 }
 </script>
 
