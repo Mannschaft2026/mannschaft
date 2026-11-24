@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SurveyDetailResponse } from '~/types/survey'
+import type { SurveyDetailResponse, SurveyQuestion } from '~/types/survey'
 import type { BulletinThreadResponse } from '~/types/bulletin'
 import type { QuestionDraft } from '~/components/survey/SurveyQuestionEditor.vue'
 import SurveyRespondentsList from '~/components/survey/SurveyRespondentsList.vue'
@@ -43,6 +43,7 @@ const { getSurvey, publishSurvey, closeSurvey, deleteSurvey, addQuestion } =
 const { getSurveyThread } = useSurveyBulletinThread()
 const { error: showError, success: showSuccess } = useNotification()
 const { confirmAction } = useConfirmDialog()
+const { resolveMessage } = useErrorHandler()
 const authStore = useAuthStore()
 const teamApi = useTeamApi()
 const organizationApi = useOrganizationApi()
@@ -78,32 +79,82 @@ let scopeContextRequestId = 0
 const draftQuestions = ref<QuestionDraft[]>([])
 const draftQuestionsSubmitting = ref(false)
 
+// 保存済みの設問（BE は DRAFT でも設問を保存・返却する）。読み取り専用で表示し、公開時に再送しない。
+// この画面で addQuestion に成功した設問（公開に失敗して再試行しても再送しないよう、保存済み扱いにする）。
+const sentQuestions = ref<SurveyQuestion[]>([])
+const savedQuestions = computed(() =>
+  [...(survey.value?.questions ?? []), ...sentQuestions.value].sort(
+    (a, b) => a.sortOrder - b.sortOrder,
+  ),
+)
+// BE は設問0件の公開を NO_QUESTIONS で拒否するため、保存済み＋追加入力の合計で公開可否を判定する。
+const hasPublishableQuestions = computed(
+  () => savedQuestions.value.length + draftQuestions.value.length > 0,
+)
+
+// 「公開する」（追加入力なし）は保存済み設問だけで判定する。追加入力だけの場合は「保存して公開」を使う。
+const hasSavedQuestions = computed(() => savedQuestions.value.length > 0)
+
+/** BE エラーコードがあればその理由、無ければ fallback の文言を返す */
+function failureReason(e: unknown, fallback: string): string {
+  const apiError = e as { data?: { error?: { code?: string; message?: string } } }
+  const code = apiError?.data?.error?.code
+  return code ? resolveMessage(code, apiError.data?.error?.message, 'surveyPublish') : fallback
+}
+
 /** DRAFTの設問を一括保存 → publish する */
 async function onSaveQuestionsAndPublish() {
   if (!survey.value) return
   draftQuestionsSubmitting.value = true
+  let stage: 'addQuestion' | 'publish' = 'addQuestion'
   try {
     // 設問を順次追加。FE ドメイン形のまま渡し、BE 形への翻訳（questionType の enum 値・
     // sortOrder → displayOrder）は useSurveyApi 側に集約している。
-    for (const q of draftQuestions.value) {
+    // 追加入力した設問だけを送る。1件成功するごとに保存済み一覧へ移して入力側から除くため、
+    // 途中や公開で失敗して再試行しても送信済みの設問は再送されない。
+    // sortOrder は保存済み設問の最大値の次から振る（欠番があっても衝突させない）。
+    for (const q of [...draftQuestions.value]) {
+      const sortOrder = Math.max(0, ...savedQuestions.value.map((sq) => sq.sortOrder)) + 1
+      const options =
+        q.questionType !== 'TEXT' && q.questionType !== 'DATE' && q.options?.length
+          ? q.options.map((o) => ({ optionText: o.optionText.trim(), sortOrder: o.sortOrder }))
+          : undefined
       await addQuestion(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId, {
         questionText: q.questionText.trim(),
         questionType: q.questionType,
         isRequired: q.isRequired,
-        sortOrder: q.sortOrder,
-        options:
-          q.questionType !== 'TEXT' && q.questionType !== 'DATE' && q.options?.length
-            ? q.options.map((o) => ({ optionText: o.optionText.trim(), sortOrder: o.sortOrder }))
-            : undefined,
+        sortOrder,
+        options,
       })
+      sentQuestions.value = [
+        ...sentQuestions.value,
+        {
+          // BE 採番前の表示用 ID（保存済み設問の実 ID と衝突しない負数）
+          id: -(sentQuestions.value.length + 1),
+          questionText: q.questionText.trim(),
+          questionType: q.questionType,
+          isRequired: q.isRequired,
+          sortOrder,
+          options: (options ?? []).map((o, i) => ({ id: -(i + 1), ...o })),
+        },
+      ]
+      draftQuestions.value = draftQuestions.value.slice(1)
     }
     // 公開
+    stage = 'publish'
     await publishSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
     showSuccess(t('surveys.detail.publishSuccess'))
     draftQuestions.value = []
     await fetchDetail()
-  } catch {
-    showError(t('surveys.detail.publishFailed'))
+    sentQuestions.value = []
+  } catch (e) {
+    // 設問の保存失敗と公開失敗を区別し、BE の理由があればそれを表示する
+    showError(
+      failureReason(
+        e,
+        t(stage === 'addQuestion' ? 'surveys.detail.addQuestionFailed' : 'surveys.detail.publishFailed'),
+      ),
+    )
   } finally {
     draftQuestionsSubmitting.value = false
   }
@@ -360,8 +411,8 @@ async function onPublish() {
     await publishSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
     showSuccess(t('surveys.detail.publishSuccess'))
     await fetchDetail()
-  } catch {
-    showError(t('surveys.detail.publishFailed'))
+  } catch (e) {
+    showError(failureReason(e, t('surveys.detail.publishFailed')))
   } finally {
     actionLoading.value = false
   }
@@ -527,6 +578,15 @@ onMounted(async () => {
           <p class="text-xs text-amber-600 dark:text-amber-300">
             {{ t('surveys.detail.draftAddQuestionsHint') }}
           </p>
+          <p
+            v-if="canManage && !hasPublishableQuestions"
+            class="mt-2 text-sm font-medium text-red-600 dark:text-red-300"
+            role="alert"
+            data-testid="survey-publish-blocked-reason"
+          >
+            <i class="pi pi-exclamation-triangle mr-1" />
+            {{ t('surveys.detail.publishNoQuestions') }}
+          </p>
         </div>
 
         <!-- 管理操作可（作成者 or 権限保有管理者）: 設問追加 & 公開 -->
@@ -536,7 +596,28 @@ onMounted(async () => {
             <p class="mb-3 text-sm font-medium text-surface-700 dark:text-surface-200">
               {{ t('surveys.detail.draftQuestionsSection') }}
             </p>
-            <SurveyQuestionEditor v-model="draftQuestions" />
+            <!-- 保存済み設問（読み取り専用） -->
+            <ol
+              v-if="savedQuestions.length > 0"
+              class="mb-3 flex flex-col gap-2"
+              data-testid="survey-saved-questions"
+            >
+              <li
+                v-for="q in savedQuestions"
+                :key="q.id"
+                class="rounded-lg border border-surface-200 bg-surface-50 p-3 text-sm dark:border-surface-700 dark:bg-surface-900"
+              >
+                <p class="font-medium text-surface-800 dark:text-surface-100">
+                  {{ q.sortOrder }}. {{ q.questionText }}
+                  <span v-if="q.isRequired" class="ml-1 text-red-500">*</span>
+                </p>
+                <p class="text-xs text-surface-500">{{ t(`surveys.questionType.${q.questionType}`) }}</p>
+                <ul v-if="q.options.length > 0" class="mt-1 list-disc pl-5 text-surface-600 dark:text-surface-300">
+                  <li v-for="o in q.options" :key="o.id">{{ o.optionText }}</li>
+                </ul>
+              </li>
+            </ol>
+            <SurveyQuestionEditor v-model="draftQuestions" :hide-empty="savedQuestions.length > 0" />
           </div>
 
           <!-- 操作ボタン群 -->
@@ -551,13 +632,14 @@ onMounted(async () => {
               class="min-h-11 min-w-11"
               @click="onSaveQuestionsAndPublish"
             />
-            <!-- 設問なしでそのまま公開（設問ゼロでも可、グレー強調） -->
+            <!-- 保存済み設問だけで公開（設問が1件もない間は押せない） -->
             <Button
               :label="t('surveys.detail.publishButton')"
               icon="pi pi-send"
               :severity="draftQuestions.length > 0 ? 'secondary' : 'primary'"
               :outlined="draftQuestions.length > 0"
               :loading="actionLoading || draftQuestionsSubmitting"
+              :disabled="!hasSavedQuestions"
               data-testid="survey-publish-button"
               class="min-h-11 min-w-11"
               @click="onPublish"
