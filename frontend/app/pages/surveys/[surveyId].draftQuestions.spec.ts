@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   showError: vi.fn(),
   showSuccess: vi.fn(),
   navigateTo: vi.fn(),
+  resolveMessage: vi.fn((code: string, fallback?: string) => fallback ?? code),
 }))
 
 mockNuxtImport('definePageMeta', () => () => undefined)
@@ -59,6 +60,10 @@ mockNuxtImport('useSurveyBulletinThread', () => () => ({ getSurveyThread: mocks.
 mockNuxtImport('useNotification', () => () => ({
   error: mocks.showError,
   success: mocks.showSuccess,
+}))
+mockNuxtImport('useErrorHandler', () => () => ({
+  handleApiError: vi.fn(),
+  resolveMessage: mocks.resolveMessage,
 }))
 mockNuxtImport('useConfirmDialog', () => () => ({ confirmAction: vi.fn() }))
 mockNuxtImport('useAuthStore', () => () => ({ currentUser: { id: 1 }, user: { id: 1 } }))
@@ -235,6 +240,7 @@ async function clickPrimaryPublish(wrapper: VueWrapper): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.resolveMessage.mockImplementation((code: string, fallback?: string) => fallback ?? code)
   mocks.getSurveyThread.mockResolvedValue(null)
   mocks.addQuestion.mockResolvedValue({ data: {} })
   mocks.publishSurvey.mockResolvedValue({ data: {} })
@@ -363,5 +369,102 @@ describe('アンケート下書き詳細: 公開失敗後の再試行で追加�
     await clickPrimaryPublish(wrapper)
     expect(mocks.addQuestion).toHaveBeenCalledTimes(1)
     expect(mocks.publishSurvey).toHaveBeenCalledTimes(2)
+  })
+})
+
+// === 検分差し戻し（R3 / R4 / L1） ===
+
+async function addDraftQuestions(wrapper: VueWrapper, texts: string[]): Promise<void> {
+  const editor = wrapper.getComponent(SurveyQuestionEditor)
+  const current = editor.props('modelValue') as QuestionDraft[]
+  const added: QuestionDraft[] = texts.map((questionText, i) => ({
+    questionText,
+    questionType: 'TEXT',
+    isRequired: false,
+    sortOrder: current.length + i + 1,
+    options: [],
+  }))
+  editor.vm.$emit('update:modelValue', [...current, ...added])
+  await flushPromises()
+}
+
+const BE_REASON = '設問が1つも登録されていないアンケートは公開できません'
+
+describe('アンケート下書き詳細: 「公開する」は保存済み設問数だけで判定する（R3）', () => {
+  it('保存済み設問が0件で追加入力だけあるとき、「公開する」は押せず「保存して公開」側だけが使える', async () => {
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey([]) })
+    const wrapper = await mountPage()
+    await addDraftQuestions(wrapper, ['追加だけの設問'])
+
+    const plain = wrapper.get('[data-testid="survey-publish-button"]')
+    expect((plain.element as HTMLButtonElement).disabled).toBe(true)
+    const withQuestions = wrapper.get('[data-testid="survey-publish-with-questions-button"]')
+    expect((withQuestions.element as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
+describe('アンケート下書き詳細: 失敗の種類と BE の理由を区別して表示する（R4）', () => {
+  it('addQuestion が失敗すると公開 API は呼ばれず、設問保存失敗の文言を出す（公開失敗の文言ではない）', async () => {
+    const addFailed = jaText('surveys.detail.addQuestionFailed')
+    expect(addFailed, 'ja/surveys.json に surveys.detail.addQuestionFailed が無い').toBeTypeOf('string')
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey(SAVED_QUESTIONS) })
+    mocks.addQuestion.mockRejectedValueOnce(new Error('HTTP 500'))
+    const wrapper = await mountPage()
+    await addDraftQuestions(wrapper, ['追加する設問'])
+
+    await clickPrimaryPublish(wrapper)
+
+    expect(mocks.publishSurvey).not.toHaveBeenCalled()
+    expect(mocks.showError).toHaveBeenCalledWith(addFailed)
+    expect(mocks.showError).not.toHaveBeenCalledWith(jaText('surveys.detail.publishFailed'))
+  })
+
+  it('addQuestion が BE エラーコード付きで失敗すると、BE の理由を表示する', async () => {
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey(SAVED_QUESTIONS) })
+    mocks.addQuestion.mockRejectedValueOnce(noQuestionsError())
+    const wrapper = await mountPage()
+    await addDraftQuestions(wrapper, ['追加する設問'])
+
+    await clickPrimaryPublish(wrapper)
+
+    expect(mocks.showError).toHaveBeenCalledWith(BE_REASON)
+  })
+
+  it('「保存して公開」で公開だけが BE エラーコード付きで失敗すると、BE の理由を表示する', async () => {
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey(SAVED_QUESTIONS) })
+    mocks.publishSurvey.mockRejectedValueOnce(noQuestionsError())
+    const wrapper = await mountPage()
+    await addDraftQuestions(wrapper, ['追加する設問'])
+
+    await clickPrimaryPublish(wrapper)
+
+    expect(mocks.showError).toHaveBeenCalledWith(BE_REASON)
+  })
+
+  it('「公開する」単体が BE エラーコード付きで失敗すると、BE の理由を表示する', async () => {
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey(SAVED_QUESTIONS) })
+    mocks.publishSurvey.mockRejectedValueOnce(noQuestionsError())
+    const wrapper = await mountPage()
+
+    await clickPrimaryPublish(wrapper)
+
+    expect(mocks.showError).toHaveBeenCalledWith(BE_REASON)
+  })
+})
+
+describe('アンケート下書き詳細: 追加設問の sortOrder は保存済みの最大値の次から（L1）', () => {
+  it('保存済み設問の sortOrder が欠番（1,5）でも、追加設問は 6, 7 で送られる', async () => {
+    const gapped: SurveyQuestion[] = [
+      { ...SAVED_QUESTIONS[0]!, sortOrder: 1 },
+      { ...SAVED_QUESTIONS[1]!, sortOrder: 5 },
+    ]
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey(gapped) })
+    const wrapper = await mountPage()
+    await addDraftQuestions(wrapper, ['追加A', '追加B'])
+
+    await clickPrimaryPublish(wrapper)
+
+    const orders = mocks.addQuestion.mock.calls.map((c) => (c[3] as { sortOrder: number }).sortOrder)
+    expect(orders).toEqual([6, 7])
   })
 })

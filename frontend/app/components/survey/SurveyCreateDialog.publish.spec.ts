@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   showError: vi.fn(),
   showSuccess: vi.fn(),
   handleApiError: vi.fn(),
+  resolveMessage: vi.fn((code: string, fallback?: string) => fallback ?? code),
 }))
 
 mockNuxtImport('useSurveyApi', () => () => ({
@@ -43,7 +44,10 @@ mockNuxtImport('useNotification', () => () => ({
   error: mocks.showError,
   success: mocks.showSuccess,
 }))
-mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError }))
+mockNuxtImport('useErrorHandler', () => () => ({
+  handleApiError: mocks.handleApiError,
+  resolveMessage: mocks.resolveMessage,
+}))
 mockNuxtImport('useAuthStore', () => () => ({ currentUser: { id: 1 }, user: { id: 1 } }))
 mockNuxtImport('useFormDraft', () => () => ({
   clear: vi.fn(),
@@ -150,6 +154,7 @@ async function clickPublishAndCreate(wrapper: VueWrapper): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.resolveMessage.mockImplementation((code: string, fallback?: string) => fallback ?? code)
   mocks.createSurvey.mockResolvedValue({ data: createdSurvey })
   mocks.publishSurvey.mockResolvedValue({ data: { ...createdSurvey, status: 'PUBLISHED' } })
 })
@@ -189,5 +194,140 @@ describe('アンケート作成ダイアログ: 「公開して作成」で公�
     expect(mocks.createSurvey).toHaveBeenCalledTimes(1)
     expect(mocks.publishSurvey).toHaveBeenCalledTimes(1)
     expect(mocks.publishSurvey).toHaveBeenCalledWith('TEAM', '5', 99)
+  })
+})
+
+// === 検分差し戻し（M1 / R1 / R2）: 公開失敗後の下書き残留 ===
+
+const TEXT_Q: QuestionDraft = {
+  questionText: '参加できますか？',
+  questionType: 'TEXT',
+  isRequired: true,
+  sortOrder: 1,
+  options: [],
+}
+
+function publishError(): Error & { statusCode: number; data: { error: { code: string; message: string } } } {
+  return Object.assign(new Error('HTTP 409'), {
+    statusCode: 409,
+    data: { error: { code: 'SURVEY_012', message: '設問が1つも登録されていないアンケートは公開できません' } },
+  })
+}
+
+async function click(wrapper: VueWrapper, testid: string): Promise<void> {
+  await wrapper.get(`[data-testid="${testid}"]`).trigger('click')
+  await flushPromises()
+  await flushPromises()
+}
+
+/** 作成は成功・公開は失敗した状態まで進める。 */
+async function reachPublishFailed(wrapper: VueWrapper): Promise<void> {
+  mocks.publishSurvey.mockRejectedValueOnce(new Error('HTTP 500'))
+  await fillTitle(wrapper, '新しいアンケート')
+  await setQuestions(wrapper, [TEXT_Q])
+  await clickPublishAndCreate(wrapper)
+}
+
+describe('アンケート作成ダイアログ: 公開失敗後は再試行と下書きで閉じるだけに限定する（M1-A）', () => {
+  it('公開失敗後は「下書きで保存」を出さず、入力欄を操作不能にし、下書きのまま閉じる旨を表示する', async () => {
+    const wrapper = mountDialog()
+    await reachPublishFailed(wrapper)
+
+    expect(wrapper.find('[data-testid="survey-create-save-draft"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="survey-create-form-fields"]').attributes('inert')).toBeDefined()
+    expect(wrapper.find('[data-testid="survey-create-locked-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="survey-create-close-as-draft"]').exists()).toBe(true)
+  })
+
+  it('公開失敗後は成功トーストを出さず、「公開を再試行」は createSurvey を呼び直さず公開だけ再実行する', async () => {
+    const wrapper = mountDialog()
+    await reachPublishFailed(wrapper)
+
+    expect(mocks.showSuccess).not.toHaveBeenCalled()
+    expect(mocks.createSurvey).toHaveBeenCalledTimes(1)
+
+    await click(wrapper, 'survey-create-submit')
+
+    expect(mocks.createSurvey).toHaveBeenCalledTimes(1)
+    expect(mocks.publishSurvey).toHaveBeenCalledTimes(2)
+    expect(mocks.publishSurvey).toHaveBeenLastCalledWith('TEAM', '5', 99)
+    expect(mocks.showSuccess).toHaveBeenCalledTimes(1)
+  })
+
+  it('公開失敗後に「下書きのまま閉じる」を押すと公開 API は再度呼ばれずダイアログが閉じる', async () => {
+    const wrapper = mountDialog()
+    await reachPublishFailed(wrapper)
+
+    await click(wrapper, 'survey-create-close-as-draft')
+
+    expect(mocks.publishSurvey).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('update:visible')?.at(-1)).toEqual([false])
+  })
+})
+
+describe('アンケート作成ダイアログ: 閉じて開き直すと状態をリセットする（M1-B）', () => {
+  it('公開失敗後に閉じて再オープンすると、エラー・ロックが消え、新しい入力の「公開して作成」は新規作成から行う', async () => {
+    const wrapper = mountDialog()
+    await reachPublishFailed(wrapper)
+
+    await wrapper.setProps({ visible: false })
+    await flushPromises()
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="survey-create-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="survey-create-locked-note"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="survey-create-form-fields"]').attributes('inert')).toBeUndefined()
+
+    mocks.createSurvey.mockResolvedValueOnce({ data: { ...createdSurvey, id: 100 } })
+    await fillTitle(wrapper, '別のアンケート')
+    await setQuestions(wrapper, [TEXT_Q])
+    await clickPublishAndCreate(wrapper)
+
+    expect(mocks.createSurvey).toHaveBeenCalledTimes(2)
+    expect(mocks.publishSurvey).toHaveBeenLastCalledWith('TEAM', '5', 100)
+  })
+})
+
+describe('アンケート作成ダイアログ: 公開失敗の理由を表示する（R1）', () => {
+  it('BE エラーコード付きで公開に失敗すると、BE の理由が survey-create-error に表示される', async () => {
+    mocks.publishSurvey.mockRejectedValueOnce(publishError())
+    const wrapper = mountDialog()
+    await fillTitle(wrapper, '新しいアンケート')
+    await setQuestions(wrapper, [TEXT_Q])
+    await clickPublishAndCreate(wrapper)
+
+    const error = wrapper.get('[data-testid="survey-create-error"]')
+    expect(error.text()).toContain('設問が1つも登録されていないアンケートは公開できません')
+    expect(mocks.showSuccess).not.toHaveBeenCalled()
+  })
+})
+
+describe('アンケート作成ダイアログ: created の emit は1回だけ（R2）', () => {
+  it('公開失敗→再試行成功でも created は合計1回', async () => {
+    const wrapper = mountDialog()
+    await reachPublishFailed(wrapper)
+    await click(wrapper, 'survey-create-submit')
+
+    expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('公開失敗→下書きのまま閉じるでも created は合計1回', async () => {
+    const wrapper = mountDialog()
+    await reachPublishFailed(wrapper)
+    await click(wrapper, 'survey-create-close-as-draft')
+    await wrapper.setProps({ visible: false })
+    await flushPromises()
+
+    expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('公開が一度で成功した場合も created は1回', async () => {
+    const wrapper = mountDialog()
+    await fillTitle(wrapper, '新しいアンケート')
+    await setQuestions(wrapper, [TEXT_Q])
+    await clickPublishAndCreate(wrapper)
+
+    expect(wrapper.emitted('created')).toHaveLength(1)
   })
 })
