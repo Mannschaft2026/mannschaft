@@ -6,6 +6,7 @@ import com.mannschaft.app.auth.service.PendingInviteService;
 import com.mannschaft.app.auth.service.PendingInviteStore;
 import com.mannschaft.app.notification.service.NotificationHelper;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
 import com.mannschaft.app.role.service.InviteAcceptanceWriter;
 import com.mannschaft.app.role.service.MembershipInviteTokenIssuer;
@@ -25,6 +26,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,6 +42,8 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -287,13 +291,21 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
         return AopTestUtils.getUltimateTargetObject(writerSpy);
     }
 
+    /** InnoDB の行ロック待ちの件数（information_schema.innodb_trx の LOCK WAIT）。 */
+    private long lockWaits() {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'",
+                Long.class);
+    }
+
     @Test
-    @DisplayName("3回目: 有効化が窓の内で UPDATE し未コミットの間に、別接続の GET が窓の外と読んで失効 CAS を打つと行ロックで待つ。"
-            + "有効化がコミットされると失効は 0 行で、GET は読み直して VALID とし、保留を EXPIRED にしない")
+    @DisplayName("3・4回目: 有効化が窓の内で UPDATE し未コミットの間に、別接続の GET が窓の外と読んで失効 CAS に到達し、行ロックで待つ"
+            + "（spy で到達、innodb_trx で LOCK WAIT を観測）。有効化がコミットされると CAS は 0 行で、確定読みは VALID、保留は PENDING")
     void activationCommittedFirstWinsOverGetRevoke() throws Exception {
         ReissueFixtures.Case c = fx.reissueRequested("TEAM");
         CountDownLatch updated = new CountDownLatch(1);
         CountDownLatch commit = new CountDownLatch(1);
+        CountDownLatch casReached = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<Object> casResult = new java.util.concurrent.atomic.AtomicReference<>();
         doAnswer(inv -> {
             restage(inv.getArgument(0), 59_000); // 窓の内（あと約 1 秒で窓の外）
             Object result = inv.callRealMethod(); // UPDATE は成功し、まだコミットしない（proxy の TX の中）
@@ -301,15 +313,28 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
             assertThat(commit.await(60, TimeUnit.SECONDS)).isTrue();
             return result;
         }).when(issuer()).activateStaged(anyLong(), anyLong());
+        doAnswer(inv -> {
+            casReached.countDown();
+            Object result = inv.callRealMethod(); // 未コミットの有効化の行ロックで待つ
+            casResult.set(result);
+            return result;
+        }).when(writerTarget()).revokeExpiredStaged(anyString(), anyLong());
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             Future<Integer> reissue = pool.submit(() -> reissue(c).andReturn().getResponse().getStatus());
             assertThat(updated.await(30, TimeUnit.SECONDS)).isTrue();
             TimeUnit.MILLISECONDS.sleep(1500); // 作成から 60 秒を過ぎる（コミット済みの旧値は revoked_at = created_at のまま）
+            long waitsBefore = lockWaits();
             Future<String> get = pool.submit(() -> pending().findMine(c.requester()).status());
-            TimeUnit.MILLISECONDS.sleep(1500);
-            assertThat(get.isDone()).as("GET の失効 CAS は未コミットの有効化の行ロックで待つ").isFalse();
+
+            assertThat(casReached.await(30, TimeUnit.SECONDS)).as("GET は失効の CAS に到達する").isTrue();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (lockWaits() <= waitsBefore && System.nanoTime() < deadline) {
+                TimeUnit.MILLISECONDS.sleep(50);
+            }
+            assertThat(lockWaits()).as("失効の CAS が未コミットの有効化の行ロックで待っている").isGreaterThan(waitsBefore);
+            assertThat(get.isDone()).isFalse();
 
             commit.countDown();
             assertThat(reissue.get(30, TimeUnit.SECONDS)).isEqualTo(200);
@@ -318,6 +343,8 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
             commit.countDown();
             pool.shutdownNow();
         }
+        verify(writerTarget(), times(1)).revokeExpiredStaged(anyString(), anyLong());
+        assertThat(casResult.get()).as("CAS は 0 行で、同じ TX の確定読みは VALID").isEqualTo(Optional.of(InviteValidity.VALID));
         assertThat(fx.pendingStatus(c.requester())).isEqualTo("PENDING");
         assertThat(fx.activeTokens(c)).isEqualTo(1);
         assertThat(pending().accept(c.requester()).status()).isEqualTo("JOINED");

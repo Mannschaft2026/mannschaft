@@ -293,7 +293,10 @@
 先にコミットした 1 つだけが勝つ。参照（GET・承認。`InviteAcceptanceFacade#findInviteValidity`）は、招待を失効と読んだら role の短TXで
 失効の CAS を打つ。1 行なら失効が勝ったので保留を `EXPIRED` にする（`token_hash` 照合は従来どおり）。0 行なら読み直し、有効化が先に
 コミットしていれば `VALID` として `EXPIRED` にしない。未コミットの有効化と同じ行への UPDATE は InnoDB の行ロックで待たされ、
-コミット後の値で条件を評価し直すので、必ずどちらか一方に決まる。有効化が 0 行（失効が先に勝った・窓の外）なら 500 `ROLE_019` で、
+コミット後の値で条件を評価し直すので、必ずどちらか一方に決まる。失効の CAS と 0 行だったときの確定読みは、1 つの読み書きの短TX
+（`InviteAcceptanceWriter#revokeExpiredStaged`。メソッドレベルの読み書き `@Transactional` なので `ReplicaRoutingAspect` が PRIMARY に固定する）で行い、
+replica には向かわない（4 回目の検分）。最初の判定の読み（readOnly・replica でありうる）は古くてもよい: 古い「仮発行のまま窓の外」を読めば
+CAS に進み primary 上で決着し、古い「処理中」なら `PENDING` のまま返すだけで誤って `EXPIRED` にはしない。有効化が 0 行（失効が先に勝った・窓の外）なら 500 `ROLE_019` で、
 保留は `EXPIRED` になっていて再依頼できる。
 
 - 窓の述語（`InviteValidity#STAGING_OPEN_SQL`）の役割は「有効化が長く遅れたときに参照側が失効させてよいか」の判断基準だけである。

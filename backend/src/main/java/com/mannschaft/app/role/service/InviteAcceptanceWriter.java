@@ -215,12 +215,23 @@ public class InviteAcceptanceWriter {
     }
 
     /**
-     * 仮発行の印があり窓の外の招待を、参照時に恒久失効させる CAS（role の短TX。CMP-261107-1833 PR3 3 回目の検分）。
-     * 有効化と同じ行を取り合い、未コミットの有効化があればロックで待つ。 @return 1: 失効が勝った / 0: 失効しなかった
+     * 仮発行の印があり窓の外の招待を参照時に恒久失効させる CAS と、その決着の確定読みを、1 つの読み書きの短TXで行う
+     * （CMP-261107-1833 PR3 3・4 回目の検分）。
+     *
+     * <p>メソッドに {@code @Transactional}（readOnly ではない）を付けているので、{@code ReplicaRoutingAspect} が PRIMARY に固定する。
+     * 有効化と同じ行を取り合い、未コミットの有効化があればロックで待つ。1 行なら失効が勝ったので {@link InviteValidity#REVOKED}。
+     * 0 行なら同じ TX（primary）の中で読み直した有効性を返す（有効化が先にコミットしていれば VALID）。読み直しは UPDATE
+     * （現在読み）の後の最初の一貫性読みなので、ロック待ちの後にコミットされた値が見える。replica には向かわないので、
+     * 複製の遅れで旧値を読み、有効な招待と EXPIRED の保留を併存させることはない。</p>
+     *
+     * @return 失効が勝てば REVOKED、そうでなければ primary 上の現在の有効性（招待が無ければ空）
      */
     @Transactional
-    public int revokeExpiredStaged(String tokenHash) {
-        return inviteTokenRepository.revokeExpiredStaged(tokenHash);
+    public Optional<InviteValidity> revokeExpiredStaged(String tokenHash, Long userId) {
+        if (inviteTokenRepository.revokeExpiredStaged(tokenHash) == 1) {
+            return Optional.of(InviteValidity.REVOKED);
+        }
+        return inviteTokenRepository.findValidityByTokenHash(tokenHash, userId);
     }
 
     private void verifyResumable(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,

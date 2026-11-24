@@ -194,12 +194,10 @@ public class InviteAcceptanceFacade {
             return validity;
         }
         // 失効と読めた。仮発行の印のまま窓を過ぎたものなら、有効化と CAS で取り合ってから確定する（PR3 3 回目の検分・殿の裁定）。
-        // 失効が勝てば REVOKED。0 行（通常の失効・有効化が先にコミット）なら読み直す（有効化が勝っていれば VALID）。
-        if (writer.revokeExpiredStaged(tokenHash) == 1) {
-            log.info("仮発行のまま窓を過ぎた招待を参照時に失効させた");
-            return validity;
-        }
-        return writer.findValidity(tokenHash, userId);
+        // 最初の読み（readOnly・replica でありうる）は古くてもよい: 古い「失効（印あり・窓の外）」を読んでも、ここで primary の
+        // 読み書きの短TXに進み、CAS と確定読みで決着する（4 回目の検分）。逆に replica が古い「有効」を返すのは、有効化が
+        // コミット済みの場合だけで、その結論は正しい。0 行の後の確定読みは CAS と同じ primary の TX で行い、readOnly の経路を通らない。
+        return writer.revokeExpiredStaged(tokenHash, userId);
     }
 
     private void accept(InviteLocator locator, Long userId, Long folderId) {
