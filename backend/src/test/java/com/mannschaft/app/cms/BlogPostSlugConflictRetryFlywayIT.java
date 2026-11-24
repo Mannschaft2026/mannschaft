@@ -5,7 +5,10 @@ import com.mannschaft.app.cms.dto.BlogPostResponse;
 import com.mannschaft.app.cms.dto.CreateBlogPostRequest;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.cms.service.BlogPostService;
+import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.organization.entity.OrganizationEntity;
+import com.mannschaft.app.team.entity.TeamEntity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +36,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * slug の同時作成競合（事前確認の後に別リクエストが同じ slug を確定させた）を、実 Flyway スキーマの
@@ -70,6 +76,10 @@ class BlogPostSlugConflictRetryFlywayIT {
 
     @MockitoBean
     private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+
+    /** 競合の検証に認可判定を混ぜないため、チーム・組織の所属確認だけ許可スタブにする。 */
+    @MockitoBean
+    private AccessControlService accessControlService;
 
     /** Spring Data の Repository は JDK 動的プロキシのため、spy の既定 Answer（元 Bean への委譲）で実体を呼ぶ。 */
     @MockitoSpyBean
@@ -129,8 +139,47 @@ class BlogPostSlugConflictRetryFlywayIT {
     }
 
     private List<String> liveSlugs(Long userId) {
-        return jdbcTemplate.queryForList(
-                "SELECT slug FROM blog_posts WHERE user_id = ? AND deleted_at IS NULL ORDER BY id", String.class, userId);
+        return liveSlugs("user_id", userId);
+    }
+
+    /** scopeColumn は本クラスの固定値（user_id / team_id / organization_id）のみ。 */
+    private List<String> liveSlugs(String scopeColumn, Long scopeId) {
+        return jdbcTemplate.queryForList("SELECT slug FROM blog_posts WHERE " + scopeColumn
+                + " = ? AND deleted_at IS NULL ORDER BY id", String.class, scopeId);
+    }
+
+    private Long persistTeam(String slug) {
+        return transactionTemplate.execute(status -> {
+            TeamEntity team = TeamEntity.builder()
+                    .slug(slug)
+                    .name("slug競合チーム")
+                    .visibility(TeamEntity.Visibility.MEMBERS_AND_ABOVE)
+                    .supporterEnabled(true)
+                    .build();
+            em.persist(team);
+            return team.getId();
+        });
+    }
+
+    private Long persistOrganization(String slug) {
+        return transactionTemplate.execute(status -> {
+            OrganizationEntity organization = OrganizationEntity.builder()
+                    .slug(slug)
+                    .name("slug競合組織")
+                    .orgType(OrganizationEntity.OrgType.ASSOCIATION)
+                    .visibility(OrganizationEntity.Visibility.PRIVATE)
+                    .hierarchyVisibility(OrganizationEntity.HierarchyVisibility.NONE)
+                    .supporterEnabled(true)
+                    .build();
+            em.persist(organization);
+            return organization.getId();
+        });
+    }
+
+    private static CreateBlogPostRequest scoped(Long teamId, Long organizationId, String title) {
+        return new CreateBlogPostRequest(teamId == null ? null : teamId.toString(),
+                organizationId == null ? null : organizationId.toString(), null, title, null, "本文",
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     @Test
@@ -160,5 +209,54 @@ class BlogPostSlugConflictRetryFlywayIT {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CmsErrorCode.DUPLICATE_SLUG));
         assertThat(liveSlugs(userId)).containsExactly("race-slug");
+    }
+
+    @Test
+    @DisplayName("自動採番(チーム): uq_bp_slug_team_active の競合でも採番し直して -2 で作成できる")
+    void チームスコープの競合は採番し直して作成できる() {
+        Long userId = persistUser("slug-conflict-team@example.com");
+        Long teamId = persistTeam("slug-conflict-team");
+        blogPostService.createPost(userId, scoped(teamId, null, "Team Report"));
+        doReturn(false).doAnswer(BlogPostSlugConflictRetryFlywayIT::callReal)
+                .when(blogPostRepository).existsByTeamIdAndSlug(eq(teamId), eq("teamreport"));
+
+        BlogPostResponse second = blogPostService.createPost(userId, scoped(teamId, null, "Team Report"));
+
+        assertThat(second.getContent().slug()).isEqualTo("teamreport-2");
+        assertThat(liveSlugs("team_id", teamId)).containsExactly("teamreport", "teamreport-2");
+    }
+
+    @Test
+    @DisplayName("自動採番(組織): uq_bp_slug_org_active の競合でも採番し直して -2 で作成できる")
+    void 組織スコープの競合は採番し直して作成できる() {
+        Long userId = persistUser("slug-conflict-org@example.com");
+        Long orgId = persistOrganization("slug-conflict-org");
+        blogPostService.createPost(userId, scoped(null, orgId, "Org Report"));
+        doReturn(false).doAnswer(BlogPostSlugConflictRetryFlywayIT::callReal)
+                .when(blogPostRepository).existsByOrganizationIdAndSlug(eq(orgId), eq("orgreport"));
+
+        BlogPostResponse second = blogPostService.createPost(userId, scoped(null, orgId, "Org Report"));
+
+        assertThat(second.getContent().slug()).isEqualTo("orgreport-2");
+        assertThat(liveSlugs("organization_id", orgId)).containsExactly("orgreport", "orgreport-2");
+    }
+
+    @Test
+    @DisplayName("呼び出し元がトランザクション内なら再試行せず 1 回で 409（CMS_027）にし、呼び出し元ごとロールバックする")
+    void 呼び出し元TX内では再試行しない() {
+        Long userId = persistUser("slug-conflict-outer-tx@example.com");
+        blogPostService.createPost(userId, personal("Outer Report", null));
+        clearInvocations(blogPostRepository);
+        // 事前確認は常に「未使用」と答える（再試行したとしても毎回競合する状態）
+        doReturn(false).when(blogPostRepository).existsByUserIdAndSlug(eq(userId), eq("outerreport"));
+
+        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status ->
+                blogPostService.createPost(userId, personal("Outer Report", null))))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CmsErrorCode.SLUG_AUTO_ASSIGN_CONFLICT));
+        verify(blogPostRepository, times(1)).existsByUserIdAndSlug(userId, "outerreport");
+        verify(blogPostRepository, times(1)).saveAndFlush(org.mockito.ArgumentMatchers.any());
+        assertThat(liveSlugs(userId)).containsExactly("outerreport");
     }
 }

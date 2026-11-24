@@ -697,7 +697,7 @@ class BlogPostServiceTest {
         }
 
         @Test
-        @DisplayName("作成(自動採番): 一意制約違反は再試行用の BlogSlugAutoConflictException（CMS_005）で投げる（再試行はアスペクトが外側で行う）")
+        @DisplayName("作成(自動採番): 一意制約違反は再試行用の BlogSlugAutoConflictException（CMS_027 自動割り当ての混雑）で投げる（再試行はアスペクトが外側で行う）")
         void 作成_自動採番の競合は再試行用例外() {
             CreateBlogPostRequest request = new CreateBlogPostRequest(
                     TEAM_ID_STR, null, null, "Weekly Report", null, "本文",
@@ -707,7 +707,7 @@ class BlogPostServiceTest {
             assertThatThrownBy(() -> service.createPost(USER_ID, request))
                     .isInstanceOf(com.mannschaft.app.cms.service.BlogSlugAutoConflictException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("CMS_005"));
+                            .isEqualTo("CMS_027"));
         }
 
         @Test

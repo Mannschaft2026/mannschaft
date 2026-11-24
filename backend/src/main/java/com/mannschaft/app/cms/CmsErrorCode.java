@@ -94,7 +94,15 @@ public enum CmsErrorCode implements ErrorCode {
      *
      * <p>HTTP 409 CONFLICT（記事の状態と操作の競合。権限ではなく状態の問題なので 403 ではない）。</p>
      */
-    SCHEDULED_POST_SHARE_NOT_ALLOWED("CMS_026", "予約公開待ちの記事は共有できません。公開時刻の到来を待つか予約を解除してください", Severity.WARN);
+    SCHEDULED_POST_SHARE_NOT_ALLOWED("CMS_026", "予約公開待ちの記事は共有できません。公開時刻の到来を待つか予約を解除してください", Severity.WARN),
+
+    /**
+     * 自動採番した slug（URL）の割り当てが同時作成と競合し続けた（CMP-261123-2341）。
+     *
+     * <p>利用者は slug を指定していないため、{@link #DUPLICATE_SLUG}（「同じスラッグが既に存在します」）とは
+     * 文言を分ける。利用者が取れる対処は再送だけ。HTTP 409 CONFLICT。</p>
+     */
+    SLUG_AUTO_ASSIGN_CONFLICT("CMS_027", "記事の URL の自動割り当てが混み合いました。もう一度お試しください", Severity.WARN);
 
     private final String code;
     private final String message;

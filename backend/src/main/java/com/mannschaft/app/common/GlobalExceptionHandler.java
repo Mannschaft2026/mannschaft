@@ -1792,6 +1792,8 @@ public class GlobalExceptionHandler {
             Map.entry("CMS_025", HttpStatus.NOT_FOUND),
             // CMS_026（予約公開待ち記事の共有不可・issue #2616）は記事の状態と操作の競合 → 409
             Map.entry("CMS_026", HttpStatus.CONFLICT),
+            // CMS_027（自動採番 slug の割り当てが同時作成と競合し続けた）は再送で解消する競合 → 409
+            Map.entry("CMS_027", HttpStatus.CONFLICT),
             // 認可根治戦役 Wave3-B12notif: confirmable notification（F04.9）の NOT_FOUND は存在秘匿の 404。
             // Severity.WARN 既定の 400 のままだと存在有無が漏れる（他ドメイン同様の慣例に合わせて上書き）。
             // CMP-260923-0954 W3b: 他スコープの通知 ID は不在 ID と同一の NOT_FOUND に畳むため、

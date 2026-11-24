@@ -66,7 +66,7 @@ class BlogSlugConflictRetryAspectTest {
     }
 
     @Test
-    @DisplayName("競合が続いたら上限回数で 409（CMS_005）")
+    @DisplayName("競合が続いたら上限回数で 409（CMS_027 自動割り当ての混雑）")
     void 上限で409() {
         SlugWriter target = new SlugWriter();
         target.failures = Integer.MAX_VALUE;
@@ -74,12 +74,12 @@ class BlogSlugConflictRetryAspectTest {
         assertThatThrownBy(() -> proxy(target).write())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CmsErrorCode.DUPLICATE_SLUG));
+                        .isEqualTo(CmsErrorCode.SLUG_AUTO_ASSIGN_CONFLICT));
         assertThat(target.calls).isEqualTo(BlogSlugConflictRetryAspect.MAX_ATTEMPTS);
     }
 
     @Test
-    @DisplayName("呼び出し元のトランザクションに参加中は再試行せず 409 のまま伝播させる（原子性を壊さない）")
+    @DisplayName("呼び出し元のトランザクションに参加中は再試行せず 409（CMS_027）のまま伝播させる（原子性を壊さない）")
     void 参加中は再試行しない() {
         TransactionSynchronizationManager.setActualTransactionActive(true);
         SlugWriter target = new SlugWriter();
@@ -88,7 +88,7 @@ class BlogSlugConflictRetryAspectTest {
         assertThatThrownBy(() -> proxy(target).write())
                 .isInstanceOf(BlogSlugAutoConflictException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CmsErrorCode.DUPLICATE_SLUG));
+                        .isEqualTo(CmsErrorCode.SLUG_AUTO_ASSIGN_CONFLICT));
         assertThat(target.calls).isEqualTo(1);
     }
 
