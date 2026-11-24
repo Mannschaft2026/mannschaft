@@ -152,7 +152,14 @@ export function usePendingInvite() {
 
   // 通知（INVITE_REISSUED / INVITE_REISSUE_DECLINED）の遷移先 /dashboard?pendingInvite=open:
   // 「あとで」の記録を捨てて取り直し、ダイアログを出す。クエリは消費したら消す（再読込で繰り返し開かない）。
-  async function openFromQuery() {
+  // 実行中の 1 本を共有する（取得中に user が更新されるなどで再入しても、再取得とクエリ消去は 1 回だけ）
+  let openInFlight: Promise<void> | null = null
+  function openFromQuery(): Promise<void> {
+    openInFlight ??= runOpenFromQuery().finally(() => { openInFlight = null })
+    return openInFlight
+  }
+
+  async function runOpenFromQuery() {
     sessionStorage.removeItem(LATER_KEY)
     laterId.value = null
     closed.value = false

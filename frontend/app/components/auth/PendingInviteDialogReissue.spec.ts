@@ -197,6 +197,27 @@ describe('通知からの遷移 ?pendingInvite=open（F1）', () => {
     expect(mocks.replace.mock.calls.filter(([to]) => typeof to !== 'string').length).toBeGreaterThan(0)
   })
 
+  it('PIR-14 P3: 取得中に user が更新されて再入しても、取り直しは 1 回・クエリ消去は 1 回で、取り直しの完了後', async () => {
+    let release!: () => void
+    mocks.api.mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ data: invite({ status: 'REISSUE_REQUESTED' as PendingInvite['status'] }) })
+    }))
+    const wrapper = await mountDialog()
+    current = invite({ status: 'PENDING' })
+    route.query = { pendingInvite: 'open' }
+    route.fullPath = '/dashboard?pendingInvite=open'
+    await nextTick()
+    auth.user = { id: 1 }
+    await nextTick()
+    await flushPromises()
+    expect(mocks.replace.mock.calls.filter(([to]) => typeof to !== 'string')).toEqual([])
+    release()
+    await flushPromises()
+    expect(gets().length).toBe(2)
+    expect(wrapper.find(q('pending-invite-pending')).exists()).toBe(true)
+    expect(mocks.replace.mock.calls.filter(([to]) => typeof to !== 'string')).toHaveLength(1)
+  })
+
   it('PIR-12: クエリが無ければ「あとで」の記録どおり出さない（従来どおり）', async () => {
     sessionStorage.setItem(LATER_KEY, ID)
     const wrapper = await mountDialog()
