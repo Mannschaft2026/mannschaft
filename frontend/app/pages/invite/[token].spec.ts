@@ -63,7 +63,7 @@ describe('招待プレビューのAPI契約と認証境界', () => {
     mocks.auth.isAuthenticated = true
     mocks.api.mockReset().mockResolvedValue({ data: preview })
   })
-  it('未認証ではAPIを呼ばずログインと登録に元URLを保持する', async () => {
+  it('未認証ではAPIを呼ばずログインに元URLを保持し、新規登録は招待トークンを ?invite= で引き継ぐ（CMP-261107-1833 AC13）', async () => {
     mocks.auth.isAuthenticated = false
     const wrapper = await mountPage()
     expect(mocks.api).not.toHaveBeenCalled()
@@ -75,9 +75,11 @@ describe('招待プレビューのAPI契約と認証境界', () => {
       query: { redirect: '/invite/abc-123?folder=7' },
     })
     await buttons[1]!.trigger('click')
+    // 登録時に保留を記録し、ログイン後のダイアログで承認する（設計 §6）。redirect で招待画面へ戻すと
+    // 保留と二重の参加導線になるため、新規登録には invite だけを渡す。
     expect(mocks.navigate).toHaveBeenLastCalledWith({
       path: '/register',
-      query: { redirect: '/invite/abc-123?folder=7' },
+      query: { invite: 'abc-123' },
     })
   })
   it.each(['TEAM', 'ORGANIZATION'])(

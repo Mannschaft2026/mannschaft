@@ -492,7 +492,7 @@ users も作らない。存在しない招待はベータ制限 OFF なら保留
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null` |
+| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null`。`PENDING` のまま本人が既に在籍していれば（`/invite/<token>` など別経路で参加済み）、`JOINED` へ確定して返す（条件付き UPDATE。`invite_token_claims`・`used_count` には触れない） |
 | POST | `/api/v1/me/pending-invite/accept` | 承認して参加。応答 `{status}`（`JOINED`/`EXPIRED`/`UNAVAILABLE`） |
 | POST | `/api/v1/me/pending-invite/decline` | 辞退（`PENDING`→`DECLINED`。共有招待そのものは失効させない） |
 | POST | `/api/v1/me/pending-invite/reissue-request` | 失効した招待の再発行を招待権限者へ要請。応答 `{alreadyRequested}` |
@@ -513,6 +513,13 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
   招待を使わず `JOINED`。
 - 二重押し・並行: `ACCEPTING` は1つの attempt だけが取れる。負け側は `JOINED` 済みなら 200 `JOINED`、処理中なら `AUTH_086`（409）。
   `ACCEPTING` のまま5分を超えたら新しい attempt で取り直せ、古い attempt の完了・差し戻しは何も書かない。
+- FE（`components/auth/PendingInviteDialog.vue`、`layouts/default.vue` の `<ClientOnly>` 内）: ログイン後（`authStore.user` あり）に GET を1回
+  取得する。`AUTH_070` は黙って待ち、保護者承認後のトークン更新（`parental-consent/pending.vue` が `performTokenRefresh` 完了後に遷移）で取り直す。
+  `PENDING` は「参加する／断る／あとで」（あとでは `sessionStorage` の `mannschaft.pendingInvite.later` に保留 ID を記録）、
+  `EXPIRED`/`REISSUE_REQUESTED` は失効案内（`joinable` なら `publicPath` へのリンク、非公開なら再招待依頼）、`ACCEPTING` は処理中表示で
+  `retryAvailableAt` 経過後に再試行を有効化（`setTimeout` で開いたままでも有効化）、`UNAVAILABLE` は「参加できません」の案内で、閉じたら
+  `localStorage` の `mannschaft.pendingInvite.unavailableSeen` に保留 ID を記録して次回以降出さない（BE はこの状態の dismiss を受け付けない）。
+  `invite/[token]` の未ログイン「新規登録」は `/register?invite=<token>` へ遷移し、`AUTH_083` は専用トースト（`auth.register.invite_targeted_*`）。
 - 途中失敗の復旧: 前回の承認がロール付与の前後で失敗して同じ利用者の claim（`CLAIMED`）が残っていれば、次の承認は
   使用回数を進めずにその claim を再開する（`InviteAcceptanceWriter#claimOrResume`）。
 - claim の付与印（`invite_token_claims.grant_committed_at`）: `ACCEPTING` が5分を超えて取り直されると、1つの claim を新旧の
@@ -532,7 +539,7 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
     参加申請承認（`grantMemberRole`）は claim に触れない。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
   7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
-  期間内の再押下は通知せず `alreadyRequested: true`。
+  期間内の再押下は通知せず `alreadyRequested: true`。通知は受信者の言語で、本文に要請者の表示名（メールアドレスは載せない）と招待先の名前を入れ、遷移先は対象の招待管理画面（`/teams/{slug}/invites` 等）。
 - エラー: `AUTH_084`（404・保留なし）、`AUTH_085`（409・状態不正）、`AUTH_086`（409・処理中）。
 - 画面（招待画面の新規登録導線・ログイン後の承認ダイアログ）は後続 PR で対応する。それまで招待画面は従来どおり
   チーム・組織のトークンを `inviteToken` として送らない（上記の段落）。
