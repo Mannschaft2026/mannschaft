@@ -31,6 +31,10 @@ export const FIX_MARKER = '<!-- ledger-autofix:fixed -->';
 export const LIMIT_MARKER = '<!-- ledger-autofix:limit -->';
 export const STRUCTURE_NG_MARKER_PREFIX = '<!-- ledger-autofix:structure-ng head=';
 export const MAX_FIXES_PER_DAY = 3;
+/** bot の修復 commit のメッセージに必ず入れる固定印（trailer）。24時間の上限はこれと bot の署名で数える。 */
+export const FIX_COMMIT_TRAILER = 'Ledger-Autofix: task-list-conflict-autofix';
+/** 自動修復の対象にする queue 脱落理由（RemovedFromMergeQueueEvent.reason。GraphQL では String で、実測値は merge_conflict / failed_checks / manual / merged）。 */
+export const CONFLICT_REMOVAL_REASON = 'merge_conflict';
 const DAY_MS = 24 * 3600 * 1000;
 const UNION_ATTRIBUTE_LINE = LEDGER_PATH + ' merge=union';
 
@@ -38,16 +42,17 @@ const UNION_ATTRIBUTE_LINE = LEDGER_PATH + ' merge=union';
 // 選定
 // ---------------------------------------------------------------------------
 
-/** timeline の最新の merge queue 関連イベントの型名（無ければ null）。 */
+/** timeline の最新の merge queue 関連イベント（無ければ null）。 */
 function lastQueueEvent(pr) {
   const nodes = pr.timelineItems?.nodes ?? [];
-  return nodes.length ? nodes[nodes.length - 1].__typename : null;
+  return nodes.length ? nodes[nodes.length - 1] : null;
 }
 
 /**
  * 自動修復の対象 PR を選ぶ。
  * open・base=main・同一リポジトリ（fork 除外）・no-ledger-autofix ラベルなし・mergeable=CONFLICTING で、
- * マージ待ちの意思（auto-merge 予約済み、または最新の queue イベントが脱落）があるもの。
+ * マージ待ちの意思（auto-merge 予約済み、または最新の queue イベントが衝突による脱落 reason=merge_conflict）があるもの。
+ * 手動で queue から外した（reason=manual 等）PR は、予約が無ければ対象にしない。
  */
 export function selectCandidates(prs) {
   const candidates = [];
@@ -58,8 +63,14 @@ export function selectCandidates(prs) {
     if (pr.isCrossRepository) { skip('fork の PR（head が別リポジトリ）'); continue; }
     if ((pr.labels?.nodes ?? []).some((l) => l.name === OPT_OUT_LABEL)) { skip(OPT_OUT_LABEL + ' ラベル付き'); continue; }
     if (pr.mergeable !== 'CONFLICTING') { skip('mergeable=' + pr.mergeable); continue; }
-    const intent = pr.autoMergeRequest != null || lastQueueEvent(pr) === 'RemovedFromMergeQueueEvent';
-    if (!intent) { skip('auto-merge 予約なし・queue 脱落イベントなし（マージ待ちの意思が無い）'); continue; }
+    const last = lastQueueEvent(pr);
+    const removedByConflict = last?.__typename === 'RemovedFromMergeQueueEvent' && last.reason === CONFLICT_REMOVAL_REASON;
+    if (pr.autoMergeRequest == null && !removedByConflict) {
+      skip(last?.__typename === 'RemovedFromMergeQueueEvent'
+        ? 'auto-merge 予約なし・queue 脱落理由が ' + last.reason + '（merge_conflict 以外は人の判断で外したものとして扱う）'
+        : 'auto-merge 予約なし・queue 脱落イベントなし（マージ待ちの意思が無い）');
+      continue;
+    }
     candidates.push(pr);
   }
   return { candidates, skipped };
@@ -74,13 +85,20 @@ export function pendingMergeability(prs) {
   return selectCandidates(unknown).candidates.map((pr) => pr.number);
 }
 
-function recentComments(pr, now, marker) {
-  return (pr.comments?.nodes ?? []).filter((c) => (c.body ?? '').includes(marker) && now - new Date(c.createdAt) < DAY_MS);
+function recentComments(comments, now, marker) {
+  return comments.filter((c) => (c.body ?? '').includes(marker) && now - new Date(c.createdAt) < DAY_MS);
 }
 
-/** bot がこの PR を直近24時間に直した回数（修復コメントの目印で数える）。 */
-export function countRecentFixes(pr, now) {
-  return recentComments(pr, now, FIX_MARKER).length;
+/**
+ * bot がこの PR を直近24時間に直した回数。コメントではなく PR の commit 履歴で数える
+ * （コメントは消せる・ページ外に流れる）。bot の修復 commit = メッセージに固定印があるか、作者/コミッタが bot。
+ */
+export function countRecentFixes(pr, now, { botEmail } = {}) {
+  return (pr.commits?.nodes ?? []).filter(({ commit }) => {
+    if (!commit || now - new Date(commit.committedDate) >= DAY_MS) return false;
+    const byBot = botEmail != null && (commit.author?.email === botEmail || commit.committer?.email === botEmail);
+    return byBot || (commit.message ?? '').includes(FIX_COMMIT_TRAILER);
+  }).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,19 +114,28 @@ function formatErrors(errors) {
  * @returns {{ outcome: string, reason?: string, mergeCommit?: string }}
  */
 export async function processPullRequest(pr, deps) {
-  const { gitOps, ghOps, now, log, sleep, checkStructure } = deps;
+  const { gitOps, ghOps, now, log, sleep, checkStructure, botEmail } = deps;
   const tag = '#' + pr.number + '（' + pr.headRefName + '）';
+  let comments = null;
+  const allComments = () => (comments ??= ghOps.listComments(pr));
+  /** コメントを投稿し、失敗は握りつぶさず結果に載せる。 */
+  const post = (body) => {
+    const r = ghOps.comment(pr.number, body) ?? { ok: true };
+    if (!r.ok) log(tag + ': コメント投稿に失敗: ' + r.error);
+    return r.ok ? null : r.error;
+  };
 
   // 暴走防止
-  const fixes = countRecentFixes(pr, now);
+  const fixes = countRecentFixes(pr, now, { botEmail });
   if (fixes >= MAX_FIXES_PER_DAY) {
-    if (recentComments(pr, now, LIMIT_MARKER).length === 0) {
-      ghOps.comment(pr.number, LIMIT_MARKER + '\n'
+    let commentError = null;
+    if (recentComments(allComments(), now, LIMIT_MARKER).length === 0) {
+      commentError = post(LIMIT_MARKER + '\n'
         + '台帳（' + LEDGER_PATH + '）衝突の自動修復は、この PR に対して直近24時間で既に ' + fixes + ' 回行ったため、上限（' + MAX_FIXES_PER_DAY + '回）に達しました。'
         + 'これ以上は自動で直しません。main を取り込んで手で解消し、`gh pr merge ' + pr.number + ' --squash` で予約し直してください。');
     }
     log(tag + ': スキップ（直近24時間の自動修復が ' + fixes + ' 回で上限）');
-    return { outcome: 'skip-limit', reason: '直近24時間で ' + fixes + ' 回修復済み' };
+    return { outcome: 'skip-limit', reason: '直近24時間で ' + fixes + ' 回修復済み', commentError };
   }
 
   const headOid = gitOps.fetchHead(pr);
@@ -145,18 +172,19 @@ export async function processPullRequest(pr, deps) {
   const check = checkStructure(ledgerText);
   if (!check.ok) {
     const marker = STRUCTURE_NG_MARKER_PREFIX + headOid + ' -->';
-    if (!(pr.comments?.nodes ?? []).some((c) => (c.body ?? '').includes(marker))) {
-      ghOps.comment(pr.number, marker + '\n'
+    let commentError = null;
+    if (!allComments().some((c) => (c.body ?? '').includes(marker))) {
+      commentError = post(marker + '\n'
         + '台帳（' + LEDGER_PATH + '）の衝突を union で自動解消しようとしましたが、解消後の台帳が構造検査に合格しないため push しませんでした。'
         + '同じ行を PR と main の両方で編集した場合、union は旧行と新行を両方残します。人手で main を取り込んで解消してください。\n\n'
         + formatErrors(check.errors));
     }
     log(tag + ': 構造検査 NG のため push しない（' + check.errors.length + ' 件）');
-    return { outcome: 'structure-ng', reason: check.errors.join(' / ') };
+    return { outcome: 'structure-ng', reason: check.errors.join(' / '), commentError };
   }
 
   const message = 'Merge origin/main into ' + pr.headRefName + '\n\n'
-    + '台帳 ' + LEDGER_PATH + ' の末尾追記衝突を merge=union で自動解消した（task-list-conflict-autofix）。';
+    + '台帳 ' + LEDGER_PATH + ' の末尾追記衝突を merge=union で自動解消した（task-list-conflict-autofix）。\n\n' + FIX_COMMIT_TRAILER;
   const mergeCommit = gitOps.commitMerge(merged.tree, headOid, mainOid, message);
   const pushed = gitOps.push(mergeCommit, pr.headRefName);
   if (!pushed.ok) {
@@ -170,13 +198,18 @@ export async function processPullRequest(pr, deps) {
   if (pr.autoMergeRequest == null) {
     let result = { ok: false, error: '未実行' };
     for (let attempt = 1; attempt <= 3; attempt++) {
-      result = ghOps.enableAutoMerge(pr);
-      if (result.ok) break;
+      // expectedHeadOid=作成した merge commit。push 後に誰かが head を進めていたら予約しない（未検証の head を予約しない）。
+      result = ghOps.enableAutoMerge(pr, mergeCommit);
+      if (result.ok || result.headMismatch) break;
       log(tag + ': auto-merge 予約失敗（' + attempt + '回目）: ' + result.error);
       if (attempt < 3) await sleep(10_000);
     }
     if (result.ok) {
       autoMergeNote = 'auto-merge（SQUASH）を予約し直しました。必須チェックが緑になると自動で merge queue へ入ります。';
+    } else if (result.headMismatch) {
+      outcome = 'fixed-head-moved';
+      log(tag + ': push 後に head が ' + mergeCommit + ' から動いたため auto-merge を予約し直さない（' + result.error + '）');
+      autoMergeNote = '**push 後に head が別の commit へ進んだため、auto-merge は予約し直していません**（' + result.error + '）。内容を確かめてから `gh pr merge ' + pr.number + ' --squash` で予約してください。';
     } else {
       outcome = 'fixed-automerge-failed';
       autoMergeNote = '**auto-merge の予約し直しに失敗しました**（' + result.error + '）。`gh pr merge ' + pr.number + ' --squash` で予約してください。';
@@ -184,11 +217,11 @@ export async function processPullRequest(pr, deps) {
   } else {
     autoMergeNote = 'auto-merge は予約済みのままです。';
   }
-  ghOps.comment(pr.number, FIX_MARKER + '\n'
+  const commentError = post(FIX_MARKER + '\n'
     + '台帳（' + LEDGER_PATH + '）だけの衝突を merge=union で自動解消し、main を取り込む merge commit `' + mergeCommit + '` を push しました'
     + '（取り込んだ main: `' + mainOid + '`）。' + autoMergeNote + '\n\n'
     + '自動修復を止めたいときは `' + OPT_OUT_LABEL + '` ラベルを付けてください（同じ PR への自動修復は24時間に' + MAX_FIXES_PER_DAY + '回まで）。');
-  return { outcome, mergeCommit };
+  return { outcome, mergeCommit, commentError };
 }
 
 // ---------------------------------------------------------------------------
@@ -270,8 +303,9 @@ const PR_QUERY = 'query($owner:String!,$name:String!,$cursor:String){repository(
   + 'id number baseRefName headRefName headRefOid isCrossRepository mergeable '
   + 'labels(first:30){nodes{name}} autoMergeRequest{enabledAt} '
   + 'timelineItems(last:1,itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT,REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{__typename ... on RemovedFromMergeQueueEvent{reason createdAt}}} '
-  + 'comments(last:50){nodes{body createdAt}}}}}}';
-const ENABLE_AUTO_MERGE = 'mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH}){pullRequest{number autoMergeRequest{enabledAt}}}}';
+  + 'commits(last:100){nodes{commit{oid message committedDate author{email} committer{email}}}}}}}}';
+const ENABLE_AUTO_MERGE = 'mutation($id:ID!,$oid:GitObjectID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH,expectedHeadOid:$oid}){pullRequest{number autoMergeRequest{enabledAt}}}}';
+const HEAD_OID = 'query($id:ID!){node(id:$id){... on PullRequest{headRefOid}}}';
 
 export function createGhOps({ repo }) {
   const [owner, name] = repo.split('/');
@@ -293,13 +327,25 @@ export function createGhOps({ repo }) {
       }
       return all;
     },
+    /** PR の全コメント（REST をページングして全件）。 */
+    listComments(pr) {
+      const out = must(gh(['api', '--paginate', '--slurp', 'repos/' + repo + '/issues/' + pr.number + '/comments?per_page=100']), '#' + pr.number + ' のコメント取得');
+      return JSON.parse(out).flat().map((c) => ({ body: c.body, createdAt: c.created_at }));
+    },
+    /** 失敗は { ok: false, error } で返す（呼び出し側が結果に載せる）。 */
     comment(number, body) {
       const r = gh(['api', '-X', 'POST', 'repos/' + repo + '/issues/' + number + '/comments', '--input', '-'], JSON.stringify({ body }));
-      if (r.code !== 0) console.error('#' + number + ': コメント投稿に失敗: ' + r.stderr.trim());
+      return r.code === 0 ? { ok: true } : { ok: false, error: (r.stderr || r.stdout).trim() || 'exit ' + r.code };
     },
-    enableAutoMerge(pr) {
-      const r = gh(['api', 'graphql', '-f', 'query=' + ENABLE_AUTO_MERGE, '-f', 'id=' + pr.id]);
-      return r.code === 0 ? { ok: true } : { ok: false, error: (r.stderr || r.stdout).trim() };
+    enableAutoMerge(pr, expectedHeadOid) {
+      const r = gh(['api', 'graphql', '-f', 'query=' + ENABLE_AUTO_MERGE, '-f', 'id=' + pr.id, '-f', 'oid=' + expectedHeadOid]);
+      if (r.code === 0) return { ok: true };
+      const error = (r.stderr || r.stdout).trim();
+      // 失敗時は現在の head を取り直し、expectedHeadOid との不一致かどうかを確かめる（文言に頼らない）。
+      const h = gh(['api', 'graphql', '-f', 'query=' + HEAD_OID, '-f', 'id=' + pr.id, '--jq', '.data.node.headRefOid']);
+      const current = h.code === 0 ? h.stdout.trim() : null;
+      if (current && current !== expectedHeadOid) return { ok: false, headMismatch: true, error: 'head=' + current + '（期待 ' + expectedHeadOid + '）: ' + error };
+      return { ok: false, error };
     },
   };
 }
@@ -336,7 +382,7 @@ export async function main(argv) {
   if (dryRun) {
     const now = new Date();
     for (const pr of candidates) {
-      const fixes = countRecentFixes(pr, now);
+      const fixes = countRecentFixes(pr, now, { botEmail: process.env.LEDGER_BOT_EMAIL || null });
       log('  対象 #' + pr.number + '（' + pr.headRefName + '）: '
         + (fixes >= MAX_FIXES_PER_DAY ? '上限到達でスキップ予定' : '修復を試みる予定（直近24時間の修復 ' + fixes + ' 回）'));
     }
@@ -358,12 +404,17 @@ export async function main(argv) {
     log,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     checkStructure: checkTaskListStructure,
+    botEmail: email,
   };
   let errors = 0;
   for (const pr of candidates) {
     try {
       const result = await processPullRequest(pr, deps);
       log('#' + pr.number + ' → ' + result.outcome + (result.reason ? '（' + result.reason + '）' : ''));
+      if (result.commentError) {
+        errors++;
+        console.error('#' + pr.number + ': PR へのコメント投稿に失敗（処理結果 ' + result.outcome + '）: ' + result.commentError);
+      }
     } catch (error) {
       errors++;
       console.error('#' + pr.number + ': 想定外の失敗: ' + (error?.message ?? error));

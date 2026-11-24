@@ -13,6 +13,7 @@ import {
   createGitOps,
   ensureUnionAttribute,
   FIX_MARKER,
+  FIX_COMMIT_TRAILER,
   LEDGER_PATH,
 } from './task-list-conflict-autofix.mjs';
 import { checkTaskListStructure } from './task-list-structure-check.mjs';
@@ -38,6 +39,7 @@ function pr(overrides = {}) {
     autoMergeRequest: null,
     timelineItems: { nodes: [{ __typename: 'RemovedFromMergeQueueEvent', reason: 'merge_conflict' }] },
     comments: { nodes: [] },
+    commits: { nodes: [] },
     ...overrides,
   };
 }
@@ -88,6 +90,20 @@ test('選定: mergeable=UNKNOWN でマージ待ちの意思がある PR だけ�
   assert.deepEqual(pendingMergeability(prs), [1]);
 });
 
+test('選定: 予約なしで queue 脱落理由が merge_conflict 以外（manual / failed_checks）は除外する', () => {
+  const manual = pr({ number: 1, timelineItems: { nodes: [{ __typename: 'RemovedFromMergeQueueEvent', reason: 'manual' }] } });
+  const failed = pr({ number: 2, timelineItems: { nodes: [{ __typename: 'RemovedFromMergeQueueEvent', reason: 'failed_checks' }] } });
+  const conflict = pr({ number: 3 });
+  const { candidates, skipped } = selectCandidates([manual, failed, conflict]);
+  assert.deepEqual(candidates.map((p) => p.number), [3]);
+  assert.match(skipped.find((s) => s.number === 1).reason, /manual/);
+});
+
+test('選定: auto-merge 予約済みなら脱落理由が manual でも対象（予約が意思を示す）', () => {
+  const reserved = pr({ autoMergeRequest: { enabledAt: '2026-11-24T00:00:00Z' }, timelineItems: { nodes: [{ __typename: 'RemovedFromMergeQueueEvent', reason: 'manual' }] } });
+  assert.equal(selectCandidates([reserved]).candidates.length, 1);
+});
+
 test('選定: base が main 以外は除外する', () => {
   const { candidates } = selectCandidates([pr({ baseRefName: 'develop' })]);
   assert.equal(candidates.length, 0);
@@ -97,7 +113,7 @@ test('選定: base が main 以外は除外する', () => {
 // 1件の処理（ops をモック）
 // ---------------------------------------------------------------------------
 
-function mockEnv({ merge, ledgerText = ledger(row('CMP-261124-0001'), row('CMP-261124-0002')), push = { ok: true }, changed = [LEDGER_PATH], autoMerge = { ok: true } } = {}) {
+function mockEnv({ merge, ledgerText = ledger(row('CMP-261124-0001'), row('CMP-261124-0002')), push = { ok: true }, changed = [LEDGER_PATH], autoMerge = { ok: true }, commentResult = { ok: true } } = {}) {
   const calls = [];
   const gitOps = {
     fetchMain: () => { calls.push('fetchMain'); return 'main0001'; },
@@ -110,11 +126,13 @@ function mockEnv({ merge, ledgerText = ledger(row('CMP-261124-0001'), row('CMP-2
     push: () => { calls.push('push'); return push; },
   };
   const comments = [];
+  const autoMergeCalls = [];
   const ghOps = {
-    comment: (number, body) => { comments.push({ number, body }); },
-    enableAutoMerge: () => { calls.push('enableAutoMerge'); return autoMerge; },
+    listComments: (p) => { calls.push('listComments'); return p.comments?.nodes ?? []; },
+    comment: (number, body) => { comments.push({ number, body }); return commentResult; },
+    enableAutoMerge: (p, expectedHeadOid) => { calls.push('enableAutoMerge'); autoMergeCalls.push(expectedHeadOid); return autoMerge; },
   };
-  return { calls, comments, deps: { gitOps, ghOps, now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure } };
+  return { calls, comments, autoMergeCalls, deps: { gitOps, ghOps, now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure, botEmail: 'bot@example.com' } };
 }
 
 test('処理: 台帳以外にも衝突が残る → push せず merge を取り消してスキップする', async () => {
@@ -175,6 +193,42 @@ test('処理: 既に auto-merge 予約済みなら予約し直さない', async 
   assert.ok(!env.calls.includes('enableAutoMerge'));
 });
 
+test('処理: auto-merge 予約に expectedHeadOid=作成した merge commit を渡す', async () => {
+  const env = mockEnv();
+  await processPullRequest(pr(), env.deps);
+  assert.deepEqual(env.autoMergeCalls, ['merge0001']);
+});
+
+test('処理: push 後に head が動いて expectedHeadOid が不一致 → 再試行せず予約し直さない（ログとコメント）', async () => {
+  const env = mockEnv({ autoMerge: { ok: false, headMismatch: true, error: 'head=other（期待 merge0001）' } });
+  const logs = [];
+  env.deps.log = (m) => logs.push(m);
+  const result = await processPullRequest(pr(), env.deps);
+  assert.equal(result.outcome, 'fixed-head-moved');
+  assert.equal(env.autoMergeCalls.length, 1);
+  assert.ok(logs.some((l) => /予約し直さない/.test(l)));
+  assert.equal(env.comments.length, 1);
+  assert.match(env.comments[0].body, /予約し直していません/);
+});
+
+test('処理: push 後のコメント投稿失敗は結果に載せて返す（握りつぶさない）', async () => {
+  const env = mockEnv({ commentResult: { ok: false, error: 'HTTP 403' } });
+  const result = await processPullRequest(pr(), env.deps);
+  assert.equal(result.outcome, 'fixed');
+  assert.equal(result.commentError, 'HTTP 403');
+});
+
+test('処理: 構造検査 NG のコメント重複確認は PR の全コメント（ページング済み）で行う', async () => {
+  const env0 = mockEnv({ ledgerText: ledger(row('CMP-261124-0001'), row('CMP-261124-0001')) });
+  await processPullRequest(pr(), env0.deps);
+  const filler = Array.from({ length: 120 }, (_, i) => ({ body: 'その他 ' + i, createdAt: NOW.toISOString() }));
+  const old = pr({ comments: { nodes: [{ body: env0.comments[0].body, createdAt: NOW.toISOString() }, ...filler] } });
+  const env = mockEnv({ ledgerText: ledger(row('CMP-261124-0001'), row('CMP-261124-0001')) });
+  await processPullRequest(old, env.deps);
+  assert.ok(env.calls.includes('listComments'));
+  assert.equal(env.comments.length, 0);
+});
+
 test('処理: auto-merge 予約の失敗はコメントに残す', async () => {
   const env = mockEnv({ autoMerge: { ok: false, error: 'Pull request is in clean status' } });
   const result = await processPullRequest(pr(), env.deps);
@@ -206,9 +260,12 @@ test('処理: workflow ファイルが変わる merge は push しない（App �
   assert.ok(!env.calls.includes('push'));
 });
 
-test('上限: 直近24時間に bot が3回直した PR はスキップしてコメントで知らせる', async () => {
-  const fixed = (hoursAgo) => ({ body: FIX_MARKER + '\n直した', createdAt: new Date(NOW - hoursAgo * 3600e3).toISOString() });
-  const target = pr({ comments: { nodes: [fixed(1), fixed(5), fixed(23)] } });
+const fixCommit = (hoursAgo, { message = 'Merge origin/main\n\n' + FIX_COMMIT_TRAILER, email = 'someone@example.com' } = {}) => ({
+  commit: { oid: 'c' + hoursAgo, message, committedDate: new Date(NOW - hoursAgo * 3600e3).toISOString(), author: { email }, committer: { email } },
+});
+
+test('上限: 直近24時間に bot が3回直した PR（commit 履歴で数える）はスキップしてコメントで知らせる', async () => {
+  const target = pr({ commits: { nodes: [fixCommit(1), fixCommit(5), fixCommit(23)] } });
   assert.equal(countRecentFixes(target, NOW), 3);
   const env = mockEnv();
   const result = await processPullRequest(target, env.deps);
@@ -219,17 +276,31 @@ test('上限: 直近24時間に bot が3回直した PR はスキップしてコ
 });
 
 test('上限: 24時間より前の修復は数えない', () => {
-  const fixed = (hoursAgo) => ({ body: FIX_MARKER, createdAt: new Date(NOW - hoursAgo * 3600e3).toISOString() });
-  assert.equal(countRecentFixes(pr({ comments: { nodes: [fixed(1), fixed(25), fixed(48)] } }), NOW), 1);
+  assert.equal(countRecentFixes(pr({ commits: { nodes: [fixCommit(1), fixCommit(25), fixCommit(48)] } }), NOW), 1);
 });
 
-test('上限: 上限到達の通知は24時間に1回だけ', async () => {
-  const fixed = (h) => ({ body: FIX_MARKER, createdAt: new Date(NOW - h * 3600e3).toISOString() });
+test('上限: 固定印が無くても作者/コミッタが bot の commit は数え、人の commit は数えない', () => {
+  const nodes = [
+    fixCommit(1, { message: 'Merge branch main', email: 'bot@example.com' }),
+    fixCommit(2, { message: '人の修正', email: 'human@example.com' }),
+    fixCommit(3),
+  ];
+  assert.equal(countRecentFixes(pr({ commits: { nodes } }), NOW, { botEmail: 'bot@example.com' }), 2);
+  assert.equal(countRecentFixes(pr({ commits: { nodes } }), NOW), 1);
+});
+
+test('上限: 修復コメントを消しても commit 履歴で数える（コメントは数えない）', () => {
+  const target = pr({ comments: { nodes: [1, 2, 3].map(() => ({ body: FIX_MARKER, createdAt: NOW.toISOString() })) }, commits: { nodes: [] } });
+  assert.equal(countRecentFixes(target, NOW), 0);
+});
+
+test('上限: 上限到達の通知は24時間に1回だけ（コメントは全ページを見る）', async () => {
   const env = mockEnv();
-  const first = pr({ comments: { nodes: [fixed(1), fixed(2), fixed(3)] } });
+  const first = pr({ commits: { nodes: [fixCommit(1), fixCommit(2), fixCommit(3)] } });
   await processPullRequest(first, env.deps);
   const env2 = mockEnv();
-  const second = pr({ comments: { nodes: [...first.comments.nodes, { body: env.comments[0].body, createdAt: NOW.toISOString() }] } });
+  const filler = Array.from({ length: 120 }, (_, i) => ({ body: 'その他 ' + i, createdAt: NOW.toISOString() }));
+  const second = pr({ commits: first.commits, comments: { nodes: [{ body: env.comments[0].body, createdAt: NOW.toISOString() }, ...filler] } });
   const result = await processPullRequest(second, env2.deps);
   assert.equal(result.outcome, 'skip-limit');
   assert.equal(env2.comments.length, 0);
@@ -328,7 +399,7 @@ test('統合: union で末尾追記衝突を自動解消し、両行が残り、
     const comments = [];
     const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), {
       gitOps: ops,
-      ghOps: { comment: (n, body) => comments.push(body), enableAutoMerge: () => ({ ok: true }) },
+      ghOps: { listComments: () => [], comment: (n, body) => { comments.push(body); return { ok: true }; }, enableAutoMerge: () => ({ ok: true }) },
       now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure,
     });
     assert.equal(result.outcome, 'fixed', JSON.stringify(result));
@@ -337,6 +408,7 @@ test('統合: union で末尾追記衝突を自動解消し、両行が残り、
     const parents = sh(repos.origin, 'rev-list', '--parents', '-n', '1', remoteHead).split(' ').slice(1);
     assert.deepEqual(parents, [repos.featureOid, mainOid]);
     assert.match(comments[0], new RegExp(result.mergeCommit));
+    assert.ok(sh(repos.origin, 'log', '-1', '--format=%B', remoteHead).includes(FIX_COMMIT_TRAILER));
   } finally {
     repos.cleanup();
   }
@@ -353,7 +425,7 @@ test('統合: 台帳以外のファイルも衝突 → union でも衝突が残�
     const ops = createGitOps({ git });
     const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), {
       gitOps: ops,
-      ghOps: { comment: () => assert.fail('コメントしない'), enableAutoMerge: () => assert.fail('予約しない') },
+      ghOps: { listComments: () => [], comment: () => assert.fail('コメントしない'), enableAutoMerge: () => assert.fail('予約しない') },
       now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure,
     });
     assert.equal(result.outcome, 'skip-conflict-outside-ledger');
@@ -386,7 +458,7 @@ test('統合: 同じ行の両側編集 → union で旧行と新行が両方残�
     const comments = [];
     const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), {
       gitOps: ops,
-      ghOps: { comment: (n, body) => comments.push(body), enableAutoMerge: () => assert.fail('予約しない') },
+      ghOps: { listComments: () => [], comment: (n, body) => { comments.push(body); return { ok: true }; }, enableAutoMerge: () => assert.fail('予約しない') },
       now: NOW, log: () => {}, sleep: async () => {}, checkStructure: checkTaskListStructure,
     });
     assert.equal(result.outcome, 'structure-ng');
