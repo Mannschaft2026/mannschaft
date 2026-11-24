@@ -108,8 +108,25 @@ public class ShiftBudgetConsumptionService {
         SKIPPED_NOT_PUBLISHED
     }
 
-    /** 取消の結果。 */
-    public record CancelOutcome(int cancelled, int deferred, int cancelAfterClose) {
+    /**
+     * 取消の結果。
+     *
+     * <p>{@code cancelledByOrganization} は今回実際に取り消した PLANNED 行の件数を、その行が紐づく割当の組織ごとに数えたもの
+     * （計上時の組織。F01.2.1 AC-G125）。{@code cancelledAllocationOrganizations} は実際に取り消した行の割当 ID → 組織 ID。
+     * 監査ログ・閾値の再判定は取消前の集計ではなくこれを使う（整合取消で有効枠の行が残る・遅延・締め後の行は数えない）。</p>
+     */
+    public record CancelOutcome(int cancelled, int deferred, int cancelAfterClose,
+                                Map<Long, Long> cancelledByOrganization,
+                                Map<Long, Long> cancelledAllocationOrganizations) {
+
+        public CancelOutcome {
+            cancelledByOrganization = Map.copyOf(cancelledByOrganization);
+            cancelledAllocationOrganizations = Map.copyOf(cancelledAllocationOrganizations);
+        }
+
+        static CancelOutcome none() {
+            return new CancelOutcome(0, 0, 0, Map.of(), Map.of());
+        }
     }
 
     // ───────────────────────── 記録 ─────────────────────────
@@ -312,7 +329,7 @@ public class ShiftBudgetConsumptionService {
     private CancelOutcome cancelOnce(Long shiftId, List<FailureNote> notes) {
         List<Long> discovered = consumptionRepository.findLiveAllocationIdsByShift(shiftId);
         if (discovered.isEmpty()) {
-            return new CancelOutcome(0, 0, 0);
+            return CancelOutcome.none();
         }
         return requiresNewTx.execute(status -> {
             Set<Long> lockSet = new TreeSet<>(discovered);
@@ -338,6 +355,8 @@ public class ShiftBudgetConsumptionService {
             int cancelled = 0;
             int deferred = 0;
             int afterClose = 0;
+            Map<Long, Long> cancelledByOrganization = new java.util.LinkedHashMap<>();
+            Map<Long, Long> cancelledAllocationOrganizations = new java.util.LinkedHashMap<>();
             for (ShiftBudgetConsumptionEntity row : rows) {
                 boolean stillAssigned = published && currentPairs.contains(row.getSlotId() + ":" + row.getUserId());
                 if (stillAssigned) {
@@ -363,11 +382,15 @@ public class ShiftBudgetConsumptionService {
                 consumptionRepository.saveAndFlush(row);
                 allocationRepository.decrementConsumedAmount(row.getAllocationId(), row.getAmount());
                 cancelled++;
+                Long organizationId = locked.get(row.getAllocationId()).getOrganizationId();
+                cancelledByOrganization.merge(organizationId, 1L, Long::sum);
+                cancelledAllocationOrganizations.put(row.getAllocationId(), organizationId);
             }
             if (cancelled > 0) {
                 log.info("シフトの公開失効・担当変更に伴い PLANNED 消化を {} 件キャンセル: shift={}", cancelled, shiftId);
             }
-            return new CancelOutcome(cancelled, deferred, afterClose);
+            return new CancelOutcome(cancelled, deferred, afterClose, cancelledByOrganization,
+                    cancelledAllocationOrganizations);
         });
     }
 

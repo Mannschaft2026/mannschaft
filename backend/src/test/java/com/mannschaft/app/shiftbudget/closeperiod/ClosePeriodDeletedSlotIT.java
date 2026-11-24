@@ -129,6 +129,52 @@ class ClosePeriodDeletedSlotIT extends ClosePeriodTestBase {
     }
 
     @Test
+    @DisplayName("整合バッチの監査ログ: 有効枠と削除済み枠が混在する公開中シフトでは、実際に取り消した行の組織・件数だけを記録する")
+    void 整合バッチの監査ログは実際の取消結果の組織と件数だけを記録する() {
+        // 同じチームが2組織に加盟し、勤務日で計上先の組織が分かれる（4/10 は組織A、4/11〜 は組織B）
+        long[] other = otherOrganization();
+        Long orgB = other[0];
+        tx.executeWithoutResult(st -> insertTeamOrgMembership(teamId, orgB));
+        Long allocationA = allocation(d("2026-04-01"), d("2026-04-10"));
+        Long allocationB = allocation(orgB, teamId, other[3], other[4], d("2026-04-11"), d("2026-04-30"));
+        Long workerB1 = worker(teamId, orgB);
+        Long workerB2 = worker(teamId, orgB);
+        long[] s = shift(d("2026-04-10"), workerId);
+        long deletedSlot = addSlot(s[0], d("2026-04-11"), workerB1);
+        long aliveSlotB = addSlot(s[0], d("2026-04-12"), workerB2);
+        publish(s[0]);
+        assertThat(liveStatus(s[1], workerId)).isEqualTo("PLANNED");
+        assertThat(liveStatus(deletedSlot, workerB1)).isEqualTo("PLANNED");
+        assertThat(liveStatus(aliveSlotB, workerB2)).isEqualTo("PLANNED");
+
+        deleteSlot(deletedSlot);
+        for (int i = 0; i < 20 && reconcileBatch.reconcileOrphanConsumptions() > 0; i++) {
+            // 収束待ち
+        }
+
+        assertThat(liveStatus(deletedSlot, workerB1)).as("削除済み枠だけが取り消される").isNull();
+        assertThat(liveStatus(aliveSlotB, workerB2)).isEqualTo("PLANNED");
+        assertThat(liveStatus(s[1], workerId)).isEqualTo("PLANNED");
+        assertThat(consumedAmount(allocationA)).isEqualByComparingTo("8000");
+        assertThat(consumedAmount(allocationB)).isEqualByComparingTo("8000");
+
+        // 監査ログは @Async で書かれる。全件が書き終わるのを待ってから（2秒後以降）、組織・件数を照合する
+        org.awaitility.Awaitility.await().pollDelay(java.time.Duration.ofSeconds(2))
+                .atMost(java.time.Duration.ofSeconds(30)).untilAsserted(() -> {
+                    java.util.List<java.util.Map<String, Object>> audits = jdbc.queryForList(
+                            "SELECT organization_id, CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.cancelled_count')) AS SIGNED) AS cnt "
+                                    + "FROM audit_logs WHERE event_type = 'SHIFT_BUDGET_CONSUMPTION_CANCELLED' "
+                                    + "AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.shift_schedule_id')) = ? "
+                                    + "AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.source')) = 'RECONCILE_BATCH' ORDER BY id",
+                            String.valueOf(s[0]));
+                    assertThat(audits).as("取り消した組織Bの1件だけ（取り消していない組織Aには出さない）")
+                            .extracting(r -> ((Number) r.get("organization_id")).longValue()).containsExactly(orgB);
+                    assertThat(((Number) audits.get(0).get("cnt")).longValue())
+                            .as("cancelled_count は実際に取り消した件数").isEqualTo(1L);
+                });
+    }
+
+    @Test
     @DisplayName("締め（Prepare の対象選定）: 削除済み勤務枠の PLANNED は確定せず、生きている勤務だけが CONFIRMED になる")
     void 締めは削除済み勤務枠のPLANNEDを確定しない() throws Exception {
         Long allocationId = allocation(d("2026-04-01"), d("2026-05-31"));
