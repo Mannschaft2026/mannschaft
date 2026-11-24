@@ -4,6 +4,8 @@ import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.auth.service.AuthTokenService;
 import com.mannschaft.app.auth.service.PendingInviteService;
 import com.mannschaft.app.auth.service.PendingInviteStore;
+import com.mannschaft.app.notification.service.NotificationHelper;
+import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
 import com.mannschaft.app.role.service.MembershipInviteTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
@@ -219,5 +221,91 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
         assertThat(fx.activeTokens(reissued)).isEqualTo(1);
         assertThat(fx.pendingStatus(reissued.requester())).isEqualTo("PENDING");
         assertThat(fx.pendingStatus(declined.requester())).isEqualTo("REISSUE_DECLINED");
+    }
+
+    private NotificationHelper notifier() {
+        return AopTestUtils.getUltimateTargetObject(notificationSpy);
+    }
+
+    // ------------------------------------------------------------------
+    // PR3 検分 P2-3: 止まっていた GET が新しい PENDING を EXPIRED に上書きしない
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("P2-3: 古い招待を判定した GET が止まっている間に再招待が完了しても、再開した GET は新しいハッシュの PENDING を EXPIRED にしない")
+    void staleGetDoesNotExpireReissuedPending() {
+        Scope scope = scope("TEAM");
+        Long requester = user();
+        InviteTokenEntity expired = token(scope, 0, utcNow().minusMinutes(5), 3, 0, null, null);
+        fx.insertPending(requester, scope, "PENDING", expired.getTokenHash(), null);
+        InviteTokenEntity fresh = token(scope, 0, utcNow().plusDays(7), 1, 0, requester, null);
+        doAnswer(inv -> {
+            // GET が古い招待を「期限切れ」と判定した後、UPDATE の前に再招待の確定が割り込んだ
+            jdbc.update("UPDATE " + ReissueFixtures.PENDING_TABLE + " SET token_hash = ?, version = version + 1 "
+                    + "WHERE user_id = ?", fresh.getTokenHash(), requester);
+            return inv.callRealMethod();
+        }).when(store()).expirePending(anyLong(), anyString(), anyString());
+
+        pending().findMine(requester);
+
+        Map<String, Object> row = fx.pendingRow(requester);
+        assertThat(row.get("status")).isEqualTo("PENDING");
+        assertThat(row.get("token_hash")).isEqualTo(fresh.getTokenHash());
+        assertThat(row.get("failure_code")).isNull();
+    }
+
+    // ------------------------------------------------------------------
+    // PR3 検分 P2-2: 有効化の直前に保留が変わっていたら、有効にした招待を失効させる
+    // ------------------------------------------------------------------
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TEAM", "ORGANIZATION"})
+    @DisplayName("P2-2: auth の確定の後、有効化までに保留が当該ハッシュの PENDING でなくなった（本人の辞退など）なら 409 ROLE_017。"
+            + "招待は有効なまま残さず、INVITE_REISSUED の通知・監査も出さない")
+    void pendingChangedBeforeActivationRevokesToken(String type) throws Exception {
+        ReissueFixtures.Case c = fx.reissueRequested(type);
+        doAnswer(inv -> {
+            jdbc.update("UPDATE " + ReissueFixtures.PENDING_TABLE + " SET status = 'DECLINED' WHERE user_id = ?",
+                    c.requester());
+            return inv.callRealMethod();
+        }).when(issuer()).activateStaged(anyLong(), anyLong());
+
+        reissue(c).andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("ROLE_017"));
+
+        assertThat(fx.pendingStatus(c.requester())).isEqualTo("DECLINED");
+        assertThat(fx.activeTokens(c)).isZero();
+        assertThat(dmDuplicateCandidates(c)).isZero();
+        ReissueFixtures.settle();
+        assertThat(fx.notifications(c.requester(), "INVITE_REISSUED")).isZero();
+        assertThat(fx.audits(ReissueFixtures.scopeEvent(c, "INVITE_REISSUED"), c.requester())).isZero();
+    }
+
+    // ------------------------------------------------------------------
+    // PR3 検分 N5: 通知の配送が失敗しても確定は維持
+    // ------------------------------------------------------------------
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TEAM", "ORGANIZATION"})
+    @DisplayName("N5: 依頼者への通知の配送が失敗しても、再招待（200 REISSUED・有効なトークン 1 件・保留 PENDING・監査 1 行）と"
+            + "見送り（200 REISSUE_DECLINED・監査 1 行）は確定したまま")
+    void notificationFailureDoesNotRollBack(String type) throws Exception {
+        ReissueFixtures.Case reissued = fx.reissueRequested(type);
+        ReissueFixtures.Case declined = fx.requestIn(reissued.scope(), reissued.admin(), "MEMBER", utcNow().minusMinutes(5));
+        doThrow(new IllegalStateException("試練: 通知の配送で停止")).when(notifier())
+                .notifyAllLocalized(any(), anyString(), any(), any(), any(), any(), any(), any(), any());
+
+        reissue(reissued).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("REISSUED"));
+        decline(declined).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("REISSUE_DECLINED"));
+
+        ReissueFixtures.await(() -> fx.audits(ReissueFixtures.scopeEvent(reissued, "INVITE_REISSUED"), reissued.requester()),
+                1, "再招待の監査");
+        ReissueFixtures.await(() -> fx.audits(ReissueFixtures.scopeEvent(declined, "INVITE_REISSUE_DECLINED"),
+                declined.requester()), 1, "見送りの監査");
+        ReissueFixtures.settle();
+        assertThat(fx.activeTokens(reissued)).isEqualTo(1);
+        assertThat(fx.pendingStatus(reissued.requester())).isEqualTo("PENDING");
+        assertThat(fx.pendingStatus(declined.requester())).isEqualTo("REISSUE_DECLINED");
+        assertThat(fx.notifications(reissued.requester(), "INVITE_REISSUED")).isZero();
+        assertThat(fx.notifications(declined.requester(), "INVITE_REISSUE_DECLINED")).isZero();
     }
 }

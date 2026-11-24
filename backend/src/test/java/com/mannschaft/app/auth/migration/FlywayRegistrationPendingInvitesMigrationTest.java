@@ -254,6 +254,61 @@ class FlywayRegistrationPendingInvitesMigrationTest {
         }
     }
 
+    // ------------------------------------------------------------------
+    // CMP-261107-1833 PR3 検分 P2-2・P2: 窓と 7 日の境界を、本番と同じ SQL 断片で実 DB 上に固定する
+    // （現在時刻だけを固定値に差し替える。窓は GET と有効化で同じ断片を使う）
+    // ------------------------------------------------------------------
+
+    private static final String NOW = "2026-11-24 00:01:00.000000";
+
+    private static boolean evalFragment(Statement s, String fragment, String columns) throws SQLException {
+        assertThat(fragment).as("断片は DB の現在時刻 UTC_TIMESTAMP(6) を使う").contains("UTC_TIMESTAMP(6)");
+        String sql = "SELECT " + fragment.replace("UTC_TIMESTAMP(6)", "TIMESTAMP('" + NOW + "')") + " FROM (SELECT "
+                + columns + ") t";
+        try (ResultSet rs = s.executeQuery(sql)) {
+            rs.next();
+            return rs.getBoolean(1);
+        }
+    }
+
+    private static boolean stagingOpen(Statement s, String createdAt) throws SQLException {
+        return evalFragment(s, com.mannschaft.app.role.dto.InviteValidity.STAGING_OPEN_SQL,
+                "TIMESTAMP('" + createdAt + "') AS revoked_at, TIMESTAMP('" + createdAt + "') AS created_at");
+    }
+
+    @Test
+    @DisplayName("PR3 検分 P2-2: 仮発行の窓は、作成から 59.5 秒・ちょうど 60 秒は処理中、60.5 秒は窓の外（GET と有効化で同じ断片・6 桁精度）")
+    void stagingWindowBoundary() throws Exception {
+        try (Connection c = connection(); Statement s = c.createStatement()) {
+            assertThat(stagingOpen(s, "2026-11-24 00:00:00.500000")).as("59.5 秒").isTrue();
+            assertThat(stagingOpen(s, "2026-11-24 00:00:00.000000")).as("ちょうど 60 秒").isTrue();
+            assertThat(stagingOpen(s, "2026-11-23 23:59:59.500000")).as("60.5 秒").isFalse();
+            assertThat(evalFragment(s, com.mannschaft.app.role.dto.InviteValidity.STAGING_OPEN_SQL,
+                    "TIMESTAMP('2026-11-24 00:00:30.000000') AS revoked_at, TIMESTAMP('2026-11-24 00:00:00.000000') AS created_at"))
+                    .as("通常の失効（revoked_at ≠ created_at）は窓に入らない").isFalse();
+        }
+        java.time.LocalDateTime now = java.time.LocalDateTime.of(2026, 11, 24, 0, 1, 0);
+        assertThat(com.mannschaft.app.role.dto.InviteValidity.evaluate(now.minusSeconds(60), now.minusSeconds(60), null, 1, 0, now))
+                .as("Java 側の判定もちょうど 60 秒は処理中").isEqualTo(com.mannschaft.app.role.dto.InviteValidity.STAGING);
+        java.time.LocalDateTime past = now.minusSeconds(60).minusNanos(500_000_000);
+        assertThat(com.mannschaft.app.role.dto.InviteValidity.evaluate(past, past, null, 1, 0, now))
+                .as("Java 側の判定も 60.5 秒は窓の外").isEqualTo(com.mannschaft.app.role.dto.InviteValidity.REVOKED);
+    }
+
+    @Test
+    @DisplayName("PR3 検分 P2: 再依頼の通知は、前回からちょうど 7 日なら出さず、7 日と 0.5 秒なら出す。未依頼（NULL）は即時")
+    void reissueCooldownBoundary() throws Exception {
+        String fragment = com.mannschaft.app.auth.repository.RegistrationPendingInviteRepository.REISSUE_COOLDOWN_ELAPSED_SQL;
+        try (Connection c = connection(); Statement s = c.createStatement()) {
+            assertThat(evalFragment(s, fragment, "TIMESTAMP('2026-11-17 00:01:00.000000') AS reissue_requested_at"))
+                    .as("ちょうど 7 日").isFalse();
+            assertThat(evalFragment(s, fragment, "TIMESTAMP('2026-11-17 00:00:59.500000') AS reissue_requested_at"))
+                    .as("7 日と 0.5 秒").isTrue();
+            assertThat(evalFragment(s, fragment, "CAST(NULL AS DATETIME(6)) AS reissue_requested_at"))
+                    .as("未依頼").isTrue();
+        }
+    }
+
     private static long insertUser(Statement s, String email) throws SQLException {
         s.executeUpdate("INSERT INTO users (email, last_name, first_name, display_name, status, is_searchable, "
                 + "handle_searchable, contact_approval_required, online_visibility, dm_receive_from, encryption_key_version, "

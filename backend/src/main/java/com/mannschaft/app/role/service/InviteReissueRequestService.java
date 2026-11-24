@@ -55,10 +55,11 @@ import java.util.UUID;
  * <ol>
  *   <li>依頼の確認（不在・他スコープ 404 ROLE_016／REISSUE_REQUESTED 以外 409 ROLE_017／依頼者が非 ACTIVE・ブロック中 409 ROLE_018）</li>
  *   <li>依頼者が在籍済みなら REISSUE_REQUESTED→JOINED、200 ALREADY_MEMBER（招待は作らない）</li>
- *   <li>PROVISIONED は既存の PROV_008、閉鎖中は ROLE_002</li>
+ *   <li>PROVISIONED は slug 解決（ACTIVE の招待先だけを引く）で 404 TEAM_001/ORG_001（{@link ProvisioningGate} は二重防御）、閉鎖中は ROLE_002</li>
  *   <li>仮発行（{@code revoked_at = created_at}）→ 閉鎖世代の再確認（偽なら仮発行は放置して ROLE_002）</li>
  *   <li>auth の確定（条件付き UPDATE。0 行なら競合で負けたので 409 ROLE_017、仮発行は無効のまま）</li>
- *   <li>有効化（失敗は 500 ROLE_019。保留は PENDING で使えない招待を指し、窓を過ぎた次の参照で EXPIRED になる）→ 監査</li>
+ *   <li>有効化（失敗は 500 ROLE_019。保留は PENDING で使えない招待を指し、窓を過ぎた次の参照で EXPIRED になる）</li>
+ *   <li>保留がまだ当該ハッシュの PENDING かを再確認（ずれていれば招待を失効させて 409 ROLE_017）→ 通知のイベント → 監査</li>
  * </ol>
  * <p>補償による失効は行わない（仮発行の招待は印のまま無効で、誰も使えない）。勝敗は auth の条件付き UPDATE で決まる。</p>
  */
@@ -170,6 +171,14 @@ public class InviteReissueRequestService {
             throw new BusinessException(RoleErrorCode.ROLE_017);
         }
         activateOrFail(pendingId, staged.tokenId(), requester);
+        if (!pendingStore.isPendingWith(requester, staged.tokenHash())) {
+            // 確定から有効化までの間に保留が変わった（本人の辞退・破棄など）。宙に浮いた有効な招待を残さない（PR3 検分 P2-2）。
+            log.info("再招待の有効化の後に保留が変わっていたため招待を失効させる: pendingId={}, tokenId={}",
+                    pendingId, staged.tokenId());
+            revokeOrFail(pendingId, staged.tokenId());
+            throw new BusinessException(RoleErrorCode.ROLE_017);
+        }
+        announce(pendingId, staged.tokenId(), requester);
         audit(scopeType, scopeId, actorUserId, requester, reissuedEvent(scopeType),
                 "{\"pending_id\":\"" + pendingId + "\",\"token_id\":" + staged.tokenId() + "}");
         log.info("再招待を発行: pendingId={}, tokenId={}, scopeType={}, scopeId={}",
@@ -238,6 +247,25 @@ public class InviteReissueRequestService {
             log.error("再招待の招待を有効化できなかった（0 行。保留は PENDING。窓を過ぎた次の参照で EXPIRED になり再依頼できる）: "
                     + "pendingId={}, tokenId={}", pendingId, tokenId);
             throw new BusinessException(RoleErrorCode.ROLE_019);
+        }
+    }
+
+    private void revokeOrFail(UUID pendingId, Long tokenId) {
+        try {
+            issuer.revokeForCompensation(tokenId);
+        } catch (RuntimeException e) {
+            log.error("保留とずれた再招待の招待を失効できなかった（招待は有効のまま）: pendingId={}, tokenId={}",
+                    pendingId, tokenId, e);
+            throw new BusinessException(RoleErrorCode.ROLE_019);
+        }
+    }
+
+    private void announce(UUID pendingId, Long tokenId, Long requester) {
+        try {
+            issuer.announceReissued(tokenId, requester);
+        } catch (RuntimeException e) {
+            // 招待と保留は確定済み。通知の失敗は主処理を止めない（N5）。
+            log.error("再招待の通知イベントを発行できなかった（確定は維持）: pendingId={}, tokenId={}", pendingId, tokenId, e);
         }
     }
 

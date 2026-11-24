@@ -86,8 +86,11 @@ public interface InviteTokenRepositoryCustom {
     /**
      * 招待のハッシュで、有効性（失効・仮発行中・期限切れ・上限到達）を DB の現在時刻で判定する（ロックなし。
      * CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     *
+     * <p>{@code userId} 本人がこの招待に CLAIMED の確保を持っていれば、上限は判定しない（その1回は本人の確保が
+     * 使っている。承認経路の {@code claimOrResume} の再開判定と同じ規則。PR3 検分 P1）。失効・期限切れは判定する。</p>
      */
-    Optional<InviteValidity> findValidityByTokenHash(String tokenHash);
+    Optional<InviteValidity> findValidityByTokenHash(String tokenHash, Long userId);
 
     /** 招待のハッシュ群から、付与するロールの名前をまとめて引く（1 本の SQL。CMP-261107-1833 PR3 L4）。 */
     Map<String, String> findRoleNamesByTokenHashes(Collection<String> tokenHashes);

@@ -3,6 +3,7 @@ package com.mannschaft.app.role;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.auth.service.PendingInviteStore;
 import com.mannschaft.app.chat.service.ChatMembershipInviteCardService;
+import com.mannschaft.app.notification.service.NotificationHelper;
 import com.mannschaft.app.role.service.InviteAcceptanceWriter;
 import com.mannschaft.app.role.service.MembershipGrantService;
 import com.mannschaft.app.role.service.MembershipInviteTokenIssuer;
@@ -29,4 +30,6 @@ abstract class InviteAcceptanceSpyItSupport extends InviteAcceptanceItSupport {
     @MockitoSpyBean protected PendingInviteStore pendingStoreSpy;
     @MockitoSpyBean protected MembershipInviteTokenIssuer issuerSpy;
     @MockitoSpyBean protected AuditLogService auditSpy;
+    /** CMP-261107-1833 PR3 検分 N5: 依頼者への通知の配送失敗の故障注入用。 */
+    @MockitoSpyBean protected NotificationHelper notificationSpy;
 }

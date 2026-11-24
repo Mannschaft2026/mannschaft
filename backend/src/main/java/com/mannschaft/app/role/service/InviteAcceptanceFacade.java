@@ -187,8 +187,9 @@ public class InviteAcceptanceFacade {
      * 招待のハッシュで、有効性（失効・再招待の仮発行中・期限切れ・上限到達）を DB の現在時刻で引く
      * （保留承認の参照時の期限判定と承認時の処理中判定用。CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
      */
-    public Optional<InviteValidity> findInviteValidity(String tokenHash) {
-        return writer.findValidity(tokenHash);
+    public Optional<InviteValidity> findInviteValidity(String tokenHash, Long userId) {
+        // userId 本人の確保（CLAIMED）が残っていれば上限は判定しない（承認経路の再開と同じ規則。PR3 検分 P1）
+        return writer.findValidity(tokenHash, userId);
     }
 
     private void accept(InviteLocator locator, Long userId, Long folderId) {

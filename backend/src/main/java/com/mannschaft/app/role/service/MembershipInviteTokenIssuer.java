@@ -105,8 +105,9 @@ public class MembershipInviteTokenIssuer {
     /**
      * 仮発行したトークンの有効化（CMP-261107-1833 PR3 設計 c）。
      * {@code UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0
-     * AND revoked_at = created_at}（作成から 60 秒の窓を過ぎたものは有効にしない）。同じトランザクションで
-     * {@link InviteReissuedEvent} を発行する（通知はコミット後に依頼者へ配送される）。0 行なら false。
+     * AND revoked_at = created_at}（作成から 60 秒の窓を過ぎたものは有効にしない。窓は
+     * {@link com.mannschaft.app.role.dto.InviteValidity#STAGING_OPEN_SQL} で参照時の判定と同じ定義）。0 行なら false。
+     * 通知のイベントは、司令塔が保留を再確認した後に {@link #announceReissued} で発行する（PR3 検分 P2-2）。
      */
     @Transactional
     public boolean activateStaged(Long tokenId, Long targetUserId) {
@@ -114,11 +115,19 @@ public class MembershipInviteTokenIssuer {
             return false;
         }
         inviteTokenRepository.refreshIfManaged(tokenId);
+        log.info("再招待の招待を有効化: tokenId={}", tokenId);
+        return true;
+    }
+
+    /**
+     * 再招待の確定を告げる（{@link InviteReissuedEvent}。コミット後に依頼者へ通知が配送される）。
+     * 有効化の後、保留がまだ当該招待を指す PENDING であることを司令塔が確かめてから呼ぶ（CMP-261107-1833 PR3 検分 P2-2）。
+     */
+    @Transactional
+    public void announceReissued(Long tokenId, Long targetUserId) {
         InviteScopeRef scope = inviteTokenRepository.findScopeById(tokenId)
                 .orElseThrow(() -> new IllegalStateException("有効化した招待が引けない: tokenId=" + tokenId));
         eventPublisher.publish(new InviteReissuedEvent(targetUserId, scope.scopeType(), scope.scopeId()));
-        log.info("再招待の招待を有効化: tokenId={}, scopeType={}, scopeId={}", tokenId, scope.scopeType(), scope.scopeId());
-        return true;
     }
 
     /**

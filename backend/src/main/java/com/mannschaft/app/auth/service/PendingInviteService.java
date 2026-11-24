@@ -125,7 +125,7 @@ public class PendingInviteService {
         UUID attemptId = acquired.get();
         PendingInviteSnapshot row = store.find(userId)
                 .orElseThrow(() -> new IllegalStateException("取得した保留が引けない: userId=" + userId));
-        if (facade.findInviteValidity(row.tokenHash()).orElse(null) == InviteValidity.STAGING) {
+        if (facade.findInviteValidity(row.tokenHash(), userId).orElse(null) == InviteValidity.STAGING) {
             // 再招待の仮発行から有効化までの間（CMP-261107-1833 PR3 設計 c の窓）。招待は使わず処理中として応える。
             BusinessException processing = new BusinessException(AuthErrorCode.AUTH_086);
             revert(userId, attemptId, processing);
@@ -202,12 +202,14 @@ public class PendingInviteService {
      * 参照時の期限判定（CMP-261107-1833 PR3 設計 g）。PENDING の保留が指す招待が失効・期限切れ・上限到達なら、
      * 条件付き UPDATE で EXPIRED（失敗コード ROLE_002/ROLE_003）へ進めてから返す。判定は DB の現在時刻で行い、
      * {@code expires_at} ちょうどは有効。再招待の仮発行中（作成から 60 秒以内）は処理中として PENDING のまま返す。
+     * 本人の確保（CLAIMED）が残っていれば上限到達とはみなさない（承認で再開できる）。
      * 招待が引けない場合は何もしない（承認時の参加処理が判定する）。
      */
     private PendingInviteSnapshot expireIfUnusable(PendingInviteSnapshot row) {
-        Optional<InviteValidity> validity = facade.findInviteValidity(row.tokenHash());
+        Optional<InviteValidity> validity = facade.findInviteValidity(row.tokenHash(), row.userId());
         String failureCode = validity.map(InviteValidity::failureCode).orElse(null);
-        if (failureCode != null && store.expirePending(row.userId(), failureCode)) {
+        // 判定に使ったハッシュを条件に含める（止まっていた参照が、再招待で替わった新しい PENDING を上書きしない。PR3 検分 P2-3）
+        if (failureCode != null && store.expirePending(row.userId(), row.tokenHash(), failureCode)) {
             log.info("参照時に使えない招待の保留を EXPIRED に確定: userId={}, failureCode={}", row.userId(), failureCode);
             return store.find(row.userId()).orElse(row);
         }

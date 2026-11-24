@@ -384,16 +384,18 @@ class InviteReissueRequestContractIT extends InviteAcceptanceItSupport {
 
     @ParameterizedTest
     @ValueSource(strings = {"TEAM", "ORGANIZATION"})
-    @DisplayName("L7: 閉鎖中は一覧 0 件・集約 0 件・再招待は ROLE_002。再開すると一覧に戻り、新しい世代で発行される")
+    @DisplayName("L7: 閉鎖中は一覧 200・0 件、集約の件数は閉鎖状態を見ない（05_decisions §17）、再招待は ROLE_002。"
+            + "再開すると一覧に戻り、新しい世代で発行される")
     void closedScopeHidesAndReopenRestores(String type) throws Exception {
         ReissueFixtures.Case c = fx.reissueRequested(type);
         closeScope(c.scope());
 
-        ResultActions closed = list(c, c.admin(), "");
-        int closedStatus = closed.andReturn().getResponse().getStatus();
-        if (closedStatus == 200) {
-            assertThat(JsonPath.<Integer>read(body(closed), "$.data.totalElements")).isZero();
-        }
+        String closed = body(list(c, c.admin(), "").andExpect(status().isOk()));
+        assertThat(JsonPath.<Integer>read(closed, "$.data.totalElements")).isZero();
+        assertThat(JsonPath.<List<?>>read(closed, "$.data.content")).isEmpty();
+        Map<String, Object> aggregate = scopeAggregate(c, c.admin(), 0);
+        assertThat(aggregate).as("集約は閉鎖状態を見ない（preview_size=0 を COUNT 1 本に保つ）").isNotNull();
+        assertThat(((Number) aggregate.get("pending_count")).longValue()).isEqualTo(1);
         reissue(c, c.admin()).andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("ROLE_002"));
         assertThat(fx.tokensFor(c)).isEmpty();
         assertThat(fx.pendingStatus(c.requester())).isEqualTo("REISSUE_REQUESTED");

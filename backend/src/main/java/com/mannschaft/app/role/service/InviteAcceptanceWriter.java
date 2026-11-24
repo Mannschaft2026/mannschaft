@@ -210,8 +210,8 @@ public class InviteAcceptanceWriter {
      * CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
      */
     @Transactional(readOnly = true)
-    public Optional<InviteValidity> findValidity(String tokenHash) {
-        return inviteTokenRepository.findValidityByTokenHash(tokenHash);
+    public Optional<InviteValidity> findValidity(String tokenHash, Long userId) {
+        return inviteTokenRepository.findValidityByTokenHash(tokenHash, userId);
     }
 
     private void verifyResumable(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,

@@ -19,6 +19,13 @@ import java.util.UUID;
  */
 public interface RegistrationPendingInviteRepository extends JpaRepository<RegistrationPendingInviteEntity, UUID> {
 
+    /**
+     * 再依頼の通知の間隔（7 日）が過ぎたか（SQL 断片・唯一の定義。CMP-261107-1833 PR3 検分 P2）。前回からちょうど 7 日は
+     * まだ過ぎていない。未依頼（NULL）は即時。DB の 6 桁精度の現在時刻で比べる。
+     */
+    String REISSUE_COOLDOWN_ELAPSED_SQL =
+            "(reissue_requested_at IS NULL OR reissue_requested_at < UTC_TIMESTAMP(6) - INTERVAL 7 DAY)";
+
     Optional<RegistrationPendingInviteEntity> findByUserId(Long userId);
 
     /** PENDING、または 5 分を超えて止まった ACCEPTING を、新しい attempt で ACCEPTING にする。 */
@@ -48,8 +55,7 @@ public interface RegistrationPendingInviteRepository extends JpaRepository<Regis
     @Modifying
     @Query(value = "UPDATE registration_pending_invites SET status = 'REISSUE_REQUESTED', "
             + "reissue_requested_at = UTC_TIMESTAMP(6), version = version + 1, updated_at = UTC_TIMESTAMP(6) "
-            + "WHERE user_id = :userId AND status IN ('EXPIRED', 'REISSUE_REQUESTED') "
-            + "AND (reissue_requested_at IS NULL OR reissue_requested_at < UTC_TIMESTAMP(6) - INTERVAL 7 DAY)",
+            + "WHERE user_id = :userId AND status IN ('EXPIRED', 'REISSUE_REQUESTED') AND " + REISSUE_COOLDOWN_ELAPSED_SQL,
             nativeQuery = true)
     int markReissueRequested(@Param("userId") Long userId);
 
@@ -58,9 +64,10 @@ public interface RegistrationPendingInviteRepository extends JpaRepository<Regis
      */
     @Modifying
     @Query(value = "UPDATE registration_pending_invites SET status = 'EXPIRED', failure_code = :failureCode, "
-            + "version = version + 1, updated_at = UTC_TIMESTAMP(6) WHERE user_id = :userId AND status = 'PENDING'",
-            nativeQuery = true)
-    int expirePending(@Param("userId") Long userId, @Param("failureCode") String failureCode);
+            + "version = version + 1, updated_at = UTC_TIMESTAMP(6) WHERE user_id = :userId AND status = 'PENDING' "
+            + "AND token_hash = :tokenHash", nativeQuery = true)
+    int expirePending(@Param("userId") Long userId, @Param("tokenHash") String tokenHash,
+                      @Param("failureCode") String failureCode);
 
     // ------------------------------------------------------------------
     // 再招待依頼の受け手側（CMP-261107-1833 PR3 設計 b・f）。一覧と件数は同じ述語

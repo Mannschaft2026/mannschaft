@@ -274,14 +274,17 @@
 2. `PendingInviteStore#findForScope`（id・スコープ一致）。無し・他スコープは 404 `ROLE_016`、`REISSUE_REQUESTED` 以外は 409 `ROLE_017`、
    依頼者が非 ACTIVE（退会・停止・論理削除）またはブロック中なら 409 `ROLE_018`
 3. 依頼者が既に在籍していれば `REISSUE_REQUESTED`→`JOINED`（条件付き UPDATE）で 200 `ALREADY_MEMBER`。招待は作らない
-4. `ProvisioningGate#requireActive`（PROVISIONED は `PROV_008`）と招待先の状態（閉鎖中は 404 `ROLE_002`）
+4. 招待先の状態（閉鎖中は 404 `ROLE_002`）。PROVISIONED の招待先は手順1の slug 解決（ACTIVE の招待先だけを引く）で 404 `TEAM_001`/`ORG_001` になる（`ProvisioningGate#requireActive` は二重防御として残す）
 5. **仮発行**: 宛先付き招待を、宛先=依頼者・`max_uses=1`・期限7日・現在の閉鎖世代・作成者=管理者で作り、同じ TX で
    `revoked_at = created_at`（仮発行の印）にする。平文は破棄し、ハッシュだけを持つ。続けて閉鎖世代を再確認し、偽なら仮発行は放置して `ROLE_002`
 6. **auth の確定**: 条件付き UPDATE（id・スコープ一致・`status=REISSUE_REQUESTED`・依頼者 ACTIVE）で `PENDING` にし、`token_hash` を新しい
    ハッシュに替え、`failure_code`・`accept_attempt_id`・`accepting_started_at`・`reissue_requested_at` を NULL に戻す
 7. **有効化**: `UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0 AND revoked_at = created_at`
-   （作成から60秒を過ぎたものは有効にしない）。同じ TX で `InviteReissuedEvent` を発行し、コミット後に依頼者へ `INVITE_REISSUED` を通知する
-8. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
+   （作成から60秒を過ぎたものは有効にしない。窓は参照時の判定と同じ SQL 断片 `InviteValidity#STAGING_OPEN_SQL`・6 桁精度の DB 時刻）
+8. **保留の再確認**: 保留がまだ新しいハッシュの `PENDING` か（`PendingInviteStore#isPendingWith`）を確かめる。確定から有効化までに本人の辞退・破棄などで
+   ずれていたら、有効にした招待を失効させて 409 `ROLE_017`（宙に浮いた有効な招待を残さない。auth の表を role から JOIN しないため、司令塔が再確認する）。
+   一致していれば `MembershipInviteTokenIssuer#announceReissued` で `InviteReissuedEvent` を発行し、コミット後に依頼者へ `INVITE_REISSUED` を通知する
+9. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
 
 #### 失敗時の扱い（補償による失効は行わない）
 
@@ -299,7 +302,10 @@ NULL に戻っているので、依頼者はすぐ再依頼でき、招待権限
 
 仮発行の印（`revoked_at = created_at`）があり作成から60秒以内の招待は「処理中」として扱う: 保留の承認は 409 `AUTH_086`
 （保留は `PENDING` のまま）、GET は `PENDING` のまま返す。60秒を過ぎたら失効扱いで、GET で `EXPIRED`（`ROLE_002`）になる。
-判定は `InviteValidity#evaluate`（DB の現在時刻）。印は既存の `revoked_at` 列の意味に乗る規約なので、印のある招待は
+判定は `InviteValidity`（窓は SQL 断片 `STAGING_OPEN_SQL` を参照時と有効化で共用し、6 桁精度の DB 時刻で比べる）。
+参照時の判定は、本人がその招待に `CLAIMED` の確保を持っていれば上限を判定しない（承認の途中失敗で使用回数だけ進んだ保留を
+`EXPIRED` にせず、承認の `claimOrResume` で再開できるようにする。承認経路と同じ規則）。参照時の `PENDING`→`EXPIRED` は
+判定に使った `token_hash` を条件に含め、止まっていた参照が再招待で替わった新しい `PENDING` を上書きしない。印は既存の `revoked_at` 列の意味に乗る規約なので、印のある招待は
 既存の失効判定（`isValidState`・`RevokedAtIsNull` の検索・閉鎖時の一括失効 `revoked_at IS NULL`）からは失効として見え、
 誰にも使えない。`revoked_at` を書く他の経路（手動失効・補償失効・閉鎖時の一括失効）はいずれも `revoked_at IS NULL` のときだけ書くため、
 印を上書きしない。

@@ -223,18 +223,31 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
     }
 
     @Override
-    public Optional<InviteValidity> findValidityByTokenHash(String tokenHash) {
-        List<?> rows = em.createNativeQuery("SELECT revoked_at, created_at, expires_at, max_uses, used_count, "
-                        + "UTC_TIMESTAMP(6) FROM invite_tokens WHERE token_hash = :tokenHash")
+    public Optional<InviteValidity> findValidityByTokenHash(String tokenHash, Long userId) {
+        List<?> rows = em.createNativeQuery("SELECT revoked_at, (revoked_at IS NOT NULL AND "
+                        + InviteValidity.STAGING_OPEN_SQL + "), expires_at, max_uses, used_count, UTC_TIMESTAMP(6), "
+                        + "EXISTS (SELECT 1 FROM " + CLAIMS + " c WHERE c.token_id = invite_tokens.id "
+                        + "AND c.user_id = :userId AND c.status = 'CLAIMED') FROM invite_tokens WHERE token_hash = :tokenHash")
                 .setParameter("tokenHash", tokenHash)
+                .setParameter("userId", userId)
                 .getResultList();
         if (rows.isEmpty()) {
             return Optional.empty();
         }
         Object[] r = (Object[]) rows.get(0);
+        boolean stagingOpen = truthy(r[1]);
+        // 本人の確保（CLAIMED）が上限の1回を使っているなら上限は判定しない（承認経路の再開判定と同じ規則）
+        Integer maxUses = truthy(r[6]) || r[3] == null ? null : ((Number) r[3]).intValue();
         // 全列が同じ変換経路を通るので、壁時計のまま比べても前後関係・一致は保たれる
-        return Optional.of(InviteValidity.evaluate(wallClock(r[0]), wallClock(r[1]), wallClock(r[2]),
-                r[3] == null ? null : ((Number) r[3]).intValue(), ((Number) r[4]).intValue(), wallClock(r[5])));
+        return Optional.of(InviteValidity.evaluate(wallClock(r[0]), stagingOpen, wallClock(r[2]), maxUses,
+                ((Number) r[4]).intValue(), wallClock(r[5])));
+    }
+
+    private static boolean truthy(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        return value != null && ((Number) value).intValue() != 0;
     }
 
     @Override
@@ -266,12 +279,11 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
     @Override
     public int activateStaged(Long tokenId, Long targetUserId) {
         em.flush();
+        // 窓は参照時の判定と同じ断片（InviteValidity#STAGING_OPEN_SQL）・同じ 6 桁精度で判定する（PR3 検分 P2-2）
         return em.createNativeQuery("UPDATE invite_tokens SET revoked_at = NULL WHERE id = :id "
-                        + "AND target_user_id = :targetUserId AND used_count = 0 AND revoked_at = created_at "
-                        + "AND created_at >= UTC_TIMESTAMP() - INTERVAL :windowSeconds SECOND")
+                        + "AND target_user_id = :targetUserId AND used_count = 0 AND " + InviteValidity.STAGING_OPEN_SQL)
                 .setParameter("id", tokenId)
                 .setParameter("targetUserId", targetUserId)
-                .setParameter("windowSeconds", InviteValidity.STAGING_WINDOW.toSeconds())
                 .executeUpdate();
     }
 
