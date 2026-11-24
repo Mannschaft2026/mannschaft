@@ -227,6 +227,35 @@ describe('通知からの遷移 ?pendingInvite=open（F1）', () => {
   })
 })
 
+describe('依頼済みの「閉じる」（D-1）', () => {
+  it('PIR-21: REISSUE_REQUESTED の「閉じる」は dismiss API を呼ばず隠す。同じセッションでは再表示せず、新しいセッションでは表示する', async () => {
+    current = invite({ status: 'REISSUE_REQUESTED' as PendingInvite['status'] })
+    const wrapper = await mountDialog()
+    await wrapper.find(q('pending-invite-dismiss')).trigger('click')
+    await flushPromises()
+    expect(mocks.api.mock.calls.some(([url]) => String(url).endsWith('/dismiss'))).toBe(false)
+    expect(wrapper.find(q('pending-invite-dialog')).exists()).toBe(false)
+
+    // 同じセッション（sessionStorage が残る）で取り直しても出ない
+    const sameSession = await mountDialog()
+    expect(sameSession.find(q('pending-invite-dialog')).exists()).toBe(false)
+
+    // 新しいセッション（sessionStorage が空）では依頼済みの案内が再び出る
+    sessionStorage.clear()
+    const nextSession = await mountDialog()
+    expect(nextSession.find(q('pending-invite-reissue-requested')).exists()).toBe(true)
+    expect(mocks.api.mock.calls.some(([url]) => String(url).endsWith('/dismiss'))).toBe(false)
+  })
+
+  it('PIR-22: EXPIRED の「閉じる」は従来どおり dismiss を呼ぶ', async () => {
+    current = invite({ status: 'EXPIRED' as PendingInvite['status'] })
+    const wrapper = await mountDialog()
+    await wrapper.find(q('pending-invite-dismiss')).trigger('click')
+    await flushPromises()
+    expect(mocks.api).toHaveBeenCalledWith(BASE + '/dismiss', expect.objectContaining({ method: 'POST' }))
+  })
+})
+
 describe('依頼済みの文言（k）', () => {
   it('PIR-20: REISSUE_REQUESTED は依頼済みの表示（auth.pending_invite.reissue_requested）', async () => {
     current = invite({ status: 'REISSUE_REQUESTED' as PendingInvite['status'] })

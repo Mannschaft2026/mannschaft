@@ -52,8 +52,10 @@ export function usePendingInvite() {
     switch (current.status as string) {
       case 'PENDING':
         return current.id !== laterId.value
-      case 'EXPIRED':
       case 'REISSUE_REQUESTED':
+        // 依頼済みの案内は「閉じる」でこのセッション中だけ隠す（API は呼ばない。依頼は取り下げない）
+        return current.id !== laterId.value
+      case 'EXPIRED':
       case 'REISSUE_DECLINED':
       case 'ACCEPTING':
         return true
@@ -243,6 +245,11 @@ export function usePendingInvite() {
 
   async function dismiss() {
     if (busy.value) return
+    // 依頼済み（REISSUE_REQUESTED）の「閉じる」は依頼の取り下げではない。「あとで」と同じくセッション中だけ隠す（BE も dismiss を 409 にする）
+    if (invite.value?.status === 'REISSUE_REQUESTED') {
+      later()
+      return
+    }
     busy.value = true
     try {
       await api(`${BASE}/dismiss`, { method: 'POST' })
