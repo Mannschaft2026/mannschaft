@@ -64,6 +64,13 @@ gh api graphql -f query='query{repository(owner:"Mannschaft2026",name:"mannschaf
 2. merge_group の失敗 run から原因を特定し、根治する（rerun だけで済ませない。flaky と判断する場合も証拠を残す）。
 3. 修正を push し、`gh pr merge <PR> --squash` で予約し直す（緑になると自動で queue へ入る）。
 4. 先行エントリの失敗による巻き添え（自分の変更に原因が無い）は、queue が再構築するため通常は自動で再検証される。脱落したときだけ再投入する。
+5. **台帳 `docs/task-list.md` だけの衝突は自動修復される**（CMP-261124-1222。`.github/workflows/task-list-conflict-autofix.yml`、本体 `scripts/task-list-conflict-autofix.mjs`）。main への push ごと（取りこぼしは30分毎の schedule）に、GitHub App（`vars.LEDGER_BOT_APP_ID`・`secrets.LEDGER_BOT_PRIVATE_KEY`、権限は contents:write・pull_requests:write のみ）が次を行う。
+   - **対象条件**: open・base=main・同一リポジトリの head（fork は除外）・`mergeable=CONFLICTING`・`no-ledger-autofix` ラベルなし、かつマージ待ちの意思がある（auto-merge 予約済み、または timeline の最新の merge queue イベントが `RemovedFromMergeQueueEvent`）。
+   - **修復**: `.git/info/attributes` に `docs/task-list.md merge=union` を書き（PR 側の `.gitattributes` に依存しない）、`git merge-tree --write-tree` で head と main をマージする（作業木を使わず PR のコードは実行しない。失敗時は何も書かないので `merge --abort` 相当の後始末は不要）。台帳以外にも衝突が残る・merge 失敗・main の取り込みで `.github/workflows/` が変わる（App に workflows 権限が無い）場合はスキップしてログに残す。
+   - **構造検査**: union 後の台帳を main 側の `scripts/task-list-structure-check.mjs` で検査し、合格したときだけ merge commit を fast-forward で push する（force しない。先に head が動いていれば次回に回す）。push 後、予約が消えていれば `enablePullRequestAutoMerge(SQUASH)` で予約し直し、PR に merge commit SHA を書いたコメントを1件残す（予約失敗もそのコメントに書く）。
+   - **構造検査 NG は人手**: 同じ行を PR と main の両方で編集すると union は旧行と新行を両方残し、CMP-ID 重複になる。このときは push せず PR にコメントする（同じ head には1回だけ）。main を取り込んで手で解消し、`gh pr merge <PR> --squash` で予約し直す。
+   - **除外と上限**: 自動修復させたくない PR には `no-ledger-autofix` ラベルを付ける。暴走防止に、同じ PR を直近24時間で3回直したらそれ以上は直さず、その旨をコメントする（以後は人手）。
+   - 手動実行は Actions の workflow_dispatch（`dry_run` 既定 true。判定だけ出す）。App の設定が無い環境では失敗させずにスキップする。
 
 ## queue 無効時（移行前・障害で無効化している間）
 
