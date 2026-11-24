@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -74,9 +73,6 @@ public class InviteAcceptanceWriter {
         RELEASED
     }
 
-    /** F04.12 特権ロール（承諾型招待では付与不可・join 側の保険ガード用）。 */
-    private static final Set<String> PRIVILEGED_INVITE_ROLES = Set.of("ADMIN", "DEPUTY_ADMIN");
-
     private final InviteTokenRepository inviteTokenRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
@@ -102,7 +98,7 @@ public class InviteAcceptanceWriter {
      *   <li>招待が無い → ROLE_002（ID 入口では、宛先本人でない・共有リンク型もここで同じ ROLE_002）</li>
      *   <li>無効（上限到達 → ROLE_003、期限切れ・失効 → ROLE_002）</li>
      *   <li>宛先違い → 403 ROLE_009</li>
-     *   <li>特権ロール → 422 ROLE_009</li>
+     *   <li>招待で付与できないロール（特権 ADMIN / DEPUTY_ADMIN、GUEST、SYSTEM_ADMIN。{@link InviteRolePolicy}）→ 422 ROLE_009</li>
      *   <li>閉鎖世代が古い → ROLE_002</li>
      *   <li>ブロック → TEAM_004</li>
      *   <li>在籍済み（user_roles ∪ memberships）→ 409 TEAM_003</li>
@@ -217,7 +213,7 @@ public class InviteAcceptanceWriter {
             throw locator.targetMismatch();
         }
         RoleEntity grantRole = roleRepository.findById(token.roleId()).orElse(null);
-        if (grantRole != null && PRIVILEGED_INVITE_ROLES.contains(grantRole.getName())) {
+        if (grantRole != null && !InviteRolePolicy.isInvitable(grantRole.getName())) {
             throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
         }
         if (!scopeStates.isCurrent(token.scopeType(), token.scopeId(), token.scopeClosureGeneration())) {
@@ -251,9 +247,10 @@ public class InviteAcceptanceWriter {
             throw locator.targetMismatch();
         }
 
-        // F04.12 特権ロール付与の保険ガード（C-1）。
+        // F04.12 特権ロール付与の保険ガード（C-1）。招待で付与できない GUEST / SYSTEM_ADMIN の旧データも同じく拒否する
+        // （CMP-261124-0157。InviteRolePolicy）。
         RoleEntity grantRole = roleRepository.findById(token.roleId()).orElse(null);
-        if (grantRole != null && PRIVILEGED_INVITE_ROLES.contains(grantRole.getName())) {
+        if (grantRole != null && !InviteRolePolicy.isInvitable(grantRole.getName())) {
             throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
