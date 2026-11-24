@@ -34,7 +34,7 @@ import static org.mockito.Mockito.verify;
  * CMP-261107-1833 PR3 D2: 見送られた保留（REISSUE_DECLINED）の依頼者側の扱い（設計 a の状態集合）。
  *
  * <p>状態集合を分ける: REISSUABLE={EXPIRED,REISSUE_REQUESTED}（requestReissue）、
- * DISMISSIBLE={EXPIRED,REISSUE_REQUESTED,REISSUE_DECLINED}（dismiss）。</p>
+ * DISMISSIBLE={EXPIRED,REISSUE_DECLINED}（dismiss。依頼済みの REISSUE_REQUESTED は閉じられない。実機 D-1）。</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
