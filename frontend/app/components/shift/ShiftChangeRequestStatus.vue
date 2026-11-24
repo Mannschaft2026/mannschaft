@@ -36,7 +36,7 @@ const hasReviewResult = computed(() => !!(props.request.reviewInfo.reviewComment
     <Tag :value="label" :severity="severity" />
     <div
       v-if="hasReviewResult"
-      class="mt-1 max-w-[16rem] whitespace-normal break-words text-xs text-surface-500 max-md:max-w-none"
+      class="mt-1 max-w-[12rem] whitespace-normal break-words text-xs text-surface-500 max-md:max-w-none"
       :data-testid="`${testidPrefix}-${request.id}`"
     >
       <p v-if="request.reviewInfo.reviewedAt">

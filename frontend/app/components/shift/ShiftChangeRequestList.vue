@@ -194,20 +194,23 @@ async function confirmReview(): Promise<void> {
           </template>
         </Column>
 
-        <Column :header="$t('shift.changeRequest.reason')" field="requestInfo.reason" style="min-width: 140px">
-          <template #body="{ data }">
-            <span class="line-clamp-1 text-xs text-surface-500">{{ data.requestInfo.reason ?? '—' }}</span>
-          </template>
-        </Column>
-
         <Column :header="$t('label.status')" field="reviewInfo.status" style="min-width: 100px">
           <template #body="{ data }">
             <ShiftChangeRequestStatus :request="data" testid-prefix="change-request-review" />
           </template>
         </Column>
 
-        <!-- 操作列は右端に固定（md 以上の幅があるので他の列を覆わない） -->
-        <Column :header="$t('label.actions')" frozen align-frozen="right" style="min-width: 150px">
+        <Column :header="$t('shift.changeRequest.reason')" field="requestInfo.reason" style="min-width: 120px">
+          <template #body="{ data }">
+            <span
+              :data-testid="`change-request-reason-${data.id}`"
+              class="line-clamp-2 max-w-[12rem] break-words text-xs text-surface-500 [overflow-wrap:anywhere]"
+            >{{ data.requestInfo.reason ?? '—' }}</span>
+          </template>
+        </Column>
+
+        <!-- 列順: 依頼者・種別・ステータス・理由・操作。主要情報を枠内に収め、理由は幅を制限して折り返す。操作列は右端に固定 -->
+        <Column :header="$t('label.actions')" frozen align-frozen="right" style="min-width: 140px">
           <template #body="{ data }">
             <ShiftChangeRequestActions
               :request-id="data.id"

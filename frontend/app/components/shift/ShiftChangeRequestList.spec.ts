@@ -184,7 +184,7 @@ describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
     expect(wrapper.text()).toContain('Actions')
     // 表（広幅）側のヘッダーに限定しても同じ
     const headers = wrapper.findAll('[data-testid="change-request-table"] th').map((h) => h.text())
-    expect(headers).toEqual(['Requester', 'Request type', 'Reason (optional)', 'Status', 'Actions'])
+    expect(headers).toEqual(['Requester', 'Request type', 'Status', 'Reason (optional)', 'Actions'])
   })
 
   it('AC-M3: 依頼者列に名前が出て、null は「不明なユーザー」。userId は表示しない', async () => {
@@ -258,6 +258,59 @@ describe('ShiftChangeRequestList 見出し重複・狭幅（アリシゼーシ�
     // 表の操作列（td）に取り下げボタンが入る
     const tds = wrapper.findAll('[data-testid="change-request-table"] tbody tr td')
     expect(tds.at(-1)!.find('[data-testid="change-request-withdraw-2"]').exists()).toBe(true)
+  })
+})
+
+/**
+ * md 以上の表は 822px 程度の枠でも主要情報（依頼者・種別・ステータス・操作）が枠内に収まること。
+ * jsdom は幅を測れないので、列順・各列の min-width・理由セルの幅制限クラスで固定する。
+ */
+describe('ShiftChangeRequestList 表の列順と幅（枠内に収める）', () => {
+  it('列順は 依頼者・種別・ステータス・理由・操作（ステータスは理由より前、操作列は最後）', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5 },
+    })
+    const headers = wrapper.findAll('[data-testid="change-request-table"] th').map((h) => h.text())
+    expect(headers).toHaveLength(5)
+    expect(headers.indexOf('Status')).toBe(2)
+    expect(headers.indexOf('Status')).toBeLessThan(headers.indexOf('Reason (optional)'))
+    const tds = wrapper.findAll('[data-testid="change-request-table"] tbody tr td')
+    expect(tds[2]!.find('[data-testid="change-request-review-2"], .p-tag').exists()).toBe(true)
+    expect(tds.at(-1)!.find('[data-testid="change-request-withdraw-2"]').exists()).toBe(true)
+  })
+
+  it('理由セルは幅を制限して折り返す（line-clamp-2 と max-w）。長文で表が広がらない', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5 },
+    })
+    const reason = wrapper.find('[data-testid="change-request-reason-2"]')
+    expect(reason.exists()).toBe(true)
+    const cls = reason.classes().join(' ')
+    expect(cls).toContain('line-clamp-2')
+    expect(cls).toMatch(/max-w-\[/)
+    expect(cls).toContain('[overflow-wrap:anywhere]')
+  })
+
+  it('各列の min-width の合計が 822px 枠に収まる目安（操作列は固定幅で他列に重ならない）', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5 },
+    })
+    const widths = wrapper
+      .findAll('[data-testid="change-request-table"] th')
+      .map((h) => Number(/min-width:\s*(\d+)px/.exec(h.attributes('style') ?? '')?.[1] ?? 0))
+    expect(widths.every((w) => w > 0)).toBe(true)
+    expect(widths.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(640)
+  })
+
+  it('審査結果ブロックの幅は 12rem 以下に制限される', async () => {
+    const reviewed = {
+      ...row({ id: 3, requestedBy: 5, requesterName: '自分', status: 'REJECTED' }),
+      reviewInfo: { status: 'REJECTED' as const, reviewerId: 9, reviewComment: '人手が足りません', reviewedAt: '2026-10-02T09:30:00' },
+    }
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [reviewed], currentUserId: 5 },
+    })
+    expect(wrapper.find('[data-testid="change-request-review-3"]').classes().join(' ')).toContain('max-w-[12rem]')
   })
 })
 
