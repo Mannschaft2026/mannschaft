@@ -247,7 +247,11 @@ public class ActivityResultService {
     }
 
     /**
-     * 活動記録詳細を取得する。
+     * 活動記録詳細を取得する（所属検証と DRAFT 判定のみ）。
+     *
+     * <p><b>visibility（可視レベル）は判定しない</b>。ID 指定で中身を返す入口は必ず
+     * {@link ActivityDetailService#requireReadable(Long, Long)} を経由すること（CMP-261124-0158。
+     * 可視レベル判定は他ドメインを引くため、本クラスの TX 入口から越境させず非 TX の段取り役で行う）。</p>
      */
     public ActivityResultEntity getActivity(Long id, Long userId) {
         ActivityResultEntity entity = findActivityOrThrow(id);

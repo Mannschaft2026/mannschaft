@@ -55,10 +55,10 @@ const expiresOptions = computed(() => [
   { label: t('inviteToken.never'), value: null },
 ])
 
+// 共有招待で付与できるのは MEMBER / SUPPORTER だけ（BE は他のロールを 422 ROLE_009 で拒否する。CMP-261124-0157）
 const roleOptions = computed(() => [
   { label: t('role.MEMBER'), value: 4 },
   { label: t('role.SUPPORTER'), value: 5 },
-  { label: t('role.GUEST'), value: 6 },
 ])
 
 async function loadTokens() {

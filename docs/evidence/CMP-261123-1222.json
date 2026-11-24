@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261123-1222",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4797,
+    "sha": "5fdcc6f15250108c62c4ee35797bc1640d6285a1"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "NotificationPreferenceDefaultsContractIT の SQL 本数計測をテストスレッド限定の SqlIntentCounter.captureCurrentThread() に移行し、他スレッドの SQL が計測窓に混入しない",
+      "tests": [
+        {
+          "name": "NotificationPreferenceDefaultsContractIT#defaultsDoNotIntroduceNPlusOneQueries",
+          "evidence": "backend/src/test/java/com/mannschaft/app/notification/NotificationPreferenceDefaultsContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "SqlIntentCounter が別スレッドの SQL を数えないことをテストで固定する",
+      "tests": [
+        {
+          "name": "SqlIntentCounterTest 別スレッドの SQL を数えない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/visibility/perf/SqlIntentCounterTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45117417398
+    },
+    {
+      "runId": 45117417396
+    },
+    {
+      "runId": 45117417397
+    },
+    {
+      "runId": 45117417411
+    },
+    {
+      "runId": 45117415191
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4797"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で画面・API の挙動を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で導線を変えない"
+    }
+  },
+  "regressions": []
+}
