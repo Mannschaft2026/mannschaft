@@ -101,10 +101,7 @@
       "scopeMissing": "Falta la información de alcance de la encuesta",
       "scopeContext": {
         "label": "Destino de la encuesta",
-        "type": {
-          "TEAM": "Equipo de destino",
-          "ORGANIZATION": "Organización de destino"
-        },
+        "type": { "TEAM": "Equipo de destino", "ORGANIZATION": "Organización de destino" },
         "loading": "Cargando nombre…",
         "nameUnavailable": "Nombre no disponible",
         "management": {

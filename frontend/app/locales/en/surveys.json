@@ -101,10 +101,7 @@
       "scopeMissing": "Survey scope information is missing",
       "scopeContext": {
         "label": "Survey target",
-        "type": {
-          "TEAM": "Target team",
-          "ORGANIZATION": "Target organization"
-        },
+        "type": { "TEAM": "Target team", "ORGANIZATION": "Target organization" },
         "loading": "Loading name…",
         "nameUnavailable": "Name unavailable",
         "management": {

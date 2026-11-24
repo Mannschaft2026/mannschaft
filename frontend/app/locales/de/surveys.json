@@ -101,10 +101,7 @@
       "scopeMissing": "Bereichsinformationen zur Umfrage fehlen",
       "scopeContext": {
         "label": "Umfrageziel",
-        "type": {
-          "TEAM": "Zielteam",
-          "ORGANIZATION": "Zielorganisation"
-        },
+        "type": { "TEAM": "Zielteam", "ORGANIZATION": "Zielorganisation" },
         "loading": "Name wird geladen…",
         "nameUnavailable": "Name nicht verfügbar",
         "management": {

@@ -101,10 +101,7 @@
       "scopeMissing": "アンケートのスコープ情報が不足しています",
       "scopeContext": {
         "label": "アンケートの対象",
-        "type": {
-          "TEAM": "対象チーム",
-          "ORGANIZATION": "対象組織"
-        },
+        "type": { "TEAM": "対象チーム", "ORGANIZATION": "対象組織" },
         "loading": "名称を確認中…",
         "nameUnavailable": "名称を取得できませんでした",
         "management": {

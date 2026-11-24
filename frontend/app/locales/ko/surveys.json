@@ -101,10 +101,7 @@
       "scopeMissing": "설문 범위 정보가 없습니다",
       "scopeContext": {
         "label": "설문 대상",
-        "type": {
-          "TEAM": "대상 팀",
-          "ORGANIZATION": "대상 조직"
-        },
+        "type": { "TEAM": "대상 팀", "ORGANIZATION": "대상 조직" },
         "loading": "이름 확인 중…",
         "nameUnavailable": "이름을 가져올 수 없습니다",
         "management": {
