@@ -280,8 +280,7 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
     public int activateStaged(Long tokenId, Long targetUserId) {
         em.flush();
         // 窓は参照時の判定と同じ断片（InviteValidity#STAGING_OPEN_SQL）・同じ 6 桁精度で判定する（PR3 検分 P2-2）
-        return em.createNativeQuery("UPDATE invite_tokens SET revoked_at = NULL WHERE id = :id "
-                        + "AND target_user_id = :targetUserId AND used_count = 0 AND " + InviteValidity.STAGING_OPEN_SQL)
+        return em.createNativeQuery(ACTIVATE_STAGED_SQL)
                 .setParameter("id", tokenId)
                 .setParameter("targetUserId", targetUserId)
                 .executeUpdate();

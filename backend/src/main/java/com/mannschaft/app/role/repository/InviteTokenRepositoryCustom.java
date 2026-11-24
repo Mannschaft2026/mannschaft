@@ -104,6 +104,14 @@ public interface InviteTokenRepositoryCustom {
      */
     int activateStaged(Long tokenId, Long targetUserId);
 
+    /**
+     * 有効化の条件付き UPDATE（唯一の定義）。窓は参照時の判定と同じ {@link InviteValidity#STAGING_OPEN_SQL}
+     * （{@code UTC_TIMESTAMP(6)}）で判定するので、参照が窓の外と判定した後にこの UPDATE が 1 行になることはない
+     * （DB 時刻は単調に進む。{@code FlywayRegistrationPendingInvitesMigrationTest} の境界試験で固定。CMP-261107-1833 PR3 再検分）。
+     */
+    String ACTIVATE_STAGED_SQL = "UPDATE invite_tokens SET revoked_at = NULL WHERE id = :id "
+            + "AND target_user_id = :targetUserId AND used_count = 0 AND " + InviteValidity.STAGING_OPEN_SQL;
+
     /** claim が指す招待の主キー。 */
     Optional<Long> findClaimTokenId(UUID claimId);
 

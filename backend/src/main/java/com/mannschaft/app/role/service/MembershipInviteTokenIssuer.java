@@ -107,7 +107,12 @@ public class MembershipInviteTokenIssuer {
      * {@code UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0
      * AND revoked_at = created_at}（作成から 60 秒の窓を過ぎたものは有効にしない。窓は
      * {@link com.mannschaft.app.role.dto.InviteValidity#STAGING_OPEN_SQL} で参照時の判定と同じ定義）。0 行なら false。
-     * 通知のイベントは、司令塔が保留を再確認した後に {@link #announceReissued} で発行する（PR3 検分 P2-2）。
+     * 有効化できたら同じトランザクションで {@link InviteReissuedEvent} を発行する（通知はコミット後に依頼者へ配送される）。
+     *
+     * <p>有効化の後に保留を再確認・補償失効しない（殿の裁定・PR3 再検分）。窓は参照時と同じ述語・単調に進む DB 時刻で判定するので、
+     * 参照が窓の外（EXPIRED）と判定した後にこの UPDATE が成功することはない。auth の確定の後の保留は新しいハッシュの PENDING で、
+     * ハッシュを書き換える経路は無い。本人の辞退が割り込んだ場合に本人宛ての1回限りの招待が有効なまま残るのは許容する
+     * （tokenId を明示して承諾しない限り使われない）。</p>
      */
     @Transactional
     public boolean activateStaged(Long tokenId, Long targetUserId) {
@@ -115,19 +120,11 @@ public class MembershipInviteTokenIssuer {
             return false;
         }
         inviteTokenRepository.refreshIfManaged(tokenId);
-        log.info("再招待の招待を有効化: tokenId={}", tokenId);
-        return true;
-    }
-
-    /**
-     * 再招待の確定を告げる（{@link InviteReissuedEvent}。コミット後に依頼者へ通知が配送される）。
-     * 有効化の後、保留がまだ当該招待を指す PENDING であることを司令塔が確かめてから呼ぶ（CMP-261107-1833 PR3 検分 P2-2）。
-     */
-    @Transactional
-    public void announceReissued(Long tokenId, Long targetUserId) {
         InviteScopeRef scope = inviteTokenRepository.findScopeById(tokenId)
                 .orElseThrow(() -> new IllegalStateException("有効化した招待が引けない: tokenId=" + tokenId));
         eventPublisher.publish(new InviteReissuedEvent(targetUserId, scope.scopeType(), scope.scopeId()));
+        log.info("再招待の招待を有効化: tokenId={}, scopeType={}, scopeId={}", tokenId, scope.scopeType(), scope.scopeId());
+        return true;
     }
 
     /**

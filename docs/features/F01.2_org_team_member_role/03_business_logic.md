@@ -281,10 +281,19 @@
    ハッシュに替え、`failure_code`・`accept_attempt_id`・`accepting_started_at`・`reissue_requested_at` を NULL に戻す
 7. **有効化**: `UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0 AND revoked_at = created_at`
    （作成から60秒を過ぎたものは有効にしない。窓は参照時の判定と同じ SQL 断片 `InviteValidity#STAGING_OPEN_SQL`・6 桁精度の DB 時刻）
-8. **保留の再確認**: 保留がまだ新しいハッシュの `PENDING` か（`PendingInviteStore#isPendingWith`）を確かめる。確定から有効化までに本人の辞退・破棄などで
-   ずれていたら、有効にした招待を失効させて 409 `ROLE_017`（宙に浮いた有効な招待を残さない。auth の表を role から JOIN しないため、司令塔が再確認する）。
-   一致していれば `MembershipInviteTokenIssuer#announceReissued` で `InviteReissuedEvent` を発行し、コミット後に依頼者へ `INVITE_REISSUED` を通知する
-9. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
+   同じ TX で `InviteReissuedEvent` を発行し、コミット後に依頼者へ `INVITE_REISSUED` を通知する。0 行・DB 例外は 500 `ROLE_019`
+8. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
+
+有効化の後に保留を再確認・補償失効しない（殿の裁定・PR3 再検分。再確認は本人の正常な承認（`ACCEPTING`）を競合と取り違え、
+補償失効の失敗は有効な招待を残したまま回収できなかったため撤去）。根拠:
+
+- 窓は参照時（GET）と有効化で同じ述語 `InviteValidity#STAGING_OPEN_SQL`（`UTC_TIMESTAMP(6)`）で判定する。有効化の SQL は
+  `InviteTokenRepositoryCustom#ACTIVATE_STAGED_SQL` が唯一の定義。DB 時刻は単調に進むので、GET が窓の外（`EXPIRED`）と判定した後に
+  有効化の UPDATE が成功することはない（`FlywayRegistrationPendingInvitesMigrationTest` で、窓の外は 0 行・窓の内でだけ 1 行を固定）。
+- auth の確定の後、保留は新しいハッシュの `PENDING` である。見送り・再招待・dismiss は `REISSUE_REQUESTED` か `EXPIRED` 系にしか作用せず、
+  ハッシュを書き換える経路は無い。本人が承認を押しても窓の内なので `AUTH_086` で `PENDING` に戻り、有効化の後に承認できる。
+- **リスク（許容）**: 確定から有効化までに本人の辞退（`PENDING`→`DECLINED`）が割り込むと、本人宛ての1回限りの招待が有効なまま残る。
+  本人が tokenId を明示して承諾しない限り使われない（期限7日で失効する）。
 
 #### 失敗時の扱い（補償による失効は行わない）
 

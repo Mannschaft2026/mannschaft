@@ -255,29 +255,29 @@ class InviteReissueRequestFailureIT extends InviteAcceptanceSpyItSupport {
     }
 
     // ------------------------------------------------------------------
-    // PR3 検分 P2-2: 有効化の直前に保留が変わっていたら、有効にした招待を失効させる
+    // PR3 再検分: 本人の承認が有効化と競っても、正常な再招待を失効させない
     // ------------------------------------------------------------------
 
     @ParameterizedTest
     @ValueSource(strings = {"TEAM", "ORGANIZATION"})
-    @DisplayName("P2-2: auth の確定の後、有効化までに保留が当該ハッシュの PENDING でなくなった（本人の辞退など）なら 409 ROLE_017。"
-            + "招待は有効なまま残さず、INVITE_REISSUED の通知・監査も出さない")
-    void pendingChangedBeforeActivationRevokesToken(String type) throws Exception {
+    @DisplayName("再検分: auth の確定の後・有効化の前に本人が承認を押しても（仮発行の窓の内なので 409 AUTH_086 で PENDING に戻る）、"
+            + "再招待は 200 REISSUED で招待は有効なまま。その後の承認で JOINED")
+    void requesterAcceptRacingActivationDoesNotRevoke(String type) throws Exception {
         ReissueFixtures.Case c = fx.reissueRequested(type);
+        java.util.concurrent.atomic.AtomicReference<Throwable> raced = new java.util.concurrent.atomic.AtomicReference<>();
         doAnswer(inv -> {
-            jdbc.update("UPDATE " + ReissueFixtures.PENDING_TABLE + " SET status = 'DECLINED' WHERE user_id = ?",
-                    c.requester());
+            raced.set(org.assertj.core.api.Assertions.catchThrowable(() -> pending().accept(c.requester())));
             return inv.callRealMethod();
         }).when(issuer()).activateStaged(anyLong(), anyLong());
 
-        reissue(c).andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("ROLE_017"));
+        reissue(c).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("REISSUED"));
 
-        assertThat(fx.pendingStatus(c.requester())).isEqualTo("DECLINED");
-        assertThat(fx.activeTokens(c)).isZero();
-        assertThat(dmDuplicateCandidates(c)).isZero();
-        ReissueFixtures.settle();
-        assertThat(fx.notifications(c.requester(), "INVITE_REISSUED")).isZero();
-        assertThat(fx.audits(ReissueFixtures.scopeEvent(c, "INVITE_REISSUED"), c.requester())).isZero();
+        assertThat(raced.get()).isInstanceOf(com.mannschaft.app.common.BusinessException.class);
+        assertThat(((com.mannschaft.app.common.BusinessException) raced.get()).getErrorCode().getCode()).isEqualTo("AUTH_086");
+        assertThat(fx.pendingStatus(c.requester())).isEqualTo("PENDING");
+        assertThat(fx.activeTokens(c)).as("正常な承認との競合で招待を失効させない").isEqualTo(1);
+        ReissueFixtures.await(() -> fx.notifications(c.requester(), "INVITE_REISSUED"), 1, "INVITE_REISSUED");
+        assertThat(pending().accept(c.requester()).status()).isEqualTo("JOINED");
     }
 
     // ------------------------------------------------------------------

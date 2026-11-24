@@ -180,14 +180,6 @@ public class PendingInviteStore {
                         repository.countActiveUser(row.getUserId()) == 1));
     }
 
-    /** 利用者の保留が、指定ハッシュを指す PENDING か（再招待の有効化後の再確認。CMP-261107-1833 PR3 検分 P2-2）。 */
-    @Transactional(readOnly = true)
-    public boolean isPendingWith(Long userId, String tokenHash) {
-        return repository.findByUserId(userId)
-                .filter(row -> row.getStatus() == PendingInviteStatus.PENDING && row.getTokenHash().equals(tokenHash))
-                .isPresent();
-    }
-
     /** 再招待依頼の件数（一覧・集約で共有する述語）。 */
     @Transactional(readOnly = true)
     public long countReissueRequests(String scopeType, Long scopeId) {

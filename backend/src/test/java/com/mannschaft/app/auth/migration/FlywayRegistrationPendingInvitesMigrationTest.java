@@ -295,6 +295,47 @@ class FlywayRegistrationPendingInvitesMigrationTest {
                 .as("Java 側の判定も 60.5 秒は窓の外").isEqualTo(com.mannschaft.app.role.dto.InviteValidity.REVOKED);
     }
 
+    private static int activateAt(Statement s, String now, long id, long target) throws SQLException {
+        String sql = com.mannschaft.app.role.repository.InviteTokenRepositoryCustom.ACTIVATE_STAGED_SQL
+                .replace(":id", Long.toString(id)).replace(":targetUserId", Long.toString(target))
+                .replace("UTC_TIMESTAMP(6)", "TIMESTAMP('" + now + "')");
+        return s.executeUpdate(sql);
+    }
+
+    private static boolean stagingOpenAt(Statement s, String now, long id) throws SQLException {
+        String fragment = com.mannschaft.app.role.dto.InviteValidity.STAGING_OPEN_SQL
+                .replace("UTC_TIMESTAMP(6)", "TIMESTAMP('" + now + "')");
+        try (ResultSet rs = s.executeQuery("SELECT " + fragment + " FROM invite_tokens WHERE id = " + id)) {
+            rs.next();
+            return rs.getBoolean(1);
+        }
+    }
+
+    @Test
+    @DisplayName("PR3 再検分: 不変条件。参照が窓の外と判定した時刻以降、有効化の UPDATE（同じ述語）は 0 行。窓の内でだけ 1 行になる")
+    void activationNeverSucceedsAfterGetJudgedOutside() throws Exception {
+        try (Connection c = connection(); Statement s = c.createStatement()) {
+            // 本番の invite_tokens を同名の一時表で覆い、有効化の本番 SQL を固定時刻で評価する（この接続の中だけ）
+            s.execute("CREATE TEMPORARY TABLE invite_tokens (id BIGINT PRIMARY KEY, target_user_id BIGINT, "
+                    + "used_count INT NOT NULL, revoked_at DATETIME(6), created_at DATETIME(6) NOT NULL)");
+            try {
+                String created = "2026-11-24 00:00:00.000000";
+                s.executeUpdate("INSERT INTO invite_tokens VALUES (1, 7, 0, '" + created + "', '" + created + "')");
+
+                String getAt = "2026-11-24 00:01:00.500000"; // 作成から 60.5 秒: 参照は窓の外（EXPIRED）と判定する
+                assertThat(stagingOpenAt(s, getAt, 1)).isFalse();
+                assertThat(activateAt(s, getAt, 1, 7)).as("参照と同時刻の有効化は 0 行").isZero();
+                assertThat(activateAt(s, "2026-11-24 00:01:01.000000", 1, 7)).as("参照より後の有効化も 0 行").isZero();
+
+                assertThat(stagingOpenAt(s, "2026-11-24 00:01:00.000000", 1)).as("ちょうど 60 秒は窓の内").isTrue();
+                assertThat(activateAt(s, "2026-11-24 00:01:00.000000", 1, 7)).as("窓の内でだけ 1 行").isEqualTo(1);
+                assertThat(activateAt(s, "2026-11-24 00:01:00.000000", 1, 7)).as("有効化済みは 0 行").isZero();
+            } finally {
+                s.execute("DROP TEMPORARY TABLE invite_tokens");
+            }
+        }
+    }
+
     @Test
     @DisplayName("PR3 検分 P2: 再依頼の通知は、前回からちょうど 7 日なら出さず、7 日と 0.5 秒なら出す。未依頼（NULL）は即時")
     void reissueCooldownBoundary() throws Exception {
