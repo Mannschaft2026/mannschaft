@@ -1,0 +1,36 @@
+{
+  "parking": {
+    "title": "停车场管理",
+    "spaces": {
+      "title": "车位列表",
+      "add": "添加车位",
+      "empty": "暂无停车位",
+      "pricePerMonth": "每月 {price}",
+      "floor": "{floor}层",
+      "deadline": "申请截止 {date}",
+      "status": {
+        "VACANT": "空闲",
+        "OCCUPIED": "使用中",
+        "MAINTENANCE": "维护中"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "接受申请中",
+        "NOT_ACCEPTING": "暂停接受申请",
+        "LOTTERY_CLOSED": "抽签已结束"
+      },
+      "type": {
+        "INDOOR": "室内",
+        "OUTDOOR": "室外",
+        "ACCESSIBLE": "无障碍",
+        "MOTORCYCLE": "摩托车",
+        "BICYCLE": "自行车",
+        "VISITOR": "访客专用",
+        "OTHER": "其他"
+      },
+      "allocation": {
+        "FIRST_COME": "先到先得",
+        "LOTTERY": "抽签"
+      }
+    }
+  }
+}

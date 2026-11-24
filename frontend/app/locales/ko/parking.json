@@ -1,0 +1,36 @@
+{
+  "parking": {
+    "title": "주차장 관리",
+    "spaces": {
+      "title": "구역 목록",
+      "add": "구역 추가",
+      "empty": "주차 구역이 없습니다",
+      "pricePerMonth": "월 {price}",
+      "floor": "{floor}층",
+      "deadline": "신청 기한 {date}",
+      "status": {
+        "VACANT": "공실",
+        "OCCUPIED": "사용 중",
+        "MAINTENANCE": "정비 중"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "신청 접수 중",
+        "NOT_ACCEPTING": "신청 접수 중지",
+        "LOTTERY_CLOSED": "추첨 접수 마감"
+      },
+      "type": {
+        "INDOOR": "실내",
+        "OUTDOOR": "실외",
+        "ACCESSIBLE": "장애인용",
+        "MOTORCYCLE": "오토바이",
+        "BICYCLE": "자전거",
+        "VISITOR": "방문자용",
+        "OTHER": "기타"
+      },
+      "allocation": {
+        "FIRST_COME": "선착순",
+        "LOTTERY": "추첨"
+      }
+    }
+  }
+}

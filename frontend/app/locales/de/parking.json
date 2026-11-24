@@ -1,0 +1,36 @@
+{
+  "parking": {
+    "title": "Parkplatzverwaltung",
+    "spaces": {
+      "title": "Stellplätze",
+      "add": "Stellplatz hinzufügen",
+      "empty": "Es gibt keine Stellplätze.",
+      "pricePerMonth": "{price} / Monat",
+      "floor": "Etage {floor}",
+      "deadline": "Bewerbung bis {date}",
+      "status": {
+        "VACANT": "Frei",
+        "OCCUPIED": "Belegt",
+        "MAINTENANCE": "In Wartung"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "Bewerbungen möglich",
+        "NOT_ACCEPTING": "Keine Bewerbungen",
+        "LOTTERY_CLOSED": "Verlosung beendet"
+      },
+      "type": {
+        "INDOOR": "Innen",
+        "OUTDOOR": "Außen",
+        "ACCESSIBLE": "Barrierefrei",
+        "MOTORCYCLE": "Motorrad",
+        "BICYCLE": "Fahrrad",
+        "VISITOR": "Besucher",
+        "OTHER": "Sonstiges"
+      },
+      "allocation": {
+        "FIRST_COME": "Wer zuerst kommt",
+        "LOTTERY": "Verlosung"
+      }
+    }
+  }
+}

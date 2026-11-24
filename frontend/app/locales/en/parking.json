@@ -1,0 +1,36 @@
+{
+  "parking": {
+    "title": "Parking",
+    "spaces": {
+      "title": "Parking spaces",
+      "add": "Add space",
+      "empty": "There are no parking spaces.",
+      "pricePerMonth": "{price} / month",
+      "floor": "Floor {floor}",
+      "deadline": "Apply by {date}",
+      "status": {
+        "VACANT": "Vacant",
+        "OCCUPIED": "Occupied",
+        "MAINTENANCE": "Under maintenance"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "Accepting applications",
+        "NOT_ACCEPTING": "Not accepting applications",
+        "LOTTERY_CLOSED": "Lottery closed"
+      },
+      "type": {
+        "INDOOR": "Indoor",
+        "OUTDOOR": "Outdoor",
+        "ACCESSIBLE": "Accessible",
+        "MOTORCYCLE": "Motorcycle",
+        "BICYCLE": "Bicycle",
+        "VISITOR": "Visitor",
+        "OTHER": "Other"
+      },
+      "allocation": {
+        "FIRST_COME": "First come, first served",
+        "LOTTERY": "Lottery"
+      }
+    }
+  }
+}

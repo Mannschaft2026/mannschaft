@@ -1,0 +1,36 @@
+{
+  "parking": {
+    "title": "Gestión de aparcamiento",
+    "spaces": {
+      "title": "Plazas",
+      "add": "Añadir plaza",
+      "empty": "No hay plazas de aparcamiento.",
+      "pricePerMonth": "{price} al mes",
+      "floor": "Planta {floor}",
+      "deadline": "Solicitar antes del {date}",
+      "status": {
+        "VACANT": "Libre",
+        "OCCUPIED": "Ocupada",
+        "MAINTENANCE": "En mantenimiento"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "Aceptando solicitudes",
+        "NOT_ACCEPTING": "Solicitudes cerradas",
+        "LOTTERY_CLOSED": "Sorteo cerrado"
+      },
+      "type": {
+        "INDOOR": "Interior",
+        "OUTDOOR": "Exterior",
+        "ACCESSIBLE": "Accesible",
+        "MOTORCYCLE": "Moto",
+        "BICYCLE": "Bicicleta",
+        "VISITOR": "Visitantes",
+        "OTHER": "Otro"
+      },
+      "allocation": {
+        "FIRST_COME": "Por orden de llegada",
+        "LOTTERY": "Sorteo"
+      }
+    }
+  }
+}

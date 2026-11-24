@@ -1,0 +1,36 @@
+{
+  "parking": {
+    "title": "駐車場管理",
+    "spaces": {
+      "title": "区画一覧",
+      "add": "区画を追加",
+      "empty": "駐車区画がありません",
+      "pricePerMonth": "月額 {price}",
+      "floor": "{floor}階",
+      "deadline": "申請期限 {date}",
+      "status": {
+        "VACANT": "空き",
+        "OCCUPIED": "使用中",
+        "MAINTENANCE": "メンテナンス中"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "申請受付中",
+        "NOT_ACCEPTING": "申請受付停止中",
+        "LOTTERY_CLOSED": "抽選受付終了"
+      },
+      "type": {
+        "INDOOR": "屋内",
+        "OUTDOOR": "屋外",
+        "ACCESSIBLE": "バリアフリー",
+        "MOTORCYCLE": "バイク",
+        "BICYCLE": "自転車",
+        "VISITOR": "来場者用",
+        "OTHER": "その他"
+      },
+      "allocation": {
+        "FIRST_COME": "先着順",
+        "LOTTERY": "抽選"
+      }
+    }
+  }
+}
