@@ -123,10 +123,7 @@ class ShiftBudgetEndToEndIntegrationTest {
         closeService = new MonthlyShiftBudgetCloseService(
                 allocationRepository, consumptionRepository, budgetTransactionRepository,
                 featureService, accessControlService, auditLogService,
-                organizationRepository, failedEventService, closeServiceSelfProvider,
-                // 締め対象 2026-06 が「月末を過ぎた月」となる壁時計（CMP-261021-0657）
-                java.time.Clock.fixed(java.time.Instant.parse("2026-11-24T03:00:00Z"),
-                        java.time.ZoneId.of("Asia/Tokyo")));
+                organizationRepository, failedEventService, closeServiceSelfProvider);
         lenient().when(closeServiceSelfProvider.getObject()).thenReturn(closeService);
 
         allocation = ShiftBudgetAllocationEntity.builder()

@@ -7,6 +7,7 @@ import com.mannschaft.app.common.i18n.UserLocaleCache;
 import com.mannschaft.app.proxy.ProxyInputContext;
 import com.mannschaft.app.proxy.repository.ProxyInputConsentRepository;
 import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -61,7 +62,7 @@ class MonthlyShiftBudgetCloseControllerTest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private MonthlyShiftBudgetCloseService closeService;
+    private MonthlyShiftBudgetCloseGate closeGate;
 
     @MockitoBean
     private AuthTokenService authTokenService;
@@ -88,7 +89,7 @@ class MonthlyShiftBudgetCloseControllerTest {
     @Test
     @DisplayName("POST /monthly-close 正常系 → 200 + closed_allocations 1, closed_consumptions 5")
     void close_200() throws Exception {
-        given(closeService.close(eq(ORG_ID), eq(YearMonth.of(2026, 6))))
+        given(closeGate.close(eq(ORG_ID), eq(YearMonth.of(2026, 6))))
                 .willReturn(new MonthlyShiftBudgetCloseService.CloseResult(1, 0, 5));
 
         String body = objectMapper.writeValueAsString(java.util.Map.of(
@@ -123,7 +124,7 @@ class MonthlyShiftBudgetCloseControllerTest {
     @DisplayName("権限なし → 403 (BUDGET_ADMIN_REQUIRED)")
     void close_権限なし_403() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED))
-                .given(closeService).close(any(), any());
+                .given(closeGate).close(any(), any());
 
         String body = objectMapper.writeValueAsString(java.util.Map.of(
                 "organization_id", ORG_ID,
@@ -139,7 +140,7 @@ class MonthlyShiftBudgetCloseControllerTest {
     @DisplayName("重複実行 → 409 (MONTHLY_ALREADY_CLOSED) — 例外シナリオ")
     void close_重複_409() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.MONTHLY_ALREADY_CLOSED))
-                .given(closeService).close(any(), any());
+                .given(closeGate).close(any(), any());
 
         String body = objectMapper.writeValueAsString(java.util.Map.of(
                 "organization_id", ORG_ID,
@@ -155,7 +156,7 @@ class MonthlyShiftBudgetCloseControllerTest {
     @DisplayName("CMP-261021-0657 当月・未来月 → 409 (MONTH_NOT_ENDED, SHIFT_BUDGET_032)")
     void close_月末未到来_409() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.MONTH_NOT_ENDED))
-                .given(closeService).close(any(), any());
+                .given(closeGate).close(any(), any());
 
         String body = objectMapper.writeValueAsString(java.util.Map.of(
                 "organization_id", ORG_ID,

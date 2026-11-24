@@ -8,6 +8,7 @@ import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
@@ -143,6 +144,9 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
     @Qualifier("wallClock")
     private Clock wallClock;
 
+    @Autowired
+    private MonthlyShiftBudgetCloseGate closeGate;
+
     private Long orgId;
     private Long teamId;
     private Long actorId;
@@ -225,7 +229,7 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
         YearMonth currentMonth = YearMonth.now(wallClock);
         Long allocationId = seedAllocationWithPlannedConsumptions(currentMonth, TOTAL);
 
-        assertThatThrownBy(() -> closeService.close(orgId, currentMonth))
+        assertThatThrownBy(() -> closeGate.close(orgId, currentMonth))
                 .isInstanceOf(com.mannschaft.app.common.BusinessException.class)
                 .satisfies(e -> assertThat(((com.mannschaft.app.common.BusinessException) e)
                         .getErrorCode().getCode()).isEqualTo("SHIFT_BUDGET_032"));

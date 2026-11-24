@@ -3,16 +3,15 @@ package com.mannschaft.app.shiftbudget.batch;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.admin.batch.BatchEndpoint;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
 import java.time.YearMonth;
 
 /**
@@ -41,11 +40,8 @@ import java.time.YearMonth;
         havingValue = "true")
 public class MonthlyShiftBudgetCloseBatchJob {
 
-    private final MonthlyShiftBudgetCloseService closeService;
-
-    /** 対象月（前月）を利用者の暦（JST）で決めるための壁時計（CMP-261021-0657）。 */
-    @Qualifier("wallClock")
-    private final Clock wallClock;
+    /** 入口（対象月を壁時計 JST で決め、未終了月を拒否する。CMP-261021-0657）。 */
+    private final MonthlyShiftBudgetCloseGate closeGate;
 
     /**
      * 毎月 1 日 02:00 JST に実行する。
@@ -59,10 +55,10 @@ public class MonthlyShiftBudgetCloseBatchJob {
     @SchedulerLock(name = "MonthlyShiftBudgetCloseBatchJob",
             lockAtMostFor = "30m", lockAtLeastFor = "5m")
     public void run() {
-        YearMonth targetMonth = YearMonth.now(wallClock).minusMonths(1);
+        YearMonth targetMonth = closeGate.previousMonth();
         log.info("F08.7 月次締め cron 起動: 対象月={}", targetMonth);
 
-        MonthlyShiftBudgetCloseService.AllOrgsCloseResult result = closeService.closeAll(targetMonth);
+        MonthlyShiftBudgetCloseService.AllOrgsCloseResult result = closeGate.closeAll(targetMonth);
 
         log.info("F08.7 月次締め cron 完了: 対象月={}, processedOrgs={}, failedOrgs={}, "
                         + "totalClosedAllocations={}, totalConsumptions={}",

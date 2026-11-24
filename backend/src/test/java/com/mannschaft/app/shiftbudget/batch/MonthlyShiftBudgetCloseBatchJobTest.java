@@ -1,5 +1,7 @@
 package com.mannschaft.app.shiftbudget.batch;
 
+import com.mannschaft.app.shiftbudget.ShiftBudgetFeatureService;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +22,8 @@ import static org.mockito.Mockito.verify;
 /**
  * {@link MonthlyShiftBudgetCloseBatchJob} 単体テスト（CMP-261021-0657）。
  *
- * <p>cron は毎月 1 日 02:00 JST に起動する。対象月は壁時計（JST）基準の「前月」でなければならない。
+ * <p>cron は毎月 1 日 02:00 JST に起動する。対象月は壁時計（JST）基準の「前月」でなければならず、
+ * かつ Gate の「月末を過ぎた月だけ締める」判定を通って {@code closeAll} に届かなければならない。
  * JVM 既定ゾーンに依存して {@code YearMonth.now()} を使うと、UTC 環境では 1 日 02:00 JST が
  * まだ前日（前月末）であり、対象月が 1 か月ずれる。</p>
  */
@@ -30,13 +33,16 @@ class MonthlyShiftBudgetCloseBatchJobTest {
 
     @Mock
     private MonthlyShiftBudgetCloseService closeService;
+    @Mock
+    private ShiftBudgetFeatureService featureService;
 
     @Test
     @DisplayName("CMP-261021-0657 2026-12-01 02:00 JST の起動で前月 2026-11 を closeAll する")
     void cron起動時は壁時計基準の前月を締める() {
         // 2026-12-01 02:00 JST = 2026-11-30 17:00 UTC
         Clock wallClock = Clock.fixed(Instant.parse("2026-11-30T17:00:00Z"), ZoneId.of("Asia/Tokyo"));
-        MonthlyShiftBudgetCloseBatchJob job = new MonthlyShiftBudgetCloseBatchJob(closeService, wallClock);
+        MonthlyShiftBudgetCloseGate gate = new MonthlyShiftBudgetCloseGate(closeService, featureService, wallClock);
+        MonthlyShiftBudgetCloseBatchJob job = new MonthlyShiftBudgetCloseBatchJob(gate);
         given(closeService.closeAll(any())).willReturn(
                 new MonthlyShiftBudgetCloseService.AllOrgsCloseResult(
                         List.of(), List.of(), List.of(), 0, 0, 0));

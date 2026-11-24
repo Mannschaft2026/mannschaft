@@ -27,16 +27,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -65,9 +61,6 @@ class MonthlyShiftBudgetCloseServiceTest {
     private static final Long ALLOCATION_ID = 42L;
     private static final Long USER_ID = 100L;
     private static final YearMonth TARGET_MONTH = YearMonth.of(2026, 6);
-    private static final ZoneId JST = ZoneId.of("Asia/Tokyo");
-    /** 基準の壁時計: 2026-11-24 12:00 JST（当月=2026-11）。 */
-    private static final Clock BASE_CLOCK = Clock.fixed(Instant.parse("2026-11-24T03:00:00Z"), JST);
 
     @Mock
     private ShiftBudgetAllocationRepository allocationRepository;
@@ -101,22 +94,17 @@ class MonthlyShiftBudgetCloseServiceTest {
 
     @BeforeEach
     void setUp() {
-        useClock(BASE_CLOCK);
+        service = new MonthlyShiftBudgetCloseService(
+                allocationRepository, consumptionRepository, budgetTransactionRepository,
+                featureService, accessControlService, auditLogService,
+                organizationRepository, failedEventService, selfProvider);
+        lenient().when(selfProvider.getObject()).thenReturn(service);
         // CMP-260910-1556 検分 P1-2: closeOneAllocation は冒頭で allocation 行を排他ロックする。
         // mock のままだと empty が返り「割当が消滅した」扱いで全件 skip される（= 全検体が静かに 0 件になる）。
         lenient().when(allocationRepository.findByIdForUpdate(anyLong()))
                 .thenAnswer(invocation -> Optional.of(sampleAllocation()));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(USER_ID.toString(), null, List.of()));
-    }
-
-    /** 壁時計を差し替えて被テストインスタンスを作り直す（自己プロキシも新インスタンスへ向ける）。 */
-    private void useClock(Clock clock) {
-        service = new MonthlyShiftBudgetCloseService(
-                allocationRepository, consumptionRepository, budgetTransactionRepository,
-                featureService, accessControlService, auditLogService,
-                organizationRepository, failedEventService, selfProvider, clock);
-        lenient().when(selfProvider.getObject()).thenReturn(service);
     }
 
     @AfterEach
@@ -370,127 +358,5 @@ class MonthlyShiftBudgetCloseServiceTest {
         assertThat(result.failedOrganizationIds()).isEmpty();
         assertThat(result.alreadyClosedOrganizationIds()).isEmpty();
         verify(failedEventService, never()).recordFailure(any(), any(), any(), any(), any());
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // CMP-261021-0657: 月末を過ぎていない月（当月・未来月）は締められない
-    // ═══════════════════════════════════════════════════════════════
-
-    private void givenBudgetAdmin() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
-        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-    }
-
-    private void givenOneClosableAllocation() {
-        given(allocationRepository.findLiveByOrgAndPeriodRange(eq(ORG_ID), any(), any()))
-                .willReturn(List.of(sampleAllocation()));
-        given(budgetTransactionRepository.existsBySourceTypeAndSourceIdAndTransactionDate(
-                any(), any(), any())).willReturn(false);
-        given(consumptionRepository.findByAllocationIdAndStatusInAndDeletedAtIsNull(any(), any()))
-                .willReturn(List.of(samplePlannedConsumption(new BigDecimal("4800"))));
-    }
-
-    private void assertMonthNotEnded(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
-        assertThatThrownBy(call)
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> {
-                    BusinessException be = (BusinessException) e;
-                    assertThat(be.getErrorCode().getCode()).isEqualTo("SHIFT_BUDGET_032");
-                    assertThat(be.getFieldErrors())
-                            .extracting(com.mannschaft.app.common.ErrorResponse.FieldError::getField)
-                            .containsExactly("year_month");
-                });
-    }
-
-    private void assertNoCloseSideEffects() {
-        verify(allocationRepository, never()).findLiveByOrgAndPeriodRange(any(), any(), any());
-        verify(budgetTransactionRepository, never()).save(any());
-        verify(allocationRepository, never()).incrementConfirmedAmount(anyLong(), any());
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 未来月 (2026-12) の締めは MONTH_NOT_ENDED (032) で拒否し、割当取得も仕訳も行わない")
-    void 未来月は拒否() {
-        givenBudgetAdmin();
-
-        assertMonthNotEnded(() -> service.close(ORG_ID, YearMonth.of(2026, 12)));
-        assertNoCloseSideEffects();
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 当月 (2026-11) の締めは MONTH_NOT_ENDED (032) で拒否し、割当取得も仕訳も行わない")
-    void 当月は拒否() {
-        givenBudgetAdmin();
-
-        assertMonthNotEnded(() -> service.close(ORG_ID, YearMonth.of(2026, 11)));
-        assertNoCloseSideEffects();
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 前月 (2026-10) は従来どおり締められる")
-    void 前月は成功() {
-        givenBudgetAdmin();
-        givenOneClosableAllocation();
-
-        MonthlyShiftBudgetCloseService.CloseResult result =
-                service.close(ORG_ID, YearMonth.of(2026, 10));
-
-        assertThat(result.closedAllocations()).isEqualTo(1);
-        verify(budgetTransactionRepository, times(1)).save(any());
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 JST 境界: 2026-11-30 23:59:59.999 JST では 2026-11 はまだ締められない")
-    void JST境界_月末最終秒は拒否() {
-        useClock(Clock.fixed(Instant.parse("2026-11-30T14:59:59.999Z"), JST));
-        givenBudgetAdmin();
-
-        assertMonthNotEnded(() -> service.close(ORG_ID, YearMonth.of(2026, 11)));
-        assertNoCloseSideEffects();
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 JST 境界: 2026-12-01 00:00 JST になれば 2026-11 を締められる（UTC ではまだ 11/30）")
-    void JST境界_翌月初は成功() {
-        useClock(Clock.fixed(Instant.parse("2026-11-30T15:00:00Z"), JST));
-        givenBudgetAdmin();
-        givenOneClosableAllocation();
-
-        MonthlyShiftBudgetCloseService.CloseResult result =
-                service.close(ORG_ID, YearMonth.of(2026, 11));
-
-        assertThat(result.closedAllocations()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 closeAll(当月) はループ前に 1 回だけ拒否し、組織走査も失敗イベント記録もしない")
-    void closeAll_当月は1回だけ拒否() {
-        assertMonthNotEnded(() -> service.closeAll(YearMonth.of(2026, 11)));
-
-        verify(organizationRepository, never()).findAll();
-        verify(failedEventService, never()).recordFailure(any(), any(), any(), any(), any());
-        assertNoCloseSideEffects();
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 closeFromBatch(当月) も共通経路の多重防御で 032 拒否し、割当取得も仕訳も行わない")
-    void closeFromBatch_当月は共通経路で拒否() {
-        given(featureService.isEnabled(ORG_ID)).willReturn(true);
-
-        assertMonthNotEnded(() -> service.closeFromBatch(ORG_ID, YearMonth.of(2026, 11)));
-        assertNoCloseSideEffects();
-    }
-
-    @Test
-    @DisplayName("CMP-261021-0657 権限なし＋未来月は権限エラー (027/403) が先に出る（月の情報を権限外に漏らさない）")
-    void 権限なし未来月は権限エラーが先() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
-        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(false);
-
-        assertThatThrownBy(() -> service.close(ORG_ID, YearMonth.of(2026, 12)))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode())
-                        .isEqualTo(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED.getCode()));
-        assertNoCloseSideEffects();
     }
 }

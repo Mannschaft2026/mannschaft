@@ -7,7 +7,6 @@ import com.mannschaft.app.budget.entity.BudgetTransactionEntity;
 import com.mannschaft.app.budget.repository.BudgetTransactionRepository;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
@@ -22,13 +21,11 @@ import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepositor
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -52,6 +49,11 @@ import java.util.Map;
  * </ol>
  *
  * <p>権限: {@code BUDGET_ADMIN}（バッチ起動時は SYSTEM 経路で権限チェックを skip）。</p>
+ *
+ * <p><strong>入口は {@link MonthlyShiftBudgetCloseGate} に限る</strong>（CMP-261021-0657）:
+ * 「月末を過ぎていない月（当月・未来月）は締めない」判定は Gate が壁時計（JST）で行う。
+ * 本クラスの {@code close} / {@code closeAll} / {@code closeFromBatch} を他の本番クラスから
+ * 直接呼ぶと判定を素通りするため、番人 {@code MonthlyShiftBudgetCloseGateGuardArchTest} が禁止している。</p>
  *
  * <p><strong>cron バッチ呼出時の注意</strong>: SecurityContext が設定されない場合、
  * {@link #closeFromBatch(Long, YearMonth)} を経由する（システム自動実行扱い）。</p>
@@ -98,15 +100,6 @@ public class MonthlyShiftBudgetCloseService {
     private final ObjectProvider<MonthlyShiftBudgetCloseService> selfProvider;
 
     /**
-     * 「対象月が終わったか」を判定する壁時計（CMP-261021-0657）。
-     *
-     * <p>月の境界は利用者の暦（JST）で判定する。JVM 既定ゾーンに依存すると、UTC 環境では
-     * JST の月初 0:00〜9:00 に前月がまだ「当月」と判定され、締めが不当に拒否される。</p>
-     */
-    @Qualifier("wallClock")
-    private final Clock wallClock;
-
-    /**
      * API #11 経由の手動締め（{@code BUDGET_ADMIN} 権限必須）。
      *
      * <p>指定組織×指定月の生存 allocation を全部締める。</p>
@@ -117,8 +110,6 @@ public class MonthlyShiftBudgetCloseService {
     public CloseResult close(Long organizationId, YearMonth targetMonth) {
         featureService.requireEnabled(organizationId);
         requireBudgetAdmin(organizationId);
-        // 権限確認の後に判定する（権限の無い利用者には 403 を返し、月の判定結果を見せない）
-        requireMonthEnded(targetMonth);
         return doCloseForOrg(organizationId, targetMonth);
     }
 
@@ -140,8 +131,6 @@ public class MonthlyShiftBudgetCloseService {
     }
 
     private CloseResult doCloseForOrg(Long organizationId, YearMonth targetMonth) {
-        // 多重防御: どの入口（close / closeFromBatch / closeAll）から来ても未終了月は確定させない
-        requireMonthEnded(targetMonth);
         LocalDate monthStart = targetMonth.atDay(1);
         LocalDate monthEnd = targetMonth.atEndOfMonth();
 
@@ -319,22 +308,14 @@ public class MonthlyShiftBudgetCloseService {
     }
 
     /**
-     * 対象月が終わっている（壁時計 JST 基準で前月以前）ことを要求する（CMP-261021-0657）。
+     * 現在の利用者が対象組織の {@code BUDGET_ADMIN}（または SYSTEM_ADMIN）であることを要求する。
      *
-     * <p>当月・未来月を締めると、締めた後に記録される消化が PLANNED のまま取り残され、
-     * 確定額と月次仕訳が実態とずれる。そのため月末を過ぎた月だけを締めの対象とする。</p>
+     * <p>{@link MonthlyShiftBudgetCloseGate} が「機能フラグ → 権限 → 対象月」の順で判定するために
+     * 公開している（CMP-261021-0657。権限の無い利用者には対象月の判定結果より先に 403 を返す）。</p>
      *
-     * @throws BusinessException {@link ShiftBudgetErrorCode#MONTH_NOT_ENDED} (409)
+     * @throws BusinessException {@link ShiftBudgetErrorCode#BUDGET_ADMIN_REQUIRED} (403)
      */
-    private void requireMonthEnded(YearMonth targetMonth) {
-        if (!targetMonth.isBefore(YearMonth.now(wallClock))) {
-            throw new BusinessException(ShiftBudgetErrorCode.MONTH_NOT_ENDED,
-                    List.of(new ErrorResponse.FieldError("year_month",
-                            ShiftBudgetErrorCode.MONTH_NOT_ENDED.getMessage())));
-        }
-    }
-
-    private void requireBudgetAdmin(Long organizationId) {
+    public void requireBudgetAdmin(Long organizationId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         if (!accessControlService.isSystemAdmin(currentUserId)
                 && !hasOrgPermission(currentUserId, organizationId, "BUDGET_ADMIN")) {
@@ -369,8 +350,6 @@ public class MonthlyShiftBudgetCloseService {
      */
     @Transactional(propagation = Propagation.NEVER)
     public AllOrgsCloseResult closeAll(YearMonth targetMonth) {
-        // 組織ループの前に 1 回だけ判定する（組織ごとに失敗イベントを溜めない）
-        requireMonthEnded(targetMonth);
         List<OrganizationEntity> organizations = organizationRepository.findAll();
 
         List<Long> processed = new ArrayList<>();
