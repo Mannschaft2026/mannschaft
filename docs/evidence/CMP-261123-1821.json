@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261123-1821",
+  "scope": "app",
+  "implementation": {
+    "pr": 4810,
+    "sha": "a5021aa91cfad8577dade746196e28a4d6500849"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "BE が枠のシフト表のチームに所属しないユーザー（他チーム・非所属・SUPPORTER・除名済み）の追加を 400 SHIFT_049 で拒否し、正規メンバーだけなら追加・置換・移動できる",
+      "tests": [
+        {
+          "name": "ShiftSlotAssignmentMembershipContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftSlotAssignmentMembershipContractIT.java"
+        },
+        {
+          "name": "ShiftSlotServiceTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftSlotServiceTest.java"
+        },
+        {
+          "name": "ShiftSlotFacadeTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/service/ShiftSlotFacadeTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "FE の board.vue が URL の slug とシフト表のチームの不一致を検出して描画せず、メンバーをシフト表のチームから取得する",
+      "tests": [
+        {
+          "name": "shift-board-team-mismatch.spec.ts",
+          "evidence": "frontend/tests/unit/pages/teams/shift-board-team-mismatch.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "権限あり・権限なし・他チーム・他テナントのロール横断で実機の挙動が正しい（他テナントは存在しないシフト表と同じ 404）",
+      "tests": [
+        {
+          "name": "cmp-261123-1821-shift-assign-authz.real.spec.ts",
+          "evidence": "frontend/tests/e2e/real/cmp-261123-1821-shift-assign-authz.real.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45215980581 },
+    { "runId": 45215980458 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4810"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-1821-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-1821-exploratory.md"
+    }
+  },
+  "regressions": []
+}
