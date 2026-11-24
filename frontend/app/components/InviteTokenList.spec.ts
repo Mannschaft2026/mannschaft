@@ -171,7 +171,6 @@ describe('スコープ招待の英語表示', () => {
       'Maximum uses (leave blank for unlimited)',
       'Member',
       'Supporter',
-      'Guest',
       '1 day',
       '7 days',
       '30 days',
@@ -183,6 +182,15 @@ describe('スコープ招待の英語表示', () => {
       expect(wrapper.text()).toContain(text)
     expect(wrapper.text()).not.toMatch(/[ぁ-んァ-ヶ一-龯]/)
     expect(mocks.api).toHaveBeenCalledTimes(1)
+  })
+  it('招待ロールの選択肢は MEMBER / SUPPORTER だけで、GUEST は出さない（CMP-261124-0157）', async () => {
+    // 共有招待で付与できるのは MEMBER / SUPPORTER だけ（BE は他のロールを 422 ROLE_009 で拒否する）
+    const wrapper = await mountList()
+    await openForm(wrapper)
+    const roleSelect = wrapper.findAll('select').find((select) => select.text().includes('Member'))
+    expect(roleSelect).toBeDefined()
+    expect(roleSelect!.findAll('option').map((option) => option.text())).toEqual(['Member', 'Supporter'])
+    expect(wrapper.text()).not.toContain('Guest')
   })
   for (const scopeType of ['team', 'organization'] as const) {
     it(`${scopeType}の作成既定値を変えず英語の成功通知を表示する`, async () => {
