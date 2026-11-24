@@ -92,13 +92,6 @@ async function slotVersion(actor: Actor, scheduleId: number, slotId: number): Pr
   return { version: s.version, assigned: s.assignedUserIds }
 }
 
-/** 管理者の API で枠の割当を空にして版を進める（前提の掃除。割当操作そのものの検証には使わない）。 */
-async function clearSlot(slotId: number, scheduleId: number) {
-  const { version, assigned } = await slotVersion(W.admin, scheduleId, slotId)
-  if (assigned.length === 0) return
-  await must(W.admin, 'PATCH', `/api/v1/shifts/slots/${slotId}/assignments`, { removeUserIds: assigned, slotVersion: version })
-}
-
 /** ボード画面を URL 直打ちで開き、取得 API（シフト表）の応答状態を返す。 */
 async function openBoard(page: Page, slug: string, scheduleId: number): Promise<number> {
   const resP = page.waitForResponse(
