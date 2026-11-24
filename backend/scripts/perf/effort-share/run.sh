@@ -7,7 +7,7 @@
 #   3. 検証用 BE（8081）を起動する（CLAUDE.md のポート規約。CORS は不要＝k6 は API を直接叩く）。
 #   4. 本スクリプトで k6（grafana/k6 を Docker）と EXPLAIN ANALYZE を取り、生ログは外部 evidence-dir に置く。
 #   5. 確定 JSON は docs/development/completion-evidence.md の正本手順に従ってリポジトリへ置く（生ログの全量は入れない）。
-#   6. 終わったら cleanup.sql で投入行だけを消す。
+#   6. 終わったら cleanup.sql で投入行だけを消す（seed.sql が記録表 perf_effort_seed_ids に残した ID と一致する行だけ）。
 #
 # 使い方: EVIDENCE_DIR=/path/outside/repo SCHEMA=effort_perf TOKEN=... TEAM_ID=... PROBE_OWNER=... MYSQL_PWD=... ./run.sh
 set -euo pipefail
