@@ -11,11 +11,15 @@ import com.mannschaft.app.shift.dto.ReviewChangeRequestRequest;
 import com.mannschaft.app.shift.entity.ShiftChangeRequestEntity;
 import com.mannschaft.app.shift.entity.ShiftScheduleEntity;
 import com.mannschaft.app.shift.entity.ShiftSlotEntity;
+import com.mannschaft.app.shift.event.ShiftChangeRequestCreatedEvent;
+import com.mannschaft.app.shift.event.ShiftChangeRequestReviewedEvent;
+import com.mannschaft.app.shift.event.ShiftChangeRequestWithdrawnEvent;
 import com.mannschaft.app.shift.repository.ShiftChangeRequestRepository;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +48,8 @@ public class ShiftChangeRequestService {
     private final ShiftChangeRequestRepository changeRequestRepository;
     private final ShiftScheduleRepository scheduleRepository;
     private final ShiftSlotRepository slotRepository;
+    /** 通知は commit 後（AFTER_COMMIT）にリスナーが配送する。tx 内で他ドメインを呼ばない（D-3T）。 */
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 変更依頼を作成する。
@@ -66,7 +72,8 @@ public class ShiftChangeRequestService {
     public ChangeRequestResponse create(CreateChangeRequestRequest request, Long userId) {
         // 認可は Facade 済み。認可の後・tx の前にスケジュールが消えた競合を 404 にするため読み直す
         // （不在なら Facade の解決時と同じ SHIFT_SCHEDULE_NOT_FOUND・DB 不変）。
-        ShiftScheduleStatus scheduleStatus = resolveSchedule(request.scheduleId()).getStatus();
+        ShiftScheduleEntity schedule = resolveSchedule(request.scheduleId());
+        ShiftScheduleStatus scheduleStatus = schedule.getStatus();
         // CMP-261010-1432 J3a: 変更依頼の受付は公開（PUBLISHED）まで。仕様
         // docs/features/F03.5_shift/01_db_design.md（shift_change_requests「受付対象ステータス」「提出可能期間」）は
         // 「DRAFT / COLLECTING / ADJUSTING のみ新規作成可能。PUBLISHED / ARCHIVED は shift_swap_requests の
@@ -97,6 +104,9 @@ public class ShiftChangeRequestService {
         entity = changeRequestRepository.save(entity);
         log.info("シフト変更依頼作成: id={}, scheduleId={}, type={}, requestedBy={}",
                 entity.getId(), request.scheduleId(), request.requestType(), userId);
+        // 管理者全員への通知（仕様: 02_api_design.md 変更依頼 POST）。宛先はスケジュール実体由来のチームの管理者。
+        eventPublisher.publishEvent(new ShiftChangeRequestCreatedEvent(
+                entity.getId(), entity.getScheduleId(), schedule.getTeamId(), userId));
         return toResponse(entity);
     }
 
@@ -175,7 +185,7 @@ public class ShiftChangeRequestService {
 
         // 認可（SYSTEM_ADMIN 短絡 or 当該チームの ADMIN/DEPUTY_ADMIN）は Facade 済み。
         // 認可の後にスケジュールが消えた競合を 404 にするため読み直す。
-        resolveTeamId(entity.getScheduleId());
+        Long teamId = resolveTeamId(entity.getScheduleId());
 
         if (entity.getStatus() != ChangeRequestStatus.OPEN) {
             throw new BusinessException(ShiftErrorCode.INVALID_CHANGE_REQUEST_STATUS);
@@ -195,6 +205,10 @@ public class ShiftChangeRequestService {
         // 応答の version を更新後の値にするため、その場で flush する
         entity = changeRequestRepository.saveAndFlush(entity);
         log.info("シフト変更依頼審査: id={}, decision={}, reviewerId={}", id, request.decision(), userId);
+        // 依頼者への通知（受諾・却下。審査コメントを本文に含める）。依頼者本人の審査は Facade で拒否済み。
+        eventPublisher.publishEvent(new ShiftChangeRequestReviewedEvent(
+                entity.getId(), entity.getScheduleId(), teamId, entity.getRequestedBy(), userId,
+                entity.getStatus(), entity.getReviewComment()));
         return toResponse(entity);
     }
 
@@ -221,6 +235,11 @@ public class ShiftChangeRequestService {
         entity.withdraw();
         changeRequestRepository.save(entity);
         log.info("シフト変更依頼取下: id={}, userId={}", id, userId);
+        // 管理者への通知。取下げは親スケジュールの存在に依存しない（従来どおり）ため、親が消えていれば通知先が
+        // 無いので発行しない（取下げ自体は成功させる）。
+        scheduleRepository.findById(entity.getScheduleId()).ifPresent(schedule ->
+                eventPublisher.publishEvent(new ShiftChangeRequestWithdrawnEvent(
+                        entity.getId(), entity.getScheduleId(), schedule.getTeamId(), userId)));
     }
 
     // ═════════════════════════════════════════════════════════════════════

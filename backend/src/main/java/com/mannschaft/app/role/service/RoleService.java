@@ -548,6 +548,26 @@ public class RoleService {
     }
 
     /**
+     * 指定チームの「ADMIN、または指定権限を持つ DEPUTY_ADMIN」のユーザー ID 一覧を返す。
+     *
+     * <p>シフト変更依頼の管理者宛通知（ADMIN ＋ MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の受信者解決用。
+     * 既存の {@code findAdminUserIdsByTeamId}（ADMIN のみ）と
+     * {@code findDeputyAdminUserIdsByTeamIdAndPermission}（権限を持つ DEPUTY_ADMIN。ロール定義・
+     * 権限グループの両経路、チーム所属中のみ）を合わせるだけで、新規クエリは持たない。
+     * 宛先は引数のチームの管理者だけで、他チームの管理者は含まれない。</p>
+     *
+     * @param teamId         対象チーム ID
+     * @param permissionName 副管理者に要求する権限名（例: {@code "MANAGE_SHIFTS"}）
+     * @return 重複のない受信者のユーザー ID 一覧
+     */
+    public List<Long> getAdminAndPermittedDeputyUserIdsByTeamId(Long teamId, String permissionName) {
+        java.util.LinkedHashSet<Long> ids = new java.util.LinkedHashSet<>(
+                userRoleRepository.findAdminUserIdsByTeamId(teamId));
+        ids.addAll(userRoleRepository.findDeputyAdminUserIdsByTeamIdAndPermission(teamId, permissionName));
+        return new java.util.ArrayList<>(ids);
+    }
+
+    /**
      * 指定チームで指定ロールを持つユーザー ID 一覧を返す。
      *
      * <p>Issue #2834 / CMP-056 第1群ロットB で追加。{@code social} ドメインの通知配送リスナー

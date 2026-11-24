@@ -281,6 +281,12 @@ INDEX idx_shift_change_requests_type (schedule_id, request_type, status)        
   - `OPEN` 作成時: 管理者全員（ADMIN + DEPUTY_ADMIN の MANAGE_SHIFTS 保有者）にプッシュ + アプリ内通知
   - `ACCEPTED / REJECTED` 時: 依頼者にプッシュ + アプリ内通知。`admin_note` を本文に含める
   - `WITHDRAWN` 時: 管理者に通知（未処理一覧から消えることを知らせる）
+  - **実装の確定事項（本対応で実装。F04.3 通知種別は `SHIFT_CHANGE_REQUEST_CREATED` / `SHIFT_CHANGE_REQUEST_REVIEWED` / `SHIFT_CHANGE_REQUEST_WITHDRAWN`、通知の source は `SHIFT_CHANGE_REQUEST` ＋ 変更依頼 ID、スコープは TEAM）**:
+    - **宛先の「管理者全員」**: そのスケジュールの所属チームの `ADMIN` ＋ `MANAGE_SHIFTS` を持つ `DEPUTY_ADMIN`（ロール定義・権限グループの両経路。チーム所属中・有効ユーザーのみ）。宛先はスケジュール実体由来のチームに限り、他チームの管理者・MANAGE_SHIFTS を持たない副管理者・一般メンバーには作らない
+    - **自己通知**: 管理者が自分で出した依頼（OPEN 作成）・自分で取り下げた依頼（WITHDRAWN）では、依頼者本人を「管理者へ」の宛先から除く（他の管理者にだけ通知）。`ACCEPTED / REJECTED` の宛先は依頼者のみで、審査者本人が依頼者になることは自己審査禁止（403 `SHIFT_045`）により起きない
+    - **アプリ内通知の遷移先**: `/teams/{slug}/shifts/{scheduleId}/change-requests`（変更依頼画面。slug を引けない場合のみ `/notifications`）
+    - **文言**: BE の `messages*.properties`（`notification.shift.changeRequest*`、6 言語）。受信者の locale で描画。`ACCEPTED / REJECTED` は `admin_note`（審査コメント）があれば本文に含める
+    - **発行方式**: `ShiftChangeRequestCreatedEvent` / `ShiftChangeRequestReviewedEvent` / `ShiftChangeRequestWithdrawnEvent` を業務 TX 内で publish し、`@TransactionalEventListener(AFTER_COMMIT)` ＋ `@Async` のリスナー（`ShiftChangeRequestNotificationListener`）が 1 受信者ずつ独立 TX で配送する。TX がロールバックされれば通知は作られず、配送の失敗は依頼・審査の確定結果を巻き戻さない
 - **監査ログ** (F10.3 連携):
   - `SHIFT_CHANGE_REQUEST_CREATED`（`requester_user_id`, `schedule_id`, `slot_id`, `request_type` を記録）
   - `SHIFT_CHANGE_REQUEST_REVIEWED`（`reviewed_by`, `status`（ACCEPTED/REJECTED）, `admin_note` を記録）
