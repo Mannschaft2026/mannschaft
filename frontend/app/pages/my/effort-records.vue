@@ -5,9 +5,9 @@
  */
 import type { ActivityFieldValue } from '~/utils/activityFields'
 import { toYmd } from '~/utils/activityFields'
+import { extractApiFieldErrors } from '~/utils/apiFieldErrors'
 import {
   buildEffortFieldValues,
-  extractEffortFieldErrors,
   hasEffortContent,
   parseTypedYmd,
   fromEffortWireValue,
@@ -189,7 +189,7 @@ function validate(): boolean {
 /** BE の 400 fieldErrors をフォームへ表示する。表示できたら true（トーストは出さない）。 */
 function showFieldErrors(e: unknown): boolean {
   if (statusOf(e) !== 400) return false
-  const errs = extractEffortFieldErrors(e)
+  const errs = extractApiFieldErrors(e)
   if (errs.length === 0) return false
   const labels = new Map(formFields.value.map((f) => [`values.${f.fieldKey}`, f.fieldLabel]))
   formError.value = errs

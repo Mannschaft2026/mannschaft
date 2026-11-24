@@ -3,8 +3,9 @@ import { createPinia, setActivePinia } from 'pinia'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { useAuthStore } from '../../../app/stores/useAuthStore'
 
-const { teamClear, organizationClear, chatClear, navigateToMock, disarmMock } = vi.hoisted(() => ({
+const { teamClear, organizationClear, chatClear, actionMemoClear, navigateToMock, disarmMock } = vi.hoisted(() => ({
   teamClear: vi.fn(),
+  actionMemoClear: vi.fn(),
   organizationClear: vi.fn(),
   chatClear: vi.fn(),
   navigateToMock: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('../../../app/stores/useOrganizationStore', () => ({ useOrganizationStor
 mockNuxtImport('navigateTo', () => (...args: unknown[]) => navigateToMock(...args))
 mockNuxtImport('useChatTabsStore', () => () => ({ clearAll: chatClear }))
 mockNuxtImport('disarmProactiveRefresh', () => () => disarmMock())
+mockNuxtImport('useActionMemoStore', () => () => ({ clear: actionMemoClear }))
 
 describe('useAuthStore.logout', () => {
   beforeEach(() => {
@@ -40,6 +42,7 @@ describe('useAuthStore.logout', () => {
     teamClear.mockClear()
     organizationClear.mockClear()
     chatClear.mockClear()
+    actionMemoClear.mockClear()
     navigateToMock.mockReset()
     disarmMock.mockReset()
   })
@@ -50,6 +53,8 @@ describe('useAuthStore.logout', () => {
     expect(teamClear).toHaveBeenCalledOnce()
     expect(organizationClear).toHaveBeenCalledOnce()
     expect(chatClear).toHaveBeenCalledOnce()
+    // CMP-261123-1201: 行動メモの利用者固有状態（公開した投稿 ID 等）を次の利用者へ持ち越さない
+    expect(actionMemoClear).toHaveBeenCalledOnce()
     expect(disarmMock).toHaveBeenCalledOnce()
     expect(navigateToMock).toHaveBeenCalledWith('/login')
   })

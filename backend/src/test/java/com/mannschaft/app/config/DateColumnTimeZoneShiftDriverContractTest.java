@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * <b>DATE 列が「接続作成時の JVM 既定 TZ」で整形されて 1 日ずれる事故のドライバ契約</b>（CMP-261123-1334 / AC-1）。
  *
- * <p>{@link TimeZoneConfig} は起動途中の {@code @PostConstruct} で JVM 既定 TZ を UTC から JST へ切り替える。
+ * <p>旧実装の {@code TimeZoneConfig} は起動途中の {@code @PostConstruct} で JVM 既定 TZ を UTC から JST へ切り替えていた
+ * （CMP-261123-1335 で Bean 生成前の確定へ移し解消済み。本契約は最終防衛として残す）。
  * Hibernate の {@code DateJdbcType} は LocalDate を {@code java.sql.Date.valueOf(ld)}（その時点の JVM 既定 TZ の 0 時）にして
  * Calendar 無しの {@code setDate} で書く。Connector/J は既定（{@code cacheDefaultTimeZone=true}）だと、
  * 接続作成時の JVM 既定 TZ をキャッシュして整形するため、切替前（UTC）に作られた接続では前日になる。</p>
