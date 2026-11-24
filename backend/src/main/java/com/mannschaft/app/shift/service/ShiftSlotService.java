@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * シフト枠サービス（<b>トランザクション本体</b>）。シフト枠のCRUD・一括操作を担当する。
@@ -196,10 +197,16 @@ public class ShiftSlotService {
      * @param slotId シフト枠ID
      * @param req    更新リクエスト
      * @param userId 操作者ユーザーID
+     * @param newAssigneeGuard 割当を置換する更新で、<b>親ロック・枠ロック後の現在の割当</b>に無い人（新たに入る人）を
+     *                         渡して検査させる関数（不適格なら例外を投げる）。所属の判定は認可と同じく
+     *                         {@code AccessControlService} を持つ Facade 側にあり、本クラスは依存しない。差分を
+     *                         ロック後の値で求めるのは、並行する removeUserIds で外れたばかりの不適格者が
+     *                         古い一覧との比較で「既存」扱いになり無検査で書き戻されるのを防ぐため（CMP-261123-1821）
      * @return 更新されたシフト枠
      */
     @Transactional
-    public ShiftSlotResponse updateSlot(Long slotId, UpdateShiftSlotRequest req, Long userId) {
+    public ShiftSlotResponse updateSlot(Long slotId, UpdateShiftSlotRequest req, Long userId,
+                                        Consumer<List<Long>> newAssigneeGuard) {
         ShiftSlotEntity entity = findSlotOrThrow(slotId);
         Long scheduleId = entity.getScheduleId();
         lockParentForUpdate(scheduleId, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
@@ -223,6 +230,12 @@ public class ShiftSlotService {
                     req.getEndsNextDay() != null ? req.getEndsNextDay() : entity.isEndsNextDay());
         }
 
+        // 履歴記録のため更新前の割当を控える（CMP-260908-2117）。親・枠のロック取得後の現在値。
+        List<Long> before = deserializeUserIds(entity.getAssignedUserIds());
+        if (req.getAssignedUserIds() != null) {
+            newAssigneeGuard.accept(req.getAssignedUserIds().stream().filter(id -> !before.contains(id)).toList());
+        }
+
         if (req.getSlotDate() != null && !req.getSlotDate().equals(entity.getSlotDate())) {
             if (!Boolean.TRUE.equals(req.getMoveRequestsConfirmed())
                     && requestRepository.findLiveIdBySlotForUpdate(scheduleId, slotId).isPresent()) {
@@ -231,9 +244,6 @@ public class ShiftSlotService {
             // 枠を変更する前に一括更新する。後続の枠保存・flush が失敗すれば希望も同じ TX で戻る。
             requestRepository.moveLiveSlotRequests(scheduleId, slotId, req.getSlotDate());
         }
-
-        // 履歴記録のため更新前の割当を控える（CMP-260908-2117）。
-        List<Long> before = deserializeUserIds(entity.getAssignedUserIds());
 
         // managed entity を直接ミューテート（toBuilder().build() でなくドメインメソッドで更新）。
         // ShiftSlotEntity は @Builder(toBuilder=true) / @SuperBuilder でない / BaseEntity継承(自前id無)

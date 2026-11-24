@@ -242,6 +242,8 @@ export const useAuthStore = defineStore('auth', {
       // 非同期キャッシュ削除を待つ前に同期的に消し、同一 SPA セッションでの情報残留を防ぐ。
       useTeamStore().clear()
       useOrganizationStore().clear()
+      // 行動メモの公開応答 ID・メモ一覧も利用者固有（CMP-261123-1201）
+      useActionMemoStore().clear()
 
       // ② 重いクリーンアップ（Cache Storage + IndexedDB）を並走で起動する。
       //   navigateTo より前に起動することで「必ず走る」ことを保証しつつ、

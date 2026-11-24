@@ -847,6 +847,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `account_purge_completion_status` | `user_id` | 保持 | GDPR 完了監査。email_hash のみで本人を再特定できない |
 | `action_memo_tags` | `user_id` | 強消去 | CMP-260822-1243 第1陣の本人設定38親表（上表）。各domainの強消去リスナー |
 | `action_memos` | `user_id` | 弱消去 | 弱側 `UserAnonymizedEvent` 購読者で物理削除（発火経路は休眠中。正本 withdrawal_flow_immediate_anonymization_fix.md） |
+| `action_memo_daily_posts` | `user_id` | 弱消去 | 行動メモの日ごとの公開記録。弱側 `UserAnonymizedEvent` 購読者で物理削除し、30日後の `AccountPurgedEvent` 購読者・手動再試行でも残りを回収する（CMP-261123-1201） |
 | `activity_comments` | `user_id` | 保持 | 共有本文・反応（投稿は残し著者表示を共通ラベル化する既決。CMP-261011-0124） |
 | `activity_participants` | `user_id` | 保持 | 参加・出欠・回答・投票・担当の共同記録（他メンバーの集計・業務根拠） |
 | `ad_announcement_deliveries` | `user_id` | 要裁可 | 広告の配信・計測ログ（個人の行動履歴か、広告主課金の根拠か） |

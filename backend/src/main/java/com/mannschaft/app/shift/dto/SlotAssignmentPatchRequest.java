@@ -1,6 +1,7 @@
 package com.mannschaft.app.shift.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
@@ -12,7 +13,7 @@ import java.util.List;
  * @param slotVersion   楽観ロック用スロットバージョン
  */
 public record SlotAssignmentPatchRequest(
-        List<Long> addUserIds,
-        List<Long> removeUserIds,
+        @Size(max = 200) List<Long> addUserIds,
+        @Size(max = 200) List<Long> removeUserIds,
         @NotNull Integer slotVersion
 ) {}

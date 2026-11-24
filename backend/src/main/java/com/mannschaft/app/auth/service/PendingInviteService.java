@@ -65,13 +65,33 @@ public class PendingInviteService {
     private final TeamService teamService;
     private final OrganizationService organizationService;
 
-    /** 本人の保留を返す。無ければ null。 */
+    /**
+     * 本人の保留を返す。無ければ null。
+     *
+     * <p><b>参照時の確定（A-1 根治）</b>: 保留が PENDING のまま、本人が既にその招待先に在籍していれば（保留の承認を
+     * 経ず {@code /invite/<token>} など別経路で参加した場合）、PENDING→JOINED へ確定してから返す。
+     * 確定しないと次のログインで「参加しますか？」が再び出てしまう。在籍の確認は承認処理の②と同じ
+     * {@link AccessControlService#isMember}、確定は保留ストアの条件付き UPDATE（PENDING のときだけ効く）で行う。
+     * ACCEPTING（承認処理中）や終了済みの状態には触れない。</p>
+     *
+     * <p>確定は保留の状態だけを書く。{@code invite_token_claims}・{@code used_count} には<b>触れない</b>:
+     * 別経路での参加なので、保留が持つ招待を使ったことにはしない（承認処理の既在籍分岐の「付与印が無ければ別経路の
+     * 参加」と同じ判断）。招待を使ったことにすると、実際には使っていない招待の使用回数を消費してしまう。
+     * 監査・通知も承認時の既在籍経路と同じく新たには出さない（参加自体の監査は別経路が記録済み）。</p>
+     */
     public PendingInviteResponse findMine(Long userId) {
         Optional<PendingInviteSnapshot> found = store.find(userId);
         if (found.isEmpty()) {
             return null;
         }
         PendingInviteSnapshot row = found.get();
+        if (row.status() == PendingInviteStatus.PENDING
+                && accessControlService.isMember(userId, row.scopeId(), row.scopeType())
+                && store.transition(userId, EnumSet.of(PendingInviteStatus.PENDING), PendingInviteStatus.JOINED)) {
+            log.info("別経路で在籍済みの保留を JOINED に確定: userId={}, scopeType={}, scopeId={}",
+                    userId, row.scopeType(), row.scopeId());
+            row = store.find(userId).orElse(row);
+        }
         ScopeView scope = scopeView(row.scopeType(), row.scopeId());
         Instant retryAvailableAt = row.status() == PendingInviteStatus.ACCEPTING && row.acceptingStartedAt() != null
                 ? row.acceptingStartedAt().plus(Duration.ofMinutes(ACCEPTING_RETRY_MINUTES))

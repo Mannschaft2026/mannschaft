@@ -245,6 +245,10 @@
         "event_deleted": "Memo eliminado",
         "event_todo_reverted": "TODO revertido"
       }
+    },
+    "published_post": {
+      "view_link": "Ver la publicación",
+      "published_note": "Publicado (solo tú puedes verlo)"
     }
   }
 }

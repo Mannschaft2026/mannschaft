@@ -288,6 +288,20 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
     }
 
     @Test
+    @DisplayName("A-1: 保留の承認を経ず別経路で在籍した後の GET は JOINED に確定し、招待は使われない")
+    void getConfirmsJoinedWhenAlreadyMember() {
+        Scope scope = scope("TEAM");
+        InviteTokenEntity token = token(scope, 0, null, 3, 0, null, null);
+        Registered r = registerAndVerifyAdult(token);
+        insertUserRole(scope, r.userId());
+        insertMembership(scope, r.userId(), "MEMBER");
+
+        assertThat(pending().findMine(r.userId()).status()).isEqualTo("JOINED");
+        assertThat(usedCount(token.getId())).isZero();
+        assertThat(claimCountOrZero(token.getId())).isZero();
+    }
+
+    @Test
     @DisplayName("AC2: 招待なし登録は保留を作らない（GET は null）")
     void noInviteNoPending() {
         Registered r = registerAdult(null);
