@@ -231,6 +231,7 @@ for (const vp of [{ w: 1280, h: 900 }, { w: 390, h: 844 }]) {
     for (let i = 1; i < sorted.length; i++) {
       const p = sorted[i - 1]
       const c = sorted[i]
+      if (!p || !c) throw new Error(`矩形の比較対象が欠けている (index=${i}, 件数=${sorted.length})`)
       const overlap = p.x < c.x + c.width - 0.5 && c.x < p.x + p.width - 0.5 && p.y < c.y + c.height - 0.5 && c.y < p.y + p.height - 0.5
       expect(overlap, '勝点・引分点・敗点が重ならない').toBe(false)
     }
