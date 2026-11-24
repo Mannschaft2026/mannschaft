@@ -333,3 +333,35 @@ describe('アンケート下書き詳細: 設問0件の公開案内（CMP-261021
     expect(mocks.showSuccess).not.toHaveBeenCalled()
   })
 })
+
+describe('アンケート下書き詳細: 公開失敗後の再試行で追加済み設問を再送しない（CMP-261021-0656）', () => {
+  it('addQuestion 成功後に公開が失敗しても、再試行で同じ設問を addQuestion し直さず、保存済みとして表示する', async () => {
+    mocks.getSurvey.mockResolvedValue({ data: draftSurvey(SAVED_QUESTIONS) })
+    mocks.publishSurvey.mockRejectedValueOnce(new Error('HTTP 500'))
+    const wrapper = await mountPage()
+
+    const editor = wrapper.getComponent(SurveyQuestionEditor)
+    const current = editor.props('modelValue') as QuestionDraft[]
+    const added: QuestionDraft = {
+      questionText: '参加できる曜日は？',
+      questionType: 'TEXT',
+      isRequired: false,
+      sortOrder: current.length + 1,
+      options: [],
+    }
+    editor.vm.$emit('update:modelValue', [...current, added])
+    await flushPromises()
+
+    // 1回目: 設問の追加は成功し、公開だけ失敗する
+    await clickPrimaryPublish(wrapper)
+    expect(mocks.addQuestion).toHaveBeenCalledTimes(1)
+    expect(mocks.publishSurvey).toHaveBeenCalledTimes(1)
+    // 追加済みの設問は保存済み一覧へ移っている
+    expect(visibleContent(wrapper)).toContain('参加できる曜日は？')
+
+    // 2回目（再試行）: 追加分を再送せず、公開 API だけが呼ばれる
+    await clickPrimaryPublish(wrapper)
+    expect(mocks.addQuestion).toHaveBeenCalledTimes(1)
+    expect(mocks.publishSurvey).toHaveBeenCalledTimes(2)
+  })
+})
