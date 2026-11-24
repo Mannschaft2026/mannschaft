@@ -59,6 +59,7 @@
       "draftHint": "設問は後で追加・編集できます。まずタイトルだけで下書き保存できます。",
       "successToast": "アンケートを作成しました",
       "draftSuccessToast": "下書きとして保存しました。設問を追加して公開してください。",
+      "publishFailedAfterCreate": "下書きは作成しましたが、公開に失敗しました。",
       "failureToast": "アンケートの作成に失敗しました",
       "validation": {
         "titleRequired": "タイトルを入力してください",
@@ -91,7 +92,10 @@
       },
       "teamBreakdownEnabled": "チーム別に集計する",
       "teamBreakdownHint": "配下チームごとに回答結果を集計します（組織配信のみ）。",
-      "teamBreakdownAnonymousConflict": "匿名アンケートではチーム別集計は利用できません。"
+      "teamBreakdownAnonymousConflict": "匿名アンケートではチーム別集計は利用できません。",
+      "lockedNote": "下書きは作成済みです。「公開を再試行」を押すか、「下書きのまま閉じる」で閉じてください（閉じても下書きとして残り、詳細画面から公開できます）。入力内容は変更できません。",
+      "closeAsDraft": "下書きのまま閉じる",
+      "retryPublish": "公開を再試行"
     },
     "detail": {
       "scopeMissing": "アンケートのスコープ情報が不足しています",
@@ -114,7 +118,8 @@
       "responseCount": "回答",
       "anonymous": "匿名",
       "draftHint": "このアンケートは下書き状態です。公開するまで回答を受け付けません。",
-      "draftAddQuestionsHint": "設問を追加してから公開してください。設問がなくても公開できますが、回答者は回答できません。",
+      "draftAddQuestionsHint": "設問を1つ以上追加してから公開してください。設問がないアンケートは公開できません。",
+      "publishNoQuestions": "設問が1つもないため公開できません。設問を追加してください。",
       "draftQuestionsSection": "設問を追加",
       "publishButton": "公開する",
       "publishSuccess": "アンケートを公開しました",
@@ -158,7 +163,8 @@
         "title": "回答者一覧",
         "toggleShow": "表示",
         "toggleHide": "非表示"
-      }
+      },
+      "addQuestionFailed": "設問の保存に失敗しました。公開は行っていません。"
     },
     "respondents": {
       "summary": "{responded} / 全 {total} 名",

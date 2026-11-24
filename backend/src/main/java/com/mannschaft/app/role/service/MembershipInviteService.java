@@ -53,7 +53,6 @@ import java.util.Set;
 @Slf4j
 public class MembershipInviteService {
 
-    private static final Set<String> PRIVILEGED_ROLES = Set.of("ADMIN", "DEPUTY_ADMIN");
     private static final Set<Integer> ALLOWED_EXPIRES_IN_DAYS = Set.of(1, 7, 30, 90);
     private static final int DEFAULT_EXPIRES_IN_DAYS = 7;
     private static final String DEFAULT_ROLE_NAME = "MEMBER";
@@ -340,7 +339,8 @@ public class MembershipInviteService {
 
     /**
      * 付与ロール ID を解決する。null なら当該スコープの MEMBER ロール、
-     * 特権ロール（ADMIN/DEPUTY_ADMIN）指定は 422（ROLE_009・C-1 権限昇格封鎖）。
+     * 招待で付与できないロール（特権 ADMIN/DEPUTY_ADMIN は C-1 権限昇格封鎖、GUEST/SYSTEM_ADMIN は招待参加の書き先が
+     * 設計に無い。CMP-261124-0157・{@link InviteRolePolicy}）の指定は 422（ROLE_009）。
      */
     private Long resolveNonPrivilegedRoleId(Long requestedRoleId) {
         if (requestedRoleId == null) {
@@ -350,7 +350,7 @@ public class MembershipInviteService {
         }
         RoleEntity role = roleRepository.findById(requestedRoleId)
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001));
-        if (PRIVILEGED_ROLES.contains(role.getName())) {
+        if (!InviteRolePolicy.isInvitable(role.getName())) {
             throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
         }
         return role.getId();
