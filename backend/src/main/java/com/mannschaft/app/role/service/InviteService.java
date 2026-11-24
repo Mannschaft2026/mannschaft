@@ -12,6 +12,7 @@ import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.provisioning.service.ProvisioningGate;
 import com.mannschaft.app.common.qr.BrandedQrImageWriter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import com.mannschaft.app.role.dto.CreateInviteTokenRequest;
 import com.mannschaft.app.role.dto.InvitePreviewResponse;
 import com.mannschaft.app.common.token.SecretTokenVault;
@@ -79,6 +80,12 @@ public class InviteService {
 
         RoleEntity role = roleRepository.findById(req.getRoleId())
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001));
+        // CMP-261124-0157: 共有招待で付与できるのは所属ロール MEMBER / SUPPORTER だけ（InviteRolePolicy）。
+        // 特権ロール（ADMIN / DEPUTY_ADMIN）は承諾側でも 422 ROLE_009 で使えず（C-1）、GUEST / SYSTEM_ADMIN は
+        // 招待参加の書き先が設計に無い（SYSTEM_ADMIN は招待対象外）ので、使えない招待を発行させない。
+        if (!InviteRolePolicy.isInvitable(role.getName())) {
+            throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
+        }
 
         // 有効期限の計算
         LocalDateTime expiresAt = resolveExpiresAt(req.getExpiresIn());

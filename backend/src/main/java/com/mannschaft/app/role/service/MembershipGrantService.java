@@ -8,7 +8,7 @@ import com.mannschaft.app.membership.dto.MembershipCreateRequest;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.role.RoleErrorCode;
 import com.mannschaft.app.role.dto.InviteClaimLock;
-import com.mannschaft.app.role.entity.RoleEntity;
+import com.mannschaft.app.role.service.InviteRolePolicy.GrantTarget;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
 import com.mannschaft.app.role.repository.RoleRepository;
@@ -52,6 +52,13 @@ import java.util.UUID;
  *   <li>付与し、同じトランザクションで claim に付与印を立てて {@code GRANTED}</li>
  * </ol>
  * <p>付与と印は一緒にコミット（またはロールバック）されるので、claim を戻すか確定するかは印だけで決まる。</p>
+ *
+ * <h2>書き先（CMP-261124-0157）</h2>
+ * <p>{@code memberships.role_kind} は SUPPORTER 招待なら SUPPORTER、それ以外は MEMBER とし、SUPPORTER は
+ * {@code user_roles} を作らない（F01.2 03_business_logic.md「招待参加フロー」手順8。SUPPORTER の user_roles 行は
+ * V60.010 で廃止済み）。権限ロール（ADMIN / DEPUTY_ADMIN）は {@code user_roles} に割り当てる。MEMBER は暫定で
+ * 従来どおり {@code user_roles} にも MEMBER 行を作る（除名・ロール変更が行を前提にしているため。{@link InviteRolePolicy}）。
+ * 所属ロールにも権限ロールにも当たらないロール（GUEST / SYSTEM_ADMIN 等）は付与せず 422 ROLE_009 とする。</p>
  *
  * <h2>2つの入口の差（現状維持の範囲）</h2>
  * <ul>
@@ -104,12 +111,14 @@ public class MembershipGrantService {
             return;
         }
         Long grantRoleId = memberRoleId();
-        grant(scopeType, scopeId, userId, grantRoleId, grantedBy, source, false);
+        grant(scopeType, scopeId, userId, grantRoleId, memberTarget(), grantedBy, source, false);
         logGranted(scopeType, scopeId, userId, grantRoleId, source);
     }
 
     /**
-     * 指定ロールを {@code user_roles} に割当て、{@code memberships} へ MEMBER として入会させる（招待承諾用）。
+     * 招待ロールに応じて入会させる（招待承諾用）。SUPPORTER は {@code memberships} に SUPPORTER として入会させるだけで
+     * {@code user_roles} は作らない。MEMBER（暫定）と権限ロール（ADMIN / DEPUTY_ADMIN）は {@code user_roles} に割当て、
+     * {@code memberships} へは MEMBER として入会させる（クラス javadoc「書き先」）。
      *
      * <p>{@link InviteClaimGrantScope} の範囲内で呼ばれたときは、付与の元の claim を同じトランザクションで判定し、
      * 付与したら付与印を立てる（クラス javadoc「付与の元の claim」）。参加申請承認（{@link #grantMemberRole}）は
@@ -118,11 +127,12 @@ public class MembershipGrantService {
      * @param scopeType  "TEAM" または "ORGANIZATION"
      * @param scopeId    スコープ ID
      * @param userId     付与対象ユーザー ID
-     * @param roleId     付与するロール ID（呼出側で非特権であることを検証済みであること）
+     * @param roleId     付与するロール ID（呼出側で招待可能であることを検証済みであること。null は MEMBER）
      * @param grantedBy  付与を行った操作者ユーザー ID（招待者・承認者等）
      * @param source     入会経路（{@code MembershipCreateRequest#source}。例: INVITE_TOKEN）
      * @return 付与した（{@code GRANTED}）か、既に在籍で何もしなかった（{@code ALREADY_JOINED}）か
      * @throws BusinessException ROLE_002（user が ACTIVE でない、または付与の元の claim が既に戻されていた）、
+     *                           ROLE_001（ロールが存在しない）、422 ROLE_009（付与できないロール）、
      *                           TEAM_003（競合して在籍が先に確定した）
      */
     @Transactional
@@ -156,8 +166,9 @@ public class MembershipGrantService {
         }
 
         Long grantRoleId = roleId != null ? roleId : memberRoleId();
+        GrantTarget target = roleId != null ? resolveGrantTarget(roleId) : memberTarget();
         try {
-            grant(scopeType, scopeId, userId, grantRoleId, grantedBy, source, true);
+            grant(scopeType, scopeId, userId, grantRoleId, target, grantedBy, source, true);
         } catch (DataIntegrityViolationException e) {
             // user ロック下の現在読みを通った後の一意制約違反は、並行して在籍が確定した競合。
             // TX は巻き戻る。業務エラーに変換するので、呼び出し側は確保した使用回数を戻せる。
@@ -178,6 +189,18 @@ public class MembershipGrantService {
     private Long memberRoleId() {
         return roleRepository.findByName(MEMBER_ROLE_NAME)
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001)).getId();
+    }
+
+    private static GrantTarget memberTarget() {
+        return InviteRolePolicy.grantTarget(MEMBER_ROLE_NAME).orElseThrow();
+    }
+
+    /** 付与ロールの書き先を決める。所属ロールにも権限ロールにも当たらなければ 422 ROLE_009（何も書かない）。 */
+    private GrantTarget resolveGrantTarget(Long roleId) {
+        String roleName = roleRepository.findById(roleId)
+                .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001)).getName();
+        return InviteRolePolicy.grantTarget(roleName)
+                .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY));
     }
 
     private enum Mode {
@@ -221,31 +244,36 @@ public class MembershipGrantService {
         return hasUserRole || membershipService.isActiveMemberForUpdate(userId, st, scopeId);
     }
 
-    private void grant(String scopeType, Long scopeId, Long userId, Long roleId, Long grantedBy, String source,
-                       boolean flushAtEnd) {
-        var roleBuilder = UserRoleEntity.builder()
-                .userId(userId)
-                .roleId(roleId)
-                .grantedBy(grantedBy);
-        if ("TEAM".equals(scopeType)) {
-            roleBuilder.teamId(scopeId);
-        } else {
-            roleBuilder.organizationId(scopeId);
+    private void grant(String scopeType, Long scopeId, Long userId, Long roleId, GrantTarget target, Long grantedBy,
+                       String source, boolean flushAtEnd) {
+        if (target.writesUserRole()) {
+            // 権限ロール（ADMIN / DEPUTY_ADMIN）と暫定の MEMBER だけ user_roles に割り当てる。SUPPORTER は作らない
+            // （CMP-261124-0157）。
+            var roleBuilder = UserRoleEntity.builder()
+                    .userId(userId)
+                    .roleId(roleId)
+                    .grantedBy(grantedBy);
+            if ("TEAM".equals(scopeType)) {
+                roleBuilder.teamId(scopeId);
+            } else {
+                roleBuilder.organizationId(scopeId);
+            }
+            userRoleRepository.save(roleBuilder.build());
         }
-        userRoleRepository.save(roleBuilder.build());
 
-        // F00.5 認可基盤根治: memberships にも MEMBER として入会させる（既存 InviteService と同じ流儀）。
+        // F00.5 認可基盤: 所属は memberships が真実の源。SUPPORTER 招待は SUPPORTER、それ以外は MEMBER として入会させる。
         MembershipCreateRequest membershipReq = new MembershipCreateRequest();
         membershipReq.setUserId(userId);
         membershipReq.setScopeType("TEAM".equals(scopeType) ? ScopeType.TEAM : ScopeType.ORGANIZATION);
         membershipReq.setScopeId(scopeId);
-        membershipReq.setRoleKind(RoleKind.MEMBER);
+        membershipReq.setRoleKind(target.roleKind());
         membershipReq.setInvitedBy(grantedBy);
         membershipReq.setSource(source);
         membershipService.join(membershipReq);
 
         if (flushAtEnd) {
-            // 制約違反をこのメソッドの中で（呼び出し側のコミットを待たず）確定させる。
+            // 制約違反をこのメソッドの中で（呼び出し側のコミットを待たず）確定させる。flush は永続化コンテキスト全体に
+            // 効くので、user_roles を書かない SUPPORTER の付与でも memberships の一意制約違反がここで出る。
             userRoleRepository.flush();
         }
     }
