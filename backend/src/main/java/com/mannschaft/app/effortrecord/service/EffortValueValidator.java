@@ -89,7 +89,8 @@ public class EffortValueValidator {
                 errors.add(error("values." + field.fieldKey(), "項目を指定してください"));
                 continue;
             }
-            normalized.put(field.fieldKey(), normalize(field, present ? given.get(field.fieldKey()) : null, errors));
+            normalized.put(field.fieldKey(), normalizeField(field, present ? given.get(field.fieldKey()) : null,
+                    "values." + field.fieldKey(), errors));
         }
 
         String note = privateNote == null || privateNote.isBlank() ? null : privateNote;
@@ -111,8 +112,16 @@ public class EffortValueValidator {
         return zone != null && zone.length() <= 64 && ZONES.contains(zone);
     }
 
-    private String normalize(EffortFieldDefinition field, String raw, List<ErrorResponse.FieldError> errors) {
-        String path = "values." + field.fieldKey();
+    /**
+     * 1 項目の値を定義（型・必須・scale・min/max・選択肢・文字数）で検証し、保存形へ正規化する（日時は UTC の Instant 表記）。
+     * 原本の値と、共有設定だけに保存する valueOverride（API 契約 §4）の両方がこの規則を使う。
+     *
+     * @param path   違反時の fieldErrors[].field
+     * @param errors 違反を追記する一覧（メッセージに入力値を載せない）
+     * @return 正規化した値。未入力・違反は null
+     */
+    public static String normalizeField(EffortFieldDefinition field, String raw, String path,
+                                        List<ErrorResponse.FieldError> errors) {
         if (raw == null || raw.isBlank()) {
             if (field.required()) {
                 errors.add(error(path, "必須項目です"));
@@ -155,7 +164,7 @@ public class EffortValueValidator {
         };
     }
 
-    private String number(EffortFieldDefinition field, String raw, String path, List<ErrorResponse.FieldError> errors) {
+    private static String number(EffortFieldDefinition field, String raw, String path, List<ErrorResponse.FieldError> errors) {
         if (raw.length() > MAX_NUMBER_LENGTH || !DECIMAL.matcher(raw).matches()) {
             errors.add(error(path, "数値は小数の10進表記で入力してください"));
             return null;
@@ -179,7 +188,7 @@ public class EffortValueValidator {
         return raw;
     }
 
-    private String text(EffortFieldDefinition field, String raw, String path, List<ErrorResponse.FieldError> errors) {
+    private static String text(EffortFieldDefinition field, String raw, String path, List<ErrorResponse.FieldError> errors) {
         int limit = field.semantic() == EffortSemantic.SUBJECT ? MAX_SUBJECT_LENGTH : MAX_TEXT_LENGTH;
         if (raw.codePointCount(0, raw.length()) > limit) {
             errors.add(error(path, limit + "文字以内で入力してください"));

@@ -19,9 +19,11 @@ import java.util.UUID;
  * F06.4.1 共有 previewToken（API 契約 §4）。
  *
  * <p>owner・原本・contentRevision・原本の @Version と shareVersion・team・加入期間 ID・共有定義の revision と hash・
- * 正規化した command（mapping と allowlist）・projection hash・予約 share UUID・失効時刻を束ね、AES-256-GCM で暗号化・認証した
- * opaque 文字列（{@link EncryptionService}）。preview は DB へ書かないため、共有 PUT は token に入った command で
- * 共有内容を作り直し、projection hash の一致を確かめる。有効期間は {@value #TTL_MINUTES} 分。</p>
+ * 正規化した command（mapping と allowlist）の hash・projection hash・予約 share UUID・失効時刻を束ね、AES-256-GCM で
+ * 暗号化・認証した opaque 文字列（{@link EncryptionService}）。preview は DB へ書かない。command 自体（valueOverride の値を含む）は
+ * token に詰めず hash で束縛するので、token の長さは入力の大きさに依らず一定（最大入力でも {@value #MAX_LENGTH} 字に収まる）。
+ * 共有 PUT は本文で送り直された mapping・allowlist を preview と同じ規則で正規化し、command hash と projection hash の一致を
+ * 確かめる。有効期間は {@value #TTL_MINUTES} 分。</p>
  *
  * <p>改竄・期限切れ・束縛不一致（別の原本・別の利用者・別のチーム・版の変化）はすべて {@code COMMON_003}（409、preview の失効）。
  * token 自体はログ・応答メッセージへ載せない（AC-61）。</p>
@@ -32,8 +34,9 @@ public class EffortPreviewTokenCodec {
     /** 有効期間（分）。 */
     public static final long TTL_MINUTES = 10;
     private static final Duration TTL = Duration.ofMinutes(TTL_MINUTES);
-    private static final int MAX_LENGTH = 16384;
-    private static final String VERSION = "p1";
+    /** 受理する token の最大長（共有 PUT の EffortShareRequest の上限と同じ）。 */
+    public static final int MAX_LENGTH = 16384;
+    private static final String VERSION = "p2";
 
     private final EncryptionService encryption;
     private final Clock clock;
@@ -47,12 +50,11 @@ public class EffortPreviewTokenCodec {
     /**
      * token に束縛する内容。
      *
-     * @param mappingsJson 正規化した mapping の canonical JSON
-     * @param selectedJson 正規化した allowlist の canonical JSON
+     * @param commandHash 正規化した command（mapping と allowlist）の canonical hash（{@link EffortShareProjector#commandHash}）
      */
     public record Claims(String v, Long ownerUserId, UUID recordId, long recordVersion, long contentRevision,
                          long shareVersion, Long teamId, Long grantMembershipId, UUID definitionUuid,
-                         int definitionRevision, String definitionHash, String mappingsJson, String selectedJson,
+                         int definitionRevision, String definitionHash, String commandHash,
                          String projectionHash, UUID shareId, long expiresAtEpochMilli) {
     }
 
@@ -65,8 +67,8 @@ public class EffortPreviewTokenCodec {
         Instant expiresAt = Instant.ofEpochMilli(clock.instant().plus(TTL).toEpochMilli());
         Claims sealed = new Claims(VERSION, claims.ownerUserId(), claims.recordId(), claims.recordVersion(),
                 claims.contentRevision(), claims.shareVersion(), claims.teamId(), claims.grantMembershipId(),
-                claims.definitionUuid(), claims.definitionRevision(), claims.definitionHash(), claims.mappingsJson(),
-                claims.selectedJson(), claims.projectionHash(), claims.shareId(), expiresAt.toEpochMilli());
+                claims.definitionUuid(), claims.definitionRevision(), claims.definitionHash(), claims.commandHash(),
+                claims.projectionHash(), claims.shareId(), expiresAt.toEpochMilli());
         try {
             String plain = mapper.writeValueAsString(sealed);
             String token = Base64.getUrlEncoder().withoutPadding()

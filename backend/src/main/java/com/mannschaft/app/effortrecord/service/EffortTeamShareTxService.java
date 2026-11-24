@@ -112,11 +112,21 @@ public class EffortTeamShareTxService {
         return UpsertResult.APPLIED;
     }
 
-    /** 本人取消・原本削除の後処理: 同じ share の team 行を REVOKED にする（MODERATED・取消済みは変えない）。 */
+    /**
+     * 本人取消・原本削除の後処理: 同じ share の team 行を REVOKED にする（MODERATED・取消済みは変えない）。
+     *
+     * <p>share UUID は同じチームへの再共有で再利用されるため、UUID の一致だけでは取消の対象を決められない。取消で進めた
+     * owner の shareVersion（{@code revokedShareVersion}）より古い版の行だけを失効させ、取消イベントが再共有の後に
+     * 遅れて届いても新しい共有（より大きい shareVersion）には適用しない（AC-35・AC-63）。返す版は失効させた行の版で、
+     * timeline の失効も同じ版で判定する（team だけ VISIBLE・timeline だけ失効、の食い違いを作らない）。</p>
+     *
+     * @param revokedShareVersion 取消・削除で確定した owner の shareVersion（取消前の版 + 1）
+     */
     @Transactional
-    public Optional<Revoked> revoke(Long teamId, UUID recordId, UUID shareId) {
+    public Optional<Revoked> revoke(Long teamId, UUID recordId, UUID shareId, long revokedShareVersion) {
         return teamShares.findForUpdate(teamId, recordId)
                 .filter(row -> row.getId().equals(shareId))
+                .filter(row -> row.getShareVersion() < revokedShareVersion)
                 .filter(row -> row.getState() == EffortTeamShareState.VISIBLE || row.getState() == EffortTeamShareState.PENDING)
                 .map(this::markRevoked);
     }

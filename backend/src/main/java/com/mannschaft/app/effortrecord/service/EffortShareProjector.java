@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /**
  * F06.4.1 共有 projection の組み立て（API 契約 §4・データ設計 §2・§7）。
@@ -30,14 +29,16 @@ import java.util.regex.Pattern;
  * チームへ見せる項目だけの projection を決定的に作る。私的 note は mapping 元にできず、未選択の項目は projection に入れない。
  * 原本訂正では凍結した共有定義・mapping・allowlist を使って新しい値で作り直す（live 定義を再要求しない）。</p>
  *
+ * <p>preview・共有 PUT の入力（{@link #build}）は、valueOverride を原本と同じ型・定義制約（{@link EffortValueValidator#normalizeField}）で
+ * 検証・正規化し（日時は UTC）、共有先の必須項目は mapping を適用した後の値で、allowlist から外した項目も含めて検査する
+ * （API 契約 §4「target 必須値は未選択でも入力検証するが、非選択値を projection へ含めない」）。</p>
+ *
  * <p>ログには何も書かない（値・note・定義を記録しない。AC-61）。検証エラーの fieldErrors にも値を載せない。</p>
  */
 @Component
 @RequiredArgsConstructor
 public class EffortShareProjector {
 
-    private static final Pattern DECIMAL = Pattern.compile("-?[0-9]{1,20}(\\.[0-9]{1,2})?");
-    private static final int MAX_TEXT_LENGTH = 2000;
     private static final TypeReference<List<EffortShareMapping>> MAPPINGS = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
 
@@ -70,7 +71,7 @@ public class EffortShareProjector {
      * preview の入力を検証し、正規化した command と projection を作る。
      *
      * @throws BusinessException 400 COMMON_001（allowlist 空・未知/重複 key・source と override の同時指定・
-     *                           note や未知の source・型/意味/単位の不一致・値の書式違反）
+     *                           note や未知の source・型/意味/単位の不一致・値の書式/定義制約の違反・共有先の必須項目の不足）
      */
     public Built build(EffortDefinitionSnapshot source, Map<String, String> sourceValues, EffortDefinitionSnapshot target,
                        List<EffortShareMapping> mappings, List<String> selectedFieldKeys, String recordTimezone) {
@@ -109,10 +110,9 @@ public class EffortShareProjector {
                     throw invalid(path + ".sourceFieldKey", "型・意味・単位が同じ項目だけ引き継げます");
                 }
             }
-            if (m.valueOverride() != null) {
-                checkValue(targetByKey.get(m.targetFieldKey()), m.valueOverride(), path + ".valueOverride");
-            }
-            byTarget.put(m.targetFieldKey(), new EffortShareMapping(m.targetFieldKey(), m.sourceFieldKey(), m.valueOverride()));
+            String override = m.valueOverride() == null ? null
+                    : normalizeOverride(targetByKey.get(m.targetFieldKey()), m.valueOverride(), path + ".valueOverride");
+            byTarget.put(m.targetFieldKey(), new EffortShareMapping(m.targetFieldKey(), m.sourceFieldKey(), override));
         }
         // 共有先定義の順に正規化（未指定の target は source なし・override なし）
         List<EffortShareMapping> normalized = new ArrayList<>();
@@ -125,6 +125,7 @@ public class EffortShareProjector {
             }
         }
         Command command = new Command(List.copyOf(normalized), List.copyOf(orderedSelected));
+        requireTargetRequired(sourceByKey, sourceValues, target, command);
         return project(source, sourceValues, target, command, recordTimezone);
     }
 
@@ -144,13 +145,7 @@ public class EffortShareProjector {
             if (!selected.contains(field.fieldKey())) {
                 continue;
             }
-            EffortShareMapping m = byTarget.get(field.fieldKey());
-            String value = null;
-            if (m != null && m.valueOverride() != null) {
-                value = m.valueOverride();
-            } else if (m != null && m.sourceFieldKey() != null) {
-                value = mapValue(sourceByKey.get(m.sourceFieldKey()), sourceValues.get(m.sourceFieldKey()), field);
-            }
+            String value = resolve(byTarget.get(field.fieldKey()), sourceByKey, sourceValues, field);
             fields.add(new EffortSharedRecord.Field(field.fieldKey(), field.label(), field.type(),
                     field.semantic() == null ? null : field.semantic().name(), field.unit(), value, display(field, value)));
         }
@@ -191,6 +186,57 @@ public class EffortShareProjector {
     }
 
     // ───────────────────────────── 内部 ─────────────────────────────
+
+    /** mapping を適用した後の値（override を優先し、なければ source の値を共有先へ写す）。 */
+    private static String resolve(EffortShareMapping m, Map<String, EffortFieldDefinition> sourceByKey,
+                                  Map<String, String> sourceValues, EffortFieldDefinition target) {
+        if (m == null) {
+            return null;
+        }
+        if (m.valueOverride() != null) {
+            return m.valueOverride();
+        }
+        if (m.sourceFieldKey() != null) {
+            return mapValue(sourceByKey.get(m.sourceFieldKey()), sourceValues.get(m.sourceFieldKey()), target);
+        }
+        return null;
+    }
+
+    /**
+     * 共有先の必須項目が mapping 適用後に値を持つか（allowlist の選択に関わらず検査する。API 契約 §4）。
+     * 不足は fieldErrors=mappings.&lt;targetFieldKey&gt;（値は載せない）。
+     */
+    private static void requireTargetRequired(Map<String, EffortFieldDefinition> sourceByKey, Map<String, String> sourceValues,
+                                              EffortDefinitionSnapshot target, Command command) {
+        Map<String, EffortShareMapping> byTarget = new LinkedHashMap<>();
+        command.mappings().forEach(m -> byTarget.put(m.targetFieldKey(), m));
+        List<ErrorResponse.FieldError> errors = new ArrayList<>();
+        for (EffortFieldDefinition field : target.fields()) {
+            if (field.required() && resolve(byTarget.get(field.fieldKey()), sourceByKey, sourceValues, field) == null) {
+                errors.add(new ErrorResponse.FieldError("mappings." + field.fieldKey(),
+                        "共有先の必須項目です。元の項目を対応づけるか、値を入力してください"));
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new BusinessException(CommonErrorCode.COMMON_001, errors);
+        }
+    }
+
+    /** valueOverride を原本と同じ型・定義制約で検証し、保存形へ正規化する（空は null＝未入力）。 */
+    private static String normalizeOverride(EffortFieldDefinition field, String value, String path) {
+        List<ErrorResponse.FieldError> errors = new ArrayList<>();
+        String normalized = EffortValueValidator.normalizeField(optional(field), value, path, errors);
+        if (!errors.isEmpty()) {
+            throw new BusinessException(CommonErrorCode.COMMON_001, errors);
+        }
+        return normalized;
+    }
+
+    /** 必須の不足は mapping 適用後にまとめて検査するため、値の検証では必須を問わない。 */
+    private static EffortFieldDefinition optional(EffortFieldDefinition f) {
+        return new EffortFieldDefinition(f.fieldKey(), f.label(), f.labelKey(), f.type(), false, f.semantic(), f.unit(),
+                f.aggregation(), f.scale(), f.min(), f.max(), f.options());
+    }
 
     private static boolean compatible(EffortFieldDefinition from, EffortFieldDefinition to) {
         return from.type() == to.type() && from.semantic() == to.semantic() && Objects.equals(from.unit(), to.unit());
@@ -234,18 +280,6 @@ public class EffortShareProjector {
             }
         }
         return null;
-    }
-
-    private static void checkValue(EffortFieldDefinition field, String value, String path) {
-        boolean ok = switch (field.type()) {
-            case NUMBER -> DECIMAL.matcher(value).matches();
-            case SELECT -> field.options().stream().anyMatch(o -> o.key().equals(value));
-            case CHECKBOX -> "true".equals(value) || "false".equals(value);
-            default -> value.length() <= MAX_TEXT_LENGTH;
-        };
-        if (!ok) {
-            throw invalid(path, "値の形式が共有先の項目に合いません");
-        }
     }
 
     private String write(Object value) {

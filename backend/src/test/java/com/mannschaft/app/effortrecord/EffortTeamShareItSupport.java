@@ -217,8 +217,25 @@ abstract class EffortTeamShareItSupport extends EffortShareItSupport {
         return body;
     }
 
+    /**
+     * preview で送った command（mappings・selectedFieldKeys）を、発行された previewToken ごとに覚える。共有 PUT は
+     * preview と同じ command を送り直す契約（token は command を hash で束縛する）なので、{@link #putShare} が引いて送る。
+     */
+    private final Map<String, Map<String, Object>> previewCommands = new java.util.concurrent.ConcurrentHashMap<>();
+
     protected MockHttpServletResponse postPreview(Long actor, String recordId, Object body) throws Exception {
-        return http(post(SHARE + "/preview", recordId).contentType(MediaType.APPLICATION_JSON).content(write(body)), actor);
+        MockHttpServletResponse response = http(post(SHARE + "/preview", recordId).contentType(MediaType.APPLICATION_JSON)
+                .content(write(body)), actor);
+        if (response.getStatus() == 200 && body instanceof Map<?, ?> map) {
+            String token = json(response).at("/data/previewToken").asText(null);
+            if (token != null) {
+                Map<String, Object> command = new LinkedHashMap<>();
+                command.put("mappings", map.get("mappings"));
+                command.put("selectedFieldKeys", map.get("selectedFieldKeys"));
+                previewCommands.put(token, command);
+            }
+        }
+        return response;
     }
 
     /** 最新の定義 token を取り直して preview し、200 の data を返す。 */
@@ -237,6 +254,13 @@ abstract class EffortTeamShareItSupport extends EffortShareItSupport {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("version", version);
         body.put("previewToken", previewToken);
+        // preview で送った command を送り直す（覚えていない token＝改竄・偽造の試験では空の command を送る）
+        Map<String, Object> command = previewToken == null ? null : previewCommands.get(previewToken);
+        if (command == null) {
+            command = Map.of("mappings", List.of(), "selectedFieldKeys", List.of());
+        }
+        body.put("mappings", command.get("mappings"));
+        body.put("selectedFieldKeys", command.get("selectedFieldKeys"));
         MockHttpServletRequestBuilder request = put(SHARE, recordId).contentType(MediaType.APPLICATION_JSON).content(write(body));
         if (key != null) {
             request.header("Idempotency-Key", key);

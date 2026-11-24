@@ -57683,8 +57683,15 @@ export interface components {
             /** Format: int64 */
             version?: number;
         };
+        EffortShareMapping: {
+            sourceFieldKey?: string;
+            targetFieldKey?: string;
+            valueOverride?: string;
+        };
         EffortShareRequest: {
+            mappings: components["schemas"]["EffortShareMapping"][];
             previewToken?: string;
+            selectedFieldKeys: string[];
             /** Format: int64 */
             version: number;
         };
@@ -70728,11 +70735,6 @@ export interface components {
             shareVersion: number;
             /** Format: int64 */
             version: number;
-        };
-        EffortShareMapping: {
-            sourceFieldKey?: string;
-            targetFieldKey?: string;
-            valueOverride?: string;
         };
         EffortSharePreviewRequest: {
             definitionToken?: string;

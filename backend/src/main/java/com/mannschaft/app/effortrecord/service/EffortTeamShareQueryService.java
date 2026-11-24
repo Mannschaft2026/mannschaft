@@ -148,18 +148,32 @@ public class EffortTeamShareQueryService {
     /**
      * 定義候補（当該チームで F00 を通る VISIBLE の履歴が 1 件以上ある定義だけ。有効・廃止は isRetired で区別）。
      * 非表示・同期中の履歴しかない定義、履歴の無い有効テンプレートは返さない。
+     *
+     * <p>継続 cursor の無い API なので、先頭の一定件数で打ち切らずにチームの VISIBLE 履歴を網羅する。{@value #MAX_SCAN} 行の
+     * チャンクごとに F00 を 1 回掛け、可視の履歴が見つかった定義は次のチャンクの SQL から除く（定義ごとの照会＝N+1 にしない）。
+     * 読む行は「まだ候補が確定していない定義の履歴」だけになり、全定義が確定すれば次のチャンクは空で終わる。</p>
      */
     public List<EffortTeamDefinitionCandidate> definitions(Long viewerUserId, Long teamId) {
         requireReadableTeam(viewerUserId, teamId);
         return metrics.measure("definitions", () -> {
-            List<EffortTeamShareEntity> rows = fetchCandidates(teamId);
-            EffortTeamShareVisibility.Result allowed = visibility.filter(rows, viewerUserId, teamId);
             Map<UUID, String> nameByDefinition = new LinkedHashMap<>();
-            for (EffortTeamShareEntity row : rows) {
-                if (allowed.allowed().contains(row.getId()) && !nameByDefinition.containsKey(row.getDefinitionId())) {
-                    nameByDefinition.put(row.getDefinitionId(),
-                            projector.readProjection(row.getProjectionJson()).templateName());
+            EffortTeamShareQueryRepository.After after = null;
+            while (true) {
+                List<EffortTeamShareEntity> rows = fetchCandidates(teamId, nameByDefinition.keySet(), after);
+                if (rows.isEmpty()) {
+                    break;
                 }
+                EffortTeamShareVisibility.Result allowed = visibility.filter(rows, viewerUserId, teamId);
+                for (EffortTeamShareEntity row : rows) {
+                    if (allowed.allowed().contains(row.getId()) && !nameByDefinition.containsKey(row.getDefinitionId())) {
+                        nameByDefinition.put(row.getDefinitionId(),
+                                projector.readProjection(row.getProjectionJson()).templateName());
+                    }
+                }
+                if (rows.size() < MAX_SCAN) {
+                    break;
+                }
+                after = position(rows.get(rows.size() - 1));
             }
             if (nameByDefinition.isEmpty()) {
                 return List.of();
@@ -226,9 +240,10 @@ public class EffortTeamShareQueryService {
         }
     }
 
-    private List<EffortTeamShareEntity> fetchCandidates(Long teamId) {
+    private List<EffortTeamShareEntity> fetchCandidates(Long teamId, Set<UUID> resolved,
+                                                        EffortTeamShareQueryRepository.After after) {
         try {
-            return queries.findVisibleForCandidates(teamId, MAX_SCAN);
+            return queries.findVisibleForCandidates(teamId, List.copyOf(resolved), after, MAX_SCAN);
         } catch (DataAccessException e) {
             throw new BusinessException(EffortErrorCode.EFFORT_004);
         }

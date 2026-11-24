@@ -107,8 +107,7 @@ public class EffortShareService {
             EffortPreviewTokenCodec.Issued issued = previewTokens.issue(new EffortPreviewTokenCodec.Claims(null, userId,
                     recordId, record.getVersion(), record.getContentRevision(), record.getShareVersion(), request.teamId(),
                     grant, current.definitionUuid(), current.revision(), current.definitionHash(),
-                    projector.commandMappingsJson(built.command()), projector.selectedJson(built.command()),
-                    built.projectionHash(), shareId, 0L));
+                    projector.commandHash(built.command()), built.projectionHash(), shareId, 0L));
             return new EffortSharePreviewResponse(issued.token(), issued.expiresAt(), record.getVersion(),
                     record.getContentRevision(), current.revision(), projection);
         });
@@ -137,7 +136,8 @@ public class EffortShareService {
                     claims.definitionRevision(), claims.definitionHash());
             EffortDefinitionSnapshot target = current.snapshot();
             try {
-                return tx.share(userId, recordId, key, path, hash, request.version(), claims, target);
+                return tx.share(userId, recordId, key, path, hash, request.version(), claims, target, request.mappings(),
+                        request.selectedFieldKeys());
             } catch (DataAccessException e) {
                 throw saveFailed(e);
             }

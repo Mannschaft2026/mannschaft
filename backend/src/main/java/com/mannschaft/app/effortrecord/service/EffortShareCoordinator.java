@@ -84,10 +84,15 @@ public class EffortShareCoordinator {
         }
     }
 
-    /** 本人取消・原本削除の後処理: team 行を REVOKED にし、timeline の対応投稿を非表示にする。 */
+    /**
+     * 本人取消・原本削除の後処理: team 行を REVOKED にし、timeline の対応投稿を非表示にする。取消イベントの shareVersion より
+     * 古い版の共有にだけ適用し、遅れて届いたイベントで再共有後の新しい共有を消さない。timeline は team で失効させた行の版
+     * （取消イベントの版より古い）を上限に失効させる。
+     */
     public void revoked(EffortShareRevokedEvent event) {
         try {
-            teamTx.revoke(event.teamId(), event.recordId(), event.shareId()).ifPresent(this::hideOnTimeline);
+            teamTx.revoke(event.teamId(), event.recordId(), event.shareId(), event.shareVersion())
+                    .ifPresent(this::hideOnTimeline);
         } catch (RuntimeException e) {
             // 読み取りの deny は owner 行の REVOKED で確定済み。後処理の失敗は記録し、保守コマンドで収束させる。
             log.error("頑張り記録の共有取消の後処理に失敗: recordId={}, shareId={}, teamId={}, cause={}",

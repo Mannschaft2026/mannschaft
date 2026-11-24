@@ -177765,13 +177765,51 @@
           }
         }
       },
+      "EffortShareMapping": {
+        "type": "object",
+        "properties": {
+          "sourceFieldKey": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 0
+          },
+          "targetFieldKey": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 0
+          },
+          "valueOverride": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 0
+          }
+        }
+      },
       "EffortShareRequest": {
         "type": "object",
         "properties": {
+          "mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffortShareMapping"
+            },
+            "maxItems": 15,
+            "minItems": 0
+          },
           "previewToken": {
             "type": "string",
             "maxLength": 16384,
             "minLength": 0
+          },
+          "selectedFieldKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "minLength": 0
+            },
+            "maxItems": 15,
+            "minItems": 0
           },
           "version": {
             "type": "integer",
@@ -177779,6 +177817,8 @@
           }
         },
         "required": [
+          "mappings",
+          "selectedFieldKeys",
           "version"
         ]
       },
@@ -213864,26 +213904,6 @@
           "shareVersion",
           "version"
         ]
-      },
-      "EffortShareMapping": {
-        "type": "object",
-        "properties": {
-          "sourceFieldKey": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 0
-          },
-          "targetFieldKey": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 0
-          },
-          "valueOverride": {
-            "type": "string",
-            "maxLength": 2000,
-            "minLength": 0
-          }
-        }
       },
       "EffortSharePreviewRequest": {
         "type": "object",

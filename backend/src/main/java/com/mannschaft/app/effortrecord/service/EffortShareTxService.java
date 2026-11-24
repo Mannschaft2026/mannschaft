@@ -7,6 +7,7 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.effortrecord.EffortErrorCode;
 import com.mannschaft.app.effortrecord.dto.EffortDefinitionSnapshot;
 import com.mannschaft.app.effortrecord.dto.EffortOwnerRecordResponse;
+import com.mannschaft.app.effortrecord.dto.EffortShareMapping;
 import com.mannschaft.app.effortrecord.entity.EffortRecordEntity;
 import com.mannschaft.app.effortrecord.entity.EffortTeamShareEntity;
 import com.mannschaft.app.effortrecord.enums.EffortShareState;
@@ -28,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -118,12 +120,14 @@ public class EffortShareTxService {
     // ───────────────────────────── 共有 PUT・retry・取消 ─────────────────────────────
 
     /**
-     * 共有 PUT（API 契約 §4）。previewToken の command で共有内容を作り直し、projection hash が preview と一致することを
-     * 確かめてから PENDING へ進める（shareVersion+1）。版・内容・共有先の変化は 409 COMMON_003（再 preview）。
+     * 共有 PUT（API 契約 §4）。本文で送り直された mapping・allowlist を preview と同じ規則で正規化して共有内容を作り直し、
+     * command hash と projection hash が previewToken に束縛した値と一致することを確かめてから PENDING へ進める
+     * （shareVersion+1）。版・内容・共有先・command の変化は 409 COMMON_003（再 preview）。
      */
     @Transactional
     public EffortOwnerRecordResponse share(Long ownerUserId, UUID recordId, UUID key, String path, String hash, long version,
-                                           EffortPreviewTokenCodec.Claims claims, EffortDefinitionSnapshot target) {
+                                           EffortPreviewTokenCodec.Claims claims, EffortDefinitionSnapshot target,
+                                           List<EffortShareMapping> mappings, List<String> selectedFieldKeys) {
         EffortReceiptService.Handle handle = receipts.begin(ownerUserId, path, key, hash);
         if (handle.replay() != null) {
             return fromJson(handle.replay().json());
@@ -136,10 +140,12 @@ public class EffortShareTxService {
             throw conflict();
         }
         checkTarget(record, claims.teamId(), teamShares.findByTeamIdAndSourceRecordId(claims.teamId(), recordId));
-        EffortShareProjector.Command command = projector.readCommand(claims.mappingsJson(), claims.selectedJson());
-        EffortShareProjector.Built built = projector.project(codec.parseSnapshot(record.getDefinitionSnapshot()),
-                codec.parseValues(record.getValuesJson()), target, command, record.getRecordTimezone());
-        if (!built.projectionHash().equals(claims.projectionHash())) {
+        EffortShareProjector.Built built = projector.build(codec.parseSnapshot(record.getDefinitionSnapshot()),
+                codec.parseValues(record.getValuesJson()), target, mappings, selectedFieldKeys, record.getRecordTimezone());
+        EffortShareProjector.Command command = built.command();
+        if (!projector.commandHash(command).equals(claims.commandHash())
+                || !built.projectionHash().equals(claims.projectionHash())) {
+            // preview と別の mapping・allowlist（token の command と不一致）は再 preview
             throw conflict();
         }
         Instant now = now();

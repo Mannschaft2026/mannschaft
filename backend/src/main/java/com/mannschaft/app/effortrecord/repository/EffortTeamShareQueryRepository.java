@@ -130,14 +130,37 @@ public class EffortTeamShareQueryRepository {
                 .getResultList();
     }
 
-    /** 定義候補用: チームの VISIBLE 行を新しい順に最大 limit 件（走査上限）。 */
-    public List<EffortTeamShareEntity> findVisibleForCandidates(Long teamId, int limit) {
-        return entityManager.createQuery("SELECT s FROM EffortTeamShareEntity s WHERE s.teamId = :team AND s.state = :state "
-                        + "ORDER BY s.recordedOn DESC, s.createdAt DESC, s.id DESC", EffortTeamShareEntity.class)
+    /**
+     * 定義候補用: チームの VISIBLE 行のうち、候補が確定済みの定義（resolvedDefinitions）を除いたものを、
+     * recordedOn DESC, createdAt DESC, id DESC の順で after より後ろから最大 limit 件読む。
+     * 呼出し側は 1 チャンクごとに F00 を 1 回だけ掛け、確定した定義を除いて次のチャンクへ進む（定義ごとの照会にしない）。
+     */
+    public List<EffortTeamShareEntity> findVisibleForCandidates(Long teamId, Collection<UUID> resolvedDefinitions, After after,
+                                                                int limit) {
+        StringBuilder jpql = new StringBuilder("SELECT s FROM EffortTeamShareEntity s WHERE s.teamId = :team "
+                + "AND s.state = :state");
+        if (!resolvedDefinitions.isEmpty()) {
+            jpql.append(" AND s.definitionId NOT IN :resolved");
+        }
+        if (after != null) {
+            jpql.append(" AND (s.recordedOn < :cursorDate"
+                    + " OR (s.recordedOn = :cursorDate AND s.createdAt < :cursorCreated)"
+                    + " OR (s.recordedOn = :cursorDate AND s.createdAt = :cursorCreated AND s.id < :cursorId))");
+        }
+        jpql.append(" ORDER BY s.recordedOn DESC, s.createdAt DESC, s.id DESC");
+        TypedQuery<EffortTeamShareEntity> query = entityManager.createQuery(jpql.toString(), EffortTeamShareEntity.class)
                 .setParameter("team", teamId)
                 .setParameter("state", EffortTeamShareState.VISIBLE)
-                .setMaxResults(limit)
-                .getResultList();
+                .setMaxResults(limit);
+        if (!resolvedDefinitions.isEmpty()) {
+            query.setParameter("resolved", resolvedDefinitions);
+        }
+        if (after != null) {
+            query.setParameter("cursorDate", after.recordedOn())
+                    .setParameter("cursorCreated", after.createdAt())
+                    .setParameter("cursorId", after.id());
+        }
+        return query.getResultList();
     }
 
     /** 保守の走査: 未失効（VISIBLE・PENDING）の共有行を id 昇順で after より後ろから limit 件。 */
