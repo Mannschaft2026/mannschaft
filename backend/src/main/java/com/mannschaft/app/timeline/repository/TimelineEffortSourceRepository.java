@@ -22,6 +22,9 @@ public interface TimelineEffortSourceRepository extends JpaRepository<TimelineEf
 
     Optional<TimelineEffortSourceEntity> findByTimelinePostId(Long timelinePostId);
 
+    /** 投稿が努力由来（対応行がある。取消済みを含む）か（通常操作の EFFORT_003 ガード）。 */
+    boolean existsByTimelinePostId(Long timelinePostId);
+
     /** 投稿 ID 集合のうち努力由来のものの対応行（読み取り経路のガードで 1 回だけ引く）。 */
     List<TimelineEffortSourceEntity> findByTimelinePostIdIn(Collection<Long> timelinePostIds);
 }

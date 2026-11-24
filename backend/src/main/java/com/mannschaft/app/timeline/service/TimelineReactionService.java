@@ -29,6 +29,8 @@ public class TimelineReactionService {
      * 呼び出し元が可視な投稿に対してのみ実行できるよう先に検証する。
      */
     private final TimelinePostVisibilityAccessGuard postVisibilityGuard;
+    /** F06.4.1: 努力由来の投稿への「みたよ！」とその解除は 403 EFFORT_003（可視性の判定の後に呼ぶ）。 */
+    private final TimelineEffortOperationGuard effortOperationGuard;
 
     /**
      * 投稿に「みたよ！」リアクションを追加する。
@@ -43,6 +45,7 @@ public class TimelineReactionService {
     @Transactional
     public ReactionResponse addReaction(Long postId, Long userId) {
         TimelinePostEntity post = postVisibilityGuard.requireVisiblePost(postId, userId);
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         if (reactionRepository.existsByTimelinePostIdAndUserId(postId, userId)) {
             throw new BusinessException(TimelineErrorCode.REACTION_ALREADY_EXISTS);
@@ -75,6 +78,7 @@ public class TimelineReactionService {
     @Transactional
     public ReactionResponse removeReaction(Long postId, Long userId) {
         TimelinePostEntity post = postVisibilityGuard.requireVisiblePost(postId, userId);
+        effortOperationGuard.rejectIfEffortSource(postId);
 
         TimelinePostReactionEntity reaction = reactionRepository
                 .findByTimelinePostIdAndUserId(postId, userId)

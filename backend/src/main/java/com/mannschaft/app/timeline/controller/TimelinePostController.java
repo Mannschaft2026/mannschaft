@@ -122,8 +122,15 @@ public class TimelinePostController {
             @PathVariable Long id,
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int limit) {
-        List<PostResponse> replies = postService.getReplies(id, cursor, limit, SecurityUtils.getCurrentUserId());
-        return ResponseEntity.ok(TimelineFeedResponse.ofReplies(replies, limit));
+        Long userId = SecurityUtils.getCurrentUserId();
+        List<PostResponse> replies = postService.getReplies(id, cursor, limit, userId);
+        // F06.4.1: 親が F00 を通らない努力由来の投稿なら、詳細と同じく存在しない投稿として 404
+        if (!effortReadGuard.isVisible(id, userId)) {
+            throw new com.mannschaft.app.common.BusinessException(com.mannschaft.app.timeline.TimelineErrorCode.POST_NOT_FOUND);
+        }
+        // F06.4.1: 次ページの有無とカーソルは間引く前の取得結果から求め、ページ内だけを F00 で間引く
+        return ResponseEntity.ok(TimelineFeedResponse.ofVisiblePage(List.of(), replies, limit,
+                page -> effortReadGuard.filterVisible(page, userId)));
     }
 
     /**

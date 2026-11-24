@@ -36,6 +36,30 @@ import java.util.Optional;
 public class TimelineFriendForwardPostService {
 
     private final TimelinePostRepository timelinePostRepository;
+    /** F06.4.1: 努力由来の投稿の転送を 403 EFFORT_003 で拒否する。 */
+    private final TimelineEffortOperationGuard effortOperationGuard;
+    /** 転送元が操作者から見えるかの正準判定（見えない者には努力由来かどうかを漏らさない）。 */
+    private final TimelinePostVisibilityAccessGuard postVisibilityGuard;
+    /** 努力由来の投稿を転送元の候補から外す（多層防御。作成時から share_with_friends=false 固定）。 */
+    private final com.mannschaft.app.timeline.repository.TimelineEffortSourceRepository effortSources;
+
+    /**
+     * F06.4.1: 操作者から見える努力由来の投稿の転送を 403 EFFORT_003 で拒否する（データ設計 §7.2）。
+     *
+     * <p>転送の権限・フレンド関係の判定より先に呼ぶ。見えない投稿（不在・論理削除済みを含む）は判定せず、
+     * 呼出元の既存の判定（不在と同じ 404 など）に任せるため、努力由来かどうかを外部へ判別させない。</p>
+     *
+     * @param postId 転送元投稿 ID
+     * @param userId 操作者のユーザー ID
+     */
+    public void rejectVisibleEffortSource(Long postId, Long userId) {
+        if (postId == null) {
+            return;
+        }
+        timelinePostRepository.findById(postId)
+                .filter(p -> postVisibilityGuard.isVisible(p, userId))
+                .ifPresent(p -> effortOperationGuard.rejectIfEffortSource(p.getId()));
+    }
 
     /**
      * フレンド共有済みの公開 TEAM 投稿を取得する。
@@ -52,6 +76,7 @@ public class TimelineFriendForwardPostService {
                 .filter(p -> p.getStatus() == PostStatus.PUBLISHED)
                 .filter(p -> Boolean.TRUE.equals(p.getShareWithFriends()))
                 .filter(p -> p.getScopeId() != null)
+                .filter(p -> !effortSources.existsByTimelinePostId(p.getId()))
                 .map(p -> new FriendShareableTeamPost(p.getId(), p.getScopeId(), p.getContent()));
     }
 

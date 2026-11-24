@@ -23,6 +23,7 @@ import java.util.Map;
  *   <li>配下配信: 距離 1 の祖先組織の {@code CHILDREN / DESCENDANTS}、距離 2 以上の祖先組織の {@code DESCENDANTS}</li>
  *   <li>{@code scope_type = 'PERSONAL' AND user_id = 閲覧者}</li>
  * </ul>
+ * <p>努力由来の投稿（{@code timeline_effort_sources} に行がある投稿。F06.4.1）は {@code NOT EXISTS} で常に除く。</p>
  * <p>VILLAGE・FRIEND_* はどの OR 句にも該当しないため出ない。スコープ指定時は所属 TEAM / ORGANIZATION の
  * 句だけを使う（PUBLIC・PERSONAL・配下配信は含めない）。空の ID 集合は呼び出し側がダミー値で埋めて渡す。</p>
  *
@@ -134,7 +135,11 @@ public class TimelinePostKeywordSearchRepository {
 
     private static String where(Condition c, Map<String, Object> params) {
         StringBuilder sb = new StringBuilder(" WHERE ").append(MATCH)
-                .append(" AND p.deleted_at IS NULL AND p.status = 'PUBLISHED' AND (")
+                .append(" AND p.deleted_at IS NULL AND p.status = 'PUBLISHED'")
+                // F06.4.1: 努力由来の投稿は全体検索に常に出さない（F00 の個別判定ではなく SQL で除く）。
+                // 件数（count）と取得（find）が同じ WHERE 句を使うので、件数とページ境界からも漏れない。
+                .append(" AND NOT EXISTS (SELECT 1 FROM timeline_effort_sources es WHERE es.timeline_post_id = p.id)")
+                .append(" AND (")
                 .append("(p.scope_type = 'TEAM' AND p.scope_id IN (:teamIds))")
                 .append(" OR (p.scope_type = 'ORGANIZATION' AND p.scope_id IN (:orgIds))");
         params.put("keyword", c.booleanQuery());

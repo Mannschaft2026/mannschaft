@@ -101,6 +101,10 @@ public class FriendContentForwardService {
     @Transactional
     public ForwardResponse forward(Long teamId, Long sourcePostId,
                                    ForwardRequest request, Long userId) {
+        // 0. F06.4.1: 努力由来の投稿の転送は、権限・フレンド関係の判定より先に 403 EFFORT_003 で拒否する。
+        //    操作者から見える投稿に限って判定するため、見えない者には努力由来かどうかを漏らさない。
+        timelineFriendForwardPostService.rejectVisibleEffortSource(sourcePostId, userId);
+
         // 1. 権限チェック
         requireManageFriendTeams(userId, teamId);
 

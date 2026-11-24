@@ -123,4 +123,30 @@ public class TimelineFeedResponse {
     public static TimelineFeedResponse ofReplies(List<PostResponse> replies, int limit) {
         return ofMyFeed(replies, limit);
     }
+
+    /**
+     * 取得後に閲覧可否で間引く一覧のページ応答（F06.4.1 努力由来の投稿の F00 判定）。
+     *
+     * <p>次ページの有無とカーソルは、間引く前の取得結果（{@code limit + 1} 件）から求める。間引いた後の件数で
+     * 判定すると、末尾の判定用 1 件が間引かれたときに続きがあるのに {@code hasNext=false} になり、
+     * ページングが途中で止まる。カーソルは間引く前のページ末尾の ID なので、間引いた投稿を再取得しない。</p>
+     *
+     * @param pinned  ピン留め（間引き済み）
+     * @param fetched 間引く前の取得結果（ID 降順・昇順いずれもカーソルの向きに従う）
+     * @param limit   ページサイズ
+     * @param visible ページ内の投稿を閲覧可否で間引く関数（順序は保つ）
+     * @return ページ応答
+     */
+    public static TimelineFeedResponse ofVisiblePage(List<PostResponse> pinned, List<PostResponse> fetched, int limit,
+                                                     java.util.function.UnaryOperator<List<PostResponse>> visible) {
+        int pageSize = limit > 0 ? limit : 20;
+        boolean hasNext = fetched.size() > pageSize;
+        List<PostResponse> pagePosts = hasNext ? fetched.subList(0, pageSize) : fetched;
+        Long nextCursor = (hasNext && !pagePosts.isEmpty())
+                ? pagePosts.get(pagePosts.size() - 1).getId()
+                : null;
+        FeedData feedData = new FeedData(pinned, visible.apply(pagePosts));
+        FeedMeta feedMeta = new FeedMeta(nextCursor, pageSize, hasNext);
+        return new TimelineFeedResponse(feedData, feedMeta);
+    }
 }
