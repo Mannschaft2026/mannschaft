@@ -97,8 +97,12 @@ public class ActivityStatsController {
             HttpServletResponse response) {
         ActivityScopeType scope = ActivityScopeType.valueOf(scopeType);
         checkScopeMembership(scope, scopeId);
+        Long userId = SecurityUtils.getCurrentUserId();
+        // CMP-261124-0158: manual 行も認証済み一覧と同じ可視レベルで絞る（SUPPORTER に MEMBERS_ONLY を書き出さない）
+        var levels = automaticAccess.readLevels(userId, scope, scopeId);
         statsService.exportCsvWithAutomaticAccess(
                 scope, scopeId, templateId, dateFrom, dateTo, response,
-                automaticAccess.actualIds(SecurityUtils.getCurrentUserId(), scope, scopeId));
+                automaticAccess.actualIds(userId, scope, scopeId),
+                levels.visibilities(), userId, levels.systemAdmin());
     }
 }
