@@ -182,7 +182,7 @@ class RanchCareDateRoundTripHttpIT extends AbstractMySqlIntegrationTest {
     }
 
     private void assertRuntimeDateConditions() throws Exception {
-        assertThat(TimeZone.getDefault().toZoneId()).as("製品TimeZoneConfigのJVM既定")
+        assertThat(TimeZone.getDefault().toZoneId()).as("製品ServerTimeZoneEnvironmentPostProcessorのJVM既定")
                 .isEqualTo(UserZoneLocalDateTimeParser.SERVER_ZONE);
         assertThat(jdbc.queryForObject("SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP())", String.class))
                 .as("MySQL sessionの実効UTC offset").isEqualTo("00:00:00");

@@ -28,6 +28,7 @@
       "backend/infra",
       "backend/scripts",
       "backend/src/main/java",
+      "backend/src/main/resources/META-INF",
       "backend/src/main/resources/css",
       "backend/src/main/resources/db",
       "backend/src/main/resources/diagnosis",

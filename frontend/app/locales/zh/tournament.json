@@ -414,6 +414,40 @@
         "invalidUserId": "用户 ID 必须为正整数",
         "searchFailed": "会员搜索失败"
       }
+    },
+    "create": {
+      "createFailed": "创建赛事失败",
+      "createFailedHint": "请检查输入内容",
+      "fields": {
+        "name": "赛事名称",
+        "season": "赛季",
+        "format": "赛制",
+        "sport": "项目",
+        "description": "说明",
+        "visibility": "公开范围",
+        "winPoints": "胜场积分",
+        "drawPoints": "平局积分",
+        "lossPoints": "负场积分"
+      },
+      "title": "创建赛事",
+      "openButton": "创建赛事",
+      "submit": "创建",
+      "cancel": "取消",
+      "success": "赛事已创建",
+      "namePlaceholder": "例如：2026年春季联赛",
+      "nameRequired": "请输入赛事名称",
+      "seasonRequired": "请输入赛季年份"
+    },
+    "list": {
+      "title": "赛事・联赛",
+      "empty": "暂无赛事",
+      "loadError": "获取赛事列表失败",
+      "scoreSummary": "胜{win} 平{draw} 负{loss}"
+    },
+    "formats": {
+      "LEAGUE": "联赛",
+      "KNOCKOUT": "淘汰赛",
+      "GROUP_KNOCKOUT": "小组赛+淘汰赛"
     }
   },
   "dashboard_widgets": {

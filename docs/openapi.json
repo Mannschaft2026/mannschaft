@@ -204640,7 +204640,9 @@
           },
           "drawPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "endDate": {
             "type": "string",
@@ -204670,7 +204672,9 @@
           },
           "lossPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "name": {
             "type": "string",
@@ -204721,7 +204725,9 @@
           },
           "winPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           }
         },
         "required": [
@@ -223096,7 +223102,9 @@
           },
           "drawPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "endDate": {
             "type": "string",
@@ -223126,7 +223134,9 @@
           },
           "lossPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "name": {
             "type": "string",
@@ -223177,7 +223187,9 @@
           },
           "winPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           }
         },
         "required": [

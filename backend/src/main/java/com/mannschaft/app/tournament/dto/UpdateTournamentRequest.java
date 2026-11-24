@@ -1,5 +1,7 @@
 package com.mannschaft.app.tournament.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -33,8 +35,11 @@ public class UpdateTournamentRequest {
 
     private final LocalDate startDate;
     private final LocalDate endDate;
+    @Min(0) @Max(255)
     private final Integer winPoints;
+    @Min(0) @Max(255)
     private final Integer drawPoints;
+    @Min(0) @Max(255)
     private final Integer lossPoints;
     private final Boolean hasDraw;
     private final Boolean hasSets;

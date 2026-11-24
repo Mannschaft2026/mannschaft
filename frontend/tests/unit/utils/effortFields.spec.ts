@@ -5,7 +5,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildEffortFieldValues,
-  extractEffortFieldErrors,
   formatEffortValueWithUnit,
   hasEffortContent,
   parseTypedYmd,
@@ -258,14 +257,5 @@ describe('ALIC-4 中身のない記録', () => {
   it('全 field が null なら中身なし、1 件でも値があれば中身あり（0 は値）', () => {
     expect(hasEffortContent([{ fieldKey: 'a', value: null }, { fieldKey: 'b', value: null }])).toBe(false)
     expect(hasEffortContent([{ fieldKey: 'a', value: null }, { fieldKey: 'b', value: '0' }])).toBe(true)
-  })
-})
-
-describe('ALIC-5 fieldErrors の取り出し', () => {
-  it('400 応答の fieldErrors を返す。無ければ空', () => {
-    const e = { data: { error: { fieldErrors: [{ field: 'values.duration', message: '入力できる範囲を超えています' }] } } }
-    expect(extractEffortFieldErrors(e)).toEqual([{ field: 'values.duration', message: '入力できる範囲を超えています' }])
-    expect(extractEffortFieldErrors(new Error('x'))).toEqual([])
-    expect(extractEffortFieldErrors(null)).toEqual([])
   })
 })

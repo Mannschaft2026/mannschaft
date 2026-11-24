@@ -24,8 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * <b>DATE 列の保存・更新で日付がずれないこと、および日時の格納基準の固定</b>（CMP-261123-1334 / AC-2・AC-3）。
  *
- * <p>JVM を UTC で起動した状態（CI の {@code -Ptest.timezone=UTC}）では、{@link TimeZoneConfig} が JVM 既定 TZ を
- * JST へ切り替える前に作られた Hikari 接続が存在し、その接続では DATE 列が 1 日前に書かれていた。
+ * <p>旧原因（CMP-261123-1335 で解消済み。本テストは最終防衛の検証として残す）: JVM を UTC で起動した状態では、
+ * 起動途中の {@code @PostConstruct} が JVM 既定 TZ を JST へ切り替える前に作られた Hikari 接続が存在し、その接続では DATE 列が 1 日前に書かれていた。
+ * 現在は {@code ServerTimeZoneEnvironmentPostProcessor} が Bean 生成前に確定するため通常は起きないが、後から既定 TZ が変わっても守れることを確かめる。
  * 起動順序に依存すると再現が不安定になるため、本テストは「JVM 既定を UTC にして既存接続を破棄→新規接続を作成→
  * JVM 既定を JST へ戻して使う」を明示的に行い、決定的に再現する（実行時の JVM TZ に依らず同じ状況になる）。</p>
  */
@@ -107,7 +108,7 @@ class DateColumnTimeZoneShiftIT extends AbstractMySqlIntegrationTest {
                 String.class, id.toString().replace("-", ""));
     }
 
-    /** JVM 既定を UTC にして既存接続を破棄し、UTC で新規接続を作らせる（TimeZoneConfig の切替前に作られた接続の再現）。 */
+    /** JVM 既定を UTC にして既存接続を破棄し、UTC で新規接続を作らせる（旧実装の切替前に作られた接続の再現）。 */
     private void recreatePoolConnectionsUnderUtc() throws Exception {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
         HikariDataSource hikari = dataSource.unwrap(HikariDataSource.class);
