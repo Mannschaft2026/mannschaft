@@ -15,7 +15,7 @@
 | max_entries_to_build / max_entries_to_merge | 5 / 5 |
 | min_entries_to_merge | 1 |
 | wait | 5 分 |
-| check_response_timeout | 150 分 |
+| check_response_timeout | 360 分（2026-11-23 に 150 分から延長。混雑時の BE PR の `checks_timed_out` 脱落対策） |
 | strict（up-to-date 必須） | **解除** |
 
 必須チェック4本（Compile & Test / OpenAPI Drift Check / Task-List PR Gate / ER Diagram Drift Check）は `merge_group` イベントに対応済み。Task-List PR Gate の merge_group 経路は `.github/workflows/task-list-pr-gate-merge-group.yml`（合成コミットの `docs/task-list.md` 構造検査）。merge group の差分は「そのエントリ自身の変更」で判定する（先行エントリは各自の group で検証済み。失敗時は queue が再構築する）。
@@ -23,14 +23,21 @@
 ## 投入とマージ（queue 有効時）
 
 ```bash
-gh pr merge <PR> --squash
+# PR を出したら予約する。必須チェック未完了なら auto-merge が予約され、緑になると自動で queue へ入る。緑なら直接 queue へ入る
+gh pr merge <PR> --repo Mannschaft2026/mannschaft --squash
 ```
 
+- **auto-merge はリポジトリで有効**（2026-11-23 `allow_auto_merge=true`）。予約後は追従も投入も不要で、queue が最新 main との合成で検証してからマージする。
+- `gh pr merge` が失敗したときの代替として、GraphQL で直接投入できる（必須チェック緑の後）:
+  ```bash
+  PR_ID=$(gh pr view <PR> --repo Mannschaft2026/mannschaft --json id -q .id)
+  gh api graphql -f query='mutation($id:ID!){enqueuePullRequest(input:{pullRequestId:$id}){mergeQueueEntry{state position}}}' -f id="$PR_ID"
+  ```
+  2026-11-22 は auto-merge が無効だったため、`gh pr merge` が `Auto merge is not allowed` で失敗した（#4758）。
 - **queue 有効時は `--delete-branch` を付けない**（gh 2.92 は拒否する。cli/cli v2.92.0 `pkg/cmd/pr/merge/merge.go`）。ブランチ削除は MERGED（`state=MERGED` かつ `mergedAt` 非 null）確認後に別手順で行い、CLAUDE.md の事前許可条件（PR が MERGED で main 反映済み・HEAD/所有者/他 worktree 未使用を削除直前に確認）を満たすときだけ実施する。
-- PR 側の必須チェックが未完了なら **auto-merge が有効化**され、完了すると自動で queue へ入る。完了済みなら直接 queue へ投入される。
 - **コマンド成功＝マージ済みではない**。必ず下記の状態判定で確認する。
 - queue 有効時に限り、`gh pr update-branch` / main 取り込みの追従は**不要**（strict 解除済み。BEHIND でも queue が合成コミットで検証する）。コンフリクト（`mergeable=CONFLICTING`）のときだけ main を取り込んで解消する。
-- `--admin` は queue を素通りする（bypass）。常用禁止（下記）。
+- **`--admin` は使えない**（2026-11-23 Ruleset の bypass を空にした）。queue の外で main を動かすと queue 内の全 group が作り直されて詰まるため（#4720・#4796・#4799 の bypass で #3655 が7時間 queue を出られなかった）。
 
 ## 状態判定（4 状態）
 
@@ -43,7 +50,7 @@ gh api graphql -f query='query{repository(owner:"Mannschaft2026",name:"mannschaf
 
 | 状態 | 判定 | 次の動き |
 |---|---|---|
-| (a) PR 側必須チェック待ち | state=OPEN・`autoMergeRequest` 非 null・`isInMergeQueue=false` | 待つ（低頻度の単発確認のみ） |
+| (a) PR 側必須チェック待ち | state=OPEN・`isInMergeQueue=false`・`autoMergeRequest` 非 null（予約済み） | 待つ（低頻度の単発確認のみ）。緑になると自動で queue へ入る |
 | (b) queue 内で検証中 | state=OPEN・`isInMergeQueue=true`（`mergeQueueEntry` 非 null） | 待つ。`position` で順番を把握 |
 | (c) queue から脱落 | 投入記録（自分で投入した事実）または timeline の `AddedToMergeQueueEvent` があり、その後 `RemovedFromMergeQueueEvent`（`reason`）が出て、state=OPEN・`isInMergeQueue=false`・未マージ | **完了扱いにしない・worktree を撤去しない**。merge_group の失敗 run を確認して原因を直し、再投入する |
 | (e) queue 外（未投入／脱落未確定） | state=OPEN・auto-merge 無し・queue 外で投入履歴が不明 | 脱落と断定しない。投入済みか確認する |
@@ -55,7 +62,7 @@ gh api graphql -f query='query{repository(owner:"Mannschaft2026",name:"mannschaf
 
 1. 完了扱いにせず、worktree・ブランチを残す。
 2. merge_group の失敗 run から原因を特定し、根治する（rerun だけで済ませない。flaky と判断する場合も証拠を残す）。
-3. 修正を push して必須チェックを再度緑にし、`gh pr merge <PR> --squash` で再投入する（`--delete-branch` は付けない）。
+3. 修正を push し、`gh pr merge <PR> --squash` で予約し直す（緑になると自動で queue へ入る）。
 4. 先行エントリの失敗による巻き添え（自分の変更に原因が無い）は、queue が再構築するため通常は自動で再検証される。脱落したときだけ再投入する。
 
 ## queue 無効時（移行前・障害で無効化している間）
@@ -70,7 +77,7 @@ strict が復元されている間は BEHIND になり得る。追いかけっ�
 
 ## `--admin` の格下げ
 
-`--admin` は **merge queue 自体の障害時のみ・マスター確認必須**。検分合格・CI 緑・マスターの明示承認が揃わない限り使わない。承認なしの自動許可はしない。使った場合は上奏に理由と承認を明記する。
+Ruleset の bypass は空なので、`--admin` は通常は失敗する。**merge queue 自体の障害時に限り、マスター確認のうえで** Ruleset の `bypass_actors` に OrganizationAdmin（`bypass_mode: always`）を一時的に戻し、対処が終わったら直ちに空へ戻す（どちらも GET で照合する）。承認なしの自動許可はしない。使った場合は上奏に理由と承認を明記する。
 
 ## queue を無効化するとき（復旧手順）
 

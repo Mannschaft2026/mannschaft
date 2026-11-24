@@ -175,7 +175,15 @@
       "visibility_failed": "公開設定の変更に失敗しました",
       "load_failed": "連絡スペースの取得に失敗しました",
       "divisions_load_failed": "ディビジョン一覧の取得に失敗しました",
-      "permissions_load_failed": "権限情報の取得に失敗しました。操作が制限される場合があります"
+      "permissions_load_failed": "権限情報の取得に失敗しました。操作が制限される場合があります",
+      "participant": {
+        "title": "大会の連絡スペース",
+        "open_link": "連絡スペースを開く",
+        "view_only_notice": "閲覧のみです。投稿できるのはチームの代表・副代表と主催者です",
+        "unavailable": "この大会の連絡スペースを利用できません",
+        "unavailable_hint": "参加中のチームの会員のみ利用できます。チームの参加状況をご確認ください",
+        "load_retry": "再読み込み"
+      }
     },
     "submission": {
       "title": "書類提出受付",
@@ -406,6 +414,40 @@
         "invalidUserId": "ユーザーIDは正の整数で入力してください",
         "searchFailed": "会員検索に失敗しました"
       }
+    },
+    "create": {
+      "createFailed": "大会の作成に失敗しました",
+      "createFailedHint": "入力内容を確認してください",
+      "fields": {
+        "name": "大会名",
+        "season": "年度",
+        "format": "形式",
+        "sport": "競技",
+        "description": "説明",
+        "visibility": "公開範囲",
+        "winPoints": "勝点",
+        "drawPoints": "引分点",
+        "lossPoints": "敗点"
+      },
+      "title": "大会を作成",
+      "openButton": "大会を作成",
+      "submit": "作成",
+      "cancel": "キャンセル",
+      "success": "大会を作成しました",
+      "namePlaceholder": "例: 2026年度春季リーグ",
+      "nameRequired": "大会名を入力してください",
+      "seasonRequired": "年度を入力してください"
+    },
+    "list": {
+      "title": "大会・リーグ",
+      "empty": "大会がありません",
+      "loadError": "大会一覧の取得に失敗しました",
+      "scoreSummary": "勝{win} 分{draw} 負{loss}"
+    },
+    "formats": {
+      "LEAGUE": "リーグ戦",
+      "KNOCKOUT": "トーナメント",
+      "GROUP_KNOCKOUT": "グループ+トーナメント"
     }
   },
   "dashboard_widgets": {

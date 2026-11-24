@@ -68,4 +68,12 @@ describe('/admin/shift-budget/failed-events の内部情報非表示', () => {
     expect(wrapper.text()).not.toContain('CONSUMPTION_RECORD')
     expect(wrapper.text()).not.toContain('NOTIFICATION_SEND')
   })
+
+  it('概要列に最小幅があり、表全体も横スクロールで読める幅を持つ（概要が縦書きに潰れない）', async () => {
+    const wrapper = await mountSuspended(FailedEventsPage)
+    await flushPromises()
+    const styles = wrapper.findAll('th').map(th => th.attributes('style') ?? '')
+    expect(styles.some(style => style.includes('min-width: 20rem'))).toBe(true)
+    expect(wrapper.find('table').attributes('style') ?? '').toContain('min-width: 95rem')
+  })
 })

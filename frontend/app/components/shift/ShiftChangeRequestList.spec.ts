@@ -1,16 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { nextTick } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import ShiftChangeRequestList from './ShiftChangeRequestList.vue'
 import type { ChangeRequest } from '~/types/shift'
 
 /**
  * CMP-261010-1432 FE-a: 変更依頼一覧の AC。
- *   AC-A3 却下ダイアログの審査コメントが review イベントで渡る
+ *   AC-A3 却下ダイアログの審査コメントが submitReview に渡る（楽観ロックの version も一緒に）
  *   AC-B4 本人の依頼に審査ボタンを出さない / currentUser 未解決なら審査・取り下げを出さない
  *   AC-C1 表ヘッダーに common. の生キーが出ない
  *   AC-I1 取り下げの処理中は disabled
- *   AC-I2 確定ボタンを素早く2回押しても review は1回だけ
+ *   AC-I2 確定ボタンを素早く2回押しても submitReview は1回だけ
  *   AC-M3 依頼者列に名前、null は「不明なユーザー」、userId は出さない
  */
 function row(over: {
@@ -21,6 +22,7 @@ function row(over: {
 }): ChangeRequest {
   return {
     id: over.id,
+    version: 5,
     scheduleId: 10,
     slotId: null,
     requestInfo: { requestType: 'PRE_CONFIRM_EDIT', reason: '理由', requestedBy: over.requestedBy },
@@ -33,6 +35,8 @@ function row(over: {
 const OTHERS = row({ id: 1, requestedBy: 7, requesterName: '山田花子' })
 const OWN = row({ id: 2, requestedBy: 5, requesterName: '自分' })
 
+const noopReview = () => vi.fn().mockResolvedValue({ status: 'ok' })
+
 function btn(wrapper: Awaited<ReturnType<typeof mountSuspended>>, id: string) {
   return wrapper.find(`[data-testid="${id}"]`)
 }
@@ -44,7 +48,7 @@ beforeEach(() => {
 describe('ShiftChangeRequestList 審査ボタン（AC-B4）', () => {
   it('AC-B4: 他人の OPEN 依頼には審査ボタンが出て、本人の依頼には出ない（取り下げは本人にだけ出る）', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OTHERS, OWN], currentUserId: 5, canReview: true },
+      props: { submitReview: noopReview(), requests: [OTHERS, OWN], currentUserId: 5, canReview: true },
     })
     expect(btn(wrapper, 'change-request-approve-1').exists()).toBe(true)
     expect(btn(wrapper, 'change-request-reject-1').exists()).toBe(true)
@@ -57,7 +61,7 @@ describe('ShiftChangeRequestList 審査ボタン（AC-B4）', () => {
 
   it('AC-B4: currentUserId が未解決（null）なら審査・取り下げボタンをどちらも出さない', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OTHERS, OWN], currentUserId: null, canReview: true },
+      props: { submitReview: noopReview(), requests: [OTHERS, OWN], currentUserId: null, canReview: true },
     })
     for (const id of [1, 2]) {
       expect(btn(wrapper, `change-request-approve-${id}`).exists()).toBe(false)
@@ -68,7 +72,7 @@ describe('ShiftChangeRequestList 審査ボタン（AC-B4）', () => {
 
   it('AC-A2（部品側）: canReview が false なら他人の依頼にも審査ボタンを出さない', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OTHERS], currentUserId: 5, canReview: false },
+      props: { submitReview: noopReview(), requests: [OTHERS], currentUserId: 5, canReview: false },
     })
     expect(btn(wrapper, 'change-request-approve-1').exists()).toBe(false)
     expect(btn(wrapper, 'change-request-reject-1').exists()).toBe(false)
@@ -76,9 +80,10 @@ describe('ShiftChangeRequestList 審査ボタン（AC-B4）', () => {
 })
 
 describe('ShiftChangeRequestList 審査ダイアログ（AC-A3 / AC-I2）', () => {
-  it('AC-A3: 却下ダイアログに入力した審査コメントが review イベントに渡る', async () => {
+  it('AC-A3: 却下ダイアログに入力した審査コメントと依頼の version が submitReview に渡り、成功で閉じる', async () => {
+    const submitReview = vi.fn().mockResolvedValue({ status: 'ok' })
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OTHERS], currentUserId: 5, canReview: true },
+      props: { requests: [OTHERS], currentUserId: 5, canReview: true, submitReview },
     })
     await btn(wrapper, 'change-request-reject-1').trigger('click')
     await nextTick()
@@ -89,14 +94,16 @@ describe('ShiftChangeRequestList 審査ダイアログ（AC-A3 / AC-I2）', () =
     textarea!.dispatchEvent(new Event('input'))
     await nextTick()
     document.body.querySelector<HTMLButtonElement>('[data-testid="change-request-review-confirm"]')!.click()
-    await nextTick()
+    await flushPromises()
 
-    expect(wrapper.emitted('review')).toEqual([[1, 'REJECTED', '人手が足りません']])
+    expect(submitReview).toHaveBeenCalledWith(1, 'REJECTED', '人手が足りません', 5)
+    expect(document.body.querySelector('[data-testid="change-request-review-confirm"]')).toBeNull()
   })
 
-  it('AC-I2: 確定ボタンを素早く2回押しても review は1回だけ', async () => {
+  it('AC-I2: 確定ボタンを素早く2回押しても submitReview は1回だけ', async () => {
+    const submitReview = vi.fn().mockResolvedValue({ status: 'ok' })
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OTHERS], currentUserId: 5, canReview: true },
+      props: { requests: [OTHERS], currentUserId: 5, canReview: true, submitReview },
     })
     await btn(wrapper, 'change-request-approve-1').trigger('click')
     await nextTick()
@@ -104,16 +111,52 @@ describe('ShiftChangeRequestList 審査ダイアログ（AC-A3 / AC-I2）', () =
     const confirm = document.body.querySelector<HTMLButtonElement>('[data-testid="change-request-review-confirm"]')!
     confirm.click()
     confirm.click()
-    await nextTick()
+    await flushPromises()
 
-    expect(wrapper.emitted('review')).toHaveLength(1)
+    expect(submitReview).toHaveBeenCalledTimes(1)
+  })
+
+  it('409 で最新がまだ OPEN なら、ダイアログとコメントを残し、最新の version で再送できる', async () => {
+    const submitReview = vi.fn()
+      .mockResolvedValueOnce({ status: 'conflict', latest: { ...OTHERS, version: 6 } })
+      .mockResolvedValueOnce({ status: 'ok' })
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { requests: [OTHERS], currentUserId: 5, canReview: true, submitReview },
+    })
+    await btn(wrapper, 'change-request-reject-1').trigger('click')
+    await nextTick()
+    const textarea = document.body.querySelector<HTMLTextAreaElement>('[data-testid="change-request-review-comment"]')!
+    textarea.value = '理由'
+    textarea.dispatchEvent(new Event('input'))
+    await nextTick()
+    const confirm = () => document.body.querySelector<HTMLButtonElement>('[data-testid="change-request-review-confirm"]')!
+    confirm().click()
+    await flushPromises()
+    expect(confirm()).not.toBeNull()
+    confirm().click()
+    await flushPromises()
+
+    expect(submitReview).toHaveBeenNthCalledWith(2, 1, 'REJECTED', '理由', 6)
+  })
+
+  it('409 で最新が審査済みなら、ダイアログを閉じる', async () => {
+    const submitReview = vi.fn().mockResolvedValue({ status: 'conflict', latest: { ...OTHERS, reviewInfo: { ...OTHERS.reviewInfo, status: 'ACCEPTED' } } })
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { requests: [OTHERS], currentUserId: 5, canReview: true, submitReview },
+    })
+    await btn(wrapper, 'change-request-approve-1').trigger('click')
+    await nextTick()
+    document.body.querySelector<HTMLButtonElement>('[data-testid="change-request-review-confirm"]')!.click()
+    await flushPromises()
+
+    expect(document.body.querySelector('[data-testid="change-request-review-confirm"]')).toBeNull()
   })
 })
 
 describe('ShiftChangeRequestList 取り下げ（AC-I1）', () => {
   it('AC-I1: 処理中の依頼の取り下げボタンは disabled で、押しても withdraw を発火しない', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OWN], currentUserId: 5, canReview: false, processingIds: [2] },
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5, canReview: false, processingIds: [2] },
     })
     const button = wrapper.find('[data-testid="change-request-withdraw-2"]')
     expect(button.attributes('disabled')).toBeDefined()
@@ -123,7 +166,7 @@ describe('ShiftChangeRequestList 取り下げ（AC-I1）', () => {
 
   it('AC-I1: 処理中でなければ押下で withdraw を1回発火する', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OWN], currentUserId: 5, canReview: false },
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5, canReview: false },
     })
     await wrapper.find('[data-testid="change-request-withdraw-2"]').trigger('click')
     expect(wrapper.emitted('withdraw')).toEqual([[2]])
@@ -133,7 +176,7 @@ describe('ShiftChangeRequestList 取り下げ（AC-I1）', () => {
 describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
   it('AC-C1: 表ヘッダーに common. で始まる生キーが出ない', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OTHERS], currentUserId: 5, canReview: true },
+      props: { submitReview: noopReview(), requests: [OTHERS], currentUserId: 5, canReview: true },
     })
     expect(wrapper.text()).not.toMatch(/\bcommon\./)
     expect(wrapper.text()).toContain('Requester')
@@ -144,6 +187,7 @@ describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
   it('AC-M3: 依頼者列に名前が出て、null は「不明なユーザー」。userId は表示しない', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
       props: {
+        submitReview: noopReview(),
         requests: [OTHERS, row({ id: 3, requestedBy: 90241, requesterName: null })],
         currentUserId: 5,
         canReview: false,
@@ -156,17 +200,43 @@ describe('ShiftChangeRequestList 表示（AC-C1 / AC-M3）', () => {
   })
 })
 
+describe('ShiftChangeRequestList 依頼者名の補完・審査結果', () => {
+  it('requesterName が無い依頼者は memberNames で補い、引けなければ「不明なユーザー」', async () => {
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: {
+        submitReview: noopReview(),
+        requests: [row({ id: 3, requestedBy: 2, requesterName: null }), row({ id: 4, requestedBy: 3, requesterName: null })],
+        currentUserId: 5,
+        memberNames: new Map([[2, '佐藤太郎']]),
+      },
+    })
+    expect(wrapper.text()).toContain('佐藤太郎')
+    expect(wrapper.text()).toContain('Unknown user')
+  })
+
+  it('審査済みの依頼には審査日時と審査コメントを出す', async () => {
+    const reviewed = row({ id: 6, requestedBy: 5, status: 'REJECTED' })
+    reviewed.reviewInfo = { ...reviewed.reviewInfo, reviewComment: '人手が足りません', reviewedAt: '2026-10-02T09:00:00' }
+    const wrapper = await mountSuspended(ShiftChangeRequestList, {
+      props: { submitReview: noopReview(), requests: [reviewed], currentUserId: 5 },
+    })
+    const box = wrapper.find('[data-testid="change-request-review-6"]')
+    expect(box.exists()).toBe(true)
+    expect(box.text()).toContain('人手が足りません')
+  })
+})
+
 describe('ShiftChangeRequestList 見出し重複・狭幅（アリシゼーション）', () => {
   it('空状態の文言はページ見出し「変更依頼」と重複しない', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [], currentUserId: 5 },
+      props: { submitReview: noopReview(), requests: [], currentUserId: 5 },
     })
     expect(wrapper.find('[data-testid="change-request-empty"]').text()).toBe('No change requests yet')
   })
 
   it('表の種別列ヘッダーは「変更依頼」ではなく専用キー、操作列は右端固定', async () => {
     const wrapper = await mountSuspended(ShiftChangeRequestList, {
-      props: { requests: [OWN], currentUserId: 5 },
+      props: { submitReview: noopReview(), requests: [OWN], currentUserId: 5 },
     })
     const headers = wrapper.findAll('th').map((h) => h.text())
     expect(headers).toContain('Request type')

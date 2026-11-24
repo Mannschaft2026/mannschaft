@@ -221,14 +221,14 @@ class JacksonTimeTypeSymmetryGuardTest {
     }
 
     @Test
-    @DisplayName("AC-9-3補: TimeZoneConfig はアプリ層の基準 TZ を SERVER_ZONE と同じ値に設定する")
-    void TimeZoneConfigの設定値がSERVER_ZONEと一致する() {
+    @DisplayName("AC-9-3補: ServerTimeZoneEnvironmentPostProcessor はアプリ層の基準 TZ を SERVER_ZONE と同じ値に設定する")
+    void 既定TZ設定値がSERVER_ZONEと一致する() {
         TimeZone original = TimeZone.getDefault();
         try {
-            new TimeZoneConfig().initTimeZone();
+            new ServerTimeZoneEnvironmentPostProcessor().postProcessEnvironment(null, null);
             // 「規約ドキュメントの文字列」ではなく実際に設定される値を検査する
             assertThat(TimeZone.getDefault().toZoneId())
-                    .as("TimeZoneConfig が設定する JVM 既定 TZ は LocalDateTimeTimezoneDeserializer.SERVER_ZONE と"
+                    .as("ServerTimeZoneEnvironmentPostProcessor が設定する JVM 既定 TZ は LocalDateTimeTimezoneDeserializer.SERVER_ZONE と"
                             + "同じでなければならない（.claudecode.md §20 アプリ層＝JST 壁時計）")
                     .isEqualTo(LocalDateTimeTimezoneDeserializer.SERVER_ZONE);
         } finally {

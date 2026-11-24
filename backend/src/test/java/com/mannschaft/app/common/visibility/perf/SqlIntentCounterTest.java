@@ -4,6 +4,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -99,6 +103,28 @@ class SqlIntentCounterTest {
         counter.inspect("SELECT * FROM user_roles");
         assertThat(snapshot).hasSize(1);
         assertThat(SqlIntentCounter.totalCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("captureCurrentThread は別スレッドで発行された SQL を数えない")
+    void captureCurrentThread_ignoresSqlFromOtherThreads() throws Exception {
+        ExecutorService other = Executors.newSingleThreadExecutor();
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
+            counter.inspect("SELECT * FROM blog_posts");
+            // 別スレッド（非同期リスナー相当）が計測窓の最中に SQL を発行する
+            other.submit(() -> {
+                counter.inspect("SELECT * FROM user_roles");
+                counter.inspect("SELECT * FROM user_roles");
+            }).get(5, TimeUnit.SECONDS);
+            counter.inspect("SELECT * FROM teams");
+
+            assertThat(capture.totalCount()).isEqualTo(2);
+            assertThat(capture.capturedSqls()).containsExactly("SELECT * FROM blog_posts", "SELECT * FROM teams");
+            // 全体カウンタは従来どおり全スレッド分を数える
+            assertThat(SqlIntentCounter.totalCount()).isEqualTo(4);
+        } finally {
+            other.shutdownNow();
+        }
     }
 
     @Test

@@ -175,7 +175,15 @@
       "visibility_failed": "공개 설정 변경에 실패했습니다",
       "load_failed": "연락 공간 불러오기에 실패했습니다",
       "divisions_load_failed": "디비전 목록 불러오기에 실패했습니다",
-      "permissions_load_failed": "권한 정보를 불러오지 못했습니다. 일부 작업이 제한될 수 있습니다"
+      "permissions_load_failed": "권한 정보를 불러오지 못했습니다. 일부 작업이 제한될 수 있습니다",
+      "participant": {
+        "title": "대회 연락 공간",
+        "open_link": "연락 공간 열기",
+        "view_only_notice": "보기 전용입니다. 팀 대표·부대표와 주최자만 게시할 수 있습니다.",
+        "unavailable": "이 대회의 연락 공간을 이용할 수 없습니다",
+        "unavailable_hint": "참가 중인 팀의 회원만 이용할 수 있습니다. 팀의 참가 상황을 확인해 주세요.",
+        "load_retry": "다시 불러오기"
+      }
     },
     "submission": {
       "title": "서류 제출 접수",
@@ -406,6 +414,40 @@
         "invalidUserId": "사용자 ID는 양의 정수로 입력하세요",
         "searchFailed": "회원 검색에 실패했습니다"
       }
+    },
+    "create": {
+      "createFailed": "대회 생성에 실패했습니다",
+      "createFailedHint": "입력 내용을 확인해 주세요",
+      "fields": {
+        "name": "대회명",
+        "season": "시즌",
+        "format": "방식",
+        "sport": "종목",
+        "description": "설명",
+        "visibility": "공개 범위",
+        "winPoints": "승점",
+        "drawPoints": "무승부 점수",
+        "lossPoints": "패점"
+      },
+      "title": "대회 만들기",
+      "openButton": "대회 만들기",
+      "submit": "만들기",
+      "cancel": "취소",
+      "success": "대회를 만들었습니다",
+      "namePlaceholder": "예: 2026년 봄 리그",
+      "nameRequired": "대회명을 입력해 주세요",
+      "seasonRequired": "시즌 연도를 입력해 주세요"
+    },
+    "list": {
+      "title": "대회・리그",
+      "empty": "대회가 없습니다",
+      "loadError": "대회 목록을 불러오지 못했습니다",
+      "scoreSummary": "승{win} 무{draw} 패{loss}"
+    },
+    "formats": {
+      "LEAGUE": "리그전",
+      "KNOCKOUT": "토너먼트",
+      "GROUP_KNOCKOUT": "그룹+토너먼트"
     }
   },
   "dashboard_widgets": {

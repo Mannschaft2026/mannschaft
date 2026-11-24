@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { ShiftScheduleResponse } from '~/types/shift'
+import type { ReviewOutcome, ShiftScheduleResponse } from '~/types/shift'
 import { isAcceptingChangeRequests } from '~/utils/shiftStatus'
+import { useTeamMembers } from '~/composables/team/useTeamMembers'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
 
@@ -26,9 +27,23 @@ const {
   processingIds,
   loadError: listError,
   fetchRequests,
-  review,
+  reviewWithOutcome,
   withdraw,
 } = useChangeRequest(scheduleId)
+
+const { handleApiError } = useErrorHandler()
+const { getAllMembers } = useTeamMembers()
+/** userId → 表示名（GET /teams/{slug}/members/all）。取得失敗は通知し、一覧は「不明なユーザー」で代替する */
+const memberNames = ref<Map<number, string>>(new Map())
+async function loadMemberNames(): Promise<void> {
+  try {
+    const res = await getAllMembers(teamSlug.value)
+    memberNames.value = new Map(res.data.map(m => [m.userId, m.displayName]))
+  } catch (error) {
+    memberNames.value = new Map()
+    handleApiError(error)
+  }
+}
 
 const schedule = ref<ShiftScheduleResponse | null>(null)
 const loading = ref(true)
@@ -53,6 +68,7 @@ async function load(): Promise<void> {
       getTeam(teamSlug.value),
       fetchRequests(),
       loadPermissions(),
+      loadMemberNames(),
     ])
     if (fetchFailure) {
       initialError.value = fetchFailure
@@ -88,8 +104,14 @@ async function onSubmitted(): Promise<void> {
   await fetchRequests()
 }
 
-async function onReview(id: number, decision: 'ACCEPTED' | 'REJECTED', comment: string): Promise<void> {
-  await review(id, decision, comment)
+/** 通知（成功・競合専用文言・汎用エラー）と一覧再取得は composable 側で済んでいる。ここでは結果だけ返す */
+function onReview(
+  id: number,
+  decision: 'ACCEPTED' | 'REJECTED',
+  comment: string | undefined,
+  version: number,
+): Promise<ReviewOutcome> {
+  return reviewWithOutcome(id, decision, comment, version)
 }
 
 async function onWithdraw(id: number): Promise<void> {
@@ -99,18 +121,8 @@ async function onWithdraw(id: number): Promise<void> {
 
 <template>
   <div class="mx-auto max-w-4xl space-y-6 px-4 py-6">
-    <!-- ページヘッダー -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <NuxtLink
-          :to="`/teams/${teamSlug}/shifts`"
-          class="text-surface-500 hover:text-surface-700"
-        >
-          <i class="pi pi-arrow-left" />
-        </NuxtLink>
-        <PageHeader :title="$t('shift.changeRequest.title')" />
-      </div>
-    </div>
+    <!-- ページヘッダー（戻る導線は PageHeader の back-to に一本化） -->
+    <PageHeader :title="$t('shift.changeRequest.title')" :back-to="`/teams/${teamSlug}/shifts`" />
 
     <SectionCard v-if="loadError">
       <DashboardErrorState
@@ -145,7 +157,8 @@ async function onWithdraw(id: number): Promise<void> {
           :can-review="canReview"
           :is-loading="isLoading"
           :processing-ids="processingIds"
-          @review="onReview"
+          :member-names="memberNames"
+          :submit-review="onReview"
           @withdraw="onWithdraw"
         />
       </SectionCard>
