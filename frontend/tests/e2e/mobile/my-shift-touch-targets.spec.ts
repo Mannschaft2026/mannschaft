@@ -34,6 +34,8 @@ async function openShift(page: Page, data = slots) {
       '/api/v1/chat/channels': [], '/api/v1/mentions': [],
       '/api/v1/inbox/summary': { byState: {}, byPriority: {}, bySourceType: {} },
       '/api/v1/active-incidents': { incidents: [] },
+      // layouts/default の PendingInviteDialog がログイン後に呼ぶ。参加待ち招待なしは data:null
+      '/api/v1/me/pending-invite': null,
     }
     if (request.method() === 'GET' && Object.hasOwn(fixtures, path)) {
       await route.fulfill({ json: { data: fixtures[path] } })
