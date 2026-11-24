@@ -245,6 +245,10 @@
         "event_deleted": "Memo gelöscht",
         "event_todo_reverted": "TODO zurückgesetzt"
       }
+    },
+    "published_post": {
+      "view_link": "Veröffentlichten Beitrag ansehen",
+      "published_note": "Veröffentlicht (nur für dich sichtbar)"
     }
   }
 }

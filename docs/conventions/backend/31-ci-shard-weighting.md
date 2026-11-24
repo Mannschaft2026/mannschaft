@@ -193,6 +193,9 @@ LRU で追い出されて同じ構成が再ロードされる。これを減ら�
   **`addFilters = false` を宣言した派生は従来どおり別キー**（意図した分離。認可フィルタを通さない試験）で、数を増やさない目的でも勝手に外さない・足さない。
   フィルタを通す側（true）は未認証の 401 など「フィルタでしか起きない拒否」が実効になる。実効値は `MockMvcAddFiltersEffectiveValueTest` が全派生で宣言どおりかを検査する。
   A の後の基準値は distinct key 338（A の前は 347）、認可型 override は 1124 件で不変。
+- **1 クラスだけの観測用 override を足さない**: Bean の呼び出しを観測したいだけのために、そのクラスへ `@MockitoSpyBean` 等を足すと構成キーが 1 つ増え、ラチェットが red にする。
+  観測は全 MCC に一様に載る等価な ContextCustomizer（equals / hashCode 定数。spring.factories 登録）へ寄せる。例: `ContextLoadObservingCustomizer`（`[ci-ctx]`）、
+  `support/test/PasswordMatchCounter`（`PasswordEncoder#matches` のスレッド単位計数。CMP-261123-1434 の AC-54 照合回数判定）。
 - **番人自体の CI 時間**: `ContextOverrideCensusGuardTest`（実測 約 280 秒。全テストクラスの MCC を構築する）と `MockMvcAddFiltersEffectiveValueTest`（約 30 秒）は
   全クラスを走査するため重い。shard-weights.properties に実測に近い重みを登録し、LPT に計算させている（登録が無いと中央値の重みで割り付き、特定 shard の Run tests が静かに伸びる）。
   走査結果の JVM 内共有は採らない: forkEvery=180・8 shard で 2 つのクラスが同じ JVM・同じ shard に入る保証が無く、効果が偶然になるため。

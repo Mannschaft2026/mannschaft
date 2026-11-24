@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261116-0722",
+  "scope": "app",
+  "implementation": {
+    "pr": 4806,
+    "sha": "04994f8d202526ea0b6314b3ca8f33889efd1442"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "全体検索が F04.6 の応答形（種別ごとの結果と、真の可視件数の typeCounts）で返り、契約・日時・レート制限・取得失敗の扱いが守られる",
+      "tests": [
+        {
+          "name": "GlobalSearchApiContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchApiContractIT.java"
+        },
+        {
+          "name": "GlobalSearchDateTimeZoneIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchDateTimeZoneIT.java"
+        },
+        {
+          "name": "GlobalSearchRateLimitIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchRateLimitIT.java"
+        },
+        {
+          "name": "GlobalSearchContributorFailureIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchContributorFailureIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "種別ごと（投稿・メッセージ・スレッド・記事・ファイル・活動記録）の認可境界: 権限範囲外のデータが結果にも件数にも出ない",
+      "tests": [
+        {
+          "name": "GlobalSearchPostVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchPostVisibilityIT.java"
+        },
+        {
+          "name": "GlobalSearchMessageVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchMessageVisibilityIT.java"
+        },
+        {
+          "name": "GlobalSearchThreadVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchThreadVisibilityIT.java"
+        },
+        {
+          "name": "GlobalSearchArticleVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchArticleVisibilityIT.java"
+        },
+        {
+          "name": "GlobalSearchFileVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchFileVisibilityIT.java"
+        },
+        {
+          "name": "GlobalSearchActivityVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchActivityVisibilityIT.java"
+        },
+        {
+          "name": "GlobalSearchScopeVisibilityIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchScopeVisibilityIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "チーム・組織の種別が公開範囲の段（閲覧者の所属・役割）に従って結果と件数に出る",
+      "tests": [
+        {
+          "name": "GlobalSearchTeamOrgVisibilityLadderIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchTeamOrgVisibilityLadderIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "並行する全体検索で検索履歴が一意キー違反にならず 500 にならない",
+      "tests": [
+        {
+          "name": "SearchHistoryContractIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/search/SearchHistoryContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "結果カードが種別ごとに崩れず表示され、題名のハイライトが描画される",
+      "tests": [
+        {
+          "name": "SearchResultCard.spec.ts",
+          "evidence": "frontend/tests/unit/components/search/SearchResultCard.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45124542952
+    },
+    {
+      "runId": 45124542735
+    },
+    {
+      "runId": 45124542768
+    },
+    {
+      "runId": 45124543008
+    },
+    {
+      "runId": 45124542753
+    },
+    {
+      "runId": 45124542736
+    },
+    {
+      "runId": 45124542751
+    },
+    {
+      "runId": 45124543010
+    },
+    {
+      "runId": 45124542913
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4806"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4816"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4806"
+    }
+  },
+  "regressions": [
+    {
+      "description": "アリシゼーションで確定した不備（チーム種別が公開範囲の段を見ない）。#4806 で修正し実機で再確認済み",
+      "test": "backend/src/test/java/com/mannschaft/app/search/GlobalSearchTeamOrgVisibilityLadderIT.java",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/4806",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/04994f8d202526ea0b6314b3ca8f33889efd1442"
+    },
+    {
+      "description": "同時検索で検索履歴が一意キー違反となり 500 になる不具合（#4781 で原子的 UPSERT に修正）",
+      "test": "backend/src/test/java/com/mannschaft/app/search/SearchHistoryContractIT.java",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/4781",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/ed64c1f4b5"
+    },
+    {
+      "description": "アリシゼーションで確定した不備（結果カードの表示崩れ・題名ハイライト未描画）。#4806 で修正し実機で再確認済み",
+      "test": "frontend/tests/unit/components/search/SearchResultCard.spec.ts",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/4806",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/04994f8d202526ea0b6314b3ca8f33889efd1442"
+    }
+  ]
+}

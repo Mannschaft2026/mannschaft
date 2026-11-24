@@ -30,6 +30,7 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -406,6 +407,55 @@ class PendingInviteServiceTest {
             assertThat(response.status()).isEqualTo("EXPIRED");
             assertThat(response.joinable()).isFalse();
             assertThat(response.publicPath()).isNull();
+        }
+
+        @Test
+        @DisplayName("A-1: PENDING で既に在籍していれば JOINED に確定して返す（招待の使用・確保には触れない）")
+        void pendingButAlreadyMember_confirmsJoined() {
+            given(store.find(USER_ID)).willReturn(Optional.of(row(PendingInviteStatus.PENDING)),
+                    Optional.of(row(PendingInviteStatus.JOINED)));
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(store.transition(USER_ID, EnumSet.of(PendingInviteStatus.PENDING), PendingInviteStatus.JOINED))
+                    .willReturn(true);
+            givenJoinability(false);
+
+            assertThat(service.findMine(USER_ID).status()).isEqualTo("JOINED");
+            verify(facade, never()).settleOrphanClaim(anyString(), anyLong());
+            verify(facade, never()).joinByInviteTokenHash(anyString(), anyLong());
+        }
+
+        @Test
+        @DisplayName("A-1: PENDING で未在籍なら PENDING のまま（確定しない）")
+        void pendingNotMember_staysPending() {
+            given(store.find(USER_ID)).willReturn(Optional.of(row(PendingInviteStatus.PENDING)));
+            givenJoinability(true);
+
+            assertThat(service.findMine(USER_ID).status()).isEqualTo("PENDING");
+            verify(store, never()).transition(anyLong(), any(), any());
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = PendingInviteStatus.class, names = {"ACCEPTING", "EXPIRED", "REISSUE_REQUESTED", "UNAVAILABLE"})
+        @DisplayName("A-1: PENDING 以外は在籍していても触れない")
+        void nonPending_untouched(PendingInviteStatus status) {
+            given(store.find(USER_ID)).willReturn(Optional.of(row(status)));
+            lenient().when(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).thenReturn(true);
+            givenJoinability(false);
+
+            assertThat(service.findMine(USER_ID).status()).isEqualTo(status.name());
+            verify(store, never()).transition(anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("A-1: 確定が0行（承認が先に ACCEPTING にした）なら現状態を返す")
+        void confirmLosesRace_returnsCurrent() {
+            given(store.find(USER_ID)).willReturn(Optional.of(row(PendingInviteStatus.PENDING)));
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(store.transition(USER_ID, EnumSet.of(PendingInviteStatus.PENDING), PendingInviteStatus.JOINED))
+                    .willReturn(false);
+            givenJoinability(false);
+
+            assertThat(service.findMine(USER_ID).status()).isEqualTo("PENDING");
         }
 
         @Test
