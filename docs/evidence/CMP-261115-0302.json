@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261115-0302",
+  "scope": "app",
+  "implementation": {
+    "pr": 3655,
+    "sha": "d85b64b4bf7d02209c9c843507f88eac9f16e333"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "シフト希望フォームが API 契約どおりの enum（既定 PREFERRED）を送り、400 にならない",
+      "tests": [
+        {
+          "name": "ShiftRequestForm の希望 enum 送信",
+          "evidence": "frontend/app/components/shift/ShiftRequestForm.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "全体シフト一覧の新規作成で締切を LocalDateTime の壁時計で送り、未入力は省略する（二重送信も防ぐ）",
+      "tests": [
+        {
+          "name": "シフト一覧の締切入力と二重送信防止",
+          "evidence": "frontend/app/pages/shift/index.spec.ts"
+        },
+        {
+          "name": "二重送信防止",
+          "evidence": "frontend/app/pages/shift/index.double-submit.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "スケジュール状態遷移を許可5遷移以外は 409 SHIFT_012 で拒否し、手動アーカイブで予算消化を取り消す",
+      "tests": [
+        {
+          "name": "状態遷移の契約",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shift/ShiftScheduleTransitionContractIT.java"
+        },
+        {
+          "name": "手動アーカイブの消化取消",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/ShiftManualArchiveConsumptionCancelIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45020151584
+    },
+    {
+      "runId": 45020151554
+    },
+    {
+      "runId": 45020151644
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/3655"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/3655"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/3655"
+    }
+  },
+  "regressions": [
+    {
+      "description": "アリシゼーションで出た締切入力の PR 起因2件を修正してからマージ",
+      "test": "シフト一覧の締切入力と二重送信防止",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/3655",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/3655"
+    }
+  ]
+}

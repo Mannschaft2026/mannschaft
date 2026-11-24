@@ -51,7 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code --tests} 絞り込み実行をしても ArchUnit 側の凍結ストアは巻き込まない。</p>
  *
  * <h2>凍結リストの位置づけ【必読】— これは CMP-023 で返済する借金の台帳である</h2>
- * <p>既存コードは4種合計で数千箇所に及ぶ（{@code TimeZoneConfig} が JVM 既定ゾーンを
+ * <p>既存コードは4種合計で数千箇所に及ぶ（{@code ServerTimeZoneEnvironmentPostProcessor} が JVM 既定ゾーンを
  * {@code Asia/Tokyo} に固定しているため、引数なし {@code now()} は現在「たまたま」正しく動いている。
  * 本番人は今あるバグを見つけるためではなく、<b>これ以上増やさない</b>ためのものである）。
  * 一斉に赤くすると番人自体が機能しないため、既存分は {@code src/test/resources/datetime_guard/}

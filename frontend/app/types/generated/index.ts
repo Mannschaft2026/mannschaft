@@ -21443,6 +21443,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/pending-invite/reissue-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 失効した招待の再発行を要請
+         * @description 非公開の招待先の招待権限者へ通知する。7 日以内の再要請は通知せず alreadyRequested=true。公開の招待先は 409 AUTH_085
+         */
+        post: operations["requestReissue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 失効した招待の案内を閉じる */
+        post: operations["dismiss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 参加待ちの招待を辞退 */
+        post: operations["decline_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 参加待ちの招待を承認して参加
+         * @description 承認後の状態（JOINED/EXPIRED/UNAVAILABLE）を返す。処理中は 409 AUTH_086、辞退済み等は 409 AUTH_085
+         */
+        post: operations["accept_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/payment-methods/setup-intent": {
         parameters: {
             query?: never;
@@ -29510,7 +29584,7 @@ export interface paths {
          * 代理承認
          * @description F03.10 §4.1: 代理人が代理を承認する
          */
-        patch: operations["accept_3"];
+        patch: operations["accept_4"];
         trace?: never;
     };
     "/api/v1/safety-checks/templates/{templateId}": {
@@ -31528,7 +31602,7 @@ export interface paths {
          * 代理承認
          * @description F03.10 §4.2: 代理人が代理を承認する
          */
-        patch: operations["accept_4"];
+        patch: operations["accept_5"];
         trace?: never;
     };
     "/api/v1/event-categories/{categoryId}": {
@@ -44414,6 +44488,26 @@ export interface paths {
         };
         /** 今日のコマ（A/B 週適用済み） */
         get: operations["today_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/pending-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 自分の参加待ち招待を取得
+         * @description 招待付きで新規登録した参加待ちの招待を返す。無ければ data は null
+         */
+        get: operations["get_40"];
         put?: never;
         post?: never;
         delete?: never;
@@ -66528,6 +66622,8 @@ export interface components {
             /** Format: int64 */
             slotId?: number;
             timing?: components["schemas"]["ChangeRequestTimingDto"];
+            /** Format: int64 */
+            version?: number;
         };
         ChangeRequestStatusDto: {
             reviewComment?: string;
@@ -69411,6 +69507,18 @@ export interface components {
             effective_until?: string;
             name?: string;
             term_label?: string;
+        };
+        ApiResponsePendingInviteReissueResponse: {
+            data?: components["schemas"]["PendingInviteReissueResponse"];
+        };
+        PendingInviteReissueResponse: {
+            alreadyRequested?: boolean;
+        };
+        ApiResponsePendingInviteAcceptResponse: {
+            data?: components["schemas"]["PendingInviteAcceptResponse"];
+        };
+        PendingInviteAcceptResponse: {
+            status?: string;
         };
         ApiResponseSetupIntentResponse: {
             data?: components["schemas"]["SetupIntentResponse"];
@@ -84049,6 +84157,23 @@ export interface components {
             subject_name?: string;
             teacher_name?: string;
             week_pattern?: string;
+        };
+        ApiResponsePendingInviteResponse: {
+            data?: components["schemas"]["PendingInviteResponse"];
+        };
+        PendingInviteResponse: {
+            /** Format: uuid */
+            id?: string;
+            joinable?: boolean;
+            publicPath?: string;
+            /** Format: date-time */
+            reissueRequestedAt?: string;
+            /** Format: date-time */
+            retryAvailableAt?: string;
+            roleName?: string;
+            scopeName?: string;
+            scopeType?: string;
+            status?: string;
         };
         ApiResponseListPaymentRequirementResponse: {
             data?: components["schemas"]["PaymentRequirementResponse"][];
@@ -134283,6 +134408,86 @@ export interface operations {
             };
         };
     };
+    requestReissue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePendingInviteReissueResponse"];
+                };
+            };
+        };
+    };
+    dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    decline_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    accept_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePendingInviteAcceptResponse"];
+                };
+            };
+        };
+    };
     createSetupIntent: {
         parameters: {
             query?: never;
@@ -149341,7 +149546,7 @@ export interface operations {
             };
         };
     };
-    accept_3: {
+    accept_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -153553,7 +153758,7 @@ export interface operations {
             };
         };
     };
-    accept_4: {
+    accept_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -172316,6 +172521,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListPersonalTimetableSlotResponse"];
+                };
+            };
+        };
+    };
+    get_40: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePendingInviteResponse"];
                 };
             };
         };

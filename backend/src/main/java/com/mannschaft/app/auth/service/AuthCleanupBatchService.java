@@ -33,6 +33,7 @@ public class AuthCleanupBatchService {
     private final UserRepository userRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final AuditLogService auditLogService;
+    private final PendingInviteStore pendingInviteStore;
 
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
             reason = "対応する gate_key が無く停止条件を宣言できないため常時実行する。未認証アカウントの論理削除であり、再開後に同じ条件で拾い直せる。機能単位の閉栓が要るようになった時点で gate_key の発行から検討すること")
@@ -76,6 +77,9 @@ public class AuthCleanupBatchService {
         });
 
         expiredUsers.forEach(user -> user.requestDeletion());
+
+        // 招待付き登録の保留は参加させずに破棄する（CMP-261107-1833 設計 §5）
+        pendingInviteStore.discardOpen(userIds);
 
         // 期限切れ残骸トークンも合わせてクリーンアップ
         emailVerificationTokenRepository.deleteByExpiresAtBeforeAndUsedAtIsNull(threshold);

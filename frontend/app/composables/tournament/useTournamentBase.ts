@@ -1,4 +1,5 @@
 // トーナメント本体・区分・テンプレート・プリセット・公開エンドポイントを担当
+import type { components } from '~/types/generated'
 import type {
   TournamentResponse,
   TournamentDivision,
@@ -25,10 +26,10 @@ export function useTournamentBase() {
   async function getTournament(orgId: string, id: number) {
     return api<{ data: TournamentResponse }>(`${b(orgId)}/tournaments/${id}`)
   }
-  async function createTournament(orgId: string, body: Record<string, unknown>) {
+  async function createTournament(orgId: string, body: components['schemas']['CreateTournamentRequest']) {
     return api<{ data: TournamentResponse }>(`${b(orgId)}/tournaments`, { method: 'POST', body })
   }
-  async function updateTournament(orgId: string, id: number, body: Record<string, unknown>) {
+  async function updateTournament(orgId: string, id: number, body: components['schemas']['UpdateTournamentRequest']) {
     return api(`${b(orgId)}/tournaments/${id}`, { method: 'PATCH', body })
   }
   async function deleteTournament(orgId: string, id: number) {

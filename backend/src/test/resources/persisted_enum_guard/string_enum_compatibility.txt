@@ -192,6 +192,16 @@ com.mannschaft.app.auth.ParentalConsentLinkStatus#APPROVED
 com.mannschaft.app.auth.ParentalConsentLinkStatus#PENDING
 com.mannschaft.app.auth.ParentalConsentLinkStatus#REJECTED
 com.mannschaft.app.auth.ParentalConsentLinkStatus#REVOKED
+# PendingInviteStatus初回9定数（CMP-261107-1833）: 新設表 registration_pending_invites のみ、旧mainに読取経路なし。配布済みの証明ではない。
+com.mannschaft.app.auth.PendingInviteStatus#ACCEPTING
+com.mannschaft.app.auth.PendingInviteStatus#DECLINED
+com.mannschaft.app.auth.PendingInviteStatus#DISCARDED
+com.mannschaft.app.auth.PendingInviteStatus#DISMISSED
+com.mannschaft.app.auth.PendingInviteStatus#EXPIRED
+com.mannschaft.app.auth.PendingInviteStatus#JOINED
+com.mannschaft.app.auth.PendingInviteStatus#PENDING
+com.mannschaft.app.auth.PendingInviteStatus#REISSUE_REQUESTED
+com.mannschaft.app.auth.PendingInviteStatus#UNAVAILABLE
 com.mannschaft.app.auth.TwoFactorMethod#EMAIL
 com.mannschaft.app.auth.TwoFactorMethod#TOTP
 com.mannschaft.app.auth.entity.OAuthAccountEntity$OAuthProvider#APPLE
