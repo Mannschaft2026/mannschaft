@@ -53,7 +53,6 @@ import java.util.Set;
 @Slf4j
 public class MembershipInviteService {
 
-    private static final String INVITE_MEMBERS_PERMISSION = "INVITE_MEMBERS";
     private static final Set<String> PRIVILEGED_ROLES = Set.of("ADMIN", "DEPUTY_ADMIN");
     private static final Set<Integer> ALLOWED_EXPIRES_IN_DAYS = Set.of(1, 7, 30, 90);
     private static final int DEFAULT_EXPIRES_IN_DAYS = 7;
@@ -78,6 +77,7 @@ public class MembershipInviteService {
     private final ChatMembershipInviteCardService cardService;
     private final AuditLogService auditLogService;
     private final InviteScopeStateService scopeStates;
+    private final InviteIssuerPolicy inviteIssuerPolicy;
 
     /**
      * DM 相手を指定スコープへ招待する（宛先付きトークン発行 ＋ 招待カード投稿）。
@@ -307,7 +307,7 @@ public class MembershipInviteService {
         // ADMIN/DEPUTY_ADMIN 所属スコープを一括列挙（N+1 回避）した上で INVITE_MEMBERS 権限で絞り込む。
         for (Long scopeId : accessControlService.findAdminOrAboveScopeIds(userId, scopeType)) {
             String roleName = accessControlService.getRoleName(userId, scopeId, scopeType);
-            if (!canIssueWithRole(userId, scopeId, scopeType, roleName)) {
+            if (!inviteIssuerPolicy.canIssueWithRole(userId, scopeId, scopeType, roleName)) {
                 continue;
             }
             if (scopeStates.read(scopeType, scopeId).filter(state -> state.available()).isEmpty()) {
@@ -319,20 +319,12 @@ public class MembershipInviteService {
         return result;
     }
 
-    /** 実行ユーザーが当該スコープで招待発行できるか（ADMIN or INVITE_MEMBERS 権限保有 DEPUTY_ADMIN）。 */
+    /**
+     * 実行ユーザーが当該スコープで招待発行できるか（ADMIN or INVITE_MEMBERS 権限保有 DEPUTY_ADMIN）。
+     * 判定は {@link InviteIssuerPolicy}（再招待要請の通知先解決と共有。CMP-261107-1833 §9-2）。
+     */
     private boolean canIssue(Long userId, Long scopeId, String scopeType) {
-        String roleName = accessControlService.getRoleName(userId, scopeId, scopeType);
-        return canIssueWithRole(userId, scopeId, scopeType, roleName);
-    }
-
-    private boolean canIssueWithRole(Long userId, Long scopeId, String scopeType, String roleName) {
-        if ("ADMIN".equals(roleName)) {
-            return true;
-        }
-        if ("DEPUTY_ADMIN".equals(roleName)) {
-            return accessControlService.hasPermission(userId, scopeId, scopeType, INVITE_MEMBERS_PERMISSION);
-        }
-        return false;
+        return inviteIssuerPolicy.canIssue(userId, scopeId, scopeType);
     }
 
     private int resolveExpiresInDays(Integer expiresInDays) {

@@ -2,6 +2,7 @@ package com.mannschaft.app.notification;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.common.visibility.perf.SqlIntentCounter;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.notification.entity.NotificationPreferenceEntity;
@@ -16,8 +17,6 @@ import com.mannschaft.app.team.repository.TeamOrgMembershipRepository;
 import com.mannschaft.app.team.repository.TeamRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -184,14 +183,20 @@ class NotificationPreferenceDefaultsContractIT extends AbstractMySqlIntegrationT
         }
         em.flush();
         em.clear();
-        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
-        stats.setStatisticsEnabled(true);
-        stats.clear();
-        JsonNode small = list(MEMBER);
-        long smallCount = stats.getPrepareStatementCount();
-        stats.clear();
-        JsonNode large = list(ADMIN);
-        long largeCount = stats.getPrepareStatementCount();
+        // 計測はテストスレッドに閉じる。SessionFactory 共通の Statistics は他スレッド（直前の IT が残した
+        // AFTER_COMMIT の非同期リスナー等）の SQL を拾い、本数がぶれて不安定になるため使わない。
+        JsonNode small;
+        long smallCount;
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
+            small = list(MEMBER);
+            smallCount = capture.totalCount();
+        }
+        JsonNode large;
+        long largeCount;
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
+            large = list(ADMIN);
+            largeCount = capture.totalCount();
+        }
         assertThat(small.size()).isEqualTo(1);
         assertThat(large.size()).isEqualTo(20);
         for (JsonNode entry : large) {

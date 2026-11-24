@@ -1,0 +1,2 @@
+# JVM 既定 TZ を DataSource の最初の接続より前に SERVER_ZONE へ確定させる（CMP-261123-1335）
+org.springframework.boot.env.EnvironmentPostProcessor=com.mannschaft.app.config.ServerTimeZoneEnvironmentPostProcessor

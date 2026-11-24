@@ -53,6 +53,7 @@ function remindUnsubmitted() {
     size="small"
     severity="secondary"
     outlined
+    class="whitespace-nowrap"
     :loading="reminding"
     :disabled="reminding"
     :data-testid="`shift-reminder-${schedule.id}`"

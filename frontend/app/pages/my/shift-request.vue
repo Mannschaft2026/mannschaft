@@ -26,7 +26,7 @@ import { runWithRequestTimeout } from '~/utils/requestTimeout'
 definePageMeta({ middleware: 'auth' })
 
 const { t } = useI18n()
-const { userTimezone } = useDatetime()
+const { userTimezone, formatDate: formatIsoDate } = useDatetime()
 const { error: showError, success: showSuccess } = useNotification()
 const { listSchedules } = useShiftApi()
 const { listSlots } = useShiftSlotApi()
@@ -471,10 +471,10 @@ onMounted(async () => {
                   {{ schedule.content.title }}
                 </h3>
                 <p class="mt-1 text-xs text-surface-500">
-                  {{ schedule.period.startDate }} 〜 {{ schedule.period.endDate }}
+                  {{ formatIsoDate(schedule.period.startDate) }} 〜 {{ formatIsoDate(schedule.period.endDate) }}
                 </p>
                 <p v-if="schedule.period.requestDeadline" class="mt-0.5 text-xs text-surface-400">
-                  {{ t('shift.field.deadline') }}: {{ schedule.period.requestDeadline }}
+                  {{ t('shift.field.deadline') }}: {{ formatIsoDate(schedule.period.requestDeadline) }}
                 </p>
               </div>
               <span
@@ -514,7 +514,7 @@ onMounted(async () => {
       >
         <h3 class="text-sm font-semibold text-surface-800">{{ selectedSchedule.content.title }}</h3>
         <p class="mt-0.5 text-xs text-surface-500">
-          {{ selectedSchedule.period.startDate }} 〜 {{ selectedSchedule.period.endDate }}
+          {{ formatIsoDate(selectedSchedule.period.startDate) }} 〜 {{ formatIsoDate(selectedSchedule.period.endDate) }}
         </p>
       </SectionCard>
 
