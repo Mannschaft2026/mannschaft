@@ -50,7 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code 02_api_design.md}（変更依頼 POST / review / DELETE）。</p>
  * <ul>
  *   <li>作成（OPEN）: 管理者全員（ADMIN ＋ MANAGE_SHIFTS を持つ DEPUTY_ADMIN）へ。依頼者本人（管理者が自分で出した）は除く。</li>
- *   <li>受諾・却下: 依頼者へ。却下は審査コメントを本文に含める。</li>
+ *   <li>承認・却下: 依頼者へ。却下は審査コメントを本文に含める。</li>
  *   <li>取り下げ: 管理者全員へ。依頼者本人（管理者）は除く。</li>
  *   <li>他チームの管理者・一般メンバー・MANAGE_SHIFTS 無しの副管理者には作られない。</li>
  * </ul>
@@ -159,7 +159,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    @DisplayName("受諾: 依頼者だけに通知行が作られる（審査者・他の管理者・他者には作られない）")
+    @DisplayName("承認: 依頼者だけに通知行が作られる（審査者・他の管理者・他者には作られない）")
     void acceptNotifiesRequesterOnly() throws Exception {
         Long requestId = insertRequest(memberId);
 
@@ -170,11 +170,11 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
         assertActionUrl(TYPE_REVIEWED, requestId, memberId);
         // コメントあり: bodyWithNote（コメントを含む）
         assertThat(bodyOf(TYPE_REVIEWED, requestId, memberId))
-                .contains("受諾されました").contains("調整しました");
+                .contains("承認されました").contains("調整しました");
     }
 
     @Test
-    @DisplayName("受諾（コメントなし）: 本文はコメントなしの文言（コメント区切りを含まない）")
+    @DisplayName("承認（コメントなし）: 本文はコメントなしの文言（コメント区切りを含まない）")
     void acceptWithoutCommentUsesPlainBody() throws Exception {
         Long requestId = insertRequest(memberId);
 
@@ -182,7 +182,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
         review(requestId, "ACCEPTED", null);
 
         assertRecipients(TYPE_REVIEWED, requestId, Set.of(memberId));
-        assertThat(bodyOf(TYPE_REVIEWED, requestId, memberId)).isEqualTo("シフトの変更依頼が受諾されました。");
+        assertThat(bodyOf(TYPE_REVIEWED, requestId, memberId)).isEqualTo("シフトの変更依頼が承認されました。");
     }
 
     @Test

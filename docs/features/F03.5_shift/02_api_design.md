@@ -2133,7 +2133,7 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 **レスポンス（200 OK）**: 更新後の change_request を返却
 
 - **重要（ACCEPTED の運用）**: 本 API は `status` フラグの更新のみで、**実スロットの変更は別途管理者が D&D UI や `PATCH /slots/{id}/assignments` で実施する**。本ボタンは「その作業が終わった」宣言として使う設計。理由: 依頼内容が多岐にわたる（単純な交代 / 別日移動 / スロット削除等）ため、画面上で自由に編集してから「この依頼を受諾した」と記録する方が柔軟
-- 依頼者にプッシュ + アプリ内通知（「変更依頼が受諾されました」「変更依頼が却下されました: {admin_note}」）
+- 依頼者にプッシュ + アプリ内通知（「変更依頼が承認されました」「変更依頼が却下されました: {admin_note}」）
 - ApplicationEvent: `ShiftChangeRequestReviewedEvent`
 - 監査ログ: `SHIFT_CHANGE_REQUEST_REVIEWED`（`action`, `reviewed_by`, `admin_note` を記録）
 
