@@ -130,7 +130,7 @@ class ShiftSlotTimeValidationServiceTest {
                     null, LocalTime.of(18, 0), null, null, null, null, null);
 
             // When & Then
-            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR))
+            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { }))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ShiftErrorCode.INVALID_TIME_RANGE);
@@ -150,7 +150,7 @@ class ShiftSlotTimeValidationServiceTest {
                     null, null, null, null, null, null, "メモ更新のみ");
 
             // When & Then
-            assertThatCode(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR))
+            assertThatCode(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { }))
                     .doesNotThrowAnyException();
             verify(slotRepository).save(any());
             assertThat(existing.getNote()).isEqualTo("メモ更新のみ");

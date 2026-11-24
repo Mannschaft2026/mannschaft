@@ -222106,7 +222106,9 @@
             "items": {
               "type": "integer",
               "format": "int64"
-            }
+            },
+            "maxItems": 200,
+            "minItems": 0
           },
           "endTime": {
             "type": "string",
@@ -222150,14 +222152,18 @@
             "items": {
               "type": "integer",
               "format": "int64"
-            }
+            },
+            "maxItems": 200,
+            "minItems": 0
           },
           "removeUserIds": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int64"
-            }
+            },
+            "maxItems": 200,
+            "minItems": 0
           },
           "slotVersion": {
             "type": "integer",
