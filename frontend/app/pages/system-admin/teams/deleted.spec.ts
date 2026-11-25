@@ -295,7 +295,9 @@ describe('削除済チーム復元の実ページと外部HTTP境界', () => {
       await openConfirm(wrapper)
       await accept()
       expect(external.success).not.toHaveBeenCalled()
-      expect(external.error).toHaveBeenCalled()
+      // CMP-261125-1951: 5xx のトーストは useApi が一元的に出す。handleApiError は 5xx では通知しない（二重表示防止）。
+      if (failure === 'network') expect(external.error).toHaveBeenCalled()
+      else expect(external.error).not.toHaveBeenCalled()
       expect(
         wrapper.get('[data-testid="restore-restore-alpha"]').attributes('disabled'),
       ).toBeUndefined()

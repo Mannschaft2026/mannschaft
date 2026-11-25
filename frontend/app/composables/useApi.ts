@@ -1,6 +1,7 @@
 import { ofetch } from 'ofetch'
 import { getAuthSessionContext, type AuthSessionSnapshot } from '~/composables/authSessionContext'
 import { resolveApiBaseUrl } from '~/composables/useApiBaseUrl'
+import { resolveApiErrorMessage } from '~/utils/resolveApiErrorMessage'
 import type { PaywallDetails } from '~/stores/usePaywallStore'
 
 /**
@@ -276,7 +277,7 @@ export function isInfrastructureRateLimit(data: unknown): boolean {
 // 短時間に複数の 5xx が発生した場合のトースト集約
 let _errorBatchTimer: ReturnType<typeof setTimeout> | null = null
 let _errorBatchCount = 0
-let _errorBatchFirst: { status: number; statusText: string; url: string } | null = null
+let _errorBatchFirst: { status: number; statusText: string; url: string; code?: string; message?: string } | null = null
 
 export function useApi() {
   const config = useRuntimeConfig()
@@ -479,13 +480,19 @@ export function useApi() {
           requestId,
         })
 
-        // トーストは 500ms 以内の複数エラーをまとめて1件に集約
+        // トーストは 500ms 以内の複数エラーをまとめて1件に集約。
+        // 5xx のトーストはここが唯一の表示（handleApiError は 5xx では出さない・CMP-261125-1951）。
+        const errorBody = response._data as { error?: { code?: unknown; message?: unknown } } | undefined
+        const bodyCode = errorBody?.error?.code
+        const bodyMessage = errorBody?.error?.message
         _errorBatchCount++
         if (_errorBatchFirst === null) {
           _errorBatchFirst = {
             status: response.status,
             statusText: response.statusText,
             url: apiUrl,
+            code: typeof bodyCode === 'string' && bodyCode !== '' ? bodyCode : undefined,
+            message: typeof bodyMessage === 'string' && bodyMessage !== '' ? bodyMessage : undefined,
           }
         }
         if (_errorBatchTimer === null) {
@@ -494,15 +501,20 @@ export function useApi() {
               | { add: (opts: Record<string, unknown>) => void }
               | undefined
             if (toast) {
-              toast.add({
-                severity: 'error',
-                summary: t('error.server'),
-                detail:
-                  _errorBatchCount > 1
-                    ? `${_errorBatchCount}件のサーバーエラーが発生しました`
-                    : t('error.server_retry'),
-                life: 5000,
-              })
+              const first = _errorBatchFirst
+              const detail
+                = _errorBatchCount > 1
+                  ? tn('error.server_multiple', { count: _errorBatchCount })
+                  : first?.code
+                    ? resolveApiErrorMessage(
+                        { t, te: key => nuxtApp.$i18n.te(key) },
+                        first.code,
+                        first.message,
+                        undefined,
+                        'error.server_retry',
+                      )
+                    : t('error.server_retry')
+              toast.add({ severity: 'error', summary: t('error.server'), detail, life: 5000 })
             }
             _errorBatchCount = 0
             _errorBatchFirst = null

@@ -302,7 +302,7 @@ describe('pages/organizations/[slug]/member-profiles.vue — メンバー削除�
   })
 
   it('MP-004: API が失敗したときエラーが通知され、ダイアログ・削除対象が残り、キャンセルしてから再試行すると成功する', async () => {
-    deleteMember.mockRejectedValueOnce({ statusCode: 500, data: {} })
+    deleteMember.mockRejectedValueOnce({ statusCode: 409, data: {} })
     deleteMember.mockResolvedValueOnce(undefined)
 
     const wrapper = await mountOnMembersView()

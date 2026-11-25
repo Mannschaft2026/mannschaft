@@ -427,6 +427,7 @@
   "error": {
     "server": "Se produjo un error del servidor",
     "server_retry": "Por favor, inténtelo de nuevo más tarde.",
+    "server_multiple": "Se produjeron {count} errores del servidor",
     "rate_limited": "Demasiadas solicitudes",
     "rate_limited_detail": "Ha realizado demasiadas solicitudes en poco tiempo. Espere un momento e inténtelo de nuevo.",
     "rate_limited_retry_after": "Ha realizado demasiadas solicitudes en poco tiempo. Inténtelo de nuevo en unos {seconds} segundos.",
