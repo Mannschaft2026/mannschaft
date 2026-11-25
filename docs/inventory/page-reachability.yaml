@@ -39,7 +39,7 @@
 # 番人が最初から無効化される（intentional-direct-only 等で無審査に埋めるのも同じ理由で不可）。
 # `/my/`・`/me/`・`/settings/` も同様に今回調査していない他のページを多数含む。
 #
-# そのため本番人は `tracked_paths`（下記の26パスちょうど）に対する **exact-match** で
+# そのため本番人は `tracked_paths`（下記の28パスちょうど）に対する **exact-match** で
 # 網羅性を取る: 「tracked_paths に載っているが pages: に無い」「pages: にあるが実在しない」
 # の両方向で陳腐化を検出する。新規ページの黙った孤立を機械的に防ぐという本来の狙い（対象を
 # 全FEに広げること）はまだ果たせていない — **対象を広げるときは、その prefix 配下を実測してから
@@ -71,6 +71,8 @@ tracked_paths:
   - /admin/member-permissions
   - /teams/[slug]/settings/confirmable-notifications
   - /organizations/[slug]/settings/confirmable-notifications
+  - /scopes/[scopeType]/[scopeId]/no-shows
+  - /scopes/[scopeType]/[scopeId]/penalty-settings
 
 pages:
   # --- Phase 1（完了・PR #3232）: 金銭に関わり本人が到達できないと実害が出る3枚 ---
@@ -194,3 +196,13 @@ pages:
   - path: /organizations/[slug]/settings/confirmable-notifications
     classification: reachable
     reason: "CMP-260909-1141。上記のOrganization版。OrganizationSidebar.vue の日常導線で回覧板の直後へ path: 'settings/confirmable-notifications' のまま配置（旧URL互換）"
+
+  # --- CMP-261005-2103: 無断欠席・ペナルティ管理（アリシゼーション 2026-10-05 で FE リンク0件を発見） ---
+  # /scopes/ 配下の scopeId には ScopeSlugIdConverter がかかり slug は TEAM として解決されるため、
+  # 導線は数値 ID を渡す。チーム・組織の管理メニュー（設定ハブ AdminSettingsHub）から ADMIN/DEPUTY_ADMIN にだけ出す。
+  - path: /scopes/[scopeType]/[scopeId]/no-shows
+    classification: reachable
+    reason: "CMP-261005-2103。チーム・組織の管理メニュー（components/admin/AdminSettingsHub.vue、/teams|organizations/[slug]/admin/settings）から ADMIN/DEPUTY_ADMIN にだけ数値 ID 付きで導線を出す。非管理者の直打ちは BE の 403 を受けて権限なし表示"
+  - path: /scopes/[scopeType]/[scopeId]/penalty-settings
+    classification: reachable
+    reason: "CMP-261005-2103。上記と同じ管理メニューから ADMIN/DEPUTY_ADMIN にだけ導線を出す（BE RecruitmentPenaltySettingService の checkAdminOrAbove と同じ判定）。非管理者の直打ちは設定フォームを出さず権限なし表示"
