@@ -78,7 +78,9 @@ erDiagram
 | 参照元ドメイン | 参照元テーブル | 列 | 種別 | 参照先テーブル |
 | --- | --- | --- | --- | --- |
 | [effortrecord](effortrecord.md) | `effort_records` | `grant_membership_id` | ID参照 | `memberships` |
+| [effortrecord](effortrecord.md) | `effort_team_shares` | `grant_membership_id` | ID参照 | `memberships` |
 | [role](role.md) | `archived_membership_grants` | `membership_id` | ID参照 | `memberships` |
+| [timeline](timeline.md) | `timeline_effort_sources` | `grant_membership_id` | ID参照 | `memberships` |
 
 ## 多態参照（線を引かない）
 
@@ -192,6 +194,7 @@ erDiagram
 | `left_trigger` | `varchar(24)` | YES | NULL |  |
 | `left_by` | `bigint unsigned` | YES | NULL |  |
 | `archive_generation` | `int` | NO | `0` |  |
+| `effort_share_disposition` | `varchar(32)` | YES | NULL |  |
 
 ### `positions`
 

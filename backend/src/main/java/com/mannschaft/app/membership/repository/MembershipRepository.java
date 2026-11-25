@@ -1,5 +1,6 @@
 package com.mannschaft.app.membership.repository;
 
+import com.mannschaft.app.membership.domain.EffortShareDisposition;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.entity.MembershipEntity;
@@ -57,6 +58,28 @@ public interface MembershipRepository extends JpaRepository<MembershipEntity, Lo
             @Param("userId") Long userId,
             @Param("scopeTypes") Collection<ScopeType> scopeTypes,
             Pageable pageable);
+
+    /**
+     * F06.4.1: チーム共有資格の判定に使う加入期間の scalar 投影（データ設計 §8）。
+     * Entity を管理状態にせず、照会時点の committed 値だけを返す。
+     */
+    interface EffortShareMembershipRow {
+        Long getId();
+        Long getUserId();
+        ScopeType getScopeType();
+        Long getScopeId();
+        Boolean getActive();
+        EffortShareDisposition getDisposition();
+    }
+
+    /**
+     * F06.4.1: 加入期間 ID の集合を 1 回で照会する（件数 N に比例しない。データ設計 §8）。
+     * 在籍判定は {@code AccessControlService#isMember} と同じ {@code left_at IS NULL}（直接所属）に揃える。
+     */
+    @Query("SELECT m.id AS id, m.userId AS userId, m.scopeType AS scopeType, m.scopeId AS scopeId, "
+            + "CASE WHEN m.leftAt IS NULL THEN true ELSE false END AS active, "
+            + "m.effortShareDisposition AS disposition FROM MembershipEntity m WHERE m.id IN :ids")
+    List<EffortShareMembershipRow> findEffortShareRowsByIds(@Param("ids") Collection<Long> ids);
 
     /** 退会処理が user 行を先にロックするために、Entity を管理状態にせず userId だけを取得する。 */
     @Query("SELECT m.userId FROM MembershipEntity m WHERE m.id = :membershipId")

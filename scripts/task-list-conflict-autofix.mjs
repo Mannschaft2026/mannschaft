@@ -101,6 +101,13 @@ export function countRecentFixes(pr, now, { botEmail } = {}) {
   }).length;
 }
 
+/** push 拒否が「GitHub App に workflows 権限が無い」ものか（workflow を変える merge を push したとき）。 */
+export function isWorkflowPermissionRejection(reason) {
+  const text = String(reason ?? '');
+  return /without\s+`?workflows`?\s+permission/i.test(text)
+    || (/refusing to allow/i.test(text) && /workflow/i.test(text) && /permission/i.test(text));
+}
+
 // ---------------------------------------------------------------------------
 // 1件の処理
 // ---------------------------------------------------------------------------
@@ -160,14 +167,6 @@ export async function processPullRequest(pr, deps) {
     return { outcome: 'skip-conflict-outside-ledger', reason };
   }
 
-  const changed = gitOps.changedPaths(headOid, merged.tree);
-  const workflowFiles = changed.filter((p) => p.startsWith('.github/workflows/'));
-  if (workflowFiles.length) {
-    const reason = 'main の取り込みで workflow が変わる（App に workflows 権限が無く push できない）: ' + workflowFiles.join(', ');
-    log(tag + ': スキップ（' + reason + '）');
-    return { outcome: 'skip-workflow-change', reason };
-  }
-
   const ledgerText = gitOps.readFile(merged.tree, LEDGER_PATH);
   const check = checkStructure(ledgerText);
   if (!check.ok) {
@@ -188,6 +187,10 @@ export async function processPullRequest(pr, deps) {
   const mergeCommit = gitOps.commitMerge(merged.tree, headOid, mainOid, message);
   const pushed = gitOps.push(mergeCommit, pr.headRefName);
   if (!pushed.ok) {
+    if (isWorkflowPermissionRejection(pushed.reason)) {
+      log(tag + ': スキップ（App に workflows 権限が無く、workflow を変える merge を push できない: ' + pushed.reason + '）');
+      return { outcome: 'skip-workflow-permission', reason: pushed.reason };
+    }
     log(tag + ': push 拒否（' + pushed.reason + '）。次回に回す');
     return { outcome: 'skip-push-rejected', reason: pushed.reason };
   }

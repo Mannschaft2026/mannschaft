@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  isWorkflowPermissionRejection,
   selectCandidates,
   processPullRequest,
   countRecentFixes,
@@ -253,11 +254,25 @@ test('処理: head が取得中に動いた → スキップ', async () => {
   assert.ok(!env.calls.includes('mergeTree'));
 });
 
-test('処理: workflow ファイルが変わる merge は push しない（App に workflows 権限が無い）', async () => {
+test('処理: workflow ファイルが変わる merge でも push を試みる（App に workflows 権限がある）', async () => {
   const env = mockEnv({ changed: [LEDGER_PATH, '.github/workflows/backend-ci.yml'] });
   const result = await processPullRequest(pr(), env.deps);
-  assert.equal(result.outcome, 'skip-workflow-change');
-  assert.ok(!env.calls.includes('push'));
+  assert.equal(result.outcome, 'fixed');
+  assert.ok(env.calls.includes('push'));
+});
+
+test('処理: workflow 権限不足で push が拒否されたら skip-workflow-permission', async () => {
+  const reason = "! [remote rejected] refusing to allow a GitHub App to create or update workflow `.github/workflows/x.yml` without `workflows` permission";
+  const env = mockEnv({ changed: [LEDGER_PATH, '.github/workflows/x.yml'], push: { ok: false, reason } });
+  const result = await processPullRequest(pr(), env.deps);
+  assert.equal(result.outcome, 'skip-workflow-permission');
+  assert.ok(!env.calls.includes('enableAutoMerge'));
+  assert.equal(env.comments.length, 0);
+  assert.equal(isWorkflowPermissionRejection('non-fast-forward'), false);
+});
+
+test('workflow: App token に workflows 権限を要求している', () => {
+  assert.match(readRepo('.github/workflows/task-list-conflict-autofix.yml'), /permission-workflows: write/);
 });
 
 const fixCommit = (hoursAgo, { message = 'Merge origin/main\n\n' + FIX_COMMIT_TRAILER, email = 'someone@example.com' } = {}) => ({
