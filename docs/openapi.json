@@ -221406,6 +221406,9 @@
               "UNDECIDED"
             ]
           },
+          "studentDisplayName": {
+            "type": "string"
+          },
           "studentUserId": {
             "type": "integer",
             "format": "int64"
