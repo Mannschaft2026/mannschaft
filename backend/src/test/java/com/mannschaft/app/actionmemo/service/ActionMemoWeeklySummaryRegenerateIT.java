@@ -118,4 +118,50 @@ class ActionMemoWeeklySummaryRegenerateIT extends AbstractMySqlIntegrationTest {
         assertThat(rows.get(0).get("deleted_at")).isNotNull();
         assertThat(rows.get(1).get("deleted_at")).isNull();
     }
+
+    @Test
+    @DisplayName("再生成の新規 INSERT が失敗しても旧記事は論理削除されず生存し続ける（論理削除と新規作成は不可分）")
+    void regenerateForAll_新規作成が失敗すると旧記事は生存したまま() {
+        LocalDate from = LocalDate.of(2041, 11, 18);
+        LocalDate to = LocalDate.of(2041, 11, 24);
+        String slug = "weekly-20411118-20411124";
+        Long userId = transactionTemplate.execute(status -> {
+            UserEntity user = UserEntity.builder()
+                    .email("weekly-atomic-" + UUID.randomUUID() + "@example.com")
+                    .lastName("週次")
+                    .firstName("原子性")
+                    .displayName("週次原子性")
+                    .status(UserEntity.UserStatus.ACTIVE)
+                    .locale("ja")
+                    .timezone("Asia/Tokyo")
+                    .isSearchable(true)
+                    .build();
+            em.persist(user);
+            em.persist(ActionMemoEntity.builder()
+                    .userId(user.getId()).memoDate(from.plusDays(1)).content("朝散歩").build());
+            return user.getId();
+        });
+
+        // 1 回目: 正常に生成（旧記事になる）
+        assertThat(weeklySummaryService.regenerateForAll(from, to).failedCount()).isZero();
+
+        // 2 回目: 対象ユーザー・slug の新規 INSERT だけを実 DB のトリガで失敗させる（論理削除の UPDATE は通る）
+        String trigger = "trg_weekly_atomic_" + userId;
+        jdbcTemplate.execute("CREATE TRIGGER " + trigger + " BEFORE INSERT ON blog_posts FOR EACH ROW "
+                + "BEGIN IF NEW.user_id = " + userId + " AND NEW.slug = '" + slug + "' THEN "
+                + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced insert failure'; END IF; END");
+        ActionMemoWeeklySummaryService.RegenerationResult result;
+        try {
+            result = weeklySummaryService.regenerateForAll(from, to);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS " + trigger);
+        }
+
+        assertThat(result.failedCount()).as("新規作成の失敗は失敗件数に計上される").isEqualTo(1);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT id, deleted_at FROM blog_posts WHERE user_id = ? AND slug = ? ORDER BY id",
+                userId, slug);
+        assertThat(rows).as("新規行は作られていない").hasSize(1);
+        assertThat(rows.get(0).get("deleted_at")).as("旧記事は論理削除されず生存する").isNull();
+    }
 }
