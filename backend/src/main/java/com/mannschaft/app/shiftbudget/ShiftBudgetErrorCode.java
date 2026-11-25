@@ -189,7 +189,19 @@ public enum ShiftBudgetErrorCode implements ErrorCode {
      * 対応種別のEXHAUSTEDには運用判断による再試行を許容する。
      */
     FAILED_EVENT_NOT_RETRIABLE("SHIFT_BUDGET_031",
-            "対象の失敗イベントは再実行できません", Severity.WARN);
+            "対象の失敗イベントは再実行できません", Severity.WARN),
+
+    // ====================================================================
+    // 予算警告の確認（032〜）
+    // ====================================================================
+
+    /**
+     * 既に確認済みの予算警告を、上書き指定なしで再確認しようとした (HTTP 409)。
+     * <p>応答の {@code error.details} に既存の確認者・確認時刻を載せる。上書きするには
+     * リクエストの {@code overwrite=true} を指定して再送する（CMP-260910-1607 ③）。</p>
+     */
+    ALERT_ALREADY_ACKNOWLEDGED("SHIFT_BUDGET_032",
+            "この予算警告は既に確認済みです", Severity.WARN);
 
     private final String code;
     private final String message;

@@ -74,6 +74,10 @@
       "acknowledgeConfirm": "Acknowledge this alert (ID: {id}). Are you sure?",
       "acknowledgeSuccess": "Alert acknowledged",
       "acknowledgeError": "Failed to acknowledge alert",
+      "alreadyAcknowledgedHeader": "Alert already acknowledged",
+      "alreadyAcknowledgedConfirm": "{name} already acknowledged this alert at {time}. Do you want to overwrite it?",
+      "unknownAcknowledger": "Another administrator",
+      "overwrite": "Overwrite",
       "loadError": "Failed to load alert list",
       "empty": "No alerts"
     },

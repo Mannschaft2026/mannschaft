@@ -74,6 +74,10 @@
       "acknowledgeConfirm": "Diese Warnung (ID: {id}) bestätigen. Sind Sie sicher?",
       "acknowledgeSuccess": "Warnung bestätigt",
       "acknowledgeError": "Warnung konnte nicht bestätigt werden",
+      "alreadyAcknowledgedHeader": "Warnung bereits bestätigt",
+      "alreadyAcknowledgedConfirm": "{name} hat diese Warnung bereits am {time} bestätigt. Möchten Sie sie überschreiben?",
+      "unknownAcknowledger": "Ein anderer Administrator",
+      "overwrite": "Überschreiben",
       "loadError": "Warnungsliste konnte nicht geladen werden",
       "empty": "Keine Warnungen"
     },

@@ -66662,6 +66662,31 @@ export interface components {
         };
         AlertAcknowledgeRequest: {
             comment?: string;
+            overwrite?: boolean;
+        };
+        BudgetAlertAlreadyAcknowledgedErrorDetail: {
+            code?: string;
+            details?: components["schemas"]["BudgetAlertAlreadyAcknowledgedErrorDetails"];
+            fieldErrors?: components["schemas"]["FieldError"][];
+            message?: string;
+        };
+        BudgetAlertAlreadyAcknowledgedErrorDetails: {
+            /**
+             * Format: date-time
+             * @description 既に確認した時刻
+             */
+            acknowledgedAt?: string;
+            /**
+             * Format: int64
+             * @description 既に確認したユーザー ID
+             */
+            acknowledgedBy?: number;
+            /** @description 既に確認したユーザーの氏名（引けない場合は null） */
+            acknowledgedByName?: string | null;
+        };
+        /** @description 予算警告の確認済み 409 応答 */
+        BudgetAlertAlreadyAcknowledgedErrorResponse: {
+            error?: components["schemas"]["BudgetAlertAlreadyAcknowledgedErrorDetail"];
         };
         AlertResponse: {
             /** Format: date-time */
@@ -122802,13 +122827,22 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description 確認成功（未確認の警告、または overwrite=true での上書き） */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseAlertResponse"];
+                };
+            };
+            /** @description 確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_032）。既存の確認者・時刻を details で返す */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BudgetAlertAlreadyAcknowledgedErrorResponse"];
                 };
             };
         };

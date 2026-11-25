@@ -74,6 +74,10 @@
       "acknowledgeConfirm": "承认此警告（ID: {id}）。确定吗？",
       "acknowledgeSuccess": "警告已承认",
       "acknowledgeError": "承认警告失败",
+      "alreadyAcknowledgedHeader": "警告已确认",
+      "alreadyAcknowledgedConfirm": "{name}已于{time}确认过此警告。要覆盖吗？",
+      "unknownAcknowledger": "其他管理员",
+      "overwrite": "覆盖",
       "loadError": "获取警告列表失败",
       "empty": "没有警告"
     },

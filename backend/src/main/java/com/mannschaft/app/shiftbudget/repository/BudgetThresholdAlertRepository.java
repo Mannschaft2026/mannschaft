@@ -2,7 +2,9 @@ package com.mannschaft.app.shiftbudget.repository;
 
 import com.mannschaft.app.shiftbudget.entity.BudgetThresholdAlertEntity;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -24,6 +26,13 @@ import java.util.Optional;
 @Repository
 public interface BudgetThresholdAlertRepository
         extends JpaRepository<BudgetThresholdAlertEntity, Long> {
+
+    /**
+     * 警告を排他ロック付きで読む（並行 acknowledge を直列化し、先着の確認を読み直して判定する。CMP-260910-1607 ③）。
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM BudgetThresholdAlertEntity a WHERE a.id = :id")
+    Optional<BudgetThresholdAlertEntity> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * 同一 (allocation, threshold) ペアでの既存警告を検索する。

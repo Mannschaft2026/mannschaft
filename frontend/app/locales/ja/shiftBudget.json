@@ -90,6 +90,10 @@
       "acknowledgeConfirm": "この警告 (ID: {id}) を承認します。よろしいですか？",
       "acknowledgeSuccess": "警告を承認しました",
       "acknowledgeError": "警告の承認に失敗しました",
+      "alreadyAcknowledgedHeader": "確認済みの警告",
+      "alreadyAcknowledgedConfirm": "{name}さんが{time}に確認済みです。上書きしますか？",
+      "unknownAcknowledger": "別の管理者",
+      "overwrite": "上書きする",
       "loadError": "警告一覧の取得に失敗しました",
       "empty": "警告はありません"
     },

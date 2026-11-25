@@ -61581,11 +61581,21 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "確認成功（未確認の警告、または overwrite=true での上書き）",
             "content": {
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseAlertResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_032）。既存の確認者・時刻を details で返す",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetAlertAlreadyAcknowledgedErrorResponse"
                 }
               }
             }
@@ -202297,6 +202307,58 @@
             "type": "string",
             "maxLength": 500,
             "minLength": 0
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BudgetAlertAlreadyAcknowledgedErrorDetail": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "$ref": "#/components/schemas/BudgetAlertAlreadyAcknowledgedErrorDetails"
+          },
+          "fieldErrors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "BudgetAlertAlreadyAcknowledgedErrorDetails": {
+        "type": "object",
+        "properties": {
+          "acknowledgedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "既に確認した時刻"
+          },
+          "acknowledgedBy": {
+            "type": "integer",
+            "format": "int64",
+            "description": "既に確認したユーザー ID"
+          },
+          "acknowledgedByName": {
+            "type": "string",
+            "description": "既に確認したユーザーの氏名（引けない場合は null）",
+            "nullable": true
+          }
+        }
+      },
+      "BudgetAlertAlreadyAcknowledgedErrorResponse": {
+        "type": "object",
+        "description": "予算警告の確認済み 409 応答",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/BudgetAlertAlreadyAcknowledgedErrorDetail"
           }
         }
       },

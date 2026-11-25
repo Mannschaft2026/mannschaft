@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { useShiftBudgetAdminAccess } from '~/composables/shift/useShiftBudgetAdminAccess'
 import type { AlertResponse } from '~/types/shiftBudget'
+import {
+  parseAlertAlreadyAcknowledged,
+  type AlertAlreadyAcknowledgedInfo,
+} from '~/utils/shiftBudgetAlertError'
 
 /**
  * F08.7 Phase 10-γ: 警告履歴一覧 (`/admin/shift-budget/alerts`)。
  *
  * <p>設計書 §6.2.5 / §7.5 に準拠。未承認警告を上に表示し、承認応答ボタンを提供する。</p>
+ *
+ * <p>確認済みの警告への確認は BE が 409（SHIFT_BUDGET_032）で拒否する。その場合は既存の確認者・時刻を
+ * 示して上書きするかを確認し、上書きを選んだときだけ overwrite: true で再送する（CMP-260910-1607 ③）。</p>
  *
  * <p>権限:</p>
  * <ul>
@@ -16,6 +23,7 @@ import type { AlertResponse } from '~/types/shiftBudget'
 definePageMeta({ middleware: 'auth' })
 
 const { t } = useI18n()
+const { formatDateTime } = useDatetime()
 const scopeStore = useScopeStore()
 const notification = useNotification()
 const api = useShiftBudgetApi()
@@ -43,6 +51,11 @@ const pageSize = ref(20)
 const ackDialogVisible = ref(false)
 const ackTarget = ref<AlertResponse | null>(null)
 const ackComment = ref('')
+/** 確認操作の送信中。二重送信（同時に 2 回の確認）を防ぐ。 */
+const ackSubmitting = ref(false)
+/** 「確認済み」409 を受けたときの上書き確認ダイアログ。 */
+const overwriteDialogVisible = ref(false)
+const alreadyAcknowledged = ref<AlertAlreadyAcknowledgedInfo | null>(null)
 
 async function load() {
   if (!organizationId.value) {
@@ -72,21 +85,62 @@ function openAcknowledge(alert: AlertResponse) {
   ackDialogVisible.value = true
 }
 
-async function confirmAcknowledge() {
-  if (!ackTarget.value || !organizationId.value) return
+async function submitAcknowledge(overwrite: boolean) {
+  if (ackSubmitting.value || !ackTarget.value || !organizationId.value) return
+  ackSubmitting.value = true
   try {
     await api.acknowledgeAlert(organizationId.value, ackTarget.value.id, {
       comment: ackComment.value || null,
+      ...(overwrite ? { overwrite: true } : {}),
     })
     notification.success(t('shiftBudget.alert.acknowledgeSuccess'))
     ackDialogVisible.value = false
+    overwriteDialogVisible.value = false
+    alreadyAcknowledged.value = null
     ackTarget.value = null
     await load()
   }
-  catch {
-    notification.error(t('shiftBudget.alert.acknowledgeError'))
+  catch (error) {
+    const already = parseAlertAlreadyAcknowledged(error)
+    if (already) {
+      // 先に別の管理者が確認済み。黙って上書きせず、確認者・時刻を見せて上書きするかを尋ねる。
+      alreadyAcknowledged.value = already
+      ackDialogVisible.value = false
+      overwriteDialogVisible.value = true
+    }
+    else {
+      notification.error(t('shiftBudget.alert.acknowledgeError'))
+    }
+  }
+  finally {
+    ackSubmitting.value = false
   }
 }
+
+function confirmAcknowledge() {
+  return submitAcknowledge(false)
+}
+
+function confirmOverwrite() {
+  return submitAcknowledge(true)
+}
+
+/** 上書きを取りやめる。他の管理者の確認結果を反映するため一覧を取り直す。 */
+async function cancelOverwrite() {
+  overwriteDialogVisible.value = false
+  alreadyAcknowledged.value = null
+  ackTarget.value = null
+  await load()
+}
+
+const overwriteMessage = computed(() => {
+  const info = alreadyAcknowledged.value
+  if (!info) return ''
+  return t('shiftBudget.alert.alreadyAcknowledgedConfirm', {
+    name: info.acknowledgedByName ?? t('shiftBudget.alert.unknownAcknowledger'),
+    time: info.acknowledgedAt ? formatDateTime(info.acknowledgedAt) : '-',
+  })
+})
 
 watch(organizationId, () => {
   load()
@@ -145,7 +199,44 @@ onMounted(() => {
             severity="secondary"
             @click="ackDialogVisible = false"
           />
-          <Button :label="t('shiftBudget.alert.acknowledge')" @click="confirmAcknowledge" />
+          <Button
+            :label="t('shiftBudget.alert.acknowledge')"
+            :loading="ackSubmitting"
+            :disabled="ackSubmitting"
+            data-testid="alert-acknowledge-submit"
+            @click="confirmAcknowledge"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="overwriteDialogVisible"
+      :header="t('shiftBudget.alert.alreadyAcknowledgedHeader')"
+      :style="{ width: '500px' }"
+      :closable="false"
+      :close-on-escape="false"
+      modal
+    >
+      <Message severity="warn" :closable="false" data-testid="alert-overwrite-message">
+        {{ overwriteMessage }}
+      </Message>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <Button
+            :label="t('shiftBudget.allocation.form.cancel')"
+            severity="secondary"
+            :disabled="ackSubmitting"
+            data-testid="alert-overwrite-cancel"
+            @click="cancelOverwrite"
+          />
+          <Button
+            :label="t('shiftBudget.alert.overwrite')"
+            :loading="ackSubmitting"
+            :disabled="ackSubmitting"
+            data-testid="alert-overwrite-submit"
+            @click="confirmOverwrite"
+          />
         </div>
       </template>
     </Dialog>

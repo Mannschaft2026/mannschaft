@@ -26,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -69,6 +70,9 @@ class BudgetThresholdAlertControllerTest {
 
     @MockitoBean
     private BudgetThresholdAlertService alertService;
+
+    @MockitoBean
+    private com.mannschaft.app.common.NameResolverService nameResolverService;
 
     @MockitoBean
     private AuthTokenService authTokenService;
@@ -129,7 +133,7 @@ class BudgetThresholdAlertControllerTest {
                 .acknowledgedAt(LocalDateTime.of(2026, 6, 25, 15, 0))
                 .acknowledgedBy(USER_ID)
                 .build();
-        given(alertService.acknowledge(eq(ORG_ID), eq(ALERT_ID), any()))
+        given(alertService.acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean()))
                 .willReturn(acked);
 
         mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
@@ -142,10 +146,43 @@ class BudgetThresholdAlertControllerTest {
     }
 
     @Test
+    @DisplayName("POST acknowledge: overwrite=true はサービスへ引き渡される")
+    void acknowledge_overwrite引き渡し() throws Exception {
+        AlertResponse acked = AlertResponse.builder().id(ALERT_ID).allocationId(ALLOCATION_ID)
+                .thresholdPercent(80).acknowledgedBy(USER_ID).build();
+        given(alertService.acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), eq(true))).willReturn(acked);
+
+        mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
+                        .header("X-Organization-Id", ORG_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"overwrite\":true}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST acknowledge: 確認済み → 409 + details に確認者・時刻")
+    void acknowledge_409() throws Exception {
+        given(nameResolverService.resolveUserFullNames(java.util.List.of(7L)))
+                .willReturn(java.util.Map.of(7L, "山田 太郎"));
+        willThrow(new com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException(
+                7L, null, LocalDateTime.of(2026, 6, 25, 15, 0)))
+                .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean());
+
+        mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
+                        .header("X-Organization-Id", ORG_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_032"))
+                .andExpect(jsonPath("$.error.details.acknowledgedBy").value(7))
+                .andExpect(jsonPath("$.error.details.acknowledgedByName").value("山田 太郎"));
+    }
+
+    @Test
     @DisplayName("POST acknowledge: ALERT_NOT_FOUND → 404")
     void acknowledge_404() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.ALERT_NOT_FOUND))
-                .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any());
+                .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean());
 
         mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
                         .header("X-Organization-Id", ORG_ID)
@@ -158,7 +195,7 @@ class BudgetThresholdAlertControllerTest {
     @DisplayName("POST acknowledge: BUDGET_ADMIN_REQUIRED → 403")
     void acknowledge_403() throws Exception {
         willThrow(new BusinessException(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED))
-                .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any());
+                .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean());
 
         mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
                         .header("X-Organization-Id", ORG_ID)
