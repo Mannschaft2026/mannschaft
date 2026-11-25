@@ -46,19 +46,32 @@ public class EffortSharedRecordAssembler {
     }
 
     public List<EffortSharedRecord> fromTeamRows(List<EffortTeamShareEntity> rows, Set<UUID> anonymousShares) {
-        Authors authors = authors(rows.stream().map(EffortTeamShareEntity::getOwnerUserId).toList());
+        return fromTeamRows(rows, anonymousShares, authors(rows.stream().map(EffortTeamShareEntity::getOwnerUserId).toList()));
+    }
+
+    /** 解決済みの投稿者プロフィールで team 行を組み立てる（呼出元が匿名の判定に使ったのと同じ解決結果を使う）。 */
+    public List<EffortSharedRecord> fromTeamRows(List<EffortTeamShareEntity> rows, Set<UUID> anonymousShares,
+                                                 Authors authors) {
         List<EffortSharedRecord> result = new ArrayList<>(rows.size());
         rows.forEach(row -> result.add(fromTeamRow(row, authors, anonymousShares.contains(row.getId()))));
         return result;
     }
 
+    /**
+     * 著者を匿名で出すか（purge 済み、または公開プロフィールが解決できない＝退会済み）。{@link #build} の判定そのもので、
+     * 利用者 ID で引く一覧から匿名の共有を除く判定（チーム一覧の {@code user_id} 指定）にも同じものを使う。
+     */
+    public boolean isAnonymous(Long ownerUserId, Authors authors, boolean purged) {
+        return purged || authors.displayNames().get(ownerUserId) == null;
+    }
+
     public EffortSharedRecord build(UUID shareId, long version, Long teamId, Long ownerUserId, LocalDate recordedOn,
                                     UUID definitionUuid, EffortShareProjector.Projection projection, Instant createdAt,
                                     Instant updatedAt, Authors authors, boolean anonymous) {
-        String displayName = authors.displayNames().get(ownerUserId);
-        EffortSharedRecord.Author author = anonymous || displayName == null
+        EffortSharedRecord.Author author = isAnonymous(ownerUserId, authors, anonymous)
                 ? new EffortSharedRecord.Author(null, WITHDRAWN_AUTHOR, null)
-                : new EffortSharedRecord.Author(ownerUserId, displayName, authors.avatarUrls().get(ownerUserId));
+                : new EffortSharedRecord.Author(ownerUserId, authors.displayNames().get(ownerUserId),
+                        authors.avatarUrls().get(ownerUserId));
         return new EffortSharedRecord(shareId, version, teamId, author, recordedOn, projection.recordTimezone(),
                 definitionUuid, projection.templateName(), projection.fields(), createdAt, updatedAt,
                 EffortSharedRecord.Interactions.NONE);

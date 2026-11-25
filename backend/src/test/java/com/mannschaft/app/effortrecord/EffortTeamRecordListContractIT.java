@@ -2,11 +2,13 @@ package com.mannschaft.app.effortrecord;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mannschaft.app.common.visibility.perf.SqlIntentCounter;
+import com.mannschaft.app.gdpr.event.AccountPurgedEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * F06.4.1 PR-3b チーム一覧・詳細・定義候補の契約（試練 / red 先行。CMP-261115-2145）。
@@ -112,6 +115,57 @@ class EffortTeamRecordListContractIT extends EffortTeamShareItSupport {
         assertThat(ids).containsExactly(shareId(real));
         assertThat(page2.at("/meta/hasNext").asBoolean()).as("走査終了").isFalse();
         assertThat(page2.at("/meta/nextCursor").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("AC-41: 退会 purge 後の投稿者を user_id で指定した一覧に匿名の共有を含めない（指定なしの一覧には匿名で残り、cursor・件数も壊れない）")
+    void AC41_purge後の投稿者指定では匿名の共有を除く() throws Exception {
+        World w = world("AC41匿名");
+        Long purger = anotherMember(w, "AC41退会者");
+        JsonNode a1 = shareOn(w.owner(), w, w.template(), DAY1, "10");
+        JsonNode p2 = shareOn(purger, w, w.template(), DAY2, "20");
+        JsonNode a3 = shareOn(w.owner(), w, w.template(), DAY3, "30");
+        JsonNode p4 = shareOn(purger, w, w.template(), DAY3.plusDays(1), "40");
+        assertThat(listedShareIds(w.viewer(), w.team(), "user_id", String.valueOf(purger)))
+                .as("対照: purge 前は投稿者で絞れる").containsExactly(shareId(p4), shareId(p2));
+
+        tx(() -> {
+            eventPublisher.publishEvent(new AccountPurgedEvent(purger, "hash"));
+            return null;
+        });
+        await().atMost(SYNC_WAIT).pollInterval(Duration.ofMillis(100))
+                .until(() -> Boolean.TRUE.equals(ownerRow(id(p2)).get("purged"))
+                        && Boolean.TRUE.equals(ownerRow(id(p4)).get("purged")));
+        JsonNode anonymous = sharedRecord(w.viewer(), w.team(), shareId(p4)).path("author");
+        assertThat(anonymous.path("userId").isMissingNode() || anonymous.path("userId").isNull())
+                .as("前提: 共有の著者は匿名").isTrue();
+
+        for (String limit : List.of("1", "20")) {
+            JsonNode byPurger = expect(teamList(w.viewer(), w.team(), "user_id", String.valueOf(purger), "limit", limit), 200);
+            assertThat(byPurger.path("data")).as("limit=" + limit + ": 退会者の ID から匿名の共有へ辿れない").isEmpty();
+            assertThat(byPurger.at("/meta/hasNext").asBoolean()).as("limit=" + limit + ": 走査終了").isFalse();
+            assertThat(byPurger.at("/meta/nextCursor").isNull()).isTrue();
+        }
+
+        JsonNode own1 = expect(teamList(w.viewer(), w.team(), "user_id", String.valueOf(w.owner()), "limit", "1"), 200);
+        assertThat(own1.path("data")).hasSize(1);
+        assertThat(own1.path("data").get(0).path("id").asText()).isEqualTo(shareId(a3));
+        assertThat(own1.at("/meta/hasNext").asBoolean()).isTrue();
+        JsonNode own2 = expect(teamList(w.viewer(), w.team(), "user_id", String.valueOf(w.owner()), "limit", "1",
+                "cursor", own1.at("/meta/nextCursor").asText()), 200);
+        assertThat(own2.path("data")).hasSize(1);
+        assertThat(own2.path("data").get(0).path("id").asText()).isEqualTo(shareId(a1));
+
+        JsonNode page1 = expect(teamList(w.viewer(), w.team(), "limit", "2"), 200);
+        List<String> ids = new ArrayList<>();
+        page1.path("data").forEach(r -> ids.add(r.path("id").asText()));
+        assertThat(page1.at("/meta/hasNext").asBoolean()).isTrue();
+        JsonNode page2 = expect(teamList(w.viewer(), w.team(), "limit", "2", "cursor", page1.at("/meta/nextCursor").asText()), 200);
+        page2.path("data").forEach(r -> ids.add(r.path("id").asText()));
+        assertThat(page2.at("/meta/hasNext").asBoolean()).isFalse();
+        assertThat(ids).as("投稿者指定なしの一覧には匿名の共有が従来どおり残る")
+                .containsExactly(shareId(p4), shareId(a3), shareId(p2), shareId(a1));
+        assertThat(page1.path("data").get(0).path("author")).as("指定なしの一覧でも著者は匿名").isEqualTo(anonymous);
     }
 
     // ═══════════════════════════════ AC-42 ═══════════════════════════════

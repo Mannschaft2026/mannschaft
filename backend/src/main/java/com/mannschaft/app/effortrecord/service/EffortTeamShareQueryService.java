@@ -64,7 +64,14 @@ public class EffortTeamShareQueryService {
     private final ActivityTemplateService activityTemplates;
     private final ObjectMapper objectMapper;
 
-    /** チーム一覧（recordedOn DESC, createdAt DESC, id DESC。user_id・期間・definition_uuid で絞る）。 */
+    /**
+     * チーム一覧（recordedOn DESC, createdAt DESC, id DESC。user_id・期間・definition_uuid で絞る）。
+     *
+     * <p>user_id を指定した一覧では、著者を匿名で出す共有（退会・purge 後。{@link EffortSharedRecordAssembler#isAnonymous}
+     * と同じ判定）を除く。利用者 ID で引く一覧に残すと、匿名化した共有本文が過去の利用者 ID へ再び紐付くため
+     * （退会フロー §13.13・API 契約 §4）。除いた行も走査済みとして cursor を進める（F00 で見えない行と同じ扱い）。
+     * 投稿者を指定しない一覧には匿名の共有を従来どおり残す。</p>
+     */
     public EffortSharedRecordPage list(Long viewerUserId, Long teamId, EffortTeamRecordListCriteria criteria) {
         requireReadableTeam(viewerUserId, teamId);
         return metrics.measure("list", () -> {
@@ -89,6 +96,8 @@ public class EffortTeamShareQueryService {
             int chunk = Math.max(limit + 1, MIN_CHUNK);
             List<EffortTeamShareEntity> items = new ArrayList<>();
             Set<UUID> anonymous = new HashSet<>();
+            // user_id 指定時だけ、匿名判定と組み立てに同じ投稿者プロフィールの解決結果を使う（1 リクエスト 1 回）
+            EffortSharedRecordAssembler.Authors authors = null;
             EffortTeamShareEntity lastScanned = null;
             int scanned = 0;
             boolean moreRows = true;
@@ -101,12 +110,17 @@ public class EffortTeamShareQueryService {
                 }
                 EffortTeamShareVisibility.Result allowed = visibility.filter(rows, viewerUserId, teamId);
                 anonymous.addAll(allowed.purgedOwner());
+                if (criteria.userId() != null && authors == null) {
+                    authors = assembler.authors(List.of(criteria.userId()));
+                }
                 int consumed = 0;
                 for (EffortTeamShareEntity row : rows) {
                     consumed++;
                     scanned++;
                     lastScanned = row;
-                    if (allowed.allowed().contains(row.getId())) {
+                    if (allowed.allowed().contains(row.getId())
+                            && (authors == null || !assembler.isAnonymous(row.getOwnerUserId(), authors,
+                                    anonymous.contains(row.getId())))) {
                         items.add(row);
                         if (items.size() == limit) {
                             break;
@@ -126,7 +140,8 @@ public class EffortTeamShareQueryService {
             String nextCursor = moreRows && lastScanned != null ? cursors.encode(scope, filterHash,
                     new EffortCursorCodec.Position(lastScanned.getRecordedOn(), lastScanned.getCreatedAt(),
                             lastScanned.getId())) : null;
-            List<EffortSharedRecord> records = assembler.fromTeamRows(items, anonymous);
+            List<EffortSharedRecord> records = authors == null ? assembler.fromTeamRows(items, anonymous)
+                    : assembler.fromTeamRows(items, anonymous, authors);
             return new EffortSharedRecordPage(records, nextCursor, nextCursor != null, limit);
         });
     }
