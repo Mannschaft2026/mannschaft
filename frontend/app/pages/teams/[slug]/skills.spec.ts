@@ -4,6 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { computed, defineComponent, h, ref } from 'vue'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import SkillsPage from './skills.vue'
+import { useScopeNotFound } from '~/composables/useScopeNotFound'
 
 /**
  * CMP-261012-0313 F-AC3 / F-AC4 / F-AC6: 資格画面の閲覧範囲・非メンバー案内・カテゴリ反映。
@@ -129,6 +130,7 @@ beforeEach(() => {
   setRole('MEMBER')
 })
 afterEach(() => {
+  useScopeNotFound().reset()
   wrapper?.unmount()
   wrapper = undefined
 })
@@ -175,11 +177,12 @@ describe('skills.vue: F-AC3 閲覧範囲', () => {
 })
 
 describe('skills.vue: F-AC4 非メンバー', () => {
-  it.each(['SUPPORTER', 'GUEST', null])('%s には権限なし案内（pi-lock）を1つだけ出し、資格系 API を呼ばない', async (role) => {
+  it.each(['SUPPORTER', 'GUEST', null])('%s には独自の権限なし案内を出さず共通の見つかりません表示（notFound）へ寄せ、資格系 API を呼ばない', async (role) => {
     setRole(role)
     const w = await render()
-    expect(w.findAll('[data-test="empty"]')).toHaveLength(1)
-    expect(w.find('[data-test="empty"]').attributes('data-icon')).toBe('pi pi-lock')
+    // CMP-261125-1108: 権限や所属を示唆する案内は出さず、シェルが本文を ScopeNotFound に置換する
+    expect(w.find('[data-test="empty"]').exists()).toBe(false)
+    expect(useScopeNotFound().notFound.value).toBe(true)
     expect(has(w, 'skill-list')).toBe(false)
     expect(has(w, 'skill-matrix')).toBe(false)
     expect(has(w, 'category-manager')).toBe(false)
