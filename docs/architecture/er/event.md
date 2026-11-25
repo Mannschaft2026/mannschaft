@@ -35,7 +35,7 @@ erDiagram
     event_guest_invite_tokens {
         bigint id PK
         bigint event_id FK
-        char token UK
+        varchar token_hash UK
         bigint created_by "ID参照"
     }
     event_registrations {
@@ -205,7 +205,7 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | `id` | `bigint unsigned` | NO | （なし） auto_increment |  |
 | `event_id` | `bigint unsigned` | NO | （なし） |  |
-| `token` | `char(36)` | NO | （なし） |  |
+| `token_hash` | `varchar(64)` | NO | （なし） | 招待トークンのSHA-256ハッシュ(hex)。平文は保存しない |
 | `label` | `varchar(100)` | YES | NULL |  |
 | `max_uses` | `int unsigned` | YES | NULL |  |
 | `used_count` | `int unsigned` | NO | `0` |  |
