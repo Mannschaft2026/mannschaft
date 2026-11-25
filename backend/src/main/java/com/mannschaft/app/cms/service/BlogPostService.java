@@ -269,7 +269,18 @@ public class BlogPostService {
         }
         // 可視性判定を ContentVisibilityChecker に一元化（getById と完全に同じ認可挙動）。
         Long viewerUserId = SecurityUtils.getCurrentUserIdOrNull();
-        contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, entity.getId(), viewerUserId);
+        // CMP-261008-1701: 閲覧不可（VISIBILITY_001=403）と不在（VISIBILITY_004）は、記事の存在を漏らす
+        // 存在オラクルになるため、不在と同じ CMS_001（404）に正規化する。これは仕様としての正規化であり、
+        // 畳むのは存在を示唆する VISIBILITY_001/004 のみ。VISIBILITY_002/003 等の他コードは再送出する。
+        try {
+            contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, entity.getId(), viewerUserId);
+        } catch (BusinessException e) {
+            String code = e.getErrorCode().getCode();
+            if ("VISIBILITY_001".equals(code) || "VISIBILITY_004".equals(code)) {
+                throw new BusinessException(CmsErrorCode.POST_NOT_FOUND);
+            }
+            throw e;
+        }
         // 可視性(F00)通過の「後段」でペイウォール本文ゲートを適用する（可視性 deny が優先）。
         // 表示経路なので、マスクを免れた本文のみ r2Key を署名 URL へ解決する。
         return resolveBodyMedia(

@@ -862,6 +862,7 @@
       "tags": "Tags",
       "relatedPosts": "Related posts",
       "noPost": "No posts yet",
+      "notFound": "Post not found",
       "createFirst": "Write your first post",
       "settings": "Blog settings",
       "selfReview": "Self review",

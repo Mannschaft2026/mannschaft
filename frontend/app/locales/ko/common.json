@@ -862,6 +862,7 @@
       "tags": "태그",
       "relatedPosts": "관련 게시글",
       "noPost": "게시글이 없습니다",
+      "notFound": "게시글을 찾을 수 없습니다",
       "createFirst": "첫 번째 글 작성",
       "settings": "블로그 설정",
       "selfReview": "셀프 리뷰",

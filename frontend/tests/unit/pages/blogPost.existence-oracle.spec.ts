@@ -8,12 +8,8 @@ import BlogPostPage from '~/pages/blog/posts/[slug].vue'
 import UserBlogPostPage from '~/pages/users/[userId]/blog/posts/[slug].vue'
 import { parseBlogPostReadQuery } from '~/utils/blogPostReadQuery'
 import type { BlogPostResponse } from '~/types/cms'
-import jaCommon from '~/locales/ja/common.json'
-import enCommon from '~/locales/en/common.json'
-import zhCommon from '~/locales/zh/common.json'
-import koCommon from '~/locales/ko/common.json'
-import esCommon from '~/locales/es/common.json'
-import deCommon from '~/locales/de/common.json'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 const external = vi.hoisted(() => ({
  api: vi.fn<(path: string, options?: Record<string, unknown>) => Promise<unknown>>(),
@@ -134,7 +130,12 @@ async function observe(wrapper: VueWrapper) {
  return { message, showsArticle: wrapper.text().includes(post.content?.title ?? '\u0000'), toasts: toastKinds() }
 }
 
-const LOCALES = { ja: jaCommon, en: enCommon, zh: zhCommon, ko: koCommon, es: esCommon, de: deCommon }
+// nuxt 環境では JSON import が i18n によりメッセージ AST へ事前コンパイルされるため、生の JSON を fs で読む。
+function rawLocale(locale: string): unknown {
+ return JSON.parse(readFileSync(resolve(process.cwd(), `app/locales/${locale}/common.json`), 'utf-8'))
+}
+const LOCALES: Record<string, unknown> = Object.fromEntries(['ja', 'en', 'zh', 'ko', 'es', 'de'].map(l => [l, rawLocale(l)]))
+const jaCommon = LOCALES.ja
 function lookup(dict: unknown, key: string): unknown {
  return key.split('.').reduce<unknown>((node, part) =>
   node !== null && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined, dict)

@@ -179,7 +179,7 @@ onScopeDispose(() => { ++postSequence })
     <DashboardEmptyState
       v-else
       icon="pi pi-book"
-      :message="$t('blog.post.noPost')"
+      :message="$t('blog.post.notFound')"
     />
   </div>
 </template>

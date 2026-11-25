@@ -862,6 +862,7 @@
       "tags": "Etiquetas",
       "relatedPosts": "Artículos relacionados",
       "noPost": "Sin artículos",
+      "notFound": "Artículo no encontrado",
       "createFirst": "Escribe tu primer artículo",
       "settings": "Configuración del blog",
       "selfReview": "Autorevisión",
