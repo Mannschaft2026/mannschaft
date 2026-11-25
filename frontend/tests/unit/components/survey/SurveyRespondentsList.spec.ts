@@ -28,6 +28,12 @@ const mockGetRespondents = vi.fn()
 const mockRemindRespondents = vi.fn()
 const mockShowError = vi.fn()
 const mockShowSuccess = vi.fn()
+const mockHandleApiError = vi.fn()
+
+mockNuxtImport('useErrorHandler', () => () => ({
+  handleApiError: mockHandleApiError,
+  resolveMessage: (code: string, fallback?: string) => fallback ?? code,
+}))
 
 mockNuxtImport('useSurveyApi', () => () => ({
   getRespondents: mockGetRespondents,
@@ -126,6 +132,7 @@ beforeEach(() => {
   mockRemindRespondents.mockReset()
   mockShowError.mockReset()
   mockShowSuccess.mockReset()
+  mockHandleApiError.mockReset()
   mockGetRespondents.mockResolvedValue({ data: RESPONDENTS })
 })
 
@@ -183,7 +190,8 @@ describe('SurveyRespondentsList.vue — 督促の残り回数・送信可否（C
   }, 30_000)
 
   it('AC6: nextRemindableAt が未来ならボタン無効・その時刻を含む待機の理由を出す', async () => {
-    const next = dayjs().add(5, 'hour').format('YYYY-MM-DDTHH:mm:ss')
+    const next = dayjs().add(5, 'hour').startOf('minute').format('YYYY-MM-DDTHH:mm:ss')
+    // 秒が残ると分単位に切り上げて表示されるため、ここでは分ちょうどの時刻で検証する（切り上げは別テスト）
     const wrapper = await mountList({
       distribution: distribution({
         manualRemindCount: 1,
@@ -373,4 +381,84 @@ describe('SurveyRespondentsList.vue — 検分対応（CMP-261125-2221）', () =
       expect(vi.getTimerCount()).toBeLessThan(before)
     }, 30_000)
   })
+})
+
+describe('SurveyRespondentsList.vue — アリシゼーション対応（CMP-261125-2221）', () => {
+  function apiFailure(statusCode: number, code: string, message: string) {
+    return Object.assign(new Error(message), { statusCode, data: { error: { code, message } } })
+  }
+
+  it.each([
+    [409, 'SURVEY_015', '前回の督促から24時間経過していません'],
+    [400, 'SURVEY_016', '督促の上限回数に達しています'],
+    [400, 'INVALID_SURVEY_STATUS', '公開中のアンケートのみ督促できます'],
+    [403, 'SURVEY_014', '督促する権限がありません'],
+  ])('%i %s で失敗したら業務エラー文言で通知し、親へ取り直しを依頼する', async (status, code, message) => {
+    const failure = apiFailure(status, code, message)
+    mockRemindRespondents.mockRejectedValue(failure)
+    const wrapper = await mountList({ distribution: distribution({ manualRemindCount: 1 }) })
+
+    await remindButton(wrapper).trigger('click')
+    await flush()
+
+    expect(mockHandleApiError).toHaveBeenCalledTimes(1)
+    expect(mockHandleApiError.mock.calls[0]![0]).toBe(failure)
+    expect(mockShowError).not.toHaveBeenCalled()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+    expect(wrapper.emitted('reminded')).toBeFalsy()
+  }, 30_000)
+
+  it('5xx では取り直しを依頼しない（表示は useApi が一元化）', async () => {
+    mockRemindRespondents.mockRejectedValue(
+      Object.assign(new Error('boom'), { statusCode: 500, data: { error: { code: 'COMMON_500', message: 'x' } } }),
+    )
+    const wrapper = await mountList({ distribution: distribution({ manualRemindCount: 1 }) })
+
+    await remindButton(wrapper).trigger('click')
+    await flush()
+
+    expect(wrapper.emitted('refresh')).toBeFalsy()
+    expect(wrapper.emitted('reminded')).toBeFalsy()
+  }, 30_000)
+
+  it('ネットワーク断では取り直しを依頼しない', async () => {
+    mockRemindRespondents.mockRejectedValue(new TypeError('Failed to fetch'))
+    const wrapper = await mountList({ distribution: distribution({ manualRemindCount: 1 }) })
+
+    await remindButton(wrapper).trigger('click')
+    await flush()
+
+    expect(wrapper.emitted('refresh')).toBeFalsy()
+  }, 30_000)
+
+  it('再読込ボタンで回答者一覧を取り直し、親へ詳細の取り直しも依頼する', async () => {
+    const wrapper = await mountList()
+    const before = mockGetRespondents.mock.calls.length
+
+    await wrapper.find('[data-testid="respondents-refresh"]').trigger('click')
+    await flush()
+
+    expect(mockGetRespondents.mock.calls.length).toBe(before + 1)
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+  }, 30_000)
+
+  it('次に送れる時刻は秒を分単位に切り上げて表示する（23:43:40 → 23:44）', async () => {
+    const next = dayjs().add(1, 'day').hour(23).minute(43).second(40).millisecond(0).format('YYYY-MM-DDTHH:mm:ss')
+    const rounded = dayjs(next).add(1, 'minute').startOf('minute').format('YYYY-MM-DDTHH:mm:ss')
+    const wrapper = await mountList({ distribution: distribution({ manualRemindCount: 1, nextRemindableAt: next }) })
+
+    const { formatDateTime } = useDatetime()
+    const text = blockedReason(wrapper).text()
+    expect(text).toContain(t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(rounded) }))
+    expect(text).not.toContain(formatDateTime(next) + ' ')
+  }, 30_000)
+
+  it('ちょうど分の時刻は切り上げない', async () => {
+    const next = dayjs().add(1, 'day').hour(23).minute(43).second(0).millisecond(0).format('YYYY-MM-DDTHH:mm:ss')
+    const wrapper = await mountList({ distribution: distribution({ manualRemindCount: 1, nextRemindableAt: next }) })
+    const { formatDateTime } = useDatetime()
+    expect(blockedReason(wrapper).text()).toContain(
+      t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(next) }),
+    )
+  }, 30_000)
 })

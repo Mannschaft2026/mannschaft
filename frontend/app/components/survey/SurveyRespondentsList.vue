@@ -11,7 +11,12 @@
  *   - 画面には「残り N/M 回」を常に出し、送れないときはボタンを無効にして理由を出す。
  *     上限回数・待機時刻は BE が返す distribution の値だけで判定し、FE は定数を持たない。
  *   - 送信が成功したら emit('reminded') で親へ詳細の取り直しを依頼する。
+ *   - 4xx の業務エラー（待機中・上限・締切・権限）で失敗したときと、再読込ボタンを押したときも
+ *     emit('refresh') で親へ詳細（distribution）の取り直しを依頼し、表示を BE に追従させる。
+ *     5xx・ネットワーク断では取り直さない（5xx の表示は useApi が一元化している）。
+ *   - 次に送れる時刻は分単位に切り上げて表示する（切り捨てると、その時刻に見てもまだ押せないため）。
  */
+import dayjs from 'dayjs'
 import type { RespondentItem, SurveyDistributionDto, SurveyStatus } from '~/types/survey'
 
 const props = withDefaults(
@@ -30,11 +35,14 @@ const props = withDefaults(
 const emit = defineEmits<{
   /** 督促の送信に成功した（親が詳細を取り直す） */
   reminded: []
+  /** 失敗時・再読込時に、親へ詳細（distribution）の取り直しを依頼する */
+  refresh: []
 }>()
 
 const { t } = useI18n()
 const { getRespondents, remindRespondents } = useSurveyApi()
 const { error: showError, success: showSuccess } = useNotification()
+const { handleApiError } = useErrorHandler()
 const { relativeTime } = useRelativeTime()
 const { formatDateTime } = useDatetime()
 
@@ -88,9 +96,19 @@ async function sendReminder() {
     // 失敗時は再取得しない（一覧は変化しない想定 + エラートーストのみ表示）。
     await loadRespondents()
     emit('reminded')
-  } catch {
-    // Backend が 400/403 を返す（上限超過・クールダウン中・権限不足）
-    showError(t('surveys.respondents.remindFailed'), t('surveys.respondents.remindFailedDetail'))
+  } catch (e) {
+    const apiError = e as { statusCode?: number; data?: { error?: { code?: string } } }
+    const status = apiError.statusCode
+    if (apiError.data?.error?.code && status !== undefined && status >= 400 && status < 500) {
+      // 別タブで先に送られた等で BE が業務エラー（待機中・上限・締切・権限）を返した。
+      // 業務コードに応じた文言で知らせ、古い表示のまま押し続けられないよう詳細を取り直す。
+      handleApiError(e, 'survey-remind')
+      emit('refresh')
+    } else if (status === undefined || status < 500) {
+      // ネットワーク断など。表示は変わっていない想定なので取り直さない。
+      showError(t('surveys.respondents.remindFailed'), t('surveys.respondents.remindFailedDetail'))
+    }
+    // 5xx の表示は useApi が一元化している
   } finally {
     reminding.value = false
   }
@@ -146,13 +164,23 @@ watch(() => props.distribution?.nextRemindableAt, () => {
 })
 onBeforeUnmount(clearCooldownTimer)
 
+/**
+ * 秒以下が残る時刻を次の分へ切り上げる（23:43:40 → 23:44）。
+ * 分単位で表示するため、切り捨てると表示時刻に見ても押せない。ボタンの有効判定は元の時刻（秒単位）のまま。
+ */
+function ceilToMinute(iso: string): string {
+  const d = dayjs(iso)
+  if (!d.isValid() || (d.second() === 0 && d.millisecond() === 0)) return iso
+  return d.add(1, 'minute').startOf('minute').toISOString()
+}
+
 /** 督促を送れない理由（送れるときは null）。公開中でない > 上限 > 待機 の順で優先する。 */
 const remindBlockedReason = computed<string | null>(() => {
   if (props.surveyStatus !== 'PUBLISHED') return t('surveys.respondents.remindBlockedNotPublished')
   if (remindRemaining.value === 0) return t('surveys.respondents.remindBlockedQuota')
   const next = props.distribution?.nextRemindableAt
   if (next && new Date(next).getTime() > nowMs.value) {
-    return t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(next) })
+    return t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(ceilToMinute(next)) })
   }
   return null
 })
@@ -167,6 +195,12 @@ onMounted(() => {
   scheduleCooldownRefresh()
   loadRespondents()
 })
+
+/** 再読込ボタン: 回答者一覧に加え、残り回数・次回時刻（distribution）も親に取り直させる */
+async function reload() {
+  emit('refresh')
+  await loadRespondents()
+}
 
 defineExpose({ refresh: loadRespondents })
 </script>
@@ -188,7 +222,7 @@ defineExpose({ refresh: loadRespondents })
         :aria-label="t('surveys.respondents.reload')"
         data-testid="respondents-refresh"
         class="min-h-11 min-w-11 shrink-0"
-        @click="loadRespondents"
+        @click="reload"
       />
     </div>
 

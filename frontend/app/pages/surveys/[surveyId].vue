@@ -829,6 +829,7 @@ onMounted(async () => {
               :survey-status="survey.status"
               :distribution="survey.distribution"
               @reminded="fetchDetail(true)"
+              @refresh="fetchDetail(true)"
             />
           </template>
         </Card>

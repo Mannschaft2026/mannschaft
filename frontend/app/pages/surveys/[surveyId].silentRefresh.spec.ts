@@ -93,7 +93,7 @@ function publishedSurvey(): SurveyDetail {
 
 const RespondentsStub = defineComponent({
   name: 'SurveyRespondentsList',
-  emits: ['reminded'],
+  emits: ['reminded', 'refresh'],
   template: '<div data-testid="respondents-stub" />',
 })
 
@@ -173,5 +173,22 @@ describe('アンケート詳細: 督促後の裏取得が失敗した場合（CM
     expect(wrapper.find('[data-testid="survey-respondents-section"]').exists()).toBe(true)
     // 失敗は握りつぶさず通知する
     expect(mocks.showError).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('アンケート詳細: 督促の失敗時・再読込時の取り直し（CMP-261125-2221）', () => {
+  it('回答者一覧から refresh が来たら、全画面ローディングにせず詳細を裏で取り直す', async () => {
+    mocks.getSurvey.mockResolvedValueOnce({ data: publishedSurvey() })
+    const wrapper = await mountPage()
+
+    await wrapper.get('[data-testid="survey-respondents-toggle"]').trigger('click')
+    await flushPromises()
+
+    mocks.getSurvey.mockResolvedValueOnce({ data: publishedSurvey() })
+    wrapper.getComponent(RespondentsStub).vm.$emit('refresh')
+    await flushPromises()
+
+    expect(mocks.getSurvey).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="respondents-stub"]').exists()).toBe(true)
   })
 })
