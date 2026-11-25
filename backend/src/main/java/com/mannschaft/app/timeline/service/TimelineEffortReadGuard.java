@@ -41,6 +41,19 @@ public class TimelineEffortReadGuard {
 
     /** 一覧から F00 を通らない努力由来の投稿を除き、通った努力由来の投稿へ SharedRecord を載せる（順序はそのまま）。 */
     public List<PostResponse> filterVisible(List<PostResponse> posts, Long viewerUserId) {
+        return filter(posts, viewerUserId, true);
+    }
+
+    /**
+     * 特定ユーザーの投稿一覧（{@code GET /timeline/users/{userId}/posts}）用。{@link #filterVisible} と同じ判定に加え、
+     * 著者を匿名にした共有（退会・purge 後）を載せる投稿を除く。利用者 ID で引く一覧に残すと、匿名の共有本文が
+     * 過去の利用者 ID に紐付いてしまうため（退会フロー §13.13・API 契約 §4.2）。
+     */
+    public List<PostResponse> filterVisibleForAuthorPosts(List<PostResponse> posts, Long viewerUserId) {
+        return filter(posts, viewerUserId, false);
+    }
+
+    private List<PostResponse> filter(List<PostResponse> posts, Long viewerUserId, boolean keepAnonymous) {
         if (posts == null || posts.isEmpty()) {
             return posts;
         }
@@ -58,9 +71,8 @@ public class TimelineEffortReadGuard {
                 continue;
             }
             EffortSharedRecord record = shared.get(shareId);
-            if (record != null) {
-                result.add(post.toBuilder().sourceType(TimelinePostSourceType.PERSONAL_EFFORT_SHARE)
-                        .effortShare(record).build());
+            if (record != null && (keepAnonymous || !isAnonymous(record))) {
+                result.add(withShare(post, record));
             }
         }
         return result;
@@ -82,8 +94,7 @@ public class TimelineEffortReadGuard {
             if (record == null) {
                 return null;
             }
-            hydrated = detail.toBuilder().sourceType(TimelinePostSourceType.PERSONAL_EFFORT_SHARE)
-                    .effortShare(record).build();
+            hydrated = withShare(detail, record);
         }
         List<PostResponse> replies = hydrated.getRecentReplies();
         if (replies != null && !replies.isEmpty()) {
@@ -98,6 +109,40 @@ public class TimelineEffortReadGuard {
         UUID shareId = effort.get(postId);
         return shareId == null
                 || visibilityChecker.canViewUuid(ReferenceType.EFFORT_TEAM_SHARE, shareId, viewerUserId);
+    }
+
+    /**
+     * 一覧の投稿へ SharedRecord を載せる。共有の著者が匿名（退会・purge 後）なら、外側の投稿者（{@code author.userId}・
+     * {@code socialProfileId}・enrich 済みの {@code user}）も SharedRecord の著者と同じ匿名表現にそろえ、共有本文を
+     * 過去の利用者 ID へ紐付けない（退会フロー §13.13: 本文は残し、書いた人の表示だけを匿名化する）。
+     */
+    private static PostResponse withShare(PostResponse post, EffortSharedRecord record) {
+        PostResponse.PostResponseBuilder builder = post.toBuilder()
+                .sourceType(TimelinePostSourceType.PERSONAL_EFFORT_SHARE).effortShare(record);
+        if (isAnonymous(record)) {
+            PostResponse.PostAuthorDto author = post.getAuthor();
+            EffortSharedRecord.Author anonymous = record.author();
+            builder.author(author == null ? null : new PostResponse.PostAuthorDto(null, null, author.postedAsType(), null))
+                    .user(post.getUser() == null ? null
+                            : new PostResponse.PostUserDto(anonymous.userId(), anonymous.displayName(), anonymous.avatarUrl()));
+        }
+        return builder.build();
+    }
+
+    /** 投稿詳細へ SharedRecord を載せる（匿名の共有なら外側の投稿者も匿名にする。{@link #withShare(PostResponse, EffortSharedRecord)} と同じ）。 */
+    private static PostDetailResponse withShare(PostDetailResponse detail, EffortSharedRecord record) {
+        PostDetailResponse.PostDetailResponseBuilder builder = detail.toBuilder()
+                .sourceType(TimelinePostSourceType.PERSONAL_EFFORT_SHARE).effortShare(record);
+        PostDetailResponse.PostAuthorDto author = detail.getAuthor();
+        if (isAnonymous(record) && author != null) {
+            builder.author(new PostDetailResponse.PostAuthorDto(null, null, author.postedAsType(), null));
+        }
+        return builder.build();
+    }
+
+    /** SharedRecord の著者が匿名（{@code userId=null}。退会・purge 後）か。 */
+    private static boolean isAnonymous(EffortSharedRecord record) {
+        return record.author() == null || record.author().userId() == null;
     }
 
     /** F00 を通った共有だけを SharedRecord にする（F00 → hydrator の両方を通ったものだけ。1 ページにつき各 1 回）。 */

@@ -72,6 +72,8 @@ class TimelineFeedControllerTest {
         securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(USER_ID);
         Mockito.lenient().when(effortReadGuard.filterVisible(Mockito.any(), Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.lenient().when(effortReadGuard.filterVisibleForAuthorPosts(Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 

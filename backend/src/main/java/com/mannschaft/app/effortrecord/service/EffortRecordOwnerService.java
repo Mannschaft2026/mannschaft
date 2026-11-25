@@ -89,6 +89,8 @@ public class EffortRecordOwnerService {
     /**
      * 原本を全置換更新する（version 一致必須。不一致は COMMON_003 / 409）。共有中の原本は、共有先チームが有効で
      * 加入期間が今も有効なときだけ同じ共有の同期を要求する（資格を失った共有は私的な更新だけで再同期しない）。
+     * 応答には GET と同じ実効状態の補正（{@link #withEffectiveShares}）を掛ける。加入期間の終了後に owner 行の後処理が
+     * 遅れて VISIBLE・FAILED のまま残っていても、更新応答で共有中表示や retry 導線を復活させない。
      */
     public EffortOwnerRecordResponse update(Long ownerUserId, UUID id, UpdateEffortRecordRequest request) {
         EffortRecordEntity current = shareTx.owned(ownerUserId, id);
@@ -96,7 +98,8 @@ public class EffortRecordOwnerService {
                 && EffortShareTxService.ACTIVE.contains(current.getShareState())
                 && teamService.findTeamSummary(current.getShareTeamId()).isPresent()
                 && eligible(ownerUserId, current.getShareTeamId(), current.getGrantMembershipId());
-        return tx.update(ownerUserId, id, request, userZone(ownerUserId), resync);
+        EffortOwnerRecordResponse updated = tx.update(ownerUserId, id, request, userZone(ownerUserId), resync);
+        return withEffectiveShares(ownerUserId, List.of(updated)).get(0);
     }
 
     /** 原本を論理削除する（Idempotency-Key 必須、version 一致必須）。 */

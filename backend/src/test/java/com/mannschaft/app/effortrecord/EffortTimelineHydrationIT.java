@@ -312,4 +312,56 @@ class EffortTimelineHydrationIT extends EffortTeamShareItSupport {
             stats.setStatisticsEnabled(enabled);
         }
     }
+
+    // ═══════════════════════════════ f. purge 後の外側の投稿者 ═══════════════════════════════
+
+    @Test
+    @DisplayName("f: purge 後に匿名の共有を載せる投稿は、外側の投稿者（author.userId・socialProfileId・user）も共有と同じ匿名表現にし、退会者の投稿一覧から辿れない")
+    void purge後は外側の投稿者も共有と同じ匿名表現にする() throws Exception {
+        World w = world("HY6");
+        Long purger = anotherMember(w, "HY6退会者");
+        JsonNode toPurge = shareVisible(purger, w.team(), w.template(),
+                teamRecord(purger, w, "13", canary("zqhyanon"), null), "時間", "メモ");
+        String sid = shareId(toPurge);
+        Long postId = effortPostId(sid);
+        JsonNode beforeMy = find(expect(http(get(TIMELINE + "/my"), w.viewer()), 200), postId);
+        assertThat(beforeMy.path("author").path("userId").asLong()).as("対照: purge 前は外側に本人の ID が出る")
+                .isEqualTo(purger);
+        assertThat(beforeMy.path("user").path("id").asLong()).as("対照: 個人集約 TL は user を enrich する").isEqualTo(purger);
+
+        tx(() -> {
+            eventPublisher.publishEvent(new AccountPurgedEvent(purger, "hash"));
+            return null;
+        });
+        await().atMost(SYNC_WAIT).pollInterval(Duration.ofMillis(100))
+                .until(() -> Boolean.TRUE.equals(ownerRow(id(toPurge)).get("purged")));
+        JsonNode anonymous = sharedRecord(w.viewer(), w.team(), sid).path("author");
+        assertThat(absent(anonymous.path("userId"))).as("前提: 共有の著者は匿名").isTrue();
+
+        Map<String, JsonNode> cards = new LinkedHashMap<>();
+        cards.put("TEAM TL", find(teamFeed(w.viewer(), w.team()), postId));
+        cards.put("個人集約 TL", find(expect(http(get(TIMELINE + "/my"), w.viewer()), 200), postId));
+        cards.put("投稿詳細", expect(http(get(POSTS + "/{id}", postId), w.viewer()), 200).path("data"));
+        for (Map.Entry<String, JsonNode> e : cards.entrySet()) {
+            String where = e.getKey();
+            JsonNode card = e.getValue();
+            assertThat(card).as(where + ": 共有本文は残る").isNotNull();
+            assertThat(card.path("effortShare").path("author")).as(where + ": 共有の著者は匿名").isEqualTo(anonymous);
+            assertThat(absent(card.path("author").path("userId"))).as(where + ": 外側の author.userId を出さない").isTrue();
+            assertThat(absent(card.path("author").path("socialProfileId"))).as(where + ": socialProfileId を出さない")
+                    .isTrue();
+            JsonNode user = card.path("user");
+            if (!absent(user)) {
+                assertThat(absent(user.path("id"))).as(where + ": user.id を出さない").isTrue();
+                assertThat(user.path("displayName")).as(where + ": 表示名は共有の著者と同じ匿名表示")
+                        .isEqualTo(anonymous.path("displayName"));
+                assertThat(absent(user.path("avatarUrl"))).as(where + ": アバターを出さない").isTrue();
+            }
+            assertNoCanary(where, card.toString(), List.of("HY6退会者"));
+        }
+        assertThat(absent(cards.get("個人集約 TL").path("user"))).as("個人集約 TL は匿名の user を返す").isFalse();
+
+        JsonNode userPosts = expect(http(get(TIMELINE + "/users/{userId}/posts", purger), w.viewer()), 200);
+        assertThat(find(userPosts, postId)).as("退会者の ID から匿名の共有へ辿れない").isNull();
+    }
 }

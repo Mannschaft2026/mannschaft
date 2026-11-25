@@ -156,8 +156,9 @@ public class TimelineFeedController {
             @PathVariable Long userId,
             @RequestParam(defaultValue = "20") int size) {
         Long callerUserId = SecurityUtils.getCurrentUserId();
-        // F06.4.1: F00 を通らない努力由来の投稿を除く（timeline の read TX の外で判定する）
-        List<PostResponse> posts = effortReadGuard.filterVisible(
+        // F06.4.1: F00 を通らない努力由来の投稿と、著者を匿名にした共有（退会・purge 後）を除く
+        // （timeline の read TX の外で判定する。利用者 ID から匿名の共有へ辿らせない）
+        List<PostResponse> posts = effortReadGuard.filterVisibleForAuthorPosts(
                 postService.getUserPosts(userId, size, callerUserId), callerUserId);
         return ResponseEntity.ok(ApiResponse.of(posts));
     }

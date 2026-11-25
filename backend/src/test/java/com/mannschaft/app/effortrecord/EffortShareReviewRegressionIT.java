@@ -246,4 +246,40 @@ class EffortShareReviewRegressionIT extends EffortTeamShareItSupport {
         data.forEach(d -> uuids.add(d.path("definitionUuid").asText()));
         assertThat(uuids).as("先頭 1000 行の外にしか可視履歴が無い定義も候補に出す").containsExactly(definitionUuid);
     }
+
+    @Test
+    @DisplayName("脱退後の後処理が遅れて owner 行が VISIBLE・FAILED のまま残っても、原本の更新応答は GET と同じ実効状態 REVOKED を返す")
+    void 脱退後の後処理が遅れても更新応答はGETと同じ実効状態を返す() throws Exception {
+        World w = world("RVUPD");
+        JsonNode visible = shareVisible(w, teamRecord(w.owner(), w, "30", "腕立て", null), "時間");
+        String sid = shareId(visible);
+        String rid = id(visible);
+        // owner 行の後処理（REVOKED 化）を失敗させる＝脱退後の非同期処理の遅延・失敗
+        failOn("effort_records", "BEFORE UPDATE",
+                "NEW.owner_user_id = " + w.owner() + " AND NEW.share_state = 'REVOKED'");
+
+        expect(leaveTeamApi(w.owner(), w.team()), 204);
+        awaitTeamState(sid, "REVOKED");
+        Thread.sleep(1000);
+        assertThat(ownerRow(rid).get("shareState")).as("owner 行は VISIBLE のまま").isEqualTo("VISIBLE");
+        JsonNode got = ownerRecord(w.owner(), rid);
+        assertThat(got.path("share").path("state").asText()).as("対照: GET は実効 REVOKED").isEqualTo("REVOKED");
+
+        JsonNode updated = expect(putRecord(w.owner(), got, "40", "腕立て", null), 200).path("data");
+        assertThat(ownerRow(rid).get("shareState")).as("資格が無いので再同期しない（保存状態は VISIBLE のまま）")
+                .isEqualTo("VISIBLE");
+        assertThat(updated.path("share").path("state").asText()).as("VISIBLE 残り: 更新応答も GET と同じ REVOKED")
+                .isEqualTo("REVOKED");
+        assertThat(updated.path("share")).as("更新応答の share は直後の GET と同じ")
+                .isEqualTo(ownerRecord(w.owner(), rid).path("share"));
+
+        tx(() -> em.createNativeQuery("UPDATE effort_records SET share_state = 'FAILED' "
+                + "WHERE id = UNHEX(REPLACE(:id, '-', ''))").setParameter("id", rid).executeUpdate());
+        JsonNode failedGet = ownerRecord(w.owner(), rid);
+        assertThat(failedGet.path("share").path("state").asText()).as("対照: FAILED 残りも GET は REVOKED").isEqualTo("REVOKED");
+        JsonNode updatedFailed = expect(putRecord(w.owner(), failedGet, "50", "腕立て", null), 200).path("data");
+        assertThat(ownerRow(rid).get("shareState")).as("保存状態は FAILED のまま").isEqualTo("FAILED");
+        assertThat(updatedFailed.path("share").path("state").asText()).as("FAILED 残り: retry 導線を復活させない")
+                .isEqualTo("REVOKED");
+    }
 }
