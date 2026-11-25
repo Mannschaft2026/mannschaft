@@ -50,6 +50,11 @@ import java.util.Map;
  *
  * <p>権限: {@code BUDGET_ADMIN}（バッチ起動時は SYSTEM 経路で権限チェックを skip）。</p>
  *
+ * <p><strong>入口は {@link MonthlyShiftBudgetCloseGate} に限る</strong>（CMP-261021-0657）:
+ * 「月末を過ぎていない月（当月・未来月）は締めない」判定は Gate が壁時計（JST）で行う。
+ * 本クラスの {@code close} / {@code closeAll} / {@code closeFromBatch} を他の本番クラスから
+ * 直接呼ぶと判定を素通りするため、番人 {@code MonthlyShiftBudgetCloseGateGuardArchTest} が禁止している。</p>
+ *
  * <p><strong>cron バッチ呼出時の注意</strong>: SecurityContext が設定されない場合、
  * {@link #closeFromBatch(Long, YearMonth)} を経由する（システム自動実行扱い）。</p>
  */
@@ -302,7 +307,15 @@ public class MonthlyShiftBudgetCloseService {
                 .build();
     }
 
-    private void requireBudgetAdmin(Long organizationId) {
+    /**
+     * 現在の利用者が対象組織の {@code BUDGET_ADMIN}（または SYSTEM_ADMIN）であることを要求する。
+     *
+     * <p>{@link MonthlyShiftBudgetCloseGate} が「機能フラグ → 権限 → 対象月」の順で判定するために
+     * 公開している（CMP-261021-0657。権限の無い利用者には対象月の判定結果より先に 403 を返す）。</p>
+     *
+     * @throws BusinessException {@link ShiftBudgetErrorCode#BUDGET_ADMIN_REQUIRED} (403)
+     */
+    public void requireBudgetAdmin(Long organizationId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         if (!accessControlService.isSystemAdmin(currentUserId)
                 && !hasOrgPermission(currentUserId, organizationId, "BUDGET_ADMIN")) {

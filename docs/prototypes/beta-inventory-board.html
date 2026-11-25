@@ -1088,11 +1088,12 @@
     function renderInsights() {
       releaseInsightObjectUrls();
       const query = document.querySelector('#search').value.trim().toLowerCase();
+      const boardStages = [...document.querySelectorAll('[data-stage]')].map((button) => button.dataset.stage);
       const stageAndQueryInsights = insights.filter((insight) => {
         const feature = getFeatureInfo(insight.featureKey);
         const source = insightSourceDetails(insight);
         const urgency = insightUrgencyDetails(insight);
-        const stageMatches = feature.stage === selectedStage;
+        const stageMatches = window.InsightStatusCore.insightStageMatches(feature.stage, selectedStage, boardStages);
         const queryMatches = !query || `${insight.id} ${insight.title} ${insight.detail} ${insight.featureDetail || ''} ${insight.page} ${feature.title} ${insight.featureKey} ${source.sourceLabel} ${source.personaLabel} ${urgency.label} ${insight.journeyId || ''}`.toLowerCase().includes(query);
         return stageMatches && queryMatches;
       });
@@ -1135,10 +1136,11 @@
         <div class="insight-groups">
           ${groups.size ? [...groups.entries()].map(([featureKey, groupInsights]) => {
             const feature = getFeatureInfo(featureKey);
+            const stageUnset = !boardStages.includes(feature.stage);
             return `
               <section class="insight-group">
                 <div class="insight-group-header">
-                  <div><h3>${escapeHtml(feature.title)}</h3><span>${escapeHtml(featureKey)} · ${escapeHtml(feature.stage)} · ${escapeHtml(classificationLabel(feature.classification))}</span></div>
+                  <div><h3>${escapeHtml(feature.title)}</h3><span>${escapeHtml(featureKey)} · ${stageUnset ? '<span class="origin-badge unexported">ステージ未設定</span>' : escapeHtml(feature.stage)} · ${escapeHtml(classificationLabel(feature.classification))}</span></div>
                   <span>${groupInsights.length}件</span>
                 </div>
                 <div class="insight-card-grid">
@@ -1669,7 +1671,8 @@ ${insight.detail}
         closeInsightForm();
         selectedView = 'insights';
         selectedInsightSource = registrationSource;
-        selectedStage = getFeatureInfo(insight.featureKey).stage;
+        const savedStage = getFeatureInfo(insight.featureKey).stage;
+        if (document.querySelector(`[data-stage="${savedStage}"]`)) selectedStage = savedStage;
         document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === 'insights'));
         document.querySelectorAll('[data-stage]').forEach((button) => button.classList.toggle('active', button.dataset.stage === selectedStage));
         renderBoard();

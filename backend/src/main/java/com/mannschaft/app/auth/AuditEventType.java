@@ -105,6 +105,10 @@ public enum AuditEventType {
     TEAM_MEMBERSHIP_INVITE_DECLINED(AuditEventCategory.TEAM),
     TEAM_MEMBERSHIP_INVITE_CANCELLED(AuditEventCategory.TEAM),
     TEAM_MEMBERSHIP_INVITE_COMPENSATED(AuditEventCategory.TEAM),
+    /** CMP-261107-1833 PR3: 招待権限者が再招待の依頼に応じて新しい招待を発行した（metadata: pending_id・token_id）。 */
+    TEAM_INVITE_REISSUED(AuditEventCategory.TEAM),
+    /** CMP-261107-1833 PR3: 招待権限者が再招待の依頼を見送った（metadata: pending_id）。 */
+    TEAM_INVITE_REISSUE_DECLINED(AuditEventCategory.TEAM),
     /** F01.2.1 §4.1: チームの加盟操作者が組織へ加盟を申請した（metadata: 組織・加盟 ID・希望グループ）。 */
     TEAM_ORG_APPLICATION_SUBMITTED(AuditEventCategory.TEAM),
     /** F01.2.1 §4.1: チームの加盟操作者が加盟申請を取り下げた（metadata: 組織・加盟 ID）。 */
@@ -150,6 +154,10 @@ public enum AuditEventType {
     ORGANIZATION_MEMBERSHIP_INVITE_DECLINED(AuditEventCategory.ORGANIZATION),
     ORGANIZATION_MEMBERSHIP_INVITE_CANCELLED(AuditEventCategory.ORGANIZATION),
     ORGANIZATION_MEMBERSHIP_INVITE_COMPENSATED(AuditEventCategory.ORGANIZATION),
+    /** CMP-261107-1833 PR3: 招待権限者が再招待の依頼に応じて新しい招待を発行した（metadata: pending_id・token_id）。 */
+    ORGANIZATION_INVITE_REISSUED(AuditEventCategory.ORGANIZATION),
+    /** CMP-261107-1833 PR3: 招待権限者が再招待の依頼を見送った（metadata: pending_id）。 */
+    ORGANIZATION_INVITE_REISSUE_DECLINED(AuditEventCategory.ORGANIZATION),
 
     // ─── PAYMENT (Phase 3+) ───────────────────────────────────
     PAYMENT_COMPLETED(AuditEventCategory.PAYMENT),

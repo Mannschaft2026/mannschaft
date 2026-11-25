@@ -134,6 +134,48 @@ class RegistrationPendingInviteFailureIT extends InviteAcceptanceSpyItSupport {
         assertThat(membershipCount(userId, scope)).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("PR3 検分 P1: T7 前の失敗で CLAIMED が残った保留は、GET（参照時の期限判定）で上限到達の EXPIRED にせず PENDING のまま。"
+            + "再承認で既存 claim を再開して JOINED")
+    void failureBeforeGrantThenGetKeepsPendingAndResumes() {
+        Scope scope = scope("TEAM");
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Long userId = userWithPendingInvite(scope, token);
+        AtomicInteger calls = new AtomicInteger();
+        onGrantRole(inv -> {
+            if (calls.getAndIncrement() == 0) {
+                throw new DataAccessResourceFailureException("試練: T7 実処理前で停止");
+            }
+            return inv.callRealMethod();
+        });
+
+        assertThat(catchThrowable(() -> pending().accept(userId))).isInstanceOf(DataAccessResourceFailureException.class);
+        assertThat(usedCount(token.getId())).as("本人の確保で上限（1）に達している").isEqualTo(1);
+        assertThat(claimStatuses(token.getId())).containsExactly("CLAIMED");
+
+        assertThat(pending().findMine(userId).status()).as("本人の CLAIMED は上限到達とみなさない").isEqualTo("PENDING");
+        assertThat(pendingStatus(userId)).isEqualTo("PENDING");
+
+        assertThat(acceptStatus(userId)).isEqualTo("JOINED");
+        assertThat(usedCount(token.getId())).isEqualTo(1);
+        assertThat(claimStatuses(token.getId())).containsExactly("GRANTED");
+    }
+
+    @Test
+    @DisplayName("PR3 検分 P1: 他人の CLAIMED で上限に達した招待は、GET で EXPIRED（ROLE_003）になる（本人の確保だけを除外する）")
+    void otherUsersClaimStillExhausts() {
+        Scope scope = scope("TEAM");
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Long userId = userWithPendingInvite(scope, token);
+        Long other = user();
+        pendingUsers.add(other);
+        insertClaim(token.getId(), other, "CLAIMED", java.time.LocalDateTime.now(java.time.ZoneOffset.UTC), true);
+
+        assertThat(pending().findMine(userId).status()).isEqualTo("EXPIRED");
+        assertThat(jdbc.queryForObject("SELECT failure_code FROM " + PENDING_TABLE + " WHERE user_id = ?", String.class,
+                userId)).isEqualTo("ROLE_003");
+    }
+
     // ------------------------------------------------------------------
     // §9-3 (b): T7 実処理後（コミット後）に失敗
     // ------------------------------------------------------------------

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261123-1201",
+  "scope": "app",
+  "implementation": {
+    "pr": 4814,
+    "sha": "dc8cb8e86653fbc124577aa0d987aa8341584cda"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "公開直後・過去日の行動メモ画面に「投稿を見る」リンクが出て /timeline/{個人投稿ID} へ遷移でき、未公開日・締め画面には出ない",
+      "tests": [
+        {
+          "name": "ActionMemoPublishedPostLink.spec.ts",
+          "evidence": "frontend/tests/unit/components/ActionMemoPublishedPostLink.spec.ts"
+        },
+        {
+          "name": "action-memo-published-post-link.spec.ts",
+          "evidence": "frontend/tests/unit/pages/action-memo-published-post-link.spec.ts"
+        },
+        {
+          "name": "closing-no-published-link.spec.ts",
+          "evidence": "frontend/tests/unit/pages/action-memo/closing-no-published-link.spec.ts"
+        },
+        {
+          "name": "useActionMemoStore-published-post.spec.ts",
+          "evidence": "frontend/tests/unit/stores/useActionMemoStore-published-post.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "メモの日付変更時に timeline_post_id を null にし、日ごとの公開記録（action_memo_daily_posts）で再公開時に旧投稿を特定して置き換える",
+      "tests": [
+        {
+          "name": "ActionMemoDailyPostIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/ActionMemoDailyPostIT.java"
+        },
+        {
+          "name": "ActionMemoServiceCoreTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServiceCoreTest.java"
+        },
+        {
+          "name": "ActionMemoServicePublishTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/service/ActionMemoServicePublishTest.java"
+        },
+        {
+          "name": "FlywayExistingDataActionMemoDailyPostsMigrationTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/actionmemo/migration/FlywayExistingDataActionMemoDailyPostsMigrationTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "6言語の文言が揃い、?date= の日付解決が端末のタイムゾーンに依存しない",
+      "tests": [
+        {
+          "name": "action-memo-published-post-keys.spec.ts",
+          "evidence": "frontend/tests/unit/i18n/action-memo-published-post-keys.spec.ts"
+        },
+        {
+          "name": "action-memo-date-query-timezone.spec.ts",
+          "evidence": "frontend/tests/unit/pages/action-memo-date-query-timezone.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "実機で本人は導線から投稿詳細に到達でき、他人の個人投稿IDは存在しないIDと同じ 404（権限あり・権限なし・未ログインを確認）",
+      "tests": [
+        {
+          "name": "action-memo-published-post-link.spec.ts（実機E2E S1〜S7）",
+          "evidence": "frontend/tests/e2e/real/action-memo-published-post-link.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45308927394
+    },
+    {
+      "runId": 45308927525
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4814"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-1201.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261123-1201.md"
+    }
+  },
+  "regressions": []
+}

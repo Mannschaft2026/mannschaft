@@ -202,6 +202,8 @@ com.mannschaft.app.auth.PendingInviteStatus#EXPIRED
 com.mannschaft.app.auth.PendingInviteStatus#JOINED
 com.mannschaft.app.auth.PendingInviteStatus#PENDING
 com.mannschaft.app.auth.PendingInviteStatus#REISSUE_REQUESTED
+# PendingInviteStatus#REISSUE_DECLINED（CMP-261107-1833 PR3）: 同じ新設表のみ。表ごと未配布（本番未構築・初回9定数と同じ campaign 内）のため二段階の第1段階に当たる旧版が無い。配布済みの証明ではない。
+com.mannschaft.app.auth.PendingInviteStatus#REISSUE_DECLINED
 com.mannschaft.app.auth.PendingInviteStatus#UNAVAILABLE
 com.mannschaft.app.auth.TwoFactorMethod#EMAIL
 com.mannschaft.app.auth.TwoFactorMethod#TOTP
