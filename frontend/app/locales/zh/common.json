@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "获取权限信息失败，请稍后重新加载",
-      "forbidden": "只有本团队成员才能使用技能与资格",
       "mineTab": "我的技能与资格",
       "categoriesReloadFailed": "重新加载分类失败"
     }

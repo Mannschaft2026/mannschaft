@@ -473,7 +473,6 @@
       "loadFailed": "Failed to load hourly rates",
       "historyLoadFailed": "Failed to load the hourly rate history",
       "permissionLoadFailed": "Failed to load permissions",
-      "forbidden": "You do not have permission to view this page",
       "noMembers": "No members",
       "dialogTitle": "Hourly rate for {name}",
       "effectiveFromHint": "Applied from the specified date. Past settings are kept as history. Registering again with the same date corrects that day's setting.",

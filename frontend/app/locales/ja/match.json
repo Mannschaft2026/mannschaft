@@ -276,7 +276,6 @@
       "member_subtitle": "このメンバーのチーム別統計です",
       "team_context": "対象チーム",
       "unknown_kind": "その他",
-      "forbidden": "この統計を閲覧する権限がありません",
       "metric": {
         "total_matches": "出場試合",
         "total_minutes": "総出場時間(分)",

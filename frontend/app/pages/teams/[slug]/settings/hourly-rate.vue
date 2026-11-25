@@ -33,6 +33,7 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 const { t } = useI18n()
 const notification = useNotification()
+const { markIfDenied, notFound } = useScopeNotFound()
 const teamApi = useTeamApi()
 const { loadAll } = useHourlyRateMemberPage()
 const { getHourlyRate, setHourlyRate } = useShiftHourlyRateApi()
@@ -96,14 +97,8 @@ async function loadRows() {
     totalRecords.value = result.totalElements
   }
   catch (error) {
-    const status
-      = (error as { statusCode?: number }).statusCode
-        ?? (error as { status?: number }).status
-        ?? (error as { response?: { status?: number } }).response?.status
-    if (status === 403 || status === 404) {
-      showError(createError({ statusCode: status, statusMessage: t('shift.hourlyRate.loadFailed') }))
-      return
-    }
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(error)) return
     notification.error(t('shift.hourlyRate.loadFailed'))
   }
   finally {
@@ -178,12 +173,15 @@ onMounted(async () => {
   const result = await loadPermissions()
   if (!result.ok) {
     loading.value = false
+    if (markIfDenied(result.error)) return
     notification.error(t('shift.hourlyRate.permissionLoadFailed'))
     return
   }
   if (!isAdmin.value) {
     // 導線を隠すだけでは URL 直打ちを防げない。BE も 403 を返すが、画面側でも明示的に弾く。
-    showError(createError({ statusCode: 403, statusMessage: t('shift.hourlyRate.forbidden') }))
+    // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
+    notFound.value = true
+    loading.value = false
     return
   }
   await loadRows()

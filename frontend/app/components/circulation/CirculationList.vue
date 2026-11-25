@@ -17,6 +17,7 @@ const { listScopedCirculations, cancelScopedCirculation, deleteScopedCirculation
 const confirm = useConfirm()
 const { success } = useNotification()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 const { relativeTime } = useRelativeTime()
 
 const items = ref<CirculationDocumentListItem[]>([])
@@ -44,7 +45,9 @@ async function loadItems() {
       { status: statusFilter.value },
     )
     items.value = res.data
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    if (markIfDenied(e)) return
     // 失敗はインラインのエラー面（＋再試行）で可視化する。トーストは重複通知になるため出さない。
     error.value = true
   } finally {
