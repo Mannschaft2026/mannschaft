@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, nextTick, ref } from 'vue'
 import type { Ref } from 'vue'
 import { useSessionOpenSections } from './useSessionOpenSections'
 
@@ -170,5 +170,72 @@ describe('useSessionOpenSections', () => {
     expect(harness.expandedAtSetup).toEqual([])
     expect(harness.expandedKeys.value).toEqual(new Set(['b']))
     expect(harness.mountedKeys.value).toEqual(new Set(['b']))
+  })
+
+  describe('storageKey が同じインスタンスで変化する場合', () => {
+    it('(a) null → key: 保存値が読み込まれる', async () => {
+      sessionStorage.setItem(KEY, JSON.stringify(['a', 'c']))
+      const keyRef = ref<string | null>(null)
+      const { harness } = await mountHarness(keyRef)
+      expect(harness.expandedKeys.value.size).toBe(0)
+
+      keyRef.value = KEY
+      await nextTick()
+      expect(harness.expandedKeys.value).toEqual(new Set(['a', 'c']))
+      expect(harness.mountedKeys.value).toEqual(new Set(['a', 'c']))
+    })
+
+    it('(b) A → B（B 未保存）: 全閉になり、B へ書くのは B での操作だけで A は変わらない', async () => {
+      const A = 'scope-sections:organization:1:10'
+      const B = 'scope-sections:organization:2:10'
+      sessionStorage.setItem(A, JSON.stringify(['a']))
+      const keyRef = ref<string | null>(A)
+      const { harness } = await mountHarness(keyRef)
+      expect(harness.expandedKeys.value).toEqual(new Set(['a']))
+
+      keyRef.value = B
+      await nextTick()
+      expect(harness.expandedKeys.value.size).toBe(0)
+
+      harness.toggle('b')
+      expect(stored(B)).toEqual(['b'])
+      expect(stored(A)).toEqual(['a'])
+    })
+
+    it('(c) A → B（B 保存済み）: B の状態に差し替わる', async () => {
+      const A = 'scope-sections:organization:1:10'
+      const B = 'scope-sections:organization:2:10'
+      sessionStorage.setItem(A, JSON.stringify(['a']))
+      sessionStorage.setItem(B, JSON.stringify(['b', 'c']))
+      const keyRef = ref<string | null>(A)
+      const { harness } = await mountHarness(keyRef)
+
+      keyRef.value = B
+      await nextTick()
+      expect(harness.expandedKeys.value).toEqual(new Set(['b', 'c']))
+      expect(stored(A)).toEqual(['a'])
+    })
+
+    it('(d) A → null: 全閉になり null の間は書かない。その後 null → B で B の状態になる', async () => {
+      const A = 'scope-sections:organization:1:10'
+      const B = 'scope-sections:organization:2:10'
+      sessionStorage.setItem(A, JSON.stringify(['a']))
+      sessionStorage.setItem(B, JSON.stringify(['c']))
+      const keyRef = ref<string | null>(A)
+      const { harness } = await mountHarness(keyRef)
+
+      keyRef.value = null
+      await nextTick()
+      expect(harness.expandedKeys.value.size).toBe(0)
+
+      const setSpy = vi.spyOn(Storage.prototype, 'setItem')
+      harness.toggle('b')
+      expect(setSpy).not.toHaveBeenCalled()
+      expect(stored(A)).toEqual(['a'])
+
+      keyRef.value = B
+      await nextTick()
+      expect(harness.expandedKeys.value).toEqual(new Set(['c']))
+    })
   })
 })
