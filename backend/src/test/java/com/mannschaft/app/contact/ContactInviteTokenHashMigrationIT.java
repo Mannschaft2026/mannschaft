@@ -21,7 +21,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 試練（CMP-260826-1457 W2・contact 系統）: 実 Flyway で旧スキーマ（V267 まで）に既存の招待を置き、
+ * 試練（CMP-260826-1457 W2・contact 系統）: 実 Flyway で旧スキーマ（V268.20261124173054 まで。本 migration は V269）に既存の招待を置き、
  * 全件を適用したあとの形と、既存トークンの失効（AC-x1 の実スキーマ・AC-A）を確かめる。
  *
  * <p>IT のスキーマは test プロファイルの {@code ddl-auto=create}（Entity 由来）で、migration の列・索引は
@@ -44,7 +44,7 @@ class ContactInviteTokenHashMigrationIT {
                 .withTmpFs(Map.of("/var/lib/mysql", "rw"))
                 .withCommand("--log_bin_trust_function_creators=1")) {
             mysql.start();
-            migrate(mysql, "267.20261124005850");
+            migrate(mysql, "268.20261124173054");
             String legacyToken = "11111111-2222-3333-4444-555555555555";
             long id;
             try (Connection c = connect(mysql); Statement s = c.createStatement()) {
