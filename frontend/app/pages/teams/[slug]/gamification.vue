@@ -7,6 +7,7 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const gamificationApi = useGamificationApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { formatDate } = useDatetime()
 
 const points = ref<PointSummary | null>(null)
@@ -27,7 +28,9 @@ async function loadData() {
     points.value = pts
     badges.value = bdg
     rankings.value = rnk
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error('ゲーミフィケーションデータの取得に失敗しました')
   } finally {
     loading.value = false
