@@ -33,6 +33,10 @@ async function mountPanel(showCreateForm = false) {
           props: ['message'],
           template: '<p data-testid="contact-empty">{{ message }}</p>',
         },
+        SecretIssuedDialog: {
+          props: ['url', 'visible'],
+          template: '<output data-testid="contact-issued-url">{{ url }}</output>',
+        },
         QrCodeImage: {
           props: ['value'],
           template: '<output data-testid="contact-qr">{{ value }}</output>',
@@ -44,7 +48,7 @@ async function mountPanel(showCreateForm = false) {
   return wrapper
 }
 
-describe('個人連絡先QR管理', () => {
+describe('個人連絡先招待の管理', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-16T03:00:00Z'))
@@ -65,12 +69,13 @@ describe('個人連絡先QR管理', () => {
     expect(api.listInviteTokens).toHaveBeenCalledTimes(2)
   })
 
-  it('開いただけでは発行せず、利用者の発行操作では7日・1回を送ってQRを表示する', async () => {
+  it('開いただけでは発行せず、利用者の発行操作では7日・1回を送り、発行直後のダイアログにだけ招待URLを渡す', async () => {
     const wrapper = await mountPanel(true)
     expect(api.createInviteToken).not.toHaveBeenCalled()
     api.createInviteToken.mockResolvedValue({
       data: {
         id: 1,
+        token: 'token',
         inviteUrl: 'https://example.test/contact-invite/token',
         label: null,
         expiresAt: '2026-10-23T12:00:00',
@@ -86,25 +91,27 @@ describe('個人連絡先QR管理', () => {
       maxUses: 1,
       expiresIn: '7d',
     })
-    expect(wrapper.get('[data-testid="contact-qr"]').text()).toContain('/contact-invite/token')
+    expect(wrapper.get('[data-testid="contact-issued-url"]').text()).toContain('/contact-invite/token')
+    // 一覧の行には URL も QR も出さない
+    expect(wrapper.find('[data-testid="contact-qr"]').exists()).toBe(false)
+    expect(wrapper.get('.p-3').text()).not.toContain('/contact-invite/')
   })
 
-  it('発行失敗ではQRを作らずフォームを保持する', async () => {
+  it('発行失敗では招待URLを出さずフォームを保持する', async () => {
     api.createInviteToken.mockRejectedValue(new Error('offline'))
     const wrapper = await mountPanel(true)
     const submit = wrapper.findAll('button').find((b) => b.find('.pi-link').exists())!
     await submit.trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="contact-qr"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="contact-issued-url"]').exists()).toBe(false)
     expect(wrapper.find('input').exists()).toBe(true)
   })
 
-  it('期限・回数上限nullの既存トークンもQRを表示する', async () => {
+  it('期限・回数上限nullの既存トークンも一覧に出し、URL・QRは出さない', async () => {
     api.listInviteTokens.mockResolvedValue({
       data: [
         {
           id: 2,
-          inviteUrl: 'https://example.test/contact-invite/unlimited',
           label: 'Unlimited',
           expiresAt: null,
           maxUses: null,
@@ -113,7 +120,9 @@ describe('個人連絡先QR管理', () => {
       ],
     })
     const wrapper = await mountPanel()
-    expect(wrapper.get('[data-testid="contact-qr"]').text()).toContain('/contact-invite/unlimited')
+    expect(wrapper.find('[data-testid="contact-qr"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('/contact-invite/')
+    expect(wrapper.get('[data-testid="contact-invite-once-hint"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('∞')
     expect(wrapper.text()).not.toContain('Invalid Date')
     expect(api.createInviteToken).not.toHaveBeenCalled()

@@ -65,6 +65,7 @@ class ContactInviteTokenHashStorageIT extends AbstractMySqlIntegrationTest {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private SecretTokenVault vault;
     @Autowired private ContactInviteTokenRepository repository;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager em;
 
     private Long issuerId;
     private Long accepterId;
@@ -171,6 +172,7 @@ class ContactInviteTokenHashStorageIT extends AbstractMySqlIntegrationTest {
                 .isEqualTo(404);
         assertThat(perform(accepterId, post("/api/v1/contact-invite/{token}/accept", plaintext)).getStatus())
                 .isEqualTo(200);
+        em.flush();
         assertThat(jdbc.queryForObject("SELECT used_count FROM contact_invite_tokens WHERE user_id = ?",
                 Integer.class, issuerId)).isEqualTo(1);
     }
