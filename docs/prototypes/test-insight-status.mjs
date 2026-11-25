@@ -750,3 +750,71 @@ describe('R5 readInsights 失敗時も警告件数を更新し、__proto__ キ�
     assert.equal(resolved.insights[0].statusOrigin, 'local');
   });
 });
+
+describe('CMP-261124-2324 ステージ未設定の気づきの表示', () => {
+  const STAGES = ['B0', 'B1', 'B2', 'B3', 'B4'];
+
+  function renderInsightsBody() {
+    const source = fs.readFileSync(htmlPath, 'utf8');
+    const start = source.indexOf('function renderInsights()');
+    assert.ok(start >= 0, 'renderInsights が見つからない');
+    const end = source.indexOf('\n    function ', start + 10);
+    return source.slice(start, end > 0 ? end : undefined);
+  }
+
+  test('AC4 insightStageMatches が純関数として公開されている', () => {
+    const core = loadCore();
+    assert.equal(typeof core.insightStageMatches, 'function', 'insightStageMatches が未実装');
+  });
+
+  test('AC1 B0〜B4 の気づきは該当ステージ選択でだけ true', () => {
+    const core = loadCore();
+    assert.equal(typeof core.insightStageMatches, 'function', 'insightStageMatches が未実装');
+    for (const featureStage of STAGES) {
+      for (const selected of STAGES) {
+        assert.equal(core.insightStageMatches(featureStage, selected, STAGES), featureStage === selected, `${featureStage} / ${selected}`);
+      }
+    }
+  });
+
+  test('AC1 未設定・未登録・空・その他の値はどのステージ選択でも true', () => {
+    const core = loadCore();
+    assert.equal(typeof core.insightStageMatches, 'function', 'insightStageMatches が未実装');
+    for (const featureStage of ['未設定', '', undefined, null, 'B9', 'b0', 'その他']) {
+      for (const selected of STAGES) {
+        assert.equal(core.insightStageMatches(featureStage, selected, STAGES), true, `${String(featureStage)} / ${selected}`);
+      }
+    }
+  });
+
+  test('AC5 全件到達: どのステージ値の気づきも、いずれかのステージ選択で表示対象になる', () => {
+    const core = loadCore();
+    assert.equal(typeof core.insightStageMatches, 'function', 'insightStageMatches が未実装');
+    for (const featureStage of [...STAGES, '未設定', '', undefined, 'B9']) {
+      assert.ok(STAGES.some((selected) => core.insightStageMatches(featureStage, selected, STAGES)), `${String(featureStage)} に到達できない`);
+    }
+  });
+
+  test('AC4/AC5 html は renderInsights で insightStageMatches を使い、旧比較を残さない', () => {
+    const body = renderInsightsBody();
+    assert.match(body, /insightStageMatches\(/);
+    assert.doesNotMatch(body, /feature\.stage\s*===\s*selectedStage/);
+  });
+
+  test('AC4 ステージ一覧はボードのステージボタン（data-stage）から取得して渡す', () => {
+    const body = renderInsightsBody();
+    assert.match(body, /data-stage/);
+  });
+
+  test('AC2 ステージ未設定の目印「ステージ未設定」が気づきの機能グループに出る', () => {
+    const body = renderInsightsBody();
+    assert.match(body, /ステージ未設定/);
+  });
+
+  test('AC3 件数は同じ絞り込み結果から数える（登録元チップ・状態件数）', () => {
+    const body = renderInsightsBody();
+    assert.match(body, /all: stageAndQueryInsights\.length/);
+    assert.match(body, /const visibleInsights = stageAndQueryInsights\.filter/);
+    assert.match(body, /visibleInsights\.filter\(\(insight\) => insight\.status === 'inbox'\)/);
+  });
+});

@@ -116,6 +116,7 @@
       "confirm": "将结算 {month} 的班次预算，确定要继续吗？",
       "success": "月度结算完成：{month}（已确定消耗记录 {count} 条）",
       "alreadyClosed": "该月份已结算",
+      "notEnded": "{month} 尚未结束，无法结账。只能对已结束的月份进行结账。",
       "title": "月度结算",
       "yearMonth": "目标月份",
       "yearMonthHint": "YYYY-MM格式（例: 2026-04）",
