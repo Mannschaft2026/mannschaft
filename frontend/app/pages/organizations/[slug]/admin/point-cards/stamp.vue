@@ -97,9 +97,9 @@ onMounted(async () => {
 /**
  * BarcodeCapture から受け取った値からトークンを抽出して resolve する。
  * 顧客側 share QR の形式:
- *   - mannschaft://wallet/share?token=UUID
- *   - https://<host>/wallet/share?token=UUID（PWA フォールバック）
- * 純粋な UUID 文字列が来た場合は token そのものとして扱う。
+ *   - mannschaft://wallet/share?token=<共有トークン>
+ *   - https://<host>/wallet/share?token=<共有トークン>（PWA フォールバック）
+ * 素の共有トークン（Base64URL 43字）が来た場合は token そのものとして扱う。
  */
 async function onQrDetected(value: string, _format: BarcodeFormat) {
   const token = extractToken(value)

@@ -47,7 +47,7 @@ import com.mannschaft.app.common.security.AccessGuard;
  *   <li>POST /resolve-by-token 不存在トークン → 404 POINT_CARD_019</li>
  *   <li>POST /resolve-by-token 他組織カード → 404 POINT_CARD_011</li>
  *   <li>POST /resolve-by-token 認可違反 → 403</li>
- *   <li>POST /resolve-by-token Bean Validation（token 必須 / 36 文字）</li>
+ *   <li>POST /resolve-by-token Bean Validation（token 必須 / 43 文字）</li>
  *   <li>レスポンスに暗号化対象が含まれない（barcodeValue / nickname / memo）</li>
  * </ul>
  */
