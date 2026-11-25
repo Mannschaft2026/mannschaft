@@ -276,6 +276,7 @@ export default {
     "noShow": {
       "pageTitle": "Historial NO_SHOW",
       "adminPageTitle": "Gestión NO_SHOW",
+      "empty": "No hay registros de ausencias sin aviso.",
       "status": {
         "pending": "Pendiente",
         "confirmed": "Confirmado",
@@ -306,6 +307,8 @@ export default {
     "penalty": {
       "pageTitle": "Configuración de penalización",
       "penaltiesPageTitle": "Lista de penalizaciones",
+      "emptyPenalties": "Ningún miembro tiene penalizaciones actualmente.",
+      "notConfigured": "La política de penalizaciones aún no está configurada. Se muestran los valores predeterminados; al guardar se aplicarán.",
       "enabled": "Habilitado",
       "disabled": "Deshabilitado",
       "thresholdCount": "Umbral de incidencias",

@@ -276,6 +276,7 @@ export default {
     "noShow": {
       "pageTitle": "NO_SHOW-Verlauf",
       "adminPageTitle": "NO_SHOW-Verwaltung",
+      "empty": "Es gibt keine Einträge zu unentschuldigtem Fehlen.",
       "status": {
         "pending": "Ausstehend",
         "confirmed": "Bestätigt",
@@ -306,6 +307,8 @@ export default {
     "penalty": {
       "pageTitle": "Strafeinstellungen",
       "penaltiesPageTitle": "Strafliste",
+      "emptyPenalties": "Derzeit hat kein Mitglied eine Strafe.",
+      "notConfigured": "Die Strafrichtlinie ist noch nicht eingerichtet. Es werden Standardwerte angezeigt; mit dem Speichern werden sie wirksam.",
       "enabled": "Aktiviert",
       "disabled": "Deaktiviert",
       "thresholdCount": "Schwellenwert",

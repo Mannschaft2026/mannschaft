@@ -206,6 +206,9 @@ class OrphanPageGuardTest {
         assertThat(reachableLinks)
                 .as("自己検証: アプリ全体からリンクが1件も抽出できなかった — 走査が壊れている")
                 .isNotEmpty();
+        // 動的ルート（[slug] 等）とテンプレートリテラルの動的セグメント（${id}）を同じ [param] に揃えて照合する。
+        Set<String> comparableLinks = new LinkedHashSet<>();
+        for (String link : reachableLinks) comparableLinks.add(toComparable(link));
 
         // 分類ごとの検査。
         for (Map.Entry<String, Map<String, Object>> entry : pageByPath.entrySet()) {
@@ -222,7 +225,7 @@ class OrphanPageGuardTest {
             switch (classification) {
                 case "reachable" -> {
                     boolean suppressed = !str(e.get("link_detection_note")).isBlank();
-                    if (!reachableLinks.contains(path) && !suppressed) {
+                    if (!comparableLinks.contains(toComparable(path)) && !suppressed) {
                         violations.add("reachable と宣言されているが、当該パスへのリンクが見つからない: " + path
                                 + " — 導線が消えた（退行）か、走査で拾えない書き方に変わった可能性がある。"
                                 + "後者なら link_detection_note に理由を書いて抑制すること");
@@ -238,7 +241,7 @@ class OrphanPageGuardTest {
                             violations.add("duplicate-remnant の replacement が実在しない: " + path
                                     + " -> " + replacement + "（代替ページが削除された可能性がある）");
                         }
-                        if (!reachableLinks.contains(replacement) && !suppressed) {
+                        if (!comparableLinks.contains(toComparable(replacement)) && !suppressed) {
                             violations.add("duplicate-remnant の replacement へのリンクが見つからない: " + path
                                     + " -> " + replacement
                                     + "（走査で拾えない書き方なら link_detection_note に理由を書いて抑制すること）");
@@ -309,23 +312,48 @@ class OrphanPageGuardTest {
         }
     }
 
+    /** パスセグメント全体が {@code ${...}} の動的部分（{@code /scopes/${type}/${id}/no-shows} の {@code ${type}} 等）。 */
+    private static final Pattern DYNAMIC_SEGMENT = Pattern.compile("(?<=/)\\$\\{[^}]*\\}(?=/|$)");
+
+    /** Nuxt の動的ルートのセグメント（{@code [slug]}・{@code [scopeId]} 等。{@code [...all]} も含む）。 */
+    private static final Pattern ROUTE_PARAM_SEGMENT = Pattern.compile("(?<=/)\\[[^/\\]]+\\](?=/|$)");
+
+    /** 動的セグメントを区別せず照合するための共通トークン。 */
+    private static final String PARAM_TOKEN = "[param]";
+
     /**
-     * リンク文字列を比較可能な形へ正規化する。クエリ文字列（{@code ?scope=...}）と
-     * テンプレートリテラルの動的部分（{@code ${...}}）のうち、先に現れる方で切り落とす。
-     * 末尾スラッシュも除く。
+     * リンク文字列を比較可能な形へ正規化する。
+     *
+     * <ul>
+     *   <li>クエリ文字列（{@code ?scope=...}）は切り落とす。</li>
+     *   <li>パスセグメント全体がテンプレートリテラルの動的部分（{@code /${id}/}）のものは
+     *       動的セグメント {@code [param]} に置き換え、以降のセグメントも残す
+     *       （以前は {@code ${} 以降をすべて切り落としていたため、
+     *       {@code /scopes/${type}/${id}/no-shows} が {@code /scopes} としか認識されず、
+     *       動的ルートへの導線を検出できなかった）。</li>
+     *   <li>セグメントの一部だけが動的（{@code /foo-${id}}・{@code /a/b${x}}）な場合は
+     *       どのルートか確定できないため、その位置で切り落とす（従来どおり）。</li>
+     *   <li>末尾スラッシュも除く。</li>
+     * </ul>
+     *
+     * <p>Nuxt の動的ルート（{@code [slug]} 等）も同じ {@code [param]} に正規化するので、
+     * リンク側とルート側を {@link #toComparable(String)} で揃えて照合できる。</p>
      */
     static String normalizeLink(String raw) {
         int q = raw.indexOf('?');
-        int d = raw.indexOf("${");
-        int cut;
-        if (q >= 0 && d >= 0) cut = Math.min(q, d);
-        else if (q >= 0) cut = q;
-        else cut = d; // d が -1 なら cut も -1（切り落とし無し）
-        String s = cut >= 0 ? raw.substring(0, cut) : raw;
+        String s = q >= 0 ? raw.substring(0, q) : raw;
+        s = DYNAMIC_SEGMENT.matcher(s).replaceAll(PARAM_TOKEN);
+        int d = s.indexOf("${");
+        if (d >= 0) s = s.substring(0, d); // セグメント途中の動的部分は従来どおり切り落とし
         if (s.length() > 1 && s.endsWith("/")) {
             s = s.substring(0, s.length() - 1);
         }
         return s;
+    }
+
+    /** ルート（{@code /scopes/[scopeType]/[scopeId]/no-shows}）を、正規化済みリンクと比較できる形へ揃える。 */
+    static String toComparable(String route) {
+        return ROUTE_PARAM_SEGMENT.matcher(route).replaceAll(PARAM_TOKEN);
     }
 
     // ------------------------------------------------------------------
@@ -340,6 +368,36 @@ class OrphanPageGuardTest {
         assertThat(normalizeLink("/admin/line-settings")).isEqualTo("/admin/line-settings");
         assertThat(normalizeLink("/settings/profile-visibility/")).isEqualTo("/settings/profile-visibility");
         assertThat(normalizeLink("/")).isEqualTo("/");
+    }
+
+    @Test
+    @DisplayName("自己検証: セグメント全体が動的な ${...} は [param] にして後続セグメントを残すこと")
+    void リンク正規化_動的セグメント() {
+        // 以前は ${ 以降を切り落とし、/scopes/ としか認識されず動的ルートへの導線を検出できなかった
+        assertThat(normalizeLink("/scopes/${type}/${id}/no-shows")).isEqualTo("/scopes/[param]/[param]/no-shows");
+        assertThat(normalizeLink("/teams/${props.slug}/settings/x?tab=${tab}")).isEqualTo("/teams/[param]/settings/x");
+        assertThat(normalizeLink("/teams/${slug}")).isEqualTo("/teams/[param]");
+        // セグメントの一部だけが動的なものはルートを確定できないため、従来どおりその位置で切り落とす
+        assertThat(normalizeLink("/foo-${id}/bar")).isEqualTo("/foo-");
+        assertThat(normalizeLink("/a/b${x}")).isEqualTo("/a/b");
+        // 先頭が変数のリンクは addMatches が拾わない（従来どおり）
+        assertThat(extractLinks("Hub.vue", "{ to: `${base}/settings/x` }")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("自己検証: Nuxt の動的ルートとテンプレートリテラルのリンクが同じ [param] 形で一致すること")
+    void ルート照合_動的セグメント() {
+        String route = "/scopes/[scopeType]/[scopeId]/no-shows";
+        Set<String> links = extractLinks("AdminSettingsHub.vue",
+                "{ absolutePath: `/scopes/${recruitmentScopeType.value}/${scopeNumericId.value}/no-shows`, title: 'x' }");
+        Set<String> comparable = new LinkedHashSet<>();
+        for (String l : links) comparable.add(toComparable(l));
+        assertThat(comparable).contains(toComparable(route));
+        // 別ルートへは一致しない（セグメント数・静的部分が違えば拾わない）
+        assertThat(comparable).doesNotContain(toComparable("/scopes/[scopeType]/[scopeId]/penalty-settings"));
+        assertThat(comparable).doesNotContain(toComparable("/scopes/[scopeType]/no-shows"));
+        // [...all] のような catch-all も [param] 化される（既存ルートの照合は変えない）
+        assertThat(toComparable("/teams/[slug]/equipment")).isEqualTo("/teams/[param]/equipment");
     }
 
     @Test

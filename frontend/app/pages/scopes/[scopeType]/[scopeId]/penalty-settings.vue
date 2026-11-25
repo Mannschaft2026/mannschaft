@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { getLoadErrorHttpStatus } from '~/utils/loadError'
 import type {
   RecruitmentPenaltySettingResponse,
   RecruitmentUserPenaltyResponse,
@@ -19,6 +20,14 @@ const scopeId = computed(() => String(route.params.scopeId))
 const setting = ref<RecruitmentPenaltySettingResponse | null>(null)
 const settingLoading = ref(false)
 const settingSaving = ref(false)
+// 取得失敗は握りつぶさず表示する。BE の 403（checkAdminOrAbove）は権限なしとして画面全体に出す
+const settingError = ref<unknown>(null)
+const penaltiesError = ref<unknown>(null)
+const forbiddenError = computed(() =>
+  [settingError.value, penaltiesError.value].find(e => getLoadErrorHttpStatus(e) === 403),
+)
+// BE は未設定のとき既定値を id なし（null）で返す
+const isNotConfigured = computed(() => setting.value !== null && setting.value.id == null)
 
 // フォーム値
 const formIsEnabled = ref(false)
@@ -42,13 +51,15 @@ const liftSubmitting = ref(false)
 
 async function loadSetting() {
   settingLoading.value = true
+  settingError.value = null
   try {
     const result = await api.getPenaltySetting(scopeType.value, scopeId.value)
     setting.value = result.data
     syncFormFromSetting(result.data)
   }
-  catch {
-    // 未設定の場合は null のまま（デフォルト値で新規作成）
+  catch (e) {
+    setting.value = null
+    settingError.value = e
   }
   finally {
     settingLoading.value = false
@@ -89,6 +100,7 @@ async function saveSetting() {
 
 async function loadPenalties() {
   penaltiesLoading.value = true
+  penaltiesError.value = null
   try {
     const result = await api.getScopePenalties(
       scopeType.value,
@@ -100,7 +112,9 @@ async function loadPenalties() {
     penaltiesTotalElements.value = result.meta.total
   }
   catch (e) {
-    error(String(e))
+    penalties.value = []
+    penaltiesTotalElements.value = 0
+    penaltiesError.value = e
   }
   finally {
     penaltiesLoading.value = false
@@ -160,6 +174,13 @@ onMounted(async () => {
 
 <template>
   <div class="container mx-auto max-w-3xl p-4">
+    <!-- 非管理者の URL 直打ち: BE の 403 を権限なしとして出し、フォーム・操作部品・0件表示は出さない -->
+    <template v-if="forbiddenError">
+      <PageHeader :title="t('recruitment.penalty.pageTitle')" />
+      <DashboardErrorState :error="forbiddenError" />
+    </template>
+
+    <template v-else>
     <!-- ペナルティ設定フォーム -->
     <section class="mb-8">
       <PageHeader :title="t('recruitment.penalty.pageTitle')" />
@@ -168,7 +189,13 @@ onMounted(async () => {
         <LoadingBounce />
       </div>
 
+      <DashboardErrorState v-else-if="settingError" :error="settingError" @retry="loadSetting" />
+
       <SectionCard v-else class="flex flex-col gap-4">
+        <p v-if="isNotConfigured" class="text-sm text-gray-500">
+          {{ t('recruitment.penalty.notConfigured') }}
+        </p>
+
         <!-- 有効/無効 -->
         <div class="flex items-center gap-3">
           <InputSwitch v-model="formIsEnabled" input-id="isEnabled" />
@@ -260,11 +287,13 @@ onMounted(async () => {
         <LoadingBounce />
       </div>
 
+      <DashboardErrorState v-else-if="penaltiesError" :error="penaltiesError" @retry="loadPenalties" />
+
       <div
         v-else-if="penalties.length === 0"
         class="rounded border border-dashed p-8 text-center text-gray-500"
       >
-        {{ t('recruitment.label.noListings') }}
+        {{ t('recruitment.penalty.emptyPenalties') }}
       </div>
 
       <div v-else class="flex flex-col gap-3">
@@ -305,7 +334,7 @@ onMounted(async () => {
       </div>
 
       <Paginator
-        v-if="penaltiesTotalElements > penaltiesPageSize"
+        v-if="!penaltiesError && penaltiesTotalElements > penaltiesPageSize"
         :rows="penaltiesPageSize"
         :total-records="penaltiesTotalElements"
         class="mt-4"
@@ -337,5 +366,6 @@ onMounted(async () => {
         />
       </template>
     </Dialog>
+    </template>
   </div>
 </template>

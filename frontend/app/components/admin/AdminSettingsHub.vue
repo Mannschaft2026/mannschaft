@@ -11,10 +11,14 @@ const { t } = useI18n()
 const slug = computed(() => props.slug)
 const { roleName, isScopeAdmin: isAdmin, loadPermissions } = useRoleAccess(props.scopeType, slug)
 const { getAdminActionRequired } = useScopeTabApi()
+const api = useApi()
 const flags = useFeatureFlagStore()
 const loading = ref(true)
 const loadError = shallowRef<unknown>(null)
 const confirmedScopeManager = ref(false)
+// /scopes/{TYPE}/{id} の id には必ず数値 ID を渡す（slug を渡すと ScopeSlugIdConverter が TEAM として解決し別スコープを誤照会しうる）
+const scopeNumericId = ref<string | null>(null)
+const recruitmentScopeType = computed(() => (props.scopeType === 'team' ? 'TEAM' : 'ORGANIZATION'))
 const isSystemAdmin = computed(() => roleName.value === 'SYSTEM_ADMIN')
 const scopeManagerAccess = computed(
   () => isAdmin.value || roleName.value === 'DEPUTY_ADMIN' || confirmedScopeManager.value,
@@ -25,7 +29,10 @@ const base = computed(
 )
 
 interface SettingsLink {
-  path: string
+  /** `${base}/settings/` 配下の相対パス（absolutePath と排他） */
+  path?: string
+  /** スコープ設定配下ではない絶対パス（フィーチャーゲート照合の対象外。BE 側 checkAdminOrAbove が最終防衛） */
+  absolutePath?: string
   title: string
   adminOnly?: boolean
   sysAllowed?: boolean
@@ -52,14 +59,39 @@ const links = computed(() => {
       adminOnly: true,
     })
   }
+  // 無断欠席・ペナルティ管理は BE の checkAdminOrAbove（ADMIN/DEPUTY_ADMIN）に合わせ、システム管理者の例外では出さない
+  if (scopeManagerAccess.value && scopeNumericId.value) {
+    settings.push(
+      {
+        absolutePath: `/scopes/${recruitmentScopeType.value}/${scopeNumericId.value}/no-shows`,
+        title: 'recruitment.noShow.adminPageTitle',
+      },
+      {
+        absolutePath: `/scopes/${recruitmentScopeType.value}/${scopeNumericId.value}/penalty-settings`,
+        title: 'recruitment.penalty.pageTitle',
+      },
+    )
+  }
   return settings.filter((link) => {
+    if (link.absolutePath) return true
     const systemException = isSystemAdmin.value && link.sysAllowed
     if (!scopeManagerAccess.value && !systemException) return false
     if (link.adminOnly && !isAdmin.value && !systemException) return false
-    const gate = matchGateKey(`${base.value}/settings/${link.path}`)
+    const gate = matchGateKey(`${base.value}/settings/${link.path ?? ''}`)
     return gate === null || (flags.publicLoaded && flags.isEnabled(gate))
   })
 })
+
+/** 詳細 API の numericId を解決する（slug は URL 用で、/scopes/ 配下へは渡せない） */
+async function resolveScopeNumericId(requestedSlug: string): Promise<string> {
+  const resource = props.scopeType === 'team' ? 'teams' : 'organizations'
+  const result = await api<{ data: { numericId?: number } }>(`/api/v1/${resource}/${requestedSlug}`)
+  const numericId = result.data.numericId
+  if (!Number.isInteger(numericId) || Number(numericId) <= 0) {
+    throw new Error(`Scope numeric ID is unavailable: ${requestedSlug}`)
+  }
+  return String(numericId)
+}
 
 let loadSequence = 0
 async function loadPage() {
@@ -69,6 +101,7 @@ async function loadPage() {
   loading.value = true
   loadError.value = null
   confirmedScopeManager.value = false
+  scopeNumericId.value = null
   try {
     const result = await loadPermissions()
     if (!isCurrent()) return
@@ -90,6 +123,11 @@ async function loadPage() {
     }
     if (scopeManagerAccess.value && props.scopeType === 'team' && !flags.publicLoaded) {
       await flags.loadPublicFlags()
+    }
+    if (scopeManagerAccess.value) {
+      const numericId = await resolveScopeNumericId(requestedSlug)
+      if (!isCurrent()) return
+      scopeNumericId.value = numericId
     }
   } catch (error) {
     if (isCurrent()) loadError.value = error
@@ -113,9 +151,9 @@ watch(slug, loadPage)
       :message="t('adminConsole.middleware.accessDeniedBody')"
     />
     <div v-else class="grid gap-4 sm:grid-cols-2">
-      <SectionCard v-for="link in links" :key="link.path">
+      <SectionCard v-for="link in links" :key="link.absolutePath ?? link.path">
         <NuxtLink
-          :to="`${base}/settings/${link.path}`"
+          :to="link.absolutePath ?? `${base}/settings/${link.path}`"
           class="flex min-h-11 min-w-0 items-center justify-between gap-3 text-primary-600 hover:underline dark:text-primary-400"
         >
           <span>{{ t(link.title) }}</span>

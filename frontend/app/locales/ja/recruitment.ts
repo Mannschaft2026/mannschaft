@@ -276,6 +276,7 @@ export default {
     "noShow": {
       "pageTitle": "NO_SHOW履歴",
       "adminPageTitle": "NO_SHOW管理",
+      "empty": "無断欠席の記録はありません",
       "status": {
         "pending": "確認待ち",
         "confirmed": "確定",
@@ -306,6 +307,8 @@ export default {
     "penalty": {
       "pageTitle": "ペナルティ設定",
       "penaltiesPageTitle": "ペナルティ一覧",
+      "emptyPenalties": "ペナルティを受けているメンバーはいません",
+      "notConfigured": "ペナルティ設定はまだ行われていません（初期値を表示しています。保存すると有効になります）",
       "enabled": "有効",
       "disabled": "無効",
       "thresholdCount": "閾値件数（N回）",

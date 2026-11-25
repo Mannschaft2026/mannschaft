@@ -276,6 +276,7 @@ export default {
     "noShow": {
       "pageTitle": "NO_SHOW记录",
       "adminPageTitle": "NO_SHOW管理",
+      "empty": "暂无缺席记录。",
       "status": {
         "pending": "待确认",
         "confirmed": "确定",
@@ -306,6 +307,8 @@ export default {
     "penalty": {
       "pageTitle": "处罚设置",
       "penaltiesPageTitle": "处罚列表",
+      "emptyPenalties": "目前没有受到处罚的成员。",
+      "notConfigured": "尚未设置处罚规则。当前显示的是默认值，保存后生效。",
       "enabled": "有效",
       "disabled": "无效",
       "thresholdCount": "阈值次数",

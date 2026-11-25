@@ -27,16 +27,29 @@ function lookup(messages: unknown, key: string): unknown {
   }, messages)
 }
 
-const JAPANESE = /[぀-ヿ一-鿿]/
+/**
+ * Nuxt のテスト環境では vue-i18n のビルド時プラグインがメッセージを AST へコンパイルするため、
+ * 文字列は `{ loc: { source } }` の形で届く。環境によらず元の文言を取り出す。
+ */
+function asText(value: unknown): unknown {
+  if (value && typeof value === 'object') {
+    const source = (value as { loc?: { source?: unknown } }).loc?.source
+    if (typeof source === 'string') return source
+  }
+  return value
+}
+
+// 日本語の残存はかな（ひらがな・カタカナ）で判定する。漢字は中国語（zh）の正当な表記なので対象外
+const JAPANESE = /[぀-ヿ]/
 
 describe('無断欠席・ペナルティ管理の専用文言（CMP-261005-2103 I2）', () => {
   it.each(Object.keys(locales) as (keyof typeof locales)[])(
     'I2: %s に空表示・未設定表示の専用キーがあり、募集一覧の空文言と異なる',
     (locale) => {
       const messages = locales[locale]
-      const noListings = lookup(messages, 'recruitment.label.noListings')
+      const noListings = asText(lookup(messages, 'recruitment.label.noListings'))
       for (const key of REQUIRED_KEYS) {
-        const value = lookup(messages, key)
+        const value = asText(lookup(messages, key))
         expect(typeof value, `${locale}: ${key}`).toBe('string')
         expect(String(value).trim(), `${locale}: ${key}`).not.toBe('')
         expect(value, `${locale}: ${key} が募集一覧の空文言と同じ`).not.toBe(noListings)

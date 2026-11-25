@@ -18,6 +18,10 @@ const state = vi.hoisted(() => ({
   loadFlags: vi.fn(),
   probe: vi.fn(),
 }))
+// 無断欠席・ペナルティ管理への導線用に、管理者の表示時だけスコープ詳細 API の numericId を引く
+vi.mock('~/composables/useApi', () => ({
+  useApi: () => vi.fn().mockResolvedValue({ data: { numericId: 42 } }),
+}))
 mockNuxtImport('useRoleAccess', () => () => ({
   roleName: ref(state.role),
   isScopeAdmin: ref(state.scopeAdmin ?? state.role === 'ADMIN'),
@@ -187,7 +191,10 @@ describe('既存設定の集約ハブ', () => {
     state.role = 'DEPUTY_ADMIN'
     const wrapper = await mountHub('organization')
     expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(true)
-    expect(wrapper.findAll('a')).toHaveLength(1)
+    // 副管理者はADMIN限定リンクを持たず、BE の checkAdminOrAbove に合わせた無断欠席・ペナルティ管理の2本だけが加わる
+    expect(wrapper.findAll('a')).toHaveLength(3)
+    expect(wrapper.find('a[href$="/no-shows"]').exists()).toBe(true)
+    expect(wrapper.find('a[href$="/penalty-settings"]').exists()).toBe(true)
     expect(state.loadFlags).not.toHaveBeenCalled()
   })
 
