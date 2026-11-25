@@ -9,6 +9,7 @@ const { isAdminOrDeputy } = useOrgShellContext()
 const { resolveScopeId } = useActivityScopeId()
 const paymentRequestApi = usePaymentRequestApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { handleApiError } = useErrorHandler()
 const confirm = useConfirm()
 
@@ -52,6 +53,8 @@ async function load(): Promise<void> {
     const response = await paymentRequestApi.listOrganizationPaymentRequests(orgId.value, { status: statusFilter.value ?? undefined })
     requests.value = response.data ?? []
   } catch (error: unknown) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(error)) return
     handleApiError(error, 'payment-request.organization.list')
   } finally {
     loading.value = false
