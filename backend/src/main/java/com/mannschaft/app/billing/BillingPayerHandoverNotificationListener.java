@@ -8,6 +8,8 @@ import com.mannschaft.app.notification.NotificationScopeType;
 import com.mannschaft.app.notification.service.NotificationDeliveryRequest;
 import com.mannschaft.app.notification.service.NotificationDeliveryResult;
 import com.mannschaft.app.notification.service.NotificationDeliveryRunner;
+import com.mannschaft.app.organization.service.OrganizationService;
+import com.mannschaft.app.team.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
@@ -43,6 +45,9 @@ public class BillingPayerHandoverNotificationListener {
     private final NotificationDeliveryRunner notificationDeliveryRunner;
     private final UserLocaleCache userLocaleCache;
     private final MessageSource messageSource;
+    /** 遷移先 URL はスコープの slug で組み立てる（既存ルートは数値 ID を受け付けない）。 */
+    private final TeamService teamService;
+    private final OrganizationService organizationService;
 
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.DROP_WHEN_DISABLED,
             gateKeys = "FEATURE_BILLING_PAYMENT_ENABLED",
@@ -164,9 +169,29 @@ public class BillingPayerHandoverNotificationListener {
         };
     }
 
-    private String buildActionUrl(BillingPayerHandoverNotificationEvent event) {
-        String prefix = event.scopeKind() == EntitlementScopeKind.ORG
-                ? "/organizations/" : "/teams/";
-        return prefix + event.scopeId() + "/billing/payer-handover-requests/" + event.handoverRequestId();
+    /**
+     * 通知の遷移先 URL を組み立てる（CMP-260909-0304）。
+     *
+     * <p>実在する FE ルート {@code pages/{teams|organizations}/[slug]/settings/billing} を指す。
+     * ルートの識別子は数値 ID ではなく <b>slug</b> のため、スコープ ID から slug を解決する。
+     * 解決できない（論理削除済み等）場合は存在しない URL を渡さず {@code null} とする。</p>
+     */
+    String buildActionUrl(BillingPayerHandoverNotificationEvent event) {
+        String slug;
+        String prefix;
+        if (event.scopeKind() == EntitlementScopeKind.ORG) {
+            prefix = "/organizations/";
+            slug = organizationService.getSlugById(event.scopeId());
+        } else {
+            prefix = "/teams/";
+            slug = teamService.getSlugById(event.scopeId());
+        }
+        if (slug == null) {
+            log.warn("柱③-B 引継通知: スコープの slug を解決できないため遷移先 URL を付けません"
+                    + " scopeKind={}, scopeId={}, handoverRequestId={}",
+                    event.scopeKind(), event.scopeId(), event.handoverRequestId());
+            return null;
+        }
+        return prefix + slug + "/settings/billing?payerHandoverRequestId=" + event.handoverRequestId();
     }
 }
