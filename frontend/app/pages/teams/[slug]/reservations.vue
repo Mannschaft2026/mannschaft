@@ -16,6 +16,10 @@ const { adminLens } = useTeamShellContext()
 
 <template>
   <div class="mt-4">
-    <TeamReservationsPanel :team-id="teamSlug" :management-view="adminLens" />
+    <TeamReservationsPanel
+      :team-id="teamSlug"
+      :management-view="adminLens"
+      scope-not-found-on-denied
+    />
   </div>
 </template>
