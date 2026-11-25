@@ -305,6 +305,30 @@ V268.20261124173054__alter_registration_pending_invites_reissue.sql（CMP-261107
 
 ---
 
+### CMP-261124-0159 是正 migration（非公開チームのサポーター・ゲスト在籍の是正）
+
+> **ステータス**: 🟢 設計完了。業務仕様は [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」。
+
+- **ファイル名**: `V{major}.{yyyyMMddHHmmss}__enforce_members_only_team_without_supporters.sql`。major は**マージ時に origin/main 全体の最大 major＋1 で確定**する（設計時点の origin/main 最大は 267。並行 PR と衝突しうるため設計書では確定しない）。minor は `date -u '+%Y%m%d%H%M%S'`。
+- **対象チーム**: `teams.visibility = 'MEMBERS_AND_ABOVE'`（論理削除・アーカイブ済みも含める。復元時に不変条件を崩さないため）。
+- **処理（すべて集合演算・冪等）**:
+  1. 在籍サポーターの退出: `UPDATE memberships SET left_at = UTC_TIMESTAMP(), leave_reason = 'REMOVED', updated_at = UTC_TIMESTAMP() WHERE scope_type = 'TEAM' AND role_kind = 'SUPPORTER' AND left_at IS NULL AND scope_id IN (対象チーム)`（`chk_memberships_left_reason` を満たす）。
+  2. GUEST の除去: `DELETE ur FROM user_roles ur JOIN roles r ON r.id = ur.role_id AND r.name = 'GUEST' WHERE ur.team_id IN (対象チーム) AND ur.organization_id IS NULL`。
+  3. PENDING 申請の却下: `UPDATE supporter_applications SET status = 'REJECTED', updated_at = UTC_TIMESTAMP() WHERE scope_type = 'TEAM' AND status = 'PENDING' AND scope_id IN (対象チーム)`。
+  4. SUPPORTER 招待トークンの無効化: `UPDATE invite_tokens t JOIN roles r ON r.id = t.role_id AND r.name = 'SUPPORTER' SET t.revoked_at = UTC_TIMESTAMP() WHERE t.team_id IN (対象チーム) AND t.revoked_at IS NULL`（MEMBER のトークンは触らない）。
+  5. サイネージのアクセストークンの無効化: 対象チームの画面（`signage_screens.scope_type = 'TEAM'`）の `signage_access_tokens` を `is_active = FALSE` にする（期限なしを含む。`is_active = TRUE` の行だけ）。
+  6. 共有ファイルリンクの無効化: 対象チームのフォルダ（`shared_folders.scope_type = 'TEAM'`）にあるファイルの `shared_file_links` を `is_active = FALSE` にする（`is_active = TRUE` の行だけ）。F00 §20.5.3。
+- **件数監査**: migration には件数出力を置かない。番人 IT がフィクスチャを置いて適用前後の件数（6 種）を検証する。本番に実データが無いため監査表は作らない。
+- **冪等**: 条件に「在籍中」「PENDING」「未失効」「GUEST 行が存在」「リンク・トークンが有効」を含むため、2 回目以降は 0 件更新。
+- **通知**: migration では通知しない（本番に実データが無い。実データ投入後に同種の是正が要る場合は業務フロー側で通知する）。
+- **キャッシュ**: サポーター数・権限キャッシュは TTL で収束するが、デプロイ手順で該当キー（CMP-261004-1942 のサポーター数キャッシュ）を削除する。
+- **予約語・照合順序**: 新規列なし。文字列リテラルを隣接させない（COMMENT の分割連結禁止）。
+- **番人テスト** `MembersOnlyTeamSupporterCleanupMigrationIT`（Testcontainers MySQL・実 migration）:
+  - **AC-0159-65**: 非公開チームと公開チーム（SUPPORTERS_AND_ABOVE）それぞれに、在籍サポーター 2・退出済みサポーター 1・GUEST 1・MEMBER 2・ADMIN 1・PENDING 申請 2・APPROVED 申請 1・SUPPORTER トークン（有効 1・失効済み 1）・MEMBER トークン 1 を置いて migration を適用すると、非公開チームだけが是正され（在籍サポーター 0・GUEST 0・PENDING 0・有効 SUPPORTER トークン 0）、MEMBER/ADMIN・退出済み行・APPROVED 申請・失効済み/MEMBER トークン・公開チームの全行は不変。非公開チームのファイルの共有リンク（有効 2）は無効になり、公開チームのリンクは不変。
+  - **AC-0159-66**: 同じ SQL を 2 回目に流しても更新 0 件（冪等）。
+  - **AC-0159-67**: 前後の件数（6 種。サイネージのアクセストークン 期限あり 1・期限なし 1 を含む）が期待値と一致。
+  - **AC-0159-68**: 適用後、`MembersOnlyTeamSupporterInvariantIT`（F00 §20.6）の不変条件が成り立つ。
+
 ## 8. 未解決事項
 
 - [x] 組織レベルの DEPUTY_ADMIN 権限グループの必要性を Phase 2 開始前に確認する（現設計はチームスコープのみ）→ **対応済み（2026-03-08）**: `team_permission_groups` / `team_permission_group_permissions` を `permission_groups` / `permission_group_permissions` に統合リネームし、`organization_id` カラム（XOR 制約）を追加。チーム・組織共通で同一テーブルを使用する設計に変更。API も `GET/POST/PATCH/DELETE /organizations/{id}/permission-groups` および `PUT /organizations/{id}/members/{userId}/permission-groups` を追加
