@@ -60,6 +60,8 @@ class TimelinePostControllerTest {
     void setUp() {
         controller = new TimelinePostController(postService, ranchNative, servletRequest, scopeIdResolver, effortReadGuard);
         Mockito.lenient().when(effortReadGuard.isVisible(Mockito.any(), Mockito.any())).thenReturn(true);
+        Mockito.lenient().when(effortReadGuard.visibleDetail(Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         Mockito.lenient().when(effortReadGuard.filterVisible(Mockito.any(), Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         securityUtils = Mockito.mockStatic(SecurityUtils.class);

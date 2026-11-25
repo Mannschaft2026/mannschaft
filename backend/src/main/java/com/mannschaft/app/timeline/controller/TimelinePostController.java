@@ -72,9 +72,9 @@ public class TimelinePostController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
-        PostDetailResponse response = postService.getPostDetail(id, userId);
-        // F06.4.1: 努力由来の投稿は F00 を通るときだけ返す（通らなければ存在しない投稿と同じ 404）。
-        if (!effortReadGuard.isVisible(id, userId)) {
+        // F06.4.1: 努力由来の投稿は F00 を通るときだけ SharedRecord を載せて返す（通らなければ存在しない投稿と同じ 404）。
+        PostDetailResponse response = effortReadGuard.visibleDetail(postService.getPostDetail(id, userId), userId);
+        if (response == null) {
             throw new com.mannschaft.app.common.BusinessException(com.mannschaft.app.timeline.TimelineErrorCode.POST_NOT_FOUND);
         }
         return ResponseEntity.ok(ApiResponse.of(response));

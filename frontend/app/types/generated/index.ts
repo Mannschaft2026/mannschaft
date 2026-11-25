@@ -60230,6 +60230,51 @@ export interface components {
             /** Format: int32 */
             videoWidth?: number;
         };
+        Author: {
+            avatarUrl?: string;
+            displayName?: string;
+            /** Format: int64 */
+            userId?: number;
+        };
+        EffortSharedRecord: {
+            author?: components["schemas"]["Author"];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: uuid */
+            definitionUuid?: string;
+            fields?: components["schemas"]["Field"][];
+            /** Format: uuid */
+            id?: string;
+            interactions?: components["schemas"]["Interactions"];
+            recordTimezone?: string;
+            /** Format: date */
+            recordedOn?: string;
+            /** Format: int64 */
+            teamId?: number;
+            templateName?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+        };
+        Field: {
+            displayValue?: string;
+            fieldKey?: string;
+            label?: string;
+            semantic?: string;
+            /** @enum {string} */
+            type?: "NUMBER" | "TEXT" | "SELECT" | "DATE" | "DATETIME" | "CHECKBOX";
+            unit?: string;
+            value?: string;
+        };
+        Interactions: {
+            canComment?: boolean;
+            canLike?: boolean;
+            canMitayo?: boolean;
+            canQuote?: boolean;
+            canReply?: boolean;
+            canRepost?: boolean;
+        };
         PostAuditDto: {
             /** Format: date-time */
             createdAt?: string;
@@ -60271,6 +60316,8 @@ export interface components {
             audit?: components["schemas"]["PostAuditDto"];
             author?: components["schemas"]["PostAuthorDto"];
             content?: components["schemas"]["PostContentDto"];
+            /** @description 努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null */
+            effortShare?: components["schemas"]["EffortSharedRecord"];
             /** Format: int64 */
             id?: number;
             /** @description 閲覧者がみたよ済みか */
@@ -60282,6 +60329,11 @@ export interface components {
             mitayoCount: number;
             postedAs?: components["schemas"]["PostPostedAsDto"];
             scope?: components["schemas"]["PostScopeDto"];
+            /**
+             * @description 投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null
+             * @enum {string}
+             */
+            sourceType?: "PERSONAL_EFFORT_SHARE";
             stats?: components["schemas"]["PostStatsDto"];
             /**
              * @description システム自動投稿の種別（村行事の還流）。非nullなら村の行事案内名義のシステム投稿。通常投稿はnull。
@@ -70748,12 +70800,6 @@ export interface components {
         ApiResponseEffortSharePreviewResponse: {
             data?: components["schemas"]["EffortSharePreviewResponse"];
         };
-        Author: {
-            avatarUrl?: string;
-            displayName?: string;
-            /** Format: int64 */
-            userId?: number;
-        };
         EffortSharePreviewResponse: {
             /** Format: int64 */
             contentRevision?: number;
@@ -70765,45 +70811,6 @@ export interface components {
             projection?: components["schemas"]["EffortSharedRecord"];
             /** Format: int64 */
             recordVersion?: number;
-        };
-        EffortSharedRecord: {
-            author?: components["schemas"]["Author"];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: uuid */
-            definitionUuid?: string;
-            fields?: components["schemas"]["Field"][];
-            /** Format: uuid */
-            id?: string;
-            interactions?: components["schemas"]["Interactions"];
-            recordTimezone?: string;
-            /** Format: date */
-            recordedOn?: string;
-            /** Format: int64 */
-            teamId?: number;
-            templateName?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-            /** Format: int64 */
-            version?: number;
-        };
-        Field: {
-            displayValue?: string;
-            fieldKey?: string;
-            label?: string;
-            semantic?: string;
-            /** @enum {string} */
-            type?: "NUMBER" | "TEXT" | "SELECT" | "DATE" | "DATETIME" | "CHECKBOX";
-            unit?: string;
-            value?: string;
-        };
-        Interactions: {
-            canComment?: boolean;
-            canLike?: boolean;
-            canMitayo?: boolean;
-            canQuote?: boolean;
-            canReply?: boolean;
-            canRepost?: boolean;
         };
         CreateDefinitionSnapshotRequest: {
             /** Format: int64 */
@@ -76248,11 +76255,18 @@ export interface components {
             audit?: components["schemas"]["PostAuditDto"];
             author?: components["schemas"]["PostAuthorDto"];
             content?: components["schemas"]["PostContentDto"];
+            /** @description 努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null */
+            effortShare?: components["schemas"]["EffortSharedRecord"];
             /** Format: int64 */
             id?: number;
             poll?: components["schemas"]["PollResponse"];
             recentReplies?: components["schemas"]["PostResponse"][];
             scope?: components["schemas"]["PostScopeDto"];
+            /**
+             * @description 投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null
+             * @enum {string}
+             */
+            sourceType?: "PERSONAL_EFFORT_SHARE";
             stats?: components["schemas"]["PostStatsDto"];
         };
         FeedData: {

@@ -184856,6 +184856,129 @@
           }
         }
       },
+      "Author": {
+        "type": "object",
+        "properties": {
+          "avatarUrl": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "EffortSharedRecord": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/Author"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "definitionUuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "interactions": {
+            "$ref": "#/components/schemas/Interactions"
+          },
+          "recordTimezone": {
+            "type": "string"
+          },
+          "recordedOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "teamId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "templateName": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Field": {
+        "type": "object",
+        "properties": {
+          "displayValue": {
+            "type": "string"
+          },
+          "fieldKey": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "semantic": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "NUMBER",
+              "TEXT",
+              "SELECT",
+              "DATE",
+              "DATETIME",
+              "CHECKBOX"
+            ]
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Interactions": {
+        "type": "object",
+        "properties": {
+          "canComment": {
+            "type": "boolean"
+          },
+          "canLike": {
+            "type": "boolean"
+          },
+          "canMitayo": {
+            "type": "boolean"
+          },
+          "canQuote": {
+            "type": "boolean"
+          },
+          "canReply": {
+            "type": "boolean"
+          },
+          "canRepost": {
+            "type": "boolean"
+          }
+        }
+      },
       "PostAuditDto": {
         "type": "object",
         "properties": {
@@ -184960,6 +185083,10 @@
           "content": {
             "$ref": "#/components/schemas/PostContentDto"
           },
+          "effortShare": {
+            "$ref": "#/components/schemas/EffortSharedRecord",
+            "description": "努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null"
+          },
           "id": {
             "type": "integer",
             "format": "int64"
@@ -184978,6 +185105,13 @@
           },
           "scope": {
             "$ref": "#/components/schemas/PostScopeDto"
+          },
+          "sourceType": {
+            "type": "string",
+            "description": "投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null",
+            "enum": [
+              "PERSONAL_EFFORT_SHARE"
+            ]
           },
           "stats": {
             "$ref": "#/components/schemas/PostStatsDto"
@@ -213961,21 +214095,6 @@
           }
         }
       },
-      "Author": {
-        "type": "object",
-        "properties": {
-          "avatarUrl": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "userId": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
       "EffortSharePreviewResponse": {
         "type": "object",
         "properties": {
@@ -214000,114 +214119,6 @@
           "recordVersion": {
             "type": "integer",
             "format": "int64"
-          }
-        }
-      },
-      "EffortSharedRecord": {
-        "type": "object",
-        "properties": {
-          "author": {
-            "$ref": "#/components/schemas/Author"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "definitionUuid": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Field"
-            }
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "interactions": {
-            "$ref": "#/components/schemas/Interactions"
-          },
-          "recordTimezone": {
-            "type": "string"
-          },
-          "recordedOn": {
-            "type": "string",
-            "format": "date"
-          },
-          "teamId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "templateName": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "version": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "Field": {
-        "type": "object",
-        "properties": {
-          "displayValue": {
-            "type": "string"
-          },
-          "fieldKey": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "semantic": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "NUMBER",
-              "TEXT",
-              "SELECT",
-              "DATE",
-              "DATETIME",
-              "CHECKBOX"
-            ]
-          },
-          "unit": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        }
-      },
-      "Interactions": {
-        "type": "object",
-        "properties": {
-          "canComment": {
-            "type": "boolean"
-          },
-          "canLike": {
-            "type": "boolean"
-          },
-          "canMitayo": {
-            "type": "boolean"
-          },
-          "canQuote": {
-            "type": "boolean"
-          },
-          "canReply": {
-            "type": "boolean"
-          },
-          "canRepost": {
-            "type": "boolean"
           }
         }
       },
@@ -229273,6 +229284,10 @@
           "content": {
             "$ref": "#/components/schemas/PostContentDto"
           },
+          "effortShare": {
+            "$ref": "#/components/schemas/EffortSharedRecord",
+            "description": "努力由来の投稿の共有内容（SharedRecord）。通常の投稿は null"
+          },
           "id": {
             "type": "integer",
             "format": "int64"
@@ -229288,6 +229303,13 @@
           },
           "scope": {
             "$ref": "#/components/schemas/PostScopeDto"
+          },
+          "sourceType": {
+            "type": "string",
+            "description": "投稿の由来。努力由来（頑張り記録のチーム共有）の投稿だけ PERSONAL_EFFORT_SHARE、通常の投稿は null",
+            "enum": [
+              "PERSONAL_EFFORT_SHARE"
+            ]
           },
           "stats": {
             "$ref": "#/components/schemas/PostStatsDto"
