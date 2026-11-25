@@ -16,6 +16,10 @@ import TeamShell from './[slug].vue'
  *          シェルのヘッダ（タブ）は残す
  *   SNF-S5 非シェルルート（timetable 等・bare NuxtPage）でも、子が notFound を立てたら本文を置き換える
  *   SNF-S6（AC-8）slug が変わったら notFound を reset し、新しいスコープの本文を表示する
+ *   SNF-S7 非所属 X の子ページで応答待ちのまま Y へ遷移 → X の遅延 403 が届いても Y は置き換えない
+ *   SNF-S8 応答待ちのままシェル外へ遷移 → 遅延 403 が届いても、後続のシェル初回描画は置き換えない
+ *   SNF-S9 クエリだけの変更（ブラウザバック含む fullPath 変更）でも notFound を reset する
+ *   SNF-S10 子が notFound を立てたら、機能可視性のエラー表示（DashboardErrorState）と二重に出さない
  *
  * マウント流儀は同階層の [slug].moved.spec.ts に合わせる。
  */
@@ -26,11 +30,18 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   error: vi.fn(),
   notifyError: vi.fn(),
+  featureError: { value: null as unknown },
+  /** useState の代替（happy-dom 環境は Nuxt アプリが無い）。キー単位で同じ ref を返す */
+  states: new Map<string, unknown>(),
 }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 vi.mock('~/components/OrganizationSidebar.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('~/components/TeamSidebar.vue', () => ({ default: { template: '<div />' } }))
 mockNuxtImport('useRoute', () => () => mocks.route.current)
+mockNuxtImport('useState', () => <T>(key: string, init?: () => T) => {
+  if (!mocks.states.has(key)) mocks.states.set(key, ref(init?.()))
+  return mocks.states.get(key)
+})
 mockNuxtImport('navigateTo', () => mocks.navigate)
 mockNuxtImport('useSlugRedirect', () => () => ({ resolveSlug: mocks.resolve }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getDetail }))
@@ -59,7 +70,7 @@ mockNuxtImport('useDashboardWidgetVisibility', () => () => ({
   fetch: async () => {},
 }))
 mockNuxtImport('useScopeFeatureVisibility', () => () => ({
-  error: ref(null),
+  error: mocks.featureError,
   isVisible: () => true,
 }))
 mockNuxtImport('useScopeFollowWiring', () => () => ({
@@ -119,9 +130,10 @@ const ButtonStub = {
   template: '<button type="button" data-testid="button">{{ label }}</button>',
 }
 
-function setRoute(scope: string, slug: string, tail = 'info') {
+function setRoute(scope: string, slug: string, tail = 'info', search = '') {
   Object.assign(mocks.route.current, {
     path: `/${scope}/${slug}/${tail}`,
+    fullPath: `/${scope}/${slug}/${tail}${search}`,
     params: { slug },
     query: {},
     hash: '',
@@ -147,7 +159,7 @@ function mountShell(scope: 'organizations' | 'teams') {
         TeamSidebar: true,
         Dialog: true,
         MemberPermissionSetupDialog: true,
-        DashboardErrorState: true,
+        DashboardErrorState: { template: '<div data-testid="dashboard-error" />' },
         ScopeNotFound: NotFoundStub,
       },
     },
@@ -156,6 +168,8 @@ function mountShell(scope: 'organizations' | 'teams') {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.states.clear()
+  mocks.featureError = ref(null)
   mocks.route.current = reactive({})
   mocks.getDetail.mockImplementation(async (slug: string) => ({
     data: { slug, id: slug, numericId: 1, basicInfo: { name: `成功:${slug}` } },
@@ -250,6 +264,107 @@ for (const scope of ['organizations', 'teams'] as const) {
       expect(wrapper.text()).toContain('成功:b')
       const after = await scopeNotFound()
       expect(after.notFound.value).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('SNF-S7: 非所属 X の子ページで応答待ちのまま Y へ遷移し、reset 後に X の 403 が届いても Y は置き換えない', async () => {
+      setRoute(scope, 'x')
+      const wrapper = mountShell(scope)
+      await settle()
+      // X の子ページの setup（応答待ち）
+      const xChild = await scopeNotFound()
+
+      setRoute(scope, 'y')
+      await settle()
+      // Y の子ページの setup
+      const yChild = await scopeNotFound()
+
+      // X の遅延 403。古い画面の応答なので黙って捨てる（true を返しトーストは出させない）
+      expect(xChild.markIfDenied({ statusCode: 403 })).toBe(true)
+      await settle()
+
+      expect(yChild.notFound.value).toBe(false)
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('成功:y')
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(mocks.notifyError).not.toHaveBeenCalled()
+
+      // Y 自身の 403 は従来どおり本文を置き換える
+      expect(yChild.markIfDenied({ statusCode: 403 })).toBe(true)
+      await settle()
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('SNF-S8: 応答待ちのままシェル外へ遷移し、後で 403 が届いても後続のシェル初回描画は置き換えない', async () => {
+      setRoute(scope, 'x')
+      const first = mountShell(scope)
+      await settle()
+      const xChild = await scopeNotFound()
+
+      // シェル外へ遷移（シェルのアンマウント）
+      first.unmount()
+      // 遷移後に X の遅延 403 が届く
+      expect(xChild.markIfDenied({ statusCode: 403 })).toBe(true)
+
+      setRoute(scope, 'z')
+      const second = mountShell(scope)
+      await settle()
+
+      expect(second.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+      expect(second.find('[data-testid="child-page"]').exists()).toBe(true)
+      expect(second.text()).toContain('成功:z')
+      second.unmount()
+    })
+
+    it('SNF-S8b: 前回シェルの破棄後に notFound が残っていても、シェルのマウント（setup）で下ろす', async () => {
+      const stale = await scopeNotFound()
+      stale.markIfDenied({ statusCode: 404 })
+      expect(stale.notFound.value).toBe(true)
+
+      setRoute(scope, 'z')
+      const wrapper = mountShell(scope)
+      await settle()
+
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('SNF-S9: クエリだけの変更（ブラウザバック等の fullPath 変更）でも notFound を reset する', async () => {
+      setRoute(scope, 'a', 'info', '?tab=1')
+      const wrapper = mountShell(scope)
+      await settle()
+      const state = await scopeNotFound()
+      state.markIfDenied({ statusCode: 403 })
+      await settle()
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+
+      setRoute(scope, 'a', 'info', '?tab=2')
+      await settle()
+
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('SNF-S10: 子が notFound を立てたら、機能可視性のエラー表示と二重に出さず ScopeNotFound だけを出す', async () => {
+      mocks.featureError.value = new Error('feature visibility failed')
+      setRoute(scope, 'a')
+      const wrapper = mountShell(scope)
+      await settle()
+      // notFound でなければ従来どおりエラー表示と本文を出す
+      expect(wrapper.find('[data-testid="dashboard-error"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+
+      const state = await scopeNotFound()
+      state.markIfDenied({ statusCode: 403 })
+      await settle()
+
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="dashboard-error"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
       wrapper.unmount()
     })
   })

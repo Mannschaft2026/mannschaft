@@ -47,7 +47,13 @@ const notification = useNotification()
 const { handleApiError } = useErrorHandler()
 const { templateLabel, visibilityLabel } = useScopeLabels()
 // 子ページの主 API が 403/404 だったとき本文を共通「見つかりません」に置き換える（CMP-261125-1108）
-const { notFound: childNotFound, reset: resetChildNotFound } = useScopeNotFound()
+const {
+  notFound: childNotFound,
+  reset: resetChildNotFound,
+  resetUnlessHydrating: resetChildNotFoundOnSetup,
+} = useScopeNotFound()
+// マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
+resetChildNotFoundOnSetup()
 /** シェル自身の詳細取得が 403/404 だった（slug 変更・取得成功・再試行で解除）。 */
 const shellDenied = ref(false)
 const showScopeNotFound = computed(() => childNotFound.value || shellDenied.value)
@@ -441,9 +447,11 @@ watch(isShellRoute, (shell) => {
   if (shell) void loadShellData()
 })
 
-// ルート（タブ・子ページ・slug）が変わったら子ページ由来の「見つかりません」を解除する。
+// ルート（タブ・子ページ・slug・クエリ）が変わったら子ページ由来の「見つかりません」を解除する。
 // 子の setup/取得は親の再描画後に走るため、遷移先で再び 403/404 なら改めて立つ。
-watch(() => route.path, () => resetChildNotFound())
+// path だけでなくクエリ変更・ブラウザバックも含めて fullPath で見る。同期 flush にして、
+// 遷移先の子ページの setup（世代の捕捉）より必ず先に世代を進める。
+watch(() => route.fullPath, () => resetChildNotFound(), { flush: 'sync' })
 
 // 永続シェルを維持したまま別チームへ遷移した場合（同一親ルート record）に再取得する。
 // useRoleAccess / useDashboardWidgetVisibility は内部で teamSlug を watch して再取得するが、
@@ -707,9 +715,12 @@ provideTeamShellContext({
         </template>
 
         <!-- タブ本体（子）— 永続シェル下で差し替え -->
-        <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
+        <!-- 子ページの 403/404 は ScopeNotFound だけを出す（機能可視性のエラー表示と二重に出さない） -->
         <ScopeNotFound v-if="childNotFound" />
-        <NuxtPage v-else />
+        <template v-else>
+          <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
+          <NuxtPage />
+        </template>
       </ScopePageShell>
 
       <!-- 403/404（非所属・権限なし・不存在）: 共通の「見つかりません」。再試行は出さない -->

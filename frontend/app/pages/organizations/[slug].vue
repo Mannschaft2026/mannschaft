@@ -71,7 +71,13 @@ const {
 
 // 子ページの主 API が 403/404 だったとき、または組織詳細自体が 403/404 だったとき、
 // 本文を共通「見つかりません」に置き換える（CMP-261125-1108。シェルのタブ・戻る導線は残す）
-const { notFound: childNotFound, reset: resetChildNotFound } = useScopeNotFound()
+const {
+  notFound: childNotFound,
+  reset: resetChildNotFound,
+  resetUnlessHydrating: resetChildNotFoundOnSetup,
+} = useScopeNotFound()
+// マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
+resetChildNotFoundOnSetup()
 const showScopeNotFound = computed(() => childNotFound.value || detailDenied.value)
 
 // フォロー（サポーター）結線（CMP-261001-0835）。ラッパー群は useScopeFollowWiring に集約し、
@@ -337,8 +343,10 @@ watch(isShellRoute, (shell) => {
   if (shell) void loadShellData()
 })
 
-// ルート（タブ・子ページ・slug）が変わったら子ページ由来の「見つかりません」を解除する。
-watch(() => route.path, () => resetChildNotFound())
+// ルート（タブ・子ページ・slug・クエリ）が変わったら子ページ由来の「見つかりません」を解除する。
+// path だけでなくクエリ変更・ブラウザバックも含めて fullPath で見る。同期 flush にして、
+// 遷移先の子ページの setup（世代の捕捉）より必ず先に世代を進める。
+watch(() => route.fullPath, () => resetChildNotFound(), { flush: 'sync' })
 
 // 永続シェルを維持したまま別組織へ遷移した場合（同一親ルート record）に再取得する。
 watch(orgSlug, () => {
@@ -538,9 +546,12 @@ provideOrgShellContext({
         </template>
 
         <!-- タブ本体（子）— 永続シェル下で差し替え -->
-        <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
+        <!-- 子ページの 403/404 は ScopeNotFound だけを出す（機能可視性のエラー表示と二重に出さない） -->
         <ScopeNotFound v-if="childNotFound" />
-        <NuxtPage v-else />
+        <template v-else>
+          <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
+          <NuxtPage />
+        </template>
       </ScopePageShell>
 
       <!-- 403/404（非所属・権限なし・不存在）: 共通の「見つかりません」 -->

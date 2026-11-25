@@ -48,9 +48,9 @@ const isForbiddenView = computed(
   () => roleName.value === 'GUEST'
     || (roleResolved.value && !roleLoadFailed.value && !roleName.value),
 )
-const { notFound } = useScopeNotFound()
+const { markDenied } = useScopeNotFound()
 watch(isForbiddenView, (denied) => {
-  if (denied) notFound.value = true
+  if (denied) markDenied()
 }, { immediate: true })
 const isRoleLoadError = computed(() => roleResolved.value && roleLoadFailed.value && !roleName.value)
 const isSupporterView = computed(() => roleName.value === 'SUPPORTER')

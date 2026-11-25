@@ -18,7 +18,7 @@ const { t } = useI18n()
       {{ t('common.scopeNotFound.body') }}
     </p>
     <NuxtLink to="/dashboard" class="mt-4 inline-flex min-h-11 items-center text-primary-600 hover:underline">
-      <i class="pi pi-arrow-left mr-1" />
+      <i class="pi pi-arrow-left mr-1" aria-hidden="true" />
       {{ t('common.scopeShell.back_to_dashboard') }}
     </NuxtLink>
   </div>

@@ -17,7 +17,7 @@ definePageMeta({ layout: 'organization', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const notification = useNotification()
-const { markIfDenied, notFound } = useScopeNotFound()
+const { markIfDenied, markDenied } = useScopeNotFound()
 const orgId = String(route.params.slug)
 const tId = Number(route.params.tId)
 
@@ -39,7 +39,7 @@ async function load() {
     // 非管理者は入力 UI を露出しない（FE ガード。最終防衛は BE）。
     if (!isAdminOrDeputy.value) {
       // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
-      notFound.value = true
+      markDenied()
       return
     }
     const [tRes, divRes] = await Promise.all([

@@ -33,7 +33,7 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 const { t } = useI18n()
 const notification = useNotification()
-const { markIfDenied, notFound } = useScopeNotFound()
+const { markIfDenied, markDenied } = useScopeNotFound()
 const teamApi = useTeamApi()
 const { loadAll } = useHourlyRateMemberPage()
 const { getHourlyRate, setHourlyRate } = useShiftHourlyRateApi()
@@ -180,7 +180,7 @@ onMounted(async () => {
   if (!isAdmin.value) {
     // 導線を隠すだけでは URL 直打ちを防げない。BE も 403 を返すが、画面側でも明示的に弾く。
     // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
-    notFound.value = true
+    markDenied()
     loading.value = false
     return
   }

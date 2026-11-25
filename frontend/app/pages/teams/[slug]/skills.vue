@@ -9,7 +9,7 @@ const teamSlug = computed(() => String(route.params.slug))
 const { roleName, isAdmin, isAdminOrDeputy, isMember, can, loadPermissions } = useRoleAccess('team', teamSlug)
 const { getSkillCategories } = useSkillApi()
 const notification = useNotification()
-const { markIfDenied, notFound } = useScopeNotFound()
+const { markIfDenied, markDenied } = useScopeNotFound()
 
 const loading = ref(true)
 /** 権限情報そのものの取得に失敗した（「権限なし」とは区別して表示する） */
@@ -49,7 +49,7 @@ async function loadData() {
     }
     if (!isMember.value) {
       // 非メンバー・SUPPORTER・GUEST。権限や所属を示唆せず共通の「見つかりません」へ
-      notFound.value = true
+      markDenied()
       return
     }
     const res = await getSkillCategories(teamSlug.value)

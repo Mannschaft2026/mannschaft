@@ -12,7 +12,11 @@ const props = withDefaults(defineProps<{
   teamTimezone?: string
   /** 管理者権限を持つ利用者に管理UIを表示するか。メンバー表示では false。 */
   managementView?: boolean
-  /** チーム／組織シェル配下の子ページからだけ true。主取得が 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま */
+  /**
+   * チーム／組織シェル配下の子ページからだけ true。ページを成立させる主取得（枠グリッド・チーム予約一覧）が
+   * 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま。
+   * 予約設定の取得は安全側フォールバックの補助取得なので判定に使わない（非所属×公開予約 OFF は従来の案内文）。
+   */
   scopeNotFoundOnDenied?: boolean
 }>(), {
   teamTimezone: undefined,
@@ -21,7 +25,6 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
-const { markIfDenied } = useScopeNotFound()
 const { team } = useTeamShellContext()
 const teamTimezone = computed(() => props.teamTimezone ?? team.value?.timezone ?? 'Asia/Tokyo')
 const { isAdmin, isAdminOrDeputy, isMember, roleName, loadPermissions } = useRoleAccess('team', computed(() => props.teamId))
@@ -172,10 +175,9 @@ async function loadReservationSettings() {
     const res = await getReservationSettings(props.teamId)
     reservationSettings.value = res.data
   }
-  catch (e) {
-    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
-    if (props.scopeNotFoundOnDenied) markIfDenied(e)
-    // 取得失敗は安全方向（allowPublicReservation=false）に fallback
+  catch {
+    // 取得失敗は安全方向（allowPublicReservation=false）に fallback。
+    // 補助取得のため 403/404 でもページ全体は置き換えない（主取得の枠グリッド・予約一覧で判定する。CMP-261125-1108）
     reservationSettings.value = null
   }
   finally {
@@ -307,6 +309,7 @@ onMounted(async () => {
               :team-id="props.teamId"
               :team-timezone="teamTimezone"
               :is-admin="isFullAdminView"
+              :scope-not-found-on-denied="props.scopeNotFoundOnDenied"
               @slot-selected="onSlotSelected"
               @manage-lines="activeTab = 2"
               @manage-slots="openWeeklyScheduleSection"
@@ -337,6 +340,7 @@ onMounted(async () => {
             :team-id="props.teamId"
             :can-manage="true"
             mode="team"
+            :scope-not-found-on-denied="props.scopeNotFoundOnDenied"
             @changed="onSlotsChanged"
           />
           <ReservationList

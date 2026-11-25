@@ -29,6 +29,12 @@ const spies = vi.hoisted(() => ({
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'e2e' } }))
+// happy-dom 環境は Nuxt アプリが無いので、useScopeNotFound が使う useState をキー単位の ref で代替する
+const nuxtStates = vi.hoisted(() => new Map<string, unknown>())
+mockNuxtImport('useState', () => <T>(key: string, init?: () => T) => {
+  if (!nuxtStates.has(key)) nuxtStates.set(key, ref(init?.()))
+  return nuxtStates.get(key)
+})
 mockNuxtImport('useSkillApi', () => () => api)
 mockNuxtImport('useNotification', () => () => notify)
 mockNuxtImport('useRoleAccess', () => () => {

@@ -81,7 +81,17 @@ const cases: Case[] = [
   { name: 'audit-logs', page: AuditLogsPage, fail: (s) => listByTeam.mockRejectedValue(err(s)), toastOn500: true },
   { name: 'voting', page: VotingPage, fail: (s) => getSessions.mockRejectedValue(err(s)), toastOn500: true },
   { name: 'service-records', page: ServiceRecordsPage, fail: (s) => getRecords.mockRejectedValue(err(s)), toastOn500: true },
-  { name: 'gamification', page: GamificationPage, fail: (s) => getMyPoints.mockRejectedValue(err(s)), toastOn500: true },
+  // gamification は 3 取得の認可が同一でない（ランキングだけ機能フラグも要する）ため、全取得の失敗で判定する
+  {
+    name: 'gamification',
+    page: GamificationPage,
+    fail: (s) => {
+      getMyPoints.mockRejectedValue(err(s))
+      getMyBadges.mockRejectedValue(err(s))
+      getRankings.mockRejectedValue(err(s))
+    },
+    toastOn500: true,
+  },
   { name: 'member-info', page: MemberInfoPage, fail: (s) => getMyResponses.mockRejectedValue(err(s)), toastOn500: true },
   // schedule は従来から一覧失敗でトーストを出さない（空表示）。notFound の立ち下がりのみ検証する
   { name: 'schedule', page: SchedulePage, fail: (s) => listSchedules.mockRejectedValue(err(s)), toastOn500: false },
@@ -109,4 +119,36 @@ describe('チーム子ページ グループ1 — 非所属・権限なし（CMP
       wrapper.unmount()
     })
   }
+})
+
+describe('gamification — 一部の取得だけが 403/404（CMP-261125-1108）', () => {
+  it('ランキングだけ 403（機能フラグ無効）なら notFound を立てず、取得できたポイントを表示する', async () => {
+    getMyPoints.mockResolvedValue({ totalPoints: 1234, monthlyPoints: 56, badgeCount: 7 })
+    getRankings.mockRejectedValue(err(403))
+    const wrapper = await mountSuspended(GamificationPage)
+    await flush()
+    expect((await scopeNotFound()).notFound.value).toBe(false)
+    expect(wrapper.text()).toContain('1,234')
+    expect(notifyError).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('ポイントだけ 404 でも、他が成功していれば notFound を立てない', async () => {
+    getMyPoints.mockRejectedValue(err(404))
+    const wrapper = await mountSuspended(GamificationPage)
+    await flush()
+    expect((await scopeNotFound()).notFound.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('403 と 500 が混在するときは notFound を立てず、従来どおりトーストを出す', async () => {
+    getMyPoints.mockRejectedValue(err(403))
+    getMyBadges.mockRejectedValue(err(403))
+    getRankings.mockRejectedValue(err(500))
+    const wrapper = await mountSuspended(GamificationPage)
+    await flush()
+    expect((await scopeNotFound()).notFound.value).toBe(false)
+    expect(notifyError).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
 })
