@@ -1477,3 +1477,88 @@ officers と同じ仕様・エラーハンドリング（数値上限のみ 20 �
 | `canGrantAdminOnlyPermissions` | Boolean | ADMIN 専用権限（`PermissionGroupService.ADMIN_ONLY_GRANTABLE_PERMISSIONS`）を含む権限グループの作成・更新・割当（付与・剥奪とも）ができるか。`AccessControlService.canActAsScopeAdminOnly`（スコープ ADMIN 本人で、かつ SYSTEM_ADMIN でない）。SYSTEM_ADMIN とスコープ ADMIN の兼任者は `scopeAdmin=true` でも `false`（`checkScopeAdminOnly` が拒否するため）|
 
 権限グループ一覧の各要素には `containsAdminOnlyPermission`（そのグループが ADMIN 専用権限を含むか）を載せる。含むグループの更新・削除・割当（外す操作も）は `canGrantAdminOnlyPermissions=true` の操作者だけができる。
+
+---
+
+## CMP-261124-0159: チームの非公開化（→ MEMBERS_AND_ABOVE）とサポーターの入口（2026-11-25 マスター裁定 MC-261125-0010）
+
+> **ステータス**: 🟡 設計中（精査待ち）。業務フローは [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」、是正 migration は [04_security_operations.md](04_security_operations.md) §7「CMP-261124-0159 是正 migration」、閲覧上限の正本は [F00 §20](../F00_content_visibility_resolver.md)。用語「メンバー限定」の正本は [F00.5 §2.6](../F00.5_membership_basis.md)。
+
+JSON は既存規約どおり camelCase、ページングなし。数値はすべて非 null。
+
+### 新規 `GET /api/v1/teams/{slug}/visibility-change-preview`
+
+公開範囲を変える前に、変えた場合に外れる人数などを返す確認用の事前問い合わせ。副作用なし。
+
+- 認可: `PATCH /api/v1/teams/{slug}` と同一（ADMIN+）。権限なし（MEMBER・サポーター・部外者・他チームの ADMIN）は `PATCH` の拒否と同一応答。不在 slug は 404 `TEAM_001`。
+- クエリ: `visibility`（必須。`PUBLIC` / `GUESTS_AND_ABOVE` / `SUPPORTERS_AND_ABOVE` / `MEMBERS_AND_ABOVE`。不正値は 400 `COMMON_001`）
+
+| フィールド | 型 | null | 説明 |
+|---|---|---|---|
+| `currentVisibility` | String | 不可 | 現在の公開範囲 |
+| `targetVisibility` | String | 不可 | 指定した公開範囲 |
+| `requiresConfirmation` | Boolean | 不可 | 現在が `MEMBERS_AND_ABOVE` 以外で指定が `MEMBERS_AND_ABOVE` のとき true（人数 0 でも true） |
+| `supportersToRemove` | Integer | 不可 | 外れる在籍サポーター数（`memberships.role_kind='SUPPORTER' AND left_at IS NULL`）。`requiresConfirmation=false` なら 0 |
+| `guestsToRemove` | Integer | 不可 | 外れるゲスト数（`user_roles` の GUEST 行） |
+| `pendingApplicationsToReject` | Integer | 不可 | 却下される PENDING のサポーター申請数 |
+| `supporterInviteTokensToRevoke` | Integer | 不可 | 無効化される有効な SUPPORTER 招待トークン数（`revoked_at IS NULL`） |
+| `version` | Long | 不可 | 判定時点のチームの楽観ロック版。`PATCH` の `version` にそのまま使う |
+
+人数は 4 本の COUNT（集合演算）で返す。対象人数に比例した問い合わせはしない。
+
+### 変更 `PATCH /api/v1/teams/{slug}`（リクエストに 1 項目追加）
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `confirmSupporterRemoval` | Boolean | 条件付き | `visibility` を `MEMBERS_AND_ABOVE` 以外から `MEMBERS_AND_ABOVE` に変えるときは `true` 必須。未指定・false なら 409 `TEAM_074`（何も変更しない）。それ以外の変更では無視する |
+
+- 遷移時の応答（200）は既存のチーム詳細に、次の `visibilityTransition` を追加する（遷移しなかった更新では `null`）。
+
+| フィールド | 型 | null | 説明 |
+|---|---|---|---|
+| `visibilityTransition.removedSupporters` | Integer | 不可 | 実際に外したサポーター数（コミット時点の在籍全員） |
+| `visibilityTransition.removedGuests` | Integer | 不可 | 実際に外したゲスト数 |
+| `visibilityTransition.rejectedApplications` | Integer | 不可 | 却下した PENDING 申請数 |
+| `visibilityTransition.revokedSupporterInviteTokens` | Integer | 不可 | 無効化した SUPPORTER 招待トークン数 |
+
+- 事前問い合わせの人数とコミット時点の人数が違っても（その間に増減しても）、`confirmSupporterRemoval=true` は「コミット時点で在籍する全員を外す」ことへの同意として扱う。実数は応答の `visibilityTransition` で返す。
+- 並行更新は既存の `version`（楽観ロック）で弾く（既存の楽観ロック競合応答 409）。
+
+### 拒否の追加（非公開チームへのサポーター追加の禁止）
+
+| エンドポイント | 非公開チーム（`MEMBERS_AND_ABOVE`）での挙動 |
+|---|---|
+| `POST /api/v1/teams/{slug}/invite-tokens`（`roleId` が SUPPORTER ロール） | 403 `TEAM_073`。MEMBER の招待トークンは従来どおり発行できる |
+| `POST /api/v1/invite/{token}/join`（SUPPORTER ロールのトークン） | 403 `TEAM_073`。在籍・`invite_token_claims`・`used_count` を変えない |
+| `POST /api/v1/me/pending-invite/accept`（SUPPORTER ロールのトークン） | 応答 `{status: "UNAVAILABLE"}`（既存の値。在籍を作らない） |
+| `POST /api/v1/teams/{slug}/supporter-applications/{applicationId}/approve` | 403 `TEAM_073`。申請の状態は変えない |
+| `POST /api/v1/teams/{slug}/supporter-applications/bulk-approve` | 403 `TEAM_073`（1 件も承認しない。全体を拒否） |
+| `POST /api/v1/teams/{slug}/follow` | 既存どおり `assertCanView(TEAM)` で 403 `VISIBILITY_001`（変更なし・回帰固定） |
+
+- 判定順: 既存の認可（招待権限・申請承認権限）→ チームの公開範囲。権限のない利用者には従来の拒否を返し、`TEAM_073` で公開範囲を教えない。
+- `TeamService#followTeam`（呼び出し元のない死蔵コード）は撤去する。
+
+### エラーコード（新規。番号は現在の最大＋1 で予約、確定はマージ時に origin/main で再確認）
+
+| Code | HTTP | ja メッセージ | 用途 |
+|---|---|---|---|
+| `TEAM_073` | 403 | メンバー限定のチームにはサポーターを追加できません | 上表の拒否 |
+| `TEAM_074` | 409 | 公開範囲をメンバー限定にするには、サポーターとゲストが外れることの確認が必要です | `confirmSupporterRemoval` 未指定 |
+
+6 言語（`messages_{ja,en,zh,ko,es,de}.properties`）に登録し、`GlobalExceptionHandler` の status 表に追加する。
+
+### FE（チーム設定の公開範囲）
+
+- 公開範囲を「メンバー限定」に変えて保存する前に事前問い合わせを呼び、確認ダイアログに人数を出す。キャンセルなら `PATCH` を送らない。了承時のみ `confirmSupporterRemoval: true` と事前問い合わせの `version` を送る。
+- 保存後、応答の `visibilityTransition` の実数をトーストで出す。
+
+| i18n キー（`common.json`、6 言語） | ja |
+|---|---|
+| `team_visibility.confirmMembersOnly.title` | 公開範囲を「メンバー限定」にします |
+| `team_visibility.confirmMembersOnly.body` | サポーター {supporters} 人とゲスト {guests} 人がチームから外れ、通知が届きます。承認待ちのサポーター申請 {applications} 件は却下され、サポーター招待 {tokens} 件は使えなくなります。元に戻しても自動では戻りません。 |
+| `team_visibility.confirmMembersOnly.confirm` | 外して変更する |
+| `team_visibility.confirmMembersOnly.cancel` | やめる |
+| `team_visibility.transitionDone` | 公開範囲を変更しました（サポーター {supporters} 人・ゲスト {guests} 人を外しました） |
+| `team_visibility.supporterInviteDisabled` | メンバー限定のチームではサポーター招待を発行できません |
+| `notification.teamMembersOnlyRemoved.title` | {teamName} から外れました |
+| `notification.teamMembersOnlyRemoved.body` | チームの公開範囲が「メンバー限定」に変わったため、サポーター（ゲスト）としての登録が解除されました。 |
