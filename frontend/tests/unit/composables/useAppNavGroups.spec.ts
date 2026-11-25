@@ -125,7 +125,7 @@ describe('useAppNavGroups', () => {
       // living/work/admin/other は出さず、本人用の会員QR・申請は常設する
       expect(groups!.value.map((g) => g.key)).toEqual(['home', 'account'])
       const accountGroup = groups!.value.find((g) => g.key === 'account')
-      expect(accountGroup?.items.map((i) => i.key)).toEqual(['member-qr', 'team-point-requests'])
+      expect(accountGroup?.items.map((i) => i.key)).toEqual(['member-qr', 'team-point-requests', 'effort-records'])
     })
   })
 

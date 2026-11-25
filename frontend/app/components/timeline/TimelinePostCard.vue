@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TimelinePostResponse, TimelineMutedType } from '~/types/timeline'
 import { CONTENT_TRUNCATE_LENGTH } from '~/types/timeline'
+import { isEffortTimelinePost } from '~/utils/effortShare'
 
 const props = withDefaults(defineProps<{
   post: TimelinePostResponse
@@ -60,6 +61,8 @@ const sourceBadge = computed(() => {
   }
   return { name: scope.name, to }
 })
+/** 努力由来の投稿は専用カードで描画し、通常の操作（反応・返信・ブックマーク・ピン・削除・編集）を出さない。 */
+const isEffortPost = computed(() => isEffortTimelinePost(props.post))
 const menu = ref()
 const expanded = ref(false)
 const mitayoLoading = ref(false)
@@ -312,7 +315,9 @@ function replyIsSystemPost(r: TimelinePostResponse): boolean {
 </script>
 
 <template>
+  <TimelineEffortCard v-if="isEffortPost" :post="post" />
   <div
+    v-else
     class="cursor-pointer rounded-xl border-2 border-surface-400 bg-surface-0 p-4 transition-shadow hover:shadow-sm dark:bg-surface-800"
     data-testid="team-timeline-post"
     @click="onCardClick"

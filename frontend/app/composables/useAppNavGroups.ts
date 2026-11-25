@@ -58,6 +58,8 @@ export function useAppNavGroups() {
     })
     list.push({ key: 'member-qr', labelKey: 'loyalty.memberQr.title', icon: 'pi pi-qrcode', path: '/my/member-qr' })
     list.push({ key: 'team-point-requests', labelKey: 'loyalty.requests.title', icon: 'pi pi-ticket', path: '/my/team-point-requests' })
+    // F06.4.1 個人の頑張り記録（PR-4 で導線を有効化）。
+    list.push({ key: 'effort-records', labelKey: 'effort.title', icon: 'pi pi-chart-line', path: '/my/effort-records' })
 
     // ナビ設定ストアの表示項目（BE 側で表示順ソート済み。配列順をそのまま尊重する）
     for (const feature of navSettingsStore.visibleFeatures) {
