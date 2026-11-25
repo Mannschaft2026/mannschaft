@@ -45,7 +45,8 @@ class EventGuestInviteTokenHashMigrationIT {
             String legacyToken = "11111111-2222-3333-4444-555555555555";
             long id;
             try (Connection c = connect(mysql); Statement s = c.createStatement()) {
-                s.execute("SET FOREIGN_KEY_CHECKS = 0");
+                // 試験用に存在しない event_id の行を置くため、同一ドメイン内 FK だけ外す（migration の対象は token 列のみ）
+                s.execute("ALTER TABLE event_guest_invite_tokens DROP FOREIGN KEY fk_event_guest_invite_tokens_event");
                 s.executeUpdate("INSERT INTO event_guest_invite_tokens (event_id, token, label, max_uses, used_count, is_active) "
                         + "VALUES (990001, '" + legacyToken + "', '旧', 5, 2, TRUE)");
                 s.executeUpdate("INSERT INTO event_guest_invite_tokens (event_id, token, is_active) "

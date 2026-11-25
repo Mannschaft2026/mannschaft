@@ -85235,7 +85235,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseInviteTokenIssuedResponse"
                 }
               }
             }

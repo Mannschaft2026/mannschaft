@@ -137136,7 +137136,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseInviteTokenIssuedResponse"];
                 };
             };
         };

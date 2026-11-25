@@ -1,9 +1,12 @@
 package com.mannschaft.app.event.service;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.token.IssuedToken;
+import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.event.EventErrorCode;
 import com.mannschaft.app.event.EventMapper;
 import com.mannschaft.app.event.dto.CreateInviteTokenRequest;
+import com.mannschaft.app.event.dto.InviteTokenIssuedResponse;
 import com.mannschaft.app.event.dto.InviteTokenResponse;
 import com.mannschaft.app.event.entity.EventGuestInviteTokenEntity;
 import com.mannschaft.app.event.repository.EventGuestInviteTokenRepository;
@@ -13,8 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.UUID;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * イベント招待トークンサービス。ゲスト招待トークンの作成・照会・無効化を担当する。
@@ -27,6 +28,7 @@ public class EventInviteTokenService {
 
     private final EventGuestInviteTokenRepository tokenRepository;
     private final EventMapper eventMapper;
+    private final SecretTokenVault vault;
 
     /**
      * イベントの招待トークン一覧を取得する。
@@ -40,19 +42,19 @@ public class EventInviteTokenService {
     }
 
     /**
-     * 招待トークンを作成する。
+     * 招待トークンを作成する。平文は発行応答にだけ載せ、DB にはハッシュだけを保存する。
      *
      * @param eventId イベントID
      * @param userId  作成者ユーザーID
      * @param request 作成リクエスト
      * @return 作成された招待トークンレスポンス
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
     @Transactional
-    public InviteTokenResponse createToken(Long eventId, Long userId, CreateInviteTokenRequest request) {
+    public InviteTokenIssuedResponse createToken(Long eventId, Long userId, CreateInviteTokenRequest request) {
+        IssuedToken issued = vault.issueBase64Url();
         EventGuestInviteTokenEntity entity = EventGuestInviteTokenEntity.builder()
                 .eventId(eventId)
-                .token(UUID.randomUUID().toString())
+                .tokenHash(issued.hash())
                 .label(request.getLabel())
                 .maxUses(request.getMaxUses())
                 .expiresAt(request.getExpiresAt())
@@ -61,7 +63,10 @@ public class EventInviteTokenService {
 
         EventGuestInviteTokenEntity saved = tokenRepository.save(entity);
         log.info("招待トークン作成: eventId={}, tokenId={}", eventId, saved.getId());
-        return eventMapper.toInviteTokenResponse(saved);
+        return new InviteTokenIssuedResponse(
+                saved.getId(), saved.getEventId(), issued.plaintext(), saved.getLabel(), saved.getMaxUses(),
+                saved.getUsedCount(), saved.getExpiresAt(), saved.getIsActive(), saved.getCreatedBy(),
+                saved.getCreatedAt(), saved.getUpdatedAt());
     }
 
     /**

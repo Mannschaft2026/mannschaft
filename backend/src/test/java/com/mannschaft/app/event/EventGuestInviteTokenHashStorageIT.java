@@ -55,7 +55,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *   <li>AC-x1: 実体の列は {@code token_hash} だけで、保存値は {@code hash(平文)}（平文と異なる）。Entity に平文フィールドが無い。</li>
  *   <li>AC-x2: 発行応答の平文でゲスト登録が通り、DB のハッシュ値そのものでは通らない。</li>
  *   <li>AC-x3: 一覧・無効化の応答に平文を含まない（キー集合が許可フィールドと完全一致）。</li>
- *   <li>AC-x4: 他イベント・無効化済み・期限切れ・不存在は INVALID_INVITE_TOKEN（400）で拒否。</li>
+ *   <li>AC-x4: 他イベント・無効化済み・期限切れ・不存在は INVALID_INVITE_TOKEN（404 秘匿）で拒否。</li>
  *   <li>AC-x5: ログに平文を出さない。</li>
  * </ul>
  *
@@ -172,7 +172,7 @@ class EventGuestInviteTokenHashStorageIT extends AbstractMySqlIntegrationTest {
         String stored = jdbc.queryForObject("SELECT token_hash FROM event_guest_invite_tokens WHERE event_id = ?",
                 String.class, eventAId);
 
-        assertThat(guest(eventAId, stored).getStatus()).isEqualTo(400);
+        assertThat(guest(eventAId, stored).getStatus()).isEqualTo(404);
         MockHttpServletResponse ok = guest(eventAId, plaintext);
         assertThat(ok.getStatus()).as(ok.getContentAsString()).isEqualTo(201);
         em.flush();
@@ -181,17 +181,17 @@ class EventGuestInviteTokenHashStorageIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    @DisplayName("AC-x4: 他イベントの招待・無効化済み・期限切れ・不存在は INVALID_INVITE_TOKEN（400）で拒否")
+    @DisplayName("AC-x4: 他イベントの招待・無効化済み・期限切れ・不存在は INVALID_INVITE_TOKEN（404 秘匿）で拒否")
     void 不正な招待は拒否される() throws Exception {
         String plaintext = issue(eventAId).path("token").asText();
-        assertThat(guest(eventBId, plaintext).getStatus()).as("他イベント").isEqualTo(400);
+        assertThat(guest(eventBId, plaintext).getStatus()).as("他イベント").isEqualTo(404);
 
         String expired = vault.issueBase64Url().plaintext();
         tokenRepository.save(EventGuestInviteTokenEntity.builder().eventId(eventAId).tokenHash(vault.hash(expired))
                 .expiresAt(LocalDateTime.now().minusDays(1)).build());
-        assertThat(guest(eventAId, expired).getStatus()).as("期限切れ").isEqualTo(400);
+        assertThat(guest(eventAId, expired).getStatus()).as("期限切れ").isEqualTo(404);
 
-        assertThat(guest(eventAId, "unknown-" + plaintext).getStatus()).as("不存在").isEqualTo(400);
+        assertThat(guest(eventAId, "unknown-" + plaintext).getStatus()).as("不存在").isEqualTo(404);
 
         long id = jdbc.queryForObject("SELECT id FROM event_guest_invite_tokens WHERE token_hash = ?",
                 Long.class, vault.hash(plaintext));
@@ -199,7 +199,7 @@ class EventGuestInviteTokenHashStorageIT extends AbstractMySqlIntegrationTest {
                 .getStatus()).isEqualTo(200);
         em.flush();
         em.clear();
-        assertThat(guest(eventAId, plaintext).getStatus()).as("無効化済み").isEqualTo(400);
+        assertThat(guest(eventAId, plaintext).getStatus()).as("無効化済み").isEqualTo(404);
     }
 
     @Test
