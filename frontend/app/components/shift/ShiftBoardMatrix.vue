@@ -40,7 +40,7 @@
             :key="row.key"
             class="border-b border-surface-100"
           >
-            <td class="sticky left-0 z-[1] bg-white px-3 py-2 text-surface-600 whitespace-nowrap font-medium border-r border-surface-100">
+            <td class="sticky left-0 z-[1] bg-surface-0 dark:bg-surface-900 px-3 py-2 text-surface-600 whitespace-nowrap font-medium border-r border-surface-100">
               <div>{{ formatSlotDate(row.date) }}</div>
               <div class="text-xs text-surface-400">{{ formatTimeRange(row.startTime, row.endTime) }}</div>
             </td>

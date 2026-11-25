@@ -203,20 +203,20 @@ const scheduleId = computed(() => Number(route.params.scheduleId))
 //   → systemRole はプラットフォームロール（SYSTEM_ADMIN など）であり、
 //     チームの SUPPORTER を判定するのは誤りだった。
 // 新実装: /api/v1/teams/{id}/me/permissions から取得した roleName で判定する。
-const { roleName, isScopeAdmin, can, loadPermissions } = useRoleAccess('team', teamSlug)
+const { roleName, can, loadPermissions } = useRoleAccess('team', teamSlug)
 const isSupporter = computed(() => roleName.value === 'SUPPORTER')
 // 割当操作（枠への追加・外す・未割当プール・自動割当）を出すのは、当該チームの ADMIN と、
 // MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ（CMP-261125-1336）。それ以外は閲覧のみ。
 // 出すと必ず 403 になる死んだ導線になるため、DOM に出さない。BE 側の MANAGE_SHIFTS 化は別戦役で、本件は FE の出し分けのみ。
 //
-// 【SYSTEM_ADMIN の扱い】(CMP-260909-1509)
-// useRoleAccess の isScopeAdmin は「対象スコープの ADMIN 割当があるか」で、プラットフォーム SYSTEM_ADMIN は
-// 兼任でない限り含まない。「運営専用アカウントである SYSTEM_ADMIN には一般業務導線を出さない」という
-// マスター確定の設計判断（docs/security/03_role_authority_model.md §3.5）に従う。
+// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)
+// 実効ロール解決は最強ロールの 1 値を返すため、SYSTEM_ADMIN 兼任者の roleName は 'SYSTEM_ADMIN' になり、
+// 以下の等値比較には当たらない。「運営専用アカウントには一般のチーム運営導線を出さない」という
+// マスター確定の設計判断（docs/security/03_role_authority_model.md §3.5）で、shifts.vue の入口判定とも一致させる。
 // BE は SYSTEM_ADMIN を別途常に許可しており、この UI 非表示は認可の代替ではない。
-// roleName の包含判定（hasRoleOrAbove 的）に書き換えて SYSTEM_ADMIN を含めないこと。
+// roleName の包含判定（hasRoleOrAbove 的）に書き換えないこと。
 const canAssign = computed(
-  () => isScopeAdmin.value || (roleName.value === 'DEPUTY_ADMIN' && can('MANAGE_SHIFTS')),
+  () => roleName.value === 'ADMIN' || (roleName.value === 'DEPUTY_ADMIN' && can('MANAGE_SHIFTS')),
 )
 
 // 自動割当は 2026-09-09 の方針転換で既定 OFF（BE も ShiftAutoAssignController の

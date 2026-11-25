@@ -31,7 +31,7 @@
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium" :class="draggable ? 'truncate' : '[overflow-wrap:anywhere]'">{{ member.displayName }}</p>
             <p v-if="member.remainingHours !== undefined" class="text-xs text-surface-500">
-              残り {{ member.remainingHours }}h
+              {{ $t('shift.board.remainingHours', { hours: member.remainingHours }) }}
             </p>
           </div>
         </div>

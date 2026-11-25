@@ -12,6 +12,7 @@
     "board": {
       "title": "Schichtplan-Board",
       "memberPool": "Nicht zugewiesene Mitglieder",
+      "remainingHours": "Noch {hours} Std.",
       "noUnassignedMembers": "Keine nicht zugewiesenen Mitglieder",
       "noMatchingMembers": "Keine Mitglieder entsprechen Ihrer Suche",
       "dragHint": "Mitglieder per Drag & Drop zuweisen",
@@ -210,7 +211,7 @@
       "moveDateAccept": "Schicht und Wünsche verschieben",
       "saveSuccess": "Slot gespeichert",
       "deleteSuccess": "Slot gelöscht",
-      "assignmentMasked": "In Abstimmung",
+      "assignmentHidden": "Zuweisungen verborgen",
       "assignmentMaskedHint": "Zuweisungen werden bis zur Veröffentlichung ausgeblendet",
       "deleteTitle": "Schichtzeit löschen",
       "deleteConfirmPlain": "Diese Schichtzeit löschen?",

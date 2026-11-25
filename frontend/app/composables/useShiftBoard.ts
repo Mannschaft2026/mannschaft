@@ -14,11 +14,16 @@ export function useShiftBoard(scheduleId: Ref<number>, slots: Ref<ShiftSlotRespo
   async function loadSlots(): Promise<void> {
     const load = ++latestLoad
     const requestedSchedule = scheduleId.value
-    const before = slots.value
     const res = await shiftApi.getShiftSlots(requestedSchedule)
-    // PATCH の確定応答や別スケジュールを、先に開始した GET で上書きしない。
-    if (load !== latestLoad || requestedSchedule !== scheduleId.value || slots.value !== before) return
-    slots.value = res.data
+    // 古い応答（後から開始した GET がある）と別スケジュールの応答は捨てる。
+    if (load !== latestLoad || requestedSchedule !== scheduleId.value) return
+    // 並行した別枠の PATCH 成功で、すでに GET の応答より新しい版を持つ枠は巻き戻さず、
+    // それ以外（失敗した枠など）は応答で必ず最新へ更新する。
+    const localById = new Map(slots.value.map((slot) => [slot.id, slot]))
+    slots.value = res.data.map((fetched) => {
+      const local = localById.get(fetched.id)
+      return local && local.version > fetched.version ? local : fetched
+    })
     syncAssignments()
   }
 
@@ -70,8 +75,10 @@ export function useShiftBoard(scheduleId: Ref<number>, slots: Ref<ShiftSlotRespo
   async function reloadAfterFailure(): Promise<void> {
     try {
       await loadSlots()
-    } catch {
-      // 再取得失敗でも、利用者へは元の操作エラーを通知する。
+    } catch (reloadError) {
+      // 再取得失敗でも、利用者へは元の操作エラーを通知する。再取得の失敗は握りつぶさず記録する。
+      const { captureQuiet } = useErrorReport()
+      captureQuiet(reloadError, { context: 'useShiftBoard: 失敗後の枠再取得' })
     }
   }
 

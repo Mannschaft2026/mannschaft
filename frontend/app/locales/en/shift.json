@@ -12,6 +12,7 @@
     "board": {
       "title": "Shift Board",
       "memberPool": "Unassigned Members",
+      "remainingHours": "{hours}h left",
       "noUnassignedMembers": "No unassigned members",
       "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
@@ -224,7 +225,7 @@
       "moveDateAccept": "Move slot and requests",
       "saveSuccess": "Slot saved",
       "deleteSuccess": "Slot deleted",
-      "assignmentMasked": "In adjustment",
+      "assignmentHidden": "Assignments hidden",
       "assignmentMaskedHint": "Assignments are hidden until the shift is published",
       "deleteTitle": "Delete shift slot",
       "deleteConfirmPlain": "Delete this slot?",

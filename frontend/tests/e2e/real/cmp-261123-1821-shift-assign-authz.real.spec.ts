@@ -34,7 +34,8 @@ const TAG = `R${RUN}`
 
 interface World {
   admin: Actor      // チーム A の ADMIN（作成者）
-  deputy: Actor     // チーム A の DEPUTY_ADMIN（シフト管理者）
+  deputy: Actor     // チーム A の DEPUTY_ADMIN（権限グループで MANAGE_SHIFTS を付与済み＝シフト管理者）
+  viewDeputy: Actor // チーム A の DEPUTY_ADMIN（MANAGE_SHIFTS なし＝閲覧のみ）
   member: Actor     // チーム A の MEMBER（割当対象）
   member2: Actor    // チーム A の MEMBER（割当対象。ドラッグ＆ドロップ用）
   member3: Actor    // チーム A の MEMBER（降格される。AC-3 用）
@@ -129,6 +130,7 @@ test.beforeAll(async () => {
   mkdirSync(EVID_DIR, { recursive: true })
   const admin = await createActor('c1821adm')
   const deputy = await createActor('c1821dep')
+  const viewDeputy = await createActor('c1821vdp')
   const member = await createActor('c1821mem')
   const member2 = await createActor('c1821mm2')
   const member3 = await createActor('c1821mm3')
@@ -140,6 +142,15 @@ test.beforeAll(async () => {
   const teamA = await createTeam(admin, `1821チームA${TAG}`, 'PUBLIC', LEDGER)
   const teamB = await createTeam(bAdmin, `1821チームB${TAG}`, 'PUBLIC', LEDGER)
   await joinWithRole(admin, teamA.slug, deputy, ROLE_ID.DEPUTY_ADMIN)
+  await joinWithRole(admin, teamA.slug, viewDeputy, ROLE_ID.DEPUTY_ADMIN)
+  // DEPUTY_ADMIN の MANAGE_SHIFTS は天井登録（is_default=0）のため、権限グループで付与しないと can('MANAGE_SHIFTS') は false になる。
+  // deputy にだけ MANAGE_SHIFTS を含む権限グループを付与する（viewDeputy は付与しない）。権限 ID は読み取り SQL で引く。
+  const manageShiftsId = Number(sql(`SELECT id FROM permissions WHERE name = 'MANAGE_SHIFTS';`))
+  if (!Number.isInteger(manageShiftsId) || manageShiftsId <= 0) throw new Error('permissions に MANAGE_SHIFTS が無い')
+  const group = await must(admin, 'POST', `/api/v1/teams/${teamA.slug}/permission-groups`, {
+    name: `manage-shifts-${TAG}`, targetRole: 'DEPUTY_ADMIN', permissionIds: [manageShiftsId],
+  })
+  await must(admin, 'PUT', `/api/v1/teams/${teamA.slug}/members/${deputy.id}/permission-groups`, { groupIds: [Number(group.data.id)] })
   await joinAsMember('teams', admin, teamA.slug, member)
   await joinAsMember('teams', admin, teamA.slug, member2)
   await joinAsMember('teams', admin, teamA.slug, member3)
@@ -173,7 +184,7 @@ test.beforeAll(async () => {
     }
   }
   W = {
-    admin, deputy, member, member2, member3, supporter, outsider, bAdmin, bMember, dual, teamA, teamB,
+    admin, deputy, viewDeputy, member, member2, member3, supporter, outsider, bAdmin, bMember, dual, teamA, teamB,
     positionA: posA.data.id, positionB: posB.data.id, scheduleA: schA.data.id, scheduleB: schB.data.id,
     slotA1, slotA2, slotA3, slotB1,
   }
@@ -227,7 +238,7 @@ test('AC-1 権限あり: チーム ADMIN が URL 直打ちでボードを開く�
   expect(roleOf(W.supporter), '前提: SUPPORTER は SUPPORTER として一覧に載る').toBe('SUPPORTER')
   const names = await poolNames(page)
   console.log(`[cmp-261123-1821] ADMIN の未割当一覧: ${JSON.stringify(names)}`)
-  for (const ok of [W.admin, W.deputy, W.member, W.member2, W.member3, W.dual]) {
+  for (const ok of [W.admin, W.deputy, W.viewDeputy, W.member, W.member2, W.member3, W.dual]) {
     expect(names, `正規メンバー ${ok.label} が並ぶ`).toContain(ok.nickname)
   }
   for (const ng of [W.supporter, W.bMember, W.bAdmin, W.outsider]) {
@@ -307,7 +318,7 @@ test('AC-1 権限あり ADMIN: 割当の移動（枠 2 → 枠 3）が画面で�
   test.setTimeout(300_000)
   const page = await sessionOf(browser, W.admin)
   const row1 = slotRow(page, 1)
-  const [removed] = await Promise.all([patchAssignmentsResponse(page), chipIn(row1, W.member2).getByRole('button', { name: '削除' }).click()])
+  const [removed] = await Promise.all([patchAssignmentsResponse(page), chipIn(row1, W.member2).getByTestId('shift-chip-remove').click()])
   expect(removed.status()).toBe(200)
   await expect(chipIn(row1, W.member2)).toHaveCount(0)
   const added = await addViaDialog(page, 2, W.member2)
@@ -336,7 +347,20 @@ test('AC-1 権限あり ADMIN: 割当済みのチップを別の枠へドラッ�
   expect(await assignedOf(W.slotA3), 'ドラッグで枠 3 から外れている').not.toContain(W.member2.id)
 })
 
-test('AC-1 権限あり DEPUTY_ADMIN（シフト管理者）: URL 直打ちでボードが開き、画面で割り当てられ、他チーム利用者・SUPPORTER は並ばない', async ({ browser }) => {
+test('ROLE DEPUTY_ADMIN でも MANAGE_SHIFTS を持たなければ閲覧のみ（追加・外す・未割当プールが出ない）', async ({ browser }) => {
+  test.setTimeout(300_000)
+  const page = await sessionOf(browser, W.viewDeputy)
+  await reloadBoard(page)
+  await expect(slotRow(page, 0)).toBeVisible()
+  await expect(addButton(slotRow(page, 0))).toHaveCount(0)
+  await expect(page.getByTestId('shift-chip-remove')).toHaveCount(0)
+  await expect(page.getByTestId('member-pool-aside')).toHaveCount(0)
+  await expect(page.locator('[draggable="true"]')).toHaveCount(0)
+  await expect(page.getByTestId('auto-assign-button')).toHaveCount(0)
+  await page.screenshot({ path: path.join(EVID_DIR, 'role-deputy-without-manage-shifts.png') })
+})
+
+test('AC-1 権限あり DEPUTY_ADMIN（MANAGE_SHIFTS 付与済みのシフト管理者）: URL 直打ちでボードが開き、画面で割り当てられ、他チーム利用者・SUPPORTER は並ばない', async ({ browser }) => {
   test.setTimeout(300_000)
   const page = await sessionOf(browser, W.deputy)
   await reloadBoard(page)

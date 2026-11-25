@@ -268,6 +268,13 @@ describe('シフトボード: 割当操作の出し分け（CMP-261125-1336）',
     const w = await renderAs('SYSTEM_ADMIN', false)
     expect(w.find('[data-testid="member-pool-aside"]').exists()).toBe(false)
   })
+
+  it('SYSTEM_ADMIN がチーム ADMIN と兼任（isScopeAdmin=true）でも、roleName 等値の既存方針どおり出さない', async () => {
+    const w = await renderAs('SYSTEM_ADMIN', true, ['MANAGE_SHIFTS'])
+    expect(w.find('[data-testid="member-pool-aside"]').exists()).toBe(false)
+    expect(w.find('[data-testid="auto-assign-button"]').exists()).toBe(false)
+    expect(w.findComponent(ShiftBoardMatrix).props('canAssign')).toBe(false)
+  })
 })
 
 describe('シフトボード: 二度押し防止と失敗後の復帰（CMP-261125-1336）', () => {

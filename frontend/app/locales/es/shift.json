@@ -12,6 +12,7 @@
     "board": {
       "title": "Tablero de turnos",
       "memberPool": "Miembros sin asignar",
+      "remainingHours": "Quedan {hours} h",
       "noUnassignedMembers": "No hay miembros sin asignar",
       "noMatchingMembers": "Ningún miembro coincide con la búsqueda",
       "dragHint": "Arrastra miembros para asignar",
@@ -210,7 +211,7 @@
       "moveDateAccept": "Mover turno y preferencias",
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",
-      "assignmentMasked": "En ajuste",
+      "assignmentHidden": "Asignaciones ocultas",
       "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
       "deleteTitle": "Eliminar turno",
       "deleteConfirmPlain": "¿Eliminar este turno?",

@@ -109,7 +109,7 @@
       "moveDateAccept": "枠と希望を移動",
       "saveSuccess": "スロットを保存しました",
       "deleteSuccess": "スロットを削除しました",
-      "assignmentMasked": "調整中",
+      "assignmentHidden": "割当は非公開",
       "assignmentMaskedHint": "公開前のため割当は表示されません",
       "deleteTitle": "シフト枠を削除",
       "deleteConfirmPlain": "この枠を削除しますか？",
@@ -340,6 +340,7 @@
     "board": {
       "title": "シフトボード",
       "memberPool": "未割当メンバー",
+      "remainingHours": "残り {hours}時間",
       "noUnassignedMembers": "未割当のメンバーはいません",
       "noMatchingMembers": "検索条件に一致するメンバーはいません",
       "dragHint": "メンバーをドラッグして割り当て",

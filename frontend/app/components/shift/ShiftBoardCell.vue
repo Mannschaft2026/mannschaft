@@ -15,7 +15,7 @@
         :title="$t('shift.slot.assignmentMaskedHint')"
         data-testid="shift-cell-masked"
       >
-        {{ $t('shift.slot.assignmentMasked') }}
+        {{ $t('shift.slot.assignmentHidden') }}
       </span>
       <template v-else>
         <span class="font-semibold" :class="isFull ? 'text-green-700' : 'text-surface-600'">

@@ -424,7 +424,7 @@ const currentStep = computed(() =>
                         class="shrink-0 whitespace-nowrap rounded bg-surface-100 px-1 font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
                         :title="$t('shift.slot.assignmentMaskedHint')"
                       >
-                        {{ $t('shift.slot.assignmentMasked') }}
+                        {{ $t('shift.slot.assignmentHidden') }}
                       </span>
                       <span
                         v-else

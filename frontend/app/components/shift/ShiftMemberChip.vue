@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative group inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-sm cursor-grab select-none transition-colors"
+    class="relative group inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-sm select-none transition-colors"
     :class="chipClass"
   >
     <!-- 長い氏名はモバイルでは切らずに折り返す（デスクトップは従来どおり省略表示） -->

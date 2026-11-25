@@ -82,8 +82,33 @@ async function openBoard(page: Page) {
   await expect(page.getByTestId('shift-board-table')).toBeVisible()
 }
 
-const noPagePan = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+/**
+ * はみ出し・切り取りの検査。ボード root は `h-screen overflow-hidden` のため documentElement の scrollWidth では
+ * 切り取りを検出できない。ヘッダー（見出し・ボタン・バッジ）と表の外枠の「右端が viewport 内」と、
+ * ヘッダーが自分の幅に収まる（scrollWidth <= clientWidth）ことを実測する。空配列なら問題なし。
+ */
+const clippingProblems = (page: Page) =>
+  page.evaluate(() => {
+    const problems: string[] = []
+    const vw = window.innerWidth
+    const doc = document.documentElement
+    if (doc.scrollWidth > doc.clientWidth) problems.push(`document scrollWidth ${doc.scrollWidth} > clientWidth ${doc.clientWidth}`)
+    const within = (el: Element, label: string) => {
+      const r = el.getBoundingClientRect()
+      if (r.width === 0 && r.height === 0) return
+      if (r.right > vw + 0.5) problems.push(`${label} の右端 ${r.right.toFixed(1)} > viewport ${vw}`)
+      if (r.left < -0.5) problems.push(`${label} の左端 ${r.left.toFixed(1)} < 0`)
+    }
+    const header = document.querySelector('[data-testid="shift-board-header"]')
+    if (header) {
+      within(header, 'ヘッダー')
+      if (header.scrollWidth > header.clientWidth) problems.push(`ヘッダー scrollWidth ${header.scrollWidth} > clientWidth ${header.clientWidth}`)
+      header.querySelectorAll('button, a, h1, [class*="p-tag"], [class*="badge"]').forEach((el, i) => within(el, `ヘッダー内 ${el.tagName.toLowerCase()}#${i}`))
+    }
+    const scroller = document.querySelector('[data-testid="shift-board-scroll"]')
+    if (scroller) within(scroller, '表の外枠')
+    return problems
+  })
 
 async function box(target: Locator) {
   await expect(target).toBeVisible()
@@ -125,7 +150,7 @@ for (const width of VIEWPORTS) {
       }
 
       // ページ本体は横にはみ出さない。表の内側コンテナは横スクロールしてよい
-      expect(await noPagePan(page)).toBe(true)
+      expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
 
       // 各枠に「〇 / 〇人」。満員は「満員」
       const counts = page.getByTestId('shift-cell-count')
@@ -144,7 +169,7 @@ for (const width of VIEWPORTS) {
       const scroller = page.getByTestId('shift-board-scroll')
       const overflow = await scroller.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }))
       expect(overflow.sw, '表が内側コンテナで横スクロールできる').toBeGreaterThan(overflow.cw)
-      expect(await noPagePan(page)).toBe(true)
+      expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
       await scroller.evaluate(el => { el.scrollLeft = el.scrollWidth })
       const dateCell = page.locator('tbody tr').first().locator('td').first()
       const [d, s] = [await box(dateCell), await box(scroller)]
@@ -171,7 +196,7 @@ for (const width of VIEWPORTS) {
         await expect(drawer).toBeVisible()
         await expect(drawer.getByText('鈴木 一郎')).toHaveCount(0) // 鈴木は枠に入っているので未割当ではない
         await expect(drawer.getByText('伊藤 さくら')).toBeVisible()
-        expect(await noPagePan(page)).toBe(true)
+        expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
         await page.keyboard.press('Escape')
       } else {
         await expect(page.getByTestId('member-pool-aside')).toBeVisible()
@@ -191,7 +216,7 @@ for (const width of VIEWPORTS) {
       const option = page.getByTestId('shift-add-member-option-13')
       await expect(option).toBeEnabled()
       if (mobile) expect((await box(option)).height).toBeGreaterThanOrEqual(44)
-      expect(await noPagePan(page)).toBe(true)
+      expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
     })
   })
 }
@@ -210,7 +235,7 @@ test.describe('390px 一般 MEMBER（閲覧のみ）', () => {
     await expect(page.locator('[draggable="true"]')).toHaveCount(0)
     await expect(page.getByTestId('shift-cell-count').first()).toContainText('/ 3人')
     await expect(page.getByTestId('shift-cell-501')).toContainText(LONG_NAME) // 長い氏名は切らずに折り返す
-    expect(await noPagePan(page)).toBe(true)
+    expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
   })
 
   test('割当を伏せた枠は人数を出さず中立表示にする', async ({ page }) => {
@@ -218,7 +243,7 @@ test.describe('390px 一般 MEMBER（閲覧のみ）', () => {
       buildSlot(501, { positionId: 1, positionName: '受付', requiredCount: 3, assignmentMasked: true }),
     ])
     await openBoard(page)
-    await expect(page.getByTestId('shift-cell-masked')).toHaveText('調整中')
+    await expect(page.getByTestId('shift-cell-masked')).toHaveText('割当は非公開')
     await expect(page.getByTestId('shift-cell-501')).not.toContainText('/ 3人')
   })
 })
@@ -270,7 +295,7 @@ test.describe('en ロケール', () => {
     await openBoard(page)
     const header = page.getByTestId('shift-board-header')
     await expect(header.getByText('Published', { exact: true })).toBeVisible()
-    expect(await noPagePan(page)).toBe(true)
+    expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
     const buttons = header.getByRole('button')
     for (let i = 0; i < await buttons.count(); i++) {
       if (!(await buttons.nth(i).isVisible())) continue
@@ -292,7 +317,7 @@ for (const width of VIEWPORTS) {
       await waitForHydration(page)
       const calendar = page.getByTestId('shift-overview-calendar')
       await expect(calendar).toBeVisible()
-      expect(await noPagePan(page)).toBe(true)
+      expect(await clippingProblems(page), 'はみ出し・切り取りが無い').toEqual([])
       const inner = await calendar.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }))
       expect(inner.sw, 'カレンダー内側コンテナも横にはみ出さない').toBeLessThanOrEqual(inner.cw)
       // 札はコンテナ内に全体が収まる

@@ -54,6 +54,14 @@ describe('ShiftBoardMatrix', () => {
     expect(w.findAll('tbody tr')).toHaveLength(2)
   })
 
+  it('同じ日時・同じポジションの 2 枠は同じセルに並び、各 slotId のセルが出る', async () => {
+    const w = await mountMatrix([slot(1, 1), slot(2, 1)])
+    expect(w.findAll('tbody tr')).toHaveLength(1)
+    const cells = w.findAll('tbody td').filter((td) => td.find('[data-testid="shift-cell-1"]').exists())
+    expect(cells).toHaveLength(1)
+    expect(cells[0]!.find('[data-testid="shift-cell-2"]').exists()).toBe(true)
+  })
+
   it('割当を伏せた枠は人数を出さず中立表示にする', async () => {
     const w = await mountMatrix([slot(1, 1, { assignmentMasked: true })])
     expect(w.find('[data-testid="shift-cell-masked"]').exists()).toBe(true)
