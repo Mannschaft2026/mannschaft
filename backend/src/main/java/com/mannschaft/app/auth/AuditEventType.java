@@ -14,6 +14,10 @@ public enum AuditEventType {
     WEBAUTHN_LOGIN_FAILED(AuditEventCategory.AUTH),
     WEBAUTHN_CREDENTIAL_REGISTERED(AuditEventCategory.AUTH),
     WEBAUTHN_CREDENTIAL_REMOVED(AuditEventCategory.AUTH),
+    /** CMP-261021-1338 B7: パスキー登録・削除／F18 提示モード前の再認証の成功。 */
+    REAUTH_SUCCEEDED(AuditEventCategory.AUTH),
+    /** CMP-261021-1338 B7: 同・失敗（失敗 TX のロールバックでも残る）。 */
+    REAUTH_FAILED(AuditEventCategory.AUTH),
     LOGOUT(AuditEventCategory.AUTH),
     LOGOUT_SESSION(AuditEventCategory.AUTH),
     LOGOUT_ALL_SESSIONS(AuditEventCategory.AUTH),

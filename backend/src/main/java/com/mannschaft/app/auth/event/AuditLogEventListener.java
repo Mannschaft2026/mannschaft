@@ -630,6 +630,40 @@ public class AuditLogEventListener {
         );
     }
 
+    /**
+     * 再認証の成功（CMP-261021-1338 B7）。method は PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / EMAIL_OTP。
+     */
+    @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
+            reason = "止めると認証・アカウント操作の監査記録が欠落する。イベントは再生されないため停止期間の監査証跡は恒久的に失われる")
+    @Async("event-pool")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void handleReauthenticationSucceeded(ReauthenticationSucceededEvent event) {
+        recordReauthentication(AuditEventType.REAUTH_SUCCEEDED, event.getUserId(),
+                event.getPurpose(), event.getMethod());
+    }
+
+    /**
+     * 再認証の失敗（CMP-261021-1338 B7）。失敗は {@code BusinessException} で応答し業務 TX がロールバックされるため、
+     * AFTER_COMMIT では発火しない。AFTER_COMPLETION（コミット・ロールバックの両方）で受けて監査を残す。
+     */
+    @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
+            reason = "止めると認証・アカウント操作の監査記録が欠落する。イベントは再生されないため停止期間の監査証跡は恒久的に失われる")
+    @Async("event-pool")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMPLETION, fallbackExecution = true)
+    public void handleReauthenticationFailed(ReauthenticationFailedEvent event) {
+        recordReauthentication(AuditEventType.REAUTH_FAILED, event.getUserId(),
+                event.getPurpose(), event.getMethod());
+    }
+
+    private void recordReauthentication(AuditEventType type, Long userId,
+                                        com.mannschaft.app.auth.ReauthPurpose purpose,
+                                        com.mannschaft.app.auth.PasskeyManageReauthMethod method) {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("purpose", purpose == null ? null : purpose.name());
+        metadata.put("method", method == null ? null : method.name());
+        auditLogService.record(type.name(), userId, null, null, null, null, null, null, toJson(metadata));
+    }
+
     // ─────────────────────────────────────────────
     // TOKEN / DEVICE (追加分)
     // ─────────────────────────────────────────────

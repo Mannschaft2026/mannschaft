@@ -461,52 +461,6 @@ class PointCardGroupServiceTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("startPresentation: require_biometric_on_show=true かつ未認証で POINT_CARD_009 を投擲")
-    void startPresentation_requireBiometric_notVerified_throwsBiometricRequired() {
-        PointCardGroupEntity group = sampleGroup(USER_ID);
-        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID))
-                .willReturn(Optional.of(group));
-        given(userSettingsService.getOrCreateSettings(USER_ID))
-                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
-        given(authWebAuthnService.isReauthenticatedRecently(USER_ID)).willReturn(false);
-
-        assertThatThrownBy(() -> groupService.startPresentation(group.getId(), USER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(PointCardErrorCode.BIOMETRIC_REQUIRED);
-
-        // 監査ログは発火しない（提示モードに進めていないため）
-        verify(auditLogService, never()).record(anyString(), any(), any(), any(), any(),
-                any(), any(), any(), any());
-        // consume は呼ばれない
-        verify(authWebAuthnService, never()).consumeReauthentication(any());
-    }
-
-    @Test
-    @DisplayName("startPresentation: require_biometric_on_show=true かつ認証済みなら通過し consume が呼ばれる")
-    void startPresentation_requireBiometric_verified_consumesFlag() {
-        PointCardGroupEntity group = sampleGroup(USER_ID);
-        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID))
-                .willReturn(Optional.of(group));
-        given(userSettingsService.getOrCreateSettings(USER_ID))
-                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
-        given(authWebAuthnService.isReauthenticatedRecently(USER_ID)).willReturn(true);
-        given(itemRepository.findAllByGroupIdOrderByDisplayOrderAsc(group.getId()))
-                .willReturn(List.of());
-
-        // When
-        GroupDetailResponse res = groupService.startPresentation(group.getId(), USER_ID);
-
-        // Then: 監査ログ発火 + フラグ消費 + 結果取得
-        assertThat(res).isNotNull();
-        verify(authWebAuthnService).consumeReauthentication(USER_ID);
-        verify(auditLogService).record(
-                eq(AuditEventType.POINT_CARD_VIEWED.name()),
-                eq(USER_ID), any(), any(), any(),
-                any(), any(), any(), anyString());
-    }
-
-    @Test
     @DisplayName("startPresentation: require_biometric_on_show=false なら WebAuthn を呼ばない")
     void startPresentation_biometricNotRequired_skipsWebAuthnCheck() {
         PointCardGroupEntity group = sampleGroup(USER_ID);
@@ -519,8 +473,7 @@ class PointCardGroupServiceTest {
 
         groupService.startPresentation(group.getId(), USER_ID);
 
-        verify(authWebAuthnService, never()).isReauthenticatedRecently(any());
-        verify(authWebAuthnService, never()).consumeReauthentication(any());
+        verify(authWebAuthnService, never()).consumeReauthentication(any(), any(), any());
     }
 
     // CMP-261021-1339 A7/B3/B4 試練: 提示モードは「提示用途・このセッション」のフラグを getAndDelete 一発で消費する。
@@ -544,7 +497,6 @@ class PointCardGroupServiceTest {
 
         assertThat(res).isNotNull();
         verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
-        verify(authWebAuthnService, never()).isReauthenticatedRecently(any());
     }
 
     @Test
@@ -557,8 +509,6 @@ class PointCardGroupServiceTest {
         String sessionHash = SessionHashUtil.hash("jti-pointcard");
         org.mockito.Mockito.lenient().when(authWebAuthnService.consumeReauthentication(
                 USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT)).thenReturn(false);
-        // 旧 API が「認証済み」と答えても、提示用途の消費に失敗したら通さない
-        org.mockito.Mockito.lenient().when(authWebAuthnService.isReauthenticatedRecently(USER_ID)).thenReturn(true);
 
         assertThatThrownBy(() -> withSession("jti-pointcard",
                 () -> groupService.startPresentation(group.getId(), USER_ID)))

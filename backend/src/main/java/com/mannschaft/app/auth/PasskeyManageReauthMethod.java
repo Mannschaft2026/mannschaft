@@ -2,8 +2,6 @@ package com.mannschaft.app.auth;
 
 /**
  * パスキー登録・削除前の再認証手段（CMP-261021-1338 B5）。利用者の状態から自動選択する。
- *
- * <p>試練スタブ: 手段の定義だけを先に置く（選択・照合は出陣で実装する）。</p>
  */
 public enum PasskeyManageReauthMethod {
     /** 既存パスキー保有者: パスキー再認証（UV 必須）。 */

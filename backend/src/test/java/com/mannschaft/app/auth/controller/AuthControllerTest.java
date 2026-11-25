@@ -2,6 +2,9 @@ package com.mannschaft.app.auth.controller;
 
 import com.mannschaft.app.auth.dto.BackupCodesResponse;
 import com.mannschaft.app.auth.MfaVerificationMethod;
+import com.mannschaft.app.auth.PasskeyManageReauthMethod;
+import com.mannschaft.app.auth.ReauthPurpose;
+import com.mannschaft.app.common.util.SessionHashUtil;
 import com.mannschaft.app.auth.dto.MessageResponse;
 import com.mannschaft.app.auth.dto.MfaLoginTokenResponse;
 import com.mannschaft.app.auth.dto.TokenResponse;
@@ -58,12 +61,15 @@ class AuthControllerTest {
 
     private static final Long USER_ID = 1L;
     private static final Long CREDENTIAL_ID = 10L;
+    private static final String SESSION_HASH = SessionHashUtil.hash("controller-test-jti");
 
     @BeforeEach
     void setUp() {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(USER_ID.toString(), null, List.of())
-        );
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(USER_ID.toString(), null, List.of());
+        // SecurityUtils.getCurrentSessionHash() の入力（再認証フラグを束ねるセッション）
+        authentication.setDetails(java.util.Map.of("jti", "controller-test-jti"));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
     @AfterEach
@@ -222,6 +228,9 @@ class AuthControllerTest {
         @Mock
         private AuthTokenService authTokenService;
 
+        @Mock
+        private Auth2faService auth2faService;
+
         @InjectMocks
         private AuthWebAuthnController authWebAuthnController;
 
@@ -231,7 +240,7 @@ class AuthControllerTest {
             // Given
             WebAuthnRegisterBeginResponse beginResponse = new WebAuthnRegisterBeginResponse(
                     "challenge-abc", "mannschaft.app", "Mannschaft", USER_ID, "yamada");
-            given(authWebAuthnService.beginRegister(USER_ID)).willReturn(ApiResponse.of(beginResponse));
+            given(authWebAuthnService.beginRegister(USER_ID, SESSION_HASH)).willReturn(ApiResponse.of(beginResponse));
 
             // When
             ResponseEntity<ApiResponse<WebAuthnRegisterBeginResponse>> response =
@@ -251,7 +260,7 @@ class AuthControllerTest {
             WebAuthnRegisterCompleteRequest req = new WebAuthnRegisterCompleteRequest(
                     "cred-id", "attestation-obj", "client-data-json",
                     "public-key", "My MacBook", "aaguid-123");
-            given(authWebAuthnService.completeRegister(USER_ID, req)).willReturn(ApiResponse.of(message));
+            given(authWebAuthnService.completeRegister(USER_ID, SESSION_HASH, req)).willReturn(ApiResponse.of(message));
 
             // When
             ResponseEntity<ApiResponse<MessageResponse>> response =
@@ -352,7 +361,7 @@ class AuthControllerTest {
 
             // Then
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-            verify(authWebAuthnService).deleteCredential(USER_ID, CREDENTIAL_ID);
+            verify(authWebAuthnService).deleteCredential(USER_ID, SESSION_HASH, CREDENTIAL_ID);
         }
 
         // ──────────────────────────────────────────────
@@ -370,10 +379,12 @@ class AuthControllerTest {
         void beginReauthenticate_targetsOnlyAuthenticatedUser() {
             var beginResponse = new com.mannschaft.app.auth.dto.WebAuthnReauthenticateBeginResponse(
                     "reauth-challenge", "mannschaft.app", List.of("cred-id-1"), USER_ID, 300000L);
-            given(authWebAuthnService.beginReauthenticate(USER_ID)).willReturn(ApiResponse.of(beginResponse));
+            given(authWebAuthnService.beginReauthenticate(USER_ID, ReauthPurpose.PASSKEY_MANAGE))
+                    .willReturn(ApiResponse.of(beginResponse));
 
             ResponseEntity<ApiResponse<com.mannschaft.app.auth.dto.WebAuthnReauthenticateBeginResponse>> response =
-                    authWebAuthnController.beginReauthenticate();
+                    authWebAuthnController.beginReauthenticate(
+                            new com.mannschaft.app.auth.dto.WebAuthnReauthenticateBeginRequest(ReauthPurpose.PASSKEY_MANAGE));
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(response.getBody().getData().getUserId()).isEqualTo(USER_ID);
@@ -387,14 +398,56 @@ class AuthControllerTest {
                     "cred-id", "auth-data", "client-data", "signature", 7L);
             var completeResponse = new com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse(
                     java.time.OffsetDateTime.now().plusMinutes(5));
-            given(authWebAuthnService.completeReauthenticate(eq(USER_ID), eq(req)))
+            given(authWebAuthnService.completeReauthenticate(eq(USER_ID), eq(SESSION_HASH), eq(req)))
                     .willReturn(ApiResponse.of(completeResponse));
 
             ResponseEntity<ApiResponse<com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse>> response =
                     authWebAuthnController.completeReauthenticate(req);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-            verify(authWebAuthnService).completeReauthenticate(USER_ID, req);
+            verify(authWebAuthnService).completeReauthenticate(USER_ID, SESSION_HASH, req);
+        }
+
+        @Test
+        @DisplayName("正常系: 再認証手段は認証主体の userId のみで解決される（AuthWebAuthnController#getReauthenticateMethod）")
+        void getReauthenticateMethod_targetsOnlyAuthenticatedUser() {
+            given(auth2faService.resolvePasskeyManageReauthMethod(USER_ID))
+                    .willReturn(PasskeyManageReauthMethod.EMAIL_OTP);
+
+            var response = authWebAuthnController.getReauthenticateMethod();
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody().getData().getMethod()).isEqualTo(PasskeyManageReauthMethod.EMAIL_OTP);
+        }
+
+        @Test
+        @DisplayName("正常系: 再認証用メールOTP送信は認証主体の userId のみで解決される"
+                + "（AuthWebAuthnController#sendReauthenticateEmailOtp）")
+        void sendReauthenticateEmailOtp_targetsOnlyAuthenticatedUser() {
+            var sendResponse = new com.mannschaft.app.auth.dto.MfaEmailSendResponse("a***@example.com", 600, 60);
+            given(auth2faService.sendPasskeyManageReauthEmailOtp(USER_ID))
+                    .willReturn(ApiResponse.of(sendResponse));
+
+            var response = authWebAuthnController.sendReauthenticateEmailOtp();
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auth2faService).sendPasskeyManageReauthEmailOtp(USER_ID);
+        }
+
+        @Test
+        @DisplayName("正常系: パスワード等の再認証は認証主体の userId と現在のセッションで解決される"
+                + "（AuthWebAuthnController#reauthenticateByFactor）")
+        void reauthenticateByFactor_targetsOnlyAuthenticatedUserAndSession() {
+            var req = new com.mannschaft.app.auth.dto.PasskeyManageReauthRequest("pw", null, null);
+            var completeResponse = new com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse(
+                    java.time.OffsetDateTime.now().plusMinutes(5));
+            given(auth2faService.reauthenticateForPasskeyManage(USER_ID, SESSION_HASH, req))
+                    .willReturn(ApiResponse.of(completeResponse));
+
+            var response = authWebAuthnController.reauthenticateByFactor(req);
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auth2faService).reauthenticateForPasskeyManage(USER_ID, SESSION_HASH, req);
         }
     }
 

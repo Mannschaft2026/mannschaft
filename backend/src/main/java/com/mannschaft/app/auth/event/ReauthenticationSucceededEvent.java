@@ -7,8 +7,6 @@ import lombok.Getter;
 
 /**
  * 再認証成功イベント（CMP-261021-1338 B7。監査ログに記録する）。
- *
- * <p>試練スタブ: 形だけを先に置く（発行・監査記録は出陣で実装する）。</p>
  */
 @Getter
 public class ReauthenticationSucceededEvent extends BaseEvent {

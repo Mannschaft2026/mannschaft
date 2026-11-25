@@ -1,6 +1,7 @@
 package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
+import com.mannschaft.app.auth.PasskeyManageReauthMethod;
 import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
@@ -18,6 +19,8 @@ import com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse;
 import com.mannschaft.app.auth.dto.WebAuthnRegisterBeginResponse;
 import com.mannschaft.app.auth.dto.WebAuthnRegisterCompleteRequest;
 import com.mannschaft.app.auth.event.LoginFailedEvent;
+import com.mannschaft.app.auth.event.ReauthenticationFailedEvent;
+import com.mannschaft.app.auth.event.ReauthenticationSucceededEvent;
 import com.mannschaft.app.auth.event.WebAuthnCredentialRemovedEvent;
 import com.mannschaft.app.auth.event.WebAuthnLoginEvent;
 import com.mannschaft.app.auth.event.WebAuthnLoginFailedEvent;
@@ -85,12 +88,15 @@ public class AuthWebAuthnService {
      */
     private static final String REAUTH_CHALLENGE_KEY_PREFIX = "mannschaft:auth:webauthn_reauth_challenge:";
     /**
-     * F18 提示モード追加保護用の「再認証済みフラグ」キープレフィックス（設計書 §9.6 / POINT_CARD_009）。
-     * 値は固定文字列 "1"。TTL は 5 分。提示モード開始 API は本キーの存在を確認し、即削除する。
+     * 再認証済みフラグのキープレフィックス（F18 設計書 §9.6 / POINT_CARD_009、CMP-261021-1338）。
+     * キーは {@code prefix + purpose + ":" + userId + ":" + sessionHash}。値は固定文字列 "1"、TTL は 5 分。
+     * 用途（A7）・ユーザー・再認証したセッション（B4）に束ね、消費は getAndDelete 一発（B3）。
      */
     private static final String REAUTH_VERIFIED_KEY_PREFIX = "mannschaft:auth:webauthn_reauth_verified:";
+    private static final char REAUTH_CHALLENGE_SEPARATOR = ':';
     private static final int CHALLENGE_TTL_MINUTES = 5;
-    private static final int REAUTH_VERIFIED_TTL_MINUTES = 5;
+    /** 再認証済みフラグの有効期間（分）。{@link Auth2faService} が期限表示に使う。 */
+    static final int REAUTH_VERIFIED_TTL_MINUTES = 5;
     private static final String RP_NAME = "Mannschaft";
 
     private final WebAuthnManager webAuthnManager = WebAuthnManager.createNonStrictWebAuthnManager();
@@ -104,11 +110,18 @@ public class AuthWebAuthnService {
     /**
      * WebAuthn登録を開始する。チャレンジを生成してValkeyに保存する。
      *
-     * @param userId ユーザーID
+     * <p>登録は再認証（{@link ReauthPurpose#PASSKEY_MANAGE}）済みのセッションに限る（B1/B2）。
+     * ここではフラグを消費せず存在だけを確認し、消費は {@link #completeRegister} で行う。</p>
+     *
+     * @param userId      ユーザーID
+     * @param sessionHash 操作中のセッション
      * @return 登録開始レスポンス
      */
     @Transactional
-    public ApiResponse<WebAuthnRegisterBeginResponse> beginRegister(Long userId) {
+    public ApiResponse<WebAuthnRegisterBeginResponse> beginRegister(Long userId, String sessionHash) {
+        if (!hasReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
+            throw new BusinessException(AuthErrorCode.AUTH_087);
+        }
         UserEntity user = findUserOrThrow(userId);
 
         // チャレンジ生成
@@ -127,29 +140,34 @@ public class AuthWebAuthnService {
     /**
      * WebAuthn登録を完了する。
      * <ol>
-     *   <li>チャレンジ検証（Valkey取得+削除）</li>
+     *   <li>再認証済みフラグの消費（getAndDelete 一発。無ければ AUTH_087。B1/B3/B4）</li>
+     *   <li>チャレンジ検証（getAndDelete で原子的に 1 回限り。B8）</li>
+     *   <li>attestation 検証（UV・UP 必須。B8）</li>
      *   <li>credential_id重複チェック</li>
      *   <li>WebAuthnCredentialEntity保存</li>
      *   <li>WebAuthnRegisteredEvent発行</li>
      * </ol>
-     * <p>
-     * WebAuthn4Jによる attestation 検証を実施する。
-     * </p>
      *
-     * @param userId ユーザーID
-     * @param req    登録完了リクエスト
+     * @param userId      ユーザーID
+     * @param sessionHash 操作中のセッション
+     * @param req         登録完了リクエスト
      * @return メッセージレスポンス
      */
     @SuppressWarnings("deprecation")
     @Transactional
-    public ApiResponse<MessageResponse> completeRegister(Long userId, WebAuthnRegisterCompleteRequest req) {
-        // 1. チャレンジ検証
+    public ApiResponse<MessageResponse> completeRegister(
+            Long userId, String sessionHash, WebAuthnRegisterCompleteRequest req) {
+        // 0. 再認証済みフラグを 1 回限りで消費する（同時 2 リクエストのうち成功は 1 つだけ）
+        if (!consumeReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
+            throw new BusinessException(AuthErrorCode.AUTH_087);
+        }
+
+        // 1. チャレンジ検証（原子的に取得して削除し、同一チャレンジの並行・再送完了を 1 回に限定する）
         String challengeKey = CHALLENGE_KEY_PREFIX + "register:" + userId;
-        String storedChallenge = redisTemplate.opsForValue().get(challengeKey);
+        String storedChallenge = redisTemplate.opsForValue().getAndDelete(challengeKey);
         if (storedChallenge == null) {
             throw new BusinessException(AuthErrorCode.AUTH_027);
         }
-        redisTemplate.delete(challengeKey);
 
         // WebAuthn4J attestation 検証 + CBOR公開鍵抽出 + 保存
         try {
@@ -164,8 +182,9 @@ public class AuthWebAuthnService {
                     new DefaultChallenge(Base64.getUrlDecoder().decode(storedChallenge)),
                     null
             );
+            // UV・UP を必須にする（UV 無しの認証器で本人確認なしにパスキーを増やさせない。B8）
             RegistrationParameters registrationParameters = new RegistrationParameters(
-                    serverProperty, null, false, false);
+                    serverProperty, null, true, true);
 
             RegistrationData registrationData = webAuthnManager.parse(registrationRequest);
             webAuthnManager.validate(registrationData, registrationParameters);
@@ -215,7 +234,7 @@ public class AuthWebAuthnService {
                     .build();
             webAuthnCredentialRepository.save(credential);
 
-        } catch (DataConversionException | VerificationException e) {
+        } catch (DataConversionException | VerificationException | IllegalArgumentException e) {
             log.warn("WebAuthn attestation検証失敗: userId={}", userId, e);
             throw new BusinessException(AuthErrorCode.AUTH_024, e);
         }
@@ -436,17 +455,25 @@ public class AuthWebAuthnService {
     /**
      * WebAuthn資格情報を削除する。
      *
+     * <p>削除は再認証（{@link ReauthPurpose#PASSKEY_MANAGE}）済みのセッションに限り、フラグは getAndDelete 一発で
+     * 消費する（B1〜B4）。所有者の確認を先に行い、他人・不在の ID は再認証の有無に関わらず AUTH_024 で区別しない。</p>
+     *
      * @param userId       ユーザーID
+     * @param sessionHash  操作中のセッション
      * @param credentialId 資格情報ID
      */
     @Transactional
-    public void deleteCredential(Long userId, Long credentialId) {
+    public void deleteCredential(Long userId, String sessionHash, Long credentialId) {
         WebAuthnCredentialEntity credential = webAuthnCredentialRepository.findById(credentialId)
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_024));
 
         // 所有者チェック
         if (!credential.getUserId().equals(userId)) {
             throw new BusinessException(AuthErrorCode.AUTH_024);
+        }
+
+        if (!consumeReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
+            throw new BusinessException(AuthErrorCode.AUTH_087);
         }
 
         webAuthnCredentialRepository.delete(credential);
@@ -456,21 +483,24 @@ public class AuthWebAuthnService {
     }
 
     // ─────────────────────────────────────────────
-    // F18 提示モード追加保護: WebAuthn 再認証（設計書 §9.6 / POINT_CARD_009）
+    // 再認証（F18 提示モード追加保護 設計書 §9.6 / CMP-261021-1339・1338 パスキー登録・削除）
     // ─────────────────────────────────────────────
 
     /**
-     * F18 提示モード追加保護のための WebAuthn 再認証を開始する。
+     * 用途付きの WebAuthn 再認証を開始する。
      *
-     * <p>既存の {@link #beginLogin(String)} と異なり、認証済みユーザー本人を対象にする。
-     * チャレンジは {@code webauthn_reauth_challenge:{userId}} に 5 分 TTL で保存する。
-     * AT/RT は発行せず、後段で {@link #completeReauthenticate} がフラグだけ書き込む。
+     * <p>認証済みユーザー本人を対象にする。チャレンジは {@code webauthn_reauth_challenge:{userId}} に
+     * 「用途:チャレンジ」の形で 5 分 TTL 保存し、用途をチャレンジに束ねる（A7）。AT/RT は発行しない。</p>
      *
-     * @param userId 現在のユーザー ID（{@code SecurityUtils.getCurrentUserId} で取得済み）
+     * @param userId  現在のユーザー ID
+     * @param purpose 再認証の用途
      * @return 再認証開始レスポンス
      */
     @Transactional
-    public ApiResponse<WebAuthnReauthenticateBeginResponse> beginReauthenticate(Long userId) {
+    public ApiResponse<WebAuthnReauthenticateBeginResponse> beginReauthenticate(Long userId, ReauthPurpose purpose) {
+        if (purpose == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_087);
+        }
         UserEntity user = findUserOrThrow(userId);
 
         // 登録済み credential が無いとそもそも再認証できない。明確に AUTH_024 で失敗させる。
@@ -485,7 +515,8 @@ public class AuthWebAuthnService {
 
         String challenge = generateChallenge();
         String challengeKey = REAUTH_CHALLENGE_KEY_PREFIX + userId;
-        redisTemplate.opsForValue().set(challengeKey, challenge, CHALLENGE_TTL_MINUTES, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(challengeKey, purpose.name() + REAUTH_CHALLENGE_SEPARATOR + challenge,
+                CHALLENGE_TTL_MINUTES, TimeUnit.MINUTES);
 
         WebAuthnReauthenticateBeginResponse response = new WebAuthnReauthenticateBeginResponse(
                 challenge, rpId, allowCredentials, userId, 60_000L);
@@ -493,46 +524,62 @@ public class AuthWebAuthnService {
     }
 
     /**
-     * F18 提示モード追加保護のための WebAuthn 再認証を完了する。
+     * WebAuthn 再認証を完了し、開始時の用途の再認証済みフラグを再認証したセッションに限って立てる。
      *
      * <ol>
-     *   <li>チャレンジ取得・削除（{@code webauthn_reauth_challenge:{userId}}）</li>
-     *   <li>credential_id 検索 + 所有者確認（{@code userId} 不一致は IDOR 防止のため AUTH_024）</li>
-     *   <li>WebAuthn4J による署名検証</li>
-     *   <li>sign_count 増分検証 + 保存値更新</li>
-     *   <li>「再認証済みフラグ」を 5 分 TTL で記録（{@code webauthn_reauth_verified:{userId}}）</li>
+     *   <li>credential_id 検索 + 所有者確認（他人の credential は AUTH_024。チャレンジはまだ消費しない。A3）</li>
+     *   <li>チャレンジの原子的な取得・削除（getAndDelete。再送・並行は AUTH_027。A4）</li>
+     *   <li>WebAuthn4J による署名検証（UV・UP 必須。A1）</li>
+     *   <li>sign_count 判定（検証済み authenticatorData の値のみ信用。0/0 許容。A5）</li>
+     *   <li>再認証済みフラグを 5 分 TTL で記録（用途・ユーザー・セッションに束縛。A7/B4）</li>
      * </ol>
      *
-     * <p>本メソッドは絶対に AT/RT を発行しない。トークン rotation したい場合は
-     * {@link #completeLogin} を使うこと。
+     * <p>AT/RT は発行しない。成功・失敗は監査イベントで記録する（B7）。</p>
      *
-     * @param userId 現在のユーザー ID
-     * @param req    再認証完了リクエスト
+     * @param userId      現在のユーザー ID
+     * @param sessionHash 再認証したセッション（{@code SecurityUtils.getCurrentSessionHash()}）
+     * @param req         再認証完了リクエスト
      * @return 期限 (verifiedUntil) のみを含むレスポンス
      */
     @SuppressWarnings("deprecation")
     @Transactional
     public ApiResponse<WebAuthnReauthenticateCompleteResponse> completeReauthenticate(
-            Long userId, WebAuthnReauthenticateCompleteRequest req) {
-
-        // 1. チャレンジ取得・即時削除（再生攻撃防止）
-        String challengeKey = REAUTH_CHALLENGE_KEY_PREFIX + userId;
-        String storedChallenge = redisTemplate.opsForValue().get(challengeKey);
-        if (storedChallenge == null) {
-            throw new BusinessException(AuthErrorCode.AUTH_027);
+            Long userId, String sessionHash, WebAuthnReauthenticateCompleteRequest req) {
+        if (sessionHash == null || sessionHash.isBlank()) {
+            // セッションを特定できないとフラグを束縛できない
+            throw new BusinessException(AuthErrorCode.AUTH_087);
         }
-        redisTemplate.delete(challengeKey);
 
-        // 2. credential_id 検索 + 所有者確認
+        // 1. credential_id 検索 + 所有者確認（チャレンジ消費より前。他人の credential で本人のチャレンジを焼かせない）
         WebAuthnCredentialEntity credential = webAuthnCredentialRepository
                 .findByCredentialId(req.getCredentialId())
-                .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_024));
-        // 他人の credential を指定された場合の IDOR 防止
-        if (!userId.equals(credential.getUserId())) {
+                .filter(c -> userId.equals(c.getUserId()))
+                .orElse(null);
+        if (credential == null) {
+            publishReauthFailed(userId, null);
             throw new BusinessException(AuthErrorCode.AUTH_024);
         }
 
+        // 2. チャレンジを原子的に取得・削除（同一チャレンジの並行・再送は 1 回に限る）
+        String stored = redisTemplate.opsForValue().getAndDelete(REAUTH_CHALLENGE_KEY_PREFIX + userId);
+        if (stored == null) {
+            publishReauthFailed(userId, null);
+            throw new BusinessException(AuthErrorCode.AUTH_027);
+        }
+        int separator = stored.indexOf(REAUTH_CHALLENGE_SEPARATOR);
+        ReauthPurpose purpose;
+        String storedChallenge;
+        try {
+            purpose = ReauthPurpose.valueOf(stored.substring(0, separator));
+            storedChallenge = stored.substring(separator + 1);
+        } catch (IndexOutOfBoundsException | IllegalArgumentException e) {
+            // 想定外の形式（過去版が書いた値など）は再認証をやり直させる
+            publishReauthFailed(userId, null);
+            throw new BusinessException(AuthErrorCode.AUTH_027, e);
+        }
+
         // 3. WebAuthn4J 署名検証
+        long verifiedSignCount;
         try {
             byte[] credentialIdBytes = Base64.getUrlDecoder().decode(req.getCredentialId());
             byte[] authenticatorData = Base64.getUrlDecoder().decode(req.getAuthenticatorData());
@@ -564,108 +611,59 @@ public class AuthWebAuthnService {
                                     credentialIdBytes, coseKey),
                             null, credential.getSignCount());
 
+            // UV・UP を必須にする（ログイン検証と同じ正規形。UV 無しの署名で再認証を通さない。A1）
             AuthenticationParameters authenticationParameters = new AuthenticationParameters(
-                    serverProperty, authenticator, null, false, false);
+                    serverProperty, authenticator, null, true, true);
 
             AuthenticationData authenticationData = webAuthnManager.parse(authenticationRequest);
             webAuthnManager.validate(authenticationData, authenticationParameters);
-        } catch (DataConversionException | VerificationException e) {
+            verifiedSignCount = authenticationData.getAuthenticatorData().getSignCount();
+        } catch (MaliciousCounterValueException e) {
+            publishReauthFailed(userId, purpose);
+            throw new BusinessException(AuthErrorCode.AUTH_026, e);
+        } catch (DataConversionException | VerificationException | IllegalArgumentException e) {
             log.warn("WebAuthn 再認証署名検証失敗: userId={}, credentialId={}",
                     userId, req.getCredentialId(), e);
+            publishReauthFailed(userId, purpose);
             throw new BusinessException(AuthErrorCode.AUTH_024, e);
         }
 
-        // 4. sign_count 増分検証
-        if (req.getSignCount() <= credential.getSignCount()) {
+        // 4. sign_count 判定。カウンタを実装しない同期パスキーの 0/0 は許す。いずれかが正値なら非増加を拒否する。
+        // クライアント申告の signCount ではなく、署名検証済み authenticatorData だけを信用する（A5）。
+        if ((verifiedSignCount != 0 || credential.getSignCount() != 0)
+                && verifiedSignCount <= credential.getSignCount()) {
+            publishReauthFailed(userId, purpose);
             throw new BusinessException(AuthErrorCode.AUTH_026);
         }
 
         // sign_count 更新 + lastUsedAt 更新（ログイン時と同じパターン）
-        WebAuthnCredentialEntity updated = credential.toBuilder()
-                .signCount(req.getSignCount())
-                .build();
-        updated.updateLastUsedAt();
-        webAuthnCredentialRepository.save(updated);
+        credential.recordAuthentication(verifiedSignCount, clock.instant());
 
         // 5. 再認証済みフラグを 5 分 TTL で記録
-        String verifiedKey = REAUTH_VERIFIED_KEY_PREFIX + userId;
-        redisTemplate.opsForValue().set(verifiedKey, "1",
-                REAUTH_VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
+        markReauthenticated(userId, sessionHash, purpose);
 
-        OffsetDateTime verifiedUntil =
-                OffsetDateTime.now().plusMinutes(REAUTH_VERIFIED_TTL_MINUTES);
+        eventPublisher.publish(new ReauthenticationSucceededEvent(userId, purpose, PasskeyManageReauthMethod.PASSKEY));
+        OffsetDateTime verifiedUntil = OffsetDateTime
+                .ofInstant(clock.instant(), clock.getZone()).plusMinutes(REAUTH_VERIFIED_TTL_MINUTES);
         return ApiResponse.of(new WebAuthnReauthenticateCompleteResponse(verifiedUntil));
     }
 
     /**
-     * F18 提示モード追加保護のため、ユーザーが直近 5 分以内に WebAuthn 再認証済みかを返す。
-     * {@link com.mannschaft.app.pointcard.service.PointCardGroupService#startPresentation}
-     * から呼び出される。
-     *
-     * @param userId 現在のユーザー ID
-     * @return フラグが Valkey に存在すれば true、なければ false
-     */
-    public boolean isReauthenticatedRecently(Long userId) {
-        if (userId == null) return false;
-        String key = REAUTH_VERIFIED_KEY_PREFIX + userId;
-        Boolean exists = redisTemplate.hasKey(key);
-        return Boolean.TRUE.equals(exists);
-    }
-
-    /**
-     * F18 提示モード追加保護のフラグを 1 回限りで消費する。
-     * 提示モード開始 API は本メソッドで即時無効化することで、同一フラグの再利用を防ぐ。
-     *
-     * @param userId 現在のユーザー ID
-     */
-    public void consumeReauthentication(Long userId) {
-        if (userId == null) return;
-        String key = REAUTH_VERIFIED_KEY_PREFIX + userId;
-        redisTemplate.delete(key);
-    }
-
-    // ─────────────────────────────────────────────
-    // CMP-261021-1339 / 1338 試練スタブ（出陣で実装する。中身は必ず red を保つ）
-    // ─────────────────────────────────────────────
-
-    /**
-     * 用途付きの WebAuthn 再認証を開始する（A7: 用途をチャレンジに束ねる）。
-     *
-     * @param userId  現在のユーザー ID
-     * @param purpose 再認証の用途
-     * @return 再認証開始レスポンス
-     */
-    public ApiResponse<WebAuthnReauthenticateBeginResponse> beginReauthenticate(Long userId, ReauthPurpose purpose) {
-        throw new UnsupportedOperationException("試練スタブ");
-    }
-
-    /**
-     * WebAuthn 再認証を完了し、開始時の用途で再認証済みフラグを再認証したセッションに限って立てる
-     * （A1〜A5/A7/B4。UV・UP 必須、チャレンジは照合後に原子的に 1 回限り消費、signCount は検証済み値で判定）。
-     *
-     * @param userId      現在のユーザー ID
-     * @param sessionHash 再認証したセッション（{@code SecurityUtils.getCurrentSessionHash()}）
-     * @param req         再認証完了リクエスト
-     * @return 期限 (verifiedUntil) のみを含むレスポンス
-     */
-    public ApiResponse<WebAuthnReauthenticateCompleteResponse> completeReauthenticate(
-            Long userId, String sessionHash, WebAuthnReauthenticateCompleteRequest req) {
-        throw new UnsupportedOperationException("試練スタブ");
-    }
-
-    /**
-     * 再認証済みフラグを 5 分 TTL で立てる（パスワード／メールOTP 経路の再認証成功時に Auth2faService から呼ぶ）。
+     * 再認証済みフラグを 5 分 TTL で立てる（パスワード／メールOTP 経路の再認証成功時に {@link Auth2faService} から呼ぶ）。
      *
      * @param userId      ユーザー ID
-     * @param sessionHash 再認証したセッション
+     * @param sessionHash 再認証したセッション（特定できなければ AUTH_087）
      * @param purpose     用途
      */
     public void markReauthenticated(Long userId, String sessionHash, ReauthPurpose purpose) {
-        throw new UnsupportedOperationException("試練スタブ");
+        // セッションを特定できない場合はキー生成で AUTH_087 とし、Valkey には何も書かない
+        String key = reauthVerifiedKey(userId, sessionHash, purpose);
+        redisTemplate.opsForValue().set(key, "1", REAUTH_VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
     }
 
     /**
      * 再認証済みフラグを getAndDelete 一発で 1 回限り消費する（B3/B4/A7）。
+     * 存在確認と削除を分けないため、同時 2 リクエストのうち消費できるのは 1 つだけ。
      *
      * @param userId      ユーザー ID
      * @param sessionHash 操作中のセッション
@@ -673,42 +671,33 @@ public class AuthWebAuthnService {
      * @return 消費できたら true
      */
     public boolean consumeReauthentication(Long userId, String sessionHash, ReauthPurpose purpose) {
-        throw new UnsupportedOperationException("試練スタブ");
+        if (userId == null || sessionHash == null || sessionHash.isBlank() || purpose == null) {
+            return false;
+        }
+        return redisTemplate.opsForValue().getAndDelete(reauthVerifiedKey(userId, sessionHash, purpose)) != null;
+    }
+
+    /** 再認証済みフラグが存在するか（消費しない。登録開始の事前ゲート用）。 */
+    private boolean hasReauthentication(Long userId, String sessionHash, ReauthPurpose purpose) {
+        if (userId == null || sessionHash == null || sessionHash.isBlank() || purpose == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.hasKey(reauthVerifiedKey(userId, sessionHash, purpose)));
+    }
+
+    private static String reauthVerifiedKey(Long userId, String sessionHash, ReauthPurpose purpose) {
+        if (userId == null || sessionHash == null || sessionHash.isBlank() || purpose == null) {
+            throw new BusinessException(AuthErrorCode.AUTH_087);
+        }
+        return REAUTH_VERIFIED_KEY_PREFIX + purpose.name() + ":" + userId + ":" + sessionHash;
     }
 
     /**
-     * 再認証済みのセッションに限りパスキー登録を開始する（B1/B2。フラグは消費しない）。
-     *
-     * @param userId      ユーザー ID
-     * @param sessionHash 操作中のセッション
-     * @return 登録開始レスポンス
+     * 再認証の失敗を監査イベントで記録する。失敗は例外で応答し TX がロールバックされるため、
+     * リスナー側は AFTER_COMPLETION で受ける（{@code AuditLogEventListener#handleReauthenticationFailed}）。
      */
-    public ApiResponse<WebAuthnRegisterBeginResponse> beginRegister(Long userId, String sessionHash) {
-        throw new UnsupportedOperationException("試練スタブ");
-    }
-
-    /**
-     * 再認証済みフラグを消費してパスキー登録を完了する（B1〜B4/B8）。
-     *
-     * @param userId      ユーザー ID
-     * @param sessionHash 操作中のセッション
-     * @param req         登録完了リクエスト
-     * @return メッセージレスポンス
-     */
-    public ApiResponse<MessageResponse> completeRegister(
-            Long userId, String sessionHash, WebAuthnRegisterCompleteRequest req) {
-        throw new UnsupportedOperationException("試練スタブ");
-    }
-
-    /**
-     * 再認証済みフラグを消費してパスキーを削除する（B1〜B4）。
-     *
-     * @param userId       ユーザー ID
-     * @param sessionHash  操作中のセッション
-     * @param credentialId 資格情報ID
-     */
-    public void deleteCredential(Long userId, String sessionHash, Long credentialId) {
-        throw new UnsupportedOperationException("試練スタブ");
+    private void publishReauthFailed(Long userId, ReauthPurpose purpose) {
+        eventPublisher.publish(new ReauthenticationFailedEvent(userId, purpose, PasskeyManageReauthMethod.PASSKEY));
     }
 
     // === ヘルパーメソッド ===

@@ -18,6 +18,9 @@ import java.time.Duration;
  * <ul>
  *   <li>{@code POST /api/v1/auth/webauthn/reauthenticate-begin}</li>
  *   <li>{@code POST /api/v1/auth/webauthn/reauthenticate-complete}</li>
+ *   <li>{@code POST /api/v1/auth/webauthn/reauthenticate-factor}（パスワード／2FA／メールOTP 経路。
+ *       サービス側でさらに 5 回/15 分）</li>
+ *   <li>{@code POST /api/v1/auth/webauthn/reauthenticate-email-otp}（本人確認用メールOTP 送信）</li>
  * </ul>
  *
  * <p>※ ログイン用 {@code /login/begin} / {@code /login/complete} には影響しない。
@@ -32,6 +35,8 @@ public class AuthWebAuthnReauthRateLimitFilter extends AbstractRateLimitFilter {
 
     private static final String REAUTH_BEGIN_PATH = "/api/v1/auth/webauthn/reauthenticate-begin";
     private static final String REAUTH_COMPLETE_PATH = "/api/v1/auth/webauthn/reauthenticate-complete";
+    private static final String REAUTH_FACTOR_PATH = "/api/v1/auth/webauthn/reauthenticate-factor";
+    private static final String REAUTH_EMAIL_OTP_PATH = "/api/v1/auth/webauthn/reauthenticate-email-otp";
     private static final int RATE_PER_MINUTE = 10;
     private static final Duration WINDOW = Duration.ofMinutes(1);
 
@@ -48,7 +53,8 @@ public class AuthWebAuthnReauthRateLimitFilter extends AbstractRateLimitFilter {
             return true;
         }
         String path = request.getServletPath();
-        return !(REAUTH_BEGIN_PATH.equals(path) || REAUTH_COMPLETE_PATH.equals(path));
+        return !(REAUTH_BEGIN_PATH.equals(path) || REAUTH_COMPLETE_PATH.equals(path)
+                || REAUTH_FACTOR_PATH.equals(path) || REAUTH_EMAIL_OTP_PATH.equals(path));
     }
 
     @Override
@@ -59,6 +65,12 @@ public class AuthWebAuthnReauthRateLimitFilter extends AbstractRateLimitFilter {
         }
         if (REAUTH_COMPLETE_PATH.equals(path)) {
             return new RateLimitRule(ZONE_PREFIX + "COMPLETE", RATE_PER_MINUTE, WINDOW);
+        }
+        if (REAUTH_FACTOR_PATH.equals(path)) {
+            return new RateLimitRule(ZONE_PREFIX + "FACTOR", RATE_PER_MINUTE, WINDOW);
+        }
+        if (REAUTH_EMAIL_OTP_PATH.equals(path)) {
+            return new RateLimitRule(ZONE_PREFIX + "EMAIL_OTP", RATE_PER_MINUTE, WINDOW);
         }
         return null;
     }

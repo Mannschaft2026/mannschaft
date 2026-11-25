@@ -6,8 +6,6 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * パスキー登録・削除前の再認証（パスワード／2FA 要素／メールOTP 経路）のリクエスト（CMP-261021-1338 B5）。
- *
- * <p>試練スタブ: 形だけを先に置く。</p>
  */
 @Getter
 @RequiredArgsConstructor
