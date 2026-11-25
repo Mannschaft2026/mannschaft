@@ -30,4 +30,10 @@ public class EffectivePermissionsResponse {
      * SYSTEM_ADMIN とスコープ ADMIN の兼任者は {@code scopeAdmin=true} でもここが false（付与・剥奪とも 403）。
      */
     private final boolean canGrantAdminOnlyPermissions;
+    /**
+     * 対象スコープの ADMIN または DEPUTY_ADMIN か（{@code AccessControlService#isAdminOrAbove} の結果）。
+     * SYSTEM_ADMIN 単独（対象スコープの割当なし）は false、SYSTEM_ADMIN とスコープ ADMIN/DEPUTY_ADMIN の兼任は true。
+     * FE の {@code useRoleAccess().canManageScope} が管理者 UI の出し分けに使う（roleName は SYSTEM_ADMIN 優先のため判定に使えない）。
+     */
+    private final boolean scopeAdminOrDeputy;
 }
