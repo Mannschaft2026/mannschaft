@@ -74,6 +74,7 @@ const {
 const {
   notFound: childNotFound,
   reset: resetChildNotFound,
+  clear: clearChildNotFound,
   resetUnlessHydrating: resetChildNotFoundOnSetup,
 } = useScopeNotFound()
 // マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
@@ -344,9 +345,21 @@ watch(isShellRoute, (shell) => {
 })
 
 // ルート（タブ・子ページ・slug・クエリ）が変わったら子ページ由来の「見つかりません」を解除する。
-// path だけでなくクエリ変更・ブラウザバックも含めて fullPath で見る。同期 flush にして、
-// 遷移先の子ページの setup（世代の捕捉）より必ず先に世代を進める。
-watch(() => route.fullPath, () => resetChildNotFound(), { flush: 'sync' })
+// クエリ変更・ブラウザバックも含めて fullPath で見る。同期 flush にして、遷移先の子ページの setup
+// （世代の捕捉）より必ず先に世代を進める。
+// - パスが変わった: 別ページ・別スコープ。世代を進めて下ろす（古い画面の遅延 403 を捨てる）
+// - クエリだけ変わった: 同一ページ（子は再マウントされず取り直す）。世代は進めず下ろすだけにし、
+//   取り直しの 403 を現世代のまま立てられるようにする（同一ページ・同一スコープなので誤置換にならない）
+let lastNotFoundPath = route.path
+watch(() => route.fullPath, () => {
+  if (route.path !== lastNotFoundPath) {
+    lastNotFoundPath = route.path
+    resetChildNotFound()
+  }
+  else {
+    clearChildNotFound()
+  }
+}, { flush: 'sync' })
 
 // 永続シェルを維持したまま別組織へ遷移した場合（同一親ルート record）に再取得する。
 watch(orgSlug, () => {

@@ -19,6 +19,7 @@ import TeamShell from './[slug].vue'
  *   SNF-S7 非所属 X の子ページで応答待ちのまま Y へ遷移 → X の遅延 403 が届いても Y は置き換えない
  *   SNF-S8 応答待ちのままシェル外へ遷移 → 遅延 403 が届いても、後続のシェル初回描画は置き換えない
  *   SNF-S9 クエリだけの変更（ブラウザバック含む fullPath 変更）でも notFound を reset する
+ *   SNF-S9c 同一ページでクエリだけ変わった後の取り直しが 403 → 現世代のまま notFound を立てる（トーストなし）
  *   SNF-S10 子が notFound を立てたら、機能可視性のエラー表示（DashboardErrorState）と二重に出さない
  *
  * マウント流儀は同階層の [slug].moved.spec.ts に合わせる。
@@ -346,6 +347,28 @@ for (const scope of ['organizations', 'teams'] as const) {
 
       expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('SNF-S9c: 同一ページでクエリだけ変わった後の取り直しが 403 なら notFound を立てる（黙って捨てない）', async () => {
+      setRoute(scope, 'a', 'info', '?tab=1')
+      const wrapper = mountShell(scope)
+      await settle()
+      // 同一ページ（再マウントされない子）の setup
+      const child = await scopeNotFound()
+
+      setRoute(scope, 'a', 'info', '?tab=2')
+      await settle()
+      expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+
+      // クエリ変更を受けた取り直しが 403
+      expect(child.markIfDenied({ statusCode: 403 })).toBe(true)
+      await settle()
+
+      expect(child.notFound.value).toBe(true)
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(mocks.notifyError).not.toHaveBeenCalled()
       wrapper.unmount()
     })
 

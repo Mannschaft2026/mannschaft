@@ -4,8 +4,8 @@ import { isScopeNotFound } from '~/utils/loadError'
  * チーム／組織の子ページの主 API が 403/404 だったことを、シェルへ伝える共有状態（CMP-261125-1108）。
  *
  * - 子ページ: 主 API の catch の先頭で `if (markIfDenied(e)) return`（トーストを出さない）
- * - シェル: `notFound` が立ったら本文（NuxtPage）を ScopeNotFound に置き換え、マウント時・ルート変更時・
- *   アンマウント時に `reset()`
+ * - シェル: `notFound` が立ったら本文（NuxtPage）を ScopeNotFound に置き換え、マウント時・パス変更時・
+ *   アンマウント時に `reset()`、クエリだけの変更時に `clear()`
  *
  * # 状態の持ち方
  *  サーバー・クライアントとも `useState`（Nuxt アプリ単位。サーバーではリクエスト単位）で持つ。
@@ -47,6 +47,14 @@ export function useScopeNotFound() {
   }
 
   /**
+   * 世代は進めずに notFound だけ下ろす。同一ページでクエリだけ変わったとき（再マウントされない子ページが
+   * そのまま取り直す）に使う。世代を進めると、その取り直しの 403 まで古い画面扱いで捨ててしまうため。
+   */
+  function clear() {
+    notFound.value = false
+  }
+
+  /**
    * シェルの setup 用。hydration 中は SSR で立った状態を引き継ぐため何もしない
    * （ここで下ろすとサーバー描画と食い違う）。それ以外は reset と同じ。
    */
@@ -55,5 +63,5 @@ export function useScopeNotFound() {
     reset()
   }
 
-  return { notFound, markIfDenied, markDenied, reset, resetUnlessHydrating }
+  return { notFound, markIfDenied, markDenied, reset, clear, resetUnlessHydrating }
 }

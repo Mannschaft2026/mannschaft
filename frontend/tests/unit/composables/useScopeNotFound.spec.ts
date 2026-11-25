@@ -10,6 +10,7 @@ import { useScopeNotFound } from '~/composables/useScopeNotFound'
  *     （SSR で立った値はペイロード経由でクライアントへ引き継がれる）
  *   - 世代: reset のたびに進む。useScopeNotFound() 呼び出し時の世代と現在の世代が違えば、
  *     markIfDenied は 403/404 でも notFound を立てない（古い画面の遅延応答を黙って捨てる。戻り値は true）
+ *   - clear(): 世代を進めずに notFound だけ下ろす（同一ページのクエリ変更用）
  *   - markDenied(): API エラーを介さずに notFound を立てる。世代照合は markIfDenied と同じ
  *   - resetUnlessHydrating: hydration 中は何もしない（SSR の状態を引き継ぐ）。それ以外は reset と同じ
  */
@@ -119,5 +120,14 @@ describe('useScopeNotFound（CMP-261125-1108）', () => {
     const current = useScopeNotFound()
     current.markDenied()
     expect(current.notFound.value).toBe(true)
+  })
+
+  it('clear は notFound を下ろすが世代は進めない（それ以前に setup した画面も引き続き立てられる）', () => {
+    const page = useScopeNotFound()
+    page.markIfDenied({ statusCode: 403 })
+    page.clear()
+    expect(page.notFound.value).toBe(false)
+    expect(page.markIfDenied({ statusCode: 403 })).toBe(true)
+    expect(page.notFound.value).toBe(true)
   })
 })
