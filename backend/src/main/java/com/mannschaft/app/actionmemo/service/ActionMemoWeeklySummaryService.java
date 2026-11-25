@@ -16,6 +16,8 @@ import com.mannschaft.app.cms.entity.BlogPostEntity;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -23,6 +25,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -63,8 +66,11 @@ import java.util.stream.Collectors;
  *
  * <p><b>冪等性</b>: 同じ週 × 同じユーザーに対して複数回実行された場合、同じ slug
  * （{@code weekly-YYYYMMDD-YYYYMMDD}）の既存ブログ記事を論理削除してから新規 INSERT する。
- * {@code blog_posts} の {@code uq_bp_slug_user} ユニーク制約は {@code (user_id, slug, deleted_at)}
- * 複合キーのため、論理削除済みレコードは制約対象外となり衝突しない。</p>
+ * {@code blog_posts} の {@code uq_bp_slug_user_active} ユニーク制約は {@code (user_id, slug, active_unique_key)}
+ * 複合キー（{@code active_unique_key} は {@code deleted_at IS NULL} の生存行だけ 1、論理削除済みは NULL）のため、
+ * 論理削除済みレコードは制約対象外となり衝突しない。ただし論理削除の UPDATE が新規 INSERT より先に DB へ
+ * 届いている必要がある（ID が IDENTITY のため INSERT は即時に走り、UPDATE は flush まで保留される）ので、
+ * 論理削除の UPDATE を {@link EntityManager#flush()} で確定させてから INSERT する。</p>
  *
  * <p><b>i18n 方針</b>: 設計書 §11.1 では週次テンプレ見出しの i18n キーが6言語分定義されているが、
  * バックエンド側では当面ハードコード日本語で生成する。Markdown は生成時点で確定・保存され、
@@ -96,6 +102,14 @@ public class ActionMemoWeeklySummaryService {
     private final ActionMemoMetrics actionMemoMetrics;
     @Qualifier("wallClock")
     private final Clock wallClock;
+
+    /**
+     * 再生成で論理削除の UPDATE を新規 INSERT より先に確定させる flush 用。
+     * コンストラクタ引数に加えると ArchUnit 凍結済みのコンストラクタ署名（cms Repository 依存の既存負債）が
+     * 変わって新規違反に化けるため、フィールド注入とする。
+     */
+    @PersistenceContext
+    private EntityManager entityManager;
 
     // ==================================================================
     // エントリポイント（スケジュール起動）
@@ -245,10 +259,19 @@ public class ActionMemoWeeklySummaryService {
         String slug = "weekly-" + from.format(SLUG_DATE_FORMAT) + "-" + to.format(SLUG_DATE_FORMAT);
         String excerpt = buildExcerpt(memos);
 
-        // 冪等性: 同 slug の既存ブログ記事を論理削除（再生成対応）
+        // 冪等性: 同 slug の既存ブログ記事を論理削除（再生成対応）。
+        // 生存行の slug 一意制約（uq_bp_slug_user_active）に掛からないよう、論理削除の UPDATE を
+        // 新規 INSERT より前に flush して確定させる（save だけでは UPDATE が INSERT の後まで保留される）。
+        // flush は他ドメインの Repository 呼び出しを増やさないよう EntityManager で行う（cms Repository への依存は
+        // ArchUnit 凍結済みの範囲に留める）。トランザクション外（スケジュール起動・全ユーザー再生成からの自己呼び出しで
+        // @Transactional が効かない経路）では save が Repository 自身のトランザクションで即時コミットされるため flush 不要
+        // （トランザクション外の EntityManager#flush は TransactionRequiredException になる）。
         blogPostRepository.findByUserIdAndSlug(userId, slug).ifPresent(existing -> {
             existing.softDelete();
             blogPostRepository.save(existing);
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                entityManager.flush();
+            }
             log.info("[ActionMemoWeeklySummary] 既存まとめを論理削除して差し替え: userId={}, blogPostId={}",
                     userId, existing.getId());
         });
