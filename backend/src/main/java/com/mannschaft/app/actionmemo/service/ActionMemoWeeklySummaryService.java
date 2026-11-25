@@ -60,9 +60,10 @@ import java.util.stream.Collectors;
  * （{@code weekly-YYYYMMDD-YYYYMMDD}）の既存ブログ記事を論理削除してから新規 INSERT する。
  * {@code blog_posts} の {@code uq_bp_slug_user_active} ユニーク制約は {@code (user_id, slug, active_unique_key)}
  * 複合キー（{@code active_unique_key} は {@code deleted_at IS NULL} の生存行だけ 1、論理削除済みは NULL）のため、
- * 論理削除済みレコードは制約対象外となり衝突しない。ただし論理削除の UPDATE が新規 INSERT より先に DB へ
- * 届いている必要がある（ID が IDENTITY のため INSERT は即時に走り、UPDATE は flush まで保留される）ので、
- * 論理削除の UPDATE を {@link EntityManager#flush()} で確定させてから INSERT する。</p>
+ * 論理削除済みレコードは制約対象外となり衝突しない。論理削除と新規 INSERT の順序保証（UPDATE を INSERT より
+ * 先に DB へ届ける）と 1 トランザクションでの不可分性は、cms ドメインの窓口
+ * {@link BlogPostSystemSummaryReplacer#replacePrivateUserPost} が担う。本サービスはトランザクションを張らずに
+ * その窓口を呼ぶだけである。</p>
  *
  * <p><b>i18n 方針</b>: 設計書 §11.1 では週次テンプレ見出しの i18n キーが6言語分定義されているが、
  * バックエンド側では当面ハードコード日本語で生成する。Markdown は生成時点で確定・保存され、
