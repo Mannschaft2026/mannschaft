@@ -140,8 +140,21 @@ async function handleSave() {
   }
 }
 
-function handleCancel() {
+const effortSection = ref<{ confirmDiscard: () => Promise<boolean> } | null>(null)
+
+/** 閉じる操作。指標設定に未保存の変更があれば、破棄してよいか確認してから閉じる（E20）。 */
+async function requestClose() {
+  if (effortSection.value && !(await effortSection.value.confirmDiscard())) return
   emit('update:visible', false)
+}
+
+function handleCancel() {
+  void requestClose()
+}
+
+function onDialogVisible(v: boolean) {
+  if (v) emit('update:visible', true)
+  else void requestClose()
 }
 </script>
 
@@ -151,7 +164,7 @@ function handleCancel() {
     modal
     style="width: 700px; max-width: 95vw"
     :header="template ? $t('activity.template.dialog_title_edit') : $t('activity.template.dialog_title_create')"
-    @update:visible="emit('update:visible', $event)"
+    @update:visible="onDialogVisible"
   >
     <div class="flex flex-col gap-4">
       <!-- 基本情報 -->
@@ -257,6 +270,7 @@ function handleCancel() {
       <!-- 頑張り記録の指標（保存済みテンプレートのみ・別 API で別保存） -->
       <EffortTemplateSettingsSection
         v-if="template && canManageEffortSettings && template.scopeType === 'TEAM'"
+        ref="effortSection"
         :team-id="template.scopeId"
         :template-id="template.id"
       />

@@ -17,14 +17,25 @@
     "savedReconciled": "이미 저장되었습니다(재전송 결과를 확인했습니다)",
     "deleted": "삭제했습니다",
     "status": {
-      "private": "개인 기록으로 저장됨"
+      "private": "개인 기록으로 저장됨",
+      "pending": "공유 준비 중",
+      "visible": "공유됨",
+      "failed": "공유 실패",
+      "revoked": "취소됨",
+      "moderated": "관리자가 숨김",
+      "revokedMembership": "팀을 나가서 공유가 종료되었습니다"
     },
     "error": {
       "required": "{field}은(는) 필수입니다",
       "recordedOnRequired": "기록일을 입력해 주세요",
       "conflict": "다른 편집이 먼저 저장되어 있었습니다. 최신 저장 내용을 표시합니다.",
       "recordedOnInvalid": "기록일은 오늘 이전의 실제 날짜로 입력해 주세요",
-      "noContent": "하나 이상의 항목을 입력해 주세요"
+      "noContent": "하나 이상의 항목을 입력해 주세요",
+      "templateRetired": "이 템플릿은 폐지되어 새로 공유할 수 없습니다",
+      "shareUnavailable": "지금은 이 공유를 조작할 수 없습니다. 최신 상태를 확인해 주세요",
+      "interactionDisabled": "이 게시물에는 조작할 수 없습니다. 공유를 중단하려면 기록의 '공유 취소'를 이용해 주세요.",
+      "teamUnavailable": "공유 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+      "shareFailed": "공유에 실패했습니다. 개인 기록은 저장되어 있습니다. 다시 시도해 주세요."
     },
     "delete": {
       "header": "기록 삭제",
@@ -115,7 +126,95 @@
         "NONE": "집계 안 함",
         "SUM": "합계",
         "LATEST": "최신 값"
+      },
+      "seriesNote": "단위나 의미를 바꾸면 이전 기록과는 다른 계열로 집계됩니다.",
+      "seriesConfirm": {
+        "header": "다른 계열이 됩니다",
+        "message": "단위 또는 의미를 바꿔 저장하면 이전 기록과는 다른 계열로 집계됩니다. 저장할까요?",
+        "accept": "변경하고 저장",
+        "reject": "취소"
+      },
+      "discard": {
+        "header": "변경 취소",
+        "message": "저장하지 않은 지표 변경 사항이 있습니다. 버릴까요?",
+        "accept": "버리기",
+        "reject": "돌아가기"
       }
+    },
+    "shareSave": "팀에 공유하기",
+    "sharePreviewSave": "저장하고 공유 내용 확인",
+    "team": "공유할 팀",
+    "sharedFields": "공유할 항목",
+    "preview": "공유 내용 확인",
+    "shareConfirm": "이 내용을 공유",
+    "shareTarget": "이 내용을 {team}에 공유",
+    "backToInput": "입력으로 돌아가기",
+    "shareAgain": "다시 공유",
+    "share": {
+      "retry": "다시 시도",
+      "revoke": "공유 취소",
+      "checking": "상태 확인",
+      "pendingHint": "공유를 반영하는 중입니다. 한동안 바뀌지 않으면 '상태 확인'을 눌러 주세요.",
+      "noTeam": "공유할 수 있는 팀이 없습니다",
+      "deleteGuide": "공유를 중단하려면 기록의 '공유 취소'를 이용해 주세요.",
+      "saveFirst": "공유 내용을 확인하기 전에 개인 기록을 저장합니다. 공유하지 않아도 개인 기록은 남습니다.",
+      "template": "공유에 사용할 템플릿",
+      "noTemplate": "이 팀에는 공유에 사용할 수 있는 템플릿이 없습니다",
+      "source": "사용할 값",
+      "sourceNone": "가져오지 않음(아래에 입력)",
+      "override": "공유용 값",
+      "selectTeamFirst": "먼저 팀을 선택해 주세요",
+      "loadError": "공유 준비에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      "needFields": "공유할 항목을 하나 이상 선택해 주세요",
+      "done": "공유 요청을 접수했습니다",
+      "revoked": "공유를 취소했습니다",
+      "noSnapshot": "기록을 저장하면 공유 내용을 확인할 수 있습니다",
+      "previewNote": "비공개 메모는 공유되지 않습니다.",
+      "revokeConfirm": {
+        "header": "공유 취소",
+        "message": "팀에 대한 공유를 취소합니다. 개인 기록은 남습니다. 계속할까요?",
+        "accept": "취소하기",
+        "reject": "닫기"
+      }
+    },
+    "filter": {
+      "person": "사람",
+      "from": "시작일",
+      "to": "종료일",
+      "template": "템플릿",
+      "allPeople": "전체",
+      "allTemplates": "모두",
+      "retired": "(폐지)"
+    },
+    "teamHistory": {
+      "title": "노력 공유 기록",
+      "subtitle": "팀 구성원이 공유한 노력 기록입니다.",
+      "empty": "아직 공유된 기록이 없습니다",
+      "emptyFiltered": "조건에 맞는 공유 기록이 없습니다",
+      "error": "불러오지 못했습니다. 잠시 후 다시 시도해 주세요",
+      "more": "더 보기",
+      "detail": "상세",
+      "link": "노력 공유 기록",
+      "fromTimeline": "활동 기록에서 보기",
+      "notFound": "이 공유를 찾을 수 없습니다",
+      "forbidden": "이 팀의 공유 기록을 볼 권한이 없습니다",
+      "sharedBy": "{name}님이 노력 기록을 공유했습니다"
+    },
+    "moderate": {
+      "action": "숨기기",
+      "done": "공유를 숨겼습니다",
+      "confirm": {
+        "header": "공유 숨기기",
+        "message": "이 공유를 팀에서 숨깁니다. 본인이 다시 공유해도 복원되지 않습니다. 계속할까요?",
+        "accept": "숨기기",
+        "reject": "취소"
+      }
+    },
+    "discard": {
+      "header": "변경 취소",
+      "message": "저장하지 않은 변경 사항이 있습니다. 취소할까요?",
+      "accept": "버리기",
+      "reject": "돌아가기"
     }
   }
 }

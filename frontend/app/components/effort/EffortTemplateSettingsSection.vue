@@ -27,8 +27,11 @@ const props = defineProps<{
   templateId: number
 }>()
 
+const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
+
 const { t } = useI18n()
 const { get, update } = useEffortTemplateSettingsApi()
+const confirm = useConfirm()
 
 const NONE = ''
 const loading = ref(true)
@@ -45,6 +48,50 @@ const durationKey = ref<string>(NONE)
 const subjectKey = ref<string>(NONE)
 const fieldErrors = ref<Record<string, string>>({})
 let loadSeq = 0
+/** 読み込み・保存直後の設定。未保存の変更（E20）と、別系列になる unit・semantic の変更（E22）の判定に使う。 */
+const baseline = ref<{ rows: Record<string, { semantic: Semantic; unit: string; aggregation: Aggregation }>; durationKey: string; subjectKey: string }>({
+  rows: {},
+  durationKey: NONE,
+  subjectKey: NONE,
+})
+
+/** 保存すると別の系列として集計される行（unit または semantic を読み込み時から変えた行）。 */
+function seriesChanged(row: Row): boolean {
+  const b = baseline.value.rows[row.fieldKey]
+  return !!b && (b.semantic !== row.semantic || b.unit !== row.unit)
+}
+const anySeriesChanged = computed(() => rows.value.some(seriesChanged))
+
+const dirty = computed(() => {
+  if (durationKey.value !== baseline.value.durationKey || subjectKey.value !== baseline.value.subjectKey) return true
+  return rows.value.some((r) => {
+    const b = baseline.value.rows[r.fieldKey]
+    return !b || b.semantic !== r.semantic || b.unit !== r.unit || b.aggregation !== r.aggregation
+  })
+})
+watch(dirty, (v) => emit('dirty-change', v))
+
+/** 未保存の変更があるとき、破棄してよいかを確認する（E20）。変更が無ければ確認せず true。 */
+function confirmDiscard(): Promise<boolean> {
+  if (!dirty.value) return Promise.resolve(true)
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const done = (v: boolean) => { if (!settled) { settled = true; resolve(v) } }
+    confirm.require({
+      header: t('effort.templateSettings.discard.header'),
+      message: t('effort.templateSettings.discard.message'),
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: t('effort.templateSettings.discard.accept'),
+      rejectLabel: t('effort.templateSettings.discard.reject'),
+      accept: () => done(true),
+      reject: () => done(false),
+      onHide: () => done(false),
+    })
+  })
+}
+defineExpose({ confirmDiscard, isDirty: () => dirty.value })
+
+onBeforeRouteLeave(async () => (await confirmDiscard()))
 
 /** 型ごとに選べる semantic（親設計 §3・BE の許容組合せと同じ範囲）。 */
 const SEMANTICS_BY_TYPE: Record<FieldType, Semantic[]> = {
@@ -104,6 +151,11 @@ function apply(settings: EffortTemplateSettings) {
   }))
   durationKey.value = def?.durationFieldKey ?? NONE
   subjectKey.value = def?.subjectFieldKey ?? NONE
+  baseline.value = {
+    rows: Object.fromEntries(rows.value.map((r) => [r.fieldKey, { semantic: r.semantic, unit: r.unit, aggregation: r.aggregation }])),
+    durationKey: durationKey.value,
+    subjectKey: subjectKey.value,
+  }
 }
 
 async function load() {
@@ -155,7 +207,20 @@ const generalErrors = computed(() => {
   return Object.entries(fieldErrors.value).filter(([k]) => !known.has(k)).map(([, v]) => v)
 })
 
-async function save() {
+/** 保存。unit・semantic を変えているときは、別系列になることを ConfirmDialog で確かめる（E22）。 */
+function save() {
+  if (!anySeriesChanged.value) return doSave()
+  confirm.require({
+    header: t('effort.templateSettings.seriesConfirm.header'),
+    message: t('effort.templateSettings.seriesConfirm.message'),
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: t('effort.templateSettings.seriesConfirm.accept'),
+    rejectLabel: t('effort.templateSettings.seriesConfirm.reject'),
+    accept: () => { void doSave() },
+  })
+}
+
+async function doSave() {
   saving.value = true
   saved.value = false
   saveFailed.value = false
@@ -263,6 +328,12 @@ onMounted(load)
             </span>
           </label>
         </div>
+        <p
+          v-if="seriesChanged(row)"
+          class="text-sm text-amber-700 dark:text-amber-400"
+          role="status"
+          :data-testid="`effort-setting-series-note-${row.fieldKey}`"
+        >{{ t('effort.templateSettings.seriesNote') }}</p>
         <p
           v-if="errorOf(`fields.${row.fieldKey}`)"
           class="text-sm text-red-600 dark:text-red-400"

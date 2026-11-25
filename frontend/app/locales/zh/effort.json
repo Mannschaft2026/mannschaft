@@ -17,14 +17,25 @@
     "savedReconciled": "已保存（已确认重发的结果）",
     "deleted": "已删除",
     "status": {
-      "private": "已保存为个人记录"
+      "private": "已保存为个人记录",
+      "pending": "正在准备分享",
+      "visible": "已分享",
+      "failed": "分享失败",
+      "revoked": "已撤销",
+      "moderated": "已被管理员隐藏",
+      "revokedMembership": "因离开团队，分享已结束"
     },
     "error": {
       "required": "{field}为必填项",
       "recordedOnRequired": "请输入记录日期",
       "conflict": "已有其他编辑先被保存。当前显示最新保存的内容。",
       "recordedOnInvalid": "记录日期请输入今天或更早的有效日期",
-      "noContent": "请至少填写一项"
+      "noContent": "请至少填写一项",
+      "templateRetired": "该模板已停用，无法新建分享",
+      "shareUnavailable": "当前无法对该分享进行操作，请确认最新状态",
+      "interactionDisabled": "无法对此帖子进行操作。如需停止分享，请在记录中点击“撤销分享”。",
+      "teamUnavailable": "无法确认分享状态，请稍后再试。",
+      "shareFailed": "分享失败。个人记录已保存，请重试。"
     },
     "delete": {
       "header": "删除记录",
@@ -115,7 +126,95 @@
         "NONE": "不汇总",
         "SUM": "合计",
         "LATEST": "最新值"
+      },
+      "seriesNote": "更改单位或含义后，将作为与以往记录不同的系列进行统计。",
+      "seriesConfirm": {
+        "header": "将成为另一个系列",
+        "message": "保存更改后的单位或含义，将作为与以往记录不同的系列进行统计。确定保存吗？",
+        "accept": "更改并保存",
+        "reject": "取消"
+      },
+      "discard": {
+        "header": "放弃更改",
+        "message": "有尚未保存的指标更改。要放弃吗？",
+        "accept": "放弃",
+        "reject": "返回"
       }
+    },
+    "shareSave": "分享给团队",
+    "sharePreviewSave": "保存并确认分享内容",
+    "team": "分享到的团队",
+    "sharedFields": "要分享的项目",
+    "preview": "确认分享内容",
+    "shareConfirm": "分享此内容",
+    "shareTarget": "将此内容分享给{team}",
+    "backToInput": "返回输入",
+    "shareAgain": "重新分享",
+    "share": {
+      "retry": "重试",
+      "revoke": "撤销分享",
+      "checking": "确认状态",
+      "pendingHint": "正在应用分享。如果长时间没有变化，请点击“确认状态”。",
+      "noTeam": "没有可以分享的团队",
+      "deleteGuide": "如需停止分享，请在记录中点击“撤销分享”。",
+      "saveFirst": "在确认分享内容之前会先保存个人记录。即使不分享，个人记录也会保留。",
+      "template": "用于分享的模板",
+      "noTemplate": "该团队没有可用于分享的模板",
+      "source": "使用的值",
+      "sourceNone": "不沿用（在下方输入）",
+      "override": "分享用的值",
+      "selectTeamFirst": "请先选择团队",
+      "loadError": "分享准备失败，请稍后再试。",
+      "needFields": "请至少选择一个要分享的项目",
+      "done": "已受理分享",
+      "revoked": "已撤销分享",
+      "noSnapshot": "保存记录后才能确认分享内容",
+      "previewNote": "私人备注不会被分享。",
+      "revokeConfirm": {
+        "header": "撤销分享",
+        "message": "将撤销对团队的分享，个人记录会保留。确定吗？",
+        "accept": "撤销",
+        "reject": "取消"
+      }
+    },
+    "filter": {
+      "person": "成员",
+      "from": "开始日期",
+      "to": "结束日期",
+      "template": "模板",
+      "allPeople": "所有人",
+      "allTemplates": "全部",
+      "retired": "（已停用）"
+    },
+    "teamHistory": {
+      "title": "努力分享记录",
+      "subtitle": "团队成员分享的努力记录。",
+      "empty": "还没有分享的记录",
+      "emptyFiltered": "没有符合条件的分享记录",
+      "error": "获取失败，请稍后再试",
+      "more": "显示更多",
+      "detail": "详情",
+      "link": "努力分享记录",
+      "fromTimeline": "在活动记录中查看",
+      "notFound": "找不到这条分享",
+      "forbidden": "您无权查看该团队的分享记录",
+      "sharedBy": "{name}分享了努力记录"
+    },
+    "moderate": {
+      "action": "隐藏",
+      "done": "已隐藏该分享",
+      "confirm": {
+        "header": "隐藏分享",
+        "message": "将从团队中隐藏这条分享。即使本人再次分享也不会恢复。确定吗？",
+        "accept": "隐藏",
+        "reject": "取消"
+      }
+    },
+    "discard": {
+      "header": "放弃更改",
+      "message": "有尚未保存的更改。要放弃吗？",
+      "accept": "放弃",
+      "reject": "返回"
     }
   }
 }

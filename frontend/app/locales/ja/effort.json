@@ -17,14 +17,25 @@
     "savedReconciled": "保存済みです（再送の結果を確認しました）",
     "deleted": "削除しました",
     "status": {
-      "private": "個人記録として保存済み"
+      "private": "個人記録として保存済み",
+      "pending": "共有準備中",
+      "visible": "共有済み",
+      "failed": "共有に失敗しました",
+      "revoked": "取消済み",
+      "moderated": "管理者により非表示",
+      "revokedMembership": "チームを抜けたため共有は終了しました"
     },
     "error": {
       "required": "{field}は必須です",
       "recordedOnRequired": "記録日を入力してください",
       "conflict": "別の編集が先に保存されていました。最新の保存内容を表示しています。",
       "recordedOnInvalid": "記録日は今日以前の実在する日付で入力してください",
-      "noContent": "少なくとも1項目を入力してください"
+      "noContent": "少なくとも1項目を入力してください",
+      "templateRetired": "このテンプレートは廃止されたため、新たに共有できません",
+      "shareUnavailable": "この共有は操作できない状態です。最新の状態を確認してください",
+      "interactionDisabled": "この投稿には操作できません。共有をやめるときは、記録の『共有を取り消す』から行ってください",
+      "teamUnavailable": "共有の状態を確認できません。時間をおいて再度お試しください",
+      "shareFailed": "共有に失敗しました。個人の記録は保存されています。再試行してください"
     },
     "delete": {
       "header": "記録の削除",
@@ -115,7 +126,95 @@
         "NONE": "集計しない",
         "SUM": "合計",
         "LATEST": "最新値"
+      },
+      "seriesNote": "単位や意味を変えると、これまでの記録とは別の系列として集計されます。",
+      "seriesConfirm": {
+        "header": "別の系列になります",
+        "message": "単位または意味を変更して保存すると、これまでの記録とは別の系列として集計されます。保存してよろしいですか？",
+        "accept": "変更して保存",
+        "reject": "キャンセル"
+      },
+      "discard": {
+        "header": "変更の破棄",
+        "message": "保存していない指標の変更があります。破棄してよろしいですか？",
+        "accept": "破棄する",
+        "reject": "戻る"
       }
+    },
+    "shareSave": "チームに共有する",
+    "sharePreviewSave": "保存して共有内容を確認",
+    "team": "共有先のチーム",
+    "sharedFields": "共有する項目",
+    "preview": "共有内容の確認",
+    "shareConfirm": "この内容を共有",
+    "shareTarget": "この内容を{team}へ共有",
+    "backToInput": "入力へ戻る",
+    "shareAgain": "共有し直す",
+    "share": {
+      "retry": "再試行",
+      "revoke": "共有を取り消す",
+      "checking": "状態を確認",
+      "pendingHint": "共有を反映しています。しばらくしても変わらないときは「状態を確認」を押してください。",
+      "noTeam": "共有できるチームがありません",
+      "deleteGuide": "共有をやめるときは、記録の『共有を取り消す』から行ってください",
+      "saveFirst": "共有内容の確認前に個人記録を保存します。共有をやめても個人記録は残ります",
+      "template": "共有に使うテンプレート",
+      "noTemplate": "このチームには共有に使えるテンプレートがありません",
+      "source": "入力する値",
+      "sourceNone": "引き継がない（下で入力）",
+      "override": "共有用の値",
+      "selectTeamFirst": "先にチームを選んでください",
+      "loadError": "共有の準備に失敗しました。時間をおいて再度お試しください。",
+      "needFields": "共有する項目を1つ以上選んでください",
+      "done": "共有を受け付けました",
+      "revoked": "共有を取り消しました",
+      "noSnapshot": "記録を保存してから共有内容を確認できます",
+      "previewNote": "私的メモは共有されません。",
+      "revokeConfirm": {
+        "header": "共有の取消",
+        "message": "チームへの共有を取り消します。個人の記録は残ります。よろしいですか？",
+        "accept": "取り消す",
+        "reject": "キャンセル"
+      }
+    },
+    "filter": {
+      "person": "人",
+      "from": "開始日",
+      "to": "終了日",
+      "template": "テンプレート",
+      "allPeople": "全員",
+      "allTemplates": "すべて",
+      "retired": "（廃止）"
+    },
+    "teamHistory": {
+      "title": "頑張りの共有履歴",
+      "subtitle": "チームのメンバーが共有した頑張り記録です。",
+      "empty": "まだ共有された記録がありません",
+      "emptyFiltered": "条件に合う共有記録がありません",
+      "error": "取得に失敗しました。時間をおいて再度お試しください",
+      "more": "さらに表示",
+      "detail": "詳細",
+      "link": "頑張りの共有履歴",
+      "fromTimeline": "活動履歴で見る",
+      "notFound": "この共有は見つかりません",
+      "forbidden": "このチームの共有履歴を見る権限がありません",
+      "sharedBy": "{name}さんが頑張り記録を共有しました"
+    },
+    "moderate": {
+      "action": "非表示にする",
+      "done": "共有を非表示にしました",
+      "confirm": {
+        "header": "共有の非表示",
+        "message": "この共有をチームから非表示にします。本人が再共有しても元には戻りません。よろしいですか？",
+        "accept": "非表示にする",
+        "reject": "キャンセル"
+      }
+    },
+    "discard": {
+      "header": "変更の破棄",
+      "message": "保存していない変更があります。破棄してよろしいですか？",
+      "accept": "破棄する",
+      "reject": "戻る"
     }
   }
 }

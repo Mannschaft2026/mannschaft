@@ -17,14 +17,25 @@
     "savedReconciled": "Already saved (the resent request was verified)",
     "deleted": "Deleted",
     "status": {
-      "private": "Saved as a personal record"
+      "private": "Saved as a personal record",
+      "pending": "Preparing to share",
+      "visible": "Shared",
+      "failed": "Sharing failed",
+      "revoked": "Withdrawn",
+      "moderated": "Hidden by an administrator",
+      "revokedMembership": "Sharing ended because you left the team"
     },
     "error": {
       "required": "{field} is required",
       "recordedOnRequired": "Please enter the record date",
       "conflict": "Another edit was saved first. The latest saved content is shown.",
       "recordedOnInvalid": "Enter a real date that is today or earlier for the record date",
-      "noContent": "Please fill in at least one field"
+      "noContent": "Please fill in at least one field",
+      "templateRetired": "This template has been retired and cannot be newly shared",
+      "shareUnavailable": "This share cannot be changed right now. Please check the latest state",
+      "interactionDisabled": "You cannot act on this post. To stop sharing, use \"Withdraw sharing\" on the record.",
+      "teamUnavailable": "Could not check the sharing status. Please try again later.",
+      "shareFailed": "Sharing failed. Your personal record is saved. Please retry."
     },
     "delete": {
       "header": "Delete record",
@@ -115,7 +126,95 @@
         "NONE": "Not aggregated",
         "SUM": "Sum",
         "LATEST": "Latest value"
+      },
+      "seriesNote": "If you change the unit or meaning, records are totaled as a separate series from earlier ones.",
+      "seriesConfirm": {
+        "header": "This becomes a separate series",
+        "message": "If you save a changed unit or meaning, records are totaled as a separate series from earlier ones. Save anyway?",
+        "accept": "Save changes",
+        "reject": "Cancel"
+      },
+      "discard": {
+        "header": "Discard changes",
+        "message": "You have unsaved metric changes. Discard them?",
+        "accept": "Discard",
+        "reject": "Go back"
       }
+    },
+    "shareSave": "Share with a team",
+    "sharePreviewSave": "Save and review what will be shared",
+    "team": "Team to share with",
+    "sharedFields": "Fields to share",
+    "preview": "Review before sharing",
+    "shareConfirm": "Share this",
+    "shareTarget": "Share this with {team}",
+    "backToInput": "Back to input",
+    "shareAgain": "Share again",
+    "share": {
+      "retry": "Retry",
+      "revoke": "Withdraw sharing",
+      "checking": "Check status",
+      "pendingHint": "Sharing is being applied. If it does not change for a while, press \"Check status\".",
+      "noTeam": "There is no team you can share with",
+      "deleteGuide": "To stop sharing, use \"Withdraw sharing\" on the record.",
+      "saveFirst": "Your personal record is saved before you review what will be shared. It stays even if you do not share.",
+      "template": "Template used for sharing",
+      "noTemplate": "This team has no template available for sharing",
+      "source": "Value to use",
+      "sourceNone": "Do not carry over (enter below)",
+      "override": "Value to share",
+      "selectTeamFirst": "Choose a team first",
+      "loadError": "Could not prepare sharing. Please try again later.",
+      "needFields": "Select at least one field to share",
+      "done": "Sharing request accepted",
+      "revoked": "Sharing withdrawn",
+      "noSnapshot": "Save the record to review what will be shared",
+      "previewNote": "Your private note is not shared.",
+      "revokeConfirm": {
+        "header": "Withdraw sharing",
+        "message": "This withdraws the record from the team. Your personal record stays. Continue?",
+        "accept": "Withdraw",
+        "reject": "Cancel"
+      }
+    },
+    "filter": {
+      "person": "Person",
+      "from": "From",
+      "to": "To",
+      "template": "Template",
+      "allPeople": "Everyone",
+      "allTemplates": "All",
+      "retired": "(retired)"
+    },
+    "teamHistory": {
+      "title": "Shared effort history",
+      "subtitle": "Effort records shared by team members.",
+      "empty": "No records have been shared yet",
+      "emptyFiltered": "No shared records match these filters",
+      "error": "Could not load. Please try again later.",
+      "more": "Show more",
+      "detail": "Details",
+      "link": "Shared effort history",
+      "fromTimeline": "View in activity history",
+      "notFound": "This shared record was not found",
+      "forbidden": "You do not have permission to view this team's shared history",
+      "sharedBy": "{name} shared an effort record"
+    },
+    "moderate": {
+      "action": "Hide",
+      "done": "The shared record was hidden",
+      "confirm": {
+        "header": "Hide shared record",
+        "message": "This hides the record from the team. It will not come back even if the owner shares again. Continue?",
+        "accept": "Hide",
+        "reject": "Cancel"
+      }
+    },
+    "discard": {
+      "header": "Discard changes",
+      "message": "You have unsaved changes. Discard them?",
+      "accept": "Discard",
+      "reject": "Go back"
     }
   }
 }

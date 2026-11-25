@@ -12,7 +12,8 @@ import type { ActivityTemplate } from '~/types/activity'
 // mountSuspended の初回は Nuxt 環境の冷間コンパイルで既定 5 秒を超えうる。
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 })
 
-const { getMock, updateMock } = vi.hoisted(() => ({ getMock: vi.fn(), updateMock: vi.fn() }))
+const { getMock, updateMock, confirmRequire } = vi.hoisted(() => ({ getMock: vi.fn(), updateMock: vi.fn(), confirmRequire: vi.fn() }))
+mockNuxtImport('useConfirm', () => () => ({ require: confirmRequire }))
 mockNuxtImport('useEffortTemplateSettingsApi', () => () => ({ get: getMock, update: updateMock }))
 
 const settings = (version = 3, durationFieldKey: string | undefined = 'f1_aaaaaaaaaa') => ({
@@ -116,6 +117,88 @@ describe('EffortTemplateSettingsSection', () => {
     const w = await mountSection()
     expect(w.find('[data-testid="effort-template-settings"]').exists()).toBe(false)
     expect(w.find('[data-testid="effort-settings-load-error"]').exists()).toBe(false)
+  })
+})
+
+describe('E22: unit・semantic 変更の警告 / E20: 未保存破棄の確認', () => {
+  beforeEach(() => {
+    getMock.mockReset()
+    updateMock.mockReset()
+    confirmRequire.mockReset()
+    getMock.mockResolvedValue(settings())
+  })
+
+  it('変更が無ければ注記も確認も出さず、そのまま保存する', async () => {
+    updateMock.mockResolvedValue(settings(4))
+    const w = await mountSection()
+    expect(w.find('[data-testid="effort-setting-series-note-f1_aaaaaaaaaa"]').exists()).toBe(false)
+    await w.find('[data-testid="effort-settings-save"]').trigger('click')
+    await flushPromises()
+    expect(confirmRequire).not.toHaveBeenCalled()
+    expect(updateMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('unit を変えると欄の近くに「別の系列」の注記が出て、保存時に ConfirmDialog で確かめる。キャンセルすると保存しない', async () => {
+    const w = await mountSection()
+    await w.find('[data-testid="effort-setting-unit-f1_aaaaaaaaaa"]').setValue('HOUR')
+    await flushPromises()
+    // semantic が NUMBER でないと unit は編集不可のため、semantic を NUMBER に変えて unit を直接編集できる状態にする
+    expect(w.find('[data-testid="effort-setting-series-note-f1_aaaaaaaaaa"]').exists()).toBe(false)
+    await w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('update:modelValue', 'NUMBER')
+    await w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('change')
+    await flushPromises()
+    expect(w.find('[data-testid="effort-setting-series-note-f1_aaaaaaaaaa"]').text()).toBe('If you change the unit or meaning, records are totaled as a separate series from earlier ones.')
+
+    await w.find('[data-testid="effort-settings-save"]').trigger('click')
+    await flushPromises()
+    expect(confirmRequire).toHaveBeenCalledTimes(1)
+    expect(updateMock).not.toHaveBeenCalled()
+
+    // 確認を承諾すると保存する
+    updateMock.mockResolvedValue(settings(4))
+    confirmRequire.mock.calls[0]![0].accept()
+    await flushPromises()
+    expect(updateMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('未保存の変更があるときだけ破棄の確認を出し、キャンセルすると入力が残る', async () => {
+    const w = await mountSection()
+    const vm = w.vm as unknown as { confirmDiscard: () => Promise<boolean> }
+    // 変更なし: 確認なしで true
+    expect(await vm.confirmDiscard()).toBe(true)
+    expect(confirmRequire).not.toHaveBeenCalled()
+
+    // 変更あり（semantic を切り替える）: 確認が出る。reject で false
+    await w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('update:modelValue', 'NUMBER')
+    await flushPromises()
+    const pending = vm.confirmDiscard()
+    expect(confirmRequire).toHaveBeenCalledTimes(1)
+    confirmRequire.mock.calls[0]![0].reject()
+    expect(await pending).toBe(false)
+    expect(w.find('[data-testid="effort-setting-row-f1_aaaaaaaaaa"]').exists()).toBe(true)
+
+    // 承諾なら true
+    const pending2 = vm.confirmDiscard()
+    confirmRequire.mock.calls[1]![0].accept()
+    expect(await pending2).toBe(true)
+  })
+
+  it('ActivityTemplateForm は未保存の指標設定があるとき、閉じる前に破棄を確認し、キャンセルなら閉じない', async () => {
+    const template: ActivityTemplate = {
+      id: 11, scopeType: 'TEAM', scopeId: 7, name: 'T', description: null, icon: null, color: null,
+      isParticipantRequired: false, defaultVisibility: null, sortOrder: 0, fields: [], createdAt: '', updatedAt: '',
+    }
+    const form = await mountSuspended(ActivityTemplateForm, { props: { template, visible: true, canManageEffortSettings: true } })
+    await flushPromises()
+    const section = form.findComponent(EffortTemplateSettingsSection)
+    await section.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('update:modelValue', 'NUMBER')
+    await flushPromises()
+    ;(form.vm as unknown as { handleCancel: () => void }).handleCancel()
+    await flushPromises()
+    expect(confirmRequire).toHaveBeenCalledTimes(1)
+    confirmRequire.mock.calls[0]![0].reject()
+    await flushPromises()
+    expect(form.emitted('update:visible')).toBeUndefined()
   })
 })
 

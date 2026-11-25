@@ -17,14 +17,25 @@
     "savedReconciled": "Ya estaba guardado (se verificó el reenvío)",
     "deleted": "Eliminado",
     "status": {
-      "private": "Guardado como registro personal"
+      "private": "Guardado como registro personal",
+      "pending": "Preparando para compartir",
+      "visible": "Compartido",
+      "failed": "Error al compartir",
+      "revoked": "Retirado",
+      "moderated": "Oculto por un administrador",
+      "revokedMembership": "Se dejó de compartir porque saliste del equipo"
     },
     "error": {
       "required": "{field} es obligatorio",
       "recordedOnRequired": "Introduce la fecha del registro",
       "conflict": "Otra edición se guardó antes. Se muestra el contenido guardado más reciente.",
       "recordedOnInvalid": "Introduce una fecha real de hoy o anterior como fecha del registro",
-      "noContent": "Rellena al menos un campo"
+      "noContent": "Rellena al menos un campo",
+      "templateRetired": "Esta plantilla está retirada y no se puede compartir de nuevo",
+      "shareUnavailable": "Este registro compartido no se puede modificar ahora. Comprueba el estado más reciente",
+      "interactionDisabled": "No puedes realizar esta acción en la publicación. Para dejar de compartir, usa «Retirar lo compartido» en el registro.",
+      "teamUnavailable": "No se pudo comprobar el estado de lo compartido. Inténtalo de nuevo más tarde.",
+      "shareFailed": "Error al compartir. Tu registro personal está guardado. Inténtalo de nuevo."
     },
     "delete": {
       "header": "Eliminar registro",
@@ -115,7 +126,95 @@
         "NONE": "Sin agregar",
         "SUM": "Suma",
         "LATEST": "Último valor"
+      },
+      "seriesNote": "Si cambias la unidad o el significado, los registros se totalizarán como una serie distinta de los anteriores.",
+      "seriesConfirm": {
+        "header": "Se convertirá en otra serie",
+        "message": "Si guardas una unidad o un significado distintos, los registros se totalizarán como una serie distinta de los anteriores. ¿Guardar?",
+        "accept": "Guardar cambios",
+        "reject": "Cancelar"
+      },
+      "discard": {
+        "header": "Descartar cambios",
+        "message": "Hay cambios de indicadores sin guardar. ¿Descartarlos?",
+        "accept": "Descartar",
+        "reject": "Volver"
       }
+    },
+    "shareSave": "Compartir con un equipo",
+    "sharePreviewSave": "Guardar y revisar lo que se compartirá",
+    "team": "Equipo con el que compartir",
+    "sharedFields": "Campos que se compartirán",
+    "preview": "Revisión antes de compartir",
+    "shareConfirm": "Compartir esto",
+    "shareTarget": "Compartir esto con {team}",
+    "backToInput": "Volver a la entrada",
+    "shareAgain": "Volver a compartir",
+    "share": {
+      "retry": "Reintentar",
+      "revoke": "Retirar lo compartido",
+      "checking": "Comprobar estado",
+      "pendingHint": "Se está aplicando lo compartido. Si no cambia en un rato, pulsa «Comprobar estado».",
+      "noTeam": "No hay ningún equipo con el que puedas compartir",
+      "deleteGuide": "Para dejar de compartir, usa «Retirar lo compartido» en el registro.",
+      "saveFirst": "Tu registro personal se guarda antes de revisar lo que se compartirá. Se conserva aunque no compartas.",
+      "template": "Plantilla para compartir",
+      "noTemplate": "Este equipo no tiene plantillas disponibles para compartir",
+      "source": "Valor a usar",
+      "sourceNone": "No traspasar (introducir abajo)",
+      "override": "Valor a compartir",
+      "selectTeamFirst": "Elige primero un equipo",
+      "loadError": "No se pudo preparar lo compartido. Inténtalo de nuevo más tarde.",
+      "needFields": "Selecciona al menos un campo para compartir",
+      "done": "Se aceptó la solicitud de compartir",
+      "revoked": "Se retiró lo compartido",
+      "noSnapshot": "Guarda el registro para revisar lo que se compartirá",
+      "previewNote": "La nota privada no se comparte.",
+      "revokeConfirm": {
+        "header": "Retirar lo compartido",
+        "message": "Se retirará el registro del equipo. Tu registro personal se conserva. ¿Continuar?",
+        "accept": "Retirar",
+        "reject": "Cancelar"
+      }
+    },
+    "filter": {
+      "person": "Persona",
+      "from": "Desde",
+      "to": "Hasta",
+      "template": "Plantilla",
+      "allPeople": "Todos",
+      "allTemplates": "Todas",
+      "retired": "(retirada)"
+    },
+    "teamHistory": {
+      "title": "Historial de esfuerzos compartidos",
+      "subtitle": "Registros de esfuerzo compartidos por los miembros del equipo.",
+      "empty": "Todavía no se ha compartido ningún registro",
+      "emptyFiltered": "Ningún registro compartido coincide con los filtros",
+      "error": "No se pudo cargar. Inténtalo de nuevo más tarde.",
+      "more": "Mostrar más",
+      "detail": "Detalles",
+      "link": "Historial de esfuerzos compartidos",
+      "fromTimeline": "Ver en el historial de actividad",
+      "notFound": "No se encontró este registro compartido",
+      "forbidden": "No tienes permiso para ver el historial compartido de este equipo",
+      "sharedBy": "{name} compartió un registro de esfuerzo"
+    },
+    "moderate": {
+      "action": "Ocultar",
+      "done": "Se ocultó el registro compartido",
+      "confirm": {
+        "header": "Ocultar registro compartido",
+        "message": "Se ocultará del equipo. No volverá aunque su autor lo comparta de nuevo. ¿Continuar?",
+        "accept": "Ocultar",
+        "reject": "Cancelar"
+      }
+    },
+    "discard": {
+      "header": "Descartar cambios",
+      "message": "Hay cambios sin guardar. ¿Descartarlos?",
+      "accept": "Descartar",
+      "reject": "Volver"
     }
   }
 }

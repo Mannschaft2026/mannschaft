@@ -17,14 +17,25 @@
     "savedReconciled": "Bereits gespeichert (die erneute Anfrage wurde geprüft)",
     "deleted": "Gelöscht",
     "status": {
-      "private": "Als persönlicher Eintrag gespeichert"
+      "private": "Als persönlicher Eintrag gespeichert",
+      "pending": "Teilen wird vorbereitet",
+      "visible": "Geteilt",
+      "failed": "Teilen fehlgeschlagen",
+      "revoked": "Zurückgezogen",
+      "moderated": "Von einem Administrator ausgeblendet",
+      "revokedMembership": "Das Teilen wurde beendet, weil Sie das Team verlassen haben"
     },
     "error": {
       "required": "{field} ist erforderlich",
       "recordedOnRequired": "Bitte das Datum des Eintrags angeben",
       "conflict": "Eine andere Änderung wurde zuerst gespeichert. Der neueste gespeicherte Stand wird angezeigt.",
       "recordedOnInvalid": "Bitte ein gültiges Datum von heute oder früher als Eintragsdatum angeben",
-      "noContent": "Bitte mindestens ein Feld ausfüllen"
+      "noContent": "Bitte mindestens ein Feld ausfüllen",
+      "templateRetired": "Diese Vorlage wurde eingestellt und kann nicht neu geteilt werden",
+      "shareUnavailable": "Dieser geteilte Eintrag kann gerade nicht bearbeitet werden. Bitte den aktuellen Stand prüfen",
+      "interactionDisabled": "Dieser Beitrag kann nicht bearbeitet werden. Um das Teilen zu beenden, verwenden Sie beim Eintrag „Teilen zurückziehen“.",
+      "teamUnavailable": "Der Teilstatus konnte nicht geprüft werden. Bitte später erneut versuchen.",
+      "shareFailed": "Teilen fehlgeschlagen. Ihr persönlicher Eintrag ist gespeichert. Bitte erneut versuchen."
     },
     "delete": {
       "header": "Eintrag löschen",
@@ -115,7 +126,95 @@
         "NONE": "Nicht aggregiert",
         "SUM": "Summe",
         "LATEST": "Letzter Wert"
+      },
+      "seriesNote": "Wenn Sie Einheit oder Bedeutung ändern, werden die Einträge als eigene Reihe getrennt von früheren ausgewertet.",
+      "seriesConfirm": {
+        "header": "Es entsteht eine eigene Reihe",
+        "message": "Wenn Sie geänderte Einheit oder Bedeutung speichern, werden die Einträge als eigene Reihe getrennt von früheren ausgewertet. Trotzdem speichern?",
+        "accept": "Änderungen speichern",
+        "reject": "Abbrechen"
+      },
+      "discard": {
+        "header": "Änderungen verwerfen",
+        "message": "Es gibt nicht gespeicherte Änderungen an den Kennzahlen. Verwerfen?",
+        "accept": "Verwerfen",
+        "reject": "Zurück"
       }
+    },
+    "shareSave": "Mit einem Team teilen",
+    "sharePreviewSave": "Speichern und Inhalt prüfen",
+    "team": "Team zum Teilen",
+    "sharedFields": "Zu teilende Felder",
+    "preview": "Prüfung vor dem Teilen",
+    "shareConfirm": "Das teilen",
+    "shareTarget": "Das mit {team} teilen",
+    "backToInput": "Zurück zur Eingabe",
+    "shareAgain": "Erneut teilen",
+    "share": {
+      "retry": "Erneut versuchen",
+      "revoke": "Teilen zurückziehen",
+      "checking": "Status prüfen",
+      "pendingHint": "Das Teilen wird übernommen. Ändert sich nach einer Weile nichts, tippen Sie auf „Status prüfen“.",
+      "noTeam": "Es gibt kein Team, mit dem Sie teilen können",
+      "deleteGuide": "Um das Teilen zu beenden, verwenden Sie beim Eintrag „Teilen zurückziehen“.",
+      "saveFirst": "Ihr persönlicher Eintrag wird vor der Prüfung gespeichert. Er bleibt auch erhalten, wenn Sie nicht teilen.",
+      "template": "Vorlage zum Teilen",
+      "noTemplate": "Dieses Team hat keine Vorlage zum Teilen",
+      "source": "Zu verwendender Wert",
+      "sourceNone": "Nicht übernehmen (unten eingeben)",
+      "override": "Wert zum Teilen",
+      "selectTeamFirst": "Wählen Sie zuerst ein Team",
+      "loadError": "Das Teilen konnte nicht vorbereitet werden. Bitte später erneut versuchen.",
+      "needFields": "Wählen Sie mindestens ein Feld zum Teilen aus",
+      "done": "Die Anfrage zum Teilen wurde angenommen",
+      "revoked": "Das Teilen wurde zurückgezogen",
+      "noSnapshot": "Speichern Sie den Eintrag, um den Inhalt zu prüfen",
+      "previewNote": "Die private Notiz wird nicht geteilt.",
+      "revokeConfirm": {
+        "header": "Teilen zurückziehen",
+        "message": "Der Eintrag wird beim Team zurückgezogen. Ihr persönlicher Eintrag bleibt erhalten. Fortfahren?",
+        "accept": "Zurückziehen",
+        "reject": "Abbrechen"
+      }
+    },
+    "filter": {
+      "person": "Person",
+      "from": "Von",
+      "to": "Bis",
+      "template": "Vorlage",
+      "allPeople": "Alle",
+      "allTemplates": "Alle",
+      "retired": "(eingestellt)"
+    },
+    "teamHistory": {
+      "title": "Geteilter Einsatzverlauf",
+      "subtitle": "Von Teammitgliedern geteilte Einsatzeinträge.",
+      "empty": "Es wurde noch nichts geteilt",
+      "emptyFiltered": "Keine geteilten Einträge entsprechen den Filtern",
+      "error": "Laden fehlgeschlagen. Bitte später erneut versuchen.",
+      "more": "Mehr anzeigen",
+      "detail": "Details",
+      "link": "Geteilter Einsatzverlauf",
+      "fromTimeline": "Im Aktivitätsverlauf ansehen",
+      "notFound": "Dieser geteilte Eintrag wurde nicht gefunden",
+      "forbidden": "Sie dürfen den geteilten Verlauf dieses Teams nicht ansehen",
+      "sharedBy": "{name} hat einen Einsatzeintrag geteilt"
+    },
+    "moderate": {
+      "action": "Ausblenden",
+      "done": "Der geteilte Eintrag wurde ausgeblendet",
+      "confirm": {
+        "header": "Geteilten Eintrag ausblenden",
+        "message": "Der Eintrag wird im Team ausgeblendet. Er kehrt auch nicht zurück, wenn die Person ihn erneut teilt. Fortfahren?",
+        "accept": "Ausblenden",
+        "reject": "Abbrechen"
+      }
+    },
+    "discard": {
+      "header": "Änderungen verwerfen",
+      "message": "Es gibt nicht gespeicherte Änderungen. Verwerfen?",
+      "accept": "Verwerfen",
+      "reject": "Zurück"
     }
   }
 }
