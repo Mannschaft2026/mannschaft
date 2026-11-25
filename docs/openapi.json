@@ -132955,7 +132955,7 @@
         "tags": [
           "シフト勤務可能時間・時給管理"
         ],
-        "summary": "チーム時給一括取得（ADMIN/DEPUTY_ADMIN のみ）",
+        "summary": "チーム時給一括取得（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN。時給閲覧切替 ON なら DEPUTY_ADMIN も）",
         "description": "基準日時点で有効な時給を、チーム全員ぶん 1 レスポンスで返す。時給が未設定のメンバーは含まれない。",
         "operationId": "listTeamEffectiveHourlyRates",
         "parameters": [
@@ -132990,7 +132990,7 @@
             }
           },
           "403": {
-            "description": "当該チームの ADMIN/DEPUTY_ADMIN でない",
+            "description": "当該チームの ADMIN でも MANAGE_SHIFTS 付き DEPUTY_ADMIN でもなく、時給閲覧切替 ON の DEPUTY_ADMIN でもない（チームロールの無い SYSTEM_ADMIN を含む）",
             "content": {
               "*/*": {
                 "schema": {
@@ -221499,9 +221499,6 @@
       "UpdateTeamShiftSettingsRequest": {
         "type": "object",
         "properties": {
-          "atLeastOneEnabled": {
-            "type": "boolean"
-          },
           "deputyHourlyRateViewEnabled": {
             "type": "boolean"
           },

@@ -1097,7 +1097,7 @@ FE は公開操作（シフト表一覧の公開ボタン、シフト詳細の�
 
 | 閲覧者 | 見える範囲 |
 |---|---|
-| SYSTEM_ADMIN / 当該チームの ADMIN・DEPUTY_ADMIN | 当該チームの**全件** |
+| 当該チームの管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN・閲覧切替 ON の DEPUTY_ADMIN。SYSTEM_ADMIN は特別扱いしない） | 当該チームの**全件** |
 | 当該チームの一般メンバー（SUPPORTER を除く） | **自分に関係する依頼のみ**（① `recipient_mode=SPECIFIC` かつ `target_user_ids` に自分が含まれる ② `recipient_mode=OPEN_CALL`（指名なし。誰でも承諾できる） ③ 自分が申請した ④ 自分が承諾済み） |
 | SUPPORTER / チーム外 | 403 |
 
@@ -1874,7 +1874,7 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 
 **レスポンス（200 OK）**: `{ "source": <ShiftSlotResponse>, "target": <ShiftSlotResponse> }`。両枠とも更新後の `version` を含む。移動先の時間帯が同じメンバーの他の枠と重なる場合は `target.warnings` に警告を入れる（`PATCH /assignments` と同じ規則）
 
-**認可・存在秘匿**: `PATCH /slots/{id}/assignments` と同じ（SYSTEM_ADMIN、または当該チームの ADMIN/DEPUTY_ADMIN）。移動先の検査は認可の後に行い、別シフト表（同チーム）・別チームの枠・不在の枠は**いずれも不在と同一の 404 `SHIFT_002`**（status・code・message まで一致）
+**認可・存在秘匿**: `PATCH /slots/{id}/assignments` と同じ（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN。SYSTEM_ADMIN は特別扱いしない）。移動先の検査は認可の後に行い、別シフト表（同チーム）・別チームの枠・不在の枠は**いずれも不在と同一の 404 `SHIFT_002`**（status・code・message まで一致）
 
 **エラーレスポンス**（いずれの拒否でも両枠とも変更しない）
 | ステータス | 条件 |
@@ -2343,8 +2343,10 @@ Authorization: Bearer ...
 
 | 項目 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `reminder48hEnabled` / `reminder24hEnabled` / `reminder12hEnabled` | Boolean | 必須 | リマインド。少なくとも 1 つは true |
+| `reminder48hEnabled` / `reminder24hEnabled` / `reminder12hEnabled` | Boolean | — | リマインド。省略（null）なら変更しない（部分更新）。**保存後の状態で**少なくとも 1 つは true（満たさない更新は 400 `COMMON_001`・保存しない） |
 | `deputyShiftViewEnabled` | Boolean | — | `MANAGE_SHIFTS` を持たない DEPUTY_ADMIN にシフトの閲覧（未公開シフト表・割当の非マスク・他人の交代/変更依頼・希望一覧/サマリー・PDF の管理者出力・ダッシュボードのシフト希望）を許すか。**既定 false**。省略（null）なら変更しない |
 | `deputyHourlyRateViewEnabled` | Boolean | — | 同じく他メンバーの時給の閲覧を許すか。**既定 false**。省略（null）なら変更しない |
+
+全項目が任意の部分更新。切替だけを送ってもリマインド 3 項目は現在値のまま維持される（CMP-261125-2114: 以前はリマインド 3 項目が必須の primitive で、切替だけの送信が 400 になる・省略項目が false で上書きされる不具合があった）。
 
 切替が ON でも許されるのは閲覧だけで、操作（作成・更新・削除・承認・時給の登録削除など）は常に `MANAGE_SHIFTS` が必要。DB 列は `team_shift_settings.deputy_shift_view_enabled` / `deputy_hourly_rate_view_enabled`（BOOLEAN NOT NULL DEFAULT FALSE。Flyway V269）。

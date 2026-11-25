@@ -39643,7 +39643,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * チーム時給一括取得（ADMIN/DEPUTY_ADMIN のみ）
+         * チーム時給一括取得（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN。時給閲覧切替 ON なら DEPUTY_ADMIN も）
          * @description 基準日時点で有効な時給を、チーム全員ぶん 1 レスポンスで返す。時給が未設定のメンバーは含まれない。
          */
         get: operations["listTeamEffectiveHourlyRates"];
@@ -73521,7 +73521,6 @@ export interface components {
             visibility?: string;
         };
         UpdateTeamShiftSettingsRequest: {
-            atLeastOneEnabled?: boolean;
             deputyHourlyRateViewEnabled?: boolean;
             deputyShiftViewEnabled?: boolean;
             reminder12hEnabled?: boolean;
@@ -165719,7 +165718,7 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResponseListHourlyRateResponse"];
                 };
             };
-            /** @description 当該チームの ADMIN/DEPUTY_ADMIN でない */
+            /** @description 当該チームの ADMIN でも MANAGE_SHIFTS 付き DEPUTY_ADMIN でもなく、時給閲覧切替 ON の DEPUTY_ADMIN でもない（チームロールの無い SYSTEM_ADMIN を含む） */
             403: {
                 headers: {
                     [name: string]: unknown;
