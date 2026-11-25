@@ -120,6 +120,7 @@
       "confirm": "Are you sure you want to finalize the shift budget for {month}?",
       "success": "Monthly close complete: {month} ({count} consumption records finalized)",
       "alreadyClosed": "This month has already been closed",
+      "notEnded": "{month} has not ended yet, so it cannot be closed. Only months that have already ended can be closed.",
       "title": "Monthly closing",
       "yearMonth": "Target month",
       "yearMonthHint": "YYYY-MM format (e.g. 2026-04)",

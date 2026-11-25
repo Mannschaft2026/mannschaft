@@ -20,7 +20,7 @@ public record AlertAcknowledgeRequest(
 
         /**
          * 確認済みの警告を、確認者・時刻を上書きして再確認する場合に true（CMP-260910-1607 ③）。
-         * 未指定・false で確認済みなら 409（SHIFT_BUDGET_032）。
+         * 未指定・false で確認済みなら 409（SHIFT_BUDGET_033）。
          */
         @JsonProperty("overwrite")
         Boolean overwrite

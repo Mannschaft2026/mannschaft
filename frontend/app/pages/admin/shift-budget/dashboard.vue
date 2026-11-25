@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useShiftBudgetAdminAccess } from '~/composables/shift/useShiftBudgetAdminAccess'
 import dayjs from 'dayjs'
+import { parseApiError } from '~/utils/apiError'
 import type {
   AllocationResponse,
   ConsumptionStatus,
@@ -16,7 +17,6 @@ import type {
 definePageMeta({ middleware: 'auth' })
 
 const { t } = useI18n()
-const { userTimezone } = useDatetime()
 const scopeStore = useScopeStore()
 const notification = useNotification()
 const api = useShiftBudgetApi()
@@ -43,9 +43,30 @@ const monthlyCloseVisible = ref(false)
 const monthlyCloseForm = ref<{ yearMonth: string }>({ yearMonth: '' })
 const monthlyCloseExecuting = ref(false)
 
-function defaultPreviousMonth(): string {
-  return dayjs().tz(userTimezone.value).subtract(1, 'month').format('YYYY-MM')
+/**
+ * 月次締めの「当月」の基準タイムゾーン。BE の判定（JST 壁時計）と揃える。
+ * テナント TZ 導入時（BE 側 wallClock の差し替え）にここも追随させる。
+ */
+const MONTH_CLOSE_TZ = 'Asia/Tokyo'
+
+function currentMonthJst(): string {
+  return dayjs().tz(MONTH_CLOSE_TZ).format('YYYY-MM')
 }
+
+function defaultPreviousMonth(): string {
+  return dayjs().tz(MONTH_CLOSE_TZ).subtract(1, 'month').format('YYYY-MM')
+}
+
+const YEAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
+
+/** 対象月が終了していない（JST の当月以降）か。形式不正は false（従来どおり実行時に弾く）。 */
+const monthNotEnded = computed(() => {
+  const ym = monthlyCloseForm.value.yearMonth
+  // YYYY-MM は辞書順 = 時系列順
+  return YEAR_MONTH_PATTERN.test(ym) && ym >= currentMonthJst()
+})
+/** BE が 409 SHIFT_BUDGET_032 を返した対象月。ダイアログ内に理由を出す。 */
+const notEndedRejectedMonth = ref<string | null>(null)
 
 async function load() {
   if (!organizationId.value) {
@@ -101,16 +122,19 @@ const summary = computed(() => {
 
 function openMonthlyClose() {
   monthlyCloseForm.value = { yearMonth: defaultPreviousMonth() }
+  notEndedRejectedMonth.value = null
   monthlyCloseVisible.value = true
 }
 
 async function executeMonthlyClose() {
   if (!organizationId.value) return
   const yearMonth = monthlyCloseForm.value.yearMonth
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) {
+  if (!YEAR_MONTH_PATTERN.test(yearMonth)) {
     notification.error(t('shiftBudget.monthlyClose.error'))
     return
   }
+  if (monthNotEnded.value) return
+  notEndedRejectedMonth.value = null
   monthlyCloseExecuting.value = true
   try {
     const request: MonthlyCloseRequest = {
@@ -132,8 +156,15 @@ async function executeMonthlyClose() {
     monthlyCloseVisible.value = false
     await load()
   }
-  catch {
-    notification.error(t('shiftBudget.monthlyClose.error'))
+  catch (e) {
+    if (parseApiError(e).code === 'SHIFT_BUDGET_032') {
+      // 未終了月の拒否。ダイアログを閉じず、理由をその場に出す
+      notEndedRejectedMonth.value = yearMonth
+      notification.error(t('shiftBudget.monthlyClose.notEnded', { month: yearMonth }))
+    }
+    else {
+      notification.error(t('shiftBudget.monthlyClose.error'))
+    }
   }
   finally {
     monthlyCloseExecuting.value = false
@@ -309,6 +340,14 @@ onMounted(() => {
           <InputText v-model="monthlyCloseForm.yearMonth" placeholder="YYYY-MM" class="w-full" />
           <p class="mt-1 text-xs text-surface-500">{{ t('shiftBudget.monthlyClose.yearMonthHint') }}</p>
         </div>
+        <Message
+          v-if="monthNotEnded || notEndedRejectedMonth === monthlyCloseForm.yearMonth"
+          severity="warn"
+          :closable="false"
+          data-testid="monthly-close-not-ended"
+        >
+          {{ t('shiftBudget.monthlyClose.notEnded', { month: monthlyCloseForm.yearMonth }) }}
+        </Message>
         <Message severity="info" :closable="false">
           {{ t('shiftBudget.monthlyClose.confirm', { month: monthlyCloseForm.yearMonth }) }}
         </Message>
@@ -324,6 +363,7 @@ onMounted(() => {
           <Button
             :label="t('shiftBudget.monthlyClose.execute')"
             :loading="monthlyCloseExecuting"
+            :disabled="monthNotEnded"
             @click="executeMonthlyClose"
           />
         </div>

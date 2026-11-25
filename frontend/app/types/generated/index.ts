@@ -122835,7 +122835,7 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResponseAlertResponse"];
                 };
             };
-            /** @description 確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_032）。既存の確認者・時刻を details で返す */
+            /** @description 確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_033）。既存の確認者・時刻を details で返す */
             409: {
                 headers: {
                     [name: string]: unknown;

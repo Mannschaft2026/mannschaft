@@ -1,7 +1,7 @@
 /**
  * 予算警告の確認（acknowledge）が「確認済み」で拒否されたときのエラー解釈（CMP-260910-1607 ③）。
  *
- * - 409 / SHIFT_BUDGET_032: 既に誰かが確認済み。`error.details` に既存の確認者（ID・氏名）と確認時刻が入る。
+ * - 409 / SHIFT_BUDGET_033: 既に誰かが確認済み。`error.details` に既存の確認者（ID・氏名）と確認時刻が入る。
  *
  * 上記以外は null を返し、呼び出し側が通常のエラー処理へ回す（握りつぶさない）。
  */
@@ -29,7 +29,7 @@ interface ApiErrorShape {
   }
 }
 
-export const ALERT_ALREADY_ACKNOWLEDGED_CODE = 'SHIFT_BUDGET_032'
+export const ALERT_ALREADY_ACKNOWLEDGED_CODE = 'SHIFT_BUDGET_033'
 
 export function parseAlertAlreadyAcknowledged(error: unknown): AlertAlreadyAcknowledgedInfo | null {
   const apiError = error as ApiErrorShape | null | undefined

@@ -703,7 +703,7 @@ public class GlobalExceptionHandler {
             // F08.7 シフト予算 (Phase 10-β: 通知失敗リトライ + 失敗イベント管理)
             Map.entry("SHIFT_BUDGET_030", HttpStatus.NOT_FOUND),            // FAILED_EVENT_NOT_FOUND (IDOR 対策で 404)
             Map.entry("SHIFT_BUDGET_031", HttpStatus.CONFLICT),             // FAILED_EVENT_NOT_RETRIABLE
-            Map.entry("SHIFT_BUDGET_032", HttpStatus.CONFLICT),             // ALERT_ALREADY_ACKNOWLEDGED (CMP-260910-1607)
+            Map.entry("SHIFT_BUDGET_033", HttpStatus.CONFLICT),             // ALERT_ALREADY_ACKNOWLEDGED (CMP-260910-1607)
             // F03.15 個人時間割（IDOR 対策で 404 統一、上限・遷移エラーは 409）
             Map.entry("PERSONAL_TIMETABLE_001", HttpStatus.NOT_FOUND),       // PERSONAL_TIMETABLE_NOT_FOUND
             Map.entry("PERSONAL_TIMETABLE_010", HttpStatus.CONFLICT),        // LIMIT_EXCEEDED
@@ -2757,7 +2757,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * CMP-260910-1607 ③: 確認済みの予算警告への再確認（SHIFT_BUDGET_032・409）。既存の確認者・確認時刻を details で返す。
+     * CMP-260910-1607 ③: 確認済みの予算警告への再確認（SHIFT_BUDGET_033・409）。既存の確認者・確認時刻を details で返す。
      * 4xx のため error_reports への記録はしない。
      */
     @ExceptionHandler(com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException.class)

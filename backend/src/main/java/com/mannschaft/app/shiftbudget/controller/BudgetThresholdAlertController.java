@@ -62,7 +62,7 @@ public class BudgetThresholdAlertController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
             description = "確認成功（未確認の警告、または overwrite=true での上書き）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-            description = "確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_032）。既存の確認者・時刻を details で返す",
+            description = "確認済みの警告を overwrite 指定なしで再確認した（SHIFT_BUDGET_033）。既存の確認者・時刻を details で返す",
             content = @io.swagger.v3.oas.annotations.media.Content(schema = @io.swagger.v3.oas.annotations.media.Schema(
                     implementation = com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedErrorResponse.class)))
     public ApiResponse<AlertResponse> acknowledgeAlert(

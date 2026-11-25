@@ -8,7 +8,7 @@ import AlertsPage from './alerts.vue'
 /**
  * CMP-260910-1607 ③: 予算警告の確認。
  * - 送信中は確認ボタンを無効化し、二重送信しない。
- * - 409（SHIFT_BUDGET_032）を受けたら確認者・時刻つきの上書き確認を出し、
+ * - 409（SHIFT_BUDGET_033）を受けたら確認者・時刻つきの上書き確認を出し、
  *   上書きを選んだときだけ overwrite: true で再送する。取り消したら一覧を取り直す。
  */
 const api = vi.hoisted(() => ({ listAlerts: vi.fn(), acknowledgeAlert: vi.fn() }))
@@ -74,7 +74,7 @@ function mountPage() {
 }
 
 function conflict(details: Record<string, unknown>) {
-  return { statusCode: 409, data: { error: { code: 'SHIFT_BUDGET_032', details } } }
+  return { statusCode: 409, data: { error: { code: 'SHIFT_BUDGET_033', details } } }
 }
 
 async function openAck(wrapper: ReturnType<typeof mountPage>) {

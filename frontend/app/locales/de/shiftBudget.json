@@ -120,6 +120,7 @@
       "confirm": "Schichtbudget für {month} wird bestätigt. Möchten Sie fortfahren?",
       "success": "Monatsabschluss abgeschlossen: {month} ({count} Verbrauchseinträge bestätigt)",
       "alreadyClosed": "Dieser Monat wurde bereits abgeschlossen",
+      "notEnded": "{month} ist noch nicht beendet und kann daher nicht abgeschlossen werden. Nur bereits beendete Monate können abgeschlossen werden.",
       "title": "Monatsabschluss",
       "yearMonth": "Zielmonat",
       "yearMonthHint": "Format YYYY-MM (z.B. 2026-04)",

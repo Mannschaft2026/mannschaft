@@ -177,7 +177,7 @@ class BudgetThresholdAlertControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_032"))
+                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_033"))
                 .andExpect(jsonPath("$.error.details.acknowledgedBy").value(7))
                 .andExpect(jsonPath("$.error.details.acknowledgedByName").value("山田 太郎"));
     }
@@ -197,7 +197,7 @@ class BudgetThresholdAlertControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_032"))
+                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_033"))
                 .andExpect(jsonPath("$.error.details.acknowledgedBy").value(7))
                 .andExpect(jsonPath("$.error.details.acknowledgedByName").doesNotExist());
         org.mockito.Mockito.verify(nameResolverService, org.mockito.Mockito.never()).resolveUserFullNames(any());

@@ -120,6 +120,7 @@
       "confirm": "{month} 시프트 예산을 확정합니다. 진행하시겠습니까?",
       "success": "월 마감 완료: {month} (소비 기록 {count} 건 확정)",
       "alreadyClosed": "해당 월은 이미 마감되었습니다",
+      "notEnded": "{month}은(는) 아직 끝나지 않아 마감할 수 없습니다. 월말이 지난 달만 마감할 수 있습니다.",
       "title": "월차 마감",
       "yearMonth": "대상 월",
       "yearMonthHint": "YYYY-MM 형식（예: 2026-04）",

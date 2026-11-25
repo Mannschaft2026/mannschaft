@@ -308,10 +308,10 @@ class BudgetThresholdAlertAcknowledgeContractIT extends AbstractMySqlIntegration
     // helpers
     // ═══════════════════════════════════════════════════════════════
 
-    /** 409・新エラーコード（SHIFT_BUDGET_032）・{@code error.details} に既存の確認者・氏名・確認時刻を含むこと。 */
+    /** 409・新エラーコード（SHIFT_BUDGET_033）・{@code error.details} に既存の確認者・氏名・確認時刻を含むこと。 */
     private void expectAlreadyAcknowledged(MockHttpServletResponse response, Map<String, Object> stored,
                                            String expectedByName) throws Exception {
-        expect(response, 409, "SHIFT_BUDGET_032");
+        expect(response, 409, "SHIFT_BUDGET_033");
         JsonNode details = json(response).at("/error/details");
         assertThat(details.isObject()).as("error.details がオブジェクト: " + response.getContentAsString()).isTrue();
         assertThat(details.path("acknowledgedBy").asLong())
