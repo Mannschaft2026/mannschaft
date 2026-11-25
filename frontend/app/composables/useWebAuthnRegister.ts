@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { useAuthApi } from './useAuthApi'
 import { b64urlToBuf, bufToB64url } from '~/utils/webauthn'
+import { parseApiError } from '~/utils/apiError'
 
 /**
  * パスキー（WebAuthn）登録フロー composable。
@@ -8,11 +9,16 @@ import { b64urlToBuf, bufToB64url } from '~/utils/webauthn'
  * 1. BE の /register/begin で challenge を取得
  * 2. navigator.credentials.create() で認証器に署名させる
  * 3. BE の /register/complete に送信して登録完了
+ *
+ * 登録は事前に用途 PASSKEY_MANAGE の再認証（5分以内・同一セッション）が必要で、無いと BE が 403 AUTH_087 を返す。
+ * authenticatorSelection.userVerification は 'required'（UV 無しの attestation は BE が拒否する）。
  */
 export function useWebAuthnRegister() {
   const { beginWebAuthnRegister, completeWebAuthnRegister } = useAuthApi()
   const isRegistering = ref(false)
   const error = ref<string | null>(null)
+  /** 直近の失敗の BE エラーコード（AUTH_087=再認証が必要・期限切れ等）。呼び出し側が再認証へ誘導する。 */
+  const errorCode = ref<string | null>(null)
 
   /**
    * パスキーを登録する。
@@ -25,6 +31,7 @@ export function useWebAuthnRegister() {
     }
     isRegistering.value = true
     error.value = null
+    errorCode.value = null
     try {
       // 1. begin → challenge 取得
       const beginRes = await beginWebAuthnRegister()
@@ -48,7 +55,7 @@ export function useWebAuthnRegister() {
           { alg: -257, type: 'public-key' }, // RS256
         ],
         authenticatorSelection: {
-          userVerification: 'preferred',
+          userVerification: 'required',
           residentKey: 'preferred',
         },
         timeout: 60000,
@@ -80,6 +87,7 @@ export function useWebAuthnRegister() {
         // ユーザーがキャンセルした場合はエラートーストを出さない
         return false
       }
+      errorCode.value = parseApiError(e).code ?? null
       error.value = e instanceof Error ? e.message : '登録に失敗しました'
       return false
     } finally {
@@ -87,7 +95,7 @@ export function useWebAuthnRegister() {
     }
   }
 
-  return { registerPasskey, isRegistering, error }
+  return { registerPasskey, isRegistering, error, errorCode }
 }
 
 /**

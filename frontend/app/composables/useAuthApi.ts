@@ -25,6 +25,13 @@ export type MfaVerificationMethod = NonNullable<Schemas['ValidateTotpLoginReques
 export type MfaLoginTokenResponse = Schemas['MfaLoginTokenResponse']
 export type MfaEmailSendResponse = Schemas['MfaEmailSendResponse']
 
+/** パスキー再認証の用途。BE の ReauthPurpose に対応し、challenge に束ねられる（用途違いの再認証は使えない）。 */
+export type ReauthPurpose = Schemas['WebAuthnReauthenticateBeginRequest']['purpose']
+/** パスキー登録・削除前の再認証手段（GET /reauthenticate-method）。 */
+export type PasskeyManageReauthMethod = NonNullable<Schemas['PasskeyManageReauthMethodResponse']['method']>
+/** パスワード／2FA 要素／メールOTP による再認証の本文（POST /reauthenticate-factor）。 */
+export type PasskeyManageReauthRequest = Schemas['PasskeyManageReauthRequest']
+
 export interface MfaValidateRequest {
   mfaSessionToken: string
   method: MfaVerificationMethod
@@ -151,11 +158,29 @@ export function useAuthApi() {
    * チャレンジを記録し、完了 API で「再認証済みフラグ」を立てる。
    * 既存の {@code beginWebAuthnLogin} と異なり email パラメータを取らない。
    */
-  async function beginWebAuthnReauthenticate() {
+  async function beginWebAuthnReauthenticate(purpose: ReauthPurpose) {
     return api<{ data: WebAuthnReauthenticateBeginResponse }>(
       '/api/v1/auth/webauthn/reauthenticate-begin',
-      { method: 'POST' },
+      { method: 'POST', body: { purpose } },
     )
+  }
+
+  /** パスキー登録・削除前の再認証手段を取得する（パスキー保有→PASSKEY / パスワード→PASSWORD 系 / いずれも無し→EMAIL_OTP）。 */
+  async function getPasskeyManageReauthMethod() {
+    return api<{ data: { method?: PasskeyManageReauthMethod } }>('/api/v1/auth/webauthn/reauthenticate-method')
+  }
+
+  /** パスキー登録・削除前の再認証（パスワード／パスワード＋2FA 要素／メールOTP）。成功で PASSKEY_MANAGE のフラグが5分立つ。 */
+  async function reauthenticateForPasskeyManage(body: PasskeyManageReauthRequest) {
+    return api<{ data: WebAuthnReauthenticateCompleteResponse }>(
+      '/api/v1/auth/webauthn/reauthenticate-factor',
+      { method: 'POST', body },
+    )
+  }
+
+  /** パスキー登録・削除前の再認証用メールOTP（REAUTH）を本人の登録アドレスへ送る（手段が EMAIL_OTP の利用者のみ）。 */
+  async function sendPasskeyManageReauthEmailOtp() {
+    return api<{ data: MfaEmailSendResponse }>('/api/v1/auth/webauthn/reauthenticate-email-otp', { method: 'POST' })
   }
 
   /**
@@ -235,6 +260,9 @@ export function useAuthApi() {
     completeWebAuthnLogin,
     beginWebAuthnReauthenticate,
     completeWebAuthnReauthenticate,
+    getPasskeyManageReauthMethod,
+    reauthenticateForPasskeyManage,
+    sendPasskeyManageReauthEmailOtp,
     verifyTotpSetup,
     getGoogleAuthUrl,
     loginWithOAuth,

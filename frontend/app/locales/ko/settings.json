@@ -198,7 +198,18 @@
         "register_confirm": "등록",
         "register_cancel": "취소",
         "register_success": "패스키가 등록되었습니다",
-        "register_error": "패스키 등록에 실패했습니다"
+        "register_error": "패스키 등록에 실패했습니다",
+        "reauth": {
+          "title": "본인 확인",
+          "description": "패스키를 등록하거나 삭제하기 전에 본인 확인을 진행합니다.",
+          "password_label": "현재 비밀번호",
+          "otp_label": "확인 코드(6자리)",
+          "submit": "본인 확인",
+          "failed": "본인 확인에 실패했습니다. 입력한 내용을 확인해 주세요.",
+          "expired": "본인 확인 유효 시간이 지났습니다. 다시 본인 확인을 해 주세요.",
+          "passkey_failed": "패스키로 본인 확인을 할 수 없었습니다.",
+          "uv_unavailable": "이 기기에서는 생체 인증 또는 화면 잠금으로 본인 확인을 할 수 없어 패스키를 등록하거나 삭제할 수 없습니다."
+        }
       },
       "session": {
         "device_label": "{os}의 {browser}",

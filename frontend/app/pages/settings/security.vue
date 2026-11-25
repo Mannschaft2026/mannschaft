@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { AuthSessionResponse, WebAuthnCredentialResponse } from '~/types/auth'
 import { useWebAuthnRegister } from '~/composables/useWebAuthnRegister'
+import { ERROR_REAUTH_REQUIRED, usePasskeyManageReauth } from '~/composables/usePasskeyManageReauth'
+import type { PasskeyManageOutcome } from '~/composables/usePasskeyManageReauth'
+import { parseApiError } from '~/utils/apiError'
 
 definePageMeta({
   middleware: 'auth',
@@ -31,7 +34,9 @@ const renameTarget = ref<WebAuthnCredentialResponse | null>(null)
 const newDeviceName = ref('')
 
 // WebAuthn register
-const { registerPasskey, isRegistering: isRegisteringPasskey, error: registerError } = useWebAuthnRegister()
+const { registerPasskey, isRegistering: isRegisteringPasskey, error: registerError, errorCode: registerErrorCode } = useWebAuthnRegister()
+// パスキー登録・削除の前の再認証（5分以内に実行。AUTH_087 なら再認証からやり直す）
+const passkeyReauth = usePasskeyManageReauth()
 const registerDialog = ref(false)
 const newPasskeyName = ref('')
 
@@ -85,11 +90,18 @@ async function handleRevokeAllSessions() {
 
 // === WebAuthn ===
 async function handleDeleteCredential(id: number) {
-  try {
-    await deleteWebAuthnCredential(id)
+  const outcome = await passkeyReauth.runWithReauth(async (): Promise<PasskeyManageOutcome> => {
+    try {
+      await deleteWebAuthnCredential(id)
+      return 'done'
+    } catch (e) {
+      return parseApiError(e).code === ERROR_REAUTH_REQUIRED ? 'reauth_required' : 'failed'
+    }
+  })
+  if (outcome === 'done') {
     credentials.value = credentials.value.filter((c) => c.id !== id)
     notification.success('セキュリティキーを削除しました')
-  } catch {
+  } else if (outcome === 'failed') {
     notification.error('セキュリティキーの削除に失敗しました')
   }
 }
@@ -117,8 +129,11 @@ async function handleRenameCredential() {
 
 async function handlePasskeyRegister() {
   const deviceName = newPasskeyName.value.trim() || undefined
-  const success = await registerPasskey(deviceName)
-  if (success) {
+  const outcome = await passkeyReauth.runWithReauth(async (): Promise<PasskeyManageOutcome> => {
+    if (await registerPasskey(deviceName)) return 'done'
+    return registerErrorCode.value === ERROR_REAUTH_REQUIRED ? 'reauth_required' : 'failed'
+  })
+  if (outcome === 'done') {
     registerDialog.value = false
     newPasskeyName.value = ''
     notification.success(t('settings.security.webauthn.register_success'))
@@ -129,7 +144,7 @@ async function handlePasskeyRegister() {
     } catch {
       // 再取得失敗は非致命的。次回リロード時に反映される。
     }
-  } else if (registerError.value) {
+  } else if (outcome === 'failed' && registerError.value) {
     notification.error(t('settings.security.webauthn.register_error'))
   }
 }
@@ -140,6 +155,17 @@ async function handlePasskeyRegister() {
     <PageHeader title="セキュリティ" help @help="showHelp = true" />
 
     <SecurityHelpDialog v-model:visible="showHelp" />
+
+    <SettingsPasskeyReauthDialog
+      :visible="passkeyReauth.dialogVisible.value"
+      :method="passkeyReauth.dialogMethod.value"
+      :busy="passkeyReauth.busy.value"
+      :error-message="passkeyReauth.errorMessage.value"
+      :reauth-email="passkeyReauth.reauthEmail.value"
+      @submit="passkeyReauth.submit"
+      @send-email="passkeyReauth.sendEmail"
+      @update:visible="passkeyReauth.onDialogVisibleChange"
+    />
 
     <PageLoading v-if="loading" />
 

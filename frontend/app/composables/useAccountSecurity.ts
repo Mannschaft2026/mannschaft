@@ -2,6 +2,10 @@ import type { components } from '~/types/generated'
 import type { AuthSessionResponse, WebAuthnCredentialResponse } from '~/types/auth'
 import type { LoginHistoryResponse } from '~/types/user-settings'
 import { useWebAuthnRegister } from '~/composables/useWebAuthnRegister'
+import { parseApiError } from '~/utils/apiError'
+import { ERROR_REAUTH_REQUIRED, usePasskeyManageReauth } from '~/composables/usePasskeyManageReauth'
+import type { PasskeyManageOutcome } from '~/composables/usePasskeyManageReauth'
+import { describeTwoFactorError } from '~/utils/twoFactorError'
 
 export function useAccountSecurity() {
   const notification = useNotification()
@@ -21,7 +25,9 @@ export function useAccountSecurity() {
   const renameDialog = ref(false)
   const renameTarget = ref<WebAuthnCredentialResponse | null>(null)
   const newDeviceName = ref('')
-  const { registerPasskey, isRegistering: isRegisteringPasskey, error: registerError } = useWebAuthnRegister()
+  const { registerPasskey, isRegistering: isRegisteringPasskey, error: registerError, errorCode: registerErrorCode } = useWebAuthnRegister()
+  // パスキー登録・削除の前の再認証（5分以内に実行。AUTH_087 なら再認証からやり直す）
+  const passkeyReauth = usePasskeyManageReauth()
   const registerDialog = ref(false)
   const newPasskeyName = ref('')
 
@@ -76,11 +82,18 @@ export function useAccountSecurity() {
   }
 
   async function handleDeleteCredential(id: number) {
-    try {
-      await deleteWebAuthnCredential(id)
+    const outcome = await passkeyReauth.runWithReauth(async (): Promise<PasskeyManageOutcome> => {
+      try {
+        await deleteWebAuthnCredential(id)
+        return 'done'
+      } catch (e) {
+        return parseApiError(e).code === ERROR_REAUTH_REQUIRED ? 'reauth_required' : 'failed'
+      }
+    })
+    if (outcome === 'done') {
       credentials.value = credentials.value.filter((c) => c.id !== id)
       notification.success(t('settings.security.toast.delete_key_success'))
-    } catch {
+    } else if (outcome === 'failed') {
       notification.error(t('settings.security.toast.delete_key_error'))
     }
   }
@@ -107,18 +120,22 @@ export function useAccountSecurity() {
   }
 
   async function handlePasskeyRegister() {
-    const success = await registerPasskey(newPasskeyName.value.trim() || undefined)
-    if (success) {
+    const outcome = await passkeyReauth.runWithReauth(async (): Promise<PasskeyManageOutcome> => {
+      if (await registerPasskey(newPasskeyName.value.trim() || undefined)) return 'done'
+      return registerErrorCode.value === ERROR_REAUTH_REQUIRED ? 'reauth_required' : 'failed'
+    })
+    if (outcome === 'done') {
       registerDialog.value = false
       newPasskeyName.value = ''
       notification.success(t('settings.security.webauthn.register_success'))
       await loadSecurity()
-    } else if (registerError.value) {
+    } else if (outcome === 'failed' && registerError.value) {
       notification.error(t('settings.security.webauthn.register_error'))
     }
   }
 
   return {
+    passkeyReauth,
     isRegisteringPasskey,
     registerDialog,
     newPasskeyName,
@@ -163,52 +180,6 @@ export interface TwoFactorReauthInput {
   code?: string
   /** 入力した場合のみ。パスワードを持たない利用者（OAuth のみ等）は常に undefined。 */
   currentPassword?: string
-}
-
-interface ApiErrorShape {
-  statusCode?: number
-  status?: number
-  response?: { status?: number; headers?: { get?: (name: string) => string | null } }
-  data?: { error?: { code?: string } }
-}
-
-/** エラーを i18n キー（settings.security.two_fa.error.*）と補間値へ写像した結果。 */
-export interface TwoFactorErrorInfo {
-  key: string
-  params?: Record<string, unknown>
-  code?: string
-}
-
-const ERROR_KEY_BY_CODE: Record<string, string> = {
-  // TOTP 設定確定・ログイン検証で使用済みのコードを再提示した（誤ったコードは AUTH_074）
-  AUTH_018: 'code_already_used',
-  AUTH_074: 'invalid_code',
-  AUTH_076: 'resend_wait',
-  AUTH_077: 'send_limit',
-  AUTH_078: 'already_enabled',
-  AUTH_079: 'not_enabled',
-  AUTH_080: 'reauth_failed',
-  AUTH_081: 'email_missing',
-  AUTH_082: 'email_unavailable',
-}
-
-/**
- * API エラーを表示用の i18n キーへ写像する。429 は Retry-After の秒数を補間値に含める。
- * 未知のエラーは握りつぶさず generic に倒す（呼び出し側が必ず利用者へ見せる）。
- */
-export function describeTwoFactorError(e: unknown): TwoFactorErrorInfo {
-  const err = (e ?? {}) as ApiErrorShape
-  const status = err.response?.status ?? err.statusCode ?? err.status
-  const code = err.data?.error?.code
-  if (status === 429) {
-    const raw = err.response?.headers?.get?.('Retry-After') ?? null
-    const seconds = raw === null ? Number.NaN : Number.parseInt(raw, 10)
-    return Number.isFinite(seconds) && seconds > 0
-      ? { key: 'rate_limited', params: { seconds }, code }
-      : { key: 'rate_limited_unknown', code }
-  }
-  const mapped = code ? ERROR_KEY_BY_CODE[code] : undefined
-  return { key: mapped ?? 'generic', code }
 }
 
 export function useTwoFactorSettings() {

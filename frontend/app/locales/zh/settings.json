@@ -198,7 +198,18 @@
         "register_confirm": "注册",
         "register_cancel": "取消",
         "register_success": "通行密钥注册成功",
-        "register_error": "通行密钥注册失败"
+        "register_error": "通行密钥注册失败",
+        "reauth": {
+          "title": "身份验证",
+          "description": "注册或删除通行密钥之前，需要先验证您的身份。",
+          "password_label": "当前密码",
+          "otp_label": "验证码（6位）",
+          "submit": "验证",
+          "failed": "验证失败，请检查输入内容。",
+          "expired": "身份验证已过期，请重新验证。",
+          "passkey_failed": "无法通过通行密钥验证身份。",
+          "uv_unavailable": "此设备无法通过生物识别或屏幕锁验证身份，因此无法注册或删除通行密钥。"
+        }
       },
       "session": {
         "device_label": "{os} 上的 {browser}",

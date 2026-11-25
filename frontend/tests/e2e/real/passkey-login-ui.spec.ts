@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { waitForHydration } from '../helpers/wait'
+import { reauthenticateForPasskeyManage } from '../helpers/passkey-reauth'
 
 const email = process.env.TEST_USER_EMAIL ?? 'e2e-user@test.mannschaft.local'
 const password = process.env.TEST_USER_PASSWORD ?? 'TestPass2026!'
@@ -70,6 +71,11 @@ for (const settingsPath of ['/settings/security', '/settings/account']) {
       const registered = page.waitForResponse(response => response.url().includes('/webauthn/register/complete'))
       registrationAttempted = true
       await dialog.getByRole('button', { name: '登録する', exact: true }).click()
+      // 登録前の本人確認（CMP-261021-1338）。このユーザーはパスキー未保有・2FA 無効なのでパスワード手段
+      const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
+      await expect(reauthDialog, '登録前に本人確認ダイアログが開くこと').toBeVisible()
+      await reauthDialog.locator('#passkeyReauthPassword').fill(password)
+      await reauthDialog.getByRole('button', { name: '本人確認する', exact: true }).click()
       expect((await registered).ok()).toBe(true)
       registrationConfirmed = true
       await expect(dialog).not.toBeVisible()
@@ -111,6 +117,8 @@ for (const settingsPath of ['/settings/security', '/settings/account']) {
           const fixtures = credentials.filter(value => value.deviceName === deviceName)
           if (registrationConfirmed) expect(fixtures).toHaveLength(1)
           for (const credential of fixtures) {
+            // 削除にも再認証が要る（仮想認証器が生きているうちに、この試験で作ったパスキーで再認証する）
+            await reauthenticateForPasskeyManage(page, { apiBase, password })
             const deleted = await page.request.delete(`${apiBase}/api/v1/auth/webauthn/credentials/${credential.id}`)
             expect(deleted.ok(), '試験用パスキーの削除').toBe(true)
           }

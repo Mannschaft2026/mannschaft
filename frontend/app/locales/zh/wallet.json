@@ -234,7 +234,8 @@
       "biometric_required": "开始展示模式需要认证",
       "biometric_failed": "认证失败",
       "no_cards": "此群组没有卡片",
-      "load_failed": "群组加载失败"
+      "load_failed": "群组加载失败",
+      "uv_unavailable": "此设备无法通过生物识别或屏幕锁（PIN）验证身份，因此无法打开展示模式。"
     },
     "admin": {
       "page_title": "积分卡管理",

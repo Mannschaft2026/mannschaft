@@ -234,7 +234,8 @@
       "biometric_required": "Authentifizierung erforderlich, um den Präsentationsmodus zu starten",
       "biometric_failed": "Authentifizierung fehlgeschlagen",
       "no_cards": "Diese Gruppe hat keine Karten",
-      "load_failed": "Gruppe konnte nicht geladen werden"
+      "load_failed": "Gruppe konnte nicht geladen werden",
+      "uv_unavailable": "Dieses Gerät kann Sie weder per Biometrie noch per Bildschirmsperre (PIN) verifizieren, daher kann der Präsentationsmodus nicht geöffnet werden."
     },
     "admin": {
       "page_title": "Punktekartenverwaltung",

@@ -50,7 +50,7 @@ const groupId = computed(() => route.params.id as string)
 // ─────────────────────────────────────────────
 
 const { acquireWakeLock, releaseWakeLock, enterFullscreen, exitFullscreen } = useWakeLockWithFallback()
-const { verifyBiometric } = useBiometricGate()
+const { verifyBiometric, uvUnavailable } = useBiometricGate()
 
 // ─────────────────────────────────────────────
 // State
@@ -90,7 +90,9 @@ async function setup(): Promise<void> {
       const ok = await verifyBiometric()
       if (!ok) {
         biometricFailed.value = true
-        loadError.value = t('wallet.presentation.biometric_failed')
+        loadError.value = uvUnavailable.value
+          ? t('wallet.presentation.uv_unavailable')
+          : t('wallet.presentation.biometric_failed')
         loading.value = false
         // グループ選択画面へ戻すまでの猶予として 1.5 秒だけメッセージを表示
         window.setTimeout(() => {

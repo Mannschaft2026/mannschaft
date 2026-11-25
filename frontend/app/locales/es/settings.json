@@ -198,7 +198,18 @@
         "register_confirm": "Registrar",
         "register_cancel": "Cancelar",
         "register_success": "Clave de acceso registrada correctamente",
-        "register_error": "Error al registrar la clave de acceso"
+        "register_error": "Error al registrar la clave de acceso",
+        "reauth": {
+          "title": "Verifica tu identidad",
+          "description": "Antes de registrar o eliminar una llave de acceso, debemos verificar tu identidad.",
+          "password_label": "Contraseña actual",
+          "otp_label": "Código de verificación (6 dígitos)",
+          "submit": "Verificar",
+          "failed": "La verificación falló. Revisa lo que has introducido.",
+          "expired": "La verificación ha caducado. Vuelve a verificar tu identidad.",
+          "passkey_failed": "No se pudo verificar tu identidad con la llave de acceso.",
+          "uv_unavailable": "Este dispositivo no puede verificar tu identidad con biometría ni con bloqueo de pantalla, por lo que no se pueden registrar ni eliminar llaves de acceso."
+        }
       },
       "session": {
         "device_label": "{browser} en {os}",
