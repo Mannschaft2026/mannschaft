@@ -23526,7 +23526,7 @@ export interface paths {
         /** 委員会招集中一覧取得 */
         get: operations["listPendingInvitations"];
         put?: never;
-        /** 委員会招集状送付 */
+        /** 委員会招集状送付（平文トークンは発行応答の1回だけ） */
         post: operations["sendInvitations"];
         delete?: never;
         options?: never;
@@ -70914,7 +70914,7 @@ export interface components {
         ApiResponseSendInvitationsResponse: {
             data?: components["schemas"]["SendInvitationsResponse"];
         };
-        CommitteeInvitationResponse: {
+        CommitteeInvitationIssuedResponse: {
             /** Format: int64 */
             committeeId?: number;
             /** Format: date-time */
@@ -70934,8 +70934,27 @@ export interface components {
             /** Format: date-time */
             resolvedAt?: string;
         };
+        CommitteeInvitationResponse: {
+            /** Format: int64 */
+            committeeId?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            invitationStatus?: string;
+            /** Format: int64 */
+            inviteeUserId?: number;
+            /** @enum {string} */
+            proposedRole?: "CHAIR" | "VICE_CHAIR" | "SECRETARY" | "MEMBER";
+            /** @enum {string} */
+            resolution?: "ACCEPTED" | "DECLINED" | "EXPIRED" | "CANCELLED";
+            /** Format: date-time */
+            resolvedAt?: string;
+        };
         SendInvitationsResponse: {
-            invitations?: components["schemas"]["CommitteeInvitationResponse"][];
+            invitations?: components["schemas"]["CommitteeInvitationIssuedResponse"][];
             /** Format: int32 */
             skippedExistingInvitationCount?: number;
             /** Format: int32 */

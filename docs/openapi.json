@@ -86524,7 +86524,7 @@
         "tags": [
           "組織委員会招集"
         ],
-        "summary": "委員会招集状送付",
+        "summary": "委員会招集状送付（平文トークンは発行応答の1回だけ）",
         "operationId": "sendInvitations",
         "parameters": [
           {
@@ -214202,7 +214202,7 @@
           }
         }
       },
-      "CommitteeInvitationResponse": {
+      "CommitteeInvitationIssuedResponse": {
         "type": "object",
         "properties": {
           "committeeId": {
@@ -214255,13 +214255,63 @@
           }
         }
       },
+      "CommitteeInvitationResponse": {
+        "type": "object",
+        "properties": {
+          "committeeId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "invitationStatus": {
+            "type": "string"
+          },
+          "inviteeUserId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "proposedRole": {
+            "type": "string",
+            "enum": [
+              "CHAIR",
+              "VICE_CHAIR",
+              "SECRETARY",
+              "MEMBER"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "DECLINED",
+              "EXPIRED",
+              "CANCELLED"
+            ]
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SendInvitationsResponse": {
         "type": "object",
         "properties": {
           "invitations": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CommitteeInvitationResponse"
+              "$ref": "#/components/schemas/CommitteeInvitationIssuedResponse"
             }
           },
           "skippedExistingInvitationCount": {
