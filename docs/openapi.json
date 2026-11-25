@@ -61581,7 +61581,7 @@
         },
         "responses": {
           "200": {
-            "description": "確認成功（未確認の警告、または overwrite=true での上書き）",
+            "description": "確認成功（未確認の警告、または overwrite\u003dtrue での上書き）",
             "content": {
               "*/*": {
                 "schema": {
@@ -202348,8 +202348,7 @@
           },
           "acknowledgedByName": {
             "type": "string",
-            "description": "既に確認したユーザーの氏名（引けない場合は null）",
-            "nullable": true
+            "description": "既に確認したユーザーの氏名（引けない場合は null）"
           }
         }
       },

@@ -66682,7 +66682,7 @@ export interface components {
              */
             acknowledgedBy?: number;
             /** @description 既に確認したユーザーの氏名（引けない場合は null） */
-            acknowledgedByName?: string | null;
+            acknowledgedByName?: string;
         };
         /** @description 予算警告の確認済み 409 応答 */
         BudgetAlertAlreadyAcknowledgedErrorResponse: {
