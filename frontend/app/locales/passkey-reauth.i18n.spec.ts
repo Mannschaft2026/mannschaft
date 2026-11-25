@@ -33,9 +33,12 @@ function lookup(dict: Record<string, unknown>, path: string): unknown {
 
 const KEYS: Array<{ ac: string, file: string, path: string }> = [
   { ac: 'A6', file: 'wallet.json', path: 'wallet.presentation.uv_unavailable' },
-  ...['title', 'description', 'password_label', 'otp_label', 'submit', 'failed'].map(leaf => ({
+  ...['title', 'description', 'password_label', 'otp_label', 'submit', 'failed', 'retry_button', 'leftover_passkey'].map(leaf => ({
     ac: 'B9', file: 'settings.json', path: `settings.security.webauthn.reauth.${leaf}`,
   })),
+  { ac: 'B8', file: 'settings.json', path: 'settings.security.webauthn.register_unsupported' },
+  { ac: 'B9', file: 'settings.json', path: 'settings.security.toast.delete_key_success' },
+  { ac: 'B9', file: 'settings.json', path: 'settings.security.toast.delete_key_error' },
 ]
 
 describe('パスキー再認証の文言（6 言語）', () => {

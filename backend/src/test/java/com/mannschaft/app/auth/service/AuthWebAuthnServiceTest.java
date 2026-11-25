@@ -189,6 +189,21 @@ class AuthWebAuthnServiceTest {
                             .isEqualTo("AUTH_087"));
             verify(redisTemplate, never()).opsForValue();
         }
+
+        @Test
+        @DisplayName("監査: 再認証なしの AUTH_087 は用途付き・手段不明（null）で REAUTH_FAILED を記録する")
+        void beginRegister_再認証なしは手段不明の失敗監査() {
+            given(redisTemplate.hasKey(anyString())).willReturn(Boolean.FALSE);
+
+            assertThatThrownBy(() -> authWebAuthnService.beginRegister(TEST_USER_ID, TEST_SESSION))
+                    .isInstanceOf(BusinessException.class);
+
+            org.mockito.ArgumentCaptor<com.mannschaft.app.auth.event.ReauthenticationFailedEvent> cap =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class);
+            verify(eventPublisher).publish(cap.capture());
+            assertThat(cap.getValue().getPurpose()).isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
+            assertThat(cap.getValue().getMethod()).isNull();
+        }
     }
 
     // ========================================
@@ -788,6 +803,8 @@ class AuthWebAuthnServiceTest {
                     org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class);
             verify(eventPublisher).publish(cap.capture());
             assertThat(cap.getValue().getPurpose()).isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
+            // フラグが無い理由から再認証の手段は分からない（PASSKEY と決め打たない）
+            assertThat(cap.getValue().getMethod()).isNull();
         }
 
         // 補助: WebAuthnReauthenticateCompleteResponse の DTO がコンパイル時依存となっていること

@@ -205,17 +205,84 @@ describe('usePasskeyManageReauth', () => {
       expect(action).toHaveBeenCalledTimes(1)
     })
 
-    it('AUTH_087（期限切れ等）なら再認証からやり直して操作を再試行する', async () => {
+    it('AUTH_087（期限切れ等）+ パスキー: 自動で get を呼ばず、「やり直す」押下を起点に再認証して再試行する', async () => {
       respondWithMethod('PASSKEY')
       passkeyReauthMock.mockResolvedValue('ok')
       const reauth = usePasskeyManageReauth()
       const action = vi.fn().mockResolvedValueOnce('reauth_required').mockResolvedValueOnce('done')
 
-      expect(await reauth.runWithReauth(action)).toBe('done')
+      const run = reauth.runWithReauth(action)
+      await flushPromises()
 
+      // 期限切れ → やり直しダイアログで待機。ボタン押下までは 2 回目の get を呼ばない
+      expect(reauth.retryVisible.value).toBe(true)
+      expect(reauth.retryLeftoverNote.value).toBe(false)
+      expect(passkeyReauthMock).toHaveBeenCalledTimes(1)
+
+      reauth.confirmRetry()
+      expect(await run).toBe('done')
+
+      expect(reauth.retryVisible.value).toBe(false)
       expect(passkeyReauthMock).toHaveBeenCalledTimes(2)
       expect(action).toHaveBeenCalledTimes(2)
+    })
+
+    it('AUTH_087 + パスキー: やり直しダイアログを閉じたら再認証せず cancelled', async () => {
+      respondWithMethod('PASSKEY')
+      passkeyReauthMock.mockResolvedValue('ok')
+      const reauth = usePasskeyManageReauth()
+      const action = vi.fn().mockResolvedValue('reauth_required')
+
+      const run = reauth.runWithReauth(action)
+      await flushPromises()
+      reauth.onRetryVisibleChange(false)
+
+      expect(await run).toBe('cancelled')
+      expect(passkeyReauthMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('AUTH_087 + パスワード手段: WebAuthn を使わないので通知して再認証ダイアログへ進む', async () => {
+      respondWithMethod('PASSWORD')
+      const reauth = usePasskeyManageReauth()
+      const action = vi.fn().mockResolvedValueOnce('reauth_required').mockResolvedValueOnce('done')
+
+      const run = reauth.runWithReauth(action)
+      await flushPromises()
+      await reauth.submit({ currentPassword: 'pw' })
+      await flushPromises()
+      expect(reauth.dialogVisible.value).toBe(true)
+      await reauth.submit({ currentPassword: 'pw' })
+
+      expect(await run).toBe('done')
+      expect(reauth.retryVisible.value).toBe(false)
       expect(notificationMock.warn).toHaveBeenCalledWith('settings.security.webauthn.reauth.expired')
+    })
+
+    it('登録の AUTH_087: 端末側に残ったパスキーの案内をやり直しダイアログに出す', async () => {
+      respondWithMethod('PASSKEY')
+      passkeyReauthMock.mockResolvedValue('ok')
+      const reauth = usePasskeyManageReauth()
+
+      const retry = reauth.reauthenticateAfterExpiry(true)
+      await flushPromises()
+      expect(reauth.retryVisible.value).toBe(true)
+      expect(reauth.retryLeftoverNote.value).toBe(true)
+      reauth.confirmRetry()
+
+      expect(await retry).toBe(true)
+    })
+
+    it('先読み: 手段を先に取得しておけば、押下時の通信は begin だけ（手段の再取得をしない）', async () => {
+      respondWithMethod('PASSKEY')
+      passkeyReauthMock.mockResolvedValue('ok')
+      const reauth = usePasskeyManageReauth()
+
+      await reauth.prefetchMethod()
+      apiMock.mockClear()
+      expect(await reauth.ensureReauthenticated()).toBe(true)
+
+      expect(apiMock).not.toHaveBeenCalledWith(METHOD_URL, expect.anything())
+      expect(passkeyReauthMock).toHaveBeenCalledWith('PASSKEY_MANAGE')
     })
 
     it('AUTH_087 が続くときは無限に繰り返さず、利用者へ知らせて終える', async () => {
@@ -224,7 +291,11 @@ describe('usePasskeyManageReauth', () => {
       const reauth = usePasskeyManageReauth()
       const action = vi.fn().mockResolvedValue('reauth_required')
 
-      expect(await reauth.runWithReauth(action)).toBe('reauth_required')
+      const run = reauth.runWithReauth(action)
+      await flushPromises()
+      reauth.confirmRetry()
+
+      expect(await run).toBe('reauth_required')
 
       expect(action).toHaveBeenCalledTimes(2)
       expect(notificationMock.error).toHaveBeenCalledWith('settings.security.webauthn.reauth.expired')

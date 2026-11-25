@@ -208,8 +208,11 @@
           "failed": "Bestätigung fehlgeschlagen. Bitte prüfen Sie Ihre Eingabe.",
           "expired": "Die Bestätigung ist abgelaufen. Bitte bestätigen Sie Ihre Identität erneut.",
           "passkey_failed": "Die Identität konnte nicht per Passkey bestätigt werden.",
-          "uv_unavailable": "Dieses Gerät kann Sie weder per Biometrie noch per Bildschirmsperre verifizieren, daher können Passkeys nicht registriert oder gelöscht werden."
-        }
+          "uv_unavailable": "Dieses Gerät kann Sie weder per Biometrie noch per Bildschirmsperre verifizieren, daher können Passkeys nicht registriert oder gelöscht werden.",
+          "retry_button": "Erneut verifizieren",
+          "leftover_passkey": "Ein auf dem Authentikator verbliebener Passkey lässt sich in den Geräteeinstellungen löschen."
+        },
+        "register_unsupported": "Dieser Browser unterstützt keine Passkeys"
       },
       "session": {
         "device_label": "{browser} unter {os}",

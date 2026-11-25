@@ -225,6 +225,13 @@ onMounted(async () => {
         @passkey-register="handlePasskeyRegister"
       />
 
+      <SettingsPasskeyReauthRetryDialog
+        :visible="passkeyReauth.retryVisible.value"
+        :leftover-note="passkeyReauth.retryLeftoverNote.value"
+        @retry="passkeyReauth.confirmRetry"
+        @update:visible="passkeyReauth.onRetryVisibleChange"
+      />
+
       <!-- パスキー登録・削除の前の本人確認（パスキー保有者は OS の認証ダイアログで済むため出ない） -->
       <SettingsPasskeyReauthDialog
         :visible="passkeyReauth.dialogVisible.value"

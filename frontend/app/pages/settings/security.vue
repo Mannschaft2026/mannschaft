@@ -46,6 +46,8 @@ const showHelp = ref(false)
 const { t } = useI18n()
 
 onMounted(async () => {
+  // 再認証手段を先読みする（ボタン押下から認証ダイアログまでの通信を減らす。iOS/Safari のユーザー操作期限対策）
+  void passkeyReauth.prefetchMethod()
   await loadData()
 })
 
@@ -100,9 +102,9 @@ async function handleDeleteCredential(id: number) {
   })
   if (outcome === 'done') {
     credentials.value = credentials.value.filter((c) => c.id !== id)
-    notification.success('セキュリティキーを削除しました')
+    notification.success(t('settings.security.toast.delete_key_success'))
   } else if (outcome === 'failed') {
-    notification.error('セキュリティキーの削除に失敗しました')
+    notification.error(t('settings.security.toast.delete_key_error'))
   }
 }
 
@@ -139,6 +141,8 @@ async function handlePasskeyRegister() {
     registerDialog.value = false
     newPasskeyName.value = ''
     notification.success(t('settings.security.webauthn.register_success'))
+    // 登録でパスキーの有無が変わると再認証手段も変わる。次の操作に備えて取り直す
+    void passkeyReauth.prefetchMethod()
     // 資格情報一覧を再取得
     try {
       const credRes = await getWebAuthnCredentials()
@@ -147,12 +151,13 @@ async function handlePasskeyRegister() {
       // 再取得失敗は非致命的。次回リロード時に反映される。
     }
   } else if (registerErrorCode.value === ERROR_REAUTH_REQUIRED) {
-    // 再認証が期限切れ（5分）等。デバイス名ダイアログを閉じてから本人確認をやり直す（入力した名前は残す）
+    // 再認証が期限切れ（5分）等。デバイス名ダイアログを閉じ、「本人確認をやり直す」ボタンの押下を起点に
+    // 本人確認をやり直す（自動では認証ダイアログを出さない。入力した名前は残す）。
+    // 認証器側だけに作られたパスキーが残りうるため、その案内も添える。
     registerDialog.value = false
-    notification.warn(t('settings.security.webauthn.reauth.expired'))
-    await startPasskeyRegister()
+    if (await passkeyReauth.reauthenticateAfterExpiry(true)) registerDialog.value = true
   } else if (registerError.value) {
-    notification.error(t('settings.security.webauthn.register_error'))
+    notification.error(t(registerError.value))
   }
 }
 </script>
@@ -162,6 +167,13 @@ async function handlePasskeyRegister() {
     <PageHeader title="セキュリティ" help @help="showHelp = true" />
 
     <SecurityHelpDialog v-model:visible="showHelp" />
+
+    <SettingsPasskeyReauthRetryDialog
+      :visible="passkeyReauth.retryVisible.value"
+      :leftover-note="passkeyReauth.retryLeftoverNote.value"
+      @retry="passkeyReauth.confirmRetry"
+      @update:visible="passkeyReauth.onRetryVisibleChange"
+    />
 
     <SettingsPasskeyReauthDialog
       :visible="passkeyReauth.dialogVisible.value"

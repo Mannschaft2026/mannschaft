@@ -37,6 +37,8 @@ export function useAccountSecurity() {
   const loadingMoreHistory = ref(false)
 
   async function loadSecurity() {
+    // 再認証手段を先読みする（押下から認証ダイアログまでの通信を減らす。iOS/Safari のユーザー操作期限対策）
+    void passkeyReauth.prefetchMethod()
     try {
       const [sessRes, credRes] = await Promise.all([getSessions(), getWebAuthnCredentials()])
       sessions.value = sessRes.data
@@ -137,10 +139,9 @@ export function useAccountSecurity() {
     } else if (registerErrorCode.value === ERROR_REAUTH_REQUIRED) {
       // 再認証が期限切れ（5分）等。デバイス名ダイアログを閉じてから本人確認をやり直す（入力した名前は残す）
       registerDialog.value = false
-      notification.warn(t('settings.security.webauthn.reauth.expired'))
-      await startPasskeyRegister()
+      if (await passkeyReauth.reauthenticateAfterExpiry(true)) registerDialog.value = true
     } else if (registerError.value) {
-      notification.error(t('settings.security.webauthn.register_error'))
+      notification.error(t(registerError.value))
     }
   }
 

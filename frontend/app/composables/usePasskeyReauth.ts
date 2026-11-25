@@ -7,8 +7,8 @@ import { parseApiError } from '~/utils/apiError'
  * パスキー再認証（WebAuthn assertion）の結果。
  *
  * - ok: 成功（BE に用途付きの再認証済みフラグが5分間立つ）
- * - cancelled: 利用者が認証ダイアログを閉じた、またはタイムアウト（UV 不可とは判別できないもの）
- * - uv_unavailable: この端末では UV（生体認証・画面ロック PIN）による本人確認ができない
+ * - cancelled: 利用者が認証ダイアログを閉じた、またはタイムアウト（NotAllowedError は常にこちら）
+ * - uv_unavailable: UV を満たせないと確定できた（ConstraintError・NotSupportedError・BE の AUTH_024・WebAuthn API が無い）
  * - failed: サーバー検証の失敗など上記以外
  */
 export type PasskeyReauthResult = 'ok' | 'cancelled' | 'uv_unavailable' | 'failed'
@@ -24,21 +24,16 @@ function extractSignCount(authenticatorData: ArrayBuffer): number {
   return new DataView(authenticatorData).getUint32(33, false)
 }
 
-/** 認証ダイアログが UV を満たせなかった（端末が UV 非対応）と判断できるか。 */
-async function isUvUnsupported(e: unknown): Promise<boolean> {
-  if (!(e instanceof DOMException)) return false
-  // 制約（UV required）を満たす認証器が無い場合の明示的なエラー
-  if (e.name === 'ConstraintError' || e.name === 'NotSupportedError') return true
-  if (e.name !== 'NotAllowedError') return false
-  // NotAllowedError は「利用者のキャンセル」と同じ名前で返る。プラットフォーム認証器の UV が使えないことが
-  // 確認できる場合に限り UV 不可と扱い、それ以外はキャンセル扱いにする（キャンセルを UV 不可と誤表示しない）。
-  try {
-    const available = await window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.()
-    return available === false
-  }
-  catch {
-    return false
-  }
+/**
+ * この端末では UV を満たせないと確定できるエラーか。
+ *
+ * <p>NotAllowedError は「利用者のキャンセル」「タイムアウト」と同じ名前で返り、UV 不可とは区別できない。
+ * UV 対応の外付けセキュリティキー（PIN 付き USB キー等）を使う利用者が、Windows Hello の無い PC でキャンセルしただけでも
+ * 返るため、プラットフォーム認証器の有無で UV 不可と推測してはならない（キャンセルを「この端末ではできません」と誤案内する）。
+ * よって NotAllowedError は常にキャンセル扱いとし、UV 不可は明示的なエラー（ConstraintError・NotSupportedError）に限る。</p>
+ */
+function isUvUnsupported(e: unknown): boolean {
+  return e instanceof DOMException && (e.name === 'ConstraintError' || e.name === 'NotSupportedError')
 }
 
 /**
@@ -87,7 +82,7 @@ export function usePasskeyReauth() {
     catch (e) {
       if (import.meta.dev) console.warn('[passkey-reauth] failed', e)
       if (parseApiError(e).code === ERROR_UV_REQUIRED) return 'uv_unavailable'
-      if (await isUvUnsupported(e)) return 'uv_unavailable'
+      if (isUvUnsupported(e)) return 'uv_unavailable'
       if (e instanceof DOMException && e.name === 'NotAllowedError') return 'cancelled'
       return 'failed'
     }

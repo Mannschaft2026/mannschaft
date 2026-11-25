@@ -208,8 +208,11 @@
           "failed": "验证失败，请检查输入内容。",
           "expired": "身份验证已过期，请重新验证。",
           "passkey_failed": "无法通过通行密钥验证身份。",
-          "uv_unavailable": "此设备无法通过生物识别或屏幕锁验证身份，因此无法注册或删除通行密钥。"
-        }
+          "uv_unavailable": "此设备无法通过生物识别或屏幕锁验证身份，因此无法注册或删除通行密钥。",
+          "retry_button": "重新验证身份",
+          "leftover_passkey": "已留在验证器上的通行密钥，可在设备的设置中删除。"
+        },
+        "register_unsupported": "此浏览器不支持通行密钥"
       },
       "session": {
         "device_label": "{os} 上的 {browser}",

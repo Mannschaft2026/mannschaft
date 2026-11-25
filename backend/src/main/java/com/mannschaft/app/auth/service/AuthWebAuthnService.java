@@ -2,8 +2,6 @@ package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
 import com.mannschaft.app.auth.PasskeyManageReauthMethod;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
@@ -51,6 +49,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -122,6 +122,7 @@ public class AuthWebAuthnService {
     @Transactional
     public ApiResponse<WebAuthnRegisterBeginResponse> beginRegister(Long userId, String sessionHash) {
         if (!hasReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
+            publishReauthFailedMethodUnknown(userId, ReauthPurpose.PASSKEY_MANAGE);
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
         UserEntity user = findUserOrThrow(userId);
@@ -161,7 +162,7 @@ public class AuthWebAuthnService {
             Long userId, String sessionHash, WebAuthnRegisterCompleteRequest req) {
         // 0. 再認証済みフラグを 1 回限りで消費する（同時 2 リクエストのうち成功は 1 つだけ）
         if (!consumeReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
-            publishReauthFailed(userId, ReauthPurpose.PASSKEY_MANAGE);
+            publishReauthFailedMethodUnknown(userId, ReauthPurpose.PASSKEY_MANAGE);
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
 
@@ -476,7 +477,7 @@ public class AuthWebAuthnService {
         }
 
         if (!consumeReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
-            publishReauthFailed(userId, ReauthPurpose.PASSKEY_MANAGE);
+            publishReauthFailedMethodUnknown(userId, ReauthPurpose.PASSKEY_MANAGE);
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
 
@@ -714,6 +715,14 @@ public class AuthWebAuthnService {
      */
     private void publishReauthFailed(Long userId, ReauthPurpose purpose) {
         eventPublisher.publish(new ReauthenticationFailedEvent(userId, purpose, PasskeyManageReauthMethod.PASSKEY));
+    }
+
+    /**
+     * 再認証フラグが無い・期限切れ（AUTH_087）の失敗を記録する。フラグが無い理由は「どの手段で再認証したか」を
+     * 知りえない（パスワード等で済ませた後の期限切れもありうる）ため、手段は null（不明）で記録する。
+     */
+    private void publishReauthFailedMethodUnknown(Long userId, ReauthPurpose purpose) {
+        eventPublisher.publish(new ReauthenticationFailedEvent(userId, purpose, null));
     }
 
     // === ヘルパーメソッド ===

@@ -723,6 +723,10 @@ public class Auth2faService {
                 if (!passwordMatches(findUserOrThrow(userId), req.getCurrentPassword())) {
                     yield false;
                 }
+                // 意図どおりの仕様（マスター決定の範囲内）: パスワード + 2FA 要素の組では、2FA 方式が TOTP の利用者でも
+                // 本人確認メールOTP（EMAIL）を 2 要素目として受ける。2FA 無効化（disableTwoFactor）の正規形と同じ扱いで、
+                // パスワードも同時に要求するため TOTP 利用者がメールOTPだけで通る抜け道にはならない
+                // （メールOTP 単独を要素とする SECOND_FACTOR とはここが違う）。
                 // 2FA 行を行ロック付きで取り、TOTP の使用済み印・バックアップコード消費を並行から守る
                 TwoFactorAuthEntity twoFactorAuth = twoFactorAuthRepository.findByUserIdForUpdate(userId)
                         .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))

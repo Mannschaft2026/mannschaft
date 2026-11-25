@@ -208,8 +208,11 @@
           "failed": "La verificación falló. Revisa lo que has introducido.",
           "expired": "La verificación ha caducado. Vuelve a verificar tu identidad.",
           "passkey_failed": "No se pudo verificar tu identidad con la llave de acceso.",
-          "uv_unavailable": "Este dispositivo no puede verificar tu identidad con biometría ni con bloqueo de pantalla, por lo que no se pueden registrar ni eliminar llaves de acceso."
-        }
+          "uv_unavailable": "Este dispositivo no puede verificar tu identidad con biometría ni con bloqueo de pantalla, por lo que no se pueden registrar ni eliminar llaves de acceso.",
+          "retry_button": "Verificar de nuevo",
+          "leftover_passkey": "La llave de acceso que quedó en tu autenticador se puede eliminar desde los ajustes del dispositivo."
+        },
+        "register_unsupported": "Este navegador no admite llaves de acceso"
       },
       "session": {
         "device_label": "{browser} en {os}",

@@ -208,8 +208,11 @@
           "failed": "Verification failed. Please check what you entered.",
           "expired": "Your verification has expired. Please verify again.",
           "passkey_failed": "Could not verify you with your passkey.",
-          "uv_unavailable": "This device cannot verify you with biometrics or a screen lock, so passkeys cannot be registered or deleted."
-        }
+          "uv_unavailable": "This device cannot verify you with biometrics or a screen lock, so passkeys cannot be registered or deleted.",
+          "retry_button": "Verify again",
+          "leftover_passkey": "A passkey left on your authenticator can be removed from your device's settings."
+        },
+        "register_unsupported": "This browser does not support passkeys"
       },
       "session": {
         "device_label": "{browser} on {os}",
