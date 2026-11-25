@@ -1484,6 +1484,8 @@ officers と同じ仕様・エラーハンドリング（数値上限のみ 20 �
 
 > **ステータス**: 🟡 設計中（精査待ち）。業務フローは [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」、是正 migration は [04_security_operations.md](04_security_operations.md) §7「CMP-261124-0159 是正 migration」、閲覧上限の正本は [F00 §20](../F00_content_visibility_resolver.md)。用語「メンバー限定」の正本は [F00.5 §2.6](../F00.5_membership_basis.md)。
 
+**依存**: CMP-261124-0157（SUPPORTER 招待で参加した人を正しく SUPPORTER 在籍にする是正。PR #4828 マージ済み）。本節の「SUPPORTER 在籍＝`memberships.role_kind='SUPPORTER'`」はその是正後の状態を前提にする。
+
 JSON は既存規約どおり camelCase、ページングなし。数値はすべて非 null。
 
 ### 新規 `GET /api/v1/teams/{slug}/visibility-change-preview`
@@ -1534,6 +1536,13 @@ JSON は既存規約どおり camelCase、ページングなし。数値はす�
 | `POST /api/v1/teams/{slug}/supporter-applications/{applicationId}/approve` | 403 `TEAM_073`。申請の状態は変えない |
 | `POST /api/v1/teams/{slug}/supporter-applications/bulk-approve` | 403 `TEAM_073`（1 件も承認しない。全体を拒否） |
 | `POST /api/v1/teams/{slug}/follow` | 既存どおり `assertCanView(TEAM)` で 403 `VISIBILITY_001`（変更なし・回帰固定） |
+| `PATCH /api/v1/teams/{slug}/members/{userId}/role`（GUEST・SUPPORTER への付与・降格） | 403 `TEAM_073`。ADMIN / DEPUTY_ADMIN / MEMBER 間の変更は従来どおり |
+| ロール割当の内部経路（`RoleService#assignRole` / `#changeRole` を呼ぶ全経路。管理画面・一括操作を含む） | GUEST・SUPPORTER を非公開チームに付与しようとすると 403 `TEAM_073`（関所で一律に判定） |
+| アーカイブからの復元（`archived_membership_grants` の復元。ライフイベント退出の取り消し等） | 非公開チームへの SUPPORTER / GUEST の復元は行わず、その行を復元対象から外す（他の行は復元する）。応答・監査ログに除外件数を残す |
+| 参加申請（`JoinRequestService`）の承認で SUPPORTER を作る経路・組織経由の付与（組織の操作で配下チームに在籍・ロールを作る経路） | 403 `TEAM_073`（関所で一律に判定） |
+
+- 上の拒否はすべて「入口の関所」（[03_business_logic.md](03_business_logic.md)「入口の関所」）で一律に判定する。新しい入口が増えても関所を通らずに SUPPORTER 在籍・GUEST を作れないことを ArchUnit `MembersOnlyTeamEntryChokePointTest`（F00 §20.6）で固定する（入口の網羅の番人）。
+- 作成・更新の応答本文でチームの中身（一覧・他人の投稿・添付 URL 等）を返す書き込み API は、読み取りと同じ門（F00 §20.3）を通す。
 
 - 判定順: 既存の認可（招待権限・申請承認権限）→ チームの公開範囲。権限のない利用者には従来の拒否を返し、`TEAM_073` で公開範囲を教えない。
 - `TeamService#followTeam`（呼び出し元のない死蔵コード）は撤去する。
@@ -1556,9 +1565,21 @@ JSON は既存規約どおり camelCase、ページングなし。数値はす�
 |---|---|
 | `team_visibility.confirmMembersOnly.title` | 公開範囲を「メンバー限定」にします |
 | `team_visibility.confirmMembersOnly.body` | サポーター {supporters} 人とゲスト {guests} 人がチームから外れ、通知が届きます。承認待ちのサポーター申請 {applications} 件は却下され、サポーター招待 {tokens} 件は使えなくなります。元に戻しても自動では戻りません。 |
+| `team_visibility.confirmMembersOnly.bodyNone` | 外れる人はいません。承認待ちのサポーター申請とサポーター招待もありません。公開範囲を「メンバー限定」にしますか。 |
 | `team_visibility.confirmMembersOnly.confirm` | 外して変更する |
+| `team_visibility.supporterSettingInactive` | メンバー限定のチームではサポーターを受け付けません（設定は公開範囲を戻したときに使われます） |
 | `team_visibility.confirmMembersOnly.cancel` | やめる |
 | `team_visibility.transitionDone` | 公開範囲を変更しました（サポーター {supporters} 人・ゲスト {guests} 人を外しました） |
 | `team_visibility.supporterInviteDisabled` | メンバー限定のチームではサポーター招待を発行できません |
-| `notification.teamMembersOnlyRemoved.title` | {teamName} から外れました |
-| `notification.teamMembersOnlyRemoved.body` | チームの公開範囲が「メンバー限定」に変わったため、サポーター（ゲスト）としての登録が解除されました。 |
+
+- 人数がすべて 0 のときは `bodyNone` を出す（確認と `confirmSupporterRemoval=true` は 0 人でも必須のまま）。
+- **`supporterEnabled` の扱い**: 非公開化しても `teams.supporter_enabled` の値は変えない（公開範囲を戻したときにそのまま使う）。非公開の間は入口が `TEAM_073` / `VISIBILITY_001` で閉じるため値に関わらずサポーターは増えない。設定画面ではスイッチを操作不可にし `supporterSettingInactive` を添える。
+
+**通知文（BE の 6 言語メッセージ `messages_{ja,en,zh,ko,es,de}.properties`。通知は BE が作るため FE の i18n には置かない）**
+
+| メッセージキー | ja |
+|---|---|
+| `notification.team.membersOnlyRemoved.title` | {0} から外れました |
+| `notification.team.membersOnlyRemoved.body` | チームの公開範囲が「メンバー限定」に変わったため、サポーター（ゲスト）としての登録が解除されました。 |
+
+通知は受信者本人のスコープ（チームではない）で保存する（F00 §20.3.1 の読み出し時の除外の対象にしないため）。

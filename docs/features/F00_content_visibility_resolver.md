@@ -3191,8 +3191,9 @@ type だけ厳格にガードする漸進的アプローチを採用。Phase B �
 3. 公開側のチームでは上限を課さない（規則 1 は `MEMBERS_AND_ABOVE` のときだけ発動）。
 4. 実装位置は §11.6（親 ORG 停止の連鎖ルール）と同じく `AbstractContentVisibilityResolver` の共通テンプレートで強制し、個別 Resolver に分散させない。`UserScopeRoleSnapshot` に「判定対象コンテンツの所属チームのうち非公開チームの ID 集合（`membersOnlyTeamIds`）」を積む。
 5. 一括読み込み: `filterAccessible` / `snapshotForUser` は、対象コンテンツ群の所属チーム ID をまとめて `SELECT id FROM teams WHERE id IN (...) AND visibility = 'MEMBERS_AND_ABOVE'` の **1 本**で引く（コンテンツ件数・チーム数に比例して問い合わせを増やさない。N+1 禁止）。1 リクエスト内のメモ化は §9.3 と同じ方式で、リクエストをまたぐキャッシュは持たない（公開範囲の変更は次のリクエストから即時に効く）。
-6. SYSTEM_ADMIN: 上限判定では §11.6 と同じく SystemAdmin を除外する（新たなバイパスも新たな拒否も足さない。既存の各経路の SystemAdmin 挙動を維持）。
-7. 未ログイン（`userId = null`）: §17 Q1 どおり PUBLIC のみ。非公開チームの中身は PUBLIC 記事であっても見えない（公開 EP は既存の「非公開チーム」と同じ 404 応答。F06.4 `ActivityPublicContractIT` の等価性番人 AC-32 を本規則込みで維持する）。
+6. SYSTEM_ADMIN: **上限を課さない（既存挙動維持）**。各経路の SystemAdmin の結果は本戦役の前後で変わらない（新たなバイパスも新たな拒否も足さない）。
+7. **チームに在籍しない親組織の ADMIN**: 既存のチーム可視性判定（`visibleByLevel` の `MEMBERS_AND_ABOVE` は**そのチームのスコープでの**ロールだけを見る）に従い、非公開チームの詳細も中身も見えない（部外者と同一扱い）。親組織の ADMIN であることで上限を緩めない。組織の機能として配下チームの情報を集計表示する既存経路（組織ダッシュボード等）は §20.5.2 の棚卸しで個別に分類する。
+8. 未ログイン（`userId = null`）: §17 Q1 どおり PUBLIC のみ。非公開チームの中身は PUBLIC 記事であっても見えない（公開 EP は既存の「非公開チーム」と同じ 404 応答。F06.4 `ActivityPublicContractIT` の等価性番人 AC-32 を本規則込みで維持する）。
 
 ### 20.3 共通の門 `AccessControlService#checkScopeContentAccess`
 
@@ -3200,13 +3201,21 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 
 | メソッド | 契約 |
 |---|---|
-| `void checkScopeContentAccess(Long userId, Long scopeId, String scopeType)` | 既存 `checkMembership` の判定（在籍）を満たし、かつ scopeType=TEAM で当該チームが非公開チームなら閲覧者のそのチームでのロールが MEMBER 以上であること。満たさなければ **既存 `checkMembership` の非所属拒否と同一の例外**（403 `COMMON_002`）を投げる。ORGANIZATION / その他の scopeType は `checkMembership` と完全に同じ（挙動不変）。 |
+| `void checkScopeContentAccess(Long userId, Long scopeId, String scopeType)` | **既存メソッドの組合せで作る（二つ目の判定器を作らない。精査 M-2）**: `isMember(userId, scopeId, scopeType)` が真、かつ scopeType=TEAM で当該チームが非公開チームなら既存の `isRegularMemberOrAbove(userId, scopeId, "TEAM")`（`DefaultAccessControlService`。在籍が `role_kind=MEMBER`、または在籍したうえで ADMIN / DEPUTY_ADMIN。SUPPORTER・GUEST・非在籍を除く。SYSTEM_ADMIN を特別扱いしない）も真であること。満たさなければ **既存 `checkMembership` の非所属拒否と同一の例外**（403 `COMMON_002`）を投げる。ORGANIZATION / その他の scopeType は `checkMembership` と完全に同じ（挙動不変）。 |
 | `boolean canAccessScopeContent(Long userId, Long scopeId, String scopeType)` | 上記の真偽版（例外を投げない） |
 | `Set<Long> filterAccessibleTeamIds(Long userId, Collection<Long> teamIds)` | 複数チームの一括版。問い合わせ 2 本以内（在籍・ロールの一括取得＋非公開チーム ID の一括取得） |
+| `void checkMembershipForWrite(Long userId, Long scopeId, String scopeType)` | 中身を返さない書き込み用の別名。判定は `checkMembership` と同一（§20.5.1。呼び出し箇所の意図を明示し ArchUnit で分類するため） |
 
 - `checkMembership` の意味は変えない（書き込み・在籍確認の用途があるため）。**読み取り経路**の `checkMembership` / `isMember` 呼び出しを §20.5 の表に従ってこの門へ置き換える。
-- ロールは `MembershipBatchQueryService#snapshotForUser` の `roleByScope`（権限ロールと所属ロールの最強）で判定する。GUEST（user_roles の権限ロール）は MEMBER 未満として扱う。
-- 書き込み経路は不変条件（非公開チームにサポーター・ゲストが在籍しない）で守り、門への置き換えは行わない（§20.10 既知課題 K-3 に残す）。
+- GUEST（user_roles の権限ロール）は在籍（memberships）を持たないため `isMember` で落ちる。
+- 門と Resolver（§20.2）の結果が非公開チームで一致することを等価性の番人（§20.6 `ScopeContentAccessGateEquivalenceTest`）で固定する。
+- 中身を返さない書き込みは不変条件（非公開チームにサポーター・ゲストが在籍しない）で守る。**応答本文で中身を返す書き込み**（作成・更新の応答に一覧・他人の投稿・添付 URL 等を含むもの）は門を通す（精査 S-5）。
+
+#### 20.3.1 通知の読み出し時の除外（精査 S-4）
+
+- 通知一覧・未読件数・通知詳細（F04.11 の受信箱、確認通知の一覧を含む）を読み出すとき、通知の送り元スコープ（`notifications.scope_type = 'TEAM'` と `scope_id`）が非公開チームで、閲覧者のそのチームでのロールが MEMBER 未満なら**除外**する。判定は読み出す通知群のチーム ID を集めて `filterAccessibleTeamIds` で 1 回（N+1 禁止）。未読件数も同じ述語で数える。詳細は不在の通知と同一応答。
+- 既に送信済みの Web Push・メールの本文は取り消せない（既知の制約）。遡って行を削除はしない。
+- 非公開化で外したことを知らせる通知（F01.2 03）は、送り元スコープをチームではなく受信者本人（`PERSONAL`／システム）で保存し、この除外の対象にしない。
 
 ### 20.4 拒否時の HTTP 応答と存在オラクル
 
@@ -3217,34 +3226,165 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 - チーム slug の実在は非機密（01_authorization_baseline.md の 2026-08-04 確定注記）。`GET /api/v1/teams/{slug}` が実在＝403 `VISIBILITY_001`・不在＝404 `TEAM_001` で分かれる既存挙動は維持し、FE はこの差で「理由表示」と「見つかりません」を出し分ける（F05.1 / F05.5 §画面）。拒否時の本文にチーム名・メンバー・中身を含めない。
 - 公開範囲の段（非公開か SUPPORTERS_AND_ABOVE か等）を拒否応答に載せない。FE の理由表示は「メンバー限定のチームなど、公開範囲の外にいるため表示できません」の汎用文言とする（§20.8）。
 
-### 20.5 ドメイン別の適用表
+### 20.5 読み取り経路の棚卸し（全パッケージ・2026-11-25 精査第1パス S-1 で差し替え）
 
-recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）が非公開チームの中身を読めた読み取り経路。各行の「適用」に従って置き換え、各ドメイン設計書の冒頭に本節への参照を置く。
+#### 20.5.1 判定の分類と書き分けの規則
 
-| ドメイン | 設計書 | 置き換え対象（読み取り経路） | 適用 | AC |
+| 分類 | 意味 | 実装 |
+|---|---|---|
+| **門** | TEAM スコープの中身を返す読み取り | `checkScopeContentAccess` / `canAccessScopeContent` / `filterAccessibleTeamIds`（§20.3） |
+| **Resolver** | `ContentVisibilityChecker` を通る経路 | §20.2 の上限で自動。追加の門は不要（重ねてもよい） |
+| **書き込み** | 中身を返さない作成・更新・削除 | 新設の `checkMembershipForWrite`（`checkMembership` と同じ判定の別名）。不変条件（非公開チームにサポーター・ゲストが在籍しない）に依拠する |
+| **中身を返す書き込み** | 作成・更新の応答本文に中身（他人の投稿・一覧・添付 URL 等）を含むもの | **門**を通す（精査 S-5） |
+| **対象外** | チームの中身を返さない・TEAM スコープでない | 理由を棚卸し表と ArchUnit の許可リストに書く |
+
+- **直呼び禁止**: `checkMembership` / `isMember` を業務パッケージから直接呼ぶことを ArchUnit（`ScopeContentAccessGateCoverageTest`、全パッケージ対象）で禁止する。呼び出し側は上表のどれかの名前で意図を明示する。例外は理由付きの許可リスト（クラス名＋理由）だけ。これにより「読み取りか書き込みか」が全呼び出し箇所で機械的に分類される。
+- 判定はパッケージ単位で分類し、各パッケージ内のメソッドは上表の規則で書き分ける（同じクラスに読み取りと書き込みが混在するため）。
+
+#### 20.5.2 棚卸し表（BE。origin/main 2026-11-25 時点、`checkMembership(` / `isMember(` の呼び出し 550 箇所・250 ファイル・71 パッケージ）
+
+括弧内はそのクラスの呼び出し数。分類「門」のパッケージでも、書き込み専用メソッドは §20.5.1 の「書き込み」に書き分ける。
+
+| パッケージ | 呼び出し数 | クラス（呼び出し数） | 分類 | 理由・備考 |
 |---|---|---|---|---|
-| 掲示板 | F05.1 | `BulletinAccessGuard`（一覧・詳細・返信・既読・リアクション読み取り）、`SurveyBulletinThreadService` | 門 | AC-0159-10 |
-| ファイル共有 | F05.5 | `SharedFolderAccessGuard`・`SharedFolderQueryService`・`SharedFolderService` の読み取り（フォルダ一覧・ファイル詳細・ダウンロード URL 発行） | 門 | AC-0159-11 |
-| タイムライン | F04.1 | `TimelinePostVisibilityAccessGuard`・`TimelinePostService`（フィード・詳細）、`TimelineAttachmentAccessGuard`（添付） | Resolver 上限＋門 | AC-0159-12 |
-| 活動記録 | F06.4 | `ActivityScopeAccessGuard`（一覧・詳細・コメント。非公開チームでは PUBLIC 記録も不可）、統計・CSV は F06.4 §15 | 門＋Resolver 上限 | AC-0159-13 |
-| スケジュール | F03.1 / F03.10 | `ScheduleService`・`ScheduleQueryService`・`TeamAnnualScheduleController`・`TeamEventCategoryController` | 門＋Resolver 上限 | AC-0159-14 |
-| ブログ（タグ・連載） | F06.1 | `BlogTagService`・`BlogSeriesService`（記事本体は `BlogScopeAccessGuard#assertCanView(TEAM)` で防げており回帰のみ） | 門 | AC-0159-15 |
-| アンケート | F05.4 | `SurveyAccessGuard`・`SurveyService`（一覧・詳細・集計） | 門 | AC-0159-16 |
-| 回覧 | F05.2 | `CirculationService`（一覧・詳細・押印状況） | 門（受信者 ACL は維持し AND） | AC-0159-17 |
-| ギャラリー | F06.2 | `PhotoAlbumService`・`PhotoService`（アルバム・写真・画像 URL 発行） | 門＋Resolver 上限 | AC-0159-18 |
-| ナレッジベース | F06.5 | `KbPageController` 配下の読み取り | 門 | AC-0159-19 |
-| TODO・プロジェクト | F02.3 | `ProjectAccessGuard`・`TodoAccessGuard` の読み取り | 門 | AC-0159-20 |
-| チャット | F04.2 | `ChatChannelAccessGuard`（チーム系チャンネル一覧・メッセージ取得） | 門（チャンネルメンバー判定は維持し AND） | AC-0159-21 |
-| フォーム | F05.7 | `FormTemplateService`・`FormSubmissionService` の読み取り | 門 | AC-0159-22 |
-| ダッシュボード | F02.2 / F02.2.1 | `DashboardService`・`DashboardWidgetVisibilityService`・`ScopeActionRequiredFacade`（チームダッシュボード・個人ダッシュボードのチーム由来項目・要対応） | 門（一括版 `filterAccessibleTeamIds`） | AC-0159-23 |
-| コルクボード・ブログ本体 | F09.8 / F06.1 | 既に `assertCanView(TEAM)` 相当で防げている（回帰固定のみ） | — | AC-0159-24 |
-| 全体検索 | F04.6 §6 | `SearchViewerResolver` の母集団 | 母集団から除外 | AC-0159-30〜32 |
-| 通知・フィード | F04.11 / F03.18 ほか | `ActivityFeedService` ほか Resolver `filterAccessible` 経由の配信・一覧、§11.1 のメンション配信 | Resolver 上限（自動） | AC-0159-35〜36 |
+| `activity` | 21 | ActivityStatsController(1)、ActivityCommentService(1)、ActivityDetailService(2)、ActivityResultService(7)、ActivityScheduleSyncService(2)、ActivityScopeAccessGuard(4)、ActivityTemplateService(1)、AutomaticActivityListService(3) | 門 | 一覧・詳細・コメント・統計（F06.4 §15）。書き込みは書き込み用 |
+| `admin` | 1 | FeedbackService(1) | 対象外 | プラットフォーム運営のフィードバック。チームの中身を返さない |
+| `analytics` | 2 | PageViewScopeType(1)、PageViewAnalyticsAccessGuard(1) | 門 | チームのアクセス解析（管理者向け読み取り） |
+| `auth` | 2 | PendingInviteService(2) | 対象外（入口表） | PendingInviteService は入口。F01.2 03 の入口表で TEAM_073 |
+| `billing` | 1 | BillingEntitlementQueryService(1) | 対象外 | 課金・権利の照会。中身でなく契約情報で、既存の管理者判定に従う |
+| `budget` | 7 | BudgetCategoryService(1)、BudgetReportService(2)、BudgetTransactionService(4) | 門 | 予算・取引・報告の読み取り |
+| `bulletin` | 39 | BulletinAccessGuard(4)、BulletinArchiveFolderService(4)、BulletinAttachmentService(1)、BulletinCategoryService(5)、BulletinReactionService(1)、BulletinReadFacade(1)、BulletinReadStatusService(4)、BulletinReplyService(4)、BulletinThreadService(14)、SurveyBulletinThreadService(1) | 門 | 掲示板（F05.1） |
+| `chart` | 9 | ChartFormulaService(1)、ChartIntakeFormService(1)、ChartRecordService(3)、ChartSettingsService(4) | 門 | カルテ・記録の読み取り |
+| `chat` | 4 | ChatChannelAccessGuard(4) | 門 | チャンネル・メッセージ（F04.2）。WebSocket 購読は別行 |
+| `circulation` | 2 | CirculationService(2) | 門 | 回覧（受信者 ACL と AND） |
+| `cms` | 11 | BlogMediaAclService(1)、BlogPostService(2)、BlogSeriesService(4)、BlogTagService(4) | 門 | ブログのタグ・連載・メディア ACL。記事本体は Resolver（既存 assertCanView(TEAM)） |
+| `committee` | 4 | CommitteeInvitationService(1)、CommitteeService(3) | 対象外 | COMMITTEE スコープ（チームではない） |
+| `common` | 8 | AccessControlService(2)、ScopeConcealingAccessGate(2)、AutomaticActivityActualPolicy(1)、AccessGuard(1)、MembershipQueryCache(2) | 基盤 | AccessControlService の定義・ScopeConcealingAccessGate・MembershipQueryCache。秘匿ゲート内部の所属判定を門へ差し替える |
+| `corkboard` | 8 | CorkboardPermissionService(3)、CorkboardScopedBoardVisibilityGuard(1)、CorkboardService(4) | 門（回帰） | 既に CorkboardScopedBoardVisibilityGuard で防げている。ボード読み取りを門へ統一 |
+| `dashboard` | 5 | DashboardScopeTabService(1)、DashboardService(2)、DashboardWidgetVisibilityService(2) | 門 | チーム/個人ダッシュボード・ウィジェット・要対応（一括版） |
+| `digest` | 3 | DigestConfigService(1)、DigestGenerationService(2) | 門 | タイムラインダイジェストの設定・生成結果の読み取り |
+| `directmail` | 2 | DirectMailService(1)、DirectMailTemplateService(1) | 門 | DM・テンプレートの読み取り |
+| `disclosure` | 6 | DisclosureExportService(2)、DisclosureFormDraftService(2)、DisclosureFormTemplateService(2) | 門 | 情報開示フォームの読み取り・出力 |
+| `effortrecord` | 1 | EffortTeamAccessGuard(1) | 門 | 頑張り記録のチーム共有投影 |
+| `equipment` | 13 | EquipmentAssignmentService(4)、EquipmentAssignmentViewAccessGuard(1)、EquipmentItemService(8) | 門 | 備品・貸出の読み取り |
+| `event` | 2 | EventScopeAccessGuard(2) | 門 | イベント（チケット含む）の読み取り。公開 EP は §20.5.2 |
+| `facility` | 3 | FacilityAccessGuard(3) | 門 | 施設予約の読み取り |
+| `family` | 30 | AnniversaryService(5)、CoinTossService(3)、DutyRotationService(2)、PresenceIconService(1)、PresenceService(4)、RoleAliasService(1)、ShoppingListService(13)、WallpaperService(1) | 門 | 家族チーム（記念日・当番・買い物リスト等）。TEAM スコープのため同じ規則 |
+| `filesharing` | 10 | SharedFolderAccessGuard(2)、SharedFolderQueryService(2)、SharedFolderService(6) | 門 | ファイル共有（F05.5）。公開リンクは §20.5.2 |
+| `forms` | 6 | FormPresetCatalogController(1)、FormSubmissionService(3)、FormTemplateService(2) | 門 | フォーム（F05.7） |
+| `gallery` | 5 | GalleryMediaUploadService(1)、PhotoService(4) | 門 | ギャラリー（F06.2）。画像 URL 発行を含む |
+| `gamification` | 7 | GamificationBadgeController(2)、GamificationPointController(2)、GamificationRankingController(1)、GamificationSettingController(2) | 門 | バッジ・ポイント・ランキング・設定の読み取り |
+| `incident` | 7 | IncidentAccessGuard(2)、IncidentCategoryService(2)、IncidentService(2)、MaintenanceScheduleService(1) | 門 | インシデント・保守予定の読み取り |
+| `jobmatching` | 2 | JobPolicy(2) | 門 | チーム内の求人方針の読み取り |
+| `joinrequest` | 2 | JoinRequestService(2) | 対象外（入口表） | 参加申請。申請者は非所属が前提。承認で SUPPORTER を作る経路は入口表 |
+| `knowledgebase` | 22 | KbFavoriteController(3)、KbPageController(10)、KbRevisionController(3)、KbSearchController(2)、KbTemplateController(4) | 門 | KB（F06.5） |
+| `line` | 2 | SnsFeedConfigService(2) | 門 | SNS フィード設定（管理者向け読み取り） |
+| `match` | 7 | MatchStatsController(3)、MatchAccessService(1)、MatchVisibilityResolver(3) | 門 | 試合統計。MatchVisibilityResolver は Resolver 上限で自動 |
+| `matching` | 3 | MatchProposalService(3) | 門 | チーム間マッチングの自チーム側の読み取り |
+| `member` | 10 | MemberProfileFieldService(2)、MemberSubtabVisibilityService(2)、TeamPageService(6) | 門 | メンバープロフィール・サブタブ・TeamPageService |
+| `memberinfo` | 3 | MemberInfoFieldService(1)、MemberInfoResponseService(2) | 門 | メンバー情報フォーム・回答 |
+| `membership` | 2 | CheckinLocationService(1)、MemberCardService(1) | 門 | 会員証・チェックイン地点 |
+| `notification` | 11 | OrgConfirmableNotificationController(1)、OrgConfirmableNotificationSettingsController(1)、OrgConfirmableNotificationTemplateController(1)、OrgConfirmableRecipientGroupController(1)、TeamConfirmableNotificationController(1)、TeamConfirmableNotificationSettingsController(1)、TeamConfirmableNotificationTemplateController(1)、TeamConfirmableRecipientGroupController(1)、ConfirmableScopeAuthorizer(2)、NotificationPreferenceService(1) | 門 | 確認通知（Team* コントローラ・ConfirmableScopeAuthorizer）。NotificationPreferenceService は個人設定で対象外 |
+| `organization` | 2 | OrganizationExtendedProfileService(2) | 対象外 | 組織スコープ（F00 §20.10 K-1） |
+| `parking` | 9 | ParkingAccessGuard(1)、ParkingSettingsService(1)、ParkingSpaceService(6)、ParkingVisitorReservationService(1) | 門 | 駐車場 |
+| `payment` | 12 | OrganizationAccessRequirementController(1)、OrganizationContentPaymentGateController(1)、OrganizationPaymentController(1)、OrganizationPaymentItemController(1)、OrganizationPaymentSummaryController(1)、TeamAccessRequirementController(1)、TeamContentPaymentGateController(1)、TeamPaymentController(1)、TeamPaymentItemController(1)、TeamPaymentSummaryController(1)、PaymentItemService(2) | 門 | チームの支払い・支払い項目・課金ゲート・集計（Team* コントローラ）。Organization* は対象外 |
+| `performance` | 10 | PerformanceExportService(2)、PerformanceMetricService(2)、PerformanceRecordService(1)、PerformanceStatsService(5) | 門 | パフォーマンス記録・統計・出力 |
+| `promotion` | 7 | CouponService(2)、PromotionService(4)、SegmentPresetService(1) | 門 | クーポン・プロモーション・セグメント |
+| `property` | 8 | PropertyWorkPackageController(7)、VendorController(1) | 門 | 物件作業・業者 |
+| `proxyvote` | 12 | ProxyDelegationService(3)、ProxyVoteCastService(2)、ProxyVoteCommentService(2)、ProxyVoteExportService(2)、ProxyVoteSessionService(3) | 門 | 議決権代理行使 |
+| `queue` | 1 | QueueAccessGuard(1) | 門 | 順番待ち |
+| `receipt` | 2 | ReceiptManagementReadFacade(1)、ReceiptPresetService(1) | 門 | 領収書管理の読み取り |
+| `recruitment` | 10 | RecruitmentListingFacade(5)、RecruitmentListingService(1)、RecruitmentMoneyFacade(2)、RecruitmentSubcategoryService(1)、RecruitmentTemplateService(1) | 門 | 募集掲載の内部読み取り（公開掲載は掲載自身の公開範囲＋非公開チームは掲載不可を別課題 K-5） |
+| `repairplan` | 12 | RepairPlanDashboardController(1)、RepairPlanQuoteKanbanController(1)、RepairPlanTimelineController(1)、BoardHandoverPackService(2)、RepairPlanItemService(2)、RepairPlanScenarioService(3)、TeamMemberTermService(2) | 門 | 修繕計画 |
+| `reservation` | 3 | ReservationDetailFacade(1)、ReservationSlotTemplateService(1)、ReservationViewAccessGuard(1) | 門 | 予約の内部読み取り |
+| `resident` | 12 | DwellingUnitService(4)、PropertyListingService(6)、ResidentDocumentService(1)、ResidentRegistryService(1) | 門 | 住民台帳・住戸・物件掲載・書類 |
+| `role` | 12 | DefaultAccessControlService(7)、MembershipInviteService(2)、OwnershipTransferOfferService(1)、PermissionGroupService(2) | 対象外（権限管理） | DefaultAccessControlService 本体・招待・オーナー委譲・権限グループ（管理操作。入口は入口表） |
+| `safetycheck` | 7 | SafetyCheckService(2)、SafetyFollowupService(1)、SafetyResponseService(1)、SafetyTemplateService(3) | 門 | 安否確認 |
+| `schedule` | 11 | OrgAnnualScheduleController(2)、TeamAnnualScheduleController(2)、TeamEventCategoryController(1)、ScheduleCrossRefService(1)、ScheduleMediaAclService(2)、ScheduleMediaQueryService(1)、ScheduleService(2) | 門 | 予定・年間計画・イベントカテゴリ・予定メディア |
+| `school` | 3 | AttendanceRequirementService(2)、SchoolAttendanceAccessPolicy(1) | 門 | 出欠要件・出欠アクセス方針 |
+| `service` | 14 | ServiceRecordExportService(2)、ServiceRecordFieldService(2)、ServiceRecordService(6)、ServiceRecordTemplateService(4) | 門 | サービス記録 |
+| `shift` | 17 | MemberWorkConstraintService(2)、ShiftAvailabilityService(1)、ShiftChangeRequestFacade(3)、ShiftHourlyRateAuthorizer(3)、ShiftPdfFacade(2)、ShiftPositionFacade(1)、ShiftScheduleFacade(2)、ShiftSlotFacade(1)、ShiftSwapFacade(2) | 門 | シフト・希望・交代・時給（時給は既存の追加判定と AND） |
+| `shiftbudget` | 7 | ShiftBudgetSummaryController(1)、BudgetThresholdAlertService(1)、MonthlyShiftBudgetCloseService(1)、ShiftBudgetAllocationService(1)、ShiftBudgetFailedEventService(1)、ShiftBudgetSummaryService(1)、TodoBudgetLinkService(1) | 門 | シフト予算 |
+| `signage` | 4 | SignageEmergencyService(1)、SignageScreenReadFacade(1)、SignageScreenService(1)、SignageSlotService(1) | 門 | サイネージ |
+| `social` | 9 | AnnouncementBroadcastService(1)、AnnouncementRangeTemplateService(1)、BroadcastAudienceResolver(2)、TeamFriendFolderService(1)、TeamFriendQueryService(3)、TeamFriendViewAccessGuard(1) | 門／宛先 | TeamFriend* は門。AnnouncementBroadcastService・BroadcastAudienceResolver は宛先作成（§20.5.3） |
+| `survey` | 1 | SurveyAccessGuard(1) | 門 | アンケート（F05.4） |
+| `team` | 5 | OrganizationTeamSearchController(1)、TeamShiftSettingsController(1)、TeamExtendedProfileService(2)、TeamSearchService(1) | 門／対象外 | TeamExtendedProfileService・TeamShiftSettingsController は門。TeamSearchService・OrganizationTeamSearchController はチーム自身の可視性述語（既存）で対象外 |
+| `template` | 4 | OrganizationModuleController(2)、TeamModuleController(2) | 門 | チームのモジュール設定の読み取り。Organization* は対象外 |
+| `ticket` | 1 | TicketAccessGuard(1) | 門 | 回数券 |
+| `timeline` | 7 | TimelineAttachmentAccessGuard(2)、TimelinePostService(2)、TimelinePostVisibilityAccessGuard(3) | 門＋Resolver | タイムライン（F04.1） |
+| `timetable` | 13 | TimetableChangeService(1)、TimetablePeriodTemplateService(1)、TimetableService(4)、TimetableSlotService(5)、TimetableTermService(2) | 門 | 時間割 |
+| `todo` | 13 | MilestoneGateController(1)、ProjectAccessGuard(4)、TodoAccessGuard(2)、TodoCommentService(1)、TodoHandoffService(3)、TodoStatusLabelService(2) | 門 | TODO・プロジェクト・マイルストーン |
+| `tournament` | 7 | OrganizationTournamentSummaryController(1)、TournamentEntryMemberService(1)、TournamentEntryTemplateService(1)、FixtureRosterService(2)、TournamentTemplateService(2) | 門 | 大会の自チーム側（エントリーメンバー等）。Organization* は対象外 |
+| `translation` | 20 | ContentTranslationController(14)、TranslationAssignmentController(4)、TranslationConfigController(2) | 門 | 翻訳（チームのコンテンツの翻訳本文を返すため） |
+| `village` | 4 | VillageService(4) | 対象外 | VILLAGE スコープ（チームではない） |
+| `workflow` | 8 | WorkflowApprovalService(1)、WorkflowCommentService(1)、WorkflowRequestAttachmentService(1)、WorkflowRequestService(3)、WorkflowTemplateService(2) | 門 | ワークフロー申請・承認・添付 |
+
+#### 20.5.3 公開 EP・トークン経路（未ログインでも到達。AC-0159-08 は本表から表駆動）
+
+非公開チームに対しては、各経路で**既存の「非公開チーム」または「不在」と同一の応答**を返す。
+
+| 経路 | 実装 | 非公開チームでの扱い |
+|---|---|---|
+| `GET /api/v1/public/teams/{slug}` | `PublicTeamController` | 既存の非公開チーム応答（`PUBLIC_001` 系 404）。回帰固定 |
+| `GET /api/v1/public/teams/{teamId}/posts`・`/posts/{postId}` | `PublicTeamPostController:54` | 同上（PUBLIC 記事でも返さない） |
+| `GET /api/v1/public/teams/{teamId}/events` | `PublicEventController:71` | 同上 |
+| `GET /api/v1/public/teams/{teamId}/timeline-posts` | `PublicTimelinePostController:72` | 同上 |
+| `GET /api/v1/public/teams/{teamId}/activities`・`/activities/{id}`・`/api/v1/public/activities/{id}` | `ActivityPublicController` | 同上。`ActivityPublicContractIT` の等価性番人 AC-32 を維持 |
+| `GET /api/v1/public/teams/{teamId}/faqs` | `PublicFaqController:73` | 同上 |
+| `GET/POST /api/v1/public/blog-posts/{postId}/comments` | `PublicPostCommentController` | 記事が非公開チームのものなら不在の記事と同一応答 |
+| `POST /api/v1/public/confirm/{token}` | `PublicConfirmationController` | トークンの宛先がそのチームで MEMBER 未満なら不在トークンと同一応答（MEMBER 以上の宛先は従来どおり） |
+| `POST /api/v1/public/file-links/{token}/access`・`/download-url`、`POST /api/v1/shared-links/{token}/access` | `PublicFileLinkController`・`FileLinkController`・`SharedFileLinkService` | **多層防御**: (1) 発行 `POST /api/v1/files/{fileId}/links` は非公開チームのファイルなら 403 `FILE_SHARING_021`（新規・番号はマージ時に再確認）。(2) 非公開化（F01.2 03）と是正 migration（F01.2 04）で、そのチームのファイルのリンクを `is_active = FALSE` にする。(3) アクセス時にもファイルの所属チームの公開範囲を再確認し、非公開なら無効化済みリンクと同一応答（410 `FILE_SHARING_018`） |
+| `GET /sitemap.xml`・`/sitemap-{page}.xml` | `PublicSitemapController` | 非公開チームの URL を含めない（回帰固定） |
+| `GET /api/v1/public/users/{userId}/posts` | `PublicUserProfileController` | 非公開チームのスコープの投稿を含めない |
+| `GET /api/v1/public/teams/search`（Discover） | `PublicDiscoverController` | 既存どおり PUBLIC のみ（回帰固定） |
+| `GET /api/v1/public/teams/slug-resolve` | `PublicSlugResolveController` | 対象外（slug の実在は非機密。2026-08-04 確定） |
+
+実装時に `SecurityConfig` の permitAll と `@IntentionallyPublic` の全件を列挙して本表と突き合わせ、漏れがあれば本表に足す（§20.5.7）。
+
+#### 20.5.4 一斉配信の宛先作成（精査 M-1）
+
+チームの中身を知らせる一斉配信の宛先は、非公開チームでは **MEMBER 以上に限る**（不変条件に頼らず上限を掛ける）。宛先解決に `AccessControlService#listActiveRegularMemberIds` 相当の集合（1 クエリ）を使う。
+
+| 宛先作成箇所 | 現在の母集団 | 非公開チームでの扱い |
+|---|---|---|
+| `membership/fanout/TeamFanoutRecipientSource`（fan-out） | 在籍全員（サポーター込み） | キーセット問い合わせに「非公開チームなら role_kind=MEMBER のみ」を加える |
+| `UserRoleRepository#findUserIdsByScope` を使う `ScheduleAttendanceService`・`ScheduleAttendanceSolicitationNotificationListener`・`ScheduleReminderNotificationListener`・`SurveyUniverseResolver`・`SurveyPublishNotificationListener`・`TeamSlotNoteNotifyListener`・`VisibilityTemplateEvaluator` | スコープの所属（ロール込み） | MEMBER 以上に絞る（`includeSupporters` 等のトグルが ON でも非公開チームではサポーターを含めない） |
+| `social/AnnouncementBroadcastService`・`BroadcastAudienceResolver` | 配信範囲で決まる | 非公開チームを配信元・配信先とするとき MEMBER 以上に絞る |
+| `recruitment/RecruitmentListingService`（宛先 SUPPORTERS） | サポーター | 非公開チームでは空集合 |
+| `MembershipService#getActiveUserIdsInScopes`（検索 USER 種別） | 在籍全員 | F04.6 の母集団規則に従う |
+
+実装時に `listActiveMemberIds` / `findUserIdsByScope` / `findActive*UserIdsByScope*` / `getActiveUserIdsInScopes` の呼び出しを grep で全件列挙し、本表と突き合わせる（§20.5.7）。
+
+#### 20.5.5 WebSocket・署名付き URL（精査 M-5）
+
+- `chat/ws/ChatChannelSubscriptionInterceptor`: SUBSCRIBE 時の判定を門に置き換える。非公開化で外れた利用者の**既存の購読**は、後始末の一括イベント（F01.2 03）を受けた chat ドメインがチャンネルメンバーを外し、その利用者のチーム系チャンネルの購読を切る（以後のメッセージを配信しない）。`match/live/MatchLiveSubscriptionInterceptor` も同じ規則（非公開チームの試合）。
+- 署名付き URL（R2 Presigned URL）と CDN キャッシュは、発行済みのものは**有効期限まで有効**（取り消せない既知の制約）。新たな発行は門で止める。期限の値は実装の設定値を AC-0159-37 で観測し記録する。
+
+#### 20.5.6 FE 画面（`frontend/app/pages/teams/[slug]/` 配下 90 項目。origin/main 2026-11-25 時点）
+
+`activities`、`activity-stats`、`activity-templates`、`admin`、`advertiser`、`affiliations`、`analytics`、`anniversaries`、`announcements`、`annual-plan`、`audit-logs`、`billing`、`blog`、`budget`、`bulletin`、`charts`、`chat`、`circulation`、`coin-toss`、`direct-mail`、`duties`、`equipment`、`events`、`extended-profile`、`facilities`、`files`、`forms`、`friend-feed`、`friend-folders`、`friend-forward-exports`、`friends`、`gallery`、`gamification`、`guide`、`homerooms`、`incidents`、`index`、`info`、`invites`、`jobs`、`join-requests`、`kb`、`league-transfers`、`loyalty`、`market`、`match-analytics`、`matches`、`matching`、`member-cards`、`member-fields`、`member-info`、`member-profiles`、`members`、`modules`、`nav`、`onboarding`、`parking`、`payment-requests`、`payments`、`performance`、`permission-groups`、`presence`、`projects`、`queue`、`recruitment-listings`、`repair-plan`、`reservations`、`residents`、`safety`、`schedule`、`schedule-attendance`、`schedule-keeps`、`school-attendance`、`service-records`、`settings`、`shifts`、`shopping-lists`、`signage`、`skills`、`supporters`、`surveys`、`tickets`、`timeline`、`timeline-digest`、`timetable`、`todos`、`tournaments`、`voting`、`webhooks`、`workflows`
+
+- 全項目で、チーム詳細が 403 なら共通部品 `TeamAccessDeniedState` の理由表示、404 なら「見つかりません」を出す（AC-0159-88 はこの一覧から表駆動）。
+- 管理者専用画面（`settings`・`admin`・`advertiser`・`billing`・`permission-groups`・`modules`・`audit-logs`・`invites`・`join-requests`・`supporters`・`guide`・`onboarding`・`nav` など）も 403 時は同じ部品で理由を出す（判定は既存の管理者判定のまま）。
+
+#### 20.5.7 棚卸しの自動生成と突き合わせ（実装時の手順）
+
+1. 実装 PR の作業開始時に、origin/main で次を実行して一覧を作る（各行: ファイル・行・メソッド名・呼び出し先）。
+   - `git grep -n -E '\b(checkMembership|isMember)\(' -- backend/src/main/java`
+   - `git grep -n -E 'listActiveMemberIds|findUserIdsByScope|findActive[A-Za-z]*UserIdsByScope|getActiveUserIdsInScopes' -- backend/src/main/java`
+   - `SecurityConfig` の permitAll と `@IntentionallyPublic`、`*SubscriptionInterceptor`
+   - `frontend/app/pages/teams/[slug]/` 配下のページ
+2. 一覧を本節の表と突き合わせ、表に無いパッケージ・経路が出たら**本節に行を足してから**実装する（設計書を正本に保つ）。
+3. 置き換え後、ArchUnit `ScopeContentAccessGateCoverageTest` が全パッケージで緑（直呼び 0・許可リストは理由付き）であることを確認する。
+4. `ScopeContentAccessMatrixIT` は本節の表（門・Resolver の行）から読み取りエンドポイントを表駆動で生成し、§20.6 の検証を行う。
 
 ### 20.6 番人（ガードテスト）
 
-- `ScopeContentAccessMatrixIT`（新設）: §20.5 の各ドメインの読み取りエンドポイントを列挙し、非公開チームに対して「MEMBER / ADMIN は 200」「在籍サポーター（是正前データを模したフィクスチャ）・GUEST・部外者・他チームのメンバー・他組織のメンバーは**部外者と同一応答**」を表駆動で検証する。公開チーム（`SUPPORTERS_AND_ABOVE`）では従来の結果を回帰固定する。
-- `ScopeContentAccessGateCoverageTest`（新設・ArchUnit）: §20.5 のパッケージの読み取り系 Service / Guard が TEAM スコープの判定に `checkMembership` / `isMember` を直接使ったら落ちる（許可リストは理由コメント必須）。
+- `ScopeContentAccessMatrixIT`（新設）: §20.5.2 の棚卸し表（門・Resolver の行）と §20.5.3 の公開 EP 表から読み取りエンドポイントを**表駆動**で生成し、非公開チームに対して「MEMBER / ADMIN は 200」「在籍サポーター（是正前データを模したフィクスチャ）・GUEST・部外者・他チームのメンバー・他組織のメンバーは**部外者と同一応答**」を表駆動で検証する。公開チーム（`SUPPORTERS_AND_ABOVE`）では従来の結果を回帰固定する。
+- `ScopeContentAccessGateCoverageTest`（新設・ArchUnit）: **全パッケージ**の Service / Guard / Controller / Facade / Listener から `AccessControlService#checkMembership` / `#isMember`（および `ActivityScopeAccessGuard` 等の同名ラッパ）を直接呼ぶと落ちる。呼び出しは `checkScopeContentAccess` 系か `checkMembershipForWrite` のどちらかに書き分ける（§20.5.1）。例外は理由付きの許可リスト（クラス名＋理由）だけ。
+- `ScopeContentAccessGateEquivalenceTest`（新設）: 非公開チームで、閲覧者ロール（ADMIN / DEPUTY_ADMIN / MEMBER / SUPPORTER / GUEST / 非在籍の親組織 ADMIN / 部外者 / SYSTEM_ADMIN）ごとに、門（`canAccessScopeContent`）と Resolver（`canView(TEAM, teamId)`）の結果が一致する（SYSTEM_ADMIN は既存挙動どおりの差を許可リストで明示）。
+- `TeamContentAudienceCoverageTest`（新設・ArchUnit）: §20.5.4 の宛先作成メソッドを、非公開チーム用の絞り込みを経ずに通知・fan-out へ渡す呼び出しを禁止する（許可リストは理由付き）。
+- `MembersOnlyTeamEntryChokePointTest`（新設・ArchUnit）: `memberships` への SUPPORTER 在籍の作成・変更と `user_roles` への GUEST 付与が、入口の関所（F01.2 03「入口の関所」）以外から行われないこと（入口の網羅の番人。精査 S-5）。
 - `MembersOnlyTeamSupporterInvariantIT`（新設）: 非公開化・招待承諾・申請承認・ロール変更の操作列の後、非公開チームに在籍中の SUPPORTER（`memberships.role_kind='SUPPORTER' AND left_at IS NULL`）と GUEST（`user_roles`）が 0 件であること。
 - Resolver: `AbstractContentVisibilityResolver` の上限判定の単体テスト（チーム 4 段 × 閲覧者ロール 6 種＋未ログイン＋SystemAdmin の全組合せ）と、問い合わせ本数の番人（`filterAccessible` で 50 チーム混在でも追加問い合わせ 1 本）。
 
@@ -3253,6 +3393,7 @@ recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）�
 - 1000 万ユーザー・チーム数十万を前提とする。上限判定の追加コストは `filterAccessible` 1 回あたり問い合わせ 1 本（`teams` の主キー IN）まで。ループ内 Repository 呼び出し禁止。
 - 検索の母集団除外は `SearchViewerResolver` の既存の定数回の問い合わせに相乗りさせ、所属スコープ数に比例させない。
 - 非公開化の後始末（F01.2 03）は集合演算の UPDATE で行い、対象人数に比例した行単位の問い合わせを行わない（通知の作成のみ件数比例・非同期）。
+- 検証の主手段は**問い合わせ本数の番人**（Hibernate statistics）と **`EXPLAIN` の索引確認**とする（精査 M-7）。性能の実測は補助。
 
 ### 20.8 i18n キー（FE。6 言語 ja/en/zh/ko/es/de 全てにその言語の訳を入れる）
 
@@ -3264,7 +3405,7 @@ recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）�
 | `team.access.notFoundBody` | URL が正しいか確認してください。チームが削除された可能性があります。 |
 | `team.access.backToHome` | ホームへ戻る |
 
-非公開化の確認・統計・設定のキーは F01.2 02 / F06.4 §15 に記載する。BE のエラーメッセージ（`messages_{ja,en,zh,ko,es,de}.properties`）は新規コード（TEAM_073 / TEAM_074 / ACTIVITY_024 / ACTIVITY_025）を 6 言語で登録する。
+非公開化の確認・統計・設定のキーは F01.2 02 / F06.4 §15 に記載する。BE のエラーメッセージ（`messages_{ja,en,zh,ko,es,de}.properties`）は新規コード（TEAM_073 / TEAM_074 / ACTIVITY_024 / ACTIVITY_025 / FILE_SHARING_021）を 6 言語で登録する。非公開化で外したことを知らせる通知の題名・本文も BE の 6 言語メッセージ（F01.2 02）で持つ。
 
 ### 20.9 受け入れ条件（AC。本戦役の正本一覧）
 
@@ -3279,7 +3420,8 @@ recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）�
 - **AC-0159-05**: `checkMembership` の結果は本戦役前と全件一致（書き込み経路の回帰）。
 - **AC-0159-06**: チームを公開→非公開に変更した直後の次のリクエストから上限が効く（キャッシュで旧判定が残らない）。非公開→公開も同様に即時。
 - **AC-0159-07**: SYSTEM_ADMIN の各経路の結果は本戦役前と同一（新たなバイパス・拒否なし）。
-- **AC-0159-08**: 未ログインで非公開チームの公開 EP（`/api/v1/public/teams/{slug}/**`・活動記録公開 EP）を叩くと、既存の「非公開チーム」と同一の 404。`ActivityPublicContractIT` の等価性番人（AC-32）が緑のまま。
+- **AC-0159-08**: §20.5.3 の表の**全行**（未ログイン・ログイン済み部外者・外されたサポーターの各閲覧者）について、非公開チームでは表の「非公開チームでの扱い」どおりの応答になり、本文に中身が出ない（表駆動）。公開チームでは本戦役前と同一。`ActivityPublicContractIT` の等価性番人（AC-32）とサイトマップの回帰が緑のまま。
+- **AC-0159-09**: 非公開チームに在籍しない親組織の ADMIN は、チーム詳細・§20.5.2 の門の経路とも部外者と同一応答。そのチームに MEMBER として在籍していれば見える。
 
 #### D. ドメイン別（各行: 非公開チームで 権限あり=200／権限なし・他テナント=部外者と同一応答／公開チーム SUPPORTERS_AND_ABOVE ではサポーターの結果が本戦役前と同一／FE の該当画面 URL 直打ちで権限なし・他テナントは §20.8 の理由表示、不在 slug は「見つかりません」）
 
@@ -3298,7 +3440,8 @@ recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）�
 - **AC-0159-22** フォーム（テンプレート一覧・提出一覧・提出詳細）
 - **AC-0159-23** ダッシュボード（チームダッシュボードのウィジェット、個人ダッシュボードのチーム由来項目・要対応一覧に非公開チームの項目が権限なしには出ない。件数バッジも含めない）
 - **AC-0159-24** コルクボード・ブログ記事本体（回帰固定。既存の拒否が維持される）
-- **AC-0159-25** 番人: `ScopeContentAccessMatrixIT` が AC-0159-10〜24 の全エンドポイントを網羅し緑。`ScopeContentAccessGateCoverageTest` が、読み取り経路に `checkMembership` を足す変更で赤になる。
+- **AC-0159-25** 番人: `ScopeContentAccessMatrixIT` が §20.5.2 の「門」「Resolver」の全パッケージの読み取りエンドポイントを網羅して緑（AC-0159-10〜24 はその主要部分）。`ScopeContentAccessGateCoverageTest` が、任意のパッケージで `checkMembership` / `isMember` を直接呼ぶ変更で赤になる。`ScopeContentAccessGateEquivalenceTest` が緑。
+- **AC-0159-26** 公開ファイルリンク: 非公開チームのファイルにリンクを発行すると 403 `FILE_SHARING_021`。非公開化（F01.2 03）と是正 migration の後、そのチームのファイルの既存リンクは `is_active = FALSE`。フィクスチャで `is_active = TRUE` のまま残したリンクでも、アクセス・ダウンロード URL 発行は無効化済みリンクと同一応答（410 `FILE_SHARING_018`）で、URL もファイル名も返らない。公開チームのリンクは従来どおり。
 
 #### S. 全体検索（F04.6 §6）
 
@@ -3310,6 +3453,9 @@ recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）�
 
 - **AC-0159-35**: 非公開チームの新規コンテンツ（掲示板・タイムライン・活動記録・予定）の通知・メンション・アクティビティフィードは、権限なし（フィクスチャのサポーター）に配信されず一覧にも出ない。権限ありには従来どおり配信される。
 - **AC-0159-36**: 非公開化の前に受け取った通知のリンクを、外されたサポーターが開くと中身は返らず、FE は §20.8 の理由表示になる（クラッシュ・空表示にならない）。
+- **AC-0159-37**: 非公開化の直後、外されたサポーターの既存の WebSocket 購読（チーム系チャットチャンネル・試合ライブ）には以後のメッセージが届かない（5 秒以内）。新たな SUBSCRIBE は拒否。発行済みの署名付き URL の有効期限の値を観測して記録し、期限後は取得できないこと、非公開化後は新たな発行が拒否されることを確認する。
+- **AC-0159-38**: 非公開チームの一斉配信（fan-out・予定の出欠依頼/リマインド・アンケート公開・時間割メモ・お知らせ配信・募集のサポーター宛て）の宛先に、フィクスチャで残したサポーター・GUEST が入らない（不変条件に頼らない）。公開チームでは従来どおり（`includeSupporters` 等のトグルも従来どおり効く）。
+- **AC-0159-39**: 通知一覧・未読件数・通知詳細で、送り元が非公開チームの通知は、そのチームで MEMBER 未満の閲覧者には出ない（未読件数にも数えない。詳細は不在と同一応答）。MEMBER 以上には従来どおり。外したことを知らせる通知は外された本人に見える。通知 100 件の一覧取得で追加の問い合わせは 1 本。
 
 #### A. 活動統計（F06.4 §15 の AC-0159-70〜83 を参照）
 
@@ -3317,19 +3463,21 @@ recon（origin/main 2026-11-25）で、サポーター（在籍のみ判定）�
 
 #### F. 画面（AC-0159-85 は F06.4 §15.7、86 は F05.5 §6.9、87 は F05.1 §6.9）
 
-- **AC-0159-88**: 非公開チームの他の配下画面（`/teams/{slug}/` 配下のタイムライン・スケジュール・年間計画・活動記録・ギャラリー・アンケート・回覧・KB・TODO/プロジェクト・チャット・フォーム・ダッシュボード）を、サポーター（フィクスチャ）・GUEST・部外者・他チームの ADMIN が URL 直打ちすると、共通部品 `TeamAccessDeniedState` の理由表示が出る（空表示・クラッシュ・無限スピナーにならない）。不在 slug は「見つかりません」。実装時に対象ページを `frontend/app/pages/teams/[slug]/` から棚卸しし、表駆動の E2E で全ページを踏む。
-- **AC-0159-89**: 本戦役で追加した i18n キー（F00 §20.8・F01.2 02・F06.4 §15.6）が 6 言語すべてにその言語の訳で存在し、`locale-no-japanese-residue.spec.ts` が緑。BE の新規エラーコード 4 件が 6 言語の `messages_*.properties` にある。
+- **AC-0159-88**: 非公開チームの他の配下画面（`/teams/{slug}/` 配下のタイムライン・スケジュール・年間計画・活動記録・ギャラリー・アンケート・回覧・KB・TODO/プロジェクト・チャット・フォーム・ダッシュボード）を、サポーター（フィクスチャ）・GUEST・部外者・他チームの ADMIN が URL 直打ちすると、共通部品 `TeamAccessDeniedState` の理由表示が出る（空表示・クラッシュ・無限スピナーにならない）。不在 slug は「見つかりません」。§20.5.6 の一覧（実装時に §20.5.7 で再生成して突き合わせる）から表駆動の E2E で全ページを踏む。
+- **AC-0159-89**: 本戦役で追加した i18n キー（F00 §20.8・F01.2 02・F06.4 §15.6）が 6 言語すべてにその言語の訳で存在し、`locale-no-japanese-residue.spec.ts` が緑。BE の新規エラーコード 5 件と通知文が 6 言語の `messages_*.properties` にある。
 
 #### P. 性能
 
-- **AC-0159-90**: 1 万チーム・各 1 万コンテンツの規模試験データで、`filterAccessible`（ページ 20 件）と `checkScopeContentAccess` の p95 が本戦役前比 +10ms 以内。`EXPLAIN` で `teams` の主キー参照になっていること。
+- **AC-0159-90**: 主手段は番人。`filterAccessible`・`filterAccessibleTeamIds`・通知一覧・検索の母集団解決の追加問い合わせが、対象件数（10 件と 1,000 件）・チーム数（1 と 100）で変わらず各 1 本以内（Hibernate statistics）。追加の問い合わせは `EXPLAIN` で `teams` の主キー（`PRIMARY`）参照。補助として 1,000 チーム × 100 コンテンツの試験データで p95 を記録する（閾値は設けず回帰比較に使う）。
 
 ### 20.10 既知課題（範囲外。握りつぶさず別課題とする）
 
 - **K-1 組織 PRIVATE**: 組織の `PRIVATE`（SCOPE_AFFILIATED＝サポーター込み）配下の中身にサポーターを含めるかは今回対象外（裁定 1）。台帳への起票は殿が判断する（本設計 PR では起票しない）。
 - **K-2 用語の表示文言**: schedule `MEMBERS_ONLY`・gallery `ALL_MEMBERS` がサポーター込みなのに画面上「メンバー限定」と読める文言になっていないかの棚卸し（F00.5 §2.6 用語表）。enum 名は変えない。
 - **K-3 書き込み経路**: 書き込み経路の `checkMembership` は不変条件（非公開チームにサポーター・ゲストが在籍しない）に依拠する。不変条件は番人 `MembersOnlyTeamSupporterInvariantIT` で固定するが、書き込み経路そのものへの上限適用は別課題とする。
-- **K-4 受信済み通知**: 非公開化の前に正当に配信された通知の本文（題名を含みうる）は遡って削除しない（受信時点で閲覧権限があったため）。リンク先は AC-0159-36 で拒否される。削除が要るかはマスター確認事項として別途起票する。
+- **K-4 受信済み通知**: 通知の行は遡って削除しないが、読み出し時に除外する（§20.3.1・AC-0159-39）。**送信済みの Web Push・メール**の本文は取り消せない（既知の制約）。
+- **K-5 募集の公開掲載**: 非公開チームが募集（F03.11）を公開掲載できるかは別課題（掲載自身の公開範囲で判定している）。
+- **K-6 署名付き URL・CDN**: 発行済みの署名付き URL と CDN キャッシュは有効期限まで有効（§20.5.5）。
 
 
 ---

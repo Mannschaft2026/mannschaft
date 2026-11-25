@@ -1118,25 +1118,39 @@ WHERE o.archived_at IS NULL
 #### 手順（チームドメインの `TeamVisibilityTransitionFacade`）
 
 1. 認可（`PATCH /teams/{slug}` と同じ）。
-2. `SELECT ... FROM teams WHERE id = ? FOR UPDATE` でチーム行を排他ロックし、`version` を照合する（不一致は既存の楽観ロック競合 409）。
+2. `SELECT ... FROM teams WHERE id = ? FOR UPDATE` でチーム行を排他ロックし、`version` を照合する（不一致は既存の楽観ロック競合 409）。**ロック順の規則: どの経路も `teams` 行のロックを最初に取り**、その後に memberships / user_roles / supporter_applications / invite_tokens / invite_token_claims / shared_file_links の順で触る（精査 M-3。逆順を作らないことでデッドロックを起こさない）。
 3. 遷移が「公開側 → MEMBERS_AND_ABOVE」で `confirmSupporterRemoval` が true でなければ 409 `TEAM_074`（何も変えずにロールバック）。
 4. `teams.visibility` を更新する。
 5. **同一トランザクション内**で、次を集合演算で行う（行単位のループ問い合わせをしない）。
-   - membership ドメイン `MembershipService`: 当該チームの在籍サポーター全員の `left_at = 現在時刻`・`leave_reason = 'REMOVED'` を一括 UPDATE し、対象 user_id を返す。`MembershipChangedEvent`（既存）を対象ごとに発行し、既存の後始末リスナー（チャンネルメンバー・権限キャッシュ・サポーター数キャッシュの無効化 CMP-261004-1942 等）を通常の除名と同じく走らせる。
-   - role ドメイン `RoleService`: 当該チームの GUEST 行を一括 DELETE（最後の ADMIN 保護の対象外。GUEST のみ）。
+   - membership ドメイン `MembershipService`: 当該チームの在籍サポーター全員の `left_at = 現在時刻`・`leave_reason = 'REMOVED'` を一括 UPDATE し、対象 user_id を返す。**イベントは人数に比例させず一括イベント `MembershipsBulkEndedEvent(scopeType=TEAM, scopeId, userIds, reason=MEMBERS_ONLY_TRANSITION)` を 1 件発行する**（精査 M-4）。既存の `MembershipChangedEvent` の後始末リスナー（チャンネルメンバー・権限キャッシュ・サポーター数キャッシュの無効化 CMP-261004-1942 等）は、一括イベントを受けるアダプタ（AFTER_COMMIT・非同期・1000 人単位）から同じ処理を呼ぶ。同期で人数分のイベントを発行しない。
+   - role ドメイン `RoleService`: 当該チームの GUEST 行を一括 DELETE（最後の ADMIN 保護の対象外。GUEST のみ）。GUEST は在籍を持たないため `MembershipChangedEvent` は発行せず、チーム単位の権限キャッシュ無効化を 1 回だけ行う。
+   - filesharing ドメイン `SharedFileLinkService`: 当該チームのフォルダにあるファイルの共有リンクを一括で `is_active = FALSE` にする（F00 §20.5.3。精査 S-2）。
    - supporter ドメイン `SupporterService`: `supporter_applications` の当該チーム PENDING を一括で REJECTED にする。
    - role ドメイン `InviteService`: 当該チームの SUPPORTER ロールで `revoked_at IS NULL` のトークンに `revoked_at = 現在時刻` を一括設定する（MEMBER ロールのトークンは触らない）。
-6. 通知: `TeamMembersOnlyTransitionedEvent`（外した user_id 一覧・ゲスト user_id 一覧・チーム ID）を `@TransactionalEventListener(phase = AFTER_COMMIT)` で notification ドメインが受け、外した各人に 1 通ずつ通知（i18n `notification.teamMembersOnlyRemoved.*`）を非同期で作る。ロールバック時は通知しない。1000 件単位で分割投入する。
+6. 通知: `TeamMembersOnlyTransitionedEvent`（外した user_id 一覧・ゲスト user_id 一覧・チーム ID）を `@TransactionalEventListener(phase = AFTER_COMMIT)` で notification ドメインが受け、外した各人に 1 通ずつ通知（BE メッセージ `notification.team.membersOnlyRemoved.*`、受信者本人のスコープで保存）を非同期で作る。chat ドメインも同じイベントで、外した利用者のチーム系チャンネルの既存 WebSocket 購読を切る（F00 §20.5.5）。ロールバック時は通知しない。1000 件単位で分割投入する。
 7. 応答に実数（`visibilityTransition`）を返す。
 
 **@Transactional の越境（理由の明記）**: 手順 4〜5 はチーム・membership・role・supporter の 4 ドメインにまたがるが、「非公開チームにサポーター・ゲストが在籍しない」不変条件をコミットの時点で成立させるため、1 トランザクションに閉じる（`domain_db_design_principles.md` 原則 5 の例外。Facade のクラス Javadoc と該当メソッドに理由コメントを書く）。各ドメインには公開 Service メソッド経由でのみ触れ、他ドメインの Repository を直接使わない。通知は可用性のため AFTER_COMMIT のイベントに分離する（通知が失敗しても後始末は確定済み・中身の閲覧は F00 §20 の上限で既に拒否される）。
 
 **並行・二重実行**:
-- 入口側（招待承諾・申請承認・一括承認・フォロー）は、在籍を作る同じトランザクションで `SELECT visibility FROM teams WHERE id = ? FOR SHARE` でチーム行を共有ロックしてから公開範囲を判定する。非公開化の排他ロック（手順 2）と直列化され、「非公開化の直後に古い判定で在籍が作られる」競合を起こさない。
+- 入口側（下の「入口の関所」を通る全経路）は、在籍・ロールを作る同じトランザクションで、**他のどの行よりも先に** `SELECT visibility FROM teams WHERE id = ? FOR SHARE` でチーム行を共有ロックしてから公開範囲を判定する（招待承諾は claims 行のロックより前）。非公開化の排他ロック（手順 2）と直列化され、「非公開化の直後に古い判定で在籍が作られる」競合を起こさない。
 - 同じ `version` での二重送信は 2 回目が楽観ロック競合で 409 になり、後始末・通知は 1 回だけ。
 - 後始末の各 UPDATE は「在籍中」「PENDING」「未失効」を条件に持つため、再実行しても追加の変更は起きない（冪等）。
 
 **ドメイン境界**: 新しいクロスドメイン FK は作らない。
+
+#### 入口の関所（精査 S-5）
+
+非公開チームへの SUPPORTER 在籍・GUEST 付与を作れる最下層を関所とし、そこで一律に判定する。個々の入口（下表）は関所を通るだけで、判定を重複実装しない。
+
+| 関所 | 判定 |
+|---|---|
+| `MembershipService#join` / 在籍の `role_kind` 変更（SUPPORTER を作る・MEMBER→SUPPORTER へ変える） | scope=TEAM かつチームが非公開なら 403 `TEAM_073`（チーム行を FOR SHARE で先に読む） |
+| `RoleService#assignRole` / `#changeRole`（GUEST・SUPPORTER の付与・降格） | 同上 |
+| `archived_membership_grants` の復元 | 非公開チームへの SUPPORTER / GUEST 行は復元対象から外す（例外にしない） |
+
+- ArchUnit `MembersOnlyTeamEntryChokePointTest`（F00 §20.6）で、関所以外から `memberships` の SUPPORTER 在籍・`user_roles` の GUEST 行を作れないことを固定する（入口の網羅の番人）。
+- 番人と `MembersOnlyTeamSupporterInvariantIT` を条件に、中身を返さない書き込み経路は不変条件に依拠する（F00 §20.5.1）。
 
 #### サポーター入口の拒否（非公開チーム）
 
@@ -1146,6 +1160,9 @@ WHERE o.archived_at IS NULL
 | SUPPORTER 招待の承諾（共有・個人・保留承認） | `InviteAcceptanceFacade`・`PendingInviteService` | チーム行を FOR SHARE で読み、非公開なら 403 `TEAM_073`（保留承認は `UNAVAILABLE`）。claims・`used_count` を変えない |
 | サポーター申請の承認・一括承認 | `SupporterService#approve` / `bulkApprove` | チーム行を FOR SHARE で読み、非公開なら 403 `TEAM_073`。一括は全体を拒否 |
 | フォロー（自己申請） | `TeamController` → `assertCanView(TEAM)` | 既存どおり（変更なし） |
+| ロール変更・割当（GUEST・SUPPORTER への付与・降格） | `RoleService#assignRole` / `#changeRole`（関所） | 403 `TEAM_073` |
+| 参加申請の承認・組織経由の付与 | `JoinRequestService` ほか（関所を通る） | 403 `TEAM_073` |
+| アーカイブ復元 | `archived_membership_grants` の復元（関所） | SUPPORTER / GUEST 行を除外して復元 |
 | `TeamService#followTeam` | 死蔵 | 撤去 |
 
 組織スコープの入口（組織の PRIVATE）は今回変えない（F00 §20.10 K-1）。
@@ -1157,20 +1174,23 @@ WHERE o.archived_at IS NULL
 - **AC-0159-42**: 非公開チームの PENDING 申請（フィクスチャ）を ADMIN が承認すると 403 `TEAM_073`、申請は PENDING のまま・在籍は作られない。
 - **AC-0159-43**: 一括承認に 3 件を渡すと 403 `TEAM_073` で 1 件も承認されない。
 - **AC-0159-44**: 非公開チームへのフォローは従来どおり 403 `VISIBILITY_001`（回帰）。
-- **AC-0159-45**: 申請承認と非公開化を同時に実行（2 スレッド・CountDownLatch）しても、両方が終わった時点で非公開チームの在籍サポーターは 0（どちらの順でも）。招待承諾と非公開化でも同様。
+- **AC-0159-45**: 申請承認と非公開化を同時に実行（2 スレッド・CountDownLatch、各 20 回）しても、両方が終わった時点で非公開チームの在籍サポーターは 0（どちらの順でも）。招待承諾（claims 行のロックを伴う）と非公開化でも同様で、**デッドロック（MySQL 1213）が 1 回も起きない**。
 - **AC-0159-46**: 公開チームでは招待発行・承諾・申請承認・一括承認・フォローの結果が本戦役前と同一（回帰）。
 - **AC-0159-47**: `TeamService#followTeam` がコードから消えている（コンパイル・ArchUnit）。
+- **AC-0159-48**: 非公開チームで ADMIN が `PATCH /teams/{slug}/members/{userId}/role` で MEMBER を SUPPORTER へ降格・非所属者に GUEST を付与すると 403 `TEAM_073`、在籍・`user_roles` は不変。ADMIN / DEPUTY_ADMIN / MEMBER 間の変更は 200。参加申請の承認・組織経由の付与で SUPPORTER を作る経路も 403 `TEAM_073`。`MembersOnlyTeamEntryChokePointTest` が緑で、関所を迂回する呼び出しを足すと赤になる。
+- **AC-0159-49**: 非公開チームの `archived_membership_grants`（MEMBER 1・SUPPORTER 1・GUEST 1）を復元すると MEMBER だけが戻り、SUPPORTER・GUEST は戻らず、除外件数 2 が応答・監査ログに残る。公開チームでは 3 件とも戻る（回帰）。
 
 #### 受け入れ条件（T: 非公開化）
 
 - **AC-0159-50**: 事前問い合わせ `visibility=MEMBERS_AND_ABOVE` を公開チームの ADMIN が呼ぶと 200、サポーター 3・ゲスト 1・PENDING 2・SUPPORTER トークン 1（MEMBER トークン 1 は数えない）のフィクスチャで各人数が一致し `requiresConfirmation=true`。サポーター 0 人でも `requiresConfirmation=true`・各 0。既に非公開・または公開側を指定したときは `requiresConfirmation=false`・各 0。副作用が無い（呼ぶ前後で DB 不変）。
 - **AC-0159-51**: 事前問い合わせを MEMBER・サポーター・部外者・他チームの ADMIN が呼ぶと `PATCH` の拒否と同一応答。不在 slug は 404 `TEAM_001`。不正な `visibility` は 400 `COMMON_001`。
 - **AC-0159-52**: `confirmSupporterRemoval` 無し・false で公開→非公開の `PATCH` は 409 `TEAM_074`、公開範囲・在籍・申請・トークン・他の更新項目すべて不変。
-- **AC-0159-53**: `confirmSupporterRemoval=true` なら 200。公開範囲が `MEMBERS_AND_ABOVE`、サポーター全員が `left_at` 設定・`leave_reason='REMOVED'`、ゲスト行が削除、PENDING は REJECTED、SUPPORTER トークンは `revoked_at` 設定、MEMBER トークン・MEMBER/ADMIN の在籍は不変。`visibilityTransition` の各数が実数と一致。
+- **AC-0159-53**: `confirmSupporterRemoval=true` なら 200。公開範囲が `MEMBERS_AND_ABOVE`、サポーター全員が `left_at` 設定・`leave_reason='REMOVED'`、ゲスト行が削除、PENDING は REJECTED、SUPPORTER トークンは `revoked_at` 設定、MEMBER トークン・MEMBER/ADMIN の在籍は不変。そのチームのファイルの共有リンクが `is_active = FALSE`（他チームのリンクは不変）。`supporterEnabled` の値は不変。`MembershipsBulkEndedEvent` は 1 件だけ発行される（サポーター 3 人でも 3 件にならない）。`visibilityTransition` の各数が実数と一致。
 - **AC-0159-54**: コミット後、外したサポーター・ゲストの各人に通知が 1 通ずつ届く（ほかの人には届かない）。後始末の途中で例外を起こすと全体がロールバックされ（公開範囲も元のまま）、通知は 0 通（**AC-0159-55**）。
 - **AC-0159-56**: 同じ `version` で 2 回送ると 2 回目は 409、通知は 1 人 1 通のまま。
 - **AC-0159-57**: 非公開チームの名前だけを更新しても確認不要・後始末なし。
 - **AC-0159-58**: 非公開→公開に戻しても確認不要、外した人・却下した申請・無効化したトークンは戻らない。
 - **AC-0159-59**: 事前問い合わせの後にサポーターが 1 人増えてから了承しても、その人も外れ、`visibilityTransition.removedSupporters` は増えた後の実数。
 - **AC-0159-60**: FE のチーム設定で「メンバー限定」を選んで保存すると確認ダイアログが人数つきで出る。キャンセルで `PATCH` が送られない（ネットワーク記録で確認）。了承でトーストに実数。設定画面を MEMBER・サポーター・部外者が URL 直打ちすると既存の拒否表示。
+- **AC-0159-60b**: 人数がすべて 0 の事前問い合わせ結果では確認ダイアログが「外れる人はいません」（`bodyNone`）になり、了承しないと `PATCH` は送られない。非公開の間、サポーター設定のスイッチは操作不可で `supporterSettingInactive` が出る。
 - **AC-0159-61**: 外されたサポーターがチーム画面・配下画面を URL 直打ちすると F00 §20.8 の理由表示。「自分のチーム」一覧・フォロー中一覧にそのチームが出ない。サポーター数の表示が 0 になる（キャッシュ無効化）。
