@@ -13,7 +13,7 @@ const categories = computed<SidebarCategory[]>(() => [
     icon: 'pi pi-home',
     items: [
       { labelKey: 'teamSidebar.item.dashboard', icon: 'pi pi-th-large', path: '', moduleSlug: null, requiredRole: 'MEMBER' },
-      { labelKey: 'teamSidebar.item.announcements', icon: 'pi pi-bullhorn', path: 'announcements', moduleSlug: null, requiredRole: 'MEMBER' },
+      { labelKey: 'teamSidebar.item.announcements', icon: 'pi pi-megaphone', path: 'announcements', moduleSlug: null, requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.chat', icon: 'pi pi-comments', path: 'chat', moduleSlug: 'chat', requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.bulletin', icon: 'pi pi-clipboard', path: 'bulletin', moduleSlug: 'bulletin', requiredRole: 'MEMBER' },
     ],
@@ -25,6 +25,8 @@ const categories = computed<SidebarCategory[]>(() => [
     items: [
       { labelKey: 'teamSidebar.item.schedule', icon: 'pi pi-calendar', path: 'schedule', moduleSlug: 'schedule', requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.shifts', icon: 'pi pi-clock', path: 'shifts', moduleSlug: 'shift', requiredRole: 'MEMBER' },
+      // 時間割は OPTIONAL モジュール（既定 OFF）。組織と同じくモジュール有効時だけ出す（CMP-261105-1507 A6）。
+      { labelKey: 'teamSidebar.item.timetable', icon: 'pi pi-table', path: 'timetable', moduleSlug: 'timetable', requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.duties', icon: 'pi pi-list', path: 'duties', moduleSlug: null, requiredRole: 'MEMBER' },
       { labelKey: 'teamSidebar.item.annual_plan', icon: 'pi pi-calendar-plus', path: 'annual-plan', moduleSlug: null, requiredRole: 'MEMBER' },
     ],
@@ -132,7 +134,7 @@ const categories = computed<SidebarCategory[]>(() => [
       { labelKey: 'teamSidebar.item.settings', icon: 'pi pi-sliders-h', path: 'settings/shift', moduleSlug: null, requiredRole: 'ADMIN' },
       // CMP-260910-1555: 時給を登録する入口が画面に無く、シフトを公開しても予算の消化額が
       // 0 円のままになっていたため新設。金銭情報なので ADMIN 限定。
-      { labelKey: 'teamSidebar.item.hourlyRate', icon: 'pi pi-yen', path: 'settings/hourly-rate', moduleSlug: null, requiredRole: 'ADMIN' },
+      { labelKey: 'teamSidebar.item.hourlyRate', icon: 'pi pi-wallet', path: 'settings/hourly-rate', moduleSlug: null, requiredRole: 'ADMIN' },
       { labelKey: 'teamSidebar.item.faqSettings', icon: 'pi pi-question-circle', path: 'settings/faq-settings', moduleSlug: null, requiredRole: 'ADMIN' },
 
       // F20.1: 課金・プラン管理（閲覧はメンバー可・操作はADMIN限定。ナビはメンバー以上に表示）

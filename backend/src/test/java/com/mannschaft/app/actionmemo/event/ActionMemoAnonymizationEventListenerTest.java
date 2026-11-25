@@ -1,5 +1,6 @@
 package com.mannschaft.app.actionmemo.event;
 
+import com.mannschaft.app.actionmemo.repository.ActionMemoDailyPostRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoTagRepository;
 import com.mannschaft.app.actionmemo.repository.UserActionMemoSettingsRepository;
@@ -52,6 +53,9 @@ class ActionMemoAnonymizationEventListenerTest {
     @Mock
     private UserActionMemoSettingsRepository userActionMemoSettingsRepository;
 
+    @Mock
+    private ActionMemoDailyPostRepository actionMemoDailyPostRepository;
+
     @InjectMocks
     private ActionMemoAnonymizationEventListener listener;
 
@@ -77,6 +81,8 @@ class ActionMemoAnonymizationEventListenerTest {
             listener.onUserAnonymized(new UserAnonymizedEvent(USER_ID, "user@example.com"));
 
             verify(actionMemoRepository).deleteAllByUserIdIncludingDeleted(USER_ID);
+            // CMP-261123-1201: 日ごとの公開記録（行動日を含む）も即時削除する
+            verify(actionMemoDailyPostRepository).deleteAllByUserId(USER_ID);
             verify(actionMemoTagRepository, never()).deleteAllByUserIdIncludingDeleted(USER_ID);
             verify(userActionMemoSettingsRepository, never()).deleteByUserId(USER_ID);
         }
@@ -108,6 +114,8 @@ class ActionMemoAnonymizationEventListenerTest {
 
             verify(actionMemoTagRepository).deleteAllByUserIdIncludingDeleted(USER_ID);
             verify(userActionMemoSettingsRepository).deleteByUserId(USER_ID);
+            // 即時削除が失敗していた場合の残りもここで回収する
+            verify(actionMemoDailyPostRepository).deleteAllByUserId(USER_ID);
             verify(actionMemoRepository, never()).deleteAllByUserIdIncludingDeleted(USER_ID);
         }
 
@@ -129,6 +137,7 @@ class ActionMemoAnonymizationEventListenerTest {
     @DisplayName("手動retryは削除のみ実行し、完了callbackは登録しない")
     void retryDoesNotReportCompletionBeforeProxyCommit() {
         assertThat(listener.retryPurge(USER_ID)).isTrue();
+        verify(actionMemoDailyPostRepository).deleteAllByUserId(USER_ID);
         assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
         verify(completionService, never()).markDomainSuccess(USER_ID, "actionmemo");
     }

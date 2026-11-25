@@ -84,6 +84,25 @@ async function save(): Promise<void> {
   }
 }
 
+/**
+ * 閉じた後のフォーカス復帰先。ダイアログ要素は消えるため、そのままだと body に落ちる。
+ * ページ内の「メニュー」ボタン、無ければ main の先頭へ移す。
+ */
+function restoreFocusAfterClose(): void {
+  // モバイル専用ボタンはデスクトップ幅では非表示のため、可視のときだけ復帰先にする
+  const toggle = document.querySelector<HTMLElement>('[data-testid="scope-sidebar-toggle"]')
+  const target = toggle && isElementVisible(toggle)
+    ? toggle
+    : document.querySelector<HTMLElement>('main')
+  if (!target) return
+  if (!target.matches('button, a[href], input, select, textarea, [tabindex]')) target.setAttribute('tabindex', '-1')
+  target.focus()
+}
+
+watch(visible, (now, before) => {
+  if (before && !now) nextTick(restoreFocusAfterClose)
+})
+
 watch(
   () => [props.scopeType, props.scopeId, props.slug, props.roleName] as const,
   checkInitialSetup,
@@ -130,8 +149,26 @@ onMounted(checkInitialSetup)
       </NuxtLink>
     </p>
     <template #footer>
-      <Button :label="t('scopeGuide.setup.later')" text :disabled="saving" @click="dismiss" />
-      <Button :label="t('scopeGuide.setup.save')" icon="pi pi-check" :loading="saving" @click="save" />
+      <!-- 初期フォーカスは非破壊な「あとで決める」（Enter 一発で権限を確定させない）。PrimeVue Dialog は [autofocus] にフォーカスする -->
+      <!-- de の長い文言が単語途中で折れないよう、フッターは折返し可・ボタンは改行しない -->
+      <div class="flex w-full flex-wrap justify-end gap-2" data-testid="member-permission-setup-footer">
+        <Button
+          :label="t('scopeGuide.setup.later')"
+          class="shrink-0 whitespace-nowrap"
+          text
+          :disabled="saving"
+          autofocus
+          data-testid="member-permission-setup-later"
+          @click="dismiss"
+        />
+        <Button
+          :label="t('scopeGuide.setup.save')"
+          class="shrink-0 whitespace-nowrap"
+          icon="pi pi-check"
+          :loading="saving"
+          @click="save"
+        />
+      </div>
     </template>
   </Dialog>
 </template>

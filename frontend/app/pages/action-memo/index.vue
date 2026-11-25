@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import type { ActionMemo, ActionMemoCategory, OrgVisibility } from '~/types/actionMemo'
+import { toLocalDateString } from '~/utils/localDate'
+import type { ActionMemo, ActionMemoCategory, ActionMemoInputExtras, OrgVisibility } from '~/types/actionMemo'
 
 /**
  * F02.5 行動メモ メイン画面（ワンショット入力 + 選択日メモ一覧）。
@@ -18,25 +19,43 @@ const { t } = useI18n()
 const store = useActionMemoStore()
 const authStore = useAuthStore()
 
-// 選択中の日付（Date型 — PrimeVue DatePicker とのバインド用）
-const selectedDate = ref<Date>(new Date())
-
-// 文字列形式の選択日（API/表示に使用）
-const selectedDateStr = computed(() =>
-  dayjs(selectedDate.value).tz(authStore.user?.timezone ?? 'Asia/Tokyo').format('YYYY-MM-DD'),
-)
-
+// 利用者タイムゾーンの「今日」（YYYY-MM-DD）
 const todayStr = computed(() =>
   dayjs().tz(authStore.user?.timezone ?? 'Asia/Tokyo').format('YYYY-MM-DD'),
 )
+
+/**
+ * YYYY-MM-DD をピッカー用の壁時計 Date（端末ローカル 0:00）にする。
+ * DatePicker の Date は「利用者が画面で指した壁時計」なので、日付の取り出しも toLocalDateString（壁時計成分）で行い、
+ * ?date= の保存と復元で端末TZと利用者TZの差によるずれを出さない（utils/localDate.ts の設計原則）。
+ */
+function wallClockDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(y!, m! - 1, d!)
+}
+
+// 選択中の日付（Date型 — PrimeVue DatePicker とのバインド用。初期値は利用者TZの今日）
+const selectedDate = ref<Date>(wallClockDate(todayStr.value))
+
+// 文字列形式の選択日（API/表示に使用）
+const selectedDateStr = computed(() => toLocalDateString(selectedDate.value))
 
 const isToday = computed(() => selectedDateStr.value === todayStr.value)
 
 const selectedMemos = computed(() => store.currentDayMemos(selectedDateStr.value))
 
-// 日付変更時に対象日のメモを取得
+// 公開応答で得た個人投稿 ID（メモの再取得に失敗した間もリンクできるよう store が保持）
+const overridePostId = computed(() => store.publishedPostIdOverrides[selectedDateStr.value] ?? null)
+
+// 日付変更時に対象日のメモを取得し、選択日を URL の ?date= に同期する
+// （投稿詳細へ移動して戻ったとき、同じ日を開き直せるようにする）
 watch(selectedDate, async () => {
-  await store.fetchMemosForDate(selectedDateStr.value)
+  const date = selectedDateStr.value
+  // ナビゲーション（ミドルウェア解決を含む）の完了を待たずにメモ取得を始める
+  await Promise.all([
+    route.query.date !== date ? router.replace({ query: { ...route.query, date } }) : Promise.resolve(),
+    store.fetchMemosForDate(date),
+  ])
 })
 
 /**
@@ -61,6 +80,37 @@ const selectedProgressRate = ref<number | null>(null)
 const selectedCompletesTodo = ref(false)
 const selectedTeamId = ref<number | null>(store.settings.defaultPostTeamId ?? null)
 
+// ActionMemoInput へ渡す選択値（作成リクエストに反映される）
+const inputExtras = computed<ActionMemoInputExtras>(() => ({
+  category: selectedCategory.value,
+  durationMinutes: selectedDuration.value,
+  progressRate: selectedProgressRate.value,
+  completesTodo: selectedCompletesTodo.value,
+  teamId: selectedTeamId.value,
+}))
+
+// 送信成功後は 1 件ごとの値（所要時間・進捗率・TODO 完了）のみ戻す。カテゴリ・投稿先は連続入力のため保持する
+function onMemoCreated() {
+  selectedDuration.value = null
+  selectedProgressRate.value = null
+  selectedCompletesTodo.value = false
+}
+
+const publishPending = ref(false)
+
+// 下書きから復元した選択値。設定取得（既定カテゴリの反映）で上書きされないよう印を付ける
+let draftExtrasRestored = false
+let restoredTeamId: number | null = null
+
+function onDraftRestored(extras: ActionMemoInputExtras) {  draftExtrasRestored = true
+  if (extras.category) selectedCategory.value = extras.category
+  selectedDuration.value = extras.durationMinutes ?? null
+  selectedProgressRate.value = extras.progressRate ?? null
+  selectedCompletesTodo.value = extras.completesTodo === true
+  restoredTeamId = extras.teamId ?? null
+  selectedTeamId.value = restoredTeamId
+}
+
 // Phase 4-α: 組織スコープ
 const selectedOrgId = ref<number | null>(null)
 const selectedOrgVisibility = ref<OrgVisibility>('TEAM_ONLY')
@@ -79,8 +129,9 @@ function onOrgChange() {
 watch(
   () => store.settings,
   (s) => {
-    selectedCategory.value = s.defaultCategory ?? 'OTHER'
-    if (selectedTeamId.value === null) {
+    if (!draftExtrasRestored) selectedCategory.value = s.defaultCategory ?? 'OTHER'
+    // 下書き復元済みなら、明示的な「投稿なし」(null) も既定チームで上書きしない
+    if (selectedTeamId.value === null && !draftExtrasRestored) {
       selectedTeamId.value = s.defaultPostTeamId ?? null
     }
   },
@@ -95,15 +146,20 @@ onMounted(async () => {
   // 通知からのディープリンク: ?date=YYYY-MM-DD があれば選択日を上書きして当日メモへ直遷移
   const queryDate = route.query.date
   if (typeof queryDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
-    selectedDate.value = dayjs(queryDate).toDate()
+    selectedDate.value = wallClockDate(queryDate)
   }
 
-  await Promise.all([
+  const [, , teamsLoaded] = await Promise.all([
     store.fetchSettings(),
     store.fetchMemosForDate(selectedDateStr.value),
     store.fetchAvailableTeams(),
     store.fetchAvailableOrgs(),
   ])
+  // 復元した投稿先が現在の選択肢に無ければ捨てる（他ユーザー・脱退済みチームへの誤投稿防止）。
+  // 取得に失敗したときは「所属なし」と区別できないため判定せず保持する（FRONTEND_CODING_CONVENTION: 取得失敗と0件の区別）
+  if (teamsLoaded && restoredTeamId !== null && !store.availableTeams.some((team) => team.id === restoredTeamId)) {
+    selectedTeamId.value = null
+  }
   await store.refreshOfflineQueueCount()
   // mood_enabled = true の場合のみ mood-stats を取得
   if (store.isMoodEnabled) {
@@ -140,7 +196,7 @@ async function onManualSync() {
 }
 
 function backToToday() {
-  selectedDate.value = new Date()
+  selectedDate.value = wallClockDate(todayStr.value)
 }
 
 function goSettings() {
@@ -240,10 +296,22 @@ function goTags() {
         {{ t(store.error) }}
       </div>
 
-      <ActionMemoInput />
+      <ActionMemoInput
+        :extras="inputExtras"
+        @created="onMemoCreated"
+        @draft-restored="onDraftRestored"
+        @pending-change="publishPending = $event"
+      />
+
+      <!-- 公開待ち（メモ保存済み・チーム投稿だけ失敗）の間は選択欄をロックし、再試行先がずれないようにする -->
+      <fieldset
+        :disabled="publishPending"
+        class="m-0 flex min-w-0 flex-col gap-3 border-0 p-0"
+        data-testid="action-memo-selectors"
+      >
 
       <!-- Phase 3: カテゴリ選択（常時表示） -->
-      <div class="flex items-center gap-2 px-1">
+      <div class="flex flex-wrap items-center gap-2 px-1">
         <span class="text-xs text-surface-500 dark:text-surface-400">
           {{ t('action_memo.phase3.category.label') }}:
         </span>
@@ -323,6 +391,7 @@ function goTags() {
           </div>
         </div>
       </details>
+      </fieldset>
 
       <!-- 気分集計（mood_enabled = true の場合のみ表示） -->
       <MoodChart
@@ -364,6 +433,7 @@ function goTags() {
             {{ t('action_memo.page.selected_date_memos', { date: selectedDateStr }) }}
           </template>
         </h2>
+        <ActionMemoPublishedPostLink :memos="selectedMemos" :override-post-id="overridePostId" />
         <ActionMemoList
           :memos="selectedMemos"
           :loading="store.loading"

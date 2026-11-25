@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { defineStore } from 'pinia'
 import type {
   ActionMemo,
+  ActionMemoInputExtras,
   ActionMemoSettings,
   ActionMemoTag,
   AvailableOrg,
@@ -51,6 +52,10 @@ interface ActionMemoStoreState {
   offlineQueueCount: number
   /** 現在オフラインかどうか（{@code navigator.onLine === false}）。SSR 時は false */
   isOffline: boolean
+  /** 直近の publishToTeam が既投稿（ACTION_MEMO_ALREADY_POSTED）で失敗したか。公開のみ項目の後始末の判定用 */
+  alreadyPostedFailure: boolean
+  /** 直近の publishToTeam 失敗の HTTP ステータス（無ければ null）。公開のみ項目の恒久失敗判定用 */
+  publishFailureStatus: number | null
   /** Phase 3: 週次まとめ一覧 */
   weeklySummaries: WeeklySummary[]
   /** Phase 3: 週次まとめ一覧の読み込み中フラグ */
@@ -67,6 +72,12 @@ interface ActionMemoStoreState {
   availableOrgs: AvailableOrg[]
   /** Phase 4-α: 次回作成時に付与する組織スコープ（折りたたみパネルで設定） */
   pendingOrgScope: { organizationId: number | null; orgVisibility: OrgVisibility | null }
+  /**
+   * CMP-261123-1201: 公開応答で得た個人投稿 ID（キーは memoDate = YYYY-MM-DD）。
+   * 公開後のメモ再取得が失敗しても、公開した投稿へのリンクを出せるよう保持する。
+   * 再取得が成功し当日メモに非 null の timelinePostId があれば、そちらを正として破棄する。
+   */
+  publishedPostIdOverrides: Record<string, number>
 }
 
 export type ActionMemoErrorCode =
@@ -74,12 +85,55 @@ export type ActionMemoErrorCode =
   | 'DAILY_LIMIT'
   | 'FUTURE_DATE'
   | 'TODO_NOT_FOUND'
+  | 'PUBLISH_FAILED'
   | 'UNKNOWN'
 
 const DRAFT_KEY_PREFIX = 'action-memo-draft-'
 
 function draftKey(userId: number | string): string {
   return `${DRAFT_KEY_PREFIX}${userId}`
+}
+
+/**
+ * 下書きの読み取り。新形式は {v:1, content, extras} の JSON、旧形式は本文だけの文字列。
+ * JSON として読めても形式が合わなければ（本文がたまたま JSON 風でも）全体を本文として扱う。
+ */
+interface DraftPendingPublish {
+  memoId: number
+  teamId: number
+}
+
+function readDraft(userId: number | string): {
+  content: string
+  extras: ActionMemoInputExtras | null
+  pendingPublish: DraftPendingPublish | null
+} {
+  if (typeof window === 'undefined') return { content: '', extras: null, pendingPublish: null }
+  let raw = ''
+  try {
+    raw = localStorage.getItem(draftKey(userId)) ?? ''
+  } catch {
+    // Storage 無効環境は下書き無しとして扱う
+  }
+  {
+    if (raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw) as { v?: unknown; content?: unknown; extras?: unknown; pendingPublish?: unknown }
+        if (parsed && parsed.v === 1 && typeof parsed.content === 'string') {
+          const extras = parsed.extras && typeof parsed.extras === 'object' ? (parsed.extras as ActionMemoInputExtras) : null
+          const pp = parsed.pendingPublish as Partial<DraftPendingPublish> | undefined
+          const pendingPublish =
+            pp && typeof pp.memoId === 'number' && typeof pp.teamId === 'number'
+              ? { memoId: pp.memoId, teamId: pp.teamId }
+              : null
+          return { content: parsed.content, extras, pendingPublish }
+        }
+      } catch {
+        // JSON ではない本文
+      }
+    }
+    return { content: raw, extras: null, pendingPublish: null }
+  }
 }
 
 /** 楽観的 UI の一時 ID。負値で本物の ID と被らないようにする */
@@ -121,6 +175,8 @@ export const useActionMemoStore = defineStore('actionMemo', {
     lastError: null,
     offlineQueueCount: 0,
     isOffline: false,
+    alreadyPostedFailure: false,
+    publishFailureStatus: null,
     weeklySummaries: [],
     weeklyLoading: false,
     weeklyError: null,
@@ -129,6 +185,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
     availableTeams: [],
     availableOrgs: [],
     pendingOrgScope: { organizationId: null, orgVisibility: null },
+    publishedPostIdOverrides: {},
   }),
 
   getters: {
@@ -139,6 +196,20 @@ export const useActionMemoStore = defineStore('actionMemo', {
         state.memos.filter((m) => m.memoDate === date),
 
     isMoodEnabled: (state): boolean => state.settings.moodEnabled,
+
+    /**
+     * 指定日に公開した個人投稿の ID（無ければ null）。
+     * 公開応答の ID を最優先し、無ければ当日メモの非 null な timelinePostId の最初の値。
+     * チーム投稿 ID（teamTimelinePostId）は対象にしない。
+     */
+    publishedPostId:
+      (state) =>
+      (date: string): number | null => {
+        const override = state.publishedPostIdOverrides[date]
+        if (override != null) return override
+        const memo = state.memos.find((m) => m.memoDate === date && m.timelinePostId != null)
+        return memo?.timelinePostId ?? null
+      },
   },
 
   actions: {
@@ -155,7 +226,10 @@ export const useActionMemoStore = defineStore('actionMemo', {
      * <p>オフライン時でも {@link ActionMemo#id} は負数の仮 ID が設定され、同期完了時に
      * {@link useOfflineQueue#flushQueue} 経由で本物の ID に置き換わる。</p>
      */
-    async createMemo(payload: CreateActionMemoPayload): Promise<ActionMemo | null> {
+    async createMemo(
+      payload: CreateActionMemoPayload,
+      options: { publishTeamId?: number } = {},
+    ): Promise<ActionMemo | null> {
       const tempId = nextTempId()
       const optimistic: ActionMemo = {
         id: tempId,
@@ -166,6 +240,7 @@ export const useActionMemoStore = defineStore('actionMemo', {
         mood: this.settings.moodEnabled ? (payload.mood ?? null) : null,
         relatedTodoId: payload.relatedTodoId ?? null,
         timelinePostId: null,
+        teamTimelinePostId: null,
         tags: [],
         createdAt: nowIso(),
         // Phase 3 フィールド
@@ -185,7 +260,8 @@ export const useActionMemoStore = defineStore('actionMemo', {
       if (this._isOffline()) {
         try {
           const queue = useOfflineQueue()
-          await queue.enqueue(payload, tempId)
+          // publishTeamId はオフライン中は実 ID が無いため、キューに保持して flush 後に publish-to-team する
+          await queue.enqueue(payload, tempId, options.publishTeamId)
           this.offlineQueueCount = await queue.count()
           this.isOffline = true
           // 下書きはクリアする（キューに積んだ時点で「ユーザーの入力」は成立）
@@ -240,9 +316,42 @@ export const useActionMemoStore = defineStore('actionMemo', {
     async flushOfflineQueue(): Promise<number> {
       const queue = useOfflineQueue()
       const api = useActionMemoApi()
-      const results = await queue.flushQueue(async (payload) => {
+      const kept: { v: { error: string | null; lastError: ActionMemoErrorCode | null } | null } = { v: null }
+      // 公開を試み、キュー項目を片付けてよいか（true）を返す。失敗は kept に退避して利用者に見せる
+      const settlePublish = async (memoId: number, teamId: number): Promise<boolean> => {
+        const result = await this.publishToTeamReconciled(memoId, { teamId })
+        if (result === 'posted') return true
+        // 後続項目の publishToTeam が error を消すため、失敗した時点で退避する
+        kept.v = { error: this.error, lastError: this.lastError }
+        // conflict（別チーム投稿済み）と 403/404/410（メモ削除済み・チーム脱退など）は再試行しても成功しない恒久失敗。
+        // 項目を片付けて後続を処理させる。通信断・5xx は項目を残して停止する
+        return result === 'conflict' || [403, 404, 410].includes(this.publishFailureStatus ?? 0)
+      }
+      const results = await queue.flushQueue(async (payload, queued) => {
         try {
+          // 公開のみ項目: 作成済みメモは再作成せず publish-to-team だけ再試行する
+          if (queued?.publishOnlyMemoId != null && queued.publishTeamId != null) {
+            const ok = await settlePublish(queued.publishOnlyMemoId, queued.publishTeamId)
+            return ok ? { id: queued.publishOnlyMemoId } : null
+          }
           const created = await api.createMemo(payload)
+          // オフライン中に選ばれた公開要求は、実 ID が得られた今ここで実行する。
+          // 公開の応答待ちの間に再読み込みされても同じメモを再作成しないよう、公開を試みる前に
+          // 元項目を実 ID つきの「公開のみ」項目へ 1 回の書き込みで置き換えて永続化する。
+          // 置き換えに失敗しても作成は成立済みのため再作成は避ける（完了扱い・公開失敗は error として残す）
+          if (queued?.publishTeamId != null) {
+            let converted = false
+            if (typeof queued.queueId === 'number') {
+              try {
+                await queue.convertToPublishOnly(queued.queueId, created.id, queued.publishTeamId)
+                converted = true
+              } catch {
+                // 永続化できなくても、再作成を避ける方針（上記）
+              }
+            }
+            const ok = await settlePublish(created.id, queued.publishTeamId)
+            return { id: created.id, keepQueued: converted && !ok }
+          }
           return created
         } catch (error) {
           this._handleError(error)
@@ -252,9 +361,14 @@ export const useActionMemoStore = defineStore('actionMemo', {
       // 仮 ID を本物の ID に置換するため、一度だけ fetchMemos で再取得する
       // （flushQueue の返す createdId だけでは、並列送信された別デバイスのメモや
       //  同日の並び順を正しく反映できないため）
+      // fetchMemosForDate が error を消すため、公開失敗のエラーは退避して復元する
       if (results.length > 0) {
         const targetDate = results[0]?.queued.payload.memoDate ?? today()
         await this.fetchMemosForDate(targetDate)
+      }
+      if (kept.v) {
+        this.error = kept.v.error
+        this.lastError = kept.v.lastError
       }
       this.offlineQueueCount = await queue.count()
       this.isOffline = this._isOffline()
@@ -281,6 +395,12 @@ export const useActionMemoStore = defineStore('actionMemo', {
         const api = useActionMemoApi()
         const res = await api.fetchMemos({ date, limit: 200 })
         this.memos = res.data
+        // 再取得できた日は、メモ側の個人投稿 ID を正とする（他端末の再公開で古い ID が優先され続けるのを防ぐ）
+        if (this.publishedPostIdOverrides[date] != null && res.data.some((m) => m.memoDate === date && m.timelinePostId != null)) {
+          this.publishedPostIdOverrides = Object.fromEntries(
+            Object.entries(this.publishedPostIdOverrides).filter(([key]) => key !== date),
+          )
+        }
       } catch (error) {
         this._handleError(error)
       } finally {
@@ -369,14 +489,30 @@ export const useActionMemoStore = defineStore('actionMemo', {
       try {
         const api = useActionMemoApi()
         const response = await api.publishDaily(payload)
-        // 各メモの timeline_post_id を反映するため対象日を再取得する
         const targetDate = payload.memoDate ?? response.memoDate ?? today()
+        // 再取得に失敗しても公開した投稿へリンクできるよう、応答の ID を対象日について保持する
+        if (response.timelinePostId != null) {
+          this.publishedPostIdOverrides = { ...this.publishedPostIdOverrides, [targetDate]: response.timelinePostId }
+        }
+        // 各メモの timeline_post_id を反映するため対象日を再取得する
         await this.fetchMemosForDate(targetDate)
         return response
       } catch (error) {
         this._handleError(error)
         throw error
       }
+    },
+
+    /**
+     * 利用者固有の状態を破棄する。logout（useAuthStore.logout）から呼ばれ、
+     * 次にログインする別の利用者へ前の利用者のメモ・公開した投稿 ID が残らないようにする。
+     */
+    clear(): void {
+      this.memos = []
+      this.publishedPostIdOverrides = {}
+      this.moodStats = null
+      this.error = null
+      this.lastError = null
     },
 
     // === Tag CRUD (Phase 4) ===
@@ -531,14 +667,16 @@ export const useActionMemoStore = defineStore('actionMemo', {
      * チーム投稿先候補を取得する。
      * {@code GET /api/v1/action-memos/available-teams}
      */
-    async fetchAvailableTeams(): Promise<void> {
+    async fetchAvailableTeams(): Promise<boolean> {
       this.error = null
       this.lastError = null
       try {
         const api = useActionMemoApi()
         this.availableTeams = await api.fetchAvailableTeams()
+        return true
       } catch (error) {
         this._handleError(error)
+        return false
       }
     },
 
@@ -570,6 +708,8 @@ export const useActionMemoStore = defineStore('actionMemo', {
     async publishToTeam(memoId: number, payload: PublishToTeamPayload): Promise<boolean> {
       this.error = null
       this.lastError = null
+      this.alreadyPostedFailure = false
+      this.publishFailureStatus = null
       try {
         const api = useActionMemoApi()
         await api.publishToTeam(memoId, payload)
@@ -582,9 +722,57 @@ export const useActionMemoStore = defineStore('actionMemo', {
         }
         return true
       } catch (error) {
-        this._handleError(error)
+        // 既投稿は flush 側で実態確認して片付けるため、判別できるよう印を残す
+        // BE の ErrorResponse は { error: { code } }（ofetch では data と response._data の両方に載る）
+        const err = error as {
+          status?: number
+          statusCode?: number
+          response?: { status?: number; _data?: { error?: { code?: string } } }
+          data?: { error?: { code?: string } }
+        }
+        const code = err?.data?.error?.code ?? err?.response?._data?.error?.code
+        this.alreadyPostedFailure = code === 'ACTION_MEMO_016'
+        this.publishFailureStatus = err?.status ?? err?.statusCode ?? err?.response?.status ?? null
+        // 公開失敗はメモ保存の失敗ではない（メモは作成済み）。保存失敗文言を出さないよう専用の種別にする
+        this.lastError = 'PUBLISH_FAILED'
+        this.error = 'action_memo.error.publish_failed'
         return false
       }
+    },
+
+    /**
+     * 公開の再試行用。publishToTeam が既投稿（ACTION_MEMO_ALREADY_POSTED）で失敗したら、
+     * 初回が成功して応答だけ失われた可能性があるため getMemo で実態を確認する（オンライン再試行とオフライン同期で共通）。
+     *
+     * @returns 'posted': 指定チームへ投稿済み（成功扱い・error 解除）/
+     *          'conflict': 別チームへ投稿済みで再試行不能（publish_failed を残す）/
+     *          'failed': それ以外の失敗（通信断・5xx・恒久失敗など。publishFailureStatus で判別）
+     */
+    async publishToTeamReconciled(
+      memoId: number,
+      payload: PublishToTeamPayload,
+    ): Promise<'posted' | 'conflict' | 'failed'> {
+      if (await this.publishToTeam(memoId, payload)) return 'posted'
+      if (!this.alreadyPostedFailure) return 'failed'
+      const status = this.publishFailureStatus
+      let memo: ActionMemo
+      try {
+        memo = await useActionMemoApi().getMemo(memoId)
+      } catch {
+        // 実態を確認できない（通信断など）。失敗として残し、次回に再確認する
+        this.alreadyPostedFailure = true
+        this.publishFailureStatus = status
+        return 'failed'
+      }
+      if (memo.postedTeamId === payload.teamId) {
+        const idx = this.memos.findIndex((m) => m.id === memoId)
+        const existing = idx >= 0 ? this.memos[idx] : undefined
+        if (existing) this.memos.splice(idx, 1, { ...existing, postedTeamId: payload.teamId })
+        this.error = null
+        this.lastError = null
+        return 'posted'
+      }
+      return 'conflict' // error は publishToTeam が設定した publish_failed のまま
     },
 
     /**
@@ -606,22 +794,35 @@ export const useActionMemoStore = defineStore('actionMemo', {
 
     // === Draft ===
 
-    /** localStorage から下書きを復元 */
+    /** localStorage から下書き本文を復元（旧形式の文字列のみの下書きも本文として読む） */
     loadDraft(userId: number | string): string {
-      if (typeof window === 'undefined') return ''
-      try {
-        return localStorage.getItem(draftKey(userId)) ?? ''
-      } catch {
-        return ''
-      }
+      return readDraft(userId).content
     },
 
-    /** localStorage に下書きを保存 */
-    saveDraft(userId: number | string, content: string): void {
+    /** 下書きと一緒に保存した選択値（カテゴリ・投稿先・所要時間など）を復元。旧形式・未保存は null */
+    loadDraftExtras(userId: number | string): ActionMemoInputExtras | null {
+      return readDraft(userId).extras
+    },
+
+    /** 作成済みだが公開に失敗したメモ（画面を離れて戻っても重複作成せず公開だけ再試行するため下書きに持つ）。無ければ null */
+    loadDraftPendingPublish(userId: number | string): DraftPendingPublish | null {
+      return readDraft(userId).pendingPublish
+    },
+
+    /** localStorage に下書きを保存（extras があれば選択値も、pendingPublish があれば公開待ちも一緒に保存する） */
+    saveDraft(
+      userId: number | string,
+      content: string,
+      extras?: ActionMemoInputExtras,
+      pendingPublish?: DraftPendingPublish | null,
+    ): void {
       if (typeof window === 'undefined') return
       try {
         if (content && content.length > 0) {
-          localStorage.setItem(draftKey(userId), content)
+          localStorage.setItem(
+            draftKey(userId),
+            extras ? JSON.stringify({ v: 1, content, extras, pendingPublish: pendingPublish ?? undefined }) : content,
+          )
         } else {
           localStorage.removeItem(draftKey(userId))
         }

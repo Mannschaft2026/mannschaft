@@ -9,7 +9,7 @@ definePageMeta({
 })
 
 const schema = toTypedSchema(z.object({
-  email: z.string().min(1, 'メールアドレスは必須です').email('有効なメールアドレスを入力してください'),
+  email: z.string().min(1, 'auth.register.err_email_required').email('auth.register.err_email_invalid'),
 }))
 
 const { defineField, handleSubmit, errors } = useForm({
@@ -42,7 +42,7 @@ const onSubmit = handleSubmit(async (values) => {
     })
   }
   catch {
-    // セキュリティ上、エラーでも成功と同じ表示にする
+    // 列挙攻撃対策: 4xx・5xx・通信断のいずれでも成功と同じ完了画面を出す（BE の message も出さない）。
   }
   finally {
     loading.value = false
@@ -54,12 +54,12 @@ const onSubmit = handleSubmit(async (values) => {
 <template>
   <div v-if="!sent">
     <p class="mb-4 text-sm text-surface-500">
-      登録済みのメールアドレスを入力してください。パスワードリセット用のリンクをお送りします。
+      {{ $t('auth.password_reset.request_description') }}
     </p>
     <form novalidate @submit.prevent="onSubmit">
       <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-2">
-          <label for="email">メールアドレス</label>
+          <label for="email">{{ $t('auth.register.email_label') }}</label>
           <InputText
             id="email"
             v-model="email"
@@ -68,11 +68,11 @@ const onSubmit = handleSubmit(async (values) => {
             placeholder="example@mannschaft.app"
             :invalid="!!errors.email"
           />
-          <small v-if="errors.email" class="text-red-500">{{ errors.email }}</small>
+          <small v-if="errors.email" class="text-red-500">{{ $t(errors.email) }}</small>
         </div>
         <Button
           type="submit"
-          label="リセットメールを送信"
+          :label="$t('auth.password_reset.request_submit')"
           icon="pi pi-envelope"
           :loading="submitting"
           :disabled="!hydrated"
@@ -80,7 +80,7 @@ const onSubmit = handleSubmit(async (values) => {
         />
         <div class="text-center">
           <NuxtLink to="/login" class="text-sm text-primary hover:underline">
-            ログインに戻る
+            {{ $t('auth.password_reset.back_to_login') }}
           </NuxtLink>
         </div>
       </div>
@@ -88,9 +88,9 @@ const onSubmit = handleSubmit(async (values) => {
   </div>
   <div v-else class="flex flex-col items-center gap-4 text-center">
     <i class="pi pi-check-circle text-4xl text-green-500" />
-    <p>パスワードリセットのメールを送信しました。メールをご確認ください。</p>
+    <p>{{ $t('auth.password_reset.request_done') }}</p>
     <NuxtLink to="/login" class="text-sm text-primary hover:underline">
-      ログインに戻る
+      {{ $t('auth.password_reset.back_to_login') }}
     </NuxtLink>
   </div>
 </template>

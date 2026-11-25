@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261119-1959",
+  "scope": "app",
+  "implementation": {
+    "pr": 4649,
+    "sha": "c3ca4332b688673e61a090fb85e4873f98f9c674"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "BoundedTtlCache.clear() と UserLocaleCache.clear() が全エントリを破棄する",
+      "tests": [
+        {
+          "name": "BoundedTtlCacheTest の clear テスト",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/cache/BoundedTtlCacheTest.java"
+        },
+        {
+          "name": "UserLocaleCacheTest の clear テスト",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/UserLocaleCacheTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "ErrorMessageLocaleHttpIT と UserLocaleResolutionIT が @BeforeEach で UserLocaleCache を破棄し、テスト順・Spring コンテキスト再利用に依らず緑になる",
+      "tests": [
+        {
+          "name": "ErrorMessageLocaleHttpIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/ErrorMessageLocaleHttpIT.java"
+        },
+        {
+          "name": "UserLocaleResolutionIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/i18n/UserLocaleResolutionIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "実機E2E 4観点（ja のエラー文言、en 切替が再起動なしで反映、ユーザー間の取り違えなし、未ログイン時は Accept-Language に従う）で本番経路の挙動が変わっていない",
+      "tests": [
+        {
+          "name": "実機E2E 4観点（合格）",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4649#issuecomment-7121311601"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44522876997
+    },
+    {
+      "runId": 44522877344
+    },
+    {
+      "runId": 44522877096
+    },
+    {
+      "runId": 44522877136
+    },
+    {
+      "runId": 44522877032
+    },
+    {
+      "runId": 44522876991
+    },
+    {
+      "runId": 44522877007
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4649"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4649#issuecomment-7121311601"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4649#issuecomment-7121311601"
+    }
+  },
+  "regressions": []
+}

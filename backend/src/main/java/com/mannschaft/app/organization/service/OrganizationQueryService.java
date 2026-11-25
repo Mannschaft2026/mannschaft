@@ -53,6 +53,35 @@ public class OrganizationQueryService {
         return result;
     }
 
+    /**
+     * 指定 ID のうち ACTIVE（承諾済み）かつ未アーカイブ・未削除の組織 ID を 1 SQL で返す。
+     * 空入力は SQL を発行しない（グローバル検索の閲覧者スコープ解決。CMP-261116-0722）。
+     *
+     * @param orgIds 対象組織 ID
+     * @return 有効な組織 ID の集合
+     */
+    public java.util.Set<Long> findActiveIds(Collection<Long> orgIds) {
+        if (orgIds == null || orgIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(organizationRepository.findActiveIdsByIdIn(orgIds));
+    }
+
+    /**
+     * 指定 ID のうち、未ログイン公開ページと同じ条件（visibility = PUBLIC・ACTIVE・未アーカイブ・未削除）を
+     * 満たす組織 ID を 1 SQL で返す。空入力は SQL を発行しない
+     * （グローバル検索 ARTICLE の非所属者向け公開経路。CMP-261116-0722 PR-5）。
+     *
+     * @param orgIds 対象組織 ID
+     * @return 公開してよい組織 ID の集合
+     */
+    public java.util.Set<Long> findPublicIds(Collection<Long> orgIds) {
+        if (orgIds == null || orgIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(organizationRepository.findPublicIdsByIdIn(orgIds));
+    }
+
     /** 他ドメイン向けの組織の表示用要約（ID・名前・slug だけ）。 */
     public record OrganizationSummary(Long id, String name, String slug) {
     }

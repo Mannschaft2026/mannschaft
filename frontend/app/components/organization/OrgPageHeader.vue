@@ -87,7 +87,7 @@ const overflowMenuItems = computed(() => {
   if (props.roleName && props.roleName !== 'SUPPORTER') {
     items.push({
       label: t('announcement.broadcast_button_org'),
-      icon: 'pi pi-bullhorn',
+      icon: 'pi pi-megaphone',
       command: () => { showBroadcastWizard.value = true },
     })
   }
@@ -145,8 +145,9 @@ const overflowMenuItems = computed(() => {
       <div class="flex items-center gap-2 flex-wrap min-w-0 md:flex-1">
         <!-- F02.9 お気に入りトグル -->
         <FavoriteToggleButton
+          v-if="org.numericId != null"
           entity-type="ORGANIZATION"
-          :entity-id="String(org.id)"
+          :entity-id="String(org.numericId)"
           :entity-name="displayName"
         />
         <!-- F01.2.1: チームとして加盟を申請（表示は BE の eligibility に従う） -->
@@ -316,7 +317,7 @@ const overflowMenuItems = computed(() => {
         <Button
           v-if="roleName && roleName !== 'SUPPORTER'"
           :label="$t('announcement.broadcast_button_org')"
-          icon="pi pi-bullhorn"
+          icon="pi pi-megaphone"
           severity="secondary"
           size="small"
           class="hidden sm:inline-flex"

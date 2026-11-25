@@ -22,6 +22,8 @@ const { t } = useI18n()
 const { createSlot, updateSlot } = useShiftSlotApi()
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
+const confirm = useConfirm()
+const { formatCalendarDay } = useDatetime()
 
 const saving = ref(false)
 
@@ -47,6 +49,8 @@ watch(
   () => props.visible,
   (visible) => {
     if (!visible) return
+    // 開き直したときだけ保存可能に戻す（成功後は閉じ終わるまで再入させない）
+    saving.value = false
     if (props.slotData) {
       form.value = {
         slotDate: props.slotData.time.slotDate,
@@ -70,8 +74,39 @@ watch(
   { immediate: true },
 )
 
-async function save() {
-  if (!form.value.slotDate) return
+async function save(moveRequestsConfirmed = false) {
+  if (!form.value.slotDate || saving.value) return
+  if (
+    props.slotData &&
+    form.value.slotDate !== props.slotData.time.slotDate &&
+    !moveRequestsConfirmed
+  ) {
+    const slotId = props.slotData.id
+    const oldDate = props.slotData.time.slotDate
+    const newDate = form.value.slotDate
+    confirm.require({
+      header: t('shift.slot.moveDateTitle'),
+      // ISO のまま出さず、ロケールに応じた曜日付きの日付で示す
+      message: t('shift.slot.moveDateMessage', {
+        oldDate: formatCalendarDay(oldDate),
+        newDate: formatCalendarDay(newDate),
+      }),
+      icon: 'pi pi-exclamation-triangle',
+      rejectLabel: t('common.cancel'),
+      // キャンセルは枠を塗りつぶさない（承認ボタンを主役にする）
+      rejectClass: 'p-button-text',
+      acceptLabel: t('shift.slot.moveDateAccept'),
+      accept: () => {
+        // 確認中に別の枠へ切り替わった場合は、古い確認を新しい更新へ流用しない。
+        if (
+          !props.visible || props.slotData?.id !== slotId ||
+          props.slotData.time.slotDate !== oldDate || form.value.slotDate !== newDate
+        ) return
+        return save(true)
+      },
+    })
+    return
+  }
   saving.value = true
   try {
     let saved: ShiftSlotResponse
@@ -83,6 +118,7 @@ async function save() {
         positionId: form.value.positionId ?? undefined,
         requiredCount: form.value.requiredCount,
         note: form.value.note.trim() || undefined,
+        ...(moveRequestsConfirmed ? { moveRequestsConfirmed: true } : {}),
       }
       saved = await updateSlot(props.slotData.id, payload)
     } else {
@@ -97,12 +133,15 @@ async function save() {
       saved = await createSlot(props.scheduleId, payload)
     }
     success(t('shift.slot.saveSuccess'))
+    // 成功時は saving を解除しない。閉じるアニメーション中も保存ボタンは DOM に残るため、
+    // ここで解除すると遅れて届いた連打が同じ内容で再保存（二重作成）してしまう。
+    // 次に開かれたとき（visible の watch）に解除する。
     emit('saved', saved)
     close()
   } catch (error) {
-    handleApiError(error)
-  } finally {
+    // 失敗時は再試行できるようボタンを戻す
     saving.value = false
+    handleApiError(error)
   }
 }
 
@@ -179,7 +218,7 @@ const dialogHeader = computed(() =>
         icon="pi pi-check"
         :loading="saving"
         :disabled="!form.slotDate"
-        @click="save"
+        @click="save()"
       />
     </template>
   </Dialog>

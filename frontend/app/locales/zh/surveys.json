@@ -59,6 +59,7 @@
       "draftHint": "可以之后再添加题目。现在仅用标题保存即可。",
       "successToast": "问卷已创建",
       "draftSuccessToast": "已保存为草稿。请添加题目后发布。",
+      "publishFailedAfterCreate": "草稿已创建，但发布失败。",
       "failureToast": "无法创建问卷",
       "validation": {
         "titleRequired": "请输入标题",
@@ -91,7 +92,10 @@
       },
       "teamBreakdownEnabled": "按团队汇总",
       "teamBreakdownHint": "按下属团队分别汇总回答结果（仅限组织分发）。",
-      "teamBreakdownAnonymousConflict": "匿名问卷无法使用团队汇总。"
+      "teamBreakdownAnonymousConflict": "匿名问卷无法使用团队汇总。",
+      "lockedNote": "草稿已创建。请点击“重试发布”，或点击“以草稿关闭”关闭（草稿会保留，可在详情页发布）。输入内容无法再修改。",
+      "closeAsDraft": "以草稿关闭",
+      "retryPublish": "重试发布"
     },
     "detail": {
       "scopeMissing": "缺少问卷范围信息",
@@ -114,7 +118,8 @@
       "responseCount": "回答",
       "anonymous": "匿名",
       "draftHint": "该问卷为草稿状态。发布前不会接受回答。",
-      "draftAddQuestionsHint": "发布前请添加题目。没有题目也可发布，但回答者将无法作答。",
+      "draftAddQuestionsHint": "请至少添加一道题目后再发布。没有题目的问卷无法发布。",
+      "publishNoQuestions": "没有任何题目，无法发布。请添加题目。",
       "draftQuestionsSection": "添加题目",
       "publishButton": "发布",
       "publishSuccess": "问卷已发布",
@@ -158,7 +163,8 @@
         "title": "应答者列表",
         "toggleShow": "显示",
         "toggleHide": "隐藏"
-      }
+      },
+      "addQuestionFailed": "问题保存失败，尚未发布。"
     },
     "respondents": {
       "summary": "{responded} / 共 {total} 人",

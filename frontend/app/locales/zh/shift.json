@@ -12,8 +12,11 @@
     "board": {
       "title": "排班板",
       "memberPool": "未分配成员",
+      "noUnassignedMembers": "没有未分配的成员",
+      "noMatchingMembers": "没有符合搜索条件的成员",
       "dragHint": "拖动成员进行分配",
-      "unassignedSlots": "{count}个未分配班次"
+      "unassignedSlots": "{count}个未分配班次",
+      "backToList": "返回班次列表"
     },
     "autoAssign": {
       "button": "自动分配",
@@ -50,6 +53,8 @@
     },
     "changeRequest": {
       "title": "变更申请",
+      "typeColumn": "申请类型",
+      "empty": "暂无变更申请",
       "type": {
         "PRE_CONFIRM_EDIT": "确定前变更",
         "INDIVIDUAL_SWAP": "个人替换",
@@ -70,7 +75,16 @@
       "reject": "拒绝",
       "reviewComment": "审核评论",
       "openCallLimit": "公开招募每月最多3次",
-      "fetchError": "获取变更申请失败"
+      "fetchError": "获取变更申请失败",
+      "requester": "申请人",
+      "unknownRequester": "未知用户",
+      "createSuccess": "已提交变更申请",
+      "approveSuccess": "已批准变更申请",
+      "rejectSuccess": "已驳回变更申请",
+      "withdrawSuccess": "已撤回变更申请",
+      "closedForNew": "该排班表已发布，不再接受新的变更申请",
+      "reviewedAt": "审核时间",
+      "reviewConflict": "其他人已先行更新。列表已重新加载，请确认最新状态"
     },
     "pdf": {
       "teamLayout": "团队排班表 PDF",
@@ -111,6 +125,7 @@
       "createDialog": "新建班次",
       "createSuccess": "班次已创建",
       "selectTeam": "选择团队",
+      "statusFilterLabel": "状态",
       "fromDate": "开始日期",
       "toDate": "结束日期",
       "noSchedule": "暂无班次",
@@ -121,14 +136,29 @@
       "formStart": "开始日期",
       "formEnd": "结束日期",
       "formDeadline": "申请截止日",
+      "formDeadlineInvalid": "请以“2026/12/31 23:59”的格式输入有效的申请截止日期和时间",
       "formNote": "备注",
       "formNotePlaceholder": "可选"
+    },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "因时薪未设置，无法发布",
+        "description": "在与预算关联的工作日中，有负责人尚未设置有效时薪。请先设置下列人员的时薪，然后重新发布。",
+        "unknownUser": "用户ID {id}",
+        "goSettings": "打开时薪设置"
+      },
+      "conflict": {
+        "title": "排班内容已变更",
+        "description": "在确认发布期间排班内容发生了变化。请重新加载页面确认内容后再次发布。"
+      },
+      "close": "关闭"
     },
     "detail": {
       "tabOverview": "概览",
       "tabEdit": "编辑",
       "tabRequests": "申请列表",
       "tabConstraints": "工作限制",
+      "changeRequestLink": "变更申请",
       "startCollecting": "开始收集申请",
       "startAdjusting": "开始调整",
       "publish": "发布",
@@ -143,7 +173,9 @@
       "colDate": "日期",
       "colSlots": "时段",
       "editDialogTitle": "编辑班次",
-      "accessDeniedRedirect": "您无权查看此页面"
+      "accessDeniedRedirect": "您无权查看此页面",
+      "tabBoard": "排班看板",
+      "tabChangeRequests": "变更申请"
     },
     "slot": {
       "createTitle": "创建时段",
@@ -152,7 +184,7 @@
       "bulkCreateSuccess": "已创建 {count} 个时段",
       "noSlot": "暂无时段",
       "noPosition": "无职位",
-      "assigned": "已分配",
+      "assigned": "分配人数",
       "date": "日期",
       "startTime": "开始时间",
       "endTime": "结束时间",
@@ -162,10 +194,23 @@
       "notePlaceholder": "可选",
       "dayOfWeek": "星期",
       "dayOfWeekHint": "仅在所选星期创建时段",
+      "moveDateTitle": "确认更改日期",
+      "moveDateMessage": "将日期从 {oldDate} 更改为 {newDate}。如果此班次已有提交的志愿，也会一并移至新日期。",
+      "moveDateAccept": "移动班次和意愿",
       "saveSuccess": "时段已保存",
       "deleteSuccess": "时段已删除",
       "assignmentMasked": "调整中",
-      "assignmentMaskedHint": "公开前不显示排班分配"
+      "assignmentMaskedHint": "公开前不显示排班分配",
+      "deleteTitle": "删除排班时段",
+      "deleteConfirmPlain": "确定删除此时段吗？",
+
+      "deleteConfirmBoth": "确定删除此时段吗？为此时段提交的 {requests} 条意愿和 {assignments} 条分配也将被删除。此操作无法通过常规操作撤销。",
+
+      "deleteConfirmRequestsOnly": "确定删除此时段吗？为此时段提交的 {requests} 条意愿也将被删除。此操作无法通过常规操作撤销。",
+
+      "deleteConfirmAssignmentsOnly": "确定删除此时段吗？此时段的 {assignments} 条分配也将被删除。此操作无法通过常规操作撤销。",
+
+      "deleteConfirmUnknown": "确定删除此时段吗？为此时段提交的意愿和分配（如有）也将被删除。此操作无法通过常规操作撤销。"
     },
     "requests": {
       "submissionRate": "提交率",
@@ -173,6 +218,7 @@
       "matrixTitle": "申请矩阵",
       "noRequests": "暂无申请",
       "colUser": "成员",
+      "unknownMember": "未知成员",
       "legend": "图例"
     },
     "preference": {
@@ -241,7 +287,14 @@
       "userId": "用户ID",
       "userIdPlaceholder": "请输入用户ID",
       "saveSuccess": "工作限制已保存",
-      "deleteSuccess": "工作限制已删除"
+      "deleteSuccess": "工作限制已删除",
+      "unknownMember": "未知用户",
+      "selectMember": "选择成员",
+      "searchMember": "按姓名搜索",
+      "noSelectableMembers": "没有可添加的成员",
+      "membersLoadError": "无法获取成员列表",
+      "deleteTitle": "删除工作限制",
+      "deleteConfirm": "确定要删除此工作限制吗？"
     },
     "validation": {
       "atLeastOneConstraint": "请至少指定一个限制条件"
@@ -389,11 +442,14 @@
       }
     },
     "entry": {
+      "notStarted": "排班意愿提交尚未开始。",
       "sectionTitle": "提交排班意愿 / 排班板",
       "bulkRequest": "批量提交意愿",
       "board": "排班板",
+      "edit": "编辑排班时段",
       "weeklyDefault": "设置每周默认",
-      "closed": "意愿提交已截止"
+      "closed": "意愿提交已截止",
+      "changeRequest": "变更申请"
     },
     "submitConfirm": {
       "title": "确认以此内容提交？",
@@ -520,9 +576,9 @@
     },
     "requests": {
       "title": "收集并查看成员的班次意愿",
-      "body": "进入“收集中”状态后，成员即可提交意愿。在详情页面的“意愿列表”标签页中，可以用矩阵查看所有人的情况。",
+      "body": "进入“收集中”状态后，成员即可提交意愿。管理员可在详情页面的“意愿列表”标签页（仅管理员可见）中用矩阵查看所有人的情况。",
       "steps": {
-        "step1": "点击详情页面的“意愿列表”标签页",
+        "step1": "（仅管理员）点击详情页面的“意愿列表”标签页",
         "step2": "在汇总卡片中查看提交率和未提交人数",
         "step3": "在矩阵表中查看每位成员在各日期的意愿强度",
         "step4": "以五个等级显示：“希望上班・无偏好・勉强可以上班・希望休息・必须休息”"

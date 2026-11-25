@@ -52,7 +52,7 @@ public class SharedFolderAccessGuard {
      * <p>実効最低可視ロールはファイル個別値を優先し、{@code null} ならフォルダ値を継承する。</p>
      */
     public void authorizeFileView(SharedFolderEntity folder, SharedFileEntity file, Long userId) {
-        authorizeBaseView(folder, userId);
+        authorizeBaseViewForFile(folder, file, userId);
         applyMinVisibleRole(folder, effectiveMinRole(file, folder), userId);
     }
 
@@ -107,6 +107,32 @@ public class SharedFolderAccessGuard {
             case TOURNAMENT, TOURNAMENT_DIVISION ->
                     folderScopeAccessGuard.checkFolderPostByFolderId(folder.getId(), userId);
         }
+    }
+
+    /**
+     * ファイル ID 経路の基本認可。大会系は {@link FolderScopeAccessGuard#checkFolderViewByFileId} に寄せ、
+     * 閲覧権なしがファイル不在と同一の {@code FILE_SHARING_002} になるようにする
+     * （フォルダ ID 経路の {@code FILE_SHARING_001} を返すとファイル ID の存在オラクルになる）。
+     * 大会系以外は {@link #authorizeBaseView} と同じ。
+     */
+    private void authorizeBaseViewForFile(SharedFolderEntity folder, SharedFileEntity file, Long userId) {
+        switch (folder.getScopeType()) {
+            case TOURNAMENT, TOURNAMENT_DIVISION ->
+                    folderScopeAccessGuard.checkFolderViewByFileId(file.getId(), userId);
+            default -> authorizeBaseView(folder, userId);
+        }
+    }
+
+    /**
+     * 大会／ディビジョンスコープのファイルに対する<b>投稿権限（公開リンク管理など）</b>の認可を、
+     * ファイル ID 経路（{@link FolderScopeAccessGuard#checkFolderPostByFileId}）で当てる。
+     *
+     * <p>フォルダ ID 経路を使うと、ファイル ID 起点の操作が {@code FILE_SHARING_001} を返し得るため、
+     * ファイル ID 起点の入口（公開リンク管理）はこちらを用いる（CMP-261116-0726）。
+     * シグネチャは ID のみ（ArchUnit D-1 API 境界: Entity を公開しない）。</p>
+     */
+    public void authorizeTournamentFilePost(Long fileId, Long userId) {
+        folderScopeAccessGuard.checkFolderPostByFileId(fileId, userId);
     }
 
     /**

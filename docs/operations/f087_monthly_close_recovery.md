@@ -90,6 +90,8 @@ Authorization: Bearer <BUDGET_ADMIN token>
 - 既に締め済: HTTP 409 `MONTHLY_ALREADY_CLOSED`（このエラーが出る場合は復旧完了 — 別経路で締めが走った可能性）
 - 再失敗: `failed_organization_ids: [42]` + ログを確認して原因切り分け
 
+> **注意（当月の再実行は拒否される）**: 締められるのは対象月が終了した月だけ（JST 壁時計で `対象月 < 当月`）。当月・未来月を指定すると HTTP 409 `SHIFT_BUDGET_032` で拒否される。月が替わる（JST の翌月 1 日 0 時を過ぎる）まで待ってから再実行すること。
+
 ### 4.2 失敗イベントの個別再実行（リトライバッチ自動分以外）
 
 リトライバッチが PENDING/RETRYING を 15 分毎に拾うが、即時対応したい場合は管理 API で個別起動。
@@ -101,9 +103,10 @@ Authorization: Bearer <BUDGET_ADMIN token>
 ```
 
 **注意**:
-- `event_type = CONSUMPTION_RECORD` / `CONSUMPTION_CANCEL` の自動リトライは禁止されている（重複 INSERT リスクのため即 EXHAUSTED 化）
-- 月次締め失敗イベントは `event_type = CONSUMPTION_RECORD` で記録されているため、本 API では再実行されず常に EXHAUSTED 化する
+- `event_type = CONSUMPTION_RECORD` / `CONSUMPTION_CANCEL` は再実行非対応。画面に再実行を表示せず、API直呼びは409で元行の全列を保持する。バッチは元診断・試行回数・最終試行日時を保持してEXHAUSTEDへ退避する
+- 月次締め失敗イベントは `event_type = CONSUMPTION_RECORD` のため、本APIは409を返す
 - → 月次締め失敗の復旧は §4.1 の **API #11 再起動** を使うこと。本 API は `THRESHOLD_ALERT` / `WORKFLOW_START` / `NOTIFICATION_SEND` 系の個別再実行用
+- 対応種別のEXHAUSTEDは手動再試行できる。再失敗しても初回診断を保持するため、最新の例外はイベントIDをキーにERRORログから確認する。SUCCEEDED / MANUAL_RESOLVEDは再実行不可
 
 ### 4.3 手動補正済マーク
 

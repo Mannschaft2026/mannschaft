@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261006-0901",
+  "scope": "app",
+  "implementation": {
+    "pr": 4328,
+    "sha": "534ea480445d2b3c31042fabe44c9475f0ec6f19"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "大会の部門・参加チーム GET が path の orgId を検証し、別組織の URL を経由した越境パスで 404 TOUR_001 を返す",
+      "tests": [
+        {
+          "name": "公開大会のtIdを踏み台に非公開大会divIdの参加チーム一覧を見ると404（divId束縛）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentScopeContractIT.java"
+        },
+        {
+          "name": "非メンバーの非公開大会ディビジョン一覧は404（可視性 fail-closed）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentScopeContractIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "閲覧系 API の可視性判定（orgId と大会の所属の照合）が共通ゲートで行われる",
+      "tests": [
+        {
+          "name": "TournamentViewAccessGateTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentViewAccessGateTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "PR #3668 の real spec の test.fixme を外して green にする",
+      "tests": [
+        {
+          "name": "cmp-260929-0654-pk-binary16.real.spec.ts",
+          "evidence": "frontend/tests/e2e/real/cmp-260929-0654-pk-binary16.real.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 42187641131 },
+    { "runId": 42187641156 },
+    { "runId": 42187641139 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4328"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261006-0901-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261006-0901-exploratory.md"
+    }
+  },
+  "regressions": []
+}

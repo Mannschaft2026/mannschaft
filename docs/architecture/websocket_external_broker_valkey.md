@@ -2,6 +2,7 @@
 
 > **ステータス**: 🟢 設計完了（2026-07-10 精査第 1 パス＋第 2 パス＋実機 E2E 耐性クリティック反映済み）
 > 作成日: 2026-07-10
+> 改訂: 2026-11-04 §2.3.1（Cookie 認証ハンドシェイクの採用条件・優先順位）／§2.3.2（STOMP ERROR の `x-error-code` 約束事）を追加（CMP-261104-0337）
 > 対象ブランチ: `docs/websocket-external-broker-design` → `main`
 > 担当: kenta（殿の軍議 + 家老偵察 + 足軽起草）
 > 関連: [`docs/features/F08.10_match_record_analytics/07_realtime_spectator.md`](../features/F08.10_match_record_analytics/07_realtime_spectator.md) §J.5（「WS 基盤全体の別軍議」の正本は本書）／[`docs/architecture/db_scalability.md`](db_scalability.md)（1000 万ユーザー方針）
@@ -62,27 +63,22 @@ flag OFF 時は `@ConditionalOnProperty` で relay 部品（`WebSocketRelayPubli
 
 ---
 
-## 2. 現状分析（origin/main 実コードで裏取り済み）
+## 2. 現状分析と構成の更新履歴
 
-### 2.1 WebSocket 設定は「2 つの `@EnableWebSocketMessageBroker`」だが実体は単一ブローカー
+### 2.1 WebSocket 設定は単一ブローカーへ集約済み
 
-同一 Spring コンテキストに `@EnableWebSocketMessageBroker` が **2 箇所**存在する。
+現行構成では、`/ws` と `/ws/signage` の両エンドポイントが単一の brokerChannel・SimpleBroker・clientOutboundChannel を共有する。過去に両設定クラスがブローカー設定を宣言していた状態は解消済みであり、現在は `WebSocketConfig` のみがブローカーと宛先プレフィックスを宣言する。CMP-261110-2011 の変更は両 Configurer の `@EnableWebSocketMessageBroker` 除去と単一 `DelegatingWebSocketMessageBrokerConfiguration` 派生による終端 ERROR・fatal gate の組み込みであり、既存のブローカー宣言と許可オリジン統一は維持している。
 
-| Config クラス | エンドポイント | ブローカー宣言 | インバウンドインターセプタ |
+| Config クラス | エンドポイント | ブローカー宣言 | インバウンド処理 |
 |---|---|---|---|
-| `config/WebSocketConfig` | `/ws`（SockJS）| `enableSimpleBroker("/topic","/queue")`・`setApplicationDestinationPrefixes("/app")`・`setUserDestinationPrefix("/user")` | `WebSocketAuthChannelInterceptor` → `MatchLiveSubscriptionInterceptor` → `EmergencyClosureSubscriptionInterceptor` |
-| `signage/config/SignageWebSocketConfig` | `/ws/signage`（SockJS）| `enableSimpleBroker("/topic")`・`setApplicationDestinationPrefixes("/app")` | なし |
+| `config/WebSocketConfig` | `/ws`（SockJS）| `enableSimpleBroker("/topic", "/queue")`・`/app`・`/user` | 認証 → MatchLive・EmergencyClosure・Chat の購読認可 |
+| `signage/config/SignageWebSocketConfig` | `/ws/signage`（SockJS）| なし | 共通 inbound channel の認証・購読認可を適用 |
 
-**確定した実挙動（Spring 機構）:**
-`@EnableWebSocketMessageBroker` は `DelegatingWebSocketMessageBrokerConfiguration` を `@Import` するメタアノテーションであり、同一構成クラスの多重 import は **1 回に重複排除**される。この `DelegatingWebSocketMessageBrokerConfiguration` は、コンテキスト内の **全ての `WebSocketMessageBrokerConfigurer` 実装 Bean を注入し、各コールバックを全 Configurer に委譲**する。したがって:
+`TerminalCloseWebSocketBrokerConfig` は `DelegatingWebSocketMessageBrokerConfiguration` を継承し、全既存 `WebSocketMessageBrokerConfigurer` の設定を委譲する。fatal session gate を inbound interceptor の先頭に加え、その後 `super.configureClientInboundChannel` で既存の認証・購読認可を登録する。このため両エンドポイントに同じ gate と認証・購読認可順が適用される。
 
-- **ブローカーは 2 系統の独立ブローカーではなく、単一のブローカー（単一 brokerChannel・単一 SimpleBroker・単一 clientOutboundChannel）に両 Configurer がマージ**される。
-- `registerStompEndpoints` は加算的に呼ばれ、`/ws` と `/ws/signage` の両エンドポイントが単一ブローカーに載る。
-- `configureClientInboundChannel` は `WebSocketConfig` のみが実装するため、認証・購読認可インターセプタは単一のインバウンドチャネルに登録され、**サイネージ含む全エンドポイントに適用**される。
+両 endpoint の許可オリジンは `mannschaft.allowed-origins` に統一され、ワイルドカードは使用しない。ブローカー設定も一本化されており、`/topic`・`/queue`・`/app`・`/user` が共通で有効となる。従前の二重宣言による順序依存と `/queue` 脱落の懸念、および Signage 側のワイルドカード許可は、既存の一本化・統一により解消済みである。
 
-**→ 中継（relay）の適用範囲**: relay は「単一の brokerChannel／SimpleBroker」を対象にするため、**サイネージ（`/topic/signage/...`）を含む全配信が自動的に中継対象**になる。サイネージ専用の追加中継実装は不要。
-
-> **潜在的脆弱性（実装スコープで是正）**: `configureMessageBroker` は両 Configurer で呼ばれ、**同一の `MessageBrokerRegistry` を二重に変更**する。`enableSimpleBroker(...)` は registry 内の登録を上書きするため、`WebSocketConfig`（`/topic`+`/queue`）と `SignageWebSocketConfig`（`/topic` のみ）の**呼び出し順序で最終的なブローカー設定が変わる**（順序依存・`@Order` 未指定で非決定的）。仮にサイネージ側が後勝ちすると `/queue` がブローカーに登録されず、`convertAndSendToUser` の `/queue/...` 配信が壊れうる。実装隊は**起動時に実 Configurer 順序を列挙して現挙動を確定**し（家訓「憶測修正禁止」）、以下の**具体形で集約**して順序依存を根絶すること: **`SignageWebSocketConfig` から `configureMessageBroker` を削除**し、ブローカー設定（`enableSimpleBroker("/topic","/queue")`・`/app`・`/user`）は `WebSocketConfig` の**単一 Registry 宣言に一本化**する（Signage 側には `registerStompEndpoints`（`/ws/signage`）のみ残す）。あわせて Signage の `setAllowedOriginPatterns("*")` と `WebSocketConfig` のオリジン制限（`mannschaft.allowed-origins`）の**食い違いも同集約タスクで統一**する（`"*"` は CSRF 対策方針と不整合のため許可オリジン方式へ寄せる）。Javadoc「本番は Valkey 想定」（`WebSocketConfig`）は実態と乖離しているため、実装時に是正する。
+relay は単一の brokerChannel／SimpleBroker を対象とするため、サイネージ（`/topic/signage/...`）を含む全配信が中継対象となる。サイネージ専用の追加中継実装は不要。
 
 ### 2.2 配信箇所の全数（relay の対象）
 
@@ -129,7 +125,64 @@ messagingTemplate.convertAndSendToUser(
 3. 既存の `sessionAttributes` の userId は購読認可インターセプタ（`MatchLiveSubscriptionInterceptor` 等・07 §J.3）が参照しているため**併存を維持**（後方互換）。Principal 追加は副作用なく上乗せできる。
 4. マルチノード時のユーザー宛配信は、relay が `/user/...` 解決後の実 destination（セッション固有）ではなく **ユーザー宛の論理 destination を中継**することで、受信ノード側の `SimpUserRegistry`（そのノードに接続中のセッション）で解決する（§4.3 参照）。
 5. **同一ソース原則（AC-5 でアサート）**: `sessionAttributes` の userId と Principal 名（`getName()`）は、**同一の JWT 検証結果から同時に設定**する（別経路から取らない）。`/user/{userId}/queue/notifications` には SUBSCRIBE 認可インターセプタが存在せず、**Principal の正当性がユーザー宛配信の唯一の防壁**であるため、両値の一致を不変条件とする。
-6. **匿名接続（CONNECT フェイルオープン）**: Authorization ヘッダなし/無効の接続には Principal を設定しない（現行の匿名許容方針は不変）。Principal 不在セッションは `SimpUserRegistry` に登録されず、`/user` 宛解決 0 件で**無害**（匿名者にユーザー宛通知が漏れることはない）。
+6. **匿名接続（CONNECT フェイルオープン）**: 資格情報が何も無い接続（Authorization ヘッダなし／空の `Bearer `、かつハンドシェイクが未認証）には Principal を設定しない（現行の匿名許容方針は不変）。Principal 不在セッションは `SimpUserRegistry` に登録されず、`/user` 宛解決 0 件で**無害**（匿名者にユーザー宛通知が漏れることはない）。**値のある無効 Bearer は匿名へ落とさず拒否する**（§2.3.1 改訂・CMP-261104-0337）。
+
+#### 2.3.1 Cookie 認証ハンドシェイクの採用（CMP-261104-0337 改訂・B 案）
+
+**欠陥（実機で確認）**: FE はアクセストークンをメモリにのみ保持するため、リロード後は accessToken を持たず CONNECT に空の `Authorization: Bearer ` を送る。一方ハンドシェイク HTTP は `JwtAuthenticationFilter` が HttpOnly Cookie（`access_token`）で認証済みで、Spring はその Authentication をセッション Principal とする（CONNECTED の `user-name` が返る）。旧実装は CONNECT の Bearer からしか session userId を設定しなかったため、**Principal はあるのに session userId が null** という同一ソース原則（5）違反が起き、購読 Interceptor は未認証として権限なしと同じ文言で拒否していた。
+
+**認証ソースの選択（CONNECT と、その同義の STOMP コマンドの両方に適用）:**
+
+| CONNECT の Authorization | ハンドシェイク（Cookie）| 結果 |
+|---|---|---|
+| `Bearer <値>` で有効 | 任意 | **Bearer を採用**。Cookie と別ユーザーでも Bearer 優先（HTTP の `JwtAuthenticationFilter` と同じ優先順位）。不一致はログに記録し、Principal・session userId とも Bearer のユーザーへ置き換える |
+| `Bearer <値>` で無効（期限切れ・改ざん・失効）| 任意 | **CONNECT を拒否**（`x-error-code: UNAUTHENTICATED`）。Cookie へ黙って切り替えない |
+| なし／空の `Bearer `（空白のみ含む）| 認証済み Authentication | **ハンドシェイクの Authentication を採用**し、その名前（userId）から `StompPrincipal` と session userId を同時に設定する |
+| なし／空の `Bearer ` | 匿名 Authentication／なし | 匿名（Principal・session userId とも設定しない）。接続は許可 |
+| なし／空の `Bearer ` | 名前が userId でない／未認証状態の Authentication | CONNECT を拒否（`UNAUTHENTICATED`）。同一ソースで設定できない Principal をセッションに残さないため |
+
+- **無効 Bearer を拒否とする理由**: クライアントが明示した資格情報が無効なのに別経路（Cookie）の身元へ黙って差し替えると、タブが保持するトークンと別アカウントのセッションが確立しうる（別タブでのアカウント切替後など）。HTTP 側も無効 Bearer は Cookie へフォールバックしない（`JwtAuthenticationFilter` は Bearer があれば Cookie を見ない）。ハンドシェイクの Principal は Spring の仕様上 CONNECT 後に外せないため「無効 Bearer → 匿名」は Principal と userId の食い違いを再発させる。よって拒否が唯一安全側で、FE は `UNAUTHENTICATED` を受けてトークン更新を 1 回試みてから再接続する（FE 側は別 PR）。
+- **匿名 Authentication は採用しない**: `AnonymousAuthenticationToken` は userId を持たないため。Spring Security の `getUserPrincipal()` は通常匿名を返さないが、多層防御として明示的に除外する。
+- **CSWSH**: ハンドシェイクの Origin 制限（`setAllowedOriginPatterns` に `mannschaft.allowed-origins` を列挙・ワイルドカード不使用）と `access_token` Cookie の `SameSite=Strict` は**緩めない**。Cookie 認証を CONNECT で採用しても、許可外 Origin（同一サイトの別ポート等を含む）からはハンドシェイク自体が成立しない（実接続テストで担保）。
+
+#### 2.3.2 拒否理由コード `x-error-code`（STOMP ERROR フレームの約束事）
+
+CONNECT／SUBSCRIBE をインターセプタで拒否するときは `StompRejectedException`（`MessagingException` 派生・`common.websocket`）を送出する。共通エラーハンドラ `StompErrorCodeErrorHandler`（`StompSubProtocolErrorHandler` 派生・`WebSocketConfig` で登録。`/ws`・`/ws/signage` 共通）が、ブラウザへ届く ERROR フレームのネイティブヘッダ **`x-error-code`** にコードを載せる。人間向けの `message` ヘッダは従来の文言を維持する。通常の終端拒否では、ERROR フレームを実際に送信してからサーバが接続を閉じる。
+
+**終端拒否時の送信・受信境界（CMP-261110-2011）:**
+
+- 同じ接続で送信が進行中の場合、`PROTOCOL_ERROR` のcloseはERRORのbuffer追加だけで送信完了とせず、進行中sendがbufferをdrainしてから試みる。実delegate・既存buffer/time limit・message callbackを維持する。
+- close入口でserver-owned session属性をfatalに確定する。以後は`preSend`とworkerの`beforeHandle`でDISCONNECT以外を抑止し、同一payloadやqueue待ちの後続処理へ拒否後の業務dispatchを進めない。既に`beforeHandle`を通過した処理は巻き戻さない。native headerからfatalを読まず、syntheticを含むDISCONNECTはbroker・user/session cleanupのため通す。
+- 正の`sendTimeLimit`では既存`messageBrokerTaskScheduler`に同limitの期限を最大1件予約し、期限でもcloseを試みる。0/負値は従来どおり即時とする。予約時刻は無条件の壁時計発火・物理close完了上限ではない。schedulerの単独`stop()`はpauseであり、shutdown/破棄後の予約拒否とは異なる。
+- `NORMAL`・`GOING_AWAY`等の他statusは即時優先し、保留期限を取消す。送信が復帰しない場合の期限closeや、アプリ停止・破棄による`GOING_AWAY`は通常のERROR送信完了経路と分けて扱い、ERROR実受信を保証する終了経路とはしない。追加poolや共有の静的session mapは作らない。アプリ全体のstop・closeでは、停止済みbrokerの内部購読簿が直ちに空になることを保証せず、稼働中のDISCONNECTによる購読解除と区別する。
+
+
+| `x-error-code` | 意味 | 再接続で解消するか |
+|---|---|---|
+| `UNAUTHENTICATED` | 認証なし、または提示された資格情報が無効 | トークン更新・ログイン後の再接続で解消しうる |
+| `FORBIDDEN` | 認証済みだが購読権限なし（対象の不在・削除済みも同じコードで返し存在を漏らさない）| 解消しない（再接続を止める）|
+| `INVALID_DESTINATION` | 宛先の識別子が解釈できない（数値範囲外・UUID 不正など）| 解消しない |
+| （ヘッダなし）| 想定外の失敗 | クライアントは未知のエラーとして扱う |
+
+適用している購読 Interceptor: 臨時休業確認状況（未認証→`UNAUTHENTICATED`／ADMIN・DEPUTY_ADMIN 以外→`FORBIDDEN`）、match ライブ観戦（購読可否は `MatchAccessService.canView` → F00 `MatchVisibilityResolver` に委譲し、Interceptor は匿名を事前拒否しない。`canView=false` のとき未認証なら `UNAUTHENTICATED`・認証済みなら `FORBIDDEN`。**現状の `MatchVisibilityResolver` は閲覧者 null を常に不可とするため、匿名の match 購読は常に `UNAUTHENTICATED` で拒否される**＝匿名で観戦できる公開試合は現状存在しない。匿名 CONNECT 自体は従来どおり成立する）、チャットチャネル（未認証→`UNAUTHENTICATED`／不在・削除済み・非メンバー→`FORBIDDEN`）。いずれも宛先不正は `INVALID_DESTINATION`。
+
+#### 2.3.3 FE 側の扱い（CMP-261104-0337）
+
+STOMP を使う 4 composable（`useChatWebSocket`〔ユーザー宛通知 `useUserNotificationSocket` が相乗り〕／`useMatchLiveSpectator`／`useCorkboardEventListener`／`useEmergencyClosureLive`）は、共通補助 `frontend/app/composables/stomp/stompAuth.ts` を使う。
+
+- **接続ヘッダ**: `buildStompConnectHeaders(accessToken)` で組み立てる。トークンが無い（null・空・空白）ときは **Authorization ヘッダを付けない**（空の `Bearer ` を送らない）。リロード直後はこれでハンドシェイク Cookie の身元が採用される（§2.3.1）。`beforeConnect` で再接続ごとに最新トークンへ組み直す。
+- **拒否理由の読み分け**（`x-error-code`・§2.3.2）:
+
+| コード | FE の動き | 画面の状態 |
+|---|---|---|
+| `FORBIDDEN` / `INVALID_DESTINATION` | 専用接続（match・emergency・corkboard）は `client.deactivate()` で再接続を止める。共有接続（chat）は拒否された宛先だけを外す（下記） | `DENIED`（閲覧権限なし）|
+| `UNAUTHENTICATED` | ログイン中なら既存の `performTokenRefresh` でトークン更新を 1 回 → `beforeConnect` が更新完了を待って新トークンで再接続。更新が 401/403 なら既存の `handleAuthFailureLogout` でログアウト。**未ログイン（匿名の閲覧者）は更新もログアウトもしない** | 回復できなければ `UNAUTHENTICATED`（DENIED と区別）|
+| なし（未知）・通信断 | 従来どおり stompjs の自動再接続 | `RECONNECTING` 等（従来どおり）|
+
+- **更新の集約（single-flight）**: 更新は `performTokenRefresh` の同一セッション flight に乗るため、複数接続から同時に `UNAUTHENTICATED` が来ても refresh API は 1 回で済む。更新後 30 秒以内に同じ接続へ再び `UNAUTHENTICATED` が来たら、更新を繰り返さず `UNAUTHENTICATED` で止める（更新しても直らない状態での無限ループ防止）。通信断で更新できなかった場合（transient）は 1 回に数えない。
+- **共有接続での部分拒否（chat）**: ERROR を受けるとサーバが接続ごと閉じるため、1 宛先の拒否で通知購読まで止まらないよう次のようにする。(1) SUBSCRIBE ごとに `receipt` ヘッダを付ける（Spring の `StompSubProtocolErrorHandler` は拒否した SUBSCRIBE の receipt を ERROR の `receipt-id` に載せる）。(2) `receipt-id` から拒否された宛先を特定し、拒否済みとして記録する（チャンネルはメッセージ・イベントの両トピックをまとめて外す）。(3) 購読の定義は接続をまたいで保持し、stompjs の自動再接続後の `onConnect` で拒否済み以外をすべて張り直す。宛先を特定できない `FORBIDDEN` だけは接続ごと止める。チャンネルを開き直す（購読を新たに始める）と拒否記録は消え、再試行される。receipt→宛先の対応表は「現在の接続上の購読」と同じ寿命で管理する（張り直し・購読解除・拒否で該当分を消し、切断で全消去。ERROR の処理は切断より先なので特定に支障はない）。張り直しは既存の購読を外してから行い、二重購読しない。
+- **停止後の再開（corkboard）**: corkboard は共有接続を使うため、`DENIED` / `UNAUTHENTICATED` で止めた後も、新しい購読（別ボードへの移動・再ログイン後の再訪）を機に状態を戻して接続を再開する。停止状態は `useCorkboardWebSocketSync` の `realtimeState` でボード詳細画面に表示する。
+- **オンライン復帰・タブ復帰**: `DENIED` / `UNAUTHENTICATED` で止めた接続は、`online` イベントや Visibility 復帰では再開しない。
 
 ### 2.4 Valkey 現状（pub/sub 未使用 → 新設が必要）
 

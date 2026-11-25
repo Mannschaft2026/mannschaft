@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-2222",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4705,
+    "sha": "87212dc3ae818c1c600ab4216104a190177a2c18"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "ActivityScheduleSyncConcurrencyIntegrationTest が独立 TX で commit した SYSTEM_ADMIN の user_roles と users を後始末で残さない",
+      "tests": [
+        {
+          "name": "後始末は独立TXで作ったSYSTEM_ADMINとusersを残さない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/activity/ActivityScheduleSyncConcurrencyIntegrationTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "最後の SYSTEM_ADMIN の退会拒否テストが、他テストの残骸に依存せず自分の fixture の ID 基準で検証する",
+      "tests": [
+        {
+          "name": "最後のSYSTEM_ADMINだけを退会拒否する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/AccessControlLastAdminWithdrawalIntegrationTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45008527902
+    },
+    {
+      "runId": 45008527918
+    },
+    {
+      "runId": 45008527854
+    },
+    {
+      "runId": 45008527944
+    },
+    {
+      "runId": 45008526307
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4705"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードと重み表のみの変更で、画面・API の挙動を変えないため"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードと重み表のみの変更で、利用者の導線を変えないため"
+    }
+  },
+  "regressions": [
+    {
+      "description": "独立 TX の SYSTEM_ADMIN 残骸が同 JVM 後続の退会テストの全体 0 件前提を崩し、shard 割当次第で落ちる",
+      "test": "後始末は独立TXで作ったSYSTEM_ADMINとusersを残さない",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/c5b5025224",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/89bbaa5d53"
+    }
+  ]
+}

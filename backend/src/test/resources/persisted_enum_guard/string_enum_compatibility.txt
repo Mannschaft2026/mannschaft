@@ -192,6 +192,16 @@ com.mannschaft.app.auth.ParentalConsentLinkStatus#APPROVED
 com.mannschaft.app.auth.ParentalConsentLinkStatus#PENDING
 com.mannschaft.app.auth.ParentalConsentLinkStatus#REJECTED
 com.mannschaft.app.auth.ParentalConsentLinkStatus#REVOKED
+# PendingInviteStatus初回9定数（CMP-261107-1833）: 新設表 registration_pending_invites のみ、旧mainに読取経路なし。配布済みの証明ではない。
+com.mannschaft.app.auth.PendingInviteStatus#ACCEPTING
+com.mannschaft.app.auth.PendingInviteStatus#DECLINED
+com.mannschaft.app.auth.PendingInviteStatus#DISCARDED
+com.mannschaft.app.auth.PendingInviteStatus#DISMISSED
+com.mannschaft.app.auth.PendingInviteStatus#EXPIRED
+com.mannschaft.app.auth.PendingInviteStatus#JOINED
+com.mannschaft.app.auth.PendingInviteStatus#PENDING
+com.mannschaft.app.auth.PendingInviteStatus#REISSUE_REQUESTED
+com.mannschaft.app.auth.PendingInviteStatus#UNAVAILABLE
 com.mannschaft.app.auth.TwoFactorMethod#EMAIL
 com.mannschaft.app.auth.TwoFactorMethod#TOTP
 com.mannschaft.app.auth.entity.OAuthAccountEntity$OAuthProvider#APPLE
@@ -492,6 +502,15 @@ com.mannschaft.app.disclosure.DisclosureOutputFormat#WORD
 com.mannschaft.app.disclosure.DraftStatus#DRAFT
 com.mannschaft.app.disclosure.DraftStatus#EXPORTED
 com.mannschaft.app.disclosure.DraftStatus#READY
+com.mannschaft.app.effortrecord.enums.EffortReceiptRouteKind#OWNER
+com.mannschaft.app.effortrecord.enums.EffortReceiptRouteKind#TEAM
+com.mannschaft.app.effortrecord.enums.EffortShareState#FAILED
+com.mannschaft.app.effortrecord.enums.EffortShareState#MODERATED
+com.mannschaft.app.effortrecord.enums.EffortShareState#PENDING
+com.mannschaft.app.effortrecord.enums.EffortShareState#REVOKED
+com.mannschaft.app.effortrecord.enums.EffortShareState#VISIBLE
+com.mannschaft.app.effortrecord.enums.EffortSourceType#PRESET
+com.mannschaft.app.effortrecord.enums.EffortSourceType#TEAM
 com.mannschaft.app.equipment.EquipmentStatus#ALL_ASSIGNED
 com.mannschaft.app.equipment.EquipmentStatus#AVAILABLE
 com.mannschaft.app.equipment.EquipmentStatus#MAINTENANCE
@@ -2186,3 +2205,10 @@ com.mannschaft.app.loyalty.RequestOperation#SELF_SUBMIT
 com.mannschaft.app.loyalty.RequestOperation#STAFF_AWARD
 com.mannschaft.app.template.FeatureDisplayScope#TEAM
 com.mannschaft.app.template.FeatureDisplayScope#ORGANIZATION
+# L1-M初回5定数: 基盤をreader先配布し、全task旧版0の証跡後の別releaseでC/F業務writerを採用する。
+# 新表empty・実業務ReliableEvent/listener未採用が前提。運用文書「永続enumの二段階配布」参照。実展開済みの証明ではない。
+com.mannschaft.app.moduleevent.ModuleEventAttemptStatus#IN_PROGRESS
+com.mannschaft.app.moduleevent.ModuleEventAttemptStatus#PENDING
+com.mannschaft.app.moduleevent.ModuleEventAttemptStatus#QUARANTINED
+com.mannschaft.app.moduleevent.api.dto.ModuleEventNoticeScope#ORGANIZATION
+com.mannschaft.app.moduleevent.api.dto.ModuleEventNoticeScope#TEAM

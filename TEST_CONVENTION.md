@@ -7,11 +7,11 @@
 | 内容 | 参照先 |
 |------|--------|
 | JUnit 5 / Mockito / JaCoCo 80% / テスト容易性 | `backend/BACKEND_CODING_CONVENTION.md` §4 |
-| TestFixture 方式（テストデータ作成パターン） | `backend/BACKEND_CODING_CONVENTION.md` テストデータ作成パターン |
-| テスト実行環境（Testcontainers / CI / テスト分離） | `backend/BACKEND_CODING_CONVENTION.md` テスト実行環境 |
+| TestFixture 方式（テストデータ作成パターン） | `docs/conventions/backend/08-security.md`（BACKEND_CODING_CONVENTION.md §8 の詳細ファイル）のテストデータ作成パターン |
+| テスト実行環境（Testcontainers / CI / テスト分離） | `docs/conventions/backend/08-security.md`（BACKEND_CODING_CONVENTION.md §8 の詳細ファイル）のテスト実行環境 |
 | Vitest / Vue Test Utils / テスト対象優先順位 / 配置ルール | `frontend/FRONTEND_CODING_CONVENTION.md` §11 |
 | 新モジュール追加時のテスト要件 | `backend/.claudecode.md` §7 |
-| pre-commit フック（Checkstyle / SpotBugs / ESLint） | `backend/BACKEND_CODING_CONVENTION.md` pre-commit フック |
+| pre-commit フック（Checkstyle / SpotBugs / ESLint） | `docs/conventions/backend/08-security.md`（BACKEND_CODING_CONVENTION.md §8 の詳細ファイル）のpre-commit フック |
 
 ---
 
@@ -155,12 +155,16 @@ afterAll(() => {
 実効レベルを明示的に設定**し、`@AfterEach` で**元のレベルへ確実に復元**すること（取得した
 `getLevel()` の戻り値をそのまま戻す。null なら null に戻し、継承状態へ戻す）。
 
-**理由**: `backend/build.gradle.kts` の `setForkEvery` により、同一 gradle テストフォーク内で複数
-のテストクラスが JVM を共有する。先に `@ActiveProfiles("test")` の `@SpringBootTest`（`test`
-プロファイルは `logback-spring.xml` で root レベルを WARN に設定）が走ると、その状態が同一フォーク
-内の後続のプレーン単体テストへ持ち越され、`log.info` 等が実効レベル未達で握りつぶされて
-`ListAppender` に何も届かない。**ローカルで対象クラス単体だけを実行すると Spring コンテキストが
-起動しないため再現せず、CI 特有の実行順依存ですり抜ける。**
+**既定の出力**: `backend/src/test/resources/logback-test.xml` は Spring 起動前の native 初期化から
+root を WARN にし、既存 `logback-spring.xml` の test プロファイルと同じ Console pattern、
+WARN/ERROR と例外スタックを保持する。個別ロガーの INFO/DEBUG を明示すれば収集できる。
+
+**理由**: 同一 Gradle テストフォーク内では複数のテストクラスが JVM を共有する。
+既定 WARN のままでは `log.info` 等が実効レベル未達で `ListAppender` に届かず、先行テストの
+レベル変更を引き継いでも実行順に依存する。ログが無いことを検証する場合も、検査対象の
+レベルを明示し、意図せず低レベルの漏出を見逃す空虚な緑を避ける。
+
+MFA単発性能IT（AC-54）の合否は `PasswordEncoder#matches` の照合回数（8回ちょうど）で判定し、壁時計の閾値は持たない（CMP-261123-1434）。照合回数は `support/test/PasswordMatchCounter`（spring.factories の ContextCustomizerFactory で全テストコンテキストに一様・等価に載る計数ラッパー。呼び出しスレッド単位）で数え、`@MockitoSpyBean(PasswordEncoder)` は構成キーを1つ増やす（規約31のラチェット）ため使わない。所要時間は診断用に `[mfa-latency] pathKind=(all-mismatch|last-match) startEpochMillis=… endEpochMillis=… elapsedMillis=… pid=…`（上限値 `limitMillis` は出さない）として出力し、CIは `backend/scripts/run-ci-tests-with-observability.sh` の完全一致正規表現で `mfa-intervals.log` に回収する。出力形式を変えるときは収集側の正規表現を同時に直し、`backend/scripts/test_run_ci_observability_patterns.py`（出力側書式と収集側正規表現を実ファイルから突き合わせる）を緑にすること。補助観測は既存の計測区間外で採り、`[mfa-latency]` と同じpathKind・wall窓・PIDの `[mfa-resources]` にcurrent-thread CPU差分(ns)とJVM全体のGC回数・時間差分(ms)を記録する。採取窓はwall窓を外側から含み、未対応・無効・未取得は `-1`（0とは区別）とする。JMX設定・性能上限は変えない。CIでは別ファイル `mfa-resources.log` に回収し、shard0は既存case開始/終了行を利用してMFA中のみ1秒周期・最大240回、窓外は300秒周期の引数なし数値psを採る（監視は1秒待機の判定最大6000回・caseログ総読取1MiB。これは診断monitorの有限上限でありテスト上限時間は変更せず、採取上限到達は専用行へ明記する）。shard3の既存300秒観測は維持する。 shard5は初回即時・以後300秒待機で最大23回、最後の後は待機せず、psは5秒timeoutで未取得/非0を明記する（待機とtimeoutの合計上限6715秒、test/job上限は不変更）。psのtimeはプロセス累積・pcpuはlifetime平均・RSSは採取時点であり、既存class窓と時刻対応させても個別classへの厳密なCPU帰属やGC/DB原因を主張しない。
 
 ---
 
@@ -243,10 +247,10 @@ MockMvc は本プロジェクトで既に **196 ファイル・3531 箇所** で
 | 検査する契約 | 起動設定・経路 | 観測する実物 |
 |---|---|---|
 | 内部 Service・トランザクション・通知境界 | `AbstractMySqlIntegrationTest` の `MOCK` を継承。Service proxy / `TransactionTemplate` 経由 | 実 Bean・実 MySQL・実 commit / rollback。HTTPサーバーは不要 |
-| API契約・Securityフィルタの認可境界 | 同基底の `MOCK` + `@AutoConfigureMockMvc` | 実 Controller・DTO変換・実 Security フィルタ・実 MySQL。認可を検査するときは `addFilters=false` を使わない |
+| API契約・Securityフィルタの認可境界 | 同基底の `MOCK`（基底が `@AutoConfigureMockMvc` を持つので `MockMvc` を `@Autowired` するだけ。再宣言しない） | 実 Controller・DTO変換・実 Security フィルタ・実 MySQL。認可を検査するときは `addFilters=false` を使わない |
 | 実HTTPクライアントの往復・WebSocket/STOMP | `RANDOM_PORT`。共通MySQL構成を使う場合は同基底の WebEnvironment だけ上書き | 自動採番した実TCPへ接続し、実HTTP/接続/購読の契約を検査 |
 
-`MOCK` は WebEnvironment の名称であり、業務 Bean・DB・認可をモックへ置き換える指定ではない。TCPリスナーを起動せずに実 Bean と実DBを検査できる。内部試験や MockMvc 試験では `@SpringBootTest` を派生クラスで再宣言せず、基底設定を継承する。実TCP試験は必要な接続契約を Javadoc に記し、`@DirtiesContext(AFTER_CLASS)` で専用 context を閉じる。共通MySQL構成を使う実TCP試験では、WebEnvironment 以外の共通設定・MySQL singleton・外部依存設定を基底から継承する。既存の専用接続・複数ノード試験は必要な独立context・broker等の資源構成を保持する。試験種別の違いだけを理由に別フレームワークや新しい基底を増やさない。
+`MOCK` は WebEnvironment の名称であり、業務 Bean・DB・認可をモックへ置き換える指定ではない。TCPリスナーを起動せずに実 Bean と実DBを検査できる。内部試験や MockMvc 試験では `@SpringBootTest` を派生クラスで再宣言せず、基底設定を継承する。実TCP試験は必要な接続契約を Javadoc に記し、`@DirtiesContext(AFTER_CLASS)` で専用 context を閉じる。共通MySQL構成を使う実TCP試験では、WebEnvironment 以外の共通設定・MySQL singleton・外部依存設定を基底から継承する。既存の専用接続・複数ノード試験は必要な独立context・broker等の資源構成を保持する。試験種別の違いだけを理由に別フレームワークや新しい基底を増やさない。基底は `@AutoConfigureMockMvc`（addFilters=true）を持ち、MockMvc の有無で構成キー（context 数）を割らない。`addFilters=false` を宣言した派生だけが別キーになるので、認可を検査しない明確な理由があるときに限る（規約 31「基底の MockMvc 自動構成」・番人 `ContextOverrideCensusGuardTest`）。
 
 通知配送・AFTER_COMMIT の観測は §9.7 に従い、テスト全体を自動rollbackする `@Transactional` で包まず、fixtureを明示commitして所有行をcleanupする。TCPを起動したことやMockMvcを使ったことだけではcommit観測の代わりにならない。red確認では、起動・依存・fixtureの失敗と、受け入れ条件の実アサーション失敗を結果XML・原因連鎖で区別する。
 
@@ -444,7 +448,7 @@ src/test/java/com/mannschaft/app/
     └── [Feature]TestFixture.java             # 機能固有テストデータ
 ```
 
-- 配置は `backend/BACKEND_CODING_CONVENTION.md` テストデータ作成パターンのルールに従う
+- 配置は `docs/conventions/backend/08-security.md` のテストデータ作成パターンのルールに従う
 - 単体テストと結合テストは同一パッケージに配置し、クラス名のサフィックスで区別する
 
 ### 6.2 フロントエンド
@@ -773,6 +777,20 @@ void cleanup() {
     - 決済フロー（Stripe テストモード）
 - ヘッドレスモードで CI 上で実行する
 
+#### 完了条件（新規 E2E spec）
+
+- 新規に追加する E2E spec は、再試行なし（`--retries=0`）で、`--workers=1` で5回連続して成功し、かつ既定の並列ワーカー数で1回成功して、はじめて完了とする
+- 理由: 直列の連続実行で不安定さ（flaky）を、並列実行で共有状態の衝突を検出するため。再試行を許すと失敗が隠れるので `--retries=0` を付ける
+- 並列の確認は、環境変数 `CI` を設定していないローカルで行う。`frontend/playwright.config.ts` は `CI` が有効だと `workers: 1`（かつ `retries: 2`）になり、並列にならないため
+
+```bash
+cd frontend
+npx playwright test <spec> --workers=1 --repeat-each=5 --retries=0
+npx playwright test <spec> --retries=0
+```
+
+- 実行の前提（接続先、サーバーの起動条件、project や専用 config の選択）は `frontend/playwright.config.ts` と、その spec が属する実行手順（実機 E2E は `docs/testing/real_e2e_setup.md`）に従う。上のコマンドは既定の config で実行できる spec の例である
+
 ### 9.3 E2E テストの配置
 
 ```
@@ -901,6 +919,20 @@ public void dispatch() { ... }
 
 ---
 
+## 9.8 足軽 worktree の sparse 除外素材に依存するテスト
+
+足軽 worktree は cone モードの sparse checkout で牧場 PNG 素材（`backend/src/main/resources/ranch/approved` など。正本は `scripts/worktree-sparse-exclusions.json`）を展開しない。この素材（承認済み manifest・mapping JSON・PNG）を実体として読むテストは、**テスト単位（メソッドまたはクラス）に `@RequiresRanchApprovedAssets` を付ける**。
+
+- skip するのは「cone の sparse checkout が有効（`core.sparseCheckout` と `core.sparseCheckoutCone` が true）で、対象が `git sparse-checkout list` の範囲外、対象の追跡パスが1件以上あり、全て skip-worktree で、作業木に1件も実在しない」ときだけ。sparse 無効、追跡0件、git 失敗、部分展開、手で削除した欠落は skip せず失敗させる。git リポジトリの外（`.git` 無し）も skip せず通常実行する（素材があれば通り、無ければ失敗）。
+- CI 環境（`CI` が true/1、または `GITHUB_ACTIONS`・`GITLAB_CI`・`CIRCLECI`・`TRAVIS`・`BUILDKITE`・`TF_BUILD`・`APPVEYOR`・`JENKINS_URL`・`TEAMCITY_VERSION` のいずれかが空・0・false 以外。FE の `isCiEnvironment` と同じ規則）では skip しない（素材が無ければ失敗）。全展開の worktree と CI では従来と同数のテストが実行される。
+- skip の理由には対象ディレクトリと「`node scripts/worktree-assets.mjs expand` で展開すれば実行される」旨が出る。
+- クラスごとの `@Disabled`、例外の握りつぶしは禁止。実素材に依存しない単位は分けて通常実行する（`src/test/resources` の合成素材で足りるなら合成素材を使う）。
+- 判定実装は `com.mannschaft.app.support.test.sparse.SparseExcludedAssets`、その単体テストは `SparseExcludedAssetsTest`。
+
+## 9.9 SecurityContext は共通拡張で自動クリアされる
+
+`SecurityContextClearExtension`（`com.mannschaft.app.common.testing`）が JUnit 5 の自動検出（`junit-platform.properties` と `META-INF/services/org.junit.jupiter.api.extension.Extension`）で全テストに効き、各テストの後（afterEach）とクラスの後（afterAll）に `SecurityContextHolder` と `TestSecurityContextHolder` を空にする。単体テストが `setAuthentication` したまま終わっても、同じ JVM の後続 Spring IT に認証が漏れない。そのため各テストで `clearContext()` を手書きする必要はない。beforeEach では消さないので、`@BeforeAll` で作った認証や `@WithMockUser` は従来どおり使える。
+
 ## 10. テストに関する禁止事項
 
 | 禁止事項 | 理由 |
@@ -910,7 +942,7 @@ public void dispatch() { ... }
 | 本番 DB や外部 API に直接接続するテスト | Testcontainers またはモックを使用する |
 | テスト専用の `if (isTest)` 分岐をプロダクションコードに入れる | DI やプロファイルで切り替える |
 | `@Disabled` を理由なく放置する | 一時的な無効化は許容するが、理由をコメントに記載し、1スプリント以内に解決する |
-| 手書きの INSERT SQL でテストデータを作成する | TestFixture 経由で作成する（`backend/BACKEND_CODING_CONVENTION.md` テストデータ作成パターン参照） |
+| 手書きの INSERT SQL でテストデータを作成する | TestFixture 経由で作成する（`docs/conventions/backend/08-security.md` のテストデータ作成パターン参照） |
 | **Controller を `@Autowired` して直接メソッド呼び出しでテストする** | HTTP 層を迂回し、URL パス・HTTP メソッド・enum バインド・JSON 形状・`@Valid`・例外→ステータス変換を一切検証できない。村ドメインで契約不一致 17 件を素通しにした実害あり。MockMvc を使うこと（**§3.1.1** に詳細）|
 | **ArchUnit を使うテストに `@Tag(ArchUnitTestTag.ARCHUNIT)`（`@AnalyzeClasses` なら `@ArchTag(ArchUnitTestTag.ARCHUNIT)`）を付けない／タグ付きテストで Spring のテストコンテキストを使う** | ArchUnit の本番取り込み（約 1.1GB）が Spring 系 IT と同じ JVM に乗り、shard 5 が OOM した（CMP-261002-1606）。ArchUnit テストは通常の `test` から除外され、専用タスク `archTest`（別 JVM・shard 分割なし）で走る。番人 `ArchUnitTestTagGuardTest` がタグ漏れ・Spring 混在・shard 重み表への混入を拒否する（詳細: `backend/.claudecode.md` §30）|
 | **ArchUnit で本番全体を `ClassFileImporter` で手動取り込みする／`JavaClasses` を static フィールドで保持する** | 取り込み結果が JVM 内に何コピーも残り、全量 CI の shard が `Java heap space` で落ちた（CMP-261002-1606）。本番全体は共有ホルダ `ProductionClasses.get()` だけを使う。番人 `ProductionClassImportGuardTest` が拒否する（詳細: `backend/.claudecode.md` §30）|

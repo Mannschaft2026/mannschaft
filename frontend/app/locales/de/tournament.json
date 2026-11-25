@@ -52,6 +52,9 @@
         "delete": "Vorlage löschen",
         "maxCount": "Bis zu 5 Vorlagen können erstellt werden",
         "noTemplates": "Keine Vorlagen vorhanden",
+        "createSuccess": "Vorlage gespeichert",
+        "saveHint": "Speichert die aktuell gespeicherte Meldung (Rückennummern und Positionen) als Vorlage. Speichern Sie zuerst die Meldung.",
+        "loadFailed": "Die Vorlagenliste konnte nicht geladen werden, daher ist Speichern nicht möglich. Bitte öffnen Sie den Dialog erneut.",
         "name": "Vorlagenname",
         "description": "Beschreibung",
         "members": "Spieler",
@@ -111,6 +114,7 @@
       "empty_history": "Keine Transfer-Historie"
     },
     "roster": {
+      "load_match": "Laden",
       "title": "Spieler-Meldeliste",
       "submit": "Einreichen",
       "apply_template": "Vorlage anwenden",
@@ -165,12 +169,21 @@
       "private": "Privat",
       "empty": "Keine Kontaktbereiche vorhanden",
       "no_bulletin": "Kein Schwarzes Brett vorhanden",
+      "bulletin_scope_unresolved": "Das Schwarze Brett kann nicht angezeigt werden, da der Bereich nicht ermittelt werden konnte",
       "no_chat": "Kein Chatbereich vorhanden",
       "visibility_saved": "Sichtbarkeit aktualisiert",
       "visibility_failed": "Fehler beim Aktualisieren der Sichtbarkeit",
       "load_failed": "Kontaktbereiche konnten nicht geladen werden",
       "divisions_load_failed": "Divisionen konnten nicht geladen werden",
-      "permissions_load_failed": "Berechtigungen konnten nicht geladen werden. Einige Aktionen sind möglicherweise nicht verfügbar."
+      "permissions_load_failed": "Berechtigungen konnten nicht geladen werden. Einige Aktionen sind möglicherweise nicht verfügbar.",
+      "participant": {
+        "title": "Kontaktbereich des Turniers",
+        "open_link": "Kontaktbereich öffnen",
+        "view_only_notice": "Nur Lesezugriff. Nur Teamleitung, stellvertretende Teamleitung und Veranstalter können Beiträge verfassen.",
+        "unavailable": "Der Kontaktbereich dieses Turniers ist nicht verfügbar",
+        "unavailable_hint": "Nur Mitglieder teilnehmender Teams können ihn nutzen. Bitte prüfe den Teilnahmestatus deines Teams.",
+        "load_retry": "Neu laden"
+      }
     },
     "submission": {
       "title": "Dokumenteneinreichung",
@@ -401,6 +414,40 @@
         "invalidUserId": "Die Benutzer-ID muss eine positive ganze Zahl sein",
         "searchFailed": "Mitgliedersuche fehlgeschlagen"
       }
+    },
+    "create": {
+      "createFailed": "Das Turnier konnte nicht erstellt werden",
+      "createFailedHint": "Bitte Eingaben prüfen",
+      "fields": {
+        "name": "Turniername",
+        "season": "Saison",
+        "format": "Format",
+        "sport": "Sportart",
+        "description": "Beschreibung",
+        "visibility": "Sichtbarkeit",
+        "winPoints": "Punkte für Sieg",
+        "drawPoints": "Punkte für Unentschieden",
+        "lossPoints": "Punkte für Niederlage"
+      },
+      "title": "Turnier erstellen",
+      "openButton": "Turnier erstellen",
+      "submit": "Erstellen",
+      "cancel": "Abbrechen",
+      "success": "Turnier erstellt",
+      "namePlaceholder": "z. B. Frühjahrsliga 2026",
+      "nameRequired": "Turniernamen eingeben",
+      "seasonRequired": "Saisonjahr eingeben"
+    },
+    "list": {
+      "title": "Turniere & Ligen",
+      "empty": "Keine Turniere",
+      "loadError": "Turnierliste konnte nicht geladen werden",
+      "scoreSummary": "S{win} U{draw} N{loss}"
+    },
+    "formats": {
+      "LEAGUE": "Liga",
+      "KNOCKOUT": "K.-o.-Runde",
+      "GROUP_KNOCKOUT": "Gruppenphase + K.-o.-Runde"
     }
   },
   "dashboard_widgets": {

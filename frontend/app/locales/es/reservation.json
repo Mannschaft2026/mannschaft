@@ -17,6 +17,7 @@
       "partial_time": "Cerrar solo durante ciertas horas del día",
       "start_time": "Hora de inicio",
       "end_time": "Hora de fin",
+      "range_separator": "a",
       "target_period": "Período objetivo",
       "subject": "Asunto",
       "reason": "Motivo del cierre",
@@ -72,7 +73,8 @@
       "connecting": "Conectando…",
       "reconnecting": "Reconectando…",
       "offline": "Sin conexión",
-      "denied": "Sin acceso"
+      "denied": "Sin acceso",
+      "unauthenticated": "Inicio de sesión requerido"
     },
     "dialog": {
       "title": "Confirmar envío",
@@ -92,6 +94,7 @@
       "reason_required": "Introduzca el motivo del cierre",
       "history_failed": "No se pudo cargar el historial de envíos. Vuelva a cargarlo.",
       "send_failed": "Error al enviar",
+      "idempotency_conflict": "Esta operación de envío ya se envió con un contenido distinto. Revise los datos e inténtelo de nuevo.",
       "confirmations_failed": "Error al cargar el estado de confirmación",
       "info_missing": "Falta información de la notificación"
     },
@@ -726,6 +729,7 @@
     "group": {
       "title": "Reserva en grupo",
       "slot_count": "30 min × {n} franjas",
+      "slot_count_total": "30 min × {n} franja ({total} min) | 30 min × {n} franjas ({total} min)",
       "time_range": "Rango horario",
       "auto_selected": "Se seleccionaron automáticamente las {n} franjas necesarias para {menu}",
       "extend": "Ampliar franjas",

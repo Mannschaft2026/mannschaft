@@ -52,6 +52,9 @@
         "delete": "删除模板",
         "maxCount": "最多可创建5个",
         "noTemplates": "没有模板",
+        "createSuccess": "模板已保存",
+        "saveHint": "将当前已保存的参赛名单（号码与位置）保存为模板。请先保存参赛名单。",
+        "loadFailed": "无法获取模板列表，因此无法保存。请重新打开此窗口。",
         "name": "模板名称",
         "description": "说明",
         "members": "选手一览",
@@ -111,6 +114,7 @@
       "empty_history": "没有移籍历史"
     },
     "roster": {
+      "load_match": "加载",
       "title": "比赛球员名单",
       "submit": "提交",
       "apply_template": "应用模板",
@@ -165,12 +169,21 @@
       "private": "非公开",
       "empty": "联络空间尚未准备好",
       "no_bulletin": "没有公告板空间",
+      "bulletin_scope_unresolved": "无法确定公告板的范围，因此无法显示",
       "no_chat": "没有聊天空间",
       "visibility_saved": "已更改公开设置",
       "visibility_failed": "更改公开设置失败",
       "load_failed": "获取联络空间失败",
       "divisions_load_failed": "获取分组列表失败",
-      "permissions_load_failed": "获取权限信息失败，部分操作可能受限"
+      "permissions_load_failed": "获取权限信息失败，部分操作可能受限",
+      "participant": {
+        "title": "赛事联络空间",
+        "open_link": "打开联络空间",
+        "view_only_notice": "仅可查看。只有球队负责人、副负责人和主办方可以发帖。",
+        "unavailable": "无法使用该赛事的联络空间",
+        "unavailable_hint": "仅参赛球队的成员可以使用。请确认球队的参赛状态。",
+        "load_retry": "重新加载"
+      }
     },
     "submission": {
       "title": "文件提交受理",
@@ -401,6 +414,40 @@
         "invalidUserId": "用户 ID 必须为正整数",
         "searchFailed": "会员搜索失败"
       }
+    },
+    "create": {
+      "createFailed": "创建赛事失败",
+      "createFailedHint": "请检查输入内容",
+      "fields": {
+        "name": "赛事名称",
+        "season": "赛季",
+        "format": "赛制",
+        "sport": "项目",
+        "description": "说明",
+        "visibility": "公开范围",
+        "winPoints": "胜场积分",
+        "drawPoints": "平局积分",
+        "lossPoints": "负场积分"
+      },
+      "title": "创建赛事",
+      "openButton": "创建赛事",
+      "submit": "创建",
+      "cancel": "取消",
+      "success": "赛事已创建",
+      "namePlaceholder": "例如：2026年春季联赛",
+      "nameRequired": "请输入赛事名称",
+      "seasonRequired": "请输入赛季年份"
+    },
+    "list": {
+      "title": "赛事・联赛",
+      "empty": "暂无赛事",
+      "loadError": "获取赛事列表失败",
+      "scoreSummary": "胜{win} 平{draw} 负{loss}"
+    },
+    "formats": {
+      "LEAGUE": "联赛",
+      "KNOCKOUT": "淘汰赛",
+      "GROUP_KNOCKOUT": "小组赛+淘汰赛"
     }
   },
   "dashboard_widgets": {

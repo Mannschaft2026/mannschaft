@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useForm } from 'vee-validate'
+import { z } from 'zod'
 import type {
   AllocationCreateRequest,
   AllocationResponse,
@@ -21,6 +23,10 @@ interface Props {
   visible: boolean
   /** 編集対象（未指定=新規作成モード）*/
   allocation?: AllocationResponse | null
+  /** 保存 API が返した項目別エラー（400 の fieldErrors。キーは BE の camelCase）。 */
+  fieldErrors?: Record<string, string>
+  /** 項目に紐づかない保存エラー（BE の message。重複作成 SHIFT_BUDGET_011 など）。 */
+  formError?: string
 }
 
 interface Emits {
@@ -31,6 +37,8 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   allocation: null,
+  fieldErrors: () => ({}),
+  formError: '',
 })
 const emit = defineEmits<Emits>()
 
@@ -38,22 +46,30 @@ const { t } = useI18n()
 
 const isEdit = computed(() => props.allocation !== null && props.allocation !== undefined)
 
+const amountSchema = z.number().finite().nonnegative()
+const { errors, defineField, handleSubmit, resetForm } = useForm<{ allocated_amount: number | null }>({
+  initialValues: { allocated_amount: 0 },
+  validationSchema: {
+    allocated_amount: (value: unknown) => amountSchema.safeParse(value).success
+      || t('shiftBudget.allocation.form.amountHint'),
+  },
+})
+const [allocatedAmount] = defineField('allocated_amount')
+
 // 作成フォーム
-const createForm = ref<AllocationCreateRequest>({
+const createForm = ref<Omit<AllocationCreateRequest, 'allocated_amount'>>({
   team_id: null,
   project_id: null,
   fiscal_year_id: 0,
   budget_category_id: 0,
   period_start: '',
   period_end: '',
-  allocated_amount: 0,
   currency: 'JPY',
   note: '',
 })
 
 // 更新フォーム
-const updateForm = ref<AllocationUpdateRequest>({
-  allocated_amount: 0,
+const updateForm = ref<Omit<AllocationUpdateRequest, 'allocated_amount'>>({
   note: '',
   version: 0,
 })
@@ -61,9 +77,9 @@ const updateForm = ref<AllocationUpdateRequest>({
 watch(
   () => props.allocation,
   (a) => {
+    resetForm({ values: { allocated_amount: a?.allocated_amount ?? 0 } })
     if (a) {
       updateForm.value = {
-        allocated_amount: a.allocated_amount ?? 0,
         note: a.note ?? '',
         version: a.version,
       }
@@ -77,7 +93,6 @@ watch(
         budget_category_id: 0,
         period_start: '',
         period_end: '',
-        allocated_amount: 0,
         currency: 'JPY',
         note: '',
       }
@@ -86,18 +101,59 @@ watch(
   { immediate: true },
 )
 
+watch(() => props.visible, (visible) => {
+  if (visible) clientErrors.value = {}
+  if (visible) resetForm({ values: { allocated_amount: props.allocation?.allocated_amount ?? 0 } })
+})
+
+/** 送信前に検出した項目別エラー（キーは作成リクエストの項目名）。 */
+const clientErrors = ref<Record<string, string>>({})
+
+/** BE の fieldErrors は camelCase。リクエスト項目名(snake_case)へ対応づける。 */
+const serverFieldKey: Record<string, string> = {
+  team_id: 'teamId',
+  project_id: 'projectId',
+  fiscal_year_id: 'fiscalYearId',
+  budget_category_id: 'budgetCategoryId',
+  period_start: 'periodStart',
+  period_end: 'periodEnd',
+}
+
+function errorOf(field: string): string | undefined {
+  return clientErrors.value[field]
+    ?? props.fieldErrors?.[serverFieldKey[field] ?? field]
+    ?? props.fieldErrors?.[field]
+}
+
+/** 作成モードの必須項目検証。BE が 400 を返す前に弾く。 */
+function validateCreate(): boolean {
+  const f = createForm.value
+  const errors: Record<string, string> = {}
+  if (!f.fiscal_year_id || f.fiscal_year_id < 1) errors.fiscal_year_id = t('shiftBudget.allocation.form.fiscalYearRequired')
+  if (!f.budget_category_id || f.budget_category_id < 1) errors.budget_category_id = t('shiftBudget.allocation.form.categoryRequired')
+  if (!f.period_start) errors.period_start = t('shiftBudget.allocation.form.periodStartRequired')
+  if (!f.period_end) errors.period_end = t('shiftBudget.allocation.form.periodEndRequired')
+  else if (f.period_start && f.period_end < f.period_start) errors.period_end = t('shiftBudget.allocation.form.periodEndBeforeStart')
+  clientErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
 function close() {
   emit('update:visible', false)
 }
 
-function onSubmit() {
+const onSubmit = handleSubmit((values) => {
+  // Zodで負数・空・非有限値を拒否した値だけをAPIのnumber契約へ戻す。
+  const amount = values.allocated_amount
+  if (typeof amount !== 'number') return
   if (isEdit.value && props.allocation) {
-    emit('submit-update', { id: props.allocation.id, request: { ...updateForm.value } })
+    emit('submit-update', { id: props.allocation.id, request: { ...updateForm.value, allocated_amount: amount } })
   }
   else {
-    emit('submit-create', { ...createForm.value })
+    if (!validateCreate()) return
+    emit('submit-create', { ...createForm.value, allocated_amount: amount })
   }
-}
+})
 </script>
 
 <template>
@@ -119,14 +175,12 @@ function onSubmit() {
           <span class="font-medium">{{ t('shiftBudget.allocation.period') }}:</span>
           {{ allocation.period_start }} 〜 {{ allocation.period_end }}
         </p>
-        <p>
-          <span class="font-medium">{{ t('shiftBudget.allocation.version') }}:</span>
-          {{ allocation.version }}
-        </p>
       </div>
       <div>
         <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.allocation.amount') }}</label>
-        <InputNumber v-model="updateForm.allocated_amount" mode="decimal" :min="0" class="w-full" />
+        <!-- min=0はPrimeVueが打鍵した負号だけを黙殺するため使わず、検証で保存を拒否する。 -->
+        <InputNumber v-model="allocatedAmount" mode="decimal" :invalid="!!errors.allocated_amount" class="w-full" />
+        <p v-if="errors.allocated_amount" role="alert" class="mt-1 text-sm text-red-600">{{ errors.allocated_amount }}</p>
         <p class="mt-1 text-xs text-surface-500">{{ t('shiftBudget.allocation.form.amountHint') }}</p>
       </div>
       <div>
@@ -153,28 +207,33 @@ function onSubmit() {
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.allocation.fiscalYear') }} ID *</label>
-          <InputNumber v-model="createForm.fiscal_year_id" :min="1" class="w-full" :use-grouping="false" />
+          <InputNumber v-model="createForm.fiscal_year_id" :min="1" class="w-full" :use-grouping="false" :invalid="!!errorOf('fiscal_year_id')" />
+          <p v-if="errorOf('fiscal_year_id')" role="alert" class="mt-1 text-sm text-red-600" data-testid="allocation-error-fiscal_year_id">{{ errorOf('fiscal_year_id') }}</p>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.allocation.category') }} ID *</label>
-          <InputNumber v-model="createForm.budget_category_id" :min="1" class="w-full" :use-grouping="false" />
+          <InputNumber v-model="createForm.budget_category_id" :min="1" class="w-full" :use-grouping="false" :invalid="!!errorOf('budget_category_id')" />
+          <p v-if="errorOf('budget_category_id')" role="alert" class="mt-1 text-sm text-red-600" data-testid="allocation-error-budget_category_id">{{ errorOf('budget_category_id') }}</p>
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.allocation.form.periodStart') }} *</label>
-          <InputText v-model="createForm.period_start" type="date" class="w-full" />
+          <InputText v-model="createForm.period_start" type="date" class="w-full" :invalid="!!errorOf('period_start')" />
+          <p v-if="errorOf('period_start')" role="alert" class="mt-1 text-sm text-red-600" data-testid="allocation-error-period_start">{{ errorOf('period_start') }}</p>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.allocation.form.periodEnd') }} *</label>
-          <InputText v-model="createForm.period_end" type="date" class="w-full" />
+          <InputText v-model="createForm.period_end" type="date" class="w-full" :invalid="!!errorOf('period_end')" />
+          <p v-if="errorOf('period_end')" role="alert" class="mt-1 text-sm text-red-600" data-testid="allocation-error-period_end">{{ errorOf('period_end') }}</p>
         </div>
       </div>
 
       <div>
         <label class="mb-1 block text-sm font-medium">{{ t('shiftBudget.allocation.amount') }} *</label>
-        <InputNumber v-model="createForm.allocated_amount" mode="decimal" :min="0" class="w-full" />
+        <InputNumber v-model="allocatedAmount" mode="decimal" :invalid="!!errors.allocated_amount" class="w-full" />
+        <p v-if="errors.allocated_amount" role="alert" class="mt-1 text-sm text-red-600">{{ errors.allocated_amount }}</p>
         <p class="mt-1 text-xs text-surface-500">{{ t('shiftBudget.allocation.form.amountHint') }}</p>
       </div>
 
@@ -188,6 +247,8 @@ function onSubmit() {
         <Textarea v-model="createForm.note" rows="3" class="w-full" :maxlength="500" />
       </div>
     </div>
+
+    <p v-if="formError" role="alert" class="mt-4 text-sm text-red-600" data-testid="allocation-form-error">{{ formError }}</p>
 
     <template #footer>
       <div class="flex justify-end gap-2">

@@ -52,6 +52,9 @@
         "delete": "Delete template",
         "maxCount": "Up to 5 templates can be created",
         "noTemplates": "No templates",
+        "createSuccess": "Template saved",
+        "saveHint": "Saves the currently saved entry (jersey numbers and positions) as a template. Save the entry first.",
+        "loadFailed": "Template list could not be loaded, so saving is unavailable. Please reopen this dialog.",
         "name": "Template name",
         "description": "Description",
         "members": "Players",
@@ -111,6 +114,7 @@
       "empty_history": "No transfer history"
     },
     "roster": {
+      "load_match": "Load",
       "title": "Match Roster",
       "submit": "Submit",
       "apply_template": "Apply Template",
@@ -165,12 +169,21 @@
       "private": "Private",
       "empty": "No communication spaces have been set up",
       "no_bulletin": "No bulletin board space",
+      "bulletin_scope_unresolved": "The bulletin board cannot be shown because its scope could not be determined",
       "no_chat": "No chat space",
       "visibility_saved": "Visibility updated",
       "visibility_failed": "Failed to update visibility",
       "load_failed": "Failed to load communication spaces",
       "divisions_load_failed": "Failed to load divisions",
-      "permissions_load_failed": "Failed to load permissions. Some actions may be unavailable."
+      "permissions_load_failed": "Failed to load permissions. Some actions may be unavailable.",
+      "participant": {
+        "title": "Tournament contact space",
+        "open_link": "Open contact space",
+        "view_only_notice": "View only. Only team admins, deputy admins, and organizers can post.",
+        "unavailable": "The contact space for this tournament is not available",
+        "unavailable_hint": "Only members of participating teams can use it. Please check your team's participation status.",
+        "load_retry": "Reload"
+      }
     },
     "submission": {
       "title": "Document Submission",
@@ -401,6 +414,40 @@
         "invalidUserId": "User ID must be a positive integer",
         "searchFailed": "Failed to search members"
       }
+    },
+    "create": {
+      "createFailed": "Failed to create the tournament",
+      "createFailedHint": "Please check your input",
+      "fields": {
+        "name": "Tournament name",
+        "season": "Season",
+        "format": "Format",
+        "sport": "Sport",
+        "description": "Description",
+        "visibility": "Visibility",
+        "winPoints": "Win points",
+        "drawPoints": "Draw points",
+        "lossPoints": "Loss points"
+      },
+      "title": "Create tournament",
+      "openButton": "Create tournament",
+      "submit": "Create",
+      "cancel": "Cancel",
+      "success": "Tournament created",
+      "namePlaceholder": "e.g. 2026 Spring League",
+      "nameRequired": "Enter a tournament name",
+      "seasonRequired": "Enter a season year"
+    },
+    "list": {
+      "title": "Tournaments & leagues",
+      "empty": "No tournaments",
+      "loadError": "Failed to load tournaments",
+      "scoreSummary": "W{win} D{draw} L{loss}"
+    },
+    "formats": {
+      "LEAGUE": "League",
+      "KNOCKOUT": "Knockout",
+      "GROUP_KNOCKOUT": "Group stage + knockout"
     }
   },
   "dashboard_widgets": {

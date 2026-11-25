@@ -18,7 +18,7 @@
 | POST | `/api/v1/shifts/schedules/{id}/slots` | 必要 | スロット作成 |
 | POST | `/api/v1/shifts/schedules/{id}/slots/bulk` | 必要 | スロット一括作成 |
 | PATCH | `/api/v1/shifts/slots/{id}` | 必要 | スロット更新（部分更新、PUT から PATCH へ変更） |
-| DELETE | `/api/v1/shifts/slots/{id}` | 必要 | スロット削除（物理削除） |
+| DELETE | `/api/v1/shifts/slots/{id}` | 必要 | スロット削除（論理削除） |
 | PATCH | `/api/v1/shifts/slots/{id}/assignments` | 必要 | **【v2】D&D UI 用の差分割当 API（個別ユーザー追加・削除）** |
 | POST | `/api/v1/shifts/slots/{id}/assignments/move` | 必要 | **【CMP-261010-1432】枠間移動（1 トランザクションで移動元から外し移動先へ入れる）** |
 | GET | `/api/v1/shifts/requests` | 必要 | 希望一覧取得（管理者用、クエリパラメータ `scheduleId` でスケジュール絞り込み。旧 `GET /shifts/schedules/{id}/requests` を統合） |
@@ -343,6 +343,36 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 > ※ 旧設計は `PATCH /status` + `PATCH /publish` の 2 本。Phase 2 で `POST /transition` 1 本に統合し、リクエストボディの `target_status` で遷移先を指定する方式に変更。以降のサブセクションは旧設計の参考情報として残す。
 
+**公開時の時給必須ガード（CMP-261115-1821）**
+
+`ADJUSTING → PUBLISHED` の遷移では、予算連動の勤務日に割り当てられた全メンバーに、勤務日時点で有効な**正数の時給**があることを検証する。予算連動とは、勤務日が有効な予算割当（チーム個別優先・組織共通フォールバック）の期間に入り、かつ予算機能が有効な日を指す。予算連動の勤務日が1日もない、または割当者がいないシフト表は従来どおり公開できる。一般参加者には時給を要求しない。
+
+| ステータス | エラーコード | 条件 |
+|-----------|-------------|------|
+| 400 | `SHIFT_047`（`HOURLY_RATE_MISSING_FOR_PUBLICATION`） | 予算連動の勤務日の割当者に、有効な正数時給（null・0・負数は不可）が無い。公開は全体がロールバックされ、公開イベントも発行されない |
+| 409 | `COMMON_003` | 公開の検証後から確定までの間に、勤務日が検証範囲の外へ出た、または空だった割当が非空へ変わった。更新・イベントとも0件で拒否する。画面を読み込み直してから再操作する |
+
+400 の応答は、時給を確認できなかった（userId, 勤務日）を重複なしで昇順に全件返す。金額は載せない。
+
+```json
+{
+  "error": {
+    "code": "SHIFT_047",
+    "message": "...",
+    "fieldErrors": [],
+    "details": {
+      "missingHourlyRates": [
+        { "userId": 7, "slotDate": "2026-11-20" }
+      ]
+    }
+  }
+}
+```
+
+応答スキーマは OpenAPI の `ShiftHourlyRateMissingErrorResponse`。公開時と、公開後の予算消化額の実計上（非同期）との間の原子性は保証しない。計上側も正数時給を必須とし、時給が無い場合は計上せず失敗として記録する。
+
+FE は公開操作（シフト表一覧の公開ボタン、シフト詳細の「確定公開」）で 400 を受けると、対象者名と勤務日の一覧を表示し、ADMIN には時給設定画面（`/teams/{slug}/settings/hourly-rate`）への導線を出す。409 では読み込み直してから再操作するよう案内する。
+
 #### 【旧】`PATCH /api/v1/shifts/schedules/{id}/status`
 
 シフトスケジュールのステータスを変更する。許可される遷移のみ受け付ける。
@@ -612,7 +642,7 @@ scope は**パス変数でなくスケジュール実体の `team_id` から解�
 
 #### `DELETE /api/v1/shifts/slots/{id}`
 
-スロットを物理削除する。`PUBLISHED` / `ARCHIVED` 状態では削除不可。
+スロットを論理削除し、枠指定希望・割当へ削除日時を連鎖する。希望の行は保持するが、`SLOT_DELETED` の希望は通常一覧・本人履歴には返さない。日単位希望は対象外。枠編集画面は確認ダイアログを開く際に希望一覧APIで対象枠の希望件数を取得し、件数（希望・割当）と通常操作で復元できないことを警告して、明示的な承諾後に本APIを呼ぶ（件数0なら素の確認のみ）（CMP-260909-2153）。`PUBLISHED` / `ARCHIVED` 状態では削除不可。
 
 **レスポンス（204 No Content）**
 
@@ -1805,9 +1835,22 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 **エラーレスポンス**
 | ステータス | 条件 |
 |-----------|------|
-| 400 | バリデーションエラー（add/remove 両方空、無効な user_id 等） |
+| 400 | バリデーションエラー（add/remove 両方空、無効な user_id 等）/ **【CMP-261123-1821】** 新たに入る者に、枠のシフト表のチームの現役メンバーでない者（他チーム所属・非所属・SUPPORTER・存在しない・非 ACTIVE・論理削除済み）が含まれる（`SHIFT_049`。`PATCH /slots/{id}` の `assignedUserIds` 置換と `/move` も同じ） |
 | 403 | ADMIN / DEPUTY_ADMIN（MANAGE_SHIFTS）ではない |
 | 404 | スロットが存在しない |
+
+**【CMP-261123-1821】追加先の所属検証**: 枠の割当に**新たに入る**ユーザーは、**枠が属するシフト表のチーム**の現役メンバー（`isRegularMemberOrAbove`＝MEMBER 以上・SUPPORTER でない、かつ `users.status = ACTIVE` で論理削除されていない）でなければならない。1人でも満たさなければ全体を 400 `SHIFT_049` で拒否し、何も保存しない。操作者の権限（当該チームの ADMIN/DEPUTY_ADMIN）とは別の検査で、操作者自身のチームに属する者でも、枠のチームに属さなければ拒否する。**存在オラクル防止**: 存在しないユーザーと他チームのユーザーは同一の応答（status・code・message）にする。検査は version 照合・人数超過の判定より前に行う。
+
+塞いだ経路（すべて枠起点の管理操作で、認可の後に検査する）:
+1. `PATCH /slots/{id}/assignments` の `addUserIds`（`addUserIds` / `removeUserIds` は各 200 件まで。超過は 400）。
+2. `PATCH /slots/{id}` の `assignedUserIds`（割当の丸ごと置換）。**親・枠のロック取得後の現在の割当に無い人（差分）だけ**を、書き込みと同じトランザクションの中で検査する（並行する `removeUserIds` で外れたばかりの不適格者が、古い一覧との比較で「既存」扱いになるのを防ぐ。検査本体は Facade が関数として渡し、Service は `AccessControlService` に依存しない）。既に入っている人は、その後に脱退・凍結していても置換で残せる（外す操作を妨げない）。
+3. `POST /slots/{id}/assignments/move` の `userId`（移動先に新たに入る人。移動元で適格だった人が、その後に不適格になっていても持ち込めない）。
+- `PATCH /slots/{id}` の `assignedUserIds` は 200 件まで（超過は 400）。
+- 枠の作成・一括作成（`POST /schedules/{id}/slots` ほか）は初期割当を受け取らない（`assignedUserIds` を持たない）ため対象外。
+
+範囲外（意図的）:
+- 自動割当の確定（`/confirm`）時の再検査は行わない。候補は希望の提出者に限られ、提出時に所属を検証している。提出後に脱退した人が候補に残りうる件は別件（越境ではない）。
+- 検査（`ShiftSlotFacade`）と書き込み（`ShiftSlotService` の tx）は別トランザクション。検査後・書き込み前に脱退・資格変更があった場合の窓は許容する（シフト表の親ロックは所属を保護しない。`ShiftSwapFacade` の受諾者再検査と同じ割り切り）。
 
 **【CMP-261010-1432】version の返却**: 枠の応答（`GET /schedules/{id}/slots` の各要素・`PATCH /slots/{id}`・本 API）はトップレベルに `version`（`shift_slots.version` の更新後の値）を返す。クライアントは次の操作でその値を `slotVersion` に送る（`0` 固定送信は 2 回目以降の操作で 409 `SHIFT_018` になる）。
 

@@ -1,6 +1,7 @@
 package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
+import com.mannschaft.app.auth.MfaVerificationMethod;
 import com.mannschaft.app.auth.dto.ConfirmPasswordResetRequest;
 import com.mannschaft.app.auth.dto.LoginHistoryResponse;
 import com.mannschaft.app.auth.dto.LoginRequest;
@@ -76,6 +77,7 @@ public class AuthService {
     private final NewDeviceDetectionService newDeviceDetectionService;
     private final RoleClaimResolver roleClaimResolver;
     private final StatusClaimResolver statusClaimResolver;
+    private final MfaSessionService mfaSessionService;
 
     // サブサービス（委譲先）
     private final AuthRegistrationService authRegistrationService;
@@ -92,10 +94,6 @@ public class AuthService {
     private static final Duration ACCOUNT_LOCK_DURATION = Duration.ofMinutes(30);
     static final String ACCOUNT_LOCK_KEY_PREFIX = "mannschaft:auth:account_lock:";
     private static final String LOGIN_FAIL_COUNT_KEY_PREFIX = "mannschaft:auth:login_fail_count:";
-    private static final String MFA_SESSION_KEY_PREFIX = MfaSessionService.SESSION_KEY_PREFIX;
-
-    // トークン有効期限
-    private static final Duration MFA_SESSION_EXPIRY = MfaSessionService.SESSION_TTL;
 
     // ========================================
     // 登録（AuthRegistrationService へ委譲）
@@ -239,18 +237,11 @@ public class AuthService {
         // 7. 二要素認証チェック
         Optional<TwoFactorAuthEntity> mfaOpt = twoFactorAuthRepository.findByUserId(user.getId());
         if (mfaOpt.isPresent() && Boolean.TRUE.equals(mfaOpt.get().getIsEnabled())) {
-            // 2FA有効: MFAセッショントークンを生成してValkeyに保存（ハッシュ化して保存）
-            String mfaSessionToken = UUID.randomUUID().toString();
-            String mfaKey = MFA_SESSION_KEY_PREFIX + authTokenService.hashToken(mfaSessionToken);
-            redisTemplate.opsForValue().set(mfaKey, String.valueOf(user.getId()),
-                    MFA_SESSION_EXPIRY.getSeconds(), TimeUnit.SECONDS);
-
-            // CMP-261012-0910 AC-27: 主手段と、このログインで提示できる要素を返す（既存項目は互換維持）
+            // 2FA有効: MFAセッションの発行は OAuth 経路と共通の MfaSessionService に集約（CMP-261012-0911）
             TwoFactorMethod primaryMethod = mfaOpt.get().getMethod() != null
                     ? mfaOpt.get().getMethod() : TwoFactorMethod.TOTP;
-            return ApiResponse.of(new MfaRequiredResponse(mfaSessionToken, primaryMethod,
-                    MfaMethodPolicy.availableMethods(primaryMethod,
-                            MfaMethodPolicy.isEmailDeliverable(user.getEmail()))));
+            return ApiResponse.of(mfaSessionService.issueChallenge(user.getId(), user.getEmail(), primaryMethod,
+                    MfaSessionService.LOGIN_METHOD_PASSWORD));
         }
 
         // 8. トークン発行（2FA無効の場合）
@@ -267,7 +258,30 @@ public class AuthService {
     @Transactional
     TokenResponse completePasskeyLogin(UserEntity user, String ipAddress, String userAgent,
                                               List<String> resolvedRoles) {
-        return issueLoginSession(user, null, false, ipAddress, userAgent, "WEBAUTHN", resolvedRoles);
+        return issueLoginSession(user, null, false, ipAddress, userAgent, "WEBAUTHN", resolvedRoles, null);
+    }
+
+    /**
+     * 2FA を完了したユーザーへ、パスワード直経路と共通のセッションを発行する（CMP-261012-0911）。
+     *
+     * <p>{@code issueLoginSession} へ委譲し、新端末検知・セッション上限・最終ログイン・
+     * LoginSuccessEvent（method=入口方式、mfaFactor=使用要素）をパスワード直経路と揃える。
+     * roles は HTTP 入力でなくサーバ側（RoleClaimResolver）で解決した値を呼び出し元から受け取る
+     * （本メソッド自身は role ドメインへ越境しない。D-3T）。</p>
+     *
+     * @param user        MFA セッションのユーザー
+     * @param ipAddress   2FA 検証要求の IP
+     * @param userAgent   2FA 検証要求の User-Agent
+     * @param loginMethod 入口方式（PASSWORD / OAUTH_x）
+     * @param factor      2FA で使用した要素
+     * @param resolvedRoles 呼び出し元がサーバ側で解決した roles（HTTP 入力は禁止）
+     * @return トークン
+     */
+    @Transactional
+    TokenResponse completeMfaLogin(UserEntity user, String ipAddress, String userAgent, String loginMethod,
+                                   MfaVerificationMethod factor, List<String> resolvedRoles) {
+        return issueLoginSession(user, null, false, ipAddress, userAgent, loginMethod,
+                resolvedRoles, factor.name());
     }
 
     // ========================================
@@ -432,7 +446,7 @@ public class AuthService {
     private LoginResponse issueLoginTokens(UserEntity user, LoginRequest req,
                                            String ipAddress, String userAgent, boolean reactivated) {
         TokenResponse tokens = issueLoginSession(user, req.getDeviceFingerprint(), req.isRememberMe(),
-                ipAddress, userAgent, "PASSWORD", roleClaimResolver.resolveRoles(user.getId()));
+                ipAddress, userAgent, "PASSWORD", roleClaimResolver.resolveRoles(user.getId()), null);
 
         // deleted_at設定済みの場合はpendingDeletionUntilを含める
         LocalDateTime pendingDeletionUntil = user.getDeletedAt() != null
@@ -454,7 +468,7 @@ public class AuthService {
      */
     private TokenResponse issueLoginSession(UserEntity user, String requestedDeviceFingerprint,
                                             boolean rememberMe, String ipAddress, String userAgent, String method,
-                                            List<String> resolvedRoles) {
+                                            List<String> resolvedRoles, String mfaFactor) {
         // Access Token発行
         // rolesは各認証入口がRoleClaimResolverで解決した値のみを受け取り、
         // 共通セッション発行はauthドメインの永続化処理に閉じる。
@@ -497,7 +511,7 @@ public class AuthService {
 
         // ログイン成功イベント発行（sessionHash = SHA-256(refresh_token_jti)）
         eventPublisher.publish(new LoginSuccessEvent(
-                user.getId(), ipAddress, userAgent, method, sessionHash));
+                user.getId(), ipAddress, userAgent, method, sessionHash, mfaFactor));
 
         return new TokenResponse(accessToken, rawRefreshToken, savedToken.getId(),
                 authTokenService.getAccessTokenExpirationSeconds());

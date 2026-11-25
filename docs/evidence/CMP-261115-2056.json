@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261115-2056",
+  "scope": "app",
+  "implementation": {
+    "pr": 4552,
+    "sha": "4f08283a67b1624d45f91ffdd883a947c651fd12"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "宛先ピッカーが配下チーム・配下組織を slug で要求し、エラートーストなしで候補を表示する",
+      "tests": [
+        {
+          "name": "配下チーム・配下組織を slug で要求し、候補を表示する",
+          "evidence": "frontend/app/components/confirmable/ConfirmableTargetPicker.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "配下チームを選んだとき宛先の対象にチームの数値 ID が入り、組織所属チーム一覧が numericId を返す",
+      "tests": [
+        {
+          "name": "チーム対象は数値IDで emit され、スラッグ文字列は送らない",
+          "evidence": "frontend/app/components/confirmable/ConfirmableTargetPicker.spec.ts"
+        },
+        {
+          "name": "各チームに numericId（チームの BIGINT ID）が入り、id と slug は従来どおりスラッグ",
+          "evidence": "backend/src/test/java/com/mannschaft/app/organization/teamgroup/OrgTeamListNumericIdIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "宛先グループの対象がチーム名で表示される",
+      "tests": [
+        {
+          "name": "宛先グループの対象をチーム名で表示する",
+          "evidence": "frontend/app/components/confirmable/ConfirmableTargetPicker.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 43805308548 },
+    { "runId": 43805308566 },
+    { "runId": 43805308475 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4552"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-2056-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261115-2056-exploratory.md"
+    }
+  },
+  "regressions": []
+}

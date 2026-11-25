@@ -39,6 +39,7 @@ export type RawMemo = {
   memo_date: string
   related_todo_id: number | null
   timeline_post_id: number | null
+  team_timeline_post_id: number | null
   tags: RawTag[] | null
   created_at: string
   updated_at?: string
@@ -93,6 +94,7 @@ export function normalizeMemo(raw: RawMemo): ActionMemo {
     mood: raw.mood ?? null,
     relatedTodoId: raw.related_todo_id ?? null,
     timelinePostId: raw.timeline_post_id ?? null,
+    teamTimelinePostId: raw.team_timeline_post_id ?? null,
     tags: (raw.tags ?? []).map(normalizeTag),
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,

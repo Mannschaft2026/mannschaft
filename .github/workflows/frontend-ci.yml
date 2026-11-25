@@ -25,6 +25,10 @@ on:
       - "docs/openapi.json"
       # BE の欠席理由 enum 変更で FE の契約テスト（absenceReason.spec.ts）を起動するため
       - "backend/src/main/java/com/mannschaft/app/school/**/AbsenceReason.java"
+      # Web Push ペイロードの契約（BE の DTO と見本 JSON）変更で FE の SW 試験（tests/unit/sw/swCustom.spec.ts）を起動するため
+      - "backend/src/main/java/com/mannschaft/app/notification/dto/WebPushPayload.java"
+      - "backend/src/main/java/com/mannschaft/app/notification/service/WebPushPayloadFactory.java"
+      - "backend/src/test/resources/contracts/web-push-payload.json"
       - ".github/workflows/frontend-ci.yml"
   push:
     branches:
@@ -36,6 +40,10 @@ on:
       - "docs/openapi.json"
       # BE の欠席理由 enum 変更で FE の契約テスト（absenceReason.spec.ts）を起動するため
       - "backend/src/main/java/com/mannschaft/app/school/**/AbsenceReason.java"
+      # Web Push ペイロードの契約（BE の DTO と見本 JSON）変更で FE の SW 試験（tests/unit/sw/swCustom.spec.ts）を起動するため
+      - "backend/src/main/java/com/mannschaft/app/notification/dto/WebPushPayload.java"
+      - "backend/src/main/java/com/mannschaft/app/notification/service/WebPushPayloadFactory.java"
+      - "backend/src/test/resources/contracts/web-push-payload.json"
       - ".github/workflows/frontend-ci.yml"
 
 concurrency:
@@ -78,7 +86,7 @@ jobs:
         run: node --test scripts/audit-with-exemption.test.mjs scripts/patch-nuxt-devtools-simple-git.test.mjs
 
       - name: npm audit (依存脆弱性スキャン)
-      # 個別除外は現在ゼロ（node-forge は 1.4.2 へ更新、braces は勧告が発火せず撤去）。
+      # 個別除外は picomatch GHSA-fc5q-39xc-vjpf の1件のみ（修正版なし・2026-12-02T00:00:00Z に失効、2026-12-01 UTC 末日まで有効）。
       # audit-level を下げることは禁止。詳細は scripts/audit-with-exemption.mjs 冒頭。
         run: node scripts/audit-with-exemption.mjs
 

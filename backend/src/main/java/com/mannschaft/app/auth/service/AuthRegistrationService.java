@@ -20,10 +20,13 @@ import com.mannschaft.app.common.EncryptionService;
 import com.mannschaft.app.common.util.AgeGroupCalculator;
 import com.mannschaft.app.postal.CountryResolver;
 import com.mannschaft.app.postal.PostalCodePolicyRegistry;
+import com.mannschaft.app.common.token.SecretTokenVault;
+import com.mannschaft.app.role.dto.RegistrationInviteInfo;
 import com.mannschaft.app.role.service.InviteService;
 import com.mannschaft.app.weather.event.UserPostalCodeUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -60,6 +63,8 @@ public class AuthRegistrationService {
     private final EncryptionService encryptionService;
     private final BetaRestrictionService betaRestrictionService;
     private final InviteService inviteService;
+    private final PendingInviteStore pendingInviteStore;
+    private final SecretTokenVault secretTokenVault;
     private final CountryResolver countryResolver;
     private final PostalCodePolicyRegistry postalCodePolicyRegistry;
 
@@ -85,19 +90,33 @@ public class AuthRegistrationService {
 
     /**
      * ユーザー登録を行う。
-     * レートリミット確認 → email重複チェック → パスワードポリシー検証 → ユーザー作成 →
-     * メール認証トークン生成 → イベント発行。
+     * レートリミット確認 → 招待の読み取り → ベータ制限 → email重複チェック → パスワードポリシー検証 → ユーザー作成 →
+     * メール認証トークン生成 → 招待の保留作成 → イベント発行。
+     *
+     * <p>招待付きの登録でも、ここでは参加させない（CMP-261107-1833）。登録直後は PENDING_VERIFICATION で参加できず、
+     * 未成年は保護者同意も要るため、招待のハッシュと招待先だけを持つ保留（registration_pending_invites）を
+     * users と同じトランザクションで作り、ログイン後に本人が承認したときに参加する（{@code PendingInviteService}）。
+     * 宛先付き（承諾型）の招待は宛先本人のための招待なので、新規登録には使えない（AUTH_083。ベータ設定・有効性に関係なく拒否）。
+     * 存在しない招待は保留を作らず登録だけ通す（ベータ有効時は従来どおり AUTH_042/043 で拒否）。</p>
      *
      * @param req       登録リクエスト
      * @param ipAddress リクエスト元IPアドレス
      * @return 登録完了メッセージ
      */
     @Transactional
-    // TODO: authドメインとroleドメインをまたいでいる（InviteService.joinByInviteを直接呼び出し）。将来はUserRegisteredEventで分離予定
     public ApiResponse<MessageResponse> register(RegisterRequest req, String ipAddress) {
         // 1. レートリミットチェック
         String rateLimitKey = "mannschaft:auth:register_attempt:" + ipAddress;
         authTokenService.checkRateLimit(rateLimitKey, REGISTER_MAX_ATTEMPTS, REGISTER_WINDOW);
+
+        // 1.2. 招待の読み取り（CMP-261107-1833）。宛先付き招待は新規登録に使えない（ベータ設定・有効性に関係なく拒否）。
+        boolean hasInviteToken = req.getInviteToken() != null && !req.getInviteToken().isBlank();
+        Optional<RegistrationInviteInfo> invite = hasInviteToken
+                ? inviteService.findRegistrationInvite(req.getInviteToken())
+                : Optional.empty();
+        if (invite.isPresent() && invite.get().targeted()) {
+            throw new BusinessException(AuthErrorCode.AUTH_083);
+        }
 
         // 1.5. ベータ制限チェック
         if (betaRestrictionService.isEnabled()) {
@@ -178,11 +197,15 @@ public class AuthRegistrationService {
         // 4.1. プライバシーポリシー同意を記録する（F_privacy_policy。GDPR Art.7 準拠）
         // privacyPolicyAccepted=false は @Valid で弾かれているため、ここに到達した場合は必ず true。
         user.recordPrivacyPolicyConsent(LocalDateTime.now(), req.getPrivacyPolicyVersion());
-        userRepository.save(user);
-
-        // 4.5. ベータ招待トークンがあれば自動参加
-        if (req.getInviteToken() != null && !req.getInviteToken().isBlank()) {
-            inviteService.joinByInvite(req.getInviteToken(), user.getId());
+        try {
+            userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            // 存在チェック(2.)と INSERT の間に同一メールの登録が割り込んだ場合の競合。
+            // users.uq_users_email に限って AUTH_004 へ写像し、他の制約違反は握りつぶさず再送出する。
+            if (isEmailUniqueViolation(e)) {
+                throw new BusinessException(AuthErrorCode.AUTH_004);
+            }
+            throw e;
         }
 
         // 5. メール認証トークン生成（SHA-256ハッシュをDB保存、平文はイベントで送信）
@@ -195,6 +218,15 @@ public class AuthRegistrationService {
                 .build();
         emailVerificationTokenRepository.save(verificationToken);
 
+        // 5.5. 招待があれば保留を作る（参加はログイン後に本人が承認したとき。CMP-261107-1833）。
+        //      失効済みでも作る（ログイン後に失効を案内し、参加申し込み・再招待要請へ導く）。平文は保存しない。
+        if (invite.isPresent()) {
+            RegistrationInviteInfo info = invite.get();
+            boolean team = info.teamId() != null;
+            pendingInviteStore.createPending(user.getId(), secretTokenVault.hash(req.getInviteToken()),
+                    team ? "TEAM" : "ORGANIZATION", team ? info.teamId() : info.organizationId());
+        }
+
         // 6. イベント発行（メール送信は非同期リスナーが処理）
         eventPublisher.publish(new UserRegisteredEvent(
                 user.getId(), user.getEmail(), user.getLastName() + " " + user.getFirstName(), rawToken));
@@ -205,6 +237,17 @@ public class AuthRegistrationService {
 
         // 7. レスポンス
         return ApiResponse.of(new MessageResponse("確認メールを送信しました"));
+    }
+
+    /** 例外の原因連鎖に users.uq_users_email（メール一意制約）が含まれるか。 */
+    private static boolean isEmailUniqueViolation(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            String msg = t.getMessage();
+            if (msg != null && msg.contains("uq_users_email")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ========================================

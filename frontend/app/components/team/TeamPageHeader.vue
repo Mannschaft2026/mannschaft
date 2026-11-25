@@ -92,7 +92,7 @@ const overflowMenuItems = computed(() => {
   if (props.roleName && props.roleName !== 'SUPPORTER') {
     items.push({
       label: t('announcement.broadcast_button_team'),
-      icon: 'pi pi-bullhorn',
+      icon: 'pi pi-megaphone',
       command: () => { showBroadcastWizard.value = true },
     })
   }
@@ -153,8 +153,9 @@ const overflowMenuItems = computed(() => {
       <!-- 右: アクションボタン群 -->
       <div class="flex items-center gap-2 flex-wrap min-w-0 md:flex-1">
         <FavoriteToggleButton
+          v-if="team.numericId != null"
           entity-type="TEAM"
-          :entity-id="String(team.id)"
+          :entity-id="String(team.numericId)"
           :entity-name="displayName"
         />
         <Button
@@ -320,7 +321,7 @@ const overflowMenuItems = computed(() => {
         <Button
           v-if="roleName && roleName !== 'SUPPORTER'"
           :label="$t('announcement.broadcast_button_team')"
-          icon="pi pi-bullhorn"
+          icon="pi pi-megaphone"
           severity="secondary"
           size="small"
           class="hidden sm:inline-flex"

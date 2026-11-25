@@ -1,5 +1,6 @@
 package com.mannschaft.app.shift.service;
 
+import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,13 +56,15 @@ class ShiftSlotFacadeTest {
     private ShiftSlotService slotService;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private UserStatusLookupService userStatusLookupService;
 
     private ShiftSlotFacade facade;
 
     @BeforeEach
     void setUp() {
         facade = new ShiftSlotFacade(slotService, new ScopeConcealingAccessGate(accessControlService),
-                accessControlService);
+                accessControlService, userStatusLookupService);
     }
 
     private static ShiftScheduleScope published() {
@@ -239,7 +243,7 @@ class ShiftSlotFacadeTest {
                     ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
             assertCode(catchThrowable(() -> facade.deleteSlot(SLOT_ID, USER_ID)),
                     ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
-            verify(slotService, never()).updateSlot(anyLong(), any(), anyLong());
+            verify(slotService, never()).updateSlot(anyLong(), any(), anyLong(), any());
             verify(slotService, never()).patchSlotAssignments(anyLong(), any(), anyLong());
             verify(slotService, never()).deleteSlot(anyLong());
         }
@@ -271,8 +275,11 @@ class ShiftSlotFacadeTest {
             given(slotService.resolveSlotTeamId(SLOT_ID)).willReturn(TEAM_ID);
             given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
             ShiftSlotResponse updated = ShiftSlotResponse.builder().id(SLOT_ID).build();
-            given(slotService.updateSlot(SLOT_ID, updateReq, USER_ID)).willReturn(updated);
+            given(slotService.updateSlot(eq(SLOT_ID), eq(updateReq), eq(USER_ID), any())).willReturn(updated);
             given(slotService.patchSlotAssignments(SLOT_ID, patchReq, USER_ID)).willReturn(updated);
+            // 追加先（patchReq の 1L）は枠のチームの現役メンバー（CMP-261123-1821）
+            given(accessControlService.isRegularMemberOrAbove(1L, TEAM_ID, "TEAM")).willReturn(true);
+            given(userStatusLookupService.isActive(1L)).willReturn(true);
 
             assertThat(facade.updateSlot(SLOT_ID, updateReq, USER_ID)).isSameAs(updated);
             assertThat(facade.patchSlotAssignments(SLOT_ID, patchReq, USER_ID)).isSameAs(updated);

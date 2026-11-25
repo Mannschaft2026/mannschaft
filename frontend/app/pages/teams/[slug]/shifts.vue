@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
+import ShiftScheduleList from '~/components/shift/ShiftScheduleList.vue'
 definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
@@ -63,7 +64,7 @@ async function resolveTeamNumericId() {
     teamLoading.value = false
   }
 }
-const { isAdmin, isAdminOrDeputy, roleName, loadPermissions } = useRoleAccess('team', teamSlug)
+const { isAdmin, isAdminOrDeputy, isMember, roleName, loadPermissions } = useRoleAccess('team', teamSlug)
 // シフトボードは当該チームの ADMIN / DEPUTY_ADMIN 限定。
 // 判定手段は board.vue（`shifts/[scheduleId]/board.vue` の isScopeAdmin）に合わせる。
 //
@@ -88,6 +89,7 @@ watch(
 const showCreateDialog = ref(false)
 const showRequestDialog = ref(false)
 const selectedScheduleId = ref<number | null>(null)
+const scheduleList = ref<InstanceType<typeof ShiftScheduleList> | null>(null)
 
 // シフト表作成フォーム
 const createForm = ref({
@@ -115,6 +117,7 @@ async function createSchedule() {
     notification.success('シフト表を作成しました')
     showCreateDialog.value = false
     createForm.value = { title: '', periodStart: null, periodEnd: null }
+    await scheduleList.value?.refresh()
   } catch {
     notification.error('作成に失敗しました')
   } finally {
@@ -172,10 +175,12 @@ onMounted(() => {
           <TabPanels>
             <TabPanel :value="0">
               <ShiftScheduleList
+                ref="scheduleList"
                 :team-id="teamNumericId"
                 :team-slug="teamSlug"
                 :can-manage="isAdminOrDeputy"
                 :can-manage-board="isScopeAdmin"
+                :can-request-change="isMember"
                 @select="onScheduleSelect"
                 @create="showCreateDialog = true"
               />

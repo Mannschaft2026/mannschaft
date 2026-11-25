@@ -84,6 +84,7 @@ HTTP|com.mannschaft.app.auth.controller.AuthWebAuthnController|9|9
 HTTP|com.mannschaft.app.auth.controller.BirthProfileController|0|3
 HTTP|com.mannschaft.app.auth.controller.GuardianChildViewController|5|5
 HTTP|com.mannschaft.app.auth.controller.GuardianshipSwitchController|5|5
+HTTP|com.mannschaft.app.auth.controller.MePendingInviteController|5|5
 HTTP|com.mannschaft.app.auth.controller.ParentalConsentController|9|9
 HTTP|com.mannschaft.app.auth.controller.UserController|10|12
 HTTP|com.mannschaft.app.auth.controller.UserOAuthLinkController|2|2
@@ -201,6 +202,8 @@ HTTP|com.mannschaft.app.disclosure.controller.DisclosureExportController|6|6
 HTTP|com.mannschaft.app.disclosure.controller.DisclosureFormDraftController|6|6
 HTTP|com.mannschaft.app.disclosure.controller.DisclosureFormTemplateController|2|2
 HTTP|com.mannschaft.app.disclosure.controller.DisclosureFormTemplateEditController|3|3
+HTTP|com.mannschaft.app.effortrecord.controller.EffortRecordMeController|7|8
+HTTP|com.mannschaft.app.effortrecord.controller.EffortTeamTemplateSettingsController|0|2
 HTTP|com.mannschaft.app.equipment.controller.EquipmentMyAssignmentsController|1|1
 HTTP|com.mannschaft.app.equipment.controller.OrganizationEquipmentController|15|16
 HTTP|com.mannschaft.app.equipment.controller.TeamEquipmentController|16|16
@@ -332,6 +335,7 @@ HTTP|com.mannschaft.app.moderation.controller.SystemAdminModerationController|15
 HTTP|com.mannschaft.app.moderation.controller.SystemAdminReportController|1|1
 HTTP|com.mannschaft.app.moderation.controller.UserViolationController|3|3
 HTTP|com.mannschaft.app.moderation.controller.YabaiController|2|2
+HTTP|com.mannschaft.app.moduleevent.controller.SystemAdminModuleEventController|0|2
 HTTP|com.mannschaft.app.navsettings.controller.NavSettingsController|2|2
 HTTP|com.mannschaft.app.navsettings.controller.SystemAdminNavFeaturesController|4|4
 HTTP|com.mannschaft.app.notification.confirmable.controller.ConfirmableNotificationRecipientController|2|2
@@ -547,7 +551,7 @@ HTTP|com.mannschaft.app.resident.controller.UserResidentController|2|2
 HTTP|com.mannschaft.app.resume.controller.ResumeController|10|11
 HTTP|com.mannschaft.app.returnstayplan.controller.ReturnStayPlanController|5|5
 HTTP|com.mannschaft.app.returnstayplan.controller.ReturnStayPlanTeamController|2|2
-HTTP|com.mannschaft.app.role.controller.InviteController|3|4
+HTTP|com.mannschaft.app.role.controller.InviteController|3|6
 HTTP|com.mannschaft.app.role.controller.InviteQrPdfController|1|1
 HTTP|com.mannschaft.app.role.controller.MeController|2|2
 HTTP|com.mannschaft.app.role.controller.MeInvitableScopesController|0|1
@@ -595,7 +599,7 @@ HTTP|com.mannschaft.app.seal.controller.SealAdminController|2|2
 HTTP|com.mannschaft.app.seal.controller.SealController|8|8
 HTTP|com.mannschaft.app.seal.controller.SealStampController|5|5
 HTTP|com.mannschaft.app.search.controller.GlobalSearchController|2|2
-HTTP|com.mannschaft.app.search.controller.SearchHistoryController|5|5
+HTTP|com.mannschaft.app.search.controller.SearchHistoryController|6|6
 HTTP|com.mannschaft.app.securityincident.controller.SystemAdminSecurityIncidentController|3|3
 HTTP|com.mannschaft.app.service.controller.ServiceRecordController|17|17
 HTTP|com.mannschaft.app.service.controller.ServiceRecordFieldController|7|7
@@ -717,6 +721,7 @@ HTTP|com.mannschaft.app.tournament.controller.DivisionController|8|8
 HTTP|com.mannschaft.app.tournament.controller.EmbedController|3|3
 HTTP|com.mannschaft.app.tournament.controller.FixtureController|12|12
 HTTP|com.mannschaft.app.tournament.controller.OrganizationTournamentSummaryController|1|1
+HTTP|com.mannschaft.app.tournament.controller.ParticipantContactSpaceController|1|1
 HTTP|com.mannschaft.app.tournament.controller.PromotionController|3|3
 HTTP|com.mannschaft.app.tournament.controller.PublicTournamentController|6|6
 HTTP|com.mannschaft.app.tournament.controller.StandingsController|7|7

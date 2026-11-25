@@ -607,29 +607,40 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
     class DeleteAndPin {
 
         /**
-         * AC-S8: 正当 ADMIN が別チームの announcementId を自チーム URL に差し込んでも、
-         * entity 自身のスコープで再認可されるため権限昇格しない（ANNOUNCE_002 → 403）。
+         * AC-S8（CMP-261103-0822 で改訂）: 正当 ADMIN が別チームの announcementId を自チーム URL に差し込んだ削除は、
+         * 不在 ID と同じ応答（status・error.code）に畳まれる（存在オラクル封じ）。行は削除されない。
+         * 実JWT/filter での本文全体の一致は {@code AnnouncementDeletePinExistenceOracleIT} が固定する。
          */
         @Test
-        @DisplayName("AC-S8 越境announcementIdの削除は403（entityスコープで再認可・権限昇格なし）")
-        void ac_s8_越境削除は403() throws Exception {
+        @DisplayName("AC-S8 越境announcementIdの削除は不在IDと同一応答（CMP-261103-0822 AC1）")
+        void ac_s8_越境削除は不在と同一() throws Exception {
             setAuth(adminAId);
-            mockMvc.perform(delete("/api/v1/teams/{teamId}/announcements/{id}", teamAId, annBId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_002"));
+            var cross = mockMvc.perform(delete("/api/v1/teams/{teamId}/announcements/{id}", teamAId, annBId))
+                    .andReturn().getResponse();
+            var missing = mockMvc.perform(
+                            delete("/api/v1/teams/{teamId}/announcements/{id}", teamAId, MISSING_ANNOUNCEMENT_ID))
+                    .andReturn().getResponse();
+            assertThat(cross.getStatus()).isEqualTo(missing.getStatus());
+            assertThat(errorCodeOf(cross.getContentAsString())).isEqualTo(errorCodeOf(missing.getContentAsString()));
             assertThat(feedRepository.existsById(annBId)).isTrue();
         }
 
-        /** AC-S8: 越境 announcementId のピン留めも entity スコープで再認可され遮断される。 */
+        /** AC-S8（CMP-261103-0822 で改訂）: 越境 announcementId のピン留めも不在 ID と同じ応答に畳まれる。 */
         @Test
-        @DisplayName("AC-S8 越境announcementIdのピン留めは403（entityスコープで再認可）")
-        void ac_s8_越境ピン留めは403() throws Exception {
+        @DisplayName("AC-S8 越境announcementIdのピン留めは不在IDと同一応答（CMP-261103-0822 AC2）")
+        void ac_s8_越境ピン留めは不在と同一() throws Exception {
             setAuth(adminAId);
-            mockMvc.perform(patch("/api/v1/teams/{teamId}/announcements/{id}/pin", teamAId, annBId)
+            var cross = mockMvc.perform(patch("/api/v1/teams/{teamId}/announcements/{id}/pin", teamAId, annBId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"pinned\":true}"))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("ANNOUNCE_002"));
+                    .andReturn().getResponse();
+            var missing = mockMvc.perform(
+                            patch("/api/v1/teams/{teamId}/announcements/{id}/pin", teamAId, MISSING_ANNOUNCEMENT_ID)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content("{\"pinned\":true}"))
+                    .andReturn().getResponse();
+            assertThat(cross.getStatus()).isEqualTo(missing.getStatus());
+            assertThat(errorCodeOf(cross.getContentAsString())).isEqualTo(errorCodeOf(missing.getContentAsString()));
         }
 
         /** AC-S8: 非管理者メンバーのピン留めは遮断される（ANNOUNCE_002 → 403）。 */
@@ -867,7 +878,9 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
                 .scopeType(scopeType)
                 .scopeId(scopeId)
                 .sourceType(AnnouncementSourceType.BLOG_POST)
-                .sourceId(sourceId)
+                // 元は公開済みの実在記事（元が公開済みでないお知らせは一覧・ID 指定の経路で不在扱い。N9）。
+                // 引数の sourceId はタイトルの識別ラベルとしてだけ使う。
+                .sourceId(AnnouncementSourceFixtures.publishedBlog(em, scopeType, scopeId, null))
                 .titleCache("ANNAUTHZ お知らせ " + sourceId)
                 .visibility(visibility)
                 .sourceDeletedAt(sourceDeletedAt)

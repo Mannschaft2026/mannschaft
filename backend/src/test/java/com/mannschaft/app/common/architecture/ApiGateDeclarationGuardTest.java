@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * API の mapped method が feature gate または明示的な常時到達理由を宣言することを監査する番人。
- * HTTP は 3,730 件（既存3,729件＋組織告知の一括既読 read-batch 1本）、
+ * HTTP は 3,744 件（総数の内訳は下記の定数コメント）、
  * STOMP は Chat の 2 件と VillageLobbyPresenceController の 3 件、計 5 件を走査する。
  */
 class ApiGateDeclarationGuardTest {
@@ -42,7 +42,21 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3730);   // 3729 + CMP-261011-0035 ALIC-1 組織告知の一括既読 POST read-batch 1本（AnnouncementFeedOrgController・
+                .isEqualTo(3751);   // 3751 = 3746 + CMP-261107-1833 招待付き新規登録の保留承認 MePendingInviteController 5本
+                                    //   （GET /api/v1/me/pending-invite・POST accept|decline|reissue-request|dismiss。feature gate 未宣言の流儀で 新規 5|5。
+                                    //   認可は @PreAuthorize("isAuthenticated()")＋本人の保留行のみ）。
+                                    // 3746 = 3745 + CMP-261118-0900 参加者向け連絡スペース一覧 ParticipantContactSpaceController GET 1本（feature gate 未宣言 1|1）。
+                                    // 3745 = 3741 + F06.4.1 PR-2 の3本 + CMP-261116-0722 PR-1 の1本。
+                                    //   (F06.4.1 PR-2) CMP-261115-2145 F06.4.1 PR-2 の3本（EffortRecordMeController の definition-snapshots 1本・
+                                    //   EffortTeamTemplateSettingsController の指標設定 GET/PUT 2本）。3本とも @AlwaysReachable(CORE) を
+                                    //   宣言済みで未宣言増加0（7|7 → 7|8、新規 0|2）。
+                                    //   (検索) 3741 + CMP-261116-0722 PR-1 保存済み検索の個別削除 SearchHistoryController DELETE /saved/{savedQueryId} 1本
+                                    //   （既存5本と同じく feature gate 未宣言の流儀で 5|5 → 6|6。認可は @AuthorizedInService＋findByIdAndUserId の所有者照合）。
+                                    // 3741 = 3734 + CMP-261115-2145 F06.4.1 個人の頑張り記録 EffortRecordMeController 7本（feature gate 未宣言の流儀で 7|7）。
+                                    // 3734 = 3732 + L1-M モジュールイベント管理GET/POST各1本。未宣言増加0。
+                                    // 3732 = 3730 + CMP-260826-1457 W1 P1 招待IDでの承諾・辞退2本（InviteController の POST invitations/{tokenId}/accept|decline。
+                                    //   どちらも @AlwaysReachable(CORE) を宣言済みで未宣言増加0。3|4 → 3|6）。QR-PDF は旧 GET を POST へ置換（1|1 のまま・純増0）。
+                                    // 3730 = 3729 + CMP-261011-0035 ALIC-1 組織告知の一括既読 POST read-batch 1本（AnnouncementFeedOrgController・
                                     //   @AuthorizedInService＋@AlwaysReachable(CORE) 宣言済みで未宣言増加0。6|6 → 6|7）。
                                     // 3729 = 3725 + CMP-261025-2202 TEAM/ORG表示設定GET/PUT各2本。未宣言増加0。
                                     // ネストSwagger注釈へのclass mapping誤帰属2件は自己試験で防ぐ。

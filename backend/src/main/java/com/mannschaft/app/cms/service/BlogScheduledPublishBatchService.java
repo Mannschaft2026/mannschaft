@@ -50,7 +50,7 @@ public class BlogScheduledPublishBatchService {
      * サーバ既定ゾーンが UTC でない環境（JST 等）でオフセット分ずれ、予約時刻より 9 時間早く/遅く
      * 公開される（{@code ReservationPendingExpireService#findExpirableUnits} の Javadoc に実測記録あり）。
      * そのため<b>壁時計 Bean {@code ClockConfig#wallClock} を明示的に注入</b>して用いる
-     * （{@code TimeZoneConfig} が JVM 既定ゾーンに設定するのと同一プロパティ由来なので食い違わない）。</p>
+     * （{@code ServerTimeZoneEnvironmentPostProcessor} が JVM 既定ゾーンに設定するのと同一プロパティ由来なので食い違わない）。</p>
      *
      * <p>戻り値はプリミティブ {@code int} ではなく参照型 {@code Integer}（issue #2724）。
      * ShedLock はプリミティブ戻り値のメソッドをロックできず {@code LockingNotSupportedException} で

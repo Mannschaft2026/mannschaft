@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import * as validator from './completion-evidence.mjs';
 import {
   parseTaskList,
@@ -37,12 +38,116 @@ const validationOptions = {
   runs: new Map([[100, { repository: 'owner/repo', sha: 'a'.repeat(40), conclusion: 'success' }]]),
 };
 
+const completed = `${headers}\n${row('完了', proofLink)}\n`;
+const oldCompleted = `${headers}\n${row('完了')}\n`;
+const proofPath = 'docs/evidence/CMP-260101-0101.json';
+const ancestry = ancestorTaskList => ({ ...validationOptions, ancestorTaskList });
+
+test('1957 AC2: mainだけの完了行・完了化・リンク追加はPRの削除にしない', () => {
+  for (const ancestor of [headers, base, oldCompleted]) {
+    assert.deepEqual(selectEvidencePaths(completed, ancestor, [], ancestry(ancestor)), []);
+    assert.doesNotThrow(() => validateCompletionChanges(completed, ancestor, {}, ancestry(ancestor)));
+  }
+});
+
+test('1957 AC3: PR自身の行・リンク・JSON削除とmain-onlyへの競合変更は拒否', () => {
+  for (const head of [headers, oldCompleted, `${headers}\n${row('完了', '説明変更')}\n`]) {
+    assert.throws(() => selectEvidencePaths(completed, head, [], ancestry(completed)), /削除/);
+    assert.throws(() => validateCompletionChanges(completed, head, {}, ancestry(completed)), /削除/);
+  }
+  const conflictingHead = `${headers}\n${row('実装中', 'PR側の注記変更')}\n`;
+  assert.throws(() => selectEvidencePaths(completed, conflictingHead, [], ancestry(base)), /削除/);
+  assert.throws(() => validateCompletionChanges(completed, conflictingHead, {}, ancestry(base)), /削除/);
+  for (const change of ['modified', 'removed', 'renamed']) {
+    // 行はancestorから無変更でも、PRのJSON操作があればmain-only免除を使わない。
+    assert.throws(() => selectEvidencePaths(completed, oldCompleted, [proofPath], ancestry(oldCompleted)), /削除/, change);
+    assert.throws(() => validateCompletionChanges(completed, oldCompleted, {}, {
+      ...ancestry(oldCompleted), evidenceChanged: new Set([proofPath]),
+      evidenceDeleted: new Set(change === 'modified' ? [] : [proofPath]),
+    }), /削除/, change);
+  }
+});
+
+test('1957 AC4: mainも完了済でもPR自身の新完了は祖先から検出して検査', () => {
+  for (const ancestor of [base, oldCompleted]) {
+    assert.deepEqual(selectEvidencePaths(completed, completed, [], ancestry(ancestor)), [proofPath]);
+    assert.throws(() => validateCompletionChanges(completed, completed, {}, ancestry(ancestor)), /JSON/);
+    assert.doesNotThrow(() => validateCompletionChanges(completed, completed, { [proofPath]: evidence }, ancestry(ancestor)));
+  }
+});
+
+// 実workflow scriptを実行する。GitHub APIだけをスタブし、trusted validatorは実物をimportする。
+async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = oldCompleted, files = [], changedFiles = files.length, compareError, invalidAncestor, missingAncestor = false } = {}) {
+  const workflow = readFileSync(new URL('../.github/workflows/task-list-pr-gate.yml', import.meta.url), 'utf8');
+  const script = workflow.replaceAll('\r\n', '\n').split('          script: |\n')[1].split('\n').map(line => line.replace(/^            /, '')).join('\n');
+  const refs = { ['a'.repeat(40)]: completed, ['b'.repeat(40)]: head, ['c'.repeat(40)]: ancestor };
+  const calls = [];
+  const github = {
+    paginate: async (fn, args) => fn(args),
+    rest: {
+      pulls: { listFiles: async () => files },
+      repos: {
+        compareCommitsWithBasehead: async ({ basehead }) => {
+          calls.push(basehead);
+          if (compareError) throw new Error('compare unavailable');
+          return { data: { merge_base_commit: { sha: invalidAncestor ? 'not-a-sha' : 'c'.repeat(40) } } };
+        },
+        getContent: async ({ path, ref }) => {
+          if (missingAncestor && ref === 'c'.repeat(40)) throw Object.assign(new Error('missing'), { status: 404 });
+          if (path !== 'docs/task-list.md' || !(ref in refs)) throw new Error(`Unexpected data read: ${path}@${ref}`);
+          return { data: { type: 'file', encoding: 'base64', content: Buffer.from(refs[ref]).toString('base64') } };
+        },
+      },
+    },
+  };
+  const context = { eventName: 'pull_request_target', repo: { owner: 'owner', repo: 'repo' }, payload: {
+    action, pull_request: { number: 1957, changed_files: changedFiles, created_at: '2026-11-15T00:00:00Z', base: { sha: 'a'.repeat(40), ref: 'main' }, head: { sha: 'b'.repeat(40) } },
+  } };
+  const core = { info() {}, notice() {}, error() {}, setFailed(message) { throw new Error(message); } };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  await new AsyncFunction('require', 'github', 'context', 'core', script)(createRequire(import.meta.url), github, context, core);
+  assert.deepEqual(calls, [`${'a'.repeat(40)}...${'b'.repeat(40)}`]);
+}
+
+for (const action of ['ready_for_review', 'edited', 'synchronize']) {
+  test(`1957 AC1/5: ${action}で実workflowがmain-onlyを許し真削除を拒否`, async () => {
+    await runCompletionWorkflow(action);
+    await assert.rejects(runCompletionWorkflow(action, { ancestor: completed, head: oldCompleted }), /削除/);
+    await assert.rejects(runCompletionWorkflow(action, { compareError: true }), /compare unavailable/);
+    await assert.rejects(runCompletionWorkflow(action, { missingAncestor: true }), /ancestor|共通祖先/);
+    await assert.rejects(runCompletionWorkflow(action, { invalidAncestor: true }), /ancestor/);
+    for (const changedFiles of [null, -1, 1.5, '0', 1]) {
+      await assert.rejects(runCompletionWorkflow(action, { changedFiles }), /incomplete/);
+    }
+    for (const status of ['modified', 'removed', 'renamed']) {
+      await assert.rejects(runCompletionWorkflow(action, { files: [{
+        filename: status === 'renamed' ? 'docs/evidence/moved.json' : proofPath,
+        previous_filename: status === 'renamed' ? proofPath : undefined, status,
+      }] }), /削除/, status);
+    }
+  });
+}
+
 test('台帳をエスケープ済み縦棒込みで7列に分解しCMP重複を検出する', () => {
   const parsed = parseTaskList(`${headers}\n${row('実装中', '文字列 a\\|b')}\n`);
   assert.equal(parsed.rows[0].cells.length, 7);
   assert.equal(parsed.rows[0].cells[5], '文字列 a|b');
   assert.throws(() => parseTaskList(`${headers}\n${row('実装中')}\n${row('完了')}\n`), /重複/);
   assert.throws(() => parseTaskList(`${headers}\n| CMP-260101-0101 | x | 完了 | only | 5 |\n`), /7列/);
+});
+
+test('状態先頭の優先度 P1〜P5 を state から除き priority へ分離する（CMP-261106-0049）', () => {
+  const parse = (state) => parseTaskList(`${headers}
+${row(state)}
+`).rows[0];
+  assert.equal(parse('P4 実装中').state, '実装中');
+  assert.equal(parse('P4 実装中').priority, 'P4');
+  assert.equal(parse('**P1 保留**').state, '保留');
+  assert.equal(parse('**P1 保留**').priority, 'P1');
+  assert.equal(parse('実装中').priority, null);
+  assert.equal(parse('P2 完了（PR #1）').state, '完了（PR #1）');
+  assert.equal(validator.isComplete(parse('P2 完了（PR #1）').state), true);
+  assert.equal(validator.isComplete(parse('P3 未着手').state), false);
 });
 
 test('証拠列のMarkdown destinationを相対pathとして解決し、外部URL内の文字列を誤認しない', () => {
@@ -123,8 +228,9 @@ test('pull_request_targetはbase trusted validatorだけを実行しPR headを�
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /await import\(pathToFileURL\(validatorPath\)\.href\)/);
-  assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths\)/);
+  assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths, \{ ancestorTaskList \}\)/);
   assert.match(workflow, /github\.rest\.git\.getTree/);
+  assert.match(workflow, /github\.rest\.git\.getBlob/);
   assert.doesNotMatch(workflow, /github\.rest\.repos\.getContent\(\{ owner, repo, path: ref/);
   assert.match(workflow, /file\.status === 'removed'/);
   assert.match(workflow, /file\.previous_filename === validatorPathInBase/);
@@ -215,6 +321,9 @@ test('AC-2: 同居spec・frontend/testsだけはtest-only、scriptsとテスト�
   assert.equal(infer(['scripts/check.mjs', '.github/workflows/x.yml']), 'tooling');
 });
 
+// 現行のリポジトリ名と、移管前（2026-11-21 に kenta-0420/mannschaft から移管）に記録された旧名。
+const REPOSITORY_NAMES = ['Mannschaft2026/mannschaft', 'kenta-0420/mannschaft'];
+
 test('AC-3: test-onlyのPRはapp申告なら通り、tooling申告は拒否、既存docs/evidence全件は新validatorを通る', () => {
   const appPassed = { ...evidence, scope: 'app', stages: { review: passed, real: passed, exploratory: passed } };
   assert.doesNotThrow(() => validateEvidence(appPassed, 'CMP-260101-0101', withFiles(TEST_ONLY_3841)));
@@ -230,11 +339,34 @@ test('AC-3: test-onlyのPRはapp申告なら通り、tooling申告は拒否、�
   const headFiles = new Set(tree.stdout.split('\n').filter(Boolean));
   for (const name of jsonFiles) {
     const item = JSON.parse(readFileSync(new URL(name, evidenceDir), 'utf8'));
-    assert.doesNotThrow(() => validateEvidence(item, name.replace(/\.json$/, ''), {
-      repository: 'kenta-0420/mannschaft',
-      fileExists: ref => headFiles.has(ref),
-    }), name);
+    const cmpId = name.replace(/\.json$/, '');
+    // 移管前に記録された証拠は旧リポジトリ名の URL を持つため、どちらかの名前で通れば合格とする。
+    let lastError;
+    const passed = REPOSITORY_NAMES.some(repository => {
+      try {
+        validateEvidence(item, cmpId, { repository, fileExists: ref => headFiles.has(ref) });
+        return true;
+      } catch (error) {
+        lastError = error;
+        return false;
+      }
+    });
+    if (!passed) throw lastError;
   }
+});
+
+
+test('AC-3b: リポジトリ移管後も現在名基準で旧名URL・大文字小文字違いが通り、無関係リポジトリは拒否される', () => {
+  const withUrl = url => ({ ...evidence, acceptanceCriteria: [{ id: 'AC-1', description: '検査する', tests: [{ name: 'unit', evidence: url }] }] });
+  const options = { repository: 'Mannschaft2026/mannschaft' };
+  const check = url => validateEvidence(withUrl(url), 'CMP-260101-0101', options);
+  assert.doesNotThrow(() => check('https://github.com/Mannschaft2026/mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/kenta-0420/mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/KENTA-0420/Mannschaft/pull/1'));
+  assert.doesNotThrow(() => check('https://github.com/mannschaft2026/MANNSCHAFT/pull/1'));
+  assert.throws(() => check('https://github.com/someone-else/mannschaft/pull/1'), /同一GitHubリポジトリ/);
+  assert.throws(() => check('https://github.com/kenta-0420/other/pull/1'), /同一GitHubリポジトリ/);
+  assert.throws(() => validateEvidence(withUrl('https://github.com/kenta-0420/mannschaft/pull/1'), 'CMP-260101-0101', { repository: 'someone-else/mannschaft' }), /同一GitHubリポジトリ/);
 });
 
 test('AC-4: files空はthrow、null・数値・filename欠落はapp、check0件とmergedAt欠落は拒否', () => {
@@ -324,4 +456,69 @@ test('開発規約backend/.claudecode.mdだけはtooling、テストとの混在
     assert.equal(infer([appPath]), 'app', appPath);
     assert.equal(infer([convention, testJava, appPath]), 'app', appPath);
   }
+});
+
+async function createLargeCliFixture(t, { size = 1024 * 1024, completed = null } = {}) {
+  const env = { ...process.env };
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_COMMON_DIR']) delete env[key];
+  const repo = await mkdtemp(join(tmpdir(), 'completion-large-transition-'));
+  t.diagnostic(`fixture: ${repo}`);
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', env });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const commit = () => {
+    git('add', '.');
+    git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture');
+    return git('rev-parse', 'HEAD');
+  };
+  git('init', '-q');
+  await mkdir(join(repo, 'docs', 'evidence'), { recursive: true });
+  await mkdir(join(repo, 'scripts'));
+  const padding = `\n<!-- ${'x'.repeat(size)} -->\n`;
+  const writeList = (state, proof) => writeFile(join(repo, 'docs', 'task-list.md'), `${headers}\n${row(state, proof)}${padding}`);
+  await writeFile(join(repo, 'scripts', 'acceptance.mjs'), 'export const checked = true;\n');
+  await writeFile(join(repo, 'docs', 'evidence', 'review.md'), 'review\n');
+  await writeList('実装中', '説明');
+  const baseRef = commit();
+  let headRef = baseRef;
+  if (completed) {
+    if (completed === 'valid') {
+      const fixtureEvidence = {
+        schemaVersion: 1,
+        cmpId: 'CMP-260101-0101',
+        scope: 'tooling',
+        implementation: { pr: 42, sha: baseRef },
+        acceptanceCriteria: [{ id: 'AC-1', description: 'fixture', tests: [{ name: 'positive', evidence: 'scripts/acceptance.mjs' }] }],
+        ci: [{ runId: 123 }],
+        stages: { review: { status: 'passed', evidence: 'docs/evidence/review.md' }, real: n_a, exploratory: n_a },
+        regressions: [],
+      };
+      await writeFile(join(repo, 'docs', 'evidence', 'CMP-260101-0101.json'), JSON.stringify(fixtureEvidence));
+    }
+    await writeList('完了', completed === 'valid' ? '[証拠](evidence/CMP-260101-0101.json)' : '説明');
+    headRef = commit();
+  }
+  const cli = fileURLToPath(new URL('./completion-evidence.mjs', import.meta.url));
+  return spawnSync(process.execPath, [cli, '--base', baseRef, '--head', headRef], { cwd: repo, encoding: 'utf8', env });
+}
+
+test('1MiB超の台帳で有効な完了遷移を通常CLIが受理する', async (t) => {
+  const result = await createLargeCliFixture(t, { completed: 'valid' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /完了証拠の構造を確認/);
+});
+
+test('1MiB超の台帳で証拠なし完了を通常CLIが拒否する', async (t) => {
+  const result = await createLargeCliFixture(t, { completed: 'invalid' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /証拠JSON/);
+});
+
+test('16MiBを超える台帳を通常CLIが容量上限で拒否する', async (t) => {
+  const result = await createLargeCliFixture(t, { size: 17 * 1024 * 1024 });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /ENOBUFS/);
 });

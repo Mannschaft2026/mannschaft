@@ -184,10 +184,12 @@ class ShiftSwapApprovalAtomicityConcurrencyIT extends ShiftSwapApprovalTestSuppo
         try (var executor = Executors.newFixedThreadPool(2)) {
             var writer = executor.submit(() -> inTx(() -> {
                 // status APIは通常読込→save。flushが取る行ロックを保持し、架空のFOR UPDATEを仮定しない。
+                // 公開取消（PUBLISHED→ADJUSTING）は手動遷移APIの許可5遷移に無いため、
+                // 先commitの親枠変更はエンティティ経由の fixture で再現する（行ロックの保持は同じ）。
+                var parent = schedules.findByIdForUpdate(schedule).orElseThrow();
                 if (change == Change.UNPUBLISH) {
-                    scheduleService.transitionStatus(schedule, "ADJUSTING", admin);
+                    parent.startAdjusting();
                 } else {
-                    schedules.findByIdForUpdate(schedule).orElseThrow();
                     applyChange(change, slot, extra);
                 }
                 em.flush();
@@ -216,8 +218,8 @@ class ShiftSwapApprovalAtomicityConcurrencyIT extends ShiftSwapApprovalTestSuppo
                     String code = switch (change) {
                         case UNPUBLISH -> "SHIFT_012";
                         case MOVE_SOURCE -> "SHIFT_018";
-                        case DELETE_SLOT -> "SHIFT_002";
-                        case DELETE_PARENT -> "SHIFT_001";
+                        // 親削除も入力swap不在と同じ応答にする（CMP-260903-0657）。
+                        case DELETE_SLOT, DELETE_PARENT -> "SHIFT_005";
                         case THIRD_DUPLICATE -> "SHIFT_042";
                         default -> throw new IllegalStateException();
                     };
@@ -238,7 +240,7 @@ class ShiftSwapApprovalAtomicityConcurrencyIT extends ShiftSwapApprovalTestSuppo
             case MOVE_SOURCE -> slotService.moveAssignment(slot,
                     new SlotAssignmentMoveRequest(extra, a, 0L, 0L), admin);
             case UPDATE_SLOT -> slotService.updateSlot(slot, new UpdateShiftSlotRequest(null,
-                    LocalTime.of(10, 0), null, null, null, List.of(c, a, d), "先行編集"), admin);
+                    LocalTime.of(10, 0), null, null, null, List.of(c, a, d), "先行編集"), admin, ids -> { });
             case DELETE_SLOT -> slotService.deleteSlot(slot);
             case DELETE_PARENT -> scheduleService.deleteSchedule(scheduleOf(slot), admin);
             case THIRD_DUPLICATE -> slotService.patchSlotAssignments(extra,

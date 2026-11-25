@@ -87,6 +87,29 @@ public class OrganizationService {
     private final java.time.Clock clock;
 
     /**
+     * 組織 ID 群の表示名とアイコン URL をまとめて返す（SQL 1 本・CMP-261103-1225 の N+1 解消用）。
+     *
+     * <p>個人ダッシュボードの「今後の予定」が予定ごとに {@code organizationRepository.findById} で
+     * 名前とアイコンを引いていたのを置き換える。{@code findById} と同じ取得（{@code findAllById}）で、
+     * 見つかる範囲も同一である。Entity は外へ渡さない。</p>
+     *
+     * @param ids 組織 ID 群（null・空なら空 Map）
+     * @return 組織 ID → 名前・アイコン（見つかったものだけ）
+     */
+    public Map<Long, com.mannschaft.app.organization.dto.OrganizationNameIconView> getNameIconsByIds(
+            Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, com.mannschaft.app.organization.dto.OrganizationNameIconView> result = new java.util.HashMap<>();
+        for (OrganizationEntity org : organizationRepository.findAllById(ids)) {
+            result.put(org.getId(), new com.mannschaft.app.organization.dto.OrganizationNameIconView(
+                    org.getId(), org.getName(), org.getIconUrl()));
+        }
+        return result;
+    }
+
+    /**
      * 組織を作成し、作成者をADMINロールで紐付ける。
      */
     @Transactional
@@ -237,7 +260,8 @@ public class OrganizationService {
                         org.getName(),
                         org.getArchivedAt() != null,
                         org.getVisibility() == OrganizationEntity.Visibility.PUBLIC,
-                        org.getLifecycleStatus() == OrganizationEntity.LifecycleStatus.PROVISIONED));
+                        org.getLifecycleStatus() == OrganizationEntity.LifecycleStatus.PROVISIONED,
+                        org.getSlug()));
     }
 
     /**
@@ -247,8 +271,16 @@ public class OrganizationService {
      * @param archived    アーカイブ済みか
      * @param isPublic    可視性が PUBLIC か
      * @param provisioned PROVISIONED（承諾前の事前作成状態）か
+     * @param slug        URL 識別子（公開ページ・招待管理画面への導線用。CMP-261107-1833）
      */
-    public record JoinabilitySummary(String name, boolean archived, boolean isPublic, boolean provisioned) {
+    public record JoinabilitySummary(String name, boolean archived, boolean isPublic, boolean provisioned,
+                                     String slug) {
+
+        /** slug を使わない呼び出し元向け（slug は null）。 */
+        public JoinabilitySummary(String name, boolean archived, boolean isPublic, boolean provisioned) {
+            this(name, archived, isPublic, provisioned, null);
+        }
+
         public boolean joinable() {
             return !archived && !provisioned && isPublic;
         }

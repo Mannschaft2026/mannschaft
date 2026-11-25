@@ -8,11 +8,13 @@ import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -49,6 +51,10 @@ public class ShiftBudgetConsumptionService {
     private final ShiftBudgetConsumptionRepository consumptionRepository;
     private final ShiftBudgetAllocationRepository allocationRepository;
 
+    /** 既存LocalDateTime列と同じ業務壁時計を使う。 */
+    @Qualifier("wallClock")
+    private final Clock wallClock;
+
     /**
      * 単一 (slot, user) 分の消化を記録する。
      *
@@ -63,7 +69,8 @@ public class ShiftBudgetConsumptionService {
      * @param shiftScheduleId    シフトスケジュールID
      * @param slotId             スロットID
      * @param userId             ユーザーID
-     * @param hourlyRate         適用時給（NULL/0 はそのまま受け入れ。設計書 §11 「時給未設定」参照）
+     * @param hourlyRate         適用時給（正数のみ。null・0・負数は既存消化の取消など副作用の前に
+     *                           {@link IllegalArgumentException} で拒否する）
      * @param hours              勤務時間
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -73,7 +80,14 @@ public class ShiftBudgetConsumptionService {
                                         Long userId,
                                         BigDecimal hourlyRate,
                                         BigDecimal hours) {
-        BigDecimal safeRate = hourlyRate != null ? hourlyRate : BigDecimal.ZERO;
+        // 0円・負数への置換は予算管理を黙って無効化する。既存PLANNEDの取消より前に拒否する。
+        // IllegalStateException にしないのは、Listener の「CONFIRMED 既存」専用 catch に吸われて
+        // failed_event に残らなくなるため（CMP-261115-1821）。
+        if (hourlyRate == null || hourlyRate.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "hourlyRate must be positive: slot=" + slotId + ", user=" + userId);
+        }
+        BigDecimal safeRate = hourlyRate;
         BigDecimal amount = safeRate.multiply(hours).setScale(2, java.math.RoundingMode.HALF_UP);
 
         // (1) 既存 PLANNED → CANCELLED 遷移 + consumed_amount 減算
@@ -132,15 +146,20 @@ public class ShiftBudgetConsumptionService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int cancelAllForShift(Long shiftScheduleId) {
-        var consumptions = consumptionRepository.findByShiftIdAndDeletedAtIsNull(shiftScheduleId);
+        var consumptions = consumptionRepository.findByShiftIdAndDeletedAtIsNullOrderByIdAsc(shiftScheduleId);
         int cancelledCount = 0;
         for (ShiftBudgetConsumptionEntity c : consumptions) {
             // CONFIRMED は変更不可（取消仕訳パターンが必要だが Phase 9-β スコープ外）
             if (c.getStatus() != ShiftBudgetConsumptionStatus.PLANNED) {
                 continue;
             }
-            c.cancel(ShiftBudgetCancelReason.SHIFT_DELETED);
-            consumptionRepository.save(c);
+            // 並行するバッチ/リスナーのうち、PLANNEDを実際に取り消したTXだけが減算する。
+            // 取消と減算は同一REQUIRES_NEW内なので、減算失敗時はclaimも巻き戻る。
+            int claimed = consumptionRepository.cancelPlannedById(
+                    c.getId(), ShiftBudgetCancelReason.SHIFT_DELETED, LocalDateTime.now(wallClock));
+            if (claimed != 1) {
+                continue;
+            }
             allocationRepository.decrementConsumedAmount(c.getAllocationId(), c.getAmount());
             cancelledCount++;
         }

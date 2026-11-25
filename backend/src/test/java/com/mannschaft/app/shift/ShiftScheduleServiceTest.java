@@ -24,6 +24,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -88,6 +90,10 @@ class ShiftScheduleServiceTest {
 
     @Mock
     private DomainEventPublisher eventPublisher;
+
+    /** CMP-261115-1821 公開 TX 内の勤務日時給検証（検証ロジックは ShiftPublicationHourlyRateVerifierTest で固定）。 */
+    @Mock
+    private com.mannschaft.app.shift.service.ShiftPublicationHourlyRateVerifier hourlyRateVerifier;
 
     /**
      * CMP-260909-1445 で {@code ShiftScheduleService} に追加された依存（{@code ClockConfig#wallClock}）。
@@ -605,7 +611,8 @@ class ShiftScheduleServiceTest {
         @DisplayName("ステータス遷移_COLLECTING_正常")
         void ステータス遷移_COLLECTING_正常() {
             // Given
-            ShiftScheduleEntity entity = createScheduleEntity();
+            ShiftScheduleEntity entity = createScheduleEntity().toBuilder()
+                    .status(ShiftScheduleStatus.DRAFT).publishedAt(null).publishedBy(null).build();
             ShiftScheduleResponse response = createScheduleResponse();
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.save(entity)).willReturn(entity);
@@ -623,7 +630,8 @@ class ShiftScheduleServiceTest {
         @DisplayName("ステータス遷移_ADJUSTING_正常")
         void ステータス遷移_ADJUSTING_正常() {
             // Given
-            ShiftScheduleEntity entity = createScheduleEntity();
+            ShiftScheduleEntity entity = createScheduleEntity().toBuilder()
+                    .status(ShiftScheduleStatus.COLLECTING).publishedAt(null).publishedBy(null).build();
             ShiftScheduleResponse response = createScheduleResponse();
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.save(entity)).willReturn(entity);
@@ -640,16 +648,22 @@ class ShiftScheduleServiceTest {
         @DisplayName("ステータス遷移_PUBLISHED_正常_publishedAt設定")
         void ステータス遷移_PUBLISHED_正常_publishedAt設定() {
             // Given
-            ShiftScheduleEntity entity = createScheduleEntity();
+            ShiftScheduleEntity entity = createScheduleEntity().toBuilder()
+                    .status(ShiftScheduleStatus.ADJUSTING).publishedAt(null).publishedBy(null).build();
             ShiftScheduleResponse response = createScheduleResponse();
-            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            com.mannschaft.app.shift.service.ShiftPublicationBudgetContext context =
+                    com.mannschaft.app.shift.service.ShiftPublicationBudgetContext.noSlots();
+            // CMP-261115-1821: 公開は親を FOR UPDATE してから枠を現在読み取りで読み直す
+            given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(slotRepository.findByScheduleIdForShare(SCHEDULE_ID)).willReturn(List.of());
             given(scheduleRepository.save(entity)).willReturn(entity);
             given(shiftMapper.toScheduleResponse(entity)).willReturn(response);
 
             // When
-            shiftScheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID);
+            shiftScheduleService.transitionStatus(SCHEDULE_ID, "PUBLISHED", USER_ID, context);
 
             // Then
+            org.mockito.Mockito.verify(hourlyRateVerifier).verify(entity.getTeamId(), List.of(), context);
             assertThat(entity.getStatus()).isEqualTo(ShiftScheduleStatus.PUBLISHED);
             assertThat(entity.getPublishedAt()).isNotNull();
             assertThat(entity.getPublishedBy()).isEqualTo(USER_ID);
@@ -684,6 +698,29 @@ class ShiftScheduleServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(ShiftErrorCode.INVALID_SCHEDULE_STATUS));
+        }
+
+        @ParameterizedTest(name = "{0} → {1}: 保存・公開確認・関連依頼・イベントを実行しない")
+        @CsvSource({"DRAFT,ARCHIVED", "PUBLISHED,ADJUSTING"})
+        void 不許可遷移は外部副作用を呼ばない(ShiftScheduleStatus from, ShiftScheduleStatus to) {
+            ShiftScheduleEntity entity = createScheduleEntity().toBuilder().status(from).build();
+            var publishedAt = entity.getPublishedAt();
+            var publishedBy = entity.getPublishedBy();
+            var version = entity.getVersion();
+            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            // REDでも保存戻り値null由来のNPEにせず、旧実装の不許可遷移成立を観測する。
+            org.mockito.Mockito.lenient().when(scheduleRepository.save(entity)).thenReturn(entity);
+
+            assertThatThrownBy(() -> shiftScheduleService.transitionStatus(SCHEDULE_ID, to.name(), USER_ID))
+                    .isInstanceOfSatisfying(BusinessException.class, ex ->
+                            assertThat(ex.getErrorCode()).isEqualTo(ShiftErrorCode.INVALID_SCHEDULE_STATUS));
+
+            assertThat(entity.getStatus()).isEqualTo(from);
+            assertThat(entity.getVersion()).isEqualTo(version);
+            assertThat(entity.getPublishedAt()).isEqualTo(publishedAt);
+            assertThat(entity.getPublishedBy()).isEqualTo(publishedBy);
+            verify(scheduleRepository, never()).save(any());
+            org.mockito.Mockito.verifyNoInteractions(autoAssignService, changeRequestRepository, eventPublisher, shiftMapper);
         }
     }
 

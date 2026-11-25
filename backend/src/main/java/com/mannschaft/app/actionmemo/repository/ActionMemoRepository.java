@@ -38,6 +38,20 @@ public interface ActionMemoRepository extends JpaRepository<ActionMemoEntity, Lo
             @Param("memoDate") LocalDate memoDate);
 
     /**
+     * 指定日のメモ行を悲観ロック（SELECT ... FOR UPDATE）する（CMP-261123-1201）。
+     *
+     * <p>publish-daily が旧投稿 ID・当日メモを読む<b>前</b>に呼び、同じ利用者・同じ日の公開を公開完了（コミット）まで直列化する。
+     * 公開には必ず1件以上のメモが要るため、初回公開も同じロックで守られる。
+     * 呼び出し元は読み取り結果を使わず、ロックの取得だけが目的（同一トランザクション内で呼ぶこと）。</p>
+     */
+    @Query(value = "SELECT id FROM action_memos "
+            + "WHERE user_id = :userId AND memo_date = :memoDate AND deleted_at IS NULL "
+            + "ORDER BY id FOR UPDATE", nativeQuery = true)
+    List<Long> lockByUserIdAndMemoDate(
+            @Param("userId") Long userId,
+            @Param("memoDate") LocalDate memoDate);
+
+    /**
      * 指定日のメモ件数を取得する（論理削除除外）。1日 200 件上限チェックで利用。
      */
     long countByUserIdAndMemoDateAndDeletedAtIsNull(Long userId, LocalDate memoDate);

@@ -52,6 +52,8 @@ export interface ActionMemo {
   relatedTodoId: number | null
   /** 終業投稿がまだなら null */
   timelinePostId: number | null
+  /** チームタイムライン投稿ID（publish-to-team 専用。timelinePostId は個人投稿専用） */
+  teamTimelinePostId: number | null
   tags: ActionMemoTag[]
   /** ISO LocalDateTime（例 "2026-04-09T08:32:14"） */
   createdAt: string
@@ -131,6 +133,18 @@ export interface CreateActionMemoPayload {
   /** Phase 4-α */
   organizationId?: number | null
   orgVisibility?: OrgVisibility | null
+}
+
+/**
+ * 行動メモ入力フォーム（ActionMemoInput）へ画面側の選択値を渡すための型。
+ * teamId は作成 API に項目が無いため、作成成功後の publish-to-team で使う（WORK のみ）。
+ */
+export interface ActionMemoInputExtras {
+  category?: ActionMemoCategory
+  durationMinutes?: number | null
+  progressRate?: number | null
+  completesTodo?: boolean
+  teamId?: number | null
 }
 
 export interface UpdateActionMemoPayload {
@@ -262,6 +276,10 @@ export interface OfflineQueuedMemo {
   tempId: number
   /** 送信予定のペイロード */
   payload: CreateActionMemoPayload
+  /** 作成成功後に publish-to-team する投稿先チーム ID（任意。無い既存項目も後方互換で動く） */
+  publishTeamId?: number
+  /** 公開のみ項目: 作成済みの実メモ ID（あればメモは再作成せず publish-to-team だけ再試行する） */
+  publishOnlyMemoId?: number
   /** キューに積んだ時刻（ISO） */
   enqueuedAt: string
 }

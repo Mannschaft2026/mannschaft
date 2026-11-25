@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261107-1243",
+  "scope": "app",
+  "implementation": {
+    "pr": 4360,
+    "sha": "263b44d0479f12059f717ba0f8a132ea7acf75f2"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "正準slug/numericIdと取得時version（0有効）を照合し名称だけ送信する",
+      "tests": [
+        {
+          "name": "正準slugと取得時version=%sで名称だけ保存する（TEAM/ORGANIZATION×0/7）",
+          "evidence": "frontend/app/components/favorites/FavoriteQuickEditDialog.spec.ts"
+        },
+        {
+          "name": "別numericIdの詳細を保存しない / 非正準URL %sを更新先にしない",
+          "evidence": "frontend/app/components/favorites/FavoriteQuickEditDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "読込中/取得失敗/version不明の入力・保存を防ぎ、4xxで入力を保持する",
+      "tests": [
+        {
+          "name": "詳細取得中の名称入力を無効化し、取得後に編集可能にする",
+          "evidence": "frontend/app/components/favorites/FavoriteQuickEditDialog.spec.ts"
+        },
+        {
+          "name": "PATCH %sでは入力を保持し成功emit・自動再送しない（400/403/404/409）",
+          "evidence": "frontend/app/components/favorites/FavoriteQuickEditDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "対象切替/close-reopen/ABA/旧保存応答で現対象を壊さない",
+      "tests": [
+        {
+          "name": "A→Bで古い成功応答を採用しない / A→B→Aでも最初のA応答を採用しない / close→同じ対象reopenでも旧応答を採用しない",
+          "evidence": "frontend/app/components/favorites/FavoriteQuickEditDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "既存widget導線と名称変更→fresh GET→元名復旧を保つ",
+      "tests": [
+        {
+          "name": "addFavorite で items が更新されると新しいカードが描画される / 削除ボタン → removeFavorite が呼ばれて消え、Undo Toast が出る / 折りたたみ時は先頭 10 件のみ、展開で全 15 件表示 / FavoriteCard の edit を発火 → updateTeam → fetchFavorites 再取得 / addFavorite が FAV_002 で reject される（バックエンド契約） / available=false のカードは opacity-60 と「開く/編集」非表示、削除ボタンのみ",
+          "evidence": "frontend/tests/unit/components/favorites/WidgetFavorites.integration.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 43522021461
+    }
+  ],
+  "stages": {
+    "review": {
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4360",
+      "status": "passed"
+    },
+    "real": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    },
+    "exploratory": {
+      "evidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "status": "passed"
+    }
+  },
+  "regressions": [
+    {
+      "description": "旧version欠落400・slug/詳細取得契約不整合の実機履歴を保持し、正準slug・version0・応答逆転/4xx保持の試験とR14分割実機へ対応する。",
+      "test": "FavoriteQuickEditDialog 正準slugと取得時version=%sで名称だけ保存する / PATCH %sでは入力を保持し成功emit・自動再送しない",
+      "redEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md",
+      "greenEvidence": "docs/evidence/CMP-261028-2304-l1r-normalizer.md"
+    }
+  ]
+}

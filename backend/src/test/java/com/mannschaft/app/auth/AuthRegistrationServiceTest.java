@@ -15,6 +15,10 @@ import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.common.EncryptionService;
 import com.mannschaft.app.postal.CountryResolver;
 import com.mannschaft.app.postal.PostalCodePolicyRegistry;
+import com.mannschaft.app.auth.service.PendingInviteStore;
+import com.mannschaft.app.common.token.SecretTokenVault;
+import com.mannschaft.app.role.dto.RegistrationInviteInfo;
+import com.mannschaft.app.role.service.InviteAcceptanceFacade;
 import com.mannschaft.app.role.service.InviteService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,10 +27,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -37,7 +43,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -80,7 +89,17 @@ class AuthRegistrationServiceTest {
     private BetaRestrictionService betaRestrictionService;
 
     @Mock
+    private InviteAcceptanceFacade inviteAcceptanceFacade;
+
+    // CMP-261107-1833: 登録時は招待を読むだけ（role の InviteService）で、保留行を auth の Store に作る
+    @Mock
     private InviteService inviteService;
+
+    @Mock
+    private PendingInviteStore pendingInviteStore;
+
+    @Spy
+    private SecretTokenVault secretTokenVault = new SecretTokenVault();
 
     // F02.10 §391 郵便番号検証基盤: 実ロジック（JP 固定）を使う
     @Spy
@@ -320,14 +339,16 @@ class AuthRegistrationServiceTest {
         }
 
         @Test
-        @DisplayName("正常系: ベータ制限ON・トークン有効・登録成功")
+        @DisplayName("AC5/AC11 正常系: ベータ制限ON・トークン有効・登録成功（Facade は呼ばず保留を作る。CMP-261107-1833 で反転）")
         void register_ベータ制限ON_トークン有効_登録成功() {
             // Given
             given(betaRestrictionService.isEnabled()).willReturn(true);
             given(betaRestrictionService.isBetaTokenValid("valid-token")).willReturn(true);
+            given(inviteService.findRegistrationInvite("valid-token"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(10L, null, false, true)));
             given(userRepository.existsByEmail(any())).willReturn(false);
             given(passwordEncoder.encode(any())).willReturn(ENCODED_PASSWORD);
-            given(userRepository.save(any(UserEntity.class))).willAnswer(inv -> inv.getArgument(0));
+            given(userRepository.save(any(UserEntity.class))).willAnswer(inv -> withId(inv.getArgument(0), 501L));
             given(authTokenService.hashToken(anyString())).willReturn("hashed-token");
             given(emailVerificationTokenRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             RegisterRequest req = new RegisterRequest(
@@ -339,7 +360,189 @@ class AuthRegistrationServiceTest {
             authRegistrationService.register(req, TEST_IP);
 
             // Then
-            verify(inviteService).joinByInvite(eq("valid-token"), any());
+            verify(pendingInviteStore).createPending(501L, new SecretTokenVault().hash("valid-token"), "TEAM", 10L);
+            verifyNoInteractions(inviteAcceptanceFacade);
+        }
+    }
+
+    // ========================================
+    // register: 招待付き新規登録の保留承認（CMP-261107-1833）
+    // ========================================
+
+    private static UserEntity withId(UserEntity user, Long id) {
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
+    }
+
+    private static RegisterRequest inviteRequest(String inviteToken) {
+        return new RegisterRequest(
+                "invitee@example.com", "Password1!", "山田", "太郎", "yamada",
+                "123-4567", "ja", "Asia/Tokyo", inviteToken, "2000-01-01",
+                true, "1.1.0");
+    }
+
+    private void givenUserCanBeSaved(Long userId) {
+        given(userRepository.existsByEmail(any())).willReturn(false);
+        given(passwordEncoder.encode(any())).willReturn(ENCODED_PASSWORD);
+        given(userRepository.save(any(UserEntity.class))).willAnswer(inv -> withId(inv.getArgument(0), userId));
+        given(authTokenService.hashToken(anyString())).willReturn("hashed-token");
+        given(emailVerificationTokenRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+    }
+
+    private static void assertErrorCode(Throwable thrown, String code) {
+        assertThat(thrown).isInstanceOf(BusinessException.class);
+        assertThat(((BusinessException) thrown).getErrorCode().getCode()).isEqualTo(code);
+    }
+
+    @Nested
+    @DisplayName("register 招待付き（CMP-261107-1833 保留承認方式）")
+    class RegisterWithInvite {
+
+        @Test
+        @DisplayName("AC4: 宛先付き招待はベータ有効でも AUTH_083 で拒否し、users を作らない")
+        void 宛先付き招待_ベータ有効_AUTH083() {
+            lenient().when(betaRestrictionService.isEnabled()).thenReturn(true);
+            lenient().when(betaRestrictionService.isBetaTokenValid("targeted-invite")).thenReturn(true);
+            given(inviteService.findRegistrationInvite("targeted-invite"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(10L, null, true, true)));
+
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> authRegistrationService.register(inviteRequest("targeted-invite"), TEST_IP));
+
+            assertErrorCode(thrown, "AUTH_083");
+            verify(userRepository, never()).save(any());
+            verifyNoInteractions(pendingInviteStore, inviteAcceptanceFacade, eventPublisher);
+        }
+
+        @Test
+        @DisplayName("AC4: 宛先付き招待はベータ無効でも AUTH_083 で拒否し、users を作らない")
+        void 宛先付き招待_ベータ無効_AUTH083() {
+            lenient().when(betaRestrictionService.isEnabled()).thenReturn(false);
+            given(inviteService.findRegistrationInvite("targeted-invite"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(null, 20L, true, true)));
+
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> authRegistrationService.register(inviteRequest("targeted-invite"), TEST_IP));
+
+            assertErrorCode(thrown, "AUTH_083");
+            verify(userRepository, never()).save(any());
+            verifyNoInteractions(pendingInviteStore, inviteAcceptanceFacade, eventPublisher);
+        }
+
+        @Test
+        @DisplayName("AC4: 宛先付き招待は失効済みでも AUTH_083（期限切れの宛先付きで登録を通さない）")
+        void 宛先付き招待_失効済み_AUTH083() {
+            lenient().when(betaRestrictionService.isEnabled()).thenReturn(false);
+            given(inviteService.findRegistrationInvite("targeted-invite"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(10L, null, true, false)));
+
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> authRegistrationService.register(inviteRequest("targeted-invite"), TEST_IP));
+
+            assertErrorCode(thrown, "AUTH_083");
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("AC5: ベータ有効・有効な共有招待（組織）→ users 保存の後に同TXで保留を作り、ハッシュのみ渡す")
+        void ベータ有効_有効招待_保留作成() {
+            given(betaRestrictionService.isEnabled()).willReturn(true);
+            given(betaRestrictionService.isBetaTokenValid("shared-invite")).willReturn(true);
+            given(inviteService.findRegistrationInvite("shared-invite"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(null, 20L, false, true)));
+            givenUserCanBeSaved(502L);
+
+            authRegistrationService.register(inviteRequest("shared-invite"), TEST_IP);
+
+            InOrder order = inOrder(userRepository, pendingInviteStore);
+            order.verify(userRepository).save(any(UserEntity.class));
+            order.verify(pendingInviteStore).createPending(502L, new SecretTokenVault().hash("shared-invite"),
+                    "ORGANIZATION", 20L);
+            verify(pendingInviteStore, never()).createPending(any(), eq("shared-invite"), any(), any());
+            verifyNoInteractions(inviteAcceptanceFacade);
+            verify(eventPublisher, times(2)).publish(any());
+        }
+
+        @Test
+        @DisplayName("AC5: ベータ有効・招待なしは AUTH_042（保留も users も作らない）")
+        void ベータ有効_招待なし_AUTH042() {
+            given(betaRestrictionService.isEnabled()).willReturn(true);
+
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> authRegistrationService.register(inviteRequest(null), TEST_IP));
+
+            assertErrorCode(thrown, "AUTH_042");
+            verify(userRepository, never()).save(any());
+            verifyNoInteractions(pendingInviteStore, inviteAcceptanceFacade);
+        }
+
+        @Test
+        @DisplayName("AC5: ベータ有効・不正/ID制限超え（isBetaTokenValid=false）は AUTH_043（保留も users も作らない）")
+        void ベータ有効_不正招待_AUTH043() {
+            given(betaRestrictionService.isEnabled()).willReturn(true);
+            given(betaRestrictionService.isBetaTokenValid("shared-invite")).willReturn(false);
+            lenient().when(inviteService.findRegistrationInvite("shared-invite"))
+                    .thenReturn(Optional.of(new RegistrationInviteInfo(10L, null, false, true)));
+
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> authRegistrationService.register(inviteRequest("shared-invite"), TEST_IP));
+
+            assertErrorCode(thrown, "AUTH_043");
+            verify(userRepository, never()).save(any());
+            verifyNoInteractions(pendingInviteStore, inviteAcceptanceFacade);
+        }
+
+        @Test
+        @DisplayName("AC5: ベータ無効・存在しない招待は保留を作らず登録だけ成功する")
+        void ベータ無効_不在招待_保留なしで成功() {
+            given(betaRestrictionService.isEnabled()).willReturn(false);
+            given(inviteService.findRegistrationInvite("unknown-invite")).willReturn(Optional.empty());
+            givenUserCanBeSaved(503L);
+
+            ApiResponse<MessageResponse> response = authRegistrationService.register(inviteRequest("unknown-invite"), TEST_IP);
+
+            assertThat(response.getData().getMessage()).contains("確認メール");
+            verify(userRepository).save(any(UserEntity.class));
+            verifyNoInteractions(pendingInviteStore, inviteAcceptanceFacade);
+        }
+
+        @Test
+        @DisplayName("AC5/AC6: ベータ無効・存在するが失効済みの共有招待は保留を作る（ログイン後に失効案内）")
+        void ベータ無効_失効招待_保留作成() {
+            given(betaRestrictionService.isEnabled()).willReturn(false);
+            given(inviteService.findRegistrationInvite("expired-invite"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(10L, null, false, false)));
+            givenUserCanBeSaved(504L);
+
+            authRegistrationService.register(inviteRequest("expired-invite"), TEST_IP);
+
+            verify(pendingInviteStore).createPending(504L, new SecretTokenVault().hash("expired-invite"), "TEAM", 10L);
+            verifyNoInteractions(inviteAcceptanceFacade);
+        }
+
+        @Test
+        @DisplayName("AC1/AC11: 招待なし登録は保留も Facade も触らない")
+        void 招待なし_保留なし() {
+            given(betaRestrictionService.isEnabled()).willReturn(false);
+            givenUserCanBeSaved(505L);
+
+            authRegistrationService.register(inviteRequest(null), TEST_IP);
+
+            verifyNoInteractions(pendingInviteStore, inviteAcceptanceFacade, inviteService);
+        }
+
+        @Test
+        @DisplayName("AC1: 保留の作成に失敗したら登録ごと失敗する（users と同TX・握りつぶさない）")
+        void 保留作成失敗_登録失敗() {
+            given(betaRestrictionService.isEnabled()).willReturn(false);
+            given(inviteService.findRegistrationInvite("shared-invite"))
+                    .willReturn(Optional.of(new RegistrationInviteInfo(10L, null, false, true)));
+            givenUserCanBeSaved(506L);
+            org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("試練"))
+                    .when(pendingInviteStore).createPending(any(), any(), any(), any());
+
+            assertThatThrownBy(() -> authRegistrationService.register(inviteRequest("shared-invite"), TEST_IP))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         }
     }
 

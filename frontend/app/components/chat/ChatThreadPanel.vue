@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { ChatMessageResponse } from '~/types/chat'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   rootMessageId: number
   channelId: number
-}>()
+  /** 他人の返信も削除できるか（チャンネル OWNER/ADMIN・スコープ管理者。F04.2 §5） */
+  canDelete?: boolean
+  /** 返信を送れるか（既定 true。false なら入力欄・送信を出さない） */
+  canSend?: boolean
+}>(), {
+  canSend: true,
+})
 
 const emit = defineEmits<{
   close: []
@@ -17,11 +23,19 @@ const {
   addReaction,
   removeReaction,
   togglePin,
+  editMessage,
   deleteMessage,
   bookmarkMessage,
   removeBookmark,
 } = useChatApi()
 const { showError, showSuccess } = useNotification()
+const authStore = useAuthStore()
+
+/** ログイン中ユーザー本人の投稿か（編集・削除の出し分け用・CMP-261105-1507） */
+function isMine(message: ChatMessageResponse): boolean {
+  const me = authStore.user?.id
+  return me != null && message.sender?.id === me
+}
 
 const rootMessage = ref<ChatMessageResponse | null>(null)
 const messages = ref<ChatMessageResponse[]>([])
@@ -52,7 +66,7 @@ async function loadThread(cursor?: string) {
 }
 
 async function sendReply() {
-  if (!replyBody.value.trim()) return
+  if (!props.canSend || !replyBody.value.trim()) return
   replySending.value = true
   try {
     await sendMessage(props.channelId, replyBody.value.trim(), props.rootMessageId)
@@ -85,7 +99,7 @@ async function onReaction(messageId: number, emoji: string) {
       msg.reactionSummary[emoji] = (msg.reactionSummary[emoji] || 0) + 1
     }
   } catch {
-    showError('リアクションに失敗しました')
+    showError(t('chat.message.reactionFailed'))
   }
 }
 
@@ -95,9 +109,9 @@ async function onPin(messageId: number) {
   try {
     await togglePin(messageId, !msg.isPinned)
     msg.isPinned = !msg.isPinned
-    showSuccess(msg.isPinned ? 'ピン留めしました' : 'ピン解除しました')
+    showSuccess(msg.isPinned ? t('chat.message.pinned') : t('chat.message.unpinned'))
   } catch {
-    showError('ピン操作に失敗しました')
+    showError(t('chat.message.pinFailed'))
   }
 }
 
@@ -110,9 +124,44 @@ async function onDelete(messageId: number) {
       msg.body = null
       msg.sender = null
     }
-    showSuccess('メッセージを削除しました')
+    showSuccess(t('chat.message.deleteSuccess'))
   } catch {
-    showError('削除に失敗しました')
+    showError(t('chat.message.deleteFailed'))
+  }
+}
+
+// --- 本人の投稿の編集（CMP-261105-1507） ---
+const editingMessageId = ref<number | null>(null)
+const editingBody = ref('')
+const editSaving = ref(false)
+const showEditDialog = computed({
+  get: () => editingMessageId.value !== null,
+  set: (open: boolean) => {
+    if (!open) editingMessageId.value = null
+  },
+})
+
+function onEdit(messageId: number) {
+  const msg = messages.value.find((m) => m.id === messageId)
+  if (!msg) return
+  editingBody.value = msg.body ?? ''
+  editingMessageId.value = messageId
+}
+
+async function onEditSave(body: string) {
+  const messageId = editingMessageId.value
+  if (messageId === null) return
+  editSaving.value = true
+  try {
+    const res = await editMessage(messageId, body)
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx !== -1) messages.value[idx] = res.data
+    editingMessageId.value = null
+    showSuccess(t('chat.message.editSuccess'))
+  } catch {
+    showError(t('chat.message.editFailed'))
+  } finally {
+    editSaving.value = false
   }
 }
 
@@ -128,7 +177,7 @@ async function onBookmark(messageId: number) {
       msg.isBookmarked = true
     }
   } catch {
-    showError('ブックマークに失敗しました')
+    showError(t('chat.message.bookmarkFailed'))
   }
 }
 
@@ -151,7 +200,7 @@ watch(() => props.rootMessageId, () => {
 
     <!-- ルートメッセージ -->
     <div v-if="rootMessage" class="border-b border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-800">
-      <span class="text-xs font-semibold text-surface-600 dark:text-surface-400">{{ rootMessage.sender?.displayName || '不明' }}</span>
+      <span class="text-xs font-semibold text-surface-600 dark:text-surface-400">{{ rootMessage.sender?.displayName || $t('chat.message.unknownSender') }}</span>
       <p class="mt-0.5 text-sm text-surface-700 dark:text-surface-300">{{ rootMessage.body }}</p>
       <span class="mt-1 text-xs text-surface-400">
         {{ $t('chat.thread.replyCount', { count: rootMessage.replyCount }) }}
@@ -172,10 +221,12 @@ watch(() => props.rootMessageId, () => {
         <ChatMessageBubble
           :message="msg"
           :can-pin="false"
-          :can-delete="false"
+          :can-delete="canDelete"
+          :is-mine="isMine(msg)"
           @reaction="onReaction"
           @pin="onPin"
           @delete="onDelete"
+          @edit="onEdit"
           @bookmark="onBookmark"
         />
       </div>
@@ -192,7 +243,7 @@ watch(() => props.rootMessageId, () => {
     </div>
 
     <!-- 返信入力 -->
-    <div class="border-t border-surface-200 p-3 dark:border-surface-700">
+    <div v-if="canSend" class="border-t border-surface-200 p-3 dark:border-surface-700">
       <div class="flex gap-2">
         <InputText
           v-model="replyBody"
@@ -211,5 +262,12 @@ watch(() => props.rootMessageId, () => {
         />
       </div>
     </div>
+
+    <ChatMessageEditDialog
+      v-model:visible="showEditDialog"
+      :initial-body="editingBody"
+      :saving="editSaving"
+      @save="onEditSave"
+    />
   </div>
 </template>

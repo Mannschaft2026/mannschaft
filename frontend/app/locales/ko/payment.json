@@ -272,6 +272,9 @@
           "ERROR": "오류"
         }
       }
+    },
+    "ticket": {
+      "create_success": "상품을 추가했습니다"
     }
   }
 }

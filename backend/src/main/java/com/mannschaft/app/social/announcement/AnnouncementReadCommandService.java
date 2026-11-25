@@ -63,6 +63,7 @@ public class AnnouncementReadCommandService {
     private final RoleResolver roleResolver;
     private final PaymentGateService paymentGateService;
     private final AnnouncementReadAllCursorStore cursorStore;
+    private final AnnouncementSourcePublicationGuard sourcePublication;
     @Qualifier("wallClock")
     private final Clock clock;
 
@@ -71,18 +72,34 @@ public class AnnouncementReadCommandService {
     // ═════════════════════════════════════════════════════════════
 
     /**
-     * お知らせを既読にする（冪等）。見えない・存在しない・越境・削除済み・期限切れは同一の
+     * お知らせを既読にする（冪等）。見えない・存在しない・越境・削除済み・期限切れ・元が公開済みでない（N9）は同一の
      * {@link AnnouncementErrorCode#ANNOUNCE_001}（存在秘匿）。
      */
     public void markAsRead(AnnouncementScopeType scopeType, Long scopeId, Long announcementId, Long userId) {
         AnnouncementFeedEntity feed = feedRepository.findById(announcementId)
                 .filter(f -> f.getScopeType() == scopeType && scopeId.equals(f.getScopeId()))
                 .filter(this::isLive)
+                .filter(this::isSourcePublished)
                 .orElseThrow(AnnouncementReadCommandService::notFound);
         if (!isReadable(feed, userId)) {
             throw notFound();
         }
         feedService.markAsRead(scopeType, scopeId, announcementId, userId);
+    }
+
+    /**
+     * お知らせがパスのスコープに実在し、閲覧者が見られるか（宛先資格・可視性・課金 HIDDEN。既読と同基準）。
+     * 削除・ピン留めの入口 Guard が共有する。期限切れ・{@code source_deleted_at} 済みでも管理操作は可能とするため isLive は問わない。
+     * ただしブログ・タイムライン投稿の元が公開済みでない（下書き・論理削除・不在を含む）お知らせは不在と同じ扱いにする
+     * （N9。ピン留めの応答はタイトル・抜粋を含むため、ADMIN にも返さない）。
+     * 評価不能は不可（fail-closed）。entity を署名に出さないため ID で受ける（D-1 API 境界）。
+     */
+    public boolean isReadableInScope(AnnouncementScopeType scopeType, Long scopeId, Long announcementId, Long userId) {
+        return feedRepository.findById(announcementId)
+                .filter(f -> f.getScopeType() == scopeType && scopeId.equals(f.getScopeId()))
+                .filter(this::isSourcePublished)
+                .map(f -> isReadable(f, userId))
+                .orElse(false);
     }
 
     private boolean isReadable(AnnouncementFeedEntity feed, Long userId) {
@@ -116,7 +133,8 @@ public class AnnouncementReadCommandService {
     /**
      * 組織の表示中のお知らせを ID 指定でまとめて既読にする。
      *
-     * <p>重複は除いてから評価する。存在しない・パスの組織と違う・宛先外・可視性不足・期限切れ・元削除済み・課金 HIDDEN は
+     * <p>重複は除いてから評価する。存在しない・パスの組織と違う・宛先外・可視性不足・期限切れ・元削除済み・
+     * 元が公開済みでない（N9）・課金 HIDDEN は
      * 黙って除外する。評価の障害（DB 例外・役割解決失敗・課金結果 null/例外）はそのまま伝播して 500 とし、
      * 判定を全部終えてから書くので 1 行も書かない。</p>
      *
@@ -131,6 +149,8 @@ public class AnnouncementReadCommandService {
                 .filter(f -> f.getScopeType() == AnnouncementScopeType.ORGANIZATION && orgId.equals(f.getScopeId()))
                 .filter(this::isLive)
                 .toList();
+        feeds = sourcePublication.retainPublished(feeds, AnnouncementFeedEntity::getSourceType,
+                AnnouncementFeedEntity::getSourceId);
         if (feeds.isEmpty()) {
             return 0;
         }
@@ -249,6 +269,14 @@ public class AnnouncementReadCommandService {
     private boolean isLive(AnnouncementFeedEntity feed) {
         return feed.getSourceDeletedAt() == null
                 && (feed.getExpiresAt() == null || feed.getExpiresAt().isAfter(LocalDateTime.now(clock)));
+    }
+
+    /**
+     * ブログ・タイムライン投稿の元が公開済みか（N9。一覧クエリと同じ定義。{@link AnnouncementSourcePublicationGuard}）。
+     * 本クラスは tx を持たないので、元ドメインへの問い合わせは各 Service の読み取り tx で閉じる（D-3T）。
+     */
+    private boolean isSourcePublished(AnnouncementFeedEntity feed) {
+        return sourcePublication.isPublished(feed.getSourceType(), feed.getSourceId());
     }
 
     private static ContentGateTarget targetOf(AnnouncementFeedEntity feed) {

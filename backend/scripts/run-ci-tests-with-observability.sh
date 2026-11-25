@@ -49,7 +49,7 @@ fi
 date +%s > "$CI_DIAGNOSTIC_DIR/started-at-epoch"
 printf 'null\n' > "$CI_DIAGNOSTIC_DIR/command-exit-code"
 # この呼出し専用の観測ファイルを初期化し、過去の正常終端を流用しない。
-for name in class-progress.log task-state.log case-intervals.log mfa-intervals.log; do
+for name in class-progress.log task-state.log case-intervals.log mfa-intervals.log mfa-resources.log context-progress.log; do
   : > "$CI_DIAGNOSTIC_DIR/$name"
 done
 write_result null ''
@@ -85,9 +85,25 @@ gradle.allprojects { project ->
             if (descriptor.className in [mfaClass, billingClass]) emit('case-intervals.log', "[ci-case-end] task=${task.path} class=${descriptor.className} startEpochMillis=${result.startTime} endEpochMillis=${result.endTime} result=${result.resultType}")
         }
         task.onOutput { descriptor, event ->
+            // CMP-261111-0508: [ci-ctx]（コンテキスト起動の計測）と [ci-ctx-orderer]（並べ替えの計測）を :test だけから集める。
+            // 出力側（Listener）も :test でしか出さない（mannschaft.ci.ctx.log=true）が、収集側でもタスクを絞って二重に守る。
+            // 値（プロパティ値等）は元から出ない。形式に合う行だけを書き、重み計算には使わない。
+            if (task.path == ':test') {
+                event.message.readLines().findAll {
+                    it ==~ /\[ci-ctx\] jvm=\S+ seq=\d+ class=\S+ key=[0-9a-f]{12} event=(load|hit|reload|error) loadMs=\d+ cacheSize=-?\d+( error=\S+)?/ ||
+                        it ==~ /\[ci-ctx-orderer\] classes=\d+ fallback=\d+ ms=\d+/
+                }.each {
+                    emit('context-progress.log', it)
+                }
+            }
             if (descriptor.className == mfaClass) {
-                event.message.readLines().findAll { it ==~ /\[mfa-latency\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ elapsedMillis=\d+ limitMillis=\d+ pid=\d+/ }.each {
+                // CMP-261123-1434: AC-54 の判定は照合回数へ移り壁時計の上限値は持たないため、[mfa-latency] に limitMillis は出ない。
+                // 出力側 MfaBackupCodeLatencyIT と形式を揃える（scripts/test_run_ci_observability_patterns.py が両者の一致を検証する）。
+                event.message.readLines().findAll { it ==~ /\[mfa-latency\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ elapsedMillis=\d+ pid=\d+/ }.each {
                     emit('mfa-intervals.log', it)
+                }
+                event.message.readLines().findAll { it ==~ /\[mfa-resources\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ pid=\d+ threadCpuNanos=(-1|\d+) gcCount=(-1|\d+) gcTimeMillis=(-1|\d+)/ }.each {
+                    emit('mfa-resources.log', it)
                 }
             }
         }
@@ -137,6 +153,79 @@ while True:
     print(datetime.datetime.now(datetime.timezone.utc).isoformat(), flush=True)
     subprocess.run(['ps', '-C', 'java', '-o', 'pid,ppid,etimes,time,pcpu,rss,comm'], check=False)
     time.sleep(300)
+PYTHON
+  MONITOR_PID=$!
+elif [ "${CI_SHARD_INDEX:-}" = '0' ]; then
+  # 既存case行を増分読み取りし、MFA中だけ最大240回の秒単位psを採る。
+  python3 -u - "$CI_DIAGNOSTIC_DIR/case-intervals.log" > "$CI_DIAGNOSTIC_DIR/worker-resources.log" 2>&1 <<'PYTHON' &
+import datetime, pathlib, subprocess, sys, time
+case_log = pathlib.Path(sys.argv[1])
+active, fast_samples, offset = 0, 0, 0
+pending = ''
+next_baseline = 0
+mfa_class = ' class=com.mannschaft.app.auth.mfa.MfaBackupCodeLatencyIT '
+# 1秒待機の判定を最大6000回・総読取1MiB以内。テストの上限時間は変更しない。
+for _ in range(6000):
+    if offset < 1048576:
+        with case_log.open('rb') as stream:
+            stream.seek(offset)
+            chunk = stream.read(min(65536, 1048576 - offset))
+        offset += len(chunk)
+        if offset == 1048576:
+            print("[ci-resource-case-read-limit] bytes=1048576", flush=True)
+        lines = (pending + chunk.decode('utf-8')).split('\n')
+        pending = lines.pop()[-4096:]
+        for line in lines:
+            if mfa_class in line:
+                if '[ci-case-start]' in line:
+                    active += 1
+                elif '[ci-case-end]' in line:
+                    active = max(0, active - 1)
+    else:
+        active = 0
+    now = time.monotonic()
+    fast = active > 0 and fast_samples < 240
+    if fast or now >= next_baseline:
+        print(datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'mfaActive=%d fastSample=%d' % (active, int(fast)), flush=True)
+        subprocess.run(['ps', '-C', 'java', '-o', 'pid,ppid,etimes,time,pcpu,rss,comm'],
+                       check=False, timeout=5)
+        if fast:
+            fast_samples += 1
+            if fast_samples == 240:
+                print("[ci-resource-fast-limit] samples=240", flush=True)
+        if now >= next_baseline:
+            next_baseline = now + 300
+    time.sleep(1)
+print("[ci-resource-monitor-limit] ticks=6000 fastSamples=%d caseBytes=%d" % (fast_samples, offset), flush=True)
+PYTHON
+  MONITOR_PID=$!
+elif [ "${CI_SHARD_INDEX:-}" = '5' ]; then
+  # C5の不足観測だけを追加する。待機/ps timeoutの合計は最大6715秒。
+  python3 -u - > "$CI_DIAGNOSTIC_DIR/worker-resources.log" 2>&1 <<'PYTHON' &
+import datetime, signal, subprocess, time
+
+# runの例外経路で実行中のpsをkill/waitし、親のowned-monitor停止に従う。
+def stop_monitor(signum, frame):
+    raise SystemExit(128 + signum)
+
+signal.signal(signal.SIGTERM, stop_monitor)
+for sample in range(23):
+    print(datetime.datetime.now(datetime.timezone.utc).isoformat(), flush=True)
+    try:
+        result = subprocess.run(['ps', '-C', 'java', '-o', 'pid,ppid,etimes,time,pcpu,rss,comm'],
+                                check=False, timeout=5, stderr=subprocess.DEVNULL)
+        print('[ci-resource-ps] outcome=%s exitCode=%d' % (
+            'success' if result.returncode == 0 else 'nonzero', result.returncode), flush=True)
+    except FileNotFoundError:
+        print('[ci-resource-ps] outcome=missing exitCode=-1', flush=True)
+    except subprocess.TimeoutExpired:
+        print('[ci-resource-ps] outcome=timeout exitCode=-1', flush=True)
+    except OSError:
+        print('[ci-resource-ps] outcome=unavailable exitCode=-1', flush=True)
+    if sample < 22:
+        time.sleep(300)
+print('[ci-resource-monitor-limit] attempts=23', flush=True)
 PYTHON
   MONITOR_PID=$!
 fi

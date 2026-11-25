@@ -41,6 +41,8 @@ public enum NotificationType {
     MEMBER_JOINED(NotificationPriority.LOW, "USER"),
     MODULE_AVAILABLE(NotificationPriority.LOW, "MODULE"),
     SYSTEM_NOTICE(NotificationPriority.NORMAL, "SYSTEM"),
+    /** L1-M: 承認済み業務操作の遅延・隔離・実復旧。 */
+    MODULE_EVENT_NOTICE(NotificationPriority.NORMAL, "MODULE_EVENT_NOTICE"),
     RESERVATION_RECEIVED(NotificationPriority.HIGH, "RESERVATION"),
     RESERVATION_PENDING_APPROVAL(NotificationPriority.HIGH, "RESERVATION"),
     RESERVATION_CANCELLED_BY_MEMBER(NotificationPriority.NORMAL, "RESERVATION"),
@@ -84,6 +86,8 @@ public enum NotificationType {
     JOIN_REQUEST_APPROVED(NotificationPriority.NORMAL, "USER"),
     /** 柱③-A: 参加申請が却下された旨の申請者向け通知（CMP-260901-1538）。 */
     JOIN_REQUEST_REJECTED(NotificationPriority.NORMAL, "USER"),
+    /** 失効した招待から登録した利用者が再招待を依頼した旨の招待権限者向け通知（CMP-261107-1833）。 */
+    INVITE_REISSUE_REQUESTED(NotificationPriority.NORMAL, "USER"),
     NEW_DEVICE_LOGIN(NotificationPriority.HIGH, "USER"),
 
     RECRUITMENT_PENALTY_LIFTED(NotificationPriority.NORMAL, "RECRUITMENT_PENALTY"),

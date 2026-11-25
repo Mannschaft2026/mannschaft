@@ -52,6 +52,9 @@
         "delete": "Eliminar plantilla",
         "maxCount": "Se pueden crear hasta 5 plantillas",
         "noTemplates": "No hay plantillas",
+        "createSuccess": "Plantilla guardada",
+        "saveHint": "Guarda la inscripción ya guardada (dorsales y posiciones) como plantilla. Guarde primero la inscripción.",
+        "loadFailed": "No se pudo cargar la lista de plantillas, por lo que no se puede guardar. Vuelva a abrir este cuadro.",
         "name": "Nombre de la plantilla",
         "description": "Descripción",
         "members": "Jugadores",
@@ -111,6 +114,7 @@
       "empty_history": "No hay historial de transferencias"
     },
     "roster": {
+      "load_match": "Cargar",
       "title": "Lista de jugadores del partido",
       "submit": "Enviar",
       "apply_template": "Aplicar plantilla",
@@ -165,12 +169,21 @@
       "private": "Privado",
       "empty": "No hay espacios de contacto disponibles",
       "no_bulletin": "No hay tablón de anuncios",
+      "bulletin_scope_unresolved": "No se puede mostrar el tablón porque no se pudo determinar su ámbito",
       "no_chat": "No hay espacio de chat",
       "visibility_saved": "Visibilidad actualizada",
       "visibility_failed": "Error al actualizar la visibilidad",
       "load_failed": "Error al cargar los espacios de contacto",
       "divisions_load_failed": "Error al cargar las divisiones",
-      "permissions_load_failed": "Error al cargar los permisos. Algunas acciones pueden no estar disponibles."
+      "permissions_load_failed": "Error al cargar los permisos. Algunas acciones pueden no estar disponibles.",
+      "participant": {
+        "title": "Espacio de contacto del torneo",
+        "open_link": "Abrir espacio de contacto",
+        "view_only_notice": "Solo lectura. Solo los administradores y subadministradores del equipo y los organizadores pueden publicar.",
+        "unavailable": "El espacio de contacto de este torneo no está disponible",
+        "unavailable_hint": "Solo pueden usarlo los miembros de los equipos participantes. Comprueba el estado de participación de tu equipo.",
+        "load_retry": "Volver a cargar"
+      }
     },
     "submission": {
       "title": "Recepción de documentos",
@@ -401,6 +414,40 @@
         "invalidUserId": "El ID de usuario debe ser un entero positivo",
         "searchFailed": "No se pudo buscar miembros"
       }
+    },
+    "create": {
+      "createFailed": "No se pudo crear el torneo",
+      "createFailedHint": "Revise los datos introducidos",
+      "fields": {
+        "name": "Nombre del torneo",
+        "season": "Temporada",
+        "format": "Formato",
+        "sport": "Deporte",
+        "description": "Descripción",
+        "visibility": "Visibilidad",
+        "winPoints": "Puntos por victoria",
+        "drawPoints": "Puntos por empate",
+        "lossPoints": "Puntos por derrota"
+      },
+      "title": "Crear torneo",
+      "openButton": "Crear torneo",
+      "submit": "Crear",
+      "cancel": "Cancelar",
+      "success": "Torneo creado",
+      "namePlaceholder": "p. ej. Liga de primavera 2026",
+      "nameRequired": "Introduzca el nombre del torneo",
+      "seasonRequired": "Introduzca el año de la temporada"
+    },
+    "list": {
+      "title": "Torneos y ligas",
+      "empty": "No hay torneos",
+      "loadError": "No se pudo cargar la lista de torneos",
+      "scoreSummary": "V{win} E{draw} D{loss}"
+    },
+    "formats": {
+      "LEAGUE": "Liga",
+      "KNOCKOUT": "Eliminatoria",
+      "GROUP_KNOCKOUT": "Fase de grupos + eliminatoria"
     }
   },
   "dashboard_widgets": {

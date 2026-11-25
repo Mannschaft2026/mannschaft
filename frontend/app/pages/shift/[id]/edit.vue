@@ -17,8 +17,10 @@ const { getSchedule } = useShiftApi()
 const { userTimezone } = useDatetime()
 const { listSlots, deleteSlot, bulkCreateSlots } = useShiftSlotApi()
 const { listPositions } = useShiftPositionApi()
+const { listRequests } = useShiftRequestApi()
 const { handleApiError } = useErrorHandler()
 const { success } = useNotification()
+const confirm = useConfirm()
 
 const scheduleId = computed(() => Number(route.params.id))
 
@@ -39,23 +41,34 @@ const canManage = computed(() => {
   )
 })
 
-onMounted(async () => {
+/** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
+const loadError = ref<unknown>(null)
+
+async function load() {
   loading.value = true
-  await teamStore.fetchMyTeams()
+  loadError.value = null
   // schedule を先に取得してチームIDを得る
   try {
-    schedule.value = await getSchedule(scheduleId.value)
+    const s = await getSchedule(scheduleId.value)
     const [sl, pos] = await Promise.all([
       listSlots(scheduleId.value),
-      listPositions(String(schedule.value.teamId)),
+      listPositions(String(s.teamId)),
     ])
+    schedule.value = s
     slots.value = sl
     positions.value = pos
   } catch (error) {
-    handleApiError(error)
+    schedule.value = null
+    slots.value = []
+    loadError.value = error
   } finally {
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  await teamStore.fetchMyTeams()
+  await load()
 })
 
 // =====================================================
@@ -85,13 +98,70 @@ function handleSlotSaved(slot: ShiftSlotResponse) {
   slots.value.sort((a, b) => a.time.slotDate.localeCompare(b.time.slotDate) || a.time.startTime.localeCompare(b.time.startTime))
 }
 
+const deletingSlotId = ref<number | null>(null)
+
+// 確認文言のために希望件数を取得中の枠ID（取得待ちの間の二重起動を防ぐ）
+const checkingSlotId = ref<number | null>(null)
+
+/**
+ * 枠削除の確認文言を組み立てる。
+ * 希望件数は slotId 一致のみ数える（slotId が null の日単位希望は枠削除で消えない）。
+ * 希望は他メンバーが随時提出・取消するため画面読込時のキャッシュは古くなりうる。
+ * そのためダイアログを開く都度取得し、古い件数を出さない。
+ * 取得失敗時は件数を出さない安全側の文言で続行する（削除自体は妨げない）。
+ */
+async function buildDeleteConfirmMessage(slot: ShiftSlotResponse): Promise<string> {
+  let requestCount: number
+  try {
+    const requests = await listRequests(scheduleId.value)
+    requestCount = requests.filter((r) => r.slotId === slot.id).length
+  } catch (error) {
+    handleApiError(error)
+    return t('shift.slot.deleteConfirmUnknown')
+  }
+  // 割当が伏せられている場合（assignmentMasked）は割当件数を出さない
+  const assignmentCount = slot.assignmentMasked ? 0 : slot.assignedUserIds.length
+  if (requestCount > 0 && assignmentCount > 0) {
+    return t('shift.slot.deleteConfirmBoth', { requests: requestCount, assignments: assignmentCount })
+  }
+  if (requestCount > 0) return t('shift.slot.deleteConfirmRequestsOnly', { requests: requestCount })
+  if (assignmentCount > 0) return t('shift.slot.deleteConfirmAssignmentsOnly', { assignments: assignmentCount })
+  return t('shift.slot.deleteConfirmPlain')
+}
+
+async function confirmDeleteSlot(slotId: number) {
+  if (!canManage.value || deletingSlotId.value !== null || checkingSlotId.value !== null) return
+  const slot = slots.value.find((s) => s.id === slotId)
+  if (!slot) return
+  checkingSlotId.value = slotId
+  let message: string
+  try {
+    message = await buildDeleteConfirmMessage(slot)
+  } finally {
+    checkingSlotId.value = null
+  }
+  confirm.require({
+    message,
+    header: t('shift.slot.deleteTitle'),
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: t('common.cancel'),
+    acceptLabel: t('shift.action.delete'),
+    acceptClass: 'p-button-danger',
+    accept: () => handleDeleteSlot(slotId),
+  })
+}
+
 async function handleDeleteSlot(slotId: number) {
+  if (!canManage.value || deletingSlotId.value !== null) return
+  deletingSlotId.value = slotId
   try {
     await deleteSlot(slotId)
     slots.value = slots.value.filter((s) => s.id !== slotId)
     success(t('shift.slot.deleteSuccess'))
   } catch (error) {
     handleApiError(error)
+  } finally {
+    deletingSlotId.value = null
   }
 }
 
@@ -138,7 +208,7 @@ const positionOptions = computed(() => [
 ])
 
 async function handleBulkCreate() {
-  if (!bulkForm.value.fromDate || !bulkForm.value.toDate) return
+  if (!bulkForm.value.fromDate || !bulkForm.value.toDate || bulkCreating.value) return
   bulkCreating.value = true
   try {
     // 日付範囲を展開してスロット配列を生成
@@ -193,43 +263,26 @@ function formatDate(dateStr: string): string {
   <div class="mx-auto max-w-5xl px-4 py-6">
     <!-- ナビゲーション -->
     <div class="mb-4 flex items-center gap-2">
-      <BackButton :to="`/shift/${scheduleId}`" />
+      <BackButton :to="`/shift/${scheduleId}`" class="shrink-0 whitespace-nowrap" />
       <h1 class="text-xl font-bold text-surface-800 dark:text-surface-100">
         {{ schedule?.content.title ?? '...' }}
       </h1>
-      <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" />
+      <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" class="shrink-0 whitespace-nowrap" />
     </div>
 
-    <!-- タブ -->
-    <nav class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700">
-      <NuxtLink
-        :to="`/shift/${scheduleId}`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-calendar" />{{ t('shift.detail.tabOverview') }}
-      </NuxtLink>
-      <span class="flex shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
-        <i class="pi pi-pencil" />{{ t('shift.detail.tabEdit') }}
-      </span>
-      <NuxtLink
-        v-if="canManage"
-        :to="`/shift/${scheduleId}/requests`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-list" />{{ t('shift.detail.tabRequests') }}
-      </NuxtLink>
-      <NuxtLink
-        v-if="canManage"
-        :to="`/shift/${scheduleId}/work-constraints`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-shield" />{{ t('shift.detail.tabConstraints') }}
-      </NuxtLink>
-    </nav>
+    <DashboardErrorState
+      v-if="loadError"
+      :error="loadError"
+      testid="shift-load-error"
+      @retry="load"
+    />
 
-    <PageLoading v-if="loading" />
+    <PageLoading v-else-if="loading" />
 
     <template v-else>
+      <!-- タブ -->
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="edit" />
+
       <!-- アクションバー -->
       <div v-if="canManage" class="mb-4 flex flex-wrap gap-2">
         <Button
@@ -256,7 +309,7 @@ function formatDate(dateStr: string): string {
         <div
           v-for="slot in sortedSlots"
           :key="slot.id"
-          class="flex items-center gap-3 rounded-lg border border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-900"
+          class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-900"
         >
           <!-- 日付 -->
           <div class="w-24 shrink-0">
@@ -266,11 +319,11 @@ function formatDate(dateStr: string): string {
           </div>
 
           <!-- 時間・ポジション -->
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">
+          <div class="min-w-[9rem] flex-1">
+            <p class="whitespace-nowrap text-sm font-medium">
               {{ slot.time.startTime.slice(0, 5) }} 〜 {{ slot.time.endTime.slice(0, 5) }}
             </p>
-            <p v-if="slot.position.positionName" class="text-xs text-surface-500">
+            <p v-if="slot.position.positionName" class="break-words text-xs text-surface-500">
               {{ slot.position.positionName }}
             </p>
           </div>
@@ -279,7 +332,7 @@ function formatDate(dateStr: string): string {
           <div class="shrink-0 text-center">
             <span
               v-if="slot.assignmentMasked"
-              class="rounded-full bg-surface-100 px-2 py-0.5 text-xs font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
+              class="shrink-0 whitespace-nowrap rounded-full bg-surface-100 px-2 py-0.5 text-xs font-medium text-surface-600 dark:bg-surface-700 dark:text-surface-300"
               :title="t('shift.slot.assignmentMaskedHint')"
             >
               {{ t('shift.slot.assignmentMasked') }}
@@ -315,7 +368,8 @@ function formatDate(dateStr: string): string {
               rounded
               size="small"
               severity="danger"
-              @click="handleDeleteSlot(slot.id)"
+              :disabled="deletingSlotId !== null || checkingSlotId !== null"
+              @click="confirmDeleteSlot(slot.id)"
             />
           </div>
         </div>
@@ -410,7 +464,7 @@ function formatDate(dateStr: string): string {
       <template #footer>
         <Button :label="t('common.cancel')" text @click="showBulkDialog = false" />
         <Button
-          :label="t('common.create')"
+          :label="t('button.create')"
           icon="pi pi-check"
           :loading="bulkCreating"
           :disabled="!bulkForm.fromDate || !bulkForm.toDate"

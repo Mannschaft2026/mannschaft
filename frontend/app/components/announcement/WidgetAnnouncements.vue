@@ -3,6 +3,7 @@ import type { AnnouncementFeedItem, AnnouncementScopeType } from '~/types/announ
 import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { runKeepingPinFocus } from '~/utils/announcementFocus'
 import { useApi } from '~/composables/useApi'
 import { useErrorHandler } from '~/composables/useErrorHandler'
 import { useAnnouncementFeed } from '~/composables/useAnnouncementFeed'
@@ -51,6 +52,11 @@ const { isAdmin } = useRoleAccess(
   props.scopeType === 'TEAM' ? 'team' : 'organization',
   props.scopeSlug ?? props.scopeId,
 )
+
+/** 操作対象のスコープ（このウィジェットのチーム/組織）の項目か */
+function isInScope(item: AnnouncementFeedItem): boolean {
+  return item.scopeType === props.scopeType && String(item.scopeId) === props.scopeId
+}
 
 const displayLimit = computed(() => props.limit ?? 5)
 
@@ -102,7 +108,7 @@ async function onItemClick(item: (typeof feed.value)[number], trigger: HTMLEleme
 }
 
 async function onTogglePin(id: number) {
-  try { await togglePin(id) } catch (error) { handleApiError(error) }
+  try { await runKeepingPinFocus(id, () => togglePin(id)) } catch (error) { handleApiError(error) }
 }
 
 async function onDelete(id: number) {
@@ -203,7 +209,8 @@ async function onMarkAllRead() {
         v-for="item in displayItems"
         :key="item.id"
         :item="item"
-        :show-pin-control="isAdmin && item.scopeType === scopeType && String(item.scopeId) === scopeId"
+        :show-pin-control="isAdmin && isInScope(item)"
+        :can-remove="isAdmin && isInScope(item)"
         @click="onItemClick"
         @pin="onTogglePin"
         @delete="onDelete"

@@ -56,6 +56,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * ユーザー管理サービス。プロフィール操作・パスワード変更・メール変更・退会を担当する。
@@ -372,7 +373,6 @@ public class UserService {
                 req.getNickname() != null ? req.getNickname() : user.getDisplayName(),
                 req.getNickname2() != null ? req.getNickname2() : user.getNickname2(),
                 req.getIsSearchable() != null ? req.getIsSearchable() : user.getIsSearchable(),
-                req.getAvatarUrl() != null ? req.getAvatarUrl() : user.getAvatarUrl(),
                 newPhoneNumber,
                 req.getPostalCode() != null ? req.getPostalCode() : user.getPostalCode(),
                 encryptionService.hmac(newLastName),
@@ -557,6 +557,7 @@ public class UserService {
      * @param req    メールアドレス変更リクエスト
      * @return メッセージレスポンス
      */
+    @PlaintextTokenDebt(cmp = "CMP-261103-2059") // ハッシュ保存済みだが乱数源が UUID で金庫（SecretTokenVault）未使用。金庫への統合が債務
     @Transactional
     public ApiResponse<MessageResponse> requestEmailChange(Long userId, RequestEmailChangeRequest req) {
         // 1. レートリミット

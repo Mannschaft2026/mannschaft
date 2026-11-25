@@ -1,4 +1,5 @@
 import { getCurrentScope, onScopeDispose } from 'vue'
+import { usePersonalDashboardWidgetSettings } from '~/composables/usePersonalDashboardWidgetSettings'
 import type { MaybeRefOrGetter, Ref } from 'vue'
 import type { MinRole, ViewerRole, WidgetVisibilitySetting } from '~/types/dashboard'
 import type { components } from '~/types/generated'
@@ -294,7 +295,7 @@ const ALL_WIDGETS: WidgetDefinition[] = [
     label: 'チームのお知らせ',
     labelKey: 'dashboard.widget_labels.team-announcements',
     icon: 'pi pi-users',
-    description: '所属チームからの掲示板・お知らせ',
+    description: '所属チームからのお知らせ',
     descriptionKey: 'dashboard.widget_descriptions.team-announcements',
     scope: ['personal'],
   },
@@ -527,7 +528,7 @@ const ALL_WIDGETS: WidgetDefinition[] = [
     key: 'attendance-results',
     label: '出席確認状況',
     labelKey: 'dashboard.widget_labels.attendance-results',
-    icon: 'pi pi-calendar-check',
+    icon: 'pi pi-calendar',
     description: 'イベントごとの出欠状況と個人別回答',
     descriptionKey: 'dashboard.widget_descriptions.attendance-results',
     scope: ['team', 'organization'],
@@ -728,7 +729,9 @@ export function useDashboardWidgets(
     // personal スコープの場合は scopeId=undefined（scope_id=0 相当として BE が識別）。
     const effectiveScopeId = apiScopeType === 'personal' ? undefined : resolvedId
     const dataKey = `dashboard-widgets:${settingsAuth.user?.id ?? 'anonymous'}:${apiScopeType}:${effectiveScopeId ?? '0'}`
-    const { data: serverSettings, status } = useAsyncData(
+    const { data: serverSettings, status } = apiScopeType === 'personal'
+      ? usePersonalDashboardWidgetSettings()
+      : useAsyncData(
       dataKey,
       async () => {
         const res = await api<{ data: WidgetSettingResponse[] }>('/api/v1/dashboard/widgets', {

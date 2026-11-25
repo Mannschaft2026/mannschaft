@@ -9,6 +9,8 @@ import com.mannschaft.app.social.announcement.AnnouncementFeedService;
 import com.mannschaft.app.social.announcement.AnnouncementReadCommandService;
 import com.mannschaft.app.social.announcement.AnnouncementReadService;
 import com.mannschaft.app.social.announcement.AnnouncementScopeType;
+import com.mannschaft.app.social.announcement.AnnouncementSourcePublicationGuard;
+import com.mannschaft.app.social.announcement.AnnouncementScopedFeedVisibilityGuard;
 import com.mannschaft.app.social.announcement.AnnouncementSourceType;
 import com.mannschaft.app.social.announcement.dto.AnnouncementFeedItemDto;
 import com.mannschaft.app.social.announcement.dto.AnnouncementFeedMetaDto;
@@ -67,7 +69,9 @@ public class AnnouncementFeedController {
 
     private final AnnouncementFeedService announcementFeedService;
     private final AnnouncementReadCommandService announcementReadCommandService;
+    private final AnnouncementScopedFeedVisibilityGuard visibilityGuard;
     private final RoleResolver roleResolver;
+    private final AnnouncementSourcePublicationGuard publicationGuard;
 
     // ═════════════════════════════════════════════════════════════
     // GET /api/v1/teams/{teamId}/announcements — 一覧取得
@@ -138,6 +142,10 @@ public class AnnouncementFeedController {
         Long userId = SecurityUtils.getCurrentUserId();
         AnnouncementSourceType sourceType = EnumInputParser.parse(AnnouncementSourceType.class, request.getSourceType(), "sourceType");
 
+        // 元コンテンツが公開状態でなければ不在と同じ ANNOUNCE_006（下書き等のタイトルを漏らさない。N9）。
+        // スコープ・個人ブログ判定（Service 内の Resolver）より前に行い、存在オラクルを作らない。
+        publicationGuard.assertPublished(sourceType, request.getSourceId());
+
         var entity = announcementFeedService.createAnnouncement(
                 AnnouncementScopeType.TEAM, teamId, sourceType, request.getSourceId(), userId);
 
@@ -171,6 +179,8 @@ public class AnnouncementFeedController {
             @PathVariable("id") Long announcementId) {
 
         Long userId = SecurityUtils.getCurrentUserId();
+        // 不在・越境・不可視は同一の 404（存在オラクル封じ）。Service の @Transactional の外で判定する
+        visibilityGuard.requireVisible(AnnouncementScopeType.TEAM, teamId, announcementId, userId);
         announcementFeedService.deleteAnnouncement(announcementId, userId);
         return ResponseEntity.noContent().build();
     }
@@ -202,6 +212,8 @@ public class AnnouncementFeedController {
             @RequestBody(required = false) PinAnnouncementRequestDto request) {
 
         Long userId = SecurityUtils.getCurrentUserId();
+        // 不在・越境・不可視は同一の 404（存在オラクル封じ）。Service の @Transactional の外で判定する
+        visibilityGuard.requireVisible(AnnouncementScopeType.TEAM, teamId, announcementId, userId);
         var entity = announcementFeedService.togglePin(announcementId, userId);
 
         // togglePin 後は既読状態が変わらないため isRead = false として返す（ピン操作の結果のみ必要）

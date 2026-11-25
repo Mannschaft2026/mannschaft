@@ -229,8 +229,8 @@ class AccountPurgeServiceTest {
 
             service.purgeExpiredAccounts();
 
-            // 旧8domainと本人設定27domain、公開範囲・牧場・診断、CMP-260822-1243 第2陣5domainが重複なくPENDING登録されること
-            verify(completionStatusRepository, org.mockito.Mockito.times(43)).save(any(AccountPurgeCompletionStatusEntity.class));
+            // 旧8domainと本人設定27domain、公開範囲・牧場・診断、CMP-260822-1243 第2陣5domain・F06.4.1 effortrecordが重複なくPENDING登録されること
+            verify(completionStatusRepository, org.mockito.Mockito.times(44)).save(any(AccountPurgeCompletionStatusEntity.class));
 
             // 各ドメイン名の PENDING レコードが INSERT されること（残債1: billing を追加登録）
             for (String domain : List.of(
@@ -241,7 +241,7 @@ class AccountPurgeServiceTest {
                     "gamification", "reflection", "timetable.personal", "cms", "chat",
                     "knowledgebase", "favorite", "membership", "weather", "inbox",
                     "timetable.notes", "seal", "visibility", "ranch", "diagnosis",
-                    "shift", "parking", "advertising", "property", "village")) {
+                    "shift", "parking", "advertising", "property", "village", "effortrecord")) {
                 verify(completionStatusRepository).save(argThat(entity ->
                         entity.getUserId().equals(USER_ID)
                                 && entity.getDomainName().equals(domain)

@@ -84,6 +84,7 @@ function statusSeverity(status: string): 'info' | 'warn' | 'danger' | 'success' 
       return 'warn'
     case 'EXHAUSTED':
       return 'danger'
+    case 'SUCCEEDED':
     case 'MANUAL_RESOLVED':
       return 'success'
     default:
@@ -97,14 +98,32 @@ function statusLabel(status: string): string {
   return t(key, status)
 }
 
+/**
+ * 種別コード（BE の enum 名）を利用者向けの名称に変換する。未知の種別は生コードを出さず汎用名にする。
+ * CMP-260909-0544: 生コードや生の error_message は内部情報の混入経路になるため画面へ出さない。
+ */
+const KNOWN_EVENT_TYPES = [
+  'CONSUMPTION_RECORD', 'CONSUMPTION_CANCEL', 'THRESHOLD_ALERT', 'WORKFLOW_START', 'NOTIFICATION_SEND',
+]
+function knownEventType(type: string): string {
+  return KNOWN_EVENT_TYPES.includes(type) ? type : 'UNKNOWN'
+}
+function eventTypeLabel(type: string): string {
+  return t(`shiftBudget.failedEvent.eventTypeValue.${knownEventType(type)}`)
+}
+/** 種別に応じた分かりやすい説明。BE の error_message（例外クラス名・SQL を含み得る）は使わない。 */
+function eventSummary(type: string): string {
+  return t(`shiftBudget.failedEvent.summaryValue.${knownEventType(type)}`)
+}
 
 function openRetry(event: FailedEventResponse) {
+  if (!canRetry(event)) return
   retryTarget.value = event
   retryConfirmVisible.value = true
 }
 
 async function confirmRetry() {
-  if (!retryTarget.value || !organizationId.value) return
+  if (!retryTarget.value || !organizationId.value || !canRetry(retryTarget.value)) return
   try {
     await api.retryFailedEvent(organizationId.value, retryTarget.value.id)
     notification.success(t('shiftBudget.failedEvent.retrySuccess'))
@@ -115,6 +134,12 @@ async function confirmRetry() {
   catch {
     notification.error(t('shiftBudget.failedEvent.retryError'))
   }
+}
+
+/** 実際に再実行できる種別だけを提供する。EXHAUSTEDの運用再試行は許可する。 */
+function canRetry(event: FailedEventResponse): boolean {
+  return ['THRESHOLD_ALERT', 'WORKFLOW_START', 'NOTIFICATION_SEND'].includes(event.event_type)
+    && event.status !== 'SUCCEEDED' && event.status !== 'MANUAL_RESOLVED'
 }
 
 function openResolve(event: FailedEventResponse) {
@@ -171,20 +196,24 @@ onMounted(() => {
 
     <PageLoading v-else-if="loading" />
 
-    <DataTable v-else :value="events" striped-rows data-key="id">
+    <DataTable v-else :value="events" striped-rows data-key="id" table-style="min-width: 95rem">
       <template #empty>
         <div class="py-8 text-center text-surface-500">{{ t('shiftBudget.failedEvent.empty') }}</div>
       </template>
       <Column field="id" :header="t('shiftBudget.failedEvent.id')" style="width: 80px" />
-      <Column field="event_type" :header="t('shiftBudget.failedEvent.eventType')" style="width: 200px" />
+      <Column :header="t('shiftBudget.failedEvent.eventType')" style="width: 200px">
+        <template #body="{ data }: { data: FailedEventResponse }">
+          <span>{{ eventTypeLabel(data.event_type) }}</span>
+        </template>
+      </Column>
       <Column :header="t('shiftBudget.failedEvent.sourceId')" style="width: 100px">
         <template #body="{ data }: { data: FailedEventResponse }">
           <span>{{ data.source_id ?? '-' }}</span>
         </template>
       </Column>
-      <Column :header="t('shiftBudget.failedEvent.errorMessage')">
+      <Column :header="t('shiftBudget.failedEvent.summary')" style="min-width: 20rem">
         <template #body="{ data }: { data: FailedEventResponse }">
-          <span class="line-clamp-2 text-sm">{{ data.error_message ?? '-' }}</span>
+          <span class="text-sm">{{ eventSummary(data.event_type) }}</span>
         </template>
       </Column>
       <Column :header="t('shiftBudget.failedEvent.retryCount')" style="width: 100px">
@@ -211,7 +240,7 @@ onMounted(() => {
         <template #body="{ data }: { data: FailedEventResponse }">
           <div class="flex gap-1">
             <Button
-              v-if="data.status !== 'MANUAL_RESOLVED'"
+              v-if="canRetry(data)"
               :label="t('shiftBudget.failedEvent.retry')"
               size="small"
               severity="secondary"

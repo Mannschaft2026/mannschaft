@@ -9,6 +9,7 @@ import com.mannschaft.app.shift.repository.ShiftPositionRepository;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
 import com.mannschaft.app.shift.service.ShiftSlotService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -58,6 +59,9 @@ class ShiftSlotTimeValidationServiceTest {
 
     @Mock
     private ShiftAssignmentRepository assignmentRepository;
+
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private ShiftSlotService shiftSlotService;
@@ -126,7 +130,7 @@ class ShiftSlotTimeValidationServiceTest {
                     null, LocalTime.of(18, 0), null, null, null, null, null);
 
             // When & Then
-            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR))
+            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { }))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ShiftErrorCode.INVALID_TIME_RANGE);
@@ -146,7 +150,7 @@ class ShiftSlotTimeValidationServiceTest {
                     null, null, null, null, null, null, "メモ更新のみ");
 
             // When & Then
-            assertThatCode(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR))
+            assertThatCode(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { }))
                     .doesNotThrowAnyException();
             verify(slotRepository).save(any());
             assertThat(existing.getNote()).isEqualTo("メモ更新のみ");

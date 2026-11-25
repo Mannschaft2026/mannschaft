@@ -40,7 +40,7 @@ public class SearchHistoryController {
      * 検索履歴一覧を取得する。
      */
     @SelfScopedEndpoint("SearchHistoryService#listHistory は SecurityUtils.getCurrentUserId() の"
-        + "検索履歴（findByUserIdOrderBySearchedAtDesc）のみを返す")
+        + "検索履歴（findTop20ByUserIdOrderBySearchedAtDescIdDesc）の最新20件のみを返す")
     @GetMapping("/recent")
     @Operation(summary = "検索履歴一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
@@ -102,5 +102,21 @@ public class SearchHistoryController {
             @Valid @RequestBody SaveQueryRequest request) {
         SavedQueryResponse response = searchHistoryService.saveQuery(SecurityUtils.getCurrentUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
+    }
+
+    /**
+     * 保存済み検索を削除する。
+     *
+     * <p>SearchHistoryService#deleteSavedQuery は findByIdAndUserId で
+     * savedQueryId の所有者を SecurityUtils.getCurrentUserId() と照合してから削除する。
+     * 他人の ID と存在しない ID はどちらも 404（存在を明かさない）。</p>
+     */
+    @AuthorizedInService
+    @DeleteMapping("/saved/{savedQueryId}")
+    @Operation(summary = "保存済み検索削除")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
+    public ResponseEntity<Void> deleteSavedQuery(@PathVariable Long savedQueryId) {
+        searchHistoryService.deleteSavedQuery(SecurityUtils.getCurrentUserId(), savedQueryId);
+        return ResponseEntity.noContent().build();
     }
 }

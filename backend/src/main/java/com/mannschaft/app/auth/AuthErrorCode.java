@@ -195,7 +195,7 @@ public enum AuthErrorCode implements ErrorCode {
     AUTH_069("AUTH_069", "Cannot invite your own email address", Severity.WARN),
 
     /** PENDING_PARENTAL_CONSENT での操作ブロック */
-    AUTH_070("AUTH_070", "This operation is not allowed for accounts pending parental consent", Severity.WARN),
+    AUTH_070("AUTH_070", "保護者の同意が完了するまで、この操作は利用できません", Severity.WARN),
 
     // ===== F02.10 §391 郵便番号検証基盤（国別レジストリ駆動） =====
 
@@ -249,7 +249,23 @@ public enum AuthErrorCode implements ErrorCode {
      * {@code mannschaft.auth.mfa.email-method-enabled=false} の間は設定開始・有効化を拒否する）。400 を返す。
      * ログイン時のメールOTP（TOTP 利用者の代替手段）・本人確認用メールOTP は本コードの対象外。
      */
-    AUTH_082("AUTH_082", "メールでの2段階認証は現在ご利用いただけません", Severity.WARN);
+    AUTH_082("AUTH_082", "メールでの2段階認証は現在ご利用いただけません", Severity.WARN),
+
+    // ===== CMP-261107-1833 招待付き新規登録の保留承認 (AUTH_083〜AUTH_086) =====
+
+    /**
+     * 宛先付き（承諾型）の招待では新規登録できない（宛先本人のための招待。ベータ設定・有効性に関係なく拒否）。403 を返す。
+     */
+    AUTH_083("AUTH_083", "この招待は特定の方宛てのため、新規登録には使えません。招待された方のアカウントでログインしてください", Severity.WARN),
+
+    /** 招待付き登録の保留が無い（自分の保留への操作。IDOR ではない単純な不在）。404 を返す。 */
+    AUTH_084("AUTH_084", "参加待ちの招待はありません", Severity.WARN),
+
+    /** 招待付き登録の保留が、その操作をできる状態にない（辞退済み・参加済み・公開先への再招待要請など）。409 を返す。 */
+    AUTH_085("AUTH_085", "この招待は現在の状態ではこの操作ができません", Severity.WARN),
+
+    /** 招待付き登録の保留の参加処理が進行中（5 分経過後に再試行できる）。409 を返す。 */
+    AUTH_086("AUTH_086", "参加処理を進めています。しばらくしてからもう一度お試しください", Severity.WARN);
 
     private final String code;
     private final String message;

@@ -28,6 +28,25 @@ public class AutomaticActivityListService {
     private final ScheduleActivityVisibilityService sources;
     private final ActivityMapper mapper;
 
+    /**
+     * 閲覧者がそのスコープで見てよい manual 記録の可視レベル（CMP-261124-0158）。
+     *
+     * <p>認証済み一覧 {@link #list} と同じ {@code snapshotForUser} → {@code resolveVisibleLevels} →
+     * {@link ActivityVisibilityMapper#toFunctional} で求める。詳細・コメント・複製・更新・参加者・CSV の
+     * ID 指定／スコープ指定経路はこの値で判定し、一覧と別の判定器を作らない
+     * （SUPPORTER は {@code MEMBERS_ONLY} を含まない）。</p>
+     */
+    public ReadLevels readLevels(Long userId, ActivityScopeType type, Long scopeId) {
+        var scope = new ScopeKey(type.name(), scopeId);
+        var roles = memberships.snapshotForUser(userId, Set.of(scope), Set.of(scope));
+        return new ReadLevels(ActivityVisibilityMapper.toFunctional(memberships.resolveVisibleLevels(scope, roles)),
+                roles.isSystemAdmin());
+    }
+
+    /** {@link #readLevels} の結果。{@code visibilities} は PUBLIC を必ず含む（SQL の IN () にならない）。 */
+    public record ReadLevels(Set<com.mannschaft.app.activity.ActivityVisibility> visibilities, boolean systemAdmin) {
+    }
+
     /** 統計/CSVはmetadataを含めず、公開済み可視actualまたは所属編集者のautoだけを数える。 */
     public Set<Long> actualIds(Long userId, ActivityScopeType type, Long scopeId) {
         var references = results.findAutomaticReferences(type, scopeId);

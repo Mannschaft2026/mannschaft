@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-1301",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4694,
+    "sha": "859e04962b1b6078de11cb783009aa4404cce350"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "Lint と Shard coverage guard を Detect changes へ同居させ、Detect changes と Compile & Test が緑（#4708 の CI で同居 step 実走）",
+      "tests": [
+        {
+          "name": "Backend CI 同居 step の実走",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4708"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "lockfile 検証・gitleaks 検出0・docs のみ PR での同居 step skip と gate 緑（実 PR での docs のみ個別確認は未実施。gate 判定は番人で36通り検証）",
+      "tests": [
+        {
+          "name": "GateJudgementExecutionTest",
+          "evidence": "backend/scripts/test_regen_shard_weights.py"
+        },
+        {
+          "name": "gitleaks 経路",
+          "evidence": "scripts/test-secret-scan.py"
+        },
+        {
+          "name": "PR 軽量検査の CI",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4694"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "backend-ci.yml を変更する PR 自身で同居 step が走る（#4708）",
+      "tests": [
+        {
+          "name": "Backend CI の実走",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4708"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "統合ジョブは1 step 失敗でも残りが走り赤になる（#4695 で実確認）。gate が判定失敗・outcome 欠落・skipped・空文字で緑にならないことは番人で確認。@Builder(toBuilder) 違反を実 PR に入れての gate 赤確認は未実施",
+      "tests": [
+        {
+          "name": "検証用 PR",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4695"
+        },
+        {
+          "name": "GateJudgementExecutionTest",
+          "evidence": "backend/scripts/test_regen_shard_weights.py"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "pr-light-checks.yml は read 権限のみ・pull_request_target 不使用。必須4チェック名は不変で #4708 で全緑。fork PR での完走は未実施",
+      "tests": [
+        {
+          "name": "pr-light-checks.yml",
+          "evidence": ".github/workflows/pr-light-checks.yml"
+        },
+        {
+          "name": "必須チェックの報告",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4708"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Node 22.23.2 と同版 Alpine 固定、musl と glibc を別々に検証（#4695 で musl 58秒・glibc 48秒の実走成功）",
+      "tests": [
+        {
+          "name": "検証用 PR",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4695"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "Backend CI のジョブ数 14→12、軽量 workflow 7ジョブ相当→1ジョブで合計8本減。Detect changes は0.4分→1.8分。待ち時間全体の短縮幅は混雑度に左右されるため未計測。実装 PR は #4694 と #4708 の2本で、#4708 は CI 番人スクリプトと build-logic のコメント修正を含み検査器の tooling 範囲外と判定されるため、全ファイルが tooling 範囲の #4694 を代表とした",
+      "tests": [
+        {
+          "name": "旧構成の run",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4706"
+        },
+        {
+          "name": "新構成の run",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4708"
+        },
+        {
+          "name": "軽量 workflow 統合",
+          "evidence": "https://github.com/kenta-0420/mannschaft/pull/4694"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 44853098619
+    },
+    {
+      "runId": 44853098618
+    },
+    {
+      "runId": 44853098607
+    },
+    {
+      "runId": 44853098632
+    },
+    {
+      "runId": 44853095965
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/kenta-0420/mannschaft/pull/4708"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI 設定のみの変更で、利用者が触れる画面・API に変更が無いため実機E2Eは未実施"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "CI 設定のみの変更で、利用者が触れる導線に変更が無いためアリシゼーションは未実施"
+    }
+  },
+  "regressions": []
+}

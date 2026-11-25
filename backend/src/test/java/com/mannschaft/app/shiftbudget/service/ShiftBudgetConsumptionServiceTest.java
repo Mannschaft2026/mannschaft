@@ -1,20 +1,24 @@
 package com.mannschaft.app.shiftbudget.service;
 
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.shiftbudget.ShiftBudgetCancelReason;
 import com.mannschaft.app.shiftbudget.ShiftBudgetConsumptionStatus;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * {@link ShiftBudgetConsumptionService} 単体テスト（Phase 9-β / 設計書 §11.1）。
@@ -43,6 +48,9 @@ import static org.mockito.Mockito.verify;
 @DisplayName("ShiftBudgetConsumptionService 単体テスト")
 class ShiftBudgetConsumptionServiceTest {
 
+    private static final Clock FIXED_WALL_CLOCK = Clock.fixed(
+            Instant.parse("2026-11-04T00:00:00Z"), UserZoneLocalDateTimeParser.SERVER_ZONE);
+
     private static final Long ALLOCATION_ID = 42L;
     private static final Long SHIFT_ID = 5L;
     private static final Long SLOT_ID = 7L;
@@ -53,8 +61,13 @@ class ShiftBudgetConsumptionServiceTest {
     @Mock
     private ShiftBudgetAllocationRepository allocationRepository;
 
-    @InjectMocks
     private ShiftBudgetConsumptionService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new ShiftBudgetConsumptionService(
+                consumptionRepository, allocationRepository, FIXED_WALL_CLOCK);
+    }
 
     @Nested
     @DisplayName("recordSingleConsumption (§11.1 擬似コード)")
@@ -154,24 +167,29 @@ class ShiftBudgetConsumptionServiceTest {
             verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
         }
 
+        @org.junit.jupiter.params.ParameterizedTest(name = "rate={0} は IllegalArgumentException で拒否し、取消・INSERT・残高更新を一切しない")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "0.00", "-1", "-1200"})
+        @DisplayName("時給が 0 以下は 0 円で記録せず拒否する (CMP-261115-1821)")
+        void 時給0以下は副作用なしで拒否(String rate) {
+            assertRejectedWithoutSideEffects(new BigDecimal(rate));
+        }
+
         @Test
-        @DisplayName("時給未設定 (rate=null) でも 0 として記録 (設計書 §11)")
-        void 時給未設定_amount0で記録() {
-            given(consumptionRepository.findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(
-                    SLOT_ID, USER_ID, ShiftBudgetConsumptionStatus.PLANNED))
-                    .willReturn(Optional.empty());
-            given(consumptionRepository.findBySlotIdAndUserIdAndStatusAndDeletedAtIsNull(
-                    SLOT_ID, USER_ID, ShiftBudgetConsumptionStatus.CONFIRMED))
-                    .willReturn(Optional.empty());
+        @DisplayName("時給未設定 (rate=null) は 0 円で記録せず拒否する (CMP-261115-1821)")
+        void 時給未設定は副作用なしで拒否() {
+            assertRejectedWithoutSideEffects(null);
+        }
 
-            service.recordSingleConsumption(ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID,
-                    null, new BigDecimal("4.0"));
+        private void assertRejectedWithoutSideEffects(BigDecimal rate) {
+            assertThatThrownBy(() -> service.recordSingleConsumption(
+                    ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID, rate, new BigDecimal("4.0")))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("hourlyRate");
 
-            ArgumentCaptor<ShiftBudgetConsumptionEntity> capt =
-                    ArgumentCaptor.forClass(ShiftBudgetConsumptionEntity.class);
-            verify(consumptionRepository).save(capt.capture());
-            assertThat(capt.getValue().getHourlyRateSnapshot()).isEqualByComparingTo(BigDecimal.ZERO);
-            assertThat(capt.getValue().getAmount()).isEqualByComparingTo("0.00");
+            // PLANNED の検索すら行わない = 既存 PLANNED の取消・減算が起きない
+            verifyNoInteractions(consumptionRepository);
+            verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
+            verify(allocationRepository, never()).decrementConsumedAmount(any(), any());
         }
     }
 
@@ -182,7 +200,7 @@ class ShiftBudgetConsumptionServiceTest {
         @Test
         @DisplayName("PLANNED は CANCELLED 遷移 + 減算、CONFIRMED は変更なし")
         void planned_のみ_cancel() {
-            ShiftBudgetConsumptionEntity planned = ShiftBudgetConsumptionEntity.builder()
+            ShiftBudgetConsumptionEntity planned = ShiftBudgetConsumptionEntity.builder().id(1L)
                     .allocationId(ALLOCATION_ID).shiftId(SHIFT_ID).slotId(SLOT_ID).userId(USER_ID)
                     .hourlyRateSnapshot(new BigDecimal("1200")).hours(new BigDecimal("4"))
                     .amount(new BigDecimal("4800.00")).currency("JPY")
@@ -196,14 +214,17 @@ class ShiftBudgetConsumptionServiceTest {
                     .status(ShiftBudgetConsumptionStatus.CONFIRMED)
                     .recordedAt(java.time.LocalDateTime.now())
                     .build();
-            given(consumptionRepository.findByShiftIdAndDeletedAtIsNull(SHIFT_ID))
+            given(consumptionRepository.findByShiftIdAndDeletedAtIsNullOrderByIdAsc(SHIFT_ID))
                     .willReturn(List.of(planned, confirmed));
+            given(consumptionRepository.cancelPlannedById(eq(1L),
+                    eq(ShiftBudgetCancelReason.SHIFT_DELETED), any(java.time.LocalDateTime.class))).willReturn(1);
 
             int cancelled = service.cancelAllForShift(SHIFT_ID);
 
             assertThat(cancelled).isEqualTo(1);
-            assertThat(planned.getStatus()).isEqualTo(ShiftBudgetConsumptionStatus.CANCELLED);
-            assertThat(planned.getCancelReason()).isEqualTo(ShiftBudgetCancelReason.SHIFT_DELETED);
+            verify(consumptionRepository).cancelPlannedById(eq(1L),
+                    eq(ShiftBudgetCancelReason.SHIFT_DELETED), eq(LocalDateTime.of(2026, 11, 4, 9, 0)));
+            verify(consumptionRepository, never()).save(any());
             assertThat(confirmed.getStatus()).isEqualTo(ShiftBudgetConsumptionStatus.CONFIRMED);
             verify(allocationRepository).decrementConsumedAmount(eq(ALLOCATION_ID),
                     eq(new BigDecimal("4800.00")));

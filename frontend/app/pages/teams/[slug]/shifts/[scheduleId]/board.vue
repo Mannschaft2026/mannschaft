@@ -6,6 +6,7 @@
         <NuxtLink
           :to="`/teams/${teamSlug}/shifts`"
           class="text-surface-500 hover:text-surface-700"
+          :aria-label="$t('shift.board.backToList')"
         >
           <i class="pi pi-arrow-left" />
         </NuxtLink>
@@ -16,7 +17,8 @@
         <Tag v-if="schedule" :value="schedule.status.status" severity="info" class="text-xs" />
       </div>
 
-      <div class="flex items-center gap-2">
+      <!-- 操作群はシフト表が取得できたときだけ出す（取得失敗時に死んだ導線を残さない） -->
+      <div v-if="schedule" class="flex items-center gap-2">
         <!-- PDF エクスポートボタン（SUPPORTER ロールは非表示） -->
         <ShiftPdfExportButton
           v-if="!isSupporter"
@@ -74,8 +76,24 @@
       </div>
     </div>
 
+    <!-- シフト表の取得中 -->
+    <PageLoading v-if="scheduleLoading" />
+
+    <!-- シフト表の取得失敗。403/404 は所属外へ実在を示唆しないよう同じ表示に畳む -->
+    <div
+      v-else-if="scheduleError !== undefined"
+      class="flex flex-col items-center gap-2 px-4"
+      data-testid="shift-board-load-error"
+    >
+      <DashboardErrorState
+        :error="scheduleError"
+        :kind="scheduleErrorKind"
+        @retry="initialize"
+      />
+    </div>
+
     <!-- メインコンテンツ -->
-    <div class="flex flex-1 overflow-hidden">
+    <div v-else class="flex flex-1 overflow-hidden">
       <!-- シフトボード -->
       <div class="flex-1 overflow-hidden">
         <ShiftBoardMatrix
@@ -97,6 +115,9 @@
       <div class="w-60 flex-shrink-0">
         <ShiftMemberPool
           :members="unassignedMembers"
+          :loading="membersLoading"
+          :error="membersError"
+          @retry="loadMembers"
           @drag-start="draggingUserId = $event"
         />
       </div>
@@ -151,6 +172,8 @@ import type {
   AssignmentParameters,
   AssignmentStrategyType,
 } from '~/types/shift'
+import type { LoadErrorKind } from '~/utils/loadError'
+import { getLoadErrorHttpStatus } from '~/utils/loadError'
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
@@ -187,16 +210,28 @@ const teamApi = useTeamApi()
 const { t } = useI18n()
 const { handleApiError } = useErrorHandler()
 const { showError } = useNotification()
-const { localAssignments, initSlot, moveUser, addUser, removeUser } = useShiftBoard(scheduleId)
+const { captureQuiet } = useErrorReport()
 const { runs, isRunning, runAutoAssign, confirmAutoAssign, revokeAutoAssign, fetchRuns } =
   useAutoAssign(scheduleId)
 
 // データ
 const schedule = ref<ShiftScheduleResponse | null>(null)
 const slots = ref<ShiftSlotResponse[]>([])
+const { localAssignments, loadSlots, moveUser, addUser, removeUser } = useShiftBoard(scheduleId, slots)
 const positions = ref<ShiftPositionResponse[]>([])
 const allMembers = ref<Array<{ userId: number; displayName: string; avatarUrl: string | null }>>([])
+const membersLoading = ref(true)
+const membersError = shallowRef<unknown>()
 const scheduleVersion = ref(0)
+// シフト表の取得状態。ボード本体（枠・メンバー欄）はシフト表が取れてから初めて描画する。
+const scheduleLoading = ref(true)
+const scheduleError = shallowRef<unknown>()
+// 403 と 404 を同じ「見つからない／表示できない」に畳み、所属外にシフト表の実在を漏らさない。
+// それ以外（通信断・5xx）は自動判定に任せ、再試行を出す。
+const scheduleErrorKind = computed((): LoadErrorKind | undefined => {
+  const status = getLoadErrorHttpStatus(scheduleError.value)
+  return status === 403 || status === 404 ? 'notFoundOrForbidden' : undefined
+})
 
 // UI 状態
 const autoAssignVisible = ref(false)
@@ -241,34 +276,66 @@ const unassignedMembers = computed(() =>
 )
 
 // 初期データ取得
-onMounted(async () => {
+onMounted(initialize)
+
+async function initialize(): Promise<void> {
   // ⑤ ポジション取得は BE の @RequestParam teamId が必須で、schedule.teamId（数値）が
   // 判明してから叩く必要があるため、loadSchedule だけ先行させてから残りを並行取得する。
-  await loadSchedule()
-  await Promise.all([loadSlots(), loadPositions(), loadMembers(), loadPermissions()])
-  // 認可根治 Wave7: 実行履歴 API は管理者専用になったため、権限解決後に管理者のときだけ取得する。
-  // 従来どおり Promise.all に混ぜたままだと、一般メンバーでは 403 で Promise.all ごと失敗し
-  // ボード画面全体が描画されなくなる（エラーを握りつぶさず、そもそも呼ばない形で解消する）。
-  // フラグ OFF のときは実行履歴 API もゲートで 403（FEATURE_GATE_001）になるため呼ばない。
-  // 例外を握りつぶすのではなく、停止中の機能には最初から到達しない形で解消する。
-  if (isScopeAdmin.value && autoAssignEnabled.value) {
-    await fetchRuns()
+  scheduleLoading.value = true
+  scheduleError.value = undefined
+  try {
+    await loadSchedule()
+    // URL の slug のチームとシフト表のチームが食い違う画面は存在しないものとして扱う
+    // （slug 違いで他チームのシフト表を開かせると、slug 側チームのメンバーが「未割当メンバー」に並び、
+    // 他チームのユーザーを割り当てる導線になる。存在オラクルを作らないため 404 相当。change-requests.vue と同じ）。
+    await assertScheduleBelongsToUrlTeam()
+  } catch (error) {
+    // 所属外の直打ち（404/403）や通信断で取得できないとき、例外を未処理のまま捨てると
+    // 後続の取得に到達せずメンバー欄が読み込み中のまま残る。画面の状態として持ち、
+    // 取得失敗表示に切り替える。BE の文言はトーストに出さず（実在の示唆を避ける）記録だけ残す。
+    scheduleError.value = error
+    captureQuiet(error, { context: 'ShiftBoard: シフト表取得' })
+    return
+  } finally {
+    scheduleLoading.value = false
   }
-})
+  // 枠・ポジション・権限のどれかが取れないボードは、枠が無いボードと見分けがつかず、
+  // 権限不明のまま操作できてしまう。例外を伝播させず、取得失敗の状態として持つ。
+  scheduleLoading.value = true
+  try {
+    const [, , , permissionResult] = await Promise.all([loadSlots(), loadPositions(), loadMembers(), loadPermissions()])
+    // loadPermissions は失敗しても例外を投げず ok:false を返す。権限不明のままボードを出さない。
+    if (!permissionResult.ok) throw permissionResult.error
+    // 認可根治 Wave7: 実行履歴 API は管理者専用になったため、権限解決後に管理者のときだけ取得する。
+    // 従来どおり Promise.all に混ぜたままだと、一般メンバーでは 403 で Promise.all ごと失敗し
+    // ボード画面全体が描画されなくなる（エラーを握りつぶさず、そもそも呼ばない形で解消する）。
+    // フラグ OFF のときは実行履歴 API もゲートで 403（FEATURE_GATE_001）になるため呼ばない。
+    // 例外を握りつぶすのではなく、停止中の機能には最初から到達しない形で解消する。
+    if (isScopeAdmin.value && autoAssignEnabled.value) {
+      await fetchRuns()
+    }
+  } catch (error) {
+    scheduleError.value = error
+    captureQuiet(error, { context: 'ShiftBoard: ボード構成データ取得' })
+  } finally {
+    scheduleLoading.value = false
+  }
+}
+
+async function assertScheduleBelongsToUrlTeam(): Promise<void> {
+  const teamRes = await teamApi.getTeam(teamSlug.value)
+  const urlTeamId = teamRes.data.numericId
+  if (urlTeamId === undefined) throw new Error('team_numeric_id_missing')
+  if (schedule.value?.teamId !== urlTeamId) {
+    // 他チームのシフト表の題名・操作導線を残さない。
+    schedule.value = null
+    throw Object.assign(new Error('schedule_team_mismatch'), { statusCode: 404 })
+  }
+}
 
 async function loadSchedule(): Promise<void> {
   const res = await shiftApi.getShiftSchedule(scheduleId.value)
   schedule.value = (res as { data: ShiftScheduleResponse }).data
-}
-
-async function loadSlots(): Promise<void> {
-  const res = await shiftApi.getShiftSlots(scheduleId.value)
-  const data = (res as { data: ShiftSlotResponse[] }).data
-  slots.value = data
-  // ローカル状態を初期化（assignedUserIds は number[] 型）
-  data.forEach((slot) => {
-    initSlot(slot.id, slot.assignedUserIds ?? [])
-  })
 }
 
 async function loadPositions(): Promise<void> {
@@ -281,16 +348,21 @@ async function loadPositions(): Promise<void> {
 }
 
 async function loadMembers(): Promise<void> {
+  membersLoading.value = true
+  membersError.value = undefined
   try {
     const res = await teamApi.getMembers(teamSlug.value, { size: 200 })
-    allMembers.value = res.data.map((m) => ({
+    // SUPPORTER は割当対象外（BE も SHIFT_049 で拒否する）ため、未割当メンバーに並べない。
+    allMembers.value = res.data.filter((m) => m.roleName !== 'SUPPORTER').map((m) => ({
       userId: m.userId,
       displayName: m.displayName || String(m.userId),
       avatarUrl: m.avatarUrl,
     }))
-  } catch {
-    // メンバー取得失敗時は空のまま続行（ボード表示は可能）
+  } catch (error) {
+    membersError.value = error
     allMembers.value = []
+  } finally {
+    membersLoading.value = false
   }
 }
 
@@ -320,14 +392,12 @@ async function onDropUser(payload: {
   userId: number
 }): Promise<void> {
   const { fromSlotId, toSlotId, userId } = payload
-  const toSlot = slots.value.find((s) => s.id === toSlotId)
-  const toVersion = toSlot ? 0 : 0 // バックエンドの楽観ロックバージョン（実際はAPIレスポンスで更新）
 
   try {
     if (fromSlotId !== null) {
-      await moveUser(fromSlotId, toSlotId, userId, toVersion)
+      await moveUser(fromSlotId, toSlotId, userId)
     } else {
-      await addUser(toSlotId, userId, toVersion)
+      await addUser(toSlotId, userId)
     }
   } catch (e) {
     notifyAssignmentError(e, 'shift-board:drop')
@@ -337,7 +407,7 @@ async function onDropUser(payload: {
 // メンバー削除
 async function onRemoveUser(payload: { slotId: number; userId: number }): Promise<void> {
   try {
-    await removeUser(payload.slotId, payload.userId, 0)
+    await removeUser(payload.slotId, payload.userId)
   } catch (e) {
     notifyAssignmentError(e, 'shift-board:remove')
   }
@@ -347,7 +417,7 @@ async function onRemoveUser(payload: { slotId: number; userId: number }): Promis
 async function onAddUserFromDialog(userId: number): Promise<void> {
   if (addUserSlotId.value !== null) {
     try {
-      await addUser(addUserSlotId.value, userId, 0)
+      await addUser(addUserSlotId.value, userId)
     } catch (e) {
       notifyAssignmentError(e, 'shift-board:add')
       return

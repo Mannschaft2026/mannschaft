@@ -210,18 +210,20 @@
 3. 操作者が ADMIN か確認（DEPUTY_ADMIN の場合は INVITE_MEMBERS かつ MANAGE_INVITE_TOKENS 権限が必要）
    → 権限不足は 403
 4. role_id のバリデーション:
-   a. 指定された role_id が roles テーブルに存在するか確認 → なければ 400
-   b. 操作者が ADMIN の場合: role_id の priority >= 3（DEPUTY_ADMIN 以下）か確認
-      → ADMIN（priority=2）/ SYSTEM_ADMIN（priority=1）のトークン作成は 403
-   c. 操作者が SYSTEM_ADMIN の場合: role_id の priority >= 2（ADMIN 以下）まで許可
+   a. 指定された role_id が roles テーブルに存在するか確認 → なければ 404（ROLE_001）
+   b. 共有招待で付与できるロールは所属ロールの MEMBER / SUPPORTER だけ。それ以外は操作者に関係なく 422（ROLE_009）
+      - ADMIN / DEPUTY_ADMIN: 特権ロールの招待付与は権限昇格の経路になるため不可（C-1。承諾側でも 422 ROLE_009）
+      - GUEST: 招待参加時の書き先（memberships の role_kind）が定まっていないため不可（CMP-261124-0157 で安全側に確定）
+      - SYSTEM_ADMIN: プラットフォームロールで招待対象外
+   （旧記載「ADMIN は priority >= 3 まで・SYSTEM_ADMIN は ADMIN 以下まで」は C-1 と CMP-261124-0157 で上記に置き換えた）
 5. expires_in のバリデーション（1d / 7d / 30d / 90d / unlimited のいずれか）→ 不正値は 400
-6. invite_tokens に INSERT（token = UUID v4、expires_at を計算、scope_closure_generation = 親から取得した発行時世代）
+6. invite_tokens に INSERT（token_hash = SHA-256(発行時に生成した Base64URL 43字の平文)・平文は発行応答でだけ返す、expires_at を計算、scope_closure_generation = 親から取得した発行時世代）
 7. audit_logs に TEAM_INVITE_TOKEN_CREATED または ORGANIZATION_INVITE_TOKEN_CREATED を記録
 8. 201 Created を返す
 ```
 
-> - ADMIN は自分と同等以上のロール（priority <= 2）のトークンを作成できない（ロール昇格制限と同一ポリシー）
-> - SYSTEM_ADMIN は ADMIN 以下のトークンを作成可能（SYSTEM_ADMIN 自身のトークン作成は不可・プラットフォームスコープのため招待対象外）
+> - 共有招待・個人招待（承諾型）とも、付与できるのは MEMBER / SUPPORTER だけ（ADMIN / DEPUTY_ADMIN / GUEST / SYSTEM_ADMIN は 422 ROLE_009）。管理者への引き上げは参加後のロール変更・オーナー委譲で行う
+> - 実装: `InviteRolePolicy`（発行: `InviteService#createInviteToken`・`MembershipInviteService`、承諾: `InviteAcceptanceWriter`、付与: `MembershipGrantService`）
 > - 共有/DM発行は非TX入口→親専属primary読取→role専属発行TXのcommit→親専属の短いFOR SHARE再確認の順に行う。201応答・DMカード投稿の前に、親の利用可能状態と発行世代一致を再確認する。事前に閉鎖済みならtoken/cardを作らない。発行commit後に閉鎖・世代前進を検出した場合は生成tokenを補償失効して拒否し、監査可能な失効行を保持する。親とtokenの更新TXは混在させない。
 
 ### 招待参加フロー
@@ -245,6 +247,14 @@
 7. memberships に当該スコープのアクティブエントリが既存か確認（left_at IS NULL） → 存在すれば 409
 8. user_roles に INSERT（role_id = invite_tokens.role_id）（権限ロールが ADMIN/DEPUTY_ADMIN の場合）
    + memberships に INSERT（scope_type/scope_id/role_kind/joined_at。role_kind は MEMBER または SUPPORTER）（F00.5 Phase 2 以降）
+   - 招待ロール → 書き先（CMP-261124-0157。`MembershipGrantService` / `InviteRolePolicy`）:
+     | 招待ロール | memberships.role_kind | user_roles |
+     |---|---|---|
+     | SUPPORTER | SUPPORTER | 作らない（SUPPORTER 行は V60.010 で廃止済み。フォロー型の応援者と同じ所属のみ） |
+     | MEMBER | MEMBER | **暫定で MEMBER 行を作る**（設計上は不要。除名 `RoleService#removeMember`・ロール変更 `changeRole` が user_roles 行を前提にしており、行が無いと ROLE_001 になるため。CMP-261020-1558 の解消後に作らない形へ移す。参加申請の承認 `grantMemberRole` も同じ） |
+     | ADMIN / DEPUTY_ADMIN | MEMBER | 当該ロールの行を作る（招待では手順 4・承諾の C-1 で弾かれるため、招待経路からは到達しない） |
+     | GUEST / SYSTEM_ADMIN ほか | — | — （付与せず 422 ROLE_009。旧データの招待で参加しても在籍・権限・使用回数を変えない） |
+   - 是正: CMP-261124-0157 以前に SUPPORTER 招待で MEMBER 在籍＋SUPPORTER の user_roles 行になった在籍は、migration V267.20261124005850 で SUPPORTER に直し当該行を消す（対象の判定は migration のコメント参照）
 9. invite_tokens.used_count を +1 UPDATE
 10. audit_logs に TEAM_MEMBER_JOINED または ORGANIZATION_MEMBER_JOINED を記録
     metadata: {"join_method": "INVITE", "invite_token_id": トークンID}

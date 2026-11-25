@@ -59,7 +59,7 @@
 #     `backend-main-test-${{ github.ref }}`（cancel-in-progress: false）に分離。
 #     test は打ち切られず、同一 ref への連続 push があってもキューイングされて
 #     必ず最後まで完走する。
-#   - test job は backend-ci.yml と同じ 6-shard 構成（matrix.shard 0..5 /
+#   - test job は backend-ci.yml と同じ 8-shard 構成（2026-11-18 に 6 から拡張。matrix.shard 0..7 /
 #     -Pshard.total / -Pshard.index）に揃え、壁時計を 4h14m → 実測 26〜46 分
 #     （PR側と同条件）まで短縮。timeout-minutes: 60 を明示。
 #   - PR 側で strict up-to-date required check が効いており、main への
@@ -87,7 +87,7 @@
 #   これまで打ち切られ続けて誰も見たことのなかった別の欠陥が表面化した。
 #
 #   [実測した症状]（run 31292148013 / main 4675d4b5d）
-#   test（6 shard）は全て success。build-and-deploy のみ failure。ログ実体:
+#   test（当時 6 shard）は全て success。build-and-deploy のみ failure。ログ実体:
 #     Run if [ -z "$AWS_KEY" ]; then ... fi
 #     ##[error]An error occurred trying to start process '/usr/bin/bash' with
 #     working directory '/home/runner/work/mannschaft/mannschaft/./backend'.
@@ -125,11 +125,12 @@ env:
   AWS_REGION: ap-northeast-1
   JAVA_VERSION: "21"
   # PR側 backend-ci.yml と同じ shard 数に揃える（詳細な選定根拠は backend-ci.yml 末尾を参照）。
-  SHARD_TOTAL: "6"
+  # 2026-11-18 CMP-261111-0508: 6 → 8（backend-ci.yml と揃える）
+  SHARD_TOTAL: "8"
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 0 — Flyway マイグレーション再生テスト（65クラス・実測で全テスト正味の
+  # Job 0 — Flyway マイグレーション再生テスト（実測で全テスト正味の
   # 81.6%）の実行要否を判定する。
   #
   # 【なぜ「直前の push との差分」ではなく「最後に成功したデプロイの main SHA」
@@ -250,7 +251,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
 
     steps:
       - name: Checkout source
@@ -276,7 +277,7 @@ jobs:
       # already running on ubuntu-latest so no additional setup is needed.
       #
       # -PexcludeMigrationTests: detect ジョブの判定結果をそのまま渡す。
-      # migration-sensitive な変更が無ければ Flyway 再生テスト（65クラス・
+      # migration-sensitive な変更が無ければ Flyway 再生テスト（
       # 全テスト正味の81.6%）を除外し、壁時計を 45分 → 20〜33分（PR側と同等）
       # まで短縮する。判定不能時は detect 側が既に true（フル実行）に倒して
       # いるため、ここでは受け取った値をそのまま使うだけでよい。
@@ -415,15 +416,46 @@ jobs:
         # ./backend は存在しない。job 既定に従うと bash の起動自体が
         # 「No such file or directory」で失敗する（2026-08-09 実測）。
         working-directory: .
+        # デプロイに必要な secret が「全て未設定」なら意図的な無効化（本番未構築）とみなし
+        # スキップ、「全て設定済み」ならデプロイへ進む。「一部だけ設定済み」は設定ミスで
+        # あり、黙ってスキップせずジョブを失敗させて気付けるようにする（対処療法の禁止）。
+        # 対象は後段 step が実際に参照する secret の全て（frontend-deploy.yml と同方式）。
+        # 値そのものはログに出さず、secret 名だけを出す。
         run: |
-          if [ -z "$AWS_KEY" ]; then
+          missing=()
+          present=()
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY ECR_REPOSITORY ECS_CLUSTER ECS_SERVICE ECS_TASK_DEFINITION ECS_CONTAINER_NAME; do
+            value_var="SECRET_${name}"
+            if [ -z "${!value_var}" ]; then
+              missing+=("$name")
+            else
+              present+=("$name")
+            fi
+          done
+
+          if [ "${#present[@]}" -eq 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::warning::AWS credentials not configured — skipping deploy"
-          else
+            {
+              echo "## デプロイ未実行"
+              echo ""
+              echo "デプロイ未実行（AWS 資格情報が未設定のため skip）。このジョブの緑はデプロイ成功を意味しない。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${#missing[@]}" -eq 0 ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::error::デプロイ用 secret が一部だけ設定されています（設定ミスの疑い）。未設定: ${missing[*]}"
+            exit 1
           fi
         env:
-          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          SECRET_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          SECRET_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SECRET_ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          SECRET_ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          SECRET_ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+          SECRET_ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
+          SECRET_ECS_CONTAINER_NAME: ${{ secrets.ECS_CONTAINER_NAME }}
 
       - name: Checkout source
         if: steps.aws-check.outputs.skip != 'true'

@@ -75,6 +75,8 @@ public class ShiftScheduleService {
     private final ShiftPositionRepository positionRepository;
     private final ShiftMapper shiftMapper;
     private final DomainEventPublisher eventPublisher;
+    /** CMP-261115-1821: 公開 TX 内の時給検証（shift 内の Repository だけに到達する）。 */
+    private final ShiftPublicationHourlyRateVerifier hourlyRateVerifier;
 
     /** 循環依存を避けるため @Lazy で注入する */
     @Lazy
@@ -260,7 +262,24 @@ public class ShiftScheduleService {
     }
 
     /**
-     * シフトスケジュールのステータスを遷移する。
+     * 公開の予算連動判定に使う候補範囲として、生存枠の日付の最小値・最大値を返す（CMP-261115-1821）。
+     *
+     * <p>Facade が認可の後・公開 TX の前に呼ぶ readOnly の読み取り。公開 TX は親ロックの後に枠を読み直し、
+     * この範囲から外れていれば 409 で再操作を促す。</p>
+     *
+     * @param id スケジュールID
+     * @return 枠日付の範囲（枠が無ければ {@link ShiftSlotDateRange#isEmpty()}）
+     */
+    public ShiftSlotDateRange findSlotDateRange(Long id) {
+        ShiftSlotDateRange range = slotRepository.findSlotDateRange(id);
+        return range != null ? range : new ShiftSlotDateRange(null, null);
+    }
+
+    /**
+     * シフトスケジュールのステータスを遷移する（公開以外）。
+     *
+     * <p>公開（PUBLISHED）は予算連動判定の context が必要なため
+     * {@link #transitionStatus(Long, String, Long, ShiftPublicationBudgetContext)} を使う。</p>
      *
      * @param id     スケジュールID
      * @param status 遷移先ステータス
@@ -269,9 +288,46 @@ public class ShiftScheduleService {
      */
     @Transactional
     public ShiftScheduleResponse transitionStatus(Long id, String status, Long userId) {
-        ShiftScheduleEntity entity = findScheduleOrThrow(id);
+        return transitionStatus(id, status, userId, null);
+    }
+
+    /**
+     * シフトスケジュールのステータスを遷移する。
+     *
+     * <p>CMP-261115-1821: 公開は親スケジュールを FOR UPDATE した後（枠・割当の更新と同じ親ロックで直列化）に
+     * 枠を読み直し、{@link ShiftPublicationHourlyRateVerifier} で予算連動日の割当者の時給を検証する。
+     * 予算連動の判定は公開 TX の外で固定した {@code budgetContext}（値）だけで行う。</p>
+     *
+     * @param id            スケジュールID
+     * @param status        遷移先ステータス
+     * @param userId        操作者ID
+     * @param budgetContext 公開時の予算連動判定 context（公開以外は null 可。公開で null は呼び出し側の誤り）
+     * @return 更新されたシフトスケジュール
+     */
+    @Transactional
+    public ShiftScheduleResponse transitionStatus(Long id, String status, Long userId,
+                                                  ShiftPublicationBudgetContext budgetContext) {
         ShiftScheduleStatus targetStatus = ShiftScheduleStatus.valueOf(status);
+        if (targetStatus == ShiftScheduleStatus.PUBLISHED && budgetContext == null) {
+            throw new IllegalStateException("公開には予算連動判定の context が必要です: scheduleId=" + id);
+        }
+        ShiftScheduleEntity entity = targetStatus == ShiftScheduleStatus.PUBLISHED
+                ? findScheduleForUpdateOrThrow(id)
+                : findScheduleOrThrow(id);
         ShiftScheduleStatus previousStatus = entity.getStatus();
+
+        // 許可された運用フロー以外は、公開確認・状態更新・関連依頼・イベントの前に拒否する。
+        boolean allowed = switch (previousStatus) {
+            case DRAFT -> targetStatus == ShiftScheduleStatus.COLLECTING;
+            case COLLECTING -> targetStatus == ShiftScheduleStatus.ADJUSTING;
+            case ADJUSTING -> targetStatus == ShiftScheduleStatus.COLLECTING
+                    || targetStatus == ShiftScheduleStatus.PUBLISHED;
+            case PUBLISHED -> targetStatus == ShiftScheduleStatus.ARCHIVED;
+            case ARCHIVED -> false;
+        };
+        if (!allowed) {
+            throw new BusinessException(ShiftErrorCode.INVALID_SCHEDULE_STATUS);
+        }
 
         switch (targetStatus) {
             case COLLECTING -> entity.startCollecting();
@@ -279,6 +335,9 @@ public class ShiftScheduleService {
             case PUBLISHED -> {
                 // 未確認の SUCCEEDED 割当実行ログがある場合は目視確認ゲートをかける
                 autoAssignService.assertNoUnreviewedRuns(id);
+                // CMP-261115-1821: 親ロック後の現在読み取りで枠・割当を読み直して時給を検証する
+                hourlyRateVerifier.verify(entity.getTeamId(),
+                        slotRepository.findByScheduleIdForShare(id), budgetContext);
                 entity.publish(userId);
             }
             case ARCHIVED -> {
@@ -312,9 +371,7 @@ public class ShiftScheduleService {
                     entity.getId(), entity.getTeamId(), userId));
         }
 
-        // CMP-260909-1445: PUBLISHED からの後戻り遷移（公開取消）も同型の穴だった。
-        // ShiftScheduleEntity の遷移メソッドはガードを持たず status を無条件に上書きするため
-        // この後戻りは実際に成立する。公開時に積んだ PLANNED 消化を置き去りにしない。
+        // CMP-260909-1445: 公開取消が成立した場合も、公開時に積んだ PLANNED 消化を置き去りにしない。
         if (previousStatus == ShiftScheduleStatus.PUBLISHED
                 && (targetStatus == ShiftScheduleStatus.COLLECTING
                         || targetStatus == ShiftScheduleStatus.ADJUSTING)) {

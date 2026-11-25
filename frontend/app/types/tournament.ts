@@ -650,19 +650,59 @@ export interface OrganizationTournamentSummary {
 export interface TournamentContactSpace {
   /** 連絡スペースID（UUID）。 */
   id: string
-  /** 掲示板参照ID。null の場合は掲示板スペースなし。 */
-  bulletinRefId: number | null
-  /** チャットチャンネルID。null の場合はチャットスペースなし。 */
-  chatChannelId: number | null
+  /** スコープ種別（大会 / ディビジョン）。 */
+  scopeType?: 'TOURNAMENT' | 'TOURNAMENT_DIVISION'
+  /** スコープID（大会ID / ディビジョンID）。掲示板 API の scope_id はこれを使う。 */
+  scopeId?: number
+  /** スペース種別。1 行 = 1 スペース（掲示板とチャットは別行）。 */
+  spaceKind?: 'BULLETIN' | 'CHAT'
+  /** 払い出し先実体ID（BULLETIN=掲示板カテゴリID / CHAT=チャットチャンネルID）。 */
+  refId?: number
   /** 公開フラグ。false の場合は参加者のみ閲覧可能。 */
   isPublic: boolean
-  /** スペース名称（任意）。 */
-  name?: string | null
 }
 
 /** 連絡スペース一覧レスポンス。 */
 export interface TournamentContactSpaceListResponse {
   data: TournamentContactSpace[]
+}
+
+/** 連絡スペース画面（TournamentContactPanel）のスコープ切替に出す部門。 */
+export interface TournamentContactPanelDivision {
+  id: number
+  name?: string | null
+}
+
+// ----- 参加者向け一覧（CMP-261118-0900・設計書 01_communication.md §10.3.3） -----
+// GET /api/v1/teams/{teamSlug}/tournaments/{tournamentId}/contact-spaces
+//
+// 生成型（SpaceItem / DivisionItem / ParticipantContactSpacesResponse）を正本とする。
+// BE DTO に required の宣言が無いため生成型は全フィールド任意だが、§10.3.3 の契約では
+// divisionName 以外はすべて非 null のため Required で締める（フィールドの増減は生成型に追従する）。
+
+type GeneratedParticipantSpaceItem = components['schemas']['SpaceItem']
+type GeneratedParticipantContactSpaces = components['schemas']['ParticipantContactSpacesResponse']
+
+/** 連絡スペースの閲覧水準。VIEW=閲覧のみ / POST=投稿可（権限なしの行は応答に含まれない）。 */
+export type ContactAccessLevel = NonNullable<GeneratedParticipantSpaceItem['accessLevel']>
+
+/** 参加者向け一覧のスペース 1 行。divisionName は大会全体スコープのとき null。 */
+export type ParticipantContactSpace = Required<Omit<GeneratedParticipantSpaceItem, 'divisionName'>> & {
+  divisionName: string | null
+}
+
+/** 自チームが参加中（REGISTERED / ACTIVE）の部門。 */
+export type ParticipantContactDivision = Required<components['schemas']['DivisionItem']>
+
+/** 参加者向け一覧の本体。 */
+export type ParticipantContactSpaces = Required<Omit<GeneratedParticipantContactSpaces, 'divisions' | 'spaces'>> & {
+  divisions: ParticipantContactDivision[]
+  spaces: ParticipantContactSpace[]
+}
+
+/** 参加者向け一覧レスポンス（ApiResponse 包み）。 */
+export interface ParticipantContactSpacesResponse {
+  data: ParticipantContactSpaces
 }
 
 /** 連絡スペース公開設定更新リクエスト。 */

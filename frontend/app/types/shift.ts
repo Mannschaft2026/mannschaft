@@ -95,6 +95,9 @@ export interface ShiftPositionResponse {
  * `assignedUserIds` / `assignmentMasked` / `note` はトップレベルのまま。
  */
 export interface ShiftSlotResponse {
+  version: number
+  /** 割当更新の警告。参照応答では未判定。 */
+  warnings?: { code: string; conflictingSlotIds: number[] }[] | null
   id: number
   scheduleId: number
   time: {
@@ -306,6 +309,8 @@ export interface UpdateShiftSlotRequest {
   note?: string
   /** 翌日終了（日跨ぎ）。未指定は現値維持（部分更新） */
   endsNextDay?: boolean
+  /** 日付変更時に提出済みの枠指定希望も移動することを確認済みか。未指定は未確認。 */
+  moveRequestsConfirmed?: boolean
 }
 
 /** シフト希望提出リクエスト */
@@ -477,6 +482,11 @@ export interface ChangeRequest {
     reason: string | null
     requestedBy: number
   }
+  /**
+   * 依頼者の表示名（BE が ChangeRequestResponse のトップレベルに足す契約）。
+   * 名前を解決できない（退会者等）ときは null。BE 反映前の応答では未定義。
+   */
+  requesterName?: string | null
   reviewInfo: {
     status: ChangeRequestStatus
     reviewerId: number | null
@@ -487,7 +497,15 @@ export interface ChangeRequest {
     expiresAt: string | null
     createdAt: string
   }
+  /** 楽観ロック用バージョン（審査時にそのまま送る。BE は不一致を 409 SHIFT_018 にする） */
+  version: number
 }
+
+/** 審査の結果。conflict の latest は 409 後に再取得した最新の依頼（消えていれば null） */
+export type ReviewOutcome =
+  | { status: 'ok' }
+  | { status: 'conflict'; latest: ChangeRequest | null }
+  | { status: 'error' }
 
 export interface CreateChangeRequestPayload {
   scheduleId: number

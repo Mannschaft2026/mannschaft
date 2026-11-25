@@ -259,6 +259,20 @@ export function parseRetryAfterSeconds(headerValue: string | null): number | nul
   return Math.max(0, Math.ceil((dateMs - Date.now()) / 1000))
 }
 
+/**
+ * 429 が基盤のレート制限（AbstractRateLimitFilter 等）由来かを、応答本文から判定する。
+ *
+ * 基盤のフィルタは error.code を持たない文字列本文 {"error":"Too many requests"} を返す
+ * （本文なしの 429 もある）。業務固有の 429 は {"error":{"code":"VILLAGE_012",...}} 形で、
+ * 呼び出し側が固有の表示を担う。したがって error.code（非空文字列）が無いものを基盤とみなす。
+ */
+export function isInfrastructureRateLimit(data: unknown): boolean {
+  const error = (data as { error?: unknown } | null | undefined)?.error
+  if (error === null || typeof error !== 'object') return true
+  const code = (error as { code?: unknown }).code
+  return !(typeof code === 'string' && code !== '')
+}
+
 // 短時間に複数の 5xx が発生した場合のトースト集約
 let _errorBatchTimer: ReturnType<typeof setTimeout> | null = null
 let _errorBatchCount = 0
@@ -295,6 +309,17 @@ export function useApi() {
       const meta = options as typeof options & { _authSessionSnapshot?: AuthSessionSnapshot }
       meta._authSessionSnapshot ??= session.capture()
       if (!session.current(meta._authSessionSnapshot) || options.signal?.aborted) throw new Error('AUTH_SESSION_CHANGED')
+      // CMP-261113-1507: BE は未ログイン時に Accept-Language でエラー文言の言語を決める（ログイン済みは users.locale 優先）。
+      // 送らないとブラウザ既定（SSR ではサーバー側の値）に倒れて画面とエラー文言の言語が食い違うため、
+      // 現在の UI 言語を全リクエストに付ける。呼び出し側が明示した値は上書きしない。
+      const uiLocale = nuxtApp.$i18n?.locale?.value
+      if (uiLocale) {
+        const langHeaders = new Headers(options.headers)
+        if (!langHeaders.has('Accept-Language')) {
+          langHeaders.set('Accept-Language', uiLocale)
+          options.headers = langHeaders
+        }
+      }
       // Cookie認証でも、認証済みの紙ピン留めには代理入力ヘッダーを付与する。
       if (authStore.accessToken || (proxyDeskStore.isPinned && authStore.isAuthenticated)) {
         const headers = new Headers(options.headers)
@@ -379,7 +404,10 @@ export function useApi() {
       // 403: 認証済みだが権限不足の場合（Forbidden）。
       // ログアウトせず、呼び出し元でエラーを処理する（例: 「アクセス権がありません」表示）。
       // 未認証状態（user が null）での 403 は想定外だが、フォールバックとしてログインへ誘導する。
-      if (response.status === 403 && !authStore.user) {
+      // ただし業務エラーコード付きの 403（未ログインの公開 API が返す AUTH_083 など）は呼び出し元が扱う業務エラーで、
+      // 遷移すると入力内容や招待の戻り先を失うため、ログインへは飛ばさない。
+      const forbiddenBody = response._data as { error?: { code?: unknown } } | undefined
+      if (response.status === 403 && !authStore.user && typeof forbiddenBody?.error?.code !== 'string') {
         await navigateTo('/login')
         return
       }
@@ -417,7 +445,11 @@ export function useApi() {
       // 提示の型は同じ関数内の 5xx 分岐（$toast + summary/detail/life）に揃えている。
       // 集約はしない — レート制限は「連打した本人が今この操作で弾かれた」ことを
       // 即座に知る必要があり、500ms の集約待ちを挟むと因果が伝わりにくくなるため。
-      if (response.status === 429) {
+      //
+      // 適用条件（CMP-260827-1808 V1）: error.code を持たない 429（基盤フィルタの文字列本文・本文なし）だけ。
+      // 業務固有コード（VILLAGE_009〜012 / RESERVATION_053 など）を持つ 429 は、呼び出し側が
+      // 固有のエラー文を出すため、ここで重ねると 1 操作で 2 枚（連打で N 倍）になる。
+      if (response.status === 429 && isInfrastructureRateLimit(response._data)) {
         const toast = nuxtApp.$toast as
           | { add: (opts: Record<string, unknown>) => void }
           | undefined

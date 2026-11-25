@@ -6,6 +6,8 @@ import type {
   ShiftPreference,
 } from '~/types/shift'
 import { preferenceToI18nKey } from '~/utils/shiftPreference'
+import dayjs from 'dayjs'
+import { useTeamMembers } from '~/composables/team/useTeamMembers'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -16,6 +18,26 @@ const { getSchedule } = useShiftApi()
 const { listRequests, getRequestSummary } = useShiftRequestApi()
 const { handleApiError } = useErrorHandler()
 const { warn } = useNotification()
+const { getAllMembers } = useTeamMembers()
+
+/** userId → 表示名（GET /teams/{slug}/members/all）。引けなかったときは「不明なメンバー」を出す */
+const memberNames = ref<Map<number, string>>(new Map())
+function memberName(userId: number): string {
+  return memberNames.value.get(userId) ?? t('shift.requests.unknownMember')
+}
+
+async function loadMemberNames() {
+  const slug = teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug
+  if (!slug) return
+  try {
+    const res = await getAllMembers(slug)
+    memberNames.value = new Map(res.data.map(m => [m.userId, m.displayName]))
+  } catch (error) {
+    // 表示名が引けなくても希望一覧は使える。名前は「不明なメンバー」で代替し、失敗は通知する
+    memberNames.value = new Map()
+    handleApiError(error)
+  }
+}
 
 const scheduleId = computed(() => Number(route.params.id))
 
@@ -50,23 +72,35 @@ watch(
   { immediate: true },
 )
 
-onMounted(async () => {
-  await teamStore.fetchMyTeams()
+/** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
+const loadError = ref<unknown>(null)
+
+async function load() {
   loading.value = true
+  loadError.value = null
   try {
     schedule.value = await getSchedule(scheduleId.value)
     if (!canManage.value) return
     const [reqs, sum] = await Promise.all([
       listRequests(scheduleId.value),
       getRequestSummary(scheduleId.value),
+      loadMemberNames(),
     ])
     requests.value = reqs
     summary.value = sum
   } catch (error) {
-    handleApiError(error)
+    schedule.value = null
+    requests.value = []
+    summary.value = null
+    loadError.value = error
   } finally {
     loading.value = false
   }
+}
+
+onMounted(async () => {
+  await teamStore.fetchMyTeams()
+  await load()
 })
 
 // =====================================================
@@ -125,7 +159,8 @@ function summaryCount(pref: ShiftPreference): number {
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
+  // 'YYYY-MM-DD' の new Date() は UTC 解釈で前日表示になり得るため、ローカル日付として解釈する
+  const d = dayjs(dateStr).toDate()
   const days = ['日', '月', '火', '水', '木', '金', '土']
   return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()] ?? ''})`
 }
@@ -144,41 +179,26 @@ const pendingCount = computed(() => summary.value?.pendingCount ?? 0)
   <div class="mx-auto max-w-7xl px-4 py-6">
     <!-- ナビゲーション -->
     <div class="mb-4 flex items-center gap-2">
-      <BackButton :to="`/shift/${scheduleId}`" />
+      <BackButton :to="`/shift/${scheduleId}`" class="shrink-0 whitespace-nowrap" />
       <h1 class="text-xl font-bold text-surface-800 dark:text-surface-100">
         {{ schedule?.content.title ?? '...' }}
       </h1>
-      <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" />
+      <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" class="shrink-0 whitespace-nowrap" />
     </div>
 
-    <!-- タブ -->
-    <nav class="mb-6 flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700">
-      <NuxtLink
-        :to="`/shift/${scheduleId}`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-calendar" />{{ t('shift.detail.tabOverview') }}
-      </NuxtLink>
-      <NuxtLink
-        :to="`/shift/${scheduleId}/edit`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-pencil" />{{ t('shift.detail.tabEdit') }}
-      </NuxtLink>
-      <span class="flex shrink-0 items-center gap-1.5 border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary">
-        <i class="pi pi-list" />{{ t('shift.detail.tabRequests') }}
-      </span>
-      <NuxtLink
-        :to="`/shift/${scheduleId}/work-constraints`"
-        class="flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-800 dark:hover:text-surface-200"
-      >
-        <i class="pi pi-shield" />{{ t('shift.detail.tabConstraints') }}
-      </NuxtLink>
-    </nav>
+    <DashboardErrorState
+      v-if="loadError"
+      :error="loadError"
+      testid="shift-load-error"
+      @retry="load"
+    />
 
-    <PageLoading v-if="loading" />
+    <PageLoading v-else-if="loading" />
 
     <template v-else>
+      <!-- タブ -->
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="requests" />
+
       <!-- サマリーカード -->
       <div v-if="summary" class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <!-- 提出率 -->
@@ -244,9 +264,9 @@ const pendingCount = computed(() => summary.value?.pendingCount ?? 0)
                 :key="userId"
                 class="border-t border-surface-100 dark:border-surface-700"
               >
-                <!-- ユーザー ID（実装注: 表示名は userStore 統合時に置換） -->
+                <!-- メンバー表示名 -->
                 <td class="sticky left-0 whitespace-nowrap bg-surface-0 px-3 py-2 font-medium dark:bg-surface-900">
-                  <span class="text-xs text-surface-500">UID:{{ userId }}</span>
+                  <span class="text-xs text-surface-500">{{ memberName(userId) }}</span>
                 </td>
                 <!-- 各日付のプリファレンス -->
                 <td

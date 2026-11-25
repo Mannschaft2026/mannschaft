@@ -11,7 +11,7 @@ const { t } = useI18n()
 const closureApi = useEmergencyClosureApi()
 const notification = useNotification()
 const { getFieldErrors } = useErrorHandler()
-const { userTimezone } = useDatetime()
+const { userTimezone, formatCalendarDay, formatCalendarDayRange, formatTimeRange } = useDatetime()
 // 多重防御（defense-in-depth）: 親タブの v-if に加え、一括送信ボタンを本コンポーネントでも
 // ロールで制御する（緊急休業は副管理者=DEPUTY_ADMIN まで許可）。BE が本防御線。
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', computed(() => props.teamId))
@@ -38,11 +38,6 @@ function toHHmm(h: number | null): string | null {
   return `${String(h).padStart(2, '0')}:00`
 }
 
-function formatHour(h: number | null): string {
-  if (h === null) return '--:--'
-  return `${String(h).padStart(2, '0')}:00`
-}
-
 // 開始時刻を選んだとき、終了時刻が未設定 or 開始以下なら自動で +1 時間プリセット（入力摩擦削減）
 watch(startHour, (h) => {
   if (h === null) return
@@ -59,31 +54,17 @@ watch(useTimeRange, (enabled) => {
   }
 })
 
-// --- 期間表示ヘルパー ---
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  const m = d.getMonth() + 1
-  const day = d.getDate()
-  const w = WEEKDAYS[d.getDay()]
-  return `${m}月${day}日（${w}）`
-}
-
-/** プレビュー行の日時表示。"yyyy-MM-dd" + "HH:mm:ss" 2つを「4月8日（水）09:00〜11:00」形式に整形 */
+// --- 期間表示 ---
+// 日付・時刻の整形は共通の useDatetime に一本化（自前で整形しない。ロケール・TZ は共通側が解決する）
+/** プレビュー行の日時表示（曜日付き暦日 + 時刻範囲） */
 function formatPreviewDateTime(slotDate: string, startTime: string, endTime: string): string {
-  const date = formatDate(slotDate)
-  const start = (startTime ?? '').slice(0, 5)
-  const end = (endTime ?? '').slice(0, 5)
-  return `${date} ${start}〜${end}`
+  return `${formatCalendarDay(slotDate)} ${formatTimeRange(startTime, endTime)}`
 }
 
 const periodText = computed(() => {
-  const datePart = startDate.value === endDate.value
-    ? formatDate(startDate.value)
-    : `${formatDate(startDate.value)}〜${formatDate(endDate.value)}`
+  const datePart = formatCalendarDayRange(startDate.value, endDate.value)
   if (useTimeRange.value && startHour.value !== null && endHour.value !== null) {
-    return `${datePart} ${formatHour(startHour.value)}〜${formatHour(endHour.value)}`
+    return `${datePart} ${formatTimeRange(toHHmm(startHour.value)!, toHHmm(endHour.value)!)}`
   }
   return datePart
 })
@@ -209,6 +190,41 @@ const showConfirm = ref(false)
 /** BE の 400 fieldErrors（フィールド名 → メッセージ）。reason / subject の入力欄の下に表示する。 */
 const sendFieldErrors = ref<Record<string, string>>({})
 
+// --- 多重送信防止（Idempotency-Key）---
+// 確認ダイアログを開いた時点で送信操作ごとのキーを発行する。失敗後に同じ内容で再送するときは同じキー、
+// 入力内容が変わった・送信が成功したときは新しいキーに替える（BE は同キー同内容を同一送信として扱う）。
+let idempotencyKey: string | null = null
+let idempotencySignature = ''
+
+function requestSignature(): string {
+  return JSON.stringify([
+    startDate.value,
+    endDate.value,
+    useTimeRange.value ? toHHmm(startHour.value) : null,
+    useTimeRange.value ? toHHmm(endHour.value) : null,
+    reason.value,
+    subject.value,
+    messageBody.value,
+    cancelReservations.value,
+  ])
+}
+
+function prepareIdempotencyKey() {
+  const signature = requestSignature()
+  if (idempotencyKey === null || idempotencySignature !== signature) {
+    idempotencyKey = crypto.randomUUID()
+    idempotencySignature = signature
+  }
+}
+
+/** 内容相違の冪等性競合（BE: 409 / RESERVATION_055 CLOSURE_IDEMPOTENCY_KEY_REUSED。コード無しの 409 も同扱い）か。 */
+function isIdempotencyConflict(error: unknown): boolean {
+  const e = error as { statusCode?: number, status?: number, response?: { status?: number }, data?: { error?: { code?: string } } }
+  const status = e?.statusCode ?? e?.status ?? e?.response?.status
+  const code = e?.data?.error?.code ?? ''
+  return code === 'RESERVATION_055' || (status === 409 && code === '')
+}
+
 function openConfirm() {
   if (!startDate.value || !endDate.value) {
     notification.warn(t('emergency_closure.error.period_required'))
@@ -230,12 +246,17 @@ function openConfirm() {
     notification.warn(t('emergency_closure.error.body_required'))
     return
   }
+  prepareIdempotencyKey()
   showConfirm.value = true
 }
 
 async function confirmSend() {
-  showConfirm.value = false
+  // 連打対策: await より前に同期で判定する（ボタンの disabled 反映を待たない）
+  if (sendLoading.value) return
   sendLoading.value = true
+  // ダイアログを開かず呼ばれた場合も、現在の内容に対応するキーを必ず持つ
+  prepareIdempotencyKey()
+  const key = idempotencyKey!
   let sendSucceeded = false
   sendResult.value = null
   sendFieldErrors.value = {}
@@ -249,7 +270,8 @@ async function confirmSend() {
       subject: subject.value,
       messageBody: messageBody.value,
       cancelReservations: cancelReservations.value,
-    })
+    }, key)
+    idempotencyKey = null // 成功したら次の送信は新しいキー
     sendResult.value = res.data.sentCount
     notification.success(t('emergency_closure.message.sent_count', { count: res.data.sentCount }))
     previewItems.value = []
@@ -259,12 +281,17 @@ async function confirmSend() {
   catch (error) {
     // 400 の fieldErrors があれば該当入力欄の下に出す。無ければ従来どおり汎用の失敗通知。
     sendFieldErrors.value = getFieldErrors(error)
-    if (Object.keys(sendFieldErrors.value).length === 0) {
+    if (isIdempotencyConflict(error)) {
+      notification.error(t('emergency_closure.error.idempotency_conflict'))
+    }
+    else if (Object.keys(sendFieldErrors.value).length === 0) {
       notification.error(t('emergency_closure.error.send_failed'))
     }
   }
   finally {
     sendLoading.value = false
+    // 応答が返った後（成功・失敗とも）にダイアログを閉じる
+    showConfirm.value = false
   }
   // 履歴の取得は送信（POST）とは独立。ここで失敗しても送信成功の表示は変えず、履歴側に失敗を出す。
   if (sendSucceeded) await loadHistory()
@@ -350,7 +377,9 @@ function onOnline() {
   void activeLive?.resync()
 }
 function onOffline() {
-  if (liveConnectionState.value !== 'DENIED') liveConnectionState.value = 'OFFLINE'
+  if (liveConnectionState.value !== 'DENIED' && liveConnectionState.value !== 'UNAUTHENTICATED') {
+    liveConnectionState.value = 'OFFLINE'
+  }
 }
 
 /** 指定 closure のリアルタイム購読を開始し、composable の状態を画面 ref へ橋渡しする。 */
@@ -499,7 +528,6 @@ onUnmounted(() => {
       :total-count="liveTotalCount"
       :confirmations-loading="confirmationsLoading"
       :connection-state="liveConnectionState"
-      :format-date="formatDate"
       @reload="loadHistory"
       @toggle-confirmations="toggleConfirmations"
     />
@@ -511,6 +539,7 @@ onUnmounted(() => {
       :subject="subject"
       :reason="reason"
       :cancel-reservations="cancelReservations"
+      :sending="sendLoading"
       @confirm="confirmSend"
     />
   </div>

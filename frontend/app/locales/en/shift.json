@@ -12,8 +12,11 @@
     "board": {
       "title": "Shift Board",
       "memberPool": "Unassigned Members",
+      "noUnassignedMembers": "No unassigned members",
+      "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
-      "unassignedSlots": "{count} unassigned slots"
+      "unassignedSlots": "{count} unassigned slots",
+      "backToList": "Back to shift list"
     },
     "autoAssign": {
       "button": "Auto Assign",
@@ -50,6 +53,8 @@
     },
     "changeRequest": {
       "title": "Change Request",
+      "typeColumn": "Request type",
+      "empty": "No change requests yet",
       "type": {
         "PRE_CONFIRM_EDIT": "Pre-confirm Edit",
         "INDIVIDUAL_SWAP": "Individual Swap",
@@ -70,7 +75,16 @@
       "reject": "Reject",
       "reviewComment": "Review Comment",
       "openCallLimit": "Open calls are limited to 3 per month",
-      "fetchError": "Failed to fetch change requests"
+      "fetchError": "Failed to fetch change requests",
+      "requester": "Requester",
+      "unknownRequester": "Unknown user",
+      "createSuccess": "Change request submitted",
+      "approveSuccess": "Change request approved",
+      "rejectSuccess": "Change request rejected",
+      "withdrawSuccess": "Change request withdrawn",
+      "closedForNew": "This schedule is already published, so new change requests are no longer accepted.",
+      "reviewedAt": "Reviewed at",
+      "reviewConflict": "This request was updated by someone else first. The list has been reloaded; please check the latest status"
     },
     "pdf": {
       "teamLayout": "Team Schedule PDF",
@@ -125,6 +139,7 @@
       "createDialog": "Create New Shift",
       "createSuccess": "Shift created successfully",
       "selectTeam": "Select team",
+      "statusFilterLabel": "Status",
       "fromDate": "From",
       "toDate": "To",
       "noSchedule": "No shifts found",
@@ -135,14 +150,29 @@
       "formStart": "Start date",
       "formEnd": "End date",
       "formDeadline": "Request deadline",
+      "formDeadlineInvalid": "Enter a valid date and time for the request deadline, e.g. 2026/12/31 23:59",
       "formNote": "Note",
       "formNotePlaceholder": "Optional"
+    },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "Cannot publish: hourly rates are missing",
+        "description": "Some assigned members have no valid hourly rate on budget-linked work days. Set their hourly rates, then publish again.",
+        "unknownUser": "User ID {id}",
+        "goSettings": "Open hourly rate settings"
+      },
+      "conflict": {
+        "title": "The shift was changed",
+        "description": "The shift changed while the publication was being checked. Reload the page, review the content, and publish again."
+      },
+      "close": "Close"
     },
     "detail": {
       "tabOverview": "Overview",
       "tabEdit": "Edit",
       "tabRequests": "Requests",
       "tabConstraints": "Constraints",
+      "changeRequestLink": "Change requests",
       "startCollecting": "Start Collecting",
       "startAdjusting": "Start Adjusting",
       "publish": "Publish",
@@ -157,7 +187,9 @@
       "colDate": "Date",
       "colSlots": "Slots",
       "editDialogTitle": "Edit Shift",
-      "accessDeniedRedirect": "You do not have permission to view this page"
+      "accessDeniedRedirect": "You do not have permission to view this page",
+      "tabBoard": "Shift board",
+      "tabChangeRequests": "Change requests"
     },
     "slot": {
       "createTitle": "Create Slot",
@@ -166,7 +198,7 @@
       "bulkCreateSuccess": "Created {count} slots",
       "noSlot": "No slots",
       "noPosition": "No position",
-      "assigned": "Assigned",
+      "assigned": "Assigned headcount",
       "date": "Date",
       "startTime": "Start time",
       "endTime": "End time",
@@ -176,10 +208,23 @@
       "notePlaceholder": "Optional",
       "dayOfWeek": "Day of week",
       "dayOfWeekHint": "Slots will be created only on the selected days of week",
+      "moveDateTitle": "Confirm date change",
+      "moveDateMessage": "This changes the date from {oldDate} to {newDate}. Any requests already submitted for this slot will be moved to the new date as well.",
+      "moveDateAccept": "Move slot and requests",
       "saveSuccess": "Slot saved",
       "deleteSuccess": "Slot deleted",
       "assignmentMasked": "In adjustment",
-      "assignmentMaskedHint": "Assignments are hidden until the shift is published"
+      "assignmentMaskedHint": "Assignments are hidden until the shift is published",
+      "deleteTitle": "Delete shift slot",
+      "deleteConfirmPlain": "Delete this slot?",
+
+      "deleteConfirmBoth": "Delete this slot? The {requests} request(s) submitted for it and its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmRequestsOnly": "Delete this slot? The {requests} request(s) submitted for it will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmAssignmentsOnly": "Delete this slot? Its {assignments} assignment(s) will also be deleted. This cannot be undone through normal operations.",
+
+      "deleteConfirmUnknown": "Delete this slot? Any requests submitted for it and any assignments will also be deleted. This cannot be undone through normal operations."
     },
     "requests": {
       "submissionRate": "Submission rate",
@@ -187,6 +232,7 @@
       "matrixTitle": "Preference Matrix",
       "noRequests": "No requests submitted",
       "colUser": "Member",
+      "unknownMember": "Unknown member",
       "legend": "Legend"
     },
     "preference": {
@@ -255,7 +301,14 @@
       "userId": "User ID",
       "userIdPlaceholder": "Enter user ID",
       "saveSuccess": "Work constraints saved",
-      "deleteSuccess": "Work constraints deleted"
+      "deleteSuccess": "Work constraints deleted",
+      "unknownMember": "Unknown user",
+      "selectMember": "Select a member",
+      "searchMember": "Search by name",
+      "noSelectableMembers": "No members available to add",
+      "membersLoadError": "Could not load the member list",
+      "deleteTitle": "Delete work constraint",
+      "deleteConfirm": "Delete this work constraint?"
     },
     "validation": {
       "atLeastOneConstraint": "Please specify at least one constraint"
@@ -389,11 +442,14 @@
       "confirmSubmit": "Submit with these settings?"
     },
     "entry": {
+      "notStarted": "Preference submission has not started yet.",
       "sectionTitle": "Submit requests / Shift board",
       "bulkRequest": "Submit requests in bulk",
       "board": "Shift board",
+      "edit": "Edit slots",
       "weeklyDefault": "Set weekly defaults",
-      "closed": "Request submission has closed"
+      "closed": "Request submission has closed",
+      "changeRequest": "Change request"
     },
     "submitConfirm": {
       "title": "Submit with this content?",
@@ -520,9 +576,9 @@
     },
     "requests": {
       "title": "Collect and review members' shift preferences",
-      "body": "Once the status is \"Collecting\", members can submit their preferences. In the \"Preferences\" tab on the detail page you can see everyone's status in a matrix.",
+      "body": "Once the status is \"Collecting\", members can submit their preferences. Administrators can see, in the \"Preferences\" tab on the detail page (administrators only), everyone's status in a matrix.",
       "steps": {
-        "step1": "Click the \"Preferences\" tab on the detail page",
+        "step1": "(Administrators only) Click the \"Preferences\" tab on the detail page",
         "step2": "Check the submission rate and the number of members who have not submitted on the summary cards",
         "step3": "Check each member's preference level for each date in the matrix table",
         "step4": "Shown in five levels: \"Wants to work / No preference / Can work if needed / Prefers off / Must be off\""

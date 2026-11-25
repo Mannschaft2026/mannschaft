@@ -35,6 +35,7 @@
       "createDialog": "シフトを新規作成",
       "createSuccess": "シフトを作成しました",
       "selectTeam": "チームを選択",
+      "statusFilterLabel": "ステータス",
       "fromDate": "開始日",
       "toDate": "終了日",
       "noSchedule": "シフトがありません",
@@ -45,14 +46,29 @@
       "formStart": "開始日",
       "formEnd": "終了日",
       "formDeadline": "希望締切",
+      "formDeadlineInvalid": "希望締切は実在する日時を「2026/12/31 23:59」の形式で入力してください",
       "formNote": "メモ",
       "formNotePlaceholder": "任意"
+    },
+    "publishError": {
+      "hourlyRateMissing": {
+        "title": "時給が未設定のため公開できません",
+        "description": "予算に連動する勤務日に、有効な時給が未設定の担当者がいます。次の担当者の時給を設定してから、もう一度公開してください。",
+        "unknownUser": "ユーザーID {id}",
+        "goSettings": "時給設定を開く"
+      },
+      "conflict": {
+        "title": "シフト内容が変更されました",
+        "description": "公開の確認中にシフトの内容が変わりました。画面を読み込み直して内容を確認し、もう一度公開してください。"
+      },
+      "close": "閉じる"
     },
     "detail": {
       "tabOverview": "概要",
       "tabEdit": "編集",
       "tabRequests": "希望一覧",
       "tabConstraints": "勤務制約",
+      "changeRequestLink": "変更依頼",
       "startCollecting": "希望収集を開始",
       "startAdjusting": "調整を開始",
       "publish": "確定公開",
@@ -67,7 +83,9 @@
       "colDate": "日付",
       "colSlots": "スロット",
       "editDialogTitle": "シフトを編集",
-      "accessDeniedRedirect": "このページを表示する権限がありません"
+      "accessDeniedRedirect": "このページを表示する権限がありません",
+      "tabBoard": "シフトボード",
+      "tabChangeRequests": "変更依頼"
     },
     "slot": {
       "createTitle": "スロットを作成",
@@ -76,7 +94,7 @@
       "bulkCreateSuccess": "{count} 件のスロットを作成しました",
       "noSlot": "スロットがありません",
       "noPosition": "ポジションなし",
-      "assigned": "割当済み",
+      "assigned": "割当人数",
       "date": "日付",
       "startTime": "開始時刻",
       "endTime": "終了時刻",
@@ -86,10 +104,23 @@
       "notePlaceholder": "任意",
       "dayOfWeek": "曜日",
       "dayOfWeekHint": "選択した曜日にのみスロットを作成します",
+      "moveDateTitle": "日付変更の確認",
+      "moveDateMessage": "{oldDate} から {newDate} に変更します。この枠に提出済みの希望があれば、新しい日付へ一緒に移動します。",
+      "moveDateAccept": "枠と希望を移動",
       "saveSuccess": "スロットを保存しました",
       "deleteSuccess": "スロットを削除しました",
       "assignmentMasked": "調整中",
-      "assignmentMaskedHint": "公開前のため割当は表示されません"
+      "assignmentMaskedHint": "公開前のため割当は表示されません",
+      "deleteTitle": "シフト枠を削除",
+      "deleteConfirmPlain": "この枠を削除しますか？",
+
+      "deleteConfirmBoth": "この枠を削除しますか？この枠に出された希望 {requests} 件・割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmRequestsOnly": "この枠を削除しますか？この枠に出された希望 {requests} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmAssignmentsOnly": "この枠を削除しますか？この枠の割当 {assignments} 件も削除されます。通常の操作では元に戻せません。",
+
+      "deleteConfirmUnknown": "この枠を削除しますか？この枠に出された希望と割当があれば、それも削除されます。通常の操作では元に戻せません。"
     },
     "requests": {
       "submissionRate": "提出率",
@@ -97,6 +128,7 @@
       "matrixTitle": "希望マトリクス",
       "noRequests": "希望提出がありません",
       "colUser": "メンバー",
+      "unknownMember": "不明なメンバー",
       "legend": "凡例"
     },
     "preference": {
@@ -165,7 +197,14 @@
       "userId": "ユーザーID",
       "userIdPlaceholder": "ユーザーIDを入力",
       "saveSuccess": "勤務制約を保存しました",
-      "deleteSuccess": "勤務制約を削除しました"
+      "deleteSuccess": "勤務制約を削除しました",
+      "unknownMember": "不明なユーザー",
+      "selectMember": "メンバーを選ぶ",
+      "searchMember": "名前で検索",
+      "noSelectableMembers": "追加できるメンバーがいません",
+      "membersLoadError": "メンバー一覧を取得できませんでした",
+      "deleteTitle": "勤務制約を削除",
+      "deleteConfirm": "この勤務制約を削除しますか？"
     },
     "validation": {
       "atLeastOneConstraint": "少なくとも1つの項目を指定してください"
@@ -301,8 +340,11 @@
     "board": {
       "title": "シフトボード",
       "memberPool": "未割当メンバー",
+      "noUnassignedMembers": "未割当のメンバーはいません",
+      "noMatchingMembers": "検索条件に一致するメンバーはいません",
       "dragHint": "メンバーをドラッグして割り当て",
-      "unassignedSlots": "{count}件未割当"
+      "unassignedSlots": "{count}件未割当",
+      "backToList": "シフト一覧に戻る"
     },
     "autoAssign": {
       "button": "自動割当",
@@ -339,6 +381,8 @@
     },
     "changeRequest": {
       "title": "変更依頼",
+      "typeColumn": "依頼種別",
+      "empty": "変更依頼はまだありません",
       "type": {
         "PRE_CONFIRM_EDIT": "確定前変更",
         "INDIVIDUAL_SWAP": "個別交代",
@@ -359,7 +403,16 @@
       "reject": "却下",
       "reviewComment": "審査コメント",
       "openCallLimit": "オープンコールは月3件まで",
-      "fetchError": "変更依頼の取得に失敗しました"
+      "fetchError": "変更依頼の取得に失敗しました",
+      "requester": "依頼者",
+      "unknownRequester": "不明なユーザー",
+      "createSuccess": "変更依頼を送信しました",
+      "approveSuccess": "変更依頼を承認しました",
+      "rejectSuccess": "変更依頼を却下しました",
+      "withdrawSuccess": "変更依頼を取り下げました",
+      "closedForNew": "このシフト表は公開済みのため、新しい変更依頼は受け付けていません",
+      "reviewedAt": "審査日時",
+      "reviewConflict": "他の人が先に更新しました。一覧を再読み込みしました。最新の状態をご確認ください"
     },
     "pdf": {
       "teamLayout": "チーム全体表 PDF",
@@ -389,11 +442,14 @@
       }
     },
     "entry": {
+      "notStarted": "希望の受付はまだ開始されていません",
       "sectionTitle": "希望の提出・シフトボード",
       "bulkRequest": "まとめて希望を出す",
       "board": "シフトボード",
+      "edit": "枠を編集",
       "weeklyDefault": "曜日ごとの既定を設定",
-      "closed": "希望の受付は終了しました"
+      "closed": "希望の受付は終了しました",
+      "changeRequest": "変更依頼"
     },
     "submitConfirm": {
       "title": "この内容で送信しますか？",
@@ -520,9 +576,9 @@
     },
     "requests": {
       "title": "メンバーのシフト希望を収集・確認する",
-      "body": "「収集中」ステータスになるとメンバーが希望を提出できます。詳細ページの「希望一覧」タブで全員の状況をマトリクスで確認できます。",
+      "body": "「収集中」ステータスになるとメンバーが希望を提出できます。管理者は、詳細ページの「希望一覧」タブ（管理者のみ表示）で全員の状況をマトリクスで確認できます。",
       "steps": {
-        "step1": "詳細ページの「希望一覧」タブをクリックする",
+        "step1": "（管理者のみ）詳細ページの「希望一覧」タブをクリックする",
         "step2": "サマリーカードで提出率・未提出人数を確認する",
         "step3": "マトリクス表で各メンバーの日付ごとの希望強度を確認する",
         "step4": "「出勤希望・指定なし・出れなくはない・できれば休み・絶対休み」の5段階で表示される"

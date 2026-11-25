@@ -77,6 +77,9 @@ class ShiftSlotServiceTest {
     private ShiftRequestRepository requestRepository;
 
     @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Mock
     private Clock wallClock;
 
     @InjectMocks
@@ -237,7 +240,7 @@ class ShiftSlotServiceTest {
             given(scheduleRepository.findByIdForUpdate(SCHEDULE_ID)).willReturn(Optional.empty());
 
             assertCode(() -> shiftSlotService.updateSlot(SLOT_ID,
-                    new UpdateShiftSlotRequest(null, null, null, null, null, null, "メモ"), ACTOR),
+                    new UpdateShiftSlotRequest(null, null, null, null, null, null, "メモ"), ACTOR, ids -> { }),
                     ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
             assertCode(() -> shiftSlotService.patchSlotAssignments(SLOT_ID,
                     new SlotAssignmentPatchRequest(List.of(1L), List.of(), 0), ACTOR),
@@ -401,11 +404,32 @@ class ShiftSlotServiceTest {
                     .willReturn(Optional.of(createPositionEntity()));
 
             // When
-            ShiftSlotResponse result = shiftSlotService.updateSlot(SLOT_ID, req, ACTOR);
+            ShiftSlotResponse result = shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { });
 
             // Then
             assertThat(result).isNotNull();
             verify(slotRepository).save(any(ShiftSlotEntity.class));
+        }
+
+        @Test
+        @DisplayName("シフト枠更新_新たに入る人の検査は、ロック後の現在の割当との差分だけに行われ、拒否されれば保存しない")
+        void シフト枠更新_ガードはロック後の現在値との差分だけを受け取る() {
+            // Given: ロック後（refresh 後）の現在の割当は [7]。リクエストは [7, 1]（7 は既存、1 が新規）。
+            ShiftSlotEntity entity = createSlotEntity();
+            ReflectionTestUtils.setField(entity, "id", SLOT_ID);
+            ReflectionTestUtils.setField(entity, "assignedUserIds", "[7]");
+            UpdateShiftSlotRequest req = new UpdateShiftSlotRequest(
+                    null, null, null, null, null, List.of(7L, 1L), null);
+            given(slotRepository.findById(SLOT_ID)).willReturn(Optional.of(entity));
+            java.util.List<java.util.List<Long>> seen = new java.util.ArrayList<>();
+
+            // When / Then
+            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> {
+                seen.add(ids);
+                throw new BusinessException(ShiftErrorCode.ASSIGNEE_NOT_TEAM_MEMBER);
+            })).isInstanceOf(BusinessException.class);
+            assertThat(seen).containsExactly(List.of(1L));
+            verify(slotRepository, org.mockito.Mockito.never()).save(any(ShiftSlotEntity.class));
         }
 
         @Test
@@ -423,7 +447,7 @@ class ShiftSlotServiceTest {
                     .willReturn(Optional.of(createPositionEntity()));
 
             // When
-            ShiftSlotResponse result = shiftSlotService.updateSlot(SLOT_ID, req, ACTOR);
+            ShiftSlotResponse result = shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { });
 
             // Then
             assertThat(result.getAssignedUserIds()).containsExactly(1L, 2L);
@@ -439,7 +463,7 @@ class ShiftSlotServiceTest {
             given(slotRepository.findById(SLOT_ID)).willReturn(Optional.empty());
 
             // When & Then
-            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR))
+            assertThatThrownBy(() -> shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { }))
                     .isInstanceOf(BusinessException.class);
         }
     }
@@ -479,7 +503,7 @@ class ShiftSlotServiceTest {
                     .willReturn(Optional.of(createPositionEntity()));
 
             // When
-            shiftSlotService.updateSlot(SLOT_ID, req, ACTOR);
+            shiftSlotService.updateSlot(SLOT_ID, req, ACTOR, ids -> { });
 
             // Then: save に渡るのは findById で取得した「まさにその」managed entity
             // （toBuilder().build() で作り直した別インスタンスではない）。

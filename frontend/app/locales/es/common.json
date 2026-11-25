@@ -102,7 +102,9 @@
       "multiple": "{names} están escribiendo…"
     },
     "connection": {
-      "failed": "Conexión perdida. Intentando reconectar…"
+      "failed": "Conexión perdida. Intentando reconectar…",
+      "denied": "No tienes permiso para ver este canal",
+      "unauthenticated": "Tu sesión ha caducado y las actualizaciones en tiempo real se han detenido. Vuelve a iniciar sesión"
     },
     "mobile": {
       "backToList": "Volver a la lista de canales",
@@ -121,6 +123,7 @@
       },
       "card": {
         "pending": "Tienes una invitación a {scope}",
+        "scopeDeleted": "Equipo eliminado",
         "waiting": "Esperando su respuesta",
         "statusPending": "Pendiente",
         "join": "Unirse",
@@ -145,6 +148,79 @@
         "joinFailed": "No se pudo unir",
         "declineFailed": "No se pudo rechazar"
       }
+    },
+    "channelList": {
+      "title": "Chat",
+      "newConversation": "Nueva conversación",
+      "addChannel": "Añadir canal",
+      "dmSection": "Kabine (MD)",
+      "noDm": "No hay mensajes directos",
+      "roomSection": "Zimmer (salas)",
+      "noRoom": "No hay salas",
+      "loadFailed": "No se pudo cargar la lista de salas",
+      "detailLoadFailed": "No se pudo cargar la información del canal"
+    },
+    "create": {
+      "typeDm": "Kabine (MD)",
+      "typeRoom": "Zimmer (sala)",
+      "dmOpened": "Kabine (MD) abierto",
+      "roomCreated": "Zimmer (sala) creado",
+      "conversationFailed": "No se pudo iniciar la conversación",
+      "roomCreateFailed": "No se pudo crear el Zimmer (sala)",
+      "header": "Iniciar una nueva conversación",
+      "tabContacts": "Elegir de los contactos",
+      "tabCreateRoom": "Crear Zimmer (sala)",
+      "searchByName": "Buscar por nombre...",
+      "selectedSummary": "{count} seleccionados → se iniciará como {type}",
+      "startAs": "Iniciar {type}",
+      "roomName": "Nombre del Zimmer (sala)",
+      "roomNamePlaceholder": "p. ej. general",
+      "descriptionOptional": "Descripción (opcional)",
+      "descriptionPlaceholder": "Descripción del Zimmer (sala)",
+      "privateRoom": "Zimmer privado (solo por invitación)",
+      "inviteMembersOptional": "Invitar miembros (opcional)",
+      "create": "Crear"
+    },
+    "inviteZimmer": {
+      "header": "Invitar a un Zimmer",
+      "tooltip": "Invitar a un Zimmer",
+      "failed": "No se pudo enviar la invitación",
+      "noMembers": "No hay miembros que se puedan invitar",
+      "candidatesLoadFailed": "No se pudo cargar la lista de miembros que puedes invitar. Inténtalo de nuevo más tarde.",
+      "shareQuestion": "¿Compartir el historial del chat?",
+      "share": "Compartir",
+      "shareHint": "Los mensajes anteriores pasan al nuevo Zimmer",
+      "noShare": "No compartir",
+      "noShareHint": "El nuevo Zimmer empieza vacío",
+      "createZimmer": "Crear Zimmer"
+    },
+    "memberSelect": {
+      "notFound": "No se encontraron miembros"
+    },
+    "activeThreadsEmpty": "No hay hilos activos",
+    "tabAriaLabel": "Pestaña {name}",
+    "unnamedChannel": "Grupo sin nombre",
+    "message": {
+      "deleted": "Este mensaje fue eliminado",
+      "unknownSender": "Desconocido",
+      "edited": "(editado)",
+      "loadOlder": "Cargar mensajes anteriores",
+      "empty": "Todavía no hay mensajes",
+      "sendFailed": "No se pudo enviar el mensaje",
+      "inputPlaceholder": "Escribe un mensaje...",
+      "inputDisabled": "No puedes publicar en este Zimmer (sala)",
+      "loadFailed": "No se pudieron cargar los mensajes",
+      "reactionFailed": "No se pudo actualizar la reacción",
+      "pinned": "Fijado",
+      "unpinned": "Desfijado",
+      "pinFailed": "No se pudo actualizar el fijado",
+      "deleteSuccess": "Mensaje eliminado",
+      "deleteFailed": "No se pudo eliminar",
+      "bookmarkFailed": "No se pudo actualizar el marcador",
+      "markReadFailed": "No se pudo marcar como leído",
+      "editHeader": "Editar mensaje",
+      "editSuccess": "Mensaje editado",
+      "editFailed": "No se pudo editar"
     }
   },
   "button": {
@@ -315,6 +391,8 @@
     "add_term": "Agregar Trimestre",
     "term_success": "Trimestre creado",
     "term_error": "Error al crear el trimestre",
+    "term_academic_year_required": "Introduzca el año académico",
+    "term_has_timetables": "No se puede eliminar este período porque aún tiene horarios. Elimínelos primero",
     "no_period": "No hay períodos definidos",
     "no_term": "No hay trimestres definidos",
     "current_week": "Esta Semana",
@@ -329,7 +407,22 @@
     "period_all": "Todos los períodos",
     "period_number_placeholder": "Número de período",
     "period_suffix": "º",
-    "term_name_placeholder": "ej: 1er Trimestre"
+    "term_name_placeholder": "ej: 1er Trimestre",
+    "term_academic_year_range": "Introduzca un año académico entre {min} y {max}",
+    "term_end_before_start": "La fecha de fin debe ser posterior a la fecha de inicio",
+    "term_date_overlap": "Este trimestre se superpone con otro. Revise las fechas de inicio y fin",
+    "term_delete_confirm": "¿Eliminar el trimestre \"{name}\"? Esta acción no se puede deshacer.",
+    "term_delete_success": "Trimestre eliminado",
+    "term_load_error": "No se pudieron cargar los trimestres",
+    "team_term_hint": "Trimestres de este equipo. Al crear un horario, se elige uno de los trimestres añadidos aquí.",
+    "no_term_for_create": "Todavía no hay trimestres. Añada primero un trimestre en la pestaña Trimestre.",
+    "delete_timetable": "Eliminar",
+    "delete_timetable_confirm": "¿Eliminar el horario \"{name}\"? Esta acción no se puede deshacer.",
+    "delete_timetable_success": "Horario eliminado",
+    "delete_timetable_error": "No se pudo eliminar el horario",
+    "create_error_out_of_term": "El período de vigencia del horario queda fuera del trimestre. Elija fechas entre el inicio y el fin del trimestre.",
+    "create_error_term_not_found": "No se encontró el trimestre seleccionado. Vuelva a abrir la lista de trimestres.",
+    "effective_until_before_from": "La fecha de fin debe ser igual o posterior a la fecha de inicio."
   },
   "error": {
     "server": "Se produjo un error del servidor",
@@ -341,6 +434,7 @@
     "unauthorized": "Por favor, inicie sesión",
     "section_load_failed": "No se pudo cargar esta sección. Recarga la página.",
     "unknown": "Se produjo un error",
+    "notFound": "No se ha encontrado",
     "TEAM_001": "No se ha encontrado el equipo.",
     "TEAM_006": "Este equipo no se puede restaurar porque no se ha eliminado.",
     "COMMON_001": "Hay errores en los datos ingresados",
@@ -1103,9 +1197,26 @@
           "step3": "Cuando todo está leído, la insignia de la campana también vuelve a 0"
         }
       }
-    }
+    },
+    "settingsTitle": "Configuración de notificaciones"
   },
   "project": {
+    "back_label": "Lista de proyectos",
+    "delete_aria": "Eliminar {title}",
+    "delete_confirm": "¿Eliminar «{title}»?",
+    "delete_confirm_header": "Confirmar eliminación",
+    "milestone_dialog": {
+      "add_title": "Añadir hito",
+      "edit_title": "Editar hito",
+      "title_label": "Título",
+      "title_placeholder": "Nombre del hito",
+      "title_required": "Introduzca un título.",
+      "due_date_label": "Fecha límite",
+      "add": "Añadir"
+    },
+    "related_todo_no_due": "Sin fecha límite",
+    "related_todo_no_assignee": "Sin responsable",
+    "related_todo_open": "Abrir detalle de la tarea",
     "milestones": "Hitos",
     "no_milestones": "No hay hitos",
     "due_date": "Fecha límite",
@@ -1163,7 +1274,19 @@
       "none": "Ninguno",
       "custom_emoji": "Personalizado",
       "custom_color": "Color personalizado",
-      "current": "Actual"
+      "current": "Actual",
+      "colors": {
+        "blue": "Azul",
+        "red": "Rojo",
+        "green": "Verde",
+        "amber": "Ámbar",
+        "violet": "Violeta",
+        "pink": "Rosa",
+        "cyan": "Cian",
+        "teal": "Verde azulado",
+        "orange": "Naranja",
+        "gray": "Gris"
+      }
     },
     "guide": {
       "button": "Cómo usar",
@@ -1215,7 +1338,10 @@
       "update_failed": "Error al actualizar",
       "delete_failed": "Error al eliminar",
       "status_change_failed": "Error al cambiar el estado",
-      "milestone_save_failed": "Error al guardar el hito"
+      "milestone_save_failed": "Error al guardar el hito",
+      "force_unlock_failed": "No se pudo forzar el desbloqueo",
+      "completion_mode_failed": "No se pudo cambiar el modo de finalización",
+      "gate_init_failed": "No se pudieron inicializar las puertas"
     },
     "status": {
       "active": "Activo",
@@ -1528,7 +1654,9 @@
     },
     "ws": {
       "disconnected": "Conexión perdida",
-      "reconnecting": "Reconectando…"
+      "reconnecting": "Reconectando…",
+      "denied": "Las actualizaciones en tiempo real se han detenido porque no tienes permiso para ver este tablero",
+      "unauthenticated": "Tu sesión ha caducado y las actualizaciones en tiempo real se han detenido. Vuelve a iniciar sesión"
     },
     "validation": {
       "required": "Este campo es obligatorio.",
@@ -1727,6 +1855,7 @@
     }
   },
   "common": {
+    "back": "Volver",
     "cancel": "Cancelar",
     "search": "Buscar",
     "edit": "Editar",
@@ -2962,7 +3091,11 @@
     "justNow": "Ahora mismo",
     "minutesAgo": "hace {count} minuto | hace {count} minutos",
     "hoursAgo": "hace {count} hora | hace {count} horas",
-    "daysAgo": "hace {count} día | hace {count} días"
+    "daysAgo": "hace {count} día | hace {count} días",
+    "soon": "En breve",
+    "inMinutes": "dentro de {count} minuto | dentro de {count} minutos",
+    "inHours": "dentro de {count} hora | dentro de {count} horas",
+    "inDays": "dentro de {count} día | dentro de {count} días"
   },
   "error_page": {
     "not_found_title": "No se encontró esta página",
@@ -3196,5 +3329,58 @@
     "supporter_label": "Mostrar {feature} a seguidores",
     "save_success": "Visibilidad guardada",
     "nav": "Navegación"
+  },
+  "secret_token": {
+    "issued_dialog": {
+      "title": "Enlace emitido",
+      "once_warning": "Este enlace solo se muestra ahora. Al cerrar este cuadro no volverá a mostrarse. Compártalo con quien lo necesite antes de cerrar.",
+      "url_label": "Enlace emitido",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "copy_failed": "No se pudo copiar. Seleccione el enlace y cópielo manualmente",
+      "qr_label": "Código QR",
+      "close": "Cerrar",
+      "pdf_download": "Guardar el código QR como PDF"
+    },
+    "list": {
+      "not_shown_hint": "Por seguridad, los enlaces emitidos no vuelven a mostrarse. Si lo necesita, emita uno nuevo.",
+      "revoked_by_migration": "Revocado por una mejora de seguridad",
+      "reissue": "Volver a emitir",
+      "links_hint": "Si pierde un enlace, cree uno nuevo para volver a emitirlo. Revoque con × los enlaces antiguos que ya no necesite.",
+      "label_with_id": "Enlace #{id}",
+      "created_at": "Emitido el",
+      "expires_at": "Caduca el",
+      "used_count": "Veces usado"
+    }
+  },
+  "globalSearch": {
+    "header": {
+      "placeholder": "Buscar en todo",
+      "open": "Abrir búsqueda",
+      "suggestions": "Sugerencias de búsqueda",
+      "keyword": "Palabra clave"
+    },
+    "title": "Buscar",
+    "placeholder": "Buscar por palabra clave (2 caracteres o más)",
+    "submit": "Buscar",
+    "failed": "La búsqueda ha fallado",
+    "tooShort": "Introduzca al menos 2 caracteres",
+    "empty": "No hay resultados",
+    "didYouMean": "Quizás quiso decir:",
+    "broaderQuery": "Búsqueda más amplia:",
+    "timedOut": "Se agotó el tiempo de búsqueda en algunos tipos: {types}",
+    "noLink": "No hay enlace",
+    "types": {
+      "ALL": "Todo",
+      "POST": "Publicaciones",
+      "MESSAGE": "Mensajes",
+      "THREAD": "Hilos",
+      "ARTICLE": "Artículos",
+      "FILE": "Archivos",
+      "USER": "Usuarios",
+      "TEAM": "Equipos",
+      "ORGANIZATION": "Organizaciones",
+      "ACTIVITY": "Registros de actividad"
+    }
   }
 }

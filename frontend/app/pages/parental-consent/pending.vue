@@ -9,6 +9,8 @@ const { t } = useI18n()
 const { sendInvitation, getInvitations, cancelInvitation, getParents } = useParentalConsentApi()
 const notification = useNotification()
 const { formatDate } = useDatetime()
+const authStore = useAuthStore()
+const runtimeConfig = useRuntimeConfig()
 
 const invitations = ref<InvitationResponse[]>([])
 const loading = ref(true)
@@ -22,7 +24,18 @@ async function loadData() {
     invitations.value = invs
     // 承認済み保護者がいれば → 保護者管理画面へ
     if (parents.length > 0) {
-      await navigateTo('/parental-consent/manage')
+      // 更新前のトークンは同意待ち（ppc）の印を持ったままで、参加待ち招待の GET が AUTH_070 になる。
+      // 更新の完了を待ってから遷移する（CMP-261107-1833 設計 §9-1）
+      // 失敗しても例外は投げず結果で返る。成功のときだけ遷移し、失敗は既存の呼び出し元（stompAuth）と同じ扱いにする
+      const refreshed = await performTokenRefresh(runtimeConfig, authStore)
+      if (refreshed === 'refreshed') {
+        await navigateTo('/parental-consent/manage')
+      } else if (refreshed === 'auth_failed') {
+        await handleAuthFailureLogout(authStore)
+      } else if (refreshed === 'transient') {
+        notification.error(t('error.unknown'))
+      }
+      // session_changed: 別の本人へ切り替わっているため何もしない
     }
   } finally {
     loading.value = false
@@ -46,7 +59,7 @@ async function handleSendInvitation() {
       AUTH_068: 'parental_consent.error_auth_068',
       AUTH_069: 'parental_consent.error_auth_069',
     }
-    notification.error(t(keyMap[code] ?? 'common.error.unknown'))
+    notification.error(t(keyMap[code] ?? 'error.unknown'))
   } finally {
     sending.value = false
   }
@@ -58,7 +71,7 @@ async function handleCancelInvitation(linkId: string) {
     notification.success(t('parental_consent.invite_cancelled'))
     await loadData()
   } catch {
-    notification.error(t('common.error.unknown'))
+    notification.error(t('error.unknown'))
   }
 }
 
