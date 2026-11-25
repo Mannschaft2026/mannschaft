@@ -1,7 +1,6 @@
 package com.mannschaft.app.school.service;
 
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.schedule.AttendanceStatus;
 import com.mannschaft.app.school.dto.AttendanceHistoryItem;
 import com.mannschaft.app.school.dto.DailyAttendanceListResponse;
@@ -52,7 +51,6 @@ public class DailyAttendanceService {
     private final DailyAttendanceRecordRepository dailyAttendanceRecordRepository;
     private final FamilyAttendanceNoticeRepository familyAttendanceNoticeRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final NameResolverService nameResolverService;
 
     // ========================================
     // 朝の点呼一括登録
@@ -192,12 +190,10 @@ public class DailyAttendanceService {
         List<DailyAttendanceRecordEntity> records =
                 dailyAttendanceRecordRepository.findByTeamIdAndAttendanceDate(teamId, date);
 
-        // 生徒氏名は 1 回のバッチ解決（N+1 回避）。退会済み等で解決できない生徒は null（FE が代替表示）。
-        Map<Long, String> studentNames = nameResolverService.resolveUserFullNames(
-                records.stream().map(DailyAttendanceRecordEntity::getStudentUserId).collect(Collectors.toSet()));
-
+        // 生徒氏名（studentDisplayName）は他ドメイン(auth)参照のため D-3T により本 TX 内では解決しない。
+        // DailyAttendanceFacade（TX の外）が付与する。ここでは null のまま返す。
         List<DailyAttendanceResponse> responseList = records.stream()
-                .map(r -> DailyAttendanceResponse.from(r, studentNames.get(r.getStudentUserId())))
+                .map(r -> DailyAttendanceResponse.from(r))
                 .toList();
 
         int presentCount = (int) records.stream()

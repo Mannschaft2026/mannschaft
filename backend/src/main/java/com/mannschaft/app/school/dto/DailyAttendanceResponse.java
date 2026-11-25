@@ -12,7 +12,7 @@ import java.time.LocalTime;
 
 /** 日次出欠1件レスポンス。 */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class DailyAttendanceResponse {
 
     private Long id;

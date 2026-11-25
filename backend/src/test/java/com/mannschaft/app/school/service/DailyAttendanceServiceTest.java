@@ -1,7 +1,6 @@
 package com.mannschaft.app.school.service;
 
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.schedule.AttendanceStatus;
 import com.mannschaft.app.school.dto.AttendanceHistoryItem;
 import com.mannschaft.app.school.dto.DailyAttendanceListResponse;
@@ -62,9 +61,6 @@ class DailyAttendanceServiceTest {
 
     @Mock
     private FamilyAttendanceNoticeRepository familyAttendanceNoticeRepository;
-
-    @Mock
-    private NameResolverService nameResolverService;
 
     @InjectMocks
     private DailyAttendanceService dailyAttendanceService;
@@ -302,26 +298,6 @@ class DailyAttendanceServiceTest {
             assertThat(response.getPresentCount()).isEqualTo(1);
             assertThat(response.getAbsentCount()).isEqualTo(1);
             assertThat(response.getUndecidedCount()).isEqualTo(1);
-        }
-
-        @Test
-        @DisplayName("正常系: 生徒の氏名を1回のバッチ解決で付与し、解決できない生徒(退会者等)は null にする")
-        void studentDisplayNameIsBatchResolved() {
-            List<DailyAttendanceRecordEntity> entities = List.of(
-                    buildEntity(1L, STUDENT_USER_ID_1, AttendanceStatus.ATTENDING),
-                    buildEntity(2L, STUDENT_USER_ID_2, AttendanceStatus.ABSENT)
-            );
-            given(dailyAttendanceRecordRepository.findByTeamIdAndAttendanceDate(TEAM_ID, ATTENDANCE_DATE))
-                    .willReturn(entities);
-            given(nameResolverService.resolveUserFullNames(any()))
-                    .willReturn(java.util.Map.of(STUDENT_USER_ID_1, "山田 太郎"));
-
-            DailyAttendanceListResponse response =
-                    dailyAttendanceService.getDailyAttendance(TEAM_ID, ATTENDANCE_DATE);
-
-            assertThat(response.getRecords().get(0).getStudentDisplayName()).isEqualTo("山田 太郎");
-            assertThat(response.getRecords().get(1).getStudentDisplayName()).isNull();
-            verify(nameResolverService, times(1)).resolveUserFullNames(any());
         }
     }
 
