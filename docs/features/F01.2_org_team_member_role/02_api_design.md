@@ -492,19 +492,33 @@ users も作らない。存在しない招待はベータ制限 OFF なら保留
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null`。`PENDING` のまま本人が既に在籍していれば（`/invite/<token>` など別経路で参加済み）、`JOINED` へ確定して返す（条件付き UPDATE。`invite_token_claims`・`used_count` には触れない） |
+| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null`。`PENDING` のまま本人が既に在籍していれば（`/invite/<token>` など別経路で参加済み）、`JOINED` へ確定して返す（条件付き UPDATE。`invite_token_claims`・`used_count` には触れない）。在籍していなければ招待の有効性を DB 時刻で判定し、失効・期限切れなら `EXPIRED`（`failure_code=ROLE_002`）、上限到達なら `EXPIRED`（`ROLE_003`）へ確定して返す（下記「参照時の期限判定」） |
 | POST | `/api/v1/me/pending-invite/accept` | 承認して参加。応答 `{status}`（`JOINED`/`EXPIRED`/`UNAVAILABLE`） |
 | POST | `/api/v1/me/pending-invite/decline` | 辞退（`PENDING`→`DECLINED`。共有招待そのものは失効させない） |
 | POST | `/api/v1/me/pending-invite/reissue-request` | 失効した招待の再発行を招待権限者へ要請。応答 `{alreadyRequested}` |
-| POST | `/api/v1/me/pending-invite/dismiss` | 失効の案内を閉じる（`EXPIRED`/`REISSUE_REQUESTED`→`DISMISSED`） |
+| POST | `/api/v1/me/pending-invite/dismiss` | 失効・見送りの案内を閉じる（`EXPIRED`/`REISSUE_DECLINED`→`DISMISSED`）。依頼済み（`REISSUE_REQUESTED`）は 409 `AUTH_085`（閉じても依頼の取り下げにならない） |
 
 GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joinable`（公開・非アーカイブ・非 PROVISIONED）・
 `publicPath`（`joinable` のときだけ `/teams/{slug}` または `/organizations/{slug}`。参加申し込みへの導線）・
 `reissueRequestedAt`・`retryAvailableAt`（`ACCEPTING` のときだけ。処理開始から5分後）。
 
 状態: `PENDING`→`ACCEPTING`→`JOINED`/`EXPIRED`/`UNAVAILABLE`（原因不明の失敗は `PENDING` に戻す）、
-`PENDING`→`DECLINED`、`EXPIRED`→`REISSUE_REQUESTED`、`EXPIRED`/`REISSUE_REQUESTED`→`DISMISSED`、
-未終了→`DISCARDED`（7日間メール未確認の掃除・保護者全員の拒否）。
+`PENDING`→`DECLINED`、`PENDING`→`EXPIRED`（参照時の期限判定）、`EXPIRED`→`REISSUE_REQUESTED`、
+`REISSUE_REQUESTED`→`PENDING`（招待権限者の再招待）、`REISSUE_REQUESTED`→`REISSUE_DECLINED`（招待権限者の見送り）、
+`REISSUE_REQUESTED`→`JOINED`（再招待の時点で在籍済み）、`EXPIRED`/`REISSUE_DECLINED`→`DISMISSED`、
+未終了（`PENDING`/`ACCEPTING`/`EXPIRED`/`REISSUE_REQUESTED`）→`DISCARDED`（7日間メール未確認の掃除・保護者全員の拒否）。
+`REISSUE_DECLINED` は未終了に含めない（破棄の対象外）。
+
+状態の集合（CMP-261107-1833 PR3）: 再依頼できる `REISSUABLE`={`EXPIRED`,`REISSUE_REQUESTED`}（`reissue-request`）と、
+閉じられる `DISMISSIBLE`={`EXPIRED`,`REISSUE_DECLINED`}（`dismiss`）を分ける。依頼済み（`REISSUE_REQUESTED`）は閉じられない
+（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない。dismiss は他の状態不一致と同じ 409 `AUTH_085` で、状態は変わらず管理者の一覧に残る）。見送られた依頼は
+閉じる前でも後でも再依頼できない（409 `AUTH_085`）。
+
+参照時の期限判定（PR3 設計 g）: GET は A-1 の在籍判定の後、`PENDING` なら保留が指す招待の有効性を DB の現在時刻で判定する
+（`InviteAcceptanceFacade#findInviteValidity`）。`expires_at` ちょうどは有効で、直後は失効。失効・期限切れは `ROLE_002`、
+上限到達は `ROLE_003` を `failure_code` に記録して条件付き UPDATE で `EXPIRED` にし、`joinable`・`publicPath` の案内を付ける。
+再招待の仮発行中（`revoked_at = created_at` かつ作成から60秒以内）は処理中として `PENDING` のまま返し、承認は `AUTH_086`（409）。
+60秒を過ぎた仮発行は失効扱い（`EXPIRED`・`ROLE_002`）。
 
 - 承認は `PendingInviteService`（TX なし）→ `PendingInviteStore`（auth の短TX。条件付き UPDATE で `ACCEPTING` を取る）→
   `InviteAcceptanceFacade#joinByInviteTokenHash`（通常の招待承諾と同じ短TXの連鎖）。使用回数・claim・監査は通常の承諾と同等。
@@ -539,8 +553,54 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
     参加申請承認（`grantMemberRole`）は claim に触れない。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
   7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
-  期間内の再押下は通知せず `alreadyRequested: true`。通知は受信者の言語で、本文に要請者の表示名（メールアドレスは載せない）と招待先の名前を入れ、遷移先は対象の招待管理画面（`/teams/{slug}/invites` 等）。
+  期間内の再押下は通知せず `alreadyRequested: true`。通知は受信者の言語で、本文に要請者の表示名（メールアドレスは載せない）と招待先の名前を入れ、遷移先は対象の招待管理画面の再招待依頼の欄（`/teams/{slug}/invites#reissue-requests` 等）。
+  7日は前回の依頼時刻からの経過で数え、ちょうど7日以内は通知しない。再招待で `reissue_requested_at` は NULL に戻るので、
+  再発行した招待が失効した後は7日を待たずに再依頼できる。
 - エラー: `AUTH_084`（404・保留なし）、`AUTH_085`（409・状態不正）、`AUTH_086`（409・処理中）。
+
+#### 再招待依頼の受け手側（CMP-261107-1833 PR3）
+
+招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN。`InviteIssuerPolicy#canIssue`）が、
+失効した招待から登録した利用者の再招待依頼（`REISSUE_REQUESTED`）を一覧し、再招待または見送りを行う。
+`InviteReissueRequestController` が TEAM 用3本と ORGANIZATION 用3本を別メソッドで持ち（金型: `JoinRequestController`）、
+`InviteReissueRequestService`（TX なし）へ委譲する。いずれも `@AuthorizedInService`＋`@AlwaysReachable(CORE)`。
+
+| メソッド | パス | 内容 |
+|---|---|---|
+| GET | `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests?page&size` | 再招待依頼の一覧（古い順。`size` 既定20・最大50）。`data.content[]` と `data.totalElements` |
+| POST | `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests/{id}/reissue` | 再招待。応答 `{status: REISSUED, expiresAt}` または `{status: ALREADY_MEMBER}` |
+| POST | `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests/{id}/decline` | 見送り。応答 `{status: REISSUE_DECLINED}` |
+
+- 一覧の要素: `id`（保留 ID）・`requesterDisplayName`（FE は補間のみで表示）・`requesterAvatarUrl`（任意）・`requestedAt`・
+  `roleName`（実際に付与するロール）。メールアドレス・招待のハッシュは含めない。表示名・アバター・付与ロールはページごとに
+  まとめて引く（行数に依らない SQL 本数）。
+- 一覧と件数の契約: 述語は1つ（`status=REISSUE_REQUESTED`・スコープ一致・依頼者が `ACTIVE`・論理削除されていない。
+  `PendingInviteStore#countReissueRequests`/`pageReissueRequests`）。一覧の `totalElements` と管理者向け集約
+  （`INVITE_REISSUE`）の `pending_count` は一致する。ブロック中の依頼者は述語に入れず一覧に残る（操作時に判定）。
+  閉鎖中（アーカイブ）のスコープの一覧は0件で、再開すると戻る。
+- 付与ロール（`InviteReissueRequestService#resolveGrantRole`）: 元の招待のロールが招待で付与できるロール（MEMBER/SUPPORTER。
+  `InviteRolePolicy`・CMP-261124-0157）なら引き継ぎ、ADMIN/DEPUTY_ADMIN/GUEST/SYSTEM_ADMIN（承諾で 422 `ROLE_009` になる）や元の招待・ロールが引けない場合は MEMBER。一覧の `roleName` と
+  発行で同じ判定を使う。
+- 再招待の手順: slug→ID → 招待権限の確認（403）→ 依頼の確認（不在・他スコープ `ROLE_016`、`REISSUE_REQUESTED` 以外
+  `ROLE_017`、依頼者が非 ACTIVE・ブロック中 `ROLE_018`）→ 在籍済みなら `JOINED` にして `ALREADY_MEMBER`（招待は作らない）→
+  閉鎖中は `ROLE_002` → 仮発行 → 閉鎖世代の再確認 → auth の確定 → 有効化 → 監査。詳細は 03_business_logic.md。
+- 見送り: 条件付き UPDATE で `REISSUE_REQUESTED`→`REISSUE_DECLINED`。ブロック中の依頼者でも見送れる（非 ACTIVE は `ROLE_018`）。
+- 通知: 再招待（有効化の成功後）・見送りのコミット後に、依頼者だけへ `INVITE_REISSUED` / `INVITE_REISSUE_DECLINED`
+  （NORMAL・受信者の言語・本文に招待先の名前）。遷移先は `/dashboard?pendingInvite=open`（FE が保留を取り直し、「あとで」の
+  記録を無視してダイアログを出す）。配送に失敗しても確定は巻き戻さない。
+- 再発行した招待が有効な間は、同じ相手への DM 招待（承諾型招待）は重複として断られる（宛先付きの未失効招待があるため。仕様）。
+
+**エラーレスポンス**
+| ステータス | コード | 条件 |
+|---|---|---|
+| 401 | — | 未認証 |
+| 403 | `COMMON_002` | 招待権限が無い（INVITE_MEMBERS の無い DEPUTY・MEMBER・SUPPORTER・非メンバー・他スコープのパス） |
+| 404 | `TEAM_001`/`ORG_001` | slug の招待先が無い（論理削除・PROVISIONED を含む。slug 解決は ACTIVE の招待先だけ） |
+| 404 | `ROLE_016` | 依頼が無い・他スコープの依頼 ID（存在秘匿のため同じコード） |
+| 404 | `ROLE_002` | 招待先が閉鎖中、または仮発行の間に閉鎖された |
+| 409 | `ROLE_017` | 依頼は既に対応済み（`REISSUE_REQUESTED` 以外・競合の負け側） |
+| 409 | `ROLE_018` | 依頼者が参加できない（非 ACTIVE。再招待はブロック中も） |
+| 500 | `ROLE_019` | 仮発行した招待の有効化に失敗（保留は `PENDING`。60秒の窓を過ぎた次の参照で `EXPIRED` になり、7日を待たず再依頼できる） |
 - 画面（招待画面の新規登録導線・ログイン後の承認ダイアログ）は後続 PR で対応する。それまで招待画面は従来どおり
   チーム・組織のトークンを `inviteToken` として送らない（上記の段落）。
 - `valid=false` または `ROLE_002` は無効招待として表示する。それ以外の取得失敗は取得エラーとして表示し、同じ取得処理による再試行を提供する。
