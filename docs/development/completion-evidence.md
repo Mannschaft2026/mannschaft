@@ -1,6 +1,6 @@
 # 完了証拠ゲート
 
-`docs/task-list.md` の状態を新たに「完了」へ変えるPRは、同じPRで `docs/evidence/<CMP-ID>.json` を追加し、証拠列へ `[完了証拠](evidence/<CMP-ID>.json)` の形でリンクする。リンク先は台帳ファイルからの相対pathである（台帳の新配置の月別・legacy ファイル `docs/task-list/*.md` からは `[完了証拠](../evidence/<CMP-ID>.json)`。検査器は `evidence/X` と `../evidence/X` を同じ証拠として扱い、配置の移行を証拠の差し替えとは判定しない）。台帳は従来どおり7列で、セル内の `|` は `\|` にする。
+`docs/task-list.md` の状態を新たに「完了」へ変えるPRは、同じPRで `docs/evidence/<CMP-ID>.json` を追加し、証拠列へ `[完了証拠](evidence/<CMP-ID>.json)` の形でリンクする。リンク先は台帳ファイルからの相対pathである（台帳の新配置の月別・legacy ファイル `docs/task-list/*.md` からは `[完了証拠](../evidence/<CMP-ID>.json)`。検査器は `evidence/X` と `../evidence/X` を同じ証拠として扱い、配置の移行を証拠の差し替えとは判定しない）。新しい行は ID の月のファイル `docs/task-list/YYYY-MM.md` の末尾に追加し（無ければ作る）、索引 `docs/task-list.md` には CMP 行を置かない。台帳は従来どおり7列で、セル内の `|` は `\|` にする。
 
 台帳の配置（CMP-261124-1222）: 旧配置は `docs/task-list.md` 1ファイル、新配置は索引 `docs/task-list.md`（前置きのみ）＋ `docs/task-list/YYYY-MM.md`（ID `CMP-YYMMDD-HHMM` の YYMM の月）＋ `docs/task-list/legacy.md`（旧形式 ID）。`docs/task-list/` に `YYYY-MM.md` か `legacy.md` があれば新配置と判定する。読む側（Task-List PR Gate・merge_group 検査・完了証拠 CLI・台帳衝突の自動修復・Java 番人・β棚卸し）はすべて共通の読み取り（`scripts/task-list-ledger.mjs` の `readLedger`、Java は `TaskListLedger`）で両配置を同じ行集合として読み、base・head・分岐点の配置が異なっていても判定は変わらない。取得失敗は空とみなさず、行0件は赤にする。
 
