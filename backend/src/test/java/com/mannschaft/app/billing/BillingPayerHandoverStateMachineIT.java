@@ -860,6 +860,22 @@ class BillingPayerHandoverStateMachineIT extends AbstractMySqlIntegrationTest {
         assertThat(again.handoverRequestId()).isNotEqualTo(requested.handoverRequestId());
     }
 
+    @Test
+    @DisplayName("CMP-260909-0304 P1: 期限超過でもACCEPTED以降の承諾試行はEXPIREDに確定せず、Stripe照合の経路へ委ねる")
+    void expiredAcceptAttemptDoesNotExpireAcceptedRow() {
+        UUID handoverId = createAmbiguousAcceptance();
+        expireHandoverRow(handoverId);
+
+        // 本人の再試行は状態検証を通り（期限切れで EXPIRED に化けない）、Stripe 照会の失敗がそのまま出る。
+        assertThatThrownBy(() -> handoverService.acceptHandover(
+                EntitlementScopeKind.TEAM, TEAM_ID, handoverId, adminAUserId))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(reloadHandover(handoverId).getStatus())
+                .as("Stripe に新サブスクがありうる ACCEPTED を EXPIRED に確定しない")
+                .isEqualTo(PayerHandoverStatus.ACCEPTED);
+    }
+
     /** 猶予期限を過去にずらし「承諾者が戻らないまま期限を越えた」状況を作る。 */
     private void expireHandoverRow(UUID handoverRequestId) {
         transactionTemplate.executeWithoutResult(tx -> {

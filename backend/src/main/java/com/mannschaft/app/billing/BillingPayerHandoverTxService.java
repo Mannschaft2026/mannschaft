@@ -87,7 +87,12 @@ public class BillingPayerHandoverTxService {
         requireEligibleAcceptor(handover, operatorUserId);
 
         Instant now = clock.instant();
-        if (!handover.getExpiresAt().isAfter(now)) {
+        // 直接 EXPIRED に確定してよいのは Stripe に一切触れていない REQUESTED / REQUIRES_PAYMENT_METHOD のみ。
+        // ACCEPTED 以降（SWITCHING 等）は Stripe 側に新サブスクが存在しうるため、ここで EXPIRED に化かさず
+        // 状態検証（HANDOVER_NOT_ACCEPTABLE）へ進め、reconcileExpiredAcceptance の Stripe 照合に委ねる。
+        boolean expirable = handover.getStatus() == PayerHandoverStatus.REQUESTED
+                || handover.getStatus() == PayerHandoverStatus.REQUIRES_PAYMENT_METHOD;
+        if (expirable && !handover.getExpiresAt().isAfter(now)) {
             handover.setStatus(PayerHandoverStatus.EXPIRED);
             handoverRequestRepository.save(handover);
             throw new HandoverExpiredException();
