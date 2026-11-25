@@ -200,6 +200,21 @@ class ContactInviteTokenHashStorageIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
+    @DisplayName("AC-x4: 利用回数の上限（maxUses=1）に達した招待は2回目の承諾が 404（CONTACT_012）で拒否される")
+    void 上限到達後の承諾は拒否される() throws Exception {
+        String plaintext = vault.issueBase64Url().plaintext();
+        repository.save(ContactInviteTokenEntity.builder().userId(issuerId).tokenHash(vault.hash(plaintext))
+                .maxUses(1).expiresAt(LocalDateTime.now().plusDays(1)).build());
+        em.flush();
+
+        assertThat(perform(accepterId, post("/api/v1/contact-invite/{token}/accept", plaintext)).getStatus())
+                .isEqualTo(200);
+        MockHttpServletResponse second = perform(accepterId, post("/api/v1/contact-invite/{token}/accept", plaintext));
+        assertThat(second.getStatus()).isEqualTo(404);
+        assertThat(second.getContentAsString()).contains("CONTACT_012");
+    }
+
+    @Test
     @DisplayName("AC-x5: 発行・プレビュー・承諾・失敗経路のログに平文のトークンを出さない")
     void ログに平文を出さない() throws Exception {
         String plaintext = issue(issuerId, "7d").path("token").asText();
