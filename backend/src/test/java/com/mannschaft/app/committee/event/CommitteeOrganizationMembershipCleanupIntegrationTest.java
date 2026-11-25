@@ -284,7 +284,7 @@ class CommitteeOrganizationMembershipCleanupIntegrationTest extends AbstractMySq
             if (withInvitation) {
                 invitation = committeeInvitationRepository.save(CommitteeInvitationEntity.builder()
                         .committeeId(committee.getId()).inviteeUserId(removedUserId)
-                        .inviteToken(UUID.randomUUID().toString()).expiresAt(LocalDateTime.now().plusDays(1))
+                        .inviteTokenHash(new com.mannschaft.app.common.token.SecretTokenVault().hash(UUID.randomUUID().toString())).expiresAt(LocalDateTime.now().plusDays(1))
                         .build());
             }
             if (deleted) {
@@ -312,7 +312,7 @@ class CommitteeOrganizationMembershipCleanupIntegrationTest extends AbstractMySq
             CommitteeInvitationEntity invitation = committeeInvitationRepository.save(
                     CommitteeInvitationEntity.builder()
                             .committeeId(committee.getId()).inviteeUserId(userId)
-                            .inviteToken(token).expiresAt(LocalDateTime.now().plusDays(1)).build());
+                            .inviteTokenHash(new com.mannschaft.app.common.token.SecretTokenVault().hash(token)).expiresAt(LocalDateTime.now().plusDays(1)).build());
             return new AcceptanceFixture(
                     organizationId, userId, committee.getId(), invitation.getId(), token);
         });
