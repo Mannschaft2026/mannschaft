@@ -156,7 +156,9 @@
         "apply_template_failed": "Failed to apply template",
         "load_all_failed": "Failed to load rosters",
         "update_deadline_failed": "Failed to update deadline"
-      }
+      },
+      "templates_unavailable": "Templates are unavailable because the team's organization could not be determined. Please enter members manually.",
+      "templates_load_failed": "Failed to load templates. You can still enter members manually."
     },
     "communication": {
       "title": "Communication Space",

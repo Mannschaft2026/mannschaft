@@ -156,7 +156,9 @@
         "apply_template_failed": "テンプレの適用に失敗しました",
         "load_all_failed": "メンバー表一覧の取得に失敗しました",
         "update_deadline_failed": "提出締切の更新に失敗しました"
-      }
+      },
+      "templates_unavailable": "テンプレを利用できません。チームの所属組織を確認できないため、メンバーは手動で入力してください",
+      "templates_load_failed": "テンプレの取得に失敗しました。メンバーは手動で入力できます"
     },
     "communication": {
       "title": "連絡スペース",
