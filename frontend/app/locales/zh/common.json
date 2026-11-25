@@ -3351,6 +3351,25 @@
       "created_at": "生成时间",
       "expires_at": "有效期限",
       "used_count": "使用次数"
+    },
+    "signage": {
+      "section": "显示终端令牌",
+      "issue": "发行令牌",
+      "device_name": "终端名称",
+      "device_placeholder": "例如：入口显示屏",
+      "empty": "暂无令牌",
+      "issued_title": "已发行显示链接",
+      "no_expiry": "无期限",
+      "inactive": "已失效",
+      "reissue_confirm": "将发行新链接并使此令牌失效。是否继续？",
+      "revoke_confirm": "要删除此令牌吗？",
+      "issue_success": "已发行令牌",
+      "issue_failed": "发行令牌失败",
+      "reissue_success": "已重新发行令牌",
+      "reissue_failed": "重新发行令牌失败",
+      "revoke_success": "已删除令牌",
+      "revoke_failed": "删除令牌失败",
+      "name_required": "请输入终端名称"
     }
   },
   "globalSearch": {

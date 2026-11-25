@@ -60275,7 +60275,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenIssuedResponse"
                 }
               }
             }
@@ -200839,15 +200839,15 @@
           }
         }
       },
-      "ApiResponseSignageAccessTokenResponse": {
+      "ApiResponseSignageAccessTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SignageAccessTokenResponse"
+            "$ref": "#/components/schemas/SignageAccessTokenIssuedResponse"
           }
         }
       },
-      "SignageAccessTokenResponse": {
+      "SignageAccessTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "allowedIps": {
@@ -241633,6 +241633,39 @@
             "items": {
               "$ref": "#/components/schemas/SignageAccessTokenResponse"
             }
+          }
+        }
+      },
+      "SignageAccessTokenResponse": {
+        "type": "object",
+        "properties": {
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "screenId": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

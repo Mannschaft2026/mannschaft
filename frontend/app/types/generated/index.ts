@@ -66131,10 +66131,10 @@ export interface components {
             expiredAt?: string;
             name?: string;
         };
-        ApiResponseSignageAccessTokenResponse: {
-            data?: components["schemas"]["SignageAccessTokenResponse"];
+        ApiResponseSignageAccessTokenIssuedResponse: {
+            data?: components["schemas"]["SignageAccessTokenIssuedResponse"];
         };
-        SignageAccessTokenResponse: {
+        SignageAccessTokenIssuedResponse: {
             allowedIps?: string[];
             /** Format: date-time */
             createdAt?: string;
@@ -80972,6 +80972,19 @@ export interface components {
         };
         ApiResponseListSignageAccessTokenResponse: {
             data?: components["schemas"]["SignageAccessTokenResponse"][];
+        };
+        SignageAccessTokenResponse: {
+            allowedIps?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiredAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            name?: string;
+            /** Format: int64 */
+            screenId?: number;
         };
         ApiResponseListEmergencyMessageResponse: {
             data?: components["schemas"]["EmergencyMessageResponse"][];
@@ -121964,7 +121977,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenIssuedResponse"];
                 };
             };
         };

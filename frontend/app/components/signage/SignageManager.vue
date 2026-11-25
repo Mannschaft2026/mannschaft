@@ -29,6 +29,7 @@ const {
   deleteToken,
   sendEmergency,
 } = useSignageApi()
+const { t } = useI18n()
 const { success, error: showError } = useNotification()
 const { formatDateTime } = useDatetime()
 
@@ -45,6 +46,11 @@ const slots = ref<SignageSlot[]>([])
 const loadingSlots = ref(false)
 const tokens = ref<SignageToken[]>([])
 const loadingTokens = ref(false)
+const newTokenName = ref('')
+const issuingToken = ref(false)
+// 発行直後にだけ保持する平文の表示用 URL。画面のメモリ上だけで扱い、ダイアログを閉じたら破棄する（保存領域には書かない）。
+const issuedUrl = ref<string | null>(null)
+const showIssuedDialog = ref(false)
 const showDetailPanel = ref(false)
 
 // Dialog state
@@ -310,34 +316,66 @@ async function handleDeleteSlot(slot: SignageSlot) {
 }
 
 // --- Token actions ---
+/** 発行応答の平文から表示用 URL を組み立ててダイアログへ渡す（以後サーバーからは取得できない）。 */
+function showIssued(plaintext: string) {
+  issuedUrl.value = `${window.location.origin}/signage/${plaintext}`
+  showIssuedDialog.value = true
+}
+
+/** ダイアログを閉じたら平文を破棄する（二度と表示できない）。 */
+function onIssuedVisibleChange(open: boolean) {
+  showIssuedDialog.value = open
+  if (!open) issuedUrl.value = null
+}
+
 async function handleIssueToken() {
   if (!selectedScreen.value) return
+  const name = newTokenName.value.trim()
+  if (!name) {
+    showError(t('secret_token.signage.name_required'))
+    return
+  }
+  issuingToken.value = true
   try {
-    await issueToken(selectedScreen.value.id)
-    success('トークンを発行しました')
+    const res = await issueToken(selectedScreen.value.id, { name })
+    newTokenName.value = ''
+    success(t('secret_token.signage.issue_success'))
+    showIssued(res.data.token)
     await loadTokens(selectedScreen.value.id)
   } catch {
-    showError('トークンの発行に失敗しました')
+    showError(t('secret_token.signage.issue_failed'))
+  } finally {
+    issuingToken.value = false
+  }
+}
+
+/** 再発行: 同じ端末名で新しく発行し、旧トークンを無効化（削除）する。 */
+async function handleReissueToken(token: SignageToken) {
+  if (!selectedScreen.value) return
+  if (!confirm(t('secret_token.signage.reissue_confirm'))) return
+  try {
+    const res = await issueToken(selectedScreen.value.id, {
+      name: token.name,
+      allowedIps: token.allowedIps,
+      expiredAt: token.expiredAt,
+    })
+    await deleteToken(token.id)
+    success(t('secret_token.signage.reissue_success'))
+    showIssued(res.data.token)
+    await loadTokens(selectedScreen.value.id)
+  } catch {
+    showError(t('secret_token.signage.reissue_failed'))
   }
 }
 
 async function handleDeleteToken(token: SignageToken) {
-  if (!confirm('このトークンを削除しますか？')) return
+  if (!confirm(t('secret_token.signage.revoke_confirm'))) return
   try {
     await deleteToken(token.id)
-    success('トークンを削除しました')
+    success(t('secret_token.signage.revoke_success'))
     if (selectedScreen.value) await loadTokens(selectedScreen.value.id)
   } catch {
-    showError('トークンの削除に失敗しました')
-  }
-}
-
-async function copyToken(tokenStr: string) {
-  try {
-    await navigator.clipboard.writeText(tokenStr)
-    success('トークンをコピーしました')
-  } catch {
-    showError('コピーに失敗しました')
+    showError(t('secret_token.signage.revoke_failed'))
   }
 }
 
@@ -543,23 +581,34 @@ onMounted(loadScreens)
 
         <!-- Token section -->
         <section>
-          <div class="mb-2 flex items-center justify-between">
-            <h3 class="font-semibold">表示端末トークン</h3>
-            <Button
-              label="トークン発行"
-              icon="pi pi-key"
-              size="small"
-              severity="secondary"
-              @click="handleIssueToken"
-            />
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="font-semibold">{{ t('secret_token.signage.section') }}</h3>
+            <div class="flex items-center gap-2">
+              <InputText
+                v-model="newTokenName"
+                :placeholder="t('secret_token.signage.device_placeholder')"
+                :aria-label="t('secret_token.signage.device_name')"
+                size="small"
+                maxlength="100"
+              />
+              <Button
+                :label="t('secret_token.signage.issue')"
+                icon="pi pi-key"
+                size="small"
+                severity="secondary"
+                :loading="issuingToken"
+                @click="handleIssueToken"
+              />
+            </div>
           </div>
+          <p class="mb-2 text-xs text-surface-500">{{ t('secret_token.list.not_shown_hint') }}</p>
 
           <div v-if="loadingTokens" class="flex justify-center py-4">
             <LoadingBounce />
           </div>
 
           <div v-else-if="tokens.length === 0" class="py-4 text-center text-sm text-surface-400">
-            トークンがありません
+            {{ t('secret_token.signage.empty') }}
           </div>
 
           <div v-else class="flex flex-col gap-2">
@@ -569,19 +618,25 @@ onMounted(loadScreens)
               class="flex items-center gap-2 rounded-lg border border-surface-200 p-3 dark:border-surface-700"
             >
               <div class="min-w-0 flex-1">
-                <p v-if="token.label" class="text-sm font-medium">{{ token.label }}</p>
-                <p class="truncate font-mono text-xs text-surface-500">{{ token.token }}</p>
-                <p v-if="token.lastSeenAt" class="mt-0.5 text-xs text-surface-400">
-                  最終接続: {{ formatDateTime(token.lastSeenAt) }}
+                <p class="text-sm font-medium">
+                  {{ token.name }}
+                  <span v-if="!token.isActive" class="ml-1 text-xs text-surface-400">
+                    ({{ t('secret_token.signage.inactive') }})
+                  </span>
+                </p>
+                <p class="mt-0.5 text-xs text-surface-400">
+                  {{ t('secret_token.list.created_at') }}: {{ formatDateTime(token.createdAt) }}
+                  / {{ t('secret_token.list.expires_at') }}:
+                  {{ token.expiredAt ? formatDateTime(token.expiredAt) : t('secret_token.signage.no_expiry') }}
                 </p>
               </div>
               <Button
-                icon="pi pi-copy"
+                :label="t('secret_token.list.reissue')"
+                icon="pi pi-refresh"
                 text
-                rounded
                 size="small"
                 severity="secondary"
-                @click="copyToken(token.token)"
+                @click="handleReissueToken(token)"
               />
               <Button
                 icon="pi pi-trash"
@@ -589,6 +644,7 @@ onMounted(loadScreens)
                 rounded
                 size="small"
                 severity="danger"
+                :aria-label="t('secret_token.signage.revoke_confirm')"
                 @click="handleDeleteToken(token)"
               />
             </div>
@@ -596,6 +652,15 @@ onMounted(loadScreens)
         </section>
       </div>
     </Dialog>
+
+    <!-- 発行直後にだけ平文の表示用リンクを見せる -->
+    <SecretIssuedDialog
+      v-if="issuedUrl"
+      :visible="showIssuedDialog"
+      :url="issuedUrl"
+      :title="t('secret_token.signage.issued_title')"
+      @update:visible="onIssuedVisibleChange"
+    />
 
     <!-- Create / Edit screen dialog -->
     <Dialog

@@ -213,7 +213,10 @@ class SignageAccessTokenHashStorageIT extends AbstractMySqlIntegrationTest {
             setAuthentication(adminAId);
             mockMvc.perform(delete("/api/v1/signage/screens/tokens/{tokenId}", issued.path("id").asLong()))
                     .andExpect(status().isNoContent());
-            assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage)
+            // 検査対象はアプリのコードが出すログ（フレームワークの DEBUG が出すリクエスト行は対象外）
+            assertThat(appender.list).filteredOn(event -> event.getLoggerName().startsWith("com.mannschaft.app"))
+                    .extracting(ILoggingEvent::getFormattedMessage)
+                    .isNotEmpty()
                     .noneMatch(message -> message.contains(plaintext));
         } finally {
             root.detachAppender(appender);
