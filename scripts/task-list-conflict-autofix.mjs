@@ -147,7 +147,7 @@ export async function planLegacyPort({ gitOps, headOid, mainOid, mergedTree }) {
   const reasons = [...plan.problems];
   if (plan.deleted.length) reasons.push('行の削除は移植できない: ' + plan.deleted.join(', '));
   if (plan.preambleChanged) reasons.push('前置き（表の行以外）の変更は移植できない');
-  if (!reasons.length && plan.files.size === 0) reasons.push('移植できる行の追加・更新が無い（判別不能）');
+  if (!reasons.length && plan.files.size === 0 && plan.unchanged.length === 0) reasons.push('移植できる行の追加・更新が無い（判別不能）');
   if (reasons.length) return { kind: 'unportable', reasons };
   const files = { [LEDGER_PATH]: mainLedger.files[0].content };
   for (const [path, text] of plan.files) files[path] = text;

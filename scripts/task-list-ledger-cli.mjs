@@ -197,18 +197,28 @@ function nonRowLines(text) {
  * 旧配置の docs/task-list.md の差分（base→head の行追加・行更新）を、新配置の台帳へ当てる計画を立てる（純粋関数。ファイルは触らない）。
  * port-diff（CLI）と台帳衝突の自動修復（task-list-conflict-autofix）が共有する。
  * @param {{ baseText: string|null, headText: string|null, ledger: { layout: string, files: {path: string, content: string|null}[], rows: {id: string, file: string}[] } }} input ledger は新配置の readLedger の結果
- * @returns {{ added: string[], updated: string[], deleted: string[], preambleChanged: boolean, problems: string[], files: Map<string, string> }}
+ * @returns {{ added: string[], updated: string[], unchanged: string[], deleted: string[], preambleChanged: boolean, problems: string[], files: Map<string, string> }}
  *   files: 変更後の本文（パス → 本文）。変更のあったファイルだけ。problems が空でなければ適用してはならない（問題の無い分だけは files に入る）。
  */
 export function planPortDiff({ baseText, headText, ledger }) {
-  const base = new Map(extractRows(baseText ?? '', LEDGER_INDEX_PATH).map((r) => [r.id, r.line]));
+  const baseRows = extractRows(baseText ?? '', LEDGER_INDEX_PATH);
   const head = extractRows(headText ?? '', LEDGER_INDEX_PATH);
+  const base = new Map(baseRows.map((r) => [r.id, r.line]));
   const headIds = new Set(head.map((r) => r.id));
-  const result = { added: [], updated: [], deleted: [...base.keys()].filter((id) => !headIds.has(id)), preambleChanged: false, problems: [], files: new Map() };
+  const result = { added: [], updated: [], unchanged: [], deleted: [...base.keys()].filter((id) => !headIds.has(id)), preambleChanged: false, problems: [], files: new Map() };
   if (ledger.layout !== 'split') {
     result.problems.push('作業木が新配置でない。port-diff は新配置への適用用');
     return result;
   }
+  // Map 化の前に重複 ID を見つける（後勝ちで静かに潰さない）
+  for (const [what, rows] of [['分岐点', baseRows], ['PR の head', head]]) {
+    const seen = new Set();
+    for (const r of rows) {
+      if (seen.has(r.id)) result.problems.push(what + ' の旧配置に重複 ID がある: ' + r.id);
+      seen.add(r.id);
+    }
+  }
+  if (result.problems.length) return result;
   result.preambleChanged = JSON.stringify(nonRowLines(baseText)) !== JSON.stringify(nonRowLines(headText));
   const where = new Map(ledger.rows.map((r) => [r.id, r]));
   const edits = new Map(); // file -> { replace: Map(id,line), append: string[] }
@@ -219,6 +229,12 @@ export function planPortDiff({ baseText, headText, ledger }) {
     const present = where.get(row.id);
     if (base.has(row.id)) {
       if (!present) { result.problems.push('更新対象の行が新配置に見つからない: ' + row.id); continue; }
+      const current = present.line;
+      if (current === line) { result.unchanged.push(row.id); continue; } // main に同じ更新が既にある
+      if (current !== rewriteLinks(base.get(row.id))) {
+        result.problems.push('競合: ' + row.id + ' は main 側でも更新されている（分岐点・main・PR の3者が異なる）。手で統合すること');
+        continue;
+      }
       edit(present.file).replace.set(row.id, line);
       result.updated.push(row.id);
     } else {

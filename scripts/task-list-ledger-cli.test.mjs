@@ -204,3 +204,37 @@ test('実台帳（作業木の docs/task-list.md が旧配置なら）を移行�
     assert.ok(Date.now() - t0 < 30000);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('port-diff: 行更新は main の現在行が分岐点の行と一致するときだけ置換する（P1）', async () => {
+  const root = makeRoot();
+  try {
+    await migrateLedger(root);
+    const baseText = OLD;
+    const pr = (l) => OLD.replace(ROWS[2], l);
+    const mainChanged = row('CMP-003', '完了（main で更新）');
+    const monthPath = join(root, 'docs/task-list/legacy.md');
+    const orig = read(root, 'docs/task-list/legacy.md');
+    // main 側も更新済み: 3者が異なる → 競合で停止（CLI は例外、書き込まない）
+    writeFileSync(monthPath, orig.replace(ROWS[2], mainChanged));
+    await assert.rejects(portDiff({ baseText, headText: pr(row('CMP-003', 'P2 実装中')), root }), /競合/);
+    assert.ok(read(root, 'docs/task-list/legacy.md').includes(mainChanged));
+    assert.ok(!read(root, 'docs/task-list/legacy.md').includes('P2 実装中'));
+    // main が既に PR と同じ行: 何もしない
+    writeFileSync(monthPath, orig.replace(ROWS[2], row('CMP-003', 'P2 実装中')));
+    const same = await portDiff({ baseText, headText: pr(row('CMP-003', 'P2 実装中')), root });
+    assert.deepEqual([same.updated, same.files], [[], []]);
+    // main が分岐点のまま: 置換する
+    writeFileSync(monthPath, orig);
+    assert.deepEqual((await portDiff({ baseText, headText: pr(row('CMP-003', 'P2 実装中')), root })).updated, ['CMP-003']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('port-diff: base・head の旧配置に重複 ID があれば移植しない（P2）', async () => {
+  const root = makeRoot();
+  try {
+    await migrateLedger(root);
+    await assert.rejects(portDiff({ baseText: OLD, headText: OLD + ROWS[2] + '\n', root }), /重複 ID/);
+    await assert.rejects(portDiff({ baseText: OLD + ROWS[2] + '\n', headText: OLD, root }), /重複 ID/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -827,3 +827,35 @@ test('移植: mock の gitOps（listDir 等なし）では従来どおり（旧�
   const result = await processPullRequest(pr(), env.deps);
   assert.equal(result.outcome, 'skip-conflict-outside-ledger');
 });
+
+test('統合 移植: 行更新で main 側も更新済み（3者が異なる）なら自動移植せず、コメントして push しない（P1）', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: ledger(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', 'P2 実装中')) },
+    main: { ...mainSplit, 'docs/task-list/2026-11.md': month(row('CMP-261124-0001', '完了'), row('CMP-261124-0002', '完了（main で更新）')) },
+  });
+  try {
+    const env = portEnv(repos);
+    const before = sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x');
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable');
+    assert.match(result.reason, /競合/);
+    assert.equal(env.comments.length, 1);
+    assert.equal(sh(repos.origin, 'rev-parse', 'refs/heads/feature/1-x'), before);
+  } finally { repos.cleanup(); }
+});
+
+test('統合 移植: 旧配置に重複 ID があれば自動移植せずコメントする（P2）', async () => {
+  const repos = setupReposFiles({
+    base: { [LEDGER_PATH]: oldBase },
+    feature: { [LEDGER_PATH]: oldBase + row('CMP-261124-0002', 'P2 実装中') + '\n' },
+    main: mainSplit,
+  });
+  try {
+    const env = portEnv(repos);
+    const result = await processPullRequest(pr({ headRefName: 'feature/1-x', headRefOid: repos.featureOid }), env.deps);
+    assert.equal(result.outcome, 'skip-port-unportable');
+    assert.match(result.reason, /重複 ID/);
+    assert.equal(env.comments.length, 1);
+  } finally { repos.cleanup(); }
+});
