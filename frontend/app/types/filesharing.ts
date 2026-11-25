@@ -61,14 +61,6 @@ export interface PublicFileLink {
 }
 
 /**
- * 公開リンクの発行応答。平文の token は発行時の1回だけ返る（DB にはハッシュしか残らない。CMP-260826-1457）。
- * 生成型 components["schemas"]["LinkIssuedResponse"] と一致させる。
- */
-export interface PublicFileLinkIssued extends PublicFileLink {
-  token: string
-}
-
-/**
  * F05.5 (D) 未認証の公開閲覧ページ（/shared/{token}）で表示するファイルメタ。
  * 生成型 components["schemas"]["FileResponse"] と一致させる。
  */

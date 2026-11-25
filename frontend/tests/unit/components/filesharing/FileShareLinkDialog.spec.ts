@@ -203,4 +203,39 @@ describe('FileShareLinkDialog.vue', () => {
 
     expect(mockDeleteFileLink).not.toHaveBeenCalled()
   })
+
+  it('FSL-006: 旧リンクの削除に失敗したら、成功トーストに続けて専用のエラー文言を出す', async () => {
+    mockCreateFileLink.mockResolvedValueOnce({ data: { id: 8, fileId: 42, token: 'C'.repeat(43) } })
+    mockDeleteFileLink.mockRejectedValueOnce(new Error('boom'))
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onCreate: () => Promise<void>
+      onReissue: (link: { id: number, downloadAllowed: boolean, expiresAt: string | null }) => void
+    }
+    vm.onReissue({ id: 7, downloadAllowed: false, expiresAt: null })
+    vm.expiresAt = new Date(2026, 5, 10, 15, 0, 0)
+    await wrapper.vm.$nextTick()
+    await vm.onCreate()
+
+    expect(mockShowError).toHaveBeenCalledWith('file_sharing.publicLink.reissueDeleteError')
+    expect(mockShowError).not.toHaveBeenCalledWith('file_sharing.publicLink.revokeError')
+  })
+
+  it('FSL-007: 再発行で旧期限が過去なら、期限欄を空にせず7日後前後を入れる', async () => {
+    const wrapper = await mountSuspended(FileShareLinkDialog, {
+      props: { file: buildFile(), visible: true },
+    })
+    const vm = wrapper.vm as unknown as {
+      expiresAt: Date | null
+      onReissue: (link: { id: number, downloadAllowed: boolean, expiresAt: string | null }) => void
+    }
+    vm.onReissue({ id: 7, downloadAllowed: false, expiresAt: '2020-01-01T00:00:00+09:00' })
+    expect(vm.expiresAt).not.toBeNull()
+    const days = (vm.expiresAt!.getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(6.9)
+    expect(days).toBeLessThan(7.1)
+  })
 })

@@ -36,9 +36,6 @@
     "loadError": "No se pudieron cargar los enlaces",
     "existingTitle": "Enlaces creados",
     "empty": "Aun no hay enlaces",
-    "copied": "Enlace copiado",
-    "copyError": "No se pudo copiar",
-    "copyButton": "Copiar enlace",
     "revoked": "Enlace revocado",
     "revokeError": "No se pudo revocar",
     "revokeButton": "Revocar enlace",
@@ -57,7 +54,8 @@
     "createdAtLabel": "Creado el",
     "accessCountLabel": "Número de accesos",
     "reissueButton": "Reemitir",
-    "reissueNotice": "Se han rellenado los ajustes del enlace anterior. Si usa contraseña, vuelva a introducirla y pulse \"Crear enlace\" para emitir un enlace nuevo y eliminar el anterior."
+    "reissueNotice": "Se han rellenado los ajustes del enlace anterior. Si usa contraseña, vuelva a introducirla y pulse \"Crear enlace\" para emitir un enlace nuevo y eliminar el anterior.",
+    "reissueDeleteError": "El nuevo enlace se ha emitido, pero no se pudo eliminar el anterior. Elimínelo manualmente desde la lista."
   },
   "guide": {
     "title": "Como funciona el uso compartido de archivos",

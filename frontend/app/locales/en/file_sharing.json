@@ -36,9 +36,6 @@
     "loadError": "Failed to load share links",
     "existingTitle": "Existing links",
     "empty": "No share links yet",
-    "copied": "Link copied",
-    "copyError": "Failed to copy",
-    "copyButton": "Copy link",
     "revoked": "Share link revoked",
     "revokeError": "Failed to revoke",
     "revokeButton": "Revoke link",
@@ -57,7 +54,8 @@
     "createdAtLabel": "Created at",
     "accessCountLabel": "Access count",
     "reissueButton": "Reissue",
-    "reissueNotice": "The old link's settings are filled in. Re-enter the password if you use one, then press \"Create share link\" to issue a new link and delete the old one."
+    "reissueNotice": "The old link's settings are filled in. Re-enter the password if you use one, then press \"Create share link\" to issue a new link and delete the old one.",
+    "reissueDeleteError": "The new link was issued, but deleting the old link failed. Please delete the old link manually from the list."
   },
   "guide": {
     "title": "How file sharing works",

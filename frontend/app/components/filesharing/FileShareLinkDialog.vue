@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { SharedFile, PublicFileLink, PublicFileLinkIssued } from '~/types/filesharing'
+import type { SharedFile, PublicFileLink } from '~/types/filesharing'
+import type { components } from '~/types/generated'
 
 /**
  * F05.5 (D) 公開共有リンクの発行・一覧・失効ダイアログ。
@@ -31,6 +32,9 @@ const reissueTargetId = ref<number | null>(null)
 const expiresAt = ref<Date | null>(null)
 const downloadAllowed = ref(false)
 const password = ref('')
+
+/** 再発行時に旧期限が使えない場合の既定の有効日数。 */
+const DEFAULT_REISSUE_DAYS = 7
 
 // 有効期限は「今」〜「30日先」まで
 const minDate = new Date()
@@ -93,7 +97,7 @@ async function onCreate() {
       downloadAllowed: downloadAllowed.value,
       password: password.value.trim() || undefined,
     })
-    const issued = res?.data as unknown as PublicFileLinkIssued | undefined
+    const issued = res?.data as components['schemas']['LinkIssuedResponse'] | undefined
     if (issued?.token) {
       issuedToken.value = issued.token
       showIssuedDialog.value = true
@@ -107,7 +111,7 @@ async function onCreate() {
         await deleteFileLink(props.file.id, oldId)
       }
       catch {
-        showError(t('file_sharing.publicLink.revokeError'))
+        showError(t('file_sharing.publicLink.reissueDeleteError'))
       }
     }
     // フォームをリセットして一覧を再取得
@@ -136,7 +140,15 @@ function onReissue(link: PublicFileLink) {
   downloadAllowed.value = link.downloadAllowed
   password.value = ''
   const old = link.expiresAt ? new Date(link.expiresAt) : null
-  expiresAt.value = old && old > new Date() && old <= maxDate.value ? old : null
+  if (old && old > new Date() && old <= maxDate.value) {
+    expiresAt.value = old
+  }
+  else {
+    // 旧期限が過去（または範囲外）なら、BE が必須にしている範囲内の既定値（7日後）を入れる
+    const d = new Date()
+    d.setDate(d.getDate() + DEFAULT_REISSUE_DAYS)
+    expiresAt.value = d
+  }
 }
 
 async function onDelete(link: PublicFileLink) {

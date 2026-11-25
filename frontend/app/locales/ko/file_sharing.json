@@ -36,9 +36,6 @@
     "loadError": "공유 링크를 불러오지 못했습니다",
     "existingTitle": "생성된 링크",
     "empty": "아직 공유 링크가 없습니다",
-    "copied": "링크를 복사했습니다",
-    "copyError": "복사에 실패했습니다",
-    "copyButton": "링크 복사",
     "revoked": "공유 링크를 폐기했습니다",
     "revokeError": "폐기에 실패했습니다",
     "revokeButton": "링크 폐기",
@@ -57,7 +54,8 @@
     "createdAtLabel": "생성 일시",
     "accessCountLabel": "접근 횟수",
     "reissueButton": "재발급",
-    "reissueNotice": "이전 링크의 설정을 입력해 두었습니다. 비밀번호를 사용하려면 다시 입력한 뒤 \"공유 링크 만들기\"를 누르면 새 링크를 발급하고 이전 링크를 삭제합니다."
+    "reissueNotice": "이전 링크의 설정을 입력해 두었습니다. 비밀번호를 사용하려면 다시 입력한 뒤 \"공유 링크 만들기\"를 누르면 새 링크를 발급하고 이전 링크를 삭제합니다.",
+    "reissueDeleteError": "새 링크는 발급되었지만 이전 링크 삭제에 실패했습니다. 목록에서 이전 링크를 직접 삭제해 주세요."
   },
   "guide": {
     "title": "파일 공유 사용법",
