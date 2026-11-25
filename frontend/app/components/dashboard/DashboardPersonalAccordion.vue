@@ -54,6 +54,7 @@ const sections: readonly SectionDefinition[] = [
       'favorites',
       'my-teams',
       'my-organizations',
+      'personal-effort',
     ],
   },
 ]

@@ -153,7 +153,8 @@
       "org-tournament-summary": "Tournament Summary",
       "team-match-summary": "Match Summary",
       "projects": "Projects",
-      "my-timeline": "Aggregated Timeline"
+      "my-timeline": "Aggregated Timeline",
+      "personal-effort": "Effort records"
     },
     "widget_descriptions": {
       "event-dismissal-reminder": "Reminder for events with unsent disbanding notifications",
@@ -197,7 +198,8 @@
       "org-tournament-summary": "Summary of tournaments you organize",
       "team-match-summary": "Recent match results and records",
       "projects": "Project progress and list",
-      "my-timeline": "Cross-scope posts from your teams and organizations"
+      "my-timeline": "Cross-scope posts from your teams and organizations",
+      "personal-effort": "Today's record count and recent records"
     },
     "notices": {
       "actionRequiredTab": "Action Required",
@@ -404,6 +406,15 @@
         "chatTitle": "Chat",
         "chatDesc": "Unread messages",
         "empty": "Nothing unread"
+      },
+      "personalEffort": {
+        "title": "Effort records",
+        "todayCount": "Today: {count} record(s)",
+        "recent": "Recent records",
+        "empty": "No records yet",
+        "error": "Could not load your effort records",
+        "record": "Add a record",
+        "review": "Review"
       }
     }
   },

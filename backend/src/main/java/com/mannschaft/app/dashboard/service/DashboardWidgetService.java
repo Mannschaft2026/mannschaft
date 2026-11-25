@@ -75,6 +75,7 @@ public class DashboardWidgetService {
             Map.entry("MY_RECRUITMENTS", "参加予定"),
             Map.entry("VILLAGE_LOBBY_DIGEST", "井戸端ダイジェスト"),
             Map.entry("PERSONAL_DINOSAUR_RANCH", "恐竜の部屋"),
+            Map.entry("PERSONAL_EFFORT", "頑張り記録"),
             Map.entry("TEAM_NOTICES", "チームお知らせ"),
             Map.entry("TEAM_UPCOMING_EVENTS", "直近イベント"),
             Map.entry("TEAM_TODO", "チームTODO"),

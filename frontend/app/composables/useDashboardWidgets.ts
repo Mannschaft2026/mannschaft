@@ -89,6 +89,8 @@ export const WidgetKeyMap: Record<
   projects: { team: 'TEAM_PROJECT_PROGRESS', organization: 'ORG_PROJECT_PROGRESS' },
   // --- personal スコープ（対象3-B / #1849 で確定した BE WidgetKey） ---
   'dinosaur-ranch': { personal: 'PERSONAL_DINOSAUR_RANCH' },
+  // F06.4.1 個人の頑張り記録
+  'personal-effort': { personal: 'PERSONAL_EFFORT' },
   'event-dismissal-reminder': { personal: 'PERSONAL_EVENT_DISMISSAL_REMINDER' },
   notices: { personal: 'NOTICES' },
   'my-calendar': { personal: 'PERSONAL_CALENDAR' },
@@ -401,6 +403,16 @@ const ALL_WIDGETS: WidgetDefinition[] = [
     icon: 'pi pi-bookmark-fill',
     description: 'ピン止めしたカードの横断一覧',
     descriptionKey: 'dashboard.widget_descriptions.my-corkboard',
+    scope: ['personal'],
+  },
+  // F06.4.1: 個人の頑張り記録（WidgetPersonalEffort）
+  {
+    key: 'personal-effort',
+    label: '頑張り記録',
+    labelKey: 'dashboard.widget_labels.personal-effort',
+    icon: 'pi pi-chart-line',
+    description: '今日の記録件数と最近の記録',
+    descriptionKey: 'dashboard.widget_descriptions.personal-effort',
     scope: ['personal'],
   },
   // F17.1 §3.12.5: 井戸端ダイジェストウィジェット

@@ -67,6 +67,8 @@ public enum WidgetKey {
     VILLAGE_LOBBY_DIGEST(ScopeType.PERSONAL, true, 29),
     /** F04.7 本人の恐竜牧場。FE dinosaur-ranch と同じ個人widget key。 */
     PERSONAL_DINOSAUR_RANCH(ScopeType.PERSONAL, false, 30),
+    /** F06.4.1 個人の頑張り記録。FE personal-effort と同じ個人widget key。 */
+    PERSONAL_EFFORT(ScopeType.PERSONAL, true, 31),
 
     // --- チームダッシュボード ---
     TEAM_NOTICES(ScopeType.TEAM, true, 0),

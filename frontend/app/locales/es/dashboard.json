@@ -153,7 +153,8 @@
       "org-tournament-summary": "Resumen de torneos",
       "team-match-summary": "Resumen de partidos",
       "projects": "Proyectos",
-      "my-timeline": "Cronología agregada"
+      "my-timeline": "Cronología agregada",
+      "personal-effort": "Registros de esfuerzo"
     },
     "widget_descriptions": {
       "event-dismissal-reminder": "Recordatorio para eventos cuya notificación de disolución aún no se ha enviado",
@@ -197,7 +198,8 @@
       "org-tournament-summary": "Resumen de los torneos que organizas",
       "team-match-summary": "Resultados y registros de partidos recientes",
       "projects": "Progreso y lista de proyectos",
-      "my-timeline": "Publicaciones de tus equipos y organizaciones en conjunto"
+      "my-timeline": "Publicaciones de tus equipos y organizaciones en conjunto",
+      "personal-effort": "Número de registros de hoy y registros recientes"
     },
     "notices": {
       "actionRequiredTab": "Acción requerida",
@@ -404,6 +406,15 @@
         "chatTitle": "Chat",
         "chatDesc": "Mensajes no leídos",
         "empty": "Nada sin leer"
+      },
+      "personalEffort": {
+        "title": "Registros de esfuerzo",
+        "todayCount": "Hoy: {count} registro(s)",
+        "recent": "Registros recientes",
+        "empty": "Aún no hay registros",
+        "error": "No se pudieron cargar los registros de esfuerzo",
+        "record": "Registrar",
+        "review": "Repasar"
       }
     }
   },

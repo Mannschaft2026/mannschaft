@@ -39,6 +39,7 @@ const dataWidgetKeys = new Set([
   'my-recruitments',
   'my-corkboard',
   'village-lobby-digest',
+  'personal-effort',
 ])
 
 function isDataWidget(key: string): boolean {
@@ -58,6 +59,7 @@ function linkTo(key: string): string | undefined {
     'team-announcements': '/notifications',
     'org-announcements': '/notifications',
     'my-blog': '/my/blog',
+    'personal-effort': '/my/effort-records',
     'my-teams': '/teams',
     'my-organizations': '/organizations',
     favorites: '/my/favorites',
@@ -101,6 +103,7 @@ function linkTo(key: string): string | undefined {
           <LazyWidgetTeamAnnouncements v-else-if="widget.key === 'team-announcements'" />
           <LazyWidgetOrgAnnouncements v-else-if="widget.key === 'org-announcements'" />
           <LazyWidgetMyBlog v-else-if="widget.key === 'my-blog'" />
+          <LazyWidgetPersonalEffort v-else-if="widget.key === 'personal-effort'" />
           <LazyWidgetMyTeams v-else-if="widget.key === 'my-teams'" />
           <LazyWidgetMyOrganizations v-else-if="widget.key === 'my-organizations'" />
           <LazyWidgetFavorites v-else-if="widget.key === 'favorites'" />

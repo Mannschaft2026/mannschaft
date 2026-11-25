@@ -153,7 +153,8 @@
       "org-tournament-summary": "Turnierübersicht",
       "team-match-summary": "Spielübersicht",
       "projects": "Projekte",
-      "my-timeline": "Gesammelte Zeitleiste"
+      "my-timeline": "Gesammelte Zeitleiste",
+      "personal-effort": "Anstrengungsprotokoll"
     },
     "widget_descriptions": {
       "event-dismissal-reminder": "Erinnerung für Veranstaltungen, deren Auflösungsbenachrichtigung noch nicht gesendet wurde",
@@ -197,7 +198,8 @@
       "org-tournament-summary": "Übersicht der von dir veranstalteten Turniere",
       "team-match-summary": "Letzte Spielergebnisse und Statistiken",
       "projects": "Projektfortschritt und Liste",
-      "my-timeline": "Beiträge deiner Teams und Organisationen im Überblick"
+      "my-timeline": "Beiträge deiner Teams und Organisationen im Überblick",
+      "personal-effort": "Einträge von heute und letzte Einträge"
     },
     "notices": {
       "actionRequiredTab": "Handlungsbedarf",
@@ -404,6 +406,15 @@
         "chatTitle": "Chat",
         "chatDesc": "Ungelesene Nachrichten",
         "empty": "Nichts ungelesen"
+      },
+      "personalEffort": {
+        "title": "Anstrengungsprotokoll",
+        "todayCount": "Heute: {count} Eintrag/Einträge",
+        "recent": "Letzte Einträge",
+        "empty": "Noch keine Einträge",
+        "error": "Das Anstrengungsprotokoll konnte nicht geladen werden",
+        "record": "Eintragen",
+        "review": "Rückblick"
       }
     }
   },

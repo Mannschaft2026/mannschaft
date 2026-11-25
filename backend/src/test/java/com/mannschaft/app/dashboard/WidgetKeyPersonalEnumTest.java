@@ -202,16 +202,16 @@ class WidgetKeyPersonalEnumTest {
     class PersonalScopeCount {
 
         @Test
-        @DisplayName("PERSONAL スコープのキーが 31 件（恐竜の部屋を含む）")
-        void personal_scope_total_31件() {
+        @DisplayName("PERSONAL スコープのキーが 32 件（恐竜の部屋・頑張り記録を含む）")
+        void personal_scope_total_32件() {
             List<WidgetKey> personalKeys = Arrays.stream(WidgetKey.values())
                     .filter(wk -> wk.getScopeType() == ScopeType.PERSONAL)
                     .collect(Collectors.toList());
 
             assertThat(personalKeys)
-                    .as("PERSONAL スコープのキーが 31 件あること（恐竜の部屋を含む）")
-                    .hasSize(31)
-                    .contains(WidgetKey.PERSONAL_DINOSAUR_RANCH, WidgetKey.RETURN_STAY_PLAN,
+                    .as("PERSONAL スコープのキーが 32 件あること（恐竜の部屋・頑張り記録を含む）")
+                    .hasSize(32)
+                    .contains(WidgetKey.PERSONAL_DINOSAUR_RANCH, WidgetKey.PERSONAL_EFFORT, WidgetKey.RETURN_STAY_PLAN,
                             WidgetKey.valueOf("RECRUITMENT_FEED"),
                             WidgetKey.valueOf("MY_RECRUITMENTS"),
                             WidgetKey.valueOf("VILLAGE_LOBBY_DIGEST"));
@@ -289,7 +289,7 @@ class WidgetKeyPersonalEnumTest {
     class DefaultSortOrder {
 
         @Test
-        @DisplayName("新規追加キー 16 件の defaultSortOrder が既存の最大値（14）より大きい")
+        @DisplayName("新規追加キー 17 件の defaultSortOrder が既存の最大値（14）より大きい")
         void new_keys_sort_order_gt_14() {
             // MY_CORKBOARD が defaultSortOrder=14 で最後の既存キー
             List<WidgetKey> newKeys = Arrays.stream(WidgetKey.values())
@@ -297,8 +297,8 @@ class WidgetKeyPersonalEnumTest {
                     .filter(wk -> wk.getDefaultSortOrder() > 14)
                     .collect(Collectors.toList());
 
-            // 恐竜の部屋を含む新規追加 16 件が order > 14 であること
-            assertThat(newKeys).hasSize(16).contains(WidgetKey.PERSONAL_DINOSAUR_RANCH);
+            // 恐竜の部屋を含む新規追加 17 件が order > 14 であること
+            assertThat(newKeys).hasSize(17).contains(WidgetKey.PERSONAL_DINOSAUR_RANCH, WidgetKey.PERSONAL_EFFORT);
         }
     }
 }

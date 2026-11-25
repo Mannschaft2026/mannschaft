@@ -153,7 +153,8 @@
       "org-tournament-summary": "대회 요약",
       "team-match-summary": "경기 요약",
       "projects": "프로젝트",
-      "my-timeline": "통합 타임라인"
+      "my-timeline": "통합 타임라인",
+      "personal-effort": "노력 기록"
     },
     "widget_descriptions": {
       "event-dismissal-reminder": "해산 알림이 아직 발송되지 않은 이벤트 리마인더",
@@ -197,7 +198,8 @@
       "org-tournament-summary": "주최하는 대회 요약",
       "team-match-summary": "최근 경기 결과와 기록",
       "projects": "프로젝트 진행 상황과 목록",
-      "my-timeline": "소속 팀·조직의 게시물을 한눈에 표시"
+      "my-timeline": "소속 팀·조직의 게시물을 한눈에 표시",
+      "personal-effort": "오늘의 기록 건수와 최근 기록"
     },
     "notices": {
       "actionRequiredTab": "처리 필요",
@@ -404,6 +406,15 @@
         "chatTitle": "채팅",
         "chatDesc": "읽지 않은 메시지",
         "empty": "읽지 않은 항목이 없습니다"
+      },
+      "personalEffort": {
+        "title": "노력 기록",
+        "todayCount": "오늘의 기록: {count}건",
+        "recent": "최근 기록",
+        "empty": "아직 기록이 없습니다",
+        "error": "노력 기록을 불러오지 못했습니다",
+        "record": "기록하기",
+        "review": "돌아보기"
       }
     }
   },

@@ -153,7 +153,8 @@
       "org-tournament-summary": "赛事概览",
       "team-match-summary": "比赛概览",
       "projects": "项目",
-      "my-timeline": "汇总时间线"
+      "my-timeline": "汇总时间线",
+      "personal-effort": "努力记录"
     },
     "widget_descriptions": {
       "event-dismissal-reminder": "提醒尚未发送解散通知的活动",
@@ -197,7 +198,8 @@
       "org-tournament-summary": "您主办的赛事概览",
       "team-match-summary": "近期比赛成绩和记录",
       "projects": "项目进度和列表",
-      "my-timeline": "汇总显示所属团队和组织的动态"
+      "my-timeline": "汇总显示所属团队和组织的动态",
+      "personal-effort": "今天的记录数量和最近的记录"
     },
     "notices": {
       "actionRequiredTab": "需要处理",
@@ -404,6 +406,15 @@
         "chatTitle": "聊天",
         "chatDesc": "未读消息",
         "empty": "没有未读内容"
+      },
+      "personalEffort": {
+        "title": "努力记录",
+        "todayCount": "今天的记录：{count} 条",
+        "recent": "最近的记录",
+        "empty": "还没有记录",
+        "error": "无法加载努力记录",
+        "record": "去记录",
+        "review": "回顾"
       }
     }
   },
