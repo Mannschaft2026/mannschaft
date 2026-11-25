@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 4
+- テーブル数: 5
 - ビュー数: 0
 
 ## ER 図
@@ -31,6 +31,12 @@ erDiagram
         bigint share_team_id "ID参照"
         bigint grant_membership_id "ID参照"
     }
+    effort_team_shares {
+        binary id PK
+        bigint team_id "ID参照"
+        bigint owner_user_id "ID参照"
+        bigint grant_membership_id "ID参照"
+    }
     memberships
     team_templates
     teams
@@ -42,6 +48,9 @@ erDiagram
     memberships |o..o{ effort_records : "ID参照(FKなし) grant_membership_id"
     teams |o..o{ effort_records : "ID参照(FKなし) share_team_id"
     users ||..o{ effort_records : "ID参照(FKなし) owner_user_id"
+    memberships ||..o{ effort_team_shares : "ID参照(FKなし) grant_membership_id"
+    teams ||..o{ effort_team_shares : "ID参照(FKなし) team_id"
+    users ||..o{ effort_team_shares : "ID参照(FKなし) owner_user_id"
 ```
 
 ## 被参照（他ドメインから）
@@ -57,6 +66,8 @@ erDiagram
 | `effort_operation_receipts` | `route_id` | 参照先テーブルを特定できない |
 | `effort_records` | `definition_id` | 参照先テーブルを特定できない |
 | `effort_records` | `share_id` | 参照先テーブルを特定できない |
+| `effort_team_shares` | `definition_id` | 参照先テーブルを特定できない |
+| `effort_team_shares` | `source_record_id` | 参照先テーブルを特定できない |
 
 ## テーブル定義
 
@@ -134,6 +145,27 @@ erDiagram
 | `synced_source_version` | `bigint` | YES | NULL |  |
 | `last_error_code` | `varchar(32)` | YES | NULL |  |
 | `share_updated_at` | `datetime(6)` | YES | NULL |  |
+| `created_at` | `datetime(6)` | NO | （なし） |  |
+| `updated_at` | `datetime(6)` | NO | （なし） |  |
+| `deleted_at` | `datetime(6)` | YES | NULL |  |
+
+### `effort_team_shares`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `team_id` | `bigint unsigned` | NO | （なし） |  |
+| `owner_user_id` | `bigint unsigned` | NO | （なし） |  |
+| `source_record_id` | `binary(16)` | NO | （なし） |  |
+| `source_version` | `bigint` | NO | （なし） |  |
+| `grant_membership_id` | `bigint unsigned` | NO | （なし） |  |
+| `share_version` | `bigint` | NO | （なし） |  |
+| `definition_id` | `binary(16)` | NO | （なし） |  |
+| `recorded_on` | `date` | NO | （なし） |  |
+| `projection_json` | `json` | NO | （なし） |  |
+| `projection_hash` | `char(64)` | NO | （なし） |  |
+| `state` | `varchar(12)` | NO | （なし） |  |
+| `version` | `bigint` | NO | `0` |  |
 | `created_at` | `datetime(6)` | NO | （なし） |  |
 | `updated_at` | `datetime(6)` | NO | （なし） |  |
 | `deleted_at` | `datetime(6)` | YES | NULL |  |
