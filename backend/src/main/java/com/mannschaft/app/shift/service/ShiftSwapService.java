@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.shift.ShiftAssignedUserIds;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.ShiftMapper;
@@ -56,6 +57,11 @@ public class ShiftSwapService {
     private static final String ACTION_APPROVE = "APPROVE";
     private static final String ACTION_REJECT = "REJECT";
 
+    /** resolve の action として受け付ける値（ACTION_* と同名。不正値・小文字は入力エラー 400 にする）。 */
+    private enum ResolveAction {
+        APPROVE, REJECT
+    }
+
     private final ShiftSwapRequestRepository swapRepository;
     private final ShiftSlotRepository slotRepository;
     private final ShiftScheduleRepository scheduleRepository;
@@ -95,7 +101,7 @@ public class ShiftSwapService {
         List<ShiftSwapRequestEntity> entities;
         if (status != null) {
             entities = swapRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(
-                    teamId, SwapRequestStatus.valueOf(status));
+                    teamId, EnumInputParser.parse(SwapRequestStatus.class, status, "status"));
         } else {
             entities = swapRepository.findByTeamIdOrderByCreatedAtAsc(teamId);
         }
@@ -226,6 +232,8 @@ public class ShiftSwapService {
     @Transactional
     public SwapRequestResponse resolveSwapRequest(
             Long swapId, ResolveSwapRequestRequest req, Long adminId, Long expectedAccepterId) {
+        // 認可は Facade 済み。入力の action は状態の読取・更新より前に検証する（不正値は 400 COMMON_001）。
+        EnumInputParser.parse(ResolveAction.class, req.getAction(), "action");
         ShiftSwapRequestEntity entity = findSwapOrThrow(swapId);
         // 認可は Facade 済み。認可の後に親（枠・スケジュール）が消えた競合を 404 にするため読み直す。
         resolveTeamIdBySwap(entity);

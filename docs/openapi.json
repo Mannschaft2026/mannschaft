@@ -222259,9 +222259,6 @@
             "type": "string",
             "format": "date"
           },
-          "status": {
-            "type": "string"
-          },
           "title": {
             "type": "string",
             "maxLength": 200,

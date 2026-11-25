@@ -17,5 +17,5 @@ public record ReviewChangeRequestRequest(
 
         /** 楽観ロック用バージョン */
         @NotNull Integer version
-) {
+) implements StrictShiftRequest {
 }

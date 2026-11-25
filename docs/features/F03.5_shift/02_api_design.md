@@ -69,6 +69,20 @@
 
 ### リクエスト／レスポンス仕様
 
+#### 入力検証の共通規則（CMP-260910-1607）
+
+シフト系の更新 API は、契約にない入力を黙って無視せず、利用者の入力エラーとして **400 `COMMON_001`** で拒否する。拒否した場合はデータを一切変更しない。認可（401/403/404 の隠蔽）の判定は常にこれらの検証より先に行うため、権限のない呼び出し元には従来どおりの拒否が返る。
+
+| 条件 | 対象 | 応答 |
+|---|---|---|
+| 不正な `status`（定義外の値・空・空白・小文字） | `POST /schedules/{id}/transition?status=`、`GET /swap-requests?status=` | 400 `COMMON_001`、`fieldErrors[0].field = "status"` |
+| 不正な `action`（`APPROVE` / `REJECT` 以外・小文字・空） | `POST /swap-requests/{id}/resolve` | 400 `COMMON_001`、`fieldErrors[0].field = "action"`（旧: 409 `SHIFT_013`） |
+| 未知のリクエストフィールド | 更新系 11 DTO（差分割当 PATCH・割当移動・枠更新・スケジュール更新・希望更新・ポジション更新・勤務制約・勤務可能時間の一括／要素・交代処理・変更依頼審査） | 400 `COMMON_001`（フィールド名の大小違いも未知として拒否） |
+| `PATCH /slots/{id}/assignments` で `addUserIds` と `removeUserIds` が両方 null／空 | 差分割当 | 400 `COMMON_001`、`fieldErrors` に「割り当てる人か外す人を1人以上指定してください」（6 言語） |
+
+- `PATCH /schedules/{id}` のリクエストから `status` フィールドを削除した。ステータスの変更は `POST /schedules/{id}/transition` のみで行う（`status` を送ると未知フィールドとして 400）。
+- 未知フィールドの拒否はサーバ側の共通部品 `StrictShiftRequest`（`@JsonAnySetter`）で実装する。
+
 #### `GET /api/v1/shifts/schedules`
 
 チーム内のシフトスケジュール一覧を取得する。

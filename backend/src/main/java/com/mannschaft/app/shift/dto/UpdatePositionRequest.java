@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Getter
 @RequiredArgsConstructor
-public class UpdatePositionRequest {
+public class UpdatePositionRequest implements StrictShiftRequest {
 
     @Size(max = 50)
     private final String name;

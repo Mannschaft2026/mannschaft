@@ -5,6 +5,7 @@ import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.shift.dto.CreateSwapRequestRequest;
 import com.mannschaft.app.shift.dto.ResolveSwapRequestRequest;
 import com.mannschaft.app.shift.dto.SwapRequestResponse;
@@ -645,7 +646,7 @@ class ShiftSwapServiceTest {
             assertThatThrownBy(() -> swapFacade.resolveSwapRequest(SWAP_ID, req, ADMIN_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
-                            .isEqualTo(ShiftErrorCode.INVALID_SWAP_STATUS));
+                            .isEqualTo(CommonErrorCode.COMMON_001));
         }
 
         @Test

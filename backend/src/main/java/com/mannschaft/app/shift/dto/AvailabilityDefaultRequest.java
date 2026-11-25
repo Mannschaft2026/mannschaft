@@ -21,7 +21,7 @@ import java.time.LocalTime;
  */
 @Getter
 @RequiredArgsConstructor
-public class AvailabilityDefaultRequest {
+public class AvailabilityDefaultRequest implements StrictShiftRequest {
 
     /** 曜日（0=日曜〜6=土曜。設計 F03.5 準拠）。 */
     @NotNull

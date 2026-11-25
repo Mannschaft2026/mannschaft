@@ -73772,7 +73772,6 @@ export interface components {
             requestDeadline?: string;
             /** Format: date */
             startDate?: string;
-            status?: string;
             title?: string;
         };
         UpdateShiftRequestRequest: {
