@@ -136,6 +136,7 @@
       "execute": "実行",
       "success": "月次締め完了: {month}（消化レコード {count} 件を確定）",
       "alreadyClosed": "該当月は既に締め済みです",
+      "notEnded": "{month} はまだ終わっていないため締められません。月末を過ぎた月のみ締められます",
       "error": "月次締めに失敗しました"
     },
     "failedEvent": {

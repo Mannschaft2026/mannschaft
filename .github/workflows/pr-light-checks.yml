@@ -96,6 +96,7 @@ jobs:
           scripts/deploy-aws-check.test.mjs
           scripts/ci-merge-group-workflows.test.mjs
           scripts/ci-change-detection-steps.test.mjs
+          scripts/task-list-conflict-autofix.test.mjs
 
       - name: "[Harness] worktree sparse paths の一覧検査"
         if: ${{ !cancelled() && github.base_ref == 'main' }}

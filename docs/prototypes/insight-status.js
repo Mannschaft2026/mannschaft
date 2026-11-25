@@ -17,6 +17,18 @@ window.BETA_INSIGHT_STATUS = {
       "pr": "#4240",
       "updatedAt": "2026-11-24",
       "note": "main 7fa6d08a2 で修正済み（組織告知一覧の宛先判定）"
+    },
+    "ALIC-CMP1152-R1-04": {
+      "status": "done",
+      "pr": "#4854",
+      "updatedAt": "2026-11-25",
+      "note": "下書き詳細に保存済み設問を表示し、公開時の設問重複と「公開して作成」の未公開も解消"
+    },
+    "ALIC-CMP1152-R3-02": {
+      "status": "fixing",
+      "pr": "#4855",
+      "updatedAt": "2026-11-25",
+      "note": "閉じるボタンは 44x44px にして解消。トーストの二重表示は未対応"
     }
   }
 };

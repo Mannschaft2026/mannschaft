@@ -49,6 +49,9 @@ class ShiftChangeRequestServiceAuthzTest {
     /** 認可根治 Wave7: create の slotId 帰属検証（BOLA 封鎖）で使用。 */
     @Mock
     private ShiftSlotRepository slotRepository;
+    /** 通知イベントの publish 先（本テストは認可の契約だけを見るため中身は検証しない）。 */
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Mock
     private AccessControlService accessControlService;
     @Mock
@@ -61,7 +64,7 @@ class ShiftChangeRequestServiceAuthzTest {
     @org.junit.jupiter.api.BeforeEach
     void setUpService() {
         ShiftChangeRequestService txService = new ShiftChangeRequestService(
-                changeRequestRepository, scheduleRepository, slotRepository);
+                changeRequestRepository, scheduleRepository, slotRepository, eventPublisher);
         service = new ShiftChangeRequestFacade(txService, new ScopeConcealingAccessGate(accessControlService),
                 accessControlService, nameResolverService);
     }
