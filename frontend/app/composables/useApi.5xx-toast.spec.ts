@@ -8,6 +8,7 @@ const external = vi.hoisted(() => ({
   fetch: vi.fn<typeof fetch>(),
   navigate: vi.fn(),
   toastAdd: vi.fn<(opts: Record<string, unknown>) => void>(),
+  toastRemove: vi.fn<(opts: Record<string, unknown>) => void>(),
   capture: vi.fn(),
   captureQuiet: vi.fn(),
 }))
@@ -41,11 +42,16 @@ beforeEach(() => {
   external.fetch.mockReset()
   external.navigate.mockReset()
   external.toastAdd.mockReset()
+  external.toastRemove.mockReset()
   external.capture.mockReset()
   external.captureQuiet.mockReset()
   // $toast は Nuxt の provide で再定義できないため、実体の add を spy で差し替える。
-  const toast = useNuxtApp().$toast as { add: (opts: Record<string, unknown>) => void }
+  const toast = useNuxtApp().$toast as {
+    add: (opts: Record<string, unknown>) => void
+    remove: (opts: Record<string, unknown>) => void
+  }
   vi.spyOn(toast, 'add').mockImplementation(opts => external.toastAdd(opts))
+  vi.spyOn(toast, 'remove').mockImplementation(opts => external.toastRemove(opts))
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 })
 afterEach(async () => {
@@ -108,6 +114,58 @@ describe('CMP-261125-1951 useApi の 5xx トースト', () => {
     expect(external.toastAdd).toHaveBeenCalledTimes(1)
     expect(external.toastAdd).toHaveBeenCalledWith(
       expect.objectContaining({ detail: tr('error.server_multiple', { count: 3 }) }),
+    )
+  })
+
+  // 障害が続く間に集約の窓が何度も走っても、画面上の 5xx トーストは常に1枚（累計件数を出す）。
+  it('窓をまたいで 5xx が続いたら前のトーストを消して1枚に置き換え、累計件数を出す', async () => {
+    external.fetch.mockImplementation(async () => json({}, 502))
+    const api = useApi()
+    await Promise.allSettled([api('/api/v1/a'), api('/api/v1/b'), api('/api/v1/c')])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(external.toastAdd).toHaveBeenCalledTimes(1)
+    const first = external.toastAdd.mock.calls[0]![0]
+
+    await vi.advanceTimersByTimeAsync(100)
+    await Promise.allSettled([api('/api/v1/d'), api('/api/v1/e')])
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(external.toastAdd).toHaveBeenCalledTimes(2)
+    expect(external.toastRemove).toHaveBeenCalledTimes(1)
+    expect(external.toastRemove).toHaveBeenCalledWith(first)
+    expect(external.toastAdd.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ detail: tr('error.server_multiple', { count: 5 }) }),
+    )
+  })
+
+  it('前のトーストが単発でも、続けて1件来たら合計2件として1枚に置き換える', async () => {
+    external.fetch.mockImplementation(async () => json({}, 503))
+    const api = useApi()
+    await Promise.allSettled([api('/api/v1/a')])
+    await vi.advanceTimersByTimeAsync(500)
+    await Promise.allSettled([api('/api/v1/b')])
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(external.toastRemove).toHaveBeenCalledTimes(1)
+    expect(external.toastAdd.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ detail: tr('error.server_multiple', { count: 2 }) }),
+    )
+  })
+
+  it('表示（life 5000ms）が終わった後の 5xx は累計をリセットして単発の文言を出す', async () => {
+    external.fetch.mockImplementation(async () => json({}, 502))
+    const api = useApi()
+    await Promise.allSettled([api('/api/v1/a'), api('/api/v1/b'), api('/api/v1/c')])
+    await vi.advanceTimersByTimeAsync(500)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    await Promise.allSettled([api('/api/v1/d')])
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(external.toastAdd).toHaveBeenCalledTimes(2)
+    expect(external.toastRemove).not.toHaveBeenCalled()
+    expect(external.toastAdd.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ detail: tr('error.server_retry') }),
     )
   })
 

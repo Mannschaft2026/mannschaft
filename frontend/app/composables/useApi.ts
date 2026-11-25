@@ -279,6 +279,13 @@ let _errorBatchTimer: ReturnType<typeof setTimeout> | null = null
 let _errorBatchCount = 0
 let _errorBatchFirst: { status: number; statusText: string; url: string; code?: string; message?: string } | null = null
 
+// 障害が続く間も 5xx トーストを画面上で1枚に保つための状態（CMP-261125-1951）。
+// 表示中（life 経過前）に次の集約が確定したら前のトーストを消して置き換え、件数は累計で出す。
+const SERVER_ERROR_TOAST_LIFE_MS = 5000
+let _shownServerToast: Record<string, unknown> | null = null
+let _shownServerToastTotal = 0
+let _shownServerToastTimer: ReturnType<typeof setTimeout> | null = null
+
 export function useApi() {
   const config = useRuntimeConfig()
   const authStore = useAuthStore()
@@ -498,13 +505,16 @@ export function useApi() {
         if (_errorBatchTimer === null) {
           _errorBatchTimer = setTimeout(() => {
             const toast = useNuxtApp().$toast as
-              | { add: (opts: Record<string, unknown>) => void }
+              | { add: (opts: Record<string, unknown>) => void, remove: (opts: Record<string, unknown>) => void }
               | undefined
             if (toast) {
               const first = _errorBatchFirst
+              // 表示中のトーストがあれば消して置き換え、件数は表示中に起きた累計にする。
+              if (_shownServerToast) toast.remove(_shownServerToast)
+              const total = _shownServerToastTotal + _errorBatchCount
               const detail
-                = _errorBatchCount > 1
-                  ? tn('error.server_multiple', { count: _errorBatchCount })
+                = total > 1
+                  ? tn('error.server_multiple', { count: total })
                   : first?.code
                     ? resolveApiErrorMessage(
                         { t, te: key => nuxtApp.$i18n.te(key) },
@@ -514,7 +524,16 @@ export function useApi() {
                         'error.server_retry',
                       )
                     : t('error.server_retry')
-              toast.add({ severity: 'error', summary: t('error.server'), detail, life: 5000 })
+              const message = { severity: 'error', summary: t('error.server'), detail, life: SERVER_ERROR_TOAST_LIFE_MS }
+              toast.add(message)
+              _shownServerToast = message
+              _shownServerToastTotal = total
+              if (_shownServerToastTimer !== null) clearTimeout(_shownServerToastTimer)
+              _shownServerToastTimer = setTimeout(() => {
+                _shownServerToast = null
+                _shownServerToastTotal = 0
+                _shownServerToastTimer = null
+              }, SERVER_ERROR_TOAST_LIFE_MS)
             }
             _errorBatchCount = 0
             _errorBatchFirst = null
