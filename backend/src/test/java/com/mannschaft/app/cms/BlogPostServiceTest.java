@@ -489,7 +489,7 @@ class BlogPostServiceTest {
                     TEAM_ID_STR, null, null, "新規記事", null, "本文テスト",
                     null, null, null, null, null, null, null, null, null, null, null);
             BlogPostEntity savedEntity = createPostEntity(PostStatus.DRAFT);
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(savedEntity);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(savedEntity);
             given(cmsMapper.toBlogPostResponse(savedEntity)).willReturn(createPostResponse());
             // accessControlService.checkMembership はモック（void なので stubbing 不要）
 
@@ -498,7 +498,7 @@ class BlogPostServiceTest {
 
             // Then
             assertThat(result).isNotNull();
-            verify(postRepository).save(any(BlogPostEntity.class));
+            verify(postRepository).saveAndFlush(any(BlogPostEntity.class));
             verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
         }
 
@@ -510,7 +510,7 @@ class BlogPostServiceTest {
                     TEAM_ID_STR, null, null, "新ラダー記事", null, "本文",
                     null, null, null, "MEMBERS_AND_ABOVE", null, null, null, null, null, null, null);
             BlogPostEntity savedEntity = createPostEntity(PostStatus.DRAFT);
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(savedEntity);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(savedEntity);
             given(cmsMapper.toBlogPostResponse(savedEntity)).willReturn(createPostResponse());
 
             // When: 以前は Visibility.valueOf("MEMBERS_AND_ABOVE") が IllegalArgumentException → 500
@@ -520,7 +520,7 @@ class BlogPostServiceTest {
             assertThat(result).isNotNull();
             org.mockito.ArgumentCaptor<BlogPostEntity> captor =
                     org.mockito.ArgumentCaptor.forClass(BlogPostEntity.class);
-            verify(postRepository).save(captor.capture());
+            verify(postRepository).saveAndFlush(captor.capture());
             assertThat(captor.getValue().getVisibility()).isEqualTo(Visibility.MEMBERS_AND_ABOVE);
         }
 
@@ -532,7 +532,7 @@ class BlogPostServiceTest {
                     TEAM_ID_STR, null, null, "タグ付き記事", null, "本文",
                     null, null, null, null, null, List.of(1L, 2L), null, null, null, null, null);
             BlogPostEntity savedEntity = createPostEntity(PostStatus.DRAFT);
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(savedEntity);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(savedEntity);
             given(cmsMapper.toBlogPostResponse(savedEntity)).willReturn(createPostResponse());
 
             // When
@@ -559,7 +559,7 @@ class BlogPostServiceTest {
             given(postRepository.findById(POST_ID)).willReturn(Optional.of(entity));
             UpdateBlogPostRequest request = new UpdateBlogPostRequest(
                     "更新タイトル", null, "更新本文", null, null, null, null, null, null, null, null, null, null);
-            given(postRepository.save(entity)).willReturn(entity);
+            given(postRepository.saveAndFlush(entity)).willReturn(entity);
             given(cmsMapper.toBlogPostResponse(entity)).willReturn(createPostResponse());
 
             // When
@@ -578,7 +578,7 @@ class BlogPostServiceTest {
             UpdateBlogPostRequest request = new UpdateBlogPostRequest(
                     "更新タイトル", null, "更新本文", null, null, "MEMBERS_AND_ABOVE",
                     null, null, null, null, null, null, null);
-            given(postRepository.save(entity)).willReturn(entity);
+            given(postRepository.saveAndFlush(entity)).willReturn(entity);
             given(cmsMapper.toBlogPostResponse(entity)).willReturn(createPostResponse());
 
             // When: 以前は Visibility.valueOf("MEMBERS_AND_ABOVE") が IllegalArgumentException → 500
@@ -597,7 +597,7 @@ class BlogPostServiceTest {
             given(postRepository.findById(POST_ID)).willReturn(Optional.of(entity));
             UpdateBlogPostRequest request = new UpdateBlogPostRequest(
                     "更新タイトル", null, "更新本文", null, null, null, null, null, null, null, null, null, null);
-            given(postRepository.save(entity)).willReturn(entity);
+            given(postRepository.saveAndFlush(entity)).willReturn(entity);
             given(cmsMapper.toBlogPostResponse(entity)).willReturn(createPostResponse());
 
             // When
@@ -625,7 +625,116 @@ class BlogPostServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("COMMON_002"));
-            verify(postRepository, never()).save(any(BlogPostEntity.class));
+            verify(postRepository, never()).saveAndFlush(any(BlogPostEntity.class));
+        }
+    }
+
+    // ========================================
+    // slug 一意性（自分自身の除外・同時作成競合）
+    // ========================================
+
+    @Nested
+    @DisplayName("slug 一意性")
+    class SlugUniqueness {
+
+        private org.springframework.dao.DataIntegrityViolationException slugViolation() {
+            return new org.springframework.dao.DataIntegrityViolationException("could not execute statement",
+                    new org.hibernate.exception.ConstraintViolationException("could not execute statement",
+                            new java.sql.SQLIntegrityConstraintViolationException("Duplicate entry", "23000", 1062),
+                            "blog_posts.uq_bp_slug_team_active"));
+        }
+
+        @Test
+        @DisplayName("更新: 自分の slug を大文字小文字だけ変えるのは自分を除いた判定で通る（文字列比較で自分に一致させない）")
+        void 更新_大文字小文字だけの変更は自分を除いて判定() {
+            BlogPostEntity entity = createPostEntity(PostStatus.DRAFT);
+            ReflectionTestUtils.setField(entity, "id", POST_ID);
+            given(postRepository.findById(POST_ID)).willReturn(Optional.of(entity));
+            given(postRepository.existsByTeamIdAndSlugAndIdNot(TEAM_ID, "TEST-ARTICLE", POST_ID)).willReturn(false);
+            given(postRepository.saveAndFlush(entity)).willReturn(entity);
+            given(cmsMapper.toBlogPostResponse(entity)).willReturn(createPostResponse());
+            UpdateBlogPostRequest request = new UpdateBlogPostRequest(
+                    "タイトル", "TEST-ARTICLE", "本文", null, null, null, null, null, null, null, null, null, null);
+
+            service.updatePost(POST_ID, USER_ID, request);
+
+            assertThat(entity.getSlug()).isEqualTo("TEST-ARTICLE");
+            verify(postRepository).existsByTeamIdAndSlugAndIdNot(TEAM_ID, "TEST-ARTICLE", POST_ID);
+            verify(postRepository, never()).existsByTeamIdAndSlug(any(), any());
+        }
+
+        @Test
+        @DisplayName("更新: 同スコープの別記事が使う slug（自分を除いて存在）は 409（CMS_005）")
+        void 更新_別記事のslugは409() {
+            BlogPostEntity entity = createPostEntity(PostStatus.DRAFT);
+            ReflectionTestUtils.setField(entity, "id", POST_ID);
+            given(postRepository.findById(POST_ID)).willReturn(Optional.of(entity));
+            given(postRepository.existsByTeamIdAndSlugAndIdNot(TEAM_ID, "taken", POST_ID)).willReturn(true);
+            UpdateBlogPostRequest request = new UpdateBlogPostRequest(
+                    "タイトル", "taken", "本文", null, null, null, null, null, null, null, null, null, null);
+
+            assertThatThrownBy(() -> service.updatePost(POST_ID, USER_ID, request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("CMS_005"));
+            verify(postRepository, never()).saveAndFlush(any(BlogPostEntity.class));
+        }
+
+        @Test
+        @DisplayName("作成(明示 slug): 事前確認後に別リクエストが同 slug を確定させた一意制約違反は 409（CMS_005）")
+        void 作成_明示slugの競合は409() {
+            CreateBlogPostRequest request = new CreateBlogPostRequest(
+                    TEAM_ID_STR, null, null, "記事", "race-slug", "本文",
+                    null, null, null, null, null, null, null, null, null, null, null);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willThrow(slugViolation());
+
+            assertThatThrownBy(() -> service.createPost(USER_ID, request))
+                    .isInstanceOf(BusinessException.class)
+                    .isNotInstanceOf(com.mannschaft.app.cms.service.BlogSlugAutoConflictException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("CMS_005"));
+            verify(postRepository, org.mockito.Mockito.times(1)).saveAndFlush(any(BlogPostEntity.class));
+        }
+
+        @Test
+        @DisplayName("作成(自動採番): 一意制約違反は再試行用の BlogSlugAutoConflictException（CMS_027 自動割り当ての混雑）で投げる（再試行はアスペクトが外側で行う）")
+        void 作成_自動採番の競合は再試行用例外() {
+            CreateBlogPostRequest request = new CreateBlogPostRequest(
+                    TEAM_ID_STR, null, null, "Weekly Report", null, "本文",
+                    null, null, null, null, null, null, null, null, null, null, null);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willThrow(slugViolation());
+
+            assertThatThrownBy(() -> service.createPost(USER_ID, request))
+                    .isInstanceOf(com.mannschaft.app.cms.service.BlogSlugAutoConflictException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("CMS_027"));
+        }
+
+        @Test
+        @DisplayName("複製(自動採番): 一意制約違反は再試行用の BlogSlugAutoConflictException で投げる")
+        void 複製_競合は再試行用例外() {
+            BlogPostEntity original = createPostEntity(PostStatus.PUBLISHED);
+            given(postRepository.findById(POST_ID)).willReturn(Optional.of(original));
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willThrow(slugViolation());
+
+            assertThatThrownBy(() -> service.duplicatePost(POST_ID, USER_ID))
+                    .isInstanceOf(com.mannschaft.app.cms.service.BlogSlugAutoConflictException.class);
+        }
+
+        @Test
+        @DisplayName("slug 以外の制約違反は変換せずそのまま投げる")
+        void 作成_slug以外の制約違反はそのまま() {
+            CreateBlogPostRequest request = new CreateBlogPostRequest(
+                    TEAM_ID_STR, null, null, "記事", null, "本文",
+                    null, null, null, null, null, null, null, null, null, null, null);
+            org.springframework.dao.DataIntegrityViolationException other =
+                    new org.springframework.dao.DataIntegrityViolationException("fk",
+                            new org.hibernate.exception.ConstraintViolationException("fk",
+                                    new java.sql.SQLIntegrityConstraintViolationException("fk", "23000", 1452),
+                                    "fk_blog_posts_series"));
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willThrow(other);
+
+            assertThatThrownBy(() -> service.createPost(USER_ID, request)).isSameAs(other);
         }
     }
 
@@ -725,7 +834,7 @@ class BlogPostServiceTest {
             // Given
             BlogPostEntity original = createPostEntity(PostStatus.PUBLISHED);
             given(postRepository.findById(POST_ID)).willReturn(Optional.of(original));
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(original);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(original);
             given(postTagRepository.findByBlogPostId(POST_ID)).willReturn(List.of());
             given(cmsMapper.toBlogPostResponse(any())).willReturn(createPostResponse());
 

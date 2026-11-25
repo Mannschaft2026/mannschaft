@@ -80,14 +80,81 @@ class MembershipGrantServiceTest {
         given(userRowLockService.lock(USER_ID)).willReturn(state);
     }
 
+    /** 招待ロール（ROLE_ID）の名前を決める。 */
+    private void inviteRoleIs(String name) {
+        given(roleRepository.findById(ROLE_ID))
+                .willReturn(Optional.of(RoleEntity.builder().id(ROLE_ID).name(name).build()));
+    }
+
+    private MembershipCreateRequest joinedRequest() {
+        ArgumentCaptor<MembershipCreateRequest> captor = ArgumentCaptor.forClass(MembershipCreateRequest.class);
+        verify(membershipService).join(captor.capture());
+        return captor.getValue();
+    }
+
     @Nested
     @DisplayName("grantRole（招待）")
     class GrantRole {
 
         @Test
-        @DisplayName("TEAM スコープで user_roles 割当と membership 入会の両方を行い GRANTED を返す")
+        @DisplayName("CMP-261124-0157: SUPPORTER 招待は memberships に SUPPORTER として入会させ、user_roles を作らない")
+        void SUPPORTER招待は所属のみ() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("SUPPORTER");
+
+            GrantOutcome outcome = service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN");
+
+            assertThat(outcome).isEqualTo(GrantOutcome.GRANTED);
+            verify(userRoleRepository, never()).save(any(UserRoleEntity.class));
+            MembershipCreateRequest req = joinedRequest();
+            assertThat(req.getRoleKind()).isEqualTo(RoleKind.SUPPORTER);
+            assertThat(req.getScopeType()).isEqualTo(ScopeType.TEAM);
+            assertThat(req.getScopeId()).isEqualTo(TEAM_ID);
+            assertThat(req.getInvitedBy()).isEqualTo(GRANTED_BY);
+            assertThat(req.getSource()).isEqualTo("INVITE_TOKEN");
+        }
+
+        @Test
+        @DisplayName("CMP-261124-0157: MEMBER 招待は memberships に MEMBER として入会させる（暫定で user_roles の MEMBER 行も従来どおり作る。除名・ロール変更が行を前提にするため）")
+        void MEMBER招待は従来どおり() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("MEMBER");
+            given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
+
+            GrantOutcome outcome = service.grantRole("ORGANIZATION", ORG_ID, USER_ID, ROLE_ID, GRANTED_BY,
+                    "INVITE_TOKEN");
+
+            assertThat(outcome).isEqualTo(GrantOutcome.GRANTED);
+            ArgumentCaptor<UserRoleEntity> roleCaptor = ArgumentCaptor.forClass(UserRoleEntity.class);
+            verify(userRoleRepository).save(roleCaptor.capture());
+            assertThat(roleCaptor.getValue().getRoleId()).isEqualTo(ROLE_ID);
+            assertThat(roleCaptor.getValue().getOrganizationId()).isEqualTo(ORG_ID);
+            MembershipCreateRequest req = joinedRequest();
+            assertThat(req.getRoleKind()).isEqualTo(RoleKind.MEMBER);
+            assertThat(req.getScopeType()).isEqualTo(ScopeType.ORGANIZATION);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"GUEST", "SYSTEM_ADMIN"})
+        @DisplayName("CMP-261124-0157: 招待で付与できないロール（GUEST / SYSTEM_ADMIN）は 422 ROLE_009 で何も書かない")
+        void 付与できないロールは拒否(String roleName) {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs(roleName);
+
+            assertThatThrownBy(() -> service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN"))
+                    .isInstanceOfSatisfying(BusinessException.class, e -> {
+                        assertThat(e.getErrorCode()).isEqualTo(RoleErrorCode.ROLE_009);
+                        assertThat(e.getHttpStatusOverride()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+                    });
+            verify(userRoleRepository, never()).save(any(UserRoleEntity.class));
+            verify(membershipService, never()).join(any(MembershipCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("権限ロール（DEPUTY_ADMIN）は TEAM スコープで user_roles 割当と membership（MEMBER）入会の両方を行い GRANTED を返す")
         void チーム() {
             userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("DEPUTY_ADMIN");
             given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
 
             GrantOutcome outcome = service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN");
@@ -112,9 +179,10 @@ class MembershipGrantServiceTest {
         }
 
         @Test
-        @DisplayName("ORGANIZATION スコープでも同様に動作する")
+        @DisplayName("権限ロール（ADMIN）は ORGANIZATION スコープでも同様に動作する")
         void 組織() {
             userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("ADMIN");
             given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
 
             service.grantRole("ORGANIZATION", ORG_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN");
@@ -129,6 +197,7 @@ class MembershipGrantServiceTest {
         @DisplayName("ロック順: user 行 → user_roles → memberships の順に現在読みし、その後に付与する")
         void ロック順() {
             userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("DEPUTY_ADMIN");
             given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
 
             service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN");
@@ -184,6 +253,7 @@ class MembershipGrantServiceTest {
         @DisplayName("付与中の一意制約違反は 409 TEAM_003 の業務エラーへ変換する（呼び出し側が確保を戻せる）")
         void 一意制約違反は業務エラー() {
             userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("DEPUTY_ADMIN");
             given(userRoleRepository.save(any(UserRoleEntity.class)))
                     .willThrow(new DataIntegrityViolationException("duplicate"));
 
@@ -192,6 +262,18 @@ class MembershipGrantServiceTest {
                         assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_003);
                         assertThat(e.getHttpStatusOverride()).isEqualTo(HttpStatus.CONFLICT);
                     });
+        }
+
+        @Test
+        @DisplayName("所属ロールのみの付与でも、memberships の一意制約違反は 409 TEAM_003 の業務エラーへ変換する")
+        void 所属のみの一意制約違反も業務エラー() {
+            userIs(UserRowLockService.UserState.ACTIVE);
+            inviteRoleIs("SUPPORTER");
+            Mockito.doThrow(new DataIntegrityViolationException("duplicate")).when(userRoleRepository).flush();
+
+            assertThatThrownBy(() -> service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN"))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_003));
         }
     }
 
@@ -216,6 +298,7 @@ class MembershipGrantServiceTest {
         void 付与と同時に付与印() {
             userIs(UserRowLockService.UserState.ACTIVE);
             claimIs("CLAIMED", false);
+            inviteRoleIs("DEPUTY_ADMIN");
             given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
             given(inviteTokenRepository.markClaimGrantCommitted(claimId)).willReturn(1);
 
@@ -273,7 +356,7 @@ class MembershipGrantServiceTest {
         @DisplayName("claim の範囲外（直接呼び出し）では claim を読まない。範囲は呼び出し後に必ず外れる")
         void 範囲外はclaimを読まない() {
             userIs(UserRowLockService.UserState.ACTIVE);
-            given(userRoleRepository.save(any(UserRoleEntity.class))).willAnswer(inv -> inv.getArgument(0));
+            inviteRoleIs("MEMBER");
 
             service.grantRole("TEAM", TEAM_ID, USER_ID, ROLE_ID, GRANTED_BY, "INVITE_TOKEN");
 

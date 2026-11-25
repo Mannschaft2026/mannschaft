@@ -195,7 +195,7 @@ test.describe('行動メモ → 公開した個人投稿への導線', () => {
       await expect(page.getByText(MARK_TODAY).first()).toBeVisible({ timeout: 30_000 })
       await shot(page, 's1-2-detail')
 
-      await page.getByRole('button', { name: /戻る/ }).first().click()
+      await page.getByRole('button', { name: '戻る', exact: true }).click()
       await page.waitForURL('**/action-memo**', { timeout: 30_000 })
       await waitForHydration(page)
       expect(new URL(page.url()).searchParams.get('date') ?? TODAY).toBe(TODAY)
@@ -245,7 +245,7 @@ test.describe('行動メモ → 公開した個人投稿への導線', () => {
       await waitForHydration(page)
       await expect(page.getByText(MARK_PAST).first()).toBeVisible({ timeout: 30_000 })
 
-      await page.getByRole('button', { name: /戻る/ }).first().click()
+      await page.getByRole('button', { name: '戻る', exact: true }).click()
       await page.waitForURL('**/action-memo**', { timeout: 30_000 })
       await waitForHydration(page)
       expect(new URL(page.url()).searchParams.get('date')).toBe(PAST_DATE)

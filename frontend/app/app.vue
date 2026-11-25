@@ -14,7 +14,7 @@ useHead(() => ({
     <NuxtPage />
   </NuxtLayout>
   <NavigationLoading />
-  <Toast>
+  <Toast :pt="appToastPt">
     <template #message="{ message }">
       <AppToastMessage :message="message" />
     </template>

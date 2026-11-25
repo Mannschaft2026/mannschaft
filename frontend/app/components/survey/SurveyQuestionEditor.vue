@@ -16,6 +16,8 @@ export interface QuestionDraft {
 
 const props = defineProps<{
   modelValue: QuestionDraft[]
+  /** 親が別枠で設問を表示済みのとき「設問がありません」を出さない */
+  hideEmpty?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -180,7 +182,7 @@ function isChoiceType(type: QuestionType): boolean {
 <template>
   <div class="flex flex-col gap-3" data-testid="survey-question-editor">
     <div
-      v-if="sortedQuestions.length === 0"
+      v-if="sortedQuestions.length === 0 && !hideEmpty"
       class="rounded-lg border border-dashed border-surface-300 py-8 text-center text-sm text-surface-400"
     >
       <i class="pi pi-list mb-2 block text-2xl" />

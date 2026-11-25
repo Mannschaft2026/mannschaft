@@ -416,15 +416,46 @@ jobs:
         # ./backend は存在しない。job 既定に従うと bash の起動自体が
         # 「No such file or directory」で失敗する（2026-08-09 実測）。
         working-directory: .
+        # デプロイに必要な secret が「全て未設定」なら意図的な無効化（本番未構築）とみなし
+        # スキップ、「全て設定済み」ならデプロイへ進む。「一部だけ設定済み」は設定ミスで
+        # あり、黙ってスキップせずジョブを失敗させて気付けるようにする（対処療法の禁止）。
+        # 対象は後段 step が実際に参照する secret の全て（frontend-deploy.yml と同方式）。
+        # 値そのものはログに出さず、secret 名だけを出す。
         run: |
-          if [ -z "$AWS_KEY" ]; then
+          missing=()
+          present=()
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY ECR_REPOSITORY ECS_CLUSTER ECS_SERVICE ECS_TASK_DEFINITION ECS_CONTAINER_NAME; do
+            value_var="SECRET_${name}"
+            if [ -z "${!value_var}" ]; then
+              missing+=("$name")
+            else
+              present+=("$name")
+            fi
+          done
+
+          if [ "${#present[@]}" -eq 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::warning::AWS credentials not configured — skipping deploy"
-          else
+            {
+              echo "## デプロイ未実行"
+              echo ""
+              echo "デプロイ未実行（AWS 資格情報が未設定のため skip）。このジョブの緑はデプロイ成功を意味しない。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${#missing[@]}" -eq 0 ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::error::デプロイ用 secret が一部だけ設定されています（設定ミスの疑い）。未設定: ${missing[*]}"
+            exit 1
           fi
         env:
-          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          SECRET_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          SECRET_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SECRET_ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          SECRET_ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          SECRET_ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+          SECRET_ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
+          SECRET_ECS_CONTAINER_NAME: ${{ secrets.ECS_CONTAINER_NAME }}
 
       - name: Checkout source
         if: steps.aws-check.outputs.skip != 'true'
