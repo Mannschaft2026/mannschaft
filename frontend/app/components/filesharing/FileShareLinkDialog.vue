@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { SharedFile, PublicFileLink } from '~/types/filesharing'
+import type { SharedFile, PublicFileLink, PublicFileLinkIssued } from '~/types/filesharing'
 
 /**
  * F05.5 (D) 公開共有リンクの発行・一覧・失効ダイアログ。
  * 発行は BE 側で管理者/所有者に限定されており、権限が無い場合は 403 を丁寧に案内する。
+ *
+ * 平文の URL は発行直後に SecretIssuedDialog で1回だけ見せる（DB にはハッシュしか残らず、後から再取得できない。
+ * CMP-260826-1457）。一覧には URL・コピーを出さず、再発行（新しく発行して旧リンクを削除）を置く。
  */
 const props = defineProps<{ file: SharedFile }>()
 const visible = defineModel<boolean>('visible', { default: false })
@@ -17,6 +20,12 @@ const links = ref<PublicFileLink[]>([])
 const loading = ref(false)
 const creating = ref(false)
 const forbidden = ref(false)
+
+// 発行直後の平文 URL（画面のメモリ上だけで扱い、保存領域には書かない）
+const issuedToken = ref<string | null>(null)
+const showIssuedDialog = ref(false)
+/** 再発行中の旧リンク ID。新リンクの発行に成功したら削除する。 */
+const reissueTargetId = ref<number | null>(null)
 
 // 発行フォーム
 const expiresAt = ref<Date | null>(null)
@@ -37,9 +46,16 @@ function statusOf(err: unknown): number | undefined {
   return e?.response?.status ?? e?.status ?? e?.statusCode
 }
 
-function publicUrl(token: string): string {
+const issuedUrl = computed(() => {
+  if (!issuedToken.value) return ''
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  return `${origin}/shared/${token}`
+  return `${origin}/shared/${issuedToken.value}`
+})
+
+function onIssuedVisibleChange(open: boolean) {
+  showIssuedDialog.value = open
+  // 閉じたら平文をメモリからも捨てる
+  if (!open) issuedToken.value = null
 }
 
 async function loadLinks() {
@@ -72,12 +88,28 @@ async function onCreate() {
       showError(t('file_sharing.publicLink.errors.expiryInvalid'))
       return
     }
-    await createFileLink(props.file.id, {
+    const res = await createFileLink(props.file.id, {
       expiresAt: isoValue,
       downloadAllowed: downloadAllowed.value,
       password: password.value.trim() || undefined,
     })
+    const issued = res?.data as unknown as PublicFileLinkIssued | undefined
+    if (issued?.token) {
+      issuedToken.value = issued.token
+      showIssuedDialog.value = true
+    }
     showSuccess(t('file_sharing.publicLink.created'))
+    // 再発行なら、新リンクの発行に成功した後で旧リンクを削除する
+    const oldId = reissueTargetId.value
+    reissueTargetId.value = null
+    if (oldId !== null) {
+      try {
+        await deleteFileLink(props.file.id, oldId)
+      }
+      catch {
+        showError(t('file_sharing.publicLink.revokeError'))
+      }
+    }
     // フォームをリセットして一覧を再取得
     expiresAt.value = null
     downloadAllowed.value = false
@@ -98,14 +130,13 @@ async function onCreate() {
   }
 }
 
-async function onCopy(token: string) {
-  try {
-    await navigator.clipboard.writeText(publicUrl(token))
-    showSuccess(t('file_sharing.publicLink.copied'))
-  }
-  catch {
-    showError(t('file_sharing.publicLink.copyError'))
-  }
+/** 再発行: 旧リンクの設定（期限・DL可否）を発行フォームへ入れる。パスワードは再入力してもらう。 */
+function onReissue(link: PublicFileLink) {
+  reissueTargetId.value = link.id
+  downloadAllowed.value = link.downloadAllowed
+  password.value = ''
+  const old = link.expiresAt ? new Date(link.expiresAt) : null
+  expiresAt.value = old && old > new Date() && old <= maxDate.value ? old : null
 }
 
 async function onDelete(link: PublicFileLink) {
@@ -122,6 +153,7 @@ async function onDelete(link: PublicFileLink) {
 // ダイアログが開かれるたびに最新のリンク一覧を読み込む
 watch(visible, (open) => {
   if (open) loadLinks()
+  else reissueTargetId.value = null
 })
 </script>
 
@@ -146,6 +178,15 @@ watch(visible, (open) => {
       <template v-else>
         <!-- 発行フォーム -->
         <SectionCard>
+          <Message
+            v-if="reissueTargetId !== null"
+            severity="info"
+            :closable="false"
+            class="mb-4"
+            data-testid="share-link-reissue-notice"
+          >
+            {{ t('file_sharing.publicLink.reissueNotice') }}
+          </Message>
           <div class="flex flex-col gap-4">
             <div>
               <label class="mb-1 block text-sm font-medium">
@@ -226,16 +267,18 @@ watch(visible, (open) => {
               class="rounded-lg border border-surface-200 p-3 dark:border-surface-700"
             >
               <div class="flex items-center gap-2">
-                <code class="min-w-0 flex-1 truncate text-xs text-surface-600 dark:text-surface-300">
-                  {{ publicUrl(link.token) }}
-                </code>
+                <span class="min-w-0 flex-1 text-xs text-surface-600 dark:text-surface-300">
+                  {{ t('file_sharing.publicLink.createdAtLabel') }}:
+                  {{ formatDateTime(link.createdAt) }}
+                </span>
                 <Button
-                  icon="pi pi-copy"
+                  icon="pi pi-refresh"
                   text
                   rounded
                   size="small"
-                  :aria-label="t('file_sharing.publicLink.copyButton')"
-                  @click="onCopy(link.token)"
+                  :aria-label="t('file_sharing.publicLink.reissueButton')"
+                  :data-testid="`share-link-reissue-${link.id}`"
+                  @click="onReissue(link)"
                 />
                 <Button
                   icon="pi pi-trash"
@@ -251,6 +294,9 @@ watch(visible, (open) => {
                 <span>
                   {{ t('file_sharing.publicLink.expiresAtLabel') }}:
                   {{ link.expiresAt ? formatDateTime(link.expiresAt) : '-' }}
+                </span>
+                <span>
+                  {{ t('file_sharing.publicLink.accessCountLabel') }}: {{ link.accessCount }}
                 </span>
                 <Tag
                   v-if="link.downloadAllowed"
@@ -278,4 +324,12 @@ watch(visible, (open) => {
       <Button :label="t('button.close')" icon="pi pi-times" text @click="visible = false" />
     </template>
   </Dialog>
+
+  <!-- 発行直後にだけ平文のリンクを見せる -->
+  <SecretIssuedDialog
+    v-if="issuedToken"
+    :visible="showIssuedDialog"
+    :url="issuedUrl"
+    @update:visible="onIssuedVisibleChange"
+  />
 </template>

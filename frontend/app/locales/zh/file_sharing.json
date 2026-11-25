@@ -53,7 +53,11 @@
       "passwordInvalid": "密码不正确",
       "downloadNotAllowed": "此分享链接不允许下载",
       "expiryInvalid": "有效期为必填，最长可设置到30天以后"
-    }
+    },
+    "createdAtLabel": "创建时间",
+    "accessCountLabel": "访问次数",
+    "reissueButton": "重新发行",
+    "reissueNotice": "已填入旧链接的设置。如需密码请重新输入，然后点击“创建分享链接”，即可发行新链接并删除旧链接。"
   },
   "guide": {
     "title": "文件共享使用说明",

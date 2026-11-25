@@ -53,7 +53,11 @@
       "passwordInvalid": "The password is incorrect",
       "downloadNotAllowed": "This share link does not allow downloads",
       "expiryInvalid": "Expiry is required and can be at most 30 days ahead"
-    }
+    },
+    "createdAtLabel": "Created at",
+    "accessCountLabel": "Access count",
+    "reissueButton": "Reissue",
+    "reissueNotice": "The old link's settings are filled in. Re-enter the password if you use one, then press \"Create share link\" to issue a new link and delete the old one."
   },
   "guide": {
     "title": "How file sharing works",

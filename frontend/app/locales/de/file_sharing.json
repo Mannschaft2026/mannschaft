@@ -53,7 +53,11 @@
       "passwordInvalid": "Das Passwort ist falsch",
       "downloadNotAllowed": "Dieser Freigabelink erlaubt keine Downloads",
       "expiryInvalid": "Ein Ablaufdatum ist erforderlich und darf höchstens 30 Tage in der Zukunft liegen"
-    }
+    },
+    "createdAtLabel": "Erstellt am",
+    "accessCountLabel": "Zugriffe",
+    "reissueButton": "Neu ausstellen",
+    "reissueNotice": "Die Einstellungen des alten Links sind eingetragen. Geben Sie ein eventuelles Passwort erneut ein und klicken Sie auf „Freigabelink erstellen“, um einen neuen Link auszustellen und den alten zu löschen."
   },
   "guide": {
     "title": "So funktioniert die Dateifreigabe",

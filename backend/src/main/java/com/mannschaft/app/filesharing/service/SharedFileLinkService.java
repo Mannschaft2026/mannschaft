@@ -2,11 +2,14 @@ package com.mannschaft.app.filesharing.service;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.token.IssuedToken;
+import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.filesharing.FileSharingErrorCode;
 import com.mannschaft.app.filesharing.FileSharingMapper;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.LinkIssuedResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
 import com.mannschaft.app.filesharing.dto.SharedFileDownloadUrlResponse;
 import com.mannschaft.app.filesharing.entity.SharedFileLinkEntity;
@@ -19,8 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * ファイル共有リンクサービス。外部共有用のトークンベースリンクを担当する。
@@ -38,6 +39,8 @@ public class SharedFileLinkService {
     private final SharedFileService fileService;
     private final FileSharingMapper fileSharingMapper;
     private final PasswordEncoder passwordEncoder;
+    /** トークンの発行（乱数）と照合用ハッシュ。平文は保存しない（CMP-260826-1457 W2）。 */
+    private final SecretTokenVault vault;
     /** F08.7.1 / 04: 大会フォルダ配下の共有リンク管理に対する横断認可ゲート（大会以外は no-op）。 */
     private final FolderScopeAccessGuard folderScopeAccessGuard;
     /**
@@ -66,11 +69,10 @@ public class SharedFileLinkService {
      * @param fileId  ファイルID
      * @param userId  作成者ユーザーID
      * @param request 作成リクエスト
-     * @return 作成されたリンクレスポンス
+     * @return 作成されたリンクレスポンス（平文トークンを載せるのはこの発行応答の1回だけ）
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
     @Transactional
-    public LinkResponse createLink(Long fileId, Long userId, CreateLinkRequest request) {
+    public LinkIssuedResponse createLink(Long fileId, Long userId, CreateLinkRequest request) {
         // PR-D 発行認可是正: 公開リンクを発行できるのはスコープの管理者（ADMIN/DEPUTY・PERSONAL は所有者）のみ。
         // 未認証・非会員にファイルを開く capability を配る強力な操作のため、一般 MEMBER は 403。
         folderQueryService.authorizeLinkManageByFileId(fileId, userId);
@@ -86,9 +88,10 @@ public class SharedFileLinkService {
         // PR-D マスター確定仕様: download_allowed 既定 false（閲覧のみ）。明示 true のリンクのみ DL 許可。
         boolean downloadAllowed = Boolean.TRUE.equals(request.getDownloadAllowed());
 
+        IssuedToken issued = vault.issueBase64Url();
         SharedFileLinkEntity entity = SharedFileLinkEntity.builder()
                 .fileId(fileId)
-                .token(UUID.randomUUID().toString())
+                .tokenHash(issued.hash())
                 .expiresAt(expiresAt)
                 .passwordHash(passwordHash)
                 .downloadAllowed(downloadAllowed)
@@ -97,7 +100,7 @@ public class SharedFileLinkService {
 
         SharedFileLinkEntity saved = linkRepository.save(entity);
         log.info("共有リンク作成: fileId={}, linkId={}, downloadAllowed={}", fileId, saved.getId(), downloadAllowed);
-        return fileSharingMapper.toLinkResponse(saved);
+        return new LinkIssuedResponse(issued.plaintext(), fileSharingMapper.toLinkResponse(saved));
     }
 
     /**
@@ -200,7 +203,7 @@ public class SharedFileLinkService {
      * @return 検証を通過したリンクエンティティ
      */
     private SharedFileLinkEntity validateLinkForAccess(String token, AccessLinkRequest request) {
-        SharedFileLinkEntity entity = linkRepository.findByToken(token)
+        SharedFileLinkEntity entity = linkRepository.findByTokenHash(vault.hash(token))
                 .orElseThrow(() -> new BusinessException(FileSharingErrorCode.LINK_NOT_FOUND));
 
         // 手動失効（is_active=false）→ 410 Gone。

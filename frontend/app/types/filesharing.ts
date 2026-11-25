@@ -51,7 +51,6 @@ export interface SharedFile {
 export interface PublicFileLink {
   id: number
   fileId: number
-  token: string
   downloadAllowed: boolean
   hasPassword: boolean
   active: boolean
@@ -59,6 +58,14 @@ export interface PublicFileLink {
   expiresAt: string | null
   lastAccessedAt: string | null
   createdAt: string
+}
+
+/**
+ * 公開リンクの発行応答。平文の token は発行時の1回だけ返る（DB にはハッシュしか残らない。CMP-260826-1457）。
+ * 生成型 components["schemas"]["LinkIssuedResponse"] と一致させる。
+ */
+export interface PublicFileLinkIssued extends PublicFileLink {
+  token: string
 }
 
 /**

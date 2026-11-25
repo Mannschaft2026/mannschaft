@@ -31,6 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("FileSharingMapper 単体テスト")
 class FileSharingMapperTest {
 
+    private static final com.mannschaft.app.common.token.SecretTokenVault HASHER =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     private final FileSharingMapper mapper = new FileSharingMapperImpl();
 
     // ========================================
@@ -354,7 +357,7 @@ class FileSharingMapperTest {
         void パスワードなしリンク_DTO変換_hasPasswordFalse() {
             SharedFileLinkEntity entity = SharedFileLinkEntity.builder()
                     .fileId(10L)
-                    .token("abc123")
+                    .tokenHash(HASHER.hash("abc123"))
                     .expiresAt(LocalDateTime.of(2026, 12, 31, 0, 0))
                     .accessCount(5)
                     .createdBy(100L)
@@ -364,7 +367,6 @@ class FileSharingMapperTest {
 
             assertThat(result).isNotNull();
             assertThat(result.getFileId()).isEqualTo(10L);
-            assertThat(result.getToken()).isEqualTo("abc123");
             assertThat(result.isHasPassword()).isFalse();
             assertThat(result.getAccessCount()).isEqualTo(5);
         }
@@ -374,7 +376,7 @@ class FileSharingMapperTest {
         void パスワードありリンク_DTO変換_hasPasswordTrue() {
             SharedFileLinkEntity entity = SharedFileLinkEntity.builder()
                     .fileId(10L)
-                    .token("xyz789")
+                    .tokenHash(HASHER.hash("xyz789"))
                     .passwordHash("$2a$10$hashedpassword")
                     .accessCount(0)
                     .createdBy(100L)
@@ -389,9 +391,9 @@ class FileSharingMapperTest {
         @DisplayName("正常系: リンクリスト変換")
         void リンクリスト_DTO変換_正常() {
             SharedFileLinkEntity e1 = SharedFileLinkEntity.builder()
-                    .fileId(1L).token("t1").accessCount(0).createdBy(10L).build();
+                    .fileId(1L).tokenHash(HASHER.hash("t1")).accessCount(0).createdBy(10L).build();
             SharedFileLinkEntity e2 = SharedFileLinkEntity.builder()
-                    .fileId(1L).token("t2").passwordHash("hash").accessCount(3).createdBy(10L).build();
+                    .fileId(1L).tokenHash(HASHER.hash("t2")).passwordHash("hash").accessCount(3).createdBy(10L).build();
 
             List<LinkResponse> result = mapper.toLinkResponseList(List.of(e1, e2));
 
