@@ -23474,7 +23474,7 @@ export interface paths {
         /** 発行済みトークン一覧 */
         get: operations["listTokens_3"];
         put?: never;
-        /** 招待トークンを発行する */
+        /** 招待トークンを発行する（平文のトークン・招待URLはこの応答の1回だけ） */
         post: operations["createToken_2"];
         delete?: never;
         options?: never;
@@ -46894,23 +46894,6 @@ export interface paths {
         };
         /** 招待プレビュー取得（認証不要） */
         get: operations["getPreview"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/contact-invite-tokens/{token}/qr": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** QRコード画像を取得する（PNG） */
-        get: operations["getQrCode_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -70925,10 +70908,10 @@ export interface components {
             /** Format: int32 */
             maxUses?: number;
         };
-        ApiResponseContactInviteTokenResponse: {
-            data?: components["schemas"]["ContactInviteTokenResponse"];
+        ApiResponseContactInviteIssuedResponse: {
+            data?: components["schemas"]["ContactInviteIssuedResponse"];
         };
-        ContactInviteTokenResponse: {
+        ContactInviteIssuedResponse: {
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -70939,7 +70922,6 @@ export interface components {
             label?: string;
             /** Format: int32 */
             maxUses?: number;
-            qrCodeUrl?: string;
             token?: string;
             /** Format: int32 */
             usedCount?: number;
@@ -86074,6 +86056,19 @@ export interface components {
         };
         ApiResponseListContactInviteTokenResponse: {
             data?: components["schemas"]["ContactInviteTokenResponse"][];
+        };
+        ContactInviteTokenResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            label?: string;
+            /** Format: int32 */
+            maxUses?: number;
+            /** Format: int32 */
+            usedCount?: number;
         };
         ApiResponseListCommitteeMemberResponse: {
             data?: components["schemas"]["CommitteeMemberResponse"][];
@@ -138109,7 +138104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseContactInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseContactInviteIssuedResponse"];
                 };
             };
         };
@@ -175858,30 +175853,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseContactInvitePreviewResponse"];
-                };
-            };
-        };
-    };
-    getQrCode_1: {
-        parameters: {
-            query?: {
-                size?: number;
-            };
-            header?: never;
-            path: {
-                token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": string;
                 };
             };
         };

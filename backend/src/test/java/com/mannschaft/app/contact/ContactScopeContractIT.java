@@ -51,7 +51,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>本 IT が固定する保証:</p>
  * <ul>
- *   <li><b>ID を受け取る EP</b>（連絡先削除・招待トークン無効化／QR・事前拒否解除・申請の承認／拒否／
+ *   <li><b>ID を受け取る EP</b>（連絡先削除・招待トークン無効化・事前拒否解除・申請の承認／拒否／
  *       キャンセル）: 対象は entity 由来の当事者（フォルダ所有者・トークン発行者・申請の宛先／送信者）に
  *       限定し、当事者以外には <b>404</b> で存在を秘匿する。越境操作が成立していないことも併せて固定する。</li>
  *   <li><b>チーム／組織のメンバー一覧</b>（設計書 {@code F04.8_contact.md §4.7}）: 公開範囲が
@@ -97,6 +97,9 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
     private ContactInviteTokenRepository contactInviteTokenRepository;
 
     @Autowired
+    private com.mannschaft.app.common.token.SecretTokenVault vault;
+
+    @Autowired
     private ChatContactFolderRepository folderRepository;
 
     @Autowired
@@ -119,7 +122,6 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
     private Long ownerFolderId;        // owner の連絡先フォルダ
     private Long attackerFolderId;     // attacker の連絡先フォルダ
     private Long ownerTokenId;         // owner が発行した招待トークンの ID
-    private String ownerTokenValue;    // 同トークン文字列
     private Long receivedRequestId;    // attacker → owner の受信申請（owner が宛先）
     private Long sentRequestId;        // owner → friend の送信申請（owner が送信者）
 
@@ -156,12 +158,11 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
 
         ContactInviteTokenEntity token = contactInviteTokenRepository.save(ContactInviteTokenEntity.builder()
                 .userId(ownerId)
-                .token("contactauthz-token-" + uniq)
+                .tokenHash(vault.hash("contactauthz-token-" + uniq))
                 .label("CONTACTAUTHZ 招待")
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build());
         ownerTokenId = token.getId();
-        ownerTokenValue = token.getToken();
 
         contactRequestBlockRepository.save(ContactRequestBlockEntity.builder()
                 .userId(ownerId).blockedId(hiddenId).build());
@@ -270,7 +271,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
     // ═════════════════════════════════════════════════════════════════════
 
     @Nested
-    @DisplayName("3. 招待トークン 無効化・QR・一覧")
+    @DisplayName("3. 招待トークン 無効化・一覧")
     class InviteTokens {
 
         @Test
@@ -293,20 +294,9 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("無関係な他ユーザーが他人のトークンのQRを取得→404秘匿")
-        void 他ユーザーのQRは404秘匿() throws Exception {
-            setAuth(attackerId);
-            mockMvc.perform(get("/api/v1/contact-invite-tokens/{token}/qr", ownerTokenValue))
-                    .andExpect(status().isNotFound());
-        }
-
-        @Test
-        @DisplayName("正常系: 発行者本人はQRを取得でき、無効化もできる")
+        @DisplayName("正常系: 発行者本人は無効化できる")
         void 発行者は成功() throws Exception {
             setAuth(ownerId);
-            mockMvc.perform(get("/api/v1/contact-invite-tokens/{token}/qr", ownerTokenValue))
-                    .andExpect(status().isOk());
-
             mockMvc.perform(delete("/api/v1/contact-invite-tokens/{id}", ownerTokenId))
                     .andExpect(status().isNoContent());
 
@@ -798,10 +788,10 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
                     "issuer-" + uniq,
                     "招待発行者実名テスト",
                     "招待発行者ニックネーム");
-            ContactInviteTokenEntity issuerToken = contactInviteTokenRepository.save(
+            contactInviteTokenRepository.save(
                     ContactInviteTokenEntity.builder()
                             .userId(issuerId)
-                            .token("contactauthz-preview-token-" + uniq)
+                            .tokenHash(vault.hash("contactauthz-preview-token-" + uniq))
                             .label("CONTACTAUTHZ プレビュー用")
                             .expiresAt(LocalDateTime.now().plusDays(7))
                             .build());
@@ -809,7 +799,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             em.clear();
 
             SecurityContextHolder.clearContext();
-            mockMvc.perform(get("/api/v1/contact-invite/{token}", issuerToken.getToken()))
+            mockMvc.perform(get("/api/v1/contact-invite/{token}", "contactauthz-preview-token-" + uniq))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.isValid").value(true))
                     .andExpect(jsonPath("$.data.issuer.fullName").value("招待発行者ニックネーム"));
@@ -846,10 +836,10 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
                     "accept-issuer-" + uniq, true);
             Long accepterId = insertUser("contactauthz-accept-user-" + uniq + "@example.test",
                     "accept-user-" + uniq, true);
-            ContactInviteTokenEntity validToken = contactInviteTokenRepository.save(
+            contactInviteTokenRepository.save(
                     ContactInviteTokenEntity.builder()
                             .userId(issuerId)
-                            .token("contactauthz-accept-valid-" + uniq)
+                            .tokenHash(vault.hash("contactauthz-accept-valid-" + uniq))
                             .label("CONTACTAUTHZ 受諾用")
                             .expiresAt(LocalDateTime.now().plusDays(7))
                             .build());
@@ -857,7 +847,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             em.clear();
 
             setAuth(accepterId);
-            mockMvc.perform(post("/api/v1/contact-invite/{token}/accept", validToken.getToken()))
+            mockMvc.perform(post("/api/v1/contact-invite/{token}/accept", "contactauthz-accept-valid-" + uniq))
                     .andExpect(status().isOk());
         }
 
@@ -882,10 +872,11 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
                     "accept-issuer2-" + uniq, true);
             Long accepterId = insertUser("contactauthz-accept-user3-" + uniq + "@example.test",
                     "accept-user3-" + uniq, true);
-            ContactInviteTokenEntity expiredToken = contactInviteTokenRepository.save(
+            String expiredPlain = UUID.randomUUID().toString();
+            contactInviteTokenRepository.save(
                     ContactInviteTokenEntity.builder()
                             .userId(issuerId)
-                            .token(UUID.randomUUID().toString())
+                            .tokenHash(vault.hash(expiredPlain))
                             .label("CONTACTAUTHZ 期限切れ用")
                             .expiresAt(LocalDateTime.now().minusDays(1))
                             .build());
@@ -893,7 +884,7 @@ class ContactScopeContractIT extends AbstractMySqlIntegrationTest {
             em.clear();
 
             setAuth(accepterId);
-            mockMvc.perform(post("/api/v1/contact-invite/{token}/accept", expiredToken.getToken()))
+            mockMvc.perform(post("/api/v1/contact-invite/{token}/accept", expiredPlain))
                     .andExpect(status().isNotFound());
         }
     }
