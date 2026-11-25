@@ -151,7 +151,7 @@ class BudgetThresholdAlertServiceTest {
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
         BudgetThresholdAlertEntity alert = sampleAlert();
-        given(alertRepository.findByIdForUpdate(ALERT_ID)).willReturn(Optional.of(alert));
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(alert));
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                 .willReturn(Optional.of(sampleAllocation(ORG_ID)));
         given(alertRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
@@ -171,7 +171,7 @@ class BudgetThresholdAlertServiceTest {
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
         BudgetThresholdAlertEntity alert = sampleAlert();
         alert.acknowledge(99L);
-        given(alertRepository.findByIdForUpdate(ALERT_ID)).willReturn(Optional.of(alert));
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(alert));
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                 .willReturn(Optional.of(sampleAllocation(ORG_ID)));
 
@@ -193,7 +193,7 @@ class BudgetThresholdAlertServiceTest {
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
         BudgetThresholdAlertEntity alert = sampleAlert();
         alert.acknowledge(99L);
-        given(alertRepository.findByIdForUpdate(ALERT_ID)).willReturn(Optional.of(alert));
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(alert));
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                 .willReturn(Optional.of(sampleAllocation(ORG_ID)));
         given(alertRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
@@ -210,7 +210,7 @@ class BudgetThresholdAlertServiceTest {
     void acknowledge_別組織は404() {
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        given(alertRepository.findByIdForUpdate(ALERT_ID)).willReturn(Optional.of(sampleAlert()));
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.of(sampleAlert()));
         // allocation は ORG_ID では見つからない（実は OTHER_ORG_ID 所属だが、ORG_ID 検索では Optional.empty）
         given(allocationRepository.findByIdAndOrganizationIdAndDeletedAtIsNull(ALLOCATION_ID, ORG_ID))
                 .willReturn(Optional.empty());
@@ -237,7 +237,7 @@ class BudgetThresholdAlertServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode())
                         .isEqualTo(ShiftBudgetErrorCode.BUDGET_ADMIN_REQUIRED.getCode()));
 
-        verify(alertRepository, never()).findByIdForUpdate(anyLong());
+        verify(alertRepository, never()).findByIdAndOrganizationIdForUpdate(anyLong(), anyLong());
     }
 
     @Test
@@ -245,7 +245,7 @@ class BudgetThresholdAlertServiceTest {
     void acknowledge_alert不在() {
         given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
-        given(alertRepository.findByIdForUpdate(ALERT_ID)).willReturn(Optional.empty());
+        given(alertRepository.findByIdAndOrganizationIdForUpdate(ALERT_ID, ORG_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.acknowledge(ORG_ID, ALERT_ID, null, false))
                 .isInstanceOf(BusinessException.class)

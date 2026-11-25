@@ -75,6 +75,9 @@ class BudgetThresholdAlertControllerTest {
     private com.mannschaft.app.common.NameResolverService nameResolverService;
 
     @MockitoBean
+    private com.mannschaft.app.common.AccessControlService accessControlService;
+
+    @MockitoBean
     private AuthTokenService authTokenService;
 
     @MockitoBean
@@ -162,6 +165,7 @@ class BudgetThresholdAlertControllerTest {
     @Test
     @DisplayName("POST acknowledge: 確認済み → 409 + details に確認者・時刻")
     void acknowledge_409() throws Exception {
+        given(accessControlService.isMember(7L, ORG_ID, "ORGANIZATION")).willReturn(true);
         given(nameResolverService.resolveUserFullNames(java.util.List.of(7L)))
                 .willReturn(java.util.Map.of(7L, "山田 太郎"));
         willThrow(new com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException(
@@ -176,6 +180,27 @@ class BudgetThresholdAlertControllerTest {
                 .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_032"))
                 .andExpect(jsonPath("$.error.details.acknowledgedBy").value(7))
                 .andExpect(jsonPath("$.error.details.acknowledgedByName").value("山田 太郎"));
+    }
+
+    @Test
+    @DisplayName("POST acknowledge: 確認者がこの組織のメンバーでない（組織外 SYSTEM_ADMIN 等）→ 409 の氏名は null で、氏名を引かない")
+    void acknowledge_409_組織外の確認者の氏名はnull() throws Exception {
+        given(accessControlService.isMember(7L, ORG_ID, "ORGANIZATION")).willReturn(false);
+        given(nameResolverService.resolveUserFullNames(java.util.List.of(7L)))
+                .willReturn(java.util.Map.of(7L, "外部 管理者"));
+        willThrow(new com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException(
+                7L, null, LocalDateTime.of(2026, 6, 25, 15, 0)))
+                .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean());
+
+        mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
+                        .header("X-Organization-Id", ORG_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_032"))
+                .andExpect(jsonPath("$.error.details.acknowledgedBy").value(7))
+                .andExpect(jsonPath("$.error.details.acknowledgedByName").doesNotExist());
+        org.mockito.Mockito.verify(nameResolverService, org.mockito.Mockito.never()).resolveUserFullNames(any());
     }
 
     @Test

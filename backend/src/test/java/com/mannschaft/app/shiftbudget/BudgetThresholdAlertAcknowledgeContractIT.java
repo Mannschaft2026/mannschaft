@@ -98,6 +98,7 @@ class BudgetThresholdAlertAcknowledgeContractIT extends AbstractMySqlIntegration
     private Long budgetAdmin1;
     private Long budgetAdmin2;
     private Long plainMember;
+    private Long outsideSystemAdmin;
 
     @BeforeEach
     void 所有fixtureをcommitする() {
@@ -108,6 +109,9 @@ class BudgetThresholdAlertAcknowledgeContractIT extends AbstractMySqlIntegration
             budgetAdmin1 = user("予算管理者1");
             budgetAdmin2 = user("予算管理者2");
             plainMember = user("一般メンバー");
+            // この組織のメンバーではない SYSTEM_ADMIN（isSystemAdmin で BUDGET_ADMIN 要件を通る）
+            outsideSystemAdmin = user("組織外システム管理者");
+            MembershipTestHelper.insertUserRole(em, outsideSystemAdmin, "SYSTEM_ADMIN", null, null);
             for (Long admin : List.of(budgetAdmin1, budgetAdmin2)) {
                 MembershipTestHelper.insertMembership(em, admin, ScopeType.ORGANIZATION, org, RoleKind.MEMBER);
                 MembershipTestHelper.insertUserRole(em, admin, "ADMIN", null, org);
@@ -227,6 +231,20 @@ class BudgetThresholdAlertAcknowledgeContractIT extends AbstractMySqlIntegration
     }
 
     @Test
+    @DisplayName("AC-9b: 確認者がこの組織のメンバーでない（組織外 SYSTEM_ADMIN）場合、409 の氏名は null（時刻・ID は返る）")
+    void AC9b_組織外の確認者の氏名はnull() throws Exception {
+        Long alert = alert(org);
+        expect(acknowledge(outsideSystemAdmin, alert, null), 200, null);
+        assertThat(awaitAuditCount(alert, 1)).isEqualTo(1);
+        Map<String, Object> before = ackRow(alert);
+
+        MockHttpServletResponse response = acknowledge(budgetAdmin1, alert, null);
+
+        expectAlreadyAcknowledged(response, before, null);
+        assertThat(ackRow(alert)).isEqualTo(before);
+    }
+
+    @Test
     @DisplayName("AC-10: 他組織の alertId は 404 SHIFT_BUDGET_029 で不変（回帰）")
     void AC10_他組織の警告は404() throws Exception {
         Long foreign = alert(otherOrg);
@@ -290,30 +308,33 @@ class BudgetThresholdAlertAcknowledgeContractIT extends AbstractMySqlIntegration
     // helpers
     // ═══════════════════════════════════════════════════════════════
 
-    /** 409・新エラーコード（SHIFT_BUDGET_xxx）・応答に既存の確認者と確認時刻を含むこと。 */
-    private void expectAlreadyAcknowledged(MockHttpServletResponse response, Map<String, Object> stored)
-            throws Exception {
-        expect(response, 409, null);
-        JsonNode root = json(response);
-        assertThat(root.at("/error/code").asText()).as("確認済みを示す新しいエラーコード")
-                .matches("SHIFT_BUDGET_\\d{3}");
-        JsonNode by = firstPresent(root, "acknowledgedBy", "acknowledged_by");
-        JsonNode at = firstPresent(root, "acknowledgedAt", "acknowledged_at");
-        assertThat(by).as("応答に既存の確認者を含む: " + response.getContentAsString()).isNotNull();
-        assertThat(at).as("応答に既存の確認時刻を含む: " + response.getContentAsString()).isNotNull();
-        assertThat(by.asLong()).isEqualTo(((Number) stored.get("acknowledged_by")).longValue());
-        assertThat(LocalDateTime.parse(at.asText().substring(0, 19)))
+    /** 409・新エラーコード（SHIFT_BUDGET_032）・{@code error.details} に既存の確認者・氏名・確認時刻を含むこと。 */
+    private void expectAlreadyAcknowledged(MockHttpServletResponse response, Map<String, Object> stored,
+                                           String expectedByName) throws Exception {
+        expect(response, 409, "SHIFT_BUDGET_032");
+        JsonNode details = json(response).at("/error/details");
+        assertThat(details.isObject()).as("error.details がオブジェクト: " + response.getContentAsString()).isTrue();
+        assertThat(details.path("acknowledgedBy").asLong())
+                .isEqualTo(((Number) stored.get("acknowledged_by")).longValue());
+        assertThat(LocalDateTime.parse(details.path("acknowledgedAt").asText().substring(0, 19)))
                 .isEqualTo(toLocal(stored.get("acknowledged_at")).truncatedTo(ChronoUnit.SECONDS));
+        if (expectedByName == null) {
+            assertThat(details.path("acknowledgedByName").isNull() || details.path("acknowledgedByName").isMissingNode())
+                    .as("氏名は引かない（null）: " + response.getContentAsString()).isTrue();
+        } else {
+            assertThat(details.path("acknowledgedByName").asText()).isEqualTo(expectedByName);
+        }
     }
 
-    private static JsonNode firstPresent(JsonNode root, String... names) {
-        for (String name : names) {
-            JsonNode found = root.findValue(name);
-            if (found != null && !found.isNull()) {
-                return found;
-            }
-        }
-        return null;
+    /** 組織メンバー（budgetAdmin）が確認者のときの 409。氏名は「姓 名」で返る。 */
+    private void expectAlreadyAcknowledged(MockHttpServletResponse response, Map<String, Object> stored)
+            throws Exception {
+        String name = inTx(() -> {
+            Long by = ((Number) stored.get("acknowledged_by")).longValue();
+            UserEntity u = users.findById(by).orElseThrow();
+            return u.getLastName() + " " + u.getFirstName();
+        });
+        expectAlreadyAcknowledged(response, stored, name);
     }
 
     private MockHttpServletResponse acknowledge(Long actor, Long alert, Map<String, Object> body) throws Exception {

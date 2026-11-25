@@ -177,4 +177,22 @@ describe('警告確認 409 と上書き', () => {
     await flushPromises()
     expect(notify.success).toHaveBeenCalledTimes(1)
   })
+
+  it('送信中はキャンセルボタンも無効で、完了後に閉じられる', async () => {
+    let resolveAck: (v: unknown) => void = () => {}
+    api.acknowledgeAlert.mockReturnValueOnce(new Promise((r) => { resolveAck = r }))
+    const wrapper = mountPage()
+    await flushPromises()
+    await openAck(wrapper)
+    expect(wrapper.find('[data-testid="alert-acknowledge-cancel"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-testid="alert-acknowledge-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="alert-acknowledge-cancel"]').attributes('disabled')).toBeDefined()
+
+    resolveAck({})
+    await flushPromises()
+    expect(wrapper.find('[data-testid="alert-acknowledge-cancel"]').exists()).toBe(false)
+  })
 })

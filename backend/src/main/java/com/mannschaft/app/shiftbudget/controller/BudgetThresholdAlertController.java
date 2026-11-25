@@ -1,6 +1,7 @@
 package com.mannschaft.app.shiftbudget.controller;
 
 import com.mannschaft.app.common.featuregate.RequireFeature;
+import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException;
@@ -45,6 +46,7 @@ public class BudgetThresholdAlertController {
 
     private final BudgetThresholdAlertService alertService;
     private final NameResolverService nameResolverService;
+    private final AccessControlService accessControlService;
 
     @GetMapping
     @Operation(summary = "未承認の閾値超過警告一覧を取得 (新しい警告ほど上)")
@@ -72,9 +74,13 @@ public class BudgetThresholdAlertController {
         try {
             return ApiResponse.of(alertService.acknowledge(organizationId, id, comment, overwrite));
         } catch (BudgetAlertAlreadyAcknowledgedException e) {
-            // 409 応答に既存の確認者の氏名（組織内スコープ）を載せる。引けなければ null（画面側が代替表示する）
+            // 409 応答に既存の確認者の氏名を載せるのは、その人がこの組織のメンバーのときだけ。
+            // 組織外の確認者（組織外 SYSTEM_ADMIN など）の氏名は漏らさず null にする（画面側は「別の管理者」と表示する）
             Long by = e.getAcknowledgedBy();
-            String name = by == null ? null : nameResolverService.resolveUserFullNames(List.of(by)).get(by);
+            String name = null;
+            if (by != null && accessControlService.isMember(by, organizationId, "ORGANIZATION")) {
+                name = nameResolverService.resolveUserFullNames(List.of(by)).get(by);
+            }
             throw e.withAcknowledgedByName(name);
         }
     }

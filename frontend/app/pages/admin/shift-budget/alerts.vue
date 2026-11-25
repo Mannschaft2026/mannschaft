@@ -175,6 +175,8 @@ onMounted(() => {
       v-model:visible="ackDialogVisible"
       :header="t('shiftBudget.alert.acknowledge')"
       :style="{ width: '500px' }"
+      :closable="!ackSubmitting"
+      :close-on-escape="!ackSubmitting"
       modal
     >
       <div v-if="ackTarget" class="flex flex-col gap-4">
@@ -197,6 +199,8 @@ onMounted(() => {
           <Button
             :label="t('shiftBudget.allocation.form.cancel')"
             severity="secondary"
+            :disabled="ackSubmitting"
+            data-testid="alert-acknowledge-cancel"
             @click="ackDialogVisible = false"
           />
           <Button

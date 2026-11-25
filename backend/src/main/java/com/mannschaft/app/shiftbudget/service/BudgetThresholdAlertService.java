@@ -73,8 +73,8 @@ public class BudgetThresholdAlertService {
      * <p>処理順:</p>
      * <ol>
      *   <li>BUDGET_ADMIN 権限チェック</li>
-     *   <li>alert を行ロック（PESSIMISTIC_WRITE）付きで取得し、所属 allocation の {@code organization_id}
-     *       と一致しなければ 404 (IDOR 対策、多テナント分離)</li>
+     *   <li>所属 allocation の {@code organization_id} が一致する alert だけを行ロック（PESSIMISTIC_WRITE）付きで
+     *       取得し、一致しなければ（他組織の行はロックせず）404 (IDOR 対策、多テナント分離)</li>
      *   <li>確認済みかつ {@code overwrite} 未指定なら 409 {@code ALERT_ALREADY_ACKNOWLEDGED}
      *       （既存の確認者・時刻を応答に含め、DB・監査ログは変えない）</li>
      *   <li>{@code acknowledge()} で {@code acknowledged_at}/{@code acknowledged_by} をセット</li>
@@ -91,10 +91,11 @@ public class BudgetThresholdAlertService {
         featureService.requireEnabled(organizationId);
         requireBudgetAdmin(organizationId);
 
-        BudgetThresholdAlertEntity alert = alertRepository.findByIdForUpdate(alertId)
+        // 多テナント分離: 所属 allocation の organization_id 一致を同じ SELECT で絞り込んだうえで行ロックする
+        // （他組織の警告の行はロックしない。不一致・不在はどちらも 404）
+        BudgetThresholdAlertEntity alert = alertRepository.findByIdAndOrganizationIdForUpdate(alertId, organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALERT_NOT_FOUND));
 
-        // 多テナント分離: 所属 allocation を経由して organization_id 一致を検証
         ShiftBudgetAllocationEntity allocation = allocationRepository
                 .findByIdAndOrganizationIdAndDeletedAtIsNull(alert.getAllocationId(), organizationId)
                 .orElseThrow(() -> new BusinessException(ShiftBudgetErrorCode.ALERT_NOT_FOUND));

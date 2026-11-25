@@ -28,11 +28,18 @@ public interface BudgetThresholdAlertRepository
         extends JpaRepository<BudgetThresholdAlertEntity, Long> {
 
     /**
-     * 警告を排他ロック付きで読む（並行 acknowledge を直列化し、先着の確認を読み直して判定する。CMP-260910-1607 ③）。
+     * 組織に属する警告だけを排他ロック付きで読む（並行 acknowledge を直列化し、先着の確認を読み直して判定する。
+     * CMP-260910-1607 ③）。
+     *
+     * <p>所属 allocation の {@code organization_id} 一致を同じ SELECT 内で絞り込むため、他組織の警告の行は
+     * ロックされない（組織境界を越えた待ち合わせ・ロック競合を起こさない）。</p>
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT a FROM BudgetThresholdAlertEntity a WHERE a.id = :id")
-    Optional<BudgetThresholdAlertEntity> findByIdForUpdate(@Param("id") Long id);
+    @Query("SELECT a FROM BudgetThresholdAlertEntity a WHERE a.id = :id AND EXISTS ("
+            + "SELECT 1 FROM ShiftBudgetAllocationEntity s WHERE s.id = a.allocationId "
+            + "AND s.organizationId = :organizationId AND s.deletedAt IS NULL)")
+    Optional<BudgetThresholdAlertEntity> findByIdAndOrganizationIdForUpdate(
+            @Param("id") Long id, @Param("organizationId") Long organizationId);
 
     /**
      * 同一 (allocation, threshold) ペアでの既存警告を検索する。
