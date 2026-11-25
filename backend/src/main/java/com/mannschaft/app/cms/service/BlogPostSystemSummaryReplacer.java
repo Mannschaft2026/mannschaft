@@ -12,6 +12,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -30,15 +31,26 @@ import java.time.LocalDateTime;
  * <p><b>同時実行</b>: 定期実行と手動再生成が同じ slug を同時に差し替えると、相手が確定した新記事を
  * こちらの検索が（未確定で）見られず、INSERT が一意制約違反（またはデッドロック）になる。
  * 差し替えは冪等なので、そのときはトランザクションごとやり直す。やり直しでは相手の確定済み記事が見えるため、
- * それを論理削除して差し替え、生存する記事は常に 1 件に保たれる。やり直しは呼び出し元にトランザクションが
- * 無い前提（外側のトランザクションが生きているとやり直しても同じ結果になるため、呼び出し元は張らないこと）。</p>
+ * それを論理削除して差し替え、生存する記事は常に 1 件に保たれる。</p>
+ *
+ * <p>やり直す対象は slug の生存行一意制約違反（{@link BlogSlugAutoConflictException#isSlugUniqueViolation}）と
+ * デッドロック・ロック待ちタイムアウト（{@link PessimisticLockingFailureException}）だけ。NOT NULL・外部キーなど
+ * 他の整合性違反はやり直しても結果が変わらないため、そのまま伝播させる。</p>
+ *
+ * <p><b>呼び出し元トランザクション</b>: 呼び出し元が既にトランザクションを持つ場合は、
+ * {@link BlogSlugConflictRetryAspect} と同じく<b>やり直さず 1 回だけ</b>実行する
+ * （{@link TransactionTemplate} は REQUIRED なので呼び出し元のトランザクションに参加する）。違反した時点で
+ * そのトランザクションはロールバック専用になり、同じトランザクション内のやり直しは必ず失敗するうえ、
+ * 呼び出し元の他の更新との不可分性を壊さないためには呼び出し元ごとロールバックさせるしかないため。
+ * 例外で拒否しないのは、呼び出し元の業務トランザクションの一部として差し替える正当な使い方（競合が無ければ成功する）を
+ * 塞がないためであり、cms ドメインの既存の再試行（同アスペクト）と振る舞いを揃えるため。</p>
  */
 @Slf4j
 @Service
 public class BlogPostSystemSummaryReplacer {
 
     /** 同時実行の競合に対する最大試行回数（初回を含む）。 */
-    private static final int MAX_ATTEMPTS = 3;
+    static final int MAX_ATTEMPTS = 3;
 
     private final BlogPostRepository blogPostRepository;
     private final TransactionTemplate transactionTemplate;
@@ -55,21 +67,35 @@ public class BlogPostSystemSummaryReplacer {
     /**
      * 個人ブログの system 生成記事（{@code PRIVATE} / {@code PUBLISHED} / タイムライン非連携）を差し替える。
      * 同 slug の生存記事があれば論理削除し、新規記事を作成する。全体で 1 トランザクション。
+     * 呼び出し元にトランザクションが無ければ、同時実行の競合時に最大 {@value #MAX_ATTEMPTS} 回まで試行する。
      *
      * @return 作成した記事の ID（エンティティは API に露出しない）
      */
     public Long replacePrivateUserPost(Long userId, String slug, String title, String body,
                                        String excerpt, LocalDateTime publishedAt) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            // 呼び出し元のトランザクションに参加する。違反すればロールバック専用になるため、やり直さない。
+            return transactionTemplate.execute(status ->
+                    replaceInTransaction(userId, slug, title, body, excerpt, publishedAt));
+        }
         for (int attempt = 1; ; attempt++) {
             try {
                 return transactionTemplate.execute(status ->
                         replaceInTransaction(userId, slug, title, body, excerpt, publishedAt));
             } catch (DataIntegrityViolationException | PessimisticLockingFailureException e) {
-                if (attempt >= MAX_ATTEMPTS) {
+                if (e instanceof DataIntegrityViolationException
+                        && !BlogSlugAutoConflictException.isSlugUniqueViolation(e)) {
                     throw e;
                 }
-                log.info("[BlogPostSystemSummaryReplacer] 同時実行の競合を検知したため差し替えをやり直す: "
-                        + "userId={}, slug={}, attempt={}", userId, slug, attempt);
+                String kind = e instanceof PessimisticLockingFailureException
+                        ? "ロック競合（デッドロック・ロック待ちタイムアウト）" : "slug 一意制約違反";
+                if (attempt >= MAX_ATTEMPTS) {
+                    log.warn("[BlogPostSystemSummaryReplacer] 同時実行の競合が続いたため差し替えを諦める: "
+                            + "userId={}, slug={}, cause={}, attempts={}", userId, slug, kind, attempt);
+                    throw e;
+                }
+                log.info("[BlogPostSystemSummaryReplacer] {}のため差し替えをやり直す: userId={}, slug={}, attempt={}",
+                        kind, userId, slug, attempt);
             }
         }
     }
