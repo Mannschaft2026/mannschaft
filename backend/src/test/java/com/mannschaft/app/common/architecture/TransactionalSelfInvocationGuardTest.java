@@ -4,6 +4,7 @@ import com.mannschaft.app.advertising.campaign.service.AdCampaignDeliveryWorker;
 import com.mannschaft.app.common.architecture.fixtures.txselfinvocation.TxSelfInvocationAllowedFixture;
 import com.mannschaft.app.common.architecture.fixtures.txselfinvocation.TxSelfInvocationClassLevelFixture;
 import com.mannschaft.app.common.architecture.fixtures.txselfinvocation.TxSelfInvocationCollaborator;
+import com.mannschaft.app.common.architecture.fixtures.txselfinvocation.TxSelfInvocationObjectProviderFixture;
 import com.mannschaft.app.common.architecture.fixtures.txselfinvocation.TxSelfInvocationSelfProxyFixture;
 import com.mannschaft.app.common.architecture.fixtures.txselfinvocation.TxSelfInvocationViolationFixture;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -11,6 +12,9 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaCodeUnit;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
+import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaParameterizedType;
+import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.core.domain.properties.CanBeAnnotated;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.DisplayName;
@@ -53,7 +57,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </ol>
  * <p>自型のフィールド（{@code @Lazy} 自己注入のプロキシ）を持つクラスは、バイトコード上で {@code self.m()} と
  * {@code this.m()} を区別できないため、自己注入で根治済みとみなして除外する。
- * 匿名クラス・内部クラスから外側クラスのメソッドを呼ぶ形は所有クラスが異なるため対象外（いずれも既知の取りこぼし）。</p>
+ * 匿名クラス・内部クラスから外側クラスのメソッドを呼ぶ形は所有クラスが異なるため対象外（いずれも既知の取りこぼし）。
+ * 同じ理由で {@code ObjectProvider<Self>} / {@code Provider<Self>} 型のフィールドを持つクラス（{@code self().m()} 形式）も除外する。</p>
+ *
+ * <h2>既知の取りこぼし（検出できない形）</h2>
+ * <ul>
+ *   <li>メソッド参照 {@code this::m}（呼び出し命令ではなく invokedynamic のため {@code JavaMethodCall} に現れない）</li>
+ *   <li>TX 内の呼出し元からの {@code REQUIRES_NEW} / {@code readOnly} 付き自己呼出し
+ *       （呼出し元が TX 内なので対象外としており、伝播属性の差は見ない）</li>
+ *   <li>インタフェース・親クラスに付いたクラスレベル {@code @Transactional}（所有クラス自身の注釈しか見ない）</li>
+ *   <li>クラス単位の件数凍結のため、同一クラス内で 1 件を直して別の 1 件を足しても件数が同じで素通りする</li>
+ * </ul>
  *
  * <h2>既存違反の凍結（CMP-261009-0010 で一覧化した借金の台帳）</h2>
  * <p>全本番コードの既存違反は {@value #FREEZE_RESOURCE} に<b>クラス単位の件数</b>で凍結する
@@ -119,9 +133,24 @@ class TransactionalSelfInvocationGuardTest {
         return result;
     }
 
-    /** 自型のフィールド（自己注入したプロキシ）を持つクラスは、そのフィールド経由の呼び出しと区別できないため除外する。 */
+    /**
+     * 自型のフィールド（自己注入したプロキシ）、または {@code ObjectProvider<Self>} / {@code Provider<Self>} 型の
+     * フィールド（{@code self().m()} の正規の自己プロキシ取得）を持つクラスは、そのフィールド経由の呼び出しと
+     * {@code this.m()} をバイトコード上で区別できないため除外する。
+     */
     private static boolean hasSelfTypedField(JavaClass owner) {
-        return owner.getFields().stream().anyMatch(f -> f.getRawType().equals(owner));
+        return owner.getFields().stream().anyMatch(f -> f.getRawType().equals(owner) || isProviderOfSelf(f, owner));
+    }
+
+    private static boolean isProviderOfSelf(JavaField field, JavaClass owner) {
+        String raw = field.getRawType().getName();
+        if (!raw.equals("org.springframework.beans.factory.ObjectProvider")
+                && !raw.equals("jakarta.inject.Provider") && !raw.equals("javax.inject.Provider")) {
+            return false;
+        }
+        JavaType type = field.getType();
+        return type instanceof JavaParameterizedType p
+                && p.getActualTypeArguments().stream().anyMatch(a -> a.toErasure().equals(owner));
     }
 
     private static boolean isCallerTransactional(JavaCodeUnit origin) {
@@ -226,7 +255,8 @@ class TransactionalSelfInvocationGuardTest {
                 TxSelfInvocationAllowedFixture.class,
                 TxSelfInvocationCollaborator.class,
                 TxSelfInvocationClassLevelFixture.class,
-                TxSelfInvocationSelfProxyFixture.class);
+                TxSelfInvocationSelfProxyFixture.class,
+                TxSelfInvocationObjectProviderFixture.class);
 
         assertThat(findSelfInvocations(classes)).isEmpty();
     }

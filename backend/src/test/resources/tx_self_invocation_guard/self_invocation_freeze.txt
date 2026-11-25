@@ -8,27 +8,22 @@
 #
 # 行形式: <完全修飾クラス名>|<そのクラス内での検出件数>（メソッド名は鍵に含めない。DateTimeAndZoneGuardTest と同じ流儀）
 #
-# 2026-11-25 初回凍結（CMP-261009-0010 試練時点のスナップショット。24 クラス 41 件）。
+# 2026-11-25 初回凍結（CMP-261009-0010 試練時点のスナップショット。24 クラス 41 件）。検分差し戻しで ObjectProvider<Self> / Provider<Self> 経由の self().m()（正規の自己プロキシ）を番人の除外対象に加えたため、誤検知だった 5 クラス 14 件を削除し 19 クラス 27 件に減った（減るのは正当。増やすのは禁止）。
 # RecruitmentCancellationFeeRetryProcessor・ScheduleScheduledTaskBatchService は自型フィールド（自己注入）を持つため番人が除外する（呼び出しの受け手を区別できないため）。
 # AdCampaignDeliveryWorker（1 件）は CMP-261009-0010 で根治する対象のため凍結しない（試練時点で red）。
 com.mannschaft.app.actionmemo.service.ActionMemoWeeklySummaryService|2
 com.mannschaft.app.advertising.campaign.service.AdCampaignStateTransitionScheduler|3
 com.mannschaft.app.advertising.campaign.service.AdFrequencyCapFlushBatch|1
-com.mannschaft.app.advertising.campaign.service.AdMessagingBillingBridge|1
 com.mannschaft.app.advertising.ranking.service.EquipmentRankingBatchService|1
 com.mannschaft.app.advertising.service.AdDailyStatsAggregationBatchService|1
 com.mannschaft.app.analytics.service.PageViewDailyAggregationBatchService|1
 com.mannschaft.app.chat.service.ChatMemberBatchQueryService|1
 com.mannschaft.app.chat.service.ChatMessageArchiveBatchService|2
-com.mannschaft.app.common.storage.migration.StoragePathMigrationBatchService|10
 com.mannschaft.app.common.storage.quota.StorageDriftDetectionBatchService|1
 com.mannschaft.app.errorreport.service.ErrorReportCleanupService|1
-com.mannschaft.app.pointcard.batch.PointCardRematchBatchService|1
 com.mannschaft.app.proxy.batch.ProxyInputRecordRetentionJob|1
-com.mannschaft.app.recruitment.service.RecruitmentAutoCancelBatch|1
 com.mannschaft.app.schedule.batch.ProxyDelegationCleanupBatchService|2
 com.mannschaft.app.schedule.service.GoogleCalendarWebhookService|3
-com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService|1
 com.mannschaft.app.timeline.service.TimelinePostVisibilityAccessGuard|1
 com.mannschaft.app.village.batch.VillageFestivalStateTransitionBatchService|2
 com.mannschaft.app.village.batch.VillageHeadmanSuccessionBatchService|1

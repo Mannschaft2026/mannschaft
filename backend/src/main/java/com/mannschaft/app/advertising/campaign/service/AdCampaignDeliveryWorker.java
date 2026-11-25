@@ -86,6 +86,8 @@ public class AdCampaignDeliveryWorker {
      * 効かない（{@code FOR UPDATE} が {@code TransactionRequiredException} になる。CMP-261009-0010）。
      * そのため宣言的 TX ではなくプログラム的 TX で境界を明示する。</p>
      */
+    private static final int LOAD_TX_TIMEOUT_SECONDS = 10;
+
     private final TransactionTemplate transactionTemplate;
 
     public AdCampaignDeliveryWorker(AdMessagingCampaignRepository campaignRepository,
@@ -98,6 +100,9 @@ public class AdCampaignDeliveryWorker {
         this.dispatcher = dispatcher;
         this.claimService = claimService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        // 候補一覧の SELECT ... FOR UPDATE だけを包む短い TX。行ロック待ちや DB 停止で毎分の配信が
+        // 無期限に詰まらないよう上限を置く（@SchedulerLock の lockAtMostFor=5m より十分短い値）。
+        this.transactionTemplate.setTimeout(LOAD_TX_TIMEOUT_SECONDS);
     }
 
     /**
@@ -152,9 +157,10 @@ public class AdCampaignDeliveryWorker {
      * 対象キャンペーンを {@code SELECT ... FOR UPDATE} で取得する。
      *
      * <p>{@link TransactionTemplate}（REQUIRED。呼出し元は TX 無しのため新規 TX）の境界はこのメソッド内で完結し、
-     * ロックはトランザクションコミット時に解放される
-     * （ループ全体のロック保持を避け、1 回の実行時間を有界化する）。したがってこのロックは
-     * 候補一覧の取得を DB 側の同時更新から守るものであり、後続の配信処理中の排他は提供しない
+     * ロックはトランザクションコミット時に即解放される
+     * （ループ全体のロック保持を避け、1 回の実行時間を有界化する）。したがってこのロックは<b>重複配信防止を担わない</b>。
+     * 実体は、他トランザクションが進行中の更新をコミットするまで待ち、最新のコミット済みデータで候補一覧を
+     * 読むことだけである。重複配信の防止は {@code @SchedulerLock}（多重起動防止）と Claim（DB 一意制約）が担う
      * （クラス Javadoc「実行制御と重複配信防止の担当分離」を参照）。</p>
      */
     List<AdMessagingCampaign> loadActiveCampaigns() {

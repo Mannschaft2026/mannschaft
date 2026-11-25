@@ -1,11 +1,14 @@
 package com.mannschaft.app.advertising.campaign.service;
 
+import com.mannschaft.app.admin.entity.FeatureFlagEntity;
+import com.mannschaft.app.admin.repository.FeatureFlagRepository;
 import com.mannschaft.app.advertising.campaign.entity.AdMessagingCampaign;
 import com.mannschaft.app.advertising.campaign.enums.AdCampaignStatus;
 import com.mannschaft.app.advertising.campaign.enums.AdModerationStatus;
 import com.mannschaft.app.advertising.campaign.repository.AdMessagingCampaignRepository;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.FeatureFlagTestSupport;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.test.util.AopTestUtils;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -61,6 +65,12 @@ import static org.mockito.Mockito.verify;
  * ShedLock は {@code test} プロファイルで無効（{@code ShedLockConfig} の {@code @Profile}）のため、
  * {@code @SchedulerLock} は宣言の不変を検査する（D4）。</p>
  *
+ * <p><b>機能フラグ</b>: {@code runDelivery} は {@code @BackgroundFeaturePolicy(SKIP_WHEN_DISABLED,
+ * gateKeys="FEATURE_PROMOTION_ENABLED")} でゲートされる。テストは Flyway 無効・{@code ddl-auto: create} で
+ * {@code feature_flags} が空のためフェイルクローズで本体がスキップされる。したがって {@link #openFeatureGate()} で
+ * 毎回フラグを開け、ゲートが閉じたときに本体がスキップされることを対照ケース
+ * {@code D1_ゲートが閉じると本体はスキップされる} で固定する（検出力の前提。{@link FeatureFlagTestSupport} 参照）。</p>
+ *
  * <p>共有 DB には他試験の DELIVERING キャンペーンが残り得るため、検証は本試験が作ったキャンペーン ID に絞る。
  * 本試験が作ったキャンペーンは {@link #restoreCollaborators()} で論理削除し、以後の配信候補に残さない。</p>
  *
@@ -84,12 +94,23 @@ class AdCampaignDeliveryWorkerIntegrationTest extends AbstractMySqlIntegrationTe
     @Autowired
     private AdCampaignDeliveryClaimService claimService;
 
+    @Autowired
+    private FeatureFlagRepository featureFlagRepository;
+
+    @Autowired
+    private CacheManager cacheManager;
+
     private AdCampaignDeliveryWorker target;
     private Object originalAudienceResolver;
     private Object originalDispatcher;
     private AdAudienceResolver audienceResolver;
     private AdCampaignDeliveryDispatcher dispatcher;
     private final List<UUID> createdCampaignIds = new ArrayList<>();
+
+    @BeforeEach
+    void openFeatureGate() {
+        FeatureFlagTestSupport.enable(featureFlagRepository, cacheManager, "FEATURE_PROMOTION_ENABLED");
+    }
 
     @BeforeEach
     void swapCollaborators() {
@@ -170,6 +191,23 @@ class AdCampaignDeliveryWorkerIntegrationTest extends AbstractMySqlIntegrationTe
 
         verify(dispatcher, times(1)).deliverForUser(
                 argThat(c -> c != null && campaign.getId().equals(c.getId())), eq(81001L));
+    }
+
+    @Test
+    @DisplayName("D1: 機能フラグ FEATURE_PROMOTION_ENABLED が閉じていると本体はスキップされる（ゲートの開閉を本当に通っている対照）")
+    void D1_ゲートが閉じると本体はスキップされる() {
+        AdMessagingCampaign campaign = persistActiveCampaign("D1 ゲート閉鎖");
+        givenCandidates(campaign.getId(), 81002L);
+        FeatureFlagEntity flag = featureFlagRepository.findByFlagKey("FEATURE_PROMOTION_ENABLED").orElseThrow();
+        flag.updateFlag(false, null);
+        featureFlagRepository.save(flag);
+        FeatureFlagTestSupport.clearFlagCaches(cacheManager);
+
+        assertThatCode(() -> worker.runDelivery()).doesNotThrowAnyException();
+
+        verify(audienceResolver, never()).streamCandidateUserIds(campaign.getId());
+        verify(dispatcher, never()).deliverForUser(
+                argThat(c -> c != null && campaign.getId().equals(c.getId())), anyLong());
     }
 
     @Test
