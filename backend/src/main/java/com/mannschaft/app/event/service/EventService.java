@@ -25,6 +25,8 @@ import com.mannschaft.app.event.repository.EventRegistrationRepository;
 import com.mannschaft.app.event.repository.EventRepository;
 import com.mannschaft.app.event.repository.EventRsvpResponseRepository;
 import com.mannschaft.app.event.RegistrationStatus;
+import com.mannschaft.app.common.util.SlugAllocator;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.mannschaft.app.common.util.SlugGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -148,7 +150,16 @@ public class EventService {
                 .createdBy(userId)
                 .build();
 
-        EventEntity saved = eventRepository.save(entity);
+        EventEntity saved;
+        try {
+            saved = eventRepository.save(entity);
+        } catch (DataIntegrityViolationException e) {
+            // 並行作成で採番直後に同じ slug を取られた場合。500 ではなく 409（EVENT_016）で再試行を促す。
+            if (SlugAllocator.isUniqueViolation(e, "uq_events_slug")) {
+                throw new BusinessException(EventErrorCode.SLUG_ALREADY_EXISTS);
+            }
+            throw e;
+        }
         log.info("イベント作成: scopeType={}, scopeId={}, eventId={}", scopeType, scopeId, saved.getId());
 
         // イベント専用チャットチャンネル自動生成のためにドメインイベントを発行する
@@ -170,7 +181,7 @@ public class EventService {
         EventEntity entity = findEventOrThrow(eventId);
 
         if (request.getSlug() != null && !request.getSlug().equals(entity.getSlug())) {
-            if (eventRepository.existsBySlug(request.getSlug())) {
+            if (eventRepository.existsBySlugIncludingDeleted(request.getSlug())) {
                 throw new BusinessException(EventErrorCode.SLUG_ALREADY_EXISTS);
             }
         }
@@ -395,7 +406,8 @@ public class EventService {
      *
      * <p>ユーザーが slug を指定した場合は一意性を検証して採用する。
      * 未指定（null / 空文字）の場合は subtitle から {@link SlugGenerator#generate} で自動生成し、
-     * 重複時は数値サフィックス (-1, -2, ...) を付与して一意化する。
+     * 重複時（論理削除済みも永久予約として重複扱い）は数値サフィックス (-1, -2, ...)、
+     * それでも埋まっていればランダムサフィックスで一意化する。
      * subtitle も空の最終フォールバックは {@code "event"} を使う。</p>
      *
      * @param requestedSlug ユーザー入力 slug（null / 空文字可）
@@ -405,26 +417,16 @@ public class EventService {
      */
     private String resolveSlugForCreate(String requestedSlug, String subtitle) {
         if (requestedSlug != null && !requestedSlug.isBlank()) {
-            // ユーザー指定slugの一意性チェック
-            if (eventRepository.existsBySlug(requestedSlug)) {
+            // ユーザー指定slugの一意性チェック（論理削除済みも永久予約として弾く。uq_events_slug は論理削除行も含む）
+            if (eventRepository.existsBySlugIncludingDeleted(requestedSlug)) {
                 throw new BusinessException(EventErrorCode.SLUG_ALREADY_EXISTS);
             }
             return requestedSlug;
         }
         // 未指定の場合はsubtitleから自動生成
         String source = (subtitle != null && !subtitle.isBlank()) ? subtitle : "event";
-        String base = SlugGenerator.generate(source);
-        if (!eventRepository.existsBySlug(base)) {
-            return base;
-        }
-        for (int i = 1; i <= 100; i++) {
-            String candidate = SlugGenerator.withSuffix(base, i);
-            if (!eventRepository.existsBySlug(candidate)) {
-                return candidate;
-            }
-        }
-        // 100回試行してもユニークにならない場合はタイムスタンプサフィックス
-        return SlugGenerator.withSuffix(base, (int) (System.currentTimeMillis() % 10000));
+        return SlugAllocator.allocate(SlugGenerator.generate(source),
+                eventRepository::existsBySlugIncludingDeleted, EventErrorCode.SLUG_ALREADY_EXISTS);
     }
 
     /**

@@ -78,7 +78,7 @@ class OrganizationSlugRenameResolveServiceTest {
         void 正常リネーム() {
             givenCounts();
             given(organizationRepository.findById(ORG_ID)).willReturn(Optional.of(orgWithSlug("old-org")));
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("new-org")).willReturn(false);
+            given(organizationRepository.existsBySlugIncludingDeleted("new-org")).willReturn(false);
             given(organizationSlugHistoryRepository.existsByOldSlugAndOrganizationIdNot("new-org", ORG_ID))
                     .willReturn(false);
 
@@ -127,7 +127,7 @@ class OrganizationSlugRenameResolveServiceTest {
         @DisplayName("既存slug重複は ORG_062")
         void 重複() {
             given(organizationRepository.findById(ORG_ID)).willReturn(Optional.of(orgWithSlug("old-org")));
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("taken-org")).willReturn(true);
+            given(organizationRepository.existsBySlugIncludingDeleted("taken-org")).willReturn(true);
 
             assertThatThrownBy(() -> service.renameSlug(ORG_ID, "taken-org"))
                     .isInstanceOf(BusinessException.class)
@@ -136,10 +136,24 @@ class OrganizationSlugRenameResolveServiceTest {
         }
 
         @Test
+        @DisplayName("CMP-261021-0838 E7: 論理削除済み組織の slug への変更は ORG_062（論理削除済みを含めて照会し 500 にしない）")
+        void 論理削除済みslugへの変更は4xx() {
+            given(organizationRepository.findById(ORG_ID)).willReturn(Optional.of(orgWithSlug("old-org")));
+            given(organizationRepository.existsBySlugIncludingDeleted("gone-org")).willReturn(true);
+
+            assertThatThrownBy(() -> service.renameSlug(ORG_ID, "gone-org"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("ORG_062"));
+            org.mockito.Mockito.verify(organizationRepository, org.mockito.Mockito.never())
+                    .existsBySlugAndDeletedAtIsNull(org.mockito.ArgumentMatchers.any());
+        }
+
+        @Test
         @DisplayName("他組織の履歴予約済みは ORG_063（SLUG_RETIRED）")
         void 履歴予約() {
             given(organizationRepository.findById(ORG_ID)).willReturn(Optional.of(orgWithSlug("old-org")));
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("retired-org")).willReturn(false);
+            given(organizationRepository.existsBySlugIncludingDeleted("retired-org")).willReturn(false);
             given(organizationSlugHistoryRepository.existsByOldSlugAndOrganizationIdNot("retired-org", ORG_ID))
                     .willReturn(true);
 
@@ -154,7 +168,7 @@ class OrganizationSlugRenameResolveServiceTest {
         void 自組織戻し許可() {
             givenCounts();
             given(organizationRepository.findById(ORG_ID)).willReturn(Optional.of(orgWithSlug("current-org")));
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("former-own-org")).willReturn(false);
+            given(organizationRepository.existsBySlugIncludingDeleted("former-own-org")).willReturn(false);
             given(organizationSlugHistoryRepository.existsByOldSlugAndOrganizationIdNot("former-own-org", ORG_ID))
                     .willReturn(false);
 

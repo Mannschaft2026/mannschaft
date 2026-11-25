@@ -26,7 +26,27 @@ public final class SlugGenerator {
     /** フォールバック文字列（日本語のみなどでASCII部分が極端に短い場合）。 */
     private static final String FALLBACK_SLUG = "team";
 
+    /** ランダムサフィックスの桁数（"-" を含め 7 文字）。 */
+    private static final int RANDOM_SUFFIX_LENGTH = 6;
+
+    /** ランダムサフィックスに使う文字（英小文字・数字）。 */
+    private static final String RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
     private SlugGenerator() {}
+
+    /**
+     * {@link #generate(String)} の結果が固定フォールバック（{@code "team"}）か判定する。
+     *
+     * <p>日本語のみの名称などは全て同じ {@code "team"} に落ちるため、同時作成で衝突しやすい。</p>
+     *
+     * @param base {@link #generate(String)} の結果
+     * @return フォールバック値なら true
+     */
+    public static boolean isFallback(String base) {
+        return FALLBACK_SLUG.equals(base);
+    }
 
     /**
      * 名称からスラッグを生成する。
@@ -73,6 +93,25 @@ public final class SlugGenerator {
         String suffix = "-" + n;
         int maxBase = MAX_LENGTH - suffix.length();
         String trimmed = base.substring(0, Math.min(base.length(), maxBase));
+        return trimmed + suffix;
+    }
+
+    /**
+     * ベーススラッグにランダムな英小文字・数字のサフィックス（6文字）を付与する。
+     *
+     * <p>連番では並行作成や大量の予約済み slug に当たり続けるため、衝突時の再採番に使う。
+     * 例: {@code "team-k3x9qa"}。合計 30 文字以内を保証する。</p>
+     *
+     * @param base ベーススラッグ
+     * @return ランダムサフィックス付きスラッグ
+     */
+    public static String withRandomSuffix(String base) {
+        StringBuilder sb = new StringBuilder("-");
+        for (int i = 0; i < RANDOM_SUFFIX_LENGTH; i++) {
+            sb.append(RANDOM_ALPHABET.charAt(RANDOM.nextInt(RANDOM_ALPHABET.length())));
+        }
+        String suffix = sb.toString();
+        String trimmed = base.substring(0, Math.min(base.length(), MAX_LENGTH - suffix.length()));
         return trimmed + suffix;
     }
 }

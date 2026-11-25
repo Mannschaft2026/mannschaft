@@ -109,6 +109,10 @@ class OrganizationServiceTest {
     @Mock
     private com.mannschaft.app.organization.teamgroup.repository.OrgTeamGroupRepository orgTeamGroupRepository;
 
+    /** CMP-261021-0838: 自動採番は slug 履歴の予約も確認する。 */
+    @Mock
+    private com.mannschaft.app.organization.repository.OrganizationSlugHistoryRepository organizationSlugHistoryRepository;
+
     @InjectMocks
     private OrganizationService organizationService;
 

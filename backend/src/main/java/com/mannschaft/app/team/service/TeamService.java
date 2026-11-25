@@ -43,6 +43,8 @@ import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.role.service.AdminRoleMutationLockService;
 import com.mannschaft.app.role.dto.MemberResponse;
+import org.springframework.dao.DataIntegrityViolationException;
+import com.mannschaft.app.common.util.SlugAllocator;
 import com.mannschaft.app.common.util.SlugGenerator;
 import com.mannschaft.app.common.util.SlugValidator;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
@@ -179,7 +181,16 @@ public class TeamService {
                     team.updateRegionCodes(req.getPrefectureCode(), req.getCityCode());
                     Long adminRoleId = adminRoleMutationLockService.lockAdminRoleIdForCreation(userId)
                             .orElseThrow(() -> new BusinessException(TeamErrorCode.TEAM_005));
-                    teamRepository.save(team);
+                    try {
+                        teamRepository.save(team);
+                    } catch (DataIntegrityViolationException e) {
+                        // 並行作成で採番直後に同じ slug を取られた場合（事前確認とINSERTの間）。同一トランザクションは
+                        // 破棄されるため再採番はできないが、500 ではなく 409（TEAM_062）で再試行を促す。
+                        if (SlugAllocator.isUniqueViolation(e, "uq_teams_slug")) {
+                            throw new BusinessException(TeamErrorCode.TEAM_062);
+                        }
+                        throw e;
+                    }
 
                     // 作成者をADMINロールで紐付ける
                     UserRoleEntity userRole = UserRoleEntity.builder()
@@ -450,24 +461,27 @@ public class TeamService {
     /**
      * チーム名から一意スラッグを生成する。
      *
-     * <p>ベーススラッグが既に使用中の場合は数値サフィックス (-1, -2, ...) を付与して一意化する。
-     * 100 回試行しても一意にならない場合はタイムスタンプベースのサフィックスを使用する。</p>
+     * <p>ベーススラッグが使用済み（現役・論理削除済み・履歴予約。論理削除済みは永久予約）の場合は
+     * 数値サフィックス (-1, -2, ...)、それでも埋まっていればランダムサフィックスで一意化する。
+     * 日本語名など固定の {@code "team"} に落ちる名称は同時作成の衝突を避けるためランダムサフィックスを先に使う。
+     * 採番を諦める場合は {@code TEAM_062}（409）で、500 にしない。</p>
      *
      * @param name チーム名
      * @return 一意なスラッグ
+     * @throws BusinessException 採番できなかった場合（TEAM_062）
      */
     public String createUniqueSlug(String name) {
-        String base = SlugGenerator.generate(name);
-        if (!teamRepository.existsBySlugAndDeletedAtIsNull(base)) {
-            return base;
-        }
-        for (int i = 1; i <= 100; i++) {
-            String candidate = SlugGenerator.withSuffix(base, i);
-            if (!teamRepository.existsBySlugAndDeletedAtIsNull(candidate)) {
-                return candidate;
-            }
-        }
-        return SlugGenerator.withSuffix(base, (int) (System.currentTimeMillis() % 10000));
+        return SlugAllocator.allocate(SlugGenerator.generate(name), this::isSlugReserved, TeamErrorCode.TEAM_062);
+    }
+
+    /**
+     * slug が使用不可か判定する（現役・論理削除済み・PROVISIONED の使用中 slug、および他チームの履歴予約）。
+     *
+     * <p>論理削除済みチームの slug は DB の一意索引（{@code uq_teams_slug}）に残り、永久予約として再利用しない。</p>
+     */
+    private boolean isSlugReserved(String slug) {
+        return teamRepository.existsBySlugIncludingDeleted(slug)
+                || teamSlugHistoryRepository.existsByOldSlug(slug);
     }
 
     /**
@@ -511,7 +525,14 @@ public class TeamService {
                             .supporterEnabled(false)
                             .lifecycleStatus(TeamEntity.LifecycleStatus.PROVISIONED)
                             .build();
-                    teamRepository.save(team);
+                    try {
+                        teamRepository.save(team);
+                    } catch (DataIntegrityViolationException e) {
+                        if (SlugAllocator.isUniqueViolation(e, "uq_teams_slug")) {
+                            throw new BusinessException(TeamErrorCode.TEAM_062);
+                        }
+                        throw e;
+                    }
                     return team.getId();
                 });
     }
@@ -593,7 +614,8 @@ public class TeamService {
         if (SlugValidator.isReserved(slug)) {
             throw new BusinessException(TeamErrorCode.TEAM_061);
         }
-        if (teamRepository.existsBySlugAndDeletedAtIsNull(slug)) {
+        // 論理削除済み・PROVISIONED を含めて弾く（永久予約。uq_teams_slug の一意制約違反で 500 になるのを防ぐ）
+        if (teamRepository.existsBySlugIncludingDeleted(slug)) {
             throw new BusinessException(TeamErrorCode.TEAM_062);
         }
         // F01.2 §5.9.5: 他チームの過去 slug（履歴予約）は恒久 301 を壊さないため使用不可。
@@ -622,7 +644,8 @@ public class TeamService {
         if (SlugValidator.isReserved(slug)) {
             return new SlugAvailabilityResponse(false, "SLUG_RESERVED");
         }
-        if (teamRepository.existsBySlugAndDeletedAtIsNull(slug)) {
+        // 論理削除済みの slug も使用中として返す（永久予約）
+        if (teamRepository.existsBySlugIncludingDeleted(slug)) {
             return new SlugAvailabilityResponse(false, "SLUG_ALREADY_TAKEN");
         }
         // F01.2 §5.9.5: 他チームの過去 slug（履歴予約）は使用不可（恒久 301 保全）
@@ -702,7 +725,8 @@ public class TeamService {
         if (SlugValidator.isReserved(slug)) {
             throw new BusinessException(TeamErrorCode.TEAM_061);
         }
-        if (teamRepository.existsBySlugAndDeletedAtIsNull(slug)) {
+        // 論理削除済み・PROVISIONED を含めて弾く（永久予約。uq_teams_slug の一意制約違反で 500 になるのを防ぐ）
+        if (teamRepository.existsBySlugIncludingDeleted(slug)) {
             throw new BusinessException(TeamErrorCode.TEAM_062);
         }
         // 他チームの履歴に予約済みなら不可。自チームの過去 slug への戻しは許可（teamId 除外）。

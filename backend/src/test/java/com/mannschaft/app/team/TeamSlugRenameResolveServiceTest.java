@@ -81,7 +81,7 @@ class TeamSlugRenameResolveServiceTest {
         void 正常リネーム() {
             givenCounts();
             given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(teamWithSlug("old-slug")));
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("new-slug")).willReturn(false);
+            given(teamRepository.existsBySlugIncludingDeleted("new-slug")).willReturn(false);
             given(teamSlugHistoryRepository.existsByOldSlugAndTeamIdNot("new-slug", TEAM_ID)).willReturn(false);
 
             var result = service.renameSlug(TEAM_ID, "new-slug");
@@ -130,7 +130,7 @@ class TeamSlugRenameResolveServiceTest {
         @DisplayName("既存slug重複は TEAM_062")
         void 重複() {
             given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(teamWithSlug("old-slug")));
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("taken")).willReturn(true);
+            given(teamRepository.existsBySlugIncludingDeleted("taken")).willReturn(true);
 
             assertThatThrownBy(() -> service.renameSlug(TEAM_ID, "taken"))
                     .isInstanceOf(BusinessException.class)
@@ -139,10 +139,24 @@ class TeamSlugRenameResolveServiceTest {
         }
 
         @Test
+        @DisplayName("CMP-261021-0838 E7: 論理削除済みチームの slug への変更は TEAM_062（論理削除済みを含めて照会し 500 にしない）")
+        void 論理削除済みslugへの変更は4xx() {
+            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(teamWithSlug("old-slug")));
+            given(teamRepository.existsBySlugIncludingDeleted("gone-team")).willReturn(true);
+
+            assertThatThrownBy(() -> service.renameSlug(TEAM_ID, "gone-team"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("TEAM_062"));
+            org.mockito.Mockito.verify(teamRepository, org.mockito.Mockito.never())
+                    .existsBySlugAndDeletedAtIsNull(org.mockito.ArgumentMatchers.any());
+        }
+
+        @Test
         @DisplayName("他チームの履歴予約済みは TEAM_063（SLUG_RETIRED）")
         void 履歴予約() {
             given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(teamWithSlug("old-slug")));
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("retired")).willReturn(false);
+            given(teamRepository.existsBySlugIncludingDeleted("retired")).willReturn(false);
             given(teamSlugHistoryRepository.existsByOldSlugAndTeamIdNot("retired", TEAM_ID)).willReturn(true);
 
             assertThatThrownBy(() -> service.renameSlug(TEAM_ID, "retired"))
@@ -156,7 +170,7 @@ class TeamSlugRenameResolveServiceTest {
         void 自チーム戻し許可() {
             givenCounts();
             given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(teamWithSlug("current-slug")));
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("former-own")).willReturn(false);
+            given(teamRepository.existsBySlugIncludingDeleted("former-own")).willReturn(false);
             // 自チーム除外の判定では false（戻し許可）
             given(teamSlugHistoryRepository.existsByOldSlugAndTeamIdNot("former-own", TEAM_ID)).willReturn(false);
 

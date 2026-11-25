@@ -266,7 +266,7 @@ class EventServiceTest {
             EventEntity savedEntity = createDraftEvent();
             EventDetailResponse response = createEventDetailResponse();
 
-            given(eventRepository.existsBySlug("test-event")).willReturn(false);
+            given(eventRepository.existsBySlugIncludingDeleted("test-event")).willReturn(false);
             given(eventRepository.save(any(EventEntity.class))).willReturn(savedEntity);
             given(eventMapper.toEventDetailResponse(savedEntity)).willReturn(response);
 
@@ -287,7 +287,7 @@ class EventServiceTest {
                     null, null, null, null, null, null,
                     null, null, null, null, null, null, null, null, null
             );
-            given(eventRepository.existsBySlug("duplicate-slug")).willReturn(true);
+            given(eventRepository.existsBySlugIncludingDeleted("duplicate-slug")).willReturn(true);
 
             // When & Then
             assertThatThrownBy(() -> eventService.createEvent(SCOPE_TYPE, SCOPE_ID, USER_ID, request))
@@ -372,7 +372,7 @@ class EventServiceTest {
 
             // Then
             assertThat(result).isNotNull();
-            verify(eventRepository, org.mockito.Mockito.never()).existsBySlug(any());
+            verify(eventRepository, org.mockito.Mockito.never()).existsBySlugIncludingDeleted(any());
             verify(eventRepository).save(existing);
         }
 
@@ -415,7 +415,7 @@ class EventServiceTest {
             UpdateEventRequest request = updateRequest("taken-slug", null);
 
             given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(existing));
-            given(eventRepository.existsBySlug("taken-slug")).willReturn(true);
+            given(eventRepository.existsBySlugIncludingDeleted("taken-slug")).willReturn(true);
 
             // When & Then
             assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID, request))
@@ -443,7 +443,7 @@ class EventServiceTest {
             );
             EventDetailResponse response = createEventDetailResponse();
 
-            given(eventRepository.existsBySlug("new-ladder-event")).willReturn(false);
+            given(eventRepository.existsBySlugIncludingDeleted("new-ladder-event")).willReturn(false);
             given(eventRepository.save(any(EventEntity.class))).willAnswer(inv -> inv.getArgument(0));
             given(eventMapper.toEventDetailResponse(any(EventEntity.class))).willReturn(response);
 

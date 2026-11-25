@@ -55,6 +55,8 @@ import static org.mockito.Mockito.verify;
 class TeamServiceTest {
 
     @Mock private TeamRepository teamRepository;
+    /** CMP-261021-0838: 自動採番は slug 履歴の予約も確認する。 */
+    @Mock private com.mannschaft.app.team.repository.TeamSlugHistoryRepository teamSlugHistoryRepository;
     @Mock private TeamBlockRepository teamBlockRepository;
     @Mock private UserRoleRepository userRoleRepository;
     @Mock private RoleRepository roleRepository;

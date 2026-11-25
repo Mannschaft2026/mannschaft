@@ -87,7 +87,7 @@ class OrganizationSlugServiceTest {
         @DisplayName("有効な slug を指定すると採用される")
         void 有効slug採用() {
             givenCreateScaffold("テスト組織");
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("my-org")).willReturn(false);
+            given(organizationRepository.existsBySlugIncludingDeleted("my-org")).willReturn(false);
 
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "SCHOOL", null, null, null, null, "my-org");
@@ -129,7 +129,7 @@ class OrganizationSlugServiceTest {
         @DisplayName("重複 slug は ORG_062")
         void 重複() {
             givenCreateScaffold("テスト組織");
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("taken-org")).willReturn(true);
+            given(organizationRepository.existsBySlugIncludingDeleted("taken-org")).willReturn(true);
 
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "SCHOOL", null, null, null, null, "taken-org");
@@ -149,7 +149,7 @@ class OrganizationSlugServiceTest {
         @DisplayName("slug 未指定なら名前から自動生成される")
         void 自動生成フォールバック() {
             givenCreateScaffold("My Org");
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("my-org")).willReturn(false);
+            given(organizationRepository.existsBySlugIncludingDeleted("my-org")).willReturn(false);
 
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "My Org", "SCHOOL", null, null, null, null, null);
@@ -167,7 +167,7 @@ class OrganizationSlugServiceTest {
         @Test
         @DisplayName("有効・未使用 slug は available=true")
         void 利用可能() {
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("free-org")).willReturn(false);
+            given(organizationRepository.existsBySlugIncludingDeleted("free-org")).willReturn(false);
 
             var res = organizationService.checkSlugAvailability("free-org");
 
@@ -178,7 +178,7 @@ class OrganizationSlugServiceTest {
         @Test
         @DisplayName("重複は SLUG_ALREADY_TAKEN")
         void 重複は利用不可() {
-            given(organizationRepository.existsBySlugAndDeletedAtIsNull("taken")).willReturn(true);
+            given(organizationRepository.existsBySlugIncludingDeleted("taken")).willReturn(true);
 
             var res = organizationService.checkSlugAvailability("taken");
 
