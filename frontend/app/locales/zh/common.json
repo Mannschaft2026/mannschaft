@@ -1970,6 +1970,10 @@
       "downloadLabel": "下载 {format}（{type}）"
     },
     "menu": "菜单",
+    "scopeNotFound": {
+      "title": "未找到",
+      "body": "无法显示您要查看的页面。"
+    },
     "scopeShell": {
       "memberCount": "成员 {count} 人",
       "supporterCount": "支持者 {count} 人",

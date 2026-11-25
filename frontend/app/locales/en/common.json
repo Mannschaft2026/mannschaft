@@ -1972,6 +1972,10 @@
     "menu": "Menu",
     "moreActions": "More actions",
     "openNavigation": "Open navigation",
+    "scopeNotFound": {
+      "title": "Not found",
+      "body": "The page you are looking for cannot be displayed."
+    },
     "scopeShell": {
       "memberCount": "{count} member | {count} members",
       "supporterCount": "{count} supporter | {count} supporters",

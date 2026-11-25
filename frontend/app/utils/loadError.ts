@@ -51,3 +51,12 @@ export function classifyLoadError(error: unknown): LoadErrorKind {
 
   return 'generic'
 }
+
+/**
+ * 主 API の失敗を共通の「見つかりません」表示へ置き換えるか（CMP-261125-1108）。
+ * 403/404（非所属・権限なし・不存在）だけ true。5xx・通信断・ステータス無しは従来の汎用エラーへ残す。
+ */
+export function isScopeNotFound(error: unknown): boolean {
+  const status = getLoadErrorHttpStatus(error)
+  return status === 403 || status === 404
+}

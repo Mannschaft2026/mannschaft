@@ -57,6 +57,7 @@ const {
   orgTeamsLoading,
   permissionGroups,
   loading,
+  detailDenied,
   joinRequestStatus,
   joinRequestLoading,
   showLeaveConfirm,
@@ -67,6 +68,11 @@ const {
   applyJoinRequest,
   leaveOrganization,
 } = useOrgDetail(orgSlug)
+
+// 子ページの主 API が 403/404 だったとき、または組織詳細自体が 403/404 だったとき、
+// 本文を共通「見つかりません」に置き換える（CMP-261125-1108。シェルのタブ・戻る導線は残す）
+const { notFound: childNotFound, reset: resetChildNotFound } = useScopeNotFound()
+const showScopeNotFound = computed(() => childNotFound.value || detailDenied.value)
 
 // フォロー（サポーター）結線（CMP-261001-0835）。ラッパー群は useScopeFollowWiring に集約し、
 // 単体テストで検証する（SUPPORTER でも状態取得・解除後の権限再取得・権限のみの再試行）。
@@ -317,6 +323,7 @@ async function loadShellData() {
 // 破棄されたインスタンスの解決待ち応答を失効させる。
 onBeforeUnmount(() => {
   ++loadShellDataSeq
+  resetChildNotFound()
 })
 
 // シェル対象ルートに居るときだけデータをロードする。
@@ -330,8 +337,12 @@ watch(isShellRoute, (shell) => {
   if (shell) void loadShellData()
 })
 
+// ルート（タブ・子ページ・slug）が変わったら子ページ由来の「見つかりません」を解除する。
+watch(() => route.path, () => resetChildNotFound())
+
 // 永続シェルを維持したまま別組織へ遷移した場合（同一親ルート record）に再取得する。
 watch(orgSlug, () => {
+  detailDenied.value = false
   orgLoaded.value = false
   org.value = null
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
@@ -479,7 +490,8 @@ provideOrgShellContext({
       bare <NuxtPage/> を描画する。各ページの layout:'organization' の見た目を変えない。
       （pageTransition out-in 対応でルートは単一 <div>。）
     -->
-    <NuxtPage v-if="!isShellRoute" />
+    <ScopeNotFound v-if="!isShellRoute && childNotFound" />
+    <NuxtPage v-else-if="!isShellRoute" />
 
     <!-- シェル対象ルート（8 タブ + ウィジェット遷移先）: 永続シェルで包む -->
     <template v-else>
@@ -527,11 +539,15 @@ provideOrgShellContext({
 
         <!-- タブ本体（子）— 永続シェル下で差し替え -->
         <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-        <NuxtPage />
+        <ScopeNotFound v-if="childNotFound" />
+        <NuxtPage v-else />
       </ScopePageShell>
 
+      <!-- 403/404（非所属・権限なし・不存在）: 共通の「見つかりません」 -->
+      <ScopeNotFound v-else-if="showScopeNotFound" />
+
       <!--
-        取得失敗フォールバック（loading 完了かつ org=null: 403/404/503 等）。
+        取得失敗フォールバック（loading 完了かつ org=null: 5xx・通信断等）。
         村金型 villages/[id].vue に倣い、白画面ではなくエラー文言＋戻り導線を出す。
       -->
       <div v-else class="mx-auto max-w-2xl p-6 text-center">

@@ -1972,6 +1972,10 @@
     "menu": "メニュー",
     "moreActions": "その他の操作",
     "openNavigation": "ナビゲーションを開く",
+    "scopeNotFound": {
+      "title": "見つかりません",
+      "body": "お探しのページは表示できません。"
+    },
     "scopeShell": {
       "memberCount": "メンバー {count}人",
       "supporterCount": "サポーター {count}人",

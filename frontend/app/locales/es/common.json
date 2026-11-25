@@ -1970,6 +1970,10 @@
       "downloadLabel": "Descargar {format} ({type})"
     },
     "menu": "Menú",
+    "scopeNotFound": {
+      "title": "No encontrado",
+      "body": "No se puede mostrar la página que busca."
+    },
     "scopeShell": {
       "memberCount": "{count} miembro | {count} miembros",
       "supporterCount": "{count} seguidor | {count} seguidores",
