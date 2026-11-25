@@ -36,6 +36,7 @@ watch(
     <SupporterManagementPanel
       v-if="canView"
       scope-type="team"
+      scope-not-found-on-denied
       :scope-id="teamSlug"
     />
   </div>

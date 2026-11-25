@@ -140,6 +140,7 @@ onMounted(() => {
     <FriendFolderList
       v-else
       ref="listRef"
+      scope-not-found-on-denied
       :team-id="teamSlug"
       :can-edit="canManage"
       @edit="openEditDialog"

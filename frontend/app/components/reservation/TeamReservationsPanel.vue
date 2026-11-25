@@ -12,12 +12,16 @@ const props = withDefaults(defineProps<{
   teamTimezone?: string
   /** 管理者権限を持つ利用者に管理UIを表示するか。メンバー表示では false。 */
   managementView?: boolean
+  /** チーム／組織シェル配下の子ページからだけ true。主取得が 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま */
+  scopeNotFoundOnDenied?: boolean
 }>(), {
   teamTimezone: undefined,
   managementView: true,
+  scopeNotFoundOnDenied: false,
 })
 
 const { t } = useI18n()
+const { markIfDenied } = useScopeNotFound()
 const { team } = useTeamShellContext()
 const teamTimezone = computed(() => props.teamTimezone ?? team.value?.timezone ?? 'Asia/Tokyo')
 const { isAdmin, isAdminOrDeputy, isMember, roleName, loadPermissions } = useRoleAccess('team', computed(() => props.teamId))
@@ -168,7 +172,9 @@ async function loadReservationSettings() {
     const res = await getReservationSettings(props.teamId)
     reservationSettings.value = res.data
   }
-  catch {
+  catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (props.scopeNotFoundOnDenied) markIfDenied(e)
     // 取得失敗は安全方向（allowPublicReservation=false）に fallback
     reservationSettings.value = null
   }
