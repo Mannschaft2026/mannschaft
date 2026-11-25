@@ -6,12 +6,12 @@ import com.mannschaft.app.admin.batch.BatchEndpoint;
 import com.mannschaft.app.advertising.campaign.entity.AdMessagingCampaign;
 import com.mannschaft.app.advertising.campaign.enums.AdCampaignStatus;
 import com.mannschaft.app.advertising.campaign.repository.AdMessagingCampaignRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,7 +32,7 @@ import java.util.stream.Stream;
  * <h3>実行制御と重複配信防止の担当分離（二重の守り）</h3>
  * <p>{@code @SchedulerLock} は複数ノードでの本メソッド自体の並列起動を防ぐ。
  * {@link #loadActiveCampaigns()} の {@code SELECT ... FOR UPDATE} はロック保持区間が
- * その小さな {@code @Transactional} 内（候補キャンペーン一覧の取得のみ）に限られ、
+ * その小さな {@link TransactionTemplate} 管理の TX 内（候補キャンペーン一覧の取得のみ）に限られ、
  * 後続の {@link #processCampaign} には及ばない。</p>
  *
  * <p>「同一ユーザーへの重複配信を実際に防ぐ」役割は Valkey と DB の二重で担う。
@@ -68,7 +68,6 @@ import java.util.stream.Stream;
  * </ul>
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class AdCampaignDeliveryWorker {
 
@@ -79,6 +78,27 @@ public class AdCampaignDeliveryWorker {
     private final AdAudienceResolver audienceResolver;
     private final AdCampaignDeliveryDispatcher dispatcher;
     private final AdCampaignDeliveryClaimService claimService;
+
+    /**
+     * 候補キャンペーン取得を実トランザクションで包むためのテンプレート。
+     *
+     * <p>同一 bean 内の {@code this.xxx()} 呼出しは Spring のプロキシを通らず {@code @Transactional} が
+     * 効かない（{@code FOR UPDATE} が {@code TransactionRequiredException} になる。CMP-261009-0010）。
+     * そのため宣言的 TX ではなくプログラム的 TX で境界を明示する。</p>
+     */
+    private final TransactionTemplate transactionTemplate;
+
+    public AdCampaignDeliveryWorker(AdMessagingCampaignRepository campaignRepository,
+                                    AdAudienceResolver audienceResolver,
+                                    AdCampaignDeliveryDispatcher dispatcher,
+                                    AdCampaignDeliveryClaimService claimService,
+                                    PlatformTransactionManager transactionManager) {
+        this.campaignRepository = campaignRepository;
+        this.audienceResolver = audienceResolver;
+        this.dispatcher = dispatcher;
+        this.claimService = claimService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
 
     /**
      * キャンペーンごとの「直近まで処理した user_id」カーソル（キーセットページング用）。
@@ -131,15 +151,15 @@ public class AdCampaignDeliveryWorker {
     /**
      * 対象キャンペーンを {@code SELECT ... FOR UPDATE} で取得する。
      *
-     * <p>{@code @Transactional} 境界はこのメソッド内で完結し、ロックはトランザクションコミット時に解放される
+     * <p>{@link TransactionTemplate}（REQUIRED。呼出し元は TX 無しのため新規 TX）の境界はこのメソッド内で完結し、
+     * ロックはトランザクションコミット時に解放される
      * （ループ全体のロック保持を避け、1 回の実行時間を有界化する）。したがってこのロックは
      * 候補一覧の取得を DB 側の同時更新から守るものであり、後続の配信処理中の排他は提供しない
      * （クラス Javadoc「実行制御と重複配信防止の担当分離」を参照）。</p>
      */
-    @Transactional
     List<AdMessagingCampaign> loadActiveCampaigns() {
-        return campaignRepository.findActiveDeliveringForUpdate(
-                AdCampaignStatus.DELIVERING, LocalDateTime.now());
+        return transactionTemplate.execute(status -> campaignRepository.findActiveDeliveringForUpdate(
+                AdCampaignStatus.DELIVERING, LocalDateTime.now()));
     }
 
     /**

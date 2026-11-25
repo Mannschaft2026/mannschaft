@@ -36,6 +36,7 @@ class AdCampaignDeliveryWorkerTest {
     @Mock private AdAudienceResolver audienceResolver;
     @Mock private AdCampaignDeliveryDispatcher dispatcher;
     @Mock private AdCampaignDeliveryClaimService claimService;
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
     @InjectMocks private AdCampaignDeliveryWorker worker;
 
     private void stubNoClaims() {
