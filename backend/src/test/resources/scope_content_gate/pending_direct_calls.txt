@@ -102,6 +102,7 @@ com.mannschaft.app.cms.service.BlogTagService#createTag
 com.mannschaft.app.cms.service.BlogTagService#listTags
 
 ## common
+# 理由: 共通基盤の AccessGuard（@PreAuthorize 用）と AutomaticActivityActualPolicy は担当 PR 未割当。PR-Z の棚卸し対象として残す（CMP-261124-0159 殿裁定 2026-11-25）。
 com.mannschaft.app.common.activityschedule.AutomaticActivityActualPolicy#filterEligible
 com.mannschaft.app.common.security.AccessGuard#isScopeMember
 
@@ -420,6 +421,9 @@ com.mannschaft.app.resident.service.PropertyListingService#listByTeam
 com.mannschaft.app.resident.service.PropertyListingService#listInquiries
 com.mannschaft.app.resident.service.ResidentDocumentService#listByResident
 com.mannschaft.app.resident.service.ResidentRegistryService#listByUnit
+
+## role
+com.mannschaft.app.role.service.InviteReissueRequestService#reissue
 
 ## safetycheck
 com.mannschaft.app.safetycheck.service.SafetyCheckService#getSafetyCheck

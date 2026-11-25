@@ -345,6 +345,7 @@ R-resident-7	HTTP	GET /api/v1/teams/{teamId}/residents/{residentId}/documents	co
 R-returnstayplan-1	HTTP	GET /api/v1/teams/{slug}/members/{memberId}/return-stay-plans	com.mannschaft.app.returnstayplan.controller.ReturnStayPlanTeamController#listForMember	未分類	PR-Z		未移行
 R-returnstayplan-2	HTTP	GET /api/v1/teams/{slug}/members/return-stay-plans	com.mannschaft.app.returnstayplan.controller.ReturnStayPlanTeamController#listForMembers	未分類	PR-Z		未移行
 R-role-1	HTTP	GET /api/v1/teams/{slug}/transfer-ownership-offers/pending	com.mannschaft.app.role.controller.OwnershipTransferOfferController#listPendingTeamOffers	対象外	PR-Z		未移行
+R-role-2	HTTP	GET /api/v1/teams/{slug}/invite-reissue-requests	com.mannschaft.app.role.controller.InviteReissueRequestController#listForTeam	対象外	PR-Z		未移行
 R-schedule-1	HTTP	GET /api/v1/teams/{teamId}/attendance-stats/export	com.mannschaft.app.schedule.controller.ScheduleCommonController#exportTeamAttendanceStats	門	PR-D2		未移行
 R-schedule-2	HTTP	GET /api/v1/teams/{teamId}/attendance-stats	com.mannschaft.app.schedule.controller.ScheduleCommonController#getTeamAttendanceStats	門	PR-D2		未移行
 R-schedule-3	HTTP	GET /api/v1/teams/{teamId}/schedule-invitations	com.mannschaft.app.schedule.controller.ScheduleInvitationController#listTeamInvitations	門	PR-D2		未移行

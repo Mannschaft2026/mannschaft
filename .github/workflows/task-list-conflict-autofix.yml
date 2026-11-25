@@ -68,6 +68,7 @@ jobs:
           private-key: ${{ secrets.LEDGER_BOT_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          permission-workflows: write
 
       # main だけを取る。履歴はマージに要るので全量、blob は必要な分だけ遅延取得（partial clone）。
       # 作業木は scripts/ だけ（牧場素材など大きいファイルを展開しない）。

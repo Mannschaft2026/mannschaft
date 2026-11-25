@@ -11,6 +11,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ErrorCode;
 import com.mannschaft.app.organization.service.OrganizationService;
 import com.mannschaft.app.role.RoleErrorCode;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.service.InviteAcceptanceFacade;
 import com.mannschaft.app.scopefolder.ScopeFolderErrorCode;
 import com.mannschaft.app.team.TeamErrorCode;
@@ -56,8 +57,17 @@ public class PendingInviteService {
     /** ACCEPTING のまま止まった保留を取り直せるまでの時間（{@code RegistrationPendingInviteRepository#startAccepting} と同値）。 */
     static final long ACCEPTING_RETRY_MINUTES = 5;
 
-    private static final Set<PendingInviteStatus> DISMISSIBLE =
+    /** 再招待を依頼できる状態（CMP-261107-1833 PR3 設計 a）。見送られた依頼（REISSUE_DECLINED）からは依頼できない。 */
+    static final Set<PendingInviteStatus> REISSUABLE =
             EnumSet.of(PendingInviteStatus.EXPIRED, PendingInviteStatus.REISSUE_REQUESTED);
+
+    /**
+     * 失効・見送りの案内を閉じられる状態（CMP-261107-1833 PR3 設計 a）。依頼済み（REISSUE_REQUESTED）は含めない:
+     * 閉じても依頼の取り下げにはしない（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない）。依頼済みへの dismiss は
+     * 他の状態不一致と同じ 409 AUTH_085。
+     */
+    static final Set<PendingInviteStatus> DISMISSIBLE =
+            EnumSet.of(PendingInviteStatus.EXPIRED, PendingInviteStatus.REISSUE_DECLINED);
 
     private final PendingInviteStore store;
     private final InviteAcceptanceFacade facade;
@@ -91,6 +101,8 @@ public class PendingInviteService {
             log.info("別経路で在籍済みの保留を JOINED に確定: userId={}, scopeType={}, scopeId={}",
                     userId, row.scopeType(), row.scopeId());
             row = store.find(userId).orElse(row);
+        } else if (row.status() == PendingInviteStatus.PENDING) {
+            row = expireIfUnusable(row);
         }
         ScopeView scope = scopeView(row.scopeType(), row.scopeId());
         Instant retryAvailableAt = row.status() == PendingInviteStatus.ACCEPTING && row.acceptingStartedAt() != null
@@ -117,6 +129,12 @@ public class PendingInviteService {
         UUID attemptId = acquired.get();
         PendingInviteSnapshot row = store.find(userId)
                 .orElseThrow(() -> new IllegalStateException("取得した保留が引けない: userId=" + userId));
+        if (facade.findInviteValidity(row.tokenHash(), userId).orElse(null) == InviteValidity.STAGING) {
+            // 再招待の仮発行から有効化までの間（CMP-261107-1833 PR3 設計 c の窓）。招待は使わず処理中として応える。
+            BusinessException processing = new BusinessException(AuthErrorCode.AUTH_086);
+            revert(userId, attemptId, processing);
+            throw processing;
+        }
 
         PendingInviteStatus result;
         String failureCode = null;
@@ -167,7 +185,7 @@ public class PendingInviteService {
     public PendingInviteReissueResponse requestReissue(Long userId) {
         PendingInviteSnapshot row = store.find(userId)
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_084));
-        if (!DISMISSIBLE.contains(row.status())) {
+        if (!REISSUABLE.contains(row.status())) {
             throw new BusinessException(AuthErrorCode.AUTH_085);
         }
         if (scopeView(row.scopeType(), row.scopeId()).joinable()) {
@@ -177,11 +195,29 @@ public class PendingInviteService {
         return new PendingInviteReissueResponse(!requested);
     }
 
-    /** 失効の案内を閉じる（EXPIRED/REISSUE_REQUESTED→DISMISSED）。 */
+    /** 失効・見送りの案内を閉じる（EXPIRED/REISSUE_DECLINED→DISMISSED）。依頼済み（REISSUE_REQUESTED）は 409 AUTH_085。 */
     public void dismiss(Long userId) {
         if (!store.transition(userId, DISMISSIBLE, PendingInviteStatus.DISMISSED)) {
             throw stateError(userId);
         }
+    }
+
+    /**
+     * 参照時の期限判定（CMP-261107-1833 PR3 設計 g）。PENDING の保留が指す招待が失効・期限切れ・上限到達なら、
+     * 条件付き UPDATE で EXPIRED（失敗コード ROLE_002/ROLE_003）へ進めてから返す。判定は DB の現在時刻で行い、
+     * {@code expires_at} ちょうどは有効。再招待の仮発行中（作成から 60 秒以内）は処理中として PENDING のまま返す。
+     * 本人の確保（CLAIMED）が残っていれば上限到達とはみなさない（承認で再開できる）。
+     * 招待が引けない場合は何もしない（承認時の参加処理が判定する）。
+     */
+    private PendingInviteSnapshot expireIfUnusable(PendingInviteSnapshot row) {
+        Optional<InviteValidity> validity = facade.findInviteValidity(row.tokenHash(), row.userId());
+        String failureCode = validity.map(InviteValidity::failureCode).orElse(null);
+        // 判定に使ったハッシュを条件に含める（止まっていた参照が、再招待で替わった新しい PENDING を上書きしない。PR3 検分 P2-3）
+        if (failureCode != null && store.expirePending(row.userId(), row.tokenHash(), failureCode)) {
+            log.info("参照時に使えない招待の保留を EXPIRED に確定: userId={}, failureCode={}", row.userId(), failureCode);
+            return store.find(row.userId()).orElse(row);
+        }
+        return row;
     }
 
     private PendingInviteAcceptResponse respondWithoutAttempt(Long userId) {

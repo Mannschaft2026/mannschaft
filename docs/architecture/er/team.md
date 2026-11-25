@@ -103,6 +103,7 @@ erDiagram
 | [cms](cms.md) | `blog_tags` | `team_id` | ID参照 | `teams` |
 | [effortrecord](effortrecord.md) | `effort_definitions` | `team_id` | ID参照 | `teams` |
 | [effortrecord](effortrecord.md) | `effort_records` | `share_team_id` | ID参照 | `teams` |
+| [effortrecord](effortrecord.md) | `effort_team_shares` | `team_id` | ID参照 | `teams` |
 | [equipment](equipment.md) | `equipment_items` | `team_id` | ID参照 | `teams` |
 | [event](event.md) | `event_delegations` | `team_id` | ID参照 | `teams` |
 | [family](family.md) | `coin_toss_results` | `team_id` | ID参照 | `teams` |
@@ -201,6 +202,7 @@ erDiagram
 | [ticket](ticket.md) | `ticket_books` | `team_id` | ID参照 | `teams` |
 | [ticket](ticket.md) | `ticket_payments` | `team_id` | ID参照 | `teams` |
 | [ticket](ticket.md) | `ticket_products` | `team_id` | ID参照 | `teams` |
+| [timeline](timeline.md) | `timeline_effort_sources` | `team_id` | ID参照 | `teams` |
 | [timetable](timetable.md) | `personal_timetable_share_targets` | `team_id` | ID参照 | `teams` |
 | [timetable](timetable.md) | `personal_timetable_slots` | `linked_team_id` | ID参照 | `teams` |
 | [timetable](timetable.md) | `timetable_terms` | `team_id` | ID参照 | `teams` |

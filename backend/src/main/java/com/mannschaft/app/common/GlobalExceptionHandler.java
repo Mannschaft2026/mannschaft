@@ -240,6 +240,10 @@ public class GlobalExceptionHandler {
             Map.entry("ROLE_014", HttpStatus.UNPROCESSABLE_ENTITY), // 自己委譲など不正対象 → 422
             // CMP-261001-0835: 応援者（SUPPORTER）の /me 自主退会はフォロー解除 API への案内のため 422
             Map.entry("ROLE_015", HttpStatus.UNPROCESSABLE_ENTITY),
+            // CMP-261107-1833 PR3: 再招待の受け手側（依頼不在/他スコープ=404・対応済み/競合=409・依頼者が参加不可=409）
+            Map.entry("ROLE_016", HttpStatus.NOT_FOUND),
+            Map.entry("ROLE_017", HttpStatus.CONFLICT),
+            Map.entry("ROLE_018", HttpStatus.CONFLICT),
             // F15.4 Phase 5-α: 店舗詳細 Public API（IDOR対策で 404）
             Map.entry("TEAM_001", HttpStatus.NOT_FOUND),
             // 組織不在は 404（Severity.WARN 既定の 400 を上書き）。兄弟の TEAM_001 と流儀を揃える。
@@ -703,6 +707,7 @@ public class GlobalExceptionHandler {
             // F08.7 シフト予算 (Phase 10-β: 通知失敗リトライ + 失敗イベント管理)
             Map.entry("SHIFT_BUDGET_030", HttpStatus.NOT_FOUND),            // FAILED_EVENT_NOT_FOUND (IDOR 対策で 404)
             Map.entry("SHIFT_BUDGET_031", HttpStatus.CONFLICT),             // FAILED_EVENT_NOT_RETRIABLE
+            Map.entry("SHIFT_BUDGET_032", HttpStatus.CONFLICT),             // MONTH_NOT_ENDED（当月・未来月の月次締め）
             // F03.15 個人時間割（IDOR 対策で 404 統一、上限・遷移エラーは 409）
             Map.entry("PERSONAL_TIMETABLE_001", HttpStatus.NOT_FOUND),       // PERSONAL_TIMETABLE_NOT_FOUND
             Map.entry("PERSONAL_TIMETABLE_010", HttpStatus.CONFLICT),        // LIMIT_EXCEEDED

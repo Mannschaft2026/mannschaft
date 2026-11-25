@@ -120,6 +120,7 @@
       "title": "月度结算",
       "yearMonth": "目标月份",
       "yearMonthHint": "YYYY-MM格式（例: 2026-04）",
+      "invalidFormat": "请按 YYYY-MM 格式输入（例如：2026-10）",
       "execute": "执行",
       "error": "月度结算失败"
     },

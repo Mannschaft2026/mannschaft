@@ -9,6 +9,7 @@
  * - ビューポート進入時に遅延取得（ScopeActionRequiredWidget §5 に倣う）。
  * - **degraded（集計失敗）を 0 件と混同しない**（03 §4.3 / 05 §9）。一部ドメインが degraded のときは
  *   「一部集計できず」を明示する。API 自体の取得失敗は握りつぶさずバッジ非表示＋注記（症状を隠さない）。
+ * - ドメイン別内訳の各行は、そのドメインの一覧（listRoute・BE がスラッグ解決済み）へのリンク（CMP-261107-1833 PR3）。
  * - 導線は P2a ハブ（`/teams|organizations/[slug]/admin`）の承認待ちセクションへ（L1 は読み取り専用・実操作は L3）。
  */
 import type { ScopeTabType } from '~/types/dashboard-scope'
@@ -145,14 +146,19 @@ onBeforeUnmount(() => {
           <li
             v-for="d in summary?.domains ?? []"
             :key="d.domain"
-            class="flex items-center justify-between"
           >
-            <span>{{ $t(`adminConsole.lens.approvals.domain.${d.domain}`) }}</span>
-            <span v-if="d.degraded" class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
-              <i class="pi pi-exclamation-triangle text-[0.7rem]" aria-hidden="true" />
-              {{ $t('adminConsole.lens.approvals.degraded') }}
-            </span>
-            <span v-else class="font-medium">{{ d.pendingCount }}</span>
+            <NuxtLink
+              :to="d.listRoute"
+              class="flex min-h-11 items-center justify-between hover:text-primary"
+              :data-testid="`admin-approvals-domain-${d.domain}`"
+            >
+              <span>{{ $t(`adminConsole.lens.approvals.domain.${d.domain}`) }}</span>
+              <span v-if="d.degraded" class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <i class="pi pi-exclamation-triangle text-[0.7rem]" aria-hidden="true" />
+                {{ $t('adminConsole.lens.approvals.degraded') }}
+              </span>
+              <span v-else class="font-medium">{{ d.pendingCount }}</span>
+            </NuxtLink>
           </li>
         </ul>
       </div>
