@@ -199,7 +199,8 @@ const deadlineLabel = computed(() => {
 
 onMounted(async () => {
   await loadPermissions()
-  await loadTemplates()
+  // テンプレ適用は ADMIN/DEPUTY のみ。一般メンバーには取得もエラー表示もしない
+  if (isAdminOrDeputy.value) await loadTemplates()
 })
 </script>
 

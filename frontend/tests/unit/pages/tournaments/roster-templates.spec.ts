@@ -18,16 +18,17 @@ import RosterPage from '~/pages/teams/[slug]/tournaments/[tId]/roster.vue'
  *   RT-004 ?org= 指定が親組織に無い（orgInvalid）ときも取得せず理由を表示する
  */
 
+const state = vi.hoisted(() => ({ query: {} as Record<string, string>, isAdmin: true }))
 const getEntryTemplates = vi.fn()
 const resolveContext = vi.fn()
 const handleApiError = vi.fn()
 
-mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-slug', tId: '7' }, query: {} }))
+mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-slug', tId: '7' }, query: state.query }))
 mockNuxtImport('useTournamentApi', () => () => ({ getEntryTemplates }))
 mockNuxtImport('useMatchOrgContext', () => () => ({ resolveContext }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError }))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }))
-mockNuxtImport('useRoleAccess', () => () => ({ isAdminOrDeputy: ref(true), loadPermissions: vi.fn(async () => {}) }))
+mockNuxtImport('useRoleAccess', () => () => ({ isAdminOrDeputy: ref(state.isAdmin), loadPermissions: vi.fn(async () => {}) }))
 
 async function settle() {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
@@ -45,6 +46,8 @@ describe('pages/teams/[slug]/tournaments/[tId]/roster.vue — エントリーテ
     getEntryTemplates.mockReset()
     resolveContext.mockReset()
     handleApiError.mockReset()
+    state.query = {}
+    state.isAdmin = true
   })
 
   it('RT-001: 解決した orgId / teamId で getEntryTemplates を呼ぶ', async () => {
@@ -53,7 +56,7 @@ describe('pages/teams/[slug]/tournaments/[tId]/roster.vue — エントリーテ
     const wrapper = await mountSuspended(RosterPage)
     await settle()
 
-    expect(resolveContext).toHaveBeenCalledWith('team-slug', expect.anything())
+    expect(resolveContext).toHaveBeenCalledWith('team-slug', { orgId: null })
     expect(getEntryTemplates).toHaveBeenCalledWith('11', '22')
     expect(wrapper.find('[data-testid="roster-templates-error"]').exists()).toBe(false)
   })
@@ -85,5 +88,27 @@ describe('pages/teams/[slug]/tournaments/[tId]/roster.vue — エントリーテ
 
     expect(getEntryTemplates).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="roster-templates-unavailable"]').exists()).toBe(true)
+  })
+
+  it('RT-005: ?org=11 は { orgId: 11 } として resolveContext に渡る', async () => {
+    state.query = { org: '11' }
+    resolveContext.mockResolvedValue({ orgId: 11, orgInvalid: false, teamId: 22, organizations: [] })
+    getEntryTemplates.mockResolvedValue({ data: [] })
+    await mountSuspended(RosterPage)
+    await settle()
+
+    expect(resolveContext).toHaveBeenCalledWith('team-slug', { orgId: 11 })
+  })
+
+  it('RT-006: 管理者でない場合は解決も取得もエラー表示もしない', async () => {
+    state.isAdmin = false
+    resolveContext.mockResolvedValue(null)
+    const wrapper = await mountSuspended(RosterPage)
+    await settle()
+
+    expect(resolveContext).not.toHaveBeenCalled()
+    expect(getEntryTemplates).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="roster-templates-unavailable"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="roster-templates-error"]').exists()).toBe(false)
   })
 })
