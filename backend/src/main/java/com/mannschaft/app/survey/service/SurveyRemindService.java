@@ -4,6 +4,7 @@ import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.survey.DistributionMode;
 import com.mannschaft.app.survey.SurveyErrorCode;
+import com.mannschaft.app.survey.SurveyRemindPolicy;
 import com.mannschaft.app.survey.SurveyStatus;
 import com.mannschaft.app.survey.dto.RemindResponse;
 import com.mannschaft.app.survey.entity.SurveyEntity;
@@ -17,7 +18,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -36,14 +36,8 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class SurveyRemindService {
 
-    /** 督促回数の上限（手動リマインド）。 */
-    private static final int MAX_MANUAL_REMIND_COUNT = 3;
-
     /** CMP-041: ADMIN+ 委任判定に用いる permission 名。 */
     private static final String PERMISSION_MANAGE_SURVEYS = "MANAGE_SURVEYS";
-
-    /** 督促のクールダウン時間（時間単位）。 */
-    private static final long REMIND_COOLDOWN_HOURS = 24L;
 
     private final SurveyRepository surveyRepository;
     private final SurveyResponseRepository responseRepository;
@@ -94,17 +88,17 @@ public class SurveyRemindService {
             throw new BusinessException(SurveyErrorCode.INVALID_SURVEY_STATUS);
         }
 
-        // クールダウン: 前回送信から24時間経過していなければ拒否
-        LocalDateTime now = LocalDateTime.now();
-        if (survey.getLastRemindedAt() != null
-                && Duration.between(survey.getLastRemindedAt(), now).toHours() < REMIND_COOLDOWN_HOURS) {
-            throw new BusinessException(SurveyErrorCode.REMIND_COOLDOWN_NOT_ELAPSED);
+        // 上限: 手動リマインドは MAX_MANUAL_REMIND_COUNT 回まで。
+        // 上限を先に判定する（上限到達後は24h待っても送れないため、待機ではなく上限を返す）
+        if (survey.getManualRemindCount() != null
+                && survey.getManualRemindCount() >= SurveyRemindPolicy.MAX_MANUAL_REMIND_COUNT) {
+            throw new BusinessException(SurveyErrorCode.REMIND_QUOTA_EXCEEDED);
         }
 
-        // 上限: 手動リマインドは MAX_MANUAL_REMIND_COUNT 回まで
-        if (survey.getManualRemindCount() != null
-                && survey.getManualRemindCount() >= MAX_MANUAL_REMIND_COUNT) {
-            throw new BusinessException(SurveyErrorCode.REMIND_QUOTA_EXCEEDED);
+        // クールダウン: 前回送信から24時間経過していなければ拒否
+        LocalDateTime now = LocalDateTime.now();
+        if (SurveyRemindPolicy.isInCooldown(survey.getLastRemindedAt(), now)) {
+            throw new BusinessException(SurveyErrorCode.REMIND_COOLDOWN_NOT_ELAPSED);
         }
 
         // 未回答者抽出（distribution_mode に応じて母集団を切り替え。回答済みを除外）
@@ -133,7 +127,7 @@ public class SurveyRemindService {
 
         int remindedCount = unansweredUserIds.size();
         int newCount = survey.getManualRemindCount() != null ? survey.getManualRemindCount() : 0;
-        int remainingQuota = MAX_MANUAL_REMIND_COUNT - newCount;
+        int remainingQuota = SurveyRemindPolicy.MAX_MANUAL_REMIND_COUNT - newCount;
         String message = remindedCount + "名の未回答メンバーにリマインドの送信を受け付けました。";
 
         log.info("アンケート督促: surveyId={}, remindedCount={}, manualRemindCount={}, by={}",

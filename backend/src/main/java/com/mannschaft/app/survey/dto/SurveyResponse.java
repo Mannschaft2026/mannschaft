@@ -40,7 +40,9 @@ public class SurveyResponse {
 
     public record SurveyDistributionDto(DistributionMode distributionMode, Boolean autoPostToTimeline,
                                          String seriesId, String remindBeforeHours, Integer manualRemindCount,
-                                         Boolean includeSupporters) {}
+                                         Boolean includeSupporters,
+                                         LocalDateTime lastRemindedAt, Integer remindMaxCount,
+                                         LocalDateTime nextRemindableAt) {}
 
     public record SurveyScheduleDto(LocalDateTime startsAt, LocalDateTime expiresAt,
                                      LocalDateTime publishedAt, LocalDateTime closedAt) {}

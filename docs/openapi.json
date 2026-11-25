@@ -179778,12 +179778,24 @@
           "includeSupporters": {
             "type": "boolean"
           },
+          "lastRemindedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "manualRemindCount": {
             "type": "integer",
             "format": "int32"
           },
+          "nextRemindableAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "remindBeforeHours": {
             "type": "string"
+          },
+          "remindMaxCount": {
+            "type": "integer",
+            "format": "int32"
           },
           "seriesId": {
             "type": "string"

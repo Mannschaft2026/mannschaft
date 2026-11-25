@@ -7,24 +7,36 @@
  *
  * 督促 UI: canRemind=true の場合のみ未回答タブに「督促送信」ボタンを表示。
  *   - Backend API: POST /api/v1/surveys/{surveyId}/remind
- *   - 認可・回数制限・24時間クールダウン等は Backend 側で判定（403/400 を画面に表示）
+ *   - 認可・回数制限・24時間クールダウン等の判定は Backend が行う。
+ *   - 画面には「残り N/M 回」を常に出し、送れないときはボタンを無効にして理由を出す。
+ *     上限回数・待機時刻は BE が返す distribution の値だけで判定し、FE は定数を持たない。
+ *   - 送信が成功したら emit('reminded') で親へ詳細の取り直しを依頼する。
  */
-import type { RespondentItem } from '~/types/survey'
+import type { RespondentItem, SurveyDistributionDto, SurveyStatus } from '~/types/survey'
 
 const props = withDefaults(
   defineProps<{
     scopeType: 'TEAM' | 'ORGANIZATION'
     scopeId: string
     surveyId: number
+    /** 督促の権限だけを表す（公開中かどうか・回数・待機は surveyStatus / distribution で判定） */
     canRemind?: boolean
+    surveyStatus?: SurveyStatus
+    distribution?: SurveyDistributionDto | null
   }>(),
-  { canRemind: false },
+  { canRemind: false, surveyStatus: undefined, distribution: null },
 )
+
+const emit = defineEmits<{
+  /** 督促の送信に成功した（親が詳細を取り直す） */
+  reminded: []
+}>()
 
 const { t } = useI18n()
 const { getRespondents, remindRespondents } = useSurveyApi()
 const { error: showError, success: showSuccess } = useNotification()
 const { relativeTime } = useRelativeTime()
+const { formatDateTime } = useDatetime()
 
 const respondents = ref<RespondentItem[]>([])
 const loading = ref(false)
@@ -75,6 +87,7 @@ async function sendReminder() {
     // 督促送信後は最新状態（lastRemindedAt 等）を反映するため一覧を再取得する。
     // 失敗時は再取得しない（一覧は変化しない想定 + エラートーストのみ表示）。
     await loadRespondents()
+    emit('reminded')
   } catch {
     // Backend が 400/403 を返す（上限超過・クールダウン中・権限不足）
     showError(t('surveys.respondents.remindFailed'), t('surveys.respondents.remindFailedDetail'))
@@ -82,6 +95,24 @@ async function sendReminder() {
     reminding.value = false
   }
 }
+
+/** 残り回数。BE が上限を返していない間は null（表示しない・上限扱いもしない）。 */
+const remindRemaining = computed<number | null>(() => {
+  const max = props.distribution?.remindMaxCount
+  if (max == null) return null
+  return Math.max(0, max - (props.distribution?.manualRemindCount ?? 0))
+})
+
+/** 督促を送れない理由（送れるときは null）。公開中でない > 上限 > 待機 の順で優先する。 */
+const remindBlockedReason = computed<string | null>(() => {
+  if (props.surveyStatus !== 'PUBLISHED') return t('surveys.respondents.remindBlockedNotPublished')
+  if (remindRemaining.value === 0) return t('surveys.respondents.remindBlockedQuota')
+  const next = props.distribution?.nextRemindableAt
+  if (next && new Date(next).getTime() > Date.now()) {
+    return t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(next) })
+  }
+  return null
+})
 
 function getInitial(name: string): string {
   const trimmed = name.trim()
@@ -133,15 +164,31 @@ defineExpose({ refresh: loadRespondents })
         v-if="canRemind"
         class="flex items-center justify-between gap-2 rounded-lg border border-surface-200 bg-surface-50 px-3 py-2 dark:border-surface-700 dark:bg-surface-800"
       >
-        <span class="min-w-0 text-xs text-surface-600">
-          {{ t('surveys.respondents.remindHint', { count: unresponded.length }) }}
-        </span>
+        <div class="flex min-w-0 flex-col gap-0.5">
+          <span class="text-xs text-surface-600">
+            {{ t('surveys.respondents.remindHint', { count: unresponded.length }) }}
+          </span>
+          <span
+            v-if="remindRemaining !== null"
+            class="text-xs font-medium text-surface-700"
+            data-testid="respondents-remind-quota"
+          >
+            {{ t('surveys.respondents.remindQuota', { remaining: remindRemaining, max: distribution?.remindMaxCount }) }}
+          </span>
+          <span
+            v-if="remindBlockedReason"
+            class="text-xs text-orange-600"
+            data-testid="respondents-remind-blocked-reason"
+          >
+            {{ remindBlockedReason }}
+          </span>
+        </div>
         <Button
           :label="t('surveys.respondents.remindButton')"
           icon="pi pi-send"
           size="small"
           :loading="reminding"
-          :disabled="unresponded.length === 0 || loading"
+          :disabled="unresponded.length === 0 || loading || remindBlockedReason !== null"
           data-testid="respondents-remind-button"
           class="min-h-11 min-w-11 shrink-0 whitespace-nowrap"
           @click="sendReminder"

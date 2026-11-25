@@ -14,7 +14,6 @@ import {
 } from '~/utils/surveyDisplayMode'
 import {
   canManageSurvey,
-  canRemindSurvey,
   canViewSurveyTeamBreakdown,
 } from '~/utils/surveyViewerCapabilities'
 import {
@@ -162,8 +161,15 @@ async function onSaveQuestionsAndPublish() {
 
 const currentUserId = computed<number | null>(() => authStore.currentUser?.id ?? null)
 
-async function fetchDetail() {
-  loading.value = true
+/**
+ * 詳細を取得する。
+ *
+ * @param silent true なら全画面ローディングに切り替えず裏で取り直す
+ *   （督促送信後に残り回数・次回送信可能時刻だけを更新したい場合。ローディングにすると
+ *   回答者一覧が作り直され、開いていた未回答タブが閉じてしまう）
+ */
+async function fetchDetail(silent = false) {
+  if (!silent) loading.value = true
   fetchError.value = false
   try {
     const res = await getSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
@@ -241,8 +247,11 @@ const canViewTeamBreakdown = computed(() => canViewSurveyTeamBreakdown(survey.va
 /** 回答者セクションの開閉状態（初期は閉じた状態） */
 const showRespondents = ref(false)
 
-/** 督促送信可否（管理操作可 かつ 公開中のみ。BE: SurveyRemindService#remind と同一粒度） */
-const canRemind = computed(() => canRemindSurvey(survey.value, survey.value?.status))
+/**
+ * 督促の「権限」。公開中かどうかは含めない（送れない理由を一覧側で表示するため。
+ * 状態・残り回数・待機は surveyStatus と distribution から SurveyRespondentsList が判定する）。
+ */
+const canRemind = computed(() => canManageSurvey(survey.value))
 
 /**
  * 結果閲覧権限の判定。
@@ -810,6 +819,9 @@ onMounted(async () => {
               :scope-id="scopeId"
               :survey-id="surveyId"
               :can-remind="canRemind"
+              :survey-status="survey.status"
+              :distribution="survey.distribution"
+              @reminded="fetchDetail(true)"
             />
           </template>
         </Card>
