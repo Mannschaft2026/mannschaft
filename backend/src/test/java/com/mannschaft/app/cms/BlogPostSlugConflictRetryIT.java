@@ -185,6 +185,71 @@ class BlogPostSlugConflictRetryIT extends AbstractMySqlIntegrationTest {
         assertThat(retryLogCount()).as("呼び出し元のトランザクション内では採番をやり直さない").isZero();
     }
 
+    @Test
+    @DisplayName("実デッドロック: 競合相手が blog_post_tags を範囲ロックしたまま同 slug を INSERT すると MySQL がデッドロックを検知し、作成側が被害者でも再試行で -2 作成できる")
+    void デッドロックは再試行して作成できる() throws Exception {
+        Long userId = persistUser("deadlock");
+        // InnoDB は変更した行数（undo 数）＋ロック構造体数が小さい側を被害者に選ぶ。競合相手に多数の行を更新させて
+        // 重くし、作成側（記事 1 行を INSERT 済み）を被害者に寄せる
+        for (int i = 0; i < 200; i++) {
+            jdbcTemplate.update("INSERT INTO blog_post_tags (blog_post_id, blog_tag_id) VALUES (?, ?)",
+                    i + 1, 9_000_000L + Math.abs(key.hashCode() % 1000) * 100 + i);
+        }
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch proceed = new CountDownLatch(1);
+        try {
+            // 競合相手: blog_post_tags 全体（末尾ギャップ含む）を排他ロックして保持し、合図の後に同 slug の記事を INSERT する
+            Future<?> competitor = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+                jdbcTemplate.update("UPDATE blog_post_tags SET blog_tag_id = blog_tag_id + 1 WHERE blog_tag_id >= 9000000");
+                jdbcTemplate.queryForList("SELECT blog_post_id FROM blog_post_tags FOR UPDATE");
+                locked.countDown();
+                await(proceed);
+                blogPostRepository.saveAndFlush(BlogPostEntity.builder()
+                        .userId(userId).slug("deadlockreport").title("競合相手").body("本文")
+                        .readingTimeMinutes((short) 1).build());
+            }));
+            assertThat(locked.await(WAIT.toSeconds(), TimeUnit.SECONDS)).as("競合相手のロック取得").isTrue();
+
+            CreateBlogPostRequest request = new CreateBlogPostRequest(null, null, null, "Deadlock Report", null, "本文",
+                    null, null, null, null, null, List.of(1L), null, null, null, null, null);
+            Future<BlogPostResponse> contender = executor.submit(() -> blogPostService.createPost(userId, request));
+            // 作成側が記事を INSERT 済みで、タグの INSERT が競合相手のギャップロック待ちに入るまで待つ
+            awaitStatementWait(contender, "insert into blog_post_tags%");
+            proceed.countDown();
+
+            BlogPostResponse created = contender.get(WAIT.toSeconds(), TimeUnit.SECONDS);
+            competitor.get(WAIT.toSeconds(), TimeUnit.SECONDS);
+            assertThat(created.getContent().slug()).isEqualTo("deadlockreport-2");
+            assertThat(liveSlugs("user_id", userId)).containsExactly("deadlockreport", "deadlockreport-2");
+            assertThat(deadlockRetryLogCount()).as("デッドロックを受けて再試行した").isEqualTo(1);
+        } finally {
+            proceed.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    private void awaitStatementWait(Future<?> contender, String likePattern) throws InterruptedException {
+        long deadline = System.nanoTime() + WAIT.toNanos();
+        while (System.nanoTime() < deadline) {
+            Integer waiting = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.processlist "
+                    + "WHERE command = 'Query' AND LOWER(info) LIKE ?", Integer.class, likePattern);
+            if (waiting != null && waiting > 0) {
+                return;
+            }
+            if (contender.isDone()) {
+                throw new AssertionError("ロック待ちに入る前に作成が終わった: " + processSnapshot());
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("ロック待ちに入らなかった: " + processSnapshot());
+    }
+
+    private long deadlockRetryLogCount() {
+        return aspectLog.list.stream().filter(event -> event.getFormattedMessage().contains("デッドロック")
+                && event.getFormattedMessage().contains("やり直す")).count();
+    }
+
     /**
      * 競合相手が同じ slug の行を INSERT して未確定のまま、{@code contender} を別スレッドで呼ぶ。
      * contender の blog_posts への INSERT がロック待ちに入ったのを確かめてから競合相手を確定させ、contender の結果を返す。
