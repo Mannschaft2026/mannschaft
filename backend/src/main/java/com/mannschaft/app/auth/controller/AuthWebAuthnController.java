@@ -275,7 +275,7 @@ public class AuthWebAuthnController {
     @Operation(summary = "パスキー登録・削除前の再認証（パスワード／2FA／メールOTP）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "再認証成功")
     public ResponseEntity<ApiResponse<WebAuthnReauthenticateCompleteResponse>> reauthenticateByFactor(
-            @RequestBody PasskeyManageReauthRequest req) {
+            @Valid @RequestBody PasskeyManageReauthRequest req) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(auth2faService.reauthenticateForPasskeyManage(
                 userId, SecurityUtils.getCurrentSessionHash(), req));

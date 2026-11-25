@@ -631,7 +631,7 @@ public class AuditLogEventListener {
     }
 
     /**
-     * 再認証の成功（CMP-261021-1338 B7）。method は PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / EMAIL_OTP。
+     * 再認証の成功（CMP-261021-1338 B7）。method は PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / SECOND_FACTOR / EMAIL_OTP。
      */
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
             reason = "止めると認証・アカウント操作の監査記録が欠落する。イベントは再生されないため停止期間の監査証跡は恒久的に失われる")

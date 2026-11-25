@@ -118,8 +118,14 @@ class PasskeyManageReauthFactorTest {
         /** パスワード＋メール方式 2FA 有効（パスキー無し）。 */
         PASSWORD_AND_2FA,
         /** SNS ログインのみ（パスワード・2FA・パスキーいずれも無し）。 */
-        SOCIAL_ONLY
+        SOCIAL_ONLY,
+        /** SNS ログイン＋TOTP 方式 2FA 有効（パスワード・パスキー無し）。 */
+        SOCIAL_AND_TOTP,
+        /** SNS ログイン＋メール方式 2FA 有効（パスワード・パスキー無し）。 */
+        SOCIAL_AND_EMAIL_2FA
     }
+
+    private static final String BACKUP_CODE = "12345678";
 
     @BeforeEach
     void 準備() {
@@ -133,7 +139,8 @@ class PasskeyManageReauthFactorTest {
     private void as(Holder holder) {
         UserEntity user = UserEntity.builder()
                 .email("reauth-factor@example.com")
-                .passwordHash(holder == Holder.SOCIAL_ONLY ? null : PASSWORD_HASH)
+                .passwordHash(holder == Holder.SOCIAL_ONLY || holder == Holder.SOCIAL_AND_TOTP
+                        || holder == Holder.SOCIAL_AND_EMAIL_2FA ? null : PASSWORD_HASH)
                 .lastName("試練").firstName("太郎").displayName("再認証試練")
                 .locale("ja").timezone("Asia/Tokyo")
                 .status(UserEntity.UserStatus.ACTIVE).isSearchable(false)
@@ -141,10 +148,14 @@ class PasskeyManageReauthFactorTest {
         ReflectionTestUtils.setField(user, "id", USER_ID);
         given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
 
-        Optional<TwoFactorAuthEntity> twoFactor = holder == Holder.PASSWORD_AND_2FA
-                ? Optional.of(TwoFactorAuthEntity.builder().userId(USER_ID).method(TwoFactorMethod.EMAIL)
-                        .backupCodes("[]").isEnabled(true).build())
-                : Optional.empty();
+        Optional<TwoFactorAuthEntity> twoFactor = switch (holder) {
+            case PASSWORD_AND_2FA, SOCIAL_AND_EMAIL_2FA -> Optional.of(TwoFactorAuthEntity.builder()
+                    .userId(USER_ID).method(TwoFactorMethod.EMAIL).backupCodes("[]").isEnabled(true).build());
+            case SOCIAL_AND_TOTP -> Optional.of(TwoFactorAuthEntity.builder()
+                    .userId(USER_ID).method(TwoFactorMethod.TOTP).backupCodes("[\"backup-hash\"]")
+                    .isEnabled(true).build());
+            default -> Optional.empty();
+        };
         given(twoFactorAuthRepository.findByUserId(USER_ID)).willReturn(twoFactor);
         given(twoFactorAuthRepository.findByUserIdForUpdate(USER_ID)).willReturn(twoFactor);
 
@@ -212,6 +223,35 @@ class PasskeyManageReauthFactorTest {
     @Nested
     @DisplayName("B5 手段ごとの照合")
     class Verify {
+
+        @Test
+        void B5_SNS且つ2FA有効の利用者の再認証手段は2要素のみ() {
+            as(Holder.SOCIAL_AND_TOTP);
+            assertThat(auth2faService.resolvePasskeyManageReauthMethod(USER_ID))
+                    .isEqualTo(PasskeyManageReauthMethod.SECOND_FACTOR);
+        }
+
+        @Test
+        void B5_SNS且つTOTP有効の利用者はメールOTPだけではAUTH080() {
+            as(Holder.SOCIAL_AND_TOTP);
+            assertAuth080(() -> reauth(req(null, MfaVerificationMethod.EMAIL, OTP)));
+            assertFlagNotMarked();
+        }
+
+        @Test
+        void B5_SNS且つTOTP有効の利用者は2FA要素のバックアップコードで再認証できる() {
+            as(Holder.SOCIAL_AND_TOTP);
+            given(passwordEncoder.matches(eq(BACKUP_CODE), eq("backup-hash"))).willReturn(true);
+            reauth(req(null, MfaVerificationMethod.BACKUP_CODE, BACKUP_CODE));
+            assertFlagMarked();
+        }
+
+        @Test
+        void B5_SNS且つメール2FA有効の利用者は2FAとしてのメールOTPで再認証できる() {
+            as(Holder.SOCIAL_AND_EMAIL_2FA);
+            reauth(req(null, MfaVerificationMethod.EMAIL, OTP));
+            assertFlagMarked();
+        }
 
         @Test
         void B5_パスキー保有者は正しいパスワードでもこの経路で再認証できない() {
@@ -323,6 +363,25 @@ class PasskeyManageReauthFactorTest {
             assertThat(event.getUserId()).isEqualTo(USER_ID);
             assertThat(event.getPurpose()).isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
             assertThat(event.getMethod()).isEqualTo(PasskeyManageReauthMethod.PASSWORD);
+        }
+
+        @Test
+        void B7_セッション不明の再認証も失敗として監査する() {
+            as(Holder.PASSWORD_ONLY);
+            assertThatThrownBy(() -> auth2faService.reauthenticateForPasskeyManage(USER_ID, null,
+                    req(PASSWORD, null, null))).isInstanceOf(BusinessException.class);
+            assertThat(published(ReauthenticationFailedEvent.class).getPurpose())
+                    .isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
+        }
+
+        @Test
+        void B7_レート制限超過AUTH044も失敗として監査する() {
+            as(Holder.PASSWORD_ONLY);
+            willThrow(new BusinessException(AuthErrorCode.AUTH_044))
+                    .given(authTokenService).checkRateLimit(startsWith("mannschaft:auth:"), eq(5), eq(Duration.ofMinutes(15)));
+            assertThatThrownBy(() -> reauth(req(PASSWORD, null, null))).isInstanceOf(BusinessException.class);
+            assertThat(published(ReauthenticationFailedEvent.class).getPurpose())
+                    .isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
         }
 
         @Test

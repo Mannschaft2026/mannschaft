@@ -86443,10 +86443,10 @@ export interface components {
         };
         PasskeyManageReauthMethodResponse: {
             /**
-             * @description 再認証手段（PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / EMAIL_OTP）
+             * @description 再認証手段（PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / SECOND_FACTOR / EMAIL_OTP）
              * @enum {string}
              */
-            method?: "PASSKEY" | "PASSWORD" | "PASSWORD_AND_SECOND_FACTOR" | "EMAIL_OTP";
+            method?: "PASSKEY" | "PASSWORD" | "PASSWORD_AND_SECOND_FACTOR" | "SECOND_FACTOR" | "EMAIL_OTP";
         };
         ApiResponseListWebAuthnCredentialResponse: {
             data?: components["schemas"]["WebAuthnCredentialResponse"][];

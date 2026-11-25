@@ -729,6 +729,67 @@ class AuthWebAuthnServiceTest {
             verify(redisTemplate, never()).opsForValue();
         }
 
+        @Test
+        @DisplayName("TX 外ならフラグをその場で書く")
+        void markReauthenticated_TX外はその場で書込() {
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+            authWebAuthnService.markReauthenticated(TEST_USER_ID, TEST_SESSION, ReauthPurpose.PASSKEY_MANAGE);
+
+            verify(valueOperations).set(anyString(), eq("1"), anyLong(), any(java.util.concurrent.TimeUnit.class));
+        }
+
+        @Test
+        @DisplayName("TX 内なら DB コミット後に書く（コミット前は書かず、ロールバックでは書かない）")
+        void markReauthenticated_TX内はコミット後に書込() {
+            org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+            try {
+                authWebAuthnService.markReauthenticated(TEST_USER_ID, TEST_SESSION, ReauthPurpose.PASSKEY_MANAGE);
+                verify(redisTemplate, never()).opsForValue();
+
+                // ロールバック: afterCommit は呼ばれない
+                var syncs = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+                assertThat(syncs).hasSize(1);
+                syncs.forEach(sync -> sync.afterCompletion(
+                        org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
+                verify(redisTemplate, never()).opsForValue();
+
+                // コミット: afterCommit で書く
+                given(redisTemplate.opsForValue()).willReturn(valueOperations);
+                syncs.forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+                verify(valueOperations).set(anyString(), eq("1"), anyLong(), any(java.util.concurrent.TimeUnit.class));
+            } finally {
+                org.springframework.transaction.support.TransactionSynchronizationManager.clear();
+            }
+        }
+
+        @Test
+        @DisplayName("監査: 再認証のセッションを特定できない完了要求も REAUTH_FAILED として記録する")
+        void completeReauthenticate_セッション不明は失敗監査() {
+            WebAuthnReauthenticateCompleteRequest req = mock(WebAuthnReauthenticateCompleteRequest.class);
+            assertThatThrownBy(() -> authWebAuthnService.completeReauthenticate(TEST_USER_ID, null, req))
+                    .isInstanceOf(BusinessException.class);
+            verify(eventPublisher).publish(any(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class));
+        }
+
+        @Test
+        @DisplayName("監査: パスキー削除でフラグを消費できない（AUTH_087）場合も用途付きで REAUTH_FAILED を記録する")
+        void deleteCredential_消費失敗は用途付き失敗監査() {
+            given(redisTemplate.opsForValue()).willReturn(valueOperations);
+            given(valueOperations.getAndDelete(anyString())).willReturn((String) null);
+            given(webAuthnCredentialRepository.findById(5L)).willReturn(java.util.Optional.of(
+                    WebAuthnCredentialEntity.builder().id(5L).userId(TEST_USER_ID).credentialId("c")
+                            .publicKey("p").signCount(0L).build()));
+
+            assertThatThrownBy(() -> authWebAuthnService.deleteCredential(TEST_USER_ID, TEST_SESSION, 5L))
+                    .isInstanceOf(BusinessException.class);
+
+            org.mockito.ArgumentCaptor<com.mannschaft.app.auth.event.ReauthenticationFailedEvent> cap =
+                    org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.auth.event.ReauthenticationFailedEvent.class);
+            verify(eventPublisher).publish(cap.capture());
+            assertThat(cap.getValue().getPurpose()).isEqualTo(ReauthPurpose.PASSKEY_MANAGE);
+        }
+
         // 補助: WebAuthnReauthenticateCompleteResponse の DTO がコンパイル時依存となっていること
         // を保証するためのスモークテスト。
         @Test

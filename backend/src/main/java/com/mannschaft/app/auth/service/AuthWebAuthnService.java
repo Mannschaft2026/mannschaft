@@ -2,6 +2,8 @@ package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
 import com.mannschaft.app.auth.PasskeyManageReauthMethod;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
@@ -159,6 +161,7 @@ public class AuthWebAuthnService {
             Long userId, String sessionHash, WebAuthnRegisterCompleteRequest req) {
         // 0. 再認証済みフラグを 1 回限りで消費する（同時 2 リクエストのうち成功は 1 つだけ）
         if (!consumeReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
+            publishReauthFailed(userId, ReauthPurpose.PASSKEY_MANAGE);
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
 
@@ -473,6 +476,7 @@ public class AuthWebAuthnService {
         }
 
         if (!consumeReauthentication(userId, sessionHash, ReauthPurpose.PASSKEY_MANAGE)) {
+            publishReauthFailed(userId, ReauthPurpose.PASSKEY_MANAGE);
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
 
@@ -546,7 +550,8 @@ public class AuthWebAuthnService {
     public ApiResponse<WebAuthnReauthenticateCompleteResponse> completeReauthenticate(
             Long userId, String sessionHash, WebAuthnReauthenticateCompleteRequest req) {
         if (sessionHash == null || sessionHash.isBlank()) {
-            // セッションを特定できないとフラグを束縛できない
+            // セッションを特定できないとフラグを束縛できない（用途はチャレンジ未消費のため不明）
+            publishReauthFailed(userId, null);
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
 
@@ -658,7 +663,18 @@ public class AuthWebAuthnService {
     public void markReauthenticated(Long userId, String sessionHash, ReauthPurpose purpose) {
         // セッションを特定できない場合はキー生成で AUTH_087 とし、Valkey には何も書かない
         String key = reauthVerifiedKey(userId, sessionHash, purpose);
-        redisTemplate.opsForValue().set(key, "1", REAUTH_VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
+        // DB コミット後に書く（コミット失敗・ロールバックで「再認証済みなのに記録が残らない」不整合を作らない）。TX 外ならその場で書く
+        Runnable write = () -> redisTemplate.opsForValue().set(key, "1", REAUTH_VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    write.run();
+                }
+            });
+        } else {
+            write.run();
+        }
     }
 
     /**

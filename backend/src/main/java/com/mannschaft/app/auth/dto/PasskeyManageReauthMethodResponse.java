@@ -13,6 +13,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PasskeyManageReauthMethodResponse {
 
-    @Schema(description = "再認証手段（PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / EMAIL_OTP）")
+    @Schema(description = "再認証手段（PASSKEY / PASSWORD / PASSWORD_AND_SECOND_FACTOR / SECOND_FACTOR / EMAIL_OTP）")
     private final PasskeyManageReauthMethod method;
 }

@@ -497,6 +497,11 @@ class PointCardGroupServiceTest {
 
         assertThat(res).isNotNull();
         verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
+        // F18 回帰: 成功時は POINT_CARD_VIEWED 監査を記録する
+        verify(auditLogService).record(
+                eq(AuditEventType.POINT_CARD_VIEWED.name()),
+                eq(USER_ID), any(), any(), any(),
+                any(), any(), any(), anyString());
     }
 
     @Test
@@ -516,6 +521,9 @@ class PointCardGroupServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(PointCardErrorCode.BIOMETRIC_REQUIRED);
         verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
+        // F18 回帰: 失敗時は POINT_CARD_VIEWED 監査を出さない
+        verify(auditLogService, never()).record(anyString(), any(), any(), any(), any(),
+                any(), any(), any(), any());
     }
 
     /** jti 付きの認証を SecurityContext に置いて処理を実行する（SecurityUtils.getCurrentSessionHash の入力）。 */

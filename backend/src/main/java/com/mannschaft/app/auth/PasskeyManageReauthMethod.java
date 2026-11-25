@@ -10,6 +10,8 @@ public enum PasskeyManageReauthMethod {
     PASSWORD,
     /** パスキー未保有・パスワードあり・2FA 有効: パスワード＋2FA 要素。 */
     PASSWORD_AND_SECOND_FACTOR,
+    /** パスキー未保有・パスワード無し（SNS ログイン）・2FA 有効: 2FA 要素のみ（TOTP／バックアップコード／2FA としてのメールOTP）。 */
+    SECOND_FACTOR,
     /** パスキー・パスワード・2FA のいずれも無い（SNS ログインのみ）: 本人確認用メールOTP（REAUTH）。 */
     EMAIL_OTP
 }

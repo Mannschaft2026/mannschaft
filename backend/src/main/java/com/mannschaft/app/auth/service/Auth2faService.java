@@ -628,7 +628,7 @@ public class Auth2faService {
     /**
      * パスキー登録・削除前の再認証手段を利用者の状態から選ぶ（B5）。
      * パスキー保有→PASSKEY／パスワードあり＋2FA 有効→PASSWORD_AND_SECOND_FACTOR／パスワードのみ→PASSWORD／
-     * パスワード無し（SNS ログインのみ）→EMAIL_OTP。どの利用者にも必ず 1 つの手段が決まり、確認なしで通る経路は無い。
+     * パスワード無し（SNS）＋2FA 有効→SECOND_FACTOR（2FA 要素のみ）／パスワード無し＋2FA 無し→EMAIL_OTP。どの利用者にも必ず 1 つの手段が決まり、確認なしで通る経路は無い。
      *
      * @param userId 認証済みユーザー ID
      * @return 再認証手段
@@ -638,12 +638,15 @@ public class Auth2faService {
             return PasskeyManageReauthMethod.PASSKEY;
         }
         UserEntity user = findUserOrThrow(userId);
-        if (!hasPassword(user)) {
-            return PasskeyManageReauthMethod.EMAIL_OTP;
-        }
         boolean twoFactorEnabled = twoFactorAuthRepository.findByUserId(userId)
                 .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))
                 .isPresent();
+        if (!hasPassword(user)) {
+            // SNS ログインのみ: 2FA 有効なら 2FA 要素のみ必須（メールOTP だけで 2FA を飛ばさせない）
+            return twoFactorEnabled
+                    ? PasskeyManageReauthMethod.SECOND_FACTOR
+                    : PasskeyManageReauthMethod.EMAIL_OTP;
+        }
         return twoFactorEnabled
                 ? PasskeyManageReauthMethod.PASSWORD_AND_SECOND_FACTOR
                 : PasskeyManageReauthMethod.PASSWORD;
@@ -681,10 +684,17 @@ public class Auth2faService {
     public ApiResponse<WebAuthnReauthenticateCompleteResponse> reauthenticateForPasskeyManage(
             Long userId, String sessionHash, PasskeyManageReauthRequest req) {
         if (sessionHash == null || sessionHash.isBlank()) {
+            eventPublisher.publish(new ReauthenticationFailedEvent(userId, ReauthPurpose.PASSKEY_MANAGE, null));
             throw new BusinessException(AuthErrorCode.AUTH_087);
         }
-        authTokenService.checkRateLimit(PASSKEY_MANAGE_REAUTH_RATE_KEY_PREFIX + userId,
-                REAUTH_RATE_LIMIT, REAUTH_RATE_WINDOW);
+        try {
+            authTokenService.checkRateLimit(PASSKEY_MANAGE_REAUTH_RATE_KEY_PREFIX + userId,
+                    REAUTH_RATE_LIMIT, REAUTH_RATE_WINDOW);
+        } catch (BusinessException e) {
+            // レート制限超過（AUTH_044）も失敗として監査に残す（総当たりの検知）
+            eventPublisher.publish(new ReauthenticationFailedEvent(userId, ReauthPurpose.PASSKEY_MANAGE, null));
+            throw e;
+        }
 
         PasskeyManageReauthMethod method = resolvePasskeyManageReauthMethod(userId);
         if (!verifyPasskeyManageReauth(userId, method, req)) {
@@ -718,6 +728,16 @@ public class Auth2faService {
                         .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))
                         .orElse(null);
                 yield twoFactorAuth != null
+                        && verifyReauthFactor(twoFactorAuth, userId, req.getMethod(), req.getCode());
+            }
+            case SECOND_FACTOR -> {
+                TwoFactorAuthEntity twoFactorAuth = twoFactorAuthRepository.findByUserIdForUpdate(userId)
+                        .filter(tfa -> Boolean.TRUE.equals(tfa.getIsEnabled()))
+                        .orElse(null);
+                // メールOTP は 2FA 方式が EMAIL のときだけ要素として数える（TOTP 利用者がメールOTPだけで通る抜け道を塞ぐ）
+                yield twoFactorAuth != null
+                        && !(req.getMethod() == MfaVerificationMethod.EMAIL
+                                && twoFactorAuth.getMethod() != TwoFactorMethod.EMAIL)
                         && verifyReauthFactor(twoFactorAuth, userId, req.getMethod(), req.getCode());
             }
             case EMAIL_OTP -> req.getMethod() == MfaVerificationMethod.EMAIL
