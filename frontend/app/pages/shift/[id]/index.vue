@@ -360,17 +360,19 @@ const currentStep = computed(() =>
         <div
           v-else
           class="overflow-x-auto rounded-xl border border-surface-200 dark:border-surface-700"
+          data-testid="shift-overview-calendar"
         >
-          <table class="w-full border-collapse text-sm">
+          <!-- table-fixed: 長いポジション名で表の最小幅が広がり、札（1/3 等）がコンテナ外へ切れるのを防ぐ -->
+          <table class="w-full table-fixed border-collapse text-sm">
             <thead>
               <tr>
                 <th
-                  class="sticky left-0 min-w-[100px] bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
+                  class="sticky left-0 w-28 bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
                 >
                   {{ t('shift.detail.colDate') }}
                 </th>
                 <th
-                  class="min-w-[140px] bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
+                  class="bg-surface-50 px-3 py-2 text-left text-xs font-medium text-surface-500 dark:bg-surface-800"
                 >
                   {{ t('shift.detail.colSlots') }}
                 </th>
@@ -401,7 +403,7 @@ const currentStep = computed(() =>
                       v-for="slot in slotsByDate.get(date)"
                       :key="slot.id"
                       :to="`/shift/${scheduleId}/edit`"
-                      class="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
+                      class="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-colors hover:border-primary"
                       :class="
                         isSlotUnderStaffed(slot)
                           ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-300'
@@ -413,7 +415,7 @@ const currentStep = computed(() =>
                           slot.time.endTime.slice(0, 5)
                         }}</span
                       >
-                      <span v-if="slot.position.positionName" class="min-w-0 break-words text-surface-400"
+                      <span v-if="slot.position.positionName" class="min-w-0 text-surface-400 [overflow-wrap:anywhere]"
                         >/{{ slot.position.positionName }}</span
                       >
                       <!-- 割当バッジ。サーバーが割当を伏せている間は人数を出さず中立表示にする -->

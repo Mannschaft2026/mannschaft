@@ -344,7 +344,18 @@
       "noMatchingMembers": "検索条件に一致するメンバーはいません",
       "dragHint": "メンバーをドラッグして割り当て",
       "unassignedSlots": "{count}件未割当",
-      "backToList": "シフト一覧に戻る"
+      "backToList": "シフト一覧に戻る",
+      "colDateTime": "日付・時間帯",
+      "assignedOfRequired": "{assigned} / {required}人",
+      "full": "満員",
+      "addMember": "追加",
+      "addMemberTitle": "メンバーを追加",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "追加できるメンバーがいません",
+      "removeAssignment": "{name}の割当を外す",
+      "fullReason": "満員のため追加できません",
+      "overlapReason": "{slot}と時間が重なるため選べません",
+      "overlapSlotLabel": "{date} {time}「{position}」"
     },
     "autoAssign": {
       "button": "自動割当",

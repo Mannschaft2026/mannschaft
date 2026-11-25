@@ -16,7 +16,18 @@
       "noMatchingMembers": "Keine Mitglieder entsprechen Ihrer Suche",
       "dragHint": "Mitglieder per Drag & Drop zuweisen",
       "unassignedSlots": "{count} nicht zugewiesene Schichten",
-      "backToList": "Zurück zur Schichtliste"
+      "backToList": "Zurück zur Schichtliste",
+      "colDateTime": "Datum / Zeit",
+      "assignedOfRequired": "{assigned} / {required}",
+      "full": "Voll",
+      "addMember": "Hinzufügen",
+      "addMemberTitle": "Mitglied hinzufügen",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "Keine Mitglieder zum Hinzufügen",
+      "removeAssignment": "{name} aus dieser Schicht entfernen",
+      "fullReason": "Voll: Hinzufügen nicht möglich",
+      "overlapReason": "Überschneidet sich mit {slot}, daher nicht wählbar",
+      "overlapSlotLabel": "{date} {time} „{position}“"
     },
     "autoAssign": {
       "button": "Automatisch zuweisen",

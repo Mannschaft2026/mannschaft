@@ -16,7 +16,18 @@
       "noMatchingMembers": "没有符合搜索条件的成员",
       "dragHint": "拖动成员进行分配",
       "unassignedSlots": "{count}个未分配班次",
-      "backToList": "返回班次列表"
+      "backToList": "返回班次列表",
+      "colDateTime": "日期 / 时间段",
+      "assignedOfRequired": "{assigned} / {required}人",
+      "full": "已满员",
+      "addMember": "添加",
+      "addMemberTitle": "添加成员",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "没有可添加的成员",
+      "removeAssignment": "将{name}移出此班次",
+      "fullReason": "已满员，无法添加",
+      "overlapReason": "与{slot}时间重叠，无法选择",
+      "overlapSlotLabel": "{date} {time}“{position}”"
     },
     "autoAssign": {
       "button": "自动分配",

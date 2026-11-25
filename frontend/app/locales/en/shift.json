@@ -16,7 +16,18 @@
       "noMatchingMembers": "No members match your search",
       "dragHint": "Drag members to assign",
       "unassignedSlots": "{count} unassigned slots",
-      "backToList": "Back to shift list"
+      "backToList": "Back to shift list",
+      "colDateTime": "Date / time",
+      "assignedOfRequired": "{assigned} / {required}",
+      "full": "Full",
+      "addMember": "Add",
+      "addMemberTitle": "Add member",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "No members available to add",
+      "removeAssignment": "Remove {name} from this slot",
+      "fullReason": "Full: cannot add more",
+      "overlapReason": "Overlaps with {slot}, so unavailable",
+      "overlapSlotLabel": "{date} {time} \"{position}\""
     },
     "autoAssign": {
       "button": "Auto Assign",

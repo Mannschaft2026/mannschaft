@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full border-l border-surface-200 bg-surface-50">
+  <div class="flex flex-col h-full min-h-0 border-l border-surface-200 bg-surface-50">
     <div class="p-3 border-b border-surface-200">
       <h3 class="font-semibold text-surface-700 mb-2">{{ $t('shift.board.memberPool') }}</h3>
       <InputText
@@ -16,8 +16,9 @@
         <div
           v-for="member in filteredMembers"
           :key="member.userId"
-          class="flex items-center gap-2 p-2 rounded-lg bg-white border border-surface-200 cursor-grab hover:border-primary-400 hover:shadow-sm transition-all"
-          draggable="true"
+          class="flex items-center gap-2 p-2 rounded-lg bg-white border border-surface-200 transition-all"
+          :class="draggable ? 'cursor-grab hover:border-primary-400 hover:shadow-sm' : ''"
+          :draggable="draggable"
           @dragstart="onDragStart($event, member.userId)"
         >
           <Avatar
@@ -28,7 +29,7 @@
           />
           <Avatar v-else :label="member.displayName.charAt(0)" size="small" shape="circle" />
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium truncate">{{ member.displayName }}</p>
+            <p class="text-sm font-medium" :class="draggable ? 'truncate' : '[overflow-wrap:anywhere]'">{{ member.displayName }}</p>
             <p v-if="member.remainingHours !== undefined" class="text-xs text-surface-500">
               残り {{ member.remainingHours }}h
             </p>
@@ -41,7 +42,7 @@
         />
       </template>
     </div>
-    <div class="p-3 border-t border-surface-200 text-xs text-surface-500 text-center">
+    <div v-if="draggable" class="p-3 border-t border-surface-200 text-xs text-surface-500 text-center">
       {{ $t('shift.board.dragHint') }}
     </div>
   </div>
@@ -60,11 +61,14 @@ interface Props {
   members: MemberPoolItem[]
   loading?: boolean
   error?: unknown
+  /** ドラッグで割り当てられるか。モバイルの一覧表示（引き出し）では false（DnD は md 以上のみ） */
+  draggable?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   error: undefined,
+  draggable: true,
 })
 
 const emit = defineEmits<{
@@ -81,6 +85,7 @@ const filteredMembers = computed(() => {
 })
 
 function onDragStart(event: DragEvent, userId: number): void {
+  if (!props.draggable) return
   if (event.dataTransfer) {
     event.dataTransfer.setData('text/plain', String(userId))
     event.dataTransfer.effectAllowed = 'move'

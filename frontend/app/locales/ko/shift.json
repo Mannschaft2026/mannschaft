@@ -16,7 +16,18 @@
       "noMatchingMembers": "검색 조건에 일치하는 멤버가 없습니다",
       "dragHint": "멤버를 드래그하여 배정",
       "unassignedSlots": "{count}건 미배정",
-      "backToList": "근무 목록으로 돌아가기"
+      "backToList": "근무 목록으로 돌아가기",
+      "colDateTime": "날짜 / 시간대",
+      "assignedOfRequired": "{assigned} / {required}명",
+      "full": "정원 마감",
+      "addMember": "추가",
+      "addMemberTitle": "멤버 추가",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "추가할 수 있는 멤버가 없습니다",
+      "removeAssignment": "{name} 배정 해제",
+      "fullReason": "정원이 가득 차 추가할 수 없습니다",
+      "overlapReason": "{slot}와(과) 시간이 겹쳐 선택할 수 없습니다",
+      "overlapSlotLabel": "{date} {time} \"{position}\""
     },
     "autoAssign": {
       "button": "자동 배정",

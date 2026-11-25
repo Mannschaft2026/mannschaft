@@ -58,21 +58,39 @@ export function useShiftBoard(scheduleId: Ref<number>, slots: Ref<ShiftSlotRespo
       await patch(fromSlotId, fromVersion, { removeUserIds: [userId] })
       await patch(toSlotId, toVersion, { addUserIds: [userId] })
     } catch (error) {
-      try {
-        await loadSlots()
-      } catch {
-        // 再取得失敗でも、確定した第1 PATCH の状態と元の操作エラーを保持する。
-      }
+      await reloadAfterFailure()
       throw error
     }
   }
 
+  /**
+   * 失敗（409 版競合・5xx 等）の後は枠一覧を取り直し、次の操作が最新の版で成功するようにする。
+   * 再取得の失敗で元の操作エラーを隠さない（元のエラーを再送出する）。
+   */
+  async function reloadAfterFailure(): Promise<void> {
+    try {
+      await loadSlots()
+    } catch {
+      // 再取得失敗でも、利用者へは元の操作エラーを通知する。
+    }
+  }
+
   async function addUser(slotId: number, userId: number): Promise<void> {
-    await patch(slotId, versionOf(slotId), { addUserIds: [userId] })
+    try {
+      await patch(slotId, versionOf(slotId), { addUserIds: [userId] })
+    } catch (error) {
+      await reloadAfterFailure()
+      throw error
+    }
   }
 
   async function removeUser(slotId: number, userId: number): Promise<void> {
-    await patch(slotId, versionOf(slotId), { removeUserIds: [userId] })
+    try {
+      await patch(slotId, versionOf(slotId), { removeUserIds: [userId] })
+    } catch (error) {
+      await reloadAfterFailure()
+      throw error
+    }
   }
 
   watch(scheduleId, () => {

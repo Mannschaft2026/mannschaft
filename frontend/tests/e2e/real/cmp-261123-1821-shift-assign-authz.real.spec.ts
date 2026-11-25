@@ -11,7 +11,7 @@ import { test } from '@playwright/test'
  * 戦役 CMP-261123-1821「シフト枠の割当で他チームのユーザーを自チームの枠に追加できる」是正（PR #4810）の実機E2E。
  *
  * 入口: /teams/{slug}/shifts/{scheduleId}/board（pages/teams/[slug]/shifts/[scheduleId]/board.vue）。
- * 対象操作（割当の追加）は必ず画面の「+ 作成」ボタン→「メンバーを追加」ダイアログ、または未割当メンバー欄からのドラッグ＆ドロップで行う。
+ * 対象操作（割当の追加）は必ず画面の「+ 追加」ボタン→「メンバーを追加」ダイアログ、または未割当メンバー欄からのドラッグ＆ドロップで行う。
  * API を使うのはログイン・前提データ（利用者・チーム・所属・ポジション・シフト表・枠）の作成・後始末と、
  * 見える／見えないの裏取り・画面から到達できない攻撃（他チーム利用者 ID を混ぜた PATCH）の SHIFT_049 確認だけ。
  *
@@ -466,15 +466,15 @@ test('ROLE 同チームの一般 MEMBER: URL 直打ちでボードは開くが�
   expect(await assignedOf(W.slotA2)).toEqual([])
 })
 
-test('ROLE 同チームの一般 MEMBER: 権限が無いのに割当の追加ボタンが表示される', async ({ browser }) => {
+test('ROLE 同チームの一般 MEMBER: 権限が無いので割当の追加ボタン・未割当ドラッグ欄・外すボタンが表示されない', async ({ browser }) => {
   test.setTimeout(300_000)
-  // 既知の欠陥の固定: board.vue / ShiftBoardCell の「+ 作成」ボタンに権限による出し分けが無く、一般 MEMBER にも表示される
-  // （押して選ぶと BE が 403 で拒否するので割当はできない＝セキュリティ上は守られているが、死んだ導線）。
-  // FE が管理者にだけ出すようになったら本 fail を外す。
-  test.fail(true, 'DEFECT: 一般 MEMBER にも枠の追加ボタン・未割当ドラッグ欄が表示される（出し分け無し。押すと 403）')
+  // CMP-261125-1336: FE が ADMIN / MANAGE_SHIFTS を持つ DEPUTY_ADMIN にだけ割当操作を出すようにしたので、
+  // 旧「既知の欠陥の固定（test.fail）」は外した。一般 MEMBER には死んだ導線（押すと 403）を出さない。
   const page = await sessionOf(browser, W.member)
   await reloadBoard(page)
   await expect(addButton(slotRow(page, 1))).toHaveCount(0)
+  await expect(page.locator('[draggable="true"]')).toHaveCount(0)
+  await expect(page.getByTestId('shift-chip-remove')).toHaveCount(0)
 })
 
 // ---- 画面から到達できない攻撃（API での裏取り）--------------------------------------------------

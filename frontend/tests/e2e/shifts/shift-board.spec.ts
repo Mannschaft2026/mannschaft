@@ -197,8 +197,8 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     // スケジュールタイトルが表示される
     await expect(page.getByText('E2Eテスト用シフトスケジュール')).toBeVisible({ timeout: 10_000 })
 
-    // ステータスタグが表示される（ADJUSTING）
-    await expect(page.getByText('ADJUSTING')).toBeVisible({ timeout: 10_000 })
+    // ステータスバッジが i18n 表示される（ADJUSTING → 調整中。英語の生値を出さない）
+    await expect(page.getByText('調整中', { exact: true })).toBeVisible({ timeout: 10_000 })
   })
 
   test('BOARD-002: 未割当メンバープールが表示される', async ({ page }) => {
@@ -218,7 +218,7 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     await waitForHydration(page)
 
     // 未割当メンバープールのラベルが表示される（i18n shift.board.memberPool = "未割当メンバー"）
-    await expect(page.getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('.w-60.flex-shrink-0').getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
   })
 
   test('BOARD-003: メンバーをスロットにドラッグして割当できる（vuedraggable）', async ({ page }) => {
@@ -260,7 +260,7 @@ test.describe('BOARD-001〜004: F03.5 Phase 2 D&D シフトボード', () => {
     })
 
     // 未割当メンバープールが表示される
-    await expect(page.getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('.w-60.flex-shrink-0').getByText('未割当メンバー')).toBeVisible({ timeout: 10_000 })
 
     // ドラッグ操作をシミュレート
     // vuedraggable の D&D は Playwright の mouse イベントで再現可能
