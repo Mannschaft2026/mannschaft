@@ -2117,16 +2117,19 @@ class FlywayFromScratchMigrationTest {
             long pendingId;
             long expiredId;
             long acceptedId;
+            List<Long> committeeIds;
             try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
-                try (Statement fk = conn.createStatement()) {
-                    // 本試験の対象は invite_token 列の移行。前提の committees / users 行は置かない
-                    fk.execute("SET FOREIGN_KEY_CHECKS = 0");
-                }
-                pendingId = insertPlaintextCommitteeInvitation(conn, 910001L, pendingPlaintext, null, null);
-                expiredId = insertPlaintextCommitteeInvitation(conn, 910002L, expiredPlaintext,
+                // 親の委員会行を置く（committee_invitations.committee_id の FK は同ドメイン CASCADE で残っている）。
+                // organization_id / invitee_user_id / invited_by の FK はクロスドメインのため V62 で撤去済み
+                long committee1 = insertCommitteeRow(conn, 1);
+                long committee2 = insertCommitteeRow(conn, 2);
+                long committee3 = insertCommitteeRow(conn, 3);
+                pendingId = insertPlaintextCommitteeInvitation(conn, committee1, pendingPlaintext, null, null);
+                expiredId = insertPlaintextCommitteeInvitation(conn, committee2, expiredPlaintext,
                         LocalDateTime.of(2026, 1, 2, 3, 4, 5), "EXPIRED");
-                acceptedId = insertPlaintextCommitteeInvitation(conn, 910003L, acceptedPlaintext,
+                acceptedId = insertPlaintextCommitteeInvitation(conn, committee3, acceptedPlaintext,
                         LocalDateTime.of(2026, 2, 3, 4, 5, 6), "ACCEPTED");
+                committeeIds = List.of(committee1, committee2, committee3);
             }
 
             Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
@@ -2158,7 +2161,7 @@ class FlywayFromScratchMigrationTest {
                         }
                     }
                     assertThat(rows).as("移行で招集の行が消えていない").containsOnlyKeys(pendingId, expiredId, acceptedId);
-                    assertThat(rows.get(pendingId).get("committee_id")).isEqualTo(910001L);
+                    assertThat(rows.get(pendingId).get("committee_id")).isEqualTo(committeeIds.get(0));
                     assertThat(rows.get(pendingId).get("invitee_user_id")).isEqualTo(77L);
                     assertThat(rows.get(pendingId).get("proposed_role")).isEqualTo("CHAIR");
                     assertThat(rows.get(pendingId).get("invited_by")).isEqualTo(88L);
@@ -2198,6 +2201,19 @@ class FlywayFromScratchMigrationTest {
             try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
                  Statement statement = root.createStatement()) {
                 statement.execute("DROP DATABASE IF EXISTS " + schema);
+            }
+        }
+    }
+
+    /** 移行直前の版の committees へ親行を JDBC で置く。 */
+    private static long insertCommitteeRow(Connection conn, int seq) throws SQLException {
+        try (var insert = conn.prepareStatement("INSERT INTO committees (organization_id, name, status) "
+                + "VALUES (910001, ?, 'ACTIVE')", Statement.RETURN_GENERATED_KEYS)) {
+            insert.setString(1, "cmp1457-committee-" + seq);
+            assertThat(insert.executeUpdate()).isEqualTo(1);
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                assertThat(keys.next()).isTrue();
+                return keys.getLong(1);
             }
         }
     }
