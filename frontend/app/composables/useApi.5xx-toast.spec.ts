@@ -34,7 +34,7 @@ const { useApi } = await import('~/composables/useApi')
 const { useErrorHandler } = await import('~/composables/useErrorHandler')
 const json = (data: unknown, status: number) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
-const tr = (key: string) => useNuxtApp().$i18n.t(key)
+const tr = (key: string, named?: Record<string, unknown>) => useNuxtApp().$i18n.t(key, named ?? {})
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -107,7 +107,7 @@ describe('CMP-261125-1951 useApi の 5xx トースト', () => {
     await vi.advanceTimersByTimeAsync(500)
     expect(external.toastAdd).toHaveBeenCalledTimes(1)
     expect(external.toastAdd).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: '3件のサーバーエラーが発生しました' }),
+      expect.objectContaining({ detail: tr('error.server_multiple', { count: 3 }) }),
     )
   })
 
