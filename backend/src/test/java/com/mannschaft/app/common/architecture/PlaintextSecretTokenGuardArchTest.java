@@ -29,7 +29,8 @@ import org.junit.jupiter.params.provider.MethodSource;
  *   <li>既存の違反（台帳の16系統の平文列・金庫を通さない発行メソッド）は、すべて {@code @PlaintextTokenDebt(cmp = "CMP-260826-1457")}
  *       で列挙して免除する。1-C の恒久除外は {@code @PlaintextSecretRequired(reason)}。</li>
  *   <li>W1〜W2 の各波は自分の系統の債務注釈を<b>外すだけ</b>で、本クラスを書き換えない。債務注釈の型は汎用の仕組みとして
- *       残し（削除しない）、W3 は {@code cmp="CMP-260826-1457"} の債務がゼロであることを確認する。他戦役の債務は
+ *       残し（削除しない）、W3 は {@code cmp="CMP-260826-1457"} の債務がゼロであることを確認する。招待・共有以外の
+ *       系統の債務は切り出し先の {@code cmp="CMP-261125-0945"} が負う。他戦役の債務も
  *       台帳に登録された未完了の CMP ID のときだけ許す。</li>
  * </ul>
  *

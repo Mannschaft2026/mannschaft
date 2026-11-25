@@ -35,7 +35,7 @@ public class ModerationAppealEntity extends BaseEntity {
     @Column(nullable = false)
     private Long actionId;
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Column(nullable = false, length = 64, unique = true)
     private String appealToken;
 
