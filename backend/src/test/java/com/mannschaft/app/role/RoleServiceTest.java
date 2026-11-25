@@ -2,6 +2,8 @@ package com.mannschaft.app.role;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.LeaveReason;
+import com.mannschaft.app.membership.domain.MembershipEndCause;
+import com.mannschaft.app.membership.dto.MembershipLeaveRequest;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
@@ -51,6 +53,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -585,11 +588,17 @@ class RoleServiceTest {
                     .id(1L).userId(TARGET_USER_ID).roleId(ADMIN_ROLE_ID).teamId(SCOPE_ID).build();
             given(userRoleRepository.findByUserIdAndTeamId(TARGET_USER_ID, SCOPE_ID))
                     .willReturn(Optional.of(current));
+            given(membershipService.findActiveMembershipIdForUpdate(TARGET_USER_ID, ScopeType.TEAM, SCOPE_ID))
+                    .willReturn(Optional.of(777L));
 
             roleService.removeMemberWithoutAdminCheck(SCOPE_ID, "TEAM", TARGET_USER_ID);
 
-            verify(membershipService).leaveByUserAndScope(
-                    TARGET_USER_ID, ScopeType.TEAM, SCOPE_ID, LeaveReason.REMOVED, null);
+            // F06.4.1 §8: 退会処理の内部経路は endCause=ACCOUNT_WITHDRAWAL で加入期間を終える。
+            ArgumentCaptor<MembershipLeaveRequest> captor = ArgumentCaptor.forClass(MembershipLeaveRequest.class);
+            verify(membershipService).leave(eq(777L), captor.capture());
+            assertThat(captor.getValue().getLeaveReason()).isEqualTo(LeaveReason.REMOVED);
+            assertThat(captor.getValue().getEndCause()).isEqualTo(MembershipEndCause.ACCOUNT_WITHDRAWAL);
+            verify(membershipService, never()).leaveByUserAndScope(any(), any(), any(), any(), any());
         }
 
         @Test
