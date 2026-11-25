@@ -607,6 +607,38 @@ public class Auth2faService {
         return ApiResponse.of(new BackupCodesResponse(plainCodes));
     }
 
+    // ─────────────────────────────────────────────
+    // CMP-261021-1338 試練スタブ（出陣で実装する。中身は必ず red を保つ）
+    // ─────────────────────────────────────────────
+
+    /**
+     * パスキー登録・削除前の再認証手段を利用者の状態から選ぶ（B5）。
+     * パスキー保有→PASSKEY／パスワードあり＋2FA 有効→PASSWORD_AND_SECOND_FACTOR／パスワードのみ→PASSWORD／
+     * いずれも無し→EMAIL_OTP。
+     *
+     * @param userId 認証済みユーザー ID
+     * @return 再認証手段
+     */
+    public com.mannschaft.app.auth.PasskeyManageReauthMethod resolvePasskeyManageReauthMethod(Long userId) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * パスキー登録・削除前の再認証（パスワード／2FA 要素／メールOTP 経路。B5〜B7）。
+     * 5 回/15 分のレート制限、失敗は AUTH_080。成功時は
+     * {@code AuthWebAuthnService#markReauthenticated(userId, sessionHash, PASSKEY_MANAGE)} でフラグを立てる。
+     * パスキー保有者はこの経路を使えない（パスキー再認証が必須）。
+     *
+     * @param userId      認証済みユーザー ID
+     * @param sessionHash 再認証したセッション
+     * @param req         本人確認（パスワード・要素・メールOTP）
+     * @return 期限 (verifiedUntil) のみを含むレスポンス
+     */
+    public ApiResponse<com.mannschaft.app.auth.dto.WebAuthnReauthenticateCompleteResponse> reauthenticateForPasskeyManage(
+            Long userId, String sessionHash, com.mannschaft.app.auth.dto.PasskeyManageReauthRequest req) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
     /**
      * オーナー移譲（ADMIN 昇格）の 2FA 要件を満たす「強い 2FA」が有効か（AC-47。EMAIL 方式は不可）。
      *

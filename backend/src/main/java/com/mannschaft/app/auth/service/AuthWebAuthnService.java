@@ -1,6 +1,7 @@
 package com.mannschaft.app.auth.service;
 
 import com.mannschaft.app.auth.AuthErrorCode;
+import com.mannschaft.app.auth.ReauthPurpose;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.auth.entity.WebAuthnCredentialEntity;
@@ -621,6 +622,93 @@ public class AuthWebAuthnService {
         if (userId == null) return;
         String key = REAUTH_VERIFIED_KEY_PREFIX + userId;
         redisTemplate.delete(key);
+    }
+
+    // ─────────────────────────────────────────────
+    // CMP-261021-1339 / 1338 試練スタブ（出陣で実装する。中身は必ず red を保つ）
+    // ─────────────────────────────────────────────
+
+    /**
+     * 用途付きの WebAuthn 再認証を開始する（A7: 用途をチャレンジに束ねる）。
+     *
+     * @param userId  現在のユーザー ID
+     * @param purpose 再認証の用途
+     * @return 再認証開始レスポンス
+     */
+    public ApiResponse<WebAuthnReauthenticateBeginResponse> beginReauthenticate(Long userId, ReauthPurpose purpose) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * WebAuthn 再認証を完了し、開始時の用途で再認証済みフラグを再認証したセッションに限って立てる
+     * （A1〜A5/A7/B4。UV・UP 必須、チャレンジは照合後に原子的に 1 回限り消費、signCount は検証済み値で判定）。
+     *
+     * @param userId      現在のユーザー ID
+     * @param sessionHash 再認証したセッション（{@code SecurityUtils.getCurrentSessionHash()}）
+     * @param req         再認証完了リクエスト
+     * @return 期限 (verifiedUntil) のみを含むレスポンス
+     */
+    public ApiResponse<WebAuthnReauthenticateCompleteResponse> completeReauthenticate(
+            Long userId, String sessionHash, WebAuthnReauthenticateCompleteRequest req) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * 再認証済みフラグを 5 分 TTL で立てる（パスワード／メールOTP 経路の再認証成功時に Auth2faService から呼ぶ）。
+     *
+     * @param userId      ユーザー ID
+     * @param sessionHash 再認証したセッション
+     * @param purpose     用途
+     */
+    public void markReauthenticated(Long userId, String sessionHash, ReauthPurpose purpose) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * 再認証済みフラグを getAndDelete 一発で 1 回限り消費する（B3/B4/A7）。
+     *
+     * @param userId      ユーザー ID
+     * @param sessionHash 操作中のセッション
+     * @param purpose     用途
+     * @return 消費できたら true
+     */
+    public boolean consumeReauthentication(Long userId, String sessionHash, ReauthPurpose purpose) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * 再認証済みのセッションに限りパスキー登録を開始する（B1/B2。フラグは消費しない）。
+     *
+     * @param userId      ユーザー ID
+     * @param sessionHash 操作中のセッション
+     * @return 登録開始レスポンス
+     */
+    public ApiResponse<WebAuthnRegisterBeginResponse> beginRegister(Long userId, String sessionHash) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * 再認証済みフラグを消費してパスキー登録を完了する（B1〜B4/B8）。
+     *
+     * @param userId      ユーザー ID
+     * @param sessionHash 操作中のセッション
+     * @param req         登録完了リクエスト
+     * @return メッセージレスポンス
+     */
+    public ApiResponse<MessageResponse> completeRegister(
+            Long userId, String sessionHash, WebAuthnRegisterCompleteRequest req) {
+        throw new UnsupportedOperationException("試練スタブ");
+    }
+
+    /**
+     * 再認証済みフラグを消費してパスキーを削除する（B1〜B4）。
+     *
+     * @param userId       ユーザー ID
+     * @param sessionHash  操作中のセッション
+     * @param credentialId 資格情報ID
+     */
+    public void deleteCredential(Long userId, String sessionHash, Long credentialId) {
+        throw new UnsupportedOperationException("試練スタブ");
     }
 
     // === ヘルパーメソッド ===

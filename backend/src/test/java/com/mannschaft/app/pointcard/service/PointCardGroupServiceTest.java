@@ -1,6 +1,8 @@
 package com.mannschaft.app.pointcard.service;
 
 import com.mannschaft.app.auth.AuditEventType;
+import com.mannschaft.app.auth.ReauthPurpose;
+import com.mannschaft.app.common.util.SessionHashUtil;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.auth.service.AuthWebAuthnService;
 import com.mannschaft.app.common.BusinessException;
@@ -519,6 +521,65 @@ class PointCardGroupServiceTest {
 
         verify(authWebAuthnService, never()).isReauthenticatedRecently(any());
         verify(authWebAuthnService, never()).consumeReauthentication(any());
+    }
+
+    // CMP-261021-1339 A7/B3/B4 試練: 提示モードは「提示用途・このセッション」のフラグを getAndDelete 一発で消費する。
+    // 事前の存在確認（isReauthenticatedRecently → consume の非原子 2 手）は廃止し、消費の成否だけで判定する。
+
+    @Test
+    @DisplayName("A7_提示モード開始は提示用途のフラグをセッション付きで原子的に消費する")
+    void A7_提示モード開始は提示用途のフラグをセッション付きで原子的に消費する() {
+        PointCardGroupEntity group = sampleGroup(USER_ID);
+        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID)).willReturn(Optional.of(group));
+        given(userSettingsService.getOrCreateSettings(USER_ID))
+                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
+        String sessionHash = SessionHashUtil.hash("jti-pointcard");
+        org.mockito.Mockito.lenient().when(authWebAuthnService.consumeReauthentication(
+                USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT)).thenReturn(true);
+        org.mockito.Mockito.lenient().when(itemRepository.findAllByGroupIdOrderByDisplayOrderAsc(group.getId()))
+                .thenReturn(List.of());
+
+        GroupDetailResponse res = withSession("jti-pointcard",
+                () -> groupService.startPresentation(group.getId(), USER_ID));
+
+        assertThat(res).isNotNull();
+        verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
+        verify(authWebAuthnService, never()).isReauthenticatedRecently(any());
+    }
+
+    @Test
+    @DisplayName("A7_提示用途のフラグを消費できなければPOINT_CARD_009（パスキー管理用の再認証では開けない）")
+    void A7_提示用途のフラグを消費できなければ提示モードを開けない() {
+        PointCardGroupEntity group = sampleGroup(USER_ID);
+        given(groupRepository.findByIdAndUserId(group.getId(), USER_ID)).willReturn(Optional.of(group));
+        given(userSettingsService.getOrCreateSettings(USER_ID))
+                .willReturn(new PointCardUserSettingsResponse(true, null, "v1.0.0", true));
+        String sessionHash = SessionHashUtil.hash("jti-pointcard");
+        org.mockito.Mockito.lenient().when(authWebAuthnService.consumeReauthentication(
+                USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT)).thenReturn(false);
+        // 旧 API が「認証済み」と答えても、提示用途の消費に失敗したら通さない
+        org.mockito.Mockito.lenient().when(authWebAuthnService.isReauthenticatedRecently(USER_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> withSession("jti-pointcard",
+                () -> groupService.startPresentation(group.getId(), USER_ID)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(PointCardErrorCode.BIOMETRIC_REQUIRED);
+        verify(authWebAuthnService).consumeReauthentication(USER_ID, sessionHash, ReauthPurpose.POINTCARD_PRESENT);
+    }
+
+    /** jti 付きの認証を SecurityContext に置いて処理を実行する（SecurityUtils.getCurrentSessionHash の入力）。 */
+    private static <T> T withSession(String jti, java.util.function.Supplier<T> action) {
+        org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        USER_ID.toString(), null, List.of());
+        auth.setDetails(java.util.Map.of("jti", jti));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            return action.get();
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
     }
 
     // ─────────────────────────────────────────────
