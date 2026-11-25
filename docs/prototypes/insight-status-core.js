@@ -156,6 +156,13 @@
     return `window.BETA_INSIGHT_STATUS = ${JSON.stringify({ schemaVersion: SCHEMA_VERSION, items: sorted }, null, 2)};\n`;
   }
 
+  // 気づきの機能ステージが選択中ステージの表示対象か。ステージ一覧（B0〜B4）に無い値
+  // （'未設定'・未登録・空・その他）は、どのステージ選択でも表示して取りこぼしを防ぐ（CMP-261124-2324）。
+  function insightStageMatches(featureStage, selectedStage, stages) {
+    if (!Array.isArray(stages) || !stages.includes(featureStage)) return true;
+    return featureStage === selectedStage;
+  }
+
   root.InsightStatusCore = {
     STATUSES,
     STATUS_LABELS,
@@ -164,6 +171,7 @@
     originalInsightId,
     validateStatusFile,
     resolveInsightStatuses,
-    buildStatusFileSource
+    buildStatusFileSource,
+    insightStageMatches
   };
 })(typeof window !== 'undefined' ? window : globalThis);

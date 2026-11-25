@@ -91,6 +91,19 @@ const {
       </div>
     </div>
 
+    <div v-else-if="status === 'REISSUE_DECLINED'" class="space-y-4" data-testid="pending-invite-reissue-declined">
+      <p>{{ t('auth.pending_invite.reissue_declined_desc', { name: scopeName }) }}</p>
+      <div class="flex justify-end">
+        <Button
+          :label="t('auth.pending_invite.dismiss')"
+          severity="secondary"
+          :disabled="busy"
+          data-testid="pending-invite-dismiss"
+          @click="dismiss"
+        />
+      </div>
+    </div>
+
     <div v-else-if="status === 'ACCEPTING'" class="space-y-4" data-testid="pending-invite-accepting">
       <p>{{ t('auth.pending_invite.accepting_desc', { name: scopeName }) }}</p>
       <p v-if="!retryEnabled" class="text-sm">{{ t('auth.pending_invite.retry_wait') }}</p>
