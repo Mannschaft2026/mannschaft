@@ -99,7 +99,7 @@ L1 は**サマリ＋要対応バッジ＋専用ページへの導線のみ**の�
 |---|-----------|------|:------:|----------------|-----------|------------|
 | ① | `ADMIN_TEAM_RESERVATIONS` | 予約 | ADMINS_AND_ABOVE | `GET .../dashboard/team/{id}`（`adminReservationSummary` 新規フィールド）。詳細は `GET /teams/{id}/reservations?status=PENDING` | 承認待ち件数 / 本日の予約数 | `/teams/[slug]/admin/reservations` |
 | ② | `ADMIN_TEAM_BUDGET` | 予算 | ADMINS_AND_ABOVE（`BUDGET_VIEW` 権限で DEPUTY 解放・§4.2） | `GET .../budget/fiscal-years/{current}/summary` | 当年度 配分/実績/残・超過カテゴリ数 | `/teams/[slug]/admin/budget` |
-| ③ | `ADMIN_TEAM_APPROVALS` | 承認待ち | ADMINS_AND_ABOVE | `GET .../dashboard/team/{id}/admin-action-required`（[03](./03_admin_action_required_api.md)・team は予約/シフト/マッチング） | ドメイン横断の `total_pending` ＋ドメイン別内訳 | `/teams/[slug]/admin/approvals` |
+| ③ | `ADMIN_TEAM_APPROVALS` | 承認待ち | ADMINS_AND_ABOVE | `GET .../dashboard/team/{id}/admin-action-required`（[03](./03_admin_action_required_api.md)・team は予約/シフト/マッチング。招待権限者には再招待依頼 INVITE_REISSUE も） | ドメイン横断の `total_pending` ＋ドメイン別内訳 | `/teams/[slug]/admin/approvals` |
 | ④ | `ADMIN_TEAM_MEMBERS` | メンバー統計 | ADMINS_AND_ABOVE | `GET .../dashboard?scope`（`member_stats`） | 総数 / アクティブ / 今月新規 | `/teams/[slug]/admin/members` |
 | ⑤ | `ADMIN_TEAM_ALERT` | 業務アラート | ADMINS_AND_ABOVE | `WidgetAdminBusinessAlert` 系サマリ（新規予約・未読問い合わせ・§3） | 新規予約 / 未読問い合わせ件数 | `/teams/[slug]/admin/reservations`・問い合わせ画面 |
 | ⑥ | `ADMIN_TEAM_REPORTS` | 通報 | ADMINS_AND_ABOVE | `GET .../dashboard`（`report_stats`・F10.1 母体） | 未対応 / 確認中 件数 | F10.1 母体のモデレーション画面 |
@@ -110,7 +110,7 @@ L1 は**サマリ＋要対応バッジ＋専用ページへの導線のみ**の�
 
 | # | widget_key | 名称 | 可視性（コード固定） | データソース API | サマリ内容 | 導線先ルート |
 |---|-----------|------|:------:|----------------|-----------|------------|
-| ① | `ADMIN_ORG_APPROVALS` | 承認待ち（未収請求） | ADMINS_AND_ABOVE | `GET .../dashboard/organization/{id}/admin-action-required`（org は PAYMENT のみ・[03](./03_admin_action_required_api.md) §3.2） | `total_pending`（未収請求件数） | `/organizations/[slug]/admin/approvals` |
+| ① | `ADMIN_ORG_APPROVALS` | 承認待ち（未収請求） | ADMINS_AND_ABOVE | `GET .../dashboard/organization/{id}/admin-action-required`（org は PAYMENT。招待権限者には再招待依頼 INVITE_REISSUE も・[03](./03_admin_action_required_api.md) §3.2） | `total_pending`（未収請求件数） | `/organizations/[slug]/admin/approvals` |
 | ② | `ADMIN_ORG_BUDGET` | 予算 | ADMINS_AND_ABOVE（`BUDGET_VIEW` で DEPUTY 解放） | `GET .../budget/fiscal-years/{current}/summary`（組織） | 配分/実績/残・超過カテゴリ数 | `/organizations/[slug]/admin/budget` |
 | ③ | `ADMIN_ORG_PAYMENTS` | 支払 | ADMINS_AND_ABOVE | `PaymentRequestService.findForOrg`（未完了請求） | 未収 / 期限超過 件数 | `/organizations/[slug]/admin/payments` |
 | ④ | `ADMIN_ORG_MEMBERS` | メンバー統計 | ADMINS_AND_ABOVE | `GET .../dashboard?scope`（`member_stats`） | 総数 / アクティブ / 今月新規 | `/organizations/[slug]/admin/members` |
@@ -188,7 +188,7 @@ API レスポンスは snake_case（[03](./03_admin_action_required_api.md) §3.
 
 ```typescript
 // frontend/app/types/admin-action-required.ts（新規）
-export type AdminActionDomain = 'RESERVATION' | 'SHIFT_REQUEST' | 'MATCHING' | 'PAYMENT'
+export type AdminActionDomain = 'RESERVATION' | 'SHIFT_REQUEST' | 'MATCHING' | 'PAYMENT' | 'INVITE_REISSUE'
 
 export interface AdminActionItem {
   id: string                 // BE は主キーを文字列化して返す

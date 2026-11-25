@@ -189,7 +189,15 @@ public enum ShiftBudgetErrorCode implements ErrorCode {
      * 対応種別のEXHAUSTEDには運用判断による再試行を許容する。
      */
     FAILED_EVENT_NOT_RETRIABLE("SHIFT_BUDGET_031",
-            "対象の失敗イベントは再実行できません", Severity.WARN);
+            "対象の失敗イベントは再実行できません", Severity.WARN),
+
+    /**
+     * 月次締めの対象月がまだ終わっていない（当月・未来月）（CMP-261021-0657）。
+     * <p>月次締めは、月末を過ぎた月（壁時計 JST 基準で前月以前）だけが対象。
+     * 当月・未来月を締めると、その後に記録される消化が締めから漏れ、確定額と仕訳が実態とずれる (HTTP 409)。</p>
+     */
+    MONTH_NOT_ENDED("SHIFT_BUDGET_032",
+            "対象月が終了していないため締められません（月末を過ぎた月のみ締められます）", Severity.WARN);
 
     private final String code;
     private final String message;

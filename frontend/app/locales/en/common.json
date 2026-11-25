@@ -3389,5 +3389,28 @@
       "ORGANIZATION": "Organizations",
       "ACTIVITY": "Activity records"
     }
+  },
+  "inviteReissue": {
+    "title": "Re-invitation requests",
+    "description": "Requests from people whose invitation has expired. Re-inviting issues a new invitation (valid for 7 days) and notifies them.",
+    "empty": "No re-invitation requests",
+    "requested_at": "Requested at",
+    "role": "Role",
+    "reissue": "Re-invite",
+    "decline": "Decline",
+    "decline_confirm_title": "Decline this request?",
+    "decline_confirm_message": "You are declining the re-invitation request from {name}. They will be notified.",
+    "reissued": "Re-invited {name}",
+    "already_member": "This person has already joined, so the request was completed",
+    "declined": "Request declined",
+    "already_handled": "This request has already been handled. The list was refreshed",
+    "requester_unavailable": "This person cannot join right now, so they cannot be re-invited. Please decline instead",
+    "activation_failed": "The new invitation could not be activated. Please try again later",
+    "forbidden": "You do not have permission to handle re-invitation requests",
+    "load_error": "Could not load re-invitation requests",
+    "retry": "Retry",
+    "load_more": "Show more",
+    "reissue_context": "re-inviting",
+    "decline_context": "declining the re-invitation request"
   }
 }

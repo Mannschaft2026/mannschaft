@@ -4,6 +4,7 @@ import com.mannschaft.app.common.featuregate.RequireFeature;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.shiftbudget.dto.MonthlyCloseRequest;
 import com.mannschaft.app.shiftbudget.dto.MonthlyCloseResponse;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,7 +43,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MonthlyShiftBudgetCloseController {
 
-    private final MonthlyShiftBudgetCloseService closeService;
+    /** 入口（機能フラグ → 権限 → 対象月の判定を経て締める。CMP-261021-0657）。 */
+    private final MonthlyShiftBudgetCloseGate closeGate;
 
     @PostMapping
     @Operation(summary = "月次締めバッチを手動起動 (PLANNED→CONFIRMED 遷移 + F08.6 仕訳生成)")
@@ -53,7 +55,7 @@ public class MonthlyShiftBudgetCloseController {
         YearMonth targetMonth = YearMonth.parse(request.yearMonth());
 
         MonthlyShiftBudgetCloseService.CloseResult result =
-                closeService.close(request.organizationId(), targetMonth);
+                closeGate.close(request.organizationId(), targetMonth);
 
         // Phase 10-β: 単一組織 close も新形式の DTO で返す（処理組織 ID のみ含む）
         return ApiResponse.of(MonthlyCloseResponse.builder()

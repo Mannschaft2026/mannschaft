@@ -356,8 +356,8 @@ describe('EXPIRED / REISSUE_REQUESTED: 丁寧な失効案内（Q2・§6）', () 
     expect(wrapper.find(q('pending-invite-reissue-requested')).exists()).toBe(true)
     expect(wrapper.find(q('pending-invite-reissue')).exists()).toBe(false)
   })
-  it.each(['EXPIRED', 'REISSUE_REQUESTED'])('PID-24: %s の失効案内を閉じる → POST dismiss して閉じる', async (status) => {
-    current = invite({ status })
+  it('PID-24: EXPIRED の失効案内を閉じる → POST dismiss して閉じる', async () => {
+    current = invite({ status: 'EXPIRED' })
     route('POST', BASE + '/dismiss', async () => {
       current = invite({ status: 'DISMISSED' })
       return { data: null }
@@ -366,6 +366,15 @@ describe('EXPIRED / REISSUE_REQUESTED: 丁寧な失効案内（Q2・§6）', () 
     await wrapper.find(q('pending-invite-dismiss')).trigger('click')
     await flushPromises()
     expect(calls('POST', BASE + '/dismiss')).toHaveLength(1)
+    expect(shownViews(wrapper)).toEqual([])
+  })
+  // D-1（実機 E2E・殿の裁定）: 依頼済みの「閉じる」は依頼の取り下げではない。dismiss を呼ばず、このセッション中だけ隠す
+  it('PID-24b: REISSUE_REQUESTED の案内を閉じる → dismiss は呼ばず、閉じて隠す', async () => {
+    current = invite({ status: 'REISSUE_REQUESTED' })
+    const wrapper = await mountDialog()
+    await wrapper.find(q('pending-invite-dismiss')).trigger('click')
+    await flushPromises()
+    expect(calls('POST', BASE + '/dismiss')).toHaveLength(0)
     expect(shownViews(wrapper)).toEqual([])
   })
   it('PID-25: 失効案内では参加ボタンを出さない', async () => {

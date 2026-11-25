@@ -155,6 +155,12 @@ describe('月次締めダイアログ 未終了月の制御', () => {
     await execButton(wrapper).trigger('click')
     await flushPromises()
     expect(api.executeMonthlyClose).toHaveBeenCalledTimes(1)
+    expect(api.executeMonthlyClose).toHaveBeenCalledWith(
+      expect.objectContaining({ organization_id: 10, year_month: '2026-10' }),
+    )
+    expect(notify.success).toHaveBeenCalled()
+    // 成功時はダイアログが閉じる
+    expect(wrapper.find('[data-test="dialog"]').exists()).toBe(false)
   })
 
   it('JST 境界: UTC 2026-11-30T15:00Z は JST 12/01 なので 2026-11 は可、2026-12 は不可', async () => {
@@ -177,16 +183,79 @@ describe('月次締めダイアログ 未終了月の制御', () => {
     expect(execButton(wrapper).attributes('disabled')).toBeDefined()
   })
 
-  it('形式不正は従来どおり実行でき、エラー通知のみで API は呼ばれない', async () => {
+  it.each([
+    ['空欄', ''],
+    ['月が13', '2026-13'],
+    ['月が1桁', '2026-1'],
+    ['全角', '２０２６-１０'],
+    ['スラッシュ区切り', '2026/10'],
+    ['区切りなし', '202610'],
+    ['文字列', 'invalid'],
+  ])('形式不正(%s)は実行ボタンが無効で、形式エラーを出し確認文は出さず、API も通知も呼ばれない', async (_l, ym) => {
     const wrapper = mountPage()
     await flushPromises()
     await openDialog(wrapper)
-    await setMonth(wrapper, 'invalid')
-    expect(execButton(wrapper).attributes('disabled')).toBeUndefined()
+    await setMonth(wrapper, ym)
+    expect(execButton(wrapper).attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('shiftBudget.monthlyClose.invalidFormat')
+    expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.confirm')
     expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.notEnded')
     await execButton(wrapper).trigger('click')
-    expect(notify.error).toHaveBeenCalledWith('shiftBudget.monthlyClose.error')
+    expect(notify.error).not.toHaveBeenCalled()
     expect(api.executeMonthlyClose).not.toHaveBeenCalled()
+  })
+
+  it('前後空白は trim して判定・送信する', async () => {
+    api.executeMonthlyClose.mockResolvedValue({
+      closed_allocations: 1,
+      already_closed_allocations: 0,
+      closed_consumptions: 3,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await openDialog(wrapper)
+    await setMonth(wrapper, ' 2026-10 ')
+    expect(execButton(wrapper).attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.invalidFormat')
+    await execButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(api.executeMonthlyClose).toHaveBeenCalledWith(
+      expect.objectContaining({ year_month: '2026-10' }),
+    )
+  })
+
+  it('未終了月では確認文を出さない（警告のみ）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await openDialog(wrapper)
+    await setMonth(wrapper, '2026-11')
+    expect(wrapper.text()).toContain('shiftBudget.monthlyClose.notEnded')
+    expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.confirm')
+  })
+
+  it('有効な過去月では確認文を出す', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await openDialog(wrapper)
+    await setMonth(wrapper, '2026-10')
+    expect(wrapper.text()).toContain('shiftBudget.monthlyClose.confirm:2026-10')
+    expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.invalidFormat')
+  })
+
+  it('409 で拒否された月は再送できない（ボタン無効・API 再呼び出しなし）', async () => {
+    api.executeMonthlyClose.mockRejectedValue({
+      status: 409,
+      data: { error: { code: 'SHIFT_BUDGET_032', message: 'x' } },
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await openDialog(wrapper)
+    await setMonth(wrapper, '2026-10')
+    await execButton(wrapper).trigger('click')
+    await flushPromises()
+    await execButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(api.executeMonthlyClose).toHaveBeenCalledTimes(1)
   })
 
   it('BE が 409 SHIFT_BUDGET_032 を返したら notEnded をダイアログ内に出し、閉じない', async () => {
@@ -205,6 +274,8 @@ describe('月次締めダイアログ 未終了月の制御', () => {
       'shiftBudget.monthlyClose.notEnded:2026-10',
     )
     expect(notify.error).toHaveBeenCalledWith('shiftBudget.monthlyClose.notEnded:2026-10')
+    expect(wrapper.text()).not.toContain('shiftBudget.monthlyClose.confirm')
+    expect(execButton(wrapper).attributes('disabled')).toBeDefined()
   })
 
   it.each([

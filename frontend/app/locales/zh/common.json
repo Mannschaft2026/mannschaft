@@ -3389,5 +3389,28 @@
       "ORGANIZATION": "组织",
       "ACTIVITY": "活动记录"
     }
+  },
+  "inviteReissue": {
+    "title": "重新邀请请求",
+    "description": "邀请已过期的用户提出的请求。重新邀请后将发出新的邀请（有效期 7 天）并通知对方。",
+    "empty": "没有重新邀请请求",
+    "requested_at": "请求时间",
+    "role": "加入角色",
+    "reissue": "重新邀请",
+    "decline": "暂不处理",
+    "decline_confirm_title": "要拒绝这个请求吗？",
+    "decline_confirm_message": "将拒绝 {name} 的重新邀请请求，并通知对方。",
+    "reissued": "已重新邀请 {name}",
+    "already_member": "对方已加入，请求已完成",
+    "declined": "已拒绝重新邀请请求",
+    "already_handled": "该请求已被处理，列表已更新",
+    "requester_unavailable": "该用户目前无法加入，无法重新邀请。请选择拒绝",
+    "activation_failed": "无法启用新的邀请，请稍后再试",
+    "forbidden": "您没有处理重新邀请请求的权限",
+    "load_error": "无法获取重新邀请请求",
+    "retry": "重试",
+    "load_more": "查看更多",
+    "reissue_context": "重新邀请",
+    "decline_context": "拒绝重新邀请请求"
   }
 }

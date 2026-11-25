@@ -12,6 +12,7 @@ import com.mannschaft.app.role.dto.InviteClaimTicket;
 import com.mannschaft.app.role.dto.InviteDeclineResult;
 import com.mannschaft.app.role.dto.InviteLocator;
 import com.mannschaft.app.role.dto.InviteScopeRef;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.service.MembershipGrantService.GrantOutcome;
 import com.mannschaft.app.scopefolder.ScopeFolderErrorCode;
 import com.mannschaft.app.scopefolder.dto.InviteFolderCheck;
@@ -180,6 +181,23 @@ public class InviteAcceptanceFacade {
     /** 招待のハッシュで、付与するロールの名前を引く（保留承認の表示用。CMP-261107-1833 設計 §2）。 */
     public Optional<String> findInviteRoleName(String tokenHash) {
         return writer.findRoleName(tokenHash);
+    }
+
+    /**
+     * 招待のハッシュで、有効性（失効・再招待の仮発行中・期限切れ・上限到達）を DB の現在時刻で引く
+     * （保留承認の参照時の期限判定と承認時の処理中判定用。CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     */
+    public Optional<InviteValidity> findInviteValidity(String tokenHash, Long userId) {
+        // userId 本人の確保（CLAIMED）が残っていれば上限は判定しない（承認経路の再開と同じ規則。PR3 検分 P1）
+        Optional<InviteValidity> validity = writer.findValidity(tokenHash, userId);
+        if (validity.orElse(null) != InviteValidity.REVOKED) {
+            return validity;
+        }
+        // 失効と読めた。仮発行の印のまま窓を過ぎたものなら、有効化と CAS で取り合ってから確定する（PR3 3 回目の検分・殿の裁定）。
+        // 最初の読み（readOnly・replica でありうる）は古くてもよい: 古い「失効（印あり・窓の外）」を読んでも、ここで primary の
+        // 読み書きの短TXに進み、CAS と確定読みで決着する（4 回目の検分）。逆に replica が古い「有効」を返すのは、有効化が
+        // コミット済みの場合だけで、その結論は正しい。0 行の後の確定読みは CAS と同じ primary の TX で行い、readOnly の経路を通らない。
+        return writer.revokeExpiredStaged(tokenHash, userId);
     }
 
     private void accept(InviteLocator locator, Long userId, Long folderId) {

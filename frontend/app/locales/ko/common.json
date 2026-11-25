@@ -3389,5 +3389,28 @@
       "ORGANIZATION": "조직",
       "ACTIVITY": "활동 기록"
     }
+  },
+  "inviteReissue": {
+    "title": "재초대 요청",
+    "description": "초대 기간이 만료된 분들의 요청입니다. 재초대하면 새 초대(7일간 유효)가 발급되고 본인에게 알림이 갑니다.",
+    "empty": "재초대 요청이 없습니다",
+    "requested_at": "요청 일시",
+    "role": "참여 역할",
+    "reissue": "재초대",
+    "decline": "거절",
+    "decline_confirm_title": "이 요청을 거절하시겠습니까?",
+    "decline_confirm_message": "{name} 님의 재초대 요청을 거절합니다. 본인에게 알림이 갑니다.",
+    "reissued": "{name} 님을 재초대했습니다",
+    "already_member": "이미 참여한 분이라 요청을 완료했습니다",
+    "declined": "재초대 요청을 거절했습니다",
+    "already_handled": "이미 처리된 요청입니다. 목록을 갱신했습니다",
+    "requester_unavailable": "현재 참여할 수 없는 상태라 재초대할 수 없습니다. 거절해 주세요",
+    "activation_failed": "새 초대를 활성화하지 못했습니다. 잠시 후 다시 시도해 주세요",
+    "forbidden": "재초대 요청을 처리할 권한이 없습니다",
+    "load_error": "재초대 요청을 불러오지 못했습니다",
+    "retry": "다시 시도",
+    "load_more": "더 보기",
+    "reissue_context": "재초대",
+    "decline_context": "재초대 요청 거절"
   }
 }
