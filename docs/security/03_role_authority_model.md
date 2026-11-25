@@ -290,6 +290,8 @@ const isScopeAdmin = computed(
 
 **最新方針**: プラットフォームの運営管理権限と、各チーム・組織の業務情報へのアクセス権限を分離する。セキュリティリスクを減らすため、SYSTEM_ADMIN であることだけを理由に各チーム・組織の業務情報へアクセスできないことを基本とする。SYSTEM_ADMIN を持つ利用者も、通常の所属先・役割・担当権限で許可される範囲では業務利用できる。
 
+**シフト管理への適用（CMP-261125-2114・2026-11-25 実装）**: シフトの管理操作と閲覧は、ADMIN と `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN だけに許可する（`AccessControlService#hasAdminOrPermissionInScope`）。チームのシフト設定の切替（`deputy_shift_view_enabled`・`deputy_hourly_rate_view_enabled`、既定 OFF）が ON のときに限り、`MANAGE_SHIFTS` 無しの DEPUTY_ADMIN にも**閲覧だけ**を許す。チームロールを持たない SYSTEM_ADMIN は、操作も閲覧も他の部外者と同じに拒否する（shift ドメインの `ShiftManageAccessGate` に SYSTEM_ADMIN の短絡は無い。§3.5 の SYSTEM_ADMIN 短絡の記述のうち、シフトに関するものは本項で置き換える。`ShiftAutoAssignService` 等の実例も現行ではこの経路に従う）。仕様: `docs/features/F03.5_shift/04_security_operations.md` §6。
+
 **CMP-260930-0233 への適用**: 駐車場情報もこの方針に従い、SYSTEM_ADMIN 単独で全組織を閲覧する経路は認めない。この仕様判断は決着したが、実装・検証・戦役完了を意味しない。
 
 **記録時点の状態と範囲**: 本更新は方針の記録のみであり、§3.3.1・§3.5などに記載した既存の SYSTEM_ADMIN 短絡や UI を変更していない。新たな例外機能・バイパスの追加や、認可コード・UI の移行は実施していない。

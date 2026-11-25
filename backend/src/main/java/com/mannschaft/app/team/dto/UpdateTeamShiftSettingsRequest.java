@@ -14,6 +14,12 @@ public class UpdateTeamShiftSettingsRequest {
     private boolean reminder24hEnabled;
     private boolean reminder12hEnabled;
 
+    /** 副管理者へのシフト閲覧許可の切替。省略（null）なら変更しない。 */
+    private Boolean deputyShiftViewEnabled;
+
+    /** 副管理者への時給閲覧許可の切替。省略（null）なら変更しない。 */
+    private Boolean deputyHourlyRateViewEnabled;
+
     /**
      * カスタムバリデーション: 少なくとも1つのリマインドが有効であること。
      */

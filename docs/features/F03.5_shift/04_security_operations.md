@@ -5,9 +5,14 @@
 ## 6. セキュリティ考慮事項
 
 - **認可チェック**: 全 API エンドポイントでチームメンバーシップとロールを検証
+- **シフト管理権限（CMP-261125-2114・マスター裁定 2026-11-25）**: シフト管理の全操作（シフト表・枠・割当・自動割当・交代の承認却下・変更依頼の審査・他人の希望の更新削除・勤務制約・時給の登録訂正削除・ポジション・シフト設定の変更・リマインド）は **ADMIN と `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN だけ**に許可する（`AccessControlService#hasAdminOrPermissionInScope`。DEPUTY_ADMIN であるというだけでは許可しない。既存 DEPUTY への自動付与 migration はしない）。判定は shift ドメインの `ShiftManageAccessGate` に集約し、`ShiftManageGateReplacementArchTest` が旧判定（`requireAdminOrConceal`・`requireOwnerOrAdminOrConceal`・`isAdminOrAbove`・`checkAdminOrAbove`）の呼び戻しを禁じる。
+  - **閲覧の切替（チームのシフト設定・既定 OFF）**: `team_shift_settings.deputy_shift_view_enabled`（API 項目 `deputyShiftViewEnabled`）が ON のチームでは、`MANAGE_SHIFTS` を持たない DEPUTY_ADMIN にも次の**閲覧だけ**を許す。未公開シフト表・枠の割当の非マスク・他人の交代/変更依頼の全件・希望一覧と提出サマリー・スケジュールのサマリー・PDF の管理者出力・ダッシュボード「要対応」のシフト希望。OFF（既定）なら一般メンバーと同じ扱い（未公開は 404、割当は MASKED、他人の依頼は見えない、希望一覧・サマリーは 403、ダッシュボードはシフト希望の欄・件数を出さない）。`deputy_hourly_rate_view_enabled`（`deputyHourlyRateViewEnabled`）が ON なら他メンバーの時給の閲覧（単体・チーム一括）を許す。**操作は切替に関わらず常に `MANAGE_SHIFTS` 必須**（時給の削除も同様）。切替の変更は `MANAGE_SHIFTS` 保有者（ADMIN 含む）だけ（`PATCH /api/v1/teams/{slug}/shift-settings`）。
+  - **SYSTEM_ADMIN**: チームの ADMIN でも `MANAGE_SHIFTS` 付き DEPUTY_ADMIN でもない SYSTEM_ADMIN は、操作も閲覧も他の部外者と同じに拒否する（[ロール・権限モデル §3.6](../../security/03_role_authority_model.md#36-system_admin-とテナント業務情報の分離2026-11-15-マスター判断)）。SYSTEM_ADMIN のバイパスは shift の管理判定から外した。
+  - **拒否の作り分けは変えない**: 越境は不在と同一の 404、同チーム所属者の権限不足は 403（`user_roles` と `memberships` が食い違う DEPUTY も所属者として 403）、run 系（`/assignment-runs/{id}`）は同チームの非管理者も 404。本人の操作（自分の希望の更新削除・自分の交代のキャンセル・自分の時給の閲覧）は維持する。
+  - **変更依頼の通知**: 受信者（`RoleService#getAdminAndPermittedDeputyUserIdsByTeamId`）と審査の許可判定は同じ述語（ADMIN ＋ `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN）。
 - **交代依頼の作成資格（CMP-261021-0647）**: スコープ認可を通過した後も、`PUBLISHED`かつ現在の`assigned_user_ids`に本人を含む枠だけを受け付ける。ADMIN / DEPUTY_ADMIN / SYSTEM_ADMINにも適用する業務不変条件であり、スコープ権限のバイパス規約は変えない。非PUBLISHEDは409 `SHIFT_012`、本人外・未割当は403 `SHIFT_019`。越境は引き続き不在と完全同一の404、SUPPORTERは403とする。スコープ認可を先に完了し、越境応答に状態・担当の差を出さない。
-- **希望データのプライバシー**: メンバーの希望詳細（preference / note）は ADMIN / DEPUTY_ADMIN のみ閲覧可能。一般メンバーは自分の希望のみ参照可
-- **時給データのプライバシー**: メンバーの時給（`shift_hourly_rates`）は **本人 + ADMIN / DEPUTY_ADMIN（MANAGE_SHIFTS）のみ** 閲覧可能。他メンバーの時給は一切表示しない。給与概算も本人の `GET /shifts/my` でのみ返却
+- **希望データのプライバシー**: メンバーの希望詳細（preference / note）は ADMIN / `MANAGE_SHIFTS` 付き DEPUTY_ADMIN（閲覧切替 ON なら DEPUTY_ADMIN も）のみ閲覧可能。一般メンバーは自分の希望のみ参照可
+- **時給データのプライバシー**: メンバーの時給（`shift_hourly_rates`）は **本人 + ADMIN / DEPUTY_ADMIN（MANAGE_SHIFTS）のみ** 閲覧可能（時給閲覧切替 ON なら MANAGE_SHIFTS 無しの DEPUTY_ADMIN も閲覧のみ可）。他メンバーの時給は一般メンバーには一切表示しない。給与概算も本人の `GET /shifts/my` でのみ返却
 - **監査ログ**: 以下のイベントを監査ログに記録（F10.3 連携）
   - `SHIFT_SCHEDULE_DELETED`: シフトスケジュールの削除
   - `SHIFT_SCHEDULE_STATUS_CHANGED`: ステータス遷移（遷移元・遷移先を記録）

@@ -39,6 +39,14 @@ public class TeamShiftSettingsEntity {
     @Column(name = "reminder_12h_enabled", nullable = false)
     private boolean reminder12hEnabled = false;
 
+    /** MANAGE_SHIFTS を持たない DEPUTY_ADMIN にシフトの閲覧（未公開・全員分の割当・希望一覧等）を許すか（CMP-261125-2114）。 */
+    @Column(name = "deputy_shift_view_enabled", nullable = false)
+    private boolean deputyShiftViewEnabled = false;
+
+    /** MANAGE_SHIFTS を持たない DEPUTY_ADMIN に他メンバーの時給の閲覧を許すか（CMP-261125-2114）。 */
+    @Column(name = "deputy_hourly_rate_view_enabled", nullable = false)
+    private boolean deputyHourlyRateViewEnabled = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -76,5 +84,17 @@ public class TeamShiftSettingsEntity {
         this.reminder48hEnabled = reminder48hEnabled;
         this.reminder24hEnabled = reminder24hEnabled;
         this.reminder12hEnabled = reminder12hEnabled;
+    }
+
+    /**
+     * 副管理者への閲覧許可の切替を更新する。{@code null} の項目は変更しない。
+     */
+    public void updateDeputyViewToggles(Boolean deputyShiftViewEnabled, Boolean deputyHourlyRateViewEnabled) {
+        if (deputyShiftViewEnabled != null) {
+            this.deputyShiftViewEnabled = deputyShiftViewEnabled;
+        }
+        if (deputyHourlyRateViewEnabled != null) {
+            this.deputyHourlyRateViewEnabled = deputyHourlyRateViewEnabled;
+        }
     }
 }

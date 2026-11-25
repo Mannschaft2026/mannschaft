@@ -2,7 +2,6 @@ package com.mannschaft.app.shift.service;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
@@ -50,6 +49,7 @@ public class ShiftChangeRequestFacade {
 
     private final ShiftChangeRequestService changeRequestService;
     private final ScopeConcealingAccessGate accessGate;
+    private final ShiftManageAccessGate manageGate;
     private final AccessControlService accessControlService;
     /**
      * 依頼者の表示名解決（CMP-261010-1432 M）。users は auth ドメインのため、common の越境窓口を
@@ -81,7 +81,8 @@ public class ShiftChangeRequestFacade {
     }
 
     /**
-     * 変更依頼一覧を取得する。管理者（SYSTEM_ADMIN・ADMIN 以上）は全件、一般メンバーは自分の依頼のみ。
+     * 変更依頼一覧を取得する。管理者の形（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN、閲覧切替 ON の DEPUTY_ADMIN）は
+     * 全件、一般メンバーは自分の依頼のみ。
      * 越境（非メンバー）は不在と同一応答（{@code SHIFT_SCHEDULE_NOT_FOUND}）に畳む。
      *
      * @param scheduleId スケジュール ID
@@ -90,17 +91,16 @@ public class ShiftChangeRequestFacade {
      */
     public List<ChangeRequestResponse> list(Long scheduleId, Long userId) {
         Long teamId = changeRequestService.resolveScheduleTeamId(scheduleId);
-        // 同一チーム内は admin/member どちらでも許可されるため、Gate の permitted 条件に isMember を渡し、
-        // 拒否経路でのみ越境判定を行わせる。
-        accessGate.requireOrConceal(
-                userId, teamId, TEAM,
-                () -> accessControlService.isMember(userId, teamId, TEAM),
-                ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND, CommonErrorCode.COMMON_002);
-        return withRequesterNames(changeRequestService.list(scheduleId, userId, isScopeAdmin(userId, teamId)));
+        // 管理者の形（閲覧扱い）か、そうでなければ同一チームの在籍者。拒否経路でのみ越境判定を行う。
+        boolean privileged = manageGate.canView(userId, teamId);
+        if (!privileged) {
+            manageGate.requireMemberOrConceal(userId, teamId, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        }
+        return withRequesterNames(changeRequestService.list(scheduleId, userId, privileged));
     }
 
     /**
-     * 変更依頼詳細を取得する。依頼者本人または当該チーム管理者のみ。それ以外は存在秘匿で 404
+     * 変更依頼詳細を取得する。依頼者本人または管理者の形（閲覧扱い）のみ。それ以外は存在秘匿で 404
      * （{@code CHANGE_REQUEST_NOT_FOUND}）。
      *
      * @param id     変更依頼 ID
@@ -110,7 +110,7 @@ public class ShiftChangeRequestFacade {
     public ChangeRequestResponse get(Long id, Long userId) {
         ShiftChangeRequestService.ChangeRequestHead head = changeRequestService.resolveHead(id);
         if (!head.requestedBy().equals(userId)
-                && !isScopeAdmin(userId, resolveTeamIdOrConceal(head))) {
+                && !manageGate.canView(userId, resolveTeamIdOrConceal(head))) {
             // 越境は存在秘匿（未存在と同一応答）
             throw new BusinessException(ShiftErrorCode.CHANGE_REQUEST_NOT_FOUND);
         }
@@ -118,7 +118,8 @@ public class ShiftChangeRequestFacade {
     }
 
     /**
-     * 変更依頼を審査する（SYSTEM_ADMIN 短絡 or 当該チームの ADMIN/DEPUTY_ADMIN）。
+     * 変更依頼を審査する（当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
+     * 管理者宛の通知の受信者（{@code RoleService#getAdminAndPermittedDeputyUserIdsByTeamId}）と同じ述語。
      *
      * @param id      変更依頼 ID
      * @param request 審査リクエスト
@@ -130,7 +131,7 @@ public class ShiftChangeRequestFacade {
         Long teamId = userId.equals(head.requestedBy())
                 ? changeRequestService.resolveScheduleTeamId(head.scheduleId())
                 : resolveTeamIdOrConceal(head);
-        accessGate.requireAdminOrConceal(userId, teamId, TEAM, ShiftErrorCode.CHANGE_REQUEST_NOT_FOUND);
+        manageGate.requireManageOrConceal(userId, teamId, ShiftErrorCode.CHANGE_REQUEST_NOT_FOUND);
         // CMP-261010-1432 B（マスター決裁 2026-10-12）: 依頼者本人による審査は禁止。SYSTEM_ADMIN も例外にしない。
         // 認可（越境の存在秘匿）の後に置き、部外者には依頼者が誰かを観測させない。
         // tx 本体の status・version 照合より先に判定する（version が古い自己審査も 403 SHIFT_045＝AC-B3）。
@@ -159,8 +160,7 @@ public class ShiftChangeRequestFacade {
                 throw new BusinessException(ShiftErrorCode.ACCESS_DENIED);
             }
             Long teamId = resolveTeamIdOrConceal(head);
-            if (accessControlService.isAdminOrAbove(userId, teamId, TEAM)
-                    || accessControlService.isMember(userId, teamId, TEAM)) {
+            if (manageGate.belongsToTeam(userId, teamId)) {
                 throw new BusinessException(ShiftErrorCode.ACCESS_DENIED);
             }
             throw new BusinessException(ShiftErrorCode.CHANGE_REQUEST_NOT_FOUND);
@@ -208,14 +208,5 @@ public class ShiftChangeRequestFacade {
     /** 単票版の {@link #withRequesterNames}。 */
     private ChangeRequestResponse withRequesterName(ChangeRequestResponse response) {
         return withRequesterNames(List.of(response)).get(0);
-    }
-
-    /**
-     * 当該チームに対する管理者（SYSTEM_ADMIN 短絡 or ADMIN/DEPUTY_ADMIN）かを判定する。
-     * 例外を投げず真偽を返す（一覧の返却範囲切替・詳細の可視判定用）。
-     */
-    private boolean isScopeAdmin(Long userId, Long teamId) {
-        return accessControlService.isSystemAdmin(userId)
-                || accessControlService.isAdminOrAbove(userId, teamId, TEAM);
     }
 }

@@ -1,5 +1,6 @@
 package com.mannschaft.app.team.service;
 
+import com.mannschaft.app.team.dto.DeputyShiftViewToggles;
 import com.mannschaft.app.team.dto.TeamShiftSettingsResponse;
 import com.mannschaft.app.team.dto.UpdateTeamShiftSettingsRequest;
 import com.mannschaft.app.team.entity.TeamShiftSettingsEntity;
@@ -35,6 +36,18 @@ public class TeamShiftSettingsService {
     }
 
     /**
+     * 副管理者への閲覧許可の切替を取得する（読み取り専用。設定行が無ければ作らずに既定の OFF を返す）。
+     *
+     * <p>shift ドメインの認可が閲覧可否の判定に使う（CMP-261125-2114）。</p>
+     */
+    @Transactional(readOnly = true)
+    public DeputyShiftViewToggles findDeputyViewToggles(Long teamId) {
+        return settingsRepository.findByTeamId(teamId)
+                .map(s -> new DeputyShiftViewToggles(s.isDeputyShiftViewEnabled(), s.isDeputyHourlyRateViewEnabled()))
+                .orElse(DeputyShiftViewToggles.OFF);
+    }
+
+    /**
      * チームシフト設定を更新する。
      * 設定が存在しない場合は作成してから更新する。
      */
@@ -46,6 +59,7 @@ public class TeamShiftSettingsService {
                 request.isReminder48hEnabled(),
                 request.isReminder24hEnabled(),
                 request.isReminder12hEnabled());
+        settings.updateDeputyViewToggles(request.getDeputyShiftViewEnabled(), request.getDeputyHourlyRateViewEnabled());
         return TeamShiftSettingsResponse.from(settingsRepository.save(settings));
     }
 

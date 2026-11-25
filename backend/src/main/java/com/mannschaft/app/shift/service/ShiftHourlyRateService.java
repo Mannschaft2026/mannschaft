@@ -1,6 +1,8 @@
 package com.mannschaft.app.shift.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.shift.ShiftMapper;
 import com.mannschaft.app.shift.dto.CreateHourlyRateRequest;
 import com.mannschaft.app.shift.dto.HourlyRateResponse;
@@ -36,6 +38,7 @@ public class ShiftHourlyRateService {
     private final ShiftMapper shiftMapper;
     private final AccessControlService accessControlService;
     private final ShiftHourlyRateAuthorizer hourlyRateAuthorizer;
+    private final ShiftManageAccessGate manageGate;
 
     /**
      * ユーザーの時給履歴を取得する。
@@ -79,7 +82,7 @@ public class ShiftHourlyRateService {
      * <h2>認可（AC-5）</h2>
      * <p>返す内容に他メンバーの時給が必ず含まれるため、
      * {@code F03.5} の「本人 + 当該チームの ADMIN/DEPUTY_ADMIN のみ」のうち
-     * <b>ADMIN/DEPUTY_ADMIN（または SYSTEM_ADMIN）だけ</b>を許可する。
+     * <b>ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN（時給閲覧切替 ON の DEPUTY_ADMIN を含む）だけ</b>を許可する。
      * 一般メンバーは自分の時給を {@link #listHourlyRates} / {@link #getEffectiveRate} で
      * 従来どおり読めるので、本メソッドを一律拒否しても機能は失われない。</p>
      *
@@ -90,9 +93,10 @@ public class ShiftHourlyRateService {
      */
     public List<HourlyRateResponse> listEffectiveRatesForTeam(Long teamId, LocalDate date, Long currentUserId) {
         // 認可番人（ArchUnit）の委譲追跡は 2 ホップまでのため、
-        // AccessControlService の呼び出しを本メソッド内に直接置く（別ヘルパーへ逃がさない）。
-        if (!accessControlService.isSystemAdmin(currentUserId)) {
-            accessControlService.checkAdminOrAbove(currentUserId, teamId, "TEAM");
+        // 認可の呼び出しを本メソッド内に直接置く（別ヘルパーへ逃がさない）。
+        // 管理者に加えて時給閲覧切替 ON の DEPUTY_ADMIN にも閲覧だけ許す。SYSTEM_ADMIN は特別扱いしない（§3.6）。
+        if (!manageGate.canViewHourlyRates(currentUserId, teamId)) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
         }
         // 対象の絞り込み（Codex 検分 P1）: ロールの検査だけでは「誰の時給を返すか」が決まらない。
         // teamId だけで引くと、時給を設定されたあとに脱退した元メンバーの金銭情報まで返る

@@ -67,6 +67,13 @@ class AuthzTxFacadeRegistryArchTest {
      */
     static final String CHAT_GUARD = "com.mannschaft.app.chat.service.ChatChannelAccessGuard";
 
+    /**
+     * シフト管理の認可クラス（CMP-261125-2114）。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに管理操作を許し、
+     * 閲覧は切替で DEPUTY_ADMIN にも許す判定を束ねる。R3 では shift の Facade がここへ届くことを、
+     * R4 では tx 本体がここへ届かない（切替の値・privileged は Facade で解決して引数で渡す）ことを検査する。
+     */
+    static final String SHIFT_GATE = "com.mannschaft.app.shift.service.ShiftManageAccessGate";
+
     private static final String SHIFT = "com.mannschaft.app.shift.";
     private static final String REC = "com.mannschaft.app.recruitment.";
     private static final String RSV = "com.mannschaft.app.reservation.";
@@ -256,15 +263,9 @@ class AuthzTxFacadeRegistryArchTest {
      * 理由が空なら {@link #許可リストと除外表に理由がある()} が落ちる。使われなくなった項目も赤にする（陳腐化の防止）。
      */
     static final Map<String, String> THROW_FORM_ALLOWLIST = Map.of(
-            SHIFT + "service.ShiftPositionFacade#checkTeamAdminAccess",
-            "teamId 直接指定のポジション一覧・作成は隠蔽対象のリソース ID を持たず、是正前から 403 COMMON_002 のまま（AC-6）。"
-                    + "SYSTEM_ADMIN を先に通したうえで checkAdminOrAbove を使う",
             SHIFT + "service.ShiftChangeRequestFacade#create",
             "非メンバーの SYSTEM_ADMIN は是正前どおり 403 COMMON_002 で拒否する（AC-5 改訂）。Gate は冒頭で SYSTEM_ADMIN を"
-                    + "通してしまうため、SYSTEM_ADMIN のときだけ checkMembership で先に弾く",
-            SHIFT + "service.ShiftScheduleFacade#createSchedule",
-            "?teamId= 直接指定のスケジュール作成は隠蔽対象のリソース ID を持たず、越境・不在・権限不足とも 403 COMMON_002 のまま"
-                    + "（ep_tables_w6.md §4-4 の S3）。SYSTEM_ADMIN を先に通したうえで checkAdminOrAbove を使う");
+                    + "通してしまうため、SYSTEM_ADMIN のときだけ checkMembership で先に弾く");
 
     /**
      * 登録 Facade を呼ぶが登録表に載せない Controller メソッド（「Controller FQN#メソッド名」→ 理由）。理由必須。
@@ -279,7 +280,7 @@ class AuthzTxFacadeRegistryArchTest {
                     + "findOrThrow・estimateFee は認可を持たない参照。W5 の対象外（試算の作り替えは別課題）で、"
                     + "tx 本体の直呼びが残るため R1 に通せない");
 
-    static final Rules RULES = new Rules(ENTRIES, TX_BODIES, Set.of(ACCESS_CONTROL, GATE, CHAT_GUARD), ACCESS_CONTROL,
+    static final Rules RULES = new Rules(ENTRIES, TX_BODIES, Set.of(ACCESS_CONTROL, GATE, CHAT_GUARD, SHIFT_GATE), ACCESS_CONTROL,
             THROW_FORM_ALLOWLIST, UNREGISTERED_FACADE_CALLERS);
 
     private final JavaClasses classes = ProductionClasses.get();

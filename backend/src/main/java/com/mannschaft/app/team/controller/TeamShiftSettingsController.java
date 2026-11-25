@@ -50,17 +50,18 @@ public class TeamShiftSettingsController {
     }
 
     @PatchMapping
-    @Operation(summary = "チームシフト設定更新（ADMIN/DEPUTY のみ）")
+    @Operation(summary = "チームシフト設定更新（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "更新成功")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "当該チームの ADMIN/DEPUTY でない")
+            description = "当該チームの ADMIN でも MANAGE_SHIFTS を持つ DEPUTY_ADMIN でもない")
     public ResponseEntity<TeamShiftSettingsResponse> updateSettings(
             @PathVariable("slug") TeamScopeId scopeId,
             @Valid @RequestBody UpdateTeamShiftSettingsRequest request) {
         Long teamId = scopeId.value();
         teamService.assertActiveTeamExists(teamId);
-        // 設定変更はチーム運営の権限（shift ドメインの変更系と同じ粒度）。
-        accessControlService.checkAdminOrAbove(SecurityUtils.getCurrentUserId(), teamId, SCOPE_TYPE);
+        // 設定変更はシフト管理の操作（CMP-261125-2114）。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。
+        accessControlService.checkAdminOrHasPermissionInScope(
+                SecurityUtils.getCurrentUserId(), teamId, SCOPE_TYPE, "MANAGE_SHIFTS");
         return ResponseEntity.ok(settingsService.updateSettings(teamId, request));
     }
 }

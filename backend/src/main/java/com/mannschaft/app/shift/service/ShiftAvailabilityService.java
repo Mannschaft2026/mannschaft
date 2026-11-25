@@ -36,6 +36,7 @@ public class ShiftAvailabilityService {
     private final MemberAvailabilityDefaultRepository availabilityRepository;
     private final ShiftMapper shiftMapper;
     private final AccessControlService accessControlService;
+    private final ShiftManageAccessGate manageGate;
     /**
      * D-5（クロスドメイン Repository 依存の禁止）により team ドメインの Repository を
      * 直接引けないため、common の越境窓口 {@link NameResolverService} を使って teamId の実在確認を行う。
@@ -168,12 +169,12 @@ public class ShiftAvailabilityService {
      * 対象 teamId への per-scope 認可を検証する（AccessControlService をこのメソッドから直接呼ぶ。
      * 番人 {@code AuthzControllerGuardArchTest} の委譲探索は深さ2までのため）。
      *
-     * <p>認可式: {@code isSystemAdmin || isAdminOrAbove || (isMember && !isSupporter)}</p>
+     * <p>認可式: {@code isSystemAdmin || canManage || (isMember && !isSupporter)}（canManage = ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
+     * 本人の可用性の登録のため SYSTEM_ADMIN の短絡は従来どおり残す（CMP-261125-2114 の対象は管理操作と閲覧）</p>
      * <ul>
-     *   <li>{@code isAdminOrAbove} との論理和が必要な理由: {@code AccessControlService#isMember} は
+     *   <li>{@code canManage} との論理和が必要な理由: {@code AccessControlService#isMember} は
      *       memberships のみを見るため、{@code user_roles} にしか ADMIN 行を持たない利用者を落とす</li>
-     *   <li>{@code isSystemAdmin} を別途先頭に置く理由: {@code isAdminOrAbove} が参照する
-     *       {@code ADMIN_ROLES} は SYSTEM_ADMIN を含まない</li>
+     *   <li>{@code isSystemAdmin} を別途先頭に置く理由: {@code canManage} は SYSTEM_ADMIN を含まない</li>
      *   <li>{@code !isSupporter} で明示的に除く理由: {@code isMember} は SUPPORTER 種別のメンバーも
      *       true を返すため</li>
      * </ul>
@@ -194,7 +195,9 @@ public class ShiftAvailabilityService {
         if (accessControlService.isSystemAdmin(userId)) {
             return;
         }
-        if (accessControlService.isAdminOrAbove(userId, teamId, "TEAM")) {
+        // 管理操作ができる人（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN。在籍の有無を問わない）。
+        // MANAGE_SHIFTS 無しの DEPUTY_ADMIN は在籍していれば下の一般メンバーとして通る。
+        if (manageGate.canManage(userId, teamId)) {
             return;
         }
         if (!accessControlService.isMember(userId, teamId, "TEAM")

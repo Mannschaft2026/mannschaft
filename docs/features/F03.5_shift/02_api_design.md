@@ -81,8 +81,8 @@
 
 | 呼び出し元 | 判定 |
 |---|---|
-| SYSTEM_ADMIN | 許可（短絡）|
-| 当該チームの ADMIN / DEPUTY_ADMIN / MEMBER | 許可 |
+| SYSTEM_ADMIN（チームロール無し） | `COMMON_002`（403）。CMP-261125-2114 で短絡を廃止（[ロール・権限モデル §3.6](../../security/03_role_authority_model.md#36-system_admin-とテナント業務情報の分離2026-11-15-マスター判断)） |
+| 当該チームの ADMIN / DEPUTY_ADMIN / MEMBER | 許可（ADMIN／`MANAGE_SHIFTS` 付き DEPUTY_ADMIN〔閲覧切替 ON なら DEPUTY_ADMIN〕は未公開も含む全件、それ以外は公開済みのみ） |
 | 当該チームの SUPPORTER | `COMMON_002`（403）|
 | 他チームのユーザー（ADMIN 含む）・無所属ユーザー | `COMMON_002`（403）|
 
@@ -1416,8 +1416,9 @@ status を既定の `PENDING` のままにしており、`OPEN_CALL` へ遷移�
 
 | 呼び出し元 | `user_id` が本人 | `user_id` が他メンバー |
 |---|---|---|
-| SYSTEM_ADMIN | 許可 | 許可 |
-| 当該チームの ADMIN / DEPUTY_ADMIN | 許可 | 許可（対象も当該チームのメンバーである場合のみ）|
+| SYSTEM_ADMIN（チームロール無し） | **403**（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない） | **403** |
+| 当該チームの ADMIN / `MANAGE_SHIFTS` 付き DEPUTY_ADMIN | 許可 | 許可（対象も当該チームのメンバーである場合のみ）|
+| `MANAGE_SHIFTS` 無しの DEPUTY_ADMIN | 許可 | 時給閲覧切替（`deputyHourlyRateViewEnabled`）が ON のときだけ許可（既定 OFF は **403**） |
 | 当該チームの一般メンバー | 許可 | **403** |
 | 当該チームの非メンバー（別チーム ADMIN 含む）| **403** | **403** |
 
@@ -1451,9 +1452,9 @@ status を既定の `PENDING` のままにしており、`OPEN_CALL` へ遷移�
 
 **認可**（CMP-261021-0659 / 実装は `ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess`）
 
-登録・同日訂正は、対象が本人か他人かにかかわらず、呼び出し元が当該チームの ADMIN / DEPUTY_ADMIN であり、
+登録・同日訂正は、対象が本人か他人かにかかわらず、呼び出し元が当該チームの ADMIN または `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN であり、
 かつ**対象ユーザーも当該チームのメンバーである**ことを要求する（対象側 BOLA 封鎖）。
-SYSTEM_ADMIN は従来どおり所属判定を短絡して許可する。管理者の判定は既存の `checkAdminOrAbove` を使い、新しい permission 条件を加えない。
+CMP-261125-2114 で SYSTEM_ADMIN の短絡と「DEPUTY_ADMIN 一律許可」を廃止した（判定は `ShiftManageAccessGate#requireManage`）。時給閲覧切替が ON でも登録・訂正・削除は許可しない。
 拒否は upsert より前に行い、時給・履歴を変更しない。参照は従来の本人 + 管理者という判定を維持する。
 
 **エラーレスポンス**
@@ -1499,7 +1500,7 @@ SYSTEM_ADMIN は従来どおり所属判定を短絡して許可する。管理�
 
 1. **誰が呼べるか（ロールの検査）**: 返す内容に他メンバーの時給（金銭情報）が必ず含まれるため、
    単数 EP の「本人 + 当該チームの ADMIN/DEPUTY_ADMIN」のうち
-   **ADMIN/DEPUTY_ADMIN（または SYSTEM_ADMIN）だけ**を許可する。
+   **ADMIN／`MANAGE_SHIFTS` 付き DEPUTY_ADMIN（時給閲覧切替 ON の DEPUTY_ADMIN を含む）だけ**を許可する（SYSTEM_ADMIN は特別扱いしない）。
    一般メンバーは自分の時給を単数 EP で従来どおり読めるため、本 EP を一律拒否しても機能は失われない。
 2. **誰の時給を返すか（対象の絞り込み）**: **在籍中のメンバーに限る**
    （`AccessControlService#listActiveMemberIds` が `memberships.left_at IS NULL` で 1 クエリ取得し、
@@ -1520,7 +1521,7 @@ SYSTEM_ADMIN は従来どおり所属判定を短絡して許可する。管理�
 **エラーレスポンス**
 | ステータス | 条件 |
 |-----------|------|
-| 403 | 当該チームの ADMIN / DEPUTY_ADMIN ではない |
+| 403 | 当該チームの ADMIN でも `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN でもない（時給閲覧切替 ON の DEPUTY_ADMIN は閲覧のみ可） |
 
 ---
 
@@ -2315,3 +2316,35 @@ Authorization: Bearer ...
 ---
 
 *前: [01_db_design.md](01_db_design.md) | 次: [03_business_logic.md](03_business_logic.md)*
+
+---
+
+### チームシフト設定（副管理者への閲覧許可の切替・CMP-261125-2114）
+
+#### `GET /api/v1/teams/{slug}/shift-settings`
+
+チームのシフト設定を取得する（チームの在籍メンバー）。設定行が無ければ既定値で自動作成する。
+
+**レスポンス**
+```json
+{
+  "teamId": 5,
+  "reminder48hEnabled": true,
+  "reminder24hEnabled": true,
+  "reminder12hEnabled": false,
+  "deputyShiftViewEnabled": false,
+  "deputyHourlyRateViewEnabled": false
+}
+```
+
+#### `PATCH /api/v1/teams/{slug}/shift-settings`
+
+チームのシフト設定を更新する。**ADMIN と `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN だけ**（それ以外は 403 `COMMON_002`）。
+
+| 項目 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `reminder48hEnabled` / `reminder24hEnabled` / `reminder12hEnabled` | Boolean | 必須 | リマインド。少なくとも 1 つは true |
+| `deputyShiftViewEnabled` | Boolean | — | `MANAGE_SHIFTS` を持たない DEPUTY_ADMIN にシフトの閲覧（未公開シフト表・割当の非マスク・他人の交代/変更依頼・希望一覧/サマリー・PDF の管理者出力・ダッシュボードのシフト希望）を許すか。**既定 false**。省略（null）なら変更しない |
+| `deputyHourlyRateViewEnabled` | Boolean | — | 同じく他メンバーの時給の閲覧を許すか。**既定 false**。省略（null）なら変更しない |
+
+切替が ON でも許されるのは閲覧だけで、操作（作成・更新・削除・承認・時給の登録削除など）は常に `MANAGE_SHIFTS` が必要。DB 列は `team_shift_settings.deputy_shift_view_enabled` / `deputy_hourly_rate_view_enabled`（BOOLEAN NOT NULL DEFAULT FALSE。Flyway V269）。
