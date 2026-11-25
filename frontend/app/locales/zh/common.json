@@ -3358,18 +3358,20 @@
       "device_name": "终端名称",
       "device_placeholder": "例如：入口显示屏",
       "empty": "暂无令牌",
-      "issued_title": "已发行显示链接",
+      "issued_title": "已发行显示终端令牌",
       "no_expiry": "无期限",
       "inactive": "已失效",
       "reissue_confirm": "将发行新链接并使此令牌失效。是否继续？",
-      "revoke_confirm": "要删除此令牌吗？",
+      "revoke_confirm": "要使此令牌失效吗？",
       "issue_success": "已发行令牌",
       "issue_failed": "发行令牌失败",
       "reissue_success": "已重新发行令牌",
       "reissue_failed": "重新发行令牌失败",
-      "revoke_success": "已删除令牌",
-      "revoke_failed": "删除令牌失败",
-      "name_required": "请输入终端名称"
+      "revoke_success": "已使令牌失效",
+      "revoke_failed": "使令牌失效失败",
+      "name_required": "请输入终端名称",
+      "token_label": "需在终端上设置的令牌",
+      "reissue_revoke_failed": "新令牌已发行，但旧令牌失效失败。请手动使旧令牌失效"
     }
   },
   "globalSearch": {

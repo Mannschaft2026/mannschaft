@@ -56,9 +56,10 @@ const MOCK_TOKENS = [
   {
     id: 1,
     screenId: 1,
-    token: 'sgn_tok_xxxxxxxxxxx',
-    label: 'エントランスPC',
-    lastSeenAt: '2026-04-10T08:00:00Z',
+    name: 'エントランスPC',
+    isActive: true,
+    allowedIps: [],
+    expiredAt: null,
     createdAt: '2026-01-01T00:00:00Z',
   },
 ]
@@ -213,8 +214,10 @@ test.describe('SIGNAGE: デジタルサイネージモード', () => {
               id: 2,
               screenId: 1,
               token: 'sgn_tok_new_yyy',
-              label: null,
-              lastSeenAt: null,
+              name: 'ロビーTV',
+              isActive: true,
+              allowedIps: [],
+              expiredAt: null,
               createdAt: '2026-04-12T00:00:00Z',
             },
           }),
@@ -237,13 +240,17 @@ test.describe('SIGNAGE: デジタルサイネージモード', () => {
     await page.getByRole('button', { name: '管理' }).first().click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 })
 
-    // トークン発行ボタンをクリック
+    // 端末名を入力してからトークンを発行する
+    await page.getByPlaceholder('例: エントランスモニター').last().fill('ロビーTV')
     await page.getByRole('button', { name: 'トークン発行' }).click()
 
+    // 平文トークンは発行直後のダイアログにだけ表示される
+    await expect(page.getByTestId('secret-issued-dialog')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('secret-issued-dialog-url')).toHaveText('sgn_tok_new_yyy')
     expect(tokenIssueCalled).toBe(true)
   })
 
-  test('SIGNAGE-005: サイネージトークンが表示される', async ({ page }) => {
+  test('SIGNAGE-005: サイネージトークンは一覧に平文が出ず、再発行できる', async ({ page }) => {
     await page.route('**/api/v1/signage/screens**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -275,8 +282,10 @@ test.describe('SIGNAGE: デジタルサイネージモード', () => {
     await page.getByRole('button', { name: '管理' }).first().click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 })
 
-    await expect(page.getByText('sgn_tok_xxxxxxxxxxx')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('エントランスPC')).toBeVisible()
+    await expect(page.getByText('エントランスPC')).toBeVisible({ timeout: 10_000 })
+    // 一覧には平文トークンを出さず、コピーも置かない。代わりに再発行がある
+    await expect(page.getByText('sgn_tok')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '再発行' })).toBeVisible()
   })
 
   test('SIGNAGE-006: コンテンツを削除できる（DELETE）', async ({ page }) => {

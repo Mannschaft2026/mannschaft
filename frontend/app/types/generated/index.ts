@@ -66148,6 +66148,19 @@ export interface components {
             screenId?: number;
             token?: string;
         };
+        SignageAccessTokenResponse: {
+            allowedIps?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiredAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            name?: string;
+            /** Format: int64 */
+            screenId?: number;
+        };
         BroadcastEmergencyRequest: {
             bgColor?: string;
             /** Format: int32 */
@@ -80972,19 +80985,6 @@ export interface components {
         };
         ApiResponseListSignageAccessTokenResponse: {
             data?: components["schemas"]["SignageAccessTokenResponse"][];
-        };
-        SignageAccessTokenResponse: {
-            allowedIps?: string[];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            expiredAt?: string;
-            /** Format: int64 */
-            id?: number;
-            isActive?: boolean;
-            name?: string;
-            /** Format: int64 */
-            screenId?: number;
         };
         ApiResponseListEmergencyMessageResponse: {
             data?: components["schemas"]["EmergencyMessageResponse"][];

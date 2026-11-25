@@ -9,6 +9,7 @@ import com.mannschaft.app.signage.entity.SignageAccessTokenEntity;
 import com.mannschaft.app.signage.entity.SignageScreenEntity;
 import com.mannschaft.app.signage.repository.SignageAccessTokenRepository;
 import com.mannschaft.app.signage.repository.SignageScreenRepository;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -62,16 +63,11 @@ public class SignageAccessTokenService {
 
     /**
      * トークン発行レスポンス DTO。平文トークンはこの応答でだけ一度返す（再表示はできない）。
+     * 一覧と同じ項目を {@link JsonUnwrapped} で平らに合成する（日時などの宣言を重複させない）。
      */
     public record SignageAccessTokenIssuedResponse(
-            Long id,
-            Long screenId,
             String token,
-            String name,
-            Boolean isActive,
-            List<String> allowedIps,
-            LocalDateTime expiredAt,
-            LocalDateTime createdAt
+            @JsonUnwrapped SignageAccessTokenResponse info
     ) {}
 
     // ========================================
@@ -113,15 +109,7 @@ public class SignageAccessTokenService {
 
         SignageAccessTokenEntity saved = tokenRepository.save(entity);
         log.info("サイネージトークン発行: id={}, screenId={}, name={}", saved.getId(), screenId, req.name());
-        return new SignageAccessTokenIssuedResponse(
-                saved.getId(),
-                saved.getScreenId(),
-                issuedToken.plaintext(),
-                saved.getName(),
-                saved.getIsActive(),
-                parseAllowedIps(saved.getAllowedIps()),
-                saved.getExpiredAt(),
-                saved.getCreatedAt());
+        return new SignageAccessTokenIssuedResponse(issuedToken.plaintext(), toResponse(saved));
     }
 
     /**

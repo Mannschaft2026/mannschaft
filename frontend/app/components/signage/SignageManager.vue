@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '~/utils/toTypedSchema'
+import { reissueSignageToken } from '~/utils/signageTokenReissue'
 import type {
   SignageScreen,
   SignageSlot,
@@ -48,8 +49,8 @@ const tokens = ref<SignageToken[]>([])
 const loadingTokens = ref(false)
 const newTokenName = ref('')
 const issuingToken = ref(false)
-// 発行直後にだけ保持する平文の表示用 URL。画面のメモリ上だけで扱い、ダイアログを閉じたら破棄する（保存領域には書かない）。
-const issuedUrl = ref<string | null>(null)
+// 発行直後にだけ保持する平文トークン。画面のメモリ上だけで扱い、ダイアログを閉じたら破棄する（保存領域には書かない）。
+const issuedPlaintext = ref<string | null>(null)
 const showIssuedDialog = ref(false)
 const showDetailPanel = ref(false)
 
@@ -318,14 +319,14 @@ async function handleDeleteSlot(slot: SignageSlot) {
 // --- Token actions ---
 /** 発行応答の平文から表示用 URL を組み立ててダイアログへ渡す（以後サーバーからは取得できない）。 */
 function showIssued(plaintext: string) {
-  issuedUrl.value = `${window.location.origin}/signage/${plaintext}`
+  issuedPlaintext.value = plaintext
   showIssuedDialog.value = true
 }
 
 /** ダイアログを閉じたら平文を破棄する（二度と表示できない）。 */
 function onIssuedVisibleChange(open: boolean) {
   showIssuedDialog.value = open
-  if (!open) issuedUrl.value = null
+  if (!open) issuedPlaintext.value = null
 }
 
 async function handleIssueToken() {
@@ -349,20 +350,17 @@ async function handleIssueToken() {
   }
 }
 
-/** 再発行: 同じ端末名で新しく発行し、旧トークンを無効化（削除）する。 */
+/** 再発行: 同じ端末名で新規発行し、旧トークンを無効化する。無効化に失敗したら新規は発行済みと明示する。 */
 async function handleReissueToken(token: SignageToken) {
   if (!selectedScreen.value) return
   if (!confirm(t('secret_token.signage.reissue_confirm'))) return
+  const screenId = selectedScreen.value.id
   try {
-    const res = await issueToken(selectedScreen.value.id, {
-      name: token.name,
-      allowedIps: token.allowedIps,
-      expiredAt: token.expiredAt,
-    })
-    await deleteToken(token.id)
-    success(t('secret_token.signage.reissue_success'))
-    showIssued(res.data.token)
-    await loadTokens(selectedScreen.value.id)
+    const result = await reissueSignageToken(token, body => issueToken(screenId, body), deleteToken)
+    showIssued(result.plaintext)
+    if (result.revokeFailed) showError(t('secret_token.signage.reissue_revoke_failed'))
+    else success(t('secret_token.signage.reissue_success'))
+    await loadTokens(screenId)
   } catch {
     showError(t('secret_token.signage.reissue_failed'))
   }
@@ -655,9 +653,10 @@ onMounted(loadScreens)
 
     <!-- 発行直後にだけ平文の表示用リンクを見せる -->
     <SecretIssuedDialog
-      v-if="issuedUrl"
+      v-if="issuedPlaintext"
       :visible="showIssuedDialog"
-      :url="issuedUrl"
+      :url="issuedPlaintext"
+      :value-label="t('secret_token.signage.token_label')"
       :title="t('secret_token.signage.issued_title')"
       @update:visible="onIssuedVisibleChange"
     />
