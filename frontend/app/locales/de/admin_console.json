@@ -83,7 +83,8 @@
           "RESERVATION": "Reservierungen",
           "SHIFT_REQUEST": "Schichten",
           "MATCHING": "Matching",
-          "PAYMENT": "Zahlungen"
+          "PAYMENT": "Zahlungen",
+          "INVITE_REISSUE": "Neue Einladung"
         }
       },
       "payments": {

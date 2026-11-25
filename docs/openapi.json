@@ -1995,6 +1995,10 @@
       "description": "F10.1 目安箱管理（システム管理者向け）"
     },
     {
+      "name": "再招待依頼",
+      "description": "失効した招待から登録した利用者の再招待依頼を、招待権限者が一覧・再招待・見送りする API"
+    },
+    {
       "name": "組織確認通知",
       "description": "F04.9 組織確認通知 CRUD・ステータス管理"
     },
@@ -55359,6 +55363,87 @@
         }
       }
     },
+    "/api/v1/teams/{slug}/invite-reissue-requests/{id}/reissue": {
+      "post": {
+        "tags": [
+          "再招待依頼"
+        ],
+        "summary": "チームの再招待依頼に再招待する（招待権限者）",
+        "description": "依頼者宛ての 1 回限り・7 日の招待を発行する。在籍済みなら ALREADY_MEMBER",
+        "operationId": "reissueForTeam",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseInviteReissueResultResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{slug}/invite-reissue-requests/{id}/decline": {
+      "post": {
+        "tags": [
+          "再招待依頼"
+        ],
+        "summary": "チームの再招待依頼を見送る（招待権限者）",
+        "operationId": "declineForTeam",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseInviteReissueResultResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/teams/{slug}/follow": {
       "post": {
         "tags": [
@@ -65711,6 +65796,87 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseInviteTokenIssuedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{slug}/invite-reissue-requests/{id}/reissue": {
+      "post": {
+        "tags": [
+          "再招待依頼"
+        ],
+        "summary": "組織の再招待依頼に再招待する（招待権限者）",
+        "description": "依頼者宛ての 1 回限り・7 日の招待を発行する。在籍済みなら ALREADY_MEMBER",
+        "operationId": "reissueForOrganization",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseInviteReissueResultResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{slug}/invite-reissue-requests/{id}/decline": {
+      "post": {
+        "tags": [
+          "再招待依頼"
+        ],
+        "summary": "組織の再招待依頼を見送る（招待権限者）",
+        "operationId": "declineForOrganization",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseInviteReissueResultResponse"
                 }
               }
             }
@@ -128238,6 +128404,58 @@
         }
       }
     },
+    "/api/v1/teams/{slug}/invite-reissue-requests": {
+      "get": {
+        "tags": [
+          "再招待依頼"
+        ],
+        "summary": "チームの再招待依頼一覧（招待権限者）",
+        "description": "古い順。size は最大 50。閉鎖中のチームは 0 件",
+        "operationId": "listForTeam_3",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponsePageInviteReissueRequestResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/teams/{slug}/followers": {
       "get": {
         "tags": [
@@ -137521,6 +137739,58 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseEffectivePermissionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{slug}/invite-reissue-requests": {
+      "get": {
+        "tags": [
+          "再招待依頼"
+        ],
+        "summary": "組織の再招待依頼一覧（招待権限者）",
+        "description": "古い順。size は最大 50。閉鎖中の組織は 0 件",
+        "operationId": "listForOrganization_1",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponsePageInviteReissueRequestResponse"
                 }
               }
             }
@@ -197182,6 +197452,26 @@
           }
         }
       },
+      "ApiResponseInviteReissueResultResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InviteReissueResultResponse"
+          }
+        }
+      },
+      "InviteReissueResultResponse": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "ApiResponseFollowStatusResponse": {
         "type": "object",
         "properties": {
@@ -236523,6 +236813,82 @@
             "items": {
               "$ref": "#/components/schemas/InviteTokenResponse"
             }
+          }
+        }
+      },
+      "ApiResponsePageInviteReissueRequestResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PageInviteReissueRequestResponse"
+          }
+        }
+      },
+      "InviteReissueRequestResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requesterAvatarUrl": {
+            "type": "string"
+          },
+          "requesterDisplayName": {
+            "type": "string"
+          },
+          "roleName": {
+            "type": "string"
+          }
+        }
+      },
+      "PageInviteReissueRequestResponse": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteReissueRequestResponse"
+            }
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "first": {
+            "type": "boolean"
+          },
+          "last": {
+            "type": "boolean"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numberOfElements": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageable": {
+            "$ref": "#/components/schemas/PageableObject"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortObject"
+          },
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
