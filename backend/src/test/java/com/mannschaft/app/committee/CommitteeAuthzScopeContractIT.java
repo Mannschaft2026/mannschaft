@@ -437,7 +437,7 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(post("/api/v1/committee-invitations/accept-by-token")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteToken", invitation.getInviteToken()))))
+                                    Map.of("inviteToken", plaintextOf(invitation)))))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("COMMON_002"));
         }
@@ -451,7 +451,7 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(post("/api/v1/committee-invitations/accept-by-token")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteToken", invitation.getInviteToken()))))
+                                    Map.of("inviteToken", plaintextOf(invitation)))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.userId").value(orgOnlyId));
         }
@@ -465,7 +465,7 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(post("/api/v1/committee-invitations/decline-by-token")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteToken", invitation.getInviteToken()))))
+                                    Map.of("inviteToken", plaintextOf(invitation)))))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("COMMON_002"));
         }
@@ -479,7 +479,7 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(post("/api/v1/committee-invitations/decline-by-token")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteToken", invitation.getInviteToken()))))
+                                    Map.of("inviteToken", plaintextOf(invitation)))))
                     .andExpect(status().isOk());
         }
     }
@@ -657,15 +657,26 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
                 .build());
     }
 
+    /** 発行時の平文（DB にはハッシュだけを置くため、受諾・辞退の要求で使う平文は招集ごとにここへ控える）。 */
+    private final Map<Long, String> plaintextByInvitationId = new java.util.concurrent.ConcurrentHashMap<>();
+
     private CommitteeInvitationEntity insertInvitation(Long committeeId, Long inviteeUserId, Long invitedBy) {
-        return committeeInvitationRepository.save(CommitteeInvitationEntity.builder()
+        com.mannschaft.app.common.token.IssuedToken issued =
+                new com.mannschaft.app.common.token.SecretTokenVault().issueBase64Url();
+        CommitteeInvitationEntity saved = committeeInvitationRepository.save(CommitteeInvitationEntity.builder()
                 .committeeId(committeeId)
                 .inviteeUserId(inviteeUserId)
                 .proposedRole(CommitteeRole.MEMBER)
-                .inviteToken(UUID.randomUUID().toString())
+                .inviteTokenHash(issued.hash())
                 .invitedBy(invitedBy)
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build());
+        plaintextByInvitationId.put(saved.getId(), issued.plaintext());
+        return saved;
+    }
+
+    private String plaintextOf(CommitteeInvitationEntity invitation) {
+        return plaintextByInvitationId.get(invitation.getId());
     }
 
     /**
