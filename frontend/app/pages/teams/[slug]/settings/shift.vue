@@ -8,6 +8,7 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { getShiftSettings, updateShiftSettings } = useTeamShiftSettingsApi()
 
 const settings = ref<TeamShiftSettings | null>(null)
@@ -32,7 +33,9 @@ async function loadSettings() {
       reminder24hEnabled: res.reminder24hEnabled,
       reminder12hEnabled: res.reminder12hEnabled,
     }
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('settings.notification.load_error'))
   } finally {
     loading.value = false

@@ -29,7 +29,8 @@ interface TicketsVm {
   form: { name: string, price: number }
   handleCreate: () => Promise<void>
 }
-const forbidden = (msg: string) => ({ statusCode: 403, data: { error: { code: 'TEAM_999', message: msg } } })
+// 403/404 は共通の「見つかりません」へ振り分ける（CMP-261125-1108）ため、BE message 表示の検証には 422 を使う
+const forbidden = (msg: string) => ({ statusCode: 422, data: { error: { code: 'TEAM_999', message: msg } } })
 const ok = { data: [] }
 function tr(key: string): string {
   return useNuxtApp().$i18n.t(key)
@@ -59,13 +60,13 @@ describe('CMP-261117-2159 回数券ページのトースト多言語化', () => 
     await useNuxtApp().$i18n.setLocale('en')
   })
 
-  it('AC-9a: 商品取得が code+英語message の403で失敗したらそのmessageを出す', async () => {
+  it('AC-9a: 商品取得が code+英語message の422で失敗したらそのmessageを出す', async () => {
     mocks.getProducts.mockRejectedValue(forbidden('Forbidden products (BE)'))
     await mountPage()
     expect(lastDetail()).toBe('Forbidden products (BE)')
   })
 
-  it('AC-9a: 発行済み取得が code+英語message の403で失敗したらそのmessageを出す', async () => {
+  it('AC-9a: 発行済み取得が code+英語message の422で失敗したらそのmessageを出す', async () => {
     mocks.getBooks.mockRejectedValue(forbidden('Forbidden books (BE)'))
     await mountPage()
     expect(lastDetail()).toBe('Forbidden books (BE)')

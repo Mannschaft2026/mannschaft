@@ -10,6 +10,7 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const onboardingApi = useOnboardingApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug)
 
 const templates = ref<OnboardingTemplate[]>([])
@@ -33,7 +34,9 @@ async function loadData() {
     if (isAdmin.value) {
       presets.value = await onboardingApi.listPresets()
     }
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error('データの取得に失敗しました')
   } finally {
     loading.value = false
