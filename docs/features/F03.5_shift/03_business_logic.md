@@ -267,7 +267,7 @@ Facadeのスコープ認可（越境は不在と同じ404、SUPPORTER等は403�
       （依頼内容に従って人を差し替え・別日へ移動・スロットから外す等）
    b. 作業完了後に「この依頼を受諾した」ボタンで PATCH /review を action=ACCEPTED で呼ぶ
    c. shift_change_requests.status = ACCEPTED, reviewed_by, reviewed_at, admin_note を記録
-   d. 依頼者にプッシュ通知（「変更依頼が受諾されました」）
+   d. 依頼者にプッシュ通知（「変更依頼が承認されました」）
    e. 監査ログ: SHIFT_CHANGE_REQUEST_REVIEWED (ACCEPTED)
 
    ＜REJECTED のケース＞
