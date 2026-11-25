@@ -72,11 +72,19 @@ const {
 // 子ページの主 API が 403/404 だったとき、または組織詳細自体が 403/404 だったとき、
 // 本文を共通「見つかりません」に置き換える（CMP-261125-1108。シェルのタブ・戻る導線は残す）
 const {
-  notFound: childNotFound,
+  notFound: childMarkedNotFound,
   reset: resetChildNotFound,
   clear: clearChildNotFound,
   resetUnlessHydrating: resetChildNotFoundOnSetup,
+  releaseOnUnmount: releaseChildNotFound,
+  isRouteDenied,
 } = useScopeNotFound()
+/**
+ * 子ページ部分を ScopeNotFound に置き換えるか。子ページの主 API の 403/404（markIfDenied）か、
+ * ルートミドルウェア（org-role-guard 等）が描画前にこのパスを拒否したとき。後者では子ページを描画しない
+ * （管理 API を呼ばせず、トーストも出させない）。
+ */
+const childNotFound = computed(() => childMarkedNotFound.value || isRouteDenied(route.path))
 // マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
 resetChildNotFoundOnSetup()
 const showScopeNotFound = computed(() => childNotFound.value || detailDenied.value)
@@ -306,6 +314,9 @@ async function loadShellData() {
     if (!isCurrent()) return
     if (redirected) return
   }
+  // 詳細が 403/404（非所属・権限なし・不存在）なら本文は ScopeNotFound で、補助取得の結果は使わない。
+  // 呼ぶと 403 が handleApiError に流れ、トーストとエラー報告が出る（実機 NG・AC-5）ので呼ばない
+  if (detailDenied.value) return
   await Promise.all([
     fetchOrgTeams(),
     isAdmin.value ? fetchPermissionGroups() : Promise.resolve(),
@@ -330,7 +341,9 @@ async function loadShellData() {
 // 破棄されたインスタンスの解決待ち応答を失効させる。
 onBeforeUnmount(() => {
   ++loadShellDataSeq
-  resetChildNotFound()
+  // 無条件の reset にしない。スコープ切替・ブラウザバックでは新しいシェルと子ページの setup が
+  // 本インスタンスの破棄より先に走るため、reset すると新しい子ページの 403 を捨ててしまう（AC-8）
+  releaseChildNotFound()
 })
 
 // シェル対象ルートに居るときだけデータをロードする。

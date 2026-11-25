@@ -48,11 +48,19 @@ const { handleApiError } = useErrorHandler()
 const { templateLabel, visibilityLabel } = useScopeLabels()
 // 子ページの主 API が 403/404 だったとき本文を共通「見つかりません」に置き換える（CMP-261125-1108）
 const {
-  notFound: childNotFound,
+  notFound: childMarkedNotFound,
   reset: resetChildNotFound,
   clear: clearChildNotFound,
   resetUnlessHydrating: resetChildNotFoundOnSetup,
+  releaseOnUnmount: releaseChildNotFound,
+  isRouteDenied,
 } = useScopeNotFound()
+/**
+ * 子ページ部分を ScopeNotFound に置き換えるか。子ページの主 API の 403/404（markIfDenied）か、
+ * ルートミドルウェア（org-role-guard 等）が描画前にこのパスを拒否したとき。後者では子ページを描画しない
+ * （管理 API を呼ばせず、トーストも出させない）。
+ */
+const childNotFound = computed(() => childMarkedNotFound.value || isRouteDenied(route.path))
 // マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
 resetChildNotFoundOnSetup()
 /** シェル自身の詳細取得が 403/404 だった（slug 変更・取得成功・再試行で解除）。 */
@@ -398,6 +406,9 @@ async function loadShellData() {
   }, SHELL_WATCHDOG_MS)
   try {
     await Promise.all([fetchTeam(), loadPermissions()])
+    // 詳細が 403/404（非所属・権限なし・不存在）なら本文は ScopeNotFound で、補助取得の結果は使わない
+    // （組織シェルと同じ。拒否された相手の補助 API を叩いてトースト・エラー報告を出さない）
+    if (shellDenied.value) return
     await fetchFollowStatus()
     await fetchJoinRequestStatus()
     // ウィジェット可視性設定と予約モジュール有効フラグを並列取得。
@@ -433,7 +444,9 @@ function retryShellData() {
 onBeforeUnmount(() => {
   // 破棄されたインスタンスの解決待ち応答を失効させる。
   ++fetchTeamSeq
-  resetChildNotFound()
+  // 無条件の reset にしない。スコープ切替・ブラウザバックでは新しいシェルと子ページの setup が
+  // 本インスタンスの破棄より先に走るため、reset すると新しい子ページの 403 を捨ててしまう（AC-8）
+  releaseChildNotFound()
   clearShellWatchdog()
 })
 

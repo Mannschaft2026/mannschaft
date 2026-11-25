@@ -16,6 +16,7 @@ import { useScopeNotFound } from '~/composables/useScopeNotFound'
  */
 beforeEach(() => {
   useScopeNotFound().reset()
+  useState<string | null>('scope-not-found-denied-path').value = null
 })
 
 describe('useScopeNotFound（CMP-261125-1108）', () => {
@@ -129,5 +130,44 @@ describe('useScopeNotFound（CMP-261125-1108）', () => {
     expect(page.notFound.value).toBe(false)
     expect(page.markIfDenied({ statusCode: 403 })).toBe(true)
     expect(page.notFound.value).toBe(true)
+  })
+
+  it('AC-8 スコープ切替: 新しいシェルが reset した後に古いシェルが破棄されても、新しい画面の判定を失効させない', () => {
+    // Nuxt の NuxtPage（Suspense）は「新しいシェル＋子ページの setup → 古いシェルの破棄」の順に動く
+    const oldShell = useScopeNotFound()
+    oldShell.reset()
+    const newShell = useScopeNotFound()
+    newShell.resetUnlessHydrating()
+    const newChild = useScopeNotFound()
+
+    oldShell.releaseOnUnmount()
+
+    expect(newChild.markIfDenied({ statusCode: 403 })).toBe(true)
+    expect(newChild.notFound.value).toBe(true)
+  })
+
+  it('後続のシェルが無いまま破棄されたシェルは、世代を進めて notFound を下ろす（シェル外への遷移）', () => {
+    const shell = useScopeNotFound()
+    shell.reset()
+    const child = useScopeNotFound()
+    child.markIfDenied({ statusCode: 403 })
+
+    shell.releaseOnUnmount()
+
+    expect(child.notFound.value).toBe(false)
+    // 破棄後に届いた古い 403 は立てない
+    expect(child.markIfDenied({ statusCode: 403 })).toBe(true)
+    expect(child.notFound.value).toBe(false)
+  })
+
+  it('ルート単位の拒否（ミドルウェア用）: 拒否したパスだけ isRouteDenied が true。reset では消えない', () => {
+    const scope = useScopeNotFound()
+    scope.setRouteDenied('/organizations/x/analytics', true)
+    expect(scope.isRouteDenied('/organizations/x/analytics')).toBe(true)
+    expect(scope.isRouteDenied('/organizations/y/analytics')).toBe(false)
+    scope.reset()
+    expect(useScopeNotFound().isRouteDenied('/organizations/x/analytics')).toBe(true)
+    scope.setRouteDenied('/organizations/x/analytics', false)
+    expect(scope.isRouteDenied('/organizations/x/analytics')).toBe(false)
   })
 })

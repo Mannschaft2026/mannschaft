@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   error: vi.fn(),
   notifyError: vi.fn(),
+  /** シェルの補助取得（所属チーム・上位/下位組織・フォロー状態・モジュール）。スコープ拒否後は呼ばない */
+  aux: vi.fn(async () => ({ data: [] })),
   featureError: { value: null as unknown },
   /** useState の代替（happy-dom 環境は Nuxt アプリが無い）。キー単位で同じ ref を返す */
   states: new Map<string, unknown>(),
@@ -48,7 +50,7 @@ mockNuxtImport('useSlugRedirect', () => () => ({ resolveSlug: mocks.resolve }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getDetail }))
 mockNuxtImport('useOrganizationApi', () => () => ({
   getOrganization: mocks.getDetail,
-  getTeamsInOrg: async () => ({ data: [] }),
+  getTeamsInOrg: mocks.aux,
   getPermissionGroups: async () => ({ data: [] }),
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.error }))
@@ -79,7 +81,7 @@ mockNuxtImport('useScopeFollowWiring', () => () => ({
   followLoading: ref(false),
   followPermissionSyncError: ref(false),
   showCancelSupporterConfirm: ref(false),
-  fetchFollowStatus: async () => {},
+  fetchFollowStatus: mocks.aux,
 }))
 mockNuxtImport('useJoinRequestSelfStatus', () => () => ({
   joinRequestStatus: ref('NONE'),
@@ -90,10 +92,10 @@ mockNuxtImport('useOrgHierarchy', () => () => ({
   children: ref([]),
   loading: ref(false),
   childrenHasNext: ref(false),
-  fetchAncestors: async () => {},
-  fetchChildren: async () => {},
+  fetchAncestors: mocks.aux,
+  fetchChildren: mocks.aux,
 }))
-mockNuxtImport('useModuleApi', () => () => ({ getTeamModules: async () => ({ data: [] }) }))
+mockNuxtImport('useModuleApi', () => () => ({ getTeamModules: mocks.aux }))
 
 type ScopeNotFoundApi = {
   notFound: { value: boolean }
@@ -390,5 +392,62 @@ for (const scope of ['organizations', 'teams'] as const) {
       expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
       wrapper.unmount()
     })
+
+    it('SNF-S11（AC-8 実機 NG）: スコープ切替で新しいシェルの後に古いシェルが破棄されても、新しい子ページの 403 で置き換える', async () => {
+      // シェルは slug ごとに別インスタンス（NuxtPage のキーが slug を含む）。Suspense は
+      // 「新しいシェル＋子ページの setup → 古いシェルの破棄」の順に動く（ブラウザバックでも同じ）
+      setRoute(scope, 'own', 'timetable')
+      const oldShell = mountShell(scope)
+      await settle()
+
+      setRoute(scope, 'other', 'timetable')
+      const newShell = mountShell(scope)
+      // 新しい子ページの setup（主 API 応答待ち）
+      const child = await scopeNotFound()
+      oldShell.unmount()
+      await settle()
+
+      expect(child.markIfDenied({ statusCode: 403 })).toBe(true)
+      await settle()
+
+      expect(newShell.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+      expect(newShell.find('[data-testid="child-page"]').exists()).toBe(false)
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(mocks.notifyError).not.toHaveBeenCalled()
+      newShell.unmount()
+    })
+
+    it('SNF-S12: シェルの詳細取得が 403 なら、補助取得（所属チーム・上位/下位組織・フォロー状態等）を呼ばない', async () => {
+      setRoute(scope, 'secret')
+      mocks.getDetail.mockRejectedValueOnce({ response: { status: 403 }, statusCode: 403 })
+      const wrapper = mountShell(scope)
+      await settle()
+
+      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+      expect(mocks.aux).not.toHaveBeenCalled()
+      expect(mocks.error).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    for (const tail of ['analytics', 'info'] as const) {
+      it(`SNF-S13: ミドルウェアがルートを拒否したら（${tail}）、子ページを描画せず ScopeNotFound を出す`, async () => {
+        setRoute(scope, 'secret', tail)
+        const state = (await scopeNotFound()) as ScopeNotFoundApi & {
+          setRouteDenied: (path: string, denied: boolean) => void
+        }
+        state.setRouteDenied(`/${scope}/secret/${tail}`, true)
+        const wrapper = mountShell(scope)
+        await settle()
+
+        expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
+
+        // 拒否されていない別ページへ移ると通常表示
+        setRoute(scope, 'secret', 'members')
+        await settle()
+        expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
+        wrapper.unmount()
+      })
+    }
   })
 }
