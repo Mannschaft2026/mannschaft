@@ -103,8 +103,9 @@ class ScopeContentAccessGateTruthTableTest {
     @BeforeEach
     void setUp() {
         service = new DefaultAccessControlService(userRoleRepository, roleRepository, null, membershipRepository,
-                null, null, new RoleScopeRoleQuery(userRoleRepository), membersOnlyTeamQuery,
+                null, null, new RoleScopeRoleQuery(userRoleRepository),
                 List.of(new FamilyCareLinkQuery(null)), List.of(new GdprLastAdminWithdrawalErrorProvider()));
+        service.setMembersOnlyTeamQuery(membersOnlyTeamQuery);
         for (Viewer v : Viewer.values()) {
             if (v.userId == null) {
                 continue;

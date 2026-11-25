@@ -14,7 +14,6 @@ com.mannschaft.app.organization.service.OrganizationExtendedProfileService	対�
 com.mannschaft.app.role.service.MembershipInviteService	対象外（権限管理）: 招待の管理操作。入口は入口表（PR-E）
 com.mannschaft.app.role.service.OwnershipTransferOfferService	対象外（権限管理）: オーナー委譲の管理操作
 com.mannschaft.app.role.service.PermissionGroupService	対象外（権限管理）: 権限グループの管理操作
-com.mannschaft.app.village.service.VillageService	対象外: VILLAGE スコープ（チームではない）
 com.mannschaft.app.team.service.TeamSearchService	対象外: チーム自身の可視性述語（既存）で検索結果を絞る。チームの中身を返さない
 com.mannschaft.app.team.controller.OrganizationTeamSearchController	対象外: 組織配下のチーム検索。チーム自身の可視性述語（既存）で絞る
 com.mannschaft.app.notification.service.NotificationPreferenceService	対象外: 本人の通知設定（個人設定）。チームの中身を返さない

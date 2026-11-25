@@ -86,7 +86,7 @@ class AccessControlServiceTest {
     void stubDefaultActiveMembership() {
         accessControlService = new DefaultAccessControlService(
                 userRoleRepository, roleRepository, roleService, membershipRepository, null,
-                organizationMembershipService, new RoleScopeRoleQuery(userRoleRepository), null,
+                organizationMembershipService, new RoleScopeRoleQuery(userRoleRepository),
                 List.of(new FamilyCareLinkQuery(userCareLinkRepository)),
                 List.of(new GdprLastAdminWithdrawalErrorProvider()));
         lenient().doReturn(true).when(userRoleRepository).isActiveUser(anyLong());
