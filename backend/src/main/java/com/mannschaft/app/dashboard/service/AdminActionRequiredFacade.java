@@ -1,11 +1,13 @@
 package com.mannschaft.app.dashboard.service;
 
+import com.mannschaft.app.auth.service.PendingInviteAdminQueryService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.PendingAggregate;
 import com.mannschaft.app.dashboard.dto.AdminActionRequiredResponse;
 import com.mannschaft.app.matching.service.MatchingAdminQueryService;
 import com.mannschaft.app.payment.service.PaymentAdminQueryService;
 import com.mannschaft.app.reservation.service.ReservationAdminQueryService;
+import com.mannschaft.app.role.service.InviteIssuerPolicy;
 import com.mannschaft.app.shift.service.ShiftRequestAdminQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +30,8 @@ import java.util.function.Supplier;
  * ドメイン横断で集約する。集約対象ドメインは<b>スコープ別に動的</b>に決まる（設計書 03 §3.2）:</p>
  * <ul>
  *   <li>team: 予約（RESERVATION）/シフト（SHIFT_REQUEST）/マッチング（MATCHING）</li>
- *   <li>organization: 未収請求（PAYMENT）のみ</li>
+ *   <li>organization: 未収請求（PAYMENT）</li>
+ *   <li>共通: 再招待依頼（INVITE_REISSUE）。招待権限者にだけ含める（CMP-261107-1833 PR3）</li>
  * </ul>
  *
  * <p><b>認可</b>: 入口で {@link AccessControlService#checkAdminOrAbove} を必ず通す（二重防御の 1 段目・
@@ -55,6 +58,8 @@ public class AdminActionRequiredFacade {
     private final ShiftRequestAdminQueryService shiftRequestAdminQueryService;
     private final MatchingAdminQueryService matchingAdminQueryService;
     private final PaymentAdminQueryService paymentAdminQueryService;
+    private final PendingInviteAdminQueryService pendingInviteAdminQueryService;
+    private final InviteIssuerPolicy inviteIssuerPolicy;
 
     /**
      * 指定スコープの管理者向け横断「承認待ち」集約を取得する。
@@ -73,7 +78,7 @@ public class AdminActionRequiredFacade {
         accessControlService.checkAdminOrAbove(userId, scopeId, scopeType);
 
         // ② スコープ別に有効なドメインのタスクだけを構築（§3.2）。
-        List<DomainTask> tasks = buildTasks(scopeType, scopeId, scopeSlug, previewSize);
+        List<DomainTask> tasks = buildTasks(userId, scopeType, scopeId, scopeSlug, previewSize);
 
         // ③ 各タスクを並行実行し、縮退ヘルパーで合成。
         List<CompletableFuture<AdminActionRequiredResponse.DomainSection>> futures = tasks.stream()
@@ -103,7 +108,20 @@ public class AdminActionRequiredFacade {
     // スコープ別ドメインタスク構築（§3.2）
     // ─────────────────────────────────────────────
 
-    private List<DomainTask> buildTasks(String scopeType, Long scopeId, String scopeSlug, int previewSize) {
+    private List<DomainTask> buildTasks(Long userId, String scopeType, Long scopeId, String scopeSlug,
+                                        int previewSize) {
+        List<DomainTask> tasks = new ArrayList<>(scopeTasks(scopeType, scopeId, scopeSlug, previewSize));
+        // 再招待依頼（INVITE_REISSUE）は招待権限者（ADMIN、または INVITE_MEMBERS を持つ DEPUTY_ADMIN）にだけ含める
+        // （CMP-261107-1833 PR3 設計 b・i）。権限の無い DEPUTY には欄も件数も出さない。
+        if (inviteIssuerPolicy.canIssue(userId, scopeId, scopeType)) {
+            String route = PendingInviteAdminQueryService.reissueRequestsRoute(scopeType, scopeSlug);
+            tasks.add(new DomainTask("INVITE_REISSUE", route,
+                    () -> pendingInviteAdminQueryService.reissueRequestsFor(scopeType, scopeId, scopeSlug, previewSize)));
+        }
+        return tasks;
+    }
+
+    private List<DomainTask> scopeTasks(String scopeType, Long scopeId, String scopeSlug, int previewSize) {
         if ("TEAM".equals(scopeType)) {
             return List.of(
                     new DomainTask("RESERVATION",

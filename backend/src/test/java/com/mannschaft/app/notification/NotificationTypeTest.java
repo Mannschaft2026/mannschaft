@@ -12,8 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NotificationTypeTest {
 
     @Test
-    @DisplayName("通知種別が全て定義されている（既存49種別 + MODULE_EVENT_NOTICE + INVITE_REISSUE_REQUESTED = 51）")
-    void 全51種別が定義() {
+    @DisplayName("通知種別が全て定義されている（既存49種別 + MODULE_EVENT_NOTICE + INVITE_REISSUE_REQUESTED + INVITE_REISSUED/_DECLINED = 53）")
+    void 全53種別が定義() {
         // 内訳: 設計書§5 の通知種別（F03.4.5 §6.1 の RESERVATION_WAITLIST_OPENING を含む 25 種別）
         //       ＋ TODO_HANDED_OFF（後付け）＋ F20.3 ベータ特典の BETA_PERK_GRANTED/_REVOKED/_EXTENDED/
         //       _REVIEW_FLAGGED（4 種）＋ F03.4.5 §6.3 の RESERVATION_PENDING_EXPIRED（仮押さえ自動失効）
@@ -25,8 +25,9 @@ class NotificationTypeTest {
         //       ＋ F01.2.1 §6.7 チーム加盟の TEAM_ORG_*（9種）
         //       ＋ L1-M の MODULE_EVENT_NOTICE（1種）
         //       ＋ CMP-261107-1833 招待付き新規登録の保留承認の INVITE_REISSUE_REQUESTED（招待権限者への再発行依頼、1種）
-        //       = 計 51 種別。
-        assertThat(NotificationType.values()).hasSize(51);
+        //       ＋ CMP-261107-1833 PR3 依頼者への INVITE_REISSUED / INVITE_REISSUE_DECLINED（2種）
+        //       = 計 53 種別。
+        assertThat(NotificationType.values()).hasSize(53);
         assertThat(NotificationType.values())
                 .contains(NotificationType.BETA_PERK_GRANTED, NotificationType.BETA_PERK_REVOKED,
                         NotificationType.BETA_PERK_EXTENDED, NotificationType.BETA_PERK_REVIEW_FLAGGED,

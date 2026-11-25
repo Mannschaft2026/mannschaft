@@ -19,6 +19,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class InviteReissueRecipientResolver {
 
+    /** 招待管理画面の再招待依頼の欄（CMP-261107-1833 PR3 設計 h）。 */
+    static final String REISSUE_REQUESTS_PATH = "/invites#reissue-requests";
+
     private final RoleService roleService;
     private final InviteIssuerPolicy policy;
     private final TeamService teamService;
@@ -33,15 +36,15 @@ public class InviteReissueRecipientResolver {
                 .toList();
     }
 
-    /** 招待管理画面のパス（{@code /teams/{slug}/invites} 等）。招待先が引けなければ空。 */
+    /** 招待管理画面の再招待依頼の欄（{@code /teams/{slug}/invites#reissue-requests} 等）。招待先が引けなければ空。 */
     public Optional<String> findInviteManagementPath(String scopeType, Long scopeId) {
         if ("TEAM".equals(scopeType)) {
             return teamService.findJoinabilitySummary(scopeId)
                     .map(TeamService.JoinabilitySummary::slug)
-                    .map(slug -> "/teams/" + slug + "/invites");
+                    .map(slug -> "/teams/" + slug + REISSUE_REQUESTS_PATH);
         }
         return organizationService.findJoinabilitySummary(scopeId)
                 .map(OrganizationService.JoinabilitySummary::slug)
-                .map(slug -> "/organizations/" + slug + "/invites");
+                .map(slug -> "/organizations/" + slug + REISSUE_REQUESTS_PATH);
     }
 }

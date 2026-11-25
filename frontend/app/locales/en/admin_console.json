@@ -83,7 +83,8 @@
           "RESERVATION": "Reservations",
           "SHIFT_REQUEST": "Shifts",
           "MATCHING": "Matching",
-          "PAYMENT": "Payments"
+          "PAYMENT": "Payments",
+          "INVITE_REISSUE": "Re-invitation requests"
         }
       },
       "payments": {

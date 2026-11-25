@@ -31,7 +31,7 @@ interface RawPersonalAdminActionRequiredResponse {
 
 // camelCase に変換した型
 export interface PersonalAdminActionItem {
-  domain: 'RESERVATION' | 'SHIFT_REQUEST' | 'MATCHING' | 'PAYMENT'
+  domain: 'RESERVATION' | 'SHIFT_REQUEST' | 'MATCHING' | 'PAYMENT' | 'INVITE_REISSUE'
   scopeType: 'TEAM' | 'ORGANIZATION'
   scopeId: number
   scopeSlug: string
