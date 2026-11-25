@@ -127,13 +127,15 @@ async function handleRenameCredential() {
   }
 }
 
+// 登録ボタン押下: 本人確認を先に済ませてからデバイス名ダイアログを開く（モーダル on モーダルを避ける）
+async function startPasskeyRegister() {
+  if (!(await passkeyReauth.ensureReauthenticated())) return
+  registerDialog.value = true
+}
+
 async function handlePasskeyRegister() {
   const deviceName = newPasskeyName.value.trim() || undefined
-  const outcome = await passkeyReauth.runWithReauth(async (): Promise<PasskeyManageOutcome> => {
-    if (await registerPasskey(deviceName)) return 'done'
-    return registerErrorCode.value === ERROR_REAUTH_REQUIRED ? 'reauth_required' : 'failed'
-  })
-  if (outcome === 'done') {
+  if (await registerPasskey(deviceName)) {
     registerDialog.value = false
     newPasskeyName.value = ''
     notification.success(t('settings.security.webauthn.register_success'))
@@ -144,7 +146,12 @@ async function handlePasskeyRegister() {
     } catch {
       // 再取得失敗は非致命的。次回リロード時に反映される。
     }
-  } else if (outcome === 'failed' && registerError.value) {
+  } else if (registerErrorCode.value === ERROR_REAUTH_REQUIRED) {
+    // 再認証が期限切れ（5分）等。デバイス名ダイアログを閉じてから本人確認をやり直す（入力した名前は残す）
+    registerDialog.value = false
+    notification.warn(t('settings.security.webauthn.reauth.expired'))
+    await startPasskeyRegister()
+  } else if (registerError.value) {
     notification.error(t('settings.security.webauthn.register_error'))
   }
 }
@@ -162,6 +169,7 @@ async function handlePasskeyRegister() {
       :busy="passkeyReauth.busy.value"
       :error-message="passkeyReauth.errorMessage.value"
       :reauth-email="passkeyReauth.reauthEmail.value"
+      :two-fa-method="passkeyReauth.twoFaMethod.value"
       @submit="passkeyReauth.submit"
       @send-email="passkeyReauth.sendEmail"
       @update:visible="passkeyReauth.onDialogVisibleChange"
@@ -185,6 +193,7 @@ async function handlePasskeyRegister() {
         @delete-credential="handleDeleteCredential"
         @open-rename-dialog="openRenameDialog"
         @rename-credential="handleRenameCredential"
+        @passkey-register-start="startPasskeyRegister"
         @passkey-register="handlePasskeyRegister"
         @update:rename-dialog="renameDialog = $event"
         @update:new-device-name="newDeviceName = $event"

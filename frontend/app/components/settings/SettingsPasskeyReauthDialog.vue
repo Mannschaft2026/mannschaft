@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MfaEmailSendResponse, PasskeyManageReauthMethod, PasskeyManageReauthRequest } from '~/composables/useAuthApi'
+import { passkeyReauthNeedsFactor, passkeyReauthNeedsPassword } from '~/utils/passkeyReauthMethod'
 
 /**
  * パスキーの登録・削除の前に挟む本人確認ダイアログ（CMP-261021-1338 B5/B9）。
@@ -7,6 +8,7 @@ import type { MfaEmailSendResponse, PasskeyManageReauthMethod, PasskeyManageReau
  * 手段は BE の GET /reauthenticate-method で決まり、画面側では選ばせない。
  * - PASSWORD: パスワード
  * - PASSWORD_AND_SECOND_FACTOR: パスワード + 2FA 要素（TOTP / 本人確認メールOTP / バックアップコード）
+ * - SECOND_FACTOR: 2FA 要素のみ（パスワードを持たない SNS ログイン + 2FA 有効の利用者。パスワード欄は出さない）
  * - EMAIL_OTP: 本人確認メールOTP（パスワードも 2FA も無い SNS ログインのみの利用者）
  * PASSKEY（パスキー保有者）はこのダイアログを使わず、OS の認証ダイアログ（UV 必須）で再認証する。
  */
@@ -20,6 +22,8 @@ const props = defineProps<{
   errorMessage: string
   /** 本人確認メールOTP の送信結果（未送信なら null）。 */
   reauthEmail: MfaEmailSendResponse | null
+  /** 利用者の 2FA 方式（GET /2fa/status）。使えない 2FA 要素を選択肢に出さないために使う。 */
+  twoFaMethod?: 'TOTP' | 'EMAIL'
 }>()
 
 const emit = defineEmits<{
@@ -36,19 +40,30 @@ const code = ref('')
 const resendRemaining = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
 
-const needsPassword = computed(() => props.method !== 'EMAIL_OTP')
-const needsFactor = computed(() => props.method !== 'PASSWORD')
+const needsPassword = computed(() => passkeyReauthNeedsPassword(props.method))
+const needsFactor = computed(() => passkeyReauthNeedsFactor(props.method))
 /** EMAIL_OTP 手段のコードは常にメールOTP。2FA 要素と併用するときは選択された要素。 */
 const activeFactor = computed<Factor>(() => (props.method === 'EMAIL_OTP' ? 'EMAIL' : factor.value))
 const isOtpFactor = computed(() => activeFactor.value !== 'BACKUP_CODE')
-const showFactorSelect = computed(() => props.method === 'PASSWORD_AND_SECOND_FACTOR')
+const showFactorSelect = computed(() => props.method === 'PASSWORD_AND_SECOND_FACTOR' || props.method === 'SECOND_FACTOR')
 const showEmailSend = computed(() => needsFactor.value && activeFactor.value === 'EMAIL')
 
-const factorOptions = computed(() => [
-  { label: t('settings.security.two_fa.reauth.method_totp'), value: 'TOTP' as Factor },
-  { label: t('settings.security.two_fa.reauth.method_email'), value: 'EMAIL' as Factor },
-  { label: t('settings.security.two_fa.reauth.method_backup'), value: 'BACKUP_CODE' as Factor },
-])
+/**
+ * 2FA 方式が EMAIL なら TOTP は出さない。SECOND_FACTOR では BE がメールOTP を「2FA 方式が EMAIL のとき」だけ
+ * 要素として受けるため、TOTP 方式の利用者にはメールを出さない（2FA 方式が不明なら全て出す）。
+ */
+const initialFactor = computed<Factor>(() => (props.twoFaMethod === 'EMAIL' ? 'EMAIL' : 'TOTP'))
+const factorOptions = computed(() => {
+  const options: { label: string, value: Factor }[] = []
+  if (props.twoFaMethod !== 'EMAIL') {
+    options.push({ label: t('settings.security.two_fa.reauth.method_totp'), value: 'TOTP' })
+  }
+  if (!(props.method === 'SECOND_FACTOR' && props.twoFaMethod === 'TOTP')) {
+    options.push({ label: t('settings.security.two_fa.reauth.method_email'), value: 'EMAIL' })
+  }
+  options.push({ label: t('settings.security.two_fa.reauth.method_backup'), value: 'BACKUP_CODE' })
+  return options
+})
 
 const normalizedCode = computed(() => (isOtpFactor.value ? code.value : code.value.replace(/[\s-]/g, '')))
 const codeReady = computed(() => (isOtpFactor.value ? /^\d{6}$/.test(code.value) : normalizedCode.value.length > 0))
@@ -78,7 +93,7 @@ watch(
       return
     }
     password.value = ''
-    factor.value = 'TOTP'
+    factor.value = initialFactor.value
     code.value = ''
     resendRemaining.value = 0
   },

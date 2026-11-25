@@ -57,6 +57,14 @@ for (const settingsPath of ['/settings/security', '/settings/account']) {
       const registerButton = page.getByRole('button', { name: 'パスキーを登録', exact: true })
       const registerButtonBounds = await registerButton.boundingBox()
       await registerButton.click()
+      // 登録前の本人確認（CMP-261021-1338）が先。このユーザーはパスキー未保有・2FA 無効なのでパスワード手段。
+      // 本人確認ダイアログとデバイス名ダイアログは重ならない（モーダル on モーダルにしない）
+      const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
+      await expect(reauthDialog, '登録前に本人確認ダイアログが開くこと').toBeVisible()
+      await expect(page.getByRole('dialog', { name: 'パスキーを登録' })).toHaveCount(0)
+      await reauthDialog.locator('#passkeyReauthPassword').fill(password)
+      await reauthDialog.getByRole('button', { name: '本人確認する', exact: true }).click()
+      await expect(reauthDialog).toBeHidden()
       const dialog = page.getByRole('dialog', { name: 'パスキーを登録' })
       await expect(dialog).toBeVisible()
       await dialog.evaluate(async node => {
@@ -71,11 +79,6 @@ for (const settingsPath of ['/settings/security', '/settings/account']) {
       const registered = page.waitForResponse(response => response.url().includes('/webauthn/register/complete'))
       registrationAttempted = true
       await dialog.getByRole('button', { name: '登録する', exact: true }).click()
-      // 登録前の本人確認（CMP-261021-1338）。このユーザーはパスキー未保有・2FA 無効なのでパスワード手段
-      const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
-      await expect(reauthDialog, '登録前に本人確認ダイアログが開くこと').toBeVisible()
-      await reauthDialog.locator('#passkeyReauthPassword').fill(password)
-      await reauthDialog.getByRole('button', { name: '本人確認する', exact: true }).click()
       expect((await registered).ok()).toBe(true)
       registrationConfirmed = true
       await expect(dialog).not.toBeVisible()

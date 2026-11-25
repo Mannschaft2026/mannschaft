@@ -25,6 +25,8 @@ defineEmits<{
   deleteCredential: [id: number]
   openRenameDialog: [cred: WebAuthnCredentialResponse]
   renameCredential: []
+  /** 登録ボタン押下。本人確認（再認証）を先に済ませてからデバイス名ダイアログを開く（モーダル on モーダルを避ける）。 */
+  passkeyRegisterStart: []
   passkeyRegister: []
   'update:renameDialog': [value: boolean]
   'update:newDeviceName': [value: string]
@@ -122,7 +124,8 @@ function deviceLabel(userAgent: string | null): string {
         icon="pi pi-key"
         class="min-h-11"
         :loading="isRegisteringPasskey"
-        @click="$emit('update:registerDialog', true)"
+        data-testid="passkey-register-button"
+        @click="$emit('passkeyRegisterStart')"
       />
     </div>
     <div v-if="credentials.length === 0" class="py-4 text-center text-surface-400">

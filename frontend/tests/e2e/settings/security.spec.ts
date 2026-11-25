@@ -147,7 +147,7 @@ async function mockSecurityApis(page: import('@playwright/test').Page) {
  */
 async function mockPasskeyManageReauth(
   page: import('@playwright/test').Page,
-  method: 'PASSKEY' | 'PASSWORD' | 'PASSWORD_AND_SECOND_FACTOR' | 'EMAIL_OTP',
+  method: 'PASSKEY' | 'PASSWORD' | 'PASSWORD_AND_SECOND_FACTOR' | 'SECOND_FACTOR' | 'EMAIL_OTP',
   opts: { factorStatus?: number; factorCode?: string } = {},
 ) {
   await page.route('**/api/v1/auth/webauthn/reauthenticate-method', async (route) => {
@@ -259,13 +259,17 @@ test.describe('WEBAUTHN-UI-001〜005: パスキー登録・削除UI（登録・�
     await waitForHydration(page)
 
     await page.getByRole('button', { name: /パスキーを登録/i }).click()
-    await page.getByRole('button', { name: /登録する/i }).click()
 
-    // 本人確認ダイアログでパスワードを入力して再認証する
+    // 本人確認が先。この間デバイス名ダイアログは開かない（モーダル on モーダルにしない）
     const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
     await expect(reauthDialog).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('dialog', { name: /パスキーを登録/ })).toHaveCount(0)
     await reauthDialog.locator('#passkeyReauthPassword').fill('TestPass2026!')
     await reauthDialog.getByRole('button', { name: '本人確認する' }).click()
+
+    // 本人確認が済んでからデバイス名ダイアログが開く
+    await expect(reauthDialog).toBeHidden({ timeout: 5_000 })
+    await page.getByRole('button', { name: /登録する/i }).click()
 
     // トースト確認
     await expect(page.getByText(/パスキーを登録しました/i)).toBeVisible({ timeout: 10_000 })
@@ -287,13 +291,13 @@ test.describe('WEBAUTHN-UI-001〜005: パスキー登録・削除UI（登録・�
     await page.goto('/settings/security')
     await waitForHydration(page)
     await page.getByRole('button', { name: /パスキーを登録/i }).click()
-    await page.getByRole('button', { name: /登録する/i }).click()
 
     const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
     await reauthDialog.locator('#passkeyReauthPassword').fill('wrong-password')
     await reauthDialog.getByRole('button', { name: '本人確認する' }).click()
 
     await expect(reauthDialog.getByText('本人確認に失敗しました。入力内容を確認してください。')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('button', { name: /登録する/i }), '本人確認が済むまでデバイス名ダイアログは開かない').toHaveCount(0)
     expect(registerBegun, '本人確認が済むまで register/begin を呼ばないこと').toBe(false)
   })
 

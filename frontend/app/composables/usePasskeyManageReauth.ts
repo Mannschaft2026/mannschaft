@@ -4,6 +4,7 @@ import type { MfaEmailSendResponse, PasskeyManageReauthMethod, PasskeyManageReau
 import { usePasskeyReauth } from './usePasskeyReauth'
 import { describeTwoFactorError } from '~/utils/twoFactorError'
 import { parseApiError } from '~/utils/apiError'
+import { passkeyReauthNeedsFactor } from '~/utils/passkeyReauthMethod'
 
 /** BE: 再認証が無い・期限切れ・別セッション・別用途（403）。再認証からやり直す。 */
 export const ERROR_REAUTH_REQUIRED = 'AUTH_087'
@@ -33,6 +34,8 @@ export function usePasskeyManageReauth() {
   const busy = ref(false)
   const errorMessage = ref('')
   const reauthEmail = ref<MfaEmailSendResponse | null>(null)
+  /** 2FA 方式（2FA 要素を選ばせる手段のときだけ取得）。ダイアログで使えない要素を出さないための表示ヒント。 */
+  const twoFaMethod = ref<'TOTP' | 'EMAIL' | undefined>(undefined)
 
   let pending: ((ok: boolean) => void) | null = null
 
@@ -83,6 +86,16 @@ export function usePasskeyManageReauth() {
     dialogMethod.value = method
     errorMessage.value = ''
     reauthEmail.value = null
+    twoFaMethod.value = undefined
+    if (passkeyReauthNeedsFactor(method) && method !== 'EMAIL_OTP') {
+      try {
+        twoFaMethod.value = (await api<{ data: { method?: 'TOTP' | 'EMAIL' } }>('/api/v1/auth/2fa/status')).data?.method
+      }
+      catch {
+        // 表示ヒントの取得失敗は致命的でない（全要素を出す）。要素の正否は BE が検証して AUTH_080 で返す。
+        twoFaMethod.value = undefined
+      }
+    }
     dialogVisible.value = true
     return new Promise<boolean>((resolve) => {
       pending = resolve
@@ -152,6 +165,7 @@ export function usePasskeyManageReauth() {
     busy,
     errorMessage,
     reauthEmail,
+    twoFaMethod,
     ensureReauthenticated,
     runWithReauth,
     submit,

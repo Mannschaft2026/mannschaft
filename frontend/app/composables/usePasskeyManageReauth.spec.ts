@@ -163,6 +163,25 @@ describe('usePasskeyManageReauth', () => {
     expect(apiMock).toHaveBeenLastCalledWith('/api/v1/auth/2fa/reauth/email/send', { method: 'POST' })
   })
 
+  it('SECOND_FACTOR: 2FA 状態を取得して 2FA 方式をダイアログへ渡し、メールは 2FA 用の送信 API を使う', async () => {
+    apiMock.mockImplementation(async (url: string) => {
+      if (url === METHOD_URL) return { data: { method: 'SECOND_FACTOR' } }
+      if (url === '/api/v1/auth/2fa/status') return { data: { enabled: true, method: 'EMAIL' } }
+      return { data: { maskedEmail: 'a***@example.com' } }
+    })
+    const reauth = usePasskeyManageReauth()
+    void reauth.ensureReauthenticated()
+    await flushPromises()
+
+    expect(reauth.dialogVisible.value).toBe(true)
+    expect(reauth.dialogMethod.value).toBe('SECOND_FACTOR')
+    expect(reauth.twoFaMethod.value).toBe('EMAIL')
+
+    await reauth.sendEmail()
+    expect(apiMock).toHaveBeenLastCalledWith('/api/v1/auth/2fa/reauth/email/send', { method: 'POST' })
+    expect(apiMock).not.toHaveBeenCalledWith('/api/v1/auth/webauthn/reauthenticate-email-otp', expect.anything())
+  })
+
   it('再認証手段の取得に失敗したら握りつぶさず通知し、操作を実行しない', async () => {
     apiMock.mockRejectedValue(apiError(500))
     const reauth = usePasskeyManageReauth()

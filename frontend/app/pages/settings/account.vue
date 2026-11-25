@@ -82,6 +82,7 @@ const {
   isRegisteringPasskey,
   registerDialog,
   newPasskeyName,
+  startPasskeyRegister,
   handlePasskeyRegister,
   passkeyReauth,
 } = useAccountSecurity()
@@ -220,6 +221,7 @@ onMounted(async () => {
         @delete-credential="handleDeleteCredential"
         @open-rename-dialog="openRenameDialog"
         @rename-credential="handleRenameCredential"
+        @passkey-register-start="startPasskeyRegister"
         @passkey-register="handlePasskeyRegister"
       />
 
@@ -230,6 +232,7 @@ onMounted(async () => {
         :busy="passkeyReauth.busy.value"
         :error-message="passkeyReauth.errorMessage.value"
         :reauth-email="passkeyReauth.reauthEmail.value"
+        :two-fa-method="passkeyReauth.twoFaMethod.value"
         @submit="passkeyReauth.submit"
         @send-email="passkeyReauth.sendEmail"
         @update:visible="passkeyReauth.onDialogVisibleChange"

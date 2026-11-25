@@ -32,7 +32,7 @@ const stubs = {
   },
 }
 
-type Method = 'PASSWORD' | 'PASSWORD_AND_SECOND_FACTOR' | 'EMAIL_OTP'
+type Method = 'PASSWORD' | 'PASSWORD_AND_SECOND_FACTOR' | 'SECOND_FACTOR' | 'EMAIL_OTP'
 
 async function mountDialog(method: Method, extra: Record<string, unknown> = {}) {
   const wrapper = await mountSuspended(SettingsPasskeyReauthDialog, {
@@ -91,6 +91,31 @@ describe('SettingsPasskeyReauthDialog', () => {
       await w.get('[data-testid="passkey-reauth-password"]').setValue('secret')
       await w.get('[data-testid="passkey-reauth-otp"]').setValue('123456')
       expect((await submit(w))![0]).toEqual([{ currentPassword: 'secret', method: 'TOTP', code: '123456' }])
+    })
+  })
+
+  describe('SECOND_FACTOR（パスワードを持たない SNS 利用者 + 2FA 有効）', () => {
+    it('パスワード欄は出さず、2FA 要素の選択とコード欄を出す', async () => {
+      const w = await mountDialog('SECOND_FACTOR')
+      expect(exists(w, 'passkey-reauth-password')).toBe(false)
+      expect(exists(w, 'passkey-reauth-factor')).toBe(true)
+      expect(exists(w, 'passkey-reauth-otp')).toBe(true)
+    })
+
+    it('コードが揃うまで送信できず、本文は {method, code} のみ（currentPassword を載せない）', async () => {
+      const w = await mountDialog('SECOND_FACTOR')
+      expect(submitDisabled(w)).toBe(true)
+      expect(await submit(w)).toBeUndefined()
+      await w.get('[data-testid="passkey-reauth-otp"]').setValue('123456')
+      expect(submitDisabled(w)).toBe(false)
+      expect((await submit(w))![0]).toEqual([{ method: 'TOTP', code: '123456' }])
+    })
+
+    it('2FA 方式が EMAIL ならメール要素が初期選択で、メール送信ボタンを出し、本文は method=EMAIL', async () => {
+      const w = await mountDialog('SECOND_FACTOR', { twoFaMethod: 'EMAIL' })
+      expect(exists(w, 'passkey-reauth-send-email')).toBe(true)
+      await w.get('[data-testid="passkey-reauth-otp"]').setValue('654321')
+      expect((await submit(w))![0]).toEqual([{ method: 'EMAIL', code: '654321' }])
     })
   })
 

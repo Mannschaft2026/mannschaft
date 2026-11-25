@@ -343,17 +343,19 @@ test.describe('WEBAUTHN: パスキー登録・ログインフロー', () => {
       const registerBtn = page.getByRole('button', { name: 'パスキーを登録' })
       await expect(registerBtn, 'パスキーを登録ボタンが表示されること').toBeVisible({ timeout: 15_000 })
 
-      // ボタンクリック → ダイアログ開く
+      // ボタンクリック → 本人確認ダイアログ（パスワード手段）が先に開く（デバイス名ダイアログとは重ならない）
       await registerBtn.click()
-      const dialog = page.getByRole('dialog', { name: 'パスキーを登録' })
-      await expect(dialog, 'ダイアログが開くこと').toBeVisible({ timeout: 5_000 })
-
-      // 「登録する」クリック → 本人確認ダイアログ（パスワード手段）→ CDP 仮想認証器が credentials.create() を自動処理
-      await dialog.getByRole('button', { name: '登録する' }).click()
       const reauthDialog = page.getByRole('dialog', { name: '本人確認', exact: true })
       await expect(reauthDialog, '登録前に本人確認ダイアログが開くこと').toBeVisible({ timeout: 5_000 })
+      await expect(page.getByRole('dialog', { name: 'パスキーを登録' })).toHaveCount(0)
       await reauthDialog.locator('#passkeyReauthPassword').fill(USER_PASSWORD)
       await reauthDialog.getByRole('button', { name: '本人確認する' }).click()
+      await expect(reauthDialog).toBeHidden({ timeout: 5_000 })
+
+      // 本人確認後にデバイス名ダイアログが開く → 「登録する」→ CDP 仮想認証器が credentials.create() を自動処理
+      const dialog = page.getByRole('dialog', { name: 'パスキーを登録' })
+      await expect(dialog, 'ダイアログが開くこと').toBeVisible({ timeout: 5_000 })
+      await dialog.getByRole('button', { name: '登録する' }).click()
 
       // 成功トーストを確認
       const successToast = page.locator('[role="alert"][data-p="success"]').first()
