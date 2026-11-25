@@ -1,6 +1,6 @@
 # F00: ContentVisibilityResolver 共通基盤
 
-> **ステータス**: 🟢 **設計完了**（v1.1 — 第 1 回・第 2 回精査全件反映、マスター裁可済 / 2026-06-05 `_AND_ABOVE` 統一の**目標仕様**確定。コードは後続 wave で追従）／🟡 §20 チーム公開範囲によるコンテンツ閲覧上限 設計中（精査待ち・CMP-261124-0159）
+> **ステータス**: 🟢 **設計完了**（v1.1 — 第 1 回・第 2 回精査全件反映、マスター裁可済 / 2026-06-05 `_AND_ABOVE` 統一の**目標仕様**確定。コードは後続 wave で追従）／🟢 §20 チーム公開範囲によるコンテンツ閲覧上限 設計完了（CMP-261124-0159）
 > **最終更新**: 2026-06-05
 > **マスター裁可済**: §17 Q1 確定（未認証ユーザーは PUBLIC のみ閲覧可、それ以外は fail-closed）
 > **モジュール種別**: 横断基盤（権限管理・共通部品）
@@ -3170,7 +3170,7 @@ type だけ厳格にガードする漸進的アプローチを採用。Phase B �
 
 ## 20. チーム公開範囲によるコンテンツ閲覧上限（CMP-261124-0159・2026-11-25 マスター裁定 MC-261125-0010）
 
-> **ステータス**: 🟡 設計中（精査待ち）
+> **ステータス**: 🟢 設計完了
 > **裁定の正本**: [docs/master-confirmations.md](../master-confirmations.md) MC-261125-0010
 > **用語の正本**: 「メンバー限定」の定義は F00.5 §2.6（本節は再定義しない）
 > **関連設計書（本節の分担）**: F01.2（[02 API](F01.2_org_team_member_role/02_api_design.md)・[03 業務](F01.2_org_team_member_role/03_business_logic.md)・[04 Flyway](F01.2_org_team_member_role/04_security_operations.md)：サポーターの入口と非公開化の状態遷移・是正 migration）／F04.6 §6（検索の母集団）／F06.4 §15（活動統計）／F05.1・F05.5 §画面（チーム詳細 403 の理由表示）／各ドメイン設計書の冒頭注記
@@ -3334,8 +3334,8 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
 | `GET/POST /api/v1/public/blog-posts/{postId}/comments` | `PublicPostCommentController` | 記事が非公開チームのものなら不在の記事と同一応答 |
 | `POST /api/v1/public/confirm/{token}` | `PublicConfirmationController` | トークンの宛先がそのチームで MEMBER 未満なら不在トークンと同一応答（MEMBER 以上の宛先は従来どおり） |
 | `POST /api/v1/public/file-links/{token}/access`・`/download-url`、`POST /api/v1/shared-links/{token}/access` | `PublicFileLinkController`・`FileLinkController`・`SharedFileLinkService` | **多層防御**: (1) 発行 `POST /api/v1/files/{fileId}/links` は非公開チームのファイルなら 403 `FILE_SHARING_021`（新規・番号はマージ時に再確認）。(2) 非公開化（F01.2 03）と是正 migration（F01.2 04）で、そのチームのファイルのリンクを `is_active = FALSE` にする。(3) アクセス時にもファイルの所属チームの公開範囲を再確認し、非公開なら無効化済みリンクと同一応答（410 `FILE_SHARING_018`） |
-| `GET /api/v1/public/market/listings`・`/listings/{id}`・`/summary`・`/regions`（`MarketController`・`MarketQueryService`・`RecruitmentListingRepository`） | 公開マーケット（募集） | **親チーム上限を掛ける**。現状は募集自身の公開範囲だけを見て Repository から直接返すため、掲載元が非公開チームの募集を一覧・詳細・件数（summary）・地域別件数（regions）のすべてから除外する。一覧・件数・地域別件数は同じ SQL 述語（掲載元 `scope_type='TEAM'` のとき `teams.visibility <> 'MEMBERS_AND_ABOVE'` を JOIN 条件に入れる。件数と一覧の不一致を作らない）で絞り、詳細は不在の募集と同一応答。`/categories` は件数を含むなら同じ述語、含まないなら対象外 |
-| `GET /signage/{token}`（`SignageDisplayController`・`SignageAccessTokenService#validateToken`）と `/ws/signage` | サイネージ表示端末（capability トークン） | (1) 非公開チームの画面にはトークンを発行しない（`POST /api/v1/signage/screens/{id}/tokens` は 403 `SIGNAGE_xxx`（新規・番号はマージ時に `SignageErrorCode` の最大＋1 で確定））。(2) 非公開化（F01.2 03）と是正 migration（F01.2 04）で既存トークン（**期限なしを含む**）を `is_active = FALSE`。(3) 利用時も `validateToken` の後に画面の所属チームの公開範囲を確かめ、非公開なら無効トークンと同一応答（画面情報・スロット・緊急メッセージを返さない） |
+| `GET /api/v1/public/market/listings`・`/listings/{id}`・`/summary`（`/regions` はマスタで対象外。`MarketController`・`MarketQueryService`・`RecruitmentListingRepository`） | 公開マーケット（募集） | **親チーム上限を掛ける**。現状は募集自身の公開範囲だけを見て Repository から直接返すため、掲載元が非公開チームの募集を一覧・詳細・件数（summary）・地域別件数（regions）のすべてから除外する。一覧（匿名・認証済みの両方）と `/summary` の各集計（総件数・地域別件数・カテゴリ別件数など summary が返す全ての数）は、同じ述語（掲載元 `scope_type='TEAM'` のとき `teams.visibility <> 'MEMBERS_AND_ABOVE'` を JOIN 条件に入れる）で絞り、詳細は不在の募集と同一応答。**`/regions` は地域マスタの一覧で募集件数を返さないため変更対象外**（`/categories` も件数を返さないなら対象外）。募集は複数地域に属しうるため、地域別件数の合計は一覧の total と一致しない（一致を期待しない） |
+| `GET /signage/{token}`（`SignageDisplayController`・`SignageAccessTokenService#validateToken`）と `/ws/signage` | サイネージ表示端末（capability トークン） | (1) 非公開チームの画面にはトークンを発行しない（`POST /api/v1/signage/screens/{id}/tokens` は 403 `SIGNAGE_009`（新規。`SignageErrorCode` の現在の最大 SIGNAGE_008＋1 で予約、確定はマージ時に origin/main で再確認））。(2) 非公開化（F01.2 03）と是正 migration（F01.2 04）で既存トークン（**期限なしを含む**）を `is_active = FALSE`。(3) 利用時も `validateToken` の後に画面の所属チームの公開範囲を確かめ、非公開なら無効トークンと同一応答（画面情報・スロット・緊急メッセージを返さない） |
 | `GET /sitemap.xml`・`/sitemap-{page}.xml` | `PublicSitemapController` | 非公開チームの URL を含めない（回帰固定） |
 | `GET /api/v1/public/users/{userId}/posts` | `PublicUserProfileController` | 非公開チームのスコープの投稿を含めない |
 | `GET /api/v1/public/teams/search`（Discover） | `PublicDiscoverController` | 既存どおり PUBLIC のみ（回帰固定） |
@@ -3373,7 +3373,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 | `/topic/villages/{villageId}/lobby/presence` | `VillageLobbyPresenceService` | 村のロビー在席 | 既存 | 対象外（VILLAGE スコープ） |
 
 - **既存購読の失効**: 非公開化のコミット直後に、**対象チームに帰属する全 destination の全購読者**（外した人に限らず、匿名・部外者・他チームを含む）を、セッションの購読レジストリから列挙して再認可し、不合格の購読を解除する（ERROR フレームで `x-error-code` を返す）。
-- **切断完了までの遮断**: 再認可が非同期で遅れても本文が届かないよう、送出側（`configureClientOutboundChannel`）に `TeamContentOutboundGuardInterceptor` を新設し、チームに帰属する destination への MESSAGE フレームを送る直前に、そのセッションの利用者（匿名を含む）が門・Resolver を満たすかを確かめ、満たさなければ落とす。判定はセッション × チームでメモ化し、公開範囲の変更（チームの `version`）で無効化する（毎フレームで DB を引かない）。
+- **切断完了までの遮断**: 再認可が非同期で遅れても本文が届かないよう、送出側（`configureClientOutboundChannel`）に `TeamContentOutboundGuardInterceptor` を新設し、チームに帰属する destination への MESSAGE フレームを送る直前に、そのセッションの利用者（匿名を含む）が門・Resolver を満たすかを確かめ、満たさなければ落とす。判定はセッション × チームでメモ化する（毎フレームで DB を引かない）。**メモの失効契機**は、(1) チームの公開範囲の変更（チームの `version`）、(2) その利用者のそのチームでの**在籍終了**（除名 `RoleService` の除名・自主退会・フォロー解除・非公開化の一括退出・GDPR）と**ロール変更**（`MembershipChangedEvent`・`MembershipsBulkEndedEvent`・ロール変更イベント）、(3) 関連 ACL の変更（チャンネルメンバー行の削除 `ChatMembershipRevokeListener`、回覧の受信者・コルクボードの共有先の変更）とし、各イベントを受けて該当ユーザー × チームのメモを即時に捨て、その利用者のそのチームに帰属する購読を再認可する。メモには上限として有効期限（60 秒）も付け、失効の取りこぼしがあっても長く残らないようにする。
 - 新設の Interceptor と送出ガードは ArchUnit で「チームに帰属する destination を配信するクラスは、対応する購読認可 Interceptor が登録されていること」を固定する（`WebSocketTeamDestinationCoverageTest`）。
 - 署名付き URL（R2 Presigned URL）と CDN キャッシュは、発行済みのものは**有効期限まで有効**（取り消せない既知の制約 K-6）。新たな発行は門で止める。期限の値は実装の設定値を AC-0159-37 で観測し記録する。
 
@@ -3434,7 +3434,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 | `team.access.notFoundBody` | URL が正しいか確認してください。チームが削除された可能性があります。 |
 | `team.access.backToHome` | ホームへ戻る |
 
-非公開化の確認・統計・設定のキーは F01.2 02 / F06.4 §15 に記載する。BE のエラーメッセージ（`messages_{ja,en,zh,ko,es,de}.properties`）は新規コード（TEAM_073 / TEAM_074 / ACTIVITY_024 / ACTIVITY_025 / FILE_SHARING_021 / SIGNAGE_xxx）を 6 言語で登録する。非公開化で外したことを知らせる通知の題名・本文も BE の 6 言語メッセージ（F01.2 02）で持つ。
+非公開化の確認・統計・設定のキーは F01.2 02 / F06.4 §15 に記載する。BE のエラーメッセージ（`messages_{ja,en,zh,ko,es,de}.properties`）は新規コード（TEAM_073 / TEAM_074 / ACTIVITY_024 / ACTIVITY_025 / FILE_SHARING_021 / SIGNAGE_009）を 6 言語で登録する。非公開化で外したことを知らせる通知の題名・本文も BE の 6 言語メッセージ（F01.2 02）で持つ。
 
 ### 20.9 受け入れ条件（AC。本戦役の正本一覧）
 
@@ -3487,8 +3487,8 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 - **AC-0159-23** ダッシュボード（チームダッシュボードのウィジェット、個人ダッシュボードのチーム由来項目・要対応一覧に非公開チームの項目が権限なしには出ない。件数バッジも含めない）
 - **AC-0159-24** コルクボード・ブログ記事本体（回帰固定。既存の拒否が維持される）
 - **AC-0159-25** 番人: `ScopeContentAccessMatrixIT` が §20.5.2 の「門」「Resolver」の全パッケージの読み取りエンドポイントを網羅して緑（AC-0159-10〜24 はその主要部分）。`ScopeContentAccessGateCoverageTest` が、任意のパッケージで `checkMembership` / `isMember` を直接呼ぶ変更で赤になる。`ScopeContentAccessGateEquivalenceTest` が緑。
-- **AC-0159-26b** サイネージ: 非公開チームの画面へのトークン発行は 403（新規 `SIGNAGE_xxx`）。非公開化・是正 migration の後、そのチームのトークン（期限なしを含む）は無効。フィクスチャで有効のまま残したトークンで `GET /signage/{token}` を叩くと無効トークンと同一応答で、画面名・スロット・緊急メッセージが返らない。そのトークンで `/ws/signage` から `/topic/signage/{screenId}/emergency` を購読しても拒否され、緊急メッセージ本文を 1 件も受信しない。公開チームでは従来どおり。
-- **AC-0159-27** 公開マーケット: 公開募集を持つチームを非公開化すると、その募集が `/api/v1/public/market/listings`（一覧と total）・`/listings/{id}`（不在と同一応答）・`/summary`（件数）・`/regions`（地域別件数）のすべてから消え、一覧の件数と summary・regions の件数が一致する。公開に戻すと再び出る。他チームの募集は不変。
+- **AC-0159-26b** サイネージ: 非公開チームの画面へのトークン発行は 403（新規 `SIGNAGE_009`）。非公開化・是正 migration の後、そのチームのトークン（期限なしを含む）は無効。フィクスチャで有効のまま残したトークンで `GET /signage/{token}` を叩くと無効トークンと同一応答で、画面名・スロット・緊急メッセージが返らない。そのトークンで `/ws/signage` から `/topic/signage/{screenId}/emergency` を購読しても拒否され、緊急メッセージ本文を 1 件も受信しない。公開チームでは従来どおり。
+- **AC-0159-27** 公開マーケット: 公開募集を持つチーム（地域 A・B に属する募集 1 件、地域 A のみの募集 1 件）を非公開化すると、匿名・認証済みの `/api/v1/public/market/listings` の一覧と total からその 2 件が消え、`/listings/{id}` は不在の募集と同一応答、`/summary` の総件数は 2 減り、地域別件数は地域 A が 2・地域 B が 1 減る（各集計の期待値を個別に検証し、一覧 total との一致は求めない）。`/regions` の応答は前後で変わらない（マスタ）。公開に戻すと再び出る。他チームの募集は不変。
 - **AC-0159-26** 公開ファイルリンク: 非公開チームのファイルにリンクを発行すると 403 `FILE_SHARING_021`。非公開化（F01.2 03）と是正 migration の後、そのチームのファイルの既存リンクは `is_active = FALSE`。フィクスチャで `is_active = TRUE` のまま残したリンクでも、アクセス・ダウンロード URL 発行は無効化済みリンクと同一応答（410 `FILE_SHARING_018`）で、URL もファイル名も返らない。公開チームのリンクは従来どおり。
 
 #### S. 全体検索（F04.6 §6）
@@ -3500,8 +3500,8 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 #### N. 通知・フィード
 
 - **AC-0159-35**: 非公開チームの新規コンテンツ（掲示板・タイムライン・活動記録・予定）の通知・メンション・アクティビティフィードは、権限なし（フィクスチャのサポーター）に配信されず一覧にも出ない。権限ありには従来どおり配信される。
-- **AC-0159-36**: 非公開化の前に受け取った通知（掲示板・予定）の `actionUrl`（例 `/teams/{slug}/bulletin?threadId=…`・`/teams/{slug}/schedule/{id}`）を、外されたサポーターが通知一覧から開くと、遷移先は系統 1（シェル）の画面で `TeamAccessDeniedState` の理由表示になり、トーストは出ず、本文の API は呼ばれない。外したことを知らせる通知の `actionUrl` は `/teams/{slug}`（チームのトップ）で、開くと同じ理由表示になる（クラッシュ・空表示・無限スピナーにならない）。
-- **AC-0159-37**（WebSocket・署名付き URL）: 観測手順: (1) タブ A に MEMBER、タブ B に外される予定のサポーター（公開チームで正規フローで加入）、タブ C に未ログイン（公開試合を購読）を開き、各タブでチーム系チャンネル・コルクボード・試合速報・臨時休業確認を購読する。(2) 管理者が非公開化を了承した時刻を記録する。(3) その直後から 10 秒間、タブ A から 1 秒ごとにメッセージ・カード更新を送り、試合速報を更新する。(4) タブ B・C の受信ログ（ブラウザの WebSocket フレーム記録）に、非公開化の時刻以後の MESSAGE フレームが **0 件**であることを確かめる（「5 秒以内に止まる」ではなく、送出ガードにより時刻以後は 0 件）。タブ A は全件受信する。(5) 再認可・購読解除を意図的に遅らせる設定（テスト用の遅延フック 10 秒）でも (4) が 0 件であること。新たな SUBSCRIBE は拒否される。署名付き URL は有効期限の値（実装の設定値）を記録し、非公開化前に発行した URL が期限後に取得できないこと、非公開化後は新たな発行が拒否されることを確かめる。
+- **AC-0159-36**: 外されたサポーターについて、(a) **非公開化の前に通知一覧を表示したままのタブ**から旧通知（掲示板・予定）を開く、(b) 非公開化の前に控えた `actionUrl`（例 `/teams/{slug}/bulletin?threadId=…`・`/teams/{slug}/schedule/{id}`）を**直打ち**する、のどちらでも、遷移先は系統 1（シェル）の画面で `TeamAccessDeniedState` の理由表示になり、トーストは出ず、本文の API は呼ばれない。(c) 通知一覧を**再取得**すると旧通知は消えている（AC-0159-39 と同じ述語）。外したことを知らせる通知は一覧に残り、その `actionUrl` は `/teams/{slug}`（チームのトップ）で、開くと同じ理由表示になる（クラッシュ・空表示・無限スピナーにならない）。
+- **AC-0159-37**（WebSocket・署名付き URL）: 観測手順: (1) タブ A に MEMBER、タブ B に外される予定のサポーター（公開チームで正規フローで加入）、タブ C に未ログイン（公開試合を購読）を開き、各タブでチーム系チャンネル・コルクボード・試合速報・臨時休業確認を購読する。(2) 管理者が非公開化を了承した時刻を記録する。(3) その直後から 10 秒間、タブ A から 1 秒ごとにメッセージ・カード更新を送り、試合速報を更新する。(4) タブ B・C の受信ログ（ブラウザの WebSocket フレーム記録）に、非公開化の時刻以後の MESSAGE フレームが **0 件**であることを確かめる（「5 秒以内に止まる」ではなく、送出ガードにより時刻以後は 0 件）。タブ A は全件受信する。(5) 再認可・購読解除を意図的に遅らせる設定（テスト用の遅延フック 10 秒）でも (4) が 0 件であること。新たな SUBSCRIBE は拒否される。(6) **非公開チームのまま**、購読中の MEMBER（タブ D）を ADMIN が除名する・タブ D の本人が自主退会する、のそれぞれの直後から、タブ A が送るメッセージ・カード更新をタブ D が **1 件も受信しない**（メモの失効。§20.5.5）。チャンネルメンバー行だけを外した場合も同様。署名付き URL は有効期限の値（実装の設定値）を記録し、非公開化前に発行した URL が期限後に取得できないこと、非公開化後は新たな発行が拒否されることを確かめる。
 - **AC-0159-38**: 非公開チームの一斉配信（fan-out・予定の出欠依頼/リマインド・アンケート公開・時間割メモ・お知らせ配信・募集のサポーター宛て）の宛先に、フィクスチャで残したサポーター・GUEST が入らない（不変条件に頼らない）。公開チームでは従来どおり（`includeSupporters` 等のトグルも従来どおり効く）。
 - **AC-0159-39**: 通知一覧・未読件数・通知詳細で、送り元が非公開チームの通知は、そのチームで MEMBER 未満の閲覧者には出ない（未読件数にも数えない。詳細は不在と同一応答）。MEMBER 以上には従来どおり。外したことを知らせる通知は外された本人に見える。通知 100 件の一覧取得で追加の問い合わせは 1 本。
 

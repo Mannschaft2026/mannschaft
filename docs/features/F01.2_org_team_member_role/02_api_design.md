@@ -1482,7 +1482,7 @@ officers と同じ仕様・エラーハンドリング（数値上限のみ 20 �
 
 ## CMP-261124-0159: チームの非公開化（→ MEMBERS_AND_ABOVE）とサポーターの入口（2026-11-25 マスター裁定 MC-261125-0010）
 
-> **ステータス**: 🟡 設計中（精査待ち）。業務フローは [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」、是正 migration は [04_security_operations.md](04_security_operations.md) §7「CMP-261124-0159 是正 migration」、閲覧上限の正本は [F00 §20](../F00_content_visibility_resolver.md)。用語「メンバー限定」の正本は [F00.5 §2.6](../F00.5_membership_basis.md)。
+> **ステータス**: 🟢 設計完了。業務フローは [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」、是正 migration は [04_security_operations.md](04_security_operations.md) §7「CMP-261124-0159 是正 migration」、閲覧上限の正本は [F00 §20](../F00_content_visibility_resolver.md)。用語「メンバー限定」の正本は [F00.5 §2.6](../F00.5_membership_basis.md)。
 
 **依存**: CMP-261124-0157（SUPPORTER 招待で参加した人を正しく SUPPORTER 在籍にする是正。PR #4828 マージ済み）。本節の「SUPPORTER 在籍＝`memberships.role_kind='SUPPORTER'`」はその是正後の状態を前提にする。
 
@@ -1560,7 +1560,8 @@ JSON は既存規約どおり camelCase、ページングなし。数値はす�
 
 現状、チーム作成後に公開範囲を変える画面は無い（作成時の `EntityCreateDialog.vue` のみ。`TeamDetailInfo.vue` は表示だけ、`admin/settings.vue` にも無い）。そこで **`/teams/{slug}/info`（`TeamDetailInfo.vue`）の管理者欄に、公開範囲の Select と保存ボタンを新設**する。
 
-- **表示条件**: BE の `PATCH /teams/{slug}` の認可（`TeamController#updateTeam` の `checkAdminOrAbove`＝そのチームの `user_roles` が ADMIN / DEPUTY_ADMIN）と揃え、`useRoleAccess()` の `isScopeAdmin || roleName === 'DEPUTY_ADMIN'` が真のときだけ出す。現在の `isAdmin` prop（SYSTEM_ADMIN も真）では DEPUTY_ADMIN に出ず、ADMIN 割当の無い SYSTEM_ADMIN に出てしまうため、この条件を新しい prop `canEditVisibility` で渡す。
+- **表示条件**: BE の `PATCH /teams/{slug}` の認可（`TeamController#updateTeam` の `checkAdminOrAbove`＝`DefaultAccessControlService#isAdminOrAbove`、そのチームの `user_roles` が ADMIN / DEPUTY_ADMIN）と**同じ判定結果を BE から受け取って**使う。`GET /api/v1/teams/{slug}/me/permissions`（`EffectivePermissionsResponse`）に `scopeAdminOrDeputy: Boolean`（非 null。`isAdminOrAbove(userId, teamId, "TEAM")` の結果）を追加し、`useRoleAccess()` に `canManageScope`（＝`scopeAdminOrDeputy`）を足して表示条件にする。`roleName` は SYSTEM_ADMIN を優先して返し、`isScopeAdmin` は ADMIN 割当だけを表すため、FE で組み立てると SYSTEM_ADMIN と DEPUTY_ADMIN の兼任者を取りこぼす。新しい prop `canEditVisibility` で `TeamDetailInfo.vue` に渡す。組織の `me/permissions` も同じ項目を返す（同一 DTO）。
+- 判定の区分: SYSTEM_ADMIN 単独（チームのロール割当なし）＝false、SYSTEM_ADMIN と ADMIN の兼任＝true、SYSTEM_ADMIN と DEPUTY_ADMIN の兼任＝true、ADMIN・DEPUTY_ADMIN＝true、MEMBER 以下＝false。
 - **選択肢**: `PUBLIC` / `GUESTS_AND_ABOVE` / `SUPPORTERS_AND_ABOVE` / `MEMBERS_AND_ABOVE`。表示は `team_visibility.*`（下の文言変更後）。初期値は現在値。
 - **保存の流れ**: 現在値と同じなら保存ボタンは無効。変更して保存を押すと、まず事前問い合わせを呼ぶ。`requiresConfirmation=true` なら確認ダイアログ（人数つき。0 人なら `bodyNone`）を出し、キャンセルなら `PATCH` を送らない。了承で `{visibility, confirmSupporterRemoval: true, version: 事前問い合わせの version}` を送る。`requiresConfirmation=false` なら確認なしで `{visibility, version}` を送る。
 - **応答の扱い**: 200 なら応答の `TeamResponse` で親シェルの `team` を**差し替える**（`useTeamShellContext` のミューテータ経由。再取得しない）。`visibilityTransition` が非 null なら実数をトースト（`transitionDone`）で出す。

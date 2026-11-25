@@ -293,7 +293,7 @@ V{major}.{yyyyMMddHHmmss}__create_ownership_transfer_offers_table.sql
 
 ### CMP-261124-0159 是正 migration（非公開チームのサポーター・ゲスト在籍の是正）
 
-> **ステータス**: 🟡 設計中（精査待ち）。業務仕様は [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」。
+> **ステータス**: 🟢 設計完了。業務仕様は [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」。
 
 - **ファイル名**: `V{major}.{yyyyMMddHHmmss}__enforce_members_only_team_without_supporters.sql`。major は**マージ時に origin/main 全体の最大 major＋1 で確定**する（設計時点の origin/main 最大は 267。並行 PR と衝突しうるため設計書では確定しない）。minor は `date -u '+%Y%m%d%H%M%S'`。
 - **対象チーム**: `teams.visibility = 'MEMBERS_AND_ABOVE'`（論理削除・アーカイブ済みも含める。復元時に不変条件を崩さないため）。

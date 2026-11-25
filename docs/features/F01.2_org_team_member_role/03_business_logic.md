@@ -1102,7 +1102,7 @@ WHERE o.archived_at IS NULL
 
 ### 非公開化フロー（CMP-261124-0159・2026-11-25 マスター裁定 MC-261125-0010）
 
-> **ステータス**: 🟡 設計中（精査待ち）。API 契約は [02_api_design.md](02_api_design.md)「CMP-261124-0159」節、閲覧上限は [F00 §20](../F00_content_visibility_resolver.md)。
+> **ステータス**: 🟢 設計完了。API 契約は [02_api_design.md](02_api_design.md)「CMP-261124-0159」節、閲覧上限は [F00 §20](../F00_content_visibility_resolver.md)。
 
 **不変条件**: `teams.visibility = MEMBERS_AND_ABOVE` のチームには、在籍中のサポーター（`memberships.role_kind='SUPPORTER' AND left_at IS NULL`）と GUEST（`user_roles` の GUEST 行）が 0 件。PENDING のサポーター申請と有効な SUPPORTER 招待トークンも 0 件。
 
@@ -1193,7 +1193,7 @@ WHERE o.archived_at IS NULL
 - **AC-0159-57**: 非公開チームの名前だけを更新しても確認不要・後始末なし。
 - **AC-0159-58**: 非公開→公開に戻しても確認不要、外した人・却下した申請・無効化したトークンは戻らない。
 - **AC-0159-59**: 事前問い合わせの後にサポーターが 1 人増えてから了承しても、その人も外れ、`visibilityTransition.removedSupporters` は増えた後の実数。
-- **AC-0159-60**: `/teams/{slug}/info` で ADMIN・DEPUTY_ADMIN には `team-visibility-select` と `team-visibility-save` が出て、MEMBER・サポーター・チームに ADMIN 割当の無い SYSTEM_ADMIN には出ない。「メンバー限定」を選んで保存すると `team-visibility-confirm-dialog` が人数つき（`team-visibility-confirm-counts`）で出る。キャンセルで `PATCH` が送られない（ネットワーク記録）。了承で `PATCH` が `confirmSupporterRemoval: true` と事前問い合わせの `version` で送られ、応答の `TeamResponse` で画面の公開範囲表示が再取得なしに「メンバー限定」へ変わり、トーストに実数が出る。選択肢の表示が 6 言語とも「メンバー限定」相当の訳になっている。
+- **AC-0159-60**: `/teams/{slug}/info` で ADMIN・DEPUTY_ADMIN・SYSTEM_ADMIN と ADMIN の兼任者・SYSTEM_ADMIN と DEPUTY_ADMIN の兼任者には `team-visibility-select` と `team-visibility-save` が出て、MEMBER・サポーター・チームのロール割当の無い SYSTEM_ADMIN には出ない（5 区分を別々に検証し、`me/permissions` の `scopeAdminOrDeputy` が BE の `PATCH` の可否と一致すること）。「メンバー限定」を選んで保存すると `team-visibility-confirm-dialog` が人数つき（`team-visibility-confirm-counts`）で出る。キャンセルで `PATCH` が送られない（ネットワーク記録）。了承で `PATCH` が `confirmSupporterRemoval: true` と事前問い合わせの `version` で送られ、応答の `TeamResponse` で画面の公開範囲表示が再取得なしに「メンバー限定」へ変わり、トーストに実数が出る。選択肢の表示が 6 言語とも「メンバー限定」相当の訳になっている。
 - **AC-0159-60c**: 別タブで先にチーム名を更新してから保存すると 409（楽観ロック）になり、`conflictReload` のトーストが出て、事前問い合わせからやり直せる（古い version で再送しない）。`TEAM_074` の応答を模した場合は `confirmRequired` のトースト。
 - **AC-0159-60d**: 非公開チームの `/teams/{slug}/invites` のロール選択に SUPPORTER が出ない。`/teams/{slug}/members` のロール変更の選択肢に SUPPORTER・GUEST が出ない。API を直接叩いた場合は 403 `TEAM_073` がトーストに出る。公開チームでは従来どおり出る。
 - **AC-0159-60b**: 人数がすべて 0 の事前問い合わせ結果では確認ダイアログが「外れる人はいません」（`bodyNone`）になり、了承しないと `PATCH` は送られない。非公開の間、サポーター設定のスイッチは操作不可で `supporterSettingInactive` が出る。

@@ -1,6 +1,6 @@
 # F03: 組織・チーム・メンバー・ロール管理
 
-> **ステータス**: 🟢 設計完了／🟡 CMP-261124-0159 非公開化（→MEMBERS_AND_ABOVE）とサポーター入口の拒否 設計中（精査待ち。[02](02_api_design.md)・[03](03_business_logic.md)・[04](04_security_operations.md) の CMP-261124-0159 節）
+> **ステータス**: 🟢 設計完了／🟢 CMP-261124-0159 非公開化（→MEMBERS_AND_ABOVE）とサポーター入口の拒否 設計完了（[02](02_api_design.md)・[03](03_business_logic.md)・[04](04_security_operations.md) の CMP-261124-0159 節）
 > **実装フェーズ**: Phase 2
 > **最終更新**: 2026-06-14
 
