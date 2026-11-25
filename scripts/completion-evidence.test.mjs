@@ -94,6 +94,8 @@ async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = o
         },
         getContent: async ({ path, ref }) => {
           if (missingAncestor && ref === 'c'.repeat(40)) throw Object.assign(new Error('missing'), { status: 404 });
+          // 台帳の新配置（docs/task-list/）の有無をディレクトリ単位で確かめる（CMP-261124-1222）。旧配置なので 404。
+          if (path === 'docs/task-list' && ref in refs) throw Object.assign(new Error('Not Found'), { status: 404 });
           if (path !== 'docs/task-list.md' || !(ref in refs)) throw new Error(`Unexpected data read: ${path}@${ref}`);
           return { data: { type: 'file', encoding: 'base64', content: Buffer.from(refs[ref]).toString('base64') } };
         },

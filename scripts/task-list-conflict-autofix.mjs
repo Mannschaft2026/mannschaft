@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 台帳 docs/task-list.md の末尾追記衝突の自動修復（CMP-261124-1222 第2段）。
+// 台帳 docs/task-list.md（新配置では docs/task-list/*.md も）の末尾追記衝突の自動修復（CMP-261124-1222 第2段・両配置対応）。
 //
 // main は GitHub merge queue（SQUASH）必須で、台帳に行を末尾追記する PR どうしが衝突すると queue から
 // merge_conflict で外れ、auto-merge の予約も消える。GitHub のサーバ側マージは .gitattributes の merge=union を
@@ -24,8 +24,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { checkTaskListStructure } from './task-list-structure-check.mjs';
+import { LEDGER_DIR, LEDGER_INDEX_PATH, readLedger } from './task-list-ledger.mjs';
 
-export const LEDGER_PATH = 'docs/task-list.md';
+export const LEDGER_PATH = LEDGER_INDEX_PATH;
 export const OPT_OUT_LABEL = 'no-ledger-autofix';
 export const FIX_MARKER = '<!-- ledger-autofix:fixed -->';
 export const LIMIT_MARKER = '<!-- ledger-autofix:limit -->';
@@ -36,7 +37,14 @@ export const FIX_COMMIT_TRAILER = 'Ledger-Autofix: task-list-conflict-autofix';
 /** 自動修復の対象にする queue 脱落理由（RemovedFromMergeQueueEvent.reason。GraphQL では String で、実測値は merge_conflict / failed_checks / manual / merged）。 */
 export const CONFLICT_REMOVAL_REASON = 'merge_conflict';
 const DAY_MS = 24 * 3600 * 1000;
-const UNION_ATTRIBUTE_LINE = LEDGER_PATH + ' merge=union';
+/** .git/info/attributes に書く union 指定（索引＝旧配置の台帳と、新配置の月別・legacy ファイル）。 */
+const UNION_ATTRIBUTE_LINES = [LEDGER_PATH + ' merge=union', LEDGER_DIR + '/*.md merge=union'];
+const LEDGER_FILE_IN_DIR = new RegExp('^' + LEDGER_DIR.replace(/[.*+?^$(){}|[\]\\/-]/g, '\\$&') + '/[^/]+\\.md$');
+
+/** 衝突を union で直してよい台帳のパスか（docs/task-list.md と docs/task-list/ 直下の *.md）。 */
+export function isLedgerPath(path) {
+  return path === LEDGER_PATH || LEDGER_FILE_IN_DIR.test(path);
+}
 
 // ---------------------------------------------------------------------------
 // 選定
@@ -159,7 +167,7 @@ export async function processPullRequest(pr, deps) {
       log(tag + ': スキップ（merge 失敗: ' + merged.error + '）');
       return { outcome: 'skip-merge-failed', reason: merged.error };
     }
-    const others = merged.conflicts.filter((p) => p !== LEDGER_PATH);
+    const others = merged.conflicts.filter((p) => !isLedgerPath(p));
     const reason = others.length
       ? '台帳以外にも衝突: ' + others.join(', ')
       : '台帳の衝突が union でも解消しなかった';
@@ -167,8 +175,18 @@ export async function processPullRequest(pr, deps) {
     return { outcome: 'skip-conflict-outside-ledger', reason };
   }
 
-  const ledgerText = gitOps.readFile(merged.tree, LEDGER_PATH);
-  const check = checkStructure(ledgerText);
+  // マージ結果の tree から台帳を両配置対応で読む（新配置なら月別・legacy の全ファイルを横断して検査する）。
+  let ledger;
+  try {
+    ledger = await readLedger({
+      listDir: (dir) => (gitOps.listDir ? gitOps.listDir(merged.tree, dir) : null),
+      readFile: (path) => gitOps.readFile(merged.tree, path),
+    }, { requireRows: false });
+  } catch (error) {
+    log(tag + ': スキップ（マージ結果の台帳を読めない: ' + error.message + '）');
+    return { outcome: 'skip-merge-failed', reason: error.message };
+  }
+  const check = checkStructure(ledger);
   if (!check.ok) {
     const marker = STRUCTURE_NG_MARKER_PREFIX + headOid + ' -->';
     let commentError = null;
@@ -244,15 +262,17 @@ function must(result, what) {
   return result.stdout.trim();
 }
 
-/** .git/info/attributes（worktree 共通）に台帳の merge=union を書く。既にあれば何もしない。 */
+/** .git/info/attributes（worktree 共通）に台帳（索引と docs/task-list/*.md）の merge=union を書く。既にある行は足さない。 */
 export function ensureUnionAttribute(git) {
   const commonDir = must(git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'git-common-dir の取得');
   const infoDir = join(commonDir, 'info');
   const file = join(infoDir, 'attributes');
   mkdirSync(infoDir, { recursive: true });
   const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  if (current.split(/\r?\n/).some((line) => line.trim() === UNION_ATTRIBUTE_LINE)) return;
-  appendFileSync(file, (current && !current.endsWith('\n') ? '\n' : '') + UNION_ATTRIBUTE_LINE + '\n');
+  const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
+  const missing = UNION_ATTRIBUTE_LINES.filter((line) => !present.has(line));
+  if (!missing.length) return;
+  appendFileSync(file, (current && !current.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
 }
 
 function assertBranchName(name) {
@@ -286,6 +306,15 @@ export function createGitOps({ git }) {
     readFile(tree, path) {
       const r = git(['cat-file', 'blob', tree + ':' + path]);
       return r.code === 0 ? r.stdout : null;
+    },
+    /** tree 内のディレクトリ直下の名前（無ければ null）。git の失敗は例外（不在と混同しない）。 */
+    listDir(tree, dir) {
+      const self = git(['ls-tree', '-z', tree, '--', dir]);
+      if (self.code !== 0) throw new Error(dir + ' の ls-tree に失敗: ' + self.stderr.trim());
+      if (!/^\d+ tree /.test(self.stdout)) return null;
+      const r = git(['ls-tree', '-z', '--name-only', tree, '--', dir + '/']);
+      if (r.code !== 0) throw new Error(dir + '/ の ls-tree に失敗: ' + r.stderr.trim());
+      return r.stdout.split('\0').filter(Boolean).map((p) => p.slice(dir.length + 1));
     },
     changedPaths(fromOid, toTree) {
       return must(git(['diff-tree', '-r', '--name-only', fromOid, toTree]), '差分の取得').split('\n').map((l) => l.trim()).filter(Boolean);

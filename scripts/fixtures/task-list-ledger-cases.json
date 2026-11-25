@@ -1,0 +1,406 @@
+{
+  "description": "台帳（docs/task-list.md と docs/task-list/*.md）の構造検査の共有 fixture（CMP-261124-1222）。scripts/task-list-ledger.test.mjs と backend の TaskListCmpIdDuplicateGuardTest が同じ判定（expectOk・reason の部分一致・expectRows の行集合）を期待する。files はリポジトリ相対パス→本文。",
+  "cases": [
+    {
+      "name": "旧配置: 完了行のみの正常台帳",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-001 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-260101-0101 | 戦役 | 完了（2026-01-01・PR #1） | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: 新旧ID形式の混在と優先度付き未完行",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-028 | 戦役 | P1 未着手 | — | 条件 | 証拠 | ledger |\n| CMP-260819-2131 | 戦役 | P4 実装中 | — | 条件 | 証拠 | ledger |\n| CMP-260819-2132 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: セル内の \\| は列区切りにしない",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | `a \\| b` を含む条件 | 証拠 \\| 補足 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: 強調記法の状態セル（**P2 未着手** / **完了**）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | **P2 未着手** | — | 条件 | 証拠 | ledger |\n| CMP-260101-0102 | 戦役 | **完了** | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: 既存の完了系状態語",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0100 | 戦役 | 取り下げ | — | 条件 | 証拠 | ledger |\n| CMP-260101-0101 | 戦役 | 取下げ | — | 条件 | 証拠 | ledger |\n| CMP-260101-0102 | 戦役 | 取下 | — | 条件 | 証拠 | ledger |\n| CMP-260101-0103 | 戦役 | 重複 | — | 条件 | 証拠 | ledger |\n| CMP-260101-0104 | 戦役 | 不要 | — | 条件 | 証拠 | ledger |\n| CMP-260101-0105 | 戦役 | 対応不要 | — | 条件 | 証拠 | ledger |\n| CMP-260101-0106 | 戦役 | 検証済み | — | 条件 | 証拠 | ledger |\n| CMP-260101-0107 | 戦役 | 対応済み | — | 条件 | 証拠 | ledger |\n| CMP-260101-0108 | 戦役 | 合格 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: 新形式IDの重複",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-260101-0101 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "CMP-260101-0101"
+    },
+    {
+      "name": "旧配置: 旧形式IDの重複",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-028 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-028 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "CMP-028"
+    },
+    {
+      "name": "旧配置: 同日の別IDは重複にしない（日時形式を先に照合）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260819-2131 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-260819-2132 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: 列数8（コードスパン内の未エスケープの |）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | a | b `x | y` | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "列数"
+    },
+    {
+      "name": "旧配置: 列数6",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "列数"
+    },
+    {
+      "name": "旧配置: 未完行の優先度欠落",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "優先度"
+    },
+    {
+      "name": "旧配置: 実機検証待ちは完了系ではない",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 実機検証待ち | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "優先度"
+    },
+    {
+      "name": "旧配置: P の後ろに空白が無い（P1未着手）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | P1未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "優先度"
+    },
+    {
+      "name": "旧配置: P6 は範囲外",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | P6 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "優先度"
+    },
+    {
+      "name": "旧配置: 空の台帳",
+      "files": {
+        "docs/task-list.md": ""
+      },
+      "expectOk": false,
+      "reason": "空"
+    },
+    {
+      "name": "旧配置: 空白だけの台帳",
+      "files": {
+        "docs/task-list.md": " \n\n"
+      },
+      "expectOk": false,
+      "reason": "空"
+    },
+    {
+      "name": "旧配置: 台帳ファイルが無い",
+      "files": {},
+      "expectOk": false,
+      "reason": "存在しない"
+    },
+    {
+      "name": "旧配置: CMP 行が1件も無い台帳",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n"
+      },
+      "expectOk": false,
+      "reason": "1件も"
+    },
+    {
+      "name": "旧配置: 先頭セルが壊れた CMP 行（緩い走査と件数不一致）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| xCMP-260101-0102 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "件数"
+    },
+    {
+      "name": "旧配置: 先頭セル以外にだけ CMP-ID を持つ表の行（緩い走査と件数不一致）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| 補足 | CMP-260101-0101 を参照 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "件数"
+    },
+    {
+      "name": "旧配置: 全角空白で始まる先頭セル（Java の \\s・trim は ASCII のみ。緩い走査と件数不一致）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n|　CMP-260101-0102 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "件数"
+    },
+    {
+      "name": "旧配置: NEL（U+0085）の後ろの行も行頭として数え、重複を検出する（Java の (?m)^ と同じ）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n#| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "CMP-260101-0101"
+    },
+    {
+      "name": "旧配置: U+2028 の後ろの行も行頭として数え、重複を検出する",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n# | CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "CMP-260101-0101"
+    },
+    {
+      "name": "旧配置: CR 単独の後ろの行も行頭として数え、重複を検出する",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n#\r| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "CMP-260101-0101"
+    },
+    {
+      "name": "旧配置: CRLF 改行の正常台帳",
+      "files": {
+        "docs/task-list.md": "# 台帳\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\r\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: 月がずれた ID も旧配置では配置違反にしない",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261201-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "旧配置: docs/task-list/ に台帳名でないファイルだけがある（README.md）なら旧配置のまま。そのファイルは読まない",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/README.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-260101-0101 | 戦役 | 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-260101-0101",
+          "docs/task-list.md"
+        ]
+      ]
+    },
+    {
+      "name": "旧配置: 行集合（ID・所在ファイル）",
+      "files": {
+        "docs/task-list.md": "# 台帳\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-261130-2359 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n| CMP-261201-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-003",
+          "docs/task-list.md"
+        ],
+        [
+          "CMP-261130-2359",
+          "docs/task-list.md"
+        ],
+        [
+          "CMP-261201-0000",
+          "docs/task-list.md"
+        ]
+      ]
+    },
+    {
+      "name": "新配置: 月境界（CMP-261130-2359→2026-11 / CMP-261201-0000→2026-12）と legacy の正常台帳",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261130-2359 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/2026-12.md": "# 2026-12\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261201-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| CMP-028 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261130-2359",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261201-0000",
+          "docs/task-list/2026-12.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ],
+        [
+          "CMP-028",
+          "docs/task-list/legacy.md"
+        ]
+      ]
+    },
+    {
+      "name": "新配置: CMP-261130-2359 を 2026-12.md に置くと配置違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-12.md": "# 2026-12\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261130-2359 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-12.md: 配置"
+    },
+    {
+      "name": "新配置: CMP-261201-0000 を 2026-11.md に置くと配置違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261201-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-11.md: 配置"
+    },
+    {
+      "name": "新配置: 旧形式 ID を月別ファイルに置くと配置違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "legacy.md"
+    },
+    {
+      "name": "新配置: legacy.md に新形式 ID を置くと配置違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/legacy.md": "# legacy\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "legacy.md に新形式"
+    },
+    {
+      "name": "新配置: 月が 13 のファイル名は不正",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/2026-13.md": "# 2026-13\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n本文\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-13.md: 配置"
+    },
+    {
+      "name": "新配置: 台帳名でないファイル（notes.md）は不正",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/notes.md": "メモ\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/notes.md: 配置"
+    },
+    {
+      "name": "新配置: 索引に CMP 行があると配置違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0001 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "索引に CMP 行"
+    },
+    {
+      "name": "新配置: ファイル跨ぎの重複",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n",
+        "docs/task-list/2026-12.md": "# 2026-12\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "重複: CMP-261101-0000"
+    },
+    {
+      "name": "新配置: 月別ファイルの列数6",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-11.md: 列数"
+    },
+    {
+      "name": "新配置: 月別ファイルの列数8",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | a | b `x | y` | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-11.md: 列数"
+    },
+    {
+      "name": "新配置: 月別ファイルのエスケープ \\| は列区切りにしない（7列）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | `a \\| b` | [証拠](../evidence/CMP-261101-0000.json) \\| 補足 | ledger |\n"
+      },
+      "expectOk": true
+    },
+    {
+      "name": "新配置: 月別ファイルの優先度欠落",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 未着手 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-11.md: 優先度"
+    },
+    {
+      "name": "新配置: 月別ファイルの未解釈の CMP 行（緩い走査と件数不一致）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n| xCMP-261101-0001 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-11.md: CMP-ID を含む表の行は"
+    },
+    {
+      "name": "新配置: 月別ファイルに行が1件も無い",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\n\n前置き。行は docs/task-list/ の月別ファイルにある。\n",
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n\n"
+      },
+      "expectOk": false,
+      "reason": "1件も"
+    },
+    {
+      "name": "新配置: 索引が無い",
+      "files": {
+        "docs/task-list/2026-11.md": "# 2026-11\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\n"
+      },
+      "expectOk": false,
+      "reason": "存在しない"
+    }
+  ]
+}
