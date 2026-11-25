@@ -140,11 +140,8 @@ function openMonthlyClose() {
 async function executeMonthlyClose() {
   if (!organizationId.value) return
   const yearMonth = trimmedYearMonth.value
-  if (!YEAR_MONTH_PATTERN.test(yearMonth)) {
-    notification.error(t('shiftBudget.monthlyClose.error'))
-    return
-  }
-  if (monthNotEnded.value) return
+  // 形式不正・未終了月・BE 409 で拒否済みの月は送らない（ボタン無効化をすり抜けた場合の防御）
+  if (!canExecuteMonthlyClose.value) return
   notEndedRejectedMonth.value = null
   monthlyCloseExecuting.value = true
   try {

@@ -120,7 +120,7 @@
       "title": "Cierre mensual",
       "yearMonth": "Mes objetivo",
       "yearMonthHint": "Formato YYYY-MM (ej.: 2026-04)",
-      "invalidFormat": "Introduce el mes en formato AAAA-MM (p. ej., 2026-10)",
+      "invalidFormat": "Introduce el mes en formato YYYY-MM (p. ej., 2026-10)",
       "execute": "Ejecutar",
       "error": "Error en el cierre mensual"
     },
