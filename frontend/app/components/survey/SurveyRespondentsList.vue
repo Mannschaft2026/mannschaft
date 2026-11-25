@@ -103,12 +103,55 @@ const remindRemaining = computed<number | null>(() => {
   return Math.max(0, max - (props.distribution?.manualRemindCount ?? 0))
 })
 
+/** 督促ヒント。上限回数を BE から受け取れていないときは回数を含まない文言にする。 */
+const remindHintText = computed<string>(() => {
+  const max = props.distribution?.remindMaxCount
+  return max == null
+    ? t('surveys.respondents.remindHintNoMax', { count: unresponded.value.length })
+    : t('surveys.respondents.remindHint', { count: unresponded.value.length, max })
+})
+
+/**
+ * 現在時刻。`remindBlockedReason` の待機判定が時間の経過で再評価されるよう ref で持ち、
+ * `nextRemindableAt` に達した時点でタイマーが更新する（computed 内で Date.now() を直読みしない）。
+ */
+const nowMs = ref(Date.now())
+let cooldownTimer: ReturnType<typeof setTimeout> | null = null
+/** setTimeout が受け付ける最大遅延（約24.8日）。超える待機は到達のたびに張り直す。 */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1
+
+function clearCooldownTimer() {
+  if (cooldownTimer !== null) {
+    clearTimeout(cooldownTimer)
+    cooldownTimer = null
+  }
+}
+
+/** nextRemindableAt までの待機が終わる時刻に現在時刻を更新する（SSR では動かさない）。 */
+function scheduleCooldownRefresh() {
+  clearCooldownTimer()
+  nowMs.value = Date.now()
+  const next = props.distribution?.nextRemindableAt
+  if (!next) return
+  const wait = new Date(next).getTime() - nowMs.value
+  if (wait <= 0) return
+  cooldownTimer = setTimeout(() => {
+    cooldownTimer = null
+    scheduleCooldownRefresh()
+  }, Math.min(wait, MAX_TIMEOUT_MS))
+}
+
+watch(() => props.distribution?.nextRemindableAt, () => {
+  if (import.meta.client) scheduleCooldownRefresh()
+})
+onBeforeUnmount(clearCooldownTimer)
+
 /** 督促を送れない理由（送れるときは null）。公開中でない > 上限 > 待機 の順で優先する。 */
 const remindBlockedReason = computed<string | null>(() => {
   if (props.surveyStatus !== 'PUBLISHED') return t('surveys.respondents.remindBlockedNotPublished')
   if (remindRemaining.value === 0) return t('surveys.respondents.remindBlockedQuota')
   const next = props.distribution?.nextRemindableAt
-  if (next && new Date(next).getTime() > Date.now()) {
+  if (next && new Date(next).getTime() > nowMs.value) {
     return t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(next) })
   }
   return null
@@ -120,7 +163,10 @@ function getInitial(name: string): string {
   return trimmed.charAt(0).toUpperCase()
 }
 
-onMounted(() => loadRespondents())
+onMounted(() => {
+  scheduleCooldownRefresh()
+  loadRespondents()
+})
 
 defineExpose({ refresh: loadRespondents })
 </script>
@@ -165,8 +211,8 @@ defineExpose({ refresh: loadRespondents })
         class="flex items-center justify-between gap-2 rounded-lg border border-surface-200 bg-surface-50 px-3 py-2 dark:border-surface-700 dark:bg-surface-800"
       >
         <div class="flex min-w-0 flex-col gap-0.5">
-          <span class="text-xs text-surface-600">
-            {{ t('surveys.respondents.remindHint', { count: unresponded.length }) }}
+          <span class="text-xs text-surface-600" data-testid="respondents-remind-hint">
+            {{ remindHintText }}
           </span>
           <span
             v-if="remindRemaining !== null"

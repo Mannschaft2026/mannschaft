@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import type { VueWrapper } from '@vue/test-utils'
 import dayjs from 'dayjs'
@@ -263,4 +263,74 @@ describe('SurveyRespondentsList.vue — 督促の残り回数・送信可否（C
     )
     expect(wrapper.emitted('reminded')).toBeFalsy()
   }, 30_000)
+})
+
+describe('SurveyRespondentsList.vue — 検分対応（CMP-261125-2221）', () => {
+  it('S1: 督促ヒントの上限回数は BE の remindMaxCount を反映する（「3回」を直書きしない）', async () => {
+    const wrapper = await mountList({
+      distribution: distribution({ manualRemindCount: 0, remindMaxCount: 5 }),
+    })
+
+    const hint = wrapper.find('[data-testid="respondents-remind-hint"]').text()
+    expect(hint).toContain('5')
+    expect(hint).not.toContain('3')
+  }, 30_000)
+
+  it('S1: 上限が未取得（remindMaxCount なし）のときは回数を含まないヒントを出す', async () => {
+    const wrapper = await mountList({
+      distribution: distribution({ remindMaxCount: undefined as unknown as number }),
+    })
+
+    const hint = wrapper.find('[data-testid="respondents-remind-hint"]').text()
+    expect(hint).toBe(t('surveys.respondents.remindHintNoMax', { count: 1 }))
+    expect(hint).not.toContain('3')
+  }, 30_000)
+
+  describe('S3: 待機終了の再評価', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    async function mountWithCooldown(): Promise<VueWrapper> {
+      const next = new Date(Date.now() + 60_000).toISOString()
+      const wrapper = await mountSuspended(SurveyRespondentsList, {
+        props: {
+          scopeType: 'TEAM',
+          scopeId: '10',
+          surveyId: 99,
+          canRemind: true,
+          surveyStatus: 'PUBLISHED',
+          distribution: distribution({ manualRemindCount: 1, nextRemindableAt: next }),
+        },
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
+      await wrapper.find('[data-testid="respondents-filter"]').findAll('button')[1]!.trigger('click')
+      await vi.advanceTimersByTimeAsync(0)
+      return wrapper
+    }
+
+    it('画面を開いたまま nextRemindableAt を過ぎると、ボタンが有効になり理由の表示が消える', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+      const wrapper = await mountWithCooldown()
+
+      expect(remindButton(wrapper).attributes('disabled')).toBeDefined()
+      expect(blockedReason(wrapper).exists()).toBe(true)
+
+      await vi.advanceTimersByTimeAsync(61_000)
+
+      expect(remindButton(wrapper).attributes('disabled')).toBeUndefined()
+      expect(blockedReason(wrapper).exists()).toBe(false)
+      wrapper.unmount()
+    }, 30_000)
+
+    it('unmount すると待機終了のタイマーを解除する', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+      const wrapper = await mountWithCooldown()
+      const before = vi.getTimerCount()
+      expect(before).toBeGreaterThan(0)
+      wrapper.unmount()
+      expect(vi.getTimerCount()).toBeLessThan(before)
+    }, 30_000)
+  })
 })

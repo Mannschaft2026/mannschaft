@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -414,8 +415,9 @@ class SurveyDetailShapeContractIT extends AbstractMySqlIntegrationTest {
                     .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
 
             JsonNode distribution = objectMapper.readTree(body).path("data").path("distribution");
-            LocalDateTime last = LocalDateTime.parse(distribution.path("lastRemindedAt").asText());
-            LocalDateTime next = LocalDateTime.parse(distribution.path("nextRemindableAt").asText());
+            // BE の LocalDateTimeTimezoneSerializer はオフセット付き ISO（例 +09:00）で出すため OffsetDateTime で読む
+            OffsetDateTime last = OffsetDateTime.parse(distribution.path("lastRemindedAt").asText());
+            OffsetDateTime next = OffsetDateTime.parse(distribution.path("nextRemindableAt").asText());
             assertThat(next).isEqualTo(last.plusHours(24));
         }
 

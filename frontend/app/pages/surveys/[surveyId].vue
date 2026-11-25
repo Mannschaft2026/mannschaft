@@ -169,13 +169,20 @@ const currentUserId = computed<number | null>(() => authStore.currentUser?.id ??
  *   回答者一覧が作り直され、開いていた未回答タブが閉じてしまう）
  */
 async function fetchDetail(silent = false) {
-  if (!silent) loading.value = true
-  fetchError.value = false
+  if (!silent) {
+    loading.value = true
+    fetchError.value = false
+  }
   try {
     const res = await getSurvey(scopeType as 'TEAM' | 'ORGANIZATION', scopeId, surveyId)
     survey.value = res.data
   } catch {
-    fetchError.value = true
+    if (silent) {
+      // 裏取得の失敗では画面を落とさず古い表示（回答者一覧など）を残し、失敗だけ通知する
+      showError(t('surveys.detail.fetchFailed'))
+    } else {
+      fetchError.value = true
+    }
   } finally {
     loading.value = false
   }
