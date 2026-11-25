@@ -229,8 +229,8 @@ public class BlogPostService {
      *
      * <p>F00 可視性認可（{@link #getById} と同一挙動）: slug→entity 解決直後に
      * {@link ContentVisibilityChecker#assertCanView} を呼び、閲覧不可なら
-     * {@link com.mannschaft.app.common.BusinessException}（{@code VISIBILITY_001}=403 /
-     * {@code VISIBILITY_004}=404 相当）を投げる。これを欠くと slug 経由で他人の
+     * {@link com.mannschaft.app.common.BusinessException}（{@link CmsErrorCode#POST_NOT_FOUND}=404 CMS_001。
+     * 存在オラクル対策で VISIBILITY_001/004 は不存在 slug と同一応答に畳む）を投げる。これを欠くと slug 経由で他人の
      * MEMBERS_ONLY/DRAFT 記事が漏洩する（実機E2Eで捕捉した認可漏洩バグ）。
      * viewerUserId は認証コンテキストから取得する（リクエスト引数 {@code userId} は
      * スコープ解決用であり閲覧者IDではないため使用しない）。</p>
@@ -269,7 +269,17 @@ public class BlogPostService {
         }
         // 可視性判定を ContentVisibilityChecker に一元化（getById と完全に同じ認可挙動）。
         Long viewerUserId = SecurityUtils.getCurrentUserIdOrNull();
-        contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, entity.getId(), viewerUserId);
+        // 存在オラクル対策: 閲覧不可（他人の下書き等）は VISIBILITY_001（403）ではなく、不存在 slug と同一の
+        // POST_NOT_FOUND（404 CMS_001）に畳む。403 のままだと「その slug の記事が存在する」ことが判ってしまう。
+        try {
+            contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, entity.getId(), viewerUserId);
+        } catch (BusinessException e) {
+            String code = e.getErrorCode().getCode();
+            if ("VISIBILITY_001".equals(code) || "VISIBILITY_004".equals(code)) {
+                throw new BusinessException(CmsErrorCode.POST_NOT_FOUND);
+            }
+            throw e;
+        }
         // 可視性(F00)通過の「後段」でペイウォール本文ゲートを適用する（可視性 deny が優先）。
         // 表示経路なので、マスクを免れた本文のみ r2Key を署名 URL へ解決する。
         return resolveBodyMedia(

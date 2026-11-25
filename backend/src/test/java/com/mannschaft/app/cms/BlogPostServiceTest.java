@@ -446,7 +446,7 @@ class BlogPostServiceTest {
         }
 
         @Test
-        @DisplayName("認可: 非メンバーが他人のMEMBERS_ONLY記事をslug取得→assertCanViewで弾かれる（漏洩根治）")
+        @DisplayName("認可: 非メンバーが他人のMEMBERS_ONLY記事をslug取得→不存在と同一の404 CMS_001に畳まれる（漏洩根治・存在オラクル対策）")
         void slug検索_可視性拒否で例外伝播() {
             // Given: MEMBERS_ONLY 記事を slug で引けるが、Checker が VISIBILITY_001（403）で拒否する
             BlogPostEntity entity = createPostEntity(PostStatus.PUBLISHED);
@@ -467,7 +467,7 @@ class BlogPostServiceTest {
                 assertThatThrownBy(() -> service.getBySlug(TEAM_ID, null, null, "secret-slug"))
                         .isInstanceOf(BusinessException.class)
                         .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                                .isEqualTo("VISIBILITY_001"));
+                                .isEqualTo("CMS_001"));
                 verify(cmsMapper, never()).toBlogPostResponse(any(BlogPostEntity.class));
             }
         }

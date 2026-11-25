@@ -238,6 +238,28 @@ class BlogPostListScopeVisibilityIT extends AbstractMySqlIntegrationTest {
             assertThat(body.path("meta").path("total").asLong()).isEqualTo(2);
             assertThat(slugs(body)).containsExactlyInAnyOrder(pub, draft);
         }
+
+        @Test
+        @DisplayName("存在オラクル: 同じチームのメンバーが他人の下書きを slug で引いても、不存在 slug と同一応答（404 CMS_001・同一メッセージ）")
+        void 他人の下書きはslug詳細で不存在と同一応答() throws Exception {
+            String draft = teamPost(Visibility.MEMBERS_ONLY, PostStatus.DRAFT).getSlug();
+            String membersOnlyDraftPublic = teamPost(Visibility.PUBLIC, PostStatus.DRAFT).getSlug();
+            em.flush();
+
+            Outcome missing = outcome(detail(memberId, "no-such-slug-" + key, "teamId", teamId));
+            assertThat(missing).isEqualTo(new Outcome(404, "CMS_001"));
+            String missingMessage = objectMapper.readTree(missing.body()).path("error").path("message").asText();
+            assertThat(missingMessage).isNotBlank();
+
+            for (String slug : List.of(draft, membersOnlyDraftPublic)) {
+                Outcome actual = outcome(detail(memberId, slug, "teamId", teamId));
+                assertThat(actual).as(slug).isEqualTo(new Outcome(404, "CMS_001"));
+                assertThat(objectMapper.readTree(actual.body()).path("error").path("message").asText())
+                        .as(slug).isEqualTo(missingMessage);
+            }
+            // 作者本人は自分の下書きを従来どおり取得できる
+            assertThat(detail(authorId, draft, "teamId", teamId).getResponse().getStatus()).isEqualTo(200);
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════
