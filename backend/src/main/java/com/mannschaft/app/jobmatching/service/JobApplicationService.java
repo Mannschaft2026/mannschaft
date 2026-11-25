@@ -131,17 +131,18 @@ public class JobApplicationService {
      *
      * <p>応募行を {@code PESSIMISTIC_WRITE} で最新化・ロックしてから状態を判定する（CMP-261021-0355）。
      * 通常 SELECT のスナップショットで判定すると、コミット待ちの受諾が ACCEPTED にした応募を WITHDRAWN で
-     * 上書きしてしまう。取り下げは求人の情報を使わないため求人行はロックしない。取るロックは応募行の 1 つだけなので、
+     * 上書きしてしまう。本人判定（不変の応募者ID）はロックより前に行う。取り下げは求人の情報を使わないため求人行はロックしない。取るロックは応募行の 1 つだけなので、
      * 求人行 → 応募行の順でロックする受諾・不採用と循環待ちにならない（求人行をロックしないので、受諾が
      * 求人行のロック待ちの間でも取り下げはコミットできる）。</p>
      */
     @Transactional
     public JobApplicationEntity withdraw(Long applicationId, Long userId) {
         JobApplicationEntity app = findOrThrow(applicationId);
-        lockLatest(app);
+        // 本人判定は不変の applicantUserId で行えるため、ロックより前に行う（権限の無い呼び出しはロックを取らない）。
         if (!userId.equals(app.getApplicantUserId())) {
             throw new BusinessException(JobmatchingErrorCode.JOB_PERMISSION_DENIED);
         }
+        lockLatest(app);
         stateMachine.validate(app.getStatus(), JobApplicationStatus.WITHDRAWN);
         app.withdraw();
         JobApplicationEntity saved = applicationRepository.save(app);
@@ -155,20 +156,27 @@ public class JobApplicationService {
      * <p>受諾（{@link JobContractService#acceptApplication(Long, Long)}）と同じ順で、求人行を
      * {@code SELECT ... FOR UPDATE} でロックしてから応募行を {@code PESSIMISTIC_WRITE} で最新化・ロックし、
      * 最新の状態で遷移を判定する（CMP-261021-0355）。同一求人の受諾と直列化されるため、受諾済みの応募を
-     * REJECTED で上書きしない。</p>
+     * REJECTED で上書きしない（そのぶん不採用は同じ求人の受諾のコミットを待つ）。採否権限の判定はロックより前に行う。</p>
      *
      * @param reason 不採用理由（任意）。現状 Entity 側に保存欄がないため MVP はログのみに記録する。
      */
     @Transactional
     public JobApplicationEntity reject(Long applicationId, String reason, Long userId) {
         JobApplicationEntity app = findOrThrow(applicationId);
-        JobPostingEntity posting = postingRepository.findByIdForUpdate(app.getJobPostingId())
+        // 採否権限は求人のチーム・作成者（状態に依らない属性）で決まるため、ロックより前に通常の読み取りで判定する
+        // （権限の無い呼び出しは求人行・応募行のロックを取らない）。
+        JobPostingEntity posting = postingRepository.findById(app.getJobPostingId())
                 .orElseThrow(() -> new BusinessException(JobmatchingErrorCode.JOB_NOT_FOUND));
-        lockLatest(app);
-
         if (!jobPolicy.canDecideApplication(userId, posting)) {
             throw new BusinessException(JobmatchingErrorCode.JOB_PERMISSION_DENIED);
         }
+
+        // 受諾と同じ順（求人行 → 応募行）でロックする。求人行のロックで同一求人の受諾と直列化する。
+        // 求人は権限判定で既に永続化コンテキストに載っており、@Version を持つ。findByIdForUpdate（ロック付きクエリ）は
+        // 載っている古い版のまま行ロックを取りに行くため、並行受諾が CLOSED にして版を進めていると
+        // 楽観ロック例外になる。refresh で最新の行（版を含む）を読み直してロックする。
+        entityManager.refresh(posting, LockModeType.PESSIMISTIC_WRITE);
+        lockLatest(app);
 
         stateMachine.validate(app.getStatus(), JobApplicationStatus.REJECTED);
         app.reject(userId);

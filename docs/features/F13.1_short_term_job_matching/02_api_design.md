@@ -104,7 +104,7 @@
 - 定員未充足
 
 **トランザクション**（排他は InnoDB の行ロック。ロック順は求人行 → 応募行で、不採用も同じ順。CMP-261021-0355）
-1. `MySQL GET_LOCK("job_posting_<id>", 10)` で受諾の入口を絞る（10 秒で取れなければ 409 `JOB_INVALID_STATE_TRANSITION`。コミット前に解放するため排他の保証にはならない流量制御）
+1. `MySQL GET_LOCK("job_posting_<id>", 10)` で受諾どうしの入口を絞る（GET_LOCK を 10 秒で取れなければ 409 `JOB_INVALID_STATE_TRANSITION`。コミット前に解放するため排他の保証にはならない流量制御）。10 秒で打ち切られるのは GET_LOCK の待ちだけで、受諾どうしの待ちは概ね 10 秒で 409 になるが、ほかの操作（不採用・取り下げ・応募）との待ちは行ロック待ちのタイムアウト（`innodb_lock_wait_timeout`）に従い、そのタイムアウトやデッドロックは既定の handler で 500 になる
 2. `SELECT ... FOR UPDATE` で `job_postings` 行ロック（同一求人の受諾・不採用を直列化。コミットまで保持）
 3. `job_applications` の対象行を `SELECT ... FOR UPDATE` で読み直し、最新の状態で `APPLIED` であることを確認（違えば 409 `JOB_APPLICATION_NOT_PENDING`）。求人が `OPEN` でなければ 409 `JOB_NOT_OPEN`
 4. 採用済み件数を `SELECT COUNT(*) ... WHERE status = 'ACCEPTED' FOR SHARE`（locking read）で数え、定員以上なら 409 `JOB_CAPACITY_FULL`。REPEATABLE READ のスナップショットではなく最新のコミット済み行を数えるため、並行受諾を数え漏らさない

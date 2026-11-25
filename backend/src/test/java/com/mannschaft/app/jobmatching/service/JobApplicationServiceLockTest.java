@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,7 +43,7 @@ import static org.mockito.Mockito.verify;
  * {@link JobApplicationService} の取り下げ・不採用のロック順と最新値判定のユニットテスト（CMP-261021-0355）。
  *
  * <p>不採用は受諾と同じ「求人行 FOR UPDATE → 応募行 PESSIMISTIC_WRITE」の順でロックし、取り下げは応募行だけを
- * ロックする。いずれもロック後に読み直した状態で遷移を判定する。実 DB での並行性は
+ * ロックする。権限判定はロックより前に行い、権限の無い呼び出しはロックを取らない。いずれもロック後に読み直した状態で遷移を判定する。実 DB での並行性は
  * {@code JobAcceptanceCapacityConcurrencyIT} が検証する。</p>
  */
 @ExtendWith(MockitoExtension.class)
@@ -73,24 +74,58 @@ class JobApplicationServiceLockTest {
     }
 
     @Test
-    @DisplayName("不採用: 求人行 FOR UPDATE → 応募行 PESSIMISTIC_WRITE の順でロックしてから遷移する")
+    @DisplayName("不採用: 権限判定 → 求人行 PESSIMISTIC_WRITE → 応募行 PESSIMISTIC_WRITE の順でロックしてから遷移する")
     void 不採用は求人行から応募行の順でロックする() {
         JobApplicationEntity app = application(JobApplicationStatus.APPLIED);
         JobPostingEntity posting = posting();
         given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
-        given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
+        given(postingRepository.findById(POSTING_ID)).willReturn(Optional.of(posting));
         given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
         given(applicationRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
         JobApplicationEntity saved = service.reject(APPLICATION_ID, "理由", REQUESTER_ID);
 
         assertThat(saved.getStatus()).isEqualTo(JobApplicationStatus.REJECTED);
-        InOrder order = inOrder(applicationRepository, postingRepository, entityManager);
+        InOrder order = inOrder(applicationRepository, postingRepository, jobPolicy, entityManager);
         order.verify(applicationRepository).findById(APPLICATION_ID);
-        order.verify(postingRepository).findByIdForUpdate(POSTING_ID);
+        order.verify(postingRepository).findById(POSTING_ID);
+        order.verify(jobPolicy).canDecideApplication(REQUESTER_ID, posting);
+        order.verify(entityManager).refresh(posting, LockModeType.PESSIMISTIC_WRITE);
         order.verify(entityManager).refresh(app, LockModeType.PESSIMISTIC_WRITE);
         order.verify(applicationRepository).save(app);
-        verify(postingRepository, never()).findById(anyLong());
+        // 権限判定で載せた求人をロック付きクエリで取り直すと、@Version の古い版のまま楽観ロック例外になりうる。
+        verify(postingRepository, never()).findByIdForUpdate(anyLong());
+    }
+
+    @Test
+    @DisplayName("不採用: 採否権限が無ければ求人行・応募行のロックを取らずに JOB_PERMISSION_DENIED")
+    void 不採用は権限が無ければロックを取らない() {
+        JobApplicationEntity app = application(JobApplicationStatus.APPLIED);
+        JobPostingEntity posting = posting();
+        given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
+        given(postingRepository.findById(POSTING_ID)).willReturn(Optional.of(posting));
+        given(jobPolicy.canDecideApplication(APPLICANT_ID, posting)).willReturn(false);
+
+        assertThatThrownBy(() -> service.reject(APPLICATION_ID, "理由", APPLICANT_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(JobmatchingErrorCode.JOB_PERMISSION_DENIED));
+        verify(entityManager, never()).refresh(any(), any(LockModeType.class));
+        verify(applicationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("取り下げ: 本人でなければ応募行のロックを取らずに JOB_PERMISSION_DENIED")
+    void 取り下げは本人でなければロックを取らない() {
+        JobApplicationEntity app = application(JobApplicationStatus.APPLIED);
+        given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
+
+        assertThatThrownBy(() -> service.withdraw(APPLICATION_ID, REQUESTER_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(JobmatchingErrorCode.JOB_PERMISSION_DENIED));
+        verify(entityManager, never()).refresh(any(), any(LockModeType.class));
+        verify(applicationRepository, never()).save(any());
     }
 
     @Test
@@ -99,8 +134,9 @@ class JobApplicationServiceLockTest {
         JobApplicationEntity app = application(JobApplicationStatus.APPLIED);
         JobPostingEntity posting = posting();
         given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
-        given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
+        given(postingRepository.findById(POSTING_ID)).willReturn(Optional.of(posting));
         given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
+        doNothing().when(entityManager).refresh(posting, LockModeType.PESSIMISTIC_WRITE);
         doAnswer(inv -> {
             ((JobApplicationEntity) inv.getArgument(0)).accept(REQUESTER_ID);
             return null;

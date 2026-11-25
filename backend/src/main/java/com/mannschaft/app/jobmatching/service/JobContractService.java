@@ -44,8 +44,10 @@ import java.util.Objects;
  * 同一求人への受諾を直列化し、応募行を {@code PESSIMISTIC_WRITE} で読み直し、採用済み件数を
  * {@code SELECT COUNT(*) ... FOR SHARE} で数える。locking read は REPEATABLE READ のスナップショットではなく
  * 最新のコミット済み行を読むため、先行受諾・取り下げ・不採用の結果を見落とさない。行ロックはコミットまで保持される。
- * {@code GET_LOCK} はコミット前に解放されるため排他の保証にはならず、同一求人への受諾の入口で待ち時間を
- * 10 秒に打ち切る流量制御としてだけ使う。</p>
+ * {@code GET_LOCK} はコミット前に解放されるため排他の保証にはならず、同一求人への受諾どうしの入口の待ちを
+ * 打ち切る流量制御としてだけ使う。10 秒で打ち切られるのは {@code GET_LOCK} の待ちだけで、受諾どうしの待ちは
+ * 概ね 10 秒で 409 になるが、ほかの操作（不採用・取り下げ・応募）との待ちは求人行・応募行の行ロック待ちで
+ * {@code innodb_lock_wait_timeout} に従い、そのタイムアウトやデッドロックは既定の handler で 500 になる。</p>
  */
 @Slf4j
 @Service
@@ -56,7 +58,7 @@ public class JobContractService {
     /** 差し戻し回数の上限（超過で JOB_REJECTION_LIMIT_EXCEEDED）。 */
     private static final int MAX_REJECTION_COUNT = 3;
 
-    /** GET_LOCK（受諾の入口の流量制御）のタイムアウト秒数。10 秒以内に獲得できなければ 409 で返す。 */
+    /** GET_LOCK（受諾どうしの入口の流量制御）のタイムアウト秒数。GET_LOCK を 10 秒以内に獲得できなければ 409 で返す。 */
     private static final int LOCK_TIMEOUT_SECONDS = 10;
 
     /** 求人単位のロックキー接頭辞。MySQL GET_LOCK は 64 文字以内。 */
@@ -82,8 +84,9 @@ public class JobContractService {
      *
      * <p>排他制御（ロック順は求人行 → 応募行。{@link JobApplicationService} の不採用も同じ順で取る）:</p>
      * <ol>
-     *   <li>{@code GET_LOCK('job_posting_{postingId}', 10)} で受諾の入口を絞る（10 秒で打ち切り 409。
-     *       finally でコミット前に解放するため、排他の保証はしない）</li>
+     *   <li>{@code GET_LOCK('job_posting_{postingId}', 10)} で受諾どうしの入口を絞る（GET_LOCK の待ちが 10 秒を
+     *       超えると 409。finally でコミット前に解放するため、排他の保証はしない。求人行の行ロック待ちは
+     *       {@code innodb_lock_wait_timeout} に従い、そのタイムアウトやデッドロックは既定の handler で 500）</li>
      *   <li>求人行を {@code SELECT ... FOR UPDATE} で排他ロックする。同一求人の受諾・不採用はここで直列化される</li>
      *   <li>応募行を {@code PESSIMISTIC_WRITE} で読み直す（先頭の通常 SELECT の値はスナップショットで古い可能性がある）</li>
      *   <li>応募ステータス・求人ステータス・採用済み件数（{@code FOR SHARE} の locking read）を最新値で確認する</li>
@@ -316,8 +319,10 @@ public class JobContractService {
     /**
      * MySQL {@code GET_LOCK} で受諾の入口ロックを取得する。失敗時は状態遷移エラーで返す。
      *
-     * <p>呼び出し元の finally でコミット前に解放されるため、排他の保証ではなく「同一求人への受諾の待ちを
-     * 10 秒で打ち切る」流量制御として扱う。整合性は求人行・応募行の行ロックが守る。</p>
+     * <p>呼び出し元の finally でコミット前に解放されるため、排他の保証ではなく流量制御として扱う。
+     * 10 秒で打ち切られるのは GET_LOCK の待ちだけで、受諾どうしの待ちは概ね 10 秒で 409 になるが、ほかの操作
+     * （不採用・取り下げ・応募）との待ちは求人行・応募行の行ロック待ちで {@code innodb_lock_wait_timeout} に従い、
+     * そのタイムアウトやデッドロックは既定の handler で 500 になる。整合性は求人行・応募行の行ロックが守る。</p>
      *
      * <p>{@code SELECT GET_LOCK(key, timeout)} は 1 を返すとロック獲得、0 はタイムアウト、
      * NULL はエラー（例: 接続切断）。</p>

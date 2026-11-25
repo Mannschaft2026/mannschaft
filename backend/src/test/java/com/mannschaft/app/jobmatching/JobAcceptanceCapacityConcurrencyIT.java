@@ -341,6 +341,64 @@ class JobAcceptanceCapacityConcurrencyIT extends AbstractMySqlIntegrationTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════
+    // (h) 受諾が FOR SHARE を保持したままコミット前に、他応募の withdraw と新規 apply を並行
+    // ═════════════════════════════════════════════════════════════════════
+
+    /**
+     * 受諾が採用済み件数の {@code FOR SHARE}（応募の索引範囲への共有ロック）と求人行の {@code FOR UPDATE} を保持したまま
+     * コミット前（MATCHED 発行の瞬間）に、同じ求人の他の応募の withdraw と新規 apply を別 TX で同時に始める。
+     * 後続は受諾のロックを待つか先に終わるかのどちらでもよいが、デッドロック・未定義例外を起こさず、
+     * 受諾のコミット後に全件が成功か定義済みの業務エラーで終わり、不変条件が成り立つこと。
+     */
+    @Test
+    @DisplayName("(h) 受諾が FOR SHARE を保持したコミット前に他応募の withdraw と新規 apply → デッドロック/未定義例外なし・不変条件")
+    void h_受諾のFOR_SHARE保持中の他応募取り下げと新規応募はデッドロックしない() throws Exception {
+        Fixture f = fixture("share-hold", 3, 3);
+        Long acceptApp = insertApplication(f, f.worker(0));
+        Long withdrawApp = insertApplication(f, f.worker(1));
+
+        Callable<List<Outcome>> followers = () -> {
+            ExecutorService inner = Executors.newFixedThreadPool(2);
+            try {
+                Future<Outcome> withdraw = inner.submit(
+                        () -> run(() -> applicationService.withdraw(withdrawApp, f.worker(1)).getId()));
+                Future<Outcome> apply = inner.submit(() -> run(() -> applicationService.apply(
+                        f.postingId(), new ApplyCommand("IT 並行応募"), f.worker(2)).getId()));
+                return List.of(withdraw.get(WORKER_FINISH_SECONDS, TimeUnit.SECONDS),
+                        apply.get(WORKER_FINISH_SECONDS, TimeUnit.SECONDS));
+            } finally {
+                shutdown(inner);
+            }
+        };
+
+        Outcome accept;
+        List<Outcome> others;
+        FollowerObservation observation;
+        String detail;
+        try (MatchedHook<List<Outcome>> hook = new MatchedHook<>(applicationContext, MYSQL, f.postingId(), followers)) {
+            accept = run(() -> contractService.acceptApplication(acceptApp, f.requesterId()).getId());
+            observation = hook.observation();
+            detail = hook.detail();
+            assertThat(observation).as("前提: 後続が受諾のコミット前に開始され、待ちか終了が観測できること: %s", detail)
+                    .isIn(FollowerObservation.WAITED_FOR_LEADER, FollowerObservation.FINISHED_BEFORE_LEADER_COMMIT);
+            others = hook.follower().get(WORKER_FINISH_SECONDS, TimeUnit.SECONDS);
+        }
+        Outcome withdraw = others.get(0);
+        Outcome apply = others.get(1);
+
+        assertThat(accept.success()).as("受諾は成立する: %s", accept).isTrue();
+        assertThat(others)
+                .as("全件が成功か定義済みの業務エラー（デッドロック・想定外例外なし。観測: %s）: withdraw=%s apply=%s",
+                        detail, withdraw, apply)
+                .allSatisfy(o -> assertThat(o.unexpected()).isNull());
+        assertThat(applicationStatus(acceptApp)).isEqualTo("ACCEPTED");
+        assertThat(applicationStatus(withdrawApp)).isEqualTo(withdraw.success() ? "WITHDRAWN" : "APPLIED");
+        assertThat(applicationCountOf(f.postingId(), f.worker(2))).isEqualTo(apply.success() ? 1 : 0);
+        assertInvariants(f, List.of(accept));
+        assertThat(postingStatus(f.postingId())).as("定員 3 に 1 件なので OPEN のまま").isEqualTo("OPEN");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
     // 並行実行・不変条件
     // ═════════════════════════════════════════════════════════════════════
 
