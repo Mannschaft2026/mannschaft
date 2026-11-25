@@ -9,13 +9,13 @@
 
 -- 1. permissions カタログへ登録（再実行安全）
 INSERT INTO permissions (name, display_name, scope, created_at, updated_at)
-SELECT 'MANAGE_PARKING', '駐車場管理', 'TEAM', NOW(), NOW()
+SELECT 'MANAGE_PARKING', '駐車場管理', 'TEAM', UTC_TIMESTAMP(), UTC_TIMESTAMP()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE name = 'MANAGE_PARKING');
 
 -- 2. ADMIN へ is_default=1 で自動付与
 INSERT INTO role_permissions (role_id, permission_id, is_default, created_at)
-SELECT r.id, p.id, 1, NOW()
+SELECT r.id, p.id, 1, UTC_TIMESTAMP()
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'ADMIN'
