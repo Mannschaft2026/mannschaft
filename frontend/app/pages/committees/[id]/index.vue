@@ -19,6 +19,8 @@ const invitations = ref<CommitteeInvitation[]>([])
 const loading = ref(true)
 /** 取得失敗は「委員会なし」ではない。何も描画しない空白へフォールバックせずエラー状態を出す。 */
 const loadFailed = ref(false)
+/** メンバー一覧だけの取得失敗（詳細は表示を維持する）。 */
+const membersLoadFailed = ref(false)
 const transitioning = ref(false)
 const showInviteDialog = ref(false)
 const inviting = ref(false)
@@ -44,28 +46,50 @@ function statusSeverity(status: CommitteeDetail['status']): string {
   }
 }
 
+/** 現役所属（myRole あり）の利用者だけがメンバー一覧を取得できる。失敗は詳細全体に波及させない。 */
+async function loadMembers() {
+  membersLoadFailed.value = false
+  try {
+    const membersRes = await committeeApi.listMembers(committeeId)
+    members.value = membersRes.data
+  } catch (err) {
+    // 0件表示に偽装せず、メンバー節専用のエラー状態にする
+    members.value = []
+    membersLoadFailed.value = true
+    handleApiError(err, 'loadCommitteeMembers')
+  }
+}
+
 async function loadData() {
   loading.value = true
   loadFailed.value = false
+  membersLoadFailed.value = false
   try {
-    const [committeeRes, membersRes] = await Promise.all([
-      committeeApi.getCommittee(committeeId),
-      committeeApi.listMembers(committeeId),
-    ])
+    // 詳細を先に取得する。メンバー一覧は所属者限定のため、所属判定（myRole）後にだけ呼ぶ
+    const committeeRes = await committeeApi.getCommittee(committeeId)
     committee.value = committeeRes.data
-    members.value = membersRes.data
-
-    if (isChair.value || isChairOrVice.value) {
-      try {
-        const invRes = await invitationApi.listInvitations(committeeId)
-        invitations.value = invRes.data
-      } catch {
-        invitations.value = []
-      }
-    }
   } catch (err) {
     handleApiError(err, 'loadCommittee')
     loadFailed.value = true
+    loading.value = false
+    return
+  }
+
+  try {
+    if (committee.value?.myRole) {
+      await loadMembers()
+      if (isChairOrVice.value) {
+        try {
+          const invRes = await invitationApi.listInvitations(committeeId)
+          invitations.value = invRes.data
+        } catch {
+          invitations.value = []
+        }
+      }
+    } else {
+      members.value = []
+      invitations.value = []
+    }
   } finally {
     loading.value = false
   }
@@ -269,13 +293,13 @@ onMounted(async () => {
         </SectionCard>
       </div>
 
-      <!-- メンバー一覧 -->
-      <div>
-        <SectionCard>
+      <!-- メンバー一覧（委員会の現役所属者のみ。非所属は節ごと出さない） -->
+      <div v-if="committee.myRole">
+        <SectionCard data-testid="committee-detail-members">
           <template #header>
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-gray-800">
-                {{ $t('committee.detail.members') }}（{{ members.length }}）
+                {{ $t('committee.detail.members') }}<template v-if="!membersLoadFailed">（{{ members.length }}）</template>
               </h3>
               <Button
                 v-if="isChair"
@@ -286,7 +310,13 @@ onMounted(async () => {
               />
             </div>
           </template>
-          <div class="divide-y">
+          <DashboardErrorState
+            v-if="membersLoadFailed"
+            testid="committee-detail-members-error"
+            :message="$t('committee.detail.members_load_failed')"
+            @retry="loadMembers"
+          />
+          <div v-else class="divide-y">
             <div
               v-for="member in members"
               :key="member.userId"
