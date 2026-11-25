@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Getter
 @RequiredArgsConstructor
-public class UpdateShiftRequestRequest {
+public class UpdateShiftRequestRequest implements StrictShiftRequest {
 
     @NotNull
     private final String preference;

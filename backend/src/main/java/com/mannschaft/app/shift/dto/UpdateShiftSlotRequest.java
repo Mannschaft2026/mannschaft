@@ -15,7 +15,7 @@ import java.util.List;
  */
 @Getter
 @RequiredArgsConstructor(onConstructor_ = @JsonCreator)
-public class UpdateShiftSlotRequest {
+public class UpdateShiftSlotRequest implements StrictShiftRequest {
 
     private final LocalDate slotDate;
 

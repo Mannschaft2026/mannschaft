@@ -418,7 +418,7 @@ class ShiftScheduleServiceTest {
             // Given
             ShiftScheduleEntity entity = createScheduleEntity();
             UpdateShiftScheduleRequest req = new UpdateShiftScheduleRequest(
-                    "更新タイトル", null, null, null, null, null, null);
+                    "更新タイトル", null, null, null, null, null);
             ShiftScheduleResponse response = createScheduleResponse();
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
             given(scheduleRepository.save(any(ShiftScheduleEntity.class))).willReturn(entity);
@@ -437,7 +437,7 @@ class ShiftScheduleServiceTest {
         void スケジュール更新_存在しない_BusinessException() {
             // Given
             UpdateShiftScheduleRequest req = new UpdateShiftScheduleRequest(
-                    "更新タイトル", null, null, null, null, null, null);
+                    "更新タイトル", null, null, null, null, null);
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.empty());
 
             // When & Then
@@ -452,7 +452,7 @@ class ShiftScheduleServiceTest {
             ShiftScheduleEntity entity = createScheduleEntity();
             UpdateShiftScheduleRequest req = new UpdateShiftScheduleRequest(
                     null, null, LocalDate.of(2026, 3, 10), LocalDate.of(2026, 3, 1),
-                    null, null, null);
+                    null, null);
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
 
             // When & Then
@@ -490,7 +490,7 @@ class ShiftScheduleServiceTest {
             // Given: findById で取得した id 採番済みの managed entity
             ShiftScheduleEntity existing = existingScheduleWithId();
             UpdateShiftScheduleRequest req = new UpdateShiftScheduleRequest(
-                    "更新後タイトル", null, null, null, null, null, null);
+                    "更新後タイトル", null, null, null, null, null);
             ShiftScheduleResponse response = createScheduleResponse();
 
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(existing));
@@ -521,7 +521,7 @@ class ShiftScheduleServiceTest {
             // Given
             ShiftScheduleEntity existing = existingScheduleWithId();
             UpdateShiftScheduleRequest req = new UpdateShiftScheduleRequest(
-                    null, "MONTHLY", null, null, null, null, null);
+                    null, "MONTHLY", null, null, null, null);
             ShiftScheduleResponse response = createScheduleResponse();
 
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(existing));

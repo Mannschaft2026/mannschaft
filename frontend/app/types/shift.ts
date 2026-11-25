@@ -276,7 +276,6 @@ export interface UpdateShiftScheduleRequest {
   periodType?: ShiftPeriodType
   startDate?: string
   endDate?: string
-  status?: ShiftScheduleStatus
   requestDeadline?: string
   note?: string
 }
