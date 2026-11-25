@@ -24,4 +24,13 @@ public interface TimelineEffortSourceRepository extends JpaRepository<TimelineEf
 
     /** 投稿 ID 集合のうち努力由来のものの対応行（読み取り経路のガードで 1 回だけ引く）。 */
     List<TimelineEffortSourceEntity> findByTimelinePostIdIn(Collection<Long> timelinePostIds);
+
+    /** share UUID の集合のうち、未失効で対応投稿が公開中（非表示・削除でない）の対応行（1 回の照会）。 */
+    @Query("SELECT s FROM TimelineEffortSourceEntity s WHERE s.shareUuid IN :shareUuids AND s.isRevoked = false "
+            + "AND EXISTS (SELECT p.id FROM TimelinePostEntity p WHERE p.id = s.timelinePostId "
+            + "AND p.status = com.mannschaft.app.timeline.PostStatus.PUBLISHED AND p.deletedAt IS NULL)")
+    List<TimelineEffortSourceEntity> findLiveByShareUuidIn(@Param("shareUuids") Collection<UUID> shareUuids);
+
+    /** share UUID の集合のうち、未失効の対応行（保守の後処理判定。1 回の照会）。 */
+    List<TimelineEffortSourceEntity> findByShareUuidInAndIsRevokedFalse(Collection<UUID> shareUuids);
 }

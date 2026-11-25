@@ -64,9 +64,10 @@ public class EffortTeamShareTxService {
      * @param grantMembershipId 行に束縛されていた加入期間 ID
      * @param shareVersion      行の shareVersion
      * @param sourceVersion     行の contentRevision
+     * @param teamUpdated       この呼出しで team 行を REVOKED にしたか（false は既に REVOKED で、後処理の再実行だけを求める）
      */
     public record Revoked(UUID shareId, UUID recordId, Long teamId, Long grantMembershipId, long shareVersion,
-                          long sourceVersion) {
+                          long sourceVersion, boolean teamUpdated) {
     }
 
     /** チームの projection を upsert する（coordinator が owner の desired command と照合済みで呼ぶ）。 */
@@ -132,25 +133,33 @@ public class EffortTeamShareTxService {
     }
 
     /**
-     * 加入期間の終了による失効: そのチームで endedMembershipId に束縛された未失効の行だけを REVOKED にする
-     * （同じ user/team の別の加入期間＝再加入後の共有には触れない）。
+     * 加入期間の終了による失効: そのチームで endedMembershipId に束縛された未失効の行を REVOKED にし、既に REVOKED の行も
+     * 返す（同じ user/team の別の加入期間＝再加入後の共有には触れない）。
+     *
+     * <p>team 行の REVOKED を commit した後に owner・timeline の後処理が失敗しても、イベントの再送で後処理を冪等に
+     * 再実行できるようにするため、失効済みの行も同じ加入期間 ID に束縛されている限り返す（teamUpdated=false）。
+     * owner・timeline 側はそれぞれ加入期間 ID と版を照合し、済んでいれば何もしない（データ設計 §8）。</p>
      */
     @Transactional
     public List<Revoked> revokeForMembership(Long teamId, Long userId, Long endedMembershipId) {
         List<Revoked> revoked = new ArrayList<>();
-        for (EffortTeamShareEntity row : queries.findLiveForMembership(teamId, userId, endedMembershipId)) {
-            revoked.add(markRevoked(row));
+        for (EffortTeamShareEntity row : queries.findBoundToMembership(teamId, userId, endedMembershipId)) {
+            revoked.add(row.getState() == EffortTeamShareState.REVOKED ? snapshot(row, false) : markRevoked(row));
         }
         return revoked;
     }
 
-    /** 保守: 指定の行を、加入期間 ID がまだ一致し未失効なら REVOKED にする。 */
+    /**
+     * 保守: 指定の行を、加入期間 ID がまだ一致し未失効なら REVOKED にする。既に REVOKED で加入期間 ID が一致する行は
+     * 変えずに返し、呼出元が owner・timeline の未完了の後処理を冪等に再実行できるようにする。
+     */
     @Transactional
     public Optional<Revoked> revokeIfBound(UUID shareId, Long grantMembershipId) {
         return teamShares.findByIdForUpdate(shareId)
                 .filter(row -> grantMembershipId.equals(row.getGrantMembershipId()))
-                .filter(row -> row.getState() == EffortTeamShareState.VISIBLE || row.getState() == EffortTeamShareState.PENDING)
-                .map(this::markRevoked);
+                .filter(row -> row.getState() == EffortTeamShareState.VISIBLE || row.getState() == EffortTeamShareState.PENDING
+                        || row.getState() == EffortTeamShareState.REVOKED)
+                .map(row -> row.getState() == EffortTeamShareState.REVOKED ? snapshot(row, false) : markRevoked(row));
     }
 
     /** share UUID のチーム側共有行（読み取りのみ）。 */
@@ -220,11 +229,15 @@ public class EffortTeamShareTxService {
     // ───────────────────────────── 内部 ─────────────────────────────
 
     private Revoked markRevoked(EffortTeamShareEntity row) {
-        Revoked before = new Revoked(row.getId(), row.getSourceRecordId(), row.getTeamId(), row.getGrantMembershipId(),
-                row.getShareVersion(), row.getSourceVersion());
+        Revoked before = snapshot(row, true);
         row.setState(EffortTeamShareState.REVOKED);
         teamShares.saveAndFlush(row);
         return before;
+    }
+
+    private static Revoked snapshot(EffortTeamShareEntity row, boolean teamUpdated) {
+        return new Revoked(row.getId(), row.getSourceRecordId(), row.getTeamId(), row.getGrantMembershipId(),
+                row.getShareVersion(), row.getSourceVersion(), teamUpdated);
     }
 
     private static boolean isOlder(EffortShareCommand command, EffortTeamShareEntity row) {

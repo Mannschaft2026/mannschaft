@@ -163,12 +163,17 @@ public class EffortTeamShareQueryRepository {
         return query.getResultList();
     }
 
-    /** 保守の走査: 未失効（VISIBLE・PENDING）の共有行を id 昇順で after より後ろから limit 件。 */
-    public List<EffortTeamShareEntity> findLiveAfter(UUID afterId, int limit) {
+    /**
+     * 保守の走査: 失効の対象または後処理の残りがあり得る共有行（VISIBLE・PENDING・REVOKED）を id 昇順で after より後ろから
+     * limit 件。REVOKED は team 行の失効を commit した後に owner・timeline の後処理が欠けた行を拾うために含める
+     * （後処理が残っているかは呼出元が owner 行・timeline をチャンク単位で一括照会して絞る）。
+     */
+    public List<EffortTeamShareEntity> findReconcilableAfter(UUID afterId, int limit) {
         String jpql = "SELECT s FROM EffortTeamShareEntity s WHERE s.state IN :states"
                 + (afterId == null ? "" : " AND s.id > :after") + " ORDER BY s.id ASC";
         TypedQuery<EffortTeamShareEntity> query = entityManager.createQuery(jpql, EffortTeamShareEntity.class)
-                .setParameter("states", List.of(EffortTeamShareState.VISIBLE, EffortTeamShareState.PENDING))
+                .setParameter("states", List.of(EffortTeamShareState.VISIBLE, EffortTeamShareState.PENDING,
+                        EffortTeamShareState.REVOKED))
                 .setMaxResults(limit);
         if (afterId != null) {
             query.setParameter("after", afterId);
@@ -176,15 +181,19 @@ public class EffortTeamShareQueryRepository {
         return query.getResultList();
     }
 
-    /** 加入期間の終了: そのチームで endedMembershipId に束縛された未失効（VISIBLE・PENDING）の行。 */
-    public List<EffortTeamShareEntity> findLiveForMembership(Long teamId, Long ownerUserId, Long grantMembershipId) {
+    /**
+     * 加入期間の終了: そのチームで endedMembershipId に束縛された VISIBLE・PENDING・REVOKED の行（REVOKED は後処理の
+     * 再実行のため。MODERATED は終端で後処理を別経路で持つため含めない）。
+     */
+    public List<EffortTeamShareEntity> findBoundToMembership(Long teamId, Long ownerUserId, Long grantMembershipId) {
         return entityManager.createQuery("SELECT s FROM EffortTeamShareEntity s WHERE s.teamId = :team "
                         + "AND s.ownerUserId = :owner AND s.grantMembershipId = :grant AND s.state IN :states",
                         EffortTeamShareEntity.class)
                 .setParameter("team", teamId)
                 .setParameter("owner", ownerUserId)
                 .setParameter("grant", grantMembershipId)
-                .setParameter("states", List.of(EffortTeamShareState.VISIBLE, EffortTeamShareState.PENDING))
+                .setParameter("states", List.of(EffortTeamShareState.VISIBLE, EffortTeamShareState.PENDING,
+                        EffortTeamShareState.REVOKED))
                 .getResultList();
     }
 

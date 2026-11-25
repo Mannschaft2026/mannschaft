@@ -129,26 +129,44 @@ public class EffortShareCoordinator {
      * 加入期間の終了による失効（TeamEffortMembershipRevokedEvent・保守コマンド共通）。endedMembershipId に束縛された
      * 共有だけを team・owner・timeline で冪等に REVOKED にする（再加入後の別の加入期間の共有には触れない）。
      *
-     * @return 失効させた team 行の数
+     * <p>team 行が既に REVOKED でも、同じ加入期間 ID に束縛されていれば owner・timeline の後処理を再実行する
+     * （team の commit 後に後処理が失敗した行を、イベントの再送で収束させる）。owner・timeline はそれぞれ加入期間 ID と
+     * 版を照合し、済んでいれば何もしない。</p>
+     *
+     * @return team・owner・timeline のいずれかを失効させた共有の数（すべて済んでいた共有は数えない）
      */
     public int revokeForMembership(Long teamId, Long userId, Long endedMembershipId) {
-        List<EffortTeamShareTxService.Revoked> revoked = teamTx.revokeForMembership(teamId, userId, endedMembershipId);
-        revoked.forEach(this::afterMembershipRevoked);
-        return revoked.size();
+        int changed = 0;
+        for (EffortTeamShareTxService.Revoked row : teamTx.revokeForMembership(teamId, userId, endedMembershipId)) {
+            if (afterMembershipRevoked(row) || row.teamUpdated()) {
+                changed++;
+            }
+        }
+        return changed;
     }
 
-    /** 保守: 指定の共有を、加入期間 ID がまだ一致していれば失効させる。 */
+    /**
+     * 保守: 指定の共有を、加入期間 ID がまだ一致していれば失効させる。team 行が既に REVOKED なら owner・timeline の
+     * 未完了の後処理だけを冪等に再実行する。
+     *
+     * @return team・owner・timeline のいずれかを失効させたら true
+     */
     public boolean revokeIfBound(UUID shareId, Long grantMembershipId) {
         Optional<EffortTeamShareTxService.Revoked> revoked = teamTx.revokeIfBound(shareId, grantMembershipId);
-        revoked.ifPresent(this::afterMembershipRevoked);
-        return revoked.isPresent();
+        if (revoked.isEmpty()) {
+            return false;
+        }
+        return afterMembershipRevoked(revoked.get()) || revoked.get().teamUpdated();
     }
 
     // ───────────────────────────── 内部 ─────────────────────────────
 
-    private void afterMembershipRevoked(EffortTeamShareTxService.Revoked row) {
-        ownerTx.revokeForEndedMembership(row.recordId(), row.shareId(), row.grantMembershipId());
-        hideOnTimeline(row);
+    /** owner → timeline の順に加入期間の失効を反映する（各自の TX・冪等）。いずれかを変えたら true。 */
+    private boolean afterMembershipRevoked(EffortTeamShareTxService.Revoked row) {
+        boolean owner = ownerTx.revokeForEndedMembership(row.recordId(), row.shareId(), row.grantMembershipId());
+        boolean onTimeline = timeline.revokeTeamShare(row.teamId(), row.shareId(), row.grantMembershipId(),
+                row.shareVersion());
+        return owner || onTimeline;
     }
 
     private void hideOnTimeline(EffortTeamShareTxService.Revoked row) {

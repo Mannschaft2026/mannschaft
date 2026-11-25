@@ -12,6 +12,8 @@ import com.mannschaft.app.membership.dto.EffortShareQualification;
 import com.mannschaft.app.membership.dto.EffortShareQualificationQuery;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.common.NameResolverService;
+import com.mannschaft.app.moderation.service.ContentHiddenStatusService;
+import com.mannschaft.app.timeline.service.TimelineEffortSourceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -37,9 +39,13 @@ import java.util.UUID;
  *   <li>team 行が VISIBLE で、owner 行（purge 後の tombstone を含む。本人の削除は deny）も VISIBLE で、
  *       share UUID・チーム・shareVersion・contentRevision（同期済み版）・加入期間 ID・hash がすべて一致する。</li>
  *   <li>投稿者の加入期間 ID が現在有効な直接所属である（退会整理だけで終わった RETAINED_ACCOUNT_WITHDRAWAL は read だけ許す）。</li>
+ *   <li>対応する努力由来のタイムライン投稿が未失効・公開中で、通報・モデレーションで非表示にされていない（データ設計 §7.2）。
+ *       非表示の確定通知（AFTER_COMMIT で team 行を MODERATED にする後処理）が欠けても、投稿の非表示・削除状態を
+ *       ここで読むため共有は見えない。</li>
  * </ol>
  *
- * <p>owner 照合・資格照会は 1 ページにつき各 1 回（件数に比例させない）。照会の障害は {@code EFFORT_004}（503）として
+ * <p>owner 照合・投稿状態の照会（timeline・moderation の Service 経由で各 1 回）・資格照会は 1 ページにつき定数回
+ * （件数に比例させない）。照会の障害は {@code EFFORT_004}（503）として
  * 呼出元へ伝え、空の一覧や「見えない」に置き換えない（障害を許可にも倒さない）。キャッシュは使わない。</p>
  */
 @Slf4j
@@ -57,6 +63,10 @@ public class EffortTeamShareVisibility {
     /** チームの有効性（削除済みは返らない）を一括で引く。TeamService は F00 の Checker と循環するため使わない。 */
     private final NameResolverService names;
     private final EffortShareMetrics metrics;
+    /** 努力由来投稿の対応行・投稿の公開状態（timeline ドメイン。Service 経由・ID 参照）。 */
+    private final TimelineEffortSourceService timelineSources;
+    /** 通報・モデレーションによる投稿の非表示（moderation ドメイン。Service 経由・ID 参照）。 */
+    private final ContentHiddenStatusService contentHidden;
 
     /**
      * 判定結果。
@@ -115,10 +125,19 @@ public class EffortTeamShareVisibility {
                     metrics.denied("owner_state");
                 }
             }
+            Set<UUID> postVisible = visiblePosts(synced);
+            List<EffortTeamShareEntity> posted = new ArrayList<>();
+            for (EffortTeamShareEntity row : synced) {
+                if (postVisible.contains(row.getId())) {
+                    posted.add(row);
+                } else {
+                    metrics.denied("post_state");
+                }
+            }
             Set<UUID> allowed = new HashSet<>();
             Set<UUID> purged = new HashSet<>();
-            Map<Long, EffortShareQualification> qualifications = qualify(synced);
-            for (EffortTeamShareEntity row : synced) {
+            Map<Long, EffortShareQualification> qualifications = qualify(posted);
+            for (EffortTeamShareEntity row : posted) {
                 EffortShareQualification q = qualifications.get(row.getGrantMembershipId());
                 boolean qualified = q != null && Objects.equals(q.teamId(), row.getTeamId())
                         && Objects.equals(q.userId(), row.getOwnerUserId())
@@ -150,6 +169,30 @@ public class EffortTeamShareVisibility {
                 && Objects.equals(owner.syncedSourceVersion(), owner.contentRevision())
                 && row.getGrantMembershipId().equals(owner.grantMembershipId())
                 && row.getProjectionHash().equals(owner.desiredHash());
+    }
+
+    /**
+     * 対応する努力由来投稿が未失効・公開中で、通報・モデレーションで非表示にされていない共有（データ設計 §7.2）。
+     * timeline の対応表と moderation の非表示状態をそれぞれ 1 回で引く（件数に比例させない）。対応投稿の無い共有は
+     * 同期が完了していない（team → timeline → owner ack の順に確定する）ため見せない。
+     */
+    private Set<UUID> visiblePosts(List<EffortTeamShareEntity> rows) {
+        if (rows.isEmpty()) {
+            return Set.of();
+        }
+        Map<UUID, Long> livePosts = timelineSources.findLivePostIdsByShareUuids(
+                rows.stream().map(EffortTeamShareEntity::getId).toList());
+        if (livePosts.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> hidden = contentHidden.findHiddenTimelinePostIds(livePosts.values());
+        Set<UUID> visible = new HashSet<>();
+        livePosts.forEach((shareId, postId) -> {
+            if (!hidden.contains(postId)) {
+                visible.add(shareId);
+            }
+        });
+        return visible;
     }
 
     /** 閲覧者が現在所属し、削除されていないチーム。 */

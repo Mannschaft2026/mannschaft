@@ -18,7 +18,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * F06.4.1 努力由来の TEAM タイムライン投稿の内部 Service（データ設計 §7。外部 Controller へ公開しない）。
@@ -141,6 +143,31 @@ public class TimelineEffortSourceService {
     @Transactional(readOnly = true)
     public Optional<UUID> findShareUuidByPostId(Long postId) {
         return sources.findByTimelinePostId(postId).map(TimelineEffortSourceEntity::getShareUuid);
+    }
+
+    /**
+     * share UUID の集合のうち、対応行が未失効で対応投稿が公開中（非表示・削除でない）のものの share UUID → post ID
+     * （1 回の照会）。effort の F00 が投稿の非表示・削除状態を判定に含めるために読む（データ設計 §7.2）。
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> findLivePostIdsByShareUuids(Collection<UUID> shareUuids) {
+        Map<UUID, Long> result = new HashMap<>();
+        if (shareUuids == null || shareUuids.isEmpty()) {
+            return result;
+        }
+        sources.findLiveByShareUuidIn(shareUuids).forEach(s -> result.put(s.getShareUuid(), s.getTimelinePostId()));
+        return result;
+    }
+
+    /** share UUID の集合のうち、対応行がまだ失効していないもの（effort の保守が後処理の残りを判定する。1 回の照会）。 */
+    @Transactional(readOnly = true)
+    public Set<UUID> findUnrevokedShareUuids(Collection<UUID> shareUuids) {
+        if (shareUuids == null || shareUuids.isEmpty()) {
+            return Set.of();
+        }
+        return sources.findByShareUuidInAndIsRevokedFalse(shareUuids).stream()
+                .map(TimelineEffortSourceEntity::getShareUuid)
+                .collect(Collectors.toSet());
     }
 
     /** 投稿 ID 集合のうち努力由来のものの post ID → share UUID（1 回の照会）。 */
