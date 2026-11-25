@@ -124,6 +124,7 @@ class PlaintextSecretTokenGuardArchTest {
         return Stream.of(
                 Arguments.of("系統1 チーム/組織招待", "com.mannschaft.app.role.entity.InviteTokenEntity", "token"),
                 Arguments.of("系統2 連絡先招待", "com.mannschaft.app.contact.entity.ContactInviteTokenEntity", "token"),
+                Arguments.of("系統3 イベントゲスト招待", "com.mannschaft.app.event.entity.EventGuestInviteTokenEntity", "token"),
                 Arguments.of("系統4 ファイル共有リンク", "com.mannschaft.app.filesharing.entity.SharedFileLinkEntity", "token"),
                 Arguments.of("系統5 委員会招集", "com.mannschaft.app.committee.entity.CommitteeInvitationEntity", "inviteToken"),
                 Arguments.of("系統6 サイネージ", "com.mannschaft.app.signage.entity.SignageAccessTokenEntity", "token"),

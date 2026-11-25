@@ -139,14 +139,14 @@ class EventInviteTokenServiceTest {
             InviteTokenIssuedResponse result = eventInviteTokenService.createToken(EVENT_ID, USER_ID, request);
 
             // Then
-            assertThat(result.getLabel()).isEqualTo("VIPゲスト用");
-            assertThat(result.getMaxUses()).isEqualTo(10);
-            assertThat(result.getToken()).matches("^[A-Za-z0-9_-]{43}$");
+            assertThat(result.invite().getLabel()).isEqualTo("VIPゲスト用");
+            assertThat(result.invite().getMaxUses()).isEqualTo(10);
+            assertThat(result.token()).matches("^[A-Za-z0-9_-]{43}$");
             org.mockito.ArgumentCaptor<EventGuestInviteTokenEntity> captor =
                     org.mockito.ArgumentCaptor.forClass(EventGuestInviteTokenEntity.class);
             verify(tokenRepository).save(captor.capture());
-            assertThat(captor.getValue().getTokenHash()).isEqualTo(vault.hash(result.getToken()))
-                    .isNotEqualTo(result.getToken());
+            assertThat(captor.getValue().getTokenHash()).isEqualTo(vault.hash(result.token()))
+                    .isNotEqualTo(result.token());
         }
 
         @Test
@@ -161,7 +161,7 @@ class EventInviteTokenServiceTest {
             InviteTokenIssuedResponse result = eventInviteTokenService.createToken(EVENT_ID, USER_ID, request);
 
             // Then
-            assertThat(result.getMaxUses()).isNull();
+            assertThat(result.invite().getMaxUses()).isNull();
         }
     }
 

@@ -63,10 +63,10 @@ public class EventInviteTokenService {
 
         EventGuestInviteTokenEntity saved = tokenRepository.save(entity);
         log.info("招待トークン作成: eventId={}, tokenId={}", eventId, saved.getId());
-        return new InviteTokenIssuedResponse(
-                saved.getId(), saved.getEventId(), issued.plaintext(), saved.getLabel(), saved.getMaxUses(),
+        return new InviteTokenIssuedResponse(issued.plaintext(), new InviteTokenResponse(
+                saved.getId(), saved.getEventId(), saved.getLabel(), saved.getMaxUses(),
                 saved.getUsedCount(), saved.getExpiresAt(), saved.getIsActive(), saved.getCreatedBy(),
-                saved.getCreatedAt(), saved.getUpdatedAt());
+                saved.getCreatedAt(), saved.getUpdatedAt()));
     }
 
     /**
