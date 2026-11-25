@@ -115,14 +115,12 @@ class MemberWorkConstraintServiceTest {
     // ========================================
 
     @Nested
-    @DisplayName("upsertConstraint")
+    @DisplayName("upsertConstraint（認可しない tx 本体。認可・在籍検査は MemberWorkConstraintFacadeTest）")
     class UpsertConstraint {
 
         @Test
         @DisplayName("個別制約_新規作成_ADMIN_成功")
         void 個別制約_新規作成_ADMIN_成功() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
             given(constraintRepository.findByUserIdAndTeamId(MEMBER_USER_ID, TEAM_ID))
                     .willReturn(Optional.empty());
             MemberWorkConstraintEntity saved = buildIndividual();
@@ -142,8 +140,6 @@ class MemberWorkConstraintServiceTest {
         @Test
         @DisplayName("個別制約_既存更新_ADMIN_成功")
         void 個別制約_既存更新_ADMIN_成功() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
             MemberWorkConstraintEntity existing = buildIndividual();
             given(constraintRepository.findByUserIdAndTeamId(MEMBER_USER_ID, TEAM_ID))
                     .willReturn(Optional.of(existing));
@@ -162,24 +158,8 @@ class MemberWorkConstraintServiceTest {
         }
 
         @Test
-        @DisplayName("個別制約_MEMBER権限_403")
-        void 個別制約_MEMBER権限_403() {
-            given(accessControlService.hasAdminOrPermissionInScope(MEMBER_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(false);
-
-            assertThatThrownBy(() -> service.upsertConstraint(
-                    TEAM_ID, MEMBER_USER_ID, buildValidRequest(), MEMBER_USER_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
-                            .isEqualTo(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN));
-            verifyNoInteractions(constraintRepository);
-        }
-
-        @Test
         @DisplayName("個別制約_全項目NULL_400")
         void 個別制約_全項目NULL_400() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
 
             assertThatThrownBy(() -> service.upsertConstraint(
                     TEAM_ID, MEMBER_USER_ID, buildAllNullRequest(), ADMIN_USER_ID))

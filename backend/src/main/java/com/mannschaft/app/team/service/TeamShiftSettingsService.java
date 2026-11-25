@@ -1,5 +1,8 @@
 package com.mannschaft.app.team.service;
 
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ErrorResponse;
 import com.mannschaft.app.team.dto.DeputyShiftViewToggles;
 import com.mannschaft.app.team.dto.TeamShiftSettingsResponse;
 import com.mannschaft.app.team.dto.UpdateTeamShiftSettingsRequest;
@@ -9,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * チームシフト設定サービス。リマインド間隔カスタマイズの取得・更新・初期化を担う。
@@ -48,17 +53,24 @@ public class TeamShiftSettingsService {
     }
 
     /**
-     * チームシフト設定を更新する。
+     * チームシフト設定を更新する（部分更新。リクエストの {@code null} の項目は現在値を維持する）。
      * 設定が存在しない場合は作成してから更新する。
+     *
+     * <p>「少なくとも 1 つのリマインドが有効」は<b>更新後の状態</b>で検証する。満たさなければ 400
+     * {@code COMMON_001}（保存しない）。</p>
      */
     @Transactional
     public TeamShiftSettingsResponse updateSettings(Long teamId, UpdateTeamShiftSettingsRequest request) {
         TeamShiftSettingsEntity settings = settingsRepository.findByTeamId(teamId)
                 .orElseGet(() -> TeamShiftSettingsEntity.createDefault(teamId));
         settings.update(
-                request.isReminder48hEnabled(),
-                request.isReminder24hEnabled(),
-                request.isReminder12hEnabled());
+                request.getReminder48hEnabled(),
+                request.getReminder24hEnabled(),
+                request.getReminder12hEnabled());
+        if (!settings.isAnyReminderEnabled()) {
+            throw new BusinessException(CommonErrorCode.COMMON_001, List.of(new ErrorResponse.FieldError(
+                    "reminder48hEnabled", "少なくとも1つのリマインドを有効にする必要があります")));
+        }
         settings.updateDeputyViewToggles(request.getDeputyShiftViewEnabled(), request.getDeputyHourlyRateViewEnabled());
         return TeamShiftSettingsResponse.from(settingsRepository.save(settings));
     }

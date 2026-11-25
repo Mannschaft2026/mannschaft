@@ -78,12 +78,23 @@ public class TeamShiftSettingsEntity {
     }
 
     /**
-     * リマインド設定を更新する。
+     * リマインド設定を更新する。{@code null} の項目は変更しない。
      */
-    public void update(boolean reminder48hEnabled, boolean reminder24hEnabled, boolean reminder12hEnabled) {
-        this.reminder48hEnabled = reminder48hEnabled;
-        this.reminder24hEnabled = reminder24hEnabled;
-        this.reminder12hEnabled = reminder12hEnabled;
+    public void update(Boolean reminder48hEnabled, Boolean reminder24hEnabled, Boolean reminder12hEnabled) {
+        if (reminder48hEnabled != null) {
+            this.reminder48hEnabled = reminder48hEnabled;
+        }
+        if (reminder24hEnabled != null) {
+            this.reminder24hEnabled = reminder24hEnabled;
+        }
+        if (reminder12hEnabled != null) {
+            this.reminder12hEnabled = reminder12hEnabled;
+        }
+    }
+
+    /** 少なくとも 1 つのリマインド（48h・24h・12h）が有効か。 */
+    public boolean isAnyReminderEnabled() {
+        return reminder48hEnabled || reminder24hEnabled || reminder12hEnabled;
     }
 
     /**

@@ -293,7 +293,7 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
             inTx(() -> { swaps.findById(resolvable).orElseThrow().accept(actors.get("ADMIN")); return null; });
             callSwap(role, "REJECT", resolvable).andExpect(status().isOk());
         }
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "SYSTEM_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN")) {
             Long acceptable = swap(slotId);
             SqlIntentCounter.reset();
             callSwap(role, "accept", acceptable).andExpect(status().isOk());
@@ -305,7 +305,7 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
                     .andExpect(jsonPath("$.error.code").value("COMMON_002"));
         }
         // CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は承認・却下も他人の取消も部外者と同じ 404（短絡しない）。
-        for (String operation : List.of("REJECT", "APPROVE", "cancel")) {
+        for (String operation : List.of("REJECT", "APPROVE", "cancel", "accept")) {
             callSwap("SYSTEM_ADMIN", operation, swapId).andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.error.code").value("SHIFT_005"));
         }
@@ -338,9 +338,9 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
         }
         for (String operation : List.of("confirm", "revoke", "detail", "visual")) {
             Map<String, String> before = snapshot();
-            boolean concealedDetail = List.of("detail", "visual").contains(operation);
-            callRun("MEMBER", operation, scheduleId, runId).andExpect(status().is(concealedDetail ? 404 : 403))
-                    .andExpect(jsonPath("$.error.code").value(concealedDetail ? "SHIFT_024" : "COMMON_002"));
+            // run の実在を同チームの非管理者にも読ませない（確定・破棄も詳細・目視確認と同じ 404。CMP-261125-2114）
+            callRun("MEMBER", operation, scheduleId, runId).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
             assertThat(snapshot()).isEqualTo(before);
         }
     }

@@ -85,7 +85,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
     private Long memberId;           // 依頼者になる一般メンバー
     private Long otherMemberId;      // 同じチームの別の一般メンバー（宛先外）
     private Long otherTeamAdminId;   // 他チームの ADMIN（宛先外）
-    private Long leftAdminId;        // ロールだけ残って退会済み（memberships.left_at 設定済み）の ADMIN（宛先外）
+    private Long leftAdminId;        // ロールだけ残って退会済み（memberships.left_at 設定済み）の ADMIN（審査できるので宛先。CMP-261125-2114）
     private Long scheduleId;
 
     @BeforeEach
@@ -111,7 +111,8 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
             MembershipTestHelper.insertUserRole(em, adminId, "ADMIN", teamId, null);
             MembershipTestHelper.insertUserRole(em, deputyWithId, "DEPUTY_ADMIN", teamId, null);
             MembershipTestHelper.insertUserRole(em, deputyWithoutId, "DEPUTY_ADMIN", teamId, null);
-            // 退会済み ADMIN: user_roles は残っているが所属（memberships）は left_at 済み。
+            // 退会済み ADMIN: user_roles は残っているが所属（memberships）は left_at 済み。ADMIN の判定は user_roles だけを見る
+            // （AccessControlService#isAdmin）ので審査はできる。通知の受信者を審査できる人と一致させるため宛先に含める。
             MembershipTestHelper.insertMembership(em, leftAdminId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
             em.createNativeQuery("UPDATE memberships SET left_at = NOW() WHERE user_id = :uid AND scope_id = :tid")
                     .setParameter("uid", leftAdminId).setParameter("tid", teamId).executeUpdate();
@@ -145,7 +146,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
         setAuth(memberId);
         Long requestId = create(memberId);
 
-        assertRecipients(TYPE_CREATED, requestId, Set.of(adminId, deputyWithId));
+        assertRecipients(TYPE_CREATED, requestId, Set.of(adminId, deputyWithId, leftAdminId));
         assertActionUrl(TYPE_CREATED, requestId, adminId);
     }
 
@@ -155,7 +156,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
         setAuth(adminId);
         Long requestId = create(adminId);
 
-        assertRecipients(TYPE_CREATED, requestId, Set.of(deputyWithId));
+        assertRecipients(TYPE_CREATED, requestId, Set.of(deputyWithId, leftAdminId));
     }
 
     @Test
@@ -194,7 +195,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
             Long requestId = create(memberId);
 
             // MANAGE_SHIFTS 無しだった副管理者も、ロール定義で既定付与されたので宛先になる。
-            assertRecipients(TYPE_CREATED, requestId, Set.of(adminId, deputyWithId, deputyWithoutId));
+            assertRecipients(TYPE_CREATED, requestId, Set.of(adminId, deputyWithId, deputyWithoutId, leftAdminId));
         } finally {
             revokeDefaultRolePermission();
         }
@@ -220,7 +221,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
         setAuth(memberId);
         mockMvc.perform(delete(BASE + "/{id}", requestId)).andExpect(status().isNoContent());
 
-        assertRecipients(TYPE_WITHDRAWN, requestId, Set.of(adminId, deputyWithId));
+        assertRecipients(TYPE_WITHDRAWN, requestId, Set.of(adminId, deputyWithId, leftAdminId));
     }
 
     @Test
@@ -231,7 +232,7 @@ class ShiftChangeRequestNotificationIT extends AbstractMySqlIntegrationTest {
         setAuth(adminId);
         mockMvc.perform(delete(BASE + "/{id}", requestId)).andExpect(status().isNoContent());
 
-        assertRecipients(TYPE_WITHDRAWN, requestId, Set.of(deputyWithId));
+        assertRecipients(TYPE_WITHDRAWN, requestId, Set.of(deputyWithId, leftAdminId));
     }
 
     @Test

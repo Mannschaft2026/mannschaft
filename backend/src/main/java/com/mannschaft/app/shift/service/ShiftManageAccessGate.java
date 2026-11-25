@@ -183,6 +183,18 @@ public class ShiftManageAccessGate {
         throw denial(userId, teamId, notFoundCode);
     }
 
+    /**
+     * 一般メンバーの操作の認可（在籍中であること。{@code excludeSupporter} が true なら SUPPORTER は 403）。
+     * SYSTEM_ADMIN を特別扱いしない。{@code ScopeConcealingAccessGate#requireMemberOrConceal} の代わりに shift ではこちらを使う
+     * （同ゲートは SYSTEM_ADMIN を素通しするため）。越境は {@code notFoundCode}、所属者の権限不足は 403 {@code COMMON_002}。
+     */
+    public void requireMemberOrConceal(Long userId, Long teamId, ErrorCode notFoundCode, boolean excludeSupporter) {
+        requireMemberOrConceal(userId, teamId, notFoundCode);
+        if (excludeSupporter && accessControlService.isSupporter(userId, teamId, TEAM)) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
+        }
+    }
+
     private BusinessException denial(Long userId, Long teamId, ErrorCode notFoundCode) {
         if (!belongsToTeam(userId, teamId)) {
             // 越境（他スコープ／無所属）: 存在自体を隠す側。不在時と完全同一のコード。

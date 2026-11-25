@@ -97,7 +97,7 @@ class ShiftSwapServiceTest {
         shiftSwapService = new ShiftSwapService(swapRepository, slotRepository, scheduleRepository,
                 shiftMapper, objectMapper, entityManager, slotService);
         // 認可は Facade（tx の外）が行う。応答の契約は Facade→tx 本体の合成で検証する。
-        swapFacade = new ShiftSwapFacade(shiftSwapService, new ScopeConcealingAccessGate(accessControlService),
+        swapFacade = new ShiftSwapFacade(shiftSwapService,
                 new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService,
                         teamShiftSettingsService),
                 accessControlService, userStatusLookupService);
@@ -138,7 +138,6 @@ class ShiftSwapServiceTest {
     /** 当該ユーザーを「当該チームの一般メンバー（SUPPORTER でない）」として認可を通す。 */
     private void givenTeamMember(Long userId) {
         givenScopeResolvable();
-        given(accessControlService.isSystemAdmin(userId)).willReturn(false);
         given(accessControlService.isMember(userId, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.isSupporter(userId, TEAM_ID, "TEAM")).willReturn(false);
     }

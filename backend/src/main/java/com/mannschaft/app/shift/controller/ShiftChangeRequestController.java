@@ -90,9 +90,9 @@ public class ShiftChangeRequestController {
     }
 
     /**
-     * 変更依頼を審査する（ADMIN のみ）。
+     * 変更依頼を審査する（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）。
      *
-     * <p>per-scope 認可（SYSTEM_ADMIN 短絡 or 当該シフトの所属チーム ADMIN/DEPUTY_ADMIN）は
+     * <p>per-scope 認可（当該シフトの所属チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN。SYSTEM_ADMIN は特別扱いしない）は
      * {@code scheduleId} がパス変数ではなく依頼エンティティ由来のため、
      * {@code @accessGuard} の SpEL では表現できない。よって認可の真の強制点は
      * {@code ShiftChangeRequestFacade#review} 内の明示呼出（Gate）に置く。

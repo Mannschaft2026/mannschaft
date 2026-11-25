@@ -1,6 +1,5 @@
 package com.mannschaft.app.shift.service;
 
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.role.service.RoleService;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreateShiftRequestRequest;
@@ -33,8 +32,8 @@ import java.util.List;
  * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  一覧/サマリーは切替OFF=403 COMMON_002（一般メンバーと同じ）・閲覧切替ON=200。
  *                             他人分の更新・削除は常に 403 COMMON_002。本人分は一般メンバーと同じ（CMP-261125-2114）
  * 提出者本人                  (一般メンバーと同じ)      201                   200(状態次第)          204
- * 非メンバーの SYSTEM_ADMIN   200                       201                   200(状態次第)          204
- * メンバーの SYSTEM_ADMIN     200                       201                   200(状態次第)          204
+ * SYSTEM_ADMIN(チームロール無し) 部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない。一覧/サマリー・提出・更新・削除とも
+ *                             越境として 404。チームの ADMIN／MANAGE_SHIFTS 付き DEPUTY・在籍メンバーを兼ねる場合はその立場で判定）
  * user_roles のみの ADMIN     200                       403 COMMON_002        200(状態次第)          204
  * 対象不在(schedule/request)  404 SHIFT_001             404 SHIFT_001         404 SHIFT_003          404 SHIFT_003
  * 親だけ不在(論理削除)        404 SHIFT_001             404 SHIFT_001         404 SHIFT_003          404 SHIFT_003
@@ -49,10 +48,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ShiftRequestFacade {
 
-    private static final String TEAM = "TEAM";
-
     private final ShiftRequestService requestService;
-    private final ScopeConcealingAccessGate accessGate;
     private final ShiftManageAccessGate manageGate;
     private final RoleService roleService;
 
@@ -80,7 +76,7 @@ public class ShiftRequestFacade {
     public ShiftRequestResponse submitRequest(CreateShiftRequestRequest req, Long userId) {
         ShiftRequestService.ScheduleScope scope = requestService.resolveScheduleScope(req.getScheduleId());
         // 越境は不在と同一の SHIFT_001。user_roles のみの ADMIN は許可せず 403。
-        accessGate.requireMemberOrConceal(userId, scope.teamId(), TEAM,
+        manageGate.requireMemberOrConceal(userId, scope.teamId(),
                 ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND, true);
         return requestService.submitRequest(req, userId);
     }

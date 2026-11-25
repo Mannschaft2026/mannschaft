@@ -87,6 +87,20 @@ class ShiftPdfFacadeAuthzTest {
         @InjectMocks
         private ShiftPdfFacade facade;
 
+        /**
+         * 在籍の判定（ゲートの requireMemberOrConceal）は accessControlService.isMember を見て、在籍していなければ
+         * 越境として不在コードを投げる形に委譲する（ゲート自体の所属判定・403 の作り分けは ShiftManageAccessGate の単体テストと IT で検証する）。
+         */
+        @org.junit.jupiter.api.BeforeEach
+        void wireMemberCheck() {
+            org.mockito.Mockito.lenient().doAnswer(inv -> {
+                if (!accessControlService.isMember(inv.getArgument(0), inv.getArgument(1), "TEAM")) {
+                    throw new BusinessException((ErrorCode) inv.getArgument(2));
+                }
+                return null;
+            }).when(manageGate).requireMemberOrConceal(any(), any(), any());
+        }
+
         @Test
         @DisplayName("越境（所属していない）は不在と同じ 404 SHIFT_001 で、tx 本体を呼ばない")
         void 越境は404() {

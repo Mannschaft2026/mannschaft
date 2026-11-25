@@ -2,6 +2,7 @@ package com.mannschaft.app.shift;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.NameResolverService;
+import com.mannschaft.app.shift.service.ShiftManageAccessGate;
 import com.mannschaft.app.shift.dto.AvailabilityDefaultRequest;
 import com.mannschaft.app.shift.dto.AvailabilityDefaultResponse;
 import com.mannschaft.app.shift.dto.BulkAvailabilityDefaultRequest;
@@ -53,14 +54,17 @@ class ShiftAvailabilityServiceTest {
     @Mock
     private NameResolverService nameResolverService;
 
+    @Mock
+    private ShiftManageAccessGate manageGate;
+
     @InjectMocks
     private ShiftAvailabilityService shiftAvailabilityService;
 
     @BeforeEach
     void setUpAuthzStubs() {
-        // per-scope 認可は本テストの検証対象外のため、常に通過させる（SYSTEM_ADMIN 扱い）
+        // per-scope 認可は本テストの検証対象外のため、常に通過させる（管理操作ができる人扱い。SYSTEM_ADMIN は特別扱いしない）
         given(nameResolverService.resolveTeamNames(Set.of(TEAM_ID))).willReturn(Map.of(TEAM_ID, "チームA"));
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+        given(manageGate.canManage(USER_ID, TEAM_ID)).willReturn(true);
     }
 
     // ========================================

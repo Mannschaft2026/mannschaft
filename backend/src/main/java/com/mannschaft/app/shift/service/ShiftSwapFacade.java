@@ -4,7 +4,6 @@ import com.mannschaft.app.auth.service.UserStatusLookupService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreateSwapRequestRequest;
 import com.mannschaft.app.shift.dto.ResolveSwapRequestRequest;
@@ -53,7 +52,6 @@ public class ShiftSwapFacade {
     private static final String TEAM = "TEAM";
 
     private final ShiftSwapService swapService;
-    private final ScopeConcealingAccessGate accessGate;
     private final ShiftManageAccessGate manageGate;
     private final AccessControlService accessControlService;
     private final UserStatusLookupService userStatusLookupService;
@@ -85,8 +83,8 @@ public class ShiftSwapFacade {
     public SwapRequestResponse createSwapRequest(CreateSwapRequestRequest req, Long userId) {
         ShiftSwapService.SwapScope scope = swapService.resolveSlotScope(req.getSlotId());
         // 越境（他チームの slotId）は不在と同一応答（SHIFT_SLOT_NOT_FOUND）に畳む。
-        accessGate.requireMemberOrConceal(
-                userId, scope.teamId(), TEAM, ShiftErrorCode.SHIFT_SLOT_NOT_FOUND, true);
+        manageGate.requireMemberOrConceal(
+                userId, scope.teamId(), ShiftErrorCode.SHIFT_SLOT_NOT_FOUND, true);
         return swapService.createSwapRequest(req, userId);
     }
 
@@ -99,8 +97,8 @@ public class ShiftSwapFacade {
      */
     public SwapRequestResponse acceptSwapRequest(Long swapId, Long accepterId) {
         ShiftSwapService.SwapScope scope = swapService.resolveSwapScope(swapId);
-        accessGate.requireMemberOrConceal(
-                accepterId, scope.teamId(), TEAM, ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true);
+        manageGate.requireMemberOrConceal(
+                accepterId, scope.teamId(), ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true);
         return swapService.acceptSwapRequest(swapId, accepterId);
     }
 

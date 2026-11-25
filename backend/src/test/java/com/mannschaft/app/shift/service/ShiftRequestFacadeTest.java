@@ -2,7 +2,6 @@ package com.mannschaft.app.shift.service;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.role.service.RoleService;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.CreateShiftRequestRequest;
@@ -45,8 +44,6 @@ class ShiftRequestFacadeTest {
     @Mock
     private ShiftRequestService requestService;
 
-    @Mock
-    private ScopeConcealingAccessGate accessGate;
 
     /** CMP-261125-2114: 管理操作・閲覧の判定（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN、閲覧は切替 ON の DEPUTY_ADMIN も）。 */
     @Mock
@@ -112,9 +109,9 @@ class ShiftRequestFacadeTest {
 
         facade.submitRequest(req, USER_ID);
 
-        InOrder order = inOrder(requestService, accessGate);
+        InOrder order = inOrder(requestService, manageGate);
         order.verify(requestService).resolveScheduleScope(SCHEDULE_ID);
-        order.verify(accessGate).requireMemberOrConceal(USER_ID, TEAM_ID, "TEAM",
+        order.verify(manageGate).requireMemberOrConceal(USER_ID, TEAM_ID,
                 ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND, true);
         order.verify(requestService).submitRequest(req, USER_ID);
     }
@@ -126,8 +123,8 @@ class ShiftRequestFacadeTest {
                 SCHEDULE_ID, null, LocalDate.of(2026, 3, 2), "PREFERRED", null);
         given(requestService.resolveScheduleScope(SCHEDULE_ID))
                 .willReturn(new ShiftRequestService.ScheduleScope(TEAM_ID));
-        doThrow(new BusinessException(CommonErrorCode.COMMON_002)).when(accessGate)
-                .requireMemberOrConceal(any(), any(), any(), any(), anyBoolean());
+        doThrow(new BusinessException(CommonErrorCode.COMMON_002)).when(manageGate)
+                .requireMemberOrConceal(any(), any(), any(), anyBoolean());
 
         assertThatThrownBy(() -> facade.submitRequest(req, USER_ID)).isInstanceOf(BusinessException.class);
         verify(requestService, never()).submitRequest(any(), any());

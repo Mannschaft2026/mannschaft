@@ -25,9 +25,9 @@ import java.util.List;
  * <pre>
  * 主体＼EP                    実行/確定/破棄(schedule)   履歴一覧(schedule)  詳細・目視確認(runId)
  * 部外者(非メンバー)          404 SHIFT_001/SHIFT_024*   404 SHIFT_001       404 SHIFT_024
- * 同チーム一般メンバー        403 COMMON_002             403 COMMON_002      404 SHIFT_024(同チームでも隠す)
+ * 同チーム一般メンバー        実行 403 COMMON_002／確定・破棄 404 SHIFT_024(run の実在を隠す)  403 COMMON_002  404 SHIFT_024(同チームでも隠す)
  * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200/201/204(状態次第)  200  200(状態次第)
- * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  403 COMMON_002  403 COMMON_002  404 SHIFT_024（一般メンバーと同じ。閲覧切替でも広がらない）
+ * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  実行 403／確定・破棄 404 SHIFT_024  403 COMMON_002  404 SHIFT_024（一般メンバーと同じ。閲覧切替でも広がらない）
  * SYSTEM_ADMIN(チームロール無し)  部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * user_roles のみの ADMIN     200/201/204(状態次第)      200                 200(状態次第)
  * 他チームの ADMIN            404 SHIFT_001/SHIFT_024*   404 SHIFT_001       404 SHIFT_024
@@ -68,8 +68,7 @@ public class ShiftAutoAssignFacade {
      * @param userId     操作者ユーザー ID
      */
     public void confirmAutoAssign(Long scheduleId, ConfirmAutoAssignRequest request, Long userId) {
-        Long teamId = autoAssignService.resolveRunTeamId(request.runId(), scheduleId);
-        manageGate.requireManageOrConceal(userId, teamId, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND);
+        requireRunAdminConcealed(request.runId(), scheduleId, userId);
         autoAssignService.confirmAutoAssign(scheduleId, request);
     }
 
@@ -81,8 +80,7 @@ public class ShiftAutoAssignFacade {
      * @param userId     操作者ユーザー ID
      */
     public void revokeAutoAssign(Long scheduleId, Long runId, Long userId) {
-        Long teamId = autoAssignService.resolveRunTeamId(runId, scheduleId);
-        manageGate.requireManageOrConceal(userId, teamId, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND);
+        requireRunAdminConcealed(runId, scheduleId, userId);
         autoAssignService.revokeAutoAssign(scheduleId, runId);
     }
 
@@ -107,7 +105,7 @@ public class ShiftAutoAssignFacade {
      * @return 実行ログ詳細
      */
     public AssignmentRunResponse getAssignmentRunDetail(Long runId, Long userId) {
-        requireRunAdminConcealed(runId, userId);
+        requireRunAdminConcealed(runId, null, userId);
         return autoAssignService.getAssignmentRunDetail(runId);
     }
 
@@ -119,7 +117,7 @@ public class ShiftAutoAssignFacade {
      * @param userId 確認者ユーザー ID
      */
     public void confirmVisualReview(Long runId, String note, Long userId) {
-        requireRunAdminConcealed(runId, userId);
+        requireRunAdminConcealed(runId, null, userId);
         autoAssignService.confirmVisualReview(runId, note, userId);
     }
 
@@ -127,12 +125,15 @@ public class ShiftAutoAssignFacade {
      * run 実体由来の管理者認可（<b>存在秘匿版</b>）。権限が無い場合も 403 ではなく
      * {@code ASSIGNMENT_RUN_NOT_FOUND}（404）を返す。
      *
-     * <p>パスにスコープを持たない {@code /assignment-runs/{runId}} 系の EP 専用。本 EP は
-     * 「同チームの管理操作の権限が無い人も不在と同じ 404」が仕様なので、権限不足を 403 で返す判定は使わず、
-     * {@code canManage}（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の真偽だけで 404 に統一する。</p>
+     * <p>run 系（確定・破棄・詳細・目視確認）は、同チームの管理権限が無い人にも run の実在を読ませない
+     * （実在 runId が 403、不在が 404 に割れると存在オラクルになる）ので、権限不足を 403 で返す判定は使わず、
+     * {@code canManage}（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の真偽だけで 404 に統一する。
+     * run の解決（不在・パスのスケジュールと不一致は 404）の<b>後</b>に判定するが、どちらも同一コードなので応答は割れない。</p>
+     *
+     * @param scheduleId パスのスケジュール ID（{@code /assignment-runs/{runId}} 系のようにパスに無ければ null）
      */
-    private void requireRunAdminConcealed(Long runId, Long userId) {
-        Long teamId = autoAssignService.resolveRunTeamId(runId, null);
+    private void requireRunAdminConcealed(Long runId, Long scheduleId, Long userId) {
+        Long teamId = autoAssignService.resolveRunTeamId(runId, scheduleId);
         if (!manageGate.canManage(userId, teamId)) {
             throw new BusinessException(ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND);
         }

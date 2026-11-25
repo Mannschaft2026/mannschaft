@@ -1,9 +1,7 @@
 package com.mannschaft.app.shift.service;
 
-import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.NameResolverService;
-import com.mannschaft.app.common.ScopeConcealingAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.ChangeRequestResponse;
 import com.mannschaft.app.shift.dto.CreateChangeRequestRequest;
@@ -33,11 +31,10 @@ import java.util.stream.Collectors;
  * チーム ADMIN/DEPUTY_ADMIN   201               200(全件)        200              200(状態次第)    403 SHIFT_019
  * 依頼者本人                  201               200(自分の分)    200              (一般なら 403)   204(OPEN のみ)
  *                                                                                (管理者でも 403 SHIFT_045。CMP-261010-1432)
- * 非メンバーの SYSTEM_ADMIN   403 COMMON_002    200(全件)        200              200(状態次第)    403 SHIFT_019
- * メンバーの SYSTEM_ADMIN     201               200(全件)        200              200(状態次第)    403 SHIFT_019
+ * SYSTEM_ADMIN(チームロール無し) 部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない。取下げは 404 SHIFT_030）
  * user_roles のみの ADMIN     403 COMMON_002    200(全件)        200              200(状態次第)    403 SHIFT_019
  * 対象不在(依頼/スケジュール) 404 SHIFT_001     404 SHIFT_001    404 SHIFT_030     404 SHIFT_030    404 SHIFT_030
- * 親だけ不在(スケジュール)    404 SHIFT_001     404 SHIFT_001    404 SHIFT_001(本人以外) 404 SHIFT_001 404 SHIFT_001(本人以外。SYSTEM_ADMIN は 403 SHIFT_019)
+ * 親だけ不在(スケジュール)    404 SHIFT_001     404 SHIFT_001    404 SHIFT_001(本人以外) 404 SHIFT_001 404 SHIFT_001(本人以外)
  * DB 変更: 拒否・不在はすべて変更なし。成功のみ変更依頼行の insert/update。
  * </pre>
  */
@@ -45,12 +42,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ShiftChangeRequestFacade {
 
-    private static final String TEAM = "TEAM";
-
     private final ShiftChangeRequestService changeRequestService;
-    private final ScopeConcealingAccessGate accessGate;
     private final ShiftManageAccessGate manageGate;
-    private final AccessControlService accessControlService;
     /**
      * 依頼者の表示名解決（CMP-261010-1432 M）。users は auth ドメインのため、common の越境窓口を
      * <b>トランザクションの外（本 Facade）</b>で呼ぶ（tx 入口から他ドメインの Repository へ到達させない＝D-3T）。
@@ -60,8 +53,8 @@ public class ShiftChangeRequestFacade {
     /**
      * 変更依頼を作成する（スケジュール所属チームのメンバー。SUPPORTER は不可 403 COMMON_002）。
      *
-     * <p>Gate は冒頭で SYSTEM_ADMIN を通すが、是正前は {@code checkMembership}（memberships のみ）で
-     * 非メンバーの SYSTEM_ADMIN も 403 {@code COMMON_002} だった。挙動を変えないため先に弾く。</p>
+     * <p>在籍（memberships）が必須。SYSTEM_ADMIN を特別扱いしない（CMP-261125-2114）。チームロールの無い
+     * SYSTEM_ADMIN は部外者と同じく不在と同一応答（404 SHIFT_001）。</p>
      *
      * <p>SUPPORTER は仕様（F03.5 README: 変更依頼不可）どおり、シフト表のステータスを見る前に 403 で弾く
      * （tx 本体のステータス判定の 201/409 の差で公開状態を読ませない。CMP-260826-2127 P2）。</p>
@@ -72,11 +65,7 @@ public class ShiftChangeRequestFacade {
      */
     public ChangeRequestResponse create(CreateChangeRequestRequest request, Long userId) {
         Long teamId = changeRequestService.resolveScheduleTeamId(request.scheduleId());
-        if (accessControlService.isSystemAdmin(userId)) {
-            accessControlService.checkMembership(userId, teamId, TEAM);
-        }
-        accessGate.requireMemberOrConceal(
-                userId, teamId, TEAM, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND, true);
+        manageGate.requireMemberOrConceal(userId, teamId, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND, true);
         return withRequesterName(changeRequestService.create(request, userId));
     }
 
@@ -142,12 +131,13 @@ public class ShiftChangeRequestFacade {
     }
 
     /**
-     * 変更依頼を取り下げる（依頼者本人のみ。SYSTEM_ADMIN・管理者による代理取下げは対象外）。
+     * 変更依頼を取り下げる（依頼者本人のみ。管理者による代理取下げは対象外）。
      *
-     * <p>本人でない場合、SYSTEM_ADMIN および当該チームの所属者（user_roles のみの管理者を含む）には
-     * {@code ACCESS_DENIED}（403 / SHIFT_019）、所属しない越境の場合のみ不在と同一応答
-     * （{@code CHANGE_REQUEST_NOT_FOUND}）。Gate は forbidden コードを {@code COMMON_002} 固定で持つため、
-     * SHIFT_019 を維持する本メソッドは同ゲートの判定対象（SYSTEM_ADMIN / isAdminOrAbove / isMember）だけを踏襲する。</p>
+     * <p>本人でない場合、当該チームの所属者（user_roles のみの管理者を含む）には
+     * {@code ACCESS_DENIED}（403 / SHIFT_019）、所属しない越境（チームロールの無い SYSTEM_ADMIN を含む。
+     * SYSTEM_ADMIN を特別扱いしない）の場合のみ不在と同一応答（{@code CHANGE_REQUEST_NOT_FOUND}）。
+     * Gate は forbidden コードを {@code COMMON_002} 固定で持つため、SHIFT_019 を維持する本メソッドは
+     * 同ゲートの所属判定（{@code belongsToTeam}）だけを踏襲する。</p>
      *
      * @param id     変更依頼 ID
      * @param userId 操作者ユーザー ID
@@ -155,10 +145,7 @@ public class ShiftChangeRequestFacade {
     public void withdraw(Long id, Long userId) {
         ShiftChangeRequestService.ChangeRequestHead head = changeRequestService.resolveHead(id);
         if (!head.requestedBy().equals(userId)) {
-            // SYSTEM_ADMIN も本人でなければ取下げ不可（従来どおり 403）。404 に畳まず ACCESS_DENIED を返す。
-            if (accessControlService.isSystemAdmin(userId)) {
-                throw new BusinessException(ShiftErrorCode.ACCESS_DENIED);
-            }
+            // 本人でなければ取下げ不可。所属者（SYSTEM_ADMIN は特別扱いしない）には ACCESS_DENIED、越境は不在と同一応答。
             Long teamId = resolveTeamIdOrConceal(head);
             if (manageGate.belongsToTeam(userId, teamId)) {
                 throw new BusinessException(ShiftErrorCode.ACCESS_DENIED);

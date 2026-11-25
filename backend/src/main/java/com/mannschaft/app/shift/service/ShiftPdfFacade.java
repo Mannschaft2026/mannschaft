@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
  * チーム ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN（在籍あり）  200（未公開も可）
  * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  閲覧切替 OFF=一般メンバーと同じ／ON=管理者の形（未公開も可。CMP-261125-2114）
  * user_roles のみの ADMIN       403 COMMON_002（是正前から在籍を要求。許可は広げない）
+ * user_roles のみの DEPUTY_ADMIN（MANAGE_SHIFTS 無し・切替 OFF） 403 COMMON_002（所属者。越境の 404 にはしない）
  * SYSTEM_ADMIN(チームロール無し) 部外者と同じ 404 SHIFT_001（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * 対象不在・削除済み            404 SHIFT_001
  * </pre>
@@ -78,9 +79,8 @@ public class ShiftPdfFacade {
         if (!privileged) {
             // 越境（所属していない）は不在と同じ 404。SUPPORTER は公開状態に依らず一律 403、
             // 未公開の 404 はその後（404/403 の差で公開状態を読ませない。CMP-260826-2127 D-2127-1）。
-            if (!accessControlService.isMember(requesterId, scope.teamId(), TEAM)) {
-                throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
-            }
+            // 所属していない（越境）は 404、所属しているが在籍していない（user_roles のみの副管理者等）は 403。
+            manageGate.requireMemberOrConceal(requesterId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
             if (accessControlService.isSupporter(requesterId, scope.teamId(), TEAM)) {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
             }

@@ -31,7 +31,7 @@ import java.util.List;
  * 同チーム一般メンバー        200             403 COMMON_002  403 COMMON_002   403 COMMON_002
  * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN  200  201  200  204
  * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  200  403 COMMON_002  403 COMMON_002  403 COMMON_002（一般メンバーと同じ。閲覧切替でも広がらない）
- * SYSTEM_ADMIN(チームロール無し) 一覧は是正前のまま 200。作成 403／更新・削除は部外者と同じ 404（CMP-261125-2114）
+ * SYSTEM_ADMIN(チームロール無し) 部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）。一覧 403／作成 403／更新・削除 404
  * user_roles のみの ADMIN     403 COMMON_002(※) 201           200              204
  * 対象不在(position)          (n/a)           (n/a)           404 SHIFT_004    404 SHIFT_004
  * 親だけ不在                  (n/a: ポジションは shift 内に親を持たない)
@@ -125,9 +125,6 @@ public class ShiftPositionFacade {
      * @throws BusinessException メンバーでない場合、または SUPPORTER の場合（COMMON_002 / 403）
      */
     private void checkTeamMemberAccess(Long teamId, Long userId) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
         if (!accessControlService.isMember(userId, teamId, TEAM)
                 || accessControlService.isSupporter(userId, teamId, TEAM)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);

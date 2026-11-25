@@ -47,7 +47,8 @@ public class ShiftAvailabilityController {
      *
      * <p><b>認可:</b> {@code teamId} は絞り込みだけでなく所属検証の対象でもある。
      * per-scope 認可は {@code ShiftAvailabilityService} 内で強制する
-     * （SYSTEM_ADMIN + 当該チーム ADMIN 以上 + 当該チームの通常メンバー（SUPPORTER 除く）のみ）。違反時は 403。</p>
+     * （当該チームの ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN、または当該チームの在籍メンバー（SUPPORTER 除く）のみ。
+     * チームロールを持たない SYSTEM_ADMIN は特別扱いしない）。違反時は 403。</p>
      */
     @GetMapping("/availability")
     @Operation(summary = "デフォルト勤務可能時間取得")
@@ -64,7 +65,7 @@ public class ShiftAvailabilityController {
      *
      * <p><b>認可:</b> {@code teamId} は絞り込みだけでなく所属検証の対象でもある。
      * per-scope 認可は {@code ShiftAvailabilityService} 内で強制する
-     * （SYSTEM_ADMIN + 当該チーム ADMIN 以上 + 当該チームの通常メンバー（SUPPORTER 除く）のみ）。違反時は 403。</p>
+     * （当該チームの ADMIN/MANAGE_SHIFTS 付き DEPUTY_ADMIN、または在籍メンバー（SUPPORTER 除く）のみ。SYSTEM_ADMIN は特別扱いしない）。違反時は 403。</p>
      */
     @PutMapping("/availability")
     @Operation(summary = "デフォルト勤務可能時間一括設定")
@@ -82,7 +83,7 @@ public class ShiftAvailabilityController {
      *
      * <p><b>認可:</b> {@code teamId} は絞り込みだけでなく所属検証の対象でもある。
      * per-scope 認可は {@code ShiftAvailabilityService} 内で強制する
-     * （SYSTEM_ADMIN + 当該チーム ADMIN 以上 + 当該チームの通常メンバー（SUPPORTER 除く）のみ）。違反時は 403。</p>
+     * （当該チームの ADMIN/MANAGE_SHIFTS 付き DEPUTY_ADMIN、または在籍メンバー（SUPPORTER 除く）のみ。SYSTEM_ADMIN は特別扱いしない）。違反時は 403。</p>
      */
     @DeleteMapping("/availability")
     @Operation(summary = "デフォルト勤務可能時間削除")
@@ -150,12 +151,13 @@ public class ShiftAvailabilityController {
      * {@code ShiftHourlyRateFacade#listEffectiveRatesForTeam} で強制する。違反時は 403。</p>
      */
     @GetMapping("/hourly-rates")
-    @Operation(summary = "チーム時給一括取得（ADMIN/DEPUTY_ADMIN のみ）",
+    @Operation(summary = "チーム時給一括取得（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN。時給閲覧切替 ON なら DEPUTY_ADMIN も）",
             description = "基準日時点で有効な時給を、チーム全員ぶん 1 レスポンスで返す。"
                     + "時給が未設定のメンバーは含まれない。")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
-            description = "当該チームの ADMIN/DEPUTY_ADMIN でない")
+            description = "当該チームの ADMIN でも MANAGE_SHIFTS 付き DEPUTY_ADMIN でもなく、時給閲覧切替 ON の DEPUTY_ADMIN でもない"
+                    + "（チームロールの無い SYSTEM_ADMIN を含む）")
     public ResponseEntity<ApiResponse<List<HourlyRateResponse>>> listTeamEffectiveHourlyRates(
             @RequestParam Long teamId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {

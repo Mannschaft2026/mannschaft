@@ -37,6 +37,8 @@ import java.util.List;
  * MANAGE_SHIFTS 無しの DEPUTY_ADMIN  切替OFF=一般メンバーと同じ／閲覧切替ON=閲覧だけ管理者の形（一覧・詳細・サマリ）。
  *                           作成・更新・削除・遷移・複製・remind は切替に関わらず 403 COMMON_002
  * user_roles のみの ADMIN   403 COMMON_002 200              201             200/204/201（一覧は是正前から在籍を要求。広げない）
+ * user_roles のみの DEPUTY_ADMIN（MANAGE_SHIFTS 無し・切替 OFF） 一覧 403／詳細 403 COMMON_002（所属者。越境の 404 にはしない）／
+ *                           作成・更新等も 403 COMMON_002（MANAGE_SHIFTS 無し）。在籍していないので一般メンバーとしても見られない
  * SYSTEM_ADMIN(チームロール無し) 一覧 403 COMMON_002／他は部外者と同じ（CMP-261125-2114: SYSTEM_ADMIN を特別扱いしない）
  * 対象不在・親削除済み      (n/a)          404 SHIFT_001    (n/a)           404 SHIFT_001
  * </pre>
@@ -100,9 +102,8 @@ public class ShiftScheduleFacade {
         if (!privileged) {
             // 越境は不在と同じ 404、SUPPORTER は公開状態に依らず一律 403、未公開の 404 はその後
             // （SUPPORTER に 404/403 の差で公開状態を読ませない。CMP-260826-2127 D-2127-1）。
-            if (!accessControlService.isMember(userId, scope.teamId(), TEAM)) {
-                throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
-            }
+            // 所属していない（越境）は不在と同じ 404、所属しているが在籍していない（user_roles のみの副管理者等）は 403。
+            manageGate.requireMemberOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
             if (accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
             }

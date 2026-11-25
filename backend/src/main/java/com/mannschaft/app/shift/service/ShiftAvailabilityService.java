@@ -169,12 +169,11 @@ public class ShiftAvailabilityService {
      * 対象 teamId への per-scope 認可を検証する（AccessControlService をこのメソッドから直接呼ぶ。
      * 番人 {@code AuthzControllerGuardArchTest} の委譲探索は深さ2までのため）。
      *
-     * <p>認可式: {@code isSystemAdmin || canManage || (isMember && !isSupporter)}（canManage = ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
-     * 本人の可用性の登録のため SYSTEM_ADMIN の短絡は従来どおり残す（CMP-261125-2114 の対象は管理操作と閲覧）</p>
+     * <p>認可式: {@code canManage || (isMember && !isSupporter)}（canManage = ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
+     * SYSTEM_ADMIN を特別扱いしない（チームロールを持たない SYSTEM_ADMIN は部外者と同じ 403。CMP-261125-2114）。</p>
      * <ul>
      *   <li>{@code canManage} との論理和が必要な理由: {@code AccessControlService#isMember} は
      *       memberships のみを見るため、{@code user_roles} にしか ADMIN 行を持たない利用者を落とす</li>
-     *   <li>{@code isSystemAdmin} を別途先頭に置く理由: {@code canManage} は SYSTEM_ADMIN を含まない</li>
      *   <li>{@code !isSupporter} で明示的に除く理由: {@code isMember} は SUPPORTER 種別のメンバーも
      *       true を返すため</li>
      * </ul>
@@ -191,9 +190,6 @@ public class ShiftAvailabilityService {
     private void checkTeamAccess(Long userId, Long teamId) {
         if (!nameResolverService.resolveTeamNames(Set.of(teamId)).containsKey(teamId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
-        }
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
         }
         // 管理操作ができる人（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN。在籍の有無を問わない）。
         // MANAGE_SHIFTS 無しの DEPUTY_ADMIN は在籍していれば下の一般メンバーとして通る。

@@ -279,14 +279,14 @@ class ShiftTxFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest {
                 new ParentDeletedCase("auto-assign 実行", Hook.GATE_ADMIN, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND,
                         t -> new Req(t.adminId, t.postJson("/api/v1/shifts/schedules/" + t.scheduleId + "/auto-assign",
                                 Map.of("strategy", "GREEDY_V1")))),
-                new ParentDeletedCase("auto-assign 確定", Hook.GATE_ADMIN, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND,
+                new ParentDeletedCase("auto-assign 確定", Hook.ACL_ADMIN_CHECK, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND,
                         t -> {
                             Long runId = t.newRun(ShiftAssignmentRunStatus.CONFIRMED);
                             return new Req(t.adminId, t.postJson(
                                     "/api/v1/shifts/schedules/" + t.scheduleId + "/auto-assign/confirm",
                                     Map.of("runId", runId, "assignmentIds", List.of(1L), "scheduleVersion", 0)));
                         }),
-                new ParentDeletedCase("auto-assign 破棄", Hook.GATE_ADMIN, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND,
+                new ParentDeletedCase("auto-assign 破棄", Hook.ACL_ADMIN_CHECK, ShiftErrorCode.ASSIGNMENT_RUN_NOT_FOUND,
                         t -> new Req(t.adminId, delete("/api/v1/shifts/schedules/{id}/auto-assign", t.scheduleId)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(String.valueOf(t.newRun(ShiftAssignmentRunStatus.SUCCEEDED))))),
@@ -327,8 +327,8 @@ class ShiftTxFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest {
             return result;
         };
         switch (hook) {
-            case GATE_MEMBER -> Mockito.doAnswer(afterReal).when(gate)
-                    .requireMemberOrConceal(any(), any(), any(), any(), anyBoolean());
+            case GATE_MEMBER -> Mockito.doAnswer(afterReal).when(manageGate)
+                    .requireMemberOrConceal(any(), any(), any(), anyBoolean());
             case GATE_ADMIN -> Mockito.doAnswer(afterReal).when(manageGate)
                     .requireManageOrConceal(any(), any(), any());
             case GATE_OWNER_OR_ADMIN -> Mockito.doAnswer(afterReal).when(manageGate)
@@ -476,10 +476,10 @@ class ShiftTxFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest {
         Long swap2 = tx.execute(s -> swapRepository.save(buildSwap(memberId)).getId());
         Long swap3 = tx.execute(s -> swapRepository.save(buildSwap(memberId)).getId());
         // JIT・キャッシュの初回コストを測定から外す（同種の呼び出しを 1 回流しておく）
-        gate.requireMemberOrConceal(member2Id, teamId, "TEAM", ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true);
+        manageGate.requireMemberOrConceal(member2Id, teamId, ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true);
 
         long gateQueries = countStatements(() ->
-                gate.requireMemberOrConceal(member2Id, teamId, "TEAM", ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true));
+                manageGate.requireMemberOrConceal(member2Id, teamId, ShiftErrorCode.SWAP_REQUEST_NOT_FOUND, true));
         long scopeQueries = countStatements(() -> swapService.resolveSwapScope(swap1));
         long bodyQueries = countStatements(() -> swapService.acceptSwapRequest(swap2, member2Id));
         long facadeQueries = countStatements(() -> swapFacade.acceptSwapRequest(swap3, member2Id));

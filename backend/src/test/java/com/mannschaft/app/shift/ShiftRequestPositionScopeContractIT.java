@@ -397,10 +397,10 @@ class ShiftRequestPositionScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-5: 非メンバーのSYSTEM_ADMINは201、親が論理削除済みなら不在と同一の404")
+        @DisplayName("AC-5（CMP-261125-2114 で改訂）: チームロールを持たないSYSTEM_ADMINは部外者と同じ404、親が論理削除済みでも不在と同一の404")
         void SYSTEM_ADMIN() throws Exception {
             setAuth(systemAdminId);
-            mockMvc.perform(submit(submitBody(scheduleAId))).andExpect(status().isCreated());
+            expectError(submit(submitBody(scheduleAId)), 404, "SHIFT_001");
             assertSameAsMissing(submit(submitBody(deletedScheduleId)), submit(submitBody(MISSING_ID)),
                     404, "SHIFT_001");
         }

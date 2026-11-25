@@ -63,7 +63,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p><b>応答コードの方針:</b></p>
  * <ul>
- *   <li>パスにスコープを持つ {@code /schedules/&#123;scheduleId&#125;/...} 系 … 非 ADMIN は 403、
+ *   <li>パスにスコープを持つ {@code /schedules/&#123;scheduleId&#125;/...} 系 … 非 ADMIN は実行・一覧が 403、run を指す確定・破棄は 404（run の実在を隠す。CMP-261125-2114）、
  *       body の runId がパスのスケジュールに属さない場合は 404（存在秘匿）</li>
  *   <li>パスにスコープを持たない {@code /assignment-runs/&#123;runId&#125;} 系 … 越境は 404（存在秘匿。
  *       403 と撃ち分けると runId の実在が観測できるため）</li>
@@ -320,13 +320,14 @@ class ShiftAutoAssignScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("非ADMINメンバーは403（管理操作）")
-        void 非ADMINメンバーは403() throws Exception {
+        @DisplayName("非ADMINメンバーは404 SHIFT_024（run の実在を隠す。CMP-261125-2114）")
+        void 非ADMINメンバーは404() throws Exception {
             setAuth(memberTeamAId);
             mockMvc.perform(post("/api/v1/shifts/schedules/{id}/auto-assign/confirm", scheduleAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(confirmBody(confirmedRunAId))))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
         }
 
         @Test
@@ -381,13 +382,14 @@ class ShiftAutoAssignScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("非ADMINメンバーは403")
-        void 非ADMINメンバーは403() throws Exception {
+        @DisplayName("非ADMINメンバーは404 SHIFT_024（run の実在を隠す。CMP-261125-2114）")
+        void 非ADMINメンバーは404() throws Exception {
             setAuth(memberTeamAId);
             mockMvc.perform(delete("/api/v1/shifts/schedules/{id}/auto-assign", scheduleAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.valueOf(revokableRunAId)))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
         }
 
         @Test
@@ -607,7 +609,7 @@ class ShiftAutoAssignScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(post("/api/v1/shifts/schedules/{id}/auto-assign/confirm", scheduleAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(confirmBody(confirmedRunAId))))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound());
         }
     }
 
@@ -667,14 +669,14 @@ class ShiftAutoAssignScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-2/AC-1: 同チームの非ADMINメンバーは、管理EPは403、パスにscopeの無い run 系は不在と同じ404")
+        @DisplayName("AC-2/AC-1: 同チームの非ADMINメンバーは、管理EP（実行・一覧）は403、run を指す EP（確定・破棄・詳細・目視確認）は不在と同じ404")
         void AC2_同チーム非ADMINの応答() throws Exception {
             setAuth(memberTeamAId);
-            for (String kind : List.of("run", "runs", "confirm", "revoke")) {
+            for (String kind : List.of("run", "runs")) {
                 org.assertj.core.api.Assertions.assertThat(call(kind, realId(kind)).getResponse().getStatus())
                         .as(kind).isEqualTo(403);
             }
-            for (String kind : List.of("detail", "visual")) {
+            for (String kind : List.of("confirm", "revoke", "detail", "visual")) {
                 assertSameError(call(kind, realId(kind)), call(kind, 999_999_999L));
             }
         }

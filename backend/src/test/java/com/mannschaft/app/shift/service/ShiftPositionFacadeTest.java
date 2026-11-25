@@ -103,7 +103,6 @@ class ShiftPositionFacadeTest {
     @Test
     @DisplayName("一覧_非メンバー・SUPPORTERは403 COMMON_002でtx本体を呼ばない／メンバーは通る")
     void 一覧_認可() {
-        given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
         given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false, true, true);
         given(accessControlService.isSupporter(USER_ID, TEAM_ID, "TEAM")).willReturn(true, false);
 

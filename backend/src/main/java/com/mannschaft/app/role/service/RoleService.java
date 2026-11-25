@@ -570,10 +570,11 @@ public class RoleService {
      * 指定チームの「ADMIN、または指定権限を持つ DEPUTY_ADMIN」のユーザー ID 一覧を返す。
      *
      * <p>シフト変更依頼の管理者宛通知（ADMIN ＋ MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の受信者解決用。
-     * 所属中の ADMIN（{@code findActiveAdminUserIdsByTeamId}。ロールだけ残って退会済みの ADMIN は除く）と
-     * {@code findDeputyAdminUserIdsByTeamIdAndPermission}（権限を持つ DEPUTY_ADMIN。ロール定義・
-     * 権限グループの両経路、チーム所属中のみ）を合わせる。既存の {@code findAdminUserIdsByTeamId}
-     * （他の呼び出し元あり）の挙動は変えない。
+     * <b>審査できる人（{@code AccessControlService#hasAdminOrPermissionInScope}）と同じ述語</b>に揃えている
+     * （CMP-261125-2114: 通知が届かないのに審査できる人を作らない）。ADMIN は {@code findAdminUserIdsByTeamId}
+     * （user_roles の ADMIN。有効な利用者のみ。{@code AccessControlService#isAdmin} と同じく在籍は問わない）、
+     * 副管理者は {@code findDeputyAdminUserIdsByTeamIdAndPermission}（権限を持つ DEPUTY_ADMIN。ロール定義・
+     * 権限グループの両経路。{@code existsDeputyAdminWithPermissionInTeam} と同じくチーム所属中のみ）。
      * 宛先は引数のチームの管理者だけで、他チームの管理者は含まれない。</p>
      *
      * @param teamId         対象チーム ID
@@ -582,7 +583,7 @@ public class RoleService {
      */
     public List<Long> getAdminAndPermittedDeputyUserIdsByTeamId(Long teamId, String permissionName) {
         LinkedHashSet<Long> ids = new LinkedHashSet<>(
-                userRoleRepository.findActiveAdminUserIdsByTeamId(teamId));
+                userRoleRepository.findAdminUserIdsByTeamId(teamId));
         ids.addAll(userRoleRepository.findDeputyAdminUserIdsByTeamIdAndPermission(teamId, permissionName));
         return new ArrayList<>(ids);
     }

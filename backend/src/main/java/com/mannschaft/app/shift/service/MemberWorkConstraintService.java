@@ -22,11 +22,14 @@ import java.util.Optional;
  * <p>チームデフォルト（{@code userId IS NULL}）と個別オーバーライドの両方を
  * 同一テーブル上で管理する。解決順序は「個別レコード → チームデフォルト → 制約なし」。</p>
  *
- * <p>権限モデル:
+ * <p>権限モデル（CMP-261125-2114。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけが管理者。
+ * DEPUTY_ADMIN というだけでは許可しない。SYSTEM_ADMIN も特別扱いしない）:
  * <ul>
- *   <li>作成・更新・削除: ADMIN または DEPUTY_ADMIN のみ</li>
- *   <li>一覧閲覧（全メンバー）: ADMIN または DEPUTY_ADMIN のみ</li>
- *   <li>個別閲覧: 本人 または ADMIN/DEPUTY_ADMIN（MEMBER は自分の制約のみ閲覧可）</li>
+ *   <li>作成・更新・削除: ADMIN または MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ
+ *       （個別制約の upsert だけは認可と対象の在籍検査を {@link MemberWorkConstraintFacade}（tx の外）が行い、
+ *       本クラスの {@link #upsertConstraint} は認可しない tx 本体）</li>
+ *   <li>一覧閲覧（全メンバー）: ADMIN または MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ</li>
+ *   <li>個別閲覧: 本人 または ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN（MEMBER は自分の制約のみ閲覧可）</li>
  * </ul>
  * </p>
  */
@@ -124,18 +127,20 @@ public class MemberWorkConstraintService {
     // ========================================
 
     /**
-     * 個別勤務制約を upsert する。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ。
+     * 個別勤務制約を upsert する（<b>認可しない tx 本体</b>）。
+     *
+     * <p>認可（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）と、対象ユーザーがそのチームの在籍者であることの検査は
+     * {@link MemberWorkConstraintFacade}（tx の外）が済ませてから呼ぶ（tx 内から membership・role の Repository へ
+     * 到達させない。D-3T）。Controller は本メソッドを直接呼ばないこと。</p>
      *
      * <p>全項目 NULL のリクエストは拒否（{@link ShiftErrorCode#WORK_CONSTRAINT_ALL_NULL}）。
      * 既存レコードが存在すれば更新、なければ新規作成。</p>
      *
-     * <p>対象ユーザーがそのチームの在籍者であることの検査は {@code MemberWorkConstraintController}（tx の外）が
-     * 権限判定の後に行う（tx 内から membership の Repository へ到達させない。D-3T）。</p>
+     * @param currentUserId 認可済みの操作者（監査ログ用）
      */
     @Transactional
     public MemberWorkConstraintResponse upsertConstraint(
             Long teamId, Long userId, MemberWorkConstraintRequest req, Long currentUserId) {
-        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
         validateNotAllNull(req);
 
         MemberWorkConstraintEntity entity = constraintRepository
@@ -162,7 +167,8 @@ public class MemberWorkConstraintService {
                         .build());
 
         entity = constraintRepository.save(entity);
-        log.info("メンバー勤務制約 upsert: teamId={}, userId={}, id={}", teamId, userId, entity.getId());
+        log.info("メンバー勤務制約 upsert: teamId={}, userId={}, id={}, by={}",
+                teamId, userId, entity.getId(), currentUserId);
         return shiftMapper.toWorkConstraintResponse(entity);
     }
 

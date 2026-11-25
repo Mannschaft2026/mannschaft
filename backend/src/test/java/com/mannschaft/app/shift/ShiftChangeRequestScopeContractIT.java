@@ -397,12 +397,12 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMINも本人でなければ403（SHIFT_019）で、依頼の status・version は変わらない")
-        void SYSTEM_ADMINも本人でなければ403でDB不変() throws Exception {
+        @DisplayName("チームロールを持たない SYSTEM_ADMIN は部外者と同じ404（SHIFT_030。CMP-261125-2114）で、依頼の status・version は変わらない")
+        void SYSTEM_ADMINは部外者と同じ404でDB不変() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(delete("/api/v1/shifts/change-requests/{id}", myRequestId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("SHIFT_019"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_030"));
             em.flush();
             em.clear();
             ShiftChangeRequestEntity after = changeRequestRepository.findById(myRequestId).orElseThrow();
@@ -576,15 +576,15 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("非メンバーの SYSTEM_ADMIN が変更依頼を作成すると 403 COMMON_002 で、件数が増えない")
-        void 非メンバーSYSTEM_ADMINの作成は403で件数不変() throws Exception {
+        @DisplayName("チームロールを持たない SYSTEM_ADMIN が変更依頼を作成すると部外者と同じ 404 SHIFT_001（CMP-261125-2114）で、件数が増えない")
+        void 非メンバーSYSTEM_ADMINの作成は404で件数不変() throws Exception {
             long before = changeRequestRepository.count();
             setAuth(systemAdminId);
             MvcResult res = call("create", scheduleAId);
-            org.assertj.core.api.Assertions.assertThat(res.getResponse().getStatus()).isEqualTo(403);
+            org.assertj.core.api.Assertions.assertThat(res.getResponse().getStatus()).isEqualTo(404);
             org.assertj.core.api.Assertions.assertThat(
                     (String) JsonPath.read(res.getResponse().getContentAsString(), "$.error.code"))
-                    .isEqualTo("COMMON_002");
+                    .isEqualTo("SHIFT_001");
             em.flush();
             em.clear();
             org.assertj.core.api.Assertions.assertThat(changeRequestRepository.count()).isEqualTo(before);

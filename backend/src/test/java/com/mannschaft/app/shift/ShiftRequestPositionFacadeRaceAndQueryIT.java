@@ -341,8 +341,8 @@ class ShiftRequestPositionFacadeRaceAndQueryIT extends AbstractMySqlIntegrationT
             return result;
         };
         switch (hook) {
-            case GATE_MEMBER -> Mockito.doAnswer(afterReal).when(gate)
-                    .requireMemberOrConceal(any(), any(), any(), any(), anyBoolean());
+            case GATE_MEMBER -> Mockito.doAnswer(afterReal).when(manageGate)
+                    .requireMemberOrConceal(any(), any(), any(), anyBoolean());
             case GATE_ADMIN -> Mockito.doAnswer(afterReal).when(manageGate)
                     .requireManageOrConceal(any(), any(), any());
             case GATE_VIEW -> Mockito.doAnswer(afterReal).when(manageGate)

@@ -145,6 +145,9 @@ class AuthzTxFacadeRegistryArchTest {
         add(list, "W2", SHIFT + "controller.ShiftAutoAssignController", SHIFT + "service.ShiftAutoAssignFacade",
                 "runAutoAssign", "confirmAutoAssign", "revokeAutoAssign", "getAssignmentRuns", "getAssignmentRunDetail",
                 "confirmVisualReview");
+        // CMP-261125-2114: 勤務制約の個別 upsert（権限判定と対象の在籍検査を tx の外へ。他の勤務制約 EP は旧来どおり Service 内認可）
+        add(list, "2114", SHIFT + "controller.MemberWorkConstraintController",
+                SHIFT + "service.MemberWorkConstraintFacade", "upsertConstraint");
         // W3a: 予約詳細
         add(list, "W3a", RSV + "controller.TeamReservationController", RSV + "service.ReservationDetailFacade",
                 "getReservation");
@@ -233,6 +236,8 @@ class AuthzTxFacadeRegistryArchTest {
                 cls(SHIFT + "service.ShiftScheduleService"),
                 cls(SHIFT + "service.ShiftPreferenceReminderBatchService")));
         map.put(SHIFT + "service.ShiftSlotFacade", List.of(cls(SHIFT + "service.ShiftSlotService")));
+        // 勤務制約は Facade を経ない EP（一覧・取得・削除・チームデフォルト）の認可が同じクラスに残るため METHOD
+        map.put(SHIFT + "service.MemberWorkConstraintFacade", List.of(method(SHIFT + "service.MemberWorkConstraintService")));
         map.put(SHIFT + "service.ShiftPdfFacade", List.of(
                 cls(SHIFT + "service.ShiftScheduleService"),
                 cls(SHIFT + "service.ShiftPdfService")));
@@ -262,10 +267,7 @@ class AuthzTxFacadeRegistryArchTest {
      * R6 の許可リスト: 「Facade FQN#メソッド名（ラムダは囲むメソッド名）」→ throw 形を直接呼んでよい理由。
      * 理由が空なら {@link #許可リストと除外表に理由がある()} が落ちる。使われなくなった項目も赤にする（陳腐化の防止）。
      */
-    static final Map<String, String> THROW_FORM_ALLOWLIST = Map.of(
-            SHIFT + "service.ShiftChangeRequestFacade#create",
-            "非メンバーの SYSTEM_ADMIN は是正前どおり 403 COMMON_002 で拒否する（AC-5 改訂）。Gate は冒頭で SYSTEM_ADMIN を"
-                    + "通してしまうため、SYSTEM_ADMIN のときだけ checkMembership で先に弾く");
+    static final Map<String, String> THROW_FORM_ALLOWLIST = Map.of();
 
     /**
      * 登録 Facade を呼ぶが登録表に載せない Controller メソッド（「Controller FQN#メソッド名」→ 理由）。理由必須。
