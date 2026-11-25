@@ -215,6 +215,46 @@ describe('SurveyRespondentsList.vue — 督促の残り回数・送信可否（C
     expect(blockedReason(wrapper).text()).toContain(t('surveys.respondents.remindBlockedNotPublished'))
   }, 30_000)
 
+  describe('督促ヒントの出し分け（送れないときは理由行だけ）', () => {
+    const hint = (w: VueWrapper) => w.find('[data-testid="respondents-remind-hint"]')
+
+    it('公開中でないならヒントを出さず理由だけを出す', async () => {
+      const wrapper = await mountList({
+        surveyStatus: 'DRAFT',
+        distribution: distribution({ manualRemindCount: 0 }),
+      })
+      expect(hint(wrapper).exists()).toBe(false)
+      expect(blockedReason(wrapper).exists()).toBe(true)
+    }, 30_000)
+
+    it('上限到達ならヒントを出さず理由だけを出す', async () => {
+      const wrapper = await mountList({
+        distribution: distribution({ manualRemindCount: 3 }),
+      })
+      expect(hint(wrapper).exists()).toBe(false)
+      expect(blockedReason(wrapper).exists()).toBe(true)
+    }, 30_000)
+
+    it('待機中ならヒントを出さず理由だけを出す', async () => {
+      const wrapper = await mountList({
+        distribution: distribution({
+          manualRemindCount: 1,
+          nextRemindableAt: dayjs().add(5, 'hour').format('YYYY-MM-DDTHH:mm:ss'),
+        }),
+      })
+      expect(hint(wrapper).exists()).toBe(false)
+      expect(blockedReason(wrapper).exists()).toBe(true)
+    }, 30_000)
+
+    it('送れるときはヒントを出し理由は出さない', async () => {
+      const wrapper = await mountList({
+        distribution: distribution({ manualRemindCount: 1, nextRemindableAt: null }),
+      })
+      expect(hint(wrapper).exists()).toBe(true)
+      expect(blockedReason(wrapper).exists()).toBe(false)
+    }, 30_000)
+  })
+
   it('AC8: 権限が無ければ残り回数を出さず、自動通知の案内だけを出す', async () => {
     const wrapper = await mountList({
       canRemind: false,

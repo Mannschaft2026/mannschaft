@@ -211,7 +211,11 @@ defineExpose({ refresh: loadRespondents })
         class="flex items-center justify-between gap-2 rounded-lg border border-surface-200 bg-surface-50 px-3 py-2 dark:border-surface-700 dark:bg-surface-800"
       >
         <div class="flex min-w-0 flex-col gap-0.5">
-          <span class="text-xs text-surface-600" data-testid="respondents-remind-hint">
+          <span
+            v-if="!remindBlockedReason"
+            class="text-xs text-surface-600"
+            data-testid="respondents-remind-hint"
+          >
             {{ remindHintText }}
           </span>
           <span
