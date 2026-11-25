@@ -203,13 +203,9 @@
       "assignmentMaskedHint": "公开前不显示排班分配",
       "deleteTitle": "删除排班时段",
       "deleteConfirmPlain": "确定删除此时段吗？",
-
       "deleteConfirmBoth": "确定删除此时段吗？为此时段提交的 {requests} 条意愿和 {assignments} 条分配也将被删除。此操作无法通过常规操作撤销。",
-
       "deleteConfirmRequestsOnly": "确定删除此时段吗？为此时段提交的 {requests} 条意愿也将被删除。此操作无法通过常规操作撤销。",
-
       "deleteConfirmAssignmentsOnly": "确定删除此时段吗？此时段的 {assignments} 条分配也将被删除。此操作无法通过常规操作撤销。",
-
       "deleteConfirmUnknown": "确定删除此时段吗？为此时段提交的意愿和分配（如有）也将被删除。此操作无法通过常规操作撤销。"
     },
     "requests": {
@@ -487,7 +483,13 @@
       "validation": {
         "rateRequired": "请输入时薪",
         "ratePositive": "时薪请输入不少于 1 日元的金额"
-      }
+      },
+      "readOnlyNotice": "您只能查看时薪。登记或更改时薪需要排班管理权限（MANAGE_SHIFTS）。"
+    },
+    "permission": {
+      "noManagePermission": "您没有管理排班的权限。请联系管理员。",
+      "adminNotice": "副管理员如果没有排班管理权限（MANAGE_SHIFTS），将无法再管理排班。请通过权限组为需要的副管理员授予 MANAGE_SHIFTS。",
+      "adminNoticeLink": "打开权限组"
     }
   },
   "my_shift_guide": {

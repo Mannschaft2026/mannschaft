@@ -32,14 +32,12 @@ const slots = ref<ShiftSlotResponse[]>([])
 const positions = ref<ShiftPositionResponse[]>([])
 const loading = ref(false)
 
-const canManage = computed(() => {
-  if (!schedule.value) return false
-  return teamStore.myTeams.some(
-    (t) =>
-      t.id === schedule.value!.teamId &&
-      (t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),
-  )
-})
+// CMP-261125-2114: 管理操作はチーム ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ（BE: ShiftManageAccessGate）。
+// 判定は useShiftPermission に集約。権限はシフト表のチーム（myTeams から slug を引く）で取得する。SYSTEM_ADMIN は特別扱いしない。
+const permissionTeamSlug = computed(
+  () => teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug ?? null,
+)
+const { canManageShift: canManage, isDeputyWithoutManage, loadPermissions } = useShiftPermission(permissionTeamSlug, { autoLoad: false })
 
 /** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
 const loadError = ref<unknown>(null)
@@ -50,6 +48,10 @@ async function load() {
   // schedule を先に取得してチームIDを得る
   try {
     const s = await getSchedule(scheduleId.value)
+    schedule.value = s
+    // 権限は取得失敗を「権限なし」に倒さず、エラー状態で見せる（再試行できる）
+    const perm = await loadPermissions()
+    if (!perm.ok) throw perm.error
     const [sl, pos] = await Promise.all([
       listSlots(scheduleId.value),
       listPositions(String(s.teamId)),
@@ -282,6 +284,9 @@ function formatDate(dateStr: string): string {
     <template v-else>
       <!-- タブ -->
       <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="edit" />
+
+      <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
+      <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />
 
       <!-- アクションバー -->
       <div v-if="canManage" class="mb-4 flex flex-wrap gap-2">

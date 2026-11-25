@@ -9,6 +9,8 @@ const teamSlug = String(route.params.slug)
 
 const notification = useNotification()
 const { getShiftSettings, updateShiftSettings } = useTeamShiftSettingsApi()
+// CMP-261125-2114: 設定の変更はチーム ADMIN または MANAGE_SHIFTS 付き DEPUTY_ADMIN だけ（BE が 403 を返す）。
+const { canManageShift, isScopeAdmin, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 
 const settings = ref<TeamShiftSettings | null>(null)
 const loading = ref(false)
@@ -22,6 +24,12 @@ const form = ref<UpdateTeamShiftSettingsRequest>({
   reminder12hEnabled: false,
 })
 
+// 副管理者への閲覧許可（MANAGE_SHIFTS 無しの副管理者に閲覧だけを許す。操作は常に MANAGE_SHIFTS が必要）
+const deputyForm = ref({
+  deputyShiftViewEnabled: false,
+  deputyHourlyRateViewEnabled: false,
+})
+
 async function loadSettings() {
   loading.value = true
   try {
@@ -31,6 +39,10 @@ async function loadSettings() {
       reminder48hEnabled: res.reminder48hEnabled,
       reminder24hEnabled: res.reminder24hEnabled,
       reminder12hEnabled: res.reminder12hEnabled,
+    }
+    deputyForm.value = {
+      deputyShiftViewEnabled: res.deputyShiftViewEnabled,
+      deputyHourlyRateViewEnabled: res.deputyHourlyRateViewEnabled,
     }
   } catch {
     notification.error(t('settings.notification.load_error'))
@@ -53,11 +65,12 @@ function validateAtLeastOneEnabled(): boolean {
 }
 
 async function saveSettings() {
+  if (!canManageShift.value) return
   if (!validateAtLeastOneEnabled()) return
 
   saving.value = true
   try {
-    const res = await updateShiftSettings(teamSlug, form.value)
+    const res = await updateShiftSettings(teamSlug, { ...form.value, ...deputyForm.value })
     settings.value = res
     notification.success(t('teamShiftSettings.saved'))
   } catch {
@@ -67,12 +80,20 @@ async function saveSettings() {
   }
 }
 
-onMounted(() => loadSettings())
+onMounted(async () => {
+  const perm = await loadPermissions()
+  if (!perm.ok) notification.error(t('settings.notification.load_error'))
+  await loadSettings()
+})
 </script>
 
 <template>
   <div class="container mx-auto max-w-2xl p-4">
     <PageHeader :title="$t('teamShiftSettings.title')" class="mb-4" />
+
+    <!-- 権限の変更を管理者へ告知し、MANAGE_SHIFTS 無しの副管理者には操作できない理由を示す -->
+    <ShiftManageNotice v-if="isScopeAdmin" variant="admin" :team-slug="teamSlug" />
+    <ShiftManageNotice v-else-if="isDeputyWithoutManage" variant="deputy" />
 
     <p class="mb-6 text-sm text-surface-500">
       {{ $t('teamShiftSettings.description') }}
@@ -96,6 +117,7 @@ onMounted(() => loadSettings())
           <ToggleSwitch
             v-model="form.reminder48hEnabled"
             data-testid="reminder-48h-toggle"
+            :disabled="!canManageShift"
           />
         </div>
 
@@ -106,6 +128,7 @@ onMounted(() => loadSettings())
           <ToggleSwitch
             v-model="form.reminder24hEnabled"
             data-testid="reminder-24h-toggle"
+            :disabled="!canManageShift"
           />
         </div>
 
@@ -123,6 +146,53 @@ onMounted(() => loadSettings())
         </div>
       </div>
 
+      <!-- 副管理者への閲覧許可（閲覧だけ。操作は MANAGE_SHIFTS が必要） -->
+      <div
+        data-testid="deputy-view-settings"
+        class="mt-6 flex flex-col gap-4 border-t border-surface-100 pt-4 dark:border-surface-700"
+      >
+        <div>
+          <h2 class="text-sm font-semibold">{{ $t('teamShiftSettings.deputyViewTitle') }}</h2>
+          <p class="mt-1 text-xs text-surface-500">{{ $t('teamShiftSettings.deputyViewDescription') }}</p>
+        </div>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <label for="deputy-shift-view-toggle" class="text-sm font-medium">
+              {{ $t('teamShiftSettings.deputyShiftView') }}
+            </label>
+            <p class="text-xs text-surface-500">{{ $t('teamShiftSettings.deputyShiftViewHint') }}</p>
+          </div>
+          <ToggleSwitch
+            v-model="deputyForm.deputyShiftViewEnabled"
+            input-id="deputy-shift-view-toggle"
+            data-testid="deputy-shift-view-toggle"
+            :disabled="!canManageShift"
+          />
+        </div>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <label for="deputy-hourly-rate-view-toggle" class="text-sm font-medium">
+              {{ $t('teamShiftSettings.deputyHourlyRateView') }}
+            </label>
+            <p class="text-xs text-surface-500">{{ $t('teamShiftSettings.deputyHourlyRateViewHint') }}</p>
+          </div>
+          <ToggleSwitch
+            v-model="deputyForm.deputyHourlyRateViewEnabled"
+            input-id="deputy-hourly-rate-view-toggle"
+            data-testid="deputy-hourly-rate-view-toggle"
+            :disabled="!canManageShift"
+          />
+        </div>
+      </div>
+
+      <p
+        v-if="!canManageShift"
+        data-testid="shift-settings-readonly-notice"
+        class="mt-4 text-xs text-surface-500"
+      >
+        {{ $t('teamShiftSettings.readOnlyNotice') }}
+      </p>
+
       <!-- バリデーションエラー -->
       <div
         v-if="validationError"
@@ -135,6 +205,7 @@ onMounted(() => loadSettings())
       <!-- 保存ボタン -->
       <div class="mt-6">
         <Button
+          v-if="canManageShift"
           data-testid="reminder-settings-save-btn"
           :label="$t('button.save')"
           icon="pi pi-save"

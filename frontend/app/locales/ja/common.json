@@ -1478,7 +1478,14 @@
     "reminder24h": "24時間前リマインド",
     "reminder12h": "12時間前リマインド（将来対応）",
     "atLeastOneRequired": "少なくとも1つのリマインドを有効にしてください",
-    "saved": "設定を保存しました"
+    "saved": "設定を保存しました",
+    "deputyViewTitle": "副管理者への閲覧許可",
+    "deputyViewDescription": "シフト管理の権限（MANAGE_SHIFTS）を持たない副管理者に、閲覧だけを許すかどうかを設定します。作成・編集・公開・割当・承認などの操作は許可されません。",
+    "deputyShiftView": "シフト情報の閲覧を許可",
+    "deputyShiftViewHint": "未公開のシフト表・割当・他人の交代／変更依頼・希望一覧・PDF の管理者出力・ダッシュボードの要対応を表示できます。",
+    "deputyHourlyRateView": "他メンバーの時給の閲覧を許可",
+    "deputyHourlyRateViewHint": "チーム設定の時給設定画面で、他メンバーの時給を表示できます（登録・変更はできません）。",
+    "readOnlyNotice": "この設定を変更できるのは、チーム管理者またはシフト管理の権限（MANAGE_SHIFTS）を持つ副管理者だけです。"
   },
   "corkboard": {
     "pin": "ピン止めする",

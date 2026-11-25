@@ -4,7 +4,8 @@
  *
  * 4ページに複製されていた nav を1か所に寄せ、ボード・変更依頼・PDF への導線を足した。
  * 出し分けはここで完結させる（ページ側に判定を散らさない）:
- * - 希望一覧・勤務制約・ボード … 当該チームの ADMIN / DEPUTY_ADMIN のみ
+ * - 希望一覧・勤務制約・ボード … 当該チームの ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ
+ *   （希望一覧は、閲覧切替が ON のときの MANAGE_SHIFTS 無し DEPUTY_ADMIN にも出す。CMP-261125-2114）
  * - 変更依頼 … teams 配下のため、利用者の myTeams にそのチームがあるときだけ
  * - PDF … myTeams にあり、かつ SUPPORTER でないとき（board.vue と同じ規則）
  */
@@ -24,11 +25,10 @@ const teamStore = useTeamStore()
 const team = computed(() =>
   props.teamId === null ? undefined : teamStore.myTeams.find(m => m.id === props.teamId),
 )
-const canManage = computed(() =>
-  ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''),
-)
-/** シフトボードは ADMIN / DEPUTY_ADMIN のみ（ShiftScheduleList / board.vue と同じ規則） */
-const canOpenBoard = computed(() => ['ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''))
+const { canManageShift, canViewShift } = useShiftPermission(() => team.value?.slug ?? null)
+/** 希望一覧は閲覧権限（管理者＋閲覧切替 ON の副管理者）、勤務制約・ボードは管理操作の権限。 */
+const canOpenRequests = canViewShift
+const canOpenBoard = canManageShift
 const showPdf = computed(() => team.value !== undefined && team.value.role !== 'SUPPORTER')
 
 interface Tab {
@@ -45,9 +45,13 @@ const tabs = computed<Tab[]>(() => {
     { key: 'overview', label: t('shift.detail.tabOverview'), icon: 'pi pi-calendar', to: base, current: props.current === 'overview' },
     { key: 'edit', label: t('shift.detail.tabEdit'), icon: 'pi pi-pencil', to: `${base}/edit`, current: props.current === 'edit' },
   ]
-  if (canManage.value) {
+  if (canOpenRequests.value) {
     list.push(
       { key: 'requests', label: t('shift.detail.tabRequests'), icon: 'pi pi-list', to: `${base}/requests`, current: props.current === 'requests' },
+    )
+  }
+  if (canManageShift.value) {
+    list.push(
       { key: 'constraints', label: t('shift.detail.tabConstraints'), icon: 'pi pi-shield', to: `${base}/work-constraints`, current: props.current === 'constraints' },
     )
   }

@@ -203,13 +203,9 @@
       "assignmentMaskedHint": "Zuweisungen werden bis zur Veröffentlichung ausgeblendet",
       "deleteTitle": "Schichtzeit löschen",
       "deleteConfirmPlain": "Diese Schichtzeit löschen?",
-
       "deleteConfirmBoth": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche und {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmRequestsOnly": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmAssignmentsOnly": "Diese Schichtzeit löschen? Die {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmUnknown": "Diese Schichtzeit löschen? Eingereichte Wünsche und Zuweisungen dafür, falls vorhanden, werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen."
     },
     "requests": {
@@ -487,7 +483,13 @@
       "validation": {
         "rateRequired": "Bitte geben Sie einen Stundensatz ein",
         "ratePositive": "Bitte geben Sie einen Stundensatz von mindestens 1 JPY ein"
-      }
+      },
+      "readOnlyNotice": "Sie dürfen Stundenlöhne nur einsehen. Zum Erfassen oder Ändern ist die Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) erforderlich."
+    },
+    "permission": {
+      "noManagePermission": "Sie haben keine Berechtigung zur Schichtverwaltung. Bitte wenden Sie sich an eine Administratorin oder einen Administrator.",
+      "adminNotice": "Stellvertretende Administratoren können Schichten nur noch verwalten, wenn sie die Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) haben. Erteilen Sie MANAGE_SHIFTS über eine Berechtigungsgruppe an die Stellvertreter, die sie benötigen.",
+      "adminNoticeLink": "Berechtigungsgruppen öffnen"
     }
   },
   "my_shift_guide": {

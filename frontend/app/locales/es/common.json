@@ -1478,7 +1478,14 @@
     "reminder24h": "Recordatorio 24 horas antes",
     "reminder12h": "Recordatorio 12 horas antes (próximamente)",
     "atLeastOneRequired": "Por favor activa al menos un recordatorio",
-    "saved": "Configuración guardada"
+    "saved": "Configuración guardada",
+    "deputyViewTitle": "Acceso de lectura para administradores adjuntos",
+    "deputyViewDescription": "Define si los administradores adjuntos sin el permiso de gestión de turnos (MANAGE_SHIFTS) pueden ver la información de turnos. Siguen sin poder crear, editar, publicar, asignar ni aprobar.",
+    "deputyShiftView": "Permitir ver la información de turnos",
+    "deputyShiftViewHint": "Podrán ver los cuadrantes sin publicar, las asignaciones, las solicitudes de cambio e intercambio de otros miembros, las listas de preferencias, la exportación PDF de administrador y los pendientes del panel.",
+    "deputyHourlyRateView": "Permitir ver el salario por hora de otros miembros",
+    "deputyHourlyRateViewHint": "Podrán ver el salario por hora de otros miembros en la página de configuración (sin poder registrarlo ni modificarlo).",
+    "readOnlyNotice": "Solo los administradores del equipo y los adjuntos con el permiso de gestión de turnos (MANAGE_SHIFTS) pueden cambiar esta configuración."
   },
   "corkboard": {
     "pin": "Fijar",

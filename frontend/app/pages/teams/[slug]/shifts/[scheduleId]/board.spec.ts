@@ -28,7 +28,12 @@ mockNuxtImport('useShiftApi', () => () => ({
   getPositions: mocks.getPositions,
 }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: mocks.getMembers }))
-mockNuxtImport('useRoleAccess', () => () => ({ roleName: ref('MEMBER'), loadPermissions: mocks.loadPermissions }))
+mockNuxtImport('useShiftPermission', () => () => ({
+  roleName: ref('MEMBER'),
+  canManageShift: ref(false),
+  isDeputyWithoutManage: ref(false),
+  loadPermissions: mocks.loadPermissions,
+}))
 mockNuxtImport('useFeatureFlag', () => () => ({ enabled: ref(false) }))
 mockNuxtImport('useAutoAssign', () => () => ({
   runs: ref([]),

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { computed, nextTick } from 'vue'
 import ShiftDetailIndex from '~/pages/shift/[id]/index.vue'
 import ShiftDetailEdit from '~/pages/shift/[id]/edit.vue'
 import ShiftDetailRequests from '~/pages/shift/[id]/requests.vue'
@@ -31,6 +31,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('~/composables/team/useTeamMembers', () => ({
   useTeamMembers: () => ({ getAllMembers: mocks.getAllMembers }),
+}))
+// 出し分けの判定本体は useShiftPermission（app/composables/useShiftPermission.spec.ts で真理値表を検証済み）。
+// ここでは管理操作ができる利用者（ADMIN 相当）として振る舞わせる。
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: computed(() => true),
+  canViewShift: computed(() => true),
+  canViewHourlyRate: computed(() => true),
+  isDeputyWithoutManage: computed(() => false),
+  isScopeAdmin: computed(() => true),
+  loadPermissions: async () => ({ ok: true }),
 }))
 mockNuxtImport('useRoute', () => () => ({ params: { id: '10' }, path: '/shift/10' }))
 mockNuxtImport('useTeamStore', () => () => ({

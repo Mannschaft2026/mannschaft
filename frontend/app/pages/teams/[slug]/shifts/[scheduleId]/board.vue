@@ -41,7 +41,7 @@
              DOM から消さず disabled ＋ 理由ツールチップで「停止中」と示す
              （docs/features/F03.5_shift/06_manual_authoring.md §11.1.2-4）。 -->
         <span
-          v-if="isScopeAdmin"
+          v-if="canManageShift"
           v-tooltip.bottom="autoAssignEnabled ? '' : t('shift.autoAssign.disabledReason')"
           :title="autoAssignEnabled ? '' : t('shift.autoAssign.disabledReason')"
           :data-testid="autoAssignEnabled ? undefined : 'auto-assign-disabled-reason'"
@@ -75,6 +75,9 @@
         </span>
       </div>
     </div>
+
+    <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
+    <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" class="mx-4 mt-4 flex-shrink-0" />
 
     <!-- シフト表の取得中 -->
     <PageLoading v-if="scheduleLoading" />
@@ -184,20 +187,12 @@ const scheduleId = computed(() => Number(route.params.scheduleId))
 //   → systemRole はプラットフォームロール（SYSTEM_ADMIN など）であり、
 //     チームの SUPPORTER を判定するのは誤りだった。
 // 新実装: /api/v1/teams/{id}/me/permissions から取得した roleName で判定する。
-const { roleName, loadPermissions } = useRoleAccess('team', teamSlug)
+const { roleName, canManageShift, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 const isSupporter = computed(() => roleName.value === 'SUPPORTER')
-// 認可根治 Wave7: 自動割当（実行・確定・破棄・履歴）は BE 側で当該チームの ADMIN/DEPUTY_ADMIN 限定に
-// なった。一般メンバーには導線を出さない（出すと必ず 403 になる死んだボタンになる）。
-//
-// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)
-// resolveEffectiveRoleName は SYSTEM_ADMIN > ADMIN > DEPUTY_ADMIN > ... の優先度で
-// 最強ロール 1 値を返すため、プラットフォーム SYSTEM_ADMIN が同時にチームの ADMIN でも
-// roleName は 'SYSTEM_ADMIN' になり ADMIN は返らない。これはバグではなく、
-// 「運営専用アカウントである SYSTEM_ADMIN には一般業務導線（このボタン）を出さない」という
-// マスター確定の設計判断（docs/security/03_role_authority_model.md §3.5）。
-// BE（ShiftAutoAssignService）は SYSTEM_ADMIN を別途常に許可しており、この UI 非表示は
-// 認可の代替ではない。`hasRoleOrAbove` 的な包含判定に書き換えて SYSTEM_ADMIN を含めないこと。
-const isScopeAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
+// CMP-261125-2114: 自動割当（実行・確定・破棄・履歴）などの管理操作は、チーム ADMIN または
+// MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに許される（BE: ShiftManageAccessGate）。
+// 判定は useShiftPermission に集約。SYSTEM_ADMIN の roleName 特別扱いはしない（BE も特別扱いしない）。
+// UI の出し分けは認可の代替ではない（BE が 403 / 404 を返す）。
 
 // 自動割当は 2026-09-09 の方針転換で既定 OFF（BE も ShiftAutoAssignController の
 // クラスレベル @RequireFeature で 6 経路すべてを FEATURE_GATE_001 で拒否する）。
@@ -311,7 +306,7 @@ async function initialize(): Promise<void> {
     // ボード画面全体が描画されなくなる（エラーを握りつぶさず、そもそも呼ばない形で解消する）。
     // フラグ OFF のときは実行履歴 API もゲートで 403（FEATURE_GATE_001）になるため呼ばない。
     // 例外を握りつぶすのではなく、停止中の機能には最初から到達しない形で解消する。
-    if (isScopeAdmin.value && autoAssignEnabled.value) {
+    if (canManageShift.value && autoAssignEnabled.value) {
       await fetchRuns()
     }
   } catch (error) {

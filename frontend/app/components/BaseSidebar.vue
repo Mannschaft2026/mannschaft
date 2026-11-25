@@ -52,6 +52,8 @@ function isItemVisible(item: SidebarItem): boolean {
   const feature = item.requiredRole === 'MEMBER' && !item.absolutePath ? featureForSidebar(item.path, props.scopeType) : undefined
   if (!featureVisibility.isVisible(feature)) return false
   if (item.access === 'scope-admin') return !props.memberLensActive && isScopeAdmin.value
+  // シフト管理（CMP-261125-2114）: ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。SYSTEM_ADMIN は特別扱いしない。
+  if (item.access === 'shift-manage') return !props.memberLensActive && (isScopeAdmin.value || can('MANAGE_SHIFTS'))
   if (item.access === 'loyalty-operate') return !props.memberLensActive && loyaltyAccess.allowed.value
   // 機能ゲートが閉じている（OFF・未取得）項目は SYSTEM_ADMIN にも出さない（fail-closed）。
   // route 層の middleware も同じ判定で弾くため、踏めない導線を作らない。

@@ -203,13 +203,9 @@
       "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
       "deleteTitle": "Eliminar turno",
       "deleteConfirmPlain": "¿Eliminar este turno?",
-
       "deleteConfirmBoth": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno y sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
-
       "deleteConfirmRequestsOnly": "¿Eliminar este turno? También se eliminarán las {requests} solicitud(es) enviadas para este turno. No se puede deshacer con las operaciones habituales.",
-
       "deleteConfirmAssignmentsOnly": "¿Eliminar este turno? También se eliminarán sus {assignments} asignación(es). No se puede deshacer con las operaciones habituales.",
-
       "deleteConfirmUnknown": "¿Eliminar este turno? Si hay solicitudes enviadas para este turno o asignaciones, también se eliminarán. No se puede deshacer con las operaciones habituales."
     },
     "requests": {
@@ -487,7 +483,13 @@
       "validation": {
         "rateRequired": "Introduce una tarifa por hora",
         "ratePositive": "Introduce una tarifa por hora de al menos 1 JPY"
-      }
+      },
+      "readOnlyNotice": "Solo puedes ver los salarios por hora. Registrarlos o modificarlos requiere el permiso de gestión de turnos (MANAGE_SHIFTS)."
+    },
+    "permission": {
+      "noManagePermission": "No tienes permiso para gestionar los turnos. Solicítalo a un administrador.",
+      "adminNotice": "Los administradores adjuntos ya no pueden gestionar los turnos sin el permiso de gestión de turnos (MANAGE_SHIFTS). Concede MANAGE_SHIFTS mediante un grupo de permisos a los adjuntos que lo necesiten.",
+      "adminNoticeLink": "Abrir grupos de permisos"
     }
   },
   "my_shift_guide": {

@@ -9,8 +9,8 @@ const loadPermissions = vi.fn(async () => ({ ok: true }))
 mockNuxtImport('useRoute', () => () => route)
 mockNuxtImport('useTeamShellContext', () => () => ({ team: ref({ numericId: 10 }) }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn() }))
-mockNuxtImport('useRoleAccess', () => () => ({
-  isAdmin: ref(true), isAdminOrDeputy: ref(true), roleName: ref('ADMIN'), loadPermissions,
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: ref(true), isScopeAdmin: ref(true), isMember: ref(true), isDeputyWithoutManage: ref(false), loadPermissions,
 }))
 mockNuxtImport('useShiftApi', () => () => ({ createSchedule: vi.fn() }))
 mockNuxtImport('useDatetime', () => () => ({ userTimezone: ref('Asia/Tokyo') }))

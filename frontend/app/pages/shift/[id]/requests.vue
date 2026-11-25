@@ -49,28 +49,13 @@ const requests = ref<ShiftRequestResponse[]>([])
 const summary = ref<ShiftRequestSummaryResponse | null>(null)
 const loading = ref(false)
 
-// このページの参照系 API（希望一覧・サマリー）は BE 側で ADMIN/DEPUTY_ADMIN 限定。
-// 一般メンバーの直リンク・ブックマーク到達を塞ぐため、権限確定時点で詳細ページへ戻す。
-const canManage = computed(() => {
-  if (!schedule.value) return false
-  return teamStore.myTeams.some(
-    (t) =>
-      t.id === schedule.value!.teamId &&
-      (t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),
-  )
-})
-
-// 直リンク防御: 権限が確定した時点で管理者でなければ詳細ページへ戻す。
-watch(
-  [schedule, canManage],
-  () => {
-    if (schedule.value && !canManage.value) {
-      warn(t('shift.detail.accessDeniedRedirect'))
-      navigateTo(`/shift/${scheduleId.value}`)
-    }
-  },
-  { immediate: true },
+// このページの参照系 API（希望一覧・サマリー）は BE 側で閲覧権限が必須（CMP-261125-2114）。
+// 閲覧できるのは、チーム ADMIN・MANAGE_SHIFTS を持つ DEPUTY_ADMIN、およびシフト閲覧切替が ON のときの DEPUTY_ADMIN。
+// 判定は useShiftPermission に集約。SYSTEM_ADMIN は特別扱いしない。
+const permissionTeamSlug = computed(
+  () => teamStore.myTeams.find(tm => tm.id === schedule.value?.teamId)?.slug ?? null,
 )
+const { canViewShift, loadPermissions } = useShiftPermission(permissionTeamSlug, { autoLoad: false })
 
 /** 取得失敗（空状態へ倒さず DashboardErrorState で出す。AC-E1〜E3） */
 const loadError = ref<unknown>(null)
@@ -80,7 +65,14 @@ async function load() {
   loadError.value = null
   try {
     schedule.value = await getSchedule(scheduleId.value)
-    if (!canManage.value) return
+    const perm = await loadPermissions()
+    if (!perm.ok) throw perm.error
+    // 一般メンバーの直リンク・ブックマーク到達を塞ぐため、権限確定時点で詳細ページへ戻す。
+    if (!canViewShift.value) {
+      warn(t('shift.detail.accessDeniedRedirect'))
+      await navigateTo(`/shift/${scheduleId.value}`)
+      return
+    }
     const [reqs, sum] = await Promise.all([
       listRequests(scheduleId.value),
       getRequestSummary(scheduleId.value),

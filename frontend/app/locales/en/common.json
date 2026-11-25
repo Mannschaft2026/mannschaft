@@ -1478,7 +1478,14 @@
     "reminder24h": "24-hour reminder",
     "reminder12h": "12-hour reminder (coming soon)",
     "atLeastOneRequired": "Please enable at least one reminder.",
-    "saved": "Settings saved."
+    "saved": "Settings saved.",
+    "deputyViewTitle": "View access for deputy administrators",
+    "deputyViewDescription": "Choose whether deputy administrators without the shift management permission (MANAGE_SHIFTS) may view shift information. They still cannot create, edit, publish, assign or approve anything.",
+    "deputyShiftView": "Allow viewing shift information",
+    "deputyShiftViewHint": "They can see unpublished schedules, assignments, other members' swap and change requests, availability lists, the administrator PDF export and action-required items on the dashboard.",
+    "deputyHourlyRateView": "Allow viewing other members' hourly rates",
+    "deputyHourlyRateViewHint": "They can see other members' hourly rates on the hourly rate settings page (but cannot register or change them).",
+    "readOnlyNotice": "Only team administrators and deputy administrators with the shift management permission (MANAGE_SHIFTS) can change these settings."
   },
   "corkboard": {
     "pin": "Pin",
