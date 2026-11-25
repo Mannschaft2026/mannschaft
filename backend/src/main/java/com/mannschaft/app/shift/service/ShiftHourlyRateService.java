@@ -1,8 +1,5 @@
 package com.mannschaft.app.shift.service;
 
-import com.mannschaft.app.common.AccessControlService;
-import com.mannschaft.app.common.BusinessException;
-import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.shift.ShiftMapper;
 import com.mannschaft.app.shift.dto.CreateHourlyRateRequest;
 import com.mannschaft.app.shift.dto.HourlyRateResponse;
@@ -20,13 +17,11 @@ import java.util.Optional;
 /**
  * シフト時給サービス。メンバーの時給設定・履歴管理を担当する。
  *
- * <p><b>認可（認可根治 Wave6 追加戦）:</b> 時給は金銭情報のため、参照は
- * {@link ShiftHourlyRateAuthorizer#checkHourlyRateAccess}、登録・訂正は
- * {@link ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess} で per-scope 認可を強制する。
- * F03.5 設計書 {@code 01_db_design.md} に従い、閲覧は本人 + ADMIN/DEPUTY_ADMIN、
- * 登録・訂正は ADMIN/DEPUTY_ADMIN に限定する。
- * shift ドメインの金型 {@code ShiftScheduleService#checkScheduleAdminAccess} と同一方針
- * （SYSTEM_ADMIN 短絡許可 + {@code AccessControlService} による TEAM スコープ判定・違反は 403）。</p>
+ * <p><b>認可（CMP-261125-2114）:</b> 時給は金銭情報のため、<b>参照</b>の認可は tx の外の
+ * {@link ShiftHourlyRateFacade}（本人・ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN・時給閲覧切替 ON の DEPUTY_ADMIN）が済ませ、
+ * 本クラスの参照メソッドは認可なしの tx 本体（時給閲覧切替が team ドメインの設定のため、tx の中で読まない。D-3T）。
+ * <b>登録・訂正</b>は {@link ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess}（ADMIN と MANAGE_SHIFTS を持つ
+ * DEPUTY_ADMIN だけ。SYSTEM_ADMIN は特別扱いしない）で強制する。削除は {@link ShiftHourlyRateDeletionFacade}。</p>
  */
 @Slf4j
 @Service
@@ -36,43 +31,40 @@ public class ShiftHourlyRateService {
 
     private final ShiftHourlyRateRepository hourlyRateRepository;
     private final ShiftMapper shiftMapper;
-    private final AccessControlService accessControlService;
     private final ShiftHourlyRateAuthorizer hourlyRateAuthorizer;
-    private final ShiftManageAccessGate manageGate;
 
     /**
-     * ユーザーの時給履歴を取得する。
+     * ユーザーの時給履歴を取得する（認可なしの tx 本体）。
      *
-     * @param userId        対象ユーザーID
-     * @param teamId        チームID
-     * @param currentUserId 操作ユーザーID（認可判定に使用）
+     * <p>認可（本人・ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN・時給閲覧切替 ON の DEPUTY_ADMIN）は
+     * {@link ShiftHourlyRateFacade} が tx の外で済ませてから呼ぶ。Controller は本メソッドを直接呼ばないこと。</p>
+     *
+     * @param userId 対象ユーザーID
+     * @param teamId チームID
      * @return 時給履歴一覧
      */
-    public List<HourlyRateResponse> listHourlyRates(Long userId, Long teamId, Long currentUserId) {
-        hourlyRateAuthorizer.checkHourlyRateAccess(currentUserId, userId, teamId);
+    public List<HourlyRateResponse> listHourlyRates(Long userId, Long teamId) {
         List<ShiftHourlyRateEntity> entities = hourlyRateRepository
                 .findByUserIdAndTeamIdOrderByEffectiveFromDesc(userId, teamId);
         return shiftMapper.toHourlyRateResponseList(entities);
     }
 
     /**
-     * 特定日時点の有効時給を取得する。
+     * 特定日時点の有効時給を取得する（認可なしの tx 本体。認可は {@link ShiftHourlyRateFacade}）。
      *
-     * @param userId        対象ユーザーID
-     * @param teamId        チームID
-     * @param date          基準日
-     * @param currentUserId 操作ユーザーID（認可判定に使用）
+     * @param userId 対象ユーザーID
+     * @param teamId チームID
+     * @param date   基準日
      * @return 有効な時給（存在しない場合はnull）
      */
-    public HourlyRateResponse getEffectiveRate(Long userId, Long teamId, LocalDate date, Long currentUserId) {
-        hourlyRateAuthorizer.checkHourlyRateAccess(currentUserId, userId, teamId);
+    public HourlyRateResponse getEffectiveRate(Long userId, Long teamId, LocalDate date) {
         return hourlyRateRepository.findEffectiveRate(userId, teamId, date)
                 .map(shiftMapper::toHourlyRateResponse)
                 .orElse(null);
     }
 
     /**
-     * チーム全員ぶんの「基準日時点で有効な時給」を 1 クエリで取得する（CMP-260912-1525）。
+     * チーム全員ぶんの「基準日時点で有効な時給」を 1 クエリで取得する（CMP-260912-1525。認可なしの tx 本体）。
      *
      * <h2>なぜ要るのか</h2>
      * <p>時給設定画面は全メンバーの現在時給を並べる。1 人ずつ
@@ -80,29 +72,21 @@ public class ShiftHourlyRateService {
      * 本メソッドは走査を 1 クエリに固定する（総処理量は人数 N に比例）。</p>
      *
      * <h2>認可（AC-5）</h2>
-     * <p>返す内容に他メンバーの時給が必ず含まれるため、
-     * {@code F03.5} の「本人 + 当該チームの ADMIN/DEPUTY_ADMIN のみ」のうち
-     * <b>ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN（時給閲覧切替 ON の DEPUTY_ADMIN を含む）だけ</b>を許可する。
-     * 一般メンバーは自分の時給を {@link #listHourlyRates} / {@link #getEffectiveRate} で
-     * 従来どおり読めるので、本メソッドを一律拒否しても機能は失われない。</p>
+     * <p>返す内容に他メンバーの時給が必ず含まれるため、認可は {@link ShiftHourlyRateFacade} が tx の外で
+     * 「ADMIN／MANAGE_SHIFTS を持つ DEPUTY_ADMIN（時給閲覧切替 ON の DEPUTY_ADMIN を含む）だけ」に絞る
+     * （CMP-261125-2114。SYSTEM_ADMIN は特別扱いしない）。</p>
      *
-     * @param teamId        チームID
-     * @param date          基準日
-     * @param currentUserId 操作ユーザーID（認可判定に使用）
+     * <h2>対象の絞り込み（Codex 検分 P1）</h2>
+     * <p>ロールの検査だけでは「誰の時給を返すか」が決まらない。teamId だけで引くと、時給を設定されたあとに脱退した
+     * 元メンバーの金銭情報まで返る。在籍中メンバーの ID（呼び出し側が tx の外で 1 クエリで解決）に限定して引く。</p>
+     *
+     * @param teamId          チームID
+     * @param date            基準日
+     * @param activeMemberIds 在籍中メンバーの ID（認可後に呼び出し側が解決して渡す）
      * @return ユーザーごとの有効時給（基準日時点で時給が無いユーザーは含まれない）
      */
-    public List<HourlyRateResponse> listEffectiveRatesForTeam(Long teamId, LocalDate date, Long currentUserId) {
-        // 認可番人（ArchUnit）の委譲追跡は 2 ホップまでのため、
-        // 認可の呼び出しを本メソッド内に直接置く（別ヘルパーへ逃がさない）。
-        // 管理者に加えて時給閲覧切替 ON の DEPUTY_ADMIN にも閲覧だけ許す。SYSTEM_ADMIN は特別扱いしない（§3.6）。
-        if (!manageGate.canViewHourlyRates(currentUserId, teamId)) {
-            throw new BusinessException(CommonErrorCode.COMMON_002);
-        }
-        // 対象の絞り込み（Codex 検分 P1）: ロールの検査だけでは「誰の時給を返すか」が決まらない。
-        // teamId だけで引くと、時給を設定されたあとに脱退した元メンバーの金銭情報まで返る
-        // （単数取得は checkHourlyRateAccess が対象ユーザーの現在の所属を見ていた）。
-        // 在籍中メンバーの ID を 1 クエリで取り、それに限定して引く（総処理量は N のまま）。
-        List<Long> activeMemberIds = accessControlService.listActiveMemberIds(teamId, "TEAM");
+    public List<HourlyRateResponse> listEffectiveRatesForTeam(Long teamId, LocalDate date,
+                                                              List<Long> activeMemberIds) {
         if (activeMemberIds.isEmpty()) {
             // 空リストを IN 句へ渡すと JPQL が不正になる。在籍者が居なければ返す時給も無い。
             return List.of();

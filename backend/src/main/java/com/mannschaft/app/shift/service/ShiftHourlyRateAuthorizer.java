@@ -33,6 +33,8 @@ public class ShiftHourlyRateAuthorizer {
     private final ShiftManageAccessGate manageGate;
 
     /**
+     * <p>時給閲覧切替を読むため、tx の外（{@link ShiftHourlyRateFacade}）から呼ぶこと。</p>
+     *
      * @param currentUserId 操作ユーザーID
      * @param targetUserId  時給の対象ユーザーID
      * @param teamId        チームID

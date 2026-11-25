@@ -53,10 +53,9 @@ class ShiftHourlyRateServiceTest {
         // 判定の実体は ShiftManageAccessGate（CMP-261125-2114）。AccessControlService と設定だけモックにして本物を組む。
         com.mannschaft.app.shift.service.ShiftManageAccessGate manageGate =
                 new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService, teamShiftSettingsService);
+        // 参照の認可は ShiftHourlyRateFacade（tx の外）の責務で、ShiftHourlyRateFacadeTest が固定する。
         shiftHourlyRateService = new ShiftHourlyRateService(hourlyRateRepository, shiftMapper,
-                accessControlService,
-                new com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer(accessControlService, manageGate),
-                manageGate);
+                new com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer(accessControlService, manageGate));
     }
 
     // ========================================
@@ -118,7 +117,7 @@ class ShiftHourlyRateServiceTest {
                     .willReturn(List.of(response));
 
             // When
-            List<HourlyRateResponse> result = shiftHourlyRateService.listHourlyRates(USER_ID, TEAM_ID, CURRENT_USER_ID);
+            List<HourlyRateResponse> result = shiftHourlyRateService.listHourlyRates(USER_ID, TEAM_ID);
 
             // Then
             assertThat(result).hasSize(1);
@@ -146,7 +145,7 @@ class ShiftHourlyRateServiceTest {
             given(shiftMapper.toHourlyRateResponse(entity)).willReturn(response);
 
             // When
-            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date, CURRENT_USER_ID);
+            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date);
 
             // Then
             assertThat(result).isNotNull();
@@ -162,7 +161,7 @@ class ShiftHourlyRateServiceTest {
                     .willReturn(Optional.empty());
 
             // When
-            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date, CURRENT_USER_ID);
+            HourlyRateResponse result = shiftHourlyRateService.getEffectiveRate(USER_ID, TEAM_ID, date);
 
             // Then
             assertThat(result).isNull();
@@ -221,20 +220,6 @@ class ShiftHourlyRateServiceTest {
         private static final Long MEMBER_USER_ID = 20L;
 
         @Test
-        @DisplayName("一般メンバーが他メンバーの時給を参照 → 時給の閲覧判定（管理者でも切替 ON の副管理者でもない）で弾かれる")
-        void 他人の時給参照_一般メンバーは403() {
-            given(accessControlService.isAdminOrAbove(MEMBER_USER_ID, TEAM_ID, "TEAM")).willReturn(false);
-
-            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                            shiftHourlyRateService.listHourlyRates(OTHER_USER_ID, TEAM_ID, MEMBER_USER_ID))
-                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
-
-            // 弾かれた以上、リポジトリまで到達してはならない（存在オラクルも残さない）
-            verify(hourlyRateRepository, org.mockito.Mockito.never())
-                    .findByUserIdAndTeamIdOrderByEffectiveFromDesc(any(), any());
-        }
-
-        @Test
         @DisplayName("他チームのユーザーを対象にした時給登録 → 対象側の checkMembership で弾かれる")
         void 他テナントのユーザーへの登録は403() {
             givenCanManage(ADMIN_USER_ID);
@@ -251,22 +236,6 @@ class ShiftHourlyRateServiceTest {
                     .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
 
             verify(hourlyRateRepository, org.mockito.Mockito.never()).upsertHourlyRate(any(), any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("本人の時給参照 → チームメンバーであることだけを要求する")
-        void 本人参照はメンバーシップのみ要求() {
-            given(hourlyRateRepository.findByUserIdAndTeamIdOrderByEffectiveFromDesc(USER_ID, TEAM_ID))
-                    .willReturn(List.of());
-            given(shiftMapper.toHourlyRateResponseList(List.of())).willReturn(List.of());
-
-            shiftHourlyRateService.listHourlyRates(USER_ID, TEAM_ID, CURRENT_USER_ID);
-
-            verify(accessControlService).checkMembership(CURRENT_USER_ID, TEAM_ID, "TEAM");
-            verify(accessControlService, org.mockito.Mockito.never())
-                    .hasAdminOrPermissionInScope(any(), any(), any(), any());
-            verify(accessControlService, org.mockito.Mockito.never())
-                    .isAdminOrAbove(any(), any(), any());
         }
     }
 
@@ -370,10 +339,9 @@ class ShiftHourlyRateServiceTest {
      * 一律で拒否</b>されなければならない。一般メンバーが呼んで他人の時給が返るのは漏洩である。</p>
      */
     @Nested
-    @DisplayName("listEffectiveRatesForTeam")
+    @DisplayName("listEffectiveRatesForTeam（認可なしの tx 本体。認可は ShiftHourlyRateFacade）")
     class ListEffectiveRatesForTeam {
 
-        private static final Long ADMIN_USER_ID = 99L;
         /** 時給は設定済みだが既にチームを脱退したユーザー。 */
         private static final Long LEFT_USER_ID = 77L;
         private static final LocalDate BASE_DATE = LocalDate.of(2026, 9, 16);
@@ -381,109 +349,36 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("AC-3: 何人いても有効時給の取得は 1 クエリで済む")
         void 一括取得は1クエリ() {
-            // Given: ADMIN として通す
-            givenCanViewRates(ADMIN_USER_ID);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of(USER_ID));
             List<ShiftHourlyRateEntity> entities = List.of(createRateEntity(), createRateEntity());
             given(hourlyRateRepository.findEffectiveRatesByTeam(TEAM_ID, BASE_DATE, List.of(USER_ID)))
                     .willReturn(entities);
             given(shiftMapper.toHourlyRateResponseList(entities))
                     .willReturn(List.of(createRateResponse(), createRateResponse()));
 
-            // When
             List<HourlyRateResponse> result =
-                    shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID);
+                    shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, List.of(USER_ID));
 
-            // Then
             assertThat(result).hasSize(2);
             verify(hourlyRateRepository, org.mockito.Mockito.times(1))
                     .findEffectiveRatesByTeam(TEAM_ID, BASE_DATE, List.of(USER_ID));
             // 1 人ずつ引く経路は使わない（使うと人数ぶんクエリが出る）
             verify(hourlyRateRepository, org.mockito.Mockito.never())
                     .findEffectiveRate(any(), any(), any());
-            verify(accessControlService).hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS");
-        }
-
-        @Test
-        @DisplayName("AC-5: 管理者でも閲覧切替 ON の副管理者でもない一般メンバーは 403 で、時給を 1 件も読まない")
-        void 一般メンバーは拒否され時給を読まない() {
-            // Given
-            given(accessControlService.isAdminOrAbove(CURRENT_USER_ID, TEAM_ID, "TEAM")).willReturn(false);
-
-            // When / Then
-            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, CURRENT_USER_ID))
-                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
-            verify(hourlyRateRepository, org.mockito.Mockito.never())
-                    .findEffectiveRatesByTeam(any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡で許可されず、時給を 1 件も読まない")
-        void システム管理者は短絡で許可されない() {
-            given(accessControlService.isAdminOrAbove(ADMIN_USER_ID, TEAM_ID, "TEAM")).willReturn(false);
-
-            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID))
-                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
-            verify(accessControlService, org.mockito.Mockito.never()).isSystemAdmin(any());
-            verify(hourlyRateRepository, org.mockito.Mockito.never())
-                    .findEffectiveRatesByTeam(any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("CMP-261125-2114: 時給閲覧切替 ON の MANAGE_SHIFTS 無し DEPUTY_ADMIN は閲覧できる（切替 OFF なら 403）")
-        void 切替ONの副管理者は閲覧できる() {
-            given(accessControlService.isAdminOrAbove(ADMIN_USER_ID, TEAM_ID, "TEAM")).willReturn(true);
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
-                    .willReturn(false);
-            given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))
-                    .willReturn(new com.mannschaft.app.team.dto.DeputyShiftViewToggles(false, true));
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of(USER_ID));
-            given(hourlyRateRepository.findEffectiveRatesByTeam(TEAM_ID, BASE_DATE, List.of(USER_ID)))
-                    .willReturn(List.of());
-            given(shiftMapper.toHourlyRateResponseList(List.of())).willReturn(List.of());
-
-            assertThat(shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID))
-                    .isEmpty();
-        }
-
-        @Test
-        @DisplayName("CMP-261125-2114: 閲覧切替だけ ON（時給切替 OFF）の MANAGE_SHIFTS 無し DEPUTY_ADMIN は 403")
-        void 閲覧切替だけONの副管理者は時給を見られない() {
-            given(accessControlService.isAdminOrAbove(ADMIN_USER_ID, TEAM_ID, "TEAM")).willReturn(true);
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
-                    .willReturn(false);
-            given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))
-                    .willReturn(new com.mannschaft.app.team.dto.DeputyShiftViewToggles(true, false));
-
-            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID))
-                    .isInstanceOf(com.mannschaft.app.common.BusinessException.class);
         }
 
         /**
-         * Codex 検分 P1 の回帰封じ。
-         *
-         * <p>単数取得は {@code checkHourlyRateAccess} が対象ユーザーの<b>現在の所属</b>まで確認していた。
-         * 一括取得を teamId だけで引くと、<b>時給を設定されたあとにチームを脱退した元メンバーの
-         * 金銭情報まで返ってしまう</b>（1 件ずつなら効いていた認可が、まとめて取ると効かなくなる）。
-         * ロールの検査（誰が呼べるか）と対象の絞り込み（誰の時給を返すか）は別の軸である。</p>
+         * Codex 検分 P1 の回帰封じ（対象の絞り込みの軸）。呼び出し側（Facade）が渡す在籍者 ID だけで引き、
+         * 渡されなかった元メンバーの時給は読まない。
          */
         @Test
-        @DisplayName("AC-5: 取得対象は在籍中のメンバーに限られる（脱退した元メンバーの時給は引かない）")
+        @DisplayName("AC-5: 取得対象は渡された在籍者に限られる（脱退した元メンバーの時給は引かない）")
         void 脱退者は取得対象から外れる() {
-            // Given: 在籍中は USER_ID のみ。LEFT_USER_ID は時給を設定済みだが既に脱退している。
-            givenCanViewRates(ADMIN_USER_ID);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of(USER_ID));
             given(hourlyRateRepository.findEffectiveRatesByTeam(eq(TEAM_ID), eq(BASE_DATE), any()))
                     .willReturn(List.of());
             given(shiftMapper.toHourlyRateResponseList(List.of())).willReturn(List.of());
 
-            // When
-            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID);
+            shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, List.of(USER_ID));
 
-            // Then: 検索対象に渡る ID は在籍者だけで、脱退者は含まれない
             org.mockito.ArgumentCaptor<List<Long>> captor =
                     org.mockito.ArgumentCaptor.forClass(List.class);
             verify(hourlyRateRepository).findEffectiveRatesByTeam(eq(TEAM_ID), eq(BASE_DATE), captor.capture());
@@ -494,10 +389,7 @@ class ShiftHourlyRateServiceTest {
         @Test
         @DisplayName("在籍者が 0 名なら時給は 1 件も読まない（空 IN 句を DB へ投げない）")
         void 在籍者ゼロなら時給を読まない() {
-            givenCanViewRates(ADMIN_USER_ID);
-            given(accessControlService.listActiveMemberIds(TEAM_ID, "TEAM")).willReturn(List.of());
-
-            assertThat(shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, ADMIN_USER_ID))
+            assertThat(shiftHourlyRateService.listEffectiveRatesForTeam(TEAM_ID, BASE_DATE, List.of()))
                     .isEmpty();
             verify(hourlyRateRepository, org.mockito.Mockito.never())
                     .findEffectiveRatesByTeam(any(), any(), any());

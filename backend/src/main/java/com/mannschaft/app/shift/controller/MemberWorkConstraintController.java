@@ -1,10 +1,14 @@
 package com.mannschaft.app.shift.controller;
 
+import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.shift.dto.MemberWorkConstraintRequest;
 import com.mannschaft.app.shift.dto.MemberWorkConstraintResponse;
 import com.mannschaft.app.shift.service.MemberWorkConstraintService;
+import com.mannschaft.app.shift.service.ShiftManageAccessGate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,6 +37,9 @@ import java.util.List;
 public class MemberWorkConstraintController {
 
     private final MemberWorkConstraintService workConstraintService;
+    /** 管理操作の判定（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。CMP-261125-2114）。 */
+    private final ShiftManageAccessGate manageGate;
+    private final AccessControlService accessControlService;
 
     // ========================================
     // 一覧取得（ADMIN/DEPUTY_ADMIN のみ）
@@ -81,8 +88,17 @@ public class MemberWorkConstraintController {
             @PathVariable Long teamId,
             @PathVariable Long userId,
             @Valid @RequestBody MemberWorkConstraintRequest request) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        // 権限判定が先（権限の無い人に対象の在籍を観測させない）。続けて、対象がそのチームの在籍者であることを検査する
+        // （他チームでだけ MANAGE_SHIFTS を持つ副管理者が、パスに自チームを書いて他チームのメンバーの制約を作る越境を塞ぐ。
+        // ユーザー ID の存在オラクルにしないため権限不足と同じ応答）。tx の外で行い、tx 内から membership の
+        // Repository へ到達させない（D-3T）。サービス側でも権限判定は再度行われる。
+        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
+        if (!accessControlService.isMember(userId, teamId, "TEAM")) {
+            throw new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
+        }
         MemberWorkConstraintResponse response = workConstraintService
-                .upsertConstraint(teamId, userId, request, SecurityUtils.getCurrentUserId());
+                .upsertConstraint(teamId, userId, request, currentUserId);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

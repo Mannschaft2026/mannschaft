@@ -110,15 +110,33 @@ public class ShiftManageAccessGate {
      * 当該チームの DEPUTY_ADMIN。
      */
     public boolean canView(Long userId, Long teamId) {
-        return isManagerOrToggledDeputy(userId, teamId, false);
+        // MANAGE_SHIFTS 付き DEPUTY・ADMIN は必ず isAdminOrAbove を満たすので、先に非管理系ロールを弾いて
+        // 一般メンバーの閲覧経路のクエリを抑える。
+        if (!accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
+            return false;
+        }
+        if (canManage(userId, teamId)) {
+            return true;
+        }
+        // ここへ来るのは MANAGE_SHIFTS を持たない DEPUTY_ADMIN。切替が ON のときだけ許す。
+        return teamShiftSettingsService.findDeputyViewToggles(teamId).shiftView();
     }
 
     /**
      * 他メンバーの時給の閲覧を許すか（例外を投げない）。管理操作ができる人、または時給閲覧切替が ON のとき
      * 当該チームの DEPUTY_ADMIN。時給の登録・削除は対象外（{@link #canManage}）。
+     *
+     * <p>切替（team ドメインの設定）を読むので、{@code @Transactional} のサービスの中からは呼ばないこと
+     * （D-3T: tx 入口から他ドメインの Repository へ到達させない）。時給の閲覧認可は
+     * {@code ShiftHourlyRateFacade}（tx の外）で行い、tx 本体へは認可済みの引数だけを渡す。</p>
      */
     public boolean canViewHourlyRates(Long userId, Long teamId) {
-        return isManagerOrToggledDeputy(userId, teamId, true);
+        if (!accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
+            return false;
+        }
+        // ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN は常に可。それ以外の DEPUTY_ADMIN は切替が ON のときだけ。
+        return canManage(userId, teamId)
+                || teamShiftSettingsService.findDeputyViewToggles(teamId).hourlyRateView();
     }
 
     /**
@@ -131,18 +149,14 @@ public class ShiftManageAccessGate {
         throw denial(userId, teamId, notFoundCode);
     }
 
-    private boolean isManagerOrToggledDeputy(Long userId, Long teamId, boolean hourlyRate) {
-        // MANAGE_SHIFTS 付き DEPUTY・ADMIN は必ず isAdminOrAbove を満たすので、先に非管理系ロールを弾いて
-        // 一般メンバーの閲覧経路のクエリを抑える。
-        if (!accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
-            return false;
+    /**
+     * 他メンバーの時給の閲覧の認可（チーム単位の一覧。権限不足は越境・所属者とも 403 {@code COMMON_002}）。
+     * {@link #canViewHourlyRates} を満たさなければ拒否する。
+     */
+    public void requireHourlyRateViewOrDeny(Long userId, Long teamId) {
+        if (!canViewHourlyRates(userId, teamId)) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
         }
-        if (canManage(userId, teamId)) {
-            return true;
-        }
-        // ここへ来るのは MANAGE_SHIFTS を持たない DEPUTY_ADMIN。切替が ON のときだけ許す。
-        DeputyShiftViewToggles toggles = teamShiftSettingsService.findDeputyViewToggles(teamId);
-        return hourlyRate ? toggles.hourlyRateView() : toggles.shiftView();
     }
 
     // ═════════════════════════════════════════════════════════════════════

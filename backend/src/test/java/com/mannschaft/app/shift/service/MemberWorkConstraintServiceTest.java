@@ -25,7 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -102,11 +101,6 @@ class MemberWorkConstraintServiceTest {
         return new MemberWorkConstraintRequest(null, null, null, null, null, "メモのみ");
     }
 
-    /** 勤務制約の対象ユーザーがそのチームの在籍者である（upsert の対象検査。CMP-261125-2114）。 */
-    private void givenTargetIsMember(Long userId) {
-        given(accessControlService.isMember(userId, TEAM_ID, SCOPE_TEAM)).willReturn(true);
-    }
-
     // ========================================
     // 共通セットアップ: MapStruct mock が NullPointer 返しでテストを落とすのを避ける
     // ========================================
@@ -129,7 +123,6 @@ class MemberWorkConstraintServiceTest {
         void 個別制約_新規作成_ADMIN_成功() {
             given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
                     .willReturn(true);
-            givenTargetIsMember(MEMBER_USER_ID);
             given(constraintRepository.findByUserIdAndTeamId(MEMBER_USER_ID, TEAM_ID))
                     .willReturn(Optional.empty());
             MemberWorkConstraintEntity saved = buildIndividual();
@@ -151,7 +144,6 @@ class MemberWorkConstraintServiceTest {
         void 個別制約_既存更新_ADMIN_成功() {
             given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
                     .willReturn(true);
-            givenTargetIsMember(MEMBER_USER_ID);
             MemberWorkConstraintEntity existing = buildIndividual();
             given(constraintRepository.findByUserIdAndTeamId(MEMBER_USER_ID, TEAM_ID))
                     .willReturn(Optional.of(existing));
@@ -161,26 +153,12 @@ class MemberWorkConstraintServiceTest {
                             null, TEAM_ID, MEMBER_USER_ID, null, null, null, null, null, null));
 
             MemberWorkConstraintRequest req = buildValidRequest();
-            service.upsertConstraint(TEAM_ID, MEMBER_USER_ID, req, ADMIN_USER_ID);
+            service.upsertConstraint(
+                    TEAM_ID, MEMBER_USER_ID, req, ADMIN_USER_ID);
 
             // 既存エンティティが updateConstraints で更新された結果を検証
             assertThat(existing.getMaxMonthlyHours()).isEqualByComparingTo(req.getMaxMonthlyHours());
             assertThat(existing.getNote()).isEqualTo(req.getNote());
-        }
-
-        @Test
-        @DisplayName("CMP-261125-2114: 個別制約_対象がそのチームの在籍者でない_403で保存しない（他チームでだけ MANAGE_SHIFTS を持つ副管理者の越境作成を塞ぐ）")
-        void 個別制約_対象が非在籍_403() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
-            given(accessControlService.isMember(MEMBER_USER_ID, TEAM_ID, SCOPE_TEAM)).willReturn(false);
-
-            assertThatThrownBy(() -> service.upsertConstraint(
-                    TEAM_ID, MEMBER_USER_ID, buildValidRequest(), ADMIN_USER_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
-                            .isEqualTo(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN));
-            verify(constraintRepository, never()).save(any(MemberWorkConstraintEntity.class));
         }
 
         @Test
@@ -202,7 +180,6 @@ class MemberWorkConstraintServiceTest {
         void 個別制約_全項目NULL_400() {
             given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
                     .willReturn(true);
-            givenTargetIsMember(MEMBER_USER_ID);
 
             assertThatThrownBy(() -> service.upsertConstraint(
                     TEAM_ID, MEMBER_USER_ID, buildAllNullRequest(), ADMIN_USER_ID))

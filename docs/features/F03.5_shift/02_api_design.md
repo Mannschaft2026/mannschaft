@@ -1410,7 +1410,7 @@ status を既定の `PENDING` のままにしており、`OPEN_CALL` へ遷移�
 - `current_rate`: `effective_from <= TODAY` の最新レコード。未設定の場合は `null`
 - `history`: 時給改定履歴（新しい順）
 
-**認可**（認可根治 Wave6 追加戦 / 実装は `ShiftHourlyRateService#checkHourlyRateAccess`）
+**認可**（認可根治 Wave6 追加戦 / CMP-261125-2114 で `ShiftHourlyRateFacade`（tx の外）＋ `ShiftHourlyRateAuthorizer#checkHourlyRateAccess` へ移設。時給閲覧切替を読むため tx の中では行わない）
 
 `01_db_design.md` の「時給の閲覧権限: 本人 + ADMIN / DEPUTY_ADMIN のみ」に準拠する。
 

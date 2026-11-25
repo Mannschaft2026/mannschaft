@@ -6,6 +6,7 @@ import com.mannschaft.app.shift.dto.BulkAvailabilityDefaultRequest;
 import com.mannschaft.app.shift.dto.CreateHourlyRateRequest;
 import com.mannschaft.app.shift.dto.HourlyRateResponse;
 import com.mannschaft.app.shift.service.ShiftAvailabilityService;
+import com.mannschaft.app.shift.service.ShiftHourlyRateFacade;
 import com.mannschaft.app.shift.service.ShiftHourlyRateService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +39,8 @@ public class ShiftAvailabilityController {
 
     private final ShiftAvailabilityService availabilityService;
     private final ShiftHourlyRateService hourlyRateService;
+    /** 時給の参照の認可（時給閲覧切替を含む。CMP-261125-2114）を tx の外で行う。 */
+    private final ShiftHourlyRateFacade hourlyRateFacade;
 
     /**
      * デフォルト勤務可能時間を取得する。
@@ -95,8 +98,8 @@ public class ShiftAvailabilityController {
      *
      * <p><b>認可（認可根治 Wave6 追加戦）:</b> 呼び出し元の身元は
      * {@link SecurityUtils#getCurrentUserId()} から採り、per-scope 認可は
-     * {@code ShiftHourlyRateService} 内で強制する（当該チーム ADMIN/DEPUTY_ADMIN のみ。
-     * 対象ユーザーも当該チームのメンバーであることを要求し、SYSTEM_ADMIN は短絡許可する）。
+     * {@code ShiftHourlyRateService} 内で強制する（当該チーム ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN のみ。
+     * 対象ユーザーも当該チームのメンバーであることを要求し、SYSTEM_ADMIN は特別扱いしない。CMP-261125-2114）。
      * 本人であることによる登録・訂正の許可は行わない。違反時は 403。</p>
      */
     @PostMapping("/hourly-rate")
@@ -115,8 +118,9 @@ public class ShiftAvailabilityController {
      *
      * <p><b>認可（認可根治 Wave6 追加戦）:</b> 呼び出し元の身元は
      * {@link SecurityUtils#getCurrentUserId()} から採り、per-scope 認可は
-     * {@code ShiftHourlyRateService} 内で強制する（本人 + 当該チーム ADMIN/DEPUTY_ADMIN のみ。
-     * F03.5 設計書「他メンバーの時給は非公開」に準拠）。違反時は 403。</p>
+     * {@code ShiftHourlyRateService} 内で強制する（本人 + 当該チーム ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN、
+     * 時給閲覧切替 ON なら DEPUTY_ADMIN のみ。F03.5 設計書「他メンバーの時給は非公開」に準拠）。違反時は 403。
+     * 参照の認可は tx の外の {@code ShiftHourlyRateFacade} が行う（時給閲覧切替を読むため。D-3T）。</p>
      */
     @GetMapping("/hourly-rate")
     @Operation(summary = "時給履歴取得")
@@ -127,10 +131,10 @@ public class ShiftAvailabilityController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         if (date != null) {
-            HourlyRateResponse rate = hourlyRateService.getEffectiveRate(userId, teamId, date, currentUserId);
+            HourlyRateResponse rate = hourlyRateFacade.getEffectiveRate(userId, teamId, date, currentUserId);
             return ResponseEntity.ok(ApiResponse.of(rate != null ? List.of(rate) : List.of()));
         }
-        List<HourlyRateResponse> responses = hourlyRateService.listHourlyRates(userId, teamId, currentUserId);
+        List<HourlyRateResponse> responses = hourlyRateFacade.listHourlyRates(userId, teamId, currentUserId);
         return ResponseEntity.ok(ApiResponse.of(responses));
     }
 
@@ -141,8 +145,9 @@ public class ShiftAvailabilityController {
      * {@code GET /hourly-rate} を引くと人数ぶんの往復になるため、1 リクエストにまとめる。</p>
      *
      * <p><b>認可:</b> 他メンバーの時給を必ず含むため、当該チームの
-     * ADMIN/DEPUTY_ADMIN（または SYSTEM_ADMIN）のみ許可する。per-scope 認可は
-     * {@code ShiftHourlyRateService#listEffectiveRatesForTeam} 内で強制する。違反時は 403。</p>
+     * ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN（時給閲覧切替 ON なら DEPUTY_ADMIN も）のみ許可する
+     * （CMP-261125-2114。SYSTEM_ADMIN は特別扱いしない）。per-scope 認可は
+     * {@code ShiftHourlyRateFacade#listEffectiveRatesForTeam} で強制する。違反時は 403。</p>
      */
     @GetMapping("/hourly-rates")
     @Operation(summary = "チーム時給一括取得（ADMIN/DEPUTY_ADMIN のみ）",
@@ -154,7 +159,7 @@ public class ShiftAvailabilityController {
     public ResponseEntity<ApiResponse<List<HourlyRateResponse>>> listTeamEffectiveHourlyRates(
             @RequestParam Long teamId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        List<HourlyRateResponse> responses = hourlyRateService
+        List<HourlyRateResponse> responses = hourlyRateFacade
                 .listEffectiveRatesForTeam(teamId, date, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(responses));
     }

@@ -132,6 +132,10 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
     @MockitoSpyBean
     @SuppressWarnings("unused")
     private ScopeConcealingAccessGate gate;
+    /** 同上（CMP-261125-2114）: 他の W2 系 IT が足した {@code ShiftManageAccessGate} の spy も揃えて、コンテキストを共有する。 */
+    @MockitoSpyBean
+    @SuppressWarnings("unused")
+    private com.mannschaft.app.shift.service.ShiftManageAccessGate manageGate;
 
     @PersistenceContext
     private EntityManager em;
