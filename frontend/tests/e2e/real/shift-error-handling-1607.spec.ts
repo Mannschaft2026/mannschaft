@@ -437,7 +437,10 @@ test('S3 確認ボタンの連打で POST は 1 回だけ', async ({ browser }) 
   await submit.evaluate((el) => {
     for (let i = 0; i < 5; i++) (el as HTMLButtonElement).click()
   })
-  await submit.click({ force: true, timeout: 1500 }).catch(() => undefined) // 送信中にもう一度クリック（無効化されていれば何も起きない）
+  // 送信中にもう一度クリック（無効化・消滅済みなら何も起きない。存在確認は DOM 側で行い、失敗は握りつぶさない）
+  await page.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('[data-testid="alert-acknowledge-submit"]')?.click()
+  })
   await expect(alertRow(page, alertId)).toHaveCount(0)
   await new Promise((r) => setTimeout(r, 1500))
   expect(posts.count(), '連打しても POST は 1 回').toBe(1)
