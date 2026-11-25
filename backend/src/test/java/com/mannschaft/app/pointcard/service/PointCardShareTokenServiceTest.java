@@ -605,9 +605,13 @@ class PointCardShareTokenServiceTest {
         private final ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
                 new ch.qos.logback.core.read.ListAppender<>();
 
+        private ch.qos.logback.classic.Level previousLevel;
+
         static LogCapture attach() {
             LogCapture capture = new LogCapture();
             capture.appender.start();
+            capture.previousLevel = capture.logger.getLevel();
+            capture.logger.setLevel(ch.qos.logback.classic.Level.ALL);
             capture.logger.addAppender(capture.appender);
             return capture;
         }
@@ -626,6 +630,7 @@ class PointCardShareTokenServiceTest {
         @Override
         public void close() {
             logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
             appender.stop();
         }
     }
