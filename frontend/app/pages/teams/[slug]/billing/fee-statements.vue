@@ -15,11 +15,12 @@ const teamId = ref<number | null>(null)
 const { resolveScopeId } = useActivityScopeId()
 const { getFeeStatement, exportFeeStatementPdf } = usePaymentApi()
 const notification = useNotification()
-const { markIfDenied } = useScopeNotFound()
+const { markIfDenied, markDenied } = useScopeNotFound()
 
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug.value)
 
 const loading = ref(true)
+/** 管理権限が無い（共通の「見つかりません」に置き換わる）。月切替の再取得を止めるために持つ。 */
 const permissionDenied = ref(false)
 
 /** 選択中の対象月（YYYY-MM 形式） */
@@ -68,9 +69,16 @@ async function load() {
 /** 権限チェック */
 onMounted(async () => {
   try {
-    await loadPermissions()
-    if (!isAdmin.value) {
+    const result = await loadPermissions()
+    if (!result.ok) {
       permissionDenied.value = true
+      if (!markIfDenied(result.error)) notification.error(t('payment.feeStatements.loadError'))
+      return
+    }
+    if (!isAdmin.value) {
+      // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
+      permissionDenied.value = true
+      markDenied()
       return
     }
     teamId.value = await resolveScopeId('TEAM', teamSlug.value)
@@ -116,15 +124,8 @@ async function downloadPdf() {
     -->
     <PageLoading v-if="loading" />
 
-    <!-- 権限不足 -->
-    <div v-else-if="permissionDenied" class="flex flex-col items-center justify-center py-16">
-      <i class="pi pi-lock mb-4 text-4xl text-surface-400" />
-      <p class="text-surface-500">{{ t('payment.admin.permissionDenied') }}</p>
-      <BackButton class="mt-4" />
-    </div>
-
     <!-- メインコンテンツ -->
-    <div v-else class="container mx-auto max-w-2xl p-4">
+    <div v-else-if="!permissionDenied" class="container mx-auto max-w-2xl p-4">
       <PageHeader :title="$t('payment.feeStatements.title')" class="mb-4" />
 
       <!-- 月選択 -->
