@@ -30,6 +30,7 @@ import {
   shouldLeaveGuardedTeamTab,
 } from '~/utils/teamAffiliationAccess'
 import { resolveSlugRedirectPath } from '~/utils/slugRedirect'
+import { classifyTeamAccessFailure } from '~/utils/teamAccessStatus'
 
 definePageMeta({
   // 親シェルには middleware を付けない。付けると子ルート全体に継承され、
@@ -141,6 +142,17 @@ async function applyJoinRequest() {
 // =============================================================================
 const team = ref<TeamResponse | null>(null)
 const loading = ref(false)
+/**
+ * チーム詳細の取得が 403/404 で閉じたときの理由（CMP-261124-0159 PR-F1 / AC-0159-86・87）。
+ * 'forbidden'=メンバー限定のチームなど公開範囲の外、'notFound'=見つからない。null=閉じていない（成功・その他の失敗）。
+ * この間は <NuxtPage/> を描かず、トーストも出さない（理由は TeamAccessDeniedState が示す）。
+ */
+const accessDenied = ref<'forbidden' | 'notFound' | null>(null)
+/**
+ * シェル内遷移時の再判定中か（AC-0159-98）。teamLoaded=true の古いタブでも、遷移のたびにチーム詳細を
+ * 再取得して可否を判定し、終わるまで子ページを描かない（子の API が非公開化後の旧権限で動くのを防ぐ）。
+ */
+const revalidating = ref(false)
 const showLeaveConfirm = ref(false)
 
 // 管理者レンズ（true=管理者ビュー, false=メンバービュー）。管理者は既定で管理者ビュー。
@@ -185,6 +197,7 @@ async function fetchTeam() {
     const result = await teamApi.getTeam(requestedSlug)
     if (!isCurrent()) return
     team.value = result.data
+    accessDenied.value = null
   }
   catch (error) {
     if (!isCurrent()) return
@@ -197,8 +210,14 @@ async function fetchTeam() {
       if (!isCurrent()) return
       if (redirected) return
     }
-    const status = (error as FetchError)?.response?.status
-    if (status === 403) team.value = null
+    // 403（公開範囲の外）・404（見つからない）は保護された詳細表示を閉じ、理由表示に切り替える。
+    // トーストは出さない（理由部品が示す）。それ以外（5xx・通信失敗）は従来どおり再試行表示とトースト。
+    const failure = classifyTeamAccessFailure(error)
+    if (failure === 'forbidden' || failure === 'notFound') {
+      team.value = null
+      accessDenied.value = failure
+      return
+    }
     handleApiError(error, 'チーム詳細取得')
   }
   finally {
@@ -380,6 +399,8 @@ async function loadShellData() {
   }, SHELL_WATCHDOG_MS)
   try {
     await Promise.all([fetchTeam(), loadPermissions()])
+    // 403/404 で閉じたときは、本文系の取得（フォロー状態・申請状態・ウィジェット設定ほか）を行わない。
+    if (accessDenied.value) return
     await fetchFollowStatus()
     await fetchJoinRequestStatus()
     // ウィジェット可視性設定と予約モジュール有効フラグを並列取得。
@@ -408,6 +429,7 @@ async function loadShellData() {
 function retryShellData() {
   teamLoaded.value = false
   team.value = null
+  accessDenied.value = null
   void loadShellData()
 }
 
@@ -434,10 +456,30 @@ watch(isShellRoute, (shell) => {
 watch(teamSlug, () => {
   teamLoaded.value = false
   team.value = null
+  accessDenied.value = null
+  revalidating.value = false
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
   joinRequestStatus.value = 'UNKNOWN'
   reservationEnabled.value = false
   if (isShellRoute.value) void loadShellData()
+})
+
+/**
+ * 同一チームのシェル内遷移でチーム詳細を再判定する（AC-0159-98）。
+ * teamLoaded=true のまま古いタブから遷移しても、非公開化などで権限を失っていれば 403 になり理由表示へ切り替わる。
+ * 再判定が終わるまで <NuxtPage/> は描かない。別 slug への遷移は上の teamSlug watch が担当（二重取得しない）。
+ */
+watch(() => route.path, async (next, prev) => {
+  if (!teamLoaded.value || !isShellRoute.value) return
+  const slugOf = (p: string) => p.split('/').filter(Boolean)[1]
+  if (slugOf(next) !== slugOf(prev)) return
+  revalidating.value = true
+  try {
+    await fetchTeam()
+  }
+  finally {
+    revalidating.value = false
+  }
 })
 
 /**
@@ -689,11 +731,18 @@ provideTeamShellContext({
 
         <!-- タブ本体（子）— 永続シェル下で差し替え -->
         <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-        <NuxtPage />
+        <!-- 再判定（AC-0159-98）が終わるまで子ページを描かない -->
+        <div v-if="revalidating" class="flex justify-center px-6 py-12">
+          <LoadingBounce />
+        </div>
+        <NuxtPage v-else />
       </ScopePageShell>
 
+      <!-- 403/404: 理由表示（トーストなし。本文 API は呼ばない） -->
+      <TeamAccessDeniedState v-else-if="accessDenied" :kind="accessDenied" />
+
       <!--
-        取得失敗フォールバック（loading 完了かつ team=null: 403/404/503 等）。
+        取得失敗フォールバック（loading 完了かつ team=null: 5xx・通信失敗等）。
         村金型 villages/[id].vue に倣い、白画面ではなくエラー文言＋戻り導線を出す。
       -->
       <div v-else class="mx-auto max-w-2xl p-6 text-center">

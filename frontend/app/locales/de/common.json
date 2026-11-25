@@ -2463,6 +2463,13 @@
     }
   },
   "team": {
+    "access": {
+      "forbiddenTitle": "Die Inhalte dieses Teams können nicht angezeigt werden",
+      "forbiddenBody": "Sie befinden sich außerhalb der Sichtbarkeit des Teams, zum Beispiel weil es ein reines Mitgliederteam ist. Wenn Sie Mitglied sind, wenden Sie sich bitte an die Teamadministration.",
+      "notFoundTitle": "Team nicht gefunden",
+      "notFoundBody": "Bitte prüfen Sie, ob die URL korrekt ist. Das Team wurde möglicherweise gelöscht.",
+      "backToHome": "Zurück zur Startseite"
+    },
     "mapEmbedUrlLabel": "Standortkarte (Google Maps Einbettungs-URL)",
     "mapEmbedUrlPlaceholder": "https://www.google.com/maps/embed?...",
     "mapEmbedUrlWarning": "⚠️ Diese URL ist auch für nicht angemeldete Benutzer sichtbar",

@@ -6,18 +6,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import BulletinPage from './bulletin.vue'
 
 // CMP-261124-0159 PR-F1 / AC-0159-87: 権限取得の失敗を無表示で倒さない（空の一覧に化けさせない）。
-const mocks = vi.hoisted(() => ({
-  roleLoadFailed: { value: false },
+const mocks = vi.hoisted(async () => ({
+  roleLoadFailed: (await import('vue')).ref(false),
   loadPermissions: vi.fn(),
 }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 mockNuxtImport('useRoute', () => () => ({ path: '/teams/a/bulletin', params: { slug: 'a' }, query: {} }))
-mockNuxtImport('useRoleAccess', () => () => ({
+mockNuxtImport('useRoleAccess', async () => { const m = await mocks; return () => ({
   isAdminOrDeputy: ref(false),
   isMember: ref(true),
-  roleLoadFailed: mocks.roleLoadFailed,
-  loadPermissions: mocks.loadPermissions,
-}))
+  roleLoadFailed: m.roleLoadFailed,
+  loadPermissions: m.loadPermissions,
+}) })
 mockNuxtImport('useBulletinApi', () => () => ({ getScopedThread: vi.fn() }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn() }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))
@@ -40,14 +40,15 @@ function mountPage() {
   })
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks()
 })
 
 describe('bulletin.vue の権限取得失敗（AC-0159-87）', () => {
   it('権限取得に失敗したら一覧に化けず、エラー表示を出す', async () => {
-    mocks.roleLoadFailed.value = true
-    mocks.loadPermissions.mockResolvedValue({ ok: false, error: new Error('x') })
+    const m = await mocks
+    m.roleLoadFailed.value = true
+    m.loadPermissions.mockResolvedValue({ ok: false, error: new Error('x') })
     const wrapper = mountPage()
     await flushPromises()
     expect(wrapper.find('[data-testid="role-error"]').exists()).toBe(true)
@@ -55,8 +56,9 @@ describe('bulletin.vue の権限取得失敗（AC-0159-87）', () => {
   })
 
   it('権限取得に成功したら従来どおり一覧を出す', async () => {
-    mocks.roleLoadFailed.value = false
-    mocks.loadPermissions.mockResolvedValue({ ok: true })
+    const m = await mocks
+    m.roleLoadFailed.value = false
+    m.loadPermissions.mockResolvedValue({ ok: true })
     const wrapper = mountPage()
     await flushPromises()
     expect(wrapper.find('[data-testid="thread-list"]').exists()).toBe(true)

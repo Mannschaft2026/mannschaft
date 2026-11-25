@@ -2463,6 +2463,13 @@
     }
   },
   "team": {
+    "access": {
+      "forbiddenTitle": "No se puede mostrar el contenido de este equipo",
+      "forbiddenBody": "Está fuera del alcance de visibilidad del equipo, por ejemplo porque es un equipo solo para miembros. Si participa como miembro, consulte con el administrador del equipo.",
+      "notFoundTitle": "Equipo no encontrado",
+      "notFoundBody": "Compruebe que la URL sea correcta. Es posible que el equipo haya sido eliminado.",
+      "backToHome": "Volver al inicio"
+    },
     "mapEmbedUrlLabel": "Mapa de tienda (URL de inserción de Google Maps)",
     "mapEmbedUrlPlaceholder": "https://www.google.com/maps/embed?...",
     "mapEmbedUrlWarning": "⚠️ Esta URL es visible para usuarios no autenticados",
