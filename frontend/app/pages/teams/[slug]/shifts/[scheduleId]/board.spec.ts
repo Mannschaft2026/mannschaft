@@ -11,6 +11,7 @@ import DashboardErrorState from '~/components/DashboardErrorState.vue'
 const mocks = vi.hoisted(() => ({
   getShiftSchedule: vi.fn(),
   getPositions: vi.fn(),
+  getTeam: vi.fn(),
   getMembers: vi.fn(),
   loadPermissions: vi.fn(),
   loadSlots: vi.fn(),
@@ -26,7 +27,7 @@ mockNuxtImport('useShiftApi', () => () => ({
   getShiftSchedule: mocks.getShiftSchedule,
   getPositions: mocks.getPositions,
 }))
-mockNuxtImport('useTeamApi', () => () => ({ getMembers: mocks.getMembers }))
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: mocks.getMembers }))
 mockNuxtImport('useRoleAccess', () => () => ({ roleName: ref('MEMBER'), loadPermissions: mocks.loadPermissions }))
 mockNuxtImport('useFeatureFlag', () => () => ({ enabled: ref(false) }))
 mockNuxtImport('useAutoAssign', () => () => ({
@@ -88,6 +89,8 @@ beforeEach(() => {
     data: { id: 425, teamId: 9, content: { title: '11月シフト' }, status: { status: 'DRAFT' } },
   })
   mocks.getPositions.mockResolvedValue({ data: [] })
+  // URL の slug のチーム（numericId）はシフト表の teamId と同じ（board.vue の所属照合を通る前提のデータ）
+  mocks.getTeam.mockResolvedValue({ data: { numericId: 9 } })
   mocks.getMembers.mockResolvedValue({ data: [{ userId: 2, displayName: 'メンバーB', avatarUrl: null }] })
   mocks.loadPermissions.mockResolvedValue({ ok: true })
   mocks.loadSlots.mockResolvedValue(undefined)

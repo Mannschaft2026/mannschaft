@@ -239,13 +239,3 @@ export function parseTypedYmd(text: string): Date | null {
   if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null
   return date
 }
-
-/** API の 400 応答に含まれる fieldErrors（field・message）を取り出す。無ければ空配列。 */
-export function extractEffortFieldErrors(e: unknown): Array<{ field: string; message: string }> {
-  const x = e as { data?: { error?: { fieldErrors?: unknown } }; response?: { _data?: { error?: { fieldErrors?: unknown } } } }
-  const raw = x?.data?.error?.fieldErrors ?? x?.response?._data?.error?.fieldErrors
-  if (!Array.isArray(raw)) return []
-  return raw
-    .filter((fe): fe is { field: string; message: string } => typeof fe?.field === 'string' && typeof fe?.message === 'string')
-    .map((fe) => ({ field: fe.field, message: fe.message }))
-}

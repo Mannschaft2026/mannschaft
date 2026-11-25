@@ -205116,7 +205116,9 @@
           },
           "drawPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "endDate": {
             "type": "string",
@@ -205146,7 +205148,9 @@
           },
           "lossPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "name": {
             "type": "string",
@@ -205197,7 +205201,9 @@
           },
           "winPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           }
         },
         "required": [
@@ -222793,7 +222799,9 @@
             "items": {
               "type": "integer",
               "format": "int64"
-            }
+            },
+            "maxItems": 200,
+            "minItems": 0
           },
           "endTime": {
             "type": "string",
@@ -222837,14 +222845,18 @@
             "items": {
               "type": "integer",
               "format": "int64"
-            }
+            },
+            "maxItems": 200,
+            "minItems": 0
           },
           "removeUserIds": {
             "type": "array",
             "items": {
               "type": "integer",
               "format": "int64"
-            }
+            },
+            "maxItems": 200,
+            "minItems": 0
           },
           "slotVersion": {
             "type": "integer",
@@ -223789,7 +223801,9 @@
           },
           "drawPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "endDate": {
             "type": "string",
@@ -223819,7 +223833,9 @@
           },
           "lossPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           },
           "name": {
             "type": "string",
@@ -223870,7 +223886,9 @@
           },
           "winPoints": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 255,
+            "minimum": 0
           }
         },
         "required": [

@@ -13,6 +13,9 @@
     <springProfile name="prod">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- @timestamp は UTC 表記に固定する。JVM 既定 TZ は ServerTimeZoneEnvironmentPostProcessor が JST に確定するため、
+                     明示しないと +09:00 表記に変わる（CMP-261123-1335）。 -->
+                <timeZone>UTC</timeZone>
                 <includeMdcKeyName>userId</includeMdcKeyName>
                 <includeMdcKeyName>requestId</includeMdcKeyName>
                 <includeMdcKeyName>traceId</includeMdcKeyName>

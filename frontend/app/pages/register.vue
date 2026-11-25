@@ -222,6 +222,9 @@ const onSubmit = handleSubmit(async (values) => {
       notification.error(t('auth.register.email_unusable_title'), `${message} → ${t('auth.register.withdrawal_cancel_hint')}`)
     } else if (code === 'AUTH_042') {
       notification.error(t('auth.beta_invite_required'), t('auth.beta_invite_required_desc'))
+    } else if (code === 'AUTH_083') {
+      // 宛先付き招待は招待された本人のメールアドレスでしか登録できない
+      notification.error(t('auth.register.invite_targeted_title'), t('auth.register.invite_targeted_desc'))
     } else if (code === 'AUTH_043') {
       notification.error(t('auth.beta_invite_invalid'), t('auth.beta_invite_invalid_desc'))
     } else {

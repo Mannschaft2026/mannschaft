@@ -332,6 +332,12 @@ public class ActionMemoService {
             if (request.getMemoDate().isAfter(today)) {
                 throw new BusinessException(ActionMemoErrorCode.ACTION_MEMO_FUTURE_DATE);
             }
+            // 個人投稿（timeline_post_id）は元の日の全メモをまとめた1日分の投稿を指す。
+            // 別の日へ動かしたメモに旧投稿IDを持ち越すと、移動先の日に旧日の投稿（再公開で削除済みになりうる）へのリンクが出るため外す。
+            // team_timeline_post_id / posted_team_id は日付に依存しない独立したチーム投稿の記録なので維持する（CMP-261123-1201）
+            if (!request.getMemoDate().equals(memo.getMemoDate())) {
+                memo.setTimelinePostId(null);
+            }
             memo.setMemoDate(request.getMemoDate());
         }
 

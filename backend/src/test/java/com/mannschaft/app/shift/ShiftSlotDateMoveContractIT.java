@@ -237,7 +237,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
                 "slotDate", NEW_DATE.toString(), "moveRequestsConfirmed", true, "note", "x".repeat(201)),
                 UpdateShiftSlotRequest.class);
         try (var capture = SqlIntentCounter.captureCurrentThread()) {
-            assertThatThrownBy(() -> slotService.updateSlot(slotId, invalid, adminId)).isInstanceOf(RuntimeException.class);
+            assertThatThrownBy(() -> slotService.updateSlot(slotId, invalid, adminId, ids -> { })).isInstanceOf(RuntimeException.class);
             List<String> sqls = capture.capturedSqls();
             assertThat(sqls).as("実 SQL 捕捉が有効である").isNotEmpty();
             assertThat(sqls).filteredOn(sql -> updatesTable(sql, "shift_requests")).hasSize(1);
@@ -280,7 +280,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             assertThat(read.await(20, TimeUnit.SECONDS)).isTrue();
             tx.executeWithoutResult(s -> {
                 scheduleRepository.findByIdForUpdate(scheduleId).orElseThrow();
-                slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
+                slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId, ids -> { });
                 edit.countDown();
                 awaitParentLock(thread);
             });
@@ -302,7 +302,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         AtomicReference<CompletableFuture<Long>> submitted = new AtomicReference<>();
         tx.executeWithoutResult(s -> {
             scheduleRepository.findByIdForUpdate(scheduleId).orElseThrow();
-            slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
+            slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId, ids -> { });
             submitted.set(CompletableFuture.supplyAsync(() -> {
                 thread.set(Thread.currentThread());
                 ServletRequestAttributes attributes = new ServletRequestAttributes(new MockHttpServletRequest());
@@ -331,7 +331,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             awaitLatch(move);
             UpdateShiftSlotRequest unconfirmed = objectMapper.convertValue(
                     Map.of("slotDate", NEW_DATE.toString()), UpdateShiftSlotRequest.class);
-            slotService.updateSlot(slotId, unconfirmed, adminId);
+            slotService.updateSlot(slotId, unconfirmed, adminId, ids -> { });
         }), executor);
         try {
             assertThat(read.await(20, TimeUnit.SECONDS)).isTrue();
@@ -380,7 +380,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
         AtomicReference<CompletableFuture<Void>> withdrawn = new AtomicReference<>();
         tx.executeWithoutResult(s -> {
             scheduleRepository.findByIdForUpdate(scheduleId).orElseThrow();
-            slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
+            slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId, ids -> { });
             withdrawn.set(CompletableFuture.runAsync(() -> {
                 thread.set(Thread.currentThread());
                 requestService.deleteRequest(requestId);
@@ -400,7 +400,7 @@ class ShiftSlotDateMoveContractIT extends AbstractMySqlIntegrationTest {
             }
         });
         try (var capture = SqlIntentCounter.captureCurrentThread()) {
-            slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId);
+            slotService.updateSlot(slotId, confirmedRequest(NEW_DATE), adminId, ids -> { });
             assertThat(capture.totalCount()).as("実 SQL 捕捉が有効で、N+1 がない").isBetween(1, 14);
             assertThat(capture.capturedSqls()).filteredOn(sql -> updatesTable(sql, "shift_requests")).hasSize(1);
             Long movedCount = tx.execute(s -> ((Number) em.createNativeQuery(

@@ -240,7 +240,7 @@ class ShiftSwapApprovalAtomicityConcurrencyIT extends ShiftSwapApprovalTestSuppo
             case MOVE_SOURCE -> slotService.moveAssignment(slot,
                     new SlotAssignmentMoveRequest(extra, a, 0L, 0L), admin);
             case UPDATE_SLOT -> slotService.updateSlot(slot, new UpdateShiftSlotRequest(null,
-                    LocalTime.of(10, 0), null, null, null, List.of(c, a, d), "先行編集"), admin);
+                    LocalTime.of(10, 0), null, null, null, List.of(c, a, d), "先行編集"), admin, ids -> { });
             case DELETE_SLOT -> slotService.deleteSlot(slot);
             case DELETE_PARENT -> scheduleService.deleteSchedule(scheduleOf(slot), admin);
             case THIRD_DUPLICATE -> slotService.patchSlotAssignments(extra,

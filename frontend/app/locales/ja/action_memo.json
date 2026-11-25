@@ -245,6 +245,10 @@
         "empty": "このチームに投稿されたWORKメモはまだありません",
         "load_more": "もっと読み込む"
       }
+    },
+    "published_post": {
+      "view_link": "投稿を見る",
+      "published_note": "公開済み（自分だけが見られます）"
     }
   }
 }

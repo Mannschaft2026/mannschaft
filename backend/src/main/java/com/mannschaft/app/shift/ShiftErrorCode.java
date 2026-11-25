@@ -153,7 +153,14 @@ public enum ShiftErrorCode implements ErrorCode {
             "予算管理の対象日に、勤務時給が未設定の割当メンバーがいるため公開できません", Severity.WARN),
 
     /** 希望のある枠の日付変更は、希望も移動する確認が必要（409）。 */
-    REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED("SHIFT_048", "この枠には希望が提出されています。希望も新しい日付へ移動することを確認してください", Severity.WARN);
+    REQUEST_DATE_MOVE_CONFIRMATION_REQUIRED("SHIFT_048", "この枠には希望が提出されています。希望も新しい日付へ移動することを確認してください", Severity.WARN),
+
+    /**
+     * 割当の追加先が、枠のシフト表のチームの現役メンバーではない（CMP-261123-1821・400）。
+     *
+     * <p>他チーム・非所属・SUPPORTER・非 ACTIVE・存在しないユーザーはすべて同一の応答にし、存在オラクルにしない。</p>
+     */
+    ASSIGNEE_NOT_TEAM_MEMBER("SHIFT_049", "割り当てできないメンバーが含まれています", Severity.WARN);
 
     private final String code;
     private final String message;
