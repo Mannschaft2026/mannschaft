@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import type { CommitteeSummary } from '~/types/committee'
 import type { MemberResponse } from '~/types/member'
+import type { components } from '~/types/generated'
 
 /** BE CommitteeCreateRequest.purposeTag の enum（backend の定義順）。 */
-const PURPOSE_TAGS = ['TOURNAMENT', 'GOVERNANCE', 'ELECTION', 'PROJECT', 'OTHER'] as const
-type PurposeTag = typeof PURPOSE_TAGS[number]
+type PurposeTag = NonNullable<components['schemas']['CommitteeCreateRequest']['purposeTag']>
+/** 生成型の enum と網羅的に一致しないとコンパイルエラーになる（BE との不一致検出）。 */
+const PURPOSE_TAG_LABEL_KEYS = {
+  TOURNAMENT: true,
+  GOVERNANCE: true,
+  ELECTION: true,
+  PROJECT: true,
+  OTHER: true,
+} satisfies Record<PurposeTag, true>
+const PURPOSE_TAGS = Object.keys(PURPOSE_TAG_LABEL_KEYS) as PurposeTag[]
 /** 委員長候補を全件取得するときの 1 ページの件数。 */
 const MEMBER_PAGE_SIZE = 100
+/** 作成フォームでエラーを表示できる BE フィールド名。 */
+const DISPLAYED_FIELDS = ['name', 'description', 'purposeTag', 'initialChairUserId']
 
 definePageMeta({ layout: 'organization', middleware: 'auth' })
 
@@ -61,7 +72,7 @@ async function loadChairCandidates() {
   chairLoadFailed.value = false
   chairLoadError.value = undefined
   try {
-    const all: MemberResponse[] = []
+    let all: MemberResponse[] = []
     let current = 0
     for (;;) {
       const res = await orgApi.getMembers(orgSlug, { page: current, size: MEMBER_PAGE_SIZE })
@@ -70,6 +81,8 @@ async function loadChairCandidates() {
       if (current >= res.meta.totalPages || res.data.length === 0) break
     }
     if (requestId !== chairRequestId) return
+    // memberships 行を持たない GUEST は BE の checkMembership で 403 になる。退会者（displayName=null）は空ラベルになる。
+    all = all.filter((m) => m.roleName !== 'GUEST' && m.displayName != null)
     chairCandidates.value = all
     const me = authStore.currentUser?.id
     if (createForm.value.initialChairUserId == null && me != null && all.some((m) => m.userId === me)) {
@@ -141,7 +154,9 @@ async function onCreateCommittee() {
     await loadCommittees()
   } catch (err) {
     const errors = getFieldErrors(err)
-    if (Object.keys(errors).length > 0) {
+    // 表示欄に対応しないキーだけの 400 は握りつぶさず handleApiError に回す
+    const shown = Object.keys(errors).filter((k) => DISPLAYED_FIELDS.includes(k))
+    if (shown.length > 0) {
       fieldErrors.value = errors
     } else {
       handleApiError(err, 'createCommittee')

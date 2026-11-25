@@ -166,4 +166,31 @@ describe('pages/organizations/[slug]/committees.vue — 委員会の設立フォ
     expect(createCommittee).not.toHaveBeenCalled()
     expect(createButton().disabled).toBe(true)
   })
+
+  it('CC-006: GUEST と displayName=null は委員長候補から外れる', async () => {
+    getMembers.mockResolvedValue({
+      data: [
+        ...members,
+        { userId: 3, displayName: 'ゲスト', avatarUrl: null, roleName: 'GUEST', joinedAt: '2026-01-01T00:00:00Z' },
+        { userId: 4, displayName: null, avatarUrl: null, roleName: 'MEMBER', joinedAt: '2026-01-01T00:00:00Z' },
+        { userId: 5, displayName: '支援者', avatarUrl: null, roleName: 'SUPPORTER', joinedAt: '2026-01-01T00:00:00Z' },
+      ],
+      meta: { page: 0, size: 100, total: 5, totalPages: 1 },
+    })
+    const wrapper = await openDialog()
+    const chair = selectByTestId(wrapper, 'committee-create-chair')
+    const ids = (chair!.props('options') as Array<{ userId: number }>).map((o) => o.userId)
+    expect(ids).toEqual([1, 2, 5])
+  })
+
+  it('CC-007: 表示欄に対応しない fieldErrors だけの 400 は handleApiError に回す', async () => {
+    const err = { statusCode: 400 }
+    createCommittee.mockRejectedValue(err)
+    getFieldErrors.mockReturnValue({ startDate: '不正' })
+    await openDialog()
+    await fillName('x')
+    createButton().click()
+    await flush()
+    expect(handleApiError).toHaveBeenCalledWith(err, 'createCommittee')
+  })
 })
