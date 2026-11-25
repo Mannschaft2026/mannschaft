@@ -28518,7 +28518,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** チームシフト設定更新（ADMIN/DEPUTY のみ） */
+        /** チームシフト設定更新（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ） */
         patch: operations["updateSettings_19"];
         trace?: never;
     };
@@ -73522,11 +73522,15 @@ export interface components {
         };
         UpdateTeamShiftSettingsRequest: {
             atLeastOneEnabled?: boolean;
+            deputyHourlyRateViewEnabled?: boolean;
+            deputyShiftViewEnabled?: boolean;
             reminder12hEnabled?: boolean;
             reminder24hEnabled?: boolean;
             reminder48hEnabled?: boolean;
         };
         TeamShiftSettingsResponse: {
+            deputyHourlyRateViewEnabled?: boolean;
+            deputyShiftViewEnabled?: boolean;
             reminder12hEnabled?: boolean;
             reminder24hEnabled?: boolean;
             reminder48hEnabled?: boolean;
@@ -147568,7 +147572,7 @@ export interface operations {
                     "*/*": components["schemas"]["TeamShiftSettingsResponse"];
                 };
             };
-            /** @description 当該チームの ADMIN/DEPUTY でない */
+            /** @description 当該チームの ADMIN でも MANAGE_SHIFTS を持つ DEPUTY_ADMIN でもない */
             403: {
                 headers: {
                     [name: string]: unknown;

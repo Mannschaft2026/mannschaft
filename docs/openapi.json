@@ -101987,7 +101987,7 @@
         "tags": [
           "チームシフト設定"
         ],
-        "summary": "チームシフト設定更新（ADMIN/DEPUTY のみ）",
+        "summary": "チームシフト設定更新（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）",
         "operationId": "updateSettings_19",
         "parameters": [
           {
@@ -102021,7 +102021,7 @@
             }
           },
           "403": {
-            "description": "当該チームの ADMIN/DEPUTY でない",
+            "description": "当該チームの ADMIN でも MANAGE_SHIFTS を持つ DEPUTY_ADMIN でもない",
             "content": {
               "*/*": {
                 "schema": {
@@ -221502,6 +221502,12 @@
           "atLeastOneEnabled": {
             "type": "boolean"
           },
+          "deputyHourlyRateViewEnabled": {
+            "type": "boolean"
+          },
+          "deputyShiftViewEnabled": {
+            "type": "boolean"
+          },
           "reminder12hEnabled": {
             "type": "boolean"
           },
@@ -221516,6 +221522,12 @@
       "TeamShiftSettingsResponse": {
         "type": "object",
         "properties": {
+          "deputyHourlyRateViewEnabled": {
+            "type": "boolean"
+          },
+          "deputyShiftViewEnabled": {
+            "type": "boolean"
+          },
           "reminder12hEnabled": {
             "type": "boolean"
           },
