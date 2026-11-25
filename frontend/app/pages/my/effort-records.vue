@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * F06.4.1 個人の頑張り記録（PR-1: 個人の記録・集計）。`/my/effort-records`。
- * 導線（メニュー・ダッシュボード）は PR-4 まで出さない。URL 直打ちでのみ到達する。
+ * PR-4: チーム共有ステップ（EffortSharePanel）と共有状態の表示を足し、個人メニューから到達できる。
  */
 import type { ActivityFieldValue } from '~/utils/activityFields'
 import { toYmd } from '~/utils/activityFields'
@@ -13,6 +13,7 @@ import {
   fromEffortWireValue,
   reconcileUpdateAfter409,
   restoreEffortInputs,
+  sameEffortContent,
   toEffortFormFields,
   toEffortUnitLabel,
   toInputFields,
@@ -26,11 +27,13 @@ import {
   type EffortChartTarget,
   type EffortPeriodKind,
 } from '~/utils/effortPeriod'
+import { effortShareStatus } from '~/utils/effortShare'
 import type {
   EffortDefinitionSnapshotResponse,
   EffortRecordResponse,
   EffortStatsResult,
 } from '~/composables/useEffortRecordApi'
+import type { EffortOwnerRecord } from '~/composables/useEffortShareApi'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -134,6 +137,7 @@ function createKeyFor(signature: string): string {
 
 function onPresetChange() {
   editing.value = null
+  shareMode.value = false
   recordedOn.value = new Date()
   resetInputs()
   clearNotices()
@@ -210,10 +214,40 @@ function adopt(record: EffortRecordResponse) {
   privateNote.value = record.privateNote ?? ''
 }
 
+/** 共有ステップを開いているか（「チームに共有する」）。 */
+const shareMode = ref(false)
+
+/** 入力が保存済みの原本と食い違うか（新規なら常に true）。共有確認ボタンの文言と、確認前の保存の要否に使う。 */
+const isDirty = computed(() => {
+  const rec = editing.value
+  if (!rec) return true
+  return !sameEffortContent(toInputFields(rec.definition?.fields), currentBody(), rec)
+})
+
 async function save() {
+  const saved = await persist()
+  if (saved) await loadRecords(true)
+}
+
+/** 共有確認の前に原本を保存する（API 順序は親設計 §2.1）。変更が無ければ保存せず、保存済みの原本を返す。失敗は null。 */
+async function saveBeforeSharePreview(): Promise<EffortOwnerRecord | null> {
+  if (editing.value && !isDirty.value) return editing.value
+  const saved = await persist()
+  if (saved) await loadRecords(true)
+  return saved
+}
+
+function onShareUpdated(record: EffortOwnerRecord) {
+  editing.value = record
+  const idx = records.value.findIndex((r) => r.id === record.id)
+  if (idx >= 0) records.value.splice(idx, 1, record)
+}
+
+/** 原本の作成 / 更新。成功したら保存後の原本、失敗したら null。 */
+async function persist(): Promise<EffortOwnerRecord | null> {
   clearNotices()
   const def = activeDefinition.value
-  if (!validate() || !def?.definitionUuid) return
+  if (!validate() || !def?.definitionUuid) return null
   saving.value = true
   try {
     const body = currentBody()
@@ -232,9 +266,11 @@ async function save() {
     } else {
       await updateExisting(editing.value, body)
     }
-    await loadRecords(true)
+    // 別の編集が先に入っていた（409 照合で CONFLICT）ときは、共有確認へ進めない。
+    return conflictNotice.value ? null : editing.value
   } catch (e) {
     if (!showFieldErrors(e)) handleApiError(e)
+    return null
   } finally {
     saving.value = false
   }
@@ -268,11 +304,13 @@ async function updateExisting(base: EffortRecordResponse, body: ReturnType<typeo
 function startEdit(r: EffortRecordResponse) {
   clearNotices()
   adopt(r)
+  shareMode.value = r.share != null
   tab.value = 'record'
 }
 
 function newRecord() {
   editing.value = null
+  shareMode.value = false
   clearNotices()
   recordedOn.value = new Date()
   recordedOnTyped.value = null
@@ -477,10 +515,29 @@ onMounted(async () => {
 
           <div class="flex flex-wrap gap-2">
             <Button :label="t('effort.privateSave')" :loading="saving" class="min-h-11" data-testid="effort-save" @click="save" />
+            <Button
+              v-if="!shareMode"
+              :label="t('effort.shareSave')"
+              icon="pi pi-share-alt"
+              severity="secondary"
+              outlined
+              class="min-h-11"
+              data-testid="effort-share-toggle"
+              @click="shareMode = true"
+            />
             <Button v-if="editing" :label="t('effort.newRecord')" severity="secondary" outlined class="min-h-11" @click="newRecord" />
           </div>
         </div>
       </SectionCard>
+
+      <EffortSharePanel
+        v-if="shareMode || editing?.share"
+        class="mb-4"
+        :record="editing"
+        :dirty="isDirty"
+        :save-before-preview="saveBeforeSharePreview"
+        @updated="onShareUpdated"
+      />
 
       <SectionCard :title="t('effort.list.title')">
         <PageLoading v-if="recordsLoading && records.length === 0" size="32px" />
@@ -491,6 +548,9 @@ onMounted(async () => {
             <div class="min-w-0">
               <div class="text-sm font-semibold">{{ r.recordedOn }} <span class="font-normal text-surface-500">{{ presetName(r.definition ?? {}) }}</span></div>
               <div class="break-words text-sm text-surface-600">{{ summaryOf(r) }}</div>
+              <div v-if="effortShareStatus(r.share)" class="mt-1 text-xs text-surface-500" :data-testid="`effort-list-share-${r.id}`">
+                {{ t(effortShareStatus(r.share)!.key) }}
+              </div>
             </div>
             <div class="flex gap-2">
               <Button :label="t('effort.edit')" size="small" severity="secondary" outlined class="min-h-11" @click="startEdit(r)" />
