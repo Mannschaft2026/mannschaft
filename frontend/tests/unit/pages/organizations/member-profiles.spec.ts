@@ -302,6 +302,8 @@ describe('pages/organizations/[slug]/member-profiles.vue — メンバー削除�
   })
 
   it('MP-004: API が失敗したときエラーが通知され、ダイアログ・削除対象が残り、キャンセルしてから再試行すると成功する', async () => {
+    // 5xx は useApi が通知し、handleApiError は通知しない設計（CMP-261125-1951）になったため、
+    // ページの通知経路を確かめる失敗として 4xx を使う。
     deleteMember.mockRejectedValueOnce({ statusCode: 409, data: {} })
     deleteMember.mockResolvedValueOnce(undefined)
 

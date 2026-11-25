@@ -58,46 +58,46 @@ export function resolveApiErrorMessage(
   context?: string,
   unresolvedKey = 'error.unknown',
 ): string {
-    const key = `error.${code}`
-    const tournamentKey = Object.hasOwn(TOURNAMENT_ENTRY_I18N_KEYS, code)
-      ? TOURNAMENT_ENTRY_I18N_KEYS[code]
-      : undefined
-    if (tournamentKey && te(tournamentKey)) return t(tournamentKey)
-    if (code === 'COMMON_003' && context === 'team-loyalty') return t('loyalty.error.changed')
-    if (code === 'MEMBERSHIP_003' && context === 'team-loyalty')
-      return t('loyalty.memberQr.disabled')
-    if (code.startsWith('LOYALTY_')) {
-      const loyaltyKeys: Record<string, string> = {
-        LOYALTY_001: 'loadErrorState.states.notFoundOrForbidden.message',
-        LOYALTY_002: 'loadErrorState.states.forbidden.message',
-        LOYALTY_003: 'loyalty.error.ineligible',
-        LOYALTY_004: 'loyalty.program.disabled',
-        LOYALTY_005: 'loyalty.error.alreadyAwarded',
-        LOYALTY_006: 'loyalty.error.changed',
-        LOYALTY_007: 'loyalty.error.changed',
-        LOYALTY_008: 'loyalty.error.insufficient',
-        LOYALTY_009: 'loyalty.error.changed',
-        LOYALTY_010: 'loyalty.self.rescan',
-        LOYALTY_011: 'loyalty.self.rescan',
-        LOYALTY_012: 'error.server_retry',
-        LOYALTY_013: 'loyalty.error.changed',
-        LOYALTY_014: 'loyalty.error.changed',
-        LOYALTY_015: 'loyalty.requests.selfApprovalForbidden',
-      }
-      const loyaltyKey = loyaltyKeys[code]
-      if (loyaltyKey) return t(loyaltyKey)
+  const key = `error.${code}`
+  const tournamentKey = Object.hasOwn(TOURNAMENT_ENTRY_I18N_KEYS, code)
+    ? TOURNAMENT_ENTRY_I18N_KEYS[code]
+    : undefined
+  if (tournamentKey && te(tournamentKey)) return t(tournamentKey)
+  if (code === 'COMMON_003' && context === 'team-loyalty') return t('loyalty.error.changed')
+  if (code === 'MEMBERSHIP_003' && context === 'team-loyalty')
+    return t('loyalty.memberQr.disabled')
+  if (code.startsWith('LOYALTY_')) {
+    const loyaltyKeys: Record<string, string> = {
+      LOYALTY_001: 'loadErrorState.states.notFoundOrForbidden.message',
+      LOYALTY_002: 'loadErrorState.states.forbidden.message',
+      LOYALTY_003: 'loyalty.error.ineligible',
+      LOYALTY_004: 'loyalty.program.disabled',
+      LOYALTY_005: 'loyalty.error.alreadyAwarded',
+      LOYALTY_006: 'loyalty.error.changed',
+      LOYALTY_007: 'loyalty.error.changed',
+      LOYALTY_008: 'loyalty.error.insufficient',
+      LOYALTY_009: 'loyalty.error.changed',
+      LOYALTY_010: 'loyalty.self.rescan',
+      LOYALTY_011: 'loyalty.self.rescan',
+      LOYALTY_012: 'error.server_retry',
+      LOYALTY_013: 'loyalty.error.changed',
+      LOYALTY_014: 'loyalty.error.changed',
+      LOYALTY_015: 'loyalty.requests.selfApprovalForbidden',
     }
-    // CMP-260920-1040 AC-36: 確認通知は errorCode ごとの6言語文言を表示する。
-    // 確認通知とチームの固定不在/復元409だけ登録済みi18nを優先し、他codeの具体的理由は維持する。
-    if (
-      (FRIEND_I18N_CODES.has(code) ||
-        code.startsWith('CONFIRMABLE_NOTIFICATION_') ||
-        code === 'TEAM_001' ||
-        code === 'TEAM_006') &&
-      te(key)
-    )
-      return t(key)
-    if (fallback) return fallback
-    if (te(key)) return t(key)
-    return t(unresolvedKey)
+    const loyaltyKey = loyaltyKeys[code]
+    if (loyaltyKey) return t(loyaltyKey)
   }
+  // CMP-260920-1040 AC-36: 確認通知は errorCode ごとの6言語文言を表示する。
+  // 確認通知とチームの固定不在/復元409だけ登録済みi18nを優先し、他codeの具体的理由は維持する。
+  if (
+    (FRIEND_I18N_CODES.has(code) ||
+      code.startsWith('CONFIRMABLE_NOTIFICATION_') ||
+      code === 'TEAM_001' ||
+      code === 'TEAM_006') &&
+    te(key)
+  )
+    return t(key)
+  if (fallback) return fallback
+  if (te(key)) return t(key)
+  return t(unresolvedKey)
+}
