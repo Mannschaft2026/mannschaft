@@ -12,6 +12,9 @@ import com.mannschaft.app.jobmatching.repository.JobApplicationRepository;
 import com.mannschaft.app.jobmatching.repository.JobPostingRepository;
 import com.mannschaft.app.jobmatching.service.command.ApplyCommand;
 import com.mannschaft.app.jobmatching.state.JobApplicationStateMachine;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,6 +48,9 @@ public class JobApplicationService {
     private final JobPolicy jobPolicy;
     private final ApplicationEventPublisher eventPublisher;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     // ---------------------------------------------------------------------
     // コマンド系
     // ---------------------------------------------------------------------
@@ -53,7 +59,7 @@ public class JobApplicationService {
      * 求人に応募する。
      *
      * <p>競合制御は軽量（SELECT → 検証 → INSERT）。厳密な定員制御は採用確定時
-     * （{@link JobContractService#acceptApplication(Long, Long)}）で GET_LOCK + FOR UPDATE により行う。
+     * （{@link JobContractService#acceptApplication(Long, Long)}）で求人行・応募行の行ロックにより行う。
      * ただし「求人 OPEN」「締切未通過」「自己応募禁止」「重複応募禁止」は応募時点で弾く。</p>
      *
      * @param postingId 応募対象の求人ID
@@ -83,7 +89,7 @@ public class JobApplicationService {
             throw new BusinessException(JobmatchingErrorCode.JOB_CANNOT_APPLY_SELF);
         }
 
-        // 早期の定員チェック（厳密判定は accept で GET_LOCK 保護下に再実行）。
+        // 早期の定員チェック（厳密判定は accept で求人行ロック下に locking read で再実行）。
         int accepted = applicationRepository.countByJobPostingIdAndStatus(
                 postingId, JobApplicationStatus.ACCEPTED);
         if (accepted >= posting.getCapacity()) {
@@ -122,10 +128,17 @@ public class JobApplicationService {
 
     /**
      * 応募を取り下げる。本人のみ許可、APPLIED → WITHDRAWN へ遷移。
+     *
+     * <p>応募行を {@code PESSIMISTIC_WRITE} で最新化・ロックしてから状態を判定する（CMP-261021-0355）。
+     * 通常 SELECT のスナップショットで判定すると、コミット待ちの受諾が ACCEPTED にした応募を WITHDRAWN で
+     * 上書きしてしまう。取り下げは求人の情報を使わないため求人行はロックしない。取るロックは応募行の 1 つだけなので、
+     * 求人行 → 応募行の順でロックする受諾・不採用と循環待ちにならない（求人行をロックしないので、受諾が
+     * 求人行のロック待ちの間でも取り下げはコミットできる）。</p>
      */
     @Transactional
     public JobApplicationEntity withdraw(Long applicationId, Long userId) {
         JobApplicationEntity app = findOrThrow(applicationId);
+        lockLatest(app);
         if (!userId.equals(app.getApplicantUserId())) {
             throw new BusinessException(JobmatchingErrorCode.JOB_PERMISSION_DENIED);
         }
@@ -139,13 +152,19 @@ public class JobApplicationService {
     /**
      * 応募を不採用にする。採否権限者のみ許可、APPLIED → REJECTED へ遷移。
      *
+     * <p>受諾（{@link JobContractService#acceptApplication(Long, Long)}）と同じ順で、求人行を
+     * {@code SELECT ... FOR UPDATE} でロックしてから応募行を {@code PESSIMISTIC_WRITE} で最新化・ロックし、
+     * 最新の状態で遷移を判定する（CMP-261021-0355）。同一求人の受諾と直列化されるため、受諾済みの応募を
+     * REJECTED で上書きしない。</p>
+     *
      * @param reason 不採用理由（任意）。現状 Entity 側に保存欄がないため MVP はログのみに記録する。
      */
     @Transactional
     public JobApplicationEntity reject(Long applicationId, String reason, Long userId) {
         JobApplicationEntity app = findOrThrow(applicationId);
-        JobPostingEntity posting = postingRepository.findById(app.getJobPostingId())
+        JobPostingEntity posting = postingRepository.findByIdForUpdate(app.getJobPostingId())
                 .orElseThrow(() -> new BusinessException(JobmatchingErrorCode.JOB_NOT_FOUND));
+        lockLatest(app);
 
         if (!jobPolicy.canDecideApplication(userId, posting)) {
             throw new BusinessException(JobmatchingErrorCode.JOB_PERMISSION_DENIED);
@@ -213,6 +232,14 @@ public class JobApplicationService {
     private JobApplicationEntity findOrThrow(Long applicationId) {
         return applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new BusinessException(JobmatchingErrorCode.JOB_APPLICATION_NOT_FOUND));
+    }
+
+    /**
+     * 応募行を locking read（{@code SELECT ... FOR UPDATE}）で読み直してロックする。先に読んだ値は
+     * REPEATABLE READ のスナップショットで古い可能性があるため、状態遷移の判定はこの後の値で行う。
+     */
+    private void lockLatest(JobApplicationEntity app) {
+        entityManager.refresh(app, LockModeType.PESSIMISTIC_WRITE);
     }
 
     /**

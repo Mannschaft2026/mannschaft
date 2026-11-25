@@ -86,7 +86,7 @@
 - 応募締切前であれば応募キャンセル可能
 - Requester が応募者一覧から **採用** を決定 → 契約成立（`job_contracts.status = MATCHED`）
 - 定員充足すると自動的にクローズ（以後の応募は不可）
-- **同時応募時の排他制御**: 採用確定時に DB トランザクション内で `SELECT ... FOR UPDATE` による行ロック。加えて `PostgreSQL advisory lock` / `MySQL GET_LOCK` で job_posting 単位の排他を二重化
+- **同時応募時の排他制御**: 採用確定時に DB トランザクション内で求人行を `SELECT ... FOR UPDATE` で行ロックし、応募行も `SELECT ... FOR UPDATE` で読み直してから、採用済み件数を `FOR SHARE` の locking read で数える（REPEATABLE READ のスナップショットを読まない。CMP-261021-0355）。不採用は同じ順（求人行 → 応募行）、取り下げは応募行だけをロックする。`MySQL GET_LOCK` はコミット前に解放されるため排他の保証ではなく、job_posting 単位の受諾の待ちを 10 秒で打ち切る流量制御
 - Worker がまだ Stripe Connect Express オンボーディングを完了していない場合、**採用確定前に Worker 側にオンボーディング完了を促す**。オンボーディング未完了で一定期間（72時間）経過した場合は採用を自動キャンセル
 
 ### 2.3 業務中コミュニケーション

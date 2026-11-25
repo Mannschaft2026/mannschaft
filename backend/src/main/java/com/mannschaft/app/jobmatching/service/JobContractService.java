@@ -16,6 +16,7 @@ import com.mannschaft.app.jobmatching.repository.JobPostingRepository;
 import com.mannschaft.app.jobmatching.service.command.ReportCompletionCommand;
 import com.mannschaft.app.jobmatching.state.JobContractStateMachine;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,10 +40,12 @@ import java.util.Objects;
  *   <li>契約閲覧（関係者のみ）・契約一覧（関与する全契約）</li>
  * </ul>
  *
- * <p>採用確定では MySQL {@code GET_LOCK} + {@code SELECT ... FOR UPDATE} の二重ロックにより
- * 同一求人に対する同時採用の競合を物理排他する（定員 1 人の求人に並列採用リクエストが来た場合でも
- * 整合性を保つ）。{@code GET_LOCK} はセッション境界の分散ロックとして振る舞うため、
- * Spring の楽観的ロック（{@code @Version}）と組み合わせて二重防御する。</p>
+ * <p>採用確定の排他は InnoDB の行ロックで行う（CMP-261021-0355）。求人行の {@code SELECT ... FOR UPDATE} で
+ * 同一求人への受諾を直列化し、応募行を {@code PESSIMISTIC_WRITE} で読み直し、採用済み件数を
+ * {@code SELECT COUNT(*) ... FOR SHARE} で数える。locking read は REPEATABLE READ のスナップショットではなく
+ * 最新のコミット済み行を読むため、先行受諾・取り下げ・不採用の結果を見落とさない。行ロックはコミットまで保持される。
+ * {@code GET_LOCK} はコミット前に解放されるため排他の保証にはならず、同一求人への受諾の入口で待ち時間を
+ * 10 秒に打ち切る流量制御としてだけ使う。</p>
  */
 @Slf4j
 @Service
@@ -53,7 +56,7 @@ public class JobContractService {
     /** 差し戻し回数の上限（超過で JOB_REJECTION_LIMIT_EXCEEDED）。 */
     private static final int MAX_REJECTION_COUNT = 3;
 
-    /** GET_LOCK タイムアウト秒数。10 秒以内にロック獲得できなければ失敗させる。 */
+    /** GET_LOCK（受諾の入口の流量制御）のタイムアウト秒数。10 秒以内に獲得できなければ 409 で返す。 */
     private static final int LOCK_TIMEOUT_SECONDS = 10;
 
     /** 求人単位のロックキー接頭辞。MySQL GET_LOCK は 64 文字以内。 */
@@ -77,13 +80,14 @@ public class JobContractService {
     /**
      * 応募を採用確定して契約を成立させる。本サービスの最重要メソッド。
      *
-     * <p>排他制御:</p>
+     * <p>排他制御（ロック順は求人行 → 応募行。{@link JobApplicationService} の不採用も同じ順で取る）:</p>
      * <ol>
-     *   <li>{@code GET_LOCK('job_posting_{postingId}', 10)} でセッションレベル分散ロック獲得</li>
-     *   <li>{@code SELECT ... FOR UPDATE} で求人行を物理排他</li>
-     *   <li>応募ステータス・求人ステータス・定員未充足を再確認（stale-read 防止）</li>
-     *   <li>応募 ACCEPTED 更新 → 契約 INSERT → チャット作成 → 求人 CLOSED（必要時）→ 通知送信</li>
-     *   <li>finally で必ず {@code RELEASE_LOCK}</li>
+     *   <li>{@code GET_LOCK('job_posting_{postingId}', 10)} で受諾の入口を絞る（10 秒で打ち切り 409。
+     *       finally でコミット前に解放するため、排他の保証はしない）</li>
+     *   <li>求人行を {@code SELECT ... FOR UPDATE} で排他ロックする。同一求人の受諾・不採用はここで直列化される</li>
+     *   <li>応募行を {@code PESSIMISTIC_WRITE} で読み直す（先頭の通常 SELECT の値はスナップショットで古い可能性がある）</li>
+     *   <li>応募ステータス・求人ステータス・採用済み件数（{@code FOR SHARE} の locking read）を最新値で確認する</li>
+     *   <li>応募 ACCEPTED 更新 → 契約 INSERT → チャット作成 → 求人 CLOSED（必要時）→ 通知イベント発行</li>
      * </ol>
      *
      * @param applicationId 採用する応募ID
@@ -101,10 +105,11 @@ public class JobContractService {
         Long postingId = app.getJobPostingId();
         String lockKey = LOCK_KEY_PREFIX + postingId;
 
-        // GET_LOCK による分散排他ロック取得。取れなければ競合中として状態遷移エラーで返す。
+        // GET_LOCK で受諾の入口を絞る（10 秒で取れなければ競合中として状態遷移エラーで返す）。
+        // コミット前に解放するので排他の保証にはならない。排他は下の求人行・応募行のロックが担う。
         acquireLockOrFail(lockKey);
         try {
-            // SELECT ... FOR UPDATE（行ロック）。GET_LOCK と併用する二重防御。
+            // 求人行の SELECT ... FOR UPDATE。同一求人の受諾・不採用を直列化する本当の排他（コミットまで保持）。
             JobPostingEntity posting = postingRepository.findByIdForUpdate(postingId)
                     .orElseThrow(() -> new BusinessException(JobmatchingErrorCode.JOB_NOT_FOUND));
 
@@ -112,6 +117,10 @@ public class JobContractService {
             if (!jobPolicy.canDecideApplication(requesterId, posting)) {
                 throw new BusinessException(JobmatchingErrorCode.JOB_PERMISSION_DENIED);
             }
+
+            // 応募行を locking read で最新化してロックする。先頭の findById はスナップショット読みのため、
+            // ロック待ちの間にコミットされた受諾・取り下げ・不採用が見えていない可能性がある。
+            entityManager.refresh(app, LockModeType.PESSIMISTIC_WRITE);
 
             // 応募が処理前（APPLIED）であるか。
             if (app.getStatus() != JobApplicationStatus.APPLIED) {
@@ -123,9 +132,8 @@ public class JobContractService {
                 throw new BusinessException(JobmatchingErrorCode.JOB_NOT_OPEN);
             }
 
-            // 定員未充足か（ロック獲得後の再確認）。
-            int accepted = applicationRepository.countByJobPostingIdAndStatus(
-                    postingId, JobApplicationStatus.ACCEPTED);
+            // 定員未充足か。スナップショットでは並行受諾のコミットを数え漏らすため locking read で数える。
+            long accepted = applicationRepository.countAcceptedByJobPostingIdForShare(postingId);
             if (accepted >= posting.getCapacity()) {
                 throw new BusinessException(JobmatchingErrorCode.JOB_CAPACITY_FULL);
             }
@@ -306,7 +314,10 @@ public class JobContractService {
     }
 
     /**
-     * MySQL {@code GET_LOCK} で分散ロックを取得する。失敗時は状態遷移エラーで返す。
+     * MySQL {@code GET_LOCK} で受諾の入口ロックを取得する。失敗時は状態遷移エラーで返す。
+     *
+     * <p>呼び出し元の finally でコミット前に解放されるため、排他の保証ではなく「同一求人への受諾の待ちを
+     * 10 秒で打ち切る」流量制御として扱う。整合性は求人行・応募行の行ロックが守る。</p>
      *
      * <p>{@code SELECT GET_LOCK(key, timeout)} は 1 を返すとロック獲得、0 はタイムアウト、
      * NULL はエラー（例: 接続切断）。</p>

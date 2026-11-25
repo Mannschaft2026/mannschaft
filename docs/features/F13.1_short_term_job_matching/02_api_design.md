@@ -103,16 +103,20 @@
 - `job_postings.status = 'OPEN'`
 - 定員未充足
 
-**トランザクション**
-1. `SELECT ... FOR UPDATE` で `job_postings` 行ロック
-2. `MySQL GET_LOCK("job_posting_<id>", 10)` でさらに排他
-3. `job_applications.status = 'ACCEPTED'` に更新
-4. `job_contracts` 新規作成（料金スナップショット）
-5. Stripe PaymentIntent 作成（`capture_method=manual`、`application_fee_amount`、`transfer_data.destination`）
-6. `job_payments` レコード作成（`status=REQUIRES_PAYMENT_METHOD`）
-7. チャットルーム自動作成（F04.2）
-8. 通知送信（`JOB_MATCHED`、強制配信）
-9. 定員充足なら `job_postings.status = 'CLOSED'`
+**トランザクション**（排他は InnoDB の行ロック。ロック順は求人行 → 応募行で、不採用も同じ順。CMP-261021-0355）
+1. `MySQL GET_LOCK("job_posting_<id>", 10)` で受諾の入口を絞る（10 秒で取れなければ 409 `JOB_INVALID_STATE_TRANSITION`。コミット前に解放するため排他の保証にはならない流量制御）
+2. `SELECT ... FOR UPDATE` で `job_postings` 行ロック（同一求人の受諾・不採用を直列化。コミットまで保持）
+3. `job_applications` の対象行を `SELECT ... FOR UPDATE` で読み直し、最新の状態で `APPLIED` であることを確認（違えば 409 `JOB_APPLICATION_NOT_PENDING`）。求人が `OPEN` でなければ 409 `JOB_NOT_OPEN`
+4. 採用済み件数を `SELECT COUNT(*) ... WHERE status = 'ACCEPTED' FOR SHARE`（locking read）で数え、定員以上なら 409 `JOB_CAPACITY_FULL`。REPEATABLE READ のスナップショットではなく最新のコミット済み行を数えるため、並行受諾を数え漏らさない
+5. `job_applications.status = 'ACCEPTED'` に更新
+6. `job_contracts` 新規作成（料金スナップショット）
+7. Stripe PaymentIntent 作成（`capture_method=manual`、`application_fee_amount`、`transfer_data.destination`）
+8. `job_payments` レコード作成（`status=REQUIRES_PAYMENT_METHOD`）
+9. チャットルーム自動作成（F04.2）
+10. 通知送信（`JOB_MATCHED`、強制配信）
+11. 定員充足なら `job_postings.status = 'CLOSED'`
+
+並行受諾の敗者は、先行受諾が定員を満たして求人を `CLOSED` にした場合は `JOB_NOT_OPEN`、同一応募が先に受諾された場合は `JOB_APPLICATION_NOT_PENDING` を受ける（いずれも 409）。受諾済みの応募への取り下げ・不採用は、応募行のロック後に読み直した `ACCEPTED` で判定され 409 `JOB_INVALID_STATE_TRANSITION` になる（受諾を上書きしない）。取り下げは応募行だけを、不採用は求人行 → 応募行の順でロックする。
 
 **レスポンス（201 Created）**
 ```json
