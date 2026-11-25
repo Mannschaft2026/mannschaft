@@ -120,6 +120,7 @@
       "title": "Monatsabschluss",
       "yearMonth": "Zielmonat",
       "yearMonthHint": "Format YYYY-MM (z.B. 2026-04)",
+      "invalidFormat": "Bitte im Format JJJJ-MM eingeben (z. B. 2026-10)",
       "execute": "Ausführen",
       "error": "Monatsabschluss fehlgeschlagen"
     },
