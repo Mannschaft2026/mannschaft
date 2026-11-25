@@ -454,7 +454,8 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
 
     @ParameterizedTest
     @ValueSource(strings = {"TEAM", "ORGANIZATION"})
-    @DisplayName("AC6: 上限到達は EXPIRED。非公開なら joinable=false・publicPath なしで再招待要請できる")
+    @DisplayName("AC6: 上限到達は EXPIRED。非公開なら joinable=false・publicPath なしで再招待要請できる。"
+            + "依頼済み（REISSUE_REQUESTED）は閉じられない（409 AUTH_085・状態不変。PR3 実機 D-1）")
     void exhaustedPrivate(String type) {
         Scope scope = scope(type);
         InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
@@ -471,6 +472,24 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
         PendingInviteReissueResponse reissue = pending().requestReissue(r.userId());
         assertThat(reissue.alreadyRequested()).isFalse();
         assertThat(pendingStatus(r.userId())).isEqualTo("REISSUE_REQUESTED");
+        // CMP-261107-1833 PR3 実機 D-1・殿の裁定: 閉じても依頼の取り下げにはしない（DISMISSIBLE={EXPIRED,REISSUE_DECLINED}）
+        Throwable dismissed = catchThrowable(() -> pending().dismiss(r.userId()));
+        assertThat(dismissed).isInstanceOf(com.mannschaft.app.common.BusinessException.class);
+        assertThat(((com.mannschaft.app.common.BusinessException) dismissed).getErrorCode().getCode()).isEqualTo("AUTH_085");
+        assertThat(pendingStatus(r.userId())).isEqualTo("REISSUE_REQUESTED");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TEAM", "ORGANIZATION"})
+    @DisplayName("AC6: 上限到達で EXPIRED の案内は、再依頼の前なら閉じられる（EXPIRED→DISMISSED）")
+    void exhaustedExpiredCanBeDismissed(String type) {
+        Scope scope = scope(type);
+        InviteTokenEntity token = token(scope, 0, null, 1, 0, null, null);
+        Registered r = registerAndVerifyAdult(token);
+        makePrivate(scope);
+        jdbc.update("UPDATE invite_tokens SET used_count = 1 WHERE id = ?", token.getId());
+
+        assertThat(acceptStatus(r.userId())).isEqualTo("EXPIRED");
         pending().dismiss(r.userId());
         assertThat(pendingStatus(r.userId())).isEqualTo("DISMISSED");
     }
