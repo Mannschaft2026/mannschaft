@@ -5,11 +5,17 @@ export interface BlogPostReadQuery {
  previewToken?: string
 }
 
-/** BE の不在応答（404 CMS_001）と同形のエラー。不正 query も不在と同じ表示・トースト種別に揃える（CMP-261008-1701 C11）。 */
+/** FE 合成の不正 query エラー識別子。BE 起因ではないため useErrorHandler は障害報告の対象から外す。 */
+export const BLOG_READ_QUERY_INVALID = 'BLOG_READ_QUERY_INVALID'
+
+/**
+ * BE の不在応答（404 CMS_001）と同形のエラー。不正 query も不在と同じ表示・トースト種別に揃える（CMP-261008-1701 C11）。
+ * 文言は直書きせず、useErrorHandler が code(CMS_001) から全ロケール共通の error.CMS_001 で解決する。
+ */
 export function createBlogPostNotFoundError(): Error & { statusCode: number; data: { error: { code: string; message: string; fieldErrors: never[] } } } {
- return Object.assign(new Error('BLOG_READ_QUERY_INVALID'), {
+ return Object.assign(new Error(BLOG_READ_QUERY_INVALID), {
   statusCode: 404,
-  data: { error: { code: 'CMS_001', message: '記事が見つかりません', fieldErrors: [] as never[] } },
+  data: { error: { code: 'CMS_001', message: '', fieldErrors: [] as never[] } },
  })
 }
 

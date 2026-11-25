@@ -436,6 +436,7 @@
     "unknown": "Ein Fehler ist aufgetreten",
     "notFound": "Nicht gefunden",
     "TEAM_001": "Das Team wurde nicht gefunden.",
+    "CMS_001": "Der Beitrag wurde nicht gefunden.",
     "TEAM_006": "Dieses Team kann nicht wiederhergestellt werden, da es nicht gelöscht wurde.",
     "COMMON_001": "Die Eingaben sind fehlerhaft",
     "COMMON_002": "Sie haben keine Berechtigung für diese Aktion",

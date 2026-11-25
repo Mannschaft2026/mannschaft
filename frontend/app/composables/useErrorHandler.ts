@@ -1,3 +1,5 @@
+import { BLOG_READ_QUERY_INVALID } from '~/utils/blogPostReadQuery'
+
 // フレンド領域はBEの日本語messageより利用中の言語を優先する。
 const FRIEND_I18N_CODES = new Set([
   'SOCIAL_101',
@@ -98,7 +100,10 @@ export const useErrorHandler = () => {
       (FRIEND_I18N_CODES.has(code) ||
         code.startsWith('CONFIRMABLE_NOTIFICATION_') ||
         code === 'TEAM_001' ||
-        code === 'TEAM_006') &&
+        code === 'TEAM_006' ||
+        // ブログ記事の不在/閲覧不可は存在オラクル対策で CMS_001 に畳まれる。実BE不在と
+        // FE合成（不正query）で文言が割れないよう、全ロケール共通の error.CMS_001 を使う。
+        code === 'CMS_001') &&
       te(key)
     )
       return t(key)
@@ -127,7 +132,10 @@ export const useErrorHandler = () => {
           return new Error(`Team loyalty API error (${code}; HTTP ${status})`)
         })()
       : error
-    errorReport.captureQuiet(reportedError, { context })
+    // FE が合成した不正 query の不在エラーは BE 障害ではないため報告しない（表示・トーストは維持）。
+    if (!(error instanceof Error && error.message === BLOG_READ_QUERY_INVALID)) {
+      errorReport.captureQuiet(reportedError, { context })
+    }
 
     // F20.1: ENTITLEMENT_003（402）は useApi の共通ハンドラが既にグローバルペイウォール
     // モーダルを開いている（usePaywallStore）。ここで追加のトーストを出すと二重表示になるため

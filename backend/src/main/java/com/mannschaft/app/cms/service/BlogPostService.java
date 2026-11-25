@@ -229,8 +229,9 @@ public class BlogPostService {
      *
      * <p>F00 可視性認可（{@link #getById} と同一挙動）: slug→entity 解決直後に
      * {@link ContentVisibilityChecker#assertCanView} を呼び、閲覧不可なら
-     * {@link com.mannschaft.app.common.BusinessException}（{@code VISIBILITY_001}=403 /
-     * {@code VISIBILITY_004}=404 相当）を投げる。これを欠くと slug 経由で他人の
+     * {@link com.mannschaft.app.common.BusinessException} を投げる。ただし存在オラクル対策として
+     * {@code VISIBILITY_001}（403）/ {@code VISIBILITY_004}（404）は不在と同じ {@code CMS_001}（404）へ
+     * 畳み込んで返す（閲覧不可と不在を区別させない）。これを欠くと slug 経由で他人の
      * MEMBERS_ONLY/DRAFT 記事が漏洩する（実機E2Eで捕捉した認可漏洩バグ）。
      * viewerUserId は認証コンテキストから取得する（リクエスト引数 {@code userId} は
      * スコープ解決用であり閲覧者IDではないため使用しない）。</p>
@@ -294,6 +295,10 @@ public class BlogPostService {
      * {@link ContentVisibilityChecker#assertCanView} に委譲する。
      * 閲覧不可の場合は {@link com.mannschaft.app.common.BusinessException}
      * ({@code VISIBILITY_001} = 403 / {@code VISIBILITY_004} = 404 相当) を投げる。
+     *
+     * <p><b>注意（存在オラクル）</b>: 本メソッドは閲覧不可を {@code VISIBILITY_001}/{@code VISIBILITY_004} のまま
+     * 投げる。表示経路へ繋ぐ場合は {@link #getBySlug} と同じ {@code VISIBILITY_001/004 → CMS_001}
+     * の畳み込みが必須（欠くと閲覧不可と不在の応答差で記事の存在が漏れる）。</p>
      *
      * <p><b>注意（本文メディアの解決）</b>: 本メソッドは現状どの Controller からも呼ばれていない
      * （呼び出し元はテストのみ）ため、本文メディアの署名 URL 解決を結線していない。

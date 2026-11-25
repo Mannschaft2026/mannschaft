@@ -216,10 +216,20 @@ class BlogPostDetailExistenceOracleContractIT extends AbstractMySqlIntegrationTe
         }
 
         @Test
-        @DisplayName("C2/C3/C9: 非作者のメンバーが下書きを開いても、不在 slug と応答全体が等価")
-        void C2_C3_下書き_非作者は不在と等価() throws Exception {
+        @DisplayName("C2/C3/C9: チーム外の非メンバーが下書きを開いても、不在 slug と応答全体が等価")
+        void C2_C3_下書き_非メンバーは不在と等価() throws Exception {
             Snapshot invisible = snapshot(get(DETAIL, teamDraftSlug).param("teamId", teamSlug), outsiderId);
             Snapshot absent = snapshot(get(DETAIL, "no-such-" + key).param("teamId", teamSlug), outsiderId);
+
+            assertNotFound(absent);
+            assertThat(invisible).isEqualTo(absent);
+        }
+
+        @Test
+        @DisplayName("C2/C3/C9: 作者でないチームメンバーが下書きを開いても、不在 slug と応答全体が等価")
+        void C2_C3_下書き_作者でないメンバーは不在と等価() throws Exception {
+            Snapshot invisible = snapshot(get(DETAIL, teamDraftSlug).param("teamId", teamSlug), memberId);
+            Snapshot absent = snapshot(get(DETAIL, "no-such-" + key).param("teamId", teamSlug), memberId);
 
             assertNotFound(absent);
             assertThat(invisible).isEqualTo(absent);
