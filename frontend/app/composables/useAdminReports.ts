@@ -34,17 +34,26 @@ export function useAdminReports() {
   const showEscalateDialog = ref(false)
   const escalateForm = ref<EscalateForm>({ reason: '', guidelineSection: '' })
 
-  // ステータス絞り込みは提供しない。
-  // 一覧の実体である BE の `SystemAdminReportController#getAllReports`
-  // （`/api/v1/system-admin/reports`）が受け取るのは `page` / `size` のみで、
-  // status 条件を解釈しないため、UI だけ置いても「操作できるが何も変わらない」
-  // 部品になってしまう（CMP-260912-1823 の検分 P2）。
-  // 復活させるには BE 側に status パラメータを足す必要がある。
+  // ステータス絞り込み。BE の `GET /api/v1/system-admin/reports?status=` が解釈する（CMP-260916-0053）。
+  // null は全ステータス。
+  const statusFilter = ref<string | null>(null)
+  const statusOptions = [
+    { value: 'PENDING', labelKey: 'admin_report.stats.pending' },
+    { value: 'REVIEWING', labelKey: 'admin_report.stats.reviewing' },
+    { value: 'ESCALATED', labelKey: 'admin_report.stats.escalated' },
+    { value: 'RESOLVED', labelKey: 'admin_report.stats.resolved' },
+    { value: 'DISMISSED', labelKey: 'admin_report.stats.dismissed' },
+  ]
+
   async function load() {
     loading.value = true
     try {
       const [reportsRes, statsRes] = await Promise.all([
-        adminReportApi.getReports({ page: page.value, size: 20 }),
+        adminReportApi.getReports({
+          page: page.value,
+          size: 20,
+          status: statusFilter.value ?? undefined,
+        }),
         adminReportApi.getReportStats(),
       ])
       reports.value = reportsRes.data
@@ -179,6 +188,11 @@ export function useAdminReports() {
     }
   }
 
+  function onStatusFilterChange() {
+    page.value = 0
+    load()
+  }
+
   function onPage(event: { page: number }) {
     page.value = event.page
     load()
@@ -212,6 +226,9 @@ export function useAdminReports() {
     hideContent,
     restoreContent,
     statusSeverity,
+    statusFilter,
+    statusOptions,
+    onStatusFilterChange,
     onPage,
   }
 }

@@ -20,6 +20,11 @@ public interface ContentReportRepository extends JpaRepository<ContentReportEnti
     List<ContentReportEntity> findByStatusOrderByCreatedAtAsc(ReportStatus status, Pageable pageable);
 
     /**
+     * スコープを問わずステータス別に通報一覧をページング取得する（システム管理者用）。
+     */
+    Page<ContentReportEntity> findByStatus(ReportStatus status, Pageable pageable);
+
+    /**
      * スコープ別・ステータス別に通報一覧をページング取得する。
      */
     Page<ContentReportEntity> findByScopeTypeAndScopeIdAndStatus(
