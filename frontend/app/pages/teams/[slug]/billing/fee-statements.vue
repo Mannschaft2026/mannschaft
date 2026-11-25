@@ -15,6 +15,7 @@ const teamId = ref<number | null>(null)
 const { resolveScopeId } = useActivityScopeId()
 const { getFeeStatement, exportFeeStatementPdf } = usePaymentApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug.value)
 
@@ -50,10 +51,12 @@ async function load() {
     const res = await getFeeStatement(teamId.value, selectedPeriod.value)
     statement.value = res.data
   } catch (err: unknown) {
-    // 404 = 対象月のデータなし、それ以外はエラー通知
+    // 404 = 対象月のデータなし（スコープの不存在ではない）、403 = 共通の「見つかりません」（CMP-261125-1108）、それ以外はエラー通知
     const status = (err as { status?: number })?.status
     if (status === 404) {
       noData.value = true
+    } else if (markIfDenied(err)) {
+      return
     } else {
       notification.error(t('payment.feeStatements.loadError'))
     }
