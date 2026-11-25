@@ -1125,6 +1125,8 @@ WHERE o.archived_at IS NULL
    - membership ドメイン `MembershipService`: 当該チームの在籍サポーター全員の `left_at = 現在時刻`・`leave_reason = 'REMOVED'` を一括 UPDATE し、対象 user_id を返す。**イベントは人数に比例させず一括イベント `MembershipsBulkEndedEvent(scopeType=TEAM, scopeId, userIds, reason=MEMBERS_ONLY_TRANSITION)` を 1 件発行する**（精査 M-4）。既存の `MembershipChangedEvent` の後始末リスナー（チャンネルメンバー・権限キャッシュ・サポーター数キャッシュの無効化 CMP-261004-1942 等）は、一括イベントを受けるアダプタ（AFTER_COMMIT・非同期・1000 人単位）から同じ処理を呼ぶ。同期で人数分のイベントを発行しない。
    - role ドメイン `RoleService`: 当該チームの GUEST 行を一括 DELETE（最後の ADMIN 保護の対象外。GUEST のみ）。GUEST は在籍を持たないため `MembershipChangedEvent` は発行せず、チーム単位の権限キャッシュ無効化を 1 回だけ行う。
    - filesharing ドメイン `SharedFileLinkService`: 当該チームのフォルダにあるファイルの共有リンクを一括で `is_active = FALSE` にする（F00 §20.5.3。精査 S-2）。
+   - signage ドメイン `SignageAccessTokenService`: 当該チームのサイネージ画面（`signage_screens.scope_type = 'TEAM'`）のアクセストークンを一括で `is_active = FALSE` にする（期限なしトークンを含む。F00 §20.5.3）。
+   - コミット直後（同期・AFTER_COMMIT の最初）に、WebSocket の**対象チームに帰属する全 destination の全購読者**（外した人だけでなく、匿名・部外者を含む）を再認可し、不合格の購読を解除する（F00 §20.5.5）。切断が終わるまでの配信は送出側のガードで止まるため、後始末の遅れで本文が届くことはない。
    - supporter ドメイン `SupporterService`: `supporter_applications` の当該チーム PENDING を一括で REJECTED にする。
    - role ドメイン `InviteService`: 当該チームの SUPPORTER ロールで `revoked_at IS NULL` のトークンに `revoked_at = 現在時刻` を一括設定する（MEMBER ロールのトークンは触らない）。
 6. 通知: `TeamMembersOnlyTransitionedEvent`（外した user_id 一覧・ゲスト user_id 一覧・チーム ID）を `@TransactionalEventListener(phase = AFTER_COMMIT)` で notification ドメインが受け、外した各人に 1 通ずつ通知（BE メッセージ `notification.team.membersOnlyRemoved.*`、受信者本人のスコープで保存）を非同期で作る。chat ドメインも同じイベントで、外した利用者のチーム系チャンネルの既存 WebSocket 購読を切る（F00 §20.5.5）。ロールバック時は通知しない。1000 件単位で分割投入する。
@@ -1185,12 +1187,14 @@ WHERE o.archived_at IS NULL
 - **AC-0159-50**: 事前問い合わせ `visibility=MEMBERS_AND_ABOVE` を公開チームの ADMIN が呼ぶと 200、サポーター 3・ゲスト 1・PENDING 2・SUPPORTER トークン 1（MEMBER トークン 1 は数えない）のフィクスチャで各人数が一致し `requiresConfirmation=true`。サポーター 0 人でも `requiresConfirmation=true`・各 0。既に非公開・または公開側を指定したときは `requiresConfirmation=false`・各 0。副作用が無い（呼ぶ前後で DB 不変）。
 - **AC-0159-51**: 事前問い合わせを MEMBER・サポーター・部外者・他チームの ADMIN が呼ぶと `PATCH` の拒否と同一応答。不在 slug は 404 `TEAM_001`。不正な `visibility` は 400 `COMMON_001`。
 - **AC-0159-52**: `confirmSupporterRemoval` 無し・false で公開→非公開の `PATCH` は 409 `TEAM_074`、公開範囲・在籍・申請・トークン・他の更新項目すべて不変。
-- **AC-0159-53**: `confirmSupporterRemoval=true` なら 200。公開範囲が `MEMBERS_AND_ABOVE`、サポーター全員が `left_at` 設定・`leave_reason='REMOVED'`、ゲスト行が削除、PENDING は REJECTED、SUPPORTER トークンは `revoked_at` 設定、MEMBER トークン・MEMBER/ADMIN の在籍は不変。そのチームのファイルの共有リンクが `is_active = FALSE`（他チームのリンクは不変）。`supporterEnabled` の値は不変。`MembershipsBulkEndedEvent` は 1 件だけ発行される（サポーター 3 人でも 3 件にならない）。`visibilityTransition` の各数が実数と一致。
+- **AC-0159-53**: `confirmSupporterRemoval=true` なら 200。公開範囲が `MEMBERS_AND_ABOVE`、サポーター全員が `left_at` 設定・`leave_reason='REMOVED'`、ゲスト行が削除、PENDING は REJECTED、SUPPORTER トークンは `revoked_at` 設定、MEMBER トークン・MEMBER/ADMIN の在籍は不変。そのチームのサイネージのアクセストークン（期限なしを含む）が `is_active = FALSE`。そのチームのファイルの共有リンクが `is_active = FALSE`（他チームのリンクは不変）。`supporterEnabled` の値は不変。`MembershipsBulkEndedEvent` は 1 件だけ発行される（サポーター 3 人でも 3 件にならない）。`visibilityTransition` の各数が実数と一致。
 - **AC-0159-54**: コミット後、外したサポーター・ゲストの各人に通知が 1 通ずつ届く（ほかの人には届かない）。後始末の途中で例外を起こすと全体がロールバックされ（公開範囲も元のまま）、通知は 0 通（**AC-0159-55**）。
 - **AC-0159-56**: 同じ `version` で 2 回送ると 2 回目は 409、通知は 1 人 1 通のまま。
 - **AC-0159-57**: 非公開チームの名前だけを更新しても確認不要・後始末なし。
 - **AC-0159-58**: 非公開→公開に戻しても確認不要、外した人・却下した申請・無効化したトークンは戻らない。
 - **AC-0159-59**: 事前問い合わせの後にサポーターが 1 人増えてから了承しても、その人も外れ、`visibilityTransition.removedSupporters` は増えた後の実数。
-- **AC-0159-60**: FE のチーム設定で「メンバー限定」を選んで保存すると確認ダイアログが人数つきで出る。キャンセルで `PATCH` が送られない（ネットワーク記録で確認）。了承でトーストに実数。設定画面を MEMBER・サポーター・部外者が URL 直打ちすると既存の拒否表示。
+- **AC-0159-60**: `/teams/{slug}/info` で ADMIN・DEPUTY_ADMIN には `team-visibility-select` と `team-visibility-save` が出て、MEMBER・サポーター・チームに ADMIN 割当の無い SYSTEM_ADMIN には出ない。「メンバー限定」を選んで保存すると `team-visibility-confirm-dialog` が人数つき（`team-visibility-confirm-counts`）で出る。キャンセルで `PATCH` が送られない（ネットワーク記録）。了承で `PATCH` が `confirmSupporterRemoval: true` と事前問い合わせの `version` で送られ、応答の `TeamResponse` で画面の公開範囲表示が再取得なしに「メンバー限定」へ変わり、トーストに実数が出る。選択肢の表示が 6 言語とも「メンバー限定」相当の訳になっている。
+- **AC-0159-60c**: 別タブで先にチーム名を更新してから保存すると 409（楽観ロック）になり、`conflictReload` のトーストが出て、事前問い合わせからやり直せる（古い version で再送しない）。`TEAM_074` の応答を模した場合は `confirmRequired` のトースト。
+- **AC-0159-60d**: 非公開チームの `/teams/{slug}/invites` のロール選択に SUPPORTER が出ない。`/teams/{slug}/members` のロール変更の選択肢に SUPPORTER・GUEST が出ない。API を直接叩いた場合は 403 `TEAM_073` がトーストに出る。公開チームでは従来どおり出る。
 - **AC-0159-60b**: 人数がすべて 0 の事前問い合わせ結果では確認ダイアログが「外れる人はいません」（`bodyNone`）になり、了承しないと `PATCH` は送られない。非公開の間、サポーター設定のスイッチは操作不可で `supporterSettingInactive` が出る。
 - **AC-0159-61**: 外されたサポーターがチーム画面・配下画面を URL 直打ちすると F00 §20.8 の理由表示。「自分のチーム」一覧・フォロー中一覧にそのチームが出ない。サポーター数の表示が 0 になる（キャッシュ無効化）。

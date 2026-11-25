@@ -1514,7 +1514,7 @@ JSON は既存規約どおり camelCase、ページングなし。数値はす�
 |---|---|---|---|
 | `confirmSupporterRemoval` | Boolean | 条件付き | `visibility` を `MEMBERS_AND_ABOVE` 以外から `MEMBERS_AND_ABOVE` に変えるときは `true` 必須。未指定・false なら 409 `TEAM_074`（何も変更しない）。それ以外の変更では無視する |
 
-- 遷移時の応答（200）は既存のチーム詳細に、次の `visibilityTransition` を追加する（遷移しなかった更新では `null`）。
+- 応答（200）は既存どおり `ApiResponse<TeamResponse>`。`TeamResponse` の**直下**に `visibilityTransition`（オブジェクト、null 可）を追加する。遷移した `PATCH` の応答でだけ値が入り、遷移しなかった `PATCH`・`GET /teams/{slug}` ほか全ての取得系では `null`。FE の型 `types/team.ts` の `TeamResponse` と生成型（`npm run generate:types`）を更新する。
 
 | フィールド | 型 | null | 説明 |
 |---|---|---|---|
@@ -1554,12 +1554,26 @@ JSON は既存規約どおり camelCase、ページングなし。数値はす�
 | `TEAM_073` | 403 | メンバー限定のチームにはサポーターを追加できません | 上表の拒否 |
 | `TEAM_074` | 409 | 公開範囲をメンバー限定にするには、サポーターとゲストが外れることの確認が必要です | `confirmSupporterRemoval` 未指定 |
 
-6 言語（`messages_{ja,en,zh,ko,es,de}.properties`）に登録し、`GlobalExceptionHandler` の status 表に追加する。
+6 言語（`messages_{ja,en,zh,ko,es,de}.properties`）に登録し、`GlobalExceptionHandler` の status 表の `TEAM_072` の行（F01.2.1 §11 の並び）の直後に `Map.entry("TEAM_073", HttpStatus.FORBIDDEN)` と `Map.entry("TEAM_074", HttpStatus.CONFLICT)` を、理由コメント（CMP-261124-0159）付きで追加する。
 
-### FE（チーム設定の公開範囲）
+### FE（公開範囲を変える画面。精査で新設を決定）
 
-- 公開範囲を「メンバー限定」に変えて保存する前に事前問い合わせを呼び、確認ダイアログに人数を出す。キャンセルなら `PATCH` を送らない。了承時のみ `confirmSupporterRemoval: true` と事前問い合わせの `version` を送る。
-- 保存後、応答の `visibilityTransition` の実数をトーストで出す。
+現状、チーム作成後に公開範囲を変える画面は無い（作成時の `EntityCreateDialog.vue` のみ。`TeamDetailInfo.vue` は表示だけ、`admin/settings.vue` にも無い）。そこで **`/teams/{slug}/info`（`TeamDetailInfo.vue`）の管理者欄に、公開範囲の Select と保存ボタンを新設**する。
+
+- **表示条件**: BE の `PATCH /teams/{slug}` の認可（`TeamController#updateTeam` の `checkAdminOrAbove`＝そのチームの `user_roles` が ADMIN / DEPUTY_ADMIN）と揃え、`useRoleAccess()` の `isScopeAdmin || roleName === 'DEPUTY_ADMIN'` が真のときだけ出す。現在の `isAdmin` prop（SYSTEM_ADMIN も真）では DEPUTY_ADMIN に出ず、ADMIN 割当の無い SYSTEM_ADMIN に出てしまうため、この条件を新しい prop `canEditVisibility` で渡す。
+- **選択肢**: `PUBLIC` / `GUESTS_AND_ABOVE` / `SUPPORTERS_AND_ABOVE` / `MEMBERS_AND_ABOVE`。表示は `team_visibility.*`（下の文言変更後）。初期値は現在値。
+- **保存の流れ**: 現在値と同じなら保存ボタンは無効。変更して保存を押すと、まず事前問い合わせを呼ぶ。`requiresConfirmation=true` なら確認ダイアログ（人数つき。0 人なら `bodyNone`）を出し、キャンセルなら `PATCH` を送らない。了承で `{visibility, confirmSupporterRemoval: true, version: 事前問い合わせの version}` を送る。`requiresConfirmation=false` なら確認なしで `{visibility, version}` を送る。
+- **応答の扱い**: 200 なら応答の `TeamResponse` で親シェルの `team` を**差し替える**（`useTeamShellContext` のミューテータ経由。再取得しない）。`visibilityTransition` が非 null なら実数をトースト（`transitionDone`）で出す。
+- **409 の分岐**: `error.code` が `TEAM_074` ならトースト `team_visibility.confirmRequired`（通常は起きない。確認を出し直す）。それ以外の 409（楽観ロック競合）はトースト `team_visibility.conflictReload`「他の人がチームを更新しました。最新の状態で確認し直してください」を出し、チームを再取得して**事前問い合わせからやり直す**（古い version で再送しない）。
+- **サポーター機能のスイッチ**: 従来どおり表示のみ（編集 UI は作らない）。非公開の間は「有効／無効」の横に `supporterSettingInactive` を添える。
+- **data-testid**: `team-visibility-select`・`team-visibility-save`・`team-visibility-confirm-dialog`・`team-visibility-confirm-ok`・`team-visibility-confirm-cancel`・`team-visibility-confirm-counts`・`team-supporter-setting-inactive`。
+- **公開範囲の選択肢の文言**: `MEMBERS_AND_ABOVE` の表示を 6 言語とも「メンバー限定」に変える（`common.json` の `team_visibility.MEMBERS_AND_ABOVE` と `scopeLabels.visibility.MEMBERS_AND_ABOVE`。ja「メンバー限定」・en「Members only」・zh「仅限成员」・ko「멤버 전용」・es「Solo miembros」・de「Nur Mitglieder」）。用語の正本 F00.5 §2.6 に合わせる。`file_sharing.json`・`tournament.json` の同名キーは別機能の段（ファイル・大会）なので変えない。
+
+### FE（招待・メンバー管理での SUPPORTER / GUEST）
+
+- `InviteTokenList.vue`（`/teams/{slug}/invites`）のロール選択: 非公開チームでは SUPPORTER の選択肢を**出さない**（MEMBER のみ）。既定値は MEMBER のまま。説明文に `supporterInviteDisabled` を出す。BE は 403 `TEAM_073` で拒否し、FE はそのメッセージをトーストに出す。
+- 発行済みの SUPPORTER 招待は非公開化で無効化されるため、一覧では既存の「無効」表示になる。
+- `MemberTable.vue`（`/teams/{slug}/members`）のロール変更: 非公開チームでは変更先に SUPPORTER・GUEST を出さない。BE が `TEAM_073` を返した場合はトーストに出し、表は変えない。
 
 | i18n キー（`common.json`、6 言語） | ja |
 |---|---|
@@ -1568,6 +1582,10 @@ JSON は既存規約どおり camelCase、ページングなし。数値はす�
 | `team_visibility.confirmMembersOnly.bodyNone` | 外れる人はいません。承認待ちのサポーター申請とサポーター招待もありません。公開範囲を「メンバー限定」にしますか。 |
 | `team_visibility.confirmMembersOnly.confirm` | 外して変更する |
 | `team_visibility.supporterSettingInactive` | メンバー限定のチームではサポーターを受け付けません（設定は公開範囲を戻したときに使われます） |
+| `team_visibility.save` | 公開範囲を保存 |
+| `team_visibility.confirmRequired` | 公開範囲を「メンバー限定」にするには確認が必要です。もう一度保存してください |
+| `team_visibility.conflictReload` | 他の人がチームを更新しました。最新の状態で確認し直してください |
+| `team_visibility.MEMBERS_AND_ABOVE`（変更） | メンバー限定 |
 | `team_visibility.confirmMembersOnly.cancel` | やめる |
 | `team_visibility.transitionDone` | 公開範囲を変更しました（サポーター {supporters} 人・ゲスト {guests} 人を外しました） |
 | `team_visibility.supporterInviteDisabled` | メンバー限定のチームではサポーター招待を発行できません |
