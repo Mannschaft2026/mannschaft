@@ -396,13 +396,13 @@ class BlogPostServiceAdditionalTest {
                     TEAM_ID_STR, null, null, "日本語記事タイトル", null, "本文",
                     null, null, null, null, null, null, null, null, null, null, null);
             BlogPostEntity savedEntity = createPostEntity(PostStatus.DRAFT);
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(savedEntity);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(savedEntity);
             given(cmsMapper.toBlogPostResponse(savedEntity)).willReturn(createPostResponse());
 
             BlogPostResponse result = service.createPost(USER_ID, request);
 
             assertThat(result).isNotNull();
-            verify(postRepository).save(any(BlogPostEntity.class));
+            verify(postRepository).saveAndFlush(any(BlogPostEntity.class));
         }
 
         @Test
@@ -413,7 +413,7 @@ class BlogPostServiceAdditionalTest {
                     "excerpt", "url", "ANNOUNCEMENT", "PUBLIC", "IMPORTANT",
                     null, null, null, null, null, null);
             BlogPostEntity savedEntity = createPostEntity(PostStatus.DRAFT);
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(savedEntity);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(savedEntity);
             given(cmsMapper.toBlogPostResponse(savedEntity)).willReturn(createPostResponse());
 
             BlogPostResponse result = service.createPost(USER_ID, request);
@@ -439,7 +439,7 @@ class BlogPostServiceAdditionalTest {
                     new com.mannschaft.app.cms.dto.UpdateBlogPostRequest(
                             "更新タイトル", null, "更新本文", null, null, null, null,
                             List.of(3L, 4L), null, null, null, null, null);
-            given(postRepository.save(entity)).willReturn(entity);
+            given(postRepository.saveAndFlush(entity)).willReturn(entity);
             given(cmsMapper.toBlogPostResponse(entity)).willReturn(createPostResponse());
 
             service.updatePost(POST_ID, USER_ID, request);
@@ -823,7 +823,7 @@ class BlogPostServiceAdditionalTest {
         void 複製_タグあり_タグコピー() {
             BlogPostEntity original = createPostEntity(PostStatus.PUBLISHED);
             given(postRepository.findById(POST_ID)).willReturn(Optional.of(original));
-            given(postRepository.save(any(BlogPostEntity.class))).willReturn(original);
+            given(postRepository.saveAndFlush(any(BlogPostEntity.class))).willReturn(original);
             BlogPostTagEntity tag = new BlogPostTagEntity(POST_ID, 5L);
             given(postTagRepository.findByBlogPostId(POST_ID)).willReturn(List.of(tag));
             given(cmsMapper.toBlogPostResponse(any())).willReturn(createPostResponse());
