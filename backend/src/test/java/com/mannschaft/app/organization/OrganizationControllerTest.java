@@ -565,6 +565,25 @@ class OrganizationControllerTest {
     }
 
     @Test
+    @DisplayName("getMyPermissions: scopeAdminOrDeputy は AccessControlService#isAdminOrAbove の結果を JSON で返す（CMP-261124-0159 PR-R）")
+    void getMyPermissions_scopeAdminOrDeputy_serialized() throws Exception {
+        given(organizationService.resolveOrgId(ORG_SLUG)).willReturn(ORG_ID);
+        given(roleService.resolveEffectivePermissions(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(List.of());
+        given(accessControlService.getRoleName(USER_ID, ORG_ID, "ORGANIZATION")).willReturn("SYSTEM_ADMIN");
+        given(accessControlService.isAdminOrAbove(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true, false);
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        com.fasterxml.jackson.databind.JsonNode first =
+                mapper.valueToTree(controller.getMyPermissions(ORG_SLUG).getBody().getData());
+        com.fasterxml.jackson.databind.JsonNode second =
+                mapper.valueToTree(controller.getMyPermissions(ORG_SLUG).getBody().getData());
+
+        assertThat(first.path("scopeAdminOrDeputy").isBoolean()).as("scopeAdminOrDeputy が JSON に出る").isTrue();
+        assertThat(first.path("scopeAdminOrDeputy").asBoolean()).isTrue();
+        assertThat(second.path("scopeAdminOrDeputy").asBoolean()).isFalse();
+    }
+
+    @Test
     @DisplayName("leaveOrganization: 204 No Content")
     void leaveOrganization_204() {
         given(organizationService.resolveOrgId(ORG_SLUG)).willReturn(ORG_ID);
