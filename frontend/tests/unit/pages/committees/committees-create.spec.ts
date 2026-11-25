@@ -167,7 +167,7 @@ describe('pages/organizations/[slug]/committees.vue — 委員会の設立フォ
     expect(createButton().disabled).toBe(true)
   })
 
-  it('CC-006: GUEST と displayName=null は委員長候補から外れる', async () => {
+  it('CC-006: GUEST・SUPPORTER・displayName=null は委員長候補から外れる', async () => {
     getMembers.mockResolvedValue({
       data: [
         ...members,
@@ -180,7 +180,7 @@ describe('pages/organizations/[slug]/committees.vue — 委員会の設立フォ
     const wrapper = await openDialog()
     const chair = selectByTestId(wrapper, 'committee-create-chair')
     const ids = (chair!.props('options') as Array<{ userId: number }>).map((o) => o.userId)
-    expect(ids).toEqual([1, 2, 5])
+    expect(ids).toEqual([1, 2])
   })
 
   it('CC-007: 表示欄に対応しない fieldErrors だけの 400 は handleApiError に回す', async () => {

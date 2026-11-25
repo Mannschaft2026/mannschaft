@@ -16,6 +16,8 @@ const PURPOSE_TAG_LABEL_KEYS = {
 const PURPOSE_TAGS = Object.keys(PURPOSE_TAG_LABEL_KEYS) as PurposeTag[]
 /** 委員長候補を全件取得するときの 1 ページの件数。 */
 const MEMBER_PAGE_SIZE = 100
+/** 初代委員長にできる組織ロール（許可リスト方式）。 */
+const CHAIR_ELIGIBLE_ROLES: MemberResponse['roleName'][] = ['ADMIN', 'DEPUTY_ADMIN', 'MEMBER']
 /** 作成フォームでエラーを表示できる BE フィールド名。 */
 const DISPLAYED_FIELDS = ['name', 'description', 'purposeTag', 'initialChairUserId']
 
@@ -81,8 +83,8 @@ async function loadChairCandidates() {
       if (current >= res.meta.totalPages || res.data.length === 0) break
     }
     if (requestId !== chairRequestId) return
-    // memberships 行を持たない GUEST は BE の checkMembership で 403 になる。退会者（displayName=null）は空ラベルになる。
-    all = all.filter((m) => m.roleName !== 'GUEST' && m.displayName != null)
+    // 初代委員長は ADMIN / DEPUTY_ADMIN / MEMBER に限る（SUPPORTER・GUEST は不可）。退会者（displayName=null）は空ラベルになる。
+    all = all.filter((m) => CHAIR_ELIGIBLE_ROLES.includes(m.roleName) && m.displayName != null)
     chairCandidates.value = all
     const me = authStore.currentUser?.id
     if (createForm.value.initialChairUserId == null && me != null && all.some((m) => m.userId === me)) {
