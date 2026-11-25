@@ -76,6 +76,19 @@ async function mounted(query: string) {
 
 describe('Blog source linkの正規scope query（先行試練、未実測）', () => {
  it.each([
+  ['slug形teamId', '?teamId=synthetic-team', { teamId: 'synthetic-team' }],
+  ['slug形organizationId', '?organizationId=synthetic-org', { organizationId: 'synthetic-org' }],
+ ])('C10: %sを弾かずBEへ渡す（CMP-261008-1701）', async (_name, query, expected) => {
+  const wrapper = await mounted(query)
+  await vi.waitFor(() => {
+   expect(calls(endpoint)).toHaveLength(1)
+   expect(postQuery()).toEqual(expected)
+   expect(wrapper.text()).toContain(post.content?.title)
+  })
+  expect(external.error).not.toHaveBeenCalled()
+ })
+
+ it.each([
   { name: '既GLOBAL slug', query: '', expected: {} },
   { name: 'TEAM currentmeta', query: '?teamId=41', expected: { teamId: '41' } },
   { name: 'ORGANIZATION currentmeta', query: '?organizationId=42', expected: { organizationId: '42' } },
@@ -97,12 +110,9 @@ describe('Blog source linkの正規scope query（先行試練、未実測）', (
   ['TEAMとORGの併記', '?teamId=41&organizationId=42'],
   ['TEAMとuserの併記', '?teamId=41&userId=43'],
   ['ORGとuserの併記', '?organizationId=42&userId=43'],
-  ['0', '?teamId=0'],
-  ['負数', '?organizationId=-1'],
+  // CMP-261008-1701 C10: teamId/organizationId は slug・数値の双方を BE が解決する（BlogScopeAccessGuard）。
+  // FE は数値以外を弾かない（0・負数・指数・小数・Long 範囲超過の判定は BE が CMS_001 に畳む）。
   ['先行0', '?userId=01'],
-  ['指数', '?teamId=1e3'],
-  ['小数', '?teamId=1.5'],
-  ['Long範囲超過', '?organizationId=9223372036854775808'],
   ['空', '?teamId='],
   ['空白', '?userId=%20'],
   ['scope繰返しarray', '?teamId=41&teamId=42'],
@@ -112,7 +122,10 @@ describe('Blog source linkの正規scope query（先行試練、未実測）', (
   await vi.waitFor(() => {
    expect(calls(endpoint)).toHaveLength(0)
    expect(calls('/api/v1/content-gates/check')).toHaveLength(0)
-   expect(external.error).toHaveBeenCalledTimes(1)
+   // CMP-261008-1701 C11: 不正 query は CMS_001 と同じ不在表示にし、code を持たない汎用（error.unknown）トーストにしない。
+   for (const [error] of external.error.mock.calls) {
+    expect((error as { data?: { error?: { code?: unknown } } } | undefined)?.data?.error?.code).toBe('CMS_001')
+   }
    expect(wrapper.text()).not.toContain(post.content?.title)
   })
  })
