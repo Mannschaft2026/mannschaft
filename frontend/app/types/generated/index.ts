@@ -13302,6 +13302,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/invite-reissue-requests/{id}/reissue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * チームの再招待依頼に再招待する（招待権限者）
+         * @description 依頼者宛ての 1 回限り・7 日の招待を発行する。在籍済みなら ALREADY_MEMBER
+         */
+        post: operations["reissueForTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/invite-reissue-requests/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** チームの再招待依頼を見送る（招待権限者） */
+        post: operations["declineForTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/follow": {
         parameters: {
             query?: never;
@@ -16919,6 +16956,43 @@ export interface paths {
         put?: never;
         /** 招待トークン作成 */
         post: operations["createInviteToken_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{slug}/invite-reissue-requests/{id}/reissue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 組織の再招待依頼に再招待する（招待権限者）
+         * @description 依頼者宛ての 1 回限り・7 日の招待を発行する。在籍済みなら ALREADY_MEMBER
+         */
+        post: operations["reissueForOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{slug}/invite-reissue-requests/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 組織の再招待依頼を見送る（招待権限者） */
+        post: operations["declineForOrganization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -37601,6 +37675,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/invite-reissue-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * チームの再招待依頼一覧（招待権限者）
+         * @description 古い順。size は最大 50。閉鎖中のチームは 0 件
+         */
+        get: operations["listForTeam_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/followers": {
         parameters: {
             query?: never;
@@ -41460,6 +41554,26 @@ export interface paths {
         };
         /** 自分の有効権限取得 */
         get: operations["getMyPermissions_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{slug}/invite-reissue-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 組織の再招待依頼一覧（招待権限者）
+         * @description 古い順。size は最大 50。閉鎖中の組織は 0 件
+         */
+        get: operations["listForOrganization_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -64737,6 +64851,14 @@ export interface components {
             /** Format: int32 */
             usedCount?: number;
         };
+        ApiResponseInviteReissueResultResponse: {
+            data?: components["schemas"]["InviteReissueResultResponse"];
+        };
+        InviteReissueResultResponse: {
+            /** Format: date-time */
+            expiresAt?: string;
+            status?: string;
+        };
         ApiResponseFollowStatusResponse: {
             data?: components["schemas"]["FollowStatusResponse"];
         };
@@ -70514,52 +70636,8 @@ export interface components {
             /** Format: int64 */
             ticketTypeId: number;
         };
-        ApiResponseEventInviteTokenIssuedResponse: {
-            data?: components["schemas"]["EventInviteTokenIssuedResponse"];
-        };
-        EventInviteTokenIssuedResponse: {
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: int64 */
-            createdBy?: number;
-            /** Format: int64 */
-            eventId?: number;
-            /** Format: date-time */
-            expiresAt?: string;
-            /** Format: int64 */
-            id?: number;
-            isActive?: boolean;
-            label?: string;
-            /** Format: int32 */
-            maxUses?: number;
-            token?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-            /** Format: int32 */
-            usedCount?: number;
-        };
-        EventInviteTokenResponse: {
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: int64 */
-            createdBy?: number;
-            /** Format: int64 */
-            eventId?: number;
-            /** Format: date-time */
-            expiresAt?: string;
-            /** Format: int64 */
-            id?: number;
-            isActive?: boolean;
-            label?: string;
-            /** Format: int32 */
-            maxUses?: number;
-            /** Format: date-time */
-            updatedAt?: string;
-            /** Format: int32 */
-            usedCount?: number;
-        };
-        ApiResponseEventInviteTokenResponse: {
-            data?: components["schemas"]["EventInviteTokenResponse"];
+        ApiResponseInviteTokenResponse: {
+            data?: components["schemas"]["InviteTokenResponse"];
         };
         CreateEventDelegationRequest: {
             /** Format: int64 */
@@ -79108,6 +79186,36 @@ export interface components {
         ApiResponseListInviteTokenResponse: {
             data?: components["schemas"]["InviteTokenResponse"][];
         };
+        ApiResponsePageInviteReissueRequestResponse: {
+            data?: components["schemas"]["PageInviteReissueRequestResponse"];
+        };
+        InviteReissueRequestResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            requestedAt?: string;
+            requesterAvatarUrl?: string;
+            requesterDisplayName?: string;
+            roleName?: string;
+        };
+        PageInviteReissueRequestResponse: {
+            content?: components["schemas"]["InviteReissueRequestResponse"][];
+            empty?: boolean;
+            first?: boolean;
+            last?: boolean;
+            /** Format: int32 */
+            number?: number;
+            /** Format: int32 */
+            numberOfElements?: number;
+            pageable?: components["schemas"]["PageableObject"];
+            /** Format: int32 */
+            size?: number;
+            sort?: components["schemas"]["SortObject"];
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
         ApiResponseListTeamCustomFieldResponse: {
             data?: components["schemas"]["TeamCustomFieldResponse"][];
         };
@@ -85240,9 +85348,6 @@ export interface components {
         PagedResponseRegistrationResponse: {
             data?: components["schemas"]["RegistrationResponse"][];
             meta?: components["schemas"]["PageMeta"];
-        };
-        ApiResponseListEventInviteTokenResponse: {
-            data?: components["schemas"]["EventInviteTokenResponse"][];
         };
         ApiResponseEventDelegationListResponse: {
             data?: components["schemas"]["EventDelegationListResponse"];
@@ -118744,6 +118849,52 @@ export interface operations {
             };
         };
     };
+    reissueForTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseInviteReissueResultResponse"];
+                };
+            };
+        };
+    };
+    declineForTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseInviteReissueResultResponse"];
+                };
+            };
+        };
+    };
     followTeam: {
         parameters: {
             query?: never;
@@ -125543,6 +125694,52 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseInviteTokenIssuedResponse"];
+                };
+            };
+        };
+    };
+    reissueForOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseInviteReissueResultResponse"];
+                };
+            };
+        };
+    };
+    declineForOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseInviteReissueResultResponse"];
                 };
             };
         };
@@ -137157,7 +137354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListEventInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseListInviteTokenResponse"];
                 };
             };
         };
@@ -137183,7 +137380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEventInviteTokenIssuedResponse"];
+                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
                 };
             };
         };
@@ -137206,7 +137403,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseEventInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
                 };
             };
         };
@@ -162912,6 +163109,31 @@ export interface operations {
             };
         };
     };
+    listForTeam_3: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePageInviteReissueRequestResponse"];
+                };
+            };
+        };
+    };
     getTeamFollowers: {
         parameters: {
             query?: {
@@ -168193,6 +168415,31 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseEffectivePermissionsResponse"];
+                };
+            };
+        };
+    };
+    listForOrganization_1: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePageInviteReissueRequestResponse"];
                 };
             };
         };
