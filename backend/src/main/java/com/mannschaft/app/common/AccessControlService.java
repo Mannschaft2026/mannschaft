@@ -29,35 +29,6 @@ public interface AccessControlService {
     /** スコープに在籍するメンバーか判定する。 */
     boolean isMember(Long userId, Long scopeId, String scopeType);
 
-    /**
-     * スコープの中身を読み取る共通の門（CMP-261124-0159・F00 §20.3）。
-     * {@link #isMember} が真、かつ TEAM の非公開チームでは {@link #isRegularMemberOrAbove} も真でなければ、
-     * {@link #checkMembership} の非所属拒否と同一の 403（COMMON_002）。TEAM 以外は {@link #checkMembership} と同じ。
-     */
-    void checkScopeContentAccess(Long userId, Long scopeId, String scopeType);
-
-    /** {@link #checkScopeContentAccess} の真偽版（例外を投げない）。 */
-    boolean canAccessScopeContent(Long userId, Long scopeId, String scopeType);
-
-    /**
-     * 複数チームの中身の読み取り可否を一括判定し、読めるチーム ID だけを返す（{@link #canAccessScopeContent} の集合版）。
-     * 在籍・ロールの一括取得と非公開チーム ID の一括取得で済ませ、チーム数に比例した問い合わせをしない。
-     */
-    Set<Long> filterAccessibleTeamIds(Long userId, java.util.Collection<Long> teamIds);
-
-    /**
-     * 中身を返さない書き込み用の在籍確認。判定は {@link #checkMembership} と同一
-     * （呼び出し箇所の意図を明示し、番人で読み取りと区別するための別名。F00 §20.5.1）。
-     */
-    void checkMembershipForWrite(Long userId, Long scopeId, String scopeType);
-
-    /**
-     * 親チーム上限を越えているか（TEAM の非公開チームで、正式メンバー以上でない）を返す。
-     * 在籍の有無は問わない（所有者・個別許可の成功経路に上限を AND するための判定。F00 §20.4・AC-0159-94）。
-     * TEAM 以外・公開側のチームでは常に false。
-     */
-    boolean isBeyondTeamContentCap(Long userId, Long scopeId, String scopeType);
-
     /** スコープに在籍中のメンバーIDを一括取得する。 */
     List<Long> listActiveMemberIds(Long scopeId, String scopeType);
 

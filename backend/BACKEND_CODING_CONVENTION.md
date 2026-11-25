@@ -318,6 +318,7 @@ CI/CD パイプラインの詳細設定（ワークフロー YAML、JaCoCo 集�
 - SQL 発行時は文字列結合を避け、必ず**プレースホルダ**を使う。
 - パスワードや機密性の高い個人情報をログに出力しない。
 - ID 等のパラメータを書き換えて他者のデータにアクセスできないよう、処理の入り口で必ず**実行権限チェック**を行う。
+- **チームスコープの中身の読み取りは共通の門を通す**（CMP-261124-0159・F00 §20.3）。業務コードから `AccessControlService#checkMembership` / `#isMember` を直接呼ばず、共通の門 `ScopeContentAccessGate` の、中身を返す読み取りは `checkScopeContentAccess` / `canAccessScopeContent` / `filterAccessibleTeamIds`、中身を返さない書き込みは `checkMembershipForWrite` に書き分ける（非公開チームではサポーター・ゲスト・部外者に中身を見せない）。番人 `ScopeContentAccessGateCoverageTest` が新規の直呼びを拒否する（既存分は `scope_content_gate/pending_direct_calls.txt` のラチェット台帳）。
 - ユーザー入力値を画面表示する際は、サニタイズ（エスケープ）を徹底する。
 
 **パスワード保存・管理**

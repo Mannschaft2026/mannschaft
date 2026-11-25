@@ -5,7 +5,6 @@ import com.mannschaft.app.gdpr.service.GdprLastAdminWithdrawalErrorProvider;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.repository.MembershipRepository;
-import com.mannschaft.app.membership.repository.MembershipScopeRoleProjection;
 import com.mannschaft.app.role.authorization.RoleScopeRoleQuery;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.repository.UserRoleRepository;
@@ -43,7 +42,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * CMP-261124-0159 PR-01 試練: 共通の門 {@link AccessControlService#checkScopeContentAccess} の真偽表
+ * CMP-261124-0159 PR-01 試練: 共通の門 {@link ScopeContentAccessGate#checkScopeContentAccess} の真偽表
  * （F00 §20.3・AC-0159-04 / 05 / 07 / 09）。
  *
  * <p>チームの公開範囲 4 段 × 閲覧者 8 区分＋未ログインの全組合せで、
@@ -99,13 +98,14 @@ class ScopeContentAccessGateTruthTableTest {
     @Mock private MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     private DefaultAccessControlService service;
+    private ScopeContentAccessGate gate;
 
     @BeforeEach
     void setUp() {
         service = new DefaultAccessControlService(userRoleRepository, roleRepository, null, membershipRepository,
                 null, null, new RoleScopeRoleQuery(userRoleRepository),
                 List.of(new FamilyCareLinkQuery(null)), List.of(new GdprLastAdminWithdrawalErrorProvider()));
-        service.setMembersOnlyTeamQuery(membersOnlyTeamQuery);
+        gate = new ScopeContentAccessGate(service, membersOnlyTeamQuery);
         for (Viewer v : Viewer.values()) {
             if (v.userId == null) {
                 continue;
@@ -149,14 +149,14 @@ class ScopeContentAccessGateTruthTableTest {
                 ? CAN_READ_MEMBERS_ONLY.contains(viewer)
                 : viewer.activeMembership;
 
-        assertThat(service.canAccessScopeContent(viewer.userId, TEAM_ID, "TEAM"))
+        assertThat(gate.canAccessScopeContent(viewer.userId, TEAM_ID, "TEAM"))
                 .as("canAccessScopeContent(%s, %s)", level, viewer).isEqualTo(expected);
         if (expected) {
-            assertThatCode(() -> service.checkScopeContentAccess(viewer.userId, TEAM_ID, "TEAM"))
+            assertThatCode(() -> gate.checkScopeContentAccess(viewer.userId, TEAM_ID, "TEAM"))
                     .doesNotThrowAnyException();
         } else {
             // 上限による拒否は checkMembership の部外者拒否と status・code まで完全一致（新コードを作らない）
-            assertThatThrownBy(() -> service.checkScopeContentAccess(viewer.userId, TEAM_ID, "TEAM"))
+            assertThatThrownBy(() -> gate.checkScopeContentAccess(viewer.userId, TEAM_ID, "TEAM"))
                     .isInstanceOf(BusinessException.class)
                     .extracting(t -> ((BusinessException) t).getErrorCode())
                     .isEqualTo(CommonErrorCode.COMMON_002);
@@ -170,12 +170,12 @@ class ScopeContentAccessGateTruthTableTest {
         teamIs(level);
         if (viewer.activeMembership) {
             assertThatCode(() -> service.checkMembership(viewer.userId, TEAM_ID, "TEAM")).doesNotThrowAnyException();
-            assertThatCode(() -> service.checkMembershipForWrite(viewer.userId, TEAM_ID, "TEAM"))
+            assertThatCode(() -> gate.checkMembershipForWrite(viewer.userId, TEAM_ID, "TEAM"))
                     .doesNotThrowAnyException();
         } else {
             assertThatThrownBy(() -> service.checkMembership(viewer.userId, TEAM_ID, "TEAM"))
                     .extracting(t -> ((BusinessException) t).getErrorCode()).isEqualTo(CommonErrorCode.COMMON_002);
-            assertThatThrownBy(() -> service.checkMembershipForWrite(viewer.userId, TEAM_ID, "TEAM"))
+            assertThatThrownBy(() -> gate.checkMembershipForWrite(viewer.userId, TEAM_ID, "TEAM"))
                     .extracting(t -> ((BusinessException) t).getErrorCode()).isEqualTo(CommonErrorCode.COMMON_002);
         }
         assertThat(service.isMember(viewer.userId, TEAM_ID, "TEAM")).isEqualTo(viewer.activeMembership);
@@ -187,7 +187,7 @@ class ScopeContentAccessGateTruthTableTest {
     void 上限越えの判定(TeamLevel level, Viewer viewer) {
         teamIs(level);
         boolean expected = level == TeamLevel.MEMBERS_AND_ABOVE && !CAN_READ_MEMBERS_ONLY.contains(viewer);
-        assertThat(service.isBeyondTeamContentCap(viewer.userId, TEAM_ID, "TEAM")).isEqualTo(expected);
+        assertThat(gate.isBeyondTeamContentCap(viewer.userId, TEAM_ID, "TEAM")).isEqualTo(expected);
     }
 
     @Nested
@@ -198,9 +198,9 @@ class ScopeContentAccessGateTruthTableTest {
         @DisplayName("V-0159-04-3: ORGANIZATION は checkMembership と全件一致し、teams の問い合わせを撃たない")
         void 組織はcheckMembershipと同一() {
             for (Viewer viewer : Viewer.values()) {
-                assertThat(service.canAccessScopeContent(viewer.userId, ORG_ID, "ORGANIZATION"))
+                assertThat(gate.canAccessScopeContent(viewer.userId, ORG_ID, "ORGANIZATION"))
                         .as("%s", viewer).isEqualTo(viewer.activeMembership);
-                assertThat(service.isBeyondTeamContentCap(viewer.userId, ORG_ID, "ORGANIZATION")).isFalse();
+                assertThat(gate.isBeyondTeamContentCap(viewer.userId, ORG_ID, "ORGANIZATION")).isFalse();
             }
             verify(membersOnlyTeamQuery, never()).findMembersOnlyTeamIds(anyCollection());
         }
@@ -216,11 +216,12 @@ class ScopeContentAccessGateTruthTableTest {
         private static final Long T_NOT_MEMBER = 14L;
         private static final Long USER = 99L;
 
-        private MembershipScopeRoleProjection row(Long teamId, RoleKind kind) {
-            return new MembershipScopeRoleProjection() {
-                @Override public ScopeType getScopeType() { return ScopeType.TEAM; }
-                @Override public Long getScopeId() { return teamId; }
+        private MembershipRepository.TeamMembershipStateRow row(Long teamId, RoleKind kind) {
+            return new MembershipRepository.TeamMembershipStateRow() {
+                @Override public Long getTeamId() { return teamId; }
+                @Override public Long getUserId() { return USER; }
                 @Override public RoleKind getRoleKind() { return kind; }
+                @Override public Boolean getActive() { return true; }
             };
         }
 
@@ -228,9 +229,11 @@ class ScopeContentAccessGateTruthTableTest {
         @DisplayName("非公開チームのサポーター在籍は落とし、公開チームのサポーター・非公開チームのメンバーは残す（問い合わせはチーム数に比例しない）")
         void 一括判定() {
             List<Long> teamIds = List.of(T_MO_SUPPORTER, T_PUBLIC_SUPPORTER, T_MO_MEMBER, T_NOT_MEMBER);
-            lenient().when(membershipRepository.findActiveRoleKindsByUserAndScopes(eq(USER), anyCollection(),
-                    anyCollection())).thenReturn(List.of(row(T_MO_SUPPORTER, RoleKind.SUPPORTER),
-                    row(T_PUBLIC_SUPPORTER, RoleKind.SUPPORTER), row(T_MO_MEMBER, RoleKind.MEMBER)));
+            lenient().when(membershipRepository.findTeamMembershipStateRows(anyCollection(), anyCollection()))
+                    .thenReturn(List.of(row(T_MO_SUPPORTER, RoleKind.SUPPORTER),
+                            row(T_PUBLIC_SUPPORTER, RoleKind.SUPPORTER), row(T_MO_MEMBER, RoleKind.MEMBER)));
+            lenient().when(userRoleRepository.findExplicitTeamAdminKeys(anyCollection(), anyCollection()))
+                    .thenReturn(List.of());
             lenient().when(membersOnlyTeamQuery.findMembersOnlyTeamIds(anyCollection())).thenAnswer(inv -> {
                 Collection<?> ids = inv.getArgument(0);
                 Set<Long> mo = new java.util.HashSet<>();
@@ -242,10 +245,10 @@ class ScopeContentAccessGateTruthTableTest {
                 return mo;
             });
 
-            assertThat(service.filterAccessibleTeamIds(USER, teamIds))
+            assertThat(gate.filterAccessibleTeamIds(USER, teamIds))
                     .containsExactlyInAnyOrder(T_PUBLIC_SUPPORTER, T_MO_MEMBER);
-            verify(membershipRepository, times(1)).findActiveRoleKindsByUserAndScopes(eq(USER), anyCollection(),
-                    anyCollection());
+            // 在籍・管理者の一括取得 2 本＋非公開チーム判定 1 本。チームごとの問い合わせをしない
+            verify(membershipRepository, times(1)).findTeamMembershipStateRows(anyCollection(), anyCollection());
             verify(membershipRepository, never()).existsActiveByUserAndScope(anyLong(), any(), anyLong());
             verify(membersOnlyTeamQuery, times(1)).findMembersOnlyTeamIds(anyCollection());
         }
@@ -253,10 +256,9 @@ class ScopeContentAccessGateTruthTableTest {
         @Test
         @DisplayName("未ログイン・空入力は空集合で、問い合わせを撃たない")
         void 空() {
-            assertThat(service.filterAccessibleTeamIds(null, List.of(T_MO_MEMBER))).isEmpty();
-            assertThat(service.filterAccessibleTeamIds(USER, List.of())).isEmpty();
-            verify(membershipRepository, never()).findActiveRoleKindsByUserAndScopes(any(), anyCollection(),
-                    anyCollection());
+            assertThat(gate.filterAccessibleTeamIds(null, List.of(T_MO_MEMBER))).isEmpty();
+            assertThat(gate.filterAccessibleTeamIds(USER, List.of())).isEmpty();
+            verify(membershipRepository, never()).findTeamMembershipStateRows(anyCollection(), anyCollection());
         }
     }
 }

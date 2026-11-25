@@ -36,6 +36,12 @@ import java.util.function.BooleanSupplier;
  *      （<b>拒否経路でのみ</b>クエリを追加し、許可経路のクエリ回数を増やさない）。</li>
  * </ol>
  *
+ * <h2>親チーム上限（CMP-261124-0159・F00 §20.4・AC-0159-94）</h2>
+ * <p>所属チームが非公開チーム（{@code MEMBERS_AND_ABOVE}）でスコープのロールが MEMBER 未満なら、所有者一致・
+ * 呼び出し側の許可条件・在籍メンバーの<b>成功経路でも</b>不在と同一の {@code notFoundCode} に倒す
+ * （{@link ScopeContentAccessGate#isBeyondTeamContentCap}）。拒否経路でもそうした在籍者を越境と同じ扱いにする。
+ * SYSTEM_ADMIN・ADMIN/DEPUTY_ADMIN の短絡は変えない。公開側のチームでは本戦役前と同一。</p>
+ *
  * <p>許可主体はエンドポイントごとに違う（C2: 判定順を全 EP に一律適用しない）。例えばメンバー操作
  * （{@link #requireMemberOrConceal}）では user_roles のみの ADMIN は<b>許可しない</b>が、所属者として 403 を返す。
  * 各呼び出し側は「EP 別許可主体表」に沿ってメソッドを選ぶこと。</p>
@@ -51,6 +57,9 @@ import java.util.function.BooleanSupplier;
 public class ScopeConcealingAccessGate {
 
     private final AccessControlService accessControlService;
+
+    /** 親チーム上限の判定（CMP-261124-0159・F00 §20.3 の共通の門）。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 管理操作の認可（SYSTEM_ADMIN、または当該スコープの ADMIN/DEPUTY_ADMIN）。
@@ -84,6 +93,9 @@ public class ScopeConcealingAccessGate {
             return;
         }
         if (ownerId != null && Objects.equals(ownerId, userId)) {
+            // CMP-261124-0159 AC-0159-94: 所有者の成功経路にも親チーム上限を AND する
+            // （非公開チームで MEMBER 未満なら、外された元所有者・在籍サポーターでも不在と同一応答）。
+            requireWithinTeamContentCap(userId, scopeId, scopeType, notFoundCode);
             return;
         }
         if (accessControlService.isAdminOrAbove(userId, scopeId, scopeType)) {
@@ -111,6 +123,8 @@ public class ScopeConcealingAccessGate {
             return;
         }
         if (accessControlService.isMember(userId, scopeId, scopeType)) {
+            // CMP-261124-0159: 非公開チームの在籍サポーター（是正前データ）は所属者扱いの 403 ではなく越境と同じ 404。
+            requireWithinTeamContentCap(userId, scopeId, scopeType, notFoundCode);
             if (excludeSupporter && accessControlService.isSupporter(userId, scopeId, scopeType)) {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
             }
@@ -143,15 +157,30 @@ public class ScopeConcealingAccessGate {
             return;
         }
         if (permitted.getAsBoolean()) {
+            // CMP-261124-0159 AC-0159-94: 個別許可（本人である等）の成功経路にも親チーム上限を AND する。
+            requireWithinTeamContentCap(userId, scopeId, scopeType, notFoundCode);
             return;
         }
         throw denial(userId, scopeId, scopeType, notFoundCode, forbiddenCode);
     }
 
+    /**
+     * 親チーム上限（CMP-261124-0159・F00 §20.2 / §20.4）。TEAM の非公開チームで MEMBER 未満なら、
+     * 越境と同じく不在時と同一の {@code notFoundCode} を投げる（拒否理由から公開範囲の段を推測させない）。
+     * 公開側のチーム・TEAM 以外では何もしない（本戦役前と同一）。
+     */
+    private void requireWithinTeamContentCap(Long userId, Long scopeId, String scopeType, ErrorCode notFoundCode) {
+        if (scopeContentAccessGate.isBeyondTeamContentCap(userId, scopeId, scopeType)) {
+            throw new BusinessException(notFoundCode);
+        }
+    }
+
     private BusinessException denial(Long userId, Long scopeId, String scopeType,
                                      ErrorCode notFoundCode, ErrorCode forbiddenCode) {
-        if (!accessControlService.isMember(userId, scopeId, scopeType)) {
+        if (!accessControlService.isMember(userId, scopeId, scopeType)
+                || scopeContentAccessGate.isBeyondTeamContentCap(userId, scopeId, scopeType)) {
             // 越境（他スコープ／無所属）: 存在自体を隠す側。不在時と完全同一のコード。
+            // CMP-261124-0159: 非公開チームで MEMBER 未満の在籍者も越境と同じ扱い（§20.4 の門の契約と一致）。
             return new BusinessException(notFoundCode);
         }
         // 同一スコープ内の権限不足: 隠す必要が無い側。

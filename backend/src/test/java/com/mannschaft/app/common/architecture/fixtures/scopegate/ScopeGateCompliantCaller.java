@@ -1,21 +1,21 @@
 package com.mannschaft.app.common.architecture.fixtures.scopegate;
 
-import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 
-/** 番人の自己検査用ダミー: 門と書き込み用の別名だけを使う（違反として検出されてはならない）。 */
+/** 番人の自己検査用ダミー: 共通の門と書き込み用の別名だけを使う（違反として検出されてはならない）。 */
 public class ScopeGateCompliantCaller {
 
-    private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
-    public ScopeGateCompliantCaller(AccessControlService accessControlService) {
-        this.accessControlService = accessControlService;
+    public ScopeGateCompliantCaller(ScopeContentAccessGate scopeContentAccessGate) {
+        this.scopeContentAccessGate = scopeContentAccessGate;
     }
 
     public void read(Long userId, Long teamId) {
-        accessControlService.checkScopeContentAccess(userId, teamId, "TEAM");
+        scopeContentAccessGate.checkScopeContentAccess(userId, teamId, "TEAM");
     }
 
     public void write(Long userId, Long teamId) {
-        accessControlService.checkMembershipForWrite(userId, teamId, "TEAM");
+        scopeContentAccessGate.checkMembershipForWrite(userId, teamId, "TEAM");
     }
 }

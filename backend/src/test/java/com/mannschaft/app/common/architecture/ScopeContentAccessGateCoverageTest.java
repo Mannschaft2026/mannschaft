@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <h2>何を禁じるか</h2>
  * <p>本番コードから {@code AccessControlService#checkMembership} / {@code #isMember}（および同名ラッパ
  * {@code ActivityScopeAccessGuard}・{@code BulletinAccessGuard}・{@code MembershipQueryCache}）を直接呼ぶこと。
- * 読み取りは {@code checkScopeContentAccess} 系（門）、中身を返さない書き込みは {@code checkMembershipForWrite} に
+ * 読み取りは共通の門 {@code ScopeContentAccessGate} の {@code checkScopeContentAccess} 系、中身を返さない書き込みは同じく {@code checkMembershipForWrite} に
  * 書き分け、呼び出し箇所の意図（読み取りか書き込みか）を機械的に分類できるようにする。</p>
  *
  * <h2>台帳（凍結ストアは使わない）</h2>
@@ -98,8 +98,8 @@ class ScopeContentAccessGateCoverageTest {
         Map<String, String> exempt = readExempt(EXEMPT);
         Set<String> violations = newViolations(directCalls(ProductionClasses.get()), ledger.entries(), exempt.keySet());
         assertThat(violations)
-                .as("未移行リスト・対象外のどちらにも無い直呼び。読み取りは checkScopeContentAccess 系、"
-                        + "中身を返さない書き込みは checkMembershipForWrite へ書き分けること（F00 §20.5.1）")
+                .as("未移行リスト・対象外のどちらにも無い直呼び。読み取りは ScopeContentAccessGate#checkScopeContentAccess 系、"
+                        + "中身を返さない書き込みは ScopeContentAccessGate#checkMembershipForWrite へ書き分けること（F00 §20.5.1）")
                 .isEmpty();
     }
 
@@ -282,7 +282,7 @@ class ScopeContentAccessGateCoverageTest {
                 "# CMP-261124-0159 未移行リスト（共通の門の番人 ScopeContentAccessGateCoverageTest のラチェット台帳）",
                 "# 書式: パッケージごとの「## <package>」見出し行の下に「FQCN#method」。",
                 "# 各ドメイン PR は自パッケージの行だけを削除する。見出し行は締め PR-Z まで消さない（並行 PR の衝突を防ぐ）。",
-                "# 新しい行を足してはならない（新規の直呼びは門 checkScopeContentAccess 系か checkMembershipForWrite に書き分ける）。");
+                "# 新しい行を足してはならない（新規の直呼びは共通の門 ScopeContentAccessGate の checkScopeContentAccess 系か checkMembershipForWrite に書き分ける）。");
 
         static Ledger read(Path file) {
             return parse(readLines(file));

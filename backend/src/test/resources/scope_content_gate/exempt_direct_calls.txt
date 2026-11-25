@@ -2,7 +2,8 @@
 # 書式: 最上位クラスの FQCN<TAB>理由（理由空欄は赤）。F00 §20.5.2 の「対象外」行・基盤クラスだけを載せる。
 # 直呼びしなくなったクラスの行は削除する（陳腐行は赤）。
 com.mannschaft.app.role.service.DefaultAccessControlService	AccessControlService の実装本体（門は isMember の組合せで作る。F00 §20.3）
-com.mannschaft.app.common.ScopeConcealingAccessGate	秘匿ゲート本体。拒否経路の越境判定に isMember を使い、親チーム上限（isBeyondTeamContentCap）を AND 済み（AC-0159-94）
+com.mannschaft.app.common.ScopeConcealingAccessGate	秘匿ゲート本体。拒否経路の越境判定に isMember を使い、親チーム上限（ScopeContentAccessGate#isBeyondTeamContentCap）を AND 済み（AC-0159-94）
+com.mannschaft.app.common.ScopeContentAccessGate	共通の門の本体（isMember・checkMembership の組合せで門と書き込み用の別名を作る。F00 §20.3）
 com.mannschaft.app.common.visibility.MembershipQueryCache	リクエスト内メモ化ラッパ（呼び出し元なし・リクエストをまたぐキャッシュではない。F00 §9.3）
 com.mannschaft.app.admin.service.FeedbackService	対象外: プラットフォーム運営のフィードバック。チームの中身を返さない（F00 §20.5.2）
 com.mannschaft.app.auth.service.PendingInviteService	対象外（入口表）: 招待の保留承認は入口。非公開チームは UNAVAILABLE（F01.2 03・PR-E）

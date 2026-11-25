@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * CMP-261124-0159 PR-01: 門と Resolver の等価性の番人（F00 §20.6 {@code ScopeContentAccessGateEquivalenceTest}・
  * AC-0159-04 / 07 / 09・AC-0159-25 の骨組み）。
  *
- * <p>非公開チームで、閲覧者ロールごとに門（{@link AccessControlService#canAccessScopeContent}）と
+ * <p>非公開チームで、閲覧者ロールごとに門（{@link ScopeContentAccessGate#canAccessScopeContent}）と
  * Resolver（{@code canView(TEAM, teamId)}＝チーム詳細の正準判定）の結果が一致することを、実 MySQL で確かめる。
  * SYSTEM_ADMIN は既存挙動どおりの差（門は在籍を見るため false・Resolver は高速パスで true）を許可リストで明示する。</p>
  */
@@ -37,6 +37,7 @@ class ScopeContentAccessGateEquivalenceTest extends AbstractMySqlIntegrationTest
     private static final Set<Actor> KNOWN_DIFFERENCE = EnumSet.of(Actor.SYSTEM_ADMIN);
 
     @Autowired private AccessControlService accessControlService;
+    @Autowired private ScopeContentAccessGate scopeContentAccessGate;
     @Autowired private ContentVisibilityChecker contentVisibilityChecker;
     @Autowired private PlatformTransactionManager transactionManager;
     @PersistenceContext private EntityManager em;
@@ -60,7 +61,7 @@ class ScopeContentAccessGateEquivalenceTest extends AbstractMySqlIntegrationTest
     void 門とResolverが一致する() {
         for (Actor actor : Actor.values()) {
             Long userId = fixture.user(actor);
-            boolean gate = accessControlService.canAccessScopeContent(userId, fixture.teamId, "TEAM");
+            boolean gate = scopeContentAccessGate.canAccessScopeContent(userId, fixture.teamId, "TEAM");
             boolean resolver = contentVisibilityChecker.canView(ReferenceType.TEAM, fixture.teamId, userId);
             if (KNOWN_DIFFERENCE.contains(actor)) {
                 assertThat(gate).as("SYSTEM_ADMIN の門（在籍なし）").isFalse();
@@ -71,7 +72,7 @@ class ScopeContentAccessGateEquivalenceTest extends AbstractMySqlIntegrationTest
             assertThat(gate).as("門 %s", actor).isEqualTo(expected);
             assertThat(resolver).as("Resolver %s", actor).isEqualTo(gate);
         }
-        assertThat(accessControlService.canAccessScopeContent(null, fixture.teamId, "TEAM")).isFalse();
+        assertThat(scopeContentAccessGate.canAccessScopeContent(null, fixture.teamId, "TEAM")).isFalse();
         assertThat(contentVisibilityChecker.canView(ReferenceType.TEAM, fixture.teamId, null)).isFalse();
     }
 
@@ -80,12 +81,12 @@ class ScopeContentAccessGateEquivalenceTest extends AbstractMySqlIntegrationTest
     void 親組織ADMINは部外者と同一() {
         Long parentAdmin = fixture.user(Actor.PARENT_ORG_ADMIN);
         Long outsider = fixture.user(Actor.OUTSIDER);
-        assertThat(accessControlService.canAccessScopeContent(parentAdmin, fixture.teamId, "TEAM"))
-                .isEqualTo(accessControlService.canAccessScopeContent(outsider, fixture.teamId, "TEAM")).isFalse();
-        assertThat(accessControlService.filterAccessibleTeamIds(parentAdmin, Set.of(fixture.teamId))).isEmpty();
-        assertThat(accessControlService.filterAccessibleTeamIds(fixture.user(Actor.MEMBER), Set.of(fixture.teamId)))
+        assertThat(scopeContentAccessGate.canAccessScopeContent(parentAdmin, fixture.teamId, "TEAM"))
+                .isEqualTo(scopeContentAccessGate.canAccessScopeContent(outsider, fixture.teamId, "TEAM")).isFalse();
+        assertThat(scopeContentAccessGate.filterAccessibleTeamIds(parentAdmin, Set.of(fixture.teamId))).isEmpty();
+        assertThat(scopeContentAccessGate.filterAccessibleTeamIds(fixture.user(Actor.MEMBER), Set.of(fixture.teamId)))
                 .containsExactly(fixture.teamId);
-        assertThat(accessControlService.filterAccessibleTeamIds(fixture.user(Actor.SUPPORTER), Set.of(fixture.teamId)))
+        assertThat(scopeContentAccessGate.filterAccessibleTeamIds(fixture.user(Actor.SUPPORTER), Set.of(fixture.teamId)))
                 .isEmpty();
     }
 }

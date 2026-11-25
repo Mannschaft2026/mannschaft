@@ -3,7 +3,6 @@ package com.mannschaft.app.role.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
-import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -87,15 +86,6 @@ public class DefaultAccessControlService implements AccessControlService {
      */
     private final OrganizationMembershipService organizationMembershipService;
 
-    /**
-     * 非公開チームの判定（CMP-261124-0159・F00 §20.3 の門の上限判定）。teams 表は team ドメインが持つ。
-     *
-     * <p>コンストラクタ引数に足さず setter で受ける。コンストラクタのシグネチャを変えると、ArchUnit 凍結ストア
-     * （D-3 / D-5）に記録済みの既存違反（MembershipRepository への依存）の記述が変わり、新規違反と誤判定されるため
-     * （凍結ストアを書き換えない。並行 PR との衝突源を作らない）。</p>
-     */
-    private MembersOnlyTeamQuery membersOnlyTeamQuery;
-
     /** SPIは必ず一実装とし、欠落や重複を起動時に検出する。 */
     public DefaultAccessControlService(UserRoleRepository userRoleRepository,
                                        RoleRepository roleRepository,
@@ -122,12 +112,6 @@ public class DefaultAccessControlService implements AccessControlService {
         this.roleScopeRoleQuery = roleScopeRoleQuery;
         this.careLinkQuery = careLinkQueries.getFirst();
         this.lastAdminWithdrawalErrorProvider = lastAdminWithdrawalErrorProviders.getFirst();
-    }
-
-    /** 非公開チームの判定を差し込む（{@link #membersOnlyTeamQuery} の注記を参照）。 */
-    @org.springframework.beans.factory.annotation.Autowired
-    public void setMembersOnlyTeamQuery(MembersOnlyTeamQuery membersOnlyTeamQuery) {
-        this.membersOnlyTeamQuery = java.util.Objects.requireNonNull(membersOnlyTeamQuery, "membersOnlyTeamQuery");
     }
 
     private static final Set<String> ADMIN_ROLES = Set.of("ADMIN", "DEPUTY_ADMIN");
@@ -157,43 +141,6 @@ public class DefaultAccessControlService implements AccessControlService {
     public boolean isMember(Long userId, Long scopeId, String scopeType) {
         ScopeType scope = ScopeType.valueOf(scopeType);
         return membershipRepository.existsActiveByUserAndScope(userId, scope, scopeId);
-    }
-
-    // ========================================
-    // 中身の読み取りの門（CMP-261124-0159・F00 §20.3）
-    // ========================================
-
-    @Override
-    public void checkScopeContentAccess(Long userId, Long scopeId, String scopeType) {
-        checkMembership(userId, scopeId, scopeType);
-    }
-
-    @Override
-    public boolean canAccessScopeContent(Long userId, Long scopeId, String scopeType) {
-        return isMember(userId, scopeId, scopeType);
-    }
-
-    @Override
-    public Set<Long> filterAccessibleTeamIds(Long userId, java.util.Collection<Long> teamIds) {
-        Set<Long> result = new java.util.LinkedHashSet<>();
-        if (teamIds != null) {
-            for (Long teamId : teamIds) {
-                if (isMember(userId, teamId, "TEAM")) {
-                    result.add(teamId);
-                }
-            }
-        }
-        return result;
-    }
-
-    @Override
-    public void checkMembershipForWrite(Long userId, Long scopeId, String scopeType) {
-        checkMembership(userId, scopeId, scopeType);
-    }
-
-    @Override
-    public boolean isBeyondTeamContentCap(Long userId, Long scopeId, String scopeType) {
-        return false;
     }
 
     /**

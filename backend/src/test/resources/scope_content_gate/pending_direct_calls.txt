@@ -1,7 +1,7 @@
 # CMP-261124-0159 未移行リスト（共通の門の番人 ScopeContentAccessGateCoverageTest のラチェット台帳）
 # 書式: パッケージごとの「## <package>」見出し行の下に「FQCN#method」。
 # 各ドメイン PR は自パッケージの行だけを削除する。見出し行は締め PR-Z まで消さない（並行 PR の衝突を防ぐ）。
-# 新しい行を足してはならない（新規の直呼びは門 checkScopeContentAccess 系か checkMembershipForWrite に書き分ける）。
+# 新しい行を足してはならない（新規の直呼びは共通の門 ScopeContentAccessGate の checkScopeContentAccess 系か checkMembershipForWrite に書き分ける）。
 
 ## activity
 com.mannschaft.app.activity.controller.ActivityStatsController#checkScopeMembership

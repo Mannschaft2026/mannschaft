@@ -41,6 +41,8 @@ import java.util.Set;
  *       direct / org で個別に引かず 1 バッチに統合している（SQL 数回帰の防止）。</li>
  *   <li>親 ORG の user_roles 権限ロール所属 1 回（{@code findByUserIdAndOrganizationIdIn}）</li>
  *   <li>非アクティブ親 ORG 抽出 1 回（{@code OrganizationRepository.findInactiveIdsByIdIn}、§11.6）</li>
+ *   <li>direct に TEAM があるときのみ、非公開チームの ID 1 回（{@code MembersOnlyTeamQuery}、CMP-261124-0159・F00 §20.2）。
+ *       未ログインでも撃つ（非公開チームの PUBLIC コンテンツも隠すため）。SystemAdmin では撃たない。</li>
  * </ol>
  *
  * <p>SystemAdmin 判定が hit した場合は早期 return で後続 SQL を一切発行しない。</p>
@@ -63,6 +65,12 @@ public class MembershipBatchQueryService {
     private final ScopeAncestorResolver scopeAncestorResolver;
     private final OrganizationRepository organizationRepository;
     private final MembershipRepository membershipRepository;
+
+    /**
+     * CMP-261124-0159: 判定対象の所属チームのうち非公開チームの ID を引く（F00 §20.2 規則 5）。
+     * TEAM スコープを含む判定でだけ 1 本撃つ（SystemAdmin・TEAM を含まない判定では撃たない）。
+     */
+    private final com.mannschaft.app.common.MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     /**
      * ユーザー × 複数スコープのメンバーシップ・ロール情報を最小 SQL で取得する。
@@ -113,7 +121,8 @@ public class MembershipBatchQueryService {
             Set<ScopeKey> orgWideScopes,
             Set<ScopeKey> descendantScopes) {
         if (userId == null) {
-            return UserScopeRoleSnapshot.empty();
+            // §20.2 規則 8: 未ログインでも非公開チームの中身（自身は PUBLIC でも）を隠すため、非公開チームの集合だけは引く。
+            return UserScopeRoleSnapshot.empty().withMembersOnlyTeamIds(fetchMembersOnlyTeamIds(directScopes));
         }
 
         // SQL 1: SystemAdmin 判定（既存メソッド戻り値は long、>0 で SystemAdmin）
@@ -185,9 +194,33 @@ public class MembershipBatchQueryService {
         Set<Long> descendantMemberOfOrgIds = resolveDescendantMembership(descendantRows);
         Map<Long, String> descendantRoleByOrgId = resolveDescendantRoleNames(descendantRows);
 
+        // SQL 9 (direct に TEAM があるときのみ): 非公開チームの ID（CMP-261124-0159・F00 §20.2 規則 5）。
+        //        teams の主キー IN の 1 本。コンテンツ件数・チーム数に比例しない。リクエストをまたぐキャッシュは持たない。
+        Set<Long> membersOnlyTeamIds = fetchMembersOnlyTeamIds(safeDirect);
+
         return new UserScopeRoleSnapshot(
                 false, roleByScope, parentOrgs, orgMemberOf, suspendedOrgIds,
-                descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId);
+                descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId, membersOnlyTeamIds);
+    }
+
+    /**
+     * direct の TEAM スコープのうち非公開チームの ID を 1 本で引く（TEAM が無ければ撃たない）。
+     * SystemAdmin は上限を課さないため呼ばない（§20.2 規則 6）。
+     */
+    private Set<Long> fetchMembersOnlyTeamIds(Set<ScopeKey> directScopes) {
+        if (directScopes == null || directScopes.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> teamIds = new HashSet<>();
+        for (ScopeKey s : directScopes) {
+            if ("TEAM".equals(s.scopeType()) && s.scopeId() != null) {
+                teamIds.add(s.scopeId());
+            }
+        }
+        if (teamIds.isEmpty()) {
+            return Set.of();
+        }
+        return membersOnlyTeamQuery.findMembersOnlyTeamIds(teamIds);
     }
 
     /**

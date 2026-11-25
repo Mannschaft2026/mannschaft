@@ -40,6 +40,7 @@ class MembersOnlyTeamCapIntegrationTest extends AbstractMySqlIntegrationTest {
     private static final String[] LEVELS = {"PUBLIC", "GUESTS_AND_ABOVE", "SUPPORTERS_AND_ABOVE", "MEMBERS_AND_ABOVE"};
 
     @Autowired private AccessControlService accessControlService;
+    @Autowired private ScopeContentAccessGate scopeContentAccessGate;
     @Autowired private ContentVisibilityChecker contentVisibilityChecker;
     @Autowired private PlatformTransactionManager transactionManager;
     @PersistenceContext private EntityManager em;
@@ -78,17 +79,17 @@ class MembersOnlyTeamCapIntegrationTest extends AbstractMySqlIntegrationTest {
     void 公開範囲の変更が即時に効く() {
         Long supporter = fixture.user(Actor.SUPPORTER);
         setVisibility("SUPPORTERS_AND_ABOVE");
-        assertThat(accessControlService.canAccessScopeContent(supporter, fixture.teamId, "TEAM")).isTrue();
+        assertThat(scopeContentAccessGate.canAccessScopeContent(supporter, fixture.teamId, "TEAM")).isTrue();
         assertThat(contentVisibilityChecker.canView(ReferenceType.TEAM, fixture.teamId, supporter)).isTrue();
 
         setVisibility("MEMBERS_AND_ABOVE");
-        assertThat(accessControlService.canAccessScopeContent(supporter, fixture.teamId, "TEAM")).isFalse();
-        assertThat(accessControlService.filterAccessibleTeamIds(supporter, List.of(fixture.teamId))).isEmpty();
+        assertThat(scopeContentAccessGate.canAccessScopeContent(supporter, fixture.teamId, "TEAM")).isFalse();
+        assertThat(scopeContentAccessGate.filterAccessibleTeamIds(supporter, List.of(fixture.teamId))).isEmpty();
         assertThat(contentVisibilityChecker.canView(ReferenceType.TEAM, fixture.teamId, supporter)).isFalse();
 
         setVisibility("SUPPORTERS_AND_ABOVE");
-        assertThat(accessControlService.canAccessScopeContent(supporter, fixture.teamId, "TEAM")).isTrue();
-        assertThat(accessControlService.filterAccessibleTeamIds(supporter, List.of(fixture.teamId)))
+        assertThat(scopeContentAccessGate.canAccessScopeContent(supporter, fixture.teamId, "TEAM")).isTrue();
+        assertThat(scopeContentAccessGate.filterAccessibleTeamIds(supporter, List.of(fixture.teamId)))
                 .containsExactly(fixture.teamId);
     }
 
@@ -100,7 +101,7 @@ class MembersOnlyTeamCapIntegrationTest extends AbstractMySqlIntegrationTest {
                 .doesNotThrowAnyException();
         assertThatThrownBy(() -> accessControlService.checkMembership(fixture.user(Actor.SYSTEM_ADMIN), fixture.teamId,
                 "TEAM")).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> accessControlService.checkScopeContentAccess(fixture.user(Actor.SUPPORTER),
+        assertThatThrownBy(() -> scopeContentAccessGate.checkScopeContentAccess(fixture.user(Actor.SUPPORTER),
                 fixture.teamId, "TEAM"))
                 .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.COMMON_002);
     }

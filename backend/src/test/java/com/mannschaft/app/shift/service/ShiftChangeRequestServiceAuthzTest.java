@@ -65,7 +65,8 @@ class ShiftChangeRequestServiceAuthzTest {
     void setUpService() {
         ShiftChangeRequestService txService = new ShiftChangeRequestService(
                 changeRequestRepository, scheduleRepository, slotRepository, eventPublisher);
-        service = new ShiftChangeRequestFacade(txService, new ScopeConcealingAccessGate(accessControlService),
+        service = new ShiftChangeRequestFacade(txService, new ScopeConcealingAccessGate(accessControlService,
+                new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())),
                 accessControlService, nameResolverService);
     }
 

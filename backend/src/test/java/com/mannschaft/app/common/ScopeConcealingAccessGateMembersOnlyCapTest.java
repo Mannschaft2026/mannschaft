@@ -35,6 +35,7 @@ class ScopeConcealingAccessGateMembersOnlyCapTest {
     private static final ErrorCode NOT_FOUND = ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND;
 
     @Mock private AccessControlService acs;
+    @Mock private ScopeContentAccessGate scopeContentAccessGate;
     @InjectMocks private ScopeConcealingAccessGate gate;
 
     private static ErrorCode codeOf(Throwable t) {
@@ -42,7 +43,7 @@ class ScopeConcealingAccessGateMembersOnlyCapTest {
     }
 
     private void membersOnlyAndBelowMember(boolean beyond) {
-        given(acs.isBeyondTeamContentCap(USER, TEAM, TEAM_T)).willReturn(beyond);
+        given(scopeContentAccessGate.isBeyondTeamContentCap(USER, TEAM, TEAM_T)).willReturn(beyond);
     }
 
     @Nested
