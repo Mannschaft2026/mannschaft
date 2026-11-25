@@ -271,15 +271,7 @@ public class BlogPostService {
         Long viewerUserId = SecurityUtils.getCurrentUserIdOrNull();
         // 存在オラクル対策: 閲覧不可（他人の下書き等）は VISIBILITY_001（403）ではなく、不存在 slug と同一の
         // POST_NOT_FOUND（404 CMS_001）に畳む。403 のままだと「その slug の記事が存在する」ことが判ってしまう。
-        try {
-            contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, entity.getId(), viewerUserId);
-        } catch (BusinessException e) {
-            String code = e.getErrorCode().getCode();
-            if ("VISIBILITY_001".equals(code) || "VISIBILITY_004".equals(code)) {
-                throw new BusinessException(CmsErrorCode.POST_NOT_FOUND);
-            }
-            throw e;
-        }
+        BlogPostViewAccessGuard.assertCanViewOrNotFound(contentVisibilityChecker, entity.getId(), viewerUserId);
         // 可視性(F00)通過の「後段」でペイウォール本文ゲートを適用する（可視性 deny が優先）。
         // 表示経路なので、マスクを免れた本文のみ r2Key を署名 URL へ解決する。
         return resolveBodyMedia(
@@ -291,8 +283,8 @@ public class BlogPostService {
      *
      * <p>F00 Phase B (設計書 §12.3): 可視性判定を
      * {@link ContentVisibilityChecker#assertCanView} に委譲する。
-     * 閲覧不可の場合は {@link com.mannschaft.app.common.BusinessException}
-     * ({@code VISIBILITY_001} = 403 / {@code VISIBILITY_004} = 404 相当) を投げる。
+     * 閲覧不可・不在の場合は {@link com.mannschaft.app.common.BusinessException}
+     * ({@link CmsErrorCode#POST_NOT_FOUND} = 404 CMS_001。存在オラクル対策で VISIBILITY_001/004 を畳む) を投げる。
      *
      * <p><b>注意（本文メディアの解決）</b>: 本メソッドは現状どの Controller からも呼ばれていない
      * （呼び出し元はテストのみ）ため、本文メディアの署名 URL 解決を結線していない。
@@ -304,7 +296,8 @@ public class BlogPostService {
         // 実存確認 + 可視性判定を ContentVisibilityChecker に一元化する。
         // viewerUserId が null（未認証）の場合は PUBLIC かつ PUBLISHED の記事のみ可。
         Long viewerUserId = SecurityUtils.getCurrentUserIdOrNull();
-        contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, id, viewerUserId);
+        // 存在オラクル対策: 閲覧不可・不在とも POST_NOT_FOUND（404 CMS_001）に畳む（getBySlug と同一）。
+        BlogPostViewAccessGuard.assertCanViewOrNotFound(contentVisibilityChecker, id, viewerUserId);
         BlogPostEntity entity = findPostOrThrow(id);
         // 可視性(F00)通過の「後段」でペイウォール本文ゲートを適用する（可視性 deny が優先）。
         return applyPaywallMask(cmsMapper.toBlogPostResponse(entity), entity, viewerUserId);

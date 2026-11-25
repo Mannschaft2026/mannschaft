@@ -243,7 +243,7 @@ class BlogPostListScopeVisibilityIT extends AbstractMySqlIntegrationTest {
         @DisplayName("存在オラクル: 同じチームのメンバーが他人の下書きを slug で引いても、不存在 slug と同一応答（404 CMS_001・同一メッセージ）")
         void 他人の下書きはslug詳細で不存在と同一応答() throws Exception {
             String draft = teamPost(Visibility.MEMBERS_ONLY, PostStatus.DRAFT).getSlug();
-            String membersOnlyDraftPublic = teamPost(Visibility.PUBLIC, PostStatus.DRAFT).getSlug();
+            String publicVisibilityDraft = teamPost(Visibility.PUBLIC, PostStatus.DRAFT).getSlug();
             em.flush();
 
             Outcome missing = outcome(detail(memberId, "no-such-slug-" + key, "teamId", teamId));
@@ -251,7 +251,7 @@ class BlogPostListScopeVisibilityIT extends AbstractMySqlIntegrationTest {
             String missingMessage = objectMapper.readTree(missing.body()).path("error").path("message").asText();
             assertThat(missingMessage).isNotBlank();
 
-            for (String slug : List.of(draft, membersOnlyDraftPublic)) {
+            for (String slug : List.of(draft, publicVisibilityDraft)) {
                 Outcome actual = outcome(detail(memberId, slug, "teamId", teamId));
                 assertThat(actual).as(slug).isEqualTo(new Outcome(404, "CMS_001"));
                 assertThat(objectMapper.readTree(actual.body()).path("error").path("message").asText())
@@ -259,6 +259,109 @@ class BlogPostListScopeVisibilityIT extends AbstractMySqlIntegrationTest {
             }
             // 作者本人は自分の下書きを従来どおり取得できる
             assertThat(detail(authorId, draft, "teamId", teamId).getResponse().getStatus()).isEqualTo(200);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // 存在オラクル（CMP-261124-2156）: 他人の下書きの ID・slug を引いても、不存在と同一応答
+    // ═════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("存在オラクル: 閲覧不可の記事は ID・slug のどの経路でも不存在と同一応答")
+    class InvisibleIsIndistinguishableFromMissing {
+
+        @Test
+        @DisplayName("リビジョン一覧: 他人の下書きの ID と不存在 ID が同一応答（404 CMS_001・同一メッセージ）、作者本人は 200")
+        void リビジョン一覧は不存在と同一応答() throws Exception {
+            BlogPostEntity draft = teamPost(Visibility.MEMBERS_ONLY, PostStatus.DRAFT);
+            em.flush();
+
+            Outcome missing = outcome(mockMvc.perform(get(LIST + "/{id}/revisions", MISSING_ID)
+                    .with(user(memberId.toString()))).andReturn());
+            Outcome actual = outcome(mockMvc.perform(get(LIST + "/{id}/revisions", draft.getId())
+                    .with(user(memberId.toString()))).andReturn());
+
+            assertSameAsMissing(missing, actual, "revisions");
+            assertThat(mockMvc.perform(get(LIST + "/{id}/revisions", draft.getId())
+                    .with(user(authorId.toString()))).andReturn().getResponse().getStatus()).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("みたよ！追加: 他人の下書きの ID と不存在 ID が同一応答（404 CMS_001・同一メッセージ）、閲覧可能な記事は 201")
+        void みたよ追加は不存在と同一応答() throws Exception {
+            BlogPostEntity draft = teamPost(Visibility.MEMBERS_ONLY, PostStatus.DRAFT);
+            BlogPostEntity visible = teamPost(Visibility.MEMBERS_ONLY, PostStatus.PUBLISHED);
+            em.flush();
+
+            Outcome missing = outcome(mockMvc.perform(post(LIST + "/{postId}/reactions", MISSING_ID)
+                    .with(user(memberId.toString()))).andReturn());
+            Outcome actual = outcome(mockMvc.perform(post(LIST + "/{postId}/reactions", draft.getId())
+                    .with(user(memberId.toString()))).andReturn());
+
+            assertSameAsMissing(missing, actual, "POST reactions");
+            assertThat(mockMvc.perform(post(LIST + "/{postId}/reactions", visible.getId())
+                    .with(user(memberId.toString()))).andReturn().getResponse().getStatus()).isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("みたよ！削除: 他人の下書きの ID と不存在 ID が同一応答（404 CMS_001・同一メッセージ）")
+        void みたよ削除は不存在と同一応答() throws Exception {
+            BlogPostEntity draft = teamPost(Visibility.MEMBERS_ONLY, PostStatus.DRAFT);
+            em.flush();
+
+            Outcome missing = outcome(mockMvc.perform(delete(LIST + "/{postId}/reactions", MISSING_ID)
+                    .with(user(memberId.toString()))).andReturn());
+            Outcome actual = outcome(mockMvc.perform(delete(LIST + "/{postId}/reactions", draft.getId())
+                    .with(user(memberId.toString()))).andReturn());
+
+            assertSameAsMissing(missing, actual, "DELETE reactions");
+        }
+
+        @Test
+        @DisplayName("組織スコープの slug 詳細: 他人の下書きの slug と不存在 slug が同一応答（404 CMS_001・同一メッセージ）、作者本人は 200")
+        void 組織slug詳細は不存在と同一応答() throws Exception {
+            BlogPostEntity draft = orgPost(Visibility.MEMBERS_ONLY, PostStatus.DRAFT);
+            em.flush();
+
+            Outcome missing = outcome(detail(memberId, "no-such-slug-" + key, "organizationId", orgId));
+            Outcome actual = outcome(detail(memberId, draft.getSlug(), "organizationId", orgId));
+
+            assertSameAsMissing(missing, actual, "organization slug");
+            assertThat(detail(authorId, draft.getSlug(), "organizationId", orgId).getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("個人ブログの slug 詳細（/users/{id}/blog/posts/{slug}）: 他人の下書きの slug と不存在 slug が同一応答、作者本人は 200")
+        void 個人ブログslug詳細は不存在と同一応答() throws Exception {
+            String slug = "oracle-personal-draft-" + key;
+            em.persist(BlogPostEntity.builder()
+                    .userId(authorId).authorId(authorId)
+                    .title("個人の下書き " + slug).slug(slug).body("個人の下書き本文 " + slug)
+                    .postType(PostType.BLOG).visibility(Visibility.PUBLIC).status(PostStatus.DRAFT)
+                    .readingTimeMinutes((short) 1)
+                    .build());
+            em.flush();
+
+            for (Long viewer : List.of(memberId, outsiderId)) {
+                Outcome missing = outcome(mockMvc.perform(get("/api/v1/users/{userId}/blog/posts/{slug}",
+                        authorId, "no-such-slug-" + key).with(user(viewer.toString()))).andReturn());
+                Outcome actual = outcome(mockMvc.perform(get("/api/v1/users/{userId}/blog/posts/{slug}",
+                        authorId, slug).with(user(viewer.toString()))).andReturn());
+                assertSameAsMissing(missing, actual, "personal slug viewer=" + viewer);
+                assertThat(actual.body()).doesNotContain("個人の下書き");
+            }
+            assertThat(mockMvc.perform(get("/api/v1/users/{userId}/blog/posts/{slug}", authorId, slug)
+                    .with(user(authorId.toString()))).andReturn().getResponse().getStatus()).isEqualTo(200);
+        }
+
+        private void assertSameAsMissing(Outcome missing, Outcome actual, String description) throws Exception {
+            assertThat(missing).as(description + " (missing)").isEqualTo(new Outcome(404, "CMS_001"));
+            String missingMessage = objectMapper.readTree(missing.body()).path("error").path("message").asText();
+            assertThat(missingMessage).as(description + " (missing message)").isNotBlank();
+            assertThat(actual).as(description).isEqualTo(missing);
+            assertThat(objectMapper.readTree(actual.body()).path("error").path("message").asText())
+                    .as(description + " message").isEqualTo(missingMessage);
         }
     }
 

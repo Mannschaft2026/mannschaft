@@ -7,7 +7,6 @@ import com.mannschaft.app.cms.repository.BlogPostReactionRepository;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
-import com.mannschaft.app.common.visibility.ReferenceType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,7 +30,8 @@ public class BlogReactionService {
      *
      * <p>認可根治戦役 Wave7: {@link #getBySlug}/{@link #getById} と同一の
      * {@link ContentVisibilityChecker#assertCanView} を先に適用し、閲覧可能な記事にのみ
-     * リアクションを許可する。</p>
+     * リアクションを許可する。閲覧不可は不存在 ID と同一の {@link CmsErrorCode#POST_NOT_FOUND}（404 CMS_001）に畳む
+     * （存在オラクル対策、{@link BlogPostViewAccessGuard}）。</p>
      *
      * @param blogPostId 記事ID
      * @param userId     ユーザーID
@@ -39,10 +39,11 @@ public class BlogReactionService {
      */
     @Transactional
     public BlogReactionResponse addReaction(Long blogPostId, Long userId) {
-        // 記事の存在確認 + 可視性判定（F00）。閲覧不可なら BusinessException（403/404相当）。
+        // 記事の存在確認 + 可視性判定（F00）。閲覧不可なら不存在と同一の BusinessException（404 CMS_001）。
         postRepository.findById(blogPostId)
                 .orElseThrow(() -> new BusinessException(CmsErrorCode.POST_NOT_FOUND));
-        contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, blogPostId, userId);
+        // 存在オラクル対策: 閲覧不可（他人の下書き等）も不存在 ID と同一の 404 CMS_001 に畳む。
+        BlogPostViewAccessGuard.assertCanViewOrNotFound(contentVisibilityChecker, blogPostId, userId);
 
         if (reactionRepository.existsByBlogPostIdAndUserId(blogPostId, userId)) {
             throw new BusinessException(CmsErrorCode.REACTION_ALREADY_EXISTS);
@@ -74,7 +75,8 @@ public class BlogReactionService {
         // 記事の存在確認 + 可視性判定（F00）
         postRepository.findById(blogPostId)
                 .orElseThrow(() -> new BusinessException(CmsErrorCode.POST_NOT_FOUND));
-        contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, blogPostId, userId);
+        // 存在オラクル対策: 閲覧不可（他人の下書き等）も不存在 ID と同一の 404 CMS_001 に畳む。
+        BlogPostViewAccessGuard.assertCanViewOrNotFound(contentVisibilityChecker, blogPostId, userId);
 
         if (!reactionRepository.existsByBlogPostIdAndUserId(blogPostId, userId)) {
             throw new BusinessException(CmsErrorCode.REACTION_NOT_FOUND);

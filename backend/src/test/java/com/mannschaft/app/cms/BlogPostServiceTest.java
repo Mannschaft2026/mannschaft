@@ -463,11 +463,54 @@ class BlogPostServiceTest {
                         .given(contentVisibilityChecker)
                         .assertCanView(ReferenceType.BLOG_POST, POST_ID, VIEWER_ID);
 
-                // When / Then: 例外がそのまま伝播し、レスポンス生成（漏洩）に到達しない
+                // When / Then: 不存在と同一の例外に畳まれ、レスポンス生成（漏洩）に到達しない
                 assertThatThrownBy(() -> service.getBySlug(TEAM_ID, null, null, "secret-slug"))
                         .isInstanceOf(BusinessException.class)
                         .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                                 .isEqualTo("CMS_001"));
+                verify(cmsMapper, never()).toBlogPostResponse(any(BlogPostEntity.class));
+            }
+        }
+
+        @Test
+        @DisplayName("存在オラクル: Checker が VISIBILITY_004（対象不在）を投げても slug 取得は 404 CMS_001 に畳む")
+        void slug検索_VISIBILITY004もCMS001に畳む() {
+            BlogPostEntity entity = createPostEntity(PostStatus.PUBLISHED);
+            ReflectionTestUtils.setField(entity, "id", POST_ID);
+            given(postRepository.findByTeamIdAndSlug(TEAM_ID, "secret-slug")).willReturn(Optional.of(entity));
+
+            try (MockedStatic<SecurityUtils> securityUtils = Mockito.mockStatic(SecurityUtils.class)) {
+                securityUtils.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
+                org.mockito.BDDMockito.willThrow(new BusinessException(
+                        com.mannschaft.app.common.visibility.VisibilityErrorCode.VISIBILITY_004))
+                        .given(contentVisibilityChecker)
+                        .assertCanView(ReferenceType.BLOG_POST, POST_ID, VIEWER_ID);
+
+                assertThatThrownBy(() -> service.getBySlug(TEAM_ID, null, null, "secret-slug"))
+                        .isInstanceOf(BusinessException.class)
+                        .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                                .isEqualTo(CmsErrorCode.POST_NOT_FOUND));
+                verify(cmsMapper, never()).toBlogPostResponse(any(BlogPostEntity.class));
+            }
+        }
+
+        @Test
+        @DisplayName("存在オラクル: 閲覧不可以外の BusinessException（VISIBILITY_003 等）は畳まず同一インスタンスのまま伝播する")
+        void slug検索_閲覧不可以外の例外はそのまま伝播() {
+            BlogPostEntity entity = createPostEntity(PostStatus.PUBLISHED);
+            ReflectionTestUtils.setField(entity, "id", POST_ID);
+            given(postRepository.findByTeamIdAndSlug(TEAM_ID, "secret-slug")).willReturn(Optional.of(entity));
+            BusinessException internal = new BusinessException(
+                    com.mannschaft.app.common.visibility.VisibilityErrorCode.VISIBILITY_003);
+
+            try (MockedStatic<SecurityUtils> securityUtils = Mockito.mockStatic(SecurityUtils.class)) {
+                securityUtils.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
+                org.mockito.BDDMockito.willThrow(internal)
+                        .given(contentVisibilityChecker)
+                        .assertCanView(ReferenceType.BLOG_POST, POST_ID, VIEWER_ID);
+
+                assertThatThrownBy(() -> service.getBySlug(TEAM_ID, null, null, "secret-slug"))
+                        .isSameAs(internal);
                 verify(cmsMapper, never()).toBlogPostResponse(any(BlogPostEntity.class));
             }
         }
@@ -1331,7 +1374,7 @@ class BlogPostServiceTest {
                 assertThatThrownBy(() -> service.getById(POST_ID))
                         .isInstanceOf(BusinessException.class)
                         .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                                .isEqualTo("VISIBILITY_004"));
+                                .isEqualTo("CMS_001"));
                 verify(paymentGateService, never()).checkAccess(any(), any(), any(), any(ContentGateTarget.class));
             }
         }
