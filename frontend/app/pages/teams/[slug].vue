@@ -153,6 +153,9 @@ const accessDenied = ref<'forbidden' | 'notFound' | null>(null)
  * 再取得して可否を判定し、終わるまで子ページを描かない（子の API が非公開化後の旧権限で動くのを防ぐ）。
  */
 const revalidating = ref(false)
+let revalidateSeq = 0
+/** ok=成功 / denied=403・404 で閉じた / failed=5xx・通信失敗 / stale=後発の要求・slug 変更に追い越された */
+type TeamFetchResult = 'ok' | 'denied' | 'failed' | 'stale'
 const showLeaveConfirm = ref(false)
 
 // 管理者レンズ（true=管理者ビュー, false=メンバービュー）。管理者は既定で管理者ビュー。
@@ -187,7 +190,7 @@ const displayName = computed(
  * - AC-11: 取得失敗が 403（権限喪失）のときは team を null にして保護された詳細表示を閉じる。
  */
 let fetchTeamSeq = 0
-async function fetchTeam() {
+async function fetchTeam(): Promise<TeamFetchResult> {
   const seq = ++fetchTeamSeq
   const requestedSlug = teamSlug.value
   const isCurrent = () => seq === fetchTeamSeq && teamSlug.value === requestedSlug
@@ -195,20 +198,21 @@ async function fetchTeam() {
   if (!quiet) loading.value = true
   try {
     const result = await teamApi.getTeam(requestedSlug)
-    if (!isCurrent()) return
+    if (!isCurrent()) return 'stale'
     team.value = result.data
     accessDenied.value = null
+    return 'ok'
   }
   catch (error) {
-    if (!isCurrent()) return
+    if (!isCurrent()) return 'stale'
     // 404 のときは「旧 slug → 新 slug の 301 移動」かもしれないので解決を試みる（村方式・BE #1542）。
     // 解決は非同期（await）のため、待機中に後発の要求が成功している／別スコープへ
     // 移動している可能性がある。解決後は isCurrent() を再確認し、古い 404 由来の
     // 通知・遷移が後発の結果を踏みつけないようにする（検分修繕2・CMP-261004-1942）。
     if ((error as FetchError)?.response?.status === 404) {
       const redirected = await tryRedirectMovedSlug(isCurrent)
-      if (!isCurrent()) return
-      if (redirected) return
+      if (!isCurrent()) return 'stale'
+      if (redirected) return 'stale'
     }
     // 403（公開範囲の外）・404（見つからない）は保護された詳細表示を閉じ、理由表示に切り替える。
     // トーストは出さない（理由部品が示す）。それ以外（5xx・通信失敗）は従来どおり再試行表示とトースト。
@@ -216,9 +220,10 @@ async function fetchTeam() {
     if (failure === 'forbidden' || failure === 'notFound') {
       team.value = null
       accessDenied.value = failure
-      return
+      return 'denied'
     }
     handleApiError(error, 'チーム詳細取得')
+    return 'failed'
   }
   finally {
     // 後発の要求が無いときだけ解く（後発がある場合はその要求の完了で解く）
@@ -436,6 +441,7 @@ function retryShellData() {
 onBeforeUnmount(() => {
   // 破棄されたインスタンスの解決待ち応答を失効させる。
   ++fetchTeamSeq
+  ++revalidateSeq
   clearShellWatchdog()
 })
 
@@ -457,6 +463,7 @@ watch(teamSlug, () => {
   teamLoaded.value = false
   team.value = null
   accessDenied.value = null
+  ++revalidateSeq
   revalidating.value = false
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
   joinRequestStatus.value = 'UNKNOWN'
@@ -473,13 +480,14 @@ watch(() => route.path, async (next, prev) => {
   if (!teamLoaded.value || !isShellRoute.value) return
   const slugOf = (p: string) => p.split('/').filter(Boolean)[1]
   if (slugOf(next) !== slugOf(prev)) return
+  const mySeq = ++revalidateSeq
   revalidating.value = true
-  try {
-    await fetchTeam()
-  }
-  finally {
-    revalidating.value = false
-  }
+  const result = await fetchTeam()
+  // 後発の再判定があれば、そちらだけがゲートを解除できる（連続遷移で未確定のまま子を描かない）
+  if (mySeq !== revalidateSeq) return
+  // 再判定の通信失敗（5xx 等）は、閲覧可否を確認できていないので古い team で本文を出さず、再試行表示へ倒す
+  if (result === 'failed') team.value = null
+  revalidating.value = false
 })
 
 /**
