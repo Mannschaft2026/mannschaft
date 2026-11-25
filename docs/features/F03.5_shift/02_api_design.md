@@ -2039,6 +2039,7 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 
 - 管理者全員（ADMIN + `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN）にプッシュ + アプリ内通知（「田中さんから変更依頼が届いています」）
 - ApplicationEvent: `ShiftChangeRequestCreatedEvent`
+- 依頼者本人（管理者が自分で出した依頼）には送らない（自己通知なし）。宛先・遷移先・文言の確定事項は `01_db_design.md` の `shift_change_requests`「通知」を参照
 - 監査ログ: `SHIFT_CHANGE_REQUEST_CREATED`
 
 **権限モデル（IDOR 防止）**
@@ -2145,7 +2146,7 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 **レスポンス（200 OK）**: 更新後の change_request を返却
 
 - **重要（ACCEPTED の運用）**: 本 API は `status` フラグの更新のみで、**実スロットの変更は別途管理者が D&D UI や `PATCH /slots/{id}/assignments` で実施する**。本ボタンは「その作業が終わった」宣言として使う設計。理由: 依頼内容が多岐にわたる（単純な交代 / 別日移動 / スロット削除等）ため、画面上で自由に編集してから「この依頼を受諾した」と記録する方が柔軟
-- 依頼者にプッシュ + アプリ内通知（「変更依頼が受諾されました」「変更依頼が却下されました: {admin_note}」）
+- 依頼者にプッシュ + アプリ内通知（「変更依頼が承認されました」「変更依頼が却下されました: {admin_note}」）
 - ApplicationEvent: `ShiftChangeRequestReviewedEvent`
 - 監査ログ: `SHIFT_CHANGE_REQUEST_REVIEWED`（`action`, `reviewed_by`, `admin_note` を記録）
 
@@ -2173,7 +2174,8 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 
 **レスポンス（200 OK）**: 更新後の change_request を返却（`status: "WITHDRAWN"`）
 
-- 管理者にプッシュ通知（未処理一覧から消える旨）
+- 管理者全員（ADMIN + `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN。依頼者本人が管理者でも本人は除く）にプッシュ + アプリ内通知（未処理一覧から消える旨）
+- ApplicationEvent: `ShiftChangeRequestWithdrawnEvent`
 - 監査ログ: `SHIFT_CHANGE_REQUEST_WITHDRAWN`
 
 **エラーレスポンス**

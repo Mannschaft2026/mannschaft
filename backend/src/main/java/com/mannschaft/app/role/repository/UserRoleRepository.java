@@ -2645,6 +2645,30 @@ public interface UserRoleRepository extends JpaRepository<UserRoleEntity, Long> 
     List<Long> findAdminUserIdsByTeamId(@Param("teamId") Long teamId);
 
     /**
+     * 指定チームの ADMIN のうち、チームに所属中（memberships.left_at IS NULL）のユーザー ID 一覧を取得する。
+     *
+     * <p>{@link #findAdminUserIdsByTeamId} は所属を見ず、ロールだけ残って退会済みの ADMIN も返す（既存の
+     * 呼び出し元の挙動は変えない）。通知の宛先のように「いま所属している管理者」だけが要る場合に使う。
+     * {@link #findDeputyAdminUserIdsByTeamIdAndPermission} の所属条件と同じ形に揃えている。</p>
+     */
+    @Query(value =
+            "SELECT DISTINCT ur.user_id FROM user_roles ur " +
+            "JOIN roles r ON r.id = ur.role_id " +
+            "JOIN users u ON u.id = ur.user_id " +
+            "WHERE ur.team_id = :teamId " +
+            "AND r.name = 'ADMIN' " +
+            "AND u.deleted_at IS NULL AND u.status = 'ACTIVE' " +
+            "AND EXISTS ( " +
+            "  SELECT 1 FROM memberships active_ms " +
+            "  WHERE active_ms.user_id = ur.user_id " +
+            "    AND active_ms.scope_type = 'TEAM' " +
+            "    AND active_ms.scope_id = ur.team_id " +
+            "    AND active_ms.left_at IS NULL " +
+            ")",
+            nativeQuery = true)
+    List<Long> findActiveAdminUserIdsByTeamId(@Param("teamId") Long teamId);
+
+    /**
      * 指定チームの DEPUTY_ADMIN ユーザー ID 一覧を全件取得する（F10.7 問い合わせ通知用）。
      */
     @Query(value =

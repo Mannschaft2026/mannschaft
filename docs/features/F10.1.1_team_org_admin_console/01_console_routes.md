@@ -251,5 +251,6 @@ export default defineNuxtRouteMiddleware(async (to) => {
 - **取得失敗**: `me/permissions` が 503 を返すようモックし、`/admin` アクセス → エラー画面（再試行）。権限なし扱いに倒れないこと。
 - **導線**: ハブの各カード押下 → 対応 L3 へ遷移。予約は独立管理画面へのSPA遷移・戻る・再読込と旧予約タブの保持を検証。ほかのリダイレクト系（budget 等）は旧パスからの転送も検証。
 - **承認待ち**: team の `/admin/approvals` で `RESERVATION`/`SHIFT_REQUEST`/`MATCHING` のドメイン別件数が描画される。org では `PAYMENT` のみ描画される（モックではなく実 BE で件数 0 でないことを確認 — メモリ `feedback_e2e_real_full_crud` 準拠）。
+- **再招待依頼（CMP-261107-1833 PR3）**: 招待権限者（ADMIN、または `INVITE_MEMBERS` を持つ DEPUTY）には承認待ちに `INVITE_REISSUE` が加わり、内訳行から `/{teams|organizations}/{slug}/invites#reissue-requests`（招待管理画面の再招待依頼の欄）へ遷移できる。権限の無い DEPUTY には出ない。
 - **degraded**: 1ドメインの集計を一時障害にして `degraded` バッジが 0 件と区別表示されることを確認。
 - **IDOR**: 別組織の slug で `/organizations/{other}/admin` → BE API が 403、FE はスコープトップへリダイレクト。

@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { springPage } from '../../tests/fixtures/spring-page'
 
-/** 全Controller Pageメソッドとの27=27照合済み。要素DTO全体や認可の合格を意味しない。 */
+/** 全Controller Pageメソッドとの29=29照合済み。要素DTO全体や認可の合格を意味しない。 */
 const AUDITED_ENDPOINTS = {
   "/api/v1/admin/dashboard/users": "未使用宣言",
   "/api/v1/admin/village-creation-requests": "content direct",
@@ -15,6 +15,7 @@ const AUDITED_ENDPOINTS = {
   "/api/v1/organizations/{orgId}/point-cards/stamps": "content direct",
   "/api/v1/organizations/{orgId}/succession/covenants": "FE未使用",
   "/api/v1/organizations/{organizationId}/join-requests": "content direct",
+  "/api/v1/organizations/{slug}/invite-reissue-requests": "content direct",
   "/api/v1/public/blog-posts/{postId}/comments": "公開direct",
   "/api/v1/public/organizations/search": "公開direct",
   "/api/v1/public/organizations/{slug}/events": "公開direct",
@@ -31,6 +32,7 @@ const AUDITED_ENDPOINTS = {
   "/api/v1/system-admin/email-outbox": "adapter",
   "/api/v1/system-admin/gdpr/purge-status": "content direct",
   "/api/v1/teams/{id}/friend-notifications": "FE未使用",
+  "/api/v1/teams/{slug}/invite-reissue-requests": "content direct",
   "/api/v1/teams/{teamId}/join-requests": "content direct",
   "/api/v1/villages/{villageId}/join-requests": "content direct"
 }
@@ -57,8 +59,8 @@ function assertCoverage(actual: string[], audited: string[]) {
 }
 
 describe('Spring Page公開経路の監査coverage', () => {
-  it('Spring Page27経路が登録集合と完全一致し、独自Page DTO7経路を混ぜない', () => {
-    expect(Object.keys(AUDITED_ENDPOINTS)).toHaveLength(27)
+  it('Spring Page29経路が登録集合と完全一致し、独自Page DTO7経路を混ぜない', () => {
+    expect(Object.keys(AUDITED_ENDPOINTS)).toHaveLength(29)
     assertCoverage(pageEndpoints(spec), Object.keys(AUDITED_ENDPOINTS))
   })
   it('OpenAPIへ未登録の新Page経路を加えた負例を必ず拒否する', () => {
