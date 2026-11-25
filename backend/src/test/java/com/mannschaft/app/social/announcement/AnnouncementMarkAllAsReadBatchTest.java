@@ -98,8 +98,19 @@ class AnnouncementMarkAllAsReadBatchTest {
     @Mock
     private Clock clock;
 
+    /** 元コンテンツの公開状態（N9）。本テストの関心外なので「公開済み」とする（判定は IT で検証する）。 */
+    @Mock
+    private AnnouncementSourcePublicationGuard sourcePublication;
+
     @InjectMocks
     private AnnouncementReadCommandService commandService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void 元コンテンツは公開済みとする() {
+        lenient().when(sourcePublication.isPublished(any(), any())).thenReturn(true);
+        lenient().when(sourcePublication.retainPublished(any(), any(), any()))
+                .thenAnswer(invocation -> new java.util.ArrayList<>((Collection<?>) invocation.getArgument(0)));
+    }
 
     /** {@code from} から {@code count} 件の連番 ID リストを作る。 */
     private static List<Long> ids(long from, int count) {

@@ -1,0 +1,11 @@
+-- CMP-261107-1833 PR3 V268.20261124173054 ロールバック手順（手動実行用、Flyway 自動実行されない）
+-- 配置場所: db/rollback/ 配下は Flyway スキャン対象外であり、手動コピー＆実行のテンプレートとして使用する。
+-- ⚠ 見送り済み（REISSUE_DECLINED）の保留は、旧 CHECK に収まるよう案内を閉じた扱い（DISMISSED）へ寄せてから戻す。
+--
+-- UPDATE registration_pending_invites SET status = 'DISMISSED', version = version + 1, updated_at = UTC_TIMESTAMP(6)
+--     WHERE status = 'REISSUE_DECLINED';
+-- DROP INDEX idx_rpi_scope_status ON registration_pending_invites;
+-- ALTER TABLE registration_pending_invites DROP CHECK chk_registration_pending_invites_status;
+-- ALTER TABLE registration_pending_invites
+--     ADD CONSTRAINT chk_registration_pending_invites_status CHECK (status IN ('PENDING', 'ACCEPTING', 'JOINED',
+--         'EXPIRED', 'UNAVAILABLE', 'DECLINED', 'REISSUE_REQUESTED', 'DISMISSED', 'DISCARDED'));

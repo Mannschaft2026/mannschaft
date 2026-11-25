@@ -49,6 +49,9 @@ class ShiftChangeRequestServiceAuthzTest {
     /** 認可根治 Wave7: create の slotId 帰属検証（BOLA 封鎖）で使用。 */
     @Mock
     private ShiftSlotRepository slotRepository;
+    /** 通知イベントの publish 先（本テストは認可の契約だけを見るため中身は検証しない）。 */
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Mock
     private AccessControlService accessControlService;
     @Mock
@@ -61,7 +64,7 @@ class ShiftChangeRequestServiceAuthzTest {
     @org.junit.jupiter.api.BeforeEach
     void setUpService() {
         ShiftChangeRequestService txService = new ShiftChangeRequestService(
-                changeRequestRepository, scheduleRepository, slotRepository);
+                changeRequestRepository, scheduleRepository, slotRepository, eventPublisher);
         service = new ShiftChangeRequestFacade(txService, new ScopeConcealingAccessGate(accessControlService),
                 accessControlService, nameResolverService);
     }
@@ -128,7 +131,7 @@ class ShiftChangeRequestServiceAuthzTest {
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
         given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(true);
-        given(changeRequestRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+        given(changeRequestRepository.saveAndFlush(any())).willAnswer(inv -> inv.getArgument(0));
 
         // 例外なく審査が確定する
         service.review(REQUEST_ID, reviewReq(), REVIEWER_ID);
@@ -136,7 +139,7 @@ class ShiftChangeRequestServiceAuthzTest {
         // SYSTEM_ADMIN 短絡したので per-scope 判定は呼ばれない
         verify(accessControlService, never()).isAdminOrAbove(any(), any(), any());
         verify(accessControlService, never()).isMember(any(), any(), any());
-        verify(changeRequestRepository).save(any());
+        verify(changeRequestRepository).saveAndFlush(any());
     }
 
     // ════════════════════════════════════════════════════════════

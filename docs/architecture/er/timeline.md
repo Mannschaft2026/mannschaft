@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 12
+- テーブル数: 13
 - ビュー数: 0
 
 ## ER 図
@@ -15,6 +15,13 @@ erDiagram
         bigint id PK
         bigint user_id "ID参照"
         bigint timeline_post_id FK
+    }
+    timeline_effort_sources {
+        binary id PK
+        bigint team_id "ID参照"
+        bigint timeline_post_id FK, UK
+        binary share_uuid UK
+        bigint grant_membership_id "ID参照"
     }
     timeline_poll_options {
         bigint id PK
@@ -68,10 +75,15 @@ erDiagram
         bigint id PK
         bigint user_id "ID参照"
     }
+    memberships
+    teams
     users
     villages
     timeline_posts ||--o{ timeline_bookmarks : "timeline_post_id"
     users ||..o{ timeline_bookmarks : "ID参照(FKなし) user_id"
+    memberships ||..o{ timeline_effort_sources : "ID参照(FKなし) grant_membership_id"
+    teams ||..o{ timeline_effort_sources : "ID参照(FKなし) team_id"
+    timeline_posts ||--o| timeline_effort_sources : "timeline_post_id"
     timeline_polls ||--o{ timeline_poll_options : "timeline_poll_id"
     timeline_poll_options ||--o{ timeline_poll_votes : "timeline_poll_option_id"
     timeline_polls ||--o{ timeline_poll_votes : "timeline_poll_id"
@@ -99,6 +111,7 @@ erDiagram
 
 | 参照元ドメイン | 参照元テーブル | 列 | 種別 | 参照先テーブル |
 | --- | --- | --- | --- | --- |
+| [actionmemo](actionmemo.md) | `action_memo_daily_posts` | `timeline_post_id` | ID参照 | `timeline_posts` |
 | [actionmemo](actionmemo.md) | `action_memos` | `team_timeline_post_id` | ID参照 | `timeline_posts` |
 | [actionmemo](actionmemo.md) | `action_memos` | `timeline_post_id` | ID参照 | `timeline_posts` |
 | [cms](cms.md) | `blog_posts` | `timeline_post_id` | ID参照 | `timeline_posts` |
@@ -143,6 +156,21 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | `user_id` | `bigint unsigned` | NO | （なし） |  |
 | `timeline_post_id` | `bigint unsigned` | NO | （なし） |  |
 | `created_at` | `datetime` | NO | `CURRENT_TIMESTAMP` （式） |  |
+
+### `timeline_effort_sources`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） |  |
+| `team_id` | `bigint unsigned` | NO | （なし） |  |
+| `timeline_post_id` | `bigint unsigned` | NO | （なし） |  |
+| `share_uuid` | `binary(16)` | NO | （なし） |  |
+| `grant_membership_id` | `bigint unsigned` | NO | （なし） |  |
+| `share_version` | `bigint` | NO | （なし） |  |
+| `content_revision` | `bigint` | NO | （なし） |  |
+| `is_revoked` | `tinyint(1)` | NO | `0` |  |
+| `created_at` | `datetime(6)` | NO | （なし） |  |
+| `updated_at` | `datetime(6)` | NO | （なし） |  |
 
 ### `timeline_poll_options`
 

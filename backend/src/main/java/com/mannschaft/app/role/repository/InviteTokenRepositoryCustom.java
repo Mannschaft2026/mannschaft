@@ -1,10 +1,14 @@
 package com.mannschaft.app.role.repository;
 
 import com.mannschaft.app.role.dto.InviteClaimAuditContext;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,8 +59,72 @@ public interface InviteTokenRepositoryCustom {
     /** CLAIMED→GRANTED の条件付き UPDATE。 @return 更新行数 */
     int markClaimGranted(UUID claimId);
 
-    /** CLAIMED→RELEASED の条件付き UPDATE。 @return 更新行数 */
+    /**
+     * CLAIMED→RELEASED の条件付き UPDATE。この claim による付与がコミット済み（{@code grant_committed_at} あり）、
+     * または付与されたか不明な旧データ（{@code legacy_grant_unknown_at} あり）なら戻さない（0 行）。 @return 更新行数
+     */
     int markClaimReleased(UUID claimId);
+
+    /**
+     * CLAIMED かつ未付与の claim に「この claim による付与がコミット済み」の印を立てる条件付き UPDATE
+     * （ロール付与と同じトランザクションで呼ぶ。CMP-261107-1833）。 @return 更新行数
+     */
+    int markClaimGrantCommitted(UUID claimId);
+
+    /** claim の状態と付与印を、ロック付きの最新値で読む（CMP-261107-1833）。 */
+    Optional<InviteClaimLock> lockClaim(UUID claimId);
+
+    /**
+     * 同じ招待・同じ利用者に残った CLAIMED の確保を、ロック付きの最新値で1件引く（CMP-261107-1833 §9-3）。
+     * 招待行をロックした後に呼ぶこと（ロック順: 招待行 → claim）。
+     */
+    Optional<InviteClaimLock> findClaimedForUpdate(Long tokenId, Long userId);
+
+    /** 招待のハッシュで、付与するロールの名前を引く（ロックなし。CMP-261107-1833 §2）。 */
+    Optional<String> findRoleNameByTokenHash(String tokenHash);
+
+    /**
+     * 招待のハッシュで、有効性（失効・仮発行中・期限切れ・上限到達）を DB の現在時刻で判定する（ロックなし。
+     * CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     *
+     * <p>{@code userId} 本人がこの招待に CLAIMED の確保を持っていれば、上限は判定しない（その1回は本人の確保が
+     * 使っている。承認経路の {@code claimOrResume} の再開判定と同じ規則。PR3 検分 P1）。失効・期限切れは判定する。</p>
+     */
+    Optional<InviteValidity> findValidityByTokenHash(String tokenHash, Long userId);
+
+    /** 招待のハッシュ群から、付与するロールの名前をまとめて引く（1 本の SQL。CMP-261107-1833 PR3 L4）。 */
+    Map<String, String> findRoleNamesByTokenHashes(Collection<String> tokenHashes);
+
+    /** 作成直後の招待に仮発行の印（{@code revoked_at = created_at}）を付ける（CMP-261107-1833 PR3 設計 c）。 @return 更新行数 */
+    int markStaged(Long tokenId);
+
+    /**
+     * 仮発行の印がある未使用の宛先付き招待を有効にする（{@code revoked_at = NULL}）。印の窓（作成から
+     * {@link InviteValidity#STAGING_WINDOW}）を過ぎたものは有効にしない（CMP-261107-1833 PR3 設計 c）。 @return 更新行数
+     */
+    int activateStaged(Long tokenId, Long targetUserId);
+
+    /**
+     * 有効化の条件付き UPDATE（CAS・唯一の定義）。仮発行の印（{@code revoked_at = created_at}）があり窓の内のときだけ効く。
+     *
+     * <p>仮発行の行の上では、この有効化と {@link #REVOKE_EXPIRED_STAGED_SQL}（参照時の失効）の 2 つの CAS のうち、
+     * 先にコミットした 1 つだけが勝つ（どちらも印を条件にし、同じ行を書くので InnoDB の行ロックで直列化される。
+     * 未コミットの片方があればもう片方は待ち、コミット後の値で条件を評価し直す）。窓の述語は「有効化が長く遅れたときに
+     * 参照側が失効させてよいか」の判断基準で、競合の勝敗は保証しない（CMP-261107-1833 PR3 3 回目の検分・殿の裁定）。</p>
+     */
+    String ACTIVATE_STAGED_SQL = "UPDATE invite_tokens SET revoked_at = NULL WHERE id = :id "
+            + "AND target_user_id = :targetUserId AND used_count = 0 AND " + InviteValidity.STAGING_OPEN_SQL;
+
+    /**
+     * 参照時の失効の条件付き UPDATE（CAS）。仮発行の印があり窓の外のときだけ、{@code revoked_at} を {@code created_at} と異なる
+     * 恒久失効の値（{@code UTC_TIMESTAMP(6)}）にして印を消す。有効化（{@link #ACTIVATE_STAGED_SQL}）と同じ行を取り合い、先にコミットした
+     * 方だけが勝つ。
+     */
+    String REVOKE_EXPIRED_STAGED_SQL = "UPDATE invite_tokens SET revoked_at = UTC_TIMESTAMP(6) WHERE token_hash = :tokenHash "
+            + "AND revoked_at = created_at AND NOT " + InviteValidity.STAGING_OPEN_SQL;
+
+    /** {@link #REVOKE_EXPIRED_STAGED_SQL} を実行する。 @return 更新行数（1: 失効が勝った / 0: 印が無い・窓の内・有効化が先にコミット） */
+    int revokeExpiredStaged(String tokenHash);
 
     /** claim が指す招待の主キー。 */
     Optional<Long> findClaimTokenId(UUID claimId);

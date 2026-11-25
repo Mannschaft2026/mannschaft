@@ -89,10 +89,10 @@ class AnnouncementDeletePinExistenceOracleIT extends AbstractMySqlIntegrationTes
     private final List<Long> orgIds = new ArrayList<>();
     private final List<Long> feedIds = new ArrayList<>();
     private final List<Long> paymentItemIds = new ArrayList<>();
+    private final List<Long> blogPostIds = new ArrayList<>();
     private Set<String> rolesBefore;
 
     private String key;
-    private long sourceSeq = 8_261_103_000L;
 
     private Long teamAId;
     private Long teamBId;
@@ -203,6 +203,9 @@ class AnnouncementDeletePinExistenceOracleIT extends AbstractMySqlIntegrationTes
                             feedIds);
                     named("DELETE FROM announcement_read_status WHERE announcement_feed_id IN (:ids)", feedIds);
                     named("DELETE FROM announcement_feeds WHERE id IN (:ids)", feedIds);
+                }
+                if (!blogPostIds.isEmpty()) {
+                    named("DELETE FROM blog_posts WHERE id IN (:ids)", blogPostIds);
                 }
                 if (!paymentItemIds.isEmpty()) {
                     named("DELETE FROM payment_items WHERE id IN (:ids)", paymentItemIds);
@@ -622,13 +625,16 @@ class AnnouncementDeletePinExistenceOracleIT extends AbstractMySqlIntegrationTes
     }
 
     private Long saveFeed(AnnouncementScopeType scopeType, Long scopeId, Long authorId, String visibility) {
+        // 元は公開済みの実在記事（元が公開済みでないお知らせは ID 指定の経路でも不在扱い。N9）
+        long sourceId = AnnouncementSourceFixtures.publishedBlog(em, scopeType, scopeId, authorId);
+        blogPostIds.add(sourceId);
         AnnouncementFeedEntity feed = AnnouncementFeedEntity.builder()
                 .scopeType(scopeType)
                 .scopeId(scopeId)
                 .sourceType(AnnouncementSourceType.BLOG_POST)
-                .sourceId(++sourceSeq)
+                .sourceId(sourceId)
                 .authorId(authorId)
-                .titleCache("ANNORACLE お知らせ " + key + " " + sourceSeq)
+                .titleCache("ANNORACLE お知らせ " + key + " " + sourceId)
                 .visibility(visibility)
                 .build();
         em.persist(feed);

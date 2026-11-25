@@ -15,13 +15,14 @@ import {
  * <p>対象画面: {@code /admin/shift-budget/dashboard}（{@code dashboard.vue}）。
  * 設計書 §7.4。</p>
  *
- * <p>シナリオ（5 ケース）:</p>
+ * <p>シナリオ（6 ケース）:</p>
  * <ol>
  *   <li>BUDGET-DASH-01: KPI 4 段階（OK/WARN/EXCEEDED/SEVERE_EXCEEDED）が正しく集計される</li>
  *   <li>BUDGET-DASH-02: 月次締め成功 → 成功通知</li>
  *   <li>BUDGET-DASH-03: 月次締め重複（既締め）→ info 通知</li>
  *   <li>BUDGET-DASH-04: 月次締めバリデーション（YYYY-MM 形式違反）→ エラー通知</li>
  *   <li>BUDGET-DASH-05: 関連画面リンク（割当/警告/失敗イベント）が遷移する</li>
+ *   <li>BUDGET-DASH-06: 未終了月（当月以降）は実行ボタン無効＋理由表示（POST されない）</li>
  * </ol>
  */
 
@@ -218,5 +219,34 @@ test.describe('F08.7 Phase 11-α: shift-budget/dashboard', () => {
     // i18n "shiftBudget.dashboard.viewFailedEvents" = "失敗イベントを見る"
     await page.getByText('失敗イベントを見る').click()
     await page.waitForURL('**/admin/shift-budget/failed-events', { timeout: 10_000 })
+  })
+
+  test('BUDGET-DASH-06: 月次締めの未終了月は実行ボタンが無効になり理由が出る（POST されない）', async ({
+    page,
+  }) => {
+    await mockAllocationsList(page, [buildAllocation()], { size: 100 })
+
+    let monthlyClosePosted = false
+    await page.route('**/api/v1/shift-budget/monthly-close', async (route, request) => {
+      if (request.method() === 'POST') {
+        monthlyClosePosted = true
+      }
+      await route.fallback()
+    })
+
+    await page.goto('/admin/shift-budget/dashboard')
+    await waitForHydration(page)
+
+    await page.getByRole('button', { name: '月次締め実行' }).click()
+    // 十分先の未来月（当月・未来月とも同じ扱い）
+    await page.getByPlaceholder('YYYY-MM').fill('2099-12')
+
+    // i18n "shiftBudget.monthlyClose.notEnded"
+    await expect(page.getByTestId('monthly-close-not-ended')).toBeVisible()
+    await expect(page.getByTestId('monthly-close-not-ended')).toContainText(
+      '2099-12 はまだ終わっていないため締められません',
+    )
+    await expect(page.getByRole('button', { name: '実行', exact: true })).toBeDisabled()
+    expect(monthlyClosePosted).toBe(false)
   })
 })

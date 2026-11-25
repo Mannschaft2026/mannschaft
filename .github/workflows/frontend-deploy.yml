@@ -102,6 +102,11 @@ jobs:
           if [ "${#present[@]}" -eq 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::warning::AWS credentials not configured — skipping deploy"
+            {
+              echo "## デプロイ未実行"
+              echo ""
+              echo "デプロイ未実行（AWS 資格情報が未設定のため skip）。このジョブの緑はデプロイ成功を意味しない。"
+            } >> "$GITHUB_STEP_SUMMARY"
           elif [ "${#missing[@]}" -eq 0 ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
           else

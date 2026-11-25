@@ -86,6 +86,12 @@ public enum NotificationType {
     JOIN_REQUEST_APPROVED(NotificationPriority.NORMAL, "USER"),
     /** 柱③-A: 参加申請が却下された旨の申請者向け通知（CMP-260901-1538）。 */
     JOIN_REQUEST_REJECTED(NotificationPriority.NORMAL, "USER"),
+    /** 失効した招待から登録した利用者が再招待を依頼した旨の招待権限者向け通知（CMP-261107-1833）。 */
+    INVITE_REISSUE_REQUESTED(NotificationPriority.NORMAL, "USER"),
+    /** 再招待の依頼に応じて新しい招待が発行された旨の依頼者向け通知（CMP-261107-1833 PR3）。 */
+    INVITE_REISSUED(NotificationPriority.NORMAL, "USER"),
+    /** 再招待の依頼が見送られた旨の依頼者向け通知（CMP-261107-1833 PR3）。 */
+    INVITE_REISSUE_DECLINED(NotificationPriority.NORMAL, "USER"),
     NEW_DEVICE_LOGIN(NotificationPriority.HIGH, "USER"),
 
     RECRUITMENT_PENALTY_LIFTED(NotificationPriority.NORMAL, "RECRUITMENT_PENALTY"),

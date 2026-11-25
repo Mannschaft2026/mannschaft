@@ -18,15 +18,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.parallel.Isolated;
+import org.awaitility.Awaitility;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,6 +69,9 @@ class OrganizationMembersN1IT extends AbstractMySqlIntegrationTest {
     private ScopeMemberCalendarSettingService scopeMemberCalendarSettingService;
     @Autowired
     private UserRepository userRepository;
+    @Autowired
+    @Qualifier("event-pool")
+    private Executor eventPoolExecutor;
     @PersistenceContext
     private EntityManager em;
 
@@ -319,6 +327,10 @@ class OrganizationMembersN1IT extends AbstractMySqlIntegrationTest {
     private long countSql(Supplier<?> call) {
         Statistics s = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
         boolean originallyEnabled = s.isStatisticsEnabled();
+        // Statistics は全スレッド共有。同じ JVM で直前に走った別クラスの AFTER_COMMIT + @Async("event-pool")
+        // リスナー（例: 確認通知のメール配送）の SQL が測定窓へ混ざらないよう、窓を開く前に event-pool の
+        // 実行中・待ちが 0 になるまで待つ（MemberReadQueryCountIT と同じ型）。
+        awaitEventPoolIdle();
         try {
             s.setStatisticsEnabled(true);
             s.clear();
@@ -328,6 +340,12 @@ class OrganizationMembersN1IT extends AbstractMySqlIntegrationTest {
             s.setStatisticsEnabled(originallyEnabled);
             em.clear();
         }
+    }
+
+    private void awaitEventPoolIdle() {
+        ThreadPoolTaskExecutor pool = (ThreadPoolTaskExecutor) eventPoolExecutor;
+        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(50)).until(() ->
+                pool.getActiveCount() == 0 && pool.getThreadPoolExecutor().getQueue().isEmpty());
     }
 
     private String row(OrgAllMembersResponse r) {

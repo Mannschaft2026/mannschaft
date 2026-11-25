@@ -16,6 +16,8 @@ import com.mannschaft.app.actionmemo.dto.UpdateActionMemoRequest;
 import com.mannschaft.app.actionmemo.entity.ActionMemoEntity;
 import com.mannschaft.app.actionmemo.entity.UserActionMemoSettingsEntity;
 import com.mannschaft.app.actionmemo.enums.ActionMemoCategory;
+import com.mannschaft.app.actionmemo.entity.ActionMemoDailyPostEntity;
+import com.mannschaft.app.actionmemo.repository.ActionMemoDailyPostRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoTagLinkRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoTagRepository;
@@ -101,6 +103,10 @@ class ActionMemoServicePublishTest {
 
     @Mock
     private TodoRepository todoRepository;
+
+    /** 日ごとの公開記録（CMP-261123-1201）。未スタブなら Optional.empty（記録なし）を返す。 */
+    @Mock
+    private ActionMemoDailyPostRepository dailyPostRepository;
 
     @Mock
     private PermissionScopeQueryService permissionScopeQueryService;
@@ -389,6 +395,54 @@ class ActionMemoServicePublishTest {
             assertThat(memoWithOldPost.getTimelinePostId()).isEqualTo(newId);
             verify(timelinePostService, times(1)).softDeleteOwnPersonalPosts(any(), org.mockito.ArgumentMatchers.eq(USER_ID));
             verify(timelinePostService, times(1)).saveActionMemoPost(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("CMP-261123-1201 旧投稿は日ごとの記録とメモの投稿 ID の和集合から探して論理削除し、記録を新 ID に更新する（全メモの ID が外れていても記録の旧投稿を消す）")
+        void publishDaily_unionOfDailyPostRecordAndMemoIds() {
+            useInMemoryPostsDb();
+            ActionMemoEntity unlinked = memoWithCreatedAt(
+                    1L, USER_ID, TARGET_DATE, "ID が外れたメモ", null,
+                    LocalDateTime.of(2026, 4, 9, 11, 0));
+            ActionMemoEntity linked = memoWithCreatedAt(
+                    2L, USER_ID, TARGET_DATE, "別 ID のメモ", null,
+                    LocalDateTime.of(2026, 4, 9, 12, 0));
+            linked.setTimelinePostId(501L);
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(unlinked, linked));
+            given(settingsService.getMoodEnabled(USER_ID)).willReturn(false);
+            ActionMemoDailyPostEntity record = ActionMemoDailyPostEntity.builder()
+                    .userId(USER_ID).memoDate(TARGET_DATE).timelinePostId(500L).build();
+            given(dailyPostRepository.findByUserIdAndMemoDateForUpdate(USER_ID, TARGET_DATE))
+                    .willReturn(Optional.of(record));
+            existingPost(500L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+            existingPost(501L, PostScopeType.PERSONAL, USER_ID, USER_ID);
+
+            PublishDailyResponse response = actionMemoPublishingService.publishDaily(
+                    publishDailyRequest(TARGET_DATE), USER_ID);
+
+            verify(memoRepository).lockByUserIdAndMemoDate(USER_ID, TARGET_DATE);
+            verify(timelinePostService).softDeleteOwnPersonalPosts(Set.of(500L, 501L), USER_ID);
+            assertThat(record.getTimelinePostId()).as("記録は新 ID に更新される").isEqualTo(response.getTimelinePostId());
+            verify(dailyPostRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("CMP-261123-1201 初回公開（記録なし）では記録を新規保存する")
+        void publishDaily_firstPublishInsertsRecord() {
+            useInMemoryPostsDb();
+            ActionMemoEntity memo = memoWithCreatedAt(
+                    1L, USER_ID, TARGET_DATE, "初回", null, LocalDateTime.of(2026, 4, 9, 11, 0));
+            given(memoRepository.findByUserIdAndMemoDate(USER_ID, TARGET_DATE)).willReturn(List.of(memo));
+            given(settingsService.getMoodEnabled(USER_ID)).willReturn(false);
+
+            PublishDailyResponse response = actionMemoPublishingService.publishDaily(
+                    publishDailyRequest(TARGET_DATE), USER_ID);
+
+            ArgumentCaptor<ActionMemoDailyPostEntity> captor = ArgumentCaptor.forClass(ActionMemoDailyPostEntity.class);
+            verify(dailyPostRepository).save(captor.capture());
+            assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
+            assertThat(captor.getValue().getMemoDate()).isEqualTo(TARGET_DATE);
+            assertThat(captor.getValue().getTimelinePostId()).isEqualTo(response.getTimelinePostId());
         }
 
         @Test

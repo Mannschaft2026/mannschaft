@@ -27,9 +27,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { createSurvey } = useSurveyApi()
+const { createSurvey, publishSurvey } = useSurveyApi()
 const { error: showError, success: showSuccess } = useNotification()
-const { handleApiError } = useErrorHandler()
+const { handleApiError, resolveMessage } = useErrorHandler()
 const authStore = useAuthStore()
 
 // === フォーム状態 ===
@@ -56,6 +56,12 @@ const deadline = ref<Date | null>(null)
 const questions = ref<QuestionDraft[]>([])
 
 const submitting = ref(false)
+// ダイアログ内に常設表示する検証・公開失敗の理由（トーストだけで消えないようにする）
+const formError = ref<string | null>(null)
+// 「公開して作成」で作成は成功したが公開に失敗した場合の下書き（再試行時は作成せず公開だけ行う）
+const createdDraft = ref<SurveyResponse | null>(null)
+// 作成済み・公開失敗の間は入力欄を触れなくし、「公開を再試行」「下書きのまま閉じる」だけを許す
+const locked = computed(() => createdDraft.value !== null)
 
 // === useFormDraft（ADHD配慮・自動保存）===
 // キーにuserId・scopeType・scopeIdを含めてスコープ間の衝突を防ぐ
@@ -104,7 +110,13 @@ const restoredFlash = ref(false)
 
 // ダイアログが開くたびにlocaleストレージから復元を試みる
 watch(visible, (nowVisible) => {
-  if (!nowVisible) return
+  if (!nowVisible) {
+    finalizeClose()
+    return
+  }
+  // 前回の公開失敗（古い下書き・エラー・ロック）を持ち越さない
+  formError.value = null
+  createdDraft.value = null
   const saved = restoreDraft()
   if (saved) {
     title.value = saved.title ?? ''
@@ -160,6 +172,16 @@ function resetForm() {
   unrespondedVisibility.value = 'CREATOR_AND_ADMIN'
   deadline.value = null
   questions.value = []
+  formError.value = null
+  createdDraft.value = null
+}
+
+// 閉じるとき: 公開失敗で下書きが残っていれば、一覧に反映させるため created をここで1回だけ通知する
+function finalizeClose() {
+  const draft = createdDraft.value
+  createdDraft.value = null
+  if (draft) emit('created', draft)
+  resetForm()
 }
 
 function close() {
@@ -208,11 +230,51 @@ function validate(mode: 'draft' | 'publish'): string | null {
   return null
 }
 
+// 作成済みのアンケートを公開する。失敗時は成功トーストを出さず、理由をダイアログ内に表示する。
+// created は「公開成功」または「下書きのまま閉じる」のどちらか一方で1回だけ emit する。
+async function publishCreated(created: SurveyResponse) {
+  try {
+    await publishSurvey(props.scopeType, props.scopeId, created.id)
+  } catch (e) {
+    createdDraft.value = created
+    const apiError = e as { data?: { error?: { code?: string; message?: string } } }
+    const code = apiError?.data?.error?.code
+    const base = t('surveys.create.publishFailedAfterCreate')
+    formError.value = code
+      ? `${base} ${resolveMessage(code, apiError.data?.error?.message, 'surveyCreate')}`
+      : base
+    return
+  }
+  showSuccess(t('surveys.create.successToast'))
+  createdDraft.value = null
+  emit('created', created)
+  resetForm()
+  close()
+}
+
+// 下書きのまま閉じる（created は閉じる処理で1回通知される）
+function closeAsDraft() {
+  close()
+}
+
 // === 送信共通処理 ===
 async function submitWith(mode: 'draft' | 'publish') {
+  // 公開失敗後は公開の再試行だけを通す（下書き保存や再作成の経路には入れない）
+  if (createdDraft.value) {
+    if (mode !== 'publish') return
+    formError.value = null
+    submitting.value = true
+    try {
+      await publishCreated(createdDraft.value)
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+  formError.value = null
   const errorMsg = validate(mode)
   if (errorMsg) {
-    showError(errorMsg)
+    formError.value = errorMsg
     return
   }
 
@@ -249,18 +311,19 @@ async function submitWith(mode: 'draft' | 'publish') {
 
     const res = await createSurvey(props.scopeType, props.scopeId, body)
 
-    // 成功 → 下書き削除
+    // 作成成功 → 入力途中の下書きを削除
     clearDraft()
 
     if (mode === 'draft') {
       showSuccess(t('surveys.create.draftSuccessToast'))
-    } else {
-      showSuccess(t('surveys.create.successToast'))
+      emit('created', res.data)
+      resetForm()
+      close()
+      return
     }
 
-    emit('created', res.data)
-    resetForm()
-    close()
+    // 「公開して作成」: 作成後に公開 API を呼んで公開まで行う
+    await publishCreated(res.data)
   } catch (e) {
     // BE エラーコード（例: SURVEY_023 匿名×チーム別内訳の併用禁止）があれば
     // それを優先表示し、無ければ汎用の失敗トーストにフォールバックする。
@@ -291,7 +354,7 @@ function submitAndPublish() {
     :style="{ width: '720px' }"
     :breakpoints="{ '960px': '90vw' }"
     :header="t('surveys.create.dialogHeader')"
-    @hide="resetForm"
+    @hide="finalizeClose"
   >
     <div class="flex flex-col gap-4" data-testid="survey-create-dialog">
       <!-- 復元フラッシュ -->
@@ -320,6 +383,28 @@ function submitAndPublish() {
         <span>{{ t('surveys.create.draftHint') }}</span>
       </div>
 
+      <!-- 検証・公開失敗の理由（常設表示） -->
+      <div
+        v-if="formError"
+        class="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-200"
+        role="alert"
+        data-testid="survey-create-error"
+      >
+        <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
+        <span>{{ formError }}</span>
+      </div>
+
+      <!-- 公開失敗後: 下書きは作成済み。再試行か下書きのまま閉じるだけ -->
+      <div
+        v-if="locked"
+        class="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
+        data-testid="survey-create-locked-note"
+      >
+        <i class="pi pi-lock mt-0.5 shrink-0" />
+        <span>{{ t('surveys.create.lockedNote') }}</span>
+      </div>
+
+      <div class="flex flex-col gap-4" :class="{ 'opacity-60': locked }" :inert="locked" data-testid="survey-create-form-fields">
       <!-- タイトル -->
       <div>
         <label class="mb-1 block text-sm font-medium">
@@ -429,9 +514,28 @@ function submitAndPublish() {
         </label>
         <SurveyQuestionEditor v-model="questions" />
       </div>
+      </div>
     </div>
 
     <template #footer>
+      <template v-if="locked">
+        <Button
+          :label="t('surveys.create.closeAsDraft')"
+          text
+          severity="secondary"
+          :disabled="submitting"
+          data-testid="survey-create-close-as-draft"
+          @click="closeAsDraft"
+        />
+        <Button
+          :label="t('surveys.create.retryPublish')"
+          icon="pi pi-send"
+          :loading="submitting"
+          data-testid="survey-create-submit"
+          @click="submitAndPublish"
+        />
+      </template>
+      <template v-else>
       <Button
         :label="t('surveys.create.cancel')"
         text
@@ -458,6 +562,7 @@ function submitAndPublish() {
         data-testid="survey-create-submit"
         @click="submitAndPublish"
       />
+      </template>
     </template>
   </Dialog>
 </template>

@@ -245,6 +245,10 @@
         "event_deleted": "Memo deleted",
         "event_todo_reverted": "TODO reverted"
       }
+    },
+    "published_post": {
+      "view_link": "View published post",
+      "published_note": "Published (only you can see it)"
     }
   }
 }

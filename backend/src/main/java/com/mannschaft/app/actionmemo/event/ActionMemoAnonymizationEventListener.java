@@ -1,5 +1,6 @@
 package com.mannschaft.app.actionmemo.event;
 
+import com.mannschaft.app.actionmemo.repository.ActionMemoDailyPostRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoTagRepository;
 import com.mannschaft.app.actionmemo.repository.UserActionMemoSettingsRepository;
@@ -68,6 +69,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * </ul>
  * </p>
  *
+ * <p>{@code action_memo_daily_posts}（日ごとの公開記録）は行動日と投稿 ID を持つ行動ログの一部のため、
+ * 行動メモ本体と同じく即時削除し、30日後の消去・手動再試行（{@link #retryPurge}）でも残りを回収する。</p>
+ *
  * <p>弱側の例外隔離は維持する。強側の削除失敗は所有TXをロールバックさせ、PENDINGを維持する。
  * 完了記録は所有TXのコミット成立後だけ行う。</p>
  */
@@ -79,6 +83,7 @@ public class ActionMemoAnonymizationEventListener {
     private final AccountPurgeCompletionService completionService;
 
     private final ActionMemoRepository actionMemoRepository;
+    private final ActionMemoDailyPostRepository actionMemoDailyPostRepository;
     private final ActionMemoTagRepository actionMemoTagRepository;
     private final UserActionMemoSettingsRepository userActionMemoSettingsRepository;
 
@@ -99,8 +104,11 @@ public class ActionMemoAnonymizationEventListener {
         Long userId = event.getUserId();
         try {
             int deleted = actionMemoRepository.deleteAllByUserIdIncludingDeleted(userId);
-            log.info("ユーザー退会: 行動メモ（行動ログ＝PII）を即時削除完了: userId={}, deleted={}",
-                    userId, deleted);
+            // 日ごとの公開記録（行動日と投稿 ID の対応）も行動ログの一部なので同時に即時削除する（CMP-261123-1201）。
+            // 失敗しても30日後の消去・再試行（purgeSettings）で回収される。
+            int deletedDailyPosts = actionMemoDailyPostRepository.deleteAllByUserId(userId);
+            log.info("ユーザー退会: 行動メモ（行動ログ＝PII）を即時削除完了: userId={}, deleted={}, dailyPosts={}",
+                    userId, deleted, deletedDailyPosts);
         } catch (Exception e) {
             log.warn("ユーザー退会: 行動メモの即時削除失敗: userId={}, error={}",
                     userId, e.getMessage(), e);
@@ -135,5 +143,7 @@ public class ActionMemoAnonymizationEventListener {
     private void purgeSettings(Long userId) {
         actionMemoTagRepository.deleteAllByUserIdIncludingDeleted(userId);
         userActionMemoSettingsRepository.deleteByUserId(userId);
+        // 即時削除（onUserAnonymized）が失敗・未実行だった場合の日ごとの公開記録の残りを回収する（CMP-261123-1201）
+        actionMemoDailyPostRepository.deleteAllByUserId(userId);
     }
 }

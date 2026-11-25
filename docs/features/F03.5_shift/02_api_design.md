@@ -1835,9 +1835,22 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 **エラーレスポンス**
 | ステータス | 条件 |
 |-----------|------|
-| 400 | バリデーションエラー（add/remove 両方空、無効な user_id 等） |
+| 400 | バリデーションエラー（add/remove 両方空、無効な user_id 等）/ **【CMP-261123-1821】** 新たに入る者に、枠のシフト表のチームの現役メンバーでない者（他チーム所属・非所属・SUPPORTER・存在しない・非 ACTIVE・論理削除済み）が含まれる（`SHIFT_049`。`PATCH /slots/{id}` の `assignedUserIds` 置換と `/move` も同じ） |
 | 403 | ADMIN / DEPUTY_ADMIN（MANAGE_SHIFTS）ではない |
 | 404 | スロットが存在しない |
+
+**【CMP-261123-1821】追加先の所属検証**: 枠の割当に**新たに入る**ユーザーは、**枠が属するシフト表のチーム**の現役メンバー（`isRegularMemberOrAbove`＝MEMBER 以上・SUPPORTER でない、かつ `users.status = ACTIVE` で論理削除されていない）でなければならない。1人でも満たさなければ全体を 400 `SHIFT_049` で拒否し、何も保存しない。操作者の権限（当該チームの ADMIN/DEPUTY_ADMIN）とは別の検査で、操作者自身のチームに属する者でも、枠のチームに属さなければ拒否する。**存在オラクル防止**: 存在しないユーザーと他チームのユーザーは同一の応答（status・code・message）にする。検査は version 照合・人数超過の判定より前に行う。
+
+塞いだ経路（すべて枠起点の管理操作で、認可の後に検査する）:
+1. `PATCH /slots/{id}/assignments` の `addUserIds`（`addUserIds` / `removeUserIds` は各 200 件まで。超過は 400）。
+2. `PATCH /slots/{id}` の `assignedUserIds`（割当の丸ごと置換）。**親・枠のロック取得後の現在の割当に無い人（差分）だけ**を、書き込みと同じトランザクションの中で検査する（並行する `removeUserIds` で外れたばかりの不適格者が、古い一覧との比較で「既存」扱いになるのを防ぐ。検査本体は Facade が関数として渡し、Service は `AccessControlService` に依存しない）。既に入っている人は、その後に脱退・凍結していても置換で残せる（外す操作を妨げない）。
+3. `POST /slots/{id}/assignments/move` の `userId`（移動先に新たに入る人。移動元で適格だった人が、その後に不適格になっていても持ち込めない）。
+- `PATCH /slots/{id}` の `assignedUserIds` は 200 件まで（超過は 400）。
+- 枠の作成・一括作成（`POST /schedules/{id}/slots` ほか）は初期割当を受け取らない（`assignedUserIds` を持たない）ため対象外。
+
+範囲外（意図的）:
+- 自動割当の確定（`/confirm`）時の再検査は行わない。候補は希望の提出者に限られ、提出時に所属を検証している。提出後に脱退した人が候補に残りうる件は別件（越境ではない）。
+- 検査（`ShiftSlotFacade`）と書き込み（`ShiftSlotService` の tx）は別トランザクション。検査後・書き込み前に脱退・資格変更があった場合の窓は許容する（シフト表の親ロックは所属を保護しない。`ShiftSwapFacade` の受諾者再検査と同じ割り切り）。
 
 **【CMP-261010-1432】version の返却**: 枠の応答（`GET /schedules/{id}/slots` の各要素・`PATCH /slots/{id}`・本 API）はトップレベルに `version`（`shift_slots.version` の更新後の値）を返す。クライアントは次の操作でその値を `slotVersion` に送る（`0` 固定送信は 2 回目以降の操作で 409 `SHIFT_018` になる）。
 
@@ -2026,6 +2039,7 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 
 - 管理者全員（ADMIN + `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN）にプッシュ + アプリ内通知（「田中さんから変更依頼が届いています」）
 - ApplicationEvent: `ShiftChangeRequestCreatedEvent`
+- 依頼者本人（管理者が自分で出した依頼）には送らない（自己通知なし）。宛先・遷移先・文言の確定事項は `01_db_design.md` の `shift_change_requests`「通知」を参照
 - 監査ログ: `SHIFT_CHANGE_REQUEST_CREATED`
 
 **権限モデル（IDOR 防止）**
@@ -2132,7 +2146,7 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 **レスポンス（200 OK）**: 更新後の change_request を返却
 
 - **重要（ACCEPTED の運用）**: 本 API は `status` フラグの更新のみで、**実スロットの変更は別途管理者が D&D UI や `PATCH /slots/{id}/assignments` で実施する**。本ボタンは「その作業が終わった」宣言として使う設計。理由: 依頼内容が多岐にわたる（単純な交代 / 別日移動 / スロット削除等）ため、画面上で自由に編集してから「この依頼を受諾した」と記録する方が柔軟
-- 依頼者にプッシュ + アプリ内通知（「変更依頼が受諾されました」「変更依頼が却下されました: {admin_note}」）
+- 依頼者にプッシュ + アプリ内通知（「変更依頼が承認されました」「変更依頼が却下されました: {admin_note}」）
 - ApplicationEvent: `ShiftChangeRequestReviewedEvent`
 - 監査ログ: `SHIFT_CHANGE_REQUEST_REVIEWED`（`action`, `reviewed_by`, `admin_note` を記録）
 
@@ -2160,7 +2174,8 @@ D&D UI 用の差分割当 API。個別ユーザーの追加・削除を `shift_s
 
 **レスポンス（200 OK）**: 更新後の change_request を返却（`status: "WITHDRAWN"`）
 
-- 管理者にプッシュ通知（未処理一覧から消える旨）
+- 管理者全員（ADMIN + `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN。依頼者本人が管理者でも本人は除く）にプッシュ + アプリ内通知（未処理一覧から消える旨）
+- ApplicationEvent: `ShiftChangeRequestWithdrawnEvent`
 - 監査ログ: `SHIFT_CHANGE_REQUEST_WITHDRAWN`
 
 **エラーレスポンス**

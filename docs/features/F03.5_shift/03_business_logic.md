@@ -6,10 +6,24 @@
 
 ### シフトスケジュール作成・運用フロー
 
+手動ステータス遷移 API は、次の5遷移だけを許可する（CMP-260903-0658）。
+
+| 遷移元 | 許可される遷移先 |
+|---|---|
+| DRAFT | COLLECTING |
+| COLLECTING | ADJUSTING |
+| ADJUSTING | COLLECTING / PUBLISHED |
+| PUBLISHED | ARCHIVED |
+| ARCHIVED | なし |
+
+同じ状態への再遷移を含む他の20組は `SHIFT_012`（HTTP 409）で拒否する。
+拒否時は状態・バージョン・公開日時・公開者・関連変更依頼を更新せず、保存やイベント発行も行わない。
+既存の管理者認可と公開前の目視確認は維持する。
+
 ```
 1. 管理者がシフトスケジュールを作成（DRAFT）
    a. 期間（start_date / end_date）、期間種別（WEEKLY / MONTHLY / CUSTOM）を設定
-   b. 希望収集の締切日時を任意で設定
+   b. 希望収集の締切日時を任意で設定。全体シフト一覧の新規作成では DatePicker の24時間制の日時入力を使用し、選択したローカル壁時計を `requestDeadline` の `LocalDateTime`（例: `2026-10-11T23:30`）として送信する。UTC 変換や日終端の補完は行わず、未入力時は省略する
    c. 一覧の DRAFT は「希望の受付はまだ開始されていません」と案内する。COLLECTING かつ締切未設定または締切前だけ入力導線を表示し、締切と同時刻以降・ADJUSTING・PUBLISHED・ARCHIVED は受付終了として案内する（CMP-260910-1609 AC7）。
 
 2. スロット（枠）の設定
@@ -177,6 +191,8 @@ Facadeのスコープ認可（越境は不在と同じ404、SUPPORTER等は403�
    b. 依頼者と引き受け者に通知
 ```
 
+**手動割当の追加先所属検証（CMP-261123-1821）**: 枠の割当に新たに入る人は、枠のシフト表のチームの現役メンバー（MEMBER 以上・SUPPORTER でない・ACTIVE・論理削除なし。他チーム・非所属・不在は不可）に限る。対象は `PATCH /slots/{id}/assignments` の `addUserIds`、`PATCH /slots/{id}` の `assignedUserIds` 置換（差分のみ）、`POST /slots/{id}/assignments/move` の移動先。違反は 400 `SHIFT_049`（全体拒否・不在と他チームは同一応答）。範囲外: 自動割当の確定時の再検査、検査と書き込みが別トランザクションである窓。ボード画面は URL の slug のチームとシフト表の `teamId` が食い違えば 404 相当の取得失敗表示にし、他チームのメンバーを未割当プールに出さない。未割当プールには SUPPORTER も出さない。
+
 **承認時の担当差替（CMP-261021-0648）**: 実API `POST /swap-requests/{id}/resolve` の `APPROVE` は、ACCEPTEDの申請者Aを現在担当の同じ位置で受諾者Bへ置換し、他担当の順序・人数・枠の日時等を保持する。非PUBLISHEDは409 `SHIFT_012`、不正状態・Bがnull/自己交代は409 `SHIFT_013`、現在担当にAがちょうど1回含まれない場合・Bの脱退/非ACTIVE/論理削除/SUPPORTER化・資格確認後のB変更は409 `SHIFT_018`、Bが既担当または同一表の完全同時刻別枠に担当済みなら409 `SHIFT_042`。部分重なりは許可し、別表を探索しない。
 
 非TXのFacadeで管理者認可とBの現在資格を確認し、業務TXでは親→枠を現在読取してから差替する。swap・担当JSON・割当履歴は同一TXでcommit/rollbackする。Aの全非REVOKED履歴をREVOKEDにし、Bへ手動CONFIRMED（runId=null、割当者=承認管理者）を記録する。Bの既存CONFIRMEDは重複させず、古いPROPOSEDだけなら元行を保持して新CONFIRMEDを作る。Aの脱退/削除は現在担当から外す交代を妨げない。`REJECT`は既存どおりACCEPTEDから状態・処理情報だけを更新し、担当・履歴を変えない。管理者自身がA/Bでも承認可能。membershipの同時変更の厳密直列化と、上記設計の通知/監査イベント新設は本対応に含めない。
@@ -251,7 +267,7 @@ Facadeのスコープ認可（越境は不在と同じ404、SUPPORTER等は403�
       （依頼内容に従って人を差し替え・別日へ移動・スロットから外す等）
    b. 作業完了後に「この依頼を受諾した」ボタンで PATCH /review を action=ACCEPTED で呼ぶ
    c. shift_change_requests.status = ACCEPTED, reviewed_by, reviewed_at, admin_note を記録
-   d. 依頼者にプッシュ通知（「変更依頼が受諾されました」）
+   d. 依頼者にプッシュ通知（「変更依頼が承認されました」）
    e. 監査ログ: SHIFT_CHANGE_REQUEST_REVIEWED (ACCEPTED)
 
    ＜REJECTED のケース＞
@@ -377,6 +393,8 @@ ADHD 傾向のあるメンバーも入力摩擦なく提出できるよう、以
    - 色: ABSOLUTE_REST=赤、STRONG_REST=橙、WEAK_REST=黄、AVAILABLE=灰、PREFERRED=緑
    - タップ1回で選択完了（モーダル・セカンドステップなし）
    - 長文の説明は `<Tooltip>` に押し込む（画面をごちゃつかせない）
+   - 日付単位の希望提出ダイアログも既存の `ShiftPreferenceRadioCard` の5択を使用し、選択した enum をそのまま送信する。従来の「出勤希望」に相当する初期値・閉じた後の reset 値は `PREFERRED` とする
+   - 新規作成・希望提出の入力欄と主要ボタンは最小高さ44px、主要ボタンは最小幅44pxとし、ラベルは既存の6言語の翻訳キーを使用する
 2. **初期値優先**: デフォルト可否プロファイルがあれば自動適用 → プリフィル。メンバーは差分のみ変更
 3. **一括操作**:
    - 「全て指定なし」「全て絶対休み」「全て出勤希望」ボタンで1タップ反映

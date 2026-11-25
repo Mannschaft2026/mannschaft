@@ -56,22 +56,23 @@ public class SearchHistoryService {
      * 検索履歴を記録する（入力検証・正規化を通った検索だけを呼ぶこと）。同一キーワードは検索日時を更新し、
      * 1 ユーザー {@value #MAX_HISTORIES} 件を超えた分は最古から削除する。
      *
+     * <p>記録は {@code INSERT ... ON DUPLICATE KEY UPDATE} の 1 文で原子的に行う。FE は詳細ビューで検索語が
+     * 変わると同じ q の検索を 2 本同時に送るため、check-then-insert では一意キー違反（500）になっていた。
+     * 上限超過分の削除は ID 指定の 1 文で行い、並行する記録と同じ行を消し合っても 0 件削除で済む
+     * （ロックするのは削除対象の古い行だけで、並行する記録の新しい行には触れない）。</p>
+     *
      * @param userId          ユーザーID
      * @param normalizedQuery 正規化済みキーワード
      */
     @Transactional
     public void recordHistory(Long userId, String normalizedQuery) {
-        searchHistoryRepository.findByUserIdAndQuery(userId, normalizedQuery)
-                .ifPresentOrElse(
-                        SearchHistoryEntity::refreshSearchedAt,
-                        () -> searchHistoryRepository.save(SearchHistoryEntity.builder()
-                                .userId(userId)
-                                .query(normalizedQuery)
-                                .build()));
-        searchHistoryRepository.flush();
+        searchHistoryRepository.upsertSearchedNow(userId, normalizedQuery);
         List<SearchHistoryEntity> all = searchHistoryRepository.findByUserIdOrderBySearchedAtDescIdDesc(userId);
         if (all.size() > MAX_HISTORIES) {
-            searchHistoryRepository.deleteAllInBatch(all.subList(MAX_HISTORIES, all.size()));
+            List<Long> overflowIds = all.subList(MAX_HISTORIES, all.size()).stream()
+                    .map(SearchHistoryEntity::getId)
+                    .toList();
+            searchHistoryRepository.deleteByUserIdAndIdIn(userId, overflowIds);
         }
     }
 

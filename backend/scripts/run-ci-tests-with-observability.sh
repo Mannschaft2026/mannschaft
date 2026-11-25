@@ -97,7 +97,9 @@ gradle.allprojects { project ->
                 }
             }
             if (descriptor.className == mfaClass) {
-                event.message.readLines().findAll { it ==~ /\[mfa-latency\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ elapsedMillis=\d+ limitMillis=\d+ pid=\d+/ }.each {
+                // CMP-261123-1434: AC-54 の判定は照合回数へ移り壁時計の上限値は持たないため、[mfa-latency] に limitMillis は出ない。
+                // 出力側 MfaBackupCodeLatencyIT と形式を揃える（scripts/test_run_ci_observability_patterns.py が両者の一致を検証する）。
+                event.message.readLines().findAll { it ==~ /\[mfa-latency\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ elapsedMillis=\d+ pid=\d+/ }.each {
                     emit('mfa-intervals.log', it)
                 }
                 event.message.readLines().findAll { it ==~ /\[mfa-resources\] pathKind=(all-mismatch|last-match) startEpochMillis=\d+ endEpochMillis=\d+ pid=\d+ threadCpuNanos=(-1|\d+) gcCount=(-1|\d+) gcTimeMillis=(-1|\d+)/ }.each {

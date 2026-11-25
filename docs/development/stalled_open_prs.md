@@ -6,7 +6,9 @@
 
 **2026-10-30 再照合**: #1316（CLOSED 10-27）・#1489/#1490（CLOSED 10-06）・#3607（MERGED）を確認。残るOPENは #1502（マスター裁可により閉じず後回し）と #1317 のみ。後継の依存更新PR（#3683・#3685・#3687・#3695・#4174）の調査結果は下記「後継の依存更新PR」節に記録した。
 
-**CMP-260826-1041 は未完了**。残る処遇対象は本番インフラ #1502（後回し）と依存更新 #1317（および後継PR群）で、殿の判断が残る。MERGED/CLOSEDの確認だけで、復活時のCI・実機や本番構築を実施済みとは扱わない。
+**2026-11-24 再照合**（REST実測）: #3683・#3687 が 2026-11-03 にMERGED、#3686・#3689・#3692 がCLOSED、見送り7件（#3695・#3694・#3688・#1316・#3684・#3691・#3693）はすべてCLOSED（dependabot の自動コメントのみ。後継へ置換）。残るOPENは #1502・#1317・#3685。後継PRの現況は下記「後継の依存更新PR」節に更新した。
+
+**CMP-260826-1041 は未完了**。残る処遇対象は本番インフラ #1502（意図的にOPEN維持、追跡点は CMP-260826-2129）、依存更新 #1317（dependabot recreate 待ち）、#3685（マージ候補・要最終確認）で、殿の判断が残る。MERGED/CLOSEDの確認だけで、復活時のCI・実機や本番構築を実施済みとは扱わない。
 
 放置された PR は静かに腐る。特に `DIRTY`（コンフリクト済み）は **CI が一度も走らない**ため、
 緑にも赤にもならず「動いているように見えて実は死んでいる」状態になる
@@ -32,7 +34,7 @@
 | 89日 | #1167 | 2f | DIRTY | フィードAPIのレスポンス型をネスト構造に修正 | **クローズ**。`TimelineFeedResponse` として同一構造が main に実装済み |
 | 87日 | #1209 | 8f/+520 | DIRTY | **認可 Phase2 点火 — `@EnableMethodSecurity` 有効化**。現 main で既に有効化済みか要確認 | **クローズ**。点火は `SecurityConfig.java:41` に生存。回帰テスト不在は CMP-260826-2128 へ |
 | 81日 | #1361 | 1f | BEHIND | TODOビュー切替ボタンのスタイル | **復活・マージ済**（2026-08-27 JST、[PR #1361](https://github.com/kenta-0420/mannschaft/pull/1361) のMERGEDを確認） |
-| 73日 | #1502 | 1f | BEHIND | 本番インフラ初回構築（mannschaft.app） | **OPEN のまま閉じない・後回し**（マスター御下命、2026-10-30 時点で OPEN・最終更新 2026-06-13）。`infra-apply` 全件 skipped ＝ 未構築の疑い。CMP-260826-2129 へ |
+| 73日 | #1502 | 1f | BEHIND | 本番インフラ初回構築（mannschaft.app） | **意図的に OPEN 維持。追跡点は CMP-260826-2129 へ移管し、CMP-260826-1041 の完了条件から除外（2026-11-25 マスター裁可）**（マスター御下命。2026-11-24 時点で OPEN・最終更新 2026-06-13）。`infra-apply` 全件 skipped ＝ 未構築の疑い |
 | 68日 | #1630 | 4f/+575 | DIRTY | 組織配信の再帰的配下解決（WITH RECURSIVE・depth32） | **クローズ**。main が keyset/sharded まで発展済み・当てると退行 |
 | 61日 | #1877 | 1f | BEHIND | 目安箱フィードバック投稿UIの実機E2E | **復活・マージ済**（2026-08-27 JST、[PR #1877](https://github.com/kenta-0420/mannschaft/pull/1877) のMERGEDを確認）。specのマージと実ブラウザ実行を区別する |
 | 58日 | #1964 | 8f | DIRTY | 予定編集モーダルのリマインダー/繰り返しUI重なり修正 | **クローズ**。同修正が着地済みで main が上位互換 |
@@ -56,29 +58,37 @@
 | 56日 | [#1073](https://github.com/kenta-0420/mannschaft/pull/1073) | poi-ooxml | **マージ済**（2026-10-04T01:59:10Z / 53f80e2e5238e7cebc56d3dd60876d31236b2ef1）前回照合（2026-10-03）時点の記録: 当時head `ffffae5ef5115d3bd00d24024a4d76ed8a014742`の対象27件はfailure/error/skip各0。[全体CI run](https://github.com/kenta-0420/mannschaft/actions/runs/37009214808)はArchUnit importerのJava heap spaceで失敗し、永続化enum番人もskip。当時は未マージであり、共通対策PR #3607（MERGED、2026-10-03T15:38:34Z）の全6シャードと全ArchUnit番人の正式検証を待っていた。#3607 は全ArchUnit番人を専用JVMへ分離してOOMを対照する対策で、着地済みのため「候補」ではない |
 | 48日 | [#1319](https://github.com/kenta-0420/mannschaft/pull/1319) | lint-staged 16→17 | **マージ済**（2026-10-03T21:23:23Z / 3fed9dea1b659cf277de0d417768e32283cc97e6） |
 | 48日 | [#1318](https://github.com/kenta-0420/mannschaft/pull/1318) | vue-virtual-scroller | **マージ済**（2026-10-04T00:09:06Z / 64d10f6d7e2bf380031065952710ab0d4d25df15） |
-| 48日 | [#1317](https://github.com/kenta-0420/mannschaft/pull/1317) | cheerio | **未処遇（OPEN）**。2026-10-30 時点 BEHIND/MERGEABLE。CI は Lighthouse と Smoke E2E が fail（失敗2件・成功12件・未実行(skipping)6件。テストシャード等は未実行で検証済みではない。2026-10-31 実測）。dependabot に `@dependabot rebase` を依頼済みだが「人手で編集されたため rebase 不可、`@dependabot recreate` なら再作成可」と返信（10-10）。殿の判断待ち |
-| 48日 | [#1316](https://github.com/kenta-0420/mannschaft/pull/1316) | nuxt-security 1.4→2.6 | **クローズ済**（2026-10-27、dependabot 自動クローズ。コメント「Superseded by #4174.」）。後継 #4174（1.4.3→2.7.0）は OPEN。メジャーのため単独PRでCIを通すこと |
+| 48日 | [#1317](https://github.com/Mannschaft2026/mannschaft/pull/1317) | cheerio | **2026-11-25 CLOSED（マスター裁可。dependabot recreate 無応答・CI 失敗の原因未調査・担当なし。理由コメント https://github.com/Mannschaft2026/mannschaft/pull/1317#issuecomment-7148820017 ）**。2026-11-03 に `@dependabot recreate` を依頼したが応答なし（2026-11-24 実測。head `11028d50`、失敗2件・成功12件・skipped 6件） |
+| 48日 | [#1316](https://github.com/Mannschaft2026/mannschaft/pull/1316) | nuxt-security 1.4→2.6 | **CLOSED**（2026-10-27）。マスター裁可 2026-10-11 で見送り・別戦役。dependabot により後継 #4174 へ置換されて CLOSED（コメント「Superseded by #4174.」のみ）。#4174（2.7.0）は OPEN、CI fail あり。メジャーのため単独PRでCIを通すこと |
 | 48日 | [#1083](https://github.com/kenta-0420/mannschaft/pull/1083) | @nuxtjs/i18n 9→10 | **マージ済**（2026-10-04T21:30:39Z / 16dc01a60605dbb0a9fc9d1cfa366b516a80f1bc） |
-| 35日 | #1490 #1489 | **Spring Boot 3.5.13 → 4.1.0**（メジャー）/ AWS SDK BOM | **クローズ済（2件）**。#1490 は 2026-10-06 に dependabot が「Superseded by #3695.」で自動クローズ、#1489 は同日「Superseded by #3696.」で自動クローズ（#3696 も後に CLOSED、理由は「awssdk:bom は依存でなくなった」）。後継 #3695（Spring Boot 4.1.2）は OPEN だが CI 大半が fail のため見送り＝別戦役 |
+| 35日 | #1490 #1489 | **Spring Boot 3.5.13 → 4.1.0**（メジャー）/ AWS SDK BOM | **クローズ済（2件）**。#1490 は 2026-10-06 に dependabot が「Superseded by #3695.」で自動クローズ、#1489 は同日「Superseded by #3696.」で自動クローズ（#3696 も後に CLOSED、理由は「awssdk:bom は依存でなくなった」）。#3695（Spring Boot 4.1.2）はマスター裁可 2026-10-11 で見送り・別戦役とし、2026-11-03 に「Superseded by #4264.」で CLOSED。後継 #4264 は OPEN で CI fail あり（2026-11-24） |
 | 14日 | #2728 | cloudflare 4.52→5.23（メジャー） | **クローズ済**（2026-09-01 JST）。[既存PRコメント](https://github.com/kenta-0420/mannschaft/pull/2728) は「Superseded by #3042.」。後続PR #3042はOPENで、依存更新の実施済みを意味しない |
 
 依存の更新は放置するほど差が開き、まとめて上げるときに壊れる。
 メジャーアップ（#1490・#2728・#1316・#1083）は単独 PR で CI を通してから畳むこと。
 
-## 後継の依存更新PR（2026-10-30 調査）
+## 後継の依存更新PR（2026-11-24 更新）
 
-調査のみ。rebase・マージ・クローズ・PRコメントは行っていない（殿の判断事項）。CI は `gh pr checks N --json name,bucket` の fail のみ列挙。
+2026-10-30 の調査を 2026-11-24 の REST 実測で更新した。rebase・マージ・クローズ・PRコメントは行っていない（殿の判断事項）。CI は head の check-runs。dependabot の PR は `Task-List PR Gate` が fail するものが多いが、原因は未調査（依存更新PRが台帳を触らないことに起因する可能性があるが未確認）。
 
-| PR | 中身 | 状態 / mergeable | CI fail | 処遇案 |
-|---|---|---|---|---|
-| #1317 | cheerio 1.0.0-rc.12 → 1.2.0（frontend, dev） | OPEN / BEHIND・MERGEABLE | Lighthouse、Smoke E2E | dependabot が rebase 不可（人手編集済）。`@dependabot recreate` で再作成が筋。cheerio の用途確認後に判断 |
-| #3683 | actions/upload-artifact 4 → 7 | OPEN / BEHIND・MERGEABLE | Compile & Test、Test (shard 1)（失敗2件・成功22件・未実行1件。2026-10-31 実測） | shard 1 は依存と無関係の可能性大。rerun かmain追従後に再判定、通ればマージ候補 |
-| #3685 | hashicorp/setup-terraform 3 → 4 | OPEN / BEHIND・MERGEABLE | なし（Terraform Plan は skipping） | マージ候補。ただし Plan 未実行のため main 追従後に infra 系ワークフローの挙動を確認 |
-| #3687 | actions/setup-java 4 → 6 | OPEN / BEHIND・MERGEABLE | なし（成功23件・未実行1件。2026-10-31 実測） | マージ候補（main 追従後） |
-| #3695 | Spring Boot 3.5.13 → 4.1.2（メジャー、#1490 の後継） | OPEN / BEHIND・MERGEABLE | Compile & Test、全6シャード、ArchUnit、Non-JST、Shard coverage、OpenAPI Drift | 見送り（別戦役）。クローズせず保留か、戦役化するまで放置 |
-| #4174 | nuxt-security 1.4.3 → 2.7.0（#1316 の後継） | OPEN（CI 未調査） | 未調査 | メジャー。単独PRでCI確認 |
-| #3689 | archunit-junit5 1.3.0 → 1.5.1 | CLOSED（2026-10-28、dependabot 自動クローズ「もはや依存でないため不要」）/ CONFLICTING | クローズ時 fail なし | 再起票の要否は下記「重要な所見」参照 |
-| #3692 | pdfbox 3.0.3 → 3.0.8 | CLOSED（2026-10-28、同上）/ CONFLICTING | クローズ時 fail なし | 同上。pdfbox は `testImplementation` で 3.0.3 固定のまま残存 |
+| PR | 中身 | 状態（2026-11-24） | 処遇 |
+|---|---|---|---|
+| #1317 | cheerio 1.0.0-rc.12 → 1.2.0（frontend, dev） | OPEN / blocked。CI fail は Lighthouse、Smoke E2E | 2026-11-25 CLOSED（マスター裁可。dependabot recreate 無応答・CI 失敗の原因未調査・担当なし。理由コメント https://github.com/Mannschaft2026/mannschaft/pull/1317#issuecomment-7148820017 ） |
+| #3683 | actions/upload-artifact 4 → 7 | MERGED（2026-11-03） | 処遇済み |
+| #3687 | actions/setup-java 4 → 6 | MERGED（2026-11-03） | 処遇済み |
+| #3685 | hashicorp/setup-terraform 3 → 4 | OPEN / blocked。2026-11-06 更新。head `6301eced` の CI は成功12・skipped 7・fail なし | 2026-11-25 マスター裁可でマージへ（auto-merge 予約済み）。旧記録: OPEN・マージ候補（head CI 緑、要最終確認。Terraform Plan は skipped のため infra 系の挙動確認が残る） |
+| #3686 | vue-tsc 3.3.7 → 3.3.12 | CLOSED（2026-10-14、後継 #3878） | 後継 #3878（3.3.14）は OPEN、CI fail あり（Install ほか） |
+| #3689 | archunit-junit5 1.3.0 → 1.5.1 | CLOSED（2026-10-28、dependabot 自動クローズ「もはや依存でないため不要」） | 依存ではなくなった。再起票の要否は下記「重要な所見」参照 |
+| #3692 | pdfbox 3.0.3 → 3.0.8 | CLOSED（2026-10-28、同上） | 同上。pdfbox は `testImplementation` で 3.0.3 固定のまま残存 |
+| #3695 | Spring Boot 3.5.13 → 4.1.2（メジャー、#1490 の後継） | CLOSED（2026-11-03）。見送り・別戦役 | 後継 #4264 は OPEN、CI fail あり（Compile & Test ほか5件） |
+| #3694 | stripe-java 28.2.0 → 34.0.0 | CLOSED（2026-10-28）。見送り・別戦役 | 依存ではなくなった（dependabot 自動コメント） |
+| #3688 | zod 3.25.76 → 4.6.5 | CLOSED（2026-10-14）。見送り・別戦役 | 後継 #3877（4.6.7）も 2026-10-24 に「zod is up-to-date」で CLOSED。現在OPENの後継なし |
+| #1316 | nuxt-security 1.4.3 → 2.6.0 | CLOSED（2026-10-27）。見送り・別戦役 | 後継 #4174（2.7.0）は OPEN、CI fail あり（lockfile 内容検査ほか。cancelled 1） |
+| #3684 | cloudflare 4.52.7 → 5.26.0 | CLOSED（2026-10-14）。見送り・別戦役 | 後継 #3872（5.27.0）は OPEN、`Task-List PR Gate` のみ fail |
+| #3691 | hashicorp/aws 5.100.0 → 6.67.0（bootstrap） | CLOSED（2026-10-14）。見送り・別戦役 | 後継は #3874→#4007→#4173→#4267→#4455 と追従され、現行は #4611（6.73.0）。OPEN、`Task-List PR Gate` のみ fail |
+| #3693 | hashicorp/aws 5.100.0 → 6.67.0（envs/prod） | CLOSED（2026-10-14）。見送り・別戦役 | 後継 #3873（6.68.0）は OPEN、`Task-List PR Gate` のみ fail |
+
+見送り7件（#3695・#3694・#3688・#1316・#3684・#3691・#3693）は、マスター裁可 2026-10-11 で見送り・別戦役。dependabot により後継 #NNNN へ置換されて（または依存でなくなって）CLOSED となった。理由は dependabot の自動コメント（Superseded / no longer a dependency）のみで、人手の判断コメントは無い。
 
 **重要な所見**: #3689・#3692・#3696（awssdk bom）の3件はいずれも dependabot が「もはや依存ではない」と判定して自動クローズした。ところが `backend/build-logic/src/main/kotlin/mannschaft.backend-conventions.gradle.kts` には pdfbox 3.0.3（131行目）や awssdk bom 2.29.45（85行目）が現存する。依存宣言が `build-logic`（precompiled script plugin）へ移ったため、`.github/dependabot.yml` の gradle `directory: "/backend"` では dependabot が検出できなくなった疑いが強い。この場合 Java 依存の更新PRは今後すべて自動では来ない。再起票より先に、検出経路（version catalog 化または dependabot の directory 追加）の整備が要る。これは仮説であり、dependabot の検出ログ（Insights → Dependency graph → Dependabot）での裏取りが残る。
 

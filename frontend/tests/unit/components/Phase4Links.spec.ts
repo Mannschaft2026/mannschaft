@@ -21,6 +21,8 @@ import type { InvitationResponse, ParentLinkResponse } from '~/types/parental-co
 
 const mockNavigateTo = vi.fn()
 mockNuxtImport('navigateTo', () => (...args: unknown[]) => mockNavigateTo(...args))
+// pending.vue は同意後にトークンを更新し、'refreshed' のときだけ遷移する（CMP-261107-1833）。更新の成否は外部境界なのでここで固定する
+mockNuxtImport('performTokenRefresh', () => () => Promise.resolve('refreshed'))
 
 const invitations: InvitationResponse[] = []
 let mockParents: ParentLinkResponse[] = []

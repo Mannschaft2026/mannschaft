@@ -153,10 +153,19 @@ public class ActivityStatsService {
         csv(scopeType, scopeId, templateId, dateFrom, dateTo, response, null);
     }
 
+    /**
+     * 認証済み CSV エクスポート（CMP-261124-0158）。manual 行は認証済み一覧と同じ可視性述語
+     * （{@code visibilities} と DRAFT の作成者本人／SystemAdmin）で、auto 行は認可段取り役が判定した
+     * {@code automaticIds} で絞る。閲覧者が一覧で見られない記録の題名を書き出さない。
+     */
     public void exportCsvWithAutomaticAccess(ActivityScopeType scopeType, Long scopeId, Long templateId,
-            LocalDate dateFrom, LocalDate dateTo, HttpServletResponse response, java.util.Set<Long> automaticIds) {
-        csv(scopeType, scopeId, templateId, dateFrom, dateTo, response,
-                automaticIds.isEmpty() ? java.util.Set.of(-1L) : automaticIds);
+            LocalDate dateFrom, LocalDate dateTo, HttpServletResponse response, java.util.Set<Long> automaticIds,
+            java.util.Set<com.mannschaft.app.activity.ActivityVisibility> visibilities, Long viewerUserId,
+            boolean viewerIsSystemAdmin) {
+        List<ActivityResultEntity> results = resultRepository.findVisibleForExportWithAutomaticIds(
+                scopeType, scopeId, templateId, dateFrom, dateTo, visibilities, viewerUserId, viewerIsSystemAdmin,
+                automaticIds.isEmpty() ? java.util.Set.of(-1L) : automaticIds, PageRequest.of(0, 5000));
+        writeCsv(scopeType, scopeId, results, response);
     }
 
     private void csv(ActivityScopeType scopeType, Long scopeId, Long templateId, LocalDate dateFrom,
@@ -165,6 +174,11 @@ public class ActivityStatsService {
                 scopeType, scopeId, templateId, dateFrom, dateTo, PageRequest.of(0, 5000))
                 : resultRepository.findForExportWithAutomaticIds(scopeType, scopeId, templateId, dateFrom, dateTo,
                         automaticIds, PageRequest.of(0, 5000));
+        writeCsv(scopeType, scopeId, results, response);
+    }
+
+    private void writeCsv(ActivityScopeType scopeType, Long scopeId, List<ActivityResultEntity> results,
+            HttpServletResponse response) {
 
         response.setContentType("text/csv; charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename=activities_" +

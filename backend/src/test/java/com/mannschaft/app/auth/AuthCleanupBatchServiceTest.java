@@ -36,6 +36,9 @@ class AuthCleanupBatchServiceTest {
 
     @Mock
     private AuditLogService auditLogService;
+    // CMP-261107-1833: 未確認掃除・保護者全員拒否で招待付き登録の保留を破棄する
+    @Mock
+    private com.mannschaft.app.auth.service.PendingInviteStore pendingInviteStore;
 
     @InjectMocks
     private AuthCleanupBatchService authCleanupBatchService;

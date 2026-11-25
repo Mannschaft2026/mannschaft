@@ -1,6 +1,6 @@
 # F03: 組織・チーム・メンバー・ロール管理
 
-> **ステータス**: 🟢 設計完了
+> **ステータス**: 🟢 設計完了／🟢 CMP-261124-0159 非公開化（→MEMBERS_AND_ABOVE）とサポーター入口の拒否 設計完了（[02](02_api_design.md)・[03](03_business_logic.md)・[04](04_security_operations.md) の CMP-261124-0159 節）
 > **実装フェーズ**: Phase 2
 > **最終更新**: 2026-06-14
 
@@ -26,7 +26,7 @@ DEPUTY_ADMIN の細粒度な権限制御は、ADMIN が名前付き「権限グ�
 | DEPUTY_ADMIN | ADMIN が付与した権限グループの範囲内のみ（招待は INVITE_MEMBERS 権限が必要）|
 | MEMBER | MANAGE_SCHEDULES / MANAGE_FILES / MANAGE_POSTS はすべて初期 OFF で、対象チーム・組織の ADMIN が既定権限画面から ON にするか、権限グループに含めて割り当てた場合に該当する管理操作を許可する。権限グループを割り当てた場合は既定値を含め全権限がグループ定義で置き換わる |
 | SUPPORTER | 公開チームページから招待コード不要でフォロー（サポーター登録）。チームが `supporter_enabled = TRUE` の場合のみ利用可。ブロック済みユーザーは登録不可 |
-| GUEST | 閲覧のみ（招待URL経由で付与）|
+| GUEST | 閲覧のみ（user_roles の権限ロール。招待URLでは付与できない: 共有・個人招待で付与できるのは MEMBER / SUPPORTER だけ。CMP-261124-0157）|
 
 ### 対象レベル
 - [x] 組織 (Organization)

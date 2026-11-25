@@ -245,7 +245,7 @@ jobs:
         id: regen_test
         if: steps.changes.outputs.backend_changed == 'true'
         working-directory: ./backend
-        run: python3 -m unittest scripts/test_regen_shard_weights.py
+        run: python3 -m unittest scripts/test_regen_shard_weights.py scripts/test_run_ci_observability_patterns.py
 
       - name: Set up Java ${{ env.JAVA_VERSION }}
         if: steps.changes.outputs.backend_changed == 'true'
@@ -438,6 +438,39 @@ jobs:
           --tests "com.mannschaft.app.admin.service.AdminBusinessAlertServiceTest"
           --tests "com.mannschaft.app.advertising.campaign.service.AdFrequencyCapServiceTest"
           --tests "com.mannschaft.app.advertising.controller.StripeAdInvoiceWebhookControllerTest"
+
+      # DATE 列が保存・更新のたびに 1 日前へずれる不具合の防波堤（CMP-261123-1334）。
+      # 通常のテストは -Duser.timezone=Asia/Tokyo で動くため、「JVM を UTC で起動 → 旧実装が起動途中に JST へ切替（CMP-261123-1335 で解消済み。最終防衛として維持）」
+      # という本番と同じ順序（切替前に作られた接続の存在）が再現されず、CI では検出できなかった。
+      # JVM を UTC で起動して、実 MySQL（Testcontainers）で DATE / DATETIME / TIME の格納を検証する。
+      # CMP-261123-1335: 上記に加え、JVM を UTC で起動しても DataSource 生成前に既定 TZ が SERVER_ZONE へ確定すること
+      # （ServerTimeZoneBootstrapTest）と、固定 Clock 系の既存テストが UTC 起動でも緑であることを同じ Gradle 起動で検証する。
+      # ActionMemoServicePublishTest・StripeAdInvoiceWebhookControllerTest は America/Los_Angeles 側のみ（UTC での確認は未実施）。
+      # ⚠️ EnvironmentPostProcessor は -Duser.timezone を無条件に JST へ上書きするため、Spring コンテキストを使うテスト
+      #    （@SpringBootTest 等）をここへ足しても非 JST では動かない。足すのは Spring を使わないテストか、意図して UTC を再現するテストだけ
+      #    （docs/conventions/backend/20-datetime.md）。
+      - name: JVM を UTC で起動して DATE 列の格納を検証
+        run: >-
+          ./gradlew test --no-daemon --build-cache
+          -Ptest.timezone=UTC
+          -x jacocoTestReport
+          --tests "com.mannschaft.app.config.DateColumnTimeZoneShiftDriverContractTest"
+          --tests "com.mannschaft.app.config.DateColumnTimeZoneShiftIT"
+          --tests "com.mannschaft.app.config.TimeZoneStorageBasisGuardTest"
+          --tests "com.mannschaft.app.config.ServerTimeZoneBootstrapTest"
+          --tests "com.mannschaft.app.config.LogbackProdTimeZoneGuardTest"
+          --tests "com.mannschaft.app.config.JacksonTimeTypeSymmetryGuardTest"
+          --tests "com.mannschaft.app.config.NonJstTimezoneContractTest"
+          --tests "com.mannschaft.app.reservation.service.ReservationPendingExpireServiceClockZoneTest"
+          --tests "com.mannschaft.app.schedule.ScheduleAttendanceServiceTest"
+          --tests "com.mannschaft.app.shift.service.ShiftRequestServiceTest"
+          --tests "com.mannschaft.app.ticket.TicketExpiryBatchServiceTest"
+          --tests "com.mannschaft.app.parking.service.ParkingVisitorReservationServiceTest"
+          --tests "com.mannschaft.app.timetable.personal.PersonalTimetableSlotServiceTest"
+          --tests "com.mannschaft.app.actionmemo.service.ActionMemoWeeklySummaryServiceTest"
+          --tests "com.mannschaft.app.actionmemo.service.ActionMemoReminderBatchServiceTest"
+          --tests "com.mannschaft.app.admin.service.AdminBusinessAlertServiceTest"
+          --tests "com.mannschaft.app.advertising.campaign.service.AdFrequencyCapServiceTest"
 
   # ---------------------------------------------------------------------------
   # shard: compile + test を 8 並列で実行する（Docker required for Testcontainers）

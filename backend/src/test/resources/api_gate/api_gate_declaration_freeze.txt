@@ -84,6 +84,7 @@ HTTP|com.mannschaft.app.auth.controller.AuthWebAuthnController|9|9
 HTTP|com.mannschaft.app.auth.controller.BirthProfileController|0|3
 HTTP|com.mannschaft.app.auth.controller.GuardianChildViewController|5|5
 HTTP|com.mannschaft.app.auth.controller.GuardianshipSwitchController|5|5
+HTTP|com.mannschaft.app.auth.controller.MePendingInviteController|5|5
 HTTP|com.mannschaft.app.auth.controller.ParentalConsentController|9|9
 HTTP|com.mannschaft.app.auth.controller.UserController|10|12
 HTTP|com.mannschaft.app.auth.controller.UserOAuthLinkController|2|2
@@ -552,6 +553,7 @@ HTTP|com.mannschaft.app.returnstayplan.controller.ReturnStayPlanController|5|5
 HTTP|com.mannschaft.app.returnstayplan.controller.ReturnStayPlanTeamController|2|2
 HTTP|com.mannschaft.app.role.controller.InviteController|3|6
 HTTP|com.mannschaft.app.role.controller.InviteQrPdfController|1|1
+HTTP|com.mannschaft.app.role.controller.InviteReissueRequestController|0|6
 HTTP|com.mannschaft.app.role.controller.MeController|2|2
 HTTP|com.mannschaft.app.role.controller.MeInvitableScopesController|0|1
 HTTP|com.mannschaft.app.role.controller.OwnershipTransferOfferController|0|11
@@ -720,6 +722,7 @@ HTTP|com.mannschaft.app.tournament.controller.DivisionController|8|8
 HTTP|com.mannschaft.app.tournament.controller.EmbedController|3|3
 HTTP|com.mannschaft.app.tournament.controller.FixtureController|12|12
 HTTP|com.mannschaft.app.tournament.controller.OrganizationTournamentSummaryController|1|1
+HTTP|com.mannschaft.app.tournament.controller.ParticipantContactSpaceController|1|1
 HTTP|com.mannschaft.app.tournament.controller.PromotionController|3|3
 HTTP|com.mannschaft.app.tournament.controller.PublicTournamentController|6|6
 HTTP|com.mannschaft.app.tournament.controller.StandingsController|7|7

@@ -12,6 +12,7 @@ import com.mannschaft.app.role.dto.InviteClaimTicket;
 import com.mannschaft.app.role.dto.InviteDeclineResult;
 import com.mannschaft.app.role.dto.InviteLocator;
 import com.mannschaft.app.role.dto.InviteScopeRef;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.service.MembershipGrantService.GrantOutcome;
 import com.mannschaft.app.scopefolder.ScopeFolderErrorCode;
 import com.mannschaft.app.scopefolder.dto.InviteFolderCheck;
@@ -40,8 +41,8 @@ import java.util.Optional;
  *  T3  [team|org RO] ブロック判定（boolean）
  *  T5  [scopefolder] 配置先フォルダの事前確認（folderId 指定時のみ。結果を返し例外にしない）
  *  T6  [role]        claim: 招待行を最新値でロックして判定 → 使用回数+1 → 確保記録（CLAIMED）
- *  T7  [role+membership] ロール付与 + 入会（GRANTED / ALREADY_JOINED）
- *  T8  [role]        付与されなかった確保を戻す（ちょうど1回）
+ *  T7  [role+membership] ロール付与 + 入会（GRANTED / ALREADY_JOINED）。付与したら同じTXで確保に付与印を立てる
+ *  T8  [role]        付与されなかった確保を戻す（ちょうど1回。付与印のある確保は戻さない）
  *  T9  [role]        確保を確定（GRANTED）し招待監査を発行
  *  T10/T11 [scopefolder] 既定フォルダ取得/作成 → フォルダ配置
  * </pre>
@@ -50,7 +51,10 @@ import java.util.Optional;
  * <p>T7 で付与されなかったと確定できる場合だけ確保を戻す: {@code ALREADY_JOINED} が正常に返った場合、または
  * T7 本体で投げられた {@link BusinessException} がトランザクション境界をそのまま越えてきた場合
  * （ロールバックが正常に完了した証拠）。それ以外の例外（ロック待ちタイムアウト、コミット成否不明、
- * rollback 失敗など）では戻さない。確保は CLAIMED のまま残り、監視（gauge）で可視化される。</p>
+ * rollback 失敗など）では戻さない。確保は CLAIMED のまま残り、監視（gauge）で可視化される。
+ * ただし確保に付与印（この確保による付与がコミット済み。T7 が付与と同じTXで立てる）があれば、どの条件でも戻さない
+ * （戻しの条件付き UPDATE 自体が印の無いことを条件にしている）。印の無い確保は付与に使われていない
+ * （CMP-261107-1833・Codex 検分 P1/P2）。</p>
  *
  * <h2>部分成功（案1・陣立て書 §10）</h2>
  * <p>外側トランザクションが無い通常の HTTP 経路では、<b>参加（ロール付与・入会・使用回数・監査）の確定後に
@@ -105,6 +109,97 @@ public class InviteAcceptanceFacade {
         accept(new InviteLocator.ById(tokenId), userId, folderId);
     }
 
+    /**
+     * 招待のハッシュで参加する（新規登録の保留承認専用の入口。CMP-261107-1833 設計 §2・§9-3）。
+     * 呼び出し元は {@code PendingInviteService} のみ。平文トークンは保存していないため、登録時に保存したハッシュで指す。
+     *
+     * <p>手順は {@link #joinByInvite(String, Long)} と同じ（フォルダ指定なし＝既定フォルダへ配置）。ただし T6 は
+     * {@link InviteAcceptanceWriter#claimOrResume} で、前回の承認が途中で失敗して同じ利用者の確保（CLAIMED）が
+     * 残っていれば、使用回数を進めずにその確保を再開する。保留の ACCEPTING が 5 分を超えて取り直されると、
+     * 1つの確保を新旧の attempt が共有しうるため、確保を戻すか確定するかは確保の付与印（T7 と同じトランザクションで
+     * 立つ）で決める（Codex 検分 P1/P2）。</p>
+     * <ul>
+     *   <li>再開した確保に付与印がある: 付与はコミット済み。T7 を行わず確定（T9）と配置だけ行う
+     *       （招待がその後に失効していても戻さない）。</li>
+     *   <li>T7 が {@code ALREADY_JOINED}: 確保に付与印が無ければ別経路の参加なので戻して 409 TEAM_003（通常の承諾と同じ）。
+     *       付与印があれば（別 attempt がこの確保で先に付与した）戻さず確定して 409 TEAM_003（配置はその attempt に任せる）。</li>
+     * </ul>
+     */
+    public void joinByInviteTokenHash(String tokenHash, Long userId) {
+        InviteLocator locator = new InviteLocator.ByTokenHash(tokenHash);
+
+        // T1
+        if (userRowLockService.lock(userId) != UserRowLockService.UserState.ACTIVE) {
+            throw new BusinessException(RoleErrorCode.ROLE_002);
+        }
+
+        // T2〜T3
+        Optional<InviteScopeRef> scope = writer.inspectScope(locator);
+        boolean blocked = scope.isPresent() && isBlocked(scope.get(), userId);
+
+        // T6'
+        InviteClaimTicket ticket = writer.claimOrResume(locator, userId, blocked, null);
+
+        if (ticket.grantCommitted()) {
+            log.info("再開した確保による付与はコミット済み（付与は行わず確定する）: claimId={}, userId={}",
+                    ticket.claimId(), userId);
+        } else {
+            // T7〜T8（通常の承諾と同じ。ALREADY_JOINED は付与印で戻すか確定するかを決めて 409）
+            grantOrRelease(ticket, userId);
+        }
+
+        // T9
+        recordJoinedOrLog(ticket);
+
+        log.info("招待付き登録の保留承認による参加完了: userId={}, scopeType={}, scopeId={}, resumed={}",
+                userId, ticket.scopeType(), ticket.scopeId(), ticket.resumed());
+
+        // T10/T11
+        placementService.place(userId, null, ticket.scopeType(), ticket.scopeId());
+    }
+
+    /**
+     * 在籍済みのとき、同じ招待・同じ利用者に残った CLAIMED を片付ける（CMP-261107-1833 設計 §9-3）。
+     * 呼び出し元は {@code PendingInviteService} のみ。残った確保が無ければ何もしない。
+     *
+     * <p>確保に付与印があれば（前回の attempt がこの確保で付与をコミットした）GRANTED に確定し、無ければ
+     * 在籍は別経路の参加によるもので確保は使われていないので戻す（{@link InviteAcceptanceWriter#settleOrphanClaim}）。
+     * 失敗しても参加は成立しているので ERROR を記録して先へ進む（CLAIMED のまま監視対象）。</p>
+     */
+    public void settleOrphanClaim(String tokenHash, Long userId) {
+        try {
+            InviteAcceptanceWriter.OrphanSettlement settled =
+                    writer.settleOrphanClaim(new InviteLocator.ByTokenHash(tokenHash), userId);
+            if (settled != InviteAcceptanceWriter.OrphanSettlement.NONE) {
+                log.info("残っていた招待 claim を片付けた: result={}, userId={}", settled, userId);
+            }
+        } catch (RuntimeException e) {
+            log.error("残った招待 claim の片付けに失敗（参加は成立済み。CLAIMED のまま監視対象）: userId={}", userId, e);
+        }
+    }
+
+    /** 招待のハッシュで、付与するロールの名前を引く（保留承認の表示用。CMP-261107-1833 設計 §2）。 */
+    public Optional<String> findInviteRoleName(String tokenHash) {
+        return writer.findRoleName(tokenHash);
+    }
+
+    /**
+     * 招待のハッシュで、有効性（失効・再招待の仮発行中・期限切れ・上限到達）を DB の現在時刻で引く
+     * （保留承認の参照時の期限判定と承認時の処理中判定用。CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     */
+    public Optional<InviteValidity> findInviteValidity(String tokenHash, Long userId) {
+        // userId 本人の確保（CLAIMED）が残っていれば上限は判定しない（承認経路の再開と同じ規則。PR3 検分 P1）
+        Optional<InviteValidity> validity = writer.findValidity(tokenHash, userId);
+        if (validity.orElse(null) != InviteValidity.REVOKED) {
+            return validity;
+        }
+        // 失効と読めた。仮発行の印のまま窓を過ぎたものなら、有効化と CAS で取り合ってから確定する（PR3 3 回目の検分・殿の裁定）。
+        // 最初の読み（readOnly・replica でありうる）は古くてもよい: 古い「失効（印あり・窓の外）」を読んでも、ここで primary の
+        // 読み書きの短TXに進み、CAS と確定読みで決着する（4 回目の検分）。逆に replica が古い「有効」を返すのは、有効化が
+        // コミット済みの場合だけで、その結論は正しい。0 行の後の確定読みは CAS と同じ primary の TX で行い、readOnly の経路を通らない。
+        return writer.revokeExpiredStaged(tokenHash, userId);
+    }
+
     private void accept(InviteLocator locator, Long userId, Long folderId) {
 
         // T1: user 行を先にロックする（inactive/absent user の存在を token 検証前に oracle 化させない）。
@@ -131,12 +226,7 @@ public class InviteAcceptanceFacade {
         grantOrRelease(ticket, userId);
 
         // T9: 確保の確定と招待監査。失敗しても参加は成立しているので ERROR を記録して先へ進む。
-        try {
-            writer.recordJoined(ticket.claimId());
-        } catch (RuntimeException e) {
-            log.error("招待 claim の確定に失敗（参加は成立済み。CLAIMED のまま監視対象）: claimId={}, tokenId={}",
-                    ticket.claimId(), ticket.tokenId(), e);
-        }
+        recordJoinedOrLog(ticket);
 
         log.info("招待トークンによる参加完了: userId={}, scopeType={}, scopeId={}",
                 userId, ticket.scopeType(), ticket.scopeId());
@@ -183,8 +273,10 @@ public class InviteAcceptanceFacade {
     private void grantOrRelease(InviteClaimTicket ticket, Long userId) {
         GrantOutcome outcome;
         try {
-            outcome = membershipGrantService.grantRole(ticket.scopeType(), ticket.scopeId(), userId,
-                    ticket.roleId(), ticket.invitedBy(), SOURCE_INVITE_TOKEN);
+            // 付与の元の claim を渡す。grantRole は同じトランザクションで claim をロックし、付与したら付与印を立てる。
+            outcome = InviteClaimGrantScope.call(ticket.claimId(), () -> membershipGrantService.grantRole(
+                    ticket.scopeType(), ticket.scopeId(), userId, ticket.roleId(), ticket.invitedBy(),
+                    SOURCE_INVITE_TOKEN));
         } catch (BusinessException e) {
             // T7 本体の業務例外がそのまま境界を越えた = ロールバック完了。未付与が確定したので戻す。
             release(ticket, e);
@@ -196,20 +288,38 @@ public class InviteAcceptanceFacade {
             throw e;
         }
         if (outcome == GrantOutcome.ALREADY_JOINED) {
-            // 競合者が先に付与した（user ロック下の現在読みで確定）。既メンバーの二重参加は 409。招待監査は出さない。
+            // 在籍済み（user ロック下の現在読みで確定）。既メンバーの二重参加は 409。
+            // 確保に付与印が無ければ別経路の参加なので戻す。付与印があれば別 attempt がこの確保で先に付与したので、
+            // 戻さず確定する（共有中の確保を解放して「参加済みなのに使用回数0」にしない。Codex 検分 P1/P2）。
             BusinessException conflict = new BusinessException(TeamErrorCode.TEAM_003, HttpStatus.CONFLICT);
-            release(ticket, conflict);
+            InviteAcceptanceWriter.ReleaseOutcome released = release(ticket, conflict);
+            if (released == InviteAcceptanceWriter.ReleaseOutcome.GRANT_COMMITTED
+                    || released == InviteAcceptanceWriter.ReleaseOutcome.GRANT_UNKNOWN) {
+                // 付与印あり、または付与されたか不明な旧データ（在籍済みなのでこの確保で参加した側に倒す）。
+                recordJoinedOrLog(ticket);
+            }
             throw conflict;
         }
     }
 
-    private void release(InviteClaimTicket ticket, RuntimeException primary) {
+    private void recordJoinedOrLog(InviteClaimTicket ticket) {
         try {
-            writer.releaseClaim(ticket.claimId());
+            writer.recordJoined(ticket.claimId());
+        } catch (RuntimeException e) {
+            log.error("招待 claim の確定に失敗（参加は成立済み。CLAIMED のまま監視対象）: claimId={}, tokenId={}",
+                    ticket.claimId(), ticket.tokenId(), e);
+        }
+    }
+
+    /** 確保を戻す。失敗は元の例外の抑制例外に残し null を返す。 */
+    private InviteAcceptanceWriter.ReleaseOutcome release(InviteClaimTicket ticket, RuntimeException primary) {
+        try {
+            return writer.releaseClaim(ticket.claimId());
         } catch (RuntimeException releaseFailure) {
             log.error("招待 claim の補償に失敗（CLAIMED のまま残り監視対象）: claimId={}, tokenId={}",
                     ticket.claimId(), ticket.tokenId(), releaseFailure);
             primary.addSuppressed(releaseFailure);
+            return null;
         }
     }
 

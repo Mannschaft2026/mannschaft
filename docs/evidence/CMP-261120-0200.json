@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261120-0200",
+  "scope": "app",
+  "implementation": {
+    "pr": 4675,
+    "sha": "07a24a008fec528e32712c4b650de52ae81947d9"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "BE が http(s) の署名付き URL を avatar_url として保存せず、プロフィール更新で avatar_url が破損しない（往復で生キーが保たれる）",
+      "tests": [
+        {
+          "name": "UserProfileAvatarRoundTripIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/UserProfileAvatarRoundTripIT.java"
+        },
+        {
+          "name": "UserServiceTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/UserServiceTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "言語設定の保存が avatarUrl を送らず、連続保存しても 500 にならない",
+      "tests": [
+        {
+          "name": "settings-language-locale-save",
+          "evidence": "frontend/tests/unit/pages/settings-language-locale-save.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "既存の破損行（署名付き URL が入った avatar_url）を生キーへ復旧する migration",
+      "tests": [
+        {
+          "name": "FlywayExistingDataUsersAvatarUrlSignedUrlRepairMigrationTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/migration/FlywayExistingDataUsersAvatarUrlSignedUrlRepairMigrationTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45050632574
+    },
+    {
+      "runId": 45050632558
+    },
+    {
+      "runId": 45050632592
+    },
+    {
+      "runId": 45050632562
+    },
+    {
+      "runId": 45050632516
+    },
+    {
+      "runId": 45050632561
+    },
+    {
+      "runId": 45050632588
+    },
+    {
+      "runId": 45050632554
+    },
+    {
+      "runId": 45050630385
+    },
+    {
+      "runId": 45050632559
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4675"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261120-0200/e2e-alicization.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261120-0200/e2e-alicization.md"
+    }
+  },
+  "regressions": [
+    {
+      "description": "署名付き URL が avatar_url に保存されデータ破損・言語保存 500 になる不具合",
+      "test": "backend/src/test/java/com/mannschaft/app/auth/UserProfileAvatarRoundTripIT.java",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/d18421a76e",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/commit/917095c6ba"
+    }
+  ]
+}

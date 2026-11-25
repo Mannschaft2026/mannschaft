@@ -11,6 +11,7 @@ import DashboardErrorState from '~/components/DashboardErrorState.vue'
 const mocks = vi.hoisted(() => ({
   getShiftSchedule: vi.fn(),
   getPositions: vi.fn(),
+  getTeam: vi.fn(),
   getMembers: vi.fn(),
   loadPermissions: vi.fn(),
   loadSlots: vi.fn(),
@@ -26,7 +27,7 @@ mockNuxtImport('useShiftApi', () => () => ({
   getShiftSchedule: mocks.getShiftSchedule,
   getPositions: mocks.getPositions,
 }))
-mockNuxtImport('useTeamApi', () => () => ({ getMembers: mocks.getMembers }))
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: mocks.getMembers }))
 mockNuxtImport('useRoleAccess', () => () => ({ roleName: ref('MEMBER'), loadPermissions: mocks.loadPermissions }))
 mockNuxtImport('useFeatureFlag', () => () => ({ enabled: ref(false) }))
 mockNuxtImport('useAutoAssign', () => () => ({
@@ -88,6 +89,8 @@ beforeEach(() => {
     data: { id: 425, teamId: 9, content: { title: '11月シフト' }, status: { status: 'DRAFT' } },
   })
   mocks.getPositions.mockResolvedValue({ data: [] })
+  // URL の slug のチーム（numericId）はシフト表の teamId と同じ（board.vue の所属照合を通る前提のデータ）
+  mocks.getTeam.mockResolvedValue({ data: { numericId: 9 } })
   mocks.getMembers.mockResolvedValue({ data: [{ userId: 2, displayName: 'メンバーB', avatarUrl: null }] })
   mocks.loadPermissions.mockResolvedValue({ ok: true })
   mocks.loadSlots.mockResolvedValue(undefined)
@@ -112,9 +115,10 @@ describe('シフトボード: シフト表の取得失敗（所属外の直打�
     const errorState = wrapper!.get('[data-testid="load-error-state"]')
     expect(errorState.text()).toContain('loadErrorState.states.notFoundOrForbidden.title')
     expect(wrapper!.find('[data-testid="load-error-state-retry"]').exists()).toBe(false)
-    const back = wrapper!.get('[data-testid="shift-board-load-error"] a')
-    expect(back.attributes('href')).toBe('/teams/team-a/shifts')
-    expect(back.text()).toContain('shift.board.backToList')
+    // 戻る導線はヘッダーの1つだけ（取得失敗表示内に二重に出さない）
+    const backLinks = wrapper!.findAll('a[href="/teams/team-a/shifts"]')
+    expect(backLinks).toHaveLength(1)
+    expect(wrapper!.find('[data-testid="shift-board-load-error"] a').exists()).toBe(false)
     // 操作群（変更依頼・PDF 等）は出さない
     expect(wrapper!.text()).not.toContain('shift.changeRequest.title')
     // 握りつぶさず記録する
@@ -191,5 +195,14 @@ describe('シフトボード: シフト表は取れたが枠・ポジション�
     await flushPromises()
     expect(wrapper!.find('[data-testid="shift-board-load-error"]').exists()).toBe(false)
     expect(wrapper!.findComponent(ShiftMemberPool).exists()).toBe(true)
+  })
+})
+
+describe('シフトボード: 戻る導線', () => {
+  it('正常表示でも戻る導線は一覧への1つだけ', async () => {
+    renderPage()
+    await flushPromises()
+    expect(wrapper!.findAll('a[href="/teams/team-a/shifts"]')).toHaveLength(1)
+    expect(wrapper!.findAll('.pi-arrow-left')).toHaveLength(1)
   })
 })

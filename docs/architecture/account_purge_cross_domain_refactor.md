@@ -847,6 +847,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `account_purge_completion_status` | `user_id` | 保持 | GDPR 完了監査。email_hash のみで本人を再特定できない |
 | `action_memo_tags` | `user_id` | 強消去 | CMP-260822-1243 第1陣の本人設定38親表（上表）。各domainの強消去リスナー |
 | `action_memos` | `user_id` | 弱消去 | 弱側 `UserAnonymizedEvent` 購読者で物理削除（発火経路は休眠中。正本 withdrawal_flow_immediate_anonymization_fix.md） |
+| `action_memo_daily_posts` | `user_id` | 弱消去 | 行動メモの日ごとの公開記録。弱側 `UserAnonymizedEvent` 購読者で物理削除し、30日後の `AccountPurgedEvent` 購読者・手動再試行でも残りを回収する（CMP-261123-1201） |
 | `activity_comments` | `user_id` | 保持 | 共有本文・反応（投稿は残し著者表示を共通ラベル化する既決。CMP-261011-0124） |
 | `activity_participants` | `user_id` | 保持 | 参加・出欠・回答・投票・担当の共同記録（他メンバーの集計・業務根拠） |
 | `ad_announcement_deliveries` | `user_id` | 要裁可 | 広告の配信・計測ログ（個人の行動履歴か、広告主課金の根拠か） |
@@ -910,6 +911,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `disclosure_exports` | `requester_user_id` | 保持 | 監査ログ（改ざん防止・説明責任） |
 | `effort_operation_receipts` | `actor_user_id` | 強消去 | `EffortRecordPurgeEventListener`（応答JSONに私的メモを含むため本人分をすべて物理削除） |
 | `effort_records` | `owner_user_id` | 強消去 | `EffortRecordPurgeEventListener`（未共有の原本は物理削除。共有許可を持つ原本は値・私的メモ・snapshotを消去した tombstone を保持） |
+| `effort_team_shares` | `owner_user_id` | 保持 | 共有本文・反応（チームへ共有した projection 本文は残し著者表示を「退会者」へ匿名化する既決。F06.4.1 データ設計 §5・§7〜7.1。退会だけでは共有を REVOKED にしない。AccountPurgedEvent では owner 側の private 値・私的メモ・definition snapshot・共有 mapping・receipt を消し、許可検証用の非本文 tombstone だけを残す。purge リスナーの実装は PR-3b） |
 | `electronic_seals` | `user_id` | 保持 | 印鑑・押印履歴（F05.3 の既決で保持） |
 | `email_change_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `email_outbox` | `user_id` | 要裁可 | 送信待ち・一時データ（宛先PIIを含む） |
@@ -1049,6 +1051,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `refresh_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `refunds` | `refunded_by_user_id` | 保持 | 会計・契約・決済記録（税法等の保存義務。billing は契約を解約済み） |
 | `registered_vehicles` | `user_id` | 要裁可 | 本人の車両情報・定期来客（区画契約の根拠か本人データか） |
+| `registration_pending_invites` | `user_id` | 要裁可 | 招待付き新規登録の保留（CMP-261107-1833）。招待トークンのハッシュ・招待先ID・状態のみで氏名等は持たない。users の物理削除で CASCADE 削除されるが、論理削除・強匿名化では残る。auth 側の強消去リスナーで消すか、invite_token_claims と同じく保持とするかは未裁定 |
 | `reservation_lines` | `default_staff_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `reservation_slot_templates` | `staff_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |
 | `reservation_slots` | `staff_user_id` | 保持 | 業務・契約・申請の記録（相手方・運営が参照する） |

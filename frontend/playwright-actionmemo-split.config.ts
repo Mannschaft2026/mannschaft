@@ -10,7 +10,7 @@ process.env.BASE_URL ||= 'http://localhost:3001'
 
 export default defineConfig({
   testDir: './tests/e2e/real',
-  testMatch: 'action-memo-team-post-split.spec.ts',
+  testMatch: ['action-memo-team-post-split.spec.ts', 'action-memo-published-post-link.spec.ts'],
   fullyParallel: false,
   retries: 0,
   workers: 1,

@@ -79,6 +79,13 @@ slug は既存 BIGINT 主キーテーブル（`teams` / `organizations`）上の
 - **組織種別変更**: `org_type` は ADMIN による自己申告制（承認プロセスなし・即時反映）。NONPROFIT / FORPROFIT の識別は UI のカラーコーディング等で視覚的に区別する。変更履歴は audit_logs（`ORGANIZATION_ORG_TYPE_CHANGED`）に before / after を含めて記録し、事後追跡を可能にする
 - **スコープ境界**: `user_roles` の `team_id` と `organization_id` を同時に非 NULL にすることをアプリ層で禁止
 - **招待URL公開範囲**: `GET /api/v1/invite/{token}` は未認証でアクセス可能だが、チーム名・アイコン・ロール名のみ返す（メンバー一覧・内部情報は含めない）
+- **再招待依頼の受け手側（CMP-261107-1833 PR3）**: `/api/v1/{teams|organizations}/{slug}/invite-reissue-requests` の一覧・再招待・見送りは
+  招待権限者（ADMIN、または `INVITE_MEMBERS` を持つ DEPUTY_ADMIN。`InviteIssuerPolicy#canIssue`）だけが行え、それ以外（権限を外された DEPUTY・
+  MEMBER・SUPPORTER・非メンバー・他スコープのパス）は 403 `COMMON_002`。権限を外された後の直打ち・古いボタンも同じ 403。IDOR 対策として、
+  依頼は id とスコープの両方で引き、自スコープのパスで他スコープの依頼 ID を指すと不在と同じ 404 `ROLE_016`（存在秘匿）。応答は依頼者の
+  表示名・日時・付与ロールだけで、メールアドレス・招待のハッシュを含めない。招待の平文は仮発行の時点で破棄し、ハッシュ・表示名はログに
+  出さない（表示名は利用者入力のため。docs/security/05 §7）。監査は `TEAM_/ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`）と
+  `TEAM_/ORGANIZATION_INVITE_REISSUE_DECLINED`（metadata `{pending_id}`）で、表示名とハッシュは載せない。監査の失敗は主処理を止めない
 - **ブロック済みユーザーの招待参加防止**: `POST /invite/{token}/join` では有効性チェック → アーカイブチェック → ブロック済みチェックの順で検証する。`team_blocks` / `organization_blocks` に対象ユーザーのエントリが存在する場合は 403 を返し、招待トークンを保持していてもブロックをバイパスして参加できないようにする
 - **フォロー登録の公開制限**: チーム/組織フォローはいずれも `visibility = PUBLIC` かつ `supporter_enabled = TRUE` のエンティティのみ受け付ける。条件を満たさない場合は 403
 - **レートリミット**: 以下のエンドポイントに Bucket4j を適用する
@@ -278,6 +285,13 @@ V{major}.{yyyyMMddHHmmss}__create_ownership_transfer_offers_table.sql
 
 > **教訓（slug 二重移行の退行）**: V71 系は当初 `public_id`（UUID）→ slug への置換として実装され、`public_id` 列を DROP した。さらに **`CreateTeamRequest` から slug 入力欄が失われ、name からの自動生成のみ**になった結果、ASCII 3 字未満（日本語名等）のチーム／組織には `team-000017` のような**意味の無い連番 slug** が backfill で付与された。正準仕様は「ユーザーが任意 slug を入力する村方式」（§5.9）であり、連番付与・public_id(UUID) 路線は不採用。既存連番 slug の是正は §5.9.4、public_id 不採用の根拠は §5.9.6 を参照。
 
+```
+V268.20261124173054__alter_registration_pending_invites_reissue.sql（CMP-261107-1833 PR3）
+  -- registration_pending_invites の CHECK(status) を張り直して REISSUE_DECLINED を追加（10 状態）
+  -- INDEX idx_rpi_scope_status (scope_type, scope_id, status, reissue_requested_at)（再招待依頼の一覧・件数の述語用）
+  -- テーブルは増やさない。rollback は db/rollback/V268.20261124173054_rollback.sql（REISSUE_DECLINED を DISMISSED へ寄せてから旧 CHECK に戻す）
+```
+
 **マイグレーション上の注意点**
 - V2.001（organizations）→ V2.002（teams）の順を守ること（teams は organizations に FK）
 - V2.003 は V2.001 直後、V2.004 は V2.002 直後に実行すること（audit_logs の FK 対象テーブルが先に存在すること）
@@ -290,6 +304,30 @@ V{major}.{yyyyMMddHHmmss}__create_ownership_transfer_offers_table.sql
 - V2.023 は V2.002（teams テーブル作成）および V2.001（organizations テーブル作成）の後に実行すること。teams.organization_id の DROP は FK・インデックスを先に削除してから行うこと（MySQL はカラム DROP 前に FK を明示削除する必要がある）
 
 ---
+
+### CMP-261124-0159 是正 migration（非公開チームのサポーター・ゲスト在籍の是正）
+
+> **ステータス**: 🟢 設計完了。業務仕様は [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」。
+
+- **ファイル名**: `V{major}.{yyyyMMddHHmmss}__enforce_members_only_team_without_supporters.sql`。major は**マージ時に origin/main 全体の最大 major＋1 で確定**する（設計時点の origin/main 最大は 267。並行 PR と衝突しうるため設計書では確定しない）。minor は `date -u '+%Y%m%d%H%M%S'`。
+- **対象チーム**: `teams.visibility = 'MEMBERS_AND_ABOVE'`（論理削除・アーカイブ済みも含める。復元時に不変条件を崩さないため）。
+- **処理（すべて集合演算・冪等）**:
+  1. 在籍サポーターの退出: `UPDATE memberships SET left_at = UTC_TIMESTAMP(), leave_reason = 'REMOVED', updated_at = UTC_TIMESTAMP() WHERE scope_type = 'TEAM' AND role_kind = 'SUPPORTER' AND left_at IS NULL AND scope_id IN (対象チーム)`（`chk_memberships_left_reason` を満たす）。
+  2. GUEST の除去: `DELETE ur FROM user_roles ur JOIN roles r ON r.id = ur.role_id AND r.name = 'GUEST' WHERE ur.team_id IN (対象チーム) AND ur.organization_id IS NULL`。
+  3. PENDING 申請の却下: `UPDATE supporter_applications SET status = 'REJECTED', updated_at = UTC_TIMESTAMP() WHERE scope_type = 'TEAM' AND status = 'PENDING' AND scope_id IN (対象チーム)`。
+  4. SUPPORTER 招待トークンの無効化: `UPDATE invite_tokens t JOIN roles r ON r.id = t.role_id AND r.name = 'SUPPORTER' SET t.revoked_at = UTC_TIMESTAMP() WHERE t.team_id IN (対象チーム) AND t.revoked_at IS NULL`（MEMBER のトークンは触らない）。
+  5. サイネージのアクセストークンの無効化: 対象チームの画面（`signage_screens.scope_type = 'TEAM'`）の `signage_access_tokens` を `is_active = FALSE` にする（期限なしを含む。`is_active = TRUE` の行だけ）。
+  6. 共有ファイルリンクの無効化: 対象チームのフォルダ（`shared_folders.scope_type = 'TEAM'`）にあるファイルの `shared_file_links` を `is_active = FALSE` にする（`is_active = TRUE` の行だけ）。F00 §20.5.3。
+- **件数監査**: migration には件数出力を置かない。番人 IT がフィクスチャを置いて適用前後の件数（6 種）を検証する。本番に実データが無いため監査表は作らない。
+- **冪等**: 条件に「在籍中」「PENDING」「未失効」「GUEST 行が存在」「リンク・トークンが有効」を含むため、2 回目以降は 0 件更新。
+- **通知**: migration では通知しない（本番に実データが無い。実データ投入後に同種の是正が要る場合は業務フロー側で通知する）。
+- **キャッシュ**: サポーター数・権限キャッシュは TTL で収束するが、デプロイ手順で該当キー（CMP-261004-1942 のサポーター数キャッシュ）を削除する。
+- **予約語・照合順序**: 新規列なし。文字列リテラルを隣接させない（COMMENT の分割連結禁止）。
+- **番人テスト** `MembersOnlyTeamSupporterCleanupMigrationIT`（Testcontainers MySQL・実 migration）:
+  - **AC-0159-65**: 非公開チームと公開チーム（SUPPORTERS_AND_ABOVE）それぞれに、在籍サポーター 2・退出済みサポーター 1・GUEST 1・MEMBER 2・ADMIN 1・PENDING 申請 2・APPROVED 申請 1・SUPPORTER トークン（有効 1・失効済み 1）・MEMBER トークン 1 を置いて migration を適用すると、非公開チームだけが是正され（在籍サポーター 0・GUEST 0・PENDING 0・有効 SUPPORTER トークン 0）、MEMBER/ADMIN・退出済み行・APPROVED 申請・失効済み/MEMBER トークン・公開チームの全行は不変。非公開チームのファイルの共有リンク（有効 2）は無効になり、公開チームのリンクは不変。
+  - **AC-0159-66**: 同じ SQL を 2 回目に流しても更新 0 件（冪等）。
+  - **AC-0159-67**: 前後の件数（6 種。サイネージのアクセストークン 期限あり 1・期限なし 1 を含む）が期待値と一致。
+  - **AC-0159-68**: 適用後、`MembersOnlyTeamSupporterInvariantIT`（F00 §20.6）の不変条件が成り立つ。
 
 ## 8. 未解決事項
 
@@ -369,6 +407,8 @@ V{major}.{yyyyMMddHHmmss}__create_ownership_transfer_offers_table.sql
 | 2026-09-25 | F01.2.1 第1パス精査の反映: ① 1チームの複数組織への同時加盟を正式に保証し、単一親前提の読み手22件（BE 18・FE 4）の改修を F01.2.1 §9 に定義 ② 取下げ・取消に24時間の冷却、PENDING の60日期限、組織・チームの削除／アーカイブ時の PENDING 片付けを追加 ③ 招待先チームの可視性チェック（見えないチームは不在と同じ 404）④ 索引を `(organization_id, group_id, status)` 等に見直し |
 | 2026-10-16 | **マスター判断（Issue #3892）**: 組織の手動・自動アーカイブによるチームの連動アーカイブを廃止。加盟が当該組織だけの場合も、チームの休止状態・個人加入用招待・既存在籍へ影響させず、チームは自身の条件でのみ休止する。組織自身の招待失効・解除後非復元は維持する。招待世代方式のカラム追加と業務TX例外なしの方針は裁可済みだが、詳細は別途設計する。12か月境界は本変更の対象外。 |
 | 2026-10-20 | **F01.2.1 の実装に追従（9-A）**: 加盟の書き込み API（招待・申請・承認・拒否・取下げ・取消・離脱・除名）、申請受付設定、チームグループ、割当、宛先プレビューが実装済みになったため、`02_api_design`・`03_business_logic`・`01_db_design` の「未実装」「追加予定」の注記を改めた。加盟の通知は同一 tx の outbox 書き込み（relay が fan-out へ取り込む）に改まった旨と、Flyway の確定版（V231・V232・V234・V238〜V242）を記した。実機E2E・アリシゼーションは未実施 |
+| 2026-11-24 | CMP-261124-0157: 招待参加が招待ロールに関係なく memberships を MEMBER で作り user_roles に招待ロール行を作っていた欠陥を修正（SUPPORTER 招待で正式メンバー扱いになりメンバー限定の記事等が見えていた）。招待ロール→書き先を 03_business_logic.md「招待参加フロー」手順8の表に確定し、共有・個人招待で付与できるロールを MEMBER / SUPPORTER に限定（ADMIN / DEPUTY_ADMIN / GUEST / SYSTEM_ADMIN は発行・承諾とも 422 ROLE_009。SYSTEM_ADMIN ロールの招待で参加するとスコープ内で SYSTEM_ADMIN 相当になる経路も塞いだ）。既存データは V267.20261124005850 で是正 |
+| 2026-11-24 | **再招待依頼の受け手側（CMP-261107-1833 PR3）**: ① 招待権限者向け API `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests`（一覧・再招待・見送り。TEAM/ORG 各3メソッド）を追加 ② 保留に `REISSUE_DECLINED` を追加し、再依頼の集合（REISSUABLE）と閉じる集合（DISMISSIBLE）を分離 ③ GET 時の期限判定（`PENDING`→`EXPIRED`）④ 再招待は仮発行（`revoked_at = created_at`）→ auth の確定 → 有効化の順で、補償の失効は行わない。仮発行の窓60秒 ⑤ 依頼者への通知 `INVITE_REISSUED`/`INVITE_REISSUE_DECLINED`、依頼通知の遷移先を `…/invites#reissue-requests` に ⑥ 監査 `*_INVITE_REISSUED`/`*_INVITE_REISSUE_DECLINED` ⑦ Flyway V268.20261124173054（CHECK 張り直し・索引）⑧ ErrorCode `ROLE_016`(404)〜`ROLE_019`(500) |
 
 ---
 

@@ -116,6 +116,7 @@
       "confirm": "Se confirmará el presupuesto de turnos de {month}. ¿Desea continuar?",
       "success": "Cierre mensual completado: {month} ({count} registros de consumo confirmados)",
       "alreadyClosed": "Este mes ya ha sido cerrado",
+      "notEnded": "{month} aún no ha terminado, por lo que no se puede cerrar. Solo se pueden cerrar los meses ya finalizados.",
       "title": "Cierre mensual",
       "yearMonth": "Mes objetivo",
       "yearMonthHint": "Formato YYYY-MM (ej.: 2026-04)",

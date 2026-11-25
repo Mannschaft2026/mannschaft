@@ -38,7 +38,7 @@ public class InboxTriageService {
     private final InboxItemStateRepository itemStateRepository;
     private final InboxAccessGuard inboxAccessGuard;
 
-    /** アプリ全体の JVM 既定 TZ（{@code TimeZoneConfig} で Asia/Tokyo 固定）に合わせた壁時計変換先。 */
+    /** アプリ全体の JVM 既定 TZ（{@code ServerTimeZoneEnvironmentPostProcessor} で Asia/Tokyo 確定）に合わせた壁時計変換先。 */
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Tokyo");
 
     /**

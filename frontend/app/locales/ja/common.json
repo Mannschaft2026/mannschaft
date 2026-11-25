@@ -3383,5 +3383,28 @@
       "ORGANIZATION": "組織",
       "ACTIVITY": "活動記録"
     }
+  },
+  "inviteReissue": {
+    "title": "再招待の依頼",
+    "description": "招待の期限が切れた方からの再招待の依頼です。再招待すると新しい招待（7日間有効）が発行され、本人に通知されます。",
+    "empty": "再招待の依頼はありません",
+    "requested_at": "依頼日時",
+    "role": "参加ロール",
+    "reissue": "再招待する",
+    "decline": "見送る",
+    "decline_confirm_title": "再招待を見送りますか？",
+    "decline_confirm_message": "{name} さんの再招待の依頼を見送ります。本人にはその旨が通知されます。",
+    "reissued": "{name} さんを再招待しました",
+    "already_member": "すでに参加済みのため、依頼を完了しました",
+    "declined": "再招待を見送りました",
+    "already_handled": "この依頼はすでに対応済みです。一覧を更新しました",
+    "requester_unavailable": "この方は現在参加できない状態のため、再招待できません。見送ってください",
+    "activation_failed": "再招待を有効にできませんでした。しばらくしてからもう一度お試しください",
+    "forbidden": "再招待の依頼を扱う権限がありません",
+    "load_error": "再招待の依頼を取得できませんでした",
+    "retry": "再試行",
+    "load_more": "もっと見る",
+    "reissue_context": "再招待",
+    "decline_context": "再招待を見送る操作"
   }
 }

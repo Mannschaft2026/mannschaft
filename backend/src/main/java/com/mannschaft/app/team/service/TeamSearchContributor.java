@@ -2,7 +2,9 @@ package com.mannschaft.app.team.service;
 
 import com.mannschaft.app.search.SearchContributor;
 import com.mannschaft.app.search.SearchCriteria;
+import com.mannschaft.app.common.visibility.mapping.TeamVisibilityMapper;
 import com.mannschaft.app.search.SearchHit;
+import com.mannschaft.app.search.SearchScopeVisibilityPredicate;
 import com.mannschaft.app.search.SearchTextHighlighter;
 import com.mannschaft.app.search.SearchType;
 import com.mannschaft.app.search.SearchViewer;
@@ -19,8 +21,10 @@ import java.util.Map;
 /**
  * グローバル検索 TEAM 種別の {@link SearchContributor}（F04.6 §6、CMP-261116-0722）。
  *
- * <p>可視性: (PUBLIC または本人所属) かつ ACTIVE かつ未アーカイブ かつ未削除。件数と取得は
- * {@link TeamKeywordSearchRepository} の同一 WHERE 句から出す。</p>
+ * <p>可視性: チームの公開範囲の段を満たす（チーム詳細の正準 {@code ContentVisibilityChecker} と同じ規則。
+ * PUBLIC は誰でも、GUESTS_AND_ABOVE は所属者、SUPPORTERS_AND_ABOVE は SUPPORTER 以上、MEMBERS_AND_ABOVE は
+ * MEMBER 以上。ロールは閲覧者のそのチームでのロール）かつ ACTIVE かつ未アーカイブ かつ未削除。件数と取得は
+ * 同一の {@link SearchScopeVisibilityPredicate} から {@link TeamKeywordSearchRepository} の同一 WHERE 句で出す。</p>
  *
  * <p>スコープ絞り込み: {@code scopeType=TEAM} はそのチーム自身だけ（所属は集約側で確認済み）、
  * {@code scopeType=ORGANIZATION} は該当なし（組織スコープに属するチームの列挙は本種別では扱わない）。</p>
@@ -42,7 +46,7 @@ public class TeamSearchContributor implements SearchContributor {
         if (excludedByScope(criteria)) {
             return 0L;
         }
-        return teamKeywordSearchRepository.count(criteria.terms(), viewer.teamIds(), onlyTeamId(criteria));
+        return teamKeywordSearchRepository.count(criteria.terms(), visibility(viewer), onlyTeamId(criteria));
     }
 
     @Override
@@ -51,10 +55,15 @@ public class TeamSearchContributor implements SearchContributor {
             return List.of();
         }
         return teamKeywordSearchRepository
-                .find(criteria.terms(), viewer.teamIds(), onlyTeamId(criteria), offset, limit)
+                .find(criteria.terms(), visibility(viewer), onlyTeamId(criteria), offset, limit)
                 .stream()
                 .map(team -> toHit(team, criteria.terms()))
                 .toList();
+    }
+
+    private static SearchScopeVisibilityPredicate<TeamEntity.Visibility> visibility(SearchViewer viewer) {
+        return SearchScopeVisibilityPredicate.of(
+                TeamEntity.Visibility.class, TeamVisibilityMapper::toStandard, viewer, SearchViewer.TEAM);
     }
 
     private static boolean excludedByScope(SearchCriteria criteria) {

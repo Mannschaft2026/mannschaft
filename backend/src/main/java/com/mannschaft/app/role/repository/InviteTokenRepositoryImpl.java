@@ -1,8 +1,10 @@
 package com.mannschaft.app.role.repository;
 
 import com.mannschaft.app.role.dto.InviteClaimAuditContext;
+import com.mannschaft.app.role.dto.InviteClaimLock;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.entity.InviteTokenClaimEntity;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import jakarta.persistence.EntityManager;
@@ -14,7 +16,10 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -157,7 +162,30 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
 
     @Override
     public int markClaimReleased(UUID claimId) {
-        return transition(claimId, InviteTokenClaimEntity.RELEASED);
+        // この claim による付与がコミット済み、または付与されたか不明な旧データなら戻さない（CMP-261107-1833）。
+        return em.createNativeQuery("UPDATE " + CLAIMS + " SET status = 'RELEASED', updated_at = UTC_TIMESTAMP(6) "
+                        + "WHERE id = UNHEX(:id) AND status = 'CLAIMED' AND grant_committed_at IS NULL "
+                        + "AND legacy_grant_unknown_at IS NULL")
+                .setParameter("id", hex(claimId))
+                .executeUpdate();
+    }
+
+    @Override
+    public int markClaimGrantCommitted(UUID claimId) {
+        return em.createNativeQuery("UPDATE " + CLAIMS + " SET grant_committed_at = UTC_TIMESTAMP(6), "
+                        + "updated_at = UTC_TIMESTAMP(6) WHERE id = UNHEX(:id) AND status = 'CLAIMED' "
+                        + "AND grant_committed_at IS NULL")
+                .setParameter("id", hex(claimId))
+                .executeUpdate();
+    }
+
+    @Override
+    public Optional<InviteClaimLock> lockClaim(UUID claimId) {
+        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL, legacy_grant_unknown_at IS NOT NULL FROM " + CLAIMS
+                        + " WHERE id = UNHEX(:id) FOR UPDATE")
+                .setParameter("id", hex(claimId))
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(claimLock((Object[]) rows.get(0)));
     }
 
     private int transition(UUID claimId, String to) {
@@ -165,6 +193,104 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
                         + "WHERE id = UNHEX(:id) AND status = 'CLAIMED'")
                 .setParameter("to", to)
                 .setParameter("id", hex(claimId))
+                .executeUpdate();
+    }
+
+    @Override
+    public Optional<InviteClaimLock> findClaimedForUpdate(Long tokenId, Long userId) {
+        // 付与印のある claim、次に旧データ（付与されたか不明）を優先する（参加に使われた可能性の高い順）。
+        List<?> rows = em.createNativeQuery("SELECT HEX(id), status, grant_committed_at IS NOT NULL, legacy_grant_unknown_at IS NOT NULL FROM " + CLAIMS
+                        + " WHERE token_id = :tokenId AND user_id = :userId AND status = 'CLAIMED' "
+                        + "ORDER BY grant_committed_at IS NULL, legacy_grant_unknown_at IS NULL, id LIMIT 1 FOR UPDATE")
+                .setParameter("tokenId", tokenId)
+                .setParameter("userId", userId)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(claimLock((Object[]) rows.get(0)));
+    }
+
+    private static InviteClaimLock claimLock(Object[] row) {
+        return new InviteClaimLock(uuid((String) row[0]), (String) row[1], ((Number) row[2]).intValue() == 1,
+                ((Number) row[3]).intValue() == 1);
+    }
+
+    @Override
+    public Optional<String> findRoleNameByTokenHash(String tokenHash) {
+        List<?> rows = em.createNativeQuery("SELECT r.name FROM invite_tokens t JOIN roles r ON r.id = t.role_id "
+                        + "WHERE t.token_hash = :tokenHash")
+                .setParameter("tokenHash", tokenHash)
+                .getResultList();
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable((String) rows.get(0));
+    }
+
+    @Override
+    public Optional<InviteValidity> findValidityByTokenHash(String tokenHash, Long userId) {
+        List<?> rows = em.createNativeQuery("SELECT revoked_at, (revoked_at IS NOT NULL AND "
+                        + InviteValidity.STAGING_OPEN_SQL + "), expires_at, max_uses, used_count, UTC_TIMESTAMP(6), "
+                        + "EXISTS (SELECT 1 FROM " + CLAIMS + " c WHERE c.token_id = invite_tokens.id "
+                        + "AND c.user_id = :userId AND c.status = 'CLAIMED') FROM invite_tokens WHERE token_hash = :tokenHash")
+                .setParameter("tokenHash", tokenHash)
+                .setParameter("userId", userId)
+                .getResultList();
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        Object[] r = (Object[]) rows.get(0);
+        boolean stagingOpen = truthy(r[1]);
+        // 本人の確保（CLAIMED）が上限の1回を使っているなら上限は判定しない（承認経路の再開判定と同じ規則）
+        Integer maxUses = truthy(r[6]) || r[3] == null ? null : ((Number) r[3]).intValue();
+        // 全列が同じ変換経路を通るので、壁時計のまま比べても前後関係・一致は保たれる
+        return Optional.of(InviteValidity.evaluate(wallClock(r[0]), stagingOpen, wallClock(r[2]), maxUses,
+                ((Number) r[4]).intValue(), wallClock(r[5])));
+    }
+
+    private static boolean truthy(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        return value != null && ((Number) value).intValue() != 0;
+    }
+
+    @Override
+    public Map<String, String> findRoleNamesByTokenHashes(Collection<String> tokenHashes) {
+        if (tokenHashes.isEmpty()) {
+            return Map.of();
+        }
+        List<?> rows = em.createNativeQuery("SELECT t.token_hash, r.name FROM invite_tokens t JOIN roles r "
+                        + "ON r.id = t.role_id WHERE t.token_hash IN (:tokenHashes)")
+                .setParameter("tokenHashes", tokenHashes)
+                .getResultList();
+        Map<String, String> names = new HashMap<>();
+        for (Object row : rows) {
+            Object[] r = (Object[]) row;
+            names.put((String) r[0], (String) r[1]);
+        }
+        return names;
+    }
+
+    @Override
+    public int markStaged(Long tokenId) {
+        em.flush();
+        return em.createNativeQuery("UPDATE invite_tokens SET revoked_at = created_at WHERE id = :id "
+                        + "AND revoked_at IS NULL AND used_count = 0")
+                .setParameter("id", tokenId)
+                .executeUpdate();
+    }
+
+    @Override
+    public int activateStaged(Long tokenId, Long targetUserId) {
+        em.flush();
+        // 窓は参照時の判定と同じ断片（InviteValidity#STAGING_OPEN_SQL）・同じ 6 桁精度で判定する（PR3 検分 P2-2）
+        return em.createNativeQuery(ACTIVATE_STAGED_SQL)
+                .setParameter("id", tokenId)
+                .setParameter("targetUserId", targetUserId)
+                .executeUpdate();
+    }
+
+    @Override
+    public int revokeExpiredStaged(String tokenHash) {
+        em.flush();
+        return em.createNativeQuery(REVOKE_EXPIRED_STAGED_SQL)
+                .setParameter("tokenHash", tokenHash)
                 .executeUpdate();
     }
 
@@ -219,8 +345,28 @@ class InviteTokenRepositoryImpl implements InviteTokenRepositoryCustom {
         return id.toString().replace("-", "");
     }
 
+    private static UUID uuid(String hex32) {
+        return UUID.fromString(hex32.replaceFirst("(.{8})(.{4})(.{4})(.{4})(.{12})", "$1-$2-$3-$4-$5"));
+    }
+
     private static Long longOrNull(Object value) {
         return value == null ? null : ((Number) value).longValue();
+    }
+
+    private static LocalDateTime wallClock(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDateTime local) {
+            return local;
+        }
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toLocalDateTime();
+        }
+        if (value instanceof java.util.Date date) {
+            return new Timestamp(date.getTime()).toLocalDateTime();
+        }
+        throw new IllegalStateException("招待行の時刻列を解釈できない型: " + value.getClass().getName());
     }
 
     private static Instant time(Object value) {

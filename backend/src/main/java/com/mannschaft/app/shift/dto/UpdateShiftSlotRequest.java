@@ -27,6 +27,7 @@ public class UpdateShiftSlotRequest {
 
     private final Integer requiredCount;
 
+    @Size(max = 200)
     private final List<Long> assignedUserIds;
 
     @Size(max = 200)
