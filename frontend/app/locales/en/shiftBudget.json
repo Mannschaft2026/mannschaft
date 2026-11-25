@@ -124,6 +124,7 @@
       "title": "Monthly closing",
       "yearMonth": "Target month",
       "yearMonthHint": "YYYY-MM format (e.g. 2026-04)",
+      "invalidFormat": "Enter the month in YYYY-MM format (e.g. 2026-10)",
       "execute": "Execute",
       "error": "Monthly closing failed"
     },

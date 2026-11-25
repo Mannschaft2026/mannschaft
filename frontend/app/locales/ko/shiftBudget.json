@@ -124,6 +124,7 @@
       "title": "월차 마감",
       "yearMonth": "대상 월",
       "yearMonthHint": "YYYY-MM 형식（예: 2026-04）",
+      "invalidFormat": "YYYY-MM 형식(예: 2026-10)으로 입력해 주세요",
       "execute": "실행",
       "error": "월차 마감에 실패했습니다"
     },
