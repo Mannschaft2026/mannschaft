@@ -20,6 +20,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +46,9 @@ import java.util.Map;
 public class ConfirmableNotificationEmailEventListener {
 
     private static final String TEMPLATE_NAME = "email/confirmable-notification";
+
+    /** outbox への多値 INSERT 1 文あたりの件数（1 文が巨大にならないよう刻む）。 */
+    private static final int OUTBOX_CHUNK_SIZE = 500;
 
     private final EmailOutboxService emailOutboxService;
     private final MessageSource messageSource;
@@ -83,7 +87,9 @@ public class ConfirmableNotificationEmailEventListener {
         // ユーザー情報を一括取得
         List<UserEntity> users = userRepository.findByIdIn(event.getRecipientUserIds());
 
-        int sentCount = 0;
+        // CMP-261002-1559: 1通ずつ enqueue すると受信者数に比例した INSERT になるため、リクエストを
+        // 溜めて 500 件ずつ enqueueAll（多値 INSERT 1 文）で outbox へ登録する。
+        List<EmailOutboxRequest> requests = new ArrayList<>(users.size());
         for (UserEntity user : users) {
             String confirmToken = confirmTokenByUserId.get(user.getId());
             if (confirmToken == null) {
@@ -103,7 +109,7 @@ public class ConfirmableNotificationEmailEventListener {
                 String confirmUrl = baseUrl + "/notifications/confirm/" + confirmToken;
                 String subject = getMessage("email.confirmableNotification.subject", locale);
                 String htmlBody = renderEmailTemplate(confirmUrl, subject, locale);
-                emailOutboxService.enqueue(new EmailOutboxRequest(
+                requests.add(new EmailOutboxRequest(
                         "NOTIFICATION_CONFIRM",
                         locale.toLanguageTag(),
                         email,
@@ -114,10 +120,21 @@ public class ConfirmableNotificationEmailEventListener {
                         user.getId(),
                         null
                 ));
-                sentCount++;
-                log.debug("確認通知メール送信成功: userId={}", user.getId());
             } catch (Exception e) {
-                log.error("確認通知メール送信失敗: userId={}, email={}", user.getId(), email, e);
+                log.error("確認通知メール組み立て失敗: userId={}, email={}", user.getId(), email, e);
+            }
+        }
+
+        int sentCount = 0;
+        for (int from = 0; from < requests.size(); from += OUTBOX_CHUNK_SIZE) {
+            int to = Math.min(from + OUTBOX_CHUNK_SIZE, requests.size());
+            List<EmailOutboxRequest> chunk = requests.subList(from, to);
+            try {
+                emailOutboxService.enqueueAll(chunk);
+                sentCount += chunk.size();
+            } catch (Exception e) {
+                log.error("確認通知メールの outbox 一括登録失敗: notificationId={}, from={}, to={}",
+                        event.getConfirmableNotificationId(), from, to, e);
             }
         }
 

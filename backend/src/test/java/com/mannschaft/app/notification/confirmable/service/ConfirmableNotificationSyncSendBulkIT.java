@@ -445,6 +445,27 @@ class ConfirmableNotificationSyncSendBulkIT extends AbstractMySqlIntegrationTest
                 .as("F8(%s): 1チャンク目のアプリ内通知も残らない（部分送信なし）", table).isZero();
     }
 
+    @Test
+    @DisplayName("アプリ内通知の organization_id: 組織スコープは scope_id、チームスコープは NULL（非同期経路と同じ規則）")
+    void 組織スコープのアプリ内通知はorganization_idを持ちチームはNULL() {
+        List<Long> orgUsers = users(3);
+        Long orgScopeId = newScopeId();
+        ConfirmableNotificationEntity org = service.send(ScopeType.ORGANIZATION, orgScopeId,
+                titlePrefix + " ORG", "本文", ConfirmableNotificationPriority.NORMAL, null,
+                null, null, null, null, null, orgUsers.get(0), orgUsers);
+        List<Long> teamUsers = users(3);
+        ConfirmableNotificationEntity team = sendTeam(newScopeId(), "TEAMORG", teamUsers);
+
+        assertThat(jdbc.queryForList(
+                "SELECT organization_id FROM notifications WHERE source_type = 'CONFIRMABLE_NOTIFICATION' AND source_id = ?",
+                Long.class, org.getId()))
+                .as("組織スコープ: 全通知の organization_id = scope_id").hasSize(3).containsOnly(orgScopeId);
+        assertThat(jdbc.queryForList(
+                "SELECT organization_id FROM notifications WHERE source_type = 'CONFIRMABLE_NOTIFICATION' AND source_id = ?",
+                Long.class, team.getId()))
+                .as("チームスコープ: organization_id は NULL").hasSize(3).containsOnlyNulls();
+    }
+
     // =====================================================================
     // ヘルパ
     // =====================================================================

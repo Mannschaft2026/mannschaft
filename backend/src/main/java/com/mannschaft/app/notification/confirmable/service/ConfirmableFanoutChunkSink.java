@@ -24,14 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * CMP-260920-1040: 確認通知の fan-out チャンク出力先（軍議第8版確定稿 §3.4・§8.1〜§8.4・§9.2・§10・§11）。
@@ -84,6 +81,8 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
     private final NotificationCreditService creditService;
     private final EmailOutboxService emailOutboxService;
     private final JdbcTemplate jdbcTemplate;
+    /** CMP-261002-1559: 同期 send と共通の多値 INSERT 部品。 */
+    private final ConfirmableRecipientBulkWriter bulkWriter;
     private final MessageSource messageSource;
     /** §9.2: finish で親の状態確定と同一トランザクションでジョブを DONE にするために使う。 */
     private final NotificationFanoutJobService fanoutJobService;
@@ -109,6 +108,7 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
             NotificationCreditService creditService,
             EmailOutboxService emailOutboxService,
             JdbcTemplate jdbcTemplate,
+            ConfirmableRecipientBulkWriter bulkWriter,
             MessageSource messageSource,
             NotificationFanoutJobService fanoutJobService,
             PlatformTransactionManager transactionManager) {
@@ -116,6 +116,7 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
         this.creditService = creditService;
         this.emailOutboxService = emailOutboxService;
         this.jdbcTemplate = jdbcTemplate;
+        this.bulkWriter = bulkWriter;
         this.messageSource = messageSource;
         this.fanoutJobService = fanoutJobService;
         this.requiresNewTxTemplate = new TransactionTemplate(transactionManager);
@@ -156,7 +157,7 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
 
             // 既に受信者行がある user_id を除く（AC-23 再開時の冪等性）。多重INSERTで壊れる重複はここでは
             // 除去しない（AC-24: チャンク内の重複は実処理由来の一意制約違反として現れる契約）。
-            Set<Long> existing = findExistingRecipientUserIds(notificationId, userIds);
+            Set<Long> existing = bulkWriter.findExistingRecipientUserIds(notificationId, userIds);
             List<Long> newUserIds = new ArrayList<>();
             for (Long userId : userIds) {
                 if (!existing.contains(userId)) {
@@ -170,10 +171,12 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
             // 受信者行の多値 INSERT（確認トークン付き）。重複があればここで一意制約違反として例外になる（AC-24。
             // この例外はこのトランザクションをそのままロールバックさせて呼び出し元へ伝播する。
             // consume はまだ呼んでいないため課金は最初から発生しない＝AC-24/AC-27 の「課金も作られない」を満たす）。
-            Map<Long, String> tokensByUserId = insertRecipients(notification, newUserIds);
+            int[] resolvedMinutes = resolveReminderMinutes(notification);
+            Map<Long, String> tokensByUserId = bulkWriter.insertRecipients(
+                    notification.getId(), newUserIds, resolvedMinutes[0], resolvedMinutes[1]);
 
             // notifications への多値 INSERT。
-            insertAppNotifications(notification, newUserIds);
+            bulkWriter.insertAppNotifications(notification, newUserIds, APP_NOTIFICATION_TYPE);
 
             // 課金の消費（AC-24・AC-25・AC-27）。猶予超過（CREDIT_INSUFFICIENT）で失敗した場合、
             // 直前の受信者行・notifications の INSERT も含めてこのチャンクのトランザクション全体を
@@ -251,53 +254,6 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
     // 内部処理
     // -------------------------------------------------------------------------
 
-    private Set<Long> findExistingRecipientUserIds(Long notificationId, List<Long> userIds) {
-        Set<Long> distinctCandidates = new HashSet<>(userIds);
-        if (distinctCandidates.isEmpty()) {
-            return Set.of();
-        }
-        String placeholders = String.join(",", distinctCandidates.stream().map(id -> "?").toList());
-        Object[] args = new Object[distinctCandidates.size() + 1];
-        args[0] = notificationId;
-        int i = 1;
-        for (Long id : distinctCandidates) {
-            args[i++] = id;
-        }
-        List<Long> rows = jdbcTemplate.query(
-                "SELECT user_id FROM confirmable_notification_recipients "
-                        + "WHERE confirmable_notification_id = ? AND user_id IN (" + placeholders + ")",
-                (rs, rowNum) -> rs.getLong("user_id"), args);
-        return new HashSet<>(rows);
-    }
-
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
-    private Map<Long, String> insertRecipients(ConfirmableNotificationEntity notification, List<Long> newUserIds) {
-        int[] resolved = resolveReminderMinutes(notification);
-        Map<Long, String> tokens = new HashMap<>();
-        StringBuilder sql = new StringBuilder(
-                "INSERT INTO confirmable_notification_recipients "
-                        + "(confirmable_notification_id, user_id, confirm_token, is_confirmed, "
-                        + "resolved_first_reminder_minutes, resolved_second_reminder_minutes, created_at) VALUES ");
-        Object[] args = new Object[newUserIds.size() * 5];
-        int a = 0;
-        for (int i = 0; i < newUserIds.size(); i++) {
-            if (i > 0) {
-                sql.append(',');
-            }
-            sql.append("(?,?,?,0,?,?,UTC_TIMESTAMP())");
-            Long userId = newUserIds.get(i);
-            String token = UUID.randomUUID().toString();
-            tokens.put(userId, token);
-            args[a++] = notification.getId();
-            args[a++] = userId;
-            args[a++] = token;
-            args[a++] = resolved[0];
-            args[a++] = resolved[1];
-        }
-        jdbcTemplate.update(sql.toString(), args);
-        return tokens;
-    }
-
     /**
      * リマインド分数の3段フォールバック解決（{@code ConfirmableNotificationService.send} と同じ規則）。
      * 1. 通知個別設定 → 2. スコープ設定 → 3. システムデフォルト（1回目180分／2回目120分）。
@@ -318,35 +274,6 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
                 ? notification.getSecondReminderMinutes()
                 : (defaultSecond != null ? defaultSecond : DEFAULT_SECOND_REMINDER_MINUTES);
         return new int[] {resolvedFirst, resolvedSecond};
-    }
-
-    private void insertAppNotifications(ConfirmableNotificationEntity notification, List<Long> newUserIds) {
-        String scopeTypeStr = notification.getScopeType() == null ? null : notification.getScopeType().name();
-        Long actorId = notification.getCreatedByUserId();
-        StringBuilder sql = new StringBuilder(
-                "INSERT INTO notifications (user_id, organization_id, notification_type, priority, title, body, "
-                        + "source_type, source_id, scope_type, scope_id, action_url, actor_id, is_read, created_at) VALUES ");
-        Object[] args = new Object[newUserIds.size() * 12];
-        int a = 0;
-        for (int i = 0; i < newUserIds.size(); i++) {
-            if (i > 0) {
-                sql.append(',');
-            }
-            sql.append("(?,?,?,?,?,?,?,?,?,?,?,?,0,UTC_TIMESTAMP())");
-            args[a++] = newUserIds.get(i);
-            args[a++] = notification.getScopeType() == ScopeType.ORGANIZATION ? notification.getScopeId() : null;
-            args[a++] = APP_NOTIFICATION_TYPE;
-            args[a++] = notification.getPriority() == null ? null : notification.getPriority().name();
-            args[a++] = notification.getTitle();
-            args[a++] = notification.getBody() != null ? notification.getBody() : "";
-            args[a++] = SOURCE_TYPE;
-            args[a++] = notification.getId();
-            args[a++] = scopeTypeStr;
-            args[a++] = notification.getScopeId();
-            args[a++] = notification.getActionUrl();
-            args[a++] = actorId;
-        }
-        jdbcTemplate.update(sql.toString(), args);
     }
 
     private void enqueueEmails(ConfirmableNotificationEntity notification, List<Long> newUserIds,
