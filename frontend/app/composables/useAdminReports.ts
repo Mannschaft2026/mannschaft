@@ -45,7 +45,11 @@ export function useAdminReports() {
     { value: 'DISMISSED', labelKey: 'admin_report.stats.dismissed' },
   ]
 
+  // 要求番号。最後に発行した要求の応答だけを反映し、古い応答の後着で一覧・総件数を上書きしない。
+  let requestSeq = 0
+
   async function load() {
+    const seq = ++requestSeq
     loading.value = true
     try {
       const [reportsRes, statsRes] = await Promise.all([
@@ -56,13 +60,15 @@ export function useAdminReports() {
         }),
         adminReportApi.getReportStats(),
       ])
+      if (seq !== requestSeq) return
       reports.value = reportsRes.data
       totalRecords.value = reportsRes.meta.total
       stats.value = statsRes.data
     } catch {
+      if (seq !== requestSeq) return
       showError(t('admin_report.messages.load_failed'))
     } finally {
-      loading.value = false
+      if (seq === requestSeq) loading.value = false
     }
   }
 
@@ -190,7 +196,7 @@ export function useAdminReports() {
 
   function onStatusFilterChange() {
     page.value = 0
-    load()
+    return load()
   }
 
   function onPage(event: { page: number }) {
