@@ -6,23 +6,32 @@ const route = useRoute()
 const { t } = useI18n()
 const orgSlug = String(route.params.slug)
 const advertiserApi = useAdvertiserApi()
+const { resolveOrganizationNumericId } = useOrganizationNumericId()
 const toast = useNotification()
 const account = ref<AdvertiserAccountResponse | null>(null)
 const overview = ref<AdvertiserOverviewResponse | null>(null)
 const loading = ref(true)
 const notRegistered = ref(false)
+// 組織 slug → 数値 ID は一度だけ解決して使い回す（BE の organizationId は Long。slug は送らない）
+const organizationNumericId = ref<string | null>(null)
 
 async function load() {
   loading.value = true
   try {
-    const res = await advertiserApi.getAccount('ORGANIZATION', orgSlug)
+    organizationNumericId.value ??= await resolveOrganizationNumericId(orgSlug)
+    const res = await advertiserApi.getAccount('ORGANIZATION', organizationNumericId.value)
     account.value = res.data
-    const ovRes = await advertiserApi.getOverview('ORGANIZATION', orgSlug)
+    const ovRes = await advertiserApi.getOverview('ORGANIZATION', organizationNumericId.value)
     overview.value = ovRes.data
   }
   catch (e: unknown) {
-    if ((e as { response?: { status?: number } })?.response?.status === 404) {
+    // 404 は「広告主アカウント未登録」のときだけ。組織の解決失敗（numericId 未取得）は未登録扱いにしない
+    if (organizationNumericId.value !== null
+      && (e as { response?: { status?: number } })?.response?.status === 404) {
       notRegistered.value = true
+    }
+    else {
+      toast.error(t('advertising.advertiser_crud.errors.load_failed'))
     }
   }
   finally {
@@ -50,7 +59,7 @@ function openEditDialog() {
 async function saveAccount() {
   savingAccount.value = true
   try {
-    const res = await advertiserApi.updateAccount('ORGANIZATION', orgSlug, {
+    const res = await advertiserApi.updateAccount('ORGANIZATION', organizationNumericId.value ?? orgSlug, {
       companyName: editForm.value.companyName,
       contactEmail: editForm.value.contactEmail,
     })

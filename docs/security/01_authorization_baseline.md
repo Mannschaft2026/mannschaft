@@ -148,6 +148,8 @@ matcher 式は行挿入で腐らず、`SecurityConfig` を Ctrl+F すれば人�
 >
 > `/api/v1/public/teams/{slug}/**` 系では、**存在しない slug** を渡すと `ScopeSlugIdConverter`（`config/ScopeSlugIdConverter.java`）が 404 `COMMON_005` を返し、**存在するが非公開なチームの slug** を渡すと 404 `PUBLIC_001` / `PUBLIC_013` を返す。ステータスはいずれも 404 だがボディのエラーコードが異なるため、**slug が実在するかどうかの 1 ビット**は判別できる。この差は activity 固有ではなく同コンバータを通す全経路に共通する。
 >
+> 解決先の決め方（CMP-261125-2124）: 引数名が `organizationId` のパス変数・クエリは、URI に `/organizations/` を含むかを問わず**常に組織として解決**する（クエリ `?organizationId=<slug>` を TEAM として解決し、同名チームの ID で別組織を誤照会する越境を根治）。引数名は `ConditionalGenericConverter` の `TypeDescriptor`（`MethodParameter`）から取り出し、リクエスト値の一致では推測しない。それ以外の引数名は従来どおり URI 直前セグメント（`/organizations/` → 組織、それ以外 → TEAM）で判定する。
+>
 > **この差は「不整合」ではなく設計上の確定事項である。将来これを見つけて「統一すべき」と善意で潰しにかからないこと。** 理由は次の 4 点:
 >
 > 1. **同じ 1 ビットを専用 EP が公然と配っている**。`GET /api/v1/public/teams/slug-resolve?slug=xxx` は permitAll（`PublicSlugResolveController` に `@IntentionallyPublic` 付与）であり、**未ログインかつ非公開チームでも** `CURRENT` / `MOVED` / `NOT_FOUND` を返す。実装 `TeamService#resolveSlug` は `existsBySlugAndDeletedAtIsNull` だけを見ており**可視性を判定していない**（組織側も同型）。

@@ -3,13 +3,19 @@ package com.mannschaft.app.config;
 import com.mannschaft.app.organization.service.OrganizationService;
 import com.mannschaft.app.team.service.TeamService;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.core.convert.converter.Converter;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.convert.TypeDescriptor;
+import org.springframework.core.convert.converter.ConditionalGenericConverter;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Set;
 
 /**
  * スコープ識別子（team / organization）のパスパラメータ変換器。
@@ -23,10 +29,22 @@ import org.springframework.web.server.ResponseStatusException;
  * （{@code /organizations/{value}} か {@code /teams/{value}} か）を見て解決先ドメインを一意に決める。
  * これにより 118 の org 系コントローラの {@code @PathVariable Long} を変更せずに slug 解決を通す。</p>
  *
+ * <p><b>解決先の決め方（越境の根治・CMP-261125-2124）:</b> 受け取る引数の名前が {@code organizationId} の
+ * 場合は、パス（{@code /organizations/{id}}）かクエリ（{@code ?organizationId=}）かを問わず常に組織として解決する。
+ * 以前は URI に {@code /organizations/} を含まないクエリの slug を TEAM として解決しており、
+ * 同名のチームがあると別組織を誤照会しえた。{@code Converter<String, Long>} は引数名を知り得ないため、
+ * 本クラスは {@link ConditionalGenericConverter} として対象の {@link TypeDescriptor}（{@link MethodParameter}）から
+ * 引数名を取り出す。リクエスト値の一致で推測しないので、{@code teamId} と {@code organizationId} に同じ値が
+ * 来ても取り違えない。引数名が {@code organizationId} 以外のときは従来どおり URI 直前セグメントで判定し、
+ * 判定できなければ TEAM とする。</p>
+ *
  * <p>解決に失敗した場合（存在しない slug 等）は 404 NOT_FOUND を送出する（400 ではない）。</p>
  */
 @Component
-public class ScopeSlugIdConverter implements Converter<String, Long> {
+public class ScopeSlugIdConverter implements ConditionalGenericConverter {
+
+    /** この名前の引数（パス変数・クエリ）は常に組織 ID として解決する。 */
+    static final String ORGANIZATION_PARAM_NAME = "organizationId";
 
     private final TeamService teamService;
     private final OrganizationService organizationService;
@@ -38,7 +56,46 @@ public class ScopeSlugIdConverter implements Converter<String, Long> {
     }
 
     @Override
-    public Long convert(@NonNull String source) {
+    public Set<ConvertiblePair> getConvertibleTypes() {
+        return Set.of(new ConvertiblePair(String.class, Long.class));
+    }
+
+    @Override
+    public boolean matches(@NonNull TypeDescriptor sourceType, @NonNull TypeDescriptor targetType) {
+        return true;
+    }
+
+    @Override
+    public Object convert(Object value, @NonNull TypeDescriptor sourceType, @NonNull TypeDescriptor targetType) {
+        if (value == null) {
+            return null;
+        }
+        return resolve((String) value, isOrganizationParameter(targetType));
+    }
+
+    /** 対象引数の名前が {@code organizationId} か（明示名 → コンパイル時の引数名の順で判定）。 */
+    private static boolean isOrganizationParameter(TypeDescriptor targetType) {
+        RequestParam requestParam = targetType.getAnnotation(RequestParam.class);
+        if (requestParam != null) {
+            String explicit = !requestParam.name().isEmpty() ? requestParam.name() : requestParam.value();
+            if (!explicit.isEmpty()) {
+                return ORGANIZATION_PARAM_NAME.equals(explicit);
+            }
+        }
+        PathVariable pathVariable = targetType.getAnnotation(PathVariable.class);
+        if (pathVariable != null) {
+            String explicit = !pathVariable.name().isEmpty() ? pathVariable.name() : pathVariable.value();
+            if (!explicit.isEmpty()) {
+                return ORGANIZATION_PARAM_NAME.equals(explicit);
+            }
+        }
+        if (targetType.getResolvableType().getSource() instanceof MethodParameter parameter) {
+            return ORGANIZATION_PARAM_NAME.equals(parameter.getParameterName());
+        }
+        return false;
+    }
+
+    Long resolve(@NonNull String source, boolean organizationParameter) {
         // 数値はそのまま解釈する（team / organization 共通の高速パス）
         try {
             return Long.parseLong(source);
@@ -46,7 +103,7 @@ public class ScopeSlugIdConverter implements Converter<String, Long> {
             // 非数値 → スラッグとしてスコープ判定のうえ解決する
         }
 
-        Scope scope = detectScope(source);
+        Scope scope = organizationParameter ? Scope.ORGANIZATION : detectScope(source);
         try {
             return switch (scope) {
                 case ORGANIZATION -> organizationService.resolveOrgId(source);
