@@ -71,7 +71,7 @@ class AccessControlServiceSpiContractTest {
                 careRecipientUserId, watcherUserId, CareLinkStatus.ACTIVE)).thenThrow(failure);
         // 実adapterと実認可サービスの協力者例外契約を固定する。実DB障害の再現ではない。
         AccessControlService accessControlService = new DefaultAccessControlService(
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 List.of(new FamilyCareLinkQuery(repository)),
                 List.of(new GdprLastAdminWithdrawalErrorProvider()));
 

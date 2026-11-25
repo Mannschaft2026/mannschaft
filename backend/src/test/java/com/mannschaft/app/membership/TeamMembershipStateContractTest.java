@@ -33,7 +33,7 @@ class TeamMembershipStateContractTest {
     @BeforeEach
     void setUp() {
         service = new DefaultAccessControlService(roles, null, null, memberships, null, null,
-                new RoleScopeRoleQuery(roles), List.of(new FamilyCareLinkQuery(null)),
+                new RoleScopeRoleQuery(roles), null, List.of(new FamilyCareLinkQuery(null)),
                 List.of(new GdprLastAdminWithdrawalErrorProvider()));
     }
 

@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * L1-A移設前の39メソッドと、Inbox最新ロール解決用の利用者活性照会1件を含む公開40契約を固定する。
+ * L1-A移設前の39メソッドと、Inbox最新ロール解決用の利用者活性照会1件を含む公開40契約に、
+ * CMP-261124-0159 の共通の門（中身の読み取り・親チーム上限）5 件を加えた公開45契約を固定する。
  * 既存契約を保持し、Inboxのfresh batchで利用者活性を一度だけ確認する追加読取も明示的に検証する。
  */
 class AccessControlServiceInterfaceContractTest {
@@ -23,7 +24,7 @@ class AccessControlServiceInterfaceContractTest {
     }
 
     @Test
-    void 既存39件とInbox最新解決用活性照会を含む公開40メソッドの引数と戻り値の型を維持する() {
+    void 既存39件とInbox最新解決用活性照会と共通の門5件を含む公開45メソッドの引数と戻り値の型を維持する() {
         assertThat(Arrays.stream(AccessControlService.class.getDeclaredMethods())
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
                 .filter(method -> !method.isSynthetic())
@@ -35,6 +36,12 @@ class AccessControlServiceInterfaceContractTest {
                         "Map<TeamUserKey,TeamMembershipState> getTeamMembershipStates(Collection<TeamUserKey>)",
                         "void checkMembership(Long,Long,String)",
                         "boolean isMember(Long,Long,String)",
+                        // CMP-261124-0159 F00 §20.3 共通の門（中身の読み取り・親チーム上限）
+                        "void checkScopeContentAccess(Long,Long,String)",
+                        "boolean canAccessScopeContent(Long,Long,String)",
+                        "Set<Long> filterAccessibleTeamIds(Long,Collection<Long>)",
+                        "void checkMembershipForWrite(Long,Long,String)",
+                        "boolean isBeyondTeamContentCap(Long,Long,String)",
                         "List<Long> listActiveMemberIds(Long,String)",
                         "boolean isRegularMemberOrAbove(Long,Long,String)",
                         "void checkRegularMemberOrAbove(Long,Long,String)",

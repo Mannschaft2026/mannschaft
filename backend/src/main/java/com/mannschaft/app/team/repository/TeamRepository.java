@@ -58,6 +58,17 @@ public interface TeamRepository
             """)
     List<Long> findPublicIdsByIdIn(@Param("ids") Collection<Long> ids);
 
+    /**
+     * 指定 ID のうち非公開チーム（{@code visibility = 'MEMBERS_AND_ABOVE'}）の ID だけを返す
+     * （CMP-261124-0159・F00 §20.2 規則 5。チームの中身の閲覧上限の一括判定）。
+     *
+     * <p>論理削除済みのチームも含めて公開範囲で判定するため native で引く（{@code @SQLRestriction} を通さない）。
+     * 主キー IN の 1 本で済み、件数・チーム数に比例して問い合わせを増やさない。</p>
+     */
+    @Query(value = "SELECT id FROM teams WHERE id IN (:ids) AND visibility = 'MEMBERS_AND_ABOVE'",
+            nativeQuery = true)
+    List<Number> findMembersOnlyIdsByIdIn(@Param("ids") Collection<Long> ids);
+
     /** 受付投影に必要なteam scalar状態だけを読む。 */
     interface ActiveStateRow {
         Long getId();
