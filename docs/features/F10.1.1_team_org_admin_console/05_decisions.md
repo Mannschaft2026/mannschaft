@@ -253,3 +253,18 @@
 - 独立ページでチーム取得に成功してからパネルを表示する。チームtimezoneは明示propsで渡し、親shellの古いチーム値を使わない。取得失敗は空状態へ倒さず共通エラーと再試行を表示する。
 - 親ルートは先頭 `admin` の子経路をshell対象外にし、末尾 `reservations` を理由としたshellのデータ取得・外装表示を防ぐ。
 - ADMIN/DEPUTYを許可し、MEMBER/SUPPORTER/他テナントは既存管理コンソールの認可で拒否する。新規API・権限モデルの変更は行わない。
+
+## §17. 承認待ちに再招待依頼（INVITE_REISSUE）を加え、閲覧者の権限で集合を変える（CMP-261107-1833 PR3・2026-11-24）
+
+**決定**: 管理者向け承認待ち集約に `INVITE_REISSUE`（失効した招待から登録した利用者の再招待依頼）を TEAM・ORGANIZATION の両方で加える。
+ただし招待権限者（`InviteIssuerPolicy#canIssue`: ADMIN、または `INVITE_MEMBERS` を持つ DEPUTY_ADMIN）にだけ含め、権限の無い DEPUTY には
+欄も件数も出さず、集計もしない。スコープ別の動的集合（[03](./03_admin_action_required_api.md) §3.2）に、閲覧者の権限という軸が初めて加わる。
+
+- 理由: 再招待は招待の発行そのものであり、発行できない DEPUTY に件数だけ見せても対応できない（導線が行き止まりになる）。
+- 件数は再招待依頼の一覧（`GET /api/v1/{teams|organizations}/{slug}/invite-reissue-requests`）と同じ述語で数え、`pending_count` と `totalElements` を一致させる。
+  `preview_size=0` は COUNT の1本だけ。
+- `list_route`・`detail_route` は `/{teams|organizations}/{slug}/invites#reissue-requests`。FE の承認待ちウィジェット（`DashboardAdminApprovalsWidget`）の
+  内訳行は全ドメインで `list_route` へのリンクにする。
+- 個人ダッシュボードの司令塔（`PersonalAdminActionRequiredService`）は本 API を再利用するので、同じ権限で `INVITE_REISSUE` の行が出る（既読・ミュートの影響を受けず、対応すると消える）。
+- 閉鎖中（アーカイブ）のスコープ: 再招待依頼の一覧は0件にするが、集約の件数は閉鎖状態を見ない（`preview_size=0` を COUNT 1本に保つため）。
+  閉鎖中のスコープで対応しようとすると一覧が空で、再招待は `ROLE_002` になる。

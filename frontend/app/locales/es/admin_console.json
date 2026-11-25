@@ -83,7 +83,8 @@
           "RESERVATION": "Reservas",
           "SHIFT_REQUEST": "Turnos",
           "MATCHING": "Emparejamiento",
-          "PAYMENT": "Pagos"
+          "PAYMENT": "Pagos",
+          "INVITE_REISSUE": "Nueva invitación"
         }
       },
       "payments": {

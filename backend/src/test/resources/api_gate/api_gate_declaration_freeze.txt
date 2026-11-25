@@ -553,6 +553,7 @@ HTTP|com.mannschaft.app.returnstayplan.controller.ReturnStayPlanController|5|5
 HTTP|com.mannschaft.app.returnstayplan.controller.ReturnStayPlanTeamController|2|2
 HTTP|com.mannschaft.app.role.controller.InviteController|3|6
 HTTP|com.mannschaft.app.role.controller.InviteQrPdfController|1|1
+HTTP|com.mannschaft.app.role.controller.InviteReissueRequestController|0|6
 HTTP|com.mannschaft.app.role.controller.MeController|2|2
 HTTP|com.mannschaft.app.role.controller.MeInvitableScopesController|0|1
 HTTP|com.mannschaft.app.role.controller.OwnershipTransferOfferController|0|11
