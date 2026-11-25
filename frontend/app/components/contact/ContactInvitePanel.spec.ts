@@ -122,7 +122,7 @@ describe('個人連絡先招待の管理', () => {
     const wrapper = await mountPanel()
     expect(wrapper.find('[data-testid="contact-qr"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('/contact-invite/')
-    expect(wrapper.get('[data-testid="contact-invite-once-hint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="contact-invite-once-hint"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('∞')
     expect(wrapper.text()).not.toContain('Invalid Date')
     expect(api.createInviteToken).not.toHaveBeenCalled()
