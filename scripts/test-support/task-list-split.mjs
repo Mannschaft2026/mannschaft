@@ -30,6 +30,26 @@ export function splitSingleLedgerForTest(content) {
   return files;
 }
 
+/** 新配置の files（パス→本文）から旧配置の docs/task-list.md 1ファイルを一時生成する（逆写像。../evidence/ は evidence/ に戻す）。 */
+export function joinSplitLedgerForTest(files) {
+  const index = files[LEDGER_INDEX_PATH] ?? '';
+  const rows = Object.keys(files).filter((p) => p !== LEDGER_INDEX_PATH).sort()
+    .flatMap((p) => extractRows(files[p], p).map((r) => r.line.replace(/\]\(\.\.\/evidence\//g, '](evidence/')));
+  return (index.endsWith('\n') ? index : index + '\n') + '\n' + HEADER + '\n' + rows.join('\n') + '\n';
+}
+
+/** readLedger の結果を files（パス→本文）に戻す。 */
+export function ledgerToFiles(ledger) {
+  return Object.fromEntries(ledger.files.filter((f) => f.content != null).map((f) => [f.path, f.content]));
+}
+
+/** 実リポジトリの台帳（配置は問わない）から、旧配置・新配置の両方の検体を作る。 */
+export function bothLayoutsFromLedger(ledger) {
+  const files = ledgerToFiles(ledger);
+  if (ledger.layout === 'split') return { single: joinSplitLedgerForTest(files), split: files };
+  return { single: files[LEDGER_INDEX_PATH], split: splitSingleLedgerForTest(files[LEDGER_INDEX_PATH]) };
+}
+
 /** files（パス→本文）を readLedger の reader にする。 */
 export function memoryLedgerReader(files) {
   return {

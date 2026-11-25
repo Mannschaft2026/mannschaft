@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { splitSingleLedgerForTest } from './test-support/task-list-split.mjs';
+import { bothLayoutsFromLedger } from './test-support/task-list-split.mjs';
+import { fsLedgerReader, readLedger } from './task-list-ledger.mjs';
 
 // CMP-261124-1222 段A AC-8: 台帳を読む docs/prototypes の消費側（generate-beta-inventory-board-data.py・
 // sync-beta-inventory-github.py が使う task_list_ledger.py）が、旧配置の実台帳と、そこから一時生成した新配置で
@@ -54,10 +55,11 @@ for root in map(Path, roots):
 print(json.dumps(out, ensure_ascii=False))
 `;
 
-test('AC-8: β棚卸しの消費側（task_list_ledger.py 経由）が旧配置と新配置で同じ CMP 集合・状態・GitHub 参照集合を返す', { skip: python ? false : 'python が無い' }, () => {
-  const single = readFileSync(join(repoRoot, 'docs', 'task-list.md'), 'utf8');
-  const singleRoot = writeTree({ 'docs/task-list.md': single });
-  const splitRoot = writeTree(splitSingleLedgerForTest(single));
+test('AC-8: β棚卸しの消費側（task_list_ledger.py 経由）が旧配置と新配置で同じ CMP 集合・状態・GitHub 参照集合を返す', { skip: python ? false : 'python が無い' }, async () => {
+  // 実リポジトリの台帳は配置を問わない（段B の移行後も通る）。旧配置・新配置の両方の検体へ写して比べる。
+  const both = bothLayoutsFromLedger(await readLedger(fsLedgerReader(repoRoot)));
+  const singleRoot = writeTree({ 'docs/task-list.md': both.single });
+  const splitRoot = writeTree(both.split);
   try {
     const res = spawnSync(python, ['-I', '-c', probe, prototypes, singleRoot, splitRoot], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
     assert.equal(res.status, 0, res.stderr);

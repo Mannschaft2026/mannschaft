@@ -401,6 +401,57 @@
       },
       "expectOk": false,
       "reason": "存在しない"
+    },
+    {
+      "name": "新配置: CRLF 改行の月境界と legacy の正常台帳（LF と同じ判定・同じ行集合）",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\r\n\r\n前置き。行は docs/task-list/ の月別ファイルにある。\r\n",
+        "docs/task-list/2026-11.md": "# 2026-11\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-261130-2359 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |\r\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\r\n",
+        "docs/task-list/2026-12.md": "# 2026-12\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-261201-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\r\n",
+        "docs/task-list/legacy.md": "# legacy\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-003 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\r\n| CMP-028 | 戦役 | P5 未着手 | — | 条件 | 証拠 | ledger |\r\n"
+      },
+      "expectOk": true,
+      "expectRows": [
+        [
+          "CMP-261130-2359",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261101-0000",
+          "docs/task-list/2026-11.md"
+        ],
+        [
+          "CMP-261201-0000",
+          "docs/task-list/2026-12.md"
+        ],
+        [
+          "CMP-003",
+          "docs/task-list/legacy.md"
+        ],
+        [
+          "CMP-028",
+          "docs/task-list/legacy.md"
+        ]
+      ]
+    },
+    {
+      "name": "新配置: CRLF 改行でも月違いは配置違反",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\r\n\r\n前置き。行は docs/task-list/ の月別ファイルにある。\r\n",
+        "docs/task-list/2026-12.md": "# 2026-12\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-261130-2359 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\r\n"
+      },
+      "expectOk": false,
+      "reason": "docs/task-list/2026-12.md: 配置"
+    },
+    {
+      "name": "新配置: CRLF 改行でもファイル跨ぎの重複を検出",
+      "files": {
+        "docs/task-list.md": "# 台帳（索引）\r\n\r\n前置き。行は docs/task-list/ の月別ファイルにある。\r\n",
+        "docs/task-list/2026-11.md": "# 2026-11\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-261101-0000 | 戦役 | 完了 | — | 条件 | 証拠 | ledger |\r\n",
+        "docs/task-list/2026-12.md": "# 2026-12\r\n\r\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\r\n|---|---|---|---|---|---|---|\r\n| CMP-261101-0000 | 戦役 | P3 未着手 | — | 条件 | 証拠 | ledger |\r\n"
+      },
+      "expectOk": false,
+      "reason": "重複: CMP-261101-0000"
     }
   ]
 }

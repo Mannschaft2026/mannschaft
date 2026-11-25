@@ -700,5 +700,5 @@ test('統合 AC-7: 新配置で月ファイルの外（他の台帳でないフ�
 test('AC-7: リポジトリの .gitattributes も両配置に union を指定する', () => {
   const attrs = readRepo('.gitattributes');
   assert.match(attrs, /^docs\/task-list\.md merge=union$/m);
-  assert.match(attrs, /^docs\/task-list\/\*\.md merge=union$/m);
+  assert.match(attrs, /^docs\/task-list\/\*\.md text eol=lf merge=union$/m);
 });

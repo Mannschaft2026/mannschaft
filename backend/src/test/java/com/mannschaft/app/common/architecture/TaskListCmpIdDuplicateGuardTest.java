@@ -214,13 +214,44 @@ class TaskListCmpIdDuplicateGuardTest {
         assertThat(TaskListLedger.expectedFile("CMP-003")).isEqualTo("docs/task-list/legacy.md");
     }
 
+    /** 旧配置の検体（実台帳から独立。月境界・旧形式・証拠リンク・エスケープを含む）。 */
+    private static final String SAMPLE_SINGLE = "# 台帳\n\n前置き\n\n" + HEADER + "\n"
+            + "| CMP-003 | 旧 | 完了 | — | 条件 | 証拠 | l |\n"
+            + "| CMP-261130-2359 | 月末 | 完了 | — | `a \\| b` | [証拠](evidence/CMP-261130-2359.json) | l |\n"
+            + "| CMP-261201-0000 | 月初 | P2 実装中 | — | 条件 | [証拠](./evidence/CMP-261201-0000.json) | l |\n"
+            + "| CMP-260101-0101 | 年初 | P5 未着手 | — | 条件 | 証拠 | l |\n";
+
     @Test
-    @DisplayName("実台帳（旧配置）と、そこから一時生成した新配置が同じ行集合・同じ債務注釈の登録判定を返す")
-    void 両配置で同じ行集合と登録判定() {
-        Ledger single = TaskListLedger.readRepository(true);
+    @DisplayName("独立した旧配置の検体と、そこから生成した新配置が同じ行集合・同じ債務注釈の登録判定を返す")
+    void 検体の両配置で同じ行集合と登録判定() {
+        Ledger split = assertSameRows(SAMPLE_SINGLE, splitForTest(SAMPLE_SINGLE));
+        assertThat(split.rows().stream().map(r -> List.of(r.id(), r.file())).toList()).containsExactly(
+                List.of("CMP-260101-0101", "docs/task-list/2026-01.md"),
+                List.of("CMP-261130-2359", "docs/task-list/2026-11.md"),
+                List.of("CMP-261201-0000", "docs/task-list/2026-12.md"),
+                List.of("CMP-003", "docs/task-list/legacy.md"));
+        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-261201-0000", TaskListLedger.concatenatedContent(split))).isTrue();
+        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-261130-2359", TaskListLedger.concatenatedContent(split))).isFalse();
+    }
+
+    @Test
+    @DisplayName("実リポジトリの台帳（配置は問わない）をもう一方の配置に写しても同じ行集合・同じ債務注釈の登録判定を返す")
+    void 実台帳の両配置で同じ行集合と登録判定() {
+        Ledger real = TaskListLedger.readRepository(true);
+        assertThat(real.layout()).isIn("single", "split");
+        assertThat(TaskListLedger.check(real)).isEmpty();
+        Map<String, String> files = new LinkedHashMap<>();
+        real.files().forEach(f -> files.put(f.path(), f.content()));
+        String singleText = real.split() ? joinForTest(files) : files.get(TaskListLedger.INDEX_PATH);
+        Map<String, String> splitFiles = real.split() ? files : splitForTest(singleText);
+        assertSameRows(singleText, splitFiles);
+    }
+
+    /** 旧配置の本文と新配置の files が同じ行集合・同じ検査結果・同じ債務注釈の登録判定を返すことを確かめる。 */
+    private static Ledger assertSameRows(String singleText, Map<String, String> splitFiles) {
+        Ledger single = TaskListLedger.read(TaskListLedger.inMemory(Map.of(TaskListLedger.INDEX_PATH, singleText)), true);
+        Ledger split = TaskListLedger.read(TaskListLedger.inMemory(splitFiles), true);
         assertThat(single.layout()).isEqualTo("single");
-        String singleText = TaskListLedger.concatenatedContent(single);
-        Ledger split = TaskListLedger.read(TaskListLedger.inMemory(splitForTest(singleText)), true);
         assertThat(split.layout()).isEqualTo("split");
         assertThat(TaskListLedger.check(single)).isEmpty();
         assertThat(TaskListLedger.check(split)).isEmpty();
@@ -231,17 +262,27 @@ class TaskListCmpIdDuplicateGuardTest {
             assertThat(r.file()).as(r.id()).isEqualTo(TaskListLedger.expectedFile(r.id()));
         }
         // 番人 PlaintextSecretTokenGuardRules の債務注釈（@PlaintextTokenDebt.cmp）の登録判定も両配置で一致する
-        String splitText = TaskListLedger.concatenatedContent(split);
+        String s = TaskListLedger.concatenatedContent(single);
+        String t = TaskListLedger.concatenatedContent(split);
         for (Row r : single.rows()) {
-            assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), splitText)).as(r.id())
-                    .isEqualTo(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), singleText));
+            assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), t)).as(r.id())
+                    .isEqualTo(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), s));
         }
-        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-999999-9999", splitText)).isFalse();
-        assertThat(single.rows().stream().anyMatch(r -> PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), splitText))).isTrue();
+        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-999999-9999", t)).isFalse();
+        return split;
+    }
+
+    /** 試験専用: 新配置の files から旧配置の docs/task-list.md 1ファイルを一時生成する（../evidence/ は evidence/ に戻す）。 */
+    private static String joinForTest(Map<String, String> files) {
+        String index = files.getOrDefault(TaskListLedger.INDEX_PATH, "");
+        List<String> lines = new ArrayList<>();
+        files.keySet().stream().filter(p -> !TaskListLedger.INDEX_PATH.equals(p)).sorted().forEach(p ->
+                TaskListLedger.extractRows(files.get(p), p).forEach(r -> lines.add(r.line().replace("](../evidence/", "](evidence/"))));
+        return (index.endsWith("\n") ? index : index + "\n") + "\n" + HEADER + "\n" + String.join("\n", lines) + "\n";
     }
 
     private static String normalizeEvidence(String line) {
-        return line.replaceAll("\\]\\((?:\\./|\\.\\./)?evidence/", "](evidence/");
+        return line.replaceAll("\\]\\((?:\\.\\.?/)?evidence/", "](evidence/");
     }
 
     /** 試験専用: 旧配置の本文から新配置（索引＋月別・legacy）を一時生成する（本番の移行は段Bで作る）。 */

@@ -15,7 +15,7 @@ import {
   readLedger,
 } from './task-list-ledger.mjs';
 import { checkTaskListStructure } from './task-list-structure-check.mjs';
-import { memoryLedgerReader, splitSingleLedgerForTest } from './test-support/task-list-split.mjs';
+import { bothLayoutsFromLedger, joinSplitLedgerForTest, memoryLedgerReader, splitSingleLedgerForTest } from './test-support/task-list-split.mjs';
 
 // CMP-261124-1222 段A: 台帳の両配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/YYYY-MM.md・legacy.md）の
 // 共通読み取り readLedger と、全ファイル横断の構造検査。共有 fixture は Java 番人（TaskListCmpIdDuplicateGuardTest）も読む。
@@ -71,28 +71,76 @@ test('AC-1: 取得失敗と0件・不在を区別する（失敗は空にしな�
   await assert.rejects(readLedger(memoryLedgerReader({ 'docs/task-list.md': '# 索引\n', 'docs/task-list/2026-11.md': '# 2026-11\n' })), /split 配置.*1件も/);
 });
 
-const realSingle = readFileSync(join(repoRoot, 'docs/task-list.md'), 'utf8');
+// 旧配置の検体（実台帳から独立。月境界・旧形式・証拠リンク・エスケープを含む）
+const sampleSingle = '# 台帳\n\n前置き\n\n| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|\n'
+  + '| CMP-003 | 旧 | 完了 | — | 条件 | 証拠 | l |\n'
+  + '| CMP-261130-2359 | 月末 | 完了 | — | `a \\| b` | [証拠](evidence/CMP-261130-2359.json) | l |\n'
+  + '| CMP-261201-0000 | 月初 | P2 実装中 | — | 条件 | [証拠](./evidence/CMP-261201-0000.json) | l |\n'
+  + '| CMP-260101-0101 | 年初 | P5 未着手 | — | 条件 | 証拠 | l |\n';
+const norm = (line) => line.replace(/\]\((?:\.\.?\/)?evidence\//g, '](evidence/');
 
-test('AC-1/AC-10: 実台帳（旧配置）と、そこから一時生成した新配置が同じ行集合（ID・行本文）を返し、どちらも構造検査に合格する', async () => {
-  const single = await readLedger(fsLedgerReader(repoRoot));
-  assert.equal(single.layout, 'single');
-  assert.ok(single.rows.length > 0);
-  const splitFiles = splitSingleLedgerForTest(realSingle);
+async function assertSameRows(singleText, splitFiles) {
+  const single = await readLedger(memoryLedgerReader({ 'docs/task-list.md': singleText }));
   const split = await readLedger(memoryLedgerReader(splitFiles));
+  assert.equal(single.layout, 'single');
   assert.equal(split.layout, 'split');
-  const norm = (line) => line.replace(/\]\(\.\.\/evidence\//g, '](evidence/');
   assert.deepEqual(split.rows.map((r) => r.id).sort(), single.rows.map((r) => r.id).sort());
-  const singleLines = new Map(single.rows.map((r) => [r.id, r.line]));
+  const singleLines = new Map(single.rows.map((r) => [r.id, norm(r.line)]));
   for (const r of split.rows) {
-    assert.equal(norm(r.line), singleLines.get(r.id).replace(/\]\(\.\/evidence\//g, '](evidence/'), r.id);
+    assert.equal(norm(r.line), singleLines.get(r.id), r.id);
     assert.equal(r.file, expectedLedgerFile(r.id));
   }
   assert.deepEqual(checkTaskListStructure(single).errors, []);
   assert.deepEqual(checkTaskListStructure(split).errors, []);
-  assert.ok(!split.rows.some((r) => r.file === 'docs/task-list.md'));
-  // 連結本文の CMP 行も一致（行単位で読む消費側の互換）
   const cmpLines = (text) => text.split(/\r?\n/).filter((l) => /^\|\s*CMP-/.test(l)).map(norm).sort();
   assert.deepEqual(cmpLines(ledgerText(split)), cmpLines(ledgerText(single)));
+  return { single, split };
+}
+
+test('AC-1: 独立した旧配置の検体と、そこから生成した新配置が同じ行集合（ID・行本文）を返し、どちらも構造検査に合格する', async () => {
+  const { split } = await assertSameRows(sampleSingle, splitSingleLedgerForTest(sampleSingle));
+  assert.deepEqual(split.rows.map((r) => [r.id, r.file]), [
+    ['CMP-260101-0101', 'docs/task-list/2026-01.md'],
+    ['CMP-261130-2359', 'docs/task-list/2026-11.md'],
+    ['CMP-261201-0000', 'docs/task-list/2026-12.md'],
+    ['CMP-003', 'docs/task-list/legacy.md'],
+  ]);
+  // 新配置から旧配置へ戻しても同じ
+  await assertSameRows(joinSplitLedgerForTest(splitSingleLedgerForTest(sampleSingle)), splitSingleLedgerForTest(sampleSingle));
+});
+
+test('AC-1/AC-10: 実リポジトリの台帳（配置は問わない）が構造検査に合格し、もう一方の配置に写しても同じ行集合を返す', async () => {
+  const real = await readLedger(fsLedgerReader(repoRoot));
+  assert.ok(['single', 'split'].includes(real.layout));
+  assert.ok(real.rows.length > 0);
+  assert.deepEqual(checkTaskListStructure(real).errors, []);
+  const both = bothLayoutsFromLedger(real);
+  const { single, split } = await assertSameRows(both.single, both.split);
+  assert.deepEqual([...(real.layout === 'single' ? single : split).rows.map((r) => r.id)], real.rows.map((r) => r.id));
+});
+
+test('AC-1/AC-2: CRLF 改行の新配置（月別ファイル・索引）でも LF と同じ行集合・同じ判定になる', async () => {
+  const lf = splitSingleLedgerForTest(sampleSingle);
+  const crlf = Object.fromEntries(Object.entries(lf).map(([p, c]) => [p, c.replace(/\n/g, '\r\n')]));
+  const a = await readLedger(memoryLedgerReader(lf));
+  const b = await readLedger(memoryLedgerReader(crlf));
+  assert.deepEqual(b.rows.map((r) => [r.id, r.file, r.line]), a.rows.map((r) => [r.id, r.file, r.line]));
+  assert.deepEqual(checkTaskListStructure(b).errors, []);
+  const bad = { ...crlf, 'docs/task-list/2026-12.md': crlf['docs/task-list/2026-12.md'].replace('CMP-261201-0000', 'CMP-261130-2358') };
+  const badLf = { ...lf, 'docs/task-list/2026-12.md': lf['docs/task-list/2026-12.md'].replace('CMP-261201-0000', 'CMP-261130-2358') };
+  assert.deepEqual(checkTaskListStructure(await readLedger(memoryLedgerReader(bad))).errors, checkTaskListStructure(await readLedger(memoryLedgerReader(badLf))).errors);
+});
+
+test('AC-7: .gitattributes で月別ファイルは text eol=lf merge=union、索引は merge=union（git check-attr）', () => {
+  const res = spawnSync('git', ['check-attr', 'text', 'eol', 'merge', '--', 'docs/task-list/2026-11.md', 'docs/task-list/legacy.md', 'docs/task-list.md'], { cwd: repoRoot, encoding: 'utf8' });
+  assert.equal(res.status, 0, res.stderr);
+  const attrs = res.stdout.replace(/\r/g, '');
+  for (const p of ['docs/task-list/2026-11.md', 'docs/task-list/legacy.md']) {
+    assert.match(attrs, new RegExp('^' + p.replace(/[./]/g, '\\$&') + ': text: set$', 'm'));
+    assert.match(attrs, new RegExp('^' + p.replace(/[./]/g, '\\$&') + ': eol: lf$', 'm'));
+    assert.match(attrs, new RegExp('^' + p.replace(/[./]/g, '\\$&') + ': merge: union$', 'm'));
+  }
+  assert.match(attrs, /^docs\/task-list\.md: merge: union$/m);
 });
 
 async function withTempRepo(files, fn) {
@@ -109,7 +157,7 @@ async function withTempRepo(files, fn) {
 }
 
 test('AC-1: 作業木・git tree の reader が同じ行集合を返す（新配置）', async () => {
-  const files = splitSingleLedgerForTest(realSingle);
+  const files = bothLayoutsFromLedger(await readLedger(fsLedgerReader(repoRoot))).split;
   await withTempRepo(files, async (dir) => {
     const git = (...args) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', '-c', 'core.autocrlf=false', ...args], { cwd: dir, encoding: 'utf8' });
     git('init', '-q', '-b', 'main');
