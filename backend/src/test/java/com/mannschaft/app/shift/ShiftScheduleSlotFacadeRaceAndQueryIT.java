@@ -329,6 +329,9 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
             return result;
         };
         Mockito.doAnswer(afterReal).when(accessControlService).isAdminOrAbove(any(), any(), any());
+        // CMP-261125-2114: 管理操作の判定は hasAdminOrPermissionInScope（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN）。
+        Mockito.doAnswer(afterReal).when(accessControlService)
+                .hasAdminOrPermissionInScope(any(), any(), any(), any());
         Mockito.doAnswer(afterReal).when(accessControlService).isMember(any(), any(), any());
         Mockito.doAnswer(afterReal).when(accessControlService).isSupporter(any(), any(), any());
         Mockito.doAnswer(afterReal).when(accessControlService).checkAdminOrAbove(any(), any(), any());
@@ -569,7 +572,7 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
             m.print(w.name());
         }
         assertThat(m.status).isEqualTo(w.status);
-        assertThat(m.authzSql).as("認可のクエリ数は是正前（isSystemAdmin＋isAdminOrAbove 単体）と同じ").isEqualTo(baseline);
+        assertThat(m.authzSql).as("認可のクエリ数は管理判定（hasAdminOrPermissionInScope 単体）と同じ").isEqualTo(baseline);
         // 在籍判定は拒否経路だけ（許可経路では足さない）。
         Mockito.verify(accessControlService, never()).isMember(any(), any(), any());
         assertThat(m.beforeAuthz().stream().filter(ShiftScheduleSlotFacadeRaceAndQueryIT::isForUpdate).toList())
@@ -617,12 +620,12 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
         }
     }
 
-    /** 是正前の管理者判定（isSystemAdmin＋isAdminOrAbove の単体）のクエリ数。初回コストを外すため 1 度流してから測る。 */
+    /**
+     * 管理判定（hasAdminOrPermissionInScope の単体。CMP-261125-2114 で是正前の isSystemAdmin＋isAdminOrAbove から置換）
+     * のクエリ数。初回コストを外すため 1 度流してから測る。
+     */
     private long adminCheckBaseline() {
-        Runnable check = () -> {
-            accessControlService.isSystemAdmin(adminId);
-            accessControlService.isAdminOrAbove(adminId, teamId, "TEAM");
-        };
+        Runnable check = () -> accessControlService.hasAdminOrPermissionInScope(adminId, teamId, "TEAM", "MANAGE_SHIFTS");
         long baseline = countSql(check);
         assertThat(baseline).as("SQL 記録が有効であること").isPositive();
         Mockito.clearInvocations(accessControlService);
@@ -718,6 +721,7 @@ class ShiftScheduleSlotFacadeRaceAndQueryIT extends AbstractMySqlIntegrationTest
         };
         Mockito.doAnswer(wrap).when(accessControlService).isSystemAdmin(any());
         Mockito.doAnswer(wrap).when(accessControlService).isAdminOrAbove(any(), any(), any());
+        Mockito.doAnswer(wrap).when(accessControlService).hasAdminOrPermissionInScope(any(), any(), any(), any());
         Mockito.doAnswer(wrap).when(accessControlService).isMember(any(), any(), any());
         Mockito.doAnswer(wrap).when(accessControlService).isSupporter(any(), any(), any());
         Mockito.doAnswer(wrap).when(accessControlService).checkAdminOrAbove(any(), any(), any());

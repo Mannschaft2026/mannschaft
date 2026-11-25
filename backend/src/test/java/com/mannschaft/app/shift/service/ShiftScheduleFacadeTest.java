@@ -60,14 +60,28 @@ class ShiftScheduleFacadeTest {
     private AccessControlService accessControlService;
     @Mock
     private ShiftPublicationBudgetContextPort publicationBudgetContextPort;
+    @Mock
+    private com.mannschaft.app.team.service.TeamShiftSettingsService teamShiftSettingsService;
 
     private ShiftScheduleFacade facade;
 
     @BeforeEach
     void setUp() {
         facade = new ShiftScheduleFacade(scheduleService, reminderService,
-                new ScopeConcealingAccessGate(accessControlService), accessControlService,
+                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService), accessControlService,
                 publicationBudgetContextPort);
+    }
+
+    /**
+     * 操作者を「ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN」にする（CMP-261125-2114）。
+     * 判定は実物の {@link ShiftManageAccessGate} が AccessControlService のモックの上で行うので、
+     * 閲覧側（isAdminOrAbove）と管理側（hasAdminOrPermissionInScope）の両方を、経路によって使われなくても許す形で用意する。
+     */
+    private void stubManager() {
+        org.mockito.Mockito.lenient().when(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM"))
+                .thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.hasAdminOrPermissionInScope(
+                USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS")).thenReturn(true);
     }
 
     private static ShiftScheduleScope published() {
@@ -167,7 +181,7 @@ class ShiftScheduleFacadeTest {
             LocalDate from = LocalDate.of(2026, 3, 1);
             LocalDate to = LocalDate.of(2026, 3, 31);
             given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
-            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            stubManager();
             given(scheduleService.listSchedulesByPeriod(TEAM_ID, from, to, true)).willReturn(List.of());
 
             assertThat(facade.listSchedules(TEAM_ID, from, to, USER_ID)).isEmpty();
@@ -175,14 +189,33 @@ class ShiftScheduleFacadeTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して全量（チーム判定を撃たない）")
-        void SYSTEM_ADMINは短絡() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡せず（SYSTEM_ADMIN 判定を撃たない）、非メンバーとして 403")
+        void SYSTEM_ADMINは短絡しない() {
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
+
+            assertCode(catchThrowable(() -> facade.listSchedules(TEAM_ID, null, null, USER_ID)),
+                    CommonErrorCode.COMMON_002);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
+            verifyNoInteractions(scheduleService);
+        }
+
+        @Test
+        @DisplayName("CMP-261125-2114: 閲覧切替 ON の MANAGE_SHIFTS 無し DEPUTY_ADMIN は privileged=true（切替 OFF は false）")
+        void 閲覧切替で副管理者は全量() {
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.hasAdminOrPermissionInScope(USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
+                    .willReturn(false);
+            given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))
+                    .willReturn(new com.mannschaft.app.team.dto.DeputyShiftViewToggles(true, false),
+                            com.mannschaft.app.team.dto.DeputyShiftViewToggles.OFF);
             given(scheduleService.listSchedules(TEAM_ID, true)).willReturn(List.of());
+            given(scheduleService.listSchedules(TEAM_ID, false)).willReturn(List.of());
 
             assertThat(facade.listSchedules(TEAM_ID, null, null, USER_ID)).isEmpty();
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
+            assertThat(facade.listSchedules(TEAM_ID, null, null, USER_ID)).isEmpty();
+            verify(scheduleService).listSchedules(TEAM_ID, true);
+            verify(scheduleService).listSchedules(TEAM_ID, false);
         }
     }
 
@@ -253,7 +286,7 @@ class ShiftScheduleFacadeTest {
         void userRolesのみのADMINは通る() {
             ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
             given(scheduleService.resolveScope(SCHEDULE_ID)).willReturn(draft());
-            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            stubManager();
             given(scheduleService.getSchedule(SCHEDULE_ID, true)).willReturn(response);
 
             assertThat(facade.getSchedule(SCHEDULE_ID, USER_ID)).isSameAs(response);
@@ -261,14 +294,14 @@ class ShiftScheduleFacadeTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通る")
-        void SYSTEM_ADMINは短絡() {
-            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡せず、部外者と同じ 404")
+        void SYSTEM_ADMINは短絡しない() {
             given(scheduleService.resolveScope(SCHEDULE_ID)).willReturn(draft());
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            given(scheduleService.getSchedule(SCHEDULE_ID, true)).willReturn(response);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
-            assertThat(facade.getSchedule(SCHEDULE_ID, USER_ID)).isSameAs(response);
+            assertCode(catchThrowable(() -> facade.getSchedule(SCHEDULE_ID, USER_ID)),
+                    ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
         }
     }
 
@@ -286,33 +319,30 @@ class ShiftScheduleFacadeTest {
         @Test
         @DisplayName("非権限者は 403 COMMON_002 で tx 本体を呼ばない")
         void 非権限者は403() {
-            org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessControlService).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
-
+            // hasAdminOrPermissionInScope は既定で false（MANAGE_SHIFTS 無しの DEPUTY_ADMIN・一般メンバーなど）。
             assertCode(catchThrowable(() -> facade.createSchedule(TEAM_ID, req, USER_ID)),
                     CommonErrorCode.COMMON_002);
             verifyNoInteractions(scheduleService);
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して作成できる（チーム ADMIN 判定を経ない）")
-        void SYSTEM_ADMINは短絡() {
-            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            given(scheduleService.createSchedule(TEAM_ID, req, USER_ID)).willReturn(response);
-
-            assertThat(facade.createSchedule(TEAM_ID, req, USER_ID)).isSameAs(response);
-            verify(accessControlService, never()).checkAdminOrAbove(anyLong(), anyLong(), any());
+        @DisplayName("CMP-261125-2114: SYSTEM_ADMIN は短絡して作成できない（SYSTEM_ADMIN 判定を撃たず、チームロールが無ければ 403）")
+        void SYSTEM_ADMINは短絡しない() {
+            assertCode(catchThrowable(() -> facade.createSchedule(TEAM_ID, req, USER_ID)),
+                    CommonErrorCode.COMMON_002);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
+            verifyNoInteractions(scheduleService);
         }
 
         @Test
-        @DisplayName("チーム ADMIN は作成できる")
+        @DisplayName("チーム ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN は作成できる")
         void ADMINは作成できる() {
             ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+            stubManager();
             given(scheduleService.createSchedule(TEAM_ID, req, USER_ID)).willReturn(response);
 
             assertThat(facade.createSchedule(TEAM_ID, req, USER_ID)).isSameAs(response);
-            verify(accessControlService).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
+            verify(accessControlService).hasAdminOrPermissionInScope(USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS");
         }
     }
 
@@ -341,7 +371,7 @@ class ShiftScheduleFacadeTest {
         }
 
         private void asAdmin() {
-            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            stubManager();
         }
 
         @Test
@@ -449,15 +479,37 @@ class ShiftScheduleFacadeTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通る（チーム判定を撃たない）")
-        void SYSTEM_ADMINは短絡() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            ManualRemindResponse remind = ManualRemindResponse.builder().scheduleId(SCHEDULE_ID).build();
-            given(reminderService.triggerManualReminder(SCHEDULE_ID, USER_ID)).willReturn(remind);
+        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡して通らず、部外者と同じ 404（SYSTEM_ADMIN 判定を撃たない）")
+        void SYSTEM_ADMINは短絡しない() {
+            asOutsider();
 
-            assertThat(facade.remindUnsubmitted(SCHEDULE_ID, USER_ID)).isSameAs(remind);
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            assertCode(catchThrowable(() -> facade.remindUnsubmitted(SCHEDULE_ID, USER_ID)),
+                    ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
+            verifyNoInteractions(reminderService);
+        }
+
+        @Test
+        @DisplayName("CMP-261125-2114: 管理操作は閲覧切替 ON の MANAGE_SHIFTS 無し DEPUTY_ADMIN にも許さない（403）が、サマリ（閲覧扱い）は通る")
+        void 閲覧切替ONでも操作は403でサマリだけ通る() {
+            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))
+                    .willReturn(new com.mannschaft.app.team.dto.DeputyShiftViewToggles(true, false));
+            ShiftScheduleSummaryResponse summary = ShiftScheduleSummaryResponse.builder()
+                    .scheduleId(SCHEDULE_ID).summaryByDate(List.of()).build();
+            given(scheduleService.getScheduleSummary(SCHEDULE_ID)).willReturn(summary);
+
+            for (Runnable op : List.<Runnable>of(
+                    () -> facade.updateSchedule(SCHEDULE_ID, updateReq, USER_ID),
+                    () -> facade.deleteSchedule(SCHEDULE_ID, USER_ID),
+                    () -> facade.transitionStatus(SCHEDULE_ID, "COLLECTING", USER_ID),
+                    () -> facade.remindUnsubmitted(SCHEDULE_ID, USER_ID),
+                    () -> facade.duplicateSchedule(SCHEDULE_ID, USER_ID))) {
+                assertCode(catchThrowable(op::run), CommonErrorCode.COMMON_002);
+            }
+            assertThat(facade.getScheduleSummary(SCHEDULE_ID, USER_ID)).isSameAs(summary);
+            verifyNoInteractions(reminderService);
         }
     }
 }

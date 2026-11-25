@@ -719,13 +719,13 @@ class ShiftAutoAssignScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は通る")
-        void AC5_systemAdminは通る() throws Exception {
+        @DisplayName("AC-5（CMP-261125-2114 で改訂）: チームロールを持たない SYSTEM_ADMIN は通らず、部外者と同じ 404")
+        void AC5_systemAdminは短絡で通らない() throws Exception {
             setAuth(systemAdminId);
             org.assertj.core.api.Assertions.assertThat(call("runs", scheduleAId).getResponse().getStatus())
-                    .isEqualTo(200);
+                    .isEqualTo(404);
             org.assertj.core.api.Assertions.assertThat(call("detail", confirmedRunAId).getResponse().getStatus())
-                    .isEqualTo(200);
+                    .isEqualTo(404);
         }
 
         @Test

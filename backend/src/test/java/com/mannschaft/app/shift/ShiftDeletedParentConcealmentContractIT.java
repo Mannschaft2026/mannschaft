@@ -135,6 +135,10 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
                     MembershipTestHelper.insertUserRole(em, actor, role,
                             role.equals("SYSTEM_ADMIN") ? null : teamId, null);
                 }
+                if (role.equals("DEPUTY_ADMIN")) {
+                    // CMP-261125-2114: シフト管理は MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。管理者の形で使うので付与する。
+                    MembershipTestHelper.grantTeamDeputyPermission(em, actor, teamId, "MANAGE_SHIFTS");
+                }
             }
             Long outsider = user("OTHER_TEAM_ADMIN");
             actors.put("OTHER_TEAM_ADMIN", outsider);
@@ -282,7 +286,7 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     void 生存親の許可主体と所属不足403と一覧403を維持する() throws Exception {
         Long slotId = slot(ShiftScheduleStatus.PUBLISHED, "[]");
         Long swapId = swap(slotId);
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN", "SYSTEM_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN")) {
             Long cancellable = swap(slotId);
             callSwap(role, "cancel", cancellable).andExpect(status().isNoContent());
             Long resolvable = swap(slotId);
@@ -300,6 +304,11 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
             callSwap(role, "REJECT", swapId).andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("COMMON_002"));
         }
+        // CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は承認・却下も他人の取消も部外者と同じ 404（短絡しない）。
+        for (String operation : List.of("REJECT", "APPROVE", "cancel")) {
+            callSwap("SYSTEM_ADMIN", operation, swapId).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_005"));
+        }
         callSwap("GHOST_ADMIN", "accept", swapId).andExpect(status().isForbidden());
         for (Long requestedTeam : List.of(teamId, Long.MAX_VALUE)) {
             perform("OTHER_TEAM_ADMIN", get("/api/v1/shifts/swap-requests").param("teamId", requestedTeam.toString()))
@@ -311,7 +320,7 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     void runの生存親と空提案の許可主体と同scopeの既存拒否コードを維持する() throws Exception {
         Long slotId = slot(ShiftScheduleStatus.PUBLISHED, "[]");
         Long scheduleId = inTx(() -> slots.findById(slotId).orElseThrow().getScheduleId());
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN", "SYSTEM_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN")) {
             Long runId = run(scheduleId);
             callRun(role, "detail", scheduleId, runId).andExpect(status().isOk());
             SqlIntentCounter.reset();
@@ -320,6 +329,13 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
             callRun(role, "revoke", scheduleId, runId).andExpect(status().isNoContent());
         }
         Long runId = run(scheduleId);
+        // CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は run の確定・破棄・詳細・目視確認とも部外者と同じ 404。
+        for (String operation : List.of("confirm", "revoke", "detail", "visual")) {
+            Map<String, String> before = snapshot();
+            callRun("SYSTEM_ADMIN", operation, scheduleId, runId).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
+            assertThat(snapshot()).isEqualTo(before);
+        }
         for (String operation : List.of("confirm", "revoke", "detail", "visual")) {
             Map<String, String> before = snapshot();
             boolean concealedDetail = List.of("detail", "visual").contains(operation);

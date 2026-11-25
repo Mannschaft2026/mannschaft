@@ -60,9 +60,17 @@ class AdminActionRequiredFacadeTest {
     private InviteIssuerPolicy inviteIssuerPolicy;
     @Mock
     private PendingInviteAdminQueryService pendingInviteAdminQueryService;
+    /** CMP-261125-2114: シフト希望の欄を出すかの判定（既定は「閲覧可」。不可の扱いは専用ケースで検証）。 */
+    @Mock
+    private com.mannschaft.app.shift.service.ShiftManageAccessGate shiftManageAccessGate;
 
     @InjectMocks
     private AdminActionRequiredFacade facade;
+
+    @org.junit.jupiter.api.BeforeEach
+    void shiftViewAllowed() {
+        lenient().when(shiftManageAccessGate.canView(any(), any())).thenReturn(true);
+    }
 
     private static final Long USER_ID = 1L;
     private static final Long TEAM_ID = 10L;
@@ -110,6 +118,23 @@ class AdminActionRequiredFacadeTest {
                 assertThat(item.detailRoute()).isNotEqualTo(d.listRoute());
                 assertThat(item.detailRoute()).startsWith("/detail/");
             }));
+        }
+
+        @Test
+        @DisplayName("CMP-261125-2114: シフトの閲覧を許されない DEPUTY には SHIFT_REQUEST の欄も件数も出さず、集計もしない（他は出る）")
+        void team_shiftRequestHiddenWithoutShiftView() {
+            given(shiftManageAccessGate.canView(USER_ID, TEAM_ID)).willReturn(false);
+            given(reservationAdminQueryService.pendingForTeam(eq(TEAM_ID), eq(TEAM_SLUG), anyInt())).willReturn(agg(2, 2));
+            given(matchingAdminQueryService.pendingReceivedForTeam(eq(TEAM_ID), eq(TEAM_SLUG), anyInt())).willReturn(agg(1, 1));
+
+            AdminActionRequiredResponse res =
+                    facade.getAdminActionRequired(USER_ID, "TEAM", TEAM_ID, TEAM_SLUG, 3);
+
+            assertThat(res.domains()).extracting(AdminActionRequiredResponse.DomainSection::domain)
+                    .containsExactlyInAnyOrder("RESERVATION", "MATCHING")
+                    .doesNotContain("SHIFT_REQUEST");
+            assertThat(res.totalPending()).isEqualTo(3);
+            verifyNoInteractions(shiftRequestAdminQueryService);
         }
 
         @Test

@@ -120,6 +120,8 @@ class ShiftScheduleSummaryVisibilitySecurityContractIT extends AbstractMySqlInte
         MembershipTestHelper.insertMembership(em, actors.get(Actor.OTHER_ADMIN), ScopeType.TEAM, otherTeamId, RoleKind.MEMBER);
         MembershipTestHelper.insertUserRole(em, actors.get(Actor.ADMIN), "ADMIN", teamId, null);
         MembershipTestHelper.insertUserRole(em, actors.get(Actor.DEPUTY), "DEPUTY_ADMIN", teamId, null);
+        // CMP-261125-2114: サマリは閲覧扱い。MANAGE_SHIFTS を持つ DEPUTY_ADMIN は管理者の形で見られる。
+        MembershipTestHelper.grantTeamDeputyPermission(em, actors.get(Actor.DEPUTY), teamId, "MANAGE_SHIFTS");
         MembershipTestHelper.insertUserRole(em, actors.get(Actor.USER_ROLES_ONLY_ADMIN), "ADMIN", teamId, null);
         MembershipTestHelper.insertUserRole(em, actors.get(Actor.OTHER_ADMIN), "ADMIN", otherTeamId, null);
         MembershipTestHelper.insertUserRole(em, actors.get(Actor.SYSTEM_ADMIN), "SYSTEM_ADMIN", null, null);
@@ -168,7 +170,8 @@ class ShiftScheduleSummaryVisibilitySecurityContractIT extends AbstractMySqlInte
     }
 
     static Stream<Arguments> crossBorderCases() {
-        return Stream.of(Actor.OTHER_ADMIN, Actor.OUTSIDER)
+        // CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN も他の部外者と同じ（短絡しない）。
+        return Stream.of(Actor.OTHER_ADMIN, Actor.OUTSIDER, Actor.SYSTEM_ADMIN)
                 .flatMap(actor -> Stream.of(Fixture.values()).map(fixture -> Arguments.of(actor, fixture)));
     }
 
@@ -183,7 +186,7 @@ class ShiftScheduleSummaryVisibilitySecurityContractIT extends AbstractMySqlInte
     }
 
     static Stream<Arguments> privilegedCases() {
-        return Stream.of(Actor.ADMIN, Actor.DEPUTY, Actor.SYSTEM_ADMIN, Actor.USER_ROLES_ONLY_ADMIN)
+        return Stream.of(Actor.ADMIN, Actor.DEPUTY, Actor.USER_ROLES_ONLY_ADMIN)
                 .flatMap(actor -> Stream.of(Fixture.values()).map(fixture -> Arguments.of(actor, fixture)));
     }
 

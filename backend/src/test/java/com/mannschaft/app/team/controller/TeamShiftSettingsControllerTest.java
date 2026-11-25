@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@link TeamShiftSettingsController} の単体テスト（認可根治戦役 Wave6）。
  *
  * <p>粒度の設計根拠: shift ドメインの既定の流儀（参照 = {@code checkMembership} /
- * 変更 = {@code checkAdminOrAbove}。金型は {@code MemberWorkConstraintService} と
+ * 変更 = ADMIN／MANAGE_SHIFTS 付き DEPUTY（CMP-261125-2114）。金型は {@code MemberWorkConstraintService} と
  * {@code ShiftScheduleService}）に揃えている。本テストはその粒度を固定する番人である。</p>
  */
 @ExtendWith(MockitoExtension.class)
@@ -93,20 +93,21 @@ class TeamShiftSettingsControllerTest {
     }
 
     @Test
-    @DisplayName("updateSettings: 200 OK（checkAdminOrAbove を必ず呼ぶ）")
+    @DisplayName("updateSettings: 200 OK（ADMIN／MANAGE_SHIFTS 付き DEPUTY の判定 checkAdminOrHasPermissionInScope を必ず呼ぶ。CMP-261125-2114）")
     void updateSettings_200() {
         UpdateTeamShiftSettingsRequest req = new UpdateTeamShiftSettingsRequest();
         given(settingsService.updateSettings(TEAM_ID, req)).willReturn(TeamShiftSettingsResponse.builder().build());
         assertThat(controller.updateSettings(new TeamScopeId(TEAM_ID), req).getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(accessControlService).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
+        verify(accessControlService).checkAdminOrHasPermissionInScope(USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS");
+        verify(accessControlService, never()).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
     }
 
     @Test
-    @DisplayName("updateSettings: ADMIN/DEPUTY でなければ 403 を送出し設定更新本体を呼ばない")
+    @DisplayName("updateSettings: ADMIN でも MANAGE_SHIFTS 付き DEPUTY でもなければ 403 を送出し設定更新本体を呼ばない")
     void updateSettings_403_whenNotAdmin() {
         UpdateTeamShiftSettingsRequest req = new UpdateTeamShiftSettingsRequest();
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(accessControlService).checkAdminOrAbove(USER_ID, TEAM_ID, "TEAM");
+                .given(accessControlService).checkAdminOrHasPermissionInScope(USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS");
         assertThatThrownBy(() -> controller.updateSettings(new TeamScopeId(TEAM_ID), req))
                 .isInstanceOf(BusinessException.class);
         verify(settingsService, Mockito.never()).updateSettings(TEAM_ID, req);

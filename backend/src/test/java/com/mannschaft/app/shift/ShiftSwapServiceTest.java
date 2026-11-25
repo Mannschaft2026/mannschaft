@@ -77,6 +77,9 @@ class ShiftSwapServiceTest {
     @Mock
     private UserStatusLookupService userStatusLookupService;
 
+    @Mock
+    private com.mannschaft.app.team.service.TeamShiftSettingsService teamShiftSettingsService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -95,6 +98,8 @@ class ShiftSwapServiceTest {
                 shiftMapper, objectMapper, entityManager, slotService);
         // 認可は Facade（tx の外）が行う。応答の契約は Facade→tx 本体の合成で検証する。
         swapFacade = new ShiftSwapFacade(shiftSwapService, new ScopeConcealingAccessGate(accessControlService),
+                new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService,
+                        teamShiftSettingsService),
                 accessControlService, userStatusLookupService);
     }
 
@@ -138,12 +143,14 @@ class ShiftSwapServiceTest {
         given(accessControlService.isSupporter(userId, TEAM_ID, "TEAM")).willReturn(false);
     }
 
-    /** 当該ユーザーを「当該チームの ADMIN」として認可を通す（Gate は isAdminOrAbove を見る）。 */
+    /**
+     * 当該ユーザーを「当該チームの ADMIN（または MANAGE_SHIFTS 付き DEPUTY_ADMIN）」として認可を通す。
+     * 管理操作の判定は ShiftManageAccessGate が hasAdminOrPermissionInScope を見る（CMP-261125-2114）。
+     */
     private void givenTeamAdmin(Long userId) {
         givenScopeResolvable();
-        given(accessControlService.isSystemAdmin(userId)).willReturn(false);
-        org.mockito.Mockito.lenient().when(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM"))
-                .thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.hasAdminOrPermissionInScope(
+                userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS")).thenReturn(true);
     }
 
     private ShiftSwapRequestEntity createPendingSwap() {
@@ -195,13 +202,13 @@ class ShiftSwapServiceTest {
 
     /** 一覧 API の「当該チーム ADMIN」認可をモックする。 */
     private void givenTeamAdminForList(Long userId) {
-        given(accessControlService.isSystemAdmin(userId)).willReturn(false);
         given(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM")).willReturn(true);
+        given(accessControlService.hasAdminOrPermissionInScope(userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
+                .willReturn(true);
     }
 
     /** 一覧 API の「当該チームの一般メンバー（SUPPORTER でない）」認可をモックする。 */
     private void givenTeamMemberForList(Long userId) {
-        given(accessControlService.isSystemAdmin(userId)).willReturn(false);
         given(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM")).willReturn(false);
         given(accessControlService.isMember(userId, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.isSupporter(userId, TEAM_ID, "TEAM")).willReturn(false);
@@ -364,7 +371,6 @@ class ShiftSwapServiceTest {
         @DisplayName("交代リクエスト一覧_当該チームのメンバーでない_BusinessException")
         void 交代リクエスト一覧_当該チームのメンバーでない_BusinessException() {
             // Given: SYSTEM_ADMIN でも ADMIN でもメンバーでもない部外者
-            given(accessControlService.isSystemAdmin(OUTSIDER_ID)).willReturn(false);
             given(accessControlService.isAdminOrAbove(OUTSIDER_ID, TEAM_ID, "TEAM")).willReturn(false);
             given(accessControlService.isMember(OUTSIDER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
@@ -377,7 +383,6 @@ class ShiftSwapServiceTest {
         @DisplayName("交代リクエスト一覧_SUPPORTERは閲覧できない_BusinessException")
         void 交代リクエスト一覧_SUPPORTERは閲覧できない() {
             // Given
-            given(accessControlService.isSystemAdmin(SUPPORTER_ID)).willReturn(false);
             given(accessControlService.isAdminOrAbove(SUPPORTER_ID, TEAM_ID, "TEAM")).willReturn(false);
             given(accessControlService.isMember(SUPPORTER_ID, TEAM_ID, "TEAM")).willReturn(true);
             given(accessControlService.isSupporter(SUPPORTER_ID, TEAM_ID, "TEAM")).willReturn(true);
@@ -656,9 +661,8 @@ class ShiftSwapServiceTest {
             ResolveSwapRequestRequest req = new ResolveSwapRequestRequest("APPROVE", "承認します");
             given(swapRepository.findById(SWAP_ID)).willReturn(Optional.of(entity));
             givenScopeResolvable();
-            given(accessControlService.isSystemAdmin(ACCEPTER_ID)).willReturn(false);
-            // 同一チームの所属者だが ADMIN ではない（Gate は 403 COMMON_002 を返す）
-            given(accessControlService.isAdminOrAbove(ACCEPTER_ID, TEAM_ID, "TEAM")).willReturn(false);
+            // 同一チームの所属者だが ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN ではない（hasAdminOrPermissionInScope は既定で false。
+            // Gate は所属者として 403 COMMON_002 を返す）
             given(accessControlService.isMember(ACCEPTER_ID, TEAM_ID, "TEAM")).willReturn(true);
 
             // When & Then
@@ -724,9 +728,7 @@ class ShiftSwapServiceTest {
             ShiftSwapRequestEntity entity = createPendingSwap();
             given(swapRepository.findById(SWAP_ID)).willReturn(Optional.of(entity));
             givenScopeResolvable();
-            given(accessControlService.isSystemAdmin(ACCEPTER_ID)).willReturn(false);
-            // 同一チームの所属者だが ADMIN ではない（Gate は 403 COMMON_002 を返す）
-            given(accessControlService.isAdminOrAbove(ACCEPTER_ID, TEAM_ID, "TEAM")).willReturn(false);
+            // 同一チームの所属者だが ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN ではない（Gate は 403 COMMON_002 を返す）
             given(accessControlService.isMember(ACCEPTER_ID, TEAM_ID, "TEAM")).willReturn(true);
 
             // When & Then

@@ -201,6 +201,8 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
         MembershipTestHelper.insertUserRole(em, adminId, "ADMIN", teamId, null);
         MembershipTestHelper.insertMembership(em, deputyAdminId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
         MembershipTestHelper.insertUserRole(em, deputyAdminId, "DEPUTY_ADMIN", teamId, null);
+        // CMP-261125-2114: 未公開の全量は ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ（切替 OFF の MANAGE_SHIFTS 無しは一般メンバーと同じ）。
+        MembershipTestHelper.grantTeamDeputyPermission(em, deputyAdminId, teamId, "MANAGE_SHIFTS");
         MembershipTestHelper.insertMembership(em, memberId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
         MembershipTestHelper.insertMembership(em, supporterId, ScopeType.TEAM, teamId, RoleKind.SUPPORTER);
         MembershipTestHelper.insertMembership(em, otherTeamAdminId, ScopeType.TEAM, otherTeamId, RoleKind.MEMBER);
@@ -520,25 +522,24 @@ class ShiftUnpublishedScheduleVisibilityContractIT extends AbstractMySqlIntegrat
             assertFullAccess(deputyAdminId, fixture);
         }
 
-        @ParameterizedTest(name = "非メンバーの SYSTEM_ADMIN は {0} を全量取得できる")
+        @ParameterizedTest(name = "非メンバーの SYSTEM_ADMIN は {0} を全量取得できない")
         @EnumSource(Fixture.class)
-        @DisplayName("AC-11(a): 当該チームの非メンバーでも SYSTEM_ADMIN は全量取得できる")
-        void SYSTEM_ADMINは非メンバーでも全量取得できる(Fixture fixture) throws Exception {
-            assertFullAccess(systemAdminId, fixture);
+        @DisplayName("AC-11(a)（CMP-261125-2114 で改訂）: チームロールを持たない SYSTEM_ADMIN は短絡で全量取得できず、他の部外者と同じ（一覧403・単体404）")
+        void SYSTEM_ADMINは非メンバーなら全量取得できない(Fixture fixture) throws Exception {
+            assertCrossTeamAlwaysNotFound(systemAdminId, fixture);
         }
 
-        @ParameterizedTest(name = "非メンバーの SYSTEM_ADMIN は {0} のPDFを取得できる")
+        @ParameterizedTest(name = "非メンバーの SYSTEM_ADMIN は {0} のPDFを取得できない")
         @EnumSource(Fixture.class)
-        @DisplayName("AC-11(b): PDF も 403/404 で弾かれない（checkMemberAndNotSupporter の SYSTEM_ADMIN 短絡）")
-        void SYSTEM_ADMINは非メンバーでもPDFを取得できる(Fixture fixture) throws Exception {
+        @DisplayName("AC-11(b)（CMP-261125-2114 で改訂）: PDF も短絡せず、部外者と同じ 404")
+        void SYSTEM_ADMINは非メンバーならPDFを取得できない(Fixture fixture) throws Exception {
             setAuth(systemAdminId);
             int pdfStatus = mockMvc.perform(get(SCHEDULES_PATH + "/{id}/pdf", scheduleIds.get(fixture))
                             .param("layout", "team"))
                     .andReturn().getResponse().getStatus();
-            // PDF のレンダリング失敗（500）は本テストの関心外。認可・可視性で弾かれないことだけを固定する。
             assertThat(pdfStatus)
-                    .as("SYSTEM_ADMIN のPDFが認可・可視性で弾かれないこと（%s）", fixture)
-                    .isNotIn(403, 404);
+                    .as("SYSTEM_ADMIN のPDFは部外者と同じ 404 になること（%s）", fixture)
+                    .isEqualTo(404);
         }
     }
 

@@ -81,8 +81,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * <ul>
  *   <li>同じチームの権限不足（一般メンバーの管理操作・SUPPORTER の参照）は 403 COMMON_002（AC-2）。</li>
  *   <li>teamId 直接指定（S1・S3）の越境・不在は 403 COMMON_002（AC-6）。</li>
- *   <li>SYSTEM_ADMIN（非メンバー・メンバーの両方）は全 EP で是正前どおり通る（殿の判断 5。新規許可なし）。
- *       存在しない teamId に SA が作成できる件は別課題（W6a では現行維持）。</li>
+ *   <li>SYSTEM_ADMIN（非メンバー・メンバーの両方）は、CMP-261125-2114 で短絡を廃止した。チームロールを持たない
+ *       SYSTEM_ADMIN は非メンバーなら他の部外者と同じ応答、メンバーなら一般メンバーと同じ応答。</li>
  *   <li>PDF の越境は 404 SHIFT_001 のまま（殿の判断 2）。</li>
  *   <li>user_roles だけを持つ ADMIN（memberships の在籍行なし）: 詳細（S2）・枠一覧（L1）・管理系は通し、
  *       一覧（S1）と PDF は是正前どおり 403 COMMON_002（殿の判断 4＝退行させない。許可は広げない）。</li>
@@ -226,11 +226,12 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
     /** ep_tables_w6.md §1.2・§1.3 と殿の判断（2026-10-03）から導く期待値。 */
     static Expect expected(Ep ep, Actor actor) {
         Expect forbidden = Expect.error(403, CommonErrorCode.COMMON_002);
-        if (actor.systemAdmin()) {
-            // 殿の判断 5: SA は是正前から全 EP で通っている（新規許可なし）。
-            return Expect.ok(ep.successStatus);
+        if (actor == Actor.SYSTEM_ADMIN_MEMBER_A) {
+            // CMP-261125-2114: SYSTEM_ADMIN の短絡は廃止。チームロールを持たない SYSTEM_ADMIN は在籍していても一般メンバーと同じ。
+            return ep.access == Access.READ ? Expect.ok(ep.successStatus) : forbidden;
         }
-        if (actor.crossBorder()) {
+        if (actor.crossBorder() || actor == Actor.SYSTEM_ADMIN) {
+            // 非メンバーの SYSTEM_ADMIN も他の部外者と同じ応答（CMP-261125-2114）。
             // teamId 直接指定（S1・S3）は隠さない（AC-6）。それ以外は ID 起点の不在コードへ畳む（remind も・殿の判断 1）。
             return ep.kind == Kind.TEAM ? forbidden : Expect.error(404, ep.notFound);
         }
@@ -385,8 +386,8 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
         if (ep.kind == Kind.TEAM) {
             assertResponse(perform(Actor.ADMIN_A, ep, missing), ep, Expect.error(403, CommonErrorCode.COMMON_002),
                     "管理者・不在 teamId");
-            // 殿の判断 5: SA は是正前どおり（一覧は空で 200、作成は不在 teamId でも 201 ＝別課題で台帳起票候補）。
-            assertResponse(perform(Actor.SYSTEM_ADMIN, ep, missing), ep, Expect.ok(ep.successStatus),
+            // CMP-261125-2114: SA の短絡は廃止。不在 teamId でも他の部外者と同じ 403（一覧・作成とも）。
+            assertResponse(perform(Actor.SYSTEM_ADMIN, ep, missing), ep, Expect.error(403, CommonErrorCode.COMMON_002),
                     "SA・不在 teamId");
             return;
         }
@@ -613,7 +614,7 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
         assertThat(member.getResponse().getStatus()).isEqualTo(200);
         assertThat((Boolean) JsonPath.read(member.getResponse().getContentAsString(), "$.data[0].assignmentMasked"))
                 .isTrue();
-        for (Actor actor : List.of(Actor.ADMIN_A, Actor.USER_ROLES_ONLY_ADMIN_A, Actor.SYSTEM_ADMIN)) {
+        for (Actor actor : List.of(Actor.ADMIN_A, Actor.USER_ROLES_ONLY_ADMIN_A)) {
             MvcResult admin = perform(actor, Ep.L1_LIST, targetId(Ep.L1_LIST));
             assertThat(admin.getResponse().getStatus()).as(actor.name()).isEqualTo(200);
             List<Object> assigned = JsonPath.read(admin.getResponse().getContentAsString(),

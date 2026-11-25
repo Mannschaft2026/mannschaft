@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>対象が<b>本人</b>の場合 — 当該チームのメンバーであることを要求</li>
  *   <li>対象が<b>他メンバー</b>の場合 — 呼び出し元が当該チームの ADMIN/DEPUTY_ADMIN であること、
  *       かつ<b>対象ユーザーも当該チームのメンバー</b>であることを要求（BOLA 封鎖）</li>
- *   <li>SYSTEM_ADMIN は短絡的に許可</li>
+ *   <li>SYSTEM_ADMIN は短絡しない（CMP-261125-2114）</li>
  *   <li>違反時のステータスは <b>403</b>（shift ドメインの既存規約
  *       {@code ShiftScheduleScopeContractIT} / {@code ShiftSlotScopeContractIT} に揃える）</li>
  * </ul>
@@ -129,6 +129,8 @@ class ShiftHourlyRateScopeContractIT extends AbstractMySqlIntegrationTest {
         MembershipTestHelper.insertMembership(em, memberTeamBId, ScopeType.TEAM, teamBId, RoleKind.MEMBER);
         MembershipTestHelper.insertMembership(em, deputyTeamAId, ScopeType.TEAM, teamAId, RoleKind.MEMBER);
         MembershipTestHelper.insertUserRole(em, deputyTeamAId, "DEPUTY_ADMIN", teamAId, null);
+        // CMP-261125-2114: シフト管理（時給の登録訂正）は MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。
+        MembershipTestHelper.grantTeamDeputyPermission(em, deputyTeamAId, teamAId, "MANAGE_SHIFTS");
         MembershipTestHelper.insertUserRole(em, systemAdminId, "SYSTEM_ADMIN", null, null);
 
         hourlyRateRepository.save(ShiftHourlyRateEntity.builder()
@@ -358,15 +360,18 @@ class ShiftHourlyRateScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        void システム管理者は所属に依存せず登録できる() throws Exception {
+        @DisplayName("CMP-261125-2114: チームロールを持たないシステム管理者は短絡で登録できず403・DB不変")
+        void システム管理者はチームロールが無ければ登録できない() throws Exception {
             setAuth(systemAdminId);
+            long before = hourlyRateRepository.count();
             mockMvc.perform(post(BASE).with(authentication(currentAuthentication))
                             .param("teamId", teamAId.toString()).contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(createBody(memberTeamBId))))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isForbidden());
             em.clear();
+            assertThat(hourlyRateRepository.count()).isEqualTo(before);
             assertThat(hourlyRateRepository.findByUserIdAndTeamIdAndEffectiveFrom(
-                    memberTeamBId, teamAId, LocalDate.of(2026, 5, 1))).isPresent();
+                    memberTeamBId, teamAId, LocalDate.of(2026, 5, 1))).isEmpty();
         }
 
         @Test

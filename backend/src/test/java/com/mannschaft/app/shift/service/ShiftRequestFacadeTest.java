@@ -48,6 +48,10 @@ class ShiftRequestFacadeTest {
     @Mock
     private ScopeConcealingAccessGate accessGate;
 
+    /** CMP-261125-2114: 管理操作・閲覧の判定（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN、閲覧は切替 ON の DEPUTY_ADMIN も）。 */
+    @Mock
+    private ShiftManageAccessGate manageGate;
+
     @Mock
     private RoleService roleService;
 
@@ -55,17 +59,16 @@ class ShiftRequestFacadeTest {
     private ShiftRequestFacade facade;
 
     @Test
-    @DisplayName("一覧_scope解決→管理者認可→tx本体の順")
+    @DisplayName("一覧_scope解決→閲覧認可→tx本体の順")
     void 一覧_順序() {
         given(requestService.resolveScheduleScope(SCHEDULE_ID))
                 .willReturn(new ShiftRequestService.ScheduleScope(TEAM_ID));
 
         facade.listRequests(SCHEDULE_ID, USER_ID);
 
-        InOrder order = inOrder(requestService, accessGate);
+        InOrder order = inOrder(requestService, manageGate);
         order.verify(requestService).resolveScheduleScope(SCHEDULE_ID);
-        order.verify(accessGate).requireAdminOrConceal(USER_ID, TEAM_ID, "TEAM",
-                ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        order.verify(manageGate).requireViewOrConceal(USER_ID, TEAM_ID, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         order.verify(requestService).listRequests(SCHEDULE_ID);
     }
 
@@ -74,15 +77,15 @@ class ShiftRequestFacadeTest {
     void 一覧_拒否() {
         given(requestService.resolveScheduleScope(SCHEDULE_ID))
                 .willReturn(new ShiftRequestService.ScheduleScope(TEAM_ID));
-        doThrow(new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND)).when(accessGate)
-                .requireAdminOrConceal(any(), any(), any(), any());
+        doThrow(new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND)).when(manageGate)
+                .requireViewOrConceal(any(), any(), any());
 
         assertThatThrownBy(() -> facade.listRequests(SCHEDULE_ID, USER_ID)).isInstanceOf(BusinessException.class);
         verify(requestService, never()).listRequests(any());
     }
 
     @Test
-    @DisplayName("サマリー_scope解決→管理者認可→tx本体の順")
+    @DisplayName("サマリー_scope解決→閲覧認可→tx本体の順")
     void サマリー_順序() {
         given(requestService.resolveScheduleScope(SCHEDULE_ID))
                 .willReturn(new ShiftRequestService.ScheduleScope(TEAM_ID));
@@ -92,10 +95,9 @@ class ShiftRequestFacadeTest {
 
         facade.getRequestSummary(SCHEDULE_ID, USER_ID);
 
-        InOrder order = inOrder(requestService, accessGate, roleService);
+        InOrder order = inOrder(requestService, manageGate, roleService);
         order.verify(requestService).resolveScheduleScope(SCHEDULE_ID);
-        order.verify(accessGate).requireAdminOrConceal(USER_ID, TEAM_ID, "TEAM",
-                ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        order.verify(manageGate).requireViewOrConceal(USER_ID, TEAM_ID, ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
         order.verify(roleService).getMemberCandidateUserIdsByTeamId(TEAM_ID);
         order.verify(requestService).getRequestSummary(SCHEDULE_ID, candidates);
     }
@@ -140,9 +142,9 @@ class ShiftRequestFacadeTest {
 
         facade.updateRequest(REQUEST_ID, req, USER_ID);
 
-        InOrder order = inOrder(requestService, accessGate);
+        InOrder order = inOrder(requestService, manageGate);
         order.verify(requestService).resolveRequestScope(REQUEST_ID);
-        order.verify(accessGate).requireOwnerOrAdminOrConceal(USER_ID, TEAM_ID, "TEAM", OWNER_ID,
+        order.verify(manageGate).requireOwnerOrManageOrConceal(USER_ID, TEAM_ID, OWNER_ID,
                 ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
         order.verify(requestService).updateRequest(REQUEST_ID, req);
     }
@@ -155,9 +157,9 @@ class ShiftRequestFacadeTest {
 
         facade.deleteRequest(REQUEST_ID, USER_ID);
 
-        InOrder order = inOrder(requestService, accessGate);
+        InOrder order = inOrder(requestService, manageGate);
         order.verify(requestService).resolveRequestScope(REQUEST_ID);
-        order.verify(accessGate).requireOwnerOrAdminOrConceal(USER_ID, TEAM_ID, "TEAM", OWNER_ID,
+        order.verify(manageGate).requireOwnerOrManageOrConceal(USER_ID, TEAM_ID, OWNER_ID,
                 ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND);
         order.verify(requestService).deleteRequest(REQUEST_ID);
     }
@@ -167,8 +169,8 @@ class ShiftRequestFacadeTest {
     void 更新削除_拒否() {
         given(requestService.resolveRequestScope(REQUEST_ID))
                 .willReturn(new ShiftRequestService.RequestScope(TEAM_ID, OWNER_ID));
-        doThrow(new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND)).when(accessGate)
-                .requireOwnerOrAdminOrConceal(any(), any(), any(), any(), any());
+        doThrow(new BusinessException(ShiftErrorCode.SHIFT_REQUEST_NOT_FOUND)).when(manageGate)
+                .requireOwnerOrManageOrConceal(any(), any(), any(), any());
 
         assertThatThrownBy(() -> facade.updateRequest(REQUEST_ID,
                 new UpdateShiftRequestRequest("AVAILABLE", null), USER_ID)).isInstanceOf(BusinessException.class);
