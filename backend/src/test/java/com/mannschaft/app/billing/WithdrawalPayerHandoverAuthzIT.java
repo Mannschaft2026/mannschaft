@@ -1,6 +1,7 @@
 package com.mannschaft.app.billing;
 
 import com.mannschaft.app.auth.entity.UserEntity;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.billing.BillingPayerHandoverService.HandoverRequestResult;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -284,12 +285,7 @@ class WithdrawalPayerHandoverAuthzIT extends AbstractMySqlIntegrationTest {
     }
 
     private void grantTeamAdminRole(Long userId) {
-        entityManager.createNativeQuery("""
-                        INSERT IGNORE INTO roles
-                            (name, display_name, priority, is_system, created_at, updated_at)
-                        VALUES ('ADMIN', '管理者', 100, false, NOW(6), NOW(6))
-                        """)
-                .executeUpdate();
+        RoleSeedSupport.ensureCanonical(entityManager, "ADMIN");
         entityManager.flush();
         Number roleId = (Number) entityManager
                 .createNativeQuery("SELECT id FROM roles WHERE name = 'ADMIN'").getSingleResult();
