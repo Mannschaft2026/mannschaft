@@ -277,6 +277,7 @@ erDiagram
 | `first_published_at` | `datetime(6)` | YES | NULL |  |
 | `first_published_author_user_id` | `bigint unsigned` | YES | NULL |  |
 | `is_publication_history_known` | `tinyint(1)` | NO | `0` |  |
+| `active_unique_key` | `tinyint` | YES | NULL |  |
 
 ### `blog_ranch_admin_commands`
 

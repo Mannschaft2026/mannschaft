@@ -59,6 +59,7 @@
       "draftHint": "Puedes añadir preguntas después. Guarda solo con el título por ahora.",
       "successToast": "Encuesta creada",
       "draftSuccessToast": "Guardado como borrador. Añade preguntas y publícala cuando estés listo.",
+      "publishFailedAfterCreate": "El borrador se creó, pero falló la publicación.",
       "failureToast": "No se pudo crear la encuesta",
       "validation": {
         "titleRequired": "Introduce un título",
@@ -91,7 +92,10 @@
       },
       "teamBreakdownEnabled": "Agrupar por equipo",
       "teamBreakdownHint": "Agrupa las respuestas por equipo subordinado (solo distribución de la organización).",
-      "teamBreakdownAnonymousConflict": "El desglose por equipo no esta disponible en encuestas anonimas."
+      "teamBreakdownAnonymousConflict": "El desglose por equipo no esta disponible en encuestas anonimas.",
+      "lockedNote": "El borrador ya está creado. Pulsa \"Reintentar publicación\" o cierra con \"Cerrar como borrador\" (el borrador se conserva y se puede publicar desde el detalle). Ya no se pueden editar los campos.",
+      "closeAsDraft": "Cerrar como borrador",
+      "retryPublish": "Reintentar publicación"
     },
     "detail": {
       "scopeMissing": "Falta la información de alcance de la encuesta",
@@ -114,7 +118,8 @@
       "responseCount": "Respuestas",
       "anonymous": "Anónima",
       "draftHint": "Esta encuesta es un borrador. No aceptará respuestas hasta que se publique.",
-      "draftAddQuestionsHint": "Añade preguntas antes de publicar. Se puede publicar sin preguntas, pero los encuestados no podrán responder.",
+      "draftAddQuestionsHint": "Añade al menos una pregunta antes de publicar. Una encuesta sin preguntas no se puede publicar.",
+      "publishNoQuestions": "No se puede publicar porque no tiene preguntas. Añade al menos una pregunta.",
       "draftQuestionsSection": "Añadir preguntas",
       "publishButton": "Publicar",
       "publishSuccess": "Encuesta publicada",
@@ -158,7 +163,8 @@
         "title": "Encuestados",
         "toggleShow": "Mostrar",
         "toggleHide": "Ocultar"
-      }
+      },
+      "addQuestionFailed": "No se pudieron guardar las preguntas. La encuesta no se publicó."
     },
     "respondents": {
       "summary": "{responded} / {total} miembros",
