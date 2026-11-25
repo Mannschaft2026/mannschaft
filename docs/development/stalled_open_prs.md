@@ -34,7 +34,7 @@
 | 89日 | #1167 | 2f | DIRTY | フィードAPIのレスポンス型をネスト構造に修正 | **クローズ**。`TimelineFeedResponse` として同一構造が main に実装済み |
 | 87日 | #1209 | 8f/+520 | DIRTY | **認可 Phase2 点火 — `@EnableMethodSecurity` 有効化**。現 main で既に有効化済みか要確認 | **クローズ**。点火は `SecurityConfig.java:41` に生存。回帰テスト不在は CMP-260826-2128 へ |
 | 81日 | #1361 | 1f | BEHIND | TODOビュー切替ボタンのスタイル | **復活・マージ済**（2026-08-27 JST、[PR #1361](https://github.com/kenta-0420/mannschaft/pull/1361) のMERGEDを確認） |
-| 73日 | #1502 | 1f | BEHIND | 本番インフラ初回構築（mannschaft.app） | **意図的に OPEN 維持。追跡点は CMP-260826-2129 へ移管**（マスター御下命。2026-11-24 時点で OPEN・最終更新 2026-06-13）。`infra-apply` 全件 skipped ＝ 未構築の疑い |
+| 73日 | #1502 | 1f | BEHIND | 本番インフラ初回構築（mannschaft.app） | **意図的に OPEN 維持。追跡点は CMP-260826-2129 へ移管し、CMP-260826-1041 の完了条件から除外（2026-11-25 マスター裁可）**（マスター御下命。2026-11-24 時点で OPEN・最終更新 2026-06-13）。`infra-apply` 全件 skipped ＝ 未構築の疑い |
 | 68日 | #1630 | 4f/+575 | DIRTY | 組織配信の再帰的配下解決（WITH RECURSIVE・depth32） | **クローズ**。main が keyset/sharded まで発展済み・当てると退行 |
 | 61日 | #1877 | 1f | BEHIND | 目安箱フィードバック投稿UIの実機E2E | **復活・マージ済**（2026-08-27 JST、[PR #1877](https://github.com/kenta-0420/mannschaft/pull/1877) のMERGEDを確認）。specのマージと実ブラウザ実行を区別する |
 | 58日 | #1964 | 8f | DIRTY | 予定編集モーダルのリマインダー/繰り返しUI重なり修正 | **クローズ**。同修正が着地済みで main が上位互換 |
@@ -58,7 +58,7 @@
 | 56日 | [#1073](https://github.com/kenta-0420/mannschaft/pull/1073) | poi-ooxml | **マージ済**（2026-10-04T01:59:10Z / 53f80e2e5238e7cebc56d3dd60876d31236b2ef1）前回照合（2026-10-03）時点の記録: 当時head `ffffae5ef5115d3bd00d24024a4d76ed8a014742`の対象27件はfailure/error/skip各0。[全体CI run](https://github.com/kenta-0420/mannschaft/actions/runs/37009214808)はArchUnit importerのJava heap spaceで失敗し、永続化enum番人もskip。当時は未マージであり、共通対策PR #3607（MERGED、2026-10-03T15:38:34Z）の全6シャードと全ArchUnit番人の正式検証を待っていた。#3607 は全ArchUnit番人を専用JVMへ分離してOOMを対照する対策で、着地済みのため「候補」ではない |
 | 48日 | [#1319](https://github.com/kenta-0420/mannschaft/pull/1319) | lint-staged 16→17 | **マージ済**（2026-10-03T21:23:23Z / 3fed9dea1b659cf277de0d417768e32283cc97e6） |
 | 48日 | [#1318](https://github.com/kenta-0420/mannschaft/pull/1318) | vue-virtual-scroller | **マージ済**（2026-10-04T00:09:06Z / 64d10f6d7e2bf380031065952710ab0d4d25df15） |
-| 48日 | [#1317](https://github.com/Mannschaft2026/mannschaft/pull/1317) | cheerio | **OPEN 継続（dependabot recreate 待ち。head CI の Lighthouse/Smoke E2E fail は原因未調査）**。2026-11-03 に `@dependabot recreate` を依頼したが応答なし（2026-11-24 実測。head `11028d50`、失敗2件・成功12件・skipped 6件） |
+| 48日 | [#1317](https://github.com/Mannschaft2026/mannschaft/pull/1317) | cheerio | **2026-11-25 CLOSED（マスター裁可。dependabot recreate 無応答・CI 失敗の原因未調査・担当なし。理由コメント https://github.com/Mannschaft2026/mannschaft/pull/1317#issuecomment-7148820017 ）**。2026-11-03 に `@dependabot recreate` を依頼したが応答なし（2026-11-24 実測。head `11028d50`、失敗2件・成功12件・skipped 6件） |
 | 48日 | [#1316](https://github.com/Mannschaft2026/mannschaft/pull/1316) | nuxt-security 1.4→2.6 | **CLOSED**（2026-10-27）。マスター裁可 2026-10-11 で見送り・別戦役。dependabot により後継 #4174 へ置換されて CLOSED（コメント「Superseded by #4174.」のみ）。#4174（2.7.0）は OPEN、CI fail あり。メジャーのため単独PRでCIを通すこと |
 | 48日 | [#1083](https://github.com/kenta-0420/mannschaft/pull/1083) | @nuxtjs/i18n 9→10 | **マージ済**（2026-10-04T21:30:39Z / 16dc01a60605dbb0a9fc9d1cfa366b516a80f1bc） |
 | 35日 | #1490 #1489 | **Spring Boot 3.5.13 → 4.1.0**（メジャー）/ AWS SDK BOM | **クローズ済（2件）**。#1490 は 2026-10-06 に dependabot が「Superseded by #3695.」で自動クローズ、#1489 は同日「Superseded by #3696.」で自動クローズ（#3696 も後に CLOSED、理由は「awssdk:bom は依存でなくなった」）。#3695（Spring Boot 4.1.2）はマスター裁可 2026-10-11 で見送り・別戦役とし、2026-11-03 に「Superseded by #4264.」で CLOSED。後継 #4264 は OPEN で CI fail あり（2026-11-24） |
@@ -73,10 +73,10 @@
 
 | PR | 中身 | 状態（2026-11-24） | 処遇 |
 |---|---|---|---|
-| #1317 | cheerio 1.0.0-rc.12 → 1.2.0（frontend, dev） | OPEN / blocked。CI fail は Lighthouse、Smoke E2E | OPEN 継続（dependabot recreate 待ち。2026-11-03 依頼、応答なし。head CI の fail は原因未調査） |
+| #1317 | cheerio 1.0.0-rc.12 → 1.2.0（frontend, dev） | OPEN / blocked。CI fail は Lighthouse、Smoke E2E | 2026-11-25 CLOSED（マスター裁可。dependabot recreate 無応答・CI 失敗の原因未調査・担当なし。理由コメント https://github.com/Mannschaft2026/mannschaft/pull/1317#issuecomment-7148820017 ） |
 | #3683 | actions/upload-artifact 4 → 7 | MERGED（2026-11-03） | 処遇済み |
 | #3687 | actions/setup-java 4 → 6 | MERGED（2026-11-03） | 処遇済み |
-| #3685 | hashicorp/setup-terraform 3 → 4 | OPEN / blocked。2026-11-06 更新。head `6301eced` の CI は成功12・skipped 7・fail なし | OPEN・マージ候補（head CI 緑、要最終確認。Terraform Plan は skipped のため infra 系の挙動確認が残る） |
+| #3685 | hashicorp/setup-terraform 3 → 4 | OPEN / blocked。2026-11-06 更新。head `6301eced` の CI は成功12・skipped 7・fail なし | 2026-11-25 マスター裁可でマージへ（auto-merge 予約済み）。旧記録: OPEN・マージ候補（head CI 緑、要最終確認。Terraform Plan は skipped のため infra 系の挙動確認が残る） |
 | #3686 | vue-tsc 3.3.7 → 3.3.12 | CLOSED（2026-10-14、後継 #3878） | 後継 #3878（3.3.14）は OPEN、CI fail あり（Install ほか） |
 | #3689 | archunit-junit5 1.3.0 → 1.5.1 | CLOSED（2026-10-28、dependabot 自動クローズ「もはや依存でないため不要」） | 依存ではなくなった。再起票の要否は下記「重要な所見」参照 |
 | #3692 | pdfbox 3.0.3 → 3.0.8 | CLOSED（2026-10-28、同上） | 同上。pdfbox は `testImplementation` で 3.0.3 固定のまま残存 |
