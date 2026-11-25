@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "No se pudo obtener la información de permisos. Vuelva a cargar más tarde",
-      "forbidden": "Solo los miembros de este equipo pueden usar habilidades y certificaciones",
       "mineTab": "Mis habilidades y certificaciones",
       "categoriesReloadFailed": "No se pudieron recargar las categorías"
     }

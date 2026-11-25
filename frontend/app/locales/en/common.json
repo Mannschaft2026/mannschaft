@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "Failed to load your permissions. Please reload later",
-      "forbidden": "Only members of this team can use skills and certifications",
       "mineTab": "My skills and certifications",
       "categoriesReloadFailed": "Failed to reload the categories"
     }

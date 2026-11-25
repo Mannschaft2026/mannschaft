@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "권한 정보를 불러오지 못했습니다. 잠시 후 다시 불러오세요",
-      "forbidden": "이 팀의 멤버만 스킬·자격을 이용할 수 있습니다",
       "mineTab": "내 스킬·자격",
       "categoriesReloadFailed": "카테고리를 다시 불러오지 못했습니다"
     }

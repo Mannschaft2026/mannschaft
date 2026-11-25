@@ -5,9 +5,9 @@
  * 本文上部のツールバーに「使い方」（所属者全員）と「フォロー」（
  * MANAGE_FRIEND_TEAMS の実効権限を持つ利用者）を置く。
  * 管理者にはフォルダ/フィード/転送履歴へのショートカットを表示する。
- * 直リンク防御: ロール解決済みで未所属（roleName null。読込中・取得失敗は別扱い）と GUEST（user_roles のみで在籍なし。BE の resolveEffectiveRole は
- * GUEST を非 null で返すため単純な falsy ガードを素通りする）には権限なし案内を出す。
- * 加えて一覧取得の 403 も TeamFriendList が権限なし案内に倒す（二重防御）。
+ * 直リンク防御（権限や所属を示唆せず共通の「見つかりません」へ。CMP-261125-1108）: ロール解決済みで未所属（roleName null。読込中・取得失敗は別扱い）と GUEST（user_roles のみで在籍なし。BE の resolveEffectiveRole は
+ * GUEST を非 null で返すため単純な falsy ガードを素通りする）には共通の見つかりません表示（シェルが本文を置換）を出す。
+ * 加えて一覧取得の 403/404 も TeamFriendList が同じ表示へ倒す（二重防御）。
  *
  * SUPPORTER にはバックエンドが is_public=TRUE のみ返すため、その旨の注意バナーを出す。
  */
@@ -42,12 +42,16 @@ const canManageFriends = computed(
 )
 // 本文を見せてよいのは在籍ロール（GUEST は在籍なしのため除外）
 const canViewTab = computed(() => !!roleName.value && roleName.value !== 'GUEST')
-// 権限なし案内: GUEST、または「ロール解決済みで取得成功なのに roleName=null」（公開チームの未所属・他テナント）。
+// 見つかりません扱い: GUEST、または「ロール解決済みで取得成功なのに roleName=null」（公開チームの未所属・他テナント）。
 // 読込中（roleResolved=false）と取得失敗は別扱い（ちらつき防止・失敗を権限なしに倒さない）。
 const isForbiddenView = computed(
   () => roleName.value === 'GUEST'
     || (roleResolved.value && !roleLoadFailed.value && !roleName.value),
 )
+const { notFound } = useScopeNotFound()
+watch(isForbiddenView, (denied) => {
+  if (denied) notFound.value = true
+}, { immediate: true })
 const isRoleLoadError = computed(() => roleResolved.value && roleLoadFailed.value && !roleName.value)
 const isSupporterView = computed(() => roleName.value === 'SUPPORTER')
 
@@ -158,11 +162,6 @@ onMounted(() => {
       />
       <FriendTeamGuideModal v-model:visible="showGuide" />
     </template>
-    <DashboardErrorState
-      v-else-if="isForbiddenView"
-      testid="friend-forbidden"
-      kind="forbidden"
-    />
     <DashboardErrorState
       v-else-if="isRoleLoadError"
       testid="friend-role-error"
