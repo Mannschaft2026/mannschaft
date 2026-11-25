@@ -92,10 +92,11 @@ public class ScopeConcealingAccessGate {
         if (accessControlService.isSystemAdmin(userId)) {
             return;
         }
-        if (ownerId != null && Objects.equals(ownerId, userId)) {
-            // CMP-261124-0159 AC-0159-94: 所有者の成功経路にも親チーム上限を AND する
-            // （非公開チームで MEMBER 未満なら、外された元所有者・在籍サポーターでも不在と同一応答）。
-            requireWithinTeamContentCap(userId, scopeId, scopeType, notFoundCode);
+        // CMP-261124-0159 AC-0159-94: 所有者の成功経路にも親チーム上限を AND する
+        // （非公開チームで MEMBER 未満なら、外された元所有者・在籍サポーターは所有者として通さない）。
+        // 上限を越える所有者でも、後続の管理者判定（user_roles のみの ADMIN/DEPUTY_ADMIN を含む）は従来どおり評価する。
+        if (ownerId != null && Objects.equals(ownerId, userId)
+                && !scopeContentAccessGate.isBeyondTeamContentCap(userId, scopeId, scopeType)) {
             return;
         }
         if (accessControlService.isAdminOrAbove(userId, scopeId, scopeType)) {
