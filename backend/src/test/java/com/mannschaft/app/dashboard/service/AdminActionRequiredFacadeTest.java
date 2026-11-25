@@ -1,5 +1,6 @@
 package com.mannschaft.app.dashboard.service;
 
+import com.mannschaft.app.auth.service.PendingInviteAdminQueryService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -8,6 +9,7 @@ import com.mannschaft.app.dashboard.dto.AdminActionRequiredResponse;
 import com.mannschaft.app.matching.service.MatchingAdminQueryService;
 import com.mannschaft.app.payment.service.PaymentAdminQueryService;
 import com.mannschaft.app.reservation.service.ReservationAdminQueryService;
+import com.mannschaft.app.role.service.InviteIssuerPolicy;
 import com.mannschaft.app.shift.service.ShiftRequestAdminQueryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,6 +55,11 @@ class AdminActionRequiredFacadeTest {
     private MatchingAdminQueryService matchingAdminQueryService;
     @Mock
     private PaymentAdminQueryService paymentAdminQueryService;
+    /** CMP-261107-1833 PR3: 招待権限の判定（既定 false＝INVITE_REISSUE を含めない。扱いは AdminActionRequiredFacadeInviteReissueTest）。 */
+    @Mock
+    private InviteIssuerPolicy inviteIssuerPolicy;
+    @Mock
+    private PendingInviteAdminQueryService pendingInviteAdminQueryService;
 
     @InjectMocks
     private AdminActionRequiredFacade facade;

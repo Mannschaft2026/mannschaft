@@ -3382,5 +3382,28 @@
       "ORGANIZATION": "Organizaciones",
       "ACTIVITY": "Registros de actividad"
     }
+  },
+  "inviteReissue": {
+    "title": "Solicitudes de nueva invitación",
+    "description": "Solicitudes de personas cuya invitación ha caducado. Al reinvitar se emite una nueva invitación (válida 7 días) y se les avisa.",
+    "empty": "No hay solicitudes de nueva invitación",
+    "requested_at": "Solicitada el",
+    "role": "Rol",
+    "reissue": "Reinvitar",
+    "decline": "Rechazar",
+    "decline_confirm_title": "¿Rechazar esta solicitud?",
+    "decline_confirm_message": "Vas a rechazar la solicitud de nueva invitación de {name}. Se le avisará.",
+    "reissued": "Se reinvitó a {name}",
+    "already_member": "Esta persona ya se ha unido, así que la solicitud quedó completada",
+    "declined": "Solicitud rechazada",
+    "already_handled": "Esta solicitud ya fue atendida. Se actualizó la lista",
+    "requester_unavailable": "Esta persona no puede unirse ahora, por lo que no se la puede reinvitar. Recházala",
+    "activation_failed": "No se pudo activar la nueva invitación. Inténtalo de nuevo más tarde",
+    "forbidden": "No tienes permiso para gestionar solicitudes de nueva invitación",
+    "load_error": "No se pudieron cargar las solicitudes de nueva invitación",
+    "retry": "Reintentar",
+    "load_more": "Ver más",
+    "reissue_context": "reinvitar",
+    "decline_context": "rechazar la solicitud de nueva invitación"
   }
 }

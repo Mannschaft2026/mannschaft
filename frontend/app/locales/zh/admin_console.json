@@ -83,7 +83,8 @@
           "RESERVATION": "预约",
           "SHIFT_REQUEST": "排班",
           "MATCHING": "匹配",
-          "PAYMENT": "支付"
+          "PAYMENT": "支付",
+          "INVITE_REISSUE": "重新邀请请求"
         }
       },
       "payments": {
