@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import type { CommitteeSummary } from '~/types/committee'
+import type { MemberResponse } from '~/types/member'
+
+/** BE CommitteeCreateRequest.purposeTag の enum（backend の定義順）。 */
+const PURPOSE_TAGS = ['TOURNAMENT', 'GOVERNANCE', 'ELECTION', 'PROJECT', 'OTHER'] as const
+type PurposeTag = typeof PURPOSE_TAGS[number]
+/** 委員長候補を全件取得するときの 1 ページの件数。 */
+const MEMBER_PAGE_SIZE = 100
 
 definePageMeta({ layout: 'organization', middleware: 'auth' })
 
@@ -8,7 +15,9 @@ const route = useRoute()
 const orgSlug = String(route.params.slug)
 const committeeApi = useCommitteeApi()
 const notification = useNotification()
-const { handleApiError } = useErrorHandler()
+const { handleApiError, getFieldErrors } = useErrorHandler()
+const orgApi = useOrganizationApi()
+const authStore = useAuthStore()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('organization', orgSlug)
 
 const committees = ref<CommitteeSummary[]>([])
@@ -28,9 +37,74 @@ function changePage(event: { page: number; rows: number }) {
 const createForm = ref({
   name: '',
   description: '',
-  purposeTag: '',
+  purposeTag: null as PurposeTag | null,
+  initialChairUserId: null as number | null,
   visibilityToOrg: 'NAME_ONLY' as 'HIDDEN' | 'NAME_ONLY' | 'NAME_AND_PURPOSE',
 })
+/** 400 で返った欄別エラー（キーは BE のフィールド名）。 */
+const fieldErrors = ref<Record<string, string>>({})
+
+const purposeTagOptions = computed(() =>
+  PURPOSE_TAGS.map((value) => ({ value, label: t(`committee.purpose_tag.${value}`) })),
+)
+
+// 委員長候補（組織メンバーのみ。BE は委員長が組織メンバーであることを要求する）
+const chairCandidates = ref<MemberResponse[]>([])
+const chairLoading = ref(false)
+const chairLoadError = shallowRef<unknown>()
+const chairLoadFailed = ref(false)
+let chairRequestId = 0
+
+async function loadChairCandidates() {
+  const requestId = ++chairRequestId
+  chairLoading.value = true
+  chairLoadFailed.value = false
+  chairLoadError.value = undefined
+  try {
+    const all: MemberResponse[] = []
+    let current = 0
+    for (;;) {
+      const res = await orgApi.getMembers(orgSlug, { page: current, size: MEMBER_PAGE_SIZE })
+      all.push(...res.data)
+      current++
+      if (current >= res.meta.totalPages || res.data.length === 0) break
+    }
+    if (requestId !== chairRequestId) return
+    chairCandidates.value = all
+    const me = authStore.currentUser?.id
+    if (createForm.value.initialChairUserId == null && me != null && all.some((m) => m.userId === me)) {
+      createForm.value.initialChairUserId = me
+    }
+  } catch (err) {
+    if (requestId !== chairRequestId) return
+    chairCandidates.value = []
+    chairLoadError.value = err
+    chairLoadFailed.value = true
+    handleApiError(err, 'listOrganizationMembers')
+  } finally {
+    if (requestId === chairRequestId) chairLoading.value = false
+  }
+}
+
+function openCreateDialog() {
+  fieldErrors.value = {}
+  showCreateDialog.value = true
+  void loadChairCandidates()
+}
+
+function resetCreateForm() {
+  createForm.value = {
+    name: '',
+    description: '',
+    purposeTag: null,
+    initialChairUserId: null,
+    visibilityToOrg: 'NAME_ONLY',
+  }
+}
+
+const canSubmit = computed(() =>
+  !!createForm.value.name.trim() && createForm.value.initialChairUserId != null && !creating.value,
+)
 
 async function loadCommittees() {
   loading.value = true
@@ -49,21 +123,29 @@ async function loadCommittees() {
 }
 
 async function onCreateCommittee() {
-  if (!createForm.value.name.trim()) return
+  if (creating.value) return
+  if (!createForm.value.name.trim() || createForm.value.initialChairUserId == null) return
   creating.value = true
+  fieldErrors.value = {}
   try {
     await committeeApi.createCommittee(orgSlug, {
       name: createForm.value.name,
       description: createForm.value.description || null,
-      purposeTag: createForm.value.purposeTag || null,
+      purposeTag: createForm.value.purposeTag,
+      initialChairUserId: createForm.value.initialChairUserId,
       visibilityToOrg: createForm.value.visibilityToOrg,
     })
     notification.success(t('committee.label'), t('committee.list.create'))
     showCreateDialog.value = false
-    createForm.value = { name: '', description: '', purposeTag: '', visibilityToOrg: 'NAME_ONLY' }
+    resetCreateForm()
     await loadCommittees()
   } catch (err) {
-    handleApiError(err, 'createCommittee')
+    const errors = getFieldErrors(err)
+    if (Object.keys(errors).length > 0) {
+      fieldErrors.value = errors
+    } else {
+      handleApiError(err, 'createCommittee')
+    }
   } finally {
     creating.value = false
   }
@@ -98,7 +180,8 @@ onMounted(async () => {
         v-if="isAdminOrDeputy"
         :label="$t('committee.list.create')"
         icon="pi pi-plus"
-        @click="showCreateDialog = true"
+        data-testid="committee-create-open"
+        @click="openCreateDialog"
       />
     </div>
 
@@ -153,6 +236,8 @@ onMounted(async () => {
       v-model:visible="showCreateDialog"
       :header="$t('committee.create_dialog.title')"
       modal
+      :closable="!creating"
+      :close-on-escape="!creating"
       :style="{ width: '480px' }"
     >
       <div class="flex flex-col gap-4">
@@ -160,19 +245,77 @@ onMounted(async () => {
           <label class="mb-1 block text-sm font-medium text-gray-700">
             {{ $t('committee.field.name') }}<span class="ml-1 text-red-500">*</span>
           </label>
-          <InputText v-model="createForm.name" class="w-full" />
+          <InputText
+            v-model="createForm.name"
+            class="w-full"
+            :invalid="!!fieldErrors.name"
+            data-testid="committee-create-name"
+          />
+          <small v-if="fieldErrors.name" class="mt-1 block text-red-500" data-testid="committee-create-name-error">
+            {{ fieldErrors.name }}
+          </small>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">
+            {{ $t('committee.field.chair') }}<span class="ml-1 text-red-500">*</span>
+          </label>
+          <DashboardErrorState
+            v-if="chairLoadFailed"
+            :error="chairLoadError"
+            :show-retry="true"
+            testid="committee-create-chair-load-error"
+            @retry="loadChairCandidates"
+          />
+          <Select
+            v-else
+            v-model="createForm.initialChairUserId"
+            :options="chairCandidates"
+            option-label="displayName"
+            option-value="userId"
+            :placeholder="$t('committee.create_dialog.chair_placeholder')"
+            :loading="chairLoading"
+            :invalid="!!fieldErrors.initialChairUserId"
+            filter
+            class="w-full"
+            data-testid="committee-create-chair"
+          />
+          <small v-if="fieldErrors.initialChairUserId" class="mt-1 block text-red-500" data-testid="committee-create-chair-error">
+            {{ fieldErrors.initialChairUserId }}
+          </small>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">
             {{ $t('committee.field.description') }}
           </label>
-          <Textarea v-model="createForm.description" class="w-full" rows="3" auto-resize />
+          <Textarea
+            v-model="createForm.description"
+            class="w-full"
+            rows="3"
+            auto-resize
+            :invalid="!!fieldErrors.description"
+          />
+          <small v-if="fieldErrors.description" class="mt-1 block text-red-500" data-testid="committee-create-description-error">
+            {{ fieldErrors.description }}
+          </small>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">
             {{ $t('committee.field.purpose_tag') }}
           </label>
-          <InputText v-model="createForm.purposeTag" class="w-full" />
+          <Select
+            v-model="createForm.purposeTag"
+            :options="purposeTagOptions"
+            option-label="label"
+            option-value="value"
+            :placeholder="$t('committee.create_dialog.purpose_placeholder')"
+            show-clear
+            :invalid="!!fieldErrors.purposeTag"
+            class="w-full"
+            data-testid="committee-create-purpose"
+          />
+          <small v-if="fieldErrors.purposeTag" class="mt-1 block text-red-500" data-testid="committee-create-purpose-error">
+            {{ fieldErrors.purposeTag }}
+          </small>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">
@@ -195,13 +338,15 @@ onMounted(async () => {
         <Button
           :label="$t('button.cancel')"
           severity="secondary"
+          :disabled="creating"
           @click="showCreateDialog = false"
         />
         <Button
           :label="$t('committee.list.create')"
           icon="pi pi-check"
           :loading="creating"
-          :disabled="!createForm.name.trim()"
+          :disabled="!canSubmit"
+          data-testid="committee-create-submit"
           @click="onCreateCommittee"
         />
       </template>
