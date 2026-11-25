@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Flyway signage_access_tokens の平文列廃止とハッシュ列への移行（全件失効）")
 class FlywaySignageAccessTokenHashMigrationTest {
 
-    private static final String PRE_TARGET = "267.20261124005850";
+    private static final String PRE_TARGET = "268.20261124173054";
     private static final String OLD_PLAINTEXT = "11111111-2222-4333-8444-555555555555";
 
     @SuppressWarnings("resource")
