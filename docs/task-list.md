@@ -62,7 +62,7 @@ Mannschaft の「タスクの地図」は二層で構成する。
 
 - 行は `docs/task-list/YYYY-MM.md`（月は ID の YYMM。例: `CMP-261124-1222` → `docs/task-list/2026-11.md`）と `docs/task-list/legacy.md`（旧形式 ID）にある。索引（本ファイル）には月の一覧を置かない（月が変わるたびに共有ファイルを書き換えないため）。`docs/task-list/` を見ること。
 - 全体を表で見る: `node scripts/task-list-ledger.mjs render [--open] [--priority P1] [--month 2026-11]`（全ファイル合わせた表を標準出力へ。0件は空表）。
-- 旧配置（本ファイルに行を足す形）で書かれた PR を新配置へ移す: `node scripts/task-list-ledger.mjs port-diff <base> <head>`（行追加・行更新を月別ファイルへ適用する）。
+- 旧配置（本ファイルに行を足す形）で書かれた PR を新配置へ移す: 移行前に作った PR は、マージ待ちの意思（auto-merge 予約済み、または merge_conflict で queue から外れた）があれば自動修復 Action が月別ファイルへ自動で移植する。それ以外（予約なし・`no-ledger-autofix` ラベル付き・行削除や前置き変更を含む PR）は手で `node scripts/task-list-ledger.mjs port-diff <base> <head>`（行追加・行更新を月別ファイルへ適用する）。
 - 月別ファイル内の相対リンクは `../evidence/<CMP-ID>.json` の形にする（`docs/task-list/` から見た相対 path）。
 - 台帳列（各行の最終列）はローカル限定（`.gitignore` 済み）のファイル名を指すため、clone 直後の環境や worktree には存在しない。`—` は「まだ台帳を作っていない」の意。戦役の再開時に台帳ファイルを作成したら、この列にファイル名を書き足すこと。
 

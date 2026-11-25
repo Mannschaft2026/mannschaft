@@ -187,18 +187,30 @@ export function renderTable(ledger, { open = false, priority = null, month = nul
   return [TABLE_HEADER, TABLE_SEPARATOR, ...rows.map((r) => r.line)].join('\n') + '\n';
 }
 
+/** 行（先頭セルが CMP-ID の表の行）以外の行。前置きなど「移植できない」変更の検出に使う。 */
+function nonRowLines(text) {
+  const rowNumbers = new Set(extractRows(text ?? '', LEDGER_INDEX_PATH).map((r) => r.lineNumber));
+  return (text ?? '').split('\n').filter((_, i) => !rowNumbers.has(i + 1));
+}
+
 /**
- * 旧配置の docs/task-list.md の差分（base→head の行追加・行更新）を、新配置の作業木へ適用する。
- * @returns {{ added: string[], updated: string[], skippedDeleted: string[], files: string[] }}
+ * 旧配置の docs/task-list.md の差分（base→head の行追加・行更新）を、新配置の台帳へ当てる計画を立てる（純粋関数。ファイルは触らない）。
+ * port-diff（CLI）と台帳衝突の自動修復（task-list-conflict-autofix）が共有する。
+ * @param {{ baseText: string|null, headText: string|null, ledger: { layout: string, files: {path: string, content: string|null}[], rows: {id: string, file: string}[] } }} input ledger は新配置の readLedger の結果
+ * @returns {{ added: string[], updated: string[], deleted: string[], preambleChanged: boolean, problems: string[], files: Map<string, string> }}
+ *   files: 変更後の本文（パス → 本文）。変更のあったファイルだけ。problems が空でなければ適用してはならない（問題の無い分だけは files に入る）。
  */
-export async function portDiff({ baseText, headText, root, dryRun = false }) {
+export function planPortDiff({ baseText, headText, ledger }) {
   const base = new Map(extractRows(baseText ?? '', LEDGER_INDEX_PATH).map((r) => [r.id, r.line]));
   const head = extractRows(headText ?? '', LEDGER_INDEX_PATH);
   const headIds = new Set(head.map((r) => r.id));
-  const result = { added: [], updated: [], skippedDeleted: [...base.keys()].filter((id) => !headIds.has(id)), files: [] };
-  const current = await readLedger(fsLedgerReader(root), { requireRows: false });
-  if (current.layout !== 'split') throw new LedgerReadError('作業木が新配置でない。port-diff は新配置への適用用');
-  const where = new Map(current.rows.map((r) => [r.id, r]));
+  const result = { added: [], updated: [], deleted: [...base.keys()].filter((id) => !headIds.has(id)), preambleChanged: false, problems: [], files: new Map() };
+  if (ledger.layout !== 'split') {
+    result.problems.push('作業木が新配置でない。port-diff は新配置への適用用');
+    return result;
+  }
+  result.preambleChanged = JSON.stringify(nonRowLines(baseText)) !== JSON.stringify(nonRowLines(headText));
+  const where = new Map(ledger.rows.map((r) => [r.id, r]));
   const edits = new Map(); // file -> { replace: Map(id,line), append: string[] }
   const edit = (file) => { if (!edits.has(file)) edits.set(file, { replace: new Map(), append: [] }); return edits.get(file); };
   for (const row of head) {
@@ -206,20 +218,20 @@ export async function portDiff({ baseText, headText, root, dryRun = false }) {
     const line = rewriteLinks(row.line);
     const present = where.get(row.id);
     if (base.has(row.id)) {
-      if (!present) throw new LedgerReadError('更新対象の行が新配置に見つからない: ' + row.id);
+      if (!present) { result.problems.push('更新対象の行が新配置に見つからない: ' + row.id); continue; }
       edit(present.file).replace.set(row.id, line);
       result.updated.push(row.id);
     } else {
-      if (present) throw new LedgerReadError('追加する行が新配置に既にある: ' + row.id);
-      edit(expectedLedgerFile(row.id)).append.push(line);
+      if (present) { result.problems.push('追加する行が新配置に既にある: ' + row.id); continue; }
+      const file = expectedLedgerFile(row.id);
+      if (!file) { result.problems.push('配置先を決められない ID: ' + row.id); continue; }
+      edit(file).append.push(line);
       result.added.push(row.id);
     }
   }
-  result.files = [...edits.keys()].sort();
-  if (dryRun) return result;
+  const contentOf = new Map(ledger.files.map((f) => [f.path, f.content]));
   for (const [file, { replace, append }] of edits) {
-    const full = join(root, ...file.split('/'));
-    let text = existsSync(full) ? readFileSync(full, 'utf8') : newFileSkeleton(file);
+    let text = contentOf.get(file) ?? newFileSkeleton(file);
     if (replace.size) {
       text = text.split('\n').map((l) => {
         if (!l.startsWith('|')) return l;
@@ -228,9 +240,23 @@ export async function portDiff({ baseText, headText, root, dryRun = false }) {
       }).join('\n');
     }
     if (append.length) text = (text.endsWith('\n') ? text : text + '\n') + append.map((l) => l + '\n').join('');
-    mkdirSync(join(root, LEDGER_DIR), { recursive: true });
-    writeFileSync(full, text);
+    result.files.set(file, text);
   }
+  return result;
+}
+
+/**
+ * 旧配置の docs/task-list.md の差分（base→head の行追加・行更新）を、新配置の作業木へ適用する。
+ * @returns {{ added: string[], updated: string[], skippedDeleted: string[], files: string[] }}
+ */
+export async function portDiff({ baseText, headText, root, dryRun = false }) {
+  const ledger = await readLedger(fsLedgerReader(root), { requireRows: false });
+  const plan = planPortDiff({ baseText, headText, ledger });
+  if (plan.problems.length) throw new LedgerReadError(plan.problems[0]);
+  const result = { added: plan.added, updated: plan.updated, skippedDeleted: plan.deleted, files: [...plan.files.keys()].sort() };
+  if (dryRun) return result;
+  mkdirSync(join(root, LEDGER_DIR), { recursive: true });
+  for (const [file, text] of plan.files) writeFileSync(join(root, ...file.split('/')), text);
   return result;
 }
 
