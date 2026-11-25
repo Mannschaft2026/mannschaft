@@ -176,6 +176,49 @@ describe('CMP-261028-0513 委員会詳細の部分表示（pages/committees/[id]
     expect(section.find('[data-testid="committee-detail-members-error"]').exists()).toBe(true)
   })
 
+  it('H3: members が403なら詳細を取り直し、myRole が null になればメンバー節ごと閉じる', async () => {
+    getCommittee
+      .mockResolvedValueOnce({ data: committeeData('MEMBER') })
+      .mockResolvedValueOnce({ data: committeeData(null) })
+    listMembers.mockRejectedValue(forbidden())
+    const wrapper = await mountSuspended(CommitteeDetailPage)
+    await flushMicrotasks()
+
+    expect(getCommittee).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('名前のみ公開委員会')
+    expect(wrapper.find('[data-testid="committee-detail-members"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="committee-detail-members-error"]').exists()).toBe(false)
+  })
+
+  it('H3: members が403で所属が続く場合は再試行ボタンを出さない（永久に403のため）', async () => {
+    getCommittee.mockResolvedValue({ data: committeeData('MEMBER') })
+    listMembers.mockRejectedValue(forbidden())
+    const wrapper = await mountSuspended(CommitteeDetailPage)
+    await flushMicrotasks()
+
+    expect(wrapper.find('[data-testid="committee-detail-members-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="committee-detail-members-error-retry"]').exists()).toBe(false)
+  })
+
+  it('H3: members が500なら再試行ボタンがあり、再試行で成功すればメンバーを表示する', async () => {
+    getCommittee.mockResolvedValue({ data: committeeData('MEMBER') })
+    listMembers
+      .mockRejectedValueOnce(Object.assign(new Error('500'), { statusCode: 500, status: 500 }))
+      .mockResolvedValueOnce({ data: memberRows })
+    const wrapper = await mountSuspended(CommitteeDetailPage)
+    await flushMicrotasks()
+
+    const retry = wrapper.find('[data-testid="committee-detail-members-error-retry"]')
+    expect(retry.exists()).toBe(true)
+    await retry.trigger('click')
+    await flushMicrotasks()
+
+    const section = wrapper.find('[data-testid="committee-detail-members"]')
+    expect(section.find('[data-testid="committee-detail-members-error"]').exists()).toBe(false)
+    expect(section.text()).toContain('山田太郎')
+    expect(getCommittee).toHaveBeenCalledTimes(1)
+  })
+
   it('H4: 詳細API自体が403（他テナント等）なら全体エラー状態のまま、members API は呼ばない', async () => {
     getCommittee.mockRejectedValue(forbidden())
     listMembers.mockRejectedValue(forbidden())

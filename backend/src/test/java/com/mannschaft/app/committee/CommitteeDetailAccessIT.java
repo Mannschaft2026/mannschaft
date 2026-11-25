@@ -40,8 +40,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * その前提となる「組織所属・委員会非所属は NAME_ONLY を 200（myRole=null）で読める一方、
  * メンバー一覧は 403」という BE 契約と、他テナント・匿名・HIDDEN の拒否を直接確かめる。</p>
  *
- * <p>組織所属の必須化（台帳 CMP-260930-0234）は別 PR の対象。ここでは現行挙動のうち
- * 他テナント非所属の拒否と匿名拒否を固定する。</p>
+ * <p>組織所属の必須化（台帳 CMP-260930-0234）は別 PR の対象。ここでは他テナント利用者への
+ * 非開示（2xx にならず本文に data を含まない）と匿名拒否を確かめる。</p>
+ *
+ * <p>既知の欠陥: 他テナント利用者への応答は 403（COMMON_002）、不在 ID は 404（COMMITTEE_NOT_FOUND）で、
+ * 両者が区別できる存在オラクルになっている（docs/security/01_authorization_baseline.md §3.3.2 違反）。
+ * 本 IT はこの差を正として固定しない。根治は別の台帳行で追跡する（行 ID は起票後に PR 本文へ記載）。</p>
  */
 @AutoConfigureMockMvc
 @Transactional
@@ -99,12 +103,27 @@ class CommitteeDetailAccessIT extends AbstractMySqlIntegrationTest {
 
     @Test
     void 他テナントの利用者は組織内委員会の詳細を取得できない() throws Exception {
-        detail(outsiderUserId, nameOnlyCommitteeId, 403);
+        // 拒否の具体的な status は固定しない（現状の 403 は存在オラクルで、不在 ID の 404 との不一致は
+        // 既知の欠陥。別の台帳行で根治予定のため、ここでは「2xx でなく data を返さない」ことだけを確かめる）。
+        var result = mockMvc.perform(get("/api/v1/committees/{id}", nameOnlyCommitteeId).with(as(outsiderUserId)))
+                .andReturn().getResponse();
+        assertThat(result.getStatus()).isGreaterThanOrEqualTo(400);
+        assertThat(objectMapper.readTree(result.getContentAsString()).has("data")).isFalse();
     }
 
     @Test
     void HIDDEN委員会は組織所属でも非所属者には存在を隠して404() throws Exception {
-        detail(orgOnlyUserId, hiddenCommitteeId, 404);
+        var hidden = mockMvc.perform(get("/api/v1/committees/{id}", hiddenCommitteeId).with(as(orgOnlyUserId)))
+                .andReturn().getResponse();
+        var absent = mockMvc.perform(get("/api/v1/committees/{id}", Long.MAX_VALUE).with(as(orgOnlyUserId)))
+                .andReturn().getResponse();
+        assertThat(hidden.getStatus()).isEqualTo(404);
+        // 存在を隠す: 不在 ID の応答と status・code・message が一致する
+        assertThat(hidden.getStatus()).isEqualTo(absent.getStatus());
+        JsonNode hiddenError = objectMapper.readTree(hidden.getContentAsString()).path("error");
+        JsonNode absentError = objectMapper.readTree(absent.getContentAsString()).path("error");
+        assertThat(hiddenError.path("code").asText()).isNotBlank().isEqualTo(absentError.path("code").asText());
+        assertThat(hiddenError.path("message").asText()).isEqualTo(absentError.path("message").asText());
         detail(committeeMemberUserId, hiddenCommitteeId, 200);
     }
 
