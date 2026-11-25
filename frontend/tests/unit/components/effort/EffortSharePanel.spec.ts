@@ -4,7 +4,7 @@
  * E25 取消・管理者非表示の状態表示 / 0 件（共有できるチームなし）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import EffortSharePanel from '~/components/effort/EffortSharePanel.vue'
 
@@ -52,9 +52,9 @@ async function mountPanel(record: unknown = baseRecord(), saveBeforePreview = vi
 }
 
 async function pickTemplateAndField(w: Awaited<ReturnType<typeof mountPanel>>['w']) {
-  await w.findComponent('[data-testid="effort-share-template"]').vm.$emit('update:modelValue', 11)
+  await (w.findComponent('[data-testid="effort-share-template"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 11)
   await flushPromises()
-  await w.findComponent('[data-testid="effort-share-select-tgt_min"]').vm.$emit('update:modelValue', ['tgt_min'])
+  await (w.findComponent('[data-testid="effort-share-select-tgt_min"]') as unknown as VueWrapper).vm.$emit('update:modelValue', ['tgt_min'])
   await flushPromises()
 }
 
@@ -130,7 +130,7 @@ describe('EffortSharePanel', () => {
 
   it('共有項目を1つも選ばないときは保存も preview もせず、エラーを出す（空 allowlist）', async () => {
     const { w, saveBeforePreview } = await mountPanel()
-    await w.findComponent('[data-testid="effort-share-template"]').vm.$emit('update:modelValue', 11)
+    await (w.findComponent('[data-testid="effort-share-template"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 11)
     await flushPromises()
     await w.find('[data-testid="effort-share-preview-btn"]').trigger('click')
     await flushPromises()
@@ -142,7 +142,7 @@ describe('EffortSharePanel', () => {
   it('廃止されたテンプレート（EFFORT_002）は共有できない旨を出す', async () => {
     m.createDefinitionSnapshot.mockRejectedValue(httpError(409, 'EFFORT_002'))
     const { w } = await mountPanel()
-    await w.findComponent('[data-testid="effort-share-template"]').vm.$emit('update:modelValue', 11)
+    await (w.findComponent('[data-testid="effort-share-template"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 11)
     await flushPromises()
     expect(w.find('[data-testid="effort-share-error"]').text()).toBe('This template has been retired and cannot be newly shared')
     expect(w.find('[data-testid="effort-share-fields"]').exists()).toBe(false)

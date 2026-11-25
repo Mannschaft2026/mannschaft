@@ -50,6 +50,7 @@ const NAV_ITEM_GROUP_MAP: Record<string, NavGroupKey> = {
   dashboard: 'home',
   'member-qr': 'account',
   'team-point-requests': 'account',
+  'effort-records': 'account',
 
   // nav_features マスタ（V9投入分）
   calendar: 'home',

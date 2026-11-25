@@ -4,7 +4,7 @@
  * 管理者非表示（ADMIN・DEPUTY_ADMIN だけ）/ 権限なし（403）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import EffortRecordsPage from '~/pages/teams/[slug]/effort-records.vue'
 
@@ -124,7 +124,7 @@ describe('/teams/{slug}/effort-records', () => {
   it('人で絞り込むと user_id を付けて取得し直す', async () => {
     const w = await mountPage()
     m.listTeamRecords.mockClear()
-    await w.findComponent('[data-testid="effort-filter-person"]').vm.$emit('update:modelValue', 3)
+    await (w.findComponent('[data-testid="effort-filter-person"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 3)
     await flushPromises()
     expect(m.listTeamRecords).toHaveBeenLastCalledWith(7, expect.objectContaining({ userId: 3 }))
   })

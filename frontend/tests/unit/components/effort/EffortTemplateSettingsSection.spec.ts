@@ -3,7 +3,7 @@
  * 権限出し分け・保存リクエスト形・400 fieldErrors 表示・409 再取得・取得失敗/403。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import EffortTemplateSettingsSection from '~/components/effort/EffortTemplateSettingsSection.vue'
 import ActivityTemplateForm from '~/components/activity/ActivityTemplateForm.vue'
@@ -144,8 +144,8 @@ describe('E22: unit・semantic 変更の警告 / E20: 未保存破棄の確認',
     await flushPromises()
     // semantic が NUMBER でないと unit は編集不可のため、semantic を NUMBER に変えて unit を直接編集できる状態にする
     expect(w.find('[data-testid="effort-setting-series-note-f1_aaaaaaaaaa"]').exists()).toBe(false)
-    await w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('update:modelValue', 'NUMBER')
-    await w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('change')
+    await (w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 'NUMBER')
+    await (w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]') as unknown as VueWrapper).vm.$emit('change')
     await flushPromises()
     expect(w.find('[data-testid="effort-setting-series-note-f1_aaaaaaaaaa"]').text()).toBe('If you change the unit or meaning, records are totaled as a separate series from earlier ones.')
 
@@ -169,7 +169,7 @@ describe('E22: unit・semantic 変更の警告 / E20: 未保存破棄の確認',
     expect(confirmRequire).not.toHaveBeenCalled()
 
     // 変更あり（semantic を切り替える）: 確認が出る。reject で false
-    await w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('update:modelValue', 'NUMBER')
+    await (w.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 'NUMBER')
     await flushPromises()
     const pending = vm.confirmDiscard()
     expect(confirmRequire).toHaveBeenCalledTimes(1)
@@ -191,7 +191,7 @@ describe('E22: unit・semantic 変更の警告 / E20: 未保存破棄の確認',
     const form = await mountSuspended(ActivityTemplateForm, { props: { template, visible: true, canManageEffortSettings: true } })
     await flushPromises()
     const section = form.findComponent(EffortTemplateSettingsSection)
-    await section.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]').vm.$emit('update:modelValue', 'NUMBER')
+    await (section.findComponent('[data-testid="effort-setting-semantic-f1_aaaaaaaaaa"]') as unknown as VueWrapper).vm.$emit('update:modelValue', 'NUMBER')
     await flushPromises()
     ;(form.vm as unknown as { handleCancel: () => void }).handleCancel()
     await flushPromises()
