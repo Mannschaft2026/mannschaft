@@ -1,5 +1,5 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import DashboardScopeAccordion from './DashboardScopeAccordion.vue'
 import type { WidgetDefinition } from '~/composables/useDashboardWidgets'
 
@@ -102,4 +102,67 @@ describe('DashboardScopeAccordion', () => {
       await switchLocale('ja')
     }
   }, 30000)
+})
+
+// 受け入れ条件 CMP-261125-2042: 子ページから戻っても開いていたセクションを開いたまま再現する。
+describe('DashboardScopeAccordion 開閉状態のタブ内保持', () => {
+  const scopeWidgets = [widget('schedule'), widget('todos')]
+
+  async function mountScoped(scopeId: string) {
+    return mountSuspended(DashboardScopeAccordion, {
+      props: { widgets: scopeWidgets, scopeType: 'organization', scopeId },
+      slots: {
+        default:
+          '<template #default="{ widgets }"><div class="rendered-widgets">{{ widgets.map((widget) => widget.key).join(\',\') }}</div></template>',
+      },
+    })
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear()
+    useAuthStore().user = {
+      id: 10,
+      email: 'member@example.com',
+      fullName: 'Member',
+      profileImageUrl: null,
+    }
+  })
+
+  afterEach(() => {
+    useAuthStore().$reset()
+    sessionStorage.clear()
+  })
+
+  it('AC7: セクションを開いて unmount し再 mount すると同じセクションが開いている', async () => {
+    const first = await mountScoped('org-a')
+    await first.get('#scope-dashboard-section-button-schedule-activity').trigger('click')
+    expect(
+      first.get('#scope-dashboard-section-button-schedule-activity').attributes('aria-expanded'),
+    ).toBe('true')
+    first.unmount()
+
+    const second = await mountScoped('org-a')
+    expect(
+      second.get('#scope-dashboard-section-button-schedule-activity').attributes('aria-expanded'),
+    ).toBe('true')
+    expect(
+      second.get('#scope-dashboard-section-button-tasks-confirmation').attributes('aria-expanded'),
+    ).toBe('false')
+    expect(
+      second.get('#scope-dashboard-section-schedule-activity').attributes('aria-hidden'),
+    ).toBe('false')
+    expect(second.get('#scope-dashboard-section-schedule-activity .rendered-widgets').text()).toBe(
+      'schedule',
+    )
+  })
+
+  it('AC8: scopeId が違うと開閉状態を復元しない', async () => {
+    const first = await mountScoped('org-a')
+    await first.get('#scope-dashboard-section-button-schedule-activity').trigger('click')
+    first.unmount()
+
+    const other = await mountScoped('org-b')
+    expect(other.findAll('[aria-expanded="true"]')).toHaveLength(0)
+    expect(other.find('.rendered-widgets').exists()).toBe(false)
+  })
 })
