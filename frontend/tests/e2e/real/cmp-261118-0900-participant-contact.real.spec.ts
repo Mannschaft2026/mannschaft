@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } fr
 import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 import {
-  API, FE, createActor, createOrg, createTeam, joinAsMember, must, apiAs, openAs, gotoAndHydrate, RUN,
+  API, FE, createActor, createOrg, createTeam, joinAsMember, recordAsset, must, apiAs, openAs, gotoAndHydrate, RUN,
   type Actor, type Scope,
 } from './helpers/n1p1-world'
 import { OWN_LEDGER, WORLD_FILE } from './helpers/cmp0900-global-teardown'
@@ -65,8 +65,16 @@ async function openTournament() {
   const status = cur.data?.structure?.status
   log({ step: 'tournament status before', status })
   expect(status, '大会応答の structure.status が読める').toBeTruthy()
-  if (status !== 'DRAFT') return
-  await must(W.orgAdmin, 'PATCH', `/api/v1/organizations/${W.orgO.numericId}/tournaments/${W.tId}/status`, { status: 'OPEN' })
+  if (status === 'DRAFT') await must(W.orgAdmin, 'PATCH', `/api/v1/organizations/${W.orgO.numericId}/tournaments/${W.tId}/status`, { status: 'OPEN' })
+  await restoreWithdrawnParticipant()
+}
+
+/**
+ * world 再利用（--repeat-each・N1P1_KEEP_WORLD=1）に備え、テスト 15 が辞退扱いにした参加チームを開始時にも元（REGISTERED）へ戻す。
+ * 大会は OPEN のままなので ACTIVE には遷移しておらず、作成直後の REGISTERED が元の状態。
+ */
+async function restoreWithdrawnParticipant() {
+  await must(W.orgAdmin, 'PATCH', `/api/v1/organizations/${W.orgO.numericId}/tournaments/${W.tId}/divisions/${W.d1}/participants/${W.pW}`, { status: 'REGISTERED' })
 }
 
 async function buildWorld() {
@@ -88,6 +96,8 @@ async function buildWorld() {
   const tName = `0900大会-${RUN}`
   const t = await must(orgAdmin, 'POST', `/api/v1/organizations/${orgO.numericId}/tournaments`, { name: tName, format: 'LEAGUE', sport: 'SOCCER', visibility: 'PUBLIC' })
   const tId = Number(t.data?.id ?? t.data?.content?.id)
+  // 組織の論理削除は大会を消さないため、作成直後に台帳へ載せる（台帳は逆順に消すので、組織・チームより先に大会が DELETE される）
+  recordAsset(`tournament ${tId}`, `/api/v1/organizations/${orgO.numericId}/tournaments/${tId}`, orgAdmin, OWN_LEDGER)
   const d1 = Number((await must(orgAdmin, 'POST', `/api/v1/organizations/${orgO.numericId}/tournaments/${tId}/divisions`, { name: `D1-${RUN}`, level: 1 })).data.id)
   const addP = async (team: Scope) => Number((await must(orgAdmin, 'POST', `/api/v1/organizations/${orgO.numericId}/tournaments/${tId}/divisions/${d1}/participants`, { teamId: team.numericId })).data.id)
   await addP(teamA)
@@ -292,9 +302,13 @@ test('15 [AC-P29] 辞退チームの代表 w1: 開ける→辞退→再読込で
   await expect(page.getByText(W.thSeed).first()).toBeVisible()
   await shot(page, '15-w1-before-withdraw')
   // 主催者が辞退扱いにする（前提操作は API）
-  await must(W.orgAdmin, 'PATCH', `/api/v1/organizations/${W.orgO.numericId}/tournaments/${W.tId}/divisions/${W.d1}/participants/${W.pW}`, { status: 'WITHDRAWN' })
-  await expectUnavailable(page, commUrl(W.teamW.slug, W.tId), 'w1-withdrawn')
-  await context.close()
+  try {
+    await must(W.orgAdmin, 'PATCH', `/api/v1/organizations/${W.orgO.numericId}/tournaments/${W.tId}/divisions/${W.d1}/participants/${W.pW}`, { status: 'WITHDRAWN' })
+    await expectUnavailable(page, commUrl(W.teamW.slug, W.tId), 'w1-withdrawn')
+  } finally {
+    await restoreWithdrawnParticipant() // 次の反復・world 再利用のため必ず元へ戻す
+    await context.close()
+  }
 })
 
 // ============================================================ 5. 主催者（退行なし）
