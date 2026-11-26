@@ -127,6 +127,8 @@ const Shell = defineComponent({
       h('section', { 'data-testid': 'shell-tabs' }, [slots.header?.(), slots.default?.()]),
 })
 const ChildPage = { template: '<div data-testid="child-page" />' }
+// チームのシェル 403/404 は PR-F1（CMP-261124-0159 / AC-0159-86・87）の理由表示、組織は共通の「見つかりません」
+const shellDeniedSelector = (scope: string) => scope === 'teams' ? '[data-testid="team-access-denied"]' : '[data-testid="scope-not-found"]'
 const NotFoundStub = { template: '<div data-testid="scope-not-found" />' }
 const ButtonStub = {
   props: ['label'],
@@ -189,7 +191,7 @@ for (const scope of ['organizations', 'teams'] as const) {
         const wrapper = mountShell(scope)
         await settle()
 
-        expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+        expect(wrapper.find(shellDeniedSelector(scope)).exists()).toBe(true)
         expect(mocks.error).not.toHaveBeenCalled()
         expect(mocks.notifyError).not.toHaveBeenCalled()
         expect(wrapper.text()).not.toContain('common.scopeShell.retry')
@@ -423,7 +425,7 @@ for (const scope of ['organizations', 'teams'] as const) {
       const wrapper = mountShell(scope)
       await settle()
 
-      expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+      expect(wrapper.find(shellDeniedSelector(scope)).exists()).toBe(true)
       expect(mocks.aux).not.toHaveBeenCalled()
       expect(mocks.error).not.toHaveBeenCalled()
       wrapper.unmount()

@@ -13,10 +13,15 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   error: vi.fn(),
   followFetch: vi.fn(),
+  states: new Map<string, unknown>(),
 }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 vi.mock('~/components/TeamSidebar.vue', () => ({ default: { template: '<div />' } }))
 mockNuxtImport('useRoute', () => () => mocks.route.current)
+mockNuxtImport('useState', () => <T>(key: string, init?: () => T) => {
+  if (!mocks.states.has(key)) mocks.states.set(key, ref(init?.()))
+  return mocks.states.get(key)
+})
 mockNuxtImport('navigateTo', () => mocks.navigate)
 mockNuxtImport('useSlugRedirect', () => () => ({ resolveSlug: mocks.resolve }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
@@ -96,6 +101,7 @@ function mountShell() {
 }
 
 beforeEach(() => {
+  mocks.states.clear()
   vi.clearAllMocks()
   mocks.route.current = reactive({})
   setRoute('/teams/a/bulletin')
