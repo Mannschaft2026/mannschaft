@@ -7,6 +7,8 @@ import { CONFIRMABLE_DRAFT_LIMIT } from '~/types/confirmable'
 
 /** 入力が止まってから自動保存するまでの待ち時間（ms） */
 export const CONFIRMABLE_DRAFT_AUTOSAVE_MS = 3000
+/** 保存に失敗（通信断・5xx）したあと、入力が止まっていても自動で再試行するまでの待ち時間（ms） */
+export const CONFIRMABLE_DRAFT_RETRY_MS = 10000
 
 const ERROR_NOT_FOUND = 'CONFIRMABLE_NOTIFICATION_DRAFT_NOT_FOUND'
 const ERROR_LIMIT = 'CONFIRMABLE_NOTIFICATION_DRAFT_LIMIT_EXCEEDED'
@@ -30,6 +32,8 @@ function errorStatus(error: unknown): number | undefined {
 export interface UseConfirmableDraftOptions {
   scopeType: () => 'TEAM' | 'ORGANIZATION'
   scopeId: () => string
+  /** 下書きを切り替えた（開く・新しく書く）あとに呼ばれる。フォームを画面内へ出すのに使う */
+  onSwitched?: () => void
   /** フォームの現在値を下書きの保存形で返す（キー順は常に同じにすること。内容が変わったかの判定に使う） */
   snapshot: () => ConfirmableNotificationDraftSaveRequest
   /** 下書きの内容をフォームへ反映する。null は空のフォーム（新規状態） */
@@ -69,6 +73,8 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   let generation = 0
   /** 送信の開始から結果が出るまでは自動保存しない（送って消える下書きへ PUT/POST しない） */
   let suspended = false
+  /** 保存の失敗を利用者へ知らせ済みか（再試行のたびにトーストを重ねないため。成功で戻す） */
+  let failureReported = false
   /** API を呼ぶ先のスコープ。送信先が変わったときは、前のスコープへ保存を済ませてから切り替える */
   let scopeType = options.scopeType()
   let scopeId = options.scopeId()
@@ -127,6 +133,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     currentId.value = null
     version.value = 0
     conflict.value = false
+    failureReported = false
     baseline = signature.value
     blankSignature = baseline
   }
@@ -142,6 +149,8 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     conflict.value = false
     baseline = ''
     await reloadList()
+    // 入力は残っているので、新しい下書きとして保存し直す（次の入力を待たない）
+    resumeIfUnsaved()
   }
 
   async function runSave(force: boolean) {
@@ -159,6 +168,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
         version.value = response.data.version ?? version.value
         baseline = sig
         conflict.value = false
+        failureReported = false
       } else {
         if (drafts.value.length >= CONFIRMABLE_DRAFT_LIMIT) return
         const response = await api.createDraft(scopeType, scopeId, payload)
@@ -166,6 +176,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
         currentId.value = response.data.id ?? null
         version.value = response.data.version ?? 0
         baseline = sig
+        failureReported = false
       }
       await reloadList()
     } catch (error) {
@@ -180,9 +191,22 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       } else if (!draftId && code === ERROR_LIMIT) {
         await reloadList()
       } else {
-        reportError(error, 'confirmable draft save')
+        // 通信断・5xx: 一度だけ知らせ、入力が止まっていても保存できるまで静かに再試行する
+        if (!failureReported) {
+          failureReported = true
+          reportError(error, 'confirmable draft save')
+        }
+        scheduleRetry()
       }
     }
+  }
+
+  function scheduleRetry() {
+    clearTimer()
+    timer = setTimeout(() => {
+      timer = null
+      void enqueue(() => runSave(false))
+    }, CONFIRMABLE_DRAFT_RETRY_MS)
   }
 
   watch(signature, (sig) => {
@@ -207,8 +231,12 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
    */
   async function switchAfterSave(proceed: () => Promise<void> | void) {
     await flushPending()
-    if (!hasUnsavedChanges()) {
+    const run = async () => {
       await proceed()
+      options.onSwitched?.()
+    }
+    if (!hasUnsavedChanges()) {
+      await run()
       return
     }
     confirm.require({
@@ -218,7 +246,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       rejectLabel: t('button.cancel'),
       acceptLabel: t('confirmable.draft.discard_and_switch'),
       acceptClass: 'p-button-danger',
-      accept: () => proceed(),
+      accept: () => run(),
     })
   }
 
@@ -239,6 +267,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       currentId.value = response.data.id ?? draftId
       version.value = response.data.version ?? 0
       conflict.value = false
+      failureReported = false
       baseline = signature.value
     } catch (error) {
       if (errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND) {

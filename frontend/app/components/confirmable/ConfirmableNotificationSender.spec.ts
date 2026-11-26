@@ -1020,6 +1020,118 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
     })
   })
 
+  // ---------------------------------------------------------------- アリシゼーション指摘（導線・案内の位置・再試行）
+  describe('アリシゼーション指摘', () => {
+    const RETRY_MS = 10000
+    /** a が b より文書上で前にある */
+    const isBefore = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+    it('上限の案内は下書き一覧の後・タイトル入力欄の直前にある（一覧が長くても入力中に見える位置）', async () => {
+      for (let i = 1; i <= LIMIT; i++) seed({ id: `d-${i}` })
+      const wrapper = await mountSender()
+
+      const notice = wrapper.find('[data-testid="confirmable-draft-limit"]').element
+      const list = wrapper.find('[data-testid="confirmable-draft-list"]').element
+      expect(isBefore(list, notice)).toBe(true)
+      expect(isBefore(notice, titleInput(wrapper).element)).toBe(true)
+      // 一覧の中にいない（最後の行より後）
+      expect(list.contains(notice)).toBe(false)
+    })
+
+    it('競合の案内と2つの操作も、下書き一覧の後・タイトル入力欄の直前にある', async () => {
+      seed({ id: 'd-1', title: '元の件名', version: 1 })
+      const wrapper = await mountSender()
+      await openDraft(wrapper, 'd-1')
+      const stored = server.drafts.get('d-1')
+      if (stored) { stored.version += 1; stored.title = '別画面の件名' }
+      useFakeTimers()
+      await typeTitle(wrapper, '自分の書き換え')
+      await advance(DEBOUNCE_MS)
+
+      const notice = wrapper.find('[data-testid="confirmable-draft-conflict"]').element
+      expect(isBefore(wrapper.find('[data-testid="confirmable-draft-list"]').element, notice)).toBe(true)
+      expect(isBefore(notice, titleInput(wrapper).element)).toBe(true)
+    })
+
+    it('下書きを開くと、一覧の下にあるフォーム（タイトル欄）を画面内へスクロールする', async () => {
+      seed({ id: 'd-1', title: '開く下書き' })
+      const wrapper = await mountSender()
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
+
+      await openDraft(wrapper, 'd-1')
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+      expect(scrollIntoView.mock.contexts[0]).toBe(titleInput(wrapper).element.parentElement)
+    })
+
+    it('「新しく書く」でも、フォーム（タイトル欄）を画面内へスクロールする', async () => {
+      seed({ id: 'd-1' })
+      const wrapper = await mountSender()
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
+
+      await clickTestId(wrapper, 'confirmable-draft-new')
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    })
+
+    it('保存の 5xx は一度だけ知らせ、入力が止まっていても一定時間後に自動で再試行して保存する', async () => {
+      seed({ id: 'd-1', version: 1 })
+      const failure = apiError(500, 'INTERNAL_SERVER_ERROR')
+      const wrapper = await mountSender()
+      await openDraft(wrapper, 'd-1')
+      mocks.updateDraft.mockRejectedValueOnce(failure)
+      mocks.updateDraft.mockRejectedValueOnce(failure)
+      useFakeTimers()
+
+      await typeTitle(wrapper, '通信が戻るまで待つ件名')
+      await advance(DEBOUNCE_MS)
+      expect(mocks.updateDraft).toHaveBeenCalledTimes(1)
+      await advance(RETRY_MS)
+      expect(mocks.updateDraft).toHaveBeenCalledTimes(2)
+      await advance(RETRY_MS)
+
+      expect(mocks.updateDraft).toHaveBeenCalledTimes(3)
+      expect(server.drafts.get('d-1')?.title).toBe('通信が戻るまで待つ件名')
+      // 失敗の通知は最初の1回だけ（再試行のたびに重ねない）
+      expect(mocks.captureQuiet).toHaveBeenCalledTimes(1)
+    })
+
+    it('通信断（status 不明）の失敗も再試行され、共通エラー処理への通知は最初の1回だけ', async () => {
+      const wrapper = await mountSender()
+      mocks.createDraft.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      mocks.createDraft.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      useFakeTimers()
+
+      await typeTitle(wrapper, '電波が切れた件名')
+      await advance(DEBOUNCE_MS)
+      await advance(RETRY_MS)
+      await advance(RETRY_MS)
+
+      expect(mocks.createDraft).toHaveBeenCalledTimes(3)
+      expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
+      expect([...server.drafts.values()].some(d => d.title === '電波が切れた件名')).toBe(true)
+    })
+
+    it('他の画面で消された下書きを編集し続けても、次の入力を待たずに新しい下書きとして保存し直す', async () => {
+      seed({ id: 'd-1', title: '消される下書き', version: 1 })
+      const wrapper = await mountSender()
+      await openDraft(wrapper, 'd-1')
+      server.drafts.delete('d-1')
+      useFakeTimers()
+
+      await typeTitle(wrapper, '消された後の入力')
+      await advance(DEBOUNCE_MS)
+      expect(mocks.updateDraft).toHaveBeenCalledTimes(1)
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+      await advance(DEBOUNCE_MS)
+
+      expect(mocks.createDraft).toHaveBeenCalledWith('TEAM', '5', expect.objectContaining({ title: '消された後の入力' }))
+      expect(rows(wrapper)).toHaveLength(1)
+    })
+  })
+
   // ---------------------------------------------------------------- FE-AC11（離脱時の保護）
   describe('FE-AC11 画面を離れるときに保存できていない入力を失わない', () => {
     const fireBeforeUnload = () => {

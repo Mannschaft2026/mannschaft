@@ -25,6 +25,11 @@ const unconfirmedVisibility = ref<UnconfirmedVisibility>('CREATOR_AND_ADMIN')
 const acceptedCount = ref<number | null>(null)
 const estimatedCount = ref<number | null>(null)
 const previewing = ref(false)
+/** タイトル欄の入口。下書きを開く・新しく書くとき、一覧の下にあるフォームを画面内へ出す */
+const draftFormAnchor = ref<HTMLElement | null>(null)
+function scrollToDraftForm() {
+  void nextTick(() => draftFormAnchor.value?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }))
+}
 let previewSequence = 0
 const templateOptions = computed(() => [{ label: t('label.optional'), value: null }, ...templates.value.map(template => ({ label: template.name, value: template.id }))])
 const groupOptions = computed(() => [{ label: t('confirmable.current_scope'), value: null }, ...groups.value.map(group => ({ label: group.name, value: group.id }))])
@@ -37,6 +42,7 @@ const { drafts, currentId: currentDraftId, conflict: draftConflict, limitReached
   scopeId: () => props.scopeId,
   snapshot: draftSnapshot,
   apply: applyDraft,
+  onSwitched: scrollToDraftForm,
 })
 /** 自動保存する下書きの形。キー順は固定（変更検知に使う）。未確認者表示は下書きに含めない */
 function draftSnapshot(): ConfirmableNotificationDraftSaveRequest {
@@ -148,7 +154,6 @@ onMounted(async () => {
           <h3 class="text-sm font-semibold">{{ $t('confirmable.draft.list_title') }}<span class="ml-2 font-normal text-surface-500" data-testid="confirmable-draft-count">{{ $t('confirmable.draft.count', { count: drafts.length, limit: CONFIRMABLE_DRAFT_LIMIT }) }}</span></h3>
           <Button :label="$t('confirmable.draft.new')" icon="pi pi-plus" size="small" severity="secondary" class="min-h-11" data-testid="confirmable-draft-new" @click="newDraft" />
         </div>
-        <Message v-if="draftLimitReached" severity="warn" :closable="false" data-testid="confirmable-draft-limit">{{ $t('confirmable.draft.limit_reached', { limit: CONFIRMABLE_DRAFT_LIMIT }) }}</Message>
         <p v-if="drafts.length === 0" class="text-sm text-surface-500" data-testid="confirmable-draft-empty">{{ $t('confirmable.draft.empty') }}</p>
         <ul v-else class="flex flex-col gap-1" data-testid="confirmable-draft-list">
           <li v-for="draft in drafts" :key="draft.id" class="flex items-stretch gap-1 rounded-border border" :class="draft.id === currentDraftId ? 'border-primary' : 'border-surface-200'" data-testid="confirmable-draft-row" :data-draft-id="draft.id">
@@ -161,13 +166,6 @@ onMounted(async () => {
           </li>
         </ul>
       </section>
-      <div v-if="draftConflict" class="flex flex-col gap-2" data-testid="confirmable-draft-conflict">
-        <Message severity="warn" :closable="false">{{ $t('confirmable.draft.conflict') }}</Message>
-        <div class="flex flex-wrap gap-2">
-          <Button :label="$t('confirmable.draft.reload_latest')" severity="secondary" class="min-h-11" data-testid="confirmable-draft-reload-latest" @click="reloadLatestDraft" />
-          <Button :label="$t('confirmable.draft.overwrite')" class="min-h-11" data-testid="confirmable-draft-overwrite" @click="overwriteDraft" />
-        </div>
-      </div>
       <Message v-if="acceptedCount !== null" severity="success" :closable="false">{{ $t('confirmable.accepted_count', { count: acceptedCount }) }}</Message>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.template') }}</label><Select v-model="selectedTemplateId" :options="templateOptions" option-label="label" option-value="value" @change="applyTemplate(selectedTemplateId)" /></div>
       <div class="flex flex-col gap-1">
@@ -179,7 +177,18 @@ onMounted(async () => {
       </div>
       <Message v-if="previewing" severity="info" :closable="false">{{ $t('confirmable.preview_loading') }}</Message>
       <Message v-else-if="estimatedCount !== null" :severity="estimatedCount ? 'info' : 'warn'" :closable="false">{{ $t('confirmable.preview_count', { count: estimatedCount }) }}</Message>
-      <div class="flex flex-col gap-1"><label>{{ $t('confirmable.message_title') }}</label><InputText v-model="title" /></div>
+      <!-- 保存できない・競合の案内は入力欄の直前に置く（下書き一覧が長いと、一覧の上では入力中に見えない） -->
+      <div v-if="draftLimitReached || draftConflict" class="flex flex-col gap-2">
+        <Message v-if="draftLimitReached" severity="warn" :closable="false" data-testid="confirmable-draft-limit">{{ $t('confirmable.draft.limit_reached', { limit: CONFIRMABLE_DRAFT_LIMIT }) }}</Message>
+        <div v-if="draftConflict" class="flex flex-col gap-2" data-testid="confirmable-draft-conflict">
+          <Message severity="warn" :closable="false">{{ $t('confirmable.draft.conflict') }}</Message>
+          <div class="flex flex-wrap gap-2">
+            <Button :label="$t('confirmable.draft.reload_latest')" severity="secondary" class="min-h-11" data-testid="confirmable-draft-reload-latest" @click="reloadLatestDraft" />
+            <Button :label="$t('confirmable.draft.overwrite')" class="min-h-11" data-testid="confirmable-draft-overwrite" @click="overwriteDraft" />
+          </div>
+        </div>
+      </div>
+      <div ref="draftFormAnchor" class="flex scroll-mt-20 flex-col gap-1"><label>{{ $t('confirmable.message_title') }}</label><InputText v-model="title" /></div>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.message_body') }}</label><Textarea v-model="body" rows="4" /></div>
       <div class="grid gap-4 md:grid-cols-2"><div class="flex flex-col gap-1"><label>{{ $t('confirmable.priority_label') }}</label><Select v-model="priority" :options="priorityOptions" option-label="label" option-value="value" /></div><div class="flex flex-col gap-1"><label>{{ $t('confirmable.deadline') }}</label><DatePicker v-model="deadlineAt" show-time hour-format="24" /></div></div>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.unconfirmed_visibility.label') }}</label><Select v-model="unconfirmedVisibility" data-testid="sender-visibility-select" :options="visibilityOptions" option-label="label" option-value="value" /></div>
