@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { BlogPostResponse, BlogSeries, BlogTag } from '~/types/cms'
 import type { GateCheckResponse } from '~/types/payment'
+import { createBlogPostNotFoundError, parseBlogUserId } from '~/utils/blogPostReadQuery'
 
 const route = useRoute()
-const userId = Number(route.params.userId)
+const rawUserId = parseBlogUserId(route.params.userId)
+const userId = rawUserId === null ? NaN : Number(rawUserId)
 const slug = route.params.slug as string
 
 const { getUserPost, addMitayo, removeMitayo } = useBlogApi()
@@ -19,6 +21,8 @@ const gateResult = ref<GateCheckResponse | null>(null)
 async function loadPost() {
   loading.value = true
   try {
+    // 不正形の userId は API を呼ばず、不在（CMS_001）と同じ扱いにする。
+    if (rawUserId === null) throw createBlogPostNotFoundError()
     const res = await getUserPost(userId, slug)
     post.value = res.data
     // 記事取得後にペイウォール判定（POST = ブログ記事）
@@ -127,7 +131,7 @@ const tagsForRelated = computed<BlogTag[]>(() => {
 })
 
 function onTagClick(tag: BlogTag) {
-  navigateTo(`/users/${userId}/blog?tag=${tag.id}`)
+  navigateTo(`/users/${rawUserId}/blog?tag=${tag.id}`)
 }
 
 onMounted(() => loadPost())
@@ -136,7 +140,7 @@ onMounted(() => loadPost())
 <template>
   <div class="mx-auto max-w-3xl px-4 py-8">
     <div class="mb-6">
-      <BackButton :to="`/users/${userId}/blog`" />
+      <BackButton :to="rawUserId === null ? '/blog' : `/users/${rawUserId}/blog`" />
     </div>
 
     <PageLoading v-if="loading" />
@@ -173,7 +177,7 @@ onMounted(() => loadPost())
     <DashboardEmptyState
       v-else
       icon="pi pi-book"
-      :message="$t('blog.post.noPost')"
+      :message="$t('blog.post.notFound')"
     />
   </div>
 </template>
