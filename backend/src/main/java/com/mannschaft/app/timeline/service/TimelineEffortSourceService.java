@@ -180,8 +180,16 @@ public class TimelineEffortSourceService {
                 .collect(Collectors.toSet());
     }
 
-    /** 投稿 ID 集合のうち努力由来のものの post ID → share UUID（1 回の照会）。 */
-    @Transactional(readOnly = true)
+    /**
+     * 投稿 ID 集合のうち努力由来のものの post ID → share UUID（1 回の照会）。
+     *
+     * <p>タイムラインの読み取りガード（{@link TimelineEffortReadGuard}）は、この結果に載らない投稿を通常の投稿として
+     * F00・hydrate・匿名化を通さずに返す（不在を公開可否の判断に使う）。投稿本体は PRIMARY から読まれるため、対応行を
+     * レプリカから読むと複製の遅れで努力由来の投稿（owner 未 ack の PENDING など）を通常の投稿と取り違えて投稿者情報付きで
+     * 返してしまう。そのため PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の PRIMARY 経路選択用。
+     * DML は行わない）。照会の障害は呼出元のガードが 503 EFFORT_004 へ変換する。</p>
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public Map<Long, UUID> findShareUuidsByPostIds(Collection<Long> postIds) {
         Map<Long, UUID> result = new HashMap<>();
         if (postIds == null || postIds.isEmpty()) {

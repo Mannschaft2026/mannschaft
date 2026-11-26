@@ -1,6 +1,8 @@
 package com.mannschaft.app.timeline.service;
 
+import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
+import com.mannschaft.app.effortrecord.EffortErrorCode;
 import com.mannschaft.app.common.visibility.ReferenceType;
 import com.mannschaft.app.effortrecord.dto.EffortSharedRecord;
 import com.mannschaft.app.effortrecord.service.EffortTimelineShareHydrator;
@@ -8,7 +10,10 @@ import com.mannschaft.app.timeline.TimelinePostSourceType;
 import com.mannschaft.app.timeline.dto.PostDetailResponse;
 import com.mannschaft.app.timeline.dto.PostResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.TransactionException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -29,8 +34,10 @@ import java.util.UUID;
  * （{@link EffortTimelineShareHydrator}。同じ判定を読み込んだ行へ掛けてから組み立てる）で SharedRecord を
  * {@code effortShare} として載せ、{@code sourceType=PERSONAL_EFFORT_SHARE} を付ける。どちらかで落ちた努力由来の投稿は
  * 一覧から除く（fail closed）。通常の投稿はそのまま通し、本文が固定識別子と同じでも目印を付けない（対応表の有無だけで判定する）。
- * F00 の照会障害は 503（EFFORT_004）として伝わり、「0 件」に置き換えない。値はキャッシュへ固定保存しない。</p>
+ * F00 の照会障害は 503（EFFORT_004）として伝わり、「0 件」に置き換えない。努力由来かを見分ける対応表の照会の障害も、
+ * 通常の投稿として素通しせず同じ 503（EFFORT_004）にする（{@link #effortShareIds}）。値はキャッシュへ固定保存しない。</p>
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TimelineEffortReadGuard {
@@ -57,7 +64,7 @@ public class TimelineEffortReadGuard {
         if (posts == null || posts.isEmpty()) {
             return posts;
         }
-        Map<Long, UUID> effort = sources.findShareUuidsByPostIds(posts.stream().map(PostResponse::getId)
+        Map<Long, UUID> effort = effortShareIds(posts.stream().map(PostResponse::getId)
                 .filter(Objects::nonNull).toList());
         if (effort.isEmpty()) {
             return posts;
@@ -87,7 +94,7 @@ public class TimelineEffortReadGuard {
         if (detail == null) {
             return null;
         }
-        UUID shareId = sources.findShareUuidsByPostIds(List.of(detail.getId())).get(detail.getId());
+        UUID shareId = effortShareIds(List.of(detail.getId())).get(detail.getId());
         PostDetailResponse hydrated = detail;
         if (shareId != null) {
             EffortSharedRecord record = visibleShares(List.of(shareId), viewerUserId).get(shareId);
@@ -105,7 +112,7 @@ public class TimelineEffortReadGuard {
 
     /** 投稿が努力由来でなければ true、努力由来なら F00 を通るときだけ true。 */
     public boolean isVisible(Long postId, Long viewerUserId) {
-        Map<Long, UUID> effort = sources.findShareUuidsByPostIds(List.of(postId));
+        Map<Long, UUID> effort = effortShareIds(List.of(postId));
         UUID shareId = effort.get(postId);
         return shareId == null
                 || visibilityChecker.canViewUuid(ReferenceType.EFFORT_TEAM_SHARE, shareId, viewerUserId);
@@ -143,6 +150,22 @@ public class TimelineEffortReadGuard {
     /** SharedRecord の著者が匿名（{@code userId=null}。退会・purge 後）か。 */
     private static boolean isAnonymous(EffortSharedRecord record) {
         return record.author() == null || record.author().userId() == null;
+    }
+
+    /**
+     * 投稿 ID 集合のうち努力由来のものの post ID → share UUID（対応表の照会。PRIMARY の独立 TX）。
+     *
+     * <p>照会の障害（DB の照会失敗・TX/接続の開始失敗）は 503 {@code EFFORT_004} にする（API 契約 §6: source 照会障害）。
+     * 「対応行なし＝通常の投稿」として素通しすると努力由来の投稿が F00 を通らずに出るため、空にも 500 にもしない。
+     * ログには値・SQL を出さず例外種別だけを記録し、元の例外は cause として保つ。</p>
+     */
+    private Map<Long, UUID> effortShareIds(Collection<Long> postIds) {
+        try {
+            return sources.findShareUuidsByPostIds(postIds);
+        } catch (DataAccessException | TransactionException e) {
+            log.error("タイムライン投稿の努力由来判定（対応表の照会）に失敗: cause={}", e.getClass().getSimpleName());
+            throw new BusinessException(EffortErrorCode.EFFORT_004, e);
+        }
     }
 
     /** F00 を通った共有だけを SharedRecord にする（F00 → hydrator の両方を通ったものだけ。1 ページにつき各 1 回）。 */

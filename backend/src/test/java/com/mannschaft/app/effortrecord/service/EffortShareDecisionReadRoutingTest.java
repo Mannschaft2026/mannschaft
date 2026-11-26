@@ -174,6 +174,17 @@ class EffortShareDecisionReadRoutingTest {
         }
     }
 
+    // ───────────────────────────── Codex 6 巡目 P1 ─────────────────────────────
+
+    @Test
+    @DisplayName("P1(6巡目): タイムラインの読み取りで投稿が努力由来か（対応行の有無）を決める照会は PRIMARY の接続で読む")
+    void 読み取りガードの努力由来判定はPRIMARYで読む() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Fixtures.class)) {
+            assertThat(context.getBean(TimelineEffortSourceService.class).findShareUuidsByPostIds(List.of(1L))).isEmpty();
+            assertThat(context.getBean(Trace.class).targets).containsExactly(DataSourceType.PRIMARY);
+        }
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     @EnableAspectJAutoProxy(proxyTargetClass = true)
     @EnableTransactionManagement(proxyTargetClass = true)

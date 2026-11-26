@@ -229,6 +229,27 @@ class EffortTimelineGuardIT extends EffortTeamShareItSupport {
         }
 
         @Test
+        @DisplayName("AC-40/E10: 努力由来かを見分ける対応表の照会が障害を起こすと、フィード・詳細・返信一覧とも 503 EFFORT_004（500 にも空にもしない）")
+        void AC40_対応表の照会障害は503() throws Exception {
+            String parked = "timeline_effort_sources_g6_" + Long.toHexString(System.nanoTime());
+            triggerDdl("RENAME TABLE timeline_effort_sources TO " + parked);
+            MockHttpServletResponse feed;
+            MockHttpServletResponse detail;
+            MockHttpServletResponse replies;
+            try {
+                feed = http(get(TIMELINE + "/feed").param("scopeType", "TEAM").param("scopeId", String.valueOf(w.team())),
+                        w.viewer());
+                detail = http(get(POSTS + "/{id}", normalPost), w.viewer());
+                replies = http(get(POSTS + "/{id}/replies", normalPost), w.viewer());
+            } finally {
+                triggerDdl("RENAME TABLE " + parked + " TO timeline_effort_sources");
+            }
+            expectError(feed, 503, "EFFORT_004");
+            expectError(detail, 503, "EFFORT_004");
+            expectError(replies, 503, "EFFORT_004");
+        }
+
+        @Test
         @DisplayName("AC-40: getReplies・getPinnedPosts に出ない（通常の返信・ピン留めは出る）")
         void AC40_返信とピン留め() throws Exception {
             Long effortReply = seedEffortPost(w.team(), w.owner(), kw + " effort reply");
