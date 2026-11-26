@@ -1,0 +1,104 @@
+{
+  "parking": {
+    "title": "Parking",
+    "spaces": {
+      "title": "Parking spaces",
+      "empty": "There are no parking spaces.",
+      "pricePerMonth": "{price} / month",
+      "floor": "Floor {floor}",
+      "deadline": "Apply by {date}",
+      "status": {
+        "VACANT": "Vacant",
+        "OCCUPIED": "Occupied",
+        "MAINTENANCE": "Under maintenance"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "Accepting applications",
+        "NOT_ACCEPTING": "Not accepting applications",
+        "LOTTERY_CLOSED": "Lottery closed"
+      },
+      "type": {
+        "INDOOR": "Indoor",
+        "OUTDOOR": "Outdoor",
+        "ACCESSIBLE": "Accessible",
+        "MOTORCYCLE": "Motorcycle",
+        "BICYCLE": "Bicycle",
+        "VISITOR": "Visitor",
+        "OTHER": "Other"
+      },
+      "allocation": {
+        "FIRST_COME": "First come, first served",
+        "LOTTERY": "Lottery"
+      },
+      "refreshError": "Failed to refresh the space list. What you see may be out of date."
+    },
+    "apply": {
+      "button": "Apply for parking",
+      "dialogTitle": "Apply for a parking space",
+      "space": "Space",
+      "spacePlaceholder": "Select a space",
+      "noSpaces": "No spaces are accepting applications right now.",
+      "vehicle": "Vehicle",
+      "vehiclePlaceholder": "Select a vehicle",
+      "noVehicle": "No vehicle is registered. You need to register a vehicle to apply.",
+      "loadVehiclesError": "Failed to load your vehicles.",
+      "retry": "Retry",
+      "message": "Message (optional)",
+      "messageHint": "Up to {max} characters",
+      "submit": "Apply",
+      "close": "Close",
+      "success": "Your application has been submitted",
+      "successLottery": "Your lottery application has been received"
+    },
+    "vehicle": {
+      "register": "Register a vehicle",
+      "type": "Type",
+      "plate": "Plate number",
+      "nickname": "Nickname (optional)",
+      "save": "Register",
+      "kind": {
+        "CAR": "Car",
+        "MOTORCYCLE": "Motorcycle",
+        "BICYCLE": "Bicycle"
+      }
+    },
+    "applications": {
+      "title": "My applications",
+      "titleAll": "Applications",
+      "empty": "There are no applications.",
+      "vehicle": "Vehicle",
+      "otherVehicle": "Another member's vehicle",
+      "rejectionReason": "Reason for rejection: {reason}",
+      "cancel": "Cancel",
+      "cancelled": "The application has been cancelled",
+      "cancelConfirm": {
+        "header": "Cancel application",
+        "message": "Cancel your application for space {space}?",
+        "accept": "Cancel application",
+        "reject": "Keep"
+      },
+      "status": {
+        "PENDING": "Pending review",
+        "APPROVED": "Approved",
+        "REJECTED": "Rejected",
+        "CANCELLED": "Cancelled",
+        "LOTTERY_PENDING": "Awaiting lottery"
+      }
+    },
+    "errors": {
+      "spaceNotFound": "The space was not found. The list has been refreshed.",
+      "vehicleNotFound": "The selected vehicle was not found. Please choose again.",
+      "applicationNotFound": "The application was not found. The list has been refreshed.",
+      "spaceNotVacant": "This space is no longer vacant. The list has been refreshed.",
+      "maxSpacesExceeded": "You have reached the maximum number of spaces per person.",
+      "notAccepting": "This space is not accepting applications right now.",
+      "alreadyApplied": "You have already applied for this space.",
+      "invalidStatus": "This application has already been decided and cannot be changed.",
+      "plateDuplicate": "This plate number is already registered.",
+      "forbidden": "You do not have permission to do this.",
+      "notFound": "The target was not found. The list has been refreshed.",
+      "conflict": "The state changed, so the action could not be completed. The list has been refreshed.",
+      "unprocessable": "This space cannot be applied for right now. The list has been refreshed."
+    }
+  }
+}

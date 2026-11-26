@@ -7,6 +7,7 @@ const api = useTeamLoyaltyApi()
 const confirm = useConfirm()
 const { handleApiError } = useErrorHandler()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const settings = ref<LoyaltySettings | null>(null)
 const enabled = ref(false)
 const audience = ref<LoyaltyAudience>('MEMBERS_AND_ABOVE')
@@ -25,6 +26,8 @@ async function load() {
     audience.value = settings.value.targetAudience
     mode.value = settings.value.selfAwardMode
   } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     error.value = e
     handleApiError(e, 'team-loyalty')
   } finally {

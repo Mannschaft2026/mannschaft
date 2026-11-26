@@ -64,7 +64,7 @@ public class TeamPageEntity extends BaseEntity {
     @Builder.Default
     private PageStatus status = PageStatus.DRAFT;
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Column(length = 64)
     private String previewToken;
 

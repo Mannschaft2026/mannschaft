@@ -9,7 +9,8 @@ import lombok.Getter;
 import java.time.LocalDateTime;
 
 /**
- * 委員会招集状レスポンス DTO。
+ * 委員会招集状レスポンス DTO（一覧・詳細用）。平文のトークンは含めない
+ * （発行時の {@link CommitteeInvitationIssuedResponse} だけが平文を返す）。
  */
 @Getter
 @Builder
@@ -19,7 +20,6 @@ public class CommitteeInvitationResponse {
     private Long committeeId;
     private Long inviteeUserId;
     private CommitteeRole proposedRole;
-    private String inviteToken;
     private LocalDateTime expiresAt;
     private LocalDateTime resolvedAt;
     private CommitteeInvitationResolution resolution;
@@ -50,7 +50,6 @@ public class CommitteeInvitationResponse {
                 .committeeId(entity.getCommitteeId())
                 .inviteeUserId(entity.getInviteeUserId())
                 .proposedRole(entity.getProposedRole())
-                .inviteToken(entity.getInviteToken())
                 .expiresAt(entity.getExpiresAt())
                 .resolvedAt(entity.getResolvedAt())
                 .resolution(entity.getResolution())

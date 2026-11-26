@@ -292,21 +292,29 @@ export interface ReorderTimetableRequest {
 
 // === Invite Token ===
 // member.ts と名前が衝突するため EventInviteTokenResponse として定義
+// 一覧・無効化の応答。平文のトークンは含まない（DB にはハッシュだけを保存し、発行応答の1回だけ返す）。
 export interface EventInviteTokenResponse {
   id: number
-  token: string
-  roleName: string | null
-  expiresAt: string | null
+  eventId: number
+  label: string | null
   maxUses: number | null
   usedCount: number
-  revokedAt: string | null
+  expiresAt: string | null
+  isActive: boolean
+  createdBy: number | null
   createdAt: string
+  updatedAt: string
+}
+
+/** 発行応答。平文トークン（Base64URL 43字）はこの応答の1回だけ返る。再取得はできない。 */
+export interface EventInviteTokenIssuedResponse extends EventInviteTokenResponse {
+  token: string
 }
 
 export interface EventCreateInviteTokenRequest {
-  roleId: number
-  expiresIn?: string
+  label?: string
   maxUses?: number
+  expiresAt?: string
 }
 
 // === EventCategory ===
