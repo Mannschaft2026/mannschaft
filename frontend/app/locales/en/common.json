@@ -628,6 +628,21 @@
     }
   },
   "confirmable": {
+    "draft": {
+      "list_title": "Drafts",
+      "count": "{count}/{limit}",
+      "empty": "No drafts yet",
+      "new": "Start a new one",
+      "untitled": "(Untitled)",
+      "delete": "Delete",
+      "delete_confirm": "Delete this draft? This cannot be undone.",
+      "delete_header": "Delete draft",
+      "limit_reached": "You can keep up to {limit} drafts, so this one cannot be auto-saved. Delete an old draft to continue (what you typed is kept).",
+      "conflict": "This draft was updated on another screen. Auto-save is paused.",
+      "reload_latest": "Load latest",
+      "overwrite": "Overwrite with this version",
+      "open": "Open this draft"
+    },
     "delivery_stopped": "Delivery stopped",
     "templates": "Manage templates",
     "template_name": "Template name",

@@ -628,6 +628,21 @@
     }
   },
   "confirmable": {
+    "draft": {
+      "list_title": "Borradores",
+      "count": "{count}/{limit}",
+      "empty": "Aún no hay borradores",
+      "new": "Escribir uno nuevo",
+      "untitled": "(Sin título)",
+      "delete": "Eliminar",
+      "delete_confirm": "¿Eliminar este borrador? Esta acción no se puede deshacer.",
+      "delete_header": "Eliminar borrador",
+      "limit_reached": "Se admiten hasta {limit} borradores, así que este no se puede guardar automáticamente. Elimina uno antiguo para continuar (lo que escribiste se conserva).",
+      "conflict": "Este borrador se actualizó en otra pantalla. El guardado automático está en pausa.",
+      "reload_latest": "Cargar lo más reciente",
+      "overwrite": "Sobrescribir con esta versión",
+      "open": "Abrir este borrador"
+    },
     "delivery_stopped": "Entrega detenida",
     "templates": "Administrar plantillas",
     "template_name": "Nombre de la plantilla",

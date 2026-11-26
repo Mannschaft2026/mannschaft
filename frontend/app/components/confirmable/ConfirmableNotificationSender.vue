@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import type { ConfirmableNotificationPriority, ConfirmableNotificationTemplate, ConfirmableRecipientGroup, ConfirmableTarget, ConfirmableRecipientPreviewRequest, CreateConfirmableNotificationRequest, UnconfirmedVisibility } from '~/types/confirmable'
+import type { ConfirmableNotificationDraftDetail, ConfirmableNotificationDraftSaveRequest, ConfirmableNotificationPriority, ConfirmableNotificationTemplate, ConfirmableRecipientGroup, ConfirmableTarget, ConfirmableRecipientPreviewRequest, CreateConfirmableNotificationRequest, UnconfirmedVisibility } from '~/types/confirmable'
+
+import { CONFIRMABLE_DRAFT_LIMIT } from '~/types/confirmable'
 
 const props = defineProps<{ scopeType: 'TEAM' | 'ORGANIZATION'; scopeId: string; scopeSlug?: string; groupsVersion?: number }>()
 const emit = defineEmits<{ sent: [] }>()
 const { sendNotification, previewRecipients, listTemplates, listRecipientGroups } = useConfirmableNotificationApi()
 const { handleApiError } = useErrorHandler()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const sending = ref(false)
 const showHelp = ref(false)
@@ -30,6 +32,39 @@ const audienceModeOptions = computed(() => ['DEFAULT', 'TARGETS', 'GROUP'].map(v
 const priorityOptions = computed(() => ['NORMAL', 'HIGH', 'URGENT'].map(value => ({ label: t(`confirmable.priority.${value}`), value })))
 const visibilityOptions = computed(() => ['HIDDEN', 'CREATOR_AND_ADMIN', 'ALL_MEMBERS'].map(value => ({ label: t(`confirmable.unconfirmed_visibility.${value}`), value })))
 
+const { drafts, currentId: currentDraftId, conflict: draftConflict, limitReached: draftLimitReached, init: initDrafts, resetScope: resetDraftScope, newDraft, openDraft, requestDelete: requestDeleteDraft, reloadLatest: reloadLatestDraft, overwriteWithMine: overwriteDraft, settleForSend, afterSent, resumeAfterFailedSend } = useConfirmableDraft({
+  scopeType: () => props.scopeType,
+  scopeId: () => props.scopeId,
+  snapshot: draftSnapshot,
+  apply: applyDraft,
+})
+/** 自動保存する下書きの形。キー順は固定（変更検知に使う）。未確認者表示は下書きに含めない */
+function draftSnapshot(): ConfirmableNotificationDraftSaveRequest {
+  return {
+    title: title.value,
+    body: body.value,
+    priority: priority.value,
+    deadlineAt: deadlineAt.value ? deadlineAt.value.toISOString() : undefined,
+    audienceMode: audienceMode.value,
+    selectedTargets: selectedTargets.value.map(target => ({ type: target.type, id: target.id })),
+    selectedGroupId: selectedGroupId.value ?? undefined,
+    selectedTemplateId: selectedTemplateId.value ?? undefined,
+  }
+}
+/** 下書きをフォームへ反映する。null は空のフォーム（新規状態） */
+function applyDraft(draft: ConfirmableNotificationDraftDetail | null) {
+  title.value = draft?.title ?? ''
+  body.value = draft?.body ?? ''
+  priority.value = draft?.priority ?? 'NORMAL'
+  deadlineAt.value = draft?.deadlineAt ? new Date(draft.deadlineAt) : null
+  audienceMode.value = draft?.audienceMode ?? 'DEFAULT'
+  selectedTargets.value = (draft?.selectedTargets ?? []).map(target => ({ type: target.type, id: target.id }))
+  selectedGroupId.value = draft?.selectedGroupId ?? null
+  selectedTemplateId.value = draft?.selectedTemplateId ?? null
+}
+function formatUpdatedAt(value?: string): string {
+  return value ? new Date(value).toLocaleString(locale.value, { dateStyle: 'short', timeStyle: 'short' }) : ''
+}
 function applyTemplate(templateId: number | null) {
   const template = templates.value.find(item => item.id === templateId)
   if (!template) return
@@ -75,23 +110,30 @@ async function onSend() {
   if (estimatedCount.value === null || estimatedCount.value === 0) { toast.add({ severity: 'warn', summary: t('confirmable.preview_required'), life: 3000 }); return }
   sending.value = true
   try {
+    const draftId = await settleForSend()
     const request: CreateConfirmableNotificationRequest = { title: title.value.trim(), priority: priority.value, unconfirmedVisibility: unconfirmedVisibility.value, ...audience }
     if (body.value.trim()) request.body = body.value.trim()
     if (deadlineAt.value) request.deadlineAt = deadlineAt.value.toISOString()
     if (selectedTemplateId.value !== null) request.templateId = selectedTemplateId.value
+    if (draftId) request.draftId = draftId
     const response = await sendNotification(props.scopeType, props.scopeId, request)
     acceptedCount.value = response.data.estimatedRecipientCount
     localStorage.setItem('confirmable.lastUnconfirmedVisibility', unconfirmedVisibility.value)
-    title.value = ''; body.value = ''; selectedTemplateId.value = null; selectedGroupId.value = null; selectedTargets.value = []; audienceMode.value = 'DEFAULT'
+    await afterSent()
     toast.add({ severity: 'success', summary: t('confirmable.accepted'), detail: t('confirmable.accepted_count', { count: response.data.estimatedRecipientCount }), life: 4000 })
     emit('sent')
-  } catch (error) { handleApiError(error, 'confirmable notification send') } finally { sending.value = false }
+  } catch (error) {
+    handleApiError(error, 'confirmable notification send')
+    resumeAfterFailedSend()
+  } finally { sending.value = false }
 }
 watch([audienceMode, selectedGroupId, selectedTargets, () => props.scopeId], loadPreview, { deep: true })
 watch(() => props.groupsVersion, loadOptions)
+watch(() => [props.scopeType, props.scopeId], resetDraftScope)
 onMounted(async () => {
   const stored = localStorage.getItem('confirmable.lastUnconfirmedVisibility')
   if (stored === 'HIDDEN' || stored === 'CREATOR_AND_ADMIN' || stored === 'ALL_MEMBERS') unconfirmedVisibility.value = stored
+  void initDrafts()
   await loadOptions()
   await loadPreview()
 })
@@ -101,6 +143,31 @@ onMounted(async () => {
   <SectionCard :title="$t('confirmable.send')">
     <template #header-actions><Button icon="pi pi-question-circle" text rounded :aria-label="$t('button.help')" @click="showHelp = true" /></template>
     <div class="flex flex-col gap-4">
+      <section class="flex flex-col gap-2" :aria-label="$t('confirmable.draft.list_title')">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold">{{ $t('confirmable.draft.list_title') }}<span class="ml-2 font-normal text-surface-500" data-testid="confirmable-draft-count">{{ $t('confirmable.draft.count', { count: drafts.length, limit: CONFIRMABLE_DRAFT_LIMIT }) }}</span></h3>
+          <Button :label="$t('confirmable.draft.new')" icon="pi pi-plus" size="small" severity="secondary" class="min-h-11" data-testid="confirmable-draft-new" @click="newDraft" />
+        </div>
+        <Message v-if="draftLimitReached" severity="warn" :closable="false" data-testid="confirmable-draft-limit">{{ $t('confirmable.draft.limit_reached', { limit: CONFIRMABLE_DRAFT_LIMIT }) }}</Message>
+        <p v-if="drafts.length === 0" class="text-sm text-surface-500" data-testid="confirmable-draft-empty">{{ $t('confirmable.draft.empty') }}</p>
+        <ul v-else class="flex flex-col gap-1" data-testid="confirmable-draft-list">
+          <li v-for="draft in drafts" :key="draft.id" class="flex items-stretch gap-1 rounded-border border" :class="draft.id === currentDraftId ? 'border-primary' : 'border-surface-200'" data-testid="confirmable-draft-row" :data-draft-id="draft.id">
+            <button type="button" class="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left" :aria-label="$t('confirmable.draft.open')" :aria-current="draft.id === currentDraftId ? 'true' : undefined" data-testid="confirmable-draft-open" @click="openDraft(draft.id as string)">
+              <span class="w-full truncate text-sm font-medium">{{ draft.title || $t('confirmable.draft.untitled') }}</span>
+              <span class="w-full truncate text-xs text-surface-500">{{ draft.bodyExcerpt }}</span>
+              <time class="text-xs text-surface-400" :datetime="draft.updatedAt" data-testid="confirmable-draft-updated-at">{{ formatUpdatedAt(draft.updatedAt) }}</time>
+            </button>
+            <Button icon="pi pi-trash" text rounded severity="danger" class="min-h-11 min-w-11 self-center" :aria-label="$t('confirmable.draft.delete')" data-testid="confirmable-draft-delete" @click="requestDeleteDraft(draft.id as string)" />
+          </li>
+        </ul>
+      </section>
+      <div v-if="draftConflict" class="flex flex-col gap-2" data-testid="confirmable-draft-conflict">
+        <Message severity="warn" :closable="false">{{ $t('confirmable.draft.conflict') }}</Message>
+        <div class="flex flex-wrap gap-2">
+          <Button :label="$t('confirmable.draft.reload_latest')" severity="secondary" class="min-h-11" data-testid="confirmable-draft-reload-latest" @click="reloadLatestDraft" />
+          <Button :label="$t('confirmable.draft.overwrite')" class="min-h-11" data-testid="confirmable-draft-overwrite" @click="overwriteDraft" />
+        </div>
+      </div>
       <Message v-if="acceptedCount !== null" severity="success" :closable="false">{{ $t('confirmable.accepted_count', { count: acceptedCount }) }}</Message>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.template') }}</label><Select v-model="selectedTemplateId" :options="templateOptions" option-label="label" option-value="value" @change="applyTemplate(selectedTemplateId)" /></div>
       <div class="flex flex-col gap-1">

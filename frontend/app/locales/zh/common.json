@@ -628,6 +628,21 @@
     }
   },
   "confirmable": {
+    "draft": {
+      "list_title": "草稿",
+      "count": "{count}/{limit}",
+      "empty": "暂无草稿",
+      "new": "新建",
+      "untitled": "（无标题）",
+      "delete": "删除",
+      "delete_confirm": "要删除此草稿吗？此操作无法撤销。",
+      "delete_header": "删除草稿",
+      "limit_reached": "草稿最多可保存 {limit} 份，当前内容无法自动保存。请删除旧草稿后继续（已输入的内容会保留）。",
+      "conflict": "此草稿已在其他页面被更新，自动保存已暂停。",
+      "reload_latest": "加载最新内容",
+      "overwrite": "用当前内容覆盖保存",
+      "open": "打开此草稿"
+    },
     "delivery_stopped": "发送已停止",
     "templates": "模板管理",
     "template_name": "模板名称",

@@ -251,37 +251,37 @@ export function useConfirmableNotificationApi() {
     return api(`${buildRecipientGroupBaseUrl(scopeType, scopeId)}/${groupId}`, { method: 'DELETE' })
   }
 
-  // === Drafts（CMP-261126-1558。試練で骨格のみ。/出陣で実装する） ===
+  // === Drafts（CMP-261126-1558） ===
 
   /** 自分の下書き一覧（updatedAt 降順） */
-  async function listDrafts(_scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string): Promise<{ data: ConfirmableNotificationDraftSummary[] }> {
-    throw new Error('未実装: listDrafts')
+  async function listDrafts(scopeType: 'TEAM' | 'ORGANIZATION', scopeId: string): Promise<{ data: ConfirmableNotificationDraftSummary[] }> {
+    return api(`${buildBaseUrl(scopeType, scopeId)}/drafts`)
   }
 
   /** 下書きを作成する（201。スコープ×作成者ごとに10件まで） */
   async function createDraft(
-    _scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _data: ConfirmableNotificationDraftSaveRequest,
+    scopeType: 'TEAM' | 'ORGANIZATION', scopeId: string, data: ConfirmableNotificationDraftSaveRequest,
   ): Promise<{ data: ConfirmableNotificationDraftDetail }> {
-    throw new Error('未実装: createDraft')
+    return api(`${buildBaseUrl(scopeType, scopeId)}/drafts`, { method: 'POST', body: data })
   }
 
   /** 下書きの全項目と version を取得する */
   async function getDraft(
-    _scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _draftId: string,
+    scopeType: 'TEAM' | 'ORGANIZATION', scopeId: string, draftId: string,
   ): Promise<{ data: ConfirmableNotificationDraftDetail }> {
-    throw new Error('未実装: getDraft')
+    return api(`${buildBaseUrl(scopeType, scopeId)}/drafts/${draftId}`)
   }
 
   /** 下書きを更新する（baseVersion 必須。食い違えば 409 VERSION_CONFLICT） */
   async function updateDraft(
-    _scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _draftId: string, _data: ConfirmableNotificationDraftUpdateRequest,
+    scopeType: 'TEAM' | 'ORGANIZATION', scopeId: string, draftId: string, data: ConfirmableNotificationDraftUpdateRequest,
   ): Promise<{ data: ConfirmableNotificationDraftDetail }> {
-    throw new Error('未実装: updateDraft')
+    return api(`${buildBaseUrl(scopeType, scopeId)}/drafts/${draftId}`, { method: 'PUT', body: data })
   }
 
   /** 下書きを削除する（204） */
-  async function deleteDraft(_scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _draftId: string): Promise<void> {
-    throw new Error('未実装: deleteDraft')
+  async function deleteDraft(scopeType: 'TEAM' | 'ORGANIZATION', scopeId: string, draftId: string): Promise<void> {
+    return api(`${buildBaseUrl(scopeType, scopeId)}/drafts/${draftId}`, { method: 'DELETE' })
   }
 
   return {

@@ -628,6 +628,21 @@
     }
   },
   "confirmable": {
+    "draft": {
+      "list_title": "임시저장",
+      "count": "{count}/{limit}",
+      "empty": "임시저장이 없습니다",
+      "new": "새로 작성",
+      "untitled": "(제목 없음)",
+      "delete": "삭제",
+      "delete_confirm": "이 임시저장을 삭제할까요? 되돌릴 수 없습니다.",
+      "delete_header": "임시저장 삭제",
+      "limit_reached": "임시저장은 최대 {limit}개까지 가능하여 자동 저장할 수 없습니다. 오래된 임시저장을 삭제해 주세요(입력한 내용은 유지됩니다).",
+      "conflict": "이 임시저장이 다른 화면에서 수정되었습니다. 자동 저장을 중지했습니다.",
+      "reload_latest": "최신 내용 불러오기",
+      "overwrite": "이 내용으로 덮어쓰기",
+      "open": "이 임시저장 열기"
+    },
     "delivery_stopped": "전송 중지",
     "templates": "템플릿 관리",
     "template_name": "템플릿 이름",

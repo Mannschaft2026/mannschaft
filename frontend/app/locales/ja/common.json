@@ -628,6 +628,21 @@
     }
   },
   "confirmable": {
+    "draft": {
+      "list_title": "下書き",
+      "count": "{count}/{limit}件",
+      "empty": "下書きはありません",
+      "new": "新しく書く",
+      "untitled": "（無題）",
+      "delete": "削除",
+      "delete_confirm": "この下書きを削除しますか？この操作は取り消せません。",
+      "delete_header": "下書きの削除",
+      "limit_reached": "下書きは最大{limit}件までのため、この内容は自動保存できません。不要な下書きを削除してください（入力内容は残っています）。",
+      "conflict": "この下書きは別の画面で更新されました。自動保存を止めています。",
+      "reload_latest": "最新を読み込む",
+      "overwrite": "この内容で上書き保存",
+      "open": "この下書きを開く"
+    },
     "delivery_stopped": "配信停止",
     "templates": "テンプレート管理",
     "template_name": "テンプレート名",

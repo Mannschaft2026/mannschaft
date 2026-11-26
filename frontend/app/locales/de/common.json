@@ -628,6 +628,21 @@
     }
   },
   "confirmable": {
+    "draft": {
+      "list_title": "Entwürfe",
+      "count": "{count}/{limit}",
+      "empty": "Noch keine Entwürfe",
+      "new": "Neu schreiben",
+      "untitled": "(Ohne Titel)",
+      "delete": "Löschen",
+      "delete_confirm": "Diesen Entwurf löschen? Das lässt sich nicht rückgängig machen.",
+      "delete_header": "Entwurf löschen",
+      "limit_reached": "Es sind höchstens {limit} Entwürfe möglich, daher kann dieser nicht automatisch gespeichert werden. Lösche einen alten Entwurf (deine Eingabe bleibt erhalten).",
+      "conflict": "Dieser Entwurf wurde auf einem anderen Bildschirm geändert. Die automatische Speicherung ist pausiert.",
+      "reload_latest": "Neueste Version laden",
+      "overwrite": "Mit dieser Version überschreiben",
+      "open": "Diesen Entwurf öffnen"
+    },
     "delivery_stopped": "Zustellung gestoppt",
     "templates": "Vorlagen verwalten",
     "template_name": "Vorlagenname",
