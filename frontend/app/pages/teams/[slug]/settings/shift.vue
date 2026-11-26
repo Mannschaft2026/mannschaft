@@ -8,6 +8,7 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { getShiftSettings, updateShiftSettings } = useTeamShiftSettingsApi()
 // CMP-261125-2114: 設定の変更はチーム ADMIN または MANAGE_SHIFTS 付き DEPUTY_ADMIN だけ（BE が 403 を返す）。
 const { canManageShift, isScopeAdmin, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
@@ -44,7 +45,9 @@ async function loadSettings() {
       deputyShiftViewEnabled: res.deputyShiftViewEnabled,
       deputyHourlyRateViewEnabled: res.deputyHourlyRateViewEnabled,
     }
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('settings.notification.load_error'))
   } finally {
     loading.value = false

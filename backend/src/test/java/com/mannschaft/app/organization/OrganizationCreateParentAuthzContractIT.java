@@ -1,6 +1,7 @@
 package com.mannschaft.app.organization;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -232,17 +233,7 @@ class OrganizationCreateParentAuthzContractIT extends AbstractMySqlIntegrationTe
 
     /** test profile は Flyway seed が無効なため、必要な roles 行をオンデマンドで確保する。 */
     private void ensureRole(String roleName) {
-        try {
-            em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult();
-        } catch (NoResultException e) {
-            em.createNativeQuery(
-                            "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                    + "VALUES (:name, :name, 99, 0, NOW(), NOW())")
-                    .setParameter("name", roleName)
-                    .executeUpdate();
-        }
+        RoleSeedSupport.ensureCanonical(em, roleName);
     }
 
     private Long insertUser(String email) {

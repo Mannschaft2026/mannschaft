@@ -296,11 +296,13 @@ class AuthzTxFacadeRegistryArchTest {
     void 登録表の件数() {
         Map<String, Long> byWave = ENTRIES.stream()
                 .collect(Collectors.groupingBy(Entry::wave, TreeMap::new, Collectors.counting()));
-        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "W1", 9L, "W2", 16L, "W3a", 1L, "W3b", 2L, "W4", 6L, "W5", 11L, "W5周辺", 1L, "W6a", 17L, "W7", 4L,
-                "W8", 22L)); // W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat
-        assertThat(ENTRIES).hasSize(89); // CMP-261010-1432 枠間移動で +1 / CMP-261105-1507 chat で +22
-        assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(89);
+        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+                Map.entry("2114", 1L), Map.entry("W1", 9L), Map.entry("W2", 16L), Map.entry("W3a", 1L),
+                Map.entry("W3b", 2L), Map.entry("W4", 6L), Map.entry("W5", 11L), Map.entry("W5周辺", 1L),
+                Map.entry("W6a", 17L), Map.entry("W7", 4L), Map.entry("W8", 22L)));
+        // 2114: CMP-261125-2114 勤務制約の個別 upsert で +1 / W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat
+        assertThat(ENTRIES).hasSize(90); // CMP-261010-1432 枠間移動で +1 / CMP-261105-1507 chat で +22
+        assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(90);
         assertThat(ENTRIES.stream().map(Entry::facade).collect(Collectors.toSet()))
                 .as("登録表の Facade と tx 本体の表の Facade が一致する").isEqualTo(TX_BODIES.keySet());
     }

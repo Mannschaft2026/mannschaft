@@ -14,6 +14,8 @@ import com.mannschaft.app.committee.repository.CommitteeRepository;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.token.IssuedToken;
+import com.mannschaft.app.common.token.SecretTokenVault;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +24,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * 委員会招集サービス。招集状の送付・一覧・取り下げ・受諾・辞退を提供する。
@@ -38,6 +38,8 @@ public class CommitteeInvitationService {
     private final CommitteeInvitationRepository committeeInvitationRepository;
     private final AccessControlService accessControlService;
     private final UserRowLockService userRowLockService;
+    /** トークンの発行（乱数）と照合用ハッシュ。平文は保存しない（CMP-260826-1457 W2）。 */
+    private final SecretTokenVault vault;
 
     /** 委員会メンバーシップ・委員会内ロール・招集状の宛先本人性に基づく認可判定の一元窓口。 */
     private final CommitteeAccessGuard committeeAccessGuard;
@@ -50,11 +52,19 @@ public class CommitteeInvitationService {
     // ========================================
 
     /**
+     * 発行した招集状と、その平文トークン。平文は DB に残らないため、発行応答の1回だけ呼び出し元へ渡す。
+     *
+     * @param inviteToken 平文の招集トークン（Base64URL 43字）。永続化・ログ出力をしてはならない
+     * @param invitation  保存した招集状（ハッシュだけを持つ）
+     */
+    public record IssuedInvitation(String inviteToken, CommitteeInvitationEntity invitation) {}
+
+    /**
      * 招集状を送付する結果を表す record。
      * スキップ件数をメタデータとして保持する。
      */
     public record SendInvitationsResult(
-            List<CommitteeInvitationEntity> sentInvitations,
+            List<IssuedInvitation> sentInvitations,
             int skippedExistingMemberCount,
             int skippedExistingInvitationCount
     ) {}
@@ -65,7 +75,6 @@ public class CommitteeInvitationService {
      * 既に現役メンバーの場合はスキップ（エラーにせずメタ情報で報告）。
      * 既に未解決招集がある場合はスキップ（重複招集を防ぐ）。
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
     @Transactional
     public SendInvitationsResult sendInvitations(Long committeeId, CommitteeInviteRequest request,
                                                   Long currentUserId) {
@@ -85,7 +94,7 @@ public class CommitteeInvitationService {
                 : DEFAULT_EXPIRES_IN_DAYS;
         LocalDateTime expiresAt = LocalDateTime.now().plusDays(expiresInDays);
 
-        List<CommitteeInvitationEntity> sentInvitations = new ArrayList<>();
+        List<IssuedInvitation> sentInvitations = new ArrayList<>();
         int skippedExistingMemberCount = 0;
         int skippedExistingInvitationCount = 0;
 
@@ -103,18 +112,19 @@ public class CommitteeInvitationService {
                 continue;
             }
 
-            // 招集状を作成して保存
+            // 招集状を作成して保存（DB にはハッシュだけを置き、平文は発行応答の1回だけ返す）
+            IssuedToken issued = vault.issueBase64Url();
             CommitteeInvitationEntity invitation = CommitteeInvitationEntity.builder()
                     .committeeId(committeeId)
                     .inviteeUserId(inviteeUserId)
                     .proposedRole(proposedRole)
-                    .inviteToken(UUID.randomUUID().toString())
+                    .inviteTokenHash(issued.hash())
                     .invitedBy(currentUserId)
                     .message(request.getMessage())
                     .expiresAt(expiresAt)
                     .build();
 
-            sentInvitations.add(committeeInvitationRepository.save(invitation));
+            sentInvitations.add(new IssuedInvitation(issued.plaintext(), committeeInvitationRepository.save(invitation)));
         }
 
         return new SendInvitationsResult(sentInvitations, skippedExistingMemberCount, skippedExistingInvitationCount);
@@ -180,7 +190,8 @@ public class CommitteeInvitationService {
         // 組織脱退は user → committee → member → invitation の順にロックするため、同じ順序に揃える。
         userRowLockService.lockAll(currentUserId);
 
-        CommitteeInvitationEntity initialInvitation = committeeInvitationRepository.findByInviteToken(inviteToken)
+        CommitteeInvitationEntity initialInvitation = committeeInvitationRepository
+                .findByInviteTokenHash(vault.hash(inviteToken))
                 .orElseThrow(() -> new BusinessException(CommitteeErrorCode.INVITATION_TOKEN_INVALID));
 
         CommitteeEntity committee = committeeRepository.findByIdForUpdate(initialInvitation.getCommitteeId())
@@ -253,7 +264,8 @@ public class CommitteeInvitationService {
      */
     @Transactional
     public void declineInvitation(String inviteToken, Long currentUserId) {
-        CommitteeInvitationEntity invitation = committeeInvitationRepository.findByInviteToken(inviteToken)
+        CommitteeInvitationEntity invitation = committeeInvitationRepository
+                .findByInviteTokenHash(vault.hash(inviteToken))
                 .orElseThrow(() -> new BusinessException(CommitteeErrorCode.INVITATION_TOKEN_INVALID));
 
         // 認可チェック: 被招集者本人のみ辞退できる（冪等応答を返す分岐よりも前に通す）

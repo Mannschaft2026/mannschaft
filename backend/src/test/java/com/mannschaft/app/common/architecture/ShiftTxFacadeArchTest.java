@@ -41,6 +41,8 @@ class ShiftTxFacadeArchTest {
     private static final String PKG = "com.mannschaft.app.shift";
     private static final String ACCESS_CONTROL = "com.mannschaft.app.common.AccessControlService";
     private static final String GATE = "com.mannschaft.app.common.ScopeConcealingAccessGate";
+    /** シフト管理の認可クラス（CMP-261125-2114）。管理系の Facade は共通 Gate の代わりにこちらへ届く。 */
+    private static final String SHIFT_GATE = PKG + ".service.ShiftManageAccessGate";
 
     /** tx 本体 → ファサード → Controller の対応（移した組だけ）。 */
     private static final List<String[]> TRIPLES = List.of(
@@ -87,9 +89,14 @@ class ShiftTxFacadeArchTest {
         // （W2 の 3 Facade は従来どおり両方、ポジションは一覧・作成が ACL・更新・削除が Gate）。
         classes().that(anyOf(facades()))
                 .should().dependOnClassesThat().haveFullyQualifiedName(GATE)
+                .orShould().dependOnClassesThat().haveFullyQualifiedName(SHIFT_GATE)
                 .check(classesUnderTest);
         classes().that(anyOf(Arrays.stream(facades())
-                        .filter(f -> !f.equals(PKG + ".service.ShiftRequestFacade")).toArray(String[]::new)))
+                        .filter(f -> !f.equals(PKG + ".service.ShiftRequestFacade")
+                                // 自動割当・変更依頼は ShiftManageAccessGate だけで認可する（CMP-261125-2114）
+                                && !f.equals(PKG + ".service.ShiftAutoAssignFacade")
+                                && !f.equals(PKG + ".service.ShiftChangeRequestFacade"))
+                        .toArray(String[]::new)))
                 .should().dependOnClassesThat().haveFullyQualifiedName(ACCESS_CONTROL)
                 .check(classesUnderTest);
     }

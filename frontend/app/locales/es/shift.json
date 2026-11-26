@@ -469,7 +469,6 @@
       "loadFailed": "No se pudieron cargar las tarifas por hora",
       "historyLoadFailed": "No se pudo cargar el historial de tarifas por hora",
       "permissionLoadFailed": "No se pudieron cargar los permisos",
-      "forbidden": "No tienes permiso para ver esta página",
       "noMembers": "No hay miembros",
       "dialogTitle": "Tarifa por hora de {name}",
       "effectiveFromHint": "Se aplica a partir de la fecha indicada. Los ajustes anteriores se conservan como historial. Si se vuelve a registrar con la misma fecha, se corrige el ajuste de ese día.",

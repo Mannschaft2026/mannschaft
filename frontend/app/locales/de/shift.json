@@ -469,7 +469,6 @@
       "loadFailed": "Die Stundensätze konnten nicht geladen werden",
       "historyLoadFailed": "Der Stundensatz-Verlauf konnte nicht geladen werden",
       "permissionLoadFailed": "Die Berechtigungen konnten nicht geladen werden",
-      "forbidden": "Sie haben keine Berechtigung, diese Seite anzuzeigen",
       "noMembers": "Keine Mitglieder",
       "dialogTitle": "Stundensatz für {name}",
       "effectiveFromHint": "Gilt ab dem angegebenen Datum. Frühere Einstellungen bleiben als Verlauf erhalten. Wird erneut mit demselben Datum gespeichert, wird die Einstellung dieses Tages korrigiert.",

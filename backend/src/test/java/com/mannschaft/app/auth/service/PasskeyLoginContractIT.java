@@ -332,7 +332,7 @@ class PasskeyLoginContractIT extends AbstractMySqlIntegrationTest {
     @Test
     void AC4_管理者ロールを実DBからトークンへ反映する() throws Exception {
         RoleEntity admin = roles.findByName("SYSTEM_ADMIN").orElseGet(() -> roles.save(RoleEntity.builder()
-                .name("SYSTEM_ADMIN").displayName("システム管理者").priority(100).isSystem(true).build()));
+                .name("SYSTEM_ADMIN").displayName("システム管理者").priority(com.mannschaft.app.role.authorization.RolePriority.priority("SYSTEM_ADMIN")).isSystem(true).build()));
         userRoles.save(UserRoleEntity.builder().userId(user.getId()).roleId(admin.getId()).build());
 
         MvcResult result = complete(assertion(begin(user), 5, 1, 1));
@@ -344,7 +344,7 @@ class PasskeyLoginContractIT extends AbstractMySqlIntegrationTest {
     @Test
     void AC4_AC11_ARCHIVED管理者は復帰後の管理者ロールでトークンを発行する() throws Exception {
         RoleEntity admin = roles.findByName("SYSTEM_ADMIN").orElseGet(() -> roles.save(RoleEntity.builder()
-                .name("SYSTEM_ADMIN").displayName("システム管理者").priority(100).isSystem(true).build()));
+                .name("SYSTEM_ADMIN").displayName("システム管理者").priority(com.mannschaft.app.role.authorization.RolePriority.priority("SYSTEM_ADMIN")).isSystem(true).build()));
         userRoles.save(UserRoleEntity.builder().userId(user.getId()).roleId(admin.getId()).build());
         user.archive();
         users.save(user);

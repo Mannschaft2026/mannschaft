@@ -122,10 +122,10 @@ test('INSIGHT-I1-DE: 360pxの長い翻訳と200%文字でもPDF操作を読め�
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
 })
 
-test('INSIGHT-CONTACT: 360pxで発行・コピー・無効化と発行フォームが44pxある', async ({ page }) => {
+test('INSIGHT-CONTACT: 360pxで無効化と発行フォームが44pxある', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 900 })
   await prepare(page)
-  await page.route('**/api/v1/contact-invite-tokens', route => route.fulfill({ json: { data: [{ id: 77, token: 'contact-ui', label: '操作検証', inviteUrl: 'https://example.com/contact-invite/contact-ui', qrCodeUrl: 'https://example.com/contact-invite/contact-ui/qr', maxUses: 5, usedCount: 0, expiresAt: null, createdAt: '2026-01-01T00:00:00' }] } }))
+  await page.route('**/api/v1/contact-invite-tokens', route => route.fulfill({ json: { data: [{ id: 77, label: '操作検証', maxUses: 5, usedCount: 0, expiresAt: null, createdAt: '2026-01-01T00:00:00' }] } }))
   await page.goto('/settings/contact-invite-tokens', { waitUntil: 'domcontentloaded' })
   await waitForHydratedShell(page)
   const open = page.getByRole('button', { name: '新しいURLを発行', exact: true })
@@ -135,7 +135,7 @@ test('INSIGHT-CONTACT: 360pxで発行・コピー・無効化と発行フォー�
   const cancel = page.getByRole('button', { name: 'キャンセル', exact: true })
   // Selectのcomboboxは内側span。クリックを受ける外枠divを測る。
   const selects = (await page.getByRole('combobox').all()).map(combobox => combobox.locator('xpath=..'))
-  for (const target of [open, page.locator('button:has(.pi-copy)'), page.locator('button:has(.pi-trash)'), label, ...selects, page.getByRole('button', { name: '発行', exact: true }), cancel]) {
+  for (const target of [open, page.locator('button:has(.pi-trash)'), label, ...selects, page.getByRole('button', { name: '発行', exact: true }), cancel]) {
     await expect(target).toBeVisible()
     const box = (await target.boundingBox())!
     expect.soft(box.width).toBeGreaterThanOrEqual(44)

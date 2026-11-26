@@ -469,7 +469,6 @@
       "loadFailed": "時給の取得に失敗しました",
       "historyLoadFailed": "時給履歴の取得に失敗しました",
       "permissionLoadFailed": "権限の取得に失敗しました",
-      "forbidden": "この画面を表示する権限がありません",
       "noMembers": "メンバーがいません",
       "dialogTitle": "{name} の時給設定",
       "effectiveFromHint": "指定した日から適用されます。過去の設定は履歴として残ります。同じ日付で登録し直すと、その日の設定を訂正します。",

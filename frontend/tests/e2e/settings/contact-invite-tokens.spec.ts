@@ -5,10 +5,7 @@ const MOCK_TOKENS = {
   data: [
     {
       id: 1,
-      token: '550e8400-e29b-41d4-a716-446655440000',
       label: 'SNS用',
-      inviteUrl: 'http://localhost:3000/contact-invite/550e8400-e29b-41d4-a716-446655440000',
-      qrCodeUrl: '/api/v1/contact-invite-tokens/550e8400-e29b-41d4-a716-446655440000/qr',
       maxUses: 10,
       usedCount: 2,
       expiresAt: '2026-12-31T00:00:00Z',
@@ -20,10 +17,9 @@ const MOCK_TOKENS = {
 const MOCK_NEW_TOKEN = {
   data: {
     id: 2,
-    token: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    token: 'aaaaaaaabbbbccccddddeeeeeeeeeeeeffffffffggg',
     label: 'テスト用',
-    inviteUrl: 'http://localhost:3000/contact-invite/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-    qrCodeUrl: '/api/v1/contact-invite-tokens/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/qr',
+    inviteUrl: 'http://localhost:3000/contact-invite/aaaaaaaabbbbccccddddeeeeeeeeeeeeffffffffggg',
     maxUses: 1,
     usedCount: 0,
     expiresAt: '2026-04-11T00:00:00Z',
@@ -70,6 +66,8 @@ test.describe('SET-CNT-010〜014: 招待トークン管理', () => {
     })
     await expect(page.getByText('SNS用')).toBeVisible({ timeout: 5_000 })
     await expect(page.getByText('2/10回')).toBeVisible()
+    // 一覧には招待URL・QR・平文を出さない（発行直後のダイアログだけ）
+    await expect(page.getByText('/contact-invite/')).toHaveCount(0)
   })
 
   test('SET-CNT-012: 新しいURLを発行フォームが開閉できる', async ({ page }) => {
@@ -121,6 +119,10 @@ test.describe('SET-CNT-010〜014: 招待トークン管理', () => {
     await expect(async () => {
       expect(postCalled).toBe(true)
     }).toPass({ timeout: 5_000 })
+    // 発行直後だけ平文のリンクを見せる
+    await expect(page.getByTestId('secret-issued-dialog-url')).toContainText(
+      '/contact-invite/aaaaaaaabbbbccccddddeeeeeeeeeeeeffffffffggg',
+    )
   })
 
   test('SET-CNT-014: 無効化ボタンでDELETEリクエストが送信される', async ({ page }) => {
