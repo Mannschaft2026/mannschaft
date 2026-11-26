@@ -1,4 +1,8 @@
-import type { ApplicationResponse } from '~/types/parking'
+import type {
+  ApplicationResponse,
+  ParkingApplicationStatus,
+  ParkingPageMeta,
+} from '~/types/parking'
 import { buildBase } from './useParkingApiBase'
 
 export function useParkingApplicationsApi() {
@@ -7,7 +11,7 @@ export function useParkingApplicationsApi() {
   async function getApplications(
     scopeType: 'team' | 'organization',
     scopeId: string,
-    params?: Record<string, unknown>,
+    params?: { status?: ParkingApplicationStatus; page?: number; size?: number },
   ) {
     const q = new URLSearchParams()
     if (params)
@@ -15,7 +19,7 @@ export function useParkingApplicationsApi() {
         if (v != null) q.set(k, String(v))
       }
     const qs = q.toString()
-    return api<{ data: ApplicationResponse[] }>(
+    return api<{ data: ApplicationResponse[]; meta?: ParkingPageMeta }>(
       `${buildBase(scopeType, scopeId)}/parking/applications${qs ? `?${qs}` : ''}`,
     )
   }
@@ -23,7 +27,7 @@ export function useParkingApplicationsApi() {
   async function createApplication(
     scopeType: 'team' | 'organization',
     scopeId: string,
-    body: Record<string, unknown>,
+    body: { spaceId: number; vehicleId: number; message?: string },
   ) {
     return api<{ data: ApplicationResponse }>(
       `${buildBase(scopeType, scopeId)}/parking/applications`,
