@@ -21,6 +21,7 @@ import com.mannschaft.app.schedule.repository.ScheduleAttendanceRepository;
 import com.mannschaft.app.schedule.repository.ScheduleRepository;
 import com.mannschaft.app.schedule.repository.ScheduleScheduledTaskRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.survey.SurveyStatus;
 import com.mannschaft.app.survey.entity.SurveyEntity;
 import com.mannschaft.app.survey.repository.SurveyRepository;
@@ -410,25 +411,9 @@ class ScheduleMaterializeIntegrationTest extends AbstractMySqlIntegrationTest {
     }
 
     private void insertRoleIfAbsent(String name, String displayName, int priority, boolean isSystem) {
-        // 冪等化: roles はグローバル参照テーブルのため、既存なら再利用し二重INSERTしない
-        // （同一 name の重複INSERTは roles の UNIQUE 制約違反になる。INSERT IGNORE は
-        // 重複キー以外にもデータ切り詰め・NOT NULL違反等の異常を警告に格下げして黙って
-        // 通してしまうため使用禁止。CI shard 再編成で同居テストが変わり得るため
-        // 事前に SELECT で存在確認する）。
-        Number existingRoleCount = (Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
-                .setParameter("name", name)
-                .getSingleResult();
-        if (existingRoleCount.longValue() > 0) {
-            return;
-        }
-        em.createNativeQuery(
-                        "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :dn, :priority, :sys, NOW(), NOW())")
-                .setParameter("name", name)
-                .setParameter("dn", displayName)
-                .setParameter("priority", priority)
-                .setParameter("sys", isSystem ? 1 : 0)
-                .executeUpdate();
+        // 引数の priority / displayName は使わない。seed と同じ正準値で upsert し、既存の誤った行も直す
+        // （CMP-261126-0906）。
+        RoleSeedSupport.ensureCanonical(em, name);
     }
 
     private Long insertUser(String email, String lastName, String firstName) {

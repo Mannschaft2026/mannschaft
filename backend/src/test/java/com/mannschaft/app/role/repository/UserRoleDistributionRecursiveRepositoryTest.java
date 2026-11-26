@@ -1,5 +1,6 @@
 package com.mannschaft.app.role.repository;
 
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -119,7 +120,7 @@ class UserRoleDistributionRecursiveRepositoryTest extends AbstractMySqlIntegrati
         RoleEntity role = RoleEntity.builder()
                 .name("MEMBER")
                 .displayName("メンバー")
-                .priority(50)
+                .priority(RolePriority.priority("MEMBER"))
                 .isSystem(true)
                 .build();
         em.persist(role);

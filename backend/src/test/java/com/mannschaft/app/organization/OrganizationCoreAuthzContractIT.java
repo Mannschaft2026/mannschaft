@@ -83,8 +83,8 @@ class OrganizationCoreAuthzContractIT extends AbstractMySqlIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        insertRoleIfAbsent("ADMIN", "管理者", 2);
-        insertRoleIfAbsent("MEMBER", "メンバー", 4);
+        insertRoleIfAbsent("ADMIN");
+        insertRoleIfAbsent("MEMBER");
 
         orgAId = insertOrganization("ORGCORE認可契約組織A", "PUBLIC");
         orgASlug = selectSlug(orgAId);
@@ -299,7 +299,7 @@ class OrganizationCoreAuthzContractIT extends AbstractMySqlIntegrationTest {
     }
 
     /** roles を name で引く idempotent seed（グローバル参照テーブルのため deleteAll しない）。 */
-    private void insertRoleIfAbsent(String name, String displayName, int priority) {
+    private void insertRoleIfAbsent(String name) {
         // 既存行の誤った priority も正す（seed と同じ値で upsert）
         RoleSeedSupport.ensureCanonical(em, name);
     }

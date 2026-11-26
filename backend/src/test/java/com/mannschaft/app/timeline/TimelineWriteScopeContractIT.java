@@ -221,13 +221,7 @@ class TimelineWriteScopeContractIT extends AbstractMySqlIntegrationTest {
         if (existingRoleCount.longValue() > 0) {
             return;
         }
-        em.createNativeQuery(
-                        "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :dn, :priority, 1, NOW(), NOW())")
-                .setParameter("name", name)
-                .setParameter("dn", name)
-                .setParameter("priority", RoleSeedSupport.priorityOf(name, 100))
-                .executeUpdate();
+        RoleSeedSupport.ensureCanonical(em, name);
         ownRoles.add(((Number) em.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue());
     }
 

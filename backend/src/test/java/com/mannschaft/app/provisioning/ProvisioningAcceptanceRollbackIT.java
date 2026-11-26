@@ -5,6 +5,7 @@ import com.mannschaft.app.provisioning.service.ProvisioningAcceptanceService;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
@@ -60,10 +61,10 @@ class ProvisioningAcceptanceRollbackIT extends AbstractMySqlIntegrationTest {
     @BeforeEach
     void setUp() {
         transactionTemplate.executeWithoutResult(tx -> {
-            insertRoleIfAbsent("SYSTEM_ADMIN", 1);
-            insertRoleIfAbsent("ADMIN", 2);
+            insertRoleIfAbsent("SYSTEM_ADMIN");
+            insertRoleIfAbsent("ADMIN");
             // 本番 seed（V2.014）と同じ priority で入れる。roles は singleton container で全 IT が共有する参照表で、コミットした行は後続の IT にも残る（違う priority を残すと MeControllerMembershipIntegrationTest 等の前提を壊す）
-            insertRoleIfAbsent("MEMBER", 4);
+            insertRoleIfAbsent("MEMBER");
         });
         adminRoleId = roleRepository.findByName("ADMIN").orElseThrow().getId();
 
@@ -146,16 +147,8 @@ class ProvisioningAcceptanceRollbackIT extends AbstractMySqlIntegrationTest {
         assertThat(auditCount).as("承諾監査ログはロールバックされ記録されない").isZero();
     }
 
-    private void insertRoleIfAbsent(String name, int priority) {
-        boolean exists = ((Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
-                .setParameter("name", name).getSingleResult()).longValue() > 0;
-        if (exists) {
-            return;
-        }
-        em.createNativeQuery(
-                        "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :name, :priority, 0, NOW(), NOW())")
-                .setParameter("name", name).setParameter("priority", priority).executeUpdate();
+    private void insertRoleIfAbsent(String name) {
+        RoleSeedSupport.ensureCanonical(em, name);
     }
 
     private Long insertUser(String email) {

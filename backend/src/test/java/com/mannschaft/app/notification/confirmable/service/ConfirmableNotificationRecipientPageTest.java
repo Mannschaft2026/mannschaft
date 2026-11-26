@@ -12,6 +12,7 @@ import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotific
 import com.mannschaft.app.notification.confirmable.support.ConfirmableFanoutFixture;
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
@@ -198,22 +199,17 @@ class ConfirmableNotificationRecipientPageTest extends AbstractMySqlIntegrationT
     }
 
     private void seedRoles() {
-        insertRole("SYSTEM_ADMIN", 1);
-        insertRole("ADMIN", 2);
-        insertRole("DEPUTY_ADMIN", 3);
-        insertRole("MEMBER", 4);
-        insertRole("SUPPORTER", 5);
-        insertRole("GUEST", 6);
+        insertRole("SYSTEM_ADMIN");
+        insertRole("ADMIN");
+        insertRole("DEPUTY_ADMIN");
+        insertRole("MEMBER");
+        insertRole("SUPPORTER");
+        insertRole("GUEST");
         em.flush();
     }
 
-    private void insertRole(String name, int priority) {
-        em.createNativeQuery(
-                        "INSERT IGNORE INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :name, :priority, 1, NOW(), NOW())")
-                .setParameter("name", name)
-                .setParameter("priority", priority)
-                .executeUpdate();
+    private void insertRole(String name) {
+        RoleSeedSupport.ensureCanonical(em, name);
     }
 
     private Long insertUser() {

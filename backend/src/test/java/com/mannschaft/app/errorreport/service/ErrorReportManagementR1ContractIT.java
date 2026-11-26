@@ -1,6 +1,7 @@
 package com.mannschaft.app.errorreport.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.errorreport.ErrorReportStatus;
 import com.mannschaft.app.errorreport.dto.ErrorReportBulkUpdateRequest;
 import com.mannschaft.app.errorreport.dto.ErrorReportUpdateRequest;
@@ -68,7 +69,7 @@ class ErrorReportManagementR1ContractIT extends ErrorReportR1TestSupport {
         var role = roles.findByName("SYSTEM_ADMIN").orElse(null);
         if (role == null) {
             role = roles.saveAndFlush(RoleEntity.builder().name("SYSTEM_ADMIN").displayName("システム管理者")
-                    .priority(0).isSystem(true).build());
+                    .priority(RolePriority.priority("SYSTEM_ADMIN")).isSystem(true).build());
             createdRoleId = role.getId();
         }
         grantId = userRoles.saveAndFlush(UserRoleEntity.builder().userId(adminId).roleId(role.getId()).build()).getId();
