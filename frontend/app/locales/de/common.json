@@ -631,11 +631,11 @@
     "draft": {
       "list_title": "Entwürfe",
       "count": "{count}/{limit}",
-      "empty": "Noch keine Entwürfe",
+      "empty": "Noch keine Entwürfe. Ihre Eingaben werden automatisch als Entwurf gespeichert, es bleiben bis zu 10 erhalten.",
       "new": "Neu schreiben",
       "untitled": "(Ohne Titel)",
       "delete": "Löschen",
-      "delete_confirm": "Diesen Entwurf löschen? Das lässt sich nicht rückgängig machen.",
+      "delete_confirm": "Entwurf „{title}“ löschen? Das lässt sich nicht rückgängig machen.",
       "delete_header": "Entwurf löschen",
       "limit_reached": "Es sind höchstens {limit} Entwürfe möglich, daher kann dieser nicht automatisch gespeichert werden. Lösche einen alten Entwurf (deine Eingabe bleibt erhalten).",
       "conflict": "Dieser Entwurf wurde auf einem anderen Bildschirm geändert. Die automatische Speicherung ist pausiert.",
@@ -646,7 +646,11 @@
       "unsaved_confirm": "Es gibt Änderungen, die nicht gespeichert wurden. Verwerfen und wechseln?",
       "discard_and_switch": "Verwerfen und wechseln",
       "unsaved_leave_confirm": "Es gibt Änderungen, die nicht gespeichert wurden. Verwerfen und diese Seite verlassen?",
-      "discard_and_leave": "Verwerfen und verlassen"
+      "discard_and_leave": "Verwerfen und verlassen",
+      "status_saving": "Wird gespeichert…",
+      "status_saved": "Gespeichert",
+      "status_error": "Speichern nicht möglich. Es wird automatisch erneut versucht, sobald die Verbindung wieder steht.",
+      "save_failed_notice": "Der Entwurf konnte nicht gespeichert werden. Es wird automatisch erneut versucht, sobald die Verbindung wieder steht"
     },
     "delivery_stopped": "Zustellung gestoppt",
     "templates": "Vorlagen verwalten",
@@ -763,7 +767,9 @@
     },
     "help": {
       "title": "Bestätigungsbenachrichtigungen",
-      "body": "Wählen Sie eine Empfängergruppe oder den aktuellen Bereich. Die Zustellung läuft asynchron; verfolgen Sie sie im Verlauf."
+      "body": "Wählen Sie eine Empfängergruppe oder den aktuellen Bereich. Die Zustellung läuft asynchron; verfolgen Sie sie im Verlauf.",
+      "draft_title": "Zu Entwürfen",
+      "draft_body": "Ihre Eingaben werden automatisch als Entwurf gespeichert (bis zu 10). Sie können nach dem Schließen der Seite oder auf einem anderen Gerät weiterschreiben. Entwürfe werden 90 Tage nach der letzten Änderung automatisch gelöscht, und ein Entwurf verschwindet, sobald Sie ihn senden."
     },
     "guide": {
       "quickConfirm": {

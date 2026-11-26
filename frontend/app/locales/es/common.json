@@ -631,11 +631,11 @@
     "draft": {
       "list_title": "Borradores",
       "count": "{count}/{limit}",
-      "empty": "Aún no hay borradores",
+      "empty": "Aún no hay borradores. Lo que escriba se guarda automáticamente como borrador y puede conservar hasta 10.",
       "new": "Escribir uno nuevo",
       "untitled": "(Sin título)",
       "delete": "Eliminar",
-      "delete_confirm": "¿Eliminar este borrador? Esta acción no se puede deshacer.",
+      "delete_confirm": "¿Eliminar el borrador \"{title}\"? Esta acción no se puede deshacer.",
       "delete_header": "Eliminar borrador",
       "limit_reached": "Se admiten hasta {limit} borradores, así que este no se puede guardar automáticamente. Elimina uno antiguo para continuar (lo que escribiste se conserva).",
       "conflict": "Este borrador se actualizó en otra pantalla. El guardado automático está en pausa.",
@@ -646,7 +646,11 @@
       "unsaved_confirm": "Hay cambios que no se han guardado. ¿Descartarlos y cambiar?",
       "discard_and_switch": "Descartar y cambiar",
       "unsaved_leave_confirm": "Hay cambios que no se han guardado. ¿Descartarlos y salir de esta página?",
-      "discard_and_leave": "Descartar y salir"
+      "discard_and_leave": "Descartar y salir",
+      "status_saving": "Guardando…",
+      "status_saved": "Guardado",
+      "status_error": "No se pudo guardar. Se reintentará automáticamente cuando vuelva la conexión.",
+      "save_failed_notice": "No se pudo guardar el borrador. Se reintentará automáticamente cuando vuelva la conexión"
     },
     "delivery_stopped": "Entrega detenida",
     "templates": "Administrar plantillas",
@@ -763,7 +767,9 @@
     },
     "help": {
       "title": "Notificaciones de confirmación",
-      "body": "Elija un grupo de destinatarios o el ámbito actual. La entrega es asíncrona; consulte el historial."
+      "body": "Elija un grupo de destinatarios o el ámbito actual. La entrega es asíncrona; consulte el historial.",
+      "draft_title": "Sobre los borradores",
+      "draft_body": "Lo que escriba se guarda automáticamente como borrador (hasta 10). Puede continuar tras cerrar la página o desde otro dispositivo. Los borradores se eliminan automáticamente 90 días después de su última actualización, y un borrador desaparece al enviarlo."
     },
     "guide": {
       "quickConfirm": {

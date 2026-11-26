@@ -30,6 +30,7 @@ mockNuxtImport('useConfirmableNotificationApi', () => () => ({
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError }))
 mockNuxtImport('useConfirm', () => () => ({ require: mocks.confirmRequire, close: vi.fn() }))
+mockNuxtImport('useToast', () => () => ({ add: vi.fn() }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 
 type ConfirmOptions = { accept?: () => unknown, reject?: () => unknown, onHide?: () => unknown, message?: string }

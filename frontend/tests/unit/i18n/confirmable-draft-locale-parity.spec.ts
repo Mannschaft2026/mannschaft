@@ -29,6 +29,10 @@ const REQUIRED_KEYS = [
   'discard_and_switch', // 同（承認ボタン）
   'unsaved_leave_confirm', // 保存できていない変更があるまま画面を離れるときの確認文
   'discard_and_leave', // 同（承認ボタン）
+  'status_saving', // 保存状態: 保存中
+  'status_saved', // 保存状態: 保存済み（直後に時刻を置く）
+  'status_error', // 保存状態: 保存できませんでした（自動で再試行）
+  'save_failed_notice', // 通信断での初回通知（専用文言）
 ] as const
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -71,6 +75,31 @@ describe('確認通知の下書きの文言（CMP-261126-1558 FE-AC10）', () =>
       const pattern = lang === 'zh' ? KANA : KANA_OR_KANJI
       const residue = Object.entries(section).filter(([, v]) => typeof v === 'string' && pattern.test(v)).map(([k]) => k)
       expect(residue).toEqual([])
+    })
+  }
+
+  it('削除確認文はタイトルを差し込む {title} を持つ', () => {
+    for (const lang of LANGS) expect(String(draftSection(lang).delete_confirm ?? ''), lang).toContain('{title}')
+  })
+
+  it('空状態の文言は上限の10を含む', () => {
+    for (const lang of LANGS) expect(String(draftSection(lang).empty ?? ''), lang).toContain('10')
+  })
+
+  for (const lang of LANGS) {
+    it(`使い方（confirmable.help）に下書きの説明がある: ${lang}`, () => {
+      const confirmable = readCommon(lang).confirmable as { help?: Record<string, unknown> }
+      const help = confirmable.help ?? {}
+      for (const key of ['draft_title', 'draft_body']) {
+        expect(typeof help[key] === 'string' && (help[key] as string).trim() !== '', `${lang} help.${key}`).toBe(true)
+      }
+      // 自動保存・最大10件・90日で自動削除が読み取れる
+      expect(String(help.draft_body)).toContain('10')
+      expect(String(help.draft_body)).toContain('90')
+      if (lang !== 'ja') {
+        const pattern = lang === 'zh' ? KANA : KANA_OR_KANJI
+        expect(String(help.draft_title) + String(help.draft_body)).not.toMatch(pattern)
+      }
     })
   }
 

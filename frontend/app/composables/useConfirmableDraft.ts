@@ -53,12 +53,17 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   const { handleApiError } = useErrorHandler()
   const errorReport = useErrorReport()
   const confirm = useConfirm()
+  const toast = useToast()
   const { t } = useI18n()
 
   const drafts = ref<ConfirmableNotificationDraftSummary[]>([])
   const currentId = ref<string | null>(null)
   const version = ref(0)
   const conflict = ref(false)
+  /** 自動保存の状態（フォーム付近の表示用）。idle は新規・読み込み直後など、表示しない状態 */
+  const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  /** 直近の自動保存が成功した時刻 */
+  const savedAt = ref<Date | null>(null)
 
   /** 一覧が上限に達していて、新しい下書きを作れない（開いている下書きの更新は可能） */
   const limitReached = computed(() => currentId.value === null && drafts.value.length >= CONFIRMABLE_DRAFT_LIMIT)
@@ -94,6 +99,21 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     const status = errorStatus(error)
     if (status !== undefined && status >= 500) errorReport.captureQuiet(error, { context })
     else handleApiError(error, context)
+  }
+
+  /**
+   * 自動保存の失敗（通信断・5xx）の初回通知。汎用エラーではなく「自動で再試行する」ことを伝える専用文言にする。
+   * 5xx は useApi の共通 onResponseError が既に汎用トーストを出すため、トーストを重ねず記録だけ残す
+   * （専用文言はフォーム付近の保存状態表示に出る）。通信断（status 不明）は API 層が拾わないのでここで出す。
+   * 4xx は再試行しても直らないので共通処理（handleApiError）に任せる。
+   */
+  function reportSaveFailure(error: unknown) {
+    if (errorStatus(error) === undefined) {
+      toast.add({ severity: 'warn', summary: t('confirmable.draft.save_failed_notice'), life: 6000 })
+      errorReport.captureQuiet(error, { context: 'confirmable draft save' })
+    } else {
+      reportError(error, 'confirmable draft save')
+    }
   }
 
   function clearTimer() {
@@ -134,6 +154,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     version.value = 0
     conflict.value = false
     failureReported = false
+    saveStatus.value = 'idle'
     baseline = signature.value
     blankSignature = baseline
   }
@@ -147,6 +168,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     currentId.value = null
     version.value = 0
     conflict.value = false
+    saveStatus.value = 'idle'
     baseline = ''
     await reloadList()
     // 入力は残っているので、新しい下書きとして保存し直す（次の入力を待たない）
@@ -163,20 +185,24 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     const draftId = currentId.value
     try {
       if (draftId) {
+        saveStatus.value = 'saving'
         const response = await api.updateDraft(scopeType, scopeId, draftId, { ...payload, baseVersion: version.value })
         if (gen !== generation) return
         version.value = response.data.version ?? version.value
         baseline = sig
         conflict.value = false
         failureReported = false
+        markSaved()
       } else {
         if (drafts.value.length >= CONFIRMABLE_DRAFT_LIMIT) return
+        saveStatus.value = 'saving'
         const response = await api.createDraft(scopeType, scopeId, payload)
         if (gen !== generation) return
         currentId.value = response.data.id ?? null
         version.value = response.data.version ?? 0
         baseline = sig
         failureReported = false
+        markSaved()
       }
       await reloadList()
     } catch (error) {
@@ -188,17 +214,25 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       } else if (draftId && (code === ERROR_CONFLICT || (status === 409 && code !== ERROR_LIMIT))) {
         clearTimer()
         conflict.value = true
+        saveStatus.value = 'idle'
       } else if (!draftId && code === ERROR_LIMIT) {
+        saveStatus.value = 'idle'
         await reloadList()
       } else {
+        saveStatus.value = 'error'
         // 通信断・5xx: 一度だけ知らせ、入力が止まっていても保存できるまで静かに再試行する
         if (!failureReported) {
           failureReported = true
-          reportError(error, 'confirmable draft save')
+          reportSaveFailure(error)
         }
         scheduleRetry()
       }
     }
+  }
+
+  function markSaved() {
+    saveStatus.value = 'saved'
+    savedAt.value = new Date()
   }
 
   function scheduleRetry() {
@@ -268,6 +302,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       version.value = response.data.version ?? 0
       conflict.value = false
       failureReported = false
+      saveStatus.value = 'idle'
       baseline = signature.value
     } catch (error) {
       if (errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND) {
@@ -302,9 +337,12 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   }
 
   function requestDelete(draftId: string) {
+    // どの下書きを消すかを確認文に出す（一覧の行と取り違えないため）。タイトルが空なら「（無題）」
+    const target = drafts.value.find(draft => draft.id === draftId)
+    const title = target?.title?.trim() || t('confirmable.draft.untitled')
     confirm.require({
       header: t('confirmable.draft.delete_header'),
-      message: t('confirmable.draft.delete_confirm'),
+      message: t('confirmable.draft.delete_confirm', { title }),
       icon: 'pi pi-exclamation-triangle',
       rejectLabel: t('button.cancel'),
       acceptLabel: t('button.delete'),
@@ -323,11 +361,15 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       options.apply(response.data)
       version.value = response.data.version ?? 0
       conflict.value = false
+      saveStatus.value = 'idle'
       baseline = signature.value
     } catch (error) {
       if (errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND) await detachGone()
       else reportError(error, 'confirmable draft reload')
+      return
     }
+    // 一覧の更新日時・タイトルも最新にする
+    await reloadList()
   }
 
   /** 競合: 最新の version を取り直したうえで、手元の内容で上書き保存する */
@@ -421,6 +463,8 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     drafts,
     currentId,
     conflict,
+    saveStatus,
+    savedAt,
     limitReached,
     init,
     resetScope,

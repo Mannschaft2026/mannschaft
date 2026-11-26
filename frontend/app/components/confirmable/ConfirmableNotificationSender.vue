@@ -37,7 +37,7 @@ const audienceModeOptions = computed(() => ['DEFAULT', 'TARGETS', 'GROUP'].map(v
 const priorityOptions = computed(() => ['NORMAL', 'HIGH', 'URGENT'].map(value => ({ label: t(`confirmable.priority.${value}`), value })))
 const visibilityOptions = computed(() => ['HIDDEN', 'CREATOR_AND_ADMIN', 'ALL_MEMBERS'].map(value => ({ label: t(`confirmable.unconfirmed_visibility.${value}`), value })))
 
-const { drafts, currentId: currentDraftId, conflict: draftConflict, limitReached: draftLimitReached, init: initDrafts, resetScope: resetDraftScope, newDraft, openDraft, requestDelete: requestDeleteDraft, reloadLatest: reloadLatestDraft, overwriteWithMine: overwriteDraft, settleForSend, afterSent, resumeAfterFailedSend } = useConfirmableDraft({
+const { drafts, currentId: currentDraftId, conflict: draftConflict, saveStatus: draftSaveStatus, savedAt: draftSavedAt, limitReached: draftLimitReached, init: initDrafts, resetScope: resetDraftScope, newDraft, openDraft, requestDelete: requestDeleteDraft, reloadLatest: reloadLatestDraft, overwriteWithMine: overwriteDraft, settleForSend, afterSent, resumeAfterFailedSend } = useConfirmableDraft({
   scopeType: () => props.scopeType,
   scopeId: () => props.scopeId,
   snapshot: draftSnapshot,
@@ -70,6 +70,9 @@ function applyDraft(draft: ConfirmableNotificationDraftDetail | null) {
 }
 function formatUpdatedAt(value?: string): string {
   return value ? new Date(value).toLocaleString(locale.value, { dateStyle: 'short', timeStyle: 'short' }) : ''
+}
+function formatSavedTime(value: Date): string {
+  return value.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 function applyTemplate(templateId: number | null) {
   const template = templates.value.find(item => item.id === templateId)
@@ -110,6 +113,8 @@ async function loadPreview() {
   } finally { if (current === previewSequence) previewing.value = false }
 }
 async function onSend() {
+  // 送信中の再入を止める（同じ tick に続けて呼ばれても1回だけ送る。ボタンの disabled だけに頼らない）
+  if (sending.value) return
   if (!title.value.trim()) { toast.add({ severity: 'warn', summary: t('confirmable.title_required'), life: 3000 }); return }
   const audience = audienceRequest()
   if (!audience) { toast.add({ severity: 'warn', summary: t('confirmable.targets_required'), life: 3000 }); return }
@@ -188,12 +193,23 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-      <div ref="draftFormAnchor" class="flex scroll-mt-20 flex-col gap-1"><label>{{ $t('confirmable.message_title') }}</label><InputText v-model="title" /></div>
+      <div ref="draftFormAnchor" class="flex scroll-mt-20 flex-col gap-1"><label>{{ $t('confirmable.message_title') }}</label><InputText v-model="title" />
+        <!-- 自動保存の状態。領域は常に置き、内容だけ変える（読み上げ ON の利用者へ変化を伝える）。未入力の新規状態では空 -->
+        <p class="min-h-5 text-xs text-surface-500" aria-live="polite" data-testid="confirmable-draft-status">
+          <template v-if="draftSaveStatus === 'saving'">{{ $t('confirmable.draft.status_saving') }}</template>
+          <template v-else-if="draftSaveStatus === 'saved' && draftSavedAt">{{ $t('confirmable.draft.status_saved') }} <time :datetime="draftSavedAt.toISOString()" data-testid="confirmable-draft-saved-at">{{ formatSavedTime(draftSavedAt) }}</time></template>
+          <span v-else-if="draftSaveStatus === 'error'" class="text-red-600">{{ $t('confirmable.draft.status_error') }}</span>
+        </p>
+      </div>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.message_body') }}</label><Textarea v-model="body" rows="4" /></div>
       <div class="grid gap-4 md:grid-cols-2"><div class="flex flex-col gap-1"><label>{{ $t('confirmable.priority_label') }}</label><Select v-model="priority" :options="priorityOptions" option-label="label" option-value="value" /></div><div class="flex flex-col gap-1"><label>{{ $t('confirmable.deadline') }}</label><DatePicker v-model="deadlineAt" show-time hour-format="24" /></div></div>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.unconfirmed_visibility.label') }}</label><Select v-model="unconfirmedVisibility" data-testid="sender-visibility-select" :options="visibilityOptions" option-label="label" option-value="value" /></div>
-      <div><Button :label="$t('confirmable.send')" icon="pi pi-send" :loading="sending" :disabled="previewing || estimatedCount === null || estimatedCount === 0" @click="onSend" /></div>
+      <div><Button :label="$t('confirmable.send')" icon="pi pi-send" :loading="sending" :disabled="sending || previewing || estimatedCount === null || estimatedCount === 0" @click="onSend" /></div>
     </div>
   </SectionCard>
-  <Dialog v-model:visible="showHelp" modal :header="$t('confirmable.help.title')" :style="{ width: 'min(34rem, 95vw)' }"><p>{{ $t('confirmable.help.body') }}</p></Dialog>
+  <Dialog v-model:visible="showHelp" modal :header="$t('confirmable.help.title')" :style="{ width: 'min(34rem, 95vw)' }">
+    <p>{{ $t('confirmable.help.body') }}</p>
+    <h4 class="mt-4 text-sm font-semibold">{{ $t('confirmable.help.draft_title') }}</h4>
+    <p class="mt-1" data-testid="confirmable-help-draft">{{ $t('confirmable.help.draft_body') }}</p>
+  </Dialog>
 </template>

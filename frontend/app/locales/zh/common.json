@@ -631,11 +631,11 @@
     "draft": {
       "list_title": "草稿",
       "count": "{count}/{limit}",
-      "empty": "暂无草稿",
+      "empty": "暂无草稿。输入内容后会自动保存为草稿，最多可保留10份。",
       "new": "新建",
       "untitled": "（无标题）",
       "delete": "删除",
-      "delete_confirm": "要删除此草稿吗？此操作无法撤销。",
+      "delete_confirm": "要删除草稿“{title}”吗？此操作无法撤销。",
       "delete_header": "删除草稿",
       "limit_reached": "草稿最多可保存 {limit} 份，当前内容无法自动保存。请删除旧草稿后继续（已输入的内容会保留）。",
       "conflict": "此草稿已在其他页面被更新，自动保存已暂停。",
@@ -646,7 +646,11 @@
       "unsaved_confirm": "有尚未保存的更改。要放弃这些更改并切换吗？",
       "discard_and_switch": "放弃并切换",
       "unsaved_leave_confirm": "有尚未保存的更改。要放弃这些更改并离开此页面吗？",
-      "discard_and_leave": "放弃并离开"
+      "discard_and_leave": "放弃并离开",
+      "status_saving": "正在保存…",
+      "status_saved": "已保存",
+      "status_error": "无法保存。网络恢复后将自动重试。",
+      "save_failed_notice": "无法保存草稿。网络恢复后将自动重试"
     },
     "delivery_stopped": "发送已停止",
     "templates": "模板管理",
@@ -763,7 +767,9 @@
     },
     "help": {
       "title": "确认通知使用方法",
-      "body": "选择收件人群组或当前范围。发送将异步进行，可在历史记录中查看。"
+      "body": "选择收件人群组或当前范围。发送将异步进行，可在历史记录中查看。",
+      "draft_title": "关于草稿",
+      "draft_body": "输入内容后会自动保存为草稿（最多10份）。关闭页面后或在其他设备上都可以继续编辑。草稿在最后更新90天后会自动删除，发送后该草稿也会消失。"
     },
     "guide": {
       "quickConfirm": {

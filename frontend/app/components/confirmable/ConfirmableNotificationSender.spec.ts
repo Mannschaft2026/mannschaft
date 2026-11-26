@@ -1098,7 +1098,7 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       expect(mocks.captureQuiet).toHaveBeenCalledTimes(1)
     })
 
-    it('通信断（status 不明）の失敗も再試行され、共通エラー処理への通知は最初の1回だけ', async () => {
+    it('通信断（status 不明）の失敗も再試行され、専用文言の通知は最初の1回だけ（共通エラー処理へは渡さない）', async () => {
       const wrapper = await mountSender()
       mocks.createDraft.mockRejectedValueOnce(new TypeError('Failed to fetch'))
       mocks.createDraft.mockRejectedValueOnce(new TypeError('Failed to fetch'))
@@ -1110,7 +1110,8 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       await advance(RETRY_MS)
 
       expect(mocks.createDraft).toHaveBeenCalledTimes(3)
-      expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
+      expect(mocks.toastAdd).toHaveBeenCalledTimes(1)
+      expect(mocks.handleApiError).not.toHaveBeenCalled()
       expect([...server.drafts.values()].some(d => d.title === '電波が切れた件名')).toBe(true)
     })
 
@@ -1310,6 +1311,148 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       expect(mocks.createDraft).not.toHaveBeenCalled()
       expect(server.drafts.size).toBe(0)
     })
+  })
+})
+
+describe('ConfirmableNotificationSender 下書きの案内・保存状態（仕上げ, CMP-261126-1558 FE）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    server.drafts.clear()
+    server.clock = 0
+    server.seq = 0
+    for (const fn of Object.values(mocks)) fn.mockReset()
+    mocks.listTemplates.mockResolvedValue({ data: templates })
+    mocks.listRecipientGroups.mockResolvedValue({ data: groups })
+    mocks.previewRecipients.mockResolvedValue({ data: { estimatedRecipientCount: 3 } })
+    installServer()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    localStorage.clear()
+  })
+
+  const status = (w: Wrapper) => w.find('[data-testid="confirmable-draft-status"]')
+
+  it('保存状態: 領域は aria-live="polite" で常に置き、未入力の新規状態では何も出さない', async () => {
+    const wrapper = await mountSender()
+
+    expect(status(wrapper).exists()).toBe(true)
+    expect(status(wrapper).attributes('aria-live')).toBe('polite')
+    expect(status(wrapper).text()).toBe('')
+  })
+
+  it('保存状態: 保存が終わるまで「保存中」、成功すると「保存済み」と時刻（time 要素）を出す', async () => {
+    let resolveCreate: (value: unknown) => void = () => {}
+    mocks.createDraft.mockImplementationOnce(() => new Promise((resolve) => { resolveCreate = resolve }))
+    const wrapper = await mountSender()
+    useFakeTimers()
+
+    await typeTitle(wrapper, '書き始め')
+    expect(status(wrapper).text()).toBe('')
+    await advance(DEBOUNCE_MS)
+    expect(status(wrapper).text()).toContain('Saving')
+    resolveCreate({ data: { id: 'n-1', version: 0 } })
+    await flushPromises()
+
+    expect(status(wrapper).text()).toContain('Saved')
+    const time = status(wrapper).find('time')
+    expect(time.exists()).toBe(true)
+    expect(time.text()).toMatch(/^\d{2}:\d{2}$/)
+    expect(Number.isNaN(Date.parse(time.attributes('datetime') ?? ''))).toBe(false)
+  })
+
+  it('保存状態: 5xx で保存できなければ「保存できませんでした（自動で再試行）」を出し、トーストは重ねない', async () => {
+    mocks.createDraft.mockRejectedValueOnce(apiError(500, 'INTERNAL_SERVER_ERROR'))
+    const wrapper = await mountSender()
+    useFakeTimers()
+
+    await typeTitle(wrapper, '500 の保存')
+    await advance(DEBOUNCE_MS)
+
+    expect(status(wrapper).text()).toContain('Could not save')
+    expect(status(wrapper).text()).toContain('retry')
+    expect(mocks.toastAdd).not.toHaveBeenCalled()
+    expect(mocks.handleApiError).not.toHaveBeenCalled()
+  })
+
+  it('失敗通知: 通信断の初回は汎用エラーではなく専用文言のトーストを1回だけ出す', async () => {
+    mocks.createDraft.mockRejectedValue(new Error('Failed to fetch'))
+    const wrapper = await mountSender()
+    useFakeTimers()
+
+    await typeTitle(wrapper, '圏外で書く')
+    await advance(DEBOUNCE_MS)
+    await advance(10000)
+    await advance(10000)
+
+    expect(mocks.createDraft.mock.calls.length).toBeGreaterThan(1)
+    expect(mocks.handleApiError).not.toHaveBeenCalled()
+    expect(mocks.toastAdd).toHaveBeenCalledTimes(1)
+    const toast = mocks.toastAdd.mock.calls[0]?.[0] as { summary?: string }
+    expect(toast.summary).toBe('Could not save the draft. It will retry automatically when the connection is back')
+  })
+
+  it('空状態: 自動保存と最大10件の説明を出す', async () => {
+    const wrapper = await mountSender()
+
+    const empty = wrapper.find('[data-testid="confirmable-draft-empty"]')
+    expect(empty.text()).toContain('saved automatically')
+    expect(empty.text()).toContain('up to 10')
+  })
+
+  it('削除確認: 対象の下書きタイトルを含める（無題なら「（無題）」）', async () => {
+    seed({ id: 'd-1', title: '総会のお知らせ' })
+    seed({ id: 'd-2', title: '' })
+    const wrapper = await mountSender()
+
+    await row(wrapper, 'd-1').find('[data-testid="confirmable-draft-delete"]').trigger('click')
+    await flushPromises()
+    expect((mocks.confirmRequire.mock.calls.at(-1)?.[0] as { message?: string }).message).toContain('総会のお知らせ')
+
+    await row(wrapper, 'd-2').find('[data-testid="confirmable-draft-delete"]').trigger('click')
+    await flushPromises()
+    expect((mocks.confirmRequire.mock.calls.at(-1)?.[0] as { message?: string }).message).toContain('(Untitled)')
+  })
+
+  it('最新を読み込む: 一覧も取り直し、更新日時が新しくなる', async () => {
+    seed({ id: 'd-1', title: '自分の件名', version: 3 })
+    const wrapper = await mountSender()
+    await openDraft(wrapper, 'd-1')
+    const d = server.drafts.get('d-1')
+    if (!d) throw new Error('seed 失敗')
+    d.title = '別画面の件名'
+    d.version = 4
+    d.updatedAt = tick()
+    useFakeTimers()
+    await typeTitle(wrapper, '自分の書き換え')
+    await advance(DEBOUNCE_MS)
+    const before = row(wrapper, 'd-1').find('[data-testid="confirmable-draft-updated-at"]').attributes('datetime')
+    // 別画面がさらに更新した（一覧の更新日時が進む）
+    d.updatedAt = tick()
+    const listCallsBefore = mocks.listDrafts.mock.calls.length
+
+    await clickTestId(wrapper, 'confirmable-draft-reload-latest')
+
+    expect(mocks.listDrafts.mock.calls.length).toBeGreaterThan(listCallsBefore)
+    const after = row(wrapper, 'd-1').find('[data-testid="confirmable-draft-updated-at"]').attributes('datetime')
+    expect(after).toBe(d.updatedAt)
+    expect(after).not.toBe(before)
+  })
+
+  it('送信の再入ガード: 同じ tick に続けて押しても1回だけ送る', async () => {
+    let resolveSend: (value: unknown) => void = () => {}
+    mocks.sendNotification.mockImplementation(() => new Promise((resolve) => { resolveSend = resolve }))
+    const wrapper = await mountSender()
+    await typeTitle(wrapper, '二重送信を試す')
+
+    void sendButton(wrapper).trigger('click')
+    void sendButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1)
+    expect(sendButton(wrapper).props('disabled')).toBe(true)
+    resolveSend({ data: { estimatedRecipientCount: 3 } })
+    await flushPromises()
   })
 })
 

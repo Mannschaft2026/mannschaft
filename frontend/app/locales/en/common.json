@@ -631,11 +631,11 @@
     "draft": {
       "list_title": "Drafts",
       "count": "{count}/{limit}",
-      "empty": "No drafts yet",
+      "empty": "No drafts yet. What you type is saved automatically as a draft, and you can keep up to 10.",
       "new": "Start a new one",
       "untitled": "(Untitled)",
       "delete": "Delete",
-      "delete_confirm": "Delete this draft? This cannot be undone.",
+      "delete_confirm": "Delete the draft \"{title}\"? This cannot be undone.",
       "delete_header": "Delete draft",
       "limit_reached": "You can keep up to {limit} drafts, so this one cannot be auto-saved. Delete an old draft to continue (what you typed is kept).",
       "conflict": "This draft was updated on another screen. Auto-save is paused.",
@@ -646,7 +646,11 @@
       "unsaved_confirm": "You have changes that have not been saved. Discard them and switch?",
       "discard_and_switch": "Discard and switch",
       "unsaved_leave_confirm": "You have changes that have not been saved. Discard them and leave this page?",
-      "discard_and_leave": "Discard and leave"
+      "discard_and_leave": "Discard and leave",
+      "status_saving": "Saving...",
+      "status_saved": "Saved",
+      "status_error": "Could not save. It will retry automatically when the connection is back.",
+      "save_failed_notice": "Could not save the draft. It will retry automatically when the connection is back"
     },
     "delivery_stopped": "Delivery stopped",
     "templates": "Manage templates",
@@ -763,7 +767,9 @@
     },
     "help": {
       "title": "Using confirmation notifications",
-      "body": "Choose a recipient group or the current scope. Delivery runs asynchronously; track delivery and confirmations in history."
+      "body": "Choose a recipient group or the current scope. Delivery runs asynchronously; track delivery and confirmations in history.",
+      "draft_title": "About drafts",
+      "draft_body": "What you type is saved automatically as a draft (up to 10). You can pick it up again after closing the page or on another device. Drafts are deleted automatically 90 days after their last update, and a draft disappears once you send it."
     },
     "guide": {
       "quickConfirm": {
