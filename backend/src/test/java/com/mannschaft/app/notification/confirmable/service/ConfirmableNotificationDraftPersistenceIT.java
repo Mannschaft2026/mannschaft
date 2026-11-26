@@ -170,6 +170,43 @@ class ConfirmableNotificationDraftPersistenceIT extends AbstractMySqlIntegration
     }
 
     @Test
+    @DisplayName("AC3: selectedTargets・deadlineAt（ナノ秒付き）を含む同じ内容の保存でも version は進まない")
+    void ac3_宛先と期限を含む同じ内容の保存でもversionは進まない() {
+        // MySQL の JSON 列は保存時に正規化（キー順・空白）されるため、文字列のまま比べると
+        // 同じ内容でも差分と見なされ version が進んでしまう（検分で検出した不具合の再現）。
+        ConfirmableNotificationDraftSaveRequest request = saveRequest("宛先つき");
+        request.setAudienceMode(ConfirmableDraftAudienceMode.TARGETS);
+        request.setDeadlineAt(Instant.parse("2027-03-01T01:02:03.456789123Z"));
+        request.setSelectedTargets(List.of(
+                new ConfirmableTargetSpec(ConfirmableTargetType.TEAM, 12L),
+                new ConfirmableTargetSpec(ConfirmableTargetType.ORGANIZATION, 34L)));
+        ConfirmableNotificationDraftDetailResponse created =
+                draftService.create(ScopeType.TEAM, teamId, userId, request);
+        long v0 = created.getVersion();
+
+        ConfirmableNotificationDraftUpdateRequest same = updateRequest("宛先つき", "本文", v0);
+        same.setAudienceMode(ConfirmableDraftAudienceMode.TARGETS);
+        same.setDeadlineAt(Instant.parse("2027-03-01T01:02:03.456789123Z"));
+        same.setSelectedTargets(List.of(
+                new ConfirmableTargetSpec(ConfirmableTargetType.TEAM, 12L),
+                new ConfirmableTargetSpec(ConfirmableTargetType.ORGANIZATION, 34L)));
+        ConfirmableNotificationDraftDetailResponse updated =
+                draftService.update(ScopeType.TEAM, teamId, userId, created.getId(), same);
+
+        assertThat(updated.getVersion()).as("同じ内容の保存では version は進まない").isEqualTo(v0);
+        assertThat(draftService.get(ScopeType.TEAM, teamId, userId, created.getId()).getVersion()).isEqualTo(v0);
+
+        ConfirmableNotificationDraftUpdateRequest reordered = updateRequest("宛先つき", "本文", v0);
+        reordered.setAudienceMode(ConfirmableDraftAudienceMode.TARGETS);
+        reordered.setDeadlineAt(Instant.parse("2027-03-01T01:02:03.456789123Z"));
+        reordered.setSelectedTargets(List.of(
+                new ConfirmableTargetSpec(ConfirmableTargetType.ORGANIZATION, 34L),
+                new ConfirmableTargetSpec(ConfirmableTargetType.TEAM, 12L)));
+        assertThat(draftService.update(ScopeType.TEAM, teamId, userId, created.getId(), reordered).getVersion())
+                .as("宛先の並び順が変われば内容の変更として version が進む").isEqualTo(v0 + 1);
+    }
+
+    @Test
     @DisplayName("AC3: 古い baseVersion の更新は VERSION_CONFLICT で、保存済みの内容を壊さない")
     void ac3_古いbaseVersionの更新はVERSION_CONFLICTで保存済みの内容を壊さない() {
         ConfirmableNotificationDraftDetailResponse created =

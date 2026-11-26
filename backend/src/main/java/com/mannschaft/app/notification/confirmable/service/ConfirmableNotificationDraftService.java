@@ -20,6 +20,8 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -86,7 +88,7 @@ public class ConfirmableNotificationDraftService {
                 .title(titleOrEmpty(request.getTitle()))
                 .body(request.getBody())
                 .priority(priorityOrDefault(request.getPriority()))
-                .deadlineAt(request.getDeadlineAt())
+                .deadlineAt(toStoredPrecision(request.getDeadlineAt()))
                 .audienceMode(audienceOrDefault(request.getAudienceMode()))
                 .selectedTargets(writeTargets(request.getSelectedTargets()))
                 .selectedGroupId(request.getSelectedGroupId())
@@ -109,13 +111,15 @@ public class ConfirmableNotificationDraftService {
         if (!Objects.equals(request.getBaseVersion(), entity.getVersion())) {
             throw new BusinessException(ConfirmableNotificationErrorCode.DRAFT_VERSION_CONFLICT);
         }
+        // 同じ内容の保存で version を進めないため、DB に保存される形へ揃えてから置き換える
+        // （deadline_at は DATETIME(6) のマイクロ秒、selected_targets は MySQL が正規化した JSON 文字列）。
         entity.replaceContent(
                 titleOrEmpty(request.getTitle()),
                 request.getBody(),
                 priorityOrDefault(request.getPriority()),
-                request.getDeadlineAt(),
+                toStoredPrecision(request.getDeadlineAt()),
                 audienceOrDefault(request.getAudienceMode()),
-                writeTargets(request.getSelectedTargets()),
+                keepStoredJsonIfSame(entity.getSelectedTargets(), writeTargets(request.getSelectedTargets())),
                 request.getSelectedGroupId(),
                 request.getSelectedTemplateId());
         try {
@@ -151,6 +155,27 @@ public class ConfirmableNotificationDraftService {
 
     private static ConfirmableDraftAudienceMode audienceOrDefault(ConfirmableDraftAudienceMode mode) {
         return mode == null ? ConfirmableDraftAudienceMode.DEFAULT : mode;
+    }
+
+    /** deadline_at 列（DATETIME(6)）の精度へ切り詰める。保存後に読み直した値と比較が一致するようにする。 */
+    private static Instant toStoredPrecision(Instant instant) {
+        return instant == null ? null : instant.truncatedTo(ChronoUnit.MICROS);
+    }
+
+    /**
+     * MySQL の JSON 列は保存時にキー順・空白を正規化するため、読み直した文字列と新しく書き出した文字列は
+     * 同じ内容でも一致しない。意味が同じ（配列の順序を含めて等しい）なら保存済みの文字列をそのまま使い、
+     * Hibernate に差分と見なされて version が進むのを防ぐ。
+     */
+    private static String keepStoredJsonIfSame(String stored, String next) {
+        if (stored == null || next == null) {
+            return next;
+        }
+        try {
+            return JSON.readTree(stored).equals(JSON.readTree(next)) ? stored : next;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("selected_targets の JSON を読み取れません", e);
+        }
     }
 
     private static String excerpt(String body) {
