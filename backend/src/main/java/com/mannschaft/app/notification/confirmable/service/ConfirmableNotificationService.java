@@ -405,7 +405,7 @@ public class ConfirmableNotificationService {
                 createdByUserId, recipientUserIds);
     }
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Transactional
     public ConfirmableNotificationEntity send(
             ScopeType scopeType,

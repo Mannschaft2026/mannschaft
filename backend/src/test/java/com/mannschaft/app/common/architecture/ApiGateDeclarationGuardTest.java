@@ -42,7 +42,7 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3762);   // 3762 = 3757 + α 5本（下記 (α) 参照）。3757 = 3751 + CMP-261107-1833 PR3 再招待依頼の受け手側 InviteReissueRequestController 6本
+                .isEqualTo(3761);   // 3761 = 3756 + α 5本（下記 (α) 参照）。3756 = 3757 - CMP-260826-1457 W2 連絡先招待QR（GET /contact-invite-tokens/{token}/qr）廃止 1本。3757 = 3751 + CMP-261107-1833 PR3 再招待依頼の受け手側 InviteReissueRequestController 6本
                                     //   （TEAM/ORG 別メソッド × GET 一覧・POST reissue・POST decline。main 側の増減は実測で上書き）
                                     // 3751 = 3746 + CMP-261107-1833 招待付き新規登録の保留承認 MePendingInviteController 5本
                                     //   （GET /api/v1/me/pending-invite・POST accept|decline|reissue-request|dismiss。feature gate 未宣言の流儀で 新規 5|5。

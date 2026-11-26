@@ -30,7 +30,7 @@
       "revoke_tooltip": "Revoke",
       "uses_unit": " uses",
       "qr_alt": "QR Code",
-      "qr_hint": "Scan QR code to add"
+      "once_hint": "The link and QR code are shown only once, right after issuing. Issue a new one if you need it again."
     },
     "expiry": {
       "never": "Never expires",
@@ -41,9 +41,7 @@
       "create_success": "Invite URL issued successfully",
       "create_error": "Failed to issue invite URL",
       "revoke_success": "Invite URL revoked",
-      "revoke_error": "Failed to revoke invite URL",
-      "copy_success": "URL copied",
-      "copy_error": "Failed to copy URL"
+      "revoke_error": "Failed to revoke invite URL"
     },
     "my_qr": "My contact QR"
   },

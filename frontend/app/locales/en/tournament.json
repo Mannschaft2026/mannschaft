@@ -286,8 +286,7 @@
       "pdfFailed": "Failed to export PDF",
       "empty": "No standings data",
       "noDivisions": "No divisions registered",
-      "loadFailed": "Failed to load standings",
-      "forbidden": "You do not have permission to view this tournament"
+      "loadFailed": "Failed to load standings"
     },
     "rankings": {
       "title": "Rankings",
@@ -301,8 +300,7 @@
       "pdfFailed": "Failed to export PDF",
       "empty": "No ranking data",
       "noCategories": "No ranking categories",
-      "loadFailed": "Failed to load rankings",
-      "forbidden": "You do not have permission to view this tournament"
+      "loadFailed": "Failed to load rankings"
     },
     "matrix": {
       "title": "Match Matrix",
@@ -314,7 +312,6 @@
       "empty": "No matrix data",
       "noDivisions": "No divisions registered",
       "loadFailed": "Failed to load matrix",
-      "forbidden": "You do not have permission to view this tournament",
       "setsNote": "This tournament uses sets, so each cell shows the total points across all sets. The winner is decided by the number of sets won."
     },
     "visibility": {

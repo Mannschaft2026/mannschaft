@@ -14,6 +14,7 @@ const route = useRoute()
 const orgSlug = computed(() => String(route.params.slug))
 const api = useOrgExtendedProfileApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('organization', orgSlug)
 
 // ----- プロフィール -----
@@ -290,6 +291,8 @@ async function loadData() {
     officers.value = officersRes.data.sort((a, b) => a.display_order - b.display_order)
     customFields.value = fieldsRes.data.sort((a, b) => a.display_order - b.display_order)
   } catch (e: unknown) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     const msg = e instanceof Error ? e.message : String(e)
     notification.error(t('dialog.error') + ': ' + msg)
   } finally {

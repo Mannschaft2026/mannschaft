@@ -27,6 +27,7 @@ definePageMeta({ layout: 'organization', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const orgId = String(route.params.slug)
 const tId = Number(route.params.tId)
 
@@ -38,7 +39,7 @@ const divisions = ref<TournamentDivision[]>([])
 const activeDivisionId = ref<number | null>(null)
 
 const loading = ref(true)
-const loadError = ref<'forbidden' | 'error' | null>(null)
+const loadError = ref<'error' | null>(null)
 
 const matrixMap = ref<Record<number, TournamentMatrix>>({})
 const matrixLoading = ref<Record<number, boolean>>({})
@@ -108,9 +109,9 @@ async function load() {
       await loadMatrixForDivision(first.id)
     }
   } catch (e) {
-    const status = (e as { response?: { status?: number }; statusCode?: number })?.response?.status
-      ?? (e as { statusCode?: number })?.statusCode
-    loadError.value = status === 403 || status === 404 ? 'forbidden' : 'error'
+    // 非所属・権限なし・不可視大会（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    if (markIfDenied(e)) return
+    loadError.value = 'error'
   } finally {
     loading.value = false
   }
@@ -131,12 +132,6 @@ onMounted(load)
     </h1>
 
     <PageLoading v-if="loading" size="40px" />
-
-    <DashboardEmptyState
-      v-else-if="loadError === 'forbidden'"
-      icon="pi pi-lock"
-      :message="$t('tournament.matrix.forbidden')"
-    />
 
     <DashboardEmptyState
       v-else-if="loadError === 'error'"

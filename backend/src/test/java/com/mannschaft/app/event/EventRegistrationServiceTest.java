@@ -68,6 +68,9 @@ class EventRegistrationServiceTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @org.mockito.Spy
+    private com.mannschaft.app.common.token.SecretTokenVault vault = new com.mannschaft.app.common.token.SecretTokenVault();
+
     @InjectMocks
     private EventRegistrationService eventRegistrationService;
 
@@ -319,7 +322,7 @@ class EventRegistrationServiceTest {
             );
             EventEntity event = createRegistrationOpenEvent();
             EventGuestInviteTokenEntity token = EventGuestInviteTokenEntity.builder()
-                    .eventId(EVENT_ID).token("valid-token").maxUses(10)
+                    .eventId(EVENT_ID).tokenHash(vault.hash("valid-token")).maxUses(10)
                     .expiresAt(LocalDateTime.now().plusDays(7)).createdBy(USER_ID).build();
             EventTicketTypeEntity ticketType = createTicketType();
             EventRegistrationEntity savedEntity = EventRegistrationEntity.builder()
@@ -329,7 +332,7 @@ class EventRegistrationServiceTest {
             RegistrationResponse response = createRegistrationResponse("APPROVED");
 
             given(eventService.findEventOrThrow(EVENT_ID)).willReturn(event);
-            given(inviteTokenRepository.findByToken("valid-token")).willReturn(Optional.of(token));
+            given(inviteTokenRepository.findByTokenHash(vault.hash("valid-token"))).willReturn(Optional.of(token));
             given(ticketTypeRepository.findById(TICKET_TYPE_ID)).willReturn(Optional.of(ticketType));
             given(registrationRepository.save(any(EventRegistrationEntity.class))).willReturn(savedEntity);
             given(inviteTokenRepository.save(any(EventGuestInviteTokenEntity.class))).willReturn(token);
@@ -354,7 +357,7 @@ class EventRegistrationServiceTest {
             EventEntity event = createRegistrationOpenEvent();
 
             given(eventService.findEventOrThrow(EVENT_ID)).willReturn(event);
-            given(inviteTokenRepository.findByToken("invalid-token")).willReturn(Optional.empty());
+            given(inviteTokenRepository.findByTokenHash(vault.hash("invalid-token"))).willReturn(Optional.empty());
 
             // When & Then
             assertThatThrownBy(() -> eventRegistrationService.createGuestRegistration(EVENT_ID, request))
@@ -370,11 +373,11 @@ class EventRegistrationServiceTest {
             );
             EventEntity event = createRegistrationOpenEvent();
             EventGuestInviteTokenEntity token = EventGuestInviteTokenEntity.builder()
-                    .eventId(999L).token("other-event-token").maxUses(10)
+                    .eventId(999L).tokenHash(vault.hash("other-event-token")).maxUses(10)
                     .expiresAt(LocalDateTime.now().plusDays(7)).createdBy(USER_ID).build();
 
             given(eventService.findEventOrThrow(EVENT_ID)).willReturn(event);
-            given(inviteTokenRepository.findByToken("other-event-token")).willReturn(Optional.of(token));
+            given(inviteTokenRepository.findByTokenHash(vault.hash("other-event-token"))).willReturn(Optional.of(token));
 
             // When & Then
             assertThatThrownBy(() -> eventRegistrationService.createGuestRegistration(EVENT_ID, request))
