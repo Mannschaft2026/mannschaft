@@ -17,9 +17,7 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -80,6 +78,9 @@ public class PointCardRematchBatchService {
     /** 高失敗率 Sentry 通知の閾値（10%）。 */
     static final double HIGH_FAILURE_RATIO = 0.10;
 
+    /** キーセットページングの起点（全 UUID の最小値。UUIDv7 の ID はすべてこれより大きい）。 */
+    static final UUID MIN_UUID = new UUID(0L, 0L);
+
     private final UserPointCardRepository userPointCardRepository;
     private final ProviderMatchService providerMatchService;
     private final AuditLogService auditLogService;
@@ -88,7 +89,7 @@ public class PointCardRematchBatchService {
     /**
      * 自分自身の Spring プロキシを取り出すための遅延解決プロバイダ（CMP-260912-1524）。
      *
-     * <p>{@link #execute()} から {@link #processChunk(Pageable)} を素の {@code this} 呼び出しに
+     * <p>{@link #execute()} から {@link #processChunk(UUID, int)} を素の {@code this} 呼び出しに
      * すると AOP プロキシを経由せず、{@code @Transactional(propagation = REQUIRES_NEW)} が
      * <b>まったく効かない</b>。呼び出し元もトランザクションを張っていないため、
      * チャンクは「1 トランザクション」ではなく Spring Data 既定の
@@ -108,7 +109,7 @@ public class PointCardRematchBatchService {
     /**
      * 毎晩 03:00 (Asia/Tokyo) に起動するエントリポイント。
      *
-     * <p>{@link Transactional} は付けず、チャンク単位で {@link #processChunk(Pageable)} に
+     * <p>{@link Transactional} は付けず、チャンク単位で {@link #processChunk(UUID, int)} に
      * {@link Propagation#REQUIRES_NEW} で別トランザクションを切る。これにより
      * 一括 rollback / 長時間ロック / メモリ圧迫を回避する。
      *
@@ -133,16 +134,18 @@ public class PointCardRematchBatchService {
         int matched = 0;
         int skipped = 0;
 
-        int pageIndex = 0;
+        // キーセット（カーソル）方式: チャンクをコミットするとマッチ済みカードが対象集合から抜けるため、
+        // オフセットではなく「最後に処理した ID より大きいもの」を取り続ける（CMP-260916-0055）
+        UUID cursor = MIN_UUID;
+        int chunkIndex = 0;
         while (true) {
-            Pageable pageable = PageRequest.of(pageIndex, chunkSize);
             ChunkResult result;
             try {
-                result = self().processChunk(pageable);
+                result = self().processChunk(cursor, chunkSize);
             } catch (RuntimeException e) {
                 // チャンク全体が失敗した場合（DB ロック競合など）はバッチ全体を継続せず終了し、
                 // Sentry 通知を投げる（DB 接続断のような致命傷を握りつぶさないため）
-                log.error("[PointCardRematchBatch] チャンク処理が失敗しました: pageIndex={}", pageIndex, e);
+                log.error("[PointCardRematchBatch] チャンク処理が失敗しました: chunkIndex={}, afterId={}", chunkIndex, cursor, e);
                 errorReportService.recordBackendException(e, null, ErrorReportSeverity.HIGH);
                 break;
             }
@@ -154,7 +157,8 @@ public class PointCardRematchBatchService {
             if (result.lastPage) {
                 break;
             }
-            pageIndex++;
+            cursor = result.lastId;
+            chunkIndex++;
         }
 
         long durationMs = System.currentTimeMillis() - startedAt;
@@ -214,9 +218,10 @@ public class PointCardRematchBatchService {
      * </ul>
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public ChunkResult processChunk(Pageable pageable) {
-        Page<UserPointCardEntity> page = userPointCardRepository.findRematchTargets(pageable);
-        List<UserPointCardEntity> targets = page.getContent();
+    public ChunkResult processChunk(UUID afterId, int size) {
+        List<UserPointCardEntity> targets = userPointCardRepository
+                .findRematchTargetsAfter(afterId, PageRequest.of(0, size));
+        UUID lastId = targets.isEmpty() ? afterId : targets.get(targets.size() - 1).getId();
         int processed = targets.size();
         int matched = 0;
         int skipped = 0;
@@ -240,16 +245,16 @@ public class PointCardRematchBatchService {
             }
         }
 
-        return new ChunkResult(processed, matched, skipped, page.isLast());
+        return new ChunkResult(processed, matched, skipped, targets.size() < size, lastId);
     }
 
     /**
      * 1 チャンクの処理結果を保持する不変値オブジェクト。
      *
-     * <p>{@code lastPage} は Spring Data の {@link Page#isLast()} 由来で、
-     * これが {@code true} なら全件処理完了。
+     * <p>{@code lastPage} は取得件数がチャンクサイズ未満のとき {@code true}（全件処理完了）。
+     * {@code lastId} は次チャンクのカーソル（このチャンクで最後に取得したカードの ID）。
      */
-    record ChunkResult(int processed, int matched, int skipped, boolean lastPage) {
+    record ChunkResult(int processed, int matched, int skipped, boolean lastPage, UUID lastId) {
     }
 
     /**

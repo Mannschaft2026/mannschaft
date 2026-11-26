@@ -42,6 +42,15 @@ public interface MemberProfileRepository extends JpaRepository<MemberProfileEnti
     boolean existsByTeamPageIdAndUserId(Long teamPageId, Long userId);
 
     /**
+     * 同一ページに登録済みのユーザーIDを一括で取得する（一括コピー・登録の重複判定の N+1 回避用）。
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m.userId FROM MemberProfileEntity m WHERE m.teamPageId = :teamPageId AND m.userId IN :userIds")
+    List<Long> findUserIdsByTeamPageIdAndUserIdIn(
+            @org.springframework.data.repository.query.Param("teamPageId") Long teamPageId,
+            @org.springframework.data.repository.query.Param("userIds") java.util.Collection<Long> userIds);
+
+    /**
      * ページIDとユーザーIDで取得する。
      */
     Optional<MemberProfileEntity> findByTeamPageIdAndUserId(Long teamPageId, Long userId);

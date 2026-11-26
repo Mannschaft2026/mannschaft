@@ -30,6 +30,7 @@ import {
   shouldLeaveGuardedTeamTab,
 } from '~/utils/teamAffiliationAccess'
 import { resolveSlugRedirectPath } from '~/utils/slugRedirect'
+import { isScopeNotFound } from '~/utils/loadError'
 
 definePageMeta({
   // 親シェルには middleware を付けない。付けると子ルート全体に継承され、
@@ -45,6 +46,26 @@ const teamApi = useTeamApi()
 const notification = useNotification()
 const { handleApiError } = useErrorHandler()
 const { templateLabel, visibilityLabel } = useScopeLabels()
+// 子ページの主 API が 403/404 だったとき本文を共通「見つかりません」に置き換える（CMP-261125-1108）
+const {
+  notFound: childMarkedNotFound,
+  reset: resetChildNotFound,
+  clear: clearChildNotFound,
+  resetUnlessHydrating: resetChildNotFoundOnSetup,
+  releaseOnUnmount: releaseChildNotFound,
+  isRouteDenied,
+} = useScopeNotFound()
+/**
+ * 子ページ部分を ScopeNotFound に置き換えるか。子ページの主 API の 403/404（markIfDenied）か、
+ * ルートミドルウェア（org-role-guard 等）が描画前にこのパスを拒否したとき。後者では子ページを描画しない
+ * （管理 API を呼ばせず、トーストも出させない）。
+ */
+const childNotFound = computed(() => childMarkedNotFound.value || isRouteDenied(route.path))
+// マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
+resetChildNotFoundOnSetup()
+/** シェル自身の詳細取得が 403/404 だった（slug 変更・取得成功・再試行で解除）。 */
+const shellDenied = ref(false)
+const showScopeNotFound = computed(() => childNotFound.value || shellDenied.value)
 
 const teamSlug = computed(() => String(route.params.slug))
 
@@ -185,6 +206,7 @@ async function fetchTeam() {
     const result = await teamApi.getTeam(requestedSlug)
     if (!isCurrent()) return
     team.value = result.data
+    shellDenied.value = false
   }
   catch (error) {
     if (!isCurrent()) return
@@ -197,8 +219,12 @@ async function fetchTeam() {
       if (!isCurrent()) return
       if (redirected) return
     }
-    const status = (error as FetchError)?.response?.status
-    if (status === 403) team.value = null
+    // 403/404 は共通の「見つかりません」表示。トーストは出さない（CMP-261125-1108）
+    if (isScopeNotFound(error)) {
+      team.value = null
+      shellDenied.value = true
+      return
+    }
     handleApiError(error, 'チーム詳細取得')
   }
   finally {
@@ -380,6 +406,9 @@ async function loadShellData() {
   }, SHELL_WATCHDOG_MS)
   try {
     await Promise.all([fetchTeam(), loadPermissions()])
+    // 詳細が 403/404（非所属・権限なし・不存在）なら本文は ScopeNotFound で、補助取得の結果は使わない
+    // （組織シェルと同じ。拒否された相手の補助 API を叩いてトースト・エラー報告を出さない）
+    if (shellDenied.value) return
     await fetchFollowStatus()
     await fetchJoinRequestStatus()
     // ウィジェット可視性設定と予約モジュール有効フラグを並列取得。
@@ -406,6 +435,7 @@ async function loadShellData() {
  * teamLoaded を戻して番人を解除してから再ロードする。
  */
 function retryShellData() {
+  shellDenied.value = false
   teamLoaded.value = false
   team.value = null
   void loadShellData()
@@ -414,6 +444,9 @@ function retryShellData() {
 onBeforeUnmount(() => {
   // 破棄されたインスタンスの解決待ち応答を失効させる。
   ++fetchTeamSeq
+  // 無条件の reset にしない。スコープ切替・ブラウザバックでは新しいシェルと子ページの setup が
+  // 本インスタンスの破棄より先に走るため、reset すると新しい子ページの 403 を捨ててしまう（AC-8）
+  releaseChildNotFound()
   clearShellWatchdog()
 })
 
@@ -428,10 +461,29 @@ watch(isShellRoute, (shell) => {
   if (shell) void loadShellData()
 })
 
+// ルート（タブ・子ページ・slug・クエリ）が変わったら子ページ由来の「見つかりません」を解除する。
+// 子の setup/取得は親の再描画後に走るため、遷移先で再び 403/404 なら改めて立つ。
+// クエリ変更・ブラウザバックも含めて fullPath で見る。同期 flush にして、遷移先の子ページの setup
+// （世代の捕捉）より必ず先に世代を進める。
+// - パスが変わった: 別ページ・別スコープ。世代を進めて下ろす（古い画面の遅延 403 を捨てる）
+// - クエリだけ変わった: 同一ページ（子は再マウントされず取り直す）。世代は進めず下ろすだけにし、
+//   取り直しの 403 を現世代のまま立てられるようにする（同一ページ・同一スコープなので誤置換にならない）
+let lastNotFoundPath = route.path
+watch(() => route.fullPath, () => {
+  if (route.path !== lastNotFoundPath) {
+    lastNotFoundPath = route.path
+    resetChildNotFound()
+  }
+  else {
+    clearChildNotFound()
+  }
+}, { flush: 'sync' })
+
 // 永続シェルを維持したまま別チームへ遷移した場合（同一親ルート record）に再取得する。
 // useRoleAccess / useDashboardWidgetVisibility は内部で teamSlug を watch して再取得するが、
 // team 本体・follow・予約フラグは本ページ側で明示的に再ロードする必要がある。
 watch(teamSlug, () => {
+  shellDenied.value = false
   teamLoaded.value = false
   team.value = null
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
@@ -628,7 +680,8 @@ provideTeamShellContext({
       bare <NuxtPage/> を描画する。各ページの layout:'team' の見た目を一切変えない。
       （pageTransition out-in 対応でルートは単一 <div>。）
     -->
-    <NuxtPage v-if="!isShellRoute" />
+    <ScopeNotFound v-if="!isShellRoute && childNotFound" />
+    <NuxtPage v-else-if="!isShellRoute" />
 
     <!-- シェル対象ルート（8 タブ）: 永続シェルで包む -->
     <template v-else>
@@ -688,12 +741,19 @@ provideTeamShellContext({
         </template>
 
         <!-- タブ本体（子）— 永続シェル下で差し替え -->
-        <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-        <NuxtPage />
+        <!-- 子ページの 403/404 は ScopeNotFound だけを出す（機能可視性のエラー表示と二重に出さない） -->
+        <ScopeNotFound v-if="childNotFound" />
+        <template v-else>
+          <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
+          <NuxtPage />
+        </template>
       </ScopePageShell>
 
+      <!-- 403/404（非所属・権限なし・不存在）: 共通の「見つかりません」。再試行は出さない -->
+      <ScopeNotFound v-else-if="showScopeNotFound" />
+
       <!--
-        取得失敗フォールバック（loading 完了かつ team=null: 403/404/503 等）。
+        取得失敗フォールバック（loading 完了かつ team=null: 5xx・通信断等）。
         村金型 villages/[id].vue に倣い、白画面ではなくエラー文言＋戻り導線を出す。
       -->
       <div v-else class="mx-auto max-w-2xl p-6 text-center">

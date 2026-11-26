@@ -2,6 +2,7 @@ package com.mannschaft.app.event.controller;
 
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.event.dto.CreateInviteTokenRequest;
+import com.mannschaft.app.event.dto.InviteTokenIssuedResponse;
 import com.mannschaft.app.event.dto.InviteTokenResponse;
 import com.mannschaft.app.event.service.EventInviteTokenService;
 import com.mannschaft.app.event.service.EventScopeAccessGuard;
@@ -56,12 +57,12 @@ public class EventInviteTokenController {
     @PostMapping
     @Operation(summary = "招待トークン作成")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "作成成功")
-    public ResponseEntity<ApiResponse<InviteTokenResponse>> createToken(
+    public ResponseEntity<ApiResponse<InviteTokenIssuedResponse>> createToken(
             @PathVariable Long eventId,
             @Valid @RequestBody CreateInviteTokenRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
         eventScopeAccessGuard.requireAdminByEventId(userId, eventId);
-        InviteTokenResponse response = inviteTokenService.createToken(eventId, userId, request);
+        InviteTokenIssuedResponse response = inviteTokenService.createToken(eventId, userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 

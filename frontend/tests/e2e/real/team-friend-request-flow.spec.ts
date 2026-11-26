@@ -228,7 +228,10 @@ test('FR-02/04/07: 認可プロフィール1候補、MEMBERは0候補・管理�
   await expect(member.page.getByTestId('incoming-follow-list')).toHaveCount(0)
   await proof(member.page, info, 'member-direct-nav')
   await open(member.page, '/teams/' + b.slug + '/nav')
-  await expect(member.page.getByTestId('friend-forbidden')).toBeVisible()
+  // 他チームの直 URL は権限や所属を示唆しない共通の「見つかりません」（CMP-261125-1108）
+  await expect(member.page.locator('[data-testid="scope-not-found"]')).toBeVisible()
+  await expect(member.page.getByTestId('friend-forbidden')).toHaveCount(0)
+  await expect(member.page.locator('.p-toast-message')).toHaveCount(0)
   await expect(member.page.getByTestId('friend-follow-button')).toHaveCount(0)
   await proof(member.page, info, 'other-team-direct-nav-forbidden')
 })

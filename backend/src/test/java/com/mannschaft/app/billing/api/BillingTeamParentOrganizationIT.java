@@ -345,7 +345,7 @@ class BillingTeamParentOrganizationIT extends AbstractMySqlIntegrationTest {
             long roleId;
             if (ids.isEmpty()) {
                 RoleEntity role = RoleEntity.builder().name("ADMIN").displayName("ADMIN")
-                        .priority(1).isSystem(true).build();
+                        .priority(com.mannschaft.app.role.authorization.RolePriority.priority("ADMIN")).isSystem(true).build();
                 entityManager.persist(role);
                 entityManager.flush();
                 roleId = role.getId();
