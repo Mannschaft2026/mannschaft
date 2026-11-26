@@ -1,27 +1,24 @@
 package com.mannschaft.app.auth.controller;
 
 import com.mannschaft.app.auth.guardianship.AuthenticationCriticalOperationGuard;
-import com.mannschaft.app.auth.service.AuthTokenService;
 import com.mannschaft.app.auth.service.ParentalConsentService;
-import com.mannschaft.app.common.i18n.UserLocaleCache;
-import com.mannschaft.app.common.security.AccessGuard;
-import com.mannschaft.app.proxy.ProxyInputContext;
-import com.mannschaft.app.proxy.repository.ProxyInputConsentRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.util.List;
 
@@ -41,42 +38,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code parentEmail} が null になり 400 で落ちていた。命名は camelCase が正
  * （Jackson 既定・同機能の他 DTO も camelCase）。{@code @JsonAlias} で両受けはしない。</p>
  *
- * <p>実 JSON を MockMvc に流し、Jackson のバインド＋Bean Validation の実挙動で検証する。
+ * <p>実 JSON を MockMvc（standaloneSetup）に流し、Jackson のバインド＋Bean Validation の実挙動で検証する。
+ * Spring コンテキストを起こさない（@MockitoBean による構成キー・認可型 override を増やさない。ContextOverrideCensusGuardTest）。
  * Service はモック（業務ロジックは ParentalConsentServiceTest が担う）。</p>
  */
-@WebMvcTest(ParentalConsentController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@ExtendWith(MockitoExtension.class)
 @DisplayName("保護者招待 POST /invitations の JSON 契約（CMP-261123-1125 AC5）")
 class ParentalConsentInviteJsonContractTest {
 
     private static final String URL = "/api/v1/parental-consent/invitations";
     private static final Long CHILD_USER_ID = 100L;
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockitoBean
+    @Mock
     private ParentalConsentService parentalConsentService;
-
-    @MockitoBean
+    @Mock
     private AuthenticationCriticalOperationGuard authenticationCriticalOperationGuard;
+    @InjectMocks
+    private ParentalConsentController controller;
 
-    // @WebMvcTest コンテキストで共通フィルター・SpEL ガードの依存を解決する（AuthLoginControllerTest と同流儀）
-    @MockitoBean
-    private AuthTokenService authTokenService;
-    @MockitoBean
-    private UserLocaleCache userLocaleCache;
-    @MockitoBean
-    private ProxyInputConsentRepository proxyInputConsentRepository;
-    @MockitoBean
-    private ProxyInputContext proxyInputContext;
-    @MockitoBean
-    private AccessGuard accessGuard;
+    private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(CHILD_USER_ID.toString(), null, List.of()));
+        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+        validator.afterPropertiesSet();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).setValidator(validator).build();
     }
 
     @AfterEach
