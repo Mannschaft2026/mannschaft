@@ -4,6 +4,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.signage.service.SignageAccessTokenService;
 import com.mannschaft.app.signage.service.SignageAccessTokenService.IssueSignageTokenRequest;
+import com.mannschaft.app.signage.service.SignageAccessTokenService.SignageAccessTokenIssuedResponse;
 import com.mannschaft.app.signage.service.SignageAccessTokenService.SignageAccessTokenResponse;
 import com.mannschaft.app.signage.service.SignageEmergencyService;
 import com.mannschaft.app.signage.service.SignageEmergencyService.BroadcastEmergencyRequest;
@@ -118,11 +119,11 @@ public class SignageScreenController {
      * レスポンス: 201 Created
      */
     @PostMapping("/{id}/tokens")
-    public ResponseEntity<ApiResponse<SignageAccessTokenResponse>> issueToken(
+    public ResponseEntity<ApiResponse<SignageAccessTokenIssuedResponse>> issueToken(
             @PathVariable Long id,
             @RequestBody IssueSignageTokenRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
-        SignageAccessTokenResponse response = tokenService.issueToken(id, userId, request);
+        SignageAccessTokenIssuedResponse response = tokenService.issueToken(id, userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 

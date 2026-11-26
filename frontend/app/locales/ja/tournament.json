@@ -156,7 +156,9 @@
         "apply_template_failed": "テンプレの適用に失敗しました",
         "load_all_failed": "メンバー表一覧の取得に失敗しました",
         "update_deadline_failed": "提出締切の更新に失敗しました"
-      }
+      },
+      "templates_unavailable": "テンプレを利用できません。チームの所属組織を確認できないため、メンバーは手動で入力してください",
+      "templates_load_failed": "テンプレの取得に失敗しました。メンバーは手動で入力できます"
     },
     "communication": {
       "title": "連絡スペース",
@@ -286,8 +288,7 @@
       "pdfFailed": "PDFの出力に失敗しました",
       "empty": "順位データがありません",
       "noDivisions": "部門が登録されていません",
-      "loadFailed": "順位表の取得に失敗しました",
-      "forbidden": "この大会を閲覧する権限がありません"
+      "loadFailed": "順位表の取得に失敗しました"
     },
     "rankings": {
       "title": "ランキング",
@@ -301,8 +302,7 @@
       "pdfFailed": "PDFの出力に失敗しました",
       "empty": "ランキングデータがありません",
       "noCategories": "ランキング項目がありません",
-      "loadFailed": "ランキングの取得に失敗しました",
-      "forbidden": "この大会を閲覧する権限がありません"
+      "loadFailed": "ランキングの取得に失敗しました"
     },
     "matrix": {
       "title": "対戦マトリクス",
@@ -314,7 +314,6 @@
       "empty": "マトリクスデータがありません",
       "noDivisions": "部門が登録されていません",
       "loadFailed": "マトリクスの取得に失敗しました",
-      "forbidden": "この大会を閲覧する権限がありません",
       "setsNote": "セット制大会のため、各セルのスコアは全セット得点の合計を示します。勝敗は勝セット数で判定されます。"
     },
     "visibility": {

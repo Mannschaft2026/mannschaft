@@ -4,7 +4,7 @@
  *
  * チームメンバーのチーム別統計（getUserTeamStats・teamId 必須）を可視化する。
  * 閲覧可否は BE 側で「本人 / チーム管理者 / F19.1 公開設定」に応じて制御されるため、
- * FE は 403 を分かりやすく表示する（握りつぶさない・CLAUDE.md 根治治療）。
+ * 403/404 は共通の「見つかりません」へ（CMP-261125-1108）。権限や所属を示唆する表示はしない。
  * 試合記録が無い場合は空状態を出す（§G.8）。
  *
  * [slug] ルート配下に移設済み（旧: teams/[id]/members/[userId]/match-analytics.vue）。
@@ -31,23 +31,12 @@ const orgId = ref<number | null>(null)
 const organizations = ref<MatchOrgOption[]>([])
 const orgInvalid = ref(false)
 const loading = ref(true)
-/** 403（閲覧権限なし）を検出したフラグ */
-const forbidden = ref(false)
+const { markIfDenied } = useScopeNotFound()
 
 const isEmpty = computed(() => (stats.value?.totalMatches ?? 0) === 0)
 
-/** ofetch のエラーから HTTP ステータスを取り出す（any 禁止・型ガード） */
-function statusOf(err: unknown): number | null {
-  if (typeof err === 'object' && err !== null && 'statusCode' in err) {
-    const code = (err as { statusCode?: unknown }).statusCode
-    return typeof code === 'number' ? code : null
-  }
-  return null
-}
-
 async function load(): Promise<void> {
   loading.value = true
-  forbidden.value = false
   try {
     // resolveContext は tm.slug === 引数 で照合するため slug を渡す（数値 ID 不可）
     // 分析は URL クエリ org で選んだ組織の試合を集計する（未指定は代表親組織）
@@ -61,13 +50,10 @@ async function load(): Promise<void> {
     }
     stats.value = await analytics.getUserTeamStats(ctx.orgId, userId.value, ctx.teamId)
   } catch (err) {
-    if (statusOf(err) === 403) {
-      forbidden.value = true
-      stats.value = null
-    } else {
-      // 403 以外は composable 側でトースト済み。再 throw せずページの空表示に留める。
-      stats.value = null
-    }
+    // 403/404 は共通の「見つかりません」へ（composable は 403/404 でトーストしない）。
+    // それ以外は composable 側でトースト済み。再 throw せずページの空表示に留める。
+    markIfDenied(err)
+    stats.value = null
   } finally {
     loading.value = false
   }
@@ -89,16 +75,9 @@ onMounted(load)
     <PageLoading v-if="loading" />
 
     <template v-else>
-      <!-- 閲覧権限なし（403・§G.9 認可連動） -->
-      <DashboardEmptyState
-        v-if="forbidden"
-        icon="pi pi-lock"
-        :message="t('match.analytics.forbidden')"
-      />
-
       <!-- 試合記録が無い -->
       <DashboardEmptyState
-        v-else-if="!orgInvalid && isEmpty"
+        v-if="!orgInvalid && isEmpty"
         icon="pi pi-chart-bar"
         :message="t('match.analytics.empty.member_no_matches')"
       />

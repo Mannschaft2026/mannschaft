@@ -34,7 +34,8 @@
         "arrivalTime": "Ankunftszeit",
         "leaveTime": "Abgangszeit",
         "loading": "Wird geladen...",
-        "noStudents": "Keine Schüler gefunden"
+        "noStudents": "Keine Schüler gefunden",
+        "unknownStudent": "Unbekannter Schüler"
       },
       "period": {
         "title": "Stunden-Anwesenheit",

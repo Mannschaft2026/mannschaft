@@ -1,6 +1,10 @@
 {
   "admin_report": {
     "title": "Gestión de denuncias",
+    "filter": {
+      "placeholder": "Filtrar por estado",
+      "all": "Todos los estados"
+    },
     "empty": "No hay denuncias",
     "messages": {
       "load_failed": "Error al cargar las denuncias",

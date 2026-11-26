@@ -9,6 +9,7 @@ const teamSlug = computed(() => String(route.params.slug))
 const { roleName, isAdmin, isAdminOrDeputy, isMember, can, loadPermissions } = useRoleAccess('team', teamSlug)
 const { getSkillCategories } = useSkillApi()
 const notification = useNotification()
+const { markIfDenied, markDenied } = useScopeNotFound()
 
 const loading = ref(true)
 /** 権限情報そのものの取得に失敗した（「権限なし」とは区別して表示する） */
@@ -40,14 +41,21 @@ async function loadData() {
     const result = await loadPermissions()
     if (!result.ok) {
       // 取得失敗を「権限なし」に倒さない（BE 障害時に管理者を誤って弾く対処療法を避ける）
+      // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+      if (markIfDenied(result.error)) return
       permissionFailed.value = true
       notification.error(t('skill.page.permissionLoadFailed'))
       return
     }
-    if (!isMember.value) return
+    if (!isMember.value) {
+      // 非メンバー・SUPPORTER・GUEST。権限や所属を示唆せず共通の「見つかりません」へ
+      markDenied()
+      return
+    }
     const res = await getSkillCategories(teamSlug.value)
     categories.value = res.data
-  } catch {
+  } catch (e) {
+    if (markIfDenied(e)) return
     notification.error('データの取得に失敗しました')
   } finally {
     loading.value = false
@@ -107,12 +115,8 @@ onMounted(loadData)
       @retry="loadData"
     />
 
-    <!-- 非メンバー・SUPPORTER・GUEST -->
-    <DashboardEmptyState
-      v-else-if="!canUse"
-      icon="pi pi-lock"
-      :message="t('skill.page.forbidden')"
-    />
+    <!-- 非メンバー・SUPPORTER・GUEST は loadData が notFound を立て、シェルが本文を置換する。ここには何も出さない -->
+    <template v-else-if="!canUse" />
 
     <template v-else>
       <Tabs v-model:value="activeTab">

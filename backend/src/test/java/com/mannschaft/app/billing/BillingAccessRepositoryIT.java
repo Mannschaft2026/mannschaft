@@ -1,6 +1,7 @@
 package com.mannschaft.app.billing;
 
 import com.mannschaft.app.auth.entity.UserEntity;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.role.entity.PermissionEntity;
 import com.mannschaft.app.role.entity.PermissionGroupEntity;
 import com.mannschaft.app.role.entity.PermissionGroupPermissionEntity;
@@ -197,7 +198,7 @@ class BillingAccessRepositoryIT extends AbstractMySqlIntegrationTest {
                 .setParameter("name", name).getResultList();
         if (!ids.isEmpty()) return ((Number) ids.get(0)).longValue();
         RoleEntity entity = RoleEntity.builder().name(name).displayName(name)
-                .priority(1).isSystem(true).build();
+                .priority(RoleSeedSupport.priorityOf(name, 1)).isSystem(true).build();
         em.persist(entity);
         em.flush();
         return entity.getId();

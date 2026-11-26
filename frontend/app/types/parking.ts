@@ -1,28 +1,39 @@
-export type ParkingSpaceStatus = 'AVAILABLE' | 'ASSIGNED' | 'RESERVED' | 'MAINTENANCE'
+import type { components } from '~/types/generated'
 
-export interface ParkingSpaceResponse {
-  id: number
-  teamId: number
-  spaceNumber: string
-  area: string | null
-  spaceType: 'STANDARD' | 'COMPACT' | 'LARGE' | 'EV_CHARGING' | 'MOTORCYCLE' | 'DISABLED'
-  status: ParkingSpaceStatus
-  assignedTo: { userId: number; displayName: string; vehiclePlate: string } | null
-  monthlyFee: number | null
-  createdAt: string
-}
+/** 区画の状態（BE: SpaceStatus）。 */
+export type ParkingSpaceStatus = 'VACANT' | 'OCCUPIED' | 'MAINTENANCE'
+/** 申請受付状態（BE: ApplicationStatus）。 */
+export type ParkingApplicationAcceptStatus = 'NOT_ACCEPTING' | 'ACCEPTING' | 'LOTTERY_CLOSED'
+/** 割当方式（BE: AllocationMethod）。 */
+export type ParkingAllocationMethod = 'FIRST_COME' | 'LOTTERY'
+/** 区画種別（BE: SpaceType）。 */
+export type ParkingSpaceType =
+  | 'INDOOR'
+  | 'OUTDOOR'
+  | 'ACCESSIBLE'
+  | 'MOTORCYCLE'
+  | 'BICYCLE'
+  | 'VISITOR'
+  | 'OTHER'
+/** 申請の状態（BE: ParkingApplicationStatus）。 */
+export type ParkingApplicationStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'LOTTERY_PENDING'
 
-export interface VehicleResponse {
-  id: number
-  userId: number
-  plateNumber: string
-  vehicleType: string | null
-  make: string | null
-  model: string | null
-  color: string | null
-  isDefault: boolean
-  createdAt: string
-}
+/** 区画（生成型 SpaceResponse。列挙は文字列で届くため上の union で絞って使う）。 */
+export type ParkingSpaceResponse = components['schemas']['SpaceResponse']
+
+/** 車両（生成型 VehicleResponse）。 */
+export type VehicleResponse = components['schemas']['VehicleResponse']
+
+/** 申請（生成型 ApplicationResponse）。 */
+export type ApplicationResponse = components['schemas']['ApplicationResponse']
+
+/** 一覧のページ情報（BE の PageMeta。page は 0 始まり）。 */
+export type ParkingPageMeta = components['schemas']['PageMeta']
 
 export interface ParkingListing {
   id: number
@@ -32,22 +43,6 @@ export interface ParkingListing {
   availableUntil: string | null
   monthlyFee: number
   status: 'ACTIVE' | 'CLOSED'
-}
-
-export interface ApplicationResponse {
-  id: number
-  spaceId: number
-  userId: number
-  vehicleId: number
-  sourceType: string
-  listingId: number | null
-  status: string
-  priority: number
-  message: string | null
-  rejectionReason: string | null
-  lotteryNumber: number | null
-  decidedAt: string | null
-  createdAt: string
 }
 
 export interface ListingResponse {

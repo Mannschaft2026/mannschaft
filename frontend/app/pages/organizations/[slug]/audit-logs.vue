@@ -7,6 +7,7 @@ const route = useRoute()
 const orgSlug = computed(() => String(route.params.slug))
 const auditLogApi = useAuditLogApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { formatDateTime } = useDatetime()
 const { t } = useI18n()
 
@@ -36,7 +37,9 @@ async function loadLogs(cursor?: string) {
     nextCursor.value = res.meta.nextCursor
     hasNext.value = res.meta.hasNext
   }
-  catch {
+  catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('auditLog.loadFailed'))
   }
   finally {

@@ -6,8 +6,7 @@
  * ディビジョンごとに getStandings を取得し、順位 / チーム / 試合数 / 勝分敗 /
  * 得失点差 / 勝点 / 直近フォーム を表示する。
  *
- * 可視性: 不可視大会は Wave0 BE が 404 を返す。FE は握り潰さず
- * 「閲覧権限がありません」を i18n で提示する（症状を隠さない）。
+ * 可視性: 不可視大会は Wave0 BE が 404 を返す。FE は握り潰さず共通の「見つかりません」（CMP-261125-1108）へ置き換える。
  * 再計算（recalculate）は書込系のため org 管理者（ADMIN/DEPUTY_ADMIN）のみ表示する。
  */
 import type {
@@ -22,6 +21,7 @@ definePageMeta({ layout: 'organization', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const orgId = String(route.params.slug)
 const tId = Number(route.params.tId)
 
@@ -34,8 +34,8 @@ const divisions = ref<TournamentDivision[]>([])
 const activeDivisionId = ref<number | null>(null)
 
 const loading = ref(true)
-/** 'forbidden' = 403/404（閲覧権限なし）、'error' = その他取得失敗 */
-const loadError = ref<'forbidden' | 'error' | null>(null)
+/** 'error' = 取得失敗（403/404 は共通の見つかりません表示へ） */
+const loadError = ref<'error' | null>(null)
 
 const standingsMap = ref<Record<number, TournamentStanding[]>>({})
 const standingsLoading = ref<Record<number, boolean>>({})
@@ -140,10 +140,9 @@ async function load() {
       await loadStandingsForDivision(first.id)
     }
   } catch (e) {
-    // 403/404 は「閲覧権限なし」として扱う（不可視大会は BE が 404）。
-    const status = (e as { response?: { status?: number }; statusCode?: number })?.response?.status
-      ?? (e as { statusCode?: number })?.statusCode
-    loadError.value = status === 403 || status === 404 ? 'forbidden' : 'error'
+    // 非所属・権限なし・不可視大会（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    if (markIfDenied(e)) return
+    loadError.value = 'error'
   } finally {
     loading.value = false
   }
@@ -164,12 +163,6 @@ onMounted(load)
     </h1>
 
     <PageLoading v-if="loading" size="40px" />
-
-    <DashboardEmptyState
-      v-else-if="loadError === 'forbidden'"
-      icon="pi pi-lock"
-      :message="$t('tournament.standings.forbidden')"
-    />
 
     <DashboardEmptyState
       v-else-if="loadError === 'error'"

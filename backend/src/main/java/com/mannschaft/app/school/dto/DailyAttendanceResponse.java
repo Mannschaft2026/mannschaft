@@ -12,12 +12,14 @@ import java.time.LocalTime;
 
 /** 日次出欠1件レスポンス。 */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class DailyAttendanceResponse {
 
     private Long id;
     private Long teamId;
     private Long studentUserId;
+    /** 生徒の氏名（姓 名）。退会済み等で解決できない場合は null（FE が「不明な生徒」を表示する）。 */
+    private String studentDisplayName;
     private LocalDate attendanceDate;
     private AttendanceStatus status;
     private AbsenceReason absenceReason;
@@ -37,10 +39,22 @@ public class DailyAttendanceResponse {
      * @return DailyAttendanceResponse
      */
     public static DailyAttendanceResponse from(DailyAttendanceRecordEntity entity) {
+        return from(entity, null);
+    }
+
+    /**
+     * 生徒氏名つきでエンティティから生成する（一覧取得用。氏名はバッチ解決済みの値を渡す）。
+     *
+     * @param entity             日次出欠レコードエンティティ
+     * @param studentDisplayName 生徒の氏名。解決できない場合は null
+     * @return DailyAttendanceResponse
+     */
+    public static DailyAttendanceResponse from(DailyAttendanceRecordEntity entity, String studentDisplayName) {
         return DailyAttendanceResponse.builder()
                 .id(entity.getId())
                 .teamId(entity.getTeamId())
                 .studentUserId(entity.getStudentUserId())
+                .studentDisplayName(studentDisplayName)
                 .attendanceDate(entity.getAttendanceDate())
                 .status(entity.getStatus())
                 .absenceReason(entity.getAbsenceReason())

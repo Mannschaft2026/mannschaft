@@ -5,6 +5,9 @@ import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.contact.ContactErrorCode;
+import com.mannschaft.app.common.token.IssuedToken;
+import com.mannschaft.app.common.token.SecretTokenVault;
+import com.mannschaft.app.contact.dto.ContactInviteIssuedResponse;
 import com.mannschaft.app.contact.dto.ContactInvitePreviewResponse;
 import com.mannschaft.app.contact.dto.ContactInviteTokenResponse;
 import com.mannschaft.app.contact.dto.CreateInviteTokenBody;
@@ -13,7 +16,6 @@ import com.mannschaft.app.contact.entity.ContactInviteTokenEntity;
 import com.mannschaft.app.contact.event.ContactInviteUsedNotificationEvent;
 import com.mannschaft.app.contact.repository.ContactInviteTokenRepository;
 import com.mannschaft.app.contact.repository.ContactRequestBlockRepository;
-import com.mannschaft.app.common.qr.BrandedQrImageWriter;
 import com.mannschaft.app.user.repository.UserBlockRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * 連絡先招待トークンサービス。
@@ -44,7 +44,7 @@ public class ContactInviteTokenService {
     private final UserBlockRepository userBlockRepository;
     private final ContactRequestBlockRepository contactRequestBlockRepository;
     private final ContactService contactService;
-    private final BrandedQrImageWriter brandedQrImageWriter;
+    private final SecretTokenVault vault;
     private final NameResolverService nameResolverService;
     /**
      * Issue #2834 / CMP-056: 付随通知は業務トランザクションの外（AFTER_COMMIT）で発火させるため、
@@ -53,25 +53,33 @@ public class ContactInviteTokenService {
     private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * 招待トークンを発行する。
+     * 招待トークンを発行する。平文は発行応答にだけ載せ、DB にはハッシュだけを保存する。
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
     @Transactional
-    public ContactInviteTokenResponse createToken(Long userId, CreateInviteTokenBody req) {
-        String token = UUID.randomUUID().toString();
+    public ContactInviteIssuedResponse createToken(Long userId, CreateInviteTokenBody req) {
+        IssuedToken issued = vault.issueBase64Url();
 
         LocalDateTime expiresAt = parseExpiresIn(req.getExpiresIn());
 
         ContactInviteTokenEntity entity = ContactInviteTokenEntity.builder()
                 .userId(userId)
-                .token(token)
+                .tokenHash(issued.hash())
                 .label(req.getLabel())
                 .maxUses(req.getMaxUses())
                 .expiresAt(expiresAt)
                 .build();
         ContactInviteTokenEntity saved = tokenRepository.save(entity);
 
-        return toResponse(saved);
+        return ContactInviteIssuedResponse.builder()
+                .id(saved.getId())
+                .token(issued.plaintext())
+                .inviteUrl(baseUrl + "/contact-invite/" + issued.plaintext())
+                .label(saved.getLabel())
+                .maxUses(saved.getMaxUses())
+                .usedCount(saved.getUsedCount())
+                .expiresAt(saved.getExpiresAt())
+                .createdAt(saved.getCreatedAt())
+                .build();
     }
 
     /**
@@ -97,7 +105,7 @@ public class ContactInviteTokenService {
      * 情報最小化: 発行者の表示名・ハンドル・有効期限のみ返す。
      */
     public ContactInvitePreviewResponse getPreview(String token) {
-        ContactInviteTokenEntity entity = tokenRepository.findByToken(token).orElse(null);
+        ContactInviteTokenEntity entity = tokenRepository.findByTokenHash(vault.hash(token)).orElse(null);
         if (entity == null || !entity.isValid()) {
             return ContactInvitePreviewResponse.builder().isValid(false).build();
         }
@@ -118,7 +126,7 @@ public class ContactInviteTokenService {
      */
     @Transactional
     public SendContactRequestResponse acceptInvite(Long currentUserId, String token) {
-        ContactInviteTokenEntity entity = tokenRepository.findByToken(token)
+        ContactInviteTokenEntity entity = tokenRepository.findByTokenHash(vault.hash(token))
                 .orElseThrow(() -> new BusinessException(ContactErrorCode.CONTACT_012));
 
         if (!entity.isValid()) {
@@ -166,37 +174,10 @@ public class ContactInviteTokenService {
         }
     }
 
-    /**
-     * QRコード画像を生成する（PNG バイト配列）。
-     * URLはサーバー側で組み立て、ユーザー入力値は含めない。
-     * {@link BrandedQrImageWriter} で中央ブランドバッジ入りQR（ECL=H固定）として生成する。
-     */
-    public byte[] generateQrCode(Long userId, String token, int size) {
-        // オーナーチェック
-        tokenRepository.findByToken(token)
-                .filter(t -> t.getUserId().equals(userId))
-                .orElseThrow(() -> new BusinessException(ContactErrorCode.CONTACT_014));
-
-        // URLはサーバー側で組み立て（ユーザー入力値を含めない）
-        String inviteUrl = baseUrl + "/contact-invite/" + token;
-
-        try {
-            return brandedQrImageWriter.writePng(inviteUrl, size);
-        } catch (Exception e) {
-            log.error("QRコード生成失敗: token={}", token, e);
-            throw new RuntimeException("QRコードの生成に失敗しました", e);
-        }
-    }
-
     private ContactInviteTokenResponse toResponse(ContactInviteTokenEntity entity) {
-        String inviteUrl = baseUrl + "/contact-invite/" + entity.getToken();
-        String qrCodeUrl = "/api/v1/contact-invite-tokens/" + entity.getToken() + "/qr";
         return ContactInviteTokenResponse.builder()
                 .id(entity.getId())
-                .token(entity.getToken())
                 .label(entity.getLabel())
-                .inviteUrl(inviteUrl)
-                .qrCodeUrl(qrCodeUrl)
                 .maxUses(entity.getMaxUses())
                 .usedCount(entity.getUsedCount())
                 .expiresAt(entity.getExpiresAt())
