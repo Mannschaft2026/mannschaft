@@ -3,7 +3,7 @@ package com.mannschaft.app.shiftbudget;
 import com.mannschaft.app.common.BusinessException;
 import lombok.Getter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 /**
  * 確認済みの予算警告を、上書き指定なしで再確認しようとした例外（CMP-260910-1607 ③・409）。
@@ -16,10 +16,10 @@ public class BudgetAlertAlreadyAcknowledgedException extends BusinessException {
     private final Long acknowledgedBy;
     /** 確認者の氏名。引けなかった場合は null。 */
     private final String acknowledgedByName;
-    private final LocalDateTime acknowledgedAt;
+    private final OffsetDateTime acknowledgedAt;
 
     public BudgetAlertAlreadyAcknowledgedException(Long acknowledgedBy, String acknowledgedByName,
-                                                   LocalDateTime acknowledgedAt) {
+                                                   OffsetDateTime acknowledgedAt) {
         super(ShiftBudgetErrorCode.ALERT_ALREADY_ACKNOWLEDGED);
         this.acknowledgedBy = acknowledgedBy;
         this.acknowledgedByName = acknowledgedByName;

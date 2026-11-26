@@ -1,12 +1,11 @@
 package com.mannschaft.app.shiftbudget.controller;
 
 import com.mannschaft.app.common.featuregate.RequireFeature;
-import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
-import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException;
 import com.mannschaft.app.shiftbudget.dto.AlertAcknowledgeRequest;
 import com.mannschaft.app.shiftbudget.dto.AlertResponse;
+import com.mannschaft.app.shiftbudget.service.BudgetAlertAcknowledgerNameResolver;
 import com.mannschaft.app.shiftbudget.service.BudgetThresholdAlertService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,8 +44,7 @@ import java.util.List;
 public class BudgetThresholdAlertController {
 
     private final BudgetThresholdAlertService alertService;
-    private final NameResolverService nameResolverService;
-    private final AccessControlService accessControlService;
+    private final BudgetAlertAcknowledgerNameResolver acknowledgerNameResolver;
 
     @GetMapping
     @Operation(summary = "未承認の閾値超過警告一覧を取得 (新しい警告ほど上)")
@@ -74,13 +72,8 @@ public class BudgetThresholdAlertController {
         try {
             return ApiResponse.of(alertService.acknowledge(organizationId, id, comment, overwrite));
         } catch (BudgetAlertAlreadyAcknowledgedException e) {
-            // 409 応答に既存の確認者の氏名を載せるのは、その人がこの組織のメンバーのときだけ。
-            // 組織外の確認者（組織外 SYSTEM_ADMIN など）の氏名は漏らさず null にする（画面側は「別の管理者」と表示する）
-            Long by = e.getAcknowledgedBy();
-            String name = null;
-            if (by != null && accessControlService.isMember(by, organizationId, "ORGANIZATION")) {
-                name = nameResolverService.resolveUserFullNames(List.of(by)).get(by);
-            }
+            // 409 応答に既存の確認者の氏名を載せる（組織外の確認者は null。判定は resolver に集約）
+            String name = acknowledgerNameResolver.resolve(e.getAcknowledgedBy(), organizationId);
             throw e.withAcknowledgedByName(name);
         }
     }

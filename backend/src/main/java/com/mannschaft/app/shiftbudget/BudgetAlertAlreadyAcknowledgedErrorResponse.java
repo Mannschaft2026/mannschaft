@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /** 確認済みの予算警告への再確認 409 応答（既存の確認者・確認時刻付き）。 */
@@ -17,7 +17,7 @@ public class BudgetAlertAlreadyAcknowledgedErrorResponse {
 
     public BudgetAlertAlreadyAcknowledgedErrorResponse(String code, String message,
                                                        Long acknowledgedBy, String acknowledgedByName,
-                                                       LocalDateTime acknowledgedAt) {
+                                                       OffsetDateTime acknowledgedAt) {
         this.error = new ErrorDetail(code, message, List.of(), new Details(acknowledgedBy, acknowledgedByName, acknowledgedAt));
     }
 
@@ -40,6 +40,6 @@ public class BudgetAlertAlreadyAcknowledgedErrorResponse {
         @Schema(description = "既に確認したユーザーの氏名（引けない場合は null）", nullable = true)
         private final String acknowledgedByName;
         @Schema(description = "既に確認した時刻")
-        private final LocalDateTime acknowledgedAt;
+        private final OffsetDateTime acknowledgedAt;
     }
 }

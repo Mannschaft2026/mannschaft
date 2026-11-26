@@ -4,6 +4,7 @@ import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException;
 import com.mannschaft.app.shiftbudget.ShiftBudgetErrorCode;
 import com.mannschaft.app.shiftbudget.ShiftBudgetFeatureService;
@@ -103,7 +104,9 @@ public class BudgetThresholdAlertService {
         // ロック取得後の最新値で判定する（先着が確認済みなら、上書き指定がない限り 409）
         if (alert.isAcknowledged() && !overwrite) {
             throw new BudgetAlertAlreadyAcknowledgedException(
-                    alert.getAcknowledgedBy(), null, alert.getAcknowledgedAt());
+                    alert.getAcknowledgedBy(), null,
+                    // 起きた瞬間として返す（エンティティの壁時計はサーバーゾーンのもの）
+                    alert.getAcknowledgedAt().atZone(UserZoneLocalDateTimeParser.SERVER_ZONE).toOffsetDateTime());
         }
 
         Long currentUserId = SecurityUtils.getCurrentUserId();

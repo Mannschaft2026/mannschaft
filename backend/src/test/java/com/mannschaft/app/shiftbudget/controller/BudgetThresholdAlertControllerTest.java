@@ -72,10 +72,7 @@ class BudgetThresholdAlertControllerTest {
     private BudgetThresholdAlertService alertService;
 
     @MockitoBean
-    private com.mannschaft.app.common.NameResolverService nameResolverService;
-
-    @MockitoBean
-    private com.mannschaft.app.common.AccessControlService accessControlService;
+    private com.mannschaft.app.shiftbudget.service.BudgetAlertAcknowledgerNameResolver acknowledgerNameResolver;
 
     @MockitoBean
     private AuthTokenService authTokenService;
@@ -165,11 +162,9 @@ class BudgetThresholdAlertControllerTest {
     @Test
     @DisplayName("POST acknowledge: 確認済み → 409 + details に確認者・時刻")
     void acknowledge_409() throws Exception {
-        given(accessControlService.isMember(7L, ORG_ID, "ORGANIZATION")).willReturn(true);
-        given(nameResolverService.resolveUserFullNames(java.util.List.of(7L)))
-                .willReturn(java.util.Map.of(7L, "山田 太郎"));
+        given(acknowledgerNameResolver.resolve(7L, ORG_ID)).willReturn("山田 太郎");
         willThrow(new com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException(
-                7L, null, LocalDateTime.of(2026, 6, 25, 15, 0)))
+                7L, null, java.time.OffsetDateTime.of(2026, 6, 25, 15, 0, 0, 0, java.time.ZoneOffset.ofHours(9))))
                 .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean());
 
         mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
@@ -183,13 +178,11 @@ class BudgetThresholdAlertControllerTest {
     }
 
     @Test
-    @DisplayName("POST acknowledge: 確認者がこの組織のメンバーでない（組織外 SYSTEM_ADMIN 等）→ 409 の氏名は null で、氏名を引かない")
+    @DisplayName("POST acknowledge: 氏名を解決できない（組織外の確認者等）→ 409 の氏名は null")
     void acknowledge_409_組織外の確認者の氏名はnull() throws Exception {
-        given(accessControlService.isMember(7L, ORG_ID, "ORGANIZATION")).willReturn(false);
-        given(nameResolverService.resolveUserFullNames(java.util.List.of(7L)))
-                .willReturn(java.util.Map.of(7L, "外部 管理者"));
+        given(acknowledgerNameResolver.resolve(7L, ORG_ID)).willReturn(null);
         willThrow(new com.mannschaft.app.shiftbudget.BudgetAlertAlreadyAcknowledgedException(
-                7L, null, LocalDateTime.of(2026, 6, 25, 15, 0)))
+                7L, null, java.time.OffsetDateTime.of(2026, 6, 25, 15, 0, 0, 0, java.time.ZoneOffset.ofHours(9))))
                 .given(alertService).acknowledge(eq(ORG_ID), eq(ALERT_ID), any(), anyBoolean());
 
         mockMvc.perform(post("/api/v1/shift-budget/alerts/" + ALERT_ID + "/acknowledge")
@@ -200,7 +193,6 @@ class BudgetThresholdAlertControllerTest {
                 .andExpect(jsonPath("$.error.code").value("SHIFT_BUDGET_033"))
                 .andExpect(jsonPath("$.error.details.acknowledgedBy").value(7))
                 .andExpect(jsonPath("$.error.details.acknowledgedByName").doesNotExist());
-        org.mockito.Mockito.verify(nameResolverService, org.mockito.Mockito.never()).resolveUserFullNames(any());
     }
 
     @Test
