@@ -13,6 +13,8 @@ interface AuthUser {
   timezone?: string
   /** UI 表示ロケール（例: 'ja', 'en'）。未設定時はアプリのデフォルトロケールを使用する。 */
   locale?: string
+  /** 本人のステータス（/users/me の status）。同意待ち（PENDING_PARENTAL_CONSENT）の判定に使う。 */
+  status?: string
 }
 
 interface AuthState {
@@ -35,6 +37,9 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: (state): boolean => !!state.user,
     currentUser: (state): AuthUser | null => state.user,
     isSystemAdmin: (state): boolean => state.user?.systemRole === 'SYSTEM_ADMIN',
+    // 保護者同意待ち。認証済み扱いだが、BE の ParentalConsentGateFilter が大半の API を遮断するため、
+    // ルートガード・起動時プラグインがこの値で pending 画面へ閉じ込める。
+    isPendingParentalConsent: (state): boolean => state.user?.status === PENDING_PARENTAL_CONSENT_STATUS,
   },
 
   actions: {

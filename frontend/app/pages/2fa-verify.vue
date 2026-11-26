@@ -235,6 +235,7 @@ async function handleVerify() {
       code: currentCode.value,
     })
     authStore.setTokens(data.data.accessToken ?? '', data.data.refreshToken ?? '')
+    let isPendingConsent = false
 
     // 検証レスポンスにユーザー情報は無い。フルプロフィール（timezone・locale 等）を取得して store を更新する。
     // 検証自体は成功しているため、取得失敗は「コード不正」と混同せず別文言で伝えて遷移は続ける。
@@ -249,8 +250,10 @@ async function handleVerify() {
           systemRole: string | null
           locale: string
           timezone: string | null
+          status: string | null
         }
       }>('/api/v1/users/me')
+      isPendingConsent = profile.data.status === PENDING_PARENTAL_CONSENT_STATUS
       await authStore.setUser({
         id: profile.data.id,
         email: profile.data.email,
@@ -258,11 +261,14 @@ async function handleVerify() {
         profileImageUrl: profile.data.avatarUrl,
         systemRole: profile.data.systemRole ?? undefined,
         timezone: profile.data.timezone ?? undefined,
+        status: profile.data.status ?? undefined,
       })
-      if (profile.data.locale) {
+      if (!isPendingConsent && profile.data.locale) {
         await applyAccountLocale(profile.data.locale)
       }
     } catch {
+      // 取得失敗でも、トークンが同意待ち（ppc=true）なら通常ユーザー扱いしない
+      isPendingConsent = isParentalConsentPendingToken(data.data.accessToken)
       notification.error(t('auth.mfa.error_profile_failed'))
     }
 
@@ -271,7 +277,8 @@ async function handleVerify() {
 
     // ログイン成立直後にアカウント設定（外観・ナビ）をサーバーから同期する。
     // 新ブラウザ（シークレット等）で localStorage が空でも BEの保存済み設定が反映される。
-    authStore.syncAccountSettings()
+    // 同意待ちは BE ゲートで塞がれるため同期しない。
+    if (!isPendingConsent) authStore.syncAccountSettings()
 
     // バックアップコードで入った場合は残り枚数を伝える。少なければ再生成を促す（AC-13）。
     if (method === 'BACKUP_CODE' && typeof data.data.backupCodesRemaining === 'number') {
@@ -286,7 +293,8 @@ async function handleVerify() {
       }
     }
 
-    navigateTo(redirectTarget.value)
+    // 同意待ちは redirect を尊重せず pending 固定（迂回させない）。
+    navigateTo(isPendingConsent ? PARENTAL_CONSENT_PENDING_PATH : redirectTarget.value)
   } catch (e: unknown) {
     const code = errorCodeOf(e)
     if (applySessionEnd(code)) return

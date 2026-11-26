@@ -14,7 +14,8 @@ export default defineNuxtPlugin(() => {
   // 同期・即時（localStorage → store）
   store.loadFromStorage()
 
-  if (authStore.isAuthenticated) {
+  // 同意待ちは BE ゲートで塞がれるため取得しない
+  if (authStore.isAuthenticated && !authStore.isPendingParentalConsent) {
     // バックグラウンドでサーバー同期（チームタグを優先）
     void store.loadTabs('TEAM', store.teamTabPage).catch((error) => {
       console.error('[scopeDashboard] 起動時のタグ取得に失敗しました', error)

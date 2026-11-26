@@ -24,6 +24,7 @@ export function useLoginSession() {
     passwordResult?: LoginResult,
   ): Promise<string> {
     let navigationTarget: string | null = null
+    let isPendingConsent = false
     authStore.setTokens(tokens.accessToken, tokens.refreshToken)
     // /api/v1/users/me でフルプロフィール（systemRole・locale・avatarUrl 等）を一括取得
     try {
@@ -40,24 +41,22 @@ export function useLoginSession() {
           status: string | null
         }
       }>('/api/v1/users/me')
-      // PENDING_PARENTAL_CONSENT: 保護者同意待ち → 専用ページへリダイレクト
-      // （setUser・設定同期は行わず、遷移先だけを決めて以降の処理を飛ばす）
-      if (profile.data.status === 'PENDING_PARENTAL_CONSENT') {
-        navigationTarget = '/parental-consent/pending'
-      }
-      else {
-        await authStore.setUser({
-          id: profile.data.id,
-          email: profile.data.email,
-          fullName: profile.data.lastName + ' ' + profile.data.firstName,
-          profileImageUrl: profile.data.avatarUrl,
-          systemRole: profile.data.systemRole ?? undefined,
-          timezone: profile.data.timezone ?? undefined,
-          locale: profile.data.locale || undefined,
-        })
-        if (profile.data.locale) {
-          await applyAccountLocale(profile.data.locale)
-        }
+      // 保護者同意待ちも認証済みとして status 付きで本人を保存する（isAuthenticated=false だと
+      // auth middleware が /login へ戻すため）。遷移先は redirect に関わらず pending 固定。
+      isPendingConsent = profile.data.status === PENDING_PARENTAL_CONSENT_STATUS
+      await authStore.setUser({
+        id: profile.data.id,
+        email: profile.data.email,
+        fullName: profile.data.lastName + ' ' + profile.data.firstName,
+        profileImageUrl: profile.data.avatarUrl,
+        systemRole: profile.data.systemRole ?? undefined,
+        timezone: profile.data.timezone ?? undefined,
+        locale: profile.data.locale || undefined,
+        status: profile.data.status ?? undefined,
+      })
+      // 同意待ちはアカウント言語の適用もしない（BE ゲートで塞がれる API を呼ばないため）
+      if (!isPendingConsent && profile.data.locale) {
+        await applyAccountLocale(profile.data.locale)
       }
     } catch {
       if (!passwordResult) {
@@ -68,20 +67,25 @@ export function useLoginSession() {
         }
         throw new Error('profile')
       }
-      // プロフィール取得失敗時はログインレスポンスの基本情報で続行
+      // プロフィール取得失敗時はログインレスポンスの基本情報で続行。
+      // ただしトークンが同意待ち（ppc=true）なら通常ユーザー扱いせず、同意待ちの本人として保存する。
+      isPendingConsent = isParentalConsentPendingToken(tokens.accessToken)
       await authStore.setUser({
         id: passwordResult.userId,
         email: passwordResult.email,
         fullName: passwordResult.fullName,
         profileImageUrl: null,
+        ...(isPendingConsent ? { status: PENDING_PARENTAL_CONSENT_STATUS } : {}),
       })
     }
 
     // 本人復元とlocale適用による世代更新が終わってから、先回り更新を武装する。
     armProactiveRefresh(runtimeConfig, authStore)
 
-    // 保護者同意待ちで遷移先が既に決まっている場合は、設定同期も遷移先の再決定も行わない。
-    if (!navigationTarget) {
+    // 保護者同意待ちは、設定同期も redirect の尊重もせず pending 固定で遷移する。
+    if (isPendingConsent) {
+      navigationTarget = PARENTAL_CONSENT_PENDING_PATH
+    } else {
       // ログイン成立直後にアカウント設定（外観・ナビ）をサーバーから同期する。
       // 新ブラウザ（シークレット等）で localStorage が空でも BEの保存済み設定が反映される。
       authStore.syncAccountSettings()

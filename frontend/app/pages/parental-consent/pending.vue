@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { InvitationResponse } from '@/types/parental-consent'
 
+// default レイアウトは受信箱ポーリング・通知 WebSocket・参加待ち招待取得を持ち、BE の同意ゲートで
+// 403 AUTH_070 になる。背景処理を持たない auth レイアウトで描画する（CMP-261123-1124 AC4）。
 definePageMeta({
+  layout: 'auth',
   middleware: 'auth',
 })
 
@@ -11,11 +14,45 @@ const notification = useNotification()
 const { formatDate } = useDatetime()
 const authStore = useAuthStore()
 const runtimeConfig = useRuntimeConfig()
+const api = useApi()
 
 const invitations = ref<InvitationResponse[]>([])
 const loading = ref(true)
 const parentEmail = ref('')
 const sending = ref(false)
+
+/** /users/me から本人を取り直して保存する。成功し、同意待ちでなくなったときだけ true。 */
+async function reloadCurrentUser(): Promise<boolean> {
+  try {
+    const profile = await api<{
+      data: {
+        id: number
+        email: string
+        lastName: string
+        firstName: string
+        avatarUrl: string | null
+        systemRole: string | null
+        locale: string
+        timezone: string | null
+        status: string | null
+      }
+    }>('/api/v1/users/me')
+    await authStore.setUser({
+      id: profile.data.id,
+      email: profile.data.email,
+      fullName: profile.data.lastName + ' ' + profile.data.firstName,
+      profileImageUrl: profile.data.avatarUrl,
+      systemRole: profile.data.systemRole ?? undefined,
+      timezone: profile.data.timezone ?? undefined,
+      locale: profile.data.locale || undefined,
+      status: profile.data.status ?? undefined,
+    })
+    return !authStore.isPendingParentalConsent
+  } catch {
+    notification.error(t('error.unknown'))
+    return false
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -29,7 +66,11 @@ async function loadData() {
       // 失敗しても例外は投げず結果で返る。成功のときだけ遷移し、失敗は既存の呼び出し元（stompAuth）と同じ扱いにする
       const refreshed = await performTokenRefresh(runtimeConfig, authStore)
       if (refreshed === 'refreshed') {
-        await navigateTo('/parental-consent/manage')
+        // 新しいトークンで本人を取り直し、同意待ちの印（status）を外してから遷移する。
+        // 印が残ったままだと auth middleware が pending へ戻す。
+        if (await reloadCurrentUser()) {
+          await navigateTo('/parental-consent/manage')
+        }
       } else if (refreshed === 'auth_failed') {
         await handleAuthFailureLogout(authStore)
       } else if (refreshed === 'transient') {
@@ -136,5 +177,11 @@ onMounted(loadData)
         </button>
       </li>
     </ul>
+
+    <div class="mt-8 text-center">
+      <button class="text-sm text-gray-500 hover:text-gray-700 underline" @click="authStore.serverLogout()">
+        {{ $t('button.logout') }}
+      </button>
+    </div>
   </div>
 </template>
