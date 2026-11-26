@@ -104,7 +104,7 @@ class TeamSlugServiceTest {
         @DisplayName("有効な slug を指定すると採用される（自動生成しない）")
         void 有効slug採用() {
             givenCreateScaffold();
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("my-team")).willReturn(false);
+            given(teamRepository.existsBySlugIncludingDeleted("my-team")).willReturn(false);
 
             CreateTeamRequest req = new CreateTeamRequest("テストチーム", null, null, null, null, null, null, "my-team", false, null);
 
@@ -138,7 +138,7 @@ class TeamSlugServiceTest {
         @Test
         @DisplayName("重複 slug は TEAM_062")
         void 重複() {
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("taken-slug")).willReturn(true);
+            given(teamRepository.existsBySlugIncludingDeleted("taken-slug")).willReturn(true);
 
             CreateTeamRequest req = new CreateTeamRequest("テストチーム", null, null, null, null, null, null, "taken-slug", false, null);
 
@@ -157,8 +157,8 @@ class TeamSlugServiceTest {
         @DisplayName("slug 未指定なら名前から自動生成される")
         void 自動生成フォールバック() {
             givenCreateScaffold();
-            // 自動生成は createUniqueSlug 経由で existsBySlugAndDeletedAtIsNull を引く
-            given(teamRepository.existsBySlugAndDeletedAtIsNull(eq("my-club"))).willReturn(false);
+            // 自動生成は createUniqueSlug 経由で existsBySlugIncludingDeleted を引く
+            given(teamRepository.existsBySlugIncludingDeleted(eq("my-club"))).willReturn(false);
 
             CreateTeamRequest req = new CreateTeamRequest("My Club", null, null, null, null, null, null, null, false, null);
 
@@ -171,7 +171,7 @@ class TeamSlugServiceTest {
         @DisplayName("空文字 slug も未指定扱いで自動生成")
         void 空文字も自動生成() {
             givenCreateScaffold();
-            given(teamRepository.existsBySlugAndDeletedAtIsNull(eq("my-club"))).willReturn(false);
+            given(teamRepository.existsBySlugIncludingDeleted(eq("my-club"))).willReturn(false);
 
             CreateTeamRequest req = new CreateTeamRequest("My Club", null, null, null, null, null, null, "  ", false, null);
 
@@ -188,7 +188,7 @@ class TeamSlugServiceTest {
         @Test
         @DisplayName("有効・未使用 slug は available=true")
         void 利用可能() {
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("free-slug")).willReturn(false);
+            given(teamRepository.existsBySlugIncludingDeleted("free-slug")).willReturn(false);
 
             var res = service.checkSlugAvailability("free-slug");
 
@@ -199,7 +199,7 @@ class TeamSlugServiceTest {
         @Test
         @DisplayName("重複 slug は available=false / SLUG_ALREADY_TAKEN")
         void 重複は利用不可() {
-            given(teamRepository.existsBySlugAndDeletedAtIsNull("taken")).willReturn(true);
+            given(teamRepository.existsBySlugIncludingDeleted("taken")).willReturn(true);
 
             var res = service.checkSlugAvailability("taken");
 

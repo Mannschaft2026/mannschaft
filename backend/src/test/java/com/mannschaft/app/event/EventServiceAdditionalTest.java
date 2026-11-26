@@ -140,7 +140,7 @@ class EventServiceAdditionalTest {
                     null, null, null, null, null);
 
             given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(entity));
-            given(eventRepository.existsBySlug("new-slug")).willReturn(false);
+            given(eventRepository.existsBySlugIncludingDeleted("new-slug")).willReturn(false);
             given(eventRepository.save(any(EventEntity.class))).willReturn(entity);
             given(eventMapper.toEventDetailResponse(any())).willReturn(response);
 
@@ -149,7 +149,7 @@ class EventServiceAdditionalTest {
 
             // Then
             assertThat(result).isNotNull();
-            verify(eventRepository).existsBySlug("new-slug");
+            verify(eventRepository).existsBySlugIncludingDeleted("new-slug");
         }
 
         @Test
@@ -163,7 +163,7 @@ class EventServiceAdditionalTest {
                     null, null, null, null, null);
 
             given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(entity));
-            given(eventRepository.existsBySlug("duplicate-slug")).willReturn(true);
+            given(eventRepository.existsBySlugIncludingDeleted("duplicate-slug")).willReturn(true);
 
             // When & Then
             assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID, request))

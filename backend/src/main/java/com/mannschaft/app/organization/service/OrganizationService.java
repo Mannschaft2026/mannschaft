@@ -6,7 +6,9 @@ import com.mannschaft.app.common.duplicatename.DuplicateNameNormalizer;
 import com.mannschaft.app.common.duplicatename.DuplicateNameScopeKind;
 import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.common.storage.MediaUrlResolver;
+import com.mannschaft.app.common.util.SlugAllocator;
 import com.mannschaft.app.common.util.SlugGenerator;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.mannschaft.app.common.util.SlugValidator;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
@@ -150,7 +152,18 @@ public class OrganizationService {
                             .build();
                     Long adminRoleId = adminRoleMutationLockService.lockAdminRoleIdForCreation(userId)
                             .orElseThrow(() -> new BusinessException(OrgErrorCode.ORG_005));
-                    organizationRepository.save(org);
+                    try {
+                        organizationRepository.save(org);
+                    } catch (DataIntegrityViolationException e) {
+                        // 並行作成で採番直後に同じ slug を取られた場合。同一トランザクションは破棄されるため同一 TX 内の再採番は
+                        // できない（REQUIRES_NEW で組織だけ別コミットすると後続失敗で孤児組織が残り原子性が崩れる）。
+                        // 500 ではなく 409 で再試行を促す。指定 slug の衝突は ORG_062、自動採番分の競合は ORG_071。
+                        if (SlugAllocator.isUniqueViolation(e, "uq_organizations_slug")) {
+                            boolean userSpecified = SlugValidator.isProvided(req.getSlug());
+                            throw new BusinessException(userSpecified ? OrgErrorCode.ORG_062 : OrgErrorCode.ORG_071);
+                        }
+                        throw e;
+                    }
 
                     // 作成者をADMINロールで紐付ける
                     UserRoleEntity userRole = UserRoleEntity.builder()
@@ -418,24 +431,27 @@ public class OrganizationService {
     /**
      * 組織名から一意スラッグを生成する。
      *
-     * <p>ベーススラッグが既に使用中の場合は数値サフィックス (-1, -2, ...) を付与して一意化する。
-     * 100 回試行しても一意にならない場合はタイムスタンプベースのサフィックスを使用する。</p>
+     * <p>ベーススラッグが使用済み（現役・論理削除済み・履歴予約。論理削除済みは永久予約）の場合は
+     * 数値サフィックス (-1, -2, ...)、それでも埋まっていればランダムサフィックスで一意化する。
+     * 日本語名など固定の {@code "team"} に落ちる名称は同時作成の衝突を避けるためランダムサフィックスを先に使う。
+     * 採番を諦める場合は {@code ORG_071}（409）で、500 にしない。</p>
      *
      * @param name 組織名
      * @return 一意なスラッグ
+     * @throws BusinessException 採番できなかった場合（ORG_071）
      */
     public String createUniqueSlug(String name) {
-        String base = SlugGenerator.generate(name);
-        if (!organizationRepository.existsBySlugAndDeletedAtIsNull(base)) {
-            return base;
-        }
-        for (int i = 1; i <= 100; i++) {
-            String candidate = SlugGenerator.withSuffix(base, i);
-            if (!organizationRepository.existsBySlugAndDeletedAtIsNull(candidate)) {
-                return candidate;
-            }
-        }
-        return SlugGenerator.withSuffix(base, (int) (System.currentTimeMillis() % 10000));
+        return SlugAllocator.allocate(SlugGenerator.generate(name), this::isSlugReserved, OrgErrorCode.ORG_071);
+    }
+
+    /**
+     * slug が使用不可か判定する（現役・論理削除済み・PROVISIONED の使用中 slug、および他組織の履歴予約）。
+     *
+     * <p>論理削除済み組織の slug は DB の一意索引（{@code uq_organizations_slug}）に残り、永久予約として再利用しない。</p>
+     */
+    private boolean isSlugReserved(String slug) {
+        return organizationRepository.existsBySlugIncludingDeleted(slug)
+                || organizationSlugHistoryRepository.existsByOldSlug(slug);
     }
 
     /**
@@ -480,7 +496,16 @@ public class OrganizationService {
                             .supporterEnabled(false)
                             .lifecycleStatus(OrganizationEntity.LifecycleStatus.PROVISIONED)
                             .build();
-                    organizationRepository.save(org);
+                    try {
+                        organizationRepository.save(org);
+                    } catch (DataIntegrityViolationException e) {
+                        // 並行作成で採番直後に同じ slug を取られた場合。同一トランザクションは破棄されるため再採番はできないが、
+                        // 500 ではなく 409（ORG_071）で再試行を促す。
+                        if (SlugAllocator.isUniqueViolation(e, "uq_organizations_slug")) {
+                            throw new BusinessException(OrgErrorCode.ORG_071);
+                        }
+                        throw e;
+                    }
                     return org.getId();
                 });
     }
@@ -569,7 +594,8 @@ public class OrganizationService {
         if (SlugValidator.isReserved(slug)) {
             throw new BusinessException(OrgErrorCode.ORG_061);
         }
-        if (organizationRepository.existsBySlugAndDeletedAtIsNull(slug)) {
+        // 論理削除済み・PROVISIONED を含めて弾く（永久予約。uq_organizations_slug の一意制約違反で 500 になるのを防ぐ）
+        if (organizationRepository.existsBySlugIncludingDeleted(slug)) {
             throw new BusinessException(OrgErrorCode.ORG_062);
         }
         // F01.2 §5.9.5: 他組織の過去 slug（履歴予約）は恒久 301 を壊さないため使用不可。
@@ -598,7 +624,8 @@ public class OrganizationService {
         if (SlugValidator.isReserved(slug)) {
             return new SlugAvailabilityResponse(false, "SLUG_RESERVED");
         }
-        if (organizationRepository.existsBySlugAndDeletedAtIsNull(slug)) {
+        // 論理削除済みの slug も使用中として返す（永久予約）
+        if (organizationRepository.existsBySlugIncludingDeleted(slug)) {
             return new SlugAvailabilityResponse(false, "SLUG_ALREADY_TAKEN");
         }
         // F01.2 §5.9.5: 他組織の過去 slug（履歴予約）は使用不可（恒久 301 保全）
@@ -669,7 +696,8 @@ public class OrganizationService {
         if (SlugValidator.isReserved(slug)) {
             throw new BusinessException(OrgErrorCode.ORG_061);
         }
-        if (organizationRepository.existsBySlugAndDeletedAtIsNull(slug)) {
+        // 論理削除済み・PROVISIONED を含めて弾く（永久予約。uq_organizations_slug の一意制約違反で 500 になるのを防ぐ）
+        if (organizationRepository.existsBySlugIncludingDeleted(slug)) {
             throw new BusinessException(OrgErrorCode.ORG_062);
         }
         // 他組織の履歴に予約済みなら不可。自組織の過去 slug への戻しは許可（orgId 除外）。

@@ -104,7 +104,10 @@ public enum OrgErrorCode implements ErrorCode {
     ORG_069("ORG_069", "この組織に加盟していないチームが含まれています", Severity.WARN),
 
     /** グループ選択を必須にするには、グループ機能を有効にしてグループを1件以上作成してください（422） */
-    ORG_070("ORG_070", "グループ選択を必須にするには、グループ機能を有効にしてグループを1件以上作成してください", Severity.WARN);
+    ORG_070("ORG_070", "グループ選択を必須にするには、グループ機能を有効にしてグループを1件以上作成してください", Severity.WARN),
+
+    /** slug を自動採番できなかった（候補が尽きた／同時作成で競合した）。slug を指定して再試行する（409） */
+    ORG_071("ORG_071", "スラッグを自動採番できませんでした。スラッグを指定して再試行してください", Severity.WARN);
 
     private final String code;
     private final String message;

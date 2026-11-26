@@ -79,6 +79,29 @@ public interface OrganizationRepository extends JpaRepository<OrganizationEntity
      */
     boolean existsBySlugAndDeletedAtIsNull(String slug);
 
+    /**
+     * 論理削除済み・PROVISIONEDを含めて slug の使用件数を数える（slug 永久予約の判定用）。
+     *
+     * <p>{@code @SQLRestriction} を回避するネイティブクエリ。DB の一意索引は論理削除行も含めて一意のため、
+     * 存在確認も論理削除済みを含めないと INSERT が一意制約違反（500）になる。
+     * 論理削除済みの slug は永久予約（再利用不可）。</p>
+     *
+     * @param slug チェック対象のスラッグ
+     * @return 使用件数（0 または 1）
+     */
+    @Query(value = "SELECT COUNT(*) FROM organizations WHERE slug = :slug", nativeQuery = true)
+    long countBySlugIncludingDeleted(@Param("slug") String slug);
+
+    /**
+     * slug が論理削除済みを含めて使用中か。永久予約の判定に使う。
+     *
+     * @param slug チェック対象のスラッグ
+     * @return 使用中なら true
+     */
+    default boolean existsBySlugIncludingDeleted(String slug) {
+        return countBySlugIncludingDeleted(slug) > 0;
+    }
+
     List<OrganizationEntity> findByVisibility(OrganizationEntity.Visibility visibility);
 
     // 組織行の PESSIMISTIC_WRITE 取得は、後段（4-A と共用）の findByIdForUpdate を使う（F01.2.1 §6.1 step 7・§6.9）。

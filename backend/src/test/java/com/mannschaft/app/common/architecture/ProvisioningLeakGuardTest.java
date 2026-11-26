@@ -63,6 +63,9 @@ class ProvisioningLeakGuardTest {
             "TeamRepository", Set.of(
                     // 真偽値のみを返し、内容を漏らさない一意性チェック（PROVISIONED込みで正しい仕様）。
                     "existsBySlugAndDeletedAtIsNull",
+                    // CMP-261021-0838: 論理削除済み・PROVISIONED を含む slug 使用有無（永久予約判定）。件数・真偽値のみで内容を漏らさない。
+                    "countBySlugIncludingDeleted",
+                    "existsBySlugIncludingDeleted",
                     // 既存債務: BulletinScopeIdResolver / BlogPostService が直接使用中。
                     // 是正は別タスク（本 PR は resolveTeamId の入口のみを対象とする）。
                     "findBySlugAndDeletedAtIsNull",
@@ -71,6 +74,9 @@ class ProvisioningLeakGuardTest {
             ),
             "OrganizationRepository", Set.of(
                     "existsBySlugAndDeletedAtIsNull",
+                    // CMP-261021-0838: 論理削除済み・PROVISIONED を含む slug 使用有無（永久予約判定）。件数・真偽値のみ。
+                    "countBySlugIncludingDeleted",
+                    "existsBySlugIncludingDeleted",
                     "findBySlugAndDeletedAtIsNull"
             )
     );

@@ -125,7 +125,10 @@ public enum EventErrorCode implements ErrorCode {
     DELEGATION_ALREADY_CHECKED_IN("EVENT_042", "この代理は既にチェックイン済みです", Severity.WARN),
 
     /** 代理チェックインの実行権限なし（403） */
-    DELEGATION_CHECKIN_FORBIDDEN("EVENT_043", "代理チェックインを実行する権限がありません", Severity.WARN);
+    DELEGATION_CHECKIN_FORBIDDEN("EVENT_043", "代理チェックインを実行する権限がありません", Severity.WARN),
+
+    /** slug を自動採番できなかった（候補が尽きた／同時作成で競合した）。slug を指定して再試行する（409） */
+    SLUG_AUTO_ALLOCATION_FAILED("EVENT_044", "スラッグを自動採番できませんでした。スラッグを指定して再試行してください", Severity.WARN);
 
     private final String code;
     private final String message;

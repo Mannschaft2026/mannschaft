@@ -106,7 +106,10 @@ public enum TeamErrorCode implements ErrorCode {
     TEAM_071("TEAM_071", "この申請・招待はすでに処理されています", Severity.WARN),
 
     /** 指定したチームグループは選択できません（400） */
-    TEAM_072("TEAM_072", "指定したチームグループは選択できません", Severity.WARN);
+    TEAM_072("TEAM_072", "指定したチームグループは選択できません", Severity.WARN),
+
+    /** slug を自動採番できなかった（候補が尽きた／同時作成で競合した）。slug を指定して再試行する（409） */
+    TEAM_073("TEAM_073", "スラッグを自動採番できませんでした。スラッグを指定して再試行してください", Severity.WARN);
 
     private final String code;
     private final String message;

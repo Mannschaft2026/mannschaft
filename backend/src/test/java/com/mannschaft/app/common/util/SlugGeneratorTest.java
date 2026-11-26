@@ -142,4 +142,13 @@ class SlugGeneratorTest {
         String result = SlugGenerator.withSuffix(base, 9999);
         assertThat(result).hasSizeLessThanOrEqualTo(30);
     }
+
+    @Test
+    void generate_withFallback_japaneseOnlyUsesGivenFallback() {
+        assertThat(SlugGenerator.generate("夏祭り", "event")).isEqualTo("event");
+        assertThat(SlugGenerator.generate(null, "event")).isEqualTo("event");
+        assertThat(SlugGenerator.generate("夏祭り")).isEqualTo("team");
+        assertThat(SlugGenerator.generate("Summer Fest", "event")).isEqualTo("summer-fest");
+        assertThat(SlugGenerator.isFallback("event")).isTrue();
+    }
 }
