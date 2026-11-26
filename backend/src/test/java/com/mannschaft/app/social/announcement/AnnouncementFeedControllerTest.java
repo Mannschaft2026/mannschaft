@@ -18,7 +18,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import com.mannschaft.app.circulation.service.CirculationPublicationStatusService;
 import com.mannschaft.app.cms.service.BlogPostPublicationStatusService;
+import com.mannschaft.app.survey.service.SurveyPublicationStatusService;
 import com.mannschaft.app.timeline.service.TimelinePostPublicationStatusService;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -89,6 +91,11 @@ class AnnouncementFeedControllerTest {
     private BlogPostPublicationStatusService blogPostPublicationStatusService;
     @MockitoBean
     private TimelinePostPublicationStatusService timelinePostPublicationStatusService;
+    // アンケート・回覧板の公開状態（CMP-261122-1300）。同じく元ドメインの Service だけを差し替える。
+    @MockitoBean
+    private SurveyPublicationStatusService surveyPublicationStatusService;
+    @MockitoBean
+    private CirculationPublicationStatusService circulationPublicationStatusService;
 
     // JwtAuthenticationFilter の依存解決用
     @MockitoBean
