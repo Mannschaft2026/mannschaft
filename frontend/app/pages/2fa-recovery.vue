@@ -4,9 +4,7 @@ definePageMeta({
 })
 
 const route = useRoute()
-const authStore = useAuthStore()
-// 先回りリフレッシュ武装用に runtimeConfig を setup コンテキストで capture する（armProactiveRefresh 参照）。
-const runtimeConfig = useRuntimeConfig()
+const { completeLogin } = useLoginSession()
 const notification = useNotification()
 const { t } = useI18n()
 const { requestMfaRecovery, confirmMfaRecovery } = useAuthApi()
@@ -75,10 +73,10 @@ async function handleConfirmRecovery() {
   confirmFailed.value = false
   try {
     const data = await confirmMfaRecovery(recoveryToken.value)
-    authStore.setTokens(data.data.accessToken, data.data.refreshToken)
-    // リカバリーログイン成功直後に先回りリフレッシュタイマーを武装する。
-    armProactiveRefresh(runtimeConfig, authStore)
-    navigateTo('/')
+    // 本人（status 含む）の復元・先回り更新の武装・設定同期・遷移先の決定は共通のログイン完了処理に任せる。
+    // 同意待ちなら /parental-consent/pending、それ以外は通常ログインと同じ遷移先になる。
+    const target = await completeLogin({ accessToken: data.data.accessToken, refreshToken: data.data.refreshToken })
+    navigateTo(target)
   } catch {
     // 期限切れ・使用済み・不正トークン。同じトークンでの再試行は無意味なのでログインからやり直させる。
     confirmFailed.value = true

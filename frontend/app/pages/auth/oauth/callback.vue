@@ -72,8 +72,14 @@ onMounted(async () => {
       // 同意待ちは BE ゲートで塞がれる API を呼ばない。
       if (!isPendingConsent) await applyAccountLocale(profile.data.locale)
     } catch {
-      // プロフィール取得失敗はサイレント（トークンは取得済み）。ただし同意待ち（ppc=true）は通常扱いしない。
-      isPendingConsent = isParentalConsentPendingToken(result.accessToken)
+      // プロフィール取得失敗はサイレント（トークンは取得済み）。
+      // ただし同意待ち（ppc=true）は本人を復元できず pending へ着けない（user=null だと auth ガードが /login へ戻す）。
+      // 通常扱いもしないので、共通のログイン失敗処理（サーバーログアウト）へ揃える。
+      if (isParentalConsentPendingToken(result.accessToken)) {
+        await authStore.serverLogout()
+        error.value = t('auth.oauth.callback_error')
+        return
+      }
     }
 
     // 本人の復元による世代更新が終わってからタイマーを武装する。

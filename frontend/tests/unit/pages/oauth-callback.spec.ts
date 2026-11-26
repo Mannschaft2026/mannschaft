@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   notifySuccess: vi.fn(),
   notifyError: vi.fn(),
   applyAccountLocale: vi.fn(),
+  serverLogout: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({ path: '/auth/oauth/callback', params: {}, query: {} as Record<string, string> }))
 
@@ -70,6 +71,7 @@ vi.mock('~/stores/useAuthStore', () => ({
     setTokens: mocks.setTokens,
     setUser: mocks.setUser,
     syncAccountSettings: mocks.syncAccountSettings,
+    serverLogout: mocks.serverLogout,
     isSystemAdmin: false,
     isAuthenticated: false,
     loadFromStorage: vi.fn(),
@@ -225,5 +227,44 @@ describe('pages/auth/oauth/callback.vue 保護者同意待ち（CMP-261123-1124�
     expect(mocks.syncAccountSettings).toHaveBeenCalledOnce()
     expect(navigatedTargets()).toContain('/dashboard')
     expect(navigatedTargets().some(t => t.includes('/parental-consent/pending'))).toBe(false)
+  })
+})
+
+/**
+ * CMP-261123-1124 AC1（失敗経路）: プロフィール取得に失敗した同意待ち（JWT ppc=true）は本人を復元できない。
+ * user=null のまま pending へ遷移すると auth ガードが /login へ戻すため、pending へ送らず
+ * 共通のログイン失敗処理（サーバーログアウト）へ揃える。通常ユーザー扱いで /dashboard へも送らない。
+ */
+function jwtWith(payload: Record<string, unknown>): string {
+  const b64url = (o: unknown) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(payload)}.signature`
+}
+
+describe('pages/auth/oauth/callback.vue プロフィール取得失敗と同意待ち（CMP-261123-1124）', () => {
+  it('AC1: ppc=true でプロフィール取得に失敗したらログイン失敗処理へ（pending にも dashboard にも送らない）', async () => {
+    const ppcToken = jwtWith({ sub: '1', ppc: true, exp: Math.floor(Date.now() / 1000) + 900 })
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: ppcToken, refreshToken: 'r' } })
+    mocks.api.mockRejectedValue(new Error('profile'))
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.serverLogout).toHaveBeenCalledOnce()
+    expect(mocks.syncAccountSettings).not.toHaveBeenCalled()
+    const targets = navigatedTargets()
+    expect(targets).not.toContain('/dashboard')
+    expect(targets.some(t => t.includes('/parental-consent/pending'))).toBe(false)
+  })
+
+  it('AC7: ppc でないトークンのプロフィール取得失敗は従来どおり（サイレントで /dashboard へ）', async () => {
+    const activeToken = jwtWith({ sub: '1', ppc: false, exp: Math.floor(Date.now() / 1000) + 900 })
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: activeToken, refreshToken: 'r' } })
+    mocks.api.mockRejectedValue(new Error('profile'))
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.serverLogout).not.toHaveBeenCalled()
+    expect(navigatedTargets()).toContain('/dashboard')
   })
 })

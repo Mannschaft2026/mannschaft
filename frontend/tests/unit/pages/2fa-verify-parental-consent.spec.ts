@@ -159,3 +159,25 @@ describe('pages/2fa-verify.vue 保護者同意待ち（CMP-261123-1124）', () =
     expect(navigatedPaths()).not.toContain('/parental-consent/pending')
   })
 })
+
+describe('pages/2fa-verify.vue プロフィール取得失敗と同意待ち（CMP-261123-1124 AC1 失敗経路）', () => {
+  function jwtWith(payload: Record<string, unknown>): string {
+    const b64url = (o: unknown) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+    return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(payload)}.signature`
+  }
+
+  it('ppc=true でプロフィール取得に失敗したらサーバーログアウトし、pending にも他へも遷移しない', async () => {
+    const ppcToken = jwtWith({ sub: '42', ppc: true, exp: Math.floor(Date.now() / 1000) + 900 })
+    mocks.validateMfaLogin.mockResolvedValue({ data: { accessToken: ppcToken, refreshToken: 'refresh' } })
+    mocks.api.mockRejectedValue(new Error('profile'))
+    const wrapper = mountVerify()
+    await flush()
+
+    await wrapper.find('form').trigger('submit')
+    await flush()
+
+    expect(mocks.serverLogout).toHaveBeenCalledOnce()
+    expect(mocks.syncAccountSettings).not.toHaveBeenCalled()
+    expect(navigatedPaths()).toEqual([])
+  })
+})

@@ -267,9 +267,13 @@ async function handleVerify() {
         await applyAccountLocale(profile.data.locale)
       }
     } catch {
-      // 取得失敗でも、トークンが同意待ち（ppc=true）なら通常ユーザー扱いしない
-      isPendingConsent = isParentalConsentPendingToken(data.data.accessToken)
       notification.error(t('auth.mfa.error_profile_failed'))
+      // 同意待ち（ppc=true）は本人を復元できず pending へ着けない（user=null だと auth ガードが /login へ戻す）。
+      // 通常ユーザー扱いもしないので、サーバーログアウトして終える。
+      if (isParentalConsentPendingToken(data.data.accessToken)) {
+        await authStore.serverLogout()
+        return
+      }
     }
 
     // 本人の復元による世代更新が終わってからタイマーを武装する。
