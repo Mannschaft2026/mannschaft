@@ -16,6 +16,7 @@ const orgId = String(route.params.slug)
 
 const { t } = useI18n()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { getTournaments, createTournament } = useTournamentApi()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('organization', orgId)
 const { userTimezone } = useDatetime()
@@ -67,7 +68,9 @@ async function load() {
   try {
     const res = await getTournaments(orgId)
     tournaments.value = res.data
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('tournament.list.loadError'))
   } finally {
     loading.value = false

@@ -276,7 +276,6 @@
       "member_subtitle": "Estadísticas por equipo de este miembro",
       "team_context": "Equipo objetivo",
       "unknown_kind": "Otro",
-      "forbidden": "No tienes permiso para ver estas estadísticas",
       "metric": {
         "total_matches": "Partidos",
         "total_minutes": "Minutos totales",

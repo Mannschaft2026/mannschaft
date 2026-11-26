@@ -11,8 +11,8 @@ import java.util.Optional;
  */
 public interface ContactInviteTokenRepository extends JpaRepository<ContactInviteTokenEntity, Long> {
 
-    /** トークン文字列で取得 */
-    Optional<ContactInviteTokenEntity> findByToken(String token);
+    /** トークンのハッシュ（{@code SecretTokenVault#hash}）で取得 */
+    Optional<ContactInviteTokenEntity> findByTokenHash(String tokenHash);
 
     /** 発行者の有効トークン一覧（無効化済みを除く） */
     List<ContactInviteTokenEntity> findByUserIdAndRevokedAtIsNullOrderByCreatedAtDesc(Long userId);

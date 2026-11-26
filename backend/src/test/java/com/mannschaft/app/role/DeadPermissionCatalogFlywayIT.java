@@ -81,6 +81,8 @@ class DeadPermissionCatalogFlywayIT {
     private static final String PERMISSION_VIEW_ATTENDANCE = "VIEW_ATTENDANCE";
     private static final String PERMISSION_MANAGE_COMMITTEE = "MANAGE_COMMITTEE";
     private static final String PERMISSION_JOBS_MANAGE = "jobs.manage";
+    /** CMP-260930-0233: 駐車場管理（V183 MANAGE_RECRUITMENTS と同型: ADMIN 自動付与・DEPUTY_ADMIN 手動付与）。 */
+    private static final String PERMISSION_MANAGE_PARKING = "MANAGE_PARKING";
 
     private static final String SCOPE_TYPE_TEAM = "TEAM";
     private static final String SCOPE_TYPE_ORGANIZATION = "ORGANIZATION";
@@ -269,6 +271,20 @@ class DeadPermissionCatalogFlywayIT {
     void manageCommitteeIsEffectiveForOrganizationAdminOnly() {
         prepareRoles();
         assertPermissionEffectiveForAdminOnly(ORGANIZATION_ID, SCOPE_TYPE_ORGANIZATION, PERMISSION_MANAGE_COMMITTEE);
+    }
+
+    @Test
+    @DisplayName("AC-21（CMP-260930-0233）: permissions カタログに MANAGE_PARKING が存在し ADMIN のみ is_default=1 で保持する")
+    void AC21_manageParkingIsRegisteredInCatalogAndGrantedToAdminOnly() {
+        assertRegisteredAndGrantedToAdminOnly(PERMISSION_MANAGE_PARKING);
+    }
+
+    @Test
+    @DisplayName("AC-21（CMP-260930-0233）: MANAGE_PARKING はチーム/組織 ADMIN に効き、個別付与なし DEPUTY_ADMIN/一般メンバー/非メンバーは 403")
+    void AC21_manageParkingIsEffectiveForAdminOnly() {
+        prepareRoles();
+        assertPermissionEffectiveForAdminOnly(TEAM_ID, SCOPE_TYPE_TEAM, PERMISSION_MANAGE_PARKING);
+        assertPermissionEffectiveForAdminOnly(ORGANIZATION_ID, SCOPE_TYPE_ORGANIZATION, PERMISSION_MANAGE_PARKING);
     }
 
     /**

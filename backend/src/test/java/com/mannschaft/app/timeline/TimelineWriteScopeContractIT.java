@@ -1,6 +1,7 @@
 package com.mannschaft.app.timeline;
 
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -225,7 +226,7 @@ class TimelineWriteScopeContractIT extends AbstractMySqlIntegrationTest {
                                 + "VALUES (:name, :dn, :priority, 1, NOW(), NOW())")
                 .setParameter("name", name)
                 .setParameter("dn", name)
-                .setParameter("priority", 100)
+                .setParameter("priority", RoleSeedSupport.priorityOf(name, 100))
                 .executeUpdate();
         ownRoles.add(((Number) em.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue());
     }

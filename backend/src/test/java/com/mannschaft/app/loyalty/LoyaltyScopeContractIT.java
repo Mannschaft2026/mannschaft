@@ -1,6 +1,7 @@
 package com.mannschaft.app.loyalty;
 
 import com.mannschaft.app.auth.entity.UserEntity;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ErrorCode;
@@ -341,7 +342,7 @@ class LoyaltyScopeContractIT extends AbstractMySqlIntegrationTest {
 
     private void role(Long user, Long team, Long organization, String name) {
         RoleEntity definition = roles.findByName(name).orElseGet(() -> roles.saveAndFlush(RoleEntity.builder()
-                .name(name).displayName(name).priority(100).isSystem(true).build()));
+                .name(name).displayName(name).priority(com.mannschaft.app.support.test.RoleSeedSupport.priorityOf(name, 100)).isSystem(true).build()));
         userRoles.saveAndFlush(UserRoleEntity.builder().userId(user).roleId(definition.getId())
                 .teamId(team).organizationId(organization).grantedBy(user).build());
     }

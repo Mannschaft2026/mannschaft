@@ -276,7 +276,6 @@
       "member_subtitle": "该成员的球队统计",
       "team_context": "目标球队",
       "unknown_kind": "其他",
-      "forbidden": "你没有权限查看这些统计",
       "metric": {
         "total_matches": "出场",
         "total_minutes": "总出场时间(分)",

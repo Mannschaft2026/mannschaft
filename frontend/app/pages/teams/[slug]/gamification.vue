@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PointSummary, UserBadge, RankingEntry } from '~/types/gamification'
+import { isScopeNotFound } from '~/utils/loadError'
 
 definePageMeta({ layout: 'team', middleware: 'auth' })
 
@@ -7,6 +8,7 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const gamificationApi = useGamificationApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { formatDate } = useDatetime()
 
 const points = ref<PointSummary | null>(null)
@@ -16,19 +18,32 @@ const loading = ref(true)
 const activeTab = ref('0')
 const rankingPeriod = ref<'WEEKLY' | 'MONTHLY' | 'YEARLY'>('MONTHLY')
 
+/**
+ * 3 つの取得は認可が同一ではない（CMP-261125-1108）。ポイント・バッジは所属チェックのみだが、
+ * ランキングはさらに機能フラグ（FEATURE_GAMIFICATION_ENABLED。無効時は所属者にも 403）を要する。
+ * そのため「全取得が 403/404」のときだけ非所属・権限なしとみなして共通の「見つかりません」に寄せ、
+ * 一部だけ失敗したときは取得できた分を表示する（失敗はトーストで知らせる）。
+ */
 async function loadData() {
   loading.value = true
   try {
-    const [pts, bdg, rnk] = await Promise.all([
+    const [pts, bdg, rnk] = await Promise.allSettled([
       gamificationApi.getMyPoints(teamSlug.value),
       gamificationApi.getMyBadges(teamSlug.value),
       gamificationApi.getRankings(teamSlug.value, rankingPeriod.value),
     ])
-    points.value = pts
-    badges.value = bdg
-    rankings.value = rnk
-  } catch {
-    notification.error('ゲーミフィケーションデータの取得に失敗しました')
+    const failures = [pts, bdg, rnk]
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map(r => r.reason as unknown)
+    if (failures.length === 3 && failures.every(isScopeNotFound)) {
+      // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない
+      markIfDenied(failures[0])
+      return
+    }
+    if (pts.status === 'fulfilled') points.value = pts.value
+    if (bdg.status === 'fulfilled') badges.value = bdg.value
+    if (rnk.status === 'fulfilled') rankings.value = rnk.value
+    if (failures.length > 0) notification.error('ゲーミフィケーションデータの取得に失敗しました')
   } finally {
     loading.value = false
   }

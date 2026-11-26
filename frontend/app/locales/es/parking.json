@@ -1,0 +1,104 @@
+{
+  "parking": {
+    "title": "Gestión de aparcamiento",
+    "spaces": {
+      "title": "Plazas",
+      "empty": "No hay plazas de aparcamiento.",
+      "pricePerMonth": "{price} al mes",
+      "floor": "Planta {floor}",
+      "deadline": "Solicitar antes del {date}",
+      "status": {
+        "VACANT": "Libre",
+        "OCCUPIED": "Ocupada",
+        "MAINTENANCE": "En mantenimiento"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "Aceptando solicitudes",
+        "NOT_ACCEPTING": "Solicitudes cerradas",
+        "LOTTERY_CLOSED": "Sorteo cerrado"
+      },
+      "type": {
+        "INDOOR": "Interior",
+        "OUTDOOR": "Exterior",
+        "ACCESSIBLE": "Accesible",
+        "MOTORCYCLE": "Moto",
+        "BICYCLE": "Bicicleta",
+        "VISITOR": "Visitantes",
+        "OTHER": "Otro"
+      },
+      "allocation": {
+        "FIRST_COME": "Por orden de llegada",
+        "LOTTERY": "Sorteo"
+      },
+      "refreshError": "No se pudo actualizar la lista de plazas. Lo mostrado puede estar desactualizado."
+    },
+    "apply": {
+      "button": "Solicitar plaza",
+      "dialogTitle": "Solicitar el uso de una plaza",
+      "space": "Plaza",
+      "spacePlaceholder": "Selecciona una plaza",
+      "noSpaces": "Ahora mismo no hay plazas que acepten solicitudes.",
+      "vehicle": "Vehículo",
+      "vehiclePlaceholder": "Selecciona un vehículo",
+      "noVehicle": "No hay vehículos registrados. Debes registrar un vehículo para solicitar.",
+      "loadVehiclesError": "No se pudieron cargar tus vehículos.",
+      "retry": "Reintentar",
+      "message": "Mensaje (opcional)",
+      "messageHint": "Máximo {max} caracteres",
+      "submit": "Solicitar",
+      "close": "Cerrar",
+      "success": "Solicitud enviada",
+      "successLottery": "Solicitud de sorteo recibida"
+    },
+    "vehicle": {
+      "register": "Registrar un vehículo",
+      "type": "Tipo",
+      "plate": "Matrícula",
+      "nickname": "Apodo (opcional)",
+      "save": "Registrar",
+      "kind": {
+        "CAR": "Coche",
+        "MOTORCYCLE": "Moto",
+        "BICYCLE": "Bicicleta"
+      }
+    },
+    "applications": {
+      "title": "Mis solicitudes",
+      "titleAll": "Solicitudes",
+      "empty": "No hay solicitudes",
+      "vehicle": "Vehículo",
+      "otherVehicle": "Vehículo de otro usuario",
+      "rejectionReason": "Motivo del rechazo: {reason}",
+      "cancel": "Cancelar",
+      "cancelled": "La solicitud se ha cancelado",
+      "cancelConfirm": {
+        "header": "Cancelar solicitud",
+        "message": "¿Cancelar tu solicitud de la plaza {space}?",
+        "accept": "Cancelar solicitud",
+        "reject": "Mantener"
+      },
+      "status": {
+        "PENDING": "Pendiente de revisión",
+        "APPROVED": "Aprobada",
+        "REJECTED": "Rechazada",
+        "CANCELLED": "Cancelada",
+        "LOTTERY_PENDING": "Pendiente de sorteo"
+      }
+    },
+    "errors": {
+      "spaceNotFound": "No se encontró la plaza. Se ha actualizado la lista.",
+      "vehicleNotFound": "No se encontró el vehículo seleccionado. Elige de nuevo.",
+      "applicationNotFound": "No se encontró la solicitud. Se ha actualizado la lista.",
+      "spaceNotVacant": "Esta plaza ya no está libre. Se ha actualizado la lista.",
+      "maxSpacesExceeded": "Has alcanzado el máximo de plazas por persona.",
+      "notAccepting": "Esta plaza no acepta solicitudes en este momento.",
+      "alreadyApplied": "Ya has solicitado esta plaza.",
+      "invalidStatus": "Esta solicitud ya está resuelta y no se puede modificar.",
+      "plateDuplicate": "Esta matrícula ya está registrada.",
+      "forbidden": "No tienes permiso para realizar esta acción.",
+      "notFound": "No se encontró el elemento. Se ha actualizado la lista.",
+      "conflict": "El estado cambió y no se pudo completar la acción. Se ha actualizado la lista.",
+      "unprocessable": "Esta plaza no se puede solicitar ahora. Se ha actualizado la lista."
+    }
+  }
+}
