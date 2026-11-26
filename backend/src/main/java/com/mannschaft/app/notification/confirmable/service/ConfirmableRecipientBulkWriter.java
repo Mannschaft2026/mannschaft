@@ -7,6 +7,9 @@ import com.mannschaft.app.notification.NotificationScopeType;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationEntity;
 import com.mannschaft.app.notification.entity.NotificationEntity;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -39,6 +42,7 @@ import java.util.UUID;
  *   <li>リマインド分数の解決は呼び出し側の責務（本部品は解決済みの値を受け取る）。</li>
  * </ul>
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ConfirmableRecipientBulkWriter {
@@ -49,6 +53,7 @@ public class ConfirmableRecipientBulkWriter {
     private static final String SOURCE_TYPE = "CONFIRMABLE_NOTIFICATION";
 
     private final JdbcTemplate jdbcTemplate;
+    private final Environment environment;
 
     /**
      * 指定の確認通知に既に受信者行がある user_id を、1 文の SELECT で求める（再開・再発火時の二重防止）。
@@ -195,6 +200,13 @@ public class ConfirmableRecipientBulkWriter {
         List<Map<String, Object>> keyRows = keyHolder.getKeyList();
         if (keyRows.size() != seeds.size()) {
             // 採番 id が行数と合わない場合は id なしで返す（配信を止めない）。DB 行自体は作成済み。
+            // 黙って劣化させないよう WARN を残し、test プロファイルでは契約違反として例外にする。
+            log.warn("確認通知の一括INSERTで採番キー数が行数と一致しません（id なしで返します）: keys={}, rows={}",
+                    keyRows.size(), seeds.size());
+            if (environment.acceptsProfiles(Profiles.of("test"))) {
+                throw new IllegalStateException("採番キー数と行数が不一致: keys=" + keyRows.size()
+                        + ", rows=" + seeds.size());
+            }
             return seeds;
         }
         List<NotificationEntity> withId = new ArrayList<>(seeds.size());

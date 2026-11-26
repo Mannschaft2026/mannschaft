@@ -62,7 +62,7 @@ class ConfirmableRecipientBulkWriterTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        writer = new ConfirmableRecipientBulkWriter(jdbcTemplate);
+        writer = new ConfirmableRecipientBulkWriter(jdbcTemplate, new org.springframework.mock.env.MockEnvironment());
         // update(PreparedStatementCreator, KeyHolder): creator を実行して SQL・引数を捕まえ、採番キーを 1001.. で返す。
         given(jdbcTemplate.update(any(PreparedStatementCreator.class), any(KeyHolder.class))).willAnswer(inv -> {
             PreparedStatementCreator creator = inv.getArgument(0);
@@ -187,5 +187,18 @@ class ConfirmableRecipientBulkWriterTest {
 
         assertThat(created).isEmpty();
         org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    @DisplayName("アプリ内通知: 採番キー数が行数と合わないとき、test プロファイルでは例外にする（黙って id なしで返さない）")
+    void insertAppNotifications_採番キー不一致はtestプロファイルで例外() {
+        given(jdbcTemplate.update(any(PreparedStatementCreator.class), any(KeyHolder.class))).willReturn(2);
+        org.springframework.mock.env.MockEnvironment env = new org.springframework.mock.env.MockEnvironment();
+        env.setActiveProfiles("test");
+        ConfirmableRecipientBulkWriter strict = new ConfirmableRecipientBulkWriter(jdbcTemplate, env);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> strict.insertAppNotifications(
+                notification(ScopeType.TEAM), List.of(11L, 12L), "CONFIRMABLE_NOTIFICATION"))
+                .isInstanceOf(IllegalStateException.class);
     }
 }

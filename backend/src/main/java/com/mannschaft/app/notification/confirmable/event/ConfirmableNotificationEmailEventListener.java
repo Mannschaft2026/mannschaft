@@ -84,12 +84,18 @@ public class ConfirmableNotificationEmailEventListener {
             confirmTokenByUserId.put(userId, confirmToken);
         }
 
-        // ユーザー情報を一括取得
-        List<UserEntity> users = userRepository.findByIdIn(event.getRecipientUserIds());
+        // ユーザー情報を取得（IN 句のプレースホルダ上限に備え 500 件ずつ。SQL 数は受信者数/500 の定数オーダー）
+        List<Long> recipientIds = event.getRecipientUserIds();
+        List<UserEntity> users = new ArrayList<>(recipientIds.size());
+        for (int from = 0; from < recipientIds.size(); from += OUTBOX_CHUNK_SIZE) {
+            users.addAll(userRepository.findByIdIn(
+                    recipientIds.subList(from, Math.min(from + OUTBOX_CHUNK_SIZE, recipientIds.size()))));
+        }
 
         // CMP-261002-1559: 1通ずつ enqueue すると受信者数に比例した INSERT になるため、リクエストを
         // 溜めて 500 件ずつ enqueueAll（多値 INSERT 1 文）で outbox へ登録する。
         List<EmailOutboxRequest> requests = new ArrayList<>(users.size());
+        int invalidAddressCount = 0;
         for (UserEntity user : users) {
             String confirmToken = confirmTokenByUserId.get(user.getId());
             if (confirmToken == null) {
@@ -101,6 +107,14 @@ public class ConfirmableNotificationEmailEventListener {
             String email = user.getEmail();
             if (email == null || email.isBlank()) {
                 log.warn("メールアドレスが未設定のためスキップ: userId={}", user.getId());
+                continue;
+            }
+
+            // 形式不正の 1 件で enqueueAll が全件拒否され同チャンクの宛先が消えないよう、ここで 1 件ずつ除外する
+            if (!EmailOutboxRequest.isValidToAddress(email)) {
+                invalidAddressCount++;
+                log.warn("メールアドレス形式不正のためスキップ: userId={}, notificationId={}",
+                        user.getId(), event.getConfirmableNotificationId());
                 continue;
             }
 
@@ -123,6 +137,11 @@ public class ConfirmableNotificationEmailEventListener {
             } catch (Exception e) {
                 log.error("確認通知メール組み立て失敗: userId={}, email={}", user.getId(), email, e);
             }
+        }
+
+        if (invalidAddressCount > 0) {
+            log.warn("形式不正アドレスを除外して送信: notificationId={}, excluded={}",
+                    event.getConfirmableNotificationId(), invalidAddressCount);
         }
 
         int sentCount = 0;

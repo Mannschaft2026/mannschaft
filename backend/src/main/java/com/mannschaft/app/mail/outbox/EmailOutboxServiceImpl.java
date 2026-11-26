@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * F09.18 メール配信 outbox Service 実装。
@@ -43,15 +42,6 @@ public class EmailOutboxServiceImpl implements EmailOutboxService {
 
     /** payload_json の上限 (バイト)。VARBINARY(8192) - GCM オーバーヘッド余裕。 */
     static final int PAYLOAD_MAX_BYTES = 8000;
-
-    /**
-     * メールアドレス検証用の簡易正規表現。
-     * RFC 5322 完全準拠ではないが、SES 送信前の基本的なバリデーションには十分。
-     * Jakarta Bean Validation の {@code @Email} と同等の挙動を狙う。
-     */
-    private static final Pattern EMAIL_PATTERN = Pattern.compile(
-            "^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$"
-    );
 
     private final EmailOutboxRepository repository;
     private final EncryptionService encryption;
@@ -277,7 +267,7 @@ public class EmailOutboxServiceImpl implements EmailOutboxService {
         if (request.locale() == null || request.locale().isBlank()) {
             throw new EmailOutboxValidationException("EMAIL_OUTBOX_002", "locale is required");
         }
-        if (request.toAddress() == null || !EMAIL_PATTERN.matcher(request.toAddress()).matches()) {
+        if (!EmailOutboxRequest.isValidToAddress(request.toAddress())) {
             throw new EmailOutboxValidationException(
                     "EMAIL_OUTBOX_001",
                     "Invalid email address format: " + request.toAddress()

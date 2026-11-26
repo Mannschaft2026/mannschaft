@@ -74,6 +74,8 @@ class ConfirmableNotificationSyncSendBulkIT extends AbstractMySqlIntegrationTest
     private static final long MAX_SYNC_STATEMENTS_FOR_1000 = 40L;
     /** F2: 1000人 = 500人×2チャンク。各表への INSERT は高々チャンク数。 */
     private static final long MAX_INSERTS_PER_TABLE_FOR_1000 = 2L;
+    /** 500人と1000人の SQL 文数の差の上限（チャンク1つ分の定数。受信者数に比例すれば超える）。 */
+    private static final long MAX_STATEMENT_DELTA_PER_CHUNK = 10L;
 
     private static final String SYNC_ALL = "cmp1559_sync_all";
     private static final String SYNC_RECIPIENT_INSERT = "cmp1559_sync_recipient_insert";
@@ -204,6 +206,16 @@ class ConfirmableNotificationSyncSendBulkIT extends AbstractMySqlIntegrationTest
                 .as("F2: 同期 send がテストスレッドで発行した SQL 文の総数は定数上限 %d 以内"
                         + "（受信者ごとの INSERT/SELECT（N+1）が無い）", MAX_SYNC_STATEMENTS_FOR_1000)
                 .isLessThanOrEqualTo(MAX_SYNC_STATEMENTS_FOR_1000);
+
+        // 比例の見逃し防止: 500人（1チャンク）との差はチャンク1つ分の定数以下（500人増えて数百文増えるなら比例）
+        statementCounter.reset();
+        Throwable thrown500 = catchThrowable(() -> sendTeam(newScopeId(), "F2-500", users(500)));
+        long all500 = statementCounter.count(SYNC_ALL);
+        assertThat(thrown500).as("F2: 500人送信が成功する").isNull();
+        assertThat(all - all500)
+                .as("F2: 1000人と500人の SQL 文数の差（%d - %d）はチャンク1つ分の定数 %d 以下", all, all500,
+                        MAX_STATEMENT_DELTA_PER_CHUNK)
+                .isLessThanOrEqualTo(MAX_STATEMENT_DELTA_PER_CHUNK);
     }
 
     // =====================================================================
@@ -403,6 +415,12 @@ class ConfirmableNotificationSyncSendBulkIT extends AbstractMySqlIntegrationTest
         assertThat(notified).as("F7: 通知は入力と完全一致").doesNotContainAnyElementsOf(outsiders);
         assertThat(countAppNotificationsForUsers(outsiders)).as("F7: 入力外の利用者には確認通知が1件も作られない")
                 .isZero();
+        // 採番 id と実行の行の一致: 通知は 1 受信者 1 行・id は全行で一意（採番キーのずれで別行の id を掴まない）
+        List<Long> notificationIds = jdbc.queryForList(
+                "SELECT id FROM notifications WHERE source_type = 'CONFIRMABLE_NOTIFICATION' AND source_id = ?",
+                Long.class, id);
+        assertThat(notificationIds).as("F7: 通知行は入力人数ぶんで id は重複しない")
+                .hasSize(users.size()).doesNotHaveDuplicates();
     }
 
     // =====================================================================
