@@ -239,8 +239,6 @@ class RolesPriorityLiteralGuardTest {
                 R_ROLLBACK);
         m.put("java/com/mannschaft/app/role/repository/UserRolePermissionGroupNativeQueryTest.java",
                 R_ROLLBACK);
-        m.put("java/com/mannschaft/app/role/service/PermissionGroupScopeIntegrationTest.java",
-                R_ROLLBACK);
         m.put("java/com/mannschaft/app/role/controller/MeOrganizationsBatchQueryIT.java",
                 R_ROLLBACK);
         m.put("java/com/mannschaft/app/role/controller/MeControllerMembershipIntegrationTest.java",
@@ -282,11 +280,20 @@ class RolesPriorityLiteralGuardTest {
         return false;
     }
 
-    /** クラス宣言より前（クラスレベル）に @Transactional があるか。 */
+    private static final Pattern COMMITTING_MARKER = Pattern.compile(
+            "Propagation\\s*\\.\\s*(?:NOT_SUPPORTED|NEVER)|(?<![\\w.])(?:NOT_SUPPORTED|NEVER)\\b(?=\\s*[,)])"
+                    + "|@Commit\\b|@Rollback\\s*\\(\\s*(?:value\\s*=\\s*)?false\\s*\\)");
+
+    /**
+     * クラス宣言より前（クラスレベル）に @Transactional があり、かつメソッド・クラスのどこにも
+     * 「トランザクションを外す／commit する」指定（Propagation.NOT_SUPPORTED / NEVER・@Commit・@Rollback(false)）が
+     * 無いか。後者があると roles が commit されて残るので、ロールバック前提の登録は誤り。
+     */
     static boolean hasClassLevelTransactional(String source) {
         var decl = CLASS_DECL.matcher(source);
         String head = decl.find() ? source.substring(0, decl.start()) : "";
-        return Pattern.compile("^@Transactional", Pattern.MULTILINE).matcher(head).find();
+        boolean classLevel = Pattern.compile("^@Transactional", Pattern.MULTILINE).matcher(head).find();
+        return classLevel && !COMMITTING_MARKER.matcher(source).find();
     }
 
     private static TreeSet<String> scanViolations() throws IOException {
@@ -370,6 +377,15 @@ class RolesPriorityLiteralGuardTest {
         assertThat(hasClassLevelTransactional("@SpringBootTest\n@Transactional\npublic class A {}")).isTrue();
         assertThat(hasClassLevelTransactional("class A {\n@Transactional\nvoid m() {}\n}")).isFalse();
         assertThat(hasClassLevelTransactional("class A {}")).isFalse();
+        // commit される指定が混ざっていたらロールバック前提とは言えない
+        String tx = "@Transactional\nclass A {\n";
+        assertThat(hasClassLevelTransactional(tx + "@Transactional(propagation = Propagation.NOT_SUPPORTED)\nvoid m() {}\n}")).isFalse();
+        assertThat(hasClassLevelTransactional(tx + "@Transactional(propagation = Propagation.NEVER)\nvoid m() {}\n}")).isFalse();
+        assertThat(hasClassLevelTransactional(tx + "@Commit\nvoid m() {}\n}")).isFalse();
+        assertThat(hasClassLevelTransactional(tx + "@Rollback(false)\nvoid m() {}\n}")).isFalse();
+        assertThat(hasClassLevelTransactional(tx + "@Rollback(value = false)\nvoid m() {}\n}")).isFalse();
+        assertThat(hasClassLevelTransactional("@Transactional(propagation = Propagation.NOT_SUPPORTED)\nclass A {}")).isFalse();
+        assertThat(hasClassLevelTransactional(tx + "@Rollback\nvoid m() {}\n}")).isTrue();
     }
 
     @Test
