@@ -34,4 +34,17 @@ class ScopeContentAccessMatrixHarnessSelfCheckIT extends AbstractScopeContentAcc
         assertThat(sameAsOutsider(new Response(403, "COMMON_002", "m"), outsider)).isFalse();
         assertThat(sameAsOutsider(new Response(403, "VISIBILITY_001", "x"), outsider)).isFalse();
     }
+
+    @Test
+    @DisplayName("部外者が 200 を返す経路（認可の全面欠落）は拒否と認められず、ハーネスが赤になる")
+    void 部外者が200なら赤() {
+        Response open = new Response(200, null, null);
+        // 200 同士は sameAsOutsider では一致してしまう（code・message が両方 null）。だから拒否の独立確認が要る
+        assertThat(sameAsOutsider(open, open)).isTrue();
+        assertThat(isRejection(open)).isFalse();
+        assertThat(isRejection(new Response(204, null, null))).isFalse();
+        assertThat(isRejection(new Response(403, null, null))).isFalse();
+        assertThat(isRejection(new Response(403, "VISIBILITY_001", "m"))).isTrue();
+        assertThat(isRejection(new Response(404, "COMMON_002", "m"))).isTrue();
+    }
 }

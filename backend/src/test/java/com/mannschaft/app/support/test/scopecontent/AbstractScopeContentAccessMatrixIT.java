@@ -104,7 +104,7 @@ public abstract class AbstractScopeContentAccessMatrixIT extends AbstractMySqlIn
 
     private void verify(String pkg, Route route, Viewer viewer) throws Exception {
         Response actual = perform(route, Actor.valueOf(viewer.name()));
-        Response outsider = perform(route, Actor.OUTSIDER);
+        Response outsider = viewer == Viewer.OUTSIDER ? actual : perform(route, Actor.OUTSIDER);
         snapshot.add(String.join("\t", pkg, route.id(), viewer.name(), String.valueOf(actual.status()),
                 String.valueOf(actual.code())));
         String expectation = route.expectationOf(viewer);
@@ -114,10 +114,19 @@ public abstract class AbstractScopeContentAccessMatrixIT extends AbstractMySqlIn
             assertThat(actual.status()).as("%s %s", route.id(), viewer)
                     .isEqualTo(Integer.parseInt(expectation.substring("STATUS:".length())));
         } else {
+            // 部外者の応答そのものが 200 だと code・message が両方 null で一致し、認可の全面欠落を見逃すため、先に独立に拒否を確かめる
+            assertThat(isRejection(outsider))
+                    .as("%s 部外者の応答は拒否（存在秘匿の 404 か契約上の 403 で error.code あり）であること: outsider=%s", route.id(), outsider)
+                    .isTrue();
             assertThat(sameAsOutsider(actual, outsider))
                     .as("%s %s は部外者と同一応答であること: actual=%s outsider=%s", route.id(), viewer, actual, outsider)
                     .isTrue();
         }
+    }
+
+    /** 拒否応答（403 または 404、かつ error.code を持つ）。部外者の応答が 200 のような成功応答でないことの確認に使う。 */
+    public static boolean isRejection(Response response) {
+        return (response.status() == 403 || response.status() == 404) && response.code() != null;
     }
 
     /** 部外者と同一応答（status・error.code・error.message の完全一致）。 */

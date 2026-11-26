@@ -79,16 +79,20 @@ class ScopeContentAccessGateCoverageTest {
     static final Path PENDING = DIR.resolve("pending_direct_calls.txt");
     static final Path EXEMPT = DIR.resolve("exempt_direct_calls.txt");
 
-    /** 走査が壊れて 0 件で緑になる偽 green の防止（origin/main 2026-11-25 実測: 直呼びは 400 箇所超）。 */
-    static final int MIN_PRODUCTION_DIRECT_CALLS = 200;
-
     // ───────── 本番 ─────────
 
     @Test
-    @DisplayName("走査そのものが機能している（本番の直呼びが下限以上見つかる）")
+    @DisplayName("走査そのものが機能している（移行で減らない対象外の既知の直呼びが、本番の走査で検出される）")
     void 走査が機能している() {
-        Set<String> calls = directCalls(ProductionClasses.get());
-        assertThat(calls.size()).as("本番の直呼び検出数").isGreaterThanOrEqualTo(MIN_PRODUCTION_DIRECT_CALLS);
+        // 件数の下限は移行で減るので置かない。対象外（恒久）の呼び出し元は、走査が生きていれば必ず検出される。
+        Map<String, String> exempt = readExempt(EXEMPT);
+        assertThat(exempt).as("対象外（走査の健全性の基準。空にしてはならない）").isNotEmpty();
+        Set<String> callers = new TreeSet<>();
+        for (String key : directCalls(ProductionClasses.get())) {
+            callers.add(key.substring(0, key.indexOf('#')));
+        }
+        assertThat(callers).as("対象外の既知の直呼びが全て検出されること（走査が壊れて 0 件になっていない）")
+                .containsAll(exempt.keySet());
     }
 
     @Test
