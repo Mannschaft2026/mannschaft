@@ -66,6 +66,7 @@ class ShiftHourlyRateServiceTest {
     private void givenCanManage(Long userId) {
         given(accessControlService.hasAdminOrPermissionInScope(userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(userId, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     /** 管理操作に加え、時給の閲覧判定が通る（isAdminOrAbove を先に見るため）。 */

@@ -51,10 +51,9 @@ public class MemberWorkConstraintService {
     // ========================================
 
     /**
-     * チーム内の全勤務制約（デフォルト + 個別）を取得する。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ。
+     * チーム内の全勤務制約（デフォルト + 個別）を取得する。認可はしない（ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN の判定は MemberWorkConstraintFacade）。
      */
     public List<MemberWorkConstraintResponse> listConstraintsByTeam(Long teamId, Long currentUserId) {
-        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
         List<MemberWorkConstraintEntity> entities = constraintRepository.findByTeamId(teamId);
         return shiftMapper.toWorkConstraintResponseList(entities);
     }
@@ -181,7 +180,6 @@ public class MemberWorkConstraintService {
     @Transactional
     public MemberWorkConstraintResponse upsertTeamDefault(
             Long teamId, MemberWorkConstraintRequest req, Long currentUserId) {
-        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
         validateNotAllNull(req);
 
         MemberWorkConstraintEntity entity = constraintRepository.findTeamDefault(teamId)
@@ -223,8 +221,6 @@ public class MemberWorkConstraintService {
      */
     @Transactional
     public void deleteConstraint(Long teamId, Long userId, Long currentUserId) {
-        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
-
         MemberWorkConstraintEntity entity = constraintRepository
                 .findByUserIdAndTeamId(userId, teamId)
                 .orElseThrow(() -> new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_NOT_FOUND));
@@ -237,8 +233,6 @@ public class MemberWorkConstraintService {
      */
     @Transactional
     public void deleteTeamDefault(Long teamId, Long currentUserId) {
-        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
-
         MemberWorkConstraintEntity entity = constraintRepository.findTeamDefault(teamId)
                 .orElseThrow(() -> new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_NOT_FOUND));
         constraintRepository.delete(entity);

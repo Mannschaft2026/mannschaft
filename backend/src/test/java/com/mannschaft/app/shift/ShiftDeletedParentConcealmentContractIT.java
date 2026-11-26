@@ -286,7 +286,7 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     void 生存親の許可主体と所属不足403と一覧403を維持する() throws Exception {
         Long slotId = slot(ShiftScheduleStatus.PUBLISHED, "[]");
         Long swapId = swap(slotId);
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN")) {
             Long cancellable = swap(slotId);
             callSwap(role, "cancel", cancellable).andExpect(status().isNoContent());
             Long resolvable = swap(slotId);
@@ -299,6 +299,11 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
             callSwap(role, "accept", acceptable).andExpect(status().isOk());
             assertParentSelectCount("shift_slots", 2);
             assertParentSelectCount("shift_schedules", 2);
+        }
+        // CMP-261125-2114: user_roles にだけ ADMIN が残った（在籍の無い）利用者は管理できず、所属者として 403。
+        for (String operation : List.of("cancel", "REJECT")) {
+            callSwap("GHOST_ADMIN", operation, swapId).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
         }
         for (String role : List.of("MEMBER", "SUPPORTER")) {
             callSwap(role, "REJECT", swapId).andExpect(status().isForbidden())
@@ -320,7 +325,7 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     void runの生存親と空提案の許可主体と同scopeの既存拒否コードを維持する() throws Exception {
         Long slotId = slot(ShiftScheduleStatus.PUBLISHED, "[]");
         Long scheduleId = inTx(() -> slots.findById(slotId).orElseThrow().getScheduleId());
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN")) {
             Long runId = run(scheduleId);
             callRun(role, "detail", scheduleId, runId).andExpect(status().isOk());
             SqlIntentCounter.reset();
@@ -340,6 +345,9 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
             Map<String, String> before = snapshot();
             // run の実在を同チームの非管理者にも読ませない（確定・破棄も詳細・目視確認と同じ 404。CMP-261125-2114）
             callRun("MEMBER", operation, scheduleId, runId).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
+            // 在籍の無い user_roles のみの ADMIN も、管理できない者として同じ 404（CMP-261125-2114）。
+            callRun("GHOST_ADMIN", operation, scheduleId, runId).andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
             assertThat(snapshot()).isEqualTo(before);
         }

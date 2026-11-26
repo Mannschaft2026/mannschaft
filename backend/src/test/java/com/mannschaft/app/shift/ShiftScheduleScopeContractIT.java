@@ -502,61 +502,57 @@ class ShiftScheduleScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // 8. user_roles のみに ADMIN ロールを持つ利用者（memberships 在籍行なし）が
-    //    読取系・管理系ともに通れること
-    //    （CMP-260923-1641 差し戻し対応・Codex 検分指摘。開発DB実測: チーム管理者ロール609件中2件該当）
+    // 8. user_roles のみに ADMIN ロールを持つ利用者（memberships 在籍行なし＝退会済みでロールだけ残った ADMIN）は
+    //    読取系・管理系ともに通れない（CMP-261125-2114 で改訂。旧: CMP-260923-1641 は通る仕様だった）
+    //    ADMIN の判定（isAdmin）は user_roles だけを見て在籍を問わないため、シフトでは在籍を追加で要求する。
+    //    所属者として 403（越境の 404 に化けない）。
     // ═════════════════════════════════════════════════════════════════════
 
     @Nested
-    @DisplayName("8. user_rolesのみのADMIN（membershipsの在籍行なし）は読取系・管理系ともに通過できる")
+    @DisplayName("8. user_rolesのみのADMIN（membershipsの在籍行なし）は読取系・管理系とも在籍が無いので通れず、所属者向けの403")
     class UserRolesOnlyAdmin {
 
         @Test
-        @DisplayName("GET /schedules/{id}（詳細）は200")
-        void 詳細は200() throws Exception {
+        @DisplayName("GET /schedules/{id}（詳細）は403")
+        void 詳細は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(get("/api/v1/shifts/schedules/{id}", scheduleAId))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("PATCH /schedules/{id}（更新）は200")
-        void 更新は200() throws Exception {
+        @DisplayName("PATCH /schedules/{id}（更新）は403")
+        void 更新は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(patch("/api/v1/shifts/schedules/{id}", scheduleAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("title", "更新後"))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("POST /schedules/{id}/transition（PUBLISH遷移）は200")
-        void 遷移は200() throws Exception {
-            // 所属行なしADMINの認可を、許可された ADJUSTING → PUBLISHED で確認する。
-            // 参照系の公開済み共通fixtureと、user_roles のみの資格は維持する。
-            em.createNativeQuery("UPDATE shift_schedules SET status = 'ADJUSTING', published_at = NULL, published_by = NULL WHERE id = :id")
-                    .setParameter("id", scheduleAId).executeUpdate();
-            em.clear();
+        @DisplayName("POST /schedules/{id}/transition（遷移）は403")
+        void 遷移は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(post("/api/v1/shifts/schedules/{id}/transition", scheduleAId)
                             .param("status", "PUBLISHED"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("POST /schedules/{id}/duplicate（複製）は201")
-        void 複製は201() throws Exception {
+        @DisplayName("POST /schedules/{id}/duplicate（複製）は403")
+        void 複製は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(post("/api/v1/shifts/schedules/{id}/duplicate", scheduleAId))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("DELETE /schedules/{id}（削除）は204")
-        void 削除は204() throws Exception {
+        @DisplayName("DELETE /schedules/{id}（削除）は403")
+        void 削除は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(delete("/api/v1/shifts/schedules/{id}", scheduleAId))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isForbidden());
         }
     }
 

@@ -1485,6 +1485,7 @@
     "deputyShiftViewHint": "They can see unpublished schedules, assignments, other members' swap and change requests, availability lists, the administrator PDF export and action-required items on the dashboard.",
     "deputyHourlyRateView": "Allow viewing other members' hourly rates",
     "deputyHourlyRateViewHint": "They can see other members' hourly rates on the hourly rate settings page (but cannot register or change them).",
+    "deputyHourlyRateAdminOnly": "Only administrators can change this setting.",
     "readOnlyNotice": "Only team administrators and deputy administrators with the shift management permission (MANAGE_SHIFTS) can change these settings."
   },
   "corkboard": {

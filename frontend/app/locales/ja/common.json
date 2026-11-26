@@ -1485,6 +1485,7 @@
     "deputyShiftViewHint": "未公開のシフト表・割当・他人の交代／変更依頼・希望一覧・PDF の管理者出力・ダッシュボードの要対応を表示できます。",
     "deputyHourlyRateView": "他メンバーの時給の閲覧を許可",
     "deputyHourlyRateViewHint": "チーム設定の時給設定画面で、他メンバーの時給を表示できます（登録・変更はできません）。",
+    "deputyHourlyRateAdminOnly": "この切替は管理者だけが変更できます。",
     "readOnlyNotice": "この設定を変更できるのは、チーム管理者またはシフト管理の権限（MANAGE_SHIFTS）を持つ副管理者だけです。"
   },
   "corkboard": {

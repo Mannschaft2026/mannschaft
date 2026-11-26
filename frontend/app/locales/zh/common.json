@@ -1485,6 +1485,7 @@
     "deputyShiftViewHint": "可以查看未发布的排班表、分配、他人的换班/变更申请、希望列表、管理员版 PDF 导出以及仪表盘上的待处理事项。",
     "deputyHourlyRateView": "允许查看其他成员的时薪",
     "deputyHourlyRateViewHint": "可以在时薪设置页面查看其他成员的时薪（不能登记或更改）。",
+    "deputyHourlyRateAdminOnly": "此开关只有管理员可以更改。",
     "readOnlyNotice": "只有团队管理员或拥有排班管理权限（MANAGE_SHIFTS）的副管理员才能更改这些设置。"
   },
   "corkboard": {

@@ -101987,7 +101987,8 @@
         "tags": [
           "チームシフト設定"
         ],
-        "summary": "チームシフト設定更新（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN のみ）",
+        "summary": "チームシフト設定更新（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN。時給閲覧の切替は ADMIN のみ）",
+        "description": "いずれも当該チームに在籍中であることが必要（退会済みでロールだけ残った ADMIN は不可）。`deputyHourlyRateViewEnabled`（副管理者への時給閲覧許可）は金額の開示範囲を決める設定のため、チームの ADMIN だけが変更できる（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403）。他の項目（リマインド・`deputyShiftViewEnabled`）は ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN が変更できる。",
         "operationId": "updateSettings_19",
         "parameters": [
           {
@@ -102021,7 +102022,7 @@
             }
           },
           "403": {
-            "description": "当該チームの ADMIN でも MANAGE_SHIFTS を持つ DEPUTY_ADMIN でもない",
+            "description": "当該チームに在籍中の ADMIN でも MANAGE_SHIFTS を持つ DEPUTY_ADMIN でもない、または時給閲覧の切替を ADMIN 以外が送った",
             "content": {
               "*/*": {
                 "schema": {
@@ -221500,7 +221501,8 @@
         "type": "object",
         "properties": {
           "deputyHourlyRateViewEnabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "副管理者への時給閲覧許可の切替。省略（null）なら変更しない。チームの ADMIN だけが変更できる（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403）"
           },
           "deputyShiftViewEnabled": {
             "type": "boolean"

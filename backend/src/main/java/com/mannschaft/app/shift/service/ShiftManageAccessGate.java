@@ -23,6 +23,9 @@ import java.util.Objects;
  *       ダッシュボード要対応のシフト希望）と<b>時給の閲覧</b>は、管理者に加えて、チームのシフト設定の切替
  *       （{@link DeputyShiftViewToggles}、既定 OFF）が ON のときに限り MANAGE_SHIFTS 無しの DEPUTY_ADMIN にも許す。
  *       OFF なら一般メンバーと同じ。切替は閲覧だけで、操作は常に MANAGE_SHIFTS が必要。</li>
+ *   <li><b>在籍を要求する</b>。ADMIN の判定（{@code AccessControlService#isAdmin}）は user_roles だけを見て在籍を問わないため、
+ *       チームを離脱してロールだけ残った ADMIN は管理も閲覧も不可（所属者としては 403）。通知の受信者
+ *       （{@code RoleService#getAdminAndPermittedDeputyUserIdsByTeamId}、在籍中の ADMIN のみ）と審査できる人を一致させる。</li>
  *   <li><b>SYSTEM_ADMIN を特別扱いしない</b>（docs/security/03_role_authority_model.md §3.6）。チームの ADMIN でも
  *       MANAGE_SHIFTS 付き DEPUTY_ADMIN でもない SYSTEM_ADMIN は、操作も閲覧も他の部外者と同じに拒否する。</li>
  * </ul>
@@ -57,7 +60,11 @@ public class ShiftManageAccessGate {
      * ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN か（例外を投げない）。SYSTEM_ADMIN は特別扱いしない。
      */
     public boolean canManage(Long userId, Long teamId) {
-        return accessControlService.hasAdminOrPermissionInScope(userId, teamId, TEAM, MANAGE_SHIFTS);
+        // ADMIN 判定（AccessControlService#isAdmin）は user_roles だけを見て在籍を問わないため、退会（チーム離脱）済みで
+        // ロールだけ残った ADMIN を通してしまう。シフト管理は在籍中であることも要求する（共通の isAdmin は変えない）。
+        // DEPUTY_ADMIN 側は existsDeputyAdminWithPermissionInTeam が在籍を見るので、ここで揃うだけ。
+        return accessControlService.hasAdminOrPermissionInScope(userId, teamId, TEAM, MANAGE_SHIFTS)
+                && accessControlService.isMember(userId, teamId, TEAM);
     }
 
     /**
@@ -112,7 +119,7 @@ public class ShiftManageAccessGate {
     public boolean canView(Long userId, Long teamId) {
         // MANAGE_SHIFTS 付き DEPUTY・ADMIN は必ず isAdminOrAbove を満たすので、先に非管理系ロールを弾いて
         // 一般メンバーの閲覧経路のクエリを抑える。
-        if (!accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
+        if (!isActiveAdminOrAbove(userId, teamId)) {
             return false;
         }
         if (canManage(userId, teamId)) {
@@ -131,7 +138,7 @@ public class ShiftManageAccessGate {
      * {@code ShiftHourlyRateFacade}（tx の外）で行い、tx 本体へは認可済みの引数だけを渡す。</p>
      */
     public boolean canViewHourlyRates(Long userId, Long teamId) {
-        if (!accessControlService.isAdminOrAbove(userId, teamId, TEAM)) {
+        if (!isActiveAdminOrAbove(userId, teamId)) {
             return false;
         }
         // ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN は常に可。それ以外の DEPUTY_ADMIN は切替が ON のときだけ。
@@ -193,6 +200,12 @@ public class ShiftManageAccessGate {
         if (excludeSupporter && accessControlService.isSupporter(userId, teamId, TEAM)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
+    }
+
+    /** ADMIN / DEPUTY_ADMIN で、かつ在籍中か（退会済みでロールだけ残った管理者は含めない）。 */
+    private boolean isActiveAdminOrAbove(Long userId, Long teamId) {
+        return accessControlService.isAdminOrAbove(userId, teamId, TEAM)
+                && accessControlService.isMember(userId, teamId, TEAM);
     }
 
     private BusinessException denial(Long userId, Long teamId, ErrorCode notFoundCode) {

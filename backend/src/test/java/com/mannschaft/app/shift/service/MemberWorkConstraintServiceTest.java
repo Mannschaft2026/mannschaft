@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * {@link MemberWorkConstraintService} の単体テスト。
@@ -180,8 +179,6 @@ class MemberWorkConstraintServiceTest {
         @Test
         @DisplayName("チームデフォルト_新規_ADMIN_成功")
         void チームデフォルト_新規_ADMIN_成功() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
             given(constraintRepository.findTeamDefault(TEAM_ID))
                     .willReturn(Optional.empty());
             MemberWorkConstraintEntity saved = buildTeamDefault();
@@ -195,17 +192,6 @@ class MemberWorkConstraintServiceTest {
                     TEAM_ID, buildValidRequest(), ADMIN_USER_ID);
 
             assertThat(result.getUserId()).isNull();
-        }
-
-        @Test
-        @DisplayName("チームデフォルト_MEMBER権限_403")
-        void チームデフォルト_MEMBER権限_403() {
-            given(accessControlService.hasAdminOrPermissionInScope(MEMBER_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(false);
-
-            assertThatThrownBy(() -> service.upsertTeamDefault(
-                    TEAM_ID, buildValidRequest(), MEMBER_USER_ID))
-                    .isInstanceOf(BusinessException.class);
         }
     }
 
@@ -297,8 +283,6 @@ class MemberWorkConstraintServiceTest {
         @Test
         @DisplayName("ADMIN_一覧取得_成功")
         void ADMIN_一覧取得_成功() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
             List<MemberWorkConstraintEntity> entities = List.of(buildIndividual(), buildTeamDefault());
             given(constraintRepository.findByTeamId(TEAM_ID)).willReturn(entities);
             given(shiftMapper.toWorkConstraintResponseList(entities))
@@ -313,18 +297,6 @@ class MemberWorkConstraintServiceTest {
 
             assertThat(result).hasSize(2);
         }
-
-        @Test
-        @DisplayName("MEMBER権限_一覧取得_403")
-        void MEMBER権限_一覧取得_403() {
-            given(accessControlService.hasAdminOrPermissionInScope(MEMBER_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(false);
-
-            assertThatThrownBy(() -> service.listConstraintsByTeam(TEAM_ID, MEMBER_USER_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
-                            .isEqualTo(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN));
-        }
     }
 
     // ========================================
@@ -338,8 +310,6 @@ class MemberWorkConstraintServiceTest {
         @Test
         @DisplayName("ADMIN_削除_成功")
         void ADMIN_削除_成功() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
             MemberWorkConstraintEntity entity = buildIndividual();
             given(constraintRepository.findByUserIdAndTeamId(MEMBER_USER_ID, TEAM_ID))
                     .willReturn(Optional.of(entity));
@@ -352,8 +322,6 @@ class MemberWorkConstraintServiceTest {
         @Test
         @DisplayName("ADMIN_削除対象なし_404")
         void ADMIN_削除対象なし_404() {
-            given(accessControlService.hasAdminOrPermissionInScope(ADMIN_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(true);
             given(constraintRepository.findByUserIdAndTeamId(MEMBER_USER_ID, TEAM_ID))
                     .willReturn(Optional.empty());
 
@@ -362,18 +330,6 @@ class MemberWorkConstraintServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(ShiftErrorCode.WORK_CONSTRAINT_NOT_FOUND));
-        }
-
-        @Test
-        @DisplayName("MEMBER権限_削除_403")
-        void MEMBER権限_削除_403() {
-            given(accessControlService.hasAdminOrPermissionInScope(MEMBER_USER_ID, TEAM_ID, SCOPE_TEAM, "MANAGE_SHIFTS"))
-                    .willReturn(false);
-
-            assertThatThrownBy(() -> service.deleteConstraint(
-                    TEAM_ID, MEMBER_USER_ID, MEMBER_USER_ID))
-                    .isInstanceOf(BusinessException.class);
-            verifyNoInteractions(constraintRepository);
         }
     }
 }

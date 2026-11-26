@@ -540,18 +540,19 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-3: user_roles のみの ADMIN は一覧(全件)・審査が許可、取下げは本人以外なので SHIFT_019、作成は所属者として403（404に化けない）")
+        @DisplayName("AC-3（CMP-261125-2114 で改訂）: user_roles のみの ADMIN（在籍なし）は一覧・審査とも所属者として403（404に化けない）、取下げは本人以外なので SHIFT_019、作成も403")
         void AC3_userRolesOnlyAdmin() throws Exception {
             setAuth(userRolesOnlyAdminAId);
             mockMvc.perform(get("/api/v1/shifts/change-requests")
                             .param("scheduleId", scheduleAId.toString()))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.length()").value(2));
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
             mockMvc.perform(patch("/api/v1/shifts/change-requests/{id}/review", myRequestId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("decision", "ACCEPTED", "reviewComment", "x", "version", 0))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
             mockMvc.perform(delete("/api/v1/shifts/change-requests/{id}", othersRequestId))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("SHIFT_019"));

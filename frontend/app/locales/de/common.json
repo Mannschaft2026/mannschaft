@@ -1485,6 +1485,7 @@
     "deputyShiftViewHint": "Sichtbar sind unveröffentlichte Schichtpläne, Zuweisungen, Tausch- und Änderungsanträge anderer, Wunschlisten, der PDF-Export für Administratoren und offene Aufgaben im Dashboard.",
     "deputyHourlyRateView": "Einsicht in Stundenlöhne anderer Mitglieder erlauben",
     "deputyHourlyRateViewHint": "Die Stundenlöhne anderer Mitglieder sind auf der Seite für Stundenlöhne sichtbar (Erfassen und Ändern bleibt untersagt).",
+    "deputyHourlyRateAdminOnly": "Diese Einstellung können nur Administratoren ändern.",
     "readOnlyNotice": "Diese Einstellungen können nur Team-Administratoren und stellvertretende Administratoren mit der Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) ändern."
   },
   "corkboard": {

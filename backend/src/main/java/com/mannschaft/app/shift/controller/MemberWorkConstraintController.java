@@ -49,7 +49,7 @@ public class MemberWorkConstraintController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
     public ResponseEntity<ApiResponse<List<MemberWorkConstraintResponse>>> listConstraints(
             @PathVariable Long teamId) {
-        List<MemberWorkConstraintResponse> list = workConstraintService
+        List<MemberWorkConstraintResponse> list = workConstraintFacade
                 .listConstraintsByTeam(teamId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(list));
     }
@@ -100,7 +100,7 @@ public class MemberWorkConstraintController {
     public ResponseEntity<Void> deleteConstraint(
             @PathVariable Long teamId,
             @PathVariable Long userId) {
-        workConstraintService.deleteConstraint(teamId, userId, SecurityUtils.getCurrentUserId());
+        workConstraintFacade.deleteConstraint(teamId, userId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.noContent().build();
     }
 
@@ -130,7 +130,7 @@ public class MemberWorkConstraintController {
     public ResponseEntity<ApiResponse<MemberWorkConstraintResponse>> upsertTeamDefault(
             @PathVariable Long teamId,
             @Valid @RequestBody MemberWorkConstraintRequest request) {
-        MemberWorkConstraintResponse response = workConstraintService
+        MemberWorkConstraintResponse response = workConstraintFacade
                 .upsertTeamDefault(teamId, request, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -143,7 +143,7 @@ public class MemberWorkConstraintController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")
     public ResponseEntity<Void> deleteTeamDefault(
             @PathVariable Long teamId) {
-        workConstraintService.deleteTeamDefault(teamId, SecurityUtils.getCurrentUserId());
+        workConstraintFacade.deleteTeamDefault(teamId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.noContent().build();
     }
 }

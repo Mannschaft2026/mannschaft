@@ -1485,6 +1485,7 @@
     "deputyShiftViewHint": "Podrán ver los cuadrantes sin publicar, las asignaciones, las solicitudes de cambio e intercambio de otros miembros, las listas de preferencias, la exportación PDF de administrador y los pendientes del panel.",
     "deputyHourlyRateView": "Permitir ver el salario por hora de otros miembros",
     "deputyHourlyRateViewHint": "Podrán ver el salario por hora de otros miembros en la página de configuración (sin poder registrarlo ni modificarlo).",
+    "deputyHourlyRateAdminOnly": "Solo los administradores pueden cambiar este ajuste.",
     "readOnlyNotice": "Solo los administradores del equipo y los adjuntos con el permiso de gestión de turnos (MANAGE_SHIFTS) pueden cambiar esta configuración."
   },
   "corkboard": {

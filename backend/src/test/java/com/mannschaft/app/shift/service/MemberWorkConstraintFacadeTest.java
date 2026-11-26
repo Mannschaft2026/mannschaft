@@ -64,6 +64,7 @@ class MemberWorkConstraintFacadeTest {
                 null, TEAM_ID, TARGET_ID, null, null, null, null, null, null);
         given(accessControlService.hasAdminOrPermissionInScope(ADMIN_ID, TEAM_ID, TEAM, "MANAGE_SHIFTS"))
                 .willReturn(true);
+        given(accessControlService.isMember(ADMIN_ID, TEAM_ID, TEAM)).willReturn(true);
         given(accessControlService.isMember(TARGET_ID, TEAM_ID, TEAM)).willReturn(true);
         given(workConstraintService.upsertConstraint(TEAM_ID, TARGET_ID, req, ADMIN_ID)).willReturn(expected);
 
@@ -88,11 +89,59 @@ class MemberWorkConstraintFacadeTest {
     void 対象が在籍者でなければ拒否する() {
         given(accessControlService.hasAdminOrPermissionInScope(ADMIN_ID, TEAM_ID, TEAM, "MANAGE_SHIFTS"))
                 .willReturn(true);
+        given(accessControlService.isMember(ADMIN_ID, TEAM_ID, TEAM)).willReturn(true);
         given(accessControlService.isMember(TARGET_ID, TEAM_ID, TEAM)).willReturn(false);
 
         assertThatThrownBy(() -> facade.upsertConstraint(TEAM_ID, TARGET_ID, request(), ADMIN_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN));
         verifyNoInteractions(workConstraintService);
+    }
+
+    private void givenManager() {
+        given(accessControlService.hasAdminOrPermissionInScope(ADMIN_ID, TEAM_ID, TEAM, "MANAGE_SHIFTS"))
+                .willReturn(true);
+        given(accessControlService.isMember(ADMIN_ID, TEAM_ID, TEAM)).willReturn(true);
+    }
+
+    private void assertForbidden(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.getErrorCode()).isEqualTo(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN));
+        verifyNoInteractions(workConstraintService);
+    }
+
+    @Test
+    @DisplayName("退会済み（ロールだけ残り在籍の無い）ADMIN は拒否され、tx 本体を呼ばない")
+    void 退会済みADMINは拒否する() {
+        given(accessControlService.hasAdminOrPermissionInScope(ADMIN_ID, TEAM_ID, TEAM, "MANAGE_SHIFTS"))
+                .willReturn(true);
+        given(accessControlService.isMember(ADMIN_ID, TEAM_ID, TEAM)).willReturn(false);
+
+        assertForbidden(() -> facade.upsertConstraint(TEAM_ID, TARGET_ID, request(), ADMIN_ID));
+    }
+
+    @Test
+    @DisplayName("一覧・デフォルト upsert・削除 2 種: 管理者なら委譲、そうでなければ WORK_CONSTRAINT_FORBIDDEN で tx 本体を呼ばない")
+    void その他の管理操作は認可後に委譲する() {
+        givenManager();
+        MemberWorkConstraintRequest req = request();
+        facade.listConstraintsByTeam(TEAM_ID, ADMIN_ID);
+        facade.upsertTeamDefault(TEAM_ID, req, ADMIN_ID);
+        facade.deleteConstraint(TEAM_ID, TARGET_ID, ADMIN_ID);
+        facade.deleteTeamDefault(TEAM_ID, ADMIN_ID);
+        verify(workConstraintService).listConstraintsByTeam(TEAM_ID, ADMIN_ID);
+        verify(workConstraintService).upsertTeamDefault(TEAM_ID, req, ADMIN_ID);
+        verify(workConstraintService).deleteConstraint(TEAM_ID, TARGET_ID, ADMIN_ID);
+        verify(workConstraintService).deleteTeamDefault(TEAM_ID, ADMIN_ID);
+    }
+
+    @Test
+    @DisplayName("管理者でなければ一覧・デフォルト upsert・削除 2 種はいずれも拒否される")
+    void その他の管理操作は管理者以外を拒否する() {
+        // hasAdminOrPermissionInScope は未スタブ（false）。
+        assertForbidden(() -> facade.listConstraintsByTeam(TEAM_ID, ADMIN_ID));
+        assertForbidden(() -> facade.upsertTeamDefault(TEAM_ID, request(), ADMIN_ID));
+        assertForbidden(() -> facade.deleteConstraint(TEAM_ID, TARGET_ID, ADMIN_ID));
+        assertForbidden(() -> facade.deleteTeamDefault(TEAM_ID, ADMIN_ID));
     }
 }

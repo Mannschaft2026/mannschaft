@@ -2339,13 +2339,13 @@ Authorization: Bearer ...
 
 #### `PATCH /api/v1/teams/{slug}/shift-settings`
 
-チームのシフト設定を更新する。**ADMIN と `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN だけ**（それ以外は 403 `COMMON_002`）。
+チームのシフト設定を更新する。**当該チームに在籍中の** ADMIN と `MANAGE_SHIFTS` を持つ DEPUTY_ADMIN だけ（それ以外は 403 `COMMON_002`。退会＝チーム離脱済みでロール（user_roles）だけ残った ADMIN も不可）。**ただし `deputyHourlyRateViewEnabled`（時給を見せる切替）は在籍中のチーム ADMIN だけが変更できる**（マスター裁定 2026-11-25）。
 
 | 項目 | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `reminder48hEnabled` / `reminder24hEnabled` / `reminder12hEnabled` | Boolean | — | リマインド。省略（null）なら変更しない（部分更新）。**保存後の状態で**少なくとも 1 つは true（満たさない更新は 400 `COMMON_001`・保存しない） |
 | `deputyShiftViewEnabled` | Boolean | — | `MANAGE_SHIFTS` を持たない DEPUTY_ADMIN にシフトの閲覧（未公開シフト表・割当の非マスク・他人の交代/変更依頼・希望一覧/サマリー・PDF の管理者出力・ダッシュボードのシフト希望）を許すか。**既定 false**。省略（null）なら変更しない |
-| `deputyHourlyRateViewEnabled` | Boolean | — | 同じく他メンバーの時給の閲覧を許すか。**既定 false**。省略（null）なら変更しない |
+| `deputyHourlyRateViewEnabled` | Boolean | — | 同じく他メンバーの時給の閲覧を許すか。**既定 false**。省略（null）なら変更しない。**null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403 `COMMON_002`（現在値と同じ値の再送でも拒否。リマインド等の他項目も保存しない）**。金額の開示範囲を決める設定のため ADMIN だけに限る |
 
 全項目が任意の部分更新。切替だけを送ってもリマインド 3 項目は現在値のまま維持される（CMP-261125-2114: 以前はリマインド 3 項目が必須の primitive で、切替だけの送信が 400 になる・省略項目が false で上書きされる不具合があった）。
 
