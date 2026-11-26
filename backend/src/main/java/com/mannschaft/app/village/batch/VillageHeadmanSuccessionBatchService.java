@@ -26,6 +26,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * F17.1 Phase 1 B11 — 村長（HEADMAN）自動引き継ぎバッチ（設計書 §5.5）。
@@ -56,6 +57,7 @@ public class VillageHeadmanSuccessionBatchService {
     private final VillageMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final AuditLogService auditLogService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 毎日 UTC 03:00 にバッチ実行する。
@@ -154,6 +156,7 @@ public class VillageHeadmanSuccessionBatchService {
         // 1. 最古参 ELDER を昇格
         Optional<VillageMembershipEntity> elder = membershipRepository
                 .findFirstByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(villageId, VillageRole.ELDER);
+        elder = skipPlatformAccount(villageId, VillageRole.ELDER, elder);
         if (elder.isPresent()) {
             promote(villageId, elder.get(), VillageRole.ELDER);
             return SuccessionResult.PROMOTED;
@@ -162,6 +165,7 @@ public class VillageHeadmanSuccessionBatchService {
         // 2. 最古参 VILLAGER を昇格
         Optional<VillageMembershipEntity> villager = membershipRepository
                 .findFirstByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(villageId, VillageRole.VILLAGER);
+        villager = skipPlatformAccount(villageId, VillageRole.VILLAGER, villager);
         if (villager.isPresent()) {
             promote(villageId, villager.get(), VillageRole.VILLAGER);
             return SuccessionResult.PROMOTED;
@@ -181,6 +185,28 @@ public class VillageHeadmanSuccessionBatchService {
             log.info("村長引き継ぎ: 全員不在のため村を凍結: villageId={}", villageId);
         }
         return SuccessionResult.ARCHIVED;
+    }
+
+    /**
+     * 後継候補が運営アカウント（SYSTEM_ADMIN）なら、同じロールの次の現役候補（古参順）から運営アカウントでない者を
+     * 選び直す（戦役 Z-A PR2。バッチは例外で止めず、候補から外して次へ進む。尽きれば空を返し、呼び出し側が次のロール
+     * または凍結へ進む）。運営アカウントでなければ与えられた候補をそのまま返す。
+     */
+    private Optional<VillageMembershipEntity> skipPlatformAccount(
+            java.util.UUID villageId, VillageRole role, Optional<VillageMembershipEntity> first) {
+        if (first.isEmpty() || !isPlatformUser(first.get())) {
+            return first;
+        }
+        return membershipRepository
+                .findByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(villageId, role)
+                .stream()
+                .filter(m -> !isPlatformUser(m))
+                .findFirst();
+    }
+
+    private boolean isPlatformUser(VillageMembershipEntity membership) {
+        return membership.getSubjectType() == VillageSubjectType.USER
+                && platformAccountAffiliationPolicy.isPlatformAccount(membership.getSubjectId());
     }
 
     /**

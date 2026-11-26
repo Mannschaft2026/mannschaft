@@ -101,6 +101,9 @@ class MembershipServiceTest {
     @Mock
     private EntityManager entityManager;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private MembershipService service;
 

@@ -70,6 +70,7 @@ class TeamServiceTest {
     @Mock private AdminRoleMutationLockService adminRoleMutationLockService;
     @Mock private DuplicateNameGuardService duplicateNameGuardService;
     @Mock private com.mannschaft.app.team.service.TeamOrgLifecycleCleanupService teamOrgLifecycleCleanupService;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private TeamService service;
 
     private static final Long USER_ID = 1L;

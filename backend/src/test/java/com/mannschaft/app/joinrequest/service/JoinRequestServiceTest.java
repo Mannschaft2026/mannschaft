@@ -60,6 +60,9 @@ class JoinRequestServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private JoinRequestService service;
 

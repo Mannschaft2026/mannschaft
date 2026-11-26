@@ -43,7 +43,7 @@ class PlatformAccountAffiliationPolicyTest {
     @Test
     @DisplayName("P5: 運営アカウントは assertAffiliatable で MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN になる")
     void P5_運営アカウントは所属不可として拒否される() {
-        given(userRoleRepository.existsSystemAdminByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
 
         assertThatThrownBy(() -> policy.assertAffiliatable(PLATFORM_USER_ID))
                 .isInstanceOf(BusinessException.class)
@@ -54,7 +54,7 @@ class PlatformAccountAffiliationPolicyTest {
     @Test
     @DisplayName("P4/P5: 一般利用者は assertAffiliatable を素通りする")
     void P5_一般利用者は素通りする() {
-        given(userRoleRepository.existsSystemAdminByUserId(GENERAL_USER_ID)).willReturn(0L);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
 
         assertThatCode(() -> policy.assertAffiliatable(GENERAL_USER_ID)).doesNotThrowAnyException();
     }
@@ -62,11 +62,26 @@ class PlatformAccountAffiliationPolicyTest {
     @Test
     @DisplayName("P5: isPlatformAccount は運営アカウントで true・一般利用者で false（後継候補の除外用）")
     void P5_isPlatformAccountは運営ロール保持を返す() {
-        given(userRoleRepository.existsSystemAdminByUserId(PLATFORM_USER_ID)).willReturn(1L);
-        given(userRoleRepository.existsSystemAdminByUserId(GENERAL_USER_ID)).willReturn(0L);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
 
         assertThat(policy.isPlatformAccount(PLATFORM_USER_ID)).isTrue();
         assertThat(policy.isPlatformAccount(GENERAL_USER_ID)).isFalse();
+    }
+
+    @Test
+    @DisplayName("P5: 停止中・非 ACTIVE の運営アカウントも対象（状態を問わない照会だけで判定し、ACTIVE 限定の照会に頼らない）")
+    void P5_停止中の運営アカウントも拒否する() {
+        // ACTIVE・未削除に限る照会（existsSystemAdminByUserId）は停止中だと 0 を返すが、Policy はそれを使わない。
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+
+        assertThatThrownBy(() -> policy.assertAffiliatable(PLATFORM_USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+        assertThat(policy.isPlatformAccount(PLATFORM_USER_ID)).isTrue();
+        org.mockito.Mockito.verify(userRoleRepository, org.mockito.Mockito.never())
+                .existsSystemAdminByUserId(org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test

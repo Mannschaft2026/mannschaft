@@ -69,6 +69,9 @@ class VillageHeadmanSuccessionBatchServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private VillageHeadmanSuccessionBatchService batch;
 

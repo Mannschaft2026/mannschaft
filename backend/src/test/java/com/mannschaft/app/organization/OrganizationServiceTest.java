@@ -109,6 +109,9 @@ class OrganizationServiceTest {
     @Mock
     private com.mannschaft.app.organization.teamgroup.repository.OrgTeamGroupRepository orgTeamGroupRepository;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private OrganizationService organizationService;
 

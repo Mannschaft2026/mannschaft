@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * F17.1 Phase 1 B3 — 村メンバーシップ管理 Service。
@@ -63,6 +64,7 @@ public class VillageMembershipService {
     private final VillageMembershipRepository membershipRepository;
     private final VillageMembershipSlotService slotService;
     private final VillageAccessGate accessGate;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================================================
     // 4.3.1 参加
@@ -80,6 +82,8 @@ public class VillageMembershipService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public MembershipResponse join(UUID villageId, Long actorUserId, MembershipJoinRequest request,
                                    VillageSubjectAuthorization authorization) {
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
         VillageEntity village = accessGate.loadActiveVillage(
                 villageId, actorUserId, VillageSubjectAuthorization.actorIsSystemAdmin(authorization, actorUserId));
 

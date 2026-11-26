@@ -75,6 +75,9 @@ class SupporterServiceTest {
     @Mock
     private ProvisioningGate provisioningGate;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private SupporterService service;
 

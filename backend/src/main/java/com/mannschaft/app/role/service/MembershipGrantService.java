@@ -86,6 +86,7 @@ public class MembershipGrantService {
     private final MembershipService membershipService;
     private final UserRowLockService userRowLockService;
     private final InviteTokenRepository inviteTokenRepository;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     private static final String MEMBER_ROLE_NAME = "MEMBER";
 
@@ -104,6 +105,8 @@ public class MembershipGrantService {
     public void grantMemberRole(String scopeType, Long scopeId, Long userId, Long grantedBy, String source) {
         // 1. user 行を先にロックする（最初のクエリ）。参加申請承認は現行どおり ACTIVE を問わない。
         userRowLockService.lock(userId);
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
         ScopeType st = toScopeType(scopeType);
         // 2. 冪等性チェック（P1-2）。
         if (isAlreadyJoined(Mode.JOIN_REQUEST, st, scopeId, userId)) {
@@ -143,6 +146,8 @@ public class MembershipGrantService {
         if (userRowLockService.lock(userId) != UserRowLockService.UserState.ACTIVE) {
             throw new BusinessException(RoleErrorCode.ROLE_002);
         }
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。claim に触れる前に拒否する。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
 
         // 2b. 付与の元の claim を、user 行の次にロックして読む（クラス javadoc「付与の元の claim」）。
         InviteClaimLock claim = lockGrantingClaim().orElse(null);

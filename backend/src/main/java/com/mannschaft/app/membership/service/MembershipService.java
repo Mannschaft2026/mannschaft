@@ -49,6 +49,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * F00.5 メンバーシップ基盤再設計の中核サービス。
@@ -78,6 +79,7 @@ public class MembershipService {
     private final AdminRoleMutationLockService adminRoleMutationLockService;
     private final EntityManager entityManager;
     private final RolePermissionCleanupService rolePermissionCleanupService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 入会処理。
@@ -97,6 +99,8 @@ public class MembershipService {
         Objects.requireNonNull(req.getScopeType(), "scopeType must not be null");
         Objects.requireNonNull(req.getScopeId(), "scopeId must not be null");
         lockUser(req.getUserId());
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。全入会経路の合流点で拒否する。
+        platformAccountAffiliationPolicy.assertAffiliatable(req.getUserId());
         validateScope(req.getScopeType(), req.getScopeId());
 
         // 冪等性チェック（§13.7）

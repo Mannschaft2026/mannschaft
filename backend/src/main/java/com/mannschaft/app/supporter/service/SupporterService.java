@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * サポーター申請・管理サービス。
@@ -57,6 +58,7 @@ public class SupporterService {
     private final UserRepository userRepository;
     private final MediaUrlResolver mediaUrlResolver;
     private final ProvisioningGate provisioningGate;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================
     // フォロー申請
@@ -73,6 +75,8 @@ public class SupporterService {
      */
     @Transactional
     public ApiResponse<FollowStatusResponse> follow(Long userId, String scopeType, Long scopeId) {
+        // 運営アカウント（SYSTEM_ADMIN）はサポーター（フォロー）にもなれない（戦役 Z-A PR2）。申請行も作らない。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
         // 柱②-3 販促プロビジョニングゲート（AC11）: PROVISIONED（承諾前の事前作成状態）スコープへの
         // サポーター申請を遮断する。
         provisioningGate.requireActive(scopeId, scopeType);

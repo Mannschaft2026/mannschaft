@@ -48,3 +48,6 @@ UNION ALL
 SELECT 'village_join_requests', vj.subject_id, 'VILLAGE', HEX(vj.village_id), vj.status
   FROM village_join_requests vj JOIN sa ON sa.user_id = vj.subject_id
   WHERE vj.subject_type = 'USER' AND vj.status = 'PENDING'
+UNION ALL
+SELECT 'follows', f.follower_id, 'FOLLOW', CAST(f.followed_id AS CHAR), 'PERSONAL_FOLLOW'
+  FROM follows f JOIN sa ON sa.user_id = f.follower_id WHERE f.follower_type = 'USER'

@@ -77,6 +77,7 @@ public class MembershipInviteService {
     private final AuditLogService auditLogService;
     private final InviteScopeStateService scopeStates;
     private final InviteIssuerPolicy inviteIssuerPolicy;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * DM 相手を指定スコープへ招待する（宛先付きトークン発行 ＋ 招待カード投稿）。
@@ -94,6 +95,8 @@ public class MembershipInviteService {
 
         // 1. 【入力検証】DM 相手（宛先）導出（DM 種別・2名・当事者ガード込み・B-9）。
         Long targetUserId = cardService.resolveDmCounterpart(channelId, actorUserId);
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は発行時点で拒否する（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
 
         // 2. 【入力検証】有効期限日数（許容値 {1,7,30,90} のみ・null は既定 7）。
         int expiresInDays = resolveExpiresInDays(request.expiresInDays());

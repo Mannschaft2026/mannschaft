@@ -59,6 +59,7 @@ class TeamSlugServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private MediaUrlResolver mediaUrlResolver;
     @Mock private DuplicateNameGuardService duplicateNameGuardService;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private TeamService service;
 
     private static final Long USER_ID = 1L;

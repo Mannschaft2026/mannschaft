@@ -86,8 +86,8 @@ class VillageJoinRequestServiceTest {
 
     @BeforeEach
     void wireRealAdmissionSlots() {
-        VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null));
-        service = new VillageJoinRequestService(joinRequestRepository, membershipRepository, villageRepository, slots, entityManager, accessGate);
+        VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+        service = new VillageJoinRequestService(joinRequestRepository, membershipRepository, villageRepository, slots, entityManager, accessGate, org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
     }
 
     /**

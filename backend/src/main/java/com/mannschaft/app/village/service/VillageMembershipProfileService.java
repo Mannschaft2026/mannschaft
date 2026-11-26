@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * F17.2 機能⑥ — 村人ミニプロフィールの所属村一覧サービス（設計書 §9）。
@@ -50,6 +51,7 @@ public class VillageMembershipProfileService {
     private final VillageMembershipRepository membershipRepository;
     private final MediaUrlResolver mediaUrlResolver;
     private final AuditLogService auditLogService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 自分のその村所属の公開トグルを切り替える（本人のみ・§9.3）。
@@ -64,6 +66,8 @@ public class VillageMembershipProfileService {
         // 後段の NOT_MEMBER は VILLAGE_007 で不在の VILLAGE_001 と error.code が異なるため、
         // ゲートを通さないと「非公開村の非村人=VILLAGE_007 ／ 不在=VILLAGE_001」の差で村の実在が漏れていた。
         accessGate.loadVillageAllowingArchived(villageId, userId);
+        // 運営アカウント（SYSTEM_ADMIN）の村所属は更新保存しない（戦役 Z-A PR2。既存の誤所属を延命させない）。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
 
         VillageMembershipEntity membership = membershipRepository
                 .findActiveByVillageIdAndSubject(villageId, VillageSubjectType.USER, userId)

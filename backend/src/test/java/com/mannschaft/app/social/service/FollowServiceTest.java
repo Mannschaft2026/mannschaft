@@ -40,6 +40,9 @@ class FollowServiceTest {
     @Mock
     private SocialMapper socialMapper;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private FollowService followService;
 

@@ -1,12 +1,12 @@
-# 運営アカウントのテナント所属禁止 — 経路の網羅表（戦役 Z-A PR2・草案）
+# 運営アカウントのテナント所属禁止 — 経路の網羅表（戦役 Z-A PR2・確定版）
 
-状態: **草案（試練時点）**。実装（出陣）で各行の「Policy 位置」を確定し、完了後に「草案」を外す。
+状態: **確定版（出陣で全経路に Policy を通した）**。新しい所属経路を足すときは、本表に行を足し、番人 G4 の基準線（`g4_sink_baseline.txt`）を Policy を通したことを確かめてから更新する。
 
 - 方針の正本: `docs/security/03_role_authority_model.md` §3.6（マスター決定 2026-11-26「運営は運営専用アカウント。個人アカウントとの併用禁止。村・サポーター（フォロー）も禁止」）
 - 判定の窓口: `com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy`
   - `assertAffiliatable(userId)`: 運営アカウントなら `MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN`（403）
   - `isPlatformAccount(userId)`: 例外を投げない判定（後継候補の選出から外す用途）
-  - 依存は `UserRoleRepository` だけ（`existsSystemAdminByUserId` を使う。新しいフラグは作らない）
+  - 依存は `UserRoleRepository` だけ。判定は `existsPlatformAdminRoleByUserId`（SYSTEM_ADMIN ロールの有無を**アカウントの状態を問わず**数える。停止中・非 ACTIVE の運営アカウントも対象。殿の決定 2026-11-26）。ACTIVE・未削除に限る既存の `existsSystemAdminByUserId` は退会ブロック等の別用途で、本禁止の判定には使わない。新しいフラグは作らない
 - 番人 G4: `PlatformAccountAffiliationPolicyGuardTest`（生成シンクを持つファイルは Policy を呼ぶ。基準線 `backend/src/test/resources/platform_account_affiliation/g4_sink_baseline.txt`、除外表 `g4_exemptions.txt`）
 - 点検 SQL: `backend/src/test/resources/platform_account_affiliation/inspection.sql`（Flyway 実スキーマで `PlatformAccountAffiliationInspectionFlywayIT` が 0 件を固定）
 
@@ -42,13 +42,14 @@
 | village | `VillageCreationRequestService.createRequest`:75（村長 admit:151）・`approve`:202（admit:241） | villages / village_memberships | 申請者 | VillagePaths `CreationRequests` |
 | village | `VillageMembershipSlotService.allocate`:82・`admit`:119（五入口の共通保存点） | village_memberships | 主体 USER | VillagePaths `Slot` |
 | village | `VillageMembershipProfileService.updateMyProfileVisibility`:61（save:73。既存の誤所属を延命させない） | village_memberships（更新） | 本人 | VillagePaths `Profile` |
-| village | `VillageHeadmanSuccessionBatchService.processVillage`:114（promote save:191） | village_memberships（村長昇格） | 候補（`isPlatformAccount` で除外） | HeadmanSuccessionTest |
+| village | `VillageHeadmanSuccessionBatchService.processVillage`:114（promote save:191） | village_memberships（村長昇格） | 候補（`isPlatformAccount` で除外。例外で止めず次の古参へ。尽きれば従来どおり凍結） | HeadmanSuccessionTest |
+| social | `FollowService.follow`:45（利用者のタイムライン上の個人フォロー。マスター決定で禁止に含める） | follows（USER→チーム/組織/利用者） | 本人 | `PlatformAccountAffiliationBanFollowTest` |
 
 ## 2. 運営アカウント宛ての招待・参加申請を作る経路（P2: 作成時点で拒否）
 
 | ドメイン | 経路 | 作る行 | 判定する利用者 | 固定するテスト |
 |---|---|---|---|---|
-| role | `MembershipInviteService.issueMembershipInvite`:90（DM 相手が宛先。`MembershipInviteTokenIssuer`） | invite_tokens（宛先付き） | 宛先 | RolePaths `MembershipInviteIssue` |
+| role | `MembershipInviteService.issueMembershipInvite`:90（DM 相手が宛先）・`MembershipInviteTokenIssuer.issue` / `stageForReissue`（保存点でも判定。G4 対象） | invite_tokens（宛先付き） | 宛先 | RolePaths `MembershipInviteIssue` |
 | role | `OwnershipTransferOfferService.createOffer`:102 | ownership_transfer_offers | 譲渡先 | RolePaths `OwnershipOffer` |
 | joinrequest | `JoinRequestService.createRequest`:84 | join_requests | 申請者 | TenantPaths `JoinRequestCreate` |
 | supporter | `SupporterService.follow`（手動承認）:110 | supporter_applications | 本人 | TenantPaths `SupporterFollow` |
@@ -65,9 +66,18 @@
 | `TeamOrgAffiliationCommandService` | チームの組織加盟（主体はチーム） |
 | `OrganizationMembershipCommitteeCleanupListener` | 組織離脱に伴う委員の退任（更新のみ） |
 | `VillageUserCleanerEventListener` | 退会時の村所属の整理（更新のみ） |
-| `SharedInviteTokenIssuer` | 宛先の無い共有招待リンク（受諾時に合流点で判定） |
+| `SharedInviteTokenIssuer` | 宛先の無い共有招待リンク。発行時は宛先が無いので判定しない。**受諾時**に `InviteAcceptanceFacade.accept`（使用回数の確保より前）と合流点（`MembershipGrantService.grantRole`・`MembershipService.join`）で拒否する（RolePaths `InviteAcceptance`） |
+| `TeamFriendsService.follow`（team→team） | チームのフォロー（follows の主体がチーム）。G4 除外表に載せる |
 
-## 4. 判断待ち（殿の御裁可を仰ぐ）
+## 4. 決定事項（殿・マスター 2026-11-26）
 
-- `social.FollowService.follow`（利用者→チーム/組織/利用者のタイムライン上のフォロー、follows 行）: テナントの所属ではなく SNS 的なフォロー。マスター決定の「サポーター（フォロー）」は SupporterService を指すと解し、本試練では対象外とした。含める場合は G4 の SINK に `FollowEntity` を足し、`FollowService` に Policy を通す。
-- `TeamFriendsService`（チーム→チームのフォロー）: 主体がチームなので対象外。
+- `social.FollowService.follow`（利用者のタイムライン上の個人フォロー）も**禁止対象に含める**。G4 の生成シンクに `FollowEntity` を足し、`FollowService` に Policy を通した。
+- `TeamFriendsService`（チーム→チームのフォロー）は主体がチームなので対象外（除外表に理由付きで記載）。
+- **停止中・非 ACTIVE の運営アカウントも対象**。Policy は状態を問わず SYSTEM_ADMIN ロールの有無で判定する。
+
+## 5. 既存の所属行の点検（本番は未構築・殿が本番前に実行）
+
+- 点検 SQL: `backend/src/test/resources/platform_account_affiliation/inspection.sql`。1 行でも返れば、運営アカウントがテナントに所属している（または所属待ちが残っている）。
+- 開発・CI: Flyway 実スキーマ（シード・バックフィル後）で 0 件であることを `PlatformAccountAffiliationInspectionFlywayIT` が常時固定する。
+- 本番（未構築。台帳 CMP-260826-2129）: 構築後・公開前に殿が点検 SQL を 1 回実行して 0 件を確認する。足軽・家老は本番で実行しない。0 件でなければ、運営アカウントを運営専用に整理（所属行の削除・退会）してから公開する。
+- 順序の注意: 本禁止（Z-A PR2）は、共通点の SYSTEM_ADMIN 短絡の撤去（Z-A PR3）より**前に**マージすること（短絡の撤去で `ALREADY_MEMBER` 判定等が運営アカウントを通すようになるため）。

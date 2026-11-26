@@ -1,5 +1,7 @@
 package com.mannschaft.app.role.service;
 
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.role.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -14,11 +16,12 @@ import org.springframework.stereotype.Component;
  * すべて本クラスを通して {@code MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN}（403）で拒否する。</p>
  *
  * <p>DI 循環を避けるため {@link UserRoleRepository} だけに依存する（設計書 z-a-design.md §2）。
- * 運営ロールの判定は既存の {@code UserRoleRepository#existsSystemAdminByUserId} を使い、
+ * 運営ロールの判定は {@code UserRoleRepository#existsPlatformAdminRoleByUserId} を使い、
  * 新しいフラグは作らない。</p>
  *
- * <p><b>試練（テスト先行）のスタブ</b>: 中身は実装（出陣）で埋める。現状は
- * {@link UnsupportedOperationException} を投げ、受け入れテストを red に保つ。</p>
+ * <p>判定は<b>アカウントの状態を問わない</b>（停止中・非 ACTIVE の運営アカウントも対象。殿の決定 2026-11-26）。
+ * そのため {@code existsSystemAdminByUserId}（ACTIVE・未削除のみ）ではなく
+ * {@code existsPlatformAdminRoleByUserId} を使う。</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -33,7 +36,9 @@ public class PlatformAccountAffiliationPolicy {
      * @param userId 所属させようとしているユーザー ID
      */
     public void assertAffiliatable(Long userId) {
-        throw new UnsupportedOperationException("試練スタブ: 戦役 Z-A PR2 で実装する");
+        if (isPlatformAccount(userId)) {
+            throw new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+        }
     }
 
     /**
@@ -43,6 +48,6 @@ public class PlatformAccountAffiliationPolicy {
      * @return 運営アカウントなら true
      */
     public boolean isPlatformAccount(Long userId) {
-        throw new UnsupportedOperationException("試練スタブ: 戦役 Z-A PR2 で実装する");
+        return userId != null && userRoleRepository.existsPlatformAdminRoleByUserId(userId) > 0;
     }
 }

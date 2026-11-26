@@ -13,6 +13,8 @@ com/mannschaft/app/role/service/OwnershipTransferOfferService.java	1
 com/mannschaft/app/role/service/RoleService.java	8
 com/mannschaft/app/role/service/RoleSuccessionService.java	2
 com/mannschaft/app/role/service/SharedInviteTokenIssuer.java	1
+com/mannschaft/app/social/service/FollowService.java	1
+com/mannschaft/app/social/service/TeamFriendsService.java	1
 com/mannschaft/app/supporter/service/SupporterService.java	1
 com/mannschaft/app/team/service/TeamOrgAffiliationCommandService.java	1
 com/mannschaft/app/team/service/TeamService.java	2

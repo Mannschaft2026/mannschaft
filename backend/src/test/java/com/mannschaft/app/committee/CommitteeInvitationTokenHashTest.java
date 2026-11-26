@@ -89,6 +89,9 @@ class CommitteeInvitationTokenHashTest {
     @Spy
     private SecretTokenVault vault = new SecretTokenVault();
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private CommitteeInvitationService service;
 

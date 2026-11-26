@@ -66,6 +66,9 @@ class CommitteeServiceToBuilderTest {
     @Mock
     private CommitteeAccessGuard committeeAccessGuard;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private CommitteeService committeeService;
 

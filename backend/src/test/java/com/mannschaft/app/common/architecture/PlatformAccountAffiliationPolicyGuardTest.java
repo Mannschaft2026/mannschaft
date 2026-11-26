@@ -56,7 +56,7 @@ class PlatformAccountAffiliationPolicyGuardTest {
             "\\b(?:UserRoleEntity|MembershipEntity|CommitteeMemberEntity|VillageMembershipEntity"
                     + "|SupporterApplicationEntity|JoinRequestEntity|VillageJoinRequestEntity"
                     + "|CommitteeInvitationEntity|VillageInvitationEntity|OwnershipTransferOfferEntity"
-                    + "|VillageCreationRequestEntity|InviteTokenEntity)\\s*\\.\\s*builder\\s*\\("
+                    + "|VillageCreationRequestEntity|InviteTokenEntity|FollowEntity)\\s*\\.\\s*builder\\s*\\("
                     + "|\\bnew\\s+(?:VillageMembershipEntity|VillageInvitationEntity|VillageJoinRequestEntity"
                     + "|VillageCreationRequestEntity|CommitteeInvitationEntity|JoinRequestEntity"
                     + "|OwnershipTransferOfferEntity|SupporterApplicationEntity|CommitteeMemberEntity)\\s*\\("

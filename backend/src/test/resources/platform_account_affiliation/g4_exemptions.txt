@@ -6,3 +6,4 @@ com/mannschaft/app/team/service/TeamOrgAffiliationCommandService.java	チーム�
 com/mannschaft/app/committee/event/OrganizationMembershipCommitteeCleanupListener.java	組織離脱に伴う委員の退任（left_at を立てる saveAll のみ）。所属を作らない
 com/mannschaft/app/village/event/VillageUserCleanerEventListener.java	退会時の村所属の整理（退村扱いの更新のみ）。所属を作らない
 com/mannschaft/app/role/service/SharedInviteTokenIssuer.java	宛先の無い共有招待リンクの発行。受諾時に InviteAcceptanceFacade → MembershipGrantService で Policy を通す
+com/mannschaft/app/social/service/TeamFriendsService.java	チーム→チームのフォロー（follows の主体がチーム）。利用者の所属・フォローではない

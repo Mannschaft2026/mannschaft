@@ -32,6 +32,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 村作成申請サービス（F17.1 Phase 1 B5）。
@@ -59,6 +60,7 @@ public class VillageCreationRequestService {
     private final VillageMembershipSlotService slotService;
     private final EntityManager entityManager;
     private final AccessControlService accessControlService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ------------------------------------------------------------------
     // 申請者向け
@@ -77,6 +79,8 @@ public class VillageCreationRequestService {
         if (requesterUserId == null) {
             throw new BusinessException(CommonErrorCode.COMMON_000);
         }
+        // 運営アカウント（SYSTEM_ADMIN）は村を作って村長（所属）になれない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
 
         // 一般ユーザーは OFFICIAL を申請できない
         if (req.type() == VillageType.OFFICIAL && !isSystemAdmin(requesterUserId)) {
@@ -207,6 +211,8 @@ public class VillageCreationRequestService {
         if (!slotService.lockUser(requesterUserId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
+        // 申請者が運営アカウント（SYSTEM_ADMIN）なら承認しても村長行を作れない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
         VillageCreationRequestEntity request = loadRequestForUpdate(requestId);
         if (!requesterUserId.equals(request.getRequesterUserId())) {
             throw new IllegalStateException("村作成申請の申請者が変更されています");

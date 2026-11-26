@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 委員会サービス。委員会の CRUD・ステータス遷移・メンバー管理を提供する。
@@ -44,6 +45,7 @@ public class CommitteeService {
 
     /** 委員会メンバーシップ・委員会内ロールに基づく認可判定の一元窓口。 */
     private final CommitteeAccessGuard committeeAccessGuard;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================
     // 委員会 CRUD
@@ -57,6 +59,9 @@ public class CommitteeService {
     public CommitteeEntity createCommittee(Long organizationId, CommitteeCreateRequest request, Long currentUserId) {
         // 組織離脱と直列化し、離脱済みユーザーを初期委員長として再登録しない。
         userRowLockService.lockAll(request.getInitialChairUserId());
+        // 運営アカウント（SYSTEM_ADMIN）は委員会を作れず、初期委員長にもなれない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(currentUserId);
+        platformAccountAffiliationPolicy.assertAffiliatable(request.getInitialChairUserId());
         accessControlService.checkMembership(
                 request.getInitialChairUserId(), organizationId, "ORGANIZATION");
 

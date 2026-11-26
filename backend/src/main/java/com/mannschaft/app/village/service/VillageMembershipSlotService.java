@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 五つの入村入口のUSER枠を、入口のREQUIREDトランザクション内だけで割り当てる。
@@ -38,6 +39,7 @@ public class VillageMembershipSlotService {
     private final VillageUserAdmissionLockRepository admissionLockRepository;
     private final VillageMembershipRepository membershipRepository;
     private final VillageParticipationLimitProvider limitProvider;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * USER単位の入村ロックを取り、呼出側の取引の終わりまで保持する。
@@ -80,6 +82,8 @@ public class VillageMembershipSlotService {
      * 上限を下げた場合、既存の所属は残したまま新しい入村だけを止める（退村は枠割当を通らないので常にできる）。</p>
      */
     public Allocation allocate(Long userId) {
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。入村枠を割り当てない。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
         int hardLimit = limitProvider.currentHardLimit();
         boolean[] occupied = new boolean[VillageParticipationLimits.DB_SLOT_CEILING + 1];
         var rows = membershipRepository.findAdmissionSlotsForUpdate(userId);
@@ -117,6 +121,10 @@ public class VillageMembershipSlotService {
      * <p>Entity を受け渡すため package-private とし、同じ village.service の五入口からだけ呼ぶ（D-1）。</p>
      */
     VillageMembershipEntity admit(VillageMembershipEntity membership) {
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。五入口の共通保存点での最終防衛線。
+        if (membership.getSubjectType() == VillageSubjectType.USER) {
+            platformAccountAffiliationPolicy.assertAffiliatable(membership.getSubjectId());
+        }
         try {
             VillageMembershipEntity saved = membershipRepository.save(membership);
             membershipRepository.flush();

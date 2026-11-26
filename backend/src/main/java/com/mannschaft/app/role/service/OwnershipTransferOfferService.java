@@ -87,6 +87,7 @@ public class OwnershipTransferOfferService {
     private final AuditLogService auditLogService;
     private final TeamService teamService;
     private final OrganizationService organizationService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * オーナー委譲を打診する（PENDING オファーを作成。ロールは変わらない）。
@@ -103,6 +104,9 @@ public class OwnershipTransferOfferService {
             Long scopeId, String scopeType, String scopeSlug,
             TransferOwnershipOfferCreateRequest request, Long actorUserId) {
         Long targetUserId = request.targetUserId();
+
+        // 運営アカウント（SYSTEM_ADMIN）宛ての打診は作成時点で拒否する（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
 
         // 認可（public 入口の二層目）: 打診は当該スコープの ADMIN のみ（DEPUTY_ADMIN 不可・設計書 step2）。
         if (!accessControlService.isAdmin(actorUserId, scopeId, scopeType)) {
@@ -200,6 +204,8 @@ public class OwnershipTransferOfferService {
     @Transactional
     public TransferOwnershipAcceptResponse acceptOffer(
             Long scopeId, String scopeType, UUID offerId, Long actorUserId) {
+        // 運営アカウント（SYSTEM_ADMIN）は ADMIN を引き受けられない（戦役 Z-A PR2。既存の打診を延命させない）。
+        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
         OwnershipTransferOfferEntity offer = loadScopedOffer(offerId, scopeId, scopeType);
 
         // 状態確認（設計書 step1）: PENDING かつ未期限のみ承諾可。

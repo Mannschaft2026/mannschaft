@@ -79,6 +79,7 @@ public class RoleService {
 
     private final UserRowLockService userRowLockService;
     private final AdminRoleMutationLockService adminRoleMutationLockService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 自己プロキシ参照（issue #2544）。{@code @Cacheable} は Spring AOP プロキシ経由でのみ作用するため、
@@ -157,6 +158,8 @@ public class RoleService {
     @Transactional
     public void assignRole(Long scopeId, String scopeType, Long targetUserId, Long roleId, Long grantedBy) {
         lockUsers(grantedBy, targetUserId);
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
         // ロール存在確認
         RoleEntity assignedRole = roleRepository.findById(roleId)
                 .orElseThrow(() -> new BusinessException(RoleErrorCode.ROLE_001));
@@ -269,6 +272,8 @@ public class RoleService {
     public void changeRole(Long scopeId, String scopeType, Long targetUserId,
                            RoleChangeRequest req, Long changedBy) {
         lockUsers(changedBy, targetUserId);
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
         // 束1 権限昇格根治（Service 層二重防御）: 操作者が当該スコープの ADMIN/DEPUTY_ADMIN であることを要求。
         requireActorAdmin(scopeId, scopeType, changedBy);
 
@@ -833,6 +838,8 @@ public class RoleService {
     @Transactional
     public void transferOwnership(Long scopeId, String scopeType, Long currentUserId, Long targetUserId) {
         Map<Long, UserState> lockedUserStates = userRowLockService.lockAll(currentUserId, targetUserId);
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
         if (currentUserId.equals(targetUserId)) {
             throw new BusinessException(RoleErrorCode.ROLE_001);
         }
