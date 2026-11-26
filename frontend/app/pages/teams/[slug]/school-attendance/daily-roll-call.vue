@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
 import { computed, ref, onMounted } from 'vue'
-import type { DailyRollCallEntry, DailyRollCallSummary } from '~/types/school'
+import type { DailyRollCallSummary } from '~/types/school'
+import { toRollCallEntries, type RollCallStudentEntry } from '~/utils/rollCallEntries'
 
 definePageMeta({
   layout: 'team',
   middleware: 'auth',
 })
 
-interface StudentEntry extends DailyRollCallEntry {
-  displayName: string
-}
-
+const { t } = useI18n()
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 
@@ -38,21 +36,15 @@ const canQuery = computed(() => permissionsReady.value && !denied.value && canVi
 const today = dayjs().tz(userTimezone.value).format('YYYY-MM-DD')
 const selectedDate = ref(today)
 
-const entries = ref<StudentEntry[]>([])
+const entries = ref<RollCallStudentEntry[]>([])
 const showSummary = ref(false)
 
 function initEntries(): void {
   if (records.value.length > 0) {
-    entries.value = records.value.map((r) => ({
-      studentUserId: r.studentUserId,
-      displayName: String(r.studentUserId),
-      status: r.status,
-      absenceReason: r.absenceReason,
-      arrivalTime: r.arrivalTime,
-      leaveTime: r.leaveTime,
-      comment: r.comment,
-      familyNoticeId: r.familyNoticeId,
-    }))
+    entries.value = toRollCallEntries(
+      records.value,
+      t('school.attendance.dailyRollCall.unknownStudent'),
+    )
   }
 }
 

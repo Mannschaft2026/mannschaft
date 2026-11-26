@@ -26,7 +26,8 @@
       "visibility_to_org": "조직 공개 설정",
       "start_date": "시작일",
       "end_date": "종료일",
-      "member_count": "멤버 수"
+      "member_count": "멤버 수",
+      "chair": "위원장"
     },
     "visibility": {
       "HIDDEN": "비공개",
@@ -96,7 +97,16 @@
       "invitee": "초대 대상"
     },
     "create_dialog": {
-      "title": "위원회 설립하기"
+      "title": "위원회 설립하기",
+      "chair_placeholder": "위원장을 선택하세요",
+      "purpose_placeholder": "목적 태그를 선택하세요"
+    },
+    "purpose_tag": {
+      "TOURNAMENT": "대회 운영",
+      "GOVERNANCE": "거버넌스",
+      "ELECTION": "선거",
+      "PROJECT": "프로젝트",
+      "OTHER": "기타"
     }
   }
 }

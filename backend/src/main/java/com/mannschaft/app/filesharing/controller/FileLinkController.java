@@ -5,6 +5,7 @@ import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.LinkIssuedResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
 import com.mannschaft.app.filesharing.service.FolderScopeAccessGuard;
 import com.mannschaft.app.filesharing.service.SharedFileLinkService;
@@ -57,14 +58,14 @@ public class FileLinkController {
      * 共有リンクを作成する。
      */
     @PostMapping("/files/{fileId}/links")
-    @Operation(summary = "共有リンク作成")
+    @Operation(summary = "共有リンク作成（平文トークンは発行応答の1回だけ）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "作成成功")
-    public ResponseEntity<ApiResponse<LinkResponse>> createLink(
+    public ResponseEntity<ApiResponse<LinkIssuedResponse>> createLink(
             @PathVariable Long fileId,
             @Valid @RequestBody CreateLinkRequest request) {
         Long actorId = SecurityUtils.getCurrentUserId();
         folderScopeAccessGuard.requirePostConcealedByFileId(fileId, actorId);
-        LinkResponse response = linkService.createLink(fileId, actorId, request);
+        LinkIssuedResponse response = linkService.createLink(fileId, actorId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
