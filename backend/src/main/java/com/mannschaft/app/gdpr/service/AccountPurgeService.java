@@ -241,7 +241,9 @@ public class AccountPurgeService {
                 // CMP-260822-1243 第2陣: 個人に属する残表（村 pin/nickname を含む）の強消去
                 "shift", "parking", "advertising", "property", "village",
                 // F06.4.1 個人の頑張り記録（私的メモを含む原本・冪等 receipt の強消去）
-                "effortrecord");
+                "effortrecord",
+                // CMP-261126-1558: 確認通知の下書き（本人の作成フォーム保存）の強消去
+                "confirmabledraft");
         LocalDateTime purgeAttemptedAt = LocalDateTime.now();
         purgeTargetDomains.forEach(domain -> {
             AccountPurgeCompletionStatusEntity pending = new AccountPurgeCompletionStatusEntity();

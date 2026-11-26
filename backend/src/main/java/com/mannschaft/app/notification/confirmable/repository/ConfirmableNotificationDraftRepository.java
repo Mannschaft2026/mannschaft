@@ -2,7 +2,11 @@ package com.mannschaft.app.notification.confirmable.repository;
 
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationDraftEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +27,18 @@ public interface ConfirmableNotificationDraftRepository
 
     Optional<ConfirmableNotificationDraftEntity> findByIdAndScopeTypeAndScopeIdAndUserId(
             UUID id, ScopeType scopeType, Long scopeId, Long userId);
+
+    /**
+     * 上限判定の直列化用: スコープ×利用者の既存下書き行を {@code SELECT ... FOR UPDATE} で取る。
+     *
+     * <p>(scope_type, scope_id, user_id, updated_at) インデックス経由で走査するため、行が0件でも
+     * ギャップロックが掛かり、同じスコープ×利用者の同時作成が直列化される。</p>
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM ConfirmableNotificationDraftEntity d "
+            + "WHERE d.scopeType = :scopeType AND d.scopeId = :scopeId AND d.userId = :userId")
+    List<ConfirmableNotificationDraftEntity> lockByScopeTypeAndScopeIdAndUserId(
+            @Param("scopeType") ScopeType scopeType, @Param("scopeId") Long scopeId, @Param("userId") Long userId);
 
     long countByScopeTypeAndScopeIdAndUserId(ScopeType scopeType, Long scopeId, Long userId);
 

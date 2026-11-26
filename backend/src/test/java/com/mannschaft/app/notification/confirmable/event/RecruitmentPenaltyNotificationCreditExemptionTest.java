@@ -98,7 +98,9 @@ class RecruitmentPenaltyNotificationCreditExemptionTest {
                 notificationRepository, recipientRepository, settingsService, userRepository,
                 notificationHelper, eventPublisher, notificationCreditService, confirmService, queryService,
                 targetRepository, targetAuthorizationValidator, targetSelectionValidator,
-                recipientGroupService, recipientPreviewService, fanoutJobService, Clock.systemDefaultZone());
+                recipientGroupService, recipientPreviewService, fanoutJobService,
+                mock(com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationDraftRepository.class),
+                Clock.systemDefaultZone());
         listener = new RecruitmentPenaltyAppliedNotificationListener(service, notificationRepository);
 
         given(userRepository.findById(any())).willReturn(Optional.empty());

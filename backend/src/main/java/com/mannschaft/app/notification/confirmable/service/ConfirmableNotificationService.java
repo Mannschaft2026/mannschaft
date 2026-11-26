@@ -21,6 +21,7 @@ import com.mannschaft.app.notification.confirmable.entity.ConfirmableTargetType;
 import com.mannschaft.app.notification.confirmable.entity.UnconfirmedVisibility;
 import com.mannschaft.app.notification.confirmable.error.ConfirmableNotificationErrorCode;
 import com.mannschaft.app.notification.confirmable.event.ConfirmableNotificationCreatedEvent;
+import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationDraftRepository;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationRecipientRepository;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationRepository;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationTargetRepository;
@@ -111,6 +112,8 @@ public class ConfirmableNotificationService {
     private final ConfirmableRecipientPreviewService recipientPreviewService;
     /** チャンク処理は乙隊担当（ワーカー隊）。enqueue のみ本サービス（送信API側）が同一TXで行う（AC-22）。 */
     private final NotificationFanoutJobService fanoutJobService;
+    /** CMP-261126-1558: 送信成功時に送信元の下書きを同一トランザクションで削除する。 */
+    private final ConfirmableNotificationDraftRepository draftRepository;
     /**
      * CI是正（CMP-260920-1040）: 引数なし {@code LocalDateTime.now()} は番人違反のため注入する
      * （docs/architecture/datetime_policy_utc_instant_vs_wallclock.md。既存 now() 群と同じゾーン基準）。
@@ -207,6 +210,14 @@ public class ConfirmableNotificationService {
                 scopeType, scopeId, request.getTitle(), request.getBody(), request.getPriority(),
                 deadlineAt, request.getActionUrl(), request.getTemplateId(), resolvedVisibility,
                 createdByUserId, effectiveTargets);
+
+        // CMP-261126-1558: 下書きからの送信なら、送信者本人・送信スコープの下書きだけを同一TXで削除する。
+        // 一致しない（他人・別スコープ・存在しない）場合は何も消えず、黙って何もしない。
+        // ここまでに例外が出てロールバックした場合は削除も巻き戻り、下書きは残る。
+        if (request.getDraftId() != null) {
+            draftRepository.deleteByIdAndScopeTypeAndScopeIdAndUserId(
+                    request.getDraftId(), scopeType, scopeId, createdByUserId);
+        }
 
         return ConfirmableNotificationSendAcceptedResponse.builder()
                 .id(notification.getId())

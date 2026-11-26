@@ -1,5 +1,6 @@
 package com.mannschaft.app.notification.confirmable.dto;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -15,5 +16,6 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ConfirmableNotificationDraftUpdateRequest extends ConfirmableNotificationDraftSaveRequest {
 
+    @NotNull
     private Long baseVersion;
 }

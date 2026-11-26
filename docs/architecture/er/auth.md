@@ -384,6 +384,7 @@ erDiagram
 | [moduleevent](moduleevent.md) | `module_event_resume_actor_states` | `actor_user_id` | ID参照 | `users` |
 | [moduleevent](moduleevent.md) | `module_event_resume_audits` | `actor_user_id` | ID参照 | `users` |
 | [navsettings](navsettings.md) | `user_nav_settings` | `user_id` | ID参照 | `users` |
+| [notification](notification.md) | `confirmable_notification_drafts` | `user_id` | ID参照 | `users` |
 | [notification](notification.md) | `confirmable_notification_recipients` | `excluded_by` | ID参照 | `users` |
 | [notification](notification.md) | `confirmable_notification_recipients` | `user_id` | ID参照 | `users` |
 | [notification](notification.md) | `confirmable_notification_templates` | `created_by` | ID参照 | `users` |

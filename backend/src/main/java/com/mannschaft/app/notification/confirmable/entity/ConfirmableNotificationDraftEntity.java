@@ -29,7 +29,7 @@ import java.util.UUID;
  * {@code user_id} はクロスドメイン参照のため FK を張らない。退会の30日後に
  * Purge Listener が {@code deleteByUserId} で物理削除する。</p>
  *
- * <p>試練（red）段階の骨格。列定義の正本は migration（出陣で追加）。</p>
+ * <p>列定義の正本は migration {@code V274.20261126102719__create_confirmable_notification_drafts.sql}。</p>
  */
 @Entity
 @Table(name = "confirmable_notification_drafts", indexes = {
@@ -96,4 +96,21 @@ public class ConfirmableNotificationDraftEntity extends UuidV7Entity {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    /**
+     * PUT の内容で全項目を置き換える（スコープ・作成者は変えない）。
+     * 値が変わらなければ Hibernate は更新せず、version も updated_at も進まない。
+     */
+    public void replaceContent(String title, String body, ConfirmableNotificationPriority priority,
+                               Instant deadlineAt, ConfirmableDraftAudienceMode audienceMode,
+                               String selectedTargets, UUID selectedGroupId, Long selectedTemplateId) {
+        this.title = title;
+        this.body = body;
+        this.priority = priority;
+        this.deadlineAt = deadlineAt;
+        this.audienceMode = audienceMode;
+        this.selectedTargets = selectedTargets;
+        this.selectedGroupId = selectedGroupId;
+        this.selectedTemplateId = selectedTemplateId;
+    }
 }
