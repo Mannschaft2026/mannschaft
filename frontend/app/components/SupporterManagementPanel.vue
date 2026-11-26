@@ -2,6 +2,8 @@
 const props = defineProps<{
   scopeType: 'team' | 'organization'
   scopeId: string
+  /** チーム／組織シェル配下の子ページからだけ true。主取得が 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま */
+  scopeNotFoundOnDenied?: boolean
 }>()
 
 const {
@@ -22,7 +24,9 @@ const {
   toggleSelectAll,
   toggleSelect,
   init,
-} = useSupporterManagement(toRef(props, 'scopeType'), toRef(props, 'scopeId'))
+} = useSupporterManagement(toRef(props, 'scopeType'), toRef(props, 'scopeId'), {
+  scopeNotFoundOnDenied: props.scopeNotFoundOnDenied,
+})
 
 onMounted(init)
 </script>

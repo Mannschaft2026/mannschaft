@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "Failed to load your permissions. Please reload later",
-      "forbidden": "Only members of this team can use skills and certifications",
       "mineTab": "My skills and certifications",
       "categoriesReloadFailed": "Failed to reload the categories"
     }
@@ -1972,6 +1971,10 @@
     "menu": "Menu",
     "moreActions": "More actions",
     "openNavigation": "Open navigation",
+    "scopeNotFound": {
+      "title": "Not found",
+      "body": "The page you are looking for cannot be displayed."
+    },
     "scopeShell": {
       "memberCount": "{count} member | {count} members",
       "supporterCount": "{count} supporter | {count} supporters",

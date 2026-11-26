@@ -12,6 +12,7 @@ const { isAdminOrDeputy, loadPermissions } = useRoleAccess('organization', orgSl
 const { fetchContactSpaces, fetchDivisionContactSpaces, toggleVisibility, toggleDivisionVisibility } = useTournamentContact()
 const { getDivisions } = useTournamentApi()
 const { showSuccess, showError } = useNotification()
+const { markIfDenied, notFound } = useScopeNotFound()
 
 /** アクティブスコープ: 'tournament'=大会全体 / divisionId（TournamentContactPanel と共有） */
 const activeScope = ref<'tournament' | number>('tournament')
@@ -40,7 +41,9 @@ async function loadTournamentSpaces() {
   try {
     tournamentSpaces.value = await fetchContactSpaces(tId)
   }
-  catch {
+  catch (e) {
+    // 非所属・権限なし・不可視大会（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    if (markIfDenied(e)) return
     showError(t('tournament.communication.load_failed'))
   }
   finally {
@@ -114,6 +117,10 @@ onMounted(async () => {
     // loadPermissions は失敗を throw ではなく戻り値（{ ok: false }）で返す契約のため、
     // allSettled の rejected だけを見ていると取得失敗を取りこぼし、
     // 通知が出ないまま管理操作だけが無言で無効化される。両方を失敗として扱う。
+    // 連絡スペース・ディビジョン一覧が 403/404 なら共通の「見つかりません」へ置き換わるため、他のトーストは出さない
+    if (divResult.status === 'rejected') markIfDenied(divResult.reason)
+    if (notFound.value) return
+
     const permissionsFailed = permResult.status === 'rejected' || !permResult.value.ok
     if (permissionsFailed) {
       showError(t('tournament.communication.permissions_load_failed'))

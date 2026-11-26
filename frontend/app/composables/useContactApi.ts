@@ -2,6 +2,7 @@ import type {
   ContactResponse,
   ContactRequestResponse,
   ContactRequestBlockResponse,
+  ContactInviteIssuedResponse,
   ContactInviteTokenResponse,
   ContactInvitePreviewResponse,
   ContactPrivacySettings,
@@ -87,7 +88,7 @@ export function useContactApi() {
   }
 
   async function createInviteToken(body: CreateInviteTokenBody) {
-    return api<{ data: ContactInviteTokenResponse }>('/api/v1/contact-invite-tokens', {
+    return api<{ data: ContactInviteIssuedResponse }>('/api/v1/contact-invite-tokens', {
       method: 'POST',
       body,
     })

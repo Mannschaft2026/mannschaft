@@ -7,12 +7,17 @@ import type {
   PrefectureResponse,
 } from '~/types/matching'
 
-const props = defineProps<{ teamId?: string }>()
+const props = defineProps<{
+  teamId?: string
+  /** チーム／組織シェル配下の子ページからだけ true。主取得が 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま */
+  scopeNotFoundOnDenied?: boolean
+}>()
 const emit = defineEmits<{ select: [req: MatchRequestResponse]; create: [] }>()
 
 const { searchRequests, getTeamRequests, getPrefectures, getCities } = useMatchingApi()
 const { t } = useI18n()
 const { showError } = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { relativeTime } = useRelativeTime()
 const authStore = useAuthStore()
 const { saveLast, loadLast, loadHistory, pushHistory } = useMatchingSearchHistory()
@@ -134,7 +139,11 @@ async function load() {
       const res = await searchRequests(searchParams.value)
       requests.value = res.data
     }
-  } catch { showError('募集一覧の取得に失敗しました') }
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (props.scopeNotFoundOnDenied && markIfDenied(e)) return
+    showError('募集一覧の取得に失敗しました')
+  }
   finally { loading.value = false }
 }
 

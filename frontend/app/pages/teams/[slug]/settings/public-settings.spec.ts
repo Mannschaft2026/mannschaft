@@ -22,6 +22,12 @@ const state = vi.hoisted(() => ({
   handleApiError: vi.fn(),
 }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'private-scope' } }))
+// happy-dom 環境は Nuxt アプリが無いので、useScopeNotFound が使う useState をキー単位の ref で代替する
+const nuxtStates = vi.hoisted(() => new Map<string, unknown>())
+mockNuxtImport('useState', () => <T>(key: string, init?: () => T) => {
+  if (!nuxtStates.has(key)) nuxtStates.set(key, ref(init?.()))
+  return nuxtStates.get(key)
+})
 mockNuxtImport('usePublicApi', () => () => state)
 mockNuxtImport('useRoleAccess', () => () => ({
   isAdminOrDeputy: ref(state.allowed),
