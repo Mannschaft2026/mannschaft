@@ -911,6 +911,7 @@ commit して戻った後にだけ SUCCESS を保存する。対象0件でも SU
 | `disclosure_exports` | `requester_user_id` | 保持 | 監査ログ（改ざん防止・説明責任） |
 | `effort_operation_receipts` | `actor_user_id` | 強消去 | `EffortRecordPurgeEventListener`（応答JSONに私的メモを含むため本人分をすべて物理削除） |
 | `effort_records` | `owner_user_id` | 強消去 | `EffortRecordPurgeEventListener`（未共有の原本は物理削除。共有許可を持つ原本は値・私的メモ・snapshotを消去した tombstone を保持） |
+| `effort_team_shares` | `owner_user_id` | 保持 | 共有本文・反応（チームへ共有した projection 本文は残し著者表示を「退会者」へ匿名化する既決。F06.4.1 データ設計 §5・§7〜7.1。退会だけでは共有を REVOKED にしない。AccountPurgedEvent では owner 側の private 値・私的メモ・definition snapshot・共有 mapping・receipt を消し、許可検証用の非本文 tombstone だけを残す。purge リスナーの実装は PR-3b） |
 | `electronic_seals` | `user_id` | 保持 | 印鑑・押印履歴（F05.3 の既決で保持） |
 | `email_change_tokens` | `user_id` | 強消去 | `AccountPurgeService` 本体TX（auth トークン・認証情報） |
 | `email_outbox` | `user_id` | 要裁可 | 送信待ち・一時データ（宛先PIIを含む） |

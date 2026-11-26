@@ -11,6 +11,7 @@ import com.mannschaft.app.role.dto.InviteDeclineResult;
 import com.mannschaft.app.role.dto.InviteLocator;
 import com.mannschaft.app.role.dto.InviteScopeRef;
 import com.mannschaft.app.role.dto.InviteTokenSnapshot;
+import com.mannschaft.app.role.dto.InviteValidity;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.repository.InviteTokenRepository;
@@ -26,7 +27,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -74,9 +74,6 @@ public class InviteAcceptanceWriter {
         RELEASED
     }
 
-    /** F04.12 特権ロール（承諾型招待では付与不可・join 側の保険ガード用）。 */
-    private static final Set<String> PRIVILEGED_INVITE_ROLES = Set.of("ADMIN", "DEPUTY_ADMIN");
-
     private final InviteTokenRepository inviteTokenRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
@@ -102,7 +99,7 @@ public class InviteAcceptanceWriter {
      *   <li>招待が無い → ROLE_002（ID 入口では、宛先本人でない・共有リンク型もここで同じ ROLE_002）</li>
      *   <li>無効（上限到達 → ROLE_003、期限切れ・失効 → ROLE_002）</li>
      *   <li>宛先違い → 403 ROLE_009</li>
-     *   <li>特権ロール → 422 ROLE_009</li>
+     *   <li>招待で付与できないロール（特権 ADMIN / DEPUTY_ADMIN、GUEST、SYSTEM_ADMIN。{@link InviteRolePolicy}）→ 422 ROLE_009</li>
      *   <li>閉鎖世代が古い → ROLE_002</li>
      *   <li>ブロック → TEAM_004</li>
      *   <li>在籍済み（user_roles ∪ memberships）→ 409 TEAM_003</li>
@@ -204,6 +201,35 @@ public class InviteAcceptanceWriter {
         return inviteTokenRepository.findRoleNameByTokenHash(tokenHash);
     }
 
+    /**
+     * 招待のハッシュで、有効性を DB の現在時刻で判定する（保留の参照時の期限判定・承認時の処理中判定用。
+     * CMP-261107-1833 PR3 設計 c・g）。招待が無ければ空。
+     */
+    @Transactional(readOnly = true)
+    public Optional<InviteValidity> findValidity(String tokenHash, Long userId) {
+        return inviteTokenRepository.findValidityByTokenHash(tokenHash, userId);
+    }
+
+    /**
+     * 仮発行の印があり窓の外の招待を参照時に恒久失効させる CAS と、その決着の確定読みを、1 つの読み書きの短TXで行う
+     * （CMP-261107-1833 PR3 3・4 回目の検分）。
+     *
+     * <p>メソッドに {@code @Transactional}（readOnly ではない）を付けているので、{@code ReplicaRoutingAspect} が PRIMARY に固定する。
+     * 有効化と同じ行を取り合い、未コミットの有効化があればロックで待つ。1 行なら失効が勝ったので {@link InviteValidity#REVOKED}。
+     * 0 行なら同じ TX（primary）の中で読み直した有効性を返す（有効化が先にコミットしていれば VALID）。読み直しは UPDATE
+     * （現在読み）の後の最初の一貫性読みなので、ロック待ちの後にコミットされた値が見える。replica には向かわないので、
+     * 複製の遅れで旧値を読み、有効な招待と EXPIRED の保留を併存させることはない。</p>
+     *
+     * @return 失効が勝てば REVOKED、そうでなければ primary 上の現在の有効性（招待が無ければ空）
+     */
+    @Transactional
+    public Optional<InviteValidity> revokeExpiredStaged(String tokenHash, Long userId) {
+        if (inviteTokenRepository.revokeExpiredStaged(tokenHash) == 1) {
+            return Optional.of(InviteValidity.REVOKED);
+        }
+        return inviteTokenRepository.findValidityByTokenHash(tokenHash, userId);
+    }
+
     private void verifyResumable(InviteLocator locator, InviteTokenSnapshot token, Long userId, boolean blocked,
                                  ErrorCode folderError) {
         if (locator.concealsNonTarget() && !userId.equals(token.targetUserId())) {
@@ -217,7 +243,7 @@ public class InviteAcceptanceWriter {
             throw locator.targetMismatch();
         }
         RoleEntity grantRole = roleRepository.findById(token.roleId()).orElse(null);
-        if (grantRole != null && PRIVILEGED_INVITE_ROLES.contains(grantRole.getName())) {
+        if (grantRole != null && !InviteRolePolicy.isInvitable(grantRole.getName())) {
             throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
         }
         if (!scopeStates.isCurrent(token.scopeType(), token.scopeId(), token.scopeClosureGeneration())) {
@@ -251,9 +277,10 @@ public class InviteAcceptanceWriter {
             throw locator.targetMismatch();
         }
 
-        // F04.12 特権ロール付与の保険ガード（C-1）。
+        // F04.12 特権ロール付与の保険ガード（C-1）。招待で付与できない GUEST / SYSTEM_ADMIN の旧データも同じく拒否する
+        // （CMP-261124-0157。InviteRolePolicy）。
         RoleEntity grantRole = roleRepository.findById(token.roleId()).orElse(null);
-        if (grantRole != null && PRIVILEGED_INVITE_ROLES.contains(grantRole.getName())) {
+        if (grantRole != null && !InviteRolePolicy.isInvitable(grantRole.getName())) {
             throw new BusinessException(RoleErrorCode.ROLE_009, HttpStatus.UNPROCESSABLE_ENTITY);
         }
 

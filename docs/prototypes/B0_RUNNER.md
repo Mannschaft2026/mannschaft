@@ -33,6 +33,8 @@ node docs/prototypes/run-b0-alicization.mjs run B0-J7
 
 ## 気づき箱への連携
 
+気づきの**状態**（未整理・課題化済・修正中・対応済）の正本は `docs/prototypes/insight-status.js` です（PR で更新）。ボードはこのファイルをIndexedDBの状態より優先して表示します。ボード上で動かした状態はそのブラウザにだけ保存されるため、ヘッダの「状態を書き出す」で `insight-status.js` を生成し、差し替えて PR に含めます。書式の検証は `node docs/prototypes/validate-beta-inventory-board.mjs [--insight-status <path>]` が行います。
+
 Playwright specから気づきを残す場合は、`inventory-insight` annotationの`description`へJSONを設定します。
 
 ```ts
@@ -68,7 +70,7 @@ $env:B0_INCLUDE_LOCAL_OVERLAY='true'
 python docs/prototypes/generate-beta-inventory-board-data.py
 ```
 
-再生成された画面を開くと、`b0RunOverlay.insights`が既存のIndexedDBへ重複なしで取り込まれます。手入力と自動探索は同じ「気づき箱」に並び、登録元・persona・journey・runId・証拠パスを保持します。
+再生成された画面を開くと、`b0RunOverlay.insights`が既存のIndexedDBへ重複なしで取り込まれます。取り込み後の状態（対応済など）は `insight-status.js` に元ID（例: `ALIC-CMP0035-B-YA-01`）をキーに記録し、ボードの「状態を書き出す」で更新します。手入力と自動探索は同じ「気づき箱」に並び、登録元・persona・journey・runId・証拠パスを保持します。
 
 第二陣時点の累積登録（履歴）は `docs/evidence/CMP-261015-1510/resident-overlay.json` の6 persona / 6 journey / 13 insight。第一陣 `CMP-261022-0338/resident-overlay.json` の3/3/5は全フィールドを保持し、第二陣c717の3/3/8を追記しています。再生成する際はこの正本を `docs/prototypes/.b0-local/run-october-wave2-20261026.json` へコピーし、他のrunが最新mtimeで選択されないことを確認してから上記生成を実行します。生成後は正本・ignored copy・`b0RunOverlay` の構造一致、通常validator、`--self-test-overlay` を確認します。新8件の住民画像はprivate原本へのpath参照だけで、画像実体は含めません。
 

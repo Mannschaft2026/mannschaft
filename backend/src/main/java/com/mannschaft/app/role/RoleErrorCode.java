@@ -38,7 +38,8 @@ public enum RoleErrorCode implements ErrorCode {
     /**
      * 宛先不一致（F04.12 / F01.2 承諾型オファー）。
      * 他人宛ての招待・委譲オファーを第三者が承諾/辞退しようとした場合の 403（IDOR 防止）。
-     * 発行時に特権ロール（ADMIN/DEPUTY_ADMIN）を指定した場合の 422 にも流用する（設計書 §6・C-1）。
+     * 発行時・承諾時に招待で付与できないロール（特権 ADMIN/DEPUTY_ADMIN は C-1、GUEST/SYSTEM_ADMIN は
+     * CMP-261124-0157）を指定した場合の 422 にも流用する（設計書 §6・C-1・{@code InviteRolePolicy}）。
      */
     ROLE_009("ROLE_009", "この招待はあなた宛てではありません", Severity.WARN),
 
@@ -75,7 +76,27 @@ public enum RoleErrorCode implements ErrorCode {
      * SUPPORTER は memberships のみを持ち、専用のフォロー解除 API（{@code SupporterService#unfollow}）
      * から解除すべきであり、一般会員向け自主退会 API からは解除できない（→ 422）。
      */
-    ROLE_015("ROLE_015", "応援（サポーター）の解除はフォロー解除から行ってください", Severity.WARN);
+    ROLE_015("ROLE_015", "応援（サポーター）の解除はフォロー解除から行ってください", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 再招待の依頼が無い。不在と他スコープの ID を同一コードに畳む（存在秘匿）。→ 404。
+     */
+    ROLE_016("ROLE_016", "再招待の依頼が見つかりません", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 再招待の依頼が既に対応済み（REISSUE_REQUESTED 以外の状態・競合の負け側）。→ 409。
+     */
+    ROLE_017("ROLE_017", "再招待の依頼は既に対応済みです", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 依頼者が参加できない状態（退会・停止などの非 ACTIVE、またはブロック中）。→ 409。
+     */
+    ROLE_018("ROLE_018", "依頼者が参加できない状態です", Severity.WARN),
+
+    /**
+     * CMP-261107-1833 PR3: 仮発行した招待の有効化に失敗した。保留は PENDING で、次の参照で EXPIRED になり再依頼できる。→ 500。
+     */
+    ROLE_019("ROLE_019", "招待の有効化に失敗しました", Severity.ERROR);
 
     private final String code;
     private final String message;

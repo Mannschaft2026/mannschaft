@@ -27,9 +27,11 @@ import com.mannschaft.app.role.dto.ScopeUserRoleResponse;
 import com.mannschaft.app.role.dto.UserRoleOnlyDiffRow;
 import com.mannschaft.app.role.event.MembershipChangedEvent;
 import com.mannschaft.app.membership.domain.LeaveReason;
+import com.mannschaft.app.membership.domain.MembershipEndCause;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.dto.MembershipCreateRequest;
+import com.mannschaft.app.membership.dto.MembershipLeaveRequest;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.team.event.TeamMemberAuditEvent;
 import com.mannschaft.app.organization.event.OrganizationMemberAuditEvent;
@@ -45,6 +47,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -414,7 +417,23 @@ public class RoleService {
         // F00.5 認可基盤: memberships の在籍も同時に終了させる（在籍が認可の真実の源）。
         // 本メソッドは ADMIN 保護をバイパスする安全弁だが、直前の user_roles 削除を flush 済みのため
         // membership 側の最後の ADMIN 保護（user_roles 参照）も同様に発火せず、保護バイパスの性質を保つ。
-        leaveMembershipForRoleRevoke(targetUserId, scopeId, scopeType, LeaveReason.REMOVED, null);
+        // F06.4.1 §8: 本メソッドの呼出元は退会処理（AccountPurge → RolePurgeScopeExecutor・孤児補正バッチ）の
+        // 内部経路だけなので、加入期間の終了理由に ACCOUNT_WITHDRAWAL を明示する（leaveReason=REMOVED は通常除名と
+        // 同じため推測に使わない）。終了本体は MembershipService#leave に委譲し、在籍行が無ければ
+        // leaveMembershipForRoleRevoke と同じく MembershipChangedEvent(REMOVED) を補填発火する。
+        // 対象 user は冒頭で行ロック済みなので、在籍行 ID の取得から終了までの間に他の終了は割り込まない。
+        ScopeType membershipScope = "TEAM".equals(scopeType) ? ScopeType.TEAM : ScopeType.ORGANIZATION;
+        Optional<Long> activeMembershipId =
+                membershipService.findActiveMembershipIdForUpdate(targetUserId, membershipScope, scopeId);
+        if (activeMembershipId.isPresent()) {
+            MembershipLeaveRequest withdrawal = new MembershipLeaveRequest();
+            withdrawal.setLeaveReason(LeaveReason.REMOVED);
+            withdrawal.setEndCause(MembershipEndCause.ACCOUNT_WITHDRAWAL);
+            membershipService.leave(activeMembershipId.get(), withdrawal);
+        } else {
+            eventPublisher.publishEvent(new MembershipChangedEvent(
+                    targetUserId, scopeType, scopeId, MembershipChangedEvent.ChangeType.REMOVED));
+        }
     }
 
     /**
@@ -545,6 +564,27 @@ public class RoleService {
      */
     public List<Long> getAdminUserIdsByTeamId(Long teamId) {
         return userRoleRepository.findAdminUserIdsByTeamIds(List.of(teamId));
+    }
+
+    /**
+     * 指定チームの「ADMIN、または指定権限を持つ DEPUTY_ADMIN」のユーザー ID 一覧を返す。
+     *
+     * <p>シフト変更依頼の管理者宛通知（ADMIN ＋ MANAGE_SHIFTS を持つ DEPUTY_ADMIN）の受信者解決用。
+     * 所属中の ADMIN（{@code findActiveAdminUserIdsByTeamId}。ロールだけ残って退会済みの ADMIN は除く）と
+     * {@code findDeputyAdminUserIdsByTeamIdAndPermission}（権限を持つ DEPUTY_ADMIN。ロール定義・
+     * 権限グループの両経路、チーム所属中のみ）を合わせる。既存の {@code findAdminUserIdsByTeamId}
+     * （他の呼び出し元あり）の挙動は変えない。
+     * 宛先は引数のチームの管理者だけで、他チームの管理者は含まれない。</p>
+     *
+     * @param teamId         対象チーム ID
+     * @param permissionName 副管理者に要求する権限名（例: {@code "MANAGE_SHIFTS"}）
+     * @return 重複のない受信者のユーザー ID 一覧
+     */
+    public List<Long> getAdminAndPermittedDeputyUserIdsByTeamId(Long teamId, String permissionName) {
+        LinkedHashSet<Long> ids = new LinkedHashSet<>(
+                userRoleRepository.findActiveAdminUserIdsByTeamId(teamId));
+        ids.addAll(userRoleRepository.findDeputyAdminUserIdsByTeamIdAndPermission(teamId, permissionName));
+        return new ArrayList<>(ids);
     }
 
     /**

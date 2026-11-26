@@ -239,6 +239,10 @@
     .shot-preview { width: 128px; height: 104px; border-radius: 10px; object-fit: cover; background: var(--panel-soft); }
     .shot-help b { display: block; margin-bottom: 5px; }
     .shot-help p { margin: 0 0 8px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .status-warning { padding: 6px 10px; border-radius: 999px; background: var(--danger-soft, #fde8e8); color: var(--danger, #b42318); font-size: 11px; font-weight: 900; cursor: pointer; }
+    .status-warning[hidden] { display: none; }
+    .origin-badge { display: inline-block; padding: 2px 7px; border-radius: 999px; background: var(--panel-soft); color: var(--muted); font-size: 10px; font-weight: 800; }
+    .origin-badge.unexported { background: var(--brand-soft); color: var(--brand); }
     .storage-note { padding: 10px 12px; border-radius: 11px; background: var(--panel-soft); color: var(--muted); font-size: 11px; line-height: 1.6; }
     .lane { padding: 12px; box-shadow: none; min-width: 250px; }
     .lane-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 3px 12px; }
@@ -347,6 +351,8 @@
       </div>
       <div class="top-actions">
         <button class="quick-note-button" id="openInsightForm" type="button">＋ 気づきを残す</button>
+        <button class="secondary-button" id="exportInsightStatus" type="button" title="ボードで動かした状態を insight-status.js として書き出します">状態を書き出す</button>
+        <span class="status-warning" id="insightStatusWarnings" role="button" tabindex="0" hidden></span>
         <button class="icon-button" id="themeToggle" type="button" aria-label="テーマを切り替える">◐</button>
       </div>
     </header>
@@ -529,7 +535,7 @@
           </div>
         </div>
       </div>
-      <div class="storage-note"><b>ローカル専用：</b>手入力とアリシゼーションの気づきは、このブラウザの同じIndexedDB（画像はBlob）へ保存します。HTML・Git・AWSには送信しません。確定分はカードの「一式保存」から、機能別フォルダへMarkdown＋画像として書き出します。</div>
+      <div class="storage-note"><b>状態の正本は insight-status.js（PR で更新）：</b>ボード上の状態変更はこのブラウザのIndexedDB（画像はBlob）に保存され、ヘッダの「状態を書き出す」で insight-status.js 形式のファイルにできます。画像・本文はHTML・Git・AWSには送信しません。確定分はカードの「一式保存」から、機能別フォルダへMarkdown＋画像として書き出します。</div>
       <div class="drawer-actions">
         <button class="primary-button" type="submit">気づきを保存</button>
         <button class="secondary-button" id="cancelInsight" type="button">キャンセル</button>
@@ -539,6 +545,8 @@
   <div class="toast" id="toast" role="status">コピーしました</div>
 
   <script src="./beta-inventory-board-data.js"></script>
+  <script src="./insight-status.js"></script>
+  <script src="./insight-status-core.js"></script>
   <script>
     const baseInventory = window.BETA_INVENTORY_DATA;
     const decisions = baseInventory.decisions;
@@ -662,10 +670,41 @@
       };
     }
 
+    function overlayRunId() {
+      const overlay = baseInventory.b0RunOverlay;
+      return overlay ? (overlay.runId || overlay.startedAt || overlay.recordedAt || 'run-unknown') : undefined;
+    }
+
+    // IndexedDB の生レコード。状態ファイルを重ねる前の状態で、書き出しと同期に使う
+    let rawInsights = [];
+    let insightStatusWarnings = [];
+
+    function applyInsightStatuses(records) {
+      rawInsights = records;
+      const resolved = window.InsightStatusCore.resolveInsightStatuses(records, window.BETA_INSIGHT_STATUS, { overlayRunId: overlayRunId() });
+      insightStatusWarnings = resolved.warnings;
+      renderInsightStatusWarnings();
+      return resolved.insights;
+    }
+
+    function renderInsightStatusWarnings() {
+      const badge = document.querySelector('#insightStatusWarnings');
+      if (!badge) return;
+      badge.hidden = insightStatusWarnings.length === 0;
+      badge.textContent = `状態ファイルの警告 ${insightStatusWarnings.length}件`;
+      badge.title = insightStatusWarnings.map((warning) => `${warning.key}: ${warning.reason}`).join('\n');
+    }
+
+    // readInsights が失敗しても、状態ファイル自体の警告件数は表示する
+    function refreshInsightStatusWarnings() {
+      insightStatusWarnings = window.InsightStatusCore.validateStatusFile(window.BETA_INSIGHT_STATUS).warnings;
+      renderInsightStatusWarnings();
+    }
+
     function collectAlicizationInsights() {
       const overlay = baseInventory.b0RunOverlay;
       if (!overlay) return [];
-      const runId = overlay.runId || overlay.startedAt || overlay.recordedAt || 'run-unknown';
+      const runId = overlayRunId();
       const stableRunPart = String(runId).replace(/[^A-Za-z0-9_-]/g, '-');
       const findings = [
         ...(overlay.insights || overlay.findings || []),
@@ -1021,7 +1060,7 @@
       return {
         key: insight.id,
         title: insight.title,
-        status: insight.status === 'done' ? 'ready' : insight.status === 'planned' ? 'working' : 'unknown',
+        status: window.InsightStatusCore.statusToTarget(insight.status),
         classification: feature.classification,
         stage: feature.stage,
         priority: insight.priority,
@@ -1049,11 +1088,12 @@
     function renderInsights() {
       releaseInsightObjectUrls();
       const query = document.querySelector('#search').value.trim().toLowerCase();
+      const boardStages = [...document.querySelectorAll('[data-stage]')].map((button) => button.dataset.stage);
       const stageAndQueryInsights = insights.filter((insight) => {
         const feature = getFeatureInfo(insight.featureKey);
         const source = insightSourceDetails(insight);
         const urgency = insightUrgencyDetails(insight);
-        const stageMatches = feature.stage === selectedStage;
+        const stageMatches = window.InsightStatusCore.insightStageMatches(feature.stage, selectedStage, boardStages);
         const queryMatches = !query || `${insight.id} ${insight.title} ${insight.detail} ${insight.featureDetail || ''} ${insight.page} ${feature.title} ${insight.featureKey} ${source.sourceLabel} ${source.personaLabel} ${urgency.label} ${insight.journeyId || ''}`.toLowerCase().includes(query);
         return stageMatches && queryMatches;
       });
@@ -1072,15 +1112,16 @@
       });
       const openCount = visibleInsights.filter((insight) => insight.status === 'inbox').length;
       const plannedCount = visibleInsights.filter((insight) => insight.status === 'planned').length;
+      const fixingCount = visibleInsights.filter((insight) => insight.status === 'fixing').length;
       const priorityLabels = { must: '止まる・危険', should: '摩擦が大きい', could: 'あると良い' };
-      const statusLabels = { inbox: '未整理', planned: '課題化済', done: '対応済' };
-      const statusClasses = { inbox: 'unknown', planned: 'working', done: 'done' };
+      const statusLabels = window.InsightStatusCore.STATUS_LABELS;
+      const statusClasses = { inbox: 'unknown', planned: 'working', fixing: 'working', done: 'done' };
 
       board.className = '';
       board.innerHTML = `
         <div class="panel-heading">
           <div><h2>気づき箱</h2><p>私とアリシゼーションテストの発見を統合し、機能単位でまとめます。</p></div>
-          <span class="wip-chip">未整理 ${openCount} · 課題化済 ${plannedCount}</span>
+          <span class="wip-chip">未整理 ${openCount} · 課題化済 ${plannedCount} · 修正中 ${fixingCount}</span>
         </div>
         <div class="insight-intro">
           <div><b>記録は30秒で十分</b><p>対象機能・一言・状況・スクショだけ残し、優先順位やCMP化は後で行います。</p></div>
@@ -1095,10 +1136,11 @@
         <div class="insight-groups">
           ${groups.size ? [...groups.entries()].map(([featureKey, groupInsights]) => {
             const feature = getFeatureInfo(featureKey);
+            const stageUnset = !boardStages.includes(feature.stage);
             return `
               <section class="insight-group">
                 <div class="insight-group-header">
-                  <div><h3>${escapeHtml(feature.title)}</h3><span>${escapeHtml(featureKey)} · ${escapeHtml(feature.stage)} · ${escapeHtml(classificationLabel(feature.classification))}</span></div>
+                  <div><h3>${escapeHtml(feature.title)}</h3><span>${escapeHtml(featureKey)} · ${stageUnset ? '<span class="origin-badge unexported">ステージ未設定</span>' : escapeHtml(feature.stage)} · ${escapeHtml(classificationLabel(feature.classification))}</span></div>
                   <span>${groupInsights.length}件</span>
                 </div>
                 <div class="insight-card-grid">
@@ -1119,6 +1161,8 @@
                         <div class="insight-body">
                           <div class="tags">
                             <span class="status-pill ${statusClasses[insight.status]}">${statusLabels[insight.status]}</span>
+                            ${insight.statusOrigin === 'file' ? `<span class="origin-badge">状態ファイル${insight.pr ? ` ${escapeHtml(insight.pr)}` : ''}${(() => { const stamp = window.BETA_INSIGHT_STATUS?.items?.[insight.statusKey]?.updatedAt; return stamp ? ` · ${escapeHtml(String(stamp).slice(0, 10))}` : ''; })()}</span>` : ''}
+                            ${insight.statusOrigin === 'local-unexported' ? '<span class="origin-badge unexported">未書き出し</span>' : ''}
                             <span class="priority ${insight.priority}">${priorityLabels[insight.priority]}</span>
                             <span class="status-pill ${urgency.statusClass}">${escapeHtml(urgency.label)}</span>
                             <span class="tag">登録：${escapeHtml(source.sourceLabel)}</span>
@@ -1134,7 +1178,7 @@
                           <div class="insight-actions">
                             <button class="mini-button primary" type="button" data-insight-prompt="${escapeHtml(insight.id)}">AI指示文</button>
                             <button class="mini-button" type="button" data-insight-export="${escapeHtml(insight.id)}">一式保存</button>
-                            <button class="mini-button" type="button" data-insight-status="${escapeHtml(insight.id)}">${insight.status === 'inbox' ? '課題化済にする' : insight.status === 'planned' ? '対応済にする' : '未整理へ戻す'}</button>
+                            <button class="mini-button" type="button" data-insight-status="${escapeHtml(insight.id)}">${{ inbox: '課題化済にする', planned: '修正中にする', fixing: '対応済にする', done: '未整理へ戻す' }[insight.status]}</button>
                           </div>
                         </div>
                       </article>`;
@@ -1165,7 +1209,7 @@
         : visible.filter((feature) => feature.status === 'incomplete' || feature.status === 'verifying').length;
       const nextCount = selectedView === 'campaigns'
         ? visibleCampaigns.filter((campaign) => ['blocked', 'not-started', 'on-hold', 'unknown'].includes(campaign.status)).length
-        : selectedView === 'insights' ? visibleInsights.filter((insight) => insight.status === 'planned').length
+        : selectedView === 'insights' ? visibleInsights.filter((insight) => insight.status === 'planned' || insight.status === 'fixing').length
         : visible.filter((feature) => feature.status === 'blocked' || feature.status === 'unknown').length;
       document.querySelector('#activeCount').textContent = activeCount;
       document.querySelector('#nextCount').textContent = nextCount;
@@ -1174,7 +1218,7 @@
         : selectedView === 'insights' ? '未整理の気づき' : '実装未完・検証中';
       document.querySelector('#nextLabel').textContent = selectedView === 'campaigns'
         ? '未着手・保留などCMP'
-        : selectedView === 'insights' ? '課題化済' : '不備・未棚卸';
+        : selectedView === 'insights' ? '課題化済・修正中' : '不備・未棚卸';
       document.querySelector('#publishableCount').textContent = features.filter((feature) => feature.status === 'ready' && feature.gate === '適用完了').length;
       document.querySelector('#gateCount').textContent = `${doneGates}/${gateFoundation.length}`;
 
@@ -1221,7 +1265,7 @@
 - B0 journey: ${feature.insight.journeyId || '該当なし'}
 - runId: ${feature.insight.runId || '該当なし'}
 - 発見画面: ${feature.insight.page || '未記録'}
-- 状態: ${feature.insight.status}
+- 状態: ${window.InsightStatusCore.STATUS_LABELS[feature.insight.status] || feature.insight.status}${feature.insight.pr ? `（${feature.insight.pr}）` : ''}
 - 記録日時: ${new Date(feature.insight.createdAt).toLocaleString('ja-JP')}
 - 実行証拠: ${feature.insight.evidencePath || 'なし'}
 - スクリーンショット: ${feature.insight.screenshot ? `${feature.insight.screenshotName || '添付あり'}（「一式保存」で書き出し、この依頼と一緒に添付してください）` : feature.insight.screenshotPath || 'なし'}
@@ -1391,7 +1435,7 @@ ${feature.refs.map((item) => `- ${item}`).join('\n')}
 - runId: ${insight.runId || '該当なし'}
 - 実行証拠: ${insight.evidencePath || 'なし'}
 - 優先度: ${insight.priority}
-- 状態: ${insight.status}
+- 状態: ${window.InsightStatusCore.STATUS_LABELS[insight.status] || insight.status}${insight.pr ? `（${insight.pr}）` : ''}
 - 発見画面: ${insight.page || '未記録'}
 - 記録日時: ${new Date(insight.createdAt).toLocaleString('ja-JP')}
 - スクリーンショット: ${screenshotName}
@@ -1447,11 +1491,13 @@ ${insight.detail}
     }
 
     async function advanceInsightStatus(insight) {
-      const nextStatus = insight.status === 'inbox' ? 'planned' : insight.status === 'planned' ? 'done' : 'inbox';
-      await writeInsight({ ...insight, status: nextStatus, updatedAt: Date.now() });
-      insights = await readInsights();
+      const next = window.InsightStatusCore.nextStatus(insight.status);
+      // 状態ファイル由来の表示用フィールドは IndexedDB へ持ち込まず、生レコードの状態だけを更新する
+      const raw = rawInsights.find((item) => item.id === insight.id) || insight;
+      await writeInsight({ ...raw, status: next, updatedAt: Date.now() });
+      insights = applyInsightStatuses(await readInsights());
       renderBoard();
-      showToast(nextStatus === 'planned' ? '課題化済にしました' : nextStatus === 'done' ? '対応済にしました' : '未整理へ戻しました');
+      showToast(`${window.InsightStatusCore.STATUS_LABELS[next]}にしました`);
     }
 
     function showToast(message) {
@@ -1621,11 +1667,12 @@ ${insight.detail}
       };
       try {
         await writeInsight(insight);
-        insights = await readInsights();
+        insights = applyInsightStatuses(await readInsights());
         closeInsightForm();
         selectedView = 'insights';
         selectedInsightSource = registrationSource;
-        selectedStage = getFeatureInfo(insight.featureKey).stage;
+        const savedStage = getFeatureInfo(insight.featureKey).stage;
+        if (document.querySelector(`[data-stage="${savedStage}"]`)) selectedStage = savedStage;
         document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === 'insights'));
         document.querySelectorAll('[data-stage]').forEach((button) => button.classList.toggle('active', button.dataset.stage === selectedStage));
         renderBoard();
@@ -1633,6 +1680,23 @@ ${insight.detail}
       } catch (error) {
         showToast(`保存できませんでした: ${error?.message || 'IndexedDBエラー'}`);
       }
+    });
+    document.querySelector('#exportInsightStatus').addEventListener('click', () => {
+      let source;
+      try {
+        source = window.InsightStatusCore.buildStatusFileSource(rawInsights, window.BETA_INSIGHT_STATUS, { overlayRunId: overlayRunId() });
+      } catch (error) {
+        showToast(`書き出せません: ${error?.message || '状態ファイルが不正です'}`);
+        return;
+      }
+      downloadBlob(new Blob([source], { type: 'text/javascript;charset=utf-8' }), 'insight-status.js');
+      const invalidCount = insightStatusWarnings.filter((warning) => warning.key !== '(file)').length;
+      showToast(invalidCount
+        ? `insight-status.js を書き出しました。不正な項目 ${invalidCount}件はそのまま残しました。リポジトリの docs/prototypes/ へ置き、PR で更新してください`
+        : 'insight-status.js を書き出しました。リポジトリの docs/prototypes/ へ置き、PR で更新してください');
+    });
+    document.querySelector('#insightStatusWarnings').addEventListener('click', () => {
+      alert(insightStatusWarnings.map((warning) => `${warning.key}: ${warning.reason}`).join('\n'));
     });
     document.querySelector('#themeToggle').addEventListener('click', () => {
       const root = document.documentElement;
@@ -1654,10 +1718,13 @@ ${insight.detail}
     readInsights()
       .then(syncAlicizationInsights)
       .then((storedInsights) => {
-        insights = storedInsights;
+        insights = applyInsightStatuses(storedInsights);
         if (selectedView === 'insights') renderBoard();
       })
-      .catch((error) => showToast(`保存済みメモを読めませんでした: ${error?.message || 'IndexedDBエラー'}`));
+      .catch((error) => {
+        refreshInsightStatusWarnings();
+        showToast(`保存済みメモを読めませんでした: ${error?.message || 'IndexedDBエラー'}`);
+      });
   </script>
 </body>
 </html>

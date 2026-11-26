@@ -86,6 +86,20 @@ public interface BlogPostRepository extends JpaRepository<BlogPostEntity, Long> 
 
     Optional<BlogPostEntity> findByUserIdAndSlug(Long userId, String slug);
 
+    // slug 一意性の事前確認（論理削除済みは @SQLRestriction で除外＝一意制約の生存行基準に一致）
+    boolean existsByTeamIdAndSlug(Long teamId, String slug);
+
+    boolean existsByOrganizationIdAndSlug(Long organizationId, String slug);
+
+    boolean existsByUserIdAndSlug(Long userId, String slug);
+
+    // 更新時の slug 一意性確認（自分自身を除く。照合順序で大文字小文字違いも重複と判定される）
+    boolean existsByTeamIdAndSlugAndIdNot(Long teamId, String slug, Long id);
+
+    boolean existsByOrganizationIdAndSlugAndIdNot(Long organizationId, String slug, Long id);
+
+    boolean existsByUserIdAndSlugAndIdNot(Long userId, String slug, Long id);
+
     @Query(value = SEARCH_BY_TEAM, nativeQuery = true)
     Page<BlogPostEntity> searchByTeam(@Param("teamId") Long teamId, @Param("keyword") String keyword, Pageable pageable);
 

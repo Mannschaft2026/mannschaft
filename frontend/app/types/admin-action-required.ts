@@ -11,8 +11,8 @@
  * とは**別物**であり、命名衝突を避けるため接頭辞 `Admin` を付けた `AdminActionRequiredSummary` とする。
  */
 
-/** 集約ドメイン enum。team=RESERVATION/SHIFT_REQUEST/MATCHING、org=PAYMENT（03 §3.2）。 */
-export type AdminActionDomain = 'RESERVATION' | 'SHIFT_REQUEST' | 'MATCHING' | 'PAYMENT'
+/** 集約ドメイン enum。team=RESERVATION/SHIFT_REQUEST/MATCHING、org=PAYMENT、INVITE_REISSUE は両方（招待権限者だけ。03 §3.2）。 */
+export type AdminActionDomain = 'RESERVATION' | 'SHIFT_REQUEST' | 'MATCHING' | 'PAYMENT' | 'INVITE_REISSUE'
 
 /** 承認待ちアイテムのプレビュー要素（preview_size 件まで）。 */
 export interface AdminActionItem {

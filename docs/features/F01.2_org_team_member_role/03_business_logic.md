@@ -210,18 +210,20 @@
 3. 操作者が ADMIN か確認（DEPUTY_ADMIN の場合は INVITE_MEMBERS かつ MANAGE_INVITE_TOKENS 権限が必要）
    → 権限不足は 403
 4. role_id のバリデーション:
-   a. 指定された role_id が roles テーブルに存在するか確認 → なければ 400
-   b. 操作者が ADMIN の場合: role_id の priority >= 3（DEPUTY_ADMIN 以下）か確認
-      → ADMIN（priority=2）/ SYSTEM_ADMIN（priority=1）のトークン作成は 403
-   c. 操作者が SYSTEM_ADMIN の場合: role_id の priority >= 2（ADMIN 以下）まで許可
+   a. 指定された role_id が roles テーブルに存在するか確認 → なければ 404（ROLE_001）
+   b. 共有招待で付与できるロールは所属ロールの MEMBER / SUPPORTER だけ。それ以外は操作者に関係なく 422（ROLE_009）
+      - ADMIN / DEPUTY_ADMIN: 特権ロールの招待付与は権限昇格の経路になるため不可（C-1。承諾側でも 422 ROLE_009）
+      - GUEST: 招待参加時の書き先（memberships の role_kind）が定まっていないため不可（CMP-261124-0157 で安全側に確定）
+      - SYSTEM_ADMIN: プラットフォームロールで招待対象外
+   （旧記載「ADMIN は priority >= 3 まで・SYSTEM_ADMIN は ADMIN 以下まで」は C-1 と CMP-261124-0157 で上記に置き換えた）
 5. expires_in のバリデーション（1d / 7d / 30d / 90d / unlimited のいずれか）→ 不正値は 400
 6. invite_tokens に INSERT（token_hash = SHA-256(発行時に生成した Base64URL 43字の平文)・平文は発行応答でだけ返す、expires_at を計算、scope_closure_generation = 親から取得した発行時世代）
 7. audit_logs に TEAM_INVITE_TOKEN_CREATED または ORGANIZATION_INVITE_TOKEN_CREATED を記録
 8. 201 Created を返す
 ```
 
-> - ADMIN は自分と同等以上のロール（priority <= 2）のトークンを作成できない（ロール昇格制限と同一ポリシー）
-> - SYSTEM_ADMIN は ADMIN 以下のトークンを作成可能（SYSTEM_ADMIN 自身のトークン作成は不可・プラットフォームスコープのため招待対象外）
+> - 共有招待・個人招待（承諾型）とも、付与できるのは MEMBER / SUPPORTER だけ（ADMIN / DEPUTY_ADMIN / GUEST / SYSTEM_ADMIN は 422 ROLE_009）。管理者への引き上げは参加後のロール変更・オーナー委譲で行う
+> - 実装: `InviteRolePolicy`（発行: `InviteService#createInviteToken`・`MembershipInviteService`、承諾: `InviteAcceptanceWriter`、付与: `MembershipGrantService`）
 > - 共有/DM発行は非TX入口→親専属primary読取→role専属発行TXのcommit→親専属の短いFOR SHARE再確認の順に行う。201応答・DMカード投稿の前に、親の利用可能状態と発行世代一致を再確認する。事前に閉鎖済みならtoken/cardを作らない。発行commit後に閉鎖・世代前進を検出した場合は生成tokenを補償失効して拒否し、監査可能な失効行を保持する。親とtokenの更新TXは混在させない。
 
 ### 招待参加フロー
@@ -245,6 +247,14 @@
 7. memberships に当該スコープのアクティブエントリが既存か確認（left_at IS NULL） → 存在すれば 409
 8. user_roles に INSERT（role_id = invite_tokens.role_id）（権限ロールが ADMIN/DEPUTY_ADMIN の場合）
    + memberships に INSERT（scope_type/scope_id/role_kind/joined_at。role_kind は MEMBER または SUPPORTER）（F00.5 Phase 2 以降）
+   - 招待ロール → 書き先（CMP-261124-0157。`MembershipGrantService` / `InviteRolePolicy`）:
+     | 招待ロール | memberships.role_kind | user_roles |
+     |---|---|---|
+     | SUPPORTER | SUPPORTER | 作らない（SUPPORTER 行は V60.010 で廃止済み。フォロー型の応援者と同じ所属のみ） |
+     | MEMBER | MEMBER | **暫定で MEMBER 行を作る**（設計上は不要。除名 `RoleService#removeMember`・ロール変更 `changeRole` が user_roles 行を前提にしており、行が無いと ROLE_001 になるため。CMP-261020-1558 の解消後に作らない形へ移す。参加申請の承認 `grantMemberRole` も同じ） |
+     | ADMIN / DEPUTY_ADMIN | MEMBER | 当該ロールの行を作る（招待では手順 4・承諾の C-1 で弾かれるため、招待経路からは到達しない） |
+     | GUEST / SYSTEM_ADMIN ほか | — | — （付与せず 422 ROLE_009。旧データの招待で参加しても在籍・権限・使用回数を変えない） |
+   - 是正: CMP-261124-0157 以前に SUPPORTER 招待で MEMBER 在籍＋SUPPORTER の user_roles 行になった在籍は、migration V267.20261124005850 で SUPPORTER に直し当該行を消す（対象の判定は migration のコメント参照）
 9. invite_tokens.used_count を +1 UPDATE
 10. audit_logs に TEAM_MEMBER_JOINED または ORGANIZATION_MEMBER_JOINED を記録
     metadata: {"join_method": "INVITE", "invite_token_id": トークンID}
@@ -260,6 +270,95 @@
 - 休止・削除はその親の`closure_generation`を同じ親TXで進める。AFTER_COMMITで捕捉済み世代をrole専属新TXへ渡し、scope一致・`scope_closure_generation < 捕捉世代 AND revoked_at IS NULL`だけを`UTC_TIMESTAMP()`で失効する。期限/使用上限/宛先で除外せず、既失効日時は維持する。解除・復元後に同世代で新規発行したtokenは対象外とする。
 - イベント未配送・失効失敗は日次03:40 JSTの`invite-token-closure-cleanup`が、親専属primary readとrole専属失効TXを分けて回復する。失敗scopeは記録して次回へ残し、他scopeの処理を継続する。親欠落時は利用を拒否し、不明な世代を推測して一括失効しない。
 - 解除・復元は世代を戻さず旧tokenを復元しない。組織休止では所属team自身の状態・世代・個人招待・既存在籍を変更しない。月次の非活動休止実装は別課題#3915で追跡し、本件で実装済みとはしない。
+
+### 再招待依頼の受け手側フロー（CMP-261107-1833 PR3）
+
+失効した招待から登録した利用者の再招待依頼（`registration_pending_invites.status = REISSUE_REQUESTED`）を、招待権限者
+（ADMIN、または `INVITE_MEMBERS` を持つ DEPUTY_ADMIN）が再招待または見送りする。司令塔は
+`InviteReissueRequestService`（role・`@Transactional` なし）。保留の状態は auth の短TX（`PendingInviteStore`）、
+招待の仮発行と有効化は role の短TX（`MembershipInviteTokenIssuer#stageForReissue`/`#activateStaged`）、監査は TX の外で行う。
+
+#### 再招待の手順
+
+1. slug→スコープ ID。`InviteIssuerPolicy#canIssue` が偽なら 403 `COMMON_002`
+2. `PendingInviteStore#findForScope`（id・スコープ一致）。無し・他スコープは 404 `ROLE_016`、`REISSUE_REQUESTED` 以外は 409 `ROLE_017`、
+   依頼者が非 ACTIVE（退会・停止・論理削除）またはブロック中なら 409 `ROLE_018`
+3. 依頼者が既に在籍していれば `REISSUE_REQUESTED`→`JOINED`（条件付き UPDATE）で 200 `ALREADY_MEMBER`。招待は作らない
+4. 招待先の状態（閉鎖中は 404 `ROLE_002`）。PROVISIONED の招待先は手順1の slug 解決（ACTIVE の招待先だけを引く）で 404 `TEAM_001`/`ORG_001` になる（`ProvisioningGate#requireActive` は二重防御として残す）
+5. **仮発行**: 宛先付き招待を、宛先=依頼者・`max_uses=1`・期限7日・現在の閉鎖世代・作成者=管理者で作り、同じ TX で
+   `revoked_at = created_at`（仮発行の印）にする。平文は破棄し、ハッシュだけを持つ。続けて閉鎖世代を再確認し、偽なら仮発行は放置して `ROLE_002`
+6. **auth の確定**: 条件付き UPDATE（id・スコープ一致・`status=REISSUE_REQUESTED`・依頼者 ACTIVE）で `PENDING` にし、`token_hash` を新しい
+   ハッシュに替え、`failure_code`・`accept_attempt_id`・`accepting_started_at`・`reissue_requested_at` を NULL に戻す
+7. **有効化**: `UPDATE invite_tokens SET revoked_at = NULL WHERE id = ? AND target_user_id = ? AND used_count = 0 AND revoked_at = created_at`
+   （作成から60秒を過ぎたものは有効にしない。窓は参照時の判定と同じ SQL 断片 `InviteValidity#STAGING_OPEN_SQL`・6 桁精度の DB 時刻）
+   同じ TX で `InviteReissuedEvent` を発行し、コミット後に依頼者へ `INVITE_REISSUED` を通知する。0 行・DB 例外は 500 `ROLE_019`
+8. 監査 `TEAM_INVITE_REISSUED` / `ORGANIZATION_INVITE_REISSUED`（metadata `{pending_id, token_id}`。表示名・ハッシュは載せない）→ 200 `REISSUED`・`expiresAt`
+
+有効化の後に保留を再確認・補償失効しない（殿の裁定・PR3 再検分。再確認は本人の正常な承認（`ACCEPTING`）を競合と取り違え、
+補償失効の失敗は有効な招待を残したまま回収できなかったため撤去）。
+
+**有効化と参照時の失効は CAS で取り合う（PR3 3 回目の検分・殿の裁定）**: 仮発行の行の上で、有効化
+（`InviteTokenRepositoryCustom#ACTIVATE_STAGED_SQL`: `revoked_at = NULL`。印あり・窓の内・未使用が条件）と、参照時の失効
+（`#REVOKE_EXPIRED_STAGED_SQL`: `revoked_at = UTC_TIMESTAMP(6)` で印を消す。印あり・窓の外が条件）の 2 つの条件付き UPDATE のうち、
+先にコミットした 1 つだけが勝つ。参照（GET・承認。`InviteAcceptanceFacade#findInviteValidity`）は、招待を失効と読んだら role の短TXで
+失効の CAS を打つ。1 行なら失効が勝ったので保留を `EXPIRED` にする（`token_hash` 照合は従来どおり）。0 行なら読み直し、有効化が先に
+コミットしていれば `VALID` として `EXPIRED` にしない。未コミットの有効化と同じ行への UPDATE は InnoDB の行ロックで待たされ、
+コミット後の値で条件を評価し直すので、必ずどちらか一方に決まる。失効の CAS と 0 行だったときの確定読みは、1 つの読み書きの短TX
+（`InviteAcceptanceWriter#revokeExpiredStaged`。メソッドレベルの読み書き `@Transactional` なので `ReplicaRoutingAspect` が PRIMARY に固定する）で行い、
+replica には向かわない（4 回目の検分）。最初の判定の読み（readOnly・replica でありうる）は古くてもよい: 古い「仮発行のまま窓の外」を読めば
+CAS に進み primary 上で決着し、古い「処理中」なら `PENDING` のまま返すだけで誤って `EXPIRED` にはしない。有効化が 0 行（失効が先に勝った・窓の外）なら 500 `ROLE_019` で、
+保留は `EXPIRED` になっていて再依頼できる。
+
+- 窓の述語（`InviteValidity#STAGING_OPEN_SQL`）の役割は「有効化が長く遅れたときに参照側が失効させてよいか」の判断基準だけである。
+  `UTC_TIMESTAMP(6)` は文の開始時刻で固定され、ロック待ちの後に成功した UPDATE の時刻とも一致しないので、時刻の述語だけでは競合を防げない
+  （前版の「DB 時刻の単調性で保証」という説明は撤回する）。境界値（60 秒ちょうどは内、60.5 秒は外）は DB 試験で固定している。
+- auth の確定の後、保留は新しいハッシュの `PENDING` である。見送り・再招待・dismiss は `REISSUE_REQUESTED` か `EXPIRED` 系にしか作用せず、
+  ハッシュを書き換える経路は無い。本人が承認を押しても窓の内なので `AUTH_086` で `PENDING` に戻り、有効化の後に承認できる。
+- **リスク（許容）**: 確定から有効化までに本人の辞退（`PENDING`→`DECLINED`）が割り込むと、本人宛ての1回限りの招待が有効なまま残る。
+  本人が tokenId を明示して承諾しない限り使われない（期限7日で失効する）。
+
+#### 失敗時の扱い（補償による失効は行わない）
+
+| 失敗箇所 | 応答 | 保留 | 招待 | 通知・監査 |
+|---|---|---|---|---|
+| auth の確定が0行（見送り・別の再招待が先に確定） | 409 `ROLE_017` | 勝った側の状態 | 仮発行の印のまま無効（tokenId 指定の承諾は `ROLE_002`、DM 招待の重複判定にも入らない） | なし |
+| auth の確定で DB 例外 | 500 | 不変（`REISSUE_REQUESTED`） | 無効のまま | なし |
+| 有効化が0行・DB 例外 | 500 `ROLE_019`（ERROR ログ） | `PENDING`（使えない招待を指す） | 無効のまま | なし |
+| 監査の記録に失敗 | 200（確定は維持） | 確定どおり | 確定どおり | 通知は届く |
+
+有効化に失敗した保留は、60秒の窓を過ぎた次の参照（GET）または承認で `EXPIRED`（`ROLE_002`）になる。`reissue_requested_at` は
+NULL に戻っているので、依頼者はすぐ再依頼でき、招待権限者へ再び通知が届く（回復する）。
+
+#### 仮発行の窓（60秒）
+
+仮発行の印（`revoked_at = created_at`）があり作成から60秒以内の招待は「処理中」として扱う: 保留の承認は 409 `AUTH_086`
+（保留は `PENDING` のまま）、GET は `PENDING` のまま返す。60秒を過ぎたら失効扱いで、GET で `EXPIRED`（`ROLE_002`）になる。
+判定は `InviteValidity`（窓は SQL 断片 `STAGING_OPEN_SQL` を参照時と有効化で共用し、6 桁精度の DB 時刻で比べる）。
+参照時の判定は、本人がその招待に `CLAIMED` の確保を持っていれば上限を判定しない（承認の途中失敗で使用回数だけ進んだ保留を
+`EXPIRED` にせず、承認の `claimOrResume` で再開できるようにする。承認経路と同じ規則）。参照時の `PENDING`→`EXPIRED` は
+判定に使った `token_hash` を条件に含め、止まっていた参照が再招待で替わった新しい `PENDING` を上書きしない。印は既存の `revoked_at` 列の意味に乗る規約なので、印のある招待は
+既存の失効判定（`isValidState`・`RevokedAtIsNull` の検索・閉鎖時の一括失効 `revoked_at IS NULL`）からは失効として見え、
+誰にも使えない。`revoked_at` を書く他の経路（手動失効・補償失効・閉鎖時の一括失効）はいずれも `revoked_at IS NULL` のときだけ書くため、
+印を上書きしない。
+
+#### 付与ロール
+
+元の招待のロールが招待で付与できるロール（MEMBER/SUPPORTER。`InviteRolePolicy`・CMP-261124-0157）なら引き継ぐ。
+ADMIN/DEPUTY_ADMIN/GUEST/SYSTEM_ADMIN（承諾では `ROLE_009`＝`UNAVAILABLE` になる）や、元の招待・ロールが引けない場合は MEMBER。一覧の `roleName` と発行で同じ `resolveGrantRole` を使う。
+
+#### 見送り
+
+条件付き UPDATE で `REISSUE_REQUESTED`→`REISSUE_DECLINED`。同じ TX で `PendingInviteReissueDeclinedEvent` を発行し、コミット後に
+依頼者へ `INVITE_REISSUE_DECLINED` を通知する。監査 `TEAM_INVITE_REISSUE_DECLINED` / `ORGANIZATION_INVITE_REISSUE_DECLINED`
+（metadata `{pending_id}`）。招待は作らない。依頼者側は `REISSUE_DECLINED` の案内を閉じられる（`DISMISSED`）が、再依頼はできない（`AUTH_085`）。
+依頼済み（`REISSUE_REQUESTED`）の間は閉じられない（`REISSUE_REQUESTED`→`DISMISSED` の遷移は無い。dismiss は 409 `AUTH_085`）。
+閉じても依頼の取り下げにはならず、管理者の欄に残る（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない）。
+
+#### 競合
+
+勝敗は auth の条件付き UPDATE（`REISSUE_REQUESTED` のときだけ効く）で決まる。再招待が勝てば有効な招待1件・`INVITE_REISSUED` だけ、
+見送りが勝てば有効な招待0件・`INVITE_REISSUE_DECLINED` だけになり、負けた側は 409 `ROLE_017`。同時の再招待（二重押し）でも
+200 は1件で、負けた側の仮発行は無効のまま残る。FE は処理中の行のボタンを押せなくし、409 なら一覧を取り直す。
 
 ### オーナー委譲 承諾フロー（2ステップ・承諾型 / 2026-07-18 マスター御裁可）
 
@@ -1087,3 +1186,104 @@ WHERE o.archived_at IS NULL
 
 > F04（支払い）・F05（スケジュール）等の他フィーチャーの書き込み操作も同様にアーカイブチェックが必要。各フィーチャードキュメントで `archived_at IS NOT NULL` の場合に 422 を返すよう明記すること
 
+
+---
+
+### 非公開化フロー（CMP-261124-0159・2026-11-25 マスター裁定 MC-261125-0010）
+
+> **ステータス**: 🟢 設計完了。API 契約は [02_api_design.md](02_api_design.md)「CMP-261124-0159」節、閲覧上限は [F00 §20](../F00_content_visibility_resolver.md)。
+
+**不変条件**: `teams.visibility = MEMBERS_AND_ABOVE` のチームには、在籍中のサポーター（`memberships.role_kind='SUPPORTER' AND left_at IS NULL`）と GUEST（`user_roles` の GUEST 行）が 0 件。PENDING のサポーター申請と有効な SUPPORTER 招待トークンも 0 件。
+
+#### 状態遷移
+
+| 現在 → 変更後 | 確認 | 後始末 |
+|---|---|---|
+| 公開側（PUBLIC / GUESTS_AND_ABOVE / SUPPORTERS_AND_ABOVE）→ `MEMBERS_AND_ABOVE` | `confirmSupporterRemoval=true` 必須（人数 0 でも） | サポーター・ゲストを外す／通知／PENDING 申請を却下／SUPPORTER 招待トークンを無効化 |
+| `MEMBERS_AND_ABOVE` → `MEMBERS_AND_ABOVE`（他項目だけの更新） | 不要 | なし |
+| `MEMBERS_AND_ABOVE` → 公開側 | 不要 | なし（外した人・却下した申請・無効化したトークンは戻さない） |
+| 公開側 → 公開側 | 不要 | なし（従来どおり） |
+
+#### 手順（チームドメインの `TeamVisibilityTransitionFacade`）
+
+1. 認可（`PATCH /teams/{slug}` と同じ）。
+2. `SELECT ... FROM teams WHERE id = ? FOR UPDATE` でチーム行を排他ロックし、`version` を照合する（不一致は既存の楽観ロック競合 409）。**ロック順の規則: どの経路も `teams` 行のロックを最初に取り**、その後に memberships / user_roles / supporter_applications / invite_tokens / invite_token_claims / shared_file_links の順で触る（精査 M-3。逆順を作らないことでデッドロックを起こさない）。
+3. 遷移が「公開側 → MEMBERS_AND_ABOVE」で `confirmSupporterRemoval` が true でなければ 409 `TEAM_074`（何も変えずにロールバック）。
+4. `teams.visibility` を更新する。
+5. **同一トランザクション内**で、次を集合演算で行う（行単位のループ問い合わせをしない）。
+   - membership ドメイン `MembershipService`: 当該チームの在籍サポーター全員の `left_at = 現在時刻`・`leave_reason = 'REMOVED'` を一括 UPDATE し、対象 user_id を返す。**イベントは人数に比例させず一括イベント `MembershipsBulkEndedEvent(scopeType=TEAM, scopeId, userIds, reason=MEMBERS_ONLY_TRANSITION)` を 1 件発行する**（精査 M-4）。既存の `MembershipChangedEvent` の後始末リスナー（チャンネルメンバー・権限キャッシュ・サポーター数キャッシュの無効化 CMP-261004-1942 等）は、一括イベントを受けるアダプタ（AFTER_COMMIT・非同期・1000 人単位）から同じ処理を呼ぶ。同期で人数分のイベントを発行しない。
+   - role ドメイン `RoleService`: 当該チームの GUEST 行を一括 DELETE（最後の ADMIN 保護の対象外。GUEST のみ）。GUEST は在籍を持たないため `MembershipChangedEvent` は発行せず、チーム単位の権限キャッシュ無効化を 1 回だけ行う。
+   - filesharing ドメイン `SharedFileLinkService`: 当該チームのフォルダにあるファイルの共有リンクを一括で `is_active = FALSE` にする（F00 §20.5.3。精査 S-2）。
+   - signage ドメイン `SignageAccessTokenService`: 当該チームのサイネージ画面（`signage_screens.scope_type = 'TEAM'`）のアクセストークンを一括で `is_active = FALSE` にする（期限なしトークンを含む。F00 §20.5.3）。
+   - コミット直後（同期・AFTER_COMMIT の最初）に、WebSocket の**対象チームに帰属する全 destination の全購読者**（外した人だけでなく、匿名・部外者を含む）を再認可し、不合格の購読を解除する（F00 §20.5.5）。切断が終わるまでの配信は送出側のガードで止まるため、後始末の遅れで本文が届くことはない。
+   - supporter ドメイン `SupporterService`: `supporter_applications` の当該チーム PENDING を一括で REJECTED にする。
+   - role ドメイン `InviteService`: 当該チームの SUPPORTER ロールで `revoked_at IS NULL` のトークンに `revoked_at = 現在時刻` を一括設定する（MEMBER ロールのトークンは触らない）。
+6. 通知: `TeamMembersOnlyTransitionedEvent`（外した user_id 一覧・ゲスト user_id 一覧・チーム ID）を `@TransactionalEventListener(phase = AFTER_COMMIT)` で notification ドメインが受け、外した各人に 1 通ずつ通知（BE メッセージ `notification.team.membersOnlyRemoved.*`、受信者本人のスコープで保存）を非同期で作る。chat ドメインも同じイベントで、外した利用者のチーム系チャンネルの既存 WebSocket 購読を切る（F00 §20.5.5）。ロールバック時は通知しない。1000 件単位で分割投入する。
+7. 応答に実数（`visibilityTransition`）を返す。
+
+**@Transactional の越境（理由の明記）**: 手順 4〜5 はチーム・membership・role・supporter の 4 ドメインにまたがるが、「非公開チームにサポーター・ゲストが在籍しない」不変条件をコミットの時点で成立させるため、1 トランザクションに閉じる（`domain_db_design_principles.md` 原則 5 の例外。Facade のクラス Javadoc と該当メソッドに理由コメントを書く）。各ドメインには公開 Service メソッド経由でのみ触れ、他ドメインの Repository を直接使わない。通知は可用性のため AFTER_COMMIT のイベントに分離する（通知が失敗しても後始末は確定済み・中身の閲覧は F00 §20 の上限で既に拒否される）。
+
+**並行・二重実行**:
+- 入口側（下の「入口の関所」を通る全経路）は、在籍・ロールを作る同じトランザクションで、**他のどの行よりも先に** `SELECT visibility FROM teams WHERE id = ? FOR SHARE` でチーム行を共有ロックしてから公開範囲を判定する（招待承諾は claims 行のロックより前）。非公開化の排他ロック（手順 2）と直列化され、「非公開化の直後に古い判定で在籍が作られる」競合を起こさない。
+- 同じ `version` での二重送信は 2 回目が楽観ロック競合で 409 になり、後始末・通知は 1 回だけ。
+- 後始末の各 UPDATE は「在籍中」「PENDING」「未失効」を条件に持つため、再実行しても追加の変更は起きない（冪等）。
+
+**ドメイン境界**: 新しいクロスドメイン FK は作らない。
+
+#### 入口の関所（精査 S-5）
+
+非公開チームへの SUPPORTER 在籍・GUEST 付与を作れる最下層を関所とし、そこで一律に判定する。個々の入口（下表）は関所を通るだけで、判定を重複実装しない。
+
+| 関所 | 判定 |
+|---|---|
+| `MembershipService#join` / 在籍の `role_kind` 変更（SUPPORTER を作る・MEMBER→SUPPORTER へ変える） | scope=TEAM かつチームが非公開なら 403 `TEAM_073`（チーム行を FOR SHARE で先に読む） |
+| `RoleService#assignRole` / `#changeRole`（GUEST・SUPPORTER の付与・降格） | 同上 |
+| `archived_membership_grants` の復元 | 非公開チームへの SUPPORTER / GUEST 行は復元対象から外す（例外にしない） |
+
+- ArchUnit `MembersOnlyTeamEntryChokePointTest`（F00 §20.6）で、関所以外から `memberships` の SUPPORTER 在籍・`user_roles` の GUEST 行を作れないことを固定する（入口の網羅の番人）。
+- 番人と `MembersOnlyTeamSupporterInvariantIT` を条件に、中身を返さない書き込み経路は不変条件に依拠する（F00 §20.5.1）。
+
+#### サポーター入口の拒否（非公開チーム）
+
+| 入口 | 実装位置 | 判定 |
+|---|---|---|
+| SUPPORTER 招待トークンの発行 | `InviteService`・`InviteRolePolicy` | 権限判定の後、チームが非公開なら 403 `TEAM_073` |
+| SUPPORTER 招待の承諾（共有・個人・保留承認） | `InviteAcceptanceFacade`・`PendingInviteService` | チーム行を FOR SHARE で読み、非公開なら 403 `TEAM_073`（保留承認は `UNAVAILABLE`）。claims・`used_count` を変えない |
+| サポーター申請の承認・一括承認 | `SupporterService#approve` / `bulkApprove` | チーム行を FOR SHARE で読み、非公開なら 403 `TEAM_073`。一括は全体を拒否 |
+| フォロー（自己申請） | `TeamController` → `assertCanView(TEAM)` | 既存どおり（変更なし） |
+| ロール変更・割当（GUEST・SUPPORTER への付与・降格） | `RoleService#assignRole` / `#changeRole`（関所） | 403 `TEAM_073` |
+| 参加申請の承認・組織経由の付与 | `JoinRequestService` ほか（関所を通る） | 403 `TEAM_073` |
+| アーカイブ復元 | `archived_membership_grants` の復元（関所） | SUPPORTER / GUEST 行を除外して復元 |
+| `TeamService#followTeam` | 死蔵 | 撤去 |
+
+組織スコープの入口（組織の PRIVATE）は今回変えない（F00 §20.10 K-1）。
+
+#### 受け入れ条件（E: 入口）
+
+- **AC-0159-40**: 非公開チームで ADMIN が SUPPORTER の招待トークンを発行すると 403 `TEAM_073`、トークン行は作られない。MEMBER の招待トークンは 201。公開チームでは SUPPORTER も 201（回帰）。招待権限のない MEMBER・サポーター・部外者・他チームの ADMIN には `TEAM_073` ではなく従来の拒否が返る。
+- **AC-0159-41**: 公開時に発行された有効な SUPPORTER トークン（フィクスチャで `revoked_at` を NULL のまま残したもの）で、非公開チームに `POST /invite/{token}/join` すると 403 `TEAM_073`、在籍・claims・`used_count` は不変。保留承認 `/me/pending-invite/accept` は `UNAVAILABLE` で在籍を作らない。
+- **AC-0159-42**: 非公開チームの PENDING 申請（フィクスチャ）を ADMIN が承認すると 403 `TEAM_073`、申請は PENDING のまま・在籍は作られない。
+- **AC-0159-43**: 一括承認に 3 件を渡すと 403 `TEAM_073` で 1 件も承認されない。
+- **AC-0159-44**: 非公開チームへのフォローは従来どおり 403 `VISIBILITY_001`（回帰）。
+- **AC-0159-45**: 申請承認と非公開化を同時に実行（2 スレッド・CountDownLatch、各 20 回）しても、両方が終わった時点で非公開チームの在籍サポーターは 0（どちらの順でも）。招待承諾（claims 行のロックを伴う）と非公開化でも同様で、**デッドロック（MySQL 1213）が 1 回も起きない**。
+- **AC-0159-46**: 公開チームでは招待発行・承諾・申請承認・一括承認・フォローの結果が本戦役前と同一（回帰）。
+- **AC-0159-47**: `TeamService#followTeam` がコードから消えている（コンパイル・ArchUnit）。
+- **AC-0159-48**: 非公開チームで ADMIN が `PATCH /teams/{slug}/members/{userId}/role` で MEMBER を SUPPORTER へ降格・非所属者に GUEST を付与すると 403 `TEAM_073`、在籍・`user_roles` は不変。ADMIN / DEPUTY_ADMIN / MEMBER 間の変更は 200。参加申請の承認・組織経由の付与で SUPPORTER を作る経路も 403 `TEAM_073`。`MembersOnlyTeamEntryChokePointTest` が緑で、関所を迂回する呼び出しを足すと赤になる。
+- **AC-0159-49**: 非公開チームの `archived_membership_grants`（MEMBER 1・SUPPORTER 1・GUEST 1）を復元すると MEMBER だけが戻り、SUPPORTER・GUEST は戻らず、除外件数 2 が応答・監査ログに残る。公開チームでは 3 件とも戻る（回帰）。
+
+#### 受け入れ条件（T: 非公開化）
+
+- **AC-0159-50**: 事前問い合わせ `visibility=MEMBERS_AND_ABOVE` を公開チームの ADMIN が呼ぶと 200、サポーター 3・ゲスト 1・PENDING 2・SUPPORTER トークン 1（MEMBER トークン 1 は数えない）のフィクスチャで各人数が一致し `requiresConfirmation=true`。サポーター 0 人でも `requiresConfirmation=true`・各 0。既に非公開・または公開側を指定したときは `requiresConfirmation=false`・各 0。副作用が無い（呼ぶ前後で DB 不変）。
+- **AC-0159-51**: 事前問い合わせを MEMBER・サポーター・部外者・他チームの ADMIN が呼ぶと `PATCH` の拒否と同一応答。不在 slug は 404 `TEAM_001`。不正な `visibility` は 400 `COMMON_001`。
+- **AC-0159-52**: `confirmSupporterRemoval` 無し・false で公開→非公開の `PATCH` は 409 `TEAM_074`、公開範囲・在籍・申請・トークン・他の更新項目すべて不変。
+- **AC-0159-53**: `confirmSupporterRemoval=true` なら 200。公開範囲が `MEMBERS_AND_ABOVE`、サポーター全員が `left_at` 設定・`leave_reason='REMOVED'`、ゲスト行が削除、PENDING は REJECTED、SUPPORTER トークンは `revoked_at` 設定、MEMBER トークン・MEMBER/ADMIN の在籍は不変。そのチームのサイネージのアクセストークン（期限なしを含む）が `is_active = FALSE`。そのチームのファイルの共有リンクが `is_active = FALSE`（他チームのリンクは不変）。`supporterEnabled` の値は不変。`MembershipsBulkEndedEvent` は 1 件だけ発行される（サポーター 3 人でも 3 件にならない）。`visibilityTransition` の各数が実数と一致。
+- **AC-0159-54**: コミット後、外したサポーター・ゲストの各人に通知が 1 通ずつ届く（ほかの人には届かない）。後始末の途中で例外を起こすと全体がロールバックされ（公開範囲も元のまま）、通知は 0 通（**AC-0159-55**）。
+- **AC-0159-56**: 同じ `version` で 2 回送ると 2 回目は 409、通知は 1 人 1 通のまま。
+- **AC-0159-57**: 非公開チームの名前だけを更新しても確認不要・後始末なし。
+- **AC-0159-58**: 非公開→公開に戻しても確認不要、外した人・却下した申請・無効化したトークンは戻らない。
+- **AC-0159-59**: 事前問い合わせの後にサポーターが 1 人増えてから了承しても、その人も外れ、`visibilityTransition.removedSupporters` は増えた後の実数。
+- **AC-0159-60**: `/teams/{slug}/info` で ADMIN・DEPUTY_ADMIN・SYSTEM_ADMIN と ADMIN の兼任者・SYSTEM_ADMIN と DEPUTY_ADMIN の兼任者には `team-visibility-select` と `team-visibility-save` が出て、MEMBER・サポーター・チームのロール割当の無い SYSTEM_ADMIN には出ない（5 区分を別々に検証し、`me/permissions` の `scopeAdminOrDeputy` が BE の `PATCH` の可否と一致すること）。「メンバー限定」を選んで保存すると `team-visibility-confirm-dialog` が人数つき（`team-visibility-confirm-counts`）で出る。キャンセルで `PATCH` が送られない（ネットワーク記録）。了承で `PATCH` が `confirmSupporterRemoval: true` と事前問い合わせの `version` で送られ、応答の `TeamResponse` で画面の公開範囲表示が再取得なしに「メンバー限定」へ変わり、トーストに実数が出る。選択肢の表示が 6 言語とも「メンバー限定」相当の訳になっている。
+- **AC-0159-60c**: 別タブで先にチーム名を更新してから保存すると 409（楽観ロック）になり、`conflictReload` のトーストが出て、事前問い合わせからやり直せる（古い version で再送しない）。`TEAM_074` の応答を模した場合は `confirmRequired` のトースト。
+- **AC-0159-60d**: 非公開チームの `/teams/{slug}/invites` のロール選択に SUPPORTER が出ない。`/teams/{slug}/members` のロール変更の選択肢に SUPPORTER・GUEST が出ない。API を直接叩いた場合は 403 `TEAM_073` がトーストに出る。公開チームでは従来どおり出る。
+- **AC-0159-60b**: 人数がすべて 0 の事前問い合わせ結果では確認ダイアログが「外れる人はいません」（`bodyNone`）になり、了承しないと `PATCH` は送られない。非公開の間、サポーター設定のスイッチは操作不可で `supporterSettingInactive` が出る。
+- **AC-0159-61**: 外されたサポーターがチーム画面・配下画面を URL 直打ちすると F00 §20.8 の理由表示。「自分のチーム」一覧・フォロー中一覧にそのチームが出ない。サポーター数の表示が 0 になる（キャッシュ無効化）。

@@ -90,6 +90,8 @@ Authorization: Bearer <BUDGET_ADMIN token>
 - 既に締め済: HTTP 409 `MONTHLY_ALREADY_CLOSED`（このエラーが出る場合は復旧完了 — 別経路で締めが走った可能性）
 - 再失敗: `failed_organization_ids: [42]` + ログを確認して原因切り分け
 
+> **注意（当月の再実行は拒否される）**: 締められるのは期間の終了日当日以降だけ。未終了の期間を指定すると HTTP 409 `SHIFT_BUDGET_036` で拒否される。終了日当日以降になってから再実行すること。
+
 ### 4.2 失敗イベントの個別再実行（リトライバッチ自動分以外）
 
 リトライバッチが PENDING/RETRYING を 15 分毎に拾うが、即時対応したい場合は管理 API で個別起動。

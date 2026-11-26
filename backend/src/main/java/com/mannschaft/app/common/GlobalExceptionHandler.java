@@ -240,6 +240,10 @@ public class GlobalExceptionHandler {
             Map.entry("ROLE_014", HttpStatus.UNPROCESSABLE_ENTITY), // 自己委譲など不正対象 → 422
             // CMP-261001-0835: 応援者（SUPPORTER）の /me 自主退会はフォロー解除 API への案内のため 422
             Map.entry("ROLE_015", HttpStatus.UNPROCESSABLE_ENTITY),
+            // CMP-261107-1833 PR3: 再招待の受け手側（依頼不在/他スコープ=404・対応済み/競合=409・依頼者が参加不可=409）
+            Map.entry("ROLE_016", HttpStatus.NOT_FOUND),
+            Map.entry("ROLE_017", HttpStatus.CONFLICT),
+            Map.entry("ROLE_018", HttpStatus.CONFLICT),
             // F15.4 Phase 5-α: 店舗詳細 Public API（IDOR対策で 404）
             Map.entry("TEAM_001", HttpStatus.NOT_FOUND),
             // 組織不在は 404（Severity.WARN 既定の 400 を上書き）。兄弟の TEAM_001 と流儀を揃える。
@@ -1784,6 +1788,7 @@ public class GlobalExceptionHandler {
             //    （TODO_073 SYSTEM_LABEL_IMMUTABLE と同じ流儀）
             //  - CMS_022（リアクション不在）/024（チーム不在）/025（組織不在）は not-found → 404
             //    （CMS_024/025 は兄弟 TEAM_001/ORG_001 と揃える）
+            Map.entry("CMS_005", HttpStatus.CONFLICT),                   // DUPLICATE_SLUG（同一スコープの slug 重複）
             Map.entry("CMS_006", HttpStatus.CONFLICT),
             Map.entry("CMS_008", HttpStatus.CONFLICT),
             Map.entry("CMS_010", HttpStatus.CONFLICT),
@@ -1796,6 +1801,8 @@ public class GlobalExceptionHandler {
             Map.entry("CMS_025", HttpStatus.NOT_FOUND),
             // CMS_026（予約公開待ち記事の共有不可・issue #2616）は記事の状態と操作の競合 → 409
             Map.entry("CMS_026", HttpStatus.CONFLICT),
+            // CMS_027（自動採番 slug の割り当てが同時作成と競合し続けた）は再送で解消する競合 → 409
+            Map.entry("CMS_027", HttpStatus.CONFLICT),
             // 認可根治戦役 Wave3-B12notif: confirmable notification（F04.9）の NOT_FOUND は存在秘匿の 404。
             // Severity.WARN 既定の 400 のままだと存在有無が漏れる（他ドメイン同様の慣例に合わせて上書き）。
             // CMP-260923-0954 W3b: 他スコープの通知 ID は不在 ID と同一の NOT_FOUND に畳むため、
