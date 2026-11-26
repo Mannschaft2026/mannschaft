@@ -237,12 +237,19 @@ class ConfirmableNotificationDraftSendIT extends AbstractMySqlIntegrationTest {
     }
 
     private void grantRole(Long userId, String roleName, Long orgIdParam) {
-        jdbc.update("INSERT INTO user_roles (user_id, role_id, team_id, organization_id, created_at, updated_at) "
-                + "SELECT ?, r.id, NULL, ?, NOW(), NOW() FROM roles r WHERE r.name = ?", userId, orgIdParam, roleName);
+        if (!"MEMBER".equals(roleName)) {
+            // 一般メンバーは memberships のみで表現する（user_roles へは張らない）
+            grantUserRole(userId, roleName, orgIdParam);
+        }
         jdbc.update("INSERT INTO memberships (user_id, scope_type, scope_id, role_kind, joined_at, created_at, updated_at) "
                 + "SELECT ?, 'ORGANIZATION', ?, ?, NOW(), NOW(), NOW() "
                 + "WHERE NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = ? "
                 + "AND m.scope_type = 'ORGANIZATION' AND m.scope_id = ? AND m.left_at IS NULL)",
                 userId, orgIdParam, RoleKind.MEMBER.name(), userId, orgIdParam);
+    }
+
+    private void grantUserRole(Long userId, String roleName, Long orgIdParam) {
+        jdbc.update("INSERT INTO user_roles (user_id, role_id, team_id, organization_id, created_at, updated_at) "
+                + "SELECT ?, r.id, NULL, ?, NOW(), NOW() FROM roles r WHERE r.name = ?", userId, orgIdParam, roleName);
     }
 }

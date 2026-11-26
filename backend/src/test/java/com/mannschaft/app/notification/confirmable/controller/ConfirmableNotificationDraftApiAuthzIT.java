@@ -664,6 +664,14 @@ class ConfirmableNotificationDraftApiAuthzIT extends AbstractMySqlIntegrationTes
     /** ロール付与＋当該スコープへの ACTIVE membership。 */
     private void grantRole(Long userId, String roleName, Scope scope) {
         boolean isTeam = "TEAM".equals(scope.type());
+        if ("MEMBER".equals(roleName)) {
+            // 一般メンバーは memberships のみで表現する（user_roles へは張らない）
+            MembershipTestHelper.insertMembership(em, userId,
+                    isTeam ? com.mannschaft.app.membership.domain.ScopeType.TEAM
+                            : com.mannschaft.app.membership.domain.ScopeType.ORGANIZATION,
+                    scope.id(), com.mannschaft.app.membership.domain.RoleKind.MEMBER);
+            return;
+        }
         MembershipTestHelper.insertUserRole(em, userId, roleName,
                 isTeam ? scope.id() : null, isTeam ? null : scope.id());
         em.createNativeQuery(
