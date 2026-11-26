@@ -12,6 +12,7 @@ const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const memberInfoApi = useMemberInfoApi()
 const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug)
 
@@ -57,7 +58,9 @@ async function loadFields() {
   try {
     const res = await memberInfoApi.getFields(teamSlug)
     fields.value = res.data
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('memberProfile.fields.loadFailed'))
   } finally {
     fieldsLoading.value = false

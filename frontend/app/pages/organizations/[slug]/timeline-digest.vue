@@ -7,6 +7,7 @@ const route = useRoute()
 const orgSlug = computed(() => String(route.params.slug))
 const { listDigests, deleteDigest, publishDigest, regenerateDigest } = useTimelineDigestApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { t } = useI18n()
 const { formatDate } = useDatetime()
 
@@ -28,7 +29,9 @@ async function loadDigests() {
   try {
     const res = await listDigests()
     digests.value = res.data
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('timeline_digest.error_load_list'))
   } finally {
     loading.value = false

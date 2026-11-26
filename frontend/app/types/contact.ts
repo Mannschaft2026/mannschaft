@@ -31,16 +31,20 @@ export interface ContactRequestBlockResponse {
   createdAt: string
 }
 
+/** 一覧用。平文のトークン・招待URL・QR の URL は含まない（発行応答だけが返す）。 */
 export interface ContactInviteTokenResponse {
   id: number
-  token: string
   label: string | null
-  inviteUrl: string
-  qrCodeUrl: string
   maxUses: number | null
   usedCount: number
   expiresAt: string | null
   createdAt: string
+}
+
+/** 発行応答。平文のトークンと招待URLはこの1回だけ返る。 */
+export interface ContactInviteIssuedResponse extends ContactInviteTokenResponse {
+  token: string
+  inviteUrl: string
 }
 
 export interface ContactInvitePreviewResponse {

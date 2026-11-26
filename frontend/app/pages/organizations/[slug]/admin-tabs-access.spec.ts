@@ -6,11 +6,17 @@ import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import type { RouteLocationNormalized } from 'vue-router'
 import adminConsole from '~/middleware/admin-console'
 import orgRoleGuard from '~/middleware/org-role-guard'
+import { useScopeNotFound } from '~/composables/useScopeNotFound'
 
 /**
  * CMP-260917-1351: HTTP 200 / roleName=null は、読込中でも管理権限でもない。
  * ページが実際に宣言するガードの結線と、既存ガードの非同期境界を組み合わせて検証する。
  * 未所属 null の2件が修正前の red 対象。実機の越境 GET 認可はこのモック試験では代替しない。
+ *
+ * 拒否の仕方はガードで異なる:
+ *  - admin-console（invites）: 組織トップへ戻す（従来どおり）
+ *  - org-role-guard（permission-groups）: CMP-261125-1108 で、リダイレクト・トーストをやめてルートを拒否し、
+ *    シェルが本文を共通の ScopeNotFound に置き換える（非所属・権限なし→見つかりません）
  */
 const navigate = vi.fn()
 mockNuxtImport('navigateTo', () => (...args: unknown[]) => navigate(...args))
@@ -26,9 +32,25 @@ mockNuxtImport('useRoleAccess', () => () => access)
 
 const top = '/organizations/null-role-org'
 const pages = [
-  { name: 'invites', guard: adminConsole, deputyAllowed: true },
-  { name: 'permission-groups', guard: orgRoleGuard, deputyAllowed: false },
+  { name: 'invites', guard: adminConsole, deputyAllowed: true, deniesInPlace: false },
+  { name: 'permission-groups', guard: orgRoleGuard, deputyAllowed: false, deniesInPlace: true },
 ] as const
+
+/** 退避（拒否）されたか。admin-console は組織トップへの遷移、org-role-guard はルートの拒否で見る。 */
+function expectDenied(name: string, deniesInPlace: boolean) {
+  if (deniesInPlace) {
+    expect(navigate).not.toHaveBeenCalled()
+    expect(useScopeNotFound().isRouteDenied(`${top}/${name}`)).toBe(true)
+  }
+  else {
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate).toHaveBeenCalledWith(top)
+  }
+}
+function expectAllowed(name: string) {
+  expect(navigate).not.toHaveBeenCalled()
+  expect(useScopeNotFound().isRouteDenied(`${top}/${name}`)).toBe(false)
+}
 
 function route(page: string): RouteLocationNormalized {
   return {
@@ -59,6 +81,7 @@ async function runDeclaredGuards(page: 'invites' | 'permission-groups') {
 
 beforeEach(() => {
   navigate.mockReset()
+  for (const { name } of pages) useScopeNotFound().setRouteDenied(`${top}/${name}`, false)
   role = ref<string | null>(null)
   access = {
     loadPermissions: vi.fn<() => Promise<LoadResult>>().mockResolvedValue({ ok: true }),
@@ -67,21 +90,20 @@ beforeEach(() => {
   }
 })
 
-describe.each(pages)('$name の null ロール境界', ({ name, guard, deputyAllowed }) => {
-  it('正常に解決した未所属 null を、ページに結線されたガードが組織トップへ戻す', async () => {
+describe.each(pages)('$name の null ロール境界', ({ name, guard, deputyAllowed, deniesInPlace }) => {
+  it('正常に解決した未所属 null を、ページに結線されたガードが退避（拒否）させる', async () => {
     await runDeclaredGuards(name)
-    expect(navigate).toHaveBeenCalledOnce()
-    expect(navigate).toHaveBeenCalledWith(top)
+    expectDenied(name, deniesInPlace)
   })
 
   it.each(['ADMIN', 'DEPUTY_ADMIN', 'MEMBER'])('%s の既存許可範囲を維持する', async (value) => {
     role.value = value
     await guard(route(name), route(name))
     if (value === 'ADMIN' || (value === 'DEPUTY_ADMIN' && deputyAllowed)) {
-      expect(navigate).not.toHaveBeenCalled()
+      expectAllowed(name)
     }
     else {
-      expect(navigate).toHaveBeenCalledWith(top)
+      expectDenied(name, deniesInPlace)
     }
   })
 
@@ -90,10 +112,10 @@ describe.each(pages)('$name の null ロール境界', ({ name, guard, deputyAll
     access.loadPermissions.mockReturnValue(new Promise<LoadResult>((done) => { resolve = done }))
     const pending = guard(route(name), route(name))
     expect(access.loadPermissions).toHaveBeenCalledOnce()
-    expect(navigate).not.toHaveBeenCalled()
+    expectAllowed(name)
     resolve({ ok: true })
     await pending
-    expect(navigate).toHaveBeenCalledWith(top)
+    expectDenied(name, deniesInPlace)
   })
 
   it('取得失敗を未所属と混同せず、redirect ではなく 503 として伝える', async () => {

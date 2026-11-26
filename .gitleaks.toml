@@ -47,6 +47,9 @@ title = "Mannschaft gitleaks 設定"
 #             検出される。値が"pi_3DSsecret_test_secret_"という固有の命名
 #             規則＋"abc123XYZ"サフィックスを持ち他所と衝突しないためregexes
 #             単独（パス不問）とする
+# 2026-11-25: CMP-260826-1457 W2 signage（PR #4871）— commit 94ebf7108342 が
+#             docs/features/F09.10_digital_signage.md:498 に置いた token 例示値が
+#             履歴走査で検出されたため、当該path＋当該値のAND allowlistを追加
 # =============================================================================
 
 [extend]
@@ -364,6 +367,16 @@ paths = [
 ]
 regexes = [
   '''^5e24b0b0-73e9-4efa-92fa-52a4b28da03d$''',
+]
+
+[[allowlists]]
+description = "CMP-260826-1457 W2 signage: PR #4871 の commit 94ebf7108342dee45bc775cd3bb774b8cf2160b4 が docs/features/F09.10_digital_signage.md:498 に置いた API レスポンス例の token 例示値。実トークンではない。後続 commit で低エントロピーのプレースホルダへ直したが、履歴走査（base..head の各 commit）では当該 commit の旧値が検出され続けるため、force push を避けて当該 path と当該値だけに限定して除外する"
+condition = "AND"
+paths = [
+  '''^docs/features/F09\.10_digital_signage\.md$''',
+]
+regexes = [
+  '''^Zk3q9T0wJm1c8vE2xYb7LrNd4HsA6UoPf5GiQeWtX_k$''',
 ]
 
 [[rules]]
@@ -870,4 +883,18 @@ regexes = [
   '''^tyrannosaurus-V4-egg-pixel$''',
   '''^tyrannosaurus-V4-juvenile-paint$''',
   '''^tyrannosaurus-V4-juvenile-pixel$''',
+]
+
+# CMP-260826-1457 W2 committee: commit 9de4f831 の docs/features/F04.10_committee.md に、
+# 招集トークン応答例の高エントロピーな例示値（実在しない値）が入り generic-api-key として検出された。
+# 後続 commit で値をプレースホルダに直しても base..head の各 commit 走査で旧値が検出され続け、
+# force push による履歴書き換えは禁止のため、値そのものを paths と AND で狙い撃ちして許可する。
+[[allowlists]]
+description = "CMP-260826-1457 W2 committee: 9de4f831 の F04.10_committee.md にある招集トークン応答例の例示値"
+condition = "AND"
+regexes = [
+  '''Zr3x9QpL0a7_bN2-kW5yT8uE1oI4sD6fG0hJ9lK2mNc''',
+]
+paths = [
+  '''docs/features/F04\.10_committee\.md''',
 ]

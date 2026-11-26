@@ -2,6 +2,8 @@ package com.mannschaft.app.parking.service;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.parking.ApplicationStatus;
 import com.mannschaft.app.parking.ParkingApplicationStatus;
@@ -50,18 +52,38 @@ public class ParkingApplicationService {
     private final ProxyInputRecordRepository proxyInputRecordRepository;
     private final AccessControlService accessControlService;
 
+    private static final String MANAGE_PARKING = ParkingApplicationAccessPolicy.MANAGE_PARKING;
+
     /**
      * 申請一覧をページング取得する。
+     *
+     * <p>CMP-260930-0233: 全件閲覧できるのは ADMIN または MANAGE_PARKING 保有者のみ
+     * （判定は D-3T 回避のため入口で {@link ParkingApplicationAccessPolicy#canViewAll} が行い、結果を {@code viewAll} で受ける）。
+     * それ以外（一般メンバー・権限なし DEPUTY_ADMIN 等）は DB で本人（user_id）に絞るため、
+     * {@code meta.total}/{@code totalPages} も絞り込み後の件数になる（他人の申請数が漏れない）。
+     * 呼び出し側（Controller）は事前にスコープ所属（{@code requireScopeMember}）を検証すること。</p>
+     *
+     * @param viewAll 全件閲覧可か（false は本人分のみ）
+     * @param status 申請状態（未指定は null）。未定義値は 400（COMMON_001）
      */
-    public Page<ApplicationResponse> list(List<Long> spaceIds, String status, Pageable pageable) {
+    public Page<ApplicationResponse> list(String scopeType, Long scopeId, Long actorUserId,
+                                          boolean viewAll, String status, Pageable pageable) {
+        ParkingApplicationStatus statusFilter = status == null
+                ? null : EnumInputParser.parse(ParkingApplicationStatus.class, status, "status");
+        List<Long> spaceIds = spaceRepository.findByScopeTypeAndScopeId(scopeType, scopeId, Pageable.unpaged())
+                .map(ParkingSpaceEntity::getId).getContent();
         if (spaceIds.isEmpty()) {
             return Page.empty(pageable);
         }
         Page<ParkingApplicationEntity> page;
-        if (status != null) {
-            page = applicationRepository.findBySpaceIdInAndStatus(spaceIds, ParkingApplicationStatus.valueOf(status), pageable);
+        if (viewAll) {
+            page = statusFilter != null
+                    ? applicationRepository.findBySpaceIdInAndStatus(spaceIds, statusFilter, pageable)
+                    : applicationRepository.findBySpaceIdIn(spaceIds, pageable);
         } else {
-            page = applicationRepository.findBySpaceIdIn(spaceIds, pageable);
+            page = statusFilter != null
+                    ? applicationRepository.findBySpaceIdInAndUserIdAndStatus(spaceIds, actorUserId, statusFilter, pageable)
+                    : applicationRepository.findBySpaceIdInAndUserId(spaceIds, actorUserId, pageable);
         }
         return page.map(parkingMapper::toApplicationResponse);
     }
@@ -118,7 +140,7 @@ public class ParkingApplicationService {
     @Transactional
     public ApplicationResponse approve(String scopeType, Long scopeId, Long id, Long actorUserId) {
         ParkingApplicationEntity entity = findScopeApplicationOrThrow(scopeType, scopeId, id);
-        accessControlService.checkAdminOrAbove(actorUserId, scopeId, scopeType);
+        accessControlService.checkAdminOrHasPermissionInScope(actorUserId, scopeId, scopeType, MANAGE_PARKING);
         if (entity.getStatus() != ParkingApplicationStatus.PENDING && entity.getStatus() != ParkingApplicationStatus.LOTTERY_PENDING) {
             throw new BusinessException(ParkingErrorCode.INVALID_APPLICATION_STATUS);
         }
@@ -134,7 +156,7 @@ public class ParkingApplicationService {
     @Transactional
     public ApplicationResponse reject(String scopeType, Long scopeId, Long id, RejectApplicationRequest request, Long actorUserId) {
         ParkingApplicationEntity entity = findScopeApplicationOrThrow(scopeType, scopeId, id);
-        accessControlService.checkAdminOrAbove(actorUserId, scopeId, scopeType);
+        accessControlService.checkAdminOrHasPermissionInScope(actorUserId, scopeId, scopeType, MANAGE_PARKING);
         if (entity.getStatus() != ParkingApplicationStatus.PENDING && entity.getStatus() != ParkingApplicationStatus.LOTTERY_PENDING) {
             throw new BusinessException(ParkingErrorCode.INVALID_APPLICATION_STATUS);
         }
@@ -145,13 +167,14 @@ public class ParkingApplicationService {
     }
 
     /**
-     * 申請をキャンセルする（申請者本人 または ADMIN 以上）。
+     * 申請をキャンセルする（申請者本人のみ。CMP-260930-0233 マスター裁定で ADMIN 例外を廃止）。
+     * 他人の申請は 403（COMMON_002）。
      */
     @Transactional
     public void cancel(String scopeType, Long scopeId, Long id, Long actorUserId) {
         ParkingApplicationEntity entity = findScopeApplicationOrThrow(scopeType, scopeId, id);
         if (!entity.getUserId().equals(actorUserId)) {
-            accessControlService.checkAdminOrAbove(actorUserId, scopeId, scopeType);
+            throw new BusinessException(CommonErrorCode.COMMON_002);
         }
         if (entity.getStatus() != ParkingApplicationStatus.PENDING && entity.getStatus() != ParkingApplicationStatus.LOTTERY_PENDING) {
             throw new BusinessException(ParkingErrorCode.INVALID_APPLICATION_STATUS);
@@ -168,7 +191,8 @@ public class ParkingApplicationService {
     public List<ApplicationResponse> executeLottery(String scopeType, Long scopeId, Long spaceId, Long actorUserId) {
         ParkingSpaceEntity space = spaceRepository.findByIdAndScopeTypeAndScopeId(spaceId, scopeType, scopeId)
                 .orElseThrow(() -> new BusinessException(ParkingErrorCode.SPACE_NOT_FOUND));
-        accessControlService.checkAdminOrAbove(actorUserId, space.getScopeId(), space.getScopeType());
+        accessControlService.checkAdminOrHasPermissionInScope(
+                actorUserId, space.getScopeId(), space.getScopeType(), MANAGE_PARKING);
 
         List<ParkingApplicationEntity> candidates = applicationRepository.findBySpaceIdAndStatus(spaceId, ParkingApplicationStatus.PENDING);
         if (candidates.isEmpty()) {
