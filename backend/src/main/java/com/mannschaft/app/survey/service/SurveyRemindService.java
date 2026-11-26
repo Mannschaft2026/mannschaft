@@ -2,6 +2,7 @@ package com.mannschaft.app.survey.service;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.survey.DistributionMode;
 import com.mannschaft.app.survey.SurveyErrorCode;
 import com.mannschaft.app.survey.SurveyRemindPolicy;
@@ -18,6 +19,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,6 +46,7 @@ public class SurveyRemindService {
     private final SurveyResponseRepository responseRepository;
     private final AccessControlService accessControlService;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
     /** 母集団解決の唯一の窓口（公開時の target_count スナップショットと同一定義）。 */
     private final SurveyUniverseResolver universeResolver;
 
@@ -96,8 +100,8 @@ public class SurveyRemindService {
         }
 
         // クールダウン: 前回送信から24時間経過していなければ拒否
-        LocalDateTime now = LocalDateTime.now();
-        if (SurveyRemindPolicy.isInCooldown(survey.getLastRemindedAt(), now)) {
+        Instant now = Instant.now(clock);
+        if (SurveyRemindPolicy.isInCooldown(SurveyRemindPolicy.toInstant(survey.getLastRemindedAt()), now)) {
             throw new BusinessException(SurveyErrorCode.REMIND_COOLDOWN_NOT_ELAPSED);
         }
 
@@ -122,7 +126,7 @@ public class SurveyRemindService {
         }
 
         // カウンタ更新
-        survey.recordManualRemind(now);
+        survey.recordManualRemind(LocalDateTime.ofInstant(now, UserZoneLocalDateTimeParser.SERVER_ZONE));
         surveyRepository.save(survey);
 
         int remindedCount = unansweredUserIds.size();

@@ -10,7 +10,7 @@ import com.mannschaft.app.survey.entity.SurveyQuestionEntity;
 import com.mannschaft.app.survey.entity.SurveyResponseEntity;
 import org.mapstruct.Mapper;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -32,9 +32,10 @@ public interface SurveyMapper {
                         entity.getDistributionMode(), entity.getAutoPostToTimeline(),
                         entity.getSeriesId(), entity.getRemindBeforeHours(), entity.getManualRemindCount(),
                         entity.getIncludeSupporters(),
-                        entity.getLastRemindedAt(), SurveyRemindPolicy.MAX_MANUAL_REMIND_COUNT,
+                        SurveyRemindPolicy.toInstant(entity.getLastRemindedAt()), SurveyRemindPolicy.MAX_MANUAL_REMIND_COUNT,
                         SurveyRemindPolicy.nextRemindableAt(
-                                entity.getLastRemindedAt(), entity.getManualRemindCount(), LocalDateTime.now())))
+                                SurveyRemindPolicy.toInstant(entity.getLastRemindedAt()),
+                                entity.getManualRemindCount(), Instant.now())))
                 .schedule(new SurveyResponse.SurveyScheduleDto(
                         entity.getStartsAt(), entity.getExpiresAt(),
                         entity.getPublishedAt(), entity.getClosedAt()))

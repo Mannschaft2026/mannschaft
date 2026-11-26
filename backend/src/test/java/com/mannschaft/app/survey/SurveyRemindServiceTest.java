@@ -65,6 +65,9 @@ class SurveyRemindServiceTest {
     @Mock
     private com.mannschaft.app.organization.service.OrganizationMembershipService organizationMembershipService;
 
+    @org.mockito.Spy
+    private java.time.Clock clock = java.time.Clock.systemUTC();
+
     @InjectMocks
     private SurveyRemindService remindService;
 
