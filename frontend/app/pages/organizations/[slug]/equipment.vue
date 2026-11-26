@@ -18,6 +18,11 @@ onMounted(async () => {
 <template>
   <PageLoading v-if="loading" />
   <div v-else>
-    <EquipmentList scope-type="organization" :scope-id="orgSlug" :can-manage="isAdminOrDeputy" />
+    <EquipmentList
+      scope-type="organization"
+      :scope-id="orgSlug"
+      :can-manage="isAdminOrDeputy"
+      scope-not-found-on-denied
+    />
   </div>
 </template>

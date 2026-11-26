@@ -1,6 +1,7 @@
 package com.mannschaft.app.social.announcement;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.social.entity.TeamFriendFolderEntity;
@@ -909,20 +910,10 @@ class SocialAnnouncementScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private Long resolveOrInsertRoleId(String roleName) {
-        try {
-            return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult()).longValue();
-        } catch (NoResultException e) {
-            em.createNativeQuery(
-                            "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                    + "VALUES (:name, :name, 99, 0, NOW(), NOW())")
-                    .setParameter("name", roleName)
-                    .executeUpdate();
-            return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult()).longValue();
-        }
+        RoleSeedSupport.ensureCanonical(em, roleName);
+        return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
+                .setParameter("name", roleName)
+                .getSingleResult()).longValue();
     }
 
     private Long resolveOrInsertPermissionId(String permissionName) {

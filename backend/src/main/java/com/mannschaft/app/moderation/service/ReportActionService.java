@@ -4,11 +4,13 @@ import com.mannschaft.app.auth.service.UserService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.EnumInputParser;
 import com.mannschaft.app.moderation.ModerationErrorCode;
+import com.mannschaft.app.moderation.ModerationMapper;
 import com.mannschaft.app.moderation.ReportActionType;
 import com.mannschaft.app.moderation.ReportStatus;
 import com.mannschaft.app.moderation.dto.BulkResolveRequest;
 import com.mannschaft.app.moderation.dto.EscalateRequest;
 import com.mannschaft.app.moderation.dto.ReportActionResponse;
+import com.mannschaft.app.moderation.dto.ReportResponse;
 import com.mannschaft.app.moderation.dto.ReportStatsResponse;
 import com.mannschaft.app.moderation.dto.ResolveReportRequest;
 import com.mannschaft.app.moderation.entity.ContentReportEntity;
@@ -38,6 +40,7 @@ public class ReportActionService {
     private final ReportActionRepository actionRepository;
     private final RecruitmentListingModerationService recruitmentListingModerationService;
     private final UserService userService;
+    private final ModerationMapper moderationMapper;
 
     /**
      * 通報をレビュー中に変更する。
@@ -245,11 +248,16 @@ public class ReportActionService {
     /**
      * 全通報を取得する（管理者用）。
      *
+     * @param status   絞り込むステータス名（{@link ReportStatus}）。null なら全ステータス
      * @param pageable ページング
-     * @return 通報ページ
+     * @return 通報レスポンスのページ
+     * @throws BusinessException status が未定義値の場合（COMMON_001 → 400）
      */
-    public Page<ContentReportEntity> getAllReports(Pageable pageable) {
-        return reportRepository.findAll(pageable);
+    public Page<ReportResponse> getAllReports(String status, Pageable pageable) {
+        Page<ContentReportEntity> reports = (status == null)
+                ? reportRepository.findAll(pageable)
+                : reportRepository.findByStatus(EnumInputParser.parse(ReportStatus.class, status, "status"), pageable);
+        return reports.map(moderationMapper::toReportResponse);
     }
 
     // ---- private helpers ----

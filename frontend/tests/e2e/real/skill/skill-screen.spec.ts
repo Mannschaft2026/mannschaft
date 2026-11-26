@@ -340,7 +340,7 @@ test.describe('資格画面の実機E2E（導線・ロール別表示・管理�
   })
 
   for (const [label, key] of [['同組織の非メンバー', 'same'], ['他テナント', 'other']] as const) {
-    test(`6. ${label}: URL 直打ちで権限なしの案内が1つだけ出て、失敗トーストも資格系 API 呼び出しも無い`, async () => {
+    test(`6. ${label}: URL 直打ちで共通の「見つかりません」が1つだけ出て、失敗トーストも資格系 API 呼び出しも無い`, async () => {
       const { page } = sess(key)
       const calls: string[] = []
       const onRequest = (req: { url: () => string }) => {
@@ -351,8 +351,11 @@ test.describe('資格画面の実機E2E（導線・ロール別表示・管理�
         await page.goto(`/teams/${TEAM_SLUG}/skills`, { waitUntil: 'domcontentloaded' })
         await waitForHydration(page)
         await expect(page.locator('.pi-spin, .p-progressspinner')).toHaveCount(0, { timeout: 30_000 })
-        await expect(page.locator('.pi-lock'), '鍵アイコンの空状態が1つ').toHaveCount(1)
-        await expect(page.getByText('このチームのメンバーのみ、スキル・資格を利用できます')).toHaveCount(1)
+        // 非メンバー・他テナントは権限や所属を示唆しない共通の「見つかりません」（CMP-261125-1108）
+        await expect(page.locator('[data-testid="scope-not-found"]'), '共通の「見つかりません」が1つ').toHaveCount(1)
+        await expect(page.locator('[data-testid="scope-not-found"]')).toBeVisible()
+        await expect(page.getByText('このチームのメンバーのみ、スキル・資格を利用できます'), '旧「メンバーのみ」案内は出ない').toHaveCount(0)
+        await expect(page.locator('.pi-lock'), '旧・鍵アイコンの空状態は出ない').toHaveCount(0)
         // 描画が落ち着いてもトーストが出ない
         await page.waitForTimeout(3_000)
         await expect(page.locator('.p-toast-message'), '失敗トーストは出ない').toHaveCount(0)

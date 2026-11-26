@@ -13,6 +13,7 @@ const todoApi = useTodoApi()
 const labelApi = useTodoStatusLabelApi()
 const progressApi = useTodoProgress()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const errorHandler = useErrorHandler()
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const { formatDate, formatDateTime } = useDatetime()
@@ -91,7 +92,9 @@ async function loadTodo() {
     }
     newLabelId.value = data.statusLabel?.id ?? null
   }
-  catch {
+  catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('todo.detail.loadFailed'))
   }
   finally {

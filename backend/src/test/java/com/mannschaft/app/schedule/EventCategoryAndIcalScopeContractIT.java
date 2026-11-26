@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.schedule.entity.ScheduleEntity;
@@ -432,18 +433,8 @@ class EventCategoryAndIcalScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private void seedRole(String name, int priority) {
-        try {
-            em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", name)
-                    .getSingleResult();
-        } catch (NoResultException e) {
-            em.createNativeQuery(
-                            "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                    + "VALUES (:name, :name, :priority, 0, NOW(), NOW())")
-                    .setParameter("name", name)
-                    .setParameter("priority", priority)
-                    .executeUpdate();
-        }
+        // priority 引数は seed の値と一致させる必要があるため使わず、正準値で upsert する
+        RoleSeedSupport.ensureCanonical(em, name);
     }
 
     private Long insertUser(String email) {

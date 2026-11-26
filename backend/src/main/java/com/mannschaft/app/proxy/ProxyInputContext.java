@@ -77,6 +77,17 @@ public class ProxyInputContext {
         return proxyMode && scope != null && scopes.contains(scope);
     }
 
+    /**
+     * スコープ名（{@link FeatureScope} の name）で判定する版。他ドメインが proxy の Entity 型に依存せず
+     * 要求スコープを検証するための入口（D-1 回避）。名前が不明な場合は {@code false}。
+     */
+    public boolean hasScope(String featureScopeName) {
+        if (!proxyMode || featureScopeName == null) {
+            return false;
+        }
+        return scopes.stream().anyMatch(s -> s.name().equals(featureScopeName));
+    }
+
     public void clear() {
         this.proxyMode = false;
         this.subjectUserId = null;
