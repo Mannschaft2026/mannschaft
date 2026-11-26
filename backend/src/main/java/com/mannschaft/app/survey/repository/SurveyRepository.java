@@ -18,6 +18,14 @@ import java.util.Optional;
  */
 public interface SurveyRepository extends JpaRepository<SurveyEntity, Long> {
 
+    /** 指定状態のいずれかの未削除アンケートが存在するか（{@code SurveyPublicationStatusService} 用）。 */
+    boolean existsByIdAndStatusIn(Long id, Collection<SurveyStatus> statuses);
+
+    /** 指定 ID のうち、指定状態のいずれかの未削除アンケートの ID（{@code SurveyPublicationStatusService} の一括判定用）。 */
+    @Query("SELECT s.id FROM SurveyEntity s WHERE s.id IN :ids AND s.status IN :statuses")
+    List<Long> findIdsByIdInAndStatusIn(@Param("ids") Collection<Long> ids,
+            @Param("statuses") Collection<SurveyStatus> statuses);
+
     /** 既存の公開・本人未回答条件のまま候補scopeを投影する。期限・配信先条件は追加しない。 */
     @Query("""
             SELECT DISTINCT s.scopeId FROM SurveyEntity s

@@ -1,7 +1,9 @@
 package com.mannschaft.app.social.announcement;
 
+import com.mannschaft.app.circulation.service.CirculationPublicationStatusService;
 import com.mannschaft.app.cms.service.BlogPostPublicationStatusService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.survey.service.SurveyPublicationStatusService;
 import com.mannschaft.app.timeline.service.TimelinePostPublicationStatusService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -14,7 +16,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * お知らせの元コンテンツ（ブログ記事・タイムライン投稿）が公開済みかを判定する<b>唯一の窓口</b>
+ * お知らせの元コンテンツ（ブログ記事・タイムライン投稿・アンケート・回覧板）が公開済みかを判定する<b>唯一の窓口</b>
  * （F02.6 §5.3「元コンテンツの公開状態」・N9）。
  *
  * <h2>定義（一覧クエリと同じ）</h2>
@@ -22,6 +24,9 @@ import java.util.function.Function;
  * <b>公開済み（{@code status = PUBLISHED}）で論理削除されていない元が存在する</b>ときだけ「公開済み」とする。
  * 下書き・予約公開（{@code DRAFT}＋未来の公開日時）・承認待ち・差し戻し・アーカイブ・非表示・論理削除済み・
  * 元が存在しない（孤児）はすべて公開済みではない（fail-closed）。ソース種別が {@code null} も公開済みではない。
+ * {@link AnnouncementSourceType#SURVEY} は PUBLISHED / CLOSED、{@link AnnouncementSourceType#CIRCULATION_DOCUMENT} は
+ * ACTIVE / COMPLETED の未削除の元が存在するときだけ公開済みとする（CMP-261122-1300。下書き・アーカイブ・取消・論理削除・孤児・
+ * ソース ID が {@code null} は非公開。許す状態は各ドメインの Service が持つ）。
  * 他のソース種別は判定しない（常に公開済み扱い）。一覧の正準 WHERE 句
  * （{@code AnnouncementFeedQueryRepository#SOURCE_PUBLISHED_CONDITION}）と同じ定義である。</p>
  *
@@ -43,6 +48,8 @@ public class AnnouncementSourcePublicationGuard {
 
     private final BlogPostPublicationStatusService blogStatus;
     private final TimelinePostPublicationStatusService timelineStatus;
+    private final SurveyPublicationStatusService surveyStatus;
+    private final CirculationPublicationStatusService circulationStatus;
 
     /**
      * 元コンテンツが公開済みでなければ {@code ANNOUNCE_006}（不在と同じ）を投げる。
@@ -63,6 +70,8 @@ public class AnnouncementSourcePublicationGuard {
         return switch (sourceType) {
             case BLOG_POST -> blogStatus.isPublished(sourceId);
             case TIMELINE_POST -> timelineStatus.isPublished(sourceId);
+            case SURVEY -> surveyStatus.isPublished(sourceId);
+            case CIRCULATION_DOCUMENT -> circulationStatus.isPublished(sourceId);
             default -> true;
         };
     }
@@ -78,8 +87,13 @@ public class AnnouncementSourcePublicationGuard {
                                        Function<T, Long> sourceId) {
         List<Long> blogIds = idsOf(items, AnnouncementSourceType.BLOG_POST, sourceType, sourceId);
         List<Long> timelineIds = idsOf(items, AnnouncementSourceType.TIMELINE_POST, sourceType, sourceId);
+        List<Long> surveyIds = idsOf(items, AnnouncementSourceType.SURVEY, sourceType, sourceId);
+        List<Long> circulationIds = idsOf(items, AnnouncementSourceType.CIRCULATION_DOCUMENT, sourceType, sourceId);
         Set<Long> publishedBlogs = blogIds.isEmpty() ? Set.of() : blogStatus.findPublishedIds(blogIds);
         Set<Long> publishedTimelines = timelineIds.isEmpty() ? Set.of() : timelineStatus.findPublishedIds(timelineIds);
+        Set<Long> publishedSurveys = surveyIds.isEmpty() ? Set.of() : surveyStatus.findPublishedIds(surveyIds);
+        Set<Long> publishedCirculations =
+                circulationIds.isEmpty() ? Set.of() : circulationStatus.findPublishedIds(circulationIds);
         List<T> result = new ArrayList<>(items.size());
         for (T item : items) {
             AnnouncementSourceType type = sourceType.apply(item);
@@ -87,8 +101,10 @@ public class AnnouncementSourcePublicationGuard {
                 continue;
             }
             boolean published = switch (type) {
-                case BLOG_POST -> publishedBlogs.contains(sourceId.apply(item));
-                case TIMELINE_POST -> publishedTimelines.contains(sourceId.apply(item));
+                case BLOG_POST -> containsId(publishedBlogs, sourceId.apply(item));
+                case TIMELINE_POST -> containsId(publishedTimelines, sourceId.apply(item));
+                case SURVEY -> containsId(publishedSurveys, sourceId.apply(item));
+                case CIRCULATION_DOCUMENT -> containsId(publishedCirculations, sourceId.apply(item));
                 default -> true;
             };
             if (published) {
@@ -96,6 +112,11 @@ public class AnnouncementSourcePublicationGuard {
             }
         }
         return result;
+    }
+
+    /** ID が {@code null} なら非公開（{@code Set.of()} は null を渡すと例外になるため明示的に弾く）。 */
+    private static boolean containsId(Set<Long> published, Long id) {
+        return id != null && published.contains(id);
     }
 
     private static <T> List<Long> idsOf(Collection<T> items, AnnouncementSourceType type,

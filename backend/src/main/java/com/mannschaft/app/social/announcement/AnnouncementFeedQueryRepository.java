@@ -53,7 +53,7 @@ public class AnnouncementFeedQueryRepository {
     }
 
     /**
-     * 元コンテンツが公開済みのお知らせだけを残す条件（N9）。ブログ・タイムライン投稿の状態に追従する。
+     * 元コンテンツが公開済みのお知らせだけを残す条件（N9）。ブログ・タイムライン投稿・アンケート・回覧板の状態に追従する。
      *
      * <p>{@code BLOG_POST}・{@code TIMELINE_POST} の行は「公開済み（{@code status = PUBLISHED}）で論理削除されていない元が
      * <b>存在する</b>」ときだけ出す（fail-closed）。下書きのまま作られた既存行・公開後に下書きへ戻された記事・
@@ -61,7 +61,7 @@ public class AnnouncementFeedQueryRepository {
      * タイトル・抜粋のキャッシュごと一覧に出さない。両エンティティは {@code @SQLRestriction("deleted_at IS NULL")} を持ち、
      * 「非公開の元が存在しない」で判定すると論理削除済みの元が見えずに素通りするため、存在を正として判定する
      * （{@code deletedAt IS NULL} も明示する）。元コンテンツの削除は {@code ContentDeletedEvent}（現状どこからも発行されない）
-     * に頼らない。状態が復帰（再公開）すれば条件を満たして一覧に戻る。</p>
+     * に頼らない。アンケートは PUBLISHED / CLOSED、回覧板は ACTIVE / COMPLETED の未削除の元が存在する行だけ出す（CMP-261122-1300）。状態が復帰（再公開）すれば条件を満たして一覧に戻る。</p>
      *
      * <p>元コンテンツのドメインへは FK を張らず、ID 参照の相関サブクエリで読む
      * （{@code FriendFeedQueryRepository} がタイムライン投稿を読むのと同じ作法）。ID 指定の経路は同じ定義を
@@ -69,7 +69,9 @@ public class AnnouncementFeedQueryRepository {
      */
     private static final String SOURCE_PUBLISHED_CONDITION = """
               AND (a.sourceType NOT IN (com.mannschaft.app.social.announcement.AnnouncementSourceType.BLOG_POST,
-                                        com.mannschaft.app.social.announcement.AnnouncementSourceType.TIMELINE_POST)
+                                        com.mannschaft.app.social.announcement.AnnouncementSourceType.TIMELINE_POST,
+                                        com.mannschaft.app.social.announcement.AnnouncementSourceType.SURVEY,
+                                        com.mannschaft.app.social.announcement.AnnouncementSourceType.CIRCULATION_DOCUMENT)
                    OR (a.sourceType = com.mannschaft.app.social.announcement.AnnouncementSourceType.BLOG_POST
                        AND EXISTS (SELECT 1 FROM BlogPostEntity sb
                                    WHERE sb.id = a.sourceId
@@ -79,7 +81,19 @@ public class AnnouncementFeedQueryRepository {
                        AND EXISTS (SELECT 1 FROM TimelinePostEntity st
                                    WHERE st.id = a.sourceId
                                      AND st.status = com.mannschaft.app.timeline.PostStatus.PUBLISHED
-                                     AND st.deletedAt IS NULL)))
+                                     AND st.deletedAt IS NULL))
+                   OR (a.sourceType = com.mannschaft.app.social.announcement.AnnouncementSourceType.SURVEY
+                       AND EXISTS (SELECT 1 FROM SurveyEntity ss
+                                   WHERE ss.id = a.sourceId
+                                     AND ss.status IN (com.mannschaft.app.survey.SurveyStatus.PUBLISHED,
+                                                       com.mannschaft.app.survey.SurveyStatus.CLOSED)
+                                     AND ss.deletedAt IS NULL))
+                   OR (a.sourceType = com.mannschaft.app.social.announcement.AnnouncementSourceType.CIRCULATION_DOCUMENT
+                       AND EXISTS (SELECT 1 FROM CirculationDocumentEntity sc
+                                   WHERE sc.id = a.sourceId
+                                     AND sc.status IN (com.mannschaft.app.circulation.CirculationStatus.ACTIVE,
+                                                       com.mannschaft.app.circulation.CirculationStatus.COMPLETED)
+                                     AND sc.deletedAt IS NULL)))
             """;
 
     /**

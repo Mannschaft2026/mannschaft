@@ -18,6 +18,14 @@ import java.util.Optional;
  */
 public interface CirculationDocumentRepository extends JpaRepository<CirculationDocumentEntity, Long> {
 
+    /** 指定状態のいずれかの未削除回覧文書が存在するか（{@code CirculationPublicationStatusService} 用）。 */
+    boolean existsByIdAndStatusIn(Long id, Collection<CirculationStatus> statuses);
+
+    /** 指定 ID のうち、指定状態のいずれかの未削除回覧文書の ID（{@code CirculationPublicationStatusService} の一括判定用）。 */
+    @Query("SELECT d.id FROM CirculationDocumentEntity d WHERE d.id IN :ids AND d.status IN :statuses")
+    List<Long> findIdsByIdInAndStatusIn(@Param("ids") Collection<Long> ids,
+            @Param("statuses") Collection<CirculationStatus> statuses);
+
     /**
      * スコープ指定で文書をページング取得する。
      */

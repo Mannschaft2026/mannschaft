@@ -1,10 +1,14 @@
 package com.mannschaft.app.survey.service;
 
 import com.mannschaft.app.survey.repository.SurveyRepository;
+import com.mannschaft.app.survey.SurveyStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -12,25 +16,30 @@ import java.util.Set;
  *
  * <p>お知らせ（F02.6）が、元のアンケートがお知らせ化してよい状態（PUBLISHED / CLOSED）かを、リポジトリやエンティティへ直接触れずに
  * 確認するために使う。論理削除済み・存在しない ID は公開済みではない（fail-closed）。</p>
- *
- * <p><b>【試練スタブ】</b>CMP-261122-1300 の red テスト（試練）をコンパイルさせるための最小スタブ。
- * 判定は未実装で、出陣（実装）で本実装に置き換える。お知らせ側からはまだ呼ばれていない。</p>
  */
 @Service
 @RequiredArgsConstructor
 public class SurveyPublicationStatusService {
 
+    /** お知らせ化を許す状態（PUBLISHED / CLOSED。他の状態・論理削除・不在はお知らせ化しない）。 */
+    private static final Set<SurveyStatus> PUBLISHED_STATUSES = EnumSet.of(SurveyStatus.PUBLISHED, SurveyStatus.CLOSED);
+
     private final SurveyRepository surveyRepository;
 
     /** 未削除で PUBLISHED / CLOSED のアンケートなら true（ID が null なら照会せず false）。 */
+    @Transactional(readOnly = true)
     public boolean isPublished(Long id) {
-        throw new UnsupportedOperationException("CMP-261122-1300: 未実装（試練スタブ）");
+        return id != null && surveyRepository.existsByIdAndStatusIn(id, PUBLISHED_STATUSES);
     }
 
     /**
      * 指定 ID のうち、未削除で PUBLISHED / CLOSED のものの ID 集合（一括判定。空入力なら照会せず空集合）。
      */
+    @Transactional(readOnly = true)
     public Set<Long> findPublishedIds(Collection<Long> ids) {
-        throw new UnsupportedOperationException("CMP-261122-1300: 未実装（試練スタブ）");
+        if (ids == null || ids.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(surveyRepository.findIdsByIdInAndStatusIn(ids, PUBLISHED_STATUSES));
     }
 }
