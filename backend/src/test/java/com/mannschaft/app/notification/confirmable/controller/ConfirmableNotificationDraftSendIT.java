@@ -1,5 +1,6 @@
 package com.mannschaft.app.notification.confirmable.controller;
 
+import com.mannschaft.app.membership.domain.RoleKind;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.UuidV7;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -239,9 +240,9 @@ class ConfirmableNotificationDraftSendIT extends AbstractMySqlIntegrationTest {
         jdbc.update("INSERT INTO user_roles (user_id, role_id, team_id, organization_id, created_at, updated_at) "
                 + "SELECT ?, r.id, NULL, ?, NOW(), NOW() FROM roles r WHERE r.name = ?", userId, orgIdParam, roleName);
         jdbc.update("INSERT INTO memberships (user_id, scope_type, scope_id, role_kind, joined_at, created_at, updated_at) "
-                + "SELECT ?, 'ORGANIZATION', ?, 'MEMBER', NOW(), NOW(), NOW() "
+                + "SELECT ?, 'ORGANIZATION', ?, ?, NOW(), NOW(), NOW() "
                 + "WHERE NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = ? "
                 + "AND m.scope_type = 'ORGANIZATION' AND m.scope_id = ? AND m.left_at IS NULL)",
-                userId, orgIdParam, userId, orgIdParam);
+                userId, orgIdParam, RoleKind.MEMBER.name(), userId, orgIdParam);
     }
 }

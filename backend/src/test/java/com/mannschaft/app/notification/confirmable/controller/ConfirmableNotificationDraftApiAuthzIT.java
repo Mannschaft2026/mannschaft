@@ -1,5 +1,6 @@
 package com.mannschaft.app.notification.confirmable.controller;
 
+import com.mannschaft.app.support.test.MembershipTestHelper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.UuidV7;
@@ -663,14 +664,8 @@ class ConfirmableNotificationDraftApiAuthzIT extends AbstractMySqlIntegrationTes
     /** ロール付与＋当該スコープへの ACTIVE membership。 */
     private void grantRole(Long userId, String roleName, Scope scope) {
         boolean isTeam = "TEAM".equals(scope.type());
-        em.createNativeQuery(
-                        "INSERT INTO user_roles (user_id, role_id, team_id, organization_id, created_at, updated_at) "
-                                + "SELECT :uid, r.id, :tid, :oid, NOW(), NOW() FROM roles r WHERE r.name = :role")
-                .setParameter("uid", userId)
-                .setParameter("tid", isTeam ? scope.id() : null)
-                .setParameter("oid", isTeam ? null : scope.id())
-                .setParameter("role", roleName)
-                .executeUpdate();
+        MembershipTestHelper.insertUserRole(em, userId, roleName,
+                isTeam ? scope.id() : null, isTeam ? null : scope.id());
         em.createNativeQuery(
                         "INSERT INTO memberships (user_id, scope_type, scope_id, role_kind, joined_at, created_at, updated_at) "
                                 + "SELECT :uid, :st, :sid, 'MEMBER', NOW(), NOW(), NOW() "
