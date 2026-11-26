@@ -2,6 +2,7 @@ package com.mannschaft.app.common.util;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ErrorCode;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.function.Predicate;
 
 /**
@@ -17,6 +18,9 @@ public final class SlugAllocator {
 
     /** ランダムサフィックスを試す回数。 */
     private static final int RANDOM_ATTEMPTS = 20;
+
+    /** MySQL の重複エントリ（一意制約違反）ベンダーコード。 */
+    private static final int MYSQL_DUPLICATE_ENTRY = 1062;
 
     private SlugAllocator() {}
 
@@ -77,7 +81,11 @@ public final class SlugAllocator {
      */
     public static boolean isUniqueViolation(Throwable e, String indexName) {
         for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
-            if (t.getMessage() != null && t.getMessage().contains(indexName)) {
+            // MySQL の一意制約違反（SQLState 23000 / ベンダーコード 1062）かつ、メッセージが対象の一意索引名を含むもの。
+            // 索引名だけで判定すると無関係な例外メッセージにも反応し得るため、SQL 例外の種別と併せて判定する。
+            if (t instanceof SQLIntegrityConstraintViolationException sql
+                    && sql.getErrorCode() == MYSQL_DUPLICATE_ENTRY
+                    && sql.getMessage() != null && sql.getMessage().contains(indexName)) {
                 return true;
             }
         }

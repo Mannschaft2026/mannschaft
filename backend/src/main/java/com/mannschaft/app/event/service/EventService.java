@@ -154,9 +154,12 @@ public class EventService {
         try {
             saved = eventRepository.save(entity);
         } catch (DataIntegrityViolationException e) {
-            // 並行作成で採番直後に同じ slug を取られた場合。500 ではなく 409（EVENT_016）で再試行を促す。
+            // 並行作成で採番直後に同じ slug を取られた場合。同一トランザクションは破棄されるため再採番できない。
+            // 500 ではなく 409 で再試行を促す。指定 slug の衝突は EVENT_016、自動採番分の競合は EVENT_044。
             if (SlugAllocator.isUniqueViolation(e, "uq_events_slug")) {
-                throw new BusinessException(EventErrorCode.SLUG_ALREADY_EXISTS);
+                boolean userSpecified = request.getSlug() != null && !request.getSlug().isBlank();
+                throw new BusinessException(userSpecified
+                        ? EventErrorCode.SLUG_ALREADY_EXISTS : EventErrorCode.SLUG_AUTO_ALLOCATION_FAILED);
             }
             throw e;
         }
@@ -424,9 +427,8 @@ public class EventService {
             return requestedSlug;
         }
         // 未指定の場合はsubtitleから自動生成
-        String source = (subtitle != null && !subtitle.isBlank()) ? subtitle : "event";
-        return SlugAllocator.allocate(SlugGenerator.generate(source),
-                eventRepository::existsBySlugIncludingDeleted, EventErrorCode.SLUG_ALREADY_EXISTS);
+        return SlugAllocator.allocate(SlugGenerator.generate(subtitle, "event"),
+                eventRepository::existsBySlugIncludingDeleted, EventErrorCode.SLUG_AUTO_ALLOCATION_FAILED);
     }
 
     /**

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 
@@ -27,6 +28,7 @@ import com.mannschaft.app.team.repository.TeamRepository;
 import com.mannschaft.app.team.repository.TeamSlugHistoryRepository;
 import com.mannschaft.app.team.service.TeamService;
 import com.mannschaft.app.team.service.TeamShiftSettingsService;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +39,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -215,6 +218,56 @@ class TeamSlugCollisionServiceTest {
             } else {
                 assertFree(slug);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("E5 並行作成で採番直後に一意制約違反になっても 500 にしない")
+    class E5 {
+
+        private void saveViolatesUniqueIndex() {
+            TeamRepository repo = (TeamRepository) ReflectionTestUtils.getField(service, "teamRepository");
+            doThrow(new DataIntegrityViolationException("could not execute statement",
+                    new SQLIntegrityConstraintViolationException(
+                            "Duplicate entry 'my-club' for key 'teams.uq_teams_slug'", "23000", 1062)))
+                    .when(repo).save(any());
+        }
+
+        @Test
+        void E5_slug未指定の自動採番で保存時に一意制約違反_TEAM_073で500にしない() {
+            saveViolatesUniqueIndex();
+            CreateTeamRequest req = new CreateTeamRequest(
+                    "My Club", null, null, null, null, null, null, null, false, null);
+
+            Throwable thrown = catchThrowable(() -> service.createTeam(USER_ID, req));
+
+            assertThat(thrown).isInstanceOf(BusinessException.class);
+            assertThat(((BusinessException) thrown).getErrorCode().getCode()).isEqualTo("TEAM_073");
+        }
+
+        @Test
+        void E5_ユーザー指定slugで保存時に一意制約違反_TEAM_062() {
+            saveViolatesUniqueIndex();
+            CreateTeamRequest req = new CreateTeamRequest(
+                    "My Club", null, null, null, null, null, null, "my-club", false, null);
+
+            Throwable thrown = catchThrowable(() -> service.createTeam(USER_ID, req));
+
+            assertThat(thrown).isInstanceOf(BusinessException.class);
+            assertThat(((BusinessException) thrown).getErrorCode().getCode()).isEqualTo("TEAM_062");
+        }
+
+        @Test
+        void E5_無関係な一意制約違反は素通しして握りつぶさない() {
+            TeamRepository repo = (TeamRepository) ReflectionTestUtils.getField(service, "teamRepository");
+            doThrow(new DataIntegrityViolationException("x",
+                    new SQLIntegrityConstraintViolationException("Duplicate entry 'a' for key 'teams.uq_other", "23000", 1062)))
+                    .when(repo).save(any());
+            CreateTeamRequest req = new CreateTeamRequest(
+                    "My Club", null, null, null, null, null, null, null, false, null);
+
+            assertThatThrownBy(() -> service.createTeam(USER_ID, req))
+                    .isInstanceOf(DataIntegrityViolationException.class);
         }
     }
 }

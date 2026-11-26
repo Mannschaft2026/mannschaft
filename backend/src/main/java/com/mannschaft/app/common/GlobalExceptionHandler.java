@@ -612,6 +612,7 @@ public class GlobalExceptionHandler {
             Map.entry("EVENT_041", HttpStatus.UNPROCESSABLE_ENTITY),        // 代理チェックイン: ACCEPTED でない
             Map.entry("EVENT_042", HttpStatus.CONFLICT),                    // 代理チェックイン: 既にチェックイン済み
             Map.entry("EVENT_043", HttpStatus.FORBIDDEN),                   // 代理チェックイン: 権限なし
+            Map.entry("EVENT_044", HttpStatus.CONFLICT),                    // slug 自動採番失敗（候補枯渇／同時作成の競合）
             // ロットD追補: event の残り未登録分。存在秘匿系は 404（招待トークンは
             // INVITE_TOKEN_NOT_FOUND(EVENT_015) と流儀を揃え、不正/期限切れ/イベント不一致も同一コードで秘匿）、
             // 状態競合系（登録締切・満席・二重登録・使用済み・スラグ重複・ステータス遷移不正等）は 409。
@@ -1917,6 +1918,8 @@ public class GlobalExceptionHandler {
             Map.entry("TEAM_070", HttpStatus.NOT_FOUND), // F01.2.1 §11 申請・招待・加盟が見つかりません
             Map.entry("TEAM_071", HttpStatus.CONFLICT), // F01.2.1 §11 この申請・招待はすでに処理されています
             Map.entry("TEAM_072", HttpStatus.BAD_REQUEST), // F01.2.1 §11 指定したチームグループは選択できません
+            Map.entry("TEAM_073", HttpStatus.CONFLICT), // slug 自動採番失敗（候補枯渇／同時作成の競合）
+            Map.entry("ORG_071", HttpStatus.CONFLICT), // slug 自動採番失敗（候補枯渇／同時作成の競合）
             Map.entry("BROADCAST_006", HttpStatus.BAD_REQUEST), // F01.2.1 §11 指定したチームグループは選択できません
             Map.entry("BROADCAST_007", HttpStatus.BAD_REQUEST), // F01.2.1 §11 この組織ではチームグループ機能が無効です
             Map.entry("BROADCAST_008", HttpStatus.BAD_REQUEST), // F01.2.1 §11 範囲の指定が正しくありません（開始が終了より後ろです）

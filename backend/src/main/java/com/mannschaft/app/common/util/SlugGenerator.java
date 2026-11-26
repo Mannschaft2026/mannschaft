@@ -26,6 +26,9 @@ public final class SlugGenerator {
     /** フォールバック文字列（日本語のみなどでASCII部分が極端に短い場合）。 */
     private static final String FALLBACK_SLUG = "team";
 
+    /** イベント用のフォールバック文字列（副題が空・日本語のみのとき）。 */
+    private static final String EVENT_FALLBACK_SLUG = "event";
+
     /** ランダムサフィックスの桁数（"-" を含め 7 文字）。 */
     private static final int RANDOM_SUFFIX_LENGTH = 6;
 
@@ -45,7 +48,7 @@ public final class SlugGenerator {
      * @return フォールバック値なら true
      */
     public static boolean isFallback(String base) {
-        return FALLBACK_SLUG.equals(base);
+        return FALLBACK_SLUG.equals(base) || EVENT_FALLBACK_SLUG.equals(base);
     }
 
     /**
@@ -65,14 +68,28 @@ public final class SlugGenerator {
      * @return 生成されたスラッグ（3〜30文字）
      */
     public static String generate(String name) {
+        return generate(name, FALLBACK_SLUG);
+    }
+
+    /**
+     * 名称からスラッグを生成する。ASCII 部分が 3 文字未満のときは指定したフォールバックを使う。
+     *
+     * <p>イベントのように {@code "team"} が不自然な用途では {@code "event"} などを渡す。
+     * 変換ルールは {@link #generate(String)} と同じ。</p>
+     *
+     * @param name     名称（null・空文字可）
+     * @param fallback 変換結果が 3 文字未満のときに返す値（3〜30 文字の有効な slug）
+     * @return 生成されたスラッグ（3〜30文字）
+     */
+    public static String generate(String name, String fallback) {
         if (name == null || name.isBlank()) {
-            return FALLBACK_SLUG;
+            return fallback;
         }
         String base = name.toLowerCase()
                 .replaceAll(NON_ALPHANUMERIC_PATTERN, "-")
                 .replaceAll(LEADING_TRAILING_HYPHENS, "");
         if (base.length() < MIN_LENGTH) {
-            return FALLBACK_SLUG;
+            return fallback;
         }
         return base.substring(0, Math.min(base.length(), MAX_LENGTH));
     }

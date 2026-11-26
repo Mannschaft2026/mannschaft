@@ -155,10 +155,12 @@ public class OrganizationService {
                     try {
                         organizationRepository.save(org);
                     } catch (DataIntegrityViolationException e) {
-                        // 並行作成で採番直後に同じ slug を取られた場合。同一トランザクションは破棄されるため再採番はできないが、
-                        // 500 ではなく 409（ORG_062）で再試行を促す。
+                        // 並行作成で採番直後に同じ slug を取られた場合。同一トランザクションは破棄されるため同一 TX 内の再採番は
+                        // できない（REQUIRES_NEW で組織だけ別コミットすると後続失敗で孤児組織が残り原子性が崩れる）。
+                        // 500 ではなく 409 で再試行を促す。指定 slug の衝突は ORG_062、自動採番分の競合は ORG_071。
                         if (SlugAllocator.isUniqueViolation(e, "uq_organizations_slug")) {
-                            throw new BusinessException(OrgErrorCode.ORG_062);
+                            boolean userSpecified = SlugValidator.isProvided(req.getSlug());
+                            throw new BusinessException(userSpecified ? OrgErrorCode.ORG_062 : OrgErrorCode.ORG_071);
                         }
                         throw e;
                     }
@@ -432,14 +434,14 @@ public class OrganizationService {
      * <p>ベーススラッグが使用済み（現役・論理削除済み・履歴予約。論理削除済みは永久予約）の場合は
      * 数値サフィックス (-1, -2, ...)、それでも埋まっていればランダムサフィックスで一意化する。
      * 日本語名など固定の {@code "team"} に落ちる名称は同時作成の衝突を避けるためランダムサフィックスを先に使う。
-     * 採番を諦める場合は {@code ORG_062}（409）で、500 にしない。</p>
+     * 採番を諦める場合は {@code ORG_071}（409）で、500 にしない。</p>
      *
      * @param name 組織名
      * @return 一意なスラッグ
-     * @throws BusinessException 採番できなかった場合（ORG_062）
+     * @throws BusinessException 採番できなかった場合（ORG_071）
      */
     public String createUniqueSlug(String name) {
-        return SlugAllocator.allocate(SlugGenerator.generate(name), this::isSlugReserved, OrgErrorCode.ORG_062);
+        return SlugAllocator.allocate(SlugGenerator.generate(name), this::isSlugReserved, OrgErrorCode.ORG_071);
     }
 
     /**
@@ -498,9 +500,9 @@ public class OrganizationService {
                         organizationRepository.save(org);
                     } catch (DataIntegrityViolationException e) {
                         // 並行作成で採番直後に同じ slug を取られた場合。同一トランザクションは破棄されるため再採番はできないが、
-                        // 500 ではなく 409（ORG_062）で再試行を促す。
+                        // 500 ではなく 409（ORG_071）で再試行を促す。
                         if (SlugAllocator.isUniqueViolation(e, "uq_organizations_slug")) {
-                            throw new BusinessException(OrgErrorCode.ORG_062);
+                            throw new BusinessException(OrgErrorCode.ORG_071);
                         }
                         throw e;
                     }

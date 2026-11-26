@@ -185,9 +185,12 @@ public class TeamService {
                         teamRepository.save(team);
                     } catch (DataIntegrityViolationException e) {
                         // 並行作成で採番直後に同じ slug を取られた場合（事前確認とINSERTの間）。同一トランザクションは
-                        // 破棄されるため再採番はできないが、500 ではなく 409（TEAM_062）で再試行を促す。
+                        // 破棄されるため同一 TX 内の再採番はできない（REQUIRES_NEW で team だけ別コミットすると、後続の
+                        // 書込失敗で孤児チームが残り原子性が崩れる）。500 ではなく 409 で再試行を促す。
+                        // 指定 slug の衝突は TEAM_062、自動採番分の競合は TEAM_073。
                         if (SlugAllocator.isUniqueViolation(e, "uq_teams_slug")) {
-                            throw new BusinessException(TeamErrorCode.TEAM_062);
+                            boolean userSpecified = SlugValidator.isProvided(req.getSlug());
+                            throw new BusinessException(userSpecified ? TeamErrorCode.TEAM_062 : TeamErrorCode.TEAM_073);
                         }
                         throw e;
                     }
@@ -464,14 +467,14 @@ public class TeamService {
      * <p>ベーススラッグが使用済み（現役・論理削除済み・履歴予約。論理削除済みは永久予約）の場合は
      * 数値サフィックス (-1, -2, ...)、それでも埋まっていればランダムサフィックスで一意化する。
      * 日本語名など固定の {@code "team"} に落ちる名称は同時作成の衝突を避けるためランダムサフィックスを先に使う。
-     * 採番を諦める場合は {@code TEAM_062}（409）で、500 にしない。</p>
+     * 採番を諦める場合は {@code TEAM_073}（409）で、500 にしない。</p>
      *
      * @param name チーム名
      * @return 一意なスラッグ
-     * @throws BusinessException 採番できなかった場合（TEAM_062）
+     * @throws BusinessException 採番できなかった場合（TEAM_073）
      */
     public String createUniqueSlug(String name) {
-        return SlugAllocator.allocate(SlugGenerator.generate(name), this::isSlugReserved, TeamErrorCode.TEAM_062);
+        return SlugAllocator.allocate(SlugGenerator.generate(name), this::isSlugReserved, TeamErrorCode.TEAM_073);
     }
 
     /**
@@ -528,8 +531,9 @@ public class TeamService {
                     try {
                         teamRepository.save(team);
                     } catch (DataIntegrityViolationException e) {
+                        // 呼び出し元（ProvisioningService）が自動採番した slug の競合。再採番は呼び出し側の再試行に委ねる。
                         if (SlugAllocator.isUniqueViolation(e, "uq_teams_slug")) {
-                            throw new BusinessException(TeamErrorCode.TEAM_062);
+                            throw new BusinessException(TeamErrorCode.TEAM_073);
                         }
                         throw e;
                     }

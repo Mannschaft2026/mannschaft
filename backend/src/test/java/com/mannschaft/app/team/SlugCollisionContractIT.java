@@ -280,6 +280,62 @@ class SlugCollisionContractIT extends AbstractMySqlIntegrationTest {
                 .getData().getSlug(), orgNames);
     }
 
+    @Test
+    void E5_チームのプロビジョニング作成で採番済みslugを他者に取られていた_TEAM_073で500にしない() {
+        String takenSlug = SlugGenerator.generate(asciiName("e5pt"));
+        softDeletedTeam(asciiName("e5ptd"), takenSlug);
+        teamNames.add(asciiName("e5ptn"));
+        String name = teamNames.get(teamNames.size() - 1);
+
+        // 採番後〜INSERT の間に同じ slug が確保された状況を、確保済み slug の直接指定で決定的に再現する
+        Throwable thrown = catchThrowable(() ->
+                teamService.createProvisionedTeam(name, takenSlug, systemAdminId, false, null));
+
+        assertBusinessCode(thrown, "TEAM_073");
+    }
+
+    @Test
+    void E5_組織のプロビジョニング作成で採番済みslugを他者に取られていた_ORG_071で500にしない() {
+        String takenSlug = SlugGenerator.generate(asciiName("e5po"));
+        softDeletedOrganization(asciiName("e5pod"), takenSlug);
+        String name = asciiName("e5pon");
+        orgNames.add(name);
+
+        Throwable thrown = catchThrowable(() ->
+                organizationService.createProvisionedOrganization(name, takenSlug, systemAdminId, false, null));
+
+        assertBusinessCode(thrown, "ORG_071");
+    }
+
+    // ===================== E7 =====================
+
+    @Test
+    void E7_チームslug変更_論理削除済みチームのslugへは変更できずTEAM_062_空きslugへは変更でき旧slugは永久予約() {
+        String deletedSlug = SlugGenerator.generate(asciiName("e7td"));
+        softDeletedTeam(asciiName("e7tdn"), deletedSlug);
+        String name = asciiName("e7t");
+        Long teamId = activeTeam(name);
+        String oldSlug = SlugGenerator.generate(name);
+
+        assertBusinessCode(catchThrowable(() -> teamService.renameSlug(teamId, deletedSlug)), "TEAM_062");
+
+        String freeSlug = SlugGenerator.generate(asciiName("e7tf"));
+        assertThatCode(() -> teamService.renameSlug(teamId, freeSlug)).doesNotThrowAnyException();
+        assertThat(teamService.checkSlugAvailability(oldSlug).available()).as("旧 slug は履歴予約で使用不可").isFalse();
+    }
+
+    @Test
+    void E7_組織slug変更_論理削除済み組織のslugへは変更できずORG_062_空きslugへは変更できる() {
+        String deletedSlug = SlugGenerator.generate(asciiName("e7od"));
+        softDeletedOrganization(asciiName("e7odn"), deletedSlug);
+        Long orgId = activeOrganization(asciiName("e7o"));
+
+        assertBusinessCode(catchThrowable(() -> organizationService.renameSlug(orgId, deletedSlug)), "ORG_062");
+
+        String freeSlug = SlugGenerator.generate(asciiName("e7of"));
+        assertThatCode(() -> organizationService.renameSlug(orgId, freeSlug)).doesNotThrowAnyException();
+    }
+
     // ===================== helpers =====================
 
     private void assertConcurrentCreatesSucceed(java.util.function.Function<String, String> create,
