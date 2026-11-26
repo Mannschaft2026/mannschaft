@@ -12,9 +12,9 @@ import java.util.Optional;
 public interface SignageAccessTokenRepository extends JpaRepository<SignageAccessTokenEntity, Long> {
 
     /**
-     * トークン文字列でアクティブなトークンを取得する。
+     * トークンのハッシュでアクティブなトークンを取得する。
      */
-    Optional<SignageAccessTokenEntity> findByTokenAndIsActiveTrue(String token);
+    Optional<SignageAccessTokenEntity> findByTokenHashAndIsActiveTrue(String tokenHash);
 
     /**
      * 画面IDに紐づくトークン一覧を取得する。
