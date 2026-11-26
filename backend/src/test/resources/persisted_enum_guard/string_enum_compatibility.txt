@@ -1011,6 +1011,9 @@ com.mannschaft.app.notification.NotificationScopeType#ORGANIZATION
 com.mannschaft.app.notification.NotificationScopeType#PERSONAL
 com.mannschaft.app.notification.NotificationScopeType#SYSTEM
 com.mannschaft.app.notification.NotificationScopeType#TEAM
+com.mannschaft.app.notification.confirmable.entity.ConfirmableDraftAudienceMode#DEFAULT
+com.mannschaft.app.notification.confirmable.entity.ConfirmableDraftAudienceMode#GROUP
+com.mannschaft.app.notification.confirmable.entity.ConfirmableDraftAudienceMode#TARGETS
 com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationDeliveryStatus#DELIVERED
 com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationDeliveryStatus#DELIVERING
 com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationDeliveryStatus#PARTIALLY_FAILED
