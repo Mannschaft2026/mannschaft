@@ -60362,7 +60362,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenIssuedResponse"
                 }
               }
             }
@@ -129220,6 +129220,14 @@
               "type": "integer",
               "format": "int32",
               "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -201091,11 +201099,47 @@
           }
         }
       },
-      "ApiResponseSignageAccessTokenResponse": {
+      "ApiResponseSignageAccessTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SignageAccessTokenResponse"
+            "$ref": "#/components/schemas/SignageAccessTokenIssuedResponse"
+          }
+        }
+      },
+      "SignageAccessTokenIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "screenId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
@@ -201129,9 +201173,6 @@
           "screenId": {
             "type": "integer",
             "format": "int64"
-          },
-          "token": {
-            "type": "string"
           }
         }
       },
@@ -221512,6 +221553,9 @@
               "UNDECIDED"
             ]
           },
+          "studentDisplayName": {
+            "type": "string"
+          },
           "studentUserId": {
             "type": "integer",
             "format": "int64"
@@ -229609,6 +229653,9 @@
           "organizationId": {
             "type": "integer",
             "format": "int64"
+          },
+          "organizationSlug": {
+            "type": "string"
           },
           "record": {
             "$ref": "#/components/schemas/TournamentHistoryEntryRecord"

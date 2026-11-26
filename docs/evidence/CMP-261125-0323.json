@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261125-0323",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 4858,
+    "sha": "0cbd04e911cb6920985170f541997b125e2fd916"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "backend/scripts/ 配下を tooling と判定する",
+      "tests": [
+        {
+          "name": "scripts/completion-evidence.test.mjs",
+          "evidence": "scripts/completion-evidence.test.mjs"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45459235681
+    },
+    {
+      "runId": 45459235631
+    },
+    {
+      "runId": 45459235672
+    },
+    {
+      "runId": 45459235525
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4858"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "開発用スクリプトとドキュメントだけの変更で利用者に見える挙動を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "開発用スクリプトだけの変更で導線を変えない"
+    }
+  },
+  "regressions": []
+}
