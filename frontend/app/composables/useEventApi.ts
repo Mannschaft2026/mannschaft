@@ -9,6 +9,7 @@ import type {
   EventDetailResponse,
   EventResponse,
   GuestRegistrationRequest,
+  EventInviteTokenIssuedResponse,
   EventInviteTokenResponse,
   RegistrationResponse,
   ReorderTimetableRequest,
@@ -276,8 +277,9 @@ export function useEventApi() {
     return api<{ data: EventInviteTokenResponse[] }>(`/api/v1/events/${eventId}/invite-tokens`)
   }
 
+  /** 招待トークンを発行する。応答の平文 token はここでしか得られない。 */
   async function createInviteToken(eventId: number, body: EventCreateInviteTokenRequest) {
-    return api<{ data: EventInviteTokenResponse }>(`/api/v1/events/${eventId}/invite-tokens`, {
+    return api<{ data: EventInviteTokenIssuedResponse }>(`/api/v1/events/${eventId}/invite-tokens`, {
       method: 'POST',
       body,
     })

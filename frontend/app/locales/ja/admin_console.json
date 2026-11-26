@@ -83,7 +83,8 @@
           "RESERVATION": "予約",
           "SHIFT_REQUEST": "シフト",
           "MATCHING": "マッチング",
-          "PAYMENT": "支払"
+          "PAYMENT": "支払",
+          "INVITE_REISSUE": "再招待の依頼"
         }
       },
       "payments": {

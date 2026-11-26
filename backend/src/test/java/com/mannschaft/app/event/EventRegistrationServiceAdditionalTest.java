@@ -58,6 +58,9 @@ class EventRegistrationServiceAdditionalTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @org.mockito.Spy
+    private com.mannschaft.app.common.token.SecretTokenVault vault = new com.mannschaft.app.common.token.SecretTokenVault();
+
     @InjectMocks
     private EventRegistrationService eventRegistrationService;
 
@@ -232,13 +235,13 @@ class EventRegistrationServiceAdditionalTest {
 
             // maxUses=1で usedCount=1 にしてisUsable=falseにする
             EventGuestInviteTokenEntity token = EventGuestInviteTokenEntity.builder()
-                    .eventId(EVENT_ID).token("used-token").maxUses(1)
+                    .eventId(EVENT_ID).tokenHash(vault.hash("used-token")).maxUses(1)
                     .expiresAt(LocalDateTime.now().plusDays(7))
                     .createdBy(USER_ID).build();
             token.incrementUsedCount(); // 1回使用済み → maxUses=1なのでisUsable=false
 
             given(eventService.findEventOrThrow(EVENT_ID)).willReturn(event);
-            given(inviteTokenRepository.findByToken("used-token")).willReturn(Optional.of(token));
+            given(inviteTokenRepository.findByTokenHash(vault.hash("used-token"))).willReturn(Optional.of(token));
 
             // When & Then
             assertThatThrownBy(() -> eventRegistrationService.createGuestRegistration(EVENT_ID, request))

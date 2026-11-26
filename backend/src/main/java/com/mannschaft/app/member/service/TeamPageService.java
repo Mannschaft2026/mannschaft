@@ -251,7 +251,7 @@ public class TeamPageService {
     /**
      * プレビュートークンを発行する。
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Transactional
     public PreviewTokenResponse issuePreviewToken(Long actorUserId, Long pageId) {
         TeamPageEntity entity = findPageOrThrow(pageId);

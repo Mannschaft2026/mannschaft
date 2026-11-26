@@ -1,6 +1,7 @@
 package com.mannschaft.app.membership.entity;
 
 import com.mannschaft.app.membership.domain.ArchiveReason;
+import com.mannschaft.app.membership.domain.EffortShareDisposition;
 import com.mannschaft.app.membership.domain.LeaveReason;
 import com.mannschaft.app.membership.domain.LeftTrigger;
 import com.mannschaft.app.membership.domain.RoleKind;
@@ -152,6 +153,15 @@ public class MembershipEntity {
     @Setter
     @Builder.Default
     private Integer archiveGeneration = 0;
+
+    /**
+     * F06.4.1: 加入期間が終わったときのチーム共有の扱い（データ設計 §8）。NULL = 在籍中、または移行前に終了した行。
+     * 終了 TX（MembershipService の終了境界）だけが設定する。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "effort_share_disposition", length = 32)
+    @Setter
+    private EffortShareDisposition effortShareDisposition;
 
     @PrePersist
     protected void onCreate() {

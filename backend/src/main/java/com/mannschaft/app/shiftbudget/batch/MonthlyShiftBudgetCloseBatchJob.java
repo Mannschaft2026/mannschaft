@@ -3,6 +3,7 @@ package com.mannschaft.app.shiftbudget.batch;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.admin.batch.BatchEndpoint;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,13 +24,16 @@ import java.time.YearMonth;
  * 起動制御は {@code feature.shift-budget.monthly-close-cron-enabled} で切替可能。
  * デフォルトは false（手動 API #11 でのみ動かす運用が安全）。</p>
  *
- * <p>Phase 10-β: {@link MonthlyShiftBudgetCloseService#closeAll} 経由に変更。
+ * <p>CMP-261021-0657: 入口 {@link MonthlyShiftBudgetCloseGate} を経由する。対象月は
+ * {@link MonthlyShiftBudgetCloseGate#previousMonth()}（壁時計 JST 基準の前月）で決め、
+ * {@link MonthlyShiftBudgetCloseGate#closeAll} が「月末を過ぎた月か」を組織ループ前に 1 回判定してから
+ * {@link MonthlyShiftBudgetCloseService#closeAll} へ委ねる（Phase 10-β の組織単位処理:
  * 1 組織の失敗が他組織を止めない + 失敗イベントを {@code shift_budget_failed_events} に記録 +
- * 運用者は管理 API / API #11 で個別再実行できる。</p>
+ * 運用者は管理 API / API #11 で個別再実行できる）。</p>
  *
  * <p>ShedLock により複数インスタンス環境でも 1 回だけ実行されることを保証する。
  * フィーチャーフラグ ({@code feature.shift-budget.enabled} の三値論理) は
- * {@link MonthlyShiftBudgetCloseService#closeFromBatch} 内で組織単位に再判定する
+ * Gate から委ねた先の {@link MonthlyShiftBudgetCloseService#closeFromBatch} 内で組織単位に再判定する
  * （バッチ全体で OFF でも、一部組織のみ ON のケースに対応する設計）。</p>
  */
 @Slf4j
@@ -39,7 +43,8 @@ import java.time.YearMonth;
         havingValue = "true")
 public class MonthlyShiftBudgetCloseBatchJob {
 
-    private final MonthlyShiftBudgetCloseService closeService;
+    /** 入口（対象月を壁時計 JST で決め、未終了月を拒否する。CMP-261021-0657）。 */
+    private final MonthlyShiftBudgetCloseGate closeGate;
 
     /**
      * 毎月 1 日 02:00 JST に実行する。
@@ -53,10 +58,10 @@ public class MonthlyShiftBudgetCloseBatchJob {
     @SchedulerLock(name = "MonthlyShiftBudgetCloseBatchJob",
             lockAtMostFor = "30m", lockAtLeastFor = "5m")
     public void run() {
-        YearMonth targetMonth = YearMonth.now().minusMonths(1);
+        YearMonth targetMonth = closeGate.previousMonth();
         log.info("F08.7 月次締め cron 起動: 対象月={}", targetMonth);
 
-        MonthlyShiftBudgetCloseService.AllOrgsCloseResult result = closeService.closeAll(targetMonth);
+        MonthlyShiftBudgetCloseService.AllOrgsCloseResult result = closeGate.closeAll(targetMonth);
 
         log.info("F08.7 月次締め cron 完了: 対象月={}, processedOrgs={}, failedOrgs={}, "
                         + "totalClosedAllocations={}, totalConsumptions={}",

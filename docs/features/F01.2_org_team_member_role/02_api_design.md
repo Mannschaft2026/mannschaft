@@ -492,19 +492,33 @@ users も作らない。存在しない招待はベータ制限 OFF なら保留
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null`。`PENDING` のまま本人が既に在籍していれば（`/invite/<token>` など別経路で参加済み）、`JOINED` へ確定して返す（条件付き UPDATE。`invite_token_claims`・`used_count` には触れない） |
+| GET | `/api/v1/me/pending-invite` | 自分の保留。無ければ `data: null`。`PENDING` のまま本人が既に在籍していれば（`/invite/<token>` など別経路で参加済み）、`JOINED` へ確定して返す（条件付き UPDATE。`invite_token_claims`・`used_count` には触れない）。在籍していなければ招待の有効性を DB 時刻で判定し、失効・期限切れなら `EXPIRED`（`failure_code=ROLE_002`）、上限到達なら `EXPIRED`（`ROLE_003`）へ確定して返す（下記「参照時の期限判定」） |
 | POST | `/api/v1/me/pending-invite/accept` | 承認して参加。応答 `{status}`（`JOINED`/`EXPIRED`/`UNAVAILABLE`） |
 | POST | `/api/v1/me/pending-invite/decline` | 辞退（`PENDING`→`DECLINED`。共有招待そのものは失効させない） |
 | POST | `/api/v1/me/pending-invite/reissue-request` | 失効した招待の再発行を招待権限者へ要請。応答 `{alreadyRequested}` |
-| POST | `/api/v1/me/pending-invite/dismiss` | 失効の案内を閉じる（`EXPIRED`/`REISSUE_REQUESTED`→`DISMISSED`） |
+| POST | `/api/v1/me/pending-invite/dismiss` | 失効・見送りの案内を閉じる（`EXPIRED`/`REISSUE_DECLINED`→`DISMISSED`）。依頼済み（`REISSUE_REQUESTED`）は 409 `AUTH_085`（閉じても依頼の取り下げにならない） |
 
 GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joinable`（公開・非アーカイブ・非 PROVISIONED）・
 `publicPath`（`joinable` のときだけ `/teams/{slug}` または `/organizations/{slug}`。参加申し込みへの導線）・
 `reissueRequestedAt`・`retryAvailableAt`（`ACCEPTING` のときだけ。処理開始から5分後）。
 
 状態: `PENDING`→`ACCEPTING`→`JOINED`/`EXPIRED`/`UNAVAILABLE`（原因不明の失敗は `PENDING` に戻す）、
-`PENDING`→`DECLINED`、`EXPIRED`→`REISSUE_REQUESTED`、`EXPIRED`/`REISSUE_REQUESTED`→`DISMISSED`、
-未終了→`DISCARDED`（7日間メール未確認の掃除・保護者全員の拒否）。
+`PENDING`→`DECLINED`、`PENDING`→`EXPIRED`（参照時の期限判定）、`EXPIRED`→`REISSUE_REQUESTED`、
+`REISSUE_REQUESTED`→`PENDING`（招待権限者の再招待）、`REISSUE_REQUESTED`→`REISSUE_DECLINED`（招待権限者の見送り）、
+`REISSUE_REQUESTED`→`JOINED`（再招待の時点で在籍済み）、`EXPIRED`/`REISSUE_DECLINED`→`DISMISSED`、
+未終了（`PENDING`/`ACCEPTING`/`EXPIRED`/`REISSUE_REQUESTED`）→`DISCARDED`（7日間メール未確認の掃除・保護者全員の拒否）。
+`REISSUE_DECLINED` は未終了に含めない（破棄の対象外）。
+
+状態の集合（CMP-261107-1833 PR3）: 再依頼できる `REISSUABLE`={`EXPIRED`,`REISSUE_REQUESTED`}（`reissue-request`）と、
+閉じられる `DISMISSIBLE`={`EXPIRED`,`REISSUE_DECLINED`}（`dismiss`）を分ける。依頼済み（`REISSUE_REQUESTED`）は閉じられない
+（実機 D-1・殿の裁定。依頼の取り下げは機能として用意しない。dismiss は他の状態不一致と同じ 409 `AUTH_085` で、状態は変わらず管理者の一覧に残る）。見送られた依頼は
+閉じる前でも後でも再依頼できない（409 `AUTH_085`）。
+
+参照時の期限判定（PR3 設計 g）: GET は A-1 の在籍判定の後、`PENDING` なら保留が指す招待の有効性を DB の現在時刻で判定する
+（`InviteAcceptanceFacade#findInviteValidity`）。`expires_at` ちょうどは有効で、直後は失効。失効・期限切れは `ROLE_002`、
+上限到達は `ROLE_003` を `failure_code` に記録して条件付き UPDATE で `EXPIRED` にし、`joinable`・`publicPath` の案内を付ける。
+再招待の仮発行中（`revoked_at = created_at` かつ作成から60秒以内）は処理中として `PENDING` のまま返し、承認は `AUTH_086`（409）。
+60秒を過ぎた仮発行は失効扱い（`EXPIRED`・`ROLE_002`）。
 
 - 承認は `PendingInviteService`（TX なし）→ `PendingInviteStore`（auth の短TX。条件付き UPDATE で `ACCEPTING` を取る）→
   `InviteAcceptanceFacade#joinByInviteTokenHash`（通常の招待承諾と同じ短TXの連鎖）。使用回数・claim・監査は通常の承諾と同等。
@@ -539,8 +553,54 @@ GET の応答: `id`・`status`・`scopeType`・`scopeName`・`roleName`・`joina
     参加申請承認（`grantMemberRole`）は claim に触れない。
 - 再招待要請: `EXPIRED`/`REISSUE_REQUESTED` かつ `joinable=false` のときだけ。公開の招待先は 409 `AUTH_085`（参加申し込みへ誘導）。
   7日に1回だけ招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN）へ通知 `INVITE_REISSUE_REQUESTED` を送り、
-  期間内の再押下は通知せず `alreadyRequested: true`。通知は受信者の言語で、本文に要請者の表示名（メールアドレスは載せない）と招待先の名前を入れ、遷移先は対象の招待管理画面（`/teams/{slug}/invites` 等）。
+  期間内の再押下は通知せず `alreadyRequested: true`。通知は受信者の言語で、本文に要請者の表示名（メールアドレスは載せない）と招待先の名前を入れ、遷移先は対象の招待管理画面の再招待依頼の欄（`/teams/{slug}/invites#reissue-requests` 等）。
+  7日は前回の依頼時刻からの経過で数え、ちょうど7日以内は通知しない。再招待で `reissue_requested_at` は NULL に戻るので、
+  再発行した招待が失効した後は7日を待たずに再依頼できる。
 - エラー: `AUTH_084`（404・保留なし）、`AUTH_085`（409・状態不正）、`AUTH_086`（409・処理中）。
+
+#### 再招待依頼の受け手側（CMP-261107-1833 PR3）
+
+招待権限者（ADMIN、または `INVITE_MEMBERS` 権限を持つ DEPUTY_ADMIN。`InviteIssuerPolicy#canIssue`）が、
+失効した招待から登録した利用者の再招待依頼（`REISSUE_REQUESTED`）を一覧し、再招待または見送りを行う。
+`InviteReissueRequestController` が TEAM 用3本と ORGANIZATION 用3本を別メソッドで持ち（金型: `JoinRequestController`）、
+`InviteReissueRequestService`（TX なし）へ委譲する。いずれも `@AuthorizedInService`＋`@AlwaysReachable(CORE)`。
+
+| メソッド | パス | 内容 |
+|---|---|---|
+| GET | `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests?page&size` | 再招待依頼の一覧（古い順。`size` 既定20・最大50）。`data.content[]` と `data.totalElements` |
+| POST | `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests/{id}/reissue` | 再招待。応答 `{status: REISSUED, expiresAt}` または `{status: ALREADY_MEMBER}` |
+| POST | `/api/v1/{teams\|organizations}/{slug}/invite-reissue-requests/{id}/decline` | 見送り。応答 `{status: REISSUE_DECLINED}` |
+
+- 一覧の要素: `id`（保留 ID）・`requesterDisplayName`（FE は補間のみで表示）・`requesterAvatarUrl`（任意）・`requestedAt`・
+  `roleName`（実際に付与するロール）。メールアドレス・招待のハッシュは含めない。表示名・アバター・付与ロールはページごとに
+  まとめて引く（行数に依らない SQL 本数）。
+- 一覧と件数の契約: 述語は1つ（`status=REISSUE_REQUESTED`・スコープ一致・依頼者が `ACTIVE`・論理削除されていない。
+  `PendingInviteStore#countReissueRequests`/`pageReissueRequests`）。一覧の `totalElements` と管理者向け集約
+  （`INVITE_REISSUE`）の `pending_count` は一致する。ブロック中の依頼者は述語に入れず一覧に残る（操作時に判定）。
+  閉鎖中（アーカイブ）のスコープの一覧は0件で、再開すると戻る。
+- 付与ロール（`InviteReissueRequestService#resolveGrantRole`）: 元の招待のロールが招待で付与できるロール（MEMBER/SUPPORTER。
+  `InviteRolePolicy`・CMP-261124-0157）なら引き継ぎ、ADMIN/DEPUTY_ADMIN/GUEST/SYSTEM_ADMIN（承諾で 422 `ROLE_009` になる）や元の招待・ロールが引けない場合は MEMBER。一覧の `roleName` と
+  発行で同じ判定を使う。
+- 再招待の手順: slug→ID → 招待権限の確認（403）→ 依頼の確認（不在・他スコープ `ROLE_016`、`REISSUE_REQUESTED` 以外
+  `ROLE_017`、依頼者が非 ACTIVE・ブロック中 `ROLE_018`）→ 在籍済みなら `JOINED` にして `ALREADY_MEMBER`（招待は作らない）→
+  閉鎖中は `ROLE_002` → 仮発行 → 閉鎖世代の再確認 → auth の確定 → 有効化 → 監査。詳細は 03_business_logic.md。
+- 見送り: 条件付き UPDATE で `REISSUE_REQUESTED`→`REISSUE_DECLINED`。ブロック中の依頼者でも見送れる（非 ACTIVE は `ROLE_018`）。
+- 通知: 再招待（有効化の成功後）・見送りのコミット後に、依頼者だけへ `INVITE_REISSUED` / `INVITE_REISSUE_DECLINED`
+  （NORMAL・受信者の言語・本文に招待先の名前）。遷移先は `/dashboard?pendingInvite=open`（FE が保留を取り直し、「あとで」の
+  記録を無視してダイアログを出す）。配送に失敗しても確定は巻き戻さない。
+- 再発行した招待が有効な間は、同じ相手への DM 招待（承諾型招待）は重複として断られる（宛先付きの未失効招待があるため。仕様）。
+
+**エラーレスポンス**
+| ステータス | コード | 条件 |
+|---|---|---|
+| 401 | — | 未認証 |
+| 403 | `COMMON_002` | 招待権限が無い（INVITE_MEMBERS の無い DEPUTY・MEMBER・SUPPORTER・非メンバー・他スコープのパス） |
+| 404 | `TEAM_001`/`ORG_001` | slug の招待先が無い（論理削除・PROVISIONED を含む。slug 解決は ACTIVE の招待先だけ） |
+| 404 | `ROLE_016` | 依頼が無い・他スコープの依頼 ID（存在秘匿のため同じコード） |
+| 404 | `ROLE_002` | 招待先が閉鎖中、または仮発行の間に閉鎖された |
+| 409 | `ROLE_017` | 依頼は既に対応済み（`REISSUE_REQUESTED` 以外・競合の負け側） |
+| 409 | `ROLE_018` | 依頼者が参加できない（非 ACTIVE。再招待はブロック中も） |
+| 500 | `ROLE_019` | 仮発行した招待の有効化に失敗（保留は `PENDING`。60秒の窓を過ぎた次の参照で `EXPIRED` になり、7日を待たず再依頼できる） |
 - 画面（招待画面の新規登録導線・ログイン後の承認ダイアログ）は後続 PR で対応する。それまで招待画面は従来どおり
   チーム・組織のトークンを `inviteToken` として送らない（上記の段落）。
 - `valid=false` または `ROLE_002` は無効招待として表示する。それ以外の取得失敗は取得エラーとして表示し、同じ取得処理による再試行を提供する。
@@ -1477,3 +1537,128 @@ officers と同じ仕様・エラーハンドリング（数値上限のみ 20 �
 | `canGrantAdminOnlyPermissions` | Boolean | ADMIN 専用権限（`PermissionGroupService.ADMIN_ONLY_GRANTABLE_PERMISSIONS`）を含む権限グループの作成・更新・割当（付与・剥奪とも）ができるか。`AccessControlService.canActAsScopeAdminOnly`（スコープ ADMIN 本人で、かつ SYSTEM_ADMIN でない）。SYSTEM_ADMIN とスコープ ADMIN の兼任者は `scopeAdmin=true` でも `false`（`checkScopeAdminOnly` が拒否するため）|
 
 権限グループ一覧の各要素には `containsAdminOnlyPermission`（そのグループが ADMIN 専用権限を含むか）を載せる。含むグループの更新・削除・割当（外す操作も）は `canGrantAdminOnlyPermissions=true` の操作者だけができる。
+
+---
+
+## CMP-261124-0159: チームの非公開化（→ MEMBERS_AND_ABOVE）とサポーターの入口（2026-11-25 マスター裁定 MC-261125-0010）
+
+> **ステータス**: 🟢 設計完了。業務フローは [03_business_logic.md](03_business_logic.md)「非公開化フロー（CMP-261124-0159）」、是正 migration は [04_security_operations.md](04_security_operations.md) §7「CMP-261124-0159 是正 migration」、閲覧上限の正本は [F00 §20](../F00_content_visibility_resolver.md)。用語「メンバー限定」の正本は [F00.5 §2.6](../F00.5_membership_basis.md)。
+
+**依存**: CMP-261124-0157（SUPPORTER 招待で参加した人を正しく SUPPORTER 在籍にする是正。PR #4828 マージ済み）。本節の「SUPPORTER 在籍＝`memberships.role_kind='SUPPORTER'`」はその是正後の状態を前提にする。
+
+JSON は既存規約どおり camelCase、ページングなし。数値はすべて非 null。
+
+### 新規 `GET /api/v1/teams/{slug}/visibility-change-preview`
+
+公開範囲を変える前に、変えた場合に外れる人数などを返す確認用の事前問い合わせ。副作用なし。
+
+- 認可: `PATCH /api/v1/teams/{slug}` と同一（ADMIN+）。権限なし（MEMBER・サポーター・部外者・他チームの ADMIN）は `PATCH` の拒否と同一応答。不在 slug は 404 `TEAM_001`。
+- クエリ: `visibility`（必須。`PUBLIC` / `GUESTS_AND_ABOVE` / `SUPPORTERS_AND_ABOVE` / `MEMBERS_AND_ABOVE`。不正値は 400 `COMMON_001`）
+
+| フィールド | 型 | null | 説明 |
+|---|---|---|---|
+| `currentVisibility` | String | 不可 | 現在の公開範囲 |
+| `targetVisibility` | String | 不可 | 指定した公開範囲 |
+| `requiresConfirmation` | Boolean | 不可 | 現在が `MEMBERS_AND_ABOVE` 以外で指定が `MEMBERS_AND_ABOVE` のとき true（人数 0 でも true） |
+| `supportersToRemove` | Integer | 不可 | 外れる在籍サポーター数（`memberships.role_kind='SUPPORTER' AND left_at IS NULL`）。`requiresConfirmation=false` なら 0 |
+| `guestsToRemove` | Integer | 不可 | 外れるゲスト数（`user_roles` の GUEST 行） |
+| `pendingApplicationsToReject` | Integer | 不可 | 却下される PENDING のサポーター申請数 |
+| `supporterInviteTokensToRevoke` | Integer | 不可 | 無効化される有効な SUPPORTER 招待トークン数（`revoked_at IS NULL`） |
+| `version` | Long | 不可 | 判定時点のチームの楽観ロック版。`PATCH` の `version` にそのまま使う |
+
+人数は 4 本の COUNT（集合演算）で返す。対象人数に比例した問い合わせはしない。
+
+### 変更 `PATCH /api/v1/teams/{slug}`（リクエストに 1 項目追加）
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `confirmSupporterRemoval` | Boolean | 条件付き | `visibility` を `MEMBERS_AND_ABOVE` 以外から `MEMBERS_AND_ABOVE` に変えるときは `true` 必須。未指定・false なら 409 `TEAM_074`（何も変更しない）。それ以外の変更では無視する |
+
+- 応答（200）は既存どおり `ApiResponse<TeamResponse>`。`TeamResponse` の**直下**に `visibilityTransition`（オブジェクト、null 可）を追加する。遷移した `PATCH` の応答でだけ値が入り、遷移しなかった `PATCH`・`GET /teams/{slug}` ほか全ての取得系では `null`。FE の型 `types/team.ts` の `TeamResponse` と生成型（`npm run generate:types`）を更新する。
+
+| フィールド | 型 | null | 説明 |
+|---|---|---|---|
+| `visibilityTransition.removedSupporters` | Integer | 不可 | 実際に外したサポーター数（コミット時点の在籍全員） |
+| `visibilityTransition.removedGuests` | Integer | 不可 | 実際に外したゲスト数 |
+| `visibilityTransition.rejectedApplications` | Integer | 不可 | 却下した PENDING 申請数 |
+| `visibilityTransition.revokedSupporterInviteTokens` | Integer | 不可 | 無効化した SUPPORTER 招待トークン数 |
+
+- 事前問い合わせの人数とコミット時点の人数が違っても（その間に増減しても）、`confirmSupporterRemoval=true` は「コミット時点で在籍する全員を外す」ことへの同意として扱う。実数は応答の `visibilityTransition` で返す。
+- 並行更新は既存の `version`（楽観ロック）で弾く（既存の楽観ロック競合応答 409）。
+
+### 拒否の追加（非公開チームへのサポーター追加の禁止）
+
+| エンドポイント | 非公開チーム（`MEMBERS_AND_ABOVE`）での挙動 |
+|---|---|
+| `POST /api/v1/teams/{slug}/invite-tokens`（`roleId` が SUPPORTER ロール） | 403 `TEAM_073`。MEMBER の招待トークンは従来どおり発行できる |
+| `POST /api/v1/invite/{token}/join`（SUPPORTER ロールのトークン） | 403 `TEAM_073`。在籍・`invite_token_claims`・`used_count` を変えない |
+| `POST /api/v1/me/pending-invite/accept`（SUPPORTER ロールのトークン） | 応答 `{status: "UNAVAILABLE"}`（既存の値。在籍を作らない） |
+| `POST /api/v1/teams/{slug}/supporter-applications/{applicationId}/approve` | 403 `TEAM_073`。申請の状態は変えない |
+| `POST /api/v1/teams/{slug}/supporter-applications/bulk-approve` | 403 `TEAM_073`（1 件も承認しない。全体を拒否） |
+| `POST /api/v1/teams/{slug}/follow` | 既存どおり `assertCanView(TEAM)` で 403 `VISIBILITY_001`（変更なし・回帰固定） |
+| `PATCH /api/v1/teams/{slug}/members/{userId}/role`（GUEST・SUPPORTER への付与・降格） | 403 `TEAM_073`。ADMIN / DEPUTY_ADMIN / MEMBER 間の変更は従来どおり |
+| ロール割当の内部経路（`RoleService#assignRole` / `#changeRole` を呼ぶ全経路。管理画面・一括操作を含む） | GUEST・SUPPORTER を非公開チームに付与しようとすると 403 `TEAM_073`（関所で一律に判定） |
+| アーカイブからの復元（`archived_membership_grants` の復元。ライフイベント退出の取り消し等） | 非公開チームへの SUPPORTER / GUEST の復元は行わず、その行を復元対象から外す（他の行は復元する）。応答・監査ログに除外件数を残す |
+| 参加申請（`JoinRequestService`）の承認で SUPPORTER を作る経路・組織経由の付与（組織の操作で配下チームに在籍・ロールを作る経路） | 403 `TEAM_073`（関所で一律に判定） |
+
+- 上の拒否はすべて「入口の関所」（[03_business_logic.md](03_business_logic.md)「入口の関所」）で一律に判定する。新しい入口が増えても関所を通らずに SUPPORTER 在籍・GUEST を作れないことを ArchUnit `MembersOnlyTeamEntryChokePointTest`（F00 §20.6）で固定する（入口の網羅の番人）。
+- 作成・更新の応答本文でチームの中身（一覧・他人の投稿・添付 URL 等）を返す書き込み API は、読み取りと同じ門（F00 §20.3）を通す。
+
+- 判定順: 既存の認可（招待権限・申請承認権限）→ チームの公開範囲。権限のない利用者には従来の拒否を返し、`TEAM_073` で公開範囲を教えない。
+- `TeamService#followTeam`（呼び出し元のない死蔵コード）は撤去する。
+
+### エラーコード（新規。番号は現在の最大＋1 で予約、確定はマージ時に origin/main で再確認）
+
+| Code | HTTP | ja メッセージ | 用途 |
+|---|---|---|---|
+| `TEAM_073` | 403 | メンバー限定のチームにはサポーターを追加できません | 上表の拒否 |
+| `TEAM_074` | 409 | 公開範囲をメンバー限定にするには、サポーターとゲストが外れることの確認が必要です | `confirmSupporterRemoval` 未指定 |
+
+6 言語（`messages_{ja,en,zh,ko,es,de}.properties`）に登録し、`GlobalExceptionHandler` の status 表の `TEAM_072` の行（F01.2.1 §11 の並び）の直後に `Map.entry("TEAM_073", HttpStatus.FORBIDDEN)` と `Map.entry("TEAM_074", HttpStatus.CONFLICT)` を、理由コメント（CMP-261124-0159）付きで追加する。
+
+### FE（公開範囲を変える画面。精査で新設を決定）
+
+現状、チーム作成後に公開範囲を変える画面は無い（作成時の `EntityCreateDialog.vue` のみ。`TeamDetailInfo.vue` は表示だけ、`admin/settings.vue` にも無い）。そこで **`/teams/{slug}/info`（`TeamDetailInfo.vue`）の管理者欄に、公開範囲の Select と保存ボタンを新設**する。
+
+- **表示条件**: BE の `PATCH /teams/{slug}` の認可（`TeamController#updateTeam` の `checkAdminOrAbove`＝`DefaultAccessControlService#isAdminOrAbove`、そのチームの `user_roles` が ADMIN / DEPUTY_ADMIN）と**同じ判定結果を BE から受け取って**使う。`GET /api/v1/teams/{slug}/me/permissions`（`EffectivePermissionsResponse`）に `scopeAdminOrDeputy: Boolean`（非 null。`isAdminOrAbove(userId, teamId, "TEAM")` の結果）を追加し、`useRoleAccess()` に `canManageScope`（＝`scopeAdminOrDeputy`）を足して表示条件にする。`roleName` は SYSTEM_ADMIN を優先して返し、`isScopeAdmin` は ADMIN 割当だけを表すため、FE で組み立てると SYSTEM_ADMIN と DEPUTY_ADMIN の兼任者を取りこぼす。新しい prop `canEditVisibility` で `TeamDetailInfo.vue` に渡す。組織の `me/permissions` も同じ項目を返す（同一 DTO）。
+- 判定の区分: SYSTEM_ADMIN 単独（チームのロール割当なし）＝false、SYSTEM_ADMIN と ADMIN の兼任＝true、SYSTEM_ADMIN と DEPUTY_ADMIN の兼任＝true、ADMIN・DEPUTY_ADMIN＝true、MEMBER 以下＝false。
+- **選択肢**: `PUBLIC` / `GUESTS_AND_ABOVE` / `SUPPORTERS_AND_ABOVE` / `MEMBERS_AND_ABOVE`。表示は `team_visibility.*`（下の文言変更後）。初期値は現在値。
+- **保存の流れ**: 現在値と同じなら保存ボタンは無効。変更して保存を押すと、まず事前問い合わせを呼ぶ。`requiresConfirmation=true` なら確認ダイアログ（人数つき。0 人なら `bodyNone`）を出し、キャンセルなら `PATCH` を送らない。了承で `{visibility, confirmSupporterRemoval: true, version: 事前問い合わせの version}` を送る。`requiresConfirmation=false` なら確認なしで `{visibility, version}` を送る。
+- **応答の扱い**: 200 なら応答の `TeamResponse` で親シェルの `team` を**差し替える**（`useTeamShellContext` のミューテータ経由。再取得しない）。`visibilityTransition` が非 null なら実数をトースト（`transitionDone`）で出す。
+- **409 の分岐**: `error.code` が `TEAM_074` ならトースト `team_visibility.confirmRequired`（通常は起きない。確認を出し直す）。それ以外の 409（楽観ロック競合）はトースト `team_visibility.conflictReload`「他の人がチームを更新しました。最新の状態で確認し直してください」を出し、チームを再取得して**事前問い合わせからやり直す**（古い version で再送しない）。
+- **サポーター機能のスイッチ**: 従来どおり表示のみ（編集 UI は作らない）。非公開の間は「有効／無効」の横に `supporterSettingInactive` を添える。
+- **data-testid**: `team-visibility-select`・`team-visibility-save`・`team-visibility-confirm-dialog`・`team-visibility-confirm-ok`・`team-visibility-confirm-cancel`・`team-visibility-confirm-counts`・`team-supporter-setting-inactive`。
+- **公開範囲の選択肢の文言**: `MEMBERS_AND_ABOVE` の表示を 6 言語とも「メンバー限定」に変える（`common.json` の `team_visibility.MEMBERS_AND_ABOVE` と `scopeLabels.visibility.MEMBERS_AND_ABOVE`。ja「メンバー限定」・en「Members only」・zh「仅限成员」・ko「멤버 전용」・es「Solo miembros」・de「Nur Mitglieder」）。用語の正本 F00.5 §2.6 に合わせる。`file_sharing.json`・`tournament.json` の同名キーは別機能の段（ファイル・大会）なので変えない。
+
+### FE（招待・メンバー管理での SUPPORTER / GUEST）
+
+- `InviteTokenList.vue`（`/teams/{slug}/invites`）のロール選択: 非公開チームでは SUPPORTER の選択肢を**出さない**（MEMBER のみ）。既定値は MEMBER のまま。説明文に `supporterInviteDisabled` を出す。BE は 403 `TEAM_073` で拒否し、FE はそのメッセージをトーストに出す。
+- 発行済みの SUPPORTER 招待は非公開化で無効化されるため、一覧では既存の「無効」表示になる。
+- `MemberTable.vue`（`/teams/{slug}/members`）のロール変更: 非公開チームでは変更先に SUPPORTER・GUEST を出さない。BE が `TEAM_073` を返した場合はトーストに出し、表は変えない。
+
+| i18n キー（`common.json`、6 言語） | ja |
+|---|---|
+| `team_visibility.confirmMembersOnly.title` | 公開範囲を「メンバー限定」にします |
+| `team_visibility.confirmMembersOnly.body` | サポーター {supporters} 人とゲスト {guests} 人がチームから外れ、通知が届きます。承認待ちのサポーター申請 {applications} 件は却下され、サポーター招待 {tokens} 件は使えなくなります。元に戻しても自動では戻りません。 |
+| `team_visibility.confirmMembersOnly.bodyNone` | 外れる人はいません。承認待ちのサポーター申請とサポーター招待もありません。公開範囲を「メンバー限定」にしますか。 |
+| `team_visibility.confirmMembersOnly.confirm` | 外して変更する |
+| `team_visibility.supporterSettingInactive` | メンバー限定のチームではサポーターを受け付けません（設定は公開範囲を戻したときに使われます） |
+| `team_visibility.save` | 公開範囲を保存 |
+| `team_visibility.confirmRequired` | 公開範囲を「メンバー限定」にするには確認が必要です。もう一度保存してください |
+| `team_visibility.conflictReload` | 他の人がチームを更新しました。最新の状態で確認し直してください |
+| `team_visibility.MEMBERS_AND_ABOVE`（変更） | メンバー限定 |
+| `team_visibility.confirmMembersOnly.cancel` | やめる |
+| `team_visibility.transitionDone` | 公開範囲を変更しました（サポーター {supporters} 人・ゲスト {guests} 人を外しました） |
+| `team_visibility.supporterInviteDisabled` | メンバー限定のチームではサポーター招待を発行できません |
+
+- 人数がすべて 0 のときは `bodyNone` を出す（確認と `confirmSupporterRemoval=true` は 0 人でも必須のまま）。
+- **`supporterEnabled` の扱い**: 非公開化しても `teams.supporter_enabled` の値は変えない（公開範囲を戻したときにそのまま使う）。非公開の間は入口が `TEAM_073` / `VISIBILITY_001` で閉じるため値に関わらずサポーターは増えない。設定画面ではスイッチを操作不可にし `supporterSettingInactive` を添える。
+
+**通知文（BE の 6 言語メッセージ `messages_{ja,en,zh,ko,es,de}.properties`。通知は BE が作るため FE の i18n には置かない）**
+
+| メッセージキー | ja |
+|---|---|
+| `notification.team.membersOnlyRemoved.title` | {0} から外れました |
+| `notification.team.membersOnlyRemoved.body` | チームの公開範囲が「メンバー限定」に変わったため、サポーター（ゲスト）としての登録が解除されました。 |
+
+通知は受信者本人のスコープ（チームではない）で保存する（F00 §20.3.1 の読み出し時の除外の対象にしないため）。

@@ -276,7 +276,6 @@
       "member_subtitle": "이 멤버의 팀별 통계입니다",
       "team_context": "대상 팀",
       "unknown_kind": "기타",
-      "forbidden": "이 통계를 볼 권한이 없습니다",
       "metric": {
         "total_matches": "출전 경기",
         "total_minutes": "총 출전 시간(분)",

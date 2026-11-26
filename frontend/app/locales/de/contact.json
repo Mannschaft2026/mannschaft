@@ -30,7 +30,7 @@
       "revoke_tooltip": "Widerrufen",
       "uses_unit": "x",
       "qr_alt": "QR-Code",
-      "qr_hint": "QR-Code scannen zum Hinzufügen"
+      "once_hint": "Link und QR-Code werden nur einmal direkt nach der Ausstellung angezeigt. Stelle bei Bedarf einen neuen aus."
     },
     "expiry": {
       "never": "Kein Ablauf",
@@ -41,9 +41,7 @@
       "create_success": "Einladungslink erfolgreich erstellt",
       "create_error": "Fehler beim Erstellen",
       "revoke_success": "Einladungslink widerrufen",
-      "revoke_error": "Fehler beim Widerrufen",
-      "copy_success": "Link kopiert",
-      "copy_error": "Fehler beim Kopieren"
+      "revoke_error": "Fehler beim Widerrufen"
     },
     "my_qr": "Mein Kontakt-QR-Code"
   },
