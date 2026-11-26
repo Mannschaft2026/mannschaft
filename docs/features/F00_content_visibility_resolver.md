@@ -3425,6 +3425,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 ### 20.7 非機能要件
 
 - 1000 万ユーザー・チーム数十万を前提とする。上限判定の追加コストは `filterAccessible` 1 回あたり問い合わせ 1 本（`teams` の主キー IN）まで。ループ内 Repository 呼び出し禁止。
+- 閲覧者のロールが既に MEMBER 以上のチームは上限が発動し得ないため、Resolver（`MembershipBatchQueryService`）は非公開チームの問い合わせに載せない。direct の TEAM すべてで MEMBER 以上なら 1 本も撃たない（在籍メンバーの閲覧の問い合わせ本数は本戦役前と同一。F03.16 AC-29 等の本数番人を維持）。委任役割で MEMBER 未満へ差し替える経路（`*Delegated*`）だけは、差し替えたチームを必要時に 1 本で引き直す。
 - 検索の母集団除外は `SearchViewerResolver` の既存の定数回の問い合わせに相乗りさせ、所属スコープ数に比例させない。
 - 非公開化の後始末（F01.2 03）は集合演算の UPDATE で行い、対象人数に比例した行単位の問い合わせを行わない（通知の作成のみ件数比例・非同期）。
 - 検証の主手段は**問い合わせ本数の番人**（Hibernate statistics）と **`EXPLAIN` の索引確認**とする（精査 M-7）。性能の実測は補助。

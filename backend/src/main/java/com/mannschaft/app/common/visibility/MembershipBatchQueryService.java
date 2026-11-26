@@ -41,7 +41,8 @@ import java.util.Set;
  *       direct / org で個別に引かず 1 バッチに統合している（SQL 数回帰の防止）。</li>
  *   <li>親 ORG の user_roles 権限ロール所属 1 回（{@code findByUserIdAndOrganizationIdIn}）</li>
  *   <li>非アクティブ親 ORG 抽出 1 回（{@code OrganizationRepository.findInactiveIdsByIdIn}、§11.6）</li>
- *   <li>direct に TEAM があるときのみ、非公開チームの ID 1 回（{@code MembersOnlyTeamQuery}、CMP-261124-0159・F00 §20.2）。
+ *   <li>direct に閲覧者のロールが MEMBER 未満の TEAM があるときのみ、非公開チームの ID 1 回（{@code MembersOnlyTeamQuery}、
+ *       CMP-261124-0159・F00 §20.2）。閲覧者が MEMBER 以上のチームは上限が発動し得ないため問い合わせに載せない（§20.7）。
  *       未ログインでも撃つ（非公開チームの PUBLIC コンテンツも隠すため）。SystemAdmin では撃たない。</li>
  * </ol>
  *
@@ -196,11 +197,66 @@ public class MembershipBatchQueryService {
 
         // SQL 9 (direct に TEAM があるときのみ): 非公開チームの ID（CMP-261124-0159・F00 §20.2 規則 5）。
         //        teams の主キー IN の 1 本。コンテンツ件数・チーム数に比例しない。リクエストをまたぐキャッシュは持たない。
-        Set<Long> membersOnlyTeamIds = fetchMembersOnlyTeamIds(safeDirect);
+        //        閲覧者がそのチームで既に MEMBER 以上なら上限は発動し得ない（isBeyondMembersOnlyTeamCap が常に偽）ため
+        //        問い合わせに載せない。direct の TEAM すべてで MEMBER 以上なら 1 本も撃たない（在籍メンバーの閲覧で本数不変）。
+        Set<Long> membersOnlyTeamIds = fetchMembersOnlyTeamIds(
+                excludeTeamsWithMemberOrAbove(safeDirect, roleByScope));
 
         return new UserScopeRoleSnapshot(
                 false, roleByScope, parentOrgs, orgMemberOf, suspendedOrgIds,
                 descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId, membersOnlyTeamIds);
+    }
+
+    /**
+     * 閲覧者のロールが既に MEMBER 以上の TEAM スコープを除いた集合を返す（CMP-261124-0159・F00 §20.7）。
+     *
+     * <p>親チーム上限はロールが MEMBER 未満のときだけ発動する（{@link UserScopeRoleSnapshot#isBeyondMembersOnlyTeamCap}）。
+     * MEMBER 以上のチームを非公開か問い合わせても判定結果は変わらないため、問い合わせ対象から外す。
+     * 委任役割でロールを MEMBER 未満へ差し替える経路は、差し替え時に
+     * {@link #supplementMembersOnlyTeamCapForRoleOverride} で外したチームを引き直す。</p>
+     */
+    private static Set<ScopeKey> excludeTeamsWithMemberOrAbove(Set<ScopeKey> directScopes,
+                                                               Map<ScopeKey, String> roleByScope) {
+        Set<ScopeKey> result = new HashSet<>();
+        for (ScopeKey s : directScopes) {
+            String role = roleByScope.get(s);
+            if ("TEAM".equals(s.scopeType()) && role != null && RolePriority.isAtLeast(role, "MEMBER")) {
+                continue;
+            }
+            result.add(s);
+        }
+        return result;
+    }
+
+    /**
+     * 委任役割（{@code canViewDelegated} 系）で所有スコープのロールを差し替えたスナップショットに、
+     * 親チーム上限の判定材料を補う（CMP-261124-0159・F00 §20.2）。
+     *
+     * <p>{@link #snapshotForUser} は閲覧者本人が MEMBER 以上の TEAM を非公開か問い合わせない。委任役割が MEMBER 未満で
+     * 本人のロールが MEMBER 以上だったチームは非公開か未確認のため、ここで当該チームだけを 1 本で引き直して集合に足す。
+     * それ以外（本人も MEMBER 未満＝既に問い合わせ済み・委任役割が MEMBER 以上・TEAM 以外・SystemAdmin）は問い合わせない。</p>
+     *
+     * @param original      本人のスナップショット（差し替え前）
+     * @param delegated     委任役割へ差し替えたスナップショット
+     * @param scope         差し替えたスコープ
+     * @param delegatedRole 委任役割
+     * @return 親チーム上限の判定材料を補ったスナップショット
+     */
+    public UserScopeRoleSnapshot supplementMembersOnlyTeamCapForRoleOverride(UserScopeRoleSnapshot original,
+                                                                        UserScopeRoleSnapshot delegated,
+                                                                        ScopeKey scope, String delegatedRole) {
+        if (original.isSystemAdmin() || scope == null || scope.scopeId() == null
+                || !"TEAM".equals(scope.scopeType())
+                || (delegatedRole != null && RolePriority.isAtLeast(delegatedRole, "MEMBER"))) {
+            return delegated;
+        }
+        String originalRole = original.roleByScope().get(scope);
+        if (originalRole == null || !RolePriority.isAtLeast(originalRole, "MEMBER")) {
+            return delegated;
+        }
+        Set<Long> membersOnly = new HashSet<>(delegated.membersOnlyTeamIds());
+        membersOnly.addAll(membersOnlyTeamQuery.findMembersOnlyTeamIds(List.of(scope.scopeId())));
+        return delegated.withMembersOnlyTeamIds(membersOnly);
     }
 
     /**

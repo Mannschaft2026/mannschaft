@@ -383,7 +383,11 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         UserScopeRoleSnapshot snapshot = buildSnapshot(
                 viewerUserId, directScopes, orgWideScopes, descendantScopes);
         if (delegatedRole != null) {
-            snapshot = withDelegatedRole(snapshot, scopeOf(row), delegatedRole);
+            // CMP-261124-0159: 本人が MEMBER 以上のチームは非公開か問い合わせていないため、委任役割が MEMBER 未満なら
+            // 差し替え後に当該チームの親チーム上限の判定材料を補う（F00 §20.2・§20.7）。
+            UserScopeRoleSnapshot own = snapshot;
+            snapshot = membershipBatchQueryService.supplementMembersOnlyTeamCapForRoleOverride(
+                    own, withDelegatedRole(own, scopeOf(row), delegatedRole), scopeOf(row), delegatedRole);
         }
 
         // 3) status ガード

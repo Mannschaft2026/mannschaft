@@ -2,6 +2,7 @@ package com.mannschaft.app.common;
 
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.ReferenceType;
+import com.mannschaft.app.common.visibility.perf.SqlIntentCounter;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -137,16 +138,45 @@ class MembersOnlyTeamCapIntegrationTest extends AbstractMySqlIntegrationTest {
         });
         assertThat(albums).hasSize(500);
 
+        // 1 件側は閲覧者が在籍しないチーム（i=1）のアルバムにする（非公開チームの判定 1 本が撃たれる側で比べる）。
+        Long outsiderTeam = extraTeams.get(1);
+        Long memberTeam = extraTeams.get(0);
+        Long outsiderAlbum = albumOf(outsiderTeam);
+        Long memberAlbum = albumOf(memberTeam);
         long many = countStatements(() -> contentVisibilityChecker.filterAccessible(
                 ReferenceType.PHOTO_ALBUM, albums, viewer));
         long one = countStatements(() -> contentVisibilityChecker.filterAccessible(
-                ReferenceType.PHOTO_ALBUM, albums.subList(0, 1), viewer));
+                ReferenceType.PHOTO_ALBUM, List.of(outsiderAlbum), viewer));
         assertThat(many).as("500 件・50 チームでも 1 件のときと同じ本数（チーム数・件数に比例しない）").isEqualTo(one);
+        // F00 §20.7: 閲覧者が MEMBER 以上のチームだけなら非公開チームの判定を撃たない（在籍メンバーの本数は本戦役前と同一）。
+        assertThat(membersOnlyTeamQueryCount(() -> contentVisibilityChecker.filterAccessible(
+                ReferenceType.PHOTO_ALBUM, List.of(memberAlbum), viewer)))
+                .as("MEMBER のチームだけなら非公開チームの判定を撃たない").isZero();
+        assertThat(membersOnlyTeamQueryCount(() -> contentVisibilityChecker.filterAccessible(
+                ReferenceType.PHOTO_ALBUM, List.of(outsiderAlbum), viewer)))
+                .as("在籍しないチームを含むなら非公開チームの判定は 1 本").isEqualTo(1);
 
         // 未ログイン: 本戦役前は射影 1 本だけ。非公開チームの判定 1 本が足されて 2 本になる（+1 本）。
         long anonymous = countStatements(() -> contentVisibilityChecker.filterAccessible(
                 ReferenceType.PHOTO_ALBUM, albums, null));
         assertThat(anonymous).as("未ログイン: 射影 1 本＋非公開チーム判定 1 本").isEqualTo(2);
+    }
+
+    private Long albumOf(Long teamId) {
+        return tx.execute(t -> ((Number) em.createNativeQuery(
+                        "SELECT MIN(id) FROM photo_albums WHERE team_id = :t")
+                .setParameter("t", teamId).getSingleResult()).longValue());
+    }
+
+    /** 非公開チームの判定（teams の visibility = 'MEMBERS_AND_ABOVE' の問い合わせ）の本数。 */
+    private long membersOnlyTeamQueryCount(Runnable action) {
+        try (SqlIntentCounter.CurrentThreadCapture capture = SqlIntentCounter.captureCurrentThread()) {
+            action.run();
+            return capture.capturedSqls().stream()
+                    .filter(sql -> sql.toLowerCase(java.util.Locale.ROOT).contains("from teams")
+                            && sql.contains("MEMBERS_AND_ABOVE"))
+                    .count();
+        }
     }
 
     private long countStatements(Runnable action) {

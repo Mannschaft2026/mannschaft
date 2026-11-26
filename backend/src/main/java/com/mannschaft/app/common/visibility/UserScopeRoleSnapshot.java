@@ -41,6 +41,7 @@ import java.util.Set;
  *                                ロール名が解決できない所属は本マップに現れない（所属集合には残る）。
  * @param membersOnlyTeamIds      判定対象コンテンツの所属チーム（direct の TEAM スコープ）のうち、
  *                                非公開チーム（{@code teams.visibility = MEMBERS_AND_ABOVE}）の ID 集合
+ *                                （閲覧者のロールが既に MEMBER 以上のチームは上限が発動し得ないため問い合わせず、含まれないことがある）
  *                                （CMP-261124-0159・F00 §20.2 規則 4/5）。{@link #isBeyondMembersOnlyTeamCap} が
  *                                親チーム上限の判定に使う。SystemAdmin のスナップショットでは常に空（上限を課さない。規則 6）。
  */

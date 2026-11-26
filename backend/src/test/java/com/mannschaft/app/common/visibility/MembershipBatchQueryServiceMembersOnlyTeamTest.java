@@ -1,7 +1,10 @@
 package com.mannschaft.app.common.visibility;
 
 import com.mannschaft.app.common.MembersOnlyTeamQuery;
+import com.mannschaft.app.membership.domain.RoleKind;
+import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.repository.MembershipRepository;
+import com.mannschaft.app.membership.repository.MembershipScopeRoleProjection;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.repository.UserRoleRepository;
@@ -22,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -98,5 +102,85 @@ class MembershipBatchQueryServiceMembersOnlyTeamTest {
         service.snapshotForUser(null, Set.of(ORG_10), Set.of());
 
         verify(membersOnlyTeamQuery, never()).findMembersOnlyTeamIds(anyCollection());
+    }
+    @Test
+    @DisplayName("F00 §20.7: 閲覧者が既に MEMBER 以上のチームは上限が発動し得ないため問い合わせに載せない（在籍メンバーの閲覧で本数不変）")
+    void MEMBER以上のチームは問い合わせに載せない() {
+        when(userRoleRepository.existsSystemAdminByUserId(5L)).thenReturn(0L);
+        when(membershipRepository.findActiveRoleKindsByUserAndScopes(eq(5L), anySet(), anySet()))
+                .thenReturn(List.of(membership(1L, RoleKind.MEMBER), membership(2L, RoleKind.SUPPORTER)));
+        when(membersOnlyTeamQuery.findMembersOnlyTeamIds(anyCollection())).thenReturn(Set.of(2L));
+
+        UserScopeRoleSnapshot snapshot = service.snapshotForUser(5L, Set.of(TEAM_1, TEAM_2), Set.of());
+
+        assertThat(snapshot.isBeyondMembersOnlyTeamCap(TEAM_1)).isFalse();
+        assertThat(snapshot.isBeyondMembersOnlyTeamCap(TEAM_2)).isTrue();
+        verify(membersOnlyTeamQuery, times(1)).findMembersOnlyTeamIds(argThat(ids -> ids.size() == 1 && ids.contains(2L)));
+    }
+
+    @Test
+    @DisplayName("F00 §20.7: direct の TEAM すべてで MEMBER 以上なら非公開チームの問い合わせを 1 本も撃たない")
+    void 全チームMEMBER以上なら撃たない() {
+        when(userRoleRepository.existsSystemAdminByUserId(5L)).thenReturn(0L);
+        when(membershipRepository.findActiveRoleKindsByUserAndScopes(eq(5L), anySet(), anySet()))
+                .thenReturn(List.of(membership(1L, RoleKind.MEMBER)));
+
+        UserScopeRoleSnapshot snapshot = service.snapshotForUser(5L, Set.of(TEAM_1), Set.of());
+
+        assertThat(snapshot.isBeyondMembersOnlyTeamCap(TEAM_1)).isFalse();
+        verify(membersOnlyTeamQuery, never()).findMembersOnlyTeamIds(anyCollection());
+    }
+
+    @Test
+    @DisplayName("委任役割で MEMBER 未満へ差し替えたチームは、本人が MEMBER 以上で未確認だった分だけ引き直して上限を課す")
+    void 委任役割の差し替えで未確認チームを引き直す() {
+        UserScopeRoleSnapshot own = new UserScopeRoleSnapshot(false, java.util.Map.of(TEAM_1, "MEMBER"),
+                null, null, null, null, null, null);
+        UserScopeRoleSnapshot replaced = new UserScopeRoleSnapshot(false, java.util.Map.of(TEAM_1, "SUPPORTER"),
+                null, null, null, null, null, null);
+        when(membersOnlyTeamQuery.findMembersOnlyTeamIds(anyCollection())).thenReturn(Set.of(1L));
+
+        UserScopeRoleSnapshot result =
+                service.supplementMembersOnlyTeamCapForRoleOverride(own, replaced, TEAM_1, "SUPPORTER");
+
+        assertThat(result.isBeyondMembersOnlyTeamCap(TEAM_1)).isTrue();
+        verify(membersOnlyTeamQuery, times(1)).findMembersOnlyTeamIds(List.of(1L));
+    }
+
+    @Test
+    @DisplayName("委任役割が MEMBER 以上、または本人も MEMBER 未満（問い合わせ済み）なら引き直さない")
+    void 委任役割の差し替えで引き直さない場合() {
+        UserScopeRoleSnapshot own = new UserScopeRoleSnapshot(false, java.util.Map.of(TEAM_1, "MEMBER"),
+                null, null, null, null, null, null);
+        UserScopeRoleSnapshot asMember = new UserScopeRoleSnapshot(false, java.util.Map.of(TEAM_1, "MEMBER"),
+                null, null, null, null, null, null);
+        service.supplementMembersOnlyTeamCapForRoleOverride(own, asMember, TEAM_1, "MEMBER");
+
+        UserScopeRoleSnapshot ownSupporter = new UserScopeRoleSnapshot(false, java.util.Map.of(TEAM_1, "SUPPORTER"),
+                null, null, null, null, null, null).withMembersOnlyTeamIds(Set.of(1L));
+        UserScopeRoleSnapshot result = service.supplementMembersOnlyTeamCapForRoleOverride(
+                ownSupporter, ownSupporter, TEAM_1, "SUPPORTER");
+
+        assertThat(result.isBeyondMembersOnlyTeamCap(TEAM_1)).isTrue();
+        verify(membersOnlyTeamQuery, never()).findMembersOnlyTeamIds(anyCollection());
+    }
+
+    private static MembershipScopeRoleProjection membership(Long teamId, RoleKind roleKind) {
+        return new MembershipScopeRoleProjection() {
+            @Override
+            public ScopeType getScopeType() {
+                return ScopeType.TEAM;
+            }
+
+            @Override
+            public Long getScopeId() {
+                return teamId;
+            }
+
+            @Override
+            public RoleKind getRoleKind() {
+                return roleKind;
+            }
+        };
     }
 }
