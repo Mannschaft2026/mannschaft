@@ -70770,8 +70770,52 @@ export interface components {
             /** Format: int64 */
             ticketTypeId: number;
         };
-        ApiResponseInviteTokenResponse: {
-            data?: components["schemas"]["InviteTokenResponse"];
+        ApiResponseEventInviteTokenIssuedResponse: {
+            data?: components["schemas"]["EventInviteTokenIssuedResponse"];
+        };
+        EventInviteTokenIssuedResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            /** Format: int64 */
+            eventId?: number;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            label?: string;
+            /** Format: int32 */
+            maxUses?: number;
+            token?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int32 */
+            usedCount?: number;
+        };
+        EventInviteTokenResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            /** Format: int64 */
+            eventId?: number;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            label?: string;
+            /** Format: int32 */
+            maxUses?: number;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int32 */
+            usedCount?: number;
+        };
+        ApiResponseEventInviteTokenResponse: {
+            data?: components["schemas"]["EventInviteTokenResponse"];
         };
         CreateEventDelegationRequest: {
             /** Format: int64 */
@@ -85512,6 +85556,9 @@ export interface components {
         PagedResponseRegistrationResponse: {
             data?: components["schemas"]["RegistrationResponse"][];
             meta?: components["schemas"]["PageMeta"];
+        };
+        ApiResponseListEventInviteTokenResponse: {
+            data?: components["schemas"]["EventInviteTokenResponse"][];
         };
         ApiResponseEventDelegationListResponse: {
             data?: components["schemas"]["EventDelegationListResponse"];
@@ -137756,7 +137803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseListEventInviteTokenResponse"];
                 };
             };
         };
@@ -137782,7 +137829,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseEventInviteTokenIssuedResponse"];
                 };
             };
         };
@@ -137805,7 +137852,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseEventInviteTokenResponse"];
                 };
             };
         };

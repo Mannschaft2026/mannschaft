@@ -85757,7 +85757,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseListEventInviteTokenResponse"
                 }
               }
             }
@@ -85797,7 +85797,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseEventInviteTokenIssuedResponse"
                 }
               }
             }
@@ -85838,7 +85838,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseEventInviteTokenResponse"
                 }
               }
             }
@@ -214016,11 +214016,108 @@
           "ticketTypeId"
         ]
       },
-      "ApiResponseInviteTokenResponse": {
+      "ApiResponseEventInviteTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/InviteTokenResponse"
+            "$ref": "#/components/schemas/EventInviteTokenIssuedResponse"
+          }
+        }
+      },
+      "EventInviteTokenIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "token": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "EventInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ApiResponseEventInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EventInviteTokenResponse"
           }
         }
       },
@@ -253436,6 +253533,17 @@
           },
           "meta": {
             "$ref": "#/components/schemas/PageMeta"
+          }
+        }
+      },
+      "ApiResponseListEventInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventInviteTokenResponse"
+            }
           }
         }
       },
