@@ -31,6 +31,7 @@ interface World {
   orgO: Scope; teamA: Scope; teamC: Scope; teamW: Scope
   tId: number; d1: number; pW: number
   tName: string
+  run: string
   bulletinRef: number; chatRef: number
   thSeed: string; thSeedId: number
   chatSeed: string; chatSeedId: number
@@ -102,7 +103,7 @@ async function buildWorld() {
   const msg = await must(a1, 'POST', `/api/v1/chat/channels/${chat.refId}/messages`, { body: chatSeed })
   await must(a1, 'POST', `/api/v1/chat/channels/${chat.refId}/messages`, { body: `seedChatReply-${RUN}`, parentId: msg.data.id })
   W = {
-    orgAdmin, a1, a3, c1, z, w1, orgO, teamA, teamC, teamW, tId, d1, pW, tName,
+    orgAdmin, a1, a3, c1, z, w1, orgO, teamA, teamC, teamW, tId, d1, pW, tName, run: RUN,
     bulletinRef: bull.refId, chatRef: chat.refId,
     thSeed, thSeedId: Number(th.data.id), chatSeed, chatSeedId: Number(msg.data.id),
   }
@@ -134,7 +135,7 @@ test('10 [AC-P01/P23/P24/P25/P28] 参加チーム ADMIN: カード→連絡ス�
   await expect(page).toHaveURL(new RegExp(`/teams/${W.teamA.slug}/tournaments/${W.tId}/communication`))
   await expect(page.getByRole('heading', { name: W.tName })).toBeVisible()
   await expect(page.getByRole('button', { name: '大会全体' })).toBeVisible()
-  await expect(page.getByRole('button', { name: `D1-${RUN}` })).toBeVisible()
+  await expect(page.getByRole('button', { name: `D1-${W.run}` })).toBeVisible()
   await expect(page.getByRole('button', { name: '掲示板' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'チャット' })).toBeVisible()
   await expect(page.getByText(W.thSeed).first()).toBeVisible()
@@ -219,7 +220,7 @@ test('11 [AC-P03/P24/P25/P28] 参加チーム MEMBER: 閲覧のみ（新規作�
   await expect(page.getByText(W.chatSeed).first()).toBeVisible()
   await shot(page, '11-a3-chat-disabled')
   await page.getByTestId('thread-reply-btn').first().click()
-  await expect(page.getByText(`seedChatReply-${RUN}`).first()).toBeVisible()
+  await expect(page.getByText(`seedChatReply-${W.run}`).first()).toBeVisible()
   await expect(page.getByTestId('thread-reply-input')).toHaveCount(0)
   await page.keyboard.press('Enter')
   await shot(page, '11-a3-chat-thread-no-reply')
@@ -227,6 +228,8 @@ test('11 [AC-P03/P24/P25/P28] 参加チーム MEMBER: 閲覧のみ（新規作�
   // 送信 API 直呼びも 403
   const directChat = await apiAs(W.a3, 'POST', `/api/v1/chat/channels/${W.chatRef}/messages`, { body: 'a3 直呼びチャット' })
   log({ step: 'a3 direct chat', status: directChat.status, body: JSON.stringify(directChat.body).slice(0, 300) })
+  expect(directChat.status).toBe(403)
+  expect(JSON.stringify(directChat.body)).toContain('TOUR_031')
   await context.close()
 })
 
