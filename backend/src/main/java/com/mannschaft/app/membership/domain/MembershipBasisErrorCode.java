@@ -62,7 +62,20 @@ public enum MembershipBasisErrorCode implements ErrorCode {
 
     /** 役職カタログが存在しない。 */
     MEMBERSHIP_POSITION_CATALOG_NOT_FOUND("MEMBERSHIP_POSITION_CATALOG_NOT_FOUND",
-            "役職カタログが見つかりません", Severity.WARN);
+            "役職カタログが見つかりません", Severity.WARN),
+
+    /**
+     * 運営アカウント（SYSTEM_ADMIN）はテナント（チーム・組織・委員会・村・サポーター）に所属できない（403）。
+     *
+     * <p>戦役 Z-A PR2（docs/security/03_role_authority_model.md §3.6、マスター決定 2026-11-26
+     * 「運営は運営専用アカウント。個人アカウントとの併用禁止」）。判定は
+     * {@code PlatformAccountAffiliationPolicy#assertAffiliatable} に一元化する。</p>
+     *
+     * <p>試練（テスト先行）で定数のみ先置きしたスタブ。403 の宣言に合わせた
+     * {@code GlobalExceptionHandler.ERROR_CODE_STATUS_MAP} への登録は実装（出陣）で行う。</p>
+     */
+    MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN("MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN",
+            "運営アカウントはチーム・組織・委員会に所属できません", Severity.WARN);
 
     private final String code;
     private final String message;

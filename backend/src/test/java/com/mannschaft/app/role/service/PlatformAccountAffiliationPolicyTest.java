@@ -1,0 +1,89 @@
+package com.mannschaft.app.role.service;
+
+import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.GlobalExceptionHandler;
+import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
+import com.mannschaft.app.role.repository.UserRoleRepository;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+
+/**
+ * 戦役 Z-A PR2 受け入れ条件 P5: 運営アカウント所属禁止の判定窓口
+ * {@link PlatformAccountAffiliationPolicy} の単体テスト（試練）。
+ *
+ * <p>判定は既存の {@code UserRoleRepository#existsSystemAdminByUserId} だけで行い、
+ * role ドメインの {@link UserRoleRepository} 以外に依存しないこと（DI 循環回避）を固定する。</p>
+ */
+@ExtendWith(MockitoExtension.class)
+@DisplayName("PlatformAccountAffiliationPolicy（戦役Z-A PR2 / P5）")
+class PlatformAccountAffiliationPolicyTest {
+
+    private static final Long PLATFORM_USER_ID = 9001L;
+    private static final Long GENERAL_USER_ID = 101L;
+
+    @Mock
+    private UserRoleRepository userRoleRepository;
+
+    @InjectMocks
+    private PlatformAccountAffiliationPolicy policy;
+
+    @Test
+    @DisplayName("P5: 運営アカウントは assertAffiliatable で MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN になる")
+    void P5_運営アカウントは所属不可として拒否される() {
+        given(userRoleRepository.existsSystemAdminByUserId(PLATFORM_USER_ID)).willReturn(1L);
+
+        assertThatThrownBy(() -> policy.assertAffiliatable(PLATFORM_USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("P4/P5: 一般利用者は assertAffiliatable を素通りする")
+    void P5_一般利用者は素通りする() {
+        given(userRoleRepository.existsSystemAdminByUserId(GENERAL_USER_ID)).willReturn(0L);
+
+        assertThatCode(() -> policy.assertAffiliatable(GENERAL_USER_ID)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("P5: isPlatformAccount は運営アカウントで true・一般利用者で false（後継候補の除外用）")
+    void P5_isPlatformAccountは運営ロール保持を返す() {
+        given(userRoleRepository.existsSystemAdminByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        given(userRoleRepository.existsSystemAdminByUserId(GENERAL_USER_ID)).willReturn(0L);
+
+        assertThat(policy.isPlatformAccount(PLATFORM_USER_ID)).isTrue();
+        assertThat(policy.isPlatformAccount(GENERAL_USER_ID)).isFalse();
+    }
+
+    @Test
+    @DisplayName("P1: MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN は HTTP 403 に解決される")
+    void P1_エラーコードは403に解決される() {
+        assertThat(GlobalExceptionHandler.resolveStatus(
+                MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN))
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN.getMessage())
+                .isEqualTo("運営アカウントはチーム・組織・委員会に所属できません");
+    }
+
+    @Test
+    @DisplayName("P5: Policy の依存は UserRoleRepository だけ（DI 循環回避）")
+    void P5_依存はUserRoleRepositoryだけ() {
+        Constructor<?>[] ctors = PlatformAccountAffiliationPolicy.class.getDeclaredConstructors();
+        assertThat(ctors).hasSize(1);
+        assertThat(Arrays.asList(ctors[0].getParameterTypes())).containsExactly(UserRoleRepository.class);
+    }
+}

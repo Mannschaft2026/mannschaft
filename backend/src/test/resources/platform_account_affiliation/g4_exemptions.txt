@@ -1,0 +1,8 @@
+# 番人 G4（PlatformAccountAffiliationPolicyGuardTest）の除外表。
+# 形式: src/main/java からの相対パス<TAB>理由（理由は必須）。
+# 所属行の生成シンクを持つが、利用者の所属を新たに作らない（退任・整理の更新だけ／主体が利用者でない）ファイルに限る。
+# 「番人が赤いから足す」は禁止。所属を作る経路なら Policy を通すこと。
+com/mannschaft/app/team/service/TeamOrgAffiliationCommandService.java	チームの組織加盟（team_org_memberships）。主体はチームで、利用者の所属行ではない（変数名 membershipRepository が一致するだけ）
+com/mannschaft/app/committee/event/OrganizationMembershipCommitteeCleanupListener.java	組織離脱に伴う委員の退任（left_at を立てる saveAll のみ）。所属を作らない
+com/mannschaft/app/village/event/VillageUserCleanerEventListener.java	退会時の村所属の整理（退村扱いの更新のみ）。所属を作らない
+com/mannschaft/app/role/service/SharedInviteTokenIssuer.java	宛先の無い共有招待リンクの発行。受諾時に InviteAcceptanceFacade → MembershipGrantService で Policy を通す

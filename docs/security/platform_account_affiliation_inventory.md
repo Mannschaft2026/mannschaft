@@ -1,0 +1,73 @@
+# 運営アカウントのテナント所属禁止 — 経路の網羅表（戦役 Z-A PR2・草案）
+
+状態: **草案（試練時点）**。実装（出陣）で各行の「Policy 位置」を確定し、完了後に「草案」を外す。
+
+- 方針の正本: `docs/security/03_role_authority_model.md` §3.6（マスター決定 2026-11-26「運営は運営専用アカウント。個人アカウントとの併用禁止。村・サポーター（フォロー）も禁止」）
+- 判定の窓口: `com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy`
+  - `assertAffiliatable(userId)`: 運営アカウントなら `MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN`（403）
+  - `isPlatformAccount(userId)`: 例外を投げない判定（後継候補の選出から外す用途）
+  - 依存は `UserRoleRepository` だけ（`existsSystemAdminByUserId` を使う。新しいフラグは作らない）
+- 番人 G4: `PlatformAccountAffiliationPolicyGuardTest`（生成シンクを持つファイルは Policy を呼ぶ。基準線 `backend/src/test/resources/platform_account_affiliation/g4_sink_baseline.txt`、除外表 `g4_exemptions.txt`）
+- 点検 SQL: `backend/src/test/resources/platform_account_affiliation/inspection.sql`（Flyway 実スキーマで `PlatformAccountAffiliationInspectionFlywayIT` が 0 件を固定）
+
+行番号は 2026-11-26 の origin/main（598dea59）時点。
+
+## 1. 所属行を作る経路（P1）
+
+| ドメイン | 経路 | 作る行 | 判定する利用者 | 固定するテスト |
+|---|---|---|---|---|
+| membership | `MembershipService.join`:94（合流点。Team/Org の参加・フォロー、Supporter、RoleService.joinMembership:983、Provisioning 受諾:155 を束ねる） | memberships | `req.userId` | TenantPaths `JoinMergePoint` / IT P1・P4 |
+| role | `MembershipGrantService.grantMemberRole`:104（参加申請の承認） | memberships / user_roles | 申請者 | RolePaths `GrantMergePoint` |
+| role | `MembershipGrantService.grantRole`:139（招待の受諾・ロール招待） | memberships / user_roles | 受諾者 | RolePaths `GrantMergePoint` |
+| role | `InviteAcceptanceFacade.joinByInvite`:87/98・`acceptInvitationById`:108（招待の受諾入口） | （grantRole 経由） | 受諾者 | RolePaths `InviteAcceptance` |
+| role | `RoleService.assignRole`:158（save:207） | user_roles | 付与先 | RolePaths `RoleServicePaths` |
+| role | `RoleService.changeRole`:269（save:330） | user_roles | 対象者 | 同上 |
+| role | `RoleService.transferOwnership`:834（save:885） | user_roles | 譲渡先 | 同上 |
+| role | `OwnershipTransferOfferService.acceptOffer`:201 | （transferOwnership 経由） | 受諾者 | RolePaths `OwnershipOffer` |
+| role | `AdminRoleMutationLockService.grantAdminRole`:58（ProvisioningAcceptanceService:145 の受諾者） | user_roles | 付与先 | RolePaths `AdminGrant` |
+| role | `RoleSuccessionService.forceAssignInitialAdminOnUnarchive`:523（SystemAdminScopeForceUnarchiveController の指定） | user_roles | 指定先 | RolePaths `ForceUnarchive` |
+| role | `RoleSuccessionService.selectSuccessionCandidate`:148／`selectTopCandidates`（後継候補の選出） | （昇格） | 候補 | IT `P1_後継候補の選出から運営アカウントを除外する` |
+| team | `TeamService.createTeam`:148（user_roles:190・join:202） | user_roles / memberships | 作成者 | TenantPaths `TeamPaths` |
+| team | `TeamService.followTeam`:1076（join:1097） | memberships(SUPPORTER) | 本人 | 合流点で固定 |
+| organization | `OrganizationService.createOrganization`:117（user_roles:161・join:173） | user_roles / memberships | 作成者 | TenantPaths `OrganizationPaths` |
+| organization | `OrganizationMembershipService.followOrganization`（join:145） | memberships(SUPPORTER) | 本人 | 合流点で固定 |
+| supporter | `SupporterService.follow`:72（即時承認 join:98／手動承認の申請行:110） | memberships(SUPPORTER) / supporter_applications | 本人 | TenantPaths `SupporterFollow` |
+| supporter | `SupporterService.approve`:281・`bulkApprove`:318 | memberships(SUPPORTER) | 申請者 | 合流点で固定 |
+| joinrequest | `JoinRequestService.approve`:217（grantMemberRole:230） | （合流点） | 申請者 | 合流点で固定 |
+| committee | `CommitteeService.createCommittee`:57（委員長 save:111） | committees / committee_members | 作成者・初期委員長 | CommitteePaths `CreateCommittee` |
+| committee | `CommitteeInvitationService.acceptInvitation`:189（save:257） | committee_members | 受諾者 | CommitteePaths `CommitteeInvitations` |
+| village | `VillageMembershipService.join`:81 | village_memberships | 操作者（主体 USER） | VillagePaths `Join` |
+| village | `VillageInvitationService.accept`:163 | village_memberships | 受諾者 | VillagePaths `Invitations`・`NoSideEffects` |
+| village | `VillageJoinRequestService.approve`:244（admit:267） | village_memberships | 申請主体 | Slot.admit で固定 |
+| village | `VillageCreationRequestService.createRequest`:75（村長 admit:151）・`approve`:202（admit:241） | villages / village_memberships | 申請者 | VillagePaths `CreationRequests` |
+| village | `VillageMembershipSlotService.allocate`:82・`admit`:119（五入口の共通保存点） | village_memberships | 主体 USER | VillagePaths `Slot` |
+| village | `VillageMembershipProfileService.updateMyProfileVisibility`:61（save:73。既存の誤所属を延命させない） | village_memberships（更新） | 本人 | VillagePaths `Profile` |
+| village | `VillageHeadmanSuccessionBatchService.processVillage`:114（promote save:191） | village_memberships（村長昇格） | 候補（`isPlatformAccount` で除外） | HeadmanSuccessionTest |
+
+## 2. 運営アカウント宛ての招待・参加申請を作る経路（P2: 作成時点で拒否）
+
+| ドメイン | 経路 | 作る行 | 判定する利用者 | 固定するテスト |
+|---|---|---|---|---|
+| role | `MembershipInviteService.issueMembershipInvite`:90（DM 相手が宛先。`MembershipInviteTokenIssuer`） | invite_tokens（宛先付き） | 宛先 | RolePaths `MembershipInviteIssue` |
+| role | `OwnershipTransferOfferService.createOffer`:102 | ownership_transfer_offers | 譲渡先 | RolePaths `OwnershipOffer` |
+| joinrequest | `JoinRequestService.createRequest`:84 | join_requests | 申請者 | TenantPaths `JoinRequestCreate` |
+| supporter | `SupporterService.follow`（手動承認）:110 | supporter_applications | 本人 | TenantPaths `SupporterFollow` |
+| committee | `CommitteeInvitationService.sendInvitations`:79 | committee_invitations | 宛先（1 人でも運営なら全体を 403） | CommitteePaths `CommitteeInvitations` |
+| village | `VillageInvitationService.issue`:82（`targetUserId` 指定時。村長・長老の認可の後に判定） | village_invitations | 宛先 | VillagePaths `Invitations` |
+| village | `VillageJoinRequestService.createRequest`:89 | village_join_requests | 申請者 | VillagePaths `JoinRequests` |
+| village | `VillageCreationRequestService.createRequest`:75 | village_creation_requests | 申請者 | VillagePaths `CreationRequests` |
+
+## 3. 対象外（P3 と G4 の除外表）
+
+| 経路 | 理由 |
+|---|---|
+| `TeamService.createProvisionedTeam`:491・`OrganizationService.createProvisionedOrganization`:460 | 運営によるプロビジョニング作成。所属行を作らない（P3: TenantPaths と IT で固定） |
+| `TeamOrgAffiliationCommandService` | チームの組織加盟（主体はチーム） |
+| `OrganizationMembershipCommitteeCleanupListener` | 組織離脱に伴う委員の退任（更新のみ） |
+| `VillageUserCleanerEventListener` | 退会時の村所属の整理（更新のみ） |
+| `SharedInviteTokenIssuer` | 宛先の無い共有招待リンク（受諾時に合流点で判定） |
+
+## 4. 判断待ち（殿の御裁可を仰ぐ）
+
+- `social.FollowService.follow`（利用者→チーム/組織/利用者のタイムライン上のフォロー、follows 行）: テナントの所属ではなく SNS 的なフォロー。マスター決定の「サポーター（フォロー）」は SupporterService を指すと解し、本試練では対象外とした。含める場合は G4 の SINK に `FollowEntity` を足し、`FollowService` に Policy を通す。
+- `TeamFriendsService`（チーム→チームのフォロー）: 主体がチームなので対象外。

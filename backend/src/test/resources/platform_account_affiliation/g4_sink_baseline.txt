@@ -1,0 +1,26 @@
+# 番人 G4 の基準線: 所属行・宛先付き申込行の生成シンク件数（src/main/java からの相対パス<TAB>件数）。
+# 件数が増えた・新しいファイルに現れたら、その経路が PlatformAccountAffiliationPolicy を通ることを確かめてから更新する。
+com/mannschaft/app/committee/event/OrganizationMembershipCommitteeCleanupListener.java	1
+com/mannschaft/app/committee/service/CommitteeInvitationService.java	3
+com/mannschaft/app/committee/service/CommitteeService.java	5
+com/mannschaft/app/joinrequest/service/JoinRequestService.java	1
+com/mannschaft/app/membership/service/MembershipService.java	4
+com/mannschaft/app/organization/service/OrganizationService.java	2
+com/mannschaft/app/role/service/AdminRoleMutationLockService.java	2
+com/mannschaft/app/role/service/MembershipGrantService.java	2
+com/mannschaft/app/role/service/MembershipInviteTokenIssuer.java	2
+com/mannschaft/app/role/service/OwnershipTransferOfferService.java	1
+com/mannschaft/app/role/service/RoleService.java	8
+com/mannschaft/app/role/service/RoleSuccessionService.java	2
+com/mannschaft/app/role/service/SharedInviteTokenIssuer.java	1
+com/mannschaft/app/supporter/service/SupporterService.java	1
+com/mannschaft/app/team/service/TeamOrgAffiliationCommandService.java	1
+com/mannschaft/app/team/service/TeamService.java	2
+com/mannschaft/app/village/batch/VillageHeadmanSuccessionBatchService.java	2
+com/mannschaft/app/village/event/VillageUserCleanerEventListener.java	1
+com/mannschaft/app/village/service/VillageCreationRequestService.java	3
+com/mannschaft/app/village/service/VillageInvitationService.java	2
+com/mannschaft/app/village/service/VillageJoinRequestService.java	2
+com/mannschaft/app/village/service/VillageMembershipProfileService.java	1
+com/mannschaft/app/village/service/VillageMembershipService.java	6
+com/mannschaft/app/village/service/VillageMembershipSlotService.java	1
