@@ -150,6 +150,7 @@ class ShiftChangeRequestServiceAuthzTest {
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
         given(accessControlService.hasAdminOrPermissionInScope(REVIEWER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(REVIEWER_ID, TEAM_ID, "TEAM")).thenReturn(true);
         given(changeRequestRepository.saveAndFlush(any())).willAnswer(inv -> inv.getArgument(0));
 
         service.review(REQUEST_ID, reviewReq(), REVIEWER_ID);
@@ -192,6 +193,7 @@ class ShiftChangeRequestServiceAuthzTest {
         given(accessControlService.isAdminOrAbove(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.hasAdminOrPermissionInScope(REVIEWER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(REVIEWER_ID, TEAM_ID, "TEAM")).thenReturn(true);
         given(changeRequestRepository.findAllByScheduleIdOrderByCreatedAtDesc(SCHEDULE_ID))
                 .willReturn(List.of());
 
@@ -244,6 +246,7 @@ class ShiftChangeRequestServiceAuthzTest {
         given(accessControlService.isAdminOrAbove(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.hasAdminOrPermissionInScope(REVIEWER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(REVIEWER_ID, TEAM_ID, "TEAM")).thenReturn(true);
 
         service.get(REQUEST_ID, REVIEWER_ID);
     }

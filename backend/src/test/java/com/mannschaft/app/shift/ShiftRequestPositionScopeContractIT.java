@@ -210,11 +210,10 @@ class ShiftRequestPositionScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-3: user_rolesのみのADMINは200、user_rolesのみのDEPUTY_ADMIN（MANAGE_SHIFTS 無し・切替OFF）は所属者として403")
+        @DisplayName("AC-3（CMP-261125-2114 で改訂）: user_rolesのみのADMIN（在籍なし）も、user_rolesのみのDEPUTY_ADMIN（MANAGE_SHIFTS 無し・切替OFF）も所属者として403")
         void userRolesOnly管理者() throws Exception {
             setAuth(userRolesOnlyAdminAId);
-            mockMvc.perform(get("/api/v1/shifts/requests").param("scheduleId", scheduleAId.toString()))
-                    .andExpect(status().isOk());
+            expectError(get("/api/v1/shifts/requests").param("scheduleId", scheduleAId.toString()), 403, "COMMON_002");
             // CMP-261125-2114: DEPUTY_ADMIN は MANAGE_SHIFTS（かつ在籍）が無ければ管理者の形で見られない。404 には化けさせない。
             setAuth(userRolesOnlyDeputyAId);
             expectError(get("/api/v1/shifts/requests").param("scheduleId", scheduleAId.toString()), 403, "COMMON_002");
@@ -313,13 +312,16 @@ class ShiftRequestPositionScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("正当ADMIN・user_rolesのみのADMINは200、チームロールを持たないSYSTEM_ADMINは404（CMP-261125-2114）")
+        @DisplayName("正当ADMINは200、user_rolesのみのADMIN（在籍なし）は403、チームロールを持たないSYSTEM_ADMINは404（CMP-261125-2114）")
         void 許可主体は200() throws Exception {
-            for (Long actor : List.of(adminTeamAId, userRolesOnlyAdminAId)) {
+            for (Long actor : List.of(adminTeamAId)) {
                 setAuth(actor);
                 mockMvc.perform(get("/api/v1/shifts/requests/summary").param("scheduleId", scheduleAId.toString()))
                         .andExpect(status().isOk());
             }
+            setAuth(userRolesOnlyAdminAId);
+            expectError(get("/api/v1/shifts/requests/summary").param("scheduleId", scheduleAId.toString()),
+                    403, "COMMON_002");
             setAuth(systemAdminId);
             expectError(get("/api/v1/shifts/requests/summary").param("scheduleId", scheduleAId.toString()),
                     404, "SHIFT_001");
@@ -478,12 +480,14 @@ class ShiftRequestPositionScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("提出者本人・当該チームADMIN・user_rolesのみのADMINは200、チームロールを持たないSYSTEM_ADMINは404（CMP-261125-2114）")
+        @DisplayName("提出者本人・当該チームADMINは200、user_rolesのみのADMIN（在籍なし）は403、チームロールを持たないSYSTEM_ADMINは404（CMP-261125-2114）")
         void 許可主体は200() throws Exception {
-            for (Long actor : List.of(memberTeamAId, adminTeamAId, userRolesOnlyAdminAId)) {
+            for (Long actor : List.of(memberTeamAId, adminTeamAId)) {
                 setAuth(actor);
                 mockMvc.perform(patchRequest(requestAId)).andExpect(status().isOk());
             }
+            setAuth(userRolesOnlyAdminAId);
+            expectError(patchRequest(requestAId), 403, "COMMON_002");
             setAuth(systemAdminId);
             expectError(patchRequest(requestAId), 404, "SHIFT_003");
         }
@@ -735,12 +739,14 @@ class ShiftRequestPositionScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("正当ADMIN・user_rolesのみのADMINは200、チームロールを持たないSYSTEM_ADMINは404（CMP-261125-2114）")
+        @DisplayName("正当ADMINは200、user_rolesのみのADMIN（在籍なし）は403、チームロールを持たないSYSTEM_ADMINは404（CMP-261125-2114）")
         void 許可主体は200() throws Exception {
-            for (Long actor : List.of(adminTeamAId, userRolesOnlyAdminAId)) {
+            for (Long actor : List.of(adminTeamAId)) {
                 setAuth(actor);
                 mockMvc.perform(patchPosition(positionAId)).andExpect(status().isOk());
             }
+            setAuth(userRolesOnlyAdminAId);
+            expectError(patchPosition(positionAId), 403, "COMMON_002");
             setAuth(systemAdminId);
             expectError(patchPosition(positionAId), 404, "SHIFT_004");
         }

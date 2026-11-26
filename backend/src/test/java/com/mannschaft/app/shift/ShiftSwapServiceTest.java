@@ -150,6 +150,7 @@ class ShiftSwapServiceTest {
         givenScopeResolvable();
         org.mockito.Mockito.lenient().when(accessControlService.hasAdminOrPermissionInScope(
                 userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS")).thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(userId, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     private ShiftSwapRequestEntity createPendingSwap() {
@@ -204,6 +205,7 @@ class ShiftSwapServiceTest {
         given(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.hasAdminOrPermissionInScope(userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(userId, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     /** 一覧 API の「当該チームの一般メンバー（SUPPORTER でない）」認可をモックする。 */

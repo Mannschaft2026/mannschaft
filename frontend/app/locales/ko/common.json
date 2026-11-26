@@ -1471,20 +1471,21 @@
     "load_more": "더 불러오기"
   },
   "teamShiftSettings": {
-    "title": "시프트 리마인드 설정",
-    "description": "희망 제출 기한 전 리마인드 알림 타이밍을 설정합니다",
+    "title": "시프트 설정",
+    "description": "희망 제출 기한 전 리마인드 알림 타이밍과 부관리자 열람 허용을 설정합니다",
     "reminder48h": "48시간 전 리마인드",
     "reminder24h": "24시간 전 리마인드",
     "reminder12h": "12시간 전 리마인드（추후 대응）",
     "atLeastOneRequired": "적어도 하나의 리마인드를 활성화해 주세요",
     "saved": "설정이 저장되었습니다",
     "deputyViewTitle": "부관리자 열람 허용",
-    "deputyViewDescription": "시프트 관리 권한(MANAGE_SHIFTS)이 없는 부관리자에게 시프트 정보 열람을 허용할지 설정합니다. 작성·편집·공개·배정·승인 등의 조작은 허용되지 않습니다.",
+    "deputyViewDescription": "권한 그룹으로 \"근무 시프트 관리\"를 부여받지 않은 부관리자에게 시프트 정보 열람을 허용할지 설정합니다. 작성·편집·공개·배정·승인 등의 조작은 허용되지 않습니다.",
     "deputyShiftView": "시프트 정보 열람 허용",
     "deputyShiftViewHint": "비공개 시프트표, 배정, 다른 사람의 교대/변경 요청, 희망 목록, 관리자용 PDF 출력, 대시보드의 처리 필요 항목을 볼 수 있습니다.",
     "deputyHourlyRateView": "다른 멤버의 시급 열람 허용",
     "deputyHourlyRateViewHint": "시급 설정 화면에서 다른 멤버의 시급을 볼 수 있습니다(등록·변경은 불가).",
-    "readOnlyNotice": "이 설정은 팀 관리자 또는 시프트 관리 권한(MANAGE_SHIFTS)을 가진 부관리자만 변경할 수 있습니다."
+    "deputyHourlyRateAdminOnly": "이 설정은 관리자만 변경할 수 있습니다.",
+    "readOnlyNotice": "이 설정은 관리자와 \"근무 시프트 관리\" 권한을 가진 부관리자가 변경할 수 있습니다. 시급 열람 허용은 관리자만 변경할 수 있습니다."
   },
   "corkboard": {
     "pin": "고정하기",

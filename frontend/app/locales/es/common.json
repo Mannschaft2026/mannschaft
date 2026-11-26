@@ -1471,20 +1471,21 @@
     "load_more": "Cargar más"
   },
   "teamShiftSettings": {
-    "title": "Configuración de recordatorios de turno",
-    "description": "Configura los tiempos de notificación de recordatorio antes de la fecha límite de presentación",
+    "title": "Configuración de turnos",
+    "description": "Configura los tiempos de recordatorio antes de la fecha límite de presentación y el acceso de lectura de los administradores adjuntos",
     "reminder48h": "Recordatorio 48 horas antes",
     "reminder24h": "Recordatorio 24 horas antes",
     "reminder12h": "Recordatorio 12 horas antes (próximamente)",
     "atLeastOneRequired": "Por favor activa al menos un recordatorio",
     "saved": "Configuración guardada",
     "deputyViewTitle": "Acceso de lectura para administradores adjuntos",
-    "deputyViewDescription": "Define si los administradores adjuntos sin el permiso de gestión de turnos (MANAGE_SHIFTS) pueden ver la información de turnos. Siguen sin poder crear, editar, publicar, asignar ni aprobar.",
+    "deputyViewDescription": "Define si los administradores adjuntos a los que ningún grupo de permisos concede \"Gestionar turnos\" pueden ver la información de turnos. Siguen sin poder crear, editar, publicar, asignar ni aprobar.",
     "deputyShiftView": "Permitir ver la información de turnos",
     "deputyShiftViewHint": "Podrán ver los cuadrantes sin publicar, las asignaciones, las solicitudes de cambio e intercambio de otros miembros, las listas de preferencias, la exportación PDF de administrador y los pendientes del panel.",
     "deputyHourlyRateView": "Permitir ver el salario por hora de otros miembros",
     "deputyHourlyRateViewHint": "Podrán ver el salario por hora de otros miembros en la página de configuración (sin poder registrarlo ni modificarlo).",
-    "readOnlyNotice": "Solo los administradores del equipo y los adjuntos con el permiso de gestión de turnos (MANAGE_SHIFTS) pueden cambiar esta configuración."
+    "deputyHourlyRateAdminOnly": "Solo los administradores pueden cambiar este ajuste.",
+    "readOnlyNotice": "Los administradores y los adjuntos con el permiso \"Gestionar turnos\" pueden cambiar esta configuración. El permiso para ver el salario por hora solo lo pueden cambiar los administradores."
   },
   "corkboard": {
     "pin": "Fijar",

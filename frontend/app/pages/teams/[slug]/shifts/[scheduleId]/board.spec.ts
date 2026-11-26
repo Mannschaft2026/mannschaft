@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   captureQuiet: vi.fn(),
   showError: vi.fn(),
   handleApiError: vi.fn(),
+  canViewShift: { value: false },
 }))
 const params = reactive({ slug: 'team-a', scheduleId: '425' })
 mockNuxtImport('useRoute', () => () => ({ params }))
@@ -31,6 +32,7 @@ mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: 
 mockNuxtImport('useShiftPermission', () => () => ({
   roleName: ref('MEMBER'),
   canManageShift: ref(false),
+  canViewShift: mocks.canViewShift,
   isDeputyWithoutManage: ref(false),
   loadPermissions: mocks.loadPermissions,
 }))
@@ -90,6 +92,7 @@ function renderPage(): VueWrapper {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.canViewShift.value = false
   mocks.getShiftSchedule.mockResolvedValue({
     data: { id: 425, teamId: 9, content: { title: '11月シフト' }, status: { status: 'DRAFT' } },
   })
@@ -209,5 +212,29 @@ describe('シフトボード: 戻る導線', () => {
     await flushPromises()
     expect(wrapper!.findAll('a[href="/teams/team-a/shifts"]')).toHaveLength(1)
     expect(wrapper!.findAll('.pi-arrow-left')).toHaveLength(1)
+  })
+})
+
+describe('シフトボード: PDF ボタンの出し分け（CMP-261125-2114 D5。BE の ShiftPdfFacade に合わせる）', () => {
+  async function pdfVisible(status: { status: string, publishedAt?: string | null }, canView: boolean): Promise<boolean> {
+    mocks.canViewShift.value = canView
+    mocks.getShiftSchedule.mockResolvedValue({
+      data: { id: 425, teamId: 9, content: { title: '11月シフト' }, status: { publishedAt: null, ...status } },
+    })
+    renderPage()
+    await flushPromises()
+    return wrapper!.find('shift-pdf-export-button-stub').exists()
+  }
+
+  it('管理者の形（閲覧可）は未公開でも出す', async () => {
+    expect(await pdfVisible({ status: 'DRAFT' }, true)).toBe(true)
+  })
+
+  it('それ以外の会員は、公開済みなら出す', async () => {
+    expect(await pdfVisible({ status: 'PUBLISHED' }, false)).toBe(true)
+  })
+
+  it('それ以外の会員は、未公開なら出さない（BE は 404 を返す）', async () => {
+    expect(await pdfVisible({ status: 'ADJUSTING' }, false)).toBe(false)
   })
 })

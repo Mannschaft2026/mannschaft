@@ -76,6 +76,7 @@ class ShiftSlotFacadeTest {
                 .thenReturn(true);
         org.mockito.Mockito.lenient().when(accessControlService.hasAdminOrPermissionInScope(
                 USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS")).thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     private static ShiftScheduleScope published() {
@@ -156,15 +157,14 @@ class ShiftSlotFacadeTest {
         }
 
         @Test
-        @DisplayName("user_roles のみの ADMIN は在籍を問わず通る（退行させない）")
-        void userRolesのみのADMINは通る() {
-            List<ShiftSlotResponse> slots = List.of();
+        @DisplayName("user_roles のみの ADMIN（退会済みでロールだけ残った）は在籍が無いので管理者の形で見られず、所属者向けの 403")
+        void userRolesのみのADMINは在籍が無ければ拒否() {
             given(slotService.resolveScheduleScope(SCHEDULE_ID)).willReturn(published());
             stubManager();
-            given(slotService.listSlots(SCHEDULE_ID, true)).willReturn(slots);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
-            assertThat(facade.listSlots(SCHEDULE_ID, USER_ID)).isSameAs(slots);
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            assertCode(catchThrowable(() -> facade.listSlots(SCHEDULE_ID, USER_ID)), CommonErrorCode.COMMON_002);
+            verify(slotService, never()).listSlots(anyLong(), org.mockito.ArgumentMatchers.anyBoolean());
         }
 
         @Test
@@ -184,6 +184,7 @@ class ShiftSlotFacadeTest {
             List<ShiftSlotResponse> slots = List.of();
             given(slotService.resolveScheduleScope(SCHEDULE_ID)).willReturn(published());
             given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
             given(accessControlService.hasAdminOrPermissionInScope(USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                     .willReturn(false);
             given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))

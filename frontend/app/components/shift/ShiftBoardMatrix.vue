@@ -53,6 +53,7 @@
                 :slot-id="slot.id"
                 :assignments="getAssignments(slot)"
                 :warnings="getSlotWarnings(slot.id)"
+                :readonly="readonly"
                 @drop="(userId) => $emit('dropUser', { fromSlotId: null, toSlotId: slot.id, userId })"
                 @remove-user="(userId) => $emit('removeUser', { slotId: slot.id, userId })"
                 @add-user="$emit('addUser', slot.id)"
@@ -76,6 +77,8 @@ interface Props {
   memberMap: Record<number, { userId: number; displayName: string; avatarUrl: string | null }>
   pendingRun: AssignmentRun | null
   scheduleVersion?: number
+  /** 閲覧のみ。割当の追加・解除・ドロップの導線を出さない（シフト管理の権限が無い人向け）。 */
+  readonly?: boolean
 }
 
 const props = defineProps<Props>()

@@ -283,7 +283,7 @@ function formatDate(dateStr: string): string {
 
     <template v-else>
       <!-- タブ -->
-      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="edit" />
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="edit" :status="schedule?.status ?? null" />
 
       <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
       <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />

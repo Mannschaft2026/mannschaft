@@ -191,7 +191,7 @@ public class ShiftAvailabilityService {
         if (!nameResolverService.resolveTeamNames(Set.of(teamId)).containsKey(teamId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
-        // 管理操作ができる人（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN。在籍の有無を問わない）。
+        // 管理操作ができる人（ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN。ゲートが在籍も要求する）。
         // MANAGE_SHIFTS 無しの DEPUTY_ADMIN は在籍していれば下の一般メンバーとして通る。
         if (manageGate.canManage(userId, teamId)) {
             return;

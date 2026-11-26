@@ -104,15 +104,42 @@ describe('シフト設定: 副管理者への閲覧許可の切替', () => {
     expect((wrapper.get('[data-testid="deputy-shift-view-toggle"]').element as HTMLInputElement).disabled).toBe(true)
     expect((wrapper.get('[data-testid="deputy-hourly-rate-view-toggle"]').element as HTMLInputElement).disabled).toBe(true)
     expect(wrapper.find('[data-testid="reminder-settings-save-btn"]').exists()).toBe(false)
+    // 閲覧のみの人には全体の説明を1つだけ出す（時給トグル直下の「管理者だけ」の注記と矛盾して読めないよう、出さない）。
     expect(wrapper.find('[data-testid="shift-settings-readonly-notice"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="deputy-hourly-rate-admin-only-notice"]').exists()).toBe(false)
     expect(mocks.updateShiftSettings).not.toHaveBeenCalled()
   })
 
-  it('MANAGE_SHIFTS 付きの副管理者は切替を操作して保存できる', async () => {
+  it('MANAGE_SHIFTS 付きの副管理者は閲覧切替を操作して保存できる', async () => {
     perm.isScopeAdmin.value = false
     const wrapper = await mountPage()
     expect((wrapper.get('[data-testid="deputy-shift-view-toggle"]').element as HTMLInputElement).disabled).toBe(false)
     expect(wrapper.find('[data-testid="reminder-settings-save-btn"]').exists()).toBe(true)
+  })
+
+  it('時給を見せる切替は ADMIN だけ操作でき、説明は出ない', async () => {
+    const wrapper = await mountPage()
+    expect((wrapper.get('[data-testid="deputy-hourly-rate-view-toggle"]').element as HTMLInputElement).disabled).toBe(false)
+    expect(wrapper.find('[data-testid="deputy-hourly-rate-admin-only-notice"]').exists()).toBe(false)
+  })
+
+  it('MANAGE_SHIFTS 付きの副管理者（ADMIN ではない）は時給切替を操作できず、「管理者だけ」の説明が出る', async () => {
+    perm.isScopeAdmin.value = false
+    const wrapper = await mountPage()
+    expect((wrapper.get('[data-testid="deputy-hourly-rate-view-toggle"]').element as HTMLInputElement).disabled).toBe(true)
+    expect(wrapper.find('[data-testid="deputy-hourly-rate-admin-only-notice"]').exists()).toBe(true)
+  })
+
+  it('ADMIN 以外が保存するとき、PATCH に時給切替を含めない（閲覧切替とリマインドは送る）', async () => {
+    perm.isScopeAdmin.value = false
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="deputy-shift-view-toggle"]').setValue(true)
+    await wrapper.get('[data-testid="reminder-settings-save-btn"]').trigger('click')
+    await flushPromises()
+    expect(mocks.updateShiftSettings).toHaveBeenCalledTimes(1)
+    const body = mocks.updateShiftSettings.mock.calls[0]![1] as Record<string, unknown>
+    expect(body).not.toHaveProperty('deputyHourlyRateViewEnabled')
+    expect(body).toMatchObject({ deputyShiftViewEnabled: true, reminder48hEnabled: true })
   })
 
   it('PATCH の失敗は通知する（握りつぶさない）', async () => {

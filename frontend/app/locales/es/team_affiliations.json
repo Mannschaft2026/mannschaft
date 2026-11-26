@@ -132,7 +132,8 @@
       "admin_only_reason": "Los permisos solo de administrador, como «Gestionar afiliación a organizaciones», solo puede concederlos el propio administrador del equipo (no si también es SYSTEM_ADMIN). No se pueden seleccionar",
       "admin_only_locked": "Este grupo incluye permisos solo de administrador. Los cambios (incluido quitar permisos) solo los puede hacer el propio administrador del equipo (no si también es SYSTEM_ADMIN)",
       "role_reason": "No se puede conceder a este rol de destino (los permisos de facturación son solo para administradores adjuntos)",
-      "role_conflict": "Este grupo incluye permisos que no se pueden conceder al rol de destino elegido, así que no se podría asignar a nadie. Revisa el rol de destino o los permisos"
+      "role_conflict": "Este grupo incluye permisos que no se pueden conceder al rol de destino elegido, así que no se podría asignar a nadie. Revisa el rol de destino o los permisos",
+      "shift_role_notice": "\"Gestionar turnos\" es un permiso para administradores adjuntos. Incluirlo en un grupo cuyo rol de destino es miembro no permite gestionar turnos; solo surte efecto en grupos de adjuntos."
     },
     "permission_names": {
       "CHANGE_MEMBER_ROLES": "Cambiar roles de miembros",

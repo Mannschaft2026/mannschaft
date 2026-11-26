@@ -11,6 +11,7 @@ const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
 const { getShiftSettings, updateShiftSettings } = useTeamShiftSettingsApi()
 // CMP-261125-2114: 設定の変更はチーム ADMIN または MANAGE_SHIFTS 付き DEPUTY_ADMIN だけ（BE が 403 を返す）。
+// ただし「時給を見せる」切替（金額の開示範囲）は ADMIN だけが変更できる（マスター裁定。MANAGE_SHIFTS 付き DEPUTY_ADMIN は不可）。
 const { canManageShift, isScopeAdmin, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 
 const settings = ref<TeamShiftSettings | null>(null)
@@ -73,7 +74,12 @@ async function saveSettings() {
 
   saving.value = true
   try {
-    const res = await updateShiftSettings(teamSlug, { ...form.value, ...deputyForm.value })
+    // 時給切替は ADMIN だけが送れる（BE は null 以外を送った非 ADMIN を 403 にする）。ADMIN 以外は項目ごと含めない。
+    const { deputyHourlyRateViewEnabled, ...shiftViewOnly } = deputyForm.value
+    const res = await updateShiftSettings(teamSlug, {
+      ...form.value,
+      ...(isScopeAdmin.value ? { ...shiftViewOnly, deputyHourlyRateViewEnabled } : shiftViewOnly),
+    })
     settings.value = res
     notification.success(t('teamShiftSettings.saved'))
   } catch {
@@ -183,9 +189,16 @@ onMounted(async () => {
             v-model="deputyForm.deputyHourlyRateViewEnabled"
             input-id="deputy-hourly-rate-view-toggle"
             data-testid="deputy-hourly-rate-view-toggle"
-            :disabled="!canManageShift"
+            :disabled="!isScopeAdmin"
           />
         </div>
+        <p
+          v-if="canManageShift && !isScopeAdmin"
+          data-testid="deputy-hourly-rate-admin-only-notice"
+          class="-mt-2 text-xs text-surface-500"
+        >
+          {{ $t('teamShiftSettings.deputyHourlyRateAdminOnly') }}
+        </p>
       </div>
 
       <p

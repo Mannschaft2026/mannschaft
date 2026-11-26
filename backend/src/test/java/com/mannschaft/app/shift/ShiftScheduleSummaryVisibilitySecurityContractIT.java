@@ -186,7 +186,7 @@ class ShiftScheduleSummaryVisibilitySecurityContractIT extends AbstractMySqlInte
     }
 
     static Stream<Arguments> privilegedCases() {
-        return Stream.of(Actor.ADMIN, Actor.DEPUTY, Actor.USER_ROLES_ONLY_ADMIN)
+        return Stream.of(Actor.ADMIN, Actor.DEPUTY)
                 .flatMap(actor -> Stream.of(Fixture.values()).map(fixture -> Arguments.of(actor, fixture)));
     }
 
@@ -198,6 +198,14 @@ class ShiftScheduleSummaryVisibilitySecurityContractIT extends AbstractMySqlInte
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.scheduleId").value(schedules.get(fixture)))
                 .andExpect(jsonPath("$.data.summaryByDate").isEmpty());
+    }
+
+    @ParameterizedTest
+    @EnumSource(Fixture.class)
+    void 退会済みで在籍の無いuser_rolesのみのADMINは管理者として取得できず所属者向けの403(Fixture fixture) throws Exception {
+        // CMP-261125-2114: ADMIN の判定は在籍を問わないため、シフトでは在籍を追加で要求する。越境の 404 には化けない。
+        MvcResult actual = summary(Actor.USER_ROLES_ONLY_ADMIN, schedules.get(fixture));
+        assertError(actual, 403, "COMMON_002");
     }
 
     @Test

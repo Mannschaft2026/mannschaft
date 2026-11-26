@@ -114,6 +114,38 @@ class TeamShiftSettingsControllerTest {
     }
 
     @Test
+    @DisplayName("updateSettings: 時給閲覧の切替を送った非 ADMIN（MANAGE_SHIFTS 付き DEPUTY）は 403 で設定更新本体を呼ばない")
+    void updateSettings_403_whenHourlyToggleByNonAdmin() throws Exception {
+        UpdateTeamShiftSettingsRequest req = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue("{\"deputyHourlyRateViewEnabled\":true}", UpdateTeamShiftSettingsRequest.class);
+        given(accessControlService.isAdmin(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
+        assertThatThrownBy(() -> controller.updateSettings(new TeamScopeId(TEAM_ID), req))
+                .isInstanceOf(BusinessException.class);
+        verify(settingsService, never()).updateSettings(TEAM_ID, req);
+    }
+
+    @Test
+    @DisplayName("updateSettings: ADMIN は時給閲覧の切替を変更できる")
+    void updateSettings_200_whenHourlyToggleByAdmin() throws Exception {
+        UpdateTeamShiftSettingsRequest req = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue("{\"deputyHourlyRateViewEnabled\":true}", UpdateTeamShiftSettingsRequest.class);
+        given(accessControlService.isAdmin(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+        given(settingsService.updateSettings(TEAM_ID, req)).willReturn(TeamShiftSettingsResponse.builder().build());
+        assertThat(controller.updateSettings(new TeamScopeId(TEAM_ID), req).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("updateSettings: 在籍していなければ（ロールだけ残った ADMIN でも）403 で設定更新本体を呼ばない")
+    void updateSettings_403_whenNotEnrolled() {
+        UpdateTeamShiftSettingsRequest req = new UpdateTeamShiftSettingsRequest();
+        willThrow(new BusinessException(CommonErrorCode.COMMON_002))
+                .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+        assertThatThrownBy(() -> controller.updateSettings(new TeamScopeId(TEAM_ID), req))
+                .isInstanceOf(BusinessException.class);
+        verify(settingsService, never()).updateSettings(TEAM_ID, req);
+    }
+
+    @Test
     @DisplayName("CMP-112: 数値チームIDはslug解決を呼ばず認可を通る")
     void getSettings_numericTeamId_usesCanonicalScopeId() throws Exception {
         given(settingsService.getSettings(TEAM_ID)).willReturn(TeamShiftSettingsResponse.builder().build());

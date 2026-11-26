@@ -707,17 +707,16 @@ class ShiftAutoAssignScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-3: user_roles のみの ADMIN は管理EP（run/runs/detail/visual）で許可され 404 に化けない")
+        @DisplayName("AC-3（CMP-261125-2114 で改訂）: user_roles のみの ADMIN（在籍なし）は管理できず、在籍の無い所属者として同チーム非管理者と同じ応答（実行・一覧は403、run を指す EP は不在と同じ404）")
         void AC3_userRolesOnlyAdmin() throws Exception {
             setAuth(userRolesOnlyAdminAId);
-            org.assertj.core.api.Assertions.assertThat(call("run", scheduleAId).getResponse().getStatus())
-                    .isEqualTo(201);
-            org.assertj.core.api.Assertions.assertThat(call("runs", scheduleAId).getResponse().getStatus())
-                    .isEqualTo(200);
-            org.assertj.core.api.Assertions.assertThat(call("detail", confirmedRunAId).getResponse().getStatus())
-                    .isEqualTo(200);
-            org.assertj.core.api.Assertions.assertThat(call("visual", succeededRunAId).getResponse().getStatus())
-                    .isEqualTo(200);
+            for (String kind : List.of("run", "runs")) {
+                org.assertj.core.api.Assertions.assertThat(call(kind, realId(kind)).getResponse().getStatus())
+                        .as(kind).isEqualTo(403);
+            }
+            for (String kind : List.of("confirm", "revoke", "detail", "visual")) {
+                assertSameError(call(kind, realId(kind)), call(kind, 999_999_999L));
+            }
         }
 
         @Test

@@ -13,11 +13,12 @@
         :display-name="assignment.displayName"
         :has-warning="hasWarning(assignment.userId)"
         :warning-message="getWarningMessage(assignment.userId)"
-        removable
+        :removable="!readonly"
         @remove="$emit('removeUser', assignment.userId)"
       />
     </div>
     <button
+      v-if="!readonly"
       type="button"
       class="mt-1 text-xs text-primary-500 hover:text-primary-700 transition-colors"
       @click="$emit('addUser')"
@@ -43,6 +44,8 @@ interface Props {
   slotId: number
   assignments: AssignedMember[]
   warnings?: WarningItem[]
+  /** 閲覧のみ（割当の追加・解除・ドロップをさせない）。シフト管理の権限が無い人向け。 */
+  readonly?: boolean
 }
 
 const props = defineProps<Props>()
@@ -78,6 +81,7 @@ function onDragLeave(): void {
 
 function onDrop(event: DragEvent): void {
   isDragOver.value = false
+  if (props.readonly) return
   const userId = Number(event.dataTransfer?.getData('text/plain'))
   if (!isNaN(userId) && userId > 0) {
     emit('drop', userId)

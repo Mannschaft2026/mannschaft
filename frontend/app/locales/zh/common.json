@@ -1471,20 +1471,21 @@
     "load_more": "加载更多"
   },
   "teamShiftSettings": {
-    "title": "排班提醒设置",
-    "description": "设置在希望提交截止日期前的提醒通知时间",
+    "title": "排班设置",
+    "description": "设置在希望提交截止日期前的提醒通知时间，以及副管理员的查看权限",
     "reminder48h": "提前48小时提醒",
     "reminder24h": "提前24小时提醒",
     "reminder12h": "提前12小时提醒（将来对应）",
     "atLeastOneRequired": "请至少启用一个提醒",
     "saved": "设置已保存",
     "deputyViewTitle": "副管理员的查看权限",
-    "deputyViewDescription": "设置没有排班管理权限（MANAGE_SHIFTS）的副管理员是否可以查看排班信息。他们仍然不能创建、编辑、发布、分配或审批。",
+    "deputyViewDescription": "设置未通过权限组获得“管理排班”权限的副管理员是否可以查看排班信息。他们仍然不能创建、编辑、发布、分配或审批。",
     "deputyShiftView": "允许查看排班信息",
     "deputyShiftViewHint": "可以查看未发布的排班表、分配、他人的换班/变更申请、希望列表、管理员版 PDF 导出以及仪表盘上的待处理事项。",
     "deputyHourlyRateView": "允许查看其他成员的时薪",
     "deputyHourlyRateViewHint": "可以在时薪设置页面查看其他成员的时薪（不能登记或更改）。",
-    "readOnlyNotice": "只有团队管理员或拥有排班管理权限（MANAGE_SHIFTS）的副管理员才能更改这些设置。"
+    "deputyHourlyRateAdminOnly": "此开关只有管理员可以更改。",
+    "readOnlyNotice": "管理员和拥有“管理排班”权限的副管理员可以更改这些设置。时薪的查看权限只有管理员可以更改。"
   },
   "corkboard": {
     "pin": "固定",

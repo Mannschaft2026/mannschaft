@@ -189,7 +189,7 @@ const pendingCount = computed(() => summary.value?.pendingCount ?? 0)
 
     <template v-else>
       <!-- タブ -->
-      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="requests" />
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="requests" :status="schedule?.status ?? null" />
 
       <!-- サマリーカード -->
       <div v-if="summary" class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

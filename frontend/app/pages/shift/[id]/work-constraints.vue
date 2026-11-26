@@ -220,7 +220,7 @@ function confirmAddMember() {
 
     <template v-else>
       <!-- タブ -->
-      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="constraints" />
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule?.teamId ?? null" current="constraints" :status="schedule?.status ?? null" />
 
       <!-- チームデフォルト -->
       <section class="mb-8">

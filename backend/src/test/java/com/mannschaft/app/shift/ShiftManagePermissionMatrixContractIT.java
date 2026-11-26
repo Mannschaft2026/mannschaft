@@ -155,7 +155,7 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
         DEPUTY_EMPTY_GROUP,
         /** T では MANAGE_SHIFTS 無しの DEPUTY、O では MANAGE_SHIFTS 付きの DEPUTY（攻め口: 境界）。 */
         CROSS_DEPUTY,
-        /** user_roles にだけ T の ADMIN がある（memberships 無し）。 */
+        /** user_roles にだけ T の ADMIN がある（memberships 無し＝退会済みでロールだけ残った ADMIN。在籍が無いので管理不可）。 */
         USER_ROLES_ONLY_ADMIN,
         /** user_roles にだけ T の DEPUTY_ADMIN がある（memberships 無し、MANAGE_SHIFTS 無し）。 */
         USER_ROLES_ONLY_DEPUTY,
@@ -363,29 +363,25 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // AC-1: ADMIN と DEPUTY+（と user_roles のみの ADMIN）は全カテゴリ成功（回帰）
+    // AC-1: 在籍中の ADMIN と DEPUTY+ は全カテゴリ成功（回帰）
     // ═════════════════════════════════════════════════════════════════════
 
     static Stream<Arguments> ac1OpCases() {
-        return Stream.of(Actor.ADMIN, Actor.DEPUTY_WITH, Actor.USER_ROLES_ONLY_ADMIN)
+        return Stream.of(Actor.ADMIN, Actor.DEPUTY_WITH)
                 .flatMap(a -> REPRESENTATIVES.stream().map(op -> Arguments.of(a, op)));
     }
 
     @ParameterizedTest(name = "AC-1 {0} × {1}")
     @MethodSource("ac1OpCases")
-    @DisplayName("AC-1/AC-10: ADMIN・DEPUTY+MANAGE_SHIFTS・user_roles のみの ADMIN は各カテゴリの代表操作に成功する")
+    @DisplayName("AC-1: 在籍中の ADMIN・DEPUTY+MANAGE_SHIFTS は各カテゴリの代表操作に成功する")
     void AC1_管理者と権限付き副管理者は代表操作に成功する(Actor actor, Op op) throws Exception {
         MvcResult result = perform(actor, request(op));
         assertAllowed(result, op == Op.K_SCHEDULE_REMIND, actor + " × " + op);
     }
 
     static Stream<Arguments> ac1ViewCases() {
-        return Stream.of(Actor.ADMIN, Actor.DEPUTY_WITH, Actor.USER_ROLES_ONLY_ADMIN)
-                .flatMap(a -> Stream.of(View.values())
-                        // 一覧（?teamId=）と PDF は是正前から在籍を要求する（user_roles のみの ADMIN は 403）ので対象外。
-                        .filter(v -> !(a == Actor.USER_ROLES_ONLY_ADMIN
-                                && (v == View.J_PDF_ADMIN_OUTPUT || v == View.SCHEDULE_LIST_INCLUDES_UNPUBLISHED)))
-                        .map(v -> Arguments.of(a, v)));
+        return Stream.of(Actor.ADMIN, Actor.DEPUTY_WITH)
+                .flatMap(a -> Stream.of(View.values()).map(v -> Arguments.of(a, v)));
     }
 
     @ParameterizedTest(name = "AC-1 {0} × {1}")
@@ -538,6 +534,50 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
                 .getResponse().getContentAsString();
         assertThat(readBoolean(body, "reminder48hEnabled")).isTrue();
         assertThat(readBoolean(body, "reminder24hEnabled")).isTrue();
+    }
+
+    @Test
+    @DisplayName("時給閲覧の切替は ADMIN だけが変更できる: MANAGE_SHIFTS 付き DEPUTY が送ると 403 で値は変わらない（同値の再送も 403）")
+    void 時給閲覧の切替はADMINだけが変更できる() throws Exception {
+        for (boolean value : new boolean[] {true, false}) {
+            MvcResult result = perform(Actor.DEPUTY_WITH, patch("/api/v1/teams/{slug}/shift-settings", teamSlug)
+                    .contentType(MediaType.APPLICATION_JSON).content(json(Map.of(TOGGLE_HOURLY_RATE_VIEW, value))));
+            assertError(result, 403, "COMMON_002", "deputy × 時給切替 " + value);
+        }
+        // 閲覧切替と同時に送っても、時給切替を含む要求は丸ごと拒否され、閲覧切替も反映されない。
+        MvcResult both = perform(Actor.DEPUTY_WITH, patch("/api/v1/teams/{slug}/shift-settings", teamSlug)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of(TOGGLE_SHIFT_VIEW, true, TOGGLE_HOURLY_RATE_VIEW, true))));
+        assertError(both, 403, "COMMON_002", "deputy × 両切替");
+        String body = perform(Actor.ADMIN, get("/api/v1/teams/{slug}/shift-settings", teamSlug))
+                .getResponse().getContentAsString();
+        assertThat(readBoolean(body, TOGGLE_SHIFT_VIEW)).as(TOGGLE_SHIFT_VIEW).isFalse();
+        assertThat(readBoolean(body, TOGGLE_HOURLY_RATE_VIEW)).as(TOGGLE_HOURLY_RATE_VIEW).isFalse();
+    }
+
+    @Test
+    @DisplayName("MANAGE_SHIFTS 付き DEPUTY は、時給切替を含めなければ閲覧切替とリマインドを変更できる")
+    void 権限付きDEPUTYは時給切替を含めなければ設定を変更できる() throws Exception {
+        MvcResult result = perform(Actor.DEPUTY_WITH, patch("/api/v1/teams/{slug}/shift-settings", teamSlug)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of(TOGGLE_SHIFT_VIEW, true, "reminder12hEnabled", true))));
+        assertStatus(result, 200, "deputy × 閲覧切替とリマインド");
+        String body = perform(Actor.ADMIN, get("/api/v1/teams/{slug}/shift-settings", teamSlug))
+                .getResponse().getContentAsString();
+        assertThat(readBoolean(body, TOGGLE_SHIFT_VIEW)).isTrue();
+        assertThat(readBoolean(body, "reminder12hEnabled")).isTrue();
+        assertThat(readBoolean(body, TOGGLE_HOURLY_RATE_VIEW)).isFalse();
+    }
+
+    @Test
+    @DisplayName("退会済み（在籍の無い）ADMIN は設定を変更できない（時給切替を含めても 403）")
+    void 退会済みADMINは設定を変更できない() throws Exception {
+        assertError(perform(Actor.USER_ROLES_ONLY_ADMIN, patch("/api/v1/teams/{slug}/shift-settings", teamSlug)
+                .contentType(MediaType.APPLICATION_JSON).content(json(Map.of(TOGGLE_HOURLY_RATE_VIEW, true)))),
+                403, "COMMON_002", "left admin × 時給切替");
+        assertError(perform(Actor.USER_ROLES_ONLY_ADMIN, patch("/api/v1/teams/{slug}/shift-settings", teamSlug)
+                .contentType(MediaType.APPLICATION_JSON).content(json(Map.of(TOGGLE_SHIFT_VIEW, true)))),
+                403, "COMMON_002", "left admin × 閲覧切替");
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -708,8 +748,33 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
     @EnumSource(View.class)
     @DisplayName("AC-10: user_roles にだけ DEPUTY（MANAGE_SHIFTS 無し・切替 OFF）がある所属者の閲覧は、越境の 404 ではなく所属者向けの 403")
     void AC10_userRolesのみの権限なし副管理者の閲覧は所属者として拒否(View view) throws Exception {
-        MvcResult r = perform(Actor.USER_ROLES_ONLY_DEPUTY, viewRequest(view));
-        String label = "ur-only-deputy × " + view;
+        assertEnrollmentlessViewDenied(Actor.USER_ROLES_ONLY_DEPUTY, view);
+        // 対照: 越境（他チーム ADMIN）は ID 起点の閲覧で 404（所属者の 403 と応答が割れること＝所属判定が効いている）。
+        if (view == View.SCHEDULE_GET_UNPUBLISHED || view == View.SLOT_ASSIGNMENTS_UNMASKED
+                || view == View.J_PDF_ADMIN_OUTPUT) {
+            assertError(perform(Actor.OTHER_ADMIN, viewRequest(view)), 404, "SHIFT_001", "other-admin × " + view);
+        }
+    }
+
+    @ParameterizedTest(name = "AC-10 退会済みADMIN {0}")
+    @EnumSource(Op.class)
+    @DisplayName("AC-10: 退会済み（user_roles にだけ ADMIN が残り在籍が無い）ADMIN は管理操作を拒否され、所属者向けの応答（run 系は 404）で、副作用が無い")
+    void AC10_退会済みADMINは管理操作を拒否(Op op) throws Exception {
+        String before = fingerprint();
+        assertStatus(perform(Actor.USER_ROLES_ONLY_ADMIN, request(op)), op.memberDeny, "ur-only-admin × " + op);
+        assertThat(fingerprint()).isEqualTo(before);
+    }
+
+    @ParameterizedTest(name = "AC-10 退会済みADMIN 閲覧 {0}")
+    @EnumSource(View.class)
+    @DisplayName("AC-10: 退会済み ADMIN は管理者の形の閲覧もできない（所属者向けの 403。一般メンバーとしても見られない）")
+    void AC10_退会済みADMINは管理者の形の閲覧もできない(View view) throws Exception {
+        assertEnrollmentlessViewDenied(Actor.USER_ROLES_ONLY_ADMIN, view);
+    }
+
+    private void assertEnrollmentlessViewDenied(Actor actor, View view) throws Exception {
+        MvcResult r = perform(actor, viewRequest(view));
+        String label = actor + " × " + view;
         switch (view) {
             // 他人の変更依頼の詳細は、所属者（一般メンバー）にも存在を隠す仕様（越境と同じ 404 SHIFT_030）。
             case CHANGE_REQUEST_GET_OTHERS -> assertError(r, 404, "SHIFT_030", label);
@@ -719,11 +784,6 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
                 assertThat(domains(r)).as(label).doesNotContain("SHIFT_REQUEST");
             }
             default -> assertError(r, 403, "COMMON_002", label);
-        }
-        // 対照: 越境（他チーム ADMIN）は ID 起点の閲覧で 404（所属者の 403 と応答が割れること＝所属判定が効いている）。
-        if (view == View.SCHEDULE_GET_UNPUBLISHED || view == View.SLOT_ASSIGNMENTS_UNMASKED
-                || view == View.J_PDF_ADMIN_OUTPUT) {
-            assertError(perform(Actor.OTHER_ADMIN, viewRequest(view)), 404, "SHIFT_001", "other-admin × " + view);
         }
     }
 
@@ -792,14 +852,14 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
     // ═════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("AC-11: 変更依頼の通知受信者（ADMIN ＋ MANAGE_SHIFTS 付き DEPUTY。user_roles のみの ADMIN を含む）と審査できる人が一致する")
+    @DisplayName("AC-11: 変更依頼の通知受信者（ADMIN ＋ MANAGE_SHIFTS 付き DEPUTY。退会済みでロールだけ残った ADMIN は含まない）と審査できる人が一致する")
     void AC11_通知受信者と審査の許可者が一致する() throws Exception {
         Set<Long> recipients = new HashSet<>(
                 roleService.getAdminAndPermittedDeputyUserIdsByTeamId(teamId, MANAGE_SHIFTS));
         List<Actor> candidates = List.of(Actor.ADMIN, Actor.ADMIN2, Actor.DEPUTY_WITH, Actor.DEPUTY_WITHOUT,
                 Actor.DEPUTY_EMPTY_GROUP, Actor.CROSS_DEPUTY, Actor.MEMBER2, Actor.SUPPORTER,
-                // user_roles にだけロールがある者（memberships 無し）。ADMIN は審査できる（isAdmin は在籍を問わない）ので
-                // 通知も届かなければならない。MANAGE_SHIFTS 無しの DEPUTY は審査も通知も無い。
+                // user_roles にだけロールがある者（memberships 無し）。在籍が無いので ADMIN も審査できず、通知も届かない
+                // （両者が一致すること）。MANAGE_SHIFTS 無しの DEPUTY も同じ。
                 Actor.USER_ROLES_ONLY_ADMIN, Actor.USER_ROLES_ONLY_DEPUTY);
         Set<Long> reviewers = new HashSet<>();
         for (Actor actor : candidates) {
@@ -816,8 +876,7 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
         Set<Long> recipientsAmongCandidates = recipients.stream().filter(candidateIds::contains)
                 .collect(Collectors.toSet());
         assertThat(recipientsAmongCandidates).as("通知受信者")
-                .containsExactlyInAnyOrder(id(Actor.ADMIN), id(Actor.ADMIN2), id(Actor.DEPUTY_WITH),
-                        id(Actor.USER_ROLES_ONLY_ADMIN));
+                .containsExactlyInAnyOrder(id(Actor.ADMIN), id(Actor.ADMIN2), id(Actor.DEPUTY_WITH));
         assertThat(reviewers).as("審査できた人 = 通知受信者").isEqualTo(recipientsAmongCandidates);
     }
 
@@ -1223,9 +1282,9 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
                 "SELECT * FROM shift_positions WHERE team_id = " + teamId + " ORDER BY id",
                 "SELECT * FROM shift_hourly_rates WHERE team_id = " + teamId + " ORDER BY id",
                 "SELECT * FROM member_work_constraints WHERE team_id = " + teamId + " ORDER BY id",
-                "SELECT * FROM team_shift_settings WHERE team_id = " + teamId,
-                "SELECT COUNT(*) FROM notifications WHERE user_id IN ("
-                        + actors.values().stream().map(String::valueOf).collect(Collectors.joining(",")) + ")");
+                // 通知の配送は AFTER_COMMIT のため @Transactional の本テストでは観測できない（偽の緑になる）。
+                // 配送結果は ShiftChangeRequestNotificationIT（TransactionTemplate で明示コミット）が検証する。
+                "SELECT * FROM team_shift_settings WHERE team_id = " + teamId);
         StringBuilder sb = new StringBuilder();
         for (String q : queries) {
             List<?> rows = em.createNativeQuery(q).getResultList();

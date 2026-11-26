@@ -12,7 +12,6 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.List;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
@@ -26,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 依存しない、認可の印を残さない、Facade の命名）は W6b で横断の番人 {@link AuthzTxFacadeRegistryArchTest} へ寄せた。
  * ここには W1・W2 だけの次の項目を残す。</p>
  * <ol>
- *   <li>W1・W2 の Facade は<b>すべて Gate に</b>届き、{@code ShiftRequestFacade} 以外は {@code AccessControlService} にも届く
+ *   <li>W1・W2 の Facade は<b>すべて Gate に</b>届き、{@code ShiftSwapFacade}・{@code ShiftPositionFacade} は {@code AccessControlService} にも届く
  *       （横断の番人は「Gate か ACS」までしか見ない）。</li>
  *   <li>Controller は<b>クラスごと</b> tx 本体に依存しない（フィールドにも持たない）。
  *       {@code ShiftRequestController} だけは自己スコープの {@code listMyRequests}（{@code @SelfScopedEndpoint}）が
@@ -40,9 +39,13 @@ class ShiftTxFacadeArchTest {
 
     private static final String PKG = "com.mannschaft.app.shift";
     private static final String ACCESS_CONTROL = "com.mannschaft.app.common.AccessControlService";
-    private static final String GATE = "com.mannschaft.app.common.ScopeConcealingAccessGate";
-    /** シフト管理の認可クラス（CMP-261125-2114）。管理系の Facade は共通 Gate の代わりにこちらへ届く。 */
-    private static final String SHIFT_GATE = PKG + ".service.ShiftManageAccessGate";
+    /**
+     * CMP-261125-2114: shift の Facade が届く秘匿ゲートは shift 専用の {@code ShiftManageAccessGate}。共通の
+     * {@code ScopeConcealingAccessGate} は SYSTEM_ADMIN を素通しするため shift では使わない
+     * （{@code ShiftManageGateReplacementArchTest} が共通ゲートの利用を禁止している）。
+     * 「Facade が秘匿ゲートを通る」意図は保ち、届く先をこの専用ゲートに固定する。
+     */
+    private static final String GATE = "com.mannschaft.app.shift.service.ShiftManageAccessGate";
 
     /** tx 本体 → ファサード → Controller の対応（移した組だけ）。 */
     private static final List<String[]> TRIPLES = List.of(
@@ -83,20 +86,16 @@ class ShiftTxFacadeArchTest {
     }
 
     @Test
-    @DisplayName("AC-15: W1・W2 の Facade はすべて Gate へ届き、ShiftRequestFacade 以外は AccessControlService にも届く")
+    @DisplayName("AC-15: W1・W2 の Facade はすべて Gate へ届き、Swap・Position は AccessControlService にも届く")
     void Facadeは認可クラスに届く() {
         // Gate へは全 Facade が届く。AccessControlService へは、Gate だけで足りるシフト希望の Facade 以外が届く
         // （W2 の 3 Facade は従来どおり両方、ポジションは一覧・作成が ACL・更新・削除が Gate）。
         classes().that(anyOf(facades()))
                 .should().dependOnClassesThat().haveFullyQualifiedName(GATE)
-                .orShould().dependOnClassesThat().haveFullyQualifiedName(SHIFT_GATE)
                 .check(classesUnderTest);
-        classes().that(anyOf(Arrays.stream(facades())
-                        .filter(f -> !f.equals(PKG + ".service.ShiftRequestFacade")
-                                // 自動割当・変更依頼は ShiftManageAccessGate だけで認可する（CMP-261125-2114）
-                                && !f.equals(PKG + ".service.ShiftAutoAssignFacade")
-                                && !f.equals(PKG + ".service.ShiftChangeRequestFacade"))
-                        .toArray(String[]::new)))
+        // CMP-261125-2114: ShiftChangeRequestFacade・ShiftAutoAssignFacade も ShiftManageAccessGate に認可を集約して
+        // AccessControlService へ直接届かなくなった（Gate が内部で判定する）。ACS を直接使うのは Swap と Position だけ。
+        classes().that(anyOf(new String[]{PKG + ".service.ShiftSwapFacade", PKG + ".service.ShiftPositionFacade"}))
                 .should().dependOnClassesThat().haveFullyQualifiedName(ACCESS_CONTROL)
                 .check(classesUnderTest);
     }

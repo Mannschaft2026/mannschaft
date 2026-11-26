@@ -1,5 +1,6 @@
 package com.mannschaft.app.team.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 
 /**
@@ -25,6 +26,12 @@ public class UpdateTeamShiftSettingsRequest {
     /** 副管理者へのシフト閲覧許可の切替。省略（null）なら変更しない。 */
     private Boolean deputyShiftViewEnabled;
 
-    /** 副管理者への時給閲覧許可の切替。省略（null）なら変更しない。 */
+    /**
+     * 副管理者への時給閲覧許可の切替。省略（null）なら変更しない。
+     * <b>チームの ADMIN だけが変更できる</b>（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403。
+     * 金額の開示範囲を決める設定のため。マスター裁定 2026-11-25）。
+     */
+    @Schema(description = "副管理者への時給閲覧許可の切替。省略（null）なら変更しない。チームの ADMIN だけが変更できる"
+            + "（null 以外を送ると、MANAGE_SHIFTS を持つ DEPUTY_ADMIN でも 403）")
     private Boolean deputyHourlyRateViewEnabled;
 }

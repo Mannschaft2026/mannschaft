@@ -33,6 +33,7 @@ mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: 
 mockNuxtImport('useShiftPermission', () => () => ({
   roleName: computed(() => 'ADMIN'),
   canManageShift: computed(() => true),
+  canViewShift: computed(() => true),
   isDeputyWithoutManage: computed(() => false),
   loadPermissions: mocks.loadPermissions,
 }))

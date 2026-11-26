@@ -8,6 +8,8 @@ import com.mannschaft.app.shift.dto.MemberWorkConstraintResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 /**
  * メンバー勤務制約の <b>認可ファサード</b>（トランザクションの外。CMP-261125-2114）。
  *
@@ -56,5 +58,30 @@ public class MemberWorkConstraintFacade {
             throw new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
         }
         return workConstraintService.upsertConstraint(teamId, userId, request, currentUserId);
+    }
+
+    /** チーム内の全勤務制約を取得する（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN。権限不足は WORK_CONSTRAINT_FORBIDDEN）。 */
+    public List<MemberWorkConstraintResponse> listConstraintsByTeam(Long teamId, Long currentUserId) {
+        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
+        return workConstraintService.listConstraintsByTeam(teamId, currentUserId);
+    }
+
+    /** チームデフォルトを upsert する（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。 */
+    public MemberWorkConstraintResponse upsertTeamDefault(
+            Long teamId, MemberWorkConstraintRequest request, Long currentUserId) {
+        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
+        return workConstraintService.upsertTeamDefault(teamId, request, currentUserId);
+    }
+
+    /** 個別勤務制約を削除する（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。 */
+    public void deleteConstraint(Long teamId, Long userId, Long currentUserId) {
+        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
+        workConstraintService.deleteConstraint(teamId, userId, currentUserId);
+    }
+
+    /** チームデフォルトを削除する（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。 */
+    public void deleteTeamDefault(Long teamId, Long currentUserId) {
+        manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
+        workConstraintService.deleteTeamDefault(teamId, currentUserId);
     }
 }

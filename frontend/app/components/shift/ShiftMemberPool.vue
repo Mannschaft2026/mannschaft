@@ -16,8 +16,9 @@
         <div
           v-for="member in filteredMembers"
           :key="member.userId"
-          class="flex items-center gap-2 p-2 rounded-lg bg-white border border-surface-200 cursor-grab hover:border-primary-400 hover:shadow-sm transition-all"
-          draggable="true"
+          class="flex items-center gap-2 p-2 rounded-lg bg-white border border-surface-200 transition-all"
+          :class="readonly ? '' : 'cursor-grab hover:border-primary-400 hover:shadow-sm'"
+          :draggable="!readonly"
           @dragstart="onDragStart($event, member.userId)"
         >
           <Avatar
@@ -41,7 +42,7 @@
         />
       </template>
     </div>
-    <div class="p-3 border-t border-surface-200 text-xs text-surface-500 text-center">
+    <div v-if="!readonly" class="p-3 border-t border-surface-200 text-xs text-surface-500 text-center">
       {{ $t('shift.board.dragHint') }}
     </div>
   </div>
@@ -60,11 +61,14 @@ interface Props {
   members: MemberPoolItem[]
   loading?: boolean
   error?: unknown
+  /** 閲覧のみ（ドラッグ割当をさせない）。シフト管理の権限が無い人向け。 */
+  readonly?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   error: undefined,
+  readonly: false,
 })
 
 const emit = defineEmits<{

@@ -62,6 +62,7 @@ class ShiftHourlyRateFacadeTest {
         given(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.hasAdminOrPermissionInScope(userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(userId, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     /** MANAGE_SHIFTS 無しの DEPUTY_ADMIN（時給閲覧切替を引数で指定）。 */
@@ -69,6 +70,7 @@ class ShiftHourlyRateFacadeTest {
         given(accessControlService.isAdminOrAbove(userId, TEAM_ID, "TEAM")).willReturn(true);
         given(accessControlService.hasAdminOrPermissionInScope(userId, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
                 .willReturn(false);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(userId, TEAM_ID, "TEAM")).thenReturn(true);
         given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))
                 .willReturn(new DeputyShiftViewToggles(false, hourlyRateView));
     }

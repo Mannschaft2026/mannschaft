@@ -49,6 +49,7 @@ mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
 // 判定本体は useShiftPermission（別 spec で検証済み）。isAdminOrDeputy は「審査できる（管理操作の権限がある）」の意味。
 mockNuxtImport('useShiftPermission', () => () => ({
   canManageShift: computed(() => mocks.isAdminOrDeputy.value),
+  canViewShift: computed(() => mocks.isAdminOrDeputy.value),
   isDeputyWithoutManage: computed(() => false),
   loadPermissions: mocks.loadPermissions,
 }))

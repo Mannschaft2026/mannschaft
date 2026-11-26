@@ -166,7 +166,8 @@ onMounted(() => {
           <TabList>
             <Tab :value="0">シフト表</Tab>
             <Tab :value="1">シフト交換</Tab>
-            <Tab :value="2">ポジション管理</Tab>
+            <!-- ポジション管理は管理操作の権限（ADMIN / MANAGE_SHIFTS 付き DEPUTY）だけ。パネルと同じ条件でタブも出す -->
+            <Tab v-if="canManageShift" :value="2">ポジション管理</Tab>
           </TabList>
           <TabPanels>
             <TabPanel :value="0">

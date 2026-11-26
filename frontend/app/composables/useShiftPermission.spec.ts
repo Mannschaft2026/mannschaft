@@ -89,6 +89,23 @@ describe('resolveShiftPermission（真理値表）', () => {
     })
   })
 
+  it('権限グループで MANAGE_SHIFTS が付いた MEMBER は管理できない（BE は 403。切替が ON でも閲覧もできない）', () => {
+    expect(
+      resolveShiftPermission({
+        ...base,
+        roleName: 'MEMBER',
+        permissions: ['MANAGE_SHIFTS'],
+        deputyShiftViewEnabled: true,
+        deputyHourlyRateViewEnabled: true,
+      }),
+    ).toEqual({
+      canManageShift: false,
+      canViewShift: false,
+      canViewHourlyRate: false,
+      isDeputyWithoutManage: false,
+    })
+  })
+
   it('SYSTEM_ADMIN はチームロールが無ければ特別扱いしない（roleName だけでは許さない）', () => {
     expect(
       resolveShiftPermission({
@@ -208,6 +225,17 @@ describe('useShiftPermission（閲覧切替の取得）', () => {
 
     expect(getShiftSettingsMock).not.toHaveBeenCalled()
     expect(p.canManageShift.value).toBe(true)
+  })
+
+  it('MANAGE_SHIFTS が付いた MEMBER は管理できず、切替も取得しない', async () => {
+    asRole('MEMBER', { perms: ['MANAGE_SHIFTS'] })
+    const p = create('team-a')
+
+    await p.loadPermissions()
+    await nextTick()
+
+    expect(getShiftSettingsMock).not.toHaveBeenCalled()
+    expect(p.canManageShift.value).toBe(false)
   })
 
   it('MEMBER は切替を取得しない', async () => {

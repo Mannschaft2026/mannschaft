@@ -82,6 +82,7 @@ class ShiftScheduleFacadeTest {
                 .thenReturn(true);
         org.mockito.Mockito.lenient().when(accessControlService.hasAdminOrPermissionInScope(
                 USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS")).thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     private static ShiftScheduleScope published() {
@@ -282,15 +283,14 @@ class ShiftScheduleFacadeTest {
         }
 
         @Test
-        @DisplayName("user_roles のみの ADMIN は在籍を問わず通り、未公開も見える（退行させない）")
-        void userRolesのみのADMINは通る() {
-            ShiftScheduleResponse response = ShiftScheduleResponse.builder().id(SCHEDULE_ID).build();
+        @DisplayName("user_roles のみの ADMIN（退会済みでロールだけ残った）は在籍が無いので未公開を見られず、所属者向けの 403")
+        void userRolesのみのADMINは在籍が無ければ拒否() {
             given(scheduleService.resolveScope(SCHEDULE_ID)).willReturn(draft());
             stubManager();
-            given(scheduleService.getSchedule(SCHEDULE_ID, true)).willReturn(response);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
-            assertThat(facade.getSchedule(SCHEDULE_ID, USER_ID)).isSameAs(response);
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            assertCode(catchThrowable(() -> facade.getSchedule(SCHEDULE_ID, USER_ID)), CommonErrorCode.COMMON_002);
+            verify(scheduleService, never()).getSchedule(anyLong(), org.mockito.ArgumentMatchers.anyBoolean());
         }
 
         @Test
