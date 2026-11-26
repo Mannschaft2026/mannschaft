@@ -51,13 +51,13 @@ class ParentalConsentInviteStatusGuardTest {
     }
 
     @Test
-    @DisplayName("ACTIVE の利用者の招待は AUTH_087 で拒否し、リンクもメールも作らない")
+    @DisplayName("ACTIVE の利用者の招待は AUTH_088 で拒否し、リンクもメールも作らない")
     void activeUser_rejected() {
         given(userRepository.findById(USER_ID)).willReturn(Optional.of(user(UserEntity.UserStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.inviteParent(USER_ID, "parent@example.com"))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode()).isEqualTo("AUTH_087"));
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode()).isEqualTo("AUTH_088"));
 
         verify(parentalConsentLinkRepository, never()).save(any());
         verify(emailOutboxService, never()).enqueue(any());

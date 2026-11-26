@@ -57,12 +57,8 @@ async function handleReject() {
   }
 }
 
-// ログイン済みなら自動承認を試みる
-onMounted(async () => {
-  if (authStore.isAuthenticated && token.value) {
-    await handleApprove()
-  }
-})
+// 注意: 表示しただけで承認してはならない。承認・拒否は保護者が画面のボタンで明示的に選ぶ
+// （メールのリンクを確認目的で開いた保護者が拒否を選べなくなるため。CMP-261123-1124）。
 
 // U-01対応: 未ログイン時にトークンを sessionStorage に保存し、
 // ログイン/登録後に戻ってきた際に自動承認する

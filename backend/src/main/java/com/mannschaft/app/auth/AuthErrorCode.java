@@ -267,10 +267,10 @@ public enum AuthErrorCode implements ErrorCode {
     /** 招待付き登録の保留の参加処理が進行中（5 分経過後に再試行できる）。409 を返す。 */
     AUTH_086("AUTH_086", "参加処理を進めています。しばらくしてからもう一度お試しください", Severity.WARN),
 
-    // ===== CMP-261123-1124 保護者招待の対象状態 (AUTH_087) =====
+    // ===== CMP-261123-1124 保護者招待の対象状態 (AUTH_088) =====
 
     /** 保護者招待は保護者の同意待ち（PENDING_PARENTAL_CONSENT）の本人だけが作れる。それ以外は 409 を返す。 */
-    AUTH_087("AUTH_087", "保護者の同意が必要なアカウントではないため、保護者を招待できません", Severity.WARN);
+    AUTH_088("AUTH_088", "保護者の同意が必要なアカウントではないため、保護者を招待できません", Severity.WARN);
 
     private final String code;
     private final String message;

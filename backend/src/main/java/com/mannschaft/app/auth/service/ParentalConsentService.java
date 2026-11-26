@@ -79,7 +79,7 @@ public class ParentalConsentService {
         UserEntity childUser = userRepository.findById(childUserId)
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_005));
         if (childUser.getStatus() != UserEntity.UserStatus.PENDING_PARENTAL_CONSENT) {
-            throw new BusinessException(AuthErrorCode.AUTH_087);
+            throw new BusinessException(AuthErrorCode.AUTH_088);
         }
 
         // 1. Valkey レートリミット
