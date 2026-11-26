@@ -4,6 +4,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.UuidV7;
 import com.mannschaft.app.village.VillageErrorCode;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
+import com.mannschaft.app.village.entity.enums.VillageRole;
 import com.mannschaft.app.village.entity.enums.VillageSubjectType;
 import com.mannschaft.app.village.repository.VillageMembershipRepository;
 import com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository;
@@ -84,6 +85,19 @@ public class VillageMembershipSlotService {
     public Allocation allocate(Long userId) {
         // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。入村枠を割り当てない。
         platformAccountAffiliationPolicy.assertAffiliatable(userId);
+        return allocateSlot(userId);
+    }
+
+    /**
+     * 公式村の作成者（村長）の入村枠を割り当てる。運営アカウントの所属禁止の唯一の例外
+     * （マスター決定 2026-11-26）。公式村の作成経路（村作成申請）だけが呼ぶこと。
+     */
+    public Allocation allocateForOfficialVillageCreator(Long userId) {
+        platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(userId, true);
+        return allocateSlot(userId);
+    }
+
+    private Allocation allocateSlot(Long userId) {
         int hardLimit = limitProvider.currentHardLimit();
         boolean[] occupied = new boolean[VillageParticipationLimits.DB_SLOT_CEILING + 1];
         var rows = membershipRepository.findAdmissionSlotsForUpdate(userId);
@@ -125,6 +139,22 @@ public class VillageMembershipSlotService {
         if (membership.getSubjectType() == VillageSubjectType.USER) {
             platformAccountAffiliationPolicy.assertAffiliatable(membership.getSubjectId());
         }
+        return saveAdmission(membership);
+    }
+
+    /**
+     * 公式村の作成者を村長として所属させる。運営アカウントの所属禁止の唯一の例外（マスター決定 2026-11-26）。
+     * 村長（HEADMAN）の所属行に限る。公式村の作成経路（村作成申請）だけが呼ぶこと。
+     */
+    VillageMembershipEntity admitOfficialVillageCreator(VillageMembershipEntity membership) {
+        if (membership.getSubjectType() == VillageSubjectType.USER) {
+            platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(
+                    membership.getSubjectId(), membership.getRole() == VillageRole.HEADMAN);
+        }
+        return saveAdmission(membership);
+    }
+
+    private VillageMembershipEntity saveAdmission(VillageMembershipEntity membership) {
         try {
             VillageMembershipEntity saved = membershipRepository.save(membership);
             membershipRepository.flush();

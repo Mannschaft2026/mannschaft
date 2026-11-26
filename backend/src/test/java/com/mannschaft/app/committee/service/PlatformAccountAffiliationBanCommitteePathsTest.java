@@ -3,12 +3,14 @@ package com.mannschaft.app.committee.service;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.committee.dto.CommitteeCreateRequest;
 import com.mannschaft.app.committee.dto.CommitteeInviteRequest;
+import com.mannschaft.app.committee.entity.CommitteeRole;
 import com.mannschaft.app.committee.entity.CommitteeEntity;
 import com.mannschaft.app.committee.repository.CommitteeInvitationRepository;
 import com.mannschaft.app.committee.repository.CommitteeMemberRepository;
 import com.mannschaft.app.committee.repository.CommitteeRepository;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -121,6 +123,7 @@ class PlatformAccountAffiliationBanCommitteePathsTest {
         @Mock CommitteeMemberRepository committeeMemberRepository;
         @Mock CommitteeInvitationRepository committeeInvitationRepository;
         @Mock UserRowLockService userRowLockService;
+        @Mock CommitteeAccessGuard committeeAccessGuard;
         @InjectMocks CommitteeInvitationService service;
 
         @BeforeEach
@@ -137,6 +140,20 @@ class PlatformAccountAffiliationBanCommitteePathsTest {
             assertPlatformForbidden(() -> service.sendInvitations(COMMITTEE_ID, req, OPERATOR_USER_ID));
             verify(committeeInvitationRepository, never()).save(any());
             verify(committeeInvitationRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("P2: 認可の無い者には、宛先が運営アカウントでも認可エラーが先に返る（宛先の実在を漏らさない）")
+        void P2_認可の無い者には宛先判定より認可エラーが先に返る() {
+            doThrow(new BusinessException(CommonErrorCode.COMMON_002)).when(committeeAccessGuard)
+                    .requireCommitteeRole(COMMITTEE_ID, GENERAL_USER_ID, CommitteeRole.CHAIR, CommitteeRole.VICE_CHAIR);
+            CommitteeInviteRequest req = new CommitteeInviteRequest();
+            req.setInviteeUserIds(List.of(PLATFORM_USER_ID));
+            assertThatThrownBy(() -> service.sendInvitations(COMMITTEE_ID, req, GENERAL_USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.COMMON_002);
+            verify(policy, never()).assertAffiliatable(any());
         }
 
         @Test

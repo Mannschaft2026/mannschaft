@@ -95,8 +95,6 @@ public class MembershipInviteService {
 
         // 1. 【入力検証】DM 相手（宛先）導出（DM 種別・2名・当事者ガード込み・B-9）。
         Long targetUserId = cardService.resolveDmCounterpart(channelId, actorUserId);
-        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は発行時点で拒否する（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
 
         // 2. 【入力検証】有効期限日数（許容値 {1,7,30,90} のみ・null は既定 7）。
         int expiresInDays = resolveExpiresInDays(request.expiresInDays());
@@ -111,6 +109,9 @@ public class MembershipInviteService {
         if (!canIssue(actorUserId, scopeId, scopeType)) {
             throw scopeAdminForbidden(scopeType);
         }
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は発行時点で拒否する（戦役 Z-A PR2）。
+        // 宛先の判定は認可の後に置く（認可の無い者へ、宛先が運営アカウントかどうかを漏らさない）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
         var scope = scopeStates.requireAvailable(scopeType, scopeId);
 
         // 6. 【既メンバー】宛先が既に scope メンバーなら発行不可（409）。

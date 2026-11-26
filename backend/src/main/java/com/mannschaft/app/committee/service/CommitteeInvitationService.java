@@ -84,14 +84,15 @@ public class CommitteeInvitationService {
         committeeRepository.findById(committeeId)
                 .orElseThrow(() -> new BusinessException(CommitteeErrorCode.NOT_FOUND));
 
-        // 運営アカウント（SYSTEM_ADMIN）宛ての招集は発行時点で拒否する（戦役 Z-A PR2。1 人でも運営なら全体を 403）。
-        for (Long inviteeUserId : request.getInviteeUserIds()) {
-            platformAccountAffiliationPolicy.assertAffiliatable(inviteeUserId);
-        }
-
         // 認可チェック: CHAIR または VICE_CHAIR
         committeeAccessGuard.requireCommitteeRole(
                 committeeId, currentUserId, CommitteeRole.CHAIR, CommitteeRole.VICE_CHAIR);
+
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招集は発行時点で拒否する（戦役 Z-A PR2。1 人でも運営なら全体を 403）。
+        // 宛先の判定は認可の後に置く（認可の無い者へ、宛先が運営アカウントかどうかを漏らさない）。
+        for (Long inviteeUserId : request.getInviteeUserIds()) {
+            platformAccountAffiliationPolicy.assertAffiliatable(inviteeUserId);
+        }
 
         CommitteeRole proposedRole = request.getProposedRole() != null
                 ? request.getProposedRole()

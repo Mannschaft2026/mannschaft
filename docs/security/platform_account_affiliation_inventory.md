@@ -39,7 +39,7 @@
 | village | `VillageMembershipService.join`:81 | village_memberships | 操作者（主体 USER） | VillagePaths `Join` |
 | village | `VillageInvitationService.accept`:163 | village_memberships | 受諾者 | VillagePaths `Invitations`・`NoSideEffects` |
 | village | `VillageJoinRequestService.approve`:244（admit:267） | village_memberships | 申請主体 | Slot.admit で固定 |
-| village | `VillageCreationRequestService.createRequest`:75（村長 admit:151）・`approve`:202（admit:241） | villages / village_memberships | 申請者 | VillagePaths `CreationRequests` |
+| village | `VillageCreationRequestService.createRequest`（村長 admit。**公式村（OFFICIAL）の作成者としての村長所属だけ例外**。Policy `assertAffiliatableAsOfficialVillageCreator`・Slot `allocateForOfficialVillageCreator` / `admitOfficialVillageCreator`）・`approve`（例外なし。承認で作る村は常に通常村） | villages / village_memberships | 申請者 | VillagePaths `CreationRequests` |
 | village | `VillageMembershipSlotService.allocate`:82・`admit`:119（五入口の共通保存点） | village_memberships | 主体 USER | VillagePaths `Slot` |
 | village | `VillageMembershipProfileService.updateMyProfileVisibility`:61（save:73。既存の誤所属を延命させない） | village_memberships（更新） | 本人 | VillagePaths `Profile` |
 | village | `VillageHeadmanSuccessionBatchService.processVillage`:114（promote save:191） | village_memberships（村長昇格） | 候補（`isPlatformAccount` で除外。例外で止めず次の古参へ。尽きれば従来どおり凍結） | HeadmanSuccessionTest |
@@ -50,10 +50,10 @@
 | ドメイン | 経路 | 作る行 | 判定する利用者 | 固定するテスト |
 |---|---|---|---|---|
 | role | `MembershipInviteService.issueMembershipInvite`:90（DM 相手が宛先）・`MembershipInviteTokenIssuer.issue` / `stageForReissue`（保存点でも判定。G4 対象） | invite_tokens（宛先付き） | 宛先 | RolePaths `MembershipInviteIssue` |
-| role | `OwnershipTransferOfferService.createOffer`:102 | ownership_transfer_offers | 譲渡先 | RolePaths `OwnershipOffer` |
+| role | `OwnershipTransferOfferService.createOffer`（ADMIN の認可の後に判定） | ownership_transfer_offers | 譲渡先 | RolePaths `OwnershipOffer` |
 | joinrequest | `JoinRequestService.createRequest`:84 | join_requests | 申請者 | TenantPaths `JoinRequestCreate` |
 | supporter | `SupporterService.follow`（手動承認）:110 | supporter_applications | 本人 | TenantPaths `SupporterFollow` |
-| committee | `CommitteeInvitationService.sendInvitations`:79 | committee_invitations | 宛先（1 人でも運営なら全体を 403） | CommitteePaths `CommitteeInvitations` |
+| committee | `CommitteeInvitationService.sendInvitations`（委員長・副委員長の認可の後に判定） | committee_invitations | 宛先（1 人でも運営なら全体を 403） | CommitteePaths `CommitteeInvitations` |
 | village | `VillageInvitationService.issue`:82（`targetUserId` 指定時。村長・長老の認可の後に判定） | village_invitations | 宛先 | VillagePaths `Invitations` |
 | village | `VillageJoinRequestService.createRequest`:89 | village_join_requests | 申請者 | VillagePaths `JoinRequests` |
 | village | `VillageCreationRequestService.createRequest`:75 | village_creation_requests | 申請者 | VillagePaths `CreationRequests` |
@@ -68,12 +68,15 @@
 | `VillageUserCleanerEventListener` | 退会時の村所属の整理（更新のみ） |
 | `SharedInviteTokenIssuer` | 宛先の無い共有招待リンク。発行時は宛先が無いので判定しない。**受諾時**に `InviteAcceptanceFacade.accept`（使用回数の確保より前）と合流点（`MembershipGrantService.grantRole`・`MembershipService.join`）で拒否する（RolePaths `InviteAcceptance`） |
 | `TeamFriendsService.follow`（team→team） | チームのフォロー（follows の主体がチーム）。G4 除外表に載せる |
+| 公式村の作成者としての村長所属（`VillageCreationRequestService.createRequest` の `type=OFFICIAL`） | **唯一の例外**（マスター決定 2026-11-26）。運営が認定・運営する公式村は運営アカウントが村長として運用するため。範囲は作成時の作成者所属だけ。運営アカウントが他の村・他の経路（招待受諾・参加申請・承認）で所属することと、通常村を作って村長になることは 403 のまま（VillagePaths で固定）。G4 は Slot / CreationRequestService が Policy を呼ぶので除外表は不要。点検 SQL は公式村の作成者の村長所属を 0 件判定から除く |
 
 ## 4. 決定事項（殿・マスター 2026-11-26）
 
 - `social.FollowService.follow`（利用者のタイムライン上の個人フォロー）も**禁止対象に含める**。G4 の生成シンクに `FollowEntity` を足し、`FollowService` に Policy を通した。
 - `TeamFriendsService`（チーム→チームのフォロー）は主体がチームなので対象外（除外表に理由付きで記載）。
 - **停止中・非 ACTIVE の運営アカウントも対象**。Policy は状態を問わず SYSTEM_ADMIN ロールの有無で判定する。
+- **公式村（OFFICIAL）に限り、運営アカウントが作成者として村長に所属するのは許す**（2026-11-26 マスター決定）。例外の範囲は作成時の作成者所属だけ。
+- 招待・打診の宛先が運営アカウントかどうかの判定は、**認可の後**に置く（委員会招集・DM の承諾型招待・オーナー移管の打診は村招待と同じ扱い。認可の無い者へ宛先の属性を漏らさない）。
 
 ## 5. 既存の所属行の点検（本番は未構築・殿が本番前に実行）
 

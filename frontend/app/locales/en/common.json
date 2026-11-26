@@ -437,6 +437,7 @@
     "notFound": "Not found",
     "TEAM_001": "Team not found.",
     "TEAM_006": "This team cannot be restored because it has not been deleted.",
+    "MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN": "Operator accounts cannot join teams, organizations, committees or villages, and cannot follow or support them.",
     "COMMON_001": "There are errors in the input",
     "COMMON_002": "You do not have permission to perform this action",
     "COMMON_003": "Updated by another user. Please refresh the page",

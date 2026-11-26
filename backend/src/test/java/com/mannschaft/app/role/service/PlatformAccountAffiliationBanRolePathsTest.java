@@ -3,7 +3,9 @@ package com.mannschaft.app.role.service;
 import com.mannschaft.app.auth.service.UserRowLockService;
 import com.mannschaft.app.auth.service.UserRowLockService.UserState;
 import com.mannschaft.app.chat.service.ChatMembershipInviteCardService;
+import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.role.dto.MembershipInviteRequest;
@@ -14,6 +16,7 @@ import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.OwnershipTransferOfferRepository;
 import com.mannschaft.app.role.repository.RoleRepository;
 import com.mannschaft.app.role.repository.UserRoleRepository;
+import com.mannschaft.app.team.service.TeamService;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -266,12 +269,26 @@ class PlatformAccountAffiliationBanRolePathsTest {
         @Mock PlatformAccountAffiliationPolicy policy;
         @Mock OwnershipTransferOfferRepository offerRepository;
         @Mock UserRowLockService userRowLockService;
+        @Mock AccessControlService accessControlService;
         @InjectMocks OwnershipTransferOfferService service;
 
         @BeforeEach
         void setUp() {
             stubPlatformAccount(policy);
             stubUsersActive(userRowLockService);
+            given(accessControlService.isAdmin(OPERATOR_USER_ID, SCOPE_ID, "TEAM")).willReturn(true);
+        }
+
+        @Test
+        @DisplayName("P2: 認可の無い者には、宛先が運営アカウントでも認可エラーが先に返る（宛先の実在を漏らさない）")
+        void P2_認可の無い者には宛先判定より認可エラーが先に返る() {
+            assertThatThrownBy(() -> service.createOffer(
+                    SCOPE_ID, "TEAM", "team-slug",
+                    new TransferOwnershipOfferCreateRequest(PLATFORM_USER_ID), GENERAL_USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.COMMON_002);
+            verify(policy, never()).assertAffiliatable(any());
         }
 
         @Test
@@ -327,12 +344,34 @@ class PlatformAccountAffiliationBanRolePathsTest {
         @Mock PlatformAccountAffiliationPolicy policy;
         @Mock ChatMembershipInviteCardService cardService;
         @Mock MembershipInviteTokenIssuer tokenIssuer;
+        @Mock InviteIssuerPolicy inviteIssuerPolicy;
+        @Mock RoleRepository roleRepository;
+        @Mock TeamService teamService;
         @InjectMocks MembershipInviteService service;
 
         @BeforeEach
         void setUp() {
             stubPlatformAccount(policy);
             given(cardService.resolveDmCounterpart(5L, OPERATOR_USER_ID)).willReturn(PLATFORM_USER_ID);
+            given(cardService.resolveDmCounterpart(5L, GENERAL_USER_ID)).willReturn(PLATFORM_USER_ID);
+            RoleEntity memberRole = org.mockito.Mockito.mock(RoleEntity.class);
+            given(memberRole.getId()).willReturn(3L);
+            given(roleRepository.findByName("MEMBER")).willReturn(Optional.of(memberRole));
+            given(teamService.findTeamSummary(SCOPE_ID))
+                    .willReturn(Optional.of(new TeamService.TeamSummary("チーム", false)));
+            given(inviteIssuerPolicy.canIssue(OPERATOR_USER_ID, SCOPE_ID, "TEAM")).willReturn(true);
+        }
+
+        @Test
+        @DisplayName("P2: 認可の無い者には、宛先が運営アカウントでも認可エラーが先に返る（宛先の実在を漏らさない）")
+        void P2_認可の無い者には宛先判定より認可エラーが先に返る() {
+            assertThatThrownBy(() -> service.issueMembershipInvite(
+                    5L, new MembershipInviteRequest("TEAM", SCOPE_ID, null, null), GENERAL_USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isNotEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+            verify(policy, never()).assertAffiliatable(any());
+            verifyNoInteractions(tokenIssuer);
         }
 
         @Test

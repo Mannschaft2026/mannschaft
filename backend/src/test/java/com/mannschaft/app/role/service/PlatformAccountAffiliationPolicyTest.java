@@ -60,6 +60,19 @@ class PlatformAccountAffiliationPolicyTest {
     }
 
     @Test
+    @DisplayName("例外: 公式村の作成者としての村長所属（true）だけ運営アカウントでも通り、false は assertAffiliatable と同じく拒否する")
+    void 例外は公式村の作成者だけを通す() {
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+
+        assertThatCode(() -> policy.assertAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, true))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> policy.assertAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+    }
+
+    @Test
     @DisplayName("P5: isPlatformAccount は運営アカウントで true・一般利用者で false（後継候補の除外用）")
     void P5_isPlatformAccountは運営ロール保持を返す() {
         given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);

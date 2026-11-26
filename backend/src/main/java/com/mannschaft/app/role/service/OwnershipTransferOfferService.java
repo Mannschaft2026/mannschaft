@@ -105,13 +105,14 @@ public class OwnershipTransferOfferService {
             TransferOwnershipOfferCreateRequest request, Long actorUserId) {
         Long targetUserId = request.targetUserId();
 
-        // 運営アカウント（SYSTEM_ADMIN）宛ての打診は作成時点で拒否する（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
-
         // 認可（public 入口の二層目）: 打診は当該スコープの ADMIN のみ（DEPUTY_ADMIN 不可・設計書 step2）。
         if (!accessControlService.isAdmin(actorUserId, scopeId, scopeType)) {
             throw new BusinessException(CommonErrorCode.COMMON_002); // 403
         }
+
+        // 運営アカウント（SYSTEM_ADMIN）宛ての打診は作成時点で拒否する（戦役 Z-A PR2）。
+        // 宛先の判定は認可の後に置く（認可の無い者へ、宛先が運営アカウントかどうかを漏らさない）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
 
         validateScopeIsActive(scopeType, scopeId);
 

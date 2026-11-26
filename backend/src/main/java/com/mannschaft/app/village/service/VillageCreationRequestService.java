@@ -80,7 +80,10 @@ public class VillageCreationRequestService {
             throw new BusinessException(CommonErrorCode.COMMON_000);
         }
         // 運営アカウント（SYSTEM_ADMIN）は村を作って村長（所属）になれない（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
+        // 唯一の例外: 公式村（OFFICIAL）の作成者としての村長所属（マスター決定 2026-11-26）。
+        // 例外はこの作成時の所属だけで、通常村の作成・他経路の所属は引き続き 403。
+        boolean officialVillage = req.type() == VillageType.OFFICIAL;
+        platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(requesterUserId, officialVillage);
 
         // 一般ユーザーは OFFICIAL を申請できない
         if (req.type() == VillageType.OFFICIAL && !isSystemAdmin(requesterUserId)) {
@@ -120,7 +123,9 @@ public class VillageCreationRequestService {
         if (!slotService.lockUser(requesterUserId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
-        Short userSlot = slotService.allocate(requesterUserId).slot();
+        Short userSlot = (officialVillage
+                ? slotService.allocateForOfficialVillageCreator(requesterUserId)
+                : slotService.allocate(requesterUserId)).slot();
 
         VillageCreationRequestEntity entity = VillageCreationRequestEntity.builder()
                 .requesterUserId(requesterUserId)
@@ -141,7 +146,7 @@ public class VillageCreationRequestService {
                 .slug(saved.getProposedSlug())
                 .name(saved.getProposedName())
                 .description(saved.getPurpose())
-                .type(VillageType.COMMUNITY)
+                .type(officialVillage ? VillageType.OFFICIAL : VillageType.COMMUNITY)
                 .joinPolicy(com.mannschaft.app.village.entity.enums.VillageJoinPolicy.FREE)
                 .visibility(com.mannschaft.app.village.entity.enums.VillageVisibility.PUBLIC)
                 .category(saved.getProposedCategory())
@@ -159,7 +164,11 @@ public class VillageCreationRequestService {
                 .userSlot(userSlot)
                 .role(VillageRole.HEADMAN)
                 .build();
-        slotService.admit(membership);
+        if (officialVillage) {
+            slotService.admitOfficialVillageCreator(membership);
+        } else {
+            slotService.admit(membership);
+        }
 
         // 申請を APPROVED に更新
         saved.setStatus(VillageRequestStatus.APPROVED);

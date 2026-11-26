@@ -21,6 +21,12 @@ UNION ALL
 SELECT 'village_memberships', vm.subject_id, 'VILLAGE', HEX(vm.village_id), vm.role
   FROM village_memberships vm JOIN sa ON sa.user_id = vm.subject_id
   WHERE vm.subject_type = 'USER' AND vm.left_at IS NULL
+    -- 唯一の例外（マスター決定 2026-11-26）: 公式村（OFFICIAL）の作成者としての村長所属は 0 件判定から除く。
+    AND NOT EXISTS (
+      SELECT 1 FROM villages v
+      WHERE v.id = vm.village_id AND v.type = 'OFFICIAL'
+        AND v.created_by_user_id = vm.subject_id AND vm.role = 'HEADMAN'
+    )
 UNION ALL
 SELECT 'supporter_applications', s.user_id, s.scope_type, CAST(s.scope_id AS CHAR), s.status
   FROM supporter_applications s JOIN sa ON sa.user_id = s.user_id WHERE s.status = 'PENDING'

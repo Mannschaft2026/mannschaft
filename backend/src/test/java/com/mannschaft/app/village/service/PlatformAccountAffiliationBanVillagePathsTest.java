@@ -67,6 +67,9 @@ class PlatformAccountAffiliationBanVillagePathsTest {
     static void stubPlatformAccount(PlatformAccountAffiliationPolicy policy) {
         doThrow(new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN))
                 .when(policy).assertAffiliatable(PLATFORM_USER_ID);
+        // 公式村の作成者としての村長所属だけが例外（true のときは通す＝既定の何もしない）。それ以外は同じく拒否する。
+        doThrow(new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN))
+                .when(policy).assertAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, false);
     }
 
     static VillageMembershipEntity userMembership(Long userId, VillageRole role) {
@@ -186,7 +189,12 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         @Test
         @DisplayName("P1/P2: 運営アカウントによる村の作成申請は 403・申請も村も村長行も作らない")
         void P1_運営アカウントは村の作成申請ができない() {
-            assertPlatformForbidden(() -> service.createRequest(PLATFORM_USER_ID, null));
+            com.mannschaft.app.village.dto.VillageCreationRequestCreateRequest community =
+                    new com.mannschaft.app.village.dto.VillageCreationRequestCreateRequest(
+                            "運営の村", "ops-village", null, "目的",
+                            java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC),
+                            com.mannschaft.app.village.entity.enums.VillageType.COMMUNITY, null);
+            assertPlatformForbidden(() -> service.createRequest(PLATFORM_USER_ID, community));
             verify(requestRepository, never()).save(any());
             verify(villageRepository, never()).save(any());
             verify(slotService, never()).admit(any());
