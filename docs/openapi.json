@@ -46370,7 +46370,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 0
+              "default": 0,
+              "minimum": 0
             }
           },
           {
@@ -46380,7 +46381,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20
+              "default": 20,
+              "minimum": 1
             }
           }
         ],
@@ -60360,7 +60362,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenIssuedResponse"
                 }
               }
             }
@@ -67015,7 +67017,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 0
+              "default": 0,
+              "minimum": 0
             }
           },
           {
@@ -67025,7 +67028,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20
+              "default": 20,
+              "minimum": 1
             }
           }
         ],
@@ -85361,7 +85365,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseListEventInviteTokenResponse"
                 }
               }
             }
@@ -85401,7 +85405,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseEventInviteTokenIssuedResponse"
                 }
               }
             }
@@ -85442,7 +85446,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseEventInviteTokenResponse"
                 }
               }
             }
@@ -86396,7 +86400,7 @@
         "tags": [
           "Contact Invite Tokens"
         ],
-        "summary": "招待トークンを発行する",
+        "summary": "招待トークンを発行する（平文のトークン・招待URLはこの応答の1回だけ）",
         "operationId": "createToken_2",
         "requestBody": {
           "content": {
@@ -86414,7 +86418,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseContactInviteTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseContactInviteIssuedResponse"
                 }
               }
             }
@@ -86524,7 +86528,7 @@
         "tags": [
           "組織委員会招集"
         ],
-        "summary": "委員会招集状送付",
+        "summary": "委員会招集状送付（平文トークンは発行応答の1回だけ）",
         "operationId": "sendInvitations",
         "parameters": [
           {
@@ -129217,6 +129221,14 @@
               "format": "int32",
               "default": 20
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -150326,48 +150338,6 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseContactInvitePreviewResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/contact-invite-tokens/{token}/qr": {
-      "get": {
-        "tags": [
-          "Contact Invite Tokens"
-        ],
-        "summary": "QRコード画像を取得する（PNG）",
-        "operationId": "getQrCode_1",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 300
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "string",
-                  "format": "byte"
                 }
               }
             }
@@ -201129,11 +201099,47 @@
           }
         }
       },
-      "ApiResponseSignageAccessTokenResponse": {
+      "ApiResponseSignageAccessTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SignageAccessTokenResponse"
+            "$ref": "#/components/schemas/SignageAccessTokenIssuedResponse"
+          }
+        }
+      },
+      "SignageAccessTokenIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "screenId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
@@ -201167,9 +201173,6 @@
           "screenId": {
             "type": "integer",
             "format": "int64"
-          },
-          "token": {
-            "type": "string"
           }
         }
       },
@@ -213438,11 +213441,108 @@
           "ticketTypeId"
         ]
       },
-      "ApiResponseInviteTokenResponse": {
+      "ApiResponseEventInviteTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/InviteTokenResponse"
+            "$ref": "#/components/schemas/EventInviteTokenIssuedResponse"
+          }
+        }
+      },
+      "EventInviteTokenIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "token": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "EventInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ApiResponseEventInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EventInviteTokenResponse"
           }
         }
       },
@@ -214106,15 +214206,15 @@
           }
         }
       },
-      "ApiResponseContactInviteTokenResponse": {
+      "ApiResponseContactInviteIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ContactInviteTokenResponse"
+            "$ref": "#/components/schemas/ContactInviteIssuedResponse"
           }
         }
       },
-      "ContactInviteTokenResponse": {
+      "ContactInviteIssuedResponse": {
         "type": "object",
         "properties": {
           "createdAt": {
@@ -214138,9 +214238,6 @@
           "maxUses": {
             "type": "integer",
             "format": "int32"
-          },
-          "qrCodeUrl": {
-            "type": "string"
           },
           "token": {
             "type": "string"
@@ -214202,7 +214299,7 @@
           }
         }
       },
-      "CommitteeInvitationResponse": {
+      "CommitteeInvitationIssuedResponse": {
         "type": "object",
         "properties": {
           "committeeId": {
@@ -214255,13 +214352,63 @@
           }
         }
       },
+      "CommitteeInvitationResponse": {
+        "type": "object",
+        "properties": {
+          "committeeId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "invitationStatus": {
+            "type": "string"
+          },
+          "inviteeUserId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "proposedRole": {
+            "type": "string",
+            "enum": [
+              "CHAIR",
+              "VICE_CHAIR",
+              "SECRETARY",
+              "MEMBER"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "DECLINED",
+              "EXPIRED",
+              "CANCELLED"
+            ]
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SendInvitationsResponse": {
         "type": "object",
         "properties": {
           "invitations": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CommitteeInvitationResponse"
+              "$ref": "#/components/schemas/CommitteeInvitationIssuedResponse"
             }
           },
           "skippedExistingInvitationCount": {
@@ -221405,6 +221552,9 @@
               "ABSENT",
               "UNDECIDED"
             ]
+          },
+          "studentDisplayName": {
+            "type": "string"
           },
           "studentUserId": {
             "type": "integer",
@@ -229503,6 +229653,9 @@
           "organizationId": {
             "type": "integer",
             "format": "int64"
+          },
+          "organizationSlug": {
+            "type": "string"
           },
           "record": {
             "$ref": "#/components/schemas/TournamentHistoryEntryRecord"
@@ -252781,6 +252934,17 @@
           }
         }
       },
+      "ApiResponseListEventInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventInviteTokenResponse"
+            }
+          }
+        }
+      },
       "ApiResponseEventDelegationListResponse": {
         "type": "object",
         "properties": {
@@ -254532,6 +254696,34 @@
             "items": {
               "$ref": "#/components/schemas/ContactInviteTokenResponse"
             }
+          }
+        }
+      },
+      "ContactInviteTokenResponse": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "usedCount": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

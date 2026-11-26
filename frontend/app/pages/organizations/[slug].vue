@@ -57,6 +57,7 @@ const {
   orgTeamsLoading,
   permissionGroups,
   loading,
+  detailDenied,
   joinRequestStatus,
   joinRequestLoading,
   showLeaveConfirm,
@@ -67,6 +68,26 @@ const {
   applyJoinRequest,
   leaveOrganization,
 } = useOrgDetail(orgSlug)
+
+// 子ページの主 API が 403/404 だったとき、または組織詳細自体が 403/404 だったとき、
+// 本文を共通「見つかりません」に置き換える（CMP-261125-1108。シェルのタブ・戻る導線は残す）
+const {
+  notFound: childMarkedNotFound,
+  reset: resetChildNotFound,
+  clear: clearChildNotFound,
+  resetUnlessHydrating: resetChildNotFoundOnSetup,
+  releaseOnUnmount: releaseChildNotFound,
+  isRouteDenied,
+} = useScopeNotFound()
+/**
+ * 子ページ部分を ScopeNotFound に置き換えるか。子ページの主 API の 403/404（markIfDenied）か、
+ * ルートミドルウェア（org-role-guard 等）が描画前にこのパスを拒否したとき。後者では子ページを描画しない
+ * （管理 API を呼ばせず、トーストも出させない）。
+ */
+const childNotFound = computed(() => childMarkedNotFound.value || isRouteDenied(route.path))
+// マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
+resetChildNotFoundOnSetup()
+const showScopeNotFound = computed(() => childNotFound.value || detailDenied.value)
 
 // フォロー（サポーター）結線（CMP-261001-0835）。ラッパー群は useScopeFollowWiring に集約し、
 // 単体テストで検証する（SUPPORTER でも状態取得・解除後の権限再取得・権限のみの再試行）。
@@ -293,6 +314,9 @@ async function loadShellData() {
     if (!isCurrent()) return
     if (redirected) return
   }
+  // 詳細が 403/404（非所属・権限なし・不存在）なら本文は ScopeNotFound で、補助取得の結果は使わない。
+  // 呼ぶと 403 が handleApiError に流れ、トーストとエラー報告が出る（実機 NG・AC-5）ので呼ばない
+  if (detailDenied.value) return
   await Promise.all([
     fetchOrgTeams(),
     isAdmin.value ? fetchPermissionGroups() : Promise.resolve(),
@@ -317,6 +341,9 @@ async function loadShellData() {
 // 破棄されたインスタンスの解決待ち応答を失効させる。
 onBeforeUnmount(() => {
   ++loadShellDataSeq
+  // 無条件の reset にしない。スコープ切替・ブラウザバックでは新しいシェルと子ページの setup が
+  // 本インスタンスの破棄より先に走るため、reset すると新しい子ページの 403 を捨ててしまう（AC-8）
+  releaseChildNotFound()
 })
 
 // シェル対象ルートに居るときだけデータをロードする。
@@ -330,8 +357,26 @@ watch(isShellRoute, (shell) => {
   if (shell) void loadShellData()
 })
 
+// ルート（タブ・子ページ・slug・クエリ）が変わったら子ページ由来の「見つかりません」を解除する。
+// クエリ変更・ブラウザバックも含めて fullPath で見る。同期 flush にして、遷移先の子ページの setup
+// （世代の捕捉）より必ず先に世代を進める。
+// - パスが変わった: 別ページ・別スコープ。世代を進めて下ろす（古い画面の遅延 403 を捨てる）
+// - クエリだけ変わった: 同一ページ（子は再マウントされず取り直す）。世代は進めず下ろすだけにし、
+//   取り直しの 403 を現世代のまま立てられるようにする（同一ページ・同一スコープなので誤置換にならない）
+let lastNotFoundPath = route.path
+watch(() => route.fullPath, () => {
+  if (route.path !== lastNotFoundPath) {
+    lastNotFoundPath = route.path
+    resetChildNotFound()
+  }
+  else {
+    clearChildNotFound()
+  }
+}, { flush: 'sync' })
+
 // 永続シェルを維持したまま別組織へ遷移した場合（同一親ルート record）に再取得する。
 watch(orgSlug, () => {
+  detailDenied.value = false
   orgLoaded.value = false
   org.value = null
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
@@ -479,7 +524,8 @@ provideOrgShellContext({
       bare <NuxtPage/> を描画する。各ページの layout:'organization' の見た目を変えない。
       （pageTransition out-in 対応でルートは単一 <div>。）
     -->
-    <NuxtPage v-if="!isShellRoute" />
+    <ScopeNotFound v-if="!isShellRoute && childNotFound" />
+    <NuxtPage v-else-if="!isShellRoute" />
 
     <!-- シェル対象ルート（8 タブ + ウィジェット遷移先）: 永続シェルで包む -->
     <template v-else>
@@ -526,12 +572,19 @@ provideOrgShellContext({
         </template>
 
         <!-- タブ本体（子）— 永続シェル下で差し替え -->
-        <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-        <NuxtPage />
+        <!-- 子ページの 403/404 は ScopeNotFound だけを出す（機能可視性のエラー表示と二重に出さない） -->
+        <ScopeNotFound v-if="childNotFound" />
+        <template v-else>
+          <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
+          <NuxtPage />
+        </template>
       </ScopePageShell>
 
+      <!-- 403/404（非所属・権限なし・不存在）: 共通の「見つかりません」 -->
+      <ScopeNotFound v-else-if="showScopeNotFound" />
+
       <!--
-        取得失敗フォールバック（loading 完了かつ org=null: 403/404/503 等）。
+        取得失敗フォールバック（loading 完了かつ org=null: 5xx・通信断等）。
         村金型 villages/[id].vue に倣い、白画面ではなくエラー文言＋戻り導線を出す。
       -->
       <div v-else class="mx-auto max-w-2xl p-6 text-center">

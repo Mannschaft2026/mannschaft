@@ -321,6 +321,15 @@ test('AC-2: 同居spec・frontend/testsだけはtest-only、scriptsとテスト�
   assert.equal(infer(['scripts/check.mjs', '.github/workflows/x.yml']), 'tooling');
 });
 
+test('AC-2b: backend/scripts/ のCI用スクリプトはtooling、テストとの混在はtest-only、backend/src や似た名前のディレクトリはapp（CMP-261125-0323）', () => {
+  assert.equal(infer(['backend/scripts/run-ci-tests-with-observability.sh', 'backend/scripts/test_run_ci_observability_patterns.py']), 'tooling');
+  assert.equal(infer(['backend/scripts/gradle-turnstile.sh', 'backend/src/test/java/A.java']), 'test-only');
+  assert.equal(infer(['backend/scripts/x.sh', 'backend/src/main/java/A.java']), 'app');
+  assert.equal(infer(['backend/scripts-extra/x.sh']), 'app');
+  assert.equal(infer(['backend/scripts']), 'app');
+  assert.equal(infer([{ filename: 'backend/scripts/new.sh', previous_filename: 'backend/src/main/old.sh', status: 'renamed' }]), 'app');
+});
+
 // 現行のリポジトリ名と、移管前（2026-11-21 に kenta-0420/mannschaft から移管）に記録された旧名。
 const REPOSITORY_NAMES = ['Mannschaft2026/mannschaft', 'kenta-0420/mannschaft'];
 

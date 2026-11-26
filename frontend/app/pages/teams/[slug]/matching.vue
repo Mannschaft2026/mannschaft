@@ -71,6 +71,7 @@ async function handleCreate() {
     <MatchRequestList
       ref="listRef"
       :team-id="teamSlug"
+      scope-not-found-on-denied
       @create="openCreateDialog"
     />
 

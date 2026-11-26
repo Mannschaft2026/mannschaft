@@ -270,7 +270,7 @@ public class ConfirmableFanoutChunkSink implements FanoutChunkSink {
         return new HashSet<>(rows);
     }
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     private Map<Long, String> insertRecipients(ConfirmableNotificationEntity notification, List<Long> newUserIds) {
         int[] resolved = resolveReminderMinutes(notification);
         Map<Long, String> tokens = new HashMap<>();

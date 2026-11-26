@@ -8,8 +8,12 @@ export function usePersonalVehiclesApi() {
     return api<{ data: VehicleResponse[] }>('/api/v1/users/me/vehicles')
   }
 
-  async function addVehicle(body: Record<string, unknown>) {
-    return api('/api/v1/users/me/vehicles', { method: 'POST', body })
+  async function addVehicle(body: {
+    vehicleType: 'CAR' | 'MOTORCYCLE' | 'BICYCLE'
+    plateNumber: string
+    nickname?: string
+  }) {
+    return api<{ data: VehicleResponse }>('/api/v1/users/me/vehicles', { method: 'POST', body })
   }
 
   return {

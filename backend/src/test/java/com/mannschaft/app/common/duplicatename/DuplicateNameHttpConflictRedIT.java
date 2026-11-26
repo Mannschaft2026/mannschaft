@@ -1,6 +1,7 @@
 package com.mannschaft.app.common.duplicatename;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
@@ -140,14 +141,7 @@ class DuplicateNameHttpConflictRedIT extends AbstractMySqlIntegrationTest {
     }
 
     private void ensureRole(String roleName) {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM roles WHERE name = ?", Long.class, roleName);
-        if (count == null || count == 0) {
-            jdbcTemplate.update(
-                    "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                            + "VALUES (?, ?, 99, 0, NOW(), NOW())",
-                    roleName, roleName);
-        }
+        RoleSeedSupport.ensureCanonical(jdbcTemplate, roleName);
     }
 
     private Long insertUser(String email) {

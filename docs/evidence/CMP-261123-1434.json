@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261123-1434",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4805,
+    "sha": "99b731094fb488f308933b37519a69486219109b"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "AC-54 の判定を壁時計の閾値ではなく照合（ハッシュ比較）回数で固定し、最大8回に収まることを保証する",
+      "tests": [
+        {
+          "name": "MfaBackupCodeLatencyIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/mfa/MfaBackupCodeLatencyIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "照合回数を数える PasswordMatchCounter を CI ランナーの揺らぎに依存しない形で提供する",
+      "tests": [
+        {
+          "name": "PasswordMatchCounter",
+          "evidence": "backend/src/test/java/com/mannschaft/app/support/test/PasswordMatchCounter.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45343158858
+    },
+    {
+      "runId": 45343158599
+    },
+    {
+      "runId": 45343158527
+    },
+    {
+      "runId": 45343158526
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4805"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "CI 用スクリプト・テスト・ドキュメントの変更だけで画面・API の挙動を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "CI 用スクリプト・テストだけの変更で導線を変えない"
+    }
+  },
+  "regressions": []
+}
