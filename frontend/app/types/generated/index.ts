@@ -163632,6 +163632,7 @@ export interface operations {
             query?: {
                 page?: number;
                 size?: number;
+                status?: string;
             };
             header?: never;
             path?: never;
