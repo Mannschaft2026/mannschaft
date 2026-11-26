@@ -11,7 +11,6 @@ import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -24,7 +23,6 @@ import java.util.UUID;
  * 呼び出し側（SupportAccessFilter）が「元の認証が ROLE_SYSTEM_ADMIN か」を先に確かめる前提。</p>
  */
 @Service
-@Transactional(readOnly = true)
 public class SupportAccessGrantValidator {
 
     private static final String STATUS_ACTIVE = "ACTIVE";

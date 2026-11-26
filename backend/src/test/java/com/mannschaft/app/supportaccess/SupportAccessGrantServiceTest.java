@@ -4,6 +4,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.supportaccess.dto.CreateSupportAccessGrantRequest;
 import com.mannschaft.app.supportaccess.dto.SupportAccessApproveRequest;
 import com.mannschaft.app.supportaccess.dto.SupportAccessSessionResponse;
+import com.mannschaft.app.supportaccess.dto.SupportAccessGrantSnapshot;
 import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.port.SupportAccessOperatorAffiliationPort;
@@ -13,6 +14,7 @@ import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.service.SupportAccessAuditRecorder;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantService;
+import com.mannschaft.app.supportaccess.service.SupportAccessGrantTransitionService;
 import com.mannschaft.app.supportaccess.service.SupportAccessLogRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -82,8 +84,10 @@ class SupportAccessGrantServiceTest {
         logRecorder = mock(SupportAccessLogRecorder.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
         Clock clock = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
-        service = new SupportAccessGrantService(grantRepository, userDirectory, affiliationPort, reauth,
-                auditRecorder, logRecorder, eventPublisher, clock);
+        // 書込トランザクション（Repository のみ）と、TX の外で動く入口（port・監査）に分けて組む
+        service = new SupportAccessGrantService(
+                new SupportAccessGrantTransitionService(grantRepository, logRecorder, eventPublisher, clock),
+                userDirectory, affiliationPort, reauth, auditRecorder);
 
         lenient().when(userDirectory.findUser(TARGET_ID))
                 .thenReturn(Optional.of(new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", false, false)));
@@ -141,18 +145,18 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S8/S11/S12 依頼は PENDING・依頼から72時間で失効として保存し、監査 REQUESTED と通知イベントを出す")
         void S8_依頼はPENDINGで保存() {
-            SupportAccessGrantEntity saved = service.request(OPERATOR_ID,
+            SupportAccessGrantSnapshot saved = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, "FEEDBACK", 77L));
 
-            assertThat(saved.getStatus()).isEqualTo(SupportAccessStatus.PENDING);
-            assertThat(saved.getOperatorUserId()).isEqualTo(OPERATOR_ID);
-            assertThat(saved.getTargetUserId()).isEqualTo(TARGET_ID);
-            assertThat(saved.getRequestReason()).isEqualTo(REASON);
-            assertThat(saved.getReferenceType()).isEqualTo("FEEDBACK");
-            assertThat(saved.getReferenceId()).isEqualTo(77L);
-            assertThat(saved.getRequestedAt()).isEqualTo(NOW);
-            assertThat(saved.getRequestExpiresAt()).isEqualTo(NOW.plusHours(72));
-            assertThat(saved.getExpiresAt()).isNull();
+            assertThat(saved.status()).isEqualTo(SupportAccessStatus.PENDING);
+            assertThat(saved.operatorUserId()).isEqualTo(OPERATOR_ID);
+            assertThat(saved.targetUserId()).isEqualTo(TARGET_ID);
+            assertThat(saved.requestReason()).isEqualTo(REASON);
+            assertThat(saved.referenceType()).isEqualTo("FEEDBACK");
+            assertThat(saved.referenceId()).isEqualTo(77L);
+            assertThat(saved.requestedAt()).isEqualTo(NOW);
+            assertThat(saved.requestExpiresAt()).isEqualTo(NOW.plusHours(72));
+            assertThat(saved.expiresAt()).isNull();
             verify(grantRepository).save(any(SupportAccessGrantEntity.class));
             verify(auditRecorder).record(eq(SupportAccessAuditAction.REQUESTED), eq(OPERATOR_ID), eq(TARGET_ID), any());
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
@@ -239,12 +243,12 @@ class SupportAccessGrantServiceTest {
             given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
                     .willReturn(Optional.of(stale));
 
-            SupportAccessGrantEntity created = service.request(OPERATOR_ID,
+            SupportAccessGrantSnapshot created = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
 
             assertThat(stale.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
             assertThat(stale.getEndedReason()).isEqualTo(SupportAccessEndedReason.EXPIRED);
-            assertThat(created.getStatus()).isEqualTo(SupportAccessStatus.PENDING);
+            assertThat(created.status()).isEqualTo(SupportAccessStatus.PENDING);
             verify(auditRecorder).record(eq(SupportAccessAuditAction.EXPIRED), eq(OPERATOR_ID), eq(TARGET_ID), any());
         }
 
@@ -255,11 +259,11 @@ class SupportAccessGrantServiceTest {
             given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
                     .willReturn(Optional.of(stale));
 
-            SupportAccessGrantEntity created = service.request(OPERATOR_ID,
+            SupportAccessGrantSnapshot created = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
 
             assertThat(stale.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
-            assertThat(created.getStatus()).isEqualTo(SupportAccessStatus.PENDING);
+            assertThat(created.status()).isEqualTo(SupportAccessStatus.PENDING);
         }
 
         @Test
@@ -278,11 +282,11 @@ class SupportAccessGrantServiceTest {
         void S9_未成年は保護者承認が必要() {
             given(userDirectory.findRequiredGuardianUserId(TARGET_ID)).willReturn(Optional.of(GUARDIAN_ID));
 
-            SupportAccessGrantEntity saved = service.request(OPERATOR_ID,
+            SupportAccessGrantSnapshot saved = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
 
-            assertThat(saved.isGuardianApprovalRequired()).isTrue();
-            assertThat(saved.getGuardianUserId()).isEqualTo(GUARDIAN_ID);
+            assertThat(saved.guardianApprovalRequired()).isTrue();
+            assertThat(saved.guardianUserId()).isEqualTo(GUARDIAN_ID);
             assertThat(publishedEvents()).anySatisfy(e -> {
                 assertThat(e.action()).isEqualTo(SupportAccessAuditAction.REQUESTED);
                 assertThat(e.guardianUserId()).isEqualTo(GUARDIAN_ID);

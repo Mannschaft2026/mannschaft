@@ -18,7 +18,7 @@ import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.chart.repository.ChartRecordRepository;
 import com.mannschaft.app.common.EncryptionService;
 import com.mannschaft.app.effortrecord.service.EffortPersonalDataService;
-import com.mannschaft.app.supportaccess.service.SupportAccessPersonalDataService;
+import com.mannschaft.app.gdpr.event.PersonalDataCategoryCollectEvent;
 import com.mannschaft.app.errorreport.entity.ErrorReportOccurrenceEntity;
 import com.mannschaft.app.errorreport.repository.ErrorReportOccurrenceRepository;
 import com.mannschaft.app.errorreport.repository.ErrorReportRepository;
@@ -123,10 +123,12 @@ public class PersonalDataCollector {
     private final RanchPersonalDataExportService ranchPersonalDataExportService;
     // F06.4.1 個人の頑張り記録: 他ドメインの Entity を直接参照せず Service 経由で DTO を受け取る
     private final EffortPersonalDataService effortPersonalDataService;
-    // F10.9 サポート閲覧: 運営者が自分の視点を閲覧した記録（本人が知る権利）。Entity は参照せず Service 経由で DTO を受け取る
+    // F10.9 サポート閲覧: 運営者が自分の視点を閲覧した記録（本人が知る権利）。supportaccess の Service を直接呼ぶと
+    // エクスポートの @Transactional 入口から supportaccess の Repository へ静的に到達する（D-3T）ため、
+    // 収集依頼の同期イベントを publish し、supportaccess 側のリスナーが結果を返す。
     // コンストラクタ引数を増やすと凍結済みの D-5 違反キー（コンストラクタ署名）が全件変わるため、フィールド注入にする
     @org.springframework.beans.factory.annotation.Autowired
-    private SupportAccessPersonalDataService supportAccessPersonalDataService;
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -251,9 +253,20 @@ public class PersonalDataCollector {
             case "scheduleComments" -> collectScheduleComments(userId);
             case "ranch" -> ranchPersonalDataExportService.exportUser(userId);
             case "effort_records" -> OBJECT_MAPPER.writeValueAsString(effortPersonalDataService.collectForGdpr(userId));
-            case "support_access_logs" -> OBJECT_MAPPER.writeValueAsString(supportAccessPersonalDataService.listLogsForTarget(userId));
+            case "support_access_logs" -> collectViaEvent(userId, category);
             default -> "[]";
         };
+    }
+
+    /** 収集依頼の同期イベントを publish し、そのカテゴリを持つドメインのリスナーが返した内容を JSON 化する。 */
+    private String collectViaEvent(Long userId, String category) throws Exception {
+        PersonalDataCategoryCollectEvent event = new PersonalDataCategoryCollectEvent(userId, category);
+        eventPublisher.publishEvent(event);
+        if (!event.isAnswered()) {
+            // 担当リスナーが無いまま空で出力すると、本人の個人データが黙って欠落する
+            throw new IllegalStateException("収集の担当が応答しませんでした category=" + category);
+        }
+        return OBJECT_MAPPER.writeValueAsString(event.getPayload());
     }
 
     /**

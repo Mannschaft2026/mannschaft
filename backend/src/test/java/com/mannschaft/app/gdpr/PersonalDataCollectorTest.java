@@ -131,9 +131,9 @@ class PersonalDataCollectorTest {
     // F06.4.1 個人の頑張り記録
     @Mock
     private com.mannschaft.app.effortrecord.service.EffortPersonalDataService effortPersonalDataService;
-    // F10.9 サポート閲覧の閲覧記録（戦役Z-B）
+    // F10.9 サポート閲覧の閲覧記録（戦役Z-B）: 収集依頼の同期イベントを担当ドメインのリスナーが返す
     @Mock
-    private com.mannschaft.app.supportaccess.service.SupportAccessPersonalDataService supportAccessPersonalDataService;
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private PersonalDataCollector collector;
@@ -192,7 +192,12 @@ class PersonalDataCollectorTest {
 
             given(ranchPersonalDataExportService.exportUser(anyLong())).willReturn("{}");
             given(effortPersonalDataService.collectForGdpr(anyLong())).willReturn(List.of());
-            given(supportAccessPersonalDataService.listLogsForTarget(anyLong())).willReturn(List.of());
+            // コンストラクタ注入が成立するため、フィールド注入（@Autowired）の publisher は明示的に差し込む
+            org.springframework.test.util.ReflectionTestUtils.setField(collector, "eventPublisher", eventPublisher);
+            org.mockito.Mockito.doAnswer(inv -> {
+                ((com.mannschaft.app.gdpr.event.PersonalDataCategoryCollectEvent) inv.getArgument(0)).respond(List.of());
+                return null;
+            }).when(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(Object.class));
 
             // memberships は事前取得が必要（F01.2.1 2-D）。0 件の事前取得を渡す
             Map<String, String> result = collector.collect(1L, null,

@@ -7,7 +7,6 @@ import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -19,7 +18,6 @@ import java.util.UUID;
  * F10.9 本人の閲覧記録（設定画面と GDPR エクスポートの両方で使う）。運営者は表示名だけを出し、メールは出さない。
  */
 @Service
-@Transactional(readOnly = true)
 public class SupportAccessPersonalDataService {
 
     private final SupportAccessLogRepository logRepository;

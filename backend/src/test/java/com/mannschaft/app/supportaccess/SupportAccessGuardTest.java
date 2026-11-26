@@ -246,8 +246,13 @@ class SupportAccessGuardTest {
     @Test
     @DisplayName("S15 GDPR エクスポート（PersonalDataCollector）は本人の閲覧記録を含める")
     void S15_GDPRエクスポートに閲覧記録() {
+        // エクスポートの TX から supportaccess の Repository へ静的に到達させない（D-3T）ため、
+        // 収集依頼の同期イベントを publish し、supportaccess の SupportAccessExportListener が
+        // SupportAccessPersonalDataService で収集して返す。
         String collector = read(MAIN.resolve("gdpr/service/PersonalDataCollector.java"));
-        Matcher m = Pattern.compile("SupportAccessPersonalDataService").matcher(collector);
-        assertThat(m.find()).as("PersonalDataCollector が SupportAccessPersonalDataService を使う").isTrue();
+        assertThat(collector).contains("\"support_access_logs\"").contains("PersonalDataCategoryCollectEvent");
+        String listener = read(MAIN.resolve("supportaccess/listener/SupportAccessExportListener.java"));
+        Matcher m = Pattern.compile("SupportAccessPersonalDataService").matcher(listener);
+        assertThat(m.find()).as("SupportAccessExportListener が SupportAccessPersonalDataService を使う").isTrue();
     }
 }

@@ -4,9 +4,9 @@ import com.mannschaft.app.billing.BillingPurgeEventListener;
 import com.mannschaft.app.chart.event.ChartPurgeEventListener;
 import com.mannschaft.app.effortrecord.event.EffortRecordPurgeEventListener;
 import com.mannschaft.app.errorreport.event.ErrorReportPurgeEventListener;
-import com.mannschaft.app.supportaccess.listener.SupportAccessPurgeEventListener;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.gdpr.event.DiagnosisPurgeRetryRequestedEvent;
+import com.mannschaft.app.gdpr.event.SupportAccessPurgeRetryRequestedEvent;
 import com.mannschaft.app.gdpr.dto.RetryResultResponse;
 import com.mannschaft.app.gdpr.entity.AccountPurgeCompletionStatusEntity;
 import com.mannschaft.app.gdpr.repository.AccountPurgeCompletionStatusRepository;
@@ -53,7 +53,6 @@ public class GdprPurgeRetryService {
     private final BillingPurgeEventListener billingPurgeEventListener;
     private final RanchPurgeEventListener ranchPurgeEventListener;
     private final EffortRecordPurgeEventListener effortRecordPurgeEventListener;
-    private final SupportAccessPurgeEventListener supportAccessPurgeEventListener;
     private final DomainEventPublisher eventPublisher;
 
     /** 受け付けるドメイン名の集合。不明なドメイン名は即時 IllegalArgumentException。 */
@@ -90,11 +89,14 @@ public class GdprPurgeRetryService {
         }
 
         // ドメイン操作を実行（completionStatusRepository の更新はここでは行わない）
-        boolean queued = "diagnosis".equals(domainName);
+        boolean queued = "diagnosis".equals(domainName) || "supportaccess".equals(domainName);
         boolean succeeded = false;
-        if (queued) {
+        if ("diagnosis".equals(domainName)) {
             // 同期GDPR TXでは診断のRepositoryを呼ばず、受付コミット後に独立して削除する。
             eventPublisher.publish(new DiagnosisPurgeRetryRequestedEvent(userId));
+        } else if ("supportaccess".equals(domainName)) {
+            // 同期GDPR TXではサポート閲覧のRepositoryを呼ばず、受付コミット後に独立して削除する（D-3T）。
+            eventPublisher.publish(new SupportAccessPurgeRetryRequestedEvent(userId));
         } else {
             succeeded = executeRetry(userId, domainName);
         }
@@ -146,7 +148,6 @@ public class GdprPurgeRetryService {
             case "billing"     -> billingPurgeEventListener.retryPurge(userId);
             case "ranch"       -> ranchPurgeEventListener.retryPurge(userId);
             case "effortrecord" -> effortRecordPurgeEventListener.retryPurge(userId);
-            case "supportaccess" -> supportAccessPurgeEventListener.retryPurge(userId);
             default -> throw new IllegalStateException("到達不能: " + domainName);
         };
     }

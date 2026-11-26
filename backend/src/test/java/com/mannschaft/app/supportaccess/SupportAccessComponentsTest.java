@@ -157,9 +157,9 @@ class SupportAccessComponentsTest {
     // ─── 記録の REQUIRES_NEW（S10/S11） ──────────────────────────
 
     @Test
-    @DisplayName("S10/S11 閲覧記録と監査の記録部品は公開メソッドすべてが REQUIRES_NEW（業務 TX が失敗しても消えない）")
+    @DisplayName("S10/S11 閲覧記録の記録部品は公開メソッドすべてが REQUIRES_NEW（業務 TX が失敗しても消えない）")
     void S11_記録部品はREQUIRES_NEW() {
-        for (Class<?> type : List.of(SupportAccessLogRecorder.class, SupportAccessAuditRecorder.class)) {
+        for (Class<?> type : List.of(SupportAccessLogRecorder.class)) {
             List<Method> publicMethods = Arrays.stream(type.getDeclaredMethods())
                     .filter(m -> java.lang.reflect.Modifier.isPublic(m.getModifiers()))
                     .toList();
@@ -173,6 +173,16 @@ class SupportAccessComponentsTest {
                 assertThat(tx.propagation()).as("%s#%s", type.getSimpleName(), m.getName())
                         .isEqualTo(Propagation.REQUIRES_NEW);
             }
+        }
+    }
+
+    @Test
+    @DisplayName("S11 遷移の監査の記録部品は @Transactional を持たない（auth の監査を supportaccess の TX の中から呼ばず、コミット後に独立して書く: D-3T）")
+    void S11_監査部品は書込TXの外で動く() {
+        assertThat(SupportAccessAuditRecorder.class.getAnnotation(Transactional.class)).isNull();
+        for (Method m : SupportAccessAuditRecorder.class.getDeclaredMethods()) {
+            assertThat(m.getAnnotation(Transactional.class))
+                    .as("SupportAccessAuditRecorder#%s", m.getName()).isNull();
         }
     }
 

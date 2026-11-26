@@ -12,7 +12,6 @@ import com.mannschaft.app.supportaccess.dto.CreateSupportAccessGrantRequest;
 import com.mannschaft.app.supportaccess.dto.SupportAccessGrantResponse;
 import com.mannschaft.app.supportaccess.dto.SupportAccessLogView;
 import com.mannschaft.app.supportaccess.dto.SupportAccessSessionResponse;
-import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantQueryService;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantService;
 import com.mannschaft.app.supportaccess.service.SupportAccessPersonalDataService;
@@ -63,9 +62,8 @@ public class SystemAdminSupportAccessController {
     public ResponseEntity<ApiResponse<SupportAccessGrantResponse>> createGrant(
             @Valid @RequestBody CreateSupportAccessGrantRequest request) {
         Long operatorId = SecurityUtils.getCurrentUserId();
-        SupportAccessGrantEntity created = grantService.request(operatorId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.of(queryService.getForOperator(operatorId, created.getId())));
+                .body(ApiResponse.of(queryService.toOperatorResponse(grantService.request(operatorId, request))));
     }
 
     @GetMapping("/grants")
@@ -94,8 +92,7 @@ public class SystemAdminSupportAccessController {
     @Operation(summary = "依頼・許可の撤回", description = "PENDING/APPROVED を CANCELLED にする。次のリクエストから代理閲覧は拒否される。")
     public ResponseEntity<ApiResponse<SupportAccessGrantResponse>> cancel(@PathVariable UUID id) {
         Long operatorId = SecurityUtils.getCurrentUserId();
-        grantService.cancel(operatorId, id);
-        return ResponseEntity.ok(ApiResponse.of(queryService.getForOperator(operatorId, id)));
+        return ResponseEntity.ok(ApiResponse.of(queryService.toOperatorResponse(grantService.cancel(operatorId, id))));
     }
 
     @PostMapping("/grants/{id}/sessions")

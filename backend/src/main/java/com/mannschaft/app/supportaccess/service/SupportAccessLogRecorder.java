@@ -5,9 +5,11 @@ import com.mannschaft.app.supportaccess.SupportAccessEventKind;
 import com.mannschaft.app.supportaccess.context.SupportAccessContext;
 import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
+import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,18 +42,18 @@ public class SupportAccessLogRecorder {
 
     private final SupportAccessLogRepository logRepository;
     private final Clock clock;
-    private final SupportAccessAuditRecorder auditRecorder;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
     public SupportAccessLogRecorder(SupportAccessLogRepository logRepository,
                                     @Qualifier("wallClock") Clock clock,
-                                    SupportAccessAuditRecorder auditRecorder) {
+                                    ApplicationEventPublisher eventPublisher) {
         this.logRepository = logRepository;
         this.clock = clock;
-        this.auditRecorder = auditRecorder;
+        this.eventPublisher = eventPublisher;
     }
 
-    /** 単体テスト用（拒否の監査は書かない）。 */
+    /** 単体テスト用（拒否の監査イベントは publish しない）。 */
     public SupportAccessLogRecorder(SupportAccessLogRepository logRepository, Clock clock) {
         this(logRepository, clock, null);
     }
@@ -85,7 +87,7 @@ public class SupportAccessLogRecorder {
 
     /**
      * 拒否を記録する。grant が実在する場合は support_access_logs に DENIED 行（本人から見える）、
-     * いずれの場合も監査（SUPPORT_ACCESS_DENIED_REQUEST）に残す。
+     * いずれの場合も監査（SUPPORT_ACCESS_DENIED_REQUEST）に残す（コミット後に {@code SupportAccessAuditListener} が書く）。
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordDenied(Long operatorUserId, String grantIdHeader, String httpMethod, String requestPath, String denyCode) {
@@ -101,8 +103,11 @@ public class SupportAccessLogRecorder {
                         .build();
                 logRepository.save(withScope(row, path));
             }
-            if (auditRecorder != null) {
-                auditRecorder.record(SupportAccessAuditAction.DENIED_REQUEST, operatorUserId, targetUserId, grantId);
+            if (eventPublisher != null) {
+                // 監査（他ドメイン auth の Repository）はこの TX の中では書かない。コミット後に
+                // SupportAccessAuditListener が書く（D-3T: supportaccess の TX を他ドメインへ到達させない）。
+                eventPublisher.publishEvent(new SupportAccessGrantChangedEvent(
+                        SupportAccessAuditAction.DENIED_REQUEST, grantId, operatorUserId, targetUserId, null));
             }
             return null;
         });

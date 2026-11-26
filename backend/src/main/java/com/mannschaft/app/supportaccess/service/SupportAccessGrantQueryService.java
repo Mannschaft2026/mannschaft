@@ -5,6 +5,7 @@ import com.mannschaft.app.supportaccess.SupportAccessErrorCode;
 import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.supportaccess.dto.MySupportAccessGrantResponse;
 import com.mannschaft.app.supportaccess.dto.SupportAccessGrantResponse;
+import com.mannschaft.app.supportaccess.dto.SupportAccessGrantSnapshot;
 import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
@@ -12,7 +13,6 @@ import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -23,9 +23,12 @@ import java.util.UUID;
 
 /**
  * F10.9 依頼・許可の参照系（運営側・本人側の一覧と詳細）。Entity は返さず、表示名つきの応答 DTO に変換する。
+ *
+ * <p>{@code @Transactional} を持たない。grant の読取は Repository 自身の読取トランザクションで済ませ、
+ * 表示名の解決（他ドメインへの port 問い合わせ）はトランザクションの外で行う
+ * （CLAUDE.md「{@code @Transactional} はドメイン内に閉じる」）。</p>
  */
 @Service
-@Transactional(readOnly = true)
 public class SupportAccessGrantQueryService {
 
     /** 運営者の一覧で取得する上限（1日20件の上限があるため十分に小さい）。状態・対象での絞り込みはこの範囲で行う。 */
@@ -54,7 +57,7 @@ public class SupportAccessGrantQueryService {
                 .filter(g -> status == null || g.getStatus() == status)
                 .filter(g -> targetUserId == null || g.getTargetUserId().equals(targetUserId))
                 .limit(limit)
-                .map(g -> toOperatorResponse(g, names))
+                .map(g -> toOperatorResponse(SupportAccessGrantSnapshot.from(g), names))
                 .toList();
     }
 
@@ -63,7 +66,7 @@ public class SupportAccessGrantQueryService {
         SupportAccessGrantEntity grant = grantRepository.findById(grantId)
                 .filter(g -> g.getOperatorUserId().equals(operatorUserId))
                 .orElseThrow(() -> new BusinessException(SupportAccessErrorCode.GRANT_NOT_FOUND));
-        return toOperatorResponse(grant, new HashMap<>());
+        return toOperatorResponse(SupportAccessGrantSnapshot.from(grant), new HashMap<>());
     }
 
     /** 運営者の所有確認のみ（閲覧記録の取得の前に使う）。 */
@@ -81,7 +84,7 @@ public class SupportAccessGrantQueryService {
         return rows.stream()
                 .filter(g -> status == null || g.getStatus() == status)
                 .limit(limit)
-                .map(g -> toMyResponse(g, userId, now, names))
+                .map(g -> toMyResponse(SupportAccessGrantSnapshot.from(g), userId, now, names))
                 .toList();
     }
 
@@ -91,53 +94,63 @@ public class SupportAccessGrantQueryService {
                 .filter(g -> g.getTargetUserId().equals(userId)
                         || (g.isGuardianApprovalRequired() && userId.equals(g.getGuardianUserId())))
                 .orElseThrow(() -> new BusinessException(SupportAccessErrorCode.GRANT_NOT_FOUND));
-        return toMyResponse(grant, userId, LocalDateTime.now(clock), new HashMap<>());
+        return toMyResponse(SupportAccessGrantSnapshot.from(grant), userId, LocalDateTime.now(clock), new HashMap<>());
     }
 
-    private SupportAccessGrantResponse toOperatorResponse(SupportAccessGrantEntity g, Map<Long, String> names) {
+    /** 遷移直後の grant（運営者の視点）を応答に変換する。 */
+    public SupportAccessGrantResponse toOperatorResponse(SupportAccessGrantSnapshot g) {
+        return toOperatorResponse(g, new HashMap<>());
+    }
+
+    /** 遷移直後の grant（本人または保護者の視点）を応答に変換する。 */
+    public MySupportAccessGrantResponse toMyResponse(SupportAccessGrantSnapshot g, Long viewerUserId) {
+        return toMyResponse(g, viewerUserId, LocalDateTime.now(clock), new HashMap<>());
+    }
+
+    private SupportAccessGrantResponse toOperatorResponse(SupportAccessGrantSnapshot g, Map<Long, String> names) {
         return new SupportAccessGrantResponse(
-                g.getId(),
-                g.getTargetUserId(),
-                name(names, g.getTargetUserId()),
-                g.getStatus().name(),
-                g.getRequestReason(),
-                g.getReferenceType(),
-                g.getReferenceId(),
-                g.getRequestedAt(),
-                g.getRequestExpiresAt(),
-                g.getDecidedAt(),
-                g.getExpiresAt(),
-                g.getRevokedAt(),
-                g.getEndedReason() == null ? null : g.getEndedReason().name(),
-                g.isGuardianApprovalRequired(),
-                g.getGuardianDecidedAt(),
-                g.isSessionActive());
+                g.id(),
+                g.targetUserId(),
+                name(names, g.targetUserId()),
+                g.status().name(),
+                g.requestReason(),
+                g.referenceType(),
+                g.referenceId(),
+                g.requestedAt(),
+                g.requestExpiresAt(),
+                g.decidedAt(),
+                g.expiresAt(),
+                g.revokedAt(),
+                g.endedReason() == null ? null : g.endedReason().name(),
+                g.guardianApprovalRequired(),
+                g.guardianDecidedAt(),
+                g.sessionActive());
     }
 
-    private MySupportAccessGrantResponse toMyResponse(SupportAccessGrantEntity g, Long viewerUserId,
+    private MySupportAccessGrantResponse toMyResponse(SupportAccessGrantSnapshot g, Long viewerUserId,
                                                       LocalDateTime now, Map<Long, String> names) {
-        boolean guardianOnly = !g.getTargetUserId().equals(viewerUserId);
+        boolean guardianOnly = !g.targetUserId().equals(viewerUserId);
         boolean alreadyApproved = g.hasApprovalBy(guardianOnly);
-        boolean canApprove = g.getStatus() == SupportAccessStatus.PENDING
-                && now.isBefore(g.getRequestExpiresAt())
+        boolean canApprove = g.status() == SupportAccessStatus.PENDING
+                && now.isBefore(g.requestExpiresAt())
                 && !alreadyApproved;
         return new MySupportAccessGrantResponse(
-                g.getId(),
+                g.id(),
                 guardianOnly ? "GUARDIAN" : "TARGET",
-                name(names, g.getOperatorUserId()),
-                name(names, g.getTargetUserId()),
-                g.getStatus().name(),
-                g.getRequestReason(),
-                g.getReferenceType(),
-                g.getRequestedAt(),
-                g.getRequestExpiresAt(),
-                g.getDecidedAt(),
-                g.getExpiresAt(),
-                g.getRevokedAt(),
-                g.getEndedReason() == null ? null : g.getEndedReason().name(),
-                g.isGuardianApprovalRequired(),
-                g.getDecidedAt() != null && g.getStatus() != SupportAccessStatus.DENIED,
-                g.getGuardianDecidedAt() != null,
+                name(names, g.operatorUserId()),
+                name(names, g.targetUserId()),
+                g.status().name(),
+                g.requestReason(),
+                g.referenceType(),
+                g.requestedAt(),
+                g.requestExpiresAt(),
+                g.decidedAt(),
+                g.expiresAt(),
+                g.revokedAt(),
+                g.endedReason() == null ? null : g.endedReason().name(),
+                g.guardianApprovalRequired(),
+                g.decidedAt() != null && g.status() != SupportAccessStatus.DENIED,
+                g.guardianDecidedAt() != null,
                 canApprove);
     }
 

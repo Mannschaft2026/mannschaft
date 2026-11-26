@@ -80,8 +80,7 @@ public class MySupportAccessController {
     public ResponseEntity<ApiResponse<MySupportAccessGrantResponse>> approve(
             @PathVariable UUID id, @RequestBody(required = false) SupportAccessApproveRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
-        grantService.approve(userId, id, request);
-        return ResponseEntity.ok(ApiResponse.of(queryService.getForUser(userId, id)));
+        return ResponseEntity.ok(ApiResponse.of(queryService.toMyResponse(grantService.approve(userId, id, request), userId)));
     }
 
     @PostMapping("/grants/{id}/deny")
@@ -89,16 +88,15 @@ public class MySupportAccessController {
     public ResponseEntity<ApiResponse<MySupportAccessGrantResponse>> deny(
             @PathVariable UUID id, @Valid @RequestBody(required = false) SupportAccessDenyRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
-        grantService.deny(userId, id, request == null ? null : request.comment());
-        return ResponseEntity.ok(ApiResponse.of(queryService.getForUser(userId, id)));
+        return ResponseEntity.ok(ApiResponse.of(queryService.toMyResponse(
+                grantService.deny(userId, id, request == null ? null : request.comment()), userId)));
     }
 
     @PostMapping("/grants/{id}/revoke")
     @Operation(summary = "サポート閲覧の許可の取消", description = "いつでも取り消せる。取消の次のリクエストから代理閲覧は拒否される。")
     public ResponseEntity<ApiResponse<MySupportAccessGrantResponse>> revoke(@PathVariable UUID id) {
         Long userId = SecurityUtils.getCurrentUserId();
-        grantService.revoke(userId, id);
-        return ResponseEntity.ok(ApiResponse.of(queryService.getForUser(userId, id)));
+        return ResponseEntity.ok(ApiResponse.of(queryService.toMyResponse(grantService.revoke(userId, id), userId)));
     }
 
     @GetMapping("/logs")
