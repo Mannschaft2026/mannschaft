@@ -47,18 +47,27 @@ public class PlatformAccountAffiliationPolicy {
     }
 
     /**
-     * 公式村の作成者としての村長所属だけを許す、明示の例外（マスター決定 2026-11-26）。
+     * 例外の述語: 「公式村（OFFICIAL）で、本人が作成者で、村長（HEADMAN）の所属行」か（マスター決定 2026-11-26）。
      *
-     * <p>{@code officialVillageCreator} が true（呼び出し側が「村の種別が OFFICIAL で、本人がその作成者として
-     * 村長になる所属行」であることを確認済み）なら通し、false なら {@link #assertAffiliatable} と同じ判定にする。
-     * 村の種別そのものはこのクラスでは確認しない（village ドメインへ依存しないため）。呼び出し側は
-     * 公式村の作成経路（村作成申請）に限って true を渡すこと。</p>
-     *
-     * @param userId                所属させようとしているユーザー ID
-     * @param officialVillageCreator 公式村の作成者を村長として所属させる場合だけ true
+     * <p>点検 SQL（{@code platform_account_affiliation/inspection.sql} の village_memberships 節の NOT EXISTS）と
+     * 同じ条件で、次の対応にある: {@code officialVillage} = {@code v.type = 'OFFICIAL'} /
+     * {@code villageCreatedByUserId == userId} = {@code v.created_by_user_id = vm.subject_id} /
+     * {@code headman} = {@code vm.role = 'HEADMAN'}。条件を変えるときは Java と SQL を必ず同時に直すこと。
+     * village ドメインへ依存しないため、村の種別・ロールは真偽値で受ける。</p>
      */
-    public void assertAffiliatableAsOfficialVillageCreator(Long userId, boolean officialVillageCreator) {
-        if (officialVillageCreator) {
+    public static boolean isOfficialVillageCreatorHeadman(
+            boolean officialVillage, Long villageCreatedByUserId, Long userId, boolean headman) {
+        return officialVillage && headman && userId != null && userId.equals(villageCreatedByUserId);
+    }
+
+    /**
+     * 公式村の作成者としての村長所属だけを許す、明示の例外（マスター決定 2026-11-26）。
+     * {@link #isOfficialVillageCreatorHeadman} が true なら通し、そうでなければ {@link #assertAffiliatable} と同じ判定にする。
+     * 呼べるクラスは番人 G4 で village の 2 クラス（入村枠サービス・所属プロフィールサービス）に限っている。
+     */
+    public void assertAffiliatableAsOfficialVillageCreator(
+            Long userId, boolean officialVillage, Long villageCreatedByUserId, boolean headman) {
+        if (isOfficialVillageCreatorHeadman(officialVillage, villageCreatedByUserId, userId, headman)) {
             return;
         }
         assertAffiliatable(userId);

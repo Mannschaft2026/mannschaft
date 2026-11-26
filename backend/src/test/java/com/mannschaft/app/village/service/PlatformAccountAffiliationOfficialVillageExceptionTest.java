@@ -113,6 +113,12 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
         return m;
     }
 
+    private static VillageEntity officialVillage() {
+        VillageEntity v = VillageEntity.builder().type(VillageType.OFFICIAL).createdByUserId(PLATFORM_USER_ID).build();
+        v.setId(VILLAGE_ID);
+        return v;
+    }
+
     private static void assertPlatformForbidden(ThrowingCallable call) {
         assertThatThrownBy(call)
                 .isInstanceOf(BusinessException.class)
@@ -171,7 +177,7 @@ class PlatformAccountAffiliationOfficialVillageExceptionTest {
     @Test
     @DisplayName("公式村の作成者の例外は村長（HEADMAN）の所属行に限る（村人の行は 403）")
     void 例外の入口でも村長以外の所属行は403() {
-        assertPlatformForbidden(() -> slots.admitOfficialVillageCreator(userMembership(VillageRole.VILLAGER)));
+        assertPlatformForbidden(() -> slots.admitOfficialVillageCreator(userMembership(VillageRole.VILLAGER), officialVillage()));
         verify(membershipRepository, never()).save(any());
     }
 }

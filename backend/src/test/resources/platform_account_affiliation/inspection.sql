@@ -22,6 +22,7 @@ SELECT 'village_memberships', vm.subject_id, 'VILLAGE', HEX(vm.village_id), vm.r
   FROM village_memberships vm JOIN sa ON sa.user_id = vm.subject_id
   WHERE vm.subject_type = 'USER' AND vm.left_at IS NULL
     -- 唯一の例外（マスター決定 2026-11-26）: 公式村（OFFICIAL）の作成者としての村長所属は 0 件判定から除く。
+    -- Java 側の述語 PlatformAccountAffiliationPolicy.isOfficialVillageCreatorHeadman と対応: officialVillage = v.type, villageCreatedByUserId == userId = v.created_by_user_id = vm.subject_id, headman = vm.role。変えるときは両方同時に直す。
     AND NOT EXISTS (
       SELECT 1 FROM villages v
       WHERE v.id = vm.village_id AND v.type = 'OFFICIAL'

@@ -83,7 +83,10 @@ public class VillageCreationRequestService {
         // 唯一の例外: 公式村（OFFICIAL）の作成者としての村長所属（マスター決定 2026-11-26）。
         // 例外はこの作成時の所属だけで、通常村の作成・他経路の所属は引き続き 403。
         boolean officialVillage = req.type() == VillageType.OFFICIAL;
-        platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(requesterUserId, officialVillage);
+        // 公式村は入村時に admitOfficialVillageCreator が村の種別・作成者・村長を確認する（非運営の申請は下で拒否）。
+        if (!officialVillage) {
+            platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
+        }
 
         // 一般ユーザーは OFFICIAL を申請できない
         if (req.type() == VillageType.OFFICIAL && !isSystemAdmin(requesterUserId)) {
@@ -165,7 +168,7 @@ public class VillageCreationRequestService {
                 .role(VillageRole.HEADMAN)
                 .build();
         if (officialVillage) {
-            slotService.admitOfficialVillageCreator(membership);
+            slotService.admitOfficialVillageCreator(membership, savedVillage);
         } else {
             slotService.admit(membership);
         }

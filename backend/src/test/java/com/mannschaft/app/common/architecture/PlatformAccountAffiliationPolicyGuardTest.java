@@ -64,7 +64,7 @@ class PlatformAccountAffiliationPolicyGuardTest {
                     + "\\s*\\.\\s*(?:save|saveAndFlush|saveAll)\\s*\\(");
 
     /** Policy の判定呼び出し。 */
-    static final Pattern POLICY_CALL = Pattern.compile("\\.\\s*(?:assertAffiliatable|isPlatformAccount)\\s*\\(");
+    static final Pattern POLICY_CALL = Pattern.compile("\\.\\s*(?:assertAffiliatable|assertAffiliatableAsOfficialVillageCreator|isPlatformAccount)\\s*\\(");
 
     /** Policy 本体（判定を定義する側。走査対象から外す）。 */
     private static final String POLICY_SELF = "com/mannschaft/app/role/service/PlatformAccountAffiliationPolicy.java";
@@ -180,6 +180,36 @@ class PlatformAccountAffiliationPolicyGuardTest {
         sb.append("実測の基準線（貼り替え用）:\n");
         actual.forEach((k, v) -> sb.append(k).append('\t').append(v).append('\n'));
         fail(sb.toString());
+    }
+
+    /** 公式村の作成者の例外（運営アカウントの所属禁止の唯一の例外）を使ってよいクラス。増やすときはマスター確認が要る。 */
+    private static final java.util.Set<String> OFFICIAL_VILLAGE_EXCEPTION_USERS = java.util.Set.of(
+            "com/mannschaft/app/village/service/VillageMembershipSlotService.java",
+            "com/mannschaft/app/village/service/VillageMembershipProfileService.java");
+
+    private static final Pattern OFFICIAL_VILLAGE_EXCEPTION_CALL = Pattern.compile(
+            "\\b(?:assertAffiliatableAsOfficialVillageCreator|isOfficialVillageCreatorHeadman)\\b");
+
+    @Test
+    @DisplayName("P6: 公式村の作成者の例外メソッドを使うクラスは 2 クラスに限る（例外の拡散防止）")
+    void P6_公式村の例外を呼べるクラスは限定される() throws IOException {
+        java.util.Set<String> users = new java.util.TreeSet<>();
+        try (Stream<Path> stream = Files.walk(MAIN_ROOT)) {
+            for (Path p : stream.filter(Files::isRegularFile)
+                    .filter(f -> f.getFileName().toString().endsWith(".java")).toList()) {
+                String rel = MAIN_ROOT.relativize(p).toString().replace('\\', '/');
+                if (rel.equals(POLICY_SELF)) {
+                    continue;
+                }
+                String masked = JavaSourceScanningUtils.maskCommentsAndLiterals(
+                        Files.readString(p, StandardCharsets.UTF_8));
+                if (OFFICIAL_VILLAGE_EXCEPTION_CALL.matcher(masked).find()) {
+                    users.add(rel);
+                }
+            }
+        }
+        assertThat(users).as("公式村の作成者の例外を使うクラス（唯一の例外を広げない）")
+                .containsExactlyInAnyOrderElementsOf(OFFICIAL_VILLAGE_EXCEPTION_USERS);
     }
 
     @Test

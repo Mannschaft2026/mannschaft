@@ -4,10 +4,10 @@
  * バックエンド http://localhost:8080 / フロントエンド http://localhost:3000(または8081) が
  * 起動済みの状態で実行してください。
  *
- * playwright.config.ts の chromium-real-admin プロジェクトで実行されます。
- * storageState: tests/e2e/.auth/real-admin.json
+ * playwright.config.ts の chromium-real-operator プロジェクトで実行されます。
+ * storageState: tests/e2e/.auth/real-operator.json（運営アカウント）
  *
- * テストユーザー: e2e-admin@test.mannschaft.local（SYSTEM_ADMIN権限）
+ * テストユーザー: e2e-operator@test.mannschaft.local（SYSTEM_ADMIN 専用の運営アカウント。どこにも所属しない）
  * - backend/scripts/seed-e2e-data.js で role_id=1（SYSTEM_ADMIN）が付与されている
  *
  * 検証目的（memory: feedback_e2e_real_full_crud）:

@@ -107,6 +107,22 @@ class PlatformAccountAffiliationBanCommitteePathsTest {
         }
 
         @Test
+        @DisplayName("認可を満たさない者が運営アカウントを初期委員長に指定しても 403 COMMON_002（運営アカウント性を探れない）")
+        void 認可を満たさない者には宛先判定より認可エラーが先に返る() {
+            given(accessControlService.isAdminOrAbove(anyLong(), anyLong(), any())).willReturn(false);
+            org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
+                    .when(accessControlService).checkPermission(anyLong(), anyLong(), any(), any());
+
+            assertThatThrownBy(() -> service.createCommittee(
+                    ORG_ID, createRequest(PLATFORM_USER_ID), GENERAL_USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.COMMON_002);
+            org.mockito.Mockito.verifyNoInteractions(policy);
+            verify(committeeRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("P5: 一般利用者の委員会作成でも初期委員長を Policy に通す")
         void P5_初期委員長はPolicyを通る() {
             org.assertj.core.api.Assertions.catchThrowable(() -> service.createCommittee(

@@ -9,7 +9,9 @@ import com.mannschaft.app.village.dto.ProfileVisibilityResponse;
 import com.mannschaft.app.village.dto.UserVillageSummaryResponse;
 import com.mannschaft.app.village.entity.VillageEntity;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
+import com.mannschaft.app.village.entity.enums.VillageRole;
 import com.mannschaft.app.village.entity.enums.VillageSubjectType;
+import com.mannschaft.app.village.entity.enums.VillageType;
 import com.mannschaft.app.village.entity.enums.VillageVisibility;
 import com.mannschaft.app.village.repository.VillageMembershipRepository;
 import com.mannschaft.app.village.repository.VillageRepository;
@@ -65,13 +67,17 @@ public class VillageMembershipProfileService {
         // 凍結済み村でも公開トグルの切り替えは従来どおり許すため loadVillageAllowingArchived を使う。
         // 後段の NOT_MEMBER は VILLAGE_007 で不在の VILLAGE_001 と error.code が異なるため、
         // ゲートを通さないと「非公開村の非村人=VILLAGE_007 ／ 不在=VILLAGE_001」の差で村の実在が漏れていた。
-        accessGate.loadVillageAllowingArchived(villageId, userId);
-        // 運営アカウント（SYSTEM_ADMIN）の村所属は更新保存しない（戦役 Z-A PR2。既存の誤所属を延命させない）。
-        platformAccountAffiliationPolicy.assertAffiliatable(userId);
+        VillageEntity village = accessGate.loadVillageAllowingArchived(villageId, userId);
 
         VillageMembershipEntity membership = membershipRepository
                 .findActiveByVillageIdAndSubject(villageId, VillageSubjectType.USER, userId)
                 .orElseThrow(() -> new BusinessException(VillageErrorCode.NOT_MEMBER));
+
+        // 運営アカウント（SYSTEM_ADMIN）の村所属は更新保存しない（戦役 Z-A PR2。既存の誤所属を延命させない）。
+        // 唯一の例外: 公式村の作成者としての村長（マスター決定 2026-11-26）。述語は Policy に集約している。
+        platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(
+                userId, village.getType() == VillageType.OFFICIAL, village.getCreatedByUserId(),
+                membership.getRole() == VillageRole.HEADMAN);
 
         membership.setProfilePublic(profilePublic);
         membershipRepository.save(membership);

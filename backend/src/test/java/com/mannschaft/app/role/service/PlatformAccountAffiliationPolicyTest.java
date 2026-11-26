@@ -60,16 +60,26 @@ class PlatformAccountAffiliationPolicyTest {
     }
 
     @Test
-    @DisplayName("例外: 公式村の作成者としての村長所属（true）だけ運営アカウントでも通り、false は assertAffiliatable と同じく拒否する")
-    void 例外は公式村の作成者だけを通す() {
+    @DisplayName("例外: 公式村・作成者本人・村長の 3 条件がそろったときだけ運営アカウントでも通り、1 つでも欠けたら拒否する")
+    void 例外は公式村の作成者の村長だけを通す() {
         given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        Long other = 202L;
 
-        assertThatCode(() -> policy.assertAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, true))
-                .doesNotThrowAnyException();
-        assertThatThrownBy(() -> policy.assertAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, false))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+        assertThatCode(() -> policy.assertAffiliatableAsOfficialVillageCreator(
+                PLATFORM_USER_ID, true, PLATFORM_USER_ID, true)).doesNotThrowAnyException();
+        for (boolean[] c : new boolean[][] {{false, true}, {true, false}}) {
+            assertThatThrownBy(() -> policy.assertAffiliatableAsOfficialVillageCreator(
+                    PLATFORM_USER_ID, c[0], PLATFORM_USER_ID, c[1]))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+        }
+        assertThatThrownBy(() -> policy.assertAffiliatableAsOfficialVillageCreator(
+                PLATFORM_USER_ID, true, other, true))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> policy.assertAffiliatableAsOfficialVillageCreator(
+                PLATFORM_USER_ID, true, null, true))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -104,7 +114,7 @@ class PlatformAccountAffiliationPolicyTest {
                 MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN))
                 .isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN.getMessage())
-                .isEqualTo("運営アカウントはチーム・組織・委員会に所属できません");
+                .isEqualTo("運営アカウントはチーム・組織・委員会・村に所属したり、サポーター（フォロー）になったりできません");
     }
 
     @Test

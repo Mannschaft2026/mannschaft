@@ -6,6 +6,9 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.test') })
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:8081'
 
+/** SYSTEM_ADMIN 専用の実機 spec（運営アカウント e2e-operator で実行。チーム ADMIN の e2e-admin とは別アカウント）。 */
+const REAL_OPERATOR_SPECS = ['**/real/admin/system-admin.spec.ts', '**/real/admin/incident-banner-real.spec.ts']
+
 export default defineConfig({
   globalSetup: './tests/e2e/global.setup.ts',
   testDir: './tests/e2e',
@@ -78,6 +81,11 @@ export default defineConfig({
       name: 'setup-real-admin',
       testMatch: /.*real-admin\.setup\.ts/,
     },
+    // Setup: 実機テスト用運営アカウント（SYSTEM_ADMIN 専用・どこにも所属しない）の認証状態を保存
+    {
+      name: 'setup-real-operator',
+      testMatch: /.*real-operator\.setup\.ts/,
+    },
     // 実機テスト: 一般ユーザー（real/ 配下のみ実行）
     // storageState が存在しない場合は各テスト内の loginIfNeeded() でフォールバックする
     {
@@ -112,7 +120,19 @@ export default defineConfig({
         storageState: 'tests/e2e/.auth/real-admin.json',
       },
       testMatch: '**/real/admin/**/*.spec.ts',
+      // SYSTEM_ADMIN 専用の spec は運営アカウント（chromium-real-operator）で実行する（戦役 Z-A PR2: 運営はテナントに所属しない）
+      testIgnore: REAL_OPERATOR_SPECS,
       dependencies: ['setup-real-admin'],
+    },
+    // 実機テスト: 運営アカウント（SYSTEM_ADMIN 専用。チーム・組織に所属しない）
+    {
+      name: 'chromium-real-operator',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'tests/e2e/.auth/real-operator.json',
+      },
+      testMatch: REAL_OPERATOR_SPECS,
+      dependencies: ['setup-real-operator'],
     },
   ],
 

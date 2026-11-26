@@ -3,9 +3,11 @@ package com.mannschaft.app.village.service;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.UuidV7;
 import com.mannschaft.app.village.VillageErrorCode;
+import com.mannschaft.app.village.entity.VillageEntity;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
 import com.mannschaft.app.village.entity.enums.VillageRole;
 import com.mannschaft.app.village.entity.enums.VillageSubjectType;
+import com.mannschaft.app.village.entity.enums.VillageType;
 import com.mannschaft.app.village.repository.VillageMembershipRepository;
 import com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository;
 import lombok.RequiredArgsConstructor;
@@ -90,10 +92,9 @@ public class VillageMembershipSlotService {
 
     /**
      * 公式村の作成者（村長）の入村枠を割り当てる。運営アカウントの所属禁止の唯一の例外
-     * （マスター決定 2026-11-26）。公式村の作成経路（村作成申請）だけが呼ぶこと。
+     * （マスター決定 2026-11-26）。公式村の作成経路（村作成申請）だけが呼ぶ（package-private）。
      */
-    public Allocation allocateForOfficialVillageCreator(Long userId) {
-        platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(userId, true);
+    Allocation allocateForOfficialVillageCreator(Long userId) {
         return allocateSlot(userId);
     }
 
@@ -144,12 +145,14 @@ public class VillageMembershipSlotService {
 
     /**
      * 公式村の作成者を村長として所属させる。運営アカウントの所属禁止の唯一の例外（マスター決定 2026-11-26）。
-     * 村長（HEADMAN）の所属行に限る。公式村の作成経路（村作成申請）だけが呼ぶこと。
+     * 村長（HEADMAN）の所属行に限る。公式村の作成経路（村作成申請）だけが呼ぶ（package-private）。
      */
-    VillageMembershipEntity admitOfficialVillageCreator(VillageMembershipEntity membership) {
+    VillageMembershipEntity admitOfficialVillageCreator(VillageMembershipEntity membership, VillageEntity village) {
         if (membership.getSubjectType() == VillageSubjectType.USER) {
+            // 村の種別・作成者・ロールの一致を自前で確認する（呼び出し元の申告を信用しない）。
             platformAccountAffiliationPolicy.assertAffiliatableAsOfficialVillageCreator(
-                    membership.getSubjectId(), membership.getRole() == VillageRole.HEADMAN);
+                    membership.getSubjectId(), village.getType() == VillageType.OFFICIAL,
+                    village.getCreatedByUserId(), membership.getRole() == VillageRole.HEADMAN);
         }
         return saveAdmission(membership);
     }

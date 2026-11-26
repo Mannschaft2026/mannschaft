@@ -71,11 +71,11 @@ public enum MembershipBasisErrorCode implements ErrorCode {
      * 「運営は運営専用アカウント。個人アカウントとの併用禁止」）。判定は
      * {@code PlatformAccountAffiliationPolicy#assertAffiliatable} に一元化する。</p>
      *
-     * <p>試練（テスト先行）で定数のみ先置きしたスタブ。403 の宣言に合わせた
-     * {@code GlobalExceptionHandler.ERROR_CODE_STATUS_MAP} への登録は実装（出陣）で行う。</p>
+     * <p>HTTP ステータス 403 は {@code GlobalExceptionHandler.ERROR_CODE_STATUS_MAP} に登録済み。
+     * 唯一の例外は公式村（OFFICIAL）の作成者としての村長所属（マスター決定 2026-11-26）。</p>
      */
     MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN("MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN",
-            "運営アカウントはチーム・組織・委員会に所属できません", Severity.WARN);
+            "運営アカウントはチーム・組織・委員会・村に所属したり、サポーター（フォロー）になったりできません", Severity.WARN);
 
     private final String code;
     private final String message;

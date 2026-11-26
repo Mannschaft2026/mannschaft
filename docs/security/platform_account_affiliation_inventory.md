@@ -68,7 +68,7 @@
 | `VillageUserCleanerEventListener` | 退会時の村所属の整理（更新のみ） |
 | `SharedInviteTokenIssuer` | 宛先の無い共有招待リンク。発行時は宛先が無いので判定しない。**受諾時**に `InviteAcceptanceFacade.accept`（使用回数の確保より前）と合流点（`MembershipGrantService.grantRole`・`MembershipService.join`）で拒否する（RolePaths `InviteAcceptance`） |
 | `TeamFriendsService.follow`（team→team） | チームのフォロー（follows の主体がチーム）。G4 除外表に載せる |
-| 公式村の作成者としての村長所属（`VillageCreationRequestService.createRequest` の `type=OFFICIAL`） | **唯一の例外**（マスター決定 2026-11-26）。運営が認定・運営する公式村は運営アカウントが村長として運用するため。範囲は作成時の作成者所属だけ。運営アカウントが他の村・他の経路（招待受諾・参加申請・承認）で所属することと、通常村を作って村長になることは 403 のまま（VillagePaths で固定）。G4 は Slot / CreationRequestService が Policy を呼ぶので除外表は不要。点検 SQL は公式村の作成者の村長所属を 0 件判定から除く |
+| 公式村の作成者としての村長所属（`VillageCreationRequestService.createRequest` の `type=OFFICIAL`） | **唯一の例外**（マスター決定 2026-11-26）。運営が認定・運営する公式村は運営アカウントが村長として運用するため。範囲は「公式村・作成者本人・村長」の3条件を満たす所属行だけ（述語は Policy `isOfficialVillageCreatorHeadman` の1箇所に集約し、作成時の所属・所属プロフィールの公開設定更新・点検 SQL が共有する。点検 SQL の NOT EXISTS 条件と Java の述語はコメントで対応付けている）。公式村でも村長以外のロールへの変更（自己降格を含む）は 403 MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN。運営アカウントが他の村・他の経路（招待受諾・参加申請・承認）で所属することと、通常村を作って村長になることは 403 のまま（VillagePaths で固定）。G4 は例外メソッドを使えるクラスを Slot / ProfileService の2クラスに限定している（入村枠の例外用メソッドは package-private で、admitOfficialVillageCreator は村の種別・作成者を自前で確認する）。点検 SQL は公式村の作成者の村長所属を 0 件判定から除く |
 
 ## 4. 決定事項（殿・マスター 2026-11-26）
 

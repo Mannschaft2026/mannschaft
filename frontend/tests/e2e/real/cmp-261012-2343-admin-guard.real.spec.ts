@@ -25,7 +25,7 @@ import { loginViaApi } from '../fixtures/auth'
 const API = process.env.API_BASE_URL ?? 'http://localhost:8080'
 const PASSWORD = 'TestPass2026!'
 const ACCOUNTS = {
-  sysadmin: { email: 'e2e-admin@test.mannschaft.local', password: PASSWORD },
+  sysadmin: { email: 'e2e-operator@test.mannschaft.local', password: PASSWORD },
   user: { email: 'e2e-user@test.mannschaft.local', password: PASSWORD },
   teamAdmin: { email: 'e2e-dummy-1@test.mannschaft.local', password: PASSWORD },
 } as const

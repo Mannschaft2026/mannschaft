@@ -67,9 +67,6 @@ class PlatformAccountAffiliationBanVillagePathsTest {
     static void stubPlatformAccount(PlatformAccountAffiliationPolicy policy) {
         doThrow(new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN))
                 .when(policy).assertAffiliatable(PLATFORM_USER_ID);
-        // 公式村の作成者としての村長所属だけが例外（true のときは通す＝既定の何もしない）。それ以外は同じく拒否する。
-        doThrow(new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN))
-                .when(policy).assertAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, false);
     }
 
     static VillageMembershipEntity userMembership(Long userId, VillageRole role) {
@@ -245,30 +242,6 @@ class PlatformAccountAffiliationBanVillagePathsTest {
             service.admit(m);
             verify(policy).assertAffiliatable(GENERAL_USER_ID);
             verify(membershipRepository).save(m);
-        }
-    }
-
-    @Nested
-    @DisplayName("VillageMembershipProfileService（村所属の公開設定の更新）")
-    class Profile {
-        @Mock PlatformAccountAffiliationPolicy policy;
-        @Mock VillageMembershipRepository membershipRepository;
-        @Mock VillageAccessGate accessGate;
-        @InjectMocks VillageMembershipProfileService service;
-
-        @BeforeEach
-        void setUp() {
-            stubPlatformAccount(policy);
-            given(membershipRepository.findActiveByVillageIdAndSubject(
-                    VILLAGE_ID, VillageSubjectType.USER, PLATFORM_USER_ID))
-                    .willReturn(Optional.of(userMembership(PLATFORM_USER_ID, VillageRole.VILLAGER)));
-        }
-
-        @Test
-        @DisplayName("P1: 運営アカウントの村所属の更新保存は 403・所属行を保存しない（既存の誤所属を延命させない）")
-        void P1_運営アカウントの村所属は更新保存しない() {
-            assertPlatformForbidden(() -> service.updateMyProfileVisibility(VILLAGE_ID, PLATFORM_USER_ID, true));
-            verify(membershipRepository, never()).save(any());
         }
     }
 

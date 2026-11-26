@@ -59,9 +59,6 @@ public class CommitteeService {
     public CommitteeEntity createCommittee(Long organizationId, CommitteeCreateRequest request, Long currentUserId) {
         // 組織離脱と直列化し、離脱済みユーザーを初期委員長として再登録しない。
         userRowLockService.lockAll(request.getInitialChairUserId());
-        // 運営アカウント（SYSTEM_ADMIN）は委員会を作れず、初期委員長にもなれない（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(currentUserId);
-        platformAccountAffiliationPolicy.assertAffiliatable(request.getInitialChairUserId());
         accessControlService.checkMembership(
                 request.getInitialChairUserId(), organizationId, "ORGANIZATION");
 
@@ -74,6 +71,11 @@ public class CommitteeService {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
             }
         }
+
+        // 運営アカウント（SYSTEM_ADMIN）は委員会を作れず、初期委員長にもなれない（戦役 Z-A PR2）。
+        // 認可の後に判定する（認可前だと、任意の認証済み利用者が初期委員長の運営アカウント性を探れてしまう）。
+        platformAccountAffiliationPolicy.assertAffiliatable(currentUserId);
+        platformAccountAffiliationPolicy.assertAffiliatable(request.getInitialChairUserId());
 
         // 名前重複チェック
         if (committeeRepository.existsByOrganizationIdAndName(organizationId, request.getName())) {
