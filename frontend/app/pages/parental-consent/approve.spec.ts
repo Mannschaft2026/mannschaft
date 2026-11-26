@@ -3,6 +3,7 @@ import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { flushPromises, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import ApprovePage from './approve.vue'
 import { useAuthStore } from '~/stores/useAuthStore'
+import { parentalConsentRedirect } from '~/utils/parentalConsentReturn'
 
 /**
  * CMP-261123-1124 保護者の承認画面: ログイン済みでも表示しただけでは承認しない。
@@ -182,11 +183,33 @@ describe('parental-consent/approve.vue 別アカウントでの承認（AUTH_089
     await buttonByText(wrapper, 'parental_consent.relogin_button')!.trigger('click')
     await flushPromises()
 
+    // 遷移は logout 側の 1 回だけ（画面側で navigateTo を重ねない）。遷移先は許可リストに通る token 付き承認画面
     expect(logout).toHaveBeenCalledOnce()
-    expect(mocks.navigate).toHaveBeenCalledWith({
-      path: '/login',
-      query: { redirect: '/parental-consent/approve?token=tok-123' },
-    })
+    const { redirectTo } = logout.mock.calls[0]![0] as { redirectTo: string }
+    expect(redirectTo).toBe('/login?redirect=' + encodeURIComponent('/parental-consent/approve?token=tok-123'))
+    const redirect = new URLSearchParams(redirectTo.split('?')[1]).get('redirect')
+    expect(parentalConsentRedirect(redirect)).toBe('/parental-consent/approve?token=tok-123')
+    expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+
+  it('logout の redirectTo 指定時はその URL へ 1 回だけ遷移し、保存 token は破棄する。既定は /login', async () => {
+    const store = useAuthStore()
+    localStorage.setItem('parentalConsentReturn', JSON.stringify({ token: 'tok-123', savedAt: Date.now() }))
+    const target = '/login?redirect=' + encodeURIComponent('/parental-consent/approve?token=tok-123')
+    await store.logout({ redirectTo: target })
+    expect(mocks.navigate).toHaveBeenCalledTimes(1)
+    expect(mocks.navigate).toHaveBeenCalledWith(target)
+    expect(localStorage.getItem('parentalConsentReturn')).toBeNull()
+
+    mocks.navigate.mockClear()
+    await store.logout()
+    expect(mocks.navigate).toHaveBeenCalledTimes(1)
+    expect(mocks.navigate).toHaveBeenCalledWith('/login')
+  })
+
+  it.each(['//evil.example/x', 'https://evil.example', 'javascript:alert(1)'])('logout の redirectTo は相対パス以外（%s）を採用せず /login へ', async (bad) => {
+    await useAuthStore().logout({ redirectTo: bad })
+    expect(mocks.navigate).toHaveBeenCalledWith('/login')
   })
 
   it('AUTH_062 / AUTH_063 は従来どおり専用のトースト（data.error.code を読む）', async () => {

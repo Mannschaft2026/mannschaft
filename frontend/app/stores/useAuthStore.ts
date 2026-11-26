@@ -225,7 +225,7 @@ export const useAuthStore = defineStore('auth', {
      *   - 'password_changed': パスワード変更後の能動的ログアウト（password.vue から呼ばれる）
      *   省略時は従来どおり /login へ遷移（後方互換）。
      */
-    async logout(options?: { reason?: string }) {
+    async logout(options?: { reason?: string, redirectTo?: string }) {
       useScopeFoldersStore().clear()
       // ① 即時処理: in-memory state と localStorage を同期的にクリアする。
       //   これ以降 isAuthenticated === false になり、ガードが /login にリダイレクトできる。
@@ -280,11 +280,17 @@ export const useAuthStore = defineStore('auth', {
       // ログイン画面に留まったまま失効を検知した場合や、複数経路から logout が呼ばれた場合に、
       // 同じ /login?reason=... へ繰り返し遷移してちらつき・ループを起こすのを防ぐ。
       // state / localStorage のクリア（①）は上で済んでいるため、遷移を省いても失効処理は完結する。
-      const loginPath = options?.reason ? `/login?reason=${options.reason}` : '/login'
+      // redirectTo: 呼び出し側が遷移先を指定する（承認画面の「ログインし直す」など、redirect 付きの /login へ直接遷移させる）。
+      //   logout の後に呼び出し側が navigateTo を重ねると、先行して撃たれた /login への遷移に潰されて遷移先が失われるため、
+      //   遷移はここ 1 回に限る。アプリ内の相対パス（/ 始まり・// 始まりでない）のみ許可する。
+      const redirectTo = options?.redirectTo && /^\/(?!\/)/.test(options.redirectTo) ? options.redirectTo : undefined
+      const loginPath = redirectTo ?? (options?.reason ? `/login?reason=${options.reason}` : '/login')
       const alreadyOnLoginPath = import.meta.client
         && `${window.location.pathname}${window.location.search}` === loginPath
       if (!alreadyOnLoginPath) {
-        navigateTo(loginPath)
+        const navigation = navigateTo(loginPath)
+        // 遷移先を指定されたときは完了を待つ（既定の遷移は従来どおり待たない）
+        if (redirectTo) await navigation
       }
 
       // ④ 遷移後もクリーンアップ Promise が完了するまで呼び出し元が await できるよう返す。
@@ -293,7 +299,7 @@ export const useAuthStore = defineStore('auth', {
       await cleanupPromise
     },
 
-    async serverLogout() {
+    async serverLogout(options?: { reason?: string, redirectTo?: string }) {
       try {
         const api = useApi()
         await api('/api/v1/auth/logout', {
@@ -302,7 +308,7 @@ export const useAuthStore = defineStore('auth', {
       } catch {
         // ignore errors - we're logging out anyway
       } finally {
-        await this.logout()
+        await this.logout(options)
       }
     },
   },

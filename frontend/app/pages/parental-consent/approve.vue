@@ -83,8 +83,8 @@ const returnPath = computed(() => `${PARENTAL_CONSENT_APPROVE_PATH}?token=${toke
 // 別アカウントでの承認・拒否（AUTH_089）: ログアウトし、承認画面（token 付き）へ戻る redirect 付きでログインへ進む。
 // ログアウトは保存済みの token を破棄するため、戻り先は redirect クエリで渡す。
 async function reloginWithInvitedAccount() {
-  await authStore.serverLogout()
-  await navigateTo({ path: '/login', query: { redirect: returnPath.value } })
+  // 遷移は logout 側の 1 回に任せる（logout 後に navigateTo を重ねると、先行する /login 遷移に潰されて redirect が失われる）
+  await authStore.serverLogout({ redirectTo: `/login?redirect=${encodeURIComponent(returnPath.value)}` })
 }
 
 function navigateToLogin() {
