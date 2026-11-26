@@ -514,6 +514,41 @@ public class AuthWebAuthnService {
     public ApiResponse<WebAuthnReauthenticateCompleteResponse> completeReauthenticate(
             Long userId, WebAuthnReauthenticateCompleteRequest req) {
 
+        // 1〜4. チャレンジ・credential 所有者・署名・sign_count の検証（共通）
+        verifyReauthAssertion(userId, req);
+
+        // 5. 再認証済みフラグを 5 分 TTL で記録
+        String verifiedKey = REAUTH_VERIFIED_KEY_PREFIX + userId;
+        redisTemplate.opsForValue().set(verifiedKey, "1",
+                REAUTH_VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
+
+        OffsetDateTime verifiedUntil =
+                OffsetDateTime.now().plusMinutes(REAUTH_VERIFIED_TTL_MINUTES);
+        return ApiResponse.of(new WebAuthnReauthenticateCompleteResponse(verifiedUntil));
+    }
+
+    /**
+     * WebAuthn 再認証の署名検証だけを行う（再認証済みフラグは書かない）。
+     *
+     * <p>F10.9 サポート閲覧の許可のように、F18 提示モードの再認証フラグ
+     * （{@code webauthn_reauth_verified:{userId}}）とは用途を分けたい呼び出し元が使う。
+     * チャレンジは {@link #beginReauthenticate} が発行したものを1回限りで消費する。
+     * 失敗は {@link BusinessException}（AUTH_024/026/027）。</p>
+     *
+     * @param userId 現在のユーザー ID
+     * @param req    再認証完了リクエスト（署名検証の材料）
+     */
+    @Transactional
+    public void verifyReauthenticationAssertionOnly(Long userId, WebAuthnReauthenticateCompleteRequest req) {
+        verifyReauthAssertion(userId, req);
+    }
+
+    /**
+     * 再認証の署名検証（チャレンジ消費・所有者確認・WebAuthn4J 検証・sign_count 更新）。
+     * {@link #completeReauthenticate} と {@link #verifyReauthenticationAssertionOnly} が共有する。
+     */
+    @SuppressWarnings("deprecation")
+    private void verifyReauthAssertion(Long userId, WebAuthnReauthenticateCompleteRequest req) {
         // 1. チャレンジ取得・即時削除（再生攻撃防止）
         String challengeKey = REAUTH_CHALLENGE_KEY_PREFIX + userId;
         String storedChallenge = redisTemplate.opsForValue().get(challengeKey);
@@ -586,14 +621,6 @@ public class AuthWebAuthnService {
         updated.updateLastUsedAt();
         webAuthnCredentialRepository.save(updated);
 
-        // 5. 再認証済みフラグを 5 分 TTL で記録
-        String verifiedKey = REAUTH_VERIFIED_KEY_PREFIX + userId;
-        redisTemplate.opsForValue().set(verifiedKey, "1",
-                REAUTH_VERIFIED_TTL_MINUTES, TimeUnit.MINUTES);
-
-        OffsetDateTime verifiedUntil =
-                OffsetDateTime.now().plusMinutes(REAUTH_VERIFIED_TTL_MINUTES);
-        return ApiResponse.of(new WebAuthnReauthenticateCompleteResponse(verifiedUntil));
     }
 
     /**

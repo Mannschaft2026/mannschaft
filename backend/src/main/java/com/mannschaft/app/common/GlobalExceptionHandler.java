@@ -2646,7 +2646,17 @@ public class GlobalExceptionHandler {
             Map.entry("PROXY_INPUT_007", HttpStatus.FORBIDDEN),
             Map.entry("PROXY_INPUT_009", HttpStatus.UNAUTHORIZED),
             Map.entry("PROXY_INPUT_010", HttpStatus.FORBIDDEN),
-            Map.entry("PROXY_INPUT_011", HttpStatus.FORBIDDEN)
+            Map.entry("PROXY_INPUT_011", HttpStatus.FORBIDDEN),
+            // F10.9 サポート閲覧（戦役Z-B）。フィルターの応答とも一致させる。
+            Map.entry("SUPPORT_ACCESS_001", HttpStatus.NOT_FOUND),
+            Map.entry("SUPPORT_ACCESS_002", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_003", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_004", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_005", HttpStatus.UNPROCESSABLE_ENTITY),
+            Map.entry("SUPPORT_ACCESS_006", HttpStatus.CONFLICT),
+            Map.entry("SUPPORT_ACCESS_007", HttpStatus.CONFLICT),
+            Map.entry("SUPPORT_ACCESS_010", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_011", HttpStatus.TOO_MANY_REQUESTS)
     );
 
     /**

@@ -6,6 +6,8 @@ import com.mannschaft.app.auth.entity.AuditLogEntity;
 import com.mannschaft.app.auth.repository.AuditLogRepository;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.PagedResponse;
+import com.mannschaft.app.supportaccess.context.SupportAccessContext;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -75,6 +77,17 @@ public class AuditLogService {
                            String ipAddress, String userAgent, String sessionHash,
                            String metadata) {
         try {
+            // F10.9 サポート閲覧中は、本人の視点の操作でも記録の actor を運営者にし、本人は targetUserId へ移す。
+            // metadata に grantId を残す（誰が・どの許可で・誰の視点で行ったかを監査から辿れるようにする）。
+            SupportAccessContext supportAccess = SupportAccessContextHolder.get().orElse(null);
+            if (supportAccess != null && !supportAccess.operatorUserId().equals(userId)) {
+                Long originalUserId = userId;
+                userId = supportAccess.operatorUserId();
+                if (targetUserId == null) {
+                    targetUserId = originalUserId != null ? originalUserId : supportAccess.targetUserId();
+                }
+                metadata = withSupportAccessGrantId(metadata, supportAccess);
+            }
             AuditLogEntity entity = AuditLogEntity.builder()
                     .eventType(eventType)
                     .userId(userId)
@@ -90,6 +103,21 @@ public class AuditLogService {
         } catch (Exception e) {
             log.error("監査ログ書き込み失敗: eventType={}, userId={}", eventType, userId, e);
         }
+    }
+
+    /** metadata（JSON オブジェクト文字列・null 可）へ supportAccessGrantId を足す。JSON でない文字列は original に包む。 */
+    private static String withSupportAccessGrantId(String metadata, SupportAccessContext context) {
+        String grantField = "\"supportAccessGrantId\":\"" + context.grantId() + "\"";
+        if (metadata == null || metadata.isBlank()) {
+            return "{" + grantField + "}";
+        }
+        String trimmed = metadata.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+            return inner.isEmpty() ? "{" + grantField + "}" : "{" + grantField + "," + inner + "}";
+        }
+        String escaped = trimmed.replace("\\", "\\\\").replace("\"", "\\\"");
+        return "{" + grantField + ",\"original\":\"" + escaped + "\"}";
     }
 
     // ─────────────────────────────────────────────

@@ -2,6 +2,7 @@ package com.mannschaft.app.supportaccess.entity;
 
 import com.mannschaft.app.supportaccess.SupportAccessEventKind;
 import com.mannschaft.app.common.entity.UuidV7Entity;
+import com.mannschaft.app.gdpr.PersonalData;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,8 +18,9 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** F10.9 代理中の閲覧記録（support_access_logs）。本人も閲覧できる。試練スタブ: 列だけを持つ。 */
+/** F10.9 代理中の閲覧記録（support_access_logs）。本人も閲覧できる。 */
 @Entity
+@PersonalData(category = "support_access_logs")
 @Table(name = "support_access_logs")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -70,4 +72,10 @@ public class SupportAccessLogEntity extends UuidV7Entity {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /** chain の後に応答状態と最適一致パターンを書き足す。 */
+    public void complete(int httpStatus, String routePattern) {
+        this.httpStatus = (short) httpStatus;
+        this.routePattern = routePattern != null && routePattern.length() > 255 ? routePattern.substring(0, 255) : routePattern;
+    }
 }

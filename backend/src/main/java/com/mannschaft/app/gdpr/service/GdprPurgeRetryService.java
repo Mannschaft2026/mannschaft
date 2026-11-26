@@ -4,6 +4,7 @@ import com.mannschaft.app.billing.BillingPurgeEventListener;
 import com.mannschaft.app.chart.event.ChartPurgeEventListener;
 import com.mannschaft.app.effortrecord.event.EffortRecordPurgeEventListener;
 import com.mannschaft.app.errorreport.event.ErrorReportPurgeEventListener;
+import com.mannschaft.app.supportaccess.listener.SupportAccessPurgeEventListener;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.gdpr.event.DiagnosisPurgeRetryRequestedEvent;
 import com.mannschaft.app.gdpr.dto.RetryResultResponse;
@@ -52,11 +53,12 @@ public class GdprPurgeRetryService {
     private final BillingPurgeEventListener billingPurgeEventListener;
     private final RanchPurgeEventListener ranchPurgeEventListener;
     private final EffortRecordPurgeEventListener effortRecordPurgeEventListener;
+    private final SupportAccessPurgeEventListener supportAccessPurgeEventListener;
     private final DomainEventPublisher eventPublisher;
 
     /** 受け付けるドメイン名の集合。不明なドメイン名は即時 IllegalArgumentException。 */
     private static final Set<String> VALID_DOMAINS =
-            Set.of("role", "team", "payment", "chart", "proxy", "errorreport", "billing", "ranch", "diagnosis", "effortrecord");
+            Set.of("role", "team", "payment", "chart", "proxy", "errorreport", "billing", "ranch", "diagnosis", "effortrecord", "supportaccess");
 
     /**
      * 指定ユーザー × ドメインの GDPR パージを手動で retry する。
@@ -144,6 +146,7 @@ public class GdprPurgeRetryService {
             case "billing"     -> billingPurgeEventListener.retryPurge(userId);
             case "ranch"       -> ranchPurgeEventListener.retryPurge(userId);
             case "effortrecord" -> effortRecordPurgeEventListener.retryPurge(userId);
+            case "supportaccess" -> supportAccessPurgeEventListener.retryPurge(userId);
             default -> throw new IllegalStateException("到達不能: " + domainName);
         };
     }

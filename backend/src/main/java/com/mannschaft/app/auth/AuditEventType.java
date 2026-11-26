@@ -692,7 +692,28 @@ public enum AuditEventType {
      * F06.4.1 本人が頑張り記録の原本を削除した。metadata は recordId・version のみ
      * （体重・科目・メモ・snapshot は含めない。AC-61）。
      */
-    EFFORT_RECORD_DELETED(AuditEventCategory.EFFORT);
+    EFFORT_RECORD_DELETED(AuditEventCategory.EFFORT),
+
+    // ─── SUPPORT_ACCESS (F10.9 本人承認制のサポート閲覧・戦役Z-B) ─────────────
+    // actor（userId）は運営者、targetUserId は本人、metadata に grantId を含める。
+    /** 運営者がサポート閲覧を依頼した。 */
+    SUPPORT_ACCESS_REQUESTED(AuditEventCategory.ADMIN_ACTION),
+    /** 本人（未成年は保護者も）がサポート閲覧を許可した（許可+24時間・延長不可）。 */
+    SUPPORT_ACCESS_APPROVED(AuditEventCategory.ADMIN_ACTION),
+    /** 本人がサポート閲覧を拒否した。 */
+    SUPPORT_ACCESS_DENIED(AuditEventCategory.ADMIN_ACTION),
+    /** 本人（または退会）がサポート閲覧の許可を取り消した。 */
+    SUPPORT_ACCESS_REVOKED(AuditEventCategory.ADMIN_ACTION),
+    /** 運営者が依頼・許可を撤回した。 */
+    SUPPORT_ACCESS_CANCELLED(AuditEventCategory.ADMIN_ACTION),
+    /** 依頼（72時間）または許可（24時間）が期限切れになった。 */
+    SUPPORT_ACCESS_EXPIRED(AuditEventCategory.ADMIN_ACTION),
+    /** 運営者が代理閲覧を開始した。 */
+    SUPPORT_ACCESS_SESSION_STARTED(AuditEventCategory.ADMIN_ACTION),
+    /** 運営者が代理閲覧を終了した。 */
+    SUPPORT_ACCESS_SESSION_ENDED(AuditEventCategory.ADMIN_ACTION),
+    /** 代理ヘッダー付きリクエストを拒否した（他の運営者の grant・無効な grant 等）。 */
+    SUPPORT_ACCESS_DENIED_REQUEST(AuditEventCategory.ADMIN_ACTION);
 
     private final AuditEventCategory category;
 }

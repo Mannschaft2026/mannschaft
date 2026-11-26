@@ -18,11 +18,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * F10.9 サポート閲覧の依頼と本人許可（support_access_grants）。試練スタブ: 列だけを持つ。
+ * F10.9 サポート閲覧の依頼と本人許可（support_access_grants）。
  *
- * <p>状態遷移は実装役がドメインメソッドとして加え、<b>このインスタンスをその場で</b>書き換える
- * （JPA の dirty checking 前提。試練はその場の状態を検査する）。open_flag は生成列なので
- * insertable/updatable=false。Flyway は実装役が V269 で追加する。</p>
+ * <p>状態遷移はドメインメソッドで<b>このインスタンスをその場で</b>書き換える（JPA の dirty checking 前提）。
+ * open_flag は生成列なので insertable/updatable=false。Flyway は V274 で追加する。</p>
  */
 @Entity
 @Table(name = "support_access_grants")
@@ -96,7 +95,8 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
     private LocalDateTime guardianDecidedAt;
 
     /** 生成列（PENDING/APPROVED のとき 1、それ以外 NULL）。一意制約で同じ組合せの同時1件を担保する。 */
-    @Column(name = "open_flag", insertable = false, updatable = false)
+    @Column(name = "open_flag", insertable = false, updatable = false,
+            columnDefinition = "TINYINT GENERATED ALWAYS AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END) STORED")
     private Integer openFlag;
 
     @CreationTimestamp
@@ -106,4 +106,76 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    // ─── 状態遷移（その場で書き換える） ─────────────────────────
+
+    /** 依頼が開いている（PENDING/APPROVED）か。 */
+    public boolean isOpen() {
+        return status == SupportAccessStatus.PENDING || status == SupportAccessStatus.APPROVED;
+    }
+
+    /** 本人の許可を記録する。保護者の承認が要る grant で保護者が未承認なら PENDING のまま。 */
+    public void recordTargetApproval(LocalDateTime now, long ttlHours) {
+        this.decidedAt = now;
+        promoteIfFullyApproved(now, ttlHours);
+    }
+
+    /** 保護者の許可を記録する。本人が未承認なら PENDING のまま。 */
+    public void recordGuardianApproval(LocalDateTime now, long ttlHours) {
+        this.guardianDecidedAt = now;
+        promoteIfFullyApproved(now, ttlHours);
+    }
+
+    private void promoteIfFullyApproved(LocalDateTime now, long ttlHours) {
+        boolean guardianOk = !guardianApprovalRequired || guardianDecidedAt != null;
+        if (decidedAt != null && guardianOk) {
+            this.status = SupportAccessStatus.APPROVED;
+            // 期限は最後の許可時刻から固定（延長不可）
+            this.expiresAt = now.plusHours(ttlHours);
+        }
+    }
+
+    /** 本人（asGuardian=false）または保護者（true）が許可済みか（二重許可の防止用）。 */
+    public boolean hasApprovalBy(boolean asGuardian) {
+        return asGuardian ? guardianDecidedAt != null : decidedAt != null;
+    }
+
+    public void deny(LocalDateTime now, String comment) {
+        this.status = SupportAccessStatus.DENIED;
+        this.decidedAt = now;
+        this.denyComment = comment;
+    }
+
+    public void revoke(LocalDateTime now, SupportAccessEndedReason reason) {
+        this.status = SupportAccessStatus.REVOKED;
+        this.revokedAt = now;
+        this.endedReason = reason;
+    }
+
+    public void cancel(LocalDateTime now) {
+        this.status = SupportAccessStatus.CANCELLED;
+        this.revokedAt = now;
+        this.endedReason = SupportAccessEndedReason.OPERATOR_CANCELLED;
+    }
+
+    public void expire() {
+        this.status = SupportAccessStatus.EXPIRED;
+        this.endedReason = SupportAccessEndedReason.EXPIRED;
+    }
+
+    public void startSession(LocalDateTime now) {
+        this.activeSessionStartedAt = now;
+        this.activeSessionEndedAt = null;
+        this.lastSessionStartedAt = now;
+    }
+
+    public void endSession(LocalDateTime now) {
+        this.activeSessionEndedAt = now;
+    }
+
+    /** 閲覧開始済みで、まだ終了していないか。 */
+    public boolean isSessionActive() {
+        return activeSessionStartedAt != null
+                && (activeSessionEndedAt == null || !activeSessionEndedAt.isAfter(activeSessionStartedAt));
+    }
 }
