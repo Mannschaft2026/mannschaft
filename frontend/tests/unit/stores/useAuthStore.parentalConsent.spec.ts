@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { useAuthStore } from '../../../app/stores/useAuthStore'
+import { stashParentalConsentToken, takeParentalConsentReturnPath } from '../../../app/utils/parentalConsentReturn'
 
 /**
  * CMP-261123-1124 試練（red 先行）: 保護者同意待ちの印をストアが保持する契約。
@@ -111,5 +112,35 @@ describe('useAuthStore 保護者同意待ちの印（CMP-261123-1124）', () => 
 
     expect(useAuthStore().isAuthenticated).toBe(true)
     expect(pendingFlag()).toBe(false)
+  })
+})
+
+/**
+ * CMP-261123-1124 Codex 第6回 P1: 未認証の保護者 A が保存した承認 token を、後からログインした別ユーザー B が
+ * 引き継がない。ログアウトの全経路（logout / serverLogout）で保存を必ず破棄する。
+ */
+describe('useAuthStore ログアウトと保存済みの承認 token（CMP-261123-1124）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
+
+  it('logout で保存済みの承認 token が破棄され、次にログインした別ユーザーは復帰しない', async () => {
+    stashParentalConsentToken('tok-A')
+    await useAuthStore().setUser({ id: 9, email: 'a@example.com', fullName: 'A B', profileImageUrl: null })
+
+    await useAuthStore().logout()
+
+    expect(localStorage.getItem('parentalConsentReturn')).toBeNull()
+    expect(takeParentalConsentReturnPath()).toBeUndefined()
+  })
+
+  it('serverLogout（API 失敗時も）で破棄される', async () => {
+    stashParentalConsentToken('tok-A')
+
+    await useAuthStore().serverLogout()
+
+    expect(takeParentalConsentReturnPath()).toBeUndefined()
   })
 })

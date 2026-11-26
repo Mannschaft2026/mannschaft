@@ -51,6 +51,8 @@
     "link_removed": "링크를 해제했습니다",
     "error_invalid_email": "이메일 주소 형식이 올바르지 않습니다",
     "go_manage": "보호자 관리로 이동",
-    "go_dashboard": "대시보드로 이동"
+    "go_dashboard": "대시보드로 이동",
+    "error_wrong_account": "초대받은 이메일 주소의 계정으로 로그인해 주세요. 현재 계정으로는 승인하거나 거부할 수 없습니다",
+    "relogin_button": "다른 계정으로 다시 로그인"
   }
 }

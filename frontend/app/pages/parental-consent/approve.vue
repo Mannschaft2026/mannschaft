@@ -15,6 +15,13 @@ const rejected = ref(false)
 const error = ref(false)
 const loading = ref(false)
 const showRejectConfirm = ref(false)
+// 招待先メールとは別のアカウントでログインしている（AUTH_089）
+const wrongAccount = ref(false)
+
+/** BE のエラー応答の業務コードは data.error.code にある。 */
+function errorCodeOf(err: unknown): string {
+  return (err as { data?: { error?: { code?: string } } })?.data?.error?.code ?? ''
+}
 
 async function handleApprove() {
   if (!token.value) {
@@ -27,8 +34,10 @@ async function handleApprove() {
     approved.value = true
     notification.success(t('parental_consent.approved_message'))
   } catch (err: unknown) {
-    const code = (err as { data?: { code?: string } })?.data?.code ?? ''
-    if (code === 'AUTH_060') {
+    const code = errorCodeOf(err)
+    if (code === 'AUTH_089') {
+      wrongAccount.value = true
+    } else if (code === 'AUTH_060') {
       error.value = true
     } else if (code === 'AUTH_062') {
       notification.error(t('parental_consent.error_auth_062'))
@@ -49,8 +58,9 @@ async function handleReject() {
     await reject(token.value)
     rejected.value = true
     notification.success(t('parental_consent.rejected_message'))
-  } catch {
-    error.value = true
+  } catch (err: unknown) {
+    if (errorCodeOf(err) === 'AUTH_089') wrongAccount.value = true
+    else error.value = true
   } finally {
     loading.value = false
     showRejectConfirm.value = false
@@ -69,6 +79,13 @@ onMounted(() => {
 })
 
 const returnPath = computed(() => `${PARENTAL_CONSENT_APPROVE_PATH}?token=${token.value ?? ''}`)
+
+// 別アカウントでの承認・拒否（AUTH_089）: ログアウトし、承認画面（token 付き）へ戻る redirect 付きでログインへ進む。
+// ログアウトは保存済みの token を破棄するため、戻り先は redirect クエリで渡す。
+async function reloginWithInvitedAccount() {
+  await authStore.serverLogout()
+  await navigateTo({ path: '/login', query: { redirect: returnPath.value } })
+}
 
 function navigateToLogin() {
   navigateTo({ path: '/login', query: { redirect: returnPath.value } })
@@ -111,6 +128,17 @@ function navigateToRegister() {
           {{ $t('parental_consent.go_dashboard') }}
         </button>
       </div>
+    </div>
+
+    <!-- 別アカウント（招待先メールと一致しない） -->
+    <div v-else-if="wrongAccount" class="space-y-4">
+      <p class="text-lg font-semibold text-red-600">{{ $t('parental_consent.error_wrong_account') }}</p>
+      <button
+        class="min-h-11 w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        @click="reloginWithInvitedAccount"
+      >
+        {{ $t('parental_consent.relogin_button') }}
+      </button>
     </div>
 
     <!-- エラー -->

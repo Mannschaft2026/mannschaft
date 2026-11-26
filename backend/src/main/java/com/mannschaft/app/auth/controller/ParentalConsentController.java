@@ -176,8 +176,7 @@ public class ParentalConsentController {
     public ResponseEntity<ApiResponse<MessageResponse>> approve(
             @Valid @RequestBody ApproveConsentRequest req,
             HttpServletRequest request) {
-        // 認証済みの場合は parentUserId を取得し自己承認チェックを行う
-        // 未認証（メールリンクから直接）の場合は null（自己承認チェックはスキップ）
+        // 承認者は招待先メールの確認済みアカウントに限る（未認証は null → サービスが AUTH_089）
         Long parentUserId = SecurityUtils.getCurrentUserIdOrNull();
         String ipAddress = com.mannschaft.app.common.IpAddressUtils.getClientIp(request);
         parentalConsentService.approveParentalConsent(req.getToken(), parentUserId, ipAddress);
@@ -202,7 +201,8 @@ public class ParentalConsentController {
             @Valid @RequestBody RejectConsentRequest req,
             HttpServletRequest request) {
         String ipAddress = com.mannschaft.app.common.IpAddressUtils.getClientIp(request);
-        parentalConsentService.rejectParentalConsent(req.getToken(), ipAddress);
+        // 拒否も承認者は招待先メールの確認済みアカウントに限る（未認証は null → サービスが AUTH_089）
+        parentalConsentService.rejectParentalConsent(req.getToken(), SecurityUtils.getCurrentUserIdOrNull(), ipAddress);
         return ResponseEntity.ok(ApiResponse.of(MessageResponse.of("保護者同意を否認しました")));
     }
 

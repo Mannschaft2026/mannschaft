@@ -141,3 +141,60 @@ describe('parental-consent/approve.vue 決定後の行き先（ALIC-2）', () =>
     expect(mocks.navigate).toHaveBeenCalledWith('/dashboard')
   })
 })
+
+/**
+ * CMP-261123-1124 Codex 第6回: 承認者は招待先メールのアカウントに限る。別アカウントでの承認・拒否は AUTH_089（403）。
+ * 画面は「招待されたメールアドレスのアカウントでログインしてください」と案内し、ログアウトして入り直す導線を出す。
+ * BE のエラー応答の業務コードは data.error.code にある（data.code ではない）。
+ */
+function apiError(code: string) {
+  return Object.assign(new Error('forbidden'), { data: { error: { code } } })
+}
+
+describe('parental-consent/approve.vue 別アカウントでの承認（AUTH_089）', () => {
+  it.each([
+    ['approve', 'parental_consent.approve_button'],
+    ['reject', 'parental_consent.reject_button'],
+  ])('%s が AUTH_089 になったら、アカウント違いの案内とログアウトして入り直すボタンを出す', async (kind, label) => {
+    mocks.approve.mockRejectedValue(apiError('AUTH_089'))
+    mocks.reject.mockRejectedValue(apiError('AUTH_089'))
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await buttonByText(wrapper, label)!.trigger('click')
+    if (kind === 'reject') {
+      const confirms = wrapper.findAll('button').filter((b: DOMWrapper<Element>) => b.text() === 'parental_consent.reject_button')
+      await confirms[confirms.length - 1]!.trigger('click')
+    }
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('parental_consent.error_wrong_account')
+    expect(wrapper.text()).not.toContain('parental_consent.invalid_token')
+    expect(wrapper.text()).not.toContain('parental_consent.approved_message')
+    expect(buttonByText(wrapper, 'parental_consent.relogin_button')).toBeDefined()
+  })
+
+  it('「別のアカウントでログイン」を押すとログアウトし、承認画面（token 付き）へ戻る redirect 付きでログインへ進む', async () => {
+    mocks.approve.mockRejectedValue(apiError('AUTH_089'))
+    const logout = vi.spyOn(useAuthStore(), 'serverLogout').mockResolvedValue(undefined)
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await buttonByText(wrapper, 'parental_consent.approve_button')!.trigger('click')
+    await flushPromises()
+
+    await buttonByText(wrapper, 'parental_consent.relogin_button')!.trigger('click')
+    await flushPromises()
+
+    expect(logout).toHaveBeenCalledOnce()
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      path: '/login',
+      query: { redirect: '/parental-consent/approve?token=tok-123' },
+    })
+  })
+
+  it('AUTH_062 / AUTH_063 は従来どおり専用のトースト（data.error.code を読む）', async () => {
+    mocks.approve.mockRejectedValue(apiError('AUTH_063'))
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await buttonByText(wrapper, 'parental_consent.approve_button')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.error).toHaveBeenCalledWith('parental_consent.error_auth_063')
+  })
+})

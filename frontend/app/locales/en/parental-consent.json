@@ -51,6 +51,8 @@
     "link_removed": "Link removed",
     "error_invalid_email": "The email address format is invalid",
     "go_manage": "Go to parental management",
-    "go_dashboard": "Go to dashboard"
+    "go_dashboard": "Go to dashboard",
+    "error_wrong_account": "Please sign in with the account of the invited email address. You cannot approve or reject with the current account",
+    "relogin_button": "Sign in with a different account"
   }
 }

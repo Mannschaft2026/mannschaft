@@ -347,8 +347,10 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
 
         Long parent = user();
         String consentToken = UUID.randomUUID().toString();
+        // 承認者は招待先メールのアカウントに限る（CMP-261123-1124）
+        String parentEmail = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, parent);
         consentLinks.saveAndFlush(ParentalConsentLinkEntity.builder().childUserId(r.userId())
-                .parentEmail(UUID.randomUUID() + "@guardian.invalid").tokenHash(authTokens.hashToken(consentToken))
+                .parentEmail(parentEmail).tokenHash(authTokens.hashToken(consentToken))
                 .status(ParentalConsentLinkStatus.PENDING).expiresAt(LocalDateTime.now().plusDays(1)).build());
         parentalConsent.approveParentalConsent(consentToken, parent, "127.0.0.1");
         assertThat(userStatus(r.userId())).isEqualTo("ACTIVE");
@@ -368,11 +370,13 @@ class RegistrationPendingInviteIT extends InviteAcceptanceItSupport {
         Registered r = register(plaintext(token), today().minusYears(18).plusDays(1));
         registration.verifyEmail(r.verifyToken());
         String consentToken = UUID.randomUUID().toString();
+        Long guardian = user();
+        String guardianEmail = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, guardian);
         consentLinks.saveAndFlush(ParentalConsentLinkEntity.builder().childUserId(r.userId())
-                .parentEmail(UUID.randomUUID() + "@guardian.invalid").tokenHash(authTokens.hashToken(consentToken))
+                .parentEmail(guardianEmail).tokenHash(authTokens.hashToken(consentToken))
                 .status(ParentalConsentLinkStatus.PENDING).expiresAt(LocalDateTime.now().plusDays(1)).build());
 
-        parentalConsent.rejectParentalConsent(consentToken, "127.0.0.1");
+        parentalConsent.rejectParentalConsent(consentToken, guardian, "127.0.0.1");
 
         assertThat(pendingStatus(r.userId())).isEqualTo("DISCARDED");
         assertThat(usedCount(token.getId())).isZero();

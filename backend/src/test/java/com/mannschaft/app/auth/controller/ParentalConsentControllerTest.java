@@ -280,7 +280,7 @@ class ParentalConsentControllerTest {
         @DisplayName("正常系: 保護者同意否認が200で返る")
         void reject_正常_200() {
             // Given
-            doNothing().when(parentalConsentService).rejectParentalConsent(eq(TEST_TOKEN), anyString());
+            doNothing().when(parentalConsentService).rejectParentalConsent(eq(TEST_TOKEN), eq(CHILD_USER_ID), anyString());
             RejectConsentRequest req = new RejectConsentRequest(TEST_TOKEN);
             org.springframework.mock.web.MockHttpServletRequest request =
                     new org.springframework.mock.web.MockHttpServletRequest();
@@ -292,7 +292,7 @@ class ParentalConsentControllerTest {
             // Then
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(response.getBody().getData().getMessage()).contains("否認");
-            verify(parentalConsentService).rejectParentalConsent(TEST_TOKEN, "198.51.100.3");
+            verify(parentalConsentService).rejectParentalConsent(TEST_TOKEN, CHILD_USER_ID, "198.51.100.3");
         }
     }
 

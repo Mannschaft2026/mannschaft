@@ -51,6 +51,8 @@
     "link_removed": "Vínculo eliminado",
     "error_invalid_email": "El formato de la dirección de correo no es válido",
     "go_manage": "Ir a la gestión de padres/tutores",
-    "go_dashboard": "Ir al panel"
+    "go_dashboard": "Ir al panel",
+    "error_wrong_account": "Inicia sesión con la cuenta de la dirección de correo invitada. Con la cuenta actual no se puede aprobar ni rechazar",
+    "relogin_button": "Iniciar sesión con otra cuenta"
   }
 }

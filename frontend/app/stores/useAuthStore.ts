@@ -242,6 +242,8 @@ export const useAuthStore = defineStore('auth', {
         localStorage.removeItem('currentUser')
         localStorage.removeItem('tokenExpiresAt')
       }
+      // 保護者の承認画面で保存した token はログアウトで必ず破棄する（次にログインする別ユーザーへ引き継がない）
+      clearParentalConsentReturn()
       useChatTabsStore().clearAll()
       // 所属スコープはユーザー固有の表示データであるため、次のログイン前に必ず破棄する。
       // 非同期キャッシュ削除を待つ前に同期的に消し、同一 SPA セッションでの情報残留を防ぐ。

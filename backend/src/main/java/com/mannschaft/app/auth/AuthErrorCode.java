@@ -270,7 +270,12 @@ public enum AuthErrorCode implements ErrorCode {
     // ===== CMP-261123-1124 保護者招待の対象状態 (AUTH_088) =====
 
     /** 保護者招待は保護者の同意待ち（PENDING_PARENTAL_CONSENT）の本人だけが作れる。それ以外は 409 を返す。 */
-    AUTH_088("AUTH_088", "保護者の同意が必要なアカウントではないため、保護者を招待できません", Severity.WARN);
+    AUTH_088("AUTH_088", "保護者の同意が必要なアカウントではないため、保護者を招待できません", Severity.WARN),
+
+    /**
+     * 保護者の承認・拒否は、招待先メールアドレスの確認済みアカウントだけが行える（トークンを持ち越した別アカウントを拒む）。403 を返す。
+     */
+    AUTH_089("AUTH_089", "招待されたメールアドレスのアカウントでログインしてください", Severity.WARN);
 
     private final String code;
     private final String message;

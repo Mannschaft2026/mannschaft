@@ -51,6 +51,8 @@
     "link_removed": "リンクを解除しました",
     "error_invalid_email": "メールアドレスの形式が正しくありません",
     "go_manage": "保護者管理へ",
-    "go_dashboard": "ダッシュボードへ"
+    "go_dashboard": "ダッシュボードへ",
+    "error_wrong_account": "招待されたメールアドレスのアカウントでログインしてください。いまのアカウントでは承認・拒否できません",
+    "relogin_button": "別のアカウントでログインし直す"
   }
 }

@@ -61,8 +61,12 @@ class ParentalConsentBirthLifecycleRaceIT extends AbstractMySqlIntegrationTest {
     }
 
     private ParentalConsentLinkEntity link(Long child, String token, LocalDateTime expiry) {
+        return link(child, token, expiry, UUID.randomUUID()+"@guardian.invalid");
+    }
+
+    private ParentalConsentLinkEntity link(Long child, String token, LocalDateTime expiry, String parentEmail) {
         return links.saveAndFlush(ParentalConsentLinkEntity.builder().childUserId(child)
-                .parentEmail(UUID.randomUUID()+"@guardian.invalid").tokenHash(tokens.hashToken(token))
+                .parentEmail(parentEmail).tokenHash(tokens.hashToken(token))
                 .status(ParentalConsentLinkStatus.PENDING).expiresAt(expiry).build());
     }
 
@@ -71,7 +75,9 @@ class ParentalConsentBirthLifecycleRaceIT extends AbstractMySqlIntegrationTest {
         Long child=user(UserEntity.UserStatus.PENDING_PARENTAL_CONSENT,"2016-01-22");
         String token=UUID.randomUUID().toString();
         UUID expired=link(child,UUID.randomUUID().toString(),LocalDateTime.now().minusDays(1)).getId();
-        UUID decision=link(child,token,LocalDateTime.now().plusDays(1)).getId();
+        // 承認者は招待先メールのアカウントに限る（CMP-261123-1124）。決定用リンクの招待先は保護者本人のメール
+        String parentEmail=users.findById(parent).orElseThrow().getEmail();
+        UUID decision=link(child,token,LocalDateTime.now().plusDays(1),parentEmail).getId();
         return new Fixture(child,parent,expired,decision,token);
     }
 
@@ -112,7 +118,7 @@ class ParentalConsentBirthLifecycleRaceIT extends AbstractMySqlIntegrationTest {
         try {
             new TransactionTemplate(transactionManager).executeWithoutResult(s->{
                 users.findByIdForUpdateIncludingDeleted(f.child()).orElseThrow();
-                var decision=worker.submit(()->consent.rejectParentalConsent(f.token(),"127.0.0.1"));
+                var decision=worker.submit(()->consent.rejectParentalConsent(f.token(),f.parent(),"127.0.0.1"));
                 pending.set(decision);BirthProfileLockWaitObserver.awaitUserWait(MYSQL,f.child(),decision);
                 cleanup.execute();probeDecisionLink(f.decision());
             });
