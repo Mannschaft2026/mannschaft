@@ -215,14 +215,14 @@ class TimelineWriteScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private void insertRoleInTransaction(String name) {
-        Number existingRoleCount = (Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
+        boolean existed = ((Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
                 .setParameter("name", name)
-                .getSingleResult();
-        if (existingRoleCount.longValue() > 0) {
-            return;
-        }
+                .getSingleResult()).longValue() > 0;
+        // 既存行があっても必ず正準 priority へ直す（誤った行を残さない）。
         RoleSeedSupport.ensureCanonical(em, name);
-        ownRoles.add(((Number) em.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue());
+        if (!existed) {
+            ownRoles.add(roleId(name));
+        }
     }
 
     private Long roleId(String name) {

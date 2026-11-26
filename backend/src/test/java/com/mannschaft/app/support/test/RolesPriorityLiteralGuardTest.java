@@ -29,6 +29,12 @@ import org.junit.jupiter.api.Test;
  * {@code UPDATE roles}（Java の文字列連結・テキストブロック・複数行・バッククォートを含む）。
  * {@code *.java} / {@code *.sql} を {@code src/test} 配下で走査する。</p>
  *
+ * <p>JPA 経由（{@code RoleEntity.builder()...priority(N)} / {@code new RoleEntity(}）の書き込みも対象。DB を使うテスト
+ * （{@code AbstractMySqlIntegrationTest} / {@code @SpringBootTest} / {@code @DataJpaTest} /
+ * {@code @PersistenceContext} / {@code TestEntityManager}）で、priority に {@code RolePriority.priority(...)} /
+ * {@code RoleSeedSupport.priorityOf(...)} 以外（数値直書き・変数）を渡すものを違反とする。Mockito だけの単体テストは
+ * DB に書かないため対象外。</p>
+ *
  * <p>既存の直書きのうち未移行のものは {@link #KNOWN_VIOLATIONS} に理由付きで登録する。登録は負債であり、
  * 移行（{@link RoleSeedSupport#ensureCanonical} 呼び出しへの置換）したら必ず外すこと
  * （外し忘れは {@link #knownViolationsAreStillViolating()} が検出する）。</p>
@@ -46,6 +52,22 @@ class RolesPriorityLiteralGuardTest {
     private static final Pattern ROLES_WRITE = Pattern.compile(
             "\\b(?:INSERT\\s+(?:IGNORE\\s+)?INTO|REPLACE\\s+INTO|UPDATE)\\s+`?roles`?(?![\\w`])",
             Pattern.CASE_INSENSITIVE);
+
+    /** DB を使うテストの目印（これらが無い Mockito 単体テストの RoleEntity 生成は DB に書かないので対象外）。 */
+    private static final Pattern DB_TEST_MARKER = Pattern.compile(
+            "AbstractMySqlIntegrationTest|@SpringBootTest|@DataJpaTest|@PersistenceContext|TestEntityManager|@AutoConfigureMockMvc");
+
+    private static final Pattern ROLE_ENTITY_BUILDER = Pattern.compile(
+            "(?<![A-Za-z])RoleEntity\\s*\\.\\s*builder\\(\\)(.*?)\\.build\\(\\)", Pattern.DOTALL);
+
+    private static final Pattern PRIORITY_CALL = Pattern.compile("\\.priority\\(((?:[^()]|\\([^()]*\\))*)\\)");
+
+    private static final Pattern CANONICAL_PRIORITY_ARG = Pattern.compile(
+            "(?:com\\.mannschaft\\.app\\.[\\w.]+\\.)?(?:RolePriority\\.priority|RoleSeedSupport\\.priorityOf)\\(.*",
+            Pattern.DOTALL);
+
+    private static final Pattern CLASS_DECL = Pattern.compile(
+            "^(?:public |final |abstract )*(?:class|interface|enum) ", Pattern.MULTILINE);
 
     private static final String R_ROLLBACK =
             "クラス @Transactional でロールバックされ roles は残らない（未移行: priority は呼び出し側指定）";
@@ -191,6 +213,46 @@ class RolesPriorityLiteralGuardTest {
                 R_ROLLBACK);
         m.put("java/com/mannschaft/app/webhook/WebhookAuthzContractIT.java",
                 R_ROLLBACK);
+        m.put("java/com/mannschaft/app/receipt/ReceiptIssuerSettingsSnapshotIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/receipt/ReceiptIssuerSettingsContractIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/receipt/PlatformReceiptAuthzContractIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/receipt/ReceiptPdfArchiveContractIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/receipt/ReceiptIssuerSettingsLogoAndAuditIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/receipt/ReceiptAuthzContractTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/team/repository/TeamMemberCountRecalculationMembershipsTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/membership/service/MembershipScopeQueryServiceContractIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/timeline/TimelineReadScopeContractIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/repository/UserRoleOrgDescendantsMembershipsAudienceTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/repository/UserRoleFlatMembershipActiveGuardTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/repository/UserRolePeripheralScopeMembershipsTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/repository/UserRolePermissionGroupNativeQueryTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/service/PermissionGroupScopeIntegrationTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/controller/MeOrganizationsBatchQueryIT.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/controller/MeControllerMembershipIntegrationTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/role/controller/RolePrivilegeEscalationAuthzContractTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/errorreport/repository/ErrorReportOrganizationLookupMembershipsTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/resident/ResidentAuthzContractTest.java",
+                R_ROLLBACK);
+        m.put("java/com/mannschaft/app/template/ScopeFeatureDisplayPolicyContractIT.java",
+                R_ROLLBACK);
         // KNOWN_VIOLATIONS_END
         return m;
     }
@@ -200,6 +262,31 @@ class RolesPriorityLiteralGuardTest {
         String joined = source.replaceAll("\"\\s*\\+\\s*\"", "");
         String collapsed = joined.replaceAll("\\s+", " ");
         return ROLES_WRITE.matcher(collapsed).find();
+    }
+
+    /** DB テストで RoleEntity を正準でない priority（数値直書き・変数）で作っているか。 */
+    static boolean writesRolesViaJpaNonCanonical(String source) {
+        if (!DB_TEST_MARKER.matcher(source).find()) {
+            return false;
+        }
+        if (source.contains("new RoleEntity(")) {
+            return true;
+        }
+        var builders = ROLE_ENTITY_BUILDER.matcher(source);
+        while (builders.find()) {
+            var priority = PRIORITY_CALL.matcher(builders.group(1));
+            if (!priority.find() || !CANONICAL_PRIORITY_ARG.matcher(priority.group(1).trim()).matches()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** クラス宣言より前（クラスレベル）に @Transactional があるか。 */
+    static boolean hasClassLevelTransactional(String source) {
+        var decl = CLASS_DECL.matcher(source);
+        String head = decl.find() ? source.substring(0, decl.start()) : "";
+        return Pattern.compile("^@Transactional", Pattern.MULTILINE).matcher(head).find();
     }
 
     private static TreeSet<String> scanViolations() throws IOException {
@@ -213,7 +300,8 @@ class RolesPriorityLiteralGuardTest {
                 if (EXEMPT_SUFFIXES.stream().anyMatch(rel::endsWith)) {
                     continue;
                 }
-                if (writesRolesDirectly(Files.readString(p, StandardCharsets.UTF_8))) {
+                String src = Files.readString(p, StandardCharsets.UTF_8);
+                if (writesRolesDirectly(src) || (rel.endsWith(".java") && writesRolesViaJpaNonCanonical(src))) {
                     violations.add(rel);
                 }
             }
@@ -246,6 +334,42 @@ class RolesPriorityLiteralGuardTest {
                 .as("移行済み・削除済みのファイルは KNOWN_VIOLATIONS から外すこと")
                 .isEmpty();
         assertThat(KNOWN_VIOLATIONS.values()).as("登録には理由が必須").allSatisfy(r -> assertThat(r).isNotBlank());
+    }
+
+    @Test
+    @DisplayName("R_ROLLBACK で登録したファイルはクラス @Transactional が付いている（外されたら落ちる）")
+    void rollbackRegisteredFilesStillTransactional() throws IOException {
+        List<String> notTransactional = new ArrayList<>();
+        for (Map.Entry<String, String> e : KNOWN_VIOLATIONS.entrySet()) {
+            if (R_ROLLBACK.equals(e.getValue())
+                    && !hasClassLevelTransactional(Files.readString(TEST_ROOT.resolve(e.getKey()), StandardCharsets.UTF_8))) {
+                notTransactional.add(e.getKey());
+            }
+        }
+        assertThat(notTransactional)
+                .as("クラス @Transactional が無いと roles が commit されて残る。RoleSeedSupport へ移行して登録を外すこと")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("検出器の自己検証: JPA 形（RoleEntity の priority 直書き）と @Transactional 判定")
+    void jpaDetectorSelfCheck() {
+        String db = "class X extends AbstractMySqlIntegrationTest {\n";
+        assertThat(writesRolesViaJpaNonCanonical(db + "RoleEntity.builder().name(\"A\").priority(2).build();")).isTrue();
+        assertThat(writesRolesViaJpaNonCanonical(db + "roles.save(RoleEntity.builder()\n.name(n)\n.priority(priority)\n.build());")).isTrue();
+        assertThat(writesRolesViaJpaNonCanonical(db + "RoleEntity.builder().name(\"A\").build();")).isTrue();
+        assertThat(writesRolesViaJpaNonCanonical(db + "new RoleEntity(\"A\");")).isTrue();
+        assertThat(writesRolesViaJpaNonCanonical(db + "RoleEntity.builder().priority(RolePriority.priority(\"ADMIN\")).build();")).isFalse();
+        assertThat(writesRolesViaJpaNonCanonical(db + "RoleEntity.builder().priority(RoleSeedSupport.priorityOf(name, 100)).build();")).isFalse();
+        assertThat(writesRolesViaJpaNonCanonical(db + "RoleEntity.builder().priority(com.mannschaft.app.role.authorization.RolePriority.priority(\"X\")).build();")).isFalse();
+        assertThat(writesRolesViaJpaNonCanonical(db + "UserRoleEntity.builder().userId(1L).build();")).isFalse();
+        // DB を使わない Mockito 単体テストは対象外
+        assertThat(writesRolesViaJpaNonCanonical("class Y {\nRoleEntity.builder().priority(2).build();")).isFalse();
+
+        assertThat(hasClassLevelTransactional("@Transactional\nclass A {}")).isTrue();
+        assertThat(hasClassLevelTransactional("@SpringBootTest\n@Transactional\npublic class A {}")).isTrue();
+        assertThat(hasClassLevelTransactional("class A {\n@Transactional\nvoid m() {}\n}")).isFalse();
+        assertThat(hasClassLevelTransactional("class A {}")).isFalse();
     }
 
     @Test

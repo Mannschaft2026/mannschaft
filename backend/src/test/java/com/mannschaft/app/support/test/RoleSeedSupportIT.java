@@ -101,7 +101,16 @@ class RoleSeedSupportIT extends AbstractMySqlIntegrationTest {
             assertThat(accessControl.hasRoleOrAbove(admin, t, TEAM, "ADMIN")).isTrue();
             assertThat(accessControl.hasRoleOrAbove(admin, t, TEAM, "DEPUTY_ADMIN")).isTrue();
         } finally {
-            tx.executeWithoutResult(s -> cleanup(teamId[0], new long[] {supporter, member, deputy, admin}));
+            // 途中で落ちても汚染を残さないよう、データ削除の成否に関わらず全ロールを正準値へ戻す
+            try {
+                tx.executeWithoutResult(s -> cleanup(teamId[0], new long[] {supporter, member, deputy, admin}));
+            } finally {
+                tx.executeWithoutResult(s -> {
+                    for (String name : new String[] {"ADMIN", "DEPUTY_ADMIN", "MEMBER", "SUPPORTER", "GUEST"}) {
+                        RoleSeedSupport.ensureCanonical(em, name);
+                    }
+                });
+            }
         }
     }
 

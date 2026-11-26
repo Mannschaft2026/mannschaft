@@ -18,6 +18,7 @@ import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.role.service.RoleService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.team.entity.TeamEntity;
 import com.mannschaft.app.team.repository.TeamRepository;
 import jakarta.persistence.EntityManager;
@@ -91,12 +92,12 @@ class RoleMembershipLeaveContractIT extends AbstractMySqlIntegrationTest {
     @BeforeEach
     void setUp() {
         truncateAll();
-        saveRole("SYSTEM_ADMIN", 1, true);
-        adminRoleId = saveRole("ADMIN", 2, false);
-        saveRole("DEPUTY_ADMIN", 3, false);
-        memberRoleId = saveRole("MEMBER", 4, false);
-        saveRole("SUPPORTER", 5, false);
-        saveRole("GUEST", 6, false);
+        saveRole("SYSTEM_ADMIN");
+        adminRoleId = saveRole("ADMIN");
+        saveRole("DEPUTY_ADMIN");
+        memberRoleId = saveRole("MEMBER");
+        saveRole("SUPPORTER");
+        saveRole("GUEST");
     }
 
     /**
@@ -119,16 +120,19 @@ class RoleMembershipLeaveContractIT extends AbstractMySqlIntegrationTest {
         membershipRepository.deleteAll();
         teamRepository.deleteAll();
         organizationRepository.deleteAll();
-        roleRepository.deleteAll();
+        // roles は全 IT 共有の参照表。正準 priority の行は他クラスのためにも残す（deleteAll しない）。
     }
 
     // ───────────────────────────────────────────────────────────────────
     // ヘルパー
     // ───────────────────────────────────────────────────────────────────
 
-    private Long saveRole(String name, int priority, boolean isSystem) {
-        return roleRepository.save(RoleEntity.builder()
-                .name(name).displayName(name).priority(priority).isSystem(isSystem).build()).getId();
+    /** 正準 priority で roles 行を用意し id を返す（既存行も直す。他クラスの行は消さない）。 */
+    private Long saveRole(String name) {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> RoleSeedSupport.ensureCanonical(em, name));
+        return ((Number) em.createNativeQuery("SELECT id FROM roles WHERE name = :n")
+                .setParameter("n", name).getSingleResult()).longValue();
     }
 
     private Long saveTeam() {
