@@ -56,7 +56,7 @@ const selectableTeams = computed(() =>
 const selectedTeamSlug = computed(
   () => teamStore.myTeams.find(tm => tm.id === selectedTeamId.value)?.slug ?? null,
 )
-const { canManageShift: canManage, canViewShift, isDeputyWithoutManage, loadPermissions } = useShiftPermission(selectedTeamSlug, { autoLoad: false })
+const { canManageShift: canManage, canViewShift, isDeputyWithoutManage, isScopeAdmin, loadPermissions } = useShiftPermission(selectedTeamSlug, { autoLoad: false })
 
 // =====================================================
 // フィルタ
@@ -259,6 +259,8 @@ function openDetail(scheduleId: number) {
 
     <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
     <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />
+    <!-- 管理者が最初に開く画面。副管理者への権限付与の手順を告知する（閉じられる） -->
+    <ShiftManageNotice v-else-if="isScopeAdmin" variant="admin" :team-slug="selectedTeamSlug" />
 
     <!-- フィルタバー -->
     <div class="mb-6 flex flex-wrap items-center gap-3">

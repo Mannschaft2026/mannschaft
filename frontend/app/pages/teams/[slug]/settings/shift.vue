@@ -190,7 +190,7 @@ onMounted(async () => {
           />
         </div>
         <p
-          v-if="!isScopeAdmin"
+          v-if="canManageShift && !isScopeAdmin"
           data-testid="deputy-hourly-rate-admin-only-notice"
           class="-mt-2 text-xs text-surface-500"
         >

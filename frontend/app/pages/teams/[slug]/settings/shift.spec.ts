@@ -104,7 +104,9 @@ describe('シフト設定: 副管理者への閲覧許可の切替', () => {
     expect((wrapper.get('[data-testid="deputy-shift-view-toggle"]').element as HTMLInputElement).disabled).toBe(true)
     expect((wrapper.get('[data-testid="deputy-hourly-rate-view-toggle"]').element as HTMLInputElement).disabled).toBe(true)
     expect(wrapper.find('[data-testid="reminder-settings-save-btn"]').exists()).toBe(false)
+    // 閲覧のみの人には全体の説明を1つだけ出す（時給トグル直下の「管理者だけ」の注記と矛盾して読めないよう、出さない）。
     expect(wrapper.find('[data-testid="shift-settings-readonly-notice"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="deputy-hourly-rate-admin-only-notice"]').exists()).toBe(false)
     expect(mocks.updateShiftSettings).not.toHaveBeenCalled()
   })
 

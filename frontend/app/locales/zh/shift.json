@@ -484,11 +484,11 @@
         "rateRequired": "请输入时薪",
         "ratePositive": "时薪请输入不少于 1 日元的金额"
       },
-      "readOnlyNotice": "您只能查看时薪。登记或更改时薪需要排班管理权限（MANAGE_SHIFTS）。"
+      "readOnlyNotice": "您只能查看时薪。登记或更改时薪需要“管理排班”权限。"
     },
     "permission": {
-      "noManagePermission": "您没有管理排班的权限。请联系管理员。",
-      "adminNotice": "副管理员如果没有排班管理权限（MANAGE_SHIFTS），将无法再管理排班。请通过权限组为需要的副管理员授予 MANAGE_SHIFTS。",
+      "noManagePermission": "由于没有“管理排班”权限，您只能查看排班。如需创建或编辑，请联系管理员通过权限组为您授予“管理排班”。",
+      "adminNotice": "副管理员如果没有通过权限组获得“管理排班”权限，就无法管理排班（仅可查看）。请将包含“管理排班”的权限组分配给需要的副管理员。",
       "adminNoticeLink": "打开权限组"
     }
   },

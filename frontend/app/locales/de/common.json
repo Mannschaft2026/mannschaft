@@ -1472,21 +1472,21 @@
     "load_more": "Mehr laden"
   },
   "teamShiftSettings": {
-    "title": "Schichtplanungseinstellungen",
-    "description": "Erinnerungsbenachrichtigungen vor der Einreichungsfrist konfigurieren",
+    "title": "Schichteinstellungen",
+    "description": "Erinnerungen vor der Einreichungsfrist und die Einsicht für stellvertretende Administratoren konfigurieren",
     "reminder48h": "48-Stunden-Erinnerung",
     "reminder24h": "24-Stunden-Erinnerung",
     "reminder12h": "12-Stunden-Erinnerung (demnächst)",
     "atLeastOneRequired": "Bitte aktiviere mindestens eine Erinnerung",
     "saved": "Einstellungen gespeichert",
     "deputyViewTitle": "Einsicht für stellvertretende Administratoren",
-    "deputyViewDescription": "Legt fest, ob stellvertretende Administratoren ohne die Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) Schichtinformationen einsehen dürfen. Erstellen, Bearbeiten, Veröffentlichen, Zuweisen und Genehmigen bleiben weiterhin untersagt.",
+    "deputyViewDescription": "Legt fest, ob stellvertretende Administratoren, denen keine Berechtigungsgruppe „Schichten verwalten“ erteilt, Schichtinformationen einsehen dürfen. Erstellen, Bearbeiten, Veröffentlichen, Zuweisen und Genehmigen bleiben weiterhin untersagt.",
     "deputyShiftView": "Einsicht in Schichtinformationen erlauben",
     "deputyShiftViewHint": "Sichtbar sind unveröffentlichte Schichtpläne, Zuweisungen, Tausch- und Änderungsanträge anderer, Wunschlisten, der PDF-Export für Administratoren und offene Aufgaben im Dashboard.",
     "deputyHourlyRateView": "Einsicht in Stundenlöhne anderer Mitglieder erlauben",
     "deputyHourlyRateViewHint": "Die Stundenlöhne anderer Mitglieder sind auf der Seite für Stundenlöhne sichtbar (Erfassen und Ändern bleibt untersagt).",
     "deputyHourlyRateAdminOnly": "Diese Einstellung können nur Administratoren ändern.",
-    "readOnlyNotice": "Diese Einstellungen können nur Team-Administratoren und stellvertretende Administratoren mit der Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) ändern."
+    "readOnlyNotice": "Diese Einstellungen können Administratoren und stellvertretende Administratoren mit der Berechtigung „Schichten verwalten“ ändern. Die Einsicht in Stundenlöhne können nur Administratoren ändern."
   },
   "corkboard": {
     "pin": "Anheften",

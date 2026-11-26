@@ -349,7 +349,7 @@ const currentStep = computed(() =>
       <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />
 
       <!-- タブナビ -->
-      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule.teamId" current="overview" />
+      <ShiftDetailTabs :schedule-id="scheduleId" :team-id="schedule.teamId" current="overview" :status="schedule?.status ?? null" />
 
       <!-- カレンダービュー -->
       <section>

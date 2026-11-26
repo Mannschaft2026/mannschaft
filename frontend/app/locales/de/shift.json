@@ -484,11 +484,11 @@
         "rateRequired": "Bitte geben Sie einen Stundensatz ein",
         "ratePositive": "Bitte geben Sie einen Stundensatz von mindestens 1 JPY ein"
       },
-      "readOnlyNotice": "Sie dürfen Stundenlöhne nur einsehen. Zum Erfassen oder Ändern ist die Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) erforderlich."
+      "readOnlyNotice": "Sie dürfen Stundenlöhne nur einsehen. Zum Erfassen oder Ändern ist die Berechtigung „Schichten verwalten“ erforderlich."
     },
     "permission": {
-      "noManagePermission": "Sie haben keine Berechtigung zur Schichtverwaltung. Bitte wenden Sie sich an eine Administratorin oder einen Administrator.",
-      "adminNotice": "Stellvertretende Administratoren können Schichten nur noch verwalten, wenn sie die Berechtigung zur Schichtverwaltung (MANAGE_SHIFTS) haben. Erteilen Sie MANAGE_SHIFTS über eine Berechtigungsgruppe an die Stellvertreter, die sie benötigen.",
+      "noManagePermission": "Sie können Schichten nur einsehen, da Ihnen die Berechtigung „Schichten verwalten“ fehlt. Zum Erstellen oder Bearbeiten bitten Sie eine Administratorin oder einen Administrator, sie Ihnen über eine Berechtigungsgruppe zu erteilen.",
+      "adminNotice": "Stellvertretende Administratoren können Schichten nicht verwalten (nur einsehen), wenn ihnen keine Berechtigungsgruppe „Schichten verwalten“ erteilt. Weisen Sie den benötigten Stellvertretern eine Berechtigungsgruppe zu, die „Schichten verwalten“ enthält.",
       "adminNoticeLink": "Berechtigungsgruppen öffnen"
     }
   },

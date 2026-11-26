@@ -46,8 +46,11 @@ export interface ShiftPermissionResult {
 
 /** 判定の純関数（真理値表の単体テスト対象）。 */
 export function resolveShiftPermission(input: ShiftPermissionInput): ShiftPermissionResult {
-  const canManageShift = input.isScopeAdmin || input.permissions.includes(MANAGE_SHIFTS_PERMISSION)
   const isDeputy = input.roleName === 'DEPUTY_ADMIN'
+  // BE（ShiftManageAccessGate）は MEMBER に MANAGE_SHIFTS が付いていても 403 にする。権限グループ経由の付与は
+  // DEPUTY_ADMIN のときだけ有効なので、ロールを見ずに permissions だけで判定しない。
+  const canManageShift = input.isScopeAdmin
+    || (isDeputy && input.permissions.includes(MANAGE_SHIFTS_PERMISSION))
   return {
     canManageShift,
     canViewShift: canManageShift || (isDeputy && input.deputyShiftViewEnabled),
@@ -89,9 +92,13 @@ export function useShiftPermission(
   }))
 
   /** 切替の値に依存しない（切替の取得結果で再評価が回らないよう、判定材料だけから作る）。 */
-  const needsSettings = computed(() => access.roleName.value === 'DEPUTY_ADMIN'
-    && !access.isScopeAdmin.value
-    && !access.permissions.value.includes(MANAGE_SHIFTS_PERMISSION))
+  const needsSettings = computed(() => resolveShiftPermission({
+    roleName: access.roleName.value,
+    isScopeAdmin: access.isScopeAdmin.value,
+    permissions: access.permissions.value,
+    deputyShiftViewEnabled: false,
+    deputyHourlyRateViewEnabled: false,
+  }).isDeputyWithoutManage)
 
   async function fetchSettings(slug: string, seq: number): Promise<void> {
     try {

@@ -7,6 +7,7 @@ import ShiftDetailTabs from './ShiftDetailTabs.vue'
  *   AC-K1 変更依頼・PDF のリンクがあり、管理者にはボードも出る。一般メンバーにはボードが出ない
  *   AC-K2 myTeams にそのチームが無い利用者には teams 配下へのリンクを出さない
  *   AC-K3 SUPPORTER には PDF を出さない
+ *   CMP-261125-2114 D5 PDF は BE の発行条件に合わせる（管理者の形は未公開でも、それ以外の会員は公開済みだけ。未公開は BE が 404）
  */
 const state = vi.hoisted(() => ({
   myTeams: [] as Array<{ id: number; slug: string; role: string }>,
@@ -29,11 +30,12 @@ async function mountTabs(
     manage: role === 'ADMIN' || role === 'DEPUTY_ADMIN',
     view: role === 'ADMIN' || role === 'DEPUTY_ADMIN',
   },
+  status: { status: string, publishedAt: string | null } | null = { status: 'PUBLISHED', publishedAt: '2026-11-01T00:00:00' },
 ) {
   state.canManageShift = perm.manage
   state.canViewShift = perm.view
   state.myTeams = role === null ? [] : [{ id: 12, slug: 'team-a', role }]
-  return mountSuspended(ShiftDetailTabs, { props: { scheduleId: 10, teamId, current: 'overview' } })
+  return mountSuspended(ShiftDetailTabs, { props: { scheduleId: 10, teamId, current: 'overview', status } as never })
 }
 
 function hrefOf(wrapper: Awaited<ReturnType<typeof mountTabs>>, testid: string): string | undefined {
@@ -104,5 +106,20 @@ describe('ShiftDetailTabs', () => {
   it('AC-K3: SUPPORTER には PDF を出さない', async () => {
     const wrapper = await mountTabs('SUPPORTER')
     expect(wrapper.find('[data-testid="shift-tab-pdf"]').exists()).toBe(false)
+  })
+
+  it.each([
+    { label: '一般メンバー・公開済み', role: 'MEMBER', perm: { manage: false, view: false }, status: { status: 'PUBLISHED', publishedAt: '2026-11-01T00:00:00' }, visible: true },
+    { label: '一般メンバー・公開日時ありのアーカイブ', role: 'MEMBER', perm: { manage: false, view: false }, status: { status: 'ARCHIVED', publishedAt: '2026-11-01T00:00:00' }, visible: true },
+    { label: '一般メンバー・公開日時なしのアーカイブ', role: 'MEMBER', perm: { manage: false, view: false }, status: { status: 'ARCHIVED', publishedAt: null }, visible: false },
+    { label: '一般メンバー・調整中（BE は 404）', role: 'MEMBER', perm: { manage: false, view: false }, status: { status: 'ADJUSTING', publishedAt: null }, visible: false },
+    { label: '一般メンバー・下書き（BE は 404）', role: 'MEMBER', perm: { manage: false, view: false }, status: { status: 'DRAFT', publishedAt: null }, visible: false },
+    { label: '一般メンバー・状態未取得', role: 'MEMBER', perm: { manage: false, view: false }, status: null, visible: false },
+    { label: '閲覧切替 OFF の副管理者・調整中', role: 'DEPUTY_ADMIN', perm: { manage: false, view: false }, status: { status: 'ADJUSTING', publishedAt: null }, visible: false },
+    { label: '閲覧切替 ON の副管理者・調整中（管理者の形は未公開でも発行できる）', role: 'DEPUTY_ADMIN', perm: { manage: false, view: true }, status: { status: 'ADJUSTING', publishedAt: null }, visible: true },
+    { label: '管理者・下書き', role: 'ADMIN', perm: { manage: true, view: true }, status: { status: 'DRAFT', publishedAt: null }, visible: true },
+  ])('D5: PDF は $label のとき $visible', async ({ role, perm, status, visible }) => {
+    const wrapper = await mountTabs(role, 12, perm, status)
+    expect(wrapper.find('[data-testid="shift-tab-pdf"]').exists()).toBe(visible)
   })
 })

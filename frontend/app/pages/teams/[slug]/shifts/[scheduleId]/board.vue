@@ -19,9 +19,9 @@
 
       <!-- 操作群はシフト表が取得できたときだけ出す（取得失敗時に死んだ導線を残さない） -->
       <div v-if="schedule" class="flex items-center gap-2">
-        <!-- PDF エクスポートボタン（SUPPORTER ロールは非表示） -->
+        <!-- PDF エクスポートボタン（SUPPORTER は非表示。管理者の形以外は公開済みのシフト表だけ） -->
         <ShiftPdfExportButton
-          v-if="!isSupporter"
+          v-if="canExportPdf"
           :schedule-id="scheduleId"
         />
 
@@ -179,6 +179,7 @@ import type {
 } from '~/types/shift'
 import type { LoadErrorKind } from '~/utils/loadError'
 import { getLoadErrorHttpStatus } from '~/utils/loadError'
+import { isPdfReleasableToNonPrivileged } from '~/utils/shiftStatus'
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
@@ -189,8 +190,11 @@ const scheduleId = computed(() => Number(route.params.scheduleId))
 //   → systemRole はプラットフォームロール（SYSTEM_ADMIN など）であり、
 //     チームの SUPPORTER を判定するのは誤りだった。
 // 新実装: /api/v1/teams/{id}/me/permissions から取得した roleName で判定する。
-const { roleName, canManageShift, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
+const { roleName, canManageShift, canViewShift, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 const isSupporter = computed(() => roleName.value === 'SUPPORTER')
+// PDF は BE（ShiftPdfFacade）が、管理者の形なら未公開でも許し、それ以外の会員は公開済みだけ許す（未公開は 404）。
+const canExportPdf = computed(() =>
+  !isSupporter.value && (canViewShift.value || isPdfReleasableToNonPrivileged(schedule.value?.status)))
 // CMP-261125-2114: 自動割当（実行・確定・破棄・履歴）などの管理操作は、チーム ADMIN または
 // MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに許される（BE: ShiftManageAccessGate）。
 // 判定は useShiftPermission に集約。SYSTEM_ADMIN の roleName 特別扱いはしない（BE も特別扱いしない）。

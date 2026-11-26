@@ -49,6 +49,7 @@ describe('BaseSidebar の取得状態', () => {
     { label: 'MANAGE_SHIFTS 付き DEPUTY_ADMIN', response: { roleName: 'DEPUTY_ADMIN', scopeAdmin: false, permissions: ['MANAGE_SHIFTS'] }, visible: true },
     { label: 'MANAGE_SHIFTS 無しの DEPUTY_ADMIN', response: { roleName: 'DEPUTY_ADMIN', scopeAdmin: false, permissions: [] }, visible: false },
     { label: 'MEMBER', response: { roleName: 'MEMBER', scopeAdmin: false, permissions: [] }, visible: false },
+    { label: 'MANAGE_SHIFTS が権限グループで付いた MEMBER（BE は 403）', response: { roleName: 'MEMBER', scopeAdmin: false, permissions: ['MANAGE_SHIFTS'] }, visible: false },
     { label: 'チームロール無しの SYSTEM_ADMIN', response: { roleName: 'SYSTEM_ADMIN', scopeAdmin: false, permissions: [] }, visible: false },
   ])('シフト設定の導線: $label は $visible', async ({ response, visible }) => {
     apiMock.mockImplementation((url: string) => Promise.resolve(url.endsWith('/me/permissions') ? { data: response } : { data: [] }))
