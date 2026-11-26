@@ -170,6 +170,12 @@ public class EffortRecordTxService {
     /**
      * 原本を全置換更新する（version 一致必須。不一致は COMMON_003 / 409）。
      *
+     * <p>原本は共有 PUT・retry・取消・後処理の ack と同じ行ロック（{@link EffortRecordRepository#findOwnedForUpdate}）で読む。
+     * ロックなしで読むと、読込の後に旧 command の ack が VISIBLE を確定した場合、訂正の PENDING が読込時の値と同じため
+     * {@code @DynamicUpdate} の更新対象に入らず、新しい contentRevision と古い同期版の VISIBLE が残る（ack は @Version を
+     * 進めないので訂正も成功する）。行ロックで ack と直列化し、ack が先なら VISIBLE を読んで PENDING へ戻し、訂正が先なら
+     * ack は版の不一致で何もしない。この TX が取るロックは原本行 1 行だけで、他の経路とロック順序が逆にならない。</p>
+     *
      * <p>resyncShare が true（共有先チームが有効で、共有に束縛された加入期間が今も有効だと呼出元が TX の外で確認済み）なら、
      * 凍結した共有定義・mapping・allowlist で新しい contentRevision の共有内容を作り、同じ share UUID の同期を要求する
      * （share.state=PENDING・shareVersion は不変。API 契約 §3）。false なら私的な更新だけを行い、旧共有を再同期しない。</p>
@@ -178,7 +184,8 @@ public class EffortRecordTxService {
     public EffortOwnerRecordResponse update(Long ownerUserId, UUID id, UpdateEffortRecordRequest request, ZoneId userZone,
                                             boolean resyncShare) {
         return metrics.measure("update", () -> {
-            EffortRecordEntity entity = owned(ownerUserId, id);
+            EffortRecordEntity entity = records.findOwnedForUpdate(id, ownerUserId)
+                    .orElseThrow(() -> new BusinessException(EffortErrorCode.EFFORT_001));
             if (entity.getVersion() != request.version().longValue()) {
                 throw new BusinessException(CommonErrorCode.COMMON_003);
             }

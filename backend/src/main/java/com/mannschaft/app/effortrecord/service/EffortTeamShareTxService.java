@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
@@ -162,8 +163,12 @@ public class EffortTeamShareTxService {
                 .map(row -> row.getState() == EffortTeamShareState.REVOKED ? snapshot(row, false) : markRevoked(row));
     }
 
-    /** share UUID のチーム側共有行（読み取りのみ）。 */
-    @Transactional(readOnly = true)
+    /**
+     * share UUID のチーム側共有行（読み取りのみ）。非表示の commit 直後の後処理が timeline の失効に使う版・加入期間を
+     * この行から決めるため、複製の遅れで古い版を読まないよう PRIMARY の独立 TX で読む（readOnly=false は
+     * ReplicaRoutingAspect の PRIMARY 経路選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     Optional<EffortTeamShareEntity> find(UUID shareId) {
         return teamShares.findById(shareId);
     }

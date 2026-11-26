@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
@@ -71,8 +72,12 @@ public class EffortShareTxService {
 
     // ───────────────────────────── 読み取り ─────────────────────────────
 
-    /** 本人の原本（不在・他人・削除済み・purged は区別せず EFFORT_001）。 */
-    @Transactional(readOnly = true)
+    /**
+     * 本人の原本（不在・他人・削除済み・purged は区別せず EFFORT_001）。訂正の再同期・preview・retry の判断に使うため、
+     * 書込直後の状態を複製の遅れで見落とさないよう PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の
+     * PRIMARY 経路選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     EffortRecordEntity owned(Long ownerUserId, UUID recordId) {
         return records.findByIdAndOwnerUserId(recordId, ownerUserId)
                 .orElseThrow(() -> new BusinessException(EffortErrorCode.EFFORT_001));
@@ -286,8 +291,14 @@ public class EffortShareTxService {
 
     // ───────────────────────────── coordinator（非 TX）から呼ぶ owner TX ─────────────────────────────
 
-    /** 現在の desired command（PENDING のときだけ）。原本が無い・purged・PENDING でないなら empty。 */
-    @Transactional(readOnly = true)
+    /**
+     * 現在の desired command（PENDING のときだけ）。原本が無い・purged・PENDING でないなら empty。
+     *
+     * <p>coordinator はこの結果と一致しないイベントを古い要求として捨てる。共有 PUT・訂正の commit 直後に動くため、
+     * レプリカから読むと複製の遅れだけで正常なイベントを捨て、自動再送も無いので共有が PENDING に取り残される。
+     * 捨てる根拠は PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の PRIMARY 経路選択用。DML は行わない）。</p>
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public Optional<EffortShareCommand> pendingCommand(UUID recordId) {
         return records.findById(recordId)
                 .filter(r -> r.getShareState() == EffortShareState.PENDING && r.getShareId() != null
