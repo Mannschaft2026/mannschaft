@@ -229,6 +229,38 @@ matcher 式は行挿入で腐らず、`SecurityConfig` を Ctrl+F すれば人�
 - 判定は**トランザクションの外**で行い、判定部品は例外の catch で分岐せず、Repository と `AccessControlService` の真偽値で決める（tx 内で例外を握ると rollback-only で 500 になるため）。tx 内の `checkPost` は多層防御として残す。
 - 子リソース ID を直接指定するファイル共有 EP（コメント・タグ・リンク・権限の ID 指定の更新／削除）は未是正で、派生戦役の対象。
 
+**委員会（F04.10）への適用（CMP-261125-2349・草案：試練で作成し、実装役が確定させる）**: 委員会のスコープは**委員会**（`committee_members` の現役行）であり、親組織の所属とは別軸のため、`ScopeConcealingAccessGate` の判定順（生存確認 → SYSTEM_ADMIN → `isAdminOrAbove` → 個別条件 → 所属判定）に準拠して委員会側の判定（`CommitteeAccessGuard` を拡張）を置く。別の Guard は新設しない。
+
+- 「存在を知り得る」利用者（**可視**）= SYSTEM_ADMIN / 親組織の ADMIN・DEPUTY_ADMIN（`isAdminOrAbove`。user_roles のみの者を含む）/ 親組織の在籍メンバー（`isMember`）で、かつ「委員会の現役メンバー」または「`visibility_to_org` が HIDDEN でない」者。委員会メンバーでも親組織に在籍していない者（残存所属）は不可視（PR #4424 の「詳細で親組織所属必須」を可視判定に含める）。
+- **読取**: 可視だが許可されない者は 403 `COMMON_002`、不可視は不在と完全一致の 404。
+- **書込**（GET 以外）: 委員会の現役メンバーで役職不足、または親組織 ADMIN・SYSTEM_ADMIN で許可されない者だけを 403 `COMMON_002` とする。**委員会の非メンバー（組織の一般メンバー）は、委員会が組織に可視でも 404**（F04.10 §7-1「それ以外: 404」）。
+- 404 のコードは、委員会 ID 指定系が `COMMITTEE_NOT_FOUND`、招集状 ID 指定（取り下げ）が `COMMITTEE_INVITATION_NOT_FOUND`。子 ID（伝達ログ・活動記録・対象ユーザー）を持つ EP でも、委員会が不可視なら子の実在によらず `COMMITTEE_NOT_FOUND`。
+- 招集トークン（accept/decline-by-token）は、宛先でない利用者の有効トークンを無効トークンと完全一致（400 `COMMITTEE_INVITATION_TOKEN_INVALID`）にする。
+- 判定は行ロック（`findByIdForUpdate`・`UserRowLockService`）・通知・お知らせ生成・伝達ログ保存より**前**に置く。不可視の要求ではロックも副作用も起こさない（ロック後の再判定は多層防御として残す）。
+
+| EP | 許可主体 | 403 `COMMON_002`（可視の非許可者） | 404（不可視・非委員の書込） | 不在 |
+|---|---|---|---|---|
+| `GET /committees/{id}` | 委員会メンバー全役職 / 組織 ADMIN / SYSTEM_ADMIN / 非 HIDDEN の組織メンバー | （なし） | HIDDEN の組織非委員・他テナント・残存所属 | 404 `COMMITTEE_NOT_FOUND` |
+| `PATCH /committees/{id}` | CHAIR・VICE_CHAIR | SECRETARY・MEMBER・組織 ADMIN・SYSTEM_ADMIN | 組織非委員（可視性によらず）・他テナント・残存所属 | 同上 |
+| `POST /committees/{id}/status` | CHAIR・組織 ADMIN | VICE_CHAIR・SECRETARY・MEMBER・SYSTEM_ADMIN | 同上 | 同上 |
+| `GET /committees/{id}/members` | 委員会メンバー全役職 | 組織 ADMIN・SYSTEM_ADMIN・非 HIDDEN の組織非委員 | HIDDEN の組織非委員・他テナント・残存所属 | 同上 |
+| `PATCH /committees/{id}/members/{userId}` | CHAIR | VICE_CHAIR・SECRETARY・MEMBER・組織 ADMIN・SYSTEM_ADMIN | 組織非委員・他テナント・残存所属 | 同上（対象ユーザー不在は CHAIR にだけ 403 `COMMITTEE_NOT_MEMBER`） |
+| `DELETE /committees/{id}/members/{userId}` | CHAIR | 同上 | 同上 | 同上 |
+| `POST /committees/{id}/members/me/leave` | 委員会メンバー全役職（唯一の CHAIR は 400 `COMMITTEE_LAST_CHAIR_CANNOT_LEAVE`） | 組織 ADMIN・SYSTEM_ADMIN | 同上 | 同上 |
+| `POST /committees/{id}/distributions` | CHAIR・VICE_CHAIR・SECRETARY | MEMBER・組織 ADMIN・SYSTEM_ADMIN | 同上 | 同上 |
+| `GET /committees/{id}/distributions` | 委員会メンバー全役職 | 組織 ADMIN・SYSTEM_ADMIN・非 HIDDEN の組織非委員 | HIDDEN の組織非委員・他テナント・残存所属 | 同上 |
+| `GET /committees/{id}/distributions/{distributionId}` | 委員会メンバー全役職 | 同上 | 同上（伝達ログの実在によらず） | 404 `COMMITTEE_NOT_FOUND`（伝達ログ不在・別委員会の伝達ログも同じ） |
+| `POST /committees/{id}/invitations` | CHAIR・VICE_CHAIR | SECRETARY・MEMBER・組織 ADMIN・SYSTEM_ADMIN | 組織非委員・他テナント・残存所属 | 404 `COMMITTEE_NOT_FOUND` |
+| `GET /committees/{id}/invitations` | CHAIR・VICE_CHAIR | SECRETARY・MEMBER・組織 ADMIN・SYSTEM_ADMIN・非 HIDDEN の組織非委員 | HIDDEN の組織非委員・他テナント・残存所属 | 同上 |
+| `PATCH /committees/{id}/activity-records/{recordId}/confirm` | CHAIR・VICE_CHAIR | SECRETARY・MEMBER・組織 ADMIN・SYSTEM_ADMIN | 組織非委員・他テナント・残存所属（活動記録の実在によらず） | 404 `COMMITTEE_NOT_FOUND`（記録不在・他委員会の記録も同じ） |
+| `DELETE /committee-invitations/{invitationId}` | 招集者本人・招集状の委員会の CHAIR | 当該委員会のその他メンバー・組織 ADMIN・SYSTEM_ADMIN | 組織非委員（被招集者を含む）・他テナント・残存所属 | 404 `COMMITTEE_INVITATION_NOT_FOUND` |
+| `POST /committee-invitations/accept-by-token` | 被招集者本人 | （なし） | （該当なし：宛先でない者は無効トークンと同じ 400 `COMMITTEE_INVITATION_TOKEN_INVALID`） | 400 `COMMITTEE_INVITATION_TOKEN_INVALID` |
+| `POST /committee-invitations/decline-by-token` | 被招集者本人 | （なし） | 同上 | 同上 |
+
+- 匿名は全 EP で 401（Security filter）。ID の型不正は 400。
+- 範囲外（別行）: NAME_ONLY の委員会で非委員に `CommitteeResponse` の全項目を返している件、`scope_type=COMMITTEE` を受ける他ドメインの ID 指定 API。
+- 契約は `CommitteeExistenceOracleContractIT`（全 EP × 主体、不可視と不在の応答のバイト等価）と `CommitteeExistenceOracleLockOrderTest`（不可視の要求でロック・副作用なし）が固定する。
+
 ### 3.4 広告（F09.7 / F09.17・IP レート制限あり）
 `POST /api/v1/ads/*/click`、`GET/POST /api/v1/ads/unsubscribe`、`GET /api/v1/ads/pixels/open`。
 

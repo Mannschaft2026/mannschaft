@@ -150,14 +150,16 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("別委員会のCHAIRの更新は403（実体の委員会でロール判定する）")
-        void 別委員会のCHAIRの更新は403() throws Exception {
+        @DisplayName("X8: 別委員会のCHAIRの更新は404（委員会の非メンバーの書込は不在と等価）")
+        void 別委員会のCHAIRの更新は404() throws Exception {
+            // CMP-261125-2349 X8: 旧期待値は 403 COMMON_002。委員会の非メンバーによる書込は、委員会が組織に
+            // 可視でも不在と等価な 404 とする（F04.10 §7-1・マスター決定）。403 のままだと委員会 ID の実在が漏れる。
             setAuthentication(chairBId);
             mockMvc.perform(patch("/api/v1/committees/{id}", committeeAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("name", "乗っ取り"))))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.NOT_FOUND.getCode()));
         }
 
         @Test
@@ -235,12 +237,14 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("別委員会のCHAIRによる解任は403")
-        void 別委員会のCHAIRによる解任は403() throws Exception {
+        @DisplayName("X8: 別委員会のCHAIRによる解任は404（委員会の非メンバーの書込は不在と等価）")
+        void 別委員会のCHAIRによる解任は404() throws Exception {
+            // CMP-261125-2349 X8: 旧期待値は 403 COMMON_002。委員会の非メンバーによる書込は、委員会が組織に
+            // 可視でも不在と等価な 404 とする（F04.10 §7-1・マスター決定）。403 のままだと委員会 ID の実在が漏れる。
             setAuthentication(chairBId);
             mockMvc.perform(delete("/api/v1/committees/{id}/members/{userId}", committeeAId, memberAId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.NOT_FOUND.getCode()));
         }
 
         @Test
@@ -257,12 +261,14 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
     class LeaveCommittee {
 
         @Test
-        @DisplayName("非メンバーの離脱は403")
-        void 非メンバーの離脱は403() throws Exception {
+        @DisplayName("X8: 非メンバーの離脱は404（委員会の非メンバーの書込は不在と等価）")
+        void 非メンバーの離脱は404() throws Exception {
+            // CMP-261125-2349 X8: 旧期待値は 403 COMMON_002。委員会の非メンバーによる書込は、委員会が組織に
+            // 可視でも不在と等価な 404 とする（F04.10 §7-1・マスター決定）。403 のままだと委員会 ID の実在が漏れる。
             setAuthentication(orgOnlyId);
             mockMvc.perform(post("/api/v1/committees/{id}/members/me/leave", committeeAId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.NOT_FOUND.getCode()));
         }
 
         @Test
@@ -403,14 +409,16 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
     class CancelInvitation {
 
         @Test
-        @DisplayName("招集者でも当該委員会のCHAIRでもない利用者の取り下げは403")
-        void 権限のない利用者の取り下げは403() throws Exception {
+        @DisplayName("X8: 招集状の委員会の非メンバー（別委員会のCHAIR）の取り下げは招集状不在と同じ404")
+        void 権限のない利用者の取り下げは404() throws Exception {
+            // CMP-261125-2349 X8: 旧期待値は 403 COMMON_002。招集状 ID は連番のため、委員会の非メンバーに
+            // 403 を返すと招集状 ID の実在が列挙できる。招集状不在（COMMITTEE_INVITATION_NOT_FOUND）と等価にする。
             CommitteeInvitationEntity invitation = insertInvitation(committeeAId, orgOnlyId, chairAId);
 
             setAuthentication(chairBId);
             mockMvc.perform(delete("/api/v1/committee-invitations/{invitationId}", invitation.getId()))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.INVITATION_NOT_FOUND.getCode()));
         }
 
         @Test
@@ -429,8 +437,10 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
     class ResolveInvitation {
 
         @Test
-        @DisplayName("宛先でない利用者の受諾は403")
-        void 宛先でない利用者の受諾は403() throws Exception {
+        @DisplayName("X8: 宛先でない利用者の受諾は無効トークンと同じ400")
+        void 宛先でない利用者の受諾は無効トークンと同じ400() throws Exception {
+            // CMP-261125-2349 X7/X8: 旧期待値は 403 COMMON_002。403 だと「そのトークンは有効な招集状のもの」と
+            // 判別できるため、無効トークン（COMMITTEE_INVITATION_TOKEN_INVALID）と等価にする。
             CommitteeInvitationEntity invitation = insertInvitation(committeeAId, orgOnlyId, chairAId);
 
             setAuthentication(chairBId);
@@ -438,8 +448,8 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("inviteToken", invitation.getInviteToken()))))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.INVITATION_TOKEN_INVALID.getCode()));
         }
 
         @Test
@@ -457,8 +467,10 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("宛先でない利用者の辞退は403")
-        void 宛先でない利用者の辞退は403() throws Exception {
+        @DisplayName("X8: 宛先でない利用者の辞退は無効トークンと同じ400")
+        void 宛先でない利用者の辞退は無効トークンと同じ400() throws Exception {
+            // CMP-261125-2349 X7/X8: 旧期待値は 403 COMMON_002。403 だと「そのトークンは有効な招集状のもの」と
+            // 判別できるため、無効トークン（COMMITTEE_INVITATION_TOKEN_INVALID）と等価にする。
             CommitteeInvitationEntity invitation = insertInvitation(committeeAId, orgOnlyId, chairAId);
 
             setAuthentication(chairBId);
@@ -466,8 +478,8 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("inviteToken", invitation.getInviteToken()))))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.INVITATION_TOKEN_INVALID.getCode()));
         }
 
         @Test
@@ -505,15 +517,17 @@ class CommitteeAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("別委員会のCHAIRの議事録確定は403")
-        void 別委員会のCHAIRの議事録確定は403() throws Exception {
+        @DisplayName("X8: 別委員会のCHAIRの議事録確定は404（委員会の非メンバーの書込は不在と等価）")
+        void 別委員会のCHAIRの議事録確定は404() throws Exception {
             Long recordId = insertCommitteeActivityRecord(committeeAId, chairAId);
 
+            // CMP-261125-2349 X8: 旧期待値は 403 COMMON_002。委員会の非メンバーによる書込は、委員会が組織に
+            // 可視でも不在と等価な 404 とする（F04.10 §7-1・マスター決定）。403 のままだと委員会 ID の実在が漏れる。
             setAuthentication(chairBId);
             mockMvc.perform(patch("/api/v1/committees/{id}/activity-records/{recordId}/confirm",
                             committeeAId, recordId))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value(CommitteeErrorCode.NOT_FOUND.getCode()));
         }
 
         @Test

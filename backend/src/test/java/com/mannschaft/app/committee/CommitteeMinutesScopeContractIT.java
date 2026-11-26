@@ -18,7 +18,10 @@ import com.mannschaft.app.committee.repository.CommitteeMemberRepository;
 import com.mannschaft.app.committee.repository.CommitteeRepository;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
+import com.mannschaft.app.membership.domain.RoleKind;
+import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.MembershipTestHelper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
@@ -116,6 +119,12 @@ class CommitteeMinutesScopeContractIT extends AbstractMySqlIntegrationTest {
                     .orgType(OrganizationEntity.OrgType.OTHER).visibility(OrganizationEntity.Visibility.PRIVATE)
                     .hierarchyVisibility(OrganizationEntity.HierarchyVisibility.NONE).supporterEnabled(false).build()).getId();
             orgIds.add(org);
+            // CMP-261125-2349 X9: 委員会の可視判定は親組織の在籍を含む（残存所属は不可視）。
+            // 委員会メンバー・元委員は組織に在籍させ、outsider だけを非在籍にする。
+            for (String label : List.of("chair", "vice", "member", "secretary", "chairB", "former")) {
+                MembershipTestHelper.insertMembership(em, actors.get(label), ScopeType.ORGANIZATION, org,
+                        RoleKind.MEMBER);
+            }
             a = committee("議事録契約A"); b = committee("議事録契約B");
             member(a, "chair", CommitteeRole.CHAIR, false);
             member(a, "vice", CommitteeRole.VICE_CHAIR, false);
@@ -145,6 +154,8 @@ class CommitteeMinutesScopeContractIT extends AbstractMySqlIntegrationTest {
                 em.flush();
                 committees.deleteAllById(committeeIds);
                 em.flush();
+                em.createNativeQuery("DELETE FROM memberships WHERE user_id IN (:ids)")
+                        .setParameter("ids", userIds).executeUpdate();
                 organizations.deleteAllById(orgIds);
                 em.flush();
                 users.deleteAllById(userIds);
@@ -210,8 +221,13 @@ class CommitteeMinutesScopeContractIT extends AbstractMySqlIntegrationTest {
         } finally { assertThat(snapshot(null)).isEqualTo(confirmed); }
     }
 
+    /**
+     * CMP-261125-2349 X8: 旧版は member/secretary/chairB/former/outsider の全員に 403 を期待していた。
+     * 新方針では 403 は「委員会メンバーで役職不足」だけに残し、委員会の非メンバー（chairB・former・outsider）は
+     * 下の {@code 委員会の非メンバーは子の実在scope状態によらず委員会不在と完全同一でDB不変} で 404 に固定する。
+     */
     @ParameterizedTest
-    @ValueSource(strings = {"member", "secretary", "chairB", "former", "outsider"})
+    @ValueSource(strings = {"member", "secretary"})
     void 権限不足は子の実在scope状態によらず先行403でDB不変(String label) throws Exception {
         Map<String, String> before = snapshot(null);
         try {
@@ -224,6 +240,30 @@ class CommitteeMinutesScopeContractIT extends AbstractMySqlIntegrationTest {
                 assertError(denied, 403, "COMMON_002", "この操作を行う権限がありません");
                 assertThat(denied.getResponse().getContentType()).isEqualTo(absent.getResponse().getContentType());
                 assertThat(json(denied)).isEqualTo(json(absent));
+            }
+        } finally { assertThat(snapshot(null)).isEqualTo(before); }
+    }
+
+    /**
+     * CMP-261125-2349 X3/X8: 委員会の非メンバー（別委員会 CHAIR・元委員・組織非在籍）の確定は、子の実在・scope・状態によらず、
+     * 委員会 ID 不在への応答と本文まで完全同一の 404（旧期待値は 403 COMMON_002）。
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"chairB", "former", "outsider"})
+    void 委員会の非メンバーは子の実在scope状態によらず委員会不在と完全同一でDB不変(String label) throws Exception {
+        Map<String, String> before = snapshot(null);
+        try {
+            MvcResult absentParent = http(actors.get(label), MISSING, MISSING);
+            assertError(absentParent, 404, "COMMITTEE_NOT_FOUND", "委員会が見つかりません");
+            List<Long> ids = new ArrayList<>(List.of(own, MISSING));
+            foreign.values().forEach(ids::addAll);
+            for (Long id : ids) {
+                MvcResult denied = http(actors.get(label), a, id);
+                assertError(denied, 404, "COMMITTEE_NOT_FOUND", "委員会が見つかりません");
+                assertThat(denied.getResponse().getContentType())
+                        .isEqualTo(absentParent.getResponse().getContentType());
+                assertThat(denied.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                        .isEqualTo(absentParent.getResponse().getContentAsString(StandardCharsets.UTF_8));
             }
         } finally { assertThat(snapshot(null)).isEqualTo(before); }
     }

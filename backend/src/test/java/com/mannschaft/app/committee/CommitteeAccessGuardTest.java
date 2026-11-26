@@ -5,6 +5,7 @@ import com.mannschaft.app.committee.entity.CommitteeMemberEntity;
 import com.mannschaft.app.committee.entity.CommitteeRole;
 import com.mannschaft.app.committee.repository.CommitteeMemberRepository;
 import com.mannschaft.app.committee.service.CommitteeAccessGuard;
+import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.committee.error.CommitteeErrorCode;
@@ -41,6 +42,13 @@ class CommitteeAccessGuardTest {
 
     @Mock
     private CommitteeMemberRepository committeeMemberRepository;
+
+    /**
+     * CMP-261125-2349: 取り下げの拒否を「可視の非許可者 403 / 非委員 404」に分けるため、
+     * 実装で組織 ADMIN・SYSTEM_ADMIN の判定が入る見込み（既定では全て false = 権限なし）。
+     */
+    @Mock
+    private AccessControlService accessControlService;
 
     @InjectMocks
     private CommitteeAccessGuard guard;
@@ -111,12 +119,14 @@ class CommitteeAccessGuardTest {
     class Invitation {
 
         @Test
-        @DisplayName("宛先でない利用者は COMMON_002 で拒否される")
-        void 宛先でない利用者は拒否される() {
+        @DisplayName("X7/X8: 宛先でない利用者は無効トークンと同じ INVITATION_TOKEN_INVALID で拒否される")
+        void 宛先でない利用者は無効トークンと同じコードで拒否される() {
+            // CMP-261125-2349 X7/X8: 旧期待値は COMMON_002（403）。403 だと他人の有効トークンであることが
+            // 無効トークン（400 COMMITTEE_INVITATION_TOKEN_INVALID）との応答差で判別できるため、等価にする。
             assertThatThrownBy(() -> guard.requireInvitee(invitation(COMMITTEE_ID, OTHER_USER_ID), USER_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
-                            .isEqualTo(CommonErrorCode.COMMON_002));
+                            .isEqualTo(CommitteeErrorCode.INVITATION_TOKEN_INVALID));
         }
 
         @Test
@@ -142,10 +152,25 @@ class CommitteeAccessGuardTest {
         }
 
         @Test
-        @DisplayName("招集者でも当該委員会の CHAIR でもない利用者は拒否される")
-        void 権限のない利用者は取り下げられない() {
+        @DisplayName("X6/X8: 招集状の委員会の非メンバー（ADMIN でもない）は招集状不在と同じ INVITATION_NOT_FOUND で拒否される")
+        void 委員会の非メンバーは招集状不在と同じコードで拒否される() {
+            // CMP-261125-2349 X6/X8: 旧期待値は COMMON_002（403）。招集状 ID は連番のため、非委員に 403 を返すと
+            // 招集状 ID の実在を列挙できる。不在（COMMITTEE_INVITATION_NOT_FOUND / 404）と等価にする。
             given(committeeMemberRepository.findByCommitteeIdAndUserIdAndLeftAtIsNull(COMMITTEE_ID, USER_ID))
                     .willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> guard.requireInvitationCanceller(
+                    invitation(COMMITTEE_ID, OTHER_USER_ID), USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(CommitteeErrorCode.INVITATION_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("X3: 招集状の委員会のメンバーで CHAIR でない利用者（招集者でもない）は COMMON_002 で拒否される")
+        void 委員会メンバーの役職不足は403のまま() {
+            given(committeeMemberRepository.findByCommitteeIdAndUserIdAndLeftAtIsNull(COMMITTEE_ID, USER_ID))
+                    .willReturn(Optional.of(member(CommitteeRole.MEMBER)));
 
             assertThatThrownBy(() -> guard.requireInvitationCanceller(
                     invitation(COMMITTEE_ID, OTHER_USER_ID), USER_ID))
