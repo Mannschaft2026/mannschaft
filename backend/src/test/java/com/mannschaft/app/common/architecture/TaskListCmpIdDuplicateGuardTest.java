@@ -215,7 +215,7 @@ class TaskListCmpIdDuplicateGuardTest {
     }
 
     /** 旧配置の検体（実台帳から独立。月境界・旧形式・証拠リンク・エスケープを含む）。 */
-    private static final String SAMPLE_SINGLE = "# 台帳\n\n前置き\n\n" + HEADER + "\n"
+    static final String SAMPLE_SINGLE = "# 台帳\n\n前置き\n\n" + HEADER + "\n"
             + "| CMP-003 | 旧 | 完了 | — | 条件 | 証拠 | l |\n"
             + "| CMP-261130-2359 | 月末 | 完了 | — | `a \\| b` | [証拠](evidence/CMP-261130-2359.json) | l |\n"
             + "| CMP-261201-0000 | 月初 | P2 実装中 | — | 条件 | [証拠](./evidence/CMP-261201-0000.json) | l |\n"
@@ -230,8 +230,6 @@ class TaskListCmpIdDuplicateGuardTest {
                 List.of("CMP-261130-2359", "docs/task-list/2026-11.md"),
                 List.of("CMP-261201-0000", "docs/task-list/2026-12.md"),
                 List.of("CMP-003", "docs/task-list/legacy.md"));
-        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-261201-0000", TaskListLedger.concatenatedContent(split))).isTrue();
-        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-261130-2359", TaskListLedger.concatenatedContent(split))).isFalse();
     }
 
     @Test
@@ -261,19 +259,12 @@ class TaskListCmpIdDuplicateGuardTest {
             assertThat(normalizeEvidence(r.line())).as(r.id()).isEqualTo(singleLines.get(r.id()));
             assertThat(r.file()).as(r.id()).isEqualTo(TaskListLedger.expectedFile(r.id()));
         }
-        // 番人 PlaintextSecretTokenGuardRules の債務注釈（@PlaintextTokenDebt.cmp）の登録判定も両配置で一致する
-        String s = TaskListLedger.concatenatedContent(single);
-        String t = TaskListLedger.concatenatedContent(split);
-        for (Row r : single.rows()) {
-            assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), t)).as(r.id())
-                    .isEqualTo(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), s));
-        }
-        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-999999-9999", t)).isFalse();
+        // 債務注釈の登録判定（PlaintextSecretTokenGuardRules）の両配置一致は ArchUnit タグ付きの PlaintextSecretTokenGuardConditionTest で検証する
         return split;
     }
 
     /** 試験専用: 新配置の files から旧配置の docs/task-list.md 1ファイルを一時生成する（../evidence/ は evidence/ に戻す）。 */
-    private static String joinForTest(Map<String, String> files) {
+    static String joinForTest(Map<String, String> files) {
         String index = files.getOrDefault(TaskListLedger.INDEX_PATH, "");
         List<String> lines = new ArrayList<>();
         files.keySet().stream().filter(p -> !TaskListLedger.INDEX_PATH.equals(p)).sorted().forEach(p ->
@@ -286,7 +277,7 @@ class TaskListCmpIdDuplicateGuardTest {
     }
 
     /** 試験専用: 旧配置の本文から新配置（索引＋月別・legacy）を一時生成する（本番の移行は段Bで作る）。 */
-    private static Map<String, String> splitForTest(String single) {
+    static Map<String, String> splitForTest(String single) {
         List<Row> rows = TaskListLedger.extractRows(single, TaskListLedger.INDEX_PATH);
         Set<Integer> rowLines = rows.stream().map(Row::lineNumber).collect(Collectors.toSet());
         String[] lines = single.split("\n", -1);
