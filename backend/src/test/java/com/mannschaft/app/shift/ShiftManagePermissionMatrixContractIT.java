@@ -1282,9 +1282,9 @@ class ShiftManagePermissionMatrixContractIT extends AbstractMySqlIntegrationTest
                 "SELECT * FROM shift_positions WHERE team_id = " + teamId + " ORDER BY id",
                 "SELECT * FROM shift_hourly_rates WHERE team_id = " + teamId + " ORDER BY id",
                 "SELECT * FROM member_work_constraints WHERE team_id = " + teamId + " ORDER BY id",
-                "SELECT * FROM team_shift_settings WHERE team_id = " + teamId,
-                "SELECT COUNT(*) FROM notifications WHERE user_id IN ("
-                        + actors.values().stream().map(String::valueOf).collect(Collectors.joining(",")) + ")");
+                // 通知の配送は AFTER_COMMIT のため @Transactional の本テストでは観測できない（偽の緑になる）。
+                // 配送結果は ShiftChangeRequestNotificationIT（TransactionTemplate で明示コミット）が検証する。
+                "SELECT * FROM team_shift_settings WHERE team_id = " + teamId);
         StringBuilder sb = new StringBuilder();
         for (String q : queries) {
             List<?> rows = em.createNativeQuery(q).getResultList();
