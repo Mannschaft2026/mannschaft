@@ -729,6 +729,7 @@
     "priority_label": "优先级",
     "accepted": "已接受发送",
     "accepted_count": "已接受发送（预计收件人：{count}）",
+    "draft_restored": "已恢复您未发送的草稿",
     "recipient": "收件人",
     "withdrawn": "已退出",
     "withdrawn_user": "已退出用户",

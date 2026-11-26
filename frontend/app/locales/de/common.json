@@ -729,6 +729,7 @@
     "priority_label": "Priorität",
     "accepted": "Versand angenommen",
     "accepted_count": "Versand angenommen (geschätzte Empfänger: {count})",
+    "draft_restored": "Dein nicht gesendeter Entwurf wurde wiederhergestellt",
     "recipient": "Empfänger",
     "withdrawn": "Ausgetreten",
     "withdrawn_user": "Ausgetretener Benutzer",

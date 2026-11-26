@@ -729,6 +729,7 @@
     "priority_label": "Prioridad",
     "accepted": "Entrega aceptada",
     "accepted_count": "Entrega aceptada (destinatarios estimados: {count})",
+    "draft_restored": "Se restauró tu borrador sin enviar",
     "recipient": "Destinatario",
     "withdrawn": "Retirado",
     "withdrawn_user": "Usuario retirado",

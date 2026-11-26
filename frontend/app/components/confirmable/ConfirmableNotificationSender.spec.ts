@@ -131,13 +131,13 @@ const bodyInput = (w: Wrapper) => w.findComponent(TextareaStub)
 const deadlineInput = (w: Wrapper) => w.findComponent(DatePickerStub)
 const selects = (w: Wrapper) => w.findAllComponents(SelectStub)
 const templateSelect = (w: Wrapper) => {
-  const found = selects(w).find(s => s.props('options')[0]?.value === null)
+  const found = selects(w).find(s => (s.props('options') ?? [])[0]?.value === null)
   if (!found) throw new Error('テンプレート選択が見つからない')
   return found
 }
 const priorityValues = ['NORMAL', 'HIGH', 'URGENT']
 const prioritySelect = (w: Wrapper) => {
-  const found = selects(w).find(s => s.props('options').some(o => o.value === 'URGENT') && s.props('options').every(o => priorityValues.includes(String(o.value))))
+  const found = selects(w).find(s => (s.props('options') ?? []).some(o => o.value === 'URGENT') && (s.props('options') ?? []).every(o => priorityValues.includes(String(o.value))))
   if (!found) throw new Error('優先度選択が見つからない')
   return found
 }
@@ -216,7 +216,7 @@ describe('ConfirmableNotificationSender 下書き自動保存 (CMP-261126-1558)'
     expect(prioritySelect(wrapper).props('modelValue')).toBe('HIGH')
     const deadline = deadlineInput(wrapper).props('modelValue')
     expect(deadline).toBeInstanceOf(Date)
-    expect((deadline as Date).toISOString()).toBe('2026-12-01T09:00:00.000Z')
+    expect((deadline as unknown as Date).toISOString()).toBe('2026-12-01T09:00:00.000Z')
     expect(audienceSelect(wrapper).props('modelValue')).toBe('GROUP')
     expect(wrapper.find('[data-testid="sender-group-select"]').exists()).toBe(true)
     const groupSelect = selects(wrapper).find(s => s.attributes('data-testid') === 'sender-group-select')
@@ -291,6 +291,35 @@ describe('ConfirmableNotificationSender 下書き自動保存 (CMP-261126-1558)'
     expect(localStorage.getItem(KEY)).toBeNull()
     await waitDebounce()
     expect(localStorage.getItem(KEY)).toBeNull()
+    expect(draftKeys()).toEqual([])
+  })
+
+  it('AC6: 優先度と期限を変えて送信が成功しても、debounce の後に下書きが再保存されない', async () => {
+    const wrapper = await mountSender()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    await typeTitleAndBody(wrapper, '送る件名', '送る本文')
+    prioritySelect(wrapper).vm.$emit('update:modelValue', 'URGENT')
+    deadlineInput(wrapper).vm.$emit('update:modelValue', new Date('2026-12-24T03:00:00.000Z'))
+    await flushPromises()
+    await waitDebounce()
+    expect(localStorage.getItem(KEY)).not.toBeNull()
+    await sendButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('sent')).toHaveLength(1)
+    expect(localStorage.getItem(KEY)).toBeNull()
+    await waitDebounce()
+    expect(localStorage.getItem(KEY)).toBeNull()
+    expect(prioritySelect(wrapper).props('modelValue')).toBe('NORMAL')
+    expect(deadlineInput(wrapper).props('modelValue')).toBeNull()
+  })
+
+  it('AC9: 何も入力しなければ debounce を待っても下書きのキーができない', async () => {
+    const wrapper = await mountSender()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    audienceSelect(wrapper).vm.$emit('update:modelValue', 'TARGETS')
+    audienceSelect(wrapper).vm.$emit('update:modelValue', 'DEFAULT')
+    await flushPromises()
+    await waitDebounce()
     expect(draftKeys()).toEqual([])
   })
 

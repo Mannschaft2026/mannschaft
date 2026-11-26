@@ -729,6 +729,7 @@
     "priority_label": "우선순위",
     "accepted": "전송이 접수되었습니다",
     "accepted_count": "전송이 접수되었습니다(예상 수신자: {count}명)",
+    "draft_restored": "전송하지 않은 임시 저장 내용을 복원했습니다",
     "recipient": "수신자",
     "withdrawn": "탈퇴",
     "withdrawn_user": "탈퇴한 사용자",

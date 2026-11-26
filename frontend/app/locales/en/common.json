@@ -729,6 +729,7 @@
     "priority_label": "Priority",
     "accepted": "Delivery accepted",
     "accepted_count": "Delivery accepted (estimated recipients: {count})",
+    "draft_restored": "Restored your unsent draft",
     "recipient": "Recipient",
     "withdrawn": "Withdrawn",
     "withdrawn_user": "Withdrawn user",

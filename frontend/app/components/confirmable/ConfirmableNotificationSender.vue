@@ -7,6 +7,7 @@ const { sendNotification, previewRecipients, listTemplates, listRecipientGroups 
 const { handleApiError } = useErrorHandler()
 const { t } = useI18n()
 const toast = useToast()
+const authStore = useAuthStore()
 const sending = ref(false)
 const showHelp = ref(false)
 const templates = ref<ConfirmableNotificationTemplate[]>([])
@@ -24,6 +25,58 @@ const acceptedCount = ref<number | null>(null)
 const estimatedCount = ref<number | null>(null)
 const previewing = ref(false)
 let previewSequence = 0
+
+// === 下書き自動保存（useFormDraft）===
+// キーはマウント時に固定する。配置ページは scopeId が確定してから本コンポーネントを描画する。
+// userId が無いとき（未ログイン）は他人の下書きと混ざらないよう、保存も復元もしない。
+interface ConfirmableSendDraft {
+  title: string
+  body: string
+  priority: ConfirmableNotificationPriority
+  deadlineAt: string | null
+  audienceMode: 'DEFAULT' | 'TARGETS' | 'GROUP'
+  selectedTargets: ConfirmableTarget[]
+  selectedGroupId: string | null
+  selectedTemplateId: number | null
+}
+const draftRestored = ref(false)
+// すべて初期値のときは null（保存せず、既存の下書きがあれば消す）
+const draftSnapshot = computed<ConfirmableSendDraft | null>(() => {
+  const pristine = !title.value && !body.value && priority.value === 'NORMAL' && !deadlineAt.value
+    && audienceMode.value === 'DEFAULT' && selectedTargets.value.length === 0
+    && selectedGroupId.value === null && selectedTemplateId.value === null
+  if (pristine) return null
+  return {
+    title: title.value,
+    body: body.value,
+    priority: priority.value,
+    deadlineAt: deadlineAt.value ? deadlineAt.value.toISOString() : null,
+    audienceMode: audienceMode.value,
+    selectedTargets: selectedTargets.value,
+    selectedGroupId: selectedGroupId.value,
+    selectedTemplateId: selectedTemplateId.value,
+  }
+})
+const draftUserId = authStore.currentUser?.id
+const formDraft = draftUserId === undefined || draftUserId === null
+  ? null
+  : useFormDraft<ConfirmableSendDraft | null>(
+    `confirmable-send-draft-${draftUserId}-${props.scopeType}-${props.scopeId}`,
+    { source: draftSnapshot, autoRestore: false },
+  )
+function restoreDraft() {
+  const saved = formDraft?.restore()
+  if (!saved) return
+  title.value = saved.title ?? ''
+  body.value = saved.body ?? ''
+  priority.value = saved.priority ?? 'NORMAL'
+  deadlineAt.value = saved.deadlineAt ? new Date(saved.deadlineAt) : null
+  audienceMode.value = saved.audienceMode ?? 'DEFAULT'
+  selectedTargets.value = saved.selectedTargets ?? []
+  selectedGroupId.value = groups.value.some(group => group.id === saved.selectedGroupId) ? saved.selectedGroupId : null
+  selectedTemplateId.value = templates.value.some(template => template.id === saved.selectedTemplateId) ? saved.selectedTemplateId : null
+  draftRestored.value = true
+}
 const templateOptions = computed(() => [{ label: t('label.optional'), value: null }, ...templates.value.map(template => ({ label: template.name, value: template.id }))])
 const groupOptions = computed(() => [{ label: t('confirmable.current_scope'), value: null }, ...groups.value.map(group => ({ label: group.name, value: group.id }))])
 const audienceModeOptions = computed(() => ['DEFAULT', 'TARGETS', 'GROUP'].map(value => ({ label: t(`confirmable.audience_mode.${value}`), value })))
@@ -82,7 +135,12 @@ async function onSend() {
     const response = await sendNotification(props.scopeType, props.scopeId, request)
     acceptedCount.value = response.data.estimatedRecipientCount
     localStorage.setItem('confirmable.lastUnconfirmedVisibility', unconfirmedVisibility.value)
-    title.value = ''; body.value = ''; selectedTemplateId.value = null; selectedGroupId.value = null; selectedTargets.value = []; audienceMode.value = 'DEFAULT'
+    // 保留中の自動保存を止めてから下書きを消し、そのあとでフィールドを初期値へ戻す（再保存させない）
+    formDraft?.cancelPendingSave()
+    formDraft?.clear()
+    draftRestored.value = false
+    title.value = ''; body.value = ''; priority.value = 'NORMAL'; deadlineAt.value = null
+    selectedTemplateId.value = null; selectedGroupId.value = null; selectedTargets.value = []; audienceMode.value = 'DEFAULT'
     toast.add({ severity: 'success', summary: t('confirmable.accepted'), detail: t('confirmable.accepted_count', { count: response.data.estimatedRecipientCount }), life: 4000 })
     emit('sent')
   } catch (error) { handleApiError(error, 'confirmable notification send') } finally { sending.value = false }
@@ -93,6 +151,7 @@ onMounted(async () => {
   const stored = localStorage.getItem('confirmable.lastUnconfirmedVisibility')
   if (stored === 'HIDDEN' || stored === 'CREATOR_AND_ADMIN' || stored === 'ALL_MEMBERS') unconfirmedVisibility.value = stored
   await loadOptions()
+  restoreDraft()
   await loadPreview()
 })
 </script>
@@ -101,6 +160,7 @@ onMounted(async () => {
   <SectionCard :title="$t('confirmable.send')">
     <template #header-actions><Button icon="pi pi-question-circle" text rounded :aria-label="$t('button.help')" @click="showHelp = true" /></template>
     <div class="flex flex-col gap-4">
+      <Message v-if="draftRestored" severity="info" :closable="false" data-testid="confirmable-draft-restored">{{ $t('confirmable.draft_restored') }}</Message>
       <Message v-if="acceptedCount !== null" severity="success" :closable="false">{{ $t('confirmable.accepted_count', { count: acceptedCount }) }}</Message>
       <div class="flex flex-col gap-1"><label>{{ $t('confirmable.template') }}</label><Select v-model="selectedTemplateId" :options="templateOptions" option-label="label" option-value="value" @change="applyTemplate(selectedTemplateId)" /></div>
       <div class="flex flex-col gap-1">
