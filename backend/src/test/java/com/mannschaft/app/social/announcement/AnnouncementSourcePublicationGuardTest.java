@@ -26,6 +26,8 @@ class AnnouncementSourcePublicationGuardTest {
 
     @Mock private BlogPostPublicationStatusService blogStatus;
     @Mock private TimelinePostPublicationStatusService timelineStatus;
+    @Mock private com.mannschaft.app.survey.service.SurveyPublicationStatusService surveyStatus;
+    @Mock private com.mannschaft.app.circulation.service.CirculationPublicationStatusService circulationStatus;
     @InjectMocks private AnnouncementSourcePublicationGuard guard;
 
     private static void assertNotFound(Runnable call) {
@@ -59,7 +61,7 @@ class AnnouncementSourcePublicationGuardTest {
     @Test
     @DisplayName("他のソース種別は判定しない（従来どおり）")
     void otherTypesUntouched() {
-        assertThatCode(() -> guard.assertPublished(AnnouncementSourceType.SURVEY, ID)).doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertPublished(AnnouncementSourceType.BULLETIN_THREAD, ID)).doesNotThrowAnyException();
     }
 
     @Test
@@ -76,12 +78,12 @@ class AnnouncementSourcePublicationGuardTest {
         Row blogNg = new Row(AnnouncementSourceType.BLOG_POST, 2L);
         Row tlOk = new Row(AnnouncementSourceType.TIMELINE_POST, 1L);
         Row tlNg = new Row(AnnouncementSourceType.TIMELINE_POST, 3L);
-        Row survey = new Row(AnnouncementSourceType.SURVEY, 9L);
+        Row other = new Row(AnnouncementSourceType.BULLETIN_THREAD, 9L);
         Row nullType = new Row(null, 1L);
         given(blogStatus.findPublishedIds(java.util.List.of(1L, 2L))).willReturn(java.util.Set.of(1L));
         given(timelineStatus.findPublishedIds(java.util.List.of(1L, 3L))).willReturn(java.util.Set.of(1L));
 
-        assertThat(guard.retainPublished(java.util.List.of(blogOk, blogNg, tlOk, tlNg, survey, nullType),
-                Row::type, Row::sourceId)).containsExactly(blogOk, tlOk, survey);
+        assertThat(guard.retainPublished(java.util.List.of(blogOk, blogNg, tlOk, tlNg, other, nullType),
+                Row::type, Row::sourceId)).containsExactly(blogOk, tlOk, other);
     }
 }
