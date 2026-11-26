@@ -1,6 +1,10 @@
 {
   "admin_report": {
     "title": "レポート管理",
+    "filter": {
+      "placeholder": "ステータスで絞り込み",
+      "all": "すべてのステータス"
+    },
     "empty": "レポートがありません",
     "messages": {
       "load_failed": "レポートの取得に失敗しました",

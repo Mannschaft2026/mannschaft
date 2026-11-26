@@ -7,6 +7,7 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const chartApi = useChartApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { loadPermissions } = useRoleAccess('team', teamSlug)
 const { formatDate } = useDatetime()
 
@@ -25,7 +26,9 @@ async function loadData(page = 0) {
     const res = await chartApi.list(teamSlug.value, { page, size: 20 })
     charts.value = res.data
     totalRecords.value = res.meta.total
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error('カルテの取得に失敗しました')
   } finally {
     loading.value = false

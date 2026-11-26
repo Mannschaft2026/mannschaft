@@ -405,7 +405,7 @@ class LoyaltyHttpContractIT extends AbstractMySqlIntegrationTest {
                 .scopeType(com.mannschaft.app.membership.domain.ScopeType.TEAM).scopeId(team)
                 .roleKind(com.mannschaft.app.membership.domain.RoleKind.MEMBER).joinedAt(LocalDateTime.ofInstant(time.now(), SERVER_ZONE)).invitedBy(actorId).build());
         var deputy = roles.findByName("DEPUTY_ADMIN").orElseGet(() -> roles.saveAndFlush(RoleEntity.builder()
-                .name("DEPUTY_ADMIN").displayName("副管理者").priority(100).isSystem(true).build()));
+                .name("DEPUTY_ADMIN").displayName("副管理者").priority(com.mannschaft.app.role.authorization.RolePriority.priority("DEPUTY_ADMIN")).isSystem(true).build()));
         userRoles.saveAndFlush(UserRoleEntity.builder().userId(actorId).roleId(deputy.getId()).teamId(team).grantedBy(actorId).build());
         var permission = permissions.findByNameIn(java.util.List.of("TEAM_LOYALTY_OPERATE")).stream().findFirst()
                 .orElseGet(() -> permissions.saveAndFlush(com.mannschaft.app.role.entity.PermissionEntity.builder()
@@ -609,7 +609,7 @@ class LoyaltyHttpContractIT extends AbstractMySqlIntegrationTest {
     }
     private UserRoleEntity admin(Long user, Long team) {
         var role = roles.findByName("ADMIN").orElseGet(() -> roles.saveAndFlush(RoleEntity.builder()
-                .name("ADMIN").displayName("管理者").priority(100).isSystem(true).build()));
+                .name("ADMIN").displayName("管理者").priority(com.mannschaft.app.role.authorization.RolePriority.priority("ADMIN")).isSystem(true).build()));
         return userRoles.saveAndFlush(UserRoleEntity.builder().userId(user).roleId(role.getId()).teamId(team).grantedBy(user).build());
     }
     private LoyaltyTransactionEntity receipt(Long team, Long user, UUID key, RequestOperation operation, UUID rule, byte[] hash) {

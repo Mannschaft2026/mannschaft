@@ -15,7 +15,14 @@ export interface ApplicationItem {
   createdAt: string
 }
 
-export function useSupporterManagement(scopeType: Ref<'team' | 'organization'>, scopeId: Ref<string>) {
+export function useSupporterManagement(
+  scopeType: Ref<'team' | 'organization'>,
+  scopeId: Ref<string>,
+  options: { scopeNotFoundOnDenied?: boolean } = {},
+) {
+  const { markIfDenied } = useScopeNotFound()
+  /** 主取得の 403/404 を共通「見つかりません」へ回す（有効時のみ。CMP-261125-1108） */
+  const denied = (e: unknown) => options.scopeNotFoundOnDenied === true && markIfDenied(e)
   const teamApi = useTeamApi()
   const orgApi = useOrganizationApi()
   const notification = useNotification()
@@ -48,7 +55,8 @@ export function useSupporterManagement(scopeType: Ref<'team' | 'organization'>, 
         ? await teamApi.getSupporterSettings(scopeId.value)
         : await orgApi.getSupporterSettings(scopeId.value)
       autoApprove.value = res.data.autoApprove
-    } catch {
+    } catch (e) {
+      if (denied(e)) return
       // 設定が取得できない場合はデフォルト値を使用
     } finally {
       settingsLoading.value = false
@@ -80,8 +88,9 @@ export function useSupporterManagement(scopeType: Ref<'team' | 'organization'>, 
         ? await teamApi.getSupporters(scopeId.value)
         : await orgApi.getSupporters(scopeId.value)
       supporters.value = res.data
-    } catch {
+    } catch (e) {
       supporters.value = []
+      if (denied(e)) return
     } finally {
       supportersLoading.value = false
     }
@@ -94,8 +103,9 @@ export function useSupporterManagement(scopeType: Ref<'team' | 'organization'>, 
         ? await teamApi.getSupporterApplications(scopeId.value)
         : await orgApi.getSupporterApplications(scopeId.value)
       applications.value = res.data
-    } catch {
+    } catch (e) {
       applications.value = []
+      if (denied(e)) return
     } finally {
       applicationsLoading.value = false
     }

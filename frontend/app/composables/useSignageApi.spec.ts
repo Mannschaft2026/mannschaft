@@ -6,6 +6,22 @@ const mocks = vi.hoisted(() => ({ api: vi.fn() }))
 mockNuxtImport('useApi', () => () => mocks.api)
 beforeEach(() => mocks.api.mockReset())
 
+describe('アクセストークンのAPI契約（CMP-260826-1457: 平文は発行応答だけ）', () => {
+  it('発行は端末名を body で送る（BE は name を必須とする）', async () => {
+    await useSignageApi().issueToken(7, { name: 'エントランス', expiredAt: null })
+    expect(mocks.api).toHaveBeenCalledWith('/api/v1/signage/screens/7/tokens', {
+      method: 'POST',
+      body: { name: 'エントランス', expiredAt: null },
+    })
+  })
+
+  it('一覧取得は GET で呼ぶ', async () => {
+    mocks.api.mockResolvedValue({ data: [] })
+    await useSignageApi().getTokens(7)
+    expect(mocks.api).toHaveBeenCalledWith('/api/v1/signage/screens/7/tokens')
+  })
+})
+
 describe('サイネージ数値scopeIdのAPI契約（初回greenのcharacterization）', () => {
   it('一覧queryは解決済みの数値IDを使う', async () => {
     await useSignageApi().getScreens('ORGANIZATION', 42)

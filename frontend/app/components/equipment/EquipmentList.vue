@@ -5,6 +5,8 @@ const props = defineProps<{
   scopeType: 'team' | 'organization'
   scopeId: string
   canManage?: boolean
+  /** チーム／組織シェル配下の子ページからだけ true。主取得が 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま */
+  scopeNotFoundOnDenied?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +16,7 @@ const emit = defineEmits<{
 
 const { getEquipmentList } = useEquipmentApi()
 const { showError } = useNotification()
+const { markIfDenied } = useScopeNotFound()
 
 const items = ref<EquipmentResponse[]>([])
 const loading = ref(false)
@@ -23,7 +26,9 @@ async function loadItems() {
   try {
     const res = await getEquipmentList(props.scopeType, props.scopeId)
     items.value = res.data
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (props.scopeNotFoundOnDenied && markIfDenied(e)) return
     showError('備品一覧の取得に失敗しました')
   } finally {
     loading.value = false

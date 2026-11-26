@@ -16,7 +16,6 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * 個人連絡先招待トークンエンティティ。招待URL/QRコード用のトークンを管理する。
@@ -37,10 +36,9 @@ public class ContactInviteTokenEntity {
     @Column(nullable = false)
     private Long userId;
 
-    /** UUID v4 トークン */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
-    @Column(nullable = false, length = 36)
-    private String token;
+    /** 招待トークンの SHA-256 ハッシュ(hex64)。平文は保存しない（発行応答でだけ一度返す）。 */
+    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
+    private String tokenHash;
 
     /** 管理用ラベル */
     @Column(length = 50)

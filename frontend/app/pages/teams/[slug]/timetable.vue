@@ -19,6 +19,7 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const timetableApi = useTimetableApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { confirmAction } = useConfirmDialog()
 const { isAdmin, can, loadPermissions } = useRoleAccess('team', teamSlug)
 
@@ -125,7 +126,9 @@ async function loadData() {
     timetables.value = await timetableApi.list(teamSlug.value)
     const active = timetables.value.find((tt) => tt.status === 'ACTIVE')
     if (active) await selectTimetable(active)
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('timetable.load_error'))
   } finally {
     loading.value = false

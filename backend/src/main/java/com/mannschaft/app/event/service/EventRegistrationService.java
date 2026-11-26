@@ -11,6 +11,7 @@ import com.mannschaft.app.event.dto.CreateRegistrationRequest;
 import com.mannschaft.app.event.dto.GuestRegistrationRequest;
 import com.mannschaft.app.event.dto.RegistrationResponse;
 import com.mannschaft.app.event.entity.EventEntity;
+import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.event.entity.EventGuestInviteTokenEntity;
 import com.mannschaft.app.event.entity.EventRegistrationEntity;
 import com.mannschaft.app.event.entity.EventTicketTypeEntity;
@@ -36,6 +37,7 @@ public class EventRegistrationService {
     private final EventRegistrationRepository registrationRepository;
     private final EventTicketTypeRepository ticketTypeRepository;
     private final EventGuestInviteTokenRepository inviteTokenRepository;
+    private final SecretTokenVault vault;
     private final EventService eventService;
     private final EventTicketService ticketService;
     private final EventMapper eventMapper;
@@ -136,7 +138,7 @@ public class EventRegistrationService {
         EventEntity event = eventService.findEventOrThrow(eventId);
         validateRegistrationOpen(event);
 
-        EventGuestInviteTokenEntity token = inviteTokenRepository.findByToken(request.getInviteToken())
+        EventGuestInviteTokenEntity token = inviteTokenRepository.findByTokenHash(vault.hash(request.getInviteToken()))
                 .orElseThrow(() -> new BusinessException(EventErrorCode.INVALID_INVITE_TOKEN));
 
         if (!token.isUsable()) {

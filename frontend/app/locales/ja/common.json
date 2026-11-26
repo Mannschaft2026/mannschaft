@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "権限情報の取得に失敗しました。時間をおいて再読み込みしてください",
-      "forbidden": "このチームのメンバーのみ、スキル・資格を利用できます",
       "mineTab": "自分のスキル・資格",
       "categoriesReloadFailed": "カテゴリの再取得に失敗しました"
     }
@@ -1976,6 +1975,10 @@
     "menu": "メニュー",
     "moreActions": "その他の操作",
     "openNavigation": "ナビゲーションを開く",
+    "scopeNotFound": {
+      "title": "見つかりません",
+      "body": "お探しのページは表示できません。"
+    },
     "scopeShell": {
       "memberCount": "メンバー {count}人",
       "supporterCount": "サポーター {count}人",
@@ -3355,6 +3358,27 @@
       "created_at": "発行日時",
       "expires_at": "有効期限",
       "used_count": "利用回数"
+    },
+    "signage": {
+      "section": "表示端末トークン",
+      "issue": "トークン発行",
+      "device_name": "端末名",
+      "device_placeholder": "例: エントランスモニター",
+      "empty": "トークンがありません",
+      "issued_title": "表示端末用トークンを発行しました",
+      "no_expiry": "無期限",
+      "inactive": "無効",
+      "reissue_confirm": "新しいリンクを発行し、このトークンを無効にします。よろしいですか？",
+      "revoke_confirm": "このトークンを無効化しますか？",
+      "issue_success": "トークンを発行しました",
+      "issue_failed": "トークンの発行に失敗しました",
+      "reissue_success": "トークンを再発行しました",
+      "reissue_failed": "トークンの再発行に失敗しました",
+      "revoke_success": "トークンを無効化しました",
+      "revoke_failed": "トークンの無効化に失敗しました",
+      "name_required": "端末名を入力してください",
+      "token_label": "端末に設定するトークン",
+      "reissue_revoke_failed": "新しいトークンは発行済みですが、旧トークンの無効化に失敗しました。旧トークンを手動で無効化してください"
     }
   },
   "globalSearch": {
