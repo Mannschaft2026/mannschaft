@@ -821,6 +821,7 @@ public class GlobalExceptionHandler {
             Map.entry("FILE_SHARING_017", HttpStatus.FORBIDDEN),             // DOWNLOAD_DISABLED（DL 禁止フラグ → 403。閲覧は通し DL URL 発行のみ拒否）
             Map.entry("FILE_SHARING_018", HttpStatus.GONE),                  // LINK_INACTIVE（手動失効した公開リンク → 410 Gone）
             Map.entry("FILE_SHARING_019", HttpStatus.FORBIDDEN),             // LINK_DOWNLOAD_NOT_ALLOWED（DL 未許可リンク → 403）
+            Map.entry("FILE_SHARING_021", HttpStatus.FORBIDDEN),             // LINK_MEMBERS_ONLY_TEAM（CMP-261124-0159 非公開チームのファイルに共有リンクを発行しない → 403）
             // FILE_SHARING_020 (LINK_EXPIRY_INVALID) は Severity.WARN 既定の 400 のまま（発行時バリデーション）
             // 認可監査(Wave6 ロットG): F05.5 ファイル共有の残り未登録分。003(バージョン)/004(権限)/
             // 005(スター)/006(コメント)/008(タグ)は各 Service の findById 直後に認可チェックする実装
@@ -1919,6 +1920,10 @@ public class GlobalExceptionHandler {
             Map.entry("TEAM_070", HttpStatus.NOT_FOUND), // F01.2.1 §11 申請・招待・加盟が見つかりません
             Map.entry("TEAM_071", HttpStatus.CONFLICT), // F01.2.1 §11 この申請・招待はすでに処理されています
             Map.entry("TEAM_072", HttpStatus.BAD_REQUEST), // F01.2.1 §11 指定したチームグループは選択できません
+            // CMP-261124-0159 チーム公開範囲によるコンテンツ閲覧上限（F01.2 02）: 非公開チームへのサポーター追加の拒否は 403、
+            // 公開→メンバー限定の変更で外れる確認（confirmSupporterRemoval）が無いときは 409（何も変更しない）
+            Map.entry("TEAM_073", HttpStatus.FORBIDDEN), // メンバー限定のチームにはサポーターを追加できません
+            Map.entry("TEAM_074", HttpStatus.CONFLICT), // 公開範囲をメンバー限定にするには確認が必要です
             Map.entry("BROADCAST_006", HttpStatus.BAD_REQUEST), // F01.2.1 §11 指定したチームグループは選択できません
             Map.entry("BROADCAST_007", HttpStatus.BAD_REQUEST), // F01.2.1 §11 この組織ではチームグループ機能が無効です
             Map.entry("BROADCAST_008", HttpStatus.BAD_REQUEST), // F01.2.1 §11 範囲の指定が正しくありません（開始が終了より後ろです）
@@ -2224,6 +2229,7 @@ public class GlobalExceptionHandler {
             // 固定しており、既定 WARN=400 のままが正しい。
             Map.entry("SIGNAGE_003", HttpStatus.NOT_FOUND),                 // スロット不在
             Map.entry("SIGNAGE_005", HttpStatus.NOT_FOUND),                 // トークン不在
+            Map.entry("SIGNAGE_009", HttpStatus.FORBIDDEN),                 // CMP-261124-0159 非公開チームの画面へのトークン発行拒否
 
             // スキル・資格管理: 資格不在は404。重複登録・楽観ロック不一致・承認対象外ステータスは
             // 409。SKILL_001 は「カテゴリ不在」「名称重複」「非アクティブカテゴリ」の3意味で割れて

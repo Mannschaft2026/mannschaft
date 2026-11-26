@@ -41,6 +41,9 @@ import java.util.Set;
  *       direct / org で個別に引かず 1 バッチに統合している（SQL 数回帰の防止）。</li>
  *   <li>親 ORG の user_roles 権限ロール所属 1 回（{@code findByUserIdAndOrganizationIdIn}）</li>
  *   <li>非アクティブ親 ORG 抽出 1 回（{@code OrganizationRepository.findInactiveIdsByIdIn}、§11.6）</li>
+ *   <li>direct に閲覧者のロールが MEMBER 未満の TEAM があるときのみ、非公開チームの ID 1 回（{@code MembersOnlyTeamQuery}、
+ *       CMP-261124-0159・F00 §20.2）。閲覧者が MEMBER 以上のチームは上限が発動し得ないため問い合わせに載せない（§20.7）。
+ *       未ログインでも撃つ（非公開チームの PUBLIC コンテンツも隠すため）。SystemAdmin では撃たない。</li>
  * </ol>
  *
  * <p>SystemAdmin 判定が hit した場合は早期 return で後続 SQL を一切発行しない。</p>
@@ -63,6 +66,12 @@ public class MembershipBatchQueryService {
     private final ScopeAncestorResolver scopeAncestorResolver;
     private final OrganizationRepository organizationRepository;
     private final MembershipRepository membershipRepository;
+
+    /**
+     * CMP-261124-0159: 判定対象の所属チームのうち非公開チームの ID を引く（F00 §20.2 規則 5）。
+     * TEAM スコープを含む判定でだけ 1 本撃つ（SystemAdmin・TEAM を含まない判定では撃たない）。
+     */
+    private final com.mannschaft.app.common.MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     /**
      * ユーザー × 複数スコープのメンバーシップ・ロール情報を最小 SQL で取得する。
@@ -113,7 +122,8 @@ public class MembershipBatchQueryService {
             Set<ScopeKey> orgWideScopes,
             Set<ScopeKey> descendantScopes) {
         if (userId == null) {
-            return UserScopeRoleSnapshot.empty();
+            // §20.2 規則 8: 未ログインでも非公開チームの中身（自身は PUBLIC でも）を隠すため、非公開チームの集合だけは引く。
+            return UserScopeRoleSnapshot.empty().withMembersOnlyTeamIds(fetchMembersOnlyTeamIds(directScopes));
         }
 
         // SQL 1: SystemAdmin 判定（既存メソッド戻り値は long、>0 で SystemAdmin）
@@ -185,9 +195,88 @@ public class MembershipBatchQueryService {
         Set<Long> descendantMemberOfOrgIds = resolveDescendantMembership(descendantRows);
         Map<Long, String> descendantRoleByOrgId = resolveDescendantRoleNames(descendantRows);
 
+        // SQL 9 (direct に TEAM があるときのみ): 非公開チームの ID（CMP-261124-0159・F00 §20.2 規則 5）。
+        //        teams の主キー IN の 1 本。コンテンツ件数・チーム数に比例しない。リクエストをまたぐキャッシュは持たない。
+        //        閲覧者がそのチームで既に MEMBER 以上なら上限は発動し得ない（isBeyondMembersOnlyTeamCap が常に偽）ため
+        //        問い合わせに載せない。direct の TEAM すべてで MEMBER 以上なら 1 本も撃たない（在籍メンバーの閲覧で本数不変）。
+        Set<Long> membersOnlyTeamIds = fetchMembersOnlyTeamIds(
+                excludeTeamsWithMemberOrAbove(safeDirect, roleByScope));
+
         return new UserScopeRoleSnapshot(
                 false, roleByScope, parentOrgs, orgMemberOf, suspendedOrgIds,
-                descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId);
+                descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId, membersOnlyTeamIds);
+    }
+
+    /**
+     * 閲覧者のロールが既に MEMBER 以上の TEAM スコープを除いた集合を返す（CMP-261124-0159・F00 §20.7）。
+     *
+     * <p>親チーム上限はロールが MEMBER 未満のときだけ発動する（{@link UserScopeRoleSnapshot#isBeyondMembersOnlyTeamCap}）。
+     * MEMBER 以上のチームを非公開か問い合わせても判定結果は変わらないため、問い合わせ対象から外す。
+     * 委任役割でロールを MEMBER 未満へ差し替える経路は、差し替え時に
+     * {@link #supplementMembersOnlyTeamCapForRoleOverride} で外したチームを引き直す。</p>
+     */
+    private static Set<ScopeKey> excludeTeamsWithMemberOrAbove(Set<ScopeKey> directScopes,
+                                                               Map<ScopeKey, String> roleByScope) {
+        Set<ScopeKey> result = new HashSet<>();
+        for (ScopeKey s : directScopes) {
+            String role = roleByScope.get(s);
+            if ("TEAM".equals(s.scopeType()) && role != null && RolePriority.isAtLeast(role, "MEMBER")) {
+                continue;
+            }
+            result.add(s);
+        }
+        return result;
+    }
+
+    /**
+     * 委任役割（{@code canViewDelegated} 系）で所有スコープのロールを差し替えたスナップショットに、
+     * 親チーム上限の判定材料を補う（CMP-261124-0159・F00 §20.2）。
+     *
+     * <p>{@link #snapshotForUser} は閲覧者本人が MEMBER 以上の TEAM を非公開か問い合わせない。委任役割が MEMBER 未満で
+     * 本人のロールが MEMBER 以上だったチームは非公開か未確認のため、ここで当該チームだけを 1 本で引き直して集合に足す。
+     * それ以外（本人も MEMBER 未満＝既に問い合わせ済み・委任役割が MEMBER 以上・TEAM 以外・SystemAdmin）は問い合わせない。</p>
+     *
+     * @param original      本人のスナップショット（差し替え前）
+     * @param delegated     委任役割へ差し替えたスナップショット
+     * @param scope         差し替えたスコープ
+     * @param delegatedRole 委任役割
+     * @return 親チーム上限の判定材料を補ったスナップショット
+     */
+    public UserScopeRoleSnapshot supplementMembersOnlyTeamCapForRoleOverride(UserScopeRoleSnapshot original,
+                                                                        UserScopeRoleSnapshot delegated,
+                                                                        ScopeKey scope, String delegatedRole) {
+        if (original.isSystemAdmin() || scope == null || scope.scopeId() == null
+                || !"TEAM".equals(scope.scopeType())
+                || (delegatedRole != null && RolePriority.isAtLeast(delegatedRole, "MEMBER"))) {
+            return delegated;
+        }
+        String originalRole = original.roleByScope().get(scope);
+        if (originalRole == null || !RolePriority.isAtLeast(originalRole, "MEMBER")) {
+            return delegated;
+        }
+        Set<Long> membersOnly = new HashSet<>(delegated.membersOnlyTeamIds());
+        membersOnly.addAll(membersOnlyTeamQuery.findMembersOnlyTeamIds(List.of(scope.scopeId())));
+        return delegated.withMembersOnlyTeamIds(membersOnly);
+    }
+
+    /**
+     * direct の TEAM スコープのうち非公開チームの ID を 1 本で引く（TEAM が無ければ撃たない）。
+     * SystemAdmin は上限を課さないため呼ばない（§20.2 規則 6）。
+     */
+    private Set<Long> fetchMembersOnlyTeamIds(Set<ScopeKey> directScopes) {
+        if (directScopes == null || directScopes.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> teamIds = new HashSet<>();
+        for (ScopeKey s : directScopes) {
+            if ("TEAM".equals(s.scopeType()) && s.scopeId() != null) {
+                teamIds.add(s.scopeId());
+            }
+        }
+        if (teamIds.isEmpty()) {
+            return Set.of();
+        }
+        return membersOnlyTeamQuery.findMembersOnlyTeamIds(teamIds);
     }
 
     /**

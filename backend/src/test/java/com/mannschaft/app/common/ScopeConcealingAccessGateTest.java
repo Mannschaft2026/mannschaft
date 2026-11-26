@@ -40,6 +40,10 @@ class ScopeConcealingAccessGateTest {
     @Mock
     private AccessControlService acs;
 
+    /** CMP-261124-0159: 親チーム上限（既定のモック応答 false＝上限なしで、既存の判定順の検体を変えない）。 */
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
+
     @InjectMocks
     private ScopeConcealingAccessGate gate;
 
@@ -91,12 +95,13 @@ class ScopeConcealingAccessGateTest {
     class OwnerOrAdmin {
 
         @Test
-        @DisplayName("本人は管理者判定・所属判定を撃たずに通る（本人経路のクエリ回数を増やさない）")
+        @DisplayName("本人は管理者判定・所属判定を撃たずに通る（追加は親チーム上限の確認 1 回だけ。CMP-261124-0159 AC-0159-94）")
         void ownerPassesWithoutRoleQueries() {
             assertThatCode(() -> gate.requireOwnerOrAdminOrConceal(USER, TEAM, TEAM_T, USER, NOT_FOUND))
                     .doesNotThrowAnyException();
             verify(acs).isSystemAdmin(USER);
             verifyNoMoreInteractions(acs);
+            verify(scopeContentAccessGate).isBeyondTeamContentCap(USER, TEAM, TEAM_T);
         }
 
         @Test
