@@ -644,7 +644,9 @@
       "open": "打开此草稿",
       "unsaved_header": "有未保存的更改",
       "unsaved_confirm": "有尚未保存的更改。要放弃这些更改并切换吗？",
-      "discard_and_switch": "放弃并切换"
+      "discard_and_switch": "放弃并切换",
+      "unsaved_leave_confirm": "有尚未保存的更改。要放弃这些更改并离开此页面吗？",
+      "discard_and_leave": "放弃并离开"
     },
     "delivery_stopped": "发送已停止",
     "templates": "模板管理",

@@ -1015,6 +1015,41 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
     })
   })
 
+  // ---------------------------------------------------------------- FE-AC11（離脱時の保護）
+  describe('FE-AC11 画面を離れるときに保存できていない入力を失わない', () => {
+    const fireBeforeUnload = () => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    async function mountWithUnsaved() {
+      for (let i = 1; i <= LIMIT; i++) seed({ id: `d-${i}` })
+      const wrapper = await mountSender()
+      useFakeTimers()
+      await typeTitle(wrapper, '上限で保存できていない件名')
+      await advance(DEBOUNCE_MS)
+      return wrapper
+    }
+
+    it('FE-AC11: 保存できていない入力があるときだけ beforeunload が既定の警告を出し、unmount で外れる', async () => {
+      const wrapper = await mountWithUnsaved()
+      expect(fireBeforeUnload()).toBe(true)
+      wrapper.unmount()
+      expect(fireBeforeUnload()).toBe(false)
+    })
+
+    it('FE-AC11: 入力が無い・保存済みなら beforeunload は警告しない', async () => {
+      const wrapper = await mountSender()
+      expect(fireBeforeUnload()).toBe(false)
+      useFakeTimers()
+      await typeTitle(wrapper, '保存できる件名')
+      await advance(DEBOUNCE_MS)
+      expect(mocks.createDraft).toHaveBeenCalledTimes(1)
+      expect(fireBeforeUnload()).toBe(false)
+      wrapper.unmount()
+    })
+  })
+
   // ---------------------------------------------------------------- FE-AC10（検分で追加）
   describe('FE-AC10 保存できていない入力を黙って失わない', () => {
     type ConfirmOptions = { header?: string; message?: string; accept?: () => unknown; reject?: () => unknown }

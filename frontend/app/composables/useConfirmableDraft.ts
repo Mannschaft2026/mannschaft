@@ -346,6 +346,36 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   // 画面を離れるときも、保存待ちの内容は取りこぼさず保存する
   onBeforeUnmount(() => { void flushPending() })
 
+  // アプリ内のルート離脱: 保存待ちを流しても保存できていない入力が残るときだけ、破棄の確認を出す
+  onBeforeRouteLeave(async () => {
+    await flushPending()
+    if (!hasUnsavedChanges()) return true
+    return new Promise<boolean>((resolve) => {
+      confirm.require({
+        header: t('confirmable.draft.unsaved_header'),
+        message: t('confirmable.draft.unsaved_leave_confirm'),
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: t('button.cancel'),
+        acceptLabel: t('confirmable.draft.discard_and_leave'),
+        acceptClass: 'p-button-danger',
+        accept: () => resolve(true),
+        reject: () => resolve(false),
+        // × や Esc で閉じたときも離脱を止める（承認済みなら先に true で確定している）
+        onHide: () => resolve(false),
+      })
+    })
+  })
+
+  // タブを閉じる・リロード: 保存できていない入力があるときだけ、ブラウザ既定の警告を出す
+  if (typeof window !== 'undefined') {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (suspended || !hasUnsavedChanges()) return
+      event.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    onScopeDispose(() => window.removeEventListener('beforeunload', onBeforeUnload))
+  }
+
   return {
     drafts,
     currentId,

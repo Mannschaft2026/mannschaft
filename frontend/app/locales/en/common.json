@@ -644,7 +644,9 @@
       "open": "Open this draft",
       "unsaved_header": "Unsaved changes",
       "unsaved_confirm": "You have changes that have not been saved. Discard them and switch?",
-      "discard_and_switch": "Discard and switch"
+      "discard_and_switch": "Discard and switch",
+      "unsaved_leave_confirm": "You have changes that have not been saved. Discard them and leave this page?",
+      "discard_and_leave": "Discard and leave"
     },
     "delivery_stopped": "Delivery stopped",
     "templates": "Manage templates",

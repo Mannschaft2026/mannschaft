@@ -27,6 +27,8 @@ const REQUIRED_KEYS = [
   'unsaved_header', // 保存できていない変更があるまま切り替えるときの確認（見出し）
   'unsaved_confirm', // 同（確認文）
   'discard_and_switch', // 同（承認ボタン）
+  'unsaved_leave_confirm', // 保存できていない変更があるまま画面を離れるときの確認文
+  'discard_and_leave', // 同（承認ボタン）
 ] as const
 
 const here = dirname(fileURLToPath(import.meta.url))

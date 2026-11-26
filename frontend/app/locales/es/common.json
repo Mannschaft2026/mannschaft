@@ -644,7 +644,9 @@
       "open": "Abrir este borrador",
       "unsaved_header": "Cambios sin guardar",
       "unsaved_confirm": "Hay cambios que no se han guardado. ¿Descartarlos y cambiar?",
-      "discard_and_switch": "Descartar y cambiar"
+      "discard_and_switch": "Descartar y cambiar",
+      "unsaved_leave_confirm": "Hay cambios que no se han guardado. ¿Descartarlos y salir de esta página?",
+      "discard_and_leave": "Descartar y salir"
     },
     "delivery_stopped": "Entrega detenida",
     "templates": "Administrar plantillas",

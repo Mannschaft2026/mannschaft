@@ -644,7 +644,9 @@
       "open": "Diesen Entwurf öffnen",
       "unsaved_header": "Nicht gespeicherte Änderungen",
       "unsaved_confirm": "Es gibt Änderungen, die nicht gespeichert wurden. Verwerfen und wechseln?",
-      "discard_and_switch": "Verwerfen und wechseln"
+      "discard_and_switch": "Verwerfen und wechseln",
+      "unsaved_leave_confirm": "Es gibt Änderungen, die nicht gespeichert wurden. Verwerfen und diese Seite verlassen?",
+      "discard_and_leave": "Verwerfen und verlassen"
     },
     "delivery_stopped": "Zustellung gestoppt",
     "templates": "Vorlagen verwalten",

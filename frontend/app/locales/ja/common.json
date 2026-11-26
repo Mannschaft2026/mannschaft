@@ -644,7 +644,9 @@
       "open": "この下書きを開く",
       "unsaved_header": "保存されていない変更",
       "unsaved_confirm": "保存されていない変更があります。破棄して切り替えますか？",
-      "discard_and_switch": "破棄して切り替える"
+      "discard_and_switch": "破棄して切り替える",
+      "unsaved_leave_confirm": "保存されていない変更があります。破棄してこの画面を離れますか？",
+      "discard_and_leave": "破棄して離れる"
     },
     "delivery_stopped": "配信停止",
     "templates": "テンプレート管理",
