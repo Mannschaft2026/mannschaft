@@ -9,6 +9,7 @@ const route = useRoute()
 const orgSlug = computed(() => String(route.params.slug))
 const annualPlanApi = useAnnualPlanApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { userTimezone } = useDatetime()
 
 const months = ref<AnnualViewMonth[]>([])
@@ -41,7 +42,9 @@ async function loadData() {
     })
     months.value = res.months
     categories.value = res.categories
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('annual_plan.load_error'))
   } finally {
     loading.value = false

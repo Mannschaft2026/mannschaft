@@ -34,7 +34,8 @@
         "arrivalTime": "등교 시간",
         "leaveTime": "하교 시간",
         "loading": "로딩 중...",
-        "noStudents": "학생을 찾을 수 없습니다"
+        "noStudents": "학생을 찾을 수 없습니다",
+        "unknownStudent": "알 수 없는 학생"
       },
       "period": {
         "title": "교시별 출결",

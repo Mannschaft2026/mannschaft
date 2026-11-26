@@ -68,7 +68,10 @@ test.describe('CMP-260820-1015 スコア一括入力の実機回帰', () => {
     await expect(page.getByTestId('tournament-detail-title')).toBeVisible({ timeout: 60_000 })
     await expect(page.getByTestId('score-entry-nav-link')).toHaveCount(0)
     await page.goto(`${BASE_URL}${scoreEntryPath}`, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('この大会のスコアを編集する権限がありません')).toBeVisible({ timeout: 60_000 })
+    // 権限の有無を示唆しない共通の「見つかりません」（CMP-261125-1108）。旧文言・失敗トーストは出ない
+    await expect(page.locator('[data-testid="scope-not-found"]')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByText('この大会のスコアを編集する権限がありません')).toHaveCount(0)
+    await expect(page.locator('.p-toast-message')).toHaveCount(0)
     await expect(page.getByTestId('score-entry-grid')).toHaveCount(0)
   })
 
@@ -80,7 +83,10 @@ test.describe('CMP-260820-1015 スコア一括入力の実機回帰', () => {
     )
 
     await page.goto(`${BASE_URL}${scoreEntryPath}`, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('この大会のスコアを編集する権限がありません')).toBeVisible({ timeout: 60_000 })
+    // 権限の有無を示唆しない共通の「見つかりません」（CMP-261125-1108）。旧文言・失敗トーストは出ない
+    await expect(page.locator('[data-testid="scope-not-found"]')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByText('この大会のスコアを編集する権限がありません')).toHaveCount(0)
+    await expect(page.locator('.p-toast-message')).toHaveCount(0)
     await expect(page.getByTestId('score-entry-grid')).toHaveCount(0)
   })
 })

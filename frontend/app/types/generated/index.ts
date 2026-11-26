@@ -66236,8 +66236,22 @@ export interface components {
             expiredAt?: string;
             name?: string;
         };
-        ApiResponseSignageAccessTokenResponse: {
-            data?: components["schemas"]["SignageAccessTokenResponse"];
+        ApiResponseSignageAccessTokenIssuedResponse: {
+            data?: components["schemas"]["SignageAccessTokenIssuedResponse"];
+        };
+        SignageAccessTokenIssuedResponse: {
+            allowedIps?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiredAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            name?: string;
+            /** Format: int64 */
+            screenId?: number;
+            token?: string;
         };
         SignageAccessTokenResponse: {
             allowedIps?: string[];
@@ -66251,7 +66265,6 @@ export interface components {
             name?: string;
             /** Format: int64 */
             screenId?: number;
-            token?: string;
         };
         BroadcastEmergencyRequest: {
             bgColor?: string;
@@ -73533,6 +73546,7 @@ export interface components {
             recordedBy?: number;
             /** @enum {string} */
             status?: "ATTENDING" | "PARTIAL" | "ABSENT" | "UNDECIDED";
+            studentDisplayName?: string;
             /** Format: int64 */
             studentUserId?: number;
             /** Format: int64 */
@@ -76455,6 +76469,7 @@ export interface components {
             meta?: components["schemas"]["TournamentHistoryEntryMeta"];
             /** Format: int64 */
             organizationId?: number;
+            organizationSlug?: string;
             record?: components["schemas"]["TournamentHistoryEntryRecord"];
         };
         TournamentHistoryEntryIdentifiers: {
@@ -122223,7 +122238,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenIssuedResponse"];
                 };
             };
         };
@@ -163632,6 +163647,7 @@ export interface operations {
             query?: {
                 page?: number;
                 size?: number;
+                status?: string;
             };
             header?: never;
             path?: never;

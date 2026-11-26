@@ -7,6 +7,7 @@ const teamSlug = String(route.params.slug)
 
 const { getSessions, createSession } = useVotingApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { relativeTime } = useRelativeTime()
 
 const sessions = ref<VoteSessionResponse[]>([])
@@ -17,7 +18,9 @@ async function load() {
   try {
     const res = await getSessions({ scope_type: 'TEAM', scope_id: teamSlug })
     sessions.value = res.data
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error('投票セッションの取得に失敗しました')
   } finally {
     loading.value = false

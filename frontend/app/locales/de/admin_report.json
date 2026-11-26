@@ -1,6 +1,10 @@
 {
   "admin_report": {
     "title": "Meldungsverwaltung",
+    "filter": {
+      "placeholder": "Nach Status filtern",
+      "all": "Alle Status"
+    },
     "empty": "Keine Meldungen",
     "messages": {
       "load_failed": "Meldungen konnten nicht geladen werden",

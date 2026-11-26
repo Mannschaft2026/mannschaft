@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * メンバープロフィールサービス。プロフィールのCRUD・一括登録・コピー・並び替え・検索を担当する。
@@ -222,12 +223,21 @@ public class MemberProfileService {
         List<MemberProfileEntity> sourceMembers =
                 profileRepository.findByTeamPageIdAndIsVisibleTrueOrderBySortOrder(request.getSourcePageId());
 
-        int copiedCount = 0;
+        // コピー先の登録済みユーザーを1回の問い合わせでまとめて取得する（件数ぶんの exists 発行を避ける）
+        List<Long> sourceUserIds = sourceMembers.stream()
+                .map(MemberProfileEntity::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Set<Long> existingUserIds = sourceUserIds.isEmpty()
+                ? Set.of()
+                : new java.util.HashSet<>(profileRepository.findUserIdsByTeamPageIdAndUserIdIn(targetPageId, sourceUserIds));
+
+        List<MemberProfileEntity> copies = new ArrayList<>();
         List<Long> skippedUserIds = new ArrayList<>();
 
         for (MemberProfileEntity source : sourceMembers) {
-            if (source.getUserId() != null &&
-                    profileRepository.existsByTeamPageIdAndUserId(targetPageId, source.getUserId())) {
+            if (source.getUserId() != null && existingUserIds.contains(source.getUserId())) {
                 skippedUserIds.add(source.getUserId());
                 continue;
             }
@@ -244,9 +254,10 @@ public class MemberProfileService {
                     .sortOrder(source.getSortOrder())
                     .build();
 
-            profileRepository.save(copy);
-            copiedCount++;
+            copies.add(copy);
         }
+        profileRepository.saveAll(copies);
+        int copiedCount = copies.size();
 
         log.info("メンバーコピー: sourcePageId={}, targetPageId={}, copied={}, skipped={}",
                 request.getSourcePageId(), targetPageId, copiedCount, skippedUserIds.size());
@@ -298,7 +309,9 @@ public class MemberProfileService {
         pageService.checkPageMemberRoleOrNotFound(actorUserId, page);
         String numberQuery = query + "%";
         String nameQuery = "%" + query + "%";
-        Pageable pageable = PageRequest.of(0, Math.min(limit, 20));
+        // limit が 0・負数のときは PageRequest が例外（500）になるため、リポジトリの前例
+        // （Math.max(1, Math.min(size, MAX))）に合わせて 1〜20 に丸める。
+        Pageable pageable = PageRequest.of(0, Math.max(1, Math.min(limit, 20)));
 
         List<MemberProfileEntity> entities = profileRepository.lookupMembers(
                 teamPageId, numberQuery, nameQuery, query, pageable);
