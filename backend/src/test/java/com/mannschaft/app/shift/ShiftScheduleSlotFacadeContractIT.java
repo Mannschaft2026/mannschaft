@@ -239,12 +239,9 @@ class ShiftScheduleSlotFacadeContractIT extends AbstractMySqlIntegrationTest {
             case ADMIN_A:
                 return Expect.ok(ep.successStatus);
             case USER_ROLES_ONLY_ADMIN_A:
-                // 殿の判断 4（退行させない＝是正前の挙動を保つ）: 一覧（S1）と PDF は是正前から在籍を要求して 403。
-                // 許可を広げないので 403 のまま固定する（AC-16）。それ以外（S2・L1・管理系）は是正前どおり通す。
-                if (ep == Ep.S1_LIST || ep == Ep.S1_LIST_PERIOD || ep.pdf()) {
-                    return forbidden;
-                }
-                return Expect.ok(ep.successStatus);
+                // CMP-261125-2114: 在籍の無い user_roles のみの ADMIN は管理者として扱わず、一般メンバーとしても扱わない。
+                // 同チーム所属者の権限不足として全 EP で 403（越境の 404 には化けない）。
+                return forbidden;
             case MEMBER_A:
                 return ep.access == Access.READ ? Expect.ok(ep.successStatus) : forbidden;
             case SUPPORTER_A:

@@ -193,9 +193,12 @@ public class ShiftScheduleFacade {
     public ShiftScheduleSummaryResponse getScheduleSummary(Long id, Long userId) {
         ShiftScheduleScope scope = scheduleService.resolveScope(id);
         // 管理者限定でも、未公開への403と不在404との差から存在が分かる。SUPPORTERの既存403は維持する。
-        if (scope.isHidden() && !manageGate.canView(userId, scope.teamId())
-                && !accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
-            throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+        if (scope.isHidden() && !manageGate.canView(userId, scope.teamId())) {
+            // 越境は不在と同じ 404、在籍の無い user_roles のみの管理者は所属者向けの 403（getSchedule と同じ順序）。
+            manageGate.requireMemberOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            if (!accessControlService.isSupporter(userId, scope.teamId(), TEAM)) {
+                throw new BusinessException(ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            }
         }
         // サマリーは閲覧扱い（閲覧切替 ON の DEPUTY_ADMIN にも許す）。
         manageGate.requireViewOrConceal(userId, scope.teamId(), ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);

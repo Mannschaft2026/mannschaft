@@ -344,15 +344,16 @@ class ShiftSwapApprovalAssignmentContractIT extends ShiftSwapApprovalTestSupport
     }
 
     @Test
-    void AC15_userRolesだけの管理者も既存の承認許可を維持する() throws Exception {
+    void AC15_在籍の無いuserRolesだけの管理者は承認できず403で担当は変わらない() throws Exception {
+        // CMP-261125-2114: ADMIN でも在籍中でなければシフト管理の権限を持たない（同チーム所属扱いの 403）。
         Long slot = slot(List.of(a), ShiftScheduleStatus.PUBLISHED);
         Long swap = accepted(slot, a, b);
         inTx(() -> {
             em.createNativeQuery("DELETE FROM memberships WHERE user_id=:id").setParameter("id", admin).executeUpdate();
             return null;
         });
-        expect(resolve(admin, swap, "APPROVE"), 200, null);
-        assertThat(assigned(slot)).containsExactly(b);
+        denied(admin, swap, "APPROVE", 403, "COMMON_002");
+        assertThat(assigned(slot)).containsExactly(a);
     }
 
     @ParameterizedTest(name = "AC15_管理者本人交代 [{index}] {arguments}")
