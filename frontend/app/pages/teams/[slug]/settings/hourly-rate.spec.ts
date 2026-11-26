@@ -13,14 +13,15 @@ const mocks = vi.hoisted(() => ({
   loadPermissions: vi.fn(),
   loadAll: vi.fn(),
   getTeam: vi.fn(),
-  showError: vi.fn(),
+  markDenied: vi.fn(),
+  markIfDenied: vi.fn(() => false),
 }))
 const perm = { canViewHourlyRate: ref(true), canManageShift: ref(true) }
 
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-a' }, query: {} }))
 mockNuxtImport('useNotification', () => () => ({ error: vi.fn(), success: vi.fn() }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
-mockNuxtImport('showError', () => mocks.showError)
+mockNuxtImport('useScopeNotFound', () => () => ({ markDenied: mocks.markDenied, markIfDenied: mocks.markIfDenied }))
 mockNuxtImport('useShiftPermission', () => () => ({ ...perm, loadPermissions: mocks.loadPermissions }))
 vi.mock('~/composables/shift/useHourlyRateMemberPage', async (importOriginal) => {
   const original = await importOriginal<typeof import('~/composables/shift/useHourlyRateMemberPage')>()
@@ -63,12 +64,12 @@ describe('時給設定画面の権限による出し分け', () => {
     expect(wrapper.find('[data-testid="hourly-rate-readonly-notice"]').exists()).toBe(true)
   })
 
-  it('閲覧できない人（切替 OFF の副管理者など）は URL 直打ちでも一覧を取得せず 403 を出す', async () => {
+  it('閲覧できない人（切替 OFF の副管理者など）は URL 直打ちでも一覧を取得せず共通の「見つかりません」にする', async () => {
     perm.canViewHourlyRate.value = false
     perm.canManageShift.value = false
     await mountPage()
     expect(mocks.loadAll).not.toHaveBeenCalled()
-    expect(mocks.showError).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }))
+    expect(mocks.markDenied).toHaveBeenCalledTimes(1)
   })
 
   it('権限の取得に失敗したら一覧を取得しない（権限なしに倒して握りつぶさず通知する）', async () => {
