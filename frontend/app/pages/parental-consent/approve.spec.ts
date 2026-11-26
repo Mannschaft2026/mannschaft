@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import ApprovePage from './approve.vue'
 import { useAuthStore } from '~/stores/useAuthStore'
 
@@ -23,8 +23,8 @@ mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 
 const options = { global: { mocks: { $t: (k: string) => k } } }
 
-function buttonByText(wrapper: Awaited<ReturnType<typeof mountSuspended>>, text: string) {
-  return wrapper.findAll('button').find(b => b.text() === text)
+function buttonByText(wrapper: VueWrapper, text: string) {
+  return wrapper.findAll('button').find((b: DOMWrapper<Element>) => b.text() === text)
 }
 
 beforeEach(() => {
@@ -66,7 +66,7 @@ describe('parental-consent/approve.vue（ログイン済みの保護者）', () 
     expect(wrapper.text()).toContain('parental_consent.reject_confirm')
 
     // 確認エリアの拒否ボタン（同名のボタンが 2 つ目として現れる）
-    const confirmButtons = wrapper.findAll('button').filter(b => b.text() === 'parental_consent.reject_button')
+    const confirmButtons = wrapper.findAll('button').filter((b: DOMWrapper<Element>) => b.text() === 'parental_consent.reject_button')
     await confirmButtons[confirmButtons.length - 1]!.trigger('click')
     await flushPromises()
 
