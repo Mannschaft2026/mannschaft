@@ -1,9 +1,9 @@
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import type { Browser, BrowserContext, Locator, Page } from '@playwright/test'
+import type { Browser, BrowserContext, Page } from '@playwright/test'
 import { test } from '@playwright/test'
 import {
-  FE, API, RUN, ROLE_ID, apiAs, createActor, createTeam, joinAsMember, must, sql, expect, readAssets, gotoAndHydrate,
+  FE, API, RUN, ROLE_ID, apiAs, createActor, createTeam, joinAsMember, must, sql, expect, readAssets,
   type Actor, type Scope,
 } from './helpers/n1p1-world'
 import { loginViaApi } from '../fixtures/auth'
@@ -120,13 +120,6 @@ const optionOf = (page: Page, actor: Actor) => page.getByTestId(`shift-add-membe
 
 function patchAssignments(page: Page) {
   return page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/api\/v1\/shifts\/slots\/\d+\/assignments$/.test(new URL(r.url()).pathname), { timeout: 60_000 })
-}
-
-async function slotState(slotId: number) {
-  const r = await must(W.admin, 'GET', `/api/v1/shifts/schedules/${W.scheduleA}/slots`)
-  const s = (r.data as Array<{ id: number; version: number; assignedUserIds: number[] }>).find((x) => x.id === slotId)
-  if (!s) throw new Error(`枠 ${slotId} が無い`)
-  return s
 }
 
 /** DB（読み取りのみ）の枠の割当ユーザー ID（shift_slots.assigned_user_ids の JSON 配列）。 */
