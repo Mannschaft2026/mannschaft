@@ -55,4 +55,55 @@ describe('useConfirmableNotificationApi', () => {
     expect(api).toHaveBeenCalledWith('/api/v1/teams/3/confirmable-notification-templates', { method: 'POST', body })
     expect(api).toHaveBeenCalledWith('/api/v1/teams/3/confirmable-notification-templates/7', { method: 'PUT', body: { ...body, defaultRecipientGroupId: null } })
   })
+
+  describe('下書き API（CMP-261126-1558）', () => {
+    it('FE-AC1: 一覧はチーム・組織それぞれの drafts を GET する', async () => {
+      api.mockResolvedValue({ data: [] })
+      const client = useConfirmableNotificationApi()
+
+      await client.listDrafts('TEAM', '3')
+      await client.listDrafts('ORGANIZATION', '42')
+
+      expect(api).toHaveBeenCalledWith('/api/v1/teams/3/confirmable-notifications/drafts')
+      expect(api).toHaveBeenCalledWith('/api/v1/organizations/42/confirmable-notifications/drafts')
+    })
+
+    it('FE-AC2: 作成は drafts へ POST する', async () => {
+      api.mockResolvedValue({ data: { id: 'd-1', version: 0 } })
+      const client = useConfirmableNotificationApi()
+      const body = { title: '件名', body: '本文', priority: 'NORMAL' as const, audienceMode: 'DEFAULT' as const }
+
+      await client.createDraft('TEAM', '3', body)
+
+      expect(api).toHaveBeenCalledWith('/api/v1/teams/3/confirmable-notifications/drafts', { method: 'POST', body })
+    })
+
+    it('FE-AC4: 取得は drafts/{draftId} を GET する', async () => {
+      api.mockResolvedValue({ data: { id: 'd-1', version: 2 } })
+      const client = useConfirmableNotificationApi()
+
+      await client.getDraft('ORGANIZATION', '42', 'd-1')
+
+      expect(api).toHaveBeenCalledWith('/api/v1/organizations/42/confirmable-notifications/drafts/d-1')
+    })
+
+    it('FE-AC3: 更新は baseVersion 付きで drafts/{draftId} へ PUT する', async () => {
+      api.mockResolvedValue({ data: { id: 'd-1', version: 3 } })
+      const client = useConfirmableNotificationApi()
+      const body = { title: '件名', baseVersion: 2 }
+
+      await client.updateDraft('TEAM', '3', 'd-1', body)
+
+      expect(api).toHaveBeenCalledWith('/api/v1/teams/3/confirmable-notifications/drafts/d-1', { method: 'PUT', body })
+    })
+
+    it('FE-AC5: 削除は drafts/{draftId} へ DELETE する', async () => {
+      api.mockResolvedValue(undefined)
+      const client = useConfirmableNotificationApi()
+
+      await client.deleteDraft('ORGANIZATION', '42', 'd-1')
+
+      expect(api).toHaveBeenCalledWith('/api/v1/organizations/42/confirmable-notifications/drafts/d-1', { method: 'DELETE' })
+    })
+  })
 })

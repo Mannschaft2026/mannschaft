@@ -12,6 +12,10 @@ import type {
   CreateConfirmableRecipientGroupRequest,
   UpdateConfirmableNotificationSettingsRequest,
   CreateConfirmableNotificationTemplateRequest,
+  ConfirmableNotificationDraftSummary,
+  ConfirmableNotificationDraftDetail,
+  ConfirmableNotificationDraftSaveRequest,
+  ConfirmableNotificationDraftUpdateRequest,
 } from '~/types/confirmable'
 
 export function useConfirmableNotificationApi() {
@@ -247,7 +251,45 @@ export function useConfirmableNotificationApi() {
     return api(`${buildRecipientGroupBaseUrl(scopeType, scopeId)}/${groupId}`, { method: 'DELETE' })
   }
 
+  // === Drafts（CMP-261126-1558。試練で骨格のみ。/出陣で実装する） ===
+
+  /** 自分の下書き一覧（updatedAt 降順） */
+  async function listDrafts(_scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string): Promise<{ data: ConfirmableNotificationDraftSummary[] }> {
+    throw new Error('未実装: listDrafts')
+  }
+
+  /** 下書きを作成する（201。スコープ×作成者ごとに10件まで） */
+  async function createDraft(
+    _scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _data: ConfirmableNotificationDraftSaveRequest,
+  ): Promise<{ data: ConfirmableNotificationDraftDetail }> {
+    throw new Error('未実装: createDraft')
+  }
+
+  /** 下書きの全項目と version を取得する */
+  async function getDraft(
+    _scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _draftId: string,
+  ): Promise<{ data: ConfirmableNotificationDraftDetail }> {
+    throw new Error('未実装: getDraft')
+  }
+
+  /** 下書きを更新する（baseVersion 必須。食い違えば 409 VERSION_CONFLICT） */
+  async function updateDraft(
+    _scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _draftId: string, _data: ConfirmableNotificationDraftUpdateRequest,
+  ): Promise<{ data: ConfirmableNotificationDraftDetail }> {
+    throw new Error('未実装: updateDraft')
+  }
+
+  /** 下書きを削除する（204） */
+  async function deleteDraft(_scopeType: 'TEAM' | 'ORGANIZATION', _scopeId: string, _draftId: string): Promise<void> {
+    throw new Error('未実装: deleteDraft')
+  }
+
   return {
+    listDrafts,
+    createDraft,
+    getDraft,
+    updateDraft,
+    deleteDraft,
     getSettings,
     updateSettings,
     sendNotification,

@@ -1,3 +1,5 @@
+import type { components } from '~/types/generated'
+
 export type ConfirmableNotificationStatus = 'ACTIVE' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED'
 export type ConfirmableNotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT'
 export type ConfirmableConfirmedVia = 'APP' | 'TOKEN' | 'BULK'
@@ -119,6 +121,8 @@ export interface CreateConfirmableNotificationRequest {
   recipientGroupId?: string
   /** 未確認者リストの公開範囲（未指定時はサーバ側でスコープ設定にフォールバック） */
   unconfirmedVisibility?: UnconfirmedVisibility | null
+  /** 送信元の下書き ID。送信成功時に BE が同じトランザクションで本人の下書きを削除する（CMP-261126-1558） */
+  draftId?: string
 }
 
 export interface ConfirmableNotificationSendAccepted {
@@ -156,3 +160,15 @@ export interface CreateConfirmableNotificationTemplateRequest {
   defaultPriority: ConfirmableNotificationPriority
   defaultRecipientGroupId?: string | null
 }
+
+// === 下書き（CMP-261126-1558）。生成型をそのまま使う ===
+/** 一覧の1行（updatedAt 降順・本文は冒頭100文字） */
+export type ConfirmableNotificationDraftSummary = components['schemas']['ConfirmableNotificationDraftSummaryResponse']
+/** 下書きの全項目と version */
+export type ConfirmableNotificationDraftDetail = components['schemas']['ConfirmableNotificationDraftDetailResponse']
+/** POST（作成）の本文 */
+export type ConfirmableNotificationDraftSaveRequest = components['schemas']['ConfirmableNotificationDraftSaveRequest']
+/** PUT（更新）の本文。baseVersion 必須 */
+export type ConfirmableNotificationDraftUpdateRequest = components['schemas']['ConfirmableNotificationDraftUpdateRequest']
+/** スコープ×作成者ごとの下書き上限（BE と同じ値） */
+export const CONFIRMABLE_DRAFT_LIMIT = 10
