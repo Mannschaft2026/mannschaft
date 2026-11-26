@@ -22,9 +22,15 @@ const state = vi.hoisted(() => ({
   permissions: vi.fn(),
   probe: vi.fn(),
   api: vi.fn(),
+  recruitmentEnabled: true,
 }))
 
-vi.mock('~/composables/useApi', () => ({ useApi: () => state.api }))
+mockNuxtImport('useTeamApi', () => () => ({
+  getTeam: (slug: string) => state.api(`/api/v1/teams/${slug}`),
+}))
+mockNuxtImport('useOrganizationApi', () => () => ({
+  getOrganization: (slug: string) => state.api(`/api/v1/organizations/${slug}`),
+}))
 mockNuxtImport('useRoleAccess', () => () => ({
   roleName: ref(state.role),
   isScopeAdmin: ref(state.role === 'ADMIN'),
@@ -32,7 +38,7 @@ mockNuxtImport('useRoleAccess', () => () => ({
 }))
 mockNuxtImport('useFeatureFlagStore', () => () => ({
   publicLoaded: true,
-  isEnabled: () => false,
+  isEnabled: (key: string) => key === 'FEATURE_RECRUITMENT_ENABLED' && state.recruitmentEnabled,
   loadPublicFlags: vi.fn(),
 }))
 mockNuxtImport('useScopeTabApi', () => () => ({ getAdminActionRequired: state.probe }))
@@ -73,6 +79,7 @@ const cases = [
 describe('無断欠席・ペナルティ管理への導線（CMP-261005-2103）', () => {
   beforeEach(() => {
     state.role = 'ADMIN'
+    state.recruitmentEnabled = true
     state.permissions.mockReset().mockResolvedValue({ ok: true })
     state.probe.mockReset().mockRejectedValue({ statusCode: 403 })
     state.api.mockReset().mockImplementation((url: string) => {
@@ -113,6 +120,36 @@ describe('無断欠席・ペナルティ管理への導線（CMP-261005-2103）'
       const wrapper = await mountHub(scopeType)
       expect(wrapper.find('a[href$="/no-shows"]').exists()).toBe(false)
       expect(wrapper.find('a[href$="/penalty-settings"]').exists()).toBe(false)
+    })
+  })
+
+  describe('機能ゲート・失敗の局所化', () => {
+    it.each(cases)('%s: 募集機能フラグ OFF では ADMIN でも導線を出さず、詳細 API も呼ばない', async (scopeType) => {
+      state.recruitmentEnabled = false
+      const wrapper = await mountHub(scopeType)
+      const scopePath = scopeType === 'team' ? 'teams' : 'organizations'
+      expect(wrapper.find(`a[href="/${scopePath}/sample/settings/public-settings"]`).exists()).toBe(true)
+      expect(wrapper.find('a[href$="/no-shows"]').exists()).toBe(false)
+      expect(wrapper.find('a[href$="/penalty-settings"]').exists()).toBe(false)
+      expect(state.api).not.toHaveBeenCalled()
+    })
+
+    it.each(cases)('%s: numericId 取得失敗でも既存リンクは残り、募集区画だけエラー表示になる', async (scopeType) => {
+      state.api.mockReset().mockRejectedValue({ statusCode: 500 })
+      const wrapper = await mountHub(scopeType)
+      const scopePath = scopeType === 'team' ? 'teams' : 'organizations'
+      expect(wrapper.find(`a[href="/${scopePath}/sample/settings/public-settings"]`).exists()).toBe(true)
+      expect(wrapper.find('a[href$="/no-shows"]').exists()).toBe(false)
+      expect(wrapper.find('a[href$="/penalty-settings"]').exists()).toBe(false)
+      expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true)
+    })
+
+    it.each(cases)('%s: 純 SYSTEM_ADMIN（スコープ管理権なし）には導線を出さない', async (scopeType) => {
+      state.role = 'SYSTEM_ADMIN'
+      const wrapper = await mountHub(scopeType)
+      expect(wrapper.find('a[href$="/no-shows"]').exists()).toBe(false)
+      expect(wrapper.find('a[href$="/penalty-settings"]').exists()).toBe(false)
+      expect(state.api).not.toHaveBeenCalled()
     })
   })
 })

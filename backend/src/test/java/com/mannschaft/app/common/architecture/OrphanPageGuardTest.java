@@ -396,8 +396,10 @@ class OrphanPageGuardTest {
         // 別ルートへは一致しない（セグメント数・静的部分が違えば拾わない）
         assertThat(comparable).doesNotContain(toComparable("/scopes/[scopeType]/[scopeId]/penalty-settings"));
         assertThat(comparable).doesNotContain(toComparable("/scopes/[scopeType]/no-shows"));
-        // [...all] のような catch-all も [param] 化される（既存ルートの照合は変えない）
+        // 単一の [param] は [param] 化され、既存ルートの照合は変えない
         assertThat(toComparable("/teams/[slug]/equipment")).isEqualTo("/teams/[param]/equipment");
+        // [...all] のような catch-all も同じ [param] 形になる
+        assertThat(toComparable("/teams/[...all]")).isEqualTo("/teams/[param]");
     }
 
     @Test

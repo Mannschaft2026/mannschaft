@@ -308,7 +308,7 @@ export default {
       "pageTitle": "ペナルティ設定",
       "penaltiesPageTitle": "ペナルティ一覧",
       "emptyPenalties": "ペナルティを受けているメンバーはいません",
-      "notConfigured": "ペナルティ設定はまだ行われていません（初期値を表示しています。保存すると有効になります）",
+      "notConfigured": "ペナルティ設定はまだ行われていません（初期値を表示しています。保存すると設定が登録され、有効・無効は「有効」スイッチの状態に従います）",
       "enabled": "有効",
       "disabled": "無効",
       "thresholdCount": "閾値件数（N回）",

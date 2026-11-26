@@ -308,7 +308,7 @@ export default {
       "pageTitle": "处罚设置",
       "penaltiesPageTitle": "处罚列表",
       "emptyPenalties": "目前没有受到处罚的成员。",
-      "notConfigured": "尚未设置处罚规则。当前显示的是默认值，保存后生效。",
+      "notConfigured": "尚未设置处罚规则。当前显示的是默认值，保存后将登记设置，是否生效取决于“启用”开关的状态。",
       "enabled": "有效",
       "disabled": "无效",
       "thresholdCount": "阈值次数",

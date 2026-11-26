@@ -308,7 +308,7 @@ export default {
       "pageTitle": "Penalty Settings",
       "penaltiesPageTitle": "Penalty List",
       "emptyPenalties": "No members are currently under a penalty.",
-      "notConfigured": "The penalty policy has not been set up yet. Default values are shown; saving will apply them.",
+      "notConfigured": "The penalty policy has not been set up yet. Default values are shown; saving registers the settings, and whether they apply follows the Enabled switch.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "thresholdCount": "Threshold Count",

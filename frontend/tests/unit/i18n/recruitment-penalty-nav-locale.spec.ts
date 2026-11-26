@@ -39,8 +39,9 @@ function asText(value: unknown): unknown {
   return value
 }
 
-// 日本語の残存はかな（ひらがな・カタカナ）で判定する。漢字は中国語（zh）の正当な表記なので対象外
-const JAPANESE = /[぀-ヿ]/
+// 日本語の残存判定。かな（ひらがな・カタカナ）は全言語で検出し、漢字は中国語（zh）の正当な表記なので zh のみ除外する
+const KANA = /[぀-ヿ]/
+const KANJI = /[一-鿿]/
 
 describe('無断欠席・ペナルティ管理の専用文言（CMP-261005-2103 I2）', () => {
   it.each(Object.keys(locales) as (keyof typeof locales)[])(
@@ -54,7 +55,10 @@ describe('無断欠席・ペナルティ管理の専用文言（CMP-261005-2103 
         expect(String(value).trim(), `${locale}: ${key}`).not.toBe('')
         expect(value, `${locale}: ${key} が募集一覧の空文言と同じ`).not.toBe(noListings)
         if (locale !== 'ja') {
-          expect(String(value), `${locale}: ${key} に日本語が残っている`).not.toMatch(JAPANESE)
+          expect(String(value), `${locale}: ${key} にかなが残っている`).not.toMatch(KANA)
+        }
+        if (locale !== 'ja' && locale !== 'zh') {
+          expect(String(value), `${locale}: ${key} に漢字が残っている`).not.toMatch(KANJI)
         }
       }
     },

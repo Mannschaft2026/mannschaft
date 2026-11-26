@@ -308,7 +308,7 @@ export default {
       "pageTitle": "Strafeinstellungen",
       "penaltiesPageTitle": "Strafliste",
       "emptyPenalties": "Derzeit hat kein Mitglied eine Strafe.",
-      "notConfigured": "Die Strafrichtlinie ist noch nicht eingerichtet. Es werden Standardwerte angezeigt; mit dem Speichern werden sie wirksam.",
+      "notConfigured": "Die Strafrichtlinie ist noch nicht eingerichtet. Es werden Standardwerte angezeigt; mit dem Speichern werden die Einstellungen registriert, und ob sie gelten, richtet sich nach dem Schalter „Aktiviert“.",
       "enabled": "Aktiviert",
       "disabled": "Deaktiviert",
       "thresholdCount": "Schwellenwert",

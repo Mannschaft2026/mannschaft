@@ -308,7 +308,7 @@ export default {
       "pageTitle": "Configuración de penalización",
       "penaltiesPageTitle": "Lista de penalizaciones",
       "emptyPenalties": "Ningún miembro tiene penalizaciones actualmente.",
-      "notConfigured": "La política de penalizaciones aún no está configurada. Se muestran los valores predeterminados; al guardar se aplicarán.",
+      "notConfigured": "La política de penalizaciones aún no está configurada. Se muestran los valores predeterminados; al guardar se registra la configuración y su aplicación depende del interruptor «Activado».",
       "enabled": "Habilitado",
       "disabled": "Deshabilitado",
       "thresholdCount": "Umbral de incidencias",
