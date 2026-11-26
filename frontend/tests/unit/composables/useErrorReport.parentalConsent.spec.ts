@@ -12,7 +12,21 @@ function jwtWith(payload: Record<string, unknown>): string {
   return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(payload)}.signature`
 }
 
-let authStub: { isPendingParentalConsent: boolean; accessToken: string | null; currentUser: { id: number } | null }
+type AuthStub = {
+  isPendingParentalConsent: boolean
+  accessToken: string | null
+  currentUser: { id: number } | null
+  isAuthenticated: boolean
+  loadFromStorage: () => void
+}
+// Nuxt 初期化（認証プラグイン）が最初に useAuthStore を引くため、宣言時点から有効なモックにしておく
+let authStub: AuthStub = {
+  isPendingParentalConsent: false,
+  accessToken: null,
+  currentUser: null,
+  isAuthenticated: false,
+  loadFromStorage: () => {},
+}
 mockNuxtImport('useAuthStore', () => () => authStub)
 
 const fetchMock = vi.fn()
@@ -21,13 +35,13 @@ beforeEach(() => {
   fetchMock.mockReset()
   fetchMock.mockResolvedValue({})
   vi.stubGlobal('$fetch', fetchMock)
-  authStub = { isPendingParentalConsent: false, accessToken: null, currentUser: null }
+  authStub = { ...authStub, isPendingParentalConsent: false, accessToken: null, currentUser: null }
   useErrorReport().close()
 })
 
 describe('useErrorReport と同意待ち（CMP-261123-1124 AC4）', () => {
   it('同意待ち: 5xx の capture は送信せず、送信済み表示にもしない', async () => {
-    authStub = { isPendingParentalConsent: true, accessToken: null, currentUser: { id: 7 } }
+    authStub = { ...authStub, isPendingParentalConsent: true, accessToken: null, currentUser: { id: 7 } }
     const report = useErrorReport()
 
     report.capture(new Error('HTTP 500'), { apiUrl: '/api/v1/parental-consent/invitations', statusCode: 500 })
@@ -40,6 +54,7 @@ describe('useErrorReport と同意待ち（CMP-261123-1124 AC4）', () => {
 
   it('本人復元前（ppc=true のトークンのみ）でも送信しない', async () => {
     authStub = {
+      ...authStub,
       isPendingParentalConsent: false,
       accessToken: jwtWith({ sub: '7', ppc: true, exp: Math.floor(Date.now() / 1000) + 900 }),
       currentUser: null,
@@ -55,7 +70,7 @@ describe('useErrorReport と同意待ち（CMP-261123-1124 AC4）', () => {
   })
 
   it('同意待ち: captureQuiet と追加コメントも送信しない', async () => {
-    authStub = { isPendingParentalConsent: true, accessToken: 'x', currentUser: { id: 7 } }
+    authStub = { ...authStub, isPendingParentalConsent: true, accessToken: 'x', currentUser: { id: 7 } }
     const report = useErrorReport()
 
     report.captureQuiet(new Error('widget failed'))
@@ -66,7 +81,7 @@ describe('useErrorReport と同意待ち（CMP-261123-1124 AC4）', () => {
   })
 
   it('AC7: 一般ユーザーは従来どおり自動送信する（回帰）', async () => {
-    authStub = { isPendingParentalConsent: false, accessToken: jwtWith({ sub: '7', ppc: false }), currentUser: { id: 7 } }
+    authStub = { ...authStub, isPendingParentalConsent: false, accessToken: jwtWith({ sub: '7', ppc: false }), currentUser: { id: 7 } }
     const report = useErrorReport()
 
     report.capture(new Error('HTTP 500'), { statusCode: 500 })
