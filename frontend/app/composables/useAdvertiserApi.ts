@@ -85,6 +85,7 @@ function creativesBasePath(scopeType: ScopeType, scopeId: string, campaignId: nu
 export function useAdvertiserApi() {
   const api = useApi()
   const { resolveOrganizationNumericId } = useOrganizationNumericId()
+  const numericIdBySlug = new Map<string, Promise<string>>()
 
   // ─── 広告主向け API ───
 
@@ -93,9 +94,15 @@ export function useAdvertiserApi() {
    * 既に数値ならそのまま、slug なら組織詳細 API の numericId へ解決する（slug を BE の Long へ流さない）。
    */
   async function organizationQueryId(organizationIdOrSlug: string): Promise<string> {
-    return /^\d+$/.test(organizationIdOrSlug)
-      ? organizationIdOrSlug
-      : await resolveOrganizationNumericId(organizationIdOrSlug)
+    if (/^\d+$/.test(organizationIdOrSlug)) return organizationIdOrSlug
+    // 同一 slug の解決は 1 回だけ（ページ内の複数 API 呼び出しで組織詳細 API を重複して引かない）。失敗は保持しない
+    let pending = numericIdBySlug.get(organizationIdOrSlug)
+    if (!pending) {
+      pending = resolveOrganizationNumericId(organizationIdOrSlug)
+      numericIdBySlug.set(organizationIdOrSlug, pending)
+      pending.catch(() => numericIdBySlug.delete(organizationIdOrSlug))
+    }
+    return await pending
   }
 
   /** スコープ種別に応じたクエリ用 ID（TEAM はパス変数側で渡すためそのまま、ORGANIZATION は数値 ID）。 */

@@ -141,6 +141,19 @@ class ScopeSlugIdConverterQueryOrganizationIdTest {
         verify(teamService, never()).resolveTeamId(anyString());
     }
 
+    @Test
+    @DisplayName("G4: 明示名つき @RequestParam(value=\"organizationId\") は Java 引数名が違っても組織として解決される")
+    void G4_明示名つきのorganizationIdも組織として解決される() throws Exception {
+        lenient().when(organizationService.resolveOrgId("dup-slug")).thenReturn(ORG_ID);
+        lenient().when(teamService.resolveTeamId("dup-slug")).thenReturn(SAME_NAME_TEAM_ID);
+
+        mockMvc.perform(get("/api/v1/advertiser/explicit").param("organizationId", "dup-slug"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(String.valueOf(ORG_ID)));
+
+        verify(teamService, never()).resolveTeamId(anyString());
+    }
+
     private static void assertOrganizationResolvedOrBadRequest(MvcResult result, String expectedOrgId)
             throws Exception {
         int httpStatus = result.getResponse().getStatus();
@@ -161,6 +174,12 @@ class ScopeSlugIdConverterQueryOrganizationIdTest {
         @GetMapping("/api/v1/advertiser/account")
         String account(@RequestParam Long organizationId) {
             return String.valueOf(organizationId);
+        }
+
+        /** DisclosureFormTemplateController と同形（明示名あり・Java 引数名は別）。 */
+        @GetMapping("/api/v1/advertiser/explicit")
+        String explicit(@RequestParam(value = "organizationId") Long org) {
+            return String.valueOf(org);
         }
 
         @GetMapping("/api/v1/teams/{teamId}/advertiser/account")

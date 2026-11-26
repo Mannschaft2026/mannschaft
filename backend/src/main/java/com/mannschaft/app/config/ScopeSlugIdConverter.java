@@ -34,9 +34,14 @@ import java.util.Set;
  * 以前は URI に {@code /organizations/} を含まないクエリの slug を TEAM として解決しており、
  * 同名のチームがあると別組織を誤照会しえた。{@code Converter<String, Long>} は引数名を知り得ないため、
  * 本クラスは {@link ConditionalGenericConverter} として対象の {@link TypeDescriptor}（{@link MethodParameter}）から
- * 引数名を取り出す。リクエスト値の一致で推測しないので、{@code teamId} と {@code organizationId} に同じ値が
- * 来ても取り違えない。引数名が {@code organizationId} 以外のときは従来どおり URI 直前セグメントで判定し、
- * 判定できなければ TEAM とする。</p>
+ * 引数名を取り出す。{@code organizationId} という名前の引数については、リクエスト値の一致で推測しないため
+ * 取り違えない。<b>この保証は {@code organizationId} 側に限る。</b>引数名が {@code organizationId} 以外のとき
+ * （{@code teamId} を含む）は従来どおり URI 直前セグメントで判定し（{@code detectScope} の値一致判定を含む）、
+ * 判定できなければ TEAM とするため、{@code teamId} 側の取り違えは本クラスでは防げない。</p>
+ *
+ * <p><b>残る越境（別行で扱う）:</b> 引数名が {@code organizationId} ではないスコープ ID
+ * （{@code scopeId}（約 73 件）、{@code organization_id}（{@code RepairPlanItemCsvController}）、
+ * {@code teamId} など）は上記の従来判定のままで、同様の越境がありうる。</p>
  *
  * <p>解決に失敗した場合（存在しない slug 等）は 404 NOT_FOUND を送出する（400 ではない）。</p>
  */

@@ -77,9 +77,9 @@ class LocalDateTimeQueryParamBindingTest {
     /**
      * 本番の登録経路（{@link WebMvcConfig#addFormatters}）を通した ConversionService を組み立てる。
      *
-     * <p>スコープ slug 変換器は本題と無関係なので mock を渡す。ただし
-     * {@link ScopeSlugIdConverter} は条件付き変換器なので、素の mock は {@code matches} が false を返し、
-     * 数値のパス変数は標準の {@code String→Long} 変換へ素通りする。</p>
+     * <p>スコープ slug 変換器は本題と無関係なので mock を渡す。素の mock は
+     * {@code getConvertibleTypes()} が空の Set を返すため、{@link ScopeSlugIdConverter} は
+     * ConversionService へ登録されず、数値のパス変数は標準の {@code String→Long} 変換へ素通りする。</p>
      *
      * <p>ここを {@code new DefaultFormattingConversionService()} だけで済ませてしまうと
      * 「本番に登録されているか」を確かめられなくなるため、必ず {@link WebMvcConfig} を経由させる。</p>
