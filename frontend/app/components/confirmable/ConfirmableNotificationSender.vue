@@ -152,12 +152,12 @@ onMounted(async () => {
         <p v-if="drafts.length === 0" class="text-sm text-surface-500" data-testid="confirmable-draft-empty">{{ $t('confirmable.draft.empty') }}</p>
         <ul v-else class="flex flex-col gap-1" data-testid="confirmable-draft-list">
           <li v-for="draft in drafts" :key="draft.id" class="flex items-stretch gap-1 rounded-border border" :class="draft.id === currentDraftId ? 'border-primary' : 'border-surface-200'" data-testid="confirmable-draft-row" :data-draft-id="draft.id">
-            <button type="button" class="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left" :aria-label="$t('confirmable.draft.open')" :aria-current="draft.id === currentDraftId ? 'true' : undefined" data-testid="confirmable-draft-open" @click="openDraft(draft.id as string)">
-              <span class="w-full truncate text-sm font-medium">{{ draft.title || $t('confirmable.draft.untitled') }}</span>
+            <button type="button" class="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left" :aria-label="$t('confirmable.draft.open')" :aria-describedby="`confirmable-draft-title-${draft.id}`" :aria-current="draft.id === currentDraftId ? 'true' : undefined" data-testid="confirmable-draft-open" @click="openDraft(draft.id as string)">
+              <span :id="`confirmable-draft-title-${draft.id}`" class="w-full truncate text-sm font-medium">{{ draft.title || $t('confirmable.draft.untitled') }}</span>
               <span class="w-full truncate text-xs text-surface-500">{{ draft.bodyExcerpt }}</span>
               <time class="text-xs text-surface-400" :datetime="draft.updatedAt" data-testid="confirmable-draft-updated-at">{{ formatUpdatedAt(draft.updatedAt) }}</time>
             </button>
-            <Button icon="pi pi-trash" text rounded severity="danger" class="min-h-11 min-w-11 self-center" :aria-label="$t('confirmable.draft.delete')" data-testid="confirmable-draft-delete" @click="requestDeleteDraft(draft.id as string)" />
+            <Button icon="pi pi-trash" text rounded severity="danger" class="min-h-11 min-w-11 self-center" :aria-label="$t('confirmable.draft.delete')" :aria-describedby="`confirmable-draft-title-${draft.id}`" data-testid="confirmable-draft-delete" @click="requestDeleteDraft(draft.id as string)" />
           </li>
         </ul>
       </section>

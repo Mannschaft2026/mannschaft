@@ -641,7 +641,10 @@
       "conflict": "Dieser Entwurf wurde auf einem anderen Bildschirm geändert. Die automatische Speicherung ist pausiert.",
       "reload_latest": "Neueste Version laden",
       "overwrite": "Mit dieser Version überschreiben",
-      "open": "Diesen Entwurf öffnen"
+      "open": "Diesen Entwurf öffnen",
+      "unsaved_header": "Nicht gespeicherte Änderungen",
+      "unsaved_confirm": "Es gibt Änderungen, die nicht gespeichert wurden. Verwerfen und wechseln?",
+      "discard_and_switch": "Verwerfen und wechseln"
     },
     "delivery_stopped": "Zustellung gestoppt",
     "templates": "Vorlagen verwalten",

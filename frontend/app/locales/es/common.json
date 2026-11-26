@@ -641,7 +641,10 @@
       "conflict": "Este borrador se actualizó en otra pantalla. El guardado automático está en pausa.",
       "reload_latest": "Cargar lo más reciente",
       "overwrite": "Sobrescribir con esta versión",
-      "open": "Abrir este borrador"
+      "open": "Abrir este borrador",
+      "unsaved_header": "Cambios sin guardar",
+      "unsaved_confirm": "Hay cambios que no se han guardado. ¿Descartarlos y cambiar?",
+      "discard_and_switch": "Descartar y cambiar"
     },
     "delivery_stopped": "Entrega detenida",
     "templates": "Administrar plantillas",

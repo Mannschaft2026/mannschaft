@@ -24,6 +24,9 @@ const REQUIRED_KEYS = [
   'conflict', // 別の画面で更新されました
   'reload_latest', // 最新を読み込む
   'overwrite', // この内容で上書き保存
+  'unsaved_header', // 保存できていない変更があるまま切り替えるときの確認（見出し）
+  'unsaved_confirm', // 同（確認文）
+  'discard_and_switch', // 同（承認ボタン）
 ] as const
 
 const here = dirname(fileURLToPath(import.meta.url))

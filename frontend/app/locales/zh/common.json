@@ -641,7 +641,10 @@
       "conflict": "此草稿已在其他页面被更新，自动保存已暂停。",
       "reload_latest": "加载最新内容",
       "overwrite": "用当前内容覆盖保存",
-      "open": "打开此草稿"
+      "open": "打开此草稿",
+      "unsaved_header": "有未保存的更改",
+      "unsaved_confirm": "有尚未保存的更改。要放弃这些更改并切换吗？",
+      "discard_and_switch": "放弃并切换"
     },
     "delivery_stopped": "发送已停止",
     "templates": "模板管理",

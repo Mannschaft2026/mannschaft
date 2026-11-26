@@ -1014,6 +1014,142 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       expect(titleInput(wrapper).props('modelValue')).toBe('作成が 500')
     })
   })
+
+  // ---------------------------------------------------------------- FE-AC10（検分で追加）
+  describe('FE-AC10 保存できていない入力を黙って失わない', () => {
+    type ConfirmOptions = { header?: string; message?: string; accept?: () => unknown; reject?: () => unknown }
+    const lastConfirm = () => mocks.confirmRequire.mock.calls.at(-1)?.[0] as ConfirmOptions | undefined
+
+    it('FE-AC10: 上限で保存できない入力があるまま「新しく書く」を押すと確認を出し、拒否なら入力はそのまま', async () => {
+      for (let i = 1; i <= LIMIT; i++) seed({ id: `d-${i}` })
+      const wrapper = await mountSender()
+      useFakeTimers()
+      await typeTitle(wrapper, '上限で保存できていない件名')
+      await advance(DEBOUNCE_MS)
+
+      await clickTestId(wrapper, 'confirmable-draft-new')
+
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(1)
+      const options = lastConfirm()
+      expect(options?.message).toBeTruthy()
+      expect(options?.header).toBeTruthy()
+      expectNoRawDraftKey(`${options?.message} ${options?.header}`)
+      // 拒否（accept を呼ばない / reject を呼ぶ）なら何もしない
+      await options?.reject?.()
+      await flushPromises()
+      expect(titleInput(wrapper).props('modelValue')).toBe('上限で保存できていない件名')
+    })
+
+    it('FE-AC10: 確認を承認したときだけ破棄して新規状態にする', async () => {
+      for (let i = 1; i <= LIMIT; i++) seed({ id: `d-${i}` })
+      const wrapper = await mountSender()
+      useFakeTimers()
+      await typeTitle(wrapper, '破棄してよい件名')
+      await advance(DEBOUNCE_MS)
+      await clickTestId(wrapper, 'confirmable-draft-new')
+
+      await lastConfirm()?.accept?.()
+      await flushPromises()
+
+      expectBlankForm(wrapper)
+      expect(server.drafts.size).toBe(LIMIT)
+    })
+
+    it('FE-AC10: 5xx で保存できていない入力があるまま別の下書きを開くと確認を出し、承認するまで開かない', async () => {
+      seed({ id: 'd-1', title: '一つ目', version: 1 })
+      seed({ id: 'd-2', title: '二つ目' })
+      const wrapper = await mountSender()
+      await openDraft(wrapper, 'd-1')
+      mocks.updateDraft.mockRejectedValue(apiError(500, 'INTERNAL_SERVER_ERROR'))
+      useFakeTimers()
+      await typeTitle(wrapper, '保存できていない書き換え')
+      await advance(DEBOUNCE_MS)
+      mocks.getDraft.mockClear()
+
+      await openDraft(wrapper, 'd-2')
+
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(1)
+      expect(mocks.getDraft).not.toHaveBeenCalled()
+      expect(titleInput(wrapper).props('modelValue')).toBe('保存できていない書き換え')
+      await lastConfirm()?.accept?.()
+      await flushPromises()
+      expect(titleInput(wrapper).props('modelValue')).toBe('二つ目')
+    })
+
+    it('FE-AC10: 競合で保存を止めている入力があるまま「新しく書く」を押しても確認を出す', async () => {
+      seed({ id: 'd-1', title: '自分の件名', version: 3 })
+      const wrapper = await mountSender()
+      await openDraft(wrapper, 'd-1')
+      const d = server.drafts.get('d-1')
+      if (!d) throw new Error('seed 失敗')
+      d.version = 4
+      useFakeTimers()
+      await typeTitle(wrapper, '競合中の書き換え')
+      await advance(DEBOUNCE_MS)
+      expect(wrapper.find('[data-testid="confirmable-draft-conflict"]').exists()).toBe(true)
+
+      await clickTestId(wrapper, 'confirmable-draft-new')
+
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(1)
+      expect(titleInput(wrapper).props('modelValue')).toBe('競合中の書き換え')
+    })
+
+    it('FE-AC10: 保存できた入力なら確認を出さずに切り替わる', async () => {
+      seed({ id: 'd-1', title: '一つ目', version: 1 })
+      const wrapper = await mountSender()
+      useFakeTimers()
+      await typeTitle(wrapper, '保存待ちの入力')
+
+      await clickTestId(wrapper, 'confirmable-draft-new')
+
+      expect(mocks.confirmRequire).not.toHaveBeenCalled()
+      expect(mocks.createDraft).toHaveBeenCalledWith('TEAM', '5', expect.objectContaining({ title: '保存待ちの入力' }))
+      expectBlankForm(wrapper)
+    })
+
+    it('FE-AC10: 上限で保存できなかった入力は、古い下書きを消して空きができたら自動保存される', async () => {
+      for (let i = 1; i <= LIMIT; i++) seed({ id: `d-${i}` })
+      const wrapper = await mountSender()
+      useFakeTimers()
+      await typeTitle(wrapper, '空き待ちの件名')
+      await advance(DEBOUNCE_MS)
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+
+      await row(wrapper, 'd-1').find('[data-testid="confirmable-draft-delete"]').trigger('click')
+      await flushPromises()
+      await lastConfirm()?.accept?.()
+      await flushPromises()
+      await advance(DEBOUNCE_MS)
+
+      expect(mocks.createDraft).toHaveBeenCalledWith('TEAM', '5', expect.objectContaining({ title: '空き待ちの件名' }))
+    })
+
+    it('FE-AC10: 送信の応答待ちに入力しても、送った下書きを PUT/POST で復活させない', async () => {
+      seed({ id: 'd-1', title: '送る下書き', version: 1 })
+      let resolveSend: (value: { data: { estimatedRecipientCount: number } }) => void = () => {}
+      mocks.sendNotification.mockImplementation((_t: string, _s: string, req: CreateConfirmableNotificationRequest) => new Promise((resolve) => {
+        resolveSend = (value) => {
+          if (req.draftId) server.drafts.delete(req.draftId)
+          resolve(value)
+        }
+      }))
+      const wrapper = await mountSender()
+      await openDraft(wrapper, 'd-1')
+      useFakeTimers()
+
+      await sendButton(wrapper).trigger('click')
+      await flushPromises()
+      await typeTitle(wrapper, '応答待ちの入力')
+      await advance(DEBOUNCE_MS)
+      resolveSend({ data: { estimatedRecipientCount: 3 } })
+      await flushPromises()
+      await advance(DEBOUNCE_MS * 2)
+
+      expect(mocks.updateDraft).not.toHaveBeenCalled()
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+      expect(server.drafts.size).toBe(0)
+    })
+  })
 })
 
 describe('ConfirmableNotificationSender 送信前提と未確認者表示の記憶（回帰）', () => {

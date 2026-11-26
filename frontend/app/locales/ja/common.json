@@ -641,7 +641,10 @@
       "conflict": "この下書きは別の画面で更新されました。自動保存を止めています。",
       "reload_latest": "最新を読み込む",
       "overwrite": "この内容で上書き保存",
-      "open": "この下書きを開く"
+      "open": "この下書きを開く",
+      "unsaved_header": "保存されていない変更",
+      "unsaved_confirm": "保存されていない変更があります。破棄して切り替えますか？",
+      "discard_and_switch": "破棄して切り替える"
     },
     "delivery_stopped": "配信停止",
     "templates": "テンプレート管理",

@@ -641,7 +641,10 @@
       "conflict": "This draft was updated on another screen. Auto-save is paused.",
       "reload_latest": "Load latest",
       "overwrite": "Overwrite with this version",
-      "open": "Open this draft"
+      "open": "Open this draft",
+      "unsaved_header": "Unsaved changes",
+      "unsaved_confirm": "You have changes that have not been saved. Discard them and switch?",
+      "discard_and_switch": "Discard and switch"
     },
     "delivery_stopped": "Delivery stopped",
     "templates": "Manage templates",

@@ -61,9 +61,22 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   const signature = computed(() => JSON.stringify(options.snapshot()))
   /** サーバーに保存済み（または空の新規）の内容。空文字は「保存済みと一致しない」の印 */
   let baseline = signature.value
+  /** 空のフォームの内容。これと同じなら失って困る入力は無い */
+  let blankSignature = baseline
   let timer: ReturnType<typeof setTimeout> | null = null
   let chain: Promise<void> = Promise.resolve()
   let generation = 0
+  /** 送信の開始から結果が出るまでは自動保存しない（送って消える下書きへ PUT/POST しない） */
+  let suspended = false
+  /** API を呼ぶ先のスコープ。送信先が変わったときは、前のスコープへ保存を済ませてから切り替える */
+  let scopeType = options.scopeType()
+  let scopeId = options.scopeId()
+
+  /** 保存できていない（失うと困る）入力があるか */
+  function hasUnsavedChanges(): boolean {
+    const sig = signature.value
+    return sig !== baseline && sig !== blankSignature
+  }
 
   function clearTimer() {
     if (timer !== null) {
@@ -88,7 +101,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   async function reloadList() {
     const gen = generation
     try {
-      const response = await api.listDrafts(options.scopeType(), options.scopeId())
+      const response = await api.listDrafts(scopeType, scopeId)
       if (gen === generation) drafts.value = response.data
     } catch (error) {
       handleApiError(error, 'confirmable draft list')
@@ -103,6 +116,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     version.value = 0
     conflict.value = false
     baseline = signature.value
+    blankSignature = baseline
   }
 
   /**
@@ -119,12 +133,11 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   }
 
   async function runSave(force: boolean) {
+    if (suspended) return
     if (conflict.value && !force) return
     const sig = signature.value
     if (!force && sig === baseline) return
     const payload = options.snapshot()
-    const scopeType = options.scopeType()
-    const scopeId = options.scopeId()
     const gen = generation
     const draftId = currentId.value
     try {
@@ -161,7 +174,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   }
 
   watch(signature, (sig) => {
-    if (conflict.value) return
+    if (conflict.value || suspended) return
     if (sig === baseline) {
       clearTimer()
       return
@@ -173,19 +186,42 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   async function flushPending() {
     clearTimer()
     await chain
-    if (!conflict.value && signature.value !== baseline) await enqueue(() => runSave(false))
+    if (!suspended && !conflict.value && signature.value !== baseline) await enqueue(() => runSave(false))
   }
 
-  async function newDraft() {
+  /**
+   * 切り替えの前に保存を済ませる。上限・5xx・競合などで保存できていない入力が残るときは、
+   * 黙って捨てずに確認を出し、承認されたときだけ proceed する（拒否なら何もしない）。
+   */
+  async function switchAfterSave(proceed: () => Promise<void> | void) {
     await flushPending()
-    resetToBlank()
+    if (!hasUnsavedChanges()) {
+      await proceed()
+      return
+    }
+    confirm.require({
+      header: t('confirmable.draft.unsaved_header'),
+      message: t('confirmable.draft.unsaved_confirm'),
+      icon: 'pi pi-exclamation-triangle',
+      rejectLabel: t('button.cancel'),
+      acceptLabel: t('confirmable.draft.discard_and_switch'),
+      acceptClass: 'p-button-danger',
+      accept: () => proceed(),
+    })
   }
 
-  async function openDraft(draftId: string) {
-    await flushPending()
+  function newDraft() {
+    return switchAfterSave(resetToBlank)
+  }
+
+  function openDraft(draftId: string) {
+    return switchAfterSave(() => loadDraft(draftId))
+  }
+
+  async function loadDraft(draftId: string) {
     const gen = generation
     try {
-      const response = await api.getDraft(options.scopeType(), options.scopeId(), draftId)
+      const response = await api.getDraft(scopeType, scopeId, draftId)
       if (gen !== generation) return
       options.apply(response.data)
       currentId.value = response.data.id ?? draftId
@@ -207,7 +243,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     if (wasCurrent) clearTimer()
     await chain
     try {
-      await api.deleteDraft(options.scopeType(), options.scopeId(), draftId)
+      await api.deleteDraft(scopeType, scopeId, draftId)
     } catch (error) {
       if (!(errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND)) {
         handleApiError(error, 'confirmable draft delete')
@@ -216,6 +252,12 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     }
     if (wasCurrent && currentId.value === draftId) resetToBlank()
     await reloadList()
+    // 上限で保存できずにいた入力は、空きができたら保存し直す
+    resumeIfUnsaved()
+  }
+
+  function resumeIfUnsaved() {
+    if (!suspended && !conflict.value && timer === null && signature.value !== baseline) schedule()
   }
 
   function requestDelete(draftId: string) {
@@ -236,7 +278,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     if (!draftId) return
     await chain
     try {
-      const response = await api.getDraft(options.scopeType(), options.scopeId(), draftId)
+      const response = await api.getDraft(scopeType, scopeId, draftId)
       options.apply(response.data)
       version.value = response.data.version ?? 0
       conflict.value = false
@@ -253,7 +295,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     if (!draftId) return
     await chain
     try {
-      const response = await api.getDraft(options.scopeType(), options.scopeId(), draftId)
+      const response = await api.getDraft(scopeType, scopeId, draftId)
       version.value = response.data.version ?? 0
     } catch (error) {
       if (errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND) await detachGone()
@@ -267,18 +309,21 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   async function settleForSend(): Promise<string | undefined> {
     clearTimer()
     await chain
+    suspended = true
     return currentId.value ?? undefined
   }
 
   /** 送信成功: BE が下書きを消しているので、新規状態に戻して一覧を取り直す */
   async function afterSent() {
+    suspended = false
     resetToBlank()
     await reloadList()
   }
 
   /** 送信失敗: 取り消していた自動保存の待ちを、未保存の変更があれば再開する */
   function resumeAfterFailedSend() {
-    if (!conflict.value && signature.value !== baseline) schedule()
+    suspended = false
+    resumeIfUnsaved()
   }
 
   function init() {
@@ -287,7 +332,12 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
 
   /** 送信先が変わったら、別スコープの下書きとの紐付けを外して一覧を取り直す */
   async function resetScope() {
+    // 前のスコープで保存待ちの内容は、前のスコープへ保存し終えてから切り替える
+    await flushPending()
     generation += 1
+    scopeType = options.scopeType()
+    scopeId = options.scopeId()
+    suspended = false
     resetToBlank()
     drafts.value = []
     await reloadList()
