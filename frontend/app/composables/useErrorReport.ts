@@ -21,6 +21,16 @@ export interface ErrorReportState {
 const ERROR_REPORT_COOLDOWN_MS = 60_000
 let _lastReportShownAt = 0
 
+/**
+ * 保護者同意待ちか。本人復元前（ppc=true のトークンだけがある）も含める。
+ * 同意待ちでは BE の同意ゲートが /api/v1/error-reports を 403 AUTH_070 で塞ぐため、
+ * 送信しても届かないのに「送信済み」と表示してしまう。報告の自動送信・追加コメント・静かな送信をすべて止める。
+ */
+function isErrorReportBlockedByParentalConsent(): boolean {
+  const authStore = useAuthStore()
+  return authStore.isPendingParentalConsent === true || isParentalConsentPendingToken(authStore.accessToken)
+}
+
 export const useErrorReport = () => {
   const state = useState<ErrorReportState>('errorReport', () => ({
     visible: false,
@@ -42,6 +52,11 @@ export const useErrorReport = () => {
     error: unknown,
     meta?: { context?: string; apiUrl?: string; statusCode?: number; requestId?: string },
   ): void => {
+    // 同意待ちは送信できないため、ダイアログも自動送信も出さない（コンソールにだけ残す）
+    if (isErrorReportBlockedByParentalConsent()) {
+      console.error('[ErrorReport] (skipped: parental consent pending)', error, meta)
+      return
+    }
     // 既に表示中、またはクールダウン中は無視
     if (state.value.visible) return
     if (Date.now() - _lastReportShownAt < ERROR_REPORT_COOLDOWN_MS) {
@@ -80,6 +95,8 @@ export const useErrorReport = () => {
 
   const _sendReport = async (userComment?: string): Promise<void> => {
     if (state.value.submitting) return
+    // 追加コメント送信も同様（送信済み表示にしない）
+    if (isErrorReportBlockedByParentalConsent()) return
 
     state.value.submitting = true
 
@@ -124,6 +141,7 @@ export const useErrorReport = () => {
    */
   const captureQuiet = (error: unknown, meta?: { context?: string; requestId?: string }): void => {
     if (import.meta.server) return
+    if (isErrorReportBlockedByParentalConsent()) return
     const err = error instanceof Error ? error : new Error(String(error))
 
     // ネットワーク障害はサーバーも落ちているため送信不要
