@@ -7,3 +7,8 @@
 # （backend/.claudecode.md の ArchUnit 番人テスト節 / ArchUnitFreezeStoreIntegrityTest 参照）。
 # このディレクトリへの変更は必ずオーナーレビューを経ること。
 backend/src/test/resources/archunit_store/ @kenta-0420
+
+# SYSTEM_ADMIN 短絡の基準線番人（戦役 Z-A PR1）。基準線ファイルの件数が増える変更は
+# 「新たな素通しの追加」または「検出パターンの拡大」であり、必ずオーナーレビューを経ること。
+backend/src/test/resources/sysadmin_bypass/ @kenta-0420
+frontend/tests/unit/guards/sysadmin-bypass-*.json @kenta-0420

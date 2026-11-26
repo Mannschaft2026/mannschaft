@@ -51,5 +51,4 @@ com/mannschaft/app/securityincident/controller/SystemAdminSecurityIncidentContro
 com/mannschaft/app/template/controller/SystemAdminModuleController.java	/api/v1/system-admin/** 配下の運営専用 Controller（SecurityConfig のパス規則と @PreAuthorize で SYSTEM_ADMIN 専用。テナント業務の共通 Gate/Guard は通らない）
 com/mannschaft/app/template/controller/SystemAdminTemplateController.java	/api/v1/system-admin/** 配下の運営専用 Controller（SecurityConfig のパス規則と @PreAuthorize で SYSTEM_ADMIN 専用。テナント業務の共通 Gate/Guard は通らない）
 com/mannschaft/app/tournament/controller/SystemPresetController.java	/api/v1/system-admin/** 配下の運営専用 Controller（SecurityConfig のパス規則と @PreAuthorize で SYSTEM_ADMIN 専用。テナント業務の共通 Gate/Guard は通らない）
-com/mannschaft/app/config/SecurityConfig.java	パス認可の正本。/api/v1/system-admin/** を SYSTEM_ADMIN 専用にする規則を定義する
 com/mannschaft/app/auth/service/RoleClaimResolver.java	JWT の roles クレーム解決の正本。SYSTEM_ADMIN ロールの付与はここだけ

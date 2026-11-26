@@ -7,10 +7,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,35 +36,47 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <h2>判定</h2>
  * <ul>
- *   <li>{@code src/main} の各 {@code .java} について、下記パターンの<b>ファイル別・パターン別件数</b>を数える
- *       （行番号に依存しないので、無関係な編集で壊れない）。</li>
- *   <li>基準線（{@code sysadmin_bypass/baseline.txt}）より増えた、または基準線に無いファイルに現れたら赤。</li>
+ *   <li>{@code src/main} の各 {@code .java} について、下記パターンの<b>ファイル別・パターン別・所属メソッド別件数</b>
+ *       を数える（行番号に依存しないので、無関係な編集で壊れない）。件数キーは
+ *       {@code パターン @ 所属メソッド名}（フィールド初期化・クラス直下は {@code -}）。
+ *       所属メソッドを含めるのは、同一パターン内の入れ替え（拒否型を 1 本消して許可型を別メソッドへ 1 本足す等）で
+ *       合計件数が変わらずに素通しが混入するのを検出するため。</li>
+ *   <li>基準線（{@code sysadmin_bypass/baseline.txt}）より増えた、または基準線に無いキーに現れたら赤。</li>
  *   <li>基準線より減ったのに基準線を下げていなければ赤（縮める一方。下げ忘れも赤）。</li>
  *   <li>allowlist（{@code sysadmin_bypass/allowlist.txt}）は<b>クラス単位・理由必須</b>の固定除外
  *       （/system-admin/** 専用 Controller など SYSTEM_ADMIN が正当なもの）。{@code /admin/**} の一括指定は禁止。
  *       allowlist のファイルは件数を数えない。実在しなくなった行も赤（縮める一方）。</li>
  * </ul>
  *
- * <h2>マスクの使い分け</h2>
+ * <h2>検出パターン</h2>
  * <ul>
- *   <li>{@link JavaSourceScanningUtils#maskCommentsAndLiterals}（コメントと文字列の中身を除去）:
- *       コード上の呼び出し・参照である {@code isSystemAdmin(} / {@code existsSystemAdminByUserId(} /
- *       {@code .systemAdmin()} / {@code ViewerRole.SYSTEM_ADMIN} / {@code forSystemAdmin(}。
- *       文字列やコメントに現れるだけの語を数えないため。</li>
- *   <li>{@link JavaSourceScanningUtils#maskCommentsOnly}（コメントだけ除去、文字列は残す）:
- *       リテラルの中に現れる {@code hasRole('SYSTEM_ADMIN')}（SpEL）/ {@code "ROLE_SYSTEM_ADMIN"} /
- *       {@code "SYSTEM_ADMIN"}（文字列比較）。リテラルの中身が検出対象そのものであるため、
- *       リテラルを潰すと全件見逃す。コメント内の言及は数えない。</li>
+ *   <li>コード上（コメント・文字列の中身を除去して数える）:
+ *     <ul>
+ *       <li>名前に {@code SystemAdmin} を含むメソッドの呼び出し・宣言を<b>メソッド名ごと</b>に
+ *           （{@code isSystemAdmin(} / {@code actorIsSystemAdmin(} / {@code isOrganizerAdminOrSystemAdmin(} /
+ *           {@code requireHeadmanOrSystemAdmin(} / {@code systemAdmin(userId)} / {@code forSystemAdmin(} 等の
+ *           許可型の包み関数・別表記と、{@code checkSystemAdmin(} / {@code requireSystemAdmin(} 等の拒否型の双方。
+ *           引数の有無は問わない）。メソッド参照 {@code ::isSystemAdmin} も同様。</li>
+ *       <li>{@code ViewerRole.SYSTEM_ADMIN} / {@code ViewerStatus.SYSTEM_ADMIN} / その他の
+ *           {@code 型.SYSTEM_ADMIN} / {@code case SYSTEM_ADMIN} 等の裸の識別子 /
+ *           {@code ROLE_SYSTEM_ADMIN} 定数の識別子参照。</li>
+ *     </ul></li>
+ *   <li>リテラル内（コメントだけ除去、文字列は残して数える。リテラルの中身が検出対象そのものであるため）:
+ *       {@code hasRole('SYSTEM_ADMIN')} / {@code hasAnyRole(..SYSTEM_ADMIN..)} /
+ *       {@code hasAuthority(..ROLE_SYSTEM_ADMIN..)} / {@code "ROLE_SYSTEM_ADMIN"} / {@code "SYSTEM_ADMIN"} /
+ *       SQL・SpEL 内の {@code 'SYSTEM_ADMIN'}。</li>
  * </ul>
  *
  * <h2>基準線の再生成（縮めたとき・意図した変更のとき）</h2>
  * <pre>cd backend &amp;&amp; SYSADMIN_BASELINE_REGENERATE=1 sh gradlew test --tests '*SysAdminBypassGuardTest*'</pre>
  * <p>{@code src/test/resources/sysadmin_bypass/baseline.txt} が現状の実測で上書きされる
- * （形式: {@code パス<TAB>パターン名<TAB>件数}、ソート済み）。<b>増える方向の再生成は PR レビューで拒否する</b>
- * （正当な追加は allowlist への理由付き追記のみ）。</p>
+ * （形式: {@code パス<TAB>パターン @ メソッド<TAB>件数}、ソート済み）。環境変数が {@code "1"} のときだけ発動する。
+ * <b>増える方向の再生成は PR レビューで拒否する</b>（正当な追加は allowlist への理由付き追記のみ）。
+ * 基準線ファイルは CODEOWNERS の対象で、<b>件数が増える変更は PR 差分で目立つ</b>よう意図的に 1 件 1 行にしている。
+ * 対象パターンを広げる変更に限り、増加が正当（既存の見逃しが可視化されるだけ）になる。</p>
  *
- * <p>注: DefaultAccessControlService / RoleService / AdminImpersonationFilter は共通の素通し点または
- * 拒否型を含むため allowlist に入れず基準線で固定する（クラス全体を除外すると新規混入が見えなくなる）。</p>
+ * <p>注: DefaultAccessControlService / RoleService / AdminImpersonationFilter / SecurityConfig は共通の素通し点または
+ * 拒否型・パス規則を含むため allowlist に入れず基準線で固定する（クラス全体を除外すると新規混入が見えなくなる）。</p>
  */
 class SysAdminBypassGuardTest {
 
@@ -68,47 +84,166 @@ class SysAdminBypassGuardTest {
     static final Path BASELINE = Paths.get("src", "test", "resources", "sysadmin_bypass", "baseline.txt");
     static final Path ALLOWLIST = Paths.get("src", "test", "resources", "sysadmin_bypass", "allowlist.txt");
 
-    /** コード上の参照（コメント・リテラル除去後に数える）。 */
+    /** コード上の参照（コメント・リテラル除去後に数える）。固定名のパターン。 */
     private static final Map<String, Pattern> CODE_PATTERNS = new LinkedHashMap<>();
     /** リテラル内の語（コメントだけ除去後に数える）。 */
     private static final Map<String, Pattern> LITERAL_PATTERNS = new LinkedHashMap<>();
+    /** 名前に SystemAdmin を含むメソッドの呼び出し・宣言（メソッド名ごとにキー化）。 */
+    private static final Pattern SYSTEM_ADMIN_METHOD = Pattern.compile("\\b(\\w*[Ss]ystemAdmin\\w*)\\s*\\(");
+    /** メソッド参照（{@code ::isSystemAdmin}）。 */
+    private static final Pattern SYSTEM_ADMIN_METHOD_REF = Pattern.compile("::\\s*(\\w*[Ss]ystemAdmin\\w*)\\b");
 
     static {
-        CODE_PATTERNS.put("isSystemAdmin(", Pattern.compile("isSystemAdmin\\s*\\("));
-        CODE_PATTERNS.put("existsSystemAdminByUserId(", Pattern.compile("existsSystemAdminByUserId\\s*\\("));
-        CODE_PATTERNS.put(".systemAdmin()", Pattern.compile("\\.systemAdmin\\s*\\(\\s*\\)"));
-        CODE_PATTERNS.put("ViewerRole.SYSTEM_ADMIN", Pattern.compile("ViewerRole\\s*\\.\\s*SYSTEM_ADMIN"));
-        CODE_PATTERNS.put("forSystemAdmin(", Pattern.compile("forSystemAdmin\\s*\\("));
-        LITERAL_PATTERNS.put("hasRole('SYSTEM_ADMIN')", Pattern.compile("hasRole\\('SYSTEM_ADMIN'\\)"));
+        CODE_PATTERNS.put("ViewerRole.SYSTEM_ADMIN", Pattern.compile("\\bViewerRole\\s*\\.\\s*SYSTEM_ADMIN\\b"));
+        CODE_PATTERNS.put("ViewerStatus.SYSTEM_ADMIN", Pattern.compile("\\bViewerStatus\\s*\\.\\s*SYSTEM_ADMIN\\b"));
+        CODE_PATTERNS.put("Type.SYSTEM_ADMIN",
+                Pattern.compile("\\b(?!ViewerRole\\b|ViewerStatus\\b)[A-Z]\\w*\\s*\\.\\s*SYSTEM_ADMIN\\b"));
+        CODE_PATTERNS.put("SYSTEM_ADMIN(bare)", Pattern.compile("(?<![\\w.])SYSTEM_ADMIN\\b"));
+        CODE_PATTERNS.put("ROLE_SYSTEM_ADMIN(ident)", Pattern.compile("\\bROLE_SYSTEM_ADMIN\\b"));
+        LITERAL_PATTERNS.put("hasRole('SYSTEM_ADMIN')", Pattern.compile("hasRole\\(\\s*'SYSTEM_ADMIN'\\s*\\)"));
+        LITERAL_PATTERNS.put("hasAnyRole(..SYSTEM_ADMIN..)", Pattern.compile("hasAnyRole\\([^)]*SYSTEM_ADMIN[^)]*\\)"));
+        LITERAL_PATTERNS.put("hasAuthority(..ROLE_SYSTEM_ADMIN..)",
+                Pattern.compile("hasAuthority\\([^)]*ROLE_SYSTEM_ADMIN[^)]*\\)"));
         LITERAL_PATTERNS.put("\"ROLE_SYSTEM_ADMIN\"", Pattern.compile("\"ROLE_SYSTEM_ADMIN\""));
         LITERAL_PATTERNS.put("\"SYSTEM_ADMIN\"", Pattern.compile("\"SYSTEM_ADMIN\""));
+        LITERAL_PATTERNS.put("'SYSTEM_ADMIN'(SQL/SpEL)", Pattern.compile("(?<!hasRole\\()'SYSTEM_ADMIN'"));
     }
 
-    /** 1 ソースのパターン別件数（0 件のパターンは含めない）。 */
-    static Map<String, Integer> countPatterns(String source) {
-        Map<String, Integer> result = new TreeMap<>();
-        String code = JavaSourceScanningUtils.maskCommentsAndLiterals(source);
-        for (Map.Entry<String, Pattern> e : CODE_PATTERNS.entrySet()) {
-            addCount(result, e.getKey(), e.getValue().matcher(code));
+    /** 1 件の検出（位置とパターン名）。 */
+    private record Hit(int pos, String pattern) { }
+
+    private static final Set<String> NOT_METHOD_KEYWORDS =
+            Set.of("if", "for", "while", "switch", "catch", "synchronized", "try", "else");
+    private static final Pattern THROWS_TAIL = Pattern.compile("\\s+throws\\s+[\\w.,\\s<>]+$");
+    private static final Pattern TYPE_DECL = Pattern.compile("\\b(?:class|interface|enum|record)\\s+\\w+");
+
+    /**
+     * 波括弧の直前の見出しから「ブロックの名前」を決める。メソッド → メソッド名、型宣言 → {@code -}
+     * （メンバ直下）、それ以外（if/for/lambda/配列初期化/static 初期化等）→ 空文字（外側を引き継ぐ）。
+     * {@code code} はコメント・文字列を潰してある前提（括弧の対応が文字列に乱されない）。
+     */
+    static String blockName(String code, int braceIdx) {
+        int j = braceIdx;
+        while (j > 0) {
+            char ch = code.charAt(j - 1);
+            if (ch == ';' || ch == '{' || ch == '}') {
+                break;
+            }
+            j--;
         }
-        String lit = JavaSourceScanningUtils.maskCommentsOnly(source);
-        for (Map.Entry<String, Pattern> e : LITERAL_PATTERNS.entrySet()) {
-            addCount(result, e.getKey(), e.getValue().matcher(lit));
+        String hdr = THROWS_TAIL.matcher(code.substring(j, braceIdx).strip()).replaceFirst("");
+        if (hdr.endsWith(")")) {
+            int depth = 0;
+            int k = hdr.length() - 1;
+            for (; k >= 0; k--) {
+                char c = hdr.charAt(k);
+                if (c == ')') {
+                    depth++;
+                } else if (c == '(') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+            }
+            if (k <= 0) {
+                return "";
+            }
+            String before = hdr.substring(0, k).stripTrailing();
+            int e = before.length();
+            int s = e;
+            while (s > 0 && Character.isJavaIdentifierPart(before.charAt(s - 1))) {
+                s--;
+            }
+            if (s == e) {
+                return "";
+            }
+            String ident = before.substring(s, e);
+            if (NOT_METHOD_KEYWORDS.contains(ident)) {
+                return "";
+            }
+            String prev = before.substring(0, s).stripTrailing();
+            if (prev.endsWith("record")) {
+                return "-";
+            }
+            if (prev.endsWith("new")) {
+                return "";
+            }
+            return ident;
+        }
+        return TYPE_DECL.matcher(hdr).find() ? "-" : "";
+    }
+
+    /** 昇順の位置ごとの所属メソッド名（フィールド・クラス直下は {@code -}）。 */
+    static String[] enclosingMethods(String code, int[] positions) {
+        String[] result = new String[positions.length];
+        Deque<String> stack = new ArrayDeque<>();
+        int pi = 0;
+        for (int i = 0; i < code.length() && pi < positions.length; i++) {
+            while (pi < positions.length && positions[pi] <= i) {
+                result[pi++] = effective(stack);
+            }
+            char c = code.charAt(i);
+            if (c == '{') {
+                stack.push(blockName(code, i));
+            } else if (c == '}' && !stack.isEmpty()) {
+                stack.pop();
+            }
+        }
+        while (pi < positions.length) {
+            result[pi++] = effective(stack);
         }
         return result;
     }
 
-    private static void addCount(Map<String, Integer> result, String key, Matcher m) {
-        int n = 0;
-        while (m.find()) {
-            n++;
+    private static String effective(Deque<String> stack) {
+        for (String name : stack) {
+            if (!name.isEmpty()) {
+                return name;
+            }
         }
-        if (n > 0) {
-            result.put(key, n);
-        }
+        return "-";
     }
 
-    /** パス → ソース から「パス\tパターン\t」→件数 の平坦マップ（allowlist 除外後）を作る。 */
+    /** 1 ソースの「パターン @ 所属メソッド」別件数（0 件は含めない）。 */
+    static Map<String, Integer> countPatterns(String source) {
+        String code = JavaSourceScanningUtils.maskCommentsAndLiterals(source);
+        String lit = JavaSourceScanningUtils.maskCommentsOnly(source);
+        List<Hit> hits = new ArrayList<>();
+        for (Map.Entry<String, Pattern> e : CODE_PATTERNS.entrySet()) {
+            Matcher m = e.getValue().matcher(code);
+            while (m.find()) {
+                hits.add(new Hit(m.start(), e.getKey()));
+            }
+        }
+        Matcher call = SYSTEM_ADMIN_METHOD.matcher(code);
+        while (call.find()) {
+            String name = call.group(1);
+            if (!Character.isUpperCase(name.charAt(0))) {
+                hits.add(new Hit(call.start(), name + "("));
+            }
+        }
+        Matcher ref = SYSTEM_ADMIN_METHOD_REF.matcher(code);
+        while (ref.find()) {
+            hits.add(new Hit(ref.start(), "::" + ref.group(1)));
+        }
+        for (Map.Entry<String, Pattern> e : LITERAL_PATTERNS.entrySet()) {
+            Matcher m = e.getValue().matcher(lit);
+            while (m.find()) {
+                hits.add(new Hit(m.start(), e.getKey()));
+            }
+        }
+        hits.sort(Comparator.comparingInt(Hit::pos));
+        int[] positions = hits.stream().mapToInt(Hit::pos).toArray();
+        String[] methods = enclosingMethods(code, positions);
+        Map<String, Integer> result = new TreeMap<>();
+        for (int i = 0; i < hits.size(); i++) {
+            result.merge(hits.get(i).pattern() + " @ " + methods[i], 1, Integer::sum);
+        }
+        return result;
+    }
+
+    /** パス → ソース から「パス\tパターン @ メソッド」→件数 の平坦マップ（allowlist 除外後）を作る。 */
     static Map<String, Integer> scan(Map<String, String> sources, Map<String, String> allowlist) {
         Map<String, Integer> flat = new TreeMap<>();
         for (Map.Entry<String, String> src : sources.entrySet()) {
@@ -186,7 +321,7 @@ class SysAdminBypassGuardTest {
     static Map<String, Integer> loadBaseline() throws IOException {
         Map<String, Integer> base = new TreeMap<>();
         for (String[] r : readTable(BASELINE)) {
-            assertEquals(3, r.length, "baseline は「パス<TAB>パターン<TAB>件数」: " + String.join("|", r));
+            assertEquals(3, r.length, "baseline は「パス<TAB>パターン @ メソッド<TAB>件数」: " + String.join("|", r));
             base.put(r[0] + "\t" + r[1], Integer.parseInt(r[2]));
         }
         return base;
@@ -199,11 +334,11 @@ class SysAdminBypassGuardTest {
         Map<String, String> allowlist = loadAllowlist();
         Map<String, Integer> actual = scan(sources, allowlist);
 
-        if (System.getenv("SYSADMIN_BASELINE_REGENERATE") != null) {
+        if ("1".equals(System.getenv("SYSADMIN_BASELINE_REGENERATE"))) {
             StringBuilder sb = new StringBuilder();
-            sb.append("# SYSTEM_ADMIN 短絡の基準線（SysAdminBypassGuardTest）。パス<TAB>パターン<TAB>件数。\n")
+            sb.append("# SYSTEM_ADMIN 短絡の基準線（SysAdminBypassGuardTest）。パス<TAB>パターン @ メソッド<TAB>件数。\n")
                     .append("# 再生成: SYSADMIN_BASELINE_REGENERATE=1 sh gradlew test --tests '*SysAdminBypassGuardTest*'\n")
-                    .append("# 増える方向の変更は禁止（縮める一方）。\n");
+                    .append("# 増える方向の変更は禁止（縮める一方）。CODEOWNERS 対象。\n");
             for (Map.Entry<String, Integer> e : actual.entrySet()) {
                 sb.append(e.getKey()).append('\t').append(e.getValue()).append('\n');
             }
@@ -248,7 +383,7 @@ class SysAdminBypassGuardTest {
         Map<String, String> base = Map.of("a/A.java",
                 "class A { boolean f(Snap s) { return s.isSystemAdmin(); } }");
         Map<String, Integer> baseline = scan(base, Map.of());
-        assertEquals(1, baseline.get("a/A.java\tisSystemAdmin("));
+        assertEquals(1, baseline.get("a/A.java\tisSystemAdmin( @ f"));
         assertTrue(diff(baseline, scan(base, Map.of())).isEmpty(), "基準線どおりなのに赤");
 
         // 既存ファイルへ直書きを 1 件追加 → 増加で赤
@@ -256,19 +391,33 @@ class SysAdminBypassGuardTest {
                 "class A { boolean f(Snap s) { return s.isSystemAdmin() || s.isSystemAdmin(); } }");
         assertEquals(1, diff(baseline, scan(added, Map.of())).size());
 
-        // 新規ファイル出現 → 赤（コード参照・リテラル・SpEL のそれぞれ）
+        // 新規ファイル出現 → 赤（コード参照・リテラル・SpEL・包み関数・別表記のそれぞれ）
         for (String body : List.of(
                 "boolean f(Q q) { return q.existsSystemAdminByUserId(1L); }",
                 "Object f() { return Snap.forSystemAdmin(); }",
                 "boolean f(Snap s) { return s.systemAdmin().x(); }",
+                "Object f(Long id) { return ViewerContext.systemAdmin(id); }",
                 "boolean f(V v) { return v == ViewerRole.SYSTEM_ADMIN; }",
+                "boolean f(V v) { return v == ViewerStatus.SYSTEM_ADMIN; }",
+                "boolean f(V v) { return v == RoleName.SYSTEM_ADMIN; }",
+                "boolean f(V v) { switch (v) { case SYSTEM_ADMIN: return true; default: return false; } }",
+                "static final String R = ROLE_SYSTEM_ADMIN;",
+                "boolean f(Long u) { return actorIsSystemAdmin(u); }",
+                "boolean f(Long u) { return isOrganizerAdminOrSystemAdmin(u, 1L); }",
+                "void f(Long u) { requireHeadmanOrSystemAdmin(u, 1L); }",
+                "void f(Long u) { checkSystemAdmin(u); }",
+                "boolean f(Stream<Long> s) { return s.anyMatch(this::isSystemAdmin); }",
                 "@PreAuthorize(\"hasRole('SYSTEM_ADMIN')\") void f() {}",
+                "@PreAuthorize(\"hasAnyRole('ADMIN','SYSTEM_ADMIN')\") void f() {}",
+                "@PreAuthorize(\"hasAuthority('ROLE_SYSTEM_ADMIN')\") void f() {}",
+                "static final String Q = \"WHERE r.name = 'SYSTEM_ADMIN'\";",
                 "boolean f(String r) { return \"ROLE_SYSTEM_ADMIN\".equals(r); }",
                 "boolean f(String r) { return \"SYSTEM_ADMIN\".equals(r); }")) {
             Map<String, String> withNew = new LinkedHashMap<>(base);
             withNew.put("b/B.java", "class B { " + body + " }");
             List<String> v = diff(baseline, scan(withNew, Map.of()));
-            assertEquals(1, v.size(), "新規混入を検出できていない（偽陰性）: " + body + " -> " + v);
+            // hasAnyRole(..) は hasAnyRole パターンと SQL/SpEL の 'SYSTEM_ADMIN' の 2 件になり得る（1 件以上で赤なら良い）
+            assertTrue(!v.isEmpty() && v.size() <= 2, "新規混入を検出できていない（偽陰性）: " + body + " -> " + v);
         }
 
         // 減少したのに基準線を下げていない → 赤
@@ -277,17 +426,61 @@ class SysAdminBypassGuardTest {
     }
 
     @Test
+    @DisplayName("自己検証: 同一パターン内の入れ替え（別メソッドへの移動・拒否型→許可型）は合計件数が同じでも赤")
+    void 自己検証_入れ替え() {
+        // 同一ファイル・同一パターンで、所属メソッドだけが f → g に変わる
+        Map<String, String> before = Map.of("a/A.java",
+                "class A { boolean f(S s) { return s.isSystemAdmin(); } boolean g(S s) { return false; } }");
+        Map<String, String> moved = Map.of("a/A.java",
+                "class A { boolean f(S s) { return false; } boolean g(S s) { return s.isSystemAdmin(); } }");
+        Map<String, Integer> baseline = scan(before, Map.of());
+        assertEquals(2, diff(baseline, scan(moved, Map.of())).size(), "メソッド間の移動を検出できていない");
+
+        // 拒否型を 1 本削除して許可型を 1 本追加（ファイル内の SystemAdmin 呼び出し総数は 1 のまま）
+        Map<String, String> deny = Map.of("a/B.java",
+                "class B { void f(Long u) { checkSystemAdmin(u); } }");
+        Map<String, String> allow = Map.of("a/B.java",
+                "class B { boolean f(Long u) { return isSystemAdmin(u); } }");
+        assertEquals(2, diff(scan(deny, Map.of()), scan(allow, Map.of())).size(), "拒否型→許可型の入れ替えを検出できていない");
+
+        // 同じメソッド内の無関係な編集（リネーム・行追加）では赤にならない（脆さの確認）
+        Map<String, String> edited = Map.of("a/A.java",
+                "class A {\n int x;\n boolean f(S sn) {\n  int y = 1;\n  return sn.isSystemAdmin();\n }\n boolean g(S s) { return false; }\n}");
+        assertTrue(diff(baseline, scan(edited, Map.of())).isEmpty(), "無関係な編集で赤になる（偽陽性）");
+    }
+
+    @Test
+    @DisplayName("自己検証: 所属メソッドの判定（ラムダ・if・throws・内部クラス・フィールド初期化）")
+    void 自己検証_所属メソッド() {
+        String src = "class C {\n"
+                + "  static final boolean X = isSystemAdmin(1L);\n"
+                + "  void a(Long u) throws java.io.IOException {\n"
+                + "    if (u != null) { run(() -> { isSystemAdmin(u); }); }\n"
+                + "  }\n"
+                + "  static class In { boolean b(Long u) { return isSystemAdmin(u); } int fld = isSystemAdmin(2L) ? 1 : 0; }\n"
+                + "}";
+        Map<String, Integer> c = countPatterns(src);
+        // 外側クラスと内部クラスのフィールド初期化はどちらも - に合算される
+        assertEquals(2, c.get("isSystemAdmin( @ -"), "フィールド初期化は - になるはずが " + c);
+        assertEquals(1, c.get("isSystemAdmin( @ a"), "throws 付きメソッド内のラムダ・if は外側のメソッド名 " + c);
+        assertEquals(1, c.get("isSystemAdmin( @ b"), "内部クラスのメソッド " + c);
+    }
+
+    @Test
     @DisplayName("自己検証: コメントや文字列に現れるだけのコード系パターンは数えず、コメント内リテラル語も数えない")
     void 自己検証_マスク() {
         String src = "class C {\n"
                 + "  // s.isSystemAdmin() hasRole('SYSTEM_ADMIN') \"SYSTEM_ADMIN\"\n"
-                + "  /* ViewerRole.SYSTEM_ADMIN forSystemAdmin( */\n"
+                + "  /* ViewerRole.SYSTEM_ADMIN forSystemAdmin( ViewerStatus.SYSTEM_ADMIN */\n"
                 + "  String msg = \"isSystemAdmin( を呼ばない\";\n"
                 + "}";
         assertTrue(countPatterns(src).isEmpty(), "マスクが効いていない（偽陽性）: " + countPatterns(src));
+        // 生成されるクラス名・コンストラクタ（大文字始まり）や監査イベント定数は数えない
+        assertTrue(countPatterns("class D { Object f() { return new SystemAdminDashboardResponse(); }"
+                + " AuditEventType t = AuditEventType.SYSTEM_ADMIN_EMAIL_OUTBOX_VIEWED; }").isEmpty());
         // テキストブロック内の SpEL はリテラルとして数える
         String tb = "class D { String x = \"\"\"\n hasRole('SYSTEM_ADMIN')\n \"\"\"; }";
-        assertEquals(1, countPatterns(tb).get("hasRole('SYSTEM_ADMIN')"));
+        assertEquals(1, countPatterns(tb).get("hasRole('SYSTEM_ADMIN') @ -"));
     }
 
     @Test
