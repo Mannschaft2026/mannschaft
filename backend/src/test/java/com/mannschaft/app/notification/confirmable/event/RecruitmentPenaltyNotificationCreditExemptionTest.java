@@ -14,6 +14,7 @@ import com.mannschaft.app.notification.confirmable.service.ConfirmableNotificati
 import com.mannschaft.app.notification.confirmable.service.ConfirmableNotificationQueryService;
 import com.mannschaft.app.notification.confirmable.service.ConfirmableNotificationService;
 import com.mannschaft.app.notification.confirmable.service.ConfirmableNotificationSettingsService;
+import com.mannschaft.app.notification.confirmable.service.ConfirmableRecipientBulkWriter;
 import com.mannschaft.app.notification.confirmable.service.ConfirmableRecipientGroupService;
 import com.mannschaft.app.notification.confirmable.service.ConfirmableRecipientPreviewService;
 import com.mannschaft.app.notification.confirmable.service.ConfirmableTargetAuthorizationValidator;
@@ -21,6 +22,7 @@ import com.mannschaft.app.notification.confirmable.service.ConfirmableTargetSele
 import com.mannschaft.app.notification.credit.error.NotificationCreditErrorCode;
 import com.mannschaft.app.notification.credit.service.NotificationCreditService;
 import com.mannschaft.app.notification.fanout.NotificationFanoutJobService;
+import com.mannschaft.app.notification.service.NotificationDispatchService;
 import com.mannschaft.app.notification.service.NotificationHelper;
 import com.mannschaft.app.recruitment.RecruitmentScopeType;
 import com.mannschaft.app.recruitment.event.RecruitmentPenaltyAppliedNotificationEvent;
@@ -44,7 +46,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -89,6 +90,8 @@ class RecruitmentPenaltyNotificationCreditExemptionTest {
     @Mock ConfirmableRecipientGroupService recipientGroupService;
     @Mock ConfirmableRecipientPreviewService recipientPreviewService;
     @Mock NotificationFanoutJobService fanoutJobService;
+    @Mock ConfirmableRecipientBulkWriter bulkWriter;
+    @Mock NotificationDispatchService dispatchService;
 
     private RecruitmentPenaltyAppliedNotificationListener listener;
 
@@ -98,14 +101,14 @@ class RecruitmentPenaltyNotificationCreditExemptionTest {
                 notificationRepository, recipientRepository, settingsService, userRepository,
                 notificationHelper, eventPublisher, notificationCreditService, confirmService, queryService,
                 targetRepository, targetAuthorizationValidator, targetSelectionValidator,
-                recipientGroupService, recipientPreviewService, fanoutJobService, Clock.systemDefaultZone());
+                recipientGroupService, recipientPreviewService, fanoutJobService, Clock.systemDefaultZone(),
+                bulkWriter, dispatchService);
         listener = new RecruitmentPenaltyAppliedNotificationListener(service, notificationRepository);
 
         given(userRepository.findById(any())).willReturn(Optional.empty());
         given(userRepository.getReferenceById(any())).willReturn(mock(UserEntity.class));
         given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
                 .willAnswer(inv -> inv.getArgument(0));
-        given(recipientRepository.saveAll(any())).willAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
@@ -126,16 +129,15 @@ class RecruitmentPenaltyNotificationCreditExemptionTest {
         // consume は0回（現状は consume(33, 1, CONFIRMABLE) が呼ばれ例外 → 以降が全部消えるため red）
         verify(notificationCreditService, never()).consume(any(), anyInt(), any());
 
-        // 受信者行1件
+        // 受信者行1件（共通部品の多値 INSERT に本人1人だけが渡る）
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ConfirmableNotificationRecipientEntity>> recipients =
-                ArgumentCaptor.forClass(List.class);
-        verify(recipientRepository).saveAll(recipients.capture());
-        assertThat(recipients.getValue()).as("AC-1: 受信者行は本人1件").hasSize(1);
+        ArgumentCaptor<List<Long>> recipients = ArgumentCaptor.forClass(List.class);
+        verify(bulkWriter).insertRecipients(any(), recipients.capture(), anyInt(), anyInt());
+        assertThat(recipients.getValue()).as("AC-1: 受信者行は本人1件").containsExactly(RECIPIENT_USER_ID);
 
-        // notifyAll("RECRUITMENT_PENALTY_APPLIED") 1回
-        verify(notificationHelper, times(1)).notifyAll(anyList(), eq("RECRUITMENT_PENALTY_APPLIED"),
-                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        // アプリ内通知（RECRUITMENT_PENALTY_APPLIED）が本人1件
+        verify(bulkWriter, times(1)).insertAppNotifications(any(), eq(List.of(RECIPIENT_USER_ID)),
+                eq("RECRUITMENT_PENALTY_APPLIED"));
 
         // ConfirmableNotificationCreatedEvent 1回
         ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
@@ -157,7 +159,7 @@ class RecruitmentPenaltyNotificationCreditExemptionTest {
                 PENALTY_ID, RECIPIENT_USER_ID, RecruitmentScopeType.TEAM, ORG_ID, EXPIRES_AT));
 
         verify(notificationCreditService, never()).consume(any(), anyInt(), any());
-        verify(notificationHelper, times(1)).notifyAll(anyList(), eq("RECRUITMENT_PENALTY_APPLIED"),
-                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(bulkWriter, times(1)).insertAppNotifications(any(), eq(List.of(RECIPIENT_USER_ID)),
+                eq("RECRUITMENT_PENALTY_APPLIED"));
     }
 }

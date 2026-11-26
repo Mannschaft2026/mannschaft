@@ -5,7 +5,6 @@ import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.notification.NotificationPriority;
-import com.mannschaft.app.notification.NotificationScopeType;
 import com.mannschaft.app.notification.confirmable.dto.ConfirmableNotificationCreateRequest;
 import com.mannschaft.app.notification.confirmable.dto.ConfirmableNotificationSendAcceptedResponse;
 import com.mannschaft.app.notification.confirmable.dto.ConfirmableRecipientPreviewRequest;
@@ -26,6 +25,8 @@ import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotific
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationTargetRepository;
 import com.mannschaft.app.notification.credit.service.NotificationCreditService;
 import com.mannschaft.app.notification.fanout.NotificationFanoutJobService;
+import com.mannschaft.app.notification.entity.NotificationEntity;
+import com.mannschaft.app.notification.service.NotificationDispatchService;
 import com.mannschaft.app.notification.service.NotificationHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -41,8 +44,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * F04.9 確認通知コアサービス（ファサード）。
@@ -76,9 +77,6 @@ public class ConfirmableNotificationService {
 
     /** リマインド分数のシステムデフォルト値（2回目） */
     private static final int DEFAULT_SECOND_REMINDER_MINUTES = 120;
-
-    /** 受信者リストの最大件数 */
-    private static final int MAX_RECIPIENT_COUNT = 500;
 
     private final ConfirmableNotificationRepository notificationRepository;
     private final ConfirmableNotificationRecipientRepository recipientRepository;
@@ -117,6 +115,11 @@ public class ConfirmableNotificationService {
      */
     @Qualifier("wallClock")
     private final Clock clock;
+
+    /** CMP-261002-1559: 同期 send / 非同期 fan-out 共通の「500人ずつ多値 INSERT」部品。 */
+    private final ConfirmableRecipientBulkWriter bulkWriter;
+    /** CMP-261002-1559: 一括 INSERT した通知のコミット後 WebSocket / Push 一括配信。 */
+    private final NotificationDispatchService dispatchService;
 
     /** {@link com.mannschaft.app.notification.confirmable.service.ConfirmableFanoutChunkSink#NOTIFICATION_TYPE}
      * と一致させる文字列（クラス参照はワーカー隊の担当パッケージに置かれるため、循環依存を避けここでは
@@ -300,7 +303,8 @@ public class ConfirmableNotificationService {
      * 確認通知を送信する。
      *
      * <p>受信者ごとに確認トークン（UUID）を付与し、リマインド分数を3段フォールバックで解決してから
-     * {@code confirmable_notification_recipients} に batch INSERT する。
+     * {@code confirmable_notification_recipients} へ 500 人ずつの多値 INSERT で書き込む
+     * （{@link ConfirmableRecipientBulkWriter}。受信者数に上限は無く、SQL 文数は人数でなくチャンク数に比例する。CMP-261002-1559）。
      * 最後に {@link ConfirmableNotificationCreatedEvent} を発行してF04.3通知基盤に引き渡す。</p>
      *
      * <p><b>F04.9 Phase D（未確認者一覧の可視化）</b>:
@@ -328,7 +332,7 @@ public class ConfirmableNotificationService {
      * @param templateId         使用テンプレートID（任意）
      * @param unconfirmedVisibility 未確認者リスト公開範囲（任意）。NULL時はスコープ設定の default を使用
      * @param createdByUserId    作成者ユーザーID
-     * @param recipientUserIds   受信者ユーザーIDリスト（最大500件）
+     * @param recipientUserIds   受信者ユーザーIDリスト（上限なし。500人ずつ多値 INSERT する）
      * @return 作成された確認通知エンティティ
      */
     /**
@@ -405,7 +409,6 @@ public class ConfirmableNotificationService {
                 createdByUserId, recipientUserIds);
     }
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
     @Transactional
     public ConfirmableNotificationEntity send(
             ScopeType scopeType,
@@ -424,17 +427,13 @@ public class ConfirmableNotificationService {
             Long createdByUserId,
             List<Long> recipientUserIds) {
 
-        // 受信者数の上限チェック
+        // CMP-261002-1559: 受信者数の上限は設けない（500人ずつ多値 INSERT する）。空だけ拒否する。
         if (recipientUserIds == null || recipientUserIds.isEmpty()) {
             throw new BusinessException(ConfirmableNotificationErrorCode.SEND_FAILED);
         }
         // AC-28: 同じIDを2度渡しても uq_cnr_notification_user 違反で500にならないよう、
         // 保存・課金・通知のいずれも一意化した後のリストで行う（挿入順を保つため LinkedHashSet）。
         List<Long> uniqueRecipientUserIds = new ArrayList<>(new LinkedHashSet<>(recipientUserIds));
-        if (uniqueRecipientUserIds.size() > MAX_RECIPIENT_COUNT) {
-            log.warn("受信者数が上限を超えています: count={}, max={}", uniqueRecipientUserIds.size(), MAX_RECIPIENT_COUNT);
-            throw new BusinessException(ConfirmableNotificationErrorCode.SEND_FAILED);
-        }
 
         // スコープ設定を取得（存在しない場合はデフォルト値で作成）
         ConfirmableNotificationSettingsEntity settings =
@@ -502,22 +501,22 @@ public class ConfirmableNotificationService {
         ConfirmableNotificationEntity notification = builder.build();
         ConfirmableNotificationEntity savedNotification = notificationRepository.save(notification);
 
-        // 受信者エンティティをバッチ作成（saveAll = batch INSERT）
-        List<ConfirmableNotificationRecipientEntity> recipients = uniqueRecipientUserIds.stream()
-                .map(userId -> {
-                    UserEntity user = userRepository.getReferenceById(userId);
-                    return ConfirmableNotificationRecipientEntity.builder()
-                            .confirmableNotification(savedNotification)
-                            .user(user)
-                            // 各受信者に一意の確認トークンを付与
-                            .confirmToken(UUID.randomUUID().toString())
-                            .resolvedFirstReminderMinutes(resolvedFirstReminder)
-                            .resolvedSecondReminderMinutes(resolvedSecondReminder)
-                            .build();
-                })
-                .collect(Collectors.toList());
-
-        recipientRepository.saveAll(recipients);
+        // CMP-261002-1559: 受信者行・アプリ内通知は 500 人ずつ多値 INSERT する（共通部品）。
+        // 受信者・notifications の主キーは IDENTITY のため saveAll は 1 人 1 INSERT になり、受信者数に
+        // 比例した SQL が発行されてしまう。発行文数をチャンク数に比例させる。
+        // 親は今作ったばかりで受信者行は 0 件なので「既存受信者の除外」は不要（再発火は uq_cn_once_per_source が
+        // 親の INSERT で拒否する）。全チャンクは呼び出し元と同一の 1 トランザクションで、途中失敗は全体ロールバック
+        // （部分コミットすると親が残り uq_cn_once_per_source で再送不能になるため）。
+        String appNotificationType = "RECRUITMENT_PENALTY".equals(sourceType)
+                ? "RECRUITMENT_PENALTY_APPLIED" : "CONFIRMABLE_NOTIFICATION";
+        List<NotificationEntity> createdAppNotifications = new ArrayList<>(uniqueRecipientUserIds.size());
+        for (int from = 0; from < uniqueRecipientUserIds.size(); from += ConfirmableRecipientBulkWriter.CHUNK_SIZE) {
+            int to = Math.min(from + ConfirmableRecipientBulkWriter.CHUNK_SIZE, uniqueRecipientUserIds.size());
+            List<Long> chunk = uniqueRecipientUserIds.subList(from, to);
+            bulkWriter.insertRecipients(savedNotification.getId(), chunk, resolvedFirstReminder, resolvedSecondReminder);
+            createdAppNotifications.addAll(
+                    bulkWriter.insertAppNotifications(savedNotification, chunk, appNotificationType));
+        }
 
         log.info("確認通知送信: notificationId={}, scopeType={}, scopeId={}, recipientCount={}",
                 savedNotification.getId(), scopeType, scopeId, uniqueRecipientUserIds.size());
@@ -526,22 +525,9 @@ public class ConfirmableNotificationService {
         // ペナルティ・最終認証・委員会配信・支払督促等）専用の経路であり、通知クレジットを消費しない
         // （CMP-260930-1932）。手動送信の課金は sendAsync → ConfirmableFanoutChunkSink で行う。
 
-        // F04.3 通知基盤へのアプリ内通知（送信者には通知しない）
-        NotificationPriority notifPriority = toNotificationPriority(savedNotification.getPriority());
-        NotificationScopeType notifScopeType = toNotificationScopeType(scopeType);
-        notificationHelper.notifyAll(
-                uniqueRecipientUserIds,
-                "RECRUITMENT_PENALTY".equals(sourceType)
-                        ? "RECRUITMENT_PENALTY_APPLIED" : "CONFIRMABLE_NOTIFICATION",
-                notifPriority,
-                title,
-                body != null ? body : "",
-                "CONFIRMABLE_NOTIFICATION",
-                savedNotification.getId(),
-                notifScopeType,
-                scopeId,
-                actionUrl,
-                createdByUserId);
+        // F04.3 通知基盤: WebSocket / Push の配信はコミット後に採番 id 付きで一括投入する
+        // （1 件ずつの dispatch は受信者数に比例した SQL を発行するため使わない）。
+        dispatchAfterCommit(createdAppNotifications);
 
         // ConfirmableNotificationCreatedEvent を発行
         eventPublisher.publishEvent(new ConfirmableNotificationCreatedEvent(
@@ -683,6 +669,37 @@ public class ConfirmableNotificationService {
     // =========================================================================
 
     /**
+     * 作成済みのアプリ内通知を、コミット成立後に {@link NotificationDispatchService#dispatchBatch} で
+     * 500 件ずつ一括配信する。ロールバック時は配信しない（DB に無い通知だけが外部へ届くのを防ぐ）。
+     * 配信の投入失敗は DB 通知を残したまま ERROR を記録し、コミット済みの業務を失敗させない。
+     */
+    private void dispatchAfterCommit(List<NotificationEntity> notifications) {
+        if (notifications.isEmpty()) {
+            return;
+        }
+        Runnable dispatch = () -> {
+            for (int from = 0; from < notifications.size(); from += ConfirmableRecipientBulkWriter.CHUNK_SIZE) {
+                int to = Math.min(from + ConfirmableRecipientBulkWriter.CHUNK_SIZE, notifications.size());
+                try {
+                    dispatchService.dispatchBatch(notifications.subList(from, to));
+                } catch (RuntimeException e) {
+                    log.error("確認通知のリアルタイム配信投入に失敗（DB通知は作成済み）: from={}, to={}", from, to, e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatch.run();
+                }
+            });
+        } else {
+            dispatch.run();
+        }
+    }
+
+    /**
      * 確認通知の優先度を F04.3 通知基盤の優先度に変換する。
      */
     private NotificationPriority toNotificationPriority(ConfirmableNotificationPriority priority) {
@@ -690,18 +707,6 @@ public class ConfirmableNotificationService {
             case URGENT -> NotificationPriority.URGENT;
             case HIGH -> NotificationPriority.HIGH;
             case NORMAL -> NotificationPriority.NORMAL;
-        };
-    }
-
-    /**
-     * ScopeType を NotificationScopeType に変換する。
-     */
-    private NotificationScopeType toNotificationScopeType(ScopeType scopeType) {
-        return switch (scopeType) {
-            case TEAM -> NotificationScopeType.TEAM;
-            case ORGANIZATION -> NotificationScopeType.ORGANIZATION;
-            case PLATFORM -> NotificationScopeType.SYSTEM;
-            case COMMITTEE -> NotificationScopeType.COMMITTEE;
         };
     }
 }

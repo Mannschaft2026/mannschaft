@@ -20,6 +20,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +46,9 @@ import java.util.Map;
 public class ConfirmableNotificationEmailEventListener {
 
     private static final String TEMPLATE_NAME = "email/confirmable-notification";
+
+    /** outbox への多値 INSERT 1 文あたりの件数（1 文が巨大にならないよう刻む）。 */
+    private static final int OUTBOX_CHUNK_SIZE = 500;
 
     private final EmailOutboxService emailOutboxService;
     private final MessageSource messageSource;
@@ -80,10 +84,18 @@ public class ConfirmableNotificationEmailEventListener {
             confirmTokenByUserId.put(userId, confirmToken);
         }
 
-        // ユーザー情報を一括取得
-        List<UserEntity> users = userRepository.findByIdIn(event.getRecipientUserIds());
+        // ユーザー情報を取得（IN 句のプレースホルダ上限に備え 500 件ずつ。SQL 数は受信者数/500 の定数オーダー）
+        List<Long> recipientIds = event.getRecipientUserIds();
+        List<UserEntity> users = new ArrayList<>(recipientIds.size());
+        for (int from = 0; from < recipientIds.size(); from += OUTBOX_CHUNK_SIZE) {
+            users.addAll(userRepository.findByIdIn(
+                    recipientIds.subList(from, Math.min(from + OUTBOX_CHUNK_SIZE, recipientIds.size()))));
+        }
 
-        int sentCount = 0;
+        // CMP-261002-1559: 1通ずつ enqueue すると受信者数に比例した INSERT になるため、リクエストを
+        // 溜めて 500 件ずつ enqueueAll（多値 INSERT 1 文）で outbox へ登録する。
+        List<EmailOutboxRequest> requests = new ArrayList<>(users.size());
+        int invalidAddressCount = 0;
         for (UserEntity user : users) {
             String confirmToken = confirmTokenByUserId.get(user.getId());
             if (confirmToken == null) {
@@ -98,12 +110,20 @@ public class ConfirmableNotificationEmailEventListener {
                 continue;
             }
 
+            // 形式不正の 1 件で enqueueAll が全件拒否され同チャンクの宛先が消えないよう、ここで 1 件ずつ除外する
+            if (!EmailOutboxRequest.isValidToAddress(email)) {
+                invalidAddressCount++;
+                log.warn("メールアドレス形式不正のためスキップ: userId={}, notificationId={}",
+                        user.getId(), event.getConfirmableNotificationId());
+                continue;
+            }
+
             try {
                 Locale locale = resolveLocale(user);
                 String confirmUrl = baseUrl + "/notifications/confirm/" + confirmToken;
                 String subject = getMessage("email.confirmableNotification.subject", locale);
                 String htmlBody = renderEmailTemplate(confirmUrl, subject, locale);
-                emailOutboxService.enqueue(new EmailOutboxRequest(
+                requests.add(new EmailOutboxRequest(
                         "NOTIFICATION_CONFIRM",
                         locale.toLanguageTag(),
                         email,
@@ -114,10 +134,26 @@ public class ConfirmableNotificationEmailEventListener {
                         user.getId(),
                         null
                 ));
-                sentCount++;
-                log.debug("確認通知メール送信成功: userId={}", user.getId());
             } catch (Exception e) {
-                log.error("確認通知メール送信失敗: userId={}, email={}", user.getId(), email, e);
+                log.error("確認通知メール組み立て失敗: userId={}, email={}", user.getId(), email, e);
+            }
+        }
+
+        if (invalidAddressCount > 0) {
+            log.warn("形式不正アドレスを除外して送信: notificationId={}, excluded={}",
+                    event.getConfirmableNotificationId(), invalidAddressCount);
+        }
+
+        int sentCount = 0;
+        for (int from = 0; from < requests.size(); from += OUTBOX_CHUNK_SIZE) {
+            int to = Math.min(from + OUTBOX_CHUNK_SIZE, requests.size());
+            List<EmailOutboxRequest> chunk = requests.subList(from, to);
+            try {
+                emailOutboxService.enqueueAll(chunk);
+                sentCount += chunk.size();
+            } catch (Exception e) {
+                log.error("確認通知メールの outbox 一括登録失敗: notificationId={}, from={}, to={}",
+                        event.getConfirmableNotificationId(), from, to, e);
             }
         }
 

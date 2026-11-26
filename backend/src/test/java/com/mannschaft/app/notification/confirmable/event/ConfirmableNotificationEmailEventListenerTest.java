@@ -89,6 +89,16 @@ class ConfirmableNotificationEmailEventListenerTest {
     // テストケース
     // -------------------------------------------------------------------------
 
+    /** enqueueAll に渡されたリクエストを、呼び出し順に連結して返す（呼び出し回数も検証する）。 */
+    private List<EmailOutboxRequest> capturedRequests(int expectedCalls) {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<EmailOutboxRequest>> captor = ArgumentCaptor.forClass(List.class);
+        verify(emailOutboxService, times(expectedCalls)).enqueueAll(captor.capture());
+        List<EmailOutboxRequest> all = new ArrayList<>();
+        captor.getAllValues().forEach(all::addAll);
+        return all;
+    }
+
     @Nested
     @DisplayName("handleConfirmableNotificationCreated")
     class HandleConfirmableNotificationCreated {
@@ -127,14 +137,14 @@ class ConfirmableNotificationEmailEventListenerTest {
             listener.handleConfirmableNotificationCreated(event);
 
             // Assert: 2名分のenqueueが呼ばれ、templateKind=NOTIFICATION_CONFIRMであること
-            ArgumentCaptor<EmailOutboxRequest> requestCaptor = ArgumentCaptor.forClass(EmailOutboxRequest.class);
-            verify(emailOutboxService, times(2)).enqueue(requestCaptor.capture());
-            assertThat(requestCaptor.getAllValues())
+            List<EmailOutboxRequest> requests = capturedRequests(1);
+            assertThat(requests)
                     .extracting(EmailOutboxRequest::toAddress)
                     .containsExactlyInAnyOrder("user1@example.com", "user2@example.com");
-            assertThat(requestCaptor.getAllValues())
+            assertThat(requests)
                     .extracting(EmailOutboxRequest::templateKind)
                     .containsOnly("NOTIFICATION_CONFIRM");
+            verify(emailOutboxService, never()).enqueue(any());
         }
 
         @Test
@@ -164,10 +174,10 @@ class ConfirmableNotificationEmailEventListenerTest {
             listener.handleConfirmableNotificationCreated(event);
 
             // Assert: enqueueが正しい宛先・templateKindで呼ばれ、confirmUrlがThymeleafコンテキストに設定されること
-            ArgumentCaptor<EmailOutboxRequest> requestCaptor = ArgumentCaptor.forClass(EmailOutboxRequest.class);
-            verify(emailOutboxService).enqueue(requestCaptor.capture());
-            assertThat(requestCaptor.getValue().toAddress()).isEqualTo("member@example.com");
-            assertThat(requestCaptor.getValue().templateKind()).isEqualTo("NOTIFICATION_CONFIRM");
+            List<EmailOutboxRequest> requests = capturedRequests(1);
+            assertThat(requests).hasSize(1);
+            assertThat(requests.get(0).toAddress()).isEqualTo("member@example.com");
+            assertThat(requests.get(0).templateKind()).isEqualTo("NOTIFICATION_CONFIRM");
 
             ArgumentCaptor<IContext> contextCaptor = ArgumentCaptor.forClass(IContext.class);
             verify(templateEngine).process(anyString(), contextCaptor.capture());
@@ -202,6 +212,7 @@ class ConfirmableNotificationEmailEventListenerTest {
 
             // Assert: enqueueが呼ばれないこと
             verify(emailOutboxService, never()).enqueue(any());
+            verify(emailOutboxService, never()).enqueueAll(any());
         }
 
         @Test
@@ -227,6 +238,7 @@ class ConfirmableNotificationEmailEventListenerTest {
 
             // Assert: enqueueが呼ばれないこと
             verify(emailOutboxService, never()).enqueue(any());
+            verify(emailOutboxService, never()).enqueueAll(any());
         }
 
         @Test
@@ -261,11 +273,74 @@ class ConfirmableNotificationEmailEventListenerTest {
             listener.handleConfirmableNotificationCreated(event);
 
             // Assert: MessageSource 経由で取得した件名がpayloadVarsに含まれ、enqueueが呼ばれること
-            ArgumentCaptor<EmailOutboxRequest> requestCaptor = ArgumentCaptor.forClass(EmailOutboxRequest.class);
-            verify(emailOutboxService).enqueue(requestCaptor.capture());
-            assertThat(requestCaptor.getValue().toAddress()).isEqualTo("user@example.com");
-            assertThat(requestCaptor.getValue().templateKind()).isEqualTo("NOTIFICATION_CONFIRM");
-            assertThat(requestCaptor.getValue().payloadVars()).containsEntry("subject", jaSubject);
+            List<EmailOutboxRequest> requests = capturedRequests(1);
+            assertThat(requests).hasSize(1);
+            assertThat(requests.get(0).toAddress()).isEqualTo("user@example.com");
+            assertThat(requests.get(0).templateKind()).isEqualTo("NOTIFICATION_CONFIRM");
+            assertThat(requests.get(0).payloadVars()).containsEntry("subject", jaSubject);
+        }
+
+        @Test
+        @DisplayName("CMP-261002-1559: 受信者501人でも outbox への登録は500人+1人の2回の一括登録で行い、1通ずつの enqueue は呼ばない")
+        void enqueueAllInChunksOf500() {
+            // Arrange
+            Long notificationId = 6L;
+            List<Long> userIds = new ArrayList<>();
+            List<UserEntity> users = new ArrayList<>();
+            List<Object[]> tokenRows = new ArrayList<>();
+            for (long i = 1; i <= 501; i++) {
+                userIds.add(i);
+                users.add(buildUser(i, "bulk" + i + "@example.com", "ja"));
+                tokenRows.add(new Object[]{i, "token-" + i});
+            }
+            ConfirmableNotificationCreatedEvent event = new ConfirmableNotificationCreatedEvent(
+                    notificationId, ScopeType.TEAM, 1L, userIds);
+            when(recipientRepository.findUserIdAndConfirmTokenByNotificationId(notificationId))
+                    .thenReturn(tokenRows);
+            // ユーザー取得も 500 件ずつ（IN 句のプレースホルダ上限対策）
+            when(userRepository.findByIdIn(userIds.subList(0, 500))).thenReturn(users.subList(0, 500));
+            when(userRepository.findByIdIn(userIds.subList(500, 501))).thenReturn(users.subList(500, 501));
+            when(templateEngine.process(anyString(), any(IContext.class))).thenReturn("<html>x</html>");
+
+            // Act
+            listener.handleConfirmableNotificationCreated(event);
+
+            // Assert
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<EmailOutboxRequest>> captor = ArgumentCaptor.forClass(List.class);
+            verify(emailOutboxService, times(2)).enqueueAll(captor.capture());
+            assertThat(captor.getAllValues()).extracting(List::size).containsExactly(500, 1);
+            verify(emailOutboxService, never()).enqueue(any());
+        }
+
+        @Test
+        @DisplayName("CMP-261002-1559: 形式不正アドレスが1件混ざっても、その1件だけ除外され残り全員分が enqueueAll される")
+        void invalidAddressIsExcludedAndOthersAreEnqueued() {
+            // Arrange
+            Long notificationId = 7L;
+            List<Long> userIds = List.of(1L, 2L, 3L);
+            List<UserEntity> users = List.of(
+                    buildUser(1L, "ok1@example.com", "ja"),
+                    buildUser(2L, "not-an-email", "ja"),
+                    buildUser(3L, "ok3@example.com", "ja"));
+            List<Object[]> tokenRows = new ArrayList<>();
+            for (long i = 1; i <= 3; i++) {
+                tokenRows.add(new Object[]{i, "token-" + i});
+            }
+            ConfirmableNotificationCreatedEvent event = new ConfirmableNotificationCreatedEvent(
+                    notificationId, ScopeType.TEAM, 1L, userIds);
+            when(recipientRepository.findUserIdAndConfirmTokenByNotificationId(notificationId))
+                    .thenReturn(tokenRows);
+            when(userRepository.findByIdIn(userIds)).thenReturn(users);
+            when(templateEngine.process(anyString(), any(IContext.class))).thenReturn("<html>x</html>");
+
+            // Act
+            listener.handleConfirmableNotificationCreated(event);
+
+            // Assert: 不正1件を除く2件が1回の enqueueAll で登録される
+            List<EmailOutboxRequest> requests = capturedRequests(1);
+            assertThat(requests).extracting(EmailOutboxRequest::toAddress)
+                    .containsExactly("ok1@example.com", "ok3@example.com");
         }
     }
 }

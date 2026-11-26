@@ -1,6 +1,7 @@
 package com.mannschaft.app.mail.outbox;
 
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * F09.18 メール配信 enqueue リクエスト DTO。
@@ -29,4 +30,20 @@ public record EmailOutboxRequest(
         Long userId,
         Long organizationId
 ) {
+
+    /**
+     * メールアドレス検証用の簡易正規表現。
+     * RFC 5322 完全準拠ではないが、SES 送信前の基本的なバリデーションには十分。
+     */
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+            "^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$"
+    );
+
+    /**
+     * 宛先メールアドレスの形式が outbox の受け付ける形式か判定する（{@code enqueue}/{@code enqueueAll} と同一判定）。
+     * 呼び出し側が enqueueAll 前に不正アドレスを 1 件ずつ除外するために公開する。
+     */
+    public static boolean isValidToAddress(String address) {
+        return address != null && EMAIL_PATTERN.matcher(address).matches();
+    }
 }

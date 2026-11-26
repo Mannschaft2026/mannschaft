@@ -5,13 +5,15 @@ import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationEntity;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationPriority;
-import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationRecipientEntity;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationSettingsEntity;
 import com.mannschaft.app.notification.confirmable.entity.UnconfirmedVisibility;
 import com.mannschaft.app.notification.confirmable.event.ConfirmableNotificationCreatedEvent;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationRecipientRepository;
 import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotificationRepository;
 import com.mannschaft.app.notification.credit.service.NotificationCreditService;
+import com.mannschaft.app.notification.NotificationScopeType;
+import com.mannschaft.app.notification.entity.NotificationEntity;
+import com.mannschaft.app.notification.service.NotificationDispatchService;
 import com.mannschaft.app.notification.service.NotificationHelper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,7 +26,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -79,6 +85,14 @@ class ConfirmableNotificationServiceTest {
     @Mock
     private ConfirmableNotificationQueryService queryService;
 
+    /** CMP-261002-1559: 受信者行・アプリ内通知の多値 INSERT（実 SQL は ConfirmableNotificationSyncSendBulkIT で検証）。 */
+    @Mock
+    private ConfirmableRecipientBulkWriter bulkWriter;
+
+    /** CMP-261002-1559: コミット後の WebSocket / Push 一括配信。 */
+    @Mock
+    private NotificationDispatchService dispatchService;
+
     @InjectMocks
     private ConfirmableNotificationService notificationService;
 
@@ -111,6 +125,16 @@ class ConfirmableNotificationServiceTest {
                 .build();
     }
 
+    /** 受信者行の多値 INSERT に渡った利用者を、呼び出し順に連結して返す。 */
+    private List<Long> insertedRecipientUserIds() {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Long>> captor = ArgumentCaptor.forClass(List.class);
+        verify(bulkWriter, atLeastOnce()).insertRecipients(any(), captor.capture(), anyInt(), anyInt());
+        List<Long> all = new ArrayList<>();
+        captor.getAllValues().forEach(all::addAll);
+        return all;
+    }
+
     // ========================================
     // send
     // ========================================
@@ -132,8 +156,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.getReferenceById(USER_ID_1)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
                     .willReturn(createActiveNotification());
-            given(recipientRepository.saveAll(any()))
-                    .willAnswer(invocation -> invocation.getArgument(0));
 
             notificationService.send(
                     ScopeType.PLATFORM, USER_ID_1, "個人札の最終認証", null,
@@ -158,8 +180,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.getReferenceById(USER_ID_3)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
                     .willReturn(savedNotification);
-            given(recipientRepository.saveAll(any()))
-                    .willAnswer(invocation -> invocation.getArgument(0));
 
             // when
             ConfirmableNotificationEntity result = notificationService.send(
@@ -171,11 +191,8 @@ class ConfirmableNotificationServiceTest {
             assertThat(result).isNotNull();
             verify(notificationRepository).save(any(ConfirmableNotificationEntity.class));
 
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<ConfirmableNotificationRecipientEntity>> captor =
-                    ArgumentCaptor.forClass(List.class);
-            verify(recipientRepository).saveAll(captor.capture());
-            assertThat(captor.getValue()).hasSize(3);
+            assertThat(insertedRecipientUserIds()).containsExactly(USER_ID_1, USER_ID_2, USER_ID_3);
+            verify(bulkWriter).insertAppNotifications(any(), eq(recipientIds), eq("CONFIRMABLE_NOTIFICATION"));
 
             verify(eventPublisher).publishEvent(any(ConfirmableNotificationCreatedEvent.class));
         }
@@ -194,8 +211,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.getReferenceById(USER_ID_1)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
                     .willReturn(savedNotification);
-            given(recipientRepository.saveAll(any()))
-                    .willAnswer(invocation -> invocation.getArgument(0));
 
             // when
             notificationService.send(
@@ -203,15 +218,8 @@ class ConfirmableNotificationServiceTest {
                     ConfirmableNotificationPriority.NORMAL, null,
                     null, null, null, null, null, USER_ID_1, recipientIds);
 
-            // then: saveAll に渡されたrecipientのresolvedFirstReminderMinutesがスコープ設定の60分
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<ConfirmableNotificationRecipientEntity>> captor =
-                    ArgumentCaptor.forClass(List.class);
-            verify(recipientRepository).saveAll(captor.capture());
-            List<ConfirmableNotificationRecipientEntity> recipients = captor.getValue();
-            assertThat(recipients).hasSize(1);
-            assertThat(recipients.get(0).getResolvedFirstReminderMinutes()).isEqualTo(60);
-            assertThat(recipients.get(0).getResolvedSecondReminderMinutes()).isEqualTo(30);
+            // then: 受信者行の多値 INSERT に、スコープ設定の 60/30 分が解決済みの値として渡る
+            verify(bulkWriter).insertRecipients(any(), eq(recipientIds), eq(60), eq(30));
         }
     }
 
@@ -238,8 +246,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.findById(USER_ID_1)).willReturn(Optional.empty());
             given(userRepository.getReferenceById(USER_ID_1)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
-                    .willAnswer(invocation -> invocation.getArgument(0));
-            given(recipientRepository.saveAll(any()))
                     .willAnswer(invocation -> invocation.getArgument(0));
 
             // when: リクエストの unconfirmedVisibility は null（省略）
@@ -271,8 +277,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.findById(USER_ID_1)).willReturn(Optional.empty());
             given(userRepository.getReferenceById(USER_ID_1)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
-                    .willAnswer(invocation -> invocation.getArgument(0));
-            given(recipientRepository.saveAll(any()))
                     .willAnswer(invocation -> invocation.getArgument(0));
 
             // when: リクエストで HIDDEN を明示
@@ -319,8 +323,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.getReferenceById(USER_ID_2)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
                     .willReturn(savedNotification);
-            given(recipientRepository.saveAll(any()))
-                    .willAnswer(invocation -> invocation.getArgument(0));
 
             // when
             notificationService.send(
@@ -328,12 +330,10 @@ class ConfirmableNotificationServiceTest {
                     ConfirmableNotificationPriority.NORMAL, null,
                     null, null, null, null, null, USER_ID_1, recipientIdsWithDuplicate);
 
-            // then: 一意化後の2件（USER_ID_1, USER_ID_2）だけが saveAll に渡る
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<ConfirmableNotificationRecipientEntity>> captor =
-                    ArgumentCaptor.forClass(List.class);
-            verify(recipientRepository).saveAll(captor.capture());
-            assertThat(captor.getValue()).hasSize(2);
+            // then: 一意化後の2件（USER_ID_1, USER_ID_2）だけが受信者行・アプリ内通知の多値 INSERT に渡る
+            assertThat(insertedRecipientUserIds()).containsExactly(USER_ID_1, USER_ID_2);
+            verify(bulkWriter).insertAppNotifications(any(), eq(List.of(USER_ID_1, USER_ID_2)),
+                    eq("CONFIRMABLE_NOTIFICATION"));
         }
 
         /**
@@ -364,8 +364,6 @@ class ConfirmableNotificationServiceTest {
             given(userRepository.getReferenceById(USER_ID_2)).willReturn(mock(UserEntity.class));
             given(notificationRepository.save(any(ConfirmableNotificationEntity.class)))
                     .willReturn(savedNotification);
-            given(recipientRepository.saveAll(any()))
-                    .willAnswer(invocation -> invocation.getArgument(0));
 
             // when
             notificationService.send(
@@ -374,14 +372,71 @@ class ConfirmableNotificationServiceTest {
                     null, null, null, null, null, USER_ID_1, recipientIdsWithDuplicate);
 
             // then: 一意化（AC-28）は維持 — 受信者行は2件
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<ConfirmableNotificationRecipientEntity>> captor =
-                    ArgumentCaptor.forClass(List.class);
-            verify(recipientRepository).saveAll(captor.capture());
-            assertThat(captor.getValue()).hasSize(2);
+            assertThat(insertedRecipientUserIds()).containsExactly(USER_ID_1, USER_ID_2);
 
             // then: AC-9 — 同期 send は組織スコープでも課金しない。現状は consume(10, 2, CONFIRMABLE) が呼ばれるため red
             verify(notificationCreditService, never()).consume(any(), anyInt(), any());
+        }
+    }
+
+    // ========================================
+    // CMP-261002-1559: アプリ内通知の WebSocket / Push 配信はコミット後に一括で行う
+    // ========================================
+    @Nested
+    @DisplayName("send リアルタイム配信（CMP-261002-1559）")
+    class SendRealtimeDispatch {
+
+        private List<NotificationEntity> stubSend() {
+            ConfirmableNotificationEntity saved = createActiveNotification();
+            given(settingsService.getOrCreate(ScopeType.TEAM, SCOPE_ID)).willReturn(createSettings(null, null));
+            given(notificationRepository.save(any(ConfirmableNotificationEntity.class))).willReturn(saved);
+            List<NotificationEntity> created = List.of(
+                    NotificationEntity.builder().id(901L).userId(USER_ID_1).notificationType("CONFIRMABLE_NOTIFICATION")
+                            .title("t").sourceType("CONFIRMABLE_NOTIFICATION").scopeType(NotificationScopeType.TEAM)
+                            .createdAt(java.time.LocalDateTime.now()).build());
+            given(bulkWriter.insertAppNotifications(any(), any(), any())).willReturn(created);
+            return created;
+        }
+
+        private void sendOne() {
+            notificationService.send(ScopeType.TEAM, SCOPE_ID, "配信", null,
+                    ConfirmableNotificationPriority.NORMAL, null,
+                    null, null, null, null, null, USER_ID_1, List.of(USER_ID_1));
+        }
+
+        @Test
+        @DisplayName("コミット前は配信せず、コミット後に採番 id 付きの通知を dispatchBatch へ一括で渡す（1件ずつの dispatch は使わない）")
+        void コミット後に一括配信する() {
+            List<NotificationEntity> created = stubSend();
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                sendOne();
+                verify(dispatchService, never()).dispatchBatch(any());
+
+                for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                    sync.afterCommit();
+                }
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+
+            verify(dispatchService).dispatchBatch(created);
+            verify(dispatchService, never()).dispatch(any());
+        }
+
+        @Test
+        @DisplayName("ロールバックされたときは配信しない（DB に無い通知だけが外部へ届かない）")
+        void ロールバック時は配信しない() {
+            stubSend();
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                sendOne();
+                // afterCommit を呼ばずに終了（ロールバック相当）
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+
+            verify(dispatchService, never()).dispatchBatch(any());
         }
     }
 }
