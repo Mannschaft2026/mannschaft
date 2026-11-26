@@ -179,20 +179,48 @@ public interface ShiftBudgetRateQueryRepository
             nativeQuery = true)
     List<Object[]> findSlotDates(@Param("slotIds") java.util.Collection<Long> slotIds);
 
-    /** 勤務枠の現在日付を1件読む（計上先の解決のやり直し用）。枠が無い・論理削除済みなら空。 */
-    default Optional<LocalDate> findSlotDate(Long slotId) {
-        List<Object[]> rows = findSlotDates(java.util.List.of(slotId));
+/**
+     * 勤務枠の現在の勤務日・開始・終了時刻（列は {@code slot_date, start_time, end_time}）。論理削除済みの枠は返さない。
+     *
+     * <p>CMP-260909-2152 Codex 検分 P2: 記録のやり直しでは勤務日だけでなく時刻も読み直し、勤務時間を再計算する
+     * （勤務日と時刻が同時に変わったとき、最初に読んだ枠の時間を新しい勤務日の時給に掛けない）。</p>
+     */
+    @Query(value = "SELECT sl.slot_date, sl.start_time, sl.end_time FROM shift_slots sl "
+            + "WHERE sl.id = :slotId AND sl.deleted_at IS NULL", nativeQuery = true)
+    List<Object[]> findSlotScheduleRows(@Param("slotId") Long slotId);
+
+    /** 勤務枠の現在の勤務日・時刻を1件読む（記録時の照合と計上先の解決のやり直し用）。枠が無い・論理削除済みなら空。 */
+    default Optional<SlotSchedule> findSlotSchedule(Long slotId) {
+        List<Object[]> rows = findSlotScheduleRows(slotId);
         if (rows.isEmpty()) {
             return Optional.empty();
         }
-        Object v = rows.get(0)[1];
+        Object[] r = rows.get(0);
+        return Optional.of(new SlotSchedule(toLocalDate(r[0]), toLocalTime(r[1]), toLocalTime(r[2])));
+    }
+
+    /** 勤務枠の現在の勤務日と開始・終了時刻。 */
+    record SlotSchedule(LocalDate slotDate, java.time.LocalTime startTime, java.time.LocalTime endTime) {
+    }
+
+    private static LocalDate toLocalDate(Object v) {
         if (v instanceof LocalDate d) {
-            return Optional.of(d);
+            return d;
         }
         if (v instanceof java.sql.Date d) {
-            return Optional.of(d.toLocalDate());
+            return d.toLocalDate();
         }
-        return Optional.of(LocalDate.parse(String.valueOf(v)));
+        return LocalDate.parse(String.valueOf(v));
+    }
+
+    private static java.time.LocalTime toLocalTime(Object v) {
+        if (v instanceof java.time.LocalTime t) {
+            return t;
+        }
+        if (v instanceof java.sql.Time t) {
+            return t.toLocalTime();
+        }
+        return java.time.LocalTime.parse(String.valueOf(v));
     }
 
     /**

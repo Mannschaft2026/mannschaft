@@ -146,7 +146,7 @@ public class ShiftBudgetConsumptionRecordListener {
                     continue;  // 未割当スロットは消化記録しない
                 }
 
-                BigDecimal hours = ShiftBudgetConsumptionService.calculateHours(
+                BigDecimal slotHours = ShiftBudgetConsumptionService.calculateHours(
                         slot.getStartTime(), slot.getEndTime());
 
                 // CMP-261115-1821: 枠の値は一度だけ読む（他ドメイン Entity への参照箇所を増やさない。D-1 凍結）
@@ -159,8 +159,11 @@ public class ShiftBudgetConsumptionRecordListener {
                     // 帰属も再解決後の組織へ切り替える（当初の組織に残さない）。個別失敗の catch でも参照するため try の外に置く
                     ShiftBudgetAllocationEntity attemptAllocation = allocation;
                     java.time.LocalDate attemptDate = slotDate;
+                    // CMP-260909-2152 Codex 検分 P2: 勤務時間も試行ごとに持つ。再試行では勤務枠の現在の時刻から計算し直す
+                    // （勤務日と時刻が同時に変わったとき、最初の枠の時間を新しい勤務日の時給に掛けない）
+                    BigDecimal hours = slotHours;
                     try {
-                        // 計上先ロック集合の不一致は、勤務枠の現在日付を読み直して計上先の解決からやり直す（最大3回）。
+                        // 計上先ロック集合の不一致は、勤務枠の現在日付・時刻を読み直して計上先の解決と勤務時間の計算からやり直す（最大3回）。
                         // 時給も試行ごとの勤務日（再解決後の日付）で取り直し、正数チェックもやり直す
                         // （時給の切替日をまたいで枠が移動していても、元の勤務日の時給で記録しない）。
                         // 時給の参照箇所は増やさない（ShiftHourlyRateRepository の呼出箇所は1つのまま）
@@ -218,9 +221,11 @@ public class ShiftBudgetConsumptionRecordListener {
                                 if (++attempt >= ShiftBudgetConsumptionService.MAX_LOCK_ATTEMPTS) {
                                     throw lockChanged;
                                 }
-                                Optional<java.time.LocalDate> fresh = rateQueryRepository.findSlotDate(slotId);
+                                // 勤務日だけでなく開始・終了時刻も読み直す（勤務時間を現在の枠から再計算するため）
+                                Optional<ShiftBudgetRateQueryRepository.SlotSchedule> fresh =
+                                        rateQueryRepository.findSlotSchedule(slotId);
                                 Optional<ShiftBudgetAllocationEntity> reResolved = fresh.isEmpty()
-                                        ? Optional.empty() : resolveAllocationForSlot(teamId, fresh.get());
+                                        ? Optional.empty() : resolveAllocationForSlot(teamId, fresh.get().slotDate());
                                 if (reResolved.isEmpty()) {
                                     result = null;
                                     break;
@@ -234,7 +239,9 @@ public class ShiftBudgetConsumptionRecordListener {
                                     result = null;
                                     break;
                                 }
-                                attemptDate = fresh.get();
+                                attemptDate = fresh.get().slotDate();
+                                hours = ShiftBudgetConsumptionService.calculateHours(
+                                        fresh.get().startTime(), fresh.get().endTime());
                                 attemptAllocation = reResolved.get();
                             }
                         }

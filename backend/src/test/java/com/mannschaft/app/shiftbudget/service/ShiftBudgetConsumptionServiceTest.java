@@ -167,6 +167,34 @@ class ShiftBudgetConsumptionServiceTest {
         }
     }
 
+    /**
+     * CMP-260909-2152 Codex 検分 P2: 呼出側が最初に読んだ枠の勤務時間が、ロック後の勤務枠の現在の時刻と違えば記録せず、
+     * 計上先の解決（と勤務時間の再計算）からやり直させる。勤務日が同じでも時刻だけ変わった枠を古い時間で記録しない。
+     */
+    @Nested
+    @DisplayName("勤務枠の現在の時刻との照合")
+    class SlotTimeChanged {
+
+        @Test
+        @DisplayName("同じ勤務日で 9:00-17:00（8h）→ 9:00-13:00（4h）へ変わっていたら、8h のまま記録せずやり直しを求める")
+        void 時刻だけ変わった枠は古い勤務時間で記録しない() {
+            when(consumptionRepository.findLiveAllocationIdsBySlotAndUser(SLOT_ID, USER_ID)).thenReturn(List.of());
+            when(allocationRepository.findByIdForUpdate(ALLOCATION_ID))
+                    .thenReturn(Optional.of(mock(ShiftBudgetAllocationEntity.class)));
+            when(consumptionRepository.lockLiveBySlotAndUser(SLOT_ID, USER_ID)).thenReturn(List.of());
+            when(rateQueryRepository.findSlotSchedule(SLOT_ID)).thenReturn(Optional.of(
+                    new ShiftBudgetRateQueryRepository.SlotSchedule(WORK_DATE, LocalTime.of(9, 0), LocalTime.of(13, 0))));
+
+            assertThatThrownBy(() -> service.recordSingleConsumption(
+                    ALLOCATION_ID, SHIFT_ID, SLOT_ID, USER_ID, new BigDecimal("1200"), new BigDecimal("8.00"), WORK_DATE))
+                    .isInstanceOf(ShiftBudgetLockSetChangedException.class);
+
+            verify(consumptionRepository, never()).save(any());
+            verify(consumptionRepository, never()).saveAndFlush(any());
+            verify(allocationRepository, never()).incrementConsumedAmount(any(), any());
+        }
+    }
+
     @Nested
     @DisplayName("calculateHours (深夜跨ぎ)")
     class CalculateHours {

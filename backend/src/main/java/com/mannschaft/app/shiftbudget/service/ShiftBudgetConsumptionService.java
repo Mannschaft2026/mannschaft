@@ -180,11 +180,18 @@ public class ShiftBudgetConsumptionService {
                 }
             }
 
-            // (4) 現在の勤務枠日付が呼出時の勤務日と一致するか（外なら計上先の解決からやり直す）
-            List<Object[]> slotRows = rateQueryRepository.findSlotDates(List.of(slotId));
-            if (!slotRows.isEmpty()
-                    && !ShiftBudgetCloseStageService.toLocalDate(slotRows.get(0)[1]).equals(workDate)) {
-                throw new ShiftBudgetLockSetChangedException("勤務枠の日付が変わりました: slot=" + slotId);
+            // (4) 現在の勤務枠の勤務日・勤務時間が呼出時の値と一致するか（違えば計上先の解決からやり直す）。
+            // CMP-260909-2152 Codex 検分 P2: 勤務日だけでなく時刻の変更も検出する。呼出側が最初に読んだ枠の時間のまま
+            // 記録すると、時刻だけ変わった枠でも古い勤務時間×時給が消化額・締め仕訳に残る
+            java.util.Optional<ShiftBudgetRateQueryRepository.SlotSchedule> current =
+                    rateQueryRepository.findSlotSchedule(slotId);
+            if (current.isPresent()) {
+                if (!current.get().slotDate().equals(workDate)) {
+                    throw new ShiftBudgetLockSetChangedException("勤務枠の日付が変わりました: slot=" + slotId);
+                }
+                if (calculateHours(current.get().startTime(), current.get().endTime()).compareTo(hours) != 0) {
+                    throw new ShiftBudgetLockSetChangedException("勤務枠の時刻が変わりました: slot=" + slotId);
+                }
             }
 
             // (5) スケジュール（公開状態の正本）を FOR SHARE で current read

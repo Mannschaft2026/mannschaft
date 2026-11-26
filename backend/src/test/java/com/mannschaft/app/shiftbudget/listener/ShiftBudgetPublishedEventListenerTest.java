@@ -531,7 +531,8 @@ class ShiftBudgetPublishedEventListenerTest {
         org.mockito.BDDMockito.willThrow(new com.mannschaft.app.shiftbudget.service.ShiftBudgetLockSetChangedException("moved"))
                 .given(consumptionService).recordSingleConsumption(
                         eq(ALLOCATION_ID), eq(SCHEDULE_ID), eq(7L), eq(USER_ID), any(), any(), eq(DATE_A));
-        given(rateQueryRepository.findSlotDate(7L)).willReturn(Optional.of(DATE_B));
+        given(rateQueryRepository.findSlotSchedule(7L)).willReturn(Optional.of(
+                new ShiftBudgetRateQueryRepository.SlotSchedule(DATE_B, LocalTime.of(9, 0), LocalTime.of(13, 0))));
     }
 
     @Test
@@ -590,12 +591,89 @@ class ShiftBudgetPublishedEventListenerTest {
         verify(failedEventService, never()).recordFailure(eq(ORG_ID), any(), any(), any(), any());
     }
 
+    @Test
+    @DisplayName("CMP-260909-2152 Codex 検分 P2: 再試行で勤務日と時刻が同時に変わったら、新しい勤務枠の時間（8h→4h）で記録する")
+    void 再試行で勤務日と時刻が同時に変わったら新しい枠の時間で記録する() throws Exception {
+        givenSlotMovesFromOrgAToOrgB(true);
+        // 最初に読んだ枠は 9:00-17:00（8時間）。読み直すと別日の 9:00-13:00（4時間）へ変わっている
+        given(slotRepository.findByScheduleIdOrderBySlotDateAscStartTimeAsc(SCHEDULE_ID))
+                .willReturn(List.of(slotOn(7L, USER_ID, DATE_A, LocalTime.of(9, 0), LocalTime.of(17, 0))));
+
+        listener.onShiftPublished(new ShiftPublishedEvent(SCHEDULE_ID, TEAM_ID, USER_ID, java.time.LocalDateTime.now()));
+
+        // 初回は最初の枠の 8 時間で試み、ロック集合不一致で再試行する
+        verify(consumptionService).recordSingleConsumption(
+                eq(ALLOCATION_ID), eq(SCHEDULE_ID), eq(7L), eq(USER_ID), any(),
+                org.mockito.ArgumentMatchers.argThat(h -> h.compareTo(new BigDecimal("8")) == 0), eq(DATE_A));
+        // 再試行は新しい勤務日・新しい時給・新しい勤務時間（4 時間）で記録する（金額 = 1200 × 4）
+        verify(consumptionService).recordSingleConsumption(
+                eq(ALLOCATION_B), eq(SCHEDULE_ID), eq(7L), eq(USER_ID),
+                org.mockito.ArgumentMatchers.argThat(r -> r.compareTo(new BigDecimal("1200")) == 0),
+                org.mockito.ArgumentMatchers.argThat(h -> h.compareTo(new BigDecimal("4")) == 0), eq(DATE_B));
+        verify(consumptionService, never()).recordSingleConsumption(
+                eq(ALLOCATION_B), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.argThat(h -> h.compareTo(new BigDecimal("8")) == 0), any());
+    }
+
+    @Test
+    @DisplayName("CMP-260909-2152 Codex 検分 P2: 勤務日は同じで時刻だけ変わった（記録側が不一致を返した）ときも新しい時間で記録し直す")
+    void 時刻だけ変わった枠は新しい時間で記録し直す() throws Exception {
+        given(slotRepository.findByScheduleIdOrderBySlotDateAscStartTimeAsc(SCHEDULE_ID))
+                .willReturn(List.of(slotOn(7L, USER_ID, DATE_A, LocalTime.of(9, 0), LocalTime.of(17, 0))));
+        given(allocationRepository.findOrganizationIdsWithTeamAllocationContaining(TEAM_ID, DATE_A))
+                .willReturn(List.of(ORG_ID));
+        given(allocationRepository.findContainingPeriod(ORG_ID, TEAM_ID, DATE_A)).willReturn(Optional.of(allocationWithId()));
+        given(featureService.isEnabled(ORG_ID)).willReturn(true);
+        given(hourlyRateRepository.findEffectiveRate(eq(USER_ID), eq(TEAM_ID), eq(DATE_A)))
+                .willReturn(Optional.of(ShiftHourlyRateEntity.builder()
+                        .userId(USER_ID).teamId(TEAM_ID).hourlyRate(new BigDecimal("1200"))
+                        .effectiveFrom(LocalDate.of(2026, 1, 1)).build()));
+        org.mockito.BDDMockito.willThrow(new com.mannschaft.app.shiftbudget.service.ShiftBudgetLockSetChangedException("time"))
+                .given(consumptionService).recordSingleConsumption(eq(ALLOCATION_ID), eq(SCHEDULE_ID), eq(7L), eq(USER_ID),
+                        any(), org.mockito.ArgumentMatchers.argThat(h -> h.compareTo(new BigDecimal("8")) == 0), eq(DATE_A));
+        given(rateQueryRepository.findSlotSchedule(7L)).willReturn(Optional.of(
+                new ShiftBudgetRateQueryRepository.SlotSchedule(DATE_A, LocalTime.of(9, 0), LocalTime.of(13, 0))));
+
+        listener.onShiftPublished(new ShiftPublishedEvent(SCHEDULE_ID, TEAM_ID, USER_ID, java.time.LocalDateTime.now()));
+
+        verify(consumptionService).recordSingleConsumption(eq(ALLOCATION_ID), eq(SCHEDULE_ID), eq(7L), eq(USER_ID),
+                any(), org.mockito.ArgumentMatchers.argThat(h -> h.compareTo(new BigDecimal("4")) == 0), eq(DATE_A));
+    }
+
+    @Test
+    @DisplayName("CMP-260909-2152 Codex 検分 P2: 再試行後の記録失敗の failed_event には新しい枠の勤務時間を残す")
+    void 再試行後の記録失敗には新しい枠の時間を残す() throws Exception {
+        givenSlotMovesFromOrgAToOrgB(true);
+        given(slotRepository.findByScheduleIdOrderBySlotDateAscStartTimeAsc(SCHEDULE_ID))
+                .willReturn(List.of(slotOn(7L, USER_ID, DATE_A, LocalTime.of(9, 0), LocalTime.of(17, 0))));
+        org.mockito.BDDMockito.willThrow(new RuntimeException("insert failed"))
+                .given(consumptionService).recordSingleConsumption(
+                        eq(ALLOCATION_B), eq(SCHEDULE_ID), eq(7L), eq(USER_ID), any(), any(), eq(DATE_B));
+
+        listener.onShiftPublished(new ShiftPublishedEvent(SCHEDULE_ID, TEAM_ID, USER_ID, java.time.LocalDateTime.now()));
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload =
+                org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(failedEventService).recordFailure(eq(ORG_B),
+                eq(com.mannschaft.app.shiftbudget.ShiftBudgetFailedEventType.CONSUMPTION_RECORD),
+                eq(SCHEDULE_ID), payload.capture(), any());
+        org.assertj.core.api.Assertions.assertThat(payload.getValue())
+                .containsEntry("hours", "4.00")
+                .containsEntry("slot_date", "2026-07-15");
+    }
+
     private ShiftSlotEntity slotOn(Long slotId, Long userId, LocalDate date) throws Exception {
+        return slotOn(slotId, userId, date, LocalTime.of(9, 0), LocalTime.of(13, 0));
+    }
+
+    private ShiftSlotEntity slotOn(Long slotId, Long userId, LocalDate date, LocalTime start, LocalTime end)
+            throws Exception {
         ShiftSlotEntity slot = ShiftSlotEntity.builder()
                 .scheduleId(SCHEDULE_ID)
                 .slotDate(date)
-                .startTime(LocalTime.of(9, 0))
-                .endTime(LocalTime.of(13, 0))
+                .startTime(start)
+                .endTime(end)
                 .requiredCount(1)
                 .assignedUserIds(objectMapper.writeValueAsString(List.of(userId)))
                 .build();
