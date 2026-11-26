@@ -22,9 +22,8 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import com.mannschaft.app.auth.service.AuthTokenService;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -60,8 +59,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *       ページング・単件既読・read-batch・read-all・ピン留め・ピン解除・お知らせ解除・インボックス・F00 Resolver で
  *       不在のお知らせと同じ扱い（AC5）。</li>
  * </ul>
+ *
+ * <p>認証は実 Security フィルタ経由（JWT 付与。{@code addFilters=false} 不使用。TEST_CONVENTION §3.1.2）。
+ * {@code sourceId}・{@code sourceType} が null の行は {@code announcement_feeds} の NOT NULL 制約（V13.019・V13.038）で
+ * 作れないため本 IT では作らず、null の判定は {@code AnnouncementSourcePublicationGuardSurveyCirculationTest} で固定する。</p>
  */
-@AutoConfigureMockMvc(addFilters = false)
 @Transactional
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("CMP-261122-1300 アンケート・回覧板の元が非公開: お知らせ化・既存お知らせは不在と同一（IT）")
@@ -72,6 +74,7 @@ class AnnouncementSurveyCirculationSourcePublicationIT extends AbstractMySqlInte
     private static final String SURVEY = "SURVEY";
     private static final String CIRCULATION = "CIRCULATION_DOCUMENT";
 
+    @Autowired private AuthTokenService tokens;
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private AnnouncementFeedRepository feedRepository;
@@ -547,8 +550,9 @@ class AnnouncementSurveyCirculationSourcePublicationIT extends AbstractMySqlInte
     private MvcResult perform(Long actorId, MockHttpServletRequestBuilder request) throws Exception {
         em.flush();
         em.clear();
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(actorId.toString(), null, List.of()));
+        // 実 Security フィルタ経由（JWT で認証。addFilters=false・SecurityContext の直接設定は使わない）
+        SecurityContextHolder.clearContext();
+        request.header("Authorization", "Bearer " + tokens.issueAccessToken(actorId, List.of("MEMBER")));
         request.header("Accept-Language", "ja");
         MvcResult result = mockMvc.perform(request).andReturn();
         em.flush();
