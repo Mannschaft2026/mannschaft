@@ -1,6 +1,7 @@
 package com.mannschaft.app.organization;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -239,8 +240,9 @@ class OrganizationCreateParentAuthzContractIT extends AbstractMySqlIntegrationTe
         } catch (NoResultException e) {
             em.createNativeQuery(
                             "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                    + "VALUES (:name, :name, 99, 0, NOW(), NOW())")
+                                    + "VALUES (:name, :name, :priority, 0, NOW(), NOW())")
                     .setParameter("name", roleName)
+                    .setParameter("priority", RolePriority.priority(roleName))
                     .executeUpdate();
         }
     }

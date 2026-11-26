@@ -2,6 +2,7 @@ package com.mannschaft.app.tournament.entry;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.auth.entity.UserInterestTagEntity;
 import com.mannschaft.app.auth.repository.UserInterestTagRepository;
 import com.mannschaft.app.membership.domain.RoleKind;
@@ -172,11 +173,13 @@ class TournamentEntryPkTypeFlywayIT {
     void setUp() {
         suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         jdbc.update("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                + "SELECT 'ADMIN', '管理者', 2, 0, NOW(), NOW() FROM DUAL "
-                + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'ADMIN')");
+                + "SELECT 'ADMIN', '管理者', ?, 0, NOW(), NOW() FROM DUAL "
+                + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'ADMIN')",
+                RolePriority.priority("ADMIN"));
         jdbc.update("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                + "SELECT 'MEMBER', 'メンバー', 4, 0, NOW(), NOW() FROM DUAL "
-                + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'MEMBER')");
+                + "SELECT 'MEMBER', 'メンバー', ?, 0, NOW(), NOW() FROM DUAL "
+                + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'MEMBER')",
+                RolePriority.priority("MEMBER"));
 
         orgId = insertOrganization("PK型ORG" + suffix);
         teamId = insertTeam("PK型TEAM" + suffix);
