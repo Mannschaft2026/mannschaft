@@ -4,7 +4,7 @@
  *
  * ルート `[id]`=組織 publicId / `[tId]`=tournamentId。
  * org 管理者（ADMIN/DEPUTY_ADMIN）のみアクセス可。非管理者には入力 UI を一切出さず
- * 「権限がありません」を提示する（最終防衛は Wave0 BE の @PreAuthorize）。
+ * 共通の「見つかりません」（シェルが本文を置換）にする（最終防衛は Wave0 BE の @PreAuthorize）。
  *
  * グリッド（ScoreEntryGrid）で節ごとに home/away スコアを一括保存し、
  * CSV 取込（ScoreCsvImport）でも一括反映できる。保存後は StandingsRecalc 経路で
@@ -17,6 +17,7 @@ definePageMeta({ layout: 'organization', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const notification = useNotification()
+const { markIfDenied, markDenied } = useScopeNotFound()
 const orgId = String(route.params.slug)
 const tId = Number(route.params.tId)
 
@@ -27,8 +28,8 @@ const tournament = ref<TournamentResponse | null>(null)
 const divisions = ref<TournamentDivision[]>([])
 
 const loading = ref(true)
-/** 'forbidden' = 権限なし（非管理者 or 不可視大会）、'error' = その他取得失敗 */
-const loadError = ref<'forbidden' | 'error' | null>(null)
+/** 'error' = 取得失敗（非管理者・不可視大会は共通の見つかりません表示へ） */
+const loadError = ref<'error' | null>(null)
 
 async function load() {
   loading.value = true
@@ -37,7 +38,8 @@ async function load() {
     await loadPermissions()
     // 非管理者は入力 UI を露出しない（FE ガード。最終防衛は BE）。
     if (!isAdminOrDeputy.value) {
-      loadError.value = 'forbidden'
+      // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
+      markDenied()
       return
     }
     const [tRes, divRes] = await Promise.all([
@@ -47,9 +49,9 @@ async function load() {
     tournament.value = tRes.data
     divisions.value = divRes.data ?? []
   } catch (e) {
-    const status = (e as { response?: { status?: number }; statusCode?: number })?.response?.status
-      ?? (e as { statusCode?: number })?.statusCode
-    loadError.value = status === 403 || status === 404 ? 'forbidden' : 'error'
+    // 非所属・権限なし・不可視大会（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    if (markIfDenied(e)) return
+    loadError.value = 'error'
   } finally {
     loading.value = false
   }
@@ -87,12 +89,6 @@ onMounted(load)
     </h1>
 
     <PageLoading v-if="loading" size="40px" />
-
-    <DashboardEmptyState
-      v-else-if="loadError === 'forbidden'"
-      icon="pi pi-lock"
-      :message="$t('tournament.scoreEntry.forbidden')"
-    />
 
     <DashboardEmptyState
       v-else-if="loadError === 'error'"

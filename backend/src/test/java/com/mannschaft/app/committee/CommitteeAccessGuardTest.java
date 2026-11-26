@@ -133,7 +133,7 @@ class CommitteeAccessGuardTest {
                     .committeeId(COMMITTEE_ID)
                     .inviteeUserId(OTHER_USER_ID)
                     .invitedBy(USER_ID)
-                    .inviteToken("token")
+                    .inviteTokenHash("token-hash")
                     .expiresAt(LocalDateTime.now().plusDays(1))
                     .build();
 
@@ -194,7 +194,7 @@ class CommitteeAccessGuardTest {
                 .committeeId(committeeId)
                 .inviteeUserId(inviteeUserId)
                 .invitedBy(OTHER_USER_ID)
-                .inviteToken("token")
+                .inviteTokenHash("token-hash")
                 .expiresAt(LocalDateTime.now().plusDays(1))
                 .build();
     }

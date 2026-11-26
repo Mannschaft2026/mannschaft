@@ -27,6 +27,8 @@ import type { TeamFriendFolderView } from '~/types/friendFolders'
 const props = defineProps<{
   teamId: string
   canEdit: boolean
+  /** チーム／組織シェル配下の子ページからだけ true。主取得が 403/404 のとき共通の「見つかりません」表示へ置き換える（CMP-261125-1108）。シェル外の利用では false のまま */
+  scopeNotFoundOnDenied?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +41,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { listFolders } = useFriendFoldersApi()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 
 const folders = ref<TeamFriendFolderView[]>([])
 const loading = ref(true)
@@ -49,6 +52,8 @@ async function load() {
     folders.value = await listFolders(props.teamId)
   }
   catch (error) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (props.scopeNotFoundOnDenied && markIfDenied(error)) return
     handleApiError(error)
   }
   finally {

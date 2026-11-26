@@ -17,6 +17,12 @@ mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 vi.mock('~/components/OrganizationSidebar.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('~/components/TeamSidebar.vue', () => ({ default: { template: '<div />' } }))
 mockNuxtImport('useRoute', () => () => mocks.route.current)
+// happy-dom 環境は Nuxt アプリが無いので、useScopeNotFound が使う useState をキー単位の ref で代替する
+const nuxtStates = vi.hoisted(() => new Map<string, unknown>())
+mockNuxtImport('useState', () => <T>(key: string, init?: () => T) => {
+  if (!nuxtStates.has(key)) nuxtStates.set(key, ref(init?.()))
+  return nuxtStates.get(key)
+})
 mockNuxtImport('navigateTo', () => mocks.navigate)
 mockNuxtImport('useSlugRedirect', () => () => ({ resolveSlug: mocks.resolve }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getDetail }))

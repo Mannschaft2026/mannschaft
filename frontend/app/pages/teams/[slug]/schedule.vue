@@ -14,6 +14,7 @@ const route = useRoute()
 const teamSlug = String(route.params.slug)
 const scheduleApi = useScheduleApi()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 const { isAdminOrDeputy, roleName, can, loadPermissions } = useRoleAccess('team', teamSlug)
 const canManageSchedule = computed(
   () => isAdminOrDeputy.value || (roleName.value === 'MEMBER' && can('MANAGE_SCHEDULES')),
@@ -34,7 +35,11 @@ const fetcher = async (from: string, to: string): Promise<CalendarEventItem[]> =
 }
 
 const { currentYear, currentMonth, events, loading, loadEvents, refresh, onPrevMonth, onNextMonth } =
-  useCalendarEvents(fetcher, { cacheHalfMonths: 2 })
+  useCalendarEvents(fetcher, {
+    cacheHalfMonths: 2,
+    // 一覧（主 API）が 403/404 なら共通の「見つかりません」へ（CMP-261125-1108）
+    onError: (e) => { markIfDenied(e) },
+  })
 
 // モバイルのリストビュー用: 表示中の月のイベントを実際の時系列（瞬間）昇順に並べる。
 // ISO 文字列のまま localeCompare すると、時差の異なる予定（例: +09:00 と Z）が

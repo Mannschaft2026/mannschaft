@@ -1,0 +1,104 @@
+{
+  "parking": {
+    "title": "Parkplatzverwaltung",
+    "spaces": {
+      "title": "Stellplätze",
+      "empty": "Es gibt keine Stellplätze.",
+      "pricePerMonth": "{price} / Monat",
+      "floor": "Etage {floor}",
+      "deadline": "Bewerbung bis {date}",
+      "status": {
+        "VACANT": "Frei",
+        "OCCUPIED": "Belegt",
+        "MAINTENANCE": "In Wartung"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "Bewerbungen möglich",
+        "NOT_ACCEPTING": "Keine Bewerbungen",
+        "LOTTERY_CLOSED": "Verlosung beendet"
+      },
+      "type": {
+        "INDOOR": "Innen",
+        "OUTDOOR": "Außen",
+        "ACCESSIBLE": "Barrierefrei",
+        "MOTORCYCLE": "Motorrad",
+        "BICYCLE": "Fahrrad",
+        "VISITOR": "Besucher",
+        "OTHER": "Sonstiges"
+      },
+      "allocation": {
+        "FIRST_COME": "Wer zuerst kommt",
+        "LOTTERY": "Verlosung"
+      },
+      "refreshError": "Die Stellplatzliste konnte nicht aktualisiert werden. Die Anzeige ist möglicherweise veraltet."
+    },
+    "apply": {
+      "button": "Stellplatz beantragen",
+      "dialogTitle": "Nutzung eines Stellplatzes beantragen",
+      "space": "Stellplatz",
+      "spacePlaceholder": "Stellplatz auswählen",
+      "noSpaces": "Derzeit nehmen keine Stellplätze Bewerbungen an.",
+      "vehicle": "Fahrzeug",
+      "vehiclePlaceholder": "Fahrzeug auswählen",
+      "noVehicle": "Es ist kein Fahrzeug registriert. Für den Antrag muss ein Fahrzeug registriert werden.",
+      "loadVehiclesError": "Die Fahrzeuge konnten nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "message": "Nachricht (optional)",
+      "messageHint": "Höchstens {max} Zeichen",
+      "submit": "Beantragen",
+      "close": "Schließen",
+      "success": "Antrag gesendet",
+      "successLottery": "Antrag für die Verlosung eingegangen"
+    },
+    "vehicle": {
+      "register": "Fahrzeug registrieren",
+      "type": "Art",
+      "plate": "Kennzeichen",
+      "nickname": "Spitzname (optional)",
+      "save": "Registrieren",
+      "kind": {
+        "CAR": "Auto",
+        "MOTORCYCLE": "Motorrad",
+        "BICYCLE": "Fahrrad"
+      }
+    },
+    "applications": {
+      "title": "Meine Anträge",
+      "titleAll": "Anträge",
+      "empty": "Keine Anträge vorhanden",
+      "vehicle": "Fahrzeug",
+      "otherVehicle": "Fahrzeug eines anderen Nutzers",
+      "rejectionReason": "Ablehnungsgrund: {reason}",
+      "cancel": "Zurückziehen",
+      "cancelled": "Der Antrag wurde zurückgezogen",
+      "cancelConfirm": {
+        "header": "Antrag zurückziehen",
+        "message": "Antrag für Stellplatz {space} zurückziehen?",
+        "accept": "Zurückziehen",
+        "reject": "Behalten"
+      },
+      "status": {
+        "PENDING": "In Prüfung",
+        "APPROVED": "Genehmigt",
+        "REJECTED": "Abgelehnt",
+        "CANCELLED": "Zurückgezogen",
+        "LOTTERY_PENDING": "Wartet auf Verlosung"
+      }
+    },
+    "errors": {
+      "spaceNotFound": "Stellplatz nicht gefunden. Die Liste wurde aktualisiert.",
+      "vehicleNotFound": "Das gewählte Fahrzeug wurde nicht gefunden. Bitte erneut wählen.",
+      "applicationNotFound": "Antrag nicht gefunden. Die Liste wurde aktualisiert.",
+      "spaceNotVacant": "Dieser Stellplatz ist nicht mehr frei. Die Liste wurde aktualisiert.",
+      "maxSpacesExceeded": "Die maximale Anzahl Stellplätze pro Person ist erreicht.",
+      "notAccepting": "Dieser Stellplatz nimmt derzeit keine Anträge an.",
+      "alreadyApplied": "Für diesen Stellplatz liegt bereits ein Antrag vor.",
+      "invalidStatus": "Dieser Antrag ist bereits entschieden und kann nicht geändert werden.",
+      "plateDuplicate": "Dieses Kennzeichen ist bereits registriert.",
+      "forbidden": "Dafür fehlt die Berechtigung.",
+      "notFound": "Das Objekt wurde nicht gefunden. Die Liste wurde aktualisiert.",
+      "conflict": "Der Status hat sich geändert; die Aktion war nicht möglich. Die Liste wurde aktualisiert.",
+      "unprocessable": "Dieser Stellplatz kann derzeit nicht beantragt werden. Die Liste wurde aktualisiert."
+    }
+  }
+}

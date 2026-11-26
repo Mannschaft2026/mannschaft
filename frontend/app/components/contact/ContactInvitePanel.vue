@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ContactInviteTokenResponse, CreateInviteTokenBody } from '~/types/contact'
+import SecretIssuedDialog from '~/components/SecretIssuedDialog.vue'
 
 const { t } = useI18n()
 const contactApi = useContactApi()
@@ -11,6 +12,9 @@ const tokens = ref<ContactInviteTokenResponse[]>([])
 const loading = ref(false)
 const loadError = shallowRef<unknown>(null)
 const creating = ref(false)
+// 発行直後の1回だけ表示する招待URL（平文）。保存領域には書かず、ダイアログを閉じたら破棄する
+const issuedUrl = ref<string | null>(null)
+const showIssuedDialog = ref(false)
 const showCreateForm = defineModel<boolean>('showCreateForm', { default: false })
 
 const form = ref<CreateInviteTokenBody>({
@@ -55,7 +59,10 @@ async function createToken() {
       maxUses: form.value.maxUses ?? undefined,
       expiresIn: form.value.expiresIn ?? undefined,
     })
-    tokens.value.unshift(result.data)
+    const { inviteUrl, id, label, maxUses, usedCount, expiresAt, createdAt } = result.data
+    tokens.value.unshift({ id, label, maxUses, usedCount, expiresAt, createdAt })
+    issuedUrl.value = inviteUrl
+    showIssuedDialog.value = true
     showCreateForm.value = false
     form.value = { label: '', maxUses: 1, expiresIn: '7d' }
     notification.success(t('contact_invite.messages.create_success'))
@@ -76,13 +83,9 @@ async function revokeToken(id: number) {
   }
 }
 
-async function copyUrl(url: string) {
-  try {
-    await navigator.clipboard.writeText(url)
-    notification.success(t('contact_invite.messages.copy_success'))
-  } catch {
-    notification.error(t('contact_invite.messages.copy_error'))
-  }
+function onIssuedVisibleChange(open: boolean) {
+  showIssuedDialog.value = open
+  if (!open) issuedUrl.value = null
 }
 
 function formatExpiry(token: ContactInviteTokenResponse): string {
@@ -181,18 +184,6 @@ onMounted(fetchTokens)
             @click="revokeToken(token.id)"
           />
         </div>
-        <div class="mb-2 flex items-center gap-2 rounded bg-surface-50 px-2 py-1">
-          <span class="min-w-0 flex-1 truncate text-xs text-gray-600">{{ token.inviteUrl }}</span>
-          <Button
-            icon="pi pi-copy"
-            :aria-label="t('share.copyLink')"
-            class="min-h-11 min-w-11 shrink-0"
-            size="small"
-            text
-            rounded
-            @click="copyUrl(token.inviteUrl)"
-          />
-        </div>
         <div class="flex items-center gap-3 text-xs text-gray-400">
           <span
             ><i class="pi pi-users mr-1" />{{ token.usedCount }}/{{ token.maxUses ?? '∞'
@@ -200,11 +191,18 @@ onMounted(fetchTokens)
           >
           <span><i class="pi pi-calendar mr-1" />{{ formatExpiry(token) }}</span>
         </div>
-        <div class="mt-2 flex items-center gap-2">
-          <QrCodeImage :value="token.inviteUrl" :size="64" />
-          <span class="text-xs text-gray-400">{{ t('contact_invite.list.qr_hint') }}</span>
-        </div>
       </div>
+      <p class="text-xs text-gray-400" data-testid="contact-invite-once-hint">
+        {{ t('contact_invite.list.once_hint') }}
+      </p>
     </div>
+
+    <!-- 発行直後にだけ平文のリンクとQRを見せる -->
+    <SecretIssuedDialog
+      v-if="issuedUrl"
+      :visible="showIssuedDialog"
+      :url="issuedUrl"
+      @update:visible="onIssuedVisibleChange"
+    />
   </div>
 </template>

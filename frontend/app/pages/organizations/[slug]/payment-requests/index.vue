@@ -4,18 +4,23 @@ import type { PaymentRequestResponse, PaymentRequestStatus } from '~/types/payme
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const route = useRoute()
+const orgSlug = computed(() => String(route.params.slug))
 const { t, locale } = useI18n()
-const { isAdminOrDeputy } = useOrgShellContext()
+const { isAdminOrDeputy, loadPermissions } = useRoleAccess('organization', orgSlug)
 const { resolveScopeId } = useActivityScopeId()
 const paymentRequestApi = usePaymentRequestApi()
 const notification = useNotification()
+const { markIfDenied, markDenied } = useScopeNotFound()
 const { handleApiError } = useErrorHandler()
 const confirm = useConfirm()
 
-const orgSlug = computed(() => String(route.params.slug))
 const orgId = ref<number | null>(null)
 const requests = ref<PaymentRequestResponse[]>([])
 const loading = ref(true)
+/** 管理権限が無い（共通の「見つかりません」に置き換わる）。 */
+const denied = ref(false)
+/** 権限の取得が成功したか（再取得のたびに取り直さない）。 */
+const permissionsChecked = ref(false)
 const actingId = ref<string | null>(null)
 const statusFilter = ref<PaymentRequestStatus | null>(null)
 
@@ -47,11 +52,29 @@ function statusLabel(status: PaymentRequestStatus | undefined): string {
 async function load(): Promise<void> {
   loading.value = true
   try {
+    // 非シェルルートなので親シェルは権限を読まない。自分で取得し、取得が済んでから判定する
+    if (!permissionsChecked.value) {
+      const permissions = await loadPermissions()
+      if (!permissions.ok) {
+        if (markIfDenied(permissions.error)) return
+        handleApiError(permissions.error, 'payment-request.organization.permissions')
+        return
+      }
+      permissionsChecked.value = true
+    }
+    if (!isAdminOrDeputy.value) {
+      // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
+      denied.value = true
+      markDenied()
+      return
+    }
     orgId.value = await resolveScopeId('ORGANIZATION', orgSlug.value)
     if (orgId.value === null) return
     const response = await paymentRequestApi.listOrganizationPaymentRequests(orgId.value, { status: statusFilter.value ?? undefined })
     requests.value = response.data ?? []
   } catch (error: unknown) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(error)) return
     handleApiError(error, 'payment-request.organization.list')
   } finally {
     loading.value = false
@@ -99,13 +122,10 @@ onMounted(load)
     />
 
     <PageLoading v-if="loading" />
-    <Message v-else-if="!isAdminOrDeputy" severity="error" :closable="false">
-      {{ t('payment.admin.permissionDenied') }}
-    </Message>
-    <Message v-else-if="orgId === null" severity="error" :closable="false">
+    <Message v-else-if="orgId === null && !denied" severity="error" :closable="false">
       {{ t('payment.membership.paymentRequest.loadError') }}
     </Message>
-    <template v-else>
+    <template v-else-if="!denied">
       <div class="flex flex-wrap justify-between gap-2">
         <Select
           v-model="statusFilter"
