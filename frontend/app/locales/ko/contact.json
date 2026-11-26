@@ -30,7 +30,7 @@
       "revoke_tooltip": "무효화",
       "uses_unit": "회",
       "qr_alt": "QR코드",
-      "qr_hint": "QR코드를 스캔하여 추가"
+      "once_hint": "링크와 QR코드는 발급 직후 한 번만 표시됩니다. 다시 필요하면 새로 발급하세요."
     },
     "expiry": {
       "never": "무기한",
@@ -41,9 +41,7 @@
       "create_success": "초대 URL을 발행했습니다",
       "create_error": "발행에 실패했습니다",
       "revoke_success": "초대 URL을 무효화했습니다",
-      "revoke_error": "무효화에 실패했습니다",
-      "copy_success": "URL을 복사했습니다",
-      "copy_error": "복사에 실패했습니다"
+      "revoke_error": "무효화에 실패했습니다"
     },
     "my_qr": "내 연락처 QR"
   },
