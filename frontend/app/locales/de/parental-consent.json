@@ -48,6 +48,9 @@
     "error_auth_068": "Eine Einladung an diese E-Mail-Adresse wurde bereits gesendet",
     "error_auth_069": "Sie können keine Einladung an Ihre eigene E-Mail-Adresse senden",
     "error_auth_070": "Verfügbar nach Abschluss der elterlichen Zustimmung",
-    "link_removed": "Verknüpfung entfernt"
+    "link_removed": "Verknüpfung entfernt",
+    "error_invalid_email": "Das Format der E-Mail-Adresse ist ungültig",
+    "go_manage": "Zur Elternverwaltung",
+    "go_dashboard": "Zum Dashboard"
   }
 }

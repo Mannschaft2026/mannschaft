@@ -298,7 +298,9 @@ async function handleVerify() {
     }
 
     // 同意待ちは redirect を尊重せず pending 固定（迂回させない）。
-    navigateTo(isPendingConsent ? PARENTAL_CONSENT_PENDING_PATH : redirectTarget.value)
+    // redirect が無い（既定 '/'）ときは、保護者の承認画面で保存した token の承認画面へ戻る（一度きり）。
+    const resumed = redirectTarget.value === '/' ? takeParentalConsentReturnPath() : undefined
+    navigateTo(isPendingConsent ? PARENTAL_CONSENT_PENDING_PATH : (resumed ?? redirectTarget.value))
   } catch (e: unknown) {
     const code = errorCodeOf(e)
     if (applySessionEnd(code)) return

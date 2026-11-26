@@ -13,12 +13,14 @@ const mocks = vi.hoisted(() => ({
   reject: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  navigate: vi.fn(),
 }))
 const routeState = vi.hoisted(() => ({ path: '/parental-consent/approve', params: {}, query: { token: 'tok-123' } as Record<string, string> }))
 
 mockNuxtImport('useParentalConsentApi', () => () => ({ approve: mocks.approve, reject: mocks.reject }))
 mockNuxtImport('useRoute', () => () => routeState)
 mockNuxtImport('useNotification', () => () => ({ success: mocks.success, error: mocks.error }))
+mockNuxtImport('navigateTo', () => mocks.navigate)
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 
 const options = { global: { mocks: { $t: (k: string) => k } } }
@@ -73,5 +75,69 @@ describe('parental-consent/approve.vue（ログイン済みの保護者）', () 
     expect(mocks.reject).toHaveBeenCalledWith('tok-123')
     expect(mocks.approve).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('parental_consent.rejected_message')
+  })
+})
+
+/**
+ * CMP-261123-1124 アリシゼーション ALIC-1/ALIC-2
+ * - 未ログインで開いたら token を保存し、ログイン/登録へは redirect（承認画面・token 付き）を渡す。ログイン済みなら保存を破棄する
+ * - 承認・拒否のあとは行き止まりにせず、次の行き先のボタンを出す
+ */
+describe('parental-consent/approve.vue 復帰導線（ALIC-1）', () => {
+  it('未ログインで開くと token を保存し、ログインへ redirect 付きで誘導する', async () => {
+    localStorage.clear()
+    useAuthStore().$patch({ user: null } as never)
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await flushPromises()
+
+    expect(JSON.parse(localStorage.getItem('parentalConsentReturn') ?? '{}').token).toBe('tok-123')
+    await buttonByText(wrapper, 'parental_consent.login_button')!.trigger('click')
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      path: '/login',
+      query: { redirect: '/parental-consent/approve?token=tok-123' },
+    })
+  })
+
+  it('未ログインから登録へも redirect 付きで誘導する', async () => {
+    useAuthStore().$patch({ user: null } as never)
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await buttonByText(wrapper, 'parental_consent.register_button')!.trigger('click')
+
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      path: '/register',
+      query: { redirect: '/parental-consent/approve?token=tok-123' },
+    })
+  })
+
+  it('ログイン済みで承認画面に着いたら、保存していた token を破棄する', async () => {
+    localStorage.setItem('parentalConsentReturn', JSON.stringify({ token: 'tok-123', savedAt: Date.now() }))
+    await mountSuspended(ApprovePage, options)
+    await flushPromises()
+
+    expect(localStorage.getItem('parentalConsentReturn')).toBeNull()
+  })
+})
+
+describe('parental-consent/approve.vue 決定後の行き先（ALIC-2）', () => {
+  it('承認後は「保護者管理へ」「ダッシュボードへ」のボタンを出し、押すと遷移する', async () => {
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await buttonByText(wrapper, 'parental_consent.approve_button')!.trigger('click')
+    await flushPromises()
+
+    await buttonByText(wrapper, 'parental_consent.go_manage')!.trigger('click')
+    expect(mocks.navigate).toHaveBeenCalledWith('/parental-consent/manage')
+    await buttonByText(wrapper, 'parental_consent.go_dashboard')!.trigger('click')
+    expect(mocks.navigate).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('拒否後は「ダッシュボードへ」のボタンを出す', async () => {
+    const wrapper = await mountSuspended(ApprovePage, options)
+    await buttonByText(wrapper, 'parental_consent.reject_button')!.trigger('click')
+    const confirms = wrapper.findAll('button').filter((b: DOMWrapper<Element>) => b.text() === 'parental_consent.reject_button')
+    await confirms[confirms.length - 1]!.trigger('click')
+    await flushPromises()
+
+    await buttonByText(wrapper, 'parental_consent.go_dashboard')!.trigger('click')
+    expect(mocks.navigate).toHaveBeenCalledWith('/dashboard')
   })
 })

@@ -60,20 +60,22 @@ async function handleReject() {
 // 注意: 表示しただけで承認してはならない。承認・拒否は保護者が画面のボタンで明示的に選ぶ
 // （メールのリンクを確認目的で開いた保護者が拒否を選べなくなるため。CMP-261123-1124）。
 
-// U-01対応: 未ログイン時にトークンを sessionStorage に保存し、
-// ログイン/登録後に戻ってきた際に自動承認する
+// 未ログインで開いたら token を保存する（新規登録 → メール確認 → ログインを経ても、ログイン後に承認画面へ戻れるように。
+// 読み出しと破棄は共通のログイン完了処理が行う）。ログイン済みで着いたら保存は不要なので破棄する。
 onMounted(() => {
-  if (!authStore.isAuthenticated && token.value) {
-    sessionStorage.setItem('parentalConsentToken', token.value)
-  }
+  if (!token.value) return
+  if (authStore.isAuthenticated) clearParentalConsentReturn()
+  else stashParentalConsentToken(token.value)
 })
 
+const returnPath = computed(() => `${PARENTAL_CONSENT_APPROVE_PATH}?token=${token.value ?? ''}`)
+
 function navigateToLogin() {
-  navigateTo(`/login?redirect=/parental-consent/approve${token.value ? '?token=' + token.value : ''}`)
+  navigateTo({ path: '/login', query: { redirect: returnPath.value } })
 }
 
 function navigateToRegister() {
-  navigateTo(`/register?redirect=/parental-consent/approve${token.value ? '?token=' + token.value : ''}`)
+  navigateTo({ path: '/register', query: { redirect: returnPath.value } })
 }
 </script>
 
@@ -82,11 +84,33 @@ function navigateToRegister() {
     <!-- 承認済み -->
     <div v-if="approved" class="text-green-600">
       <p class="text-xl font-semibold">{{ $t('parental_consent.approved_message') }}</p>
+      <div class="mt-6 flex flex-col gap-3">
+        <button
+          class="min-h-11 w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+          @click="navigateTo('/parental-consent/manage')"
+        >
+          {{ $t('parental_consent.go_manage') }}
+        </button>
+        <button
+          class="min-h-11 w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          @click="navigateTo('/dashboard')"
+        >
+          {{ $t('parental_consent.go_dashboard') }}
+        </button>
+      </div>
     </div>
 
     <!-- 否認済み -->
     <div v-else-if="rejected" class="text-gray-600">
       <p class="text-xl font-semibold">{{ $t('parental_consent.rejected_message') }}</p>
+      <div class="mt-6">
+        <button
+          class="min-h-11 w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          @click="navigateTo('/dashboard')"
+        >
+          {{ $t('parental_consent.go_dashboard') }}
+        </button>
+      </div>
     </div>
 
     <!-- エラー -->

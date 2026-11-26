@@ -156,43 +156,43 @@ public enum AuthErrorCode implements ErrorCode {
     // ===== F01.9 年齢確認・保護者同意機能 (AUTH_050〜AUTH_070) =====
 
     /** 生年月日未指定 */
-    AUTH_050("AUTH_050", "birth_date is required", Severity.WARN),
+    AUTH_050("AUTH_050", "生年月日が指定されていません", Severity.WARN),
 
     /** 日付フォーマット誤り */
-    AUTH_051("AUTH_051", "Invalid date format (expected: YYYY-MM-DD)", Severity.WARN),
+    AUTH_051("AUTH_051", "日付の形式が正しくありません（YYYY-MM-DD）", Severity.WARN),
 
     /** 未来日付 */
-    AUTH_052("AUTH_052", "Birth date cannot be in the future", Severity.WARN),
+    AUTH_052("AUTH_052", "未来の日付は指定できません", Severity.WARN),
 
     /** 100年以上前の生年月日 */
-    AUTH_053("AUTH_053", "Birth date is too far in the past", Severity.WARN),
+    AUTH_053("AUTH_053", "生年月日が古すぎます", Severity.WARN),
 
     /** 保護者同意トークン無効・期限切れ・使用済み統一 */
-    AUTH_060("AUTH_060", "Parental consent token is invalid or expired", Severity.WARN),
+    AUTH_060("AUTH_060", "保護者同意のトークンが無効、または期限切れです", Severity.WARN),
 
     /** 自己承認防止 */
-    AUTH_062("AUTH_062", "Cannot register yourself as a guardian", Severity.WARN),
+    AUTH_062("AUTH_062", "自分自身を保護者として登録することはできません", Severity.WARN),
 
     /** 未成年保護者防止 */
-    AUTH_063("AUTH_063", "Guardian must be 18 years or older", Severity.WARN),
+    AUTH_063("AUTH_063", "保護者は18歳以上である必要があります", Severity.WARN),
 
     /** 子側からの最終リンク削除防止 */
-    AUTH_064("AUTH_064", "Cannot remove the last guardian link", Severity.WARN),
+    AUTH_064("AUTH_064", "最後の保護者リンクは削除できません", Severity.WARN),
 
     /** 保護者側からの最終リンク解除防止 */
-    AUTH_065("AUTH_065", "Please invite another guardian first", Severity.WARN),
+    AUTH_065("AUTH_065", "先に別の保護者を招待してください", Severity.WARN),
 
     /** 保護者退会ブロック */
-    AUTH_066("AUTH_066", "You are the sole guardian of a minor account", Severity.WARN),
+    AUTH_066("AUTH_066", "あなたは未成年アカウントの唯一の保護者です", Severity.WARN),
 
     /** 招待数上限 */
-    AUTH_067("AUTH_067", "Maximum 3 pending invitations allowed", Severity.WARN),
+    AUTH_067("AUTH_067", "保留中の招待は最大3件までです", Severity.WARN),
 
     /** 重複招待防止 */
-    AUTH_068("AUTH_068", "An invitation has already been sent to this email", Severity.WARN),
+    AUTH_068("AUTH_068", "このメールアドレスには既に招待を送信しています", Severity.WARN),
 
     /** 自己招待防止 */
-    AUTH_069("AUTH_069", "Cannot invite your own email address", Severity.WARN),
+    AUTH_069("AUTH_069", "自分自身のメールアドレスは招待できません", Severity.WARN),
 
     /** PENDING_PARENTAL_CONSENT での操作ブロック */
     AUTH_070("AUTH_070", "保護者の同意が完了するまで、この操作は利用できません", Severity.WARN),

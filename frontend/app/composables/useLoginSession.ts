@@ -96,9 +96,13 @@ export function useLoginSession() {
       // `/` には `guest` ミドルウェアが付いており、認証済みユーザーは即座に `/dashboard` へ
       // 弾き返される。`/` 経由にすると「認証済みユーザーが決して見ないランディングページ」を
       // 読み込んでから捨てることになり、遷移が二段になって待ち時間が伸びるだけで利点がない。
+      // 保護者の承認画面から登録・メール確認を経て戻った場合は、redirect が失われているため保存済み token の承認画面へ戻る。
+      // 保存は一度きり。redirect クエリがあればそちらを優先する。
+      const parentalConsentReturn = takeParentalConsentReturnPath()
       navigationTarget = passwordResult?.reactivated
         ? '/account-restore'
         : (route.query.redirect as string)
+          || parentalConsentReturn
           || (authStore.isSystemAdmin ? '/system-admin' : '/dashboard')
 
       notification.success(t('auth.login.success'))

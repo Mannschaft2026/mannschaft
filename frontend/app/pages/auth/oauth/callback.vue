@@ -95,7 +95,11 @@ onMounted(async () => {
     authStore.syncAccountSettings()
 
     notification.success(t('auth.login.success'))
-    if (authStore.isSystemAdmin) {
+    // 保護者の承認画面から来た場合は、保存済み token の承認画面へ戻る（一度きり）
+    const resumed = takeParentalConsentReturnPath()
+    if (resumed) {
+      await router.push(resumed)
+    } else if (authStore.isSystemAdmin) {
       await router.push('/system-admin')
     } else {
       await router.push('/dashboard')

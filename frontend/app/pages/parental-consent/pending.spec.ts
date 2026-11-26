@@ -2,7 +2,7 @@
 // 更新前のトークンは同意待ち（ppc）の印を持ったままで、参加待ち招待の GET が AUTH_070 になるため。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type DOMWrapper } from '@vue/test-utils'
 import PendingPage from './pending.vue'
 import { useAuthStore } from '~/stores/useAuthStore'
 
@@ -215,5 +215,77 @@ describe('parental-consent/pending.vue 同意待ち以外の利用者（CMP-2611
 
     expect(mocks.navigate).not.toHaveBeenCalledWith('/dashboard')
     expect(mocks.getInvitations).toHaveBeenCalled()
+  })
+})
+
+/**
+ * CMP-261123-1124 アリシゼーション ALIC-3/ALIC-4
+ * - 招待の業務エラー（BE の応答は data.error.code）を業務コード別の案内にする。汎用の「エラーが発生しました」にしない。
+ *   トースト（積み重なる）ではなく画面内の 1 か所に出し、再送信や入力で消える
+ * - スマホでも押せるタップ領域（44x44px 以上）
+ */
+describe('parental-consent/pending.vue 招待エラーの案内（ALIC-3）', () => {
+  function apiError(code: string) {
+    return Object.assign(new Error('bad request'), { data: { error: { code } } })
+  }
+
+  async function sendWith(code: string) {
+    mocks.getParents.mockResolvedValue([])
+    mocks.sendInvitation.mockRejectedValue(apiError(code))
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+    await wrapper.find('input[type="email"]').setValue('parent@example.com')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it.each([
+    ['AUTH_068', 'parental_consent.error_auth_068'],
+    ['AUTH_069', 'parental_consent.error_auth_069'],
+    ['AUTH_067', 'parental_consent.error_auth_067'],
+    ['COMMON_001', 'parental_consent.error_invalid_email'],
+  ])('%s は業務コード別の案内を画面内に出し、トーストは積まない', async (code, key) => {
+    const wrapper = await sendWith(code)
+
+    expect(wrapper.find('[role="alert"]').text()).toContain(key)
+    expect(wrapper.text()).not.toContain('error.unknown')
+    expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it('未知のコードは汎用の案内（error.unknown）にフォールバックする', async () => {
+    const wrapper = await sendWith('SOMETHING_ELSE')
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('error.unknown')
+  })
+
+  it('連続で失敗しても案内は 1 か所のまま、成功すると消える', async () => {
+    const wrapper = await sendWith('AUTH_068')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+
+    mocks.sendInvitation.mockResolvedValue(undefined)
+    await wrapper.find('input[type="email"]').setValue('other@example.com')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+})
+
+describe('parental-consent/pending.vue タップ領域（ALIC-4）', () => {
+  it('「招待を取消」と「ログアウト」は 44x44px 以上（min-h-11 min-w-11）', async () => {
+    mocks.getParents.mockResolvedValue([])
+    mocks.getInvitations.mockResolvedValue([
+      { linkId: 'l1', parentEmail: 'parent@example.com', status: 'PENDING', expiresAt: '2026-12-01T00:00:00' },
+    ])
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    for (const text of ['parental_consent.cancel_invite', 'button.logout']) {
+      const button = wrapper.findAll('button').find((b: DOMWrapper<Element>) => b.text() === text)
+      expect(button, text).toBeDefined()
+      expect(button!.classes(), text).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']))
+    }
   })
 })
