@@ -1,5 +1,6 @@
 package com.mannschaft.app.school.service;
 
+import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.school.dto.DailyAttendanceListResponse;
 import com.mannschaft.app.school.dto.DailyAttendanceResponse;
 import com.mannschaft.app.school.dto.DailyAttendanceUpdateRequest;
@@ -9,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -24,6 +27,7 @@ public class DailyAttendanceFacade {
 
     private final DailyAttendanceService dailyAttendanceService;
     private final SchoolAttendanceAccessPolicy policy;
+    private final NameResolverService nameResolverService;
 
     /**
      * 朝の点呼を一括登録する。認可（AC-13）: 日次登録権（R）。登録 entries の生徒は全員このクラスの在籍メンバーであること
@@ -38,10 +42,22 @@ public class DailyAttendanceFacade {
         return dailyAttendanceService.submitDailyRollCall(teamId, request, operatorUserId);
     }
 
-    /** クラスの日次出欠一覧を取得する。認可: 閲覧権（V）。 */
+    /**
+     * クラスの日次出欠一覧を取得する。認可: 閲覧権（V）。
+     *
+     * <p>生徒氏名は他ドメイン(auth)の参照なので、業務 TX の外（本ファサード）で 1 回のバッチ解決で付与する
+     * （D-3T、N+1 回避）。退会済み等で解決できない生徒は null（FE が代替表示）。</p>
+     */
     public DailyAttendanceListResponse getDailyAttendance(Long teamId, LocalDate date, Long currentUserId) {
         policy.checkCanView(currentUserId, teamId);
-        return dailyAttendanceService.getDailyAttendance(teamId, date);
+        DailyAttendanceListResponse list = dailyAttendanceService.getDailyAttendance(teamId, date);
+        Map<Long, String> names = nameResolverService.resolveUserFullNames(
+                list.getRecords().stream().map(DailyAttendanceResponse::getStudentUserId)
+                        .collect(Collectors.toSet()));
+        List<DailyAttendanceResponse> named = list.getRecords().stream()
+                .map(r -> r.toBuilder().studentDisplayName(names.get(r.getStudentUserId())).build())
+                .toList();
+        return list.toBuilder().records(named).build();
     }
 
     /** 日次出欠を個別修正する。認可（AC-13）: 日次登録権（R）。 */

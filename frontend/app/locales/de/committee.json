@@ -26,7 +26,8 @@
       "visibility_to_org": "Sichtbarkeit in der Organisation",
       "start_date": "Startdatum",
       "end_date": "Enddatum",
-      "member_count": "Mitglieder"
+      "member_count": "Mitglieder",
+      "chair": "Vorsitz"
     },
     "visibility": {
       "HIDDEN": "Versteckt",
@@ -96,7 +97,16 @@
       "invitee": "Eingeladener"
     },
     "create_dialog": {
-      "title": "Komitee gründen"
+      "title": "Komitee gründen",
+      "chair_placeholder": "Vorsitz auswählen",
+      "purpose_placeholder": "Zweck-Tag auswählen"
+    },
+    "purpose_tag": {
+      "TOURNAMENT": "Turnier",
+      "GOVERNANCE": "Governance",
+      "ELECTION": "Wahl",
+      "PROJECT": "Projekt",
+      "OTHER": "Sonstiges"
     }
   }
 }

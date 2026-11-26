@@ -156,7 +156,9 @@
         "apply_template_failed": "템플릿 적용에 실패했습니다",
         "load_all_failed": "명단 목록 로드에 실패했습니다",
         "update_deadline_failed": "마감일 업데이트에 실패했습니다"
-      }
+      },
+      "templates_unavailable": "팀의 소속 조직을 확인할 수 없어 템플릿을 사용할 수 없습니다. 멤버를 직접 입력해 주세요.",
+      "templates_load_failed": "템플릿을 불러오지 못했습니다. 멤버는 직접 입력할 수 있습니다."
     },
     "communication": {
       "title": "연락 공간",

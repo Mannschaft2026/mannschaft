@@ -7,11 +7,13 @@ import com.mannschaft.app.parking.dto.ApplicationResponse;
 import com.mannschaft.app.parking.dto.CreateApplicationRequest;
 import com.mannschaft.app.parking.dto.RejectApplicationRequest;
 import com.mannschaft.app.parking.service.ParkingAccessGuard;
+import com.mannschaft.app.parking.service.ParkingApplicationAccessPolicy;
 import com.mannschaft.app.parking.service.ParkingApplicationService;
 import com.mannschaft.app.parking.service.ParkingSpaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -35,6 +37,7 @@ public class OrgParkingApplicationController {
     private final ParkingApplicationService applicationService;
     private final ParkingSpaceService spaceService;
     private final ParkingAccessGuard parkingAccessGuard;
+    private final ParkingApplicationAccessPolicy accessPolicy;
 
     private static final String SCOPE_TYPE = ParkingScopeType.ORGANIZATION.name();
 
@@ -43,11 +46,12 @@ public class OrgParkingApplicationController {
     public ResponseEntity<PagedResponse<ApplicationResponse>> list(
             @PathVariable Long organizationId,
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
-        List<Long> spaceIds = spaceService.getSpaceIds(SCOPE_TYPE, organizationId);
-        Page<ApplicationResponse> result = applicationService.list(spaceIds, status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) int size) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, organizationId, userId);
+        Page<ApplicationResponse> result = applicationService.list(SCOPE_TYPE, organizationId, userId,
+                accessPolicy.canViewAll(SCOPE_TYPE, organizationId, userId), status,
                 PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt")));
         PagedResponse.PageMeta meta = new PagedResponse.PageMeta(
                 result.getTotalElements(), result.getNumber(), result.getSize(), result.getTotalPages());
@@ -59,9 +63,12 @@ public class OrgParkingApplicationController {
     public ResponseEntity<ApiResponse<ApplicationResponse>> create(
             @PathVariable Long organizationId,
             @Valid @RequestBody CreateApplicationRequest request) {
-        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        Long actorId = SecurityUtils.getCurrentUserId();
+        // SUPPORTER は申請不可（AC-15）。代理入力時の申請者は代理対象者（AC-14）
+        Long applicantId = accessPolicy.resolveApplicant(SCOPE_TYPE, organizationId, actorId);
+        parkingAccessGuard.requireOwnedVehicle(applicantId, request.getVehicleId());
         List<Long> spaceIds = spaceService.getSpaceIds(SCOPE_TYPE, organizationId);
-        ApplicationResponse result = applicationService.create(spaceIds, SecurityUtils.getCurrentUserId(), request);
+        ApplicationResponse result = applicationService.create(spaceIds, applicantId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(result));
     }
 
@@ -69,7 +76,7 @@ public class OrgParkingApplicationController {
     @Operation(summary = "組織申請承認")
     public ResponseEntity<ApiResponse<ApplicationResponse>> approve(
             @PathVariable Long organizationId, @PathVariable Long id) {
-        parkingAccessGuard.requireScopeAdmin(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        accessPolicy.requireManage(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
         ApplicationResponse result = applicationService.approve(SCOPE_TYPE, organizationId, id, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(result));
     }
@@ -79,7 +86,7 @@ public class OrgParkingApplicationController {
     public ResponseEntity<ApiResponse<ApplicationResponse>> reject(
             @PathVariable Long organizationId, @PathVariable Long id,
             @Valid @RequestBody RejectApplicationRequest request) {
-        parkingAccessGuard.requireScopeAdmin(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        accessPolicy.requireManage(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
         ApplicationResponse result = applicationService.reject(SCOPE_TYPE, organizationId, id, request, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(result));
     }
@@ -97,7 +104,7 @@ public class OrgParkingApplicationController {
     public ResponseEntity<ApiResponse<List<ApplicationResponse>>> lottery(
             @PathVariable Long organizationId,
             @RequestParam Long spaceId) {
-        parkingAccessGuard.requireScopeAdmin(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        accessPolicy.requireManage(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
         List<ApplicationResponse> result = applicationService.executeLottery(SCOPE_TYPE, organizationId, spaceId, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.of(result));
     }

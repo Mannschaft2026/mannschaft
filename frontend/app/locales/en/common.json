@@ -3354,6 +3354,27 @@
       "created_at": "Issued at",
       "expires_at": "Expires at",
       "used_count": "Times used"
+    },
+    "signage": {
+      "section": "Display device tokens",
+      "issue": "Issue token",
+      "device_name": "Device name",
+      "device_placeholder": "e.g. Entrance monitor",
+      "empty": "No tokens yet",
+      "issued_title": "Display device token issued",
+      "no_expiry": "No expiry",
+      "inactive": "Revoked",
+      "reissue_confirm": "This issues a new link and revokes this token. Continue?",
+      "revoke_confirm": "Revoke this token?",
+      "issue_success": "Token issued",
+      "issue_failed": "Failed to issue the token",
+      "reissue_success": "Token reissued",
+      "reissue_failed": "Failed to reissue the token",
+      "revoke_success": "Token revoked",
+      "revoke_failed": "Failed to revoke the token",
+      "name_required": "Enter a device name",
+      "token_label": "Token to set on the device",
+      "reissue_revoke_failed": "The new token was issued, but revoking the old token failed. Please revoke the old token manually"
     }
   },
   "globalSearch": {

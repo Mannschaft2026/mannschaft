@@ -39,6 +39,18 @@ public class RegisteredVehicleService {
     }
 
     /**
+     * 指定ユーザー本人の車両であることを要求する。
+     *
+     * <p>他人の車両・存在しない車両は同一の {@code VEHICLE_NOT_FOUND}（404）で拒否し、
+     * 車両 ID の存在オラクルを作らない（CMP-260930-0233）。</p>
+     */
+    public void requireOwnedVehicle(Long userId, Long vehicleId) {
+        if (vehicleId == null || vehicleRepository.findByIdAndUserId(vehicleId, userId).isEmpty()) {
+            throw new BusinessException(ParkingErrorCode.VEHICLE_NOT_FOUND);
+        }
+    }
+
+    /**
      * 車両を登録する。
      */
     @Transactional

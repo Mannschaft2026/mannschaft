@@ -111,6 +111,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
 
     @Autowired
+    private com.mannschaft.app.common.token.SecretTokenVault vault;
+
+    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
@@ -894,7 +897,7 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
                           String passwordHash, boolean active, Long createdBy) {
         SharedFileLinkEntity.SharedFileLinkEntityBuilder<?, ?> builder = SharedFileLinkEntity.builder()
                 .fileId(fileId)
-                .token(token)
+                .tokenHash(vault.hash(token))
                 .expiresAt(expiresAt)
                 .active(active)
                 .createdBy(createdBy);

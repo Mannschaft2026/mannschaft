@@ -156,7 +156,9 @@
         "apply_template_failed": "Vorlage konnte nicht angewendet werden",
         "load_all_failed": "Meldelisten konnten nicht geladen werden",
         "update_deadline_failed": "Frist konnte nicht aktualisiert werden"
-      }
+      },
+      "templates_unavailable": "Vorlagen sind nicht verfügbar, da die Organisation des Teams nicht ermittelt werden konnte. Bitte Mitglieder manuell eingeben.",
+      "templates_load_failed": "Vorlagen konnten nicht geladen werden. Mitglieder können weiterhin manuell eingegeben werden."
     },
     "communication": {
       "title": "Kontaktbereich",
