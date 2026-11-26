@@ -116,15 +116,13 @@ class ConfirmableNotificationDraftServiceTest {
     }
 
     private void stubSaveEcho() {
-        given(draftRepository.save(any(ConfirmableNotificationDraftEntity.class))).willAnswer(invocation -> {
+        given(draftRepository.saveAndFlush(any(ConfirmableNotificationDraftEntity.class))).willAnswer(invocation -> {
             ConfirmableNotificationDraftEntity e = invocation.getArgument(0);
             if (e.getId() == null) {
                 e.setId(DRAFT_ID);
             }
             return e;
         });
-        given(draftRepository.saveAndFlush(any(ConfirmableNotificationDraftEntity.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
     }
 
     private static ErrorAssert assertBusinessError(Throwable thrown) {
@@ -159,7 +157,7 @@ class ConfirmableNotificationDraftServiceTest {
 
             ArgumentCaptor<ConfirmableNotificationDraftEntity> captor =
                     ArgumentCaptor.forClass(ConfirmableNotificationDraftEntity.class);
-            verify(draftRepository).save(captor.capture());
+            verify(draftRepository).saveAndFlush(captor.capture());
             ConfirmableNotificationDraftEntity saved = captor.getValue();
             assertThat(saved.getScopeType()).isEqualTo(ScopeType.TEAM);
             assertThat(saved.getScopeId()).isEqualTo(TEAM_ID);
@@ -189,7 +187,7 @@ class ConfirmableNotificationDraftServiceTest {
 
             ArgumentCaptor<ConfirmableNotificationDraftEntity> captor =
                     ArgumentCaptor.forClass(ConfirmableNotificationDraftEntity.class);
-            verify(draftRepository).save(captor.capture());
+            verify(draftRepository).saveAndFlush(captor.capture());
             assertThat(captor.getValue().getTitle()).isEqualTo("");
             assertThat(captor.getValue().getPriority()).isEqualTo(ConfirmableNotificationPriority.NORMAL);
         }
@@ -316,7 +314,7 @@ class ConfirmableNotificationDraftServiceTest {
 
             draftService.create(ScopeType.TEAM, TEAM_ID, USER_ID, saveRequest("10件目", null));
 
-            verify(draftRepository).save(any(ConfirmableNotificationDraftEntity.class));
+            verify(draftRepository).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
         }
 
         @Test
@@ -328,7 +326,7 @@ class ConfirmableNotificationDraftServiceTest {
             assertBusinessError(catchThrowable(() -> draftService.create(
                     ScopeType.TEAM, TEAM_ID, USER_ID, saveRequest("11件目", null))))
                     .is(ConfirmableNotificationErrorCode.DRAFT_LIMIT_EXCEEDED);
-            verify(draftRepository, never()).save(any(ConfirmableNotificationDraftEntity.class));
+            verify(draftRepository, never()).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
             verify(draftRepository, never()).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
         }
 
@@ -346,7 +344,7 @@ class ConfirmableNotificationDraftServiceTest {
             draftService.delete(ScopeType.TEAM, TEAM_ID, USER_ID, DRAFT_ID);
             draftService.create(ScopeType.TEAM, TEAM_ID, USER_ID, saveRequest("削除後", null));
 
-            verify(draftRepository).save(any(ConfirmableNotificationDraftEntity.class));
+            verify(draftRepository).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
         }
 
         @Test
@@ -361,7 +359,7 @@ class ConfirmableNotificationDraftServiceTest {
             draftService.create(ScopeType.ORGANIZATION, TEAM_ID, USER_ID, saveRequest("組織側", null));
 
             verify(draftRepository).countByScopeTypeAndScopeIdAndUserId(eq(ScopeType.ORGANIZATION), eq(TEAM_ID), eq(USER_ID));
-            verify(draftRepository).save(any(ConfirmableNotificationDraftEntity.class));
+            verify(draftRepository).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
         }
     }
 
@@ -385,7 +383,7 @@ class ConfirmableNotificationDraftServiceTest {
                     ScopeType.TEAM, TEAM_ID, USER_ID, DRAFT_ID, updateRequest("上書き", "本文", 4L))))
                     .is(ConfirmableNotificationErrorCode.DRAFT_VERSION_CONFLICT);
             assertThat(entity.getTitle()).as("競合時は Entity を書き換えない").isEqualTo("保存済み");
-            verify(draftRepository, never()).save(any(ConfirmableNotificationDraftEntity.class));
+            verify(draftRepository, never()).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
             verify(draftRepository, never()).saveAndFlush(any(ConfirmableNotificationDraftEntity.class));
         }
 

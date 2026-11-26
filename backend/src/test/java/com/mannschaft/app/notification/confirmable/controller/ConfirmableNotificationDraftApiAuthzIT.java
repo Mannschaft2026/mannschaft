@@ -240,6 +240,9 @@ class ConfirmableNotificationDraftApiAuthzIT extends AbstractMySqlIntegrationTes
             assertThat(created.getResponse().getStatus()).as("%s 作成", scope.type()).isEqualTo(201);
             String draftId = data(created).path("id").asText();
             long version = data(created).path("version").asLong();
+            // 作成直後の応答でも createdAt / updatedAt が入っている（save だけだと flush 前で null になる）
+            assertThat(data(created).path("createdAt").isNull()).as("%s 作成応答の createdAt", scope.type()).isFalse();
+            assertThat(data(created).path("updatedAt").isNull()).as("%s 作成応答の updatedAt", scope.type()).isFalse();
 
             assertThat(status(get(scope.base() + "/" + draftId))).as("%s 取得", scope.type()).isEqualTo(200);
             Map<String, Object> update = new LinkedHashMap<>();

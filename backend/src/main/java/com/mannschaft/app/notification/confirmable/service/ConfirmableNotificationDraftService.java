@@ -94,7 +94,7 @@ public class ConfirmableNotificationDraftService {
                 .selectedGroupId(request.getSelectedGroupId())
                 .selectedTemplateId(request.getSelectedTemplateId())
                 .build();
-        return toDetail(draftRepository.save(entity));
+        return toDetail(draftRepository.saveAndFlush(entity));
     }
 
     public ConfirmableNotificationDraftDetailResponse get(
