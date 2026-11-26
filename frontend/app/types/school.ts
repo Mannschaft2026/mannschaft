@@ -8,6 +8,8 @@ export interface DailyAttendanceResponse {
   id: number
   teamId: number
   studentUserId: number
+  /** 生徒の氏名。退会済み等で解決できない場合は null */
+  studentDisplayName?: string | null
   attendanceDate: string
   status: AttendanceStatus
   absenceReason?: AbsenceReason

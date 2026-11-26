@@ -73546,6 +73546,7 @@ export interface components {
             recordedBy?: number;
             /** @enum {string} */
             status?: "ATTENDING" | "PARTIAL" | "ABSENT" | "UNDECIDED";
+            studentDisplayName?: string;
             /** Format: int64 */
             studentUserId?: number;
             /** Format: int64 */
