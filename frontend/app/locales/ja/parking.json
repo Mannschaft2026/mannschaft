@@ -1,0 +1,104 @@
+{
+  "parking": {
+    "title": "駐車場管理",
+    "spaces": {
+      "title": "区画一覧",
+      "empty": "駐車区画がありません",
+      "pricePerMonth": "月額 {price}",
+      "floor": "{floor}階",
+      "deadline": "申請期限 {date}",
+      "status": {
+        "VACANT": "空き",
+        "OCCUPIED": "使用中",
+        "MAINTENANCE": "メンテナンス中"
+      },
+      "applicationStatus": {
+        "ACCEPTING": "申請受付中",
+        "NOT_ACCEPTING": "申請受付停止中",
+        "LOTTERY_CLOSED": "抽選受付終了"
+      },
+      "type": {
+        "INDOOR": "屋内",
+        "OUTDOOR": "屋外",
+        "ACCESSIBLE": "バリアフリー",
+        "MOTORCYCLE": "バイク",
+        "BICYCLE": "自転車",
+        "VISITOR": "来場者用",
+        "OTHER": "その他"
+      },
+      "allocation": {
+        "FIRST_COME": "先着順",
+        "LOTTERY": "抽選"
+      },
+      "refreshError": "区画一覧の更新に失敗しました。表示は最新でない可能性があります"
+    },
+    "apply": {
+      "button": "駐車場を申請",
+      "dialogTitle": "区画の利用を申請",
+      "space": "区画",
+      "spacePlaceholder": "区画を選択",
+      "noSpaces": "現在、申請を受け付けている区画はありません。",
+      "vehicle": "車両",
+      "vehiclePlaceholder": "車両を選択",
+      "noVehicle": "車両が登録されていません。申請には車両の登録が必要です。",
+      "loadVehiclesError": "車両情報の取得に失敗しました。",
+      "retry": "再試行",
+      "message": "メッセージ（任意）",
+      "messageHint": "最大{max}文字",
+      "submit": "申請する",
+      "close": "閉じる",
+      "success": "申請を送信しました",
+      "successLottery": "抽選の申請を受け付けました"
+    },
+    "vehicle": {
+      "register": "車両を登録する",
+      "type": "種別",
+      "plate": "ナンバー",
+      "nickname": "ニックネーム（任意）",
+      "save": "登録",
+      "kind": {
+        "CAR": "自動車",
+        "MOTORCYCLE": "バイク",
+        "BICYCLE": "自転車"
+      }
+    },
+    "applications": {
+      "title": "自分の申請",
+      "titleAll": "申請一覧",
+      "empty": "申請はありません",
+      "vehicle": "車両",
+      "otherVehicle": "他の利用者の車両",
+      "rejectionReason": "却下理由: {reason}",
+      "cancel": "取り消す",
+      "cancelled": "申請を取り消しました",
+      "cancelConfirm": {
+        "header": "申請の取消",
+        "message": "区画 {space} の申請を取り消します。よろしいですか？",
+        "accept": "取り消す",
+        "reject": "やめる"
+      },
+      "status": {
+        "PENDING": "審査待ち",
+        "APPROVED": "承認済み",
+        "REJECTED": "却下",
+        "CANCELLED": "取消済み",
+        "LOTTERY_PENDING": "抽選待ち"
+      }
+    },
+    "errors": {
+      "spaceNotFound": "区画が見つかりません。一覧を更新しました",
+      "vehicleNotFound": "選択した車両が見つかりません。車両を選び直してください",
+      "applicationNotFound": "申請が見つかりません。一覧を更新しました",
+      "spaceNotVacant": "この区画は空きではなくなりました。一覧を更新しました",
+      "maxSpacesExceeded": "1人あたりの最大利用区画数を超えています",
+      "notAccepting": "この区画は現在申請を受け付けていません",
+      "alreadyApplied": "この区画には既に申請済みです",
+      "invalidStatus": "この申請は既に決定済みのため操作できません",
+      "plateDuplicate": "このナンバーは既に登録されています",
+      "forbidden": "この操作を行う権限がありません",
+      "notFound": "対象が見つかりません。一覧を更新しました",
+      "conflict": "状態が変わったため操作できませんでした。一覧を更新しました",
+      "unprocessable": "この区画は現在申請できません。一覧を更新しました"
+    }
+  }
+}

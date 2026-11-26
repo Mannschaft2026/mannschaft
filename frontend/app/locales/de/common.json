@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "Die Berechtigungen konnten nicht geladen werden. Bitte später neu laden",
-      "forbidden": "Nur Mitglieder dieses Teams können Fähigkeiten und Zertifikate nutzen",
       "mineTab": "Meine Fähigkeiten und Zertifikate",
       "categoriesReloadFailed": "Die Kategorien konnten nicht neu geladen werden"
     }
@@ -1970,6 +1969,10 @@
       "downloadLabel": "{format} herunterladen ({type})"
     },
     "menu": "Menü",
+    "scopeNotFound": {
+      "title": "Nicht gefunden",
+      "body": "Die gesuchte Seite kann nicht angezeigt werden."
+    },
     "scopeShell": {
       "memberCount": "{count} Mitglied | {count} Mitglieder",
       "supporterCount": "{count} Unterstützer | {count} Unterstützer",

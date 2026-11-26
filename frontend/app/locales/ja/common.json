@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "権限情報の取得に失敗しました。時間をおいて再読み込みしてください",
-      "forbidden": "このチームのメンバーのみ、スキル・資格を利用できます",
       "mineTab": "自分のスキル・資格",
       "categoriesReloadFailed": "カテゴリの再取得に失敗しました"
     }
@@ -1972,6 +1971,10 @@
     "menu": "メニュー",
     "moreActions": "その他の操作",
     "openNavigation": "ナビゲーションを開く",
+    "scopeNotFound": {
+      "title": "見つかりません",
+      "body": "お探しのページは表示できません。"
+    },
     "scopeShell": {
       "memberCount": "メンバー {count}人",
       "supporterCount": "サポーター {count}人",

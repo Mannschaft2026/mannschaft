@@ -18,8 +18,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -99,8 +97,8 @@ class PointCardRematchBatchServiceTest {
         UserPointCardEntity card2 = card("01928a3e-0002-7000-8000-000000000002", "Tポイント");
         UserPointCardEntity card3 = card("01928a3e-0003-7000-8000-000000000003", "Pontaポイント");
 
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(card1, card2, card3), PageRequest.of(0, 1000), 3));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(List.of(card1, card2, card3));
 
         PointCardProviderEntity p1 = provider();
         PointCardProviderEntity p2 = provider();
@@ -127,8 +125,8 @@ class PointCardRematchBatchServiceTest {
         UserPointCardEntity card2 = card("01928a3e-0002-7000-8000-000000000002", "知らないカード");
         UserPointCardEntity card3 = card("01928a3e-0003-7000-8000-000000000003", "Pontaポイント");
 
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(card1, card2, card3), PageRequest.of(0, 1000), 3));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(List.of(card1, card2, card3));
 
         when(providerMatchService.matchProvider("ドコモポイント")).thenReturn(Optional.of(provider()));
         when(providerMatchService.matchProvider("知らないカード")).thenReturn(Optional.empty());
@@ -151,8 +149,8 @@ class PointCardRematchBatchServiceTest {
             cards.add(card("01928a3e-000" + i + "-7000-8000-00000000000" + i, "未知カード" + i));
         }
 
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(cards, PageRequest.of(0, 1000), 5));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(cards);
         when(providerMatchService.matchProvider(any())).thenReturn(Optional.empty());
 
         service.execute();
@@ -171,8 +169,8 @@ class PointCardRematchBatchServiceTest {
         UserPointCardEntity card2 = card("01928a3e-0002-7000-8000-000000000002", "BAD");
         UserPointCardEntity card3 = card("01928a3e-0003-7000-8000-000000000003", "Pontaポイント");
 
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(card1, card2, card3), PageRequest.of(0, 1000), 3));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(List.of(card1, card2, card3));
 
         when(providerMatchService.matchProvider("ドコモポイント")).thenReturn(Optional.of(provider()));
         when(providerMatchService.matchProvider("BAD"))
@@ -194,8 +192,8 @@ class PointCardRematchBatchServiceTest {
     @Test
     @DisplayName("0 件 → no-op、集計 {total:0, matched:0, skipped:0} を発火")
     void emptyTable() {
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(Collections.emptyList(), PageRequest.of(0, 1000), 0));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(Collections.emptyList());
 
         service.execute();
 
@@ -221,25 +219,57 @@ class PointCardRematchBatchServiceTest {
         UserPointCardEntity c5 = card("01928a3e-0005-7000-8000-000000000005", "n5");
 
         // PageImpl(content, pageable, totalElements) で isLast() は自動算出される
-        Page<UserPointCardEntity> p0 = new PageImpl<>(List.of(c1, c2), PageRequest.of(0, 2), 5);
-        Page<UserPointCardEntity> p1 = new PageImpl<>(List.of(c3, c4), PageRequest.of(1, 2), 5);
-        Page<UserPointCardEntity> p2 = new PageImpl<>(List.of(c5), PageRequest.of(2, 2), 5);
-
-        when(userPointCardRepository.findRematchTargets(PageRequest.of(0, 2))).thenReturn(p0);
-        when(userPointCardRepository.findRematchTargets(PageRequest.of(1, 2))).thenReturn(p1);
-        when(userPointCardRepository.findRematchTargets(PageRequest.of(2, 2))).thenReturn(p2);
+        // キーセット: 直前チャンクの最後の ID を次の afterId に渡す
+        when(userPointCardRepository.findRematchTargetsAfter(PointCardRematchBatchService.MIN_UUID, PageRequest.of(0, 2)))
+                .thenReturn(List.of(c1, c2));
+        when(userPointCardRepository.findRematchTargetsAfter(c2.getId(), PageRequest.of(0, 2)))
+                .thenReturn(List.of(c3, c4));
+        when(userPointCardRepository.findRematchTargetsAfter(c4.getId(), PageRequest.of(0, 2)))
+                .thenReturn(List.of(c5));
 
         when(providerMatchService.matchProvider(any())).thenReturn(Optional.empty());
 
         service.execute();
 
-        // 3 回 findRematchTargets が呼ばれることを確認
-        verify(userPointCardRepository, times(1)).findRematchTargets(PageRequest.of(0, 2));
-        verify(userPointCardRepository, times(1)).findRematchTargets(PageRequest.of(1, 2));
-        verify(userPointCardRepository, times(1)).findRematchTargets(PageRequest.of(2, 2));
+        verify(userPointCardRepository, times(1))
+                .findRematchTargetsAfter(PointCardRematchBatchService.MIN_UUID, PageRequest.of(0, 2));
+        verify(userPointCardRepository, times(1)).findRematchTargetsAfter(c2.getId(), PageRequest.of(0, 2));
+        verify(userPointCardRepository, times(1)).findRematchTargetsAfter(c4.getId(), PageRequest.of(0, 2));
         // 全 5 件 matchProvider 呼出
         verify(providerMatchService, times(5)).matchProvider(any());
         assertMetadataContains("\"total\":5", "\"matched\":0", "\"skipped\":0");
+    }
+
+    // ──────────────────────────────────────────────
+    // 6b. コミットで対象集合が縮んでも取りこぼさない（CMP-260916-0055）
+    // ──────────────────────────────────────────────
+    @Test
+    @DisplayName("マッチ済みカードが対象集合から抜けても全 5 件が処理される（chunk-size=2・全件マッチ）")
+    void shrinkingTargetSetIsFullyProcessed() {
+        ReflectionTestUtils.setField(service, "chunkSize", 2);
+
+        List<UserPointCardEntity> all = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            all.add(card("01928a3e-000" + i + "-7000-8000-00000000000" + i, "n" + i));
+        }
+        // 実 DB 同様: provider_id IS NULL かつ id > afterId を id 昇順で size 件。マッチ済みは次回以降の対象から消える
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenAnswer(inv -> {
+                    UUID after = inv.getArgument(0);
+                    Pageable p = inv.getArgument(1);
+                    return all.stream()
+                            .filter(c -> c.getProviderId() == null && c.getId().compareTo(after) > 0)
+                            .sorted(java.util.Comparator.comparing(UserPointCardEntity::getId))
+                            .limit(p.getPageSize())
+                            .toList();
+                });
+        when(providerMatchService.matchProvider(any())).thenAnswer(inv -> Optional.of(provider()));
+
+        service.execute();
+
+        assertThat(all).allSatisfy(c -> assertThat(c.getProviderId()).isNotNull());
+        verify(userPointCardRepository, times(5)).save(any(UserPointCardEntity.class));
+        assertMetadataContains("\"total\":5", "\"matched\":5", "\"skipped\":0");
     }
 
     // ──────────────────────────────────────────────
@@ -252,8 +282,8 @@ class PointCardRematchBatchServiceTest {
         for (int i = 1; i <= 10; i++) {
             cards.add(card(String.format("01928a3e-%04d-7000-8000-000000000000", i), "n" + i));
         }
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(cards, PageRequest.of(0, 1000), 10));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(cards);
 
         // n1, n2 が失敗、残り 8 件は未マッチ（matched=0, skipped=2 で失敗率 20%）
         when(providerMatchService.matchProvider("n1")).thenThrow(new RuntimeException("fail1"));
@@ -279,8 +309,8 @@ class PointCardRematchBatchServiceTest {
         for (int i = 1; i <= 100; i++) {
             cards.add(card(String.format("01928a3e-%04d-7000-8000-000000000000", i), "n" + i));
         }
-        when(userPointCardRepository.findRematchTargets(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(cards, PageRequest.of(0, 1000), 100));
+        when(userPointCardRepository.findRematchTargetsAfter(any(UUID.class), any(Pageable.class)))
+                .thenReturn(cards);
 
         // n1〜n5 失敗、残り 95 件は未マッチ（5%）
         for (int i = 1; i <= 5; i++) {

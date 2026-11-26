@@ -30,7 +30,7 @@
       "revoke_tooltip": "Revocar",
       "uses_unit": " uso(s)",
       "qr_alt": "Código QR",
-      "qr_hint": "Escanea el código QR para agregar"
+      "once_hint": "El enlace y el código QR se muestran solo una vez, justo después de emitirlos. Emite uno nuevo si lo necesitas de nuevo."
     },
     "expiry": {
       "never": "Sin vencimiento",
@@ -41,9 +41,7 @@
       "create_success": "URL de invitación emitida correctamente",
       "create_error": "Error al emitir la URL",
       "revoke_success": "URL de invitación revocada",
-      "revoke_error": "Error al revocar la URL",
-      "copy_success": "URL copiada",
-      "copy_error": "Error al copiar la URL"
+      "revoke_error": "Error al revocar la URL"
     },
     "my_qr": "Mi QR de contacto"
   },
