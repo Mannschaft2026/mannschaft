@@ -2466,13 +2466,6 @@
     }
   },
   "team": {
-    "access": {
-      "forbiddenTitle": "このチームの中身は表示できません",
-      "forbiddenBody": "メンバー限定のチームなど、公開範囲の外にいるため表示できません。メンバーとして参加している場合は、チームの管理者に確認してください。",
-      "notFoundTitle": "チームが見つかりません",
-      "notFoundBody": "URL が正しいか確認してください。チームが削除された可能性があります。",
-      "backToHome": "ホームへ戻る"
-    },
     "mapEmbedUrlLabel": "店舗地図（Google Maps 埋め込み URL）",
     "mapEmbedUrlPlaceholder": "https://www.google.com/maps/embed?...",
     "mapEmbedUrlWarning": "⚠️ この URL は未ログインユーザーにも公開されます",

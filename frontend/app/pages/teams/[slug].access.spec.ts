@@ -5,7 +5,7 @@ import { defineComponent, h, nextTick, reactive, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import TeamShell from './[slug].vue'
 
-// CMP-261124-0159 PR-F1: 親シェルの 403/404 出し分け（AC-0159-86・87）と遷移時の再判定（AC-0159-98）。
+// CMP-261124-0159 PR-F1: 親シェルの 403/404 の統一表示（CMP-261125-1108 / 2026-11-27 マスター裁定で AC-0159-86・87 は取り下げ）と遷移時の再判定（AC-0159-98）。
 const mocks = vi.hoisted(() => ({
   route: { current: {} as Record<string, unknown> },
   getTeam: vi.fn(),
@@ -68,10 +68,7 @@ function deferred<T>() {
 const Shell = defineComponent({
   setup: (_, { slots }) => () => h('section', [slots.header?.(), slots.default?.()]),
 })
-const Denied = defineComponent({
-  props: ['kind'],
-  setup: props => () => h('div', { 'data-testid': 'denied', 'data-kind': props.kind }),
-})
+const NotFound = defineComponent({ setup: () => () => h('div', { 'data-testid': 'scope-not-found' }) })
 const Page = defineComponent({ setup: () => () => h('div', { 'data-testid': 'child-page' }) })
 
 function setRoute(path: string, slug = 'a') {
@@ -87,7 +84,7 @@ function mountShell() {
       stubs: {
         ScopePageShell: Shell,
         TeamPageHeader: true,
-        TeamAccessDeniedState: Denied,
+        ScopeNotFound: NotFound,
         NuxtPage: Page,
         NuxtLink: true,
         LoadingBounce: true,
@@ -109,16 +106,32 @@ beforeEach(() => {
   mocks.getTeam.mockResolvedValue({ data: { slug: 'a', id: 'a', numericId: 1, basicInfo: { name: 'A' } } })
 })
 
-describe('親シェル [slug].vue の取得失敗の出し分け（AC-0159-86・87）', () => {
-  it('403 は TeamAccessDeniedState(forbidden) を出し、トーストなし・子ページ非描画', async () => {
+describe('親シェル [slug].vue の取得失敗の出し分け（403/404 は同じ「見つかりません」。AC-0159-86・87 取り下げ）', () => {
+  it('403 は「見つかりません」を出し、トーストなし・子ページ非描画', async () => {
     mocks.getTeam.mockRejectedValue({ response: { status: 403 } })
     const wrapper = mountShell()
     await settle()
-    expect(wrapper.find('[data-testid="denied"]').attributes('data-kind')).toBe('forbidden')
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
     expect(mocks.error).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('common.scopeShell.load_error_title')
     wrapper.unmount()
+  })
+
+  it('403 と 404 は同じ表示になる（権限の有無・存在の有無を示さない。AC-0159-86・87 取り下げの裏付け）', async () => {
+    mocks.getTeam.mockRejectedValue({ response: { status: 403 } })
+    const forbidden = mountShell()
+    await settle()
+    const forbiddenHtml = forbidden.html()
+    forbidden.unmount()
+
+    mocks.states.clear()
+    mocks.getTeam.mockRejectedValue({ response: { status: 404 } })
+    const notFound = mountShell()
+    await settle()
+    expect(notFound.html()).toBe(forbiddenHtml)
+    expect(notFound.find('[data-testid="scope-not-found"]').exists()).toBe(true)
+    notFound.unmount()
   })
 
   it('403 のあとフォロー状態など本文系の取得をしない', async () => {
@@ -129,22 +142,22 @@ describe('親シェル [slug].vue の取得失敗の出し分け（AC-0159-86・
     wrapper.unmount()
   })
 
-  it('404（slug 移転なし）は TeamAccessDeniedState(notFound) を出し、トーストなし', async () => {
+  it('404（slug 移転なし）は「見つかりません」を出し、トーストなし', async () => {
     mocks.getTeam.mockRejectedValue({ response: { status: 404 } })
     const wrapper = mountShell()
     await settle()
     expect(mocks.resolve).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('[data-testid="denied"]').attributes('data-kind')).toBe('notFound')
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
     expect(mocks.error).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('5xx は従来の再試行表示とトーストで、理由表示部品は出さない', async () => {
+  it('5xx は従来の再試行表示とトーストで、「見つかりません」は出さない', async () => {
     mocks.getTeam.mockRejectedValue({ response: { status: 503 } })
     const wrapper = mountShell()
     await settle()
-    expect(wrapper.find('[data-testid="denied"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('common.scopeShell.load_error_title')
     expect(mocks.error).toHaveBeenCalledTimes(1)
     wrapper.unmount()
@@ -154,7 +167,7 @@ describe('親シェル [slug].vue の取得失敗の出し分け（AC-0159-86・
     const wrapper = mountShell()
     await settle()
     expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="denied"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })
@@ -180,13 +193,13 @@ describe('シェル内遷移時の再判定（AC-0159-98）', () => {
     wrapper.unmount()
   })
 
-  it('非公開化後の遷移は 403 になり、理由表示に切り替わり子ページは出ない（トーストなし）', async () => {
+  it('非公開化後の遷移は 403 になり、「見つかりません」に切り替わり子ページは出ない（トーストなし）', async () => {
     const wrapper = mountShell()
     await settle()
     mocks.getTeam.mockRejectedValueOnce({ response: { status: 403 } })
     setRoute('/teams/a/schedule')
     await settle()
-    expect(wrapper.find('[data-testid="denied"]').attributes('data-kind')).toBe('forbidden')
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
     expect(mocks.error).not.toHaveBeenCalled()
     wrapper.unmount()
@@ -208,7 +221,7 @@ describe('シェル内遷移時の再判定（AC-0159-98）', () => {
     second.reject({ response: { status: 403 } })
     await settle()
     expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="denied"]').attributes('data-kind')).toBe('forbidden')
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -219,7 +232,7 @@ describe('シェル内遷移時の再判定（AC-0159-98）', () => {
     setRoute('/teams/a/schedule')
     await settle()
     expect(wrapper.find('[data-testid="child-page"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="denied"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('common.scopeShell.load_error_title')
     expect(mocks.error).toHaveBeenCalledTimes(1)
     wrapper.unmount()

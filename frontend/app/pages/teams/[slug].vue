@@ -30,7 +30,7 @@ import {
   shouldLeaveGuardedTeamTab,
 } from '~/utils/teamAffiliationAccess'
 import { resolveSlugRedirectPath } from '~/utils/slugRedirect'
-import { classifyTeamAccessFailure } from '~/utils/teamAccessStatus'
+import { isScopeNotFound } from '~/utils/loadError'
 
 definePageMeta({
   // 親シェルには middleware を付けない。付けると子ルート全体に継承され、
@@ -63,6 +63,9 @@ const {
 const childNotFound = computed(() => childMarkedNotFound.value || isRouteDenied(route.path))
 // マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
 resetChildNotFoundOnSetup()
+/** シェル自身の詳細取得が 403/404 だった（slug 変更・取得成功・再試行で解除）。CMP-261125-1108 の裁定どおり 403 も 404 も同じ「見つかりません」。 */
+const shellDenied = ref(false)
+const showScopeNotFound = computed(() => childNotFound.value || shellDenied.value)
 
 const teamSlug = computed(() => String(route.params.slug))
 
@@ -160,12 +163,6 @@ async function applyJoinRequest() {
 const team = ref<TeamResponse | null>(null)
 const loading = ref(false)
 /**
- * チーム詳細の取得が 403/404 で閉じたときの理由（CMP-261124-0159 PR-F1 / AC-0159-86・87）。
- * 'forbidden'=メンバー限定のチームなど公開範囲の外、'notFound'=見つからない。null=閉じていない（成功・その他の失敗）。
- * この間は <NuxtPage/> を描かず、トーストも出さない（理由は TeamAccessDeniedState が示す）。
- */
-const accessDenied = ref<'forbidden' | 'notFound' | null>(null)
-/**
  * シェル内遷移時の再判定中か（AC-0159-98）。teamLoaded=true の古いタブでも、遷移のたびにチーム詳細を
  * 再取得して可否を判定し、終わるまで子ページを描かない（子の API が非公開化後の旧権限で動くのを防ぐ）。
  */
@@ -217,7 +214,7 @@ async function fetchTeam(): Promise<TeamFetchResult> {
     const result = await teamApi.getTeam(requestedSlug)
     if (!isCurrent()) return 'stale'
     team.value = result.data
-    accessDenied.value = null
+    shellDenied.value = false
     return 'ok'
   }
   catch (error) {
@@ -231,12 +228,11 @@ async function fetchTeam(): Promise<TeamFetchResult> {
       if (!isCurrent()) return 'stale'
       if (redirected) return 'stale'
     }
-    // 403（公開範囲の外）・404（見つからない）は保護された詳細表示を閉じ、理由表示に切り替える。
-    // トーストは出さない（理由部品が示す）。それ以外（5xx・通信失敗）は従来どおり再試行表示とトースト。
-    const failure = classifyTeamAccessFailure(error)
-    if (failure === 'forbidden' || failure === 'notFound') {
+    // 403/404 は共通の「見つかりません」表示（権限・存在の別を示さない）。トーストは出さない（CMP-261125-1108）。
+    // それ以外（5xx・通信失敗）は従来どおり再試行表示とトースト。
+    if (isScopeNotFound(error)) {
       team.value = null
-      accessDenied.value = failure
+      shellDenied.value = true
       return 'denied'
     }
     handleApiError(error, 'チーム詳細取得')
@@ -421,9 +417,9 @@ async function loadShellData() {
   }, SHELL_WATCHDOG_MS)
   try {
     await Promise.all([fetchTeam(), loadPermissions()])
-    // 403/404 で閉じたときは、本文系の取得（フォロー状態・申請状態・ウィジェット設定ほか）を行わない。
-    // 拒否された相手の補助 API を叩いてトースト・エラー報告を出さない（組織シェルと同じ）。
-    if (accessDenied.value) return
+    // 詳細が 403/404（非所属・権限なし・不存在）なら本文は ScopeNotFound で、補助取得の結果は使わない
+    // （組織シェルと同じ。拒否された相手の補助 API を叩いてトースト・エラー報告を出さない）
+    if (shellDenied.value) return
     await fetchFollowStatus()
     await fetchJoinRequestStatus()
     // ウィジェット可視性設定と予約モジュール有効フラグを並列取得。
@@ -450,9 +446,9 @@ async function loadShellData() {
  * teamLoaded を戻して番人を解除してから再ロードする。
  */
 function retryShellData() {
+  shellDenied.value = false
   teamLoaded.value = false
   team.value = null
-  accessDenied.value = null
   void loadShellData()
 }
 
@@ -499,9 +495,9 @@ watch(() => route.fullPath, () => {
 // useRoleAccess / useDashboardWidgetVisibility は内部で teamSlug を watch して再取得するが、
 // team 本体・follow・予約フラグは本ページ側で明示的に再ロードする必要がある。
 watch(teamSlug, () => {
+  shellDenied.value = false
   teamLoaded.value = false
   team.value = null
-  accessDenied.value = null
   ++revalidateSeq
   revalidating.value = false
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
@@ -512,7 +508,7 @@ watch(teamSlug, () => {
 
 /**
  * 同一チームのシェル内遷移でチーム詳細を再判定する（AC-0159-98）。
- * teamLoaded=true のまま古いタブから遷移しても、非公開化などで権限を失っていれば 403 になり理由表示へ切り替わる。
+ * teamLoaded=true のまま古いタブから遷移しても、非公開化などで権限を失っていれば 403 になり「見つかりません」表示へ切り替わる。
  * 再判定が終わるまで <NuxtPage/> は描かない。別 slug への遷移は上の teamSlug watch が担当（二重取得しない）。
  */
 watch(() => route.path, async (next, prev) => {
@@ -790,8 +786,8 @@ provideTeamShellContext({
         </template>
       </ScopePageShell>
 
-      <!-- 403/404: 理由表示（トーストなし。本文 API は呼ばない） -->
-      <TeamAccessDeniedState v-else-if="accessDenied" :kind="accessDenied" />
+      <!-- 403/404（非所属・権限なし・不存在）: 共通の「見つかりません」。再試行は出さない -->
+      <ScopeNotFound v-else-if="showScopeNotFound" />
 
       <!--
         取得失敗フォールバック（loading 完了かつ team=null: 5xx・通信失敗等）。

@@ -2466,13 +2466,6 @@
     }
   },
   "team": {
-    "access": {
-      "forbiddenTitle": "This team's content cannot be displayed",
-      "forbiddenBody": "You are outside the team's visibility, for example because it is a members-only team. If you are a member, please check with the team administrator.",
-      "notFoundTitle": "Team not found",
-      "notFoundBody": "Please check that the URL is correct. The team may have been deleted.",
-      "backToHome": "Back to home"
-    },
     "mapEmbedUrlLabel": "Store map (Google Maps embed URL)",
     "mapEmbedUrlPlaceholder": "https://www.google.com/maps/embed?...",
     "mapEmbedUrlWarning": "⚠️ This URL is publicly visible to unauthenticated users",

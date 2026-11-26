@@ -8,8 +8,8 @@ const teamSlug = String(route.params.slug)
  * SharedFolderController の scope_id は数値文字列を要求するため、slug をそのまま渡すと
  * parseScopeId で NumberFormatException が発生し 404 になる。
  *
- * 403（メンバー限定のチームなど）・404 のときは空表示に化けさせず理由を表示し、
- * ファイル共有 API は呼ばない（CMP-261124-0159 PR-F1 / AC-0159-86）。
+ * 403・404 のときは空表示に化けさせず、共通の「見つかりません」を表示し、
+ * ファイル共有 API は呼ばない（CMP-261124-0159 PR-F1。403 の理由は出さない: CMP-261125-1108）。
  */
 const { team, state, error, load } = useTeamAccessGate(teamSlug)
 </script>
@@ -27,7 +27,7 @@ const { team, state, error, load } = useTeamAccessGate(teamSlug)
       -->
       <FileBrowser scope-type="TEAM" :scope-id="String(team.numericId)" />
     </template>
-    <TeamAccessDeniedState v-else-if="state === 'forbidden' || state === 'notFound'" :kind="state" />
+    <ScopeNotFound v-else-if="state === 'notFound'" />
     <div v-else-if="state === 'loading'" class="flex justify-center py-8">
       <LoadingBounce />
     </div>

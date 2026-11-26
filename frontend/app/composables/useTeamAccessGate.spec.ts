@@ -34,7 +34,7 @@ beforeEach(() => {
   mocks.resolve.mockResolvedValue({ status: 'NOT_FOUND' })
 })
 
-describe('useTeamAccessGate（CMP-261124-0159 PR-F1 / AC-0159-86・87・88）', () => {
+describe('useTeamAccessGate（CMP-261124-0159 PR-F1 / AC-0159-88。403 の理由表示 AC-0159-86・87 は取り下げ）', () => {
   it('200 は ok になりチームを返す', async () => {
     mocks.getTeam.mockResolvedValue({ data: { id: 'a', numericId: 7 } })
     const { gate } = mountGate()
@@ -45,13 +45,15 @@ describe('useTeamAccessGate（CMP-261124-0159 PR-F1 / AC-0159-86・87・88）', 
     expect(mocks.error).not.toHaveBeenCalled()
   })
 
-  it('403 は forbidden になり、トーストを出さずチームを保持しない', async () => {
+  it('403 は 404 と同じ notFound になり、トーストを出さずチームを保持せず、slug 移転の解決もしない', async () => {
     mocks.getTeam.mockRejectedValue({ response: { status: 403 } })
     const { gate } = mountGate()
     await flushPromises()
-    expect(gate.state.value).toBe('forbidden')
+    expect(gate.state.value).toBe('notFound')
     expect(gate.team.value).toBeNull()
     expect(mocks.error).not.toHaveBeenCalled()
+    expect(mocks.resolve).not.toHaveBeenCalled()
+    expect(mocks.navigate).not.toHaveBeenCalled()
   })
 
   it('404 で slug 移転が無ければ notFound になり、トーストを出さない', async () => {
