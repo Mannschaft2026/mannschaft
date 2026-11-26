@@ -7,6 +7,7 @@ const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const memberInfoApi = useMemberInfoApi()
 const { formatDate } = useDatetime()
 
@@ -23,7 +24,9 @@ async function loadResponses() {
     for (const item of res.data) {
       editValues.value[item.fieldId] = item.value
     }
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('memberProfile.loadFailed'))
   } finally {
     loading.value = false

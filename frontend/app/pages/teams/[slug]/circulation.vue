@@ -7,6 +7,7 @@ const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
+const { markIfDenied } = useScopeNotFound()
 
 const loading = ref(true)
 // 権限取得が settle したが失敗した（{ok:false} / 例外）状態。無言で権限なしに倒さず、
@@ -70,11 +71,12 @@ async function loadPage() {
     if (loading.value) slowLoading.value = true
   }, WATCHDOG_MS)
   try {
-    const { ok } = await loadPermissions()
-    permissionsError.value = !ok
+    const result = await loadPermissions()
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    permissionsError.value = !result.ok && !markIfDenied(result.error)
   }
-  catch {
-    permissionsError.value = true
+  catch (e) {
+    permissionsError.value = !markIfDenied(e)
   }
   finally {
     loading.value = false

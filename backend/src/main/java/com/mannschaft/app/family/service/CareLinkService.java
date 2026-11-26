@@ -567,7 +567,7 @@ public class CareLinkService {
     }
 
     /** UUID ベースの招待トークンを生成する。 */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     private String generateToken() {
         return java.util.UUID.randomUUID().toString().replace("-", "");
     }

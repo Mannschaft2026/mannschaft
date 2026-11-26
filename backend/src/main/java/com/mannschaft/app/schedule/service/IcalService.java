@@ -232,7 +232,7 @@ public class IcalService {
     /**
      * セキュアなランダムトークンを生成する。
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     private String generateSecureToken() {
         SecureRandom random = new SecureRandom();
         byte[] bytes = new byte[TOKEN_BYTE_LENGTH];

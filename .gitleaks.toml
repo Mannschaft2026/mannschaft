@@ -871,3 +871,17 @@ regexes = [
   '''^tyrannosaurus-V4-juvenile-paint$''',
   '''^tyrannosaurus-V4-juvenile-pixel$''',
 ]
+
+# CMP-260826-1457 W2 committee: commit 9de4f831 の docs/features/F04.10_committee.md に、
+# 招集トークン応答例の高エントロピーな例示値（実在しない値）が入り generic-api-key として検出された。
+# 後続 commit で値をプレースホルダに直しても base..head の各 commit 走査で旧値が検出され続け、
+# force push による履歴書き換えは禁止のため、値そのものを paths と AND で狙い撃ちして許可する。
+[[allowlists]]
+description = "CMP-260826-1457 W2 committee: 9de4f831 の F04.10_committee.md にある招集トークン応答例の例示値"
+condition = "AND"
+regexes = [
+  '''Zr3x9QpL0a7_bN2-kW5yT8uE1oI4sD6fG0hJ9lK2mNc''',
+]
+paths = [
+  '''docs/features/F04\.10_committee\.md''',
+]

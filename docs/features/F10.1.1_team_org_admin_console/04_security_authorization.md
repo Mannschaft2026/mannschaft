@@ -30,7 +30,7 @@
 - **FE はあくまで表示制御**。`useRoleAccess` で取得したロールは「誤遷移の早期遮断」「ボタンの出し分け」にのみ使う（`useRoleAccess(scopeType, slug)`・第2引数は slug 文字列・R8）。
 - **すべての管理 API は BE で必ず `checkAdminOrAbove`（または権限グループ判定）を入口で通す**。本機能で新設する API（[03](./03_admin_action_required_api.md) の `admin-action-required`）はファサード入口で `checkAdminOrAbove` を呼ぶ。既存流用 API（予約・予算・メンバー）は各 Controller/Service が既に同等の認可を持つため、それを温存する。
 - FE の `admin-console` ミドルウェア（[01](./01_console_routes.md) §5）の遮断は UX 上の早期弾きであり、これだけに依存しない。仮に FE 判定を改ざんしても、BE が 403 を返すため情報は漏れない。
-- 組織の招待タブは既存 `admin-console`、権限グループタブは既存 `org-role-guard` をページメタに結線する（CMP-260917-1351）。権限取得が正常完了した `roleName=null` は非所属として組織トップへ戻し、取得前の null と区別する。取得失敗は既存どおり 503 として伝え、ページ内のロール変更監視も維持する。
+- 組織の招待タブは既存 `admin-console`、権限グループタブは既存 `org-role-guard` をページメタに結線する（CMP-260917-1351）。権限取得が正常完了した `roleName=null` は非所属として扱い、取得前の null と区別する。招待タブ（`admin-console`）は組織トップへ戻す。権限グループタブ（`org-role-guard`）は CMP-261125-1108 で、非所属・ADMIN 以外・権限取得の 403/404 をトースト・リダイレクトなしの共通「見つかりません」（ScopeNotFound）に寄せた（`useScopeNotFound().setRouteDenied`）。取得失敗（5xx・通信断）は既存どおり 503 として伝え、ページ内のロール変更監視も維持する。
 - `isAdmin` をハードコードで true にする・テストの便宜で常時許可する等は禁止（メモリ `feedback_visibility_bypass_f00_audit`）。
 
 ### 2.1 SYSTEM_ADMIN の扱い（FE トグル表示と BE 認可の食い違い解消）【C・SYSTEM_ADMIN 整合 根治】
