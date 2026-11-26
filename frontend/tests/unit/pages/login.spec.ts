@@ -315,7 +315,9 @@ describe('pages/login.vue パスキーでログイン', () => {
     await flush()
   })
 
-  it('保護者同意待ちではプロフィール保存と設定同期をせず専用ページへ遷移する', async () => {
+  // CMP-261123-1124 AC1/AC7: 旧版は「setUser を呼ばない」前提だったが、それが /login 差し戻しの原因だった。
+  // 同意待ちも認証済みとして本人（status 付き）を保存し、設定同期（BE ゲートで AUTH_070）はしない。
+  it('AC1: 保護者同意待ちでは status 付きで本人を保存し、設定同期をせず専用ページへ遷移する', async () => {
     mockPasskeyLogin.mockResolvedValue(tokenResponse)
     mockApi.mockResolvedValue({ data: { ...profile, status: 'PENDING_PARENTAL_CONSENT' } })
     const wrapper = await mountPasskeyPage()
@@ -323,7 +325,7 @@ describe('pages/login.vue パスキーでログイン', () => {
     await wrapper.find('[data-passkey-login]').trigger('click')
     await flush(8)
 
-    expect(mockSetUser).not.toHaveBeenCalled()
+    expect(mockSetUser).toHaveBeenCalledWith(expect.objectContaining({ id: 42, status: 'PENDING_PARENTAL_CONSENT' }))
     expect(mockSyncSettings).not.toHaveBeenCalled()
     expect(mockNavigate).toHaveBeenCalledWith('/parental-consent/pending')
   })
@@ -441,5 +443,109 @@ describe('pages/login.vue 本人復元後の先回り更新', () => {
       finishUser()
       await flush(8)
     }
+  })
+})
+
+/**
+ * CMP-261123-1124 試練（red 先行）: 同意待ちの未成年のログイン後遷移。
+ * - AC1: パスワード / パスキーのどちらでも pending に着く。redirect クエリでも迂回できない
+ * - AC3: プロフィール取得失敗時の基本情報フォールバックが、同意待ち（JWT ppc=true）を通常ユーザー扱いしない
+ * - AC7: 一般ユーザーの redirect 付き遷移は変えない
+ */
+function jwtWith(payload: Record<string, unknown>): string {
+  const b64url = (o: unknown) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(payload)}.signature`
+}
+
+describe('pages/login.vue 保護者同意待ち（CMP-261123-1124）', () => {
+  const pendingProfile = { ...profile, status: 'PENDING_PARENTAL_CONSENT' }
+  const passwordResult = { ...tokenResponse, userId: 42, fullName: 'Test Member', email: profile.email }
+
+  it('AC1: パスワードログインで同意待ちなら status 付きで本人を保存し pending へ遷移する', async () => {
+    mockApi.mockResolvedValueOnce({ data: passwordResult }).mockResolvedValueOnce({ data: pendingProfile })
+    const wrapper = await mountPasskeyPage()
+
+    await submit(wrapper)
+    await flush(8)
+
+    expect(mockSetUser).toHaveBeenCalledWith(expect.objectContaining({ id: 42, status: 'PENDING_PARENTAL_CONSENT' }))
+    expect(mockSyncSettings).not.toHaveBeenCalled()
+    expect(mockNavigate).toHaveBeenCalledWith('/parental-consent/pending')
+    expect(mockNavigate).not.toHaveBeenCalledWith('/dashboard')
+  })
+
+  it.each(['/dashboard', '/my/profile', '/parental-consent/manage'])(
+    'AC1: redirect=%s 指定でも同意待ちは pending へ着く（迂回できない）',
+    async (redirect) => {
+      routeState.query = { redirect }
+      mockApi.mockResolvedValueOnce({ data: passwordResult }).mockResolvedValueOnce({ data: pendingProfile })
+      const wrapper = await mountPasskeyPage()
+
+      await submit(wrapper)
+      await flush(8)
+
+      expect(mockNavigate).toHaveBeenCalledWith('/parental-consent/pending')
+      expect(mockNavigate).not.toHaveBeenCalledWith(redirect)
+    },
+  )
+
+  it('AC1: パスキーで redirect 指定でも同意待ちは pending へ着く', async () => {
+    routeState.query = { redirect: '/my/profile' }
+    mockPasskeyLogin.mockResolvedValue(tokenResponse)
+    mockApi.mockResolvedValue({ data: pendingProfile })
+    const wrapper = await mountPasskeyPage()
+
+    await wrapper.find('[data-passkey-login]').trigger('click')
+    await flush(8)
+
+    expect(mockNavigate).toHaveBeenCalledWith('/parental-consent/pending')
+    expect(mockNavigate).not.toHaveBeenCalledWith('/my/profile')
+  })
+
+  it('AC3: プロフィール取得失敗のフォールバックでも、トークンが同意待ち（ppc=true）なら通常ユーザー扱いしない', async () => {
+    const ppcToken = jwtWith({ sub: '42', ppc: true, exp: Math.floor(Date.now() / 1000) + 900 })
+    mockApi
+      .mockResolvedValueOnce({ data: { ...passwordResult, accessToken: ppcToken } })
+      .mockRejectedValueOnce(new Error('profile'))
+    const wrapper = await mountPasskeyPage()
+
+    await submit(wrapper)
+    await flush(8)
+
+    // 通常ユーザーとして本人を保存しない（保存するなら同意待ちの status を付ける）
+    for (const [user] of mockSetUser.mock.calls) {
+      expect(user).toEqual(expect.objectContaining({ status: 'PENDING_PARENTAL_CONSENT' }))
+    }
+    expect(mockSyncSettings).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalledWith('/dashboard')
+    expect(mockNavigate).toHaveBeenCalledWith('/parental-consent/pending')
+  })
+
+  it('AC7: ppc=false のトークンでのフォールバックは従来どおり基本情報で /dashboard へ', async () => {
+    const activeToken = jwtWith({ sub: '42', ppc: false, exp: Math.floor(Date.now() / 1000) + 900 })
+    mockApi
+      .mockResolvedValueOnce({ data: { ...passwordResult, accessToken: activeToken } })
+      .mockRejectedValueOnce(new Error('profile'))
+    const wrapper = await mountPasskeyPage()
+
+    await submit(wrapper)
+    await flush(8)
+
+    expect(mockSetUser).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }))
+    expect(mockSetUser).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'PENDING_PARENTAL_CONSENT' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('AC7: 一般ユーザー（ACTIVE）の redirect 付きパスワードログインは従来どおり redirect 先へ', async () => {
+    routeState.query = { redirect: '/my/profile' }
+    mockApi.mockResolvedValueOnce({ data: passwordResult }).mockResolvedValueOnce({ data: profile })
+    const wrapper = await mountPasskeyPage()
+
+    await submit(wrapper)
+    await flush(8)
+
+    expect(mockSyncSettings).toHaveBeenCalledOnce()
+    expect(mockNavigate).toHaveBeenCalledWith('/my/profile')
+    expect(mockNavigate).not.toHaveBeenCalledWith('/parental-consent/pending')
   })
 })

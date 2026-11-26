@@ -189,3 +189,41 @@ describe('pages/auth/oauth/callback.vue 応答三択の分岐（CMP-261012-0911�
     expect(mocks.loginWithOAuth).toHaveBeenCalledWith('google', { code: 'google-auth-code' })
   })
 })
+
+/**
+ * CMP-261123-1124 試練（red 先行）AC1: OAuth コールバック経由でも同意待ちの未成年は pending に着く。
+ * 同意待ちでは設定同期（BE ゲートで AUTH_070）をせず、/dashboard へも送らない。
+ */
+describe('pages/auth/oauth/callback.vue 保護者同意待ち（CMP-261123-1124）', () => {
+  const pendingProfile = {
+    id: 1, email: 'u@example.com', lastName: '山田', firstName: '太郎',
+    avatarUrl: null, systemRole: null, locale: 'ja', timezone: 'Asia/Tokyo', status: 'PENDING_PARENTAL_CONSENT',
+  }
+
+  it('AC1: トークン応答で本人が同意待ちなら status 付きで保存し /parental-consent/pending へ', async () => {
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: 'a', refreshToken: 'r' } })
+    mocks.api.mockResolvedValue({ data: pendingProfile })
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.setTokens).toHaveBeenCalledWith('a', 'r')
+    expect(mocks.setUser).toHaveBeenCalledWith(expect.objectContaining({ id: 1, status: 'PENDING_PARENTAL_CONSENT' }))
+    expect(mocks.syncAccountSettings).not.toHaveBeenCalled()
+    const targets = navigatedTargets()
+    expect(targets.some(t => t.includes('/parental-consent/pending')), `遷移先: ${JSON.stringify(targets)}`).toBe(true)
+    expect(targets).not.toContain('/dashboard')
+  })
+
+  it('AC7: トークン応答で本人が ACTIVE なら従来どおり /dashboard へ（回帰）', async () => {
+    mocks.loginWithOAuth.mockResolvedValue({ data: { accessToken: 'a', refreshToken: 'r' } })
+    mocks.api.mockResolvedValue({ data: { ...pendingProfile, status: 'ACTIVE' } })
+
+    mountCallback()
+    await flush()
+
+    expect(mocks.syncAccountSettings).toHaveBeenCalledOnce()
+    expect(navigatedTargets()).toContain('/dashboard')
+    expect(navigatedTargets().some(t => t.includes('/parental-consent/pending'))).toBe(false)
+  })
+})
