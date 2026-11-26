@@ -3228,8 +3228,8 @@ Resolver を通らない読み取り経路（スコープ単位の一覧・集�
   - スコープ単位の経路（`checkMembership` 系）: 403 `COMMON_002`。
   - 子リソース ID 指定の経路で `ScopeConcealingAccessGate`（docs/security/01_authorization_baseline.md §3.3.2）を使うもの: 不在 ID と同一の 404。上限による拒否もこの秘匿ゲートを通し、越境応答＝不在応答の契約を崩さない。
   - Resolver の `assertCanView` 経路: §7.4 どおり 403 `VISIBILITY_001` / 404 `VISIBILITY_004`（DenyReason 単位）。
-- チーム slug の実在は非機密（01_authorization_baseline.md の 2026-08-04 確定注記）。`GET /api/v1/teams/{slug}` が実在＝403 `VISIBILITY_001`・不在＝404 `TEAM_001` で分かれる既存挙動は維持し、FE はこの差で「理由表示」と「見つかりません」を出し分ける（F05.1 / F05.5 §画面）。拒否時の本文にチーム名・メンバー・中身を含めない。
-- 公開範囲の段（非公開か SUPPORTERS_AND_ABOVE か等）を拒否応答に載せない。FE の理由表示は「メンバー限定のチームなど、公開範囲の外にいるため表示できません」の汎用文言とする（§20.8）。
+- チーム slug の実在は非機密（01_authorization_baseline.md の 2026-08-04 確定注記）。`GET /api/v1/teams/{slug}` が実在＝403 `VISIBILITY_001`・不在＝404 `TEAM_001` で分かれる既存挙動は維持し、FE は 403 でも 404 でも同じ中立な「見つかりません」を出す（2026-11-27 マスター裁定（MC-261125-0010 追記）で CMP-261125-1108 に合わせ、403 も 404 と同じ中立な「見つかりません」（`ScopeNotFound`）に統一した。権限・存在の別を画面に示さない。F05.1 / F05.5 §画面）。拒否時の本文にチーム名・メンバー・中身を含めない。
+- 公開範囲の段（非公開か SUPPORTERS_AND_ABOVE か等）を拒否応答に載せない。FE は理由を表示せず、共通の「見つかりません」（`common.scopeNotFound.*`）とする（§20.8。**AC-0159-86・87 の「403 の理由表示」は取り下げ**）。
 
 ### 20.5 読み取り経路の棚卸し（全パッケージ・2026-11-25 精査第1パス S-1 で差し替え）
 
@@ -3390,15 +3390,15 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 `info`、`members`、`invites`、`supporters`、`join-requests`、`modules`、`affiliations`、`permission-groups`、`reservations`、`nav`、`guide`、`schedule`、`todos`、`timeline`、`bulletin`、`blog`、`chat`、`member-profiles`、`activities`、`gallery`、`circulation`、`surveys`、`member-info`、`tournaments`、`match-analytics`、`projects`
 
-- 親 `[slug].vue` の取得失敗表示を分ける: **403** は `TeamAccessDeniedState`（§20.8）を出し、`handleApiError` のトーストを**出さない**。**404** は slug 移転のリダイレクト（`resolveSlugRedirectPath`）を試して成立しなかった後に「見つかりません」（`team.access.notFound*`）。**その他**（5xx・通信失敗）は既存の再試行表示（`load_error_title` / `load_error_body`）とトースト。
+- 親 `[slug].vue` の取得失敗表示: **403 も 404 も** 共通の `ScopeNotFound`（「見つかりません」。CMP-261125-1108）を出し、`handleApiError` のトーストを**出さない**。**404** は先に slug 移転のリダイレクト（`resolveSlugRedirectPath`）を試す。403 の理由表示（`TeamAccessDeniedState`）は2026-11-27 マスター裁定で取り下げた。**その他**（5xx・通信失敗）は既存の再試行表示（`load_error_title` / `load_error_body`）とトースト。
 - 各子ページは個別の対応をしない（親が `<NuxtPage/>` を描かないため、子の API は呼ばれない）。
 
 **系統 2: シェル対象外（64 セグメント）— 各ページで対応**
 
 `activity-stats`、`activity-templates`、`admin`、`advertiser`、`analytics`、`anniversaries`、`announcements`、`annual-plan`、`audit-logs`、`billing`、`budget`、`charts`、`coin-toss`、`direct-mail`、`duties`、`equipment`、`events`、`extended-profile`、`facilities`、`files`、`forms`、`friend-feed`、`friend-folders`、`friend-forward-exports`、`friends`、`gamification`、`homerooms`、`incidents`、`index`、`jobs`、`kb`、`league-transfers`、`loyalty`、`market`、`matches`、`matching`、`member-cards`、`member-fields`、`onboarding`、`parking`、`payment-requests`、`payments`、`performance`、`presence`、`queue`、`recruitment-listings`、`repair-plan`、`residents`、`safety`、`schedule-attendance`、`schedule-keeps`、`school-attendance`、`service-records`、`settings`、`shifts`、`shopping-lists`、`signage`、`skills`、`tickets`、`timeline-digest`、`timetable`、`voting`、`webhooks`、`workflows`
 
-- 各ページは最初にチーム詳細を取得し（または共通 composable `useTeamAccessGate(slug)` を新設して使い）、403＝`TeamAccessDeniedState`（トーストなし）、404＝slug 移転の解決が不成立なら「見つかりません」、その他＝既存のエラー表示に分ける。403/404 の間は本文の API を呼ばない。
-- 管理者専用画面（`settings`・`admin`・`audit-logs`・`billing`・`webhooks`・`advertiser` など）も 403 時は同じ部品で理由を出す（判定は既存の管理者判定のまま）。
+- 各ページは最初にチーム詳細を取得し（または共通 composable `useTeamAccessGate(slug)` を新設して使い）、403＝「見つかりません」（`ScopeNotFound`。トーストなし）、404＝slug 移転の解決が不成立なら同じ「見つかりません」、その他＝既存のエラー表示に分ける。403/404 の間は本文の API を呼ばない。
+- 管理者専用画面（`settings`・`admin`・`audit-logs`・`billing`・`webhooks`・`advertiser` など）も 403 時は同じ「見つかりません」を出す（判定は既存の管理者判定のまま。理由は出さない）。
 - AC-0159-88 は系統 1・2 の全項目から表駆動で生成する。
 
 #### 20.5.7 棚卸しの自動生成と突き合わせ（実装時の手順）
@@ -3432,13 +3432,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 ### 20.8 i18n キー（FE。6 言語 ja/en/zh/ko/es/de 全てにその言語の訳を入れる）
 
-| キー（`common.json`） | ja |
-|---|---|
-| `team.access.forbiddenTitle` | このチームの中身は表示できません |
-| `team.access.forbiddenBody` | メンバー限定のチームなど、公開範囲の外にいるため表示できません。メンバーとして参加している場合は、チームの管理者に確認してください。 |
-| `team.access.notFoundTitle` | チームが見つかりません |
-| `team.access.notFoundBody` | URL が正しいか確認してください。チームが削除された可能性があります。 |
-| `team.access.backToHome` | ホームへ戻る |
+> **取り下げ（2026-11-27）**: 403 の理由表示を廃止したため、`team.access.*`（`forbiddenTitle` / `forbiddenBody` / `notFoundTitle` / `notFoundBody` / `backToHome`）と部品 `TeamAccessDeniedState` は作らない（実装も削除済み）。チーム配下の 403/404 は既存の `common.scopeNotFound.*` を使う（CMP-261125-1108）。
 
 非公開化の確認・統計・設定のキーは F01.2 02 / F06.4 §15 に記載する。BE のエラーメッセージ（`messages_{ja,en,zh,ko,es,de}.properties`）は新規コード（TEAM_073 / TEAM_074 / ACTIVITY_024 / ACTIVITY_025 / FILE_SHARING_021 / SIGNAGE_009）を 6 言語で登録する。非公開化で外したことを知らせる通知の題名・本文も BE の 6 言語メッセージ（F01.2 02）で持つ。
 
@@ -3508,7 +3502,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 #### N. 通知・フィード
 
 - **AC-0159-35**: 非公開チームの新規コンテンツ（掲示板・タイムライン・活動記録・予定）の通知・メンション・アクティビティフィードは、権限なし（フィクスチャのサポーター）に配信されず一覧にも出ない。権限ありには従来どおり配信される。
-- **AC-0159-36**: 外されたサポーターについて、(a) **非公開化の前に通知一覧を表示したままのタブ**から旧通知（掲示板・予定）を開く、(b) 非公開化の前に控えた `actionUrl`（例 `/teams/{slug}/bulletin?threadId=…`・`/teams/{slug}/schedule/{id}`）を**直打ち**する、のどちらでも、遷移先は系統 1（シェル）の画面で `TeamAccessDeniedState` の理由表示になり、トーストは出ず、本文の API は呼ばれない。(c) 通知一覧を**再取得**すると旧通知は消えている（AC-0159-39 と同じ述語）。外したことを知らせる通知は一覧に残り、その `actionUrl` は `/teams/{slug}`（チームのトップ）で、開くと同じ理由表示になる（クラッシュ・空表示・無限スピナーにならない）。
+- **AC-0159-36**: 外されたサポーターについて、(a) **非公開化の前に通知一覧を表示したままのタブ**から旧通知（掲示板・予定）を開く、(b) 非公開化の前に控えた `actionUrl`（例 `/teams/{slug}/bulletin?threadId=…`・`/teams/{slug}/schedule/{id}`）を**直打ち**する、のどちらでも、遷移先は系統 1（シェル）の画面で共通の「見つかりません」（`ScopeNotFound`。2026-11-27 マスター裁定で理由表示から変更）になり、トーストは出ず、本文の API は呼ばれない。(c) 通知一覧を**再取得**すると旧通知は消えている（AC-0159-39 と同じ述語）。外したことを知らせる通知は一覧に残り、その `actionUrl` は `/teams/{slug}`（チームのトップ）で、開くと同じ理由表示になる（クラッシュ・空表示・無限スピナーにならない）。
 - **AC-0159-37**（WebSocket・署名付き URL）: 観測手順: (1) タブ A に MEMBER、タブ B に外される予定のサポーター（公開チームで正規フローで加入）、タブ C に未ログイン（公開試合を購読）を開き、各タブでチーム系チャンネル・コルクボード・試合速報・臨時休業確認を購読する。(2) 管理者が非公開化を了承した時刻を記録する。(3) その直後から 10 秒間、タブ A から 1 秒ごとにメッセージ・カード更新を送り、試合速報を更新する。(4) タブ B・C の受信ログ（ブラウザの WebSocket フレーム記録）に、非公開化の時刻以後の MESSAGE フレームが **0 件**であることを確かめる（「5 秒以内に止まる」ではなく、送出ガードにより時刻以後は 0 件）。タブ A は全件受信する。(5) 再認可・購読解除を意図的に遅らせる設定（テスト用の遅延フック 10 秒）でも (4) が 0 件であること。新たな SUBSCRIBE は拒否される。(6) **非公開チームのまま**、購読中の MEMBER（タブ D）を ADMIN が除名する・タブ D の本人が自主退会する、のそれぞれの直後から、タブ A が送るメッセージ・カード更新をタブ D が **1 件も受信しない**（メモの失効。§20.5.5）。チャンネルメンバー行だけを外した場合も同様。署名付き URL は有効期限の値（実装の設定値）を記録し、非公開化前に発行した URL が期限後に取得できないこと、非公開化後は新たな発行が拒否されることを確かめる。
 - **AC-0159-38**: 非公開チームの一斉配信（fan-out・予定の出欠依頼/リマインド・アンケート公開・時間割メモ・お知らせ配信・募集のサポーター宛て）の宛先に、フィクスチャで残したサポーター・GUEST が入らない（不変条件に頼らない）。公開チームでは従来どおり（`includeSupporters` 等のトグルも従来どおり効く）。
 - **AC-0159-39**: 通知一覧・未読件数・通知詳細で、送り元が非公開チームの通知は、そのチームで MEMBER 未満の閲覧者には出ない（未読件数にも数えない。詳細は不在と同一応答）。MEMBER 以上には従来どおり。外したことを知らせる通知は外された本人に見える。通知 100 件の一覧取得で追加の問い合わせは 1 本。
@@ -3519,7 +3513,7 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 #### F. 画面（AC-0159-85 は F06.4 §15.7、86 は F05.5 §6.9、87 は F05.1 §6.9）
 
-- **AC-0159-88**: 非公開チームの他の配下画面（`/teams/{slug}/` 配下のタイムライン・スケジュール・年間計画・活動記録・ギャラリー・アンケート・回覧・KB・TODO/プロジェクト・チャット・フォーム・ダッシュボード）を、サポーター（フィクスチャ）・GUEST・部外者・他チームの ADMIN が URL 直打ちすると、共通部品 `TeamAccessDeniedState` の理由表示が出る（空表示・クラッシュ・無限スピナーにならない）。不在 slug は「見つかりません」。§20.5.6 の一覧（実装時に §20.5.7 で再生成して突き合わせる）から表駆動の E2E で全ページを踏む。
+- **AC-0159-88**: 非公開チームの他の配下画面（`/teams/{slug}/` 配下のタイムライン・スケジュール・年間計画・活動記録・ギャラリー・アンケート・回覧・KB・TODO/プロジェクト・チャット・フォーム・ダッシュボード）を、サポーター（フィクスチャ）・GUEST・部外者・他チームの ADMIN が URL 直打ちすると、共通部品 `ScopeNotFound` の「見つかりません」が出る（空表示・クラッシュ・無限スピナーにならない。理由は出さない。403 と不在 slug で表示は同じ）。§20.5.6 の一覧（実装時に §20.5.7 で再生成して突き合わせる）から表駆動の E2E で全ページを踏む。
 - **AC-0159-89**: 本戦役で追加した i18n キー（F00 §20.8・F01.2 02・F06.4 §15.6）が 6 言語すべてにその言語の訳で存在し、`locale-no-japanese-residue.spec.ts` が緑。BE の新規エラーコード 6 件と通知文が 6 言語の `messages_*.properties` にある。
 
 #### P. 性能

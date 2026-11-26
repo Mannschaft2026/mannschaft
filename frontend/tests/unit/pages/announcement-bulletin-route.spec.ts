@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }))
 mockNuxtImport('useRoute', () => () => mocks.route)
 mockNuxtImport('useRoleAccess', () => () => ({
-  isAdminOrDeputy: ref(false), isMember: ref(true), loadPermissions: vi.fn().mockResolvedValue(undefined),
+  isAdminOrDeputy: ref(false), isMember: ref(true), loadPermissions: vi.fn().mockResolvedValue({ ok: true }),
 }))
 mockNuxtImport('useBulletinApi', () => () => ({ getScopedThread: mocks.getScopedThread }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getScope }))
