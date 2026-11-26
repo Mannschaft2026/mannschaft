@@ -76469,6 +76469,7 @@ export interface components {
             meta?: components["schemas"]["TournamentHistoryEntryMeta"];
             /** Format: int64 */
             organizationId?: number;
+            organizationSlug?: string;
             record?: components["schemas"]["TournamentHistoryEntryRecord"];
         };
         TournamentHistoryEntryIdentifiers: {

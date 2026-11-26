@@ -19,6 +19,8 @@ public class TeamTournamentHistoryResponse {
     @Getter
     public static class TournamentHistoryEntry {
         private Long organizationId;
+        /** 主催組織の slug（組織ページ URL の正準識別子）。削除済みなど取得できないときは null。 */
+        private String organizationSlug;
         private TournamentHistoryEntryMeta meta;
         private TournamentHistoryEntryIdentifiers identifiers;
         private TournamentHistoryEntryRecord record;
