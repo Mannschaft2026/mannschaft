@@ -47,6 +47,7 @@ export interface UseConfirmableDraftOptions {
 export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
   const api = useConfirmableNotificationApi()
   const { handleApiError } = useErrorHandler()
+  const errorReport = useErrorReport()
   const confirm = useConfirm()
   const { t } = useI18n()
 
@@ -78,6 +79,17 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
     return sig !== baseline && sig !== blankSignature
   }
 
+  /**
+   * API 失敗の提示。5xx は useApi の共通 onResponseError が既に汎用トーストを出すため、ここで handleApiError
+   * （もう1枚トーストを出す）を重ねない（同一操作で二重表示になる）。記録だけ静かに残す。
+   * 4xx・ネットワークエラー（status 不明）は API 層が拾わないので handleApiError に任せる。
+   */
+  function reportError(error: unknown, context: string) {
+    const status = errorStatus(error)
+    if (status !== undefined && status >= 500) errorReport.captureQuiet(error, { context })
+    else handleApiError(error, context)
+  }
+
   function clearTimer() {
     if (timer !== null) {
       clearTimeout(timer)
@@ -104,7 +116,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       const response = await api.listDrafts(scopeType, scopeId)
       if (gen === generation) drafts.value = response.data
     } catch (error) {
-      handleApiError(error, 'confirmable draft list')
+      reportError(error, 'confirmable draft list')
     }
   }
 
@@ -168,7 +180,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       } else if (!draftId && code === ERROR_LIMIT) {
         await reloadList()
       } else {
-        handleApiError(error, 'confirmable draft save')
+        reportError(error, 'confirmable draft save')
       }
     }
   }
@@ -233,7 +245,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
         resetToBlank()
         await reloadList()
       } else {
-        handleApiError(error, 'confirmable draft open')
+        reportError(error, 'confirmable draft open')
       }
     }
   }
@@ -246,7 +258,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       await api.deleteDraft(scopeType, scopeId, draftId)
     } catch (error) {
       if (!(errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND)) {
-        handleApiError(error, 'confirmable draft delete')
+        reportError(error, 'confirmable draft delete')
         return
       }
     }
@@ -285,7 +297,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       baseline = signature.value
     } catch (error) {
       if (errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND) await detachGone()
-      else handleApiError(error, 'confirmable draft reload')
+      else reportError(error, 'confirmable draft reload')
     }
   }
 
@@ -299,7 +311,7 @@ export function useConfirmableDraft(options: UseConfirmableDraftOptions) {
       version.value = response.data.version ?? 0
     } catch (error) {
       if (errorStatus(error) === 404 || errorCode(error) === ERROR_NOT_FOUND) await detachGone()
-      else handleApiError(error, 'confirmable draft overwrite')
+      else reportError(error, 'confirmable draft overwrite')
       return
     }
     await enqueue(() => runSave(true))

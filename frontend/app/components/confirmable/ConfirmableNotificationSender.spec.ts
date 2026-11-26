@@ -145,6 +145,7 @@ const mocks = vi.hoisted(() => ({
   updateDraft: vi.fn(),
   deleteDraft: vi.fn(),
   handleApiError: vi.fn(),
+  captureQuiet: vi.fn(),
   toastAdd: vi.fn(),
   confirmRequire: vi.fn(),
 }))
@@ -160,6 +161,7 @@ mockNuxtImport('useConfirmableNotificationApi', () => () => ({
   deleteDraft: mocks.deleteDraft,
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError }))
+mockNuxtImport('useErrorReport', () => () => ({ captureQuiet: mocks.captureQuiet }))
 mockNuxtImport('useToast', () => () => ({ add: mocks.toastAdd }))
 mockNuxtImport('useConfirm', () => () => ({ require: mocks.confirmRequire, close: vi.fn() }))
 
@@ -977,7 +979,7 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       expect(rowIds(wrapper)).toEqual(['d-2'])
     })
 
-    it('FE-AC9: 自動保存の 5xx は共通エラー処理に渡す（握りつぶさない）', async () => {
+    it('FE-AC9: 自動保存の 5xx は記録して入力を残す（トーストは useApi が出すので二重にしない）', async () => {
       seed({ id: 'd-1', version: 1 })
       const failure = apiError(500, 'INTERNAL_SERVER_ERROR')
       const wrapper = await mountSender()
@@ -988,20 +990,22 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       await typeTitle(wrapper, '500 になる保存')
       await advance(DEBOUNCE_MS)
 
-      expect(mocks.handleApiError).toHaveBeenCalledWith(failure, expect.anything())
+      expect(mocks.captureQuiet).toHaveBeenCalledWith(failure, expect.anything())
+      expect(mocks.handleApiError).not.toHaveBeenCalled()
       expect(titleInput(wrapper).props('modelValue')).toBe('500 になる保存')
     })
 
-    it('FE-AC9: 一覧取得の 5xx も共通エラー処理に渡す', async () => {
+    it('FE-AC9: 一覧取得の 5xx も記録する（二重トーストにしない）', async () => {
       const failure = apiError(503, 'SERVICE_UNAVAILABLE')
       mocks.listDrafts.mockRejectedValue(failure)
 
       await mountSender()
 
-      expect(mocks.handleApiError).toHaveBeenCalledWith(failure, expect.anything())
+      expect(mocks.captureQuiet).toHaveBeenCalledWith(failure, expect.anything())
+      expect(mocks.handleApiError).not.toHaveBeenCalled()
     })
 
-    it('FE-AC9: 作成の 5xx も共通エラー処理に渡し、入力内容は残る', async () => {
+    it('FE-AC9: 作成の 5xx も記録し、入力内容は残る', async () => {
       const failure = apiError(500, 'INTERNAL_SERVER_ERROR')
       mocks.createDraft.mockRejectedValueOnce(failure)
       const wrapper = await mountSender()
@@ -1010,7 +1014,8 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       await typeTitle(wrapper, '作成が 500')
       await advance(DEBOUNCE_MS)
 
-      expect(mocks.handleApiError).toHaveBeenCalledWith(failure, expect.anything())
+      expect(mocks.captureQuiet).toHaveBeenCalledWith(failure, expect.anything())
+      expect(mocks.handleApiError).not.toHaveBeenCalled()
       expect(titleInput(wrapper).props('modelValue')).toBe('作成が 500')
     })
   })
@@ -1047,6 +1052,15 @@ describe('ConfirmableNotificationSender 下書き（DB 保存・複数件・上�
       expect(mocks.createDraft).toHaveBeenCalledTimes(1)
       expect(fireBeforeUnload()).toBe(false)
       wrapper.unmount()
+    })
+
+    it('FE-AC9: 5xx 以外（403 など API 層がトーストを出さない失敗）は共通エラー処理に渡す', async () => {
+      const failure = apiError(403, 'COMMON_002')
+      mocks.listDrafts.mockRejectedValue(failure)
+
+      await mountSender()
+
+      expect(mocks.handleApiError).toHaveBeenCalledWith(failure, expect.anything())
     })
   })
 
