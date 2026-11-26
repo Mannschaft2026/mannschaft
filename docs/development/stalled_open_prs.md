@@ -8,7 +8,7 @@
 
 **2026-11-24 再照合**（REST実測）: #3683・#3687 が 2026-11-03 にMERGED、#3686・#3689・#3692 がCLOSED、見送り7件（#3695・#3694・#3688・#1316・#3684・#3691・#3693）はすべてCLOSED（dependabot の自動コメントのみ。後継へ置換）。残るOPENは #1502・#1317・#3685。後継PRの現況は下記「後継の依存更新PR」節に更新した。
 
-**CMP-260826-1041 は未完了**。残る処遇対象は本番インフラ #1502（意図的にOPEN維持、追跡点は CMP-260826-2129）、依存更新 #1317（dependabot recreate 待ち）、#3685（マージ候補・要最終確認）で、殿の判断が残る。MERGED/CLOSEDの確認だけで、復活時のCI・実機や本番構築を実施済みとは扱わない。
+**2026-11-26: CMP-260826-1041 は完了**。#1317 は 2026-11-25 に CLOSED、#3685 は 2026-11-25 に MERGED（REST 実測）、#1502 は意図的にOPEN維持（追跡点は CMP-260826-2129、完了条件から除外）。処遇列は全行埋まっている。MERGED/CLOSEDの確認だけで、復活時のCI・実機や本番構築を実施済みとは扱わない。
 
 放置された PR は静かに腐る。特に `DIRTY`（コンフリクト済み）は **CI が一度も走らない**ため、
 緑にも赤にもならず「動いているように見えて実は死んでいる」状態になる
@@ -76,7 +76,7 @@
 | #1317 | cheerio 1.0.0-rc.12 → 1.2.0（frontend, dev） | OPEN / blocked。CI fail は Lighthouse、Smoke E2E | 2026-11-25 CLOSED（マスター裁可。dependabot recreate 無応答・CI 失敗の原因未調査・担当なし。理由コメント https://github.com/Mannschaft2026/mannschaft/pull/1317#issuecomment-7148820017 ） |
 | #3683 | actions/upload-artifact 4 → 7 | MERGED（2026-11-03） | 処遇済み |
 | #3687 | actions/setup-java 4 → 6 | MERGED（2026-11-03） | 処遇済み |
-| #3685 | hashicorp/setup-terraform 3 → 4 | OPEN / blocked。2026-11-06 更新。head `6301eced` の CI は成功12・skipped 7・fail なし | 2026-11-25 マスター裁可でマージへ（auto-merge 予約済み）。旧記録: OPEN・マージ候補（head CI 緑、要最終確認。Terraform Plan は skipped のため infra 系の挙動確認が残る） |
+| #3685 | hashicorp/setup-terraform 3 → 4 | OPEN / blocked。2026-11-06 更新。head `6301eced` の CI は成功12・skipped 7・fail なし | **MERGED**（2026-11-25T05:03:24Z / 6e2d9b5e48a51a853f67569a6c83aa3c1e51609c、2026-11-25 マスター裁可）。旧記録: OPEN・マージ候補（head CI 緑、要最終確認。Terraform Plan は skipped のため infra 系の挙動確認が残る） |
 | #3686 | vue-tsc 3.3.7 → 3.3.12 | CLOSED（2026-10-14、後継 #3878） | 後継 #3878（3.3.14）は OPEN、CI fail あり（Install ほか） |
 | #3689 | archunit-junit5 1.3.0 → 1.5.1 | CLOSED（2026-10-28、dependabot 自動クローズ「もはや依存でないため不要」） | 依存ではなくなった。再起票の要否は下記「重要な所見」参照 |
 | #3692 | pdfbox 3.0.3 → 3.0.8 | CLOSED（2026-10-28、同上） | 同上。pdfbox は `testImplementation` で 3.0.3 固定のまま残存 |
