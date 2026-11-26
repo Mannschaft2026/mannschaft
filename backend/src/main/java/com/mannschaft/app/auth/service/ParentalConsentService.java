@@ -13,6 +13,7 @@ import com.mannschaft.app.mail.outbox.EmailOutboxRequest;
 import com.mannschaft.app.mail.outbox.EmailOutboxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +22,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -42,6 +42,10 @@ public class ParentalConsentService {
     private final StringRedisTemplate redisTemplate;
     private final EmailOutboxService emailOutboxService;
     private final PendingInviteStore pendingInviteStore;
+
+    /** 保護者へ送る承認画面リンクの起点（正準プロパティ app.base-url。MFA 回復メールと同じ）。 */
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     /** 招待メールのレートリミット: 24時間で最大10回 */
     private static final int INVITE_MAX_ATTEMPTS = 10;
@@ -71,13 +75,18 @@ public class ParentalConsentService {
      */
     @Transactional
     public void inviteParent(Long childUserId, String parentEmail) {
+        // 0. 招待を作れるのは本人が同意待ちのときだけ（一般成人が画面を開いて送っても同意リンクを作らない）
+        UserEntity childUser = userRepository.findById(childUserId)
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_005));
+        if (childUser.getStatus() != UserEntity.UserStatus.PENDING_PARENTAL_CONSENT) {
+            throw new BusinessException(AuthErrorCode.AUTH_087);
+        }
+
         // 1. Valkey レートリミット
         String rateLimitKey = "mannschaft:auth:parental_consent_invite:" + childUserId;
         authTokenService.checkRateLimit(rateLimitKey, INVITE_MAX_ATTEMPTS, INVITE_RATE_LIMIT_WINDOW);
 
         // 2. 自己招待チェック
-        UserEntity childUser = userRepository.findById(childUserId)
-                .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_005));
         if (parentEmail.equalsIgnoreCase(childUser.getEmail())) {
             throw new BusinessException(AuthErrorCode.AUTH_069);
         }
@@ -123,11 +132,10 @@ public class ParentalConsentService {
                 "PARENTAL_CONSENT_INVITATION",
                 "ja",
                 parentEmail,
-                Map.of(
-                        "child_name", childDisplayName,
-                        "token", rawToken,
-                        "expires_days", String.valueOf(TOKEN_EXPIRY_DAYS)
-                ),
+                ParentalConsentMailContent.invitation(
+                        childDisplayName,
+                        baseUrl + ParentalConsentMailContent.APPROVE_PATH + "?token=" + rawToken,
+                        TOKEN_EXPIRY_DAYS),
                 "auth",
                 null,
                 null,
@@ -312,7 +320,7 @@ public class ParentalConsentService {
                 "PARENTAL_CONSENT_APPROVED",
                 childUser.getLocale() != null ? childUser.getLocale() : "ja",
                 childUser.getEmail(),
-                Map.of("child_name", childUser.getDisplayName() != null
+                ParentalConsentMailContent.approved(childUser.getDisplayName() != null
                         ? childUser.getDisplayName()
                         : childUser.getLastName() + " " + childUser.getFirstName()),
                 "auth",
@@ -372,7 +380,7 @@ public class ParentalConsentService {
                     "PARENTAL_CONSENT_REJECTED",
                     childUser.getLocale() != null ? childUser.getLocale() : "ja",
                     childUser.getEmail(),
-                    Map.of(),
+                    ParentalConsentMailContent.rejected(),
                     "auth",
                     null,
                     null,

@@ -116,11 +116,20 @@ async function handleCancelInvitation(linkId: string) {
   }
 }
 
-onMounted(loadData)
+onMounted(async () => {
+  // 同意待ち以外（一般成人など）にはこの画面を見せない。通常の遷移先へ戻し、BE ゲート対象の API も呼ばない。
+  // 承認後に印が外れても manage へ進めるよう、判定は表示時の1回だけ行う（監視はしない）。
+  if (!authStore.isPendingParentalConsent) {
+    await navigateTo(authStore.isSystemAdmin ? '/system-admin' : '/dashboard', { replace: true })
+    return
+  }
+  await loadData()
+})
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto py-8 px-4">
+  <!-- 同意待ち以外には「18歳未満のため…」を見せない（onMounted で通常の遷移先へ戻す） -->
+  <div v-if="authStore.isPendingParentalConsent" class="max-w-2xl mx-auto py-8 px-4">
     <h1 class="text-2xl font-bold mb-2">{{ $t('parental_consent.pending_title') }}</h1>
     <p class="text-gray-600 mb-6">{{ $t('parental_consent.pending_description') }}</p>
 

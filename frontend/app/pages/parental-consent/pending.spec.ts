@@ -35,6 +35,10 @@ const options = { global: { mocks: { $t: (k: string) => k } } }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // 既定は同意待ちの本人（pending 画面は同意待ち以外には開かない。CMP-261123-1124 D-2）
+  useAuthStore().$patch({
+    user: { id: 7, email: 'child@example.com', fullName: '山田 太郎', profileImageUrl: null, status: 'PENDING_PARENTAL_CONSENT' },
+  } as never)
   mocks.getInvitations.mockResolvedValue([])
   mocks.refresh.mockResolvedValue('refreshed')
   // CMP-261123-1124 AC6: 承認後の /users/me 取り直しの既定応答（ACTIVE に戻った本人）
@@ -175,5 +179,41 @@ describe('parental-consent/pending.vue 招待送信（CMP-261123-1124/1125 AC5�
 
     expect(mocks.sendInvitation).toHaveBeenCalledWith('parent@example.com')
     expect(wrapper.text()).toContain('parent@example.com')
+  })
+})
+
+/**
+ * CMP-261123-1124 実機 D-2: 同意待ちでない利用者（一般成人 ACTIVE など）が /parental-consent/pending を開いても
+ * 「18歳未満のため…」を見せず、通常の遷移先へ戻す。招待 API や一覧取得も呼ばない。
+ */
+describe('parental-consent/pending.vue 同意待ち以外の利用者（CMP-261123-1124 D-2）', () => {
+  const activeUser = { id: 8, email: 'adult@example.com', fullName: '大人 太郎', profileImageUrl: null, status: 'ACTIVE' }
+
+  it('ACTIVE の利用者は /dashboard へ戻され、API を呼ばない', async () => {
+    useAuthStore().$patch({ user: activeUser } as never)
+    const wrapper = await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.navigate).toHaveBeenCalledWith('/dashboard', { replace: true })
+    expect(mocks.getInvitations).not.toHaveBeenCalled()
+    expect(mocks.getParents).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('parental_consent.pending_description')
+  })
+
+  it('SYSTEM_ADMIN は /system-admin へ戻される', async () => {
+    useAuthStore().$patch({ user: { ...activeUser, systemRole: 'SYSTEM_ADMIN' } } as never)
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.navigate).toHaveBeenCalledWith('/system-admin', { replace: true })
+  })
+
+  it('同意待ちの利用者は戻されない（回帰）', async () => {
+    mocks.getParents.mockResolvedValue([])
+    await mountSuspended(PendingPage, options)
+    await flushPromises()
+
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/dashboard')
+    expect(mocks.getInvitations).toHaveBeenCalled()
   })
 })
