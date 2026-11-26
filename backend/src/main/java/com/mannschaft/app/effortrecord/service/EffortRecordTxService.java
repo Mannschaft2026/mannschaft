@@ -23,6 +23,7 @@ import com.mannschaft.app.effortrecord.event.EffortShareRevokedEvent;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -116,8 +117,10 @@ public class EffortRecordTxService {
     /**
      * 同じ Idempotency-Key・同じ本文の作成が完了済みなら、その応答を返す（書込なし）。同じ key・別の本文は 409 COMMON_003。
      * TEAM 定義 token の期限切れ後の再送でも、完了済みの作成は元の 201 を返すために Facade が先に呼ぶ。
+     * 完了直後の再送を複製の遅れで見落とすと token 検証のエラーを返すため、PRIMARY の独立 TX で読む
+     * （readOnly=false は ReplicaRoutingAspect の PRIMARY 経路選択用。DML は行わない）。
      */
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public java.util.Optional<EffortOwnerRecordResponse> findCompletedCreate(Long ownerUserId, String idempotencyKey,
                                                                             CreateEffortRecordRequest request) {
         UUID key = parseKey(idempotencyKey);

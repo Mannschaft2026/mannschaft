@@ -5,6 +5,7 @@ import com.mannschaft.app.effortrecord.EffortErrorCode;
 import com.mannschaft.app.effortrecord.repository.EffortRecordRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
@@ -20,8 +21,12 @@ public class EffortOwnerAccessGuard {
 
     private final EffortRecordRepository records;
 
-    /** 認証主体が原本の所有者であることを要求する。 */
-    @Transactional(readOnly = true)
+    /**
+     * 認証主体が原本の所有者であることを要求する。preview・共有 PUT・retry・取消を 404 で拒むかをこの結果で決めるため、
+     * 作成・訂正の直後の要求を複製の遅れで拒まないよう PRIMARY の独立 TX で読む（readOnly=false は
+     * ReplicaRoutingAspect の PRIMARY 経路選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public void requireOwner(Long userId, UUID recordId) {
         if (records.findByIdAndOwnerUserId(recordId, userId).isEmpty()) {
             throw new BusinessException(EffortErrorCode.EFFORT_001);

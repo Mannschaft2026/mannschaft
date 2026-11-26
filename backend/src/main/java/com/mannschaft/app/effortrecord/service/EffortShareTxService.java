@@ -83,14 +83,25 @@ public class EffortShareTxService {
                 .orElseThrow(() -> new BusinessException(EffortErrorCode.EFFORT_001));
     }
 
-    /** 同じ key・同じ本文の完了済み応答（同じ key・別の本文は 409 COMMON_003）。 */
-    @Transactional(readOnly = true)
+    /**
+     * 同じ key・同じ本文の完了済み応答（同じ key・別の本文は 409 COMMON_003）。Facade はこの結果で元の応答を返すか
+     * previewToken・所属の検証へ進むかを決める（token の期限切れ後の再送でも元の応答を返す契約）。完了直後の再送を
+     * 複製の遅れで見落とすと検証側のエラーを返すため、PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の
+     * PRIMARY 経路選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public Optional<EffortReceiptService.StoredResponse> findCompleted(Long ownerUserId, String path, UUID key, String hash) {
         return receipts.findCompleted(ownerUserId, path, key, hash);
     }
 
-    /** (team, 原本) のチーム側共有行。 */
-    @Transactional(readOnly = true)
+    /**
+     * (team, 原本) のチーム側共有行。preview が再共有の share UUID（{@link #reserveShareId}）と共有先の可否
+     * （{@link #checkTarget}）をこの行から決め、previewToken に束縛する。複製の遅れで既存の行を見落とすと新しい UUID を
+     * 束縛し、PRIMARY 上の行と UUID が違うため team 側の upsert が常に STALE を返して共有が PENDING に残る（同じ command の
+     * retry でも回復しない）。PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の PRIMARY 経路選択用。
+     * DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     Optional<EffortTeamShareEntity> teamShare(Long teamId, UUID recordId) {
         return teamShares.findByTeamIdAndSourceRecordId(teamId, recordId);
     }

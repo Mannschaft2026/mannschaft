@@ -11,6 +11,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -139,8 +140,13 @@ public class TimelineEffortSourceService {
         return true;
     }
 
-    /** 投稿が努力由来ならその share UUID（通報による非表示を effort の MODERATED へ寄せるため）。 */
-    @Transactional(readOnly = true)
+    /**
+     * 投稿が努力由来ならその share UUID（通報による非表示を effort の MODERATED へ寄せるため）。非表示の commit 直後の
+     * 非同期の後処理が、この結果で共有を MODERATED（終端）にするかを決める（再送は無い）。複製の遅れで対応行を見落とすと
+     * 共有が MODERATED にならないため、PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の PRIMARY 経路
+     * 選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public Optional<UUID> findShareUuidByPostId(Long postId) {
         return sources.findByTimelinePostId(postId).map(TimelineEffortSourceEntity::getShareUuid);
     }
@@ -159,8 +165,12 @@ public class TimelineEffortSourceService {
         return result;
     }
 
-    /** share UUID の集合のうち、対応行がまだ失効していないもの（effort の保守が後処理の残りを判定する。1 回の照会）。 */
-    @Transactional(readOnly = true)
+    /**
+     * share UUID の集合のうち、対応行がまだ失効していないもの（effort の保守が後処理の残りを判定する。1 回の照会）。
+     * 保守はこの結果で失効の後処理を再実行する行を選ぶため、PRIMARY の独立 TX で読む（readOnly=false は
+     * ReplicaRoutingAspect の PRIMARY 経路選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public Set<UUID> findUnrevokedShareUuids(Collection<UUID> shareUuids) {
         if (shareUuids == null || shareUuids.isEmpty()) {
             return Set.of();

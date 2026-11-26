@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -81,8 +82,12 @@ public class EffortTeamDefinitionTxService {
         return "team:" + teamId + ":template:" + templateId;
     }
 
-    /** 定義行が既にあるか（初回作成の要否判定）。 */
-    @Transactional(readOnly = true)
+    /**
+     * 定義行が既にあるか（初回作成の要否判定と、作成の一意制約違反を「先に作成された」として収束させる判定）。
+     * 作成直後の定義行を複製の遅れで見落とすと、作成を重ねて一意制約違反になり、収束判定でも見落として例外を再送出する
+     * ため、PRIMARY の独立 TX で読む（readOnly=false は ReplicaRoutingAspect の PRIMARY 経路選択用。DML は行わない）。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public boolean exists(Long teamId, Long templateId) {
         return definitions.findBySourceTypeAndSourceKey(EffortSourceType.TEAM, sourceKey(teamId, templateId)).isPresent();
     }
