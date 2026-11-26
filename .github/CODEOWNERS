@@ -12,3 +12,7 @@ backend/src/test/resources/archunit_store/ @kenta-0420
 # 「新たな素通しの追加」または「検出パターンの拡大」であり、必ずオーナーレビューを経ること。
 backend/src/test/resources/sysadmin_bypass/ @kenta-0420
 frontend/tests/unit/guards/sysadmin-bypass-*.json @kenta-0420
+# 番人の検出器本体（パターン・マスク・所属メソッド判定）。ここを緩める変更は基準線と同じく素通しの見逃しに直結する。
+backend/src/test/java/com/mannschaft/app/common/architecture/SysAdminBypassGuardTest.java @kenta-0420
+backend/src/test/java/com/mannschaft/app/common/architecture/PlatformScopeRoleGuardTest.java @kenta-0420
+frontend/tests/unit/guards/sysadmin-bypass-guard.spec.ts @kenta-0420

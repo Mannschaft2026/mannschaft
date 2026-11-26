@@ -75,6 +75,18 @@ import static org.junit.jupiter.api.Assertions.fail;
  * 基準線ファイルは CODEOWNERS の対象で、<b>件数が増える変更は PR 差分で目立つ</b>よう意図的に 1 件 1 行にしている。
  * 対象パターンを広げる変更に限り、増加が正当（既存の見逃しが可視化されるだけ）になる。</p>
  *
+ * <h2>既知の限界（偽陰性・偽陽性の余地）</h2>
+ * <ul>
+ *   <li>局所変数の再利用: {@code boolean x = isSystemAdmin(..)} の結果を後で別の判定に流用する形
+ *       （例: {@code MembershipBatchQueryService} 120-121 行付近）は、呼び出し箇所の件数しか見ない。
+ *       変数の使われ方（短絡かどうか）までは追わない。</li>
+ *   <li>同一メソッド内の {@code !} 反転: {@code !isSystemAdmin(..)} と {@code isSystemAdmin(..)} の入れ替え
+ *       （拒否→許可の反転）は件数・所属メソッドが同じなので検出できない。</li>
+ *   <li>同名オーバーロード: 引数の異なる同名メソッドは所属メソッド名が同じなので件数が合算される。
+ *       オーバーロード間の移動は検出できない。</li>
+ *   <li>メソッド名の変更（リネーム）は消滅＋新規として赤になる（基準線の再生成が必要）。</li>
+ * </ul>
+ *
  * <p>注: DefaultAccessControlService / RoleService / AdminImpersonationFilter / SecurityConfig は共通の素通し点または
  * 拒否型・パス規則を含むため allowlist に入れず基準線で固定する（クラス全体を除外すると新規混入が見えなくなる）。</p>
  */
@@ -181,7 +193,9 @@ class SysAdminBypassGuardTest {
         int pi = 0;
         for (int i = 0; i < code.length() && pi < positions.length; i++) {
             while (pi < positions.length && positions[pi] <= i) {
-                result[pi++] = effective(stack);
+                String ahead = methodOpenedAfter(code, positions[pi]);
+                result[pi] = ahead != null ? ahead : effective(stack);
+                pi++;
             }
             char c = code.charAt(i);
             if (c == '{') {
@@ -191,9 +205,35 @@ class SysAdminBypassGuardTest {
             }
         }
         while (pi < positions.length) {
-            result[pi++] = effective(stack);
+            String ahead = methodOpenedAfter(code, positions[pi]);
+            result[pi] = ahead != null ? ahead : effective(stack);
+            pi++;
         }
         return result;
+    }
+
+    /**
+     * ヒットの後ろで {@code ;} {@code }} に当たる前に最初に開くブロックがメソッド本体なら、そのメソッド名を返す
+     * （メソッドの {@code {} より前に付いたアノテーション {@code @PreAuthorize("hasAnyRole(..)")} を、
+     * クラス直下ではなくそのメソッドへ帰属させるため）。括弧内（アノテーション引数の配列初期化等）の波括弧は無視する。
+     * 該当しなければ {@code null}（呼び出し側が外側ブロックの名前を使う）。
+     */
+    private static String methodOpenedAfter(String code, int pos) {
+        int depth = 0;
+        for (int i = pos; i < code.length(); i++) {
+            char c = code.charAt(i);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+            } else if (depth <= 0 && (c == ';' || c == '}')) {
+                return null;
+            } else if (depth <= 0 && c == '{') {
+                String name = blockName(code, i);
+                return name.isEmpty() || "-".equals(name) ? null : name;
+            }
+        }
+        return null;
     }
 
     private static String effective(Deque<String> stack) {
@@ -391,33 +431,39 @@ class SysAdminBypassGuardTest {
                 "class A { boolean f(Snap s) { return s.isSystemAdmin() || s.isSystemAdmin(); } }");
         assertEquals(1, diff(baseline, scan(added, Map.of())).size());
 
-        // 新規ファイル出現 → 赤（コード参照・リテラル・SpEL・包み関数・別表記のそれぞれ）
-        for (String body : List.of(
-                "boolean f(Q q) { return q.existsSystemAdminByUserId(1L); }",
-                "Object f() { return Snap.forSystemAdmin(); }",
-                "boolean f(Snap s) { return s.systemAdmin().x(); }",
-                "Object f(Long id) { return ViewerContext.systemAdmin(id); }",
-                "boolean f(V v) { return v == ViewerRole.SYSTEM_ADMIN; }",
-                "boolean f(V v) { return v == ViewerStatus.SYSTEM_ADMIN; }",
-                "boolean f(V v) { return v == RoleName.SYSTEM_ADMIN; }",
-                "boolean f(V v) { switch (v) { case SYSTEM_ADMIN: return true; default: return false; } }",
-                "static final String R = ROLE_SYSTEM_ADMIN;",
-                "boolean f(Long u) { return actorIsSystemAdmin(u); }",
-                "boolean f(Long u) { return isOrganizerAdminOrSystemAdmin(u, 1L); }",
-                "void f(Long u) { requireHeadmanOrSystemAdmin(u, 1L); }",
-                "void f(Long u) { checkSystemAdmin(u); }",
-                "boolean f(Stream<Long> s) { return s.anyMatch(this::isSystemAdmin); }",
-                "@PreAuthorize(\"hasRole('SYSTEM_ADMIN')\") void f() {}",
-                "@PreAuthorize(\"hasAnyRole('ADMIN','SYSTEM_ADMIN')\") void f() {}",
-                "@PreAuthorize(\"hasAuthority('ROLE_SYSTEM_ADMIN')\") void f() {}",
-                "static final String Q = \"WHERE r.name = 'SYSTEM_ADMIN'\";",
-                "boolean f(String r) { return \"ROLE_SYSTEM_ADMIN\".equals(r); }",
-                "boolean f(String r) { return \"SYSTEM_ADMIN\".equals(r); }")) {
+        // 新規ファイル出現 → 赤（本文ごとに、期待するキー「パターン @ 所属メソッド」が違反に含まれること）
+        Map<String, String> bodies = new LinkedHashMap<>();
+        bodies.put("boolean f(Q q) { return q.existsSystemAdminByUserId(1L); }", "existsSystemAdminByUserId( @ f");
+        bodies.put("Object f() { return Snap.forSystemAdmin(); }", "forSystemAdmin( @ f");
+        bodies.put("boolean f(Snap s) { return s.systemAdmin().x(); }", "systemAdmin( @ f");
+        bodies.put("Object f(Long id) { return ViewerContext.systemAdmin(id); }", "systemAdmin( @ f");
+        bodies.put("boolean f(V v) { return v == ViewerRole.SYSTEM_ADMIN; }", "ViewerRole.SYSTEM_ADMIN @ f");
+        bodies.put("boolean f(V v) { return v == ViewerStatus.SYSTEM_ADMIN; }", "ViewerStatus.SYSTEM_ADMIN @ f");
+        bodies.put("boolean f(V v) { return v == RoleName.SYSTEM_ADMIN; }", "Type.SYSTEM_ADMIN @ f");
+        bodies.put("boolean f(V v) { switch (v) { case SYSTEM_ADMIN: return true; default: return false; } }",
+                "SYSTEM_ADMIN(bare) @ f");
+        bodies.put("static final String R = ROLE_SYSTEM_ADMIN;", "ROLE_SYSTEM_ADMIN(ident) @ -");
+        bodies.put("boolean f(Long u) { return actorIsSystemAdmin(u); }", "actorIsSystemAdmin( @ f");
+        bodies.put("boolean f(Long u) { return isOrganizerAdminOrSystemAdmin(u, 1L); }",
+                "isOrganizerAdminOrSystemAdmin( @ f");
+        bodies.put("void f(Long u) { requireHeadmanOrSystemAdmin(u, 1L); }", "requireHeadmanOrSystemAdmin( @ f");
+        bodies.put("void f(Long u) { checkSystemAdmin(u); }", "checkSystemAdmin( @ f");
+        bodies.put("boolean f(Stream<Long> s) { return s.anyMatch(this::isSystemAdmin); }", "::isSystemAdmin @ f");
+        bodies.put("@PreAuthorize(\"hasRole('SYSTEM_ADMIN')\") void f() {}", "hasRole('SYSTEM_ADMIN') @ f");
+        bodies.put("@PreAuthorize(\"hasAnyRole('ADMIN','SYSTEM_ADMIN')\") void f() {}",
+                "hasAnyRole(..SYSTEM_ADMIN..) @ f");
+        bodies.put("@PreAuthorize(\"hasAuthority('ROLE_SYSTEM_ADMIN')\") void f() {}",
+                "hasAuthority(..ROLE_SYSTEM_ADMIN..) @ f");
+        bodies.put("static final String Q = \"WHERE r.name = 'SYSTEM_ADMIN'\";", "'SYSTEM_ADMIN'(SQL/SpEL) @ -");
+        bodies.put("boolean f(String r) { return \"ROLE_SYSTEM_ADMIN\".equals(r); }", "\"ROLE_SYSTEM_ADMIN\" @ f");
+        bodies.put("boolean f(String r) { return \"SYSTEM_ADMIN\".equals(r); }", "\"SYSTEM_ADMIN\" @ f");
+        for (Map.Entry<String, String> body : bodies.entrySet()) {
             Map<String, String> withNew = new LinkedHashMap<>(base);
-            withNew.put("b/B.java", "class B { " + body + " }");
+            withNew.put("b/B.java", "class B { " + body.getKey() + " }");
             List<String> v = diff(baseline, scan(withNew, Map.of()));
-            // hasAnyRole(..) は hasAnyRole パターンと SQL/SpEL の 'SYSTEM_ADMIN' の 2 件になり得る（1 件以上で赤なら良い）
-            assertTrue(!v.isEmpty() && v.size() <= 2, "新規混入を検出できていない（偽陰性）: " + body + " -> " + v);
+            String expected = "新規混入（基準線に無い）: b/B.java  " + body.getValue() + " = 1";
+            assertTrue(v.contains(expected),
+                    "期待するキーで新規混入を検出できていない（偽陰性）: " + body.getKey() + " 期待 " + expected + " -> " + v);
         }
 
         // 減少したのに基準線を下げていない → 赤
@@ -464,6 +510,30 @@ class SysAdminBypassGuardTest {
         assertEquals(2, c.get("isSystemAdmin( @ -"), "フィールド初期化は - になるはずが " + c);
         assertEquals(1, c.get("isSystemAdmin( @ a"), "throws 付きメソッド内のラムダ・if は外側のメソッド名 " + c);
         assertEquals(1, c.get("isSystemAdmin( @ b"), "内部クラスのメソッド " + c);
+    }
+
+    @Test
+    @DisplayName("自己検証: メソッドの { より前のアノテーションはそのメソッドへ帰属し、別メソッドへ移すと赤")
+    void 自己検証_アノテーションの帰属() {
+        String onF = "class C {\n"
+                + "  @PreAuthorize(\"hasAnyRole('ADMIN','SYSTEM_ADMIN')\")\n"
+                + "  public void f() { }\n"
+                + "  public void g() { }\n"
+                + "}";
+        String onG = "class C {\n"
+                + "  public void f() { }\n"
+                + "  @PreAuthorize(\"hasAnyRole('ADMIN','SYSTEM_ADMIN')\")\n"
+                + "  public void g() { }\n"
+                + "}";
+        assertEquals(1, countPatterns(onF).get("hasAnyRole(..SYSTEM_ADMIN..) @ f"), "" + countPatterns(onF));
+        assertFalse(countPatterns(onF).containsKey("hasAnyRole(..SYSTEM_ADMIN..) @ -"), "クラス直下に帰属している");
+        Map<String, Integer> baseline = scan(Map.of("a/C.java", onF), Map.of());
+        assertFalse(diff(baseline, scan(Map.of("a/C.java", onG), Map.of())).isEmpty(),
+                "アノテーションを別メソッドへ移しても緑（偽陰性）");
+        // メソッド本体内の文（; で終わる）や if 条件は、後続のメソッドへ誤帰属しない
+        String body = "class C {\n void f(Long u) { boolean b = isSystemAdmin(u);\n if (isSystemAdmin(u)) { run(); } }\n"
+                + " void g() { }\n}";
+        assertEquals(2, countPatterns(body).get("isSystemAdmin( @ f"), "" + countPatterns(body));
     }
 
     @Test

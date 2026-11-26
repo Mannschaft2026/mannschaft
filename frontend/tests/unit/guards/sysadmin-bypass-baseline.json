@@ -1,112 +1,108 @@
 {
   "components/BaseSidebar.vue": {
-    "'SYSTEM_ADMIN'#5a103fd3": 1,
-    "'SYSTEM_ADMIN'#387084c8": 1
+    "'SYSTEM_ADMIN'#isItemVisible": 1,
+    "'SYSTEM_ADMIN'#loadSidebar": 1
   },
   "components/RoleBadge.vue": {
-    "SYSTEM_ADMIN:#9bf55f66": 1
+    "SYSTEM_ADMIN:#-": 1
   },
   "components/admin/AdminSettingsHub.vue": {
-    "'SYSTEM_ADMIN'#64ced758": 1,
-    "isSystemAdmin#64ced758": 1,
-    "isSystemAdmin#56e7be52": 1,
-    "isSystemAdmin#5182cb9d": 1,
-    "'SYSTEM_ADMIN'#d0edba77": 1
+    "isSystemAdmin#-": 2,
+    "'SYSTEM_ADMIN'#-": 1,
+    "isSystemAdmin#links": 1,
+    "'SYSTEM_ADMIN'#sequence": 1
   },
   "components/dashboard/DashboardActionPanel.vue": {
-    "'SYSTEM_ADMIN'#79be45fc": 1
+    "'SYSTEM_ADMIN'#load": 1
   },
   "components/dashboard/DashboardPersonalPanel.vue": {
-    "'SYSTEM_ADMIN'#890f8d30": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "components/public/PublicPostCommentSection.vue": {
-    "'SYSTEM_ADMIN'#308177be": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "components/shift/ShiftDetailTabs.vue": {
-    "'SYSTEM_ADMIN'#5312f1d9": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "composables/useAdminScopeGuard.ts": {
-    "SYSTEM_ADMIN:#32b08ea2": 1
+    "SYSTEM_ADMIN:#-": 1
   },
   "composables/useLoginSession.ts": {
-    "isSystemAdmin#51429594": 1
+    "isSystemAdmin#armProactiveRefresh": 1
   },
   "composables/useLoyaltyStaffAccess.ts": {
-    "'SYSTEM_ADMIN'#e1648242": 1,
-    "'SYSTEM_ADMIN'#ef46dd0e": 1
+    "'SYSTEM_ADMIN'#useLoyaltyStaffAccess": 1,
+    "'SYSTEM_ADMIN'#refresh": 1
   },
   "composables/useRoleAccess.ts": {
-    "'SYSTEM_ADMIN'#5c46eae1": 1,
-    "'SYSTEM_ADMIN'#6b9141ad": 1
+    "'SYSTEM_ADMIN'#-": 2
   },
   "composables/useScopeFeatureVisibility.ts": {
-    "'SYSTEM_ADMIN'#ffb61ca3": 1,
-    "'SYSTEM_ADMIN'#f0c35dff": 1
+    "'SYSTEM_ADMIN'#useScopeFeatureVisibility": 1,
+    "'SYSTEM_ADMIN'#isVisible": 1
   },
   "pages/admin/villages/creation-requests.vue": {
-    "isSystemAdmin#d2b29d01": 1
+    "isSystemAdmin#-": 1
   },
   "pages/auth/oauth/callback.vue": {
-    "isSystemAdmin#48ae95ae": 1
+    "isSystemAdmin#error": 1
   },
   "pages/blog/posts/[id]/edit.vue": {
-    "isSystemAdmin#77d0cb34": 1
+    "isSystemAdmin#-": 1
   },
   "pages/organizations/[slug]/admin/point-cards/history.vue": {
-    "'SYSTEM_ADMIN'#a0b59d80": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "pages/organizations/[slug]/admin/point-cards/index.vue": {
-    "'SYSTEM_ADMIN'#a0b59d80": 1,
-    "'SYSTEM_ADMIN'#0f92c40b": 1
+    "'SYSTEM_ADMIN'#-": 2
   },
   "pages/organizations/[slug]/admin/point-cards/providers/[providerId]/index.vue": {
-    "'SYSTEM_ADMIN'#a0b59d80": 1,
-    "'SYSTEM_ADMIN'#0f92c40b": 1
+    "'SYSTEM_ADMIN'#-": 2
   },
   "pages/organizations/[slug]/admin/point-cards/providers/new.vue": {
-    "'SYSTEM_ADMIN'#0f92c40b": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "pages/organizations/[slug]/admin/point-cards/stamp.vue": {
-    "'SYSTEM_ADMIN'#a0b59d80": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "pages/shift/[id]/edit.vue": {
-    "'SYSTEM_ADMIN'#6c1008a7": 1
+    "'SYSTEM_ADMIN'#scheduleId": 1
   },
   "pages/shift/[id]/index.vue": {
-    "'SYSTEM_ADMIN'#6c1008a7": 1
+    "'SYSTEM_ADMIN'#schedule": 1
   },
   "pages/shift/[id]/requests.vue": {
-    "'SYSTEM_ADMIN'#6c1008a7": 1
+    "'SYSTEM_ADMIN'#schedule": 1
   },
   "pages/shift/[id]/work-constraints.vue": {
-    "'SYSTEM_ADMIN'#6c1008a7": 1
+    "'SYSTEM_ADMIN'#schedule": 1
   },
   "pages/shift/index.vue": {
-    "'SYSTEM_ADMIN'#59c88d4c": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "stores/featureFlags.ts": {
-    "isSystemAdmin#50109ac4": 1
+    "isSystemAdmin#loadFlags": 1
   },
   "stores/useOrganizationStore.ts": {
-    "'SYSTEM_ADMIN'#92a8031a": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "stores/useTeamStore.ts": {
-    "'SYSTEM_ADMIN'#db7753ca": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "types/dashboard-scope.ts": {
-    "'SYSTEM_ADMIN'#eb0fa0e4": 2
+    "'SYSTEM_ADMIN'#-": 2
   },
   "types/dashboard.ts": {
-    "'SYSTEM_ADMIN'#9a974022": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "types/feature-display.ts": {
-    "'SYSTEM_ADMIN'#65145596": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "types/member.ts": {
-    "'SYSTEM_ADMIN'#ab3c6132": 1
+    "'SYSTEM_ADMIN'#-": 1
   },
   "utils/surveyScopeContext.ts": {
-    "'SYSTEM_ADMIN'#65145596": 1,
-    "'SYSTEM_ADMIN'#d72d124b": 1
+    "'SYSTEM_ADMIN'#-": 1,
+    "'SYSTEM_ADMIN'#resolveSurveyManagementContext": 1
   }
 }

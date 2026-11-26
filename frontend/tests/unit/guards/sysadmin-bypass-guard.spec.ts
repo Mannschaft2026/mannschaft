@@ -4,11 +4,13 @@
  * docs/security/03_role_authority_model.md §3.6）。BE の SysAdminBypassGuardTest と同型。
  *
  * - frontend/app 配下（*.spec.ts・*.test.ts・types/generated を除く）の次のパターンを、
- *   ファイル別・パターン別・「正規化した行のハッシュ」別に数える（行番号に依存しない）:
+ *   ファイル別・パターン別・「所属する関数名」別に数える（行番号に依存しない。BE の「パターン @ 所属メソッド」と同型）:
  *   引用符付きの `'SYSTEM_ADMIN'` / `'ROLE_SYSTEM_ADMIN'`、引用符なしのオブジェクトキー `SYSTEM_ADMIN:`
  *   （useAdminScopeGuard.ts の `SYSTEM_ADMIN: 2` 等）、`isSystemAdmin`。
- *   行のハッシュをキーに含めるのは、同一パターン内の入れ替え（拒否型の行を消して許可型の行を足す等）で
- *   合計件数が変わらずに素通しが混入するのを検出するため（行の中身を編集したら基準線の再生成が要る）。
+ *   所属関数名をキーに含めるのは、同一パターン内の入れ替え（拒否型を 1 本消して許可型を別の関数へ 1 本足す等）で
+ *   合計件数が変わらずに素通しが混入するのを検出するため。行の中身を編集しても関数名が同じなら赤にならない
+ *   （行ハッシュ方式の脆さの解消）。関数の外（トップレベル・テンプレート・オブジェクトリテラル）は `-`。
+ *   既知の限界: 同一関数内での拒否↔許可の入れ替え（`return false` → `return true` 等）と、同名関数の合算は検出できない。
  * - 基準線（sysadmin-bypass-baseline.json）より増えたら赤、基準線に無いキーに現れたら赤、
  *   減ったのに基準線を下げていなければ赤（縮める一方）。
  * - 固定 allowlist（sysadmin-bypass-allowlist.json）は理由必須。運営コンソールそのもの
@@ -25,7 +27,6 @@
  */
 import { describe, it, expect } from 'vitest'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -49,9 +50,40 @@ const PATTERNS: Record<string, RegExp> = {
   isSystemAdmin: /\bisSystemAdmin\b/g,
 }
 
-/** 行を正規化（空白を畳む）してハッシュ化する。入れ替え検出用のキー。 */
-function lineKey(line: string): string {
-  return createHash('sha1').update(line.replace(/\s+/g, ' ').trim()).digest('hex').slice(0, 8)
+const NOT_FUNCTION_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'await', 'typeof'])
+
+/** `{` の直前の見出しから「ブロックの名前」を決める。関数・メソッド・関数代入の const → 名前、それ以外は空文字（外側を引き継ぐ）。 */
+export function blockName(code: string, braceIdx: number): string {
+  let j = braceIdx
+  while (j > 0 && !';{}'.includes(code[j - 1])) j--
+  const hdr = code.slice(Math.max(j, braceIdx - 400), braceIdx).trim()
+  const fn = hdr.match(/\bfunction\s*\*?\s*(\w+)\s*[(<][^]*$/)
+  if (fn) return fn[1]
+  const assigned = hdr.match(/\b(?:const|let|var)\s+(\w+)\b[^]*?(?:=>|\bfunction\b)[^]*$/)
+  if (assigned) return assigned[1]
+  const method = hdr.match(/(?:^|[\s.])(?:async\s+)?(\w+)\s*(?:<[^>()]*>)?\s*\([^]*\)\s*(?::\s*[^{}]+)?$/)
+  if (method && !NOT_FUNCTION_KEYWORDS.has(method[1])) return method[1]
+  return ''
+}
+
+/** 昇順の位置ごとの所属関数名（関数の外は `-`）。code はコメント除去済み。 */
+export function enclosingFunctions(code: string, positions: number[]): string[] {
+  const result: string[] = []
+  const stack: string[] = []
+  let pi = 0
+  for (let i = 0; i < code.length && pi < positions.length; i++) {
+    while (pi < positions.length && positions[pi] <= i) {
+      result.push(stack.findLast((n) => n !== '') ?? '-')
+      pi++
+    }
+    if (code[i] === '{') stack.push(blockName(code, i))
+    else if (code[i] === '}' && stack.length > 0) stack.pop()
+  }
+  while (pi < positions.length) {
+    result.push(stack.findLast((n) => n !== '') ?? '-')
+    pi++
+  }
+  return result
 }
 
 /** 行コメント・ブロックコメント・HTML コメントを空白化する（文字列内の // は URL 等なので触らない簡易版）。 */
@@ -64,16 +96,17 @@ export function stripComments(src: string): string {
 
 export function countPatterns(src: string): Counts {
   const body = stripComments(src)
-  const result: Counts = {}
-  for (const line of body.split('\n')) {
-    for (const [name, re] of Object.entries(PATTERNS)) {
-      const n = (line.match(re) ?? []).length
-      if (n > 0) {
-        const key = `${name}#${lineKey(line)}`
-        result[key] = (result[key] ?? 0) + n
-      }
-    }
+  const hits: { pos: number; name: string }[] = []
+  for (const [name, re] of Object.entries(PATTERNS)) {
+    for (const m of body.matchAll(re)) hits.push({ pos: m.index ?? 0, name })
   }
+  hits.sort((a, b) => a.pos - b.pos)
+  const fns = enclosingFunctions(body, hits.map((h) => h.pos))
+  const result: Counts = {}
+  hits.forEach((h, i) => {
+    const key = `${h.name}#${fns[i]}`
+    result[key] = (result[key] ?? 0) + 1
+  })
   return result
 }
 
@@ -81,7 +114,7 @@ export function isAllowed(path: string, allow: AllowEntry[]): boolean {
   return allow.some((a) => (a.path.endsWith('/') ? path.startsWith(a.path) : path === a.path))
 }
 
-/** 実測（allowlist 除外後）→ 平坦マップ "path\tpattern#行ハッシュ" → 件数 */
+/** 実測（allowlist 除外後）→ 平坦マップ "path\tpattern#所属関数" → 件数 */
 export function scan(sources: Record<string, string>, allow: AllowEntry[]): Counts {
   const flat: Counts = {}
   for (const [path, src] of Object.entries(sources)) {
@@ -195,7 +228,7 @@ describe('番人 G2 の自己検証（検出器の偽陰性・偽陽性を晒す
   const baseKey = Object.keys(baseline)[0]
 
   it('基準線どおりなら緑、新規ファイル・件数増加は赤、減少の下げ忘れも赤', () => {
-    expect(baseKey).toMatch(/^composables\/useX\.ts\tisSystemAdmin#[0-9a-f]{8}$/)
+    expect(baseKey).toBe('composables/useX.ts\tisSystemAdmin#-')
     expect(baseline[baseKey]).toBe(1)
     expect(diff(baseline, scan(base, []))).toEqual([])
     const withNew = { ...base, 'pages/new.vue': "<script setup>const r = u.role === 'SYSTEM_ADMIN'</script>" }
@@ -217,14 +250,22 @@ describe('番人 G2 の自己検証（検出器の偽陰性・偽陽性を晒す
     expect(diff(baseline, scan(withNew, []))).toHaveLength(1)
   })
 
-  it('同一パターン内の入れ替え（拒否型の行を消して許可型の行を足す）は合計件数が同じでも赤', () => {
-    const deny = { 'composables/useY.ts': "if (role === 'SYSTEM_ADMIN') return false" }
-    const allow = { 'composables/useY.ts': "if (role === 'SYSTEM_ADMIN') return true" }
-    const b = scan(deny, [])
-    expect(diff(b, scan(deny, []))).toEqual([])
-    expect(diff(b, scan(allow, []))).toHaveLength(2)
-    // 空白だけの違い（インデント変更）では赤にならない
-    expect(diff(b, scan({ 'composables/useY.ts': "    if (role   ===  'SYSTEM_ADMIN')  return false  " }, []))).toEqual([])
+  it('同一パターン内の入れ替え（別の関数へ移す）は合計件数が同じでも赤。関数名が同じなら行の編集では赤にならない', () => {
+    const before = { 'composables/useY.ts': "function deny(role) { return role === 'SYSTEM_ADMIN' }\nfunction other() { return 1 }" }
+    const moved = { 'composables/useY.ts': "function deny(role) { return 1 }\nfunction other(role) { return role === 'SYSTEM_ADMIN' }" }
+    const b = scan(before, [])
+    expect(Object.keys(b)).toEqual(["composables/useY.ts\t'SYSTEM_ADMIN'#deny"])
+    expect(diff(b, scan(before, []))).toEqual([])
+    expect(diff(b, scan(moved, []))).toHaveLength(2)
+    // 空白・インデント・行の増減・引数名の変更だけでは赤にならない
+    const edited = {
+      'composables/useY.ts':
+        "function deny(r) {\n  const x = 1\n    return r   ===  'SYSTEM_ADMIN'\n}\nfunction other() { return 1 }",
+    }
+    expect(diff(b, scan(edited, []))).toEqual([])
+    // アロー関数・メソッド・computed の所属名
+    const arrow = "const canSee = computed(() => {\n  return u.role === 'SYSTEM_ADMIN'\n})\nconst o = { m(x) { return x.isSystemAdmin } }"
+    expect(Object.keys(countPatterns(arrow)).sort()).toEqual(["'SYSTEM_ADMIN'#canSee", 'isSystemAdmin#m'])
   })
 
   it('コメント内の言及は数えない', () => {
