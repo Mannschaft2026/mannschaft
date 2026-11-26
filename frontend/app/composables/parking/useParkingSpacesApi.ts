@@ -1,11 +1,22 @@
-import type { ParkingSpaceResponse } from '~/types/parking'
+import type { ParkingPageMeta, ParkingSpaceResponse } from '~/types/parking'
 import { buildBase } from './useParkingApiBase'
 
 export function useParkingSpacesApi() {
   const api = useApi()
 
-  async function getSpaces(scopeType: 'team' | 'organization', scopeId: string) {
-    return api<{ data: ParkingSpaceResponse[] }>(`${buildBase(scopeType, scopeId)}/parking/spaces`)
+  /** 区画一覧。BE は page 0 始まり・size 既定 20 のため、全件が要る呼び出し側は meta.totalPages を見て続きを取る。 */
+  async function getSpaces(
+    scopeType: 'team' | 'organization',
+    scopeId: string,
+    params?: { page?: number; size?: number },
+  ) {
+    const q = new URLSearchParams()
+    if (params?.page != null) q.set('page', String(params.page))
+    if (params?.size != null) q.set('size', String(params.size))
+    const qs = q.toString()
+    return api<{ data: ParkingSpaceResponse[]; meta?: ParkingPageMeta }>(
+      `${buildBase(scopeType, scopeId)}/parking/spaces${qs ? `?${qs}` : ''}`,
+    )
   }
 
   async function getSpace(scopeType: 'team' | 'organization', scopeId: string, spaceId: number) {

@@ -36,6 +36,7 @@ watch(
       v-if="canView"
       scope-type="organization"
       :scope-id="orgSlug"
+      scope-not-found-on-denied
     />
   </div>
 </template>

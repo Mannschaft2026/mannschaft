@@ -20,6 +20,12 @@ public interface ParkingApplicationRepository extends JpaRepository<ParkingAppli
 
     Page<ParkingApplicationEntity> findBySpaceIdInAndStatus(List<Long> spaceIds, ParkingApplicationStatus status, Pageable pageable);
 
+    /** 本人分のみの一覧（MANAGE_PARKING を持たない閲覧者向け。CMP-260930-0233）。 */
+    Page<ParkingApplicationEntity> findBySpaceIdInAndUserId(List<Long> spaceIds, Long userId, Pageable pageable);
+
+    Page<ParkingApplicationEntity> findBySpaceIdInAndUserIdAndStatus(
+            List<Long> spaceIds, Long userId, ParkingApplicationStatus status, Pageable pageable);
+
     Optional<ParkingApplicationEntity> findBySpaceIdAndUserIdAndStatusIn(Long spaceId, Long userId, List<ParkingApplicationStatus> statuses);
 
     List<ParkingApplicationEntity> findBySpaceIdAndStatus(Long spaceId, ParkingApplicationStatus status);

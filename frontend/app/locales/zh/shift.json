@@ -473,7 +473,6 @@
       "loadFailed": "获取时薪失败",
       "historyLoadFailed": "获取时薪历史失败",
       "permissionLoadFailed": "获取权限失败",
-      "forbidden": "您没有查看此页面的权限",
       "noMembers": "没有成员",
       "dialogTitle": "{name} 的时薪设置",
       "effectiveFromHint": "自指定日期起生效。过去的设置会保留为历史记录。以相同日期重新登记，则会更正当天的设置。",

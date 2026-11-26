@@ -473,7 +473,6 @@
       "loadFailed": "시급을 불러오지 못했습니다",
       "historyLoadFailed": "시급 이력을 불러오지 못했습니다",
       "permissionLoadFailed": "권한을 불러오지 못했습니다",
-      "forbidden": "이 화면을 볼 권한이 없습니다",
       "noMembers": "멤버가 없습니다",
       "dialogTitle": "{name}의 시급 설정",
       "effectiveFromHint": "지정한 날짜부터 적용됩니다. 이전 설정은 이력으로 남습니다. 같은 날짜로 다시 등록하면 해당 날짜의 설정이 정정됩니다.",

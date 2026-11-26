@@ -95,16 +95,7 @@ public final class N1SeedSupport {
      * 既存 IT（{@code WebhookAuthzContractIT}）と同じく必要なロールを都度用意する。
      */
     public void ensureRole(String roleName) {
-        long exists = ((Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
-                .setParameter("name", roleName).getSingleResult()).longValue();
-        if (exists > 0) {
-            return;
-        }
-        em.createNativeQuery(
-                "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                        + "VALUES (:name, :name, 9, 0, NOW(), NOW())")
-                .setParameter("name", roleName)
-                .executeUpdate();
+        RoleSeedSupport.ensureCanonical(em, roleName);
     }
 
     /** モジュール定義を（無ければ）作る。ddl-auto=create のため Flyway シードの代わりに用意する。 */

@@ -6,7 +6,7 @@
  * - {@link useFriendTeamsApi.listFriends} でフレンド一覧を取得し、
  *   {@link TeamFriendCard} を map 表示する。
  * - ページネーション UI（PrimeVue Paginator）を提供する。
- * - 空状態は {@link DashboardEmptyState}、取得失敗は {@link DashboardErrorState}（403=権限なし案内、5xx・通信断=再試行付き）。
+ * - 空状態は {@link DashboardEmptyState}、取得失敗は {@link DashboardErrorState}（403/404=共通の見つかりません、5xx・通信断=再試行付き）。
  * - ローディング中は {@link PageLoading} を使用。
  *
  * Props:
@@ -34,11 +34,12 @@ const { listFriends, unfollow } = useFriendTeamsApi()
 const { confirmAction } = useConfirmDialog()
 const notification = useNotification()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 
 const friends = ref<TeamFriendView[]>([])
 const loading = ref(true)
 const { page, rows: pageSize, totalRecords: totalElements, loadWithPageCorrection } = usePagination()
-// 取得失敗は空状態と区別して保持する（403=権限なし案内、5xx・通信断=エラー表示＋再試行）
+// 取得失敗は空状態と区別して保持する（403/404=共通の見つかりません、5xx・通信断=エラー表示＋再試行）
 const loadError = shallowRef<unknown>(null)
 
 async function load() {
@@ -52,6 +53,8 @@ async function load() {
   catch (error) {
     friends.value = []
     totalElements.value = 0
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ（CMP-261125-1108）
+    if (markIfDenied(error)) return
     loadError.value = error
   }
   finally {

@@ -378,7 +378,7 @@ public class GoogleCalendarWebhookService {
      *
      * @param userId 対象ユーザーID
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Transactional
     public void registerWebhookChannel(Long userId) {
         UserGoogleCalendarConnectionEntity connection = connectionRepository.findByUserId(userId)

@@ -10,6 +10,7 @@ import type {
   OrgSocialDto,
 } from '~/types/organization'
 import { createLatestGuard } from '~/utils/latestRequest'
+import { isScopeNotFound } from '~/utils/loadError'
 
 // Wave 3-B: OrganizationResponse ネスト構造に対応
 export interface OrgDetail {
@@ -49,6 +50,11 @@ export function useOrgDetail(orgId: Ref<string>) {
   const orgTeamsLoading = ref(false)
   const permissionGroups = ref<OrgPermissionGroup[]>([])
   const loading = ref(false)
+  /**
+   * 詳細取得が 403/404（非所属・権限なし）だった。シェルは共通の「見つかりません」を出す
+   * （CMP-261125-1108。エラートースト・再試行は出さない）。slug 変更・取得成功で false に戻る。
+   */
+  const detailDenied = ref(false)
 
   // フォロー（サポーター）状態の取得・申請・解除はページ側の `useScopeFollowWiring` に一本化
   // （CMP-261001-0835。権限再取得 loadPermissions との結線をページ単位で持つため）。
@@ -92,12 +98,17 @@ export function useOrgDetail(orgId: Ref<string>) {
       const result = await orgApi.getOrganization(requestedId)
       if (!isCurrent()) return
       org.value = result.data as OrgDetail
+      detailDenied.value = false
     } catch (error) {
       if (!isCurrent()) return
-      const status = (error as { statusCode?: number, response?: { status?: number }, status?: number })
-        ?.statusCode ?? (error as { response?: { status?: number } })?.response?.status
-        ?? (error as { status?: number })?.status
-      if (status === 403) org.value = null
+      // 403/404 は共通の「見つかりません」表示（CMP-261125-1108）。トーストは出さない。
+      // 404 の旧 slug（MOVED）解決は呼び出し側（loadShellData）が org=null を見て先に試す。
+      if (isScopeNotFound(error)) {
+        org.value = null
+        detailDenied.value = true
+        return
+      }
+      detailDenied.value = false
       handleApiError(error, '組織詳細取得')
     } finally {
       // 後発の要求が無いときだけ解く（後発がある場合はその要求の完了で解く）
@@ -173,6 +184,7 @@ export function useOrgDetail(orgId: Ref<string>) {
     orgTeamsLoading,
     permissionGroups,
     loading,
+    detailDenied,
     joinRequestStatus,
     joinRequestLoading,
     showLeaveConfirm,

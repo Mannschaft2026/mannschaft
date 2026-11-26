@@ -590,6 +590,7 @@ export default defineNuxtConfig({
           'ja/billing.json',
           'ja/global_nav.json',
           'ja/receipt.json',
+          'ja/parking.json',
         ],
       },
       {
@@ -674,6 +675,7 @@ export default defineNuxtConfig({
           'en/billing.json',
           'en/global_nav.json',
           'en/receipt.json',
+          'en/parking.json',
         ],
       },
       {
@@ -758,6 +760,7 @@ export default defineNuxtConfig({
           'zh/billing.json',
           'zh/global_nav.json',
           'zh/receipt.json',
+          'zh/parking.json',
         ],
       },
       {
@@ -842,6 +845,7 @@ export default defineNuxtConfig({
           'ko/billing.json',
           'ko/global_nav.json',
           'ko/receipt.json',
+          'ko/parking.json',
         ],
       },
       {
@@ -926,6 +930,7 @@ export default defineNuxtConfig({
           'es/billing.json',
           'es/global_nav.json',
           'es/receipt.json',
+          'es/parking.json',
         ],
       },
       {
@@ -1010,6 +1015,7 @@ export default defineNuxtConfig({
           'de/billing.json',
           'de/global_nav.json',
           'de/receipt.json',
+          'de/parking.json',
         ],
       },
     ],

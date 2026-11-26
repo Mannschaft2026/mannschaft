@@ -1,6 +1,7 @@
 package com.mannschaft.app.team;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.role.repository.UserRoleRepository;
@@ -96,7 +97,7 @@ class TeamCoreAuthzContractIT extends AbstractMySqlIntegrationTest {
     @BeforeEach
     void setUp() {
         insertRoleIfAbsent("ADMIN", "管理者", 2);
-        insertRoleIfAbsent("MEMBER", "メンバー", 5);
+        insertRoleIfAbsent("MEMBER", "メンバー", 4);
         insertRoleIfAbsent("SYSTEM_ADMIN", "システム管理者", 1);
 
         teamAId = insertTeam("TEAMCORE認可契約チームA", "PUBLIC");
@@ -545,19 +546,8 @@ class TeamCoreAuthzContractIT extends AbstractMySqlIntegrationTest {
 
     /** roles を name で引く idempotent seed（グローバル参照テーブルのため deleteAll しない）。 */
     private void insertRoleIfAbsent(String name, String displayName, int priority) {
-        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
-                .setParameter("name", name)
-                .getSingleResult();
-        if (count.longValue() > 0) {
-            return;
-        }
-        em.createNativeQuery(
-                        "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :dn, :priority, 0, NOW(), NOW())")
-                .setParameter("name", name)
-                .setParameter("dn", displayName)
-                .setParameter("priority", priority)
-                .executeUpdate();
+        // 既存行の誤った priority も正す（seed と同じ値で upsert）
+        RoleSeedSupport.ensureCanonical(em, name);
     }
 
     private Long insertUser(String email) {
