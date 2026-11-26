@@ -30,7 +30,7 @@
       "revoke_tooltip": "無効化",
       "uses_unit": "回",
       "qr_alt": "QRコード",
-      "qr_hint": "QRコードをスキャンして追加"
+      "once_hint": "リンクとQRコードは発行した直後に一度だけ表示されます。必要な場合は新しく発行してください。"
     },
     "expiry": {
       "never": "無期限",
@@ -41,9 +41,7 @@
       "create_success": "招待URLを発行しました",
       "create_error": "発行に失敗しました",
       "revoke_success": "招待URLを無効化しました",
-      "revoke_error": "無効化に失敗しました",
-      "copy_success": "URLをコピーしました",
-      "copy_error": "コピーに失敗しました"
+      "revoke_error": "無効化に失敗しました"
     },
     "my_qr": "自分の連絡先QR"
   },
