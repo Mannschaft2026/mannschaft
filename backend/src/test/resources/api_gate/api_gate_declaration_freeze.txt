@@ -168,7 +168,7 @@ HTTP|com.mannschaft.app.common.storage.quota.controller.StorageUsageController|1
 HTTP|com.mannschaft.app.contact.controller.ContactController|2|2
 HTTP|com.mannschaft.app.contact.controller.ContactHandleController|4|4
 HTTP|com.mannschaft.app.contact.controller.ContactInviteController|2|2
-HTTP|com.mannschaft.app.contact.controller.ContactInviteTokenController|4|4
+HTTP|com.mannschaft.app.contact.controller.ContactInviteTokenController|3|3
 HTTP|com.mannschaft.app.contact.controller.ContactPrivacyController|2|2
 HTTP|com.mannschaft.app.contact.controller.ContactRequestBlockController|3|3
 HTTP|com.mannschaft.app.contact.controller.ContactRequestController|6|6

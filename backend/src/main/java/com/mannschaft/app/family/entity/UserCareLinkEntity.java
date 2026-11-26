@@ -66,7 +66,7 @@ public class UserCareLinkEntity {
     @Column(nullable = false, length = 20)
     private CareLinkInvitedBy invitedBy;
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Column(length = 64)
     private String invitationToken;
 
