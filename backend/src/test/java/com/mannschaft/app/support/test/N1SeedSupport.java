@@ -1,6 +1,5 @@
 package com.mannschaft.app.support.test;
 
-import com.mannschaft.app.role.authorization.RolePriority;
 import jakarta.persistence.EntityManager;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -103,9 +102,8 @@ public final class N1SeedSupport {
         }
         em.createNativeQuery(
                 "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                        + "VALUES (:name, :name, :priority, 0, NOW(), NOW())")
+                        + "VALUES (:name, :name, 9, 0, NOW(), NOW())")
                 .setParameter("name", roleName)
-                .setParameter("priority", RolePriority.priority(roleName))
                 .executeUpdate();
     }
 

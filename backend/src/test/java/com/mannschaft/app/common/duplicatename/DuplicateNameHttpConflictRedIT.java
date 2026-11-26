@@ -2,7 +2,6 @@ package com.mannschaft.app.common.duplicatename;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,7 +17,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,7 +64,6 @@ class DuplicateNameHttpConflictRedIT extends AbstractMySqlIntegrationTest {
 
     private Long userId;
     private String organizationName;
-    private final List<String> insertedRoleNames = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -86,10 +83,6 @@ class DuplicateNameHttpConflictRedIT extends AbstractMySqlIntegrationTest {
             jdbcTemplate.update("DELETE FROM user_roles WHERE user_id = ?", userId);
             jdbcTemplate.update("DELETE FROM users WHERE id = ?", userId);
         }
-        for (String roleName : insertedRoleNames) {
-            jdbcTemplate.update("DELETE FROM roles WHERE name = ?", roleName);
-        }
-        insertedRoleNames.clear();
     }
 
     @Test
@@ -146,20 +139,14 @@ class DuplicateNameHttpConflictRedIT extends AbstractMySqlIntegrationTest {
                 new UsernamePasswordAuthenticationToken(userId.toString(), null, List.of()));
     }
 
-    /**
-     * roles 行が無ければ正準 priority（{@link RolePriority}）で投入する。このクラスが投入した行だけを
-     * {@link #insertedRoleNames} に記録し、{@code @AfterEach} で撤去する（commit 済みのまま残すと
-     * 同一 JVM の後続 IT の優先度比較が崩れる）。priority を固定値で書かないこと。
-     */
     private void ensureRole(String roleName) {
         Long count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM roles WHERE name = ?", Long.class, roleName);
         if (count == null || count == 0) {
             jdbcTemplate.update(
                     "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                            + "VALUES (?, ?, ?, 0, NOW(), NOW())",
-                    roleName, roleName, RolePriority.priority(roleName));
-            insertedRoleNames.add(roleName);
+                            + "VALUES (?, ?, 99, 0, NOW(), NOW())",
+                    roleName, roleName);
         }
     }
 
