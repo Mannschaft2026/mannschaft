@@ -106,6 +106,7 @@
           :member-map="memberMap"
           :pending-run="pendingRun"
           :schedule-version="scheduleVersion"
+          :readonly="!canManageShift"
           @drop-user="onDropUser"
           @remove-user="onRemoveUser"
           @add-user="addUserSlotId = $event; poolVisible = true"
@@ -120,6 +121,7 @@
           :members="unassignedMembers"
           :loading="membersLoading"
           :error="membersError"
+          :readonly="!canManageShift"
           @retry="loadMembers"
           @drag-start="draggingUserId = $event"
         />
