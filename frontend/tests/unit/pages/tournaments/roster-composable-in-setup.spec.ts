@@ -16,6 +16,7 @@ import RostersPage from '~/pages/organizations/[slug]/tournaments/[tId]/rosters.
  *   RS-003 提出 API 失敗時に失敗通知が出る
  *   RS-004 useNotification は setup 外（クリック時）で呼ばれない
  *   RS-005 主催者画面の締切更新でも PATCH API が呼ばれる
+ *   RS-006 主催者画面の試合切替で GET が呼ばれ、setup 外の呼び出しが 0 回
  */
 
 const state = vi.hoisted(() => ({ query: {} as Record<string, string> }))
@@ -40,16 +41,41 @@ mockNuxtImport('useNotification', () => () => {
   return notify
 })
 
+const player = {
+  id: 1,
+  userId: 42,
+  displayName: '選手A',
+  isStarter: true,
+  jerseyNumber: 10,
+  position: null,
+  registrationNumber: null,
+  uniformSetId: null,
+}
 const rosterBody = {
-  data: { locked: false, rosterDeadline: null, players: [], staff: [] },
+  data: { matchId: 5, participantId: 1, teamId: 22, locked: false, rosterDeadline: null, players: [player], staff: [] },
+}
+const submittedBody = {
+  data: { ...rosterBody.data, locked: true },
 }
 
 async function settle() {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PageVm = any
+interface RosterPageVm {
+  selectedTemplateId: string | null
+  showTemplateModal: boolean
+  playerRows: Array<{ userId: number }>
+  roster: { locked: boolean } | null
+  applyTemplate: () => Promise<void>
+  submitRoster: () => Promise<void>
+}
+
+interface RostersPageVm {
+  matchIdInput: string
+  selectMatch: () => Promise<void>
+  updateDeadline: () => Promise<void>
+}
 
 beforeAll(async () => {
   resolveContext.mockResolvedValue({ orgId: 11, orgInvalid: false, teamId: 22, organizations: [] })
@@ -78,11 +104,15 @@ describe('roster.vue — useMatchRoster は setup でのみ呼ぶ', () => {
 
   it('RS-001: テンプレ適用で apply-template API が呼ばれ成功通知が出る', async () => {
     const wrapper = await mountPage()
-    const vm = wrapper.vm as PageVm
+    const vm = wrapper.vm as unknown as RosterPageVm
+    vm.playerRows = []
+    vm.showTemplateModal = true
     vm.selectedTemplateId = 'tpl-1'
     await vm.applyTemplate()
     await settle()
 
+    expect(vm.playerRows.map((p) => p.userId)).toEqual([42])
+    expect(vm.showTemplateModal).toBe(false)
     expect(api).toHaveBeenCalledWith(
       '/api/v1/tournaments/7/matches/5/rosters/me/apply-template',
       expect.objectContaining({ method: 'POST', body: expect.objectContaining({ templateId: 'tpl-1' }) }),
@@ -92,9 +122,13 @@ describe('roster.vue — useMatchRoster は setup でのみ呼ぶ', () => {
 
   it('RS-002: 提出で PUT API が呼ばれ成功通知が出る', async () => {
     const wrapper = await mountPage()
-    await (wrapper.vm as PageVm).submitRoster()
+    const vm = wrapper.vm as unknown as RosterPageVm
+    expect(vm.roster?.locked).toBe(false)
+    api.mockResolvedValueOnce(submittedBody)
+    await vm.submitRoster()
     await settle()
 
+    expect(vm.roster?.locked).toBe(true)
     expect(api).toHaveBeenCalledWith(
       '/api/v1/tournaments/7/matches/5/rosters/me',
       expect.objectContaining({ method: 'PUT' }),
@@ -105,7 +139,7 @@ describe('roster.vue — useMatchRoster は setup でのみ呼ぶ', () => {
   it('RS-003: 提出 API 失敗時に失敗通知が出る', async () => {
     const wrapper = await mountPage()
     api.mockRejectedValueOnce(new Error('boom'))
-    await (wrapper.vm as PageVm).submitRoster()
+    await (wrapper.vm as unknown as RosterPageVm).submitRoster()
     await settle()
 
     expect(notify.error).toHaveBeenCalled()
@@ -113,7 +147,7 @@ describe('roster.vue — useMatchRoster は setup でのみ呼ぶ', () => {
 
   it('RS-004: useNotification は setup 外（クリック時）で呼ばれない', async () => {
     const wrapper = await mountPage()
-    const vm = wrapper.vm as PageVm
+    const vm = wrapper.vm as unknown as RosterPageVm
     vm.selectedTemplateId = 'tpl-1'
     await vm.applyTemplate()
     await vm.submitRoster()
@@ -135,7 +169,7 @@ describe('rosters.vue（主催者）— useMatchRoster は setup でのみ呼ぶ
   it('RS-005: 締切更新で PATCH API が呼ばれる', async () => {
     const wrapper = await mountSuspended(RostersPage)
     await settle()
-    await (wrapper.vm as PageVm).updateDeadline()
+    await (wrapper.vm as unknown as RostersPageVm).updateDeadline()
     await settle()
 
     expect(notificationCalls.outsideSetup).toBe(0)
@@ -143,5 +177,18 @@ describe('rosters.vue（主催者）— useMatchRoster は setup でのみ呼ぶ
       '/api/v1/tournaments/7/matches/5',
       expect.objectContaining({ method: 'PATCH' }),
     )
+  })
+
+  it('RS-006: 試合切替(selectMatch)で /matches/6/rosters の GET が呼ばれ、setup 外の呼び出しは 0 回', async () => {
+    const wrapper = await mountSuspended(RostersPage)
+    await settle()
+    const vm = wrapper.vm as unknown as RostersPageVm
+    api.mockClear()
+    vm.matchIdInput = '6'
+    await vm.selectMatch()
+    await settle()
+
+    expect(api).toHaveBeenCalledWith('/api/v1/tournaments/7/matches/6/rosters')
+    expect(notificationCalls.outsideSetup).toBe(0)
   })
 })
