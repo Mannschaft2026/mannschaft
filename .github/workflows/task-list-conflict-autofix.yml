@@ -1,0 +1,114 @@
+# =============================================================================
+# 台帳 docs/task-list.md の末尾追記衝突の自動修復 — CMP-261124-1222
+# =============================================================================
+# main は merge queue（SQUASH）必須。台帳に行を末尾追記する PR どうしが衝突すると queue から
+# merge_conflict で外れ、auto-merge の予約も消える。GitHub のサーバ側マージは merge=union を見ないため、
+# ここ（Actions 上のローカル git）で「台帳だけで衝突している PR」を union で直して push し、予約し直す。
+# ロジック本体: scripts/task-list-conflict-autofix.mjs（試験: scripts/task-list-conflict-autofix.test.mjs）
+# 運用: docs/development/merge_queue_operations.md「脱落時の扱い」
+#
+# 安全上の方針:
+# - checkout は main だけ。PR の head のコードは実行しない（git merge-tree でマージ結果を作り、
+#   台帳を main 側の scripts/task-list-structure-check.mjs で検査するだけ）。
+# - push と auto-merge 予約は GitHub App token（contents:write・pull_requests:write のみ）で行う。
+#   GITHUB_TOKEN で push すると PR の必須チェックが走らないため。workflow ファイルを変える push は
+#   App に workflows 権限が無いので、スクリプト側でスキップする。
+# - App の設定（vars.LEDGER_BOT_APP_ID / secrets.LEDGER_BOT_PRIVATE_KEY）が無い環境（fork 等）では
+#   失敗させずにスキップする。
+# - 多重実行は concurrency で直列化する（走りかけは打ち切らない）。
+# =============================================================================
+
+name: 台帳衝突の自動修復
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '判定だけ出して何もしない'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: task-list-conflict-autofix
+  cancel-in-progress: false
+
+jobs:
+  autofix:
+    name: 台帳衝突の自動修復
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: App の設定を確認
+        id: config
+        env:
+          APP_ID: ${{ vars.LEDGER_BOT_APP_ID }}
+          HAS_KEY: ${{ secrets.LEDGER_BOT_PRIVATE_KEY != '' }}
+        run: |
+          if [ -z "$APP_ID" ] || [ "$HAS_KEY" != "true" ]; then
+            echo "::notice::vars.LEDGER_BOT_APP_ID / secrets.LEDGER_BOT_PRIVATE_KEY が無いため自動修復をスキップする（fork 等）"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: App token を発行
+        id: app-token
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.LEDGER_BOT_APP_ID }}
+          private-key: ${{ secrets.LEDGER_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+
+      # main だけを取る。履歴はマージに要るので全量、blob は必要な分だけ遅延取得（partial clone）。
+      # 作業木は scripts/ だけ（牧場素材など大きいファイルを展開しない）。
+      - name: Checkout main
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Node.js 24
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: bot の commit 署名者を決める
+        id: identity
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          USER_ID=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          echo "name=${APP_SLUG}[bot]" >> "$GITHUB_OUTPUT"
+          echo "email=${USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com" >> "$GITHUB_OUTPUT"
+
+      - name: 台帳だけで衝突している PR を直す
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          LEDGER_BOT_NAME: ${{ steps.identity.outputs.name }}
+          LEDGER_BOT_EMAIL: ${{ steps.identity.outputs.email }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            node scripts/task-list-conflict-autofix.mjs --dry-run
+          else
+            node scripts/task-list-conflict-autofix.mjs
+          fi

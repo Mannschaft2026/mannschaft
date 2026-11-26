@@ -55,7 +55,7 @@ public class AuthOAuthLinkService {
      * @param userId 連携を要求するユーザーID
      * @return 認可 URL（Google Calendar スコープ付き）
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     public String generateCalendarOnlyAuthUrl(Long userId) {
         String state = UUID.randomUUID().toString();
         String redisKey = STATE_KEY_PREFIX + state;
@@ -74,7 +74,7 @@ public class AuthOAuthLinkService {
      * @throws BusinessException AUTH_028 — サポート外プロバイダ
      * @throws BusinessException AUTH_034 — 既に連携済み
      */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     public String generateAuthUrl(Long userId, String provider, boolean includeCalendar) {
         // 1. プロバイダ検証（GOOGLE のみサポート）
         OAuthAccountEntity.OAuthProvider oauthProvider = validateProvider(provider);

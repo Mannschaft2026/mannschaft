@@ -17,9 +17,9 @@ import java.util.Optional;
 public interface CommitteeInvitationRepository extends JpaRepository<CommitteeInvitationEntity, Long> {
 
     /**
-     * トークンで招集状を検索する。
+     * トークンのハッシュ（{@code SecretTokenVault#hash}）で招集状を検索する。平文では検索しない。
      */
-    Optional<CommitteeInvitationEntity> findByInviteToken(String inviteToken);
+    Optional<CommitteeInvitationEntity> findByInviteTokenHash(String inviteTokenHash);
 
     /** 親委員会・現役メンバーをロックした後に招集状の最新状態を取得する。 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

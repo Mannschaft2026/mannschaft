@@ -10,6 +10,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Version;
@@ -27,7 +28,14 @@ import com.mannschaft.app.common.token.PlaintextTokenDebt;
  * ブログ記事・お知らせエンティティ。
  */
 @Entity
-@Table(name = "blog_posts")
+@Table(
+        name = "blog_posts",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uq_bp_slug_team_active", columnNames = {"team_id", "slug", "active_unique_key"}),
+                @UniqueConstraint(name = "uq_bp_slug_org_active",
+                        columnNames = {"organization_id", "slug", "active_unique_key"}),
+                @UniqueConstraint(name = "uq_bp_slug_user_active", columnNames = {"user_id", "slug", "active_unique_key"})
+        })
 @SQLRestriction("deleted_at IS NULL")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -49,6 +57,16 @@ public class BlogPostEntity extends BaseEntity {
 
     @Column(nullable = false, length = 200)
     private String slug;
+
+    /**
+     * 生存行（{@code deleted_at IS NULL}）だけ 1、論理削除済みは NULL になる生成列（V267）。DB が算出し、Java からは書かない。
+     *
+     * <p>slug の生存行一意制約 {@code uq_bp_slug_*_active} の一部。マッピングしておくことで、Flyway を使わない
+     * 統合テスト（{@code ddl-auto=create}）のスキーマにも本番と同じ一意制約が入る。</p>
+     */
+    @Column(name = "active_unique_key", insertable = false, updatable = false,
+            columnDefinition = "TINYINT GENERATED ALWAYS AS (IF(deleted_at IS NULL, 1, NULL)) VIRTUAL")
+    private Integer activeUniqueKey;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String body;
@@ -163,7 +181,7 @@ public class BlogPostEntity extends BaseEntity {
     @Builder.Default
     private boolean publicVisible = true;
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
+    @PlaintextTokenDebt(cmp = "CMP-261125-0945")
     @Column(length = 64)
     private String previewToken;
 

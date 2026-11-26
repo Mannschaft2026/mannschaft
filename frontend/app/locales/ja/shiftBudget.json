@@ -132,10 +132,12 @@
       "button": "月次締め実行",
       "yearMonth": "対象月",
       "yearMonthHint": "YYYY-MM 形式（例: 2026-04）",
+      "invalidFormat": "YYYY-MM 形式（例: 2026-10）で入力してください",
       "confirm": "{month} 分のシフト予算を確定します。よろしいですか？",
       "execute": "実行",
       "success": "月次締め完了: {month}（消化レコード {count} 件を確定）",
       "alreadyClosed": "該当月は既に締め済みです",
+      "notEnded": "{month} はまだ終わっていないため締められません。月末を過ぎた月のみ締められます",
       "error": "月次締めに失敗しました"
     },
     "failedEvent": {

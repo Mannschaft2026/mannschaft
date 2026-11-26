@@ -3382,5 +3382,28 @@
       "ORGANIZATION": "Organisationen",
       "ACTIVITY": "Aktivitätsberichte"
     }
+  },
+  "inviteReissue": {
+    "title": "Anfragen für eine neue Einladung",
+    "description": "Anfragen von Personen, deren Einladung abgelaufen ist. Bei einer erneuten Einladung wird eine neue Einladung (7 Tage gültig) ausgestellt und die Person benachrichtigt.",
+    "empty": "Keine Anfragen für eine neue Einladung",
+    "requested_at": "Angefragt am",
+    "role": "Rolle",
+    "reissue": "Erneut einladen",
+    "decline": "Ablehnen",
+    "decline_confirm_title": "Diese Anfrage ablehnen?",
+    "decline_confirm_message": "Sie lehnen die Anfrage von {name} ab. Die Person wird benachrichtigt.",
+    "reissued": "{name} wurde erneut eingeladen",
+    "already_member": "Die Person ist bereits beigetreten, die Anfrage wurde abgeschlossen",
+    "declined": "Anfrage abgelehnt",
+    "already_handled": "Diese Anfrage wurde bereits bearbeitet. Die Liste wurde aktualisiert",
+    "requester_unavailable": "Die Person kann derzeit nicht beitreten und kann nicht erneut eingeladen werden. Bitte lehnen Sie ab",
+    "activation_failed": "Die neue Einladung konnte nicht aktiviert werden. Bitte versuchen Sie es später erneut",
+    "forbidden": "Sie haben keine Berechtigung, Anfragen für eine neue Einladung zu bearbeiten",
+    "load_error": "Anfragen für eine neue Einladung konnten nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "load_more": "Mehr anzeigen",
+    "reissue_context": "erneut einladen",
+    "decline_context": "Anfrage für eine neue Einladung ablehnen"
   }
 }
