@@ -27,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerMapping;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -46,7 +47,11 @@ import java.util.function.Supplier;
  *
  * <h2>閲覧のみの強制（第1層）</h2>
  * <ol>
- *   <li>禁止パス（{@link SupportAccessPathPolicy}）は、メソッドを問わず SUPPORT_ACCESS_004</li>
+ *   <li>URI にパーセントエンコード（{@code %}）を含む要求は、メソッドを問わず SUPPORT_ACCESS_004（エンコードによる
+ *       禁止パスの迂回を構造的に塞ぐ。代理閲覧の画面はエンコードを要する URI を使わない）</li>
+ *   <li>禁止パス（{@link SupportAccessPathPolicy}）は、メソッドを問わず SUPPORT_ACCESS_004。判定は生の URI と、
+ *       Spring MVC と同じデコード済みの lookup path（{@link UrlPathHelper}: デコード・セミコロン除去）の<b>両方</b>で行い、
+ *       どちらかが禁止なら拒否する</li>
  *   <li>GET/HEAD 以外は SUPPORT_ACCESS_003</li>
  * </ol>
  * <p>第2層は {@code SupportAccessHandlerInterceptor}（{@code @SupportAccessDenied}）、第3層は DB 接続の READ ONLY 化
@@ -69,6 +74,9 @@ public class SupportAccessFilter extends OncePerRequestFilter {
 
     /** 代理入力・後見切替のヘッダー（併用は 400 SUPPORT_ACCESS_009）。 */
     private static final List<String> PROXY_HEADERS = List.of("X-Proxy-For-User-Id", "X-Proxy-Consent-Id");
+
+    /** Spring MVC の handler 解決と同じ規則（URL デコード・セミコロン除去）で lookup path を求める。 */
+    private static final UrlPathHelper LOOKUP_PATH_HELPER = createLookupPathHelper();
 
     private final Supplier<SupportAccessGrantValidator> validatorSupplier;
     private final Supplier<SupportAccessLogRecorder> logRecorderSupplier;
@@ -112,8 +120,9 @@ public class SupportAccessFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String path = request.getRequestURI();
-        // WebSocket は代理にならない（旧ヘッダー・新ヘッダーとも見ない）。
-        if (path != null && (path.equals("/ws") || path.startsWith("/ws/"))) {
+        String lookupPath = decodedLookupPath(request);
+        // WebSocket は代理にならない（旧ヘッダー・新ヘッダーとも見ない）。生の URI とデコード後の両方が /ws 配下のときだけ。
+        if (isWebSocketPath(path) && isWebSocketPath(lookupPath)) {
             chain.doFilter(request, response);
             return;
         }
@@ -174,8 +183,11 @@ public class SupportAccessFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 閲覧のみ（第1層）: 禁止パスはメソッドを問わず 004、GET/HEAD 以外は 003。
-        if (SupportAccessPathPolicy.isForbiddenDuringSupportAccess(path)) {
+        // 閲覧のみ（第1層）: エンコード入りの URI・禁止パスはメソッドを問わず 004、GET/HEAD 以外は 003。
+        // 禁止パスは生の URI とデコード済み lookup path の両方で判定する（%2D・%65 等のエンコード迂回を塞ぐ）。
+        if (containsPercentEncoding(path)
+                || SupportAccessPathPolicy.isForbiddenDuringSupportAccess(path)
+                || SupportAccessPathPolicy.isForbiddenDuringSupportAccess(lookupPath)) {
             deny(request, response, operatorUserId, grantHeaderValue, method, path, SupportAccessErrorCode.OPERATION_FORBIDDEN);
             return;
         }
@@ -225,6 +237,31 @@ public class SupportAccessFilter extends OncePerRequestFilter {
 
     // ─── 部品 ─────────────────────────────────────────────
 
+    private static UrlPathHelper createLookupPathHelper() {
+        UrlPathHelper helper = new UrlPathHelper();
+        helper.setUrlDecode(true);
+        helper.setRemoveSemicolonContent(true);
+        helper.setAlwaysUseFullPath(true);
+        return helper;
+    }
+
+    /** デコード済みの lookup path。求められなければ null（{@link SupportAccessPathPolicy} は null を拒否する）。 */
+    public static String decodedLookupPath(HttpServletRequest request) {
+        try {
+            return LOOKUP_PATH_HELPER.getPathWithinApplication(request);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static boolean containsPercentEncoding(String rawUri) {
+        return rawUri == null || rawUri.indexOf('%') >= 0;
+    }
+
+    private static boolean isWebSocketPath(String path) {
+        return path != null && (path.equals("/ws") || path.startsWith("/ws/"));
+    }
+
     private static boolean isReadMethod(String method) {
         return "GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method);
     }
@@ -269,13 +306,23 @@ public class SupportAccessFilter extends OncePerRequestFilter {
         return roles.stream().map(role -> new SimpleGrantedAuthority("ROLE_" + role)).toList();
     }
 
-    /** details は運営者の jti（セッション特定用）を残し、ppc は立てない（本人の状態ゲートは検証側で判定済み）。 */
+    /** 代理中の details に運営者のアクセストークン jti を残すキー（{@code jti} とは別。追跡用で、本人のセッション扱いにしない）。 */
+    public static final String DETAILS_OPERATOR_JTI = "supportAccessOperatorJti";
+
+    /**
+     * 代理中の details。ppc は立てない（本人の状態ゲートは検証側で判定済み）。
+     *
+     * <p>運営者の jti は {@code jti} キーに置かない。{@code SecurityUtils.getCurrentSessionHash()} は {@code jti} から
+     * session_hash を求めるため、置くと「本人 ID ＋運営者のセッション」の混成になり、本人のセッション一覧・監査記録の
+     * session_hash に運営者のセッションが混ざる。代理中の session_hash は null（本人のセッションでも運営者のセッション
+     * でもない）とし、運営者の jti は {@link #DETAILS_OPERATOR_JTI} に追跡用として残す。</p>
+     */
     private static Map<String, Object> targetDetails(Authentication original) {
         Map<String, Object> details = new HashMap<>();
         if (original.getDetails() instanceof Map<?, ?> map) {
             Object jti = map.get("jti");
             if (jti instanceof String s && !s.isBlank()) {
-                details.put("jti", s);
+                details.put(DETAILS_OPERATOR_JTI, s);
             }
         }
         details.put("ppc", false);

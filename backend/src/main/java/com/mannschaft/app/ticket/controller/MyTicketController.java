@@ -7,6 +7,7 @@ import com.mannschaft.app.common.pdf.PdfFileNameBuilder;
 import com.mannschaft.app.common.pdf.PdfGeneratorService;
 import com.mannschaft.app.common.pdf.PdfResponseHelper;
 import com.mannschaft.app.common.security.AuthorizedInService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.ticket.PaymentMethod;
 import com.mannschaft.app.ticket.dto.QrCodeResponse;
 import com.mannschaft.app.ticket.dto.TicketBookDetailResponse;
@@ -179,6 +180,7 @@ public class MyTicketController {
     /**
      * チケット消化用 QR コードデータを取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/{bookId}/qr")
     @Operation(summary = "QR コード取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

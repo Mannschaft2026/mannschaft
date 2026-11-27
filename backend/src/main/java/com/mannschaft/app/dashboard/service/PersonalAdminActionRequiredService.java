@@ -1,12 +1,15 @@
 package com.mannschaft.app.dashboard.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.config.AsyncConfig;
 import com.mannschaft.app.dashboard.dto.AdminActionRequiredResponse;
 import com.mannschaft.app.dashboard.dto.PersonalAdminActionRequiredResponse;
 import com.mannschaft.app.organization.service.OrganizationService;
 import com.mannschaft.app.team.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * 個人ダッシュボード: 全チーム・組織横断「承認待ち」集計サービス（司令塔第二弾）。
@@ -50,6 +55,18 @@ import java.util.concurrent.ExecutionException;
 @Service
 @RequiredArgsConstructor
 public class PersonalAdminActionRequiredService {
+
+    /**
+     * 並列集計の実行先。F10.9 サポート閲覧（戦役Z-B）: 共有 ForkJoin プール（引数なしの supplyAsync）には代理閲覧の
+     * 文脈と MDC が伝播しないため、文脈を伝播する {@code dashboard-aggregation-pool}（AsyncConfig）を使う。
+     * 手組み（{@code @InjectMocks} 等）で注入されないときも、文脈を伝播する共有プールを既定にする。
+     */
+    private Executor aggregationExecutor = AsyncConfig.contextPropagating(ForkJoinPool.commonPool());
+
+    @Autowired
+    void setAggregationExecutor(@Qualifier("dashboard-aggregation-pool") Executor aggregationExecutor) {
+        this.aggregationExecutor = aggregationExecutor;
+    }
 
     /** per-scope 承認待ちプレビューの取得件数（アイテム一覧のプレビュー上限。件数バッジは totalPending が別途正確な値を持つ）。 */
     private static final int PREVIEW_SIZE = 3;
@@ -93,7 +110,7 @@ public class PersonalAdminActionRequiredService {
             String capturedSlug = slug;
             String capturedName = name;
             futures.add(CompletableFuture.supplyAsync(() ->
-                    fetchAndConvert(userId, "TEAM", capturedTeamId, capturedSlug, capturedName)));
+                    fetchAndConvert(userId, "TEAM", capturedTeamId, capturedSlug, capturedName), aggregationExecutor));
         }
 
         for (Long orgId : orgIds) {
@@ -107,7 +124,7 @@ public class PersonalAdminActionRequiredService {
             String capturedSlug = slug;
             String capturedName = name;
             futures.add(CompletableFuture.supplyAsync(() ->
-                    fetchAndConvert(userId, "ORGANIZATION", capturedOrgId, capturedSlug, capturedName)));
+                    fetchAndConvert(userId, "ORGANIZATION", capturedOrgId, capturedSlug, capturedName), aggregationExecutor));
         }
 
         // 結果を集約する（縮退: 例外は当該スコープのみ0件にして継続）

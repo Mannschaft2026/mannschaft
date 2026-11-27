@@ -18,6 +18,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.service.MembershipService;
 import com.mannschaft.app.payment.service.TeamPlanService;
 import com.mannschaft.app.role.service.RoleService;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -147,8 +148,14 @@ public class SpotlightServingService {
         List<SpotlightAllocationSelector.Candidate> selected = selector.selectWithCount(ordered, resolvedCount);
 
         List<SpotlightItem> items = new ArrayList<>(selected.size());
+        // F10.9 サポート閲覧（戦役Z-B）: 代理中は本人の serve-token・serve-cap（Valkey）を消費しない（SKIP）。
+        // 代理中の閲覧で本人の露出機会を減らさず、運営者の閲覧を本人の view/visit の前提にもしない。
+        boolean supportAccess = SupportAccessContextHolder.isActive();
         for (SpotlightAllocationSelector.Candidate c : selected) {
             items.add(itemByCandidate.get(c));
+            if (supportAccess) {
+                continue;
+            }
             // serve 証跡: HOUSE を応答に含めた時点で serve-token を書く（view/visit の前提）。
             if ("HOUSE".equals(c.source()) && c.creativeId() != null) {
                 redisTemplate.opsForValue().set(
@@ -296,7 +303,9 @@ public class SpotlightServingService {
                     : estimate.divide(g.dailyBudget, 6, java.math.RoundingMode.HALF_UP);
 
             // キャンペーン内クリエイティブをラウンドロビンで 1 件選択。
-            long rr = incrementCounter(K_RR + g.campaignId + ":" + placement.name(), RR_TTL);
+            // F10.9 サポート閲覧: 代理中はラウンドロビンの位置を進めない（読むだけ。GET の Valkey 副作用を残さない）。
+            String rrKey = K_RR + g.campaignId + ":" + placement.name();
+            long rr = SupportAccessContextHolder.isActive() ? readCounter(rrKey) : incrementCounter(rrKey, RR_TTL);
             Long chosenCreative = selector.pickCreativeByRoundRobin(g.creativeIdsAsc, rr);
 
             SpotlightAllocationSelector.Candidate candidate = new SpotlightAllocationSelector.Candidate(

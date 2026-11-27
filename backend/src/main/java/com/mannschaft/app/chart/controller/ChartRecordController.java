@@ -103,6 +103,7 @@ public class ChartRecordController {
     @GetMapping("/{id}")
     @Operation(summary = "カルテ詳細取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<ChartRecordResponse>> getChart(
             @PathVariable Long teamId,
             @PathVariable Long id) {

@@ -6,6 +6,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.featuregate.AlwaysReachable;
 import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,7 @@ public class BillingPlanChangePaymentActionController {
     @Operation(summary = "3DS payment-action の取得",
             description = "change が REQUIRES_ACTION のときだけ、Stripe から都度 clientSecret を取得して返す。"
                     + "DB には保存しない。")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<BillingPaymentActionResponse>> paymentAction(
             @PathVariable UUID contractId, @PathVariable UUID changeId) {
         long actorId = SecurityUtils.getCurrentUserId();

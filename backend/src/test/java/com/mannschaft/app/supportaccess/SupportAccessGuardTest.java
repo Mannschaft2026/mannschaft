@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ul>
  *   <li>S4: download-url・export・csv・pdf を含む GET エンドポイントはすべて代理中に拒否される（新規追加も自動で捕捉）</li>
  *   <li>S13: AdminImpersonationFilter と旧ヘッダー・旧属性 originalAdminId が本番コードに残らない（SupportAccessContext へ移る）</li>
- *   <li>S14: GET の副作用（閲覧数・既読）を持つ Service は洗い出し表に載り、代理中のスキップ/拒否を実装している</li>
+ *   <li>S14: GET の副作用（閲覧数・既読・Valkey への書込）を持つクラスは洗い出し表に載り、代理中のスキップ/拒否を実装している</li>
  *   <li>S15: AccountPurgeService・GdprPurgeRetryService に supportaccess を登録し、GDPR エクスポートが本人の閲覧記録を含む</li>
  * </ul>
  */
@@ -182,6 +182,35 @@ class SupportAccessGuardTest {
                 .filter(r -> !inventory.contains(r))
                 .toList();
         assertThat(missing).as("洗い出し表に無い GET 副作用の候補（分類して載せること）").isEmpty();
+    }
+
+    /** Valkey への書込（GET の副作用になりうる）。Service 以外（Store・Listener・Batch）も対象にする。 */
+    private static final Pattern VALKEY_WRITE = Pattern.compile(
+            "opsFor\\w+\\(\\)\\s*\\.\\s*(set|setIfAbsent|increment|add)\\s*\\(");
+
+    @Test
+    @DisplayName("S14 Valkey へ書き込む（opsFor*().set/setIfAbsent/increment/add）クラスはすべて洗い出し表に載る")
+    void S14_Valkey書込は洗い出し表に載る() throws Exception {
+        Set<String> inventory = loadInventory();
+        List<String> candidates = mainJavaFiles().stream()
+                .filter(p -> VALKEY_WRITE.matcher(read(p)).find())
+                .map(SupportAccessGuardTest::rel)
+                .toList();
+        assertThat(candidates).as("走査が空なら番人が壊れている").hasSizeGreaterThan(10)
+                .contains("advertising/service/SpotlightServingService.java");
+        assertThat(candidates.stream().filter(r -> !inventory.contains(r)).toList())
+                .as("洗い出し表に無い Valkey 書込（GET から到達するか確かめ、SKIP/DENY/NONE に分類して載せること）")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("S14 洗い出し表の各行は実在するファイルを指す")
+    void S14_洗い出し表の行は実在する() throws Exception {
+        List<String> missing = loadInventory().stream()
+                .filter(r -> !Files.exists(MAIN.resolve(r)))
+                .sorted()
+                .toList();
+        assertThat(missing).as("洗い出し表に残った、もう存在しないファイル").isEmpty();
     }
 
     @Test

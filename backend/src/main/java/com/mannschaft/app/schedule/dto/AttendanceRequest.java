@@ -54,7 +54,6 @@ public class AttendanceRequest {
         return payload;
     }
 
-    /** Controllerがtrusted impersonation属性と今回proxyから固定する。公開JSON契約を増やさない。 */
     public void captureRanchResponseOrigin(boolean self) {
         ranchSelfResponse = self;
     }

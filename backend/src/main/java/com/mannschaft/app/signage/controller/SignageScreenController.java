@@ -13,6 +13,7 @@ import com.mannschaft.app.signage.service.SignageScreenReadFacade;
 import com.mannschaft.app.signage.service.SignageScreenService.CreateSignageScreenRequest;
 import com.mannschaft.app.signage.service.SignageScreenService.SignageScreenResponse;
 import com.mannschaft.app.signage.service.SignageScreenService.UpdateSignageScreenRequest;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -131,6 +132,7 @@ public class SignageScreenController {
      * 認可: 認証済みユーザー
      * レスポンス: 200 OK
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/tokens")
     public ApiResponse<List<SignageAccessTokenResponse>> listTokens(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();

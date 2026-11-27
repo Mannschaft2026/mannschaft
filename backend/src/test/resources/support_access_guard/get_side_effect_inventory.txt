@@ -9,8 +9,17 @@
 #   NONE … GET から副作用に到達しない／副作用が閲覧記録・メトリクスのみ。理由が必須
 #
 # 洗い出しの起点: GetMapping から呼ばれる非 readOnly の @Transactional、increment*/markAs*/record*、getOrCreate*、
-# AFTER_COMMIT の発火。番人 SupportAccessGuardTest.S14 が、ここに載らない新規の候補（Service.java 内の
-# increment*View*/markAsRead*/record*Viewed*/*_VIEWED）を検出する。分類を変えるときはこの表と実装を同時に直すこと。
+# AFTER_COMMIT の発火、Valkey への書込（opsFor*().set/setIfAbsent/increment/add）、外部送信（メール・Push・Webhook・
+# S3 署名 URL の発行）。番人 SupportAccessGuardTest.S14 が、ここに載らない新規の候補（Service.java 内の
+# increment*View*/markAsRead*/record*Viewed*/*_VIEWED と、全クラスの Valkey 書込）を検出する。
+# 分類を変えるときはこの表と実装を同時に直すこと。
+#
+# 外部送信の再走査（2026-11-27 検分差し戻し対応A）: メールは mail outbox への INSERT（READ ONLY 接続で不成立）か
+# 書込 API の AFTER_COMMIT リスナーからだけ送る。Push（NotificationDispatchService・WebPushService）・Webhook も
+# 書込の通知イベントからだけ発火し、GET からは到達しない。S3 署名 URL の発行口（presign*）は、アップロード用が
+# POST（SUPPORT_ACCESS_003）、ダウンロード用が download-url／file-links のパス（PathPolicy の 004）で、いずれも
+# 代理中の GET からは発行されない。応答 DTO に signedUrl・token 等を持つ GET は @SupportAccessDenied が必須
+# （番人 SupportAccessEnforcementGuardTest）。
 
 # --- SKIP: 代理中は副作用だけ行わない ---
 knowledgebase/service/KbPageService.java|SKIP|getPage の閲覧数加算（DB と Valkey の重複除外キー）を代理中は行わない
@@ -19,6 +28,8 @@ search/service/GlobalSearchQueryService.java|SKIP|search の検索履歴の記�
 advertising/campaign/service/UserAdPreferenceService.java|SKIP|getOrCreateForUser の既定行の作成を代理中は行わず、既定値の一時オブジェクトで応答する
 notification/confirmable/service/ConfirmableNotificationSettingsService.java|SKIP|getOrCreate の既定行の作成を代理中は行わず、既定値の一時オブジェクトで応答する
 timetable/personal/service/PersonalTimetableSettingsService.java|SKIP|getOrCreate の既定行の作成を代理中は行わず、既定値の一時オブジェクトで応答する
+
+advertising/service/SpotlightServingService.java|SKIP|serveContent（GET /spotlight/content）の serve-token の SET と serve-cap の SETNX（本人の露出機会の消費）を代理中は行わない
 
 # --- DENY: 代理中は拒否する ---
 billing/api/BillingInvoiceHistoryService.java|DENY|請求詳細は閲覧監査（BILLING_INVOICE_VIEWED）を伴う請求情報。/me/billing は PathPolicy でも拒否し、Service でも拒否する
@@ -42,3 +53,31 @@ weather/service/WeatherForecastService.java|NONE|getForecast の副作用はキ�
 forms/service/FormCsvExportService.java|NONE|CSV 書出しは PathPolicy（export/csv）と @SupportAccessDenied で到達しない
 payment/service/PaymentCsvExportService.java|NONE|CSV 書出しは PathPolicy（export/csv）と @SupportAccessDenied で到達しない
 resume/service/ResumeExportService.java|NONE|書出しは PathPolicy（export）と @SupportAccessDenied で到達しない
+
+# --- NONE（Valkey 書込の再走査で追加）: GET から到達しない／本人のデータを変えない ---
+admin/service/AdminBusinessAlertService.java|NONE|Valkey 書込は業務アラート集計の応答キャッシュ（TTL 付き）だけで、閲覧結果と同値。本人のデータを変えない
+advertising/campaign/service/AdFrequencyCapService.java|NONE|週次頻度上限の INCR は配信ディスパッチャ・状態遷移スケジューラ（バッチ）からだけ呼ばれ GET から到達しない
+auth/service/AuthRegistrationService.java|NONE|Valkey 書込は登録・確認フロー（/auth/**）。/auth/** は PathPolicy で 004
+auth/service/AuthService.java|NONE|Valkey 書込はログイン失敗回数・ロック（POST /auth/login）。/auth/** は PathPolicy で 004
+auth/service/AuthTokenService.java|NONE|Valkey 書込はトークン発行・失効（/auth/**）。/auth/** は PathPolicy で 004
+auth/service/AuthWebAuthnService.java|NONE|Valkey 書込は WebAuthn のチャレンジ（/auth/webauthn）。/auth/** は PathPolicy で 004
+auth/service/MfaSessionService.java|NONE|Valkey 書込は MFA セッション・失敗回数（/auth/2fa 等の認証フロー）。/auth/** は PathPolicy で 004
+auth/service/ValkeyMfaEmailOtpService.java|NONE|Valkey 書込はメール OTP の発行・再送制限（認証フロー）。/auth/** は PathPolicy で 004
+billing/api/BillingIdempotencyService.java|NONE|冪等キーの SET は契約作成（POST）だけ。書込メソッドは SUPPORT_ACCESS_003、billing は PathPolicy でも 004
+budget/service/BudgetCsvService.java|NONE|取込プレビューの SET は POST /import（SUPPORT_ACCESS_003）。書出しは export/csv で PathPolicy の 004
+errorreport/batch/ErrorReportSlaOverdueAlertBatch.java|NONE|SLA 超過アラートの重複抑止キーはバッチだけが書き GET から到達しない
+errorreport/service/ErrorReportAiBudgetService.java|NONE|AI 予算の INCRBY は障害報告の取込（POST）からだけ呼ばれる（SUPPORT_ACCESS_003）
+errorreport/service/ErrorReportIngestService.java|NONE|障害報告の取込は POST（書込可能な接続の例外は記録の部品だけ）。GET から到達しない
+match/live/MatchLiveBroadcastListener.java|NONE|試合速報の配信状態は書込イベントのリスナーだけが書き GET から到達しない
+pointcard/service/PointCardShareTokenService.java|NONE|共有トークンの SETNX は POST /share-tokens（SUPPORT_ACCESS_003）。*-tokens は PathPolicy でも 004
+repairplan/service/RepairPlanItemCsvService.java|NONE|取込プレビューの SET は POST（SUPPORT_ACCESS_003）。csv は PathPolicy でも 004
+repairplan/service/RepairPlanScenarioService.java|NONE|シミュレーション結果の SET は POST /simulate の応答キャッシュ（SUPPORT_ACCESS_003）。GET から到達しない
+shift/service/ShiftPreferenceReminderBatchService.java|NONE|Valkey 書込は手動リマインドの多重実行ロック（POST の手動リマインド。SUPPORT_ACCESS_003）とバッチだけで、GET から到達しない
+social/announcement/AnnouncementReadAllCursorStore.java|NONE|全件既読の走査位置は POST read-all（SUPPORT_ACCESS_003）からだけ保存する
+social/announcement/OrgAnnouncementFeedCursorStore.java|NONE|組織告知一覧の継続トークン（TTL 30 分・推測不能な乱数キー）は一覧を読み進める手段そのもので、本人に見える状態も本人のデータも変えない
+timetable/personal/listener/TeamSlotNoteNotifyListener.java|NONE|通知の重複抑止キーは書込イベントのリスナーだけが書き GET から到達しない
+village/service/VillageLobbyPresenceService.java|NONE|在席の SET/SADD は STOMP の join（/ws 経由）だけ。/ws は代理にならない（運営者本人のまま）
+auth/service/Auth2faService.java|NONE|TOTP 使用済みコードの SETNX は 2FA の検証（/auth/2fa の POST）だけ。/auth/** は PathPolicy で 004
+chat/event/InquiryChatEventListener.java|NONE|問い合わせチャットの重複抑止キーは書込イベントのリスナーだけが書き GET から到達しない
+errorreport/service/ErrorReportAiHealthMonitor.java|NONE|AI 健全性アラートの重複抑止キーは障害報告の取込（POST）と監視からだけ書き GET から到達しない
+errorreport/service/GitHubIssueService.java|NONE|Issue 起票のロックは障害報告の取込（POST）の後続処理だけが取り GET から到達しない

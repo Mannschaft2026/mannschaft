@@ -35,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * チーム会員証コントローラー。チーム単位の会員証一覧・チェックイン履歴・拠点管理・統計APIを提供する。
@@ -148,6 +149,7 @@ public class TeamMemberCardController {
     /**
      * 拠点QRコード（印刷用）を取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/checkin-locations/{locationId}/qr")
     @Operation(summary = "拠点QRコード取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

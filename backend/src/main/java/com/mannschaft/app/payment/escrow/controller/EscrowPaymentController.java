@@ -11,6 +11,7 @@ import com.mannschaft.app.payment.escrow.EscrowSourceKind;
 import com.mannschaft.app.payment.escrow.EscrowStatus;
 import com.mannschaft.app.payment.escrow.dto.ReceivedEscrowResponse;
 import com.mannschaft.app.payment.escrow.dto.RecruitmentPaymentResponse;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +68,7 @@ public class EscrowPaymentController {
     @AuthorizedInService
     @GetMapping("/recruitment/{listingId}/{participantId}/payment-intent")
     @Operation(summary = "札主の決済確認（謝礼エスクローの clientSecret＋手数料内訳・支払者本人のみ clientSecret）")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<RecruitmentPaymentResponse>> getRecruitmentPaymentIntent(
             @PathVariable Long listingId,
             @PathVariable Long participantId) {
@@ -93,6 +95,7 @@ public class EscrowPaymentController {
     @AuthorizedInService
     @GetMapping("/{id}")
     @Operation(summary = "エスクロー状態照会（支払者本人=clientSecret 含む / 受取側 ADMIN=状態・金額のみ）")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<RecruitmentPaymentResponse>> getEscrow(@PathVariable UUID id) {
         Long actorUserId = SecurityUtils.getCurrentUserId();
         EscrowQueryService.PaymentView view = escrowQueryService.getEscrowView(id, actorUserId);

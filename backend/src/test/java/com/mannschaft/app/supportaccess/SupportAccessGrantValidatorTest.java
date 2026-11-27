@@ -57,11 +57,16 @@ class SupportAccessGrantValidatorTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         validator = new SupportAccessGrantValidator(grantRepository, userDirectory, affiliationPort, clock);
         lenient().when(userDirectory.findUser(TARGET_ID)).thenReturn(Optional.of(activeTarget()));
+        lenient().when(userDirectory.findUser(OPERATOR_ID)).thenReturn(Optional.of(activeOperator()));
         lenient().when(affiliationPort.isAffiliatedWithAnyTenant(OPERATOR_ID)).thenReturn(false);
     }
 
     private static SupportAccessUserSnapshot activeTarget() {
         return new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", false, false);
+    }
+
+    private static SupportAccessUserSnapshot activeOperator() {
+        return new SupportAccessUserSnapshot(OPERATOR_ID, "運営者", "ACTIVE", false, true);
     }
 
     /** 承認済み・閲覧開始済み・期限内の有効な grant。 */
@@ -238,5 +243,73 @@ class SupportAccessGrantValidatorTest {
 
         assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
                 .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+    }
+
+    // ─── 軽微7: 運営者の現在の状態 ─────────────────────────────
+
+    @Test
+    @DisplayName("軽微7 運営者の SYSTEM_ADMIN が剥奪されていれば（JWT が期限内でも）002")
+    void 運営者のSYSTEM_ADMIN剥奪は002() {
+        givenGrant(validGrant().build());
+        given(userDirectory.findUser(OPERATOR_ID)).willReturn(Optional.of(
+                new SupportAccessUserSnapshot(OPERATOR_ID, "運営者", "ACTIVE", false, false)));
+
+        assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
+                .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+    }
+
+    @ParameterizedTest(name = "運営者の状態 {0} は 002")
+    @ValueSource(strings = {"FROZEN", "SUSPENDED", "PENDING_VERIFICATION", "LOCKED"})
+    @DisplayName("軽微7 運営者が凍結・停止など ACTIVE 以外なら 002")
+    void 運営者がACTIVE以外は002(String status) {
+        givenGrant(validGrant().build());
+        given(userDirectory.findUser(OPERATOR_ID)).willReturn(Optional.of(
+                new SupportAccessUserSnapshot(OPERATOR_ID, "運営者", status, false, true)));
+
+        assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
+                .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+    }
+
+    @Test
+    @DisplayName("軽微7 運営者が退会手続中・利用者として見つからなければ 002")
+    void 運営者の退会手続中と不在は002() {
+        givenGrant(validGrant().build());
+        given(userDirectory.findUser(OPERATOR_ID)).willReturn(Optional.of(
+                new SupportAccessUserSnapshot(OPERATOR_ID, "運営者", "ACTIVE", true, true)));
+        assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
+                .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+
+        given(userDirectory.findUser(OPERATOR_ID)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
+                .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+    }
+
+    @Test
+    @DisplayName("軽微7 運営者の状態は毎回引き直す（キャッシュしない）")
+    void 運営者の状態は毎回判定() {
+        givenGrant(validGrant().build());
+
+        validator.validate(OPERATOR_ID, GRANT_ID);
+        validator.validate(OPERATOR_ID, GRANT_ID);
+
+        verify(userDirectory, times(2)).findUser(OPERATOR_ID);
+    }
+
+    // ─── 軽微6: 閲覧セッションの判定 ─────────────────────────────
+
+    @Test
+    @DisplayName("軽微6 開始と同じ時刻で終了したセッションは終了済み（002）。再開始すれば有効に戻る")
+    void 同時刻で終了したセッションは終了済み() {
+        SupportAccessGrantEntity grant = validGrant().build();
+        Instant started = NOW.minus(java.time.Duration.ofMinutes(5));
+        grant.startSession(started);
+        grant.endSession(started);
+        assertThat(grant.isSessionActive()).isFalse();
+        givenGrant(grant);
+        assertThatThrownBy(() -> validator.validate(OPERATOR_ID, GRANT_ID))
+                .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+
+        grant.startSession(NOW);
+        assertThat(grant.isSessionActive()).isTrue();
     }
 }

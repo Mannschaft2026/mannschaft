@@ -173,9 +173,13 @@ public class SupportAccessGrantEntity extends UuidV7Entity {
         this.activeSessionEndedAt = now;
     }
 
-    /** 閲覧開始済みで、まだ終了していないか。 */
+    /**
+     * 閲覧開始済みで、まだ終了していないか。
+     *
+     * <p>{@link #startSession} が終了時刻を null に戻し、{@link #endSession} が終了時刻を入れるため、
+     * 「開始あり・終了なし」だけで判定する（開始と同じ時刻で終了した場合も終了済みとして扱う。時刻の前後比較に頼らない）。</p>
+     */
     public boolean isSessionActive() {
-        return activeSessionStartedAt != null
-                && (activeSessionEndedAt == null || !activeSessionEndedAt.isAfter(activeSessionStartedAt));
+        return activeSessionStartedAt != null && activeSessionEndedAt == null;
     }
 }

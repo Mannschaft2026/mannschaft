@@ -443,6 +443,43 @@ public class AsyncConfig {
     }
 
     /**
+     * ダッシュボードの並列集計用スレッドプール（{@code CompletableFuture.supplyAsync(..., executor)} の実行先）。
+     *
+     * <p>F10.9 サポート閲覧（戦役Z-B）: 引数なしの {@code supplyAsync} は共有 ForkJoin プールで動き、代理閲覧の文脈
+     * （{@code SupportAccessContextHolder}）も MDC も伝播しない（集計の中で代理中の SKIP/DENY・READ ONLY が効かない）。
+     * 他のプールと同じ {@link #contextPropagatingDecorator()} を付けたこのプールを明示して渡す。番人
+     * {@code SupportAccessEnforcementGuardTest} が Executor 未指定の supplyAsync/runAsync を検出する。</p>
+     *
+     * <p>キューは持たず（容量 0 = 直接受け渡し）、飽和時は CallerRuns で呼び出し元スレッドが同期に実行する。
+     * 集計は入れ子になる（個人ダッシュボードの集計が、スコープの「要対応」集計をさらに並列化して待つ）ため、
+     * キューに積んで待つ方式は外側のタスクがスレッドを占有したまま内側の完了を待つ枯渇（デッドロック）を起こしうる。
+     * 直接受け渡し＋CallerRuns なら、空きが無いときは呼び出し元で実行されるだけで待ち合わせが閉じない。</p>
+     */
+    @Bean("dashboard-aggregation-pool")
+    public Executor dashboardAggregationPool() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(32);
+        executor.setQueueCapacity(0);
+        executor.setThreadNamePrefix("dashboard-agg-");
+        executor.setTaskDecorator(contextPropagatingDecorator());
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * 任意の {@link Executor} に、全プール共通の文脈伝播（MDC・サポート閲覧の文脈）を付ける。
+     *
+     * <p>Spring の Bean を受け取れない手組み（単体テストの {@code @InjectMocks} 等）での既定の実行先に使う。
+     * 本番は {@code dashboard-aggregation-pool} が注入される。</p>
+     */
+    public static Executor contextPropagating(Executor delegate) {
+        TaskDecorator decorator = contextPropagatingDecorator();
+        return runnable -> delegate.execute(decorator.decorate(runnable));
+    }
+
+    /**
      * 全プール共通の {@link TaskDecorator}: MDC と、F10.9 サポート閲覧（代理）の文脈を非同期スレッドへ伝播する。
      *
      * <p>代理中に publish されたイベントの受け手（@Async・AFTER_COMMIT）でも DB 接続が READ ONLY のままになり、

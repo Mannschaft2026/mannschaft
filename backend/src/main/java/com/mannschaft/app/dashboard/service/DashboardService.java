@@ -11,6 +11,7 @@ import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.ReferenceType;
+import com.mannschaft.app.config.AsyncConfig;
 import com.mannschaft.app.dashboard.MinRole;
 import com.mannschaft.app.dashboard.ScopeType;
 import com.mannschaft.app.dashboard.SwipeWidgetKey;
@@ -47,6 +48,8 @@ import com.mannschaft.app.todo.entity.TodoEntity;
 import com.mannschaft.app.todo.repository.TodoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -61,6 +64,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * ダッシュボードデータ集約サービス。
@@ -82,6 +87,18 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 @Slf4j
 public class DashboardService {
+
+    /**
+     * 並列集計の実行先。F10.9 サポート閲覧（戦役Z-B）: 共有 ForkJoin プール（引数なしの supplyAsync）には代理閲覧の
+     * 文脈と MDC が伝播しないため、文脈を伝播する {@code dashboard-aggregation-pool}（AsyncConfig）を使う。
+     * 手組み（{@code @InjectMocks} 等）で注入されないときも、文脈を伝播する共有プールを既定にする。
+     */
+    private Executor aggregationExecutor = AsyncConfig.contextPropagating(ForkJoinPool.commonPool());
+
+    @Autowired
+    void setAggregationExecutor(@Qualifier("dashboard-aggregation-pool") Executor aggregationExecutor) {
+        this.aggregationExecutor = aggregationExecutor;
+    }
 
     private final DashboardWidgetService widgetService;
     private final NameResolverService nameResolverService;
@@ -219,13 +236,13 @@ public class DashboardService {
             final java.time.ZoneId userZone = TimezoneContextHolder.get();
 
             CompletableFuture<List<Map<String, Object>>> myPostsFuture =
-                    CompletableFuture.supplyAsync(() -> loadMyPosts(userId));
+                    CompletableFuture.supplyAsync(() -> loadMyPosts(userId), aggregationExecutor);
             CompletableFuture<Map<String, Object>> unreadThreadsFuture =
-                    CompletableFuture.supplyAsync(() -> loadUnreadThreads(userId, finalTeamIds));
+                    CompletableFuture.supplyAsync(() -> loadUnreadThreads(userId, finalTeamIds), aggregationExecutor);
             CompletableFuture<List<Map<String, Object>>> recentActivityFuture =
-                    CompletableFuture.supplyAsync(() -> loadRecentActivity(userId, finalTeamIds, finalOrgIds));
+                    CompletableFuture.supplyAsync(() -> loadRecentActivity(userId, finalTeamIds, finalOrgIds), aggregationExecutor);
             CompletableFuture<Map<String, Object>> personalCalendarFuture =
-                    CompletableFuture.supplyAsync(() -> loadPersonalCalendarCounts(userId, finalTeamIds, userZone));
+                    CompletableFuture.supplyAsync(() -> loadPersonalCalendarCounts(userId, finalTeamIds, userZone), aggregationExecutor);
 
             // すべて join（例外は CompletionException として伝播させ握り潰さない: 障害対応の原則）。
             builder.myPosts(myPostsFuture.join());
@@ -567,13 +584,13 @@ public class DashboardService {
         final java.time.ZoneId userZone = TimezoneContextHolder.get();
 
         CompletableFuture<List<Map<String, Object>>> blogFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildLatestBlogPosts("TEAM", teamId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildLatestBlogPosts("TEAM", teamId), aggregationExecutor);
         CompletableFuture<Map<String, Object>> chatFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildChatSummary("TEAM", teamId, userId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildChatSummary("TEAM", teamId, userId), aggregationExecutor);
         CompletableFuture<Map<String, Object>> calendarFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildCalendarSummary("TEAM", teamId, userZone, userId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildCalendarSummary("TEAM", teamId, userZone, userId), aggregationExecutor);
         CompletableFuture<ActionRequiredSummaryResponse> actionFuture =
-                CompletableFuture.supplyAsync(() -> scopeActionRequiredFacade.getActionRequired(userId, "TEAM", teamId));
+                CompletableFuture.supplyAsync(() -> scopeActionRequiredFacade.getActionRequired(userId, "TEAM", teamId), aggregationExecutor);
 
         List<Map<String, Object>> teamLatestBlogPosts = swipeWidgetVisibilityResolver.filterIfVisible(
                 viewerRole, swipeVisibility, SwipeWidgetKey.SWIPE_TEAM_BLOG, joinSwipe(blogFuture));
@@ -689,19 +706,19 @@ public class DashboardService {
         final java.time.ZoneId userZone = TimezoneContextHolder.get();
 
         CompletableFuture<List<Map<String, Object>>> upcomingFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildOrgUpcomingEvents(orgId, userId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildOrgUpcomingEvents(orgId, userId), aggregationExecutor);
         CompletableFuture<List<Map<String, Object>>> postsFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildOrgLatestPosts(orgId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildOrgLatestPosts(orgId), aggregationExecutor);
         CompletableFuture<Map<String, Object>> unreadFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildOrgUnreadThreads(orgId, userId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildOrgUnreadThreads(orgId, userId), aggregationExecutor);
         CompletableFuture<List<Map<String, Object>>> blogFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildLatestBlogPosts("ORGANIZATION", orgId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildLatestBlogPosts("ORGANIZATION", orgId), aggregationExecutor);
         CompletableFuture<Map<String, Object>> chatFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildChatSummary("ORGANIZATION", orgId, userId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildChatSummary("ORGANIZATION", orgId, userId), aggregationExecutor);
         CompletableFuture<Map<String, Object>> calendarFuture =
-                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildCalendarSummary("ORGANIZATION", orgId, userZone, userId));
+                CompletableFuture.supplyAsync(() -> scopeWidgetSummaryService.buildCalendarSummary("ORGANIZATION", orgId, userZone, userId), aggregationExecutor);
         CompletableFuture<ActionRequiredSummaryResponse> actionFuture =
-                CompletableFuture.supplyAsync(() -> scopeActionRequiredFacade.getActionRequired(userId, "ORGANIZATION", orgId));
+                CompletableFuture.supplyAsync(() -> scopeActionRequiredFacade.getActionRequired(userId, "ORGANIZATION", orgId), aggregationExecutor);
 
         List<Map<String, Object>> orgUpcomingEvents = swipeWidgetVisibilityResolver.filterIfVisible(
                 viewerRole, swipeVisibility, SwipeWidgetKey.SWIPE_ORG_UPCOMING, joinSwipe(upcomingFuture));

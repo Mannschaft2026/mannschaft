@@ -3,6 +3,7 @@ package com.mannschaft.app.dashboard.service;
 import com.mannschaft.app.auth.service.PendingInviteAdminQueryService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.PendingAggregate;
+import com.mannschaft.app.config.AsyncConfig;
 import com.mannschaft.app.dashboard.dto.AdminActionRequiredResponse;
 import com.mannschaft.app.matching.service.MatchingAdminQueryService;
 import com.mannschaft.app.payment.service.PaymentAdminQueryService;
@@ -11,6 +12,8 @@ import com.mannschaft.app.role.service.InviteIssuerPolicy;
 import com.mannschaft.app.shift.service.ShiftRequestAdminQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +22,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
@@ -53,6 +58,18 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class AdminActionRequiredFacade {
 
+    /**
+     * 並列集計の実行先。F10.9 サポート閲覧（戦役Z-B）: 共有 ForkJoin プール（引数なしの supplyAsync）には代理閲覧の
+     * 文脈と MDC が伝播しないため、文脈を伝播する {@code dashboard-aggregation-pool}（AsyncConfig）を使う。
+     * 手組み（{@code @InjectMocks} 等）で注入されないときも、文脈を伝播する共有プールを既定にする。
+     */
+    private Executor aggregationExecutor = AsyncConfig.contextPropagating(ForkJoinPool.commonPool());
+
+    @Autowired
+    void setAggregationExecutor(@Qualifier("dashboard-aggregation-pool") Executor aggregationExecutor) {
+        this.aggregationExecutor = aggregationExecutor;
+    }
+
     private final AccessControlService accessControlService;
     private final ReservationAdminQueryService reservationAdminQueryService;
     private final ShiftRequestAdminQueryService shiftRequestAdminQueryService;
@@ -82,7 +99,7 @@ public class AdminActionRequiredFacade {
 
         // ③ 各タスクを並行実行し、縮退ヘルパーで合成。
         List<CompletableFuture<AdminActionRequiredResponse.DomainSection>> futures = tasks.stream()
-                .map(task -> CompletableFuture.supplyAsync(() -> buildSection(task)))
+                .map(task -> CompletableFuture.supplyAsync(() -> buildSection(task), aggregationExecutor))
                 .toList();
 
         List<AdminActionRequiredResponse.DomainSection> sections = new ArrayList<>();
