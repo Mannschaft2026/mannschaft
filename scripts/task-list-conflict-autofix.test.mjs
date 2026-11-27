@@ -214,6 +214,48 @@ test('処理: push 後に head が動いて expectedHeadOid が不一致 → 再
   assert.match(env.comments[0].body, /予約し直していません/);
 });
 
+// CMP-261124-1222 AC-11: push 直後の head 取り直しは反映前の古い head（push 前の headRefOid）を返すことがある。
+function sequencedAutoMerge(env, results) {
+  let i = 0;
+  env.deps.ghOps.enableAutoMerge = (p, expectedHeadOid) => { env.calls.push('enableAutoMerge'); env.autoMergeCalls.push(expectedHeadOid); return results[Math.min(i++, results.length - 1)]; };
+}
+
+test('処理 AC-11: head の反映遅れ（current が push 前 head）は待って再試行し、反映後に予約できる', async () => {
+  const env = mockEnv();
+  const target = pr();
+  const stale = { ok: false, headMismatch: true, current: target.headRefOid, error: 'stale' };
+  sequencedAutoMerge(env, [stale, stale, { ok: true }]);
+  const sleeps = [];
+  env.deps.sleep = async (ms) => { sleeps.push(ms); };
+  const result = await processPullRequest(target, env.deps);
+  assert.equal(result.outcome, 'fixed');
+  assert.deepEqual(env.autoMergeCalls, ['merge0001', 'merge0001', 'merge0001']);
+  assert.deepEqual(sleeps, [10_000, 10_000]);
+});
+
+test('処理 AC-11: 反映遅れが続いても最大6回待つだけで、実時間は待たず fixed-head-moved にする', async () => {
+  const env = mockEnv();
+  const target = pr();
+  sequencedAutoMerge(env, [{ ok: false, headMismatch: true, current: target.headRefOid, error: 'stale' }]);
+  const sleeps = [];
+  env.deps.sleep = async (ms) => { sleeps.push(ms); };
+  const result = await processPullRequest(target, env.deps);
+  assert.equal(result.outcome, 'fixed-head-moved');
+  assert.equal(sleeps.length, 6);
+  assert.equal(env.autoMergeCalls.length, 7);
+});
+
+test('処理 AC-11: push 前 head でも作った commit でもない第三の commit は待たず headMismatch', async () => {
+  const env = mockEnv();
+  sequencedAutoMerge(env, [{ ok: false, headMismatch: true, current: 'third0001', error: 'third' }]);
+  const sleeps = [];
+  env.deps.sleep = async (ms) => { sleeps.push(ms); };
+  const result = await processPullRequest(pr(), env.deps);
+  assert.equal(result.outcome, 'fixed-head-moved');
+  assert.equal(env.autoMergeCalls.length, 1);
+  assert.deepEqual(sleeps, []);
+});
+
 test('処理: push 後のコメント投稿失敗は結果に載せて返す（握りつぶさない）', async () => {
   const env = mockEnv({ commentResult: { ok: false, error: 'HTTP 403' } });
   const result = await processPullRequest(pr(), env.deps);

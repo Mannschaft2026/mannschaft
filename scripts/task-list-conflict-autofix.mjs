@@ -35,6 +35,8 @@ export const LIMIT_MARKER = '<!-- ledger-autofix:limit -->';
 export const PORT_MANUAL_MARKER_PREFIX = '<!-- ledger-autofix:port-manual head=';
 export const STRUCTURE_NG_MARKER_PREFIX = '<!-- ledger-autofix:structure-ng head=';
 export const MAX_FIXES_PER_DAY = 3;
+export const HEAD_REFLECT_WAIT_MS = 10_000;
+export const HEAD_REFLECT_MAX_WAITS = 6;
 /** bot の修復 commit のメッセージに必ず入れる固定印（trailer）。24時間の上限はこれと bot の署名で数える。 */
 export const FIX_COMMIT_TRAILER = 'Ledger-Autofix: task-list-conflict-autofix';
 /** 自動修復の対象にする queue 脱落理由（RemovedFromMergeQueueEvent.reason。GraphQL では String で、実測値は merge_conflict / failed_checks / manual / merged）。 */
@@ -287,12 +289,27 @@ export async function processPullRequest(pr, deps) {
   let outcome = 'fixed';
   if (pr.autoMergeRequest == null) {
     let result = { ok: false, error: '未実行' };
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    let failures = 0;
+    let reflectWaits = 0;
+    for (;;) {
       // expectedHeadOid=作成した merge commit。push 後に誰かが head を進めていたら予約しない（未検証の head を予約しない）。
       result = ghOps.enableAutoMerge(pr, mergeCommit);
-      if (result.ok || result.headMismatch) break;
-      log(tag + ': auto-merge 予約失敗（' + attempt + '回目）: ' + result.error);
-      if (attempt < 3) await sleep(10_000);
+      if (result.ok) break;
+      if (result.headMismatch) {
+        // push 直後は PR head の反映が遅れ、push 前の head（headOid）が返ることがある。反映待ちとして再試行する。
+        // push 前 head でも作った commit でもない第三の commit のときだけ headMismatch として扱う。
+        if (result.current === headOid && reflectWaits < HEAD_REFLECT_MAX_WAITS) {
+          reflectWaits++;
+          log(tag + ': PR head が push 前のまま（反映待ち ' + reflectWaits + '/' + HEAD_REFLECT_MAX_WAITS + '）');
+          await sleep(HEAD_REFLECT_WAIT_MS);
+          continue;
+        }
+        break;
+      }
+      failures++;
+      log(tag + ': auto-merge 予約失敗（' + failures + '回目）: ' + result.error);
+      if (failures >= 3) break;
+      await sleep(10_000);
     }
     if (result.ok) {
       autoMergeNote = 'auto-merge（SQUASH）を予約し直しました。必須チェックが緑になると自動で merge queue へ入ります。';
@@ -466,7 +483,7 @@ export function createGhOps({ repo }) {
       // 失敗時は現在の head を取り直し、expectedHeadOid との不一致かどうかを確かめる（文言に頼らない）。
       const h = gh(['api', 'graphql', '-f', 'query=' + HEAD_OID, '-f', 'id=' + pr.id, '--jq', '.data.node.headRefOid']);
       const current = h.code === 0 ? h.stdout.trim() : null;
-      if (current && current !== expectedHeadOid) return { ok: false, headMismatch: true, error: 'head=' + current + '（期待 ' + expectedHeadOid + '）: ' + error };
+      if (current && current !== expectedHeadOid) return { ok: false, headMismatch: true, current, error: 'head=' + current + '（期待 ' + expectedHeadOid + '）: ' + error };
       return { ok: false, error };
     },
   };

@@ -22,15 +22,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # pull_request_target では必ずbase SHAをcheckoutする。PRのソースはcheckout/import/実行しない。
+      # rerun は古いペイロード（title/body/base.sha）で走る既知事象があるため、最初に pulls.get で最新の PR を取り、
+      # その最新 base.sha を checkout する（ペイロードの base.sha で先に checkout しない）。
+      - name: Fetch latest pull request
+        id: latest
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const payloadPull = context.payload.pull_request;
+            if (!payloadPull) throw new Error('pull_request payload is missing');
+            const { data } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: payloadPull.number });
+            core.setOutput('base_sha', data.base.sha);
+            core.setOutput('head_sha', data.head.sha);
+
+      # pull_request_target では必ず信頼 base SHA（最新）をcheckoutする。PRのソースはcheckout/import/実行しない。
       - name: Checkout trusted base
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ steps.latest.outputs.base_sha || github.sha }}
           persist-credentials: false
 
       - name: Validate registration and completion evidence
         uses: actions/github-script@v9
+        env:
+          TRUSTED_BASE_SHA: ${{ steps.latest.outputs.base_sha }}
         with:
           script: |
             const fs = require('node:fs');
@@ -62,8 +78,16 @@ jobs:
               return;
             }
 
-            const pull = context.payload.pull_request;
-            if (!pull) throw new Error('pull_request payload is missing');
+            const payloadPull = context.payload.pull_request;
+            if (!payloadPull) throw new Error('pull_request payload is missing');
+            // 最新の PR（title/body/base.sha/head.sha）で判定する。ペイロードと head が食い違えば新しい run に任せる。
+            const latestPull = (await github.rest.pulls.get({ owner, repo, pull_number: payloadPull.number })).data;
+            if (latestPull.head.sha !== payloadPull.head.sha) {
+              core.notice(`PR head moved (${payloadPull.head.sha} -> ${latestPull.head.sha}); this run is stale and a newer run decides.`);
+              return;
+            }
+            // checkout 済みの信頼 base と同じ SHA で判定する（検査コードと台帳読み出しの世代を揃える）。
+            const pull = { ...latestPull, base: { ...latestPull.base, sha: process.env.TRUSTED_BASE_SHA || latestPull.base.sha } };
             const { pathToFileURL } = require('node:url');
             const validatorPath = path.join(process.cwd(), 'scripts', 'completion-evidence.mjs');
             const validatorAvailable = fs.existsSync(validatorPath);
