@@ -13,6 +13,7 @@ import com.mannschaft.app.schedule.ScheduleStatus;
 import com.mannschaft.app.schedule.ScheduleVisibility;
 import com.mannschaft.app.schedule.entity.ScheduleEntity;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.team.entity.TeamEntity;
 import com.mannschaft.app.team.entity.TeamOrgMembershipEntity;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -466,12 +467,20 @@ class GlobalSearchActivityVisibilityIT extends AbstractGlobalSearchIT {
         @Test
         @DisplayName("AC-V2: SUPPORTER には、PUBLIC の自動生成記録でも元予定が MEMBER_PLUS なら出ず、元予定が SUPPORTER_PLUS なら出る（記録の可視レベルと元予定の可視性の両方を満たす）")
         void AC_V2_SUPPORTERは元予定の閲覧ロールにも従う() throws Exception {
-            Long team = privateTeam("V2S-" + kw);
+            // CMP-261124-0159: サポーターが在籍するチームは公開側（F00 §20.1 不変条件「非公開チームにサポーターは在籍しない」）。
+            Long team = team("V2S-" + kw, TeamEntity.Visibility.SUPPORTERS_AND_ABOVE);
             Long author = viewer("v2s-author");
             teamMember(author, team);
             teamAdmin(author, team);
             Long supporter = viewer("v2s-supporter");
             teamSupporter(supporter, team);
+            // 不変条件が崩れた非公開チームの在籍サポーターには、元予定が SUPPORTER_PLUS の PUBLIC 記録でも出ない（F00 §20.2 規則 1）
+            Long membersOnlyTeam = privateTeam("V2S-MO-" + kw);
+            teamMember(author, membersOnlyTeam);
+            teamAdmin(author, membersOnlyTeam);
+            teamSupporter(supporter, membersOnlyTeam);
+            Long capped = autoActivity(membersOnlyTeam, teamSchedule(membersOnlyTeam, author, MinViewRole.SUPPORTER_PLUS),
+                    author, kw + " 非公開チームの応援者可の予定", ActivityVisibility.PUBLIC);
 
             Long forSupporters = teamSchedule(team, author, MinViewRole.SUPPORTER_PLUS);
             Long shown = autoActivity(team, forSupporters, author, kw + " 応援者可の予定", ActivityVisibility.PUBLIC);
@@ -480,6 +489,7 @@ class GlobalSearchActivityVisibilityIT extends AbstractGlobalSearchIT {
             hidden.add(autoActivity(team, forMembers, author, kw + " メンバー以上の予定", ActivityVisibility.PUBLIC));
             // 元予定は可視でも記録自体が MEMBERS_ONLY なら SUPPORTER に出ない
             hidden.add(autoActivity(team, forSupporters, author, kw + " 内輪の記録", ActivityVisibility.MEMBERS_ONLY));
+            hidden.add(capped);
 
             assertExactlyVisible(supporter, hidden, shown);
         }

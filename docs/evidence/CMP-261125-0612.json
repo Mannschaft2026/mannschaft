@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261125-0612",
+  "scope": "test-only",
+  "implementation": {
+    "pr": 4860,
+    "sha": "f204a24658834acf32af18e37b1b5311dc34261b"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "roles を作る IT が正準 priority で投入し既存行の誤値も ON DUPLICATE KEY UPDATE で正す",
+      "tests": [
+        {
+          "name": "RoleSeedSupportIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/support/test/RoleSeedSupportIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "先に MEMBER=4 が commit 済みでも DEPUTY_ADMIN 判定が崩れない",
+      "tests": [
+        {
+          "name": "BillingOperationAuthorizerConcurrencyIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/billing/BillingOperationAuthorizerConcurrencyIT.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45493492638
+    },
+    {
+      "runId": 45493492741
+    },
+    {
+      "runId": 45493492670
+    },
+    {
+      "runId": 45493492605
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4860"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で画面・API の挙動を変えない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "test-only",
+      "reason": "テストコードだけの変更で導線を変えない"
+    }
+  },
+  "regressions": []
+}
