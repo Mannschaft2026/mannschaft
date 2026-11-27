@@ -87,7 +87,7 @@ test('AC-10: PR 側の task-list-pr-gate.yml は merge_group を持たず、pull
   assert.match(on, /^  workflow_dispatch:$/m);
   assert.equal(topLevelBlock(prWorkflow, 'permissions'), '  contents: read\n  actions: read\n  checks: write\n  pull-requests: read\n');
   const checkout = steps(prWorkflow).find((step) => step.name === 'Checkout trusted base');
-  assert.match(checkout.ref, /^\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}$/);
+  assert.match(checkout.ref, /^\$\{\{ steps\.latest\.outputs\.base_sha \|\| github\.sha \}\}$/);
   assert.match(topLevelBlock(prWorkflow, 'jobs'), /^    name: Task-List PR Gate$/m);
 });
 
@@ -96,10 +96,12 @@ test('AC-10: PR 側の task-list-pr-gate.yml は merge_group を持たず、pull
 // 「実装 PR は base で登録済み・実装中」を判定すること、取得失敗を空にしないことを確かめる。
 // ---------------------------------------------------------------------------
 
-function gateScript() {
-  const lines = prWorkflow.split('\n');
+function stepScript(name) {
+  const block = steps(prWorkflow).find((step) => step.name === name)?.block;
+  assert.ok(block, 'ステップが無い: ' + name);
+  const lines = block.split('\n');
   const start = lines.findIndex((line) => line === '          script: |');
-  assert.notEqual(start, -1, 'github-script の script ブロックが無い');
+  assert.notEqual(start, -1, 'github-script の script ブロックが無い: ' + name);
   const body = [];
   for (const line of lines.slice(start + 1)) {
     if (line.trim() !== '' && !line.startsWith('            ')) break;
@@ -107,21 +109,34 @@ function gateScript() {
   }
   return body.join('\n');
 }
+const gateScript = () => stepScript('Validate registration and completion evidence');
+const fetchScript = () => stepScript('Fetch latest pull request');
 
 const headerRow = '| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |\n|---|---|---|---|---|---|---|';
 const ledgerOf = (...rows) => '# 台帳\n\n' + headerRow + '\n' + rows.map(([id, state]) => '| ' + id + ' | 戦役 | ' + state + ' | — | 条件 | 証拠 | ledger |').join('\n') + '\n';
 
-async function runGate({ files, title = '実装 CMP-261201-0000', failDir = false }) {
+async function runGate({ files, title = '実装 CMP-261201-0000', failDir = false, latest = {}, latestSequence = null, refSha = 'h'.repeat(40), base = {} }) {
   const repoRoot = fileURLToPath(new URL('../', import.meta.url));
   const previous = process.cwd();
   process.chdir(repoRoot);
   const failed = [];
   const infos = [];
+  const outputs = {};
+  let listFilesCalled = 0;
+  let getCalls = 0;
   const notFound = () => Object.assign(new Error('Not Found'), { status: 404 });
+  const latestOf = (overrides) => ({ number: 1, title, body: '', created_at: '2026-11-25T00:00:00Z', changed_files: 1, base: { sha: 'b'.repeat(40), ref: 'main', repo: { full_name: 'o/r' }, ...base }, head: { sha: 'h'.repeat(40) }, ...overrides });
   const github = {
     paginate: async (fn, params) => (await fn(params)).data,
     rest: {
-      pulls: { listFiles: async () => ({ data: [{ filename: 'scripts/x.mjs', status: 'modified' }] }) },
+      git: { getRef: async () => ({ data: { object: { sha: refSha } } }) },
+      pulls: {
+        get: async () => {
+          const overrides = latestSequence ? latestSequence[Math.min(getCalls, latestSequence.length - 1)] : latest;
+          getCalls++;
+          return { data: latestOf(overrides) };
+        },
+        listFiles: async () => { listFilesCalled++; return { data: [{ filename: 'scripts/x.mjs', status: 'modified' }] }; } },
       repos: {
         compareCommitsWithBasehead: async () => ({ data: { merge_base_commit: { sha: 'c'.repeat(40) } } }),
         getContent: async ({ path }) => {
@@ -142,15 +157,21 @@ async function runGate({ files, title = '実装 CMP-261201-0000', failDir = fals
     eventName: 'pull_request_target',
     ref: 'refs/pull/1/merge',
     repo: { owner: 'o', repo: 'r' },
-    payload: { pull_request: { number: 1, title, body: '', created_at: '2026-11-25T00:00:00Z', changed_files: 1, base: { sha: 'b'.repeat(40), ref: 'main' }, head: { sha: 'h'.repeat(40) } } },
+    payload: { pull_request: { number: 1, title: 'ペイロードの古い題名', body: '古い本文', created_at: '2026-11-25T00:00:00Z', changed_files: 1, base: { sha: 'b'.repeat(40), ref: 'main' }, head: { sha: 'h'.repeat(40), ref: 'feature/x', repo: { name: 'r', owner: { login: 'o' } } } } },
   };
-  const core = { info: (m) => infos.push(m), notice: (m) => infos.push(m), error: (m) => failed.push(m), setFailed: (m) => failed.push(m) };
+  const core = { info: (m) => infos.push(m), notice: (m) => infos.push(m), error: (m) => failed.push(m), setFailed: (m) => failed.push(m), setOutput: (k, v) => { outputs[k] = v; } };
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn) => realSetTimeout(fn, 0); // 反映待ちの 10 秒は実時間で待たない
   try {
-    const fn = new AsyncFunction('github', 'context', 'core', 'require', gateScript());
-    await fn(github, context, core, createRequire(import.meta.url));
-    return { failed, infos };
+    await new AsyncFunction('github', 'context', 'core', 'require', fetchScript())(github, context, core, createRequire(import.meta.url));
+    if (outputs.stale === 'true') return { failed, infos, listFilesCalled, outputs, getCalls };
+    process.env.LATEST_PULL = outputs.pull;
+    await new AsyncFunction('github', 'context', 'core', 'require', gateScript())(github, context, core, createRequire(import.meta.url));
+    return { failed, infos, listFilesCalled, outputs, getCalls };
   } finally {
+    delete process.env.LATEST_PULL;
+    globalThis.setTimeout = realSetTimeout;
     process.chdir(previous);
   }
 }
@@ -193,4 +214,56 @@ test('AC-5: PR 側 gate は信頼 base の scripts/task-list-ledger.mjs だけ�
   const checkouts = steps(prWorkflow).filter((step) => /^actions\/checkout@/.test(step.uses ?? ''));
   assert.equal(checkouts.length, 1);
   assert.doesNotMatch(prWorkflow, /pull_request\.head\.(sha|ref) \}\}/);
+});
+
+// CMP-261124-1222 AC-10: rerun は古いペイロードではなく最新の PR（title/body/base.sha）で判定し、head のずれた run は判定しない。
+test('AC-10: ペイロードの題名が古くても、最新の PR の題名の CMP-ID で判定する', async () => {
+  const files = oldLayout(['CMP-261201-0000', 'P4 実装中']);
+  const { failed, infos } = await runGate({ files, title: '実装 CMP-261201-0000' });
+  assert.deepEqual(failed, []);
+  assert.ok(infos.some((m) => /CMP-261201-0000 is registered as 実装中/.test(m)), infos.join('\n'));
+});
+
+test('AC-10: ペイロードの head が古い run（ブランチ ref がさらに新しい commit）は判定せず notice で成功終了する', async () => {
+  const files = oldLayout(['CMP-261201-0000', 'P4 未着手']); // 判定すれば赤になる台帳
+  const { failed, infos, listFilesCalled, outputs } = await runGate({ files, latest: { head: { sha: 'f'.repeat(40) } }, refSha: 'f'.repeat(40) });
+  assert.deepEqual(failed, []);
+  assert.equal(listFilesCalled, 0, '判定処理に進んでいない');
+  assert.equal(outputs.stale, 'true');
+  assert.ok(infos.some((m) => /stale/.test(m)), infos.join('\n'));
+});
+
+test('AC-10: API の反映遅れ（ref は payload の head のまま）は上限付きで取り直し、反映後に判定する', async () => {
+  const files = oldLayout(['CMP-261201-0000', 'P4 実装中']);
+  const lag = { head: { sha: 'o'.repeat(40) } };
+  const { failed, infos, getCalls, outputs } = await runGate({ files, latestSequence: [lag, lag, {}] });
+  assert.equal(getCalls, 3);
+  assert.notEqual(outputs.stale, 'true');
+  assert.deepEqual(failed, []);
+  assert.ok(infos.some((m) => /CMP-261201-0000 is registered as 実装中/.test(m)), infos.join('\n'));
+});
+
+test('AC-10: 反映遅れが上限まで続けば成功にせず失敗させる（検査されないまま緑にしない）', async () => {
+  const files = oldLayout(['CMP-261201-0000', 'P4 未着手']);
+  await assert.rejects(runGate({ files, latest: { head: { sha: 'o'.repeat(40) } } }), /kept returning a different head/);
+});
+
+test('AC-10: 最新の PR の base がこの repo の main でなければ、検査コードを取得する前に失敗させる', async () => {
+  const files = oldLayout(['CMP-261201-0000', 'P4 実装中']);
+  await assert.rejects(runGate({ files, base: { ref: 'unreviewed-branch' } }), /base must be main/);
+  await assert.rejects(runGate({ files, base: { repo: { full_name: 'evil/r' } } }), /base must be main/);
+  const all = steps(prWorkflow);
+  assert.ok(all.findIndex((step) => step.name === 'Fetch latest pull request') < all.findIndex((step) => step.name === 'Checkout trusted base'));
+  assert.match(all.find((step) => step.name === 'Validate registration and completion evidence').block, /if: steps\.latest\.outputs\.stale != 'true'/);
+});
+
+test('AC-10: 最初のステップで pulls.get し、その最新 base.sha を checkout する。ペイロードの base.sha で checkout しない', () => {
+  const all = steps(prWorkflow);
+  const names = all.map((step) => step.name);
+  assert.ok(names.indexOf('Fetch latest pull request') < names.indexOf('Checkout trusted base'));
+  assert.match(all[0].block, /pulls\.get/);
+  assert.match(all[0].block, /git\.getRef/);
+  assert.doesNotMatch(prWorkflow, /uses: actions\/checkout@[^\n]*\n\s+with:\n\s+ref: \$\{\{ github\.event\.pull_request\.base\.sha/);
+  assert.doesNotMatch(prWorkflow, /pull_request\.base\.sha/);
+  assert.match(gateScript(), /process\.env\.LATEST_PULL/);
 });
