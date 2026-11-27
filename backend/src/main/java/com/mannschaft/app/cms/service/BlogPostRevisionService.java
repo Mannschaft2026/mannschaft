@@ -13,7 +13,6 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
-import com.mannschaft.app.common.visibility.ReferenceType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import lombok.extern.slf4j.Slf4j;
@@ -51,12 +50,14 @@ public class BlogPostRevisionService {
      * <p>認可根治戦役 Wave3-B7: 従来は認可判定が皆無だった（記事の実存確認のみ）ため、
      * 非メンバーでも他人の記事のリビジョン履歴（下書き含む編集履歴）を閲覧できた。
      * {@link ContentVisibilityChecker#assertCanView} で {@code getById} と同一の
-     * 可視性判定を適用する。</p>
+     * 可視性判定を適用する。閲覧不可は不存在 ID と同一の {@link CmsErrorCode#POST_NOT_FOUND}（404 CMS_001）に
+     * 畳む（存在オラクル対策、{@link BlogPostViewAccessGuard}）。</p>
      */
     public List<RevisionResponse> listRevisions(Long postId) {
         findPostOrThrow(postId);
         Long viewerUserId = SecurityUtils.getCurrentUserIdOrNull();
-        contentVisibilityChecker.assertCanView(ReferenceType.BLOG_POST, postId, viewerUserId);
+        // 存在オラクル対策: 閲覧不可（他人の下書き等）も不存在 ID と同一の 404 CMS_001 に畳む。
+        BlogPostViewAccessGuard.assertCanViewOrNotFound(contentVisibilityChecker, postId, viewerUserId);
         return cmsMapper.toRevisionResponseList(
                 revisionRepository.findByBlogPostIdOrderByCreatedAtDesc(postId));
     }

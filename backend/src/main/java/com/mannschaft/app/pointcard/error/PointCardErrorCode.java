@@ -185,7 +185,7 @@ public enum PointCardErrorCode implements ErrorCode {
      * 一時トークンが見つからない / 期限切れ / 使用済み。HTTP 404。
      *
      * <p>Phase 3 第二陣 2A の QR 自動特定で利用。
-     * 顧客側で発行した 5 分 TTL の UUID トークンを店主側が resolve した際、
+     * 顧客側で発行した 5 分 TTL の 共有トークン（Base64URL 43字）を店主側が resolve した際、
      * Valkey に存在しないか TTL 切れ、または既に消費済（GETDEL で削除済）の場合に投げる。
      * 不存在 / 期限切れ / 使用済の区別はクライアントに開示しない（情報漏洩防止）。
      */
