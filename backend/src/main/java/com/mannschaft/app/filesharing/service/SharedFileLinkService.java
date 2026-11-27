@@ -132,22 +132,6 @@ public class SharedFileLinkService {
     }
 
     /**
-     * トークンで共有リンクにアクセスし、ファイル情報を取得する。
-     *
-     * @param token   共有リンクトークン
-     * @param request アクセスリクエスト（パスワード）
-     * @return ファイルレスポンス
-     * @deprecated PR-D で未認証公開経路 {@link #accessLinkPublic} に一本化した。本メソッドは互換のため
-     *     公開経路へ委譲するだけの薄いラッパーで、旧 {@code /api/v1/shared-links/{token}/access}
-     *     （permitAll 未設定で実質認証必須）からのみ参照される。新規呼び出しは {@link #accessLinkPublic} を使うこと。
-     */
-    @Deprecated
-    @Transactional
-    public FileResponse accessLink(String token, AccessLinkRequest request) {
-        return accessAndLoadFile(token, request);
-    }
-
-    /**
      * PR-D: <b>未認証・非会員</b>がトークンで公開リンクにアクセスし、ファイルメタを取得する。
      *
      * <p>検証順（存在秘匿を保つ）: token 実在（404 LINK_NOT_FOUND）→ is_active（410 LINK_INACTIVE）

@@ -484,7 +484,10 @@ class FileSharingAuthzScopeContractIT extends AbstractMySqlIntegrationTest {
             setAuth(outsiderId);
             mockMvc.perform(post("/api/v1/shared-links/{token}/access", personalLinkToken))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.id").value(personalFileId.intValue()));
+                    .andExpect(jsonPath("$.data.name").exists())
+                    .andExpect(jsonPath("$.data.fileKey").doesNotExist())
+                    .andExpect(jsonPath("$.data.createdBy").doesNotExist())
+                    .andExpect(jsonPath("$.data.id").doesNotExist());
         }
     }
 

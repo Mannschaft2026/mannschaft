@@ -66810,28 +66810,15 @@ export interface components {
         AccessLinkRequest: {
             password?: string;
         };
-        ApiResponseFileResponse: {
-            data?: components["schemas"]["FileResponse"];
+        ApiResponsePublicFileLinkResponse: {
+            data?: components["schemas"]["PublicFileLinkResponse"];
         };
-        FileResponse: {
+        PublicFileLinkResponse: {
             contentType?: string;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: int64 */
-            createdBy?: number;
-            /** Format: int32 */
-            currentVersion?: number;
             description?: string;
             downloadDisabled?: boolean;
-            fileKey?: string;
             /** Format: int64 */
             fileSize?: number;
-            /** Format: int64 */
-            folderId?: number;
-            /** Format: int64 */
-            id?: number;
-            /** @enum {string} */
-            minVisibleRole?: "SUPPORTERS_AND_ABOVE" | "MEMBERS_AND_ABOVE" | "ADMINS_AND_ABOVE";
             name?: string;
             /** Format: date-time */
             updatedAt?: string;
@@ -67194,19 +67181,6 @@ export interface components {
              * @example 900
              */
             expiresInSeconds?: number;
-        };
-        ApiResponsePublicFileLinkResponse: {
-            data?: components["schemas"]["PublicFileLinkResponse"];
-        };
-        PublicFileLinkResponse: {
-            contentType?: string;
-            description?: string;
-            downloadDisabled?: boolean;
-            /** Format: int64 */
-            fileSize?: number;
-            name?: string;
-            /** Format: date-time */
-            updatedAt?: string;
         };
         ApiResponsePublicConfirmationResponse: {
             data?: components["schemas"]["PublicConfirmationResponse"];
@@ -70311,6 +70285,32 @@ export interface components {
             /** @enum {string} */
             minVisibleRole?: "SUPPORTERS_AND_ABOVE" | "MEMBERS_AND_ABOVE" | "ADMINS_AND_ABOVE";
             name?: string;
+        };
+        ApiResponseFileResponse: {
+            data?: components["schemas"]["FileResponse"];
+        };
+        FileResponse: {
+            contentType?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            /** Format: int32 */
+            currentVersion?: number;
+            description?: string;
+            downloadDisabled?: boolean;
+            fileKey?: string;
+            /** Format: int64 */
+            fileSize?: number;
+            /** Format: int64 */
+            folderId?: number;
+            /** Format: int64 */
+            id?: number;
+            /** @enum {string} */
+            minVisibleRole?: "SUPPORTERS_AND_ABOVE" | "MEMBERS_AND_ABOVE" | "ADMINS_AND_ABOVE";
+            name?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
         CreateVersionRequest: {
             comment?: string;
@@ -123146,7 +123146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseFileResponse"];
+                    "*/*": components["schemas"]["ApiResponsePublicFileLinkResponse"];
                 };
             };
         };
