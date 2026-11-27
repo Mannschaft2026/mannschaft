@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -210,14 +211,14 @@ final class PlaintextSecretTokenGuardRules {
     }
 
     /** 免除注釈が有効か。{@code reason} が空白だけ、または {@code cmp} が戦役 ID と違えば無効。 */
-    private static boolean hasValidExemption(HasAnnotations<?> element) {
+    private static boolean hasValidExemption(HasAnnotations<?> element, Supplier<String> ledger) {
         boolean required = element.tryGetAnnotationOfType(PlaintextSecretRequired.class.getName())
                 .flatMap(annotation -> annotation.get(EXEMPTION_REASON_PROP))
                 .map(value -> value instanceof String reason && !reason.isBlank())
                 .orElse(false);
         boolean debt = element.tryGetAnnotationOfType(PlaintextTokenDebt.class.getName())
                 .flatMap(annotation -> annotation.get(EXEMPTION_CMP_PROP))
-                .map(value -> value instanceof String cmp && isOpenRegisteredCmp(cmp, ledger()))
+                .map(value -> value instanceof String cmp && isOpenRegisteredCmp(cmp, ledger.get()))
                 .orElse(false);
         return required || debt;
     }
@@ -254,10 +255,10 @@ final class PlaintextSecretTokenGuardRules {
     }
 
     /** 免除注釈が付いているが無効（cmp 違い・reason 空）か。形に関係なく常に違反として扱う（AC-27）。 */
-    private static boolean hasInvalidExemption(HasAnnotations<?> element) {
+    private static boolean hasInvalidExemption(HasAnnotations<?> element, Supplier<String> ledger) {
         boolean present = element.tryGetAnnotationOfType(PlaintextSecretRequired.class.getName()).isPresent()
                 || element.tryGetAnnotationOfType(PlaintextTokenDebt.class.getName()).isPresent();
-        return present && !hasValidExemption(element);
+        return present && !hasValidExemption(element, ledger);
     }
 
     /** 永続フィールドの列名。{@code @Column(name)} があればそれ、無ければフィールド名の snake_case。 */
@@ -350,6 +351,11 @@ final class PlaintextSecretTokenGuardRules {
 
     /** 番人1: 平文の token 系列。 */
     static GuardResult plaintextColumns(JavaClasses classes) {
+        return plaintextColumns(classes, PlaintextSecretTokenGuardRules::ledger);
+    }
+
+    /** 台帳の供給元を差し替えられる版（自己検証が実台帳の状態に依存しないようにするため。遅延評価）。 */
+    static GuardResult plaintextColumns(JavaClasses classes, Supplier<String> ledger) {
         Collector out = new Collector();
         for (JavaClass type : classes) {
             if (!isEntityLike(type)) {
@@ -357,7 +363,7 @@ final class PlaintextSecretTokenGuardRules {
             }
             for (JavaField field : type.getFields()) {
                 // 免除注釈の検証は列の種類（ハッシュ列・語彙に一致しない列）に関係なく、付いていれば必ず行う
-                if (hasInvalidExemption(field)) {
+                if (hasInvalidExemption(field, ledger)) {
                     out.violations.add(fieldId(field) + " 無効な免除注釈（cmp が台帳に未登録または完了済み、または reason が空）");
                 }
                 if (!isSecretCandidate(field)) {
@@ -368,7 +374,7 @@ final class PlaintextSecretTokenGuardRules {
                 if (isHashColumn(field)) {
                     continue;
                 }
-                if (hasValidExemption(field)) {
+                if (hasValidExemption(field, ledger)) {
                     out.exempted.add(id);
                 } else {
                     out.violations.add(id + " 平文の token 系列（_hash でなく免除注釈も無い）");
@@ -382,6 +388,11 @@ final class PlaintextSecretTokenGuardRules {
 
     /** 番人2: 平文の token 系列を検索する Repository メソッド。 */
     static GuardResult plaintextRepositoryLookups(JavaClasses classes) {
+        return plaintextRepositoryLookups(classes, PlaintextSecretTokenGuardRules::ledger);
+    }
+
+    /** 台帳の供給元を差し替えられる版（自己検証が実台帳の状態に依存しないようにするため。遅延評価）。 */
+    static GuardResult plaintextRepositoryLookups(JavaClasses classes, Supplier<String> ledger) {
         Collector out = new Collector();
         for (JavaClass repository : classes) {
             if (!isRepositoryInterface(repository)) {
@@ -389,7 +400,7 @@ final class PlaintextSecretTokenGuardRules {
             }
             Optional<JavaClass> entity = resolveDomainType(repository, classes);
             for (JavaMethod method : repository.getMethods()) {
-                inspectRepositoryMethod(method, entity, out);
+                inspectRepositoryMethod(method, entity, out, ledger);
             }
         }
         return out.toResult();
@@ -408,7 +419,8 @@ final class PlaintextSecretTokenGuardRules {
         return Optional.empty();
     }
 
-    private static void inspectRepositoryMethod(JavaMethod method, Optional<JavaClass> entity, Collector out) {
+    private static void inspectRepositoryMethod(JavaMethod method, Optional<JavaClass> entity, Collector out,
+            Supplier<String> ledger) {
         String name = method.getName();
         boolean nameCandidate = SECRET_METHOD_VOCABULARY.matcher(name).find()
                 && !name.toLowerCase().contains(HASH_WORD);
@@ -438,7 +450,7 @@ final class PlaintextSecretTokenGuardRules {
         if (matched.isEmpty()) {
             return;
         }
-        boolean allExempt = matched.stream().allMatch(PlaintextSecretTokenGuardRules::hasValidExemption);
+        boolean allExempt = matched.stream().allMatch(element -> hasValidExemption(element, ledger));
         if (allExempt) {
             out.exempted.add(id);
         } else {
@@ -498,11 +510,16 @@ final class PlaintextSecretTokenGuardRules {
 
     /** 番人3: 金庫を通さない自前発行（自前乱数と Entity の token 系 setter/builder の同居）。 */
     static GuardResult selfIssuedTokens(JavaClasses classes) {
+        return selfIssuedTokens(classes, PlaintextSecretTokenGuardRules::ledger);
+    }
+
+    /** 台帳の供給元を差し替えられる版（自己検証が実台帳の状態に依存しないようにするため。遅延評価）。 */
+    static GuardResult selfIssuedTokens(JavaClasses classes, Supplier<String> ledger) {
         Collector out = new Collector();
         for (JavaClass type : classes) {
             Map<String, Set<String>> taintedCalls = null;
             for (JavaMethod method : type.getMethods()) {
-                if (hasInvalidExemption(method)) {
+                if (hasInvalidExemption(method, ledger)) {
                     out.violations.add(methodId(method) + " 無効な免除注釈（cmp が台帳に未登録または完了済み、または reason が空）");
                 }
                 if (!callsSelfRandom(method)) {
@@ -521,7 +538,7 @@ final class PlaintextSecretTokenGuardRules {
                 if (!writesToken) {
                     continue;
                 }
-                if (hasValidExemption(method)) {
+                if (hasValidExemption(method, ledger)) {
                     out.exempted.add(id);
                 } else {
                     out.violations.add(id + " 自前乱数で発行した値を Entity の token 系に詰めている（SecretTokenVault を使う）");
@@ -584,11 +601,16 @@ final class PlaintextSecretTokenGuardRules {
 
     /** 番人6: JDBC 直接 INSERT/UPDATE と自前乱数の同居、{@code BearerSecretValkeyKey.of} と自前乱数の同居。 */
     static GuardResult rawWritesAndBearerKeysWithSelfRandom(JavaClasses classes) {
+        return rawWritesAndBearerKeysWithSelfRandom(classes, PlaintextSecretTokenGuardRules::ledger);
+    }
+
+    /** 台帳の供給元を差し替えられる版（自己検証が実台帳の状態に依存しないようにするため。遅延評価）。 */
+    static GuardResult rawWritesAndBearerKeysWithSelfRandom(JavaClasses classes, Supplier<String> ledger) {
         Collector out = new Collector();
         for (JavaClass type : classes) {
             Map<String, Set<String>> constants = null;
             for (JavaMethod method : type.getMethods()) {
-                if (hasInvalidExemption(method)) {
+                if (hasInvalidExemption(method, ledger)) {
                     out.violations.add(methodId(method) + " 無効な免除注釈（cmp が台帳に未登録または完了済み、または reason が空）");
                 }
                 if (!callsSelfRandom(method)) {
@@ -607,7 +629,7 @@ final class PlaintextSecretTokenGuardRules {
                 if (!bearerKey && !rawWrite) {
                     continue;
                 }
-                if (hasValidExemption(method)) {
+                if (hasValidExemption(method, ledger)) {
                     out.exempted.add(id);
                 } else {
                     String why = bearerKey
