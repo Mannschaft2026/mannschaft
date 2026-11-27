@@ -90,6 +90,33 @@ class EquipmentItemServiceTest {
                             .isEqualTo("EQUIPMENT_001"));
             org.mockito.Mockito.verifyNoInteractions(itemRepository, equipmentMapper);
         }
+
+        @Test
+        @DisplayName("F10.9 第2回検分: サポート閲覧（代理）中は QR コード識別子だけを外し、他の項目は返す。通常は QR も返す")
+        void 取得_代理中はQRコードを外す() {
+            EquipmentMapper realMapper = org.mapstruct.factory.Mappers.getMapper(EquipmentMapper.class);
+            EquipmentItemEntity entity = EquipmentItemEntity.builder()
+                    .teamId(TEAM_ID).name("ボール").qrCode("QR-001").quantity(1)
+                    .status(com.mannschaft.app.equipment.EquipmentStatus.AVAILABLE).build();
+            given(accessControlService.isMember(ACTOR_USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(itemRepository.findByIdAndTeamId(ITEM_ID, TEAM_ID)).willReturn(Optional.of(entity));
+            given(equipmentMapper.toItemResponse(entity)).willAnswer(inv -> realMapper.toItemResponse(entity));
+            given(equipmentMapper.toItemResponseWithoutQrCode(entity))
+                    .willAnswer(inv -> realMapper.toItemResponseWithoutQrCode(entity));
+
+            assertThat(service.getByTeam(TEAM_ID, ITEM_ID, ACTOR_USER_ID).getQrCode()).isEqualTo("QR-001");
+
+            com.mannschaft.app.supportaccess.context.SupportAccessContextHolder.set(
+                    new com.mannschaft.app.supportaccess.context.SupportAccessContext(
+                            java.util.UUID.randomUUID(), 9001L, ACTOR_USER_ID, java.time.Instant.now()));
+            try {
+                EquipmentItemResponse masked = service.getByTeam(TEAM_ID, ITEM_ID, ACTOR_USER_ID);
+                assertThat(masked.getQrCode()).isNull();
+                assertThat(masked.getName()).isEqualTo("ボール");
+            } finally {
+                com.mannschaft.app.supportaccess.context.SupportAccessContextHolder.clear();
+            }
+        }
     }
 
     @Nested

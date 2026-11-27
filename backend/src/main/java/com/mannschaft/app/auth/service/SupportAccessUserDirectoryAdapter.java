@@ -9,6 +9,7 @@ import com.mannschaft.app.auth.guardianship.GuardianshipSwitchService.SwitchVerd
 import com.mannschaft.app.auth.repository.ParentalConsentLinkRepository;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.supportaccess.port.SupportAccessGuardianRequirement;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
@@ -38,6 +40,12 @@ public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirec
 
     /** 未成年の境界（この年齢未満は保護者の承認が要る）。 */
     private static final int MINOR_AGE_YEARS = 18;
+
+    /**
+     * 年齢の境界日を求めるタイムゾーン（サーバー・Clock のゾーンに依存させない。後見の年齢ポリシーと同じく JST）。
+     * アプリ層の基準 TZ（{@link UserZoneLocalDateTimeParser#SERVER_ZONE}）を使い、リテラルを増やさない。
+     */
+    private static final ZoneId AGE_ZONE = UserZoneLocalDateTimeParser.SERVER_ZONE;
 
     private final UserRepository userRepository;
     private final ParentalConsentLinkRepository parentalConsentLinkRepository;
@@ -66,8 +74,10 @@ public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirec
      * <p><b>要否</b>は保護者リンクの有無ではなく<b>本人の年齢・後見の状態</b>から決める。後見切替の年齢ポリシー
      * （{@link GuardianshipAgePolicyRegistry}・国別）で「保護者が子に代わって操作できる段階」（{@code switchAllowed}）の
      * 子は保護者の承認が要る。<b>18歳未満の未成年は、後見の封印段階（自立扱いの年齢）でも一律で要る</b>
-     * （マスター決定 2026-11-27）。生年月日が無い・読めない本人は、承認済みの保護者リンクがあれば安全側で要るとする
-     * （リンクも無ければ成人の通常アカウントとして扱う）。以前は「リンクがあり後見の権原が有効な保護者がいれば要る」
+     * （マスター決定 2026-11-27）。<b>成人として扱うのは生年月日から18歳以上と確認できるときだけ</b>で、生年月日が無い・
+     * 読めない本人は年齢を確認できないため解決不能（{@code required=true}・承認できる保護者なし＝SUPPORT_ACCESS_005）とする
+     * （第2回検分: 以前は保護者リンクも無ければ成人扱いで、生年月日未登録の未成年が保護者の承認なしで依頼できた）。
+     * 境界日は JST（Asia/Tokyo）の暦日で求める。以前は「リンクがあり後見の権原が有効な保護者がいれば要る」
      * だったため、リンクの無い（または保護者が停止した）子は保護者の承認なしで依頼・許可できた（fail-open）。</p>
      *
      * <p><b>承認できる保護者</b>は、承認済みの保護者リンクがあり、後見の権原（{@code evaluateSwitch}）が ALLOWED で、
@@ -91,7 +101,12 @@ public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirec
                 .distinct()
                 .sorted(Comparator.naturalOrder())
                 .toList();
-        if (!isGuardianshipRequired(child, !linkedGuardians.isEmpty())) {
+        LocalDate birthDate = parseBirthDate(child);
+        if (birthDate == null) {
+            log.warn("サポート閲覧: 生年月日が無い・読めない本人は成人と確認できない（fail-closed で拒否）userId={}", userId);
+            return SupportAccessGuardianRequirement.requiredBy(List.of());
+        }
+        if (!isGuardianshipRequired(child, birthDate)) {
             return SupportAccessGuardianRequirement.notRequired();
         }
         List<Long> eligible = linkedGuardians.stream()
@@ -115,13 +130,10 @@ public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirec
                 .filter(MfaMethodPolicy::isEmailDeliverable);
     }
 
-    private boolean isGuardianshipRequired(UserEntity child, boolean hasApprovedGuardianLink) {
-        LocalDate birthDate = parseBirthDate(child);
-        if (birthDate == null) {
-            return hasApprovedGuardianLink;
-        }
-        // マスター決定（2026-11-27）: 未成年（18歳未満）は後見の封印段階（自立扱いの年齢）でも一律で保護者の承認を求める
-        if (birthDate.plusYears(MINOR_AGE_YEARS).isAfter(LocalDate.now(clock))) {
+    private boolean isGuardianshipRequired(UserEntity child, LocalDate birthDate) {
+        // マスター決定（2026-11-27）: 未成年（18歳未満）は後見の封印段階（自立扱いの年齢）でも一律で保護者の承認を求める。
+        // 境界日は JST の暦日（Clock のゾーンが UTC 等でも、JST で18歳の誕生日を迎えた時点から成人）
+        if (birthDate.plusYears(MINOR_AGE_YEARS).isAfter(LocalDate.now(clock.withZone(AGE_ZONE)))) {
             return true;
         }
         return agePolicyRegistry.forCountry(child.getCountryCode()).resolve(birthDate, clock).switchAllowed();

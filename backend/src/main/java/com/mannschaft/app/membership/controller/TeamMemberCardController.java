@@ -57,6 +57,8 @@ public class TeamMemberCardController {
     @GetMapping("/member-cards")
     @Operation(summary = "チーム会員証一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    // F10.9 第2回検分: 会員証の一覧は中身の型が見えず（Map）、会員証の QR・番号を運びうるため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<Map<String, Object>> getTeamMemberCards(
             @PathVariable Long teamId,
             @RequestParam(defaultValue = "ACTIVE") String status,

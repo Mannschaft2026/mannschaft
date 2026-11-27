@@ -5,6 +5,7 @@ import com.mannschaft.app.auth.service.AuthOAuthLinkService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,6 +49,8 @@ public class UserOAuthLinkController {
             "SecurityUtils.getCurrentUserId() のみで連携対象ユーザーを解決し、"
                     + "provider はプロバイダ種別に過ぎない（UserOAuthLinkController#getAuthUrl）")
     @GetMapping("/{provider}/auth-url")
+    // F10.9 第2回検分: OAuth 連携の認可 URL（state 付き）は本人として外部連携を始める材料のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<OAuthLinkAuthUrlResponse>> getAuthUrl(
             @PathVariable String provider,
             @RequestParam(defaultValue = "false") boolean includeCalendar) {
@@ -73,6 +76,8 @@ public class UserOAuthLinkController {
             "SecurityUtils.getCurrentUserId() のみで連携対象ユーザーを解決する"
                     + "（UserOAuthLinkController#getCalendarOnlyAuthUrl）")
     @GetMapping("/GOOGLE/calendar-only-auth-url")
+    // F10.9 第2回検分: OAuth 連携の認可 URL（state 付き）は本人として外部連携を始める材料のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<OAuthLinkAuthUrlResponse>> getCalendarOnlyAuthUrl() {
         Long userId = SecurityUtils.getCurrentUserId();
         String authUrl = authOAuthLinkService.generateCalendarOnlyAuthUrl(userId);

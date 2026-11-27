@@ -1,6 +1,8 @@
 package com.mannschaft.app.supportaccess.service;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.mail.outbox.EmailOutboxService;
+import com.mannschaft.app.supportaccess.SupportAccessNotificationKind;
 import com.mannschaft.app.supportaccess.SupportAccessAuditAction;
 import com.mannschaft.app.supportaccess.SupportAccessEndedReason;
 import com.mannschaft.app.supportaccess.SupportAccessErrorCode;
@@ -13,10 +15,13 @@ import com.mannschaft.app.supportaccess.dto.SupportAccessTransitionResult;
 import com.mannschaft.app.supportaccess.entity.SupportAccessAuditOutboxEntity;
 import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
+import com.mannschaft.app.supportaccess.entity.SupportAccessNotificationOutboxEntity;
 import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
 import com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
+import com.mannschaft.app.supportaccess.repository.SupportAccessNotificationOutboxRepository;
+import com.mannschaft.app.supportaccess.service.SupportAccessNoticeComposer.PreparedEmail;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -31,8 +36,10 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * F10.9 状態遷移の書込トランザクション（supportaccess ドメインの Repository だけに触れる）。
@@ -46,8 +53,18 @@ import java.util.UUID;
  * <p><b>排他（検分差し戻し対応）</b>: 遷移する全メソッドは grant 行を {@code SELECT ... FOR UPDATE}
  * （{@link SupportAccessGrantRepository#findByIdForUpdate} 等）で読み、ロックを持ったまま状態を検証して書く。
  * ロックなしで読むと、同時の「閲覧開始」と「取消」、「許可」と「撤回」、「本人の許可」と「保護者の許可」の
- * どちらかが後勝ちで上書きされて消える。ロックの取得順は「運営者の依頼ロック → grant 行（id 昇順）」に固定する。
+ * どちらかが後勝ちで上書きされて消える。ロックの取得順は「運営者の依頼ロック → grant 行の<b>主キー</b>（id 昇順）
+ * → 新しい行の INSERT」に統一し、二次索引を走査してロックする読み取りは使わない（第2回検分: 失効バッチ・退会が
+ * 二次索引 → 主キー、本人の操作が主キー → 二次索引の逆順でデッドロックしていた）。複数行の失効・退会は id を
+ * ロックなしで集め、1件ずつ別 TX で主キーをロックして再検証する。ロック待ちは5秒で打ち切る（{@link #withShortLockWait}）。
  * TX の外で済ませた事前判定（preflight）は信用せず、ロック後に状態の検証をやり直す。</p>
+ *
+ * <p><b>安全通知の欠落防止（第2回検分対応）</b>: 依頼・閲覧開始・許可・拒否・取消の通知は、遷移と同じトランザクションで
+ * アプリ内通知の outbox（support_access_notification_outbox）に宛先ごとに1行、本人・保護者へのメールは
+ * メール outbox（F09.18 {@link EmailOutboxService}）に1行書く。遷移が巻き戻れば通知・メールも残らず、確定すれば必ず残る。
+ * メール outbox への書込は mail ドメインの表への越境だが、F09.18 の設計（呼び出し側の TX の中で enqueue する
+ * transactional outbox）どおりの入口であり、送信自体はメールの Worker がコミット後に行う。冪等キーは
+ * grantId＋種別＋宛先（閲覧開始は開始時刻）で決まる値で、同じ遷移から2通は出ない。</p>
  *
  * <p><b>監査の欠落防止</b>: 遷移ごとに、同じトランザクションで監査 outbox（support_access_audit_outbox）へ1行書く。
  * 遷移が確定すれば監査の元も必ず確定し、audit_logs への反映はコミット後に {@link SupportAccessAuditRecorder} が
@@ -66,26 +83,40 @@ public class SupportAccessGrantTransitionService {
     private final SupportAccessGrantRepository grantRepository;
     private final SupportAccessLogRepository logRepository;
     private final SupportAccessAuditOutboxRepository auditOutboxRepository;
+    private final SupportAccessNotificationOutboxRepository notificationOutboxRepository;
+    private final EmailOutboxService emailOutboxService;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public SupportAccessGrantTransitionService(SupportAccessGrantRepository grantRepository,
                                                SupportAccessLogRepository logRepository,
                                                SupportAccessAuditOutboxRepository auditOutboxRepository,
+                                               SupportAccessNotificationOutboxRepository notificationOutboxRepository,
+                                               EmailOutboxService emailOutboxService,
                                                ApplicationEventPublisher eventPublisher,
                                                Clock clock) {
         this.grantRepository = grantRepository;
         this.logRepository = logRepository;
         this.auditOutboxRepository = auditOutboxRepository;
+        this.notificationOutboxRepository = notificationOutboxRepository;
+        this.emailOutboxService = emailOutboxService;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
     // ─── 運営側 ────────────────────────────────────────────
 
-    /** 依頼を作る。guardianUserId は呼び出し側が TX の外で解決した値（null なら保護者の承認は不要）。 */
+    /**
+     * 依頼を作る。guardianUserId は呼び出し側が TX の外で解決した値（null なら保護者の承認は不要）。
+     * emails は呼び出し側が TX の前に組んだ本人・保護者へのメール（ここで冪等キーを付けて同じ TX で enqueue する）。
+     */
     public SupportAccessTransitionResult request(Long operatorUserId, CreateSupportAccessGrantRequest request,
-                                                 String reason, Long guardianUserId) {
+                                                 String reason, Long guardianUserId, List<PreparedEmail> emails) {
+        return withShortLockWait(() -> doRequest(operatorUserId, request, reason, guardianUserId, emails));
+    }
+
+    private SupportAccessTransitionResult doRequest(Long operatorUserId, CreateSupportAccessGrantRequest request,
+                                                    String reason, Long guardianUserId, List<PreparedEmail> emails) {
         // 同じ運営者の依頼を直列化する（1日20件の count→insert と、同じ組合せの重複の判定を競合させない）
         grantRepository.lockOperatorForRequest(operatorUserId);
 
@@ -93,9 +124,15 @@ public class SupportAccessGrantTransitionService {
         Long targetUserId = request.targetUserId();
         List<SupportAccessGrantSnapshot> expired = new ArrayList<>();
 
-        // 開いている grant が期限切れ（バッチ前）なら、その場で失効してから新しい依頼を作る
-        for (SupportAccessGrantEntity open
-                : grantRepository.findOpenForUpdate(operatorUserId, targetUserId, OPEN_STATUSES)) {
+        // 開いている grant が期限切れ（バッチ前）なら、その場で失効してから新しい依頼を作る。
+        // id はロックなしで集め、主キーで1件ずつロックしてから状態を再検証する（二次索引を走査してロックしない）
+        for (UUID openId : grantRepository.findOpenIds(operatorUserId, targetUserId, OPEN_STATUSES)) {
+            SupportAccessGrantEntity open = grantRepository.findByIdForUpdate(openId).orElse(null);
+            if (open == null || !open.isOpen() || !open.getOperatorUserId().equals(operatorUserId)
+                    || !open.getTargetUserId().equals(targetUserId)) {
+                // 読んでからロックするまでに失効・取消などで閉じた（または消えた）
+                continue;
+            }
             if (!isOverdue(open, now)) {
                 throw new BusinessException(SupportAccessErrorCode.DUPLICATE_OPEN_GRANT);
             }
@@ -132,45 +169,59 @@ public class SupportAccessGrantTransitionService {
             throw new BusinessException(SupportAccessErrorCode.DUPLICATE_OPEN_GRANT, e);
         }
         record(SupportAccessAuditAction.REQUESTED, saved, now);
+        enqueueEmails(emails, saved.getId(), null);
         return new SupportAccessTransitionResult(SupportAccessGrantSnapshot.from(saved), expired);
     }
 
     /** 運営者が依頼・許可を撤回する（CANCELLED）。 */
     public SupportAccessTransitionResult cancel(Long operatorUserId, UUID grantId) {
-        SupportAccessGrantEntity grant = lockOwnedByOperator(operatorUserId, grantId);
-        requireOpen(grant);
-        Instant now = Instant.now(clock);
-        grant.cancel(now);
-        grantRepository.save(grant);
-        record(SupportAccessAuditAction.CANCELLED, grant, now);
-        return result(grant);
+        return withShortLockWait(() -> {
+            SupportAccessGrantEntity grant = lockOwnedByOperator(operatorUserId, grantId);
+            requireOpen(grant);
+            Instant now = Instant.now(clock);
+            grant.cancel(now);
+            grantRepository.save(grant);
+            record(SupportAccessAuditAction.CANCELLED, grant, now);
+            return result(grant);
+        });
     }
 
-    /** 閲覧開始の前提（自分の grant・承認済みで期限内）の検証。対象本人の userId を返す（ロックしない事前判定）。 */
+    /** 閲覧開始の前提（自分の grant・承認済みで期限内）の検証。grant の写しを返す（ロックしない事前判定）。 */
     @Transactional(readOnly = true)
-    public Long preflightStartSession(Long operatorUserId, UUID grantId) {
+    public SupportAccessGrantSnapshot preflightStartSession(Long operatorUserId, UUID grantId) {
         SupportAccessGrantEntity grant = findOwnedByOperator(operatorUserId, grantId);
         requireUsable(grant, Instant.now(clock));
-        return grant.getTargetUserId();
+        return SupportAccessGrantSnapshot.from(grant);
     }
 
-    /** 閲覧開始。承認済みで期限内の grant だけが開始できる（所属・本人の状態は呼び出し側が TX の前に確認済み）。 */
-    public SupportAccessSessionResponse startSession(Long operatorUserId, UUID grantId, String targetDisplayName) {
-        SupportAccessGrantEntity grant = lockOwnedByOperator(operatorUserId, grantId);
-        Instant now = Instant.now(clock);
-        // ロック後に検証し直す（事前判定の後に取消・撤回・失効が確定していれば、ここで 002 になる）
-        requireUsable(grant, now);
+    /**
+     * 閲覧開始。承認済みで期限内の grant だけが開始できる（所属・本人の状態は呼び出し側が TX の前に確認済み）。
+     * 本人への通知（アプリ内・メール）は同じ TX で outbox に書く（閲覧が始まったのに本人へ知らせが残らない、を作らない）。
+     */
+    public SupportAccessSessionResponse startSession(Long operatorUserId, UUID grantId, String targetDisplayName,
+                                                     List<PreparedEmail> emails) {
+        return withShortLockWait(() -> {
+            SupportAccessGrantEntity grant = lockOwnedByOperator(operatorUserId, grantId);
+            Instant now = Instant.now(clock);
+            // ロック後に検証し直す（事前判定の後に取消・撤回・失効が確定していれば、ここで 002 になる）
+            requireUsable(grant, now);
 
-        grant.startSession(now);
-        grantRepository.save(grant);
-        appendSessionLog(grant, SupportAccessEventKind.SESSION_START, now);
-        record(SupportAccessAuditAction.SESSION_STARTED, grant, now);
-        return new SupportAccessSessionResponse(grantId, grant.getTargetUserId(), targetDisplayName,
-                grant.getExpiresAt(), remainingSeconds(grant.getExpiresAt(), now));
+            grant.startSession(now);
+            grantRepository.save(grant);
+            appendSessionLog(grant, SupportAccessEventKind.SESSION_START, now);
+            record(SupportAccessAuditAction.SESSION_STARTED, grant, now);
+            enqueueEmails(emails, grant.getId(), now);
+            return new SupportAccessSessionResponse(grantId, grant.getTargetUserId(), targetDisplayName,
+                    grant.getExpiresAt(), remainingSeconds(grant.getExpiresAt(), now));
+        });
     }
 
     /** 閲覧終了。終了済みなら何もせず null（冪等）、終了したら対象本人の userId を返す。 */
     public Long endSession(Long operatorUserId, UUID grantId) {
+        return withShortLockWait(() -> doEndSession(operatorUserId, grantId));
+    }
+
+    private Long doEndSession(Long operatorUserId, UUID grantId) {
         SupportAccessGrantEntity grant = lockOwnedByOperator(operatorUserId, grantId);
         if (grant.getActiveSessionStartedAt() == null) {
             throw new BusinessException(SupportAccessErrorCode.INVALID_TRANSITION);
@@ -201,6 +252,10 @@ public class SupportAccessGrantTransitionService {
      * 本人と保護者が同時に許可しても、grant 行の排他ロックで1件ずつ処理されるため、片方の許可が消えない。
      */
     public SupportAccessTransitionResult approve(Long userId, UUID grantId) {
+        return withShortLockWait(() -> doApprove(userId, grantId));
+    }
+
+    private SupportAccessTransitionResult doApprove(Long userId, UUID grantId) {
         SupportAccessGrantEntity grant = lockVisibleToUser(userId, grantId);
         boolean asGuardian = isGuardianOnly(grant, userId);
         Instant now = Instant.now(clock);
@@ -222,47 +277,58 @@ public class SupportAccessGrantTransitionService {
 
     /** 本人（または保護者）が拒否する（DENIED）。 */
     public SupportAccessTransitionResult deny(Long userId, UUID grantId, String comment) {
-        SupportAccessGrantEntity grant = lockVisibleToUser(userId, grantId);
-        Instant now = Instant.now(clock);
-        if (grant.getStatus() != SupportAccessStatus.PENDING || !now.isBefore(grant.getRequestExpiresAt())) {
-            throw new BusinessException(SupportAccessErrorCode.INVALID_TRANSITION);
-        }
-        grant.deny(now, comment);
-        grantRepository.save(grant);
-        record(SupportAccessAuditAction.DENIED, grant, now);
-        return result(grant);
+        return withShortLockWait(() -> {
+            SupportAccessGrantEntity grant = lockVisibleToUser(userId, grantId);
+            Instant now = Instant.now(clock);
+            if (grant.getStatus() != SupportAccessStatus.PENDING || !now.isBefore(grant.getRequestExpiresAt())) {
+                throw new BusinessException(SupportAccessErrorCode.INVALID_TRANSITION);
+            }
+            grant.deny(now, comment);
+            grantRepository.save(grant);
+            record(SupportAccessAuditAction.DENIED, grant, now);
+            return result(grant);
+        });
     }
 
     /** 本人（または保護者）はいつでも許可を取り消せる（REVOKED）。次のリクエストから即座に拒否される。 */
     public SupportAccessTransitionResult revoke(Long userId, UUID grantId) {
-        SupportAccessGrantEntity grant = lockVisibleToUser(userId, grantId);
-        requireOpen(grant);
-        Instant now = Instant.now(clock);
-        grant.revoke(now, SupportAccessEndedReason.USER_REVOKED);
-        grantRepository.save(grant);
-        record(SupportAccessAuditAction.REVOKED, grant, now);
-        return result(grant);
+        return withShortLockWait(() -> {
+            SupportAccessGrantEntity grant = lockVisibleToUser(userId, grantId);
+            requireOpen(grant);
+            Instant now = Instant.now(clock);
+            grant.revoke(now, SupportAccessEndedReason.USER_REVOKED);
+            grantRepository.save(grant);
+            record(SupportAccessAuditAction.REVOKED, grant, now);
+            return result(grant);
+        });
     }
 
     // ─── 退会・失効 ────────────────────────────────────────
 
+    /** 退会用: 本人の開いている grant の id（ロックしない。{@link #revokeForWithdrawal} で1件ずつ取り消す）。 */
+    @Transactional(readOnly = true)
+    public List<UUID> findOpenGrantIdsForTarget(Long targetUserId) {
+        return grantRepository.findOpenIdsByTargetUserId(targetUserId, OPEN_STATUSES);
+    }
+
     /**
-     * 退会申請で本人の開いている grant を即座に REVOKED(WITHDRAWAL) にする。
+     * 退会申請で本人の開いている grant を1件 REVOKED(WITHDRAWAL) にする（主キーでロックしてから再検証）。
      * 呼び出し元のトランザクションに関わらず確実に確定させるため REQUIRES_NEW。REVOKED は終端で、
-     * 退会を撤回しても PENDING・APPROVED へは戻らない（戻す経路を持たない）。
+     * 退会を撤回しても PENDING・APPROVED へは戻らない（戻す経路を持たない）。既に閉じていれば empty。
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public List<SupportAccessGrantSnapshot> revokeAllForWithdrawal(Long targetUserId) {
-        Instant now = Instant.now(clock);
-        List<SupportAccessGrantSnapshot> revoked = new ArrayList<>();
-        for (SupportAccessGrantEntity grant
-                : grantRepository.findByTargetUserIdAndStatusInForUpdate(targetUserId, OPEN_STATUSES)) {
+    public Optional<SupportAccessGrantSnapshot> revokeForWithdrawal(UUID grantId, Long targetUserId) {
+        return withShortLockWait(() -> {
+            SupportAccessGrantEntity grant = grantRepository.findByIdForUpdate(grantId).orElse(null);
+            if (grant == null || !grant.isOpen() || !grant.getTargetUserId().equals(targetUserId)) {
+                return Optional.empty();
+            }
+            Instant now = Instant.now(clock);
             grant.revoke(now, SupportAccessEndedReason.WITHDRAWAL);
             grantRepository.save(grant);
             record(SupportAccessAuditAction.REVOKED, grant, now);
-            revoked.add(SupportAccessGrantSnapshot.from(grant));
-        }
-        return revoked;
+            return Optional.of(SupportAccessGrantSnapshot.from(grant));
+        });
     }
 
     /** 開いている grant の本人（退会の取りこぼしの照合用）。 */
@@ -275,20 +341,30 @@ public class SupportAccessGrantTransitionService {
         return targets;
     }
 
+    /** 失効バッチ用: 期限に達した grant の id（ロックしない。{@link #expireIfOverdue} で1件ずつ失効させる）。 */
+    @Transactional(readOnly = true)
+    public List<UUID> findOverdueIds() {
+        return grantRepository.findOverdueIds(Instant.now(clock));
+    }
+
     /**
-     * PENDING(依頼72h)・APPROVED(許可24h) の期限切れを EXPIRED にし、失効させた grant を返す。
-     * 境界は Validator（{@code now < expiresAt} のときだけ有効）に揃え、期限ちょうども失効とする。
+     * 期限に達した grant を1件 EXPIRED にする（主キーでロックしてから期限を再検証）。読んでからロックするまでに
+     * 本人の取消・許可などで状態が変わっていれば何もしない（empty）。境界は Validator（{@code now < expiresAt} の
+     * ときだけ有効）に揃え、期限ちょうども失効とする。
      */
-    public List<SupportAccessGrantSnapshot> expireOverdue() {
-        Instant now = Instant.now(clock);
-        List<SupportAccessGrantSnapshot> expired = new ArrayList<>();
-        for (SupportAccessGrantEntity grant : grantRepository.findOverdueForUpdate(now)) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<SupportAccessGrantSnapshot> expireIfOverdue(UUID grantId) {
+        return withShortLockWait(() -> {
+            SupportAccessGrantEntity grant = grantRepository.findByIdForUpdate(grantId).orElse(null);
+            Instant now = Instant.now(clock);
+            if (grant == null || !grant.isOpen() || !isOverdue(grant, now)) {
+                return Optional.empty();
+            }
             grant.expire();
             grantRepository.save(grant);
             appendAudit(SupportAccessAuditAction.EXPIRED, grant, now);
-            expired.add(SupportAccessGrantSnapshot.from(grant));
-        }
-        return expired;
+            return Optional.of(SupportAccessGrantSnapshot.from(grant));
+        });
     }
 
     // ─── 内部 ──────────────────────────────────────────────
@@ -340,11 +416,82 @@ public class SupportAccessGrantTransitionService {
         }
     }
 
-    /** 遷移の監査 outbox を書き、通知用のイベントを出す（どちらもこのトランザクションに乗る）。 */
+    /**
+     * ロック待ちの上限を5秒にして本体を実行し、必ず既定に戻す（接続はプールで再利用される）。
+     * 5秒を超える待ち・デッドロックは例外のまま呼び出し側へ返し、{@link SupportAccessGrantService} が1回だけ再試行する。
+     */
+    private <T> T withShortLockWait(Supplier<T> body) {
+        grantRepository.shortenLockWait();
+        try {
+            return body.get();
+        } finally {
+            grantRepository.restoreLockWait();
+        }
+    }
+
+    /** 遷移の監査 outbox と通知 outbox を書き、配送を起こすイベントを出す（どれもこのトランザクションに乗る）。 */
     private void record(SupportAccessAuditAction action, SupportAccessGrantEntity grant, Instant now) {
         appendAudit(action, grant, now);
+        appendNotifications(action, grant, now);
         eventPublisher.publishEvent(new SupportAccessGrantChangedEvent(action, grant.getId(),
                 grant.getOperatorUserId(), grant.getTargetUserId(), grant.getGuardianUserId()));
+    }
+
+    /** 遷移ごとの通知の宛先（本人へ: 依頼・閲覧開始。保護者へ: 依頼。運営者へ: 許可・拒否・取消）。 */
+    private void appendNotifications(SupportAccessAuditAction action, SupportAccessGrantEntity grant, Instant now) {
+        switch (action) {
+            case REQUESTED -> {
+                appendNotification(SupportAccessNotificationKind.REQUESTED_TO_TARGET, grant.getTargetUserId(),
+                        grant, now, null);
+                if (grant.isGuardianApprovalRequired() && grant.getGuardianUserId() != null) {
+                    appendNotification(SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN, grant.getGuardianUserId(),
+                            grant, now, null);
+                }
+            }
+            case SESSION_STARTED -> appendNotification(SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET,
+                    grant.getTargetUserId(), grant, now, now);
+            case APPROVED -> appendNotification(SupportAccessNotificationKind.APPROVED_TO_OPERATOR,
+                    grant.getOperatorUserId(), grant, now, null);
+            case DENIED -> appendNotification(SupportAccessNotificationKind.DENIED_TO_OPERATOR,
+                    grant.getOperatorUserId(), grant, now, null);
+            case REVOKED -> appendNotification(SupportAccessNotificationKind.REVOKED_TO_OPERATOR,
+                    grant.getOperatorUserId(), grant, now, null);
+            default -> {
+                // CANCELLED・EXPIRED・SESSION_ENDED・DENIED_REQUEST は通知しない（監査にのみ残る）
+            }
+        }
+    }
+
+    private void appendNotification(SupportAccessNotificationKind kind, Long recipientUserId,
+                                    SupportAccessGrantEntity grant, Instant now, Instant sessionStartedAt) {
+        String key = SupportAccessNoticeComposer.noticeKey(kind, grant.getId(), recipientUserId, sessionStartedAt);
+        if (notificationOutboxRepository.existsByIdempotencyKey(key)) {
+            // 同じ遷移の通知は1回だけ（UNIQUE 違反で遷移の TX を巻き戻さないよう、先に確かめる）
+            return;
+        }
+        notificationOutboxRepository.save(SupportAccessNotificationOutboxEntity.builder()
+                .idempotencyKey(key)
+                .grantId(grant.getId())
+                .notificationKind(kind.name())
+                .recipientUserId(recipientUserId)
+                .targetUserId(grant.getTargetUserId())
+                .occurredAt(now)
+                .attemptCount(0)
+                .nextAttemptAt(now)
+                .build());
+    }
+
+    /**
+     * 本人・保護者へのメールを、遷移と同じ TX でメール outbox に enqueue する（冪等キーは決定的な値）。
+     * enqueue に失敗したら遷移ごと巻き戻す（本人へ知らせを残せない閲覧開始・依頼を確定させない: fail-closed）。
+     */
+    private void enqueueEmails(List<PreparedEmail> emails, UUID grantId, Instant sessionStartedAt) {
+        if (emails == null) {
+            return;
+        }
+        for (PreparedEmail email : emails) {
+            emailOutboxService.enqueue(email.toRequest(grantId, sessionStartedAt));
+        }
     }
 
     /** 監査 outbox へ1行（遷移と同じトランザクション）。audit_logs への反映はコミット後。 */

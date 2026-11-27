@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -454,18 +455,35 @@ public class AsyncConfig {
      * 集計は入れ子になる（個人ダッシュボードの集計が、スコープの「要対応」集計をさらに並列化して待つ）ため、
      * キューに積んで待つ方式は外側のタスクがスレッドを占有したまま内側の完了を待つ枯渇（デッドロック）を起こしうる。
      * 直接受け渡し＋CallerRuns なら、空きが無いときは呼び出し元で実行されるだけで待ち合わせが閉じない。</p>
+     *
+     * <p><b>最大スレッド数と DB 接続（第2回検分対応）</b>: 集計タスクはそれぞれ DB 接続を1本使う。以前の最大32は
+     * Hikari の上限（既定 {@code HIKARI_MAX_POOL_SIZE=50}、CI は5）の6割を集計だけで占めうるため、同時に動く
+     * リクエストスレッド（Tomcat）や他のプール（event・通知・バッチ等）が接続待ち（{@code connection-timeout} 3秒）で
+     * 失敗しうる。最大は Hikari の上限の 1/6（{@value #DASHBOARD_POOL_HIKARI_DIVISOR} で割る）を 2〜16 に収めた値にし、
+     * 既定の50なら8本に留める。足りないときは CallerRuns で呼び出し元のスレッド（既に接続を持つリクエスト）が
+     * 順に実行するだけなので、上限を絞っても集計は止まらない。</p>
      */
     @Bean("dashboard-aggregation-pool")
-    public Executor dashboardAggregationPool() {
+    public Executor dashboardAggregationPool(
+            @Value("${spring.datasource.hikari.maximum-pool-size:50}") int hikariMaximumPoolSize) {
+        int maxPoolSize = dashboardAggregationMaxPoolSize(hikariMaximumPoolSize);
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(4);
-        executor.setMaxPoolSize(32);
+        executor.setCorePoolSize(Math.min(4, maxPoolSize));
+        executor.setMaxPoolSize(maxPoolSize);
         executor.setQueueCapacity(0);
         executor.setThreadNamePrefix("dashboard-agg-");
         executor.setTaskDecorator(contextPropagatingDecorator());
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
+    }
+
+    /** ダッシュボード集計プールの最大を Hikari の上限の何分の1にするか。 */
+    public static final int DASHBOARD_POOL_HIKARI_DIVISOR = 6;
+
+    /** ダッシュボード集計プールの最大スレッド数（Hikari の上限の 1/6 を 2〜16 に収める）。 */
+    public static int dashboardAggregationMaxPoolSize(int hikariMaximumPoolSize) {
+        return Math.max(2, Math.min(16, hikariMaximumPoolSize / DASHBOARD_POOL_HIKARI_DIVISOR));
     }
 
     /**

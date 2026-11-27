@@ -11,6 +11,7 @@ import com.mannschaft.app.pointcard.dto.UserPointCardDetailResponse;
 import com.mannschaft.app.pointcard.dto.UserPointCardListItemResponse;
 import com.mannschaft.app.pointcard.service.PointCardService;
 import com.mannschaft.app.pointcard.service.PointCardShareTokenService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -101,6 +102,8 @@ public class PointCardController {
     @GetMapping("/{id}")
     @Operation(summary = "カード詳細取得",
             description = "提示モードで使う復号値（barcodeValue / nickname / memo）を含めて返す")
+    // F10.9 第2回検分: ポイントカードのバーコード値は店頭で本人のカードとして使える値のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<UserPointCardDetailResponse>> getCard(
             @PathVariable UUID id) {
         Long userId = SecurityUtils.getCurrentUserId();

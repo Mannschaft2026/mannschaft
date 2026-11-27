@@ -32,6 +32,7 @@ import com.mannschaft.app.errorreport.service.ErrorReportService;
 import com.mannschaft.app.errorreport.service.ErrorReportTimelineService;
 import com.mannschaft.app.errorreport.service.GitHubIssueService;
 import com.mannschaft.app.role.repository.UserRoleRepository;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -240,6 +241,8 @@ public class SystemAdminErrorReportController {
     @GetMapping("/{id}/timeline")
     @Operation(summary = "タイムライン取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    // F10.9 第2回検分: 運営 API。metadata は中身の型が見えないため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<ErrorReportTimelineResponse>> timeline(
             @PathVariable Long id,
             @RequestParam(required = false) String cursor,

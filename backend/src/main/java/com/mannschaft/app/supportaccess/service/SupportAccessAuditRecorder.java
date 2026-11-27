@@ -71,7 +71,15 @@ public class SupportAccessAuditRecorder {
         return relay(pending);
     }
 
-    /** 未反映でリースの切れた監査を最大 {@link #RELAY_BATCH_LIMIT} 件反映する（再試行バッチ・拒否の監査）。 */
+    /** 指定の監査 outbox 行だけを反映する（拒否の監査のコミット直後。outbox 全体は走査しない）。 */
+    public int relayOne(UUID outboxId) {
+        if (outboxId == null) {
+            return 0;
+        }
+        return relay(outboxStore.leaseById(outboxId));
+    }
+
+    /** 未反映でリースの切れた監査を最大 {@link #RELAY_BATCH_LIMIT} 件反映する（再試行バッチ）。 */
     public int relayDue() {
         return relay(outboxStore.leaseDue(RELAY_BATCH_LIMIT));
     }

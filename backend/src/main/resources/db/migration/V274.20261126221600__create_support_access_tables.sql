@@ -83,3 +83,27 @@ CREATE TABLE support_access_request_locks (
     updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (operator_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='F10.9 サポート閲覧の依頼の運営者単位の排他';
+
+-- アプリ内通知の outbox（遷移と同じ TX で宛先ごとに1行。コミット後に配送し、未配送は再試行バッチが拾う）。
+-- 本文は配送時に組む（行には個人の文面を持たない）。メールは遷移の TX でメール outbox(email_outbox) に直接 enqueue する。
+CREATE TABLE support_access_notification_outbox (
+    id                BINARY(16)      NOT NULL COMMENT 'UUIDv7',
+    idempotency_key   VARCHAR(120)    NOT NULL COMMENT '冪等キー(種別:grantId:宛先[:閲覧開始時刻])',
+    grant_id          BINARY(16)      NOT NULL COMMENT 'support_access_grants.id(FKなし)',
+    notification_kind VARCHAR(40)     NOT NULL COMMENT 'SupportAccessNotificationKind',
+    recipient_user_id BIGINT UNSIGNED NOT NULL COMMENT '宛先(users.id・FKなし)',
+    target_user_id    BIGINT UNSIGNED NULL COMMENT '本人(users.id・FKなし。退会の強消去用)',
+    occurred_at       DATETIME(6)     NOT NULL COMMENT '遷移の時刻',
+    attempt_count     INT             NOT NULL DEFAULT 0 COMMENT '配送の試行回数',
+    next_attempt_at   DATETIME(6)     NOT NULL COMMENT '次に配送を試みてよい時刻(取得中の行はリースで先送り)',
+    last_error        VARCHAR(500)    NULL COMMENT '直近の配送失敗の要約',
+    published_at      DATETIME(6)     NULL COMMENT '配送した時刻。NULLなら未配送',
+    created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_support_access_notification_outbox_key (idempotency_key),
+    KEY idx_support_access_notification_outbox_pending (published_at, next_attempt_at),
+    KEY idx_support_access_notification_outbox_grant (grant_id, published_at),
+    KEY idx_support_access_notification_outbox_recipient (recipient_user_id),
+    KEY idx_support_access_notification_outbox_target (target_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='F10.9 サポート閲覧のアプリ内通知 outbox';

@@ -4,6 +4,7 @@ import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
+import com.mannschaft.app.supportaccess.repository.SupportAccessNotificationOutboxRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,15 +39,18 @@ public class SupportAccessRetentionService {
     private final SupportAccessGrantRepository grantRepository;
     private final SupportAccessLogRepository logRepository;
     private final SupportAccessAuditOutboxRepository auditOutboxRepository;
+    private final SupportAccessNotificationOutboxRepository notificationOutboxRepository;
     private final Clock clock;
 
     public SupportAccessRetentionService(SupportAccessGrantRepository grantRepository,
                                          SupportAccessLogRepository logRepository,
                                          SupportAccessAuditOutboxRepository auditOutboxRepository,
+                                         SupportAccessNotificationOutboxRepository notificationOutboxRepository,
                                          Clock clock) {
         this.grantRepository = grantRepository;
         this.logRepository = logRepository;
         this.auditOutboxRepository = auditOutboxRepository;
+        this.notificationOutboxRepository = notificationOutboxRepository;
         this.clock = clock;
     }
 
@@ -55,14 +59,20 @@ public class SupportAccessRetentionService {
         Instant now = Instant.now(clock);
         int logs = logRepository.deleteByOccurredAtBefore(now.atZone(java.time.ZoneOffset.UTC).minusYears(LOG_RETENTION_YEARS).toInstant());
         int grants = grantRepository.deleteByStatusInAndUpdatedAtBefore(ENDED_STATUSES, now.atZone(java.time.ZoneOffset.UTC).minusYears(GRANT_RETENTION_YEARS).toInstant());
-        int outbox = auditOutboxRepository.deletePublishedBefore(now.minus(java.time.Duration.ofDays(PUBLISHED_OUTBOX_RETENTION_DAYS)));
-        log.info("サポート閲覧の保存期間削除: 閲覧記録={}件, 依頼・許可={}件, 反映済みの監査 outbox={}件", logs, grants, outbox);
+        Instant outboxThreshold = now.minus(java.time.Duration.ofDays(PUBLISHED_OUTBOX_RETENTION_DAYS));
+        int outbox = auditOutboxRepository.deletePublishedBefore(outboxThreshold);
+        int notifications = notificationOutboxRepository.deletePublishedBefore(outboxThreshold);
+        log.info("サポート閲覧の保存期間削除: 閲覧記録={}件, 依頼・許可={}件, 反映済みの監査 outbox={}件, 配送済みの通知 outbox={}件",
+                logs, grants, outbox, notifications);
     }
 
     /**
      * AccountPurgeService（強匿名化）の supportaccess ドメイン分。
      * <ul>
-     *   <li>本人が target の logs → grants の順に消す（logs は grants への FK を持つ）。本人宛の監査 outbox も消す。</li>
+     *   <li>本人が target の logs → grants の順に消す（logs は grants への FK を持つ）。本人宛の監査 outbox は
+     *       audit_logs へ反映済みの行だけ消し、<b>未反映の行は本人の userId を外して残す</b>（第2回検分: 未反映まで消すと
+     *       代理閲覧の監査が audit_logs に届かないまま失われる。反映後は保存期間の削除が消す）。本人宛・本人に関わる
+     *       通知 outbox は消す（本文を持たず、宛先が居ない通知は配送しない）。</li>
      *   <li>保護者としてだけ記録されている行（他人が target の grant の guardian_user_id）は、子の記録を残したまま
      *       保護者の userId を外す（子の閲覧記録まで消さない）。</li>
      *   <li>運営者としての依頼ロック行を消す（grants・logs の operator_user_id は ID 参照のまま残す方針）。</li>
@@ -70,7 +80,9 @@ public class SupportAccessRetentionService {
      */
     public void purgeUser(Long userId) {
         logRepository.deleteByTargetUserId(userId);
-        auditOutboxRepository.deleteByTargetUserId(userId);
+        auditOutboxRepository.deletePublishedByTargetUserId(userId);
+        auditOutboxRepository.anonymizeUnpublishedByTargetUserId(userId);
+        notificationOutboxRepository.deleteByUserId(userId);
         grantRepository.deleteByTargetUserId(userId);
         grantRepository.clearGuardianUserId(userId);
         grantRepository.deleteRequestLock(userId);

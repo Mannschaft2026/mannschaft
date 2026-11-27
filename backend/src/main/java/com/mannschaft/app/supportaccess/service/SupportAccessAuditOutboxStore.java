@@ -55,7 +55,14 @@ public class SupportAccessAuditOutboxStore {
         return lease(repository.findDueByGrantIdForUpdate(grantId, now), now);
     }
 
-    /** 未反映でリースの切れた行を最大 limit 件リースして返す（再試行バッチ・拒否の監査）。 */
+    /** 指定の1行が未反映ならリースして返す（拒否の監査の即時反映。他の反映役が掴んでいれば飛ばす）。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<PendingAudit> leaseById(UUID outboxId) {
+        Instant now = Instant.now(clock);
+        return lease(repository.findDueByIdForUpdate(outboxId, now), now);
+    }
+
+    /** 未反映でリースの切れた行を最大 limit 件リースして返す（再試行バッチ）。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<PendingAudit> leaseDue(int limit) {
         Instant now = Instant.now(clock);

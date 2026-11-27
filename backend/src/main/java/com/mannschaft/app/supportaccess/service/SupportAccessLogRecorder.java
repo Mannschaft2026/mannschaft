@@ -7,7 +7,7 @@ import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.supportaccess.context.SupportAccessWritable;
 import com.mannschaft.app.supportaccess.entity.SupportAccessAuditOutboxEntity;
 import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
-import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
+import com.mannschaft.app.supportaccess.event.SupportAccessDeniedAuditAppendedEvent;
 import com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -119,9 +119,10 @@ public class SupportAccessLogRecorder {
                         .build();
                 logRepository.save(withScope(row, path));
             }
+            UUID auditOutboxId = null;
             if (auditOutboxRepository != null) {
                 Instant now = Instant.now(clock);
-                auditOutboxRepository.save(SupportAccessAuditOutboxEntity.builder()
+                auditOutboxId = auditOutboxRepository.save(SupportAccessAuditOutboxEntity.builder()
                         .grantId(targetUserId == null ? null : grantId)
                         .eventType(SupportAccessAuditRecorder.EVENT_PREFIX + SupportAccessAuditAction.DENIED_REQUEST.name())
                         .operatorUserId(operatorUserId)
@@ -129,13 +130,12 @@ public class SupportAccessLogRecorder {
                         .occurredAt(now)
                         .attemptCount(0)
                         .nextAttemptAt(now)
-                        .build());
+                        .build()).getId();
             }
-            if (eventPublisher != null) {
+            if (eventPublisher != null && auditOutboxId != null) {
                 // 監査（他ドメイン auth の Repository）はこの TX の中では書かない。コミット後に
-                // SupportAccessAuditListener が書く（D-3T: supportaccess の TX を他ドメインへ到達させない）。
-                eventPublisher.publishEvent(new SupportAccessGrantChangedEvent(
-                        SupportAccessAuditAction.DENIED_REQUEST, grantId, operatorUserId, targetUserId, null));
+                // SupportAccessAuditListener がこの1行だけを書く（D-3T: supportaccess の TX を他ドメインへ到達させない）。
+                eventPublisher.publishEvent(new SupportAccessDeniedAuditAppendedEvent(auditOutboxId));
             }
             return null;
         });

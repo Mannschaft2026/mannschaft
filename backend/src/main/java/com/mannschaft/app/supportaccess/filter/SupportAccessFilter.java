@@ -47,8 +47,11 @@ import java.util.function.Supplier;
  *
  * <h2>閲覧のみの強制（第1層）</h2>
  * <ol>
- *   <li>URI にパーセントエンコード（{@code %}）を含む要求は、メソッドを問わず SUPPORT_ACCESS_004（エンコードによる
- *       禁止パスの迂回を構造的に塞ぐ。代理閲覧の画面はエンコードを要する URI を使わない）</li>
+ *   <li>URI のパーセントエンコード（{@code %}）は、<b>復号した結果のバイトがすべて非 ASCII の UTF-8 の文字</b>
+ *       （日本語 slug のブログ記事など）のときだけ許す。エンコードされた ASCII（{@code %2D}・{@code %2E}・{@code %2F}・
+ *       {@code %5C}・{@code %3B}・{@code %65} など 0x00-0x7F のすべて）を1つでも含む、16進でない、UTF-8 として不正
+ *       （途中で切れた・過長・サロゲート）な要求は、メソッドを問わず SUPPORT_ACCESS_004（エンコードによる禁止パスの
+ *       迂回を構造的に塞ぐ。第2回検分: 一律拒否だと日本語 slug の記事が見られなかった）</li>
  *   <li>禁止パス（{@link SupportAccessPathPolicy}）は、メソッドを問わず SUPPORT_ACCESS_004。判定は生の URI と、
  *       Spring MVC と同じデコード済みの lookup path（{@link UrlPathHelper}: デコード・セミコロン除去）の<b>両方</b>で行い、
  *       どちらかが禁止なら拒否する</li>
@@ -183,9 +186,9 @@ public class SupportAccessFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 閲覧のみ（第1層）: エンコード入りの URI・禁止パスはメソッドを問わず 004、GET/HEAD 以外は 003。
+        // 閲覧のみ（第1層）: 許されないエンコード入りの URI・禁止パスはメソッドを問わず 004、GET/HEAD 以外は 003。
         // 禁止パスは生の URI とデコード済み lookup path の両方で判定する（%2D・%65 等のエンコード迂回を塞ぐ）。
-        if (containsPercentEncoding(path)
+        if (hasDisallowedPercentEncoding(path)
                 || SupportAccessPathPolicy.isForbiddenDuringSupportAccess(path)
                 || SupportAccessPathPolicy.isForbiddenDuringSupportAccess(lookupPath)) {
             deny(request, response, operatorUserId, grantHeaderValue, method, path, SupportAccessErrorCode.OPERATION_FORBIDDEN);
@@ -254,8 +257,62 @@ public class SupportAccessFilter extends OncePerRequestFilter {
         }
     }
 
-    private static boolean containsPercentEncoding(String rawUri) {
-        return rawUri == null || rawUri.indexOf('%') >= 0;
+    /**
+     * 代理閲覧で許さないパーセントエンコードを含むか（null も拒否）。
+     *
+     * <p>許すのは、連続する {@code %XX} の並びを復号したバイトが<b>すべて 0x80 以上</b>で、かつ並びごとに
+     * 厳密な UTF-8（過長・サロゲート・途中切れを拒否）として読める場合だけ。エンコードされた ASCII は1文字でも拒否する
+     * （{@code %2F} のパス区切り、{@code %2E} のドット、{@code %65} の英字など、復号後に禁止パスへ化けうるもの全部）。
+     * 復号後のパスの禁止判定は呼び出し側が従来どおり lookup path で行う。</p>
+     */
+    public static boolean hasDisallowedPercentEncoding(String rawUri) {
+        if (rawUri == null) {
+            return true;
+        }
+        int i = rawUri.indexOf('%');
+        if (i < 0) {
+            return false;
+        }
+        java.io.ByteArrayOutputStream run = new java.io.ByteArrayOutputStream();
+        while (i < rawUri.length()) {
+            char c = rawUri.charAt(i);
+            if (c != '%') {
+                if (run.size() > 0 && !isStrictUtf8(run.toByteArray())) {
+                    return true;
+                }
+                run.reset();
+                i++;
+                continue;
+            }
+            if (i + 2 >= rawUri.length()) {
+                return true;
+            }
+            int hi = Character.digit(rawUri.charAt(i + 1), 16);
+            int lo = Character.digit(rawUri.charAt(i + 2), 16);
+            if (hi < 0 || lo < 0) {
+                return true;
+            }
+            int b = (hi << 4) | lo;
+            if (b < 0x80) {
+                // エンコードされた ASCII（0x00-0x7F）は1つでも拒否する
+                return true;
+            }
+            run.write(b);
+            i += 3;
+        }
+        return run.size() > 0 && !isStrictUtf8(run.toByteArray());
+    }
+
+    private static boolean isStrictUtf8(byte[] bytes) {
+        try {
+            java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(bytes));
+            return true;
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return false;
+        }
     }
 
     private static boolean isWebSocketPath(String path) {

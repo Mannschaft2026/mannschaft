@@ -19,6 +19,7 @@ import com.mannschaft.app.billing.beta.dto.RevokeBetaGrantRequest;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.billing.api.BillingTenantOrganizationResolver;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -72,6 +73,8 @@ public class SystemAdminBetaPerkController {
     @GetMapping("/grants")
     @PreAuthorize("hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "付与一覧", description = "grantKind/betaPhase/reviewFlag/scopeKind/scopeId で絞り込み・grantedAt 降順。")
+    // F10.9 第2回検分: 運営 API。criteriaSnapshot は中身の型が見えないため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<BetaGrantPageResponse>> listGrants(
             @RequestParam(value = "grantKind", required = false) GrantKind grantKind,
             @RequestParam(value = "betaPhase", required = false) Integer betaPhase,

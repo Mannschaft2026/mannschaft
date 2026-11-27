@@ -9,6 +9,7 @@ import com.mannschaft.app.pointcard.dto.GroupDetailResponse;
 import com.mannschaft.app.pointcard.dto.GroupListItemResponse;
 import com.mannschaft.app.pointcard.dto.UpdateGroupRequest;
 import com.mannschaft.app.pointcard.service.PointCardGroupService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -110,6 +111,8 @@ public class PointCardGroupController {
     @Operation(summary = "グループ詳細取得",
             description = "グループに含まれるカード全件を復号値付きで返す。N+1 回避のため一括取得する。"
                     + "提示モード起動とは別経路（監査ログは記録しない）。")
+    // F10.9 第2回検分: ポイントカードのバーコード値は店頭で本人のカードとして使える値のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<GroupDetailResponse>> getGroupDetail(@PathVariable UUID id) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.of(groupService.getGroupDetail(id, userId)));

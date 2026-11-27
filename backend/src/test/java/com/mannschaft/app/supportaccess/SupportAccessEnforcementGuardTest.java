@@ -168,14 +168,23 @@ class SupportAccessEnforcementGuardTest {
 
     // ─── 第2層: 資格情報を返す GET ──────────────────────────────
 
-    /** 資格情報とみなす応答フィールド名（大文字小文字を問わず部分一致）。 */
-    private static final Pattern CREDENTIAL_FIELD = Pattern.compile(
-            "(?i).*(token|secret|password|apikey|api_key|signedurl|presigned).*");
+    /**
+     * 資格情報とみなす応答フィールド名（大文字小文字を問わず部分一致）。第2回検分で QR・バーコード・招待・購読・照合の系統
+     * （{@code qrCode}・{@code qrPayload}・{@code barcodeValue}・{@code inviteCode}・{@code subscribeUrl}・
+     * {@code verificationCode} 等: 第三者が手にすると本人として入場・参加・購読・承認できる値）を足した。
+     *
+     * <p>{@code code} 単独の部分一致は採らない: {@code postalCode}・{@code countryCode}・{@code prefectureCode}・
+     * {@code videoCodec}・{@code lastErrorCode} 等の資格情報でない項目が71件の GET に当たり、例外表が意味を失うため。
+     * 代わりに「招待・照合・アクセス・認証・参加・共有・引換・PIN・パス・OTP・クーポン」＋「code/key/url/link」の複合語で拾う。</p>
+     */
+    static final Pattern CREDENTIAL_FIELD = Pattern.compile(
+            "(?i).*(token|secret|password|apikey|api_key|signedurl|presigned|qr|barcode|subscribe"
+                    + "|(invite|invitation|verification|access|auth|join|share|redeem|pin|pass|otp|coupon)(code|key|url|link)).*");
 
     private static final String CREDENTIAL_ALLOWLIST = "/support_access_guard/credential_get_allowlist.txt";
 
     @Test
-    @DisplayName("第2層 応答 DTO（戻り値の型を再帰的に）に token・secret・password・apiKey・signedUrl 系の文字列フィールドを持つ GET は @SupportAccessDenied 必須")
+    @DisplayName("第2層 応答 DTO（戻り値の型を再帰的に）に token・secret・password・apiKey・signedUrl・QR・招待・購読系の文字列フィールドを持つ、または中身の型が見えない（Map・Object・ワイルドカード・JSON 木）GET は @SupportAccessDenied 必須")
     void 資格情報を返すGETには注釈が付いている() throws Exception {
         Map<String, String> allowlist = loadReasonedList(CREDENTIAL_ALLOWLIST);
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
@@ -216,6 +225,54 @@ class SupportAccessEnforcementGuardTest {
         assertThat(stale).as("例外表に残った、もう該当しない handler（表から消すこと）").isEmpty();
     }
 
+    @Test
+    @DisplayName("第2層 資格情報の名前の判定と「型が見えない」判定の自己検査（第2回検分対応）")
+    void 資格情報判定の自己検査() throws Exception {
+        assertThat(List.of("qrCode", "qrPayload", "inviteCode", "invitationUrl", "subscribeUrl", "verificationCode",
+                "barcodeValue", "shareUrl", "accessKey", "passcode", "pinCode", "accessToken", "signedUrl"))
+                .allSatisfy(n -> assertThat(CREDENTIAL_FIELD.matcher(n).matches()).as(n).isTrue());
+        assertThat(List.of("postalCode", "countryCode", "prefectureCode", "videoCodec", "lastErrorCode", "inviteEmail",
+                "subscriptionStatus", "code", "presetCode"))
+                .allSatisfy(n -> assertThat(CREDENTIAL_FIELD.matcher(n).matches()).as(n).isFalse());
+
+        for (String method : List.of("map", "wildcard", "object", "stringMap")) {
+            List<String> hits = new ArrayList<>();
+            collectCredentialFields(ResolvableType.forMethodReturnType(OpaqueSamples.class.getDeclaredMethod(method)),
+                    "", new HashSet<>(), hits, 0);
+            assertThat(hits).as(method).anySatisfy(h -> assertThat(h).contains(OPAQUE_MARK.trim()));
+        }
+        List<String> typed = new ArrayList<>();
+        collectCredentialFields(ResolvableType.forMethodReturnType(OpaqueSamples.class.getDeclaredMethod("typedMap")),
+                "", new HashSet<>(), typed, 0);
+        assertThat(typed).as("値が DTO の Map は中身をたどる").containsExactly("{}.qrCode");
+    }
+
+    /** 自己検査用の戻り値の型。 */
+    @SuppressWarnings("unused")
+    static final class OpaqueSamples {
+        record Item(String name, String qrCode) { }
+
+        org.springframework.http.ResponseEntity<com.mannschaft.app.common.ApiResponse<Map<String, Object>>> map() {
+            return null;
+        }
+
+        org.springframework.http.ResponseEntity<?> wildcard() {
+            return null;
+        }
+
+        com.mannschaft.app.common.ApiResponse<Object> object() {
+            return null;
+        }
+
+        Map<String, String> stringMap() {
+            return null;
+        }
+
+        Map<String, Item> typedMap() {
+            return null;
+        }
+    }
+
     private static boolean isMainSource(Class<?> type) {
         Class<?> top = type;
         while (top.getEnclosingClass() != null) {
@@ -241,7 +298,21 @@ class SupportAccessEnforcementGuardTest {
             return;
         }
         Class<?> raw = type.resolve();
-        if (raw == null) {
+        if (raw == null || raw == Object.class || isOpaqueTree(raw)) {
+            // ワイルドカード・Object・JSON 木: 中身の型が見えず、資格情報を含まないと確かめられない（第2回検分対応）
+            hits.add(path + OPAQUE_MARK + (raw == null ? type : raw.getSimpleName()));
+            return;
+        }
+        if (Map.class.isAssignableFrom(raw)) {
+            // Map のキーは型から見えない。値が文字列・Object なら token 等を任意のキーで運べるため「型が見えない」
+            ResolvableType value = type.asMap().getGeneric(1);
+            Class<?> valueRaw = value.resolve();
+            if (valueRaw == null || valueRaw == Object.class || isCredentialCarrier(valueRaw)
+                    || Map.class.isAssignableFrom(valueRaw)) {
+                hits.add(path + OPAQUE_MARK + type);
+                return;
+            }
+            collectCredentialFields(value, path + "{}", visiting, hits, depth + 1);
             return;
         }
         if (!raw.getName().startsWith("com.mannschaft.")) {
@@ -272,6 +343,15 @@ class SupportAccessEnforcementGuardTest {
             }
         }
         visiting.remove(key);
+    }
+
+    /** 中身の型が見えない応答の目印（hits の要素に付ける）。 */
+    static final String OPAQUE_MARK = " (型が見えない: ";
+
+    private static boolean isOpaqueTree(Class<?> raw) {
+        String n = raw.getName();
+        return n.equals("com.fasterxml.jackson.databind.JsonNode") || n.startsWith("com.fasterxml.jackson.databind.node.")
+                || n.startsWith("tools.jackson.databind.node.") || n.equals("tools.jackson.databind.JsonNode");
     }
 
     /** 資格情報を運びうる型（文字列・URI・バイト列）。真偽値・件数・日時のフィールド（hasPassword 等）は対象外。 */

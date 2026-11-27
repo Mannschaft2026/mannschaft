@@ -18,6 +18,12 @@ import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
+import com.mannschaft.app.supportaccess.repository.SupportAccessNotificationOutboxRepository;
+import com.mannschaft.app.supportaccess.entity.SupportAccessNotificationOutboxEntity;
+import com.mannschaft.app.supportaccess.service.SupportAccessNoticeComposer;
+import com.mannschaft.app.supportaccess.service.SupportAccessNotificationOutboxStore;
+import com.mannschaft.app.mail.outbox.EmailOutboxRequest;
+import com.mannschaft.app.mail.outbox.EmailOutboxService;
 import com.mannschaft.app.supportaccess.service.SupportAccessAuditRecorder;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantService;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantTransitionService;
@@ -79,6 +85,10 @@ class SupportAccessGrantServiceTest {
     private SupportAccessAuditOutboxRepository outboxRepository;
     private SupportAccessActingAsDetector actingAs;
     private ApplicationEventPublisher eventPublisher;
+    private SupportAccessNotificationOutboxRepository notificationOutboxRepository;
+    private EmailOutboxService emailOutboxService;
+    private SupportAccessNoticeComposer composer;
+    private SupportAccessNotificationOutboxStore notificationOutboxStore;
     private SupportAccessGrantService service;
     /** 許可の時点の保護者の要否の再評価が返す値（既定は不要）。 */
     private SupportAccessGuardianRequirement currentGuardianRequirement = SupportAccessGuardianRequirement.notRequired();
@@ -94,11 +104,18 @@ class SupportAccessGrantServiceTest {
         outboxRepository = mock(SupportAccessAuditOutboxRepository.class);
         actingAs = mock(SupportAccessActingAsDetector.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
+        notificationOutboxRepository = mock(SupportAccessNotificationOutboxRepository.class);
+        emailOutboxService = mock(EmailOutboxService.class);
+        composer = mock(SupportAccessNoticeComposer.class);
+        notificationOutboxStore = mock(SupportAccessNotificationOutboxStore.class);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         // 書込トランザクション（Repository のみ）と、TX の外で動く入口（port・監査）に分けて組む
         service = new SupportAccessGrantService(
-                new SupportAccessGrantTransitionService(grantRepository, logRepository, outboxRepository, eventPublisher, clock),
-                userDirectory, affiliationPort, reauth, actingAs, auditRecorder);
+                new SupportAccessGrantTransitionService(grantRepository, logRepository, outboxRepository,
+                        notificationOutboxRepository, emailOutboxService, eventPublisher, clock),
+                userDirectory, affiliationPort, reauth, actingAs, auditRecorder, composer, notificationOutboxStore);
+        lenient().when(notificationOutboxRepository.save(any(SupportAccessNotificationOutboxEntity.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
 
         lenient().when(userDirectory.findUser(TARGET_ID))
                 .thenReturn(Optional.of(new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", false, false)));
@@ -109,7 +126,7 @@ class SupportAccessGrantServiceTest {
         lenient().when(userDirectory.findUser(GUARDIAN_ID))
                 .thenReturn(Optional.of(new SupportAccessUserSnapshot(GUARDIAN_ID, "保護者", "ACTIVE", false, false)));
         lenient().when(affiliationPort.isAffiliatedWithAnyTenant(anyLong())).thenReturn(false);
-        lenient().when(grantRepository.findOpenForUpdate(anyLong(), anyLong(), anyCollection()))
+        lenient().when(grantRepository.findOpenIds(anyLong(), anyLong(), anyCollection()))
                 .thenReturn(List.of());
         lenient().when(outboxRepository.save(any(SupportAccessAuditOutboxEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(logRepository.save(any(SupportAccessLogEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -141,9 +158,26 @@ class SupportAccessGrantServiceTest {
     }
 
     private SupportAccessGrantEntity givenGrant(SupportAccessGrantEntity grant) {
-        lenient().when(grantRepository.findById(GRANT_ID)).thenReturn(Optional.of(grant));
-        lenient().when(grantRepository.findByIdForUpdate(GRANT_ID)).thenReturn(Optional.of(grant));
+        lenient().when(grantRepository.findById(grant.getId())).thenReturn(Optional.of(grant));
+        lenient().when(grantRepository.findByIdForUpdate(grant.getId())).thenReturn(Optional.of(grant));
         return grant;
+    }
+
+    /** 依頼の時点で同じ運営者×本人に開いている grant（id はロックなしで返し、主キーでロックして読む）。 */
+    private void givenOpen(SupportAccessGrantEntity... grants) {
+        given(grantRepository.findOpenIds(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
+                .willReturn(java.util.Arrays.stream(grants).map(SupportAccessGrantEntity::getId).toList());
+        for (SupportAccessGrantEntity g : grants) {
+            givenGrant(g);
+        }
+    }
+
+    /** 遷移と同じ TX で通知 outbox に書かれた種別。 */
+    private List<String> notifiedKinds() {
+        ArgumentCaptor<SupportAccessNotificationOutboxEntity> captor =
+                ArgumentCaptor.forClass(SupportAccessNotificationOutboxEntity.class);
+        verify(notificationOutboxRepository, org.mockito.Mockito.atLeast(0)).save(captor.capture());
+        return captor.getAllValues().stream().map(SupportAccessNotificationOutboxEntity::getNotificationKind).toList();
     }
 
     /** 遷移と同じ TX で監査 outbox に書かれた種別（audit_logs への反映はコミット後の auditRecorder）。 */
@@ -264,8 +298,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S8 同じ運営者×本人で有効な依頼・許可が開いていれば 409 SUPPORT_ACCESS_006")
         void S8_同じ組合せは同時1件() {
-            given(grantRepository.findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
-                    .willReturn(List.of(pending().build()));
+            givenOpen(pending().build());
 
             assertThatThrownBy(() -> service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null)))
@@ -276,8 +309,7 @@ class SupportAccessGrantServiceTest {
         @DisplayName("S8 開いている grant が期限切れ（バッチ前）なら、その場で EXPIRED にしてから新しい依頼を作る")
         void S8_再依頼前にその場で失効() {
             SupportAccessGrantEntity stale = approved().expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
-            given(grantRepository.findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
-                    .willReturn(List.of(stale));
+            givenOpen(stale);
 
             SupportAccessGrantSnapshot created = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
@@ -292,8 +324,7 @@ class SupportAccessGrantServiceTest {
         @DisplayName("S8 開いている PENDING が依頼期限（72h）切れなら、その場で EXPIRED にして新しい依頼を作る")
         void S8_依頼期限切れのPENDINGもその場で失効() {
             SupportAccessGrantEntity stale = pending().requestExpiresAt(NOW.minus(java.time.Duration.ofSeconds(1))).build();
-            given(grantRepository.findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
-                    .willReturn(List.of(stale));
+            givenOpen(stale);
 
             SupportAccessGrantSnapshot created = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
@@ -560,7 +591,9 @@ class SupportAccessGrantServiceTest {
         void S11_失効バッチ() {
             SupportAccessGrantEntity stalePending = pending().id(UUID.randomUUID()).requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
             SupportAccessGrantEntity staleApproved = approved().id(UUID.randomUUID()).expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
-            given(grantRepository.findOverdueForUpdate(NOW)).willReturn(List.of(stalePending, staleApproved));
+            given(grantRepository.findOverdueIds(NOW)).willReturn(List.of(stalePending.getId(), staleApproved.getId()));
+            givenGrant(stalePending);
+            givenGrant(staleApproved);
 
             int count = service.expireOverdue();
 
@@ -578,8 +611,10 @@ class SupportAccessGrantServiceTest {
         void S15_退会で即取消() {
             SupportAccessGrantEntity open1 = pending().id(UUID.randomUUID()).build();
             SupportAccessGrantEntity open2 = approved().id(UUID.randomUUID()).operatorUserId(8888L).build();
-            given(grantRepository.findByTargetUserIdAndStatusInForUpdate(eq(TARGET_ID), anyCollection()))
-                    .willReturn(List.of(open1, open2));
+            given(grantRepository.findOpenIdsByTargetUserId(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(open1.getId(), open2.getId()));
+            givenGrant(open1);
+            givenGrant(open2);
 
             int count = service.revokeAllForWithdrawal(TARGET_ID);
 
@@ -595,8 +630,8 @@ class SupportAccessGrantServiceTest {
         @DisplayName("S15 退会で取り消した grant は退会を撤回しても復活しない（REVOKED は終端で、許可・再開はできない）")
         void S15_退会撤回でPENDINGは復活しない() {
             SupportAccessGrantEntity open = givenGrant(pending().build());
-            given(grantRepository.findByTargetUserIdAndStatusInForUpdate(eq(TARGET_ID), anyCollection()))
-                    .willReturn(List.of(open));
+            given(grantRepository.findOpenIdsByTargetUserId(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(open.getId()));
             service.revokeAllForWithdrawal(TARGET_ID);
 
             assertThat(open.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
@@ -612,8 +647,9 @@ class SupportAccessGrantServiceTest {
             given(grantRepository.findByStatusIn(anyCollection())).willReturn(List.of(open));
             given(userDirectory.findUser(TARGET_ID))
                     .willReturn(Optional.of(new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", true, false)));
-            given(grantRepository.findByTargetUserIdAndStatusInForUpdate(eq(TARGET_ID), anyCollection()))
-                    .willReturn(List.of(open));
+            given(grantRepository.findOpenIdsByTargetUserId(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(open.getId()));
+            givenGrant(open);
 
             int revoked = service.reconcileWithdrawnTargets();
 
@@ -644,7 +680,7 @@ class SupportAccessGrantServiceTest {
 
             org.mockito.InOrder order = org.mockito.Mockito.inOrder(grantRepository);
             order.verify(grantRepository).lockOperatorForRequest(OPERATOR_ID);
-            order.verify(grantRepository).findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection());
+            order.verify(grantRepository).findOpenIds(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection());
             order.verify(grantRepository).countByOperatorUserIdAndRequestedAtAfter(eq(OPERATOR_ID), any());
         }
 
@@ -764,6 +800,190 @@ class SupportAccessGrantServiceTest {
 
             assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
                     .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_005"));
+        }
+    }
+
+    @Nested
+    @DisplayName("第2回検分対応: ロック順の統一・ロック競合の再試行・安全通知の outbox")
+    class SecondReviewFixes {
+
+        private SupportAccessNoticeComposer.PreparedEmail email(Long recipient,
+                                                                 com.mannschaft.app.supportaccess.SupportAccessNotificationKind kind) {
+            return new SupportAccessNoticeComposer.PreparedEmail(recipient, kind, "ja", "target@example.com",
+                    "【Mannschaft】件名", "<p>本文</p>");
+        }
+
+        @Test
+        @DisplayName("失効バッチは id をロックなしで集め、主キーでロックしてから期限を再検証する（読んだ後に取り消された行は失効させない）")
+        void 失効バッチは主キーでロックして再検証() {
+            SupportAccessGrantEntity revokedMeanwhile = approved().id(UUID.randomUUID())
+                    .expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
+            revokedMeanwhile.revoke(NOW, SupportAccessEndedReason.USER_REVOKED);
+            given(grantRepository.findOverdueIds(NOW)).willReturn(List.of(revokedMeanwhile.getId()));
+            givenGrant(revokedMeanwhile);
+
+            int count = service.expireOverdue();
+
+            assertThat(count).isZero();
+            assertThat(revokedMeanwhile.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
+            verify(grantRepository).findByIdForUpdate(revokedMeanwhile.getId());
+            verify(grantRepository, org.mockito.Mockito.atLeastOnce()).shortenLockWait();
+            verify(grantRepository, org.mockito.Mockito.atLeastOnce()).restoreLockWait();
+        }
+
+        @Test
+        @DisplayName("失効バッチ: ロックが取れない行は1回だけ再試行し、それでも取れなければ次の回へ回して他の行は失効させる")
+        void 失効バッチのロック競合は次の回へ() {
+            SupportAccessGrantEntity locked = pending().id(UUID.randomUUID())
+                    .requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
+            SupportAccessGrantEntity free = pending().id(UUID.randomUUID())
+                    .requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
+            given(grantRepository.findOverdueIds(NOW)).willReturn(List.of(locked.getId(), free.getId()));
+            given(grantRepository.findByIdForUpdate(locked.getId()))
+                    .willThrow(new org.springframework.dao.CannotAcquireLockException("Lock wait timeout exceeded"));
+            givenGrant(free);
+
+            int count = service.expireOverdue();
+
+            assertThat(count).isEqualTo(1);
+            assertThat(free.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
+            verify(grantRepository, org.mockito.Mockito.times(2)).findByIdForUpdate(locked.getId());
+        }
+
+        @Test
+        @DisplayName("本人の取消でデッドロックに選ばれても1回だけ再試行して成功する")
+        void デッドロックは1回再試行() {
+            SupportAccessGrantEntity grant = approved().build();
+            given(grantRepository.findByIdForUpdate(GRANT_ID))
+                    .willThrow(new org.springframework.dao.CannotAcquireLockException("Deadlock found",
+                            new java.sql.SQLException("Deadlock found when trying to get lock", "40001", 1213)))
+                    .willReturn(Optional.of(grant));
+
+            SupportAccessGrantSnapshot result = service.revoke(TARGET_ID, GRANT_ID);
+
+            assertThat(result.status()).isEqualTo(SupportAccessStatus.REVOKED);
+        }
+
+        @Test
+        @DisplayName("再試行してもロックが取れなければ利用者には 409 SUPPORT_ACCESS_007（500 にしない）")
+        void ロック競合が解けなければ409() {
+            given(grantRepository.findByIdForUpdate(GRANT_ID))
+                    .willThrow(new org.springframework.dao.PessimisticLockingFailureException("Lock wait timeout exceeded"));
+
+            assertThatThrownBy(() -> service.revoke(TARGET_ID, GRANT_ID))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_007"));
+            verify(grantRepository, org.mockito.Mockito.times(2)).findByIdForUpdate(GRANT_ID);
+        }
+
+        @Test
+        @DisplayName("退会の取消は1件ずつ主キーでロックし、ロックが取れない行が残れば例外にして再試行・照合へ回す（他の行は取り消す）")
+        void 退会の取消はロックが取れない行を残して例外() {
+            SupportAccessGrantEntity locked = pending().id(UUID.randomUUID()).build();
+            SupportAccessGrantEntity free = approved().id(UUID.randomUUID()).build();
+            given(grantRepository.findOpenIdsByTargetUserId(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(locked.getId(), free.getId()));
+            given(grantRepository.findByIdForUpdate(locked.getId()))
+                    .willThrow(new org.springframework.dao.CannotAcquireLockException("Lock wait timeout exceeded"));
+            givenGrant(free);
+
+            assertThatThrownBy(() -> service.revokeAllForWithdrawal(TARGET_ID))
+                    .isInstanceOf(org.springframework.dao.CannotAcquireLockException.class);
+            assertThat(free.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
+            assertThat(free.getEndedReason()).isEqualTo(SupportAccessEndedReason.WITHDRAWAL);
+        }
+
+        @Test
+        @DisplayName("ロック競合の判定は Spring・JPA・Hibernate・JDBC（1205/1213/40001）の原因の連鎖で行い、業務例外は含めない")
+        void ロック競合の判定() {
+            assertThat(SupportAccessGrantService.isLockConflict(
+                    new RuntimeException(new java.sql.SQLException("timeout", "HY000", 1205)))).isTrue();
+            assertThat(SupportAccessGrantService.isLockConflict(
+                    new jakarta.persistence.PessimisticLockException("x"))).isTrue();
+            assertThat(SupportAccessGrantService.isLockConflict(
+                    new BusinessException(SupportAccessErrorCode.INVALID_TRANSITION))).isFalse();
+            assertThat(SupportAccessGrantService.isLockConflict(new IllegalStateException("x"))).isFalse();
+        }
+
+        @Test
+        @DisplayName("閲覧開始: 本人へのアプリ内通知の outbox 行とメール outbox の行を遷移と同じ TX で書く（冪等キーは grantId＋種別＋宛先＋開始時刻）")
+        void 閲覧開始の通知は遷移と同じTXでoutboxへ() {
+            givenGrant(approved().build());
+            given(composer.prepareEmail(eq(TARGET_ID),
+                    eq(com.mannschaft.app.supportaccess.SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET),
+                    eq(OPERATOR_ID), eq(TARGET_ID), eq(REASON)))
+                    .willReturn(Optional.of(email(TARGET_ID,
+                            com.mannschaft.app.supportaccess.SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET)));
+
+            service.startSession(OPERATOR_ID, GRANT_ID);
+
+            assertThat(notifiedKinds()).containsExactly("SESSION_STARTED_TO_TARGET");
+            ArgumentCaptor<EmailOutboxRequest> mail = ArgumentCaptor.forClass(EmailOutboxRequest.class);
+            verify(emailOutboxService).enqueue(mail.capture());
+            assertThat(mail.getValue().sourceEventId())
+                    .isEqualTo("support-access:SESSION_STARTED_TO_TARGET:" + GRANT_ID + ":" + TARGET_ID + ":" + NOW.toEpochMilli());
+            assertThat(mail.getValue().idempotencyKey()).as("メール outbox が source_event_id から決定的に作る").isNull();
+            assertThat(mail.getValue().toAddress()).isEqualTo("target@example.com");
+        }
+
+        @Test
+        @DisplayName("閲覧開始が巻き戻る（ロック後の再検証で 002）なら、通知 outbox もメールも書かない")
+        void 遷移が巻き戻れば通知もメールも出ない() {
+            SupportAccessGrantEntity unlocked = approved().build();
+            SupportAccessGrantEntity lockedLatest = approved().build();
+            lockedLatest.revoke(NOW, SupportAccessEndedReason.USER_REVOKED);
+            given(grantRepository.findById(GRANT_ID)).willReturn(Optional.of(unlocked));
+            given(grantRepository.findByIdForUpdate(GRANT_ID)).willReturn(Optional.of(lockedLatest));
+            given(composer.prepareEmail(any(), any(), any(), any(), any()))
+                    .willReturn(Optional.of(email(TARGET_ID,
+                            com.mannschaft.app.supportaccess.SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET)));
+
+            assertThatThrownBy(() -> service.startSession(OPERATOR_ID, GRANT_ID))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+            verify(notificationOutboxRepository, never()).save(any());
+            verify(emailOutboxService, never()).enqueue(any());
+        }
+
+        @Test
+        @DisplayName("同じ遷移の通知 outbox 行が既にあれば二重に書かない（冪等キーで確かめ、UNIQUE 違反で遷移を巻き戻さない）")
+        void 通知outboxは冪等() {
+            givenGrant(approved().build());
+            given(notificationOutboxRepository.existsByIdempotencyKey(any())).willReturn(true);
+
+            service.revoke(TARGET_ID, GRANT_ID);
+
+            verify(notificationOutboxRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("同じ遷移のメールは同じ source_event_id（＝同じ冪等キー）になり、メール outbox の UNIQUE で再送しても1通")
+        void メールの冪等キーは決定的() {
+            var prepared = email(TARGET_ID,
+                    com.mannschaft.app.supportaccess.SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET);
+            EmailOutboxRequest first = prepared.toRequest(GRANT_ID, NOW);
+            EmailOutboxRequest again = prepared.toRequest(GRANT_ID, NOW);
+            EmailOutboxRequest nextSession = prepared.toRequest(GRANT_ID, NOW.plusSeconds(60));
+
+            assertThat(again.sourceEventId()).isEqualTo(first.sourceEventId());
+            assertThat(nextSession.sourceEventId()).as("次の閲覧開始は別のメール").isNotEqualTo(first.sourceEventId());
+            com.mannschaft.app.mail.outbox.IdempotencyKeyGenerator gen = new com.mannschaft.app.mail.outbox.IdempotencyKeyGenerator();
+            assertThat(gen.generate(TARGET_ID, first.templateKind(), first.sourceEventId()))
+                    .isEqualTo(gen.generate(TARGET_ID, again.templateKind(), again.sourceEventId()));
+        }
+
+        @Test
+        @DisplayName("依頼: 本人・保護者のメールを TX の前に組み、通知 outbox には本人・保護者の2行を書く")
+        void 依頼の通知は本人と保護者() {
+            currentGuardianRequirement = SupportAccessGuardianRequirement.requiredBy(List.of(GUARDIAN_ID));
+
+            service.request(OPERATOR_ID, new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
+
+            assertThat(notifiedKinds()).containsExactly("REQUESTED_TO_TARGET", "REQUESTED_TO_GUARDIAN");
+            verify(composer).prepareEmail(TARGET_ID,
+                    com.mannschaft.app.supportaccess.SupportAccessNotificationKind.REQUESTED_TO_TARGET,
+                    OPERATOR_ID, TARGET_ID, REASON);
+            verify(composer).prepareEmail(GUARDIAN_ID,
+                    com.mannschaft.app.supportaccess.SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN,
+                    OPERATOR_ID, TARGET_ID, REASON);
         }
     }
 }

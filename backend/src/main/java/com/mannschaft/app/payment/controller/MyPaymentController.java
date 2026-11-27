@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * 自分の支払いコントローラー。ログインユーザー自身の支払い状況・未払い要件を提供する。
@@ -73,6 +74,8 @@ public class MyPaymentController {
             + "リクエストに他ユーザーの識別子を指定する項目が無い（listMySubscriptions メソッド本体）")
     @GetMapping("/subscriptions")
     @Operation(summary = "自分のサブスクリプション一覧（Phase 4）")
+    // F10.9 第2回検分: 決済（サブスクリプション）の情報で、中身の型が見えないため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<List<Object>>> listMySubscriptions() {
         // Phase 4 実装予定
         return ResponseEntity.ok(ApiResponse.of(List.of()));

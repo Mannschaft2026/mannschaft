@@ -148,6 +148,66 @@ class SupportAccessBypassHardeningTest {
         }
 
         @Test
+        @DisplayName("第2回検分 軽微7 日本語 slug（非 ASCII の UTF-8 だけのエンコード）のブログ記事は代理中も閲覧できる")
+        void 日本語slugは通る() throws Exception {
+            // 「サポート」をパーセントエンコードした slug
+            String rawUri = "/api/v1/teams/3/blog/posts/%E3%82%B5%E3%83%9D%E3%83%BC%E3%83%88-2026";
+            MockHttpServletResponse res = new MockHttpServletResponse();
+            AtomicBoolean called = new AtomicBoolean(false);
+
+            filter.doFilter(request(rawUri), res, (rq, rs) -> called.set(true));
+
+            assertThat(called).isTrue();
+            assertThat(res.getContentAsString()).doesNotContain("SUPPORT_ACCESS_004");
+            assertThat(SupportAccessFilter.hasDisallowedPercentEncoding(rawUri)).isFalse();
+        }
+
+        @ParameterizedTest(name = "許さないエンコード: {0}")
+        @ValueSource(strings = {
+                "/api/v1/teams/3/blog/posts/%E3%82%B5%2D1",         // 日本語と %2D の混在
+                "/api/v1/teams/3/blog/posts/%E3%82%B5%65",          // 日本語と %65（英字）の混在
+                "/api/v1/teams/3/blog/posts/a%2Eb",                 // %2E
+                "/api/v1/teams/3/blog/posts/a%2fb",                 // %2F（小文字）
+                "/api/v1/teams/3/blog/posts/a%5Cb",                 // %5C
+                "/api/v1/teams/3/blog/posts/a%3Bb",                 // %3B
+                "/api/v1/teams/3/blog/posts/a%00b",                 // %00
+                "/api/v1/teams/3/blog/posts/a%7Fb",                 // %7F
+                "/api/v1/teams/3/blog/posts/%E3%82",                // UTF-8 の途中切れ
+                "/api/v1/teams/3/blog/posts/%C0%AF",                // 過長な '/'
+                "/api/v1/teams/3/blog/posts/%ED%A0%80",             // サロゲート
+                "/api/v1/teams/3/blog/posts/%E3%82%B5%E3",          // 末尾の途中切れ
+                "/api/v1/teams/3/blog/posts/%E3x%82%B5",            // 文字の途中で区切られた
+                "/api/v1/teams/3/blog/posts/%G1",                   // 16進でない
+                "/api/v1/teams/3/blog/posts/%E",                    // 桁不足
+        })
+        @DisplayName("第2回検分 軽微7 エンコードされた ASCII を1つでも含む・不正な UTF-8 のエンコードは 004")
+        void 許さないエンコードは004(String rawUri) throws Exception {
+            MockHttpServletResponse res = new MockHttpServletResponse();
+            AtomicBoolean called = new AtomicBoolean(false);
+
+            filter.doFilter(request(rawUri), res, (rq, rs) -> called.set(true));
+
+            assertThat(SupportAccessFilter.hasDisallowedPercentEncoding(rawUri)).isTrue();
+            assertThat(res.getStatus()).isEqualTo(403);
+            assertThat(res.getContentAsString()).contains("SUPPORT_ACCESS_004");
+            assertThat(called).isFalse();
+        }
+
+        @Test
+        @DisplayName("第2回検分 軽微7 非 ASCII のエンコードでも、復号後のパスが禁止パスなら従来どおり 004")
+        void 復号後の禁止パスは004() throws Exception {
+            String rawUri = "/api/v1/users/me/login-history/%E3%82%B5";
+            MockHttpServletResponse res = new MockHttpServletResponse();
+            AtomicBoolean called = new AtomicBoolean(false);
+
+            filter.doFilter(request(rawUri), res, (rq, rs) -> called.set(true));
+
+            assertThat(SupportAccessFilter.hasDisallowedPercentEncoding(rawUri)).isFalse();
+            assertThat(res.getContentAsString()).contains("SUPPORT_ACCESS_004");
+            assertThat(called).isFalse();
+        }
+
+        @Test
         @DisplayName("致命1 デコード済みの lookup path は Spring MVC と同じ規則（デコード・セミコロン除去）で求める")
         void デコード済みlookupPath() {
             assertThat(SupportAccessFilter.decodedLookupPath(request("/api/v1/users/me/login%2Dhistory")))
@@ -245,7 +305,7 @@ class SupportAccessBypassHardeningTest {
         @Test
         @DisplayName("dashboard-aggregation-pool で実行した集計にも代理の文脈が伝播し、プールのスレッドには残らない")
         void 集計プールへ文脈が伝播する() throws Exception {
-            ThreadPoolTaskExecutor pool = (ThreadPoolTaskExecutor) new AsyncConfig().dashboardAggregationPool();
+            ThreadPoolTaskExecutor pool = (ThreadPoolTaskExecutor) new AsyncConfig().dashboardAggregationPool(50);
             try {
                 SupportAccessContextHolder.set(CONTEXT);
                 Boolean activeInTask = CompletableFuture
@@ -256,6 +316,22 @@ class SupportAccessBypassHardeningTest {
                 Boolean leaked = CompletableFuture
                         .supplyAsync(SupportAccessContextHolder::isActive, pool).get(5, TimeUnit.SECONDS);
                 assertThat(leaked).as("前のタスクの文脈がプールのスレッドに残らない").isFalse();
+            } finally {
+                pool.shutdown();
+            }
+        }
+
+        @Test
+        @DisplayName("第2回検分 軽微9 集計プールの最大は Hikari の上限より十分小さい（既定50→8、CI の5→2、上限16）")
+        void 集計プールの最大はHikariより十分小さい() {
+            assertThat(AsyncConfig.dashboardAggregationMaxPoolSize(50)).isEqualTo(8);
+            assertThat(AsyncConfig.dashboardAggregationMaxPoolSize(5)).isEqualTo(2);
+            assertThat(AsyncConfig.dashboardAggregationMaxPoolSize(100)).isEqualTo(16);
+            assertThat(AsyncConfig.dashboardAggregationMaxPoolSize(1000)).isEqualTo(16);
+            ThreadPoolTaskExecutor pool = (ThreadPoolTaskExecutor) new AsyncConfig().dashboardAggregationPool(50);
+            try {
+                assertThat(pool.getMaxPoolSize()).isEqualTo(8).isLessThan(50 / 2);
+                assertThat(pool.getCorePoolSize()).isLessThanOrEqualTo(pool.getMaxPoolSize());
             } finally {
                 pool.shutdown();
             }

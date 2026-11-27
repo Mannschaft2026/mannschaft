@@ -34,6 +34,7 @@ import com.mannschaft.app.loyalty.dto.TransactionResponse;
 import com.mannschaft.app.loyalty.dto.UpdateProgramRequest;
 import com.mannschaft.app.loyalty.dto.UpdateRewardRequest;
 import com.mannschaft.app.loyalty.dto.UpdateRuleRequest;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -273,6 +274,8 @@ public class LoyaltyController {
     @Operation(operationId = "loyaltyMyRequests", summary = "本人の申請一覧")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE, reason = "認証本人の申請閲覧と取消を本人スコープで制御する基盤API")
     @GetMapping("/loyalty/award-requests/me")
+    // F10.9 第2回検分: 付与依頼の照合コード（verificationCode）は承認に使う値のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public CursorPagedResponse<AwardRequestResponse> myRequests(
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
@@ -283,6 +286,8 @@ public class LoyaltyController {
     @Operation(operationId = "loyaltyMyRequest", summary = "本人の申請詳細")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE, reason = "認証本人の申請閲覧と取消を本人スコープで制御する基盤API")
     @GetMapping("/loyalty/award-requests/{requestId}/me")
+    // F10.9 第2回検分: 付与依頼の照合コード（verificationCode）は承認に使う値のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ApiResponse<AwardRequestResponse> myRequest(
             @PathVariable UUID requestId) {
         return ApiResponse.of(facade.myRequest(SecurityUtils.getCurrentUserId(), requestId));
@@ -304,6 +309,8 @@ public class LoyaltyController {
     @Operation(operationId = "loyaltyStaffRequests", summary = "スタッフの承認申請一覧")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE, reason = "当該TEAMの現スタッフ権限とポイント設定で制御する基盤API")
     @GetMapping("/teams/{teamId}/loyalty/award-requests")
+    // F10.9 第2回検分: 付与依頼の照合コード（verificationCode）は承認に使う値のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public CursorPagedResponse<AwardRequestResponse> staffRequests(
             @PathVariable Long teamId,
             @RequestParam(defaultValue = "PENDING") RequestFilter status,
@@ -317,6 +324,8 @@ public class LoyaltyController {
     @Operation(operationId = "loyaltyStaffRequest", summary = "スタッフの承認申請詳細")
     @AlwaysReachable(category = AlwaysReachableCategory.CORE, reason = "当該TEAMの現スタッフ権限とポイント設定で制御する基盤API")
     @GetMapping("/teams/{teamId}/loyalty/award-requests/{requestId}")
+    // F10.9 第2回検分: 付与依頼の照合コード（verificationCode）は承認に使う値のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ApiResponse<AwardRequestResponse> staffRequest(
             @PathVariable Long teamId,
             @PathVariable UUID requestId) {

@@ -4,6 +4,7 @@ import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.membership.CardStatus;
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.membership.service.MemberCardService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,8 @@ public class OrganizationMemberCardController {
     @GetMapping("/member-cards")
     @Operation(summary = "組織会員証一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    // F10.9 第2回検分: 会員証の一覧は中身の型が見えず（Map）、会員証の QR・番号を運びうるため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<Map<String, Object>> getOrganizationMemberCards(
             @PathVariable Long orgId,
             @RequestParam(defaultValue = "ACTIVE") String status,

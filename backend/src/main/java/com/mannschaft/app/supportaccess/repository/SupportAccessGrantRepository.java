@@ -21,9 +21,19 @@ import java.util.UUID;
  *
  * <p><b>状態遷移の排他</b>: 遷移する書込（許可・拒否・取消・撤回・開始・終了・失効・退会）は必ず
  * {@code *ForUpdate}（{@code PESSIMISTIC_WRITE} = {@code SELECT ... FOR UPDATE}）で grant 行を読む。
- * ロックなしで読んで書くと、同時の取消と開始のような競合で後勝ちの上書きが起き、取消が消える。
- * <b>ロックの取得順</b>は「運営者の依頼ロック（{@link #lockOperatorForRequest}）→ grant 行（id の昇順）」に固定する
- * （複数行を取る失効・退会は id 順に取り、デッドロックを作らない）。</p>
+ * ロックなしで読んで書くと、同時の取消と開始のような競合で後勝ちの上書きが起き、取消が消える。</p>
+ *
+ * <p><b>ロックの取得順（第2回検分対応）</b>: grant 行のロックは<b>必ず主キー（{@link #findByIdForUpdate}）で</b>取り、
+ * 二次索引（status・target_status・open_flag の uq）を走査してロックする問い合わせを持たない。以前は失効バッチ
+ * （status 索引）と退会（target_status 索引）が二次索引の行を先にロックしてから主キーへ進み、本人の許可・取消・開始は
+ * 主キー → 二次索引（status の更新）の順だったため、逆順の取得でデッドロックした。いまは複数行を扱う失効・退会・依頼も
+ * 対象の id を<b>ロックなし</b>（{@code findOverdueIds} 等・一貫性読み取り）で集め、id 昇順に1件ずつ主キーでロックしてから
+ * 状態を再検証して遷移する。順序は「運営者の依頼ロック（{@link #lockOperatorForRequest}）→ grant 行の主キー（id 昇順）
+ * → 新しい行の INSERT（uq 索引）」に統一する。</p>
+ *
+ * <p>ロック待ちの上限は {@link #shortenLockWait}（{@code innodb_lock_wait_timeout} を5秒）で絞る。
+ * {@code jakarta.persistence.lock.timeout} のミリ秒指定は Hibernate の MySQL 方言が解釈せず黙って無視するため
+ * （{@code ConfirmableNotificationRepository} の経緯を参照）、接続のセッション変数で実効化する。</p>
  */
 public interface SupportAccessGrantRepository extends JpaRepository<SupportAccessGrantEntity, UUID> {
 
@@ -32,32 +42,39 @@ public interface SupportAccessGrantRepository extends JpaRepository<SupportAcces
     @Query("select g from SupportAccessGrantEntity g where g.id = :id")
     Optional<SupportAccessGrantEntity> findByIdForUpdate(@Param("id") UUID id);
 
-    /** 依頼用: 同じ運営者×本人の開いている grant を排他ロックして読む。 */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select g from SupportAccessGrantEntity g where g.operatorUserId = :operatorUserId "
+    /** 依頼用: 同じ運営者×本人の開いている grant の id（ロックしない。呼び出し側が id 昇順に主キーでロックする）。 */
+    @Query("select g.id from SupportAccessGrantEntity g where g.operatorUserId = :operatorUserId "
             + "and g.targetUserId = :targetUserId and g.status in :statuses order by g.id")
-    List<SupportAccessGrantEntity> findOpenForUpdate(@Param("operatorUserId") Long operatorUserId,
-                                                     @Param("targetUserId") Long targetUserId,
-                                                     @Param("statuses") Collection<SupportAccessStatus> statuses);
+    List<UUID> findOpenIds(@Param("operatorUserId") Long operatorUserId,
+                           @Param("targetUserId") Long targetUserId,
+                           @Param("statuses") Collection<SupportAccessStatus> statuses);
 
-    /** 退会用: 本人の開いている grant を id 順に排他ロックして読む。 */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select g from SupportAccessGrantEntity g where g.targetUserId = :targetUserId "
+    /** 退会用: 本人の開いている grant の id（ロックしない。呼び出し側が1件ずつ主キーでロックして再検証する）。 */
+    @Query("select g.id from SupportAccessGrantEntity g where g.targetUserId = :targetUserId "
             + "and g.status in :statuses order by g.id")
-    List<SupportAccessGrantEntity> findByTargetUserIdAndStatusInForUpdate(
-            @Param("targetUserId") Long targetUserId, @Param("statuses") Collection<SupportAccessStatus> statuses);
+    List<UUID> findOpenIdsByTargetUserId(@Param("targetUserId") Long targetUserId,
+                                         @Param("statuses") Collection<SupportAccessStatus> statuses);
 
     /**
-     * 失効バッチ用: 期限に達した PENDING（依頼期限）・APPROVED（許可期限）を id 順に排他ロックして読む。
-     * 境界は {@code SupportAccessGrantValidator}（{@code now < expiresAt} のときだけ有効）に揃え、
-     * 期限ちょうど（{@code expiresAt == now}）も失効とする（{@code <=}）。
+     * 失効バッチ用: 期限に達した PENDING（依頼期限）・APPROVED（許可期限）の id（ロックしない。呼び出し側が1件ずつ
+     * 主キーでロックして期限を再検証する）。境界は {@code SupportAccessGrantValidator}（{@code now < expiresAt} の
+     * ときだけ有効）に揃え、期限ちょうど（{@code expiresAt == now}）も失効とする（{@code <=}）。
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select g from SupportAccessGrantEntity g where "
+    @Query("select g.id from SupportAccessGrantEntity g where "
             + "(g.status = com.mannschaft.app.supportaccess.SupportAccessStatus.PENDING and g.requestExpiresAt <= :now) "
             + "or (g.status = com.mannschaft.app.supportaccess.SupportAccessStatus.APPROVED "
             + "and g.expiresAt is not null and g.expiresAt <= :now) order by g.id")
-    List<SupportAccessGrantEntity> findOverdueForUpdate(@Param("now") Instant now);
+    List<UUID> findOverdueIds(@Param("now") Instant now);
+
+    /** この接続のロック待ちの上限を5秒にする（遷移の TX の先頭で呼び、終わりに {@link #restoreLockWait} で戻す）。 */
+    @Modifying
+    @Query(value = "SET SESSION innodb_lock_wait_timeout = 5", nativeQuery = true)
+    int shortenLockWait();
+
+    /** ロック待ちの上限を既定に戻す（接続はプールで再利用されるため必ず戻す）。 */
+    @Modifying
+    @Query(value = "SET SESSION innodb_lock_wait_timeout = DEFAULT", nativeQuery = true)
+    int restoreLockWait();
 
     /**
      * 運営者単位の依頼の排他（1日20件の上限の count→insert を直列化する）。

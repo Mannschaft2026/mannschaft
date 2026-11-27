@@ -32,8 +32,8 @@ function handleUpload(event: Event, type: string) {
             :key="photo.id"
           >
             <img
-              v-if="photo.photoUrl"
-              :src="photo.photoUrl"
+              v-if="photo.signedUrl"
+              :src="photo.signedUrl"
               alt="ビフォー"
               class="h-32 w-full rounded-lg object-cover"
             >
@@ -58,8 +58,8 @@ function handleUpload(event: Event, type: string) {
             :key="photo.id"
           >
             <img
-              v-if="photo.photoUrl"
-              :src="photo.photoUrl"
+              v-if="photo.signedUrl"
+              :src="photo.signedUrl"
               alt="アフター"
               class="h-32 w-full rounded-lg object-cover"
             >

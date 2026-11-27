@@ -95,13 +95,23 @@ onMounted(() => loadData())
           <div v-if="selectedChart.photos.length > 0">
             <p class="text-sm text-surface-500">写真</p>
             <div class="mt-2 grid grid-cols-3 gap-2">
-              <img
+              <template
                 v-for="p in selectedChart.photos"
                 :key="p.id"
-                :src="p.photoUrl"
-                :alt="p.caption ?? ''"
-                class="h-24 w-full rounded-lg object-cover"
               >
+                <img
+                  v-if="p.signedUrl"
+                  :src="p.signedUrl"
+                  :alt="p.note ?? ''"
+                  class="h-24 w-full rounded-lg object-cover"
+                >
+                <div
+                  v-else
+                  class="flex h-24 w-full items-center justify-center rounded-lg bg-surface-100 p-2 text-center text-xs text-surface-500"
+                >
+                  {{ $t('supportAccess.photoHidden') }}
+                </div>
+              </template>
             </div>
           </div>
         </div>

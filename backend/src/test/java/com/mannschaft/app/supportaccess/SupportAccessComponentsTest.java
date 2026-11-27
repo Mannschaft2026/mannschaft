@@ -25,6 +25,7 @@ import com.mannschaft.app.supportaccess.service.SupportAccessGrantService;
 import com.mannschaft.app.supportaccess.service.SupportAccessLogRecorder;
 import com.mannschaft.app.supportaccess.service.SupportAccessPersonalDataService;
 import com.mannschaft.app.supportaccess.service.SupportAccessRetentionService;
+import com.mannschaft.app.supportaccess.service.SupportAccessNotificationOutboxStore;
 import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.supportaccess.web.SupportAccessHandlerInterceptor;
 import org.junit.jupiter.api.AfterEach;
@@ -337,38 +338,50 @@ class SupportAccessComponentsTest {
     // ─── 通知（S12） ────────────────────────────────────────
 
     @Test
-    @DisplayName("S12 通知は AFTER_COMMIT のリスナーで送る")
+    @DisplayName("S12 通知の配送は AFTER_COMMIT のリスナーで行う（遷移直後と再試行の両方）")
     void S12_通知リスナーはAFTER_COMMIT() throws Exception {
-        Method m = SupportAccessNotificationListener.class.getMethod("onGrantChanged", SupportAccessGrantChangedEvent.class);
-        TransactionalEventListener ann = m.getAnnotation(TransactionalEventListener.class);
-        assertThat(ann).isNotNull();
-        assertThat(ann.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
+        for (Method m : List.of(
+                SupportAccessNotificationListener.class.getMethod("onGrantChanged", SupportAccessGrantChangedEvent.class),
+                SupportAccessNotificationListener.class.getMethod("onRelayRequested",
+                        com.mannschaft.app.supportaccess.event.SupportAccessNotificationRelayRequestedEvent.class))) {
+            TransactionalEventListener ann = m.getAnnotation(TransactionalEventListener.class);
+            assertThat(ann).as(m.getName()).isNotNull();
+            assertThat(ann.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
+        }
     }
 
     @Test
-    @DisplayName("S12 依頼時と閲覧開始時は本人へ、未成年なら保護者へも通知する")
+    @DisplayName("S12 遷移直後はその grant の通知 outbox 行を配送し、配送済みにする（本人・保護者・閲覧開始）")
     void S12_本人への通知() {
         NotificationDeliveryRunner runner = mock(NotificationDeliveryRunner.class);
-        SupportAccessNotificationListener listener = newNotificationListener(runner);
+        SupportAccessNotificationOutboxStore store = mock(SupportAccessNotificationOutboxStore.class);
+        var rows = List.of(row(SupportAccessNotificationKind.REQUESTED_TO_TARGET, TARGET_ID),
+                row(SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN, GUARDIAN_ID),
+                row(SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET, TARGET_ID));
+        when(store.leaseForGrant(GRANT_ID)).thenReturn(rows);
 
-        listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.REQUESTED, GRANT_ID, OPERATOR_ID, TARGET_ID, GUARDIAN_ID));
-        listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.SESSION_STARTED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
+        newNotificationListener(runner, store).onGrantChanged(
+                new SupportAccessGrantChangedEvent(SupportAccessAuditAction.SESSION_STARTED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
 
         assertThat(sentTo(runner)).containsExactlyInAnyOrder(
                 TARGET_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.REQUESTED_TO_TARGET,
                 GUARDIAN_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN,
                 TARGET_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET);
+        rows.forEach(r -> verify(store).markPublished(r.id()));
     }
 
     @Test
-    @DisplayName("S12 許可・拒否・取消は運営者へ通知する")
+    @DisplayName("S12 許可・拒否・取消は運営者へ通知する（再試行の依頼でも未配送の行を配送する）")
     void S12_運営者への通知() {
         NotificationDeliveryRunner runner = mock(NotificationDeliveryRunner.class);
-        SupportAccessNotificationListener listener = newNotificationListener(runner);
+        SupportAccessNotificationOutboxStore store = mock(SupportAccessNotificationOutboxStore.class);
+        when(store.leaseDue(anyInt())).thenReturn(List.of(
+                row(SupportAccessNotificationKind.APPROVED_TO_OPERATOR, OPERATOR_ID),
+                row(SupportAccessNotificationKind.DENIED_TO_OPERATOR, OPERATOR_ID),
+                row(SupportAccessNotificationKind.REVOKED_TO_OPERATOR, OPERATOR_ID)));
 
-        listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.APPROVED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
-        listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.DENIED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
-        listener.onGrantChanged(new SupportAccessGrantChangedEvent(SupportAccessAuditAction.REVOKED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
+        newNotificationListener(runner, store).onRelayRequested(
+                new com.mannschaft.app.supportaccess.event.SupportAccessNotificationRelayRequestedEvent(NOW));
 
         assertThat(sentTo(runner)).containsExactlyInAnyOrder(
                 OPERATOR_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.APPROVED_TO_OPERATOR,
@@ -376,8 +389,49 @@ class SupportAccessComponentsTest {
                 OPERATOR_ID + ":SUPPORT_ACCESS_" + SupportAccessNotificationKind.REVOKED_TO_OPERATOR);
     }
 
+    @Test
+    @DisplayName("第2回検分 配送に失敗した行は配送済みにせず失敗を記録して残す（再試行バッチが拾う）。他の行は配送する")
+    void S12_配送失敗は未配送で残る() {
+        NotificationDeliveryRunner runner = mock(NotificationDeliveryRunner.class);
+        SupportAccessNotificationOutboxStore store = mock(SupportAccessNotificationOutboxStore.class);
+        var failing = row(SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET, TARGET_ID);
+        var ok = row(SupportAccessNotificationKind.REVOKED_TO_OPERATOR, OPERATOR_ID);
+        when(store.leaseForGrant(GRANT_ID)).thenReturn(List.of(failing, ok));
+        when(runner.sendOne(org.mockito.ArgumentMatchers.argThat(r -> r != null && TARGET_ID.equals(r.recipientUserId()))))
+                .thenThrow(new IllegalStateException("notification down"));
+
+        newNotificationListener(runner, store).onGrantChanged(
+                new SupportAccessGrantChangedEvent(SupportAccessAuditAction.SESSION_STARTED, GRANT_ID, OPERATOR_ID, TARGET_ID, null));
+
+        verify(store).markFailed(eq(failing.id()), anyString());
+        verify(store, never()).markPublished(failing.id());
+        verify(store).markPublished(ok.id());
+    }
+
+    @Test
+    @DisplayName("第2回検分 軽微8 拒否の監査はその outbox 行の ID だけを反映する（outbox 全体を FOR UPDATE で走査しない）")
+    void 拒否の監査は1行だけ反映() {
+        com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore store =
+                mock(com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore.class);
+        java.util.UUID outboxId = java.util.UUID.randomUUID();
+        when(store.leaseById(outboxId)).thenReturn(List.of());
+        SupportAccessAuditRecorder recorder = new SupportAccessAuditRecorder(mock(AuditLogService.class), store);
+
+        new com.mannschaft.app.supportaccess.listener.SupportAccessAuditListener(recorder).onDeniedAuditAppended(
+                new com.mannschaft.app.supportaccess.event.SupportAccessDeniedAuditAppendedEvent(outboxId));
+
+        verify(store).leaseById(outboxId);
+        verify(store, never()).leaseDue(anyInt());
+    }
+
+    private static SupportAccessNotificationOutboxStore.PendingNotification row(SupportAccessNotificationKind kind, Long recipient) {
+        return new SupportAccessNotificationOutboxStore.PendingNotification(java.util.UUID.randomUUID(), GRANT_ID,
+                kind.name(), recipient, 1);
+    }
+
     /** 通知リスナーを、grant と利用者名を引ける最小の依存で組み立てる（配送は runner のモックで観測する）。 */
-    private static SupportAccessNotificationListener newNotificationListener(NotificationDeliveryRunner runner) {
+    private static SupportAccessNotificationListener newNotificationListener(NotificationDeliveryRunner runner,
+                                                                             SupportAccessNotificationOutboxStore store) {
         SupportAccessGrantRepository grantRepository = mock(SupportAccessGrantRepository.class);
         SupportAccessGrantEntity grant = mock(SupportAccessGrantEntity.class);
         when(grant.getOperatorUserId()).thenReturn(OPERATOR_ID);
@@ -393,8 +447,9 @@ class SupportAccessComponentsTest {
                 mock(com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory.class);
         when(directory.findUser(any())).thenReturn(java.util.Optional.empty());
         when(directory.findDeliverableEmail(any())).thenReturn(java.util.Optional.empty());
-        return new SupportAccessNotificationListener(runner, localeCache, messageSource, grantRepository, directory,
-                mock(com.mannschaft.app.mail.outbox.EmailOutboxService.class));
+        var composer = new com.mannschaft.app.supportaccess.service.SupportAccessNoticeComposer(
+                localeCache, messageSource, directory, "https://mannschaft.app");
+        return new SupportAccessNotificationListener(runner, grantRepository, store, composer);
     }
 
     private static java.util.List<String> sentTo(NotificationDeliveryRunner runner) {
@@ -424,7 +479,9 @@ class SupportAccessComponentsTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository outbox =
                 mock(com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository.class);
-        SupportAccessRetentionService retention = new SupportAccessRetentionService(grants, logs, outbox, clock);
+        com.mannschaft.app.supportaccess.repository.SupportAccessNotificationOutboxRepository notifications =
+                mock(com.mannschaft.app.supportaccess.repository.SupportAccessNotificationOutboxRepository.class);
+        SupportAccessRetentionService retention = new SupportAccessRetentionService(grants, logs, outbox, notifications, clock);
         retention.purgeUser(TARGET_ID);
         var order = inOrder(logs, grants);
         order.verify(logs).deleteByTargetUserId(TARGET_ID);
@@ -432,7 +489,10 @@ class SupportAccessComponentsTest {
         // 保護者としてだけ残る行は保護者の userId を外し、本人宛の監査 outbox・運営者の依頼ロックも消す
         verify(grants).clearGuardianUserId(TARGET_ID);
         verify(grants).deleteRequestLock(TARGET_ID);
-        verify(outbox).deleteByTargetUserId(TARGET_ID);
+        // 第2回検分: 監査 outbox は反映済みだけ消し、未反映は本人の userId を外して残す（監査を失わない）
+        verify(outbox).deletePublishedByTargetUserId(TARGET_ID);
+        verify(outbox).anonymizeUnpublishedByTargetUserId(TARGET_ID);
+        verify(notifications).deleteByUserId(TARGET_ID);
 
         SupportAccessRetentionService mockedRetention = mock(SupportAccessRetentionService.class);
         AccountPurgeCompletionService completion = mock(AccountPurgeCompletionService.class);
@@ -449,7 +509,8 @@ class SupportAccessComponentsTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
         new SupportAccessRetentionService(grants, logs,
-                mock(com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository.class), clock)
+                mock(com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository.class),
+                mock(com.mannschaft.app.supportaccess.repository.SupportAccessNotificationOutboxRepository.class), clock)
                 .purgeExpiredRecords();
 
         verify(logs).deleteByOccurredAtBefore(NOW.atZone(ZoneOffset.UTC).minusYears(1).toInstant());

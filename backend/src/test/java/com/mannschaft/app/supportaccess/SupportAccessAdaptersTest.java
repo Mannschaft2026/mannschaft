@@ -211,17 +211,62 @@ class SupportAccessAdaptersTest {
         }
 
         @Test
-        @DisplayName("生年月日が読めない本人は、承認済みの保護者リンクがあれば安全側で要る")
-        void 生年月日不明でリンクありは要る() {
+        @DisplayName("生年月日が読めない本人は、承認済みの保護者リンクがあっても成人と確認できないため解決不能")
+        void 生年月日不明でリンクありは解決不能() {
             child(null, false);
             links(PARENT_A);
             parent(PARENT_A, UserEntity.UserStatus.ACTIVE);
-            given(switchService.evaluateSwitch(PARENT_A, CHILD_ID)).willReturn(SwitchVerdict.AGE_LOCKED);
+            given(switchService.evaluateSwitch(PARENT_A, CHILD_ID)).willReturn(SwitchVerdict.ALLOWED);
 
             SupportAccessGuardianRequirement r = adapter.resolveGuardianRequirement(CHILD_ID);
 
             assertThat(r.required()).isTrue();
             assertThat(r.unresolvable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("第2回検分: 生年月日なし・保護者リンクなしでも成人扱いにせず解決不能（依頼は SUPPORT_ACCESS_005）")
+        void 生年月日なしリンクなしは解決不能() {
+            child(null, false);
+            links();
+
+            SupportAccessGuardianRequirement r = adapter.resolveGuardianRequirement(CHILD_ID);
+
+            assertThat(r.required()).isTrue();
+            assertThat(r.unresolvable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("生年月日が不正な形式（空白・壊れた日付）も解決不能")
+        void 生年月日不正は解決不能() {
+            child("2008-13-40", false);
+            links();
+
+            assertThat(adapter.resolveGuardianRequirement(CHILD_ID).unresolvable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("境界日は JST: Clock のゾーン（ロサンゼルス）では 11/26 でも JST で 11/27 なら 2008-11-27 生まれは18歳＝成人")
+        void 境界日はJST_成人() {
+            SupportAccessUserDirectoryAdapter utcAdapter = new SupportAccessUserDirectoryAdapter(
+                    userRepository, linkRepository, switchService, registry, mock(AccessControlService.class),
+                    Clock.fixed(Instant.parse("2026-11-26T16:00:00Z"), java.time.ZoneId.of("America/Los_Angeles")));
+            child("2008-11-27", false);
+            links();
+
+            assertThat(utcAdapter.resolveGuardianRequirement(CHILD_ID).required()).isFalse();
+        }
+
+        @Test
+        @DisplayName("境界日は JST: Clock のゾーン（キリティマティ UTC+14）では 11/27 でも JST で 11/26 なら未成年")
+        void 境界日はJST_未成年() {
+            SupportAccessUserDirectoryAdapter utcAdapter = new SupportAccessUserDirectoryAdapter(
+                    userRepository, linkRepository, switchService, registry, mock(AccessControlService.class),
+                    Clock.fixed(Instant.parse("2026-11-26T11:00:00Z"), java.time.ZoneId.of("Pacific/Kiritimati")));
+            child("2008-11-27", false);
+            links();
+
+            assertThat(utcAdapter.resolveGuardianRequirement(CHILD_ID).unresolvable()).isTrue();
         }
     }
 
@@ -251,19 +296,7 @@ class SupportAccessAdaptersTest {
     @DisplayName("本人・保護者へのメール通知（AC12）")
     class Email {
 
-        private final com.mannschaft.app.notification.service.NotificationDeliveryRunner runner =
-                mock(com.mannschaft.app.notification.service.NotificationDeliveryRunner.class);
-        private final com.mannschaft.app.mail.outbox.EmailOutboxService outbox =
-                mock(com.mannschaft.app.mail.outbox.EmailOutboxService.class);
-        private final java.util.UUID grantId = java.util.UUID.randomUUID();
-
-        private com.mannschaft.app.supportaccess.listener.SupportAccessNotificationListener listener() {
-            var grants = mock(com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository.class);
-            var grant = mock(com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity.class);
-            when(grant.getOperatorUserId()).thenReturn(OPERATOR_ID);
-            when(grant.getTargetUserId()).thenReturn(CHILD_ID);
-            when(grant.getRequestReason()).thenReturn("<script>alert(1)</script> 表示崩れの確認");
-            when(grants.findById(grantId)).thenReturn(Optional.of(grant));
+        private com.mannschaft.app.supportaccess.service.SupportAccessNoticeComposer composer() {
             var localeCache = mock(com.mannschaft.app.common.i18n.UserLocaleCache.class);
             when(localeCache.getLocale(any())).thenReturn("ja");
             var messages = new org.springframework.context.support.StaticMessageSource();
@@ -272,27 +305,26 @@ class SupportAccessAdaptersTest {
             var directory = mock(com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory.class);
             when(directory.findUser(any())).thenReturn(Optional.empty());
             when(directory.findDeliverableEmail(CHILD_ID)).thenReturn(Optional.of("child@example.invalid"));
-            var l = new com.mannschaft.app.supportaccess.listener.SupportAccessNotificationListener(
-                    runner, localeCache, messages, grants, directory, outbox);
-            org.springframework.test.util.ReflectionTestUtils.setField(l, "baseUrl", "https://mannschaft.app");
-            return l;
+            return new com.mannschaft.app.supportaccess.service.SupportAccessNoticeComposer(
+                    localeCache, messages, directory, "https://mannschaft.app");
         }
 
         @Test
         @DisplayName("依頼時・閲覧開始時は本人へメールも送る。理由は HTML エスケープしたプレーンテキストで、リンクは設定画面だけ（ワンクリック許可なし）")
         void 依頼と開始はメールも送る() {
-            var l = listener();
-            l.onGrantChanged(new com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent(
-                    SupportAccessAuditAction.REQUESTED, grantId, OPERATOR_ID, CHILD_ID, null));
-            l.onGrantChanged(new com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent(
-                    SupportAccessAuditAction.SESSION_STARTED, grantId, OPERATOR_ID, CHILD_ID, null));
+            var c = composer();
+            var requested = c.prepareEmail(CHILD_ID, SupportAccessNotificationKind.REQUESTED_TO_TARGET, OPERATOR_ID,
+                    CHILD_ID, "<script>alert(1)</script> 表示崩れの確認").orElseThrow();
+            var started = c.prepareEmail(CHILD_ID, SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET, OPERATOR_ID,
+                    CHILD_ID, "理由");
 
-            var captor = org.mockito.ArgumentCaptor.forClass(com.mannschaft.app.mail.outbox.EmailOutboxRequest.class);
-            verify(outbox, org.mockito.Mockito.times(2)).enqueue(captor.capture());
-            var first = captor.getAllValues().get(0);
+            java.util.UUID grantId = java.util.UUID.randomUUID();
+            var first = requested.toRequest(grantId, null);
+            assertThat(started).isPresent();
             assertThat(first.templateKind()).isEqualTo("SUPPORT_ACCESS_NOTICE");
             assertThat(first.toAddress()).isEqualTo("child@example.invalid");
             assertThat(first.userId()).isEqualTo(CHILD_ID);
+            assertThat(first.sourceEventId()).isEqualTo("support-access:REQUESTED_TO_TARGET:" + grantId + ":" + CHILD_ID);
             String body = first.payloadVars().get("body");
             assertThat(body).contains("&lt;script&gt;").doesNotContain("<script>");
             assertThat(body).contains("https://mannschaft.app/settings/support-access");
@@ -302,22 +334,15 @@ class SupportAccessAdaptersTest {
         @Test
         @DisplayName("運営者宛（許可・拒否・取消）はメールを送らない（アプリ内通知のみ）")
         void 運営者宛はメールなし() {
-            var l = listener();
-            l.onGrantChanged(new com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent(
-                    SupportAccessAuditAction.APPROVED, grantId, OPERATOR_ID, CHILD_ID, null));
-
-            verify(outbox, org.mockito.Mockito.never()).enqueue(any());
+            assertThat(composer().prepareEmail(OPERATOR_ID, SupportAccessNotificationKind.APPROVED_TO_OPERATOR,
+                    CHILD_ID, CHILD_ID, "理由")).isEmpty();
         }
 
         @Test
-        @DisplayName("アプリ内通知の配送が失敗してもメールは送る（片方の失敗でもう片方を止めない）")
-        void 通知失敗でもメールは送る() {
-            given(runner.sendOne(any())).willThrow(new IllegalStateException("notification down"));
-            var l = listener();
-            l.onGrantChanged(new com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent(
-                    SupportAccessAuditAction.REQUESTED, grantId, OPERATOR_ID, CHILD_ID, null));
-
-            verify(outbox).enqueue(any());
+        @DisplayName("送れる宛先が無い本人へはメールを組まない（アプリ内通知の outbox は別に必ず残る）")
+        void 宛先なしはメールなし() {
+            assertThat(composer().prepareEmail(999L, SupportAccessNotificationKind.REQUESTED_TO_TARGET,
+                    OPERATOR_ID, 999L, "理由")).isEmpty();
         }
     }
 
