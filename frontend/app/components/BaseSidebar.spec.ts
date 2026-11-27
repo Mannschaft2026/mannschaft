@@ -43,6 +43,29 @@ describe('BaseSidebar の取得状態', () => {
     expect(wrapper.find('a[href="/teams/team-policy/duties"]').exists()).toBe(role === 'ADMIN')
   })
 
+  // CMP-261125-2114: シフト設定の導線は ADMIN と MANAGE_SHIFTS 付き DEPUTY_ADMIN だけ。SYSTEM_ADMIN は特別扱いしない。
+  it.each([
+    { label: 'ADMIN', response: { roleName: 'ADMIN', scopeAdmin: true, permissions: [] }, visible: true },
+    { label: 'MANAGE_SHIFTS 付き DEPUTY_ADMIN', response: { roleName: 'DEPUTY_ADMIN', scopeAdmin: false, permissions: ['MANAGE_SHIFTS'] }, visible: true },
+    { label: 'MANAGE_SHIFTS 無しの DEPUTY_ADMIN', response: { roleName: 'DEPUTY_ADMIN', scopeAdmin: false, permissions: [] }, visible: false },
+    { label: 'MEMBER', response: { roleName: 'MEMBER', scopeAdmin: false, permissions: [] }, visible: false },
+    { label: 'MANAGE_SHIFTS が権限グループで付いた MEMBER（BE は 403）', response: { roleName: 'MEMBER', scopeAdmin: false, permissions: ['MANAGE_SHIFTS'] }, visible: false },
+    { label: 'チームロール無しの SYSTEM_ADMIN', response: { roleName: 'SYSTEM_ADMIN', scopeAdmin: false, permissions: [] }, visible: false },
+  ])('シフト設定の導線: $label は $visible', async ({ response, visible }) => {
+    apiMock.mockImplementation((url: string) => Promise.resolve(url.endsWith('/me/permissions') ? { data: response } : { data: [] }))
+    const wrapper = await mountSuspended(BaseSidebar, {
+      props: {
+        scopeType: 'team',
+        scopeId: 'team-shift',
+        categories: [{ key: 'settings', labelKey: 'common.menu', icon: '', items: [
+          { labelKey: 'common.menu', icon: '', path: 'settings/shift', moduleSlug: null, requiredRole: 'DEPUTY_ADMIN' as const, access: 'shift-manage' as const },
+        ] }],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('a[href="/teams/team-shift/settings/shift"]').exists()).toBe(visible)
+  })
+
   it('実際の権限composableでADMIN応答を受けるとメニューリンクを描画する', async () => {
     const wrapper = await mountSidebar()
     await flushPromises()

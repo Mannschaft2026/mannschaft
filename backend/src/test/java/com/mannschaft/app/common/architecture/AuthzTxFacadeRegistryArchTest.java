@@ -67,6 +67,13 @@ class AuthzTxFacadeRegistryArchTest {
      */
     static final String CHAT_GUARD = "com.mannschaft.app.chat.service.ChatChannelAccessGuard";
 
+    /**
+     * シフト管理の認可クラス（CMP-261125-2114）。ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに管理操作を許し、
+     * 閲覧は切替で DEPUTY_ADMIN にも許す判定を束ねる。R3 では shift の Facade がここへ届くことを、
+     * R4 では tx 本体がここへ届かない（切替の値・privileged は Facade で解決して引数で渡す）ことを検査する。
+     */
+    static final String SHIFT_GATE = "com.mannschaft.app.shift.service.ShiftManageAccessGate";
+
     private static final String SHIFT = "com.mannschaft.app.shift.";
     private static final String REC = "com.mannschaft.app.recruitment.";
     private static final String RSV = "com.mannschaft.app.reservation.";
@@ -138,6 +145,11 @@ class AuthzTxFacadeRegistryArchTest {
         add(list, "W2", SHIFT + "controller.ShiftAutoAssignController", SHIFT + "service.ShiftAutoAssignFacade",
                 "runAutoAssign", "confirmAutoAssign", "revokeAutoAssign", "getAssignmentRuns", "getAssignmentRunDetail",
                 "confirmVisualReview");
+        // CMP-261125-2114: 勤務制約の個別 upsert（権限判定と対象の在籍検査を tx の外へ。他の勤務制約 EP は旧来どおり Service 内認可）
+        add(list, "2114", SHIFT + "controller.MemberWorkConstraintController",
+                SHIFT + "service.MemberWorkConstraintFacade", "upsertConstraint",
+                // 同 CMP-261125-2114: 一覧・削除・チームデフォルトの upsert/削除も Facade 経由へ移したため登録（件数 +4）
+                "listConstraints", "deleteConstraint", "upsertTeamDefault", "deleteTeamDefault");
         // W3a: 予約詳細
         add(list, "W3a", RSV + "controller.TeamReservationController", RSV + "service.ReservationDetailFacade",
                 "getReservation");
@@ -226,6 +238,8 @@ class AuthzTxFacadeRegistryArchTest {
                 cls(SHIFT + "service.ShiftScheduleService"),
                 cls(SHIFT + "service.ShiftPreferenceReminderBatchService")));
         map.put(SHIFT + "service.ShiftSlotFacade", List.of(cls(SHIFT + "service.ShiftSlotService")));
+        // 勤務制約は Facade を経ない EP（一覧・取得・削除・チームデフォルト）の認可が同じクラスに残るため METHOD
+        map.put(SHIFT + "service.MemberWorkConstraintFacade", List.of(method(SHIFT + "service.MemberWorkConstraintService")));
         map.put(SHIFT + "service.ShiftPdfFacade", List.of(
                 cls(SHIFT + "service.ShiftScheduleService"),
                 cls(SHIFT + "service.ShiftPdfService")));
@@ -255,16 +269,7 @@ class AuthzTxFacadeRegistryArchTest {
      * R6 の許可リスト: 「Facade FQN#メソッド名（ラムダは囲むメソッド名）」→ throw 形を直接呼んでよい理由。
      * 理由が空なら {@link #許可リストと除外表に理由がある()} が落ちる。使われなくなった項目も赤にする（陳腐化の防止）。
      */
-    static final Map<String, String> THROW_FORM_ALLOWLIST = Map.of(
-            SHIFT + "service.ShiftPositionFacade#checkTeamAdminAccess",
-            "teamId 直接指定のポジション一覧・作成は隠蔽対象のリソース ID を持たず、是正前から 403 COMMON_002 のまま（AC-6）。"
-                    + "SYSTEM_ADMIN を先に通したうえで checkAdminOrAbove を使う",
-            SHIFT + "service.ShiftChangeRequestFacade#create",
-            "非メンバーの SYSTEM_ADMIN は是正前どおり 403 COMMON_002 で拒否する（AC-5 改訂）。Gate は冒頭で SYSTEM_ADMIN を"
-                    + "通してしまうため、SYSTEM_ADMIN のときだけ checkMembership で先に弾く",
-            SHIFT + "service.ShiftScheduleFacade#createSchedule",
-            "?teamId= 直接指定のスケジュール作成は隠蔽対象のリソース ID を持たず、越境・不在・権限不足とも 403 COMMON_002 のまま"
-                    + "（ep_tables_w6.md §4-4 の S3）。SYSTEM_ADMIN を先に通したうえで checkAdminOrAbove を使う");
+    static final Map<String, String> THROW_FORM_ALLOWLIST = Map.of();
 
     /**
      * 登録 Facade を呼ぶが登録表に載せない Controller メソッド（「Controller FQN#メソッド名」→ 理由）。理由必須。
@@ -279,7 +284,7 @@ class AuthzTxFacadeRegistryArchTest {
                     + "findOrThrow・estimateFee は認可を持たない参照。W5 の対象外（試算の作り替えは別課題）で、"
                     + "tx 本体の直呼びが残るため R1 に通せない");
 
-    static final Rules RULES = new Rules(ENTRIES, TX_BODIES, Set.of(ACCESS_CONTROL, GATE, CHAT_GUARD), ACCESS_CONTROL,
+    static final Rules RULES = new Rules(ENTRIES, TX_BODIES, Set.of(ACCESS_CONTROL, GATE, CHAT_GUARD, SHIFT_GATE), ACCESS_CONTROL,
             THROW_FORM_ALLOWLIST, UNREGISTERED_FACADE_CALLERS);
 
     private final JavaClasses classes = ProductionClasses.get();
@@ -293,11 +298,20 @@ class AuthzTxFacadeRegistryArchTest {
     void 登録表の件数() {
         Map<String, Long> byWave = ENTRIES.stream()
                 .collect(Collectors.groupingBy(Entry::wave, TreeMap::new, Collectors.counting()));
-        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "W1", 9L, "W2", 16L, "W3a", 1L, "W3b", 2L, "W4", 6L, "W5", 11L, "W5周辺", 1L, "W6a", 17L, "W7", 4L,
-                "W8", 22L)); // W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat
-        assertThat(ENTRIES).hasSize(89); // CMP-261010-1432 枠間移動で +1 / CMP-261105-1507 chat で +22
-        assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(89);
+        assertThat(byWave).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+                Map.entry("2114", 5L),
+                Map.entry("W1", 9L),
+                Map.entry("W2", 16L),
+                Map.entry("W3a", 1L),
+                Map.entry("W3b", 2L),
+                Map.entry("W4", 6L),
+                Map.entry("W5", 11L),
+                Map.entry("W5周辺", 1L),
+                Map.entry("W6a", 17L),
+                Map.entry("W7", 4L),
+                Map.entry("W8", 22L))); // 2114: CMP-261125-2114 勤務制約 Facade の 5 メソッド / W6a: CMP-261010-1432 枠間移動で +1 / W8: CMP-261105-1507 chat
+        assertThat(ENTRIES).hasSize(94); // CMP-261125-2114 勤務制約 Facade で +5 / CMP-261010-1432 枠間移動で +1 / CMP-261105-1507 chat で +22
+        assertThat(ENTRIES.stream().map(Entry::key).distinct().count()).as("登録表に重複が無い").isEqualTo(94);
         assertThat(ENTRIES.stream().map(Entry::facade).collect(Collectors.toSet()))
                 .as("登録表の Facade と tx 本体の表の Facade が一致する").isEqualTo(TX_BODIES.keySet());
     }

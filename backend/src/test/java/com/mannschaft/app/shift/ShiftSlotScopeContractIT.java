@@ -441,55 +441,56 @@ class ShiftSlotScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // 7. user_roles のみに ADMIN ロールを持つ利用者（memberships 在籍行なし）が通れること
-    //    （CMP-260923-1641 差し戻し対応・Codex 検分指摘。開発DB実測: チーム管理者ロール609件中2件該当）
+    // 7. user_roles のみに ADMIN ロールを持つ利用者（memberships 在籍行なし＝退会済みでロールだけ残った ADMIN）は通れない
+    //    （CMP-261125-2114 で改訂。旧: CMP-260923-1641 は通る仕様だった。ADMIN の判定は在籍を問わないため、
+    //    シフトでは在籍を追加で要求する。所属者として 403）
     // ═════════════════════════════════════════════════════════════════════
 
     @Nested
-    @DisplayName("7. user_rolesのみのADMIN（membershipsの在籍行なし）は全EPを通過できる")
+    @DisplayName("7. user_rolesのみのADMIN（membershipsの在籍行なし）は在籍が無いので全EPで所属者向けの403")
     class UserRolesOnlyAdmin {
 
         @Test
-        @DisplayName("GET /schedules/{id}/slots（一覧）は200")
-        void 一覧は200() throws Exception {
+        @DisplayName("GET /schedules/{id}/slots（一覧）は403")
+        void 一覧は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(get("/api/v1/shifts/schedules/{id}/slots", scheduleAId))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("POST /schedules/{id}/slots（作成）は201")
-        void 作成は201() throws Exception {
+        @DisplayName("POST /schedules/{id}/slots（作成）は403")
+        void 作成は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(post("/api/v1/shifts/schedules/{id}/slots", scheduleAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(slotBody())))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("POST /schedules/{id}/slots/bulk（一括作成）は201")
-        void 一括作成は201() throws Exception {
+        @DisplayName("POST /schedules/{id}/slots/bulk（一括作成）は403")
+        void 一括作成は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(post("/api/v1/shifts/schedules/{id}/slots/bulk", scheduleAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("slots", List.of(slotBody())))))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("PATCH /slots/{id}（更新）は200")
-        void 更新は200() throws Exception {
+        @DisplayName("PATCH /slots/{id}（更新）は403")
+        void 更新は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(patch("/api/v1/shifts/slots/{id}", slotAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("note", "更新後"))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("PATCH /slots/{id}/assignments（差分割当）は200")
-        void 差分割当は200() throws Exception {
+        @DisplayName("PATCH /slots/{id}/assignments（差分割当）は403")
+        void 差分割当は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("addUserIds", List.of(memberTeamAId));
@@ -498,15 +499,15 @@ class ShiftSlotScopeContractIT extends AbstractMySqlIntegrationTest {
             mockMvc.perform(patch("/api/v1/shifts/slots/{id}/assignments", slotAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(body)))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("DELETE /slots/{id}（削除）は204")
-        void 削除は204() throws Exception {
+        @DisplayName("DELETE /slots/{id}（削除）は403")
+        void 削除は403() throws Exception {
             setAuth(userRolesOnlyAdminTeamAId);
             mockMvc.perform(delete("/api/v1/shifts/slots/{id}", slotAId))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isForbidden());
         }
     }
 

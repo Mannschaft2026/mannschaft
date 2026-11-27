@@ -5,7 +5,7 @@ import { groupMissingByUser, type ShiftPublishErrorInfo } from '~/utils/shiftPub
  * シフト公開が拒否されたときの案内ダイアログ（CMP-261115-1821）。
  *
  * - 時給未設定（400）: 対象者と勤務日を一覧表示し、時給設定画面への導線を出す。
- *   導線は時給設定画面と同じ権限（ADMIN）を持つ人にだけ出す。
+ *   導線は時給を登録できる権限（ADMIN または MANAGE_SHIFTS 付き DEPUTY_ADMIN）を持つ人にだけ出す。
  * - 競合（409）: 内容が変わったので読み込み直してから再操作するよう案内する。
  */
 const props = defineProps<{
@@ -28,7 +28,8 @@ const visible = computed({
 
 const names = ref<Record<number, string>>({})
 const slugRef = computed(() => props.teamSlug ?? '')
-const { isAdmin: canOpenSettings, loadPermissions } = useRoleAccess('team', slugRef)
+// 導線は時給の登録に必要な権限（ADMIN または MANAGE_SHIFTS 付き DEPUTY_ADMIN）を持つ人にだけ出す（CMP-261125-2114）。
+const { canManageShift: canOpenSettings, loadPermissions } = useShiftPermission(slugRef, { autoLoad: false })
 
 const groups = computed(() =>
   props.info?.kind === 'hourlyRateMissing' ? groupMissingByUser(props.info.missing) : [],

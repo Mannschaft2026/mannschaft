@@ -131,10 +131,12 @@ const categories = computed<SidebarCategory[]>(() => [
       // F10.1.1 P2a: 管理コンソール（L2 ハブ）への入口。DEPUTY_ADMIN 以上に表示。
       { labelKey: 'teamSidebar.item.adminConsole', icon: 'pi pi-shield', path: 'admin', moduleSlug: null, requiredRole: 'DEPUTY_ADMIN' },
       { labelKey: 'teamSidebar.item.memberPermissions', icon: 'pi pi-user-edit', path: '', absolutePath: '/admin/member-permissions', moduleSlug: null, requiredRole: 'ADMIN' },
-      { labelKey: 'teamSidebar.item.settings', icon: 'pi pi-sliders-h', path: 'settings/shift', moduleSlug: null, requiredRole: 'ADMIN' },
+      { labelKey: 'teamSidebar.item.shiftSettings', icon: 'pi pi-sliders-h', path: 'settings/shift', moduleSlug: null, requiredRole: 'DEPUTY_ADMIN', access: 'shift-manage' },
       // CMP-260910-1555: 時給を登録する入口が画面に無く、シフトを公開しても予算の消化額が
-      // 0 円のままになっていたため新設。金銭情報なので ADMIN 限定。
-      { labelKey: 'teamSidebar.item.hourlyRate', icon: 'pi pi-wallet', path: 'settings/hourly-rate', moduleSlug: null, requiredRole: 'ADMIN' },
+      // 0 円のままになっていたため新設。金銭情報なので閲覧は ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN・
+      // 時給閲覧切替が ON の DEPUTY_ADMIN に限る（CMP-261125-2114）。切替の値はサイドバーでは引かず、
+      // DEPUTY_ADMIN 以上に導線を出して、権限の判定と案内は画面側（hourly-rate.vue）が行う。
+      { labelKey: 'teamSidebar.item.hourlyRate', icon: 'pi pi-wallet', path: 'settings/hourly-rate', moduleSlug: null, requiredRole: 'DEPUTY_ADMIN' },
       { labelKey: 'teamSidebar.item.faqSettings', icon: 'pi pi-question-circle', path: 'settings/faq-settings', moduleSlug: null, requiredRole: 'ADMIN' },
 
       // F20.1: 課金・プラン管理（閲覧はメンバー可・操作はADMIN限定。ナビはメンバー以上に表示）

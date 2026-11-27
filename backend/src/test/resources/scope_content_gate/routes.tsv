@@ -32,7 +32,7 @@ R-aud-5	AUD	findActiveDistinctUserIdsByScope	com.mannschaft.app.role.service.Def
 R-aud-6	AUD	findUserIdsByScope	com.mannschaft.app.schedule.service.ScheduleAttendanceService#openAttendanceSolicitation	宛先	PR-N		未移行
 R-aud-7	AUD	listActiveMemberIds	com.mannschaft.app.school.service.SchoolAttendanceAccessPolicy#isEnrolledStudent	宛先	PR-N		未移行
 R-aud-8	AUD	listActiveMemberIds	com.mannschaft.app.school.service.SchoolAttendanceAccessPolicy#requireEnrolledStudents	宛先	PR-N		未移行
-R-aud-9	AUD	listActiveMemberIds	com.mannschaft.app.shift.service.ShiftHourlyRateService#listEffectiveRatesForTeam	宛先	PR-N		未移行
+R-aud-9	AUD	listActiveMemberIds	com.mannschaft.app.shift.service.ShiftHourlyRateFacade#listEffectiveRatesForTeam	宛先	PR-N		未移行
 R-aud-10	AUD	findUserIdsByScope	com.mannschaft.app.survey.service.SurveyUniverseResolver#isUserInUniverse	宛先	PR-N		未移行
 R-aud-11	AUD	findUserIdsByScope	com.mannschaft.app.survey.service.SurveyUniverseResolver#resolveAllModeUserIds	宛先	PR-N		未移行
 R-aud-12	AUD	findUserIdsByScope	com.mannschaft.app.timetable.personal.listener.TeamSlotNoteNotifyListener#deliver	宛先	PR-N		未移行

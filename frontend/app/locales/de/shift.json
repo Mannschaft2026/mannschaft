@@ -215,13 +215,9 @@
       "assignmentMaskedHint": "Zuweisungen werden bis zur Veröffentlichung ausgeblendet",
       "deleteTitle": "Schichtzeit löschen",
       "deleteConfirmPlain": "Diese Schichtzeit löschen?",
-
       "deleteConfirmBoth": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche und {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmRequestsOnly": "Diese Schichtzeit löschen? Die dafür eingereichten {requests} Wünsche werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmAssignmentsOnly": "Diese Schichtzeit löschen? Die {assignments} Zuweisungen werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen.",
-
       "deleteConfirmUnknown": "Diese Schichtzeit löschen? Eingereichte Wünsche und Zuweisungen dafür, falls vorhanden, werden ebenfalls gelöscht. Dies lässt sich mit normalen Mitteln nicht rückgängig machen."
     },
     "requests": {
@@ -498,7 +494,13 @@
       "validation": {
         "rateRequired": "Bitte geben Sie einen Stundensatz ein",
         "ratePositive": "Bitte geben Sie einen Stundensatz von mindestens 1 JPY ein"
-      }
+      },
+      "readOnlyNotice": "Sie dürfen Stundenlöhne nur einsehen. Zum Erfassen oder Ändern ist die Berechtigung „Schichten verwalten“ erforderlich."
+    },
+    "permission": {
+      "noManagePermission": "Sie können Schichten nur einsehen, da Ihnen die Berechtigung „Schichten verwalten“ fehlt. Zum Erstellen oder Bearbeiten bitten Sie eine Administratorin oder einen Administrator, sie Ihnen über eine Berechtigungsgruppe zu erteilen.",
+      "adminNotice": "Stellvertretende Administratoren können Schichten nicht verwalten (nur einsehen), wenn ihnen keine Berechtigungsgruppe „Schichten verwalten“ erteilt. Weisen Sie den benötigten Stellvertretern eine Berechtigungsgruppe zu, die „Schichten verwalten“ enthält.",
+      "adminNoticeLink": "Berechtigungsgruppen öffnen"
     }
   },
   "my_shift_guide": {

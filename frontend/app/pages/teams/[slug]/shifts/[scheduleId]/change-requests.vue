@@ -13,13 +13,12 @@ const authStore = useAuthStore()
 const { getSchedule } = useShiftApi()
 const { getTeam } = useTeamApi()
 
-// 審査してよいか（チーム ADMIN / DEPUTY_ADMIN）。BE（ShiftChangeRequestFacade）の判定に揃える。
-// プラットフォームの systemRole ではなく、このチームでの実効ロールで判定する。
-// 権限取得に失敗したときは roleName が null のままなので審査ボタンは出ない（権限なしに倒れる側）。
-// 運営専用の SYSTEM_ADMIN は業務導線に含めない（docs/security/03_role_authority_model.md §3.5、#4164）ため、
-// isAdminOrDeputy（SYSTEM_ADMIN を含む）ではなく roleName で判定する。
-const { roleName, loadPermissions } = useRoleAccess('team', teamSlug)
-const canReview = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
+// 審査してよいか（CMP-261125-2114: チーム ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN）。
+// BE（ShiftChangeRequestFacade / ShiftManageAccessGate）の判定に揃える。判定は useShiftPermission に集約。
+// プラットフォームの systemRole ではなく、このチームでの権限で判定する。SYSTEM_ADMIN は特別扱いしない。
+// 権限取得に失敗したときは権限なしに倒れ、審査ボタンは出ない。
+const { canManageShift, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
+const canReview = canManageShift
 
 const {
   requests,
@@ -123,6 +122,8 @@ async function onWithdraw(id: number): Promise<void> {
   <div class="mx-auto max-w-4xl space-y-6 px-4 py-6">
     <!-- ページヘッダー（戻る導線は PageHeader の back-to に一本化） -->
     <PageHeader :title="$t('shift.changeRequest.title')" :back-to="`/teams/${teamSlug}/shifts`" />
+
+    <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" />
 
     <SectionCard v-if="loadError">
       <DashboardErrorState

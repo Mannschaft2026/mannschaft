@@ -37,7 +37,9 @@ const { markIfDenied, markDenied } = useScopeNotFound()
 const teamApi = useTeamApi()
 const { loadAll } = useHourlyRateMemberPage()
 const { getHourlyRate, setHourlyRate } = useShiftHourlyRateApi()
-const { isAdmin, loadPermissions } = useRoleAccess('team', teamSlug)
+// CMP-261125-2114: 時給の閲覧は ADMIN・MANAGE_SHIFTS 付き DEPUTY_ADMIN・時給閲覧切替が ON の DEPUTY_ADMIN、
+// 登録・変更は ADMIN と MANAGE_SHIFTS 付き DEPUTY_ADMIN だけ（BE: ShiftManageAccessGate）。
+const { canViewHourlyRate, canManageShift, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 
 const loading = ref(true)
 const saving = ref(false)
@@ -112,6 +114,7 @@ function onPage(event: { page: number }) {
 }
 
 function openEdit(row: MemberRateRow) {
+  if (!canManageShift.value) return
   targetRow.value = row
   formRate.value = row.rate ? Number(row.rate.hourlyRate) : null
   formEffectiveFrom.value = new Date()
@@ -177,7 +180,7 @@ onMounted(async () => {
     notification.error(t('shift.hourlyRate.permissionLoadFailed'))
     return
   }
-  if (!isAdmin.value) {
+  if (!canViewHourlyRate.value) {
     // 導線を隠すだけでは URL 直打ちを防げない。BE も 403 を返すが、画面側でも明示的に弾く。
     // 権限の有無を示唆せず共通の「見つかりません」へ（CMP-261125-1108）
     markDenied()
@@ -198,6 +201,15 @@ onMounted(async () => {
     <PageLoading v-if="loading" />
 
     <template v-else>
+      <Message
+        v-if="!canManageShift"
+        severity="info"
+        :closable="false"
+        class="mb-4"
+        data-testid="hourly-rate-readonly-notice"
+      >
+        {{ $t('shift.hourlyRate.readOnlyNotice') }}
+      </Message>
       <Message
         v-if="missingCount > 0"
         severity="warn"
@@ -238,7 +250,7 @@ onMounted(async () => {
               <span v-else class="text-surface-400">—</span>
             </template>
           </Column>
-          <Column :header="$t('label.actions')">
+          <Column v-if="canManageShift" :header="$t('label.actions')">
             <template #body="{ data }: { data: MemberRateRow }">
               <Button
                 :label="data.rate ? $t('button.edit') : $t('shift.hourlyRate.setButton')"

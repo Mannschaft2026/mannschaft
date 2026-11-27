@@ -95,6 +95,8 @@ class ShiftChangeRequestReviewAndRequesterContractIT extends AbstractMySqlIntegr
         MembershipTestHelper.insertUserRole(em, adminId, "ADMIN", teamId, null);
         MembershipTestHelper.insertMembership(em, deputyId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
         MembershipTestHelper.insertUserRole(em, deputyId, "DEPUTY_ADMIN", teamId, null);
+        // CMP-261125-2114: 審査は ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけ。
+        MembershipTestHelper.grantTeamDeputyPermission(em, deputyId, teamId, "MANAGE_SHIFTS");
         MembershipTestHelper.insertMembership(em, memberId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
         MembershipTestHelper.insertMembership(em, sysAdminMemberId, ScopeType.TEAM, teamId, RoleKind.MEMBER);
         MembershipTestHelper.insertUserRole(em, sysAdminMemberId, "SYSTEM_ADMIN", null, null);
@@ -133,8 +135,8 @@ class ShiftChangeRequestReviewAndRequesterContractIT extends AbstractMySqlIntegr
         }
 
         @Test
-        @DisplayName("AC-B1: SYSTEM_ADMIN も例外なく、自分の依頼の審査は403 SHIFT_045（却下も同じ）")
-        void AC_B1_SYSTEM_ADMINの自己審査も403_SHIFT_045() throws Exception {
+        @DisplayName("AC-B1（CMP-261125-2114 で改訂）: チームロールを持たない SYSTEM_ADMIN は自分の依頼でも審査できず403 COMMON_002（SYSTEM_ADMIN の短絡は無い。却下も同じ）")
+        void AC_B1_SYSTEM_ADMINの自己審査も403() throws Exception {
             Long requestId = insertRequest(sysAdminMemberId);
 
             setAuth(sysAdminMemberId);
@@ -142,7 +144,7 @@ class ShiftChangeRequestReviewAndRequesterContractIT extends AbstractMySqlIntegr
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(reviewBody("REJECTED", 0))))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.error.code").value("SHIFT_045"));
+                    .andExpect(jsonPath("$.error.code").value("COMMON_002"));
 
             em.flush();
             em.clear();

@@ -17,6 +17,13 @@ const { mainApi, notifyError, handleApiError } = vi.hoisted(() => ({
 
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-a' }, query: {}, path: '/teams/team-a/settings/shift' }))
 mockNuxtImport('useTeamShiftSettingsApi', () => () => ({ getShiftSettings: mainApi, updateShiftSettings: vi.fn() }))
+// 権限の判定本体は useShiftPermission（別 spec で検証済み）。ここでは設定 API の 403/404/500 の扱いだけを見る（CMP-261125-2114）。
+mockNuxtImport('useShiftPermission', () => () => ({
+  canManageShift: ref(true),
+  isScopeAdmin: ref(true),
+  isDeputyWithoutManage: ref(false),
+  loadPermissions: async () => ({ ok: true }),
+}))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn(), error: notifyError, warn: vi.fn(), info: vi.fn() }))
 mockNuxtImport('useErrorHandler', () => () => ({
   handleApiError,

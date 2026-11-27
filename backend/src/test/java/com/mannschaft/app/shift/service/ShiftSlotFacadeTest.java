@@ -58,14 +58,26 @@ class ShiftSlotFacadeTest {
     private AccessControlService accessControlService;
     @Mock
     private UserStatusLookupService userStatusLookupService;
+    @Mock
+    private com.mannschaft.app.team.service.TeamShiftSettingsService teamShiftSettingsService;
 
     private ShiftSlotFacade facade;
 
     @BeforeEach
     void setUp() {
-        facade = new ShiftSlotFacade(slotService, new ScopeConcealingAccessGate(accessControlService,
-                new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())),
+        facade = new ShiftSlotFacade(slotService,
+                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())),
                 accessControlService, userStatusLookupService);
+    }
+
+    /** 操作者を「ADMIN、または MANAGE_SHIFTS を持つ DEPUTY_ADMIN」にする（CMP-261125-2114。判定は実物のゲートがモックの上で行う）。 */
+    private void stubManager() {
+        org.mockito.Mockito.lenient().when(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM"))
+                .thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.hasAdminOrPermissionInScope(
+                USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS")).thenReturn(true);
+        org.mockito.Mockito.lenient().when(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).thenReturn(true);
     }
 
     private static ShiftScheduleScope published() {
@@ -146,23 +158,38 @@ class ShiftSlotFacadeTest {
         }
 
         @Test
-        @DisplayName("user_roles のみの ADMIN は在籍を問わず通る（退行させない）")
-        void userRolesのみのADMINは通る() {
-            List<ShiftSlotResponse> slots = List.of();
+        @DisplayName("user_roles のみの ADMIN（退会済みでロールだけ残った）は在籍が無いので管理者の形で見られず、所属者向けの 403")
+        void userRolesのみのADMINは在籍が無ければ拒否() {
             given(slotService.resolveScheduleScope(SCHEDULE_ID)).willReturn(published());
-            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
-            given(slotService.listSlots(SCHEDULE_ID, true)).willReturn(slots);
+            stubManager();
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
-            assertThat(facade.listSlots(SCHEDULE_ID, USER_ID)).isSameAs(slots);
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            assertCode(catchThrowable(() -> facade.listSlots(SCHEDULE_ID, USER_ID)), CommonErrorCode.COMMON_002);
+            verify(slotService, never()).listSlots(anyLong(), org.mockito.ArgumentMatchers.anyBoolean());
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通る")
-        void SYSTEM_ADMINは短絡() {
+        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡せず、部外者と同じ 404")
+        void SYSTEM_ADMINは短絡しない() {
+            given(slotService.resolveScheduleScope(SCHEDULE_ID)).willReturn(published());
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
+
+            assertCode(catchThrowable(() -> facade.listSlots(SCHEDULE_ID, USER_ID)),
+                    ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
+        }
+
+        @Test
+        @DisplayName("CMP-261125-2114: 閲覧切替 ON の MANAGE_SHIFTS 無し DEPUTY_ADMIN は privileged=true（割当を伏せない）")
+        void 閲覧切替ONの副管理者は割当を伏せない() {
             List<ShiftSlotResponse> slots = List.of();
             given(slotService.resolveScheduleScope(SCHEDULE_ID)).willReturn(published());
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            given(accessControlService.hasAdminOrPermissionInScope(USER_ID, TEAM_ID, "TEAM", "MANAGE_SHIFTS"))
+                    .willReturn(false);
+            given(teamShiftSettingsService.findDeputyViewToggles(TEAM_ID))
+                    .willReturn(new com.mannschaft.app.team.dto.DeputyShiftViewToggles(true, false));
             given(slotService.listSlots(SCHEDULE_ID, true)).willReturn(slots);
 
             assertThat(facade.listSlots(SCHEDULE_ID, USER_ID)).isSameAs(slots);
@@ -209,9 +236,9 @@ class ShiftSlotFacadeTest {
         }
 
         @Test
-        @DisplayName("管理者・SYSTEM_ADMIN は tx 本体へ進む")
+        @DisplayName("ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN は tx 本体へ進む")
         void 管理者は通る() {
-            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            stubManager();
             ShiftSlotResponse created = ShiftSlotResponse.builder().id(SLOT_ID).build();
             given(slotService.createSlot(SCHEDULE_ID, req)).willReturn(created);
 
@@ -267,14 +294,14 @@ class ShiftSlotFacadeTest {
 
             assertCode(catchThrowable(() -> facade.updateSlot(SLOT_ID, updateReq, USER_ID)),
                     ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
+            verify(accessControlService, never()).hasAdminOrPermissionInScope(any(), any(), any(), any());
         }
 
         @Test
-        @DisplayName("管理者・SYSTEM_ADMIN は tx 本体へ進む")
+        @DisplayName("ADMIN／MANAGE_SHIFTS 付き DEPUTY_ADMIN は tx 本体へ進む")
         void 管理者は通る() {
             given(slotService.resolveSlotTeamId(SLOT_ID)).willReturn(TEAM_ID);
-            given(accessControlService.isAdminOrAbove(USER_ID, TEAM_ID, "TEAM")).willReturn(true);
+            stubManager();
             ShiftSlotResponse updated = ShiftSlotResponse.builder().id(SLOT_ID).build();
             given(slotService.updateSlot(eq(SLOT_ID), eq(updateReq), eq(USER_ID), any())).willReturn(updated);
             given(slotService.patchSlotAssignments(SLOT_ID, patchReq, USER_ID)).willReturn(updated);
@@ -289,16 +316,16 @@ class ShiftSlotFacadeTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通る（チーム判定を撃たない）")
-        void SYSTEM_ADMINは短絡() {
+        @DisplayName("CMP-261125-2114: チームロールを持たない SYSTEM_ADMIN は短絡して通らず、部外者と同じ 404 SHIFT_002")
+        void SYSTEM_ADMINは短絡しない() {
             given(slotService.resolveSlotTeamId(SLOT_ID)).willReturn(TEAM_ID);
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+            given(accessControlService.isMember(USER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
-            facade.deleteSlot(SLOT_ID, USER_ID);
+            assertCode(catchThrowable(() -> facade.deleteSlot(SLOT_ID, USER_ID)),
+                    ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
 
-            verify(slotService).deleteSlot(SLOT_ID);
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            verify(slotService, never()).deleteSlot(anyLong());
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
         }
     }
 }
