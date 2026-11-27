@@ -3509,6 +3509,11 @@ origin/main の `convertAndSend` / `convertAndSendToUser` の全呼び出しか�
 
 #### A. 活動統計（F06.4 §15 の AC-0159-70〜83 を参照）
 
+- **AC-0159-101**: 記録 3 件（参加者 {u1,u2,u3}・{u1,u2}・{u1}、うち 1 件はテンプレートなし）で `totalParticipations=6`・`uniqueParticipants=3`・`averageParticipants=2.0`。四捨五入の境界（延べ 7／3 件 → 2.3、延べ 5／2 件 → 2.5）が仕様どおり。`byTemplate` にテンプレートなし行（`templateId=null`・`templateName=null`・件数）が最後に並ぶ。
+- **AC-0159-102**: 期間内の対象記録が 0 件のとき 200 で `totalActivities=0`・`totalParticipations=0`・`uniqueParticipants=0`・`averageParticipants=null`・`byTemplate=[]`・`byPeriod` は期間内の全バケットが 0 で昇順・`topParticipants` は見せる閲覧者には `[]`（見せない閲覧者には null）。
+- **AC-0159-104**: 集計の各問い合わせ（総数・バケット・参加者・上位・名前解決）のいずれかで例外を注入すると、部分集計の 200 を返さず 5xx（既存の共通エラー応答）。参加者取得の例外を空集合へ変換する旧処理が撤去されている。
+- **AC-0159-105**: 期間の日数＝`date_to − date_from + 1`（両端含む）とし、1,095 日・1,096 日は 200、1,097 日は 400 `ACTIVITY_025`（うるう日をまたぐ期間でも同じ算定）。算定式は F06.4 §15.2。
+
 #### E・T・M. サポーターの入口・非公開化・是正 migration（F01.2 03/04 の AC-0159-40〜68 を参照）
 
 #### F. 画面（AC-0159-85 は F06.4 §15.7、86 は F05.5 §6.9、87 は F05.1 §6.9）

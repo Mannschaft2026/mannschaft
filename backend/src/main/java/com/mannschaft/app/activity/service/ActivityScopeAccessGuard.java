@@ -117,6 +117,20 @@ public class ActivityScopeAccessGuard {
     }
 
     /**
+     * 活動統計の閲覧資格（F06.4 §15.2）を検証する。共通の門を通したうえで、スコープでのロールが MEMBER 以上
+     * （在籍が {@code role_kind=MEMBER}、または在籍したうえで ADMIN / DEPUTY_ADMIN）。公開チーム・組織のサポーターも
+     * 部外者と同一の 403（COMMON_002）。COMMITTEE は常に 403。
+     *
+     * @throws BusinessException 資格なし、または解決対象外スコープ（COMMON_002）
+     */
+    public void checkRegularMemberOrAbove(Long userId, ActivityScopeType scopeType, Long scopeId) {
+        checkScopeContentAccess(userId, scopeType, scopeId);
+        if (!accessControlService.isRegularMemberOrAbove(userId, scopeId, scopeType.name())) {
+            throw new BusinessException(CommonErrorCode.COMMON_002);
+        }
+    }
+
+    /**
      * スコープ管理者（ADMIN / DEPUTY_ADMIN）であることを検証する（更新・削除系）。
      *
      * @throws BusinessException 非管理者、または解決対象外スコープ（COMMON_002）

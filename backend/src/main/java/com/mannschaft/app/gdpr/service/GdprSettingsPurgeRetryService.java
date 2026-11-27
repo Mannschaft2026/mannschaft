@@ -35,6 +35,7 @@ import com.mannschaft.app.timetable.notes.event.TimetableNoteFieldsPurgeEventLis
 import com.mannschaft.app.timetable.personal.event.PersonalTimetableSettingsPurgeEventListener;
 import com.mannschaft.app.user.event.UserBlockPurgeEventListener;
 import com.mannschaft.app.village.event.VillagePersonalSettingsPurgeEventListener;
+import com.mannschaft.app.activity.event.ActivityStatsSettingsPurgeEventListener;
 import com.mannschaft.app.visibility.event.VisibilityTemplatePurgeEventListener;
 import com.mannschaft.app.weather.event.WeatherLocationCleanupListener;
 import lombok.RequiredArgsConstructor;
@@ -105,6 +106,7 @@ public class GdprSettingsPurgeRetryService {
     private final UserAdPreferencePurgeEventListener userAdPreferencePurgeEventListener;
     private final PropertyWorkHistoryViewPurgeEventListener propertyWorkHistoryViewPurgeEventListener;
     private final VillagePersonalSettingsPurgeEventListener villagePersonalSettingsPurgeEventListener;
+    private final ActivityStatsSettingsPurgeEventListener activityStatsSettingsPurgeEventListener;
 
     /** 受け付けるドメイン名の集合。不明なドメイン名は即時 IllegalArgumentException。 */
     private static final Set<String> VALID_DOMAINS =
@@ -114,7 +116,7 @@ public class GdprSettingsPurgeRetryService {
                     "reflection", "timetable.personal", "cms", "chat", "knowledgebase",
                     "favorite", "membership", "weather", "inbox", "timetable.notes",
                     "seal", "schedule", "visibility",
-                    "shift", "parking", "advertising", "property", "village");
+                    "shift", "parking", "advertising", "property", "village", "activity");
 
     /** 設定専用の retry 対象か判定する。 */
     public boolean supports(String domainName) {
@@ -216,6 +218,7 @@ public class GdprSettingsPurgeRetryService {
                 case "advertising" -> userAdPreferencePurgeEventListener.retryPurge(userId);
                 case "property" -> propertyWorkHistoryViewPurgeEventListener.retryPurge(userId);
                 case "village" -> villagePersonalSettingsPurgeEventListener.retryPurge(userId);
+                case "activity" -> activityStatsSettingsPurgeEventListener.retryPurge(userId);
                 default -> throw new IllegalStateException("到達不能: " + domainName);
             };
         } catch (Exception ex) {
