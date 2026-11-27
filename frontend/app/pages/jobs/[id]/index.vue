@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { JobPostingResponse } from '~/types/jobmatching'
+import { isScopeNotFound } from '~/utils/loadError'
 
 /**
  * F13.1 Worker 向け求人詳細ページ。
@@ -33,8 +34,11 @@ async function load() {
     job.value = res.data
   }
   catch (e) {
-    error(t('jobmatching.error.loadFailed'), String(e))
     job.value = null
+    // 見えない求人・不存在（403/404）は「見つかりません」表示だけにし、トーストを出さない。
+    // BE は見えない求人を不在と同一の 404 で返す（存在秘匿・CMP-261127-1118、FE 規約 §12）
+    if (isScopeNotFound(e)) return
+    error(t('jobmatching.error.loadFailed'), String(e))
   }
   finally {
     loading.value = false
@@ -86,6 +90,7 @@ onMounted(() => load())
 
     <div
       v-else-if="!job"
+      data-testid="job-detail-not-found"
       class="rounded border border-dashed border-surface-300 p-8 text-center text-surface-500 dark:border-surface-600"
     >
       {{ t('jobmatching.detail.notFound') }}

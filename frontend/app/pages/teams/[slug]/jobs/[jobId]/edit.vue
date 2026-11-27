@@ -24,6 +24,7 @@ const router = useRouter()
 const { t } = useI18n()
 const api = useJobPostingApi()
 const { success, error } = useNotification()
+const { markIfDenied } = useScopeNotFound()
 
 const teamSlug = computed(() => String(route.params.slug))
 const jobId = computed(() => Number(route.params.jobId))
@@ -82,8 +83,10 @@ async function load() {
     applyJobToForm(res.data)
   }
   catch (e) {
-    error(t('jobmatching.error.loadFailed'), String(e))
     job.value = null
+    // 見えない求人・不存在（403/404）は共通の「見つかりません」（ScopeNotFound）へ。トーストは出さない（CMP-261127-1118）
+    if (markIfDenied(e)) return
+    error(t('jobmatching.error.loadFailed'), String(e))
   }
   finally {
     loading.value = false

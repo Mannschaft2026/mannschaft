@@ -89,7 +89,8 @@ public class JobPostingController {
      * 求人詳細を取得する。
      *
      * <p>BOLA対策: id 直打ちで他チームの DRAFT/非公開求人が閲覧できないよう、
-     * 一覧（{@link #searchJobs}）と同じ F00 可視性基盤で viewer 視点の可視性を検証する。</p>
+     * 一覧（{@link #searchJobs}）と同じ F00 可視性基盤で viewer 視点の可視性を検証する。
+     * 見えない求人は不在 ID と同一の 404 {@code JOB_NOT_FOUND} で返し、実在を秘匿する（CMP-261127-1118）。</p>
      */
     @GetMapping("/{id}")
     @Operation(summary = "求人詳細取得")
