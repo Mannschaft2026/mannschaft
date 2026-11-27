@@ -1,6 +1,7 @@
 package com.mannschaft.app.billing;
 
 import com.mannschaft.app.auth.entity.UserEntity;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -210,16 +211,7 @@ class BillingOperationAuthorizerConcurrencyIT extends AbstractMySqlIntegrationTe
     }
 
     private void ensureRole(String roleName) {
-        int priority = "ADMIN".equals(roleName) ? 100 : 80;
-        entityManager.createNativeQuery("""
-                        INSERT IGNORE INTO roles
-                            (name, display_name, priority, is_system, created_at, updated_at)
-                        VALUES (:name, :displayName, :priority, false, NOW(6), NOW(6))
-                        """)
-                .setParameter("name", roleName)
-                .setParameter("displayName", "ADMIN".equals(roleName) ? "管理者" : "副管理者")
-                .setParameter("priority", priority)
-                .executeUpdate();
+        RoleSeedSupport.ensureCanonical(entityManager, roleName);
         entityManager.flush();
     }
 

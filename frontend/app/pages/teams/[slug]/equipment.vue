@@ -65,6 +65,7 @@ async function handleCreate() {
         <EquipmentList
           ref="listRef"
           scope-type="team"
+          scope-not-found-on-denied
           :scope-id="teamSlug"
           :can-manage="isAdminOrDeputy"
           @create="openCreateDialog"

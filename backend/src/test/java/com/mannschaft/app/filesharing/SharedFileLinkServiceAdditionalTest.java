@@ -34,6 +34,9 @@ import static org.mockito.Mockito.verify;
 @DisplayName("SharedFileLinkService 追加単体テスト")
 class SharedFileLinkServiceAdditionalTest {
 
+    private static final com.mannschaft.app.common.token.SecretTokenVault HASHER =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     @Mock
     private SharedFileLinkRepository linkRepository;
 
@@ -53,6 +56,11 @@ class SharedFileLinkServiceAdditionalTest {
     @Mock
     private com.mannschaft.app.filesharing.service.SharedFolderQueryService folderQueryService;
 
+    // トークンの発行・ハッシュは実物の金庫を使う（CMP-260826-1457 W2）。
+    @org.mockito.Spy
+    private com.mannschaft.app.common.token.SecretTokenVault vault =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     @InjectMocks
     private SharedFileLinkService service;
 
@@ -62,7 +70,7 @@ class SharedFileLinkServiceAdditionalTest {
 
     private LinkResponse mockLinkResponse(boolean hasPassword) {
         // LinkResponse(id, fileId, token, expiresAt, hasPassword, accessCount, lastAccessedAt, createdBy, createdAt, active, downloadAllowed)
-        return new LinkResponse(LINK_ID, FILE_ID, "tok123", null, hasPassword, 0, null, USER_ID, null, true, false);
+        return new LinkResponse(LINK_ID, FILE_ID, null, hasPassword, 0, null, USER_ID, null, true, false);
     }
 
     // ========================================
@@ -77,7 +85,7 @@ class SharedFileLinkServiceAdditionalTest {
         @DisplayName("正常系: ファイルの共有リンク一覧が返却される")
         void リンク一覧_正常() {
             SharedFileLinkEntity entity = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok123").accessCount(0).createdBy(USER_ID).build();
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok123")).accessCount(0).createdBy(USER_ID).build();
             given(linkRepository.findByFileIdOrderByCreatedAtDesc(FILE_ID))
                     .willReturn(List.of(entity));
             given(fileSharingMapper.toLinkResponseList(any()))
@@ -103,14 +111,14 @@ class SharedFileLinkServiceAdditionalTest {
             CreateLinkRequest request = new CreateLinkRequest(
                     LocalDateTime.now().plusDays(7), null, false);
             SharedFileLinkEntity saved = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("gen-token").accessCount(0).createdBy(USER_ID).build();
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("gen-token")).accessCount(0).createdBy(USER_ID).build();
             given(linkRepository.save(any())).willReturn(saved);
             given(fileSharingMapper.toLinkResponse(saved)).willReturn(mockLinkResponse(false));
 
-            LinkResponse result = service.createLink(FILE_ID, USER_ID, request);
+            com.mannschaft.app.filesharing.dto.LinkIssuedResponse issued = service.createLink(FILE_ID, USER_ID, request);
 
-            assertThat(result).isNotNull();
-            assertThat(result.isHasPassword()).isFalse();
+            assertThat(issued.token()).isNotBlank();
+            assertThat(issued.link().isHasPassword()).isFalse();
         }
 
         @Test
@@ -120,14 +128,14 @@ class SharedFileLinkServiceAdditionalTest {
                     LocalDateTime.now().plusDays(7), "secret", false);
             given(passwordEncoder.encode("secret")).willReturn("$2a$hashed");
             SharedFileLinkEntity saved = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("gen-token").passwordHash("$2a$hashed")
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("gen-token")).passwordHash("$2a$hashed")
                     .accessCount(0).createdBy(USER_ID).build();
             given(linkRepository.save(any())).willReturn(saved);
             given(fileSharingMapper.toLinkResponse(saved)).willReturn(mockLinkResponse(true));
 
-            LinkResponse result = service.createLink(FILE_ID, USER_ID, request);
+            com.mannschaft.app.filesharing.dto.LinkIssuedResponse issued = service.createLink(FILE_ID, USER_ID, request);
 
-            assertThat(result.isHasPassword()).isTrue();
+            assertThat(issued.link().isHasPassword()).isTrue();
             verify(passwordEncoder).encode("secret");
         }
 
@@ -137,13 +145,13 @@ class SharedFileLinkServiceAdditionalTest {
             // PR-D: expiresAt は必須（null は LINK_EXPIRY_INVALID）になったため有効な期限を指定する。
             CreateLinkRequest request = new CreateLinkRequest(LocalDateTime.now().plusDays(7), "   ", false);
             SharedFileLinkEntity saved = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("gen-token").accessCount(0).createdBy(USER_ID).build();
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("gen-token")).accessCount(0).createdBy(USER_ID).build();
             given(linkRepository.save(any())).willReturn(saved);
             given(fileSharingMapper.toLinkResponse(saved)).willReturn(mockLinkResponse(false));
 
-            LinkResponse result = service.createLink(FILE_ID, USER_ID, request);
+            com.mannschaft.app.filesharing.dto.LinkIssuedResponse issued = service.createLink(FILE_ID, USER_ID, request);
 
-            assertThat(result.isHasPassword()).isFalse();
+            assertThat(issued.link().isHasPassword()).isFalse();
         }
     }
 
@@ -159,7 +167,7 @@ class SharedFileLinkServiceAdditionalTest {
         @DisplayName("正常系: リンクが削除される")
         void リンク削除_正常() {
             SharedFileLinkEntity entity = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok123").accessCount(0).createdBy(USER_ID).build();
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok123")).accessCount(0).createdBy(USER_ID).build();
             given(linkRepository.findById(LINK_ID)).willReturn(Optional.of(entity));
 
             service.deleteLink(LINK_ID);
@@ -191,13 +199,13 @@ class SharedFileLinkServiceAdditionalTest {
         @DisplayName("正常系: パスワード正しくアクセスできる")
         void パスワード正しい_アクセス成功() {
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("pw-token").passwordHash("$2a$hashed")
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("pw-token")).passwordHash("$2a$hashed")
                     .accessCount(0).createdBy(USER_ID).build();
             com.mannschaft.app.filesharing.dto.FileResponse fileResponse =
                     new com.mannschaft.app.filesharing.dto.FileResponse(
                             FILE_ID, 1L, "secure.pdf", "key", 2048L, "application/pdf",
                             null, USER_ID, 1, null, null, null, null);
-            given(linkRepository.findByToken("pw-token")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("pw-token"))).willReturn(Optional.of(link));
             given(passwordEncoder.matches("correct", "$2a$hashed")).willReturn(true);
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse);
 

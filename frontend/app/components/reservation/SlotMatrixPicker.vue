@@ -40,6 +40,8 @@ const props = defineProps<{
   teamTimezone?: string
   /** 管理者（ADMIN）か否か。空状態の文言・管理CTAの出し分けに使う。 */
   isAdmin: boolean
+  /** シェル配下の予約タブからだけ true。枠グリッド（主取得）が 403/404 なら共通の「見つかりません」へ（CMP-261125-1108） */
+  scopeNotFoundOnDenied?: boolean
 }>()
 
 // 写経元 SlotGridPicker と同一シグネチャで emit（長尺手動枠クリック時のみ・単枠フロー）
@@ -59,6 +61,7 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const reservationApi = useReservationApi()
+const { markIfDenied } = useScopeNotFound()
 const teamTimezone = computed(() => props.teamTimezone ?? 'Asia/Tokyo')
 /** 静かなエラー記録（トーストは出さずバックエンドへ送信。WidgetAttendanceResults.vue 等と同一パターン）。 */
 const { captureQuiet } = useErrorReport()
@@ -284,9 +287,11 @@ async function loadGrid(opts?: { silent?: boolean }) {
     })
     requiredCellCount.value = res.data.meta?.requiredCellCount ?? null
   }
-  catch {
+  catch (error) {
     days.value = []
     requiredCellCount.value = null
+    // 非所属・権限なし（403/404）は本文を共通の「見つかりません」に置き換える。エラー文言は出さない
+    if (props.scopeNotFoundOnDenied && markIfDenied(error)) return
     errorMsg.value = t('reservation.grid.load_error')
   }
   finally {

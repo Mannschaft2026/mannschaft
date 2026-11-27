@@ -33,9 +33,9 @@ public class ContactInviteController {
      *
      * <p><b>認可根拠（{@link AuthorizedInService}）</b>: 認可は capability トークン
      * （招待 URL に埋め込まれた発行者固有トークン）で実施する。
-     * {@code ContactInviteTokenService.java:93-96}（{@code getPreview}）が
-     * {@code tokenRepository.findByToken(token)} で照合し、トークン不在または
-     * {@code ContactInviteTokenEntity.java:97-102} の {@code isValid()}
+     * {@code ContactInviteTokenService#getPreview} が
+     * {@code tokenRepository.findByTokenHash(vault.hash(token))} で照合し、トークン不在または
+     * {@code ContactInviteTokenEntity#isValid()}
      * （無効化済み {@code revokedAt} / 期限切れ {@code expiresAt} / 利用回数超過 {@code maxUses}）
      * が false の場合は {@code isValid=false} のみを返し、<b>発行者情報を一切返さない</b>。
      * 有効なトークンの保持者にのみ発行者の氏名・ハンドル・有効期限を開示する
@@ -56,7 +56,7 @@ public class ContactInviteController {
      * <p><b>認可</b>: 追加相手は<b>招待 URL に埋め込まれた capability トークンの発行者</b>に
      * 限定され、リクエストで任意のユーザーを指定する余地がない。自分側の登録先は
      * {@code SecurityUtils.getCurrentUserId()} で確定した認証主体のフォルダのみ
-     * （{@code ContactInviteTokenService.java:113-160}）。トークン不在・無効化済み・期限切れ・
+     * （{@code ContactInviteTokenService#acceptInvite}）。トークン不在・無効化済み・期限切れ・
      * 利用回数超過は {@code CONTACT_012}、自分が発行したトークンは {@code CONTACT_013} で拒否し、
      * ブロック・事前拒否は設計書 §2.3 のサイレント方式（応答差を作らない）で扱う。
      * 契約は {@code ContactScopeContractIT} で固定する。認可根治戦役 Wave6 監査済。</p>

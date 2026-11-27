@@ -6,8 +6,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,11 +29,16 @@ class BlogSlugConflictRetryAspectTest {
         final List<Boolean> txActiveAtAttempt = new ArrayList<>();
         int failures;
         int calls;
+        /** 非 null なら failures 回まで、slug 競合の代わりにこの失敗を投げる。 */
+        RuntimeException failure;
 
         @RetryOnAutoSlugConflict
         public String write() {
             calls++;
             txActiveAtAttempt.add(TransactionSynchronizationManager.isActualTransactionActive());
+            if (calls <= failures && failure != null) {
+                throw failure;
+            }
             if (calls <= failures) {
                 throw new BlogSlugAutoConflictException(new RuntimeException("Duplicate entry"));
             }
@@ -98,6 +106,74 @@ class BlogSlugConflictRetryAspectTest {
         SlugWriter target = new SlugWriter();
 
         assertThatThrownBy(() -> proxy(target).notAnnotated()).isInstanceOf(BlogSlugAutoConflictException.class);
+        assertThat(target.calls).isEqualTo(1);
+    }
+
+    private static DeadlockLoserDataAccessException deadlock() {
+        return new DeadlockLoserDataAccessException("Deadlock found when trying to get lock", new SQLException(
+                "Deadlock found when trying to get lock; try restarting transaction", "40001", 1213));
+    }
+
+    @Test
+    @DisplayName("デッドロックは（トランザクション全体がロールバック済みなので）呼び直して成功する")
+    void デッドロックは呼び直して成功() {
+        SlugWriter target = new SlugWriter();
+        target.failures = 2;
+        target.failure = deadlock();
+
+        assertThat(proxy(target).write()).isEqualTo("slug-3");
+        assertThat(target.calls).isEqualTo(3);
+        assertThat(target.txActiveAtAttempt).as("毎回 TX の外側から呼び直す").containsOnly(false);
+    }
+
+    @Test
+    @DisplayName("MySQL の 1213（CannotAcquireLockException に翻訳される）もデッドロックとして再試行する")
+    void 翻訳済みデッドロックも再試行() {
+        SlugWriter target = new SlugWriter();
+        target.failures = 1;
+        target.failure = new CannotAcquireLockException("could not execute statement", new SQLException(
+                "Deadlock found when trying to get lock; try restarting transaction", "40001", 1213));
+
+        assertThat(proxy(target).write()).isEqualTo("slug-2");
+        assertThat(target.calls).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("ロック待ちタイムアウト(1205)はデッドロックではないので再試行せずそのまま伝播する（待ち時間の増幅を避ける）")
+    void ロック待ちタイムアウトは再試行しない() {
+        SlugWriter target = new SlugWriter();
+        target.failures = 1;
+        target.failure = new CannotAcquireLockException("Lock wait timeout exceeded", new SQLException(
+                "Lock wait timeout exceeded; try restarting transaction", "HY000", 1205));
+
+        assertThatThrownBy(() -> proxy(target).write()).isInstanceOf(CannotAcquireLockException.class);
+        assertThat(target.calls).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("デッドロックが続いたら上限回数で 503（CMS_028）")
+    void デッドロック上限で503() {
+        SlugWriter target = new SlugWriter();
+        target.failures = Integer.MAX_VALUE;
+        target.failure = deadlock();
+
+        assertThatThrownBy(() -> proxy(target).write())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode()).isEqualTo("CMS_028"));
+        assertThat(target.calls).isEqualTo(BlogSlugConflictRetryAspect.MAX_ATTEMPTS);
+    }
+
+    @Test
+    @DisplayName("呼び出し元のトランザクション内のデッドロックは再試行せず 503（CMS_028）にして呼び出し元ごとロールバックさせる")
+    void 参加中のデッドロックは再試行しない() {
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        SlugWriter target = new SlugWriter();
+        target.failures = 1;
+        target.failure = deadlock();
+
+        assertThatThrownBy(() -> proxy(target).write())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode().getCode()).isEqualTo("CMS_028"));
         assertThat(target.calls).isEqualTo(1);
     }
 }

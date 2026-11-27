@@ -2055,6 +2055,101 @@ class FlywayFromScratchMigrationTest {
         }
     }
 
+    /** W2 filesharing の移行直前の版（origin/main の最大版）。shared_file_links.token が平文のまま残っている。 */
+    private static final String SHARED_FILE_LINKS_PRE_HASH_TARGET = "267.20261124005850";
+
+    @Test
+    @Order(29)
+    @DisplayName("CMP-260826-1457 W2 filesharing: shared_file_links の token はハッシュ化され、移行前のリンクは行を残したまま全失効する（AC-x1・AC-A）")
+    void shared_file_linksのtokenはハッシュ化され全失効する() throws Exception {
+        String schema = "cmp1457_shared_file_links";
+        String schemaUrl = MYSQL.getJdbcUrl().replaceFirst("/" + MYSQL.getDatabaseName() + "(?=$|\\?)", "/" + schema);
+        try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             Statement statement = root.createStatement()) {
+            statement.execute("DROP DATABASE IF EXISTS " + schema);
+            statement.execute("CREATE DATABASE " + schema + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+        }
+        try {
+            Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
+                    .outOfOrder(false).target(SHARED_FILE_LINKS_PRE_HASH_TARGET).load().migrate();
+
+            String activePlaintext = java.util.UUID.randomUUID().toString();
+            String inactivePlaintext = java.util.UUID.randomUUID().toString();
+            long activeId;
+            long inactiveId;
+            try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
+                try (Statement fk = conn.createStatement()) {
+                    // 本試験の対象は token 列の移行。前提の shared_files / users 行は置かない
+                    fk.execute("SET FOREIGN_KEY_CHECKS = 0");
+                }
+                activeId = insertPlaintextFileLink(conn, activePlaintext, true);
+                inactiveId = insertPlaintextFileLink(conn, inactivePlaintext, false);
+            }
+
+            Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
+                    .outOfOrder(false).load().migrate();
+
+            try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
+                assertTokenHashMigrated(conn, new TokenHashMigrationExpectation("shared_file_links", "token", "token_hash", false));
+
+                // AC-A: 行・ID・参照元(file_id)・利用回数・DL可否・発行者は残り、全件が失効している
+                try (var select = conn.prepareStatement("SELECT id, file_id, access_count, download_allowed, created_by, "
+                        + "is_active, token_hash FROM shared_file_links WHERE id IN (?, ?) ORDER BY id")) {
+                    select.setLong(1, activeId);
+                    select.setLong(2, inactiveId);
+                    List<String> hashes = new ArrayList<>();
+                    int rows = 0;
+                    try (ResultSet rs = select.executeQuery()) {
+                        while (rs.next()) {
+                            rows++;
+                            assertThat(rs.getLong("file_id")).isEqualTo(910001L);
+                            assertThat(rs.getInt("access_count")).isEqualTo(4);
+                            assertThat(rs.getBoolean("download_allowed")).isTrue();
+                            assertThat(rs.getLong("created_by")).isEqualTo(77L);
+                            assertThat(rs.getBoolean("is_active")).as("移行前に有効だったリンクも失効する").isFalse();
+                            assertThat(rs.getString("token_hash")).matches("^[0-9a-f]{64}$");
+                            hashes.add(rs.getString("token_hash"));
+                        }
+                    }
+                    assertThat(rows).as("移行で行が消えていない").isEqualTo(2);
+                    assertThat(hashes.stream().distinct().count()).as("乱数で埋めたハッシュは行ごとに異なる").isEqualTo(2L);
+                }
+
+                // AC-A: 移行前の平文はどれも照合（hash(平文) の等値検索）に当たらない
+                try (var lookup = conn.prepareStatement("SELECT COUNT(*) FROM shared_file_links "
+                        + "WHERE token_hash IN (SHA2(?, 256), SHA2(?, 256))")) {
+                    lookup.setString(1, activePlaintext);
+                    lookup.setString(2, inactivePlaintext);
+                    try (ResultSet rs = lookup.executeQuery()) {
+                        assertThat(rs.next()).isTrue();
+                        assertThat(rs.getLong(1)).as("移行前の平文で照合に当たる行がある").isZero();
+                    }
+                }
+            }
+        } finally {
+            try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+                 Statement statement = root.createStatement()) {
+                statement.execute("DROP DATABASE IF EXISTS " + schema);
+            }
+        }
+    }
+
+    /** 移行直前の版の shared_file_links へ平文行を JDBC で置く（旧 schema には新 Entity を永続化できないため）。 */
+    private static long insertPlaintextFileLink(Connection conn, String plaintext, boolean active) throws SQLException {
+        try (var insert = conn.prepareStatement("INSERT INTO shared_file_links (file_id, token, expires_at, access_count, "
+                + "created_by, created_at, is_active, download_allowed) VALUES (910001, ?, ?, 4, 77, UTC_TIMESTAMP(), ?, TRUE)",
+                Statement.RETURN_GENERATED_KEYS)) {
+            insert.setString(1, plaintext);
+            insert.setObject(2, LocalDateTime.of(2099, 1, 2, 3, 4, 5));
+            insert.setBoolean(3, active);
+            assertThat(insert.executeUpdate()).isEqualTo(1);
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                assertThat(keys.next()).isTrue();
+                return keys.getLong(1);
+            }
+        }
+    }
+
     @Test
     @Order(26)
     @DisplayName("CMP-260826-1457 W0: 全失効の検査ヘルパが、既にハッシュ保存の村招待表で成立する（枠の健全性）")
@@ -2090,6 +2185,150 @@ class FlywayFromScratchMigrationTest {
         migrateFromScratch();
         try (Connection conn = connect()) {
             assertCascade(conn, "refresh_tokens", "user_id", "users");
+        }
+    }
+
+    /** W2 committee の移行直前の版（origin/main の最大版）。committee_invitations.invite_token が平文のまま残っている。 */
+    private static final String COMMITTEE_INVITATIONS_PRE_HASH_TARGET = "267.20261124005850";
+
+    @Test
+    @Order(31)
+    @DisplayName("CMP-260826-1457 W2 committee: committee_invitations の invite_token はハッシュ化され、移行前の未解決招集は行を残したまま全失効する（AC-x1・AC-A）")
+    void committee_invitationsのtokenはハッシュ化され全失効する() throws Exception {
+        String schema = "cmp1457_committee_invitations";
+        String schemaUrl = MYSQL.getJdbcUrl().replaceFirst("/" + MYSQL.getDatabaseName() + "(?=$|\\?)", "/" + schema);
+        try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             Statement statement = root.createStatement()) {
+            statement.execute("DROP DATABASE IF EXISTS " + schema);
+            statement.execute("CREATE DATABASE " + schema + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+        }
+        try {
+            Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
+                    .outOfOrder(false).target(COMMITTEE_INVITATIONS_PRE_HASH_TARGET).load().migrate();
+
+            String pendingPlaintext = java.util.UUID.randomUUID().toString();
+            String expiredPlaintext = java.util.UUID.randomUUID().toString();
+            String acceptedPlaintext = java.util.UUID.randomUUID().toString();
+            long pendingId;
+            long expiredId;
+            long acceptedId;
+            List<Long> committeeIds;
+            try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
+                // 親の委員会行を置く（committee_invitations.committee_id の FK は同ドメイン CASCADE で残っている）。
+                // organization_id / invitee_user_id / invited_by の FK はクロスドメインのため V62 で撤去済み
+                long committee1 = insertCommitteeRow(conn, 1);
+                long committee2 = insertCommitteeRow(conn, 2);
+                long committee3 = insertCommitteeRow(conn, 3);
+                pendingId = insertPlaintextCommitteeInvitation(conn, committee1, pendingPlaintext, null, null);
+                expiredId = insertPlaintextCommitteeInvitation(conn, committee2, expiredPlaintext,
+                        LocalDateTime.of(2026, 1, 2, 3, 4, 5), "EXPIRED");
+                acceptedId = insertPlaintextCommitteeInvitation(conn, committee3, acceptedPlaintext,
+                        LocalDateTime.of(2026, 2, 3, 4, 5, 6), "ACCEPTED");
+                committeeIds = List.of(committee1, committee2, committee3);
+            }
+
+            Flyway.configure().dataSource(schemaUrl, "root", MYSQL.getPassword()).locations("classpath:db/migration")
+                    .outOfOrder(false).load().migrate();
+
+            try (Connection conn = DriverManager.getConnection(schemaUrl, "root", MYSQL.getPassword())) {
+                assertTokenHashMigrated(conn,
+                        new TokenHashMigrationExpectation("committee_invitations", "invite_token", "invite_token_hash", false));
+
+                // AC-A: 行・ID・委員会・宛先・提案ロール・招集者は残る
+                try (var select = conn.prepareStatement("SELECT id, committee_id, invitee_user_id, proposed_role, invited_by, "
+                        + "resolved_at, resolution, invite_token_hash FROM committee_invitations "
+                        + "WHERE id IN (?, ?, ?) ORDER BY id")) {
+                    select.setLong(1, pendingId);
+                    select.setLong(2, expiredId);
+                    select.setLong(3, acceptedId);
+                    Map<Long, Map<String, Object>> rows = new HashMap<>();
+                    try (ResultSet rs = select.executeQuery()) {
+                        while (rs.next()) {
+                            Map<String, Object> row = new HashMap<>();
+                            row.put("committee_id", rs.getLong("committee_id"));
+                            row.put("invitee_user_id", rs.getLong("invitee_user_id"));
+                            row.put("proposed_role", rs.getString("proposed_role"));
+                            row.put("invited_by", rs.getLong("invited_by"));
+                            row.put("resolved_at", rs.getObject("resolved_at", LocalDateTime.class));
+                            row.put("resolution", rs.getString("resolution"));
+                            row.put("invite_token_hash", rs.getString("invite_token_hash"));
+                            rows.put(rs.getLong("id"), row);
+                        }
+                    }
+                    assertThat(rows).as("移行で招集の行が消えていない").containsOnlyKeys(pendingId, expiredId, acceptedId);
+                    assertThat(rows.get(pendingId).get("committee_id")).isEqualTo(committeeIds.get(0));
+                    assertThat(rows.get(pendingId).get("invitee_user_id")).isEqualTo(77L);
+                    assertThat(rows.get(pendingId).get("proposed_role")).isEqualTo("CHAIR");
+                    assertThat(rows.get(pendingId).get("invited_by")).isEqualTo(88L);
+
+                    // 移行前に未解決（有効）だった招集は失効する。再招集を止めない（未解決の存在検査に当たらない）
+                    assertThat(rows.get(pendingId).get("resolved_at")).as("未解決だった招集は失効して解決済みになる").isNotNull();
+                    assertThat(rows.get(pendingId).get("resolution")).isEqualTo("EXPIRED");
+                    // すでに解決済みの招集は解決日時・結果を変えない
+                    assertThat(rows.get(expiredId).get("resolved_at")).isEqualTo(LocalDateTime.of(2026, 1, 2, 3, 4, 5));
+                    assertThat(rows.get(expiredId).get("resolution")).isEqualTo("EXPIRED");
+                    assertThat(rows.get(acceptedId).get("resolved_at")).isEqualTo(LocalDateTime.of(2026, 2, 3, 4, 5, 6));
+                    assertThat(rows.get(acceptedId).get("resolution")).isEqualTo("ACCEPTED");
+
+                    List<Object> hashes = rows.values().stream().map(r -> r.get("invite_token_hash")).toList();
+                    assertThat(hashes).allSatisfy(h -> assertThat((String) h).matches("^[0-9a-f]{64}$"));
+                    assertThat(hashes.stream().distinct().count()).as("乱数で埋めたハッシュは行ごとに異なる").isEqualTo(3L);
+                }
+                try (var unresolved = conn.createStatement();
+                     ResultSet rs = unresolved.executeQuery("SELECT COUNT(*) FROM committee_invitations WHERE resolved_at IS NULL")) {
+                    assertThat(rs.next()).isTrue();
+                    assertThat(rs.getLong(1)).as("移行後に未解決の招集が残っていない").isZero();
+                }
+
+                // AC-A: 移行前の平文はどれも照合（hash(平文) の等値検索）に当たらない
+                try (var lookup = conn.prepareStatement("SELECT COUNT(*) FROM committee_invitations "
+                        + "WHERE invite_token_hash IN (SHA2(?, 256), SHA2(?, 256), SHA2(?, 256))")) {
+                    lookup.setString(1, pendingPlaintext);
+                    lookup.setString(2, expiredPlaintext);
+                    lookup.setString(3, acceptedPlaintext);
+                    try (ResultSet rs = lookup.executeQuery()) {
+                        assertThat(rs.next()).isTrue();
+                        assertThat(rs.getLong(1)).as("移行前の平文で照合に当たる行がある").isZero();
+                    }
+                }
+            }
+        } finally {
+            try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+                 Statement statement = root.createStatement()) {
+                statement.execute("DROP DATABASE IF EXISTS " + schema);
+            }
+        }
+    }
+
+    /** 移行直前の版の committees へ親行を JDBC で置く。 */
+    private static long insertCommitteeRow(Connection conn, int seq) throws SQLException {
+        try (var insert = conn.prepareStatement("INSERT INTO committees (organization_id, name, status) "
+                + "VALUES (910001, ?, 'ACTIVE')", Statement.RETURN_GENERATED_KEYS)) {
+            insert.setString(1, "cmp1457-committee-" + seq);
+            assertThat(insert.executeUpdate()).isEqualTo(1);
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                assertThat(keys.next()).isTrue();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    /** 移行直前の版の committee_invitations へ平文行を JDBC で置く（旧 schema には新 Entity を永続化できないため）。 */
+    private static long insertPlaintextCommitteeInvitation(Connection conn, long committeeId, String plaintext,
+                                                           LocalDateTime resolvedAt, String resolution) throws SQLException {
+        try (var insert = conn.prepareStatement("INSERT INTO committee_invitations (committee_id, invitee_user_id, "
+                + "proposed_role, invite_token, invited_by, expires_at, resolved_at, resolution) "
+                + "VALUES (?, 77, 'CHAIR', ?, 88, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+            insert.setLong(1, committeeId);
+            insert.setString(2, plaintext);
+            insert.setObject(3, LocalDateTime.of(2099, 1, 2, 3, 4, 5));
+            insert.setObject(4, resolvedAt);
+            insert.setString(5, resolution);
+            assertThat(insert.executeUpdate()).isEqualTo(1);
+            try (ResultSet keys = insert.getGeneratedKeys()) {
+                assertThat(keys.next()).isTrue();
+                return keys.getLong(1);
+            }
         }
     }
 }

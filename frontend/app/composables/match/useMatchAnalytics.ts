@@ -17,6 +17,7 @@ import type {
   UserTimelineParams,
 } from '~/types/match'
 import type { components } from '~/types/generated'
+import { isScopeNotFound } from '~/utils/loadError'
 
 type PagedUserTimeline = components['schemas']['PagedResponseUserMatchTimelineEntry']
 
@@ -76,7 +77,8 @@ export function useMatchAnalytics() {
       )
       return res.data
     } catch (err) {
-      notification.error(t('match.analytics.error.load_failed'))
+      // 403/404（非所属・権限なし）は呼び出し側が共通の「見つかりません」へ置き換えるためトーストしない（CMP-261125-1108）
+      if (!isScopeNotFound(err)) notification.error(t('match.analytics.error.load_failed'))
       throw err
     }
   }

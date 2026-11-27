@@ -22769,7 +22769,7 @@ export interface paths {
         /** 共有リンク一覧 */
         get: operations["listLinks"];
         put?: never;
-        /** 共有リンク作成 */
+        /** 共有リンク作成（平文トークンは発行応答の1回だけ） */
         post: operations["createLink_1"];
         delete?: never;
         options?: never;
@@ -23474,7 +23474,7 @@ export interface paths {
         /** 発行済みトークン一覧 */
         get: operations["listTokens_3"];
         put?: never;
-        /** 招待トークンを発行する */
+        /** 招待トークンを発行する（平文のトークン・招待URLはこの応答の1回だけ） */
         post: operations["createToken_2"];
         delete?: never;
         options?: never;
@@ -23526,7 +23526,7 @@ export interface paths {
         /** 委員会招集中一覧取得 */
         get: operations["listPendingInvitations"];
         put?: never;
-        /** 委員会招集状送付 */
+        /** 委員会招集状送付（平文トークンは発行応答の1回だけ） */
         post: operations["sendInvitations"];
         delete?: never;
         options?: never;
@@ -46902,23 +46902,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/contact-invite-tokens/{token}/qr": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** QRコード画像を取得する（PNG） */
-        get: operations["getQrCode_1"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/committees/{committeeId}/members": {
         parameters: {
             query?: never;
@@ -66253,8 +66236,22 @@ export interface components {
             expiredAt?: string;
             name?: string;
         };
-        ApiResponseSignageAccessTokenResponse: {
-            data?: components["schemas"]["SignageAccessTokenResponse"];
+        ApiResponseSignageAccessTokenIssuedResponse: {
+            data?: components["schemas"]["SignageAccessTokenIssuedResponse"];
+        };
+        SignageAccessTokenIssuedResponse: {
+            allowedIps?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiredAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            name?: string;
+            /** Format: int64 */
+            screenId?: number;
+            token?: string;
         };
         SignageAccessTokenResponse: {
             allowedIps?: string[];
@@ -66268,7 +66265,6 @@ export interface components {
             name?: string;
             /** Format: int64 */
             screenId?: number;
-            token?: string;
         };
         BroadcastEmergencyRequest: {
             bgColor?: string;
@@ -70352,8 +70348,28 @@ export interface components {
             /** @description 任意の閲覧パスワード（設定するとアクセス時に照合） */
             password?: string;
         };
-        ApiResponseLinkResponse: {
-            data?: components["schemas"]["LinkResponse"];
+        ApiResponseLinkIssuedResponse: {
+            data?: components["schemas"]["LinkIssuedResponse"];
+        };
+        LinkIssuedResponse: {
+            /** Format: int32 */
+            accessCount?: number;
+            active?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            downloadAllowed?: boolean;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            fileId?: number;
+            hasPassword?: boolean;
+            /** Format: int64 */
+            id?: number;
+            /** Format: date-time */
+            lastAccessedAt?: string;
+            token?: string;
         };
         LinkResponse: {
             /** Format: int32 */
@@ -70373,7 +70389,6 @@ export interface components {
             id?: number;
             /** Format: date-time */
             lastAccessedAt?: string;
-            token?: string;
         };
         SharedFilePresignRequest: {
             contentType: string;
@@ -70636,8 +70651,52 @@ export interface components {
             /** Format: int64 */
             ticketTypeId: number;
         };
-        ApiResponseInviteTokenResponse: {
-            data?: components["schemas"]["InviteTokenResponse"];
+        ApiResponseEventInviteTokenIssuedResponse: {
+            data?: components["schemas"]["EventInviteTokenIssuedResponse"];
+        };
+        EventInviteTokenIssuedResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            /** Format: int64 */
+            eventId?: number;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            label?: string;
+            /** Format: int32 */
+            maxUses?: number;
+            token?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int32 */
+            usedCount?: number;
+        };
+        EventInviteTokenResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            /** Format: int64 */
+            eventId?: number;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            label?: string;
+            /** Format: int32 */
+            maxUses?: number;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int32 */
+            usedCount?: number;
+        };
+        ApiResponseEventInviteTokenResponse: {
+            data?: components["schemas"]["EventInviteTokenResponse"];
         };
         CreateEventDelegationRequest: {
             /** Format: int64 */
@@ -70881,10 +70940,10 @@ export interface components {
             /** Format: int32 */
             maxUses?: number;
         };
-        ApiResponseContactInviteTokenResponse: {
-            data?: components["schemas"]["ContactInviteTokenResponse"];
+        ApiResponseContactInviteIssuedResponse: {
+            data?: components["schemas"]["ContactInviteIssuedResponse"];
         };
-        ContactInviteTokenResponse: {
+        ContactInviteIssuedResponse: {
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -70895,7 +70954,6 @@ export interface components {
             label?: string;
             /** Format: int32 */
             maxUses?: number;
-            qrCodeUrl?: string;
             token?: string;
             /** Format: int32 */
             usedCount?: number;
@@ -70914,7 +70972,7 @@ export interface components {
         ApiResponseSendInvitationsResponse: {
             data?: components["schemas"]["SendInvitationsResponse"];
         };
-        CommitteeInvitationResponse: {
+        CommitteeInvitationIssuedResponse: {
             /** Format: int64 */
             committeeId?: number;
             /** Format: date-time */
@@ -70934,8 +70992,27 @@ export interface components {
             /** Format: date-time */
             resolvedAt?: string;
         };
+        CommitteeInvitationResponse: {
+            /** Format: int64 */
+            committeeId?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            invitationStatus?: string;
+            /** Format: int64 */
+            inviteeUserId?: number;
+            /** @enum {string} */
+            proposedRole?: "CHAIR" | "VICE_CHAIR" | "SECRETARY" | "MEMBER";
+            /** @enum {string} */
+            resolution?: "ACCEPTED" | "DECLINED" | "EXPIRED" | "CANCELLED";
+            /** Format: date-time */
+            resolvedAt?: string;
+        };
         SendInvitationsResponse: {
-            invitations?: components["schemas"]["CommitteeInvitationResponse"][];
+            invitations?: components["schemas"]["CommitteeInvitationIssuedResponse"][];
             /** Format: int32 */
             skippedExistingInvitationCount?: number;
             /** Format: int32 */
@@ -73488,6 +73565,7 @@ export interface components {
             recordedBy?: number;
             /** @enum {string} */
             status?: "ATTENDING" | "PARTIAL" | "ABSENT" | "UNDECIDED";
+            studentDisplayName?: string;
             /** Format: int64 */
             studentUserId?: number;
             /** Format: int64 */
@@ -76410,6 +76488,7 @@ export interface components {
             meta?: components["schemas"]["TournamentHistoryEntryMeta"];
             /** Format: int64 */
             organizationId?: number;
+            organizationSlug?: string;
             record?: components["schemas"]["TournamentHistoryEntryRecord"];
         };
         TournamentHistoryEntryIdentifiers: {
@@ -85349,6 +85428,9 @@ export interface components {
             data?: components["schemas"]["RegistrationResponse"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        ApiResponseListEventInviteTokenResponse: {
+            data?: components["schemas"]["EventInviteTokenResponse"][];
+        };
         ApiResponseEventDelegationListResponse: {
             data?: components["schemas"]["EventDelegationListResponse"];
         };
@@ -86008,6 +86090,19 @@ export interface components {
         };
         ApiResponseListContactInviteTokenResponse: {
             data?: components["schemas"]["ContactInviteTokenResponse"][];
+        };
+        ContactInviteTokenResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            label?: string;
+            /** Format: int32 */
+            maxUses?: number;
+            /** Format: int32 */
+            usedCount?: number;
         };
         ApiResponseListCommitteeMemberResponse: {
             data?: components["schemas"]["CommitteeMemberResponse"][];
@@ -122162,7 +122257,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenIssuedResponse"];
                 };
             };
         };
@@ -136759,7 +136854,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseLinkResponse"];
+                    "*/*": components["schemas"]["ApiResponseLinkIssuedResponse"];
                 };
             };
         };
@@ -137354,7 +137449,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseListEventInviteTokenResponse"];
                 };
             };
         };
@@ -137380,7 +137475,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseEventInviteTokenIssuedResponse"];
                 };
             };
         };
@@ -137403,7 +137498,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseEventInviteTokenResponse"];
                 };
             };
         };
@@ -138043,7 +138138,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseContactInviteTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseContactInviteIssuedResponse"];
                 };
             };
         };
@@ -163571,6 +163666,7 @@ export interface operations {
             query?: {
                 page?: number;
                 size?: number;
+                status?: string;
             };
             header?: never;
             path?: never;
@@ -175792,30 +175888,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseContactInvitePreviewResponse"];
-                };
-            };
-        };
-    };
-    getQrCode_1: {
-        parameters: {
-            query?: {
-                size?: number;
-            };
-            header?: never;
-            path: {
-                token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": string;
                 };
             };
         };

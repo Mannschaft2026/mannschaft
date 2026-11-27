@@ -1,5 +1,6 @@
 package com.mannschaft.app.committee.controller;
 
+import com.mannschaft.app.committee.dto.CommitteeInvitationIssuedResponse;
 import com.mannschaft.app.committee.dto.CommitteeInvitationResponse;
 import com.mannschaft.app.committee.dto.CommitteeInviteRequest;
 import com.mannschaft.app.committee.dto.CommitteeMemberResponse;
@@ -47,11 +48,11 @@ public class CommitteeInvitationController {
      */
     @Getter
     public static class SendInvitationsResponse {
-        private final List<CommitteeInvitationResponse> invitations;
+        private final List<CommitteeInvitationIssuedResponse> invitations;
         private final int skippedExistingMemberCount;
         private final int skippedExistingInvitationCount;
 
-        public SendInvitationsResponse(List<CommitteeInvitationResponse> invitations,
+        public SendInvitationsResponse(List<CommitteeInvitationIssuedResponse> invitations,
                                         int skippedExistingMemberCount,
                                         int skippedExistingInvitationCount) {
             this.invitations = invitations;
@@ -65,15 +66,16 @@ public class CommitteeInvitationController {
      * POST /committees/{committeeId}/invitations
      */
     @PostMapping("/committees/{committeeId}/invitations")
-    @Operation(summary = "委員会招集状送付")
+    @Operation(summary = "委員会招集状送付（平文トークンは発行応答の1回だけ）")
     public ResponseEntity<ApiResponse<SendInvitationsResponse>> sendInvitations(
             @PathVariable Long committeeId,
             @Valid @RequestBody CommitteeInviteRequest request) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         SendInvitationsResult result = committeeInvitationService.sendInvitations(committeeId, request, currentUserId);
 
-        List<CommitteeInvitationResponse> invitations = result.sentInvitations().stream()
-                .map(CommitteeInvitationResponse::of)
+        List<CommitteeInvitationIssuedResponse> invitations = result.sentInvitations().stream()
+                .map(issued -> new CommitteeInvitationIssuedResponse(
+                        issued.inviteToken(), CommitteeInvitationResponse.of(issued.invitation())))
                 .collect(Collectors.toList());
 
         SendInvitationsResponse response = new SendInvitationsResponse(

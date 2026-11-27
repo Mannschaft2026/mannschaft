@@ -11,7 +11,6 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * デジタルサイネージ アクセストークンエンティティ。
@@ -27,10 +26,9 @@ public class SignageAccessTokenEntity extends BaseEntity {
     @Column(nullable = false)
     private Long screenId;
 
-    /** UUID v4形式のトークン。 */
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
-    @Column(nullable = false, length = 36, unique = true)
-    private String token;
+    /** アクセストークンの SHA-256 ハッシュ（hex64）。平文は保存せず、発行応答でだけ一度返す。 */
+    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
+    private String tokenHash;
 
     @Column(nullable = false, length = 100)
     private String name;

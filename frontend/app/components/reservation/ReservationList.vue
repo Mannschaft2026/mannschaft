@@ -11,7 +11,9 @@ const props = withDefaults(defineProps<{
    * - 'mine' … ログインユーザー自身の予約のみ（非管理者向け・他人の情報を一切表示しない）
    */
   mode?: 'team' | 'mine'
-}>(), { mode: 'team' })
+  /** シェル配下の予約タブからだけ true。team モードの一覧取得（主取得）が 403/404 なら共通の「見つかりません」へ（CMP-261125-1108） */
+  scopeNotFoundOnDenied?: boolean
+}>(), { mode: 'team', scopeNotFoundOnDenied: false })
 
 /**
  * 一覧操作（承認/却下/キャンセル）成功時に emit する。#2179 で結線した「予約→枠表示」の
@@ -25,6 +27,7 @@ const reservationApi = useReservationApi()
 const notification = useNotification()
 const confirm = useConfirm()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 
 const reservations = ref<ReservationResponse[]>([])
 const totalRecords = ref(0)
@@ -74,11 +77,13 @@ async function loadReservations() {
       totalRecords.value = res.meta.total
     }
   }
-  catch {
+  catch (error) {
     // 取得失敗は症状を隠さずユーザーへ通知する（catch での握り潰し＝対処療法を避ける）。
     // 表示は空へフォールバックしつつ、失敗した事実は隠さない。
     reservations.value = []
     totalRecords.value = 0
+    // チーム一覧（mine はチームスコープ外の自分の予約）が 403/404 なら共通の「見つかりません」。トーストは出さない
+    if (props.mode === 'team' && props.scopeNotFoundOnDenied && markIfDenied(error)) return
     notification.error(t('reservation.message.my_load_failed'))
   }
   finally { loading.value = false }

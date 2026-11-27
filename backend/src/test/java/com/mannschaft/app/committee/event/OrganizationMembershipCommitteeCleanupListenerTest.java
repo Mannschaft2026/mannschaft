@@ -194,7 +194,7 @@ class OrganizationMembershipCommitteeCleanupListenerTest {
                     .id(100L)
                     .committeeId(COMMITTEE_ID)
                     .inviteeUserId(REMOVED_USER_ID)
-                    .inviteToken("token")
+                    .inviteTokenHash("token-hash")
                     .expiresAt(CLEANUP_AT.plusDays(1))
                     .build();
             given(committeeRepository.findActiveCommitteesByOrganizationAndUserForUpdate(

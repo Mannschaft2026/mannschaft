@@ -14,7 +14,6 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
-import com.mannschaft.app.common.token.PlaintextTokenDebt;
 
 /**
  * ファイル共有リンクエンティティ。外部共有用のトークンベースリンクを管理する。
@@ -33,9 +32,9 @@ public class SharedFileLinkEntity {
     @Column(nullable = false)
     private Long fileId;
 
-    @PlaintextTokenDebt(cmp = "CMP-260826-1457")
-    @Column(nullable = false, length = 36)
-    private String token;
+    /** 共有リンクトークンの SHA-256 ハッシュ(hex64)。平文は保存せず、発行応答の1回だけ返す。 */
+    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
+    private String tokenHash;
 
     private LocalDateTime expiresAt;
 

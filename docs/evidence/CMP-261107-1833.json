@@ -1,0 +1,412 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261107-1833",
+  "scope": "app",
+  "implementation": {
+    "pr": 4832,
+    "sha": "a2b3eb9523c8813385cf6c872a06b40d22fe1aed"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "招待付き新規登録は ROLE_002 で巻き戻らず成功する。users は PENDING_VERIFICATION、保留は 1 行（トークンのハッシュのみ）、used_count・claim・権限・在籍は 0、UserRegisteredEvent は発行される（分離 PR の特性試験 F2 の期待値を反転。TEAM / ORG）",
+      "tests": [
+        {
+          "name": "F2 反転: 招待付き登録は 200・保留 1 行・参加の副作用なし（InviteAcceptanceParityIT）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteAcceptanceParityIT.java"
+        },
+        {
+          "name": "AuthRegistrationService は招待参加の Facade を呼ばず保留を同一 TX で保存する",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthRegistrationServiceTest.java"
+        },
+        {
+          "name": "実機 E2E J-S1（登録から参加まで）",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "成人はメール確認後にログインして保留を本人が承認すると参加でき、used_count 1・claim GRANTED・監査が従来の招待参加と同等になる",
+      "tests": [
+        {
+          "name": "保留承認で参加（TEAM / ORG）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/RegistrationPendingInviteIT.java"
+        },
+        {
+          "name": "承認・辞退・失効・再招待要請の状態遷移",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/PendingInviteServiceTest.java"
+        },
+        {
+          "name": "実機 E2E J-S1",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "未成年は保護者同意の完了後にだけ承認でき、同意待ちの間は保留が PENDING のまま 403 AUTH_070。全員拒否・未確認 7 日で DISCARDED になる",
+      "tests": [
+        {
+          "name": "保護者承認で ACTIVE 化しても保留は残り参加可能",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/ParentalConsentApproveActivationTest.java"
+        },
+        {
+          "name": "未確認 7 日の清掃で保留を同一 TX で破棄",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthCleanupBatchServiceTest.java"
+        },
+        {
+          "name": "FE: 同意待ち画面で承認検出後にトークンを更新して遷移",
+          "evidence": "frontend/app/pages/parental-consent/pending.spec.ts"
+        },
+        {
+          "name": "実機 E2E J-S3（本 PR の範囲。既存欠陥 2 件は別行）",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "宛先付き招待で別人が登録すると、ベータ設定に関係なく AUTH_083 で登録時点で拒否され、users 行も保留も作られない",
+      "tests": [
+        {
+          "name": "宛先付き招待の登録拒否",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthRegistrationServiceTest.java"
+        },
+        {
+          "name": "宛先付き招待は登録行を残さない",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/RegistrationPendingInviteIT.java"
+        },
+        {
+          "name": "実機 E2E J-S5",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "ベータ ON は招待なし AUTH_042・不正トークン AUTH_043、有効な招待なら保留。ベータ OFF で存在しないトークンは保留を作らず登録だけ成功する",
+      "tests": [
+        {
+          "name": "ベータ制限と保留作成の分岐",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/AuthRegistrationServiceTest.java"
+        },
+        {
+          "name": "実機 E2E J-S8（回帰）",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "招待が失効・上限到達なら EXPIRED（ROLE_002 / ROLE_003）。公開スコープは参加申し込みへのリンク、非公開は再招待の依頼ができる。ブロックは UNAVAILABLE",
+      "tests": [
+        {
+          "name": "失効・上限・ブロックの写像と案内情報",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/PendingInviteServiceTest.java"
+        },
+        {
+          "name": "FE: 失効案内（公開・非公開）",
+          "evidence": "frontend/app/components/auth/PendingInviteDialog.spec.ts"
+        },
+        {
+          "name": "実機 E2E J-S4",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "二重押し・並行承認でも付与は 1 回。途中失敗は PENDING に戻り再承認で完了し、使用回数は増えない。ACCEPTING は 5 分で再試行でき、古い試行の更新は書かれない",
+      "tests": [
+        {
+          "name": "条件付き UPDATE と世代（accept_attempt_id）の単体 IT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/PendingInviteStoreIT.java"
+        },
+        {
+          "name": "承認途中失敗からの復旧",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/RegistrationPendingInviteFailureIT.java"
+        },
+        {
+          "name": "招待受諾の途中失敗の特性",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteAcceptanceFailureIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "辞退は DECLINED で参加せず、DECLINED への承認は AUTH_085。未認証は 401、他人の保留には触れず、ハッシュは応答にもログにも出ない",
+      "tests": [
+        {
+          "name": "保留 API の認可と応答の契約",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/controller/MePendingInviteControllerTest.java"
+        },
+        {
+          "name": "実機 E2E J-S2・J-S6",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "再招待の依頼は招待権限者だけに通知され（一般メンバー・他テナントには届かない）、7 日に 1 回に制限される",
+      "tests": [
+        {
+          "name": "依頼通知の宛先と制限",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/event/InviteReissueNotificationListenerTest.java"
+        },
+        {
+          "name": "招待権限の判定（ADMIN または INVITE_MEMBERS を持つ DEPUTY）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/service/InviteIssuerPolicyTest.java"
+        },
+        {
+          "name": "実機 E2E J-S4・PR3 J1",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "description": "新表と CHECK・索引の DDL、境界の番人（register は Facade を呼ばない、hash 入口の呼び出し元は保留承認のみ、凍結ストアは削除のみ、ApiGate 宣言）",
+      "tests": [
+        {
+          "name": "migration の DDL 試験（REISSUE_DECLINED の CHECK と索引を含む）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/migration/FlywayRegistrationPendingInvitesMigrationTest.java"
+        },
+        {
+          "name": "招待受諾の境界 ArchUnit",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/architecture/InviteAcceptanceBoundaryArchTest.java"
+        },
+        {
+          "name": "ApiGate 宣言の番人",
+          "evidence": "backend/src/test/java/com/mannschaft/app/common/architecture/ApiGateDeclarationGuardTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "description": "FE: ログイン後の保留ダイアログ（参加する・断る・あとで）、同意待ち中は表示せず取得し直し、登録導線（/register?invite=）と AUTH_083 の案内、6 言語",
+      "tests": [
+        {
+          "name": "保留ダイアログの表示と 3 択",
+          "evidence": "frontend/app/components/auth/PendingInviteDialog.spec.ts"
+        },
+        {
+          "name": "登録画面の招待引継ぎと AUTH_083",
+          "evidence": "frontend/app/pages/register.spec.ts"
+        },
+        {
+          "name": "招待ページから登録への導線",
+          "evidence": "frontend/app/pages/invite/[token].spec.ts"
+        },
+        {
+          "name": "実機 E2E J-S1・J-S2",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "description": "再招待依頼の受け手側: 権限を持つ管理者だけが依頼の一覧を見て再招待または見送りができ、権限なし・他スコープ・未認証は 403 / 404 / 401。他スコープの ID を指しても行は不変",
+      "tests": [
+        {
+          "name": "一覧・再招待・見送りの認可と契約（TEAM / ORG）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueRequestContractIT.java"
+        },
+        {
+          "name": "FE: 欄の表示と操作",
+          "evidence": "frontend/app/components/invite/InviteReissueRequestPanel.spec.ts"
+        },
+        {
+          "name": "FE: 権限による欄の出し分け",
+          "evidence": "frontend/app/composables/useInviteReissueAccess.spec.ts"
+        },
+        {
+          "name": "実機 E2E PR3 J4",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "description": "再招待は宛先付き・1 回限り・7 日の有効なトークンを 1 件だけ発行し、付与ロールは非特権のみ引き継ぎ（特権や不在は MEMBER）、依頼者にだけ通知し監査を 1 行残す。在籍済みは ALREADY_MEMBER",
+      "tests": [
+        {
+          "name": "再招待・見送りの契約（トークン・保留・監査・通知）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueRequestContractIT.java"
+        },
+        {
+          "name": "付与ロールの決定",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/service/InviteReissueGrantRoleTest.java"
+        },
+        {
+          "name": "見送りの状態遷移と通知",
+          "evidence": "backend/src/test/java/com/mannschaft/app/auth/service/PendingInviteServiceReissueDeclinedTest.java"
+        },
+        {
+          "name": "実機 E2E PR3 J1・J2・J5",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "description": "途中失敗と競合: 保留の確定が 0 行なら 409 でトークンは無効のまま、有効化の失敗は 500 で回復でき、再招待と見送りの同時操作は片方だけが勝つ。仮発行の 60 秒の窓と参照時の失効判定",
+      "tests": [
+        {
+          "name": "故障注入（確定の失敗・有効化の失敗）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueRequestFailureIT.java"
+        },
+        {
+          "name": "再招待と見送りの競合",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueRequestRaceIT.java"
+        },
+        {
+          "name": "招待の有効性判定（処理中の窓を含む）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/dto/InviteValidityTest.java"
+        },
+        {
+          "name": "参照時の有効性判定と失効の CAS",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/service/InviteAcceptanceFacadeValidityTest.java"
+        },
+        {
+          "name": "実機 E2E PR3 J6",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "description": "一覧と件数の契約: 一覧の totalElements と承認待ちの件数が一致し、表示名はページごとに 1 本の SQL、preview_size=0 は件数のみ。退会・ブロック・閉鎖中・物理削除の扱い",
+      "tests": [
+        {
+          "name": "クエリ数と件数の一致",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueRequestQueryCountIT.java"
+        },
+        {
+          "name": "ページ境界と閉鎖中の扱い",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueRequestContractIT.java"
+        },
+        {
+          "name": "通知種別・エラーコード・メッセージの網羅",
+          "evidence": "backend/src/test/java/com/mannschaft/app/role/InviteReissueCatalogTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "description": "通知と導線: 依頼通知は #reissue-requests へ、依頼者への通知は /dashboard?pendingInvite=open へ遷移し、スコープのダッシュボードの承認待ちと管理ハブのバッジに出る。権限の無い副管理者には出ない",
+      "tests": [
+        {
+          "name": "集約への INVITE_REISSUE の追加（権限依存・件数のみの経路）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/dashboard/service/AdminActionRequiredFacadeInviteReissueTest.java"
+        },
+        {
+          "name": "通知種別の網羅",
+          "evidence": "backend/src/test/java/com/mannschaft/app/notification/NotificationTypeTest.java"
+        },
+        {
+          "name": "FE: 承認待ちの内訳行をリンク化",
+          "evidence": "frontend/tests/unit/components/dashboard/DashboardAdminApprovalsWidgetLinks.spec.ts"
+        },
+        {
+          "name": "FE: 依頼済み・見送りの案内とダイアログの再表示",
+          "evidence": "frontend/app/components/auth/PendingInviteDialogReissue.spec.ts"
+        },
+        {
+          "name": "実機 E2E PR3 J1・J3",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "description": "FE の欄: 読み込み中・空・エラー・もっと見る、見送りの確認、二重押しの防止、#reissue-requests への着地、6 言語、モバイル幅で横はみ出しなし・44px 以上",
+      "tests": [
+        {
+          "name": "欄の着地（アンカー）",
+          "evidence": "frontend/app/components/invite/InviteReissueRequestPanelAnchor.spec.ts"
+        },
+        {
+          "name": "一覧・操作の composable",
+          "evidence": "frontend/app/composables/useInviteReissueRequests.spec.ts"
+        },
+        {
+          "name": "6 言語の揃い",
+          "evidence": "frontend/tests/unit/i18n/invite-reissue-locales.spec.ts"
+        },
+        {
+          "name": "実機 E2E PR3 J7（360・390 幅）",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-18",
+      "description": "実機 E2E: 招待付き登録から参加まで（TEAM / ORG）、権限あり・権限なし・他テナントのロール横断、URL 直打ち、回帰",
+      "tests": [
+        {
+          "name": "実機 E2E J-S1〜J-S8、PR3 J1〜J8",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-19",
+      "description": "アリシゼーション: 住民の探索で導線の欠落と文言の矛盾を洗い出し、確定した不備は修正または台帳へ起票する",
+      "tests": [
+        {
+          "name": "アリシゼーション（PR1・PR2 の 4 体、PR3 の再実施 4 体）",
+          "evidence": "docs/evidence/CMP-261107-1833-real.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45502982936
+    },
+    {
+      "runId": 45502987791
+    },
+    {
+      "runId": 45502987804
+    },
+    {
+      "runId": 45502987909
+    },
+    {
+      "runId": 45502987973
+    },
+    {
+      "runId": 45502988000
+    },
+    {
+      "runId": 45502988124
+    },
+    {
+      "runId": 45502988383
+    },
+    {
+      "runId": 45502988424
+    },
+    {
+      "runId": 45502988568
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4832"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261107-1833-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261107-1833-real.md"
+    }
+  },
+  "regressions": []
+}

@@ -5,7 +5,8 @@
  * 権限:
  * - 認証必須（`auth` middleware）。
  * - フォルダ CRUD 操作は ADMIN、または MANAGE_FRIEND_TEAMS 保持の DEPUTY_ADMIN のみ。
- * - それ以外のロールはアクセス拒否メッセージを表示。
+ * - それ以外のロール・非所属は、権限を示唆せず共通の「見つかりません」（ScopeNotFound）にする
+ *   （CMP-261125-1108）。権限取得が済むまでは読み込み表示で、「見つかりません」をちらつかせない。
  *
  * UI:
  * - {@link FriendFolderList} でフォルダカード一覧を表示
@@ -29,6 +30,7 @@ const { isAdmin, isAdminOrDeputy, can, loadPermissions } = useRoleAccess('team',
 const { deleteFolder } = useFriendFoldersApi()
 const notification = useNotification()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied, markDenied } = useScopeNotFound()
 const { confirmAction } = useConfirmDialog()
 
 // ----- 権限 -----
@@ -36,6 +38,9 @@ const { confirmAction } = useConfirmDialog()
 const canManage = computed(
   () => isAdmin.value || (isAdminOrDeputy.value && can('MANAGE_FRIEND_TEAMS')),
 )
+
+/** 権限取得が済んだか（成功・失敗いずれでも true）。済むまでは「見つかりません」を出さない。 */
+const permissionsResolved = ref(false)
 
 // ----- 一覧コンポーネント参照 -----
 const listRef = ref<{
@@ -104,8 +109,17 @@ async function onMembersUpdated() {
   await listRef.value?.refresh()
 }
 
-onMounted(() => {
-  void loadPermissions()
+onMounted(async () => {
+  const result = await loadPermissions()
+  permissionsResolved.value = true
+  if (!result.ok) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。それ以外は通常のエラー通知
+    if (markIfDenied(result.error)) return
+    handleApiError(result.error)
+    return
+  }
+  // 所属していても管理権限が無ければ、権限の有無を示唆せず共通の「見つかりません」へ
+  if (!canManage.value) markDenied()
 })
 </script>
 
@@ -127,19 +141,14 @@ onMounted(() => {
       </template>
     </PageHeader>
 
-    <!-- 権限なし -->
-    <div
-      v-if="!canManage"
-      class="rounded-lg border border-surface-200 bg-surface-0 py-12 text-center text-surface-500 dark:border-surface-700 dark:bg-surface-800"
-    >
-      <i class="pi pi-lock mb-3 text-3xl" aria-hidden="true" />
-      <p class="text-sm">{{ t('friends.errors.permission_denied') }}</p>
-    </div>
+    <!-- 権限取得中（権限なしは ScopeNotFound がシェルで本文を置き換える） -->
+    <PageLoading v-if="!permissionsResolved" />
 
     <!-- フォルダ一覧 -->
     <FriendFolderList
-      v-else
+      v-else-if="canManage"
       ref="listRef"
+      scope-not-found-on-denied
       :team-id="teamSlug"
       :can-edit="canManage"
       @edit="openEditDialog"
