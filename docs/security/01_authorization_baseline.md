@@ -192,20 +192,21 @@ matcher 式は行挿入で腐らず、`SecurityConfig` を Ctrl+F すれば人�
 
 **判定順（入れ替え禁止）**:
 
-1. **親リソースの生存確認を呼び出し側が先に行う**。不在・論理削除済みは、その EP の不在コード（`notFoundCode`）で拒否する。SYSTEM_ADMIN の短絡より前に置く（CMP-260917-1136）。子リソースを ID で引く EP では、親が論理削除済みのときも**子の不在コード**を投げる（親のコードを投げると「子は実在し親が消えている」ことが漏れる）。
-2. SYSTEM_ADMIN は通す。
-3. `isAdminOrAbove`（user_roles と memberships の 2 系統）を `isMember` より**先に**判定する。memberships 行を持たない user_roles のみの ADMIN/DEPUTY_ADMIN を越境と誤判定しないため。
-4. 呼び出し側の許可条件（本人である等）。
-5. 許可されなかったときだけ `isMember` を撃ち、非メンバーなら `notFoundCode`、メンバー（権限不足）なら 403（既定 `COMMON_002`）。**拒否経路でのみ**クエリが増え、許可経路のクエリ回数は変わらない。
+> SYSTEM_ADMIN の短絡は撤去済み（戦役 Z-A PR3、[03 §3.6](03_role_authority_model.md)）。所属の無い SYSTEM_ADMIN は越境者と同一応答（`notFoundCode`）になる。
+
+1. **親リソースの生存確認を呼び出し側が先に行う**。不在・論理削除済みは、その EP の不在コード（`notFoundCode`）で拒否する（CMP-260917-1136）。子リソースを ID で引く EP では、親が論理削除済みのときも**子の不在コード**を投げる（親のコードを投げると「子は実在し親が消えている」ことが漏れる）。
+2. `isAdminOrAbove`（user_roles と memberships の 2 系統）を `isMember` より**先に**判定する。memberships 行を持たない user_roles のみの ADMIN/DEPUTY_ADMIN を越境と誤判定しないため。
+3. 呼び出し側の許可条件（本人である等）。
+4. 許可されなかったときだけ `isMember` を撃ち、非メンバーなら `notFoundCode`、メンバー（権限不足）なら 403（既定 `COMMON_002`）。**拒否経路でのみ**クエリが増え、許可経路のクエリ回数は変わらない。
 
 **メソッドの選び方**（許可主体は EP ごとに違う。判定順を全 EP に一律適用しない）:
 
 | メソッド | 許可 | 同一スコープの権限不足 | 越境 |
 |---|---|---|---|
-| `requireAdminOrConceal(userId, scopeId, scopeType, notFoundCode)` | SYSTEM_ADMIN / ADMIN・DEPUTY_ADMIN | 403 `COMMON_002` | `notFoundCode` |
+| `requireAdminOrConceal(userId, scopeId, scopeType, notFoundCode)` | ADMIN・DEPUTY_ADMIN | 403 `COMMON_002` | `notFoundCode` |
 | `requireOwnerOrAdminOrConceal(userId, scopeId, scopeType, ownerId, notFoundCode)` | 上記＋所有者本人（本人判定はクエリを撃たないので管理者判定より先） | 403 `COMMON_002` | `notFoundCode` |
-| `requireMemberOrConceal(userId, scopeId, scopeType, notFoundCode, excludeSupporter)` | SYSTEM_ADMIN / 在籍メンバー（`excludeSupporter` なら SUPPORTER 除く） | 403 `COMMON_002`（user_roles のみの ADMIN も所属者として 403。404 に化けない） | `notFoundCode` |
-| `requireOrConceal(userId, scopeId, scopeType, permitted, notFoundCode, forbiddenCode)` | SYSTEM_ADMIN / ADMIN・DEPUTY_ADMIN / 呼び出し側の条件 | `forbiddenCode` | `notFoundCode` |
+| `requireMemberOrConceal(userId, scopeId, scopeType, notFoundCode, excludeSupporter)` | 在籍メンバー（`excludeSupporter` なら SUPPORTER 除く） | 403 `COMMON_002`（user_roles のみの ADMIN も所属者として 403。404 に化けない） | `notFoundCode` |
+| `requireOrConceal(userId, scopeId, scopeType, permitted, notFoundCode, forbiddenCode)` | ADMIN・DEPUTY_ADMIN / 呼び出し側の条件 | `forbiddenCode` | `notFoundCode` |
 
 - `scopeId` は**リソース実体から解決した値**を渡す（パス・クエリの scope 値を鵜呑みにしない）。
 - 公開されているリソース（PUBLIC のチーム・公開中の募集など）と、§3.3.1 の `?teamId=` 一覧型には使わない（非メンバーに常に同一の 403 のまま）。

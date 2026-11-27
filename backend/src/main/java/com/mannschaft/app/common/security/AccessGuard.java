@@ -18,8 +18,8 @@ import org.springframework.stereotype.Component;
  *
  * <p><strong>設計上の取り決め（設計書 §3.3.1）:</strong></p>
  * <ol>
- *   <li><strong>SYSTEM_ADMIN は常に通す</strong> — 各メソッドは先に
- *       {@link AccessControlService#isSystemAdmin(Long)} を確認し、true なら無条件許可する。</li>
+ *   <li><strong>SYSTEM_ADMIN を特別扱いしない</strong> — 当該スコープのロールだけで判定する
+ *       （運営権限はスコープの権限に載せない。戦役 Z-A PR3 で短絡を撤去）。</li>
  *   <li><strong>null / 非認証 / パース失敗は false</strong> — DB を参照せず早期に false を返す。</li>
  *   <li><strong>scopeType は文字列リテラル</strong> — SpEL から {@code 'TEAM'} / {@code 'ORGANIZATION'} を渡す。</li>
  *   <li><strong>委譲先の再利用</strong> — 新規 SQL は追加しない。</li>
@@ -36,7 +36,7 @@ public class AccessGuard {
     private final AccessControlService accessControlService;
 
     /**
-     * SYSTEM_ADMIN もしくは当該スコープの ADMIN/DEPUTY_ADMIN なら true。
+     * 当該スコープの ADMIN/DEPUTY_ADMIN なら true。
      *
      * @param authentication 現在の認証情報
      * @param scopeId        スコープ ID（チーム ID または組織 ID）
@@ -48,14 +48,11 @@ public class AccessGuard {
         if (userId == null) {
             return false;
         }
-        if (accessControlService.isSystemAdmin(userId)) {
-            return true;
-        }
         return accessControlService.isAdminOrAbove(userId, scopeId, scopeType);
     }
 
     /**
-     * SYSTEM_ADMIN もしくは当該スコープの ADMIN（DEPUTY_ADMIN を除く）なら true。
+     * 当該スコープの ADMIN（DEPUTY_ADMIN を除く）なら true。
      *
      * @param authentication 現在の認証情報
      * @param scopeId        スコープ ID
@@ -67,14 +64,11 @@ public class AccessGuard {
         if (userId == null) {
             return false;
         }
-        if (accessControlService.isSystemAdmin(userId)) {
-            return true;
-        }
         return accessControlService.isAdmin(userId, scopeId, scopeType);
     }
 
     /**
-     * SYSTEM_ADMIN もしくは当該スコープのメンバー（MEMBER 以上）なら true。
+     * 当該スコープのメンバー（MEMBER 以上）なら true。
      *
      * @param authentication 現在の認証情報
      * @param scopeId        スコープ ID
@@ -86,14 +80,11 @@ public class AccessGuard {
         if (userId == null) {
             return false;
         }
-        if (accessControlService.isSystemAdmin(userId)) {
-            return true;
-        }
         return accessControlService.isMember(userId, scopeId, scopeType);
     }
 
     /**
-     * SYSTEM_ADMIN もしくは当該スコープで指定 permission を保有するなら true
+     * 当該スコープで指定 permission を保有するなら true
      *（DEPUTY_ADMIN の細粒度権限用）。
      *
      * @param authentication 現在の認証情報
@@ -107,9 +98,6 @@ public class AccessGuard {
         Long userId = resolveUserId(authentication);
         if (userId == null) {
             return false;
-        }
-        if (accessControlService.isSystemAdmin(userId)) {
-            return true;
         }
         return accessControlService.hasPermission(userId, scopeId, scopeType, permission);
     }

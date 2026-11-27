@@ -322,10 +322,8 @@ public class DefaultAccessControlService implements AccessControlService {
      * ユーザーのスコープ内「有効ロール名」を解決する（F00.5 §8.3 統合ロール解決）。
      *
      * <p>F00.5 で所属（memberships）と権限ロール（user_roles）が分離されたことに伴い、
-     * 1 スコープに対するユーザーのロールは次の 2 系統に分散している:</p>
+     * 1 スコープに対するユーザーのロールは次の 2 系統に分散している（SYSTEM_ADMIN はスコープのロールに含めない）:</p>
      * <ul>
-     *   <li><b>プラットフォームロール</b>: {@code user_roles} のスコープ未指定行
-     *       （SYSTEM_ADMIN）</li>
      *   <li><b>権限ロール</b>: {@code user_roles} 由来（ADMIN / DEPUTY_ADMIN / GUEST など）</li>
      *   <li><b>所属ロール</b>: {@code memberships.role_kind} 由来（MEMBER / SUPPORTER）</li>
      * </ul>
@@ -364,17 +362,11 @@ public class DefaultAccessControlService implements AccessControlService {
      * （= 既存テストのスタブ前提を壊さない）。</p>
      */
     private Optional<EffectiveRole> resolveEffectiveRole(Long userId, Long scopeId, String scopeType) {
-        // SYSTEM_ADMIN は team_id / organization_id がともに null のプラットフォームロール。
-        // スコープ別 findUserRole() では取得できないため、最強ロールとして先に解決する。
-        if (isSystemAdmin(userId)) {
-            return Optional.of(new EffectiveRole("SYSTEM_ADMIN", 1));
-        }
-
-        // PLATFORM（運営）スコープには実テナントが無く、ScopeType enum にも値が無い。
-        // ここへ到達するのは「SYSTEM_ADMIN ではない利用者が PLATFORM スコープを指した」場合であり、
-        // そのまま下へ流すと ScopeType.valueOf("PLATFORM") が IllegalArgumentException を投げて
-        // 500 になる。認可の失敗は 403 でなければならないため、空（＝無権限）を返して打ち切る。
-        // F08.12 §2.1。
+        // PLATFORM（運営）スコープは誰にとっても無権限。運営権限はロール階層に載せず、
+        // checkSystemAdmin で判定する（戦役 Z-A PR3: SYSTEM_ADMIN の最強ロール昇格を撤去）。
+        // 実テナントが無く ScopeType enum にも値が無いため、そのまま下へ流すと
+        // ScopeType.valueOf("PLATFORM") が IllegalArgumentException を投げて 500 になる。
+        // 認可の失敗は 403 でなければならないため、空（＝無権限）を返して打ち切る。F08.12 §2.1。
         if (PLATFORM_SCOPE_TYPE.equals(scopeType)) {
             return Optional.empty();
         }

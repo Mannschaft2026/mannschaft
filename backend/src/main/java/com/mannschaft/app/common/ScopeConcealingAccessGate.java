@@ -25,9 +25,7 @@ import java.util.function.BooleanSupplier;
  * <h2>判定順（入れ替えてはならない）</h2>
  * <ol>
  *   <li><b>親リソースの生存確認は呼び出し側が本ゲートより先に行う。</b>不在・論理削除済みは
- *       {@code notFoundCode} で拒否する（CMP-260917-1136。SYSTEM_ADMIN の短絡より先に置かないと、
- *       SYSTEM_ADMIN だけが亡霊リソースを操作できてしまう）。親の不在と越境は同一応答になる。</li>
- *   <li>SYSTEM_ADMIN は通す。</li>
+ *       {@code notFoundCode} で拒否する（CMP-260917-1136）。親の不在と越境は同一応答になる。</li>
  *   <li>{@link AccessControlService#isAdminOrAbove}（user_roles と memberships の 2 系統を統合した有効ロール）。
  *       {@link AccessControlService#isMember} より<b>必ず先</b>に置く。memberships 行を持たず user_roles だけに
  *       ADMIN/DEPUTY_ADMIN を持つ利用者を、越境と誤判定して 404 にしないため。</li>
@@ -53,7 +51,7 @@ public class ScopeConcealingAccessGate {
     private final AccessControlService accessControlService;
 
     /**
-     * 管理操作の認可（SYSTEM_ADMIN、または当該スコープの ADMIN/DEPUTY_ADMIN）。
+     * 管理操作の認可（当該スコープの ADMIN/DEPUTY_ADMIN）。
      *
      * @param userId       操作者
      * @param scopeId      リソース実体から解決したスコープ ID（パス・クエリの値を鵜呑みにしない）
@@ -66,7 +64,7 @@ public class ScopeConcealingAccessGate {
     }
 
     /**
-     * 本人または管理者の認可（SYSTEM_ADMIN、リソースの所有者本人、当該スコープの ADMIN/DEPUTY_ADMIN）。
+     * 本人または管理者の認可（リソースの所有者本人、当該スコープの ADMIN/DEPUTY_ADMIN）。
      *
      * <p>本人判定はメモリ上の比較でクエリを撃たないため、{@code isAdminOrAbove} より先に評価する
      * （本人経路の認可クエリ回数を是正前から増やさないため）。本人の現在の所属は問わない。</p>
@@ -80,9 +78,6 @@ public class ScopeConcealingAccessGate {
      */
     public void requireOwnerOrAdminOrConceal(Long userId, Long scopeId, String scopeType, Long ownerId,
                                              ErrorCode notFoundCode) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
         if (ownerId != null && Objects.equals(ownerId, userId)) {
             return;
         }
@@ -93,7 +88,7 @@ public class ScopeConcealingAccessGate {
     }
 
     /**
-     * メンバー操作の認可（SYSTEM_ADMIN、または当該スコープに在籍中のメンバー）。
+     * メンバー操作の認可（当該スコープに在籍中のメンバー）。
      *
      * <p>在籍（memberships）を必須とする操作用。user_roles のみの ADMIN/DEPUTY_ADMIN は<b>許可しない</b>が、
      * 所属者として扱い 403 を返す（404 に化けさせない）。</p>
@@ -107,9 +102,6 @@ public class ScopeConcealingAccessGate {
      */
     public void requireMemberOrConceal(Long userId, Long scopeId, String scopeType, ErrorCode notFoundCode,
                                        boolean excludeSupporter) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
         if (accessControlService.isMember(userId, scopeId, scopeType)) {
             if (excludeSupporter && accessControlService.isSupporter(userId, scopeId, scopeType)) {
                 throw new BusinessException(CommonErrorCode.COMMON_002);
@@ -124,7 +116,7 @@ public class ScopeConcealingAccessGate {
     }
 
     /**
-     * 汎用形。SYSTEM_ADMIN → ADMIN/DEPUTY_ADMIN → 呼び出し側の許可条件 の順に許可を判定し、
+     * 汎用形。ADMIN/DEPUTY_ADMIN → 呼び出し側の許可条件 の順に許可を判定し、
      * 許可されなければ越境（{@code notFoundCode}）か所属者の権限不足（{@code forbiddenCode}）かを作り分ける。
      *
      * @param userId        操作者
@@ -136,9 +128,6 @@ public class ScopeConcealingAccessGate {
      */
     public void requireOrConceal(Long userId, Long scopeId, String scopeType, BooleanSupplier permitted,
                                  ErrorCode notFoundCode, ErrorCode forbiddenCode) {
-        if (accessControlService.isSystemAdmin(userId)) {
-            return;
-        }
         if (accessControlService.isAdminOrAbove(userId, scopeId, scopeType)) {
             return;
         }

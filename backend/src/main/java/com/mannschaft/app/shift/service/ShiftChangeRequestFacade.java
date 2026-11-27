@@ -60,8 +60,8 @@ public class ShiftChangeRequestFacade {
     /**
      * 変更依頼を作成する（スケジュール所属チームのメンバー。SUPPORTER は不可 403 COMMON_002）。
      *
-     * <p>Gate は冒頭で SYSTEM_ADMIN を通すが、是正前は {@code checkMembership}（memberships のみ）で
-     * 非メンバーの SYSTEM_ADMIN も 403 {@code COMMON_002} だった。挙動を変えないため先に弾く。</p>
+     * <p>是正前は {@code checkMembership}（memberships のみ）で非メンバーの SYSTEM_ADMIN も 403
+     * {@code COMMON_002} だった。SYSTEM_ADMIN の直書き判定は本メソッドに残している（Z-C で整理する）。</p>
      *
      * <p>SUPPORTER は仕様（F03.5 README: 変更依頼不可）どおり、シフト表のステータスを見る前に 403 で弾く
      * （tx 本体のステータス判定の 201/409 の差で公開状態を読ませない。CMP-260826-2127 P2）。</p>

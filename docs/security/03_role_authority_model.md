@@ -189,7 +189,7 @@ per-scope ロールを JWT に載せない理由は **マルチテナントで�
 
 #### 3.3.1 新設 SpEL ガード Bean の設計
 
-> **旧方針・既存実装の記録**: 本項の SYSTEM_ADMIN 無条件許可は、2026-11-15 の最新方針（§3.6）ではテナント業務情報へのアクセス根拠にしない。以下は既存実装を説明する記録であり、新規実装の推奨ではない。認可コードの移行は未実施。
+> **旧方針・既存実装の記録**: 本項の SYSTEM_ADMIN 無条件許可は、2026-11-15 の最新方針（§3.6）ではテナント業務情報へのアクセス根拠にしない。以下は既存実装を説明する記録であり、新規実装の推奨ではない。**共通点1〜3（`ScopeConcealingAccessGate`・`AccessGuard`・`resolveEffectiveRole`）の短絡は撤去済み（戦役 Z-A PR3）。共通点4〜7（snapshot・可視性・ViewerContext・dashboard RoleResolver）は PR4 で撤去する。**
 
 既存 `AdminRoleChecker` / `QuickMemoAccessGuard` の定石（`@Component("name")` ＋ `Authentication` 引数）に倣い、**per-scope 認可専用の単一ガード Bean** を新設する。`AccessControlService` に判定を委譲し、ロジックの二重化を避ける。
 
@@ -223,7 +223,7 @@ public class AccessGuard {
 
 **設計上の取り決め:**
 
-1. **SYSTEM_ADMIN は常に通す** — `isScopeAdmin` 等は内部で先に `accessControlService.isSystemAdmin(userId)` を確認し、true なら無条件許可（プラットフォーム管理者は全スコープを操作可能）。
+1. ~~SYSTEM_ADMIN は常に通す~~ — **撤去済み（Z-A PR3）**。`isScopeAdmin` 等は SYSTEM_ADMIN を特別扱いせず、当該スコープのロールだけで判定する。旧記述は「内部で先に `isSystemAdmin` を確認し、true なら無条件許可」だった。
 2. **null/非認証は false** — `authentication == null || !authentication.isAuthenticated()` で早期 false。`authentication.getName()` のパース失敗（`NumberFormatException`）も false（既存ガードと同挙動）。
 3. **scopeType は文字列リテラル** — SpEL 内で `'TEAM'` / `'ORGANIZATION'` を渡す。`AccessControlService` の既存シグネチャ（`String scopeType`）と一致。
 4. **委譲先の再利用** — `isScopeAdmin` → `AccessControlService.isAdminOrAbove` ＋ `isSystemAdmin` の OR。`hasScopePermission` → `AccessControlService.checkPermission` の boolean 版（`roleService.hasPermission`）。新規 SQL は原則追加しない。
@@ -264,7 +264,7 @@ circulation / shift / chat / faq の一部 EP は、`@EnableMethodSecurity` 未�
 
 #### BE 側（不変・本節では変更しない）
 
-§3.3.1 のとおり、`AccessGuard` やSYSTEM_ADMIN短絡を明示したロール判定経路は **SYSTEM_ADMIN を通す**（`isSystemAdmin(userId)` が true なら無条件許可）。この方針は変更しない。実例: `ShiftAutoAssignService`（`backend/src/main/java/com/mannschaft/app/shift/service/ShiftAutoAssignService.java:353,356,381,384,405,408`）は各 public 入口で `accessControlService.isSystemAdmin(userId)` を先に確認し、true なら即許可、false ならチームの `checkAdminOrAbove` / `isAdminOrAbove` へフォールバックする。**SYSTEM_ADMIN は当該チームの ADMIN/DEPUTY_ADMIN でなくても BE API は通る。**
+（旧記述。共通点1〜3は Z-A PR3 で撤去済み。個別サービスの直書き短絡は後続戦役で撤去する。）§3.3.1 のとおり、SYSTEM_ADMIN短絡を明示したロール判定経路は **SYSTEM_ADMIN を通す**（`isSystemAdmin(userId)` が true なら無条件許可）設計だった。実例: `ShiftAutoAssignService`（`backend/src/main/java/com/mannschaft/app/shift/service/ShiftAutoAssignService.java:353,356,381,384,405,408`）は各 public 入口で `accessControlService.isSystemAdmin(userId)` を先に確認し、true なら即許可、false ならチームの `checkAdminOrAbove` / `isAdminOrAbove` へフォールバックする。**SYSTEM_ADMIN は当該チームの ADMIN/DEPUTY_ADMIN でなくても BE API は通る。**
 
 **実効権限経路の区別（CMP-261021-0020）**: `AccessControlService.checkPermission` は対象チームの実効権限を判定し、SYSTEM_ADMIN 単独を無条件に許可しない。フレンドの follow/unfollow と `GET /teams/{id}/friends/pending` は `MANAGE_FRIEND_TEAMS` があれば MEMBER も許可し、SYSTEM_ADMIN 兼任者も対象チームの実効権限がある場合だけ許可する。この経路の FE は `can('MANAGE_FRIEND_TEAMS')` に合わせ、以下のロール限定 UI 方針を適用しない。ほかの API のロール方針は本変更の対象外。
 
@@ -294,7 +294,7 @@ const isScopeAdmin = computed(
 
 **運営アカウントは専用、テナントに所属しない（2026-11-26 マスター決定・所属禁止を実装）**: 運営（SYSTEM_ADMIN）は運営専用アカウントを使い、個人アカウントとの併用はしない。運営アカウントはチーム・組織・委員会・村に所属せず、サポーター（フォロー）にも、タイムライン上の個人フォローにもならない。停止中・非 ACTIVE の運営アカウントも対象とする（状態を問わず SYSTEM_ADMIN ロールを持つかで判定する）。所属行を作る全経路と、運営アカウント宛ての招待・参加申請・移管申し出を作る全経路は、`PlatformAccountAffiliationPolicy`（`role.service`）を通して `MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN`（403）で拒否する。経路の網羅表は [platform_account_affiliation_inventory.md](platform_account_affiliation_inventory.md)、番人は `PlatformAccountAffiliationPolicyGuardTest`（生成シンクを持つファイルが Policy を呼ぶことを CI で固定）。**唯一の例外（公式村だけ）**: 公式村（`OFFICIAL`）に限り、運営アカウントが村の作成者として村長（HEADMAN）に所属することを許す（村作成申請の作成時の所属のみ。公式村は運営が認定・運営する村であり、運営が村長として運用する必要があるため。マスター決定 2026-11-26）。例外は作成時の作成者所属に限り、運営アカウントが他の村や他の経路（招待受諾・参加申請・承認など）で所属すること、通常村（`COMMUNITY`）を作成して村長になることは引き続き 403。Policy の `assertAffiliatableAsOfficialVillageCreator` が唯一の入口で、点検 SQL も公式村の作成者としての村長所属は 0 件判定から除く。除外（運営によるプロビジョニング作成・チームの組織加盟など所属を作らない経路）は同表に理由付きで記録する。既に所属行を持つ運営アカウントの点検は同表「点検 SQL」を参照。
 
-**記録時点の状態と範囲**: 本更新は方針の記録のみであり、§3.3.1・§3.5などに記載した既存の SYSTEM_ADMIN 短絡や UI を変更していない。新たな例外機能・バイパスの追加や、認可コード・UI の移行は実施していない。
+**記録時点の状態と範囲**: 2026-11-15 時点は方針の記録のみだった。2026-11-27 の戦役 Z-A PR3 で共通の素通し点 1〜3（`ScopeConcealingAccessGate`・`AccessGuard`・`DefaultAccessControlService.resolveEffectiveRole`）の SYSTEM_ADMIN 短絡を撤去した（PLATFORM は誰にとっても無権限。運営権限はロール階層に載せず `checkSystemAdmin` で判定する）。あわせて、運営（SYSTEM_ADMIN）によるテナントの FAQ 設定・公開設定・サポーター名の開示設定（`/api/v1/admin/{teams,organizations}/{id}/faqs`・`public-settings`・`supporter-name-disclosure`）は近道撤去により 403 となり、運営画面からの導線を廃止した（マスター決定。サポーターの名前開示も運営からは触れない）。共通点4〜7と UI の表示ロールは後続（PR4・PR5）で移行する。
 
 ---
 
