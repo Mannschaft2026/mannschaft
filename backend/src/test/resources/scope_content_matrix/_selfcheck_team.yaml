@@ -1,0 +1,16 @@
+# CMP-261124-0159 ハーネス自己検査用（先頭が _ のファイルは経路台帳の突き合わせ対象外）。
+# 本戦役前から非公開チームの詳細は MEMBER 以上だけが 200、他は部外者と同一の 403 VISIBILITY_001（F05.1/F05.5 §画面の前提）。
+package: _selfcheck_team
+routes:
+  - id: R-selfcheck-1
+    method: GET
+    path: /api/v1/teams/{slug}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+      SUPPORTER: OUTSIDER
+      GUEST: OUTSIDER
+      OUTSIDER: OUTSIDER
+      OTHER_TEAM_MEMBER: OUTSIDER
+      OTHER_ORG_MEMBER: OUTSIDER
