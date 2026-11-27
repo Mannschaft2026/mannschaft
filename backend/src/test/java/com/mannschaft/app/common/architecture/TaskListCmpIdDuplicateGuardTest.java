@@ -210,15 +210,32 @@ class TaskListCmpIdDuplicateGuardTest {
     }
 
     @Test
-    @DisplayName("申告0件の実台帳は、実効台帳と生の本文が完全一致する（CMP-261124-1222 ④ AC-1）")
+    @DisplayName("申告0件の台帳（実台帳の生の月別・索引だけの写し）は、実効台帳と生の本文が完全一致する（CMP-261124-1222 ④ AC-1）")
     void 申告0件なら実効台帳と生の本文が一致する() {
-        Ledger effective = TaskListLedger.readRepository(true);
-        Ledger raw = TaskListLedger.read(TaskListLedger.fileSystem(TaskListLedger.resolveRepoRoot()), true, true);
+        // 実リポジトリが申告0件であることは前提にしない（PR-2 以降は申告が入る）。生のファイルだけを写して申告0件の検体にする。
+        Ledger real = TaskListLedger.read(TaskListLedger.fileSystem(TaskListLedger.resolveRepoRoot()), true, true);
+        Map<String, String> copy = new LinkedHashMap<>();
+        real.rawFiles().forEach(f -> {
+            if (f.content() != null) {
+                copy.put(f.path(), f.content());
+            }
+        });
+        assertThat(copy.keySet()).noneMatch(p -> p.startsWith(TaskListLedger.CHANGES_DIR + "/"));
+        Ledger effective = TaskListLedger.read(TaskListLedger.inMemory(copy), true);
+        Ledger raw = TaskListLedger.read(TaskListLedger.inMemory(copy), true, true);
         assertThat(effective.changes().entries()).isEmpty();
         assertThat(effective.changes().problems()).isEmpty();
-        assertThat(effective.files()).isEqualTo(raw.files());
+        assertThat(effective.files()).isEqualTo(raw.files()).isEqualTo(real.rawFiles());
         assertThat(effective.rows()).isEqualTo(raw.rows());
         assertThat(TaskListLedger.concatenatedContent(effective)).isEqualTo(TaskListLedger.concatenatedContent(raw));
+    }
+
+    @Test
+    @DisplayName("実台帳は申告の有無に依らず構造・連鎖検査に合格する（CMP-261124-1222 ④）")
+    void 実台帳は申告があっても構造と連鎖の検査に合格する() {
+        Ledger real = TaskListLedger.readRepository(true);
+        assertThat(real.changes().problems()).isEmpty();
+        assertThat(TaskListLedger.check(real)).isEmpty();
     }
 
     @Test

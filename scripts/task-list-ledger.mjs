@@ -338,6 +338,9 @@ export function parseChangeFile(path, content) {
   const cells = line.startsWith('|') ? splitTableRow(line) : [];
   if (cells.length < 3) {
     errors.push(problem('format', path, '形式: 2行目が表の行（| で始まる7列行）でない。'));
+  } else if (cells.length - 2 !== 7) {
+    // 最終の実効本文だけでなく申告ごとに7列を検査する（壊れた中間行を経由する連鎖を通さない）
+    errors.push(problem('format', path, '形式: 2行目の列数が ' + (cells.length - 2) + '（期待 7 列）。セル内の | は \\| にエスケープすること。'));
   } else if (javaTrim(cells[1]) !== id) {
     errors.push(problem('id', path, 'ID 不一致: メタ行の ID ' + id + ' と行の先頭セル ' + javaTrim(cells[1]) + ' が違う。'));
   }
@@ -416,7 +419,8 @@ export function applyChanges(rawFiles, layout, entries) {
   for (const e of valid.filter((x) => x.op === 'add').sort(changeOrder)) {
     const existing = loc.get(e.id);
     if (existing) {
-      problems.push(problem('duplicate', e.path, '重複: 既に実効台帳にある ID ' + e.id + ' への add（' + existing.source + '）。新しい ID を採るか update にすること。'));
+      // paths に既存側（先の add 申告または月別ファイル）も入れる。仮想マージでどちらが PR 側でも競合を拾うため
+      problems.push(problem('duplicate', e.path, '重複: 既に実効台帳にある ID ' + e.id + ' への add（' + existing.source + '）。新しい ID を採るか update にすること。', [e.path, existing.source]));
       continue;
     }
     const target = layout === 'split' ? expectedLedgerFile(e.id) : LEDGER_INDEX_PATH;

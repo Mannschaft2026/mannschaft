@@ -456,6 +456,9 @@ final class TaskListLedger {
         List<String> cells = line.startsWith("|") ? splitTableRow(line) : List.of();
         if (cells.size() < 3) {
             errors.add(problem("format", path, "形式: 2行目が表の行（| で始まる7列行）でない。"));
+        } else if (cells.size() - 2 != EXPECTED_COLUMN_COUNT) {
+            // 申告ごとに7列を検査する（壊れた中間行を経由する連鎖を通さない）
+            errors.add(problem("format", path, "形式: 2行目の列数が " + (cells.size() - 2) + "（期待 7 列）。セル内の | は \\| にエスケープすること。"));
         } else if (!cells.get(1).trim().equals(id)) {
             errors.add(problem("id", path, "ID 不一致: メタ行の ID " + id + " と行の先頭セル " + cells.get(1).trim() + " が違う。"));
         }
@@ -590,8 +593,9 @@ final class TaskListLedger {
         for (Change e : valid.stream().filter(c -> "add".equals(c.op())).sorted(CHANGE_ORDER).toList()) {
             Loc existing = loc.get(e.id());
             if (existing != null) {
-                problems.add(problem("duplicate", e.path(), "重複: 既に実効台帳にある ID " + e.id() + " への add（" + existing.source
-                        + "）。新しい ID を採るか update にすること。"));
+                // paths に既存側（先の add 申告または月別ファイル）も入れる（仮想マージでどちらが PR 側でも競合を拾う）
+                problems.add(new Problem("duplicate", e.path(), List.of(e.path(), existing.source), e.path() + ": 申告: 重複: 既に実効台帳にある ID "
+                        + e.id() + " への add（" + existing.source + "）。新しい ID を採るか update にすること。"));
                 continue;
             }
             String target = "split".equals(layout) ? expectedFile(e.id()) : INDEX_PATH;

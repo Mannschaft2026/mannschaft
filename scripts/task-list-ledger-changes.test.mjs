@@ -56,14 +56,25 @@ function writeTree(files) {
   return dir;
 }
 
-test('AC-1: 実リポジトリの台帳は申告0件で、既定の読み取り（実効）と raw が完全一致する', async () => {
-  const eff = await readLedger(fsLedgerReader(repoRoot));
-  const raw = await readLedger(fsLedgerReader(repoRoot), { raw: true });
+test('AC-1: 申告0件の台帳（実リポジトリの生の月別・索引だけを写した固定の写し）は、実効と raw が完全一致する', async () => {
+  // 実リポジトリが申告0件であることは前提にしない（PR-2 以降は申告が入る）。生のファイルだけを写して申告0件の検体にする。
+  const real = await readLedger(fsLedgerReader(repoRoot), { raw: true });
+  const copy = Object.fromEntries(real.rawFiles.filter((f) => f.content != null).map((f) => [f.path, f.content]));
+  assert.ok(!Object.keys(copy).some((p) => p.startsWith(CHANGES_DIR + '/')));
+  const eff = await read(copy);
+  const raw = await read(copy, { raw: true });
   assert.equal(eff.changes.entries.length, 0);
   assert.deepEqual(eff.changes.problems, []);
   assert.deepEqual(eff.files, raw.files);
+  assert.deepEqual(eff.files, real.rawFiles);
   assert.deepEqual(eff.rows, raw.rows);
   assert.equal(ledgerText(eff), ledgerText(raw));
+});
+
+test('実リポジトリの台帳は申告の有無に依らず構造・連鎖検査に合格する', async () => {
+  const real = await readLedger(fsLedgerReader(repoRoot));
+  assert.deepEqual(real.changes.problems, []);
+  assert.deepEqual(checkTaskListStructure(real).errors, []);
 });
 
 test('AC-1: changes/ が空ディレクトリでも不在と同じ（files・rows・構造検査・CLI 出力が一致）', async () => {
@@ -218,7 +229,7 @@ test('port-diff は生の月別ファイルへ適用し、未畳み込みの申�
   }
 });
 
-test('性能: 申告500件（add 250・update 250 の連鎖）で fs readLedger が1秒未満', async () => {
+test('性能: 申告500件（add 250・update 250 の連鎖）で fs readLedger が1秒未満（基準環境 CI で厳守）', async () => {
   const files = { ...base };
   let prev = A;
   for (let i = 0; i < 250; i++) {
@@ -230,27 +241,36 @@ test('性能: 申告500件（add 250・update 250 の連鎖）で fs readLedger 
   }
   const dir = writeTree(files);
   try {
-    const t0 = performance.now();
-    const ledger = await readLedger(fsLedgerReader(dir));
-    const ms = performance.now() - t0;
-    console.log('申告500件の fs readLedger: ' + ms.toFixed(1) + ' ms');
+    // 並列実行・一時的な負荷の揺れを避けるため、温めの1回の後に3回測って最小値で判定する
+    await readLedger(fsLedgerReader(dir));
+    let ms = Infinity;
+    let ledger;
+    for (let i = 0; i < 3; i++) {
+      const t0 = performance.now();
+      ledger = await readLedger(fsLedgerReader(dir));
+      ms = Math.min(ms, performance.now() - t0);
+    }
     assert.equal(ledger.changes.entries.length, 500);
     assert.equal(ledger.changes.applied.length, 500);
     assert.deepEqual(ledger.changes.problems, []);
     assert.equal(ledgerRowMap(ledger).get('CMP-261124-1222'), prev);
-    // 計算部分（同じ500件をメモリ上で適用）は環境に依らず1秒未満
-    const t1 = performance.now();
-    await readLedger(memoryLedgerReader(files));
-    const cpuMs = performance.now() - t1;
+    // 計算部分（同じ500件をメモリ上で適用）はどの環境でも1秒未満
+    let cpuMs = Infinity;
+    for (let i = 0; i < 3; i++) {
+      const t1 = performance.now();
+      await readLedger(memoryLedgerReader(files));
+      cpuMs = Math.min(cpuMs, performance.now() - t1);
+    }
     assert.ok(cpuMs < 1000, 'メモリ上の適用 ' + cpuMs + ' ms');
-    // fs 読み取りは1秒未満（Linux ext4 の実測 約17ms）。ただしリアルタイム走査の重い Windows 作業木などでは
-    // ファイル500件を読むこと自体（I/O の下限）が1秒を超えるため、そのときは下限の3倍以内であることを確かめる。
+    // 診断（判定には使わない）: 同じ500件を readFileSync するだけの I/O 下限との比
     const t2 = performance.now();
     const changesDir = join(dir, 'docs', 'task-list', 'changes');
     for (const name of readdirSync(changesDir)) readFileSync(join(changesDir, name), 'utf8');
     const ioFloorMs = performance.now() - t2;
-    console.log('同じ500件を readFileSync するだけの I/O 下限: ' + ioFloorMs.toFixed(1) + ' ms');
-    assert.ok(ms < 1000 || ms < ioFloorMs * 3, ms + ' ms（I/O 下限 ' + ioFloorMs + ' ms）');
+    console.log('申告500件の fs readLedger: ' + ms.toFixed(1) + ' ms（3回の最小）/ メモリ上の適用: ' + cpuMs.toFixed(1) + ' ms / I/O 下限: ' + ioFloorMs.toFixed(1) + ' ms');
+    // 基準環境（GitHub Actions の ubuntu-latest。CI=true）では fs readLedger 1秒未満を厳守する。
+    // ローカル（リアルタイム走査の重い Windows 作業木など）は I/O 自体が1秒を超えうるため診断出力のみ。
+    if (process.env.CI === 'true') assert.ok(ms < 1000, 'fs readLedger ' + ms + ' ms');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -335,6 +355,22 @@ test('AC-5c: 先行エントリが脱落して group が組み直されても等
   const foldPr = await fold({ ...base, ...pr1 });
   const afterFold = await vh({ mb: { ...base, ...pr1 }, h: { ...foldPr, ...pr2 } });
   assert.deepEqual(kinds(afterFold), { violations: [], warnings: [] });
+});
+
+test('仮想マージ: 分岐後に main が同じ ID を add し、古い PR も同じ ID を add すると、ファイル名時刻の前後に依らず赤', async () => {
+  const id = 'CMP-261127-0900';
+  for (const [mainTime, prTime] of [['20261127T020000Z', '20261127T010000Z'], ['20261127T010000Z', '20261127T020000Z']]) {
+    const mainAdd = { [cname(id, mainTime, '111111')]: add(row(id, 'P3 未着手（main）'), id) };
+    const prAdd = { [cname(id, prTime, '222222')]: add(row(id, 'P3 未着手（PR）'), id) };
+    const r = await vh({ mb: base, b: { ...base, ...mainAdd }, h: { ...base, ...prAdd } });
+    assert.equal(r.ok, false, mainTime + ' / ' + prTime);
+    assert.deepEqual(kinds(r).violations, ['duplicate'], mainTime + ' / ' + prTime);
+    assert.ok(r.violations[0].message.includes(Object.keys(prAdd)[0]) && r.violations[0].message.includes(Object.keys(mainAdd)[0]), r.violations[0].message);
+    // main が畳み込み済み（月別ファイルに同じ ID）でも赤
+    const folded = await fold({ ...base, ...mainAdd });
+    const r2 = await vh({ mb: base, b: folded, h: { ...base, ...prAdd } });
+    assert.deepEqual(kinds(r2).violations, ['duplicate']);
+  }
 });
 
 test('CLI: --base <dir> で等式検査。直接編集は警告で exit 0、申告削除は exit 1', async () => {
