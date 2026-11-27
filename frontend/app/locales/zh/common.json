@@ -459,6 +459,10 @@
     "AUTH_010": "当前密码不正确",
     "AUTH_011": "尚未设置密码",
     "AUTH_044": "请求过于频繁，请稍后再试",
+    "SURVEY_014": "您没有发送提醒的权限",
+    "SURVEY_015": "距上次提醒时间过短，暂时无法再次提醒",
+    "SURVEY_016": "已达到提醒次数上限",
+    "INVALID_SURVEY_STATUS": "当前问卷状态下无法发送提醒",
     "SURVEY_023": "匿名问卷无法启用团队明细",
     "SCHEDULE_KEEP_001": "未找到暂存",
     "SCHEDULE_KEEP_002": "请输入标题",
@@ -3354,6 +3358,27 @@
       "created_at": "生成时间",
       "expires_at": "有效期限",
       "used_count": "使用次数"
+    },
+    "signage": {
+      "section": "显示终端令牌",
+      "issue": "发行令牌",
+      "device_name": "终端名称",
+      "device_placeholder": "例如：入口显示屏",
+      "empty": "暂无令牌",
+      "issued_title": "已发行显示终端令牌",
+      "no_expiry": "无期限",
+      "inactive": "已失效",
+      "reissue_confirm": "将发行新链接并使此令牌失效。是否继续？",
+      "revoke_confirm": "要使此令牌失效吗？",
+      "issue_success": "已发行令牌",
+      "issue_failed": "发行令牌失败",
+      "reissue_success": "已重新发行令牌",
+      "reissue_failed": "重新发行令牌失败",
+      "revoke_success": "已使令牌失效",
+      "revoke_failed": "使令牌失效失败",
+      "name_required": "请输入终端名称",
+      "token_label": "需在终端上设置的令牌",
+      "reissue_revoke_failed": "新令牌已发行，但旧令牌失效失败。请手动使旧令牌失效"
     }
   },
   "globalSearch": {

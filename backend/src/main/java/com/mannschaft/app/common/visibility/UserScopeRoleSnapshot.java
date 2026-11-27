@@ -39,6 +39,11 @@ import java.util.Set;
  *                                <strong>同じ 1 クエリの結果</strong>からロール名を取り出して保持する。
  *                                同一根に複数の所属経路がある場合は最も強いロールを採る。
  *                                ロール名が解決できない所属は本マップに現れない（所属集合には残る）。
+ * @param membersOnlyTeamIds      判定対象コンテンツの所属チーム（direct の TEAM スコープ）のうち、
+ *                                非公開チーム（{@code teams.visibility = MEMBERS_AND_ABOVE}）の ID 集合
+ *                                （閲覧者のロールが既に MEMBER 以上のチームは上限が発動し得ないため問い合わせず、含まれないことがある）
+ *                                （CMP-261124-0159・F00 §20.2 規則 4/5）。{@link #isBeyondMembersOnlyTeamCap} が
+ *                                親チーム上限の判定に使う。SystemAdmin のスナップショットでは常に空（上限を課さない。規則 6）。
  */
 public record UserScopeRoleSnapshot(
         boolean systemAdmin,
@@ -48,13 +53,15 @@ public record UserScopeRoleSnapshot(
         Set<Long> suspendedOrgIds,
         Set<Long> descendantMemberOfOrgIds,
         Map<ScopeKey, String> orgRoleByScope,
-        Map<Long, String> descendantRoleByOrgId) {
+        Map<Long, String> descendantRoleByOrgId,
+        Set<Long> membersOnlyTeamIds) {
 
     /**
      * 防御的コピーは行わない（呼び出し元が不変 Map/Set を渡す前提）。
      * null は空コレクションへ正規化する。
      */
     public UserScopeRoleSnapshot {
+        membersOnlyTeamIds = membersOnlyTeamIds != null ? membersOnlyTeamIds : Set.of();
         roleByScope = roleByScope != null ? roleByScope : Map.of();
         parentOrgByScope = parentOrgByScope != null ? parentOrgByScope : Map.of();
         orgMemberOf = orgMemberOf != null ? orgMemberOf : Set.of();
@@ -62,6 +69,23 @@ public record UserScopeRoleSnapshot(
         descendantMemberOfOrgIds = descendantMemberOfOrgIds != null ? descendantMemberOfOrgIds : Set.of();
         orgRoleByScope = orgRoleByScope != null ? orgRoleByScope : Map.of();
         descendantRoleByOrgId = descendantRoleByOrgId != null ? descendantRoleByOrgId : Map.of();
+    }
+
+    /**
+     * CMP-261124-0159 以前の 8 引数呼び出しとの後方互換コンストラクタ。
+     * {@code membersOnlyTeamIds} を空集合（親チーム上限なし）で補完してカノニカルコンストラクタへ委譲する。
+     */
+    public UserScopeRoleSnapshot(
+            boolean systemAdmin,
+            Map<ScopeKey, String> roleByScope,
+            Map<ScopeKey, Set<Long>> parentOrgByScope,
+            Set<ScopeKey> orgMemberOf,
+            Set<Long> suspendedOrgIds,
+            Set<Long> descendantMemberOfOrgIds,
+            Map<ScopeKey, String> orgRoleByScope,
+            Map<Long, String> descendantRoleByOrgId) {
+        this(systemAdmin, roleByScope, parentOrgByScope, orgMemberOf, suspendedOrgIds,
+                descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId, Set.of());
     }
 
     /**
@@ -135,6 +159,35 @@ public record UserScopeRoleSnapshot(
 
     public boolean isSystemAdmin() {
         return systemAdmin;
+    }
+
+    /**
+     * 非公開チームの集合を差し替えた複製を返す（{@link MembershipBatchQueryService} が組み立てに使う）。
+     */
+    public UserScopeRoleSnapshot withMembersOnlyTeamIds(Set<Long> teamIds) {
+        return new UserScopeRoleSnapshot(systemAdmin, roleByScope, parentOrgByScope, orgMemberOf, suspendedOrgIds,
+                descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId,
+                teamIds != null ? Set.copyOf(teamIds) : Set.of());
+    }
+
+    /**
+     * 親チーム上限（CMP-261124-0159・F00 §20.2）を越えるかを返す。
+     *
+     * <p>コンテンツの所属スコープが非公開チーム（{@link #membersOnlyTeamIds} に含まれる TEAM）で、
+     * 閲覧者のそのチームでのロールが MEMBER 未満（SUPPORTER・GUEST・非所属・未ログイン）なら true。
+     * 判定はチーム詳細の正準判定（{@code TeamVisibilityMapper} の {@code MEMBERS_AND_ABOVE} を
+     * {@link #hasRoleOrAbove(ScopeKey, String)} で評価する）と同じ規則で、二つ目の判定器を作らない（規則 2）。
+     * 公開側のチーム・TEAM 以外のスコープでは常に false（規則 3）。SystemAdmin は false（規則 6）。
+     * 親組織の ADMIN であっても、そのチームでのロールが無ければ true（規則 7）。</p>
+     */
+    public boolean isBeyondMembersOnlyTeamCap(ScopeKey scope) {
+        if (systemAdmin || scope == null || scope.scopeId() == null) {
+            return false;
+        }
+        if (!"TEAM".equals(scope.scopeType()) || !membersOnlyTeamIds.contains(scope.scopeId())) {
+            return false;
+        }
+        return !hasRoleOrAbove(scope, "MEMBER");
     }
 
     /**

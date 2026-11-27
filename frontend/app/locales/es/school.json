@@ -34,7 +34,8 @@
         "arrivalTime": "Hora de llegada",
         "leaveTime": "Hora de salida",
         "loading": "Cargando...",
-        "noStudents": "No se encontraron estudiantes"
+        "noStudents": "No se encontraron estudiantes",
+        "unknownStudent": "Estudiante desconocido"
       },
       "period": {
         "title": "Asistencia por período",
