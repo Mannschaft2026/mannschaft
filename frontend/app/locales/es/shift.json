@@ -12,11 +12,23 @@
     "board": {
       "title": "Tablero de turnos",
       "memberPool": "Miembros sin asignar",
+      "remainingHours": "Quedan {hours} h",
       "noUnassignedMembers": "No hay miembros sin asignar",
       "noMatchingMembers": "Ningún miembro coincide con la búsqueda",
       "dragHint": "Arrastra miembros para asignar",
       "unassignedSlots": "{count} turnos sin asignar",
-      "backToList": "Volver a la lista de turnos"
+      "backToList": "Volver a la lista de turnos",
+      "colDateTime": "Fecha y horario",
+      "assignedOfRequired": "{assigned} / {required}",
+      "full": "Completo",
+      "addMember": "Añadir",
+      "addMemberTitle": "Añadir miembro",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "No hay miembros que añadir",
+      "removeAssignment": "Quitar a {name} de este turno",
+      "fullReason": "Completo: no se puede añadir",
+      "overlapReason": "Se solapa con {slot}; no se puede elegir",
+      "overlapSlotLabel": "{date} {time} «{position}»"
     },
     "autoAssign": {
       "button": "Asignación automática",
@@ -199,7 +211,7 @@
       "moveDateAccept": "Mover turno y preferencias",
       "saveSuccess": "Franja guardada",
       "deleteSuccess": "Franja eliminada",
-      "assignmentMasked": "En ajuste",
+      "assignmentHidden": "Asignaciones ocultas",
       "assignmentMaskedHint": "Las asignaciones se ocultan hasta que se publique el turno",
       "deleteTitle": "Eliminar turno",
       "deleteConfirmPlain": "¿Eliminar este turno?",

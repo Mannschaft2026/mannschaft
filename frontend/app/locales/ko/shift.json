@@ -12,11 +12,23 @@
     "board": {
       "title": "시프트 보드",
       "memberPool": "미배정 멤버",
+      "remainingHours": "남은 {hours}시간",
       "noUnassignedMembers": "미배정 멤버가 없습니다",
       "noMatchingMembers": "검색 조건에 일치하는 멤버가 없습니다",
       "dragHint": "멤버를 드래그하여 배정",
       "unassignedSlots": "{count}건 미배정",
-      "backToList": "근무 목록으로 돌아가기"
+      "backToList": "근무 목록으로 돌아가기",
+      "colDateTime": "날짜 / 시간대",
+      "assignedOfRequired": "{assigned} / {required}명",
+      "full": "정원 마감",
+      "addMember": "추가",
+      "addMemberTitle": "멤버 추가",
+      "addMemberSlotLabel": "{slot}",
+      "noAddableMembers": "추가할 수 있는 멤버가 없습니다",
+      "removeAssignment": "{name} 배정 해제",
+      "fullReason": "정원이 가득 차 추가할 수 없습니다",
+      "overlapReason": "{slot}와(과) 시간이 겹쳐 선택할 수 없습니다",
+      "overlapSlotLabel": "{date} {time} \"{position}\""
     },
     "autoAssign": {
       "button": "자동 배정",
@@ -199,7 +211,7 @@
       "moveDateAccept": "근무 시간대와 희망 이동",
       "saveSuccess": "슬롯을 저장했습니다",
       "deleteSuccess": "슬롯을 삭제했습니다",
-      "assignmentMasked": "조정 중",
+      "assignmentHidden": "배정 비공개",
       "assignmentMaskedHint": "공개 전이므로 배정은 표시되지 않습니다",
       "deleteTitle": "근무 시간대 삭제",
       "deleteConfirmPlain": "이 시간대를 삭제하시겠습니까?",

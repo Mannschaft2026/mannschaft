@@ -29,12 +29,11 @@ mockNuxtImport('useShiftApi', () => () => ({
   getShiftSlots: mocks.getShiftSlots,
 }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: mocks.getMembers }))
-// 判定本体は useShiftPermission（別 spec で検証済み）。ここでは管理操作ができる ADMIN として振る舞わせる。
-mockNuxtImport('useShiftPermission', () => () => ({
+mockNuxtImport('useRoleAccess', () => () => ({
   roleName: computed(() => 'ADMIN'),
-  canManageShift: computed(() => true),
-  canViewShift: computed(() => true),
-  isDeputyWithoutManage: computed(() => false),
+  isScopeAdmin: computed(() => true),
+  can: () => false,
+  permissions: computed(() => [] as string[]),
   loadPermissions: mocks.loadPermissions,
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))

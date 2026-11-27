@@ -282,6 +282,8 @@ const isScopeAdmin = computed(
 )
 ```
 
+シフトボードの割当操作（枠への追加・外す・未割当プール・自動割当）の出し分け `canAssign` も同じ方針で、`roleName === 'ADMIN' || (roleName === 'DEPUTY_ADMIN' && can('MANAGE_SHIFTS'))` とする（CMP-261125-1336）。DEPUTY_ADMIN は MANAGE_SHIFTS を権限グループで付与された場合だけ割当操作が出て、持たない DEPUTY_ADMIN は閲覧のみ。SYSTEM_ADMIN 兼任者は `roleName` が `SYSTEM_ADMIN` になるため `shifts.vue` の入口判定と同じく含まれない。
+
 - 参照実装: `frontend/app/pages/teams/[slug]/shifts/[scheduleId]/board.vue` の `isScopeAdmin`（シフトボードの自動割当ボタン・履歴ボタン）、`frontend/app/pages/teams/[slug]/shifts.vue` の `isScopeAdmin`（「シフトボード」ボタン）。
 - **UI を隠すことは認可の代替ではない。** 上記のとおり BE は SYSTEM_ADMIN を常に許可するため、このボタンを消しても「SYSTEM_ADMIN がその API を叩けなくなる」わけではない。あくまで「運営専用アカウントに、一般利用者向けの業務導線を出さない」という UX 上の方針である。
 - **この等値比較は将来「バグだ」と誤解して `hasRoleOrAbove` 的な包含判定に書き換えないこと。** 書き換えると SYSTEM_ADMIN にもチーム運営導線が出てしまい、本節の方針に反する。

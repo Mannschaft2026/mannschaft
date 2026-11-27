@@ -426,6 +426,7 @@
   "error": {
     "server": "サーバーエラーが発生しました",
     "server_retry": "しばらく時間をおいて再度お試しください。",
+    "server_multiple": "{count}件のサーバーエラーが発生しました",
     "rate_limited": "操作が集中しています",
     "rate_limited_detail": "短時間に操作が集中しました。しばらく待ってから再度お試しください。",
     "rate_limited_retry_after": "短時間に操作が集中しました。約 {seconds} 秒後に再度お試しください。",

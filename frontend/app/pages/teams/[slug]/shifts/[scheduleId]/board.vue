@@ -1,24 +1,22 @@
 <template>
   <div class="flex flex-col h-screen overflow-hidden">
-    <!-- ヘッダー -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-surface-200 bg-white flex-shrink-0">
-      <div class="flex items-center gap-3">
-        <NuxtLink
-          :to="`/teams/${teamSlug}/shifts`"
-          class="text-surface-500 hover:text-surface-700"
-          :aria-label="$t('shift.board.backToList')"
-        >
-          <i class="pi pi-arrow-left" />
-        </NuxtLink>
-        <div>
-          <h1 class="font-bold text-surface-800 text-lg">{{ $t('shift.board.title') }}</h1>
-          <p v-if="schedule" class="text-xs text-surface-500">{{ schedule.content.title }}</p>
-        </div>
-        <Tag v-if="schedule" :value="schedule.status.status" severity="info" class="text-xs" />
-      </div>
+    <!-- ヘッダー。見出し・ステータス・ボタン群は PageHeader に寄せ、狭い幅では折り返す -->
+    <div class="flex-shrink-0 border-b border-surface-200 bg-white px-4 pt-2 pb-3" data-testid="shift-board-header">
+      <PageHeader
+        size="sm"
+        :title="$t('shift.board.title')"
+        :subtitle="schedule?.content.title"
+        :back-to="`/teams/${teamSlug}/shifts`"
+        :back-label="$t('shift.board.backToList')"
+        class="!mb-0"
+      >
+        <ShiftStatusBadge v-if="schedule" :status="schedule.status.status" />
+      </PageHeader>
 
-      <!-- 操作群はシフト表が取得できたときだけ出す（取得失敗時に死んだ導線を残さない） -->
-      <div v-if="schedule" class="flex items-center gap-2">
+      <!-- 操作群はシフト表が取得できたときだけ出す（取得失敗時に死んだ導線を残さない）。
+           PageHeader の actions 欄に入れると md 以上で見出しが押し潰されて縦書き状に折れるため、
+           見出しの下の折り返す行に置く。 -->
+      <div v-if="schedule" class="mt-2 flex flex-wrap items-center gap-2" data-testid="shift-board-actions">
         <!-- PDF エクスポートボタン（SUPPORTER は非表示。管理者の形以外は公開済みのシフト表だけ） -->
         <ShiftPdfExportButton
           v-if="canExportPdf"
@@ -36,16 +34,29 @@
           />
         </NuxtLink>
 
-        <!-- 自動割当は管理者専用（BE が per-scope 認可で 403 を返す）。
+        <!-- md 未満では未割当プールを常時表示せず、このボタンで開く（DnD は md 以上のみ） -->
+        <Button
+          v-if="canAssign"
+          :label="$t('shift.board.memberPool')"
+          icon="pi pi-users"
+          severity="secondary"
+          outlined
+          size="small"
+          class="md:hidden"
+          data-testid="member-pool-open"
+          @click="memberDrawerVisible = true"
+        />
+
+        <!-- 自動割当は割当権限のある人専用（BE が per-scope 認可で 403 を返す）。
              フラグ FEATURE_SHIFT_AUTO_ASSIGN_ENABLED が OFF のときは
              DOM から消さず disabled ＋ 理由ツールチップで「停止中」と示す
              （docs/features/F03.5_shift/06_manual_authoring.md §11.1.2-4）。 -->
         <span
-          v-if="canManageShift"
+          v-if="canAssign"
           v-tooltip.bottom="autoAssignEnabled ? '' : t('shift.autoAssign.disabledReason')"
           :title="autoAssignEnabled ? '' : t('shift.autoAssign.disabledReason')"
           :data-testid="autoAssignEnabled ? undefined : 'auto-assign-disabled-reason'"
-          class="flex items-center gap-2"
+          class="flex flex-wrap items-center gap-2"
         >
           <Tag
             v-if="!autoAssignEnabled"
@@ -76,9 +87,6 @@
       </div>
     </div>
 
-    <!-- MANAGE_SHIFTS を持たない副管理者には、操作できない理由を示す -->
-    <ShiftManageNotice v-if="isDeputyWithoutManage" variant="deputy" class="mx-4 mt-4 flex-shrink-0" />
-
     <!-- シフト表の取得中 -->
     <PageLoading v-if="scheduleLoading" />
 
@@ -96,9 +104,9 @@
     </div>
 
     <!-- メインコンテンツ -->
-    <div v-else class="flex flex-1 overflow-hidden">
+    <div v-else class="flex min-h-0 flex-1 overflow-hidden">
       <!-- シフトボード -->
-      <div class="flex-1 overflow-hidden">
+      <div class="min-w-0 flex-1 overflow-hidden">
         <ShiftBoardMatrix
           :slots="slots"
           :positions="positions"
@@ -106,22 +114,22 @@
           :member-map="memberMap"
           :pending-run="pendingRun"
           :schedule-version="scheduleVersion"
-          :readonly="!canManageShift"
+          :can-assign="canAssign"
+          :busy-slot-ids="busySlotIds"
           @drop-user="onDropUser"
           @remove-user="onRemoveUser"
-          @add-user="addUserSlotId = $event; poolVisible = true"
+          @add-user="onOpenAddDialog"
           @confirm-auto-assign="onConfirmAutoAssignWithNote"
           @revoke-auto-assign="onRevokeAutoAssign"
         />
       </div>
 
-      <!-- 未割当メンバープール -->
-      <div class="w-60 flex-shrink-0">
+      <!-- 未割当メンバープール（md 以上のみ常時表示。割当権限が無ければ出さない） -->
+      <div v-if="canAssign" class="hidden w-60 flex-shrink-0 md:block" data-testid="member-pool-aside">
         <ShiftMemberPool
           :members="unassignedMembers"
           :loading="membersLoading"
           :error="membersError"
-          :readonly="!canManageShift"
           @retry="loadMembers"
           @drag-start="draggingUserId = $event"
         />
@@ -140,31 +148,37 @@
       :runs="runs"
     />
 
-    <!-- メンバー追加ダイアログ（addUser 用） -->
+    <!-- md 未満の未割当メンバー一覧（引き出し）。DnD はできないので一覧のみ -->
     <Dialog
-      v-model:visible="poolVisible"
-      header="メンバーを追加"
+      v-if="canAssign"
+      v-model:visible="memberDrawerVisible"
+      :header="$t('shift.board.memberPool')"
       modal
-      :style="{ width: '360px' }"
+      :style="{ width: 'min(90vw, 360px)' }"
+      data-testid="member-pool-drawer"
     >
-      <div class="space-y-2">
-        <div
-          v-for="member in allMembers"
-          :key="member.userId"
-          class="flex items-center gap-3 p-2 rounded hover:bg-surface-50 cursor-pointer"
-          @click="onAddUserFromDialog(member.userId)"
-        >
-          <Avatar
-            v-if="member.avatarUrl"
-            :image="member.avatarUrl"
-            size="small"
-            shape="circle"
-          />
-          <Avatar v-else :label="member.displayName.charAt(0)" size="small" shape="circle" />
-          <span class="text-sm">{{ member.displayName }}</span>
-        </div>
+      <div class="h-[60vh]">
+        <ShiftMemberPool
+          :members="unassignedMembers"
+          :loading="membersLoading"
+          :error="membersError"
+          :draggable="false"
+          @retry="loadMembers"
+        />
       </div>
     </Dialog>
+
+    <!-- メンバー追加ダイアログ（枠ごとの追加） -->
+    <ShiftAddMemberDialog
+      v-if="canAssign"
+      v-model:visible="addDialogVisible"
+      :target-slot="addTargetSlot"
+      :slots="slots"
+      :members="allMembers"
+      :assignments="localAssignments"
+      :busy="addTargetSlot !== null && busySlotIds.includes(addTargetSlot.id)"
+      @select="onAddUserFromDialog"
+    />
   </div>
 </template>
 
@@ -185,20 +199,21 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const scheduleId = computed(() => Number(route.params.scheduleId))
 
-// F00.5 Phase 5: チームレベルの SUPPORTER 判定を useRoleAccess 経由に切替
+// F00.5 Phase 5: チームレベルの SUPPORTER 判定を useRoleAccess（useShiftPermission 経由）に切替
 // 旧実装: authStore.currentUser?.systemRole === 'SUPPORTER'
 //   → systemRole はプラットフォームロール（SYSTEM_ADMIN など）であり、
 //     チームの SUPPORTER を判定するのは誤りだった。
 // 新実装: /api/v1/teams/{id}/me/permissions から取得した roleName で判定する。
-const { roleName, canManageShift, canViewShift, isDeputyWithoutManage, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
+const { roleName, canManageShift, canViewShift, loadPermissions } = useShiftPermission(teamSlug, { autoLoad: false })
 const isSupporter = computed(() => roleName.value === 'SUPPORTER')
 // PDF は BE（ShiftPdfFacade）が、管理者の形なら未公開でも許し、それ以外の会員は公開済みだけ許す（未公開は 404）。
 const canExportPdf = computed(() =>
   !isSupporter.value && (canViewShift.value || isPdfReleasableToNonPrivileged(schedule.value?.status)))
-// CMP-261125-2114: 自動割当（実行・確定・破棄・履歴）などの管理操作は、チーム ADMIN または
-// MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに許される（BE: ShiftManageAccessGate）。
-// 判定は useShiftPermission に集約。SYSTEM_ADMIN の roleName 特別扱いはしない（BE も特別扱いしない）。
-// UI の出し分けは認可の代替ではない（BE が 403 / 404 を返す）。
+// CMP-261125-2114: 割当操作（枠への追加・外す・未割当プール・自動割当・実行履歴）は、チーム ADMIN または
+// MANAGE_SHIFTS を持つ DEPUTY_ADMIN だけに許される（BE: ShiftManageAccessGate）。それ以外は閲覧のみ。
+// 判定は useShiftPermission に集約（CMP-261125-1336 の FE 側の等値比較はここへ統合した）。
+// SYSTEM_ADMIN の roleName 特別扱いはしない（BE も特別扱いしない）。UI の出し分けは認可の代替ではない。
+const canAssign = canManageShift
 
 // 自動割当は 2026-09-09 の方針転換で既定 OFF（BE も ShiftAutoAssignController の
 // クラスレベル @RequireFeature で 6 経路すべてを FEATURE_GATE_001 で拒否する）。
@@ -237,9 +252,16 @@ const scheduleErrorKind = computed((): LoadErrorKind | undefined => {
 // UI 状態
 const autoAssignVisible = ref(false)
 const historyVisible = ref(false)
-const poolVisible = ref(false)
+const addDialogVisible = ref(false)
+const memberDrawerVisible = ref(false)
 const addUserSlotId = ref<number | null>(null)
 const draggingUserId = ref<number | null>(null)
+// 割当操作の処理中の枠。同じ枠への二重送信（二度押し）を防ぐ。
+const busySlotIds = ref<number[]>([])
+
+const addTargetSlot = computed(
+  (): ShiftSlotResponse | null => slots.value.find((slot) => slot.id === addUserSlotId.value) ?? null,
+)
 
 // 未確認の自動割当結果
 const pendingRun = computed((): AssignmentRun | null => {
@@ -312,7 +334,7 @@ async function initialize(): Promise<void> {
     // ボード画面全体が描画されなくなる（エラーを握りつぶさず、そもそも呼ばない形で解消する）。
     // フラグ OFF のときは実行履歴 API もゲートで 403（FEATURE_GATE_001）になるため呼ばない。
     // 例外を握りつぶすのではなく、停止中の機能には最初から到達しない形で解消する。
-    if (canManageShift.value && autoAssignEnabled.value) {
+    if (canAssign.value && autoAssignEnabled.value) {
       await fetchRuns()
     }
   } catch (error) {
@@ -386,20 +408,39 @@ function notifyAssignmentError(e: unknown, context: string): void {
   }
 }
 
+/**
+ * 枠への割当操作を、処理中の枠を押さえて実行する。
+ * 対象の枠のどれかが処理中なら何もしない（false を返す）＝二度押しでも PATCH は 1 回。
+ */
+async function runExclusive(slotIds: number[], operation: () => Promise<void>): Promise<boolean> {
+  if (slotIds.some((id) => busySlotIds.value.includes(id))) return false
+  busySlotIds.value = [...busySlotIds.value, ...slotIds]
+  try {
+    await operation()
+    return true
+  } finally {
+    busySlotIds.value = busySlotIds.value.filter((id) => !slotIds.includes(id))
+  }
+}
+
 // D&D でドロップ
 async function onDropUser(payload: {
   fromSlotId: number | null
   toSlotId: number
   userId: number
 }): Promise<void> {
+  if (!canAssign.value) return
   const { fromSlotId, toSlotId, userId } = payload
+  const involved = fromSlotId !== null ? [fromSlotId, toSlotId] : [toSlotId]
 
   try {
-    if (fromSlotId !== null) {
-      await moveUser(fromSlotId, toSlotId, userId)
-    } else {
-      await addUser(toSlotId, userId)
-    }
+    await runExclusive(involved, async () => {
+      if (fromSlotId !== null) {
+        await moveUser(fromSlotId, toSlotId, userId)
+      } else {
+        await addUser(toSlotId, userId)
+      }
+    })
   } catch (e) {
     notifyAssignmentError(e, 'shift-board:drop')
   }
@@ -407,23 +448,31 @@ async function onDropUser(payload: {
 
 // メンバー削除
 async function onRemoveUser(payload: { slotId: number; userId: number }): Promise<void> {
+  if (!canAssign.value) return
   try {
-    await removeUser(payload.slotId, payload.userId)
+    await runExclusive([payload.slotId], () => removeUser(payload.slotId, payload.userId))
   } catch (e) {
     notifyAssignmentError(e, 'shift-board:remove')
   }
 }
 
+// 「+ 追加」から追加ダイアログを開く
+function onOpenAddDialog(slotId: number): void {
+  if (!canAssign.value) return
+  addUserSlotId.value = slotId
+  addDialogVisible.value = true
+}
+
 // ダイアログからメンバー追加
 async function onAddUserFromDialog(userId: number): Promise<void> {
-  if (addUserSlotId.value !== null) {
-    try {
-      await addUser(addUserSlotId.value, userId)
-    } catch (e) {
-      notifyAssignmentError(e, 'shift-board:add')
-      return
-    }
-    poolVisible.value = false
+  const slotId = addUserSlotId.value
+  if (!canAssign.value || slotId === null) return
+  try {
+    const done = await runExclusive([slotId], () => addUser(slotId, userId))
+    if (done) addDialogVisible.value = false
+  } catch (e) {
+    // ダイアログは開いたまま。失敗後は useShiftBoard が枠を再取得するので、続けて選び直せる。
+    notifyAssignmentError(e, 'shift-board:add')
   }
 }
 
