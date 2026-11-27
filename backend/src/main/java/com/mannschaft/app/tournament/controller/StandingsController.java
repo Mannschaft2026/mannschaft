@@ -15,6 +15,7 @@ import com.mannschaft.app.team.service.TeamService;
 import com.mannschaft.app.tournament.service.RankingsCalculationService;
 import com.mannschaft.app.tournament.service.StandingsCalculationService;
 import com.mannschaft.app.tournament.service.StandingsQueryService;
+import com.mannschaft.app.tournament.service.TeamTournamentHistoryFacade;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,7 @@ public class StandingsController {
     private final RankingsCalculationService rankingsCalculationService;
     private final TournamentViewAccessGate tournamentViewAccessGate;
     private final TeamService teamService;
+    private final TeamTournamentHistoryFacade teamTournamentHistoryFacade;
 
     /**
      * 大会 visibility ガード。URL の組織配下の大会であることを確認した上で、認証ユーザー
@@ -129,7 +131,8 @@ public class StandingsController {
         // slug（URL識別子）を内部 BIGINT に解決してからサービスへ渡す（survey resolveScopeId 流儀）。
         // FE ダッシュボードは slug を渡すため Long のままだと型変換で 400 になりウィジェットが空表示になる。
         Long resolvedTeamId = teamService.resolveTeamId(teamId);
-        return ResponseEntity.ok(ApiResponse.of(standingsQueryService.getTeamHistory(resolvedTeamId)));
+        return ResponseEntity.ok(ApiResponse.of(teamTournamentHistoryFacade.attachOrganizationSlugs(
+                standingsQueryService.getTeamHistory(resolvedTeamId))));
     }
 
     @GetMapping("/api/v1/teams/{teamId}/tournament-stats")

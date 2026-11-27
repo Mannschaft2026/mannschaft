@@ -22769,7 +22769,7 @@ export interface paths {
         /** 共有リンク一覧 */
         get: operations["listLinks"];
         put?: never;
-        /** 共有リンク作成 */
+        /** 共有リンク作成（平文トークンは発行応答の1回だけ） */
         post: operations["createLink_1"];
         delete?: never;
         options?: never;
@@ -70348,8 +70348,28 @@ export interface components {
             /** @description 任意の閲覧パスワード（設定するとアクセス時に照合） */
             password?: string;
         };
-        ApiResponseLinkResponse: {
-            data?: components["schemas"]["LinkResponse"];
+        ApiResponseLinkIssuedResponse: {
+            data?: components["schemas"]["LinkIssuedResponse"];
+        };
+        LinkIssuedResponse: {
+            /** Format: int32 */
+            accessCount?: number;
+            active?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            downloadAllowed?: boolean;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            fileId?: number;
+            hasPassword?: boolean;
+            /** Format: int64 */
+            id?: number;
+            /** Format: date-time */
+            lastAccessedAt?: string;
+            token?: string;
         };
         LinkResponse: {
             /** Format: int32 */
@@ -70369,7 +70389,6 @@ export interface components {
             id?: number;
             /** Format: date-time */
             lastAccessedAt?: string;
-            token?: string;
         };
         SharedFilePresignRequest: {
             contentType: string;
@@ -73546,6 +73565,7 @@ export interface components {
             recordedBy?: number;
             /** @enum {string} */
             status?: "ATTENDING" | "PARTIAL" | "ABSENT" | "UNDECIDED";
+            studentDisplayName?: string;
             /** Format: int64 */
             studentUserId?: number;
             /** Format: int64 */
@@ -76468,6 +76488,7 @@ export interface components {
             meta?: components["schemas"]["TournamentHistoryEntryMeta"];
             /** Format: int64 */
             organizationId?: number;
+            organizationSlug?: string;
             record?: components["schemas"]["TournamentHistoryEntryRecord"];
         };
         TournamentHistoryEntryIdentifiers: {
@@ -136833,7 +136854,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseLinkResponse"];
+                    "*/*": components["schemas"]["ApiResponseLinkIssuedResponse"];
                 };
             };
         };

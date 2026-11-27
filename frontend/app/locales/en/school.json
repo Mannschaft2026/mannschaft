@@ -34,7 +34,8 @@
         "arrivalTime": "Arrival Time",
         "leaveTime": "Departure Time",
         "loading": "Loading...",
-        "noStudents": "No students found"
+        "noStudents": "No students found",
+        "unknownStudent": "Unknown student"
       },
       "period": {
         "title": "Period Attendance",
