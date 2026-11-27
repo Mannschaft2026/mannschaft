@@ -4,6 +4,7 @@
 # FeatureDisplayScope初回2定数: 新設表のみ、旧mainに読取経路なしの親検分承認。F01.3.1 §5参照。配布済みの証明ではない。
 # 本人診断6定数: 読取り互換性を全taskへ先配布し、旧task0の証跡後に別releaseで書込み開始。実展開済みの証明ではない。
 # F06.4.1 PR-3a 6定数（EffortTeamShareState・EffortShareDisposition）: 新設表 effort_team_shares と memberships の新列のみ。旧mainのEntityは列を写像せず読取経路なし。書込み開始は同PRの実装。配布済みの証明ではない。
+# F10.9 サポート閲覧 15定数（SupportAccessStatus・SupportAccessEndedReason・SupportAccessEventKind）: 新設表 support_access_grants / support_access_logs のみ。旧mainに読取経路なし（旧バイナリが読む既存行は存在しない）。配布済みの証明ではない。
 com.mannschaft.app.actionmemo.ActionMemoMood#BAD
 com.mannschaft.app.actionmemo.ActionMemoMood#GOOD
 com.mannschaft.app.actionmemo.ActionMemoMood#GREAT
@@ -1837,6 +1838,21 @@ com.mannschaft.app.social.announcement.AnnouncementSourceType#SCHEDULE
 com.mannschaft.app.social.announcement.AnnouncementSourceType#SURVEY
 com.mannschaft.app.social.announcement.AnnouncementSourceType#TIMELINE_POST
 com.mannschaft.app.social.announcement.AnnouncementSourceType#TODO
+com.mannschaft.app.supportaccess.SupportAccessEndedReason#EXPIRED
+com.mannschaft.app.supportaccess.SupportAccessEndedReason#OPERATOR_CANCELLED
+com.mannschaft.app.supportaccess.SupportAccessEndedReason#OPERATOR_INELIGIBLE
+com.mannschaft.app.supportaccess.SupportAccessEndedReason#USER_REVOKED
+com.mannschaft.app.supportaccess.SupportAccessEndedReason#WITHDRAWAL
+com.mannschaft.app.supportaccess.SupportAccessEventKind#DENIED
+com.mannschaft.app.supportaccess.SupportAccessEventKind#SESSION_END
+com.mannschaft.app.supportaccess.SupportAccessEventKind#SESSION_START
+com.mannschaft.app.supportaccess.SupportAccessEventKind#VIEW
+com.mannschaft.app.supportaccess.SupportAccessStatus#APPROVED
+com.mannschaft.app.supportaccess.SupportAccessStatus#CANCELLED
+com.mannschaft.app.supportaccess.SupportAccessStatus#DENIED
+com.mannschaft.app.supportaccess.SupportAccessStatus#EXPIRED
+com.mannschaft.app.supportaccess.SupportAccessStatus#PENDING
+com.mannschaft.app.supportaccess.SupportAccessStatus#REVOKED
 com.mannschaft.app.supporter.SupporterApplicationStatus#APPROVED
 com.mannschaft.app.supporter.SupporterApplicationStatus#PENDING
 com.mannschaft.app.supporter.SupporterApplicationStatus#REJECTED

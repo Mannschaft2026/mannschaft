@@ -1,5 +1,6 @@
 package com.mannschaft.app.survey.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -229,6 +230,7 @@ public class SurveyController {
      * <p>ADMIN+ / 作成者 / 結果閲覧者が利用可能。匿名アンケートの場合は回答者列を「匿名」と表示し、
      * 5名未満の場合は集計サマリのみ返す（匿名性保証）。</p>
      */
+    @SupportAccessDenied
     @GetMapping(value = "/{surveyId}/results/export", produces = "text/csv; charset=UTF-8")
     @Operation(summary = "アンケート結果 CSV エクスポート",
             description = "F05.4 §4.5 集計結果と全回答の生データを CSV で返す")

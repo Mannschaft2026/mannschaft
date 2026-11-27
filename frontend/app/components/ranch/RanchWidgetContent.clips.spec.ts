@@ -24,7 +24,7 @@ mockNuxtImport('useErrorReport', () => () => ({
 }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 type Reaction = { key: string; dinosaurId: string; sequence: number; soundToken: number | null }
 const observed: { reaction: Reaction; stage: string }[] = []
 const cancel = vi.fn()

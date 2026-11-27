@@ -1,5 +1,6 @@
 package com.mannschaft.app.tournament.entry;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.tournament.entry.dto.EntryLoadResponse;
@@ -145,6 +146,7 @@ public class TournamentEntryMemberController {
      * @param pId   参加チームID
      * @return PDF バイト列
      */
+    @SupportAccessDenied
     @GetMapping("/api/v1/organizations/{orgId}/tournaments/{tId}/divisions/{divId}/participants/{pId}/entry-members/pdf")
     @Operation(summary = "エントリー表PDF出力")
     public ResponseEntity<byte[]> generateEntryPdf(

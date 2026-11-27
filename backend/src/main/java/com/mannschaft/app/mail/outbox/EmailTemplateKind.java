@@ -81,5 +81,9 @@ public enum EmailTemplateKind {
 
     // 組織/チーム統治系 (柱②-2 販促プロビジョニング。骨格追加のみ・レンダラは出陣で実装)
     /** 柱②-2: SYSTEM_ADMIN による販促プロビジョニング招待メール (raw token 含む) */
-    PROVISIONING_ADMIN_INVITE
+    PROVISIONING_ADMIN_INVITE,
+
+    // サポート閲覧系 (F10.9・スルー方式)
+    /** F10.9 本人・保護者へのサポート閲覧の依頼・閲覧開始の通知（安全上必須。理由はプレーンテキスト・リンクは設定画面のみ） */
+    SUPPORT_ACCESS_NOTICE
 }

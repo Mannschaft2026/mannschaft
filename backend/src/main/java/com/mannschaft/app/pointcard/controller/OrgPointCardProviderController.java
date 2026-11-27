@@ -7,6 +7,7 @@ import com.mannschaft.app.pointcard.dto.CustomerQrResponse;
 import com.mannschaft.app.pointcard.dto.PointCardProviderResponse;
 import com.mannschaft.app.pointcard.dto.UpdateOrgProviderRequest;
 import com.mannschaft.app.pointcard.service.OrgPointCardProviderService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -168,6 +169,7 @@ public class OrgPointCardProviderController {
      * 顧客がアプリ追加に使う QR コード用のディープリンク URL 情報を返す。
      * 実 QR 画像はフロントエンドで {@code qrcode} ライブラリにより生成する。
      */
+    @SupportAccessDenied
     @GetMapping("/{providerId}/customer-qr")
     @Operation(summary = "顧客追加用 QR ディープリンク URL 取得",
             description = "deepLinkUrl (mannschaft://...) と webUrl を返却。"

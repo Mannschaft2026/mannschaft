@@ -61,7 +61,7 @@ const EMAIL: Record<Role, string> = {
   guardian: `e2e-user@${DOMAIN}`, // 保護者（生徒への ACTIVE な見守りのみ。T には非所属）
   otherAdmin: `e2e-dummy-10@${DOMAIN}`, // 他テナント O の ADMIN
   outsider: `e2e-outsider@${DOMAIN}`, // どこにも所属しない
-  sysAdmin: `e2e-admin@${DOMAIN}`, // SYSTEM_ADMIN（T には非所属）
+  sysAdmin: `e2e-operator@${DOMAIN}`, // SYSTEM_ADMIN（T には非所属）
 }
 
 /** 閲覧 V のロールと、登録 R の可否（期待する BE 判定結果）。 */

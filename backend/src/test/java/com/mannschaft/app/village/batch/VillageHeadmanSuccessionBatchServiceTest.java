@@ -25,6 +25,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -51,6 +53,9 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("VillageHeadmanSuccessionBatchService 単体テスト")
 class VillageHeadmanSuccessionBatchServiceTest {
+
+    // 後継候補が運営アカウントかの判定は VillageHeadmanSuccessionBatchScheduler が村の取引の外で済ませる（戦役 Z-A PR2・
+    // D-3T）。本試験は引き継ぎ本体を試すため、候補を一般利用者と判定した結果を置いて processVillage を呼ぶ。
 
     private static final UUID VILLAGE_ID = UUID.fromString("01956c00-0000-7000-8000-000000000301");
     private static final UUID HEADMAN_MS_ID = UUID.fromString("01956c00-0000-7000-8000-0000000000A1");
@@ -136,7 +141,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .willReturn(Optional.of(headman));
         given(userRepository.findById(HEADMAN_USER_ID)).willReturn(Optional.of(activeUser(HEADMAN_USER_ID)));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.NOT_NEEDED);
         verify(membershipRepository, never()).save(any());
@@ -157,7 +163,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .findFirstByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(VILLAGE_ID, VillageRole.ELDER))
                 .willReturn(Optional.of(elder));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.PROMOTED);
         // 旧 HEADMAN は leftAt がセットされて save される
@@ -190,7 +197,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .findFirstByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(VILLAGE_ID, VillageRole.VILLAGER))
                 .willReturn(Optional.of(villager));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.PROMOTED);
         verify(auditLogService).record(
@@ -227,7 +235,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .willReturn(Optional.empty());
         given(villageRepository.findById(VILLAGE_ID)).willReturn(Optional.of(activeVillage()));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.ARCHIVED);
         assertThat(bannedElder.getRole()).isEqualTo(VillageRole.ELDER);
@@ -255,7 +264,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .willReturn(Optional.empty());
         given(villageRepository.findById(VILLAGE_ID)).willReturn(Optional.of(activeVillage()));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.ARCHIVED);
         ArgumentCaptor<VillageEntity> vcap = ArgumentCaptor.forClass(VillageEntity.class);
@@ -283,7 +293,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .findFirstByVillageIdAndRoleAndLeftAtIsNullOrderByJoinedAtAsc(VILLAGE_ID, VillageRole.HEADMAN))
                 .willReturn(Optional.of(headman));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.NOT_NEEDED);
         verify(userRepository, never()).findById(any());
@@ -301,7 +312,8 @@ class VillageHeadmanSuccessionBatchServiceTest {
                 .findFirstByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(VILLAGE_ID, VillageRole.ELDER))
                 .willReturn(Optional.of(elder));
 
-        VillageHeadmanSuccessionBatchService.SuccessionResult result = batch.processVillage(VILLAGE_ID);
+        VillageHeadmanSuccessionBatchService.SuccessionResult result = judged(general(HEADMAN_USER_ID, ELDER_USER_ID, VILLAGER_USER_ID, 500L),
+                () -> batch.processVillage(VILLAGE_ID));
 
         assertThat(result).isEqualTo(VillageHeadmanSuccessionBatchService.SuccessionResult.PROMOTED);
         verify(membershipRepository).save(elder);

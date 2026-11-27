@@ -278,12 +278,37 @@ let _errorBatchTimer: ReturnType<typeof setTimeout> | null = null
 let _errorBatchCount = 0
 let _errorBatchFirst: { status: number; statusText: string; url: string } | null = null
 
+/** F10.9 サポート閲覧の許可 ID を運ぶヘッダー名（BE: SupportAccessHeaders）。 */
+const SUPPORT_ACCESS_HEADER = 'X-Support-Access-Grant-Id'
+
+/** サポート閲覧のエラーコードと、利用者へ出す i18n キー。 */
+const SUPPORT_ACCESS_ERROR_MESSAGES: Record<string, string> = {
+  SUPPORT_ACCESS_002: 'supportAccess.error.notActive',
+  SUPPORT_ACCESS_003: 'supportAccess.error.readOnly',
+  SUPPORT_ACCESS_004: 'supportAccess.error.forbidden',
+  SUPPORT_ACCESS_012: 'supportAccess.error.legacyHeader',
+  SUPPORT_ACCESS_014: 'supportAccess.error.unavailable',
+}
+
+function isSupportAccessExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false
+  const time = Date.parse(expiresAt)
+  return Number.isFinite(time) && time <= Date.now()
+}
+
+/** grant ID を付けてよい宛先か。/system-admin と /auth/** は運営者本人として扱う。 */
+function supportAccessHeaderApplies(request: unknown): boolean {
+  const raw = typeof request === 'string' ? request : (request as { url?: string } | null | undefined)?.url ?? ''
+  const path = raw.replace(/^https?:\/\/[^/]+/i, '').split('?')[0] ?? ''
+  return !/^\/api\/v1\/(system-admin|auth)(\/|$)/.test(path)
+}
+
 export function useApi() {
   const config = useRuntimeConfig()
   const authStore = useAuthStore()
   const proxyDeskStore = useProxyDeskStore()
   const guardianshipSwitchStore = useGuardianshipSwitchStore()
-  const adminImpersonationStore = useAdminImpersonationStore()
+  const supportAccessStore = useSupportAccessStore()
   const nuxtApp = useNuxtApp()
   const session = getAuthSessionContext(authStore)
   session.bindApp(nuxtApp)
@@ -296,6 +321,21 @@ export function useApi() {
   // t(key, named) 形（テンプレートで既に使われている形）がそのまま使える。
   const tn = (key: string, named: Record<string, unknown>) => nuxtApp.$i18n.t(key, named)
 
+  const handleSupportAccessError = (code: string, options: { method?: string; headers?: HeadersInit }) => {
+    const toast = nuxtApp.$toast as { add: (opts: Record<string, unknown>) => void } | undefined
+    const sentHeader = new Headers(options.headers).has(SUPPORT_ACCESS_HEADER)
+    const method = String(options.method ?? 'GET').toUpperCase()
+    const isRead = method === 'GET' || method === 'HEAD'
+    const key = SUPPORT_ACCESS_ERROR_MESSAGES[code]
+    if (code === 'SUPPORT_ACCESS_002' && sentHeader) {
+      // 許可が期限切れ・取消・撤回された。次のリクエストから拒否されるので、手元の閲覧状態も終える。
+      supportAccessStore.expireLocally()
+    }
+    if (code === 'SUPPORT_ACCESS_004' && isRead) return
+    if (!key || !toast) return
+    toast.add({ severity: 'warn', summary: t(key), life: 5000 })
+  }
+
   const api = ofetch.create({
     baseURL: resolveApiBaseUrl(config),
     // HttpOnly Cookie を自動送信するために credentials: 'include' を設定する。
@@ -305,7 +345,7 @@ export function useApi() {
     retry: 1,
     retryStatusCodes: [401],
 
-    onRequest({ options }) {
+    onRequest({ request, options }) {
       const meta = options as typeof options & { _authSessionSnapshot?: AuthSessionSnapshot }
       meta._authSessionSnapshot ??= session.capture()
       if (!session.current(meta._authSessionSnapshot) || options.signal?.aborted) throw new Error('AUTH_SESSION_CHANGED')
@@ -346,12 +386,23 @@ export function useApi() {
         else if (guardianshipSwitchStore.isActingAs) {
           headers.set('X-Proxy-For-User-Id', String(guardianshipSwitchStore.activeChild!.childUserId))
         }
-        // 管理者変身モードが有効な場合: X-Admin-Impersonate-User-Id を付与（F10.1）
-        // BE の AdminImpersonationFilter が SecurityContext の principal を対象ユーザー ID に置き換える
-        else if (adminImpersonationStore.isImpersonating) {
-          headers.set('X-Admin-Impersonate-User-Id', String(adminImpersonationStore.targetUserId))
-        }
+        options.headers = headers
+      }
 
+      // F10.9 サポート閲覧中（本人承認制・閲覧のみ）: 運営者の本人 JWT に許可 ID を添える。
+      // 認証方式（Cookie / Bearer）を問わず付ける。代理入力・後見切替とは併用しない（BE は併用を 400 にする）。
+      // /system-admin と /auth/** は運営者本人として行う操作（開始・終了・トークン更新）なので付けない。
+      if (
+        authStore.isAuthenticated
+        && supportAccessStore.isActive
+        && !proxyDeskStore.isPinned
+        && !guardianshipSwitchStore.isActingAs
+        && supportAccessStore.grantId
+        && !isSupportAccessExpired(supportAccessStore.expiresAt)
+        && supportAccessHeaderApplies(request)
+      ) {
+        const headers = new Headers(options.headers)
+        headers.set(SUPPORT_ACCESS_HEADER, supportAccessStore.grantId)
         options.headers = headers
       }
     },
@@ -410,6 +461,17 @@ export function useApi() {
       if (response.status === 403 && !authStore.user && typeof forbiddenBody?.error?.code !== 'string') {
         await navigateTo('/login')
         return
+      }
+
+      // F10.9 サポート閲覧の拒否応答（SUPPORT_ACCESS_002/003/004/012/014）。
+      // 画面ごとに分岐させず、ここで一度だけ利用者に伝える。
+      // 004（代理中は禁止の操作）の GET は書出し・認証・決済・招待など「見せない領域」への自然な到達で、
+      // 画面側が導線を出さない前提の正常系なので通知しない。書込（003）と禁止操作の書込（004）は通知する。
+      if (response.status >= 400) {
+        const supportCode = (response._data as { error?: { code?: unknown } } | undefined)?.error?.code
+        if (typeof supportCode === 'string' && supportCode.startsWith('SUPPORT_ACCESS_')) {
+          handleSupportAccessError(supportCode, options)
+        }
       }
 
       // 402: F20.1 課金・エンタイトルメント基盤の共通ペイウォール検知（設計書 04 §2）。

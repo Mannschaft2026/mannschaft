@@ -1,5 +1,6 @@
 package com.mannschaft.app.ranch.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.security.PrivateSelfAccessGuard;
@@ -31,6 +32,9 @@ public class RanchPrivateQueryController {
     private final RanchPrivateQueryFacade facade;
     private final PrivateSelfAccessGuard accessGuard;
 
+    // コマンドの結果（JSON 木）は型から中身を確かめられないため、サポート閲覧（代理）中は注釈で拒否する。
+    // PrivateSelfAccessGuard#requireSelfAccess も代理の文脈を拒否するが、番人が注釈で検出できるよう明示する。
+    @SupportAccessDenied
     @GetMapping("/commands/{commandId}")
     public ResponseEntity<ApiResponse<CommandResult>> command(@PathVariable UUID commandId,
                                                                 HttpServletRequest request,

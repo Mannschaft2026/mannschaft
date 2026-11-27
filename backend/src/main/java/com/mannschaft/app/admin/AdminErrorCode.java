@@ -27,13 +27,9 @@ public enum AdminErrorCode implements ErrorCode {
     INVALID_MAINTENANCE_PERIOD("ADMIN_005", "開始日時は終了日時より前に設定してください", Severity.WARN),
 
     /** バッチジョブログが見つからない */
-    BATCH_JOB_LOG_NOT_FOUND("ADMIN_006", "バッチジョブログが見つかりません", Severity.WARN),
+    BATCH_JOB_LOG_NOT_FOUND("ADMIN_006", "バッチジョブログが見つかりません", Severity.WARN);
 
-    /** 管理者変身ヘッダーをシステム管理者以外が指定した（AdminImpersonationFilter・403） */
-    IMPERSONATION_SYSTEM_ADMIN_ONLY("ADMIN_007", "変身機能はシステム管理者のみ使用できます", Severity.WARN),
-
-    /** 管理者変身ヘッダーの値が数値でない（AdminImpersonationFilter・400） */
-    IMPERSONATION_TARGET_INVALID("ADMIN_008", "X-Admin-Impersonate-User-Id の形式が不正です", Severity.WARN);
+    // ADMIN_007・ADMIN_008（旧・管理者変身）は廃番。本人承認制のサポート閲覧（F10.9）の SUPPORT_ACCESS_* へ置き換えた。
 
     private final String code;
     private final String message;

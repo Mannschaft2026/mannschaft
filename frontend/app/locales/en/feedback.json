@@ -56,7 +56,7 @@
         "success": "Status updated",
         "error": "Failed to update status"
       },
-      "viewAsUser": "View as user",
+      "requestSupportAccess": "Request viewing permission",
       "anonymous": "Anonymous"
     }
   }

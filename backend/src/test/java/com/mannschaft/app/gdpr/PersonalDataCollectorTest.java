@@ -131,6 +131,9 @@ class PersonalDataCollectorTest {
     // F06.4.1 個人の頑張り記録
     @Mock
     private com.mannschaft.app.effortrecord.service.EffortPersonalDataService effortPersonalDataService;
+    // F10.9 サポート閲覧の閲覧記録（戦役Z-B）: 収集依頼の同期イベントを担当ドメインのリスナーが返す
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private PersonalDataCollector collector;
@@ -140,7 +143,7 @@ class PersonalDataCollectorTest {
     class Collect {
 
         @Test
-        @DisplayName("正常系: nullカテゴリで全カテゴリが収集される（20カテゴリ）")
+        @DisplayName("正常系: nullカテゴリで全カテゴリが収集される（23カテゴリ）")
         void 正常_nullカテゴリ_全カテゴリ収集() {
             given(userRepository.findById(anyLong())).willReturn(Optional.empty());
             given(oAuthAccountRepository.findByUserId(anyLong())).willReturn(List.of());
@@ -189,19 +192,26 @@ class PersonalDataCollectorTest {
 
             given(ranchPersonalDataExportService.exportUser(anyLong())).willReturn("{}");
             given(effortPersonalDataService.collectForGdpr(anyLong())).willReturn(List.of());
+            // コンストラクタ注入が成立するため、フィールド注入（@Autowired）の publisher は明示的に差し込む
+            org.springframework.test.util.ReflectionTestUtils.setField(collector, "eventPublisher", eventPublisher);
+            org.mockito.Mockito.doAnswer(inv -> {
+                ((com.mannschaft.app.gdpr.event.PersonalDataCategoryCollectEvent) inv.getArgument(0)).respond(List.of());
+                return null;
+            }).when(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(Object.class));
 
             // memberships は事前取得が必要（F01.2.1 2-D）。0 件の事前取得を渡す
             Map<String, String> result = collector.collect(1L, null,
                     new com.mannschaft.app.gdpr.dto.PrefetchedPersonalData(List.of(), List.of(), List.of()));
 
-            assertThat(result).hasSize(21);
+            assertThat(result).hasSize(23);
             assertThat(result.keySet()).containsExactlyInAnyOrder(
                     "account.json", "oauth_accounts.json", "memberships.json", "profiles.json",
                     "payments.json", "charts.json", "chat_messages.json", "timeline_posts.json",
                     "audit_logs.json", "notifications.json", "action_memos.json",
                     "error_reports.json", "proxy_input_consents.json", "proxy_input_records.json",
                     "weather_locations.json", "point_cards.json", "resumes.json", "inbox.json",
-                    "scheduleComments", "ranch.json", "effort_records.json"
+                    "scheduleComments", "ranch.json", "effort_records.json", "support_access_logs.json",
+                    "support_access_grants.json"
             );
             assertThat(result).as("F03.16 予定コメントスレッド（AC-35）が全カテゴリ収集に含まれること")
                     .containsKey("scheduleComments");
@@ -262,16 +272,17 @@ class PersonalDataCollectorTest {
     class GetCategoryKeys {
 
         @Test
-        @DisplayName("正常系: 21カテゴリキーが返る")
+        @DisplayName("正常系: 23カテゴリキーが返る")
         void 正常_20カテゴリキー返却() {
             Set<String> keys = collector.getCategoryKeys();
 
-            assertThat(keys).hasSize(21);
+            assertThat(keys).hasSize(23);
             assertThat(keys).containsExactlyInAnyOrder(
                     "account", "oauth", "memberships", "profiles", "payments",
                     "charts", "chat_messages", "timeline", "audit_logs", "notifications",
                     "action_memos", "error_reports", "proxy_consents", "proxy_records",
-                    "location_preference", "point_cards", "resumes", "inbox", "scheduleComments", "ranch", "effort_records"
+                    "location_preference", "point_cards", "resumes", "inbox", "scheduleComments", "ranch", "effort_records", "support_access_logs",
+                    "support_access_grants"
             );
             assertThat(keys).as("F03.16 予定コメントスレッド（AC-35）のカテゴリキーが含まれること")
                     .contains("scheduleComments");

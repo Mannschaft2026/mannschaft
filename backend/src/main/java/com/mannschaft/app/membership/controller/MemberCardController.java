@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 import java.util.List;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * 会員証コントローラー。会員証のCRUD・QR認証・チェックインAPIを提供する。
@@ -85,6 +86,7 @@ public class MemberCardController {
      * {@code card.getUserId().equals(userId)} で本人所有を検証する（他人は不在と同じ MEMBERSHIP_001）。</p>
      */
     @AuthorizedInService
+    @SupportAccessDenied
     @GetMapping("/{id}/qr")
     @Operation(summary = "QRコード表示用トークン取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

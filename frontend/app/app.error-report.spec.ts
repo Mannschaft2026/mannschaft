@@ -84,7 +84,7 @@ describe('アプリ全体のエラー報告UI', () => {
           IosInstallGuideModal: true,
           QuickMemoCaptureModal: true,
           FeedbackSubmitModal: true,
-          AdminImpersonationBanner: true,
+          SupportAccessBanner: true,
           OfflineStatusBanner: true,
         },
       },

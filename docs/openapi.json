@@ -803,6 +803,10 @@
       "description": "F08.10 採点競技（フィギュア/体操）採点結果（合計点）"
     },
     {
+      "name": "システム管理 - サポート閲覧",
+      "description": "F10.9 本人承認制のサポート閲覧（代理ログイン）の運営側 API"
+    },
+    {
       "name": "時間割コマテンプレート管理",
       "description": "F03.9 組織レベルのコマ定義管理"
     },
@@ -1829,6 +1833,10 @@
     {
       "name": "管理 - フィードバック",
       "description": "F10.1 フィードバック管理API（管理者向け）"
+    },
+    {
+      "name": "マイページ - サポート閲覧",
+      "description": "F10.9 本人承認制のサポート閲覧（代理ログイン）の本人側 API"
     },
     {
       "name": "居住者書類（組織）",
@@ -56971,6 +56979,186 @@
         }
       }
     },
+    "/api/v1/system-admin/support-access/grants": {
+      "get": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "自分の依頼一覧",
+        "description": "自分が出した依頼だけを新しい順に返す。cursor は直前ページ末尾の requestedAt。",
+        "operationId": "listGrants",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "targetUserId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorPagedResponseSupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "サポート閲覧の依頼",
+        "description": "対象・理由（10〜1000字）を指定して本人へ許可を依頼する。依頼は72時間で失効する。",
+        "operationId": "createGrant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSupportAccessGrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseSupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system-admin/support-access/grants/{id}/sessions": {
+      "post": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "代理閲覧の開始",
+        "description": "承認済みで期限内の許可で閲覧を開始する。開始記録を残し、本人へ通知する。以後 X-Support-Access-Grant-Id ヘッダーで本人の視点を閲覧のみできる。",
+        "operationId": "startSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseSupportAccessSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system-admin/support-access/grants/{id}/sessions/end": {
+      "post": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "代理閲覧の終了",
+        "operationId": "endSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/system-admin/support-access/grants/{id}/cancel": {
+      "post": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "依頼・許可の撤回",
+        "description": "PENDING/APPROVED を CANCELLED にする。次のリクエストから代理閲覧は拒否される。",
+        "operationId": "cancel_5",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseSupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system-admin/storage-migration/run": {
       "post": {
         "tags": [
@@ -57551,7 +57739,7 @@
           "販促プロビジョニング（SYSTEM_ADMIN）"
         ],
         "summary": "招待を取消す",
-        "operationId": "cancel_5",
+        "operationId": "cancel_6",
         "parameters": [
           {
             "name": "invitationId",
@@ -58838,7 +59026,7 @@
         ],
         "summary": "付与一覧",
         "description": "grantKind/betaPhase/reviewFlag/scopeKind/scopeId で絞り込み・grantedAt 降順。",
-        "operationId": "listGrants",
+        "operationId": "listGrants_1",
         "parameters": [
           {
             "name": "grantKind",
@@ -58931,7 +59119,7 @@
         ],
         "summary": "手動付与",
         "description": "TEAM_ORG の正規経路（INDIVIDUAL も可）。organizationId は本層で解決して渡す。",
-        "operationId": "createGrant",
+        "operationId": "createGrant_1",
         "requestBody": {
           "content": {
             "application/json": {
@@ -62955,7 +63143,7 @@
           "F03.11 募集型予約 / 募集枠"
         ],
         "summary": "募集枠 主催者キャンセル",
-        "operationId": "cancel_6",
+        "operationId": "cancel_7",
         "parameters": [
           {
             "name": "id",
@@ -68517,7 +68705,7 @@
         "tags": [
           "organization-ad-messaging-campaign-transition-controller"
         ],
-        "operationId": "cancel_7",
+        "operationId": "cancel_8",
         "parameters": [
           {
             "name": "organizationId",
@@ -72494,7 +72682,7 @@
           "封緘解除申請（F09.15）"
         ],
         "summary": "封緘解除申請のキャンセル（申請者本人または ADMIN）",
-        "operationId": "cancel_8",
+        "operationId": "cancel_9",
         "parameters": [
           {
             "name": "orgId",
@@ -74222,7 +74410,7 @@
           "プロモーション管理（組織）"
         ],
         "summary": "配信キャンセル",
-        "operationId": "cancel_9",
+        "operationId": "cancel_10",
         "parameters": [
           {
             "name": "orgId",
@@ -75453,7 +75641,7 @@
         ],
         "summary": "送り出し取消",
         "description": "手放す側 org ADMIN のみ（応答前 DISPATCHED のみ）→ CANCELLED",
-        "operationId": "cancel_10",
+        "operationId": "cancel_11",
         "parameters": [
           {
             "name": "orgId",
@@ -79446,6 +79634,122 @@
         }
       }
     },
+    "/api/v1/me/support-access/grants/{id}/revoke": {
+      "post": {
+        "tags": [
+          "マイページ - サポート閲覧"
+        ],
+        "summary": "サポート閲覧の許可の取消",
+        "description": "いつでも取り消せる。取消の次のリクエストから代理閲覧は拒否される。",
+        "operationId": "revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMySupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/support-access/grants/{id}/deny": {
+      "post": {
+        "tags": [
+          "マイページ - サポート閲覧"
+        ],
+        "summary": "サポート閲覧の拒否",
+        "operationId": "deny",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportAccessDenyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMySupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/support-access/grants/{id}/approve": {
+      "post": {
+        "tags": [
+          "マイページ - サポート閲覧"
+        ],
+        "summary": "サポート閲覧の許可",
+        "description": "再認証（currentPassword か passkeyAssertionJson）が必須。期限は許可から24時間で固定・延長不可。未成年・後見下は本人と保護者の両方の許可で有効になる。",
+        "operationId": "approve_8",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportAccessApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMySupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/scope-folders": {
       "get": {
         "tags": [
@@ -80134,7 +80438,7 @@
         "tags": [
           "recall-session-controller"
         ],
-        "operationId": "cancel_11",
+        "operationId": "cancel_12",
         "parameters": [
           {
             "name": "sessionId",
@@ -81383,7 +81687,7 @@
           "personal-market-listing-controller"
         ],
         "summary": "個人札の取消",
-        "operationId": "cancel_12",
+        "operationId": "cancel_13",
         "parameters": [
           {
             "name": "id",
@@ -81722,7 +82026,7 @@
         "tags": [
           "diagnosis-controller"
         ],
-        "operationId": "startSession",
+        "operationId": "startSession_1",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -82316,7 +82620,7 @@
         ],
         "summary": "契約の解約（期末解約の予約）",
         "description": "有償契約は current_period_end までの利用を残したまま解約を予約する。Idempotency-Key 必須。",
-        "operationId": "cancel_13",
+        "operationId": "cancel_14",
         "parameters": [
           {
             "name": "contractId",
@@ -91259,7 +91563,7 @@
         "tags": [
           "ad-messaging-campaign-transition-controller"
         ],
-        "operationId": "cancel_14",
+        "operationId": "cancel_15",
         "parameters": [
           {
             "name": "id",
@@ -91478,7 +91782,7 @@
           "F17.1 村機能 - 村作成申請"
         ],
         "summary": "運営: 村作成申請を承認",
-        "operationId": "approve_8",
+        "operationId": "approve_9",
         "parameters": [
           {
             "name": "id",
@@ -99198,7 +99502,7 @@
           "チームサブリース"
         ],
         "summary": "チームサブリース承認",
-        "operationId": "approve_9",
+        "operationId": "approve_10",
         "parameters": [
           {
             "name": "teamId",
@@ -99443,7 +99747,7 @@
           "チーム区画申請"
         ],
         "summary": "チーム申請承認",
-        "operationId": "approve_10",
+        "operationId": "approve_11",
         "parameters": [
           {
             "name": "teamId",
@@ -101249,7 +101553,7 @@
           "チーム確認通知"
         ],
         "summary": "確認通知キャンセル",
-        "operationId": "cancel_15",
+        "operationId": "cancel_16",
         "parameters": [
           {
             "name": "teamId",
@@ -104155,7 +104459,7 @@
         "tags": [
           "system-admin-ad-creative-controller"
         ],
-        "operationId": "approve_11",
+        "operationId": "approve_12",
         "parameters": [
           {
             "name": "adId",
@@ -104260,7 +104564,7 @@
         "tags": [
           "システム管理 - 運用型キャンペーン審査"
         ],
-        "operationId": "approve_12",
+        "operationId": "approve_13",
         "parameters": [
           {
             "name": "id",
@@ -107161,7 +107465,7 @@
           "組織サブリース"
         ],
         "summary": "組織サブリース承認",
-        "operationId": "approve_13",
+        "operationId": "approve_14",
         "parameters": [
           {
             "name": "organizationId",
@@ -107406,7 +107710,7 @@
           "組織区画申請"
         ],
         "summary": "組織申請承認",
-        "operationId": "approve_14",
+        "operationId": "approve_15",
         "parameters": [
           {
             "name": "organizationId",
@@ -109529,7 +109833,7 @@
           "協会請求（協会視点）"
         ],
         "summary": "協会請求の取消（CANCELLED）",
-        "operationId": "cancel_16",
+        "operationId": "cancel_17",
         "parameters": [
           {
             "name": "orgId",
@@ -110037,7 +110341,7 @@
           "組織確認通知"
         ],
         "summary": "確認通知キャンセル（組織）",
-        "operationId": "cancel_17",
+        "operationId": "cancel_18",
         "parameters": [
           {
             "name": "orgId",
@@ -120627,7 +120931,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListMapStringObject"
+                  "$ref": "#/components/schemas/ApiResponseListSkillSearchItemResponse"
                 }
               }
             }
@@ -129144,6 +129448,89 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseListSystemLogFileResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system-admin/support-access/grants/{id}": {
+      "get": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "依頼の詳細",
+        "operationId": "getGrant",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseSupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system-admin/support-access/grants/{id}/logs": {
+      "get": {
+        "tags": [
+          "システム管理 - サポート閲覧"
+        ],
+        "summary": "閲覧記録",
+        "description": "この依頼の代理閲覧の記録を新しい順に返す。cursor は直前ページ末尾の occurredAt。",
+        "operationId": "listLogs_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorPagedResponseSupportAccessLogView"
                 }
               }
             }
@@ -144406,6 +144793,107 @@
         }
       }
     },
+    "/api/v1/me/support-access/logs": {
+      "get": {
+        "tags": [
+          "マイページ - サポート閲覧"
+        ],
+        "summary": "自分の画面が閲覧された記録",
+        "description": "日時・運営者の表示名・画面（パス）・スコープを新しい順に返す。メールは含まない。",
+        "operationId": "listLogs_2",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorPagedResponseSupportAccessLogView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/support-access/grants": {
+      "get": {
+        "tags": [
+          "マイページ - サポート閲覧"
+        ],
+        "summary": "自分宛のサポート閲覧の依頼・許可の一覧",
+        "description": "運営者は表示名のみ。依頼理由はプレーンテキストとして表示すること。",
+        "operationId": "listGrants_2",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorPagedResponseMySupportAccessGrantResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/subscriptions": {
       "get": {
         "tags": [
@@ -153962,7 +154450,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListMapStringString"
+                  "$ref": "#/components/schemas/ApiResponseListSupportedLocaleResponse"
                 }
               }
             }
@@ -154186,7 +154674,7 @@
           "村代表委任 (F17.1 Phase 2)"
         ],
         "summary": "村代表委任の取消し（HEADMAN/ELDER）",
-        "operationId": "revoke",
+        "operationId": "revoke_1",
         "parameters": [
           {
             "name": "villageId",
@@ -154356,7 +154844,7 @@
           "村招待 (F17.1)"
         ],
         "summary": "招待を失効させる（冪等）",
-        "operationId": "revoke_1",
+        "operationId": "revoke_2",
         "parameters": [
           {
             "name": "villageId",
@@ -155078,7 +155566,7 @@
           "チーム区画申請"
         ],
         "summary": "チーム申請取消",
-        "operationId": "cancel_18",
+        "operationId": "cancel_19",
         "parameters": [
           {
             "name": "teamId",
@@ -155527,7 +156015,7 @@
         ],
         "summary": "転送取消",
         "description": "指定転送履歴の is_revoked を TRUE にし、転送先投稿を論理削除する。取消後は同一投稿を再度転送可能。",
-        "operationId": "revoke_2",
+        "operationId": "revoke_3",
         "parameters": [
           {
             "name": "id",
@@ -156145,7 +156633,7 @@
           "組織からの加盟招待"
         ],
         "summary": "招待の取消（組織 ADMIN）",
-        "operationId": "cancel_19",
+        "operationId": "cancel_20",
         "parameters": [
           {
             "name": "slug",
@@ -156382,7 +156870,7 @@
           "組織区画申請"
         ],
         "summary": "組織申請取消",
-        "operationId": "cancel_20",
+        "operationId": "cancel_21",
         "parameters": [
           {
             "name": "organizationId",
@@ -156899,7 +157387,7 @@
           "継続課金"
         ],
         "summary": "継続課金 期末解約（F08.9 P5）",
-        "operationId": "cancel_21",
+        "operationId": "cancel_22",
         "parameters": [
           {
             "name": "id",
@@ -197283,6 +197771,7 @@
               "type": "integer",
               "format": "int64"
             },
+            "maxItems": 100,
             "minItems": 1
           }
         }
@@ -198648,6 +199137,133 @@
           },
           "thumbnailUrl": {
             "type": "string"
+          }
+        }
+      },
+      "CreateSupportAccessGrantRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "referenceId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "referenceType": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 0
+          },
+          "targetUserId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "targetUserId"
+        ]
+      },
+      "ApiResponseSupportAccessGrantResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SupportAccessGrantResponse"
+          }
+        }
+      },
+      "SupportAccessGrantResponse": {
+        "type": "object",
+        "properties": {
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedReason": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "guardianApprovalRequired": {
+            "type": "boolean"
+          },
+          "guardianDecidedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "referenceId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "referenceType": {
+            "type": "string"
+          },
+          "requestExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestReason": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sessionActive": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "targetDisplayName": {
+            "type": "string"
+          },
+          "targetUserId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ApiResponseSupportAccessSessionResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SupportAccessSessionResponse"
+          }
+        }
+      },
+      "SupportAccessSessionResponse": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "remainingSeconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "応答時点での許可の残り秒数（BE の時刻基準）。FE はこの値を基準に残り時間を表示する"
+          },
+          "targetDisplayName": {
+            "type": "string"
+          },
+          "targetUserId": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -208859,6 +209475,97 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ApiResponseMySupportAccessGrantResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MySupportAccessGrantResponse"
+          }
+        }
+      },
+      "MySupportAccessGrantResponse": {
+        "type": "object",
+        "properties": {
+          "canApprove": {
+            "type": "boolean"
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedReason": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "guardianApprovalRequired": {
+            "type": "boolean"
+          },
+          "guardianApproved": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operatorDisplayName": {
+            "type": "string"
+          },
+          "referenceType": {
+            "type": "string"
+          },
+          "requestExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestReason": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "targetApproved": {
+            "type": "boolean"
+          },
+          "targetDisplayName": {
+            "type": "string"
+          }
+        }
+      },
+      "SupportAccessDenyRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 0
+          }
+        }
+      },
+      "SupportAccessApproveRequest": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "passkeyAssertionJson": {
+            "type": "string"
           }
         }
       },
@@ -230141,17 +230848,61 @@
           }
         }
       },
-      "ApiResponseListMapStringObject": {
+      "ApiResponseListSkillSearchItemResponse": {
         "type": "object",
         "properties": {
           "data": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "object"
-              }
+              "$ref": "#/components/schemas/SkillSearchItemResponse"
             }
+          }
+        }
+      },
+      "SkillSearchItemResponse": {
+        "type": "object",
+        "properties": {
+          "acquiredOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date"
+          },
+          "expiringSoon": {
+            "type": "boolean"
+          },
+          "hasCertificate": {
+            "type": "boolean"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "memberSkillId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skillName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -237884,6 +238635,63 @@
             "format": "int64"
           },
           "type": {
+            "type": "string"
+          }
+        }
+      },
+      "CursorPagedResponseSupportAccessGrantResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportAccessGrantResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorMeta"
+          }
+        }
+      },
+      "CursorPagedResponseSupportAccessLogView": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupportAccessLogView"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorMeta"
+          }
+        }
+      },
+      "SupportAccessLogView": {
+        "type": "object",
+        "properties": {
+          "eventKind": {
+            "type": "string"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operatorDisplayName": {
+            "type": "string"
+          },
+          "requestPath": {
+            "type": "string"
+          },
+          "scopeId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scopeType": {
             "type": "string"
           }
         }
@@ -249270,6 +250078,20 @@
           }
         }
       },
+      "CursorPagedResponseMySupportAccessGrantResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MySupportAccessGrantResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorMeta"
+          }
+        }
+      },
       "ApiResponseListObject": {
         "type": "object",
         "properties": {
@@ -251096,11 +251918,31 @@
           }
         }
       },
+      "TimetableTodayChange": {
+        "type": "object",
+        "properties": {
+          "change_type": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "room_name": {
+            "type": "string"
+          },
+          "subject_name": {
+            "type": "string"
+          },
+          "teacher_name": {
+            "type": "string"
+          }
+        }
+      },
       "TimetableTodayItem": {
         "type": "object",
         "properties": {
           "change": {
-            "type": "object"
+            "$ref": "#/components/schemas/TimetableTodayChange"
           },
           "color": {
             "type": "string"
@@ -253463,6 +254305,20 @@
           }
         }
       },
+      "ApiResponseListMapStringObject": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
       "AdminReservationSummaryResponse": {
         "type": "object",
         "properties": {
@@ -254455,7 +255311,7 @@
             "format": "date-time"
           },
           "detail": {
-            "type": "object",
+            "$ref": "#/components/schemas/ScheduleFeedDetail",
             "description": "変更差分（SCHEDULE系のみ非null）"
           },
           "id": {
@@ -254507,6 +255363,46 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/ActivityFeedPageResponse"
+          }
+        }
+      },
+      "FieldDiff": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          }
+        }
+      },
+      "ScheduleFeedDetail": {
+        "type": "object",
+        "description": "変更差分（SCHEDULE系のみ非null）",
+        "properties": {
+          "affectedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldDiff"
+            }
+          },
+          "scheduleId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -257040,17 +257936,25 @@
           }
         }
       },
-      "ApiResponseListMapStringString": {
+      "ApiResponseListSupportedLocaleResponse": {
         "type": "object",
         "properties": {
           "data": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
+              "$ref": "#/components/schemas/SupportedLocaleResponse"
             }
+          }
+        }
+      },
+      "SupportedLocaleResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "nativeName": {
+            "type": "string"
           }
         }
       },

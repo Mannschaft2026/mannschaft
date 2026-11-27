@@ -35,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * チーム会員証コントローラー。チーム単位の会員証一覧・チェックイン履歴・拠点管理・統計APIを提供する。
@@ -56,6 +57,8 @@ public class TeamMemberCardController {
     @GetMapping("/member-cards")
     @Operation(summary = "チーム会員証一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    // F10.9 第2回検分: 会員証の一覧は中身の型が見えず（Map）、会員証の QR・番号を運びうるため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<Map<String, Object>> getTeamMemberCards(
             @PathVariable Long teamId,
             @RequestParam(defaultValue = "ACTIVE") String status,
@@ -148,6 +151,7 @@ public class TeamMemberCardController {
     /**
      * 拠点QRコード（印刷用）を取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/checkin-locations/{locationId}/qr")
     @Operation(summary = "拠点QRコード取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

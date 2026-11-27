@@ -1,5 +1,6 @@
 package com.mannschaft.app.performance.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.performance.dto.BulkRecordRequest;
 import com.mannschaft.app.performance.dto.BulkRecordResponse;
@@ -117,6 +118,7 @@ public class PerformanceRecordController {
     /**
      * パフォーマンス記録をCSVエクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/export")
     @Operation(summary = "パフォーマンス記録CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

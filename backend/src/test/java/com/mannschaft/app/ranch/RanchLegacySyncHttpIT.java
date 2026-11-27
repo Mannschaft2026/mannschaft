@@ -1,7 +1,7 @@
 package com.mannschaft.app.ranch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.ranch.repository.RanchOwnerRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -58,10 +58,10 @@ class RanchLegacySyncHttpIT extends AbstractMySqlIntegrationTest {
                 .andExpect(status().isCreated());
         String admin = "999999999";
         mvc.perform(post(SYNC).with(user(admin).roles("SYSTEM_ADMIN"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, me.toString())
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, me.toString())
                         .header("Idempotency-Key", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"afterAwardId\":\"0\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isBadRequest());
 
         UUID key = UUID.randomUUID();
         var first = mvc.perform(post(SYNC).with(user(me.toString()))

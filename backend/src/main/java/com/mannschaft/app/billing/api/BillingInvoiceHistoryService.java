@@ -1,5 +1,7 @@
 package com.mannschaft.app.billing.api;
 
+import com.mannschaft.app.supportaccess.SupportAccessErrorCode;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.billing.EntitlementErrorCode;
@@ -133,6 +135,10 @@ public class BillingInvoiceHistoryService {
      * 読み取りは3本とも独立した単純 SELECT で、跨いで整合を取るべき不変条件は無い。</p>
      */
     public BillingInvoiceDetailResponse detail(long actorId, UUID invoiceId) {
+        // F10.9 請求・領収の詳細はサポート閲覧中は開かせない（SupportAccessPathPolicy の /me/billing 拒否と二重の防御）。
+        if (SupportAccessContextHolder.isActive()) {
+            throw new BusinessException(SupportAccessErrorCode.OPERATION_FORBIDDEN);
+        }
         BillingInvoiceEntity invoice = invoiceRepository.findById(invoiceId)
                 .filter(i -> i.getDeletedAt() == null)
                 .orElseThrow(() -> new BusinessException(EntitlementErrorCode.INVOICE_NOT_FOUND));

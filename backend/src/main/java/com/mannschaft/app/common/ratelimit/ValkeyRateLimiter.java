@@ -1,5 +1,6 @@
 package com.mannschaft.app.common.ratelimit;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,9 @@ public class ValkeyRateLimiter {
     /** Valkey キーの接頭辞（§4.3）。 */
     static final String KEY_PREFIX = "mannschaft:rate:";
 
+    /** 代理閲覧中の制限主体キーの接頭辞（運営者 ID で数える）。 */
+    static final String OPERATOR_KEY_PREFIX = "op:";
+
     /** TTL マージン秒。ウィンドウ跨ぎ直後の参照とクロックずれを吸収する。 */
     static final long TTL_MARGIN_SECONDS = 5L;
 
@@ -91,6 +95,12 @@ public class ValkeyRateLimiter {
      * @return 判定結果（Valkey 障害時は fail-open で {@code allowed=true}）
      */
     public RateLimitResult tryConsume(String zone, String key, int limit, Duration window) {
+        // F10.9 サポート閲覧中は認証主体が本人（視点を借りられた側）になるため、呼び出し側が組む
+        // 「u:{userId}」等のキーのまま数えると運営者の閲覧が本人の枠を消費し、本人の通常操作が 429 になる。
+        // 代理中は主体を運営者へ差し替え、運営者自身の枠で数える（zone は保つので上限値は変わらない）。
+        key = SupportAccessContextHolder.get()
+                .map(context -> OPERATOR_KEY_PREFIX + context.operatorUserId())
+                .orElse(key);
         long windowSeconds = Math.max(1L, window.getSeconds());
         long nowEpochSeconds = clock.instant().getEpochSecond();
         long windowStart = (nowEpochSeconds / windowSeconds) * windowSeconds;

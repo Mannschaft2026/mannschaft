@@ -1,7 +1,10 @@
 package com.mannschaft.app.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.auth.service.RoleClaimResolver;
+import com.mannschaft.app.supportaccess.filter.SupportAccessFilter;
+import com.mannschaft.app.supportaccess.service.SupportAccessGrantValidator;
+import com.mannschaft.app.supportaccess.service.SupportAccessLogRecorder;
 import com.mannschaft.app.advertising.campaign.filter.AdPublicEndpointRateLimitFilter;
 import com.mannschaft.app.auth.service.AuthTokenService;
 import com.mannschaft.app.config.JwtAuthenticationFilter;
@@ -101,10 +104,12 @@ class AuthorizationIntegrationTest {
             return new JwtAuthenticationFilter(mock(AuthTokenService.class));
         }
 
-        /** F10.1: AdminImpersonationFilter。ObjectMapper のみ依存。ヘッダー無しは即 chain.doFilter。 */
+        /** F10.9: SupportAccessFilter（依存はモック）。ヘッダー無しは即 chain.doFilter。 */
         @Bean
-        AdminImpersonationFilter adminImpersonationFilter() {
-            return new AdminImpersonationFilter(mock(ObjectMapper.class));
+        SupportAccessFilter supportAccessFilter() {
+            return new SupportAccessFilter(org.mockito.Mockito.mock(SupportAccessGrantValidator.class),
+                    org.mockito.Mockito.mock(SupportAccessLogRecorder.class),
+                    org.mockito.Mockito.mock(RoleClaimResolver.class));
         }
 
         @Bean

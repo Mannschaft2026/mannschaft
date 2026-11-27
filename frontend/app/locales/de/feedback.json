@@ -56,7 +56,7 @@
         "success": "Status aktualisiert",
         "error": "Status aktualisieren fehlgeschlagen"
       },
-      "viewAsUser": "Als Benutzer anzeigen",
+      "requestSupportAccess": "Erlaubnis zur Ansicht anfragen",
       "anonymous": "Anonym"
     }
   }

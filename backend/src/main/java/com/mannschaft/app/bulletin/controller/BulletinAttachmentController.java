@@ -1,5 +1,6 @@
 package com.mannschaft.app.bulletin.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.bulletin.dto.AttachmentDownloadUrlResponse;
 import com.mannschaft.app.bulletin.dto.AttachmentPresignRequest;
 import com.mannschaft.app.bulletin.dto.AttachmentPresignResponse;
@@ -110,6 +111,7 @@ public class BulletinAttachmentController {
     /**
      * 添付ファイルの短命 presigned ダウンロード URL を発行する（生 fileKey は返さない）。
      */
+    @SupportAccessDenied
     @GetMapping("/attachments/{id}/download-url")
     @Operation(summary = "添付ファイルダウンロード用 presigned URL 発行")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "発行成功")

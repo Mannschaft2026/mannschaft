@@ -6,9 +6,7 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.storage.MediaUrlResolver;
 import com.mannschaft.app.membership.domain.LeaveReason;
-import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
-import com.mannschaft.app.membership.dto.MembershipCreateRequest;
 import com.mannschaft.app.membership.dto.MembershipLeaveRequest;
 import com.mannschaft.app.membership.entity.MembershipEntity;
 import com.mannschaft.app.membership.query.MemberQueryDispatcher;
@@ -117,33 +115,6 @@ public class OrganizationMembershipService {
 
         var meta = new PagedResponse.PageMeta(totalElements, page, size, totalPages);
         return PagedResponse.of(pagedData, meta);
-    }
-
-    /**
-     * 組織をフォロー（SUPPORTER として memberships に入会）する。
-     *
-     * <p>F00.5 Phase 5: memberships への書き込みに切替。MembershipService.join() 経由で
-     * 冪等性保証・イベント発火を一本化する。</p>
-     */
-    @Transactional
-    public void followOrganization(Long userId, Long orgId) {
-        findOrganizationOrThrow(orgId);
-
-        // 重複チェック（memberships に既にアクティブな SUPPORTER がいる場合）
-        if (membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                userId, ScopeType.ORGANIZATION, orgId, RoleKind.SUPPORTER)) {
-            throw new BusinessException(OrgErrorCode.ORG_007);
-        }
-
-        // F00.5 Phase 5: memberships に SUPPORTER として入会
-        MembershipCreateRequest req = new MembershipCreateRequest();
-        req.setUserId(userId);
-        req.setScopeType(ScopeType.ORGANIZATION);
-        req.setScopeId(orgId);
-        req.setRoleKind(RoleKind.SUPPORTER);
-        req.setSource("SELF_FOLLOW");
-        membershipService.join(req);
-        log.info("組織フォロー完了: userId={}, orgId={}", userId, orgId);
     }
 
     /**

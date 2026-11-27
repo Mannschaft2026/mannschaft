@@ -39,7 +39,9 @@ Account model (`README.md` §アカウント構造): **3 layers — organization
   (POSTs `/api/v1/auth/login`, then writes `localStorage['currentUser']`). UI-form login is
   `loginAs()` (PrimeVue inputs need `click()` + `pressSequentially()`, NOT `fill()`).
 - Seed accounts (`seed-e2e-data.js`): `e2e-user@test.mannschaft.local` / `TestPass2026!` (member of
-  team **FC東京U-18**) and `e2e-admin@test.mannschaft.local`. Real-tier helpers resolve IDs by name at
+  team **FC東京U-18**) and `e2e-admin@test.mannschaft.local` (a personal account: team/org ADMIN, no SYSTEM_ADMIN). SYSTEM_ADMIN is a separate
+  operator-only account `e2e-operator@test.mannschaft.local` that belongs to no team/org (operators never affiliate with
+  tenants). Use it only for specs that call SYSTEM_ADMIN screens/APIs. Real-tier helpers resolve IDs by name at
   runtime (`tests/e2e/real/helpers/seed-api.ts`, `getE2eTeamId`) — never hardcode numeric IDs.
 - `data-testid` convention already exists (kebab-case, feature-namespaced, e.g.
   `action-memo-edit-dialog-save`, `todo-complete-checkbox`). 186 component files use it.

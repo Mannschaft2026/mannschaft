@@ -56,7 +56,7 @@
         "success": "状态已更新",
         "error": "状态更新失败"
       },
-      "viewAsUser": "以用户视角查看",
+      "requestSupportAccess": "申请查看许可",
       "anonymous": "匿名"
     }
   }

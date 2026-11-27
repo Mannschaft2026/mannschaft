@@ -1,5 +1,6 @@
 package com.mannschaft.app.analytics.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.analytics.DatePreset;
 import com.mannschaft.app.analytics.Granularity;
 import com.mannschaft.app.analytics.dto.*;
@@ -77,6 +78,7 @@ public class AnalyticsRevenueController {
     }
 
     /** 分析データCSVエクスポート */
+    @SupportAccessDenied
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
             @RequestParam String type,

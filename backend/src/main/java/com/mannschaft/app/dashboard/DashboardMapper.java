@@ -1,5 +1,6 @@
 package com.mannschaft.app.dashboard;
 
+import com.mannschaft.app.dashboard.dto.ScheduleFeedDetail;
 import com.mannschaft.app.dashboard.dto.ActivityFeedResponse;
 import com.mannschaft.app.dashboard.dto.ChatFolderItemResponse;
 import com.mannschaft.app.dashboard.dto.ChatFolderResponse;
@@ -73,7 +74,7 @@ public interface DashboardMapper {
             ActivityFeedEntity entity,
             ActivityFeedResponse.ActorSummary actor,
             String scopeName,
-            Object detail) {
+            ScheduleFeedDetail detail) {
         return new ActivityFeedResponse(
                 entity.getId(),
                 entity.getActivityType().name(),

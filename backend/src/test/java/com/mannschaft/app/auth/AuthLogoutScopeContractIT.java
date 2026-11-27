@@ -182,21 +182,35 @@ class AuthLogoutScopeContractIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    void 管理者変身中_署名済み本人だけを失効する() throws Exception {
+    void 旧変身ヘッダー付きのログアウトは400で何も失効しない() throws Exception {
         accessToken = authTokenService.issueAccessToken(actorId, List.of("MEMBER", "SYSTEM_ADMIN"));
         String jti = accessJti();
         RefreshTokenEntity anotherDevice = saveSession(actorId, UUID.randomUUID().toString());
         RefreshTokenEntity targetActor = saveSession(otherActorId, UUID.randomUUID().toString());
 
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .header("X-Admin-Impersonate-User-Id", otherActorId)
+                        .header(com.mannschaft.app.supportaccess.SupportAccessHeaders.LEGACY_IMPERSONATE, otherActorId)
                         .cookie(new Cookie("access_token", accessToken), new Cookie("refresh_token", rawRefreshToken)))
-                .andExpect(status().isOk());
+                .andExpect(status().isBadRequest());
 
-        assertThat(isRevoked(sessionId)).isTrue();
+        assertThat(isRevoked(sessionId)).isFalse();
         assertThat(isRevoked(anotherDevice.getId())).isFalse();
         assertThat(isRevoked(targetActor.getId())).isFalse();
-        assertThat(authTokenService.isJtiBlacklisted(jti)).isTrue();
+        assertThat(authTokenService.isJtiBlacklisted(jti)).isFalse();
+    }
+
+    @Test
+    void サポート閲覧の許可ヘッダー付きのログアウトは存在しない許可なら404で何も失効しない() throws Exception {
+        accessToken = authTokenService.issueAccessToken(actorId, List.of("MEMBER", "SYSTEM_ADMIN"));
+        String jti = accessJti();
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .header(com.mannschaft.app.supportaccess.SupportAccessHeaders.GRANT_ID, UUID.randomUUID().toString())
+                        .cookie(new Cookie("access_token", accessToken), new Cookie("refresh_token", rawRefreshToken)))
+                .andExpect(status().isNotFound());
+
+        assertThat(isRevoked(sessionId)).isFalse();
+        assertThat(authTokenService.isJtiBlacklisted(jti)).isFalse();
     }
 
     @Test

@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * API の mapped method が feature gate または明示的な常時到達理由を宣言することを監査する番人。
- * HTTP は 3,744 件（総数の内訳は下記の定数コメント）、
+ * HTTP は 3,768 件（総数の内訳は下記の定数コメント）、
  * STOMP は Chat の 2 件と VillageLobbyPresenceController の 3 件、計 5 件を走査する。
  */
 class ApiGateDeclarationGuardTest {
@@ -42,7 +42,9 @@ class ApiGateDeclarationGuardTest {
         assertThat(scan.entries()).isNotEmpty();
         assertThat(scan.entries().stream().filter(entry -> entry.type() == Type.HTTP).count())
                 .as("HTTP mapped method の走査総数。parser 退行を台帳比較とは独立に検知する")
-                .isEqualTo(3756);   // 3756 = 3757 - CMP-260826-1457 W2 連絡先招待QR（GET /contact-invite-tokens/{token}/qr）廃止 1本。3757 = 3751 + CMP-261107-1833 PR3 再招待依頼の受け手側 InviteReissueRequestController 6本
+                .isEqualTo(3768);   // 3768 = 3756 + CMP Z-B サポート閲覧 supportaccess の12本（運営側 SystemAdminSupportAccessController 7本・本人側 MySupportAccessController 5本。
+                                    //   全て @AlwaysReachable(CORE) を宣言済みで未宣言増加0。0|7・0|5）。
+                                    // 3756 = 3757 - CMP-260826-1457 W2 連絡先招待QR（GET /contact-invite-tokens/{token}/qr）廃止 1本。3757 = 3751 + CMP-261107-1833 PR3 再招待依頼の受け手側 InviteReissueRequestController 6本
                                     //   （TEAM/ORG 別メソッド × GET 一覧・POST reissue・POST decline。main 側の増減は実測で上書き）
                                     // 3751 = 3746 + CMP-261107-1833 招待付き新規登録の保留承認 MePendingInviteController 5本
                                     //   （GET /api/v1/me/pending-invite・POST accept|decline|reissue-request|dismiss。feature gate 未宣言の流儀で 新規 5|5。

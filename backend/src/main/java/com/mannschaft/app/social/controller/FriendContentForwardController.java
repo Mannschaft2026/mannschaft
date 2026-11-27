@@ -1,5 +1,6 @@
 package com.mannschaft.app.social.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.social.dto.ForwardRequest;
@@ -124,6 +125,7 @@ public class FriendContentForwardController {
      * @param size   1 ページあたりの件数
      * @return 逆転送履歴レスポンス
      */
+    @SupportAccessDenied
     @GetMapping("/friend-forward-exports")
     @Operation(summary = "自チーム投稿の逆転送履歴取得",
             description = "自チーム発信投稿がどのフレンドチームに転送されたかを追跡する透明性API。"

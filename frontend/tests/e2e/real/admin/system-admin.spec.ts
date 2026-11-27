@@ -2,10 +2,10 @@
  * このテストはAPIモックを使わない実機テストです。
  * バックエンド http://localhost:8080 / フロントエンド http://localhost:3000 が起動済みの状態で実行してください。
  *
- * playwright.config.ts の chromium-real-admin プロジェクトで実行されます。
- * storageState: tests/e2e/.auth/real-admin.json
+ * playwright.config.ts の chromium-real-operator プロジェクトで実行されます。
+ * storageState: tests/e2e/.auth/real-operator.json（運営アカウント）
  *
- * テストユーザー: e2e-admin@test.mannschaft.local（SYSTEM_ADMIN権限）
+ * テストユーザー: e2e-operator@test.mannschaft.local（SYSTEM_ADMIN 専用の運営アカウント。どこにも所属しない）
  * - seed-e2e-data.js で role_id=1（SYSTEM_ADMIN）が付与されている
  */
 
@@ -220,7 +220,7 @@ test.describe('SYS-014〜015: アクセス制御境界確認', () => {
 //   /admin/dashboard → loadingスピナー後に /login へ遷移（Nuxt middleware が非同期で認可チェック）
 // ---------------------------------------------------------------------------
 test.describe('SYS-016〜017: 認証済みMEMBERのadmin route guard', () => {
-  // MEMBER の storageState を使う（chromium-real-admin プロジェクトは admin storageState がデフォルトだが
+  // MEMBER の storageState を使う（chromium-real-operator プロジェクトは operator storageState がデフォルトだが
   // browser.newContext で MEMBER の storageState を明示的に指定してオーバーライドする）
   const MEMBER_STORAGE_STATE = 'tests/e2e/.auth/real-user.json'
 

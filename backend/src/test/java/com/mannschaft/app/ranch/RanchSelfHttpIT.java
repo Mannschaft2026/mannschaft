@@ -1,7 +1,7 @@
 package com.mannschaft.app.ranch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.ranch.repository.RanchDinosaurRepository;
 import com.mannschaft.app.ranch.repository.RanchOwnerRepository;
@@ -245,28 +245,43 @@ class RanchSelfHttpIT extends AbstractMySqlIntegrationTest {
     void adminImpersonationCannotReadOrEnrollButOwnAdminSessionCanRead() throws Exception {
         String admin = "999999999";
         mvc.perform(get("/api/v1/me/ranch").with(user(admin).roles("SYSTEM_ADMIN"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, me.toString()))
-                .andExpect(status().isForbidden());
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, me.toString()))
+                .andExpect(status().isBadRequest());
         mvc.perform(post("/api/v1/me/ranch").with(user(admin).roles("SYSTEM_ADMIN"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, me.toString())
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, me.toString())
                         .header("Idempotency-Key", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/me/ranch").with(user(me.toString()).roles("SYSTEM_ADMIN")))
                 .andExpect(status().isOk());
         assertThat(owners.findByUserId(me)).isEmpty();
     }
 
     @Test
-    void forgedImpersonationHeaderCannotReadOrEnrollAsMember() throws Exception {
-        mvc.perform(get("/api/v1/me/ranch").with(user(me.toString()).roles("MEMBER"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, other.toString()))
-                .andExpect(status().isForbidden());
-        mvc.perform(post("/api/v1/me/ranch").with(user(me.toString()).roles("MEMBER"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, other.toString())
+    void unknownSupportAccessGrantCannotReadOrEnrollAsAdmin() throws Exception {
+        String admin = "999999999";
+        String grant = UUID.randomUUID().toString();
+        mvc.perform(get("/api/v1/me/ranch").with(user(admin).roles("SYSTEM_ADMIN"))
+                        .header(SupportAccessHeaders.GRANT_ID, grant))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/me/ranch").with(user(admin).roles("SYSTEM_ADMIN"))
+                        .header(SupportAccessHeaders.GRANT_ID, grant)
                         .header("Idempotency-Key", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
+        assertThat(owners.findByUserId(me)).isEmpty();
+    }
+
+    @Test
+    void forgedImpersonationHeaderCannotReadOrEnrollAsMember() throws Exception {
+        mvc.perform(get("/api/v1/me/ranch").with(user(me.toString()).roles("MEMBER"))
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, other.toString()))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/me/ranch").with(user(me.toString()).roles("MEMBER"))
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, other.toString())
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/me/ranch").with(user(me.toString()).roles("MEMBER")))
                 .andExpect(status().isOk());
         assertThat(owners.findByUserId(me)).isEmpty();

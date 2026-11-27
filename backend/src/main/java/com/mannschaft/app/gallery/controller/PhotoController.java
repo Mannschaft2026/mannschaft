@@ -1,5 +1,6 @@
 package com.mannschaft.app.gallery.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.gallery.dto.DownloadResponse;
@@ -57,6 +58,7 @@ public class PhotoController {
     /**
      * 個別写真ダウンロード（Pre-signed URL）。
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/download")
     @Operation(summary = "写真ダウンロード")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "ダウンロードURL生成成功")

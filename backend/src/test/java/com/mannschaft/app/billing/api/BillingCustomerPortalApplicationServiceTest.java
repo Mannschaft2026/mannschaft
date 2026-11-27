@@ -271,7 +271,7 @@ class BillingCustomerPortalApplicationServiceTest {
         private final List<String> metadata = new ArrayList<>();
 
         private RecordingAuditLogService() {
-            super(null, null);
+            super(null, null, null);
         }
 
         @Override

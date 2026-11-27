@@ -1,5 +1,6 @@
 package com.mannschaft.app.property.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
@@ -311,6 +312,7 @@ public class PropertyWorkPackageController {
     // エクスポート (PDF / Excel)
     // =========================================================================
 
+    @SupportAccessDenied
     @PostMapping("/{packageId}/export")
     public ResponseEntity<byte[]> exportSingle(
             @PathVariable("scope") String scope,
@@ -325,6 +327,7 @@ public class PropertyWorkPackageController {
                 viewerUserId, snapshot);
     }
 
+    @SupportAccessDenied
     @PostMapping("/export")
     public ResponseEntity<byte[]> exportList(
             @PathVariable("scope") String scope,

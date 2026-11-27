@@ -436,6 +436,7 @@
     "notFound": "Nicht gefunden",
     "TEAM_001": "Das Team wurde nicht gefunden.",
     "TEAM_006": "Dieses Team kann nicht wiederhergestellt werden, da es nicht gelöscht wurde.",
+    "MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN": "Betreiberkonten können keinem Team, keiner Organisation, keinem Komitee und keinem Dorf beitreten und ihnen auch nicht folgen oder sie unterstützen.",
     "COMMON_001": "Die Eingaben sind fehlerhaft",
     "COMMON_002": "Sie haben keine Berechtigung für diese Aktion",
     "COMMON_003": "Von einem anderen Benutzer aktualisiert. Bitte aktualisieren Sie die Seite",
@@ -2177,10 +2178,6 @@
       "pointCardSynonyms": "Synonyme für Punktekarten",
       "appeals": "Einsprüche"
     },
-    "impersonation": {
-      "banner": "Identitätswechsel: {label}",
-      "exit": "Beenden"
-    },
     "businessAlert": {
       "title": "Geschäftswarnungen",
       "viewAll": "Alle anzeigen",
@@ -3433,5 +3430,161 @@
     "load_more": "Mehr anzeigen",
     "reissue_context": "erneut einladen",
     "decline_context": "Anfrage für eine neue Einladung ablehnen"
+  },
+  "supportAccess": {
+    "photoHidden": "Fotos werden während der Support-Ansicht nicht angezeigt",
+    "banner": {
+      "viewing": "Ansicht von {name} wird angezeigt",
+      "readOnly": "Nur Ansicht (keine Änderungen möglich)",
+      "remaining": "Noch {hours} Std. {minutes} Min.",
+      "end": "Ansicht beenden",
+      "endError": "Das Ende der Ansicht konnte nicht protokolliert werden. Zurück zur eigenen Betreiberansicht",
+      "expired": "Die Support-Ansicht wurde beendet (abgelaufen oder widerrufen)"
+    },
+    "status": {
+      "PENDING": "Angefragt",
+      "APPROVED": "Erlaubt",
+      "DENIED": "Abgelehnt",
+      "REVOKED": "Vom Nutzer widerrufen",
+      "EXPIRED": "Abgelaufen",
+      "CANCELLED": "Vom Betreiber zurückgezogen"
+    },
+    "endedReason": {
+      "USER_REVOKED": "Der Nutzer hat die Erlaubnis widerrufen",
+      "OPERATOR_CANCELLED": "Der Betreiber hat die Anfrage zurückgezogen",
+      "EXPIRED": "Die Erlaubnis ist abgelaufen",
+      "WITHDRAWAL": "Beendet, weil der Nutzer den Dienst verlassen hat",
+      "OPERATOR_INELIGIBLE": "Beendet wegen einer Änderung des Betreiberkontos"
+    },
+    "eventKind": {
+      "SESSION_START": "Ansicht gestartet",
+      "VIEW": "Angesehen",
+      "DENIED": "Blockierte Aktion",
+      "SESSION_END": "Ansicht beendet"
+    },
+    "scopeType": {
+      "TEAM": "Team",
+      "ORGANIZATION": "Organisation",
+      "PERSONAL": "Persönlich"
+    },
+    "reference": {
+      "FEEDBACK": "Feedback-Box"
+    },
+    "error": {
+      "notActive": "Die Support-Erlaubnis ist nicht mehr gültig. Die Ansicht wird beendet",
+      "readOnly": "Die Support-Ansicht ist nur lesend. Ändern, Veröffentlichen, Löschen und Senden sind nicht möglich",
+      "forbidden": "Diese Aktion ist während der Support-Ansicht nicht verfügbar",
+      "legacyHeader": "Die abgeschaffte Stellvertreter-Anmeldung wurde verwendet. Bitte stattdessen die Support-Erlaubnis anfragen",
+      "unavailable": "Die Support-Ansicht ist derzeit nicht verfügbar (das Zugriffsprotokoll konnte nicht gespeichert werden). Bitte später erneut versuchen"
+    },
+    "guardianWaiting": "Wartet auf Zustimmung der Erziehungsberechtigten",
+    "logs": {
+      "when": "Datum und Uhrzeit",
+      "operator": "Betreiber",
+      "kind": "Art",
+      "path": "Seite (Pfad)",
+      "scope": "Bereich"
+    },
+    "admin": {
+      "title": "Support-Ansicht",
+      "description": "Mit Erlaubnis des Nutzers dessen Ansicht im Nur-Lese-Modus prüfen",
+      "notice": "Die Ansicht ist nur lesend. Eine Erlaubnis läuft 24 Stunden nach der Zustimmung ab und kann vom Nutzer jederzeit widerrufen werden. Anfragegrund und Zugriffsprotokoll sind für den Nutzer sichtbar.",
+      "request": "Erlaubnis zur Ansicht anfragen",
+      "tabAll": "Alle",
+      "createDescription": "Der Nutzer wird benachrichtigt. Nach erneuter Authentifizierung und Zustimmung ist die Ansicht 24 Stunden lang nur lesend möglich.",
+      "targetUserId": "Ziel-Nutzer-ID",
+      "reason": "Grund der Anfrage",
+      "reasonHint": "Wird dem Nutzer angezeigt. {min} bis {max} Zeichen, die konkret begründen, warum die Ansicht nötig ist",
+      "reference": "Bezug (optional)",
+      "referenceNone": "Keiner",
+      "referenceId": "Bezugs-ID",
+      "submit": "Anfrage senden",
+      "requested": "Anfrage gesendet. Bitte auf die Zustimmung des Nutzers warten",
+      "requestError": "Die Anfrage konnte nicht gesendet werden",
+      "start": "Ansicht starten",
+      "started": "Ansicht von {name} gestartet (nur lesend)",
+      "startError": "Die Ansicht konnte nicht gestartet werden",
+      "cancel": "Zurückziehen",
+      "cancelled": "Anfrage bzw. Erlaubnis wurde zurückgezogen",
+      "cancelError": "Zurückziehen nicht möglich",
+      "cancelConfirm": "Anfrage bzw. Erlaubnis für {name} zurückziehen? Ab der nächsten Anfrage ist keine Ansicht mehr möglich.",
+      "detail": "Details",
+      "logs": "Zugriffsprotokoll",
+      "noLogs": "Noch keine Protokolleinträge",
+      "loadError": "Laden fehlgeschlagen",
+      "retry": "Neu laden",
+      "empty": "Keine Anfragen",
+      "loadMore": "Mehr laden",
+      "viewingNow": "Wird angesehen",
+      "requestUntil": "Antwort ausstehend bis {date}",
+      "columns": {
+        "target": "Zielperson",
+        "status": "Status",
+        "requestedAt": "Angefragt am",
+        "expiresAt": "Gültig bis"
+      }
+    },
+    "settings": {
+      "title": "Support-Ansicht erlauben",
+      "description": "Wenn der Betreiber darum bittet, Ihre Ansicht zu sehen, entscheiden Sie, ob Sie zustimmen oder ablehnen. Ohne Ihre Erlaubnis kann der Betreiber Ihre Ansicht nicht sehen.",
+      "hubDescription": "Anfragen des Betreibers erlauben oder ablehnen, Erlaubnis widerrufen und Protokoll einsehen",
+      "hubKeywords": "Support Stellvertreter Ansicht Betreiber Erlaubnis Widerruf Protokoll",
+      "pending": "Offene Anfragen",
+      "active": "Aktive Erlaubnisse",
+      "logs": "Zugriffsprotokoll",
+      "logsDescription": "Zeigt, wann der Betreiber Ihre Ansicht angesehen hat, welche Seite und welchen Bereich, neueste zuerst",
+      "noPending": "Keine offenen Anfragen",
+      "noActive": "Keine aktiven Erlaubnisse",
+      "noLogs": "Keine Protokolleinträge",
+      "loadError": "Laden fehlgeschlagen",
+      "requestedBy": "Angefragt von",
+      "requestReason": "Grund",
+      "reference": "Bezug",
+      "requestedAt": "Angefragt am",
+      "requestUntil": "Antwort bis",
+      "validUntil": "Erlaubnis gültig bis",
+      "approve": "Erlauben",
+      "deny": "Ablehnen",
+      "revoke": "Erlaubnis widerrufen",
+      "revokeConfirm": "Erlaubnis widerrufen? Ab der nächsten Anfrage kann der Betreiber Ihre Ansicht nicht mehr sehen.",
+      "denyComment": "Grund der Ablehnung (optional)",
+      "denyConfirm": "Ablehnung bestätigen",
+      "approved": "Erlaubt. Der Betreiber kann 24 Stunden lang nur lesend ansehen",
+      "denied": "Abgelehnt",
+      "revoked": "Erlaubnis widerrufen",
+      "actionError": "Die Aktion ist fehlgeschlagen. Bitte später erneut versuchen",
+      "reauthRequired": "Zum Erlauben ist eine Identitätsbestätigung nötig. Bestätigen Sie mit Passwort oder Passkey.",
+      "approveNotice": "Nach der Erlaubnis kann der Betreiber Ihre Ansicht 24 Stunden lang nur lesend sehen. Ändern, Veröffentlichen, Löschen und Senden sind nicht möglich.",
+      "password": "Passwort",
+      "approveWithPassword": "Mit Passwort bestätigen und erlauben",
+      "approveWithPasskey": "Mit Passkey bestätigen und erlauben",
+      "passkeyUnsupported": "Passkeys sind auf diesem Gerät oder in diesem Browser nicht verfügbar. Bitte mit Passwort bestätigen",
+      "guardianRole": "Anfrage zur Ansicht von {name}. Ihre Entscheidung als Erziehungsberechtigte(r) ist nötig",
+      "guardianToo": "Da es sich um eine minderjährige oder betreute Person handelt, ist zusätzlich die Zustimmung der Erziehungsberechtigten nötig."
+    },
+    "help": {
+      "title": "So funktioniert die Support-Erlaubnis",
+      "description": "Zur Untersuchung von Problemen möchte der Betreiber manchmal Ihre Ansicht prüfen. Das geschieht immer erst nach Ihrer Erlaubnis und nur lesend.",
+      "what": {
+        "title": "Wann kommt eine Anfrage?",
+        "body": "Der Betreiber sendet eine Anfrage, etwa nach einem Beitrag in der Feedback-Box. Sie enthält einen Grund; Sie werden in der App und per E-Mail benachrichtigt."
+      },
+      "allow": {
+        "title": "So erlauben Sie",
+        "body": "Lesen Sie den Grund, tippen Sie auf \"Erlauben\" und bestätigen Sie mit Passwort oder Passkey. Ein E-Mail-Link allein genügt nicht. Unbekannte Anfragen lehnen Sie bitte ab."
+      },
+      "limits": {
+        "title": "Was der Betreiber darf und nicht darf",
+        "body": "Nach der Erlaubnis kann der Betreiber 24 Stunden lang nur Ihre Ansicht sehen. Ändern, Veröffentlichen, Löschen, Senden, Passwörter, Zahlungen und Datenexporte sind nicht möglich. Minderjährige und betreute Personen brauchen zusätzlich die Zustimmung der Erziehungsberechtigten."
+      },
+      "revoke": {
+        "title": "So widerrufen Sie",
+        "body": "Unter \"Aktive Erlaubnisse\" können Sie jederzeit widerrufen. Ab der nächsten Anfrage kann der Betreiber Ihre Ansicht nicht mehr sehen."
+      },
+      "logs": {
+        "title": "Protokoll einsehen",
+        "body": "Wann, welche Seite und welchen Bereich der Betreiber angesehen hat, wird protokolliert und ist hier für Sie einsehbar."
+      }
+    }
   }
 }

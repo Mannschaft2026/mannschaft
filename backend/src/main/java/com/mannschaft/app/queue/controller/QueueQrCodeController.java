@@ -7,6 +7,7 @@ import com.mannschaft.app.queue.dto.CreateQrCodeRequest;
 import com.mannschaft.app.queue.dto.QrCodeResponse;
 import com.mannschaft.app.queue.service.QueueAccessGuard;
 import com.mannschaft.app.queue.service.QueueQrCodeService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ import java.util.List;
  * QRコードは自身に scope を持たず参照先（カテゴリ XOR カウンター）経由で scope が決まるため、
  * 参照先カテゴリの scope を URL パスの {@code teamId} と突合し、越境は 404（QUEUE_008）で秘匿する。</p>
  */
+@SupportAccessDenied
 @RestController
 @RequestMapping("/api/v1/teams/{teamId}/queue/qr-codes")
 @Tag(name = "順番待ちQRコード管理", description = "F03.7 順番待ちQRコードの発行・管理")

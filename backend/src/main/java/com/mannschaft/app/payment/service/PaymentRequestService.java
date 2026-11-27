@@ -1,5 +1,6 @@
 package com.mannschaft.app.payment.service;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.service.AuditLogService;
 import com.mannschaft.app.common.AccessControlService;
@@ -340,7 +341,8 @@ public class PaymentRequestService {
         requireTeamAdmin(actorUserId, teamId);
 
         // 初閲覧（SENT → VIEWED）。冪等: VIEWED/OVERDUE/PAID/CANCELLED では何もしない。
-        if (request.markAsViewedIfSent()) {
+        // F10.9 サポート閲覧中は VIEWED へ遷移させない（請求の発行側から見える状態を、運営の閲覧で変えない）。
+        if (!SupportAccessContextHolder.isActive() && request.markAsViewedIfSent()) {
             paymentRequestRepository.save(request);
             log.info("協会請求を初閲覧 VIEWED: requestId={}, teamId={}", request.getId(), teamId);
         }

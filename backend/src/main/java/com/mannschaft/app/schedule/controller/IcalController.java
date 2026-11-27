@@ -22,6 +22,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import org.springframework.beans.factory.annotation.Value;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * iCal購読コントローラー。iCalトークン管理・iCalフィード配信APIを提供する。
@@ -50,6 +51,7 @@ public class IcalController {
             + "（IcalService#getOrCreateToken が IcalTokenRepository#findByUserId で引き、"
             + "未発行時も insert(userId, ...) で自分の行を作る。"
             + "リクエストはトークン値も対象ユーザーも受け取らないため、他人のトークンには到達しない）")
+    @SupportAccessDenied
     @GetMapping("/api/v1/me/ical/token")
     @Operation(summary = "iCalトークン取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

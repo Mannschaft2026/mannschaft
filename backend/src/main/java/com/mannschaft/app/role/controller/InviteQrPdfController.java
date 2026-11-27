@@ -1,5 +1,6 @@
 package com.mannschaft.app.role.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.role.dto.InviteQrPdfRequest;
 import com.mannschaft.app.role.service.InviteQrPdfService;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  * （CMP-260826-1457）。tokenId だけから平文は引けないので、旧 {@code GET .../{tokenId}/pdf} は撤去した。</p>
  */
 @RestController
+@SupportAccessDenied
 @RequestMapping("/api/v1/teams/{teamId}/invite-tokens/pdf")
 @Tag(name = "招待QRコードPDF", description = "F01.8 チーム招待QRコードPDF印刷")
 @RequiredArgsConstructor

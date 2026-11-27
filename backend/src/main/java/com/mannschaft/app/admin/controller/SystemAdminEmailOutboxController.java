@@ -7,6 +7,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.AuthorizedByPathConfig;
 import com.mannschaft.app.mail.outbox.EmailOutboxAdminService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -91,6 +92,8 @@ public class SystemAdminEmailOutboxController {
      */
     @GetMapping("/{id}")
     @Operation(summary = "メール outbox 詳細取得", description = "to_address / payload を復号して返す。閲覧ログを記録する。")
+    // F10.9 第2回検分: メール outbox の payloadVars は確認リンク・ワンタイムコード等の資格情報を運びうるため（型が見えない Map）、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<EmailOutboxDetailResponse>> getDetail(
             @PathVariable UUID id, HttpServletRequest request) {
         try {

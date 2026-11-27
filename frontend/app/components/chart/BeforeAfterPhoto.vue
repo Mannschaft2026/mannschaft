@@ -27,13 +27,23 @@ function handleUpload(event: Event, type: string) {
       <div>
         <p class="mb-2 text-xs font-medium text-surface-500">ビフォー</p>
         <div class="grid grid-cols-2 gap-2">
-          <img
+          <template
             v-for="photo in beforePhotos"
             :key="photo.id"
-            :src="photo.photoUrl"
-            alt="ビフォー"
-            class="h-32 w-full rounded-lg object-cover"
           >
+            <img
+              v-if="photo.signedUrl"
+              :src="photo.signedUrl"
+              alt="ビフォー"
+              class="h-32 w-full rounded-lg object-cover"
+            >
+            <div
+              v-else
+              class="flex h-32 w-full items-center justify-center rounded-lg bg-surface-100 p-2 text-center text-xs text-surface-500"
+            >
+              {{ $t('supportAccess.photoHidden') }}
+            </div>
+          </template>
         </div>
         <label class="mt-2 inline-block cursor-pointer">
           <input type="file" accept="image/*" class="hidden" @change="handleUpload($event, 'BEFORE')" >
@@ -43,13 +53,23 @@ function handleUpload(event: Event, type: string) {
       <div>
         <p class="mb-2 text-xs font-medium text-surface-500">アフター</p>
         <div class="grid grid-cols-2 gap-2">
-          <img
+          <template
             v-for="photo in afterPhotos"
             :key="photo.id"
-            :src="photo.photoUrl"
-            alt="アフター"
-            class="h-32 w-full rounded-lg object-cover"
           >
+            <img
+              v-if="photo.signedUrl"
+              :src="photo.signedUrl"
+              alt="アフター"
+              class="h-32 w-full rounded-lg object-cover"
+            >
+            <div
+              v-else
+              class="flex h-32 w-full items-center justify-center rounded-lg bg-surface-100 p-2 text-center text-xs text-surface-500"
+            >
+              {{ $t('supportAccess.photoHidden') }}
+            </div>
+          </template>
         </div>
         <label class="mt-2 inline-block cursor-pointer">
           <input type="file" accept="image/*" class="hidden" @change="handleUpload($event, 'AFTER')" >

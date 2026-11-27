@@ -1,5 +1,6 @@
 package com.mannschaft.app.proxy.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -159,6 +160,7 @@ public class ProxyInputConsentController {
      * 権限: ADMIN以上 or 本人（subjectUserId）。
      */
     @Operation(summary = "スキャン文書ダウンロードURL発行")
+    @SupportAccessDenied
     @GetMapping("/api/v1/proxy-input-consents/{id}/scan-download-url")
     public ApiResponse<String> generateScanDownloadUrl(@PathVariable Long id) {
         Long requestUserId = SecurityUtils.getCurrentUserId();

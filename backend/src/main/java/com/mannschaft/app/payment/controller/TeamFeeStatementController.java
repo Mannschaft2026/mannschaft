@@ -1,5 +1,6 @@
 package com.mannschaft.app.payment.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -66,6 +67,7 @@ public class TeamFeeStatementController {
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 
+    @SupportAccessDenied
     @GetMapping("/fee-statements/pdf")
     @Operation(summary = "月次手数料明細PDF")
     public ResponseEntity<byte[]> downloadFeeStatementPdf(

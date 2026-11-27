@@ -83,6 +83,27 @@ class ValkeyRateLimiterTest {
     class KeyAndTtl {
 
         @Test
+        @DisplayName("サポート閲覧（代理）中は本人のキーではなく運営者 ID で数える（本人の枠を消費しない）")
+        @SuppressWarnings("unchecked")
+        void supportAccessCountsByOperator() {
+            stubCount(1L);
+            com.mannschaft.app.supportaccess.context.SupportAccessContextHolder.set(
+                    new com.mannschaft.app.supportaccess.context.SupportAccessContext(
+                            java.util.UUID.randomUUID(), 7L, 42L, Instant.parse("2030-01-01T00:00:00Z")));
+            try {
+                limiter.tryConsume("test-zone", "u:42", 60, Duration.ofSeconds(60));
+            } finally {
+                com.mannschaft.app.supportaccess.context.SupportAccessContextHolder.clear();
+            }
+
+            ArgumentCaptor<List<String>> keysCaptor = ArgumentCaptor.forClass(List.class);
+            org.mockito.Mockito.verify(redisTemplate).execute(
+                    any(RedisScript.class), keysCaptor.capture(), any());
+            assertThat(keysCaptor.getValue())
+                    .containsExactly("mannschaft:rate:test-zone:op:7:" + WINDOW_START_60S);
+        }
+
+        @Test
         @DisplayName("Valkey キーは mannschaft:rate:{zone}:{key}:{windowStart}、TTL はウィンドウ長+5秒")
         @SuppressWarnings("unchecked")
         void keyAndTtlComputation() {

@@ -1,5 +1,6 @@
 package com.mannschaft.app.shift.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.shift.service.ShiftPdfFacade;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * SUPPORTER ロールは 403 を返す。
  */
 @RestController
+@SupportAccessDenied
 @RequestMapping("/api/v1/shifts/schedules/{scheduleId}/pdf")
 @Tag(name = "シフト PDF エクスポート", description = "F03.5 シフト PDF ダウンロード")
 @RequiredArgsConstructor

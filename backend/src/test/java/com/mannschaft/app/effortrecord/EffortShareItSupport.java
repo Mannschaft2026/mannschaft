@@ -1,5 +1,6 @@
 package com.mannschaft.app.effortrecord;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.membership.domain.EffortShareDisposition;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -42,6 +43,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 abstract class EffortShareItSupport extends EffortRecordItSupport {
 
     static final String TEAMS = "/api/v1/teams";
+
+    /** 運営アカウントの判定（取引の外）。本番の Controller と同じく判定してから呼ぶ（戦役 Z-A PR2・D-3T）。 */
+    @Autowired
+    private PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     @Autowired protected MembershipService membershipService;
     @Autowired protected RoleService roleService;
@@ -164,7 +169,8 @@ abstract class EffortShareItSupport extends EffortRecordItSupport {
         request.setScopeId(teamId);
         request.setRoleKind(RoleKind.MEMBER);
         request.setSource("EFFORT_PR3A_TEST");
-        membershipService.join(request);
+        PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(userId)),
+                () -> membershipService.join(request));
         return activeMembershipId(userId, teamId);
     }
 

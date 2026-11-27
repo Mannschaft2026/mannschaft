@@ -44,6 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * 組織備品コントローラー。組織スコープの備品CRUD・貸出・返却・消費・画像管理・QRコードAPIを提供する。
@@ -302,6 +303,7 @@ public class OrganizationEquipmentController {
     /**
      * 組織備品のQRコード一覧を取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/qr-codes")
     @Operation(summary = "組織備品QRコード一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

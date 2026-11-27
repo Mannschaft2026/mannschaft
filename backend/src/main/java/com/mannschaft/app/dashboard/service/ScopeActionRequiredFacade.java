@@ -4,6 +4,7 @@ import com.mannschaft.app.circulation.entity.CirculationDocumentEntity;
 import com.mannschaft.app.circulation.service.CirculationService;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.visibility.ScopeKey;
+import com.mannschaft.app.config.AsyncConfig;
 import com.mannschaft.app.dashboard.dto.ActionRequiredSummaryResponse;
 import com.mannschaft.app.schedule.entity.ScheduleEntity;
 import com.mannschaft.app.schedule.service.ScheduleAttendanceService;
@@ -11,11 +12,15 @@ import com.mannschaft.app.survey.entity.SurveyEntity;
 import com.mannschaft.app.survey.service.SurveyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -48,6 +53,18 @@ import java.util.concurrent.ExecutionException;
 @Service
 @RequiredArgsConstructor
 public class ScopeActionRequiredFacade {
+
+    /**
+     * 並列集計の実行先。F10.9 サポート閲覧（戦役Z-B）: 共有 ForkJoin プール（引数なしの supplyAsync）には代理閲覧の
+     * 文脈と MDC が伝播しないため、文脈を伝播する {@code dashboard-aggregation-pool}（AsyncConfig）を使う。
+     * 手組み（{@code @InjectMocks} 等）で注入されないときも、文脈を伝播する共有プールを既定にする。
+     */
+    private Executor aggregationExecutor = AsyncConfig.contextPropagating(ForkJoinPool.commonPool());
+
+    @Autowired
+    void setAggregationExecutor(@Qualifier("dashboard-aggregation-pool") Executor aggregationExecutor) {
+        this.aggregationExecutor = aggregationExecutor;
+    }
 
     private final CirculationService circulationService;
     private final SurveyService surveyService;
@@ -110,11 +127,11 @@ public class ScopeActionRequiredFacade {
         accessControlService.checkMembershipOrDescendant(userId, scopeId, scopeType, true);
 
         CompletableFuture<ActionRequiredSummaryResponse.CirculationSection> circulationFuture =
-                CompletableFuture.supplyAsync(() -> buildCirculation(userId, scopeType, scopeId));
+                CompletableFuture.supplyAsync(() -> buildCirculation(userId, scopeType, scopeId), aggregationExecutor);
         CompletableFuture<ActionRequiredSummaryResponse.SurveySection> surveyFuture =
-                CompletableFuture.supplyAsync(() -> buildSurvey(userId, scopeType, scopeId));
+                CompletableFuture.supplyAsync(() -> buildSurvey(userId, scopeType, scopeId), aggregationExecutor);
         CompletableFuture<ActionRequiredSummaryResponse.AttendanceSection> attendanceFuture =
-                CompletableFuture.supplyAsync(() -> buildAttendance(userId, scopeType, scopeId));
+                CompletableFuture.supplyAsync(() -> buildAttendance(userId, scopeType, scopeId), aggregationExecutor);
 
         ActionRequiredSummaryResponse.CirculationSection circulation =
                 join(circulationFuture, "circulation", emptyCirculation());

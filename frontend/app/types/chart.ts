@@ -1,3 +1,5 @@
+import type { components } from '~/types/generated'
+
 export type ChartStatus = 'DRAFT' | 'FINALIZED'
 
 export interface Chart {
@@ -28,14 +30,16 @@ export interface ChartSectionConfig {
   consent: boolean
 }
 
-export interface ChartPhoto {
+/**
+ * カルテ写真（BE の `ChartPhotoResponse`・生成型に寄せる）。
+ *
+ * 以前は手書きの `photoUrl` を読んでいたが、BE は `signedUrl` を返すため、代理中でなくても写真が出ず
+ * 「写真は非表示」の案内が出ていた（第2回検分で発見）。`signedUrl` は代理（サポート閲覧）中は BE が返さない（null）。
+ */
+export type ChartPhoto = Omit<components['schemas']['ChartPhotoResponse'], 'id' | 'photoType' | 'signedUrl'> & {
   id: number
-  chartId: number
   photoType: 'BEFORE' | 'AFTER' | 'GENERAL'
-  photoUrl: string
-  caption: string | null
-  sortOrder: number
-  createdAt: string
+  signedUrl?: string | null
 }
 
 export interface ChartTemplate {

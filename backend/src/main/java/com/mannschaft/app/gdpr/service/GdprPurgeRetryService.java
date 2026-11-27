@@ -6,6 +6,7 @@ import com.mannschaft.app.effortrecord.event.EffortRecordPurgeEventListener;
 import com.mannschaft.app.errorreport.event.ErrorReportPurgeEventListener;
 import com.mannschaft.app.common.DomainEventPublisher;
 import com.mannschaft.app.gdpr.event.DiagnosisPurgeRetryRequestedEvent;
+import com.mannschaft.app.gdpr.event.SupportAccessPurgeRetryRequestedEvent;
 import com.mannschaft.app.gdpr.dto.RetryResultResponse;
 import com.mannschaft.app.gdpr.entity.AccountPurgeCompletionStatusEntity;
 import com.mannschaft.app.gdpr.repository.AccountPurgeCompletionStatusRepository;
@@ -56,7 +57,7 @@ public class GdprPurgeRetryService {
 
     /** 受け付けるドメイン名の集合。不明なドメイン名は即時 IllegalArgumentException。 */
     private static final Set<String> VALID_DOMAINS =
-            Set.of("role", "team", "payment", "chart", "proxy", "errorreport", "billing", "ranch", "diagnosis", "effortrecord");
+            Set.of("role", "team", "payment", "chart", "proxy", "errorreport", "billing", "ranch", "diagnosis", "effortrecord", "supportaccess");
 
     /**
      * 指定ユーザー × ドメインの GDPR パージを手動で retry する。
@@ -88,11 +89,14 @@ public class GdprPurgeRetryService {
         }
 
         // ドメイン操作を実行（completionStatusRepository の更新はここでは行わない）
-        boolean queued = "diagnosis".equals(domainName);
+        boolean queued = "diagnosis".equals(domainName) || "supportaccess".equals(domainName);
         boolean succeeded = false;
-        if (queued) {
+        if ("diagnosis".equals(domainName)) {
             // 同期GDPR TXでは診断のRepositoryを呼ばず、受付コミット後に独立して削除する。
             eventPublisher.publish(new DiagnosisPurgeRetryRequestedEvent(userId));
+        } else if ("supportaccess".equals(domainName)) {
+            // 同期GDPR TXではサポート閲覧のRepositoryを呼ばず、受付コミット後に独立して削除する（D-3T）。
+            eventPublisher.publish(new SupportAccessPurgeRetryRequestedEvent(userId));
         } else {
             succeeded = executeRetry(userId, domainName);
         }

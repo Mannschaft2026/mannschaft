@@ -19,9 +19,8 @@ const { t } = useI18n()
 const { formatDate } = useDatetime()
 const toast = useToast()
 
-// ─── API / Store ─────────────────────────────────────────────────────────────
+// ─── API ─────────────────────────────────────────────────────────────────────
 const { getFeedbacks, respondToFeedback, updateFeedbackStatus } = useSystemAdminFeedbackApi()
-const impersonationStore = useAdminImpersonationStore()
 
 // ─── 状態 ─────────────────────────────────────────────────────────────────────
 const feedbacks = ref<FeedbackResponse[]>([])
@@ -136,11 +135,18 @@ async function submitResponse() {
   }
 }
 
-// ─── 管理者変身（ユーザー視点確認）────────────────────────────────────────────
-function startImpersonation(feedback: FeedbackResponse) {
+// ─── サポート閲覧の依頼（F10.9: 本人の許可を得て、ユーザー視点を閲覧のみで確認）──────────
+// 変身は廃止した。対象者と参照（この目安箱）を入れた依頼ダイアログを、サポート閲覧の画面で開く。
+async function requestSupportAccess(feedback: FeedbackResponse) {
   if (feedback.isAnonymous || !feedback.submittedBy) return
-  const label = `User #${feedback.submittedBy}`
-  impersonationStore.startImpersonation(feedback.submittedBy, label)
+  await navigateTo({
+    path: '/system-admin/support-access',
+    query: {
+      targetUserId: String(feedback.submittedBy),
+      referenceType: 'FEEDBACK',
+      referenceId: String(feedback.id),
+    },
+  })
 }
 </script>
 
@@ -268,11 +274,12 @@ function startImpersonation(feedback: FeedbackResponse) {
               v-if="!data.isAnonymous && data.submittedBy"
               icon="pi pi-eye"
               size="small"
-              :label="t('feedback.inbox.viewAsUser')"
+              :label="t('feedback.inbox.requestSupportAccess')"
               severity="warn"
               outlined
               class="text-xs"
-              @click="startImpersonation(data)"
+              data-testid="feedback-request-support-access"
+              @click="requestSupportAccess(data)"
             />
           </div>
         </template>

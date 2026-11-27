@@ -1,5 +1,6 @@
 package com.mannschaft.app.succession.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.succession.dto.CreateLegalFilingRequest;
@@ -165,6 +166,7 @@ public class LegalFilingController {
      * @param legalFilingId 法的手続きレコード ID（UUID）
      * @return 200 OK + Pre-signed URL と有効期間（秒）
      */
+    @SupportAccessDenied
     @GetMapping("/api/v1/organizations/{orgId}/succession/legal-filings/{legalFilingId}/evidence-package/download-url")
     @Operation(
             summary = "証拠 ZIP ダウンロード URL（ADMIN のみ・1h 有効）",

@@ -5,9 +5,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextTaskDecorator;
 import org.springframework.core.task.TaskDecorator;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -52,7 +54,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(5);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("event-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // Issue #2953: 投入拒否を silent drop にしない。
         // 拒否方針そのもの（AbortPolicy = 例外送出）は 168 箇所の @Async("event-pool") 全体に効くため変更せず、
         // 「拒否が起きた事実」を構造化 ERROR ログで観測できるようにするだけに留める。
@@ -91,7 +93,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(10);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("withdrawal-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.initialize();
         return executor;
     }
@@ -118,7 +120,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(10);
         executor.setQueueCapacity(500); // 100件バッチ × 6ドメイン = 600タスクに対応
         executor.setThreadNamePrefix("purge-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.initialize();
         return executor;
     }
@@ -170,7 +172,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(500); // SPA ユーザー 500 人同時閲覧分のバースト吸収
         executor.setThreadNamePrefix("page-view-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // DiscardPolicy 相当（飽和時は捨てる）＋捨てた数を可視化。既存プールは AbortPolicy 既定なので明示必須。
         // カウンタが無い（レジストリ欠落）環境では捨てるだけで可視化はスキップする。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -221,7 +223,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(500); // purge-pool / page-view-pool 前例に揃える
         executor.setThreadNamePrefix("notification-fanout-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // 通知は欠損許容でない。飽和時は AbortPolicy（silent drop）ではなく CallerRuns で取りこぼさず実行し、
         // 飽和回数だけをカウンタで可視化する（レジストリ欠落環境では実行のみ・可視化はスキップ）。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -304,7 +306,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(500); // notification-fanout-pool / purge-pool の前例に揃える
         executor.setThreadNamePrefix("notification-dispatch-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // 通知は欠損許容ではない。飽和時も捨てず・例外も投げず、呼び出し元スレッドで実行する（CallerRuns）。
         // 例外を投げないことが本質: 投げると sendOne の REQUIRES_NEW ごとロールバックし通知行が消える。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -353,7 +355,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("notification-outbox-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
             if (rejectedCounter != null) {
                 rejectedCounter.increment();
@@ -410,7 +412,7 @@ public class AsyncConfig {
         executor.setMaxPoolSize(2);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("ai-analysis-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         // 拒否は「静かに捨てる」ではなく可視化する。欠落はしない（後追いバッチが拾う）が、
         // 恒常的に拒否が出るならプール幅か AI 呼び出し頻度の見直しが要るためログで観測できるようにする。
         executor.setRejectedExecutionHandler((runnable, poolExecutor) -> {
@@ -436,9 +438,75 @@ public class AsyncConfig {
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(50);
         executor.setThreadNamePrefix("job-");
-        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setTaskDecorator(contextPropagatingDecorator());
         executor.initialize();
         return executor;
+    }
+
+    /**
+     * ダッシュボードの並列集計用スレッドプール（{@code CompletableFuture.supplyAsync(..., executor)} の実行先）。
+     *
+     * <p>F10.9 サポート閲覧（戦役Z-B）: 引数なしの {@code supplyAsync} は共有 ForkJoin プールで動き、代理閲覧の文脈
+     * （{@code SupportAccessContextHolder}）も MDC も伝播しない（集計の中で代理中の SKIP/DENY・READ ONLY が効かない）。
+     * 他のプールと同じ {@link #contextPropagatingDecorator()} を付けたこのプールを明示して渡す。番人
+     * {@code SupportAccessEnforcementGuardTest} が Executor 未指定の supplyAsync/runAsync を検出する。</p>
+     *
+     * <p>キューは持たず（容量 0 = 直接受け渡し）、飽和時は CallerRuns で呼び出し元スレッドが同期に実行する。
+     * 集計は入れ子になる（個人ダッシュボードの集計が、スコープの「要対応」集計をさらに並列化して待つ）ため、
+     * キューに積んで待つ方式は外側のタスクがスレッドを占有したまま内側の完了を待つ枯渇（デッドロック）を起こしうる。
+     * 直接受け渡し＋CallerRuns なら、空きが無いときは呼び出し元で実行されるだけで待ち合わせが閉じない。</p>
+     *
+     * <p><b>最大スレッド数と DB 接続（第2回検分対応）</b>: 集計タスクはそれぞれ DB 接続を1本使う。以前の最大32は
+     * Hikari の上限（既定 {@code HIKARI_MAX_POOL_SIZE=50}、CI は5）の6割を集計だけで占めうるため、同時に動く
+     * リクエストスレッド（Tomcat）や他のプール（event・通知・バッチ等）が接続待ち（{@code connection-timeout} 3秒）で
+     * 失敗しうる。最大は Hikari の上限の 1/6（{@value #DASHBOARD_POOL_HIKARI_DIVISOR} で割る）を 2〜16 に収めた値にし、
+     * 既定の50なら8本に留める。足りないときは CallerRuns で呼び出し元のスレッド（既に接続を持つリクエスト）が
+     * 順に実行するだけなので、上限を絞っても集計は止まらない。</p>
+     */
+    @Bean("dashboard-aggregation-pool")
+    public Executor dashboardAggregationPool(
+            @Value("${spring.datasource.hikari.maximum-pool-size:50}") int hikariMaximumPoolSize) {
+        int maxPoolSize = dashboardAggregationMaxPoolSize(hikariMaximumPoolSize);
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(Math.min(4, maxPoolSize));
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(0);
+        executor.setThreadNamePrefix("dashboard-agg-");
+        executor.setTaskDecorator(contextPropagatingDecorator());
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
+    /** ダッシュボード集計プールの最大を Hikari の上限の何分の1にするか。 */
+    public static final int DASHBOARD_POOL_HIKARI_DIVISOR = 6;
+
+    /** ダッシュボード集計プールの最大スレッド数（Hikari の上限の 1/6 を 2〜16 に収める）。 */
+    public static int dashboardAggregationMaxPoolSize(int hikariMaximumPoolSize) {
+        return Math.max(2, Math.min(16, hikariMaximumPoolSize / DASHBOARD_POOL_HIKARI_DIVISOR));
+    }
+
+    /**
+     * 任意の {@link Executor} に、全プール共通の文脈伝播（MDC・サポート閲覧の文脈）を付ける。
+     *
+     * <p>Spring の Bean を受け取れない手組み（単体テストの {@code @InjectMocks} 等）での既定の実行先に使う。
+     * 本番は {@code dashboard-aggregation-pool} が注入される。</p>
+     */
+    public static Executor contextPropagating(Executor delegate) {
+        TaskDecorator decorator = contextPropagatingDecorator();
+        return runnable -> delegate.execute(decorator.decorate(runnable));
+    }
+
+    /**
+     * 全プール共通の {@link TaskDecorator}: MDC と、F10.9 サポート閲覧（代理）の文脈を非同期スレッドへ伝播する。
+     *
+     * <p>代理中に publish されたイベントの受け手（@Async・AFTER_COMMIT）でも DB 接続が READ ONLY のままになり、
+     * 書込系の副作用が成立しない（受け手側で拒否）。代理でなければ {@link SupportAccessContextTaskDecorator} は何もしない。</p>
+     */
+    static TaskDecorator contextPropagatingDecorator() {
+        MdcTaskDecorator mdc = new MdcTaskDecorator();
+        SupportAccessContextTaskDecorator supportAccess = new SupportAccessContextTaskDecorator();
+        return runnable -> supportAccess.decorate(mdc.decorate(runnable));
     }
 
     /**

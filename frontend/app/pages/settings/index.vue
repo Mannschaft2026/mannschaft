@@ -159,6 +159,14 @@ const individualItems = computed<SettingsHubItem[]>(() => [
     to: '/parental-consent/manage',
   },
   {
+    // F10.9 サポート閲覧の許可（運営からの閲覧依頼・許可の取消・閲覧記録）。
+    label: t('supportAccess.settings.title'),
+    description: t('supportAccess.settings.hubDescription'),
+    icon: 'pi pi-eye',
+    to: '/settings/support-access',
+    keywords: t('supportAccess.settings.hubKeywords'),
+  },
+  {
     // contact-invite-tokens.vue 自身が使うキー。
     label: t('contact_invite.page_title'),
     description: t('settings.hub.contactInviteTokens.description'),

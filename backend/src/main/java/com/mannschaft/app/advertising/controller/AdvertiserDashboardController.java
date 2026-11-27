@@ -1,5 +1,6 @@
 package com.mannschaft.app.advertising.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.advertising.InvoiceStatus;
 import com.mannschaft.app.advertising.PricingModel;
 import com.mannschaft.app.advertising.dto.AdvertiserAccountResponse;
@@ -327,6 +328,7 @@ public class AdvertiserDashboardController {
     /**
      * パフォーマンスデータを CSV エクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/campaigns/{campaignId}/export")
     public ResponseEntity<byte[]> exportCampaignPerformance(
             @PathVariable Long campaignId,
@@ -350,6 +352,7 @@ public class AdvertiserDashboardController {
     /**
      * 請求書 PDF をダウンロードする。
      */
+    @SupportAccessDenied
     @GetMapping("/invoices/{invoiceId}/pdf")
     public ResponseEntity<byte[]> downloadInvoicePdf(
             @PathVariable Long invoiceId,

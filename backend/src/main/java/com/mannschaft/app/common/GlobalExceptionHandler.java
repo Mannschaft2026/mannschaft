@@ -2365,6 +2365,8 @@ public class GlobalExceptionHandler {
             Map.entry("MEMBERSHIP_POSITION_ACTIVE_EXISTS", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_POSITION_NOT_FOUND", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_POSITION_CATALOG_NOT_FOUND", HttpStatus.NOT_FOUND),
+            // 戦役 Z-A PR2: 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない。
+            Map.entry("MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN", HttpStatus.FORBIDDEN),
 
             // 認可監査 Wave6 ロットE: 備品管理（EquipmentErrorCode）の残り未登録分。
             // EQUIPMENT_009（SCOPE_MISMATCH）は廃止。他備品の貸出記録は不在と同一の EQUIPMENT_002 で返す（CMP-260821-1027）。
@@ -2648,13 +2650,24 @@ public class GlobalExceptionHandler {
             // CMP-261113-1507: F02.7 マイルストーンロック（専用ハンドラ handleMilestoneLocked と同じ 423）。
             Map.entry("MILESTONE_LOCKED", HttpStatus.LOCKED),
             // CMP-261113-1507: 早期拒否フィルタの ErrorCode 化（フィルタが書くステータスと一致させる）。
-            Map.entry("ADMIN_007", HttpStatus.FORBIDDEN),        // 管理者変身はシステム管理者のみ
             Map.entry("PROXY_INPUT_005", HttpStatus.UNAUTHORIZED),
             Map.entry("PROXY_INPUT_006", HttpStatus.FORBIDDEN),
             Map.entry("PROXY_INPUT_007", HttpStatus.FORBIDDEN),
             Map.entry("PROXY_INPUT_009", HttpStatus.UNAUTHORIZED),
             Map.entry("PROXY_INPUT_010", HttpStatus.FORBIDDEN),
-            Map.entry("PROXY_INPUT_011", HttpStatus.FORBIDDEN)
+            Map.entry("PROXY_INPUT_011", HttpStatus.FORBIDDEN),
+            // F10.9 サポート閲覧（戦役Z-B）。フィルターの応答とも一致させる。
+            Map.entry("SUPPORT_ACCESS_001", HttpStatus.NOT_FOUND),
+            Map.entry("SUPPORT_ACCESS_002", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_003", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_004", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_005", HttpStatus.UNPROCESSABLE_ENTITY),
+            Map.entry("SUPPORT_ACCESS_006", HttpStatus.CONFLICT),
+            Map.entry("SUPPORT_ACCESS_007", HttpStatus.CONFLICT),
+            Map.entry("SUPPORT_ACCESS_010", HttpStatus.FORBIDDEN),
+            Map.entry("SUPPORT_ACCESS_011", HttpStatus.TOO_MANY_REQUESTS),
+            Map.entry("SUPPORT_ACCESS_014", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("SUPPORT_ACCESS_015", HttpStatus.FORBIDDEN)
     );
 
     /**

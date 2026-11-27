@@ -1,5 +1,6 @@
 package com.mannschaft.app.filesharing.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
@@ -70,6 +71,7 @@ public class PublicFileLinkController {
     /**
      * 公開リンクでダウンロード URL を発行する（未認証可・download_allowed && !download_disabled 必須）。
      */
+    @SupportAccessDenied
     @PostMapping("/{token}/download-url")
     @Operation(summary = "公開リンク ダウンロードURL発行（未認証可・DL許可リンクのみ）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "発行成功")

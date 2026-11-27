@@ -3,6 +3,7 @@ package com.mannschaft.app.skill.service;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.skill.SkillStatus;
+import com.mannschaft.app.skill.dto.SkillSearchItemResponse;
 import com.mannschaft.app.skill.entity.MemberSkillEntity;
 import com.mannschaft.app.skill.repository.MemberSkillRepository;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -40,7 +40,7 @@ public class SkillSearchService {
      * @param keyword            資格名キーワード（任意）
      * @return 検索結果（資格情報 + ユーザー表示名）のリスト
      */
-    public ApiResponse<List<Map<String, Object>>> searchMembers(
+    public ApiResponse<List<SkillSearchItemResponse>> searchMembers(
             String scopeType, Long scopeId,
             Long categoryId, SkillStatus status, boolean includeExpired, String keyword) {
 
@@ -74,29 +74,29 @@ public class SkillSearchService {
         Map<Long, String> displayNames = nameResolverService.resolveUserDisplayNames(userIds);
 
         // レスポンス構築
-        List<Map<String, Object>> result = skills.stream()
+        List<SkillSearchItemResponse> result = skills.stream()
                 .map(s -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("memberSkillId", s.getId());
-                    item.put("userId", s.getUserId());
-                    item.put("displayName", displayNames.getOrDefault(s.getUserId(), "不明なユーザー"));
-                    item.put("categoryId", s.getSkillCategoryId());
-                    item.put("skillName", s.getName());
-                    item.put("issuer", s.getIssuer());
-                    item.put("acquiredOn", s.getAcquiredOn());
-                    item.put("expiresAt", s.getExpiresAt());
-                    item.put("status", s.getStatus().name());
-                    item.put("verifiedAt", s.getVerifiedAt());
                     // 証明書の有無（CMP-261012-0313）。判定式は MemberSkillResponse（SkillMapper#toResponse）と同じ。
                     // キーそのものは返さない（F07.5 §6: 他メンバーには has_certificate フラグのみ）。
-                    item.put("hasCertificate",
-                            s.getCertificateS3Key() != null && !s.getCertificateS3Key().isBlank());
+                    boolean hasCertificate =
+                            s.getCertificateS3Key() != null && !s.getCertificateS3Key().isBlank();
                     // 期限切れフラグ（有効期限が今日より前 && status=ACTIVE）
                     boolean isExpiringSoon = s.getExpiresAt() != null
                             && s.getStatus() == SkillStatus.ACTIVE
                             && s.getExpiresAt().isBefore(LocalDate.now().plusDays(30));
-                    item.put("expiringSoon", isExpiringSoon);
-                    return item;
+                    return new SkillSearchItemResponse(
+                            s.getId(),
+                            s.getUserId(),
+                            displayNames.getOrDefault(s.getUserId(), "不明なユーザー"),
+                            s.getSkillCategoryId(),
+                            s.getName(),
+                            s.getIssuer(),
+                            s.getAcquiredOn(),
+                            s.getExpiresAt(),
+                            s.getStatus().name(),
+                            s.getVerifiedAt(),
+                            hasCertificate,
+                            isExpiringSoon);
                 })
                 .toList();
 

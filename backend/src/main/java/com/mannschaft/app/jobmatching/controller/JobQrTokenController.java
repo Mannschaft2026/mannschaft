@@ -14,6 +14,7 @@ import com.mannschaft.app.jobmatching.policy.JobPolicy;
 import com.mannschaft.app.jobmatching.repository.JobContractRepository;
 import com.mannschaft.app.jobmatching.service.JobContractViewAccessGuard;
 import com.mannschaft.app.jobmatching.service.JobQrTokenService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -48,6 +49,7 @@ import java.util.Optional;
  * 揃えている。認可は Service 層（{@link JobQrTokenService}）で実施するが、Controller でも
  * {@link JobPolicy#canIssueQrToken} で二重防御し、早期拒否による攻撃者への情報量を絞る。</p>
  */
+@SupportAccessDenied
 @RestController
 @RequestMapping("/api/v1/contracts/{contractId}/qr-tokens")
 @Tag(name = "QR トークン")

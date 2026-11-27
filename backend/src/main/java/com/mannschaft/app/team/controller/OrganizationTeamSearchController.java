@@ -10,6 +10,7 @@ import com.mannschaft.app.config.OrgScopeId;
 import com.mannschaft.app.organization.OrgErrorCode;
 import com.mannschaft.app.organization.exception.OrganizationNotFoundException;
 import com.mannschaft.app.organization.service.OrganizationService;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.team.dto.TeamPublicSummaryResponse;
 import com.mannschaft.app.team.dto.TeamSearchCriteria;
 import com.mannschaft.app.team.dto.TeamSearchResultResponse;
@@ -140,12 +141,15 @@ public class OrganizationTeamSearchController {
 
         PagedResponse<?> body;
         if (isMember) {
+            // F10.9 サポート閲覧（代理）中は、組織メンバー向けの詳細版に載る非公開チームの署名 URL（画像の取得に使える
+            // 資格情報）をマスクする（カルテの写真と同じ方式。名称などの本文は返す）。
+            boolean maskSignedUrls = SupportAccessContextHolder.isActive();
             List<TeamSearchResultResponse> content = resultPage.getContent().stream()
                     // 画像 URL 根治 Phase 1: icon/banner を署名付き表示 URL へ解決して渡す。
                     .map(team -> TeamSearchResultResponse.from(
                             team,
-                            mediaUrlResolver.resolve(team.getIconUrl()),
-                            mediaUrlResolver.resolve(team.getBannerUrl())))
+                            maskSignedUrls ? null : mediaUrlResolver.resolve(team.getIconUrl()),
+                            maskSignedUrls ? null : mediaUrlResolver.resolve(team.getBannerUrl())))
                     .toList();
             body = PagedResponse.of(content, buildMeta(resultPage, page, size));
         } else {

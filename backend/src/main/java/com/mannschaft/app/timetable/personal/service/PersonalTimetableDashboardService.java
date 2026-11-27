@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -375,7 +374,7 @@ public class PersonalTimetableDashboardService {
 
         // F03.15 Phase 4: linked_timetable_id 経由で当日の臨時変更を引く
         Boolean isChanged = Boolean.FALSE;
-        Object change = null;
+        DashboardTimetableTodayResponse.TimetableTodayChange change = null;
         if (slot.getLinkedTimetableId() != null) {
             // DAY_OFF 優先
             TimetableChangeEntity dayOff = changes.stream()
@@ -426,14 +425,13 @@ public class PersonalTimetableDashboardService {
         );
     }
 
-    private Map<String, Object> buildChangeMap(TimetableChangeEntity change) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("change_type", change.getChangeType().name());
-        m.put("reason", change.getReason());
-        m.put("subject_name", change.getSubjectName());
-        m.put("teacher_name", change.getTeacherName());
-        m.put("room_name", change.getRoomName());
-        return m;
+    private DashboardTimetableTodayResponse.TimetableTodayChange buildChangeMap(TimetableChangeEntity change) {
+        return new DashboardTimetableTodayResponse.TimetableTodayChange(
+                change.getChangeType().name(),
+                change.getReason(),
+                change.getSubjectName(),
+                change.getTeacherName(),
+                change.getRoomName());
     }
 
     private DashboardTimetableTodayResponse.TimetableTodayItem buildTeamItem(

@@ -1,5 +1,6 @@
 package com.mannschaft.app.disclosure.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.PagedResponse;
@@ -60,6 +61,7 @@ public class DisclosureExportController {
     /**
      * ドラフトを出力する。{@code format} は {@code pdf} / {@code xlsx} を受け付ける（大文字小文字無視）。
      */
+    @SupportAccessDenied
     @PostMapping("/disclosure-drafts/{draftId}/export")
     public ResponseEntity<ApiResponse<DisclosureExportResponse>> exportDraft(
             @PathVariable("organizationId") Long organizationId,
@@ -75,6 +77,7 @@ public class DisclosureExportController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
+    @SupportAccessDenied
     @GetMapping("/disclosure-exports")
     public PagedResponse<DisclosureExportResponse> listExports(
             @PathVariable("organizationId") Long organizationId,
@@ -92,6 +95,7 @@ public class DisclosureExportController {
                         result.getTotalPages()));
     }
 
+    @SupportAccessDenied
     @GetMapping("/disclosure-exports/{exportId}")
     public ApiResponse<DisclosureExportResponse> getExport(
             @PathVariable("organizationId") Long organizationId,
@@ -104,6 +108,7 @@ public class DisclosureExportController {
      * presigned ダウンロード URL を発行する。改ざん検出により SHA-256 不一致時は
      * {@link DisclosureErrorCode#DISCLOSURE_010} を返す（GlobalExceptionHandler 経由で 503）。
      */
+    @SupportAccessDenied
     @GetMapping("/disclosure-exports/{exportId}/download")
     public ApiResponse<DisclosureExportResponse> downloadExport(
             @PathVariable("organizationId") Long organizationId,
@@ -121,6 +126,7 @@ public class DisclosureExportController {
      * <p><strong>権限制御</strong>: ADMIN のみ許可する（設計書 §5.7、認可根治戦役 Wave3-B4 で
      * {@code AccessControlService.checkAdminOrAbove} を実装済み）。</p>
      */
+    @SupportAccessDenied
     @PatchMapping("/disclosure-exports/{exportId}/extend-expiry")
     public ApiResponse<DisclosureExportResponse> extendExpiry(
             @PathVariable("organizationId") Long organizationId,
@@ -139,6 +145,7 @@ public class DisclosureExportController {
      * F05.2 {@code CirculationDocumentEntity} を作成し、{@code disclosure_exports.circulation_document_id}
      * へ保存する。</p>
      */
+    @SupportAccessDenied
     @PostMapping("/disclosure-exports/{exportId}/circulation")
     public ResponseEntity<ApiResponse<DisclosureCirculationStartResponse>> startCirculation(
             @PathVariable("organizationId") Long organizationId,

@@ -40,6 +40,7 @@ public class MembershipInviteTokenIssuer {
     private final AuditLogService auditLogService;
     private final SecretTokenVault vault;
     private final DomainEventPublisher eventPublisher;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 宛先付き承諾型トークンを発行する（{@code target_user_id} 非 NULL・{@code max_uses = 1}）。
@@ -49,6 +50,8 @@ public class MembershipInviteTokenIssuer {
      */
     @Transactional
     public MembershipInviteIssuedToken issue(MembershipInviteTokenCommand command) {
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は作らない（戦役 Z-A PR2。発行側の検査をすり抜けても止める）。
+        platformAccountAffiliationPolicy.assertAffiliatable(command.targetUserId());
         var builder = InviteTokenEntity.builder()
                 .tokenHash(vault.issueBase64Url().hash())
                 .roleId(command.roleId())
@@ -78,6 +81,8 @@ public class MembershipInviteTokenIssuer {
      */
     @Transactional
     public StagedInviteToken stageForReissue(MembershipInviteTokenCommand command) {
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は作らない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(command.targetUserId());
         String tokenHash = vault.issueBase64Url().hash();
         var builder = InviteTokenEntity.builder()
                 .tokenHash(tokenHash)

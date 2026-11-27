@@ -1,5 +1,6 @@
 package com.mannschaft.app.knowledgebase.service;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.knowledgebase.KnowledgeBaseErrorCode;
@@ -112,12 +113,15 @@ public class KbPageService {
 
         checkAccessLevel(page, userRole);
 
-        // Valkeyで5分間重複除外
-        String viewKey = VIEW_KEY_PREFIX + pageId + ":" + userId;
-        Boolean isNew = stringRedisTemplate.opsForValue().setIfAbsent(viewKey, "1", VIEW_DEDUP_TTL);
-        if (Boolean.TRUE.equals(isNew)) {
-            page.incrementViewCount();
-            pageRepository.save(page);
+        // F10.9 サポート閲覧中は、閲覧数の加算（DB・Valkey の重複除外キーとも）を行わない（本人の統計を汚さない）。
+        if (!SupportAccessContextHolder.isActive()) {
+            // Valkeyで5分間重複除外
+            String viewKey = VIEW_KEY_PREFIX + pageId + ":" + userId;
+            Boolean isNew = stringRedisTemplate.opsForValue().setIfAbsent(viewKey, "1", VIEW_DEDUP_TTL);
+            if (Boolean.TRUE.equals(isNew)) {
+                page.incrementViewCount();
+                pageRepository.save(page);
+            }
         }
 
         return ApiResponse.of(page);

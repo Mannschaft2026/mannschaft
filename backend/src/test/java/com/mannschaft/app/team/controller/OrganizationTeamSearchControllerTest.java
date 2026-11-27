@@ -216,6 +216,41 @@ class OrganizationTeamSearchControllerTest {
     }
 
     @Test
+    @DisplayName("F10.9 GET /search 200 組織メンバーの代理（サポート閲覧）中: 詳細版の署名 URL（iconUrl・bannerUrl）はマスクし、本文は返す")
+    void search_member_duringSupportAccess_masksSignedUrls() throws Exception {
+        setAuthenticated(MEMBER_USER_ID);
+        TeamEntity team = TeamEntity.builder()
+                .name("非公開店舗C")
+                .nameKana("ひこうかいてんぽしー")
+                .template("clinic")
+                .visibility(TeamEntity.Visibility.MEMBERS_AND_ABOVE)
+                .supporterEnabled(false)
+                .iconUrl("https://cdn/icon3.png")
+                .bannerUrl("https://cdn/banner3.png")
+                .memberCount(3L)
+                .build();
+        given(teamSearchService.search(eq(ORG_ID), any(TeamSearchCriteria.class), eq(MEMBER_USER_ID), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(team)));
+        given(accessControlService.isMember(eq(MEMBER_USER_ID), eq(ORG_ID), eq("ORGANIZATION")))
+                .willReturn(true);
+
+        com.mannschaft.app.supportaccess.context.SupportAccessContextHolder.set(
+                new com.mannschaft.app.supportaccess.context.SupportAccessContext(java.util.UUID.randomUUID(),
+                        9001L, MEMBER_USER_ID, java.time.Instant.now().plusSeconds(600)));
+        try {
+            mockMvc.perform(get("/api/v1/organizations/{orgPublicId}/teams/search", ORG_SLUG))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[0].name").value("非公開店舗C"))
+                    .andExpect(jsonPath("$.data[0].visibility").value("MEMBERS_AND_ABOVE"))
+                    .andExpect(jsonPath("$.data[0].iconUrl").value(org.hamcrest.Matchers.nullValue()))
+                    .andExpect(jsonPath("$.data[0].bannerUrl").value(org.hamcrest.Matchers.nullValue()));
+        } finally {
+            com.mannschaft.app.supportaccess.context.SupportAccessContextHolder.clear();
+        }
+        verify(mediaUrlResolver, never()).resolve(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
     @DisplayName("GET /search 200 空結果: data=[] / meta.total=0")
     void search_emptyResult() throws Exception {
         given(teamSearchService.search(eq(ORG_ID), any(TeamSearchCriteria.class), any(), any(Pageable.class)))

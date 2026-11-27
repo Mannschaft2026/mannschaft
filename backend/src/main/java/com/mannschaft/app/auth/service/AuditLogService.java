@@ -6,6 +6,8 @@ import com.mannschaft.app.auth.entity.AuditLogEntity;
 import com.mannschaft.app.auth.repository.AuditLogRepository;
 import com.mannschaft.app.common.CursorPagedResponse;
 import com.mannschaft.app.common.PagedResponse;
+import com.mannschaft.app.supportaccess.context.SupportAccessContext;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -28,6 +30,7 @@ public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
     private final AuditLogQueryService auditLogQueryService;
+    private final AuditLogStrictWriter auditLogStrictWriter;
 
     // ─────────────────────────────────────────────
     // 書き込み（非同期・fire-and-forget）
@@ -75,21 +78,74 @@ public class AuditLogService {
                            String ipAddress, String userAgent, String sessionHash,
                            String metadata) {
         try {
-            AuditLogEntity entity = AuditLogEntity.builder()
-                    .eventType(eventType)
-                    .userId(userId)
-                    .targetUserId(targetUserId)
-                    .teamId(teamId)
-                    .organizationId(organizationId)
-                    .ipAddress(ipAddress)
-                    .userAgent(userAgent)
-                    .sessionHash(sessionHash)
-                    .metadata(metadata)
-                    .build();
-            auditLogRepository.save(entity);
+            AuditLogEntity entity = buildEntity(eventType, userId, targetUserId, teamId, organizationId,
+                    ipAddress, userAgent, sessionHash, metadata);
+            if (SupportAccessContextHolder.isActive()) {
+                // F10.9 代理閲覧中は呼び出し元の業務 TX の接続が READ ONLY のため、その TX に参加すると INSERT が失敗して
+                // 監査が消える。独立した書込可能な TX（REQUIRES_NEW・別 Bean）で書く。
+                auditLogStrictWriter.write(entity);
+            } else {
+                auditLogRepository.save(entity);
+            }
         } catch (Exception e) {
             log.error("監査ログ書き込み失敗: eventType={}, userId={}", eventType, userId, e);
         }
+    }
+
+    /**
+     * 監査ログを<b>呼び出し元から独立した TX</b>（REQUIRES_NEW・書込可能な接続）で同期に書き、<b>失敗は例外で返す</b>。
+     *
+     * <p>{@link #recordSync} は失敗を握りつぶす（メイン処理を止めない）契約のため、監査の欠落を許さない呼び出し元
+     * （F10.9 サポート閲覧の監査 outbox の反映）は本メソッドを使い、失敗時は自分で再試行する。</p>
+     *
+     * @throws RuntimeException 書込に失敗した場合（呼び出し元は再試行の対象として扱う）
+     */
+    public void recordStrict(String eventType, Long userId, Long targetUserId, String metadata) {
+        auditLogStrictWriter.write(buildEntity(eventType, userId, targetUserId, null, null,
+                null, null, null, metadata));
+    }
+
+    private static AuditLogEntity buildEntity(String eventType, Long userId, Long targetUserId,
+                                              Long teamId, Long organizationId,
+                                              String ipAddress, String userAgent, String sessionHash,
+                                              String metadata) {
+        // F10.9 サポート閲覧中は、本人の視点の操作でも記録の actor を運営者にし、本人は targetUserId へ移す。
+        // metadata に grantId を残す（誰が・どの許可で・誰の視点で行ったかを監査から辿れるようにする）。
+        SupportAccessContext supportAccess = SupportAccessContextHolder.get().orElse(null);
+        if (supportAccess != null && !supportAccess.operatorUserId().equals(userId)) {
+            Long originalUserId = userId;
+            userId = supportAccess.operatorUserId();
+            if (targetUserId == null) {
+                targetUserId = originalUserId != null ? originalUserId : supportAccess.targetUserId();
+            }
+            metadata = withSupportAccessGrantId(metadata, supportAccess);
+        }
+        return AuditLogEntity.builder()
+                .eventType(eventType)
+                .userId(userId)
+                .targetUserId(targetUserId)
+                .teamId(teamId)
+                .organizationId(organizationId)
+                .ipAddress(ipAddress)
+                .userAgent(userAgent)
+                .sessionHash(sessionHash)
+                .metadata(metadata)
+                .build();
+    }
+
+    /** metadata（JSON オブジェクト文字列・null 可）へ supportAccessGrantId を足す。JSON でない文字列は original に包む。 */
+    private static String withSupportAccessGrantId(String metadata, SupportAccessContext context) {
+        String grantField = "\"supportAccessGrantId\":\"" + context.grantId() + "\"";
+        if (metadata == null || metadata.isBlank()) {
+            return "{" + grantField + "}";
+        }
+        String trimmed = metadata.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+            return inner.isEmpty() ? "{" + grantField + "}" : "{" + grantField + "," + inner + "}";
+        }
+        String escaped = trimmed.replace("\\", "\\\\").replace("\"", "\\\"");
+        return "{" + grantField + ",\"original\":\"" + escaped + "\"}";
     }
 
     // ─────────────────────────────────────────────

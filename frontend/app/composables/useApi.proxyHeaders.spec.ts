@@ -12,7 +12,7 @@ const captured = vi.hoisted(() => ({
     originalStorageLocation: '',
   },
   guardian: { isActingAs: false, activeChild: { childUserId: 17 } },
-  impersonation: { isImpersonating: false, targetUserId: 19 },
+  support: { isActive: false, grantId: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b', expiresAt: null as string | null },
   runtimeConfig: () => ({ public: {} }),
   nuxtApp: () => ({
     $i18n: { t: (key: string) => key },
@@ -35,8 +35,8 @@ vi.mock('~/stores/useProxyDeskStore', () => ({ useProxyDeskStore: () => captured
 vi.mock('~/stores/useGuardianshipSwitchStore', () => ({
   useGuardianshipSwitchStore: () => captured.guardian,
 }))
-vi.mock('~/stores/useAdminImpersonationStore', () => ({
-  useAdminImpersonationStore: () => captured.impersonation,
+vi.mock('~/stores/useSupportAccessStore', () => ({
+  useSupportAccessStore: () => captured.support,
 }))
 vi.mock('~/composables/useErrorReport', () => ({ useErrorReport: () => ({}) }))
 vi.mock('#app/nuxt', () => ({
@@ -46,19 +46,19 @@ vi.mock('#app/nuxt', () => ({
 const { useApi } = await import('./useApi')
 
 describe('Cookie認証と代理入力ヘッダーの実生成境界', () => {
-  const { auth, desk, guardian, impersonation } = captured
+  const { auth, desk, guardian, support } = captured
 
   beforeEach(() => {
     auth.accessToken = null
     auth.isAuthenticated = true
     Object.assign(desk, { isPinned: false, originalStorageLocation: '' })
     guardian.isActingAs = false
-    impersonation.isImpersonating = false
+    support.isActive = false
     vi.stubGlobal('useRuntimeConfig', captured.runtimeConfig)
     vi.stubGlobal('useAuthStore', () => auth)
     vi.stubGlobal('useProxyDeskStore', () => desk)
     vi.stubGlobal('useGuardianshipSwitchStore', () => guardian)
-    vi.stubGlobal('useAdminImpersonationStore', () => impersonation)
+    vi.stubGlobal('useSupportAccessStore', () => support)
     vi.stubGlobal('useNuxtApp', captured.nuxtApp)
     vi.stubGlobal('useErrorReport', () => ({}))
     captured.onRequest = undefined
@@ -107,7 +107,7 @@ describe('Cookie認証と代理入力ヘッダーの実生成境界', () => {
       'X-Proxy-Input-Source',
       'X-Proxy-Original-Storage',
       'X-Proxy-Original-Storage-Encoding',
-      'X-Admin-Impersonate-User-Id',
+      'X-Support-Access-Grant-Id',
     ]) {
       expect(headers.has(name)).toBe(false)
     }
@@ -121,45 +121,46 @@ describe('Cookie認証と代理入力ヘッダーの実生成境界', () => {
       'X-Proxy-Consent-Id',
       'X-Proxy-Input-Source',
       'X-Proxy-Original-Storage',
-      'X-Admin-Impersonate-User-Id',
+      'X-Support-Access-Grant-Id',
     ]) {
       expect(headers.has(name)).toBe(false)
     }
   })
 
-  it('紙ピン留めは既存の後見切替・管理者変身より優先する', () => {
+  it('紙ピン留めは後見切替・サポート閲覧より優先する', () => {
     auth.accessToken = 'unit-test-token'
     desk.isPinned = true
     desk.originalStorageLocation = 'paper.pdf'
     guardian.isActingAs = true
-    impersonation.isImpersonating = true
+    support.isActive = true
     const headers = generate()
     expect(headers.get('Authorization')).toBe('Bearer unit-test-token')
     expect(headers.get('X-Proxy-For-User-Id')).toBe('90245')
-    expect(headers.has('X-Admin-Impersonate-User-Id')).toBe(false)
+    expect(headers.has('X-Support-Access-Grant-Id')).toBe(false)
   })
 
-  it('後見切替は管理者変身より優先し同意・紙入力ヘッダーを付けない', () => {
+  it('後見切替はサポート閲覧より優先し同意・紙入力ヘッダーを付けない', () => {
     auth.accessToken = 'unit-test-token'
     guardian.isActingAs = true
-    impersonation.isImpersonating = true
+    support.isActive = true
     const headers = generate()
     expect(headers.get('X-Proxy-For-User-Id')).toBe('17')
     for (const name of [
       'X-Proxy-Consent-Id',
       'X-Proxy-Input-Source',
       'X-Proxy-Original-Storage',
-      'X-Admin-Impersonate-User-Id',
+      'X-Support-Access-Grant-Id',
     ]) {
       expect(headers.has(name)).toBe(false)
     }
   })
 
-  it('紙・後見のない管理者変身は既存変身ヘッダーだけを付ける', () => {
+  it('紙・後見のないサポート閲覧は grant ID だけを付け、旧変身ヘッダーは付けない', () => {
     auth.accessToken = 'unit-test-token'
-    impersonation.isImpersonating = true
+    support.isActive = true
     const headers = generate()
-    expect(headers.get('X-Admin-Impersonate-User-Id')).toBe('19')
+    expect(headers.get('X-Support-Access-Grant-Id')).toBe(support.grantId)
+    expect(headers.has('X-Admin-Impersonate-User-Id')).toBe(false)
     expect(headers.has('X-Proxy-For-User-Id')).toBe(false)
   })
 
@@ -190,8 +191,10 @@ describe('Cookie認証と代理入力ヘッダーの実生成境界', () => {
     expect(generate().has('X-Proxy-For-User-Id')).toBe(false)
   })
 
-  it('管理者変身だけのCookie認証へ今回の紙代理対応を拡張しない', () => {
-    impersonation.isImpersonating = true
-    expect(generate().has('X-Admin-Impersonate-User-Id')).toBe(false)
+  it('サポート閲覧のCookie認証でも grant ID を付ける（旧変身ヘッダーは付けない）', () => {
+    support.isActive = true
+    const headers = generate()
+    expect(headers.get('X-Support-Access-Grant-Id')).toBe(support.grantId)
+    expect(headers.has('X-Admin-Impersonate-User-Id')).toBe(false)
   })
 })

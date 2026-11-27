@@ -5,6 +5,7 @@ import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.featuregate.AlwaysReachable;
 import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.common.security.AuthorizedInService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.webhook.service.IncomingWebhookService;
 import com.mannschaft.app.webhook.service.IncomingWebhookService.CreateIncomingWebhookRequest;
 import com.mannschaft.app.webhook.service.IncomingWebhookService.IncomingWebhookTokenResponse;
@@ -59,6 +60,7 @@ public class IncomingWebhookController {
      * @param scopeId   スコープID
      */
     @GetMapping("/api/webhooks/incoming")
+    @SupportAccessDenied
     public ApiResponse<List<IncomingWebhookTokenResponse>> listTokens(
             @RequestParam String scopeType,
             @RequestParam Long scopeId) {

@@ -12,6 +12,7 @@ import com.mannschaft.app.equipment.EquipmentScopeType;
 import com.mannschaft.app.equipment.EquipmentStatus;
 import com.mannschaft.app.equipment.dto.CreateEquipmentItemRequest;
 import com.mannschaft.app.equipment.dto.EquipmentItemResponse;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.equipment.dto.PresignedUrlRequest;
 import com.mannschaft.app.equipment.dto.PresignedUrlResponse;
 import com.mannschaft.app.equipment.dto.QrCodeResponse;
@@ -68,7 +69,7 @@ public class EquipmentItemService {
                                                    String nameLike, Pageable pageable) {
         accessControlService.checkMembership(actorUserId, teamId, "TEAM");
         Page<EquipmentItemEntity> page = resolveTeamPage(teamId, category, status, nameLike, pageable);
-        return page.map(equipmentMapper::toItemResponse);
+        return page.map(this::toViewerResponse);
     }
 
     /**
@@ -78,7 +79,7 @@ public class EquipmentItemService {
                                                            String nameLike, Pageable pageable) {
         accessControlService.checkMembership(actorUserId, orgId, "ORGANIZATION");
         Page<EquipmentItemEntity> page = resolveOrgPage(orgId, category, status, nameLike, pageable);
-        return page.map(equipmentMapper::toItemResponse);
+        return page.map(this::toViewerResponse);
     }
 
     // ===================== 詳細取得 =====================
@@ -92,7 +93,7 @@ public class EquipmentItemService {
             throw new BusinessException(EquipmentErrorCode.ITEM_NOT_FOUND);
         }
         EquipmentItemEntity entity = findTeamItemOrThrow(teamId, id);
-        return equipmentMapper.toItemResponse(entity);
+        return toViewerResponse(entity);
     }
 
     /**
@@ -101,7 +102,17 @@ public class EquipmentItemService {
     public EquipmentItemResponse getByOrganization(Long orgId, Long id, Long actorUserId) {
         EquipmentItemEntity entity = findOrgItemOrThrow(orgId, id);
         accessControlService.checkMembership(actorUserId, entity.getOrganizationId(), "ORGANIZATION");
-        return equipmentMapper.toItemResponse(entity);
+        return toViewerResponse(entity);
+    }
+
+    /**
+     * 閲覧用の応答。F10.9 サポート閲覧（代理）中は QR コード識別子（読み取ると貸出・返却の画面に入れる値で、
+     * 備品に貼る QR の中身）だけを外し、他は返す（第2回検分: 資格情報の番人が qrCode を検出）。
+     */
+    private EquipmentItemResponse toViewerResponse(EquipmentItemEntity entity) {
+        return SupportAccessContextHolder.isActive()
+                ? equipmentMapper.toItemResponseWithoutQrCode(entity)
+                : equipmentMapper.toItemResponse(entity);
     }
 
     // ===================== 作成 =====================

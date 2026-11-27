@@ -1,5 +1,7 @@
 package com.mannschaft.app.schedule.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.security.SelfScopedEndpoint;
 import com.mannschaft.app.schedule.dto.AttendanceRequest;
@@ -58,10 +60,10 @@ public class ScheduleCommonController {
             @PathVariable Long scheduleId,
             @Valid @RequestBody AttendanceRequest request) {
         Long actor = SecurityUtils.getCurrentUserId();
-        request.captureRanchResponseOrigin(servletRequest.getAttribute("originalAdminId") == null
+        request.captureRanchResponseOrigin(!SupportAccessContextHolder.isActive()
                 && !proxyInputContext.isProxy());
         AttendanceResponse response = ranchNative.respond(scheduleId, actor, request,
-                servletRequest.getAttribute("originalAdminId") != null, proxyInputContext.isProxy())
+                SupportAccessContextHolder.isActive(), proxyInputContext.isProxy())
                 .orElseGet(() -> attendanceService.respondAttendance(scheduleId, actor, request));
         return ResponseEntity.ok(ApiResponse.of(response));
     }
@@ -131,6 +133,7 @@ public class ScheduleCommonController {
     /**
      * チームの出席率統計をCSVエクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/teams/{teamId}/attendance-stats/export")
     @Operation(summary = "チーム統計CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")
@@ -166,6 +169,7 @@ public class ScheduleCommonController {
     /**
      * 組織の出席率統計をCSVエクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/organizations/{orgId}/attendance-stats/export")
     @Operation(summary = "組織統計CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

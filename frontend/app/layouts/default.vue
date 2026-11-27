@@ -154,8 +154,8 @@ async function handleEndSwitch() {
         v-if="mountedDialogs.feedback"
         v-model:visible="feedbackModalVisible"
       />
-      <!-- F10.1: 管理者変身中バナー -->
-      <AdminImpersonationBanner />
+      <!-- F10.9: サポート閲覧中バナー（本人承認制・閲覧のみ） -->
+      <SupportAccessBanner />
       <!-- CMP-261107-1833: 招待付き新規登録で保留された招待の参加確認 -->
       <PendingInviteDialog />
     </ClientOnly>

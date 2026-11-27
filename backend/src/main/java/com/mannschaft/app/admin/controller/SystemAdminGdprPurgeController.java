@@ -1,5 +1,6 @@
 package com.mannschaft.app.admin.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.featuregate.AlwaysReachable;
 import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
@@ -153,6 +154,7 @@ public class SystemAdminGdprPurgeController {
      */
     @AlwaysReachable(category = AlwaysReachableCategory.GATE_CONTROL_PLANE,
             reason = "GDPR消去処理の監査資料をGate状態にかかわらず取得するため")
+    @SupportAccessDenied
     @GetMapping("/export.csv")
     @Operation(summary = "GDPR パージ状況 CSV エクスポート", description = "全件を CSV 形式でダウンロード。UTF-8 BOM 付き。")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "CSV エクスポート成功")

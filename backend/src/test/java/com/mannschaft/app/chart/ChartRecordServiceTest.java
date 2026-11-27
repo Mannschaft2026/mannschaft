@@ -18,6 +18,8 @@ import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.common.storage.StorageService;
+import com.mannschaft.app.supportaccess.context.SupportAccessContext;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -74,6 +76,50 @@ class ChartRecordServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("CHART_001"));
+        }
+
+        private ChartRecordEntity stubChartWithPhoto() {
+            ChartRecordEntity entity = ChartRecordEntity.builder()
+                    .teamId(TEAM_ID).customerUserId(USER_ID).visitDate(LocalDate.now()).build();
+            given(recordRepository.findByIdAndTeamId(CHART_ID, TEAM_ID)).willReturn(Optional.of(entity));
+            given(sectionSettingRepository.findByTeamId(TEAM_ID)).willReturn(List.of());
+            given(customValueRepository.findByChartRecordId(any())).willReturn(List.of());
+            given(photoRepository.findByChartRecordIdOrderBySortOrder(any())).willReturn(List.of(
+                    ChartPhotoEntity.builder().chartRecordId(CHART_ID).photoType("BEFORE")
+                            .s3Key("photos/test.jpg").originalFilename("test.jpg")
+                            .fileSizeBytes(1024).contentType("image/jpeg").build()));
+            given(formulaRepository.findByChartRecordIdOrderBySortOrder(any())).willReturn(List.of());
+            given(bodyMarkRepository.findByChartRecordId(any())).willReturn(List.of());
+            return entity;
+        }
+
+        @Test
+        @DisplayName("F10.9 代理中_署名URLなし_本文あり: 写真の署名URLは作らず null で渡し、本文（カルテ）は返す")
+        void 代理中_署名URLなし_本文あり() {
+            stubChartWithPhoto();
+            ChartRecordResponse body = new ChartRecordResponse(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+            given(chartMapper.toChartRecordResponse(any(), any(), any(), any(), any(), any(), any(), any())).willReturn(body);
+            SupportAccessContextHolder.set(new SupportAccessContext(
+                    java.util.UUID.randomUUID(), 1L, USER_ID, java.time.Instant.now().plusSeconds(600)));
+            try {
+                ChartRecordResponse result = service.getChart(TEAM_ID, CHART_ID, USER_ID);
+                assertThat(result).isSameAs(body);
+            } finally {
+                SupportAccessContextHolder.clear();
+            }
+            verify(chartMapper).toPhotoResponse(any(), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull());
+            verify(photoUrlProvider, org.mockito.Mockito.never()).generateSignedUrl(any());
+        }
+
+        @Test
+        @DisplayName("代理でないときは従来どおり署名URLを発行する")
+        void 通常_署名URLあり() {
+            stubChartWithPhoto();
+            given(photoUrlProvider.generateSignedUrl("photos/test.jpg")).willReturn("https://signed.example/p");
+            given(chartMapper.toChartRecordResponse(any(), any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(new ChartRecordResponse(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+            service.getChart(TEAM_ID, CHART_ID, USER_ID);
+            verify(chartMapper).toPhotoResponse(any(), org.mockito.ArgumentMatchers.eq("https://signed.example/p"), any());
         }
     }
 

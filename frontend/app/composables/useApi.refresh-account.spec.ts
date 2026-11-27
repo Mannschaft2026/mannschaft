@@ -17,7 +17,7 @@ mockNuxtImport('useChatTabsStore', () => () => ({ clearAll: external.chatClear }
 mockNuxtImport('useErrorReport', () => () => ({ capture: external.report }))
 mockNuxtImport('useProxyDeskStore', () => () => ({ isPinned: false }))
 mockNuxtImport('useGuardianshipSwitchStore', () => () => ({ isActingAs: false }))
-mockNuxtImport('useAdminImpersonationStore', () => () => ({ isImpersonating: false }))
+mockNuxtImport('useSupportAccessStore', () => () => ({ isActive: false }))
 const { useApi, performTokenRefresh, armProactiveRefresh, disarmProactiveRefresh } = await import('~/composables/useApi')
 const user = (id: number) => ({ id, email: 'synthetic@example.invalid', fullName: 'Synthetic', profileImageUrl: null })
 function deferred<T>() {

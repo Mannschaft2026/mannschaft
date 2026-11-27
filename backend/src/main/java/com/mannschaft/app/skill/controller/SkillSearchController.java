@@ -1,8 +1,10 @@
 package com.mannschaft.app.skill.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.skill.SkillStatus;
+import com.mannschaft.app.skill.dto.SkillSearchItemResponse;
 import com.mannschaft.app.skill.service.SkillCsvService;
 import com.mannschaft.app.skill.service.SkillSearchService;
 import com.mannschaft.app.skill.service.SkillViewerAccessGuard;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * スキル検索・エクスポートコントローラー。
@@ -36,7 +37,7 @@ public class SkillSearchController {
      * 認可: ADMIN・SYSTEM_ADMIN・MANAGE_MEMBER を持つ DEPUTY_ADMIN（F07.5 §2。CMP-261012-0313）
      */
     @GetMapping("/search")
-    public ApiResponse<List<Map<String, Object>>> searchSkills(
+    public ApiResponse<List<SkillSearchItemResponse>> searchSkills(
             @PathVariable Long teamId,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) SkillStatus status,
@@ -52,6 +53,7 @@ public class SkillSearchController {
      * スコープ内の全資格データをCSVとして非同期エクスポートする。
      * 認可: ADMIN・SYSTEM_ADMIN・MANAGE_MEMBER を持つ DEPUTY_ADMIN（F07.5 §2。CMP-261012-0313）
      */
+    @SupportAccessDenied
     @GetMapping("/export")
     public ResponseEntity<ApiResponse<Void>> exportCsv(@PathVariable Long teamId) {
         Long userId = SecurityUtils.getCurrentUserId();

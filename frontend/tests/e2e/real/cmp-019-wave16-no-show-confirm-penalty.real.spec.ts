@@ -20,8 +20,8 @@ const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:8080'
 const API = `${API_BASE}/api/v1`
 const APP_BASE = process.env.BASE_URL ?? 'http://localhost:3000'
 const SYSTEM_ADMIN = {
-  email: process.env.TEST_ADMIN_EMAIL ?? 'e2e-admin@test.mannschaft.local',
-  password: process.env.TEST_ADMIN_PASSWORD ?? 'TestPass2026!',
+  email: process.env.TEST_OPERATOR_EMAIL ?? 'e2e-operator@test.mannschaft.local',
+  password: process.env.TEST_OPERATOR_PASSWORD ?? 'TestPass2026!',
 }
 const TEAM_OWNER = {
   email: process.env.TEST_TEAM_ADMIN_EMAIL ?? 'e2e-dummy-1@test.mannschaft.local',

@@ -1,5 +1,6 @@
 package com.mannschaft.app.repairplan.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.repairplan.dto.CsvImportConfirmRequest;
@@ -36,6 +37,7 @@ public class RepairPlanItemCsvController {
      * CSV ファイルをアップロードしてプレビューを返す（dry_run）。
      * Valkey に CSV 原文を 30 分保存し、{@code import_token} を発行する。
      */
+    @SupportAccessDenied
     @PostMapping(value = "/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CsvImportPreviewResponse> preview(
             @PathVariable String scopeType,
@@ -52,6 +54,7 @@ public class RepairPlanItemCsvController {
     /**
      * プレビュー時に発行された {@code import_token} を使ってインポートを確定する。
      */
+    @SupportAccessDenied
     @PostMapping("/import-csv/confirm")
     public ApiResponse<CsvImportConfirmResponse> confirm(
             @PathVariable String scopeType,

@@ -1,5 +1,7 @@
 package com.mannschaft.app.schedule.service;
 
+import com.mannschaft.app.supportaccess.SupportAccessErrorCode;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -85,6 +87,10 @@ public class IcalService {
      */
     @Transactional
     public IcalTokenResponse getOrCreateToken(Long userId) {
+        // F10.9 購読 URL のトークンは資格情報。サポート閲覧中は読ませず、未発行でも発行しない。
+        if (SupportAccessContextHolder.isActive()) {
+            throw new BusinessException(SupportAccessErrorCode.OPERATION_FORBIDDEN);
+        }
         var tokenOpt = icalTokenRepository.findByUserId(userId);
 
         if (tokenOpt.isPresent()) {

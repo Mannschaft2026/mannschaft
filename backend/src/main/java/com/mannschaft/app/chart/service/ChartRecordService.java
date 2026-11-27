@@ -3,6 +3,7 @@ package com.mannschaft.app.chart.service;
 import com.mannschaft.app.chart.ChartErrorCode;
 import com.mannschaft.app.chart.ChartMapper;
 import com.mannschaft.app.chart.ChartPhotoUrlProvider;
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.chart.dto.ChartBodyMarkResponse;
 import com.mannschaft.app.chart.dto.ChartFormulaResponse;
 import com.mannschaft.app.chart.dto.ChartPhotoResponse;
@@ -425,10 +426,14 @@ public class ChartRecordService {
 
         // 写真
         List<ChartPhotoEntity> photos = photoRepository.findByChartRecordIdOrderBySortOrder(entity.getId());
+        // F10.9 サポート閲覧（代理）中は署名 URL（写真の取得に使える資格情報）だけをマスクし、本文は返す。
+        boolean maskPhotoUrl = SupportAccessContextHolder.isActive();
         List<ChartPhotoResponse> photoResponses = photos.stream()
-                .map(p -> chartMapper.toPhotoResponse(p,
-                        photoUrlProvider.generateSignedUrl(p.getS3Key()),
-                        photoUrlProvider.getExpiresAt()))
+                .map(p -> maskPhotoUrl
+                        ? chartMapper.toPhotoResponse(p, null, null)
+                        : chartMapper.toPhotoResponse(p,
+                                photoUrlProvider.generateSignedUrl(p.getS3Key()),
+                                photoUrlProvider.getExpiresAt()))
                 .collect(Collectors.toList());
 
         // 薬剤レシピ

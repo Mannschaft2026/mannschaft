@@ -1,5 +1,6 @@
 package com.mannschaft.app.search.service;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import com.mannschaft.app.search.SearchContributor;
 import com.mannschaft.app.search.SearchCriteria;
@@ -105,7 +106,10 @@ public class GlobalSearchQueryService {
     public GlobalSearchResponse search(Long userId, GlobalSearchRequest request) {
         long started = System.nanoTime();
         SearchCriteria criteria = request.criteria();
-        searchHistoryService.recordHistory(userId, criteria.query());
+        // F10.9 サポート閲覧中は、本人の検索履歴に残さない（閲覧のみ。本人の履歴・おすすめを汚さない）。
+        if (!SupportAccessContextHolder.isActive()) {
+            searchHistoryService.recordHistory(userId, criteria.query());
+        }
 
         SearchViewer viewer = viewerResolver.resolve(userId);
         boolean scopeVisible = criteria.scopeType() == null

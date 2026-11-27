@@ -49,6 +49,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * F00.5 メンバーシップ基盤再設計の中核サービス。
@@ -97,6 +98,10 @@ public class MembershipService {
         Objects.requireNonNull(req.getScopeType(), "scopeType must not be null");
         Objects.requireNonNull(req.getScopeId(), "scopeId must not be null");
         lockUser(req.getUserId());
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。全入会経路の合流点で拒否する。
+        // 判定は呼び出し側が取引の外（role ドメインでは自ドメインの取引）で済ませる（membership の取引を
+        // role へ越境させない。D-3T）。判定漏れの経路は IllegalStateException で止まる。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(req.getUserId());
         validateScope(req.getScopeType(), req.getScopeId());
 
         // 冪等性チェック（§13.7）

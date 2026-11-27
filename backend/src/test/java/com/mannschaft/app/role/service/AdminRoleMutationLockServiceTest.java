@@ -24,6 +24,7 @@ class AdminRoleMutationLockServiceTest {
     @Mock private UserRowLockService userRowLockService;
     @Mock private RoleRepository roleRepository;
     @Mock private UserRoleRepository userRoleRepository;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private AdminRoleMutationLockService service;
 
     @Test

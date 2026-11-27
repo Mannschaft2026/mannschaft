@@ -1,5 +1,7 @@
 package com.mannschaft.app.village.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.ErrorCode;
@@ -130,7 +132,7 @@ class VillageInvitationServiceTest {
     @BeforeEach
     void wireRealAdmissionSlots() {
         VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null));
-        service = new VillageInvitationService(invitationRepository, membershipRepository, slots, entityManager, villageAccessGate, secretTokenVault, clock);
+        service = new VillageInvitationService(invitationRepository, membershipRepository, slots, entityManager, villageAccessGate, secretTokenVault, clock, org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
     }
 
     @BeforeEach
@@ -235,7 +237,7 @@ class VillageInvitationServiceTest {
 
     /** 受諾で投げられた {@link BusinessException} の ErrorCode を取り出す。 */
     private ErrorCode acceptErrorCode(String token, Long actorUserId) {
-        Throwable thrown = catchThrowable(() -> service.accept(token, actorUserId));
+        Throwable thrown = catchThrowable(() -> judged(general(actorUserId), () -> service.accept(token, actorUserId)));
         assertThat(thrown)
                 .as("受諾は BusinessException で失敗すること（実装が無い間はここで red になる）")
                 .isInstanceOf(BusinessException.class);
@@ -472,7 +474,7 @@ class VillageInvitationServiceTest {
             lenient().when(membershipRepository.save(any(VillageMembershipEntity.class)))
                     .thenAnswer(a -> a.getArgument(0));
 
-            assertThat(service.accept(VALID_TOKEN, INVITEE_ID).villageId()).isEqualTo(VILLAGE_ID);
+            assertThat(judged(general(INVITEE_ID), () -> service.accept(VALID_TOKEN, INVITEE_ID)).villageId()).isEqualTo(VILLAGE_ID);
             assertThat(inv.getUsedCount()).isEqualTo(5);
         }
 
@@ -484,7 +486,7 @@ class VillageInvitationServiceTest {
             lenient().when(membershipRepository.save(any(VillageMembershipEntity.class)))
                     .thenAnswer(a -> a.getArgument(0));
 
-            assertThat(service.accept(VALID_TOKEN, INVITEE_ID).villageId()).isEqualTo(VILLAGE_ID);
+            assertThat(judged(general(INVITEE_ID), () -> service.accept(VALID_TOKEN, INVITEE_ID)).villageId()).isEqualTo(VILLAGE_ID);
         }
     }
 
@@ -497,7 +499,7 @@ class VillageInvitationServiceTest {
         lenient().when(membershipRepository.save(any(VillageMembershipEntity.class)))
                 .thenAnswer(a -> a.getArgument(0));
 
-        VillageInvitationAcceptResponse response = service.accept(VALID_TOKEN, INVITEE_ID);
+        VillageInvitationAcceptResponse response = judged(general(INVITEE_ID), () -> service.accept(VALID_TOKEN, INVITEE_ID));
 
         assertThat(response.villageId()).isEqualTo(VILLAGE_ID);
         ArgumentCaptor<VillageMembershipEntity> captor =
@@ -526,7 +528,7 @@ class VillageInvitationServiceTest {
         lenient().when(membershipRepository.save(any(VillageMembershipEntity.class)))
                 .thenAnswer(a -> a.getArgument(0));
 
-        service.accept(VALID_TOKEN, INVITEE_ID);
+        judged(general(INVITEE_ID), () -> service.accept(VALID_TOKEN, INVITEE_ID));
 
         ArgumentCaptor<VillageMembershipEntity> captor =
                 ArgumentCaptor.forClass(VillageMembershipEntity.class);
@@ -621,7 +623,7 @@ class VillageInvitationServiceTest {
         lenient().when(membershipRepository.save(any(VillageMembershipEntity.class)))
                 .thenThrow(new DataIntegrityViolationException("同時挿入衝突"));
 
-        Throwable thrown = catchThrowable(() -> service.accept(VALID_TOKEN, INVITEE_ID));
+        Throwable thrown = catchThrowable(() -> judged(general(INVITEE_ID), () -> service.accept(VALID_TOKEN, INVITEE_ID)));
 
         // 握りつぶさず伝播すること（対処療法の catch を置かせない）。
         assertThat(thrown).isNotNull();
@@ -644,7 +646,7 @@ class VillageInvitationServiceTest {
         lenient().when(membershipRepository.save(any(VillageMembershipEntity.class)))
                 .thenAnswer(a -> a.getArgument(0));
 
-        service.accept(VALID_TOKEN, INVITEE_ID);
+        judged(general(INVITEE_ID), () -> service.accept(VALID_TOKEN, INVITEE_ID));
 
         long byHash = Mockito.mockingDetails(invitationRepository).getInvocations().stream()
                 .filter(i -> i.getMethod().getName().startsWith("findByTokenHash"))

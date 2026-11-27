@@ -436,6 +436,7 @@
     "notFound": "찾을 수 없습니다",
     "TEAM_001": "팀을 찾을 수 없습니다.",
     "TEAM_006": "이 팀은 삭제되지 않았으므로 복원할 수 없습니다.",
+    "MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN": "운영 계정은 팀·조직·위원회·마을에 소속될 수 없으며, 팔로우나 서포터도 될 수 없습니다.",
     "COMMON_001": "입력 내용에 오류가 있습니다",
     "COMMON_002": "이 작업을 수행할 권한이 없습니다",
     "COMMON_003": "다른 사용자가 업데이트했습니다. 화면을 새로고침하세요",
@@ -2177,10 +2178,6 @@
       "pointCardSynonyms": "포인트 카드 동의어",
       "appeals": "이의 신청"
     },
-    "impersonation": {
-      "banner": "관리자 위장 중: {label}",
-      "exit": "위장 종료"
-    },
     "businessAlert": {
       "title": "업무 알림",
       "viewAll": "전체 보기",
@@ -3433,5 +3430,161 @@
     "load_more": "더 보기",
     "reissue_context": "재초대",
     "decline_context": "재초대 요청 거절"
+  },
+  "supportAccess": {
+    "photoHidden": "지원 열람 중에는 사진을 표시하지 않습니다",
+    "banner": {
+      "viewing": "{name} 님의 화면을 열람 중",
+      "readOnly": "열람 전용 (변경할 수 없습니다)",
+      "remaining": "남은 시간 {hours}시간 {minutes}분",
+      "end": "열람 종료",
+      "endError": "열람 종료를 기록하지 못했습니다. 운영자 본인 화면으로 돌아갑니다",
+      "expired": "서포트 열람이 종료되었습니다 (기간 만료 또는 취소)"
+    },
+    "status": {
+      "PENDING": "요청 중",
+      "APPROVED": "허가됨",
+      "DENIED": "거부됨",
+      "REVOKED": "본인이 취소",
+      "EXPIRED": "기간 만료",
+      "CANCELLED": "운영자가 철회"
+    },
+    "endedReason": {
+      "USER_REVOKED": "본인이 허가를 취소했습니다",
+      "OPERATOR_CANCELLED": "운영자가 요청을 철회했습니다",
+      "EXPIRED": "기간이 만료되었습니다",
+      "WITHDRAWAL": "본인의 탈퇴로 종료되었습니다",
+      "OPERATOR_INELIGIBLE": "운영 계정 상태 변경으로 종료되었습니다"
+    },
+    "eventKind": {
+      "SESSION_START": "열람 시작",
+      "VIEW": "열람",
+      "DENIED": "거부된 작업",
+      "SESSION_END": "열람 종료"
+    },
+    "scopeType": {
+      "TEAM": "팀",
+      "ORGANIZATION": "조직",
+      "PERSONAL": "개인"
+    },
+    "reference": {
+      "FEEDBACK": "의견함"
+    },
+    "error": {
+      "notActive": "서포트 열람 허가가 유효하지 않습니다. 열람을 종료합니다",
+      "readOnly": "서포트 열람 중에는 열람만 가능합니다. 변경·게시·삭제·전송은 할 수 없습니다",
+      "forbidden": "서포트 열람 중에는 이 작업을 할 수 없습니다",
+      "legacyHeader": "폐지된 기존 대리 로그인 방식이 사용되었습니다. 서포트 열람 허가를 요청해 주세요",
+      "unavailable": "현재 서포트 열람을 이용할 수 없습니다 (기록을 저장하지 못했습니다). 잠시 후 다시 시도해 주세요"
+    },
+    "guardianWaiting": "보호자 승인 대기 중",
+    "logs": {
+      "when": "일시",
+      "operator": "운영자",
+      "kind": "종류",
+      "path": "화면 (경로)",
+      "scope": "대상 범위"
+    },
+    "admin": {
+      "title": "서포트 열람",
+      "description": "이용자 본인의 허가를 받아 그 사람의 화면을 열람 전용으로 확인합니다",
+      "notice": "대리 열람은 보기만 가능합니다. 허가는 허가 시점부터 24시간 후 만료되며 본인이 언제든 취소할 수 있습니다. 요청 사유와 열람 기록은 본인에게 표시됩니다.",
+      "request": "열람 허가 요청",
+      "tabAll": "전체",
+      "createDescription": "대상자에게 알림이 전달됩니다. 본인이 재인증 후 허가하면 허가 시점부터 24시간 동안 열람 전용으로 확인할 수 있습니다.",
+      "targetUserId": "대상 사용자 ID",
+      "reason": "요청 사유",
+      "reasonHint": "본인에게 표시됩니다. 열람이 필요한 이유를 {min}~{max}자로 구체적으로 적어 주세요",
+      "reference": "참조 (선택)",
+      "referenceNone": "없음",
+      "referenceId": "참조 ID",
+      "submit": "요청하기",
+      "requested": "열람 허가를 요청했습니다. 본인의 허가를 기다려 주세요",
+      "requestError": "요청을 보내지 못했습니다",
+      "start": "대리 열람 시작",
+      "started": "{name} 님의 화면 열람을 시작했습니다 (열람 전용)",
+      "startError": "열람을 시작하지 못했습니다",
+      "cancel": "철회",
+      "cancelled": "요청·허가를 철회했습니다",
+      "cancelError": "철회하지 못했습니다",
+      "cancelConfirm": "{name} 님에 대한 요청·허가를 철회하시겠습니까? 철회하면 다음 요청부터 열람할 수 없습니다.",
+      "detail": "상세",
+      "logs": "열람 기록",
+      "noLogs": "아직 열람 기록이 없습니다",
+      "loadError": "불러오지 못했습니다",
+      "retry": "다시 불러오기",
+      "empty": "요청이 없습니다",
+      "loadMore": "더 보기",
+      "viewingNow": "열람 중",
+      "requestUntil": "{date}까지 응답 대기",
+      "columns": {
+        "target": "대상자",
+        "status": "상태",
+        "requestedAt": "요청 일시",
+        "expiresAt": "기한"
+      }
+    },
+    "settings": {
+      "title": "서포트 열람 허가",
+      "description": "운영팀이 \"화면을 보여 달라\"고 요청하면 허가할지 거부할지 직접 결정합니다. 허가하지 않는 한 운영팀은 회원님의 화면을 볼 수 없습니다.",
+      "hubDescription": "운영팀의 열람 요청 허가·거부, 허가 취소, 열람 기록을 확인합니다",
+      "hubKeywords": "서포트 대리 로그인 열람 운영 허가 취소 기록",
+      "pending": "요청 중",
+      "active": "유효한 허가",
+      "logs": "열람 기록",
+      "logsDescription": "운영팀이 회원님의 화면을 열람한 일시·화면·대상을 최신순으로 표시합니다",
+      "noPending": "도착한 요청이 없습니다",
+      "noActive": "유효한 허가가 없습니다",
+      "noLogs": "열람 기록이 없습니다",
+      "loadError": "불러오지 못했습니다",
+      "requestedBy": "요청한 운영자",
+      "requestReason": "요청 사유",
+      "reference": "관련",
+      "requestedAt": "요청 일시",
+      "requestUntil": "응답 기한",
+      "validUntil": "허가 기한",
+      "approve": "허가하기",
+      "deny": "거부하기",
+      "revoke": "허가 취소",
+      "revokeConfirm": "허가를 취소하시겠습니까? 취소하면 운영팀은 다음 요청부터 회원님의 화면을 볼 수 없습니다.",
+      "denyComment": "거부 사유 (선택)",
+      "denyConfirm": "거부 확정",
+      "approved": "허가했습니다. 허가 시점부터 24시간 동안 운영팀이 열람 전용으로 확인할 수 있습니다",
+      "denied": "거부했습니다",
+      "revoked": "허가를 취소했습니다",
+      "actionError": "작업에 실패했습니다. 잠시 후 다시 시도해 주세요",
+      "reauthRequired": "허가하려면 본인 확인이 필요합니다. 비밀번호 또는 패스키로 확인해 주세요.",
+      "approveNotice": "허가하면 운영팀이 24시간 동안 회원님의 화면을 열람 전용으로 확인할 수 있습니다. 변경·게시·삭제·전송은 할 수 없습니다.",
+      "password": "비밀번호",
+      "approveWithPassword": "비밀번호로 확인하고 허가",
+      "approveWithPasskey": "패스키로 확인하고 허가",
+      "passkeyUnsupported": "이 기기·브라우저에서는 패스키를 사용할 수 없습니다. 비밀번호로 확인해 주세요",
+      "guardianRole": "{name} 님의 화면 열람 요청입니다. 보호자로서의 판단이 필요합니다",
+      "guardianToo": "미성년자 또는 후견 하의 이용자이므로 본인의 허가에 더해 보호자의 허가가 필요합니다."
+    },
+    "help": {
+      "title": "서포트 열람 허가 사용법",
+      "description": "불편 사항 조사 등을 위해 운영팀이 회원님의 화면을 확인해야 할 때가 있습니다. 반드시 회원님의 허가를 받은 뒤 보기만 합니다.",
+      "what": {
+        "title": "어떤 때 요청이 오나요?",
+        "body": "의견함에 글을 남기는 등의 계기로 운영팀에서 열람 요청이 옵니다. 요청에는 사유가 적혀 있으며 알림과 이메일로 알려 드립니다."
+      },
+      "allow": {
+        "title": "허가하는 방법",
+        "body": "요청 사유를 읽고 \"허가하기\"를 누른 뒤 비밀번호 또는 패스키로 본인 확인을 합니다. 이메일 링크만으로는 허가할 수 없습니다. 짚이는 데가 없는 요청은 \"거부하기\"를 선택하세요."
+      },
+      "limits": {
+        "title": "운영팀이 할 수 있는 일·할 수 없는 일",
+        "body": "허가 후 24시간 동안 운영팀은 회원님의 화면을 보기만 할 수 있습니다. 변경·게시·삭제·전송, 비밀번호·결제 조작, 데이터 내보내기는 할 수 없습니다. 미성년자·후견 하의 이용자는 보호자의 허가도 필요합니다."
+      },
+      "revoke": {
+        "title": "취소하는 방법",
+        "body": "\"유효한 허가\"의 \"허가 취소\"에서 언제든 취소할 수 있습니다. 취소한 다음 요청부터 운영팀은 회원님의 화면을 볼 수 없습니다."
+      },
+      "logs": {
+        "title": "열람 기록 확인",
+        "body": "운영팀이 본 일시·화면·대상은 \"열람 기록\"에 모두 남으며 회원님도 여기서 확인할 수 있습니다."
+      }
+    }
   }
 }

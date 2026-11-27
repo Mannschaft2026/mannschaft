@@ -8,6 +8,7 @@ import com.mannschaft.app.common.security.SelfScopedEndpoint;
 import com.mannschaft.app.succession.dto.SignCovenantRequest;
 import com.mannschaft.app.succession.dto.SuccessionCovenantResponse;
 import com.mannschaft.app.succession.service.SuccessionCovenantService;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -93,6 +94,7 @@ public class SuccessionCovenantController {
      */
     @GetMapping("/api/v1/organizations/{orgId}/succession/covenants/{id}")
     @Operation(summary = "誓約詳細取得（本人 + 組織 ADMIN）")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<SuccessionCovenantResponse>> getCovenant(
             @PathVariable Long orgId, @PathVariable UUID id) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
@@ -105,6 +107,7 @@ public class SuccessionCovenantController {
     @GetMapping("/api/v1/organizations/{orgId}/succession/covenants")
     @Operation(summary = "組織内の誓約一覧（組織 ADMIN のみ）")
     @RequireFeature("FEATURE_SUCCESSION_PROXY_ENABLED")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<Page<SuccessionCovenantResponse>>> listOrgCovenants(
             @PathVariable Long orgId,
             @RequestParam(defaultValue = "0") int page,
@@ -124,6 +127,7 @@ public class SuccessionCovenantController {
             + "SecurityUtils.getCurrentUserId()（signerUserId）のみを検索条件に束縛する")
     @GetMapping("/api/v1/succession/covenants/me")
     @Operation(summary = "本人の誓約履歴（自分自身のみ）")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<List<SuccessionCovenantResponse>>> listMyCovenants() {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.of(covenantService.listMyCovenants(currentUserId)));

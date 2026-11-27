@@ -1,7 +1,7 @@
 package com.mannschaft.app.ranch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.ranch.repository.RanchOwnerRepository;
 import com.mannschaft.app.ranch.repository.RanchDinosaurRepository;
@@ -103,11 +103,11 @@ class RanchOwnerActionHttpIT extends AbstractMySqlIntegrationTest {
                 .isEqualTo(json.readTree(firstTouch.getResponse().getContentAsString()).path("data"));
         mvc.perform(post("/api/v1/me/ranch/pause")
                         .with(user("999999999").roles("SYSTEM_ADMIN"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, me.toString())
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, me.toString())
                         .header("Idempotency-Key", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":\"" + version + "\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/me/ranch").with(user(me.toString())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.owner.status").value("ACTIVE"));
     }
@@ -180,9 +180,9 @@ class RanchOwnerActionHttpIT extends AbstractMySqlIntegrationTest {
         for (var entry : bodies.entrySet()) {
             mvc.perform(post("/api/v1/me/ranch/" + entry.getKey())
                             .with(user("999999999").roles("SYSTEM_ADMIN"))
-                            .header(AdminImpersonationFilter.HEADER_IMPERSONATE, me.toString())
+                            .header(SupportAccessHeaders.LEGACY_IMPERSONATE, me.toString())
                             .header("Idempotency-Key", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON).content(entry.getValue()))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isBadRequest());
         }
         mvc.perform(post("/api/v1/me/ranch/purchases").with(user(me.toString()))
                         .header("Idempotency-Key", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON).content(bodies.get("purchases")))

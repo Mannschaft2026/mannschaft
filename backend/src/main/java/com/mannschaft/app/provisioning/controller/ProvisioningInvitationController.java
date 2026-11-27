@@ -1,5 +1,6 @@
 package com.mannschaft.app.provisioning.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.provisioning.dto.ProvisioningInvitationAcceptRequest;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 柱②-2: 販促プロビジョニング招待の下見/承諾 API（承諾者側・要ログイン）。
@@ -32,6 +35,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProvisioningInvitationController {
 
     private final ProvisioningAcceptanceService acceptanceService;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（provisioning / membership の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 認可根治戦役 Wave5 監査済: 平文トークン（{@code SecretTokenVault} 発行の
@@ -58,6 +63,9 @@ public class ProvisioningInvitationController {
     @AuthorizedInService
     public ResponseEntity<ProvisioningInvitationAcceptResponse> accept(
             @Valid @RequestBody ProvisioningInvitationAcceptRequest request) {
-        return ResponseEntity.ok(acceptanceService.accept(request.token(), SecurityUtils.getCurrentUserId()));
+        Long actorUserId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(List.of(actorUserId)),
+                () -> acceptanceService.accept(request.token(), actorUserId)));
     }
 }

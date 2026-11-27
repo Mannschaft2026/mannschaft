@@ -1,5 +1,6 @@
 package com.mannschaft.app.forms.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.forms.service.FormCsvExportService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,6 +35,7 @@ public class FormCsvExportController {
     /**
      * 提出一覧を CSV としてダウンロードする。
      */
+    @SupportAccessDenied
     @GetMapping("/export")
     @Operation(summary = "提出一覧 CSV エクスポート", description = "EAV ピボット展開した CSV を返す")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "CSV 出力成功")

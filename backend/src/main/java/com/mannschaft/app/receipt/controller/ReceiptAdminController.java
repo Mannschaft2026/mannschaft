@@ -1,5 +1,6 @@
 package com.mannschaft.app.receipt.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.receipt.ReceiptArchiveKind;
@@ -219,6 +220,7 @@ public class ReceiptAdminController {
     /**
      * 領収書 PDF をダウンロードする。
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/pdf")
     @Operation(summary = "領収書PDFダウンロード")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "ダウンロード成功")
@@ -239,6 +241,7 @@ public class ReceiptAdminController {
     /**
      * 領収書一覧を CSV エクスポートする。
      */
+    @SupportAccessDenied
     @GetMapping("/export")
     @Operation(summary = "領収書CSVエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")
@@ -263,6 +266,7 @@ public class ReceiptAdminController {
     /**
      * 領収書 PDF の一括ダウンロード（ZIP）を開始する。
      */
+    @SupportAccessDenied
     @PostMapping("/download-zip")
     @Operation(summary = "ZIP一括ダウンロード開始")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202", description = "ジョブ作成成功")
@@ -275,6 +279,7 @@ public class ReceiptAdminController {
     /**
      * ZIP ダウンロードジョブの状態を確認する。
      */
+    @SupportAccessDenied
     @GetMapping("/download-zip/{jobId}")
     @Operation(summary = "ZIPダウンロード状態確認")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

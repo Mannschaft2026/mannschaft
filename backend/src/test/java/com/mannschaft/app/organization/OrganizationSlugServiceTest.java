@@ -1,5 +1,7 @@
 package com.mannschaft.app.organization;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -57,6 +59,7 @@ class OrganizationSlugServiceTest {
     @Mock private MembershipService membershipService;
     @Mock private MediaUrlResolver mediaUrlResolver;
     @Mock private DuplicateNameGuardService duplicateNameGuardService;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private OrganizationService organizationService;
 
     private void givenCreateScaffold(String name) {
@@ -92,7 +95,7 @@ class OrganizationSlugServiceTest {
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "SCHOOL", null, null, null, null, "my-org");
 
-            ApiResponse<OrganizationResponse> result = organizationService.createOrganization(USER_ID, req);
+            ApiResponse<OrganizationResponse> result = judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             assertThat(result.getData().getSlug()).isEqualTo("my-org");
         }
@@ -105,7 +108,7 @@ class OrganizationSlugServiceTest {
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "SCHOOL", null, null, null, null, "Bad_Slug");
 
-            assertThatThrownBy(() -> organizationService.createOrganization(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("ORG_060"));
@@ -119,7 +122,7 @@ class OrganizationSlugServiceTest {
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "SCHOOL", null, null, null, null, "settings");
 
-            assertThatThrownBy(() -> organizationService.createOrganization(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("ORG_061"));
@@ -134,7 +137,7 @@ class OrganizationSlugServiceTest {
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "テスト組織", "SCHOOL", null, null, null, null, "taken-org");
 
-            assertThatThrownBy(() -> organizationService.createOrganization(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("ORG_062"));
@@ -154,7 +157,7 @@ class OrganizationSlugServiceTest {
             CreateOrganizationRequest req = new CreateOrganizationRequest(
                     "My Org", "SCHOOL", null, null, null, null, null);
 
-            ApiResponse<OrganizationResponse> result = organizationService.createOrganization(USER_ID, req);
+            ApiResponse<OrganizationResponse> result = judged(general(USER_ID), () -> organizationService.createOrganization(USER_ID, req));
 
             assertThat(result.getData().getSlug()).isEqualTo("my-org");
         }

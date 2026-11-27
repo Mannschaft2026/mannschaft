@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * イベントチケットコントローラー。チケットの照会・キャンセルAPIを提供する。
@@ -37,6 +38,7 @@ public class EventTicketController {
     @GetMapping
     @Operation(summary = "チケット一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    @SupportAccessDenied
     public ResponseEntity<PagedResponse<TicketResponse>> listTickets(
             @PathVariable Long eventId,
             @RequestParam(defaultValue = "0") int page,
@@ -54,6 +56,7 @@ public class EventTicketController {
     @GetMapping("/{ticketId}")
     @Operation(summary = "チケット詳細")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<TicketResponse>> getTicket(
             @PathVariable Long eventId,
             @PathVariable Long ticketId) {
@@ -66,6 +69,7 @@ public class EventTicketController {
     /**
      * QRトークンでチケットを検索する。
      */
+    @SupportAccessDenied
     @GetMapping("/by-qr")
     @Operation(summary = "QRトークンでチケット検索")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

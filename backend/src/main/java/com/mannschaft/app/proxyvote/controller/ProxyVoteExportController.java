@@ -1,5 +1,6 @@
 package com.mannschaft.app.proxyvote.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.pdf.PdfFileNameBuilder;
@@ -43,6 +44,7 @@ public class ProxyVoteExportController {
     /**
      * 投票結果を CSV でダウンロードする。
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/results/csv")
     @Operation(summary = "投票結果 CSV エクスポート")
     public ResponseEntity<byte[]> exportResultsCsv(@PathVariable Long id) {
@@ -58,6 +60,7 @@ public class ProxyVoteExportController {
     /**
      * 議事録 PDF をダウンロードする。
      */
+    @SupportAccessDenied
     @GetMapping("/{id}/minutes-pdf")
     @Operation(summary = "議事録 PDF エクスポート")
     public ResponseEntity<byte[]> exportMinutesPdf(@PathVariable Long id) {

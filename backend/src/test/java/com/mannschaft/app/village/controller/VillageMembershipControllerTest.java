@@ -68,6 +68,10 @@ class VillageMembershipControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    /** 運営アカウントの判定（取引の外）。モックの judge は判定結果なし（null）を返し、Service もモックなので素通りする。 */
+    @MockitoBean
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @MockitoBean
     private VillageMembershipService membershipService;
 

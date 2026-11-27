@@ -1,5 +1,6 @@
 package com.mannschaft.app.advertising.campaign.service;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,8 +62,10 @@ public class UserAdPreferenceService {
      */
     @Transactional
     public UserAdPreferenceResponse getOrCreateForUser(Long userId) {
+        // F10.9 サポート閲覧中は、未作成の既定行を DB に作らず既定値の一時オブジェクトで応答する。
         UserAdPreference entity = preferenceRepository.findByUserId(userId)
-                .orElseGet(() -> createDefault(userId));
+                .orElseGet(() -> SupportAccessContextHolder.isActive()
+                        ? buildDefault(userId) : createDefault(userId));
         return toResponse(entity);
     }
 
@@ -298,7 +301,12 @@ public class UserAdPreferenceService {
      * <p>accept_*_ads = true / blocked = [] / consented_at = null / token_version = 0。</p>
      */
     private UserAdPreference createDefault(Long userId) {
-        UserAdPreference entity = UserAdPreference.builder()
+        return preferenceRepository.save(buildDefault(userId));
+    }
+
+    /** 既定値の Entity を組み立てる（保存しない）。 */
+    private UserAdPreference buildDefault(Long userId) {
+        return UserAdPreference.builder()
                 .userId(userId)
                 .acceptAnnouncementAds(Boolean.TRUE)
                 .acceptEmailAds(Boolean.TRUE)
@@ -308,7 +316,6 @@ public class UserAdPreferenceService {
                 .unsubscribeTokenVersion(0)
                 .consentedAt(null)
                 .build();
-        return preferenceRepository.save(entity);
     }
 
     /**

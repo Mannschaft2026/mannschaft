@@ -1,5 +1,6 @@
 package com.mannschaft.app.forms.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.forms.dto.FormPdfDownloadUrlResponse;
@@ -33,6 +34,7 @@ public class FormPdfController {
     /**
      * 提出 PDF を生成する（同期）。
      */
+    @SupportAccessDenied
     @PostMapping("/pdf")
     @Operation(summary = "PDF 生成", description = "提出済みフォームを Thymeleaf テンプレートで PDF 化し R2/S3 にアップロードする")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "PDF 生成成功")
@@ -48,6 +50,7 @@ public class FormPdfController {
     /**
      * 生成済み PDF の Pre-signed ダウンロード URL を発行する（5 分有効）。
      */
+    @SupportAccessDenied
     @GetMapping("/pdf/download-url")
     @Operation(summary = "PDF ダウンロード URL 取得", description = "5 分有効の Pre-signed URL を発行する")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL 発行成功")

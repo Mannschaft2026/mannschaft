@@ -1,7 +1,7 @@
 package com.mannschaft.app.ranch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.admin.filter.AdminImpersonationFilter;
+import com.mannschaft.app.supportaccess.SupportAccessHeaders;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.ranch.repository.RanchCommandRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
@@ -67,12 +67,12 @@ class RanchPrivateQueryHttpIT extends AbstractMySqlIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/me/ranch/collectibles")
                         .with(user("999999999").roles("SYSTEM_ADMIN"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, me.toString()))
-                .andExpect(status().isForbidden());
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, me.toString()))
+                .andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/me/ranch/shop")
                         .with(user(me.toString()).roles("MEMBER"))
-                        .header(AdminImpersonationFilter.HEADER_IMPERSONATE, other.toString()))
-                .andExpect(status().isForbidden());
+                        .header(SupportAccessHeaders.LEGACY_IMPERSONATE, other.toString()))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

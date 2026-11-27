@@ -436,6 +436,7 @@
     "notFound": "No se ha encontrado",
     "TEAM_001": "No se ha encontrado el equipo.",
     "TEAM_006": "Este equipo no se puede restaurar porque no se ha eliminado.",
+    "MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN": "Las cuentas de operador no pueden unirse a equipos, organizaciones, comités ni aldeas, ni seguirlos o apoyarlos.",
     "COMMON_001": "Hay errores en los datos ingresados",
     "COMMON_002": "No tiene permiso para realizar esta acción",
     "COMMON_003": "Actualizado por otro usuario. Por favor, actualice la página",
@@ -2177,10 +2178,6 @@
       "pointCardSynonyms": "Sinónimos de tarjetas de puntos",
       "appeals": "Apelaciones"
     },
-    "impersonation": {
-      "banner": "Suplantando a: {label}",
-      "exit": "Salir"
-    },
     "businessAlert": {
       "title": "Alertas de negocio",
       "viewAll": "Ver todo",
@@ -3433,5 +3430,161 @@
     "load_more": "Ver más",
     "reissue_context": "reinvitar",
     "decline_context": "rechazar la solicitud de nueva invitación"
+  },
+  "supportAccess": {
+    "photoHidden": "Las fotos no se muestran durante la visualización de soporte",
+    "banner": {
+      "viewing": "Viendo la pantalla de {name}",
+      "readOnly": "Solo lectura (no se pueden hacer cambios)",
+      "remaining": "Quedan {hours} h {minutes} min",
+      "end": "Finalizar la visualización",
+      "endError": "No se pudo registrar el fin de la visualización. Volviendo a su propia vista de operador",
+      "expired": "La visualización de soporte ha finalizado (caducada o revocada)"
+    },
+    "status": {
+      "PENDING": "Solicitada",
+      "APPROVED": "Aprobada",
+      "DENIED": "Rechazada",
+      "REVOKED": "Revocada por el usuario",
+      "EXPIRED": "Caducada",
+      "CANCELLED": "Retirada por el operador"
+    },
+    "endedReason": {
+      "USER_REVOKED": "El usuario revocó el permiso",
+      "OPERATOR_CANCELLED": "El operador retiró la solicitud",
+      "EXPIRED": "El permiso caducó",
+      "WITHDRAWAL": "Finalizada porque el usuario se dio de baja",
+      "OPERATOR_INELIGIBLE": "Finalizada por un cambio en la cuenta del operador"
+    },
+    "eventKind": {
+      "SESSION_START": "Inicio de la visualización",
+      "VIEW": "Visualización",
+      "DENIED": "Acción bloqueada",
+      "SESSION_END": "Fin de la visualización"
+    },
+    "scopeType": {
+      "TEAM": "Equipo",
+      "ORGANIZATION": "Organización",
+      "PERSONAL": "Personal"
+    },
+    "reference": {
+      "FEEDBACK": "Buzón de sugerencias"
+    },
+    "error": {
+      "notActive": "El permiso de visualización de soporte ya no es válido. La visualización terminará",
+      "readOnly": "La visualización de soporte es de solo lectura. No se puede cambiar, publicar, eliminar ni enviar nada",
+      "forbidden": "Esta acción no está disponible durante la visualización de soporte",
+      "legacyHeader": "Se usó el método de suplantación retirado. Solicite en su lugar el permiso de visualización de soporte",
+      "unavailable": "La visualización de soporte no está disponible (no se pudo guardar el registro). Inténtelo de nuevo más tarde"
+    },
+    "guardianWaiting": "Pendiente de aprobación del tutor",
+    "logs": {
+      "when": "Fecha y hora",
+      "operator": "Operador",
+      "kind": "Tipo",
+      "path": "Pantalla (ruta)",
+      "scope": "Ámbito"
+    },
+    "admin": {
+      "title": "Visualización de soporte",
+      "description": "Con el permiso del usuario, revise su pantalla en modo de solo lectura",
+      "notice": "La visualización es de solo lectura. El permiso caduca 24 horas después de aprobarse y el usuario puede revocarlo en cualquier momento. El motivo de la solicitud y el registro se muestran al usuario.",
+      "request": "Solicitar permiso de visualización",
+      "tabAll": "Todas",
+      "createDescription": "Se notificará al usuario. Cuando apruebe tras volver a autenticarse, podrá ver su pantalla en solo lectura durante 24 horas.",
+      "targetUserId": "ID del usuario objetivo",
+      "reason": "Motivo de la solicitud",
+      "reasonHint": "Se mostrará al usuario. Escriba de {min} a {max} caracteres explicando concretamente por qué es necesaria la visualización",
+      "reference": "Referencia (opcional)",
+      "referenceNone": "Ninguna",
+      "referenceId": "ID de referencia",
+      "submit": "Enviar solicitud",
+      "requested": "Solicitud enviada. Espere la aprobación del usuario",
+      "requestError": "No se pudo enviar la solicitud",
+      "start": "Iniciar la visualización",
+      "started": "Se inició la visualización de la pantalla de {name} (solo lectura)",
+      "startError": "No se pudo iniciar la visualización",
+      "cancel": "Retirar",
+      "cancelled": "Se retiró la solicitud o el permiso",
+      "cancelError": "No se pudo retirar",
+      "cancelConfirm": "¿Retirar la solicitud o el permiso de {name}? La visualización se detiene desde la siguiente petición.",
+      "detail": "Detalles",
+      "logs": "Registro de visualización",
+      "noLogs": "Aún no hay registros de visualización",
+      "loadError": "No se pudo cargar",
+      "retry": "Recargar",
+      "empty": "No hay solicitudes",
+      "loadMore": "Cargar más",
+      "viewingNow": "Visualizando ahora",
+      "requestUntil": "En espera de respuesta hasta {date}",
+      "columns": {
+        "target": "Usuario objetivo",
+        "status": "Estado",
+        "requestedAt": "Solicitada el",
+        "expiresAt": "Caduca"
+      }
+    },
+    "settings": {
+      "title": "Permisos de visualización de soporte",
+      "description": "Cuando el equipo operador pide ver su pantalla, usted decide si lo permite o lo rechaza. Sin su permiso, no pueden ver su pantalla.",
+      "hubDescription": "Apruebe o rechace solicitudes de visualización, revoque permisos y revise el registro",
+      "hubKeywords": "soporte suplantación visualización operador permiso revocar registro",
+      "pending": "Solicitudes pendientes",
+      "active": "Permisos activos",
+      "logs": "Registro de visualización",
+      "logsDescription": "Muestra cuándo vio el operador su pantalla, qué pantalla y ámbito, de más reciente a más antiguo",
+      "noPending": "No tiene solicitudes pendientes",
+      "noActive": "No tiene permisos activos",
+      "noLogs": "No hay registros de visualización",
+      "loadError": "No se pudo cargar",
+      "requestedBy": "Solicitado por",
+      "requestReason": "Motivo",
+      "reference": "Relacionado con",
+      "requestedAt": "Solicitada el",
+      "requestUntil": "Responder antes de",
+      "validUntil": "Permiso válido hasta",
+      "approve": "Permitir",
+      "deny": "Rechazar",
+      "revoke": "Revocar el permiso",
+      "revokeConfirm": "¿Revocar este permiso? El operador dejará de ver su pantalla desde la siguiente petición.",
+      "denyComment": "Motivo del rechazo (opcional)",
+      "denyConfirm": "Confirmar rechazo",
+      "approved": "Permitido. El operador puede ver en solo lectura durante 24 horas",
+      "denied": "Rechazado",
+      "revoked": "Permiso revocado",
+      "actionError": "La acción falló. Inténtelo de nuevo más tarde",
+      "reauthRequired": "Para permitir se requiere confirmar su identidad. Confirme con su contraseña o una clave de acceso.",
+      "approveNotice": "Una vez permitido, el operador puede ver su pantalla en solo lectura durante 24 horas. No puede cambiar, publicar, eliminar ni enviar nada.",
+      "password": "Contraseña",
+      "approveWithPassword": "Confirmar con contraseña y permitir",
+      "approveWithPasskey": "Confirmar con clave de acceso y permitir",
+      "passkeyUnsupported": "Las claves de acceso no están disponibles en este dispositivo o navegador. Confirme con su contraseña",
+      "guardianRole": "Es una solicitud para ver la pantalla de {name}. Se necesita su decisión como tutor",
+      "guardianToo": "Al ser un menor o estar bajo tutela, además de su permiso se necesita el de un tutor."
+    },
+    "help": {
+      "title": "Cómo funcionan los permisos de visualización de soporte",
+      "description": "Para investigar un problema, el equipo operador puede querer revisar su pantalla. Siempre piden su permiso antes y solo miran, sin cambiar nada.",
+      "what": {
+        "title": "¿Cuándo llega una solicitud?",
+        "body": "El equipo operador envía una solicitud, por ejemplo tras una publicación en el buzón de sugerencias. Incluye un motivo y se le avisa en la app y por correo."
+      },
+      "allow": {
+        "title": "Cómo permitir",
+        "body": "Lea el motivo, pulse \"Permitir\" y confirme con su contraseña o una clave de acceso. Un enlace de correo por sí solo no puede conceder el permiso. Si no reconoce una solicitud, elija \"Rechazar\"."
+      },
+      "limits": {
+        "title": "Qué puede y qué no puede hacer el operador",
+        "body": "Durante 24 horas tras permitirlo, el operador solo puede mirar su pantalla. No puede cambiar, publicar, eliminar ni enviar, tocar contraseñas o pagos, ni exportar datos. Los menores y personas bajo tutela necesitan además la aprobación de un tutor."
+      },
+      "revoke": {
+        "title": "Cómo revocar",
+        "body": "Use \"Revocar el permiso\" en \"Permisos activos\" en cualquier momento. Desde la siguiente petición, el operador deja de ver su pantalla."
+      },
+      "logs": {
+        "title": "Revisar el registro",
+        "body": "La fecha, la pantalla y el ámbito que vio el operador quedan registrados y puede revisarlos aquí."
+      }
+    }
   }
 }

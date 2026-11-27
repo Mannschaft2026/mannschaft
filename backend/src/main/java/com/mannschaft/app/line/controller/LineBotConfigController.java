@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * LINE BOT設定管理コントローラー（チーム・組織共用）。
@@ -62,6 +63,7 @@ public class LineBotConfigController {
      * チームのBOT設定を取得する。
      */
     @GetMapping("/api/v1/teams/{teamId}/line/config")
+    @SupportAccessDenied
     public ApiResponse<LineBotConfigResponse> getForTeam(@PathVariable Long teamId) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ApiResponse.of(lineBotConfigService.getConfig(ScopeType.TEAM, teamId, userId));
@@ -138,6 +140,7 @@ public class LineBotConfigController {
      * 組織のBOT設定を取得する。
      */
     @GetMapping("/api/v1/organizations/{orgId}/line/config")
+    @SupportAccessDenied
     public ApiResponse<LineBotConfigResponse> getForOrg(@PathVariable Long orgId) {
         Long userId = SecurityUtils.getCurrentUserId();
         return ApiResponse.of(lineBotConfigService.getConfig(ScopeType.ORGANIZATION, orgId, userId));

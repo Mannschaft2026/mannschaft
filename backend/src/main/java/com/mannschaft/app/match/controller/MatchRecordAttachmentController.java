@@ -1,5 +1,6 @@
 package com.mannschaft.app.match.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.match.dto.MatchAttachmentConfirmRequest;
@@ -96,6 +97,7 @@ public class MatchRecordAttachmentController {
         return ResponseEntity.ok(ApiResponse.of(list));
     }
 
+    @SupportAccessDenied
     @GetMapping("/{attachmentId}/download-url")
     @Operation(summary = "局面写真の短命ダウンロード URL 発行（閲覧可視性・生 key は返さない）")
     public ResponseEntity<ApiResponse<MatchAttachmentDownloadResponse>> downloadUrl(

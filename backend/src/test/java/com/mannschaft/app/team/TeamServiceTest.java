@@ -1,5 +1,7 @@
 package com.mannschaft.app.team;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
@@ -70,6 +72,7 @@ class TeamServiceTest {
     @Mock private AdminRoleMutationLockService adminRoleMutationLockService;
     @Mock private DuplicateNameGuardService duplicateNameGuardService;
     @Mock private com.mannschaft.app.team.service.TeamOrgLifecycleCleanupService teamOrgLifecycleCleanupService;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private TeamService service;
 
     private static final Long USER_ID = 1L;
@@ -107,7 +110,7 @@ class TeamServiceTest {
             given(membershipRepository.countActiveByScopeAndRoleKind(any(), any(), any())).willReturn(0L);
 
             // When
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             // Then
             assertThat(result.getData().getBasicInfo().name()).isEqualTo("テストチーム");
@@ -139,7 +142,7 @@ class TeamServiceTest {
                     .checkForCreateAndRun(eq(DuplicateNameScopeKind.TEAM), eq("既存チーム"), eq(USER_ID),
                             eq(false), org.mockito.ArgumentMatchers.isNull(), any(), any());
 
-            assertThatThrownBy(() -> service.createTeam(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createTeam(USER_ID, req)))
                     .isSameAs(expected);
             verify(teamRepository, org.mockito.Mockito.never()).save(any(TeamEntity.class));
         }
@@ -156,7 +159,7 @@ class TeamServiceTest {
             given(teamFriendRepository.countFriendsByTeamId(any())).willReturn(0L);
             given(membershipRepository.countActiveByScopeAndRoleKind(any(), any(), any())).willReturn(0L);
 
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             assertThat(result.getData().getBasicInfo().name()).isEqualTo("既存チーム");
             verify(duplicateNameGuardService).checkForCreateAndRun(
@@ -510,64 +513,6 @@ class TeamServiceTest {
 
             // Then
             assertThat(result.getData().getMetadata().mapEmbedUrl()).isEqualTo("https://www.google.com/maps/embed?pb=existing");
-        }
-    }
-
-    @Nested
-    @DisplayName("followTeam")
-    class FollowTeam {
-
-        @Test
-        @DisplayName("異常系: ブロックされている場合TEAM_004例外")
-        void フォロー_ブロック_例外() {
-            // Given
-            TeamEntity team = TeamEntity.builder().name("テスト").template("sports")
-                    .visibility(TeamEntity.Visibility.GUESTS_AND_ABOVE).build();
-            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(team));
-            given(teamBlockRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(true);
-
-            // When / Then
-            assertThatThrownBy(() -> service.followTeam(USER_ID, TEAM_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("TEAM_004"));
-        }
-
-        @Test
-        @DisplayName("異常系: 既にSUPPORTERとして所属している場合TEAM_003例外")
-        void フォロー_既所属_例外() {
-            // Given
-            TeamEntity team = TeamEntity.builder().name("テスト").template("sports")
-                    .visibility(TeamEntity.Visibility.GUESTS_AND_ABOVE).build();
-            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(team));
-            given(teamBlockRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(false);
-            // F00.5 Phase 5: memberships ベースの重複チェック
-            given(membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                    USER_ID, ScopeType.TEAM, TEAM_ID, RoleKind.SUPPORTER)).willReturn(true);
-
-            // When / Then
-            assertThatThrownBy(() -> service.followTeam(USER_ID, TEAM_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
-                            .isEqualTo("TEAM_003"));
-        }
-
-        @Test
-        @DisplayName("正常系: memberships に SUPPORTER として入会される")
-        void フォロー_正常_入会() {
-            // Given
-            TeamEntity team = TeamEntity.builder().name("テスト").template("sports")
-                    .visibility(TeamEntity.Visibility.GUESTS_AND_ABOVE).build();
-            given(teamRepository.findById(TEAM_ID)).willReturn(Optional.of(team));
-            given(teamBlockRepository.existsByTeamIdAndUserId(TEAM_ID, USER_ID)).willReturn(false);
-            given(membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                    USER_ID, ScopeType.TEAM, TEAM_ID, RoleKind.SUPPORTER)).willReturn(false);
-
-            // When
-            service.followTeam(USER_ID, TEAM_ID);
-
-            // Then
-            verify(membershipService).join(any(MembershipCreateRequest.class));
         }
     }
 

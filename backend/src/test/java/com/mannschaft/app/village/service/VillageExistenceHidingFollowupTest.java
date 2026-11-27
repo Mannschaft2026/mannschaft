@@ -94,6 +94,7 @@ class VillageExistenceHidingFollowupTest {
     @Mock private PostingIdentityService postingIdentityService;
 
     @InjectMocks private VillageRecruitCategoryService recruitCategoryService;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private VillageMembershipProfileService membershipProfileService;
     @InjectMocks private VillageAffinityService affinityService;
     @InjectMocks private VillageFeedService feedService;

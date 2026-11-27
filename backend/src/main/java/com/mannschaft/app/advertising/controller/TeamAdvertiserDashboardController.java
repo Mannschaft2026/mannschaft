@@ -1,5 +1,6 @@
 package com.mannschaft.app.advertising.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.advertising.InvoiceStatus;
 import com.mannschaft.app.advertising.dto.AdvertiserAccountResponse;
 import com.mannschaft.app.advertising.dto.AdvertiserOverviewResponse;
@@ -143,6 +144,7 @@ public class TeamAdvertiserDashboardController {
     }
 
     /** 請求書 PDF をダウンロードする。scope→account.id を解決し帰属検証済みで生成する。 */
+    @SupportAccessDenied
     @GetMapping("/invoices/{invoiceId}/pdf")
     public ResponseEntity<byte[]> downloadInvoicePdf(
             @PathVariable Long teamId,
@@ -255,6 +257,7 @@ public class TeamAdvertiserDashboardController {
     }
 
     /** パフォーマンスデータを CSV エクスポートする（scope=TEAM）。 */
+    @SupportAccessDenied
     @GetMapping("/campaigns/{campaignId}/export")
     public ResponseEntity<byte[]> exportCampaignPerformance(
             @PathVariable Long teamId,

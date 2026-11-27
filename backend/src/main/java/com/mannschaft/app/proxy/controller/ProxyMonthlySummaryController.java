@@ -1,5 +1,6 @@
 package com.mannschaft.app.proxy.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.proxy.service.ProxyMonthlySummaryService;
@@ -48,6 +49,7 @@ public class ProxyMonthlySummaryController {
      * @return {@code { "downloadUrl": "https://..." }}
      */
     @Operation(summary = "代理入力月次サマリPDF ダウンロードURL取得")
+    @SupportAccessDenied
     @GetMapping("/{year}/{month}/{subjectUserId}/download-url")
     public ApiResponse<Map<String, String>> getDownloadUrl(
             @PathVariable int year,

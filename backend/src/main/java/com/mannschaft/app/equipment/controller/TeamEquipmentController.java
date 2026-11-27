@@ -43,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * チーム備品コントローラー。チームスコープの備品CRUD・貸出・返却・消費・画像管理・QRコードAPIを提供する。
@@ -300,6 +301,7 @@ public class TeamEquipmentController {
     /**
      * チーム備品のQRコード一覧を取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/qr-codes")
     @Operation(summary = "チーム備品QRコード一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

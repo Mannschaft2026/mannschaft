@@ -1,5 +1,6 @@
 package com.mannschaft.app.provisioning;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.repository.MembershipRepository;
 import com.mannschaft.app.provisioning.service.ProvisioningAcceptanceService;
@@ -48,6 +49,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProvisioningAcceptanceConcurrencyIT extends AbstractMySqlIntegrationTest {
 
     private static final long TIMEOUT_SECONDS = 15L;
+
+    /** 運営アカウントの判定（取引の外）。本番の Controller と同じく判定してから呼ぶ（戦役 Z-A PR2・D-3T）。 */
+    @Autowired
+    private PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     @Autowired private ProvisioningAcceptanceService acceptanceService;
     @Autowired private RoleRepository roleRepository;
@@ -162,7 +167,8 @@ class ProvisioningAcceptanceConcurrencyIT extends AbstractMySqlIntegrationTest {
                 throw new AssertionError("concurrency test start timed out");
             }
             try {
-                acceptanceService.accept(plaintextToken, acceptorId);
+                PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(acceptorId)),
+                () -> acceptanceService.accept(plaintextToken, acceptorId));
                 return null;
             } catch (Throwable error) {
                 return error;

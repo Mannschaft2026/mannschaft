@@ -67,6 +67,7 @@ class MembershipPositionScopeBodyParityTest {
     @Mock private UserRowLockService userRowLockService;
     @Mock private AdminRoleMutationLockService adminRoleMutationLockService;
     @Mock private EntityManager entityManager;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private MembershipService service;
 
     @Test

@@ -294,7 +294,7 @@ public class ActivityFeedService {
      *
      * @return パース済み detail。detail が無い（既存7種別）／パース失敗時は null
      */
-    private Object parseDetail(ActivityFeedEntity entity) {
+    private ScheduleFeedDetail parseDetail(ActivityFeedEntity entity) {
         String raw = entity.getDetail();
         if (raw == null || raw.isBlank()) {
             return null;

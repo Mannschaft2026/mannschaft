@@ -1,5 +1,6 @@
 package com.mannschaft.app.timeline.controller;
 
+import com.mannschaft.app.supportaccess.context.SupportAccessContextHolder;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.timeline.dto.CreatePostRequest;
 import com.mannschaft.app.timeline.dto.PostDetailResponse;
@@ -57,7 +58,7 @@ public class TimelinePostController {
             @Valid @RequestBody CreatePostRequest request) {
         Long resolvedScopeId = scopeIdResolver.resolve(request.getScopeTypeOrDefault(), request.getScopeId());
         PostResponse response = ranchNative.create(request, resolvedScopeId, SecurityUtils.getCurrentUserId(),
-                servletRequest.getAttribute("originalAdminId") != null)
+                SupportAccessContextHolder.isActive())
                 .orElseGet(() -> postService.createPost(request, resolvedScopeId, SecurityUtils.getCurrentUserId()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }

@@ -1,5 +1,7 @@
 package com.mannschaft.app.village.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -165,7 +167,7 @@ class VillageJoinRequestServiceTest {
             return e;
         });
 
-        JoinRequestResponse res = service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest()));
+        JoinRequestResponse res = judged(general(USER_ID), () -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest())));
 
         assertThat(res.status()).isEqualTo(VillageRequestStatus.PENDING);
         assertThat(res.subjectId()).isEqualTo(USER_ID);
@@ -186,7 +188,7 @@ class VillageJoinRequestServiceTest {
     void create_freeVillage_rejected() {
         given(villageRepository.findById(VILLAGE_ID)).willReturn(Optional.of(freeVillage()));
 
-        assertThatThrownBy(() -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest())))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest()))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.VILLAGE_FREE_VILLAGE_DIRECT_JOIN);
@@ -205,7 +207,7 @@ class VillageJoinRequestServiceTest {
                 eq(VILLAGE_ID), eq(VillageSubjectType.USER), eq(USER_ID)))
                 .willReturn(Optional.of(membership(VillageRole.VILLAGER, USER_ID)));
 
-        assertThatThrownBy(() -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest())))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest()))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.ALREADY_MEMBER);
@@ -226,7 +228,7 @@ class VillageJoinRequestServiceTest {
                 eq(VILLAGE_ID), eq(VillageSubjectType.USER), eq(USER_ID)))
                 .willReturn(Optional.of(banned));
 
-        assertThatThrownBy(() -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest())))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest()))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.MEMBER_BANNED);
@@ -253,7 +255,7 @@ class VillageJoinRequestServiceTest {
                 eq(VILLAGE_ID), eq(VillageSubjectType.USER), eq(USER_ID), eq(VillageRequestStatus.PENDING)))
                 .willReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest())))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest(VILLAGE_ID, USER_ID, validCreateRequest(), permitted(USER_ID, validCreateRequest()))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.VILLAGE_JOIN_REQUEST_PENDING_DUPLICATE);
@@ -273,7 +275,7 @@ class VillageJoinRequestServiceTest {
                 VillageSubjectType.USER, OTHER_USER_ID, null);
         VillageSubjectAuthorization denied = new VillageSubjectAuthorization(
                 USER_ID, VillageSubjectType.USER, OTHER_USER_ID, false);
-        assertThatThrownBy(() -> service.createRequest(VILLAGE_ID, USER_ID, req, denied))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createRequest(VILLAGE_ID, USER_ID, req, denied)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.REPRESENT_FORBIDDEN);
@@ -315,8 +317,8 @@ class VillageJoinRequestServiceTest {
         given(membershipRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
         given(joinRequestRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
-        JoinRequestResponse res = service.approve(
-                VILLAGE_ID, requestId, USER_ID, new JoinRequestReviewRequest("歓迎"));
+        JoinRequestResponse res = judged(general(USER_ID, OTHER_USER_ID), () -> service.approve(
+                VILLAGE_ID, requestId, USER_ID, new JoinRequestReviewRequest("歓迎")));
 
         assertThat(res.status()).isEqualTo(VillageRequestStatus.APPROVED);
         assertThat(res.reviewedBy()).isEqualTo(reviewer.getId());
@@ -358,8 +360,8 @@ class VillageJoinRequestServiceTest {
                 eq(VILLAGE_ID), eq("USER"), eq(OTHER_USER_ID)))
                 .willReturn(List.of(VillageMembershipSlotTestFixture.presence(false)));
 
-        assertThatThrownBy(() -> service.approve(
-                VILLAGE_ID, requestId, USER_ID, new JoinRequestReviewRequest(null)))
+        assertThatThrownBy(() -> judged(general(USER_ID, OTHER_USER_ID), () -> service.approve(
+                VILLAGE_ID, requestId, USER_ID, new JoinRequestReviewRequest(null))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.ALREADY_MEMBER);
@@ -379,8 +381,8 @@ class VillageJoinRequestServiceTest {
                 eq(VILLAGE_ID), eq(VillageSubjectType.USER), eq(USER_ID)))
                 .willReturn(Optional.of(membership(VillageRole.VILLAGER, USER_ID)));
 
-        assertThatThrownBy(() -> service.approve(
-                VILLAGE_ID, requestId, USER_ID, new JoinRequestReviewRequest(null)))
+        assertThatThrownBy(() -> judged(general(USER_ID, OTHER_USER_ID), () -> service.approve(
+                VILLAGE_ID, requestId, USER_ID, new JoinRequestReviewRequest(null))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.MODERATION_FORBIDDEN);

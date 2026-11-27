@@ -73,6 +73,9 @@ class RoleSuccessionServiceTest {
     @Mock
     private RolePermissionCacheGenerationService cacheGenerationService;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private RoleSuccessionService service;
 

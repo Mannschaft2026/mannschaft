@@ -268,13 +268,14 @@ class ErrorMessageLocaleHttpIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-12: 管理者変身フィルタ（AdminImpersonationFilter・非管理者の 403）が users.locale=en で日本語を含まない")
+        @DisplayName("AC-12: サポート閲覧フィルタ（SupportAccessFilter・旧ヘッダーの 400 SUPPORT_ACCESS_012）が users.locale=en で日本語を含まない")
         void AC12_管理者変身フィルタがenで日本語を含まない() throws Exception {
             UserEntity user = user("en");
             MvcResult result = mockMvc.perform(get("/api/v1/users/me")
                     .with(authentication(auth(user))).header("Accept-Language", "en")
-                    .header("X-Admin-Impersonate-User-Id", "1")).andReturn();
-            assertThat(result.getResponse().getStatus()).isEqualTo(403);
+                    .header(com.mannschaft.app.supportaccess.SupportAccessHeaders.LEGACY_IMPERSONATE, "1")).andReturn();
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(result.getResponse().getContentAsString(StandardCharsets.UTF_8)).contains("SUPPORT_ACCESS_012");
             assertThat(result.getResponse().getContentAsString(StandardCharsets.UTF_8))
                     .isNotBlank().doesNotContainPattern(JAPANESE);
         }

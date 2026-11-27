@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import com.mannschaft.app.common.SecurityUtils;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 
 /**
  * ファイル共有リンクコントローラー。外部共有リンク管理APIを提供する。
@@ -43,6 +44,7 @@ public class FileLinkController {
     /**
      * ファイルの共有リンク一覧を取得する。
      */
+    @SupportAccessDenied
     @GetMapping("/files/{fileId}/links")
     @Operation(summary = "共有リンク一覧")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "取得成功")

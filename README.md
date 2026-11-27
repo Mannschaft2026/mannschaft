@@ -581,6 +581,14 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 - ロール変更、メンバー追加/削除、設定変更等を自動記録
 - SYSTEM_ADMINによる監査ログ閲覧・検索
 
+
+#### サポート閲覧（本人承認制の代理ログイン）
+
+> 📄 詳細設計: [docs/features/F10.9_support_access.md](docs/features/F10.9_support_access.md)
+
+- 運営専用アカウントが、本人の再認証つき許可（24時間・未成年や後見下は保護者も承認）がある場合に限り、本人の視点で画面を**閲覧のみ**できる（書込・書出し・認証系・決済系は不可）
+- 運営は `/system-admin/support-access` で依頼、本人は `/settings/support-access` で許可・拒否・取消と閲覧記録の確認。旧「管理者変身」は廃止
+
 #### 12.1 パフォーマンス監視 / エラー監視
 
 > 📄 詳細設計: [docs/features/F10.5_performance_monitoring.md](docs/features/F10.5_performance_monitoring.md) | [docs/features/F10.6_error_monitoring.md](docs/features/F10.6_error_monitoring.md)
@@ -992,7 +1000,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 | 7 | サービス記録、パフォーマンス管理、備品管理、カルテ、スキル・資格管理、インシデント管理 | [F07.1](docs/features/F07.1_service_records.md), [F07.2](docs/features/F07.2_performance.md), [F07.3](docs/features/F07.3_equipment.md), [F07.4](docs/features/F07.4_chart.md), [F07.5](docs/features/F07.5_skill_certification.md), [F07.6](docs/features/F07.6_incident_management.md) |
 | 8 | マッチング、大会・リーグ管理、決済・会費・入退室、議決権行使・委任状、領収書、回数券、予算・会計管理 | [F08.1](docs/features/F08.1_matching.md), [F08.2](docs/features/F08.2_payments_access_control.md), [F08.3](docs/features/F08.3_voting_proxy.md), [F08.4](docs/features/F08.4_receipt.md), [F08.5](docs/features/F08.5_ticket_book.md), [F08.6](docs/features/F08.6_budget_accounting.md), [F08.7](docs/features/F08.7_tournament_league.md) |
 | 9 | 住民台帳、プロモーション配信、駐車場区画、LINE/SNS連携、施設予約、ダイレクトメール、広告、コルクボード、Webhook/外部API、デジタルサイネージ、メール配信基盤 | [F09.1](docs/features/F09.1_resident_registry.md), [F09.2](docs/features/F09.2_promotion_targeting.md), [F09.3](docs/features/F09.3_parking.md), [F09.4](docs/features/F09.4_line_sns.md), [F09.5](docs/features/F09.5_facility_booking.md), [F09.6](docs/features/F09.6_direct_mail.md), [F09.7](docs/features/F09.7_advertising.md), [F09.8](docs/features/F09.8_corkboard.md), [F09.9](docs/features/F09.9_webhook_api.md), [F09.10](docs/features/F09.10_digital_signage.md), [F09.18](docs/features/F09.18_email_delivery_infrastructure.md) |
-| 10 | 管理者ダッシュボード（チーム・組織の設定集約）、通報モデレーション、監査ログ、経営分析、パフォーマンス監視、エラー監視 | [F10.1](docs/features/F10.1_admin_dashboard.md), [F10.1.1](docs/features/F10.1.1_team_org_admin_console/README.md), [F10.2](docs/features/F10.2_moderation.md), [F10.3](docs/features/F10.3_audit_logs.md), [F10.4](docs/features/F10.4_business_analytics.md), [F10.5](docs/features/F10.5_performance_monitoring.md), [F10.6](docs/features/F10.6_error_monitoring.md) |
+| 10 | 管理者ダッシュボード（チーム・組織の設定集約）、通報モデレーション、監査ログ、経営分析、パフォーマンス監視、エラー監視 | [F10.1](docs/features/F10.1_admin_dashboard.md), [F10.1.1](docs/features/F10.1.1_team_org_admin_console/README.md), [F10.2](docs/features/F10.2_moderation.md), [F10.3](docs/features/F10.3_audit_logs.md), [F10.4](docs/features/F10.4_business_analytics.md), [F10.5](docs/features/F10.5_performance_monitoring.md), [F10.6](docs/features/F10.6_error_monitoring.md), [F10.9 サポート閲覧](docs/features/F10.9_support_access.md) |
 | 11 | オフライン対応/PWA、多言語コンテンツ、ポリッシュ・テスト・Docker化 | [F11.1](docs/features/F11.1_offline_pwa.md), [F11.2](docs/features/F11.2_multilingual_content.md) |
 
 ---
@@ -1029,7 +1037,7 @@ Mannschaft は「チーム・組織内は実名表示」を基本思想とする
 | 7 | サービス記録、パフォーマンス、備品管理、カルテ | `/service-records/**`, `/performance/**`, `/equipment/**`, `/charts/**` | [F07.1](docs/features/F07.1_service_records.md), [F07.2](docs/features/F07.2_performance.md), [F07.3](docs/features/F07.3_equipment.md), [F07.4](docs/features/F07.4_chart.md) |
 | 8 | マッチング、大会・リーグ、決済・会費、議決権、領収書、回数券 | `/matching/**`, `/tournaments/**`, `/payments/**`, `/proxy-votes/**`, `/admin/receipts/**`, `/ticket-products/**` | [F08.1](docs/features/F08.1_matching.md), [F08.2](docs/features/F08.2_payments_access_control.md), [F08.3](docs/features/F08.3_voting_proxy.md), [F08.4](docs/features/F08.4_receipt.md), [F08.5](docs/features/F08.5_ticket_book.md), [F08.7](docs/features/F08.7_tournament_league.md) |
 | 9 | 住民台帳、プロモーション、駐車場、LINE/SNS、施設予約、DM、広告、コルクボード | `/dwelling-units/**`, `/promotions/**`, `/parking/**`, `/line/**`, `/facilities/**`, `/direct-mails/**`, `/ads/**`, `/corkboards/**` | [F09.1](docs/features/F09.1_resident_registry.md), [F09.2](docs/features/F09.2_promotion_targeting.md), [F09.3](docs/features/F09.3_parking.md), [F09.4](docs/features/F09.4_line_sns.md), [F09.5](docs/features/F09.5_facility_booking.md), [F09.6](docs/features/F09.6_direct_mail.md), [F09.7](docs/features/F09.7_advertising.md), [F09.8](docs/features/F09.8_corkboard.md) |
-| 10 | 管理者ダッシュボード、モデレーション、監査ログ、経営分析 | `/admin/dashboard/**`, `/admin/reports/**`, `/admin/audit-logs/**`, `/system-admin/analytics/**` | [F10.1](docs/features/F10.1_admin_dashboard.md), [F10.2](docs/features/F10.2_moderation.md), [F10.3](docs/features/F10.3_audit_logs.md), [F10.4](docs/features/F10.4_business_analytics.md) |
+| 10 | 管理者ダッシュボード、モデレーション、監査ログ、経営分析 | `/admin/dashboard/**`, `/admin/reports/**`, `/admin/audit-logs/**`, `/system-admin/analytics/**`, `/system-admin/support-access/**`, `/me/support-access/**` | [F10.1](docs/features/F10.1_admin_dashboard.md), [F10.2](docs/features/F10.2_moderation.md), [F10.3](docs/features/F10.3_audit_logs.md), [F10.4](docs/features/F10.4_business_analytics.md) |
 | 11 | ワークフロー、予算会計、フォーム、ナレッジベース、イベント、スキル、Webhook、ゲーミフィケーション、時間割管理、年間行事計画等 | `/workflows/**`, `/budgets/**`, `/forms/**`, `/kb/**`, `/events/**`, `/skills/**`, `/webhooks/**`, `/badges/**`, `/timetables/**`, `/event-categories/**` | [F05.6](docs/features/F05.6_workflow_approval.md)〜[F11.2](docs/features/F11.2_multilingual_content.md), [F03.9](docs/features/F03.9_timetable.md), [F03.10](docs/features/F03.10_annual_event_plan.md) |
 
 ### データエクスポート

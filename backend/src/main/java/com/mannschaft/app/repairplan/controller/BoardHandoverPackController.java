@@ -1,5 +1,6 @@
 package com.mannschaft.app.repairplan.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.SecurityUtils;
@@ -83,6 +84,7 @@ public class BoardHandoverPackController {
     /**
      * 申し送りパックの署名付きダウンロード URL を取得する（メンバーシップ必須）。
      */
+    @SupportAccessDenied
     @GetMapping("/{packId}/download")
     @Operation(summary = "ダウンロード URL 取得（メンバーシップ必須）")
     public ResponseEntity<ApiResponse<HandoverPackDownloadResponse>> getDownloadUrl(

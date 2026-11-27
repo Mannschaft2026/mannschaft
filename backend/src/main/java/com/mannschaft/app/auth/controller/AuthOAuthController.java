@@ -8,6 +8,7 @@ import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.featuregate.AlwaysReachable;
 import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.common.security.IntentionallyPublic;
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -68,6 +69,8 @@ public class AuthOAuthController {
     @GetMapping("/google/auth-url")
     @Operation(summary = "Google OAuth 認証URL取得")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Google OAuth 認証URL")
+    // F10.9 第2回検分: OAuth の認可 URL（state 付き）は本人としてログインを始める材料のため、代理閲覧中は拒否する（SUPPORT_ACCESS_004）
+    @SupportAccessDenied
     public ResponseEntity<ApiResponse<Map<String, String>>> getGoogleAuthUrl() {
         String authUrl = authOAuthService.generateGoogleLoginAuthUrl();
         return ResponseEntity.ok(ApiResponse.of(Map.of("authUrl", authUrl)));

@@ -1,5 +1,6 @@
 package com.mannschaft.app.ticket.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -222,6 +223,7 @@ public class TicketBookController {
     /**
      * 売上レポート CSV/PDF エクスポート（ADMIN）。
      */
+    @SupportAccessDenied
     @GetMapping("/stats/export")
     @Operation(summary = "売上レポートエクスポート")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "エクスポート成功")

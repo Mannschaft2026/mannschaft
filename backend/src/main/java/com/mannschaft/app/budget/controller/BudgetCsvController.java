@@ -1,5 +1,6 @@
 package com.mannschaft.app.budget.controller;
 
+import com.mannschaft.app.supportaccess.web.SupportAccessDenied;
 import com.mannschaft.app.budget.dto.CsvImportConfirmRequest;
 import com.mannschaft.app.budget.dto.CsvImportPreviewResponse;
 import com.mannschaft.app.budget.dto.CsvImportResultResponse;
@@ -37,6 +38,7 @@ public class BudgetCsvController {
      * @param fiscalYearId 会計年度ID
      * @return CSVバイトデータ
      */
+    @SupportAccessDenied
     @GetMapping(value = "/export", produces = "text/csv")
     public byte[] export(@PathVariable Long fiscalYearId) {
         return budgetCsvService.export(fiscalYearId);

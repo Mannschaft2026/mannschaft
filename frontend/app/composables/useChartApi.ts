@@ -10,6 +10,7 @@ import type {
   ChartRecordTemplate,
   ChartSectionSettings,
   ChartCustomerProgress,
+  ChartPhoto,
 } from '~/types/chart'
 
 export function useChartApi() {
@@ -150,7 +151,7 @@ export function useChartApi() {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('photoType', photoType)
-    return api<{ data: { photoUrl: string } }>(`/api/v1/teams/${teamId}/charts/${chartId}/photos`, {
+    return api<{ data: ChartPhoto }>(`/api/v1/teams/${teamId}/charts/${chartId}/photos`, {
       method: 'POST',
       body: formData,
     })

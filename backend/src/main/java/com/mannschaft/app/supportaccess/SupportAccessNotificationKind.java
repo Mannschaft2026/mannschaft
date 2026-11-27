@@ -1,0 +1,11 @@
+package com.mannschaft.app.supportaccess;
+
+/** F10.9 通知の種別（REQUESTED_TO_TARGET/SESSION_STARTED_TO_TARGET は本人、REQUESTED_TO_GUARDIAN は保護者、*_TO_OPERATOR は運営者へ）。 */
+public enum SupportAccessNotificationKind {
+    REQUESTED_TO_TARGET,
+    REQUESTED_TO_GUARDIAN,
+    SESSION_STARTED_TO_TARGET,
+    APPROVED_TO_OPERATOR,
+    DENIED_TO_OPERATOR,
+    REVOKED_TO_OPERATOR
+}
