@@ -89,6 +89,42 @@ describe('CommerceDisclosureModal', () => {
     w.unmount()
   })
 
+  it('CDM-004c: 閉じて再度開いても再スクロールする', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    const w = mountModal({ anchor: 'contact' })
+    await flushPromises()
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+    await w.setProps({ visible: false })
+    await flushPromises()
+    await w.setProps({ visible: true })
+    await flushPromises()
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(2))
+    w.unmount()
+  })
+
+  it('CDM-004d: anchor=contact で開いた後、anchor 無しで開き直してもスクロールしない', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    const w = mountModal({ anchor: 'contact' })
+    await flushPromises()
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+    await w.setProps({ visible: false })
+    await flushPromises()
+    await w.setProps({ visible: true, anchor: undefined })
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('CDM-004e: モーダル内の項目には scroll-mt-20 が付かない（余計な余白を作らない）', async () => {
+    const w = mountModal()
+    await flushPromises()
+    const dialog = document.body.querySelector('[data-testid="commerce-disclosure-modal"]')!
+    expect(dialog.querySelector('.scroll-mt-20')).toBeNull()
+    w.unmount()
+  })
+
   it('CDM-005: モーダル内に id="contact" が無い', async () => {
     const w = mountModal()
     await flushPromises()
@@ -102,5 +138,6 @@ describe('CommerceDisclosureContent', () => {
     const w = mount(Content)
     expect(w.find('h1').exists()).toBe(true)
     expect(w.find('#contact').exists()).toBe(true)
+    expect(w.find('.scroll-mt-20').exists()).toBe(true)
   })
 })

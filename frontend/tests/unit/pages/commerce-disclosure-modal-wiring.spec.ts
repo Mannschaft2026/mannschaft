@@ -19,7 +19,13 @@ describe('特商法モーダルの配線', () => {
       const src = read(rel)
       expect(src).not.toMatch(/to="\/commerce-disclosure/)
       expect(src).toMatch(/<CommerceDisclosureModal\s+v-model:visible=/)
-      expect(src).toMatch(/type="button"[\s\S]{0,300}footer_commerce/)
+      // footer_commerce を表示する button 要素そのものが type="button" で、モーダルを開く @click を持つ
+      const buttons = [...src.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)]
+        .filter((m) => m[2]!.includes('footer_commerce'))
+      expect(buttons).toHaveLength(1)
+      expect(buttons[0]![1]).toMatch(/type="button"/)
+      expect(buttons[0]![1]).toMatch(/@click="commerceModalVisible = true"/)
+      expect(src).toMatch(/const commerceModalVisible = ref\(false\)/)
     })
   }
 

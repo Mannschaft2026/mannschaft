@@ -7,7 +7,9 @@ withDefaults(defineProps<{
   hideTitle?: boolean
   /** お問い合わせ項目に付ける id。ページとモーダルが同時に DOM にあっても重複しないよう、モーダルは空にする */
   contactId?: string
-}>(), { hideTitle: false, contactId: 'contact' })
+  /** ページ用の固定ヘッダー逃げ（scroll-mt-20）を付けるか。モーダル内では余計な余白になるため false にする */
+  scrollOffset?: boolean
+}>(), { hideTitle: false, contactId: 'contact', scrollOffset: true })
 
 interface DisclosureItem {
   key: string
@@ -41,8 +43,9 @@ const items = computed<DisclosureItem[]>(() => {
         v-for="item in items"
         :id="item.key === 'contact' && contactId ? contactId : undefined"
         :key="item.key"
+        :class="{ 'scroll-mt-20': scrollOffset }"
         :data-section="item.key === 'contact' ? 'contact' : undefined"
-        class="scroll-mt-20 border-b border-surface-100 pb-4 last:border-b-0 dark:border-surface-700"
+        class="border-b border-surface-100 pb-4 last:border-b-0 dark:border-surface-700"
       >
         <dt class="mb-1 text-sm font-bold text-surface-900 dark:text-white">
           {{ item.label }}

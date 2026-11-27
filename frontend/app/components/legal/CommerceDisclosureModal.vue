@@ -34,7 +34,7 @@ watch(
     data-testid="commerce-disclosure-modal"
   >
     <div ref="bodyRef" class="overflow-y-auto py-2" style="max-height: 70vh">
-      <CommerceDisclosureContent hide-title contact-id="" />
+      <CommerceDisclosureContent hide-title contact-id="" :scroll-offset="false" />
     </div>
     <template #footer>
       <Button :label="t('button.close')" icon="pi pi-times" text @click="visible = false" />
