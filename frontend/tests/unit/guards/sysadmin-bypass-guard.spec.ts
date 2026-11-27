@@ -55,14 +55,14 @@ const NOT_FUNCTION_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 
 /** `{` の直前の見出しから「ブロックの名前」を決める。関数・メソッド・関数代入の const → 名前、それ以外は空文字（外側を引き継ぐ）。 */
 export function blockName(code: string, braceIdx: number): string {
   let j = braceIdx
-  while (j > 0 && !';{}'.includes(code[j - 1])) j--
+  while (j > 0 && !';{}'.includes(code.charAt(j - 1))) j--
   const hdr = code.slice(Math.max(j, braceIdx - 400), braceIdx).trim()
   const fn = hdr.match(/\bfunction\s*\*?\s*(\w+)\s*[(<][^]*$/)
-  if (fn) return fn[1]
+  if (fn) return fn[1] ?? ''
   const assigned = hdr.match(/\b(?:const|let|var)\s+(\w+)\b[^]*?(?:=>|\bfunction\b)[^]*$/)
-  if (assigned) return assigned[1]
+  if (assigned) return assigned[1] ?? ''
   const method = hdr.match(/(?:^|[\s.])(?:async\s+)?(\w+)\s*(?:<[^>()]*>)?\s*\([^]*\)\s*(?::\s*[^{}]+)?$/)
-  if (method && !NOT_FUNCTION_KEYWORDS.has(method[1])) return method[1]
+  if (method && !NOT_FUNCTION_KEYWORDS.has(method[1] ?? '')) return method[1] ?? ''
   return ''
 }
 
@@ -72,7 +72,7 @@ export function enclosingFunctions(code: string, positions: number[]): string[] 
   const stack: string[] = []
   let pi = 0
   for (let i = 0; i < code.length && pi < positions.length; i++) {
-    while (pi < positions.length && positions[pi] <= i) {
+    while (pi < positions.length && (positions[pi] ?? Infinity) <= i) {
       result.push(stack.findLast((n) => n !== '') ?? '-')
       pi++
     }
@@ -203,7 +203,7 @@ describe('番人 G2: FE の SYSTEM_ADMIN 判定は基準線から増えない（
     if (process.env.SYSADMIN_BASELINE_REGENERATE === '1') {
       const out: Baseline = {}
       for (const [k, n] of Object.entries(actual)) {
-        const [path, p] = k.split('\t')
+        const [path = '', p = ''] = k.split('\t')
         ;(out[path] ??= {})[p] = n
       }
       writeFileSync(BASELINE_PATH, JSON.stringify(out, null, 2) + '\n')
@@ -225,7 +225,7 @@ describe('番人 G2: FE の SYSTEM_ADMIN 判定は基準線から増えない（
 describe('番人 G2 の自己検証（検出器の偽陰性・偽陽性を晒す）', () => {
   const base = { 'composables/useX.ts': 'export const a = (s) => s.isSystemAdmin ? 1 : 0' }
   const baseline = scan(base, [])
-  const baseKey = Object.keys(baseline)[0]
+  const baseKey = Object.keys(baseline)[0] ?? ''
 
   it('基準線どおりなら緑、新規ファイル・件数増加は赤、減少の下げ忘れも赤', () => {
     expect(baseKey).toBe('composables/useX.ts\tisSystemAdmin#-')

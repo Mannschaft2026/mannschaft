@@ -147,7 +147,7 @@ describe('既存設定の集約ハブ', () => {
     expect(state.loadFlags).toHaveBeenCalledTimes(1)
   })
 
-  it('旧slugの権限取得の成功が遅れても、新slugの取得失敗を上書きしない', async () => {
+  it('旧slugの権限取得の成功が遅れても、新slugの取得失敗（403を含む。本物の /me/permissions は未所属でも200で roleName=null を返すので403は通信側の異常）を上書きしない', async () => {
     state.role = 'DEPUTY_ADMIN'
     state.scopeAdmin = false
     let allowOld!: () => void

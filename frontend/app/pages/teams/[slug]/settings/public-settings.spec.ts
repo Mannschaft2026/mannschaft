@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
+import { createPinia } from 'pinia'
 import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import TeamPage from './public-settings.vue'
 import OrganizationPage from '~/pages/organizations/[slug]/settings/public-settings.vue'
@@ -11,6 +12,7 @@ import publicMessages from '~/locales/en/public.json'
 
 const state = vi.hoisted(() => ({
   allowed: true,
+  realRole: null as string | null,
   roleName: 'ADMIN',
   permissions: vi.fn(),
   fetchTeamPublicSettings: vi.fn(),
@@ -23,11 +25,17 @@ const state = vi.hoisted(() => ({
 }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'private-scope' } }))
 mockNuxtImport('usePublicApi', () => () => state)
-mockNuxtImport('useRoleAccess', () => () => ({
-  isAdminOrDeputy: ref(state.allowed),
-  roleName: ref(state.roleName),
-  loadPermissions: state.permissions,
-}))
+// 通常は模造。realRole を入れたテストだけ本物の useRoleAccess（useApi の応答から roleName を解決）を通す。
+mockNuxtImport('useApi', () => () => async () => ({ data: { roleName: state.realRole, permissions: [] } }))
+mockNuxtImport('useRoleAccess', (original) => {
+  return (...args: Parameters<typeof original>) => state.realRole
+    ? original(...args)
+    : {
+        isAdminOrDeputy: ref(state.allowed),
+        roleName: ref(state.roleName),
+        loadPermissions: state.permissions,
+      }
+})
 mockNuxtImport('useToast', () => () => ({ add: vi.fn() }))
 mockNuxtImport('useNotification', () => () => ({ success: vi.fn() }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: state.handleApiError }))
@@ -43,6 +51,7 @@ async function mountPage(scope: 'team' | 'organization') {
     {
       global: {
         plugins: [
+          createPinia(),
           createI18n({
             legacy: false,
             locale: 'en',
@@ -82,6 +91,7 @@ async function mountPage(scope: 'team' | 'organization') {
 
 beforeEach(() => {
   state.allowed = true
+  state.realRole = null
   state.roleName = 'ADMIN'
   vi.clearAllMocks()
   state.permissions.mockReset().mockResolvedValue({ ok: true })
@@ -116,9 +126,8 @@ for (const scope of ['team', 'organization'] as const) {
           .checked,
       ).toBe(true)
     })
-    it('SYSTEM_ADMIN単独は管理者扱いにならず（isAdminOrDeputy=false）、管理GETも設定フォームも使えない（運営はテナント設定に触れない）', async () => {
-      state.roleName = 'SYSTEM_ADMIN'
-      state.allowed = false
+    it('旧応答 roleName=SYSTEM_ADMIN 単独は本物の useRoleAccess で管理者扱いにならず、管理GETも設定フォームも使えない（運営はテナント設定に触れない）', async () => {
+      state.realRole = 'SYSTEM_ADMIN'
       const wrapper = await mountPage(scope)
       expect(read()).not.toHaveBeenCalled()
       expect(wrapper.find('form').exists()).toBe(false)

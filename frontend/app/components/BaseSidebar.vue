@@ -88,6 +88,12 @@ async function loadSidebar() {
   try {
     const result = await loadPermissions()
     if (!result.ok) throw result.error
+    // メンバーでない人（未所属・SUPPORTER・GUEST・運営アカウント）には項目を出さないので、
+    // モジュールを取らない（取ると 403 でエラー面が出る）。権限取得の失敗は上で従来どおりエラー面へ送る。
+    if (!isMember.value) {
+      loadState.value = 'loaded'
+      return
+    }
     const modules = props.scopeType === 'organization'
       ? await getOrganizationModules(props.scopeId)
       : (await getTeamModules(props.scopeId)).data

@@ -52,16 +52,27 @@ describe('BaseSidebar の取得状態', () => {
     expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/team-a/me/permissions')
   })
 
-  it('所属の無い運営アカウント（roleName=null）にはメニューリンクを出さず、モジュールAPIの失敗はエラーとして表示する（戦役Z-A PR5）', async () => {
+  it.each([null, 'SUPPORTER', 'GUEST', 'SYSTEM_ADMIN'])('メンバーでない roleName=%s はモジュールAPIを呼ばず、メニューもエラー面も出さない（戦役Z-A PR5）', async (role) => {
     apiMock.mockImplementation((url: string) => url.endsWith('/me/permissions')
-      ? Promise.resolve(permissions(null as unknown as string))
+      ? Promise.resolve(permissions(role as unknown as string))
       : Promise.reject(Object.assign(new Error('membership required'), { statusCode: 403 })))
     const wrapper = await mountSidebar()
     await flushPromises()
 
     expect(wrapper.find('a[href="/teams/team-a/admin"]').exists()).toBe(false)
-    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
     expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/team-a/me/permissions')
+    expect(apiMock).not.toHaveBeenCalledWith('/api/v1/teams/team-a/modules')
+  })
+
+  it('メンバー（MEMBER）のモジュール取得失敗はエラー面を表示する（回帰）', async () => {
+    apiMock.mockImplementation((url: string) => url.endsWith('/me/permissions')
+      ? Promise.resolve(permissions('MEMBER'))
+      : Promise.reject(Object.assign(new Error('boom'), { statusCode: 500 })))
+    const wrapper = await mountSidebar()
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true)
     expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/team-a/modules')
   })
 

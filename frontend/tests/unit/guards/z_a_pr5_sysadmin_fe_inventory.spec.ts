@@ -40,14 +40,14 @@ const PATTERNS: Record<string, RegExp> = {
 const NOT_FUNCTION_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'await', 'typeof'])
 function blockName(code: string, braceIdx: number): string {
   let j = braceIdx
-  while (j > 0 && !';{}'.includes(code[j - 1])) j--
+  while (j > 0 && !';{}'.includes(code.charAt(j - 1))) j--
   const hdr = code.slice(Math.max(j, braceIdx - 400), braceIdx).trim()
   const fn = hdr.match(/\bfunction\s*\*?\s*(\w+)\s*[(<][^]*$/)
-  if (fn) return fn[1]
+  if (fn) return fn[1] ?? ''
   const assigned = hdr.match(/\b(?:const|let|var)\s+(\w+)\b[^]*?(?:=>|\bfunction\b)[^]*$/)
-  if (assigned) return assigned[1]
+  if (assigned) return assigned[1] ?? ''
   const method = hdr.match(/(?:^|[\s.])(?:async\s+)?(\w+)\s*(?:<[^>()]*>)?\s*\([^]*\)\s*(?::\s*[^{}]+)?$/)
-  if (method && !NOT_FUNCTION_KEYWORDS.has(method[1])) return method[1]
+  if (method && !NOT_FUNCTION_KEYWORDS.has(method[1] ?? '')) return method[1] ?? ''
   return ''
 }
 function enclosingFunctions(code: string, positions: number[]): string[] {
@@ -55,7 +55,7 @@ function enclosingFunctions(code: string, positions: number[]): string[] {
   const stack: string[] = []
   let pi = 0
   for (let i = 0; i < code.length && pi < positions.length; i++) {
-    while (pi < positions.length && positions[pi] <= i) {
+    while (pi < positions.length && (positions[pi] ?? Infinity) <= i) {
       result.push(stack.findLast((n) => n !== '') ?? '-')
       pi++
     }
@@ -121,7 +121,7 @@ function loadInventory(): Row[] {
   return body.map((l) => {
     const c = l.split('\t')
     expect(c, `列数は 7: ${l}`).toHaveLength(7)
-    return { path: c[0], line: Number(c[1]), kind: c[2], keys: c[3] === '-' ? [] : c[3].split(','), snippet: c[4], cls: c[5], action: c[6] }
+    return { path: c[0] ?? '', line: Number(c[1]), kind: c[2] ?? '', keys: c[3] === '-' ? [] : (c[3] ?? '').split(','), snippet: c[4] ?? '', cls: c[5] ?? '', action: c[6] ?? '' }
   })
 }
 /** 分類別の「path\tkey → 件数」 */
@@ -184,7 +184,7 @@ describe('戦役Z-A PR5: FE の SYSTEM_ADMIN 判定の分類表', () => {
     const remove = tally(rows, (r) => r.cls === 'i')
     const baseline = JSON.parse(readFileSync(BASELINE, 'utf-8')) as Record<string, Counts>
     const stale = Object.keys(remove).flatMap((k) => {
-      const [path, key] = k.split('\t')
+      const [path = '', key = ''] = k.split('\t')
       const b = baseline[path]?.[key] ?? 0
       return b > (keep[k] ?? 0) ? [`${path}  ${key} 基準線 ${b}（PR5 後の期待 ${keep[k] ?? 0}）`] : []
     })

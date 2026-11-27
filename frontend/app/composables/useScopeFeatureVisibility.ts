@@ -1,5 +1,6 @@
 import { computed, watch, type MaybeRefOrGetter } from 'vue'
-import type { FeatureDisplayPolicy } from '~/types/feature-display'
+import type { FeatureDisplayPolicy, FeatureDisplayRole } from '~/types/feature-display'
+import type { ViewerRole } from '~/types/dashboard'
 
 type PolicyState = {
   status: 'loading' | 'success' | 'error'
@@ -13,7 +14,7 @@ export function useScopeFeatureVisibility(
   scopeType: MaybeRefOrGetter<'team' | 'organization'>,
   slug: MaybeRefOrGetter<string | undefined | null>,
   // 表示ロール（実ロール）。列挙外の値は eligible にならず、管理者の素通しにも使わない。
-  actualRole: MaybeRefOrGetter<string | null | undefined>,
+  actualRole: MaybeRefOrGetter<FeatureDisplayRole | ViewerRole | null | undefined>,
   memberLens: MaybeRefOrGetter<boolean> = false,
 ) {
   const api = useApi()

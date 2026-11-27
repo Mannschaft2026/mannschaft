@@ -90,11 +90,12 @@ describe('BaseSidebar — 戦役Z-A PR5 AC9: 運営アカウントにテナン�
     },
   )
 
-  it('旧応答 roleName="SYSTEM_ADMIN" でもモジュール有効状態の取得を省略しない（SYSTEM_ADMIN 専用の分岐を持たない）', async () => {
+  it('旧応答 roleName="SYSTEM_ADMIN" はメンバーでない人として扱い、モジュールを取らず、エラー面も出さない（運営専用の分岐ではなく、メンバーでない人全員に効く判定）', async () => {
     asPlatformAccount()
     respond('SYSTEM_ADMIN')
-    await mountSidebar('team')
-    expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/scope-a/modules')
+    const wrapper = await mountSidebar('team')
+    expect(apiMock).not.toHaveBeenCalledWith('/api/v1/teams/scope-a/modules')
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
   })
 
   it('BaseSidebar.vue のコードに SYSTEM_ADMIN の文字列判定が残っていない（コメントを除く）', () => {
