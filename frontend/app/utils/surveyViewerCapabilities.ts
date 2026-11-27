@@ -1,4 +1,4 @@
-import type { SurveyDetailResponse, SurveyStatus } from '~/types/survey'
+import type { SurveyDetailResponse } from '~/types/survey'
 
 /**
  * アンケート詳細画面の「この閲覧者に何をさせてよいか」の判定（CMP-041）。
@@ -45,15 +45,4 @@ export function canManageSurvey(detail: SurveyViewerCapabilityInput): boolean {
  */
 export function canViewSurveyTeamBreakdown(detail: SurveyViewerCapabilityInput): boolean {
   return detail?.viewerCanViewTeamBreakdown === true
-}
-
-/**
- * 督促を送信できるか。管理操作可であり、かつ公開中であること
- * （BE `SurveyRemindService#remind` は PUBLISHED 以外を INVALID_SURVEY_STATUS で弾く）。
- */
-export function canRemindSurvey(
-  detail: SurveyViewerCapabilityInput,
-  status: SurveyStatus | undefined,
-): boolean {
-  return canManageSurvey(detail) && status === 'PUBLISHED'
 }
