@@ -64,6 +64,11 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
  * 候補が0件または複数のときは全実装へ広げず、従来解決できていたdefault本体だけを保持する。
  * reflectionやその他の動的ディスパッチ、lambdaの合成メソッドを常に追跡できるとは限らない。
  * 呼び出し先型自体がRepositoryパッケージなら、実装解決の前に検出する。
+ *
+ * <h2>越境読み取り専用の認可境界（{@link #AUTHORIZATION_BOUNDARIES}）</h2>
+ * <p>{@code common} の中継は原則として通り抜けて探索を続けるが、F00 §20 の共通の門
+ * {@code com.mannschaft.app.common.ScopeContentAccessGate} だけは「越境読み取り専用の認可境界」として扱い、
+ * そこで展開を止める（門への呼び出し自体は辿るが、門の中身へは入らない）。詳細は定数の Javadoc。
  */
 @AnalyzeClasses(packages = "com.mannschaft.app", importOptions = ImportOption.DoNotIncludeTests.class)
 @ArchTag(ArchUnitTestTag.ARCHUNIT)
@@ -71,6 +76,29 @@ class CrossDomainTransactionalTransitiveArchTest {
 
     private static final String REPOSITORY_MARKER = ".repository";
     private static final String DIAGNOSTICS_PROPERTY = "archunit.d3t.diagnostics";
+
+    /**
+     * 展開を止める「越境読み取り専用の認可境界」の完全修飾クラス名（CMP-261124-0159 PR-D0）。
+     *
+     * <p>F00 §20 の共通の門 {@code ScopeContentAccessGate} は、各ドメインがドメインの外の認可（在籍・ロール・
+     * チームの公開範囲）を Service 経由で問い合わせるための正規の経路であり、読み取り専用の認可ポートである。
+     * D-3T の趣旨は「書き込みの整合性が他ドメインの Repository に広がらないこと」なので、門の先にある
+     * role / membership の Repository への到達は趣旨に反しない。門の中まで辿ると、門を呼ぶ全ドメインの
+     * {@code @Transactional} 入口が {@code UserRoleRepository} / {@code RoleRepository} /
+     * {@code MembershipRepository} へ届く扱いになり、移行 PR ごとに数十件の見かけの新規違反が出る
+     * （PR-D2 #4963 で 73 件）。殿の裁定（案 B を門の 1 クラスに限って採る。凍結ストアへの大量追加＝案 D、
+     * 門の native SQL 化＝案 A は採らない）により、ここで展開を止める。</p>
+     *
+     * <p>境界にする前提条件として、門が本当に読み取り専用であること（{@code @Transactional} は readOnly のみ・
+     * Repository の書き込み系メソッドへ推移的に到達しない・悲観ロックを使わない）を
+     * {@code ScopeContentAccessGateReadOnlyArchTest} が機械的に保証する。対象は門の 1 クラスだけで、
+     * ワイルドカードやパッケージ単位の指定はしない（ほかの {@code common} の中継はこれまでどおり通り抜ける。
+     * メタテスト {@code CrossDomainTransactionalTransitiveGuardConditionTest} が両方を固定する）。
+     * この境界により、門へ移行した各 PR で旧 {@code checkMembership} 経由の凍結行が消えるのは負債の返済ではなく、
+     * 境界の定義による付け替えである（{@code docs/architecture/archunit_freeze_history.md}）。</p>
+     */
+    static final Set<String> AUTHORIZATION_BOUNDARIES = Set.of(
+        "com.mannschaft.app.common.ScopeContentAccessGate");
 
     @ArchTest
     static final ArchRule transactional_entries_should_not_reach_other_domain_repositories =
@@ -83,18 +111,24 @@ class CrossDomainTransactionalTransitiveArchTest {
                 .as("transactional entry should not transitively reach other-domain repositories (D-3T)"));
 
     static List<TransitiveViolation> findViolations(JavaClass clazz, Iterable<JavaClass> candidates) {
-        return findViolations(clazz, new SingleImplementationIndex(candidates));
+        return findViolations(clazz, candidates, AUTHORIZATION_BOUNDARIES);
+    }
+
+    /** メタテスト用: 認可境界の集合を差し替えて判定する（境界が検出を消していることの確認に使う）。 */
+    static List<TransitiveViolation> findViolations(
+            JavaClass clazz, Iterable<JavaClass> candidates, Set<String> boundaries) {
+        return findViolations(clazz, new SingleImplementationIndex(candidates), boundaries);
     }
 
     private static List<TransitiveViolation> findViolations(
-            JavaClass clazz, SingleImplementationIndex implementations) {
+            JavaClass clazz, SingleImplementationIndex implementations, Set<String> boundaries) {
         String sourceDomain = DomainPackages.domainOf(clazz.getPackageName());
         if (sourceDomain == null || DomainPackages.isSharedDomain(sourceDomain)) {
             return List.of();
         }
         Map<String, TransitiveViolation> unique = new LinkedHashMap<>();
         for (TransactionalEntry entry : transactionalEntries(clazz)) {
-            collectViolations(entry, sourceDomain, unique, implementations);
+            collectViolations(entry, sourceDomain, unique, implementations, boundaries);
         }
         return unique.values().stream()
             .sorted(Comparator.comparing(TransitiveViolation::freezeKey))
@@ -119,7 +153,8 @@ class CrossDomainTransactionalTransitiveArchTest {
             TransactionalEntry entry,
             String sourceDomain,
             Map<String, TransitiveViolation> unique,
-            SingleImplementationIndex implementations) {
+            SingleImplementationIndex implementations,
+            Set<String> boundaries) {
         Deque<PathNode> queue = new ArrayDeque<>();
         Set<String> visited = new HashSet<>();
         queue.add(new PathNode(entry.method(), List.of(displayName(entry.method()))));
@@ -141,6 +176,10 @@ class CrossDomainTransactionalTransitiveArchTest {
                     unique.putIfAbsent(violation.freezeKey(), violation);
                 }
                 if (!isWithinApp(targetOwner)) {
+                    continue;
+                }
+                if (boundaries.contains(targetOwner.getName())) {
+                    // 越境読み取り専用の認可境界（F00 §20 の門）。中身へは展開しない（AUTHORIZATION_BOUNDARIES）。
                     continue;
                 }
                 for (JavaCodeUnit callee : implementations.resolve(call)) {
@@ -212,7 +251,7 @@ class CrossDomainTransactionalTransitiveArchTest {
 
             @Override
             public void check(JavaClass clazz, ConditionEvents events) {
-                for (TransitiveViolation violation : findViolations(clazz, implementations)) {
+                for (TransitiveViolation violation : findViolations(clazz, implementations, AUTHORIZATION_BOUNDARIES)) {
                     if (Boolean.getBoolean(DIAGNOSTICS_PROPERTY)) {
                         System.err.println("[D-3T] " + violation.diagnosticPath());
                     }

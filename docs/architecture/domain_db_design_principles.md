@@ -90,6 +90,8 @@ PII（個人識別情報）の消去は **GDPR Art.17 の 30 日タイムリミ�
 public void createSchedule(...) { ... }
 ```
 
+**越境読み取り専用の認可境界（CMP-261124-0159 PR-D0）**: 推移的な番人 D-3T（`CrossDomainTransactionalTransitiveArchTest`）は `@Transactional` 入口から呼び出しを辿り、common の中継も通り抜けて他ドメインの Repository への到達を検出する。ただし F00 §20.3 の共通の門 `com.mannschaft.app.common.ScopeContentAccessGate` の 1 クラスだけは、ドメインの外の認可を Service 経由で問い合わせる読み取り専用の認可ポートとして扱い、そこで展開を止める（門の先の role / membership の Repository の読み取りは、書き込みの整合性を他ドメインへ広げないという本原則の趣旨に反しない）。境界は完全修飾名で明示し、ほかのクラスへ広げない。前提条件として、門が `@Transactional` を readOnly でしか持たず、Repository の書き込み系メソッドへ推移的に到達せず、悲観ロックを使わないことを `ScopeContentAccessGateReadOnlyArchTest` が強制する。門へ移行した PR で D-3T の凍結行が消えるのは返済ではなく境界の定義による付け替えである（[`archunit_freeze_history.md`](archunit_freeze_history.md)）。
+
 ### 6. 新規テーブルの主キーは UuidV7Entity を継承する（2026-05-11〜）
 **新規に作成するテーブルの Entity** は `UuidV7Entity` を継承し、主キーを UUIDv7 にすること。既存テーブルの BIGINT ID は原則として変更しない。変更する場合は、公開APIと参照先を同一リリースで一括移行し、既存行を保全する実DB migrationテストを必須とする。CMP-008 では `csp_reports` と `schedule_media_uploads` にこの条件を適用した。
 
