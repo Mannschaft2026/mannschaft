@@ -503,6 +503,25 @@
       "loadOptionsFailed": "无法加载商品键和税码的选项",
       "errorInvalidTaxRate": "请输入0至100％之间、最多保留两位小数的税率",
       "taxCodeEnabled": "有效"
+    },
+    "pricing": {
+      "title": "价格方案",
+      "description": "Mannschaft 的价格方案。按月显示含税价格，可随时取消。",
+      "heading": "价格方案",
+      "scopeLabel": "适用对象",
+      "scopeUser": "个人",
+      "scopeTeam": "团队",
+      "scopeOrg": "组织",
+      "quoteRequired": "登录后将显示针对您的团队/组织的确定报价",
+      "comingSoon": "即将推出",
+      "free": "免费",
+      "taxIncluded": "含税",
+      "taxBreakdown": "（不含税 {excl} + 税额 {tax}，税率 {rate}%）",
+      "loadError": "价格加载失败",
+      "retry": "重试",
+      "addonsHeading": "可单独添加的功能（附加项）",
+      "register": "免费开始",
+      "login": "登录"
     }
   }
 }

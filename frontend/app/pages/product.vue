@@ -24,9 +24,8 @@ const features = [
 
 // F20.1 AC-41: 誠実表示原則。¥980/月 等の未確定価格の表示は撤去し、
 // 「ベータ期間中は無料・正式料金はベータ終了後に決定」の中立な案内に統一する。
-// ログイン済みならプラン一覧（実際の契約状況付き）、未ログインなら登録導線へ。
-const authStore = useAuthStore()
-const pricingCtaTo = computed(() => (authStore.isAuthenticated ? '/billing/plans' : '/register'))
+// 公開価格ページ /pricing（SSR・認証不要）へ、認証状態に関係なく誘導する。
+const pricingCtaTo = '/pricing'
 </script>
 
 <template>

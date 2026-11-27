@@ -503,6 +503,25 @@
       "loadOptionsFailed": "No se pudieron cargar las opciones de clave de producto y código fiscal",
       "errorInvalidTaxRate": "Introduzca una tasa entre 0 y 100 % con un máximo de 2 decimales",
       "taxCodeEnabled": "Activo"
+    },
+    "pricing": {
+      "title": "Precios",
+      "description": "Precios de Mannschaft. Los importes mensuales incluyen impuestos y puedes cancelar en cualquier momento.",
+      "heading": "Precios",
+      "scopeLabel": "Dirigido a",
+      "scopeUser": "Personal",
+      "scopeTeam": "Equipo",
+      "scopeOrg": "Organización",
+      "quoteRequired": "Tras iniciar sesión verás un presupuesto confirmado para tu equipo u organización",
+      "comingSoon": "Próximamente",
+      "free": "Gratis",
+      "taxIncluded": "Impuestos incluidos",
+      "taxBreakdown": "(sin impuestos {excl} + impuestos {tax}, tasa {rate}%)",
+      "loadError": "No se pudieron cargar los precios",
+      "retry": "Reintentar",
+      "addonsHeading": "Funciones adicionales (complementos)",
+      "register": "Empezar gratis",
+      "login": "Iniciar sesión"
     }
   }
 }

@@ -503,6 +503,25 @@
       "loadOptionsFailed": "Die Auswahl für Produktschlüssel und Steuercode konnte nicht geladen werden",
       "errorInvalidTaxRate": "Geben Sie einen Steuersatz zwischen 0 und 100 Prozent mit höchstens 2 Nachkommastellen ein",
       "taxCodeEnabled": "Aktiv"
+    },
+    "pricing": {
+      "title": "Preise",
+      "description": "Die Preise von Mannschaft. Monatspreise werden inklusive Steuern angezeigt und sind jederzeit kündbar.",
+      "heading": "Preise",
+      "scopeLabel": "Gilt für",
+      "scopeUser": "Einzelperson",
+      "scopeTeam": "Team",
+      "scopeOrg": "Organisation",
+      "quoteRequired": "Nach dem Login sehen Sie ein verbindliches Angebot für Ihr Team bzw. Ihre Organisation",
+      "comingSoon": "In Vorbereitung",
+      "free": "Kostenlos",
+      "taxIncluded": "Inkl. Steuern",
+      "taxBreakdown": "(netto {excl} + Steuer {tax}, Satz {rate}%)",
+      "loadError": "Preise konnten nicht geladen werden",
+      "retry": "Erneut versuchen",
+      "addonsHeading": "Einzeln zubuchbare Funktionen (Add-ons)",
+      "register": "Kostenlos starten",
+      "login": "Anmelden"
     }
   }
 }
