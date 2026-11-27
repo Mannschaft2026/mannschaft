@@ -48,7 +48,8 @@ public class ActivityScheduleSyncService {
 
     public Long createDraft(ScheduleActivitySource source, Long userId) {
         ActivityScopeType type = ActivityScopeType.valueOf(source.scopeType());
-        access.checkMembership(userId, type, source.scopeId());
+        // 中身を返さない書き込み（応答は記録 ID だけ）。CMP-261124-0159 F00 §20.5.1
+        access.checkMembershipForWrite(userId, type, source.scopeId());
         List<ActivityResultEntity> linked = results.findAllByScheduleIdOrderByIdAsc(source.id()).stream()
                 .filter(a -> sameScope(a, source)).toList();
         if (!linked.isEmpty()) {
@@ -115,7 +116,8 @@ public class ActivityScheduleSyncService {
 
     private ScopePermission permission(ScheduleActivitySource source, Long userId) {
         ActivityScopeType type = ActivityScopeType.valueOf(source.scopeType());
-        if (!access.isMember(userId, type, source.scopeId())) return new ScopePermission(false, false);
+        // 同期プレビューは既存記録の値の差分（中身）を返すため、門の真偽版で判定する（CMP-261124-0159 F00 §20.3）
+        if (!access.canAccessScopeContent(userId, type, source.scopeId())) return new ScopePermission(false, false);
         return new ScopePermission(true, access.isAdminOrAbove(userId, type, source.scopeId()));
     }
 

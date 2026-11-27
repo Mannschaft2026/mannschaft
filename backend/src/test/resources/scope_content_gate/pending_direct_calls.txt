@@ -4,25 +4,6 @@
 # 新しい行を足してはならない（新規の直呼びは共通の門 ScopeContentAccessGate の checkScopeContentAccess 系か checkMembershipForWrite に書き分ける）。
 
 ## activity
-com.mannschaft.app.activity.controller.ActivityStatsController#checkScopeMembership
-com.mannschaft.app.activity.service.ActivityCommentService#checkScopeMembership
-com.mannschaft.app.activity.service.ActivityDetailService#deletionReference
-com.mannschaft.app.activity.service.ActivityDetailService#requireAutomaticAccess
-com.mannschaft.app.activity.service.ActivityResultService#addParticipants
-com.mannschaft.app.activity.service.ActivityResultService#createActivity
-com.mannschaft.app.activity.service.ActivityResultService#createDraftActivity
-com.mannschaft.app.activity.service.ActivityResultService#duplicateActivity
-com.mannschaft.app.activity.service.ActivityResultService#getActivity
-com.mannschaft.app.activity.service.ActivityResultService#listActivities
-com.mannschaft.app.activity.service.ActivityResultService#removeParticipants
-com.mannschaft.app.activity.service.ActivityScheduleSyncService#createDraft
-com.mannschaft.app.activity.service.ActivityScheduleSyncService#permission
-com.mannschaft.app.activity.service.ActivityScopeAccessGuard#checkMembership
-com.mannschaft.app.activity.service.ActivityScopeAccessGuard#isMember
-com.mannschaft.app.activity.service.ActivityTemplateService#checkScopeMembership
-com.mannschaft.app.activity.service.AutomaticActivityListService#actualIds
-com.mannschaft.app.activity.service.AutomaticActivityListService#linkedMetadata
-com.mannschaft.app.activity.service.AutomaticActivityListService#list
 
 ## analytics
 com.mannschaft.app.analytics.service.PageViewAnalyticsAccessGuard#isAllowed

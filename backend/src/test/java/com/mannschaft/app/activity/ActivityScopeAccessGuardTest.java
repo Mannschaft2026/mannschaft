@@ -4,6 +4,7 @@ import com.mannschaft.app.activity.service.ActivityScopeAccessGuard;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class ActivityScopeAccessGuardTest {
 
     @Mock private AccessControlService accessControlService;
+    @Mock private ScopeContentAccessGate scopeContentAccessGate;
 
     @InjectMocks private ActivityScopeAccessGuard guard;
 
@@ -61,53 +63,53 @@ class ActivityScopeAccessGuardTest {
         void 全スコープ種別_素通しが存在しない(ActivityScopeType scopeType) {
             if (isRoleManaged(scopeType)) {
                 // 解決可能スコープ: AccessControlService へ委譲されること
-                guard.checkMembership(USER_ID, scopeType, SCOPE_ID);
-                verify(accessControlService).checkMembership(USER_ID, SCOPE_ID, scopeType.name());
+                guard.checkScopeContentAccess(USER_ID, scopeType, SCOPE_ID);
+                verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, SCOPE_ID, scopeType.name());
             } else {
                 // 解決対象外スコープ: 拒否され、AccessControlService へは委譲されないこと
-                assertThatThrownBy(() -> guard.checkMembership(USER_ID, scopeType, SCOPE_ID))
+                assertThatThrownBy(() -> guard.checkScopeContentAccess(USER_ID, scopeType, SCOPE_ID))
                         .isInstanceOf(BusinessException.class)
                         .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                                 .isEqualTo("COMMON_002"));
-                verifyNoInteractions(accessControlService);
+                verifyNoInteractions(accessControlService, scopeContentAccessGate);
             }
         }
     }
 
     @Nested
-    @DisplayName("checkMembership")
-    class CheckMembership {
+    @DisplayName("checkScopeContentAccess（読み取り＝共通の門。CMP-261124-0159）")
+    class CheckScopeContentAccess {
 
         // AC-1: 解決対象外スコープ（COMMITTEE）は会員であるか否かに関わらず拒否される
         @Test
         @DisplayName("COMMITTEE は403（COMMON_002）で拒否され、ロール基盤へ委譲されない")
         void 委員会スコープ_403() {
             assertThatThrownBy(() ->
-                    guard.checkMembership(USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID))
+                    guard.checkScopeContentAccess(USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("COMMON_002"));
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-2: scopeType が null（想定外入力）でも素通しせず拒否する
         @Test
         @DisplayName("scopeType が null なら403（COMMON_002）")
         void スコープ種別null_403() {
-            assertThatThrownBy(() -> guard.checkMembership(USER_ID, null, SCOPE_ID))
+            assertThatThrownBy(() -> guard.checkScopeContentAccess(USER_ID, null, SCOPE_ID))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("COMMON_002"));
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-3: TEAM 会員は従来どおり通過する（非回帰）
         @Test
         @DisplayName("TEAM 会員は成功（非回帰）")
         void チーム会員_成功() {
-            assertThatCode(() -> guard.checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
+            assertThatCode(() -> guard.checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
                     .doesNotThrowAnyException();
-            verify(accessControlService).checkMembership(USER_ID, SCOPE_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, SCOPE_ID, "TEAM");
         }
 
         // AC-4: ORGANIZATION 会員も同様に通過する（TEAM/ORG 両系統を揃える）
@@ -115,9 +117,9 @@ class ActivityScopeAccessGuardTest {
         @DisplayName("ORGANIZATION 会員は成功（非回帰）")
         void 組織会員_成功() {
             assertThatCode(() ->
-                    guard.checkMembership(USER_ID, ActivityScopeType.ORGANIZATION, SCOPE_ID))
+                    guard.checkScopeContentAccess(USER_ID, ActivityScopeType.ORGANIZATION, SCOPE_ID))
                     .doesNotThrowAnyException();
-            verify(accessControlService).checkMembership(USER_ID, SCOPE_ID, "ORGANIZATION");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, SCOPE_ID, "ORGANIZATION");
         }
 
         // AC-5: 非会員は従来どおり403（ロール基盤の判定がそのまま伝播すること）
@@ -125,10 +127,43 @@ class ActivityScopeAccessGuardTest {
         @DisplayName("TEAM 非会員は403（委譲先の例外が伝播する）")
         void チーム非会員_403() {
             willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .given(accessControlService).checkMembership(USER_ID, SCOPE_ID, "TEAM");
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, SCOPE_ID, "TEAM");
 
-            assertThatThrownBy(() -> guard.checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
+            assertThatThrownBy(() -> guard.checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
                     .isInstanceOf(BusinessException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("checkMembershipForWrite / canAccessScopeContent（CMP-261124-0159 F00 §20.5.1）")
+    class WriteAndReadPredicate {
+
+        @Test
+        @DisplayName("書き込み用は共通の門の checkMembershipForWrite（checkMembership と同じ判定）へ委譲する")
+        void 書き込み用は門の書き込み用へ委譲() {
+            guard.checkMembershipForWrite(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+            verify(scopeContentAccessGate).checkMembershipForWrite(USER_ID, SCOPE_ID, "TEAM");
+        }
+
+        @Test
+        @DisplayName("書き込み用も COMMITTEE は 403（COMMON_002）で拒否し、委譲しない")
+        void 書き込み用_委員会_403() {
+            assertThatThrownBy(() -> guard.checkMembershipForWrite(USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
+        }
+
+        @Test
+        @DisplayName("真偽版は門の canAccessScopeContent の結果を返し、COMMITTEE は false（委譲しない）")
+        void 真偽版() {
+            given(scopeContentAccessGate.canAccessScopeContent(USER_ID, SCOPE_ID, "TEAM")).willReturn(false);
+            assertThat(guard.canAccessScopeContent(USER_ID, ActivityScopeType.TEAM, SCOPE_ID)).isFalse();
+            assertThat(guard.isMember(USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
+                    .as("isMember は common の AutomaticActivityActualPolicy 用の別名").isFalse();
+            assertThat(guard.canAccessScopeContent(USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID)).isFalse();
+            verifyNoInteractions(accessControlService);
         }
     }
 
@@ -143,7 +178,7 @@ class ActivityScopeAccessGuardTest {
             assertThatThrownBy(() ->
                     guard.checkAdminOrAbove(USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID))
                     .isInstanceOf(BusinessException.class);
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-7: TEAM 管理者は従来どおり通過する（非回帰）
@@ -168,7 +203,7 @@ class ActivityScopeAccessGuardTest {
             assertThatThrownBy(() -> guard.checkAuthorOrAdmin(
                     USER_ID, USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID))
                     .isInstanceOf(BusinessException.class);
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-9: 作成者本人は管理者判定を経ずに通過する（非回帰）
@@ -178,7 +213,7 @@ class ActivityScopeAccessGuardTest {
             assertThatCode(() -> guard.checkAuthorOrAdmin(
                     USER_ID, USER_ID, ActivityScopeType.TEAM, SCOPE_ID))
                     .doesNotThrowAnyException();
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-10: 他人の記録は管理者判定へ回る
@@ -213,7 +248,7 @@ class ActivityScopeAccessGuardTest {
             assertThatThrownBy(() -> guard.checkOwnerOrAdmin(
                     USER_ID, USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID))
                     .isInstanceOf(BusinessException.class);
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-13: TEAM は従来どおりロール基盤へ委譲される（非回帰）
@@ -234,7 +269,7 @@ class ActivityScopeAccessGuardTest {
         @DisplayName("COMMITTEE は false（権限なし）を返し、ロール基盤へ委譲されない")
         void 委員会スコープ_false() {
             assertThat(guard.isAdminOrAbove(USER_ID, ActivityScopeType.COMMITTEE, SCOPE_ID)).isFalse();
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-15: scopeType が null でも false（権限なし）に倒れる
@@ -242,7 +277,7 @@ class ActivityScopeAccessGuardTest {
         @DisplayName("scopeType が null なら false")
         void スコープ種別null_false() {
             assertThat(guard.isAdminOrAbove(USER_ID, null, SCOPE_ID)).isFalse();
-            verifyNoInteractions(accessControlService);
+            verifyNoInteractions(accessControlService, scopeContentAccessGate);
         }
 
         // AC-16: TEAM 管理者は true（非回帰）

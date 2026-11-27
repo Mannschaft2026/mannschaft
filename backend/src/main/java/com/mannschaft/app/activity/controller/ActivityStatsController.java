@@ -33,13 +33,14 @@ public class ActivityStatsController {
     private final com.mannschaft.app.activity.service.AutomaticActivityListService automaticAccess;
 
     /**
-     * 統計・エクスポートAPIの認可ゲート。対象スコープの会員のみ実行可（非会員は 403 = COMMON_002）。
+     * 統計・エクスポートAPIの認可ゲート。対象スコープの中身を読める会員のみ実行可（非会員・非公開チームの
+     * MEMBER 未満は部外者と同一の 403 = COMMON_002。CMP-261124-0159 F00 §20.3）。
      *
      * <p>パラメータ validation 後・サービス委譲前に先行で呼ぶ。判定はスコープ種別を網羅的に
      * ディスパッチする {@link ActivityScopeAccessGuard} に委譲する。</p>
      */
-    private void checkScopeMembership(ActivityScopeType scopeType, Long scopeId) {
-        scopeAccessGuard.checkMembership(SecurityUtils.getCurrentUserId(), scopeType, scopeId);
+    private void checkScopeContentAccess(ActivityScopeType scopeType, Long scopeId) {
+        scopeAccessGuard.checkScopeContentAccess(SecurityUtils.getCurrentUserId(), scopeType, scopeId);
     }
 
     /**
@@ -56,7 +57,7 @@ public class ActivityStatsController {
             @RequestParam(value = "date_from", required = false) LocalDate dateFrom,
             @RequestParam(value = "date_to", required = false) LocalDate dateTo) {
         ActivityScopeType scope = ActivityScopeType.valueOf(scopeType);
-        checkScopeMembership(scope, scopeId);
+        checkScopeContentAccess(scope, scopeId);
         ActivityStatsResponse response = statsService.getStatsWithAutomaticAccess(
                 scope, scopeId, templateId, period, dateFrom, dateTo,
                 automaticAccess.actualIds(SecurityUtils.getCurrentUserId(), scope, scopeId));
@@ -76,7 +77,7 @@ public class ActivityStatsController {
             @RequestParam("field_key") String fieldKey,
             @RequestParam(value = "period", defaultValue = "MONTH") String period) {
         ActivityScopeType scope = ActivityScopeType.valueOf(scopeType);
-        checkScopeMembership(scope, scopeId);
+        checkScopeContentAccess(scope, scopeId);
         ActivityFieldStatsResponse response = statsService.getFieldStats(
                 scope, scopeId, templateId, fieldKey, period);
         return ResponseEntity.ok(ApiResponse.of(response));
@@ -96,8 +97,10 @@ public class ActivityStatsController {
             @RequestParam(value = "date_to", required = false) LocalDate dateTo,
             HttpServletResponse response) {
         ActivityScopeType scope = ActivityScopeType.valueOf(scopeType);
-        checkScopeMembership(scope, scopeId);
+        checkScopeContentAccess(scope, scopeId);
         Long userId = SecurityUtils.getCurrentUserId();
+        // CMP-261124-0159 F06.4 §15.5: CSV 出力は管理者（ADMIN / DEPUTY_ADMIN）だけ。MEMBER 以下は 403 COMMON_002
+        scopeAccessGuard.checkAdminOrAbove(userId, scope, scopeId);
         // CMP-261124-0158: manual 行も認証済み一覧と同じ可視レベルで絞る（SUPPORTER に MEMBERS_ONLY を書き出さない）
         var levels = automaticAccess.readLevels(userId, scope, scopeId);
         statsService.exportCsvWithAutomaticAccess(

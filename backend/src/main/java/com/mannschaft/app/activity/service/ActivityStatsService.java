@@ -129,6 +129,12 @@ public class ActivityStatsService {
             throw new IllegalArgumentException("不正なfield_keyです");
         }
 
+        // CMP-261124-0159 F06.4 §15.4: template がこのスコープのものであることを、フィールド定義を読む前に確かめる。
+        // 他スコープのテンプレートは存在しない ID と同一の 404（ACTIVITY_002）にする（存在とフィールド名を漏らさない）
+        templateRepository.findById(templateId)
+                .filter(t -> t.getScopeType() == scopeType && java.util.Objects.equals(t.getScopeId(), scopeId))
+                .orElseThrow(() -> new BusinessException(ActivityErrorCode.TEMPLATE_NOT_FOUND));
+
         // フィールド定義の取得
         ActivityTemplateFieldEntity field = fieldRepository.findByTemplateIdAndFieldKey(templateId, fieldKey)
                 .orElseThrow(() -> new BusinessException(ActivityErrorCode.TEMPLATE_NOT_FOUND));

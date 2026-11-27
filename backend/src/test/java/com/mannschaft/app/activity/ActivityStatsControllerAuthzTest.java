@@ -28,7 +28,7 @@ import org.mockito.Mock;
 /**
  * 活動統計コントローラーの認可ゲート契約テスト（AC-8）。
  *
- * <p>統計・エクスポートは Controller 層で {@link ActivityScopeAccessGuard#checkMembership} を先行実行し、
+ * <p>統計・エクスポートは Controller 層で {@link ActivityScopeAccessGuard#checkScopeContentAccess} を先行実行し、
  * 非会員には 403（COMMON_002）を返す。サービスへは委譲されないことを検証する。</p>
  */
 @ExtendWith(MockitoExtension.class)
@@ -62,7 +62,7 @@ class ActivityStatsControllerAuthzTest {
     @DisplayName("getStats_他スコープ会員は403（COMMON_002）でサービス非委譲")
     void 統計_他スコープ_403() {
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
         assertThatThrownBy(() -> controller.getStats("TEAM", SCOPE_ID, null, "MONTH", null, null))
                 .isInstanceOf(BusinessException.class)
@@ -76,7 +76,7 @@ class ActivityStatsControllerAuthzTest {
     @DisplayName("getFieldStats_他スコープ会員は403（COMMON_002）でサービス非委譲")
     void フィールド集計_他スコープ_403() {
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
         assertThatThrownBy(() -> controller.getFieldStats("TEAM", SCOPE_ID, 1L, "key", "MONTH"))
                 .isInstanceOf(BusinessException.class)
@@ -90,7 +90,7 @@ class ActivityStatsControllerAuthzTest {
     @DisplayName("exportCsv_他スコープ会員は403（COMMON_002）でサービス非委譲")
     void エクスポート_他スコープ_403() {
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
         assertThatThrownBy(() -> controller.exportCsv("TEAM", SCOPE_ID, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
@@ -108,7 +108,7 @@ class ActivityStatsControllerAuthzTest {
 
         controller.getStats("TEAM", SCOPE_ID, null, "MONTH", null, null);
 
-        verify(scopeAccessGuard).checkMembership(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+        verify(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
         verify(statsService).getStatsWithAutomaticAccess(ActivityScopeType.TEAM, SCOPE_ID, null, "MONTH", null, null, java.util.Set.of());
     }
 }

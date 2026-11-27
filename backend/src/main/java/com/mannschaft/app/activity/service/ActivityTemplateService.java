@@ -56,7 +56,7 @@ public class ActivityTemplateService {
      * 他スコープ会員によるテンプレート列挙（IDOR）を封じる。</p>
      */
     public List<ActivityTemplateResponse> listTemplates(Long userId, ActivityScopeType scopeType, Long scopeId) {
-        checkScopeMembership(userId, scopeType, scopeId);
+        checkScopeContentAccess(userId, scopeType, scopeId);
         List<ActivityTemplateEntity> templates =
                 templateRepository.findByScopeTypeAndScopeIdOrderBySortOrderAsc(scopeType, scopeId);
         return templates.stream().map(this::toResponseWithFields).collect(Collectors.toList());
@@ -69,7 +69,7 @@ public class ActivityTemplateService {
      */
     public ActivityTemplateResponse getTemplate(Long id, Long userId) {
         ActivityTemplateEntity entity = findTemplateOrThrow(id);
-        checkScopeMembership(userId, entity.getScopeType(), entity.getScopeId());
+        checkScopeContentAccess(userId, entity.getScopeType(), entity.getScopeId());
         return toResponseWithFields(entity);
     }
 
@@ -361,12 +361,12 @@ public class ActivityTemplateService {
     }
 
     /**
-     * スコープ会員であることを検証する（参照系・作成系）。
+     * スコープの中身を読めることを検証する（参照系。非公開チームでは MEMBER 以上。CMP-261124-0159 F00 §20.3）。
      *
      * <p>判定はスコープ種別を網羅的にディスパッチする {@link ActivityScopeAccessGuard} に委譲する。</p>
      */
-    private void checkScopeMembership(Long userId, ActivityScopeType scopeType, Long scopeId) {
-        scopeAccessGuard.checkMembership(userId, scopeType, scopeId);
+    private void checkScopeContentAccess(Long userId, ActivityScopeType scopeType, Long scopeId) {
+        scopeAccessGuard.checkScopeContentAccess(userId, scopeType, scopeId);
     }
 
     /**
