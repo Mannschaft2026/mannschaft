@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261118-0900",
+  "scope": "app",
+  "implementation": {
+    "pr": 4720,
+    "sha": "72c65f139903fe2e627a39b5dd559ff146856d0e"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-P01〜P05",
+      "description": "参加チームの代表・副代表は全スペース POST、一般会員・SUPPORTER は VIEW。自チームが参加する部門のスペースだけが返り、divisionName・tournamentName の null 規則に従う",
+      "tests": [
+        { "name": "ParticipantContactSpaceListContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceListContractIT.java" },
+        { "name": "ParticipantContactSpaceFacadeTest", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/ParticipantContactSpaceFacadeTest.java" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts（AC-P01・P03・P04）", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P06",
+      "description": "accessLevel は投稿 API の成否（POST なら 2xx、VIEW なら 403 TOUR_031）と一致する",
+      "tests": [
+        { "name": "ParticipantContactSpaceListContractIT（accessLevel と投稿 API の一致）", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceListContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-P07〜P13",
+      "description": "非参加チーム・非所属チーム slug・部外者は 404 TOUR_029、未ログインは 401。存在しない大会・チーム・アーカイブ・未有効化チームは不在と同一応答（存在オラクル無し）。論理削除済み大会は 404、型不正の tournamentId は 400",
+      "tests": [
+        { "name": "ParticipantContactSpaceListContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceListContractIT.java" },
+        { "name": "ParticipantContactSpaceControllerContractTest", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/controller/ParticipantContactSpaceControllerContractTest.java" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts（AC-P07・P09・P10）", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P14〜P19",
+      "description": "参加が WITHDRAWN・DISQUALIFIED なら 404。部門単位の参加状態・複数部門・0 件スペース・他チーム部門の非混入・出ている部門 0 件の境界が契約どおり",
+      "tests": [
+        { "name": "ParticipantContactSpaceListContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceListContractIT.java" },
+        { "name": "ParticipantContactSpaceFacadeTest", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/ParticipantContactSpaceFacadeTest.java" }
+      ]
+    },
+    {
+      "id": "AC-P20",
+      "description": "発行クエリ本数が部門数・参加チーム数によらず同一の定数上限以下（N+1 なし）",
+      "tests": [
+        { "name": "ParticipantContactSpaceQueryCountIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceQueryCountIT.java" }
+      ]
+    },
+    {
+      "id": "AC-P21・P35",
+      "description": "公開スペースでも非会員は本 API で 404。アーカイブ済みチームの slug は 404",
+      "tests": [
+        { "name": "ParticipantContactSpaceListContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceListContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-P22",
+      "description": "主催者向け一覧 API の回帰（閲覧できる者は 403 TOUR_032、できない者は 404 TOUR_029、主催組織 ADMIN は 200）。主催者側画面が従来どおり動く",
+      "tests": [
+        { "name": "TournamentContactSpaceVisibilityOracleContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/TournamentContactSpaceVisibilityOracleContractIT.java" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts（16 主催者 ADMIN）", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P33・P34",
+      "description": "主催組織 ADMIN が参加チーム会員を兼ねる場合の POST 判定。Gate の一括解決メソッドは全 (scope, kind) で requireViewResolvingLevel と一致する",
+      "tests": [
+        { "name": "TournamentContactSpaceAccessGateTest", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGateTest.java" },
+        { "name": "ParticipantContactSpaceListContractIT", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/ParticipantContactSpaceListContractIT.java" }
+      ]
+    },
+    {
+      "id": "AC-P23",
+      "description": "参加チーム ADMIN が参加大会カードの連絡スペースリンクから /teams/A/tournaments/T/communication を開ける",
+      "tests": [
+        { "name": "team-tournaments-index-communication-link.spec.ts", "evidence": "frontend/tests/unit/pages/tournaments/team-tournaments-index-communication-link.spec.ts" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts（10）", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P24・P25・P28",
+      "description": "POST は新規スレッド作成・返信・チャット送信ができ、VIEW は作成ボタン・返信欄・送信入力が出ず送信要求も発生しない（直呼びは 403 TOUR_031）",
+      "tests": [
+        { "name": "team-communication-participant.spec.ts", "evidence": "frontend/tests/unit/pages/tournaments/team-communication-participant.spec.ts" },
+        { "name": "ChatMessagePanel.canSend.spec.ts", "evidence": "frontend/tests/unit/components/chat/ChatMessagePanel.canSend.spec.ts" },
+        { "name": "ChatThreadPanel.canSend.spec.ts", "evidence": "frontend/tests/unit/components/chat/ChatThreadPanel.canSend.spec.ts" },
+        { "name": "BulletinThreadDetail.spec.ts", "evidence": "frontend/app/components/bulletin/BulletinThreadDetail.spec.ts" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts（10・11・11b）", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P26・P27・P29",
+      "description": "非参加者・部外者・辞退チームの URL 直打ちは「利用できません」の状態表示（空白や無言のリダイレクトにしない）。未ログインはログイン画面へ",
+      "tests": [
+        { "name": "team-communication-participant.spec.ts", "evidence": "frontend/tests/unit/pages/tournaments/team-communication-participant.spec.ts" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts（12・13・14・15）", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P30",
+      "description": "一覧取得が 5xx・通信断のときはエラー通知と再試行導線、404 は状態表示のみでトーストを濫発しない",
+      "tests": [
+        { "name": "team-communication-participant.spec.ts", "evidence": "frontend/tests/unit/pages/tournaments/team-communication-participant.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P31",
+      "description": "BulletinThreadDetail・ChatMessagePanel・ChatThreadPanel の既存呼び出し元は prop 既定値により挙動が変わらない",
+      "tests": [
+        { "name": "BulletinThreadDetail.spec.ts", "evidence": "frontend/app/components/bulletin/BulletinThreadDetail.spec.ts" },
+        { "name": "ChatMessagePanel.canSend.spec.ts", "evidence": "frontend/tests/unit/components/chat/ChatMessagePanel.canSend.spec.ts" },
+        { "name": "ChatThreadPanel.canSend.spec.ts", "evidence": "frontend/tests/unit/components/chat/ChatThreadPanel.canSend.spec.ts" }
+      ]
+    },
+    {
+      "id": "AC-P36",
+      "description": "参加者画面では can-manage を渡さず、ピン・削除・ロックの UI が出ない",
+      "tests": [
+        { "name": "team-communication-participant.spec.ts", "evidence": "frontend/tests/unit/pages/tournaments/team-communication-participant.spec.ts" },
+        { "name": "cmp-261118-0900-participant-contact.real.spec.ts", "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts" }
+      ]
+    },
+    {
+      "id": "ALIC-1",
+      "description": "アリシゼーションで見つけた不具合の是正: 参加大会カードのリンクが組織の数値 ID だったため遷移先が 404 になる行き止まりを、組織 slug のリンクに直す（AC-P32 は設計書上の欠番）",
+      "tests": [
+        { "name": "team-tournaments-index-org-slug-link.spec.ts", "evidence": "frontend/tests/unit/pages/tournaments/team-tournaments-index-org-slug-link.spec.ts" },
+        { "name": "TeamTournamentHistoryFacadeTest", "evidence": "backend/src/test/java/com/mannschaft/app/tournament/service/TeamTournamentHistoryFacadeTest.java" }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45015371368 },
+    { "runId": 45015371373 },
+    { "runId": 45015371375 },
+    { "runId": 45015371366 },
+    { "runId": 45015371376 },
+    { "runId": 45015371439 },
+    { "runId": 45015371395 },
+    { "runId": 45015371387 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4720"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "frontend/tests/e2e/real/cmp-261118-0900-participant-contact.real.spec.ts"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4830"
+    }
+  },
+  "regressions": [
+    {
+      "description": "ALIC-1: 参加大会カードのリンクが数値の組織 ID で組まれ、遷移先の GET /api/v1/organizations/{数値ID} が 404 になる",
+      "test": "team-tournaments-index-org-slug-link.spec.ts",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/4830",
+      "greenEvidence": "frontend/tests/unit/pages/tournaments/team-tournaments-index-org-slug-link.spec.ts"
+    }
+  ]
+}
