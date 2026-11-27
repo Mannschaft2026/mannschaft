@@ -189,7 +189,7 @@ class SurveyServiceTest {
                         com.mannschaft.app.survey.ResultsVisibility.AFTER_RESPONSE,
                         com.mannschaft.app.survey.UnrespondedVisibility.CREATOR_AND_ADMIN))
                 .distribution(new SurveyResponse.SurveyDistributionDto(
-                        com.mannschaft.app.survey.DistributionMode.ALL, false, null, null, 0, false))
+                        com.mannschaft.app.survey.DistributionMode.ALL, false, null, null, 0, false, null, 3, null))
                 .schedule(new SurveyResponse.SurveyScheduleDto(null, null, null, null))
                 .stats(new SurveyResponse.SurveyStatsDto(0, 0))
                 .audit(new SurveyResponse.SurveyAuditDto(null, USER_ID, null, null))
