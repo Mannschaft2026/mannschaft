@@ -3,7 +3,6 @@ import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import Page from './hourly-rate.vue'
-import { useScopeNotFound } from '~/composables/useScopeNotFound'
 
 /**
  * チーム設定 > 時給設定の権限による出し分け（CMP-261125-2114）。
@@ -14,18 +13,15 @@ const mocks = vi.hoisted(() => ({
   loadPermissions: vi.fn(),
   loadAll: vi.fn(),
   getTeam: vi.fn(),
+  markDenied: vi.fn(),
+  markIfDenied: vi.fn(() => false),
 }))
-// happy-dom 環境は Nuxt アプリが無いので、useScopeNotFound が使う useState をキー単位の ref で代替する
-const nuxtStates = vi.hoisted(() => new Map<string, unknown>())
 const perm = { canViewHourlyRate: ref(true), canManageShift: ref(true) }
 
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-a' }, query: {} }))
 mockNuxtImport('useNotification', () => () => ({ error: vi.fn(), success: vi.fn() }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
-mockNuxtImport('useState', () => <T>(key: string, init?: () => T) => {
-  if (!nuxtStates.has(key)) nuxtStates.set(key, ref(init?.()))
-  return nuxtStates.get(key) as ReturnType<typeof ref<T>>
-})
+mockNuxtImport('useScopeNotFound', () => () => ({ markDenied: mocks.markDenied, markIfDenied: mocks.markIfDenied }))
 mockNuxtImport('useShiftPermission', () => () => ({ ...perm, loadPermissions: mocks.loadPermissions }))
 vi.mock('~/composables/shift/useHourlyRateMemberPage', async (importOriginal) => {
   const original = await importOriginal<typeof import('~/composables/shift/useHourlyRateMemberPage')>()
@@ -42,7 +38,6 @@ async function mountPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  useScopeNotFound().reset()
   perm.canViewHourlyRate.value = true
   perm.canManageShift.value = true
   mocks.loadPermissions.mockResolvedValue({ ok: true })
@@ -69,12 +64,12 @@ describe('時給設定画面の権限による出し分け', () => {
     expect(wrapper.find('[data-testid="hourly-rate-readonly-notice"]').exists()).toBe(true)
   })
 
-  it('閲覧できない人（切替 OFF の副管理者など）は URL 直打ちでも一覧を取得せず「見つかりません」にする（#4918 方式）', async () => {
+  it('閲覧できない人（切替 OFF の副管理者など）は URL 直打ちでも一覧を取得せず共通の「見つかりません」にする', async () => {
     perm.canViewHourlyRate.value = false
     perm.canManageShift.value = false
     await mountPage()
     expect(mocks.loadAll).not.toHaveBeenCalled()
-    expect(useScopeNotFound().notFound.value).toBe(true)
+    expect(mocks.markDenied).toHaveBeenCalledTimes(1)
   })
 
   it('権限の取得に失敗したら一覧を取得しない（権限なしに倒して握りつぶさず通知する）', async () => {
