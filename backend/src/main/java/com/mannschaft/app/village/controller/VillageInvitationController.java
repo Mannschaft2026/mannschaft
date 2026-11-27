@@ -1,5 +1,6 @@
 package com.mannschaft.app.village.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.featuregate.AlwaysReachable;
@@ -42,6 +43,8 @@ import java.util.UUID;
 public class VillageInvitationController {
 
     private final VillageInvitationService invitationService;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（村の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     @AlwaysReachable(category = AlwaysReachableCategory.CORE,
             reason = "Village基盤の招待発行は既存17機能Gateの対象外であるため")
@@ -85,6 +88,8 @@ public class VillageInvitationController {
             @PathVariable("token") String token) {
         Long actorUserId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.of(invitationService.accept(token, actorUserId)));
+                .body(ApiResponse.of(PlatformAccountAffiliationPolicy.callJudged(
+                        platformAccountAffiliationPolicy.judge(List.of(actorUserId)),
+                        () -> invitationService.accept(token, actorUserId))));
     }
 }

@@ -1,5 +1,7 @@
 package com.mannschaft.app.supporter.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.ApiResponse;
@@ -75,6 +77,9 @@ class SupporterServiceTest {
     @Mock
     private ProvisioningGate provisioningGate;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private SupporterService service;
 
@@ -97,7 +102,7 @@ class SupporterServiceTest {
             // MembershipService.join() は MembershipDto を返すが、戻り値は使わないので null で OK
             given(membershipService.join(any(MembershipCreateRequest.class))).willReturn(null);
 
-            ApiResponse<FollowStatusResponse> resp = service.follow(10L, "TEAM", 20L);
+            ApiResponse<FollowStatusResponse> resp = judged(general(10L), () -> service.follow(10L, "TEAM", 20L));
 
             assertThat(resp.getData().status()).isEqualTo("APPROVED");
 
@@ -124,7 +129,7 @@ class SupporterServiceTest {
             given(applicationRepository.save(any(SupporterApplicationEntity.class)))
                     .willAnswer(inv -> inv.getArgument(0));
 
-            ApiResponse<FollowStatusResponse> resp = service.follow(10L, "TEAM", 20L);
+            ApiResponse<FollowStatusResponse> resp = judged(general(10L), () -> service.follow(10L, "TEAM", 20L));
 
             assertThat(resp.getData().status()).isEqualTo("PENDING");
             verify(membershipService, never()).join(any());
@@ -136,7 +141,7 @@ class SupporterServiceTest {
             given(membershipRepository.existsActiveByUserAndScope(10L, ScopeType.TEAM, 20L))
                     .willReturn(true);
 
-            assertThatThrownBy(() -> service.follow(10L, "TEAM", 20L))
+            assertThatThrownBy(() -> judged(general(10L), () -> service.follow(10L, "TEAM", 20L)))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", SupporterErrorCode.SUPPORTER_002);
             verify(membershipService, never()).join(any());
@@ -152,7 +157,7 @@ class SupporterServiceTest {
             given(applicationRepository.existsByScopeTypeAndScopeIdAndUserIdAndStatus(
                     "TEAM", 20L, 10L, SupporterApplicationStatus.PENDING)).willReturn(true);
 
-            assertThatThrownBy(() -> service.follow(10L, "TEAM", 20L))
+            assertThatThrownBy(() -> judged(general(10L), () -> service.follow(10L, "TEAM", 20L)))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", SupporterErrorCode.SUPPORTER_001);
         }

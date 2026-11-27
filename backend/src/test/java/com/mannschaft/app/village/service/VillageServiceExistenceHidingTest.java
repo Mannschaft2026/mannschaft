@@ -131,8 +131,14 @@ class VillageServiceExistenceHidingTest {
 
     @InjectMocks
     private VillageMeetupService meetupService;
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private VillageMembershipService membershipServiceUnderTest;
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy2;
+
     @InjectMocks
     private VillageJoinRequestService joinRequestService;
     @InjectMocks

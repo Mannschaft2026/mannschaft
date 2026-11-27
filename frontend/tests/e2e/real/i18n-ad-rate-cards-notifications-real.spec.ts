@@ -38,7 +38,7 @@ test.describe.configure({ mode: 'default' })
 test.setTimeout(300_000)
 
 const BE = process.env.API_BASE_URL ?? 'http://localhost:8080'
-const ADMIN = { email: 'e2e-admin@test.mannschaft.local', password: 'TestPass2026!' }
+const ADMIN = { email: 'e2e-operator@test.mannschaft.local', password: 'TestPass2026!' }
 const USER = { email: 'e2e-user@test.mannschaft.local', password: 'TestPass2026!' }
 const OTHER_TENANT_ADMIN = { email: 'e2e-dummy-1@test.mannschaft.local', password: 'TestPass2026!' }
 const RUN_TAG = `R${Date.now().toString(36)}`.toUpperCase()

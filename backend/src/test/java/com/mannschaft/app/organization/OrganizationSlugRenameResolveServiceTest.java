@@ -49,6 +49,7 @@ class OrganizationSlugRenameResolveServiceTest {
     @Mock private OrganizationHierarchyService organizationHierarchyService;
     @Mock private MembershipService membershipService;
     @Mock private MediaUrlResolver mediaUrlResolver;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private OrganizationService service;
 
     private static final Long ORG_ID = 20L;

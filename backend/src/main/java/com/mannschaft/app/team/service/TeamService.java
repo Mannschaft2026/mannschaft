@@ -76,6 +76,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * チーム管理サービス。チームのCRUD・アーカイブ・メンバー一覧・SUPPORTER管理を提供する。
@@ -146,6 +147,9 @@ public class TeamService {
     // TODO: teamドメインがroleドメイン(RoleRepository/UserRoleRepository)・socialドメイン(TeamFriendRepository)・membershipドメイン(MembershipRepository/MembershipService)・shiftドメイン(TeamShiftSettingsService)をまたいでいる。将来はTeamCreatedEventで分離予定
     @CacheEvict(value = "team-search", allEntries = true)
     public ApiResponse<TeamResponse> createTeam(Long userId, CreateTeamRequest req) {
+        // 運営アカウント（SYSTEM_ADMIN）はチームを作って所属（ADMIN）できない（戦役 Z-A PR2）。
+        // 判定は TeamController が取引の外で済ませる（team の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(userId);
         // CMP-260901-1538 柱③-A: チーム名の重複も組織と同様、409（候補一覧＋fingerprint）で
         // 確認を求める二段方式とする（従来チーム側には重複チェック自体が存在しなかった）。
         // 検分 P1-2 是正: 「候補再計算 → 作成」の全体をアドバイザリロック保持中に実行する
@@ -1059,44 +1063,6 @@ public class TeamService {
                         dto.joinedAt(),
                         colorsByUserId.get(dto.userId())))
                 .toList();
-    }
-
-    /**
-     * SUPPORTERとしてチームをフォローする（自己登録）。
-     *
-     * <p>F00.5 Phase 5: memberships への書き込みに切替。MembershipService.join() 経由で
-     * 冪等性保証・イベント発火を一本化する。</p>
-     */
-    @Transactional
-    // TODO: teamドメインとmembershipドメイン(MembershipRepository/MembershipService)をまたいでいる。将来はTeamFollowRequestedEventで分離予定
-    @Caching(evict = {
-            @CacheEvict(value = "team-detail", allEntries = true),
-            @CacheEvict(value = "team-search", allEntries = true)
-    })
-    public void followTeam(Long userId, Long teamId) {
-        findTeamOrThrow(teamId);
-
-        // ブロックチェック
-        if (teamBlockRepository.existsByTeamIdAndUserId(teamId, userId)) {
-            throw new BusinessException(TeamErrorCode.TEAM_004);
-        }
-
-        // 重複チェック（memberships に既にアクティブな SUPPORTER がいる場合）
-        if (membershipRepository.existsActiveByUserAndScopeAndRoleKind(
-                userId, ScopeType.TEAM, teamId, RoleKind.SUPPORTER)) {
-            throw new BusinessException(TeamErrorCode.TEAM_003);
-        }
-
-        // F00.5 Phase 5: memberships に SUPPORTER として入会
-        MembershipCreateRequest req = new MembershipCreateRequest();
-        req.setUserId(userId);
-        req.setScopeType(ScopeType.TEAM);
-        req.setScopeId(teamId);
-        req.setRoleKind(RoleKind.SUPPORTER);
-        req.setSource("SELF_FOLLOW");
-        membershipService.join(req);
-
-        log.info("チームフォロー完了: userId={}, teamId={}", userId, teamId);
     }
 
     /**

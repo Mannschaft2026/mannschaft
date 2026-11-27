@@ -102,6 +102,7 @@ public class RoleSuccessionService {
     private final UserRowLockService userRowLockService;
     private final MembershipService membershipService;
     private final RolePermissionCacheGenerationService cacheGenerationService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * {@code userId} が唯一の ADMIN であるスコープを全て返す（他メンバー0人のスコープも含む）。
@@ -154,14 +155,16 @@ public class RoleSuccessionService {
         List<Long> deputies = team
                 ? userRoleRepository.findDeputyAdminCandidateIdsByTeam(scopeId)
                 : userRoleRepository.findDeputyAdminCandidateIdsByOrganization(scopeId);
-        Optional<Long> deputy = deputies.stream().filter(id -> !excludeUserIds.contains(id)).findFirst();
+        Optional<Long> deputy = deputies.stream().filter(id -> !excludeUserIds.contains(id))
+                .filter(id -> !platformAccountAffiliationPolicy.isPlatformAccount(id)).findFirst();
         if (deputy.isPresent()) {
             return deputy;
         }
         List<Long> members = team
                 ? userRoleRepository.findMemberCandidateIdsByTeam(scopeId)
                 : userRoleRepository.findMemberCandidateIdsByOrganization(scopeId);
-        return members.stream().filter(id -> !excludeUserIds.contains(id)).findFirst();
+        return members.stream().filter(id -> !excludeUserIds.contains(id))
+                .filter(id -> !platformAccountAffiliationPolicy.isPlatformAccount(id)).findFirst();
     }
 
     /**
@@ -199,7 +202,9 @@ public class RoleSuccessionService {
         List<Long> deputies = (team
                 ? userRoleRepository.findDeputyAdminCandidateIdsByTeam(scopeId)
                 : userRoleRepository.findDeputyAdminCandidateIdsByOrganization(scopeId))
-                .stream().filter(id -> !id.equals(excludeUserId)).distinct().toList();
+                .stream().filter(id -> !id.equals(excludeUserId))
+                // 運営アカウント（SYSTEM_ADMIN）は後継候補にしない（戦役 Z-A PR2）。
+                .filter(id -> !platformAccountAffiliationPolicy.isPlatformAccount(id)).distinct().toList();
 
         if (deputies.size() >= limit) {
             return new TopCandidates(deputies.subList(0, limit), deputies.size() > limit);
@@ -213,6 +218,7 @@ public class RoleSuccessionService {
                 : userRoleRepository.findMemberCandidateIdsByOrganization(scopeId))
                 .stream()
                 .filter(id -> !id.equals(excludeUserId))
+                .filter(id -> !platformAccountAffiliationPolicy.isPlatformAccount(id))
                 .filter(id -> !deputySet.contains(id))
                 .distinct()
                 .toList();
@@ -524,6 +530,8 @@ public class RoleSuccessionService {
             Long scopeId, String scopeType, Long newAdminUserId, Long actingSystemAdminId) {
         // ① users を先にロック（新ADMIN指名者の現役性はこのロック結果で判定する）。
         UserRowLockService.UserState newAdminState = userRowLockService.lock(newAdminUserId);
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。初期 ADMIN に指名できない。
+        platformAccountAffiliationPolicy.assertAffiliatable(newAdminUserId);
         // ② ADMIN 行ロック（users ロック済み前提）。
         adminRoleMutationLockService.lockScopeAdminRowsAfterUsersLocked(scopeId, scopeType);
 

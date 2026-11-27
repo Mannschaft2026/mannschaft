@@ -1,5 +1,7 @@
 package com.mannschaft.app.membership.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.MembershipScopeQueryService;
 import com.mannschaft.app.auth.service.UserRowLockService;
@@ -101,6 +103,9 @@ class MembershipServiceTest {
     @Mock
     private EntityManager entityManager;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private MembershipService service;
 
@@ -150,7 +155,7 @@ class MembershipServiceTest {
                         return e;
                     });
 
-            MembershipDto dto = service.join(req);
+            MembershipDto dto = judged(general(req.getUserId()), () -> service.join(req));
 
             assertThat(dto.id()).isEqualTo(555L);
             assertThat(dto.userId()).isEqualTo(99L);
@@ -175,7 +180,7 @@ class MembershipServiceTest {
             given(membershipRepository.findActiveByUserAndScope(99L, ScopeType.TEAM, 100L))
                     .willReturn(Optional.of(existing));
 
-            MembershipDto dto = service.join(req);
+            MembershipDto dto = judged(general(req.getUserId()), () -> service.join(req));
 
             assertThat(dto.id()).isEqualTo(777L);
             verify(membershipRepository, never()).save(any());
@@ -192,7 +197,7 @@ class MembershipServiceTest {
             given(membershipRepository.findActiveByUserAndScope(99L, ScopeType.TEAM, 100L))
                     .willReturn(Optional.of(existing));
 
-            assertThatThrownBy(() -> service.join(req))
+            assertThatThrownBy(() -> judged(general(req.getUserId()), () -> service.join(req)))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", MembershipBasisErrorCode.MEMBERSHIP_ACTIVE_EXISTS);
         }
@@ -219,7 +224,7 @@ class MembershipServiceTest {
                         return e;
                     });
 
-            MembershipDto dto = service.join(req);
+            MembershipDto dto = judged(general(req.getUserId()), () -> service.join(req));
             assertThat(dto.isRejoin()).isTrue();
         }
 
@@ -236,7 +241,7 @@ class MembershipServiceTest {
         @DisplayName("userId NULLは副作用前に拒否する")
         void nullUserIdRejectedBeforeWork() {
             MembershipCreateRequest req = req(null, ScopeType.TEAM, 100L, RoleKind.MEMBER, null);
-            assertThatThrownBy(() -> service.join(req))
+            assertThatThrownBy(() -> judged(general(req.getUserId()), () -> service.join(req)))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("userId");
             verifyNoInteractions(userRowLockService, membershipRepository, eventPublisher);
@@ -246,7 +251,7 @@ class MembershipServiceTest {
         @DisplayName("scopeType NULLは副作用前に拒否する")
         void nullScopeTypeRejectedBeforeWork() {
             MembershipCreateRequest req = req(99L, null, 100L, RoleKind.MEMBER, null);
-            assertThatThrownBy(() -> service.join(req))
+            assertThatThrownBy(() -> judged(general(req.getUserId()), () -> service.join(req)))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("scopeType");
             verifyNoInteractions(userRowLockService, membershipRepository, eventPublisher);
@@ -256,7 +261,7 @@ class MembershipServiceTest {
         @DisplayName("scopeId NULLは副作用前に拒否する")
         void nullScopeIdRejectedBeforeWork() {
             MembershipCreateRequest req = req(99L, ScopeType.TEAM, null, RoleKind.MEMBER, null);
-            assertThatThrownBy(() -> service.join(req))
+            assertThatThrownBy(() -> judged(general(req.getUserId()), () -> service.join(req)))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("scopeId");
             verifyNoInteractions(userRowLockService, membershipRepository, eventPublisher);
@@ -662,7 +667,7 @@ class MembershipServiceTest {
                         return e;
                     });
 
-            service.join(req);
+            judged(general(req.getUserId()), () -> service.join(req));
 
             ArgumentCaptor<MembershipChangedEvent> captor =
                     ArgumentCaptor.forClass(MembershipChangedEvent.class);
@@ -712,7 +717,7 @@ class MembershipServiceTest {
                         return e;
                     });
 
-            service.join(req);
+            judged(general(req.getUserId()), () -> service.join(req));
 
             verify(userRoleRepository, never()).save(any());
         }

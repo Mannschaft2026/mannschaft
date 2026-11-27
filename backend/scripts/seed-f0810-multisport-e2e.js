@@ -14,7 +14,7 @@
  *   チーム: team slug = f0810-basketball-team（バスケ）/ f0810-volleyball-team（バレー）
  *   会員:   f0810-recorder@test.mannschaft.local（両チームの ADMIN・記録者）
  *           f0810-player1..4@test.mannschaft.local（選手・選手グリッドの母集団）
- *           e2e-admin（既存 SYSTEM_ADMIN）も両チーム ADMIN を付与（既存 storageState 流用のため）
+ *           e2e-admin（既存の個人アカウント。SYSTEM_ADMIN は持たない）も両チーム ADMIN を付与（既存 storageState 流用のため）
  *
  * 投入内容:
  *   - 組織 1（COMMUNITY）
@@ -206,7 +206,7 @@ function encryptForTest(plain) {
   // 組織 ADMIN も付与（観戦/閲覧の組織テナント文脈用）
   await assignRole(recorderId, 2, null, ORG_ID);
 
-  // e2e-admin（既存 SYSTEM_ADMIN / 既存 storageState 流用）にも全チーム ADMIN を付与
+  // e2e-admin（既存の個人アカウント。SYSTEM_ADMIN は持たない / 既存 storageState 流用）にも全チーム ADMIN を付与
   await assignRole(E2E_ADMIN, 2, basketTeamId, null);
   await assignRole(E2E_ADMIN, 2, volleyTeamId, null);
   await assignRole(E2E_ADMIN, 2, scoredTeamId, null);

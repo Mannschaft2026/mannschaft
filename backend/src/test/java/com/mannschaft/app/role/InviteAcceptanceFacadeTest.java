@@ -65,6 +65,9 @@ class InviteAcceptanceFacadeTest {
     @Mock private AuditLogService auditLogService;
     @Spy private SecretTokenVault vault = new SecretTokenVault();
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private InviteAcceptanceFacade facade;
 

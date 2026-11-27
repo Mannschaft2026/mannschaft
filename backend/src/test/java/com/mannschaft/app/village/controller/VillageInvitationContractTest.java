@@ -84,6 +84,10 @@ class VillageInvitationContractTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    /** 運営アカウントの判定（取引の外）。実物の受諾ロジックを通すため、宛先を一般利用者と判定した結果を返させる。 */
+    @MockitoBean
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @MockitoBean
     private VillageInvitationService invitationService;
 
@@ -122,7 +126,12 @@ class VillageInvitationContractTest {
                 invitationRepository, membershipRepository, slots, Mockito.mock(jakarta.persistence.EntityManager.class), gate,
                 // 金庫は状態を持たない共通部品なので実物を渡す（モックだとトークンが null になる）。
                 new com.mannschaft.app.common.token.SecretTokenVault(),
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC(),
+                Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+
+        lenient().when(platformAccountAffiliationPolicy.judge(any()))
+                .thenAnswer(inv -> com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general(
+                        (java.util.Collection<Long>) inv.getArgument(0)));
 
         // モックのサービスに実物を委譲させる（写経ではなく実ロジックを HTTP まで通す）。
         lenient().doAnswer(inv -> real.accept(inv.getArgument(0), inv.getArgument(1)))

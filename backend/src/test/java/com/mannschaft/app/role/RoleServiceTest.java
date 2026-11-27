@@ -85,6 +85,9 @@ class RoleServiceTest {
     @Mock private RolePermissionCleanupService rolePermissionCleanupService;
     @Mock private AdminRoleMutationLockService adminRoleMutationLockService;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private RoleService roleService;
 

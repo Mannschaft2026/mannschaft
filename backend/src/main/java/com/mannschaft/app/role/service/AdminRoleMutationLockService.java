@@ -18,6 +18,7 @@ public class AdminRoleMutationLockService {
     private final UserRowLockService userRowLockService;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     public List<Long> lockScopeAdminRows(Long scopeId, String scopeType, Long... userIds) {
         userRowLockService.lockAll(userIds);
@@ -58,6 +59,8 @@ public class AdminRoleMutationLockService {
      * @param organizationId 組織スコープの場合の organization ID（チームスコープなら null）
      */
     public void grantAdminRole(Long userId, Long roleId, Long teamId, Long organizationId) {
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
         UserRoleEntity userRole = UserRoleEntity.builder()
                 .userId(userId)
                 .roleId(roleId)

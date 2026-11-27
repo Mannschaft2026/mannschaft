@@ -121,6 +121,13 @@ public interface VillageMembershipRepository extends JpaRepository<VillageMember
     Optional<VillageMembershipEntity> findFirstByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(
             UUID villageId, VillageRole role);
 
+    /**
+     * 村内の指定ロールの現役メンバーを古参順に全件取得する（{@code leftAt IS NULL} かつ {@code bannedAt IS NULL}）。
+     * HEADMAN 後継の選出で、先頭の候補が運営アカウントだったときに次の候補へ進むために使う（戦役 Z-A PR2）。
+     */
+    List<VillageMembershipEntity> findByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNullOrderByJoinedAtAsc(
+            UUID villageId, VillageRole role);
+
     /** 村内の指定ロールの現役メンバー件数（退村・BAN 済みを除外、最後の HEADMAN 判定用）。 */
     long countByVillageIdAndRoleAndLeftAtIsNullAndBannedAtIsNull(UUID villageId, VillageRole role);
 

@@ -22,7 +22,7 @@ import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 // error.COMMON_001 のみ翻訳キーが存在する想定にし、
 // error.COMMON_999_UNKNOWN_KEY は存在しないキーとして扱う。
 // ============================================================
-const KNOWN_KEYS = new Set(['error.SOCIAL_104', 'error.SOCIAL_001', 'error.SOCIAL_999', 'error.TEAM_001', 'error.TEAM_006', 'error.COMMON_001', 'error.CONFIRMABLE_NOTIFICATION_RECIPIENTS_EMPTY', 'error.unknown', 'error.server', 'error.server_retry', 'dialog.error', 'invalid_format', 'required'])
+const KNOWN_KEYS = new Set(['error.SOCIAL_104', 'error.SOCIAL_001', 'error.SOCIAL_999', 'error.TEAM_001', 'error.TEAM_006', 'error.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN', 'error.COMMON_001', 'error.CONFIRMABLE_NOTIFICATION_RECIPIENTS_EMPTY', 'error.unknown', 'error.server', 'error.server_retry', 'dialog.error', 'invalid_format', 'required'])
 
 const tMock = vi.fn((key: string): string => {
   if (key === 'error.SOCIAL_104') return 'Das Zielteam wurde nicht gefunden'
@@ -197,6 +197,13 @@ describe('フレンドエラーのロケール優先契約', () => {
   })
   it.each(['TEAM_001', 'TEAM_006'])('R4 %sの登録済み翻訳を維持する', (code) => {
     expect(useErrorHandler().resolveMessage(code, 'BEの日本語')).toBe('error.' + code)
+  })
+  it('R5 運営アカウントの所属禁止（MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN）はBEの日本語messageより登録済みの6言語文言を共通のエラー表示に出す', () => {
+    useErrorHandler().handleApiError({
+      statusCode: 403,
+      data: { error: { code: 'MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN', message: '運営アカウントはチーム・組織・委員会に所属できません' } },
+    })
+    expect(mockNotifyError).toHaveBeenCalledWith('エラー', 'error.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN')
   })
   it('R4 LOYALTY明示対応表とteam-loyalty contextを維持する', () => {
     const handler = useErrorHandler()

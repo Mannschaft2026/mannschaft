@@ -1,5 +1,6 @@
 package com.mannschaft.app.social.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.social.dto.FollowRequest;
 import com.mannschaft.app.social.dto.FollowResponse;
@@ -32,6 +33,8 @@ import com.mannschaft.app.common.security.SelfScopedEndpoint;
 public class FollowController {
 
     private final FollowService followService;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（social の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
 
     /**
@@ -45,8 +48,10 @@ public class FollowController {
             + "到達点ではなくフォロー対象の指定にすぎない）")
     public ResponseEntity<ApiResponse<FollowResponse>> follow(
             @Valid @RequestBody FollowRequest request) {
-        FollowResponse response = followService.follow(
-                request.getFollowedType(), request.getFollowedId(), SecurityUtils.getCurrentUserId());
+        Long userId = SecurityUtils.getCurrentUserId();
+        FollowResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(List.of(userId)),
+                () -> followService.follow(request.getFollowedType(), request.getFollowedId(), userId));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 

@@ -7,7 +7,7 @@
  * DB への直接投入は行いません。
  *
  * ロール:
- *   - 権限あり      : e2e-admin@test.mannschaft.local（SYSTEM_ADMIN）
+ *   - 権限あり      : e2e-operator@test.mannschaft.local（SYSTEM_ADMIN）
  *   - 権限なし      : e2e-user@test.mannschaft.local（一般。システム権限なし）
  *                     ※ 同アカウントは組織「e2e」（id=71）の作成者・ADMIN でもあるため、
  *                        テナント ADMIN の検証にも用いる
@@ -47,7 +47,7 @@ const BE = process.env.API_BASE_URL ?? 'http://localhost:8080'
 const PR_API = `${BE}/api/v1/system-admin/billing/price-revisions`
 const TAX_API = `${BE}/api/v1/system-admin/billing/tax-codes`
 
-const ADMIN = { email: 'e2e-admin@test.mannschaft.local', password: 'TestPass2026!' }
+const ADMIN = { email: 'e2e-operator@test.mannschaft.local', password: 'TestPass2026!' }
 const USER = { email: 'e2e-user@test.mannschaft.local', password: 'TestPass2026!' }
 const OTHER_TENANT_ADMIN = { email: 'e2e-dummy-1@test.mannschaft.local', password: 'TestPass2026!' }
 /** USER が作成者・ADMIN の組織（テナント ADMIN 検証用） */

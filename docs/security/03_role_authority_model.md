@@ -292,6 +292,8 @@ const isScopeAdmin = computed(
 
 **CMP-260930-0233 への適用**: 駐車場情報もこの方針に従い、SYSTEM_ADMIN 単独で全組織を閲覧する経路は認めない。この仕様判断は決着したが、実装・検証・戦役完了を意味しない。
 
+**運営アカウントは専用、テナントに所属しない（2026-11-26 マスター決定・所属禁止を実装）**: 運営（SYSTEM_ADMIN）は運営専用アカウントを使い、個人アカウントとの併用はしない。運営アカウントはチーム・組織・委員会・村に所属せず、サポーター（フォロー）にも、タイムライン上の個人フォローにもならない。停止中・非 ACTIVE の運営アカウントも対象とする（状態を問わず SYSTEM_ADMIN ロールを持つかで判定する）。所属行を作る全経路と、運営アカウント宛ての招待・参加申請・移管申し出を作る全経路は、`PlatformAccountAffiliationPolicy`（`role.service`）を通して `MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN`（403）で拒否する。経路の網羅表は [platform_account_affiliation_inventory.md](platform_account_affiliation_inventory.md)、番人は `PlatformAccountAffiliationPolicyGuardTest`（生成シンクを持つファイルが Policy を呼ぶことを CI で固定）。**唯一の例外（公式村だけ）**: 公式村（`OFFICIAL`）に限り、運営アカウントが村の作成者として村長（HEADMAN）に所属することを許す（村作成申請の作成時の所属のみ。公式村は運営が認定・運営する村であり、運営が村長として運用する必要があるため。マスター決定 2026-11-26）。例外は作成時の作成者所属に限り、運営アカウントが他の村や他の経路（招待受諾・参加申請・承認など）で所属すること、通常村（`COMMUNITY`）を作成して村長になることは引き続き 403。Policy の `assertAffiliatableAsOfficialVillageCreator` が唯一の入口で、点検 SQL も公式村の作成者としての村長所属は 0 件判定から除く。除外（運営によるプロビジョニング作成・チームの組織加盟など所属を作らない経路）は同表に理由付きで記録する。既に所属行を持つ運営アカウントの点検は同表「点検 SQL」を参照。
+
 **記録時点の状態と範囲**: 本更新は方針の記録のみであり、§3.3.1・§3.5などに記載した既存の SYSTEM_ADMIN 短絡や UI を変更していない。新たな例外機能・バイパスの追加や、認可コード・UI の移行は実施していない。
 
 ---
@@ -594,6 +596,9 @@ tournament ドメインに `TournamentContactAccessService` を新設し、read�
 
 | 日付 | 変更 |
 |---|---|
+| 2026-11-27 | §3.6 の所属禁止の判定をドメイン境界に合わせた（戦役 Z-A PR2）。他ドメインの取引の中では user_roles を読まず、Controller 等が取引の外で `PlatformAccountAffiliationPolicy.judge` し、取引の中は判定結果だけを確かめる（番人 D-3T）。詳細は [platform_account_affiliation_inventory.md](platform_account_affiliation_inventory.md)。 |
+| 2026-11-26 | §3.6 の運営アカウント所属禁止に「公式村の作成者としての村長所属だけは例外」を追記（戦役 Z-A PR2、マスター決定）。招待・打診の宛先判定は認可の後へ移した（宛先が運営アカウントかどうかを認可の無い者へ漏らさない）。 |
+| 2026-11-26 | §3.6 に「運営アカウントは専用、テナントに所属しない」を追記（戦役 Z-A PR2）。運営アカウントのチーム・組織・委員会・村・サポーター・個人フォローへの所属を全経路で禁止し、`PlatformAccountAffiliationPolicy` に一元化した。 |
 | 2026-11-15 | §3.6に最新のマスター判断を記録。SYSTEM_ADMIN の運営管理権限とテナント業務情報へのアクセスを分離し、通常の所属・役割・担当権限に従う基本方針を明記。§3.3.1・§3.5の旧方針には注記を付し、認可コード・UI は未変更、CMP-260930-0233 の実装・完了とは区別。 |
 | 2026-06-12 | **ステータス追従**: Phase 1〜3 完了（#1266・2026-06-02 点火）を反映。冒頭ステータス・§1 概要・§5 カタログの「現状挙動」列・§8 段階計画の実装状態列を更新。根治済みの病巣記述に「根治済み注記」を追記。ShiftPdf 負論理(E)・出席開示(D)の根治（#1263・点火前の前哨修正）、統合テスト 11 シナリオ（#1266 `AuthorizationIntegrationTest`）の完了を実機コード（`ShiftPdfController.java:43` / `ShiftPdfService.checkMemberAndNotSupporter`）で裏取りして反映。残課題は Phase 6（性能最適化）のみ。 |
 | 2026-05-31 | §15 を F08.7.1 最新版に**改訂**: (a) §15.2 に**ファイル置き場の PUBLIC 露出方針**を追加（連絡スペースの `is_public` に追従・PUBLIC は VIEW/DOWNLOAD のみ・書込は代表＋主催者・`TournamentContactAccessService.canView/canPost` 流用）。(b) §15.3 リーグ移籍を**プッシュ＋承認の対称モデル**に改訂（昇格=下位 org 送り出し／降格=上位 org 送り出し → 受け入れ側 org が承認。送り先は親系列/子孫 ASSOCIATION に限定。チームは閲覧のみ）。(c) §15.4 **試合メンバー表**の認可を新設（提出=自チーム ADMIN/DEPUTY・閲覧/締切=主催組織 ADMIN・代理入力なし・締切後 409）。 |

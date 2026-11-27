@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * サポーター申請・管理サービス。
@@ -73,6 +74,9 @@ public class SupporterService {
      */
     @Transactional
     public ApiResponse<FollowStatusResponse> follow(Long userId, String scopeType, Long scopeId) {
+        // 運営アカウント（SYSTEM_ADMIN）はサポーター（フォロー）にもなれない（戦役 Z-A PR2）。申請行も作らない。
+        // 判定は Team/OrganizationController が取引の外で済ませる（supporter の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(userId);
         // 柱②-3 販促プロビジョニングゲート（AC11）: PROVISIONED（承諾前の事前作成状態）スコープへの
         // サポーター申請を遮断する。
         provisioningGate.requireActive(scopeId, scopeType);
@@ -267,6 +271,21 @@ public class SupporterService {
     // ========================================
     // 管理者向け: 個別・一括承認/却下
     // ========================================
+
+    /**
+     * 承認の対象になる申請者のユーザー ID（存在しない申請は含めない）。申請者は申請の作成後に変わらない。
+     * Controller が承認の取引の外で運営アカウントの判定に使う（戦役 Z-A PR2。supporter の取引を role へ越境させない。
+     * D-3T）。帰属・状態の確認は承認の取引が従来どおり行う。
+     *
+     * @param applicationIds 申請 ID
+     * @return 申請者のユーザー ID
+     */
+    public List<Long> findApplicantUserIds(java.util.Collection<Long> applicationIds) {
+        return applicationRepository.findAllById(applicationIds).stream()
+                .map(SupporterApplicationEntity::getUserId)
+                .distinct()
+                .toList();
+    }
 
     /**
      * サポーター申請を個別承認する。

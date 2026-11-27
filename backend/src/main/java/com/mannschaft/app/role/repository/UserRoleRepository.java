@@ -503,6 +503,30 @@ public interface UserRoleRepository extends JpaRepository<UserRoleEntity, Long> 
     long existsSystemAdminByUserId(@Param("userId") Long userId);
 
     /**
+     * プラットフォームレベルの SYSTEM_ADMIN ロールを持つかを、アカウントの状態（停止・退会待ち等）を問わず数える。
+     * 運営アカウントのテナント所属禁止（戦役 Z-A PR2）の判定用。{@link #existsSystemAdminByUserId} は
+     * ACTIVE・未削除に限るため、停止中の運営アカウントを取りこぼす。
+     */
+    @Query(value = "SELECT COUNT(*) FROM user_roles ur " +
+            "JOIN roles r ON r.id = ur.role_id " +
+            "WHERE ur.user_id = :userId AND r.name = 'SYSTEM_ADMIN' " +
+            "AND ur.team_id IS NULL AND ur.organization_id IS NULL",
+            nativeQuery = true)
+    long existsPlatformAdminRoleByUserId(@Param("userId") Long userId);
+
+    /**
+     * 指定ユーザーのうち、プラットフォームレベルの SYSTEM_ADMIN ロールを持つ者の ID を1回の照会で返す
+     * （{@link #existsPlatformAdminRoleByUserId} の一括版。アカウントの状態は問わない）。
+     * 招集状・一括承認など、複数ユーザーをまとめて判定する入口が1件ずつ照会しないために使う。
+     */
+    @Query(value = "SELECT DISTINCT ur.user_id FROM user_roles ur " +
+            "JOIN roles r ON r.id = ur.role_id " +
+            "WHERE ur.user_id IN (:userIds) AND r.name = 'SYSTEM_ADMIN' " +
+            "AND ur.team_id IS NULL AND ur.organization_id IS NULL",
+            nativeQuery = true)
+    List<Long> findPlatformAdminUserIdsIn(@Param("userIds") Collection<Long> userIds);
+
+    /**
      * プラットフォームレベルの SYSTEM_ADMIN 総数を取得する（退会ブロック判定用）。
      */
     @Query(value = "SELECT COUNT(DISTINCT ur.user_id) FROM user_roles ur " +

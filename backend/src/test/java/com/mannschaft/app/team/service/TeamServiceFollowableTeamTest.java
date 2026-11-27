@@ -28,6 +28,9 @@ class TeamServiceFollowableTeamTest {
     @Mock
     private TeamRepository teamRepository;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private TeamService teamService;
 

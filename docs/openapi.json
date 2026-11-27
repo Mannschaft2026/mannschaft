@@ -197283,6 +197283,7 @@
               "type": "integer",
               "format": "int64"
             },
+            "maxItems": 100,
             "minItems": 1
           }
         }

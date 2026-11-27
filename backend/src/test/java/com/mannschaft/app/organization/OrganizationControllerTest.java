@@ -69,6 +69,7 @@ class OrganizationControllerTest {
     private static final String ORG_SLUG = "test-org";
 
     @Mock private OrganizationService organizationService;
+    @Mock private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @Mock private com.mannschaft.app.organization.service.OrganizationDetailFacade organizationDetailFacade;
     @Mock private com.mannschaft.app.organization.service.OrgTeamListService orgTeamListService;
     @Mock private RoleService roleService;

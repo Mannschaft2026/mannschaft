@@ -1,5 +1,6 @@
 package com.mannschaft.app.provisioning;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.provisioning.service.ProvisioningAcceptanceService;
 import com.mannschaft.app.role.repository.RoleRepository;
@@ -43,6 +44,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @EnabledIf("com.mannschaft.app.support.test.AbstractMySqlIntegrationTest#isDockerAvailable")
 @DisplayName("柱②-2 AC12: accept途中失敗時のロールバック")
 class ProvisioningAcceptanceRollbackIT extends AbstractMySqlIntegrationTest {
+
+    /** 運営アカウントの判定（取引の外）。本番の Controller と同じく判定してから呼ぶ（戦役 Z-A PR2・D-3T）。 */
+    @Autowired
+    private PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     @Autowired private ProvisioningAcceptanceService acceptanceService;
     @Autowired private RoleRepository roleRepository;
@@ -121,7 +126,8 @@ class ProvisioningAcceptanceRollbackIT extends AbstractMySqlIntegrationTest {
     @DisplayName("AC12: membership付与での自然な失敗は accept() 全体をロールバックする"
             + "（招待はPENDINGのまま・ADMIN role未付与・スコープはPROVISIONEDのまま）")
     void acceptRollsBackEntirelyWhenMembershipJoinFails() {
-        assertThatThrownBy(() -> acceptanceService.accept(plaintextToken, acceptorId))
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(acceptorId)),
+                () -> acceptanceService.accept(plaintextToken, acceptorId)))
                 .isInstanceOf(BusinessException.class);
 
         String invitationStatus = (String) em.createNativeQuery(

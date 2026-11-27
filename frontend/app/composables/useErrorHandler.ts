@@ -93,12 +93,14 @@ export const useErrorHandler = () => {
       if (loyaltyKey) return t(loyaltyKey)
     }
     // CMP-260920-1040 AC-36: 確認通知は errorCode ごとの6言語文言を表示する。
-    // 確認通知とチームの固定不在/復元409だけ登録済みi18nを優先し、他codeの具体的理由は維持する。
+    // 確認通知・チームの固定不在/復元409・運営アカウントの所属禁止だけ登録済みi18nを優先し、他codeの具体的理由は維持する。
     if (
       (FRIEND_I18N_CODES.has(code) ||
         code.startsWith('CONFIRMABLE_NOTIFICATION_') ||
         code === 'TEAM_001' ||
-        code === 'TEAM_006') &&
+        code === 'TEAM_006' ||
+        // 戦役 Z-A PR2: 運営アカウントの所属禁止（参加・フォロー等で BE が 403）。BE の日本語 message より6言語文言を優先する。
+        code === 'MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN') &&
       te(key)
     )
       return t(key)

@@ -118,6 +118,26 @@ function encryptForTest(plain) {
   );
   const E2E_ADMIN = Number(e2eAdminRow.id);
 
+  // 戦役 Z-A PR2: 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（マスター決定 2026-11-26）。
+  // そのため E2E も「運営専用アカウント（e2e-operator: SYSTEM_ADMIN のみ・どこにも所属しない）」と
+  // 「個人アカウント（e2e-admin: チーム・組織の ADMIN。SYSTEM_ADMIN は持たない）」に分ける。
+  const e2eOperatorHash = hashStrength8('TestPass2026!');
+  await conn.execute(
+    `INSERT IGNORE INTO users
+      (email, password_hash, last_name, first_name, display_name,
+       is_searchable, encryption_key_version, locale, timezone,
+       status, reporting_restricted, created_at, updated_at)
+     VALUES (?,?,?,?,?,1,1,?,?,?,0,?,?)`,
+    ['e2e-operator@test.mannschaft.local', e2eOperatorHash,
+     encryptForTest('E2E運営'), encryptForTest('運営'), 'E2E運営アカウント',
+     'ja', 'Asia/Tokyo', 'ACTIVE', now, now]
+  );
+  const [[e2eOperatorRow]] = await conn.execute(
+    'SELECT id FROM users WHERE email = ?',
+    ['e2e-operator@test.mannschaft.local']
+  );
+  const E2E_OPERATOR = Number(e2eOperatorRow.id);
+
   // F03.4 予約E2E: SUPPORTER ロールのテストアカウント。
   // 「SUPPORTER でも予約できるか」を実機検証するために fc-u-18 の SUPPORTER として用意する。
   const e2eSupporterHash = hashStrength8('TestPass2026!');
@@ -158,7 +178,7 @@ function encryptForTest(plain) {
   );
   const E2E_OUTSIDER = Number(e2eOutsiderRow.id);
 
-  console.log(`E2E users: E2E_USER id=${E2E_USER}, E2E_ADMIN id=${E2E_ADMIN}, E2E_SUPPORTER id=${E2E_SUPPORTER}, E2E_OUTSIDER id=${E2E_OUTSIDER}（どのteam/orgにも非所属）`);
+  console.log(`E2E users: E2E_USER id=${E2E_USER}, E2E_ADMIN id=${E2E_ADMIN}（個人・チーム ADMIN）, E2E_OPERATOR id=${E2E_OPERATOR}（運営専用・どこにも所属しない）, E2E_SUPPORTER id=${E2E_SUPPORTER}, E2E_OUTSIDER id=${E2E_OUTSIDER}（どのteam/orgにも非所属）`);
 
   // ============================================================
   // 1. ダミーユーザー 20人
@@ -352,9 +372,22 @@ function encryptForTest(plain) {
     }
   }
 
-  // E2E admin: SYSTEM_ADMIN（プラットフォーム全体） + JFA ADMIN + FC東京U-18 ADMIN
+  // E2E operator: 運営専用アカウント。SYSTEM_ADMIN（プラットフォーム全体）のみ・テナントに所属しない（戦役 Z-A PR2）。
   // role_id=1 は SYSTEM_ADMIN（V2.014__seed_roles.sql で投入済み）
-  await assignRole(E2E_ADMIN, 1, null, null);
+  await assignRole(E2E_OPERATOR, 1, null, null);
+  // 運営アカウントの所属行は残さない（過去のシードで付いた所属・以前の SYSTEM_ADMIN 混在の掃除を兼ねる）
+  await conn.execute(
+    'DELETE FROM user_roles WHERE user_id = ? AND (team_id IS NOT NULL OR organization_id IS NOT NULL)',
+    [E2E_OPERATOR]
+  );
+  await conn.execute('DELETE FROM memberships WHERE user_id = ?', [E2E_OPERATOR]);
+
+  // E2E admin: 個人アカウント。JFA ADMIN + FC東京U-18 ADMIN。SYSTEM_ADMIN は持たない（運営は e2e-operator に分離）。
+  // 既存 DB で過去に付いた SYSTEM_ADMIN（role_id=1・スコープ無し）を外す（再投入で是正する）。
+  await conn.execute(
+    'DELETE FROM user_roles WHERE user_id = ? AND role_id = 1 AND team_id IS NULL AND organization_id IS NULL',
+    [E2E_ADMIN]
+  );
   await assignRole(E2E_ADMIN, 2, null, orgs.jfa);
   await assignRole(E2E_ADMIN, 2, teams.fcTokyoU18, null);
 
@@ -1096,7 +1129,8 @@ function encryptForTest(plain) {
   console.log('  E2E SEED DATA - COMPLETE');
   console.log('========================================');
   console.log(`E2E_USER id:    ${E2E_USER}  (e2e-user@test.mannschaft.local)`);
-  console.log(`E2E_ADMIN id:   ${E2E_ADMIN}  (e2e-admin@test.mannschaft.local)`);
+  console.log(`E2E_ADMIN id:   ${E2E_ADMIN}  (e2e-admin@test.mannschaft.local / 個人・チーム ADMIN)`);
+  console.log(`E2E_OPERATOR id: ${E2E_OPERATOR}  (e2e-operator@test.mannschaft.local / SYSTEM_ADMIN 専用・どこにも所属しない)`);
   console.log(`E2E_OUTSIDER id: ${E2E_OUTSIDER}  (e2e-outsider@test.mannschaft.local / 非メンバー・認可スモーク専用)`);
   console.log(`Users:         20 dummy (id ${userIds[0]}-${userIds[19]})`);
   console.log(`Organizations: 10`);

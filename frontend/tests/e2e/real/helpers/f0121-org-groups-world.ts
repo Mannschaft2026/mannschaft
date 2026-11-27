@@ -26,8 +26,8 @@ if (process.env[F0121_CONFIG_MARK] !== '1') {
   throw new Error('F01.2.1 の実機E2E は playwright-f0121.config.ts から実行すること（globalTeardown による後始末のため）')
 }
 export const PASSWORD = 'Passw0rd!2026'
-const SYSTEM_ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? 'e2e-admin@test.mannschaft.local'
-const SYSTEM_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'TestPass2026!'
+const SYSTEM_ADMIN_EMAIL = process.env.TEST_OPERATOR_EMAIL ?? 'e2e-operator@test.mannschaft.local'
+const SYSTEM_ADMIN_PASSWORD = process.env.TEST_OPERATOR_PASSWORD ?? 'TestPass2026!'
 
 /**
  * 実行ごとに一意な接尾辞（slug・メールアドレス・名前に付ける）。失敗でワーカーが再起動しても
@@ -169,7 +169,7 @@ export const systemAdmin: Actor = {
   email: SYSTEM_ADMIN_EMAIL,
   password: SYSTEM_ADMIN_PASSWORD,
   id: 0,
-  nickname: 'e2e-admin',
+  nickname: 'e2e-operator',
 }
 
 /** 共有 Valkey 上の「1 つのキー」を消す（パターン削除はしない。並行セッションの状態を変えないため）。 */

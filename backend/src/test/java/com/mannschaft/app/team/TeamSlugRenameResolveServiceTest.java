@@ -53,6 +53,7 @@ class TeamSlugRenameResolveServiceTest {
     @Mock private MembershipRepository membershipRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private MediaUrlResolver mediaUrlResolver;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private TeamService service;
 
     private static final Long TEAM_ID = 10L;

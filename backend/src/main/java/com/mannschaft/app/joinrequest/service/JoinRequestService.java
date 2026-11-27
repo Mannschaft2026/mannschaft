@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 柱③-A「MEMBER 参加申請（join request）」サービス（CMP-260901-1538）。
@@ -83,6 +84,9 @@ public class JoinRequestService {
     @Transactional
     public JoinRequestResponse createRequest(String scopeType, Long scopeId, Long actorUserId,
                                               JoinRequestCreateRequest request) {
+        // 運営アカウント（SYSTEM_ADMIN）の参加申請は作成時点で拒否する（戦役 Z-A PR2）。
+        // 判定は JoinRequestController が取引の外で済ませる（joinrequest の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(actorUserId);
         String normalizedScopeType = validateScopeType(scopeType);
         ScopeJoinability joinability = loadJoinableScope(normalizedScopeType, scopeId);
 

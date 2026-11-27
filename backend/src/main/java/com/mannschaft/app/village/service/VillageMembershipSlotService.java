@@ -3,8 +3,11 @@ package com.mannschaft.app.village.service;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.UuidV7;
 import com.mannschaft.app.village.VillageErrorCode;
+import com.mannschaft.app.village.entity.VillageEntity;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
+import com.mannschaft.app.village.entity.enums.VillageRole;
 import com.mannschaft.app.village.entity.enums.VillageSubjectType;
+import com.mannschaft.app.village.entity.enums.VillageType;
 import com.mannschaft.app.village.repository.VillageMembershipRepository;
 import com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +17,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 五つの入村入口のUSER枠を、入口のREQUIREDトランザクション内だけで割り当てる。
@@ -80,6 +84,22 @@ public class VillageMembershipSlotService {
      * 上限を下げた場合、既存の所属は残したまま新しい入村だけを止める（退村は枠割当を通らないので常にできる）。</p>
      */
     public Allocation allocate(Long userId) {
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。入村枠を割り当てない。
+        // 判定は入村の各入口の Controller が村の取引の外で済ませる（村の取引を role へ越境させない。D-3T）。
+        // 判定漏れの入口は IllegalStateException で止まる。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(userId);
+        return allocateSlot(userId);
+    }
+
+    /**
+     * 公式村の作成者（村長）の入村枠を割り当てる。運営アカウントの所属禁止の唯一の例外
+     * （マスター決定 2026-11-26）。公式村の作成経路（村作成申請）だけが呼ぶ（package-private）。
+     */
+    Allocation allocateForOfficialVillageCreator(Long userId) {
+        return allocateSlot(userId);
+    }
+
+    private Allocation allocateSlot(Long userId) {
         int hardLimit = limitProvider.currentHardLimit();
         boolean[] occupied = new boolean[VillageParticipationLimits.DB_SLOT_CEILING + 1];
         var rows = membershipRepository.findAdmissionSlotsForUpdate(userId);
@@ -117,6 +137,28 @@ public class VillageMembershipSlotService {
      * <p>Entity を受け渡すため package-private とし、同じ village.service の五入口からだけ呼ぶ（D-1）。</p>
      */
     VillageMembershipEntity admit(VillageMembershipEntity membership) {
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。五入口の共通保存点での最終防衛線。
+        if (membership.getSubjectType() == VillageSubjectType.USER) {
+            PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(membership.getSubjectId());
+        }
+        return saveAdmission(membership);
+    }
+
+    /**
+     * 公式村の作成者を村長として所属させる。運営アカウントの所属禁止の唯一の例外（マスター決定 2026-11-26）。
+     * 村長（HEADMAN）の所属行に限る。公式村の作成経路（村作成申請）だけが呼ぶ（package-private）。
+     */
+    VillageMembershipEntity admitOfficialVillageCreator(VillageMembershipEntity membership, VillageEntity village) {
+        if (membership.getSubjectType() == VillageSubjectType.USER) {
+            // 村の種別・作成者・ロールの一致を自前で確認する（呼び出し元の申告を信用しない）。
+            PlatformAccountAffiliationPolicy.assertJudgedAffiliatableAsOfficialVillageCreator(
+                    membership.getSubjectId(), village.getType() == VillageType.OFFICIAL,
+                    village.getCreatedByUserId(), membership.getRole() == VillageRole.HEADMAN);
+        }
+        return saveAdmission(membership);
+    }
+
+    private VillageMembershipEntity saveAdmission(VillageMembershipEntity membership) {
         try {
             VillageMembershipEntity saved = membershipRepository.save(membership);
             membershipRepository.flush();

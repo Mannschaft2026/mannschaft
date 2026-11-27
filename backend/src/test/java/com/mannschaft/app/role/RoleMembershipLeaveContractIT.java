@@ -1,5 +1,6 @@
 package com.mannschaft.app.role;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.membership.domain.LeaveReason;
@@ -73,6 +74,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RoleMembershipLeaveContractIT extends AbstractMySqlIntegrationTest {
 
     private static final AtomicInteger SEQ = new AtomicInteger(0);
+
+    /** 運営アカウントの判定（取引の外）。本番の Controller と同じく判定してから呼ぶ（戦役 Z-A PR2・D-3T）。 */
+    @Autowired
+    private PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     @Autowired private RoleService roleService;
     @Autowired private MembershipService membershipService;
@@ -181,7 +186,8 @@ class RoleMembershipLeaveContractIT extends AbstractMySqlIntegrationTest {
         request.setScopeId(scopeId);
         request.setRoleKind(roleKind);
         request.setSource("CONTRACT_TEST");
-        membershipService.join(request);
+        PlatformAccountAffiliationPolicy.callJudged(platformAccountAffiliationPolicy.judge(java.util.List.of(userId)),
+                () -> membershipService.join(request));
     }
 
     private Optional<MembershipEntity> membershipOf(Long userId, ScopeType scopeType, Long scopeId) {
