@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import { fsLedgerReader, ledgerText, readLedger } from '../../scripts/task-list-ledger.mjs';
 
 const prototypeDirectory = new URL('./', import.meta.url);
 
@@ -43,7 +45,8 @@ const prototypeDirectory = new URL('./', import.meta.url);
 
 const dataSource = fs.readFileSync(new URL('beta-inventory-board-data.js', prototypeDirectory), 'utf8');
 const html = fs.readFileSync(new URL('beta-inventory-board.html', prototypeDirectory), 'utf8');
-const taskList = fs.readFileSync(new URL('../task-list.md', prototypeDirectory), 'utf8');
+// 台帳は両配置（旧: docs/task-list.md / 新: 索引＋docs/task-list/*.md。CMP-261124-1222）を readLedger で読み、全ファイルを連結して行単位で照合する。
+const taskList = ledgerText(await readLedger(fsLedgerReader(fileURLToPath(new URL('../../', prototypeDirectory)))));
 const b0PlanSource = JSON.parse(fs.readFileSync(new URL('beta-inventory-board-b0-alicization.json', prototypeDirectory), 'utf8'));
 const b0Coverage = JSON.parse(fs.readFileSync(new URL('beta-inventory-board-b0-coverage.json', prototypeDirectory), 'utf8'));
 const context = { window: {} };

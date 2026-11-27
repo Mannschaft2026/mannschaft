@@ -106,7 +106,13 @@ public enum TeamErrorCode implements ErrorCode {
     TEAM_071("TEAM_071", "この申請・招待はすでに処理されています", Severity.WARN),
 
     /** 指定したチームグループは選択できません（400） */
-    TEAM_072("TEAM_072", "指定したチームグループは選択できません", Severity.WARN);
+    TEAM_072("TEAM_072", "指定したチームグループは選択できません", Severity.WARN),
+
+    /** メンバー限定のチームにはサポーターを追加できません（403。CMP-261124-0159 F01.2 02 入口の拒否） */
+    TEAM_073("TEAM_073", "メンバー限定のチームにはサポーターを追加できません", Severity.WARN),
+
+    /** 公開範囲をメンバー限定にするには、サポーターとゲストが外れることの確認が必要です（409。CMP-261124-0159） */
+    TEAM_074("TEAM_074", "公開範囲をメンバー限定にするには、サポーターとゲストが外れることの確認が必要です", Severity.WARN);
 
     private final String code;
     private final String message;

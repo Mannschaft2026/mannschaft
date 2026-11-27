@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261124-1031",
+  "scope": "app",
+  "implementation": {
+    "pr": 4904,
+    "sha": "c4b920189d5e9cc27ae2b5d33ae6ba23adfd3560"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "roster.vue が正しい組織 ID・チーム ID でエントリーテンプレートを取得できる（orgId を '0' に固定しない）。管理者（ADMIN/DEPUTY_ADMIN）に限って取得する",
+      "tests": [
+        {
+          "name": "roster-templates.spec.ts",
+          "evidence": "frontend/tests/unit/pages/tournaments/roster-templates.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "テンプレート取得に失敗したとき、握りつぶさず画面にエラー（role=alert）を表示する",
+      "tests": [
+        {
+          "name": "roster-templates.spec.ts",
+          "evidence": "frontend/tests/unit/pages/tournaments/roster-templates.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45605097013 },
+    { "runId": 45605096821 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4904"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261124-1031-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261124-1031-exploratory.md"
+    }
+  },
+  "regressions": []
+}

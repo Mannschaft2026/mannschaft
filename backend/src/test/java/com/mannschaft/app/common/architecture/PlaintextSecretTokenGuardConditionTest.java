@@ -697,4 +697,43 @@ class PlaintextSecretTokenGuardConditionTest {
                             && call.getName().equals("of"));
         }
     }
+
+    @Test
+    @DisplayName("台帳の両配置（旧1ファイル・新分割）で債務注釈 @PlaintextTokenDebt.cmp の登録判定が一致する（検体）")
+    void 台帳の両配置で債務注釈の登録判定が一致する_検体() {
+        String single = TaskListCmpIdDuplicateGuardTest.SAMPLE_SINGLE;
+        TaskListLedger.Ledger split = TaskListLedger.read(
+                TaskListLedger.inMemory(TaskListCmpIdDuplicateGuardTest.splitForTest(single)), true);
+        assertThat(split.layout()).isEqualTo("split");
+        String splitContent = TaskListLedger.concatenatedContent(split);
+        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-261201-0000", splitContent)).isTrue();
+        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-261130-2359", splitContent)).isFalse();
+        assertSameRegistration(
+                TaskListLedger.read(TaskListLedger.inMemory(java.util.Map.of(TaskListLedger.INDEX_PATH, single)), true), split);
+    }
+
+    @Test
+    @DisplayName("実リポジトリの台帳をもう一方の配置に写しても債務注釈の登録判定が一致する")
+    void 台帳の両配置で債務注釈の登録判定が一致する_実台帳() {
+        TaskListLedger.Ledger real = TaskListLedger.readRepository(true);
+        java.util.Map<String, String> files = new java.util.LinkedHashMap<>();
+        real.files().forEach(f -> files.put(f.path(), f.content()));
+        String singleText = real.split()
+                ? TaskListCmpIdDuplicateGuardTest.joinForTest(files) : files.get(TaskListLedger.INDEX_PATH);
+        java.util.Map<String, String> splitFiles = real.split()
+                ? files : TaskListCmpIdDuplicateGuardTest.splitForTest(singleText);
+        assertSameRegistration(
+                TaskListLedger.read(TaskListLedger.inMemory(java.util.Map.of(TaskListLedger.INDEX_PATH, singleText)), true),
+                TaskListLedger.read(TaskListLedger.inMemory(splitFiles), true));
+    }
+
+    private static void assertSameRegistration(TaskListLedger.Ledger single, TaskListLedger.Ledger split) {
+        String s = TaskListLedger.concatenatedContent(single);
+        String t = TaskListLedger.concatenatedContent(split);
+        for (TaskListLedger.Row r : single.rows()) {
+            assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), t)).as(r.id())
+                    .isEqualTo(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp(r.id(), s));
+        }
+        assertThat(PlaintextSecretTokenGuardRules.isOpenRegisteredCmp("CMP-999999-9999", t)).isFalse();
+    }
 }

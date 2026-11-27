@@ -65,6 +65,9 @@ class SurveyRemindServiceTest {
     @Mock
     private com.mannschaft.app.organization.service.OrganizationMembershipService organizationMembershipService;
 
+    @org.mockito.Spy
+    private java.time.Clock clock = java.time.Clock.systemUTC();
+
     @InjectMocks
     private SurveyRemindService remindService;
 
@@ -298,6 +301,24 @@ class SurveyRemindServiceTest {
         given(surveyRepository.findById(SURVEY_ID)).willReturn(Optional.of(survey));
 
         // When & Then
+        assertThatThrownBy(() -> remindService.remind(SURVEY_ID, USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(SurveyErrorCode.REMIND_QUOTA_EXCEEDED));
+        verify(eventPublisher, never()).publishEvent(any(SurveyReminderNotificationEvent.class));
+    }
+
+    @Test
+    @DisplayName("CMP-261125-2221 AC2: 上限到達かつ24h以内は上限を優先し REMIND_QUOTA_EXCEEDED")
+    void 督促_上限到達かつクールダウン中_上限を優先しREMIND_QUOTA_EXCEEDED() {
+        // Given: 既に3回送信済み、かつ前回から1時間しか経っていない（クールダウン中）
+        SurveyEntity survey = createRemindableSurvey().toBuilder()
+                .lastRemindedAt(LocalDateTime.now().minusHours(1))
+                .manualRemindCount(3)
+                .build();
+        given(surveyRepository.findById(SURVEY_ID)).willReturn(Optional.of(survey));
+
+        // When & Then: 24h 待っても送れないので、待機ではなく上限を返す
         assertThatThrownBy(() -> remindService.remind(SURVEY_ID, USER_ID))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())

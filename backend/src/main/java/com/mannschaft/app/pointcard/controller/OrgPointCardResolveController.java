@@ -58,7 +58,7 @@ public class OrgPointCardResolveController {
      */
     @PostMapping("/resolve-by-token")
     @Operation(summary = "一時トークン resolve",
-            description = "顧客側で発行された 5 分 TTL の UUID トークンから cardId を特定する。"
+            description = "顧客側で発行された 5 分 TTL の共有トークン（Base64URL 43 字）から cardId を特定する。"
                     + "GETDEL で原子的に消費するため同じトークンは 1 回しか使えない。"
                     + "暗号化対象（barcodeValue / displayName / nickname / memo）は一切返さない。"
                     + "認可: ADMIN / DEPUTY_ADMIN。レート制限: 600/h/user。")
@@ -73,16 +73,18 @@ public class OrgPointCardResolveController {
     /**
      * resolve リクエスト Body。
      *
-     * <p>UUID 形式バリデーションは Service 層 {@link PointCardShareTokenService#resolve}
-     * 内で実施する（不正値は {@code POINT_CARD_019} で隠蔽 = 情報漏洩防止）。
-     * Bean Validation では {@code @NotBlank} と長さ 36 のみチェックし、形式不一致は
-     * 「トークン不存在」として扱う。
+     * <p>Bean Validation では {@code @NotBlank} と長さ 43 のみチェックする。長さが合っていて
+     * 文字種が違うなど形式不一致の値は、Valkey のキー（ハッシュ）に当たらず
+     * 「トークン不存在」（{@code POINT_CARD_019}）として扱う（存在を漏らさない）。
      *
-     * @param token 顧客側で発行された一時トークン（UUID v4 文字列、36 文字）
+     * <p>旧形式の UUID（36 字）は受けない。旧トークンは移行時に TTL 5 分で自然に消え、
+     * 受けても照合は必ず失敗するだけなので、許可長を増やさず 43 字だけにして単純さを優先した。
+     *
+     * @param token 顧客側で発行された一時トークン（Base64URL・パディング無し・43 文字）
      */
     public record ResolveByTokenRequest(
             @NotBlank
-            @Size(min = 36, max = 36)
+            @Size(min = 43, max = 43)
             String token
     ) {
     }
