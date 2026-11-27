@@ -2,7 +2,7 @@
 
 > このファイルは自動生成されます。手で編集しないでください。再生成: `cd backend && ./gradlew generateErDiagrams`
 
-- テーブル数: 6
+- テーブル数: 7
 - ビュー数: 0
 
 ## ER 図
@@ -28,6 +28,10 @@ erDiagram
         bigint schedule_id "ID参照"
         bigint created_by "ID参照"
     }
+    activity_stats_settings {
+        binary id PK
+        bigint updated_by "ID参照"
+    }
     activity_template_fields {
         bigint id PK
         bigint template_id FK
@@ -50,6 +54,7 @@ erDiagram
     schedules |o..o{ activity_results : "ID参照(FKなし) schedule_id"
     users |o..o{ activity_results : "ID参照(FKなし) created_by"
     venues |o..o{ activity_results : "ID参照(FKなし) venue_id"
+    users |o..o{ activity_stats_settings : "ID参照(FKなし) updated_by"
     activity_templates ||--o{ activity_template_fields : "template_id"
     users ||..o{ activity_templates : "ID参照(FKなし) created_by"
 ```
@@ -68,6 +73,7 @@ erDiagram
 | --- | --- | --- |
 | `activity_results` | `scope_type` | `scope_id` |
 | `activity_results` | `source_type` | `source_id` |
+| `activity_stats_settings` | `scope_type` | `scope_id` |
 | `activity_templates` | `scope_type` | `scope_id` |
 
 ## テーブル定義
@@ -125,6 +131,19 @@ erDiagram
 | `version` | `bigint` | NO | `0` |  |
 | `is_auto_generated_from_schedule` | `tinyint(1)` | NO | `0` |  |
 | `is_planned` | `tinyint(1)` | NO | `0` |  |
+
+### `activity_stats_settings`
+
+| 列名 | 型 | NULL | 既定値 | コメント |
+| --- | --- | --- | --- | --- |
+| `id` | `binary(16)` | NO | （なし） | UUIDv7 |
+| `scope_type` | `varchar(20)` | NO | （なし） | TEAM / ORGANIZATION / COMMITTEE |
+| `scope_id` | `bigint unsigned` | NO | （なし） | スコープID（teams.id 等への ID 参照・FKなし） |
+| `top_participants_visible_to_members` | `tinyint(1)` | NO | `0` | 上位参加者をメンバーに公開するか（既定OFF＝管理者のみ） |
+| `updated_by` | `bigint unsigned` | YES | NULL | 最終更新者（users.id への ID 参照・FKなし。退会者の物理削除時にNULL） |
+| `version` | `bigint` | NO | `0` | 楽観ロック |
+| `created_at` | `datetime(6)` | NO | `CURRENT_TIMESTAMP(6)` （式） | 作成した瞬間（UTC） |
+| `updated_at` | `datetime(6)` | NO | `CURRENT_TIMESTAMP(6)` （式） | 最後に更新した瞬間（UTC） |
 
 ### `activity_template_fields`
 

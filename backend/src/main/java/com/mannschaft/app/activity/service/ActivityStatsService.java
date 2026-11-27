@@ -159,7 +159,7 @@ public class ActivityStatsService {
     }
 
     /** 期間の検証。日数 = date_to − date_from + 1（両端含む）。 */
-    static void validateRange(LocalDate from, LocalDate to) {
+    public static void validateRange(LocalDate from, LocalDate to) {
         if (from.isAfter(to)) {
             throw new BusinessException(ActivityErrorCode.STATS_DATE_RANGE_INVERTED);
         }

@@ -5810,6 +5810,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/activities/stats/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 活動統計の設定取得 */
+        get: operations["getStatsSettings"];
+        /** 活動統計の設定更新 */
+        put: operations["updateStatsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/incoming/{token}": {
         parameters: {
             query?: never;
@@ -58216,6 +58234,22 @@ export interface components {
         ApiResponseActivityCommentResponse: {
             data?: components["schemas"]["ActivityCommentResponse"];
         };
+        UpdateActivityStatsSettingsRequest: {
+            topParticipantsVisibleToMembers: boolean;
+            /** Format: int64 */
+            version?: number;
+        };
+        ActivityStatsSettingsResponse: {
+            /** Format: int64 */
+            scopeId?: number;
+            scopeType?: string;
+            topParticipantsVisibleToMembers?: boolean;
+            /** Format: int64 */
+            version?: number;
+        };
+        ApiResponseActivityStatsSettingsResponse: {
+            data?: components["schemas"]["ActivityStatsSettingsResponse"];
+        };
         CreateIncomingWebhookRequest: {
             allowedIps?: string[];
             description?: string;
@@ -86898,19 +86932,37 @@ export interface components {
             data?: components["schemas"]["ActivityCommentResponse"][];
         };
         ActivityStatsResponse: {
-            byMonth?: components["schemas"]["MonthCount"][];
+            averageParticipants?: number;
+            byPeriod?: components["schemas"]["PeriodCount"][];
             byTemplate?: components["schemas"]["TemplateCount"][];
+            /** Format: date */
+            dateFrom?: string;
+            /** Format: date */
+            dateTo?: string;
+            granularity?: string;
+            /** Format: int64 */
+            scopeId?: number;
+            scopeType?: string;
             topParticipants?: components["schemas"]["TopParticipant"][];
+            topParticipantsVisible?: boolean;
             /** Format: int64 */
             totalActivities?: number;
+            /** Format: int64 */
+            totalParticipations?: number;
+            /** Format: int64 */
+            uniqueParticipants?: number;
         };
         ApiResponseActivityStatsResponse: {
             data?: components["schemas"]["ActivityStatsResponse"];
         };
-        MonthCount: {
+        PeriodCount: {
             /** Format: int64 */
             count?: number;
-            month?: string;
+            /** Format: int64 */
+            participations?: number;
+            periodLabel?: string;
+            /** Format: date */
+            periodStart?: string;
         };
         TemplateCount: {
             /** Format: int64 */
@@ -103579,6 +103631,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getStatsSettings: {
+        parameters: {
+            query: {
+                scope_type: string;
+                scope_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseActivityStatsSettingsResponse"];
+                };
+            };
+        };
+    };
+    updateStatsSettings: {
+        parameters: {
+            query: {
+                scope_type: string;
+                scope_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateActivityStatsSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseActivityStatsSettingsResponse"];
+                };
             };
         };
     };
@@ -177683,9 +177785,9 @@ export interface operations {
                 scope_type: string;
                 scope_id: number;
                 template_id?: number;
-                period?: string;
                 date_from?: string;
                 date_to?: string;
+                granularity?: string;
             };
             header?: never;
             path?: never;
