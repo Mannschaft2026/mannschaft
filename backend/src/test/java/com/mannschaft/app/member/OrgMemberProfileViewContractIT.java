@@ -555,10 +555,10 @@ class OrgMemberProfileViewContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-13 所属のない SYS × DRAFT: 200（hasRoleOrAbove が SYSTEM_ADMIN を通す）")
-        void AC13_SYS_200() throws Exception {
+        @DisplayName("AC-13 所属のない SYS × DRAFT: 404(MEMBER_001)（hasRoleOrAbove が SYSTEM_ADMIN を通さない。戦役Z-A PR3）")
+        void AC13_SYS_404() throws Exception {
             setAuth(sysId);
-            lookup(drAId, "ORGV", 10).andExpect(status().isOk());
+            expect404(lookup(drAId, "ORGV", 10), "MEMBER_001");
         }
 
         @Test

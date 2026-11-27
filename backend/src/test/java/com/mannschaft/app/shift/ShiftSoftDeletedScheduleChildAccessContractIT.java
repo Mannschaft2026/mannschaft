@@ -236,13 +236,13 @@ class ShiftSoftDeletedScheduleChildAccessContractIT extends AbstractMySqlIntegra
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMINは親が生存していれば200（退行なし）")
-        void SYSTEM_ADMINは親が生存していれば200() throws Exception {
+        @DisplayName("SYSTEM_ADMIN単独は親が生存していても通さず404（越境者と同一。戦役Z-A PR3）")
+        void SYSTEM_ADMIN単独は親が生存していても404() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(patch("/api/v1/shifts/slots/{id}", liveSlotId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("note", "生存枠編集"))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound());
         }
 
         @Test

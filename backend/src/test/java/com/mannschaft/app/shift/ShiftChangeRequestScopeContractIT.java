@@ -560,17 +560,19 @@ class ShiftChangeRequestScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は一覧・審査できる")
-        void AC5_systemAdminは通る() throws Exception {
+        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は一覧・審査とも越境者と同一の404（SYSTEM_ADMIN 単独は通さない）")
+        void AC5_systemAdmin単独は通さない() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(get("/api/v1/shifts/change-requests")
                             .param("scheduleId", scheduleAId.toString()))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_001"));
             mockMvc.perform(patch("/api/v1/shifts/change-requests/{id}/review", myRequestId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("decision", "ACCEPTED", "reviewComment", "x", "version", 0))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_030"));
         }
 
         @Test

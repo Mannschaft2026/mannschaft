@@ -654,14 +654,15 @@ class ShiftSwapScopeContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は resolve できる")
-        void AC5_systemAdminは通る() throws Exception {
+        @DisplayName("AC-5: 非メンバーの SYSTEM_ADMIN は resolve できず越境者と同一の404（SYSTEM_ADMIN 単独は通さない）")
+        void AC5_systemAdmin単独は通さない() throws Exception {
             setAuth(systemAdminId);
             mockMvc.perform(post("/api/v1/shifts/swap-requests/{id}/resolve", acceptedSwapAId)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("action", "APPROVE", "adminNote", "x"))))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_005"));
         }
 
         @Test

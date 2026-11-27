@@ -288,16 +288,15 @@ class ShiftSlotFacadeTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通る（チーム判定を撃たない）")
-        void SYSTEM_ADMINは短絡() {
+        @DisplayName("SYSTEM_ADMIN 単独は通さない（isSystemAdmin を呼ばず、越境者と同一の SHIFT_SLOT_NOT_FOUND）")
+        void SYSTEM_ADMIN単独は通さない() {
             given(slotService.resolveSlotTeamId(SLOT_ID)).willReturn(TEAM_ID);
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
 
-            facade.deleteSlot(SLOT_ID, USER_ID);
+            assertCode(catchThrowable(() -> facade.deleteSlot(SLOT_ID, USER_ID)),
+                    ShiftErrorCode.SHIFT_SLOT_NOT_FOUND);
 
-            verify(slotService).deleteSlot(SLOT_ID);
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            verify(slotService, never()).deleteSlot(anyLong());
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
         }
     }
 }

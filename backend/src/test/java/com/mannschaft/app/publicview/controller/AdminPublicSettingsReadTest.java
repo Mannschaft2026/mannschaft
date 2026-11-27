@@ -167,7 +167,7 @@ class AdminPublicSettingsReadTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"teams", "organizations"})
-    @DisplayName("実GETの認可式は正準slugを数値IDへ解決しSYS・管理者だけを許可する")
+    @DisplayName("実GETの認可式は正準slugを数値IDへ解決しスコープ管理者だけを許可する（SYS単独は拒否）")
     void canonicalSlugAuthorizationExpression(String scope) throws Exception {
         var teamService = new SlugResolverFixture();
         var organizationService = new SlugResolverFixture();
@@ -188,8 +188,8 @@ class AdminPublicSettingsReadTest {
         when(access.isAdminOrAbove(USER_ID, SCOPE_ID, scopeType(scope))).thenReturn(true);
         assertEquals(true, expression.getValue(context, Boolean.class), "ADMIN/DEPUTYは既存guardで許可");
         when(access.isAdminOrAbove(USER_ID, SCOPE_ID, scopeType(scope))).thenReturn(false);
-        when(access.isSystemAdmin(USER_ID)).thenReturn(true);
-        assertEquals(true, expression.getValue(context, Boolean.class), "SYSは既存guardの短絡で許可");
+        assertEquals(false, expression.getValue(context, Boolean.class), "SYS単独は短絡せず拒否（戦役Z-A PR3）");
+        verify(access, never()).isSystemAdmin(anyLong());
     }
 
     @ParameterizedTest

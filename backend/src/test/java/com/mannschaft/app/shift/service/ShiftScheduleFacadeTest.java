@@ -449,15 +449,13 @@ class ShiftScheduleFacadeTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は短絡して通る（チーム判定を撃たない）")
-        void SYSTEM_ADMINは短絡() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            ManualRemindResponse remind = ManualRemindResponse.builder().scheduleId(SCHEDULE_ID).build();
-            given(reminderService.triggerManualReminder(SCHEDULE_ID, USER_ID)).willReturn(remind);
+        @DisplayName("SYSTEM_ADMIN 単独は通さない（isSystemAdmin を呼ばず、越境者と同一の SHIFT_001）")
+        void SYSTEM_ADMIN単独は通さない() {
+            assertCode(catchThrowable(() -> facade.remindUnsubmitted(SCHEDULE_ID, USER_ID)),
+                    ShiftErrorCode.SHIFT_SCHEDULE_NOT_FOUND);
 
-            assertThat(facade.remindUnsubmitted(SCHEDULE_ID, USER_ID)).isSameAs(remind);
-            verify(accessControlService, never()).isAdminOrAbove(anyLong(), anyLong(), any());
-            verify(accessControlService, never()).isMember(anyLong(), anyLong(), any());
+            verifyNoInteractions(reminderService);
+            verify(accessControlService, never()).isSystemAdmin(anyLong());
         }
     }
 }

@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
  * {@link ScopeConcealingAccessGate} の単体テスト（CMP-260923-0954 W1）。
  *
  * <p>判定順そのものが秘匿契約の一部であるため、順序の取り違え（isMember を isAdminOrAbove より先に置く、
- * SYSTEM_ADMIN の短絡を落とす等）で必ず落ちる検体を含める。また許可経路で isMember を撃たない
+ * SYSTEM_ADMIN の短絡を戻す等）で必ず落ちる検体を含める。また許可経路で isMember を撃たない
  * （拒否経路でのみクエリが増える）ことを回数で固定する。</p>
  */
 @ExtendWith(MockitoExtension.class)
@@ -52,12 +52,11 @@ class ScopeConcealingAccessGateTest {
     class Admin {
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は他の判定を一切撃たずに通る")
-        void systemAdminShortCircuits() {
-            given(acs.isSystemAdmin(USER)).willReturn(true);
-            assertThatCode(() -> gate.requireAdminOrConceal(USER, TEAM, TEAM_T, NOT_FOUND)).doesNotThrowAnyException();
-            verify(acs).isSystemAdmin(USER);
-            verifyNoMoreInteractions(acs);
+        @DisplayName("SYSTEM_ADMIN 単独は通さない（isSystemAdmin を呼ばず、越境者と同一の notFoundCode）")
+        void systemAdminAloneIsConcealed() {
+            assertThatThrownBy(() -> gate.requireAdminOrConceal(USER, TEAM, TEAM_T, NOT_FOUND))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo(NOT_FOUND));
+            verify(acs, never()).isSystemAdmin(anyLong());
         }
 
         @Test
@@ -95,7 +94,6 @@ class ScopeConcealingAccessGateTest {
         void ownerPassesWithoutRoleQueries() {
             assertThatCode(() -> gate.requireOwnerOrAdminOrConceal(USER, TEAM, TEAM_T, USER, NOT_FOUND))
                     .doesNotThrowAnyException();
-            verify(acs).isSystemAdmin(USER);
             verifyNoMoreInteractions(acs);
         }
 
@@ -175,12 +173,11 @@ class ScopeConcealingAccessGateTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は在籍なしでも通る")
-        void systemAdminPasses() {
-            given(acs.isSystemAdmin(USER)).willReturn(true);
-            assertThatCode(() -> gate.requireMemberOrConceal(USER, TEAM, TEAM_T, NOT_FOUND, true))
-                    .doesNotThrowAnyException();
-            verify(acs, never()).isMember(anyLong(), anyLong(), anyString());
+        @DisplayName("SYSTEM_ADMIN 単独は在籍が無ければ通さない（越境者と同一の notFoundCode）")
+        void systemAdminAloneIsConcealed() {
+            assertThatThrownBy(() -> gate.requireMemberOrConceal(USER, TEAM, TEAM_T, NOT_FOUND, true))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo(NOT_FOUND));
+            verify(acs, never()).isSystemAdmin(anyLong());
         }
     }
 

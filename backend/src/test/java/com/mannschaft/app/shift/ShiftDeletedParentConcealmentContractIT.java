@@ -279,22 +279,30 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     }
 
     @Test
-    void 生存親の許可主体と所属不足403と一覧403を維持する() throws Exception {
+    void 生存親の許可主体はSYSTEM_ADMIN単独を通さず所属不足403と一覧403を維持する() throws Exception {
         Long slotId = slot(ShiftScheduleStatus.PUBLISHED, "[]");
         Long swapId = swap(slotId);
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN", "SYSTEM_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN")) {
             Long cancellable = swap(slotId);
             callSwap(role, "cancel", cancellable).andExpect(status().isNoContent());
             Long resolvable = swap(slotId);
             inTx(() -> { swaps.findById(resolvable).orElseThrow().accept(actors.get("ADMIN")); return null; });
             callSwap(role, "REJECT", resolvable).andExpect(status().isOk());
         }
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "SYSTEM_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN")) {
             Long acceptable = swap(slotId);
             SqlIntentCounter.reset();
             callSwap(role, "accept", acceptable).andExpect(status().isOk());
             assertParentSelectCount("shift_slots", 2);
             assertParentSelectCount("shift_schedules", 2);
+        }
+        // SYSTEM_ADMIN 単独（所属なし）は通さない。越境者と同一の404（SHIFT_005）で、依頼は変わらない（戦役 Z-A PR3）。
+        for (String operation : List.of("cancel", "REJECT", "accept")) {
+            Long untouched = swap(slotId);
+            Map<String, String> before = snapshot();
+            callSwap("SYSTEM_ADMIN", operation, untouched).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_005"));
+            assertThat(snapshot()).isEqualTo(before);
         }
         for (String role : List.of("MEMBER", "SUPPORTER")) {
             callSwap(role, "REJECT", swapId).andExpect(status().isForbidden())
@@ -308,16 +316,26 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     }
 
     @Test
-    void runの生存親と空提案の許可主体と同scopeの既存拒否コードを維持する() throws Exception {
+    void runの生存親と空提案の許可主体はSYSTEM_ADMIN単独を通さず同scopeの既存拒否コードを維持する() throws Exception {
         Long slotId = slot(ShiftScheduleStatus.PUBLISHED, "[]");
         Long scheduleId = inTx(() -> slots.findById(slotId).orElseThrow().getScheduleId());
-        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN", "SYSTEM_ADMIN")) {
+        for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "GHOST_ADMIN")) {
             Long runId = run(scheduleId);
             callRun(role, "detail", scheduleId, runId).andExpect(status().isOk());
             SqlIntentCounter.reset();
             callRun(role, "confirm", scheduleId, runId).andExpect(status().isOk());
             assertParentSelectCount("shift_schedules", 2);
             callRun(role, "revoke", scheduleId, runId).andExpect(status().isNoContent());
+        }
+        // SYSTEM_ADMIN 単独（所属なし）の確定・破棄は共通ゲートが越境者と同一の404（SHIFT_024）で拒否する（戦役 Z-A PR3）。
+        // detail は run 専用の直書き短絡（requireRunAdminConcealed）が残るため従来どおり通る（Z-C で撤去）。
+        Long systemAdminRunId = run(scheduleId);
+        callRun("SYSTEM_ADMIN", "detail", scheduleId, systemAdminRunId).andExpect(status().isOk());
+        for (String operation : List.of("confirm", "revoke")) {
+            Map<String, String> before = snapshot();
+            callRun("SYSTEM_ADMIN", operation, scheduleId, systemAdminRunId).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("SHIFT_024"));
+            assertThat(snapshot()).isEqualTo(before);
         }
         Long runId = run(scheduleId);
         for (String operation : List.of("confirm", "revoke", "detail", "visual")) {

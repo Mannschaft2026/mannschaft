@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verify;
  * <p>per-scope SpEL ガードの各メソッド（isScopeAdmin / isScopeStrictAdmin / isScopeMember /
  * hasScopePermission）について、以下の振る舞いを検証する:</p>
  * <ul>
- *   <li>SYSTEM_ADMIN は当該スコープのロール如何に関わらず常に true（短絡）</li>
+ *   <li>SYSTEM_ADMIN を特別扱いしない（所属の無い SYSTEM_ADMIN は false。isSystemAdmin を呼ばない。戦役 Z-A PR3）</li>
  *   <li>当該スコープの ADMIN/DEPUTY_ADMIN は許可、それ以外は拒否</li>
  *   <li>null / 非認証 / userId パース失敗は false（DB を参照せず早期 false）</li>
  * </ul>
@@ -97,21 +97,18 @@ class AccessGuardTest {
     class IsScopeAdmin {
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は当該スコープのロールに関わらず true（短絡）")
-        void systemAdminShortCircuits() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-
+        @DisplayName("SYSTEM_ADMIN 単独は通さない（isSystemAdmin を呼ばず、当該スコープの判定に任せる）")
+        void systemAdminAloneIsNotShortCircuited() {
             boolean result = accessGuard.isScopeAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE);
 
-            assertThat(result).isTrue();
-            // 短絡したので per-scope 判定は呼ばれない
-            verify(accessControlService, never()).isAdminOrAbove(USER_ID, SCOPE_ID, SCOPE_TYPE);
+            assertThat(result).isFalse();
+            verify(accessControlService, never()).isSystemAdmin(USER_ID);
+            verify(accessControlService).isAdminOrAbove(USER_ID, SCOPE_ID, SCOPE_TYPE);
         }
 
         @Test
         @DisplayName("当該スコープの ADMIN/DEPUTY なら true")
         void scopeAdminAllowed() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isAdminOrAbove(USER_ID, SCOPE_ID, SCOPE_TYPE)).willReturn(true);
 
             assertThat(accessGuard.isScopeAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isTrue();
@@ -120,7 +117,6 @@ class AccessGuardTest {
         @Test
         @DisplayName("非 SYSTEM_ADMIN かつ当該スコープ非 ADMIN なら false（他団体 ADMIN を弾く）")
         void nonAdminDenied() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isAdminOrAbove(USER_ID, SCOPE_ID, SCOPE_TYPE)).willReturn(false);
 
             assertThat(accessGuard.isScopeAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isFalse();
@@ -136,17 +132,16 @@ class AccessGuardTest {
     class IsScopeStrictAdmin {
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は true（短絡）")
-        void systemAdminShortCircuits() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            assertThat(accessGuard.isScopeStrictAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isTrue();
-            verify(accessControlService, never()).isAdmin(USER_ID, SCOPE_ID, SCOPE_TYPE);
+        @DisplayName("SYSTEM_ADMIN 単独は通さない（isSystemAdmin を呼ばない）")
+        void systemAdminAloneIsNotShortCircuited() {
+            assertThat(accessGuard.isScopeStrictAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isFalse();
+            verify(accessControlService, never()).isSystemAdmin(USER_ID);
+            verify(accessControlService).isAdmin(USER_ID, SCOPE_ID, SCOPE_TYPE);
         }
 
         @Test
         @DisplayName("当該スコープの ADMIN（DEPUTY 除く）なら true")
         void strictAdminAllowed() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isAdmin(USER_ID, SCOPE_ID, SCOPE_TYPE)).willReturn(true);
             assertThat(accessGuard.isScopeStrictAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isTrue();
         }
@@ -154,7 +149,6 @@ class AccessGuardTest {
         @Test
         @DisplayName("DEPUTY_ADMIN（isAdmin=false）なら false")
         void deputyDenied() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isAdmin(USER_ID, SCOPE_ID, SCOPE_TYPE)).willReturn(false);
             assertThat(accessGuard.isScopeStrictAdmin(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isFalse();
         }
@@ -169,17 +163,16 @@ class AccessGuardTest {
     class IsScopeMember {
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は true（短絡）")
-        void systemAdminShortCircuits() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            assertThat(accessGuard.isScopeMember(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isTrue();
-            verify(accessControlService, never()).isMember(USER_ID, SCOPE_ID, SCOPE_TYPE);
+        @DisplayName("SYSTEM_ADMIN 単独は通さない（isSystemAdmin を呼ばない）")
+        void systemAdminAloneIsNotShortCircuited() {
+            assertThat(accessGuard.isScopeMember(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isFalse();
+            verify(accessControlService, never()).isSystemAdmin(USER_ID);
+            verify(accessControlService).isMember(USER_ID, SCOPE_ID, SCOPE_TYPE);
         }
 
         @Test
         @DisplayName("当該スコープのメンバーなら true")
         void memberAllowed() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isMember(USER_ID, SCOPE_ID, SCOPE_TYPE)).willReturn(true);
             assertThat(accessGuard.isScopeMember(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isTrue();
         }
@@ -187,7 +180,6 @@ class AccessGuardTest {
         @Test
         @DisplayName("非メンバーなら false")
         void nonMemberDenied() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.isMember(USER_ID, SCOPE_ID, SCOPE_TYPE)).willReturn(false);
             assertThat(accessGuard.isScopeMember(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE)).isFalse();
         }
@@ -204,17 +196,16 @@ class AccessGuardTest {
         private static final String PERMISSION = "ATTENDANCE_DISCLOSE";
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は permission 如何に関わらず true（短絡）")
-        void systemAdminShortCircuits() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-            assertThat(accessGuard.hasScopePermission(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE, PERMISSION)).isTrue();
-            verify(accessControlService, never()).hasPermission(USER_ID, SCOPE_ID, SCOPE_TYPE, PERMISSION);
+        @DisplayName("SYSTEM_ADMIN 単独は permission を持たなければ通さない（isSystemAdmin を呼ばない）")
+        void systemAdminAloneIsNotShortCircuited() {
+            assertThat(accessGuard.hasScopePermission(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE, PERMISSION)).isFalse();
+            verify(accessControlService, never()).isSystemAdmin(USER_ID);
+            verify(accessControlService).hasPermission(USER_ID, SCOPE_ID, SCOPE_TYPE, PERMISSION);
         }
 
         @Test
         @DisplayName("当該スコープで permission を保有していれば true")
         void permissionAllowed() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.hasPermission(USER_ID, SCOPE_ID, SCOPE_TYPE, PERMISSION)).willReturn(true);
             assertThat(accessGuard.hasScopePermission(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE, PERMISSION)).isTrue();
         }
@@ -222,7 +213,6 @@ class AccessGuardTest {
         @Test
         @DisplayName("permission 非保有なら false")
         void permissionDenied() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.hasPermission(USER_ID, SCOPE_ID, SCOPE_TYPE, PERMISSION)).willReturn(false);
             assertThat(accessGuard.hasScopePermission(authedAs(USER_ID), SCOPE_ID, SCOPE_TYPE, PERMISSION)).isFalse();
         }

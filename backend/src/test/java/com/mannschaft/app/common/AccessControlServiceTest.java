@@ -938,22 +938,18 @@ class AccessControlServiceTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN（プラットフォームロール）→ 組織未所属でもgetRoleName=SYSTEM_ADMIN")
-        void systemAdminは組織未所属でも最優先ロールになる() {
+        @DisplayName("SYSTEM_ADMIN（プラットフォームロール）単独 → 組織未所属ならロール無し（昇格しない）")
+        void systemAdmin単独は組織未所属ならロール無し() {
             // Given: SYSTEM_ADMIN は team_id / organization_id がともに null のため、
-            // スコープ別 user_roles と memberships のどちらにも現れない。
-            given(userRoleRepository.existsSystemAdminByUserId(USER_ID)).willReturn(1L);
-            given(roleRepository.findByName("ADMIN")).willReturn(Optional.of(role("ADMIN")));
+            // スコープ別 user_roles と memberships のどちらにも現れない。有効ロールへ昇格もさせない。
+            given(userRoleRepository.isActiveUser(USER_ID)).willReturn(true);
 
-            // When / Then: サイドバー等のスコープUIでもプラットフォーム権限を認識できる。
-            assertThat(accessControlService.getRoleName(USER_ID, SCOPE_ID, "ORGANIZATION"))
-                    .isEqualTo("SYSTEM_ADMIN");
+            // When / Then: 運営権限はロール階層に載せない（戦役 Z-A PR3。checkSystemAdmin で判定する）。
+            assertThat(accessControlService.getRoleName(USER_ID, SCOPE_ID, "ORGANIZATION")).isNull();
             assertThat(accessControlService.hasRoleOrAbove(
                     USER_ID, SCOPE_ID, "ORGANIZATION", "ADMIN"))
-                    .isTrue();
-            verify(userRoleRepository, never())
-                    .findByUserIdAndOrganizationId(USER_ID, SCOPE_ID);
-            verifyNoInteractions(membershipRepository);
+                    .isFalse();
+            verify(userRoleRepository, never()).existsSystemAdminByUserId(USER_ID);
         }
 
         @Test

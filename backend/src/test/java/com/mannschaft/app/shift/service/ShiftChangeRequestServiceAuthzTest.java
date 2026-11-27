@@ -91,7 +91,6 @@ class ShiftChangeRequestServiceAuthzTest {
     @DisplayName("同一チームの所属者だが非ADMINは COMMON_002（scheduleId→teamId 解決後に弾く）")
     void review_非権限者_COMMON_002() {
         given(changeRequestRepository.findById(REQUEST_ID)).willReturn(Optional.of(openRequest()));
-        given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(false);
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
         given(accessControlService.isAdminOrAbove(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(false);
@@ -109,7 +108,6 @@ class ShiftChangeRequestServiceAuthzTest {
     @DisplayName("他チーム（非所属）は不在と同一の CHANGE_REQUEST_NOT_FOUND（存在オラクル是正）")
     void review_越境_CHANGE_REQUEST_NOT_FOUND() {
         given(changeRequestRepository.findById(REQUEST_ID)).willReturn(Optional.of(openRequest()));
-        given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(false);
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
         given(accessControlService.isAdminOrAbove(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(false);
@@ -125,21 +123,19 @@ class ShiftChangeRequestServiceAuthzTest {
     }
 
     @Test
-    @DisplayName("SYSTEM_ADMIN は per-scope 判定なしで認可通過（親スケジュールの生存確認は先に行う）")
-    void review_SYSTEM_ADMIN_短絡() {
+    @DisplayName("SYSTEM_ADMIN 単独は審査できない（isSystemAdmin を呼ばず、不在依頼と同一の CHANGE_REQUEST_NOT_FOUND）")
+    void review_SYSTEM_ADMIN単独は通さない() {
         given(changeRequestRepository.findById(REQUEST_ID)).willReturn(Optional.of(openRequest()));
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
-        given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(true);
-        given(changeRequestRepository.saveAndFlush(any())).willAnswer(inv -> inv.getArgument(0));
 
-        // 例外なく審査が確定する
-        service.review(REQUEST_ID, reviewReq(), REVIEWER_ID);
+        assertThatThrownBy(() -> service.review(REQUEST_ID, reviewReq(), REVIEWER_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(ShiftErrorCode.CHANGE_REQUEST_NOT_FOUND));
 
-        // SYSTEM_ADMIN 短絡したので per-scope 判定は呼ばれない
-        verify(accessControlService, never()).isAdminOrAbove(any(), any(), any());
-        verify(accessControlService, never()).isMember(any(), any(), any());
-        verify(changeRequestRepository).saveAndFlush(any());
+        verify(accessControlService, never()).isSystemAdmin(any());
+        verify(changeRequestRepository, never()).saveAndFlush(any());
     }
 
     // ════════════════════════════════════════════════════════════
@@ -191,7 +187,6 @@ class ShiftChangeRequestServiceAuthzTest {
     void list_非メンバーはCOMMON_002() {
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
-        given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(false);
         given(accessControlService.isAdminOrAbove(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(false);
         given(accessControlService.isMember(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(false);
 
@@ -301,6 +296,8 @@ class ShiftChangeRequestServiceAuthzTest {
         given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(
                 ShiftScheduleEntity.builder().teamId(TEAM_ID).build()));
         given(accessControlService.isSystemAdmin(REVIEWER_ID)).willReturn(true);
+        // 所属（メンバー）としての判定で通る。SYSTEM_ADMIN であること自体は通す理由にならない（戦役 Z-A PR3）。
+        given(accessControlService.isMember(REVIEWER_ID, TEAM_ID, "TEAM")).willReturn(true);
         given(changeRequestRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
         service.create(createReq(null), REVIEWER_ID);
