@@ -8,7 +8,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -122,10 +125,22 @@ public class PlatformAccountAffiliationPolicy {
      * @return 判定結果
      */
     public Verdicts judge(Collection<Long> userIds) {
-        Map<Long, Boolean> verdicts = new HashMap<>();
+        Set<Long> targets = new LinkedHashSet<>();
         for (Long userId : userIds) {
             if (userId != null) {
-                verdicts.put(userId, isPlatformAccount(userId));
+                targets.add(userId);
+            }
+        }
+        Map<Long, Boolean> verdicts = new HashMap<>();
+        if (targets.size() == 1) {
+            // 1 件（本人の操作など大多数）は従来の単一照会のまま。
+            Long only = targets.iterator().next();
+            verdicts.put(only, isPlatformAccount(only));
+        } else if (!targets.isEmpty()) {
+            // 複数件（招集・一括承認など）は 1 本の IN 句にまとめる（1 件ずつ user_roles を引かない）。
+            Set<Long> platformIds = new HashSet<>(userRoleRepository.findPlatformAdminUserIdsIn(targets));
+            for (Long userId : targets) {
+                verdicts.put(userId, platformIds.contains(userId));
             }
         }
         return new Verdicts(verdicts);
@@ -170,11 +185,15 @@ public class PlatformAccountAffiliationPolicy {
         });
     }
 
-    /** {@link #judge} の判定結果（ユーザー ID → 運営アカウントか）。不変。{@link #judge} の外では作れない。 */
+    /**
+     * {@link #judge} の判定結果（ユーザー ID → 運営アカウントか）。不変。
+     * コンストラクタは private で、本クラスの {@link #judge} だけが作れる（同じ package の別クラスや試験からも作れない）。
+     * 試験で判定結果が要るときは、UserRoleRepository のモックを渡した本クラスの {@link #judge} を通す。
+     */
     public static final class Verdicts {
         private final Map<Long, Boolean> byUserId;
 
-        Verdicts(Map<Long, Boolean> byUserId) {
+        private Verdicts(Map<Long, Boolean> byUserId) {
             this.byUserId = Map.copyOf(byUserId);
         }
     }

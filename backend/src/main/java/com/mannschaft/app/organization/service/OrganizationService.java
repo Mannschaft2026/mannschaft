@@ -862,15 +862,6 @@ public class OrganizationService {
     // ========================================
 
     /**
-     * 組織をフォロー（SUPPORTER として memberships に入会）する。
-     *
-     * <p>{@link OrganizationMembershipService#followOrganization(Long, Long)} へ委譲。</p>
-     */
-    public void followOrganization(Long userId, Long orgId) {
-        organizationMembershipService.followOrganization(userId, orgId);
-    }
-
-    /**
      * 組織のフォローを解除する。
      *
      * <p>{@link OrganizationMembershipService#unfollowOrganization(Long, Long)} へ委譲。</p>
