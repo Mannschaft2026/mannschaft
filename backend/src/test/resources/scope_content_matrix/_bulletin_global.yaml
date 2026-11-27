@@ -1,0 +1,59 @@
+# CMP-261124-0159 PR-D1: 掲示板のグローバル方式（threadId・scope_id だけで叩く）読み取り経路。
+# URL に /teams/{teamId} を持たないため経路台帳（routes.tsv）の対象外（先頭 _ のファイルは台帳の突き合わせ対象外）。
+# 検証事項 V-0159-10-2 で、PR-D1 が門へ置換した BulletinAccessGuard の全読み取り入口を押さえる。
+package: _bulletin_global
+routes:
+  - id: R-bulletin-g1
+    method: GET
+    path: /api/v1/bulletin/threads?scope_type=TEAM&scope_id={teamId}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-g2
+    method: GET
+    path: /api/v1/bulletin/threads/{threadId}
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-g3
+    method: GET
+    path: /api/v1/bulletin/threads/{threadId}/replies
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-g4
+    method: GET
+    path: /api/v1/bulletin/categories?scope_type=TEAM&scope_id={teamId}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-g5
+    method: GET
+    path: /api/v1/bulletin/threads/{threadId}/attachments
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-g6
+    method: GET
+    path: /api/v1/bulletin/reactions?targetType=THREAD&targetId={threadId}
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-g7
+    method: GET
+    path: /api/v1/bulletin/reactions/summary?targetType=THREAD&targetId={threadId}
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

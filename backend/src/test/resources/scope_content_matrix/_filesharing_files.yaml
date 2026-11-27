@@ -1,0 +1,52 @@
+# CMP-261124-0159 PR-D1: ファイル共有の folderId / fileId 指定の読み取り経路（URL に /teams/{teamId} を持たないため台帳の対象外）。
+# ダウンロード URL の発行（/files/{fileId}/download-url）は FilesharingFileScopeContentAccessMatrixIT の専用テストで、
+# 「権限なしには URL が返らない」ことを本文まで確かめる（許可側は外部ストレージ依存のためここには載せない）。
+package: _filesharing_files
+routes:
+  - id: R-filesharing-f1
+    method: GET
+    path: /api/v1/files/folders/{folderId}
+    params: { folderId: "@folder" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-f2
+    method: GET
+    path: /api/v1/files/folders?scope_type=TEAM&scope_id={teamId}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-f3
+    method: GET
+    path: /api/v1/files?folderId={folderId}
+    params: { folderId: "@folder" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-f4
+    method: GET
+    path: /api/v1/files/{fileId}
+    params: { fileId: "@file" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-f5
+    method: GET
+    path: /api/v1/files/{fileId}/versions
+    params: { fileId: "@file" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-filesharing-f6
+    method: GET
+    path: /api/v1/files/{fileId}/comments
+    params: { fileId: "@file" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

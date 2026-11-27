@@ -1,0 +1,73 @@
+# CMP-261124-0159 PR-D1: 掲示板（F05.1）の読み取り経路の Matrix 表（F00 §20.6）。
+# 権限あり（ADMIN / DEPUTY_ADMIN / MEMBER）は本戦役前の実挙動（2xx）のまま。
+# 権限なし（SUPPORTER・GUEST・部外者・他チーム・他組織）は部外者と同一応答（既定 OUTSIDER）。
+# 非公開チーム（MEMBERS_AND_ABOVE）のとき、在籍サポーターも中身を読めてはならない。
+package: bulletin
+routes:
+  - id: R-bulletin-1
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/archive/folders
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-2
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/archive/threads
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-3
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/categories/{categoryId}
+    params: { categoryId: "@category" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-4
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/categories
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-5
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/threads/{threadId}/read-status
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-6
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/threads/{threadId}/replies
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-7
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/threads/{threadId}
+    params: { threadId: "@thread" }
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-8
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/threads
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-bulletin-9
+    method: GET
+    path: /api/v1/teams/{teamId}/bulletin/threads/search?keyword=PRD1
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

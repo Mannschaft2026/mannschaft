@@ -18,3 +18,8 @@ V-0159-107-4	AC-0159-107	検証事項表とテストの V 番号が双方向に�
 V-0159-107-5	AC-0159-107	自己検査: 台帳の 1 行の削除・追加で赤	PR-01	ScopeContentRouteLedgerCoverageTest#台帳の削除と追加	実装済み
 V-0159-107-6	AC-0159-107	自己検査: Matrix 表の 1 行の削除・追加で赤	PR-01	ScopeContentRouteLedgerCoverageTest#Matrixの削除と追加	実装済み
 V-0159-107-7	AC-0159-107	自己検査: 検証事項表の 1 行の削除・追加で赤	PR-01	ScopeContentRouteLedgerCoverageTest#検証事項の削除と追加	実装済み
+V-0159-10-1	AC-0159-10	掲示板（スレッド一覧・詳細・返信・既読状況・カテゴリ・保管庫）の閲覧上限: 非公開チームで権限なしは部外者と同一応答	PR-D1	BulletinScopeContentAccessMatrixIT#表に全読み取り経路が載っている	実装済み
+V-0159-10-2	AC-0159-10	掲示板のグローバル方式（threadId・scope_id 指定）でも同じ上限が効く	PR-D1	BulletinGlobalScopeContentAccessMatrixIT	実装済み
+V-0159-11-1	AC-0159-11	ファイル共有（チームフォルダの一覧・子一覧・詳細）の閲覧上限	PR-D1	FilesharingScopeContentAccessMatrixIT#表に全読み取り経路が載っている	実装済み
+V-0159-11-2	AC-0159-11	ファイル詳細・版一覧・コメント一覧・フォルダ詳細の閲覧上限（folderId / fileId 指定）	PR-D1	FilesharingFileScopeContentAccessMatrixIT	実装済み
+V-0159-11-3	AC-0159-11	権限なしにはダウンロード URL が返らず、部外者と同一応答	PR-D1	FilesharingFileScopeContentAccessMatrixIT#権限なしにはダウンロードURLが返らない	実装済み
