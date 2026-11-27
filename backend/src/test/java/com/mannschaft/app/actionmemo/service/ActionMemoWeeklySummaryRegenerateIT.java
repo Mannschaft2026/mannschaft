@@ -19,6 +19,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * 行動メモ週次まとめの再生成（同一週を 2 回生成）が、生存行の slug 一意制約
@@ -237,7 +239,7 @@ class ActionMemoWeeklySummaryRegenerateIT extends AbstractMySqlIntegrationTest {
 
             Future<ActionMemoWeeklySummaryService.RegenerationResult> mine =
                     executor.submit(() -> weeklySummaryService.regenerateForAll(from, to));
-            awaitInsertLockWait(mine, otherConnectionId.get());
+            awaitLockWait(mine, otherConnectionId.get(), "insert into blog_posts");
             release.countDown();
             other.get(30, TimeUnit.SECONDS);
 
@@ -260,12 +262,99 @@ class ActionMemoWeeklySummaryRegenerateIT extends AbstractMySqlIntegrationTest {
     }
 
     /**
-     * 相手のトランザクション（接続 ID {@code blockingConnectionId}）が保持するロックを、
-     * {@code blog_posts} への INSERT が実際に待っている状態になるまで待つ。
-     * {@code performance_schema.data_lock_waits} / {@code data_locks} はアプリ用ユーザーに SELECT 権限が無いため、root で参照する。
+     * 既存の週次まとめがある状態で同じユーザーの差し替えが同時に走る状況を、実 DB のロック待ちで再現する（台帳 CMP-261127-1817）。
+     * 相手の差し替えが既存記事（version=1）を論理削除して新記事を INSERT し、未確定の間に、こちらの再生成を走らせる。
+     * こちらは既存記事を（相手の未確定の変更が見えない一貫読み取りで）version=1 のまま読み、その論理削除の UPDATE が
+     * 相手の保持する行ロックを実際に待っていることを {@code performance_schema.data_lock_waits} で確かめてから相手を確定させる。
+     * 相手の確定後、こちらの UPDATE は版の一致しない行に当たって更新 0 行（楽観ロック衝突）になる。それで失敗せず、
+     * やり直しで相手の新記事を論理削除して差し替え、1 件だけ生存させなければならない
+     * （相手の新記事が論理削除されていることが、やり直しが起きた証拠）。
      */
-    private void awaitInsertLockWait(Future<?> contender, long blockingConnectionId)
-            throws InterruptedException, SQLException {
+    @Test
+    @DisplayName("既存記事がある状態で同じ週の差し替えが同時に走っても楽観ロック衝突で失敗せず、生存する週次まとめは 1 件だけになる")
+    void regenerateForUser_既存記事ありの同時実行でも楽観ロック衝突で失敗しない() throws Exception {
+        LocalDate from = LocalDate.of(2041, 12, 2);
+        LocalDate to = LocalDate.of(2041, 12, 8);
+        String slug = "weekly-20411202-20411208";
+        Long userId = transactionTemplate.execute(status -> {
+            UserEntity user = UserEntity.builder()
+                    .email("weekly-concurrent-existing-" + UUID.randomUUID() + "@example.com")
+                    .lastName("週次")
+                    .firstName("既存")
+                    .displayName("週次既存")
+                    .status(UserEntity.UserStatus.ACTIVE)
+                    .locale("ja")
+                    .timezone("Asia/Tokyo")
+                    .isSearchable(true)
+                    .build();
+            em.persist(user);
+            em.persist(ActionMemoEntity.builder()
+                    .userId(user.getId()).memoDate(from.plusDays(1)).content("朝散歩").build());
+            return user.getId();
+        });
+        // 既存の週次まとめ（version=1）を作っておく
+        assertThat(weeklySummaryService.regenerateForUser(userId, from, to)).isTrue();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch replaced = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicLong otherConnectionId = new AtomicLong();
+        AtomicLong otherPostId = new AtomicLong();
+        try {
+            // 相手の差し替え: 既存記事を論理削除（行ロックを保持）して新記事を INSERT し、未確定のまま保持する
+            Future<?> other = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+                BlogPostEntity existing = blogPostRepository.findByUserIdAndSlug(userId, slug).orElseThrow();
+                existing.softDelete();
+                blogPostRepository.saveAndFlush(existing);
+                BlogPostEntity otherPost = blogPostRepository.saveAndFlush(BlogPostEntity.builder()
+                        .userId(userId).authorId(userId).title("相手の週次まとめ").slug(slug).body("相手の本文")
+                        .readingTimeMinutes((short) 1).build());
+                otherPostId.set(otherPost.getId());
+                otherConnectionId.set(jdbcTemplate.queryForObject("SELECT CONNECTION_ID()", Long.class));
+                replaced.countDown();
+                try {
+                    release.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(replaced.await(30, TimeUnit.SECONDS)).as("相手の差し替え").isTrue();
+
+            Future<Boolean> mine = executor.submit(() -> weeklySummaryService.regenerateForUser(userId, from, to));
+            awaitLockWait(mine, otherConnectionId.get(), "update blog_posts");
+            release.countDown();
+            other.get(30, TimeUnit.SECONDS);
+
+            assertThat(mine.get(30, TimeUnit.SECONDS)).as("楽観ロック衝突で失敗せず差し替える").isTrue();
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT id, deleted_at FROM blog_posts WHERE user_id = ? AND slug = ? ORDER BY id",
+                userId, slug);
+        assertThat(rows).as("既存・相手・こちらの 3 件").hasSize(3);
+        assertThat(rows.stream().filter(r -> r.get("deleted_at") == null)).as("生存する週次まとめは 1 件だけ").hasSize(1);
+        assertThat(rows.stream().filter(r -> ((Number) r.get("id")).longValue() == otherPostId.get()))
+                .as("相手の新記事はやり直しで論理削除されている")
+                .singleElement()
+                .satisfies(r -> assertThat(r.get("deleted_at")).isNotNull());
+    }
+
+    /**
+     * 相手のトランザクション（接続 ID {@code blockingConnectionId}）が保持するロックを、
+     * {@code blog_posts} への文（先頭が {@code statementPrefix} の INSERT・UPDATE）が実際に待っている状態になるまで待つ。
+     * {@code performance_schema.data_lock_waits} / {@code data_locks} はアプリ用ユーザーに SELECT 権限が無いため、root で参照する。
+     *
+     * <p>{@code information_schema.innodb_trx} は InnoDB が内部キャッシュから返し、そのキャッシュは
+     * <b>直前の読み取りから 0.1 秒以上空いたときにしか更新されない</b>。間隔を詰めて問い合わせ続けると、
+     * 最初に読んだ時点（こちらの再生成がまだ読み取りだけで、更新するトランザクションになる前）の内容のまま
+     * 固まり、実際にはロック待ちに入っていても検出できない（ロック待ち自体は {@code performance_schema} 側に
+     * 出ているのに 30 秒待って失敗する、負荷の高いときだけの不安定さの原因だった）。そのため 0.2 秒間隔で問い合わせる。</p>
+     */
+    private void awaitLockWait(Future<?> contender, long blockingConnectionId, String statementPrefix)
+            throws SQLException {
         // 挿入時の暗黙ロックは待つ側のスレッドが明示ロックへ変換するため、data_lock_waits の BLOCKING_THREAD_ID は
         // 待つ側を指すことがある。保持側はトランザクション ID から innodb_trx の接続 ID で識別する。
         String sql = "SELECT COUNT(*) FROM performance_schema.data_lock_waits w "
@@ -275,23 +364,20 @@ class ActionMemoWeeklySummaryRegenerateIT extends AbstractMySqlIntegrationTest {
                 + "ON requesting.trx_id = w.REQUESTING_ENGINE_TRANSACTION_ID "
                 + "WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = 'blog_posts' "
                 + "AND blocking.trx_mysql_thread_id = ? "
-                + "AND LOWER(requesting.trx_query) LIKE 'insert into blog_posts%'";
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+                + "AND LOWER(requesting.trx_query) LIKE CONCAT(?, '%')";
         try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
              PreparedStatement statement = root.prepareStatement(sql)) {
             statement.setLong(1, blockingConnectionId);
-            while (System.nanoTime() < deadline) {
-                try (ResultSet rs = statement.executeQuery()) {
-                    if (rs.next() && rs.getInt(1) > 0) {
-                        return;
-                    }
-                }
-                if (contender.isDone()) {
-                    throw new AssertionError("ロック待ちに入る前に再生成が終わった（競合を再現できていない）");
-                }
-                Thread.sleep(20);
-            }
+            statement.setString(2, statementPrefix);
+            await("再生成の " + statementPrefix + " が相手のロック待ちに入る")
+                    .atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(200))
+                    .failFast("ロック待ちに入る前に再生成が終わった（競合を再現できていない）", contender::isDone)
+                    .until(() -> {
+                        try (ResultSet rs = statement.executeQuery()) {
+                            return rs.next() && rs.getInt(1) > 0;
+                        }
+                    });
         }
-        throw new AssertionError("再生成の INSERT が相手のロック待ちに入らなかった");
     }
 }

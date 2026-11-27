@@ -6,9 +6,11 @@ import com.mannschaft.app.cms.Visibility;
 import com.mannschaft.app.cms.entity.BlogPostEntity;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -33,8 +35,16 @@ import java.time.LocalDateTime;
  * 差し替えは冪等なので、そのときはトランザクションごとやり直す。やり直しでは相手の確定済み記事が見えるため、
  * それを論理削除して差し替え、生存する記事は常に 1 件に保たれる。</p>
  *
- * <p>やり直す対象は slug の生存行一意制約違反（{@link BlogSlugAutoConflictException#isSlugUniqueViolation}）と
- * デッドロック・ロック待ちタイムアウト（{@link PessimisticLockingFailureException}）だけ。NOT NULL・外部キーなど
+ * <p>既存記事がある状態で同時に差し替えると、両者が同じ既存行（同じ版）を読み、先に確定した側が論理削除して
+ * 版を上げるため、後の側の論理削除の UPDATE は更新 0 行（楽観ロック衝突）になる。これもやり直せば
+ * 相手の確定済み記事を読み直して論理削除して差し替える（後勝ち）ので、同じくトランザクションごとやり直す。</p>
+ *
+ * <p>やり直す対象は slug の生存行一意制約違反（{@link BlogSlugAutoConflictException#isSlugUniqueViolation}）、
+ * デッドロック・ロック待ちタイムアウト（{@link PessimisticLockingFailureException}）、楽観ロック衝突だけ。
+ * 楽観ロック衝突は、flush を {@link EntityManager} で直接呼ぶため Spring に変換されない
+ * {@link OptimisticLockException} のまま届く経路と、commit 時に {@link OptimisticLockingFailureException}
+ * （{@code ObjectOptimisticLockingFailureException}）へ変換されて、または {@code TransactionSystemException} に
+ * 包まれて届く経路があるため、原因連鎖のどこかにどちらかがあれば衝突とみなす。NOT NULL・外部キーなど
  * 他の整合性違反はやり直しても結果が変わらないため、そのまま伝播させる。</p>
  *
  * <p><b>呼び出し元トランザクション</b>: 呼び出し元が既にトランザクションを持つ場合は、
@@ -82,13 +92,11 @@ public class BlogPostSystemSummaryReplacer {
             try {
                 return transactionTemplate.execute(status ->
                         replaceInTransaction(userId, slug, title, body, excerpt, publishedAt));
-            } catch (DataIntegrityViolationException | PessimisticLockingFailureException e) {
-                if (e instanceof DataIntegrityViolationException
-                        && !BlogSlugAutoConflictException.isSlugUniqueViolation(e)) {
+            } catch (RuntimeException e) {
+                String kind = retryableConflictKind(e);
+                if (kind == null) {
                     throw e;
                 }
-                String kind = e instanceof PessimisticLockingFailureException
-                        ? "ロック競合（デッドロック・ロック待ちタイムアウト）" : "slug 一意制約違反";
                 if (attempt >= MAX_ATTEMPTS) {
                     log.warn("[BlogPostSystemSummaryReplacer] 同時実行の競合が続いたため差し替えを諦める: "
                             + "userId={}, slug={}, cause={}, attempts={}", userId, slug, kind, attempt);
@@ -98,6 +106,24 @@ public class BlogPostSystemSummaryReplacer {
                         kind, userId, slug, attempt);
             }
         }
+    }
+
+    /**
+     * やり直せば解消する同時実行の競合なら、その種別（ログ用）を返す。やり直し対象でなければ {@code null}。
+     */
+    private static String retryableConflictKind(RuntimeException e) {
+        if (e instanceof PessimisticLockingFailureException) {
+            return "ロック競合（デッドロック・ロック待ちタイムアウト）";
+        }
+        if (e instanceof DataIntegrityViolationException && BlogSlugAutoConflictException.isSlugUniqueViolation(e)) {
+            return "slug 一意制約違反";
+        }
+        for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof OptimisticLockException || t instanceof OptimisticLockingFailureException) {
+                return "楽観ロック衝突（既存記事が同時に差し替えられた）";
+            }
+        }
+        return null;
     }
 
     private Long replaceInTransaction(Long userId, String slug, String title, String body,
