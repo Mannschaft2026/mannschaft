@@ -99,10 +99,12 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
     private Long foreignAdmin;   // 他 TEAM の ADMIN
     private Long foreignMember;  // 他 TEAM の一般メンバー
     private Long outsider;       // どこにも所属しない利用者
+    private Long systemAdmin;    // SYSTEM_ADMIN（スコープなしの user_roles）
 
     private Long openTeamMembers; // OPEN・TEAM_MEMBERS
     private Long draft;           // DRAFT・TEAM_MEMBERS（作成者本人のみ可視）
     private Long publicBoard;     // OPEN・JOBBER_PUBLIC_BOARD（PUBLIC 相当）
+    private Long cancelled;       // CANCELLED・TEAM_MEMBERS（F00 上 ARCHIVED。SYSTEM_ADMIN のみ可視）
 
     @BeforeEach
     void Repositoryで自所有fixtureを確定する() {
@@ -129,9 +131,12 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
             foreignMember = user();
             member(foreignMember, foreignTeam);
             outsider = user();
+            systemAdmin = user();
+            assignSystemAdmin(systemAdmin);
             openTeamMembers = posting(team, VisibilityScope.TEAM_MEMBERS, JobPostingStatus.OPEN);
             draft = posting(team, VisibilityScope.TEAM_MEMBERS, JobPostingStatus.DRAFT);
             publicBoard = posting(team, VisibilityScope.JOBBER_PUBLIC_BOARD, JobPostingStatus.OPEN);
+            cancelled = posting(team, VisibilityScope.TEAM_MEMBERS, JobPostingStatus.CANCELLED);
             assertThat(postings.existsById(MISSING)).isFalse();
             em.flush();
             return null;
@@ -175,7 +180,9 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
                 new Case("他TEAMのADMIN", foreignAdmin, "DRAFT", draft),
                 new Case("他TEAMの一般", foreignMember, "DRAFT", draft),
                 new Case("所属なし", outsider, "DRAFT", draft),
-                new Case("同TEAMの一般（可視範囲外）", plainMember, "DRAFT", draft));
+                new Case("同TEAMの一般（可視範囲外）", plainMember, "DRAFT", draft),
+                new Case("他TEAMのADMIN", foreignAdmin, "CANCELLED", cancelled),
+                new Case("他TEAMの一般", foreignMember, "CANCELLED", cancelled));
         List<String> diffs = new ArrayList<>();
         for (Case c : cases) {
             String token = tokens.issueAccessToken(c.actor(), List.of("USER"));
@@ -203,7 +210,7 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
     void AC_1118_2_未ログインは実在不在とも同一() throws Exception {
         MvcResult missing = call(null, MISSING);
         assertThat(missing.getResponse().getStatus()).isEqualTo(401);
-        for (Long posting : List.of(openTeamMembers, draft, publicBoard)) {
+        for (Long posting : List.of(openTeamMembers, draft, publicBoard, cancelled)) {
             MvcResult existing = call(null, posting);
             assertThat(existing.getResponse().getStatus()).as("posting=%s", posting).isEqualTo(401);
             assertThat(json(existing)).as("posting=%s", posting).isEqualTo(json(missing));
@@ -211,7 +218,7 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
     }
 
     @Test
-    @DisplayName("AC-1118-3: 可視範囲の正当な閲覧者は従来どおり 200（同TEAMメンバー・下書きの作成者・PUBLIC相当は誰でも）")
+    @DisplayName("AC-1118-3: 可視範囲の正当な閲覧者は従来どおり 200（同TEAMメンバー・下書きの作成者・PUBLIC相当は誰でも・SYSTEM_ADMINはDRAFT/CANCELLEDも）")
     void AC_1118_3_正当な閲覧者は200() throws Exception {
         record Case(String name, Long actor, Long posting) { }
         List<Case> cases = List.of(
@@ -219,7 +226,9 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
                 new Case("作成者→OPEN/TEAM_MEMBERS", requester, openTeamMembers),
                 new Case("作成者→DRAFT", requester, draft),
                 new Case("所属なし→JOBBER_PUBLIC_BOARD", outsider, publicBoard),
-                new Case("他TEAMのADMIN→JOBBER_PUBLIC_BOARD", foreignAdmin, publicBoard));
+                new Case("他TEAMのADMIN→JOBBER_PUBLIC_BOARD", foreignAdmin, publicBoard),
+                new Case("SYSTEM_ADMIN→DRAFT", systemAdmin, draft),
+                new Case("SYSTEM_ADMIN→CANCELLED", systemAdmin, cancelled));
         for (Case c : cases) {
             MvcResult result = call(tokens.issueAccessToken(c.actor(), List.of("USER")), c.posting());
             assertThat(result.getResponse().getStatus())
@@ -287,6 +296,17 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
             return created;
         });
         userRoles.save(UserRoleEntity.builder().userId(user).roleId(role.getId()).teamId(scope).build());
+    }
+
+    /** SYSTEM_ADMIN ロールをスコープなし（team/organization とも null）で付与する。 */
+    private void assignSystemAdmin(Long user) {
+        RoleEntity role = roles.findByName("SYSTEM_ADMIN").orElseGet(() -> {
+            RoleEntity created = roles.save(RoleEntity.builder().name("SYSTEM_ADMIN").displayName("SYSTEM_ADMIN")
+                    .priority(RolePriority.priority("SYSTEM_ADMIN")).isSystem(true).build());
+            createdRoleIds.add(created.getId());
+            return created;
+        });
+        userRoles.save(UserRoleEntity.builder().userId(user).roleId(role.getId()).build());
     }
 
     private <T> T tx(Supplier<T> work) {
