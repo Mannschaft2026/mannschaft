@@ -34,6 +34,10 @@ mockNuxtImport('useRoleAccess', () => () => ({
   isScopeAdmin: computed(() => true),
   can: () => false,
   permissions: computed(() => [] as string[]),
+  roleResolved: computed(() => true),
+  loading: computed(() => false),
+  roleLoadFailed: computed(() => false),
+  isMember: computed(() => true),
   loadPermissions: mocks.loadPermissions,
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))

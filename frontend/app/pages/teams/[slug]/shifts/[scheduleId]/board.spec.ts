@@ -38,6 +38,10 @@ mockNuxtImport('useRoleAccess', () => () => ({
   isScopeAdmin: computed(() => roleState.scopeAdmin),
   can: (permission: string) => roleState.permissions.includes(permission),
   permissions: computed(() => roleState.permissions),
+  roleResolved: computed(() => true),
+  loading: computed(() => false),
+  roleLoadFailed: computed(() => false),
+  isMember: computed(() => true),
   loadPermissions: mocks.loadPermissions,
 }))
 mockNuxtImport('useTeamShiftSettingsApi', () => () => ({ getShiftSettings: vi.fn().mockResolvedValue({ deputyShiftViewEnabled: false, deputyHourlyRateViewEnabled: false }) }))
