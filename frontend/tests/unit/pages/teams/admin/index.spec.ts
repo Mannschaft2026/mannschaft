@@ -16,6 +16,7 @@ import TeamAdminConsolePage from '~/pages/teams/[slug]/admin/index.vue'
  *   TAC-002 「設定」カードの href が想定の遷移先を指す
  */
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-000001' } }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key }))
 

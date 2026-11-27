@@ -14,6 +14,7 @@ import {
 definePageMeta({ layout: 'team', middleware: 'auth' })
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const { t, locale } = useI18n()
 const notification = useNotification()
 const { handleApiError, getFieldErrors } = useErrorHandler()
@@ -122,7 +123,7 @@ function changeFy(id: number) {
   const fy = fiscalYears.value.find((item) => item.id === id)
   if (fy) void selectFy(fy)
 }
-onMounted(load)
+onGateOk(load)
 onBeforeUnmount(() => {
   summaryRequest++
 })
@@ -130,135 +131,144 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <PageHeader
-      :title="t('budget_accounting.title')"
-      :back-to="`/teams/${teamSlug}`"
-      class="flex-wrap [&_[data-testid=page-header-help]]:min-h-11 [&_[data-testid=page-header-help]]:min-w-11"
-      help
-      @help="showGuide = true"
-    >
-      <template #actions>
-        <Button
-          v-if="canCreate"
-          :label="t('budget_accounting.add_year')"
-          icon="pi pi-plus"
-          size="small"
-          class="min-h-11"
-          data-testid="add-fiscal-year"
-          @click="openCreateDialog"
-        />
-      </template>
-    </PageHeader>
-    <PageLoading v-if="loading" />
-    <DashboardErrorState v-else-if="loadError" :error="loadError" @retry="load" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
+    </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
     <template v-else>
-      <div v-if="fiscalYears.length" class="mb-4 overflow-x-auto">
-        <SelectButton
-          :model-value="selectedFy?.id"
-          :options="fiscalYears"
-          class="[&_.p-togglebutton]:min-h-11"
-          option-label="name"
-          option-value="id"
-          :allow-empty="false"
-          :aria-label="t('budget_accounting.fiscal_year')"
-          @update:model-value="changeFy"
-        />
-      </div>
-      <DashboardEmptyState
-        v-else
-        icon="pi pi-wallet"
-        :message="t('budget_accounting.empty_years')"
-        :sub-message="t('budget_accounting.empty_years_hint')"
-      />
-      <p
-        v-if="selectedFy"
-        class="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-surface-600 dark:text-surface-300"
-        data-testid="fiscal-year-period"
-      >
-        <span>{{ t('budget_accounting.start_date') }}: {{ formatDate(selectedFy.startDate) }}</span>
-        <span>{{ t('budget_accounting.end_date') }}: {{ formatDate(selectedFy.endDate) }}</span>
-      </p>
-      <PageLoading v-if="summaryLoading" />
-      <DashboardErrorState
-        v-else-if="summaryError"
-        :error="summaryError"
-        @retry="selectedFy && selectFy(selectedFy)"
-      />
-      <BudgetSummaryPanel v-else-if="summary" :summary="summary" />
+        <div>
+          <PageHeader
+            :title="t('budget_accounting.title')"
+            :back-to="`/teams/${teamSlug}`"
+            class="flex-wrap [&_[data-testid=page-header-help]]:min-h-11 [&_[data-testid=page-header-help]]:min-w-11"
+            help
+            @help="showGuide = true"
+          >
+            <template #actions>
+              <Button
+                v-if="canCreate"
+                :label="t('budget_accounting.add_year')"
+                icon="pi pi-plus"
+                size="small"
+                class="min-h-11"
+                data-testid="add-fiscal-year"
+                @click="openCreateDialog"
+              />
+            </template>
+          </PageHeader>
+          <PageLoading v-if="loading" />
+          <DashboardErrorState v-else-if="loadError" :error="loadError" @retry="load" />
+          <template v-else>
+            <div v-if="fiscalYears.length" class="mb-4 overflow-x-auto">
+              <SelectButton
+                :model-value="selectedFy?.id"
+                :options="fiscalYears"
+                class="[&_.p-togglebutton]:min-h-11"
+                option-label="name"
+                option-value="id"
+                :allow-empty="false"
+                :aria-label="t('budget_accounting.fiscal_year')"
+                @update:model-value="changeFy"
+              />
+            </div>
+            <DashboardEmptyState
+              v-else
+              icon="pi pi-wallet"
+              :message="t('budget_accounting.empty_years')"
+              :sub-message="t('budget_accounting.empty_years_hint')"
+            />
+            <p
+              v-if="selectedFy"
+              class="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-surface-600 dark:text-surface-300"
+              data-testid="fiscal-year-period"
+            >
+              <span>{{ t('budget_accounting.start_date') }}: {{ formatDate(selectedFy.startDate) }}</span>
+              <span>{{ t('budget_accounting.end_date') }}: {{ formatDate(selectedFy.endDate) }}</span>
+            </p>
+            <PageLoading v-if="summaryLoading" />
+            <DashboardErrorState
+              v-else-if="summaryError"
+              :error="summaryError"
+              @retry="selectedFy && selectFy(selectedFy)"
+            />
+            <BudgetSummaryPanel v-else-if="summary" :summary="summary" />
+          </template>
+          <Dialog
+            v-model:visible="showCreateDialog"
+            modal
+            :header="t('budget_accounting.add_year')"
+            class="w-full max-w-md [&_.p-button]:min-h-11 [&_.p-button]:min-w-11"
+            :closable="!saving"
+            :close-on-escape="!saving"
+          >
+            <form id="fiscal-year-form" class="flex flex-col gap-4 py-2" @submit.prevent="handleCreate">
+              <div class="flex flex-col gap-1">
+                <label for="fiscal-year-name">{{ t('budget_accounting.name') }}</label>
+                <InputText
+                  id="fiscal-year-name"
+                  v-model="name"
+                  class="min-h-11 text-base"
+                  :placeholder="t('budget_accounting.name_placeholder')"
+                  :invalid="!!errors.name"
+                  :disabled="saving"
+                  aria-required="true"
+                  aria-describedby="fiscal-year-name-error"
+                />
+                <small id="fiscal-year-name-error" class="text-red-500">{{ errors.name }}</small>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label for="fiscal-year-start">{{ t('budget_accounting.start_date') }}</label>
+                <DatePicker
+                  v-model="startDate"
+                  input-class="min-h-11 text-base"
+                  :pt="fiscalYearDatePickerPt"
+                  input-id="fiscal-year-start"
+                  date-format="yy/mm/dd"
+                  show-icon
+                  :invalid="!!errors.startDate"
+                  :disabled="saving"
+                  aria-required="true"
+                  aria-describedby="fiscal-year-start-error"
+                />
+                <small id="fiscal-year-start-error" class="text-red-500">{{ errors.startDate }}</small>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label for="fiscal-year-end">{{ t('budget_accounting.end_date') }}</label>
+                <DatePicker
+                  v-model="endDate"
+                  input-class="min-h-11 text-base"
+                  :pt="fiscalYearDatePickerPt"
+                  input-id="fiscal-year-end"
+                  date-format="yy/mm/dd"
+                  show-icon
+                  :invalid="!!errors.endDate"
+                  :disabled="saving"
+                  aria-required="true"
+                  aria-describedby="fiscal-year-end-error"
+                />
+                <small id="fiscal-year-end-error" class="text-red-500">{{ errors.endDate }}</small>
+              </div>
+            </form>
+            <template #footer>
+              <Button
+                :label="t('button.cancel')"
+                text
+                :disabled="saving"
+                @click="showCreateDialog = false"
+              />
+              <Button
+                type="submit"
+                form="fiscal-year-form"
+                :label="t('budget_accounting.add')"
+                icon="pi pi-check"
+                :loading="saving"
+                :disabled="saving || isSubmitting"
+              />
+            </template>
+          </Dialog>
+          <BudgetGuideModal v-model:visible="showGuide" />
+        </div>
     </template>
-    <Dialog
-      v-model:visible="showCreateDialog"
-      modal
-      :header="t('budget_accounting.add_year')"
-      class="w-full max-w-md [&_.p-button]:min-h-11 [&_.p-button]:min-w-11"
-      :closable="!saving"
-      :close-on-escape="!saving"
-    >
-      <form id="fiscal-year-form" class="flex flex-col gap-4 py-2" @submit.prevent="handleCreate">
-        <div class="flex flex-col gap-1">
-          <label for="fiscal-year-name">{{ t('budget_accounting.name') }}</label>
-          <InputText
-            id="fiscal-year-name"
-            v-model="name"
-            class="min-h-11 text-base"
-            :placeholder="t('budget_accounting.name_placeholder')"
-            :invalid="!!errors.name"
-            :disabled="saving"
-            aria-required="true"
-            aria-describedby="fiscal-year-name-error"
-          />
-          <small id="fiscal-year-name-error" class="text-red-500">{{ errors.name }}</small>
-        </div>
-        <div class="flex flex-col gap-1">
-          <label for="fiscal-year-start">{{ t('budget_accounting.start_date') }}</label>
-          <DatePicker
-            v-model="startDate"
-            input-class="min-h-11 text-base"
-            :pt="fiscalYearDatePickerPt"
-            input-id="fiscal-year-start"
-            date-format="yy/mm/dd"
-            show-icon
-            :invalid="!!errors.startDate"
-            :disabled="saving"
-            aria-required="true"
-            aria-describedby="fiscal-year-start-error"
-          />
-          <small id="fiscal-year-start-error" class="text-red-500">{{ errors.startDate }}</small>
-        </div>
-        <div class="flex flex-col gap-1">
-          <label for="fiscal-year-end">{{ t('budget_accounting.end_date') }}</label>
-          <DatePicker
-            v-model="endDate"
-            input-class="min-h-11 text-base"
-            :pt="fiscalYearDatePickerPt"
-            input-id="fiscal-year-end"
-            date-format="yy/mm/dd"
-            show-icon
-            :invalid="!!errors.endDate"
-            :disabled="saving"
-            aria-required="true"
-            aria-describedby="fiscal-year-end-error"
-          />
-          <small id="fiscal-year-end-error" class="text-red-500">{{ errors.endDate }}</small>
-        </div>
-      </form>
-      <template #footer>
-        <Button
-          :label="t('button.cancel')"
-          text
-          :disabled="saving"
-          @click="showCreateDialog = false"
-        />
-        <Button
-          type="submit"
-          form="fiscal-year-form"
-          :label="t('budget_accounting.add')"
-          icon="pi pi-check"
-          :loading="saving"
-          :disabled="saving || isSubmitting"
-        />
-      </template>
-    </Dialog>
-    <BudgetGuideModal v-model:visible="showGuide" />
   </div>
 </template>

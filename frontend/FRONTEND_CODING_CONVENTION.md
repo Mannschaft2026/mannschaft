@@ -114,7 +114,7 @@
 
 - チーム詳細（`GET /teams/{slug}`）が **403** でも **404**（slug 移転の解決が不成立）でも、空表示にもトーストにもせず、共通部品 `ScopeNotFound` の中立な「見つかりません」を出す（権限の有無・存在の有無を示さない。CMP-261125-1108。2026-11-27 マスター裁定で、403 の理由を出す AC-0159-86・87 は取り下げ）。5xx・通信失敗は従来どおり再試行表示とトースト
 - 親シェル `pages/teams/[slug].vue` の配下（`SHELL_SEGMENTS`）は親が一括で対応する。親は 403/404 の間 `<NuxtPage/>` を描かず、同じチームのシェル内遷移のたびにチーム詳細を再判定し、判定が終わるまで子ページを描かない
-- シェル対象外の個別ページは、最初に `useTeamAccessGate(slug)` を通し、`state === 'ok'` になるまで本文の API を呼ばない。対象ページの一覧と対応状況は `frontend/tests/unit/pages/teamAccessLedger.ts`（`pages/teams/[slug]/**` と突き合わせる番人あり）。新しいページを足したら台帳にも足す
+- シェル対象外の個別ページは、最初に `useTeamAccessGate(slug)` を通し、`state === 'ok'` になるまで本文の API を呼ばない。対象ページの一覧と対応状況は `frontend/tests/unit/pages/teamAccessLedger.ts`（`pages/teams/[slug]/**` と突き合わせる番人あり）。新しいページを足したら台帳にも足す。`onMounted` で本文を読み込む既存の書き方は、`useTeamAccessGate` が返す `onOk(fn)` に置き換える（403/404/判定中/通信失敗の間は呼ばれない）
 
 ## 5. API通信規約 (API Client & Fetch Settings)
 Nuxt 3 標準の `ofetch` をベースにした共通クライアントを使用する。

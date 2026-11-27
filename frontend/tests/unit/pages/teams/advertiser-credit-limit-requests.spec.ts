@@ -28,6 +28,7 @@ vi.mock('~/composables/useAdvertiserApi', () => ({
 const notificationMock = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }
 vi.mock('~/composables/useNotification', () => ({ useNotification: () => notificationMock }))
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'team-1' } }))
 
 beforeAll(async () => {

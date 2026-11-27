@@ -7,6 +7,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const annualPlanApi = useAnnualPlanApi()
 const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
@@ -105,156 +106,165 @@ function formatDate(isoString: string): string {
 }
 
 watch([selectedYear, selectedCategoryId], () => loadData())
-onMounted(loadData)
+onGateOk(loadData)
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
-    <div class="mb-6 flex items-center justify-between">
-      <PageHeader :title="$t('annual_plan.title')" />
-      <div class="flex items-center gap-3">
-        <Select
-          v-model="selectedYear"
-          :options="yearOptions"
-          class="w-28"
-        />
-        <Select
-          v-model="selectedCategoryId"
-          :options="categoryOptions"
-          option-label="name"
-          option-value="id"
-          :placeholder="$t('annual_plan.category_placeholder')"
-          class="w-40"
-        />
-        <Button
-          :label="$t('annual_plan.copy_prev_year')"
-          icon="pi pi-copy"
-          severity="secondary"
-          size="small"
-          @click="openCopyDialog"
-        />
-      </div>
+  <div>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <PageLoading v-if="loading" />
-
-    <div v-else class="space-y-6">
-      <SectionCard
-        v-for="month in months"
-        :key="month.month"
-        :title="month.month"
-      >
-        <div v-if="month.events.length === 0" class="text-sm text-surface-400">
-          {{ $t('annual_plan.no_events') }}
-        </div>
-        <div v-else class="space-y-2">
-          <div
-            v-for="event in month.events"
-            :key="event.id"
-            class="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-50 dark:hover:bg-surface-700"
-          >
-            <div
-              v-if="event.eventCategory?.color"
-              class="h-3 w-3 flex-shrink-0 rounded-full"
-              :style="{ backgroundColor: event.eventCategory.color }"
-            />
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium truncate">{{ event.title }}</p>
-              <p class="text-xs text-surface-400">
-                {{ formatDate(event.startAt) }}{{ event.endAt ? ` - ${formatDate(event.endAt)}` : '' }}
-              </p>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div class="mx-auto max-w-6xl">
+          <div class="mb-6 flex items-center justify-between">
+            <PageHeader :title="$t('annual_plan.title')" />
+            <div class="flex items-center gap-3">
+              <Select
+                v-model="selectedYear"
+                :options="yearOptions"
+                class="w-28"
+              />
+              <Select
+                v-model="selectedCategoryId"
+                :options="categoryOptions"
+                option-label="name"
+                option-value="id"
+                :placeholder="$t('annual_plan.category_placeholder')"
+                class="w-40"
+              />
+              <Button
+                :label="$t('annual_plan.copy_prev_year')"
+                icon="pi pi-copy"
+                severity="secondary"
+                size="small"
+                @click="openCopyDialog"
+              />
             </div>
-            <Badge
-              v-if="event.eventCategory?.name"
-              :value="event.eventCategory.name"
-              severity="secondary"
-              class="text-xs"
-            />
-            <Badge
-              v-if="event.sourceScheduleId"
-              :value="$t('annual_plan.copied_badge')"
-              severity="info"
-              class="text-xs"
+          </div>
+
+          <PageLoading v-if="loading" />
+
+          <div v-else class="space-y-6">
+            <SectionCard
+              v-for="month in months"
+              :key="month.month"
+              :title="month.month"
+            >
+              <div v-if="month.events.length === 0" class="text-sm text-surface-400">
+                {{ $t('annual_plan.no_events') }}
+              </div>
+              <div v-else class="space-y-2">
+                <div
+                  v-for="event in month.events"
+                  :key="event.id"
+                  class="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-50 dark:hover:bg-surface-700"
+                >
+                  <div
+                    v-if="event.eventCategory?.color"
+                    class="h-3 w-3 flex-shrink-0 rounded-full"
+                    :style="{ backgroundColor: event.eventCategory.color }"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium truncate">{{ event.title }}</p>
+                    <p class="text-xs text-surface-400">
+                      {{ formatDate(event.startAt) }}{{ event.endAt ? ` - ${formatDate(event.endAt)}` : '' }}
+                    </p>
+                  </div>
+                  <Badge
+                    v-if="event.eventCategory?.name"
+                    :value="event.eventCategory.name"
+                    severity="secondary"
+                    class="text-xs"
+                  />
+                  <Badge
+                    v-if="event.sourceScheduleId"
+                    :value="$t('annual_plan.copied_badge')"
+                    severity="info"
+                    class="text-xs"
+                  />
+                </div>
+              </div>
+            </SectionCard>
+            <DashboardEmptyState
+              v-if="months.length === 0"
+              icon="pi pi-calendar"
+              :message="$t('annual_plan.no_data')"
             />
           </div>
-        </div>
-      </SectionCard>
-      <DashboardEmptyState
-        v-if="months.length === 0"
-        icon="pi pi-calendar"
-        :message="$t('annual_plan.no_data')"
-      />
-    </div>
 
-    <!-- 前年度コピー確認ダイアログ -->
-    <Dialog
-      v-model:visible="showCopyDialog"
-      :header="$t('annual_plan.copy_dialog_title')"
-      :modal="true"
-      class="w-full max-w-md"
-    >
-      <p class="mb-4">
-        {{ $t('annual_plan.copy_dialog_message', { sourceYear: selectedYear - 1, targetYear: selectedYear }) }}
-      </p>
-      <template #footer>
-        <Button
-          :label="$t('button.cancel')"
-          severity="secondary"
-          @click="showCopyDialog = false"
-        />
-        <Button
-          :label="$t('annual_plan.copy_preview')"
-          icon="pi pi-eye"
-          :loading="previewLoading"
-          @click="loadPreview"
-        />
-      </template>
-    </Dialog>
+          <!-- 前年度コピー確認ダイアログ -->
+          <Dialog
+            v-model:visible="showCopyDialog"
+            :header="$t('annual_plan.copy_dialog_title')"
+            :modal="true"
+            class="w-full max-w-md"
+          >
+            <p class="mb-4">
+              {{ $t('annual_plan.copy_dialog_message', { sourceYear: selectedYear - 1, targetYear: selectedYear }) }}
+            </p>
+            <template #footer>
+              <Button
+                :label="$t('button.cancel')"
+                severity="secondary"
+                @click="showCopyDialog = false"
+              />
+              <Button
+                :label="$t('annual_plan.copy_preview')"
+                icon="pi pi-eye"
+                :loading="previewLoading"
+                @click="loadPreview"
+              />
+            </template>
+          </Dialog>
 
-    <!-- プレビューダイアログ -->
-    <Dialog
-      v-model:visible="showPreviewDialog"
-      :header="$t('annual_plan.copy_dialog_title')"
-      :modal="true"
-      class="w-full max-w-2xl"
-    >
-      <div class="max-h-96 overflow-y-auto space-y-2">
-        <div
-          v-for="item in previewItems"
-          :key="item.sourceScheduleId"
-          class="flex items-start gap-3 rounded-lg border p-3"
-          :class="item.conflict ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950' : 'border-surface-200'"
-        >
-          <div
-            v-if="item.eventCategory?.color"
-            class="mt-1 h-3 w-3 flex-shrink-0 rounded-full"
-            :style="{ backgroundColor: item.eventCategory.color }"
-          />
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium truncate">{{ item.title }}</p>
-            <p class="text-xs text-surface-400">
-              {{ formatDate(item.suggestedStartAt) }}
-              <span v-if="item.dateShiftNote" class="ml-1 text-surface-300">（{{ item.dateShiftNote }}）</span>
-            </p>
-            <p v-if="item.conflict" class="text-xs text-red-500">
-              {{ $t('annual_plan.conflict_with', { title: item.conflict.existingTitle }) }}
-            </p>
-          </div>
+          <!-- プレビューダイアログ -->
+          <Dialog
+            v-model:visible="showPreviewDialog"
+            :header="$t('annual_plan.copy_dialog_title')"
+            :modal="true"
+            class="w-full max-w-2xl"
+          >
+            <div class="max-h-96 overflow-y-auto space-y-2">
+              <div
+                v-for="item in previewItems"
+                :key="item.sourceScheduleId"
+                class="flex items-start gap-3 rounded-lg border p-3"
+                :class="item.conflict ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950' : 'border-surface-200'"
+              >
+                <div
+                  v-if="item.eventCategory?.color"
+                  class="mt-1 h-3 w-3 flex-shrink-0 rounded-full"
+                  :style="{ backgroundColor: item.eventCategory.color }"
+                />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium truncate">{{ item.title }}</p>
+                  <p class="text-xs text-surface-400">
+                    {{ formatDate(item.suggestedStartAt) }}
+                    <span v-if="item.dateShiftNote" class="ml-1 text-surface-300">（{{ item.dateShiftNote }}）</span>
+                  </p>
+                  <p v-if="item.conflict" class="text-xs text-red-500">
+                    {{ $t('annual_plan.conflict_with', { title: item.conflict.existingTitle }) }}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <template #footer>
+              <Button
+                :label="$t('button.cancel')"
+                severity="secondary"
+                @click="showPreviewDialog = false"
+              />
+              <Button
+                :label="$t('annual_plan.copy_execute')"
+                icon="pi pi-copy"
+                :loading="copyLoading"
+                @click="handleCopy"
+              />
+            </template>
+          </Dialog>
         </div>
-      </div>
-      <template #footer>
-        <Button
-          :label="$t('button.cancel')"
-          severity="secondary"
-          @click="showPreviewDialog = false"
-        />
-        <Button
-          :label="$t('annual_plan.copy_execute')"
-          icon="pi pi-copy"
-          :loading="copyLoading"
-          @click="handleCopy"
-        />
-      </template>
-    </Dialog>
+    </template>
   </div>
 </template>

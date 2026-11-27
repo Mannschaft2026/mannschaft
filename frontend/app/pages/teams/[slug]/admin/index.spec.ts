@@ -9,6 +9,7 @@ import { mockComponent, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import TeamAdmin from './index.vue'
 import OrganizationAdmin from '~/pages/organizations/[slug]/admin/index.vue'
 
+mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'sample' } }))
 mockComponent('NuxtLink', async () => (await import('vue-router')).RouterLink)
 

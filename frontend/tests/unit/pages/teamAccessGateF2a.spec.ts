@@ -1,9 +1,7 @@
-// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mockNuxtImport } from '@nuxt/test-utils/runtime'
+import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { defineComponent, h, type Component } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import { TEAM_ACCESS_LEDGER } from './teamAccessLedger'
 
 // CMP-261124-0159 PR-F2a（試練）: 系統 2 のうち F2a 担当 16 セグメント・34 画面を表駆動で検証する。
@@ -21,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getTeam: vi.fn(),
   resolve: vi.fn(),
   navigate: vi.fn(),
+  handleApiError: vi.fn(),
   api: vi.fn(),
   rawFetch: vi.fn(),
   route: {
@@ -33,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key, tn: (key: string) => key, locale: { value: 'ja' } }))
 mockNuxtImport('useRoute', () => () => mocks.route)
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
+mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError, getFieldErrors: () => ({}) }))
 mockNuxtImport('useSlugRedirect', () => () => ({ resolveSlug: mocks.resolve }))
 mockNuxtImport('navigateTo', () => mocks.navigate)
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }))
@@ -53,7 +53,7 @@ const NotFound = defineComponent({ setup: () => () => h('div', { 'data-testid': 
 
 async function mountPage(file: string) {
   const page = (await loaderOf(file)()).default
-  return mount(page, { shallow: true, global: { plugins: [createPinia()], stubs: { ScopeNotFound: NotFound } } })
+  return mountSuspended(page, { shallow: true, global: { stubs: { ScopeNotFound: NotFound } } })
 }
 
 function bodyCalls(): number {
@@ -62,7 +62,6 @@ function bodyCalls(): number {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  setActivePinia(createPinia())
   mocks.api.mockResolvedValue({ data: [] })
   mocks.resolve.mockResolvedValue({ status: 'NOT_FOUND' })
   vi.stubGlobal('$fetch', mocks.rawFetch)
@@ -105,6 +104,7 @@ describe.each(F2A_FILES)('%s（CMP-261124-0159 PR-F2a）', (file) => {
     const wrapper = await mountPage(file)
     await flushPromises()
     expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
+    expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
     expect(bodyCalls()).toBe(0)
   })
 

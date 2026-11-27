@@ -12,6 +12,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = String(route.params.slug)
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 // F09.17 Phase 11-d-4: チーム配下ページは scope='TEAM' 固定で composable を呼ぶ。
 const scopeType: ScopeType = 'TEAM'
 const scopeId = teamSlug
@@ -94,105 +95,114 @@ function formatPeriod(item: AdMessagingCampaignListItem): string {
   return `${item.startsAt.slice(0, 10)} - ${item.endsAt.slice(0, 10)}`
 }
 
-onMounted(load)
+onGateOk(load)
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <PageHeader :title="t('advertising.pages.advertiser_campaign_list.title')" />
-      <NuxtLink :to="`/teams/${teamSlug}/advertiser/messaging-campaigns/new`">
-        <Button
-          icon="pi pi-plus"
-          :label="t('advertising.advertiser_crud.list_action.create_button')"
-        />
-      </NuxtLink>
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
-
-    <p class="mb-4 text-sm text-surface-500">
-      {{ t('advertising.pages.advertiser_campaign_list.description') }}
-    </p>
-
-    <!-- status タブ -->
-    <div class="mb-4 flex flex-wrap gap-2">
-      <Button
-        v-for="tab in tabs"
-        :key="tab.value"
-        :label="t(tab.labelKey)"
-        size="small"
-        :severity="activeTab === tab.value ? 'primary' : 'secondary'"
-        :outlined="activeTab !== tab.value"
-        @click="onTabChange(tab.value)"
-      />
-    </div>
-
-    <DashboardErrorState
-      v-if="loadFailed"
-      testid="advertiser-messaging-campaigns-error-state"
-      @retry="load"
-    />
-
-    <SectionCard v-else>
-      <DataTable
-        :value="items"
-        :loading="loading"
-        :rows="size"
-        :total-records="totalElements"
-        striped-rows
-        paginator
-        lazy
-        :first="page * size"
-        @page="onPageChange"
-      >
-        <template #empty>
-          <DashboardEmptyState
-            :message="t('advertising.pages.advertiser_campaign_list.empty')"
-          />
-        </template>
-
-        <Column field="name" :header="t('advertising.advertiser_crud.list_table.name')">
-          <template #body="{ data }">
-            <NuxtLink
-              :to="`/teams/${teamSlug}/advertiser/messaging-campaigns/${data.id}`"
-              class="text-primary hover:underline"
-            >
-              {{ data.name }}
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <div class="mb-4 flex items-center justify-between">
+            <PageHeader :title="t('advertising.pages.advertiser_campaign_list.title')" />
+            <NuxtLink :to="`/teams/${teamSlug}/advertiser/messaging-campaigns/new`">
+              <Button
+                icon="pi pi-plus"
+                :label="t('advertising.advertiser_crud.list_action.create_button')"
+              />
             </NuxtLink>
-          </template>
-        </Column>
-        <Column :header="t('advertising.advertiser_crud.list_table.status')">
-          <template #body="{ data }">
-            <Tag
-              :value="statusLabel(data.status)"
-              :severity="statusSeverityMap[data.status as AdMessagingCampaignStatus]"
+          </div>
+
+          <p class="mb-4 text-sm text-surface-500">
+            {{ t('advertising.pages.advertiser_campaign_list.description') }}
+          </p>
+
+          <!-- status タブ -->
+          <div class="mb-4 flex flex-wrap gap-2">
+            <Button
+              v-for="tab in tabs"
+              :key="tab.value"
+              :label="t(tab.labelKey)"
+              size="small"
+              :severity="activeTab === tab.value ? 'primary' : 'secondary'"
+              :outlined="activeTab !== tab.value"
+              @click="onTabChange(tab.value)"
             />
-          </template>
-        </Column>
-        <Column :header="t('advertising.advertiser_crud.list_table.period')">
-          <template #body="{ data }">{{ formatPeriod(data) }}</template>
-        </Column>
-        <Column
-          field="totalBudgetYen"
-          :header="t('advertising.advertiser_crud.list_table.total_budget')"
-          class="text-right"
-        >
-          <template #body="{ data }">¥{{ data.totalBudgetYen.toLocaleString() }}</template>
-        </Column>
-        <Column
-          field="consumedBudgetYen"
-          :header="t('advertising.advertiser_crud.list_table.consumed_budget')"
-          class="text-right"
-        >
-          <template #body="{ data }">¥{{ data.consumedBudgetYen.toLocaleString() }}</template>
-        </Column>
-        <Column :header="t('advertising.advertiser_crud.list_table.actions')">
-          <template #body="{ data }">
-            <NuxtLink :to="`/teams/${teamSlug}/advertiser/messaging-campaigns/${data.id}`">
-              <Button icon="pi pi-arrow-right" text size="small" />
-            </NuxtLink>
-          </template>
-        </Column>
-      </DataTable>
-    </SectionCard>
+          </div>
+
+          <DashboardErrorState
+            v-if="loadFailed"
+            testid="advertiser-messaging-campaigns-error-state"
+            @retry="load"
+          />
+
+          <SectionCard v-else>
+            <DataTable
+              :value="items"
+              :loading="loading"
+              :rows="size"
+              :total-records="totalElements"
+              striped-rows
+              paginator
+              lazy
+              :first="page * size"
+              @page="onPageChange"
+            >
+              <template #empty>
+                <DashboardEmptyState
+                  :message="t('advertising.pages.advertiser_campaign_list.empty')"
+                />
+              </template>
+
+              <Column field="name" :header="t('advertising.advertiser_crud.list_table.name')">
+                <template #body="{ data }">
+                  <NuxtLink
+                    :to="`/teams/${teamSlug}/advertiser/messaging-campaigns/${data.id}`"
+                    class="text-primary hover:underline"
+                  >
+                    {{ data.name }}
+                  </NuxtLink>
+                </template>
+              </Column>
+              <Column :header="t('advertising.advertiser_crud.list_table.status')">
+                <template #body="{ data }">
+                  <Tag
+                    :value="statusLabel(data.status)"
+                    :severity="statusSeverityMap[data.status as AdMessagingCampaignStatus]"
+                  />
+                </template>
+              </Column>
+              <Column :header="t('advertising.advertiser_crud.list_table.period')">
+                <template #body="{ data }">{{ formatPeriod(data) }}</template>
+              </Column>
+              <Column
+                field="totalBudgetYen"
+                :header="t('advertising.advertiser_crud.list_table.total_budget')"
+                class="text-right"
+              >
+                <template #body="{ data }">¥{{ data.totalBudgetYen.toLocaleString() }}</template>
+              </Column>
+              <Column
+                field="consumedBudgetYen"
+                :header="t('advertising.advertiser_crud.list_table.consumed_budget')"
+                class="text-right"
+              >
+                <template #body="{ data }">¥{{ data.consumedBudgetYen.toLocaleString() }}</template>
+              </Column>
+              <Column :header="t('advertising.advertiser_crud.list_table.actions')">
+                <template #body="{ data }">
+                  <NuxtLink :to="`/teams/${teamSlug}/advertiser/messaging-campaigns/${data.id}`">
+                    <Button icon="pi pi-arrow-right" text size="small" />
+                  </NuxtLink>
+                </template>
+              </Column>
+            </DataTable>
+          </SectionCard>
+        </div>
+    </template>
   </div>
 </template>

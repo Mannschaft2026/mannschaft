@@ -5,6 +5,7 @@ definePageMeta({ layout: 'team', middleware: 'auth' })
 
 const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
+const { state: gateState, error: gateError, load: reloadGate, onOk: onGateOk } = useTeamAccessGate(teamSlug)
 const auditLogApi = useAuditLogApi()
 const notification = useNotification()
 const { markIfDenied } = useScopeNotFound()
@@ -53,33 +54,42 @@ function loadMore() {
   if (nextCursor.value) loadLogs(nextCursor.value)
 }
 
-onMounted(() => loadLogs())
+onGateOk(() => loadLogs())
 </script>
 
 <template>
   <div>
-    <PageHeader :title="t('auditLog.title')" class="mb-6" />
-    <DataTable :value="logs" :loading="loading" data-key="id" striped-rows>
-      <template #empty>
-        <div class="py-8 text-center text-surface-500">
-          {{ t('auditLog.empty') }}
-        </div>
-      </template>
-      <Column :header="t('auditLog.column.datetime')" style="width: 160px">
-        <template #body="{ data }">
-          {{ formatDateTime(data.createdAt) }}
-        </template>
-      </Column>
-      <Column field="userName" :header="t('auditLog.column.user')" />
-      <Column :header="t('auditLog.column.category')">
-        <template #body="{ data }">
-          <Badge :value="data.eventCategory" severity="secondary" />
-        </template>
-      </Column>
-      <Column field="eventType" :header="t('auditLog.column.event')" />
-    </DataTable>
-    <div v-if="hasNext" class="flex justify-center py-4">
-      <Button :label="t('label.loadMore')" text :loading="loadingMore" @click="loadMore" />
+    <ScopeNotFound v-if="gateState === 'notFound'" />
+    <div v-else-if="gateState === 'loading'" class="flex justify-center py-8">
+      <LoadingBounce />
     </div>
+    <DashboardErrorState v-else-if="gateState === 'error'" :error="gateError" @retry="reloadGate" />
+    <template v-else>
+        <div>
+          <PageHeader :title="t('auditLog.title')" class="mb-6" />
+          <DataTable :value="logs" :loading="loading" data-key="id" striped-rows>
+            <template #empty>
+              <div class="py-8 text-center text-surface-500">
+                {{ t('auditLog.empty') }}
+              </div>
+            </template>
+            <Column :header="t('auditLog.column.datetime')" style="width: 160px">
+              <template #body="{ data }">
+                {{ formatDateTime(data.createdAt) }}
+              </template>
+            </Column>
+            <Column field="userName" :header="t('auditLog.column.user')" />
+            <Column :header="t('auditLog.column.category')">
+              <template #body="{ data }">
+                <Badge :value="data.eventCategory" severity="secondary" />
+              </template>
+            </Column>
+            <Column field="eventType" :header="t('auditLog.column.event')" />
+          </DataTable>
+          <div v-if="hasNext" class="flex justify-center py-4">
+            <Button :label="t('label.loadMore')" text :loading="loadingMore" @click="loadMore" />
+          </div>
+        </div>
+    </template>
   </div>
 </template>

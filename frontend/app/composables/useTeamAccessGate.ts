@@ -17,6 +17,9 @@ export type TeamAccessGateState = 'loading' | 'ok' | 'notFound' | 'error'
  * - 200 → 'ok'（team を返す）。403/404 の間は team を保持しない＝本文 API を呼ぶ根拠が無い
  *
  * 呼び出し時に 1 回自動で取得する。後発の要求・slug 変更で古い応答は破棄する。
+ *
+ * 本文の読み込み（onMounted で行っていた API 呼び出し・権限取得）は `onOk(fn)` に渡す。
+ * 'ok' になった時点（再判定で ok に戻ったときも）でだけ fn を呼び、403/404/判定中/通信失敗の間は呼ばない。
  */
 export function useTeamAccessGate(slug: MaybeRefOrGetter<string>) {
   const teamApi = useTeamApi()
@@ -64,9 +67,14 @@ export function useTeamAccessGate(slug: MaybeRefOrGetter<string>) {
     }
   }
 
+  /** 'ok' になるたびに fn を呼ぶ。本文 API は必ずここ（または state==='ok' の描画）から呼ぶこと。 */
+  function onOk(fn: () => void | Promise<void>): void {
+    watch(state, (s) => { if (s === 'ok') void fn() }, { immediate: true })
+  }
+
   watch(() => toValue(slug), () => { void load() })
   onBeforeUnmount(() => { ++seq })
   void load()
 
-  return { team, state, error, load }
+  return { team, state, error, load, onOk }
 }
