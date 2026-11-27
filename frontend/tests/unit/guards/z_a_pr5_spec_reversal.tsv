@@ -1,0 +1,40 @@
+# 戦役 Z-A PR5: 実ロール化・FE の (i) 削除で期待値の見直しが要る既存テストの一覧（試練時点では反転しない。実装役が PR5 で扱う）
+# 区分: 反転=SYSTEM_ADMIN だから導線が出る／ロールが SYSTEM_ADMIN と表示される、を期待しており PR5 後は赤になる
+#       前提更新=期待値は PR5 後も成り立つが、BE が返さなくなった roleName/role="SYSTEM_ADMIN" を前提に組んでいる（実ロールへ書き換える）
+#       モック更新=useRoleAccess の模造が isAdmin 等に SYSTEM_ADMIN を含めている（本体に合わせて外す）
+#       維持=拒否型・運営導線。変えない（DenyTypeTestsFrozenGuardTest の固定対象を含む）
+# 規律（設計書 §8）: 変えてよいのは期待値と使われなくなったスタブだけ。テストの削除・@Disabled・it.skip は禁止。
+kind	path	test	reason
+反転	backend/src/test/java/com/mannschaft/app/role/controller/MeControllerMembershipIntegrationTest.java	archiveCapability_matchesScopeRole（systemAdmin=true の 3 行）	$.data[0].role を "SYSTEM_ADMIN" と期待。PR5 後は実ロール（ADMIN/DEPUTY_ADMIN/MEMBER）。canManageArchive の期待は不変
+反転	backend/src/test/java/com/mannschaft/app/role/controller/MeOrganizationsBatchQueryIT.java	システム管理者も本人所属だけを返す	$.data[0].role を "SYSTEM_ADMIN" と期待。PR5 後は実ロール MEMBER
+反転	frontend/app/components/BaseSidebar.spec.ts	未所属のSYSTEM_ADMINは所属限定モジュールAPIを取得せずメニューリンクを表示する	SYSTEM_ADMIN バイパスで管理リンクが出る・modules を取らない、を期待。PR5 後はリンクが出ず modules を取る
+前提更新	frontend/app/components/BaseSidebar.spec.ts	SYSTEM_ADMINもメンバーレンズ中のモジュール取得失敗をエラーとして表示する	期待（エラー面）は不変だが roleName='SYSTEM_ADMIN' 前提。実ロールで組み直す
+反転	frontend/app/components/admin/AdminSettingsHub.spec.ts	SYSTEM_ADMIN単独には%sのFAQ・公開設定を案内しない（運営はテナント設定に触れない）	リンク非表示は不変だが probe（getAdminActionRequired）が呼ばれることを期待。PR5 後は呼ばない
+反転	frontend/app/components/admin/AdminSettingsHub.spec.ts	SYSTEM_ADMIN兼任の%s副管理者は正準API成功時だけ副管理者向けリンクを表示する	roleName=SYSTEM_ADMIN の救済分岐でリンクが出ることを期待。PR5 後は実ロール DEPUTY_ADMIN が返るので分岐ごと不要（DEPUTY_ADMIN の実ロールで組み直す）
+反転	frontend/app/components/admin/AdminSettingsHub.spec.ts	SYSTEM_ADMINの正準APIが503なら拒否と混同せず、再試行で権限・正準API・フラグを再取得する	救済分岐の正準 API 呼び出しを前提。分岐削除で成り立たない（再試行は権限取得の失敗で検証し直す）
+反転	frontend/app/components/admin/AdminSettingsHub.spec.ts	旧slugの正準API成功が遅れても、新slugの403拒否を上書きしない	救済分岐の正準 API 呼び出し順を期待。分岐削除で成り立たない（slug 切替の競合は loadPermissions 側で検証し直す）
+前提更新	frontend/app/components/admin/AdminSettingsHub.spec.ts	SYSTEM_ADMINでも%sのADMINを兼任していれば管理設定へ案内する	期待は scopeAdmin=true で不変だが roleName='SYSTEM_ADMIN' 前提。PR5 後は roleName='ADMIN' が返る
+反転	frontend/tests/unit/composables/useRoleAccess.spec.ts	ROLE-002: ADMIN/SYSTEM_ADMIN は isAdminOrDeputy=true	SYSTEM_ADMIN で true を期待。PR5 後は false
+前提更新	frontend/tests/unit/composables/useRoleAccess.spec.ts	ROLE-006: SYSTEM_ADMIN と対象組織 ADMIN の兼任は roleName が SYSTEM_ADMIN でも isScopeAdmin=true	期待は不変だが「roleName が SYSTEM_ADMIN」は PR5 後に起きない（兼任データでも roleName=ADMIN）
+維持	frontend/tests/unit/composables/useRoleAccess.spec.ts	ROLE-005 / ROLE-009 / ROLE-011 / ROLE-012	SYSTEM_ADMIN を管理者扱いしない側の期待。PR5 後も緑
+反転	frontend/app/pages/teams/[slug]/settings/public-settings.spec.ts	SYSTEM_ADMIN単独も既存isAdminOrDeputy許可で管理GETと設定フォームを利用できる	SYSTEM_ADMIN 単独がテナントの公開設定を使えることを期待（マスター決定で廃止）。PR5 後は使えない
+反転	frontend/app/components/schedule/EventDetailPanel.delegations.spec.ts	%sは既存管理者判定どおり取得できる（SYSTEM_ADMIN の行）	roleName=SYSTEM_ADMIN を管理者扱いして委任件数を取ることを期待。PR5 後は取らない
+反転	frontend/app/utils/surveyScopeContext.spec.ts	%sは管理者として表示する（SYSTEM_ADMIN の行）	roleName=SYSTEM_ADMIN を 'admin' と期待。PR5 後は管理者として扱わない
+反転	frontend/app/composables/useLoyaltyStaffAccess.spec.ts	SYSTEM_ADMINの全体昇格では許可せずcatalogの403と障害を区別する	roleName=SYSTEM_ADMIN のとき catalog を呼ぶことを期待（500 の error 区別）。PR5 後は catalog を呼ばない
+前提更新	frontend/app/composables/useLoyaltyStaffAccess.spec.ts	team変更後の古い成功を反映しない	SYSTEM_ADMIN の catalog 分岐で競合を作っている。分岐削除後は実スコープ権限の経路で組み直す
+反転	frontend/app/pages/teams/[slug]/skills.spec.ts	SYSTEM_ADMIN も全員一覧・マトリクスが出る	SYSTEM_ADMIN で全員一覧・マトリクスを期待。PR5 後は出ない
+反転	frontend/tests/unit/components/TeamSidebarSkills.spec.ts	TEAM-SB-SKL-005: SYSTEM_ADMIN でもゲート ON なら出る	SYSTEM_ADMIN でスキル導線が出ることを期待。PR5 後は出ない
+前提更新	frontend/tests/unit/components/TeamSidebarSkills.spec.ts	TEAM-SB-SKL-003: SYSTEM_ADMIN でもゲート OFF なら出ない	期待（出ない）は不変。roleName='SYSTEM_ADMIN' 前提を ADMIN へ
+前提更新	frontend/tests/unit/pages/organizations/member-teams.spec.ts	MT-16: SYSTEM_ADMIN と対象組織 ADMIN の兼任者（roleName は SYSTEM_ADMIN）は管理 view・切替・設定リンクが使える	scopeAdmin で判定するので期待は不変。roleName は PR5 後 ADMIN
+維持	frontend/tests/unit/pages/organizations/member-teams.spec.ts	MT-14: SYSTEM_ADMIN のみ（対象組織の ADMIN でない）は view=applications を直打ちしても一覧へ戻し…	拒否側。PR5 後も緑
+モック更新	frontend/app/pages/teams/[slug]/skills.spec.ts	useRoleAccess の模造（isAdmin / isAdminOrDeputy / isMember）	模造が SYSTEM_ADMIN を含む。本体の (i) 削除に合わせて外す
+モック更新	frontend/tests/unit/components/TeamSidebarSkills.spec.ts	useRoleAccess の模造（isAdmin / isAdminOrDeputy）	同上
+モック更新	frontend/tests/unit/components/TeamSidebarTimetable.spec.ts	useRoleAccess の模造（isAdmin / isAdminOrDeputy）	同上
+モック更新	frontend/app/pages/organizations/[slug]/admin-tabs-access.spec.ts	useRoleAccess の模造（isAdmin / isAdminOrDeputy）	同上
+モック更新	frontend/tests/unit/pages/organizations/member-teams.spec.ts	useRoleAccess の模造（isAdmin）	同上
+維持	frontend/tests/unit/composables/useAppNavGroups.spec.ts	SYSTEM_ADMINは組合ADMIN兼任でも代理入力業務導線を持たずSYSTEM導線を維持する ほか	拒否型と /system-admin 導線。DenyTypeTestsFrozenGuardTest（z_a_pr3/deny_type_tests_frozen.tsv 13 行目）で SHA-256 固定。変えない
+維持	frontend/app/pages/teams/[slug]/shifts/[scheduleId]/change-requests.spec.ts	AC2 %sはscopeAdmin=trueでも表示しない（既存UI契約）（SYSTEM_ADMIN の行）	出さない側。PR5 後も緑
+維持	frontend/tests/unit/pages/teams/nav-friend-toolbar.spec.ts	SYSTEM_ADMIN では友好チームの操作を出さない部分	出さない側。PR5 後も緑
+維持	frontend/app/components/FeatureDisplaySettingsPanel.spec.ts	%sは設定編集と保存ができない（SYSTEM_ADMIN の行）	出さない側。PR5 後も緑
+維持	frontend/app/composables/useTeamArchiveAction.spec.ts	SYSTEM_ADMIN × scopeAdmin の行	scopeAdmin で判定。PR5 後も緑（role='SYSTEM_ADMIN' は前提更新候補だが期待は不変）
+維持	frontend/app/components/ScopeDashboard.spec.ts	%sには案内を表示しない（SYSTEM_ADMIN の行）	dashboard の ViewerRole（分類 iii、Z-C で BE と同時に削除）

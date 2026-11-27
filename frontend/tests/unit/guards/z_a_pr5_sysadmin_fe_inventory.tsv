@@ -1,0 +1,190 @@
+# 戦役 Z-A PR5: frontend/app 配下の SYSTEM_ADMIN / isSystemAdmin を含む全行の分類表（*.spec.ts・types/generated・locales を除く）
+# 列: path（frontend/app からの相対）, line（PR4 HEAD 10ef960a1 時点）, kind（code=G2 番人の計数対象 / comment=コメントのみ）, g2_key（G2 基準線のキー「パターン#所属関数」。comment は -）, snippet, class（i=PR5 で削除 / ii=残す / iii=基準線に残し Z-C）, action
+# 番人: tests/unit/guards/z_a_pr5_sysadmin_fe_inventory.spec.ts が code 行の i を「PR5 後に消えていること」、ii/iii を「残っていること」で照合する（行番号ではなく g2_key で照合）。
+path	line	kind	g2_key	snippet	class	action
+components/BaseSidebar.vue	56	comment	-	// 機能ゲートが閉じている（OFF・未取得）項目は SYSTEM_ADMIN にも出さない（fail-closed）。	i	記述を実ロール前提に更新（roleName==="SYSTEM_ADMIN" のバイパス／モジュール取得省略を削除に合わせる）
+components/BaseSidebar.vue	59	comment	-	// レンズが「メンバー」プレビュー中は SYSTEM_ADMIN バイパスも効かせない（実ロールを問わず	i	記述を実ロール前提に更新（roleName==="SYSTEM_ADMIN" のバイパス／モジュール取得省略を削除に合わせる）
+components/BaseSidebar.vue	61	code	'SYSTEM_ADMIN'#isItemVisible	if (roleName.value === 'SYSTEM_ADMIN' && !props.memberLensActive) return true	i	roleName==="SYSTEM_ADMIN" のバイパス／モジュール取得省略を削除
+components/BaseSidebar.vue	95	comment	-	// SYSTEM_ADMINの通常表示はモジュール有効状態を使わない。所属限定APIも取得しない。	i	記述を実ロール前提に更新（roleName==="SYSTEM_ADMIN" のバイパス／モジュール取得省略を削除に合わせる）
+components/BaseSidebar.vue	97	code	'SYSTEM_ADMIN'#loadSidebar	if (roleName.value !== 'SYSTEM_ADMIN' || props.memberLensActive) {	i	roleName==="SYSTEM_ADMIN" のバイパス／モジュール取得省略を削除
+components/RoleBadge.vue	9	code	SYSTEM_ADMIN:#-	SYSTEM_ADMIN: 'danger',	i	SYSTEM_ADMIN の色を削除（利用はテナント画面のみ。pages/system-admin では未使用）
+components/admin/AdminSettingsHub.vue	21	comment	-	// 運営（SYSTEM_ADMIN）にはテナントの設定を出さない（戦役 Z-A PR3）。兼任のスコープ管理者だけが対象。	i	記述を実ロール前提に更新（roleName==="SYSTEM_ADMIN" の正準API確認（confirmedScopeManager）ごと削除に合わせる）
+components/admin/AdminSettingsHub.vue	74	code	'SYSTEM_ADMIN'#sequence	if (roleName.value === 'SYSTEM_ADMIN' && !isAdmin.value) {	i	roleName==="SYSTEM_ADMIN" の正準API確認（confirmedScopeManager）ごと削除
+components/dashboard/DashboardActionPanel.vue	132	code	'SYSTEM_ADMIN'#load	.filter((t) => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN')	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+components/dashboard/DashboardPersonalPanel.vue	15	code	'SYSTEM_ADMIN'#-	(team) => team.role === 'ADMIN' || team.role === 'SYSTEM_ADMIN' || team.role === 'DEPUTY_ADMIN',	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+components/dashboard/DashboardScopeLensToggle.vue	7	comment	-	* - **ADMIN/DEPUTY（および SYSTEM_ADMIN）のときのみ DOM ごと描画**する（`useRoleAccess.isAdminOrDeputy`）。	i	記述から SYSTEM_ADMIN を外す（isAdminOrDeputy が実ロールのみになる）
+components/public/PublicPostCommentSection.vue	27	code	'SYSTEM_ADMIN'#-	authStore.currentUser?.systemRole === 'SYSTEM_ADMIN' ||	iii	systemRole 直見の公開コメント削除導線。PR6（Z-A5: 通報からの非表示）で撤去。基準線に残す
+components/shift/ShiftDetailTabs.vue	28	code	'SYSTEM_ADMIN'#-	['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''),	i	/me/teams の role 配列から SYSTEM_ADMIN を削除
+components/skill/SkillList.vue	8	comment	-	* 'all'  = 全員の資格（GET /skills/search。ADMIN・SYSTEM_ADMIN・MANAGE_MEMBER を持つ DEPUTY_ADMIN だけ BE が許す）	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+components/system-admin/AdCampaignReviewCard.vue	3	comment	-	* F09.17 Phase 11-c-4 — SYSTEM_ADMIN 審査キュー内の 1 キャンペーン要約カード。	ii	運営コンソールの部品。残す
+components/system-admin/SystemAdminQuickLinks.vue	224	comment	-	// CMP-260909-1141 Phase 3: 孤立ページのナビ接続（SYSTEM_ADMIN 向け4枚）	ii	運営コンソールの部品。残す
+components/system-admin/SystemAdminSecurityScanCard.vue	8	comment	-	* SYSTEM_ADMIN 向けシステム管理ダッシュボードに配置するウィジェット。</p>	ii	運営コンソールの部品。残す
+components/systemAdmin/errorReport/ErrorReportAssigneeSelector.vue	4	comment	-	* SYSTEM_ADMIN ユーザーをドロップダウンで選択する改善版 UI。	ii	運営コンソールの部品。残す
+components/team/TeamMemberPermissionGroupsDialog.vue	15	comment	-	* （SYSTEM_ADMIN 不可）だけに許す。付与できない操作者には、ADMIN 専用権限を含むグループを選べなくし、	iii	拒否型 canActAsScopeAdminOnly の記述（SYSTEM_ADMIN 兼任は不可）。正しいまま。維持
+components/team/TeamMemberPermissionGroupsDialog.vue	26	comment	-	/** ADMIN 専用権限を含む権限グループを付与・剥奪できる操作者か（チーム ADMIN 本人。SYSTEM_ADMIN 兼任者は不可）。 */	iii	拒否型 canActAsScopeAdminOnly の記述（SYSTEM_ADMIN 兼任は不可）。正しいまま。維持
+components/team/TeamPermissionGroupFormDialog.vue	12	comment	-	* BE は ADMIN 専用権限が変更の前後どちらかに含まれる更新・作成を、チーム ADMIN 本人（SYSTEM_ADMIN 不可）だけに許す。	iii	同上。維持
+components/team/TeamPermissionGroupFormDialog.vue	13	comment	-	* 付与できない操作者（SYSTEM_ADMIN 兼任など）には ADMIN 専用権限を選べなくし、既に ADMIN 専用権限を含む	iii	同上。維持
+components/team/TeamPermissionGroupFormDialog.vue	23	comment	-	/** ADMIN 専用権限を含む権限グループを作成・更新できる操作者か（チーム ADMIN 本人。SYSTEM_ADMIN 兼任者は不可）。 */	iii	同上。維持
+composables/recruitment/useRecruitmentCancellationFee.ts	10	comment	-	* 受取先側の管理者・受取先本人・SYSTEM_ADMIN が、自分が受け取るべきキャンセル料の記録を	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+composables/shift/useShiftHourlyRateApi.ts	79	comment	-	* 時給は金銭情報のため BE 側は ADMIN/DEPUTY_ADMIN（または SYSTEM_ADMIN）のみ許可し、	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+composables/tournament/useTournamentScorekeepers.ts	3	comment	-	// BE: TournamentScorekeeperController（#1464・すべて主催組織 ADMIN / SYSTEM_ADMIN 限定）。	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+composables/useAdminScopeGuard.ts	32	code	SYSTEM_ADMIN:#-	SYSTEM_ADMIN: 2,	i	ROLE_RANK から SYSTEM_ADMIN を削除
+composables/useAdvertiserApi.ts	261	comment	-	// ─── SYSTEM_ADMIN 向け API ───	ii	運営 API（広告審査）の記述。残す
+composables/useAdvertiserApi.ts	376	comment	-	// Creatives（SYSTEM_ADMIN向け）	ii	運営 API（広告審査）の記述。残す
+composables/useAppNavGroups.ts	9	comment	-	* 合流条件）を移植する。代理入力業務の導線はSYSTEM_ADMINを除外し、	ii	拒否型（代理入力導線の除外）と /system-admin 導線。残す（DenyTypeTestsFrozenGuardTest 固定）
+composables/useAppNavGroups.ts	29	code	isSystemAdmin#useAppNavGroups	!authStore.isSystemAdmin &&	ii	拒否型（代理入力導線の除外）と /system-admin 導線。残す（DenyTypeTestsFrozenGuardTest 固定）
+composables/useAppNavGroups.ts	39	code	isSystemAdmin#useAppNavGroups	!authStore.isSystemAdmin &&	ii	拒否型（代理入力導線の除外）と /system-admin 導線。残す（DenyTypeTestsFrozenGuardTest 固定）
+composables/useAppNavGroups.ts	103	code	isSystemAdmin#showProxyAdminNav	if (authStore.isSystemAdmin) {	ii	拒否型（代理入力導線の除外）と /system-admin 導線。残す（DenyTypeTestsFrozenGuardTest 固定）
+composables/useBetaPerksApi.ts	8	comment	-	* `@PreAuthorize("hasRole('SYSTEM_ADMIN')")`（非 SYSTEM_ADMIN は 403 → 呼び出し側が	ii	運営 API クライアントの記述。残す
+composables/useBillingApi.ts	449	comment	-	// 価格改定（price-revisions・SYSTEM_ADMIN専用）	ii	運営 API（価格改定・税コード）の記述。残す
+composables/useBillingApi.ts	527	comment	-	// 税コードマスタ（tax-codes・SYSTEM_ADMIN専用）	ii	運営 API（価格改定・税コード）の記述。残す
+composables/useDashboardWidgets.ts	15	comment	-	return 2 // MEMBER / DEPUTY_ADMIN / ADMIN / SYSTEM_ADMIN	iii	ViewerRole の段の記述。Z-C で BE の ViewerRole と同時に整理
+composables/useEmailOutboxAdminApi.ts	5	comment	-	* SYSTEM_ADMIN ロールでのみアクセス可能。	ii	運営 API クライアントの記述。残す
+composables/useErrorReportAdmin.ts	120	comment	-	* F10.6 Phase 10-δ — 担当者候補となる SYSTEM_ADMIN ユーザー一覧を取得する。	ii	運営 API クライアントの記述。残す
+composables/useFaqApi.ts	10	comment	-	* 管理 API（ADMIN / SYSTEM_ADMIN 限定。認可は BE 側で 401/403 を返す）と、	i	記述から SYSTEM_ADMIN を外す（運営による FAQ 設定は廃止＝マスター決定）
+composables/useFaqApi.ts	22	comment	-	/** チームの FAQ 編集ペイロードを取得する（ADMIN / SYSTEM_ADMIN 限定）。 */	i	記述から SYSTEM_ADMIN を外す（運営による FAQ 設定は廃止＝マスター決定）
+composables/useFaqApi.ts	27	comment	-	/** チームの FAQ を一括 upsert する（ADMIN / SYSTEM_ADMIN 限定。成功 204）。 */	i	記述から SYSTEM_ADMIN を外す（運営による FAQ 設定は廃止＝マスター決定）
+composables/useFaqApi.ts	35	comment	-	/** 組織の FAQ 編集ペイロードを取得する（ADMIN / SYSTEM_ADMIN 限定）。 */	i	記述から SYSTEM_ADMIN を外す（運営による FAQ 設定は廃止＝マスター決定）
+composables/useFaqApi.ts	40	comment	-	/** 組織の FAQ を一括 upsert する（ADMIN / SYSTEM_ADMIN 限定。成功 204）。 */	i	記述から SYSTEM_ADMIN を外す（運営による FAQ 設定は廃止＝マスター決定）
+composables/useIncidentBannerAdmin.ts	5	comment	-	* ROLE_SYSTEM_ADMIN ロールでのみアクセス可能（BE側で自動認可）。	ii	運営 API クライアントの記述。残す
+composables/useLoginSession.ts	98	code	isSystemAdmin#armProactiveRefresh	|| (authStore.isSystemAdmin ? '/system-admin' : '/dashboard')	ii	ログイン後の遷移先を /system-admin に振る導線。残す
+composables/useLoyaltyStaffAccess.ts	1	comment	-	/** SYSTEM_ADMIN 兼任時だけ、実スコープ権限を検証するカタログ応答を利用する。 */	i	記述を実ロール前提に更新（roleName==="SYSTEM_ADMIN" の catalog 救済分岐を削除（実スコープ権限 can/isScopeAdmin だけで判定）に合わせる）
+composables/useLoyaltyStaffAccess.ts	17	code	'SYSTEM_ADMIN'#useLoyaltyStaffAccess	(roleName.value === 'SYSTEM_ADMIN' && systemAllowed.value),	i	roleName==="SYSTEM_ADMIN" の catalog 救済分岐を削除（実スコープ権限 can/isScopeAdmin だけで判定）
+composables/useLoyaltyStaffAccess.ts	23	code	'SYSTEM_ADMIN'#refresh	if (roleName.value !== 'SYSTEM_ADMIN' || isScopeAdmin.value) return	i	roleName==="SYSTEM_ADMIN" の catalog 救済分岐を削除（実スコープ権限 can/isScopeAdmin だけで判定）
+composables/useOrgShellContext.ts	49	comment	-	/** 管理権限（ADMIN / SYSTEM_ADMIN）を持つか。 */	i	記述を実ロール前提に更新（同上）
+composables/useOrgShellContext.ts	51	comment	-	/** 対象組織の ADMIN 割当があるか（SYSTEM_ADMIN のみは false。兼任者は true）。組織 ADMIN 専用の操作の出し分け用。 */	i	記述を実ロール前提に更新（同上）
+composables/useProvisioningAdminApi.ts	2	comment	-	* 柱②-2 販促プロビジョニング: SYSTEM_ADMIN 向け API クライアント。	ii	運営 API クライアントの記述。残す
+composables/useProvisioningAdminApi.ts	4	comment	-	* バックエンド: {@code /api/v1/system-admin/provisioning} 配下（ROLE_SYSTEM_ADMIN のみ）。	ii	運営 API クライアントの記述。残す
+composables/usePublicApi.ts	234	comment	-	* チームの公開設定を更新する（ADMIN / SYSTEM_ADMIN 限定）。	i	記述から SYSTEM_ADMIN を外す（運営による公開設定・名前開示は廃止＝マスター決定）
+composables/usePublicApi.ts	249	comment	-	* 組織の公開設定を更新する（ADMIN / SYSTEM_ADMIN 限定）。	i	記述から SYSTEM_ADMIN を外す（運営による公開設定・名前開示は廃止＝マスター決定）
+composables/usePublicApi.ts	347	comment	-	* チームの投稿者識別モードを切り替える（ADMIN / SYSTEM_ADMIN 限定）。	i	記述から SYSTEM_ADMIN を外す（運営による公開設定・名前開示は廃止＝マスター決定）
+composables/usePublicApi.ts	367	comment	-	* 組織の投稿者識別モードを切り替える（ADMIN / SYSTEM_ADMIN 限定）。	i	記述から SYSTEM_ADMIN を外す（運営による公開設定・名前開示は廃止＝マスター決定）
+composables/usePublicApi.ts	384	comment	-	* チームの投稿者識別モード変更履歴を取得する（ADMIN / SYSTEM_ADMIN 限定）。	i	記述から SYSTEM_ADMIN を外す（運営による公開設定・名前開示は廃止＝マスター決定）
+composables/usePublicApi.ts	395	comment	-	* 組織の投稿者識別モード変更履歴を取得する（ADMIN / SYSTEM_ADMIN 限定）。	i	記述から SYSTEM_ADMIN を外す（運営による公開設定・名前開示は廃止＝マスター決定）
+composables/useRoleAccess.ts	1	code	'SYSTEM_ADMIN'#-	type RoleName = 'SYSTEM_ADMIN' | 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'GUEST'	i	isAdmin から SYSTEM_ADMIN を削除、RoleName 型からも外す
+composables/useRoleAccess.ts	8	comment	-	* roleName は SYSTEM_ADMIN を優先して返すため、SYSTEM_ADMIN との兼任者は roleName だけでは判定できない。	i	記述を更新（roleName が SYSTEM_ADMIN を優先する前提が消える）
+composables/useRoleAccess.ts	14	comment	-	* BE の AccessControlService#canActAsScopeAdminOnly（スコープ ADMIN 本人で、かつ SYSTEM_ADMIN でない）。	iii	拒否型 canActAsScopeAdminOnly の記述。正しいまま。維持
+composables/useRoleAccess.ts	15	comment	-	* SYSTEM_ADMIN 兼任者は scopeAdmin=true でも false。旧 BE は返さない（undefined）。	iii	同上。維持
+composables/useRoleAccess.ts	119	code	'SYSTEM_ADMIN'#-	roleName.value === 'ADMIN' || roleName.value === 'SYSTEM_ADMIN',	i	isAdmin から SYSTEM_ADMIN を削除、RoleName 型からも外す
+composables/useRoleAccess.ts	124	comment	-	* （BE が対象スコープの ADMIN 割当で 403 を返す操作）。isAdmin は SYSTEM_ADMIN も含むため使わない。	i	記述を更新（isAdmin が SYSTEM_ADMIN を含まなくなる）
+composables/useRoleAccess.ts	125	comment	-	* scopeAdmin を返さない旧 BE では roleName === 'ADMIN' で代用する（SYSTEM_ADMIN は不可）。	i	記述を更新（旧 BE 代用の SYSTEM_ADMIN 言及を外す）
+composables/useRoleAccess.ts	133	comment	-	* 返さない旧 BE では roleName === 'ADMIN'（SYSTEM_ADMIN は roleName が SYSTEM_ADMIN になるため不可）で代用する。	i	記述を更新（同上）
+composables/useScheduleComments.ts	145	comment	-	/** PATCH .../comments/settings（スレッド開閉・SYSTEM_ADMIN/ADMIN/予定作成者限定・設計書 §4.4） */	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+composables/useScopeFeatureVisibility.ts	28	code	'SYSTEM_ADMIN'#useScopeFeatureVisibility	['SUPPORTER', 'MEMBER', 'DEPUTY_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(	i	role 配列から SYSTEM_ADMIN を削除
+composables/useScopeFeatureVisibility.ts	103	code	'SYSTEM_ADMIN'#isVisible	if (!toValue(memberLens) && ['SYSTEM_ADMIN', 'ADMIN', 'DEPUTY_ADMIN'].includes(role ?? ''))	i	role 配列から SYSTEM_ADMIN を削除
+composables/useSecurityScanApi.ts	7	comment	-	* SYSTEM_ADMIN ロールでのみアクセス可能。	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminAdCampaignApi.ts	2	comment	-	* F09.17 Phase 11-c-4 — SYSTEM_ADMIN 用 広告キャンペーン審査 API composable。	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminAdCampaignApi.ts	7	comment	-	* SYSTEM_ADMIN 権限を持つユーザーのみが利用する想定。</p>	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminAdCampaignApi.ts	25	comment	-	/** SYSTEM_ADMIN 通報一覧の絞り込み条件 */	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminAdCampaignApi.ts	34	comment	-	* SYSTEM_ADMIN 視点での 1 キャンペーン審査詳細。	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminAdCampaignApi.ts	46	comment	-	* SYSTEM_ADMIN 広告キャンペーン審査 API composable。	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminBatchApi.ts	11	comment	-	* SYSTEM_ADMIN ロールでのみアクセス可能。	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminGdprApi.ts	13	comment	-	* SYSTEM_ADMIN ロールでのみアクセス可能。	ii	運営 API クライアントの記述。残す
+composables/useSystemAdminOperationalCampaignApi.ts	2	comment	-	* F09.19.4b 運用型キャンペーン審査 API クライアント（SYSTEM_ADMIN 向け）。	ii	運営 API クライアントの記述。残す
+composables/useTeamShellContext.ts	61	comment	-	/** 管理権限（ADMIN / SYSTEM_ADMIN）を持つか。 */	i	記述を実ロール前提に更新（isAdmin は ADMIN のみ。roleName が SYSTEM_ADMIN を優先する前提は消える）
+composables/useTeamShellContext.ts	74	comment	-	* SYSTEM_ADMIN とチーム ADMIN の兼任者は false（画面は出るが、ADMIN 専用権限が絡む操作は理由つきで不可にする）。	i	記述を実ロール前提に更新（isAdmin は ADMIN のみ。roleName が SYSTEM_ADMIN を優先する前提は消える）
+composables/useVillageCategoryApi.ts	9	comment	-	*   GET    /api/v1/system-admin/village-categories         ← SYSTEM_ADMIN 向け一覧	ii	運営 API クライアントの記述。残す
+composables/useVillageCategoryApi.ts	23	comment	-	/** SYSTEM_ADMIN 向け: 村カテゴリ一覧取得（ツリー構造） */	ii	運営 API クライアントの記述。残す
+composables/useVillageCategoryApi.ts	29	comment	-	/** SYSTEM_ADMIN 向け: 村カテゴリ作成 */	ii	運営 API クライアントの記述。残す
+composables/useVillageCategoryApi.ts	38	comment	-	/** SYSTEM_ADMIN 向け: 村カテゴリ更新 */	ii	運営 API クライアントの記述。残す
+composables/useVillageCategoryApi.ts	47	comment	-	/** SYSTEM_ADMIN 向け: 村カテゴリ論理削除（204 No Content） */	ii	運営 API クライアントの記述。残す
+middleware/system-admin.ts	8	comment	-	* - `useAuthStore().isSystemAdmin` で判定する。SYSTEM_ADMIN 以外はダッシュボードへ戻し、エラートーストを出す。	ii	/system-admin の入口ガード（拒否型）。残す
+middleware/system-admin.ts	19	comment	-	// 未認証は auth ミドルウェアの担当。ここでは「ログイン済みだが SYSTEM_ADMIN ではない」場合だけを扱う。	ii	/system-admin の入口ガード（拒否型）。残す
+middleware/system-admin.ts	21	code	isSystemAdmin#-	if (authStore.isSystemAdmin) return	ii	/system-admin の入口ガード（拒否型）。残す
+pages/admin/affiliate-settings.vue	20	comment	-	// （affiliate-settings は SYSTEM_ADMIN 専用のため将来分の事前設定を許容する）。	ii	SYSTEM_ADMIN 専用の運営画面の記述。残す
+pages/admin/villages/creation-requests.vue	8	comment	-	* - SYSTEM_ADMIN 専用画面。SYSTEM_ADMIN でない場合はページ内で「権限がありません」表示	ii	SYSTEM_ADMIN 専用の運営画面（/system-admin/** と同じ扱い）。残す
+pages/admin/villages/creation-requests.vue	26	comment	-	// 権限判定 — SYSTEM_ADMIN 以外は閲覧不可	ii	SYSTEM_ADMIN 専用の運営画面（/system-admin/** と同じ扱い）。残す
+pages/admin/villages/creation-requests.vue	27	code	isSystemAdmin#-	const isAllowed = computed(() => authStore.isSystemAdmin)	ii	SYSTEM_ADMIN 専用の運営画面（/system-admin/** と同じ扱い）。残す
+pages/auth/oauth/callback.vue	81	code	isSystemAdmin#error	if (authStore.isSystemAdmin) {	ii	OAuth ログイン後の遷移先を /system-admin に振る導線。残す
+pages/blog/posts/[id]/edit.vue	287	code	isSystemAdmin#-	const isAdmin = computed(() => authStore.isSystemAdmin)	iii	authStore.isSystemAdmin で PENDING_REVIEW の審査パネルを出す運営業務（テナント画面内）。Z-C で /system-admin へ移すか判断。基準線に残す
+pages/me/recruitment-cancellation-fees/index.vue	5	comment	-	* 受取先側の管理者・受取先本人・SYSTEM_ADMIN が、自分が受け取るべきキャンセル料の	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+pages/my/index.vue	123	comment	-	// F03.11.1 キャンセル料の免除（受取先側の精算管理者・受取先本人・SYSTEM_ADMIN）。	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+pages/organizations/[slug]/admin/point-cards/history.vue	26	code	'SYSTEM_ADMIN'#-	|| myOrg.value?.role === 'SYSTEM_ADMIN'	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/admin/point-cards/index.vue	8	comment	-	* アクセス制御: 組織 ADMIN / SYSTEM_ADMIN / DEPUTY_ADMIN のみ。それ以外は組織トップへリダイレクト。	i	記述を実ロール前提に更新（/me/organizations の role==="SYSTEM_ADMIN" を削除に合わせる）
+pages/organizations/[slug]/admin/point-cards/index.vue	27	code	'SYSTEM_ADMIN'#-	|| myOrg.value?.role === 'SYSTEM_ADMIN'	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/admin/point-cards/index.vue	31	code	'SYSTEM_ADMIN'#-	myOrg.value?.role === 'ADMIN' || myOrg.value?.role === 'SYSTEM_ADMIN',	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/admin/point-cards/providers/[providerId]/index.vue	8	comment	-	* 停止操作は ADMIN / SYSTEM_ADMIN のみ可能（DEPUTY_ADMIN には UI から隠す）。	i	記述を実ロール前提に更新（/me/organizations の role==="SYSTEM_ADMIN" を削除に合わせる）
+pages/organizations/[slug]/admin/point-cards/providers/[providerId]/index.vue	33	code	'SYSTEM_ADMIN'#-	|| myOrg.value?.role === 'SYSTEM_ADMIN'	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/admin/point-cards/providers/[providerId]/index.vue	37	code	'SYSTEM_ADMIN'#-	myOrg.value?.role === 'ADMIN' || myOrg.value?.role === 'SYSTEM_ADMIN',	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/admin/point-cards/providers/new.vue	26	code	'SYSTEM_ADMIN'#-	myOrg.value?.role === 'ADMIN' || myOrg.value?.role === 'SYSTEM_ADMIN',	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/admin/point-cards/stamp.vue	47	code	'SYSTEM_ADMIN'#-	|| myOrg.value?.role === 'SYSTEM_ADMIN'	i	/me/organizations の role==="SYSTEM_ADMIN" を削除
+pages/organizations/[slug]/member-teams.vue	45	comment	-	// 対象組織の ADMIN 割当を持つか。shell の isAdmin / roleName は SYSTEM_ADMIN を優先して返すため使わない。	i	記述を更新（roleName が SYSTEM_ADMIN を優先する前提が消える）
+pages/organizations/[slug]/member-teams.vue	46	comment	-	// BE は対象組織の ADMIN 割当（AccessControlService.isAdmin）で 403 を返す。兼任者は許可し、SYSTEM_ADMIN のみは対象外。	iii	BE の isAdmin（ADMIN 割当）で 403 の記述。正しいまま。維持
+pages/shift/[id]/edit.vue	40	code	'SYSTEM_ADMIN'#scheduleId	(t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+pages/shift/[id]/index.vue	43	code	'SYSTEM_ADMIN'#schedule	(t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+pages/shift/[id]/requests.vue	59	code	'SYSTEM_ADMIN'#schedule	(t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+pages/shift/[id]/work-constraints.vue	33	code	'SYSTEM_ADMIN'#schedule	(t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+pages/shift/index.vue	53	comment	-	/** ADMIN / SYSTEM_ADMIN / DEPUTY_ADMIN のチーム（シフト表の作成・編集権限あり。canManage 専用） */	i	記述を実ロール前提に更新（/me/teams の role==="SYSTEM_ADMIN" を削除に合わせる）
+pages/shift/index.vue	56	code	'SYSTEM_ADMIN'#-	(t) => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN',	i	/me/teams の role==="SYSTEM_ADMIN" を削除
+pages/surveys/[surveyId].vue	210	comment	-	* 「ADMIN+（ADMIN または SYSTEM_ADMIN）」という **BE 仕様とは異なる定義**を書いていた。	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+pages/system-admin/advertising/index.vue	3	comment	-	* F09.17 Phase 11-c-4 — SYSTEM_ADMIN 広告審査ダッシュボード（概況）。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/advertising/moderation-queue/[id].vue	3	comment	-	* F09.17 Phase 11-c-4 — SYSTEM_ADMIN 広告キャンペーン審査詳細。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/advertising/moderation-queue/index.vue	3	comment	-	* F09.17 Phase 11-c-4 — SYSTEM_ADMIN 広告キャンペーン審査キュー。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/advertising/operational-queue.vue	3	comment	-	* F09.19.4b SYSTEM_ADMIN 運用型キャンペーン（バナー広告）審査キュー。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/advertising/user-reports.vue	3	comment	-	* F09.17 Phase 11-c-4 — SYSTEM_ADMIN 広告ユーザー通報一覧。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/beta-perks.vue	9	comment	-	* ガードは `middleware: ['auth', 'system-admin']`（SYSTEM_ADMIN 以外は FE で遮断。BE の 403 が最終防衛線）。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/beta-perks.vue	10	comment	-	* 非 SYSTEM_ADMIN で API が 403 のときは handleApiError で綺麗に表示する（白画面にしない）。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/incident-banners/index.vue	5	comment	-	* SYSTEM_ADMIN がシスアド手動オーサリング方式で障害告知バナーを管理する。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/incident-banners/index.vue	14	comment	-	* API: /api/v1/system-admin/incident-banners (ROLE_SYSTEM_ADMIN)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/incident-banners/index.vue	42	comment	-	// SYSTEM_ADMIN 権限チェック	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/incident-banners/index.vue	43	code	isSystemAdmin#-	const isAllowed = computed(() => authStore.isSystemAdmin)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/price-revisions/[id].vue	39	code	isSystemAdmin#-	const isAllowed = computed(() => authStore.isSystemAdmin)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/price-revisions/index.vue	73	code	isSystemAdmin#-	const isAllowed = computed(() => authStore.isSystemAdmin)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/provisioning/index.vue	3	comment	-	* 柱②-2: 販促プロビジョニング SYSTEM_ADMIN 向け管理画面。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/provisioning/index.vue	10	comment	-	* API: /api/v1/system-admin/provisioning/** (ROLE_SYSTEM_ADMIN)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/provisioning/index.vue	30	comment	-	// SYSTEM_ADMIN 権限チェック	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/provisioning/index.vue	31	code	isSystemAdmin#-	const isAllowed = computed(() => authStore.isSystemAdmin)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/ranch.vue	7	code	isSystemAdmin#-,isSystemAdmin#-	watch([() => auth.user?.id ?? null, () => auth.isSystemAdmin], ([id, isSystemAdmin]) => {	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/ranch.vue	9	code	isSystemAdmin#auth	accountKey.value = id !== null && isSystemAdmin ? `${id}:${generation}` : ''	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/ranch.vue	10	code	isSystemAdmin#auth	if (!isSystemAdmin) {	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/teams/deleted.vue	22	code	isSystemAdmin#load	if (!auth.isSystemAdmin) return	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/teams/deleted.vue	51	code	isSystemAdmin#restore	if (restoringSlug.value || !auth.isSystemAdmin) return	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/teams/deleted.vue	77	code	isSystemAdmin#requestRestore	if (restoringSlug.value || loading.value || !auth.isSystemAdmin) return	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/teams/deleted.vue	104	code	isSystemAdmin#-	<div v-if="auth.isSystemAdmin" class="mx-auto w-full min-w-0 max-w-screen-lg space-y-4">	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/village-categories.vue	5	comment	-	* SYSTEM_ADMIN が村カテゴリのマスタデータを管理する。	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/village-categories.vue	33	comment	-	// SYSTEM_ADMIN 権限チェック	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/system-admin/village-categories.vue	34	code	isSystemAdmin#-	const isAllowed = computed(() => authStore.isSystemAdmin)	ii	運営コンソール本体（/system-admin/**。G2 allowlist）。残す
+pages/teams/[slug].vue	444	comment	-	* チームの加盟操作者か（F01.2.1 8-D）。ADMIN 割当（scopeAdmin。SYSTEM_ADMIN 単独は不可）か、	iii	scopeAdmin で判定する記述（SYSTEM_ADMIN 単独は不可）。正しいまま。維持
+pages/teams/[slug].vue	453	comment	-	/** 権限グループの画面・メンバー一覧の割当を出してよいか（チーム ADMIN 割当・管理者レンズ ON。SYSTEM_ADMIN のみは不可）。 */	iii	scopeAdmin で判定する記述（SYSTEM_ADMIN 単独は不可）。正しいまま。維持
+pages/teams/[slug]/shifts.vue	71	comment	-	// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)	i	記述を更新（roleName が SYSTEM_ADMIN を優先して返す前提が消える。等値比較は残す）
+pages/teams/[slug]/shifts.vue	72	comment	-	// プラットフォーム SYSTEM_ADMIN が同時にチームの ADMIN でも、実効ロール解決	i	記述を更新（roleName が SYSTEM_ADMIN を優先して返す前提が消える。等値比較は残す）
+pages/teams/[slug]/shifts.vue	73	comment	-	// （resolveEffectiveRoleName）は最強ロールである 'SYSTEM_ADMIN' を返すため、この等値比較では	i	記述を更新（roleName が SYSTEM_ADMIN を優先して返す前提が消える。等値比較は残す）
+pages/teams/[slug]/shifts.vue	76	comment	-	// §3.5）。BE 側の認可はこれと独立しており、SYSTEM_ADMIN は API を叩けば通る（UI 非表示は認可の代替	i	記述を更新（roleName が SYSTEM_ADMIN を優先して返す前提が消える。等値比較は残す）
+pages/teams/[slug]/shifts.vue	77	comment	-	// ではない）。SYSTEM_ADMIN を含めるように書き換えないこと。	i	記述を更新（roleName が SYSTEM_ADMIN を優先して返す前提が消える。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	184	comment	-	//   → systemRole はプラットフォームロール（SYSTEM_ADMIN など）であり、	iii	systemRole はプラットフォームロールという記述。正しいまま。維持
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	192	comment	-	// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	193	comment	-	// resolveEffectiveRoleName は SYSTEM_ADMIN > ADMIN > DEPUTY_ADMIN > ... の優先度で	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	194	comment	-	// 最強ロール 1 値を返すため、プラットフォーム SYSTEM_ADMIN が同時にチームの ADMIN でも	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	195	comment	-	// roleName は 'SYSTEM_ADMIN' になり ADMIN は返らない。これはバグではなく、	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	196	comment	-	// 「運営専用アカウントである SYSTEM_ADMIN には一般業務導線（このボタン）を出さない」という	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	198	comment	-	// BE（ShiftAutoAssignService）は SYSTEM_ADMIN を別途常に許可しており、この UI 非表示は	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/board.vue	199	comment	-	// 認可の代替ではない。`hasRoleOrAbove` 的な包含判定に書き換えて SYSTEM_ADMIN を含めないこと。	i	記述を更新（同上。等値比較は残す）
+pages/teams/[slug]/shifts/[scheduleId]/change-requests.vue	19	comment	-	// 運営専用の SYSTEM_ADMIN は業務導線に含めない（docs/security/03_role_authority_model.md §3.5、#4164）ため、	i	記述を更新（isAdminOrDeputy が SYSTEM_ADMIN を含まなくなる）
+pages/teams/[slug]/shifts/[scheduleId]/change-requests.vue	20	comment	-	// isAdminOrDeputy（SYSTEM_ADMIN を含む）ではなく roleName で判定する。	i	記述を更新（isAdminOrDeputy が SYSTEM_ADMIN を含まなくなる）
+pages/teams/[slug]/skills.vue	29	comment	-	* BE（SkillViewerAccessGuard）は ADMIN・SYSTEM_ADMIN・MANAGE_MEMBER を持つ DEPUTY_ADMIN だけに許す。	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+pages/villages/[id]/admin/recruit-categories.vue	13	comment	-	*    - 権限: 金型は `authStore.isSystemAdmin` / 本画面は **`useVillageContext().perms.isAdmin`**	ii	運営画面（金型）を参照する記述。残す
+stores/featureFlags.ts	27	comment	-	* 管理コンソール用途。isSystemAdmin でなければ何もしない。	ii	管理コンソール用のフラグ取得（運営画面専用）。残す
+stores/featureFlags.ts	31	code	isSystemAdmin#loadFlags	if (!authStore.isSystemAdmin) return	ii	管理コンソール用のフラグ取得（運営画面専用）。残す
+stores/useAuthStore.ts	37	code	isSystemAdmin#-,'SYSTEM_ADMIN'#-	isSystemAdmin: (state): boolean => state.user?.systemRole === 'SYSTEM_ADMIN',	ii	isSystemAdmin getter の定義元。残す
+stores/useAuthStore.ts	158	comment	-	// state 先行により、直後の isSystemAdmin 等の getter が新ユーザーの値で正しく評価される。	ii	isSystemAdmin getter の定義元。残す
+stores/useOrganizationStore.ts	27	code	'SYSTEM_ADMIN'#-	state.myOrganizations.filter(o => o.role === 'ADMIN' || o.role === 'SYSTEM_ADMIN'),	i	adminOrganizations から role==="SYSTEM_ADMIN" を削除
+stores/useTeamStore.ts	33	code	'SYSTEM_ADMIN'#-	state.myTeams.filter(t => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN'),	i	adminTeams から role==="SYSTEM_ADMIN" を削除
+types/adModeration.ts	2	comment	-	* F09.17 SYSTEM_ADMIN 審査キュー / 通報処理 — 型定義	ii	運営 API の型の記述。残す
+types/adModeration.ts	5	comment	-	* Controller に対応する。SYSTEM_ADMIN 権限を持つユーザーのみが利用する。</p>	ii	運営 API の型の記述。残す
+types/adModeration.ts	18	comment	-	* SYSTEM_ADMIN 審査キューの 1 件。	ii	運営 API の型の記述。残す
+types/advertiser.ts	49	comment	-	* 広告主アカウント詳細レスポンス（SYSTEM_ADMIN 用）。	ii	運営 API の型の記述。残す
+types/dashboard-scope.ts	223	code	'SYSTEM_ADMIN'#-	viewerRole: 'SYSTEM_ADMIN' | 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'PUBLIC' | null	iii	BE の ViewerRole.SYSTEM_ADMIN（Z-C で削除予定）に対応する型。Z-C で BE と同時に削除。基準線に残す
+types/dashboard-scope.ts	251	code	'SYSTEM_ADMIN'#-	viewerRole: 'SYSTEM_ADMIN' | 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'PUBLIC' | null	iii	BE の ViewerRole.SYSTEM_ADMIN（Z-C で削除予定）に対応する型。Z-C で BE と同時に削除。基準線に残す
+types/dashboard.ts	3	code	'SYSTEM_ADMIN'#-	export type ViewerRole = 'SYSTEM_ADMIN' | 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'PUBLIC'	iii	同上（ViewerRole）。Z-C。基準線に残す
+types/feature-display.ts	5	code	'SYSTEM_ADMIN'#-	| 'SYSTEM_ADMIN'	i	FeatureDisplayRole から SYSTEM_ADMIN を削除（利用は useScopeFeatureVisibility のみ）
+types/member.ts	1	code	'SYSTEM_ADMIN'#-	export type RoleName = 'SYSTEM_ADMIN' | 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'GUEST'	iii	横断の RoleName 型（メンバー一覧等）。利用箇所の確認を伴うため Z-C。基準線に残す
+types/sidebar.ts	18	comment	-	* 指定された項目は、そのフラグが ON のときだけ表示する（OFF・未取得は非表示。SYSTEM_ADMIN も同様）。	i	記述から SYSTEM_ADMIN を外す（サイドバーのバイパス撤去に合わせる）
+types/tournament.ts	820	comment	-	// すべて主催組織 ADMIN / SYSTEM_ADMIN 限定。	iii	BE 側の SYSTEM_ADMIN 許可の記述（BE 直書き）。Z-C で BE の除去と同時に文言を直す
+types/villageCategory.ts	7	comment	-	*   GET  /api/v1/system-admin/village-categories       ← SYSTEM_ADMIN 向け	ii	運営 API の型の記述。残す
+utils/surveyScopeContext.ts	2	code	'SYSTEM_ADMIN'#-	| 'SYSTEM_ADMIN'	i	roleName==="SYSTEM_ADMIN" を削除（型の union からも外す）
+utils/surveyScopeContext.ts	37	code	'SYSTEM_ADMIN'#resolveSurveyManagementContext	if (input.roleName === 'ADMIN' || input.roleName === 'SYSTEM_ADMIN') return 'admin'	i	roleName==="SYSTEM_ADMIN" を削除（型の union からも外す）
+utils/teamAffiliationAccess.ts	13	comment	-	/** 対象チームの ADMIN 割当があるか（/me/permissions の scopeAdmin）。SYSTEM_ADMIN 単独は false。 */	iii	scopeAdmin・権限保有で判定する記述（SYSTEM_ADMIN 単独は不可）。正しいまま。維持
+utils/teamAffiliationAccess.ts	15	comment	-	/** 対象チームでの実効権限名（/me/permissions の permissions）。roleName（SYSTEM_ADMIN を優先して返す）には依存しない。 */	i	記述を更新（roleName が SYSTEM_ADMIN を優先する前提が消える）
+utils/teamAffiliationAccess.ts	24	comment	-	*   権限の保有で判定する。SYSTEM_ADMIN との兼任でも、権限を持っていれば操作者）	iii	scopeAdmin・権限保有で判定する記述（SYSTEM_ADMIN 単独は不可）。正しいまま。維持
+utils/teamAffiliationAccess.ts	25	comment	-	* - SYSTEM_ADMIN 単独（ADMIN 割当も権限も無い）は、権限が無いので操作者ではない	iii	scopeAdmin・権限保有で判定する記述（SYSTEM_ADMIN 単独は不可）。正しいまま。維持
+utils/teamAffiliationAccess.ts	36	comment	-	* SYSTEM_ADMIN を含む isAdmin ではなく isScopeAdmin で判定する（ADMIN 割当の無い運営者は一覧 API が 403）。	iii	scopeAdmin・権限保有で判定する記述（SYSTEM_ADMIN 単独は不可）。正しいまま。維持
