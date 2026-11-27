@@ -1,13 +1,21 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
+import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 import { defineComponent, h, type Component } from 'vue'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 import { TEAM_ACCESS_LEDGER } from './teamAccessLedger'
 
 // CMP-261124-0159 PR-F2a（試練）: 系統 2 のうち F2a 担当 16 セグメント・34 画面を表駆動で検証する。
 // 2026-11-27 マスター裁定（CMP-261125-1108 に統一）: チーム詳細が 403 でも 404 でも同じ中立な「見つかりません」（ScopeNotFound）。
 // 理由表示（AC-0159-86・87）は取り下げ。各画面は useTeamAccessGate を先に通し、403/404/判定中/通信失敗の間は本文 API を一切呼ばない。
 // 本文 API の観測: useApi()（全 API 合成関数の共通入口）と $fetch / fetch をスパイに差し替え、呼び出し 0 回を確かめる。
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
 const F2A_SEGMENTS = new Set([
   'activity-templates', 'admin', 'advertiser', 'analytics', 'anniversaries', 'announcements', 'annual-plan', 'audit-logs',
   'billing', 'budget', 'charts', 'coin-toss', 'direct-mail', 'duties', 'equipment', 'events',
@@ -30,6 +38,17 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 mockNuxtImport('useI18n', () => () => ({ t: (key: string) => key, tn: (key: string) => key, locale: { value: 'ja' } }))
+mockNuxtImport('useErrorReport', () => () => ({ capture: vi.fn() }))
+mockNuxtImport('useAnnouncementFeed', () => () => ({
+  feed: { value: [] }, meta: { value: null }, loading: { value: false }, error: { value: null },
+  fetchFeed: mocks.api, togglePin: mocks.api, deleteAnnouncement: mocks.api, markAsReadBeforeOpen: mocks.api,
+  markAllAsRead: mocks.api, setReadLocally: vi.fn(), removeFromFeedLocally: vi.fn(), runKeepingPinFocus: mocks.api,
+}))
+mockNuxtImport('useHead', () => () => undefined)
+mockNuxtImport('useScopeNotFound', () => () => ({
+  notFound: { value: false }, markIfDenied: () => false, markDenied: () => undefined, reset: () => undefined,
+}))
+mockNuxtImport('useRouter', () => () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }))
 mockNuxtImport('useRoute', () => () => mocks.route)
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: mocks.handleApiError, getFieldErrors: () => ({}) }))
@@ -51,9 +70,16 @@ const loaderOf = (file: string) => {
 
 const NotFound = defineComponent({ setup: () => () => h('div', { 'data-testid': 'scope-not-found' }) })
 
+const errors: unknown[] = []
+
 async function mountPage(file: string) {
   const page = (await loaderOf(file)()).default
-  return mountSuspended(page, { shallow: true, global: { stubs: { ScopeNotFound: NotFound } } })
+  errors.length = 0
+  const wrapper = mount(page, {
+    shallow: true,
+    global: { plugins: [createPinia()], stubs: { ScopeNotFound: NotFound }, config: { errorHandler: (e: unknown) => { errors.push(e) } } },
+  })
+  return wrapper
 }
 
 function bodyCalls(): number {
@@ -62,7 +88,8 @@ function bodyCalls(): number {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.api.mockResolvedValue({ data: [] })
+  setActivePinia(createPinia())
+  mocks.api.mockRejectedValue(new Error('本文 API の応答は本試験の対象外'))
   mocks.resolve.mockResolvedValue({ status: 'NOT_FOUND' })
   vi.stubGlobal('$fetch', mocks.rawFetch)
   vi.stubGlobal('fetch', mocks.rawFetch)
@@ -79,6 +106,7 @@ describe.each(F2A_FILES)('%s（CMP-261124-0159 PR-F2a）', (file) => {
     mocks.getTeam.mockRejectedValue({ response: { status: 403 } })
     const wrapper = await mountPage(file)
     await flushPromises()
+    expect(errors).toEqual([])
     expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
     expect(bodyCalls()).toBe(0)
   })
@@ -87,6 +115,7 @@ describe.each(F2A_FILES)('%s（CMP-261124-0159 PR-F2a）', (file) => {
     mocks.getTeam.mockRejectedValue({ response: { status: 404 } })
     const wrapper = await mountPage(file)
     await flushPromises()
+    expect(errors).toEqual([])
     expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(true)
     expect(bodyCalls()).toBe(0)
   })
@@ -103,6 +132,7 @@ describe.each(F2A_FILES)('%s（CMP-261124-0159 PR-F2a）', (file) => {
     mocks.getTeam.mockRejectedValue({ response: { status: 500 } })
     const wrapper = await mountPage(file)
     await flushPromises()
+    expect(errors).toEqual([])
     expect(wrapper.find('[data-testid="scope-not-found"]').exists()).toBe(false)
     expect(mocks.handleApiError).toHaveBeenCalledTimes(1)
     expect(bodyCalls()).toBe(0)

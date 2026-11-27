@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { createI18n } from 'vue-i18n'
@@ -9,6 +9,7 @@ import { mockComponent, mockNuxtImport } from '@nuxt/test-utils/runtime'
 import TeamAdmin from './index.vue'
 import OrganizationAdmin from '~/pages/organizations/[slug]/admin/index.vue'
 
+mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: vi.fn().mockResolvedValue({ data: { id: 'x', numericId: 1 } }) }))
 mockNuxtImport('useRoute', () => () => ({ params: { slug: 'sample' } }))
 mockComponent('NuxtLink', async () => (await import('vue-router')).RouterLink)
@@ -40,6 +41,7 @@ describe('管理コンソール設定カード', () => {
         ],
       },
     })
+    await flushPromises()
     expect(wrapper.find(`a[href="/${scope}/sample/admin/settings"]`).exists()).toBe(true)
   })
 })
