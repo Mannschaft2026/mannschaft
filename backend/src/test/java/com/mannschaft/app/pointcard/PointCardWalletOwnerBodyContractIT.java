@@ -81,6 +81,7 @@ class PointCardWalletOwnerBodyContractIT extends AbstractMySqlIntegrationTest {
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper mapper;
     @Autowired private AuthTokenService tokens;
+    @Autowired private com.mannschaft.app.common.token.SecretTokenVault vault;
     @Autowired private UserRepository users;
     @Autowired private UserPointCardRepository cards;
     @Autowired private PlatformTransactionManager transactions;
@@ -221,14 +222,17 @@ class PointCardWalletOwnerBodyContractIT extends AbstractMySqlIntegrationTest {
                 case "share" -> {
                     JsonNode data = json(result).path("data");
                     String token = data.path("token").asText();
-                    assertThat(UUID.fromString(token).version()).isEqualTo(4);
+                    assertThat(token).matches("[A-Za-z0-9_-]{43}");
                     Instant expiresAt = Instant.parse(data.path("expiresAt").asText());
                     assertThat(expiresAt).isBetween(start.plusSeconds(300), Instant.now().plusSeconds(300));
                     assertThat(data).isEqualTo(mapper.valueToTree(Map.of("token", token,
                             "expiresAt", data.path("expiresAt").asText(),
                             "deepLinkUrl", "mannschaft://wallet/share?token=" + token)));
-                    assertThat(issuedTokens).hasSize(1).containsKey(TOKEN_PREFIX + token);
-                    JsonNode payload = mapper.readTree(issuedTokens.get(TOKEN_PREFIX + token));
+                    // 平文のキーは無く、キーは SHA-256 ハッシュ（AC-x1）
+                    String key = TOKEN_PREFIX + vault.hash(token);
+                    assertThat(issuedTokens).hasSize(1).containsKey(key);
+                    assertThat(issuedTokens.keySet()).noneMatch(k -> k.contains(token));
+                    JsonNode payload = mapper.readTree(issuedTokens.get(key));
                     // OffsetDateTime.toStringとJackson ISO formatterは同時点でも末尾0の表記が異なる。
                     assertThat(Instant.parse(payload.path("expiresAt").asText())).isEqualTo(expiresAt);
                     assertThat(payload).isEqualTo(mapper.readTree(mapper.writeValueAsString(
