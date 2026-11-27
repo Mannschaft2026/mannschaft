@@ -1,6 +1,6 @@
 package com.mannschaft.app.shiftbudget.service;
 
-import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.NameResolverService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ class BudgetAlertAcknowledgerNameResolverTest {
     private NameResolverService nameResolverService;
 
     @Mock
-    private AccessControlService accessControlService;
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     @InjectMocks
     private BudgetAlertAcknowledgerNameResolver resolver;
@@ -37,7 +37,7 @@ class BudgetAlertAcknowledgerNameResolverTest {
     @Test
     @DisplayName("resolve: この組織のメンバーなら氏名を返す")
     void resolve_メンバーは氏名() {
-        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
+        given(scopeContentAccessGate.canAccessScopeContent(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(true);
         given(nameResolverService.resolveUserFullNames(List.of(USER_ID))).willReturn(Map.of(USER_ID, "山田 太郎"));
 
         assertThat(resolver.resolve(USER_ID, ORG_ID)).isEqualTo("山田 太郎");
@@ -46,7 +46,7 @@ class BudgetAlertAcknowledgerNameResolverTest {
     @Test
     @DisplayName("resolve: 組織外の確認者（組織外 SYSTEM_ADMIN 等）は null で、氏名を引かない")
     void resolve_組織外はnullで氏名を引かない() {
-        given(accessControlService.isMember(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(false);
+        given(scopeContentAccessGate.canAccessScopeContent(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(false);
 
         assertThat(resolver.resolve(USER_ID, ORG_ID)).isNull();
         verify(nameResolverService, never()).resolveUserFullNames(any());
@@ -56,6 +56,6 @@ class BudgetAlertAcknowledgerNameResolverTest {
     @DisplayName("resolve: 確認者が不明（null）なら null")
     void resolve_確認者不明はnull() {
         assertThat(resolver.resolve(null, ORG_ID)).isNull();
-        verify(accessControlService, never()).isMember(any(), any(), any());
+        verify(scopeContentAccessGate, never()).canAccessScopeContent(any(), any(), any());
     }
 }
