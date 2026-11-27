@@ -1,5 +1,6 @@
 package com.mannschaft.app.tournament.roster;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -25,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,11 +136,16 @@ class FixtureRosterResubmitIT extends AbstractMySqlIntegrationTest {
     @DisplayName("(b) 一部が重なる内容を PUT しても200で、旧行は残らず新しい内容に全置換される")
     void b_一部重複の再提出が200で全置換される() throws Exception {
         setAuth(teamAdminId);
-        assertOk(putRoster(rosterBody(List.of(player(player1, 10), player(player2, 7)), List.of())), "1 回目の PUT");
+        assertOk(putRoster(rosterBody(List.of(player(player1, 10), player(player2, 7)),
+                List.of(staff("監督", "旧監督")))), "1 回目の PUT");
 
-        assertOk(putRoster(rosterBody(List.of(player(player2, 8), player(player3, 9)), List.of())),
-                "2 回目の PUT（player2 が重なる）");
+        MvcResult second = putRoster(rosterBody(List.of(player(player2, 8), player(player3, 9)),
+                List.of(staff("監督", "新監督"))));
+        assertOk(second, "2 回目の PUT（player2 が重なる）");
 
+        // 応答にも旧行（player1・旧監督）が混ざらず、新しい内容だけが返る
+        assertThat(responsePlayerUserIds(second)).containsExactlyInAnyOrder(player2, player3);
+        assertThat(responseStaffNames(second)).containsExactly("新監督");
         assertThat(rosterUserIds()).containsExactlyInAnyOrder(player2, player3);
         Number jersey = (Number) em.createNativeQuery("SELECT jersey_number FROM tournament_match_rosters "
                         + "WHERE match_id = :mid AND user_id = :uid")
@@ -166,11 +173,16 @@ class FixtureRosterResubmitIT extends AbstractMySqlIntegrationTest {
     @DisplayName("(d) 既存の名簿行がある状態で overwriteExisting=true のテンプレ適用が200で全置換される")
     void d_既存行がある状態のテンプレ上書き適用が200() throws Exception {
         setAuth(teamAdminId);
-        assertOk(putRoster(rosterBody(List.of(player(player1, 10), player(player2, 7)), List.of())), "既存行の PUT");
-        UUID templateId = createTemplate(List.of(player1, player3), List.of());
+        assertOk(putRoster(rosterBody(List.of(player(player1, 10), player(player2, 7)),
+                List.of(staff("監督", "旧監督")))), "既存行の PUT");
+        UUID templateId = createTemplate(List.of(player1, player3), List.of("テンプレ監督"));
 
-        assertOk(applyTemplate(templateId, true), "テンプレ上書き適用");
+        MvcResult applied = applyTemplate(templateId, true);
+        assertOk(applied, "テンプレ上書き適用");
 
+        // 応答にも旧行（player2・旧監督）が混ざらず、テンプレの内容だけが返る
+        assertThat(responsePlayerUserIds(applied)).containsExactlyInAnyOrder(player1, player3);
+        assertThat(responseStaffNames(applied)).containsExactly("テンプレ監督");
         assertThat(rosterUserIds()).containsExactlyInAnyOrder(player1, player3);
     }
 
@@ -215,6 +227,24 @@ class FixtureRosterResubmitIT extends AbstractMySqlIntegrationTest {
         assertThat(result.getResponse().getStatus())
                 .as("%s の本文: %s", label, result.getResponse().getContentAsString())
                 .isEqualTo(200);
+    }
+
+    /** 応答 JSON の data.players[].userId。 */
+    private List<Long> responsePlayerUserIds(MvcResult result) throws Exception {
+        List<Long> ids = new ArrayList<>();
+        for (JsonNode p : objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/players")) {
+            ids.add(p.get("userId").asLong());
+        }
+        return ids;
+    }
+
+    /** 応答 JSON の data.staff[].name。 */
+    private List<String> responseStaffNames(MvcResult result) throws Exception {
+        List<String> names = new ArrayList<>();
+        for (JsonNode s : objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/staff")) {
+            names.add(s.get("name").asText());
+        }
+        return names;
     }
 
     /** 自チームのエントリーテンプレ（選手・ベンチ役員）を作る。 */
