@@ -45,6 +45,8 @@ public class TimelineEffortReadGuard {
     private final TimelineEffortSourceService sources;
     private final ContentVisibilityChecker visibilityChecker;
     private final EffortTimelineShareHydrator hydrator;
+    /** 走査上限で打ち切ったときの継続位置（暗号化した負の数のカーソル）の符号化。 */
+    private final TimelineScanCursorCodec scanCursors;
 
     /** 一覧から F00 を通らない努力由来の投稿を除き、通った努力由来の投稿へ SharedRecord を載せる（順序はそのまま）。 */
     public List<PostResponse> filterVisible(List<PostResponse> posts, Long viewerUserId) {
@@ -61,50 +63,82 @@ public class TimelineEffortReadGuard {
     }
 
     /**
+     * 1 回の要求で補充のために読む行の上限（API 契約 §6「1 回の走査上限は 1000 行」）。先読み行を含む。
+     * 要求件数がこれを超える一覧（マイフィード・リプライは上限なし）は、要求件数 + 1 行までを上限にする。
+     */
+    public static final int MAX_SCAN_ROWS = 1000;
+    /**
+     * 補充 1 回あたりの取得件数の上限。スコープ別フィードの取得（{@code getFeedPage}）が 1 回 50 件で切るため、
+     * それを超えて頼むと「件数 + 1 件」の先読みが効かず続きを見落とす。要求件数が大きい一覧は要求件数まで。
+     */
+    static final int MAX_BATCH = 50;
+
+    /**
      * カーソル方式の一覧を、見える投稿だけで要求件数まで埋めて 1 ページにする（フィード・マイフィード・リプライ共通）。
      *
-     * <p>非表示の投稿は飛ばし、足りない分は続きを取得し直して補う。{@code nextCursor} は返したページの最後の
-     * <b>見えた</b>投稿の ID だけで、非表示の投稿の ID は応答に出さない（内部で次の取得位置に使うだけ）。
-     * {@code hasNext} は「見える投稿がもう 1 件以上ある」ときだけ true（先読みで確かめる）ため、
-     * 末尾が非表示だけなら false・null になる。取得位置は 1 バッチごとに必ず進むので、非表示が続いても
-     * 必ず終わる（バッチは要求件数 + 1 件で、判定はバッチ単位の一括。1 件ずつ照会しない）。</p>
+     * <p>非表示の投稿は飛ばし、足りない分は続きを取得し直して補う。取得件数は要求件数から倍々に増やし（1 回
+     * {@link #MAX_BATCH} 件まで）、判定はバッチ単位の一括（1 件ずつ照会しない）。1 回の要求で読む行は
+     * {@link #MAX_SCAN_ROWS} 行まで（先読み込み）で、取得・判定の回数も定数回に収まる（履歴の件数に比例しない）。</p>
      *
-     * @param cursor   起点カーソル（null なら先頭）
+     * <ul>
+     *   <li>上限までに要求件数 + 1 件（先読み）の見える投稿が揃えば、{@code nextCursor} は返したページで最後に
+     *       見えた投稿の ID、{@code hasNext=true}。</li>
+     *   <li>取得元の末尾に届けば {@code hasNext=false}・{@code nextCursor=null}（残りが非表示だけのときも同じ）。</li>
+     *   <li>上限で打ち切ったときは、それまでに見えた投稿（0 件〜要求件数。空ページもあり得る）と {@code hasNext=true}、
+     *       {@code nextCursor} に最後に読んだ行の位置を {@link TimelineScanCursorCodec} で暗号化した負の数を返す。
+     *       非表示の投稿の ID はどの項目にも出ず、トークンから推定もできない。次の要求はその位置の続きから読むため、
+     *       同じ行を読み直さず必ず前進し、辿り切れば見える投稿を欠けも重複もなく返す。</li>
+     * </ul>
+     *
+     * @param cursor   起点カーソル（null なら先頭。正なら見えた投稿の ID、負なら継続位置トークン）
      * @param pageSize 要求件数（1 以上）
-     * @param fetch    (カーソル, 件数) → カーソルより後の最大 件数 + 1 件（先読み 1 件込み）の取得結果。TX は呼出先で完結させる
+     * @param fetch    (取得位置, 件数) → 取得位置より後の最大 件数 + 1 件（先読み 1 件込み）の取得結果。TX は呼出先で完結させる
      * @param viewerUserId 閲覧者
      */
     public TimelineVisiblePage fillVisiblePage(Long cursor, int pageSize,
                                                java.util.function.BiFunction<Long, Integer, List<PostResponse>> fetch,
                                                Long viewerUserId) {
+        int size = Math.max(pageSize, 1);
+        int budget = Math.max(MAX_SCAN_ROWS, size + 1);
+        int batchCap = Math.max(size, MAX_BATCH);
         List<PostResponse> collected = new ArrayList<>();
-        Long position = cursor;
+        Long position = scanCursors.toPosition(cursor);
+        int read = 0;
+        int batchSize = size;
         while (true) {
-            List<PostResponse> raw = fetch.apply(position, pageSize);
+            int count = Math.min(batchSize, budget - read - 1);
+            List<PostResponse> raw = fetch.apply(position, count);
             if (raw == null || raw.isEmpty()) {
                 break;
             }
-            boolean sourceHasMore = raw.size() > pageSize;
-            List<PostResponse> batch = sourceHasMore ? raw.subList(0, pageSize) : raw;
+            read += raw.size();
+            boolean sourceHasMore = raw.size() > count;
+            List<PostResponse> batch = sourceHasMore ? raw.subList(0, count) : raw;
             List<PostResponse> visible = filter(batch, viewerUserId, true);
             if (visible != null) {
                 collected.addAll(visible);
             }
-            if (collected.size() > pageSize || !sourceHasMore) {
+            if (collected.size() > size || !sourceHasMore) {
                 break;
             }
             position = batch.get(batch.size() - 1).getId();
+            if (budget - read - 1 < 1) {
+                // 走査上限: 見えた分（要求件数以下）だけ返し、続きは最後に読んだ行の位置を暗号化して渡す
+                return new TimelineVisiblePage(collected, scanCursors.encode(position), true);
+            }
+            batchSize = Math.min(batchSize * 2, batchCap);
         }
-        boolean hasNext = collected.size() > pageSize;
-        List<PostResponse> page = hasNext ? new ArrayList<>(collected.subList(0, pageSize)) : collected;
+        boolean hasNext = collected.size() > size;
+        List<PostResponse> page = hasNext ? new ArrayList<>(collected.subList(0, size)) : collected;
         Long nextCursor = hasNext ? page.get(page.size() - 1).getId() : null;
         return new TimelineVisiblePage(page, nextCursor, hasNext);
     }
 
     /**
      * ユーザー別投稿一覧（作成日時降順・カーソル無し）を、見える投稿で要求件数まで埋める。応答にカーソルは無い。
-     * 匿名の共有などを除いて足りないときは、取得件数を倍にして先頭から取り直す（取得は毎回 1 クエリ群で、1 件ずつ照会しない。
-     * 取得件数が増える一方なので必ず終わる）。
+     * 匿名の共有などを除いて足りないときは、取得件数を増やして先頭から 1 回だけ取り直す（取得は毎回 1 クエリ群で、
+     * 1 件ずつ照会しない）。読む行は 2 回の合計で {@link #MAX_SCAN_ROWS} 行まで（要求件数がその半分以上なら
+     * 取り直さず要求件数まで）で、届かなければ見えた分だけ返す（続きの目印を持たない一覧なので打ち切りを示す項目は無い）。
      *
      * @param pageSize 要求件数（1 以上）
      * @param fetch    取得件数 → 先頭からその件数までの取得結果（件数に満たなければ続きは無い）
@@ -112,17 +146,19 @@ public class TimelineEffortReadGuard {
     public List<PostResponse> fillVisibleAuthorPosts(int pageSize,
                                                      java.util.function.IntFunction<List<PostResponse>> fetch,
                                                      Long viewerUserId) {
-        int limit = pageSize;
+        int size = Math.max(pageSize, 1);
+        int retryLimit = Math.max(MAX_SCAN_ROWS - size, size);
+        int limit = size;
         while (true) {
             List<PostResponse> raw = fetch.apply(limit);
             if (raw == null || raw.isEmpty()) {
                 return List.of();
             }
             List<PostResponse> visible = filter(raw, viewerUserId, false);
-            if (visible.size() >= pageSize || raw.size() < limit) {
-                return visible.size() > pageSize ? new ArrayList<>(visible.subList(0, pageSize)) : visible;
+            if (visible.size() >= size || raw.size() < limit || limit >= retryLimit) {
+                return visible.size() > size ? new ArrayList<>(visible.subList(0, size)) : visible;
             }
-            limit = limit > Integer.MAX_VALUE / 2 ? Integer.MAX_VALUE : limit * 2;
+            limit = retryLimit;
         }
     }
 

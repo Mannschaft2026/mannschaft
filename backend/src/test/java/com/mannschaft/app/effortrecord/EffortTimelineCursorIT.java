@@ -3,6 +3,9 @@ package com.mannschaft.app.effortrecord;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mannschaft.app.gdpr.event.AccountPurgedEvent;
 import com.mannschaft.app.timeline.PostScopeType;
+import com.mannschaft.app.timeline.PostStatus;
+import com.mannschaft.app.timeline.entity.TimelineEffortSourceEntity;
+import com.mannschaft.app.timeline.entity.TimelinePostEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -212,5 +215,89 @@ class EffortTimelineCursorIT extends EffortTeamShareItSupport {
         purgerPosts.path("data").forEach(p -> got.add(p.path("id").asLong()));
         assertThat(got).doesNotContain(anonymousPost);
         assertThat(purgerPosts.toString()).doesNotContain("nextCursor");
+    }
+
+    /** F00 を通らない努力由来の投稿を 1 TX でまとめて作る（走査上限の試験用。古い順に並んだ投稿 ID を返す）。 */
+    private List<Long> hiddenBulk(World w, int count) {
+        return tx(() -> {
+            List<Long> created = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                Long postId = timelinePosts.save(TimelinePostEntity.builder().scopeType(PostScopeType.TEAM)
+                        .scopeId(w.team()).userId(w.owner()).content("bulk-hidden-" + i).status(PostStatus.PUBLISHED)
+                        .build()).getId();
+                effortSources.save(TimelineEffortSourceEntity.builder().teamId(w.team()).timelinePostId(postId)
+                        .shareUuid(UUID.randomUUID()).grantMembershipId(1L).shareVersion(1L).contentRevision(1L)
+                        .isRevoked(false).build());
+                created.add(postId);
+            }
+            timelinePosts.flush();
+            effortSources.flush();
+            return created;
+        });
+    }
+
+    @Test
+    @DisplayName("f: 非表示が走査上限（1000 行）を超えて連続しても 1 回の走査で打ち切り、非表示 ID を推定できない継続位置で続きを返し、辿ると見える投稿が欠けも重複もなく得られる")
+    void f_走査上限を超える非表示の連続() throws Exception {
+        World w = world("CUR-F");
+        Long oldest = normal(w, "oldest");
+        List<Long> hiddenIds = hiddenBulk(w, 2100);
+        Long newest = normal(w, "newest");
+        long minHidden = hiddenIds.get(0);
+        long maxHidden = hiddenIds.get(hiddenIds.size() - 1);
+        Set<Long> hiddenSet = new HashSet<>(hiddenIds);
+
+        List<Long> got = new ArrayList<>();
+        List<JsonNode> pages = new ArrayList<>();
+        Set<Long> seenCursors = new HashSet<>();
+        Long cursor = null;
+        for (int guard = 0; guard < 10; guard++) {
+            JsonNode body = page(w, 1, cursor);
+            pages.add(body);
+            got.addAll(ids(body));
+            Long next = cursorOf(body);
+            // (B) 続きの目印にも投稿一覧にも非表示の投稿の ID を出さない。値から ID を推定できない（ID の近傍でもない）
+            assertThat(ids(body)).doesNotContainAnyElementsOf(hiddenSet);
+            if (next == null) {
+                assertThat(hasNext(body)).isFalse();
+                break;
+            }
+            assertThat(hasNext(body)).isTrue();
+            assertThat(next).as("非表示 ID ではない").isNotIn(hiddenSet);
+            assertThat(-next).as("符号反転しても非表示 ID ではない").isNotIn(hiddenSet);
+            if (next < 0) {
+                long magnitude = Math.abs(next);
+                assertThat(magnitude < minHidden - 100_000L || magnitude > maxHidden + 100_000L)
+                        .as("継続位置は非表示 ID の範囲から推定できない").isTrue();
+                assertThat(Math.abs(next)).as("JS の安全な整数に収まる").isLessThanOrEqualTo(9_007_199_254_740_991L);
+            } else {
+                assertThat(next).as("正の目印は見えた投稿の ID").isIn(got);
+            }
+            // (C) 同じ目印を二度返さない（空ページの無限ループを作らない）
+            assertThat(seenCursors.add(next)).as("目印は前進する").isTrue();
+            cursor = next;
+        }
+        // (C) 辿り切ると見える投稿が欠けも重複もなく得られる
+        assertThat(got).containsExactly(newest, oldest);
+        assertThat(cursorOf(pages.get(pages.size() - 1))).isNull();
+        // (A) 1 回の走査は 1000 行で打ち切る: 非表示 2100 行を挟むため、最古の見える投稿は 1 回目では届かず、
+        // 非表示だけの区間では空ページ＋hasNext=true（暗号化した継続位置）が返る
+        assertThat(ids(pages.get(0))).containsExactly(newest);
+        assertThat(cursorOf(pages.get(0))).as("上限で打ち切った続きは継続位置（負の数）").isNegative();
+        assertThat(pages).as("非表示だけの区間で空ページを挟む").anySatisfy(p -> {
+            assertThat(ids(p)).isEmpty();
+            assertThat(hasNext(p)).isTrue();
+        });
+        assertThat(pages.size()).as("走査量は 1 回 1000 行まで: 2100 行は 3 回以上に分かれる").isGreaterThanOrEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("g: 改ざん・範囲外の継続位置は 400 COMMON_001（任意の位置へ飛ばさない）")
+    void g_不正な継続位置() throws Exception {
+        World w = world("CUR-G");
+        normal(w, "n1");
+        var request = get(TIMELINE + "/feed").param("scopeType", "TEAM").param("scopeId", String.valueOf(w.team()))
+                .param("size", "1").param("cursor", String.valueOf(-(1L << 53)));
+        expect(http(request, w.viewer()), 400);
     }
 }
