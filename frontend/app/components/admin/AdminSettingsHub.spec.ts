@@ -99,16 +99,16 @@ describe('既存設定の集約ハブ', () => {
   )
 
   it.each(['team', 'organization'] as const)(
-    'SYSTEM_ADMIN単独でも%sの既存例外であるFAQ・公開設定だけを案内する',
+    'SYSTEM_ADMIN単独には%sのFAQ・公開設定を案内しない（運営はテナント設定に触れない）',
     async (scope) => {
       state.role = 'SYSTEM_ADMIN'
       state.scopeAdmin = false
       state.shift = true
       state.loaded = false
       const wrapper = await mountHub(scope)
-      expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(true)
-      expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(true)
-      expect(wrapper.findAll('a')).toHaveLength(2)
+      expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(false)
+      expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(false)
+      expect(wrapper.findAll('a')).toHaveLength(0)
       expect(state.probe).toHaveBeenCalledWith(
         scope === 'team' ? 'TEAM' : 'ORGANIZATION',
         'sample',
@@ -132,7 +132,7 @@ describe('既存設定の集約ハブ', () => {
         0,
       )
       expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(true)
-      expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(true)
+      expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(false)
       expect(wrapper.find('a[href$="/notification-credits"]').exists()).toBe(false)
       expect(wrapper.find('a[href$="/todo-status-labels"]').exists()).toBe(scope === 'team')
     },
@@ -165,16 +165,11 @@ describe('既存設定の集約ハブ', () => {
     const wrapper = await mountHub()
     await wrapper.setProps({ slug: 'other' })
     await flushPromises()
-    expect(wrapper.findAll('a')).toHaveLength(2)
+    expect(wrapper.findAll('a')).toHaveLength(0)
     expect(wrapper.find('a[href$="/todo-status-labels"]').exists()).toBe(false)
     allowOld()
     await flushPromises()
-    expect(wrapper.findAll('a')).toHaveLength(2)
-    expect(
-      wrapper
-        .findAll('a')
-        .every((link) => link.attributes('href')?.startsWith('/teams/other/settings/')),
-    ).toBe(true)
+    expect(wrapper.findAll('a')).toHaveLength(0)
     expect(wrapper.find('a[href$="/todo-status-labels"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="load-error-state"]').exists()).toBe(false)
     expect(state.probe.mock.calls).toEqual([

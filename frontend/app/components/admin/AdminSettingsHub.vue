@@ -15,11 +15,11 @@ const flags = useFeatureFlagStore()
 const loading = ref(true)
 const loadError = shallowRef<unknown>(null)
 const confirmedScopeManager = ref(false)
-const isSystemAdmin = computed(() => roleName.value === 'SYSTEM_ADMIN')
 const scopeManagerAccess = computed(
   () => isAdmin.value || roleName.value === 'DEPUTY_ADMIN' || confirmedScopeManager.value,
 )
-const hubAccess = computed(() => scopeManagerAccess.value || isSystemAdmin.value)
+// 運営（SYSTEM_ADMIN）にはテナントの設定を出さない（戦役 Z-A PR3）。兼任のスコープ管理者だけが対象。
+const hubAccess = computed(() => scopeManagerAccess.value)
 const base = computed(
   () => `/${props.scopeType === 'team' ? 'teams' : 'organizations'}/${props.slug}`,
 )
@@ -28,14 +28,13 @@ interface SettingsLink {
   path: string
   title: string
   adminOnly?: boolean
-  sysAllowed?: boolean
   readOnly?: boolean
 }
 
 const links = computed(() => {
   const settings: SettingsLink[] = [
-    { path: 'faq-settings', title: 'faq.settings.title', adminOnly: true, sysAllowed: true },
-    { path: 'public-settings', title: 'public.publicSettings.title', sysAllowed: true },
+    { path: 'faq-settings', title: 'faq.settings.title', adminOnly: true },
+    { path: 'public-settings', title: 'public.publicSettings.title' },
     {
       path: 'todo-status-labels',
       title: 'todo.statusLabel.management.title',
@@ -53,9 +52,8 @@ const links = computed(() => {
     })
   }
   return settings.filter((link) => {
-    const systemException = isSystemAdmin.value && link.sysAllowed
-    if (!scopeManagerAccess.value && !systemException) return false
-    if (link.adminOnly && !isAdmin.value && !systemException) return false
+    if (!scopeManagerAccess.value) return false
+    if (link.adminOnly && !isAdmin.value) return false
     const gate = matchGateKey(`${base.value}/settings/${link.path}`)
     return gate === null || (flags.publicLoaded && flags.isEnabled(gate))
   })
