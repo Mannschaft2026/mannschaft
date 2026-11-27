@@ -118,7 +118,7 @@ class AbstractContentVisibilityResolverTest {
 
         @Test
         @DisplayName("SystemAdmin 単独は PUBLISHED でも非所属と同じ（PRIVATE は不可視）")
-        void sysAdmin_published_all_allowed() {
+        void sysAdmin_published_private_denied() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PRIVATE);
             resolver.projections = List.of(p);
             when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
@@ -142,7 +142,7 @@ class AbstractContentVisibilityResolverTest {
 
         @Test
         @DisplayName("SystemAdmin 単独は ARCHIVED も見られない（著者でも所属中でも DEPUTY_ADMIN 以上でもない）")
-        void sysAdmin_archived_allowed() {
+        void sysAdmin_archived_denied() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
             resolver.statusOverride = ContentStatus.ARCHIVED;
@@ -188,7 +188,7 @@ class AbstractContentVisibilityResolverTest {
 
         @Test
         @DisplayName("SCHEDULED は作成者本人のみ可視（SystemAdmin に特権は無い）")
-        void scheduled_author_or_sysadmin() {
+        void scheduled_author_only_sysadmin_denied() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
             resolver.statusOverride = ContentStatus.SCHEDULED;
@@ -554,7 +554,7 @@ class AbstractContentVisibilityResolverTest {
 
         @Test
         @DisplayName("親 ORG が SUSPENDED のとき SystemAdmin 単独も不可視（非所属と同じ）")
-        void inactiveParentOrg_sysadmin_allowed() {
+        void inactiveParentOrg_sysadmin_denied() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
             // 早期 return 撤去後の実サービスは SystemAdmin でも親 ORG の停止情報を解決する（systemAdmin 値だけ true）

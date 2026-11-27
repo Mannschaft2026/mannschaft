@@ -83,14 +83,4 @@ public record ViewerContext(
     public static ViewerContext supporter(Long userId, Set<Long> supporterScopeIds) {
         return new ViewerContext(userId, ViewerStatus.SUPPORTER, Set.of(), supporterScopeIds);
     }
-
-    /**
-     * システム管理者用の ViewerContext を構築する。
-     *
-     * @param userId システム管理者のユーザー ID
-     * @return SYSTEM_ADMIN 閲覧者用の不変 ViewerContext
-     */
-    public static ViewerContext systemAdmin(Long userId) {
-        return new ViewerContext(userId, ViewerStatus.SYSTEM_ADMIN, Set.of(), Set.of());
-    }
 }

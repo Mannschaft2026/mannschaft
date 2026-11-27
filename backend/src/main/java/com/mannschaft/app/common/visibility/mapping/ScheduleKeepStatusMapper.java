@@ -14,7 +14,7 @@ import com.mannschaft.app.schedule.entity.ScheduleKeepStatus;
  * </ul>
  *
  * <p><strong>キープの {@code ARCHIVED} を {@link ContentStatus#ARCHIVED} に写像しない理由</strong>:
- * F00 の {@link ContentStatus#ARCHIVED} は「SystemAdmin のみ可視」という強い意味を持つ。
+ * F00 の {@link ContentStatus#ARCHIVED} は「著者本人と DEPUTY_ADMIN 以上のみ可視」という強い意味を持つ。
  * 一方 F03.17 の {@code ARCHIVED} は「見送り／完了」を表す利用者向けの状態であり、
  * メンバーは一覧（{@code status=ARCHIVED} 絞り込み）で参照し、{@code restore} で戻し、
  * {@code DELETE} で片付ける（設計書 §5.3 の状態遷移表）。F00 の ARCHIVED に写像すると

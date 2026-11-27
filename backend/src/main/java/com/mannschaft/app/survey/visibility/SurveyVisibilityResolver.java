@@ -58,10 +58,10 @@ import java.util.Set;
  *
  * <p><strong>status × visibility 合成</strong>（§7.5）:</p>
  * <ul>
- *   <li>{@link SurveyStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者・SystemAdmin のみ可視）</li>
+ *   <li>{@link SurveyStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者本人のみ可視）</li>
  *   <li>{@link SurveyStatus#PUBLISHED} / {@link SurveyStatus#CLOSED} → {@link ContentStatus#PUBLISHED}
  *       （結果可視性ガード {@link ResultsVisibility} の評価へ進む）</li>
- *   <li>{@link SurveyStatus#ARCHIVED} → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+ *   <li>{@link SurveyStatus#ARCHIVED} → {@link ContentStatus#ARCHIVED}（著者本人と DEPUTY_ADMIN 以上のみ可視）</li>
  *   <li>{@code null} → {@link ContentStatus#DELETED}（fail-closed）</li>
  * </ul>
  *

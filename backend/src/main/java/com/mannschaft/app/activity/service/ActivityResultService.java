@@ -80,7 +80,7 @@ public class ActivityResultService {
      * で {@link ActivityVisibility} 集合へ逆写像し、SQL の {@code WHERE visibility IN (...)}
      * へ渡す（{@link ActivityVisibility} は 2 値のみで行依存値を持たないため歯抜けが
      * 数学的にゼロになる）。DRAFT は F00 の status 軸と同じ意味論
-     * （作成者本人 or SystemAdmin のみ可視）を SQL 上でも同一述語として再現する。
+     * （作成者本人のみ可視）を SQL 上でも同一述語として再現する。
      * 判定器は F00 のまま 1 つ（新しい判定器を作らない）。</p>
      */
     public Page<ActivityResultEntity> listActivities(Long userId, ActivityScopeType scopeType, Long scopeId,
@@ -403,7 +403,7 @@ public class ActivityResultService {
      *
      * <p>AC-8: title + activityDate のみの最小項目で作成できる。テンプレートは任意。
      * status は {@link com.mannschaft.app.activity.ActivityStatus#DRAFT}。DRAFT は
-     * 作成者・SystemAdmin のみ閲覧可（F00 可視性で status=DRAFT が author 限定になる）。</p>
+     * 作成者本人のみ閲覧可（F00 可視性で status=DRAFT が author 限定になる）。</p>
      */
     @Transactional
     public ActivityResultEntity createDraftActivity(Long userId, ActivityScopeType scopeType,

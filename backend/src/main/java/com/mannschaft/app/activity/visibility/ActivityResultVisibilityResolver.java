@@ -35,7 +35,7 @@ import java.util.List;
  *       DELETED ガードも上位で自動的に効く（fail-closed）。</li>
  *   <li>scopeType は {@code TEAM / ORGANIZATION / COMMITTEE} だが、F00 Phase B 範囲では
  *       TEAM / ORGANIZATION のみ正しく解決される。COMMITTEE はメンバーシップ解決対象外で
- *       MEMBERS_ONLY だと SystemAdmin 以外不可視（fail-closed）。</li>
+ *       MEMBERS_ONLY だと 誰も不可視（fail-closed）。</li>
  * </ul>
  *
  * <p>判定パイプラインのすべて（実存確認 → snapshot 構築 → status × visibility 評価 →
@@ -102,7 +102,7 @@ public class ActivityResultVisibilityResolver
      * status 軸のマッピング（F06.4 下書き対応）。
      *
      * <p>{@link com.mannschaft.app.activity.ActivityStatus#DRAFT} は
-     * {@link ContentStatus#DRAFT}（作成者・SystemAdmin のみ可視）、PUBLISHED は
+     * {@link ContentStatus#DRAFT}（作成者本人のみ可視）、PUBLISHED は
      * {@link ContentStatus#PUBLISHED}（visibility 評価に進む）へ写像する。
      * これにより「DRAFT はスコープ一覧に非表示・作成者のみ閲覧可」が F00 正準で担保される。</p>
      */

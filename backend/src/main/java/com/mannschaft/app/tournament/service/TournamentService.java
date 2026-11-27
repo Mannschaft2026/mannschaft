@@ -121,8 +121,7 @@ public class TournamentService {
     public Page<TournamentResponse> listTournaments(Long orgId, String status, Pageable pageable,
                                                     Long viewerUserId) {
         boolean orgManager = viewerUserId != null
-                && (accessControlService.isSystemAdmin(viewerUserId)
-                    || accessControlService.isAdminOrAbove(viewerUserId, orgId, "ORGANIZATION"));
+                && accessControlService.isAdminOrAbove(viewerUserId, orgId, "ORGANIZATION");
         if (orgManager) {
             Page<TournamentEntity> page = status != null
                     ? tournamentRepository.findByOrganizationIdAndStatusOrderByCreatedAtDesc(

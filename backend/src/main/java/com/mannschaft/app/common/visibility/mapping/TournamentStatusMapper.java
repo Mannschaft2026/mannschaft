@@ -11,11 +11,11 @@ import com.mannschaft.app.tournament.TournamentStatus;
  *
  * <p>マッピング:
  * <ul>
- *   <li>{@link TournamentStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者と SystemAdmin のみ可視）</li>
+ *   <li>{@link TournamentStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者本人のみ可視）</li>
  *   <li>{@link TournamentStatus#OPEN} / {@link TournamentStatus#IN_PROGRESS}
  *       / {@link TournamentStatus#COMPLETED} → {@link ContentStatus#PUBLISHED}（visibility 評価へ）</li>
  *   <li>{@link TournamentStatus#CANCELLED} / {@link TournamentStatus#ARCHIVED}
- *       → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+ *       → {@link ContentStatus#ARCHIVED}（著者本人と DEPUTY_ADMIN 以上のみ可視）</li>
  * </ul>
  *
  * <p>{@link ContentStatus#DELETED} は tournaments.deleted_at 列を {@code @SQLRestriction} が

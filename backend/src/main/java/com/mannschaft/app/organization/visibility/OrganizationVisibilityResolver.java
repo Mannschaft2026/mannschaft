@@ -46,7 +46,7 @@ import java.util.List;
  * <p><strong>status × visibility 合成</strong>（§7.5）:</p>
  * <ul>
  *   <li>{@code deletedAt != null} → {@link ContentStatus#DELETED}（誰も不可視、fail-closed）</li>
- *   <li>{@code archivedAt != null} → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+ *   <li>{@code archivedAt != null} → {@link ContentStatus#ARCHIVED}（著者本人と DEPUTY_ADMIN 以上のみ可視）</li>
  *   <li>それ以外 → {@link ContentStatus#PUBLISHED}（visibility 評価へ）</li>
  * </ul>
  *

@@ -17,14 +17,14 @@ public enum ContentStatus {
     /**
      * 作成中・未公開。
      *
-     * <p>{@code author} および {@code SystemAdmin} のみ可視。
+     * <p>{@code author}（作成者本人）のみ可視。
      */
     DRAFT,
 
     /**
      * 公開予約中 ({@code scheduled_publish_at} が未来)。
      *
-     * <p>{@code author} および {@code SystemAdmin} のみ可視。
+     * <p>{@code author}（作成者本人）のみ可視。
      */
     SCHEDULED,
 
@@ -38,7 +38,7 @@ public enum ContentStatus {
     /**
      * アーカイブ済み (利用者から非表示)。
      *
-     * <p>{@code SystemAdmin} のみ可視。
+     * <p>著者本人（所属中）とスコープの DEPUTY_ADMIN 以上のみ可視。SystemAdmin に特権は無い。
      */
     ARCHIVED,
 

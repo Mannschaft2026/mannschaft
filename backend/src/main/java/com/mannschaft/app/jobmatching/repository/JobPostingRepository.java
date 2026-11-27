@@ -143,7 +143,16 @@ public interface JobPostingRepository extends JpaRepository<JobPostingEntity, Lo
                     ))
                 OR (p.status = com.mannschaft.app.jobmatching.enums.JobPostingStatus.CANCELLED
                     AND (:viewerIsScopeDeputyAdminOrAbove = true
-                         OR (p.createdByUserId = :viewerUserId AND :viewerIsScopeMember = true)))
+                         OR (p.createdByUserId = :viewerUserId AND :viewerIsScopeMember = true))
+                    AND (
+                      p.visibilityScope IN :visibilities
+                      OR (p.visibilityScope = com.mannschaft.app.jobmatching.enums.VisibilityScope.JOBBER_INTERNAL
+                          AND EXISTS (
+                              SELECT 1 FROM com.mannschaft.app.role.entity.UserRoleEntity ur2
+                              JOIN com.mannschaft.app.role.entity.RoleEntity r2 ON r2.id = ur2.roleId
+                              WHERE ur2.userId = :viewerUserId AND ur2.teamId = p.teamId AND r2.name = 'JOBBER'
+                          ))
+                    ))
               )
             ORDER BY p.createdAt DESC
             """)

@@ -12,14 +12,14 @@ import com.mannschaft.app.recruitment.RecruitmentListingStatus;
  * <p>マッピング:
  * <ul>
  *   <li>{@link RecruitmentListingStatus#DRAFT} → {@link ContentStatus#DRAFT}
- *       （作成者と SystemAdmin のみ可視）</li>
+ *       （作成者本人のみ可視）</li>
  *   <li>{@link RecruitmentListingStatus#OPEN} / {@link RecruitmentListingStatus#FULL}
  *       / {@link RecruitmentListingStatus#CLOSED} /
  *       {@link RecruitmentListingStatus#COMPLETED}
  *       → {@link ContentStatus#PUBLISHED}（visibility 評価へ）</li>
  *   <li>{@link RecruitmentListingStatus#CANCELLED} /
  *       {@link RecruitmentListingStatus#AUTO_CANCELLED}
- *       → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+ *       → {@link ContentStatus#ARCHIVED}（著者本人と DEPUTY_ADMIN 以上のみ可視）</li>
  * </ul>
  *
  * <p>{@link ContentStatus#DELETED} は recruitment_listings.deleted_at 列を

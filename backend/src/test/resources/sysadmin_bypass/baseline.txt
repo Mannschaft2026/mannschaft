@@ -39,8 +39,6 @@ com/mannschaft/app/circulation/service/CirculationService.java	isSystemAdmin( @ 
 com/mannschaft/app/circulation/service/CirculationStampService.java	isSystemAdmin( @ checkScopeAdminAccess	1
 com/mannschaft/app/cms/service/BlogPostPreviewService.java	isSystemAdmin( @ metadata	1
 com/mannschaft/app/cms/service/BlogPostSearchContributor.java	"SYSTEM_ADMIN" @ visibilitiesFor	1
-com/mannschaft/app/cms/service/BlogPostService.java	isSystemAdmin( @ applyPaywallMask	1
-com/mannschaft/app/cms/service/BlogPostService.java	isSystemAdmin( @ scanVisiblePage	1
 com/mannschaft/app/common/AccessControlService.java	checkNotLastSystemAdmin( @ -	1
 com/mannschaft/app/common/AccessControlService.java	checkSystemAdmin( @ -	1
 com/mannschaft/app/common/AccessControlService.java	isSystemAdmin( @ -	1
@@ -150,8 +148,6 @@ com/mannschaft/app/publicview/controller/PublicPostCommentController.java	isAdmi
 com/mannschaft/app/publicview/service/AdminPublicSettingsService.java	isSystemAdmin( @ checkScopeAdminAccess	1
 com/mannschaft/app/publicview/service/SupporterNameDisclosureService.java	isSystemAdmin( @ checkScopeAdminAccess	1
 com/mannschaft/app/publicview/visibility/IdentityVisibilityResolver.java	SYSTEM_ADMIN(bare) @ resolveIdentityForViewer	1
-com/mannschaft/app/publicview/visibility/ViewerContext.java	ViewerStatus.SYSTEM_ADMIN @ systemAdmin	1
-com/mannschaft/app/publicview/visibility/ViewerContext.java	systemAdmin( @ systemAdmin	1
 com/mannschaft/app/publicview/visibility/ViewerStatus.java	SYSTEM_ADMIN(bare) @ -	1
 com/mannschaft/app/ranch/service/RanchAdminAdmission.java	checkSystemAdmin( @ checked	1
 com/mannschaft/app/recruitment/repository/RecruitmentCancellationRecordRepository.java	findChunkForSystemAdmin( @ -	1
@@ -283,8 +279,6 @@ com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	isSy
 com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	isSystemAdmin( @ loadParticipation	1
 com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	isSystemAdmin( @ requireVisibilityManage	1
 com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	organizerAdminOrSystemAdmin( @ resolveLevelsForSpaces	1
-com/mannschaft/app/tournament/service/TournamentService.java	isSystemAdmin( @ listTournaments	1
-com/mannschaft/app/tournament/service/TournamentViewAccessGate.java	isSystemAdmin( @ isViewableBy	1
 com/mannschaft/app/tournament/submission/TournamentSubmissionRequirementService.java	isSystemAdmin( @ requireOrganizerAdmin	1
 com/mannschaft/app/village/controller/VillageCreationRequestController.java	checkSystemAdmin( @ approve	1
 com/mannschaft/app/village/controller/VillageCreationRequestController.java	checkSystemAdmin( @ listForAdmin	1

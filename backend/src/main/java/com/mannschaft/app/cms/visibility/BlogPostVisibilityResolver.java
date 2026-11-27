@@ -271,7 +271,7 @@ public class BlogPostVisibilityResolver
      *   <li>{@code PUBLISHED} → {@link ContentStatus#PUBLISHED}</li>
      *   <li>{@code ARCHIVED} → {@link ContentStatus#ARCHIVED}</li>
      *   <li>{@code DRAFT} / {@code PENDING_REVIEW} / {@code PENDING_SELF_REVIEW} / {@code REJECTED}
-     *       → {@link ContentStatus#DRAFT}（公開前 / 取り下げ → 作成者と SystemAdmin のみ可視）</li>
+     *       → {@link ContentStatus#DRAFT}（公開前 / 取り下げ → 作成者本人のみ可視）</li>
      * </ul>
      *
      * <p>論理削除 ({@code deleted_at IS NOT NULL}) は射影段階の WHERE 句で除外されるため、

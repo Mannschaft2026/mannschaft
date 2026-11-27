@@ -49,6 +49,7 @@ class TournamentServiceTest {
     @Mock private TournamentParticipantRepository participantRepository;
     @Mock private TournamentMapper mapper;
     @Mock private ContentVisibilityChecker contentVisibilityChecker;
+    @Mock private com.mannschaft.app.common.visibility.MembershipBatchQueryService membershipBatchQueryService;
     /** 認可根治戦役 Wave7: getTournament/listTournaments の主催組織 ADMIN 判定用モック。 */
     @Mock private com.mannschaft.app.common.AccessControlService accessControlService;
     /** 閲覧可否の共通ゲート（判定自体は TournamentViewAccessGateTest で検証）。 */
@@ -77,6 +78,58 @@ class TournamentServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(TournamentErrorCode.TOURNAMENT_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("listTournaments")
+    class ListTournaments {
+
+        private final com.mannschaft.app.common.visibility.ScopeKey scope =
+                new com.mannschaft.app.common.visibility.ScopeKey("ORGANIZATION", ORG_ID);
+
+        private void stubViewer(Set<com.mannschaft.app.common.visibility.StandardVisibility> levels) {
+            com.mannschaft.app.common.visibility.UserScopeRoleSnapshot snapshot =
+                    com.mannschaft.app.common.visibility.UserScopeRoleSnapshot.empty();
+            given(membershipBatchQueryService.snapshotForUser(eq(USER_ID), eq(Set.of(scope)), eq(Set.of(scope))))
+                    .willReturn(snapshot);
+            given(membershipBatchQueryService.resolveVisibleLevels(scope, snapshot)).willReturn(levels);
+        }
+
+        @Test
+        @DisplayName("戦役Z-A PR4: SYSTEM_ADMIN 単独（組織の管理者ではない）は全件の管理者経路に入らず、公開範囲つきの一覧になる")
+        void システム管理者単独は全件経路に入らない() {
+            given(accessControlService.isAdminOrAbove(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(false);
+            stubViewer(Set.of(com.mannschaft.app.common.visibility.StandardVisibility.PUBLIC));
+            given(tournamentRepository.findVisibleByOrganizationId(
+                    eq(ORG_ID), eq(null), any(), eq(USER_ID), eq(false), eq(false), any()))
+                    .willReturn(new PageImpl<>(List.of()));
+
+            Page<?> result = service.listTournaments(ORG_ID, null, PageRequest.of(0, 20), USER_ID);
+
+            assertThat(result.getContent()).isEmpty();
+            verify(accessControlService, org.mockito.Mockito.never()).isSystemAdmin(any());
+            verify(tournamentRepository, org.mockito.Mockito.never())
+                    .findByOrganizationIdOrderByCreatedAtDesc(any(), any());
+        }
+
+        @Test
+        @DisplayName("戦役Z-A PR4: SQL が返した行が詳細と同じ判定で全件通る（乖離の log.warn が常態化しない・件数がずれない）")
+        void SQLの結果と第二の門が一致すれば件数は変わらない() {
+            given(accessControlService.isAdminOrAbove(USER_ID, ORG_ID, "ORGANIZATION")).willReturn(false);
+            stubViewer(Set.of(com.mannschaft.app.common.visibility.StandardVisibility.PUBLIC));
+            TournamentEntity mine = TournamentEntity.builder().organizationId(ORG_ID).name("中止した自分の大会").build();
+            org.springframework.test.util.ReflectionTestUtils.setField(mine, "id", 7L);
+            given(tournamentRepository.findVisibleByOrganizationId(
+                    eq(ORG_ID), eq(null), any(), eq(USER_ID), eq(false), eq(false), any()))
+                    .willReturn(new PageImpl<>(List.of(mine), PageRequest.of(0, 20), 1));
+            given(contentVisibilityChecker.filterAccessible(
+                    com.mannschaft.app.common.visibility.ReferenceType.TOURNAMENT, List.of(7L), USER_ID))
+                    .willReturn(Set.of(7L));
+
+            Page<?> result = service.listTournaments(ORG_ID, null, PageRequest.of(0, 20), USER_ID);
+
+            assertThat(result.getTotalElements()).isEqualTo(1);
         }
     }
 

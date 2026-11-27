@@ -167,7 +167,6 @@ public class BlogPostService {
         int scanSize = Math.max(100, pageable.getPageSize());
         long offset = pageable.getOffset();
         long visibleTotal = 0;
-        boolean systemAdmin = viewerUserId != null && accessControlService.isSystemAdmin(viewerUserId);
         List<BlogPostResponse> result = new ArrayList<>();
         for (int scanPage = 0; ; scanPage++) {
             Page<BlogPostEntity> page = source.apply(PageRequest.of(scanPage, scanSize));
@@ -191,7 +190,7 @@ public class BlogPostService {
                     ContentGateType.POST, content.stream().map(BlogPostEntity::getId).toList(), viewerUserId, targets);
             for (BlogPostEntity entity : content) {
                 if (!accessibleIds.contains(entity.getId())) continue;
-                BlogPostResponse response = applyListPaywall(entity, systemAdmin,
+                BlogPostResponse response = applyListPaywall(entity,
                         gates == null ? null : gates.get(entity.getId()));
                 if (response == null) continue;
                 long index = visibleTotal++;
@@ -732,7 +731,8 @@ public class BlogPostService {
      * 可視性(F00)通過の<b>後段</b>で BE 側でも本文をマスクする。</p>
      *
      * <ul>
-     *   <li>SystemAdmin だけがゲートを迂回できる。著者本人は通常どおり評価する。</li>
+     *   <li>運営アカウント（SystemAdmin）にゲートの素通しは無い（戦役 Z-A PR4、マスター決定 2026-11-27）。
+     *       課金結果に従う。対象スコープの ADMIN の扱いは {@link PaymentGateService} が決める。</li>
      *   <li>{@code accessible=false} のとき body=null。{@code titleHidden=true} なら title も null。
      *       {@code excerpt}/{@code coverImageUrl}/{@code title} はプレビュー素材として残す。</li>
      *   <li>fail-closed: {@code checkAccess} が例外または評価不能なら非表示として扱う。</li>
@@ -744,11 +744,6 @@ public class BlogPostService {
      * @return ゲート適用後のレスポンス
      */
     private BlogPostResponse applyPaywallMask(BlogPostResponse dto, BlogPostEntity entity, Long viewerUserId) {
-        // SystemAdmin だけがゲートを迂回できる。著者本人は通常どおり評価する。
-        if (viewerUserId != null && accessControlService.isSystemAdmin(viewerUserId)) {
-            return dto.withAccessState(ContentAccessState.FULL.name());
-        }
-
         GateCheckResponse gate;
         try {
             gate = paymentGateService.checkAccess(ContentGateType.POST, entity.getId(), viewerUserId,
@@ -842,11 +837,8 @@ public class BlogPostService {
 
     /** 一覧の課金軸適用。HIDDENは除外し、LOCKEDはタイトルと状態だけ残す。 */
     private BlogPostResponse applyListPaywall(
-            BlogPostEntity entity, boolean systemAdmin, GateCheckResponse gate) {
+            BlogPostEntity entity, GateCheckResponse gate) {
         BlogPostResponse dto = stripBody(cmsMapper.toBlogPostResponse(entity));
-        if (systemAdmin) {
-            return dto.withAccessState(ContentAccessState.FULL.name());
-        }
         if (gate == null) {
             return null;
         }

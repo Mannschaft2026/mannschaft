@@ -250,6 +250,58 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
         assertThat(page.getContent()).extracting(TournamentEntity::getId).contains(other);
     }
 
+    /**
+     * 戦役 Z-A PR4（マスター決定 2026-11-27「公開範囲も守る」）: CANCELLED/ARCHIVED は著者・DEPUTY_ADMIN 以上の
+     * 条件に加え、その大会の公開範囲（visibility）を満たす閲覧者だけ。単票（F00 Resolver）と同じ結果になること。
+     */
+    @Test
+    @DisplayName("CANCELLED/ARCHIVEDは所属中の著者でも公開範囲を満たさなければ一覧に出ない（単票と同じ）")
+    void CANCELLEDは公開範囲も満たす必要がある() {
+        Long adminsOnlyCancelled = persistTournament(
+                TournamentVisibility.ADMINS_AND_ABOVE, TournamentStatus.CANCELLED, VIEWER_ID);
+        Long adminsOnlyArchived = persistTournament(
+                TournamentVisibility.ADMINS_AND_ABOVE, TournamentStatus.ARCHIVED, VIEWER_ID);
+        Long publicCancelled = persistTournament(
+                TournamentVisibility.PUBLIC, TournamentStatus.CANCELLED, VIEWER_ID);
+        em.flush();
+        em.clear();
+
+        // 所属中の著者（DEPUTY_ADMIN 未満）。可視ラダーは PUBLIC のみ
+        Page<TournamentEntity> author = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, true, false, PageRequest.of(0, 100));
+        // DEPUTY_ADMIN 以上。可視ラダーに ADMINS_AND_ABOVE を含む
+        Page<TournamentEntity> deputy = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC", "ADMINS_AND_ABOVE"), VIEWER_ID, true, true, PageRequest.of(0, 100));
+
+        assertThat(author.getContent()).extracting(TournamentEntity::getId)
+                .contains(publicCancelled)
+                .doesNotContain(adminsOnlyCancelled, adminsOnlyArchived);
+        assertThat(deputy.getContent()).extracting(TournamentEntity::getId)
+                .contains(publicCancelled, adminsOnlyCancelled, adminsOnlyArchived);
+    }
+
+    @Test
+    @DisplayName("PARTICIPANTS_ONLYのCANCELLED大会は、所属中の著者かつ参加チーム関係者にだけ一覧に出る")
+    void CANCELLEDのPARTICIPANTS_ONLYは参加チーム関係者の著者だけ() {
+        Long participantsOnly = persistTournament(
+                TournamentVisibility.PARTICIPANTS_ONLY, TournamentStatus.CANCELLED, VIEWER_ID);
+        Long divisionId = persistDivision(participantsOnly);
+        persistParticipant(divisionId, PARTICIPANT_TEAM_ID, ParticipantStatus.REGISTERED);
+        em.flush();
+        em.clear();
+
+        Page<TournamentEntity> notRelated = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, true, false, PageRequest.of(0, 100));
+        persistMembership(VIEWER_ID, PARTICIPANT_TEAM_ID);
+        em.flush();
+        em.clear();
+        Page<TournamentEntity> related = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, true, false, PageRequest.of(0, 100));
+
+        assertThat(notRelated.getContent()).extracting(TournamentEntity::getId).doesNotContain(participantsOnly);
+        assertThat(related.getContent()).extracting(TournamentEntity::getId).contains(participantsOnly);
+    }
+
     private Long persistTournament(TournamentVisibility visibility, TournamentStatus status, Long createdBy) {
         TournamentEntity entity = TournamentEntity.builder()
                 .organizationId(orgId)

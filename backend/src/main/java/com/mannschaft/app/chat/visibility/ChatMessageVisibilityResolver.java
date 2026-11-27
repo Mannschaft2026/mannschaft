@@ -43,7 +43,7 @@ import java.util.List;
  *       {@code ADMINS_AND_ABOVE} 経路では DEPUTY_ADMIN が deny されるため、閾値 "DEPUTY_ADMIN"
  *       （SYSTEM_ADMIN/ADMIN/DEPUTY_ADMIN 包含・MEMBER 以下除外）を明示採用する。</li>
  *   <li><b>PRIVATE チャンネル（{@code isPrivate=true} かつ非 inquiry）</b> — Projection が scope を
- *       {@code null} に落とすため <b>fail-closed（SystemAdmin 以外不可視）</b>。チャンネルメンバーシップ
+ *       {@code null} に落とすため <b>fail-closed（誰も不可視）</b>。チャンネルメンバーシップ
  *       ベース判定への昇格は将来の別軍議（{@link ChatMessageVisibilityProjection} の危険注記参照）。</li>
  *   <li><b>公開チャンネル</b> — {@link StandardVisibility#SCOPE_AFFILIATED}＝チャンネルのスコープ
  *       （TEAM/ORGANIZATION）への直接所属者全員。基底の {@code snapshot.isMemberOf(scope)} に委譲。</li>

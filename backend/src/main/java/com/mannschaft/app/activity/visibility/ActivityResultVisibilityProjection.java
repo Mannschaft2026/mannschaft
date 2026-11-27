@@ -38,7 +38,7 @@ import com.mannschaft.app.common.visibility.VisibilityProjection;
  * @param scopeId         scope_id
  * @param authorUserId    created_by（作成者 user_id）
  * @param visibility      {@link ActivityVisibility} 値
- * @param status          {@link ActivityStatus} 値（DRAFT は作成者・SystemAdmin のみ可視）
+ * @param status          {@link ActivityStatus} 値（DRAFT は作成者本人のみ可視）
  */
 public record ActivityResultVisibilityProjection(
         Long id,

@@ -232,7 +232,7 @@ class BlogPostServiceTest {
                         .isEqualTo(ContentAccessState.LOCKED.name());
                 assertThat(result.getTotalElements()).isEqualTo(2);
                 assertThat(result.getTotalPages()).isEqualTo(2);
-                verify(accessControlService).isSystemAdmin(VIEWER_ID);
+                verify(accessControlService, never()).isSystemAdmin(any());
             }
         }
 
@@ -1074,7 +1074,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(new GateCheckResponse(true, false, List.of()));
 
@@ -1091,7 +1090,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(new GateCheckResponse(true, false,
                                 List.of(new GateCheckResponse.RequiredItem(1L, "月会費", null, true))));
@@ -1109,7 +1107,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(new GateCheckResponse(false, false,
                                 List.of(new GateCheckResponse.RequiredItem(1L, "月会費", null, false))));
@@ -1131,7 +1128,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(new GateCheckResponse(false, true, List.of()));
 
@@ -1161,18 +1157,21 @@ class BlogPostServiceTest {
         }
 
         @Test
-        @DisplayName("AC-8: SystemAdmin → ゲート無視で全文（checkAccess を呼ばない）")
-        void AC8_SystemAdmin_全文バイパス() {
+        @DisplayName("AC-8: SystemAdmin 単独も課金結果に従う（未課金は本文なし。ゲート無視の全文は返さない・戦役 Z-A PR4）")
+        void AC8_SystemAdmin_課金結果に従う() {
             BlogPostEntity entity = postWithId();
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(true);
+                given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
+                        .willReturn(new GateCheckResponse(false, false, List.of()));
 
                 BlogPostResponse result = service.getById(POST_ID);
 
-                assertThat(result.getContent().body()).isEqualTo((String) "有料本文フルテキスト");
-                verify(paymentGateService, never()).checkAccess(any(), any(), any(), any(ContentGateTarget.class));
+                assertThat(result.getContent().body()).isNull();
+                assertThat(result.getAccessState()).isEqualTo(ContentAccessState.LOCKED.name());
+                verify(paymentGateService).checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class));
+                verify(accessControlService, never()).isSystemAdmin(any());
             }
         }
 
@@ -1183,7 +1182,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(new GateCheckResponse(false, false, List.of()));
 
@@ -1201,7 +1199,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willThrow(new RuntimeException("判定不能"));
 
@@ -1219,7 +1216,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willThrow(new RuntimeException("判定不能"));
                 assertThatThrownBy(() -> service.getById(POST_ID))
@@ -1236,7 +1232,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(null);
 
@@ -1254,7 +1249,6 @@ class BlogPostServiceTest {
             stubGetById(entity);
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(null);
 
@@ -1306,7 +1300,6 @@ class BlogPostServiceTest {
             given(cmsMapper.toBlogPostResponse(entity)).willReturn(responseWithBody());
             try (MockedStatic<SecurityUtils> su = Mockito.mockStatic(SecurityUtils.class)) {
                 su.when(SecurityUtils::getCurrentUserIdOrNull).thenReturn(VIEWER_ID);
-                given(accessControlService.isSystemAdmin(VIEWER_ID)).willReturn(false);
                 given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(VIEWER_ID), any(ContentGateTarget.class)))
                         .willReturn(new GateCheckResponse(false, false, List.of()));
 

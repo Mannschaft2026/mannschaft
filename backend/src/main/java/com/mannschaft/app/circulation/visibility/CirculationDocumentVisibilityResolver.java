@@ -38,7 +38,7 @@ import java.util.Objects;
  *   <li>それ以外 → {@code false}</li>
  * </ol>
  *
- * <p>SystemAdmin 高速パス（§15 D-13）／親 ORG 連鎖ガード（§11.6）／status 軸ガード（§7.5）／監査ログ
+ * <p>親 ORG 連鎖ガード（§11.6）／status 軸ガード（§7.5）／監査ログ
  * （§11.4）／メトリクス（§9.4）はすべて {@link AbstractContentVisibilityResolver} に委譲される。</p>
  *
  * <p>機能側 visibility enum を持たないため、総称型 {@code <V>} には {@link StandardVisibility} 自体を
@@ -121,9 +121,9 @@ public class CirculationDocumentVisibilityResolver
      * {@link CirculationStatus} → {@link ContentStatus} の写像。
      *
      * <ul>
-     *   <li>{@code DRAFT} → {@link ContentStatus#DRAFT}（作成者と SystemAdmin のみ可視）</li>
+     *   <li>{@code DRAFT} → {@link ContentStatus#DRAFT}（作成者本人のみ可視）</li>
      *   <li>{@code ACTIVE} / {@code COMPLETED} → {@link ContentStatus#PUBLISHED}（visibility 評価へ）</li>
-     *   <li>{@code CANCELLED} → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+     *   <li>{@code CANCELLED} → {@link ContentStatus#ARCHIVED}（著者本人と DEPUTY_ADMIN 以上のみ可視）</li>
      * </ul>
      *
      * <p>論理削除は射影段階の {@code @SQLRestriction("deleted_at IS NULL")} で除外されるため、

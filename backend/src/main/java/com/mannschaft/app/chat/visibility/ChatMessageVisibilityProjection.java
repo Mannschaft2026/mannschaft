@@ -18,7 +18,7 @@ import com.mannschaft.app.common.visibility.VisibilityProjection;
  *       {@code InquiryChatEventListener} と完全一致）。一般メンバーには他者の問い合わせ内容を開かない。</li>
  *   <li><b>PRIVATE チャンネル（{@code isPrivate=true} かつ非 inquiry）</b> —
  *       {@link #scopeType()} / {@link #scopeId()} を {@code null} に落とし
- *       <b>fail-closed（SystemAdmin 以外不可視）</b>。本来はチャンネルメンバーシップ
+ *       <b>fail-closed（誰も不可視）</b>。本来はチャンネルメンバーシップ
  *       （{@code chat_channel_members}）ベースの判定が正だが、その昇格は将来の別軍議とする。</li>
  *   <li><b>公開チャンネル（上記以外）</b> — {@link StandardVisibility#SCOPE_AFFILIATED}
  *       （チャンネルのスコープ＝TEAM/ORGANIZATION への直接所属者全員が閲覧可）。</li>

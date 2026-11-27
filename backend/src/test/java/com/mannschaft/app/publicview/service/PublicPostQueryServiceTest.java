@@ -242,7 +242,8 @@ class PublicPostQueryServiceTest {
                     .willReturn(new GateCheckResponse(false, false, List.of()));
 
             PublicPostDetail result = service.findPublicPostDetailByTeam(
-                    TEAM_ID, POST_ID, ViewerContext.systemAdmin(999L));
+                    TEAM_ID, POST_ID, new ViewerContext(999L, com.mannschaft.app.publicview.visibility.ViewerStatus.SYSTEM_ADMIN,
+                            java.util.Set.of(), java.util.Set.of()));
 
             assertThat(result.bodyHtml()).isEqualTo((String) null);
             verify(paymentGateService).checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(999L), any(ContentGateTarget.class));

@@ -218,6 +218,31 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
         assertThat(deputy.getContent()).extracting(JobPostingEntity::getId).contains(mine);
     }
 
+    /**
+     * 戦役 Z-A PR4（マスター決定 2026-11-27「公開範囲も守る」）: CANCELLED は著者・DEPUTY_ADMIN 以上の条件に加え、
+     * その求人の公開範囲を満たす閲覧者だけ。単票（F00 Resolver）と同じ結果になること。
+     */
+    @Test
+    @DisplayName("CANCELLED求人は所属中の著者でも公開範囲を満たさなければ一覧に出ない（単票と同じ）")
+    void CANCELLEDは公開範囲も満たす必要がある() {
+        Long jobberInternal = insertPosting("jp-cancelled-ji", memberUserId, "CANCELLED", "JOBBER_INTERNAL");
+        Long teamMembers = insertPosting("jp-cancelled-tm", memberUserId, "CANCELLED", "TEAM_MEMBERS");
+        em.flush();
+        em.clear();
+
+        Page<JobPostingEntity> author = postingRepository.findVisibleByTeamId(
+                teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
+                memberUserId, true, false, PageRequest.of(0, 200));
+        Page<JobPostingEntity> authorWithTeamLevel = postingRepository.findVisibleByTeamId(
+                teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD, VisibilityScope.TEAM_MEMBERS),
+                memberUserId, true, false, PageRequest.of(0, 200));
+
+        assertThat(author.getContent()).extracting(JobPostingEntity::getId)
+                .doesNotContain(jobberInternal, teamMembers);
+        assertThat(authorWithTeamLevel.getContent()).extracting(JobPostingEntity::getId)
+                .contains(teamMembers).doesNotContain(jobberInternal);
+    }
+
     private Long insertUser(String email) {
         em.createNativeQuery(
                 "INSERT INTO users ("

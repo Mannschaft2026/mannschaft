@@ -58,12 +58,13 @@ class TournamentViewAccessGateTest {
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN は閲覧できる")
-        void システム管理者は閲覧可() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+        @DisplayName("SYSTEM_ADMIN 単独に素通しは無い: 組織管理者でなければ F00 Resolver の判定に従う（戦役 Z-A PR4）")
+        void システム管理者単独は素通しなし() {
+            given(contentVisibilityChecker.canView(ReferenceType.TOURNAMENT, TOURNAMENT_ID, USER_ID))
+                    .willReturn(false);
 
-            assertThat(gate.isViewableBy(TOURNAMENT_ID, ORG_ID, USER_ID)).isTrue();
-            verify(contentVisibilityChecker, never()).canView(any(), any(), any());
+            assertThat(gate.isViewableBy(TOURNAMENT_ID, ORG_ID, USER_ID)).isFalse();
+            verify(accessControlService, never()).isSystemAdmin(any());
         }
 
         @Test

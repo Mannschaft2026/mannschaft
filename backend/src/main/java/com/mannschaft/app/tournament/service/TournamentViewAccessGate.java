@@ -42,9 +42,8 @@ public class TournamentViewAccessGate {
      */
     public boolean isViewableBy(Long tournamentId, Long organizationId, Long viewerUserId) {
         boolean orgManager = viewerUserId != null
-                && (accessControlService.isSystemAdmin(viewerUserId)
-                    || accessControlService.isAdminOrAbove(
-                            viewerUserId, organizationId, "ORGANIZATION"));
+                && accessControlService.isAdminOrAbove(
+                        viewerUserId, organizationId, "ORGANIZATION");
         return orgManager
                 || contentVisibilityChecker.canView(
                         ReferenceType.TOURNAMENT, tournamentId, viewerUserId);

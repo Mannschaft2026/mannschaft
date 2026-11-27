@@ -11,11 +11,11 @@ import com.mannschaft.app.event.EventStatus;
  *
  * <p>マッピング:
  * <ul>
- *   <li>{@link EventStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者と SystemAdmin のみ可視）</li>
+ *   <li>{@link EventStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者本人のみ可視）</li>
  *   <li>{@link EventStatus#PUBLISHED} / {@link EventStatus#REGISTRATION_OPEN}
  *       / {@link EventStatus#REGISTRATION_CLOSED} / {@link EventStatus#IN_PROGRESS}
  *       / {@link EventStatus#COMPLETED} → {@link ContentStatus#PUBLISHED}（visibility 評価へ）</li>
- *   <li>{@link EventStatus#CANCELLED} → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+ *   <li>{@link EventStatus#CANCELLED} → {@link ContentStatus#ARCHIVED}（著者本人と DEPUTY_ADMIN 以上のみ可視）</li>
  * </ul>
  *
  * <p>{@link ContentStatus#DELETED} は events.deleted_at 列を {@code @SQLRestriction} が

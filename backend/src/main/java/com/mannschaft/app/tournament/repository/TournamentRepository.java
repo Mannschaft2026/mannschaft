@@ -157,7 +157,15 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             + "              AND m.user_id = :viewerUserId AND m.left_at IS NULL)) "
             + "    )) "
             + "    OR (t.status IN ('CANCELLED', 'ARCHIVED') AND (:viewerIsScopeDeputyAdminOrAbove = true "
-            + "        OR (t.created_by = :viewerUserId AND :viewerIsScopeMember = true))) "
+            + "        OR (t.created_by = :viewerUserId AND :viewerIsScopeMember = true)) "
+            + "        AND (t.visibility IN (:visibilities) "
+            + "        OR (t.visibility = 'PARTICIPANTS_ONLY' AND EXISTS ( "
+            + "            SELECT 1 FROM tournament_participants p2 "
+            + "            JOIN tournament_divisions d2 ON p2.division_id = d2.id "
+            + "            JOIN memberships m2 ON m2.scope_type = 'TEAM' AND m2.scope_id = p2.team_id "
+            + "            WHERE d2.tournament_id = t.id "
+            + "              AND p2.status IN ('REGISTERED', 'ACTIVE') "
+            + "              AND m2.user_id = :viewerUserId AND m2.left_at IS NULL)))) "
             + "  ) "
             + "ORDER BY t.created_at DESC",
             countQuery = "SELECT COUNT(*) FROM tournaments t "
@@ -177,7 +185,15 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             + "              AND m.user_id = :viewerUserId AND m.left_at IS NULL)) "
             + "    )) "
             + "    OR (t.status IN ('CANCELLED', 'ARCHIVED') AND (:viewerIsScopeDeputyAdminOrAbove = true "
-            + "        OR (t.created_by = :viewerUserId AND :viewerIsScopeMember = true))) "
+            + "        OR (t.created_by = :viewerUserId AND :viewerIsScopeMember = true)) "
+            + "        AND (t.visibility IN (:visibilities) "
+            + "        OR (t.visibility = 'PARTICIPANTS_ONLY' AND EXISTS ( "
+            + "            SELECT 1 FROM tournament_participants p2 "
+            + "            JOIN tournament_divisions d2 ON p2.division_id = d2.id "
+            + "            JOIN memberships m2 ON m2.scope_type = 'TEAM' AND m2.scope_id = p2.team_id "
+            + "            WHERE d2.tournament_id = t.id "
+            + "              AND p2.status IN ('REGISTERED', 'ACTIVE') "
+            + "              AND m2.user_id = :viewerUserId AND m2.left_at IS NULL)))) "
             + "  )",
             nativeQuery = true)
     Page<TournamentEntity> findVisibleByOrganizationId(

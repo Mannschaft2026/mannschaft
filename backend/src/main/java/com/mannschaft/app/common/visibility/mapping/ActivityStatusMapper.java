@@ -10,7 +10,7 @@ import com.mannschaft.app.common.visibility.ContentStatus;
  * Survey の {@code SurveyStatus → ContentStatus} 写像を金型とする。</p>
  *
  * <ul>
- *   <li>{@link ActivityStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者・SystemAdmin のみ可視）</li>
+ *   <li>{@link ActivityStatus#DRAFT} → {@link ContentStatus#DRAFT}（作成者本人のみ可視）</li>
  *   <li>{@link ActivityStatus#PUBLISHED} → {@link ContentStatus#PUBLISHED}（visibility 評価に進む）</li>
  *   <li>{@code null} → {@link ContentStatus#DELETED}（fail-closed）</li>
  * </ul>

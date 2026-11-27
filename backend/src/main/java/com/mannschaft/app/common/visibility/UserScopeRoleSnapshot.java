@@ -125,7 +125,7 @@ public record UserScopeRoleSnapshot(
     }
 
     /**
-     * スコープへの直接メンバーシップ（または SystemAdmin）を持つかを返す。
+     * スコープへの直接メンバーシップを持つかを返す。
      *
      * <p>JOBBER 等の並行ロール（{@link RolePriority} マップ未登録）は、
      * {@code user_roles} 行が存在しても通常のメンバーとは区別する。
@@ -142,7 +142,7 @@ public record UserScopeRoleSnapshot(
 
     /**
      * スコープにおいて要求ロール以上の権限を持つかを返す。
-     * SystemAdmin は常に true。
+     * SystemAdmin に特権は無い（所属・ロールの実態だけで判定する）。
      */
     public boolean hasRoleOrAbove(ScopeKey scope, String required) {
         if (scope == null) {
@@ -154,7 +154,7 @@ public record UserScopeRoleSnapshot(
 
     /**
      * 当該スコープの「親 ORG」へのメンバーシップを持つかを返す。
-     * ORGANIZATION_WIDE 公開判定の中核ロジック。SystemAdmin は常に true。
+     * ORGANIZATION_WIDE 公開判定の中核ロジック。SystemAdmin に特権は無い（所属・ロールの実態だけで判定する）。
      */
     public boolean isMemberOfParentOrg(ScopeKey scope) {
         if (scope == null) {
@@ -171,7 +171,7 @@ public record UserScopeRoleSnapshot(
 
     /**
      * 当該スコープの「親 ORG」において、要求ロール以上の<strong>直接所属ロール</strong>を
-     * 持つかを返す（CMP-017b）。SystemAdmin は常に true。
+     * 持つかを返す（CMP-017b）。SystemAdmin に特権は無い（所属・ロールの実態だけで判定する）。
      *
      * <p>{@link #isMemberOfParentOrg(ScopeKey)} が「親 ORG に所属しているか」しか答えられないのに対し、
      * 本メソッドは親 ORG での役職の高さを閾値で評価する。設計書
@@ -208,7 +208,7 @@ public record UserScopeRoleSnapshot(
      * {@link #isMemberOfParentOrg} / {@link #hasParentOrgRoleOrAbove} 側で数えない）。
      * 親 ORG が判定不能（マッピング無し）の場合は false。
      * 設計書 §11.6 連鎖ルール: 非アクティブ親 ORG 配下の TEAM コンテンツは
-     * SystemAdmin 以外不可視（fail-closed）。
+     * 誰も不可視（fail-closed）。
      */
     public boolean isParentOrgInactive(ScopeKey scope) {
         if (scope == null) {
@@ -237,7 +237,7 @@ public record UserScopeRoleSnapshot(
      * scope が ORGANIZATION スコープであり、かつ viewer がその ORG を根とした再帰的配下ツリー
      * （全子孫組織の直属 ∪ それら組織の ACTIVE 参加チームメンバー）に属するなら true。</p>
      *
-     * <p><strong>所属軸であり SUPPORTER を含む</strong>（G7）。SystemAdmin は常に true。
+     * <p><strong>所属軸であり SUPPORTER を含む</strong>（G7）。SystemAdmin に特権は無い（所属・ロールの実態だけで判定する）。
      * 直接所属（{@link #orgMemberOf}）とは別フィールド {@link #descendantMemberOfOrgIds} を参照するため、
      * {@link #isMemberOf(ScopeKey)} / {@link #isMemberOfParentOrg(ScopeKey)} の挙動には影響しない。</p>
      */
@@ -250,7 +250,7 @@ public record UserScopeRoleSnapshot(
 
     /**
      * 当該 ORG スコープの「再帰的配下ツリーにおける実効ロール」が要求ロール以上かを返す
-     * （CMP-017b 三b）。SystemAdmin は常に true。
+     * （CMP-017b 三b）。SystemAdmin に特権は無い（所属・ロールの実態だけで判定する）。
      *
      * <p>{@link #isDescendantMemberOf(ScopeKey)} が「配下に属するか（真偽）」しか答えられないため、
      * {@link StandardVisibility#ORGANIZATION_AND_DESCENDANTS} 段では閲覧閾値
