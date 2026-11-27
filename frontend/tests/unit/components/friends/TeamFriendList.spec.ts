@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import TeamFriendList from '~/components/friends/TeamFriendList.vue'
+import { useScopeNotFound } from '~/composables/useScopeNotFound'
 
 /**
  * CMP-261013-1226: フレンド一覧の取得失敗を空状態と混同しない。
- *   AC-14 403 → 権限なし案内(forbidden)
+ *   AC-14 403/404 → 共通の見つかりません（notFound を立てる。独自の権限なし案内は出さない。CMP-261125-1108）
  *   AC-15 5xx・通信断 → エラー表示＋再試行で再取得
  *   AC-17 0件の正規メンバー → 従来どおり空状態
  */
@@ -33,16 +34,19 @@ describe('components/friends/TeamFriendList.vue — 取得失敗の表示', () =
     api.listFriends.mockReset()
     api.unfollow.mockReset()
     api.confirm.mockClear()
+    useScopeNotFound().reset()
   })
 
-  it('AC-14: 403 は空状態ではなく forbidden 案内を出す', async () => {
-    api.listFriends.mockRejectedValue({ statusCode: 403 })
-    const w = await mountList()
-    expect(w.find('[data-testid="friend-list-error"]').exists()).toBe(true)
-    expect(w.text()).not.toContain('フレンドチームがありません')
-    expect(w.find('[data-testid="friend-list-error"] .pi-lock').exists()).toBe(true)
-    expect(w.find('[data-testid="friend-list-error-retry"]').exists()).toBe(false)
-  })
+  for (const status of [403, 404]) {
+    it(`AC-14: ${status} は notFound を立て、独自の権限なし案内も空状態も出さない`, async () => {
+      api.listFriends.mockRejectedValue({ statusCode: status })
+      const w = await mountList()
+      expect(useScopeNotFound().notFound.value).toBe(true)
+      expect(w.find('[data-testid="friend-list-error"]').exists()).toBe(false)
+      expect(w.find('.pi-lock').exists()).toBe(false)
+      expect(w.text()).not.toContain('フレンドチームがありません')
+    })
+  }
 
   it('AC-15: 500 はエラー表示＋再試行ボタン。再試行で再取得する', async () => {
     api.listFriends.mockRejectedValueOnce({ statusCode: 500 })
@@ -56,6 +60,7 @@ describe('components/friends/TeamFriendList.vue — 取得失敗の表示', () =
     await flushPromises()
     expect(api.listFriends).toHaveBeenCalledTimes(2)
     expect(w.find('[data-testid="friend-list-error"]').exists()).toBe(false)
+    expect(useScopeNotFound().notFound.value).toBe(false)
   })
 
   it('AC-15: 通信断(FetchError)もエラー表示', async () => {

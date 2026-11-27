@@ -2,6 +2,8 @@ package com.mannschaft.app.notification.confirmable.controller;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
+import com.mannschaft.app.common.featuregate.AlwaysReachable;
+import com.mannschaft.app.common.featuregate.AlwaysReachableCategory;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.membership.ScopeType;
 import com.mannschaft.app.notification.confirmable.dto.ConfirmableNotificationDraftDetailResponse;
@@ -45,6 +47,8 @@ public class OrgConfirmableNotificationDraftController {
     private final ConfirmableNotificationDraftService draftService;
     private final AccessControlService accessControlService;
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "確認通知の作成フォームの入力途中を失わないための基盤機能として常時提供するため")
     @GetMapping
     @Operation(summary = "下書き一覧（updated_at 降順・本文は冒頭100文字）")
     public ResponseEntity<ApiResponse<List<ConfirmableNotificationDraftSummaryResponse>>> list(
@@ -53,6 +57,8 @@ public class OrgConfirmableNotificationDraftController {
         return ResponseEntity.ok(ApiResponse.of(draftService.list(ScopeType.ORGANIZATION, orgId, userId)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "確認通知の作成フォームの入力途中を失わないための基盤機能として常時提供するため")
     @PostMapping
     @Operation(summary = "下書き作成（スコープ×作成者ごとに10件まで）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "作成成功")
@@ -64,6 +70,8 @@ public class OrgConfirmableNotificationDraftController {
                 .body(ApiResponse.of(draftService.create(ScopeType.ORGANIZATION, orgId, userId, request)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "確認通知の作成フォームの入力途中を失わないための基盤機能として常時提供するため")
     @GetMapping("/{draftId}")
     @Operation(summary = "下書き取得")
     public ResponseEntity<ApiResponse<ConfirmableNotificationDraftDetailResponse>> get(
@@ -72,6 +80,8 @@ public class OrgConfirmableNotificationDraftController {
         return ResponseEntity.ok(ApiResponse.of(draftService.get(ScopeType.ORGANIZATION, orgId, userId, draftId)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "確認通知の作成フォームの入力途中を失わないための基盤機能として常時提供するため")
     @PutMapping("/{draftId}")
     @Operation(summary = "下書き更新（baseVersion 必須。不一致は 409）")
     public ResponseEntity<ApiResponse<ConfirmableNotificationDraftDetailResponse>> update(
@@ -81,6 +91,8 @@ public class OrgConfirmableNotificationDraftController {
         return ResponseEntity.ok(ApiResponse.of(draftService.update(ScopeType.ORGANIZATION, orgId, userId, draftId, request)));
     }
 
+    @AlwaysReachable(category = AlwaysReachableCategory.CORE,
+            reason = "確認通知の作成フォームの入力途中を失わないための基盤機能として常時提供するため")
     @DeleteMapping("/{draftId}")
     @Operation(summary = "下書き削除")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "削除成功")

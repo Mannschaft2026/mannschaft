@@ -8,7 +8,7 @@ import java.util.List;
 
 /** 日次出欠一覧レスポンス。 */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class DailyAttendanceListResponse {
 
     /** 対象日。 */

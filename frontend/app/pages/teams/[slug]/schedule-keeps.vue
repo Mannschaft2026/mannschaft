@@ -21,6 +21,7 @@ const api = useScheduleKeepApi()
 const { isMember, isAdminOrDeputy, loadPermissions } = useRoleAccess('team', teamSlug)
 const authStore = useAuthStore()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 
 const keeps = ref<ScheduleKeepResponse[]>([])
 const loading = ref(true)
@@ -40,6 +41,8 @@ async function fetchKeeps() {
     keeps.value = res.data ?? []
   }
   catch (error) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(error)) return
     handleApiError(error, 'schedule-keeps:list')
   }
   finally {

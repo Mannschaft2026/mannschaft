@@ -32,7 +32,6 @@
     },
     "page": {
       "permissionLoadFailed": "권한 정보를 불러오지 못했습니다. 잠시 후 다시 불러오세요",
-      "forbidden": "이 팀의 멤버만 스킬·자격을 이용할 수 있습니다",
       "mineTab": "내 스킬·자격",
       "categoriesReloadFailed": "카테고리를 다시 불러오지 못했습니다"
     }
@@ -1996,6 +1995,10 @@
       "downloadLabel": "{format} 다운로드（{type}）"
     },
     "menu": "메뉴",
+    "scopeNotFound": {
+      "title": "찾을 수 없습니다",
+      "body": "요청하신 페이지를 표시할 수 없습니다."
+    },
     "scopeShell": {
       "memberCount": "멤버 {count}명",
       "supporterCount": "서포터 {count}명",
@@ -3377,6 +3380,27 @@
       "created_at": "발급 일시",
       "expires_at": "유효 기간",
       "used_count": "사용 횟수"
+    },
+    "signage": {
+      "section": "표시 단말 토큰",
+      "issue": "토큰 발급",
+      "device_name": "단말 이름",
+      "device_placeholder": "예: 현관 모니터",
+      "empty": "토큰이 없습니다",
+      "issued_title": "표시 단말용 토큰을 발급했습니다",
+      "no_expiry": "무기한",
+      "inactive": "무효",
+      "reissue_confirm": "새 링크를 발급하고 이 토큰을 무효로 합니다. 계속하시겠습니까?",
+      "revoke_confirm": "이 토큰을 무효화하시겠습니까?",
+      "issue_success": "토큰을 발급했습니다",
+      "issue_failed": "토큰 발급에 실패했습니다",
+      "reissue_success": "토큰을 재발급했습니다",
+      "reissue_failed": "토큰 재발급에 실패했습니다",
+      "revoke_success": "토큰을 무효화했습니다",
+      "revoke_failed": "토큰 무효화에 실패했습니다",
+      "name_required": "단말 이름을 입력하세요",
+      "token_label": "단말에 설정할 토큰",
+      "reissue_revoke_failed": "새 토큰은 발급되었지만 이전 토큰의 무효화에 실패했습니다. 이전 토큰을 직접 무효화해 주세요"
     }
   },
   "globalSearch": {

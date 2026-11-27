@@ -7,8 +7,7 @@ import com.mannschaft.app.actionmemo.repository.ActionMemoRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoTagLinkRepository;
 import com.mannschaft.app.actionmemo.repository.ActionMemoTagRepository;
 import com.mannschaft.app.cms.Visibility;
-import com.mannschaft.app.cms.entity.BlogPostEntity;
-import com.mannschaft.app.cms.repository.BlogPostRepository;
+import com.mannschaft.app.cms.service.BlogPostSystemSummaryReplacer;
 import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +36,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -68,16 +68,13 @@ class ActionMemoWeeklySummaryServiceTest {
     private ActionMemoTagRepository tagRepository;
 
     @Mock
-    private BlogPostRepository blogPostRepository;
+    private BlogPostSystemSummaryReplacer blogPostSystemSummaryReplacer;
 
     @Mock
     private ActionMemoMetrics actionMemoMetrics;
 
     @Mock
     private Clock wallClock;
-
-    @Mock
-    private jakarta.persistence.EntityManager entityManager;
 
     @InjectMocks
     private ActionMemoWeeklySummaryService weeklySummaryService;
@@ -131,27 +128,22 @@ class ActionMemoWeeklySummaryServiceTest {
             given(memoRepository.findByUserIdAndMemoDateBetweenOrderByMemoDateAscCreatedAtAsc(
                     eq(USER_A), any(), any()))
                     .willReturn(memosA);
-            given(blogPostRepository.findByUserIdAndSlug(eq(USER_A), anyString()))
-                    .willReturn(Optional.empty());
-            given(blogPostRepository.save(any(BlogPostEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             weeklySummaryService.generateWeeklySummaries();
 
-            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
-            verify(blogPostRepository, times(1)).save(captor.capture());
-            BlogPostEntity saved = captor.getValue();
+            ArgumentCaptor<String> slug = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> title = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<LocalDateTime> publishedAt = ArgumentCaptor.forClass(LocalDateTime.class);
+            verify(blogPostSystemSummaryReplacer, times(1)).replacePrivateUserPost(
+                    eq(USER_A), slug.capture(), title.capture(), body.capture(), anyString(), publishedAt.capture());
 
-            assertThat(saved.getUserId()).isEqualTo(USER_A);
-            assertThat(saved.getAuthorId()).isEqualTo(USER_A);
-            assertThat(saved.getVisibility()).isEqualTo(Visibility.PRIVATE);
-            assertThat(saved.getCrossPostToTimeline()).isFalse();
-            assertThat(saved.getTitle()).startsWith("週次ふりかえり:");
-            assertThat(saved.getSlug()).startsWith("weekly-");
-            assertThat(saved.getBody()).contains("# 週次ふりかえり:");
-            assertThat(saved.getBody()).contains("## 📊 今週のサマリー");
-            assertThat(saved.getBody()).contains("メモ件数: 3件");
-            assertThat(saved.getPublishedAt()).isEqualTo(CURRENT_TIME);
+            assertThat(title.getValue()).startsWith("週次ふりかえり:");
+            assertThat(slug.getValue()).startsWith("weekly-");
+            assertThat(body.getValue()).contains("# 週次ふりかえり:");
+            assertThat(body.getValue()).contains("## 📊 今週のサマリー");
+            assertThat(body.getValue()).contains("メモ件数: 3件");
+            assertThat(publishedAt.getValue()).isEqualTo(CURRENT_TIME);
 
             verify(memoRepository).findDistinctUserIdsByMemoDateBetween(
                     TODAY.minusDays(7), TODAY.minusDays(1));
@@ -169,37 +161,20 @@ class ActionMemoWeeklySummaryServiceTest {
     class RegenerationTest {
 
         @Test
-        @DisplayName("同 slug の既存記事は論理削除を flush で確定させてから新規 INSERT する（生存行の slug 一意制約を避ける）")
-        void regenerateForUser_softDeleteIsFlushedBeforeInsert() {
+        @DisplayName("再生成の論理削除と新規作成は cms 側の差し替え窓口 1 回に委譲され、actionmemo 側はトランザクションを張らない")
+        void regenerateForUser_delegatesReplaceToCms() {
             LocalDate from = TODAY.minusDays(7);
             LocalDate to = TODAY.minusDays(1);
             given(memoRepository.findByUserIdAndMemoDateBetweenOrderByMemoDateAscCreatedAtAsc(
                     eq(USER_A), any(), any()))
                     .willReturn(List.of(memo(USER_A, TODAY.minusDays(2), "朝散歩した", null)));
-            BlogPostEntity existing = BlogPostEntity.builder()
-                    .userId(USER_A).authorId(USER_A).title("旧").slug("weekly-20260405-20260411").body("旧本文")
-                    .build();
-            given(blogPostRepository.findByUserIdAndSlug(USER_A, "weekly-20260405-20260411"))
-                    .willReturn(Optional.of(existing));
-            given(blogPostRepository.save(any(BlogPostEntity.class))).willAnswer(inv -> inv.getArgument(0));
 
-            org.springframework.test.util.ReflectionTestUtils.setField(weeklySummaryService, "entityManager", entityManager);
-            // regenerateForUser は @Transactional（単体テストではプロキシが無いため、トランザクション中の状態を再現する）
-            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
-            try {
-                assertThat(weeklySummaryService.regenerateForUser(USER_A, from, to)).isTrue();
-            } finally {
-                org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
-            }
+            assertThat(weeklySummaryService.regenerateForUser(USER_A, from, to)).isTrue();
 
-            assertThat(existing.getDeletedAt()).isNotNull();
-            org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(blogPostRepository, entityManager);
-            inOrder.verify(blogPostRepository).save(existing);
-            inOrder.verify(entityManager).flush();
-            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
-            inOrder.verify(blogPostRepository).save(captor.capture());
-            assertThat(captor.getValue()).isNotSameAs(existing);
-            assertThat(captor.getValue().getSlug()).isEqualTo("weekly-20260405-20260411");
+            verify(blogPostSystemSummaryReplacer).replacePrivateUserPost(
+                    eq(USER_A), eq("weekly-20260405-20260411"), anyString(), anyString(), anyString(), any());
+            assertThat(ActionMemoWeeklySummaryService.class
+                    .isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class)).isFalse();
         }
     }
 
@@ -224,7 +199,7 @@ class ActionMemoWeeklySummaryServiceTest {
 
             weeklySummaryService.generateWeeklySummaries();
 
-            verify(blogPostRepository, never()).save(any(BlogPostEntity.class));
+            verifyNoInteractions(blogPostSystemSummaryReplacer);
             verify(actionMemoMetrics, never()).recordWeeklySummaryGenerated();
             verify(actionMemoMetrics, atLeastOnce()).recordWeeklySummarySkipped();
         }
@@ -237,7 +212,7 @@ class ActionMemoWeeklySummaryServiceTest {
 
             weeklySummaryService.generateWeeklySummaries();
 
-            verify(blogPostRepository, never()).save(any(BlogPostEntity.class));
+            verifyNoInteractions(blogPostSystemSummaryReplacer);
             verify(actionMemoMetrics, never()).recordWeeklySummaryGenerated();
             verify(actionMemoMetrics, never()).recordWeeklySummarySkipped();
             verify(actionMemoMetrics, never()).recordWeeklySummaryFailed();
@@ -265,16 +240,13 @@ class ActionMemoWeeklySummaryServiceTest {
             given(memoRepository.findByUserIdAndMemoDateBetweenOrderByMemoDateAscCreatedAtAsc(
                     eq(USER_A), any(), any()))
                     .willReturn(memos);
-            given(blogPostRepository.findByUserIdAndSlug(eq(USER_A), anyString()))
-                    .willReturn(Optional.empty());
-            given(blogPostRepository.save(any(BlogPostEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             weeklySummaryService.generateWeeklySummaries();
 
-            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
-            verify(blogPostRepository).save(captor.capture());
-            String body = captor.getValue().getBody();
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(blogPostSystemSummaryReplacer).replacePrivateUserPost(
+                    eq(USER_A), anyString(), anyString(), bodyCaptor.capture(), anyString(), any());
+            String body = bodyCaptor.getValue();
 
             assertThat(body).contains("## 📈 気分の推移");
             assertThat(body).contains("平均気分:");
@@ -294,16 +266,13 @@ class ActionMemoWeeklySummaryServiceTest {
             given(memoRepository.findByUserIdAndMemoDateBetweenOrderByMemoDateAscCreatedAtAsc(
                     eq(USER_A), any(), any()))
                     .willReturn(memos);
-            given(blogPostRepository.findByUserIdAndSlug(eq(USER_A), anyString()))
-                    .willReturn(Optional.empty());
-            given(blogPostRepository.save(any(BlogPostEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             weeklySummaryService.generateWeeklySummaries();
 
-            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
-            verify(blogPostRepository).save(captor.capture());
-            String body = captor.getValue().getBody();
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(blogPostSystemSummaryReplacer).replacePrivateUserPost(
+                    eq(USER_A), anyString(), anyString(), bodyCaptor.capture(), anyString(), any());
+            String body = bodyCaptor.getValue();
 
             assertThat(body).doesNotContain("## 📈 気分の推移");
             assertThat(body).doesNotContain("平均気分:");
@@ -338,16 +307,13 @@ class ActionMemoWeeklySummaryServiceTest {
             given(memoRepository.findByUserIdAndMemoDateBetweenOrderByMemoDateAscCreatedAtAsc(
                     eq(USER_A), any(), any()))
                     .willReturn(memosWithHistoricalMood);
-            given(blogPostRepository.findByUserIdAndSlug(eq(USER_A), anyString()))
-                    .willReturn(Optional.empty());
-            given(blogPostRepository.save(any(BlogPostEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             weeklySummaryService.generateWeeklySummaries();
 
-            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
-            verify(blogPostRepository).save(captor.capture());
-            String body = captor.getValue().getBody();
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(blogPostSystemSummaryReplacer).replacePrivateUserPost(
+                    eq(USER_A), anyString(), anyString(), bodyCaptor.capture(), anyString(), any());
+            String body = bodyCaptor.getValue();
 
             // 気分セクションが含まれる（本サービスは UserActionMemoSettingsRepository を参照しない）
             assertThat(body).contains("## 📈 気分の推移");
@@ -392,21 +358,14 @@ class ActionMemoWeeklySummaryServiceTest {
                     eq(USER_C), any(), any()))
                     .willReturn(memosC);
 
-            given(blogPostRepository.findByUserIdAndSlug(anyLong(), anyString()))
-                    .willReturn(Optional.empty());
-            given(blogPostRepository.save(any(BlogPostEntity.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
 
             weeklySummaryService.generateWeeklySummaries();
 
-            // USER_A と USER_C の save が呼ばれる（計2回）
-            ArgumentCaptor<BlogPostEntity> captor = ArgumentCaptor.forClass(BlogPostEntity.class);
-            verify(blogPostRepository, times(2)).save(captor.capture());
-            List<Long> savedUserIds = new ArrayList<>();
-            for (BlogPostEntity post : captor.getAllValues()) {
-                savedUserIds.add(post.getUserId());
-            }
-            assertThat(savedUserIds).containsExactlyInAnyOrder(USER_A, USER_C);
+            // USER_A と USER_C の差し替えが呼ばれる（計2回）
+            ArgumentCaptor<Long> userIdCaptor = ArgumentCaptor.forClass(Long.class);
+            verify(blogPostSystemSummaryReplacer, times(2)).replacePrivateUserPost(
+                    userIdCaptor.capture(), anyString(), anyString(), anyString(), anyString(), any());
+            assertThat(userIdCaptor.getAllValues()).containsExactlyInAnyOrder(USER_A, USER_C);
 
             verify(actionMemoMetrics, times(2)).recordWeeklySummaryGenerated();
             verify(actionMemoMetrics, times(1)).recordWeeklySummaryFailed();
