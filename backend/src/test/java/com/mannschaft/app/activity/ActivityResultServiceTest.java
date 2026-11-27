@@ -131,7 +131,7 @@ class ActivityResultServiceTest {
             given(resultRepository.findById(ACTIVITY_ID)).willReturn(Optional.of(teamOriginal()));
             org.mockito.BDDMockito.willThrow(new BusinessException(
                     com.mannschaft.app.common.CommonErrorCode.COMMON_002))
-                    .given(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+                    .given(scopeAccessGuard).checkMembershipForWrite(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
 
             assertThatThrownBy(() -> service.duplicateActivity(ACTIVITY_ID, USER_ID, null))
                     .isInstanceOf(BusinessException.class)
@@ -151,7 +151,7 @@ class ActivityResultServiceTest {
 
             ActivityResultEntity result = service.duplicateActivity(ACTIVITY_ID, USER_ID, null);
             assertThat(result).isNotNull();
-            verify(scopeAccessGuard).checkScopeContentAccess(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
+            verify(scopeAccessGuard).checkMembershipForWrite(USER_ID, ActivityScopeType.TEAM, SCOPE_ID);
         }
     }
 
