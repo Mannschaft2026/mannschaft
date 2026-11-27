@@ -120,12 +120,19 @@ class TimelineEffortReadGuardScanTest {
     @DisplayName("非表示が少なければ従来どおり見えた投稿の ID を目印に、要求件数で埋めたページを返す")
     void 上限に届かなければ従来どおり() {
         Feed feed = new Feed(new AtomicInteger(), new AtomicInteger());
-        // 新しい順 5990, 5989 が見え、5989 が先読み（次ページにある見える投稿）になる
+        // 新しい順は 6000〜5991 の 10 件が非表示、その後ろに見える 5990, 5989 が続く。要求 1 件なら 5990 が 1 ページ目で、
+        // 5989 が「次がある」の根拠（先読み）になる。取得は要求件数 1 から倍々（1, 2, 4, 8 件）で、各回は「件数 + 先読み 1 行」を読む。
+        //   1 回目 count=1: 6000, 5999 の 2 行（判定対象は 6000 のみ・非表示）
+        //   2 回目 count=2: 5999, 5998, 5997 の 3 行（判定対象 5999, 5998・非表示）
+        //   3 回目 count=4: 5997〜5993 の 5 行（判定対象 5997〜5994・非表示）
+        //   4 回目 count=8: 5993〜5985 の 9 行（判定対象 5993〜5986 のうち 5990, 5989 が見え、件数 + 1 = 2 が揃って終わる）
+        // 合計 4 回・19 行で、1000 行の上限には届かず暗号化トークンへ切り替わらない（目印は最後に見えた投稿の ID 5990）。
         TimelineVisiblePage page = guard.fillVisiblePage(null, 1, feed::fetch, 1L);
         assertThat(page.posts()).extracting(PostResponse::getId).containsExactly(5990L);
         assertThat(page.nextCursor()).isEqualTo(5990L);
         assertThat(page.hasNext()).isTrue();
-        assertThat(feed.calls().get()).isEqualTo(1);
+        assertThat(feed.calls().get()).isEqualTo(4);
+        assertThat(feed.rows().get()).isEqualTo(19);
     }
 
     @Test
