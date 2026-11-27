@@ -1,9 +1,10 @@
 package com.mannschaft.app.filesharing.dto;
 
+import com.mannschaft.app.common.timezone.UserZoneLocalDateTimeParser;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * 公開ファイルリンク（未認証）のアクセス応答DTO。
@@ -20,13 +21,16 @@ public class PublicFileLinkResponse {
     private final Long fileSize;
     private final String contentType;
     private final String description;
-    private final LocalDateTime updatedAt;
+    /** 更新日時。起きた瞬間なので {@link Instant}（元の LocalDateTime 列は SERVER_ZONE の壁時計として解釈して変換）。 */
+    private final Instant updatedAt;
     /** ダウンロード禁止フラグ（true の場合 FE はダウンロードボタンを出さない）。 */
     private final Boolean downloadDisabled;
 
     /** 認証済み向けの {@link FileResponse} から公開してよい項目だけを写す。 */
     public static PublicFileLinkResponse from(FileResponse file) {
         return new PublicFileLinkResponse(file.getName(), file.getFileSize(), file.getContentType(),
-                file.getDescription(), file.getUpdatedAt(), file.getDownloadDisabled());
+                file.getDescription(),
+                file.getUpdatedAt() == null ? null : file.getUpdatedAt().atZone(UserZoneLocalDateTimeParser.SERVER_ZONE).toInstant(),
+                file.getDownloadDisabled());
     }
 }
