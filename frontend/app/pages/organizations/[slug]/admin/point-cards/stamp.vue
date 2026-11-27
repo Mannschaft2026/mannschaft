@@ -22,6 +22,7 @@ import type { FetchError } from 'ofetch'
 import type { BalanceEventResponse, OrgPointCardProvider, ResolveTokenResponse, StampEventResponse } from '~/types/orgPointCard'
 import type { BarcodeFormat } from '~/types/pointCard'
 import { useToast } from 'primevue/usetoast'
+import { extractShareToken, isCardId } from '~/utils/walletShareToken'
 
 definePageMeta({ layout: 'organization', middleware: 'auth' })
 
@@ -48,8 +49,7 @@ const canAccess = computed(() =>
   || myOrg.value?.role === 'DEPUTY_ADMIN',
 )
 
-// UUID 形式（簡易判定: 8-4-4-4-12）
-const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+// 共有トークン（Base64URL 43 字）とカード ID（UUID）の形式判定は utils/walletShareToken.ts
 
 // ─── カード特定モード ────────────────────────────────────────
 type ResolveMode = 'qr' | 'manual'
@@ -97,9 +97,9 @@ onMounted(async () => {
 /**
  * BarcodeCapture から受け取った値からトークンを抽出して resolve する。
  * 顧客側 share QR の形式:
- *   - mannschaft://wallet/share?token=UUID
- *   - https://<host>/wallet/share?token=UUID（PWA フォールバック）
- * 純粋な UUID 文字列が来た場合は token そのものとして扱う。
+ *   - mannschaft://wallet/share?token=<共有トークン>
+ *   - https://<host>/wallet/share?token=<共有トークン>（PWA フォールバック）
+ * 素の共有トークン（Base64URL 43字）が来た場合は token そのものとして扱う。
  */
 async function onQrDetected(value: string, _format: BarcodeFormat) {
   const token = extractToken(value)
@@ -115,24 +115,7 @@ async function onQrDetected(value: string, _format: BarcodeFormat) {
 }
 
 function extractToken(qrValue: string): string | null {
-  const raw = qrValue.trim()
-  if (!raw) return null
-
-  // 純 UUID 形式
-  if (UUID_PATTERN.test(raw)) return raw
-
-  // URL 系（mannschaft:// は WHATWG URL がパースできないため https:// に置換）
-  try {
-    const normalized = raw.startsWith('mannschaft://')
-      ? raw.replace('mannschaft://', 'https://app.local/')
-      : raw
-    const url = new URL(normalized)
-    const token = url.searchParams.get('token')
-    if (token && UUID_PATTERN.test(token)) return token
-  } catch {
-    // パース失敗 → 不正な QR
-  }
-  return null
+  return extractShareToken(qrValue)
 }
 
 async function resolveToken(token: string) {
@@ -175,7 +158,7 @@ async function resolveToken(token: string) {
 function applyManualCardId() {
   manualError.value = null
   const v = cardIdInput.value.trim()
-  if (!UUID_PATTERN.test(v)) {
+  if (!isCardId(v)) {
     manualError.value = t('wallet.admin.stamp.card_id_invalid')
     return
   }
