@@ -492,10 +492,6 @@ com.mannschaft.app.shiftbudget.service.ShiftBudgetSummaryService#hasOrgPermissio
 com.mannschaft.app.shiftbudget.service.TodoBudgetLinkService#requireBudgetView
 
 ## signage
-com.mannschaft.app.signage.service.SignageEmergencyService#listEmergencyMessages
-com.mannschaft.app.signage.service.SignageScreenReadFacade#getScreenForActor
-com.mannschaft.app.signage.service.SignageScreenService#listScreensForActor
-com.mannschaft.app.signage.service.SignageSlotService#listSlotsForActor
 
 ## social
 com.mannschaft.app.social.announcement.AnnouncementBroadcastService#broadcast

@@ -1,5 +1,7 @@
 package com.mannschaft.app.match.live;
 
+import com.mannschaft.app.signage.service.SignageAccessTokenService;
+import com.mannschaft.app.signage.websocket.SignageSubscriptionInterceptor;
 import com.mannschaft.app.chat.repository.ChatChannelMemberRepository;
 import com.mannschaft.app.chat.repository.ChatChannelRepository;
 import com.mannschaft.app.chat.ws.ChatChannelSubscriptionInterceptor;
@@ -66,11 +68,17 @@ class MatchLiveSubscriptionInterceptorContextTest {
         }
 
         @Bean
+        SignageSubscriptionInterceptor signageSubscriptionInterceptor() {
+            return new SignageSubscriptionInterceptor(Mockito.mock(SignageAccessTokenService.class));
+        }
+
+        @Bean
         WebSocketConfig webSocketConfig(WebSocketAuthChannelInterceptor auth,
                                         MatchLiveSubscriptionInterceptor sub,
                                         EmergencyClosureSubscriptionInterceptor closureSub,
-                                        ChatChannelSubscriptionInterceptor chatSub) {
-            return new WebSocketConfig(auth, sub, closureSub, chatSub);
+                                        ChatChannelSubscriptionInterceptor chatSub,
+                                        SignageSubscriptionInterceptor signageSub) {
+            return new WebSocketConfig(auth, sub, closureSub, chatSub, signageSub);
         }
     }
 
@@ -100,18 +108,22 @@ class MatchLiveSubscriptionInterceptorContextTest {
                 new ChatChannelSubscriptionInterceptor(
                         Mockito.mock(ChatChannelRepository.class),
                         Mockito.mock(ChatChannelMemberRepository.class));
-        WebSocketConfig config = new WebSocketConfig(auth, sub, closureSub, chatSub);
+        SignageSubscriptionInterceptor signageSub =
+                new SignageSubscriptionInterceptor(Mockito.mock(SignageAccessTokenService.class));
+        WebSocketConfig config = new WebSocketConfig(auth, sub, closureSub, chatSub, signageSub);
 
         ChannelRegistration registration = new ChannelRegistration();
         config.configureClientInboundChannel(registration);
 
         List<ChannelInterceptor> interceptors = extractInterceptors(registration);
-        assertThat(interceptors).hasSize(4);
+        assertThat(interceptors).hasSize(5);
         // 認証（CONNECT で userId 確定）が先、購読認可（SUBSCRIBE）が後段に並ぶ。
         assertThat(interceptors.get(0)).isSameAs(auth);
         assertThat(interceptors.get(1)).isSameAs(sub);
         assertThat(interceptors.get(2)).isSameAs(closureSub);
         assertThat(interceptors.get(3)).isSameAs(chatSub);
+        // CMP-261124-0159: サイネージ配信トピックの購読認可（最後段）
+        assertThat(interceptors.get(4)).isSameAs(signageSub);
     }
 
     /** {@link ChannelRegistration#getInterceptors()}（protected）を反射で呼び出して登録済み一覧を取り出す。 */

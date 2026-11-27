@@ -361,6 +361,11 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                        WHERE u.id = l.scopeId
                          AND u.status = com.mannschaft.app.auth.entity.UserEntity.UserStatus.ACTIVE
                          AND u.publicProfileEnabled = TRUE))
+              AND (l.scopeType <> com.mannschaft.app.recruitment.RecruitmentScopeType.TEAM
+                   OR NOT EXISTS (
+                       SELECT 1 FROM TeamEntity mt
+                       WHERE mt.id = l.scopeId
+                         AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE))
               AND l.status IN (
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.OPEN,
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.FULL)
@@ -380,6 +385,8 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                         WHERE rr.listingId = l.id))
               )
             """)
+    // CMP-261124-0159: 市の一覧・詳細・summary の 6 本は、掲載元が非公開チーム（メンバー限定）の募集を同じ述語
+    // （TEAM なら teams.visibility <> MEMBERS_AND_ABOVE）で除外する（親チーム上限・F00 §20.5.3）。
     Page<RecruitmentListingEntity> searchMarketListings(
             @Param("prefecture") String prefecture,
             @Param("city") String city,
@@ -413,6 +420,11 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                          AND u.status = com.mannschaft.app.auth.entity.UserEntity.UserStatus.ACTIVE
                          AND (l.visibility = com.mannschaft.app.recruitment.RecruitmentVisibility.SELECTED_SCOPES
                               OR u.publicProfileEnabled = TRUE)))
+              AND (l.scopeType <> com.mannschaft.app.recruitment.RecruitmentScopeType.TEAM
+                   OR NOT EXISTS (
+                       SELECT 1 FROM TeamEntity mt
+                       WHERE mt.id = l.scopeId
+                         AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE))
               AND l.status IN (
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.OPEN,
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.FULL)
@@ -470,6 +482,11 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                        WHERE u.id = l.scopeId
                          AND u.status = com.mannschaft.app.auth.entity.UserEntity.UserStatus.ACTIVE
                          AND u.publicProfileEnabled = TRUE))
+              AND (l.scopeType <> com.mannschaft.app.recruitment.RecruitmentScopeType.TEAM
+                   OR NOT EXISTS (
+                       SELECT 1 FROM TeamEntity mt
+                       WHERE mt.id = l.scopeId
+                         AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE))
               AND l.status IN (
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.OPEN,
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.FULL)
@@ -494,6 +511,11 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                          AND u.status = com.mannschaft.app.auth.entity.UserEntity.UserStatus.ACTIVE
                          AND (l.visibility = com.mannschaft.app.recruitment.RecruitmentVisibility.SELECTED_SCOPES
                               OR u.publicProfileEnabled = TRUE)))
+              AND (l.scopeType <> com.mannschaft.app.recruitment.RecruitmentScopeType.TEAM
+                   OR NOT EXISTS (
+                       SELECT 1 FROM TeamEntity mt
+                       WHERE mt.id = l.scopeId
+                         AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE))
               AND l.status IN (
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.OPEN,
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.FULL)
@@ -528,6 +550,11 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                        WHERE u.id = l.scopeId
                          AND u.status = com.mannschaft.app.auth.entity.UserEntity.UserStatus.ACTIVE
                          AND u.publicProfileEnabled = TRUE))
+              AND (l.scopeType <> com.mannschaft.app.recruitment.RecruitmentScopeType.TEAM
+                   OR NOT EXISTS (
+                       SELECT 1 FROM TeamEntity mt
+                       WHERE mt.id = l.scopeId
+                         AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE))
               AND l.status IN (
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.OPEN,
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.FULL)
@@ -559,6 +586,11 @@ public interface RecruitmentListingRepository extends JpaRepository<RecruitmentL
                        WHERE u.id = l.scopeId
                          AND u.status = com.mannschaft.app.auth.entity.UserEntity.UserStatus.ACTIVE
                          AND u.publicProfileEnabled = TRUE))
+              AND (l.scopeType <> com.mannschaft.app.recruitment.RecruitmentScopeType.TEAM
+                   OR NOT EXISTS (
+                       SELECT 1 FROM TeamEntity mt
+                       WHERE mt.id = l.scopeId
+                         AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE))
               AND l.status IN (
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.OPEN,
                   com.mannschaft.app.recruitment.RecruitmentListingStatus.FULL)

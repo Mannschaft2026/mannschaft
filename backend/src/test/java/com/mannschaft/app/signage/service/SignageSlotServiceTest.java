@@ -1,5 +1,6 @@
 package com.mannschaft.app.signage.service;
 
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.signage.SignageSlotType;
@@ -42,6 +43,10 @@ class SignageSlotServiceTest {
 
     @Mock
     private AccessControlService accessControlService;
+
+    /** CMP-261124-0159: 親チーム上限の判定（既定では上限に掛からない）。 */
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     @InjectMocks
     private SignageSlotService slotService;

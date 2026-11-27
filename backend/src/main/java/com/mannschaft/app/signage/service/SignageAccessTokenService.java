@@ -2,6 +2,7 @@ package com.mannschaft.app.signage.service;
 
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import com.mannschaft.app.common.token.IssuedToken;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.signage.SignageErrorCode;
@@ -32,6 +33,11 @@ public class SignageAccessTokenService {
     private final SignageScreenRepository screenRepository;
     private final AccessControlService accessControlService;
     private final SecretTokenVault vault;
+    /** CMP-261124-0159: 画面の所属チームが非公開チーム（メンバー限定）かの判定（F00 §20.5.3 サイネージ行）。 */
+    private final MembersOnlyTeamQuery membersOnlyTeamQuery;
+
+    /** 画面のスコープ種別のうちチームを表す値。 */
+    private static final String SCOPE_TEAM = "TEAM";
 
     // ========================================
     // DTO 定義
@@ -91,6 +97,12 @@ public class SignageAccessTokenService {
 
         // 認可: 当該画面スコープの ADMIN/DEPUTY_ADMIN のみトークン発行可能
         accessControlService.checkAdminOrAbove(createdBy, screen.getScopeId(), screen.getScopeType());
+
+        // CMP-261124-0159: 非公開チームの画面にはトークンを発行しない（判定順: 既存の認可 → 公開範囲。F00 §20.5.3）。
+        // トークンは未ログインの端末に画面の中身を開く capability のため、メンバー限定のチームでは配らない。
+        if (isMembersOnlyTeamScreen(screen)) {
+            throw new BusinessException(SignageErrorCode.SIGNAGE_009);
+        }
 
         // 乱数トークン生成（平文は応答にだけ載せ、保存するのはハッシュのみ）
         IssuedToken issuedToken = vault.issueBase64Url();
@@ -167,8 +179,71 @@ public class SignageAccessTokenService {
             throw new BusinessException(SignageErrorCode.SIGNAGE_002);
         }
 
+        // CMP-261124-0159: 利用時にも画面の所属チームの公開範囲を確かめる（多層防御・F00 §20.5.3）。
+        // 非公開化・是正 migration の取りこぼしで有効のまま残ったトークンでも、無効トークンと同一の SIGNAGE_002 にし、
+        // 画面情報・スロット・緊急メッセージを返さない（拒否理由から公開範囲の段を推測させない）。
+        boolean cappedScreen = screenRepository.findByIdAndDeletedAtIsNull(entity.getScreenId())
+                .map(this::isMembersOnlyTeamScreen)
+                .orElse(false);
+        if (cappedScreen) {
+            throw new BusinessException(SignageErrorCode.SIGNAGE_002);
+        }
+
         log.debug("サイネージトークン検証成功: id={}", entity.getId());
         return entity;
+    }
+
+    /**
+     * STOMP 購読認可用: トークンのハッシュが、指定画面に対して今有効かを判定する（例外を投げない）。
+     *
+     * <p>{@code SignageSubscriptionInterceptor} が {@code /topic/signage/{screenId}/**} の SUBSCRIBE ごとに呼ぶ
+     * （CMP-261124-0159・AC-0159-99 / AC-0159-26b）。次をすべて満たすときだけ true:
+     * トークンが存在し未失効・期限内（{@link #validateToken} と同じ条件）、トークンの画面が {@code screenId} と一致、
+     * 画面が未削除で、所属チームが非公開チームでない。購読のたびに DB を引き直すため、失効・非公開化は次の購読から即時に効く。</p>
+     *
+     * @param tokenHash 接続時に受け取ったトークンの SHA-256 ハッシュ（平文は保持しない）
+     * @param screenId  購読先の画面 ID
+     * @return 購読してよければ true
+     */
+    public boolean canSubscribe(String tokenHash, Long screenId) {
+        if (tokenHash == null || screenId == null) {
+            return false;
+        }
+        return tokenRepository.findByTokenHashAndIsActiveTrue(tokenHash)
+                .filter(token -> !token.isExpired(LocalDateTime.now()))
+                .filter(token -> screenId.equals(token.getScreenId()))
+                .flatMap(token -> screenRepository.findByIdAndDeletedAtIsNull(token.getScreenId()))
+                .map(screen -> !isMembersOnlyTeamScreen(screen))
+                .orElse(false);
+    }
+
+    /**
+     * STOMP 接続時に受け取った平文トークンを、セッションに保持するハッシュへ変換する（平文はセッションに置かない）。
+     *
+     * @param token 平文トークン
+     * @return SHA-256 ハッシュ
+     */
+    public String hashForSession(String token) {
+        return vault.hash(token);
+    }
+
+    /**
+     * チームの全画面のアクセストークン（期限なしを含む）を一括で無効化する（CMP-261124-0159・F00 §20.5.3）。
+     *
+     * <p>非公開化フロー（F01.2 03・PR-T の {@code TeamVisibilityTransitionFacade}）が呼ぶ。問い合わせは UPDATE 1 本で、
+     * 画面数・トークン数に比例しない。既に無効なトークンは数えない。</p>
+     *
+     * @param teamId チーム ID
+     * @return 無効化したトークンの件数
+     */
+    @Transactional
+    public int deactivateTokensForTeam(Long teamId) {
+        if (teamId == null) {
+            return 0;
+        }
+        int count = tokenRepository.deactivateActiveTokensByTeam(teamId);
+        log.info("サイネージトークン一括無効化（非公開化）: teamId={}, count={}", teamId, count);
+        return count;
     }
 
     // ========================================
@@ -182,6 +257,11 @@ public class SignageAccessTokenService {
      * @param screenId 画面ID
      * @param actor    操作者ユーザーID
      */
+    private boolean isMembersOnlyTeamScreen(SignageScreenEntity screen) {
+        return SCOPE_TEAM.equals(screen.getScopeType())
+                && membersOnlyTeamQuery.findMembersOnlyTeamIds(List.of(screen.getScopeId())).contains(screen.getScopeId());
+    }
+
     private void checkScreenAdmin(Long screenId, Long actor) {
         SignageScreenEntity screen = screenRepository.findByIdAndDeletedAtIsNull(screenId)
                 .orElseThrow(() -> new BusinessException(SignageErrorCode.SIGNAGE_001));

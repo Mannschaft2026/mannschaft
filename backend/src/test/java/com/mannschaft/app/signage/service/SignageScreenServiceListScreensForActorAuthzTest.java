@@ -1,5 +1,6 @@
 package com.mannschaft.app.signage.service;
 
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
@@ -38,6 +39,10 @@ class SignageScreenServiceListScreensForActorAuthzTest {
     @Mock private SignageScreenRepository screenRepository;
     @Mock private AccessControlService accessControlService;
 
+    /** CMP-261124-0159: 親チーム上限の判定（既定では上限に掛からない）。 */
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
+
     @InjectMocks
     private SignageScreenService screenService;
 
@@ -70,7 +75,7 @@ class SignageScreenServiceListScreensForActorAuthzTest {
     @Test
     @DisplayName("TEAMスコープ: MEMBERは200相当で取得できる（Wave7契約維持）")
     void team_member_isAllowed() {
-        doNothing().when(accessControlService).checkMembership(ACTOR_ID, SCOPE_ID, "TEAM");
+        doNothing().when(scopeContentAccessGate).checkScopeContentAccess(ACTOR_ID, SCOPE_ID, "TEAM");
         given(screenRepository.findByScopeTypeAndScopeIdAndIsActiveTrueAndDeletedAtIsNull("TEAM", SCOPE_ID))
                 .willReturn(List.of());
 
@@ -82,7 +87,7 @@ class SignageScreenServiceListScreensForActorAuthzTest {
     @DisplayName("TEAMスコープ: 非メンバーは403（COMMON_002）で拒否される")
     void team_nonMember_isForbidden() {
         doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .when(accessControlService).checkMembership(ACTOR_ID, SCOPE_ID, "TEAM");
+                .when(scopeContentAccessGate).checkScopeContentAccess(ACTOR_ID, SCOPE_ID, "TEAM");
 
         assertThatThrownBy(() -> screenService.listScreensForActor("TEAM", SCOPE_ID, ACTOR_ID))
                 .isInstanceOf(BusinessException.class)

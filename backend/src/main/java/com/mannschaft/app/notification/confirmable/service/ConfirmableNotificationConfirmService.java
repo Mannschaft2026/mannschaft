@@ -3,6 +3,7 @@ package com.mannschaft.app.notification.confirmable.service;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationEntity;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationRecipientEntity;
 import com.mannschaft.app.notification.confirmable.entity.ConfirmableNotificationStatus;
@@ -42,6 +43,8 @@ public class ConfirmableNotificationConfirmService {
     private final ConfirmableNotificationRecipientRepository recipientRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
+    /** CMP-261124-0159: 非公開チームの確認通知は、宛先が MEMBER 未満ならトークンを無効扱いにする（F00 §20.5.3）。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * 認証済みユーザーがアプリ内から確認通知を確認する。
@@ -118,6 +121,16 @@ public class ConfirmableNotificationConfirmService {
                 recipientRepository.findByConfirmToken(confirmToken)
                         .orElseThrow(() -> new BusinessException(ConfirmableNotificationErrorCode.INVALID_TOKEN));
         Long notificationId = unlockedRecipient.getConfirmableNotification().getId();
+
+        // CMP-261124-0159: 送り元が非公開チームで、トークンの宛先がそのチームで MEMBER 未満（外されたサポーター等）なら
+        // 不在トークンと同一応答にする（MEMBER 以上の宛先は従来どおり。F00 §20.5.3）。ロック取得前に判定する。
+        ConfirmableNotificationEntity unlockedNotification = unlockedRecipient.getConfirmableNotification();
+        if (unlockedNotification.getScopeType() == com.mannschaft.app.membership.ScopeType.TEAM
+                && unlockedRecipient.getUser() != null
+                && scopeContentAccessGate.isBeyondTeamContentCap(unlockedRecipient.getUser().getId(),
+                        unlockedNotification.getScopeId(), unlockedNotification.getScopeType().name())) {
+            throw new BusinessException(ConfirmableNotificationErrorCode.INVALID_TOKEN);
+        }
 
         // 手順2: 親の行を FOR UPDATE でロックする。
         ConfirmableNotificationEntity notification = notificationRepository.findByIdForUpdate(notificationId)

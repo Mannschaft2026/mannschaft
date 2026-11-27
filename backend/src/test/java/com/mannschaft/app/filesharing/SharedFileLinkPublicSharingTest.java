@@ -1,5 +1,6 @@
 package com.mannschaft.app.filesharing;
 
+import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
@@ -69,6 +70,10 @@ class SharedFileLinkPublicSharingTest {
     @org.mockito.Spy
     private com.mannschaft.app.common.token.SecretTokenVault vault =
             new com.mannschaft.app.common.token.SecretTokenVault();
+
+    /** CMP-261124-0159: 親チーム上限の判定（既定では上限に掛からない）。 */
+    @Mock
+    private MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     @InjectMocks
     private SharedFileLinkService service;

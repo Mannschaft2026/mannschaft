@@ -4,6 +4,7 @@ import com.mannschaft.app.chat.ws.ChatChannelSubscriptionInterceptor;
 import com.mannschaft.app.common.websocket.StompErrorCodeErrorHandler;
 import com.mannschaft.app.match.live.MatchLiveSubscriptionInterceptor;
 import com.mannschaft.app.reservation.ws.EmergencyClosureSubscriptionInterceptor;
+import com.mannschaft.app.signage.websocket.SignageSubscriptionInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -46,6 +47,10 @@ import java.util.Arrays;
  * <p>さらに {@link ChatChannelSubscriptionInterceptor} を認証インターセプタの後段に登録し、
  * チャットチャネルトピック（{@code /topic/channels/{channelId}}）の SUBSCRIBE 認可
  * （チャネルメンバーシップ検査・非メンバー拒否）を行い、既存 IDOR を閉塞する（§2.6・AC-11）。</p>
+ *
+ * <p>{@link SignageSubscriptionInterceptor} はサイネージ配信トピック（{@code /topic/signage/{screenId}/emergency}・
+ * {@code /update}）の SUBSCRIBE を、CONNECT ヘッダ {@code signage-token} のトークンが有効でその画面のものであり、
+ * 画面の所属チームが非公開チームでないときだけ許可する（CMP-261124-0159・F00 §20.5.5・AC-0159-26b / AC-0159-99）。</p>
  */
 @Configuration
 @RequiredArgsConstructor
@@ -55,6 +60,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final MatchLiveSubscriptionInterceptor matchLiveSubscriptionInterceptor;
     private final EmergencyClosureSubscriptionInterceptor emergencyClosureSubscriptionInterceptor;
     private final ChatChannelSubscriptionInterceptor chatChannelSubscriptionInterceptor;
+    private final SignageSubscriptionInterceptor signageSubscriptionInterceptor;
 
     /**
      * WebSocket ハンドシェイクで許可するオリジン。{@code CorsConfig} と同じプロパティを使用し、
@@ -99,6 +105,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 authChannelInterceptor,
                 matchLiveSubscriptionInterceptor,
                 emergencyClosureSubscriptionInterceptor,
-                chatChannelSubscriptionInterceptor);
+                chatChannelSubscriptionInterceptor,
+                signageSubscriptionInterceptor);
     }
 }

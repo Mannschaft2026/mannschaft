@@ -1,6 +1,7 @@
 package com.mannschaft.app.signage.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.signage.SignageErrorCode;
 import com.mannschaft.app.signage.SignageLayout;
@@ -29,6 +30,8 @@ public class SignageScreenService {
 
     private final SignageScreenRepository screenRepository;
     private final AccessControlService accessControlService;
+    /** CMP-261124-0159: 中身の読み取りは共通の門で非公開チームの上限を課す（F00 §20.3）。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     // ========================================
     // DTO 定義
@@ -175,7 +178,7 @@ public class SignageScreenService {
         if ("ORGANIZATION".equals(scopeType)) {
             accessControlService.checkAdminOrAbove(actor, scopeId, scopeType);
         } else {
-            accessControlService.checkMembership(actor, scopeId, scopeType);
+            scopeContentAccessGate.checkScopeContentAccess(actor, scopeId, scopeType);
         }
         return listScreens(scopeType, scopeId);
     }

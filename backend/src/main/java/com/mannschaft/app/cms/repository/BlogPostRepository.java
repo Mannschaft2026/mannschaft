@@ -365,6 +365,10 @@ public interface BlogPostRepository extends JpaRepository<BlogPostEntity, Long> 
             + "AND bp.visibility = com.mannschaft.app.cms.Visibility.PUBLIC "
             + "AND bp.status = com.mannschaft.app.cms.PostStatus.PUBLISHED "
             + "AND bp.publicVisible = true "
+            // CMP-261124-0159: 非公開チーム（メンバー限定）のスコープの投稿は公開プロフィールに出さない（F00 §20.5.3）
+            + "AND (bp.teamId IS NULL OR NOT EXISTS ("
+            + "    SELECT 1 FROM TeamEntity mt WHERE mt.id = bp.teamId "
+            + "    AND mt.visibility = com.mannschaft.app.team.entity.TeamEntity.Visibility.MEMBERS_AND_ABOVE)) "
             + "ORDER BY bp.createdAt DESC, bp.id DESC")
     Page<BlogPostEntity> findPublicPostsByAuthorId(@Param("authorId") Long authorId, Pageable pageable);
 

@@ -1,5 +1,6 @@
 package com.mannschaft.app.publicview.service;
 
+import com.mannschaft.app.common.MembersOnlyTeamQuery;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.cms.PostStatus;
 import com.mannschaft.app.cms.Visibility;
@@ -46,6 +47,10 @@ class PublicPostCommentServiceTest {
     private BlogPostRepository blogPostRepository;
     @Mock
     private UserRepository userRepository;
+
+    /** CMP-261124-0159: 親チーム上限の判定（既定では上限に掛からない）。 */
+    @Mock
+    private MembersOnlyTeamQuery membersOnlyTeamQuery;
 
     @InjectMocks
     private PublicPostCommentService service;
