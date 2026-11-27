@@ -7,6 +7,7 @@
 //     docs/task-list/YYYY-MM.md … ID CMP-YYMMDD-HHMM の YYMM の月の行
 //     docs/task-list/legacy.md  … 旧形式 ID（CMP-003 等、月不明）の行
 //   判定: docs/task-list/ に YYYY-MM.md か legacy.md が1つでもあれば新配置。
+// - 変更申告（CMP-261124-1222 ④）: docs/task-list/changes/*.md。readLedger は既定で申告を適用した実効台帳を files に返す（下の「変更申告」節）。
 //
 // ファイルの読み取りは注入する（reader = { listDir(dir), readFile(path) }。どちらも同期・非同期のどちらで返してもよい）。
 // - listDir(dir): ディレクトリ内の名前の配列。ディレクトリが無ければ null。
@@ -18,6 +19,7 @@
 // 依存パッケージなし（GitHub ランナー既定の Node で動く）。
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -119,37 +121,46 @@ async function fetchOrThrow(what, fn) {
 /**
  * 台帳を読む。
  * @param {{ listDir(dir: string): (string[]|null|Promise<string[]|null>), readFile(path: string): (string|null|Promise<string|null>) }} reader
- * @param {{ requireRows?: boolean }} [options] requireRows（既定 true）: 索引の不在・行0件を LedgerReadError にする。
+ * @param {{ requireRows?: boolean, raw?: boolean }} [options] requireRows（既定 true）: 索引の不在・行0件を LedgerReadError にする。
  *   構造検査のように不在・0件を自分で報告する呼び出し側だけが false にする。
- * @returns {Promise<{ layout: 'single'|'split', files: {path: string, content: string|null}[], rows: {id: string, line: string, file: string, lineNumber: number}[], missing: string[] }>}
- *   files は索引が先頭、続いて docs/task-list/ のファイルを名前順（新配置のときだけ）。
+ *   raw（既定 false）: files を申告適用前の生の月別ファイルで返す（申告の解析・problems は返す。applied は空）。
+ * @returns {Promise<{ layout: 'single'|'split', files: {path: string, content: string|null}[], rawFiles: {path: string, content: string|null}[], rows: {id: string, line: string, file: string, lineNumber: number}[], missing: string[], changes: { entries: object[], applied: string[], problems: {kind: string, path: string, message: string}[] } }>}
+ *   files は索引が先頭、続いて docs/task-list/ のファイルを名前順（新配置のときだけ）。既定では申告（docs/task-list/changes/）を
+ *   base 連鎖で適用した仮想本文（実効台帳）で、申告が add で作る新しい月のファイルも含む。申告そのものは files に入れず changes に置く。
+ *   申告が0件（changes/ が無い・空）なら files は生の本文と同じ。
  */
-export async function readLedger(reader, { requireRows = true } = {}) {
+export async function readLedger(reader, { requireRows = true, raw = false } = {}) {
   if (!reader || typeof reader.listDir !== 'function' || typeof reader.readFile !== 'function') {
     throw new TypeError('readLedger: reader には listDir と readFile が要る');
   }
   const entries = await fetchOrThrow(LEDGER_DIR + '/ の一覧', () => reader.listDir(LEDGER_DIR));
   if (entries != null && !Array.isArray(entries)) throw new LedgerReadError(LEDGER_DIR + '/ の一覧が配列でない');
-  const names = (entries ?? []).map(String).sort(byName);
+  const listed = (entries ?? []).map(String).sort(byName);
+  const hasChanges = listed.includes(CHANGES_DIR_NAME);
+  const names = listed.filter((n) => n !== CHANGES_DIR_NAME);
   const layout = names.some(isLedgerFileName) ? 'split' : 'single';
   const indexContent = await fetchOrThrow(LEDGER_INDEX_PATH, () => reader.readFile(LEDGER_INDEX_PATH));
   if (indexContent != null && typeof indexContent !== 'string') throw new LedgerReadError(LEDGER_INDEX_PATH + ' の本文が文字列でない');
-  const files = [{ path: LEDGER_INDEX_PATH, content: indexContent ?? null }];
+  const rawFiles = [{ path: LEDGER_INDEX_PATH, content: indexContent ?? null }];
   if (layout === 'split') {
     for (const name of names) {
       const path = LEDGER_DIR + '/' + name;
       const content = await fetchOrThrow(path, () => reader.readFile(path));
       if (typeof content !== 'string') throw new LedgerReadError(path + ' は一覧にあるのに本文を読めない');
-      files.push({ path, content });
+      rawFiles.push({ path, content });
     }
   }
+  const read = hasChanges ? await readChanges(reader) : { entries: [], problems: [] };
+  const effective = applyChanges(rawFiles, layout, read.entries);
+  const files = raw ? rawFiles : effective.files;
   const rows = files.flatMap((f) => (f.content == null ? [] : extractRows(f.content, f.path)));
-  const missing = files.filter((f) => f.content == null).map((f) => f.path);
+  const missing = rawFiles.filter((f) => f.content == null).map((f) => f.path);
   if (requireRows) {
     if (missing.length) throw new LedgerReadError(missing.join(', ') + ' が存在しない（台帳が無い状態を「行0件」とは扱わない）');
     if (rows.length === 0) throw new LedgerReadError('台帳（' + layout + ' 配置）から CMP 行を1件も読めなかった。0件は正常とみなさない');
   }
-  return { layout, files, rows, missing };
+  const changes = { entries: read.entries, applied: raw ? [] : effective.applied, problems: [...read.problems, ...effective.problems] };
+  return { layout, files, rawFiles, rows, missing, changes };
 }
 
 /** 文字列1つ（旧配置の docs/task-list.md の本文）を台帳として扱う。content が null なら索引不在。 */
@@ -160,6 +171,7 @@ export function singleFileLedger(content) {
     files: [{ path: LEDGER_INDEX_PATH, content: text }],
     rows: text == null ? [] : extractRows(text, LEDGER_INDEX_PATH),
     missing: text == null ? [LEDGER_INDEX_PATH] : [],
+    changes: { entries: [], applied: [], problems: [] },
   };
 }
 
@@ -203,10 +215,13 @@ function fsReaderFor(resolve) {
       return readdirSync(full);
     },
     readFile(path) {
-      const full = resolve(path);
-      const stat = statSync(full, { throwIfNoEntry: false });
-      if (!stat || !stat.isFile()) return null;
-      return readFileSync(full, 'utf8');
+      // stat と read の2回にせず1回で読む（申告が数百件あっても I/O を件数×1 に抑える）。不在・ディレクトリは null。
+      try {
+        return readFileSync(resolve(path), 'utf8');
+      } catch (error) {
+        if (error?.code === 'ENOENT' || error?.code === 'EISDIR' || error?.code === 'ENOTDIR') return null;
+        throw error;
+      }
     },
   };
 }
@@ -232,7 +247,244 @@ export function gitLedgerReader(ref, { cwd, maxBuffer = 64 * 1024 * 1024 } = {})
   };
 }
 
-// CLI（migrate / render / port-diff）。本体は task-list-ledger-cli.mjs（循環 import を避けて起動時にだけ読む）。
+
+// ---------------------------------------------------------------------------
+// 変更申告（docs/task-list/changes/*.md。CMP-261124-1222 ④）
+// ---------------------------------------------------------------------------
+//
+// 申告: docs/task-list/changes/<CMP-ID>--<UTC yyyymmddThhmmssZ>--<6桁乱数>.md。LF・2行固定・16KiB 以下。
+//   1行目 <!-- ledger-change v1 op=add|update id=<CMP-ID> base=none|sha256:<64hex> -->
+//   2行目 完全な7列行（月別ファイルに置いたときの形。証拠リンクは ../evidence/X）。delete は無い（行削除禁止を維持）。
+// base = 実効台帳上の対象行文字列（CR 除去・UTF-8）の sha256。畳み込みで不変。
+// 実効台帳 = 月別ファイル＋未畳み込み申告を「base 連鎖」で適用したもの（行ごとに 現在行のハッシュ = base の update を辿る）。
+//   同じ base の update が2件以上 = fork、どの版とも繋がらない update = 孤児、既に実効台帳にある ID への add = 重複。
+//   いずれも problems に入れ、その申告は適用しない（構造検査・Java 番人が赤にする）。
+//   ファイル名の時刻・乱数は add の並び（月別ファイル末尾へ（時刻, 乱数）順）と同点決着にだけ使う。update の順序は連鎖が決める。
+// CRLF の申告は CRLF を LF とみなして読む（base は CR 除去で計算するので LF の申告と同じ結果）。
+// 月別ファイル内の行順は意味を持たない（読むのは AI と CI のみ）。比較は ID→行 の対応表（ledgerRowMap）で行う。
+// Java 側の同じ実装: TaskListLedger.java（共有 fixture scripts/fixtures/task-list-ledger-cases.json の「申告:」case）。
+
+export const CHANGES_DIR_NAME = 'changes';
+export const CHANGES_DIR = LEDGER_DIR + '/' + CHANGES_DIR_NAME;
+/** 申告1件の上限（バイト・UTF-8）。ちょうどは可。 */
+export const MAX_CHANGE_BYTES = 16 * 1024;
+/** 申告のファイル名。 */
+export const CHANGE_FILE_NAME = new RegExp('^(' + CMP_ID_FORM + ')--(\\d{8}T\\d{6}Z)--(\\d{6})\\.md$');
+const CHANGE_META = new RegExp('^<!-- ledger-change v1 op=(add|update) id=(' + CMP_ID_FORM + ') base=(none|sha256:[0-9a-f]{64}) -->$');
+const CHANGE_NAME_RULE = '<CMP-ID>--<UTC yyyymmddThhmmssZ>--<6桁乱数>.md';
+
+export const TABLE_HEADER = '| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |';
+export const TABLE_SEPARATOR = '|----|------|------|------|---------|----------------|------|';
+
+function fileHeading(path) {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  if (name === LEGACY_FILE_NAME) {
+    return '# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。新しい行は ID の月のファイル docs/task-list/YYYY-MM.md の末尾に追加する。規約は [索引](../task-list.md) を参照。\n';
+  }
+  const month = name.slice(0, -3);
+  return '# 台帳 ' + month + '（ID が CMP-' + month.slice(2, 4) + month.slice(5, 7) + 'DD-HHMM の行）\n\n新しい行は本ファイルの末尾に追加する。規約は [索引](../task-list.md) を参照。\n';
+}
+
+/** 月別ファイルの新規作成時の本文（見出し＋7列表ヘッダ）。申告の add が新しい月に入るときもこの雛形から作る。 */
+export function newFileSkeleton(path) {
+  return fileHeading(path) + '\n' + TABLE_HEADER + '\n' + TABLE_SEPARATOR + '\n';
+}
+
+/** 申告の base（対象行の CR を除いた UTF-8 の sha256）。 */
+export function changeRowHash(line) {
+  return 'sha256:' + createHash('sha256').update(String(line).replace(/\r/g, ''), 'utf8').digest('hex');
+}
+
+function problem(kind, path, message, paths) {
+  return paths ? { kind, path, paths, message: path + ': 申告: ' + message } : { kind, path, message: path + ': 申告: ' + message };
+}
+
+/**
+ * 申告1件を解析する（純粋関数）。valid が false なら errors に理由（kind: name / size / format / id）。
+ * @returns {{ path: string, name: string, id: string|null, time: string|null, rand: string|null, op: string|null, base: string|null, line: string|null, content: string, valid: boolean, errors: {kind: string, path: string, message: string}[] }}
+ */
+export function parseChangeFile(path, content) {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const m = CHANGE_FILE_NAME.exec(name);
+  const errors = [];
+  const entry = { path, name, id: m ? m[1] : null, time: m ? m[2] : null, rand: m ? m[3] : null, op: null, base: null, line: null, content, valid: false, errors };
+  if (!m) {
+    errors.push(problem('name', path, 'ファイル名が不正（名前は ' + CHANGE_NAME_RULE + ' に限る）。'));
+    return entry;
+  }
+  const bytes = Buffer.byteLength(content, 'utf8');
+  if (bytes > MAX_CHANGE_BYTES) {
+    errors.push(problem('size', path, 'サイズが ' + bytes + ' バイトで上限 ' + MAX_CHANGE_BYTES + ' バイト（16KiB）を超える。'));
+    return entry;
+  }
+  const text = content.replace(/\r\n/g, '\n');
+  const lines = (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n');
+  if (text.includes('\r') || lines.length !== 2) {
+    errors.push(problem('format', path, '形式: 2行（メタ行と表の行）でない（' + lines.length + ' 行）。'));
+    return entry;
+  }
+  const meta = CHANGE_META.exec(lines[0]);
+  if (!meta) {
+    errors.push(problem('format', path, '形式: 1行目が <!-- ledger-change v1 op=add|update id=<CMP-ID> base=none|sha256:<64hex> --> でない。'));
+    return entry;
+  }
+  const [, op, id, base] = meta;
+  entry.op = op;
+  entry.base = base;
+  if (op === 'add' && base !== 'none') errors.push(problem('format', path, '形式: add の base は none に限る。'));
+  if (op === 'update' && base === 'none') errors.push(problem('format', path, '形式: update の base は sha256:<64hex>（対象行のハッシュ）が要る。'));
+  if (id !== m[1]) errors.push(problem('id', path, 'ID 不一致: ファイル名の ID ' + m[1] + ' とメタ行の ID ' + id + ' が違う。'));
+  const line = lines[1];
+  const cells = line.startsWith('|') ? splitTableRow(line) : [];
+  if (cells.length < 3) {
+    errors.push(problem('format', path, '形式: 2行目が表の行（| で始まる7列行）でない。'));
+  } else if (javaTrim(cells[1]) !== id) {
+    errors.push(problem('id', path, 'ID 不一致: メタ行の ID ' + id + ' と行の先頭セル ' + javaTrim(cells[1]) + ' が違う。'));
+  }
+  entry.line = line;
+  entry.valid = errors.length === 0;
+  return entry;
+}
+
+/** docs/task-list/changes/ を読む。エントリの不正（.md 以外・サブディレクトリ・不正名・読めない）は problems。取得失敗は例外。 */
+async function readChanges(reader) {
+  const entries = [];
+  const problems = [];
+  const listed = await fetchOrThrow(CHANGES_DIR + '/ の一覧', () => reader.listDir(CHANGES_DIR));
+  if (listed == null) {
+    problems.push(problem('entry', CHANGES_DIR, CHANGES_DIR + ' がディレクトリでない。'));
+    return { entries, problems };
+  }
+  if (!Array.isArray(listed)) throw new LedgerReadError(CHANGES_DIR + '/ の一覧が配列でない');
+  for (const name of listed.map(String).sort(byName)) {
+    const path = CHANGES_DIR + '/' + name;
+    if (!name.endsWith('.md')) {
+      problems.push(problem('entry', path, CHANGES_DIR + '/ に .md 以外のもの（サブディレクトリを含む）を置かない。'));
+      continue;
+    }
+    if (!CHANGE_FILE_NAME.test(name)) {
+      problems.push(problem('name', path, 'ファイル名が不正（名前は ' + CHANGE_NAME_RULE + ' に限る）。'));
+      continue;
+    }
+    const content = await fetchOrThrow(path, () => reader.readFile(path));
+    if (content == null) {
+      problems.push(problem('entry', path, '本文を読めない（サブディレクトリ＝ネストは置かない）。'));
+      continue;
+    }
+    if (typeof content !== 'string') throw new LedgerReadError(path + ' の本文が文字列でない');
+    const entry = parseChangeFile(path, content);
+    entries.push(entry);
+    problems.push(...entry.errors);
+  }
+  return { entries, problems };
+}
+
+function changeOrder(a, b) {
+  return byName(a.time, b.time) || byName(a.rand, b.rand) || byName(a.name, b.name);
+}
+
+function stripCr(line) {
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
+}
+
+/**
+ * 申告を生の台帳ファイルへ base 連鎖で適用する（純粋関数）。
+ * @param {{path: string, content: string|null}[]} rawFiles readLedger の生の files（索引が先頭）
+ * @param {'single'|'split'} layout split なら add は ID の月ファイル（旧形式は legacy.md）、single なら索引の末尾
+ * @param {ReturnType<typeof parseChangeFile>[]} entries 申告（valid でないものは無視する）
+ * @returns {{ files: {path: string, content: string|null}[], applied: string[], problems: {kind: string, path: string, paths?: string[], message: string}[] }}
+ */
+export function applyChanges(rawFiles, layout, entries) {
+  const valid = entries.filter((e) => e.valid);
+  const docs = new Map();
+  const loc = new Map();
+  for (const f of rawFiles) {
+    if (f.content == null) continue;
+    const doc = { path: f.path, lines: f.content.split('\n'), appended: [], isNew: false };
+    docs.set(f.path, doc);
+    for (const r of extractRows(f.content, f.path)) {
+      if (!loc.has(r.id)) loc.set(r.id, { doc, appended: false, idx: r.lineNumber - 1, cr: doc.lines[r.lineNumber - 1].endsWith('\r'), source: f.path });
+    }
+  }
+  const get = (l) => (l.appended ? l.doc.appended[l.idx] : stripCr(l.doc.lines[l.idx]));
+  const set = (l, v) => {
+    if (l.appended) l.doc.appended[l.idx] = v;
+    else l.doc.lines[l.idx] = v + (l.cr ? '\r' : '');
+  };
+  const problems = [];
+  const applied = new Set();
+  for (const e of valid.filter((x) => x.op === 'add').sort(changeOrder)) {
+    const existing = loc.get(e.id);
+    if (existing) {
+      problems.push(problem('duplicate', e.path, '重複: 既に実効台帳にある ID ' + e.id + ' への add（' + existing.source + '）。新しい ID を採るか update にすること。'));
+      continue;
+    }
+    const target = layout === 'split' ? expectedLedgerFile(e.id) : LEDGER_INDEX_PATH;
+    let doc = docs.get(target);
+    if (!doc) {
+      doc = { path: target, lines: (layout === 'split' ? newFileSkeleton(target) : '').split('\n'), appended: [], isNew: true };
+      docs.set(target, doc);
+    }
+    doc.appended.push(e.line);
+    loc.set(e.id, { doc, appended: true, idx: doc.appended.length - 1, cr: false, source: e.path });
+    applied.add(e.path);
+  }
+  const updatesById = new Map();
+  for (const e of valid.filter((x) => x.op === 'update')) {
+    if (!updatesById.has(e.id)) updatesById.set(e.id, []);
+    updatesById.get(e.id).push(e);
+  }
+  for (const id of [...updatesById.keys()].sort(byName)) {
+    const list = updatesById.get(id).sort(changeOrder);
+    const byBase = new Map();
+    for (const u of list) {
+      if (!byBase.has(u.base)) byBase.set(u.base, []);
+      byBase.get(u.base).push(u);
+    }
+    const forked = new Set();
+    for (const [base, group] of byBase) {
+      if (group.length < 2) continue;
+      forked.add(base);
+      const paths = group.map((g) => g.path);
+      problems.push(problem('fork', paths[0], 'fork（分岐）: ' + id + ' に同じ base の update が ' + group.length + ' 件ある（' + paths.join(', ') + '）。一本の連鎖（前の申告の行を base に）に直すこと。', paths));
+    }
+    const l = loc.get(id);
+    const used = new Set();
+    if (l) {
+      for (;;) {
+        const h = changeRowHash(get(l));
+        const group = byBase.get(h);
+        if (!group || forked.has(h) || used.has(group[0])) break;
+        set(l, group[0].line);
+        used.add(group[0]);
+        applied.add(group[0].path);
+      }
+    }
+    for (const u of list) {
+      if (used.has(u) || forked.has(u.base)) continue;
+      problems.push(problem('orphan', u.path, '孤児: ' + id + ' の update の base が実効台帳のどの版とも繋がらない' + (l ? '' : '（対象の行が無い）') + '。最新の実効行から base を計算し直すこと。'));
+    }
+  }
+  const render = (doc) => {
+    const text = doc.lines.join('\n');
+    if (!doc.appended.length) return text;
+    return (text === '' || text.endsWith('\n') ? text : text + '\n') + doc.appended.map((x) => x + '\n').join('');
+  };
+  const files = rawFiles.map((f) => (f.content == null ? f : { path: f.path, content: render(docs.get(f.path)) }));
+  for (const doc of docs.values()) if (doc.isNew) files.push({ path: doc.path, content: render(doc) });
+  files.sort((a, b) => (a.path === LEDGER_INDEX_PATH ? -1 : b.path === LEDGER_INDEX_PATH ? 1 : byName(a.path, b.path)));
+  return { files, applied: [...applied].sort(byName), problems };
+}
+
+/** 実効台帳の ID→行 の対応表（順序を問わない比較用。同じ ID が複数あれば最初の行）。 */
+export function ledgerRowMap(input) {
+  const ledger = asLedger(input);
+  const map = new Map();
+  for (const r of ledger.rows) if (!map.has(r.id)) map.set(r.id, r.line);
+  return map;
+}
+
+// CLI（migrate / render / port-diff / effective）。本体は task-list-ledger-cli.mjs（循環 import を避けて起動時にだけ読む）。
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // 評価完了後に読む（top-level await にすると本体との循環 import で止まる）
   import('./task-list-ledger-cli.mjs').then(({ main }) => main(process.argv.slice(2))).then((code) => { process.exitCode = code; });

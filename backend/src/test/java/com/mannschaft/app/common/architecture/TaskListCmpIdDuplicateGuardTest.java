@@ -63,6 +63,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 不正なファイル名・索引の CMP 行）も検出する。Node 側（{@code scripts/task-list-structure-check.mjs}）と同じ判定であることを
  * 共有 fixture {@code scripts/fixtures/task-list-ledger-cases.json} で固定する。</p>
  *
+ * <h2>変更申告（2026-11-27 CMP-261124-1222 ④）</h2>
+ * <p>{@code docs/task-list/changes/*.md} の申告を base 連鎖で適用した実効台帳を検査する。申告の形式・名前・サイズ・ID 一致・
+ * fork・孤児・重複・changes/ の不正なものも違反（共有 fixture の「申告:」case で Node と同じ実効台帳・同じ判定）。</p>
+ *
  * <h2>本テストは ArchUnit ではない</h2>
  * <p>Markdown ドキュメントの走査であり、ソースコードのバイトコード解析ではないため、
  * {@link PagingTotalCountSizeGuardTest} と同じ<b>ソース（ドキュメント）走査型</b>で書いた。
@@ -112,7 +116,7 @@ class TaskListCmpIdDuplicateGuardTest {
     void cmpIdは重複しない() {
         Ledger ledger = TaskListLedger.readRepository(false);
         printStatusBreakdown(TaskListLedger.concatenatedContent(ledger));
-        List<Violation> violations = realViolations(EnumSet.of(Kind.MISSING, Kind.EMPTY, Kind.SCAN, Kind.DUPLICATE));
+        List<Violation> violations = realViolations(EnumSet.of(Kind.MISSING, Kind.EMPTY, Kind.SCAN, Kind.DUPLICATE, Kind.CHANGE));
         assertThat(violations).as(describe(
                 "台帳（" + ledger.layout() + " 配置）に重複した CMP-ID、または走査経路の破損が見つかりました。",
                 "原因: 同一の ID が二重に登録されている（旧・連番形式では並行セッションが同じ最大番号を採り、git が競合検知できずに"
@@ -185,10 +189,44 @@ class TaskListCmpIdDuplicateGuardTest {
                     c.get("expectRows").forEach(r -> expected.add(List.of(r.get(0).asText(), r.get(1).asText())));
                     assertThat(ledger.rows().stream().map(r -> List.of(r.id(), r.file())).toList()).as(name).isEqualTo(expected);
                 }
+                // 申告（docs/task-list/changes/）を含む case（CMP-261124-1222 ④）: 理由はすべて含む・実効行・実効の月別ファイル本文
+                if (c.hasNonNull("reasons")) {
+                    c.get("reasons").forEach(r -> assertThat(String.join("\n", messages)).as(name).contains(r.asText()));
+                }
+                if (c.hasNonNull("expectLines")) {
+                    Map<String, String> rowMap = TaskListLedger.rowMap(ledger);
+                    c.get("expectLines").fields().forEachRemaining(e -> assertThat(rowMap.get(e.getKey())).as(name + " " + e.getKey())
+                            .isEqualTo(e.getValue().asText()));
+                }
+                if (c.hasNonNull("expectFiles")) {
+                    c.get("expectFiles").fields().forEachRemaining(e -> assertThat(ledger.files().stream()
+                            .filter(f -> f.path().equals(e.getKey())).map(TaskListLedger.LedgerFile::content).findFirst().orElse(null))
+                            .as(name + " " + e.getKey()).isEqualTo(e.getValue().asText()));
+                }
             }));
         }
         assertThat(tests).hasSizeGreaterThanOrEqualTo(40);
         return tests.stream();
+    }
+
+    @Test
+    @DisplayName("申告0件の実台帳は、実効台帳と生の本文が完全一致する（CMP-261124-1222 ④ AC-1）")
+    void 申告0件なら実効台帳と生の本文が一致する() {
+        Ledger effective = TaskListLedger.readRepository(true);
+        Ledger raw = TaskListLedger.read(TaskListLedger.fileSystem(TaskListLedger.resolveRepoRoot()), true, true);
+        assertThat(effective.changes().entries()).isEmpty();
+        assertThat(effective.changes().problems()).isEmpty();
+        assertThat(effective.files()).isEqualTo(raw.files());
+        assertThat(effective.rows()).isEqualTo(raw.rows());
+        assertThat(TaskListLedger.concatenatedContent(effective)).isEqualTo(TaskListLedger.concatenatedContent(raw));
+    }
+
+    @Test
+    @DisplayName("申告の base は対象行（CR 除去・UTF-8）の sha256、上限は 16KiB（CMP-261124-1222 ④）")
+    void 申告のbaseとサイズ上限() {
+        String line = "| CMP-261124-1222 | 戦役 | P2 実装中 | — | 条件 | 証拠 | ledger |";
+        assertThat(TaskListLedger.changeRowHash(line)).isEqualTo(TaskListLedger.changeRowHash(line + "\r")).startsWith("sha256:").hasSize(7 + 64);
+        assertThat(TaskListLedger.MAX_CHANGE_BYTES).isEqualTo(16384);
     }
 
     @Test

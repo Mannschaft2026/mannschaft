@@ -80,6 +80,12 @@ test('AC-12: 検査器は base_sha から直下へ、台帳だけを head_sha �
   assert.doesNotMatch(topLevelBlock(mergeGroupWorkflow, 'jobs'), /github-script|pull_request/, 'merge_group 経路で PR 本文検査を行わない');
 });
 
+test('CMP-261124-1222 ④: merge_group 経路は構造検査に加え、base_sha（ワークスペース直下）と group head で申告の連鎖・等式を検査する', () => {
+  const run = steps(mergeGroupWorkflow).find((step) => /node scripts\/task-list-structure-check\.mjs/.test(step.block));
+  assert.ok(run, '検査器を実行していない');
+  assert.ok(run.block.includes('node scripts/task-list-structure-check.mjs .merge-group-head/docs/task-list.md --base .'), run.block);
+});
+
 test('AC-10: PR 側の task-list-pr-gate.yml は merge_group を持たず、pull_request_target 経路は従来どおり', () => {
   const on = topLevelBlock(prWorkflow, 'on');
   assert.doesNotMatch(prWorkflow, /merge_group/);

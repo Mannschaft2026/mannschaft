@@ -124,7 +124,8 @@ export function isWorkflowPermissionRejection(reason) {
 // ---------------------------------------------------------------------------
 
 async function readTreeLedger(gitOps, treeish) {
-  return readLedger({ listDir: (dir) => gitOps.listDir(treeish, dir), readFile: (path) => gitOps.readFile(treeish, path) }, { requireRows: false });
+  // planPortDiff は月別ファイルへ書き込むため、生の月別ファイルで読む（実効台帳だと未畳み込みの申告を畳み込んでしまう）
+  return readLedger({ listDir: (dir) => gitOps.listDir(treeish, dir), readFile: (path) => gitOps.readFile(treeish, path) }, { requireRows: false, raw: true });
 }
 
 /**

@@ -2,7 +2,8 @@
 // 台帳の月別移行・表示・差分移植の CLI 本体（CMP-261124-1222 段B）。
 //   migrate            旧配置（docs/task-list.md 1枚）を 索引＋docs/task-list/YYYY-MM.md・legacy.md へ分ける。冪等・失敗時は元に戻る。
 //   render [--open] [--priority P1] [--month 2026-11]   全ファイル合わせた表を標準出力へ出す。0件は空表。
-//   port-diff <base> <head>   旧配置の docs/task-list.md への差分（行追加・行更新）を新配置へ適用する。
+//   port-diff <base> <head>   旧配置の docs/task-list.md への差分（行追加・行更新）を新配置へ適用する（生の月別ファイルへ）。
+//   effective [--json] [--raw] [--root <dir>]   申告（docs/task-list/changes/）適用後の実効台帳を出す（--json は files・rows・changes。CMP-261124-1222 ④）。
 // 入口: node scripts/task-list-ledger.mjs <サブコマンド>。依存パッケージなし。
 
 import { execFileSync } from 'node:child_process';
@@ -13,7 +14,11 @@ import {
   LEDGER_INDEX_PATH,
   LEGACY_FILE_NAME,
   LedgerReadError,
+  TABLE_HEADER,
+  TABLE_SEPARATOR,
   expectedLedgerFile,
+  ledgerText,
+  newFileSkeleton,
   extractRows,
   fsLedgerReader,
   fsLedgerReaderForIndex,
@@ -23,8 +28,9 @@ import {
 } from './task-list-ledger.mjs';
 import { checkTaskListStructure } from './task-list-structure-check.mjs';
 
-export const TABLE_HEADER = '| ID | 戦役 | 状態 | 依存 | 完了条件 | 証拠(PR/テスト) | 台帳 |';
-export const TABLE_SEPARATOR = '|----|------|------|------|---------|----------------|------|';
+// 月別ファイルの雛形は読む側（申告の add で新月ファイルを作る）と共有するため task-list-ledger.mjs に置く。従来の import 先も保つ。
+export { TABLE_HEADER, TABLE_SEPARATOR, newFileSkeleton };
+
 /** 索引と月別ファイルの境目。この見出しより前を索引の前置きとして残す。 */
 export const ROWS_HEADING = '## 戦役一覧';
 
@@ -36,19 +42,6 @@ export function rewriteLinks(line) {
   });
 }
 
-function fileHeading(path) {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  if (name === LEGACY_FILE_NAME) {
-    return '# 台帳 旧形式 ID（CMP-003 等）の行\n\n旧形式 ID の行はここに置く（月が決まらないため）。新しい行は ID の月のファイル docs/task-list/YYYY-MM.md の末尾に追加する。規約は [索引](../task-list.md) を参照。\n';
-  }
-  const month = name.slice(0, -3);
-  return '# 台帳 ' + month + '（ID が CMP-' + month.slice(2, 4) + month.slice(5, 7) + 'DD-HHMM の行）\n\n新しい行は本ファイルの末尾に追加する。規約は [索引](../task-list.md) を参照。\n';
-}
-
-/** 月別ファイルの新規作成時の本文（見出し＋7列表ヘッダ）。 */
-export function newFileSkeleton(path) {
-  return fileHeading(path) + '\n' + TABLE_HEADER + '\n' + TABLE_SEPARATOR + '\n';
-}
 
 /** 旧配置の本文を {索引本文, ファイルごとの行, 捨てた行} に分ける（純粋関数）。 */
 export function splitSingleLedger(text) {
@@ -266,7 +259,8 @@ export function planPortDiff({ baseText, headText, ledger }) {
  * @returns {{ added: string[], updated: string[], skippedDeleted: string[], files: string[] }}
  */
 export async function portDiff({ baseText, headText, root, dryRun = false }) {
-  const ledger = await readLedger(fsLedgerReader(root), { requireRows: false });
+  // 生の月別ファイルへ適用する（実効台帳で書くと未畳み込みの申告を月別ファイルへ畳み込んでしまう）
+  const ledger = await readLedger(fsLedgerReader(root), { requireRows: false, raw: true });
   const plan = planPortDiff({ baseText, headText, ledger });
   if (plan.problems.length) throw new LedgerReadError(plan.problems[0]);
   const result = { added: plan.added, updated: plan.updated, skippedDeleted: plan.deleted, files: [...plan.files.keys()].sort() };
@@ -282,6 +276,24 @@ function gitShow(ref, path, cwd) {
   } catch {
     return null; // ref にそのファイルが無い
   }
+}
+
+/**
+ * effective --json の出力（申告適用後の実効台帳）。Python の docs/prototypes/task_list_ledger.py がこれを読む。
+ * 申告の本文（content）は出さない（行は files・rows にある）。
+ */
+export function effectiveJson(ledger) {
+  return {
+    layout: ledger.layout,
+    files: ledger.files,
+    rows: ledger.rows.map((r) => ({ id: r.id, file: r.file, line: r.line, lineNumber: r.lineNumber })),
+    missing: ledger.missing,
+    changes: {
+      entries: ledger.changes.entries.map((e) => ({ path: e.path, id: e.id, op: e.op, base: e.base, valid: e.valid })),
+      applied: ledger.changes.applied,
+      problems: ledger.changes.problems.map((p) => ({ kind: p.kind, path: p.path, message: p.message })),
+    },
+  };
 }
 
 /** CLI。終了コードを返す。 */
@@ -316,7 +328,19 @@ export async function main(argv, { out = console.log, err = console.error, root 
       if (r.skippedDeleted.length) err('注意: base にあって head に無い行は適用しない（行の削除は手で）: ' + r.skippedDeleted.join(', '));
       return 0;
     }
-    err('使い方: node scripts/task-list-ledger.mjs <migrate | render [--open] [--priority P1] [--month YYYY-MM] | port-diff <base> <head> [--dry-run]>');
+    if (cmd === 'effective') {
+      const opts = { json: false, raw: false, root };
+      for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === '--json') opts.json = true;
+        else if (rest[i] === '--raw') opts.raw = true;
+        else if (rest[i] === '--root') opts.root = rest[++i];
+        else throw new Error('不明な引数: ' + rest[i]);
+      }
+      const ledger = await readLedger(fsLedgerReader(opts.root), { requireRows: false, raw: opts.raw });
+      process.stdout.write(opts.json ? JSON.stringify(effectiveJson(ledger)) + '\n' : ledgerText(ledger));
+      return 0;
+    }
+    err('使い方: node scripts/task-list-ledger.mjs <migrate | render [--open] [--priority P1] [--month YYYY-MM] | port-diff <base> <head> [--dry-run] | effective [--json] [--raw] [--root <dir>]>');
     return 1;
   } catch (error) {
     err('台帳 ' + (cmd ?? '') + ' 失敗: ' + (error?.message ?? error));

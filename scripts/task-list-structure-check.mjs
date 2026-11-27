@@ -11,21 +11,29 @@
 // readLedger で読み、全ファイルを横断して検査する。新配置のときだけ配置違反（月違い・legacy 違い・不正なファイル名・
 // 索引の CMP 行）も赤にする。規則と試験データは Java 番人と共有する（scripts/fixtures/task-list-ledger-cases.json）。
 //
-// 使い方: node scripts/task-list-structure-check.mjs <task-list.md のパス>
-//   月別ファイルは索引と同じディレクトリの task-list/ から読む。
+// 使い方: node scripts/task-list-structure-check.mjs <task-list.md のパス> [--base <ref|dir>] [--merge-base <ref|dir>]
+//   月別ファイル・申告（task-list/changes/）は索引と同じディレクトリの task-list/ から読む。
+//   --base を付けると仮想 head の等式・連鎖検査（checkVirtualHead）も行う。直接編集は警告（exit 0）、申告の改変・削除・連鎖違反は exit 1。
 // 違反・ファイル不在・空・走査不能はすべて理由を出力して exit 1（例外の stack で落とさない）。
 // 依存パッケージなし（GitHub ランナー既定の Node で動く）。
 
 import { pathToFileURL } from 'node:url';
+import { statSync } from 'node:fs';
 import {
   CMP_ID_FORM,
+  LEDGER_DIR,
   LEDGER_INDEX_PATH,
   LEGACY_FILE_NAME,
+  applyChanges,
   asLedger,
   expectedLedgerFile,
+  extractRows,
+  fsLedgerReader,
   fsLedgerReaderForIndex,
+  gitLedgerReader,
   isLedgerFileName,
   javaTrim,
+  newFileSkeleton,
   readLedger,
   splitTableRow,
 } from './task-list-ledger.mjs';
@@ -157,17 +165,130 @@ export function checkTaskListStructure(input) {
   if (stats.rows === 0 && looseTotal > 0) {
     errors.push('先頭セルに CMP-ID を持つ表の行を1件も見つけられなかった。走査経路（splitTableRow / CMP_ID_FORM）が壊れている可能性がある。');
   }
+  // 変更申告（docs/task-list/changes/）の形式・名前・サイズ・ID 一致・連鎖（fork・孤児・重複）・台帳外のもの（CMP-261124-1222 ④）。
+  // 上の検査は申告を適用した実効台帳（仮想の月別ファイル）に対して行っている。
+  stats.changes = ledger.changes?.entries?.length ?? 0;
+  for (const p of ledger.changes?.problems ?? []) errors.push(p.message);
   return { ok: errors.length === 0, errors, stats };
 }
 
 /** 名前の別名（全ファイル横断であることを呼び出し側で明示したいとき）。 */
 export const checkLedger = checkTaskListStructure;
 
-/** CLI 本体。終了コードを返す（0: 問題なし / 1: 違反・読めない）。 */
+
+// ---------------------------------------------------------------------------
+// 仮想 head の等式検査（CMP-261124-1222 ④ P1-1）
+// ---------------------------------------------------------------------------
+//
+// mb = 分岐点（merge-base(base, head)）、base = PR の base、head = PR head。merge_group は実マージなので mb = base（base_sha と group head）。
+// PR 自身の差分: 申告の追加 D+ = changes(head) \ changes(mb)、申告の削除 D- = changes(mb) \ changes(head)、月別の差分 month(mb)→month(head)。
+// - 等式 E(month(mb), changes(mb) ∪ D+) == E(month(head), changes(head))（ID→行 の対応表で比べ、行順は問わない。P1-2）。
+//   D- の申告は「月別ファイルへ畳み込まれた」ときだけ消してよい。畳み込みが正しければ左辺（消した申告も適用）と右辺（月別に反映済み）が一致する。
+//   （正本の記述は「changes(mb)∪D+ ∖D-」だが、∖D- を左辺から除くと正しい畳み込みが常に不一致になるため、D- は左辺に残して評価する。）
+// - 結果種別: 違反（violations）= 申告の改変（change-modified）・畳み込みでない申告の削除（change-deleted）・PR が足した申告の連鎖違反
+//   （fork / orphan / duplicate / 形式）。警告（warnings）= 月別ファイルの直接編集（direct-edit。互換期間 P2-4 のあいだは警告のみ。
+//   段3 で違反へ上げる）。等式が成り立ち申告を消している PR は fold（畳み込み）と分類する（作者が bot かは PR ゲート側で見る）。
+// - 連鎖は仮想マージ month(base)＋changes(base) ∪ D+ で判定し、D+ に関わる問題だけを違反にする（main の前進だけでは古い PR を赤にしない）。
+// - 月別ファイルの行以外（見出し・前置き・表ヘッダ）は変えてはならない。新しい月のファイルは雛形（newFileSkeleton）と同じでなければ警告。
+
+function changeMapOf(ledger) {
+  return new Map((ledger.changes?.entries ?? []).map((e) => [e.path, e]));
+}
+
+function rowMapOfFiles(files) {
+  const map = new Map();
+  for (const f of files) {
+    if (f.content == null) continue;
+    for (const r of extractRows(f.content, f.path)) if (!map.has(r.id)) map.set(r.id, r.line);
+  }
+  return map;
+}
+
+/** ID→行 の対応表の差（a と b で行が違う・片方にしかない ID）。 */
+export function diffRowMaps(a, b) {
+  const ids = new Set([...a.keys(), ...b.keys()]);
+  return [...ids].filter((id) => a.get(id) !== b.get(id)).sort();
+}
+
+function monthFiles(ledger) {
+  return new Map((ledger.rawFiles ?? ledger.files).filter((f) => f.path.startsWith(LEDGER_DIR + '/') && f.content != null).map((f) => [f.path, f.content]));
+}
+
+function nonRowLines(content, path) {
+  const rowLines = new Set(extractRows(content, path).map((r) => r.lineNumber));
+  const lines = content.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l)).filter((_, i) => !rowLines.has(i + 1));
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+  return lines;
+}
+
+/**
+ * 仮想 head の等式・連鎖を検査する。引数はいずれも readLedger の結果（既定・raw どちらでもよい。rawFiles と changes を使う）。
+ * @returns {{ ok: boolean, violations: {kind: string, path?: string, message: string}[], warnings: {kind: string, path?: string, message: string}[], fold: boolean, addedChanges: string[], removedChanges: string[], modifiedChanges: string[] }}
+ */
+export function checkVirtualHead({ mergeBase, base = mergeBase, head }) {
+  const mbC = changeMapOf(mergeBase);
+  const baseC = changeMapOf(base);
+  const headC = changeMapOf(head);
+  const violations = [];
+  const warnings = [];
+  const added = [...headC.keys()].filter((p) => !mbC.has(p)).sort();
+  const removed = [...mbC.keys()].filter((p) => !headC.has(p)).sort();
+  const modified = [...headC.keys()].filter((p) => mbC.has(p) && mbC.get(p).content !== headC.get(p).content).sort();
+  for (const p of modified) {
+    violations.push({ kind: 'change-modified', path: p, message: p + ': 申告の改変（change-modified）: 申告は追加のみ。行を変えるなら新しい update 申告を足すこと。' });
+  }
+  const addedEntries = added.map((p) => headC.get(p));
+  for (const e of addedEntries) for (const er of e.errors) violations.push({ kind: er.kind, path: er.path, message: er.message });
+  const lhs = applyChanges(mergeBase.rawFiles ?? mergeBase.files, mergeBase.layout, [...mbC.values(), ...addedEntries]);
+  const rhs = applyChanges(head.rawFiles ?? head.files, head.layout, [...headC.values()]);
+  const diff = diffRowMaps(rowMapOfFiles(lhs.files), rowMapOfFiles(rhs.files));
+  const shown = diff.slice(0, 10).join(', ') + (diff.length > 10 ? ' ほか ' + (diff.length - 10) + ' 件' : '');
+  if (diff.length && removed.length) {
+    violations.push({ kind: 'change-deleted', path: removed[0], message: removed.join(', ') + ': 申告の削除（change-deleted）: 消した申告が月別ファイルへ正しく畳み込まれていない（実効台帳が変わる ID: ' + shown + '）。申告は畳み込み以外で消さないこと。' });
+  } else if (diff.length) {
+    warnings.push({ kind: 'direct-edit', message: '月別ファイルの直接編集（direct-edit）: 実効台帳が変わる ID: ' + shown + '。行の追加・更新は申告（docs/task-list/changes/）で行うこと（互換期間のため警告のみ）。' });
+  }
+  const mbMonths = monthFiles(mergeBase);
+  const headMonths = monthFiles(head);
+  const nonRowChanged = [];
+  for (const path of [...new Set([...mbMonths.keys(), ...headMonths.keys()])].sort()) {
+    const before = mbMonths.has(path) ? nonRowLines(mbMonths.get(path), path) : null;
+    const after = headMonths.has(path) ? nonRowLines(headMonths.get(path), path) : null;
+    if (after == null) nonRowChanged.push(path + '（削除）');
+    else if (before == null) { if (after.join('\n') !== nonRowLines(newFileSkeleton(path), path).join('\n')) nonRowChanged.push(path + '（新しい月のファイルが雛形と違う）'); }
+    else if (after.join('\n') !== before.join('\n')) nonRowChanged.push(path);
+  }
+  if (nonRowChanged.length) {
+    warnings.push({ kind: 'direct-edit', message: '月別ファイルの行以外の変更（direct-edit）: ' + nonRowChanged.join(', ') + '。月別ファイルの見出し・表ヘッダは変えないこと（互換期間のため警告のみ）。' });
+  }
+  const addedSet = new Set(added);
+  const virtualMerge = applyChanges(base.rawFiles ?? base.files, base.layout, [...baseC.values(), ...addedEntries.filter((e) => !baseC.has(e.path))]);
+  for (const p of virtualMerge.problems) {
+    if ((p.paths ?? [p.path]).some((x) => addedSet.has(x))) violations.push({ kind: p.kind, path: p.path, message: '仮想マージ（base の月別＋base の申告＋PR が足した申告）: ' + p.message });
+  }
+  return { ok: violations.length === 0, violations, warnings, fold: removed.length > 0 && diff.length === 0, addedChanges: added, removedChanges: removed, modifiedChanges: modified };
+}
+
+/** --base / --merge-base の値（ディレクトリ＝リポジトリルート、*.md ファイル＝索引、それ以外＝git の ref）を reader にする。 */
+function readerFor(spec) {
+  const stat = statSync(spec, { throwIfNoEntry: false });
+  if (stat?.isDirectory()) return fsLedgerReader(spec);
+  if (stat?.isFile()) return fsLedgerReaderForIndex(spec);
+  return gitLedgerReader(spec, { cwd: process.cwd() });
+}
+
+/** CLI 本体。終了コードを返す（0: 問題なし・警告のみ / 1: 違反・読めない）。 */
 export async function main(argv, out = console.log, err = console.error) {
-  const [filePath] = argv;
-  if (!filePath) {
-    err('使い方: node scripts/task-list-structure-check.mjs <docs/task-list.md のパス>');
+  const opts = { base: null, mergeBase: null };
+  const positional = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--base') opts.base = argv[++i] ?? null;
+    else if (argv[i] === '--merge-base') opts.mergeBase = argv[++i] ?? null;
+    else positional.push(argv[i]);
+  }
+  const [filePath] = positional;
+  if (!filePath || (argv.includes('--base') && !opts.base) || (argv.includes('--merge-base') && !opts.mergeBase)) {
+    err('使い方: node scripts/task-list-structure-check.mjs <docs/task-list.md のパス> [--base <ref|dir>] [--merge-base <ref|dir>]');
     return 1;
   }
   let ledger;
@@ -178,12 +299,33 @@ export async function main(argv, out = console.log, err = console.error) {
     return 1;
   }
   const result = checkTaskListStructure(ledger);
-  if (!result.ok) {
+  let virtualHead = null;
+  if (opts.base) {
+    try {
+      const base = await readLedger(readerFor(opts.base), { requireRows: false });
+      const mergeBase = opts.mergeBase ? await readLedger(readerFor(opts.mergeBase), { requireRows: false }) : base;
+      virtualHead = checkVirtualHead({ mergeBase, base, head: ledger });
+    } catch (error) {
+      err('比較元の台帳を読めなかった（--base ' + opts.base + (opts.mergeBase ? ' --merge-base ' + opts.mergeBase : '') + '）: ' + error.message);
+      return 1;
+    }
+    const annotate = process.env.GITHUB_ACTIONS === 'true';
+    for (const w of virtualHead.warnings) {
+      out('警告（' + w.kind + '）: ' + w.message);
+      if (annotate) out('::warning::' + w.message);
+    }
+  }
+  const failed = !result.ok || (virtualHead && !virtualHead.ok);
+  if (failed) {
     err('台帳構造検査: NG（' + filePath + '、' + ledger.layout + ' 配置）');
     for (const message of result.errors) err('  ✗ ' + message);
+    for (const v of virtualHead?.violations ?? []) err('  ✗ 等式・連鎖（' + v.kind + '）: ' + v.message);
     return 1;
   }
   out('台帳構造検査: OK（' + filePath + '、' + ledger.layout + ' 配置・' + result.stats.files + ' ファイル、CMP 行 ' + result.stats.rows + ' 件。重複・列数・優先度' + (ledger.layout === 'split' ? '・配置' : '') + 'の違反なし）');
+  if (virtualHead) {
+    out('等式・連鎖検査: OK（--base ' + opts.base + '。申告 追加 ' + virtualHead.addedChanges.length + ' 件・削除 ' + virtualHead.removedChanges.length + ' 件' + (virtualHead.fold ? '・畳み込み' : '') + '、警告 ' + virtualHead.warnings.length + ' 件）');
+  }
   return 0;
 }
 
