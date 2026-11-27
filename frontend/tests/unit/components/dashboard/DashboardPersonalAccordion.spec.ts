@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { defineComponent } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import DashboardPersonalAccordion from '~/components/dashboard/DashboardPersonalAccordion.vue'
 import type { WidgetDefinition } from '~/composables/useDashboardWidgets'
 
@@ -131,5 +131,43 @@ describe('DashboardPersonalAccordion', () => {
     expect(region.text()).toContain('No widgets to display')
     await region.get('button').trigger('click')
     expect(wrapper.emitted('configure')).toHaveLength(1)
+  })
+})
+
+// 受け入れ条件 CMP-261125-2042: 子ページから戻っても開いていたカテゴリを開いたまま再現する。
+describe('DashboardPersonalAccordion 開閉状態のタブ内保持', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    useAuthStore().user = {
+      id: 20,
+      email: 'personal@example.com',
+      fullName: 'Personal',
+      profileImageUrl: null,
+    }
+  })
+
+  afterEach(() => {
+    useAuthStore().$reset()
+    sessionStorage.clear()
+  })
+
+  it('AC7: カテゴリを開いて unmount し再 mount すると同じカテゴリが開いている', async () => {
+    const first = await mountAccordion()
+    await first.get('#personal-dashboard-section-button-todo').trigger('click')
+    expect(first.get('#personal-dashboard-section-button-todo').attributes('aria-expanded')).toBe(
+      'true',
+    )
+    first.unmount()
+
+    const second = await mountAccordion()
+    expect(second.get('#personal-dashboard-section-button-todo').attributes('aria-expanded')).toBe(
+      'true',
+    )
+    expect(
+      second.get('#personal-dashboard-section-button-schedule').attributes('aria-expanded'),
+    ).toBe('false')
+    const region = second.get('#personal-dashboard-section-todo')
+    expect(region.attributes('aria-hidden')).toBe('false')
+    expect(region.find('.widget-grid').exists()).toBe(true)
   })
 })

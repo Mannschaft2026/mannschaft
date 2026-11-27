@@ -78,6 +78,8 @@ class PublicFileLinkContractIT extends AbstractMySqlIntegrationTest {
     private StorageAclService storageAclService;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private com.mannschaft.app.common.token.SecretTokenVault vault;
 
     /** R2 は外部依存のため mock（DL URL 発行の成功パスで使用）。 */
     @MockitoBean
@@ -130,8 +132,10 @@ class PublicFileLinkContractIT extends AbstractMySqlIntegrationTest {
 
     private String seedLink(Long targetFileId, LocalDateTime expiresAt, boolean active,
                             boolean downloadAllowed, String rawPassword) {
+        // 保存するのはハッシュだけ。呼び出し側へは平文（発行応答相当）を返す。
+        String plaintext = vault.issueBase64Url().plaintext();
         SharedFileLinkEntity.SharedFileLinkEntityBuilder<?, ?> b = SharedFileLinkEntity.builder()
-                .fileId(targetFileId).token(java.util.UUID.randomUUID().toString())
+                .fileId(targetFileId).tokenHash(vault.hash(plaintext))
                 .expiresAt(expiresAt).downloadAllowed(downloadAllowed).accessCount(0).createdBy(1L);
         if (rawPassword != null) {
             b.passwordHash(passwordEncoder.encode(rawPassword));
@@ -141,7 +145,7 @@ class PublicFileLinkContractIT extends AbstractMySqlIntegrationTest {
             saved.deactivate();
             saved = linkRepository.save(saved);
         }
-        return saved.getToken();
+        return plaintext;
     }
 
     // ======================= access（メタ）=======================
@@ -209,7 +213,7 @@ class PublicFileLinkContractIT extends AbstractMySqlIntegrationTest {
         String token = seedLink(fileId, LocalDateTime.now().plusDays(1), true, false, null);
         mockMvc.perform(post("/api/v1/public/file-links/{token}/access", token))
                 .andExpect(status().isOk());
-        SharedFileLinkEntity reloaded = linkRepository.findByToken(token).orElseThrow();
+        SharedFileLinkEntity reloaded = linkRepository.findByTokenHash(vault.hash(token)).orElseThrow();
         org.assertj.core.api.Assertions.assertThat(reloaded.getAccessCount()).isEqualTo(1);
     }
 

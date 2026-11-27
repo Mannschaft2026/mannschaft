@@ -98,7 +98,11 @@ public enum FileSharingErrorCode implements ErrorCode {
      * 発行しようとすると 400 Bad Request（Severity.WARN の既定マッピング）。</p>
      */
     LINK_EXPIRY_INVALID("FILE_SHARING_020",
-            "共有リンクの有効期限は必須で、最大30日先まで指定できます", Severity.WARN);
+            "共有リンクの有効期限は必須で、最大30日先まで指定できます", Severity.WARN),
+
+    /** メンバー限定のチームのファイルには共有リンクを作れません（403。CMP-261124-0159 F05.5 共有リンク） */
+    LINK_MEMBERS_ONLY_TEAM("FILE_SHARING_021",
+            "メンバー限定のチームのファイルには共有リンクを作れません", Severity.WARN);
 
     private final String code;
     private final String message;

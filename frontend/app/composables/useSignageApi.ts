@@ -2,6 +2,8 @@ import type {
   SignageScreen,
   SignageSlot,
   SignageToken,
+  SignageTokenIssued,
+  IssueSignageTokenRequest,
   CreateSignageScreenRequest,
   UpdateSignageScreenRequest,
   AddSignageSlotRequest,
@@ -78,9 +80,10 @@ export function useSignageApi() {
     return api<{ data: SignageToken[] }>(`/api/v1/signage/screens/${screenId}/tokens`)
   }
 
-  async function issueToken(screenId: number) {
-    return api<{ data: SignageToken }>(`/api/v1/signage/screens/${screenId}/tokens`, {
+  async function issueToken(screenId: number, body: IssueSignageTokenRequest) {
+    return api<{ data: SignageTokenIssued }>(`/api/v1/signage/screens/${screenId}/tokens`, {
       method: 'POST',
+      body,
     })
   }
 

@@ -193,7 +193,7 @@ public class PointCardController {
     @AuthorizedInService
     @PostMapping("/{cardId}/share-tokens")
     @Operation(summary = "QR 自動特定用 一時トークン発行",
-            description = "本人のカードに対して 5 分 TTL の UUID トークンを Valkey に発行する。"
+            description = "本人のカードに対して 5 分 TTL の共有トークン（Base64URL 43 字）を発行し、Valkey にはハッシュのキーで置く。"
                     + "フロントは返却された token を QR コードに変換して店主側に提示し、"
                     + "店主側端末が POST /api/v1/organizations/{orgId}/point-cards/resolve-by-token で消費する。"
                     + "レート制限: 60/h/user。")

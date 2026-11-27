@@ -426,6 +426,7 @@
   "error": {
     "server": "Se produjo un error del servidor",
     "server_retry": "Por favor, inténtelo de nuevo más tarde.",
+    "server_multiple": "Se produjeron {count} errores del servidor",
     "rate_limited": "Demasiadas solicitudes",
     "rate_limited_detail": "Ha realizado demasiadas solicitudes en poco tiempo. Espere un momento e inténtelo de nuevo.",
     "rate_limited_retry_after": "Ha realizado demasiadas solicitudes en poco tiempo. Inténtelo de nuevo en unos {seconds} segundos.",
@@ -459,6 +460,10 @@
     "AUTH_010": "La contraseña actual no es correcta",
     "AUTH_011": "Aún no se ha establecido ninguna contraseña",
     "AUTH_044": "Demasiadas solicitudes. Por favor, espere un momento y vuelva a intentarlo",
+    "SURVEY_014": "No tiene permiso para enviar recordatorios",
+    "SURVEY_015": "Se envió un recordatorio recientemente, por lo que aún no puede enviar otro",
+    "SURVEY_016": "Se alcanzó el límite de recordatorios",
+    "INVALID_SURVEY_STATUS": "No se pueden enviar recordatorios en el estado actual de la encuesta",
     "SURVEY_023": "No se puede activar el desglose por equipo en encuestas anónimas",
     "SCHEDULE_KEEP_001": "No se encontró el plan en espera",
     "SCHEDULE_KEEP_002": "Introduce un título",
@@ -3354,6 +3359,27 @@
       "created_at": "Emitido el",
       "expires_at": "Caduca el",
       "used_count": "Veces usado"
+    },
+    "signage": {
+      "section": "Tokens de pantallas",
+      "issue": "Emitir token",
+      "device_name": "Nombre del dispositivo",
+      "device_placeholder": "p. ej. Monitor de entrada",
+      "empty": "No hay tokens",
+      "issued_title": "Token del dispositivo emitido",
+      "no_expiry": "Sin caducidad",
+      "inactive": "Revocado",
+      "reissue_confirm": "Se emitirá un enlace nuevo y se revocará este token. ¿Continuar?",
+      "revoke_confirm": "¿Revocar este token?",
+      "issue_success": "Token emitido",
+      "issue_failed": "No se pudo emitir el token",
+      "reissue_success": "Token reemitido",
+      "reissue_failed": "No se pudo reemitir el token",
+      "revoke_success": "Token revocado",
+      "revoke_failed": "No se pudo revocar el token",
+      "name_required": "Introduzca el nombre del dispositivo",
+      "token_label": "Token que se configura en el dispositivo",
+      "reissue_revoke_failed": "El nuevo token se emitió, pero no se pudo revocar el anterior. Revóquelo manualmente"
     }
   },
   "globalSearch": {

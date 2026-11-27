@@ -16478,7 +16478,7 @@ export interface paths {
         put?: never;
         /**
          * QR 自動特定用 一時トークン発行
-         * @description 本人のカードに対して 5 分 TTL の UUID トークンを Valkey に発行する。フロントは返却された token を QR コードに変換して店主側に提示し、店主側端末が POST /api/v1/organizations/{orgId}/point-cards/resolve-by-token で消費する。レート制限: 60/h/user。
+         * @description 本人のカードに対して 5 分 TTL の共有トークン（Base64URL 43 字）を発行し、Valkey にはハッシュのキーで置く。フロントは返却された token を QR コードに変換して店主側に提示し、店主側端末が POST /api/v1/organizations/{orgId}/point-cards/resolve-by-token で消費する。レート制限: 60/h/user。
          */
         post: operations["createShareToken"];
         delete?: never;
@@ -19375,7 +19375,7 @@ export interface paths {
         put?: never;
         /**
          * 一時トークン resolve
-         * @description 顧客側で発行された 5 分 TTL の UUID トークンから cardId を特定する。GETDEL で原子的に消費するため同じトークンは 1 回しか使えない。暗号化対象（barcodeValue / displayName / nickname / memo）は一切返さない。認可: ADMIN / DEPUTY_ADMIN。レート制限: 600/h/user。
+         * @description 顧客側で発行された 5 分 TTL の共有トークン（Base64URL 43 字）から cardId を特定する。GETDEL で原子的に消費するため同じトークンは 1 回しか使えない。暗号化対象（barcodeValue / displayName / nickname / memo）は一切返さない。認可: ADMIN / DEPUTY_ADMIN。レート制限: 600/h/user。
          */
         post: operations["resolveByToken"];
         delete?: never;
@@ -22786,7 +22786,7 @@ export interface paths {
         /** 共有リンク一覧 */
         get: operations["listLinks"];
         put?: never;
-        /** 共有リンク作成 */
+        /** 共有リンク作成（平文トークンは発行応答の1回だけ） */
         post: operations["createLink_1"];
         delete?: never;
         options?: never;
@@ -58527,9 +58527,15 @@ export interface components {
             /** @enum {string} */
             distributionMode?: "ALL" | "TARGETED";
             includeSupporters?: boolean;
+            /** Format: date-time */
+            lastRemindedAt?: string;
             /** Format: int32 */
             manualRemindCount?: number;
+            /** Format: date-time */
+            nextRemindableAt?: string;
             remindBeforeHours?: string;
+            /** Format: int32 */
+            remindMaxCount?: number;
             seriesId?: string;
         };
         SurveyPolicyDto: {
@@ -66325,8 +66331,22 @@ export interface components {
             expiredAt?: string;
             name?: string;
         };
-        ApiResponseSignageAccessTokenResponse: {
-            data?: components["schemas"]["SignageAccessTokenResponse"];
+        ApiResponseSignageAccessTokenIssuedResponse: {
+            data?: components["schemas"]["SignageAccessTokenIssuedResponse"];
+        };
+        SignageAccessTokenIssuedResponse: {
+            allowedIps?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiredAt?: string;
+            /** Format: int64 */
+            id?: number;
+            isActive?: boolean;
+            name?: string;
+            /** Format: int64 */
+            screenId?: number;
+            token?: string;
         };
         SignageAccessTokenResponse: {
             allowedIps?: string[];
@@ -66340,7 +66360,6 @@ export interface components {
             name?: string;
             /** Format: int64 */
             screenId?: number;
-            token?: string;
         };
         BroadcastEmergencyRequest: {
             bgColor?: string;
@@ -70464,8 +70483,28 @@ export interface components {
             /** @description 任意の閲覧パスワード（設定するとアクセス時に照合） */
             password?: string;
         };
-        ApiResponseLinkResponse: {
-            data?: components["schemas"]["LinkResponse"];
+        ApiResponseLinkIssuedResponse: {
+            data?: components["schemas"]["LinkIssuedResponse"];
+        };
+        LinkIssuedResponse: {
+            /** Format: int32 */
+            accessCount?: number;
+            active?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            createdBy?: number;
+            downloadAllowed?: boolean;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            fileId?: number;
+            hasPassword?: boolean;
+            /** Format: int64 */
+            id?: number;
+            /** Format: date-time */
+            lastAccessedAt?: string;
+            token?: string;
         };
         LinkResponse: {
             /** Format: int32 */
@@ -70485,7 +70524,6 @@ export interface components {
             id?: number;
             /** Format: date-time */
             lastAccessedAt?: string;
-            token?: string;
         };
         SharedFilePresignRequest: {
             contentType: string;
@@ -73662,6 +73700,7 @@ export interface components {
             recordedBy?: number;
             /** @enum {string} */
             status?: "ATTENDING" | "PARTIAL" | "ABSENT" | "UNDECIDED";
+            studentDisplayName?: string;
             /** Format: int64 */
             studentUserId?: number;
             /** Format: int64 */
@@ -76584,6 +76623,7 @@ export interface components {
             meta?: components["schemas"]["TournamentHistoryEntryMeta"];
             /** Format: int64 */
             organizationId?: number;
+            organizationSlug?: string;
             record?: components["schemas"]["TournamentHistoryEntryRecord"];
         };
         TournamentHistoryEntryIdentifiers: {
@@ -122384,7 +122424,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenResponse"];
+                    "*/*": components["schemas"]["ApiResponseSignageAccessTokenIssuedResponse"];
                 };
             };
         };
@@ -137007,7 +137047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseLinkResponse"];
+                    "*/*": components["schemas"]["ApiResponseLinkIssuedResponse"];
                 };
             };
         };
@@ -163819,6 +163859,7 @@ export interface operations {
             query?: {
                 page?: number;
                 size?: number;
+                status?: string;
             };
             header?: never;
             path?: never;

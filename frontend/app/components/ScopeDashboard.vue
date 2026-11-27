@@ -308,7 +308,12 @@ function onDragEnd() {
     <!-- 並び順確定後: 保存順で初描画（ここで初めてマウントするためジャンプしない） -->
     <!-- ウィジェットグリッド -->
     <DashboardErrorState v-else-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-    <DashboardScopeAccordion v-else :widgets="visibleWidgets" @configure="showConfig = true">
+    <DashboardScopeAccordion
+      v-else
+      :widgets="visibleWidgets"
+      :scope-type="scopeType"
+      :scope-id="scopeId"
+      @configure="showConfig = true">
       <template #default="{ widgets }">
         <TransitionGroup
           tag="div"

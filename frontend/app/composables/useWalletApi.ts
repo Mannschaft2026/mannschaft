@@ -109,7 +109,7 @@ export function useWalletApi() {
   /**
    * 「店舗で提示」フロー用の一時トークンを発行する（F18 Phase 3）。
    *
-   * <p>顧客がレジで提示するために 5 分間有効な UUID トークンを発行する。
+   * <p>顧客がレジで提示するために 5 分間有効な 共有トークン（Base64URL 43字）を発行する。
    * フロントは {@code deepLinkUrl} を QR コードに描画して画面表示し、
    * 店主端末がスキャンすると {@code resolve-by-token} 経由でカード ID を特定できる。
    *

@@ -5,6 +5,7 @@ import com.mannschaft.app.common.PagedResponse;
 import com.mannschaft.app.parking.ParkingScopeType;
 import com.mannschaft.app.parking.dto.*;
 import com.mannschaft.app.parking.service.ParkingAccessGuard;
+import com.mannschaft.app.parking.service.ParkingApplicationAccessPolicy;
 import com.mannschaft.app.parking.service.ParkingListingService;
 import com.mannschaft.app.parking.service.ParkingSpaceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,6 +34,7 @@ public class OrgParkingListingController {
     private final ParkingListingService listingService;
     private final ParkingSpaceService spaceService;
     private final ParkingAccessGuard parkingAccessGuard;
+    private final ParkingApplicationAccessPolicy accessPolicy;
 
     private static final String SCOPE_TYPE = ParkingScopeType.ORGANIZATION.name();
 
@@ -98,9 +100,10 @@ public class OrgParkingListingController {
     public ResponseEntity<ApiResponse<ApplicationResponse>> apply(
             @PathVariable Long organizationId, @PathVariable Long id,
             @Valid @RequestBody ListingApplyRequest request) {
-        parkingAccessGuard.requireScopeMember(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        Long applicantId = accessPolicy.resolveApplicant(SCOPE_TYPE, organizationId, SecurityUtils.getCurrentUserId());
+        parkingAccessGuard.requireOwnedVehicle(applicantId, request.getVehicleId());
         List<Long> spaceIds = spaceService.getSpaceIds(SCOPE_TYPE, organizationId);
-        ApplicationResponse result = listingService.apply(spaceIds, id, SecurityUtils.getCurrentUserId(), request);
+        ApplicationResponse result = listingService.apply(spaceIds, id, applicantId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(result));
     }
 

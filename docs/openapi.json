@@ -46378,7 +46378,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 0
+              "default": 0,
+              "minimum": 0
             }
           },
           {
@@ -46388,7 +46389,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20
+              "default": 20,
+              "minimum": 1
             }
           }
         ],
@@ -60368,7 +60370,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenResponse"
+                  "$ref": "#/components/schemas/ApiResponseSignageAccessTokenIssuedResponse"
                 }
               }
             }
@@ -64245,7 +64247,7 @@
           "ポイントカード CRUD"
         ],
         "summary": "QR 自動特定用 一時トークン発行",
-        "description": "本人のカードに対して 5 分 TTL の UUID トークンを Valkey に発行する。フロントは返却された token を QR コードに変換して店主側に提示し、店主側端末が POST /api/v1/organizations/{orgId}/point-cards/resolve-by-token で消費する。レート制限: 60/h/user。",
+        "description": "本人のカードに対して 5 分 TTL の共有トークン（Base64URL 43 字）を発行し、Valkey にはハッシュのキーで置く。フロントは返却された token を QR コードに変換して店主側に提示し、店主側端末が POST /api/v1/organizations/{orgId}/point-cards/resolve-by-token で消費する。レート制限: 60/h/user。",
         "operationId": "createShareToken",
         "parameters": [
           {
@@ -67065,7 +67067,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 0
+              "default": 0,
+              "minimum": 0
             }
           },
           {
@@ -67075,7 +67078,8 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 20
+              "default": 20,
+              "minimum": 1
             }
           }
         ],
@@ -74631,7 +74635,7 @@
           "ポイントカード 店主 QR 自動特定"
         ],
         "summary": "一時トークン resolve",
-        "description": "顧客側で発行された 5 分 TTL の UUID トークンから cardId を特定する。GETDEL で原子的に消費するため同じトークンは 1 回しか使えない。暗号化対象（barcodeValue / displayName / nickname / memo）は一切返さない。認可: ADMIN / DEPUTY_ADMIN。レート制限: 600/h/user。",
+        "description": "顧客側で発行された 5 分 TTL の共有トークン（Base64URL 43 字）から cardId を特定する。GETDEL で原子的に消費するため同じトークンは 1 回しか使えない。暗号化対象（barcodeValue / displayName / nickname / memo）は一切返さない。認可: ADMIN / DEPUTY_ADMIN。レート制限: 600/h/user。",
         "operationId": "resolveByToken",
         "parameters": [
           {
@@ -84458,7 +84462,7 @@
         "tags": [
           "ファイル共有 - 共有リンク"
         ],
-        "summary": "共有リンク作成",
+        "summary": "共有リンク作成（平文トークンは発行応答の1回だけ）",
         "operationId": "createLink_1",
         "parameters": [
           {
@@ -84487,7 +84491,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseLinkResponse"
+                  "$ref": "#/components/schemas/ApiResponseLinkIssuedResponse"
                 }
               }
             }
@@ -129266,6 +129270,14 @@
               "type": "integer",
               "format": "int32",
               "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -179964,12 +179976,24 @@
           "includeSupporters": {
             "type": "boolean"
           },
+          "lastRemindedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "manualRemindCount": {
             "type": "integer",
             "format": "int32"
           },
+          "nextRemindableAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "remindBeforeHours": {
             "type": "string"
+          },
+          "remindMaxCount": {
+            "type": "integer",
+            "format": "int32"
           },
           "seriesId": {
             "type": "string"
@@ -201315,11 +201339,47 @@
           }
         }
       },
-      "ApiResponseSignageAccessTokenResponse": {
+      "ApiResponseSignageAccessTokenIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SignageAccessTokenResponse"
+            "$ref": "#/components/schemas/SignageAccessTokenIssuedResponse"
+          }
+        }
+      },
+      "SignageAccessTokenIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "allowedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "screenId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
@@ -201353,9 +201413,6 @@
           "screenId": {
             "type": "integer",
             "format": "int64"
-          },
-          "token": {
-            "type": "string"
           }
         }
       },
@@ -207427,8 +207484,8 @@
         "properties": {
           "token": {
             "type": "string",
-            "maxLength": 36,
-            "minLength": 36
+            "maxLength": 43,
+            "minLength": 43
           }
         }
       },
@@ -212966,11 +213023,56 @@
           }
         }
       },
-      "ApiResponseLinkResponse": {
+      "ApiResponseLinkIssuedResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/LinkResponse"
+            "$ref": "#/components/schemas/LinkIssuedResponse"
+          }
+        }
+      },
+      "LinkIssuedResponse": {
+        "type": "object",
+        "properties": {
+          "accessCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "downloadAllowed": {
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fileId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hasPassword": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lastAccessedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
@@ -213013,9 +213115,6 @@
           "lastAccessedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "token": {
-            "type": "string"
           }
         }
       },
@@ -221838,6 +221937,9 @@
               "UNDECIDED"
             ]
           },
+          "studentDisplayName": {
+            "type": "string"
+          },
           "studentUserId": {
             "type": "integer",
             "format": "int64"
@@ -229935,6 +230037,9 @@
           "organizationId": {
             "type": "integer",
             "format": "int64"
+          },
+          "organizationSlug": {
+            "type": "string"
           },
           "record": {
             "$ref": "#/components/schemas/TournamentHistoryEntryRecord"

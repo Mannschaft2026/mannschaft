@@ -32,6 +32,9 @@ import static org.mockito.BDDMockito.given;
 @DisplayName("SharedFileLinkService 単体テスト")
 class SharedFileLinkServiceTest {
 
+    private static final com.mannschaft.app.common.token.SecretTokenVault HASHER =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     @Mock
     private SharedFileLinkRepository linkRepository;
 
@@ -51,6 +54,11 @@ class SharedFileLinkServiceTest {
     @Mock
     private com.mannschaft.app.filesharing.service.SharedFolderQueryService folderQueryService;
 
+    // トークンの発行・ハッシュは実物の金庫を使う（CMP-260826-1457 W2）。
+    @org.mockito.Spy
+    private com.mannschaft.app.common.token.SecretTokenVault vault =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     @InjectMocks
     private SharedFileLinkService sharedFileLinkService;
 
@@ -66,12 +74,12 @@ class SharedFileLinkServiceTest {
         void リンクアクセス_有効_ファイル情報返却() {
             // Given
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("valid-token")
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("valid-token"))
                     .expiresAt(LocalDateTime.now().plusDays(1)).createdBy(USER_ID).build();
             FileResponse fileResponse = new FileResponse(FILE_ID, 1L, "test.pdf", "key",
                     1024L, "application/pdf", null, USER_ID, 1, null, null, null, null);
 
-            given(linkRepository.findByToken("valid-token")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("valid-token"))).willReturn(Optional.of(link));
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse);
 
             // When
@@ -87,10 +95,10 @@ class SharedFileLinkServiceTest {
         void リンクアクセス_期限切れ_BusinessException() {
             // Given
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("expired-token")
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("expired-token"))
                     .expiresAt(LocalDateTime.now().minusDays(1)).createdBy(USER_ID).build();
 
-            given(linkRepository.findByToken("expired-token")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("expired-token"))).willReturn(Optional.of(link));
 
             // When & Then
             assertThatThrownBy(() -> sharedFileLinkService.accessLink("expired-token", null))
@@ -104,12 +112,12 @@ class SharedFileLinkServiceTest {
         void リンクアクセス_パスワード不正_BusinessException() {
             // Given
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("pw-token")
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("pw-token"))
                     .passwordHash("encoded_pw").createdBy(USER_ID).build();
 
             AccessLinkRequest request = new AccessLinkRequest("wrong");
 
-            given(linkRepository.findByToken("pw-token")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("pw-token"))).willReturn(Optional.of(link));
             given(passwordEncoder.matches("wrong", "encoded_pw")).willReturn(false);
 
             // When & Then
@@ -123,7 +131,7 @@ class SharedFileLinkServiceTest {
         @DisplayName("リンクアクセス_トークン不存在_BusinessException")
         void リンクアクセス_トークン不存在_BusinessException() {
             // Given
-            given(linkRepository.findByToken("unknown")).willReturn(Optional.empty());
+            given(linkRepository.findByTokenHash(HASHER.hash("unknown"))).willReturn(Optional.empty());
 
             // When & Then
             assertThatThrownBy(() -> sharedFileLinkService.accessLink("unknown", null))
