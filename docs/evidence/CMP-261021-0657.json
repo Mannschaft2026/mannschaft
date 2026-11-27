@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261021-0657",
+  "scope": "app",
+  "implementation": {
+    "pr": 4851,
+    "sha": "ed5778ef7c3b4f2dbcb650e7012e11e4e5545b1c"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "当月・未来月（JST）の月次締めを 409 SHIFT_BUDGET_032 で拒否し、副作用・監査ログを残さない",
+      "tests": [
+        {
+          "name": "締め可否ゲートの単体テスト",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/service/MonthlyShiftBudgetCloseGateTest.java"
+        },
+        {
+          "name": "close_月末未到来_409（コントローラ）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/controller/MonthlyShiftBudgetCloseControllerTest.java"
+        },
+        {
+          "name": "月次締めのトランザクション境界（実DBの統合テスト）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/MonthlyShiftBudgetCloseTransactionIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "判定順は機能フラグ→権限（027）→月（032）で、バッチも同じ入口を通る",
+      "tests": [
+        {
+          "name": "締め可否ゲートの単体テスト",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/service/MonthlyShiftBudgetCloseGateTest.java"
+        },
+        {
+          "name": "月次締めバッチのテスト",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/batch/MonthlyShiftBudgetCloseBatchJobTest.java"
+        },
+        {
+          "name": "ゲート経由を強制する ArchUnit 番人",
+          "evidence": "backend/src/test/java/com/mannschaft/app/shiftbudget/architecture/MonthlyShiftBudgetCloseGateGuardArchTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "FE ダッシュボードで未終了月は実行無効＋理由表示、409 をダイアログで表示、形式不正は無効＋形式エラー、未終了・形式不正時は確認文を出さない",
+      "tests": [
+        {
+          "name": "ダッシュボード月次締めの単体テスト",
+          "evidence": "frontend/app/pages/admin/shift-budget/dashboard.monthlyClose.spec.ts"
+        },
+        {
+          "name": "E2E BUDGET-DASH-04 / BUDGET-DASH-06",
+          "evidence": "frontend/tests/e2e/F08.7_shift_budget/dashboard.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "実機でロール横断（権限あり・権限なし・他テナント・URL 直打ち・未ログイン）を確認する",
+      "tests": [
+        {
+          "name": "実機E2E 7項目（2026-11-25）",
+          "evidence": "docs/evidence/CMP-261021-0657-real.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45510972936
+    },
+    {
+      "runId": 45510972796
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4851"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261021-0657-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261021-0657-exploratory.md"
+    }
+  },
+  "regressions": [
+    {
+      "description": "ALIC-1: 未終了月で警告と確認文が同時に表示される（PR #4880 で是正）",
+      "test": "frontend/app/pages/admin/shift-budget/dashboard.monthlyClose.spec.ts",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/4880",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/actions/runs/45554744629"
+    },
+    {
+      "description": "ALIC-2: 形式不正の月でも実行でき、理由のない失敗トーストが出る（PR #4880 で是正）",
+      "test": "frontend/app/pages/admin/shift-budget/dashboard.monthlyClose.spec.ts",
+      "redEvidence": "https://github.com/Mannschaft2026/mannschaft/pull/4880",
+      "greenEvidence": "https://github.com/Mannschaft2026/mannschaft/actions/runs/45554744629"
+    }
+  ]
+}

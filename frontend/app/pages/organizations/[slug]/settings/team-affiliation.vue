@@ -25,6 +25,7 @@ const toast = useToast()
 const orgSlug = String(route.params.slug)
 
 const { getSettings, updateSettings } = useTeamAffiliationApi()
+const { markIfDenied } = useScopeNotFound()
 
 const loading = ref(true)
 const loadFailed = ref(false)
@@ -73,7 +74,9 @@ async function load() {
   try {
     applyToForm(await getSettings(orgSlug))
   }
-  catch {
+  catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     // 読み込み失敗は空の設定に見せず、エラー表示にする（症状を隠さない）。
     loadFailed.value = true
   }

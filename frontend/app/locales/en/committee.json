@@ -26,7 +26,8 @@
       "visibility_to_org": "Visibility to Organization",
       "start_date": "Start Date",
       "end_date": "End Date",
-      "member_count": "Members"
+      "member_count": "Members",
+      "chair": "Chairperson"
     },
     "visibility": {
       "HIDDEN": "Hidden",
@@ -96,7 +97,16 @@
       "invitee": "Invitee"
     },
     "create_dialog": {
-      "title": "Establish a committee"
+      "title": "Establish a committee",
+      "chair_placeholder": "Select a chairperson",
+      "purpose_placeholder": "Select a purpose tag"
+    },
+    "purpose_tag": {
+      "TOURNAMENT": "Tournament",
+      "GOVERNANCE": "Governance",
+      "ELECTION": "Election",
+      "PROJECT": "Project",
+      "OTHER": "Other"
     }
   }
 }

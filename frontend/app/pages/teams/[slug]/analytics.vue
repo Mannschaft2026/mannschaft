@@ -17,6 +17,7 @@ const route = useRoute()
 const teamSlug = computed(() => String(route.params.slug))
 const analyticsApi = useAnalyticsApi()
 const notification = useNotification()
+const { markIfDenied } = useScopeNotFound()
 const { t } = useI18n()
 const { sendBeacon } = usePageViewBeacon()
 
@@ -31,7 +32,9 @@ async function loadData() {
   loading.value = true
   try {
     data.value = await analyticsApi.getAnalytics('team', teamSlug.value)
-  } catch {
+  } catch (e) {
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ。トーストは出さない（CMP-261125-1108）
+    if (markIfDenied(e)) return
     notification.error(t('analytics.loadError'))
   } finally {
     loading.value = false

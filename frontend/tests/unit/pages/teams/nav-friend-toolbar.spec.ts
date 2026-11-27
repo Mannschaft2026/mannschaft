@@ -2,6 +2,7 @@ import { computed, defineComponent, ref } from 'vue'
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import TeamNavPage from '~/pages/teams/[slug]/nav.vue'
+import { useScopeNotFound } from '~/composables/useScopeNotFound'
 
 /**
  * ALIC-1/2 回帰テスト（CMP-261011-1237）: 「フレンドチーム」タブの実体は nav.vue。
@@ -76,7 +77,7 @@ beforeAll(async () => {
 })
 
 describe('pages/teams/[slug]/nav.vue — フレンドチームタブのツールバー', () => {
-  beforeEach(() => { setRole('ADMIN', ['MANAGE_FRIEND_TEAMS']); incomingRefresh.mockClear() })
+  beforeEach(() => { setRole('ADMIN', ['MANAGE_FRIEND_TEAMS']); incomingRefresh.mockClear(); useScopeNotFound().reset() })
 
   it('NAVF-001: 所属者（MEMBER）にも「使い方」ボタンが出る', async () => {
     setRole('MEMBER')
@@ -170,10 +171,11 @@ describe('pages/teams/[slug]/nav.vue — フレンドチームタブのツール
   // AC-14: 部外者・GUEST・他テナントは空状態ではなく権限なし案内
   // 部外者(roleName=null)は本文を出さず、一覧取得の 403 は TeamFriendList.spec で forbidden に倒すことを検証。
   // GUEST は BE が非 null で返すためガードを素通りしていた経路。
-  it('AC-14: GUEST では本文を出さず権限なし案内(forbidden)が出る', async () => {
+  it('AC-14: GUEST では本文を出さず notFound（共通の見つかりません）を立てる。独自の権限なし案内は出さない', async () => {
     setRole('GUEST')
     const w = await mountNav()
-    expect(w.find('[data-testid="friend-forbidden"]').exists()).toBe(true)
+    expect(useScopeNotFound().notFound.value).toBe(true)
+    expect(w.find('[data-testid="friend-forbidden"]').exists()).toBe(false)
     expect(w.find('[data-testid="friend-toolbar"]').exists()).toBe(false)
     expect(w.findComponent({ name: 'TeamFriendList' }).exists()).toBe(false)
   })
@@ -197,10 +199,11 @@ describe('pages/teams/[slug]/nav.vue — フレンドチームタブのツール
       shell.roleLoadFailed = state.failed
     }
 
-    it('AC-14a: 解決済みで roleName=null（未所属・他テナント）は forbidden 案内を出し、一覧はマウントしない', async () => {
+    it('AC-14a: 解決済みで roleName=null（未所属・他テナント）は notFound を立て、独自の権限なし案内は出さず、一覧はマウントしない', async () => {
       setNull({ resolved: true, failed: false })
       const w = await mountNav()
-      expect(w.find('[data-testid="friend-forbidden"]').exists()).toBe(true)
+      expect(useScopeNotFound().notFound.value).toBe(true)
+      expect(w.find('[data-testid="friend-forbidden"]').exists()).toBe(false)
       expect(w.find('[data-testid="friend-role-error"]').exists()).toBe(false)
       expect(w.find('[data-testid="friend-toolbar"]').exists()).toBe(false)
       expect(w.findComponent({ name: 'TeamFriendList' }).exists()).toBe(false)
@@ -209,6 +212,7 @@ describe('pages/teams/[slug]/nav.vue — フレンドチームタブのツール
     it('AC-14b: 読込中は forbidden 案内もエラーも出さない（ちらつき防止）', async () => {
       setNull({ resolved: false, failed: false })
       const w = await mountNav()
+      expect(useScopeNotFound().notFound.value).toBe(false)
       expect(w.find('[data-testid="friend-forbidden"]').exists()).toBe(false)
       expect(w.find('[data-testid="friend-role-error"]').exists()).toBe(false)
       expect(w.findComponent({ name: 'TeamFriendList' }).exists()).toBe(false)

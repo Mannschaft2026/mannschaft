@@ -14,7 +14,7 @@ erDiagram
     contact_invite_tokens {
         bigint id PK
         bigint user_id "ID参照"
-        char token UK
+        varchar token_hash UK
     }
     contact_request_blocks {
         bigint id PK
@@ -56,7 +56,7 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | `id` | `bigint unsigned` | NO | （なし） auto_increment |  |
 | `user_id` | `bigint unsigned` | NO | （なし） | トークン発行者 |
-| `token` | `char(36)` | NO | （なし） | UUID v4 |
+| `token_hash` | `varchar(64)` | NO | （なし） | 招待トークンのSHA-256ハッシュ(hex)。平文は保存しない |
 | `label` | `varchar(50)` | YES | NULL | 管理用ラベル |
 | `max_uses` | `int` | YES | NULL | NULL=無制限 |
 | `used_count` | `int` | NO | `0` |  |

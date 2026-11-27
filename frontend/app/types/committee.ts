@@ -42,6 +42,14 @@ export interface CommitteeInvitation {
   status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'CANCELLED'
 }
 
+/**
+ * 招集状の発行応答。平文の `inviteToken` を返すのは発行時の一度きり（DB にはハッシュしか残らず、
+ * 一覧・詳細の {@link CommitteeInvitation} には含まれない）。
+ */
+export interface CommitteeInvitationIssued extends CommitteeInvitation {
+  inviteToken: string
+}
+
 export interface CommitteeDistributionLog {
   id: number
   committeeId: number

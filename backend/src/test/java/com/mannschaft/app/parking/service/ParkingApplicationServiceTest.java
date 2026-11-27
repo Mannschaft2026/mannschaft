@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -130,53 +131,120 @@ class ParkingApplicationServiceTest {
     @DisplayName("list")
     class List_ {
 
+        private void givenSpaces(List<Long> ids) {
+            List<ParkingSpaceEntity> spaces = ids.stream().map(id -> {
+                ParkingSpaceEntity e = org.mockito.Mockito.mock(ParkingSpaceEntity.class);
+                given(e.getId()).willReturn(id);
+                return e;
+            }).toList();
+            given(spaceRepository.findByScopeTypeAndScopeId(eq(SCOPE_TYPE), eq(SCOPE_ID), any(Pageable.class)))
+                    .willReturn(new PageImpl<>(spaces));
+        }
+
         @Test
-        @DisplayName("正常系: spaceIdsが空の場合空ページが返る")
-        void list_spaceIds空_空ページが返る() {
+        @DisplayName("正常系: スコープに区画が無い場合空ページが返る")
+        void list_区画なし_空ページが返る() {
             // Given
             Pageable pageable = PageRequest.of(0, 10);
+            givenSpaces(List.of());
 
             // When
-            Page<ApplicationResponse> result = parkingApplicationService.list(List.of(), null, pageable);
+            Page<ApplicationResponse> result =
+                    parkingApplicationService.list(SCOPE_TYPE, SCOPE_ID, USER_ID, false, null, pageable);
 
             // Then
             assertThat(result).isEmpty();
         }
 
         @Test
-        @DisplayName("正常系: ステータス指定ありで絞り込み取得できる")
-        void list_ステータス指定あり_絞り込み取得() {
+        @DisplayName("正常系: 全件閲覧権限ありでステータス指定あり、絞り込み取得できる")
+        void list_管理権限_ステータス指定あり_絞り込み取得() {
             // Given
             Pageable pageable = PageRequest.of(0, 10);
             List<Long> spaceIds = List.of(SPACE_ID);
+            givenSpaces(spaceIds);
             ParkingApplicationEntity entity = createPendingApplication();
-            Page<ParkingApplicationEntity> page = new PageImpl<>(List.of(entity));
             given(applicationRepository.findBySpaceIdInAndStatus(spaceIds, ParkingApplicationStatus.PENDING, pageable))
-                    .willReturn(page);
+                    .willReturn(new PageImpl<>(List.of(entity)));
             given(parkingMapper.toApplicationResponse(entity)).willReturn(createApplicationResponse());
 
             // When
-            Page<ApplicationResponse> result = parkingApplicationService.list(spaceIds, "PENDING", pageable);
+            Page<ApplicationResponse> result =
+                    parkingApplicationService.list(SCOPE_TYPE, SCOPE_ID, USER_ID, true, "PENDING", pageable);
 
             // Then
             assertThat(result.getContent()).hasSize(1);
         }
 
         @Test
-        @DisplayName("正常系: ステータス指定なしで全件取得できる")
-        void list_ステータス指定なし_全件取得() {
+        @DisplayName("正常系: 全件閲覧権限ありでステータス指定なし、全件取得できる")
+        void list_管理権限_ステータス指定なし_全件取得() {
             // Given
             Pageable pageable = PageRequest.of(0, 10);
             List<Long> spaceIds = List.of(SPACE_ID);
-            Page<ParkingApplicationEntity> page = new PageImpl<>(List.of(createPendingApplication()));
-            given(applicationRepository.findBySpaceIdIn(spaceIds, pageable)).willReturn(page);
+            givenSpaces(spaceIds);
+            given(applicationRepository.findBySpaceIdIn(spaceIds, pageable))
+                    .willReturn(new PageImpl<>(List.of(createPendingApplication())));
             given(parkingMapper.toApplicationResponse(any())).willReturn(createApplicationResponse());
 
             // When
-            Page<ApplicationResponse> result = parkingApplicationService.list(spaceIds, null, pageable);
+            Page<ApplicationResponse> result =
+                    parkingApplicationService.list(SCOPE_TYPE, SCOPE_ID, USER_ID, true, null, pageable);
 
             // Then
             assertThat(result.getContent()).hasSize(1);
+            verify(applicationRepository, never()).findBySpaceIdInAndUserId(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("正常系: 全件閲覧権限なしは本人分のみ（user_id で絞り込む）")
+        void list_権限なし_本人分のみ() {
+            // Given
+            Pageable pageable = PageRequest.of(0, 10);
+            List<Long> spaceIds = List.of(SPACE_ID);
+            givenSpaces(spaceIds);
+            given(applicationRepository.findBySpaceIdInAndUserId(spaceIds, USER_ID, pageable))
+                    .willReturn(new PageImpl<>(List.of(createPendingApplication())));
+            given(parkingMapper.toApplicationResponse(any())).willReturn(createApplicationResponse());
+
+            // When
+            Page<ApplicationResponse> result =
+                    parkingApplicationService.list(SCOPE_TYPE, SCOPE_ID, USER_ID, false, null, pageable);
+
+            // Then
+            assertThat(result.getContent()).hasSize(1);
+            verify(applicationRepository, never()).findBySpaceIdIn(any(), any());
+        }
+
+        @Test
+        @DisplayName("正常系: 全件閲覧権限なし＋ステータス指定も本人分のみ")
+        void list_権限なし_ステータス指定_本人分のみ() {
+            // Given
+            Pageable pageable = PageRequest.of(0, 10);
+            List<Long> spaceIds = List.of(SPACE_ID);
+            givenSpaces(spaceIds);
+            given(applicationRepository.findBySpaceIdInAndUserIdAndStatus(
+                    spaceIds, USER_ID, ParkingApplicationStatus.PENDING, pageable))
+                    .willReturn(new PageImpl<>(List.of(createPendingApplication())));
+            given(parkingMapper.toApplicationResponse(any())).willReturn(createApplicationResponse());
+
+            // When
+            Page<ApplicationResponse> result =
+                    parkingApplicationService.list(SCOPE_TYPE, SCOPE_ID, USER_ID, false, "PENDING", pageable);
+
+            // Then
+            assertThat(result.getContent()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("異常系: 未定義のステータス（小文字含む）は COMMON_001（400）")
+        void list_不正ステータス_COMMON001() {
+            Pageable pageable = PageRequest.of(0, 10);
+
+            assertThatThrownBy(() -> parkingApplicationService.list(SCOPE_TYPE, SCOPE_ID, USER_ID, true, "pending", pageable))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_001"));
         }
     }
 
@@ -453,8 +521,8 @@ class ParkingApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("正常系: 本人以外でもADMIN以上ならキャンセルできる")
-        void cancel_ADMIN_キャンセルされる() {
+        @DisplayName("異常系: 本人以外はADMINでもキャンセルできない（COMMON_002・CMP-260930-0233 マスター裁定）")
+        void cancel_他人の申請はADMINでも403() {
             // Given
             ParkingApplicationEntity entity = createPendingApplication(); // userId=USER_ID
             Long adminUserId = 999L;
@@ -462,12 +530,13 @@ class ParkingApplicationServiceTest {
             given(spaceRepository.findByIdAndScopeTypeAndScopeId(SPACE_ID, SCOPE_TYPE, SCOPE_ID))
                     .willReturn(Optional.of(createAcceptingSpace()));
 
-            // When
-            parkingApplicationService.cancel(SCOPE_TYPE, SCOPE_ID, APPLICATION_ID, adminUserId);
-
-            // Then: checkAdminOrAbove が呼ばれる（申請者本人でないため）
-            verify(accessControlService).checkAdminOrAbove(adminUserId, SCOPE_ID, SCOPE_TYPE);
-            assertThat(entity.getStatus()).isEqualTo(ParkingApplicationStatus.CANCELLED);
+            // When / Then
+            assertThatThrownBy(() -> parkingApplicationService.cancel(SCOPE_TYPE, SCOPE_ID, APPLICATION_ID, adminUserId))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
+                            .isEqualTo("COMMON_002"));
+            assertThat(entity.getStatus()).isEqualTo(ParkingApplicationStatus.PENDING);
+            verify(applicationRepository, never()).save(any());
         }
 
         @Test

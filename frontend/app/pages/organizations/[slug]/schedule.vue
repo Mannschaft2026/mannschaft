@@ -14,6 +14,7 @@ const route = useRoute()
 const orgSlug = String(route.params.slug)
 const scheduleApi = useScheduleApi()
 const { handleApiError } = useErrorHandler()
+const { markIfDenied } = useScopeNotFound()
 const { isAdminOrDeputy, roleName, can, loadPermissions } = useRoleAccess('organization', orgSlug)
 const canManageSchedule = computed(
   () => isAdminOrDeputy.value || (roleName.value === 'MEMBER' && can('MANAGE_SCHEDULES')),
@@ -34,7 +35,11 @@ const fetcher = async (from: string, to: string): Promise<CalendarEventItem[]> =
 }
 
 const { currentYear, currentMonth, events, loading, loadEvents, refresh, onPrevMonth, onNextMonth } =
-  useCalendarEvents(fetcher, { cacheHalfMonths: 2 })
+  useCalendarEvents(fetcher, {
+    cacheHalfMonths: 2,
+    // 非所属・権限なし（403/404）は共通の「見つかりません」へ（CMP-261125-1108）。他のエラーは従来どおり
+    onError: (error) => { markIfDenied(error) },
+  })
 
 function onDateClick(date: string) {
   if (!canManageSchedule.value) return

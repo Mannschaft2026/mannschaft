@@ -407,7 +407,7 @@ class EventMapperTest {
             // given
             EventGuestInviteTokenEntity entity = EventGuestInviteTokenEntity.builder()
                     .eventId(1L)
-                    .token("invite-token-xyz")
+                    .tokenHash("invite-token-xyz-hash")
                     .maxUses(10)
                     .isActive(true)
                     .expiresAt(NOW.plusDays(30))
@@ -418,7 +418,7 @@ class EventMapperTest {
 
             // then
             assertThat(result).isNotNull();
-            assertThat(result.getToken()).isEqualTo("invite-token-xyz");
+            assertThat(result.getEventId()).isEqualTo(1L);
             assertThat(result.getMaxUses()).isEqualTo(10);
         }
 
@@ -428,7 +428,7 @@ class EventMapperTest {
             // given
             EventGuestInviteTokenEntity entity = EventGuestInviteTokenEntity.builder()
                     .eventId(2L)
-                    .token("token-abc")
+                    .tokenHash("token-abc-hash")
                     .isActive(false)
                     .build();
 
@@ -437,7 +437,7 @@ class EventMapperTest {
 
             // then
             assertThat(result).hasSize(1);
-            assertThat(result.get(0).getToken()).isEqualTo("token-abc");
+            assertThat(result.get(0).getEventId()).isEqualTo(2L);
         }
     }
 }

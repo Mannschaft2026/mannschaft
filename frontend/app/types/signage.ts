@@ -25,13 +25,26 @@ export interface SignageSlot {
   order: number
 }
 
+/** 一覧・参照用。サーバーにはハッシュしか無いため、平文トークンは含まない。 */
 export interface SignageToken {
   id: number
   screenId: number
-  token: string
-  label: string | null
-  lastSeenAt: string | null
+  name: string
+  isActive: boolean
+  allowedIps: string[]
+  expiredAt: string | null
   createdAt: string
+}
+
+/** 発行応答。平文トークン（token）はこの応答でだけ返る。 */
+export interface SignageTokenIssued extends SignageToken {
+  token: string
+}
+
+export interface IssueSignageTokenRequest {
+  name: string
+  allowedIps?: string[]
+  expiredAt?: string | null
 }
 
 export interface CreateSignageScreenRequest {

@@ -17,7 +17,8 @@ import java.time.LocalDateTime;
 /**
  * 求人応募エンティティ。F13.1 Phase 13.1.1 MVP。
  *
- * <p>論理削除なし・楽観ロックなし。状態は {@link JobApplicationStatus} で管理する。</p>
+ * <p>論理削除なし・楽観ロックなし。状態は {@link JobApplicationStatus} で管理する。状態遷移（採用・不採用・取り下げ）は
+ * 行を悲観ロック（{@code PESSIMISTIC_WRITE}）で読み直してから判定する（CMP-261021-0355）。</p>
  */
 @Entity
 @Table(name = "job_applications")

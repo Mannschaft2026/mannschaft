@@ -19,6 +19,7 @@ import com.mannschaft.app.jobmatching.repository.JobPostingRepository;
 import com.mannschaft.app.jobmatching.service.command.ReportCompletionCommand;
 import com.mannschaft.app.jobmatching.state.JobContractStateMachine;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -50,8 +52,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -120,8 +126,7 @@ class JobContractServiceTest {
             given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
             given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
             given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
-            given(applicationRepository.countByJobPostingIdAndStatus(
-                    POSTING_ID, JobApplicationStatus.ACCEPTED)).willReturn(0);
+            given(applicationRepository.countAcceptedByJobPostingIdForShare(POSTING_ID)).willReturn(0L);
             given(applicationRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(contractRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(jobChatService.createRoomForContract(any(), any())).willReturn(CHAT_ROOM_ID);
@@ -144,8 +149,7 @@ class JobContractServiceTest {
             given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
             given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
             given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
-            given(applicationRepository.countByJobPostingIdAndStatus(
-                    POSTING_ID, JobApplicationStatus.ACCEPTED)).willReturn(0);
+            given(applicationRepository.countAcceptedByJobPostingIdForShare(POSTING_ID)).willReturn(0L);
             given(applicationRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(contractRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(jobChatService.createRoomForContract(any(), any())).willReturn(CHAT_ROOM_ID);
@@ -211,8 +215,7 @@ class JobContractServiceTest {
             given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
             given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
             // 既に1名採用済み → 定員1充足
-            given(applicationRepository.countByJobPostingIdAndStatus(
-                    POSTING_ID, JobApplicationStatus.ACCEPTED)).willReturn(1);
+            given(applicationRepository.countAcceptedByJobPostingIdForShare(POSTING_ID)).willReturn(1L);
 
             assertThatThrownBy(() -> service.acceptApplication(APPLICATION_ID, REQUESTER_ID))
                     .isInstanceOf(BusinessException.class)
@@ -230,6 +233,54 @@ class JobContractServiceTest {
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(JobmatchingErrorCode.JOB_APPLICATION_NOT_FOUND));
         }
+
+        @Test
+        @DisplayName("ロック順: GET_LOCK → 求人 FOR UPDATE → 応募 PESSIMISTIC_WRITE → 採用済み件数 FOR SHARE（旧 count は使わない）")
+        void ロック順_求人行から応募行_件数はlockingRead() {
+            JobApplicationEntity app = appliedApplication();
+            JobPostingEntity posting = openPosting(2);
+            given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
+            given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
+            given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
+            given(applicationRepository.countAcceptedByJobPostingIdForShare(POSTING_ID)).willReturn(0L);
+            given(applicationRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+            given(contractRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+            given(jobChatService.createRoomForContract(any(), any())).willReturn(CHAT_ROOM_ID);
+
+            service.acceptApplication(APPLICATION_ID, REQUESTER_ID);
+
+            InOrder order = inOrder(applicationRepository, entityManager, postingRepository);
+            order.verify(applicationRepository).findById(APPLICATION_ID);
+            order.verify(entityManager).createNativeQuery(contains("GET_LOCK"));
+            order.verify(postingRepository).findByIdForUpdate(POSTING_ID);
+            order.verify(entityManager).refresh(app, LockModeType.PESSIMISTIC_WRITE);
+            order.verify(applicationRepository).countAcceptedByJobPostingIdForShare(POSTING_ID);
+            order.verify(applicationRepository).save(app);
+            order.verify(entityManager).createNativeQuery(contains("RELEASE_LOCK"));
+            verify(applicationRepository, never()).countByJobPostingIdAndStatus(any(), any());
+        }
+
+        @Test
+        @DisplayName("先に読んだ値が APPLIED でも、ロック後に読み直した値（取り下げ済み）で判定し JOB_APPLICATION_NOT_PENDING")
+        void ロック後の最新値で判定_取り下げ済みは拒否() {
+            JobApplicationEntity app = appliedApplication();
+            JobPostingEntity posting = openPosting(2);
+            given(applicationRepository.findById(APPLICATION_ID)).willReturn(Optional.of(app));
+            given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
+            given(jobPolicy.canDecideApplication(REQUESTER_ID, posting)).willReturn(true);
+            // locking read で最新のコミット済み状態（ロック待ちの間に取り下げ済み）が読み込まれる。
+            doAnswer(inv -> {
+                ((JobApplicationEntity) inv.getArgument(0)).withdraw();
+                return null;
+            }).when(entityManager).refresh(app, LockModeType.PESSIMISTIC_WRITE);
+
+            assertThatThrownBy(() -> service.acceptApplication(APPLICATION_ID, REQUESTER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(JobmatchingErrorCode.JOB_APPLICATION_NOT_PENDING));
+            verify(contractRepository, never()).save(any());
+            verify(applicationRepository, never()).save(any());
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -242,8 +293,9 @@ class JobContractServiceTest {
 
         /**
          * <p>シナリオ: 定員1の求人に対し、2人の応募（applicationA/applicationB）が同時に採用確定要求される。
-         * 実装は MySQL {@code GET_LOCK} による分散排他で 2 スレッドを直列化する。テスト側はこの
-         * セマンティクスを {@link ReentrantLock} で再現し、後発スレッドが先発スレッドの完了を待つ挙動を模す。</p>
+         * 実装は求人行の {@code SELECT ... FOR UPDATE}（コミットまで保持）で 2 スレッドを直列化する。テスト側はこの
+         * セマンティクスを {@link ReentrantLock} で再現し、後発スレッドが先発スレッドの完了を待つ挙動を模す。
+         * 実 DB での並行性（スナップショット読みの排除を含む）は {@code JobAcceptanceCapacityConcurrencyIT} が検証する。</p>
          *
          * <p>1 件目成功時に {@link JobContractService#acceptApplication} は
          * 求人ステータスを {@link JobPostingStatus#CLOSED} に遷移させるため、
@@ -266,57 +318,23 @@ class JobContractServiceTest {
 
             given(applicationRepository.findById(applicationIdA)).willReturn(Optional.of(appA));
             given(applicationRepository.findById(applicationIdB)).willReturn(Optional.of(appB));
-            given(postingRepository.findByIdForUpdate(POSTING_ID)).willReturn(Optional.of(posting));
             given(jobPolicy.canDecideApplication(eq(REQUESTER_ID), any())).willReturn(true);
             given(contractRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(jobChatService.createRoomForContract(any(), any())).willReturn(CHAT_ROOM_ID);
 
-            // --- 根治ポイント: MySQL GET_LOCK / RELEASE_LOCK の排他セマンティクスを ReentrantLock で
-            //     忠実に再現する。@BeforeEach の共通スタブ（すべての getSingleResult が "1" を返す）を
-            //     ここで上書きし、SQL 種別ごとに Query インスタンスを使い分けた Answer に差し替える。
-            //
-            //     これにより、実装の try { GET_LOCK; ... } finally { RELEASE_LOCK } と同じく
-            //     GET_LOCK 取得から RELEASE_LOCK 解放までがスレッド単位で直列化され、
-            //     その内側で実行される countByJobPostingIdAndStatus → save の順序が保護される。
-            Query getLockQuery = org.mockito.Mockito.mock(Query.class);
-            Query releaseLockQuery = org.mockito.Mockito.mock(Query.class);
-            given(getLockQuery.setParameter(anyInt(), any())).willReturn(getLockQuery);
-            given(releaseLockQuery.setParameter(anyInt(), any())).willReturn(releaseLockQuery);
-
-            final ReentrantLock postingLock = new ReentrantLock();
-
-            // SQL 種別で返す Query を切り替える（GET_LOCK / RELEASE_LOCK を区別）。
-            given(entityManager.createNativeQuery(anyString())).willAnswer(inv -> {
-                String sql = inv.getArgument(0);
-                if (sql.contains("GET_LOCK")) {
-                    return getLockQuery;
-                }
-                if (sql.contains("RELEASE_LOCK")) {
-                    return releaseLockQuery;
-                }
-                return nativeQuery;
+            // 求人行の SELECT ... FOR UPDATE（コミットまで保持される行ロック）を ReentrantLock で再現する。
+            // findByIdForUpdate で獲得し、各スレッドの acceptApplication 終了時（＝コミット相当）に解放する。
+            // GET_LOCK は @BeforeEach の共通スタブで即時 "1"（コミット前に解放されるため排他の根拠にしない）。
+            final ReentrantLock postingRowLock = new ReentrantLock();
+            given(postingRepository.findByIdForUpdate(POSTING_ID)).willAnswer(inv -> {
+                postingRowLock.lock();
+                return Optional.of(posting);
             });
 
-            // GET_LOCK.getSingleResult() 呼び出しで ReentrantLock を実取得する
-            // （他スレッドが保持中ならここでブロックする。これが MySQL GET_LOCK の本来の意味論）。
-            given(getLockQuery.getSingleResult()).willAnswer(inv -> {
-                postingLock.lock();
-                return "1";
-            });
-            // RELEASE_LOCK.getSingleResult() 呼び出しで解放。
-            given(releaseLockQuery.getSingleResult()).willAnswer(inv -> {
-                if (postingLock.isHeldByCurrentThread()) {
-                    postingLock.unlock();
-                }
-                return "1";
-            });
-
-            // countByJobPostingIdAndStatus の原子的カウンタ。初期0、1件成功するたび +1。
-            // GET_LOCK で直列化されているため、スレッド A の save 完了後に B の count が走る。
+            // locking read の採用済み件数。1 件成功するたび +1（求人行ロックの内側で直列化される）。
             final AtomicInteger acceptedCounter = new AtomicInteger(0);
-            given(applicationRepository.countByJobPostingIdAndStatus(
-                    POSTING_ID, JobApplicationStatus.ACCEPTED))
-                    .willAnswer(inv -> acceptedCounter.get());
+            given(applicationRepository.countAcceptedByJobPostingIdForShare(POSTING_ID))
+                    .willAnswer(inv -> (long) acceptedCounter.get());
 
             // 1件成功時にカウンタをインクリメント（save 時点で捕捉）。
             given(applicationRepository.save(any())).willAnswer(inv -> {
@@ -325,34 +343,6 @@ class JobContractServiceTest {
                     acceptedCounter.incrementAndGet();
                 }
                 return saved;
-            });
-
-            // 実 DB の MySQL GET_LOCK による分散排他を ReentrantLock で再現する。
-            // デフォルトの @BeforeEach スタブは GET_LOCK/RELEASE_LOCK のいずれも "1" を即時返すため、
-            // 2 スレッドが count→save 区間を同時通過し、定員1に対して両方 ACCEPT される flaky が発生していた。
-            // 実装（JobContractService#acquireLockOrFail）は SELECT GET_LOCK(key, timeout) を叩き、
-            // 実 DB 環境では同一 key に対して 1 スレッドしか保持できない。そのセマンティクスをモックで再現する。
-            final ReentrantLock lockSerializer = new ReentrantLock();
-            final ThreadLocal<String> threadSql = new ThreadLocal<>();
-            given(entityManager.createNativeQuery(anyString())).willAnswer(inv -> {
-                threadSql.set(inv.getArgument(0));
-                return nativeQuery;
-            });
-            given(nativeQuery.getSingleResult()).willAnswer(inv -> {
-                String sql = threadSql.get();
-                try {
-                    if (sql != null && sql.contains("GET_LOCK")) {
-                        lockSerializer.lock();
-                    } else if (sql != null && sql.contains("RELEASE_LOCK")) {
-                        if (lockSerializer.isHeldByCurrentThread()) {
-                            lockSerializer.unlock();
-                        }
-                    }
-                    return "1";
-                } finally {
-                    // ExecutorService のワーカースレッド再利用による値の持ち越し・メモリリーク防止。
-                    threadSql.remove();
-                }
             });
 
             // 2 スレッド同時起動。両スレッドが latch.await で待機 → countDown で同時スタート。
@@ -366,7 +356,6 @@ class JobContractServiceTest {
             AtomicInteger notOpenCount = new AtomicInteger(0);
             AtomicReference<Throwable> unexpectedError = new AtomicReference<>();
 
-            Runnable runAccept = () -> { /* 各スレッドで1回採用確定を試行 */ };
             executor.submit(() -> {
                 try {
                     startLatch.await();
@@ -381,6 +370,10 @@ class JobContractServiceTest {
                 } catch (Throwable t) {
                     unexpectedError.set(t);
                 } finally {
+                    // コミット相当: TX 終了で行ロックが外れる。
+                    if (postingRowLock.isHeldByCurrentThread()) {
+                        postingRowLock.unlock();
+                    }
                     doneLatch.countDown();
                 }
             });
@@ -398,6 +391,10 @@ class JobContractServiceTest {
                 } catch (Throwable t) {
                     unexpectedError.set(t);
                 } finally {
+                    // コミット相当: TX 終了で行ロックが外れる。
+                    if (postingRowLock.isHeldByCurrentThread()) {
+                        postingRowLock.unlock();
+                    }
                     doneLatch.countDown();
                 }
             });

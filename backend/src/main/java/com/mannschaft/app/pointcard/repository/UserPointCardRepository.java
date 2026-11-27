@@ -5,6 +5,7 @@ import com.mannschaft.app.pointcard.entity.UserPointCardEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -52,9 +53,14 @@ public interface UserPointCardRepository
      * {@code deleted_at IS NULL} 条件は不要（物理削除のみで運用、設計書 §5.2 / §10.3 参照）。
      *
      * <p>並び順は {@code id ASC}（UUIDv7 = 時系列順）で安定化する。
+     *
+     * <p>ページング方式はキーセット（カーソル）: {@code afterId} より大きい ID だけを返す。
+     * チャンクをコミットするとマッチ済みカードが対象集合（provider_id IS NULL）から抜けるため、
+     * オフセット方式だと次ページの窓がずれて取りこぼす（CMP-260916-0055）。
+     * 呼び出し側は直前チャンクの最後の ID を {@code afterId} に渡すこと（初回は最小 UUID）。
      */
-    @Query("SELECT c FROM UserPointCardEntity c WHERE c.providerId IS NULL ORDER BY c.id ASC")
-    Page<UserPointCardEntity> findRematchTargets(Pageable pageable);
+    @Query("SELECT c FROM UserPointCardEntity c WHERE c.providerId IS NULL AND c.id > :afterId ORDER BY c.id ASC")
+    List<UserPointCardEntity> findRematchTargetsAfter(@Param("afterId") UUID afterId, Pageable pageable);
 
     /**
      * 指定ユーザーの保有カードを全削除する（退会即時匿名化の安全弁）。
