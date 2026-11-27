@@ -8,6 +8,7 @@
  *   GET    /api/v1/tournaments/{tId}/matches/{matchId}/rosters          （主催者）
  *   PATCH  /api/v1/tournaments/{tId}/matches/{matchId}                  （締切設定）
  */
+import { toValue, type MaybeRefOrGetter } from 'vue'
 import type {
   FixtureRosterResponse,
   OrganizerRosterView,
@@ -15,12 +16,25 @@ import type {
   ApplyRosterTemplateRequest,
 } from '~/types/tournament'
 
-export function useMatchRoster(tournamentId: number, matchId: number) {
+/**
+ * 注意: 本 composable は useNotification（PrimeVue useToast＝inject）を内部で呼ぶため、
+ * 必ず setup（または setup と同期の onMounted 等）で呼ぶこと。クリックハンドラ等
+ * setup 外から呼ぶと `No PrimeVue Toast provided!` で失敗する。
+ * 試合 ID は実行時に決まるため ref / getter で受け、各 API 呼び出しの時点で評価する。
+ */
+export function useMatchRoster(tournamentId: number, matchId: MaybeRefOrGetter<number | null>) {
   const api = useApi()
   const notification = useNotification()
   const { t } = useI18n()
 
-  const base = `/api/v1/tournaments/${tournamentId}/matches/${matchId}`
+  /** 呼び出し時点の試合 ID でベース URL を組み立てる（未選択なら例外） */
+  function basePath(): string {
+    const id = toValue(matchId)
+    if (id === null || id === undefined) {
+      throw new Error('useMatchRoster: matchId が未選択です')
+    }
+    return `/api/v1/tournaments/${tournamentId}/matches/${id}`
+  }
 
   const myRoster = ref<FixtureRosterResponse | null>(null)
   const allRosters = ref<OrganizerRosterView[]>([])
@@ -35,7 +49,7 @@ export function useMatchRoster(tournamentId: number, matchId: number) {
   async function getMyRoster(): Promise<FixtureRosterResponse | null> {
     loadingMy.value = true
     try {
-      const res = await api<{ data: FixtureRosterResponse }>(`${base}/rosters/me`)
+      const res = await api<{ data: FixtureRosterResponse }>(`${basePath()}/rosters/me`)
       myRoster.value = res.data
       return res.data
     } catch (err) {
@@ -51,7 +65,7 @@ export function useMatchRoster(tournamentId: number, matchId: number) {
   async function submitMyRoster(request: SubmitRosterRequest): Promise<FixtureRosterResponse> {
     submitting.value = true
     try {
-      const res = await api<{ data: FixtureRosterResponse }>(`${base}/rosters/me`, {
+      const res = await api<{ data: FixtureRosterResponse }>(`${basePath()}/rosters/me`, {
         method: 'PUT',
         body: request,
       })
@@ -71,7 +85,7 @@ export function useMatchRoster(tournamentId: number, matchId: number) {
   async function applyTemplate(req: ApplyRosterTemplateRequest): Promise<FixtureRosterResponse> {
     applyingTemplate.value = true
     try {
-      const res = await api<{ data: FixtureRosterResponse }>(`${base}/rosters/me/apply-template`, {
+      const res = await api<{ data: FixtureRosterResponse }>(`${basePath()}/rosters/me/apply-template`, {
         method: 'POST',
         body: req,
       })
@@ -91,7 +105,7 @@ export function useMatchRoster(tournamentId: number, matchId: number) {
   async function getAllRosters(): Promise<OrganizerRosterView[]> {
     loadingAll.value = true
     try {
-      const res = await api<{ data: OrganizerRosterView[] }>(`${base}/rosters`)
+      const res = await api<{ data: OrganizerRosterView[] }>(`${basePath()}/rosters`)
       allRosters.value = res.data
       return res.data
     } catch (err) {
@@ -107,7 +121,7 @@ export function useMatchRoster(tournamentId: number, matchId: number) {
   async function updateDeadline(rosterDeadline: string | null): Promise<void> {
     updatingDeadline.value = true
     try {
-      await api(`${base}`, {
+      await api(basePath(), {
         method: 'PATCH',
         body: { rosterDeadline },
       })
