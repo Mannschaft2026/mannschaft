@@ -63425,7 +63425,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseFileResponse"
+                  "$ref": "#/components/schemas/ApiResponsePublicFileLinkResponse"
                 }
               }
             }
@@ -203680,6 +203680,39 @@
             "format": "int64",
             "description": "URL 有効期限（秒）",
             "example": 900
+          }
+        }
+      },
+      "ApiResponsePublicFileLinkResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PublicFileLinkResponse"
+          }
+        }
+      },
+      "PublicFileLinkResponse": {
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "downloadDisabled": {
+            "type": "boolean"
+          },
+          "fileSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

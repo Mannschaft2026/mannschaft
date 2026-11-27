@@ -3,7 +3,7 @@ package com.mannschaft.app.filesharing.controller;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.security.AuthorizedInService;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
-import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.PublicFileLinkResponse;
 import com.mannschaft.app.filesharing.dto.SharedFileDownloadUrlResponse;
 import com.mannschaft.app.filesharing.service.SharedFileLinkService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,10 +60,10 @@ public class PublicFileLinkController {
     @PostMapping("/{token}/access")
     @Operation(summary = "公開リンクアクセス（未認証可・メタ返却）")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "アクセス成功")
-    public ResponseEntity<ApiResponse<FileResponse>> access(
+    public ResponseEntity<ApiResponse<PublicFileLinkResponse>> access(
             @PathVariable String token,
             @RequestBody(required = false) AccessLinkRequest request) {
-        FileResponse response = linkService.accessLinkPublic(token, request);
+        PublicFileLinkResponse response = linkService.accessLinkPublic(token, request);
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

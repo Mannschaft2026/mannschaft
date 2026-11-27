@@ -67195,6 +67195,19 @@ export interface components {
              */
             expiresInSeconds?: number;
         };
+        ApiResponsePublicFileLinkResponse: {
+            data?: components["schemas"]["PublicFileLinkResponse"];
+        };
+        PublicFileLinkResponse: {
+            contentType?: string;
+            description?: string;
+            downloadDisabled?: boolean;
+            /** Format: int64 */
+            fileSize?: number;
+            name?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
         ApiResponsePublicConfirmationResponse: {
             data?: components["schemas"]["PublicConfirmationResponse"];
         };
@@ -124215,7 +124228,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseFileResponse"];
+                    "*/*": components["schemas"]["ApiResponsePublicFileLinkResponse"];
                 };
             };
         };

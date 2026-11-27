@@ -9,6 +9,7 @@ import com.mannschaft.app.filesharing.FileSharingMapper;
 import com.mannschaft.app.filesharing.dto.AccessLinkRequest;
 import com.mannschaft.app.filesharing.dto.CreateLinkRequest;
 import com.mannschaft.app.filesharing.dto.FileResponse;
+import com.mannschaft.app.filesharing.dto.PublicFileLinkResponse;
 import com.mannschaft.app.filesharing.dto.LinkIssuedResponse;
 import com.mannschaft.app.filesharing.dto.LinkResponse;
 import com.mannschaft.app.filesharing.dto.SharedFileDownloadUrlResponse;
@@ -143,7 +144,7 @@ public class SharedFileLinkService {
     @Deprecated
     @Transactional
     public FileResponse accessLink(String token, AccessLinkRequest request) {
-        return accessLinkPublic(token, request);
+        return accessAndLoadFile(token, request);
     }
 
     /**
@@ -155,10 +156,14 @@ public class SharedFileLinkService {
      *
      * @param token   公開リンクトークン
      * @param request アクセスリクエスト（パスワード・任意）
-     * @return ファイルレスポンス（メタ）
+     * @return 公開用ファイルメタ（fileKey・createdBy 等の内部情報を含まない専用 DTO）
      */
     @Transactional
-    public FileResponse accessLinkPublic(String token, AccessLinkRequest request) {
+    public PublicFileLinkResponse accessLinkPublic(String token, AccessLinkRequest request) {
+        return PublicFileLinkResponse.from(accessAndLoadFile(token, request));
+    }
+
+    private FileResponse accessAndLoadFile(String token, AccessLinkRequest request) {
         SharedFileLinkEntity entity = validateLinkForAccess(token, request);
         entity.recordAccess();
         linkRepository.save(entity);
