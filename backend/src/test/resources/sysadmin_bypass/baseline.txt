@@ -164,10 +164,6 @@ com/mannschaft/app/repairplan/controller/RepairPlanQuoteKanbanController.java	is
 com/mannschaft/app/repairplan/service/RepairPlanQuoteKanbanService.java	isSystemAdmin( @ resolveIsAdmin	1
 com/mannschaft/app/reservation/service/ReservationDetailFacade.java	isSystemAdmin( @ denyDetailView	1
 com/mannschaft/app/role/authorization/RolePriority.java	"SYSTEM_ADMIN" @ -	1
-com/mannschaft/app/role/controller/MeController.java	"SYSTEM_ADMIN" @ getMyOrganizations	1
-com/mannschaft/app/role/controller/MeController.java	"SYSTEM_ADMIN" @ getMyTeams	1
-com/mannschaft/app/role/controller/MeController.java	isSystemAdmin( @ getMyOrganizations	2
-com/mannschaft/app/role/controller/MeController.java	isSystemAdmin( @ getMyTeams	1
 com/mannschaft/app/role/repository/FriendRequestSourceTeamRepository.java	'SYSTEM_ADMIN'(SQL/SpEL) @ -	2
 com/mannschaft/app/role/repository/UserRoleRepository.java	'SYSTEM_ADMIN'(SQL/SpEL) @ -	6
 com/mannschaft/app/role/repository/UserRoleRepository.java	countSystemAdmins( @ -	1

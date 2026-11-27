@@ -110,8 +110,7 @@ public class MeController {
             teamScopes.add(new ScopeKey("TEAM", teamId));
         }
         var roleSnapshot = membershipBatchQueryService.snapshotForUser(userId, teamScopes, Set.of());
-        // SYSTEM_ADMIN の snapshot はスコープロールを持たないため、既に取得した本人の
-        // user_roles を使う。checkAdminOrAbove と同じ ACTIVE 利用者・対象割当・ADMIN/DEPUTY 判定。
+        // アーカイブ可否は、既に取得した本人の user_roles を使う。checkAdminOrAbove と同じ ACTIVE 利用者・対象割当・ADMIN/DEPUTY 判定。
         // ロールマスタと利用者状態は一覧全体で最大1回ずつ解決し、チームごとのSQLを増やさない。
         Set<Long> archiveManageableTeamIds = new LinkedHashSet<>();
         if (!teamRoles.isEmpty() && userRoleRepository.isActiveUser(userId)) {
@@ -147,9 +146,8 @@ public class MeController {
             if (!includeArchived && team.archivedAt() != null) {
                 continue;
             }
-            String roleName = roleSnapshot.isSystemAdmin()
-                    ? "SYSTEM_ADMIN"
-                    : roleSnapshot.roleByScope().get(new ScopeKey("TEAM", teamId));
+            // 表示ロールは実ロールのみ（運営ロールは返さない。戦役 Z-A PR5）。
+            String roleName = roleSnapshot.roleByScope().get(new ScopeKey("TEAM", teamId));
             if (roleName == null) {
                 roleName = "MEMBER";
             }
@@ -227,7 +225,7 @@ public class MeController {
         }
         var roleSnapshot = membershipBatchQueryService.snapshotForUser(userId, orgScopes, Set.of());
         // snapshotの直接割当は利用者状態を遮断しないため、従来の単件解決と同じ条件を一度だけ判定する。
-        boolean canResolveRole = roleSnapshot.isSystemAdmin() || userRoleRepository.isActiveUser(userId);
+        boolean canResolveRole = userRoleRepository.isActiveUser(userId);
         Map<Long, Integer> memberCountByOrgId =
                 accessControlService.countActiveDistinctMembersByScopes("ORGANIZATION", orgIds);
 
@@ -240,8 +238,9 @@ public class MeController {
             if (!includeArchived && org.archivedAt() != null) {
                 continue;
             }
-            String roleName = roleSnapshot.isSystemAdmin() ? "SYSTEM_ADMIN"
-                    : canResolveRole ? roleSnapshot.roleByScope().get(new ScopeKey("ORGANIZATION", orgId)) : null;
+            // 表示ロールは実ロールのみ（運営ロールは返さない。戦役 Z-A PR5）。
+            String roleName = canResolveRole
+                    ? roleSnapshot.roleByScope().get(new ScopeKey("ORGANIZATION", orgId)) : null;
             if (roleName == null) {
                 roleName = "MEMBER";
             }

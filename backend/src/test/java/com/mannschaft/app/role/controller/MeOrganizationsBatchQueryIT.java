@@ -243,7 +243,7 @@ class MeOrganizationsBatchQueryIT extends AbstractMySqlIntegrationTest {
         mockMvc.perform(get("/api/v1/me/organizations"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(1)))
                 .andExpect(jsonPath("$.data[0].id").value(own.getId()))
-                .andExpect(jsonPath("$.data[0].role").value("SYSTEM_ADMIN"));
+                .andExpect(jsonPath("$.data[0].role").value("MEMBER"));
     }
 
     @Test

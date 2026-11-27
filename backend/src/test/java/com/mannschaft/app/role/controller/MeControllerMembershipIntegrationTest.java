@@ -383,7 +383,7 @@ class MeControllerMembershipIntegrationTest extends AbstractMySqlIntegrationTest
         mockMvc.perform(get("/api/v1/me/teams"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].role").value(systemAdmin ? "SYSTEM_ADMIN" : scopeRole))
+                .andExpect(jsonPath("$.data[0].role").value(scopeRole))
                 .andExpect(jsonPath("$.data[0].canManageArchive").value(allowed))
                 .andExpect(jsonPath("$.data[0].isArchived").value(false));
     }
