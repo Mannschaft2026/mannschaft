@@ -63,7 +63,7 @@ const {
 const childNotFound = computed(() => childMarkedNotFound.value || isRouteDenied(route.path))
 // マウント時にも下ろす（前回シェルを離れた後に届いた古い 403 を持ち越さない。hydration 中は SSR の状態を引き継ぐ）
 resetChildNotFoundOnSetup()
-/** シェル自身の詳細取得が 403/404 だった（slug 変更・取得成功・再試行で解除）。 */
+/** シェル自身の詳細取得が 403/404 だった（slug 変更・取得成功・再試行で解除）。CMP-261125-1108 の裁定どおり 403 も 404 も同じ「見つかりません」。 */
 const shellDenied = ref(false)
 const showScopeNotFound = computed(() => childNotFound.value || shellDenied.value)
 
@@ -162,6 +162,14 @@ async function applyJoinRequest() {
 // =============================================================================
 const team = ref<TeamResponse | null>(null)
 const loading = ref(false)
+/**
+ * シェル内遷移時の再判定中か（AC-0159-98）。teamLoaded=true の古いタブでも、遷移のたびにチーム詳細を
+ * 再取得して可否を判定し、終わるまで子ページを描かない（子の API が非公開化後の旧権限で動くのを防ぐ）。
+ */
+const revalidating = ref(false)
+let revalidateSeq = 0
+/** ok=成功 / denied=403・404 で閉じた / failed=5xx・通信失敗 / stale=後発の要求・slug 変更に追い越された */
+type TeamFetchResult = 'ok' | 'denied' | 'failed' | 'stale'
 const showLeaveConfirm = ref(false)
 
 // 管理者レンズ（true=管理者ビュー, false=メンバービュー）。管理者は既定で管理者ビュー。
@@ -196,7 +204,7 @@ const displayName = computed(
  * - AC-11: 取得失敗が 403（権限喪失）のときは team を null にして保護された詳細表示を閉じる。
  */
 let fetchTeamSeq = 0
-async function fetchTeam() {
+async function fetchTeam(): Promise<TeamFetchResult> {
   const seq = ++fetchTeamSeq
   const requestedSlug = teamSlug.value
   const isCurrent = () => seq === fetchTeamSeq && teamSlug.value === requestedSlug
@@ -204,28 +212,31 @@ async function fetchTeam() {
   if (!quiet) loading.value = true
   try {
     const result = await teamApi.getTeam(requestedSlug)
-    if (!isCurrent()) return
+    if (!isCurrent()) return 'stale'
     team.value = result.data
     shellDenied.value = false
+    return 'ok'
   }
   catch (error) {
-    if (!isCurrent()) return
+    if (!isCurrent()) return 'stale'
     // 404 のときは「旧 slug → 新 slug の 301 移動」かもしれないので解決を試みる（村方式・BE #1542）。
     // 解決は非同期（await）のため、待機中に後発の要求が成功している／別スコープへ
     // 移動している可能性がある。解決後は isCurrent() を再確認し、古い 404 由来の
     // 通知・遷移が後発の結果を踏みつけないようにする（検分修繕2・CMP-261004-1942）。
     if ((error as FetchError)?.response?.status === 404) {
       const redirected = await tryRedirectMovedSlug(isCurrent)
-      if (!isCurrent()) return
-      if (redirected) return
+      if (!isCurrent()) return 'stale'
+      if (redirected) return 'stale'
     }
-    // 403/404 は共通の「見つかりません」表示。トーストは出さない（CMP-261125-1108）
+    // 403/404 は共通の「見つかりません」表示（権限・存在の別を示さない）。トーストは出さない（CMP-261125-1108）。
+    // それ以外（5xx・通信失敗）は従来どおり再試行表示とトースト。
     if (isScopeNotFound(error)) {
       team.value = null
       shellDenied.value = true
-      return
+      return 'denied'
     }
     handleApiError(error, 'チーム詳細取得')
+    return 'failed'
   }
   finally {
     // 後発の要求が無いときだけ解く（後発がある場合はその要求の完了で解く）
@@ -444,6 +455,7 @@ function retryShellData() {
 onBeforeUnmount(() => {
   // 破棄されたインスタンスの解決待ち応答を失効させる。
   ++fetchTeamSeq
+  ++revalidateSeq
   // 無条件の reset にしない。スコープ切替・ブラウザバックでは新しいシェルと子ページの setup が
   // 本インスタンスの破棄より先に走るため、reset すると新しい子ページの 403 を捨ててしまう（AC-8）
   releaseChildNotFound()
@@ -486,10 +498,31 @@ watch(teamSlug, () => {
   shellDenied.value = false
   teamLoaded.value = false
   team.value = null
+  ++revalidateSeq
+  revalidating.value = false
   // followStatus の初期化は useScopeFollowWiring が slug 変更時に同期的に行う。
   joinRequestStatus.value = 'UNKNOWN'
   reservationEnabled.value = false
   if (isShellRoute.value) void loadShellData()
+})
+
+/**
+ * 同一チームのシェル内遷移でチーム詳細を再判定する（AC-0159-98）。
+ * teamLoaded=true のまま古いタブから遷移しても、非公開化などで権限を失っていれば 403 になり「見つかりません」表示へ切り替わる。
+ * 再判定が終わるまで <NuxtPage/> は描かない。別 slug への遷移は上の teamSlug watch が担当（二重取得しない）。
+ */
+watch(() => route.path, async (next, prev) => {
+  if (!teamLoaded.value || !isShellRoute.value) return
+  const slugOf = (p: string) => p.split('/').filter(Boolean)[1]
+  if (slugOf(next) !== slugOf(prev)) return
+  const mySeq = ++revalidateSeq
+  revalidating.value = true
+  const result = await fetchTeam()
+  // 後発の再判定があれば、そちらだけがゲートを解除できる（連続遷移で未確定のまま子を描かない）
+  if (mySeq !== revalidateSeq) return
+  // 再判定の通信失敗（5xx 等）は、閲覧可否を確認できていないので古い team で本文を出さず、再試行表示へ倒す
+  if (result === 'failed') team.value = null
+  revalidating.value = false
 })
 
 /**
@@ -745,7 +778,11 @@ provideTeamShellContext({
         <ScopeNotFound v-if="childNotFound" />
         <template v-else>
           <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-          <NuxtPage />
+          <!-- 再判定（AC-0159-98）が終わるまで子ページを描かない -->
+          <div v-if="revalidating" class="flex justify-center px-6 py-12">
+            <LoadingBounce />
+          </div>
+          <NuxtPage v-else />
         </template>
       </ScopePageShell>
 
@@ -753,7 +790,7 @@ provideTeamShellContext({
       <ScopeNotFound v-else-if="showScopeNotFound" />
 
       <!--
-        取得失敗フォールバック（loading 完了かつ team=null: 5xx・通信断等）。
+        取得失敗フォールバック（loading 完了かつ team=null: 5xx・通信失敗等）。
         村金型 villages/[id].vue に倣い、白画面ではなくエラー文言＋戻り導線を出す。
       -->
       <div v-else class="mx-auto max-w-2xl p-6 text-center">

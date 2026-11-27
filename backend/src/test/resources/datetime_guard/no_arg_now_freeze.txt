@@ -738,7 +738,6 @@ NO_ARG_NOW|com.mannschaft.app.survey.entity.SurveyQuestionEntity|1
 NO_ARG_NOW|com.mannschaft.app.survey.entity.SurveyResponseEntity|2
 NO_ARG_NOW|com.mannschaft.app.survey.entity.SurveyResultViewerEntity|1
 NO_ARG_NOW|com.mannschaft.app.survey.entity.SurveyTargetEntity|1
-NO_ARG_NOW|com.mannschaft.app.survey.service.SurveyRemindService|1
 NO_ARG_NOW|com.mannschaft.app.survey.service.SurveyResponseService|1
 NO_ARG_NOW|com.mannschaft.app.survey.visibility.SurveyVisibilityResolver|1
 NO_ARG_NOW|com.mannschaft.app.sync.entity.OfflineSyncConflictEntity|1

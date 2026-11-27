@@ -161,7 +161,7 @@ describe('useOrgDetail.fetchOrg 最後の要求の応答だけを反映する（
  */
 describe('pages/teams/[slug].vue fetchTeam の応答逆転ガード（CMP-261004-1942）', () => {
   const source = readFileSync(resolve(process.cwd(), 'app/pages/teams/[slug].vue'), 'utf8').replace(/\r\n/g, '\n')
-  const fn = source.match(/async function fetchTeam\(\)[\s\S]*?\n\}\n/)?.[0] ?? ''
+  const fn = source.match(/async function fetchTeam\(\)(?:: Promise<TeamFetchResult>)? \{[\s\S]*?\n\}\n/)?.[0] ?? ''
 
   it('要求ごとに連番を振り、最後の要求かつ同じ slug のときだけ反映する', () => {
     expect(fn).not.toBe('')
@@ -170,8 +170,8 @@ describe('pages/teams/[slug].vue fetchTeam の応答逆転ガード（CMP-261004
   })
 
   it('成功・失敗のどちらも isCurrent で判定してから反映する（slug 一致だけの判定に戻さない）', () => {
-    expect(fn).toMatch(/await teamApi\.getTeam\(requestedSlug\)\s*\n\s*if \(!isCurrent\(\)\) return\s*\n\s*team\.value = result\.data/)
-    expect(fn).toMatch(/catch \(error\) \{\s*\n\s*if \(!isCurrent\(\)\) return/)
+    expect(fn).toMatch(/await teamApi\.getTeam\(requestedSlug\)\s*\n\s*if \(!isCurrent\(\)\) return 'stale'\s*\n\s*team\.value = result\.data/)
+    expect(fn).toMatch(/catch \(error\) \{\s*\n\s*if \(!isCurrent\(\)\) return 'stale'/)
     expect(fn).not.toMatch(/teamSlug\.value !== requestedSlug\) return/)
   })
 
@@ -183,7 +183,7 @@ describe('pages/teams/[slug].vue fetchTeam の応答逆転ガード（CMP-261004
    */
   it('404 解決の await 後、遷移前とエラー通知前に isCurrent() を再確認する', () => {
     expect(fn).toMatch(
-      /const redirected = await tryRedirectMovedSlug\(isCurrent\)\s*\n\s*if \(!isCurrent\(\)\) return\s*\n\s*if \(redirected\) return/,
+      /const redirected = await tryRedirectMovedSlug\(isCurrent\)\s*\n\s*if \(!isCurrent\(\)\) return 'stale'\s*\n\s*if \(redirected\) return 'stale'/,
     )
     // isCurrent 再確認より前に handleApiError が呼ばれる経路が残っていないこと。
     expect(fn).not.toMatch(/tryRedirectMovedSlug\(\)\s*\n\s*\{\s*\n\s*return\s*\n\s*\}/)
