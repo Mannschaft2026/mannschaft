@@ -272,6 +272,11 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
             if (!visibleByStatus(row, viewerUserId, snapshot)) {
                 continue;
             }
+            // 4.2) 親チーム上限（CMP-261124-0159・F00 §20.2）。作者特例（4.5）より先に置き、非公開チームの中身は
+            //      そのチームで MEMBER 未満の閲覧者には作者本人であっても見せない。
+            if (exceedsMembersOnlyTeamCap(row, snapshot)) {
+                continue;
+            }
             // 4.5) DRAFT / SCHEDULED × 作成者本人 → visibility 評価スキップ（§7.5 OQ-A 根治）
             // status ガードで「作成者本人か SystemAdmin のみ通過」が保証されているため、
             // 作者本人ならここで可視と確定させ、ADMINS_ONLY 等による誤排除（OQ-A）を防ぐ。
@@ -378,7 +383,11 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         UserScopeRoleSnapshot snapshot = buildSnapshot(
                 viewerUserId, directScopes, orgWideScopes, descendantScopes);
         if (delegatedRole != null) {
-            snapshot = withDelegatedRole(snapshot, scopeOf(row), delegatedRole);
+            // CMP-261124-0159: 本人が MEMBER 以上のチームは非公開か問い合わせていないため、委任役割が MEMBER 未満なら
+            // 差し替え後に当該チームの親チーム上限の判定材料を補う（F00 §20.2・§20.7）。
+            UserScopeRoleSnapshot own = snapshot;
+            snapshot = membershipBatchQueryService.supplementMembersOnlyTeamCapForRoleOverride(
+                    own, withDelegatedRole(own, scopeOf(row), delegatedRole), scopeOf(row), delegatedRole);
         }
 
         // 3) status ガード
@@ -391,6 +400,18 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
             };
             String detail = "status=" + status;
             VisibilityDecision decision = decisionWithLevel(false, contentId, reason, null, detail);
+            recordAudit(decision, viewerUserId);
+            return decision;
+        }
+
+        // 3.2) 親チーム上限（CMP-261124-0159・F00 §20.2）。実在するコンテンツなので NOT_FOUND には倒さず、
+        //      既存の段判定の拒否と同じ分類（所属あり=INSUFFICIENT_ROLE / 非所属=NOT_A_MEMBER）で返す。
+        if (exceedsMembersOnlyTeamCap(row, snapshot)) {
+            ScopeKey capScope = scopeOf(row);
+            DenyReason reason = capScope != null && snapshot.roleByScope().containsKey(capScope)
+                    ? DenyReason.INSUFFICIENT_ROLE : DenyReason.NOT_A_MEMBER;
+            VisibilityDecision decision = decisionWithLevel(false, contentId, reason, resolveLevelSafely(row),
+                    "members_only_team_cap");
             recordAudit(decision, viewerUserId);
             return decision;
         }
@@ -450,7 +471,18 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         roles.put(scope, delegatedRole);
         return new UserScopeRoleSnapshot(snapshot.systemAdmin(), roles, snapshot.parentOrgByScope(),
                 snapshot.orgMemberOf(), snapshot.suspendedOrgIds(), snapshot.descendantMemberOfOrgIds(),
-                snapshot.orgRoleByScope(), snapshot.descendantRoleByOrgId());
+                snapshot.orgRoleByScope(), snapshot.descendantRoleByOrgId(), snapshot.membersOnlyTeamIds());
+    }
+
+    /**
+     * 親チーム上限（CMP-261124-0159・F00 §20.2 規則 1〜8）を越えるか。
+     *
+     * <p>所属チームが非公開チーム（スナップショットの {@code membersOnlyTeamIds}）で、閲覧者のそのチームでのロールが
+     * MEMBER 未満なら true。判定はチーム詳細の正準判定と同じ {@link UserScopeRoleSnapshot#hasRoleOrAbove}（規則 2）。
+     * 個別 Resolver に分散させず本テンプレートで強制する（規則 4）。SystemAdmin は対象外（規則 6）。</p>
+     */
+    private boolean exceedsMembersOnlyTeamCap(P row, UserScopeRoleSnapshot snapshot) {
+        return snapshot.isBeyondMembersOnlyTeamCap(scopeOf(row));
     }
 
     /**
@@ -496,6 +528,11 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         // §15 D-13: SystemAdmin 高速パス（実存確認済の row に対して短絡）
         if (snapshot.isSystemAdmin()) {
             return true;
+        }
+
+        // CMP-261124-0159 F00 §20.2: 親チーム上限（作者特例・上位条件の貫通より先）。
+        if (exceedsMembersOnlyTeamCap(row, snapshot)) {
+            return false;
         }
 
         // §7.5 DRAFT/SCHEDULED の作者本人は visibility 軸をスキップ
