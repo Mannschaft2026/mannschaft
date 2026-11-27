@@ -166,19 +166,47 @@ class SupportAccessReadOnlyConnectionIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    @DisplayName("S11 遷移の監査（REQUIRES_NEW）は外側の業務 TX が巻き戻っても audit_logs に残る")
+    @DisplayName("S11 代理中に業務 TX の中から監査を書いても、独立した書込可能な TX（REQUIRES_NEW）で audit_logs に残り、業務 TX の巻き戻りでも消えない")
     void S11_監査は業務TXの失敗でも残る() {
-        var auditRecorder = applicationContext.getBean(com.mannschaft.app.supportaccess.service.SupportAccessAuditRecorder.class);
+        var auditLogService = applicationContext.getBean(com.mannschaft.app.auth.service.AuditLogService.class);
+        String eventType = "SUPPORT_ACCESS_IT_" + Math.abs(grantId.getLeastSignificantBits() % 100000);
+        SupportAccessContextHolder.set(context);
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
 
         catchThrowable(() -> tx.executeWithoutResult(s -> {
-            auditRecorder.record(SupportAccessAuditAction.REVOKED, context.operatorUserId(), targetId, grantId);
+            // 業務 TX の接続は READ ONLY（代理中）。recordSync はこの接続に参加せず、独立した書込可能な TX で書く
+            auditLogService.recordSync(eventType, targetId, null, null, null, null, null, null, null);
             throw new IllegalStateException("業務の失敗");
         }));
 
+        SupportAccessContextHolder.clear();
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM audit_logs WHERE event_type = 'SUPPORT_ACCESS_REVOKED' AND user_id = ? AND target_user_id = ?",
-                Integer.class, context.operatorUserId(), targetId);
+                "SELECT COUNT(*) FROM audit_logs WHERE event_type = ? AND user_id = ? AND target_user_id = ?",
+                Integer.class, eventType, context.operatorUserId(), targetId);
+        assertThat(count).as("代理中の監査は actor=運営者・target=本人で、業務 TX が巻き戻っても残る").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("S11 遷移と同じ TX で書いた監査 outbox は、即時の反映が失敗・未実行でも再試行で必ず audit_logs に反映され、確定する（記録が消えない）")
+    void S11_未反映の監査outboxは再試行で反映される() {
+        var outboxRepository = applicationContext.getBean(
+                com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository.class);
+        var auditRecorder = applicationContext.getBean(com.mannschaft.app.supportaccess.service.SupportAccessAuditRecorder.class);
+        Instant now = Instant.now();
+        // 遷移は確定したが、コミット直後の即時反映が行われなかった（障害・プロセス停止）状態を作る
+        var row = outboxRepository.saveAndFlush(com.mannschaft.app.supportaccess.entity.SupportAccessAuditOutboxEntity.builder()
+                .grantId(grantId).eventType("SUPPORT_ACCESS_REVOKED")
+                .operatorUserId(context.operatorUserId()).targetUserId(targetId)
+                .occurredAt(now).attemptCount(0).nextAttemptAt(now.minusSeconds(1)).build());
+
+        auditRecorder.relayDue();
+
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE event_type = 'SUPPORT_ACCESS_REVOKED' AND user_id = ? "
+                        + "AND target_user_id = ? AND metadata LIKE ?",
+                Integer.class, context.operatorUserId(), targetId, "%" + row.getId() + "%");
         assertThat(count).isEqualTo(1);
+        assertThat(outboxRepository.findById(row.getId())).get()
+                .satisfies(o -> assertThat(o.getPublishedAt()).as("反映後に確定する").isNotNull());
     }
 }

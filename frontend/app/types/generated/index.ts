@@ -65528,6 +65528,11 @@ export interface components {
             expiresAt?: string;
             /** Format: uuid */
             grantId?: string;
+            /**
+             * Format: int64
+             * @description 応答時点での許可の残り秒数（BE の時刻基準）。FE はこの値を基準に残り時間を表示する
+             */
+            remainingSeconds?: number;
             targetDisplayName?: string;
             /** Format: int64 */
             targetUserId?: number;

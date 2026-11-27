@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { MySupportAccessGrant, SupportAccessLog } from '~/types/support-access'
+import type { MySupportAccessGrant, SupportAccessLog, WithGrantId } from '~/types/support-access'
+import { hasGrantId } from '~/types/support-access'
+
+/** 操作できる（grant ID のある）行。ID の無い行は API の境界で除く。 */
+type MyGrantRow = WithGrantId<MySupportAccessGrant>
 
 /**
  * F10.9 サポート閲覧の許可（本人側）。
@@ -21,8 +25,8 @@ const passkey = usePasskeyReauthAssertion()
 const showHelp = ref(false)
 
 // ─── 一覧 ───
-const pending = ref<MySupportAccessGrant[]>([])
-const active = ref<MySupportAccessGrant[]>([])
+const pending = ref<MyGrantRow[]>([])
+const active = ref<MyGrantRow[]>([])
 const logs = ref<SupportAccessLog[]>([])
 const loading = ref(true)
 const loadFailed = ref(false)
@@ -30,7 +34,8 @@ const logsNextCursor = ref<string | null>(null)
 const logsHasNext = ref(false)
 const logsLoading = ref(false)
 
-function notExpired(iso: string | null): boolean {
+/** 期限がまだ先か（期限の値が無い行は有効とみなさない）。 */
+function notExpired(iso?: string | null): boolean {
   return !!iso && Date.parse(iso) > Date.now()
 }
 
@@ -43,8 +48,8 @@ async function loadAll() {
       supportApi.listMyGrants({ status: 'APPROVED', limit: 50 }),
       supportApi.listMyLogs(),
     ])
-    pending.value = pendingRes.data.filter(g => notExpired(g.requestExpiresAt))
-    active.value = activeRes.data.filter(g => notExpired(g.expiresAt))
+    pending.value = pendingRes.data.filter(hasGrantId).filter(g => notExpired(g.requestExpiresAt))
+    active.value = activeRes.data.filter(hasGrantId).filter(g => notExpired(g.expiresAt))
     logs.value = logsRes.data
     logsNextCursor.value = logsRes.meta.nextCursor
     logsHasNext.value = logsRes.meta.hasNext
@@ -77,7 +82,7 @@ async function loadMoreLogs() {
 onMounted(loadAll)
 
 // ─── 表示の補助 ───
-function referenceLabel(type: string | null): string {
+function referenceLabel(type?: string | null): string {
   if (!type) return ''
   const key = `supportAccess.reference.${type}`
   return te(key) ? t(key) : type
@@ -91,13 +96,14 @@ function scopeLabel(log: SupportAccessLog): string {
 }
 
 /** 保護者の承認待ち（本人は許可済みで、保護者の許可がまだ）。 */
-function guardianWaiting(grant: MySupportAccessGrant): boolean {
-  return grant.role === 'TARGET' && grant.guardianApprovalRequired && grant.targetApproved && !grant.guardianApproved
+function guardianWaiting(grant: MyGrantRow): boolean {
+  // 生成型は optional。値が無い（undefined）は「許可していない／要らない」として扱う
+  return grant.role === 'TARGET' && grant.guardianApprovalRequired === true && grant.targetApproved === true && grant.guardianApproved !== true
 }
 
 /** 自分の許可がまだで、保護者の許可も必要な依頼（本人側の注意書き用）。 */
-function needsGuardianToo(grant: MySupportAccessGrant): boolean {
-  return grant.role === 'TARGET' && grant.guardianApprovalRequired && !grant.targetApproved
+function needsGuardianToo(grant: MyGrantRow): boolean {
+  return grant.role === 'TARGET' && grant.guardianApprovalRequired === true && grant.targetApproved !== true
 }
 
 // ─── インライン操作（許可・拒否・取消）。同時に開くのは 1 つだけ ───
@@ -130,7 +136,7 @@ function apiMessage(error: unknown, fallbackKey: string): string {
   return parseApiError(error).message ?? t(fallbackKey)
 }
 
-async function approveWith(grant: MySupportAccessGrant, body: { currentPassword?: string; passkeyAssertionJson?: string }) {
+async function approveWith(grant: MyGrantRow, body: { currentPassword?: string; passkeyAssertionJson?: string }) {
   busy.value = true
   panelError.value = ''
   try {
@@ -149,12 +155,12 @@ async function approveWith(grant: MySupportAccessGrant, body: { currentPassword?
   }
 }
 
-async function approveWithPassword(grant: MySupportAccessGrant) {
+async function approveWithPassword(grant: MyGrantRow) {
   if (!password.value) return
   await approveWith(grant, { currentPassword: password.value })
 }
 
-async function approveWithPasskey(grant: MySupportAccessGrant) {
+async function approveWithPasskey(grant: MyGrantRow) {
   busy.value = true
   panelError.value = ''
   let assertion: string | null
@@ -173,7 +179,7 @@ async function approveWithPasskey(grant: MySupportAccessGrant) {
   await approveWith(grant, { passkeyAssertionJson: assertion })
 }
 
-async function deny(grant: MySupportAccessGrant) {
+async function deny(grant: MyGrantRow) {
   busy.value = true
   panelError.value = ''
   try {
@@ -190,7 +196,7 @@ async function deny(grant: MySupportAccessGrant) {
   }
 }
 
-async function revoke(grant: MySupportAccessGrant) {
+async function revoke(grant: MyGrantRow) {
   busy.value = true
   panelError.value = ''
   try {

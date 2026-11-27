@@ -172,7 +172,9 @@ public class PersonalDataCollector {
             // F06.4.1 個人の頑張り記録（本人の原本のみ。削除済み・purge 済みは除く）
             Map.entry("effort_records", "effort_records.json"),
             // F10.9 サポート閲覧の閲覧記録（運営者は表示名のみ・メールは含めない）
-            Map.entry("support_access_logs", "support_access_logs.json")
+            Map.entry("support_access_logs", "support_access_logs.json"),
+            // F10.9 サポート閲覧の依頼・許可（本人宛・保護者として関わったもの。依頼理由・運営者の表示名を含む）
+            Map.entry("support_access_grants", "support_access_grants.json")
     );
 
     /**
@@ -253,7 +255,7 @@ public class PersonalDataCollector {
             case "scheduleComments" -> collectScheduleComments(userId);
             case "ranch" -> ranchPersonalDataExportService.exportUser(userId);
             case "effort_records" -> OBJECT_MAPPER.writeValueAsString(effortPersonalDataService.collectForGdpr(userId));
-            case "support_access_logs" -> collectViaEvent(userId, category);
+            case "support_access_logs", "support_access_grants" -> collectViaEvent(userId, category);
             default -> "[]";
         };
     }

@@ -273,8 +273,11 @@ body {
 .dark .article-body pre { background: var(--p-surface-800, #27272a); }
 .dark .article-body a { color: var(--p-primary-400, #60a5fa); }
 
-/* F10.9 サポート閲覧中（閲覧のみ）: 保存・送信ボタンを無効に見せる。書込は BE が SUPPORT_ACCESS_003 で必ず拒否する。 */
-html.support-access-readonly :is(button, .p-button)[type="submit"] {
+/* F10.9 サポート閲覧中（閲覧のみ）: 保存系の操作を無効に見せる。書込は BE が SUPPORT_ACCESS_003 で必ず拒否する。
+   範囲は useSupportAccessReadOnlyGuard の SUPPORT_ACCESS_READ_ONLY_ACTION_SELECTOR と揃える（クリック・送信もそちらで止める）。 */
+html.support-access-readonly :is(button[type="submit"], input[type="submit"]):not([data-support-access-allow]),
+html.support-access-readonly form .p-button:not(.p-button-secondary):not(.p-button-text):not(.p-button-outlined):not(.p-button-link):not([data-support-access-allow]),
+html.support-access-readonly .p-dialog-footer .p-button:not(.p-button-secondary):not(.p-button-text):not(.p-button-outlined):not(.p-button-link):not([data-support-access-allow]) {
   opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;

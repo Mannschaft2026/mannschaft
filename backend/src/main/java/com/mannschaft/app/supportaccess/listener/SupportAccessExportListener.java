@@ -8,7 +8,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * F10.9 GDPR エクスポートの「本人の閲覧記録」カテゴリ（support_access_logs）を収集して返す。
+ * F10.9 GDPR エクスポートの「本人の閲覧記録」（support_access_logs）と「依頼・許可」（support_access_grants。
+ * 依頼理由・運営者の表示名・状態と時刻。本人宛と、保護者として関わったもの）のカテゴリを収集して返す。
  *
  * <p>PersonalDataCollector は収集依頼の同期イベントを publish するだけで、supportaccess の Service を直接呼ばない
  * （エクスポートのトランザクションから supportaccess の Repository へ静的に到達させない。D-3T）。
@@ -17,8 +18,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class SupportAccessExportListener {
 
-    /** PersonalDataCollector のカテゴリキー。 */
+    /** PersonalDataCollector のカテゴリキー（閲覧記録）。 */
     public static final String CATEGORY = "support_access_logs";
+    /** PersonalDataCollector のカテゴリキー（依頼・許可）。 */
+    public static final String GRANTS_CATEGORY = "support_access_grants";
 
     private final SupportAccessPersonalDataService personalDataService;
 
@@ -27,11 +30,13 @@ public class SupportAccessExportListener {
     }
 
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
-            reason = "本人の個人データ開示（GDPR エクスポート）に閲覧記録を含める。停止すると本人が自分の閲覧記録を受け取れず開示が欠落する")
+            reason = "本人の個人データ開示（GDPR エクスポート）に閲覧記録と依頼・許可を含める。停止すると本人が自分の記録を受け取れず開示が欠落する")
     @EventListener
     public void onCollect(PersonalDataCategoryCollectEvent event) {
         if (CATEGORY.equals(event.getCategory())) {
             event.respond(personalDataService.listLogsForTarget(event.getUserId()));
+        } else if (GRANTS_CATEGORY.equals(event.getCategory())) {
+            event.respond(personalDataService.listGrantsForExport(event.getUserId()));
         }
     }
 }

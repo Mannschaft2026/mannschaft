@@ -514,8 +514,8 @@ public class AuthWebAuthnService {
     public ApiResponse<WebAuthnReauthenticateCompleteResponse> completeReauthenticate(
             Long userId, WebAuthnReauthenticateCompleteRequest req) {
 
-        // 1〜4. チャレンジ・credential 所有者・署名・sign_count の検証（共通）
-        verifyReauthAssertion(userId, req);
+        // 1〜4. チャレンジ・credential 所有者・署名・sign_count の検証（F18 提示モードの従来の強さ）
+        verifyReauthAssertion(userId, req, false);
 
         // 5. 再認証済みフラグを 5 分 TTL で記録
         String verifiedKey = REAUTH_VERIFIED_KEY_PREFIX + userId;
@@ -528,27 +528,36 @@ public class AuthWebAuthnService {
     }
 
     /**
-     * WebAuthn 再認証の署名検証だけを行う（再認証済みフラグは書かない）。
+     * WebAuthn 再認証の署名検証だけを行う（再認証済みフラグは書かない）。<b>本人確認（UV）と在席（UP）を必須</b>にする。
      *
      * <p>F10.9 サポート閲覧の許可のように、F18 提示モードの再認証フラグ
-     * （{@code webauthn_reauth_verified:{userId}}）とは用途を分けたい呼び出し元が使う。
-     * チャレンジは {@link #beginReauthenticate} が発行したものを1回限りで消費する。
-     * 失敗は {@link BusinessException}（AUTH_024/026/027）。</p>
+     * （{@code webauthn_reauth_verified:{userId}}・戦役 1338/1339 の提示モード用）とは用途を分けたい呼び出し元が使う。
+     * このメソッドはフラグを読み書きしないため、F18 の再認証でサポート閲覧を許可することも、その逆も起きない。
+     * チャレンジは {@link #beginReauthenticate} が発行したものを1回限りで消費する。</p>
+     *
+     * <p>許可は「本人がいまこの端末で本人確認した」ことの証明であるため、authenticatorData の UV・UP フラグを
+     * 必須として検証する（UV の無いセキュリティキーのタップだけでは許可できない）。sign_count はクライアント申告の値ではなく
+     * 署名検証済みの authenticatorData の値で判定し、カウンタを実装しない同期パスキーの 0/0 は許す。</p>
+     *
+     * <p>失敗は {@link BusinessException}（AUTH_024: 署名・UV/UP 不備 / AUTH_026: カウンタ不正 / AUTH_027: チャレンジ無し）。</p>
      *
      * @param userId 現在のユーザー ID
      * @param req    再認証完了リクエスト（署名検証の材料）
      */
     @Transactional
     public void verifyReauthenticationAssertionOnly(Long userId, WebAuthnReauthenticateCompleteRequest req) {
-        verifyReauthAssertion(userId, req);
+        verifyReauthAssertion(userId, req, true);
     }
 
     /**
      * 再認証の署名検証（チャレンジ消費・所有者確認・WebAuthn4J 検証・sign_count 更新）。
      * {@link #completeReauthenticate} と {@link #verifyReauthenticationAssertionOnly} が共有する。
+     *
+     * @param strict true なら UV・UP を必須にし、sign_count を署名検証済みの authenticatorData の値で判定する
+     *               （0/0 は許す）。false は F18 提示モードの従来の判定（UV・UP 任意・クライアント申告の sign_count）
      */
     @SuppressWarnings("deprecation")
-    private void verifyReauthAssertion(Long userId, WebAuthnReauthenticateCompleteRequest req) {
+    private void verifyReauthAssertion(Long userId, WebAuthnReauthenticateCompleteRequest req, boolean strict) {
         // 1. チャレンジ取得・即時削除（再生攻撃防止）
         String challengeKey = REAUTH_CHALLENGE_KEY_PREFIX + userId;
         String storedChallenge = redisTemplate.opsForValue().get(challengeKey);
@@ -567,6 +576,7 @@ public class AuthWebAuthnService {
         }
 
         // 3. WebAuthn4J 署名検証
+        long verifiedSignCount;
         try {
             byte[] credentialIdBytes = Base64.getUrlDecoder().decode(req.getCredentialId());
             byte[] authenticatorData = Base64.getUrlDecoder().decode(req.getAuthenticatorData());
@@ -598,25 +608,40 @@ public class AuthWebAuthnService {
                                     credentialIdBytes, coseKey),
                             null, credential.getSignCount());
 
+            // strict（サポート閲覧の許可）は UV・UP を必須にする（userVerificationRequired / userPresenceRequired）
             AuthenticationParameters authenticationParameters = new AuthenticationParameters(
-                    serverProperty, authenticator, null, false, false);
+                    serverProperty, authenticator, null, strict, strict);
 
             AuthenticationData authenticationData = webAuthnManager.parse(authenticationRequest);
             webAuthnManager.validate(authenticationData, authenticationParameters);
-        } catch (DataConversionException | VerificationException e) {
+            verifiedSignCount = authenticationData.getAuthenticatorData().getSignCount();
+        } catch (MaliciousCounterValueException e) {
+            throw new BusinessException(AuthErrorCode.AUTH_026, e);
+        } catch (DataConversionException | VerificationException | IllegalArgumentException e) {
             log.warn("WebAuthn 再認証署名検証失敗: userId={}, credentialId={}",
                     userId, req.getCredentialId(), e);
             throw new BusinessException(AuthErrorCode.AUTH_024, e);
         }
 
         // 4. sign_count 増分検証
-        if (req.getSignCount() <= credential.getSignCount()) {
-            throw new BusinessException(AuthErrorCode.AUTH_026);
+        long newSignCount;
+        if (strict) {
+            // 署名検証済みの authenticatorData の値だけを信用する。カウンタを実装しない同期パスキーの 0/0 は許す。
+            if ((verifiedSignCount != 0 || credential.getSignCount() != 0)
+                    && verifiedSignCount <= credential.getSignCount()) {
+                throw new BusinessException(AuthErrorCode.AUTH_026);
+            }
+            newSignCount = verifiedSignCount;
+        } else {
+            if (req.getSignCount() <= credential.getSignCount()) {
+                throw new BusinessException(AuthErrorCode.AUTH_026);
+            }
+            newSignCount = req.getSignCount();
         }
 
         // sign_count 更新 + lastUsedAt 更新（ログイン時と同じパターン）
         WebAuthnCredentialEntity updated = credential.toBuilder()
-                .signCount(req.getSignCount())
+                .signCount(newSignCount)
                 .build();
         updated.updateLastUsedAt();
         webAuthnCredentialRepository.save(updated);

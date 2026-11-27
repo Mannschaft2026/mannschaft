@@ -372,7 +372,7 @@ class SupportAccessEnforcementGuardTest {
     }
 
     @Test
-    @DisplayName("第3層 @SupportAccessWritable（書込可能な接続の例外）を付けてよいのは閲覧記録の部品と障害記録（error_reports）の書込口だけ")
+    @DisplayName("第3層 @SupportAccessWritable（書込可能な接続の例外）を付けてよいのは閲覧記録・監査（audit_logs と監査 outbox）・障害記録（error_reports）の書込口だけ")
     void writable注釈の付与先を固定する() throws IOException {
         List<String> annotated;
         try (Stream<Path> s = Files.walk(MAIN)) {
@@ -383,8 +383,12 @@ class SupportAccessEnforcementGuardTest {
                     .sorted()
                     .collect(Collectors.toList());
         }
+        // 監査の書込口（検分差し戻し対応）: auth の AuditLogStrictWriter（REQUIRES_NEW で audit_logs へ）と、
+        // supportaccess の監査 outbox のリース・確定（SupportAccessAuditOutboxStore）。どちらも記録専用で業務の書込はしない。
         assertThat(annotated).containsExactly(
+                "auth/service/AuditLogStrictWriter.java",
                 "errorreport/service/ErrorReportIngestService.java",
+                "supportaccess/service/SupportAccessAuditOutboxStore.java",
                 "supportaccess/service/SupportAccessLogRecorder.java");
         assertThat(SupportAccessLogRecorderMarker.isMarked()).isTrue();
     }

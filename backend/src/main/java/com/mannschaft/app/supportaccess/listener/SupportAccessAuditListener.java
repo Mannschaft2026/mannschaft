@@ -12,13 +12,13 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * F10.9 代理ヘッダー付きリクエストの拒否（DENIED_REQUEST）の監査を、コミット後に書く。
+ * F10.9 代理ヘッダー付きリクエストの拒否（DENIED_REQUEST）の監査を、コミット後に audit_logs へ反映する。
  *
- * <p>拒否の記録（{@code SupportAccessLogRecorder#recordDenied}）は supportaccess の REQUIRES_NEW トランザクション
- * で書く。その中から監査（auth ドメインの Repository）を呼ぶと、トランザクションが他ドメインの Repository に
- * 到達するため、イベントで切り離してコミット後にここで書く（Ranch の管理操作監査と同じ方式）。
- * grant の遷移（依頼・許可など）の監査は {@code SupportAccessGrantService} がコミット後に書くため、
- * 本リスナーは DENIED_REQUEST だけを扱う。</p>
+ * <p>拒否の記録（{@code SupportAccessLogRecorder#recordDenied}）は supportaccess の REQUIRES_NEW トランザクションで
+ * 閲覧記録と監査 outbox を書く。その中から監査（auth ドメインの Repository）を呼ぶと、トランザクションが他ドメインの
+ * Repository に到達するため、イベントで切り離してコミット後にここで反映する。反映に失敗しても outbox に残り、
+ * 再試行バッチが拾う（ここで失敗を握りつぶして監査が消えることはない）。grant の遷移（依頼・許可など）の監査は
+ * {@code SupportAccessGrantService} がコミット後に反映するため、本リスナーは DENIED_REQUEST だけを扱う。</p>
  */
 @Slf4j
 @Component
@@ -31,19 +31,14 @@ public class SupportAccessAuditListener {
     }
 
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
-            reason = "代理閲覧の拒否の監査事実は再生されず、止めると運営の不正な試行の証跡が恒久的に欠落する")
+            reason = "代理閲覧の拒否の監査を audit_logs へ反映する。止めても outbox に残り再試行バッチが反映するが、反映が遅れる")
     @Async("event-pool")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onGrantChanged(SupportAccessGrantChangedEvent event) {
         if (event.action() != SupportAccessAuditAction.DENIED_REQUEST) {
             return;
         }
-        try {
-            auditRecorder.record(SupportAccessAuditAction.DENIED_REQUEST,
-                    event.operatorUserId(), event.targetUserId(), event.grantId());
-        } catch (RuntimeException e) {
-            log.error("サポート閲覧の拒否の監査に失敗: grantId={}, operatorUserId={}",
-                    event.grantId(), event.operatorUserId(), e);
-        }
+        int published = auditRecorder.relayDue();
+        log.debug("サポート閲覧の拒否の監査を反映: published={}, grantId={}", published, event.grantId());
     }
 }

@@ -15,7 +15,13 @@ import type {
   SupportAccessGrant,
   SupportAccessLog,
   SupportAccessStatus,
+  WithGrantId,
 } from '~/types/support-access'
+import { hasGrantId } from '~/types/support-access'
+import { toSupportAccessSession } from '~/stores/useSupportAccessStore'
+
+/** 操作できる（grant ID のある）行。ID の無い行は API の境界で除く。 */
+type GrantRow = WithGrantId<SupportAccessGrant>
 
 /**
  * F10.9 サポート閲覧（本人承認制の代理ログイン）— 運営側の画面。
@@ -40,7 +46,7 @@ const REASON_MAX = 1000
 type TabValue = 'ALL' | SupportAccessStatus
 const TAB_ORDER: TabValue[] = ['ALL', 'PENDING', 'APPROVED', 'DENIED', 'REVOKED', 'EXPIRED', 'CANCELLED']
 const activeTab = ref<TabValue>('ALL')
-const grants = ref<SupportAccessGrant[]>([])
+const grants = ref<GrantRow[]>([])
 const loading = ref(false)
 const loadingMore = ref(false)
 const loadFailed = ref(false)
@@ -60,7 +66,8 @@ async function loadGrants(more = false) {
       status: activeTab.value === 'ALL' ? undefined : activeTab.value,
       cursor: more ? nextCursor.value : null,
     })
-    grants.value = more ? [...grants.value, ...res.data] : res.data
+    const rows = res.data.filter(hasGrantId)
+    grants.value = more ? [...grants.value, ...rows] : rows
     nextCursor.value = res.meta.nextCursor
     hasNext.value = res.meta.hasNext
   }
@@ -85,11 +92,11 @@ function statusSeverity(status: SupportAccessStatus): 'info' | 'success' | 'seco
   }
 }
 
-function guardianWaiting(grant: SupportAccessGrant): boolean {
-  return grant.status === 'PENDING' && grant.guardianApprovalRequired
+function guardianWaiting(grant: GrantRow): boolean {
+  return grant.status === 'PENDING' && grant.guardianApprovalRequired === true
 }
 
-function referenceLabel(type: string | null, id: number | null): string {
+function referenceLabel(type?: string | null, id?: number | null): string {
   if (!type) return ''
   const key = `supportAccess.reference.${type}`
   const base = te(key) ? t(key) : type
@@ -106,11 +113,11 @@ function apiMessage(error: unknown, fallbackKey: string): string {
   return parseApiError(error).message ?? t(fallbackKey)
 }
 
-function canStart(grant: SupportAccessGrant): boolean {
+function canStart(grant: GrantRow): boolean {
   return grant.status === 'APPROVED' && !!grant.expiresAt && Date.parse(grant.expiresAt) > Date.now()
 }
 
-function canCancel(grant: SupportAccessGrant): boolean {
+function canCancel(grant: GrantRow): boolean {
   return grant.status === 'PENDING' || grant.status === 'APPROVED'
 }
 
@@ -169,12 +176,18 @@ async function submitCreate() {
 // ─── 開始・撤回・終了 ───
 const busyId = ref<string | null>(null)
 
-async function startViewing(grant: SupportAccessGrant) {
+async function startViewing(grant: GrantRow) {
   busyId.value = grant.id
   try {
     const res = await supportApi.startSession(grant.id)
-    store.startSession(res.data)
-    notification.success(t('supportAccess.admin.started', { name: res.data.targetDisplayName }))
+    const session = toSupportAccessSession(res.data)
+    if (!session) {
+      // 応答に必須の値（grant・本人・期限）が欠けていたら閲覧を始めない（本人の画面を不完全な状態で開かない）
+      notification.error(t('supportAccess.admin.startError'))
+      return
+    }
+    store.startSession(session)
+    notification.success(t('supportAccess.admin.started', { name: session.targetDisplayName }))
     await navigateTo('/')
   }
   catch (error) {
@@ -185,10 +198,10 @@ async function startViewing(grant: SupportAccessGrant) {
   }
 }
 
-function confirmCancel(grant: SupportAccessGrant) {
+function confirmCancel(grant: GrantRow) {
   cancelTarget.value = grant
 }
-const cancelTarget = ref<SupportAccessGrant | null>(null)
+const cancelTarget = ref<GrantRow | null>(null)
 
 async function cancelGrant() {
   const grant = cancelTarget.value
@@ -209,7 +222,7 @@ async function cancelGrant() {
 }
 
 // ─── 詳細（閲覧記録） ───
-const detailGrant = ref<SupportAccessGrant | null>(null)
+const detailGrant = ref<GrantRow | null>(null)
 const detailVisible = ref(false)
 const logs = ref<SupportAccessLog[]>([])
 const logsLoading = ref(false)
@@ -236,7 +249,7 @@ async function loadLogs(more = false) {
   }
 }
 
-async function openDetail(grant: SupportAccessGrant) {
+async function openDetail(grant: GrantRow) {
   detailGrant.value = grant
   detailVisible.value = true
   logs.value = []

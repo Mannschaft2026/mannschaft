@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import { installSupportAccessReadOnlyGuard, setSupportAccessReadOnlyClass } from '~/composables/useSupportAccessReadOnlyGuard'
 
 /**
  * F10.9 サポート閲覧中バナー（戦役Z-B）。旧・管理者変身のバナーを置き換える。
@@ -19,13 +20,23 @@ const remaining = computed(() => {
 
 const ending = ref(false)
 
-// 閲覧のみの共通表示: 閲覧中は html にクラスを付け、保存・送信ボタン（type="submit"）を無効に見せる（main.css）。
-// 書込は BE が SUPPORT_ACCESS_003 で必ず拒否する（useApi がトーストで知らせる）。ここは壊れたように見せないための表示。
+// 閲覧のみの共通の仕組み（useSupportAccessReadOnlyGuard）: 閲覧中は html にクラスを付けて保存系の操作
+// （送信ボタン・フォーム内とダイアログ下部の主ボタン）を無効に見せ（main.css）、クリック・Enter での送信も捕捉段階で止める。
+// 書込は BE が SUPPORT_ACCESS_003 で必ず拒否する。ここは壊れたように見せないための表示と操作の抑止。
+let uninstallGuard: (() => void) | null = null
 watchEffect(() => {
-  if (import.meta.client) document.documentElement.classList.toggle('support-access-readonly', store.isActive)
+  if (import.meta.client) setSupportAccessReadOnlyClass(store.isActive)
+})
+onMounted(() => {
+  uninstallGuard = installSupportAccessReadOnlyGuard(
+    () => store.isActive,
+    () => notification.info(t('supportAccess.banner.readOnly')),
+  )
 })
 onBeforeUnmount(() => {
-  if (import.meta.client) document.documentElement.classList.remove('support-access-readonly')
+  uninstallGuard?.()
+  uninstallGuard = null
+  if (import.meta.client) setSupportAccessReadOnlyClass(false)
 })
 
 /** 全読み込みで運営者本人の画面へ戻る。本人の画面を描くために読み込んだ Pinia・各キャッシュがすべて破棄される。 */
@@ -87,6 +98,7 @@ watch(
         class="text-white hover:text-orange-100"
         :loading="ending"
         data-testid="support-access-banner-end"
+        data-support-access-allow
         @click="endViewing"
       />
     </div>

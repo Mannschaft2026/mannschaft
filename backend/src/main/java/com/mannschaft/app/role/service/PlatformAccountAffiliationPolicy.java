@@ -82,4 +82,20 @@ public class PlatformAccountAffiliationPolicy {
     public boolean isPlatformAccount(Long userId) {
         return userId != null && userRoleRepository.existsPlatformAdminRoleByUserId(userId) > 0;
     }
+
+    /**
+     * 指定ユーザーが、いまテナント（チーム・組織・委員会・村・サポーター・個人フォロー）に所属しているか、
+     * 本人の申請で所属待ち（サポーター申請・参加申請・入村申請）にあるかを返す。アカウントの状態を問わない
+     * （停止中の運営アカウントも対象）。公式村の作成者としての村長所属（{@link #isOfficialVillageCreatorHeadman}）は数えない。
+     *
+     * <p>F10.9 サポート閲覧で、所属のある運営アカウントの依頼・閲覧を拒否する（SUPPORT_ACCESS_010）ための照合。
+     * 所属を作る経路は本クラスが塞いでいるが、本ポリシー導入前の既存行や点検で見つかった残存行に対しても
+     * 運営の代理閲覧を成立させないため、所属行そのものを確かめる。</p>
+     *
+     * @param userId 対象ユーザー ID
+     * @return 所属（または本人の申請による所属待ち）があれば true
+     */
+    public boolean hasAnyTenantAffiliation(Long userId) {
+        return userId != null && userRoleRepository.countTenantAffiliationKindsByUserId(userId) > 0;
+    }
 }

@@ -17,7 +17,7 @@ CREATE TABLE support_access_grants (
     ended_reason                VARCHAR(30)     NULL COMMENT 'USER_REVOKED/OPERATOR_CANCELLED/EXPIRED/WITHDRAWAL/OPERATOR_INELIGIBLE',
     last_session_started_at     DATETIME(6)     NULL COMMENT '直近の閲覧開始時刻',
     active_session_started_at   DATETIME(6)     NULL COMMENT '閲覧開始(POST sessions)の時刻。NULLなら未開始でヘッダーは403',
-    active_session_ended_at     DATETIME(6)     NULL COMMENT '閲覧終了の時刻。開始より後なら終了済みでヘッダーは403',
+    active_session_ended_at     DATETIME(6)     NULL COMMENT '閲覧終了の時刻。値があれば終了済みでヘッダーは403(閲覧開始で NULL に戻す)',
     guardian_approval_required  TINYINT(1)      NOT NULL DEFAULT 0 COMMENT '未成年・後見下の本人で保護者の承認も要るか',
     guardian_user_id            BIGINT UNSIGNED NULL COMMENT '承認する保護者(users.id・FKなし)',
     guardian_decided_at         DATETIME(6)     NULL COMMENT '保護者の許可時刻',
@@ -54,3 +54,32 @@ CREATE TABLE support_access_logs (
     KEY idx_support_access_logs_occurred (occurred_at),
     CONSTRAINT fk_support_access_logs_support_access_grants FOREIGN KEY (grant_id) REFERENCES support_access_grants (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='F10.9 サポート閲覧の閲覧記録';
+
+-- 遷移・拒否の監査の outbox。遷移と同じトランザクションで1行書き、コミット後に audit_logs へ反映する。
+-- 反映に失敗した行は published_at が NULL のまま残り、再試行バッチが拾う（遷移の確定と監査の欠落が起きない）。
+CREATE TABLE support_access_audit_outbox (
+    id                BINARY(16)      NOT NULL COMMENT 'UUIDv7',
+    grant_id          BINARY(16)      NULL COMMENT 'support_access_grants.id(拒否の監査では無い場合がある・FKなし)',
+    event_type        VARCHAR(50)     NOT NULL COMMENT 'audit_logs.event_type(SUPPORT_ACCESS_*)',
+    operator_user_id  BIGINT UNSIGNED NULL COMMENT '運営者(users.id・FKなし)',
+    target_user_id    BIGINT UNSIGNED NULL COMMENT '本人(users.id・FKなし)',
+    occurred_at       DATETIME(6)     NOT NULL COMMENT '遷移の時刻',
+    attempt_count     INT             NOT NULL DEFAULT 0 COMMENT 'audit_logs への反映の試行回数',
+    next_attempt_at   DATETIME(6)     NOT NULL COMMENT '次に反映を試みてよい時刻(取得中の行はリースで先送り)',
+    last_error        VARCHAR(500)    NULL COMMENT '直近の反映失敗の要約',
+    published_at      DATETIME(6)     NULL COMMENT 'audit_logs へ反映した時刻。NULLなら未反映',
+    created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_support_access_audit_outbox_pending (published_at, next_attempt_at),
+    KEY idx_support_access_audit_outbox_grant (grant_id, published_at),
+    KEY idx_support_access_audit_outbox_target (target_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='F10.9 サポート閲覧の監査 outbox';
+
+-- 運営者ごとの依頼の排他（1日20件の上限の count→insert を直列化する）。行の中身は使わず、行ロックだけを使う。
+CREATE TABLE support_access_request_locks (
+    operator_user_id  BIGINT UNSIGNED NOT NULL COMMENT '依頼する運営者(users.id・FKなし)',
+    created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (operator_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='F10.9 サポート閲覧の依頼の運営者単位の排他';

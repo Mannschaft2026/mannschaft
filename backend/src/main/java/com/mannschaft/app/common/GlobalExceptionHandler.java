@@ -2658,7 +2658,8 @@ public class GlobalExceptionHandler {
             Map.entry("SUPPORT_ACCESS_007", HttpStatus.CONFLICT),
             Map.entry("SUPPORT_ACCESS_010", HttpStatus.FORBIDDEN),
             Map.entry("SUPPORT_ACCESS_011", HttpStatus.TOO_MANY_REQUESTS),
-            Map.entry("SUPPORT_ACCESS_014", HttpStatus.SERVICE_UNAVAILABLE)
+            Map.entry("SUPPORT_ACCESS_014", HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry("SUPPORT_ACCESS_015", HttpStatus.FORBIDDEN)
     );
 
     /**

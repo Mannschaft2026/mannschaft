@@ -7,6 +7,12 @@ public interface SupportAccessUserDirectory {
 
     Optional<SupportAccessUserSnapshot> findUser(Long userId);
 
-    /** 未成年・後見下なら承認が必要な保護者の userId。成人で後見なしなら空。 */
-    Optional<Long> findRequiredGuardianUserId(Long userId);
+    /**
+     * 本人に保護者の承認が要るか（年齢・後見の状態から判定）と、承認できる保護者（有効な保護者リンク・
+     * 後見の権原が有効・保護者が ACTIVE）。要るのに解決できない場合は {@link SupportAccessGuardianRequirement#unresolvable()}。
+     */
+    SupportAccessGuardianRequirement resolveGuardianRequirement(Long userId);
+
+    /** 通知メールの宛先（送れる登録アドレスが無ければ空）。 */
+    Optional<String> findDeliverableEmail(Long userId);
 }

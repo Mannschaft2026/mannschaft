@@ -3,6 +3,7 @@ package com.mannschaft.app.supportaccess.entity;
 import com.mannschaft.app.supportaccess.SupportAccessEndedReason;
 import com.mannschaft.app.supportaccess.SupportAccessStatus;
 import com.mannschaft.app.common.entity.UuidV7Entity;
+import com.mannschaft.app.gdpr.PersonalData;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -22,8 +23,13 @@ import java.time.Instant;
  *
  * <p>状態遷移はドメインメソッドで<b>このインスタンスをその場で</b>書き換える（JPA の dirty checking 前提）。
  * open_flag は生成列なので insertable/updatable=false。Flyway は V274 で追加する。</p>
+ *
+ * <p><b>排他</b>: 遷移は {@code SupportAccessGrantRepository#findByIdForUpdate}（{@code SELECT ... FOR UPDATE}）で
+ * 行ロックを取ってから書き換える（{@code @Version} による楽観ロックではなく悲観ロック。取消・撤回が後勝ちの
+ * 上書きで消えないことを、競合した側を待たせて最新の状態で検証し直すことで保証する）。</p>
  */
 @Entity
+@PersonalData(category = "support_access_grants")
 @Table(name = "support_access_grants")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

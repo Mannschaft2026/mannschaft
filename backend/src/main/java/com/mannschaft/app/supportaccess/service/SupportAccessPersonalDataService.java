@@ -1,7 +1,10 @@
 package com.mannschaft.app.supportaccess.service;
 
+import com.mannschaft.app.supportaccess.dto.SupportAccessGrantExportView;
 import com.mannschaft.app.supportaccess.dto.SupportAccessLogView;
+import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
 import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
+import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
@@ -9,6 +12,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,12 +26,45 @@ import java.util.UUID;
 public class SupportAccessPersonalDataService {
 
     private final SupportAccessLogRepository logRepository;
+    private final SupportAccessGrantRepository grantRepository;
     private final SupportAccessUserDirectory userDirectory;
 
     public SupportAccessPersonalDataService(SupportAccessLogRepository logRepository,
+                                            SupportAccessGrantRepository grantRepository,
                                             SupportAccessUserDirectory userDirectory) {
         this.logRepository = logRepository;
+        this.grantRepository = grantRepository;
         this.userDirectory = userDirectory;
+    }
+
+    /**
+     * GDPR エクスポート用: 本人宛の依頼・許可と、保護者として関わった依頼・許可（新しい順）。
+     * 依頼理由（運営者が入力したプレーンテキスト）と運営者の表示名を含め、運営者のメールは含めない。
+     */
+    public List<SupportAccessGrantExportView> listGrantsForExport(Long userId) {
+        Map<Long, String> names = new HashMap<>();
+        List<SupportAccessGrantExportView> views = new ArrayList<>();
+        for (SupportAccessGrantEntity g : grantRepository.findByTargetUserIdOrderByRequestedAtDesc(userId)) {
+            views.add(toExportView(g, SupportAccessGrantExportView.ROLE_TARGET, names));
+        }
+        for (SupportAccessGrantEntity g : grantRepository.findByGuardianUserIdOrderByRequestedAtDesc(userId)) {
+            if (!userId.equals(g.getTargetUserId())) {
+                views.add(toExportView(g, SupportAccessGrantExportView.ROLE_GUARDIAN, names));
+            }
+        }
+        views.sort(Comparator.comparing(SupportAccessGrantExportView::requestedAt).reversed());
+        return views;
+    }
+
+    private SupportAccessGrantExportView toExportView(SupportAccessGrantEntity g, String role, Map<Long, String> names) {
+        return new SupportAccessGrantExportView(
+                g.getId(), role, g.getStatus().name(), g.getRequestReason(),
+                names.computeIfAbsent(g.getOperatorUserId(), this::displayNameOf),
+                g.getReferenceType(), g.getReferenceId(),
+                g.getRequestedAt(), g.getRequestExpiresAt(), g.getDecidedAt(), g.getDenyComment(),
+                g.getGuardianDecidedAt(), g.getExpiresAt(), g.getRevokedAt(),
+                g.getEndedReason() == null ? null : g.getEndedReason().name(),
+                g.getLastSessionStartedAt());
     }
 
     /** 本人の閲覧記録をすべて返す（新しい順・GDPR エクスポート用）。 */

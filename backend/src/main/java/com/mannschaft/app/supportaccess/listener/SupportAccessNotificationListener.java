@@ -3,6 +3,8 @@ package com.mannschaft.app.supportaccess.listener;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
 import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.common.i18n.UserLocaleCache;
+import com.mannschaft.app.mail.outbox.EmailOutboxRequest;
+import com.mannschaft.app.mail.outbox.EmailOutboxService;
 import com.mannschaft.app.notification.NotificationPriority;
 import com.mannschaft.app.notification.NotificationScopeType;
 import com.mannschaft.app.notification.service.NotificationDeliveryRequest;
@@ -16,13 +18,17 @@ import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.web.util.HtmlUtils;
 
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -35,6 +41,11 @@ import java.util.UUID;
  * （AFTER_COMMIT のリスナー、またはそこから同一クラス内の無修飾呼び出しで届く private ヘルパ）に合わせ、
  * このリスナー内に置く。依頼理由は運営者が入力した文字列をそのままプレーンテキストで本文に差し込む（リンク化・HTML 化しない）。
  * 通知の sourceId は Long のため grant（UUID）は actionUrl 側の画面で特定する。</p>
+ *
+ * <p><b>本人・保護者への通知は安全上必須</b>（{@code MandatoryNotificationTypes}）: アプリ内通知は通知設定で種別を OFF に
+ * していても配信され、加えてメール（F09.18 メール outbox・{@value #EMAIL_TEMPLATE}）でも依頼時・閲覧開始時に知らせる。
+ * メールの依頼理由は HTML エスケープしたプレーンテキストで載せ、リンクは設定画面（{@value #TARGET_URL}）へ遷移するだけ
+ * （メールからのワンクリック許可は成立しない。許可には設定画面での再認証が要る）。</p>
  */
 @Slf4j
 @Component
@@ -42,14 +53,27 @@ import java.util.UUID;
 public class SupportAccessNotificationListener {
 
     static final String SOURCE_TYPE = "SUPPORT_ACCESS_GRANT";
-    private static final String TARGET_URL = "/settings/support-access";
+    static final String TARGET_URL = "/settings/support-access";
     private static final String OPERATOR_URL = "/system-admin/support-access";
+    /** メール outbox のテンプレート種別（スルー方式: subject / body を payload に詰める）。 */
+    static final String EMAIL_TEMPLATE = "SUPPORT_ACCESS_NOTICE";
+    private static final String EMAIL_SOURCE_DOMAIN = "supportaccess";
+    private static final Set<String> EMAIL_LOCALES = Set.of("ja", "en", "zh", "ko", "es", "de");
+    /** 本人・保護者へメールでも知らせる種別（依頼時・閲覧開始時）。 */
+    private static final Set<SupportAccessNotificationKind> EMAIL_KINDS = Set.of(
+            SupportAccessNotificationKind.REQUESTED_TO_TARGET,
+            SupportAccessNotificationKind.REQUESTED_TO_GUARDIAN,
+            SupportAccessNotificationKind.SESSION_STARTED_TO_TARGET);
 
     private final NotificationDeliveryRunner notificationDeliveryRunner;
     private final UserLocaleCache userLocaleCache;
     private final MessageSource messageSource;
     private final SupportAccessGrantRepository grantRepository;
     private final SupportAccessUserDirectory userDirectory;
+    private final EmailOutboxService emailOutboxService;
+
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
             reason = "サポート閲覧の依頼・開始を本人へ知らせる。停止すると本人が知らないまま閲覧される状態になる")
@@ -115,10 +139,65 @@ public class SupportAccessNotificationListener {
                 recipientUserId,
                 toOperator ? OPERATOR_URL : TARGET_URL,
                 null);
-        NotificationDeliveryResult result = notificationDeliveryRunner.sendOne(request);
-        if (result == NotificationDeliveryResult.VISIBILITY_DENIED) {
-            log.warn("サポート閲覧の通知が visibility deny によりスキップ: kind={}, recipientUserId={}", kind, recipientUserId);
+        // アプリ内通知とメールは独立に送る（片方の失敗でもう片方を止めない）
+        RuntimeException failure = null;
+        try {
+            NotificationDeliveryResult result = notificationDeliveryRunner.sendOne(request);
+            if (result == NotificationDeliveryResult.VISIBILITY_DENIED) {
+                log.warn("サポート閲覧の通知が visibility deny によりスキップ: kind={}, recipientUserId={}", kind, recipientUserId);
+            }
+        } catch (RuntimeException e) {
+            failure = e;
         }
+        if (EMAIL_KINDS.contains(kind)) {
+            try {
+                enqueueEmail(recipientUserId, kind, grantId, title, body, locale);
+            } catch (RuntimeException e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    /**
+     * 本人・保護者へのメール（F09.18 メール outbox）。通知設定の OFF に関わらず送る（安全上必須）。
+     * 本文は HTML エスケープしたプレーンテキスト（依頼理由に HTML・リンクを混ぜさせない）と、設定画面へのリンクだけ。
+     */
+    private void enqueueEmail(Long recipientUserId, SupportAccessNotificationKind kind, UUID grantId,
+                              String title, String body, Locale locale) {
+        String email = userDirectory.findDeliverableEmail(recipientUserId).orElse(null);
+        if (email == null) {
+            log.warn("サポート閲覧の通知メール: 送れる宛先が無いため enqueue しない kind={}, recipientUserId={}",
+                    kind, recipientUserId);
+            return;
+        }
+        String settingsUrl = baseUrl + TARGET_URL;
+        String linkLabel = messageSource.getMessage("notification.supportaccess.email.link", null,
+                "許可・拒否・取消は設定画面で行えます（メールから直接許可することはできません）", locale);
+        String html = "<p>" + HtmlUtils.htmlEscape(body) + "</p>"
+                + "<p>" + HtmlUtils.htmlEscape(linkLabel) + "</p>"
+                + "<p><a href=\"" + HtmlUtils.htmlEscape(settingsUrl) + "\">" + HtmlUtils.htmlEscape(settingsUrl) + "</a></p>";
+        emailOutboxService.enqueue(new EmailOutboxRequest(
+                EMAIL_TEMPLATE,
+                emailLocale(locale),
+                email,
+                Map.of("subject", "【Mannschaft】" + title, "body", html),
+                EMAIL_SOURCE_DOMAIN,
+                "support-access:" + kind.name() + ":" + grantId + ":" + UUID.randomUUID(),
+                null,
+                recipientUserId,
+                null));
+    }
+
+    private static String emailLocale(Locale locale) {
+        String lang = locale == null ? "ja" : locale.getLanguage();
+        return EMAIL_LOCALES.contains(lang) ? lang : "ja";
     }
 
     private Locale resolveLocale(Long userId) {

@@ -5,17 +5,22 @@ import com.mannschaft.app.supportaccess.dto.CreateSupportAccessGrantRequest;
 import com.mannschaft.app.supportaccess.dto.SupportAccessApproveRequest;
 import com.mannschaft.app.supportaccess.dto.SupportAccessSessionResponse;
 import com.mannschaft.app.supportaccess.dto.SupportAccessGrantSnapshot;
+import com.mannschaft.app.supportaccess.entity.SupportAccessAuditOutboxEntity;
 import com.mannschaft.app.supportaccess.entity.SupportAccessGrantEntity;
+import com.mannschaft.app.supportaccess.entity.SupportAccessLogEntity;
 import com.mannschaft.app.supportaccess.event.SupportAccessGrantChangedEvent;
+import com.mannschaft.app.supportaccess.port.SupportAccessActingAsDetector;
+import com.mannschaft.app.supportaccess.port.SupportAccessGuardianRequirement;
 import com.mannschaft.app.supportaccess.port.SupportAccessOperatorAffiliationPort;
 import com.mannschaft.app.supportaccess.port.SupportAccessReauthenticationVerifier;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory;
 import com.mannschaft.app.supportaccess.port.SupportAccessUserSnapshot;
+import com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository;
 import com.mannschaft.app.supportaccess.repository.SupportAccessGrantRepository;
+import com.mannschaft.app.supportaccess.repository.SupportAccessLogRepository;
 import com.mannschaft.app.supportaccess.service.SupportAccessAuditRecorder;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantService;
 import com.mannschaft.app.supportaccess.service.SupportAccessGrantTransitionService;
-import com.mannschaft.app.supportaccess.service.SupportAccessLogRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -70,9 +75,13 @@ class SupportAccessGrantServiceTest {
     private SupportAccessOperatorAffiliationPort affiliationPort;
     private SupportAccessReauthenticationVerifier reauth;
     private SupportAccessAuditRecorder auditRecorder;
-    private SupportAccessLogRecorder logRecorder;
+    private SupportAccessLogRepository logRepository;
+    private SupportAccessAuditOutboxRepository outboxRepository;
+    private SupportAccessActingAsDetector actingAs;
     private ApplicationEventPublisher eventPublisher;
     private SupportAccessGrantService service;
+    /** 許可の時点の保護者の要否の再評価が返す値（既定は不要）。 */
+    private SupportAccessGuardianRequirement currentGuardianRequirement = SupportAccessGuardianRequirement.notRequired();
 
     @BeforeEach
     void setUp() {
@@ -81,22 +90,29 @@ class SupportAccessGrantServiceTest {
         affiliationPort = mock(SupportAccessOperatorAffiliationPort.class);
         reauth = mock(SupportAccessReauthenticationVerifier.class);
         auditRecorder = mock(SupportAccessAuditRecorder.class);
-        logRecorder = mock(SupportAccessLogRecorder.class);
+        logRepository = mock(SupportAccessLogRepository.class);
+        outboxRepository = mock(SupportAccessAuditOutboxRepository.class);
+        actingAs = mock(SupportAccessActingAsDetector.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         // 書込トランザクション（Repository のみ）と、TX の外で動く入口（port・監査）に分けて組む
         service = new SupportAccessGrantService(
-                new SupportAccessGrantTransitionService(grantRepository, logRecorder, eventPublisher, clock),
-                userDirectory, affiliationPort, reauth, auditRecorder);
+                new SupportAccessGrantTransitionService(grantRepository, logRepository, outboxRepository, eventPublisher, clock),
+                userDirectory, affiliationPort, reauth, actingAs, auditRecorder);
 
         lenient().when(userDirectory.findUser(TARGET_ID))
                 .thenReturn(Optional.of(new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", false, false)));
         lenient().when(userDirectory.findUser(OPERATOR_ID))
                 .thenReturn(Optional.of(new SupportAccessUserSnapshot(OPERATOR_ID, "運営担当", "ACTIVE", false, true)));
-        lenient().when(userDirectory.findRequiredGuardianUserId(anyLong())).thenReturn(Optional.empty());
+        lenient().when(userDirectory.resolveGuardianRequirement(anyLong()))
+                .thenAnswer(inv -> currentGuardianRequirement);
+        lenient().when(userDirectory.findUser(GUARDIAN_ID))
+                .thenReturn(Optional.of(new SupportAccessUserSnapshot(GUARDIAN_ID, "保護者", "ACTIVE", false, false)));
         lenient().when(affiliationPort.isAffiliatedWithAnyTenant(anyLong())).thenReturn(false);
-        lenient().when(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(anyLong(), anyLong(), anyCollection()))
-                .thenReturn(Optional.empty());
+        lenient().when(grantRepository.findOpenForUpdate(anyLong(), anyLong(), anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(outboxRepository.save(any(SupportAccessAuditOutboxEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(logRepository.save(any(SupportAccessLogEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(grantRepository.save(any(SupportAccessGrantEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(reauth.verify(eq(TARGET_ID), eq(REAUTH))).thenReturn(true);
         lenient().when(reauth.verify(eq(GUARDIAN_ID), eq(REAUTH))).thenReturn(true);
@@ -125,8 +141,28 @@ class SupportAccessGrantServiceTest {
     }
 
     private SupportAccessGrantEntity givenGrant(SupportAccessGrantEntity grant) {
-        given(grantRepository.findById(GRANT_ID)).willReturn(Optional.of(grant));
+        lenient().when(grantRepository.findById(GRANT_ID)).thenReturn(Optional.of(grant));
+        lenient().when(grantRepository.findByIdForUpdate(GRANT_ID)).thenReturn(Optional.of(grant));
         return grant;
+    }
+
+    /** 遷移と同じ TX で監査 outbox に書かれた種別（audit_logs への反映はコミット後の auditRecorder）。 */
+    private List<String> auditedEvents() {
+        ArgumentCaptor<SupportAccessAuditOutboxEntity> captor = ArgumentCaptor.forClass(SupportAccessAuditOutboxEntity.class);
+        verify(outboxRepository, atLeastOnce()).save(captor.capture());
+        return captor.getAllValues().stream().map(SupportAccessAuditOutboxEntity::getEventType).toList();
+    }
+
+    private List<String> auditedEventsOrEmpty() {
+        ArgumentCaptor<SupportAccessAuditOutboxEntity> captor = ArgumentCaptor.forClass(SupportAccessAuditOutboxEntity.class);
+        verify(outboxRepository, org.mockito.Mockito.atLeast(0)).save(captor.capture());
+        return captor.getAllValues().stream().map(SupportAccessAuditOutboxEntity::getEventType).toList();
+    }
+
+    private List<SupportAccessEventKind> sessionLogKinds() {
+        ArgumentCaptor<SupportAccessLogEntity> captor = ArgumentCaptor.forClass(SupportAccessLogEntity.class);
+        verify(logRepository, atLeastOnce()).save(captor.capture());
+        return captor.getAllValues().stream().map(SupportAccessLogEntity::getEventKind).toList();
     }
 
     private List<SupportAccessGrantChangedEvent> publishedEvents() {
@@ -158,7 +194,7 @@ class SupportAccessGrantServiceTest {
             assertThat(saved.requestExpiresAt()).isEqualTo(NOW.plus(java.time.Duration.ofHours(72)));
             assertThat(saved.expiresAt()).isNull();
             verify(grantRepository).save(any(SupportAccessGrantEntity.class));
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.REQUESTED), eq(OPERATOR_ID), eq(TARGET_ID), any());
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_REQUESTED");
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
                     .contains(SupportAccessAuditAction.REQUESTED);
         }
@@ -228,8 +264,8 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S8 同じ運営者×本人で有効な依頼・許可が開いていれば 409 SUPPORT_ACCESS_006")
         void S8_同じ組合せは同時1件() {
-            given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
-                    .willReturn(Optional.of(pending().build()));
+            given(grantRepository.findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(pending().build()));
 
             assertThatThrownBy(() -> service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null)))
@@ -240,8 +276,8 @@ class SupportAccessGrantServiceTest {
         @DisplayName("S8 開いている grant が期限切れ（バッチ前）なら、その場で EXPIRED にしてから新しい依頼を作る")
         void S8_再依頼前にその場で失効() {
             SupportAccessGrantEntity stale = approved().expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
-            given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
-                    .willReturn(Optional.of(stale));
+            given(grantRepository.findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(stale));
 
             SupportAccessGrantSnapshot created = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
@@ -249,15 +285,15 @@ class SupportAccessGrantServiceTest {
             assertThat(stale.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
             assertThat(stale.getEndedReason()).isEqualTo(SupportAccessEndedReason.EXPIRED);
             assertThat(created.status()).isEqualTo(SupportAccessStatus.PENDING);
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.EXPIRED), eq(OPERATOR_ID), eq(TARGET_ID), any());
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_EXPIRED");
         }
 
         @Test
         @DisplayName("S8 開いている PENDING が依頼期限（72h）切れなら、その場で EXPIRED にして新しい依頼を作る")
         void S8_依頼期限切れのPENDINGもその場で失効() {
             SupportAccessGrantEntity stale = pending().requestExpiresAt(NOW.minus(java.time.Duration.ofSeconds(1))).build();
-            given(grantRepository.findFirstByOperatorUserIdAndTargetUserIdAndStatusIn(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
-                    .willReturn(Optional.of(stale));
+            given(grantRepository.findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(stale));
 
             SupportAccessGrantSnapshot created = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
@@ -280,7 +316,8 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S9/S12 未成年・後見下の本人への依頼は保護者の承認も要る印を付け、保護者へも通知イベントを出す")
         void S9_未成年は保護者承認が必要() {
-            given(userDirectory.findRequiredGuardianUserId(TARGET_ID)).willReturn(Optional.of(GUARDIAN_ID));
+            given(userDirectory.resolveGuardianRequirement(TARGET_ID))
+                    .willReturn(SupportAccessGuardianRequirement.requiredBy(List.of(GUARDIAN_ID)));
 
             SupportAccessGrantSnapshot saved = service.request(OPERATOR_ID,
                     new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
@@ -309,7 +346,7 @@ class SupportAccessGrantServiceTest {
             assertThat(grant.getDecidedAt()).isEqualTo(NOW);
             assertThat(grant.getExpiresAt()).isEqualTo(NOW.plus(java.time.Duration.ofHours(24)));
             verify(reauth).verify(TARGET_ID, REAUTH);
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.APPROVED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_APPROVED");
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
                     .contains(SupportAccessAuditAction.APPROVED);
         }
@@ -324,7 +361,7 @@ class SupportAccessGrantServiceTest {
             assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, wrong)).isInstanceOf(BusinessException.class);
             assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.PENDING);
             assertThat(grant.getExpiresAt()).isNull();
-            verify(auditRecorder, never()).record(eq(SupportAccessAuditAction.APPROVED), any(), any(), any());
+            assertThat(auditedEventsOrEmpty()).doesNotContain("SUPPORT_ACCESS_APPROVED");
         }
 
         @Test
@@ -369,6 +406,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S9 未成年・後見下: 本人の許可だけでは PENDING のまま、保護者の許可も揃って APPROVED（期限は最後の許可＋24h）")
         void S9_本人と保護者の両方で初めてAPPROVED() {
+            currentGuardianRequirement = SupportAccessGuardianRequirement.requiredBy(List.of(GUARDIAN_ID));
             SupportAccessGrantEntity grant = givenGrant(pending().guardianApprovalRequired(true).guardianUserId(GUARDIAN_ID).build());
 
             service.approve(TARGET_ID, GRANT_ID, REAUTH);
@@ -386,6 +424,7 @@ class SupportAccessGrantServiceTest {
         @Test
         @DisplayName("S9 未成年・後見下: 保護者が先に許可しても本人の許可が無ければ PENDING のまま")
         void S9_保護者だけではAPPROVEDにならない() {
+            currentGuardianRequirement = SupportAccessGuardianRequirement.requiredBy(List.of(GUARDIAN_ID));
             SupportAccessGrantEntity grant = givenGrant(pending().guardianApprovalRequired(true).guardianUserId(GUARDIAN_ID).build());
 
             service.approve(GUARDIAN_ID, GRANT_ID, REAUTH);
@@ -405,7 +444,7 @@ class SupportAccessGrantServiceTest {
             assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.DENIED);
             assertThat(grant.getDenyComment()).isEqualTo("今は困ります");
             assertThat(grant.getDecidedAt()).isEqualTo(NOW);
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.DENIED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_DENIED");
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
                     .contains(SupportAccessAuditAction.DENIED);
         }
@@ -425,7 +464,7 @@ class SupportAccessGrantServiceTest {
             assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
             assertThat(grant.getRevokedAt()).isEqualTo(NOW);
             assertThat(grant.getEndedReason()).isEqualTo(SupportAccessEndedReason.USER_REVOKED);
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.REVOKED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_REVOKED");
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
                     .contains(SupportAccessAuditAction.REVOKED);
         }
@@ -450,7 +489,7 @@ class SupportAccessGrantServiceTest {
 
             assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.CANCELLED);
             assertThat(grant.getEndedReason()).isEqualTo(SupportAccessEndedReason.OPERATOR_CANCELLED);
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.CANCELLED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_CANCELLED");
         }
 
         @Test
@@ -467,8 +506,8 @@ class SupportAccessGrantServiceTest {
             assertThat(grant.getActiveSessionStartedAt()).isEqualTo(NOW);
             assertThat(grant.getActiveSessionEndedAt()).isNull();
             assertThat(grant.getLastSessionStartedAt()).isEqualTo(NOW);
-            verify(logRecorder).recordSessionStart(any());
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.SESSION_STARTED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
+            assertThat(sessionLogKinds()).contains(SupportAccessEventKind.SESSION_START);
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_SESSION_STARTED");
             assertThat(publishedEvents()).extracting(SupportAccessGrantChangedEvent::action)
                     .contains(SupportAccessAuditAction.SESSION_STARTED);
         }
@@ -512,8 +551,8 @@ class SupportAccessGrantServiceTest {
             service.endSession(OPERATOR_ID, GRANT_ID);
 
             assertThat(grant.getActiveSessionEndedAt()).isEqualTo(NOW);
-            verify(logRecorder).recordSessionEnd(any());
-            verify(auditRecorder).record(eq(SupportAccessAuditAction.SESSION_ENDED), eq(OPERATOR_ID), eq(TARGET_ID), eq(GRANT_ID));
+            assertThat(sessionLogKinds()).contains(SupportAccessEventKind.SESSION_END);
+            assertThat(auditedEvents()).contains("SUPPORT_ACCESS_SESSION_ENDED");
         }
 
         @Test
@@ -521,10 +560,7 @@ class SupportAccessGrantServiceTest {
         void S11_失効バッチ() {
             SupportAccessGrantEntity stalePending = pending().id(UUID.randomUUID()).requestExpiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
             SupportAccessGrantEntity staleApproved = approved().id(UUID.randomUUID()).expiresAt(NOW.minus(java.time.Duration.ofMinutes(1))).build();
-            given(grantRepository.findByStatusAndRequestExpiresAtBefore(eq(SupportAccessStatus.PENDING), any()))
-                    .willReturn(List.of(stalePending));
-            given(grantRepository.findByStatusAndExpiresAtBefore(eq(SupportAccessStatus.APPROVED), any()))
-                    .willReturn(List.of(staleApproved));
+            given(grantRepository.findOverdueForUpdate(NOW)).willReturn(List.of(stalePending, staleApproved));
 
             int count = service.expireOverdue();
 
@@ -532,8 +568,9 @@ class SupportAccessGrantServiceTest {
             assertThat(stalePending.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
             assertThat(staleApproved.getStatus()).isEqualTo(SupportAccessStatus.EXPIRED);
             assertThat(staleApproved.getEndedReason()).isEqualTo(SupportAccessEndedReason.EXPIRED);
-            verify(auditRecorder, org.mockito.Mockito.times(2))
-                    .record(eq(SupportAccessAuditAction.EXPIRED), eq(OPERATOR_ID), eq(TARGET_ID), any());
+            assertThat(auditedEvents()).filteredOn("SUPPORT_ACCESS_EXPIRED"::equals).hasSize(2);
+            verify(auditRecorder).relayForGrant(stalePending.getId());
+            verify(auditRecorder).relayForGrant(staleApproved.getId());
         }
 
         @Test
@@ -541,7 +578,7 @@ class SupportAccessGrantServiceTest {
         void S15_退会で即取消() {
             SupportAccessGrantEntity open1 = pending().id(UUID.randomUUID()).build();
             SupportAccessGrantEntity open2 = approved().id(UUID.randomUUID()).operatorUserId(8888L).build();
-            given(grantRepository.findByTargetUserIdAndStatusIn(eq(TARGET_ID), anyCollection()))
+            given(grantRepository.findByTargetUserIdAndStatusInForUpdate(eq(TARGET_ID), anyCollection()))
                     .willReturn(List.of(open1, open2));
 
             int count = service.revokeAllForWithdrawal(TARGET_ID);
@@ -552,6 +589,181 @@ class SupportAccessGrantServiceTest {
                 assertThat(g.getEndedReason()).isEqualTo(SupportAccessEndedReason.WITHDRAWAL);
                 assertThat(g.getRevokedAt()).isEqualTo(NOW);
             });
+        }
+
+        @Test
+        @DisplayName("S15 退会で取り消した grant は退会を撤回しても復活しない（REVOKED は終端で、許可・再開はできない）")
+        void S15_退会撤回でPENDINGは復活しない() {
+            SupportAccessGrantEntity open = givenGrant(pending().build());
+            given(grantRepository.findByTargetUserIdAndStatusInForUpdate(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(open));
+            service.revokeAllForWithdrawal(TARGET_ID);
+
+            assertThat(open.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
+            assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_007"));
+            assertThat(open.isOpen()).isFalse();
+        }
+
+        @Test
+        @DisplayName("S15 退会リスナーの取りこぼしは失効バッチの照合で取り消す（退会手続中・見つからない本人の開いている grant）")
+        void S15_退会の取りこぼしを照合で取消() {
+            SupportAccessGrantEntity open = pending().id(UUID.randomUUID()).build();
+            given(grantRepository.findByStatusIn(anyCollection())).willReturn(List.of(open));
+            given(userDirectory.findUser(TARGET_ID))
+                    .willReturn(Optional.of(new SupportAccessUserSnapshot(TARGET_ID, "本人", "ACTIVE", true, false)));
+            given(grantRepository.findByTargetUserIdAndStatusInForUpdate(eq(TARGET_ID), anyCollection()))
+                    .willReturn(List.of(open));
+
+            int revoked = service.reconcileWithdrawnTargets();
+
+            assertThat(revoked).isEqualTo(1);
+            assertThat(open.getEndedReason()).isEqualTo(SupportAccessEndedReason.WITHDRAWAL);
+        }
+    }
+
+    @Nested
+    @DisplayName("検分差し戻し対応: 排他・監査 outbox・後見切替・未成年の fail-closed")
+    class ReviewFixes {
+
+        @Test
+        @DisplayName("遷移は排他ロック付きの読み取り（findByIdForUpdate）で行い、ロックなしの findById で書かない")
+        void 遷移はロック付きで読む() {
+            givenGrant(approved().build());
+
+            service.revoke(TARGET_ID, GRANT_ID);
+
+            verify(grantRepository).findByIdForUpdate(GRANT_ID);
+            verify(grantRepository, never()).findById(GRANT_ID);
+        }
+
+        @Test
+        @DisplayName("依頼は運営者の依頼ロックを最初に取り、その後に開いている grant を排他ロックで読む（ロック順の固定）")
+        void 依頼は運営者ロックが先() {
+            service.request(OPERATOR_ID, new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null));
+
+            org.mockito.InOrder order = org.mockito.Mockito.inOrder(grantRepository);
+            order.verify(grantRepository).lockOperatorForRequest(OPERATOR_ID);
+            order.verify(grantRepository).findOpenForUpdate(eq(OPERATOR_ID), eq(TARGET_ID), anyCollection());
+            order.verify(grantRepository).countByOperatorUserIdAndRequestedAtAfter(eq(OPERATOR_ID), any());
+        }
+
+        @Test
+        @DisplayName("閲覧開始の直前に取消が確定していたら（ロック後の再検証で）002 にし、開始で取消を上書きしない")
+        void 開始と取消の競合は取消が勝つ() {
+            SupportAccessGrantEntity unlocked = approved().build();
+            SupportAccessGrantEntity lockedLatest = approved().build();
+            lockedLatest.revoke(NOW, SupportAccessEndedReason.USER_REVOKED);
+            given(grantRepository.findById(GRANT_ID)).willReturn(Optional.of(unlocked));
+            given(grantRepository.findByIdForUpdate(GRANT_ID)).willReturn(Optional.of(lockedLatest));
+
+            assertThatThrownBy(() -> service.startSession(OPERATOR_ID, GRANT_ID))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_002"));
+            assertThat(lockedLatest.getStatus()).isEqualTo(SupportAccessStatus.REVOKED);
+            assertThat(lockedLatest.getActiveSessionStartedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("監査は遷移と同じ TX で outbox に書き、コミット後に auditRecorder が反映する（遷移の確定と監査の欠落が起きない）")
+        void 監査はoutboxとコミット後の反映() {
+            givenGrant(approved().build());
+
+            service.cancel(OPERATOR_ID, GRANT_ID);
+
+            ArgumentCaptor<SupportAccessAuditOutboxEntity> captor = ArgumentCaptor.forClass(SupportAccessAuditOutboxEntity.class);
+            verify(outboxRepository).save(captor.capture());
+            SupportAccessAuditOutboxEntity row = captor.getValue();
+            assertThat(row.getEventType()).isEqualTo("SUPPORT_ACCESS_CANCELLED");
+            assertThat(row.getGrantId()).isEqualTo(GRANT_ID);
+            assertThat(row.getOperatorUserId()).isEqualTo(OPERATOR_ID);
+            assertThat(row.getTargetUserId()).isEqualTo(TARGET_ID);
+            assertThat(row.getPublishedAt()).isNull();
+            assertThat(row.getNextAttemptAt()).isEqualTo(NOW);
+            verify(auditRecorder).relayForGrant(GRANT_ID);
+        }
+
+        @Test
+        @DisplayName("閲覧開始の応答は BE の時刻基準の残り秒数を返す")
+        void 閲覧開始は残り秒数を返す() {
+            givenGrant(approved().build());
+
+            SupportAccessSessionResponse res = service.startSession(OPERATOR_ID, GRANT_ID);
+
+            assertThat(res.remainingSeconds())
+                    .isEqualTo(java.time.Duration.between(NOW, res.expiresAt()).getSeconds());
+        }
+
+        @Test
+        @DisplayName("後見切替・代理入力の最中は、保護者が子として許可しても 403 SUPPORT_ACCESS_015（状態は変わらない）")
+        void 後見切替中の許可は015() {
+            SupportAccessGrantEntity grant = givenGrant(pending().guardianApprovalRequired(true).guardianUserId(GUARDIAN_ID).build());
+            given(actingAs.isActingAsAnotherUser()).willReturn(true);
+
+            assertThatThrownBy(() -> service.approve(GUARDIAN_ID, GRANT_ID, REAUTH))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_015"));
+            assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_015"));
+            assertThatThrownBy(() -> service.deny(TARGET_ID, GRANT_ID, null))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_015"));
+            assertThatThrownBy(() -> service.revoke(TARGET_ID, GRANT_ID))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_015"));
+            assertThat(grant.getStatus()).isEqualTo(SupportAccessStatus.PENDING);
+            assertThat(grant.getGuardianDecidedAt()).isNull();
+            verify(reauth, never()).verify(any(), any());
+        }
+
+        @Test
+        @DisplayName("未成年判定の fail-closed: 保護者が要るのに承認できる保護者がいない（リンク無し・停止中）なら依頼は 005")
+        void 保護者が解決できなければ005() {
+            given(userDirectory.resolveGuardianRequirement(TARGET_ID))
+                    .willReturn(SupportAccessGuardianRequirement.requiredBy(List.of()));
+
+            assertThatThrownBy(() -> service.request(OPERATOR_ID,
+                    new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null)))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_005"));
+            verify(grantRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("保護者が SYSTEM_ADMIN、または依頼した運営者本人なら依頼は 005（利益相反）")
+        void 保護者が運営なら005() {
+            given(userDirectory.resolveGuardianRequirement(TARGET_ID))
+                    .willReturn(SupportAccessGuardianRequirement.requiredBy(List.of(OPERATOR_ID)));
+            assertThatThrownBy(() -> service.request(OPERATOR_ID,
+                    new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null)))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_005"));
+
+            given(userDirectory.resolveGuardianRequirement(TARGET_ID))
+                    .willReturn(SupportAccessGuardianRequirement.requiredBy(List.of(GUARDIAN_ID)));
+            given(userDirectory.findUser(GUARDIAN_ID))
+                    .willReturn(Optional.of(new SupportAccessUserSnapshot(GUARDIAN_ID, "別の運営", "ACTIVE", false, true)));
+            assertThatThrownBy(() -> service.request(OPERATOR_ID,
+                    new CreateSupportAccessGrantRequest(TARGET_ID, REASON, null, null)))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_005"));
+            verify(grantRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("保護者は許可の時点で再評価する: 依頼後に保護者が停止・リンク解除されたら許可は 005")
+        void 許可時に保護者を再評価() {
+            SupportAccessGrantEntity grant = givenGrant(pending().guardianApprovalRequired(true).guardianUserId(GUARDIAN_ID).build());
+            given(userDirectory.resolveGuardianRequirement(TARGET_ID))
+                    .willReturn(SupportAccessGuardianRequirement.requiredBy(List.of()));
+
+            assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_005"));
+            assertThat(grant.getDecidedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("依頼の時は保護者が不要でも、許可の時点で要るようになっていたら 005（依頼のやり直し）")
+        void 許可時に保護者が要るようになったら005() {
+            givenGrant(pending().build());
+            given(userDirectory.resolveGuardianRequirement(TARGET_ID))
+                    .willReturn(SupportAccessGuardianRequirement.requiredBy(List.of(GUARDIAN_ID)));
+
+            assertThatThrownBy(() -> service.approve(TARGET_ID, GRANT_ID, REAUTH))
+                    .satisfies(t -> assertThat(codeOf(t)).isEqualTo("SUPPORT_ACCESS_005"));
         }
     }
 }

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import type { SupportAccessSessionResponse } from '~/types/support-access'
 
 /**
  * F10.9 サポート閲覧（本人承認制の代理ログイン）ストア（戦役Z-B）。
@@ -7,15 +8,35 @@ import { defineStore } from 'pinia'
  * （/api/v1/system-admin/** と /api/v1/auth/** には付けない）。旧・管理者変身のストアを置き換える。
  *
  * - 状態は画面メモリだけに持つ（再読込すると閲覧は終わり、運営者本人の画面に戻る）。許可自体は BE で期限まで有効。
- * - 期限（許可+24時間）を過ぎたら、BE の応答を待たずに手元で終了する。
+ * - 期限（許可+24時間）を過ぎたら、BE の応答を待たずに手元で終了する。残り時間は端末の時計ではなく、
+ *   閲覧開始の応答の remainingSeconds（BE の時刻基準）を受け取った時点から数える（端末の時計のずれで延命・早切れしない）。
  * - 終了時は BE の sessions/end を呼び、本人データのキャッシュ（useAsyncData・useState）を必ず消す。
  */
 export interface SupportAccessSession {
   grantId: string
   targetUserId: number
   targetDisplayName: string
-  /** 許可の期限（ISO 8601）。許可+24h 固定。 */
+  /** 許可の期限（ISO 8601）。許可+24h 固定。表示用。 */
   expiresAt: string
+  /** 応答時点での残り秒数（BE の時刻基準）。無ければ expiresAt と端末の時計で数える。 */
+  remainingSeconds?: number
+}
+
+/**
+ * 閲覧開始の応答（生成型は全項目 optional）を、閲覧に必要な値が揃った {@link SupportAccessSession} にする。
+ * grant・本人・期限のどれかが欠けていれば null（呼び出し側は閲覧を始めない）。
+ */
+export function toSupportAccessSession(res: SupportAccessSessionResponse | null | undefined): SupportAccessSession | null {
+  if (!res) return null
+  const { grantId, targetUserId, targetDisplayName, expiresAt, remainingSeconds } = res
+  if (!grantId || typeof targetUserId !== 'number' || !expiresAt) return null
+  return {
+    grantId,
+    targetUserId,
+    targetDisplayName: targetDisplayName ?? '',
+    expiresAt,
+    ...(typeof remainingSeconds === 'number' ? { remainingSeconds } : {}),
+  }
 }
 
 /**
@@ -40,13 +61,23 @@ export const useSupportAccessStore = defineStore('supportAccess', () => {
   const targetUserId = ref<number | null>(null)
   const targetDisplayName = ref<string>('')
   const expiresAt = ref<string | null>(null)
+  /** 終了の時刻（端末の時計の上での値）。BE の残り秒数を受け取った時刻に足して求める。 */
+  const deadlineMs = ref<number | null>(null)
   const clock = ref(Date.now())
   let timer: ReturnType<typeof setInterval> | null = null
 
   function remainingMs(): number {
-    if (!grantId.value || !expiresAt.value) return 0
-    const expires = Date.parse(expiresAt.value)
-    return Number.isFinite(expires) ? Math.max(0, expires - Date.now()) : 0
+    if (!grantId.value || deadlineMs.value === null) return 0
+    return Math.max(0, deadlineMs.value - Date.now())
+  }
+
+  /** BE の残り秒数があればそれを基準に、無ければ expiresAt（端末の時計との比較）で終了時刻を決める。 */
+  function resolveDeadline(session: SupportAccessSession): number | null {
+    if (typeof session.remainingSeconds === 'number' && Number.isFinite(session.remainingSeconds)) {
+      return Date.now() + Math.max(0, session.remainingSeconds) * 1000
+    }
+    const expires = Date.parse(session.expiresAt)
+    return Number.isFinite(expires) ? expires : null
   }
 
   /** 有効な閲覧中か（期限切れは false）。 */
@@ -77,6 +108,7 @@ export const useSupportAccessStore = defineStore('supportAccess', () => {
     targetUserId.value = null
     targetDisplayName.value = ''
     expiresAt.value = null
+    deadlineMs.value = null
     clearCaches({ state: true })
   }
 
@@ -93,6 +125,7 @@ export const useSupportAccessStore = defineStore('supportAccess', () => {
     targetUserId.value = session.targetUserId
     targetDisplayName.value = session.targetDisplayName
     expiresAt.value = session.expiresAt
+    deadlineMs.value = resolveDeadline(session)
     clock.value = Date.now()
     // 運営者本人の取得結果を本人の画面として使い回さない（useState は他の画面状態も含むため終了時だけ消す）
     clearCaches({ state: false })

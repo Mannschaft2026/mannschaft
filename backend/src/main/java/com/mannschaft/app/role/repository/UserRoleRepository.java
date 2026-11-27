@@ -515,6 +515,31 @@ public interface UserRoleRepository extends JpaRepository<UserRoleEntity, Long> 
     long existsPlatformAdminRoleByUserId(@Param("userId") Long userId);
 
     /**
+     * 指定ユーザーが、いまテナントに所属している（または本人の申請で所属待ちにある）種類の数（0 なら所属なし）。
+     * アカウントの状態（停止中・退会待ち）を問わない。運営アカウントのテナント所属禁止の照合用
+     * （F10.9 サポート閲覧の SUPPORT_ACCESS_010・戦役 Z-A PR2 の点検 SQL
+     * {@code platform_account_affiliation/inspection.sql} の「本人が持つ行」と同じ条件）。
+     * 他人が作った招待・移管の申し出（本人の操作でない所属待ち）は数えない（第三者の操作で運営の業務を止めさせない）。
+     * 公式村の作成者としての村長所属は唯一の例外として数えない
+     * （{@code PlatformAccountAffiliationPolicy.isOfficialVillageCreatorHeadman} と対応。変えるときは両方同時に直す）。
+     */
+    @Query(value = "SELECT "
+            + "(SELECT EXISTS(SELECT 1 FROM memberships m WHERE m.user_id = :userId AND m.left_at IS NULL)) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM user_roles ur WHERE ur.user_id = :userId "
+            + "   AND (ur.team_id IS NOT NULL OR ur.organization_id IS NOT NULL))) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM committee_members cm WHERE cm.user_id = :userId AND cm.left_at IS NULL)) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM village_memberships vm WHERE vm.subject_type = 'USER' AND vm.subject_id = :userId "
+            + "   AND vm.left_at IS NULL AND NOT EXISTS (SELECT 1 FROM villages v WHERE v.id = vm.village_id "
+            + "   AND v.type = 'OFFICIAL' AND v.created_by_user_id = vm.subject_id AND vm.role = 'HEADMAN'))) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM supporter_applications s WHERE s.user_id = :userId AND s.status = 'PENDING')) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM join_requests j WHERE j.requester_user_id = :userId AND j.status = 'PENDING')) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM village_join_requests vj WHERE vj.subject_type = 'USER' AND vj.subject_id = :userId "
+            + "   AND vj.status = 'PENDING')) "
+            + "+ (SELECT EXISTS(SELECT 1 FROM follows f WHERE f.follower_type = 'USER' AND f.follower_id = :userId))",
+            nativeQuery = true)
+    long countTenantAffiliationKindsByUserId(@Param("userId") Long userId);
+
+    /**
      * プラットフォームレベルの SYSTEM_ADMIN 総数を取得する（退会ブロック判定用）。
      */
     @Query(value = "SELECT COUNT(DISTINCT ur.user_id) FROM user_roles ur " +

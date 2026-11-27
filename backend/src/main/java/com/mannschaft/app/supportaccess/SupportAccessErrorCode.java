@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 /**
- * F10.9 サポート閲覧（本人承認制の代理ログイン）のエラーコード（SUPPORT_ACCESS_001〜014）。
+ * F10.9 サポート閲覧（本人承認制の代理ログイン）のエラーコード（SUPPORT_ACCESS_001〜015）。
  *
  * <p>HTTP ステータスは {@code GlobalExceptionHandler.ERROR_CODE_STATUS_MAP} に登録する。
  * 旧 ADMIN_007/008（管理者変身）は本コードへ置き換えて廃番にする。</p>
@@ -54,7 +54,10 @@ public enum SupportAccessErrorCode implements ErrorCode {
     REAUTH_FAILED("SUPPORT_ACCESS_013", "本人確認（再認証）に失敗しました", Severity.WARN),
 
     /** 許可の検証または閲覧記録の保存に失敗した。記録できない閲覧は許さない（fail-closed）（503） */
-    UNAVAILABLE("SUPPORT_ACCESS_014", "サポート閲覧を現在利用できません（記録の保存に失敗しました）", Severity.WARN);
+    UNAVAILABLE("SUPPORT_ACCESS_014", "サポート閲覧を現在利用できません（記録の保存に失敗しました）", Severity.WARN),
+
+    /** 後見切替・代理入力の最中は、許可・拒否・取消を行えない（本人の意思表示を代わりに行わせない）（403） */
+    ACTING_AS_FORBIDDEN("SUPPORT_ACCESS_015", "後見切替・代理入力の最中はサポート閲覧の許可・拒否・取消を行えません", Severity.WARN);
 
     private final String code;
     private final String message;

@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -191,16 +192,98 @@ class SupportAccessComponentsTest {
     }
 
     @Test
-    @DisplayName("S11 遷移の監査は actor=運営者・target=本人・metadata に grantId で書く")
+    @DisplayName("S11 監査 outbox の反映は actor=運営者・target=本人・metadata に grantId と auditOutboxId を入れ、反映後に確定する")
     void S11_遷移監査のactorは運営者() {
         AuditLogService auditLogService = mock(AuditLogService.class);
-        new SupportAccessAuditRecorder(auditLogService)
-                .record(SupportAccessAuditAction.SESSION_STARTED, OPERATOR_ID, TARGET_ID, GRANT_ID);
+        com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore store =
+                mock(com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore.class);
+        UUID outboxId = UUID.randomUUID();
+        given(store.leaseForGrant(GRANT_ID)).willReturn(List.of(
+                new com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore.PendingAudit(
+                        outboxId, GRANT_ID, "SUPPORT_ACCESS_SESSION_STARTED", OPERATOR_ID, TARGET_ID, NOW, 1)));
+
+        int published = new SupportAccessAuditRecorder(auditLogService, store).relayForGrant(GRANT_ID);
 
         ArgumentCaptor<String> metadata = ArgumentCaptor.forClass(String.class);
-        verify(auditLogService).recordSync(eq("SUPPORT_ACCESS_SESSION_STARTED"), eq(OPERATOR_ID), eq(TARGET_ID),
-                any(), any(), any(), any(), any(), metadata.capture());
-        assertThat(metadata.getValue()).contains(GRANT_ID.toString());
+        verify(auditLogService).recordStrict(eq("SUPPORT_ACCESS_SESSION_STARTED"), eq(OPERATOR_ID), eq(TARGET_ID),
+                metadata.capture());
+        assertThat(metadata.getValue()).contains(GRANT_ID.toString()).contains(outboxId.toString());
+        verify(store).markPublished(outboxId);
+        assertThat(published).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("S11 audit_logs への反映に失敗したら握りつぶさず outbox に失敗を記録し、確定しない（再試行バッチが拾う）")
+    void S11_反映失敗はoutboxに残る() {
+        AuditLogService auditLogService = mock(AuditLogService.class);
+        com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore store =
+                mock(com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore.class);
+        UUID outboxId = UUID.randomUUID();
+        given(store.leaseDue(anyInt())).willReturn(List.of(
+                new com.mannschaft.app.supportaccess.service.SupportAccessAuditOutboxStore.PendingAudit(
+                        outboxId, GRANT_ID, "SUPPORT_ACCESS_REVOKED", OPERATOR_ID, TARGET_ID, NOW, 1)));
+        org.mockito.Mockito.doThrow(new IllegalStateException("audit_logs down"))
+                .when(auditLogService).recordStrict(any(), any(), any(), any());
+
+        int published = new SupportAccessAuditRecorder(auditLogService, store).relayDue();
+
+        assertThat(published).isZero();
+        verify(store).markFailed(eq(outboxId), org.mockito.ArgumentMatchers.contains("audit_logs down"));
+        verify(store, org.mockito.Mockito.never()).markPublished(any());
+    }
+
+    @Test
+    @DisplayName("S11 監査の書込口（AuditLogStrictWriter）は REQUIRES_NEW・書込可能な接続で、失敗を例外で返す（握りつぶさない）")
+    void S11_厳格な監査の書込口() throws Exception {
+        Method write = com.mannschaft.app.auth.service.AuditLogStrictWriter.class
+                .getMethod("write", com.mannschaft.app.auth.entity.AuditLogEntity.class);
+        assertThat(write.getAnnotation(Transactional.class).propagation())
+                .isEqualTo(org.springframework.transaction.annotation.Propagation.REQUIRES_NEW);
+        assertThat(org.springframework.core.annotation.AnnotatedElementUtils.hasAnnotation(com.mannschaft.app.auth.service.AuditLogStrictWriter.class,
+                com.mannschaft.app.supportaccess.context.SupportAccessWritable.class)).isTrue();
+
+        com.mannschaft.app.auth.repository.AuditLogRepository repo =
+                mock(com.mannschaft.app.auth.repository.AuditLogRepository.class);
+        given(repo.saveAndFlush(any())).willThrow(new IllegalStateException("insert failed"));
+        AuditLogService service = new AuditLogService(repo,
+                mock(com.mannschaft.app.auth.service.AuditLogQueryService.class),
+                new com.mannschaft.app.auth.service.AuditLogStrictWriter(repo));
+        assertThatThrownBy(() -> service.recordStrict("SUPPORT_ACCESS_REVOKED", OPERATOR_ID, TARGET_ID, "{}"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("S11 代理中に recordSync を業務 TX から呼んでも、READ ONLY の業務接続に参加せず独立した書込可能な TX で書く")
+    void S11_代理中のrecordSyncは独立TX() {
+        com.mannschaft.app.auth.repository.AuditLogRepository repo =
+                mock(com.mannschaft.app.auth.repository.AuditLogRepository.class);
+        com.mannschaft.app.auth.service.AuditLogStrictWriter writer = mock(com.mannschaft.app.auth.service.AuditLogStrictWriter.class);
+        AuditLogService service = new AuditLogService(repo,
+                mock(com.mannschaft.app.auth.service.AuditLogQueryService.class), writer);
+        SupportAccessContextHolder.set(CONTEXT);
+        try {
+            service.recordSync("POINT_CARD_VIEWED", TARGET_ID, null, null, null, null, null, null, null);
+        } finally {
+            SupportAccessContextHolder.clear();
+        }
+        verify(writer).write(any());
+        verify(repo, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    @DisplayName("S10 巨大な数字のスコープ ID は 503 にせずスコープ不明として記録する")
+    void S10_巨大なスコープIDはスコープ不明() {
+        SupportAccessLogRepository repo = mock(SupportAccessLogRepository.class);
+        given(repo.save(any(SupportAccessLogEntity.class))).willAnswer(inv -> inv.getArgument(0));
+
+        new SupportAccessLogRecorder(repo, Clock.fixed(NOW, ZoneOffset.UTC))
+                .recordView(CONTEXT, "GET", "/api/v1/teams/99999999999999999999999/schedules");
+
+        ArgumentCaptor<SupportAccessLogEntity> captor = ArgumentCaptor.forClass(SupportAccessLogEntity.class);
+        verify(repo).save(captor.capture());
+        assertThat(captor.getValue().getScopeType()).isNull();
+        assertThat(captor.getValue().getScopeId()).isNull();
+        assertThat(captor.getValue().getRequestPath()).isEqualTo("/api/v1/teams/99999999999999999999999/schedules");
     }
 
     @Test
@@ -240,14 +323,15 @@ class SupportAccessComponentsTest {
 
         ArgumentCaptor<com.mannschaft.app.auth.entity.AuditLogEntity> captor =
                 ArgumentCaptor.forClass(com.mannschaft.app.auth.entity.AuditLogEntity.class);
-        verify(auditLogRepository).save(captor.capture());
+        verify(auditLogRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getUserId()).isEqualTo(OPERATOR_ID);
         assertThat(captor.getValue().getTargetUserId()).isEqualTo(TARGET_ID);
         assertThat(captor.getValue().getMetadata()).contains(GRANT_ID.toString()).contains("cardId");
     }
 
     private static AuditLogService newAuditLogService(com.mannschaft.app.auth.repository.AuditLogRepository repo) {
-        return new AuditLogService(repo, mock(com.mannschaft.app.auth.service.AuditLogQueryService.class));
+        return new AuditLogService(repo, mock(com.mannschaft.app.auth.service.AuditLogQueryService.class),
+                new com.mannschaft.app.auth.service.AuditLogStrictWriter(repo));
     }
 
     // ─── 通知（S12） ────────────────────────────────────────
@@ -308,7 +392,9 @@ class SupportAccessComponentsTest {
         com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory directory =
                 mock(com.mannschaft.app.supportaccess.port.SupportAccessUserDirectory.class);
         when(directory.findUser(any())).thenReturn(java.util.Optional.empty());
-        return new SupportAccessNotificationListener(runner, localeCache, messageSource, grantRepository, directory);
+        when(directory.findDeliverableEmail(any())).thenReturn(java.util.Optional.empty());
+        return new SupportAccessNotificationListener(runner, localeCache, messageSource, grantRepository, directory,
+                mock(com.mannschaft.app.mail.outbox.EmailOutboxService.class));
     }
 
     private static java.util.List<String> sentTo(NotificationDeliveryRunner runner) {
@@ -336,11 +422,17 @@ class SupportAccessComponentsTest {
         SupportAccessGrantRepository grants = mock(SupportAccessGrantRepository.class);
         SupportAccessLogRepository logs = mock(SupportAccessLogRepository.class);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        SupportAccessRetentionService retention = new SupportAccessRetentionService(grants, logs, clock);
+        com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository outbox =
+                mock(com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository.class);
+        SupportAccessRetentionService retention = new SupportAccessRetentionService(grants, logs, outbox, clock);
         retention.purgeUser(TARGET_ID);
         var order = inOrder(logs, grants);
         order.verify(logs).deleteByTargetUserId(TARGET_ID);
         order.verify(grants).deleteByTargetUserId(TARGET_ID);
+        // 保護者としてだけ残る行は保護者の userId を外し、本人宛の監査 outbox・運営者の依頼ロックも消す
+        verify(grants).clearGuardianUserId(TARGET_ID);
+        verify(grants).deleteRequestLock(TARGET_ID);
+        verify(outbox).deleteByTargetUserId(TARGET_ID);
 
         SupportAccessRetentionService mockedRetention = mock(SupportAccessRetentionService.class);
         AccountPurgeCompletionService completion = mock(AccountPurgeCompletionService.class);
@@ -356,7 +448,9 @@ class SupportAccessComponentsTest {
         SupportAccessLogRepository logs = mock(SupportAccessLogRepository.class);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
-        new SupportAccessRetentionService(grants, logs, clock).purgeExpiredRecords();
+        new SupportAccessRetentionService(grants, logs,
+                mock(com.mannschaft.app.supportaccess.repository.SupportAccessAuditOutboxRepository.class), clock)
+                .purgeExpiredRecords();
 
         verify(logs).deleteByOccurredAtBefore(NOW.atZone(ZoneOffset.UTC).minusYears(1).toInstant());
         @SuppressWarnings("unchecked")
@@ -380,7 +474,8 @@ class SupportAccessComponentsTest {
         given(directory.findUser(OPERATOR_ID))
                 .willReturn(Optional.of(new SupportAccessUserSnapshot(OPERATOR_ID, "運営担当", "ACTIVE", false, true)));
 
-        List<SupportAccessLogView> views = new SupportAccessPersonalDataService(logs, directory).listLogsForTarget(TARGET_ID);
+        List<SupportAccessLogView> views = new SupportAccessPersonalDataService(logs,
+                mock(SupportAccessGrantRepository.class), directory).listLogsForTarget(TARGET_ID);
 
         assertThat(views).singleElement().satisfies(v -> {
             assertThat(v.occurredAt()).isEqualTo(NOW);

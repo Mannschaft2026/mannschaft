@@ -7,6 +7,7 @@ import com.mannschaft.app.notification.NotificationMapper;
 import com.mannschaft.app.notification.NotificationType;
 import com.mannschaft.app.notification.dto.NotificationResponse;
 import com.mannschaft.app.notification.entity.NotificationEntity;
+import com.mannschaft.app.notification.MandatoryNotificationTypes;
 import com.mannschaft.app.notification.entity.NotificationPreferenceEntity;
 import com.mannschaft.app.notification.entity.NotificationTypePreferenceEntity;
 import com.mannschaft.app.notification.entity.PushSubscriptionEntity;
@@ -101,7 +102,7 @@ public class NotificationDispatchService {
             return;
         }
 
-        // 確認通知（CONFIRMABLE_NOTIFICATION*）は強制配信のため opt-out チェックをスキップ
+        // 確認通知（CONFIRMABLE_NOTIFICATION*）・サポート閲覧の本人通知は強制配信のため opt-out チェックをスキップ
         if (isConfirmableNotification(notification.getNotificationType())) {
             log.debug("確認通知は強制配信（opt-out スキップ）: userId={}, type={}",
                     userId, notification.getNotificationType());
@@ -294,12 +295,12 @@ public class NotificationDispatchService {
     }
 
     /**
-     * 確認通知種別かどうかを判定する（opt-out 無視の強制配信対象）。
-     * CONFIRMABLE_NOTIFICATION / CONFIRMABLE_NOTIFICATION_REMINDER_1 / CONFIRMABLE_NOTIFICATION_REMINDER_2
-     * のすべてに対応するよう前方一致で判定する。
+     * opt-out を無視して強制配信する種別かどうかを判定する（{@link MandatoryNotificationTypes}）。
+     * 確認通知（CONFIRMABLE_NOTIFICATION / _REMINDER_1 / _REMINDER_2 の前方一致）と、
+     * F10.9 サポート閲覧の本人・保護者への通知（依頼・閲覧開始。安全上必須）が対象。
      */
     private boolean isConfirmableNotification(String notificationType) {
-        return notificationType != null && notificationType.startsWith("CONFIRMABLE_NOTIFICATION");
+        return MandatoryNotificationTypes.isMandatory(notificationType);
     }
 
     /**

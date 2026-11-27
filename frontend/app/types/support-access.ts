@@ -34,6 +34,18 @@ export type SupportAccessApproveRequest = Schemas['SupportAccessApproveRequest']
 /** 閲覧記録（運営者は表示名だけ）。 */
 export type SupportAccessLog = Schemas['SupportAccessLogView']
 
+/**
+ * 生成型は全項目が optional（OpenAPI の required 指定が無い）。操作（許可・拒否・取消・開始・撤回）には grant ID が要るため、
+ * 画面は API の境界で {@link hasGrantId} で ID のある行だけを受け取り、以後は ID を必須として扱う
+ * （非 null 断言で黙らせない）。ID の無い行は操作できないので一覧に出さない。
+ */
+export type WithGrantId<T extends { id?: string }> = T & { id: string }
+
+/** grant ID のある行か（型の絞り込み）。 */
+export function hasGrantId<T extends { id?: string }>(grant: T): grant is WithGrantId<T> {
+  return typeof grant.id === 'string' && grant.id.length > 0
+}
+
 export interface SupportAccessCursorPage<T> {
   data: T[]
   meta: { nextCursor: string | null; hasNext: boolean; limit: number }

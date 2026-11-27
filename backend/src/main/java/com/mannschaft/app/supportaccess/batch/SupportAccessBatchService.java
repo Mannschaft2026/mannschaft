@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
- * F10.9 サポート閲覧の定期バッチ（失効の確定と保存期間の物理削除）。
+ * F10.9 サポート閲覧の定期バッチ（失効の確定・退会の取りこぼしの照合・監査の再反映・保存期間の物理削除）。
  *
  * <p>期限の判定自体は {@code SupportAccessGrantValidator} が時刻で即時に行うため、失効バッチは
  * 状態表示（EXPIRED）と監査を確定させる後追いであり、止まっても代理閲覧が延命されることはない。</p>
@@ -35,6 +35,23 @@ public class SupportAccessBatchService {
         int count = grantService.expireOverdue();
         if (count > 0) {
             log.info("[SupportAccessBatch] 期限切れを EXPIRED に更新: {}件", count);
+        }
+        // 退会リスナー（非同期・AFTER_COMMIT）が失敗・停止しても、退会手続中の本人の grant をここで必ず取り消す
+        int revoked = grantService.reconcileWithdrawnTargets();
+        if (revoked > 0) {
+            log.warn("[SupportAccessBatch] 退会リスナーの取りこぼしを照合して取消: {}件", revoked);
+        }
+    }
+
+    @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
+            reason = "遷移・拒否の監査 outbox のうち audit_logs へ反映できなかった行を再試行する。停止すると運営の代理閲覧の監査が audit_logs に現れない")
+    @BatchEndpoint(name = "supportaccess-audit-relay", description = "audit_logs へ反映できていないサポート閲覧の監査（outbox）を5分ごとに再反映する")
+    @Scheduled(cron = "30 */5 * * * *", zone = "Asia/Tokyo")
+    @SchedulerLock(name = "supportAccessAuditRelay", lockAtMostFor = "PT15M", lockAtLeastFor = "PT30S")
+    public void relayPendingAudits() {
+        int count = grantService.relayPendingAudits();
+        if (count > 0) {
+            log.info("[SupportAccessBatch] 未反映の監査を audit_logs へ反映: {}件", count);
         }
     }
 
