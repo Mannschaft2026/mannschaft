@@ -77,6 +77,7 @@ public class MembershipInviteService {
     private final AuditLogService auditLogService;
     private final InviteScopeStateService scopeStates;
     private final InviteIssuerPolicy inviteIssuerPolicy;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * DM 相手を指定スコープへ招待する（宛先付きトークン発行 ＋ 招待カード投稿）。
@@ -108,6 +109,9 @@ public class MembershipInviteService {
         if (!canIssue(actorUserId, scopeId, scopeType)) {
             throw scopeAdminForbidden(scopeType);
         }
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は発行時点で拒否する（戦役 Z-A PR2）。
+        // 宛先の判定は認可の後に置く（認可の無い者へ、宛先が運営アカウントかどうかを漏らさない）。
+        platformAccountAffiliationPolicy.assertAffiliatable(targetUserId);
         var scope = scopeStates.requireAvailable(scopeType, scopeId);
 
         // 6. 【既メンバー】宛先が既に scope メンバーなら発行不可（409）。

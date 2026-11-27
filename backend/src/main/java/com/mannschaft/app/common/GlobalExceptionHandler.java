@@ -2357,6 +2357,8 @@ public class GlobalExceptionHandler {
             Map.entry("MEMBERSHIP_POSITION_ACTIVE_EXISTS", HttpStatus.CONFLICT),
             Map.entry("MEMBERSHIP_POSITION_NOT_FOUND", HttpStatus.NOT_FOUND),
             Map.entry("MEMBERSHIP_POSITION_CATALOG_NOT_FOUND", HttpStatus.NOT_FOUND),
+            // 戦役 Z-A PR2: 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない。
+            Map.entry("MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN", HttpStatus.FORBIDDEN),
 
             // 認可監査 Wave6 ロットE: 備品管理（EquipmentErrorCode）の残り未登録分。
             // EQUIPMENT_009（SCOPE_MISMATCH）は廃止。他備品の貸出記録は不在と同一の EQUIPMENT_002 で返す（CMP-260821-1027）。

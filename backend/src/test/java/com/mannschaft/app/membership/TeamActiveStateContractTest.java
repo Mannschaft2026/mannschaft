@@ -18,6 +18,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class TeamActiveStateContractTest {
     @Mock private TeamRepository teams;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private TeamService service;
     @Test
     void nullと空入力は照会しない() {

@@ -57,8 +57,8 @@ const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:8080'
 
 const USER_EMAIL = process.env.TEST_USER_EMAIL ?? 'e2e-user@test.mannschaft.local'
 const USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? 'TestPass2026!'
-const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? 'e2e-admin@test.mannschaft.local'
-const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'TestPass2026!'
+const ADMIN_EMAIL = process.env.TEST_OPERATOR_EMAIL ?? 'e2e-operator@test.mannschaft.local'
+const ADMIN_PASSWORD = process.env.TEST_OPERATOR_PASSWORD ?? 'TestPass2026!'
 
 // #3・#4 は既存 seed データを再利用（別 worktree 足軽作業で投入済み・shared BE:8080 に現存）
 const ORG_SLUG_PUBLIC_POST = 'org-000001'

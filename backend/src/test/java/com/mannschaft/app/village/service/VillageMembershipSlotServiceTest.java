@@ -40,7 +40,7 @@ class VillageMembershipSlotServiceTest {
     @org.junit.jupiter.api.BeforeEach
     void wireDefaultLimit() {
         service = new VillageMembershipSlotService(admissionLockRepository, membershipRepository,
-                new VillageParticipationLimitProvider(null));
+                new VillageParticipationLimitProvider(null), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
     }
 
     @Test
@@ -196,7 +196,7 @@ class VillageMembershipSlotServiceTest {
     void loweredLimitBlocksOnlyNewAdmissions() {
         int lowered = VillageParticipationLimits.DEFAULT_HARD_LIMIT - 1;
         VillageMembershipSlotService loweredService = new VillageMembershipSlotService(
-                admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(lowered));
+                admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(lowered), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(lowered))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(lowered - 1));
@@ -213,7 +213,7 @@ class VillageMembershipSlotServiceTest {
     void raisedLimitAllocatesBeyondDefault() {
         VillageMembershipSlotService raisedService = new VillageMembershipSlotService(
                 admissionLockRepository, membershipRepository,
-                new VillageParticipationLimitProvider(VillageParticipationLimits.DB_SLOT_CEILING));
+                new VillageParticipationLimitProvider(VillageParticipationLimits.DB_SLOT_CEILING), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(VillageParticipationLimits.DEFAULT_HARD_LIMIT));
         assertThat(raisedService.allocate(USER_ID)).isEqualTo(new VillageMembershipSlotService.Allocation(

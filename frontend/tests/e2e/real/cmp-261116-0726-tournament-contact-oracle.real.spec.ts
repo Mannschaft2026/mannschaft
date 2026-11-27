@@ -41,7 +41,7 @@ const EVID = process.env.EVIDENCE_DIR || path.resolve('test-results', 'cmp0726-e
 mkdirSync(EVID, { recursive: true })
 const LOG = path.join(EVID, 'responses.jsonl')
 const ABSENT = 999999990 // 存在しない ID（大会・スレッド・返信・添付・フォルダ・ファイル共通）
-const SYS = { email: process.env.TEST_ADMIN_EMAIL ?? 'e2e-admin@test.mannschaft.local', password: process.env.TEST_ADMIN_PASSWORD ?? 'TestPass2026!' }
+const SYS = { email: process.env.TEST_OPERATOR_EMAIL ?? 'e2e-operator@test.mannschaft.local', password: process.env.TEST_OPERATOR_PASSWORD ?? 'TestPass2026!' }
 
 interface World {
   orgAdmin: Actor; orgMember: Actor; pAdmin: Actor; pMember: Actor; wAdmin: Actor; outsider: Actor; foreignAdmin: Actor

@@ -67,6 +67,9 @@ class MembershipGrantServiceTest {
     @Mock
     private InviteTokenRepository inviteTokenRepository;
 
+    @org.mockito.Mock
+    private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
+
     @InjectMocks
     private MembershipGrantService service;
 

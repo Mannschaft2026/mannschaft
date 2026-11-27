@@ -57,6 +57,7 @@ class OrganizationSlugServiceTest {
     @Mock private MembershipService membershipService;
     @Mock private MediaUrlResolver mediaUrlResolver;
     @Mock private DuplicateNameGuardService duplicateNameGuardService;
+    @org.mockito.Mock com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private OrganizationService organizationService;
 
     private void givenCreateScaffold(String name) {

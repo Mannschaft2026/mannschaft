@@ -57,6 +57,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 組織管理サービス（ファサード）。
@@ -85,6 +86,7 @@ public class OrganizationService {
     private final DuplicateNameGuardService duplicateNameGuardService;
     private final OrgTeamGroupRepository orgTeamGroupRepository;
     private final java.time.Clock clock;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /**
      * 組織 ID 群の表示名とアイコン URL をまとめて返す（SQL 1 本・CMP-261103-1225 の N+1 解消用）。
@@ -115,6 +117,8 @@ public class OrganizationService {
     @Transactional
     // TODO: OrganizationドメインとAuthドメイン・Roleドメインをまたいでいる。将来はOrganizationCreatedEventで分離予定
     public ApiResponse<OrganizationResponse> createOrganization(Long userId, CreateOrganizationRequest req) {
+        // 運営アカウント（SYSTEM_ADMIN）は組織を作って所属（ADMIN）できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
         OrganizationEntity.OrgType orgType = parseOrgType(req.getOrgType());
 
         // CMP-260901-1538 柱③-A: 組織名の重複は一律ブロックせず、同名候補があれば

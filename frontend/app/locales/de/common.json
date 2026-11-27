@@ -436,6 +436,7 @@
     "notFound": "Nicht gefunden",
     "TEAM_001": "Das Team wurde nicht gefunden.",
     "TEAM_006": "Dieses Team kann nicht wiederhergestellt werden, da es nicht gelöscht wurde.",
+    "MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN": "Betreiberkonten können keinem Team, keiner Organisation, keinem Komitee und keinem Dorf beitreten und ihnen auch nicht folgen oder sie unterstützen.",
     "COMMON_001": "Die Eingaben sind fehlerhaft",
     "COMMON_002": "Sie haben keine Berechtigung für diese Aktion",
     "COMMON_003": "Von einem anderen Benutzer aktualisiert. Bitte aktualisieren Sie die Seite",

@@ -77,7 +77,7 @@ async function loginAsLocal(
  *   6. villages/[id]/calendar                  — 村メンバー限定。非所属村は403
  *
  * アカウント（用途ごとにロールをAPIで実測済み。docs/task-list.md系の申し送りに従う）:
- *   - e2e-admin@test.mannschaft.local / TestPass2026! : systemRole=SYSTEM_ADMIN (id=24)
+ *   - e2e-operator@test.mannschaft.local / TestPass2026! : systemRole=SYSTEM_ADMIN (id=24)
  *   - e2e-user@test.mannschaft.local  / TestPass2026! : systemRole=null (MEMBER, id=23)
  *
  * villages/[id]/admin/recruit-categories・villages/[id]/calendar は「他村」の観点を兼ねる
@@ -94,7 +94,7 @@ async function loginAsLocal(
 
 test.describe.configure({ mode: 'serial' })
 
-const ADMIN_CREDS = { email: 'e2e-admin@test.mannschaft.local', password: 'TestPass2026!' }
+const ADMIN_CREDS = { email: 'e2e-operator@test.mannschaft.local', password: 'TestPass2026!' }
 const MEMBER_CREDS = { email: 'e2e-user@test.mannschaft.local', password: 'TestPass2026!' }
 
 // e2e-user (MEMBER) が HEADMAN の村（正の視点用）

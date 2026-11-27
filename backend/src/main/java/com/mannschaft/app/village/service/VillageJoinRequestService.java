@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * F17.1 Phase 1 B6 — 村参加申請 Service（APPROVAL 村のみ）。
@@ -71,6 +72,7 @@ public class VillageJoinRequestService {
     private final VillageMembershipSlotService slotService;
     private final EntityManager entityManager;
     private final VillageAccessGate accessGate;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================================================
     // 4.4.4 申請作成
@@ -93,6 +95,8 @@ public class VillageJoinRequestService {
         if (actorUserId == null) {
             throw new BusinessException(CommonErrorCode.COMMON_000);
         }
+        // 運営アカウント（SYSTEM_ADMIN）の参加申請は作成時点で拒否する（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
 
         VillageEntity village = accessGate.loadActiveVillage(
                 villageId, actorUserId, VillageSubjectAuthorization.actorIsSystemAdmin(authorization, actorUserId));

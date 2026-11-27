@@ -6,7 +6,7 @@
  * 対象操作（選択・％入力・送信）はすべて画面の要素で行う。DB への直接投入は行わない。
  *
  * ロール:
- *   - 権限あり        : e2e-admin@test.mannschaft.local（SYSTEM_ADMIN）
+ *   - 権限あり        : e2e-operator@test.mannschaft.local（SYSTEM_ADMIN）
  *   - 権限なし        : e2e-user@test.mannschaft.local（一般。組織 e2e の ADMIN でもある）
  *   - 他テナント ADMIN: e2e-dummy-1@test.mannschaft.local（チーム fc-u-18 の ADMIN）
  *
@@ -44,7 +44,7 @@ const TAX_API = `${BE}/api/v1/system-admin/billing/tax-codes`
 const PLANS_API = `${BE}/api/v1/system-admin/billing/plans`
 const FEATURES_API = `${BE}/api/v1/system-admin/billing/features`
 
-const ADMIN = { email: 'e2e-admin@test.mannschaft.local', password: 'TestPass2026!' }
+const ADMIN = { email: 'e2e-operator@test.mannschaft.local', password: 'TestPass2026!' }
 const USER = { email: 'e2e-user@test.mannschaft.local', password: 'TestPass2026!' }
 const OTHER_TENANT_ADMIN = { email: 'e2e-dummy-1@test.mannschaft.local', password: 'TestPass2026!' }
 

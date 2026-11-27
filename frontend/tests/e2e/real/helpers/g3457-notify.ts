@@ -47,8 +47,8 @@ export const OUTSIDER: Cred = {
 }
 /** SYSTEM_ADMIN。 */
 export const SYSADMIN: Cred = {
-  email: process.env.TEST_ADMIN_EMAIL ?? 'e2e-admin@test.mannschaft.local',
-  password: process.env.TEST_ADMIN_PASSWORD ?? 'TestPass2026!',
+  email: process.env.TEST_OPERATOR_EMAIL ?? 'e2e-operator@test.mannschaft.local',
+  password: process.env.TEST_OPERATOR_PASSWORD ?? 'TestPass2026!',
   label: 'SYSTEM_ADMIN',
 }
 

@@ -95,8 +95,8 @@ class VillageMembershipServiceTest {
 
     @BeforeEach
     void wireRealAdmissionSlots() {
-        VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null));
-        service = new VillageMembershipService(membershipRepository, slots, accessGate);
+        VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+        service = new VillageMembershipService(membershipRepository, slots, accessGate, org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
         guard = new VillageSubjectAuthorizationGuard(accessControlService, membershipRepository);
     }
 

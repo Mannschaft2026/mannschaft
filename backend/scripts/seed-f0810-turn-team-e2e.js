@@ -15,7 +15,7 @@
  *   会員:   f0810-turn-recorder@test.mannschaft.local（ADMIN・記録者）
  *           f0810-shogi-player1..2@test.mannschaft.local（対局者・将棋）
  *           f0810-go-player1..2@test.mannschaft.local（対局者・囲碁）
- *           e2e-admin（既存 SYSTEM_ADMIN）も両チーム ADMIN を付与
+ *           e2e-admin（既存の個人アカウント。SYSTEM_ADMIN は持たない）も両チーム ADMIN を付与
  *
  * 投入内容:
  *   - 既存組織（f0810-multisport-club）にチーム 2（将棋/囲碁）を追加

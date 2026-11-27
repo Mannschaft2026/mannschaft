@@ -27,6 +27,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
+import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 
 /**
  * F17.1 Phase 1 B3 — 村メンバーシップ管理 Service。
@@ -63,6 +65,7 @@ public class VillageMembershipService {
     private final VillageMembershipRepository membershipRepository;
     private final VillageMembershipSlotService slotService;
     private final VillageAccessGate accessGate;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================================================
     // 4.3.1 参加
@@ -80,6 +83,8 @@ public class VillageMembershipService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public MembershipResponse join(UUID villageId, Long actorUserId, MembershipJoinRequest request,
                                    VillageSubjectAuthorization authorization) {
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
         VillageEntity village = accessGate.loadActiveVillage(
                 villageId, actorUserId, VillageSubjectAuthorization.actorIsSystemAdmin(authorization, actorUserId));
 
@@ -255,6 +260,13 @@ public class VillageMembershipService {
                 .orElseThrow(() -> new BusinessException(VillageErrorCode.NOT_MEMBER));
         if (!target.getVillageId().equals(villageId) || target.getLeftAt() != null) {
             throw new BusinessException(VillageErrorCode.NOT_MEMBER);
+        }
+
+        // 運営アカウント（SYSTEM_ADMIN）の所属は公式村の作成者としての村長だけが例外（戦役 Z-A PR2）。
+        // 村長以外のロール（VILLAGER/ELDER）へ変えると例外の範囲外の所属が残るため、自己・他者からの変更とも拒否する。
+        if (target.getSubjectType() == VillageSubjectType.USER && request.role() != VillageRole.HEADMAN
+                && platformAccountAffiliationPolicy.isPlatformAccount(target.getSubjectId())) {
+            throw new BusinessException(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
         }
 
         // 自身を HEADMAN から降格する場合、他に現役 HEADMAN/ELDER が居ることを必須

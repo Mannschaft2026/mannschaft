@@ -436,6 +436,7 @@
     "notFound": "No se ha encontrado",
     "TEAM_001": "No se ha encontrado el equipo.",
     "TEAM_006": "Este equipo no se puede restaurar porque no se ha eliminado.",
+    "MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN": "Las cuentas de operador no pueden unirse a equipos, organizaciones, comités ni aldeas, ni seguirlos o apoyarlos.",
     "COMMON_001": "Hay errores en los datos ingresados",
     "COMMON_002": "No tiene permiso para realizar esta acción",
     "COMMON_003": "Actualizado por otro usuario. Por favor, actualice la página",

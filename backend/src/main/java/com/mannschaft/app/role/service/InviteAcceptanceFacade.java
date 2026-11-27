@@ -82,6 +82,7 @@ public class InviteAcceptanceFacade {
     private final MembershipGrantService membershipGrantService;
     private final AuditLogService auditLogService;
     private final SecretTokenVault vault;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /** 招待トークンで参加する（後方互換版。folderId=null と等価）。 */
     public void joinByInvite(String token, Long userId) {
@@ -96,6 +97,9 @@ public class InviteAcceptanceFacade {
      * 検出して現行どおり参加せずエラーを返す。事前確認の後に起きた配置の失敗は部分成功（クラス javadoc 参照）。</p>
      */
     public void joinByInvite(String token, Long userId, Long folderId) {
+        // 運営アカウント（SYSTEM_ADMIN）は招待リンクでも所属できない（戦役 Z-A PR2）。トークンに触れる前に拒否する
+        // （accept 内の判定は、ID 指定の承諾・保留承認と共通の最終防衛線）。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
         accept(new InviteLocator.ByTokenHash(vault.hash(token)), userId, folderId);
     }
 
@@ -132,6 +136,8 @@ public class InviteAcceptanceFacade {
         if (userRowLockService.lock(userId) != UserRowLockService.UserState.ACTIVE) {
             throw new BusinessException(RoleErrorCode.ROLE_002);
         }
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。使用回数を確保する前に拒否する。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
 
         // T2〜T3
         Optional<InviteScopeRef> scope = writer.inspectScope(locator);
@@ -206,6 +212,9 @@ public class InviteAcceptanceFacade {
         if (userRowLockService.lock(userId) != UserRowLockService.UserState.ACTIVE) {
             throw new BusinessException(RoleErrorCode.ROLE_002);
         }
+        // 運営アカウント（SYSTEM_ADMIN）はテナントに所属できない（戦役 Z-A PR2）。共有リンクの受諾もここで拒否する。
+        // 使用回数の確保（claim）より前なので、拒否しても招待は消費されない。
+        platformAccountAffiliationPolicy.assertAffiliatable(userId);
 
         // T2〜T5: 他ドメインの読み取りは結果だけを受け取る。招待が無ければ飛ばす（claim が ROLE_002 を投げる）。
         Optional<InviteScopeRef> scope = writer.inspectScope(locator);

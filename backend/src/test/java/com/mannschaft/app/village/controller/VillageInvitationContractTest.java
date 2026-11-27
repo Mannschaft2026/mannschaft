@@ -117,12 +117,14 @@ class VillageInvitationContractTest {
                 Mockito.mock(com.mannschaft.app.common.AccessControlService.class));
         var admissionLocks = Mockito.mock(com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository.class);
         var slots = new com.mannschaft.app.village.service.VillageMembershipSlotService(admissionLocks, membershipRepository,
-                new com.mannschaft.app.village.service.VillageParticipationLimitProvider(null));
+                new com.mannschaft.app.village.service.VillageParticipationLimitProvider(null),
+                Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
         VillageInvitationService real = new VillageInvitationService(
                 invitationRepository, membershipRepository, slots, Mockito.mock(jakarta.persistence.EntityManager.class), gate,
                 // 金庫は状態を持たない共通部品なので実物を渡す（モックだとトークンが null になる）。
                 new com.mannschaft.app.common.token.SecretTokenVault(),
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC(),
+                Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
 
         // モックのサービスに実物を委譲させる（写経ではなく実ロジックを HTTP まで通す）。
         lenient().doAnswer(inv -> real.accept(inv.getArgument(0), inv.getArgument(1)))

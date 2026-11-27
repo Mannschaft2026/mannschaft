@@ -32,6 +32,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 村作成申請サービス（F17.1 Phase 1 B5）。
@@ -59,6 +60,7 @@ public class VillageCreationRequestService {
     private final VillageMembershipSlotService slotService;
     private final EntityManager entityManager;
     private final AccessControlService accessControlService;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ------------------------------------------------------------------
     // 申請者向け
@@ -76,6 +78,14 @@ public class VillageCreationRequestService {
                                                         VillageCreationRequestCreateRequest req) {
         if (requesterUserId == null) {
             throw new BusinessException(CommonErrorCode.COMMON_000);
+        }
+        // 運営アカウント（SYSTEM_ADMIN）は村を作って村長（所属）になれない（戦役 Z-A PR2）。
+        // 唯一の例外: 公式村（OFFICIAL）の作成者としての村長所属（マスター決定 2026-11-26）。
+        // 例外はこの作成時の所属だけで、通常村の作成・他経路の所属は引き続き 403。
+        boolean officialVillage = req.type() == VillageType.OFFICIAL;
+        // 公式村は入村時に admitOfficialVillageCreator が村の種別・作成者・村長を確認する（非運営の申請は下で拒否）。
+        if (!officialVillage) {
+            platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
         }
 
         // 一般ユーザーは OFFICIAL を申請できない
@@ -116,7 +126,9 @@ public class VillageCreationRequestService {
         if (!slotService.lockUser(requesterUserId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
-        Short userSlot = slotService.allocate(requesterUserId).slot();
+        Short userSlot = (officialVillage
+                ? slotService.allocateForOfficialVillageCreator(requesterUserId)
+                : slotService.allocate(requesterUserId)).slot();
 
         VillageCreationRequestEntity entity = VillageCreationRequestEntity.builder()
                 .requesterUserId(requesterUserId)
@@ -137,7 +149,7 @@ public class VillageCreationRequestService {
                 .slug(saved.getProposedSlug())
                 .name(saved.getProposedName())
                 .description(saved.getPurpose())
-                .type(VillageType.COMMUNITY)
+                .type(officialVillage ? VillageType.OFFICIAL : VillageType.COMMUNITY)
                 .joinPolicy(com.mannschaft.app.village.entity.enums.VillageJoinPolicy.FREE)
                 .visibility(com.mannschaft.app.village.entity.enums.VillageVisibility.PUBLIC)
                 .category(saved.getProposedCategory())
@@ -155,7 +167,11 @@ public class VillageCreationRequestService {
                 .userSlot(userSlot)
                 .role(VillageRole.HEADMAN)
                 .build();
-        slotService.admit(membership);
+        if (officialVillage) {
+            slotService.admitOfficialVillageCreator(membership, savedVillage);
+        } else {
+            slotService.admit(membership);
+        }
 
         // 申請を APPROVED に更新
         saved.setStatus(VillageRequestStatus.APPROVED);
@@ -207,6 +223,8 @@ public class VillageCreationRequestService {
         if (!slotService.lockUser(requesterUserId)) {
             throw new BusinessException(CommonErrorCode.COMMON_002);
         }
+        // 申請者が運営アカウント（SYSTEM_ADMIN）なら承認しても村長行を作れない（戦役 Z-A PR2）。
+        platformAccountAffiliationPolicy.assertAffiliatable(requesterUserId);
         VillageCreationRequestEntity request = loadRequestForUpdate(requestId);
         if (!requesterUserId.equals(request.getRequesterUserId())) {
             throw new IllegalStateException("村作成申請の申請者が変更されています");

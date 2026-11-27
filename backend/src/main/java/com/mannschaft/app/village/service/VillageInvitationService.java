@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 
 /**
  * 村招待サービス。非公開(UNLISTED)村の<b>存在秘匿を破らない入村導線</b>を提供する。
@@ -72,6 +73,7 @@ public class VillageInvitationService {
 
     /** 期限判定の基準時刻。テストで固定できるよう注入する（内部で now() を呼ばない）。 */
     private final java.time.Clock clock;
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ======================================================================
     // 発行 / 一覧 / 失効（村長・長老のみ）
@@ -84,6 +86,11 @@ public class VillageInvitationService {
         // 非公開村に非メンバーが触れた場合、ゲートが 404 に畳む（403 を返すと存在が漏れる）。
         villageAccessGate.loadActiveVillage(villageId, actorUserId);
         VillageMembershipEntity actor = requireHeadmanOrElder(villageId, actorUserId);
+        // 運営アカウント（SYSTEM_ADMIN）宛ての招待は発行時点で拒否する（戦役 Z-A PR2）。宛先の判定は村長・長老の
+        // 認可の後に置く（運営アカウントの実在を村人以外へ漏らさない）。宛先なしの共有招待は受諾時に拒否する。
+        if (request.targetUserId() != null) {
+            platformAccountAffiliationPolicy.assertAffiliatable(request.targetUserId());
+        }
 
         IssuedToken issued = secretTokenVault.issueBase64Url();
         VillageInvitationEntity invitation = new VillageInvitationEntity();
@@ -164,6 +171,8 @@ public class VillageInvitationService {
         if (token == null || token.isBlank()) {
             throw foldToAbsent();
         }
+        // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。招待の使用回数・入村ロックの前に拒否する。
+        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
         if (!slotService.lockUser(actorUserId)) {
             throw foldToAbsent();
         }
