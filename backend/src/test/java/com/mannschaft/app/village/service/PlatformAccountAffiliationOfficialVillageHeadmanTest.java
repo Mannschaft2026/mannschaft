@@ -237,10 +237,10 @@ class PlatformAccountAffiliationOfficialVillageHeadmanTest {
     @DisplayName("admitOfficialVillageCreator は村の種別・作成者の不一致を自前で拒否する")
     void admitは村の種別と作成者を自前で確認する() {
         VillageMembershipSlotService slots = new VillageMembershipSlotService(
-                null, membershipRepository, new VillageParticipationLimitProvider(null), policy);
+                null, membershipRepository, new VillageParticipationLimitProvider(null));
         VillageMembershipEntity m = membership(PLATFORM_USER_ID, VillageRole.HEADMAN);
-        assertPlatformForbidden(() -> slots.admitOfficialVillageCreator(m, village(VillageType.COMMUNITY, PLATFORM_USER_ID)));
-        assertPlatformForbidden(() -> slots.admitOfficialVillageCreator(m, village(VillageType.OFFICIAL, OTHER_HEADMAN_ID)));
+        assertPlatformForbidden(() -> PlatformAccountAffiliationPolicy.callJudged(policy.judge(java.util.List.of(PLATFORM_USER_ID)), () -> slots.admitOfficialVillageCreator(m, village(VillageType.COMMUNITY, PLATFORM_USER_ID))));
+        assertPlatformForbidden(() -> PlatformAccountAffiliationPolicy.callJudged(policy.judge(java.util.List.of(PLATFORM_USER_ID)), () -> slots.admitOfficialVillageCreator(m, village(VillageType.OFFICIAL, OTHER_HEADMAN_ID))));
         verify(membershipRepository, never()).save(any());
     }
 }

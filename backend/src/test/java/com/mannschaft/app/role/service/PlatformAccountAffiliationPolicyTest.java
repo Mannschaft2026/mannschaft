@@ -124,4 +124,79 @@ class PlatformAccountAffiliationPolicyTest {
         assertThat(ctors).hasSize(1);
         assertThat(Arrays.asList(ctors[0].getParameterTypes())).containsExactly(UserRoleRepository.class);
     }
+
+    // ------------------------------------------------------------------
+    // 判定は取引の外・拒否は取引の中（D-3T 根治。他ドメインの取引から user_roles を読まない）
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("D-3T: judge で取引の外に判定し、callJudged の範囲では assertJudgedAffiliatable が DB を読まずに運営アカウントを 403 にする")
+    void 取引の外の判定結果で取引の中が拒否する() {
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
+        PlatformAccountAffiliationPolicy.Verdicts verdicts =
+                policy.judge(java.util.List.of(PLATFORM_USER_ID, GENERAL_USER_ID));
+
+        PlatformAccountAffiliationPolicy.runJudged(verdicts, () -> {
+            assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(PLATFORM_USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+            assertThatCode(() -> PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(GENERAL_USER_ID))
+                    .doesNotThrowAnyException();
+            assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(PLATFORM_USER_ID)).isTrue();
+            assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(GENERAL_USER_ID)).isFalse();
+        });
+        // 判定は judge の 1 回だけ（取引の中の確認は DB を読まない）。
+        org.mockito.Mockito.verify(userRoleRepository).existsPlatformAdminRoleByUserId(PLATFORM_USER_ID);
+        org.mockito.Mockito.verify(userRoleRepository).existsPlatformAdminRoleByUserId(GENERAL_USER_ID);
+    }
+
+    @Test
+    @DisplayName("D-3T: 判定結果が無い（範囲外・判定していない利用者・null の判定結果）ときは素通りさせず IllegalStateException")
+    void 判定漏れは素通りさせない() {
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(GENERAL_USER_ID))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(GENERAL_USER_ID))
+                .isInstanceOf(IllegalStateException.class);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
+        PlatformAccountAffiliationPolicy.runJudged(policy.judge(java.util.List.of(GENERAL_USER_ID)), () ->
+                assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(PLATFORM_USER_ID))
+                        .isInstanceOf(IllegalStateException.class));
+        PlatformAccountAffiliationPolicy.runJudged(null, () ->
+                assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(GENERAL_USER_ID))
+                        .isInstanceOf(IllegalStateException.class));
+    }
+
+    @Test
+    @DisplayName("D-3T: 範囲は入れ子で足し合わせ、抜ければ外側へ戻り、例外で抜けても残らない")
+    void 範囲は入れ子で戻る() {
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(PLATFORM_USER_ID)).willReturn(1L);
+        given(userRoleRepository.existsPlatformAdminRoleByUserId(GENERAL_USER_ID)).willReturn(0L);
+        PlatformAccountAffiliationPolicy.runJudged(policy.judge(java.util.List.of(GENERAL_USER_ID)), () -> {
+            PlatformAccountAffiliationPolicy.runJudged(policy.judge(java.util.List.of(PLATFORM_USER_ID)), () -> {
+                assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(GENERAL_USER_ID)).isFalse();
+                assertThat(PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(PLATFORM_USER_ID)).isTrue();
+            });
+            assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(PLATFORM_USER_ID))
+                    .isInstanceOf(IllegalStateException.class);
+        });
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.callJudged(
+                policy.judge(java.util.List.of(PLATFORM_USER_ID)), () -> {
+                    throw new IllegalArgumentException("work failed");
+                })).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(PLATFORM_USER_ID))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("D-3T: 公式村の作成者の例外は取引内版でも判定結果を見ずに通し、それ以外は判定結果で拒否する")
+    void 公式村の例外の取引内版() {
+        assertThatCode(() -> PlatformAccountAffiliationPolicy.assertJudgedAffiliatableAsOfficialVillageCreator(
+                PLATFORM_USER_ID, true, PLATFORM_USER_ID, true)).doesNotThrowAnyException();
+        PlatformAccountAffiliationPolicy.runJudged(PlatformAccountJudgedFixture.platform(PLATFORM_USER_ID), () ->
+                assertThatThrownBy(() -> PlatformAccountAffiliationPolicy
+                        .assertJudgedAffiliatableAsOfficialVillageCreator(PLATFORM_USER_ID, true, PLATFORM_USER_ID, false))
+                        .isInstanceOf(BusinessException.class));
+    }
 }

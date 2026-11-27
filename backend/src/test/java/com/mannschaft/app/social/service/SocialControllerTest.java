@@ -39,6 +39,7 @@ class SocialControllerTest {
 
     // FollowController
     @Mock private FollowService followService;
+    @Mock private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @InjectMocks private FollowController followController;
 
     // SocialProfileController

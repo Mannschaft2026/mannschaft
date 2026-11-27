@@ -1,5 +1,6 @@
 package com.mannschaft.app.village.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
@@ -48,6 +49,8 @@ import java.util.UUID;
 public class VillageCreationRequestController {
 
     private final VillageCreationRequestService service;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（村の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     private final AccessControlService accessControlService;
 
     // ------------------------------------------------------------------
@@ -67,7 +70,9 @@ public class VillageCreationRequestController {
     public ResponseEntity<ApiResponse<VillageCreationRequestResponse>> create(
             @Valid @RequestBody VillageCreationRequestCreateRequest request) {
         Long userId = SecurityUtils.getCurrentUserId();
-        VillageCreationRequestResponse response = service.createRequest(userId, request);
+        VillageCreationRequestResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(List.of(userId)),
+                () -> service.createRequest(userId, request));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 
@@ -103,7 +108,10 @@ public class VillageCreationRequestController {
             @Valid @RequestBody(required = false) VillageCreationRequestReviewRequest review) {
         Long reviewerId = SecurityUtils.getCurrentUserId();
         accessControlService.checkSystemAdmin(reviewerId);
-        VillageCreationRequestResponse response = service.approve(id, reviewerId, review);
+        // 申請者を取引の外で判定する（拒否は承認の取引の中の従来の位置で投げる）。
+        VillageCreationRequestResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(service.findRequesterUserId(id).stream().toList()),
+                () -> service.approve(id, reviewerId, review));
         return ResponseEntity.ok(ApiResponse.of(response));
     }
 

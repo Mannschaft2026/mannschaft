@@ -1,5 +1,7 @@
 package com.mannschaft.app.village.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.village.VillageErrorCode;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
@@ -40,14 +42,14 @@ class VillageMembershipSlotServiceTest {
     @org.junit.jupiter.api.BeforeEach
     void wireDefaultLimit() {
         service = new VillageMembershipSlotService(admissionLockRepository, membershipRepository,
-                new VillageParticipationLimitProvider(null), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+                new VillageParticipationLimitProvider(null));
     }
 
     @Test
     @DisplayName("0枠ならslot1・保存後1件を返す")
     void emptyStartsAtOne() {
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID)).thenReturn(List.of());
-        assertThat(service.allocate(USER_ID)).isEqualTo(new VillageMembershipSlotService.Allocation((short) 1, 1));
+        assertThat(judged(general(USER_ID), () -> service.allocate(USER_ID))).isEqualTo(new VillageMembershipSlotService.Allocation((short) 1, 1));
     }
 
     @Test
@@ -55,7 +57,7 @@ class VillageMembershipSlotServiceTest {
     void picksSmallestHole() {
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID)).thenReturn(List.of(
                 VillageMembershipSlotTestFixture.slot((short) 1), VillageMembershipSlotTestFixture.slot((short) 3)));
-        assertThat(service.allocate(USER_ID)).isEqualTo(new VillageMembershipSlotService.Allocation((short) 2, 3));
+        assertThat(judged(general(USER_ID), () -> service.allocate(USER_ID))).isEqualTo(new VillageMembershipSlotService.Allocation((short) 2, 3));
         verify(membershipRepository).findAdmissionSlotsForUpdate(USER_ID);
     }
 
@@ -63,7 +65,7 @@ class VillageMembershipSlotServiceTest {
     @DisplayName("既定上限-1枠から既定上限枠目へ進める")
     void hundredthSlotIsAvailable() {
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID)).thenReturn(VillageMembershipSlotTestFixture.occupied(VillageParticipationLimits.DEFAULT_HARD_LIMIT - 1));
-        assertThat(service.allocate(USER_ID)).isEqualTo(
+        assertThat(judged(general(USER_ID), () -> service.allocate(USER_ID))).isEqualTo(
                 new VillageMembershipSlotService.Allocation((short) VillageParticipationLimits.DEFAULT_HARD_LIMIT, VillageParticipationLimits.DEFAULT_HARD_LIMIT));
     }
 
@@ -72,7 +74,7 @@ class VillageMembershipSlotServiceTest {
     @DisplayName("NULL・0・DB天井+1・重複slotは上限エラーへ隠さず不変条件違反にする")
     void refusesInvalidProjection(List<VillageMembershipRepository.AdmissionSlotRow> rows) {
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID)).thenReturn(rows);
-        assertThatThrownBy(() -> service.allocate(USER_ID)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.allocate(USER_ID))).isInstanceOf(IllegalStateException.class);
     }
 
     static Stream<List<VillageMembershipRepository.AdmissionSlotRow>> invalidRows() {
@@ -112,7 +114,7 @@ class VillageMembershipSlotServiceTest {
         doThrow(new DataIntegrityViolationException("could not execute statement",
                 new java.sql.SQLIntegrityConstraintViolationException(message)))
                 .when(membershipRepository).flush();
-        assertThatThrownBy(() -> service.admit(entity))
+        assertThatThrownBy(() -> judged(general(entity.getSubjectId()), () -> service.admit(entity)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(expected));
     }
@@ -125,7 +127,7 @@ class VillageMembershipSlotServiceTest {
         doThrow(new org.springframework.jdbc.UncategorizedSQLException("flush", "INSERT",
                 new java.sql.SQLException("Check constraint 'ck_vm_active_user_slot' is violated.", "HY000", 3819)))
                 .when(membershipRepository).flush();
-        assertThatThrownBy(() -> service.admit(entity))
+        assertThatThrownBy(() -> judged(general(entity.getSubjectId()), () -> service.admit(entity)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(VillageErrorCode.PARTICIPATION_LIMIT_EXCEEDED));
     }
@@ -137,7 +139,7 @@ class VillageMembershipSlotServiceTest {
         when(membershipRepository.save(entity)).thenReturn(entity);
         DataIntegrityViolationException unrelated = new DataIntegrityViolationException("fk_vm_village");
         doThrow(unrelated).when(membershipRepository).flush();
-        assertThatThrownBy(() -> service.admit(entity)).isSameAs(unrelated);
+        assertThatThrownBy(() -> judged(general(entity.getSubjectId()), () -> service.admit(entity))).isSameAs(unrelated);
     }
 
     @Test
@@ -145,7 +147,7 @@ class VillageMembershipSlotServiceTest {
     void admitFlushesImmediately() {
         VillageMembershipEntity entity = VillageMembershipEntity.builder().build();
         when(membershipRepository.save(entity)).thenReturn(entity);
-        assertThat(service.admit(entity)).isSameAs(entity);
+        assertThat(judged(general(entity.getSubjectId()), () -> service.admit(entity))).isSameAs(entity);
         verify(membershipRepository).flush();
     }
 
@@ -180,7 +182,7 @@ class VillageMembershipSlotServiceTest {
     void rejectsAtDefaultLimitWithCurrentValue() {
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(VillageParticipationLimits.DEFAULT_HARD_LIMIT));
-        assertThatThrownBy(() -> service.allocate(USER_ID))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> service.allocate(USER_ID)))
                 .isInstanceOfSatisfying(BusinessException.class, error -> {
                     assertThat(error.getErrorCode()).isEqualTo(VillageErrorCode.PARTICIPATION_LIMIT_EXCEEDED);
                     assertThat(error.getMessageArgs())
@@ -196,15 +198,15 @@ class VillageMembershipSlotServiceTest {
     void loweredLimitBlocksOnlyNewAdmissions() {
         int lowered = VillageParticipationLimits.DEFAULT_HARD_LIMIT - 1;
         VillageMembershipSlotService loweredService = new VillageMembershipSlotService(
-                admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(lowered), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+                admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(lowered));
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(lowered))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(lowered - 1));
 
-        assertThatThrownBy(() -> loweredService.allocate(USER_ID))
+        assertThatThrownBy(() -> judged(general(USER_ID), () -> loweredService.allocate(USER_ID)))
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getMessageArgs()).containsExactly(String.valueOf(lowered)));
-        assertThat(loweredService.allocate(USER_ID))
+        assertThat(judged(general(USER_ID), () -> loweredService.allocate(USER_ID)))
                 .isEqualTo(new VillageMembershipSlotService.Allocation((short) lowered, lowered));
     }
 
@@ -213,10 +215,10 @@ class VillageMembershipSlotServiceTest {
     void raisedLimitAllocatesBeyondDefault() {
         VillageMembershipSlotService raisedService = new VillageMembershipSlotService(
                 admissionLockRepository, membershipRepository,
-                new VillageParticipationLimitProvider(VillageParticipationLimits.DB_SLOT_CEILING), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+                new VillageParticipationLimitProvider(VillageParticipationLimits.DB_SLOT_CEILING));
         when(membershipRepository.findAdmissionSlotsForUpdate(USER_ID))
                 .thenReturn(VillageMembershipSlotTestFixture.occupied(VillageParticipationLimits.DEFAULT_HARD_LIMIT));
-        assertThat(raisedService.allocate(USER_ID)).isEqualTo(new VillageMembershipSlotService.Allocation(
+        assertThat(judged(general(USER_ID), () -> raisedService.allocate(USER_ID))).isEqualTo(new VillageMembershipSlotService.Allocation(
                 (short) (VillageParticipationLimits.DEFAULT_HARD_LIMIT + 1), VillageParticipationLimits.DEFAULT_HARD_LIMIT + 1));
     }
 }

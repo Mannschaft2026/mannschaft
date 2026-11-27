@@ -1,5 +1,6 @@
 package com.mannschaft.app.joinrequest.controller;
 
+import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
 import com.mannschaft.app.common.ApiResponse;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.security.AuthorizedInService;
@@ -47,6 +48,8 @@ public class JoinRequestController {
     private static final String ORGANIZATION = "ORGANIZATION";
 
     private final JoinRequestService service;
+    /** 運営アカウントの所属禁止の判定を取引の外で済ませる（joinrequest の取引を role へ越境させない。D-3T）。 */
+    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ------------------------------------------------------------------
     // TEAM
@@ -165,7 +168,9 @@ public class JoinRequestController {
     private ResponseEntity<ApiResponse<JoinRequestResponse>> create(
             String scopeType, Long scopeId, JoinRequestCreateRequest request) {
         Long actorUserId = SecurityUtils.getCurrentUserId();
-        JoinRequestResponse response = service.createRequest(scopeType, scopeId, actorUserId, request);
+        JoinRequestResponse response = PlatformAccountAffiliationPolicy.callJudged(
+                platformAccountAffiliationPolicy.judge(List.of(actorUserId)),
+                () -> service.createRequest(scopeType, scopeId, actorUserId, request));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
     }
 

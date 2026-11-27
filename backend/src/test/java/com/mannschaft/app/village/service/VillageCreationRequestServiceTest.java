@@ -1,5 +1,7 @@
 package com.mannschaft.app.village.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.village.repository.VillageUserAdmissionLockRepository;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.AccessControlService;
@@ -96,8 +98,8 @@ class VillageCreationRequestServiceTest {
 
     @BeforeEach
     void wireRealAdmissionSlots() {
-        VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null), org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
-        service = new VillageCreationRequestService(requestRepository, villageRepository, membershipRepository, slots, entityManager, accessControlService, org.mockito.Mockito.mock(com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy.class));
+        VillageMembershipSlotService slots = new VillageMembershipSlotService(admissionLockRepository, membershipRepository, new VillageParticipationLimitProvider(null));
+        service = new VillageCreationRequestService(requestRepository, villageRepository, membershipRepository, slots, entityManager, accessControlService);
     }
 
     @BeforeEach
@@ -130,7 +132,7 @@ class VillageCreationRequestServiceTest {
         });
         given(membershipRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
-        VillageCreationRequestResponse res = service.createRequest(REQUESTER_ID, validRequest());
+        VillageCreationRequestResponse res = judged(general(REQUESTER_ID), () -> service.createRequest(REQUESTER_ID, validRequest()));
 
         // 自動承認されるので APPROVED
         assertThat(res.status()).isEqualTo(VillageRequestStatus.APPROVED);
@@ -165,7 +167,7 @@ class VillageCreationRequestServiceTest {
         given(requestRepository.countByRequesterUserIdAndCreatedAtAfter(eq(REQUESTER_ID), any()))
                 .willReturn(3L);
 
-        assertThatThrownBy(() -> service.createRequest(REQUESTER_ID, validRequest()))
+        assertThatThrownBy(() -> judged(general(REQUESTER_ID), () -> service.createRequest(REQUESTER_ID, validRequest())))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.CREATION_REQUEST_THROTTLED);
@@ -191,7 +193,7 @@ class VillageCreationRequestServiceTest {
                 OffsetDateTime.now(ZoneOffset.UTC).minusHours(2),
                 VillageType.COMMUNITY, null);
 
-        assertThatThrownBy(() -> service.createRequest(REQUESTER_ID, req))
+        assertThatThrownBy(() -> judged(general(REQUESTER_ID), () -> service.createRequest(REQUESTER_ID, req)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.GUIDELINE_NOT_AGREED);
@@ -206,7 +208,7 @@ class VillageCreationRequestServiceTest {
         given(requestRepository.countByRequesterUserIdAndCreatedAtAfter(eq(REQUESTER_ID), any())).willReturn(0L);
         given(villageRepository.existsBySlug("casual-baseball")).willReturn(true);
 
-        assertThatThrownBy(() -> service.createRequest(REQUESTER_ID, validRequest()))
+        assertThatThrownBy(() -> judged(general(REQUESTER_ID), () -> service.createRequest(REQUESTER_ID, validRequest())))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.CREATION_REQUEST_SLUG_TAKEN);
@@ -239,8 +241,8 @@ class VillageCreationRequestServiceTest {
         given(membershipRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
         given(requestRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
-        VillageCreationRequestResponse res = service.approve(
-                requestId, ADMIN_ID, new VillageCreationRequestReviewRequest("問題なし"));
+        VillageCreationRequestResponse res = judged(general(REQUESTER_ID), () -> service.approve(
+                requestId, ADMIN_ID, new VillageCreationRequestReviewRequest("問題なし")));
 
         // 村が作成された
         ArgumentCaptor<VillageEntity> vCap = ArgumentCaptor.forClass(VillageEntity.class);
@@ -321,8 +323,8 @@ class VillageCreationRequestServiceTest {
         ReflectionTestUtils.setField(approved, "id", requestId);
         given(requestRepository.findByIdForUpdate(requestId)).willReturn(Optional.of(approved));
 
-        assertThatThrownBy(() -> service.approve(requestId, ADMIN_ID,
-                new VillageCreationRequestReviewRequest("再審査")))
+        assertThatThrownBy(() -> judged(general(REQUESTER_ID), () -> service.approve(requestId, ADMIN_ID,
+                new VillageCreationRequestReviewRequest("再審査"))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.CREATION_REQUEST_ALREADY_REVIEWED);
@@ -344,8 +346,8 @@ class VillageCreationRequestServiceTest {
         ReflectionTestUtils.setField(rejected, "id", requestId);
         given(requestRepository.findByIdForUpdate(requestId)).willReturn(Optional.of(rejected));
 
-        assertThatThrownBy(() -> service.approve(requestId, ADMIN_ID,
-                new VillageCreationRequestReviewRequest("コメ")))
+        assertThatThrownBy(() -> judged(general(REQUESTER_ID), () -> service.approve(requestId, ADMIN_ID,
+                new VillageCreationRequestReviewRequest("コメ"))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.CREATION_REQUEST_REJECTED);
@@ -415,7 +417,7 @@ class VillageCreationRequestServiceTest {
                 VillageType.OFFICIAL, null);
         given(accessControlService.isSystemAdmin(REQUESTER_ID)).willReturn(false);
 
-        assertThatThrownBy(() -> service.createRequest(REQUESTER_ID, req))
+        assertThatThrownBy(() -> judged(general(REQUESTER_ID), () -> service.createRequest(REQUESTER_ID, req)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(VillageErrorCode.OFFICIAL_VILLAGE_FORBIDDEN);

@@ -7,6 +7,10 @@
   - `assertAffiliatable(userId)`: 運営アカウントなら `MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN`（403）
   - `isPlatformAccount(userId)`: 例外を投げない判定（後継候補の選出から外す用途）
   - 依存は `UserRoleRepository` だけ。判定は `existsPlatformAdminRoleByUserId`（SYSTEM_ADMIN ロールの有無を**アカウントの状態を問わず**数える。停止中・非 ACTIVE の運営アカウントも対象。殿の決定 2026-11-26）。ACTIVE・未削除に限る既存の `existsSystemAdminByUserId` は退会ブロック等の別用途で、本禁止の判定には使わない。新しいフラグは作らない
+- **判定は取引の外、拒否は取引の中（ドメイン境界・番人 D-3T）**: 判定は role ドメインの `user_roles` を読むため、チーム・会員・組織・サポーター・ソーシャル・委員会・参加申請・村の取引の中では判定しない（他ドメインの取引を role へ越境させない。CLAUDE.md DB 設計の原則 #5）。
+  - 判定: Controller（村長引き継ぎは `VillageHeadmanSuccessionBatchScheduler`）が取引の外で `judge(userIds)` し、`PlatformAccountAffiliationPolicy.callJudged(verdicts, () -> 取引の入口)` で判定結果を同じスレッドの呼び出し範囲に置く。承認系（サポーター申請・村参加申請・村作成申請）は、取引の外で申請者を読む読み取り API（`SupporterService#findApplicantUserIds`・`VillageJoinRequestService#findAdmissionUserId`・`VillageCreationRequestService#findRequesterUserId`）で対象を決める。role ドメインの中（`RoleService`・`MembershipGrantService` から `MembershipService.join` を呼ぶところ）は自ドメインの取引で判定して置く。
+  - 拒否: 所属行を作る側は取引の中で `assertJudgedAffiliatable` / `isJudgedPlatformAccount` / `assertJudgedAffiliatableAsOfficialVillageCreator`（static。DB を読まない）を従来と同じ位置で呼ぶ。判定結果が無い経路は `IllegalStateException` で止まる（判定漏れを素通りさせない）。
+  - role ドメインの中の経路（招待・付与・移管・後継選出）は従来どおり `assertAffiliatable` / `isPlatformAccount` を直接呼ぶ。
 - 番人 G4: `PlatformAccountAffiliationPolicyGuardTest`（生成シンクを持つファイルは Policy を呼ぶ。基準線 `backend/src/test/resources/platform_account_affiliation/g4_sink_baseline.txt`、除外表 `g4_exemptions.txt`）
 - 点検 SQL: `backend/src/test/resources/platform_account_affiliation/inspection.sql`（Flyway 実スキーマで `PlatformAccountAffiliationInspectionFlywayIT` が 0 件を固定）
 
@@ -42,7 +46,7 @@
 | village | `VillageCreationRequestService.createRequest`（村長 admit。**公式村（OFFICIAL）の作成者としての村長所属だけ例外**。Policy `assertAffiliatableAsOfficialVillageCreator`・Slot `allocateForOfficialVillageCreator` / `admitOfficialVillageCreator`）・`approve`（例外なし。承認で作る村は常に通常村） | villages / village_memberships | 申請者 | VillagePaths `CreationRequests` |
 | village | `VillageMembershipSlotService.allocate`:82・`admit`:119（五入口の共通保存点） | village_memberships | 主体 USER | VillagePaths `Slot` |
 | village | `VillageMembershipProfileService.updateMyProfileVisibility`:61（save:73。既存の誤所属を延命させない） | village_memberships（更新） | 本人 | VillagePaths `Profile` |
-| village | `VillageHeadmanSuccessionBatchService.processVillage`:114（promote save:191） | village_memberships（村長昇格） | 候補（`isPlatformAccount` で除外。例外で止めず次の古参へ。尽きれば従来どおり凍結） | HeadmanSuccessionTest |
+| village | `VillageHeadmanSuccessionBatchService.processVillage`:114（promote save:191） | village_memberships（村長昇格） | 候補（Scheduler が取引の外で判定し `isJudgedPlatformAccount` で除外。例外で止めず次の古参へ。尽きれば従来どおり凍結） | HeadmanSuccessionTest |
 | social | `FollowService.follow`:45（利用者のタイムライン上の個人フォロー。マスター決定で禁止に含める） | follows（USER→チーム/組織/利用者） | 本人 | `PlatformAccountAffiliationBanFollowTest` |
 
 ## 2. 運営アカウント宛ての招待・参加申請を作る経路（P2: 作成時点で拒否）

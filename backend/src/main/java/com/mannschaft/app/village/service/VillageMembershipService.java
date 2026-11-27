@@ -84,7 +84,8 @@ public class VillageMembershipService {
     public MembershipResponse join(UUID villageId, Long actorUserId, MembershipJoinRequest request,
                                    VillageSubjectAuthorization authorization) {
         // 運営アカウント（SYSTEM_ADMIN）は村に所属できない（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
+        // 判定は VillageMembershipController が村の取引の外で済ませる（村の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(actorUserId);
         VillageEntity village = accessGate.loadActiveVillage(
                 villageId, actorUserId, VillageSubjectAuthorization.actorIsSystemAdmin(authorization, actorUserId));
 

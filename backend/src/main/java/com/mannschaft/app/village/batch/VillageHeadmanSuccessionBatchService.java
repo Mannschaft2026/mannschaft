@@ -1,12 +1,9 @@
 package com.mannschaft.app.village.batch;
 
-import com.mannschaft.app.admin.batch.BatchEndpoint;
 import com.mannschaft.app.auth.AuditEventType;
 import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.auth.service.AuditLogService;
-import com.mannschaft.app.common.backgroundgate.BackgroundFeatureMode;
-import com.mannschaft.app.common.backgroundgate.BackgroundFeaturePolicy;
 import com.mannschaft.app.village.entity.VillageEntity;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
 import com.mannschaft.app.village.entity.enums.VillageRole;
@@ -15,14 +12,8 @@ import com.mannschaft.app.village.repository.VillageMembershipRepository;
 import com.mannschaft.app.village.repository.VillageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -46,6 +37,10 @@ import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
  *       将来 {@code UserAnonymizedEvent} を購読する {@link com.mannschaft.app.village.event.VillageUserCleanerEventListener}
  *       に統合し、退会即時引き継ぎ化する候補としてマークする（TODO）。</li>
  *   <li>HEADMAN 引き継ぎ自体は village ドメイン内の閉じた更新ゆえ {@code @Transactional} は村単位に閉じる。</li>
+ *   <li>定期起動は {@link VillageHeadmanSuccessionBatchScheduler} が担い、村ごとに本クラスの
+ *       {@link #processVillage} をプロキシ経由で呼ぶ。後継候補が運営アカウントか（role ドメイン）の判定は
+ *       Scheduler が村の取引の外で済ませ、本クラスは判定結果だけを見る（戦役 Z-A PR2。村の取引を role へ
+ *       越境させない。D-3T）。</li>
  * </ul>
  */
 @Slf4j
@@ -57,53 +52,6 @@ public class VillageHeadmanSuccessionBatchService {
     private final VillageMembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final AuditLogService auditLogService;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
-
-    /**
-     * 毎日 UTC 03:00 にバッチ実行する。
-     */
-    @BackgroundFeaturePolicy(mode = BackgroundFeatureMode.ALWAYS,
-            reason = "対応する gate_key が無く停止条件を宣言できないため常時実行する。村長の自動引き継ぎであり、再開後の実行で現在の条件に応じて引き継がれる。機能単位の閉栓が要るようになった時点で gate_key の発行から検討すること")
-    @BatchEndpoint(name = "village-headman-succession-daily", description = "村長 HEADMAN の自動引き継ぎを毎日 UTC 03:00 に処理する")
-    @Scheduled(cron = "0 0 3 * * *", zone = "UTC")
-    @SchedulerLock(
-            name = "villageHeadmanSuccessionBatch",
-            lockAtLeastFor = "PT1M",
-            lockAtMostFor = "PT30M")
-    public void runBatch() {
-        log.info("村長引き継ぎバッチ開始");
-
-        int promoted = 0;
-        int archived = 0;
-        int skipped = 0;
-        int failed = 0;
-        int totalVillages = 0;
-
-        final int CHUNK_SIZE = 500;
-        Pageable pageable = PageRequest.of(0, CHUNK_SIZE);
-        Page<VillageEntity> page;
-        do {
-            page = villageRepository.findByDeletedAtIsNullAndArchivedAtIsNull(pageable);
-            for (VillageEntity village : page.getContent()) {
-                totalVillages++;
-                try {
-                    SuccessionResult result = processVillage(village.getId());
-                    switch (result) {
-                        case PROMOTED -> promoted++;
-                        case ARCHIVED -> archived++;
-                        case NOT_NEEDED -> skipped++;
-                    }
-                } catch (Exception e) {
-                    failed++;
-                    log.error("村長引き継ぎ処理失敗: villageId={}", village.getId(), e);
-                }
-            }
-            pageable = pageable.next();
-        } while (page.hasNext());
-
-        log.info("村長引き継ぎバッチ完了: 総村数={} 昇格={} 凍結={} スキップ={} 失敗={}",
-                totalVillages, promoted, archived, skipped, failed);
-    }
 
     enum SuccessionResult { PROMOTED, ARCHIVED, NOT_NEEDED }
 
@@ -205,8 +153,9 @@ public class VillageHeadmanSuccessionBatchService {
     }
 
     private boolean isPlatformUser(VillageMembershipEntity membership) {
+        // 判定は VillageHeadmanSuccessionBatchScheduler が取引の外で済ませる（判定漏れは IllegalStateException）。
         return membership.getSubjectType() == VillageSubjectType.USER
-                && platformAccountAffiliationPolicy.isPlatformAccount(membership.getSubjectId());
+                && PlatformAccountAffiliationPolicy.isJudgedPlatformAccount(membership.getSubjectId());
     }
 
     /**

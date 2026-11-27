@@ -17,6 +17,9 @@ import com.mannschaft.app.role.repository.UserRoleRepository;
 import com.mannschaft.app.role.service.AdminRoleMutationLockService;
 import com.mannschaft.app.role.service.MembershipGrantService;
 import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.platform;
 import com.mannschaft.app.supporter.repository.SupporterApplicationRepository;
 import com.mannschaft.app.supporter.service.SupporterService;
 import com.mannschaft.app.team.dto.CreateTeamRequest;
@@ -47,8 +50,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * 戦役 Z-A PR2 試練: memberships 合流点・チーム/組織の作成・参加申請・サポーター（フォロー）の
  * 経路が運営アカウントを拒否する（P1/P2/P3/P5）。
  *
- * <p>Policy は mock で「運営アカウント {@link #PLATFORM_USER_ID} なら拒否」とする。
- * 各サービスが Policy を呼ばずに保存へ進むと red になる。Policy 呼び出しは各メソッドの冒頭に置くこと。</p>
+ * <p>各サービスは取引の中で、Controller が取引の外で済ませた判定結果（{@code PlatformAccountJudgedFixture} で置く）
+ * を確かめる。運営アカウント {@link #PLATFORM_USER_ID} と判定された利用者を拒否せずに保存へ進むと red になる。
+ * 判定結果の確認は各メソッドの冒頭に置くこと（D-3T のため判定そのものは取引の外）。</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -97,22 +101,33 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         @Test
         @DisplayName("P1: 運営アカウントの MEMBER 入会は 403・memberships を作らない")
         void P1_運営アカウントのMEMBER入会を拒否する() {
-            assertPlatformForbidden(() -> service.join(joinRequest(PLATFORM_USER_ID, RoleKind.MEMBER)));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.join(joinRequest(PLATFORM_USER_ID, RoleKind.MEMBER))));
             verify(membershipRepository, never()).save(any());
         }
 
         @Test
         @DisplayName("P1: 運営アカウントの SUPPORTER 入会（フォロー）も 403・memberships を作らない")
         void P1_運営アカウントのSUPPORTER入会を拒否する() {
-            assertPlatformForbidden(() -> service.join(joinRequest(PLATFORM_USER_ID, RoleKind.SUPPORTER)));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.join(joinRequest(PLATFORM_USER_ID, RoleKind.SUPPORTER))));
             verify(membershipRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("P5: 一般利用者の入会も Policy を通る")
+        @DisplayName("P5: 一般利用者の入会も Policy の判定を通る（取引の外の判定が無ければ判定漏れとして止め、所属行を作らない）")
         void P5_一般利用者の入会もPolicyを通る() {
-            catchThrowable(() -> service.join(joinRequest(GENERAL_USER_ID, RoleKind.MEMBER)));
-            verify(policy).assertAffiliatable(GENERAL_USER_ID);
+            assertThatThrownBy(() -> service.join(joinRequest(GENERAL_USER_ID, RoleKind.MEMBER)))
+                    .isInstanceOf(IllegalStateException.class);
+            verify(membershipRepository, never()).save(any());
+
+            // 一般利用者と判定されていれば所属禁止の判定は素通りする（後段の検証で落ちても、判定漏れ・403 ではない）。
+            Throwable thrown = catchThrowable(() -> judged(general(GENERAL_USER_ID),
+                    () -> service.join(joinRequest(GENERAL_USER_ID, RoleKind.MEMBER))));
+            assertThat(thrown).isNotInstanceOf(IllegalStateException.class);
+            if (thrown instanceof BusinessException be) {
+                assertThat(be.getErrorCode()).isNotEqualTo(MembershipBasisErrorCode.MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN);
+            }
         }
     }
 
@@ -134,7 +149,8 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         @Test
         @DisplayName("P1: 運営アカウントによるチーム作成は 403・user_roles / memberships を作らない")
         void P1_運営アカウントはチームを作成できない() {
-            assertPlatformForbidden(() -> service.createTeam(PLATFORM_USER_ID, mock(CreateTeamRequest.class)));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.createTeam(PLATFORM_USER_ID, mock(CreateTeamRequest.class))));
             verify(userRoleRepository, never()).save(any());
             verifyNoInteractions(membershipService);
         }
@@ -144,8 +160,8 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         void P3_プロビジョニング作成は対象外() {
             Throwable thrown = catchThrowable(() -> service.createProvisionedTeam(
                     "販促チーム", "promo-team", PLATFORM_USER_ID, false, null));
+            // 判定結果を置かずに呼んでも例外にならない（所属禁止の判定に掛からない）。
             assertThat(thrown).isNull();
-            verify(policy, never()).assertAffiliatable(any());
         }
     }
 
@@ -167,8 +183,8 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         @Test
         @DisplayName("P1: 運営アカウントによる組織作成は 403・user_roles / memberships を作らない")
         void P1_運営アカウントは組織を作成できない() {
-            assertPlatformForbidden(() -> service.createOrganization(
-                    PLATFORM_USER_ID, mock(CreateOrganizationRequest.class)));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.createOrganization(
+                    PLATFORM_USER_ID, mock(CreateOrganizationRequest.class))));
             verify(userRoleRepository, never()).save(any());
             verifyNoInteractions(membershipService);
         }
@@ -178,8 +194,8 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         void P3_プロビジョニング作成は対象外() {
             Throwable thrown = catchThrowable(() -> service.createProvisionedOrganization(
                     "販促組織", "promo-org", PLATFORM_USER_ID, false, null));
+            // 判定結果を置かずに呼んでも例外にならない（所属禁止の判定に掛からない）。
             assertThat(thrown).isNull();
-            verify(policy, never()).assertAffiliatable(any());
         }
     }
 
@@ -199,7 +215,8 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         @Test
         @DisplayName("P2: 運営アカウントの参加申請は作成時点で 403・申請行を作らない")
         void P2_運営アカウントの参加申請は作成時点で拒否する() {
-            assertPlatformForbidden(() -> service.createRequest("TEAM", SCOPE_ID, PLATFORM_USER_ID, null));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.createRequest("TEAM", SCOPE_ID, PLATFORM_USER_ID, null)));
             verify(joinRequestRepository, never()).save(any());
             verify(joinRequestRepository, never()).saveAndFlush(any());
             verifyNoInteractions(membershipGrantService);
@@ -224,16 +241,19 @@ class PlatformAccountAffiliationBanTenantPathsTest {
         @Test
         @DisplayName("P1/P2: 運営アカウントのサポーター登録（即時承認・手動承認とも）は 403・所属行も申請行も作らない")
         void P1_運営アカウントはサポーター登録できない() {
-            assertPlatformForbidden(() -> service.follow(PLATFORM_USER_ID, "TEAM", SCOPE_ID));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.follow(PLATFORM_USER_ID, "TEAM", SCOPE_ID)));
             verify(applicationRepository, never()).save(any());
             verify(membershipService, never()).join(any());
         }
 
         @Test
-        @DisplayName("P5: 一般利用者のサポーター登録も Policy を通る")
+        @DisplayName("P5: 一般利用者のサポーター登録も Policy の判定を通る（判定が無ければ止め、所属行も申請行も作らない）")
         void P5_一般利用者のサポーター登録もPolicyを通る() {
-            catchThrowable(() -> service.follow(GENERAL_USER_ID, "ORGANIZATION", SCOPE_ID));
-            verify(policy).assertAffiliatable(GENERAL_USER_ID);
+            assertThatThrownBy(() -> service.follow(GENERAL_USER_ID, "ORGANIZATION", SCOPE_ID))
+                    .isInstanceOf(IllegalStateException.class);
+            verify(applicationRepository, never()).save(any());
+            verify(membershipService, never()).join(any());
         }
     }
 }

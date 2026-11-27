@@ -129,7 +129,6 @@ public class TeamService {
     private final AdminRoleMutationLockService adminRoleMutationLockService;
     private final DuplicateNameGuardService duplicateNameGuardService;
     private final TeamOrgLifecycleCleanupService teamOrgLifecycleCleanupService;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     /** SYSパス認可後の復元対象一覧。外部sortは破棄し、削除日時・IDの固定順だけを使う。 */
     public PagedResponse<DeletedTeamSummaryResponse> getDeletedTeamsForSystemAdmin(Pageable pageable) {
@@ -149,7 +148,8 @@ public class TeamService {
     @CacheEvict(value = "team-search", allEntries = true)
     public ApiResponse<TeamResponse> createTeam(Long userId, CreateTeamRequest req) {
         // 運営アカウント（SYSTEM_ADMIN）はチームを作って所属（ADMIN）できない（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(userId);
+        // 判定は TeamController が取引の外で済ませる（team の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(userId);
         // CMP-260901-1538 柱③-A: チーム名の重複も組織と同様、409（候補一覧＋fingerprint）で
         // 確認を求める二段方式とする（従来チーム側には重複チェック自体が存在しなかった）。
         // 検分 P1-2 是正: 「候補再計算 → 作成」の全体をアドバイザリロック保持中に実行する

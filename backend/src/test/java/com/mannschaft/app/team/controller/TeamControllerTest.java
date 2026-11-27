@@ -62,6 +62,7 @@ class TeamControllerTest {
     private static final String TEAM_SLUG = "test-team";
 
     @Mock private TeamService teamService;
+    @Mock private com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
     @Mock private com.mannschaft.app.team.service.TeamOrgSummaryService teamOrgSummaryService;
     @Mock private RoleService roleService;
     @Mock private AccessControlService accessControlService;

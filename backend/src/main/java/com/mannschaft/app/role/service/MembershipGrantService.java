@@ -21,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -274,7 +275,10 @@ public class MembershipGrantService {
         membershipReq.setRoleKind(target.roleKind());
         membershipReq.setInvitedBy(grantedBy);
         membershipReq.setSource(source);
-        membershipService.join(membershipReq);
+        // memberships の合流点は判定結果だけを見る（membership の取引を role へ越境させない。D-3T）。
+        // role の取引の中なので、ここで判定してから呼ぶ。
+        PlatformAccountAffiliationPolicy.runJudged(
+                platformAccountAffiliationPolicy.judge(List.of(userId)), () -> membershipService.join(membershipReq));
 
         if (flushAtEnd) {
             // 制約違反をこのメソッドの中で（呼び出し側のコミットを待たず）確定させる。flush は永続化コンテキスト全体に

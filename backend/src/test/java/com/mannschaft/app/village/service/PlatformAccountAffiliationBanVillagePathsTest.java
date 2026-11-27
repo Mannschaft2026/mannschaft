@@ -5,6 +5,9 @@ import com.mannschaft.app.common.token.IssuedToken;
 import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.platform;
 import com.mannschaft.app.village.dto.VillageInvitationCreateRequest;
 import com.mannschaft.app.village.entity.VillageMembershipEntity;
 import com.mannschaft.app.village.entity.enums.VillageRole;
@@ -43,7 +46,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * 戦役 Z-A PR2 試練: 村（village_memberships / 招待 / 参加申請 / 作成申請）の経路が運営アカウントを拒否する
  * （P1/P2/P5。軍議検分 Z-A (3)）。
  *
- * <p>村の主体が USER のとき、所属行の主体（= 操作者本人・宛先）を Policy に通す。
+ * <p>村の主体が USER のとき、所属行の主体（= 操作者本人・宛先）を Policy に通す。判定は Controller が村の取引の外で
+ * 済ませ（本試験では {@code PlatformAccountJudgedFixture} で判定結果を置く）、取引の中は判定結果だけを確かめる（D-3T）。
  * Policy 呼び出しはメソッドの冒頭に置くこと（招待の発行だけは、宛先の判定で運営アカウントの実在が
  * 非村人へ漏れないよう、村長・長老の認可の直後に置く）。</p>
  */
@@ -94,16 +98,17 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         @Test
         @DisplayName("P1: 運営アカウントの村参加は 403・village_memberships を作らない")
         void P1_運営アカウントは村に参加できない() {
-            assertPlatformForbidden(() -> service.join(VILLAGE_ID, PLATFORM_USER_ID, null, null));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.join(VILLAGE_ID, PLATFORM_USER_ID, null, null)));
             verify(slotService, never()).admit(any());
             verify(membershipRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("P5: 一般利用者の村参加も Policy を通る")
+        @DisplayName("P5: 一般利用者の村参加も判定を通る（取引の外の判定が無ければ判定漏れとして止め、所属行を作らない）")
         void P5_一般利用者の村参加もPolicyを通る() {
-            catchThrowable(() -> service.join(VILLAGE_ID, GENERAL_USER_ID, null, null));
-            verify(policy).assertAffiliatable(GENERAL_USER_ID);
+            assertThatThrownBy(() -> service.join(VILLAGE_ID, GENERAL_USER_ID, null, null))
+                    .isInstanceOf(IllegalStateException.class);
+            verify(slotService, never()).admit(any());
         }
     }
 
@@ -138,7 +143,7 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         @Test
         @DisplayName("P1: 運営アカウントによる村招待の受諾は 403・village_memberships を作らない")
         void P1_運営アカウントは村招待を受諾できない() {
-            assertPlatformForbidden(() -> service.accept("plain-token", PLATFORM_USER_ID));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.accept("plain-token", PLATFORM_USER_ID)));
             verify(slotService, never()).admit(any());
             verify(membershipRepository, never()).save(any());
         }
@@ -162,7 +167,7 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         @Test
         @DisplayName("P2: 運営アカウントの村参加申請は作成時点で 403・申請行を作らない")
         void P2_運営アカウントの村参加申請は作成時点で拒否する() {
-            assertPlatformForbidden(() -> service.createRequest(VILLAGE_ID, PLATFORM_USER_ID, null, null));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.createRequest(VILLAGE_ID, PLATFORM_USER_ID, null, null)));
             verify(joinRequestRepository, never()).save(any());
             verify(joinRequestRepository, never()).saveAndFlush(any());
         }
@@ -191,7 +196,7 @@ class PlatformAccountAffiliationBanVillagePathsTest {
                             "運営の村", "ops-village", null, "目的",
                             java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC),
                             com.mannschaft.app.village.entity.enums.VillageType.COMMUNITY, null);
-            assertPlatformForbidden(() -> service.createRequest(PLATFORM_USER_ID, community));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.createRequest(PLATFORM_USER_ID, community)));
             verify(requestRepository, never()).save(any());
             verify(villageRepository, never()).save(any());
             verify(slotService, never()).admit(any());
@@ -203,7 +208,7 @@ class PlatformAccountAffiliationBanVillagePathsTest {
             UUID requestId = UUID.fromString("0190bbbb-0000-7000-8000-000000000002");
             given(requestRepository.findAdmissionRequesterId(requestId)).willReturn(Optional.of(PLATFORM_USER_ID));
             given(slotService.lockUser(PLATFORM_USER_ID)).willReturn(true);
-            assertPlatformForbidden(() -> service.approve(requestId, OPERATOR_USER_ID, null));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.approve(requestId, OPERATOR_USER_ID, null)));
             verify(villageRepository, never()).save(any());
             verify(slotService, never()).admit(any());
         }
@@ -224,13 +229,13 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         @Test
         @DisplayName("P1: 運営アカウントへの入村枠の割当は 403")
         void P1_運営アカウントには入村枠を割り当てない() {
-            assertPlatformForbidden(() -> service.allocate(PLATFORM_USER_ID));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.allocate(PLATFORM_USER_ID)));
         }
 
         @Test
         @DisplayName("P1: 運営アカウントを主体とする所属行の保存（admit）は 403・保存しない")
         void P1_運営アカウントの所属行はadmitで保存しない() {
-            assertPlatformForbidden(() -> service.admit(userMembership(PLATFORM_USER_ID, VillageRole.VILLAGER)));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID), () -> service.admit(userMembership(PLATFORM_USER_ID, VillageRole.VILLAGER))));
             verify(membershipRepository, never()).save(any());
         }
 
@@ -239,8 +244,10 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         void P4_一般利用者の所属行は保存する() {
             VillageMembershipEntity m = userMembership(GENERAL_USER_ID, VillageRole.VILLAGER);
             given(membershipRepository.save(m)).willReturn(m);
-            service.admit(m);
-            verify(policy).assertAffiliatable(GENERAL_USER_ID);
+            // 取引の外の判定が無ければ判定漏れとして止め、保存しない。
+            assertThatThrownBy(() -> service.admit(m)).isInstanceOf(IllegalStateException.class);
+            verify(membershipRepository, never()).save(m);
+            judged(general(GENERAL_USER_ID), () -> service.admit(m));
             verify(membershipRepository).save(m);
         }
     }
@@ -258,7 +265,7 @@ class PlatformAccountAffiliationBanVillagePathsTest {
         @DisplayName("P1: 運営アカウントの招待受諾では招待の使用回数も入村ロックも消費しない")
         void P1_招待受諾は副作用の前に拒否する() {
             stubPlatformAccount(policy);
-            catchThrowable(() -> service.accept("plain-token", PLATFORM_USER_ID));
+            catchThrowable(() -> judged(platform(PLATFORM_USER_ID), () -> service.accept("plain-token", PLATFORM_USER_ID)));
             verifyNoInteractions(slotService);
         }
     }

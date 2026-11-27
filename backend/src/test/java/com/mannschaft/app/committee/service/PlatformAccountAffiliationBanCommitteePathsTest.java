@@ -13,6 +13,9 @@ import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.membership.domain.MembershipBasisErrorCode;
 import com.mannschaft.app.role.service.PlatformAccountAffiliationPolicy;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judging;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.platform;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -153,7 +156,8 @@ class PlatformAccountAffiliationBanCommitteePathsTest {
         void P2_運営アカウント宛ての招集は発行時点で拒否する() {
             CommitteeInviteRequest req = new CommitteeInviteRequest();
             req.setInviteeUserIds(List.of(GENERAL_USER_ID, PLATFORM_USER_ID));
-            assertPlatformForbidden(() -> service.sendInvitations(COMMITTEE_ID, req, OPERATOR_USER_ID));
+            assertPlatformForbidden(() -> judged(judging(req.getInviteeUserIds(), PLATFORM_USER_ID),
+                    () -> service.sendInvitations(COMMITTEE_ID, req, OPERATOR_USER_ID)));
             verify(committeeInvitationRepository, never()).save(any());
             verify(committeeInvitationRepository, never()).saveAll(any());
         }
@@ -165,17 +169,28 @@ class PlatformAccountAffiliationBanCommitteePathsTest {
                     .requireCommitteeRole(COMMITTEE_ID, GENERAL_USER_ID, CommitteeRole.CHAIR, CommitteeRole.VICE_CHAIR);
             CommitteeInviteRequest req = new CommitteeInviteRequest();
             req.setInviteeUserIds(List.of(PLATFORM_USER_ID));
-            assertThatThrownBy(() -> service.sendInvitations(COMMITTEE_ID, req, GENERAL_USER_ID))
+            // 判定結果は「運営アカウント」でも、拒否は認可の後に置くので認可エラーが先に返る。
+            assertThatThrownBy(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.sendInvitations(COMMITTEE_ID, req, GENERAL_USER_ID)))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(CommonErrorCode.COMMON_002);
-            verify(policy, never()).assertAffiliatable(any());
+            verify(committeeInvitationRepository, never()).save(any());
         }
 
         @Test
         @DisplayName("P1: 運営アカウントによる招集の受諾は 403・委員行を作らない")
         void P1_運営アカウントは招集を受諾できない() {
-            assertPlatformForbidden(() -> service.acceptInvitation("plain-token", PLATFORM_USER_ID));
+            assertPlatformForbidden(() -> judged(platform(PLATFORM_USER_ID),
+                    () -> service.acceptInvitation("plain-token", PLATFORM_USER_ID)));
+            verify(committeeMemberRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("D-3T: 取引の外の判定が無いまま受諾に来たら判定漏れとして止め、委員行を作らない")
+        void 判定漏れの受諾は止まる() {
+            assertThatThrownBy(() -> service.acceptInvitation("plain-token", GENERAL_USER_ID))
+                    .isInstanceOf(IllegalStateException.class);
             verify(committeeMemberRepository, never()).save(any());
         }
     }

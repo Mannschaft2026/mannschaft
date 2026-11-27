@@ -987,7 +987,10 @@ public class RoleService {
         req.setRoleKind(RoleKind.MEMBER);
         req.setInvitedBy(invitedBy);
         req.setSource(source);
-        membershipService.join(req);
+        // memberships の合流点は判定結果だけを見る（membership の取引を role へ越境させない。D-3T）。
+        // role の取引の中なので、ここで判定してから呼ぶ。
+        PlatformAccountAffiliationPolicy.runJudged(
+                platformAccountAffiliationPolicy.judge(List.of(userId)), () -> membershipService.join(req));
     }
 
     /**

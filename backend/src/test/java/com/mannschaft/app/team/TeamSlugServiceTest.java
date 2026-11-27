@@ -1,5 +1,7 @@
 package com.mannschaft.app.team;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -109,7 +111,7 @@ class TeamSlugServiceTest {
 
             CreateTeamRequest req = new CreateTeamRequest("テストチーム", null, null, null, null, null, null, "my-team", false, null);
 
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             assertThat(result.getData().getSlug()).isEqualTo("my-team");
         }
@@ -119,7 +121,7 @@ class TeamSlugServiceTest {
         void 形式不正() {
             CreateTeamRequest req = new CreateTeamRequest("テストチーム", null, null, null, null, null, null, "Bad_Slug", false, null);
 
-            assertThatThrownBy(() -> service.createTeam(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createTeam(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("TEAM_060"));
@@ -130,7 +132,7 @@ class TeamSlugServiceTest {
         void 予約語() {
             CreateTeamRequest req = new CreateTeamRequest("テストチーム", null, null, null, null, null, null, "admin", false, null);
 
-            assertThatThrownBy(() -> service.createTeam(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createTeam(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("TEAM_061"));
@@ -143,7 +145,7 @@ class TeamSlugServiceTest {
 
             CreateTeamRequest req = new CreateTeamRequest("テストチーム", null, null, null, null, null, null, "taken-slug", false, null);
 
-            assertThatThrownBy(() -> service.createTeam(USER_ID, req))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> service.createTeam(USER_ID, req)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                             .isEqualTo("TEAM_062"));
@@ -163,7 +165,7 @@ class TeamSlugServiceTest {
 
             CreateTeamRequest req = new CreateTeamRequest("My Club", null, null, null, null, null, null, null, false, null);
 
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             assertThat(result.getData().getSlug()).isEqualTo("my-club");
         }
@@ -176,7 +178,7 @@ class TeamSlugServiceTest {
 
             CreateTeamRequest req = new CreateTeamRequest("My Club", null, null, null, null, null, null, "  ", false, null);
 
-            ApiResponse<TeamResponse> result = service.createTeam(USER_ID, req);
+            ApiResponse<TeamResponse> result = judged(general(USER_ID), () -> service.createTeam(USER_ID, req));
 
             assertThat(result.getData().getSlug()).isEqualTo("my-club");
         }

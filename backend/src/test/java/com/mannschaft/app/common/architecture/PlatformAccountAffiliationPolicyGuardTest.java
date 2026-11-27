@@ -63,8 +63,13 @@ class PlatformAccountAffiliationPolicyGuardTest {
                     + "|\\b(?:membershipRepository|userRoleRepository|committeeMemberRepository)"
                     + "\\s*\\.\\s*(?:save|saveAndFlush|saveAll)\\s*\\(");
 
-    /** Policy の判定呼び出し。 */
-    static final Pattern POLICY_CALL = Pattern.compile("\\.\\s*(?:assertAffiliatable|assertAffiliatableAsOfficialVillageCreator|isPlatformAccount)\\s*\\(");
+    /**
+     * Policy の判定呼び出し。role ドメインの中で直接判定する形（{@code assertAffiliatable} 等）と、他ドメインの取引の中で
+     * 取引の外の判定結果を確かめる形（{@code assertJudgedAffiliatable} 等。D-3T のため判定は取引の外で済ませる）の両方。
+     */
+    static final Pattern POLICY_CALL = Pattern.compile("\\.\\s*(?:assertAffiliatable|assertAffiliatableAsOfficialVillageCreator"
+            + "|isPlatformAccount|assertJudgedAffiliatable|assertJudgedAffiliatableAsOfficialVillageCreator"
+            + "|isJudgedPlatformAccount)\\s*\\(");
 
     /** Policy 本体（判定を定義する側。走査対象から外す）。 */
     private static final String POLICY_SELF = "com/mannschaft/app/role/service/PlatformAccountAffiliationPolicy.java";
@@ -188,7 +193,8 @@ class PlatformAccountAffiliationPolicyGuardTest {
             "com/mannschaft/app/village/service/VillageMembershipProfileService.java");
 
     private static final Pattern OFFICIAL_VILLAGE_EXCEPTION_CALL = Pattern.compile(
-            "\\b(?:assertAffiliatableAsOfficialVillageCreator|isOfficialVillageCreatorHeadman)\\b");
+            "\\b(?:assertAffiliatableAsOfficialVillageCreator|assertJudgedAffiliatableAsOfficialVillageCreator"
+                    + "|isOfficialVillageCreatorHeadman)\\b");
 
     @Test
     @DisplayName("P6: 公式村の作成者の例外メソッドを使うクラスは 2 クラスに限る（例外の拡散防止）")
@@ -237,6 +243,16 @@ class PlatformAccountAffiliationPolicyGuardTest {
                 """;
         assertThat(countSinks(guarded)).isEqualTo(3);
         assertThat(callsPolicy(guarded)).as("Policy を通る経路は許す").isTrue();
+
+        String judgedOutsideTx = """
+                class X {
+                  void join(Long uid) {
+                    PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(uid);
+                    membershipRepository.save(MembershipEntity.builder().userId(uid).build());
+                  }
+                }
+                """;
+        assertThat(callsPolicy(judgedOutsideTx)).as("取引の外の判定結果を確かめる経路も Policy を通るとみなす").isTrue();
 
         String commentOnly = """
                 class X {

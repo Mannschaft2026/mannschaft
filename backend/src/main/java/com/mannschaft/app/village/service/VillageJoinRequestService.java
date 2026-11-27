@@ -72,7 +72,6 @@ public class VillageJoinRequestService {
     private final VillageMembershipSlotService slotService;
     private final EntityManager entityManager;
     private final VillageAccessGate accessGate;
-    private final PlatformAccountAffiliationPolicy platformAccountAffiliationPolicy;
 
     // ========================================================================
     // 4.4.4 申請作成
@@ -96,7 +95,8 @@ public class VillageJoinRequestService {
             throw new BusinessException(CommonErrorCode.COMMON_000);
         }
         // 運営アカウント（SYSTEM_ADMIN）の参加申請は作成時点で拒否する（戦役 Z-A PR2）。
-        platformAccountAffiliationPolicy.assertAffiliatable(actorUserId);
+        // 判定は VillageJoinRequestController が村の取引の外で済ませる（村の取引を role へ越境させない。D-3T）。
+        PlatformAccountAffiliationPolicy.assertJudgedAffiliatable(actorUserId);
 
         VillageEntity village = accessGate.loadActiveVillage(
                 villageId, actorUserId, VillageSubjectAuthorization.actorIsSystemAdmin(authorization, actorUserId));
@@ -233,6 +233,18 @@ public class VillageJoinRequestService {
     // ========================================================================
     // 4.4.4 承認
     // ========================================================================
+
+    /**
+     * 承認で入村する USER 名義の主体のユーザー ID（TEAM / ORGANIZATION 名義・申請が無ければ空）。入村主体は申請の
+     * 作成後に変わらない。{@code VillageJoinRequestController} が承認の取引の外で運営アカウントの判定に使う
+     * （戦役 Z-A PR2・D-3T）。応答には出さない（存在秘匿に影響しない）。
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Long> findAdmissionUserId(UUID villageId, UUID requestId) {
+        return joinRequestRepository.findAdmissionSubject(villageId, requestId)
+                .filter(subject -> subject.getSubjectType() == VillageSubjectType.USER)
+                .map(subject -> subject.getSubjectId());
+    }
 
     /**
      * 参加申請を承認する。

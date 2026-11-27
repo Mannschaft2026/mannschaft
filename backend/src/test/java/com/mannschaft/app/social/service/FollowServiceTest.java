@@ -1,5 +1,7 @@
 package com.mannschaft.app.social.service;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.social.FollowerType;
 import com.mannschaft.app.social.SocialErrorCode;
@@ -71,7 +73,7 @@ class FollowServiceTest {
             given(socialMapper.toFollowResponse(any(FollowEntity.class))).willReturn(expected);
 
             // when
-            FollowResponse result = followService.follow("USER", FOLLOWED_ID, USER_ID);
+            FollowResponse result = judged(general(USER_ID), () -> followService.follow("USER", FOLLOWED_ID, USER_ID));
 
             // then
             assertThat(result).isEqualTo(expected);
@@ -82,7 +84,7 @@ class FollowServiceTest {
         @DisplayName("異常系: 自分自身をフォローするとエラー")
         void 自分自身をフォローするとエラー() {
             // when & then
-            assertThatThrownBy(() -> followService.follow("USER", USER_ID, USER_ID))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> followService.follow("USER", USER_ID, USER_ID)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(SocialErrorCode.CANNOT_FOLLOW_SELF));
@@ -96,7 +98,7 @@ class FollowServiceTest {
                     FollowerType.USER, USER_ID, FollowerType.USER, FOLLOWED_ID)).willReturn(true);
 
             // when & then
-            assertThatThrownBy(() -> followService.follow("USER", FOLLOWED_ID, USER_ID))
+            assertThatThrownBy(() -> judged(general(USER_ID), () -> followService.follow("USER", FOLLOWED_ID, USER_ID)))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(SocialErrorCode.FOLLOW_ALREADY_EXISTS));

@@ -1,5 +1,7 @@
 package com.mannschaft.app.committee;
 
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.judged;
+import static com.mannschaft.app.role.service.PlatformAccountJudgedFixture.general;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -119,7 +121,7 @@ class CommitteeInvitationTokenHashTest {
         CommitteeInviteRequest request = new CommitteeInviteRequest();
         request.setInviteeUserIds(List.of(inviteeIds));
         request.setProposedRole(CommitteeRole.MEMBER);
-        return service.sendInvitations(COMMITTEE_ID, request, CHAIR_ID);
+        return judged(general(request.getInviteeUserIds()), () -> service.sendInvitations(COMMITTEE_ID, request, CHAIR_ID));
     }
 
     private static CommitteeEntity committee() {
@@ -180,7 +182,7 @@ class CommitteeInvitationTokenHashTest {
         given(committeeInvitationRepository.findByIdForUpdate(1L)).willReturn(Optional.of(invitation));
         given(committeeMemberRepository.save(any(CommitteeMemberEntity.class))).willAnswer(inv -> inv.getArgument(0));
 
-        CommitteeMemberEntity member = service.acceptInvitation(plaintext, INVITEE_ID);
+        CommitteeMemberEntity member = judged(general(INVITEE_ID), () -> service.acceptInvitation(plaintext, INVITEE_ID));
 
         assertThat(member.getUserId()).isEqualTo(INVITEE_ID);
         assertThat(invitation.getResolution()).isEqualTo(CommitteeInvitationResolution.ACCEPTED);
@@ -212,7 +214,7 @@ class CommitteeInvitationTokenHashTest {
         assertThatThrownBy(() -> service.declineInvitation(unknown, INVITEE_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(CommitteeErrorCode.INVITATION_TOKEN_INVALID));
-        assertThatThrownBy(() -> service.acceptInvitation(unknown, INVITEE_ID))
+        assertThatThrownBy(() -> judged(general(INVITEE_ID), () -> service.acceptInvitation(unknown, INVITEE_ID)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(CommitteeErrorCode.INVITATION_TOKEN_INVALID));
         verify(committeeInvitationRepository, never()).findByInviteTokenHash(eq(unknown));
@@ -233,7 +235,7 @@ class CommitteeInvitationTokenHashTest {
         given(committeeInvitationRepository.findByIdForUpdate(1L)).willReturn(Optional.of(invitation));
 
         assertThatThrownBy(() -> service.declineInvitation(plaintext, OTHER_ID)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> service.acceptInvitation(plaintext, OTHER_ID)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> judged(general(OTHER_ID), () -> service.acceptInvitation(plaintext, OTHER_ID))).isInstanceOf(BusinessException.class);
         assertThat(invitation.getResolvedAt()).isNull();
     }
 
@@ -290,7 +292,7 @@ class CommitteeInvitationTokenHashTest {
         CommitteeInviteRequest request = new CommitteeInviteRequest();
         request.setInviteeUserIds(List.of(INVITEE_ID));
 
-        SendInvitationsResult result = service.sendInvitations(COMMITTEE_ID, request, CHAIR_ID);
+        SendInvitationsResult result = judged(general(request.getInviteeUserIds()), () -> service.sendInvitations(COMMITTEE_ID, request, CHAIR_ID));
 
         assertThat(result.sentInvitations()).isEmpty();
         assertThat(result.skippedExistingInvitationCount()).isEqualTo(1);
