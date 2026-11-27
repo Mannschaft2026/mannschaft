@@ -22,7 +22,7 @@ erDiagram
     shared_file_links {
         bigint id PK
         bigint file_id FK
-        char token UK
+        varchar token_hash UK
         bigint created_by "ID参照"
     }
     shared_file_stars {
@@ -137,7 +137,7 @@ mermaid は同一テーブルの自己参照を複数描けず 1 本に畳むた
 | --- | --- | --- | --- | --- |
 | `id` | `bigint unsigned` | NO | （なし） auto_increment |  |
 | `file_id` | `bigint unsigned` | NO | （なし） |  |
-| `token` | `char(36)` | NO | （なし） |  |
+| `token_hash` | `varchar(64)` | NO | （なし） | 共有リンクトークンのSHA-256ハッシュ(hex)。平文は保存しない |
 | `expires_at` | `datetime(6)` | YES | NULL |  |
 | `password_hash` | `varchar(255)` | YES | NULL |  |
 | `access_count` | `int` | NO | `0` |  |

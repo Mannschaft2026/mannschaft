@@ -49,6 +49,9 @@ import static org.mockito.Mockito.verify;
 @DisplayName("SharedFileLinkService PR-D 公開リンク共有 単体テスト")
 class SharedFileLinkPublicSharingTest {
 
+    private static final com.mannschaft.app.common.token.SecretTokenVault HASHER =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     @Mock
     private SharedFileLinkRepository linkRepository;
     @Mock
@@ -62,6 +65,11 @@ class SharedFileLinkPublicSharingTest {
     @Mock
     private SharedFolderQueryService folderQueryService;
 
+    // トークンの発行・ハッシュは実物の金庫を使う（CMP-260826-1457 W2）。
+    @org.mockito.Spy
+    private com.mannschaft.app.common.token.SecretTokenVault vault =
+            new com.mannschaft.app.common.token.SecretTokenVault();
+
     @InjectMocks
     private SharedFileLinkService service;
 
@@ -70,7 +78,7 @@ class SharedFileLinkPublicSharingTest {
 
     private static SharedFileLinkEntity linkBuilder() {
         return SharedFileLinkEntity.builder()
-                .fileId(FILE_ID).token("tok").expiresAt(LocalDateTime.now().plusDays(1))
+                .fileId(FILE_ID).tokenHash(HASHER.hash("tok")).expiresAt(LocalDateTime.now().plusDays(1))
                 .accessCount(0).createdBy(USER_ID).build();
     }
 
@@ -91,7 +99,7 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("AC-D1/D2: 有効リンクで 200 相当（メタ返却）＋ フォルダ認可を通さない")
         void 有効リンク_メタ返却() {
             SharedFileLinkEntity link = linkBuilder();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse());
 
             FileResponse result = service.accessLinkPublic("tok", null);
@@ -103,7 +111,7 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("AC-D10: アクセスで access_count がインクリメントされ保存される")
         void アクセスでカウント増加() {
             SharedFileLinkEntity link = linkBuilder();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
             given(fileService.getFileForSharedLink(FILE_ID)).willReturn(fileResponse());
 
             service.accessLinkPublic("tok", null);
@@ -115,7 +123,7 @@ class SharedFileLinkPublicSharingTest {
         @Test
         @DisplayName("AC-D5: 存在しないトークンは LINK_NOT_FOUND（→404・存在秘匿）")
         void トークン不在_404() {
-            given(linkRepository.findByToken("nope")).willReturn(Optional.empty());
+            given(linkRepository.findByTokenHash(HASHER.hash("nope"))).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.accessLinkPublic("nope", null))
                     .isInstanceOf(BusinessException.class)
@@ -128,7 +136,7 @@ class SharedFileLinkPublicSharingTest {
         void 手動失効_410() {
             SharedFileLinkEntity link = linkBuilder();
             link.deactivate();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
 
             assertThatThrownBy(() -> service.accessLinkPublic("tok", null))
                     .isInstanceOf(BusinessException.class)
@@ -140,9 +148,9 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("AC-D3: 期限切れは LINK_EXPIRED（→410）")
         void 期限切れ_410() {
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok").expiresAt(LocalDateTime.now().minusDays(1))
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok")).expiresAt(LocalDateTime.now().minusDays(1))
                     .accessCount(0).createdBy(USER_ID).build();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
 
             assertThatThrownBy(() -> service.accessLinkPublic("tok", null))
                     .isInstanceOf(BusinessException.class)
@@ -154,9 +162,9 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("AC-D6: パスワード誤りは LINK_PASSWORD_INVALID（→403）、正しければ 200 相当")
         void パスワード分岐() {
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok").expiresAt(LocalDateTime.now().plusDays(1))
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok")).expiresAt(LocalDateTime.now().plusDays(1))
                     .passwordHash("hash").accessCount(0).createdBy(USER_ID).build();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
             given(passwordEncoder.matches("wrong", "hash")).willReturn(false);
 
             assertThatThrownBy(() -> service.accessLinkPublic("tok", new AccessLinkRequest("wrong")))
@@ -175,10 +183,10 @@ class SharedFileLinkPublicSharingTest {
         void 検証順_失効優先() {
             // 失効 かつ 期限切れ かつ パスワード付き → 最初に評価される LINK_INACTIVE を返す。
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok").expiresAt(LocalDateTime.now().minusDays(1))
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok")).expiresAt(LocalDateTime.now().minusDays(1))
                     .passwordHash("hash").accessCount(0).createdBy(USER_ID).build();
             link.deactivate();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
 
             assertThatThrownBy(() -> service.accessLinkPublic("tok", new AccessLinkRequest("x")))
                     .isInstanceOf(BusinessException.class)
@@ -199,7 +207,7 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("AC-D7: download_allowed=false は LINK_DOWNLOAD_NOT_ALLOWED（→403）・R2 を呼ばない")
         void DL未許可_403() {
             SharedFileLinkEntity link = linkBuilder(); // downloadAllowed 既定 false
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
 
             assertThatThrownBy(() -> service.presignDownloadForLink("tok", null))
                     .isInstanceOf(BusinessException.class)
@@ -212,9 +220,9 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("AC-D8: download_allowed=true でも C:download_disabled=true なら DOWNLOAD_DISABLED（→403・C 優先）")
         void DL許可でもC禁止優先_403() {
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok").expiresAt(LocalDateTime.now().plusDays(1))
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok")).expiresAt(LocalDateTime.now().plusDays(1))
                     .downloadAllowed(true).accessCount(0).createdBy(USER_ID).build();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
             willThrow(new BusinessException(FileSharingErrorCode.DOWNLOAD_DISABLED))
                     .given(fileService).presignDownloadForSharedLink(FILE_ID);
 
@@ -228,9 +236,9 @@ class SharedFileLinkPublicSharingTest {
         @DisplayName("正常系: download_allowed=true かつ C 未禁止なら DL URL を発行・access_count 加算")
         void DL許可_URL発行() {
             SharedFileLinkEntity link = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("tok").expiresAt(LocalDateTime.now().plusDays(1))
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("tok")).expiresAt(LocalDateTime.now().plusDays(1))
                     .downloadAllowed(true).accessCount(0).createdBy(USER_ID).build();
-            given(linkRepository.findByToken("tok")).willReturn(Optional.of(link));
+            given(linkRepository.findByTokenHash(HASHER.hash("tok"))).willReturn(Optional.of(link));
             given(fileService.presignDownloadForSharedLink(FILE_ID))
                     .willReturn(new SharedFileDownloadUrlResponse("https://r2/x", 900L));
 
@@ -268,14 +276,14 @@ class SharedFileLinkPublicSharingTest {
         void 認可通過_作成() {
             CreateLinkRequest request = new CreateLinkRequest(LocalDateTime.now().plusDays(7), null, true);
             SharedFileLinkEntity saved = SharedFileLinkEntity.builder()
-                    .fileId(FILE_ID).token("gen").downloadAllowed(true).accessCount(0).createdBy(USER_ID).build();
+                    .fileId(FILE_ID).tokenHash(HASHER.hash("gen")).downloadAllowed(true).accessCount(0).createdBy(USER_ID).build();
             given(linkRepository.save(any())).willReturn(saved);
             given(fileSharingMapper.toLinkResponse(saved))
-                    .willReturn(new LinkResponse(1L, FILE_ID, "gen", null, false, 0, null, USER_ID, null, true, true));
+                    .willReturn(new LinkResponse(1L, FILE_ID, null, false, 0, null, USER_ID, null, true, true));
 
-            LinkResponse result = service.createLink(FILE_ID, USER_ID, request);
+            com.mannschaft.app.filesharing.dto.LinkIssuedResponse issued = service.createLink(FILE_ID, USER_ID, request);
 
-            assertThat(result.isDownloadAllowed()).isTrue();
+            assertThat(issued.link().isDownloadAllowed()).isTrue();
             verify(linkRepository).save(any());
         }
 

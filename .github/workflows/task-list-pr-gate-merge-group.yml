@@ -6,9 +6,9 @@
 # skipped の同名チェックが PR 側にも報告され必須チェックの判定に混ざるため、ファイルごと分離した。
 #
 # PR 本文（CMP-ID 登録）と完了証拠の検査は各 PR の pull_request_target で済んでいるため、ここでは行わない。
-# 合成コミット（merge_group.head_sha）の docs/task-list.md の構造（CMP-ID 重複・列数7・未完行の優先度）
-# だけを検査する。検査器は信頼できる merge_group.base_sha からワークスペース直下へ checkout したものだけを
-# 実行し、head_sha からは台帳1ファイルだけを別ディレクトリへ取得する（キュー内 PR が改変した検査器で
+# 合成コミット（merge_group.head_sha）の台帳の構造（CMP-ID 重複・列数7・未完行の優先度。新配置では月別ファイル
+# docs/task-list/*.md を横断し配置違反も。CMP-261124-1222）だけを検査する。検査器は信頼できる merge_group.base_sha からワークスペース直下へ checkout したものだけを
+# 実行し、head_sha からは台帳（索引 docs/task-list.md と docs/task-list/）だけを別ディレクトリへ取得する（キュー内 PR が改変した検査器で
 # 自己承認させない）。権限は contents: read のみ。
 
 name: Task-List PR Gate (merge queue)
@@ -43,6 +43,7 @@ jobs:
           path: .merge-group-head
           sparse-checkout: |
             docs/task-list.md
+            docs/task-list/
           sparse-checkout-cone-mode: false
           persist-credentials: false
 

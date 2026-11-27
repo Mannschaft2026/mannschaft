@@ -17,9 +17,6 @@ import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.Transient;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -84,7 +81,7 @@ import org.springframework.data.repository.Repository;
  * </ol>
  *
  * <p><b>有効な免除注釈</b>: {@code @PlaintextSecretRequired}（{@code reason} が空白以外の文字を含む）または
- * {@code @PlaintextTokenDebt}（{@code cmp} が {@code docs/task-list.md} に登録された CMP ID で、状態が完了でないもの。
+ * {@code @PlaintextTokenDebt}（{@code cmp} が台帳（{@code docs/task-list.md}、新配置では {@code docs/task-list/*.md}。{@link TaskListLedger}）に登録された CMP ID で、状態が完了でないもの。
  * {@link #isOpenRegisteredCmp}）。任意の文字列・未登録の ID・完了済みの戦役は無効で、
  * 無効な免除注釈が付いた要素は免除されず違反になる。</p>
  *
@@ -109,9 +106,6 @@ import org.springframework.data.repository.Repository;
  * 入れずに分けるか、{@code @PlaintextTokenDebt}（台帳登録済みの未完了 CMP）を付ける。</p>
  */
 final class PlaintextSecretTokenGuardRules {
-
-    /** 台帳（リポジトリルートからの相対パス）。債務注釈の {@code cmp} はここに登録された未完了の戦役でなければならない。 */
-    private static final Path TASK_LIST_RELATIVE = Paths.get("docs", "task-list.md");
 
     /** 台帳の表の行から ID と状態（第3列）を取り出す。戦役名の列に {@code \|} が含まれても列を取り違えない。 */
     private static final Pattern LEDGER_ROW = Pattern.compile(
@@ -232,7 +226,7 @@ final class PlaintextSecretTokenGuardRules {
      * {@code cmp} が台帳に登録された CMP ID で、状態が完了でないか。
      *
      * @param cmp    債務注釈の {@code cmp}
-     * @param ledger {@code docs/task-list.md} の本文
+     * @param ledger 台帳の本文（新配置では全ファイルの連結。{@link TaskListLedger#concatenatedContent}）
      * @return 登録済みかつ未完了なら true
      */
     static boolean isOpenRegisteredCmp(String cmp, String ledger) {
@@ -247,22 +241,13 @@ final class PlaintextSecretTokenGuardRules {
 
     private static synchronized String ledger() {
         if (ledgerContent == null) {
-            Path path = null;
-            for (Path candidate : new Path[]{TASK_LIST_RELATIVE, Paths.get("..").resolve(TASK_LIST_RELATIVE),
-                    Paths.get("backend").resolve(TASK_LIST_RELATIVE)}) {
-                if (Files.isRegularFile(candidate)) {
-                    path = candidate;
-                    break;
-                }
-            }
-            if (path == null) {
-                throw new IllegalStateException("docs/task-list.md が見つからない（債務注釈の cmp を検証できない）。CWD="
-                        + Paths.get("").toAbsolutePath());
-            }
+            // 台帳の両配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/YYYY-MM.md・legacy.md。CMP-261124-1222）を
+            // TaskListLedger で読み、全ファイルの本文を連結して LEDGER_ROW で走査する（行単位の判定なので連結しても結果は同じ）。
             try {
-                ledgerContent = Files.readString(path, StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                throw new IllegalStateException("docs/task-list.md を読めません: " + path, e);
+                ledgerContent = TaskListLedger.concatenatedContent(TaskListLedger.readRepository(true));
+            } catch (RuntimeException e) {
+                throw new IllegalStateException("台帳（docs/task-list.md / docs/task-list/*.md）を読めない（債務注釈の cmp を検証できない）。CWD="
+                        + Paths.get("").toAbsolutePath(), e);
             }
         }
         return ledgerContent;
