@@ -563,13 +563,15 @@ class ActivityAutomaticScheduleIntegrationTest extends AbstractMySqlIntegrationT
         try {
             // 非空の未公開actualも、予定が見えるだけの一般所属者の統計へ混ぜない。
             var response = mvc.perform(get("/api/v1/activities/stats").with(user(Long.toString(MEMBER)))
-                    .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
+                    .param("scope_type", "TEAM").param("scope_id", teamId.toString())
+                    .param("date_from", "2026-10-01").param("date_to", "2026-10-31"))
                     .andExpect(status().isOk()).andReturn();
             var stats = json.readTree(response.getResponse().getContentAsString()).path("data");
+            // CMP-261124-0159 F06.4 §15.1: 統計は PUBLISHED だけを数える（DRAFT の auto は誰の統計にも入らない）
             assertThat(stats.path("totalActivities").asLong()).isZero();
-            for (String key : List.of("byMonth", "byTemplate", "topParticipants")) {
-                assertThat(stats.path(key).size()).as(key).isZero();
-            }
+            assertThat(stats.path("byTemplate").size()).isZero();
+            assertThat(stats.path("topParticipants").isNull()).as("設定 OFF の MEMBER には上位参加者を見せない").isTrue();
+            stats.path("byPeriod").forEach(p -> assertThat(p.path("count").asLong()).isZero());
             // CMP-261124-0159 AC-0159-81: CSV は管理者限定になったため、一般所属者は 403 で題名を 1 件も受け取らない
             var csv = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(MEMBER)))
                     .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
@@ -584,13 +586,15 @@ class ActivityAutomaticScheduleIntegrationTest extends AbstractMySqlIntegrationT
             assertThat(visibilityChecker.canView(com.mannschaft.app.common.visibility.ReferenceType.SCHEDULE, scheduleId, MEMBER)).isFalse();
             // 公開autoでも恒久source ACLを統計・参加者集計・CSVへ適用する。
             var hiddenResponse = mvc.perform(get("/api/v1/activities/stats").with(user(Long.toString(MEMBER)))
-                    .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
+                    .param("scope_type", "TEAM").param("scope_id", teamId.toString())
+                    .param("date_from", "2026-10-01").param("date_to", "2026-10-31"))
                     .andExpect(status().isOk()).andReturn();
             var hiddenStats = json.readTree(hiddenResponse.getResponse().getContentAsString()).path("data");
-            assertThat(hiddenStats.path("totalActivities").asLong()).isZero();
-            for (String key : List.of("byMonth", "byTemplate", "topParticipants")) {
-                assertThat(hiddenStats.path(key).size()).as(key).isZero();
-            }
+            // CMP-261124-0159 F06.4 §15.1: 統計は閲覧者によらず全員共通の数字で、PUBLISHED の auto も数える
+            // （§14.5 AC-36 の閲覧者ごとの除外は §15 で置き換え）。数だけで、題名・本文は統計に出さない
+            assertThat(hiddenStats.path("totalActivities").asLong()).isEqualTo(1);
+            assertThat(hiddenStats.path("topParticipants").isNull()).isTrue();
+            assertThat(hiddenResponse.getResponse().getContentAsString()).doesNotContain("秘匿実績CSV題名");
             var hiddenCsv = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(MEMBER)))
                     .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
                     .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString();
@@ -606,17 +610,17 @@ class ActivityAutomaticScheduleIntegrationTest extends AbstractMySqlIntegrationT
             });
             assertThat(detail(manualId, MEMBER).path("title").asText()).isEqualTo("閲覧可能な手動実績CSV題名");
             var visibleResponse = mvc.perform(get("/api/v1/activities/stats").with(user(Long.toString(MEMBER)))
-                    .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
+                    .param("scope_type", "TEAM").param("scope_id", teamId.toString())
+                    .param("date_from", "2026-10-01").param("date_to", "2026-10-31"))
                     .andExpect(status().isOk()).andReturn();
             var visibleStats = json.readTree(visibleResponse.getResponse().getContentAsString()).path("data");
-            assertThat(visibleStats.path("totalActivities").asLong()).isEqualTo(1);
+            // auto（PUBLISHED）と手動の 2 件。どちらも同じテンプレート
+            assertThat(visibleStats.path("totalActivities").asLong()).isEqualTo(2);
             assertThat(visibleStats.path("byTemplate").size()).isEqualTo(1);
             assertThat(visibleStats.path("byTemplate").get(0).path("templateId").asLong()).isEqualTo(templateId);
-            assertThat(visibleStats.path("byTemplate").get(0).path("count").asLong()).isEqualTo(1);
-            assertThat(visibleStats.path("byMonth").get(0).path("count").asLong()).isEqualTo(1);
-            assertThat(visibleStats.path("topParticipants").size()).isEqualTo(1);
-            assertThat(visibleStats.path("topParticipants").get(0).path("userId").asLong()).isEqualTo(MEMBER);
-            assertThat(visibleStats.path("topParticipants").get(0).path("participationCount").asLong()).isEqualTo(1);
+            assertThat(visibleStats.path("byTemplate").get(0).path("count").asLong()).isEqualTo(2);
+            assertThat(visibleStats.path("totalParticipations").asLong()).isEqualTo(2);
+            assertThat(visibleStats.path("topParticipants").isNull()).isTrue();
             var visibleCsv = mvc.perform(get("/api/v1/activities/export").with(user(Long.toString(MEMBER)))
                     .param("scope_type", "TEAM").param("scope_id", teamId.toString()))
                     .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString();
