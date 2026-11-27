@@ -154,18 +154,18 @@ export interface UserPointCardDetail {
 }
 
 // =====================================================================
-// Share Token（顧客側 → 店主側に渡す一時 UUID）
+// Share Token（顧客側 → 店主側に渡す一時トークン）
 // =====================================================================
 
 /**
  * `POST /api/v1/point-cards/{cardId}/share-tokens` のレスポンス DTO。
  *
- * <p>顧客が店舗で提示する際に発行する 5 分 TTL の一時トークン。
+ * <p>顧客が店舗で提示する際に発行する 5 分 TTL の一時トークン（平文はこの応答の 1 回だけ）。
  * フロントは {@code deepLinkUrl} を QR コードに描画して画面表示し、
  * 店主側端末が読み取って {@code resolve-by-token} 経由でカード ID を解決する。
  *
  * <ul>
- *   <li>{@code token}: UUID 文字列</li>
+ *   <li>{@code token}: Base64URL 43 字（UUID ではない）</li>
  *   <li>{@code expiresAt}: ISO 8601 形式の失効日時</li>
  *   <li>{@code deepLinkUrl}: 例 {@code mannschaft://wallet/share?token=...}</li>
  * </ul>
