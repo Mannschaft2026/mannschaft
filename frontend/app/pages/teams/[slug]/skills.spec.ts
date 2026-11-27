@@ -38,9 +38,9 @@ mockNuxtImport('useRoleAccess', () => () => {
     permissions,
     loadPermissions: perm.loadPermissions,
     can: (p: string) => permissions.value.includes(p),
-    isAdmin: computed(() => roleName.value === 'ADMIN' || roleName.value === 'SYSTEM_ADMIN'),
-    isAdminOrDeputy: computed(() => ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(roleName.value ?? '')),
-    isMember: computed(() => ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN', 'MEMBER'].includes(roleName.value ?? '')),
+    isAdmin: computed(() => roleName.value === 'ADMIN'),
+    isAdminOrDeputy: computed(() => ['ADMIN', 'DEPUTY_ADMIN'].includes(roleName.value ?? '')),
+    isMember: computed(() => ['ADMIN', 'DEPUTY_ADMIN', 'MEMBER'].includes(roleName.value ?? '')),
   }
 })
 
@@ -142,11 +142,11 @@ describe('skills.vue: F-AC3 閲覧範囲', () => {
     expect(has(w, 'category-manager')).toBe(true)
   })
 
-  it('SYSTEM_ADMIN も全員一覧・マトリクスが出る', async () => {
+  it('SYSTEM_ADMIN（旧応答）は管理者扱いにならず、全員一覧・マトリクスが出ない（戦役Z-A PR5）', async () => {
     setRole('SYSTEM_ADMIN', [])
     const w = await render()
-    expect(w.find('[data-test="skill-list"]').attributes('data-scope')).toBe('all')
-    expect(has(w, 'skill-matrix')).toBe(true)
+    expect(w.find('[data-test="skill-list"]').exists()).toBe(false)
+    expect(has(w, 'skill-matrix')).toBe(false)
   })
 
   it('MANAGE_MEMBER を持つ DEPUTY_ADMIN は全員一覧・マトリクス・カテゴリ管理が出る', async () => {

@@ -129,7 +129,7 @@ async function load() {
 
       // 5. マッチング提案 (ADMINのチームのみ)
       ...teamStore.myTeams
-        .filter((t) => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN')
+        .filter((t) => t.role === 'ADMIN')
         .slice(0, 5)
         .map((team) =>
           getTeamRequests(String(team.id)).then((res) => ({

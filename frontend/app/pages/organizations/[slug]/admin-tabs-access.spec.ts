@@ -62,8 +62,8 @@ beforeEach(() => {
   role = ref<string | null>(null)
   access = {
     loadPermissions: vi.fn<() => Promise<LoadResult>>().mockResolvedValue({ ok: true }),
-    isAdmin: computed(() => role.value === 'ADMIN' || role.value === 'SYSTEM_ADMIN'),
-    isAdminOrDeputy: computed(() => ['ADMIN', 'DEPUTY_ADMIN', 'SYSTEM_ADMIN'].includes(role.value ?? '')),
+    isAdmin: computed(() => role.value === 'ADMIN'),
+    isAdminOrDeputy: computed(() => ['ADMIN', 'DEPUTY_ADMIN'].includes(role.value ?? '')),
   }
 })
 

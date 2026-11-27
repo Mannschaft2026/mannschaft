@@ -116,12 +116,12 @@ for (const scope of ['team', 'organization'] as const) {
           .checked,
       ).toBe(true)
     })
-    it('SYSTEM_ADMIN単独も既存isAdminOrDeputy許可で管理GETと設定フォームを利用できる', async () => {
+    it('SYSTEM_ADMIN単独は管理者扱いにならず（isAdminOrDeputy=false）、管理GETも設定フォームも使えない（運営はテナント設定に触れない）', async () => {
       state.roleName = 'SYSTEM_ADMIN'
-      state.allowed = true
+      state.allowed = false
       const wrapper = await mountPage(scope)
-      expect(read()).toHaveBeenCalledWith('private-scope')
-      expect(wrapper.find('form').exists()).toBe(true)
+      expect(read()).not.toHaveBeenCalled()
+      expect(wrapper.find('form').exists()).toBe(false)
     })
     it('数値IDと変更後timeline値・取得済みevent値を必ず送る', async () => {
       const wrapper = await mountPage(scope)

@@ -42,8 +42,7 @@ const {
 } = useOrgShellContext()
 const { listApplications } = useOrgTeamMembershipApi()
 
-// 対象組織の ADMIN 割当を持つか。shell の isAdmin / roleName は SYSTEM_ADMIN を優先して返すため使わない。
-// BE は対象組織の ADMIN 割当（AccessControlService.isAdmin）で 403 を返す。兼任者は許可し、SYSTEM_ADMIN のみは対象外。
+// 対象組織の ADMIN 割当を持つか（BE は対象組織の ADMIN 割当 = AccessControlService.isAdmin で 403 を返す）。
 const isOrgAdmin = isScopeAdmin
 
 // F01.2.1 8-A: 加盟の設定への入口。組織 ADMIN かつ管理レンズ ON のときだけ出す（設計書 §13）。

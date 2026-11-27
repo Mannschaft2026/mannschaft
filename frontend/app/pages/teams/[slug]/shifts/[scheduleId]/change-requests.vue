@@ -16,8 +16,7 @@ const { getTeam } = useTeamApi()
 // 審査してよいか（チーム ADMIN / DEPUTY_ADMIN）。BE（ShiftChangeRequestFacade）の判定に揃える。
 // プラットフォームの systemRole ではなく、このチームでの実効ロールで判定する。
 // 権限取得に失敗したときは roleName が null のままなので審査ボタンは出ない（権限なしに倒れる側）。
-// 運営専用の SYSTEM_ADMIN は業務導線に含めない（docs/security/03_role_authority_model.md §3.5、#4164）ため、
-// isAdminOrDeputy（SYSTEM_ADMIN を含む）ではなく roleName で判定する。
+// roleName は実ロールのみ（運営ロールは返らない。docs/security/03_role_authority_model.md §3.5・§3.6、#4164）。
 const { roleName, loadPermissions } = useRoleAccess('team', teamSlug)
 const canReview = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
 

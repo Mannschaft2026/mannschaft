@@ -50,10 +50,10 @@ const selectableTeams = computed(() =>
   teamStore.myTeams.filter((t) => !SHIFT_UNREADABLE_ROLES.includes(t.role)),
 )
 
-/** ADMIN / SYSTEM_ADMIN / DEPUTY_ADMIN のチーム（シフト表の作成・編集権限あり。canManage 専用） */
+/** ADMIN / DEPUTY_ADMIN のチーム（シフト表の作成・編集権限あり。canManage 専用） */
 const manageableTeams = computed(() =>
   teamStore.myTeams.filter(
-    (t) => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN',
+    (t) => t.role === 'ADMIN' || t.role === 'DEPUTY_ADMIN',
   ),
 )
 

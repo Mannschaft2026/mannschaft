@@ -12,7 +12,7 @@ const timedMessage = useTimedMessage()
 const hasFamilyTeam = computed(() => teamStore.myTeams.some((team) => team.template === 'FAMILY'))
 const hasAdminOrDeputyRole = computed(() =>
   teamStore.myTeams.some(
-    (team) => team.role === 'ADMIN' || team.role === 'SYSTEM_ADMIN' || team.role === 'DEPUTY_ADMIN',
+    (team) => team.role === 'ADMIN' || team.role === 'DEPUTY_ADMIN',
   ),
 )
 

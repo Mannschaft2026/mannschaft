@@ -77,10 +77,17 @@ describe('予定詳細の代理出席件数（CMP-261017-1629）', () => {
     expect(wrapper.find('[data-testid="schedule-delegation-error"]').exists()).toBe(false)
   })
 
-  it.each(['ADMIN', 'DEPUTY_ADMIN', 'SYSTEM_ADMIN'])('%sは既存管理者判定どおり取得できる', async (role) => {
+  it.each(['ADMIN', 'DEPUTY_ADMIN'])('%sは既存管理者判定どおり取得できる', async (role) => {
     mocks.api.mockImplementation((url: string) => Promise.resolve(url.endsWith('/me/permissions') ? perms(role) : summary(3)))
     const wrapper = await panel()
     expect(wrapper.get('[data-testid="schedule-delegation-count"]').text()).toContain('3')
+  })
+
+  it('旧応答 roleName=SYSTEM_ADMIN は管理者扱いにせず委任件数を取得しない（戦役Z-A PR5）', async () => {
+    mocks.api.mockImplementation((url: string) => Promise.resolve(url.endsWith('/me/permissions') ? perms('SYSTEM_ADMIN') : summary(3)))
+    const wrapper = await panel()
+    expect(wrapper.find('[data-testid="schedule-delegation-count"]').exists()).toBe(false)
+    expect(mocks.api).toHaveBeenCalledTimes(1)
   })
 
   it('成功0件と失敗を区別し、再試行では権限取得から一度だけ実行する', async () => {

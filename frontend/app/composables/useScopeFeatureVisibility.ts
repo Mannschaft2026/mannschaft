@@ -1,5 +1,5 @@
 import { computed, watch, type MaybeRefOrGetter } from 'vue'
-import type { FeatureDisplayPolicy, FeatureDisplayRole } from '~/types/feature-display'
+import type { FeatureDisplayPolicy } from '~/types/feature-display'
 
 type PolicyState = {
   status: 'loading' | 'success' | 'error'
@@ -12,7 +12,8 @@ const requests = new WeakMap<object, Map<string, Promise<void>>>()
 export function useScopeFeatureVisibility(
   scopeType: MaybeRefOrGetter<'team' | 'organization'>,
   slug: MaybeRefOrGetter<string | undefined | null>,
-  actualRole: MaybeRefOrGetter<FeatureDisplayRole>,
+  // 表示ロール（実ロール）。列挙外の値は eligible にならず、管理者の素通しにも使わない。
+  actualRole: MaybeRefOrGetter<string | null | undefined>,
   memberLens: MaybeRefOrGetter<boolean> = false,
 ) {
   const api = useApi()
@@ -25,7 +26,7 @@ export function useScopeFeatureVisibility(
   const eligible = computed(
     () =>
       !!toValue(slug) &&
-      ['SUPPORTER', 'MEMBER', 'DEPUTY_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(
+      ['SUPPORTER', 'MEMBER', 'DEPUTY_ADMIN', 'ADMIN'].includes(
         toValue(actualRole) ?? '',
       ),
   )
@@ -100,7 +101,7 @@ export function useScopeFeatureVisibility(
   function isVisible(featureKey?: string): boolean {
     if (!featureKey || !eligible.value) return true
     const role = toValue(actualRole)
-    if (!toValue(memberLens) && ['SYSTEM_ADMIN', 'ADMIN', 'DEPUTY_ADMIN'].includes(role ?? ''))
+    if (!toValue(memberLens) && ['ADMIN', 'DEPUTY_ADMIN'].includes(role ?? ''))
       return true
     if (!ready.value) return false
     const setting = state.value?.features.find((feature) => feature.featureKey === featureKey)

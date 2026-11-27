@@ -189,14 +189,9 @@ const isSupporter = computed(() => roleName.value === 'SUPPORTER')
 // 認可根治 Wave7: 自動割当（実行・確定・破棄・履歴）は BE 側で当該チームの ADMIN/DEPUTY_ADMIN 限定に
 // なった。一般メンバーには導線を出さない（出すと必ず 403 になる死んだボタンになる）。
 //
-// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)
-// resolveEffectiveRoleName は SYSTEM_ADMIN > ADMIN > DEPUTY_ADMIN > ... の優先度で
-// 最強ロール 1 値を返すため、プラットフォーム SYSTEM_ADMIN が同時にチームの ADMIN でも
-// roleName は 'SYSTEM_ADMIN' になり ADMIN は返らない。これはバグではなく、
-// 「運営専用アカウントである SYSTEM_ADMIN には一般業務導線（このボタン）を出さない」という
-// マスター確定の設計判断（docs/security/03_role_authority_model.md §3.5）。
-// BE（ShiftAutoAssignService）は SYSTEM_ADMIN を別途常に許可しており、この UI 非表示は
-// 認可の代替ではない。`hasRoleOrAbove` 的な包含判定に書き換えて SYSTEM_ADMIN を含めないこと。
+// 【実ロールの等値比較】(CMP-260909-1509)
+// roleName は対象チームの実ロールのみで、運営ロールは返らない（運営専用アカウントはテナントに所属しない。
+// docs/security/03_role_authority_model.md §3.5・§3.6）。この UI の出し分けは認可の代替ではない。
 const isScopeAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
 
 // 自動割当は 2026-09-09 の方針転換で既定 OFF（BE も ShiftAutoAssignController の

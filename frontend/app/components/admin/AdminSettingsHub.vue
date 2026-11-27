@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { matchGateKey } from '~/constants/featureGates'
-import { getLoadErrorHttpStatus } from '~/utils/loadError'
 
 const props = defineProps<{
   scopeType: 'team' | 'organization'
@@ -10,15 +9,13 @@ const props = defineProps<{
 const { t } = useI18n()
 const slug = computed(() => props.slug)
 const { roleName, isScopeAdmin: isAdmin, loadPermissions } = useRoleAccess(props.scopeType, slug)
-const { getAdminActionRequired } = useScopeTabApi()
 const flags = useFeatureFlagStore()
 const loading = ref(true)
 const loadError = shallowRef<unknown>(null)
-const confirmedScopeManager = ref(false)
 const scopeManagerAccess = computed(
-  () => isAdmin.value || roleName.value === 'DEPUTY_ADMIN' || confirmedScopeManager.value,
+  () => isAdmin.value || roleName.value === 'DEPUTY_ADMIN',
 )
-// 運営（SYSTEM_ADMIN）にはテナントの設定を出さない（戦役 Z-A PR3）。兼任のスコープ管理者だけが対象。
+// 実ロールがスコープの ADMIN / DEPUTY_ADMIN の利用者だけが対象（運営専用アカウントは所属が無く出ない。戦役 Z-A PR3/PR5）。
 const hubAccess = computed(() => scopeManagerAccess.value)
 const base = computed(
   () => `/${props.scopeType === 'team' ? 'teams' : 'organizations'}/${props.slug}`,
@@ -66,26 +63,10 @@ async function loadPage() {
   const isCurrent = () => sequence === loadSequence && requestedSlug === props.slug
   loading.value = true
   loadError.value = null
-  confirmedScopeManager.value = false
   try {
     const result = await loadPermissions()
     if (!isCurrent()) return
     if (!result.ok) throw result.error
-    if (roleName.value === 'SYSTEM_ADMIN' && !isAdmin.value) {
-      // 表示用ロールから兼任DEPUTYを推測せず、既存API入口の正準スコープ認可で確認する。
-      try {
-        await getAdminActionRequired(
-          props.scopeType === 'team' ? 'TEAM' : 'ORGANIZATION',
-          requestedSlug,
-          0,
-        )
-        if (!isCurrent()) return
-        confirmedScopeManager.value = true
-      } catch (error) {
-        if (!isCurrent()) return
-        if (getLoadErrorHttpStatus(error) !== 403) throw error
-      }
-    }
     if (scopeManagerAccess.value && props.scopeType === 'team' && !flags.publicLoaded) {
       await flags.loadPublicFlags()
     }

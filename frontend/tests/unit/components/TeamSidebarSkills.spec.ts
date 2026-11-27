@@ -13,9 +13,9 @@ import { ref, computed } from 'vue'
  * テストケース一覧:
  *  TEAM-SB-SKL-001: ゲート ON + MEMBER + member_intro 有効ならリンクが出る
  *  TEAM-SB-SKL-002: ゲート OFF ならリンクは出ない（死んだ導線を作らない）
- *  TEAM-SB-SKL-003: SYSTEM_ADMIN でもゲート OFF ならリンクは出ない
+ *  TEAM-SB-SKL-003: ADMIN でもゲート OFF ならリンクは出ない
  *  TEAM-SB-SKL-004: フラグ未取得（キー無し）なら fail-closed でリンクは出ない
- *  TEAM-SB-SKL-005: SYSTEM_ADMIN でもゲート ON ならリンクが出る
+ *  TEAM-SB-SKL-005: 旧応答 SYSTEM_ADMIN はゲート ON でもリンクが出ない（運営ロールはメンバー扱いにしない。戦役 Z-A PR5）
  *  TEAM-SB-SKL-006: member_intro モジュール無効ならリンクは出ない
  *  TEAM-SB-SKL-007: ゲート OFF でも既存項目（メンバー紹介）は回帰せず出る
  *  TEAM-SB-SKL-009: SUPPORTER / GUEST にはリンクが出ない
@@ -39,9 +39,9 @@ vi.mock('~/composables/useRoleAccess', () => ({
     roleName,
     isScopeAdmin: computed(() => roleName.value === 'ADMIN'),
     can: vi.fn(() => false),
-    isAdmin: computed(() => roleName.value === 'ADMIN' || roleName.value === 'SYSTEM_ADMIN'),
+    isAdmin: computed(() => roleName.value === 'ADMIN'),
     isAdminOrDeputy: computed(
-      () => ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(roleName.value ?? ''),
+      () => ['ADMIN', 'DEPUTY_ADMIN'].includes(roleName.value ?? ''),
     ),
     loadPermissions: vi.fn().mockResolvedValue({ ok: true }),
   }),
@@ -96,8 +96,8 @@ describe('TeamSidebar スキル・資格導線', () => {
     expect(wrapper.html()).not.toContain(SKILLS_HREF)
   })
 
-  it('TEAM-SB-SKL-003: SYSTEM_ADMIN でもゲート OFF なら出ない', async () => {
-    roleName.value = 'SYSTEM_ADMIN'
+  it('TEAM-SB-SKL-003: ADMIN でもゲート OFF なら出ない', async () => {
+    roleName.value = 'ADMIN'
     setFlags({ [GATE]: false })
     const wrapper = await mountSidebar()
     expect(wrapper.html()).not.toContain(SKILLS_HREF)
@@ -109,10 +109,10 @@ describe('TeamSidebar スキル・資格導線', () => {
     expect(wrapper.html()).not.toContain(SKILLS_HREF)
   })
 
-  it('TEAM-SB-SKL-005: SYSTEM_ADMIN でもゲート ON なら出る', async () => {
+  it('TEAM-SB-SKL-005: 旧応答 SYSTEM_ADMIN はゲート ON でも出ない', async () => {
     roleName.value = 'SYSTEM_ADMIN'
     const wrapper = await mountSidebar()
-    expect(wrapper.html()).toContain(SKILLS_HREF)
+    expect(wrapper.html()).not.toContain(SKILLS_HREF)
   })
 
   it('TEAM-SB-SKL-006: member_intro モジュール無効なら出ない', async () => {

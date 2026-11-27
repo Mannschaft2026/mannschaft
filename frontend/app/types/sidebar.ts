@@ -15,7 +15,7 @@ export interface SidebarItem {
   moduleSlug: string | null
   /**
    * 機能ゲート（gate_key。`constants/featureGates.ts` の GATE_ROUTE_MAP と同じ値）。
-   * 指定された項目は、そのフラグが ON のときだけ表示する（OFF・未取得は非表示。SYSTEM_ADMIN も同様）。
+   * 指定された項目は、そのフラグが ON のときだけ表示する（OFF・未取得は非表示）。
    * route 層 middleware が弾くページへの導線を出さない（見えるものは必ず踏める）ための仕組み。
    */
   gateKey?: string

@@ -68,13 +68,10 @@ const { isAdmin, isAdminOrDeputy, isMember, roleName, loadPermissions } = useRol
 // シフトボードは当該チームの ADMIN / DEPUTY_ADMIN 限定。
 // 判定手段は board.vue（`shifts/[scheduleId]/board.vue` の isScopeAdmin）に合わせる。
 //
-// 【意図的に SYSTEM_ADMIN を含めない等値比較】(CMP-260909-1509)
-// プラットフォーム SYSTEM_ADMIN が同時にチームの ADMIN でも、実効ロール解決
-// （resolveEffectiveRoleName）は最強ロールである 'SYSTEM_ADMIN' を返すため、この等値比較では
-// 「シフトボード」ボタンは表示されない。これはバグではなく、「運営専用アカウントには一般の
-// チーム運営導線を出さない」というマスター確定の設計判断（docs/security/03_role_authority_model.md
-// §3.5）。BE 側の認可はこれと独立しており、SYSTEM_ADMIN は API を叩けば通る（UI 非表示は認可の代替
-// ではない）。SYSTEM_ADMIN を含めるように書き換えないこと。
+// 【実ロールの等値比較】(CMP-260909-1509)
+// 実効ロールは対象チームの実ロールのみで、運営ロールは返らない（運営専用アカウントはテナントに所属しない。
+// docs/security/03_role_authority_model.md §3.5・§3.6）。包含判定ではなく ADMIN / DEPUTY_ADMIN の等値比較で
+// 「シフトボード」ボタンを出す。UI の出し分けは認可の代替ではなく、BE の認可は独立している。
 const isScopeAdmin = computed(() => roleName.value === 'ADMIN' || roleName.value === 'DEPUTY_ADMIN')
 const { userTimezone } = useDatetime()
 

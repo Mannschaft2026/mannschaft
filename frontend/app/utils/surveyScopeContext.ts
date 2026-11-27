@@ -1,5 +1,4 @@
 export type SurveyScopeRoleName =
-  | 'SYSTEM_ADMIN'
   | 'ADMIN'
   | 'DEPUTY_ADMIN'
   | 'MEMBER'
@@ -34,7 +33,7 @@ export function resolveSurveyManagementContext(
   input: SurveyManagementContextInput,
 ): SurveyManagementContext | null {
   if (!input.canManage) return null
-  if (input.roleName === 'ADMIN' || input.roleName === 'SYSTEM_ADMIN') return 'admin'
+  if (input.roleName === 'ADMIN') return 'admin'
   if (input.roleName === 'DEPUTY_ADMIN' && input.permissions.includes('MANAGE_SURVEYS')) {
     return 'delegated'
   }

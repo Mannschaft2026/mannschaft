@@ -231,7 +231,7 @@ export function usePublicApi() {
   // ─── F19.1 Phase 7: Admin 向け 公開設定 PATCH API ───
 
   /**
-   * チームの公開設定を更新する（ADMIN / SYSTEM_ADMIN 限定）。
+   * チームの公開設定を更新する（ADMIN 限定）。
    *
    * エンドポイント: PATCH /api/v1/admin/teams/{teamId}/public-settings
    */
@@ -246,7 +246,7 @@ export function usePublicApi() {
   }
 
   /**
-   * 組織の公開設定を更新する（ADMIN / SYSTEM_ADMIN 限定）。
+   * 組織の公開設定を更新する（ADMIN 限定）。
    *
    * エンドポイント: PATCH /api/v1/admin/organizations/{orgId}/public-settings
    */
@@ -344,7 +344,7 @@ export function usePublicApi() {
   // ─── F19.1 Phase 2: Admin 向け supporter_name_disclosure 切替 API ───
 
   /**
-   * チームの投稿者識別モードを切り替える（ADMIN / SYSTEM_ADMIN 限定）。
+   * チームの投稿者識別モードを切り替える（ADMIN 限定）。
    *
    * confirmed=true が必須。DISPLAY_NAME → REAL_NAME の切替時は
    * SupporterNameDisclosureWarningDialog で確認を取ってから呼び出すこと。
@@ -364,7 +364,7 @@ export function usePublicApi() {
   }
 
   /**
-   * 組織の投稿者識別モードを切り替える（ADMIN / SYSTEM_ADMIN 限定）。
+   * 組織の投稿者識別モードを切り替える（ADMIN 限定）。
    */
   async function patchOrganizationNameDisclosure(
     organizationId: string,
@@ -381,7 +381,7 @@ export function usePublicApi() {
   }
 
   /**
-   * チームの投稿者識別モード変更履歴を取得する（ADMIN / SYSTEM_ADMIN 限定）。
+   * チームの投稿者識別モード変更履歴を取得する（ADMIN 限定）。
    */
   async function fetchTeamNameDisclosureHistory(
     teamId: string,
@@ -392,7 +392,7 @@ export function usePublicApi() {
   }
 
   /**
-   * 組織の投稿者識別モード変更履歴を取得する（ADMIN / SYSTEM_ADMIN 限定）。
+   * 組織の投稿者識別モード変更履歴を取得する（ADMIN 限定）。
    */
   async function fetchOrganizationNameDisclosureHistory(
     organizationId: string,

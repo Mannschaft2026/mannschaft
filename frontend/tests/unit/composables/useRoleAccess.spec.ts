@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
  *
  * 検証観点（ガードが依拠する isAdminOrDeputy の真偽）:
  *   ROLE-001: DEPUTY_ADMIN は isAdminOrDeputy=true（過小露出の是正）
- *   ROLE-002: ADMIN/SYSTEM_ADMIN は従来どおり true
+ *   ROLE-002: ADMIN は true、旧応答の SYSTEM_ADMIN は false（実ロールのみ。戦役 Z-A PR5）
  *   ROLE-003: MEMBER/SUPPORTER/GUEST は false（漏洩を新たに作らない）
  *   ROLE-004: isAdmin は DEPUTY_ADMIN で false のまま（=旧ガードは DEPUTY を弾いていた）
  */
@@ -40,9 +40,9 @@ describe('useRoleAccess', () => {
     expect(access.isAdminOrDeputy.value).toBe(true)
   })
 
-  it('ROLE-002: ADMIN/SYSTEM_ADMIN は isAdminOrDeputy=true', async () => {
+  it('ROLE-002: ADMIN は isAdminOrDeputy=true、旧応答 SYSTEM_ADMIN は false（運営ロールは管理者扱いしない）', async () => {
     expect((await loadWithRole('ADMIN')).isAdminOrDeputy.value).toBe(true)
-    expect((await loadWithRole('SYSTEM_ADMIN')).isAdminOrDeputy.value).toBe(true)
+    expect((await loadWithRole('SYSTEM_ADMIN')).isAdminOrDeputy.value).toBe(false)
   })
 
   it('ROLE-003: MEMBER/SUPPORTER/GUEST は isAdminOrDeputy=false（漏洩なし）', async () => {
@@ -57,7 +57,7 @@ describe('useRoleAccess', () => {
   })
 
   // 対象スコープの ADMIN 割当の有無（BE の AccessControlService.isAdmin と同じ判定の結果）。
-  // roleName は「表示用の最強ロール」で SYSTEM_ADMIN が優先されるため、ADMIN 判定には使えない。
+  // roleName は実ロールのみ（運営ロールは返らない）。
   async function loadScopeAdmin(roleName: string, scopeAdmin?: boolean) {
     mockFetch.mockResolvedValueOnce({ data: { roleName, permissions: [], scopeAdmin } })
     const access = useRoleAccess('organization', 'org-1')
@@ -69,8 +69,8 @@ describe('useRoleAccess', () => {
     expect(await loadScopeAdmin('SYSTEM_ADMIN', false)).toBe(false)
   })
 
-  it('ROLE-006: SYSTEM_ADMIN と対象組織 ADMIN の兼任は roleName が SYSTEM_ADMIN でも isScopeAdmin=true', async () => {
-    expect(await loadScopeAdmin('SYSTEM_ADMIN', true)).toBe(true)
+  it('ROLE-006: 運営と対象組織 ADMIN の兼任でも roleName は実ロール ADMIN で isScopeAdmin=true', async () => {
+    expect(await loadScopeAdmin('ADMIN', true)).toBe(true)
   })
 
   it('ROLE-007: 対象組織の ADMIN 単独は isScopeAdmin=true', async () => {

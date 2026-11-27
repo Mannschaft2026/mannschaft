@@ -5,7 +5,7 @@
  * <p>設計書: docs/features/F18_point_card_wallet.md §3.3 UC-8 / §8 UI/UX
  *
  * <p>3 つの大きいアクションカード（プロバイダー / 履歴 / 押印）と、稼働中プロバイダー一覧を出す。
- * アクセス制御: 組織 ADMIN / SYSTEM_ADMIN / DEPUTY_ADMIN のみ。それ以外は組織トップへリダイレクト。
+ * アクセス制御: 組織 ADMIN / DEPUTY_ADMIN のみ。それ以外は組織トップへリダイレクト。
  */
 import type { OrgPointCardProvider } from '~/types/orgPointCard'
 
@@ -24,11 +24,10 @@ const myOrg = computed(() =>
 )
 const canAccess = computed(() =>
   myOrg.value?.role === 'ADMIN'
-  || myOrg.value?.role === 'SYSTEM_ADMIN'
   || myOrg.value?.role === 'DEPUTY_ADMIN',
 )
 const isAdminOnly = computed(() =>
-  myOrg.value?.role === 'ADMIN' || myOrg.value?.role === 'SYSTEM_ADMIN',
+  myOrg.value?.role === 'ADMIN',
 )
 
 // ─── 状態 ────────────────────────────────────────────────────

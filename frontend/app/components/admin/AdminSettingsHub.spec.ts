@@ -84,9 +84,9 @@ describe('既存設定の集約ハブ', () => {
   })
 
   it.each(['team', 'organization'] as const)(
-    'SYSTEM_ADMINでも%sのADMINを兼任していれば管理設定へ案内する',
+    '実ロールがADMINなら%sの管理設定へ案内する（運営との兼任でも実ロールで判定し、追加確認APIは呼ばない）',
     async (scope) => {
-      state.role = 'SYSTEM_ADMIN'
+      state.role = 'ADMIN'
       state.scopeAdmin = true
       const wrapper = await mountHub(scope)
       expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(true)
@@ -99,7 +99,7 @@ describe('既存設定の集約ハブ', () => {
   )
 
   it.each(['team', 'organization'] as const)(
-    'SYSTEM_ADMIN単独には%sのFAQ・公開設定を案内しない（運営はテナント設定に触れない）',
+    '旧応答 roleName=SYSTEM_ADMIN 単独には%sのFAQ・公開設定を案内せず、兼任確認の追加APIも呼ばない（運営はテナント設定に触れない）',
     async (scope) => {
       state.role = 'SYSTEM_ADMIN'
       state.scopeAdmin = false
@@ -109,28 +109,19 @@ describe('既存設定の集約ハブ', () => {
       expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(false)
       expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(false)
       expect(wrapper.findAll('a')).toHaveLength(0)
-      expect(state.probe).toHaveBeenCalledWith(
-        scope === 'team' ? 'TEAM' : 'ORGANIZATION',
-        'sample',
-        0,
-      )
+      expect(state.probe).not.toHaveBeenCalled()
       expect(state.loadFlags).not.toHaveBeenCalled()
     },
   )
 
   it.each(['team', 'organization'] as const)(
-    'SYSTEM_ADMIN兼任の%s副管理者は正準API成功時だけ副管理者向けリンクを表示する',
+    '実ロールがDEPUTY_ADMINの%sは副管理者向けリンクを表示する（兼任確認の追加APIは呼ばない）',
     async (scope) => {
-      state.role = 'SYSTEM_ADMIN'
+      state.role = 'DEPUTY_ADMIN'
       state.scopeAdmin = false
       state.shift = true
-      state.probe.mockResolvedValue({})
       const wrapper = await mountHub(scope)
-      expect(state.probe).toHaveBeenCalledWith(
-        scope === 'team' ? 'TEAM' : 'ORGANIZATION',
-        'sample',
-        0,
-      )
+      expect(state.probe).not.toHaveBeenCalled()
       expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(true)
       expect(wrapper.find('a[href$="/faq-settings"]').exists()).toBe(false)
       expect(wrapper.find('a[href$="/notification-credits"]').exists()).toBe(false)
@@ -138,11 +129,13 @@ describe('既存設定の集約ハブ', () => {
     },
   )
 
-  it('SYSTEM_ADMINの正準APIが503なら拒否と混同せず、再試行で権限・正準API・フラグを再取得する', async () => {
-    state.role = 'SYSTEM_ADMIN'
+  it('権限取得が503なら拒否と混同せずエラー表示にし、再試行で権限とフラグを再取得する', async () => {
+    state.role = 'DEPUTY_ADMIN'
     state.scopeAdmin = false
     state.loaded = false
-    state.probe.mockRejectedValueOnce({ statusCode: 503 }).mockResolvedValueOnce({})
+    state.permissions
+      .mockResolvedValueOnce({ ok: false, error: { statusCode: 503 } })
+      .mockResolvedValueOnce({ ok: true })
     const wrapper = await mountHub()
     expect(wrapper.find('[data-testid="load-error-state"]').exists()).toBe(true)
     expect(wrapper.findAll('a')).toHaveLength(0)
@@ -150,18 +143,20 @@ describe('既存設定の集約ハブ', () => {
     await flushPromises()
     expect(wrapper.find('a[href$="/public-settings"]').exists()).toBe(true)
     expect(state.permissions).toHaveBeenCalledTimes(2)
-    expect(state.probe).toHaveBeenCalledTimes(2)
+    expect(state.probe).not.toHaveBeenCalled()
     expect(state.loadFlags).toHaveBeenCalledTimes(1)
   })
 
-  it('旧slugの正準API成功が遅れても、新slugの403拒否を上書きしない', async () => {
-    state.role = 'SYSTEM_ADMIN'
+  it('旧slugの権限取得の成功が遅れても、新slugの取得失敗を上書きしない', async () => {
+    state.role = 'DEPUTY_ADMIN'
     state.scopeAdmin = false
     let allowOld!: () => void
-    const oldResult = new Promise<object>((resolve) => {
-      allowOld = () => resolve({})
+    const oldResult = new Promise<{ ok: true }>((resolve) => {
+      allowOld = () => resolve({ ok: true })
     })
-    state.probe.mockImplementationOnce(() => oldResult).mockRejectedValueOnce({ statusCode: 403 })
+    state.permissions
+      .mockImplementationOnce(() => oldResult)
+      .mockResolvedValueOnce({ ok: false, error: { statusCode: 403 } })
     const wrapper = await mountHub()
     await wrapper.setProps({ slug: 'other' })
     await flushPromises()
@@ -171,11 +166,8 @@ describe('既存設定の集約ハブ', () => {
     await flushPromises()
     expect(wrapper.findAll('a')).toHaveLength(0)
     expect(wrapper.find('a[href$="/todo-status-labels"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="load-error-state"]').exists()).toBe(false)
-    expect(state.probe.mock.calls).toEqual([
-      ['TEAM', 'sample', 0],
-      ['TEAM', 'other', 0],
-    ])
+    expect(wrapper.find('[data-testid="load-error-state"]').exists()).toBe(true)
+    expect(state.probe).not.toHaveBeenCalled()
   })
 
   it('組織の副管理者へADMIN限定のFAQ・通知クレジット・TODO設定を案内しない', async () => {

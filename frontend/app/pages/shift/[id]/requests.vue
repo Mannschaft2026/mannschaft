@@ -56,7 +56,7 @@ const canManage = computed(() => {
   return teamStore.myTeams.some(
     (t) =>
       t.id === schedule.value!.teamId &&
-      (t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN' || t.role === 'DEPUTY_ADMIN'),
+      (t.role === 'ADMIN' || t.role === 'DEPUTY_ADMIN'),
   )
 })
 

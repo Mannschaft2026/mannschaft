@@ -29,7 +29,6 @@ const ROLE_RANK: Record<string, number> = {
   MEMBER: 0,
   DEPUTY_ADMIN: 1,
   ADMIN: 2,
-  SYSTEM_ADMIN: 2,
 }
 
 export type AdminScopeMinRole = 'ADMIN' | 'DEPUTY_ADMIN'

@@ -52,23 +52,31 @@ describe('BaseSidebar の取得状態', () => {
     expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/team-a/me/permissions')
   })
 
-  it('未所属のSYSTEM_ADMINは所属限定モジュールAPIを取得せずメニューリンクを表示する', async () => {
+  it('所属の無い運営アカウント（roleName=null）にはメニューリンクを出さず、モジュールAPIの失敗はエラーとして表示する（戦役Z-A PR5）', async () => {
     apiMock.mockImplementation((url: string) => url.endsWith('/me/permissions')
-      ? Promise.resolve(permissions('SYSTEM_ADMIN'))
+      ? Promise.resolve(permissions(null as unknown as string))
       : Promise.reject(Object.assign(new Error('membership required'), { statusCode: 403 })))
     const wrapper = await mountSidebar()
     await flushPromises()
 
-    expect(wrapper.find('a[href="/teams/team-a/admin"]').exists()).toBe(true)
-    expect(wrapper.get('a[href="/teams/team-a/admin"]').isVisible()).toBe(true)
-    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(false)
+    expect(wrapper.find('a[href="/teams/team-a/admin"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'DashboardErrorState' }).exists()).toBe(true)
     expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/team-a/me/permissions')
-    expect(apiMock).not.toHaveBeenCalledWith('/api/v1/teams/team-a/modules')
+    expect(apiMock).toHaveBeenCalledWith('/api/v1/teams/team-a/modules')
   })
 
-  it('SYSTEM_ADMINもメンバーレンズ中のモジュール取得失敗をエラーとして表示する', async () => {
+  it.each(['SYSTEM_ADMIN', 'GUEST', 'UNKNOWN_ROLE'])('列挙外・非メンバーの roleName=%s はメンバー扱いにせず、メニューを描画しない（fail-closed）', async (role) => {
+    apiMock.mockImplementation((url: string) => Promise.resolve(url.endsWith('/me/permissions') ? permissions(role) : { data: [] }))
+    const wrapper = await mountSidebar()
+    await flushPromises()
+
+    expect(wrapper.find('nav').exists()).toBe(false)
+    expect(wrapper.find('a[href="/teams/team-a/admin"]').exists()).toBe(false)
+  })
+
+  it('ADMINもメンバーレンズ中のモジュール取得失敗をエラーとして表示する', async () => {
     apiMock.mockImplementation((url: string) => url.endsWith('/me/permissions')
-      ? Promise.resolve(permissions('SYSTEM_ADMIN'))
+      ? Promise.resolve(permissions('ADMIN'))
       : Promise.reject(Object.assign(new Error('membership required'), { statusCode: 403 })))
     const wrapper = await mountSuspended(BaseSidebar, {
       props: { scopeType: 'team', scopeId: 'team-a', categories, memberLensActive: true },

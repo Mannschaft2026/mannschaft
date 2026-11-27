@@ -4,7 +4,7 @@
  *
  * 設計書: docs/features/F10.1.1_team_org_admin_console/02_admin_lens_widgets.md §1.2 / §1.3 / §1.5
  *
- * - **ADMIN/DEPUTY（および SYSTEM_ADMIN）のときのみ DOM ごと描画**する（`useRoleAccess.isAdminOrDeputy`）。
+ * - **ADMIN/DEPUTY のときのみ DOM ごと描画**する（`useRoleAccess.isAdminOrDeputy`）。
  *   非管理者には存在しない（FE 表示制御。最終認可は BE 側の `checkAdminOrAbove` が担保）。
  * - `role="switch"` / `aria-checked` のトグルボタン。タップ域は最小 44×44px（モバイル誤タップ防止）。
  * - **ジェスチャ競合排他（§1.3）**: トグルはタグ行右端（DashboardScopeCarousel のスワイプ領域内）に置くが、

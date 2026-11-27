@@ -44,7 +44,6 @@ const myOrg = computed(() =>
 )
 const canAccess = computed(() =>
   myOrg.value?.role === 'ADMIN'
-  || myOrg.value?.role === 'SYSTEM_ADMIN'
   || myOrg.value?.role === 'DEPUTY_ADMIN',
 )
 

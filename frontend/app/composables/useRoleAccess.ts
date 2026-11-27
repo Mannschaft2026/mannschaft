@@ -1,11 +1,11 @@
-type RoleName = 'SYSTEM_ADMIN' | 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'GUEST'
+type RoleName = 'ADMIN' | 'DEPUTY_ADMIN' | 'MEMBER' | 'SUPPORTER' | 'GUEST'
 
 interface EffectivePermissions {
   roleName: RoleName
   permissions: string[]
   /**
    * 対象スコープの ADMIN 割当があるか（BE の AccessControlService.isAdmin と同じ判定）。
-   * roleName は SYSTEM_ADMIN を優先して返すため、SYSTEM_ADMIN との兼任者は roleName だけでは判定できない。
+   * roleName は対象スコープの実ロール（運営ロールは返らない）。
    * 旧 BE は返さない（undefined）。
    */
   scopeAdmin?: boolean
@@ -116,13 +116,13 @@ export function useRoleAccess(
   }
 
   const isAdmin = computed(() =>
-    roleName.value === 'ADMIN' || roleName.value === 'SYSTEM_ADMIN',
+    roleName.value === 'ADMIN',
   )
 
   /**
    * 対象スコープの ADMIN 割当があるか。スコープ ADMIN 専用の画面・操作の出し分けに使う
-   * （BE が対象スコープの ADMIN 割当で 403 を返す操作）。isAdmin は SYSTEM_ADMIN も含むため使わない。
-   * scopeAdmin を返さない旧 BE では roleName === 'ADMIN' で代用する（SYSTEM_ADMIN は不可）。
+   * （BE が対象スコープの ADMIN 割当で 403 を返す操作）。
+   * scopeAdmin を返さない旧 BE では roleName === 'ADMIN' で代用する。
    */
   const isScopeAdmin = computed(() =>
     scopeAdminFromApi.value ?? roleName.value === 'ADMIN',
@@ -130,7 +130,7 @@ export function useRoleAccess(
 
   /**
    * ADMIN 専用権限を含む権限グループを操作できるか（BE の checkScopeAdminOnly と同じ結果を BE が返す）。
-   * 返さない旧 BE では roleName === 'ADMIN'（SYSTEM_ADMIN は roleName が SYSTEM_ADMIN になるため不可）で代用する。
+   * 返さない旧 BE では roleName === 'ADMIN' で代用する。
    */
   const canGrantAdminOnlyPermissions = computed(() =>
     canGrantFromApi.value ?? roleName.value === 'ADMIN',

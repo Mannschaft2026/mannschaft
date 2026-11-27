@@ -25,7 +25,7 @@ const team = computed(() =>
   props.teamId === null ? undefined : teamStore.myTeams.find(m => m.id === props.teamId),
 )
 const canManage = computed(() =>
-  ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''),
+  ['ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''),
 )
 /** シフトボードは ADMIN / DEPUTY_ADMIN のみ（ShiftScheduleList / board.vue と同じ規則） */
 const canOpenBoard = computed(() => ['ADMIN', 'DEPUTY_ADMIN'].includes(team.value?.role ?? ''))

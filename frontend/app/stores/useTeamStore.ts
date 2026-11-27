@@ -30,7 +30,7 @@ export const useTeamStore = defineStore('team', {
   getters: {
     teamCount: (state): number => state.myTeams.length,
     adminTeams: (state): MyTeam[] =>
-      state.myTeams.filter(t => t.role === 'ADMIN' || t.role === 'SYSTEM_ADMIN'),
+      state.myTeams.filter(t => t.role === 'ADMIN'),
   },
 
   actions: {

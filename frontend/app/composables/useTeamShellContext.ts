@@ -58,7 +58,7 @@ export interface TeamShellContext {
   roleResolved: Ref<boolean>
   /** ロール取得に失敗したか（roleResolved=true かつ true のときエラー表示を出す）。 */
   roleLoadFailed: Ref<boolean>
-  /** 管理権限（ADMIN / SYSTEM_ADMIN）を持つか。 */
+  /** 管理権限（ADMIN）を持つか。 */
   isAdmin: ComputedRef<boolean>
   /** 管理者または副管理者か。 */
   isAdminOrDeputy: ComputedRef<boolean>
@@ -71,7 +71,7 @@ export interface TeamShellContext {
   canManagePermissionGroups: ComputedRef<boolean>
   /**
    * ADMIN 専用権限（MANAGE_ORG_AFFILIATION 等）を含む権限グループを作成・更新・割当できるか（BE の checkScopeAdminOnly と同じ結果）。
-   * SYSTEM_ADMIN とチーム ADMIN の兼任者は false（画面は出るが、ADMIN 専用権限が絡む操作は理由つきで不可にする）。
+   * スコープ ADMIN 本人以外は false（画面は出るが、ADMIN 専用権限が絡む操作は理由つきで不可にする）。
    */
   canGrantAdminOnlyPermissions: ComputedRef<boolean>
   /**

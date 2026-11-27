@@ -7,7 +7,7 @@ import type {
 /**
  * F21.1 §5.5「FAQ駆動GEO」用 API クライアント composable。
  *
- * 管理 API（ADMIN / SYSTEM_ADMIN 限定。認可は BE 側で 401/403 を返す）と、
+ * 管理 API（ADMIN 限定。認可は BE 側で 401/403 を返す）と、
  * 認証不要の公開 GET API の両方を提供する。
  *
  * - 管理 GET: `GET /api/v1/admin/{teams|organizations}/{id}/faqs` → {@link FaqEditorResponse}
@@ -19,12 +19,12 @@ import type {
 export function useFaqApi() {
   const api = useApi()
 
-  /** チームの FAQ 編集ペイロードを取得する（ADMIN / SYSTEM_ADMIN 限定）。 */
+  /** チームの FAQ 編集ペイロードを取得する（ADMIN 限定）。 */
   async function fetchTeamFaqEditor(teamId: string): Promise<FaqEditorResponse> {
     return api<FaqEditorResponse>(`/api/v1/admin/teams/${teamId}/faqs`)
   }
 
-  /** チームの FAQ を一括 upsert する（ADMIN / SYSTEM_ADMIN 限定。成功 204）。 */
+  /** チームの FAQ を一括 upsert する（ADMIN 限定。成功 204）。 */
   async function saveTeamFaqs(teamId: string, req: SaveFaqRequest): Promise<void> {
     await api(`/api/v1/admin/teams/${teamId}/faqs`, {
       method: 'PUT',
@@ -32,12 +32,12 @@ export function useFaqApi() {
     })
   }
 
-  /** 組織の FAQ 編集ペイロードを取得する（ADMIN / SYSTEM_ADMIN 限定）。 */
+  /** 組織の FAQ 編集ペイロードを取得する（ADMIN 限定）。 */
   async function fetchOrgFaqEditor(orgId: string): Promise<FaqEditorResponse> {
     return api<FaqEditorResponse>(`/api/v1/admin/organizations/${orgId}/faqs`)
   }
 
-  /** 組織の FAQ を一括 upsert する（ADMIN / SYSTEM_ADMIN 限定。成功 204）。 */
+  /** 組織の FAQ を一括 upsert する（ADMIN 限定。成功 204）。 */
   async function saveOrgFaqs(orgId: string, req: SaveFaqRequest): Promise<void> {
     await api(`/api/v1/admin/organizations/${orgId}/faqs`, {
       method: 'PUT',

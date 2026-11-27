@@ -47,10 +47,10 @@ vi.mock('~/composables/useOrgShellContext', () => ({
   useOrgShellContext: () => ({
     orgTeams: ref([]),
     showTeamSearchLink: computed(() => false),
-    // shell の isAdmin は SYSTEM_ADMIN も含む（ページは roleName === 'ADMIN' で見る）。
-    isAdmin: computed(() => state.isAdmin || state.roleName === 'SYSTEM_ADMIN'),
+    // shell の isAdmin は実ロール ADMIN のみ（運営ロールは含まない）。
+    isAdmin: computed(() => state.isAdmin),
     roleName: computed(() => state.roleName ?? (state.isAdmin ? 'ADMIN' : 'MEMBER')),
-    // 対象組織の ADMIN 割当の有無（roleName とは独立。SYSTEM_ADMIN との兼任は roleName=SYSTEM_ADMIN かつ true）。
+    // 対象組織の ADMIN 割当の有無（roleName とは独立。運営との兼任でも roleName は実ロール ADMIN）。
     isScopeAdmin: computed(() => state.scopeAdmin ?? state.isAdmin),
     adminLens: ref(state.adminLens),
     orgTeamsLoading: computed(() => state.teamsLoading),
@@ -236,9 +236,9 @@ describe('pages/organizations/[slug]/member-teams.vue', () => {
       expect(replaceSpy).toHaveBeenCalledWith({ query: {} })
     })
 
-    it('MT-16: SYSTEM_ADMIN と対象組織 ADMIN の兼任者（roleName は SYSTEM_ADMIN）は管理 view・切替・設定リンクが使える', async () => {
+    it('MT-16: 運営と対象組織 ADMIN の兼任者（roleName は実ロール ADMIN）は管理 view・切替・設定リンクが使える', async () => {
       state.isAdmin = false
-      state.roleName = 'SYSTEM_ADMIN'
+      state.roleName = 'ADMIN'
       state.scopeAdmin = true
       state.query = { view: 'applications' }
       const wrapper = await mountPage()

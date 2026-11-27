@@ -35,6 +35,8 @@
 
 ### 2.1 SYSTEM_ADMIN の扱い（FE トグル表示と BE 認可の食い違い解消）【C・SYSTEM_ADMIN 整合 根治】
 
+> **2026-11-27 更新（戦役 Z-A PR5）**: 運営アカウントはテナントに所属せず、表示ロール（`roleName`）は実ロールのみで SYSTEM_ADMIN を返さない。設定ハブの SYSTEM_ADMIN 兼任確認（`getAdminActionRequired` による追加確認）は削除し、`isScopeAdmin` または `roleName==='DEPUTY_ADMIN'` だけで判定する。以下は経緯の記録。
+
 > **2026-10-16 現行契約との照合**: `EffectivePermissionsResponse.roleName` は表示用の最強ロールで、`AccessControlService.resolveEffectiveRoleName` は SYSTEM_ADMIN を優先する。したがって、従来の「`me/permissions` は常に scope 内ロールを返す」という説明だけでは兼任者を正しく扱えない。スコープ ADMIN の割当は応答の `scopeAdmin`（BE の `AccessControlService.isAdmin` と同じ判定）で明示され、FE の既存 `useRoleAccess.isScopeAdmin` がこれを参照する。
 
 **確定ポリシー**: 管理集約API・管理者レンズは、SYSTEM_ADMINでもscope内ADMIN/DEPUTYの割当を必要とする。設定ハブは既存設定ページの認可を維持し、FAQ・公開設定に限り既存のSYSTEM_ADMIN例外を案内する。この例外を他の設定や集約APIへ一般化しない。

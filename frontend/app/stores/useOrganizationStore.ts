@@ -24,7 +24,7 @@ export const useOrganizationStore = defineStore('organization', {
   getters: {
     organizationCount: (state): number => state.myOrganizations.length,
     adminOrganizations: (state): MyOrganization[] =>
-      state.myOrganizations.filter(o => o.role === 'ADMIN' || o.role === 'SYSTEM_ADMIN'),
+      state.myOrganizations.filter(o => o.role === 'ADMIN'),
   },
 
   actions: {

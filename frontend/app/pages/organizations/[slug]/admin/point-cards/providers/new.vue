@@ -23,7 +23,7 @@ const myOrg = computed(() =>
   orgStore.myOrganizations.find(o => String(o.id) === orgSlug.value),
 )
 const canAccess = computed(() =>
-  myOrg.value?.role === 'ADMIN' || myOrg.value?.role === 'SYSTEM_ADMIN',
+  myOrg.value?.role === 'ADMIN',
 )
 
 const submitting = ref(false)

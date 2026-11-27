@@ -47,7 +47,7 @@ describe('surveyScopeContext', () => {
       ).toBeNull()
     })
 
-    it.each(['ADMIN', 'SYSTEM_ADMIN'] as const)('%sは管理者として表示する', (roleName) => {
+    it.each(['ADMIN'] as const)('%sは管理者として表示する（運営ロールは管理者扱いしない）', (roleName) => {
       expect(
         resolveSurveyManagementContext({
           canManage: true,

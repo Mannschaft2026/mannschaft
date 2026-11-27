@@ -5,7 +5,7 @@
  * <p>設計書: docs/features/F18_point_card_wallet.md §3.3 UC-8 / §12.1
  *
  * <p>詳細表示 / 編集モード切替 / 顧客向け QR 表示 / 停止（DELETE）を担う。
- * 停止操作は ADMIN / SYSTEM_ADMIN のみ可能（DEPUTY_ADMIN には UI から隠す）。
+ * 停止操作は ADMIN のみ可能（DEPUTY_ADMIN には UI から隠す）。
  */
 import type {
   CreateOrgProviderRequest,
@@ -30,11 +30,10 @@ const myOrg = computed(() =>
 )
 const canAccess = computed(() =>
   myOrg.value?.role === 'ADMIN'
-  || myOrg.value?.role === 'SYSTEM_ADMIN'
   || myOrg.value?.role === 'DEPUTY_ADMIN',
 )
 const isAdminOnly = computed(() =>
-  myOrg.value?.role === 'ADMIN' || myOrg.value?.role === 'SYSTEM_ADMIN',
+  myOrg.value?.role === 'ADMIN',
 )
 
 const provider = ref<OrgPointCardProvider | null>(null)

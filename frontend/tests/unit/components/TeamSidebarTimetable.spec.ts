@@ -34,9 +34,9 @@ vi.mock('~/composables/useRoleAccess', () => ({
     roleName,
     isScopeAdmin: computed(() => roleName.value === 'ADMIN'),
     can: vi.fn(() => false),
-    isAdmin: computed(() => roleName.value === 'ADMIN' || roleName.value === 'SYSTEM_ADMIN'),
+    isAdmin: computed(() => roleName.value === 'ADMIN'),
     isAdminOrDeputy: computed(
-      () => ['ADMIN', 'SYSTEM_ADMIN', 'DEPUTY_ADMIN'].includes(roleName.value ?? ''),
+      () => ['ADMIN', 'DEPUTY_ADMIN'].includes(roleName.value ?? ''),
     ),
     loadPermissions: vi.fn().mockResolvedValue({ ok: true }),
   }),

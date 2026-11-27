@@ -1,42 +1,9 @@
 {
-  "components/BaseSidebar.vue": {
-    "'SYSTEM_ADMIN'#isItemVisible": 1,
-    "'SYSTEM_ADMIN'#loadSidebar": 1
-  },
-  "components/RoleBadge.vue": {
-    "SYSTEM_ADMIN:#-": 1
-  },
-  "components/admin/AdminSettingsHub.vue": {
-    "'SYSTEM_ADMIN'#sequence": 1
-  },
-  "components/dashboard/DashboardActionPanel.vue": {
-    "'SYSTEM_ADMIN'#load": 1
-  },
-  "components/dashboard/DashboardPersonalPanel.vue": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
   "components/public/PublicPostCommentSection.vue": {
     "'SYSTEM_ADMIN'#-": 1
   },
-  "components/shift/ShiftDetailTabs.vue": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
-  "composables/useAdminScopeGuard.ts": {
-    "SYSTEM_ADMIN:#-": 1
-  },
   "composables/useLoginSession.ts": {
     "isSystemAdmin#armProactiveRefresh": 1
-  },
-  "composables/useLoyaltyStaffAccess.ts": {
-    "'SYSTEM_ADMIN'#useLoyaltyStaffAccess": 1,
-    "'SYSTEM_ADMIN'#refresh": 1
-  },
-  "composables/useRoleAccess.ts": {
-    "'SYSTEM_ADMIN'#-": 2
-  },
-  "composables/useScopeFeatureVisibility.ts": {
-    "'SYSTEM_ADMIN'#useScopeFeatureVisibility": 1,
-    "'SYSTEM_ADMIN'#isVisible": 1
   },
   "pages/admin/villages/creation-requests.vue": {
     "isSystemAdmin#-": 1
@@ -47,44 +14,8 @@
   "pages/blog/posts/[id]/edit.vue": {
     "isSystemAdmin#-": 1
   },
-  "pages/organizations/[slug]/admin/point-cards/history.vue": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
-  "pages/organizations/[slug]/admin/point-cards/index.vue": {
-    "'SYSTEM_ADMIN'#-": 2
-  },
-  "pages/organizations/[slug]/admin/point-cards/providers/[providerId]/index.vue": {
-    "'SYSTEM_ADMIN'#-": 2
-  },
-  "pages/organizations/[slug]/admin/point-cards/providers/new.vue": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
-  "pages/organizations/[slug]/admin/point-cards/stamp.vue": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
-  "pages/shift/[id]/edit.vue": {
-    "'SYSTEM_ADMIN'#scheduleId": 1
-  },
-  "pages/shift/[id]/index.vue": {
-    "'SYSTEM_ADMIN'#schedule": 1
-  },
-  "pages/shift/[id]/requests.vue": {
-    "'SYSTEM_ADMIN'#schedule": 1
-  },
-  "pages/shift/[id]/work-constraints.vue": {
-    "'SYSTEM_ADMIN'#schedule": 1
-  },
-  "pages/shift/index.vue": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
   "stores/featureFlags.ts": {
     "isSystemAdmin#loadFlags": 1
-  },
-  "stores/useOrganizationStore.ts": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
-  "stores/useTeamStore.ts": {
-    "'SYSTEM_ADMIN'#-": 1
   },
   "types/dashboard-scope.ts": {
     "'SYSTEM_ADMIN'#-": 2
@@ -92,14 +23,7 @@
   "types/dashboard.ts": {
     "'SYSTEM_ADMIN'#-": 1
   },
-  "types/feature-display.ts": {
-    "'SYSTEM_ADMIN'#-": 1
-  },
   "types/member.ts": {
     "'SYSTEM_ADMIN'#-": 1
-  },
-  "utils/surveyScopeContext.ts": {
-    "'SYSTEM_ADMIN'#-": 1,
-    "'SYSTEM_ADMIN'#resolveSurveyManagementContext": 1
   }
 }

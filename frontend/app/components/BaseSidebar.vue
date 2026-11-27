@@ -27,13 +27,12 @@ const { roleName, isAdmin, isScopeAdmin, can, isAdminOrDeputy, loadPermissions }
 
 const featureVisibility = useScopeFeatureVisibility(() => props.scopeType, () => props.scopeId, roleName, () => !!props.memberLensActive)
 
-const loyaltyAccess = useLoyaltyStaffAccess(toRef(props, 'scopeId'), computed(() => props.scopeType === 'team' ? roleName.value : null), isScopeAdmin, can)
+const loyaltyAccess = useLoyaltyStaffAccess(computed(() => props.scopeType === 'team' ? roleName.value : null), isScopeAdmin, can)
 
-// MEMBER以上判定（SUPPORTER/GUEST/未加入は除外）
+// MEMBER以上判定（SUPPORTER/GUEST/未加入は除外）。実ロールの列挙で判定し、未知の値はメンバー扱いにしない（fail-closed）。
+const MEMBER_OR_ABOVE_ROLES: readonly string[] = ['ADMIN', 'DEPUTY_ADMIN', 'MEMBER']
 const isMember = computed(() =>
-  roleName.value !== null
-  && roleName.value !== 'SUPPORTER'
-  && roleName.value !== 'GUEST',
+  roleName.value !== null && MEMBER_OR_ABOVE_ROLES.includes(roleName.value),
 )
 
 // モジュール有効スラッグセット
@@ -53,12 +52,9 @@ function isItemVisible(item: SidebarItem): boolean {
   if (!featureVisibility.isVisible(feature)) return false
   if (item.access === 'scope-admin') return !props.memberLensActive && isScopeAdmin.value
   if (item.access === 'loyalty-operate') return !props.memberLensActive && loyaltyAccess.allowed.value
-  // 機能ゲートが閉じている（OFF・未取得）項目は SYSTEM_ADMIN にも出さない（fail-closed）。
+  // 機能ゲートが閉じている（OFF・未取得）項目は出さない（fail-closed）。
   // route 層の middleware も同じ判定で弾くため、踏めない導線を作らない。
   if (item.gateKey !== undefined && !featureFlagStore.isEnabled(item.gateKey)) return false
-  // レンズが「メンバー」プレビュー中は SYSTEM_ADMIN バイパスも効かせない（実ロールを問わず
-  // メンバー項目のみに絞る＝プレビューとして機能させる）。
-  if (roleName.value === 'SYSTEM_ADMIN' && !props.memberLensActive) return true
   if (!isMember.value) return false
   if (item.moduleSlug !== null && !enabledSlugs.value.has(item.moduleSlug)) return false
   if (props.memberLensActive) {
@@ -92,16 +88,12 @@ async function loadSidebar() {
   try {
     const result = await loadPermissions()
     if (!result.ok) throw result.error
-    // SYSTEM_ADMINの通常表示はモジュール有効状態を使わない。所属限定APIも取得しない。
-    // メンバーレンズ中は通常どおりモジュール有効状態に従う。
-    if (roleName.value !== 'SYSTEM_ADMIN' || props.memberLensActive) {
-      const modules = props.scopeType === 'organization'
-        ? await getOrganizationModules(props.scopeId)
-        : (await getTeamModules(props.scopeId)).data
-      enabledSlugs.value = new Set(
-        modules.filter(module => module.isEnabled).map(module => module.moduleSlug),
-      )
-    }
+    const modules = props.scopeType === 'organization'
+      ? await getOrganizationModules(props.scopeId)
+      : (await getTeamModules(props.scopeId)).data
+    enabledSlugs.value = new Set(
+      modules.filter(module => module.isEnabled).map(module => module.moduleSlug),
+    )
     loadState.value = 'loaded'
   }
   catch (error) {
@@ -171,7 +163,6 @@ function isItemActive(item: SidebarItem): boolean {
   <nav v-else-if="isMember" class="flex flex-col gap-0.5 py-2 px-1">
     <PageLoading v-if="featureVisibility.loading.value" class="!min-h-0 py-4" />
     <DashboardErrorState v-if="featureVisibility.error.value" :error="featureVisibility.error.value" @retry="featureVisibility.refresh(true)" />
-    <DashboardErrorState v-if="loyaltyAccess.error.value && scopeType === 'team'" :error="loyaltyAccess.error.value" @retry="loyaltyAccess.refresh" />
     <template v-for="category in categories" :key="category.key">
       <div v-if="isCategoryVisible(category)">
         <!-- カテゴリヘッダー（クリックで展開/折り畳み） -->

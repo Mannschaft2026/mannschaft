@@ -10,9 +10,9 @@ export const MANAGE_ORG_AFFILIATION = 'MANAGE_ORG_AFFILIATION'
 export interface OrgAffiliationAccessInput {
   /** 管理者レンズ（true=管理者ビュー）。 */
   adminLens: boolean
-  /** 対象チームの ADMIN 割当があるか（/me/permissions の scopeAdmin）。SYSTEM_ADMIN 単独は false。 */
+  /** 対象チームの ADMIN 割当があるか（/me/permissions の scopeAdmin）。 */
   isScopeAdmin: boolean
-  /** 対象チームでの実効権限名（/me/permissions の permissions）。roleName（SYSTEM_ADMIN を優先して返す）には依存しない。 */
+  /** 対象チームでの実効権限名（/me/permissions の permissions）。 */
   permissions: string[]
 }
 
@@ -21,8 +21,8 @@ export interface OrgAffiliationAccessInput {
  *
  * - チーム ADMIN 割当（isScopeAdmin）は常に操作者
  * - それ以外は、対象チームで MANAGE_ORG_AFFILIATION を保有しているときだけ（BE の TeamAffiliationAccessGuard は
- *   権限の保有で判定する。SYSTEM_ADMIN との兼任でも、権限を持っていれば操作者）
- * - SYSTEM_ADMIN 単独（ADMIN 割当も権限も無い）は、権限が無いので操作者ではない
+ *   権限の保有で判定する）
+ * - ADMIN 割当も権限も無い者は操作者ではない
  * - 管理者レンズ OFF のときは操作者として扱わない（タブを隠す。設計書 §13）
  */
 export function canManageOrgAffiliation(input: OrgAffiliationAccessInput): boolean {
@@ -33,7 +33,7 @@ export function canManageOrgAffiliation(input: OrgAffiliationAccessInput): boole
 
 /**
  * 権限グループ画面・メンバー一覧の割当を出してよいか（チーム ADMIN 割当・管理レンズ ON のみ。設計書 §3.2）。
- * SYSTEM_ADMIN を含む isAdmin ではなく isScopeAdmin で判定する（ADMIN 割当の無い運営者は一覧 API が 403）。
+ * isScopeAdmin で判定する（ADMIN 割当の無い者は一覧 API が 403）。
  */
 export function canManagePermissionGroups(input: { adminLens: boolean, isScopeAdmin: boolean }): boolean {
   return input.adminLens && input.isScopeAdmin

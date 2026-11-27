@@ -6,7 +6,6 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const severityMap: Record<string, string> = {
-  SYSTEM_ADMIN: 'danger',
   ADMIN: 'warn',
   DEPUTY_ADMIN: 'info',
   MEMBER: 'success',
