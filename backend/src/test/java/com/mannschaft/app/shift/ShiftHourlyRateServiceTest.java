@@ -52,10 +52,12 @@ class ShiftHourlyRateServiceTest {
         // 認可判定は ShiftHourlyRateAuthorizer に一本化されている。モックの AccessControlService を実際の判定へ通す。
         // 判定の実体は ShiftManageAccessGate（CMP-261125-2114）。AccessControlService と設定だけモックにして本物を組む。
         com.mannschaft.app.shift.service.ShiftManageAccessGate manageGate =
-                new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService, teamShiftSettingsService);
+                new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of()));
         // 参照の認可は ShiftHourlyRateFacade（tx の外）の責務で、ShiftHourlyRateFacadeTest が固定する。
         shiftHourlyRateService = new ShiftHourlyRateService(hourlyRateRepository, shiftMapper,
-                new com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer(accessControlService, manageGate));
+                new com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer(accessControlService, manageGate,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())));
     }
 
     // ========================================

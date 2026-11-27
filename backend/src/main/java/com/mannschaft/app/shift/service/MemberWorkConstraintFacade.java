@@ -1,7 +1,7 @@
 package com.mannschaft.app.shift.service;
 
-import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.shift.ShiftErrorCode;
 import com.mannschaft.app.shift.dto.MemberWorkConstraintRequest;
 import com.mannschaft.app.shift.dto.MemberWorkConstraintResponse;
@@ -14,7 +14,7 @@ import java.util.List;
  * メンバー勤務制約の <b>認可ファサード</b>（トランザクションの外。CMP-261125-2114）。
  *
  * <p>本クラスは {@code @Transactional} を<b>付けない</b>（クラスにもメソッドにも）。流れは
- * 「認可（{@link ShiftManageAccessGate}）＋対象の在籍検査（{@code AccessControlService#isMember}）→
+ * 「認可（{@link ShiftManageAccessGate}）＋対象の在籍検査（共通の門 {@link ScopeContentAccessGate#canAccessScopeContent}）→
  * {@link MemberWorkConstraintService} の tx 本体（認可しない）」。tx 内から membership・role の Repository へ
  * 到達させない（D-3T）。Controller は本クラスだけを呼ぶ。名前を {@code *AccessService} / {@code *AccessGate} にしないのは、
  * 呼んだだけで認可シグナル扱いになり本クラス内の認可漏れを AuthzControllerGuard が見逃すのを避けるため。</p>
@@ -39,7 +39,7 @@ public class MemberWorkConstraintFacade {
 
     private final MemberWorkConstraintService workConstraintService;
     private final ShiftManageAccessGate manageGate;
-    private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * メンバー個別の勤務制約を upsert する（ADMIN と MANAGE_SHIFTS を持つ DEPUTY_ADMIN。対象は当該チームの在籍者）。
@@ -54,7 +54,9 @@ public class MemberWorkConstraintFacade {
     public MemberWorkConstraintResponse upsertConstraint(
             Long teamId, Long userId, MemberWorkConstraintRequest request, Long currentUserId) {
         manageGate.requireManage(currentUserId, teamId, ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
-        if (!accessControlService.isMember(userId, teamId, TEAM)) {
+        // 対象の在籍は共通の門で判定する（F00 §20.5.1）。拒否コードは権限不足と同一の WORK_CONSTRAINT_FORBIDDEN を保つため
+        // 真偽版で判定して自前で投げる（非公開チームに在籍する MEMBER 未満の対象も在籍者でない側に倒す。AC-0159-94）。
+        if (!scopeContentAccessGate.canAccessScopeContent(userId, teamId, TEAM)) {
             throw new BusinessException(ShiftErrorCode.WORK_CONSTRAINT_FORBIDDEN);
         }
         return workConstraintService.upsertConstraint(teamId, userId, request, currentUserId);

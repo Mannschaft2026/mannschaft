@@ -29,4 +29,3 @@ com.mannschaft.app.payment.controller.OrganizationPaymentItemController	対象�
 com.mannschaft.app.payment.controller.OrganizationPaymentSummaryController	対象外: 組織スコープの支払い集計（Organization* 系）
 com.mannschaft.app.template.controller.OrganizationModuleController	対象外: 組織スコープのモジュール設定（Organization* 系）
 com.mannschaft.app.tournament.controller.OrganizationTournamentSummaryController	対象外: 組織スコープの大会集計（Organization* 系）
-com.mannschaft.app.shift.service.ShiftManageAccessGate	対象外: シフト管理の認可ゲート本体（CMP-261125-2114）。越境（404）と所属者の権限不足（403）の作り分けに isMember を使う。ScopeConcealingAccessGate と同じ役割

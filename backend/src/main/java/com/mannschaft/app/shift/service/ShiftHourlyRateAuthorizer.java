@@ -3,6 +3,7 @@ package com.mannschaft.app.shift.service;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,7 @@ public class ShiftHourlyRateAuthorizer {
 
     private final AccessControlService accessControlService;
     private final ShiftManageAccessGate manageGate;
+    private final ScopeContentAccessGate scopeContentAccessGate;
 
     /**
      * <p>時給閲覧切替を読むため、tx の外（{@link ShiftHourlyRateFacade}）から呼ぶこと。</p>
@@ -60,7 +62,8 @@ public class ShiftHourlyRateAuthorizer {
      */
     public void checkHourlyRateDeleteAccess(Long currentUserId, Long targetUserId, Long teamId) {
         if (currentUserId.equals(targetUserId)) {
-            accessControlService.checkMembership(currentUserId, teamId, TEAM);
+            // 本人の分の削除は中身を返さない書き込みなので共通の門の書き込み用（F00 §20.5.1）。
+            scopeContentAccessGate.checkMembershipForWrite(currentUserId, teamId, TEAM);
             return;
         }
         checkHourlyRateWriteAccess(currentUserId, targetUserId, teamId);

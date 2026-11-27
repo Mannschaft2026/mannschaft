@@ -54,7 +54,8 @@ class MemberWorkConstraintServiceTest {
     @BeforeEach
     void setUpService() {
         service = new MemberWorkConstraintService(constraintRepository, shiftMapper, accessControlService,
-                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService));
+                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())));
     }
 
     // ========================================

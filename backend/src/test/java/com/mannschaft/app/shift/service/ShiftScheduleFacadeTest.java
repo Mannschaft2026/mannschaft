@@ -68,7 +68,8 @@ class ShiftScheduleFacadeTest {
     @BeforeEach
     void setUp() {
         facade = new ShiftScheduleFacade(scheduleService, reminderService,
-                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService), accessControlService,
+                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())), accessControlService,
                 publicationBudgetContextPort);
     }
 

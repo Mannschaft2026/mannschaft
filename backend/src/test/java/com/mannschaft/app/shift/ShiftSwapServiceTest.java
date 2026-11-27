@@ -99,7 +99,9 @@ class ShiftSwapServiceTest {
         // 認可は Facade（tx の外）が行う。応答の契約は Facade→tx 本体の合成で検証する。
         swapFacade = new ShiftSwapFacade(shiftSwapService,
                 new com.mannschaft.app.shift.service.ShiftManageAccessGate(accessControlService,
-                        teamShiftSettingsService),
+                        teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService,
+                                teamIds -> java.util.Set.of())),
                 accessControlService, userStatusLookupService);
     }
 

@@ -53,9 +53,11 @@ class ShiftHourlyRateFacadeTest {
 
     @BeforeEach
     void setUp() {
-        ShiftManageAccessGate manageGate = new ShiftManageAccessGate(accessControlService, teamShiftSettingsService);
+        ShiftManageAccessGate manageGate = new ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of()));
         facade = new ShiftHourlyRateFacade(hourlyRateService,
-                new ShiftHourlyRateAuthorizer(accessControlService, manageGate), manageGate, accessControlService);
+                new ShiftHourlyRateAuthorizer(accessControlService, manageGate,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())), manageGate, accessControlService);
     }
 
     private void givenManager(Long userId) {

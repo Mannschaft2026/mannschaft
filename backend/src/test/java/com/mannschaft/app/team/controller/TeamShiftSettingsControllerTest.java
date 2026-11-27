@@ -53,6 +53,7 @@ class TeamShiftSettingsControllerTest {
     @Mock private TeamShiftSettingsService settingsService;
     @Mock private TeamService teamService;
     @Mock private AccessControlService accessControlService;
+    @Mock private com.mannschaft.app.common.ScopeContentAccessGate scopeContentAccessGate;
 
     @InjectMocks
     private TeamShiftSettingsController controller;
@@ -139,7 +140,7 @@ class TeamShiftSettingsControllerTest {
     void updateSettings_403_whenNotEnrolled() {
         UpdateTeamShiftSettingsRequest req = new UpdateTeamShiftSettingsRequest();
         willThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                .given(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+                .given(scopeContentAccessGate).checkMembershipForWrite(USER_ID, TEAM_ID, "TEAM");
         assertThatThrownBy(() -> controller.updateSettings(new TeamScopeId(TEAM_ID), req))
                 .isInstanceOf(BusinessException.class);
         verify(settingsService, never()).updateSettings(TEAM_ID, req);

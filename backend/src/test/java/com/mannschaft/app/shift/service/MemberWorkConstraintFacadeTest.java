@@ -49,7 +49,9 @@ class MemberWorkConstraintFacadeTest {
     @BeforeEach
     void setUp() {
         facade = new MemberWorkConstraintFacade(workConstraintService,
-                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService), accessControlService);
+                new ShiftManageAccessGate(accessControlService, teamShiftSettingsService,
+                        new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())),
+                new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of()));
     }
 
     private static MemberWorkConstraintRequest request() {

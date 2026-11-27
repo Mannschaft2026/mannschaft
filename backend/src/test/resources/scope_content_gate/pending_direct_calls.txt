@@ -466,12 +466,10 @@ com.mannschaft.app.service.service.ServiceRecordTemplateService#listOrgTemplates
 com.mannschaft.app.service.service.ServiceRecordTemplateService#listTeamTemplates
 
 ## shift
-com.mannschaft.app.shift.service.MemberWorkConstraintFacade#upsertConstraint
 com.mannschaft.app.shift.service.MemberWorkConstraintService#getConstraint
 com.mannschaft.app.shift.service.MemberWorkConstraintService#getTeamDefault
 com.mannschaft.app.shift.service.ShiftAvailabilityService#checkTeamAccess
 com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateAccess
-com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateDeleteAccess
 com.mannschaft.app.shift.service.ShiftHourlyRateAuthorizer#checkHourlyRateWriteAccess
 com.mannschaft.app.shift.service.ShiftPdfFacade#authorize
 com.mannschaft.app.shift.service.ShiftPositionFacade#checkTeamMemberAccess
@@ -508,7 +506,6 @@ com.mannschaft.app.survey.service.SurveyAccessGuard#checkCanCreate
 
 ## team
 com.mannschaft.app.team.controller.TeamShiftSettingsController#getSettings
-com.mannschaft.app.team.controller.TeamShiftSettingsController#updateSettings
 com.mannschaft.app.team.service.TeamExtendedProfileService#getCustomFields
 com.mannschaft.app.team.service.TeamExtendedProfileService#getOfficers
 

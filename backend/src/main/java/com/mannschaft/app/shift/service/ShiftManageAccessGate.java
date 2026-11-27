@@ -4,6 +4,7 @@ import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.ErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.team.dto.DeputyShiftViewToggles;
 import com.mannschaft.app.team.service.TeamShiftSettingsService;
 import lombok.RequiredArgsConstructor;
@@ -32,8 +33,15 @@ import java.util.Objects;
  *
  * <h2>拒否の作り分け（存在オラクルの封鎖。{@code ScopeConcealingAccessGate} と同じ規約）</h2>
  * <p>所属していない（越境）は呼び出し側の不在コード、所属者の権限不足は 403 {@code COMMON_002}。
- * 所属は memberships の在籍、または user_roles の ADMIN/DEPUTY_ADMIN のいずれか（両者が食い違う副管理者を
+ * 所属は「共通の門で中身を読める在籍」、または user_roles の ADMIN/DEPUTY_ADMIN のいずれか（両者が食い違う副管理者を
  * 越境と誤判定して 404 にしない）。</p>
+ *
+ * <h2>在籍判定は共通の門を通す（CMP-261124-0159・F00 §20.4・AC-0159-94）</h2>
+ * <p>在籍の判定は {@code AccessControlService#isMember} を直接呼ばず、共通の門
+ * {@link ScopeContentAccessGate#canAccessScopeContent}（在籍 かつ 親チーム上限の内側）で行う。非公開チーム
+ * （{@code MEMBERS_AND_ABOVE}）に在籍する MEMBER 未満（是正前データのサポーター・ゲスト）は、一般メンバーの操作・
+ * 本人の操作の成功経路でも、拒否経路でも、越境と同じく不在と同一の {@code notFoundCode} に倒す
+ * （{@code ScopeConcealingAccessGate} の上限の扱いと同一）。ADMIN / DEPUTY_ADMIN は MEMBER 以上なので上限は掛からない。</p>
  *
  * <h2>R4（トランザクション本体は認可クラスに依存しない）</h2>
  * <p>本クラスは Facade（tx の外）から呼ぶ。閲覧切替の値や privileged の結果は Facade で解決し、
@@ -52,6 +60,9 @@ public class ShiftManageAccessGate {
     private final AccessControlService accessControlService;
     private final TeamShiftSettingsService teamShiftSettingsService;
 
+    /** 在籍と親チーム上限の判定（CMP-261124-0159・F00 §20.3 の共通の門）。 */
+    private final ScopeContentAccessGate scopeContentAccessGate;
+
     // ═════════════════════════════════════════════════════════════════════
     // 管理操作
     // ═════════════════════════════════════════════════════════════════════
@@ -63,8 +74,9 @@ public class ShiftManageAccessGate {
         // ADMIN 判定（AccessControlService#isAdmin）は user_roles だけを見て在籍を問わないため、退会（チーム離脱）済みで
         // ロールだけ残った ADMIN を通してしまう。シフト管理は在籍中であることも要求する（共通の isAdmin は変えない）。
         // DEPUTY_ADMIN 側は existsDeputyAdminWithPermissionInTeam が在籍を見るので、ここで揃うだけ。
+        // 在籍は共通の門で判定する（ADMIN / DEPUTY_ADMIN は MEMBER 以上なので親チーム上限は掛からない）。
         return accessControlService.hasAdminOrPermissionInScope(userId, teamId, TEAM, MANAGE_SHIFTS)
-                && accessControlService.isMember(userId, teamId, TEAM);
+                && isEnrolledWithinCap(userId, teamId);
     }
 
     /**
@@ -81,9 +93,14 @@ public class ShiftManageAccessGate {
 
     /**
      * 本人、または管理操作の認可。本人判定はメモリ上の比較でクエリを撃たないため先に評価する。
+     *
+     * <p>本人の成功経路にも親チーム上限を AND する（AC-0159-94。{@code ScopeConcealingAccessGate#requireOwnerOrAdminOrConceal}
+     * と同じ）。非公開チームで MEMBER 未満の所有者（外された元提出者・在籍サポーター）は本人として通さず、
+     * 管理操作の判定へ進み、拒否なら越境と同じ {@code notFoundCode}。本人の現在の在籍そのものは従来どおり問わない。</p>
      */
     public void requireOwnerOrManageOrConceal(Long userId, Long teamId, Long ownerId, ErrorCode notFoundCode) {
-        if (ownerId != null && Objects.equals(ownerId, userId)) {
+        if (ownerId != null && Objects.equals(ownerId, userId)
+                && !scopeContentAccessGate.isBeyondTeamContentCap(userId, teamId, TEAM)) {
             return;
         }
         requireManageOrConceal(userId, teamId, notFoundCode);
@@ -171,20 +188,22 @@ public class ShiftManageAccessGate {
     // ═════════════════════════════════════════════════════════════════════
 
     /**
-     * 当該チームの所属者として扱うか。memberships の在籍、または user_roles の ADMIN/DEPUTY_ADMIN。
-     * 両系統が食い違う副管理者も所属者とみなし、越境（404）に化けさせない。
+     * 当該チームの所属者として扱うか。共通の門で中身を読める在籍（{@link #isEnrolledWithinCap}）、
+     * または user_roles の ADMIN/DEPUTY_ADMIN。両系統が食い違う副管理者も所属者とみなし、越境（404）に化けさせない。
+     * 非公開チームに在籍する MEMBER 未満は所属者とみなさない（越境と同じ 404。AC-0159-94）。
      */
     public boolean belongsToTeam(Long userId, Long teamId) {
-        return accessControlService.isMember(userId, teamId, TEAM)
+        return isEnrolledWithinCap(userId, teamId)
                 || accessControlService.isAdminOrAbove(userId, teamId, TEAM);
     }
 
     /**
-     * 一般メンバーの参照の認可（在籍中であること。SYSTEM_ADMIN を特別扱いしない）。
-     * 在籍していなければ、user_roles のみの管理者は 403、それ以外は越境として {@code notFoundCode}。
+     * 一般メンバーの参照の認可（在籍中で、親チーム上限の内側であること。SYSTEM_ADMIN を特別扱いしない）。
+     * 許可されなければ、user_roles のみの管理者は 403、それ以外（非公開チームに在籍する MEMBER 未満を含む）は
+     * 越境として {@code notFoundCode}。
      */
     public void requireMemberOrConceal(Long userId, Long teamId, ErrorCode notFoundCode) {
-        if (accessControlService.isMember(userId, teamId, TEAM)) {
+        if (isEnrolledWithinCap(userId, teamId)) {
             return;
         }
         throw denial(userId, teamId, notFoundCode);
@@ -205,7 +224,15 @@ public class ShiftManageAccessGate {
     /** ADMIN / DEPUTY_ADMIN で、かつ在籍中か（退会済みでロールだけ残った管理者は含めない）。 */
     private boolean isActiveAdminOrAbove(Long userId, Long teamId) {
         return accessControlService.isAdminOrAbove(userId, teamId, TEAM)
-                && accessControlService.isMember(userId, teamId, TEAM);
+                && isEnrolledWithinCap(userId, teamId);
+    }
+
+    /**
+     * 在籍中で、かつ親チーム上限の内側か（共通の門 {@link ScopeContentAccessGate#canAccessScopeContent}）。
+     * 非公開チームでは MEMBER 以上の在籍者だけが真。公開側のチームでは在籍と同一。
+     */
+    private boolean isEnrolledWithinCap(Long userId, Long teamId) {
+        return scopeContentAccessGate.canAccessScopeContent(userId, teamId, TEAM);
     }
 
     private BusinessException denial(Long userId, Long teamId, ErrorCode notFoundCode) {

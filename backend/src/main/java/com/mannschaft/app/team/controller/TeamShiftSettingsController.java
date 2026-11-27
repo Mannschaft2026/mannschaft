@@ -3,6 +3,7 @@ package com.mannschaft.app.team.controller;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.config.TeamScopeId;
 import com.mannschaft.app.team.dto.TeamShiftSettingsResponse;
@@ -34,6 +35,7 @@ public class TeamShiftSettingsController {
 
     private final TeamShiftSettingsService settingsService;
     private final AccessControlService accessControlService;
+    private final ScopeContentAccessGate scopeContentAccessGate;
     private final TeamService teamService;
 
     @GetMapping
@@ -72,7 +74,8 @@ public class TeamShiftSettingsController {
         Long userId = SecurityUtils.getCurrentUserId();
         // ADMIN の判定（isAdmin）は user_roles だけを見て在籍を問わない。退会済みでロールだけ残った ADMIN を通さないため、
         // 在籍中であることも要求する（シフト管理ゲート ShiftManageAccessGate と同じ基準）。
-        accessControlService.checkMembership(userId, teamId, SCOPE_TYPE);
+        // 中身を返さない書き込みなので共通の門の書き込み用（F00 §20.5.1）。
+        scopeContentAccessGate.checkMembershipForWrite(userId, teamId, SCOPE_TYPE);
         // 時給を見せる範囲の切替は ADMIN だけ（マスター裁定。MANAGE_SHIFTS 付き DEPUTY は変更不可）。
         // 送った（null 以外）時点で拒否する: 現在値と同じ値の再送でも、権限の無い者に変更の窓口を開けない。
         if (request.getDeputyHourlyRateViewEnabled() != null
