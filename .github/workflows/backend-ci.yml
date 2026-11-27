@@ -386,7 +386,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.backend_changed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 2026-11-27 実測 9〜15 分で上限 15 分に張り付き、merge queue の entry が繰り返し cancelled → failed_checks で除外されたため 25 分へ（遅延の原因調査は CMP-261126-1645）
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: ./backend
