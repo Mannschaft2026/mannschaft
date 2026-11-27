@@ -60,9 +60,12 @@ public class BillingPayerHandoverTxService {
      * 書き込みトランザクションで実行する（{@code requireCanManage} も {@code MANDATORY}）。
      * 期限切れだけは {@code EXPIRED} への確定を伴う（設計書 §5.3）。</p>
      *
+     * <p>期限切れの {@code EXPIRED} 確定は、{@link HandoverExpiredException} を {@code noRollbackFor} に
+     * 指定してロールバックされないようにしている（CMP-260909-0304）。</p>
+     *
      * @return 検証済みスナップショット（支払い手段検証は tx の外で行うため本メソッドでは行わない）
      */
-    @Transactional
+    @Transactional(noRollbackFor = HandoverExpiredException.class)
     public AcceptValidation validateAcceptable(
             EntitlementScopeKind scopeKind, Long scopeId, UUID handoverRequestId, Long operatorUserId) {
 
@@ -84,10 +87,15 @@ public class BillingPayerHandoverTxService {
         requireEligibleAcceptor(handover, operatorUserId);
 
         Instant now = clock.instant();
-        if (!handover.getExpiresAt().isAfter(now)) {
+        // 直接 EXPIRED に確定してよいのは Stripe に一切触れていない REQUESTED / REQUIRES_PAYMENT_METHOD のみ。
+        // ACCEPTED 以降（SWITCHING 等）は Stripe 側に新サブスクが存在しうるため、ここで EXPIRED に化かさず
+        // 状態検証（HANDOVER_NOT_ACCEPTABLE）へ進め、reconcileExpiredAcceptance の Stripe 照合に委ねる。
+        boolean expirable = handover.getStatus() == PayerHandoverStatus.REQUESTED
+                || handover.getStatus() == PayerHandoverStatus.REQUIRES_PAYMENT_METHOD;
+        if (expirable && !handover.getExpiresAt().isAfter(now)) {
             handover.setStatus(PayerHandoverStatus.EXPIRED);
             handoverRequestRepository.save(handover);
-            throw new BusinessException(EntitlementErrorCode.HANDOVER_EXPIRED);
+            throw new HandoverExpiredException();
         }
         requireAcceptableStatus(handover, operatorUserId);
 
