@@ -58,6 +58,10 @@ class MembershipBatchQueryServiceTest {
     @Mock
     private MembershipRepository membershipRepository;
 
+    /** CMP-261124-0159: 非公開チーム判定（既定のモック応答は空集合＝上限なしで、既存シナリオの判定を変えない）。 */
+    @Mock
+    private com.mannschaft.app.common.MembersOnlyTeamQuery membersOnlyTeamQuery;
+
     @InjectMocks
     private MembershipBatchQueryService service;
 
@@ -71,7 +75,7 @@ class MembershipBatchQueryServiceTest {
     class EarlyReturn {
 
         @Test
-        @DisplayName("userId=null → empty() を返し SQL を一切発行しない")
+        @DisplayName("userId=null → empty() を返しメンバーシップ・ロール系の SQL を発行しない（非公開チーム判定は CMP-261124-0159 で別途 1 本）")
         void userIdNull_emptyかつSQL未発行() {
             UserScopeRoleSnapshot result = service.snapshotForUser(null, Set.of(TEAM_1), Set.of(ORG_10));
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 台帳 docs/task-list.md の末尾追記衝突の自動修復（CMP-261124-1222 第2段）。
+// 台帳 docs/task-list.md（新配置では docs/task-list/*.md も）の末尾追記衝突の自動修復（CMP-261124-1222 第2段・両配置対応）。
 //
 // main は GitHub merge queue（SQUASH）必須で、台帳に行を末尾追記する PR どうしが衝突すると queue から
 // merge_conflict で外れ、auto-merge の予約も消える。GitHub のサーバ側マージは .gitattributes の merge=union を
@@ -20,15 +20,19 @@
 // 依存パッケージなし（gh / git はサブプロセス）。
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { checkTaskListStructure } from './task-list-structure-check.mjs';
+import { LEDGER_DIR, LEDGER_INDEX_PATH, readLedger } from './task-list-ledger.mjs';
+import { planPortDiff } from './task-list-ledger-cli.mjs';
 
-export const LEDGER_PATH = 'docs/task-list.md';
+export const LEDGER_PATH = LEDGER_INDEX_PATH;
 export const OPT_OUT_LABEL = 'no-ledger-autofix';
 export const FIX_MARKER = '<!-- ledger-autofix:fixed -->';
 export const LIMIT_MARKER = '<!-- ledger-autofix:limit -->';
+export const PORT_MANUAL_MARKER_PREFIX = '<!-- ledger-autofix:port-manual head=';
 export const STRUCTURE_NG_MARKER_PREFIX = '<!-- ledger-autofix:structure-ng head=';
 export const MAX_FIXES_PER_DAY = 3;
 /** bot の修復 commit のメッセージに必ず入れる固定印（trailer）。24時間の上限はこれと bot の署名で数える。 */
@@ -36,7 +40,14 @@ export const FIX_COMMIT_TRAILER = 'Ledger-Autofix: task-list-conflict-autofix';
 /** 自動修復の対象にする queue 脱落理由（RemovedFromMergeQueueEvent.reason。GraphQL では String で、実測値は merge_conflict / failed_checks / manual / merged）。 */
 export const CONFLICT_REMOVAL_REASON = 'merge_conflict';
 const DAY_MS = 24 * 3600 * 1000;
-const UNION_ATTRIBUTE_LINE = LEDGER_PATH + ' merge=union';
+/** .git/info/attributes に書く union 指定（索引＝旧配置の台帳と、新配置の月別・legacy ファイル）。 */
+const UNION_ATTRIBUTE_LINES = [LEDGER_PATH + ' merge=union', LEDGER_DIR + '/*.md merge=union'];
+const LEDGER_FILE_IN_DIR = new RegExp('^' + LEDGER_DIR.replace(/[.*+?^$(){}|[\]\\/-]/g, '\\$&') + '/[^/]+\\.md$');
+
+/** 衝突を union で直してよい台帳のパスか（docs/task-list.md と docs/task-list/ 直下の *.md）。 */
+export function isLedgerPath(path) {
+  return path === LEDGER_PATH || LEDGER_FILE_IN_DIR.test(path);
+}
 
 // ---------------------------------------------------------------------------
 // 選定
@@ -109,6 +120,41 @@ export function isWorkflowPermissionRejection(reason) {
 }
 
 // ---------------------------------------------------------------------------
+// 旧配置の PR の新配置への自動移植（月別移行より前に作られた PR）
+// ---------------------------------------------------------------------------
+
+async function readTreeLedger(gitOps, treeish) {
+  return readLedger({ listDir: (dir) => gitOps.listDir(treeish, dir), readFile: (path) => gitOps.readFile(treeish, path) }, { requireRows: false });
+}
+
+/**
+ * main は新配置・PR は旧配置（docs/task-list.md に行追加・行更新）なら、port-diff と同じ planPortDiff で新配置の変更へ変換する。
+ * @returns {Promise<{ kind: 'none' } | { kind: 'unportable', reasons: string[] } | { kind: 'ported', tree: string, added: string[], updated: string[] }>}
+ */
+export async function planLegacyPort({ gitOps, headOid, mainOid, mergedTree }) {
+  if (!gitOps.listDir || !gitOps.mergeBase || !gitOps.writeTree) return { kind: 'none' };
+  const mainLedger = await readTreeLedger(gitOps, mainOid);
+  if (mainLedger.layout !== 'split') return { kind: 'none' };
+  const headLedger = await readTreeLedger(gitOps, headOid);
+  if (headLedger.layout !== 'single') return { kind: 'none' };
+  const baseOid = gitOps.mergeBase(headOid, mainOid);
+  const baseText = baseOid ? gitOps.readFile(baseOid, LEDGER_PATH) : null;
+  const headText = headLedger.files[0].content;
+  if (baseText == null || headText == null) return { kind: 'unportable', reasons: ['分岐点または head の ' + LEDGER_PATH + ' を読めない'] };
+  const baseLedger = await readTreeLedger(gitOps, baseOid);
+  if (baseLedger.layout !== 'single') return { kind: 'unportable', reasons: ['分岐点が旧配置でない（判別不能）'] };
+  const plan = planPortDiff({ baseText, headText, ledger: mainLedger });
+  const reasons = [...plan.problems];
+  if (plan.deleted.length) reasons.push('行の削除は移植できない: ' + plan.deleted.join(', '));
+  if (plan.preambleChanged) reasons.push('前置き（表の行以外）の変更は移植できない');
+  if (!reasons.length && plan.files.size === 0 && plan.unchanged.length === 0) reasons.push('移植できる行の追加・更新が無い（判別不能）');
+  if (reasons.length) return { kind: 'unportable', reasons };
+  const files = { [LEDGER_PATH]: mainLedger.files[0].content };
+  for (const [path, text] of plan.files) files[path] = text;
+  return { kind: 'ported', tree: gitOps.writeTree(mergedTree, files), added: plan.added, updated: plan.updated };
+}
+
+// ---------------------------------------------------------------------------
 // 1件の処理
 // ---------------------------------------------------------------------------
 
@@ -152,23 +198,62 @@ export async function processPullRequest(pr, deps) {
   }
   const mainOid = gitOps.fetchMain();
 
-  const merged = gitOps.mergeTree(headOid, mainOid);
+  let merged = gitOps.mergeTree(headOid, mainOid);
   if (!merged.ok) {
     gitOps.abortMerge();
     if (merged.error) {
       log(tag + ': スキップ（merge 失敗: ' + merged.error + '）');
       return { outcome: 'skip-merge-failed', reason: merged.error };
     }
-    const others = merged.conflicts.filter((p) => p !== LEDGER_PATH);
-    const reason = others.length
-      ? '台帳以外にも衝突: ' + others.join(', ')
-      : '台帳の衝突が union でも解消しなかった';
+    const others = merged.conflicts.filter((p) => !isLedgerPath(p));
+    if (others.length) {
+      const reason = '台帳以外にも衝突: ' + others.join(', ');
+      log(tag + ': スキップ（' + reason + '）');
+      return { outcome: 'skip-conflict-outside-ledger', reason };
+    }
+  }
+
+  // main は新配置・PR は旧配置の台帳（月別移行より前に作った PR）なら、union では直らない（索引に旧行が残る）ので、
+  // 行追加・行更新を月別ファイルへ移植する。衝突の有無（union で綺麗にマージされてしまう場合を含む）によらず先に判定する。
+  {
+    let port;
+    try {
+      port = await planLegacyPort({ gitOps, headOid, mainOid, mergedTree: merged.tree });
+    } catch (error) {
+      log(tag + ': スキップ（旧配置の移植計画で失敗: ' + error.message + '）');
+      return { outcome: 'skip-merge-failed', reason: error.message };
+    }
+    if (port.kind === 'unportable') {
+      const marker = PORT_MANUAL_MARKER_PREFIX + headOid + ' -->';
+      let commentError = null;
+      if (!allComments().some((c) => (c.body ?? '').includes(marker))) {
+        commentError = post(marker + '\n'
+          + 'この PR は旧配置の台帳（' + LEDGER_PATH + ' に行を書く形）で、main は月別配置（' + LEDGER_DIR + '/YYYY-MM.md）へ移行済みです。自動で移せない差分のため、手で移してください: '
+          + '`node scripts/task-list-ledger.mjs port-diff <分岐点> HEAD`（行の追加・更新を月別ファイルへ適用します）。\n\n' + formatErrors(port.reasons));
+      }
+      log(tag + ': スキップ（旧配置の自動移植ができない: ' + port.reasons.join(' / ') + '）');
+      return { outcome: 'skip-port-unportable', reason: port.reasons.join(' / '), commentError };
+    }
+    if (port.kind === 'ported') merged = { ok: true, tree: port.tree, conflicts: [], ported: port };
+  }
+  if (!merged.ok) {
+    const reason = '台帳の衝突が union でも解消しなかった';
     log(tag + ': スキップ（' + reason + '）');
     return { outcome: 'skip-conflict-outside-ledger', reason };
   }
 
-  const ledgerText = gitOps.readFile(merged.tree, LEDGER_PATH);
-  const check = checkStructure(ledgerText);
+  // マージ結果の tree から台帳を両配置対応で読む（新配置なら月別・legacy の全ファイルを横断して検査する）。
+  let ledger;
+  try {
+    ledger = await readLedger({
+      listDir: (dir) => (gitOps.listDir ? gitOps.listDir(merged.tree, dir) : null),
+      readFile: (path) => gitOps.readFile(merged.tree, path),
+    }, { requireRows: false });
+  } catch (error) {
+    log(tag + ': スキップ（マージ結果の台帳を読めない: ' + error.message + '）');
+    return { outcome: 'skip-merge-failed', reason: error.message };
+  }
+  const check = checkStructure(ledger);
   if (!check.ok) {
     const marker = STRUCTURE_NG_MARKER_PREFIX + headOid + ' -->';
     let commentError = null;
@@ -183,7 +268,9 @@ export async function processPullRequest(pr, deps) {
   }
 
   const message = 'Merge origin/main into ' + pr.headRefName + '\n\n'
-    + '台帳 ' + LEDGER_PATH + ' の末尾追記衝突を merge=union で自動解消した（task-list-conflict-autofix）。\n\n' + FIX_COMMIT_TRAILER;
+    + (merged.ported
+      ? '旧配置の台帳への行追加・更新（追加 ' + merged.ported.added.length + ' 件・更新 ' + merged.ported.updated.length + ' 件）を月別ファイルへ自動移植した（task-list-conflict-autofix / port-diff と同じ planPortDiff）。\n\n'
+      : '台帳 ' + LEDGER_PATH + ' の末尾追記衝突を merge=union で自動解消した（task-list-conflict-autofix）。\n\n') + FIX_COMMIT_TRAILER;
   const mergeCommit = gitOps.commitMerge(merged.tree, headOid, mainOid, message);
   const pushed = gitOps.push(mergeCommit, pr.headRefName);
   if (!pushed.ok) {
@@ -221,7 +308,8 @@ export async function processPullRequest(pr, deps) {
     autoMergeNote = 'auto-merge は予約済みのままです。';
   }
   const commentError = post(FIX_MARKER + '\n'
-    + '台帳（' + LEDGER_PATH + '）だけの衝突を merge=union で自動解消し、main を取り込む merge commit `' + mergeCommit + '` を push しました'
+    + (merged.ported ? '旧配置の台帳（' + LEDGER_PATH + '）への行追加・更新を月別ファイルへ自動移植し（追加: ' + (merged.ported.added.join(', ') || 'なし') + ' / 更新: ' + (merged.ported.updated.join(', ') || 'なし') + '）、' : '台帳（' + LEDGER_PATH + '）だけの衝突を merge=union で自動解消し、')
+    + 'main を取り込む merge commit `' + mergeCommit + '` を push しました'
     + '（取り込んだ main: `' + mainOid + '`）。' + autoMergeNote + '\n\n'
     + '自動修復を止めたいときは `' + OPT_OUT_LABEL + '` ラベルを付けてください（同じ PR への自動修復は24時間に' + MAX_FIXES_PER_DAY + '回まで）。');
   return { outcome, mergeCommit, commentError };
@@ -233,8 +321,8 @@ export async function processPullRequest(pr, deps) {
 
 /** cwd で git を走らせる関数を作る。返り値は { code, stdout, stderr }。 */
 export function createGit({ cwd, env = {} }) {
-  return (args) => {
-    const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env }, maxBuffer: 256 * 1024 * 1024 });
+  return (args, { input, env: extraEnv } = {}) => {
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8', input, env: { ...process.env, ...env, ...extraEnv }, maxBuffer: 256 * 1024 * 1024 });
     return { code: r.status, stdout: r.stdout ?? '', stderr: (r.stderr ?? '') + (r.error ? String(r.error) : '') };
   };
 }
@@ -244,15 +332,17 @@ function must(result, what) {
   return result.stdout.trim();
 }
 
-/** .git/info/attributes（worktree 共通）に台帳の merge=union を書く。既にあれば何もしない。 */
+/** .git/info/attributes（worktree 共通）に台帳（索引と docs/task-list/*.md）の merge=union を書く。既にある行は足さない。 */
 export function ensureUnionAttribute(git) {
   const commonDir = must(git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'git-common-dir の取得');
   const infoDir = join(commonDir, 'info');
   const file = join(infoDir, 'attributes');
   mkdirSync(infoDir, { recursive: true });
   const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  if (current.split(/\r?\n/).some((line) => line.trim() === UNION_ATTRIBUTE_LINE)) return;
-  appendFileSync(file, (current && !current.endsWith('\n') ? '\n' : '') + UNION_ATTRIBUTE_LINE + '\n');
+  const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
+  const missing = UNION_ATTRIBUTE_LINES.filter((line) => !present.has(line));
+  if (!missing.length) return;
+  appendFileSync(file, (current && !current.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
 }
 
 function assertBranchName(name) {
@@ -286,6 +376,35 @@ export function createGitOps({ git }) {
     readFile(tree, path) {
       const r = git(['cat-file', 'blob', tree + ':' + path]);
       return r.code === 0 ? r.stdout : null;
+    },
+    /** tree 内のディレクトリ直下の名前（無ければ null）。git の失敗は例外（不在と混同しない）。 */
+    listDir(tree, dir) {
+      const self = git(['ls-tree', '-z', tree, '--', dir]);
+      if (self.code !== 0) throw new Error(dir + ' の ls-tree に失敗: ' + self.stderr.trim());
+      if (!/^\d+ tree /.test(self.stdout)) return null;
+      const r = git(['ls-tree', '-z', '--name-only', tree, '--', dir + '/']);
+      if (r.code !== 0) throw new Error(dir + '/ の ls-tree に失敗: ' + r.stderr.trim());
+      return r.stdout.split('\0').filter(Boolean).map((p) => p.slice(dir.length + 1));
+    },
+    /** 2つの commit の分岐点（無ければ null）。 */
+    mergeBase(a, b) {
+      const r = git(['merge-base', a, b]);
+      return r.code === 0 ? r.stdout.trim() : null;
+    },
+    /** baseTree をもとに、files（パス → 本文）を差し替えた tree を作る（作業木・本物の index は使わない）。 */
+    writeTree(baseTree, files) {
+      const dir = mkdtempSync(join(tmpdir(), 'ledger-index-'));
+      const env = { GIT_INDEX_FILE: join(dir, 'index') };
+      try {
+        must(git(['read-tree', baseTree], { env }), 'read-tree');
+        for (const [path, text] of Object.entries(files)) {
+          const oid = must(git(['hash-object', '-w', '--stdin'], { input: text }), 'hash-object');
+          must(git(['update-index', '--add', '--cacheinfo', '100644,' + oid + ',' + path], { env }), 'update-index ' + path);
+        }
+        return must(git(['write-tree'], { env }), 'write-tree');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     },
     changedPaths(fromOid, toTree) {
       return must(git(['diff-tree', '-r', '--name-only', fromOid, toTree]), '差分の取得').split('\n').map((l) => l.trim()).filter(Boolean);

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261021-0355",
+  "scope": "app",
+  "implementation": {
+    "pr": 4891,
+    "sha": "27c8b35f358382112e4331db68287a5c5ff4df7f"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "並行受諾で定員を超えない（定員2に3並行受諾で成功2・JOB_NOT_OPEN 1・契約2・求人 CLOSED、定員2に2並行で両成功・CLOSED、定員1に2並行で成功1）。実 DB（MySQL）の並行テストで固定する",
+      "tests": [
+        {
+          "name": "JobAcceptanceCapacityConcurrencyIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/jobmatching/JobAcceptanceCapacityConcurrencyIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "定員集計がスナップショットではなくロック読み取り（求人行 FOR UPDATE、応募行 PESSIMISTIC_WRITE、採用済み件数は FOR SHARE）で行われ、ロック後の最新値で判定する",
+      "tests": [
+        {
+          "name": "JobContractServiceTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/jobmatching/service/JobContractServiceTest.java"
+        },
+        {
+          "name": "JobApplicationServiceLockTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/jobmatching/service/JobApplicationServiceLockTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "同一応募の4並行受諾は成功1・契約1、受諾と取り下げ・不採用の同時実行でも契約と応募の状態に矛盾がなく、デッドロックや未定義例外が出ない",
+      "tests": [
+        {
+          "name": "JobAcceptanceCapacityConcurrencyIT",
+          "evidence": "backend/src/test/java/com/mannschaft/app/jobmatching/JobAcceptanceCapacityConcurrencyIT.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "JOB_NOT_OPEN・JOB_APPLICATION_NOT_PENDING・JOB_INVALID_STATE_TRANSITION・JOB_CAPACITY_FULL が HTTP 409 に対応する",
+      "tests": [
+        {
+          "name": "JobmatchingConflictStatusMappingTest",
+          "evidence": "backend/src/test/java/com/mannschaft/app/jobmatching/exception/JobmatchingConflictStatusMappingTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "実機で画面と実 API の並行を通して、権限あり・権限なし・他チームのロール横断を確認する（権限なし・他チームは 404 で状態不変）",
+      "tests": [
+        {
+          "name": "実機E2E 2026-11-27（手動。専用の自動 spec なし）",
+          "evidence": "docs/evidence/CMP-261021-0355-real.md"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45857138018 },
+    { "runId": 45857138484 },
+    { "runId": 45857138015 },
+    { "runId": 45857138069 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4891"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261021-0355-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261021-0355-exploratory.md"
+    }
+  },
+  "regressions": []
+}

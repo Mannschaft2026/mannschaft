@@ -180,12 +180,13 @@ export function useAdminReportApi() {
    * かつては存在しない `/api/v1/admin/reports` を叩いたうえ `meta` を任意扱いにしていたため、
    * 呼び出しが失敗しても総件数が取れないことが型の上では表に出ず、
    * ページャーが出ない原因になっていた（CMP-260912-1823）。
-   * なお BE が解釈するのは `page` / `size` のみで `status` は受け取らない。
+   * `status` は ReportStatus 名（PENDING/REVIEWING/ESCALATED/RESOLVED/DISMISSED）。未指定なら全件。
    */
-  async function getReports(params?: { page?: number; size?: number }) {
+  async function getReports(params?: { page?: number; size?: number; status?: string }) {
     const q = new URLSearchParams()
     if (params?.page != null) q.set('page', String(params.page))
     if (params?.size != null) q.set('size', String(params.size))
+    if (params?.status) q.set('status', params.status)
     return api<{ data: ReportResponse[]; meta: PageMeta }>(`/api/v1/system-admin/reports?${q.toString()}`)
   }
 

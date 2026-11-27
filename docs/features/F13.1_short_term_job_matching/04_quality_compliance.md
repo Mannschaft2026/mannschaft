@@ -15,11 +15,11 @@
   - **運営一括業務時間入力**: 50 名分の time_confirmation を 3 秒以内（バルク INSERT）
   - **Worker 承認 API**: 100ms 以内（状態遷移のみ）
   - **TODO → 求人変換**: 500ms 以内（権限チェック + INSERT + 通知配信）
-- 同時応募排他制御:
-  - 楽観的ロック（`version` カラム）
-  - `SELECT ... FOR UPDATE` 行ロック（採用確定時）
-  - `GET_LOCK` による Advisory Lock（job_posting 単位）
-  - トランザクション分離レベル `READ_COMMITTED`（MySQL InnoDB デフォルト）
+- 同時応募排他制御（CMP-261021-0355）:
+  - 応募に楽観的ロック（`version` カラム）は無い。求人には `@Version`（`JobPostingEntity`、`V13.030` の `version` 列）があり、`JobPostingService` の編集系が使う。採用確定・不採用・取り下げの排他は InnoDB の行ロックで行う
+  - 採用確定: 求人行 `SELECT ... FOR UPDATE` → 応募行 `SELECT ... FOR UPDATE`（読み直し）→ 採用済み件数 `SELECT COUNT(*) ... FOR SHARE`。不採用も求人行 → 応募行の順、取り下げは応募行だけをロックする
+  - トランザクション分離レベルは `REPEATABLE READ`（MySQL InnoDB デフォルト）。通常の SELECT はスナップショットを読むため、状態判定・定員集計は locking read で行う
+  - `GET_LOCK`（job_posting 単位）はコミット前に解放されるため排他の保証ではなく、受諾どうしの入口の流量制御。10 秒で打ち切られるのは GET_LOCK の待ちだけで、受諾どうしの待ちは概ね 10 秒で 409 になるが、ほかの操作（不採用・取り下げ・応募）との待ちは行ロック待ちのタイムアウト（`innodb_lock_wait_timeout`）に従い、そのタイムアウトやデッドロックは既定の handler で 500 になる
 - **エスクロー排他制御（第三版）**:
   - 早期 release 押下: `UPDATE job_payments SET early_release_*_approved_at = NOW() WHERE id=? AND early_release_*_approved_at IS NULL` で冪等
   - 同時に両者押下時の競合: `SELECT ... FOR UPDATE` で両フラグが NOT NULL になったか判定し、成立時のみ capture 呼び出し

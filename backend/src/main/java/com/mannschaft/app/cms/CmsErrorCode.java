@@ -102,7 +102,15 @@ public enum CmsErrorCode implements ErrorCode {
      * <p>利用者は slug を指定していないため、{@link #DUPLICATE_SLUG}（「同じスラッグが既に存在します」）とは
      * 文言を分ける。利用者が取れる対処は再送だけ。HTTP 409 CONFLICT。</p>
      */
-    SLUG_AUTO_ASSIGN_CONFLICT("CMS_027", "記事の URL の自動割り当てが混み合いました。もう一度お試しください", Severity.WARN);
+    SLUG_AUTO_ASSIGN_CONFLICT("CMS_027", "記事の URL の自動割り当てが混み合いました。もう一度お試しください", Severity.WARN),
+
+    /**
+     * 記事作成・複製が DB のデッドロックに続けて巻き込まれ、再試行の上限に達した（CMP-261124-2159）。
+     *
+     * <p>デッドロックの被害者は MySQL がトランザクション全体をロールバックするため、何も確定していない。
+     * 一時的な混雑なので再送で解消する。HTTP 503 SERVICE_UNAVAILABLE。</p>
+     */
+    POST_WRITE_DEADLOCK("CMS_028", "記事の保存が混み合っています。しばらくしてからもう一度お試しください", Severity.WARN);
 
     private final String code;
     private final String message;

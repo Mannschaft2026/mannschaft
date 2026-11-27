@@ -20,7 +20,7 @@ import { waitForHydration } from './helpers/wait'
 const ORG_ID = 1
 const PROVIDER_ID = '01900000-0000-7000-8000-000000000099'
 const CARD_ID = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff'
-const TOKEN = 'cccccccc-dddd-eeee-ffff-000000000000'
+const TOKEN = 'cCcCcCcCdDdDdDdDeEeEeEeEfFfFfFfF0000000_-_-'
 
 interface MockBalanceEvent {
   id: string

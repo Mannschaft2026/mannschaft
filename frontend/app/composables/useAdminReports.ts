@@ -34,26 +34,41 @@ export function useAdminReports() {
   const showEscalateDialog = ref(false)
   const escalateForm = ref<EscalateForm>({ reason: '', guidelineSection: '' })
 
-  // ステータス絞り込みは提供しない。
-  // 一覧の実体である BE の `SystemAdminReportController#getAllReports`
-  // （`/api/v1/system-admin/reports`）が受け取るのは `page` / `size` のみで、
-  // status 条件を解釈しないため、UI だけ置いても「操作できるが何も変わらない」
-  // 部品になってしまう（CMP-260912-1823 の検分 P2）。
-  // 復活させるには BE 側に status パラメータを足す必要がある。
+  // ステータス絞り込み。BE の `GET /api/v1/system-admin/reports?status=` が解釈する（CMP-260916-0053）。
+  // null は全ステータス。
+  const statusFilter = ref<string | null>(null)
+  const statusOptions = [
+    { value: 'PENDING', labelKey: 'admin_report.stats.pending' },
+    { value: 'REVIEWING', labelKey: 'admin_report.stats.reviewing' },
+    { value: 'ESCALATED', labelKey: 'admin_report.stats.escalated' },
+    { value: 'RESOLVED', labelKey: 'admin_report.stats.resolved' },
+    { value: 'DISMISSED', labelKey: 'admin_report.stats.dismissed' },
+  ]
+
+  // 要求番号。最後に発行した要求の応答だけを反映し、古い応答の後着で一覧・総件数を上書きしない。
+  let requestSeq = 0
+
   async function load() {
+    const seq = ++requestSeq
     loading.value = true
     try {
       const [reportsRes, statsRes] = await Promise.all([
-        adminReportApi.getReports({ page: page.value, size: 20 }),
+        adminReportApi.getReports({
+          page: page.value,
+          size: 20,
+          status: statusFilter.value ?? undefined,
+        }),
         adminReportApi.getReportStats(),
       ])
+      if (seq !== requestSeq) return
       reports.value = reportsRes.data
       totalRecords.value = reportsRes.meta.total
       stats.value = statsRes.data
     } catch {
+      if (seq !== requestSeq) return
       showError(t('admin_report.messages.load_failed'))
     } finally {
-      loading.value = false
+      if (seq === requestSeq) loading.value = false
     }
   }
 
@@ -179,6 +194,11 @@ export function useAdminReports() {
     }
   }
 
+  function onStatusFilterChange() {
+    page.value = 0
+    return load()
+  }
+
   function onPage(event: { page: number }) {
     page.value = event.page
     load()
@@ -212,6 +232,9 @@ export function useAdminReports() {
     hideContent,
     restoreContent,
     statusSeverity,
+    statusFilter,
+    statusOptions,
+    onStatusFilterChange,
     onPage,
   }
 }

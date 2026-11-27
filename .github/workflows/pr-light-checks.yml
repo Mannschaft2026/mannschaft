@@ -97,6 +97,10 @@ jobs:
           scripts/ci-merge-group-workflows.test.mjs
           scripts/ci-change-detection-steps.test.mjs
           scripts/task-list-conflict-autofix.test.mjs
+          scripts/task-list-ledger.test.mjs
+          scripts/task-list-ledger-cli.test.mjs
+          scripts/task-list-ledger-consumers.test.mjs
+          scripts/completion-evidence-ledger.test.mjs
 
       - name: "[Harness] worktree sparse paths の一覧検査"
         if: ${{ !cancelled() && github.base_ref == 'main' }}

@@ -1,6 +1,10 @@
 {
   "admin_report": {
     "title": "Report Management",
+    "filter": {
+      "placeholder": "Filter by status",
+      "all": "All statuses"
+    },
     "empty": "No reports",
     "messages": {
       "load_failed": "Failed to load reports",
