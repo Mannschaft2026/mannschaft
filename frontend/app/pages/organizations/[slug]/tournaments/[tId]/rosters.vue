@@ -23,6 +23,9 @@ const showDeadlineDialog = ref(false)
 // 選択行の展開
 const expandedTeamId = ref<number | null>(null)
 
+// composable（内部で useToast を inject する）は setup で取得し、試合 ID は実行時に ref から読む
+const rosterApi = useMatchRoster(tournamentId, selectedMatchId)
+
 // 権限
 const { isAdminOrDeputy, loadPermissions } = useRoleAccess('organization', orgSlug)
 
@@ -48,10 +51,10 @@ async function selectMatch() {
 // ===== 全チームメンバー表取得 =====
 
 async function loadAllRosters(matchId: number) {
+  selectedMatchId.value = matchId
   loadingRosters.value = true
-  const composable = useMatchRoster(tournamentId, matchId)
   try {
-    const data = await composable.getAllRosters()
+    const data = await rosterApi.getAllRosters()
     rosters.value = data
   } catch {
     // エラーはcomposable内で通知済み
@@ -64,11 +67,10 @@ async function loadAllRosters(matchId: number) {
 
 async function updateDeadline() {
   if (!selectedMatchId.value) return
-  const composable = useMatchRoster(tournamentId, selectedMatchId.value)
   updatingDeadline.value = true
   try {
     const deadline = deadlineValue.value ? deadlineValue.value : null
-    await composable.updateDeadline(deadline)
+    await rosterApi.updateDeadline(deadline)
     showDeadlineDialog.value = false
     // 再取得
     await loadAllRosters(selectedMatchId.value)

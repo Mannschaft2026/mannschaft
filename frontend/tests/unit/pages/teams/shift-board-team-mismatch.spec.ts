@@ -31,6 +31,8 @@ mockNuxtImport('useShiftApi', () => () => ({
 mockNuxtImport('useTeamApi', () => () => ({ getTeam: mocks.getTeam, getMembers: mocks.getMembers }))
 mockNuxtImport('useRoleAccess', () => () => ({
   roleName: computed(() => 'ADMIN'),
+  isScopeAdmin: computed(() => true),
+  can: () => false,
   loadPermissions: mocks.loadPermissions,
 }))
 mockNuxtImport('useErrorHandler', () => () => ({ handleApiError: vi.fn() }))

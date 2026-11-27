@@ -79,7 +79,9 @@ test('1957 AC4: mainも完了済でもPR自身の新完了は祖先から検出�
 // 実workflow scriptを実行する。GitHub APIだけをスタブし、trusted validatorは実物をimportする。
 async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = oldCompleted, files = [], changedFiles = files.length, compareError, invalidAncestor, missingAncestor = false } = {}) {
   const workflow = readFileSync(new URL('../.github/workflows/task-list-pr-gate.yml', import.meta.url), 'utf8');
-  const script = workflow.replaceAll('\r\n', '\n').split('          script: |\n')[1].split('\n').map(line => line.replace(/^            /, '')).join('\n');
+  // 先頭に最新 PR 取得ステップがあるため、対象ステップ名で抽出する（CMP-261124-1222）。
+  const stepBlock = workflow.replaceAll('\r\n', '\n').split(/\n(?=      - name: )/).find(block => block.startsWith('      - name: Validate registration and completion evidence'));
+  const script = stepBlock.split('          script: |\n')[1].split('\n').map(line => line.replace(/^            /, '')).join('\n');
   const refs = { ['a'.repeat(40)]: completed, ['b'.repeat(40)]: head, ['c'.repeat(40)]: ancestor };
   const calls = [];
   const github = {
@@ -227,7 +229,9 @@ test('pull_request_targetはbase trusted validatorだけを実行しPR headを�
   const workflow = readFileSync(new URL('../.github/workflows/task-list-pr-gate.yml', import.meta.url), 'utf8');
   assert.match(workflow, /pull_request_target:/);
   assert.match(workflow, /actions: read/);
-  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow, /ref: \$\{\{ steps\.latest\.outputs\.base_sha \|\| github\.sha \}\}/);
+  assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha/);
+  assert.match(workflow, /latest\.base\.ref !== 'main'/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /await import\(pathToFileURL\(validatorPath\)\.href\)/);
   assert.match(workflow, /selectEvidencePaths\(baseTaskList, headTaskList, changedEvidencePaths, \{ ancestorTaskList \}\)/);
