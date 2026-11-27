@@ -126,7 +126,7 @@ public class PropertyWorkPackageVisibilityResolver
      *   <li>{@code IN_PROGRESS} → {@link ContentStatus#PUBLISHED}</li>
      *   <li>{@code COMPLETED} → {@link ContentStatus#PUBLISHED}</li>
      *   <li>{@code CLOSED} → {@link ContentStatus#PUBLISHED}（クローズ後も閲覧自体は visibility に従う）</li>
-     *   <li>{@code CANCELLED} → {@link ContentStatus#ARCHIVED}（SystemAdmin のみ可視）</li>
+     *   <li>{@code CANCELLED} → {@link ContentStatus#ARCHIVED}（著者本人とスコープ管理者のみ可視）</li>
      * </ul>
      *
      * <p>本機能は {@code DRAFT}/{@code SCHEDULED} に該当するステータスを持たない（パッケージは
@@ -136,7 +136,7 @@ public class PropertyWorkPackageVisibilityResolver
      */
     private static ContentStatus mapStatus(WorkPackageStatus status) {
         if (status == null) {
-            // fail-closed: status 不明は ARCHIVED 扱い（SystemAdmin のみ可視）
+            // fail-closed: status 不明は ARCHIVED 扱い（著者本人とスコープ管理者のみ可視）
             return ContentStatus.ARCHIVED;
         }
         return switch (status) {

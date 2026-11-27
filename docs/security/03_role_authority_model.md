@@ -189,7 +189,7 @@ per-scope ロールを JWT に載せない理由は **マルチテナントで�
 
 #### 3.3.1 新設 SpEL ガード Bean の設計
 
-> **旧方針・既存実装の記録**: 本項の SYSTEM_ADMIN 無条件許可は、2026-11-15 の最新方針（§3.6）ではテナント業務情報へのアクセス根拠にしない。以下は既存実装を説明する記録であり、新規実装の推奨ではない。**共通点1〜3（`ScopeConcealingAccessGate`・`AccessGuard`・`resolveEffectiveRole`）の短絡は撤去済み（戦役 Z-A PR3）。共通点4〜7（snapshot・可視性・ViewerContext・dashboard RoleResolver）は PR4 で撤去する。**
+> **旧方針・既存実装の記録**: 本項の SYSTEM_ADMIN 無条件許可は、2026-11-15 の最新方針（§3.6）ではテナント業務情報へのアクセス根拠にしない。以下は既存実装を説明する記録であり、新規実装の推奨ではない。**共通点1〜3（`ScopeConcealingAccessGate`・`AccessGuard`・`resolveEffectiveRole`）の短絡は撤去済み（戦役 Z-A PR3）。共通点4〜7（`UserScopeRoleSnapshot` の6判定・`AbstractContentVisibilityResolver` と個別 Resolver・publicview の `ViewerContextBuilder` と有料記事ゲート・dashboard `RoleResolver`）の短絡も撤去済み（戦役 Z-A PR4）。**
 
 既存 `AdminRoleChecker` / `QuickMemoAccessGuard` の定石（`@Component("name")` ＋ `Authentication` 引数）に倣い、**per-scope 認可専用の単一ガード Bean** を新設する。`AccessControlService` に判定を委譲し、ロジックの二重化を避ける。
 
@@ -258,7 +258,7 @@ circulation / shift / chat / faq の一部 EP は、`@EnableMethodSecurity` 未�
 
 ### 3.5 SYSTEM_ADMIN の UI 表示方針 — BEの許可経路とFEのスコープ管理者導線（CMP-260909-1509）
 
-> **旧判断の記録**: 以下の2026-09-09判断のうち、SYSTEM_ADMIN 単独でのテナント業務アクセス許可と業務導線の一律除外は、2026-11-15 の最新方針（§3.6）で見直す。以下は既存方針・実装の経緯として保持し、現行の推奨とはしない。認可コードと UI の移行は未実施。
+> **旧判断の記録**: 以下の2026-09-09判断のうち、SYSTEM_ADMIN 単独でのテナント業務アクセス許可と業務導線の一律除外は、2026-11-15 の最新方針（§3.6）で見直す。以下は既存方針・実装の経緯として保持し、現行の推奨とはしない。共通点1〜7の短絡は撤去済み（Z-A PR3・PR4）。個別サービスの直書きと UI の移行は後続。
 
 **マスター判断（2026-09-09）**: プラットフォーム管理者（SYSTEM_ADMIN）は**運営専用の特別なアカウント**を想定しており、一般利用者アカウントとは**別の動作をするのが正**である。これは欠陥ではなく意図した設計であり、本節で明文化する。
 
@@ -294,7 +294,7 @@ const isScopeAdmin = computed(
 
 **運営アカウントは専用、テナントに所属しない（2026-11-26 マスター決定・所属禁止を実装）**: 運営（SYSTEM_ADMIN）は運営専用アカウントを使い、個人アカウントとの併用はしない。運営アカウントはチーム・組織・委員会・村に所属せず、サポーター（フォロー）にも、タイムライン上の個人フォローにもならない。停止中・非 ACTIVE の運営アカウントも対象とする（状態を問わず SYSTEM_ADMIN ロールを持つかで判定する）。所属行を作る全経路と、運営アカウント宛ての招待・参加申請・移管申し出を作る全経路は、`PlatformAccountAffiliationPolicy`（`role.service`）を通して `MEMBERSHIP_PLATFORM_ACCOUNT_FORBIDDEN`（403）で拒否する。経路の網羅表は [platform_account_affiliation_inventory.md](platform_account_affiliation_inventory.md)、番人は `PlatformAccountAffiliationPolicyGuardTest`（生成シンクを持つファイルが Policy を呼ぶことを CI で固定）。**唯一の例外（公式村だけ）**: 公式村（`OFFICIAL`）に限り、運営アカウントが村の作成者として村長（HEADMAN）に所属することを許す（村作成申請の作成時の所属のみ。公式村は運営が認定・運営する村であり、運営が村長として運用する必要があるため。マスター決定 2026-11-26）。例外は作成時の作成者所属に限り、運営アカウントが他の村や他の経路（招待受諾・参加申請・承認など）で所属すること、通常村（`COMMUNITY`）を作成して村長になることは引き続き 403。Policy の `assertAffiliatableAsOfficialVillageCreator` が唯一の入口で、点検 SQL も公式村の作成者としての村長所属は 0 件判定から除く。除外（運営によるプロビジョニング作成・チームの組織加盟など所属を作らない経路）は同表に理由付きで記録する。既に所属行を持つ運営アカウントの点検は同表「点検 SQL」を参照。
 
-**記録時点の状態と範囲**: 2026-11-15 時点は方針の記録のみだった。2026-11-27 の戦役 Z-A PR3 で共通の素通し点 1〜3（`ScopeConcealingAccessGate`・`AccessGuard`・`DefaultAccessControlService.resolveEffectiveRole`）の SYSTEM_ADMIN 短絡を撤去した（PLATFORM は誰にとっても無権限。運営権限はロール階層に載せず `checkSystemAdmin` で判定する）。あわせて、運営（SYSTEM_ADMIN）によるテナントの FAQ 設定・公開設定・サポーター名の開示設定（`/api/v1/admin/{teams,organizations}/{id}/faqs`・`public-settings`・`supporter-name-disclosure`）は近道撤去により 403 となり、運営画面からの導線を廃止した（マスター決定。サポーターの名前開示も運営からは触れない）。共通点4〜7と UI の表示ロールは後続（PR4・PR5）で移行する。
+**記録時点の状態と範囲**: 2026-11-15 時点は方針の記録のみだった。2026-11-27 の戦役 Z-A PR3 で共通の素通し点 1〜3（`ScopeConcealingAccessGate`・`AccessGuard`・`DefaultAccessControlService.resolveEffectiveRole`）の SYSTEM_ADMIN 短絡を撤去した（PLATFORM は誰にとっても無権限。運営権限はロール階層に載せず `checkSystemAdmin` で判定する）。あわせて、運営（SYSTEM_ADMIN）によるテナントの FAQ 設定・公開設定・サポーター名の開示設定（`/api/v1/admin/{teams,organizations}/{id}/faqs`・`public-settings`・`supporter-name-disclosure`）は近道撤去により 403 となり、運営画面からの導線を廃止した（マスター決定。サポーターの名前開示も運営からは触れない）。2026-11-27 の戦役 Z-A PR4 で共通点 4〜7（`UserScopeRoleSnapshot` の6判定・可視性 Resolver・publicview の閲覧者判定と有料記事ゲート・dashboard `RoleResolver`）の短絡と、Repository への isSystemAdmin 引数（活動記録・求人・大会の一覧）を撤去した。運営アカウントは、テナントの DRAFT・ARCHIVED・CANCELLED・メンバー限定の内容を見られず、有料記事も課金結果に従う（本文の確認は Z-B の代理閲覧で行う）。**ARCHIVED の閲覧者はマスター決定（2026-11-27）どおり、著者本人（PERSONAL か、そのスコープに今も所属）またはスコープの DEPUTY_ADMIN 以上だけ**で、スコープを抜けた著者は自分の記事も見られない（拒否は不在と同じ応答）。一覧の SQL（大会・求人の CANCELLED/ARCHIVED）も同じ規則に揃えた。UI の表示ロールは後続（PR5）、直書きの `isSystemAdmin` の除去は Z-C で移行する。
 
 ---
 
@@ -596,6 +596,7 @@ tournament ドメインに `TournamentContactAccessService` を新設し、read�
 
 | 日付 | 変更 |
 |---|---|
+| 2026-11-27 | §3.3.1・§3.5・§3.6 に共通の素通し点 4〜7 の SYSTEM_ADMIN 短絡撤去を反映（戦役 Z-A PR4）。ARCHIVED の閲覧者を「著者本人（PERSONAL か所属中）またはスコープの DEPUTY_ADMIN 以上」に変更（マスター決定）。大会・求人の一覧 SQL も同規則。有料記事は運営アカウントも課金結果に従う。 |
 | 2026-11-27 | §3.6 の所属禁止の判定をドメイン境界に合わせた（戦役 Z-A PR2）。他ドメインの取引の中では user_roles を読まず、Controller 等が取引の外で `PlatformAccountAffiliationPolicy.judge` し、取引の中は判定結果だけを確かめる（番人 D-3T）。詳細は [platform_account_affiliation_inventory.md](platform_account_affiliation_inventory.md)。 |
 | 2026-11-26 | §3.6 の運営アカウント所属禁止に「公式村の作成者としての村長所属だけは例外」を追記（戦役 Z-A PR2、マスター決定）。招待・打診の宛先判定は認可の後へ移した（宛先が運営アカウントかどうかを認可の無い者へ漏らさない）。 |
 | 2026-11-26 | §3.6 に「運営アカウントは専用、テナントに所属しない」を追記（戦役 Z-A PR2）。運営アカウントのチーム・組織・委員会・村・サポーター・個人フォローへの所属を全経路で禁止し、`PlatformAccountAffiliationPolicy` に一元化した。 |

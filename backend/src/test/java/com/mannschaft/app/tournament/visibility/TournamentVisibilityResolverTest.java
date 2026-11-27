@@ -177,16 +177,16 @@ class TournamentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は SCOPE_AFFILIATED もすべて可視")
-        void system_admin_can_see_all() {
+        @DisplayName("SystemAdmin 単独は SCOPE_AFFILIATED を見られない（非所属と同じ）")
+        void system_admin_cannot_see_scope_affiliated() {
             TournamentVisibilityProjection p = projection(1L, 100L, 99L,
                     TournamentStatus.OPEN, TournamentVisibility.SCOPE_AFFILIATED);
             when(tournamentRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(eq(5L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 
@@ -245,17 +245,16 @@ class TournamentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は参加チーム照会なしで可視（基底の高速パス）")
-        void system_admin_visible_without_participant_lookup() {
+        @DisplayName("SystemAdmin 単独は PARTICIPANTS_ONLY を見られない（高速パス撤去後は参加チーム照会へ進み、非参加者と同じ）")
+        void system_admin_cannot_see_participants_only() {
             TournamentVisibilityProjection p = projection(1L, 100L, 99L,
                     TournamentStatus.IN_PROGRESS, TournamentVisibility.PARTICIPANTS_ONLY);
             when(tournamentRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(eq(5L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
-            verifyNoInteractions(participantRepository);
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 
@@ -294,7 +293,7 @@ class TournamentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("CANCELLED は SystemAdmin 以外不可視（ARCHIVED 扱い）")
+        @DisplayName("CANCELLED は著者（所属中）と DEPUTY_ADMIN 以上以外には不可視（ARCHIVED 扱い）")
         void cancelled_invisible_to_general_user() {
             TournamentVisibilityProjection p = projection(1L, 100L, 99L,
                     TournamentStatus.CANCELLED, TournamentVisibility.PUBLIC);
@@ -309,29 +308,29 @@ class TournamentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("CANCELLED は SystemAdmin に可視")
-        void cancelled_visible_to_system_admin() {
+        @DisplayName("CANCELLED は SystemAdmin 単独には見えない（非所属と同じ）")
+        void cancelled_invisible_to_system_admin() {
             TournamentVisibilityProjection p = projection(1L, 100L, 99L,
                     TournamentStatus.CANCELLED, TournamentVisibility.PUBLIC);
             when(tournamentRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
 
         @Test
-        @DisplayName("ARCHIVED は CANCELLED と同じく ARCHIVED 扱い → SystemAdmin のみ可視")
-        void archived_visible_only_to_system_admin() {
+        @DisplayName("ARCHIVED は CANCELLED と同じく ARCHIVED 扱い → SystemAdmin 単独には見えない")
+        void archived_invisible_to_system_admin() {
             TournamentVisibilityProjection p = projection(1L, 100L, 99L,
                     TournamentStatus.ARCHIVED, TournamentVisibility.PUBLIC);
             when(tournamentRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
 
         @Test

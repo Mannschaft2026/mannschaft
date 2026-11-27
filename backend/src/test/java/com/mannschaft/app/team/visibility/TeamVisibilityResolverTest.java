@@ -140,16 +140,16 @@ class TeamVisibilityResolverTest {
     }
 
     @Test
-    @DisplayName("canView_GUESTS_AND_ABOVEチームはSystemAdminに可視（高速パス）")
-    void canView_GUESTS_AND_ABOVEチームはSystemAdminに可視() {
+    @DisplayName("canView_GUESTS_AND_ABOVEチームはSystemAdmin単独には不可視（高速パス撤去）")
+    void canView_GUESTS_AND_ABOVEチームはSystemAdmin単独には不可視() {
         TeamVisibilityProjection projection = projection(
                 1L, 1L, TeamEntity.Visibility.GUESTS_AND_ABOVE, null, null);
         when(teamRepository.findVisibilityProjectionsByIdIn(any()))
                 .thenReturn(List.of(projection));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     // -------------------------------------------------------------------------
@@ -187,16 +187,16 @@ class TeamVisibilityResolverTest {
     }
 
     @Test
-    @DisplayName("canView_MEMBERS_AND_ABOVEチームはSystemAdminに可視（高速パス）")
-    void canView_MEMBERS_AND_ABOVEチームはSystemAdminに可視() {
+    @DisplayName("canView_MEMBERS_AND_ABOVEチームはSystemAdmin単独には不可視（高速パス撤去）")
+    void canView_MEMBERS_AND_ABOVEチームはSystemAdmin単独には不可視() {
         TeamVisibilityProjection projection = projection(
                 1L, 1L, TeamEntity.Visibility.MEMBERS_AND_ABOVE, null, null);
         when(teamRepository.findVisibilityProjectionsByIdIn(any()))
                 .thenReturn(List.of(projection));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     // -------------------------------------------------------------------------
@@ -204,17 +204,17 @@ class TeamVisibilityResolverTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("canView_ARCHIVEDはSystemAdminのみ: SystemAdmin は true")
-    void canView_ARCHIVEDはSystemAdminに可視() {
+    @DisplayName("canView_ARCHIVED: SystemAdmin 単独は false（著者でも DEPUTY_ADMIN 以上でもない）")
+    void canView_ARCHIVEDはSystemAdmin単独には不可視() {
         TeamVisibilityProjection projection = projection(
                 1L, 1L, TeamEntity.Visibility.PUBLIC,
                 LocalDateTime.now().minusDays(1), null);
         when(teamRepository.findVisibilityProjectionsByIdIn(any()))
                 .thenReturn(List.of(projection));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     @Test

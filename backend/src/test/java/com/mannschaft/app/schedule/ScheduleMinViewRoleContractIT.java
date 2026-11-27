@@ -238,13 +238,14 @@ class ScheduleMinViewRoleContractIT extends AbstractMySqlIntegrationTest {
         }
 
         @Test
-        @DisplayName("AC-07 SystemAdmin は min_view_role に関わらず 200")
-        void systemAdminは閾値に関わらず200() throws Exception {
+        @DisplayName("AC-07 SystemAdmin 単独（所属なし）は min_view_role に関わらず 403（非所属と同じ。戦役 Z-A PR4）")
+        void systemAdmin単独は閾値を通らず403() throws Exception {
             Long scheduleId = saveTeamSchedule(ScheduleVisibility.MEMBERS_ONLY, MinViewRole.ADMIN_ONLY);
 
             setAuthentication(systemAdminId);
             mockMvc.perform(get("/api/v1/teams/{slug}/schedules/{id}", teamSlug, scheduleId))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("VISIBILITY_001"));
         }
     }
 

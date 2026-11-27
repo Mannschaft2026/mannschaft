@@ -81,8 +81,8 @@ class MembershipBatchQueryServiceTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin → forSystemAdmin() を返し後続 SQL は呼ばれない")
-        void SystemAdmin_早期return() {
+        @DisplayName("SystemAdmin でも早期 return せず、通常どおり後続 SQL を発行する（systemAdmin 値は true のまま）")
+        void SystemAdmin_早期returnしない() {
             when(userRoleRepository.existsSystemAdminByUserId(USER_ID)).thenReturn(1L);
 
             UserScopeRoleSnapshot result = service.snapshotForUser(
@@ -90,10 +90,9 @@ class MembershipBatchQueryServiceTest {
 
             assertThat(result.isSystemAdmin()).isTrue();
             verify(userRoleRepository).existsSystemAdminByUserId(USER_ID);
-            // 後続呼び出しは一切無し
-            verify(userRoleRepository, never()).findByUserIdAndScopes(anyLong(), anySet(), anySet());
-            verify(userRoleRepository, never()).findByUserIdAndOrganizationIdIn(anyLong(), anySet());
-            verifyNoInteractions(roleRepository, scopeAncestorResolver, organizationRepository);
+            // 戦役 Z-A PR4: 早期 return を撤去したため、後続の所属・ロール解決 SQL も通常どおり発行される
+            verify(userRoleRepository).findByUserIdAndScopes(anyLong(), anySet(), anySet());
+            assertThat(result.isMemberOf(TEAM_1)).isFalse();
         }
     }
 
@@ -657,11 +656,11 @@ class MembershipBatchQueryServiceTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は親 ORG 閾値も常に true")
-        void systemAdminは親ORG閾値も常にtrue() {
-            UserScopeRoleSnapshot admin = UserScopeRoleSnapshot.forSystemAdmin();
+        @DisplayName("SystemAdmin 単独は親 ORG 閾値を満たさない")
+        void systemAdmin単独は親ORG閾値を満たさない() {
+            UserScopeRoleSnapshot admin = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
 
-            assertThat(admin.hasParentOrgRoleOrAbove(TEAM_1, "ADMIN")).isTrue();
+            assertThat(admin.hasParentOrgRoleOrAbove(TEAM_1, "ADMIN")).isFalse();
         }
     }
 
@@ -812,14 +811,8 @@ class MembershipBatchQueryServiceTest {
                     StandardVisibility.CUSTOM_TEMPLATE,
                     StandardVisibility.CUSTOM,
                     StandardVisibility.ORGANIZATION_AND_DESCENDANTS);
-            // SystemAdmin は snapshot の各判定メソッドが内部バイパスするため、ラダー段は全段 true になる。
-            assertThat(result).contains(
-                    StandardVisibility.PUBLIC,
-                    StandardVisibility.SCOPE_AFFILIATED,
-                    StandardVisibility.SUPPORTERS_AND_ABOVE,
-                    StandardVisibility.MEMBERS_AND_ABOVE,
-                    StandardVisibility.DEPUTY_ADMINS_AND_ABOVE,
-                    StandardVisibility.ADMINS_AND_ABOVE);
+            // 戦役 Z-A PR4: SystemAdmin の短絡を撤去したため、所属の無い SystemAdmin は PUBLIC だけ（非所属と同じ）。
+            assertThat(result).containsExactly(StandardVisibility.PUBLIC);
         }
 
         /**

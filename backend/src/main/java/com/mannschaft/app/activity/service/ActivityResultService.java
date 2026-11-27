@@ -102,10 +102,10 @@ public class ActivityResultService {
         Page<ActivityResultEntity> page = templateId != null
                 ? resultRepository.findVisibleByScopeTypeAndScopeIdAndTemplateId(
                         scopeType, scopeId, templateId, visibleVisibilities,
-                        userId, snapshot.isSystemAdmin(), pageable)
+                        userId, pageable)
                 : resultRepository.findVisibleByScopeTypeAndScopeId(
                         scopeType, scopeId, visibleVisibilities,
-                        userId, snapshot.isSystemAdmin(), pageable);
+                        userId, pageable);
 
         // 第二の門（保険）: SQL 述語と F00 の判定が食い違った場合を検知する。
         // 通常は 1 件も落ちない。乖離した場合は fail-closed で除外し警告を残す

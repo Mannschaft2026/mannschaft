@@ -188,18 +188,16 @@ class CirculationDocumentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は recipients 未登録でも閲覧可（基底クラス §15 D-13）")
-        void system_admin_can_view_without_recipient_record() {
+        @DisplayName("SystemAdmin 単独は recipients 未登録なら閲覧できない（高速パス撤去後は recipients を照会する）")
+        void system_admin_cannot_view_without_recipient_record() {
             CirculationDocumentVisibilityProjection p = projection(1L, "TEAM", 100L, 99L,
                     CirculationStatus.ACTIVE);
             when(documentRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 99_999L)).isTrue();
-            // SystemAdmin 高速パスにより recipients 照会は走らない
-            verify(recipientRepository, never()).existsByDocumentIdAndUserId(any(), any());
+            assertThat(resolver.canView(1L, 99_999L)).isFalse();
         }
 
         @Test
@@ -269,16 +267,16 @@ class CirculationDocumentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("CANCELLED は SystemAdmin に可視")
-        void cancelled_visible_to_system_admin() {
+        @DisplayName("CANCELLED は SystemAdmin 単独には見えない（非所属と同じ）")
+        void cancelled_invisible_to_system_admin() {
             CirculationDocumentVisibilityProjection p = projection(1L, "TEAM", 100L, 99L,
                     CirculationStatus.CANCELLED);
             when(documentRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 

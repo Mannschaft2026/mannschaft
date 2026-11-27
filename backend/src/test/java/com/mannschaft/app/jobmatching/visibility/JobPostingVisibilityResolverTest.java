@@ -202,8 +202,8 @@ class JobPostingVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin はあらゆる visibility が可視（高速パス）")
-        void system_admin_can_see_all_scopes() {
+        @DisplayName("SystemAdmin 単独は公開掲示板（JOBBER_PUBLIC_BOARD）以外の visibility を見られない（高速パス撤去）")
+        void system_admin_sees_only_public_board() {
             for (VisibilityScope scope : VisibilityScope.values()) {
                 if (scope == VisibilityScope.CUSTOM_TEMPLATE) {
                     // CUSTOM_TEMPLATE は visibility_template_id 必須のため別系統で扱う
@@ -214,11 +214,11 @@ class JobPostingVisibilityResolverTest {
                 when(jobPostingRepository.findVisibilityProjectionsByIdIn(any()))
                         .thenReturn(List.of(p));
                 when(membershipBatchQueryService.snapshotForUser(eq(VIEWER_ID), anySet(), anySet()))
-                        .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                        .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
                 assertThat(resolver.canView(1L, VIEWER_ID))
-                        .as("VisibilityScope=%s × OPEN は SystemAdmin に可視", scope)
-                        .isTrue();
+                        .as("VisibilityScope=%s × OPEN は SystemAdmin 単独には公開掲示板だけ可視", scope)
+                        .isEqualTo(scope == VisibilityScope.JOBBER_PUBLIC_BOARD);
             }
         }
     }
@@ -310,16 +310,16 @@ class JobPostingVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("JOBBER_INTERNAL × OPEN は SystemAdmin には可視（基底高速パス）")
-        void jobber_internal_visible_to_system_admin() {
+        @DisplayName("JOBBER_INTERNAL × OPEN は JOBBER でない SystemAdmin 単独には見えない（高速パス撤去）")
+        void jobber_internal_invisible_to_system_admin() {
             JobPostingVisibilityProjection p = projection(1L,
                     JobPostingStatus.OPEN, VisibilityScope.JOBBER_INTERNAL);
             when(jobPostingRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(eq(VIEWER_ID), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, VIEWER_ID)).isTrue();
+            assertThat(resolver.canView(1L, VIEWER_ID)).isFalse();
         }
 
         @Test
@@ -415,16 +415,16 @@ class JobPostingVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("CANCELLED は SystemAdmin に可視")
-        void cancelled_visible_to_system_admin() {
+        @DisplayName("CANCELLED は SystemAdmin 単独には見えない（非所属と同じ）")
+        void cancelled_invisible_to_system_admin() {
             JobPostingVisibilityProjection p = projection(1L,
                     JobPostingStatus.CANCELLED, VisibilityScope.JOBBER_PUBLIC_BOARD);
             when(jobPostingRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, VIEWER_ID)).isTrue();
+            assertThat(resolver.canView(1L, VIEWER_ID)).isFalse();
         }
     }
 

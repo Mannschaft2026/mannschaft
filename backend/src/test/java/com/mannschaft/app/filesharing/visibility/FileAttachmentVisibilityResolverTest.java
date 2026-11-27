@@ -126,14 +126,14 @@ class FileAttachmentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("TEAM スコープ — SystemAdmin は閲覧可")
-        void canView_TEAMスコープファイルはSystemAdminが見られる() {
+        @DisplayName("TEAM スコープ — SystemAdmin 単独は閲覧できない")
+        void canView_TEAMスコープファイルはSystemAdminは見られない() {
             FileAttachmentVisibilityProjection row = teamProjection(1L, 10L);
             stubProjection(row);
             when(membershipBatchQueryService.snapshotForUser(eq(999L), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 999L)).isTrue();
+            assertThat(resolver.canView(1L, 999L)).isFalse();
         }
     }
 
@@ -169,14 +169,14 @@ class FileAttachmentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("PERSONAL スコープ — SystemAdmin は閲覧可")
-        void canView_PERSONALスコープSystemAdminが見られる() {
+        @DisplayName("PERSONAL スコープ — SystemAdmin 単独は閲覧できない")
+        void canView_PERSONALスコープSystemAdminは見られない() {
             FileAttachmentVisibilityProjection row = personalProjection(1L, 100L);
             stubProjection(row);
             when(membershipBatchQueryService.snapshotForUser(eq(999L), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 999L)).isTrue();
+            assertThat(resolver.canView(1L, 999L)).isFalse();
         }
     }
 

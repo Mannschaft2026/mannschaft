@@ -403,7 +403,7 @@ class PropertyWorkPackageMaskingServiceTest {
         @DisplayName("isVisible: SystemAdmin は visibility に関わらず可視")
         void isVisible_systemAdmin_true() {
             PropertyWorkPackageEntity pkg = packageOf(WorkPackageVisibility.ADMINS_ONLY);
-            assertThat(service.isVisible(pkg, UserScopeRoleSnapshot.forSystemAdmin())).isTrue();
+            assertThat(service.isVisible(pkg, new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()))).isTrue();
         }
 
         @Test
@@ -437,7 +437,7 @@ class PropertyWorkPackageMaskingServiceTest {
             for (WorkPackageVisibility v : WorkPackageVisibility.values()) {
                 PropertyWorkPackageEntity pkg = packageOf(v);
                 MaskedView m = service.applyMasking(pkg, vendor(), VIEWER_USER_ID,
-                        UserScopeRoleSnapshot.forSystemAdmin());
+                        new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
                 assertThat(m.visible()).as("visibility=%s", v).isTrue();
                 assertThat(m.canViewAmount()).as("visibility=%s", v).isTrue();
             }

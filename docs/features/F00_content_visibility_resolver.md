@@ -97,7 +97,7 @@ if (team.getVisibility() == TeamEntity.Visibility.PRIVATE && !isMember) {
 > - `ScheduleQueryService.listTeamSchedules` / `listOrgSchedules`（チーム/組織一覧。Controller から閲覧者 userId を引き回し）
 >
 > 個人（PERSONAL）スケジュールは所有者本人の `userId` で取得しており本人のみ取得される設計のため、フィルタ対象外とした。
-> SystemAdmin の全件可視は Resolver 側（§15 D-13）が担保するため呼び出し側で特別扱いしない。
+> SystemAdmin の全件可視（旧 §15 D-13）は戦役 Z-A PR4 で撤去した。運営アカウントも一般利用者と同じく所属・ロールだけで判定される。
 
 ---
 
@@ -187,7 +187,7 @@ F09.8.1 §4.3 の 11 種を起点に、本基盤としては以下 17 種を Pha
 - **`BULLETIN_THREAD`**: visibility 概念なし。`toStandard` は常に `SCOPE_AFFILIATED`（直接所属者全員）を返す最小実装。`scopeType/scopeId` 取得 + AbstractContentVisibilityResolver 標準フローで判定。Phase C では UI/DDL 追加なし、Phase 2 以降で visibility 概念追加時に別軍議。
 - **`CIRCULATION_DOCUMENT`**: visibility 概念なし。`toStandard` は `CUSTOM` を返し、`evaluateCustom` で `circulation_recipients` テーブルに `(document_id, user_id)` レコードがあるかを判定する **ACL 固定戦略**。
   - 採用案: **案 A（recipients のみ）**。`circulation_recipients` に viewerUserId が登録されていれば可視。親 ORG/TEAM 所属チェックは **行わない**（recipients に登録された時点で配信対象として確定済の前提）。
-  - 例外: SystemAdmin 高速パス（D-13）は変わらず適用。
+  - SystemAdmin 高速パス（D-13）は撤去済み（戦役 Z-A PR4）。
   - Projection には `scopeType/scopeId` を載せて将来拡張に備える。recipients は別 SQL で都度取得する（バルク N+1 回避は `MembershipBatchQueryService` 拡張で後日対応＝**Phase C スコープ外**、Phase D 以降の課題）。
 - **`COMMENT`**: Phase C は **CirculationComment 限定**で実装する（CirculationDocument の comment ACL ＝親文書の recipients に従属）。既存の他 Comment 実体（ActivityComment / IncidentComment / TodoComment / WorkflowRequestComment / ProxyVoteMotionComment / SharedFileComment）は **Phase C スコープ外**。汎用化は Phase D 以降の親 Resolver 整備（PHOTO_ALBUM / FILE_ATTACHMENT 等）と一括で別軍議。
 
@@ -464,7 +464,7 @@ public class BlogPostVisibilityResolver
         if (rows.isEmpty()) return Set.of();
 
         // 2) status × visibility の合成 (§7.5)
-        //    DELETED/ARCHIVED は SystemAdmin 以外不可視
+        //    DELETED は誰も不可視。ARCHIVED は著者本人（PERSONAL か所属中）か DEPUTY_ADMIN 以上のみ（2026-11-27 マスター決定）
         //    DRAFT/SCHEDULED は author のみ可視
         boolean isSysAdmin = accessControlService.isSystemAdmin(viewerUserId);
 
@@ -495,9 +495,9 @@ public class BlogPostVisibilityResolver
         ContentStatus s = BlogPostStatusMapper.toStandard(row.status());
         return switch (s) {
             case DELETED -> false;                 // 誰でも不可視
-            case ARCHIVED -> isSysAdmin;           // SystemAdmin のみ
+            case ARCHIVED -> archivedVisible(row, viewerUserId); // 著者（所属中）か DEPUTY_ADMIN 以上
             case DRAFT, SCHEDULED ->
-                Objects.equals(viewerUserId, row.authorUserId()) || isSysAdmin;
+                Objects.equals(viewerUserId, row.authorUserId());
             case PUBLISHED -> true;                // visibility 評価へ進む
         };
     }
@@ -619,9 +619,9 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         ContentStatus s = toContentStatus(row);
         return switch (s) {
             case DELETED -> false;
-            case ARCHIVED -> snapshot.isSystemAdmin();
-            case DRAFT, SCHEDULED -> snapshot.isSystemAdmin()
-                || Objects.equals(viewerUserId, row.authorUserId());
+            // ARCHIVED: 著者本人（PERSONAL か、スコープに今も所属）またはスコープの DEPUTY_ADMIN 以上（2026-11-27 マスター決定）
+            case ARCHIVED -> visibleArchived(row, viewerUserId, snapshot);
+            case DRAFT, SCHEDULED -> Objects.equals(viewerUserId, row.authorUserId());
             case PUBLISHED -> true;
         };
     }
@@ -1425,9 +1425,9 @@ private boolean visibleByStatus(
         ContentMetadata meta, Long viewerUserId, boolean isSysAdmin) {
     return switch (meta.status()) {
         case DELETED -> false;
-        case ARCHIVED -> isSysAdmin;
+        case ARCHIVED -> archivedVisible(meta, viewerUserId); // 著者（所属中）か DEPUTY_ADMIN 以上
         case DRAFT, SCHEDULED ->
-            isSysAdmin || Objects.equals(viewerUserId, meta.authorUserId());
+            Objects.equals(viewerUserId, meta.authorUserId());
         case PUBLISHED -> true; // visibility 評価に進む
     };
 }
@@ -1924,7 +1924,7 @@ log.warn("Visibility denied: refType={}, contentId={}, userId={}, reason={}, "
 通常は記録しない（性能・ログ量）。ただし以下のセンシティブ visibility への成功アクセスは INFO ログ:
 - `PRIVATE` への閲覧成功（作成者本人以外が見えた場合は異常 → これは事実上発生しないはずなので記録）
 - `CUSTOM_TEMPLATE` 経由の閲覧成功（マッパー誤りや評価ロジック誤りの事後トリアージ用）
-- `ARCHIVED`/`DELETED` への SystemAdmin 閲覧
+- `ARCHIVED` への閲覧成功（著者・スコープ管理者）
 
 実装は Resolver 側の `auditAllow` フラグで opt-in:
 
@@ -2841,8 +2841,8 @@ if (viewerUserId == null) {
 
 **v0.2 確定**: `ContentStatus { DRAFT, SCHEDULED, PUBLISHED, ARCHIVED, DELETED }` を共通基盤で標準化。各 Resolver は `visibleByStatus()` を `evaluate()` の前段ガードとして必ず実行 (§7.5)。判定ルール:
 - `DELETED`: 誰でも不可視（fail-closed）
-- `ARCHIVED`: SystemAdmin のみ可視
-- `DRAFT/SCHEDULED`: SystemAdmin or author のみ可視
+- `ARCHIVED`: 著者本人（PERSONAL か、そのスコープに今も所属）またはスコープの DEPUTY_ADMIN 以上のみ可視（2026-11-27 マスター決定、戦役 Z-A PR4 で変更。スコープを抜けた著者は自分の記事も見られない。SystemAdmin に特権は無い。拒否理由は NOT_OWNER で不在と同じ応答）
+- `DRAFT/SCHEDULED`: author のみ可視（SystemAdmin に特権は無い）
 - `PUBLISHED`: visibility 評価へ進む
 
 **決着**: ✅ 確定（v0.2）。§7.5、§15 D-15 参照。

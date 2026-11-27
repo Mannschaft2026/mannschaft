@@ -235,15 +235,17 @@ class PublicPostQueryServiceTest {
         }
 
         @Test
-        @DisplayName("AC-8: SystemAdmin → ゲート無視で全文（checkAccess を呼ばない）")
-        void AC8_SystemAdmin_全文() {
+        @DisplayName("AC-8: SystemAdmin 単独も課金結果に従う（未課金は bodyHtml=null。ゲート無視の全文は返さない）")
+        void AC8_SystemAdmin_課金結果に従う() {
             stubDetail(post("要約"));
+            given(paymentGateService.checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(999L), any(ContentGateTarget.class)))
+                    .willReturn(new GateCheckResponse(false, false, List.of()));
 
             PublicPostDetail result = service.findPublicPostDetailByTeam(
                     TEAM_ID, POST_ID, ViewerContext.systemAdmin(999L));
 
-            assertThat(result.bodyHtml()).isEqualTo(BODY);
-            verify(paymentGateService, never()).checkAccess(any(), any(), any(), any(ContentGateTarget.class));
+            assertThat(result.bodyHtml()).isEqualTo((String) null);
+            verify(paymentGateService).checkAccess(eq(ContentGateType.POST), eq(POST_ID), eq(999L), any(ContentGateTarget.class));
         }
 
         @Test

@@ -36,13 +36,12 @@ import java.util.stream.Collectors;
  *   <li>{@link #visibleByStatus(VisibilityProjection, Long, UserScopeRoleSnapshot)} —
  *       §7.5 status × visibility 合成のうち status 軸ガード（DELETED / ARCHIVED / DRAFT / SCHEDULED）</li>
  *   <li>{@link #visibleByVisibility(VisibilityProjection, Long, UserScopeRoleSnapshot)} —
- *       SystemAdmin 高速パス（§15 D-13）→ §11.6 親 ORG 連鎖ガード →
+ *       §11.6 親 ORG 連鎖ガード →
  *       {@link StandardVisibility} 9 値 × {@link UserScopeRoleSnapshot} 評価</li>
  * </ol>
  *
- * <p><strong>SystemAdmin 高速パス（§15 D-13）</strong>: 本ファサードでは扱わず、Resolver 内で
- * 「実存確認後に systemAdmin なら status 評価のみ実行し visibility 評価をスキップ」する。これにより
- * 「存在しない id を accessible として返す」セマンティクスを排除し、IDOR 防止 §11.3 と整合する。</p>
+ * <p><strong>SystemAdmin</strong>: 高速パス（§15 D-13）は撤去済み（戦役 Z-A PR4）。運営アカウントは
+ * テナントのコンテンツに対し一般利用者と同じ判定を受ける（本文の確認は Z-B の代理閲覧で行う）。</p>
  *
  * <p><strong>監査ログ連携（§11.4 / マスター裁可 C-1）</strong>: {@link #decide(Long, Long)} 経由で
  * センシティブな {@link StandardVisibility}（PRIVATE / CUSTOM_TEMPLATE / ADMINS_ONLY）の
@@ -204,7 +203,7 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
      * {@inheritDoc}
      *
      * <p>テンプレートメソッド: 内部で {@link #filterAccessible(Collection, Long)} を呼び、
-     * 結果に対象 ID が含まれるかで判定する。SystemAdmin 高速パスや status / visibility
+     * 結果に対象 ID が含まれるかで判定する。status / visibility
      * ガードはすべて {@link #filterAccessible} 側で実装される。</p>
      */
     @Override
@@ -273,7 +272,7 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
                 continue;
             }
             // 4.5) DRAFT / SCHEDULED × 作成者本人 → visibility 評価スキップ（§7.5 OQ-A 根治）
-            // status ガードで「作成者本人か SystemAdmin のみ通過」が保証されているため、
+            // status ガードで「作成者本人のみ通過」が保証されているため、
             // 作者本人ならここで可視と確定させ、ADMINS_ONLY 等による誤排除（OQ-A）を防ぐ。
             ContentStatus statusForSkip = toContentStatus(row);
             if ((statusForSkip == ContentStatus.DRAFT || statusForSkip == ContentStatus.SCHEDULED)
@@ -396,9 +395,8 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         }
 
         // 3.5) DRAFT / SCHEDULED × 作成者本人 → visibility 評価スキップ（§7.5）
-        // status ガードで「作成者本人か SystemAdmin のみ通過」が保証されるが、
+        // status ガードで「作成者本人のみ通過」が保証されるが、
         // ADMINS_ONLY 等の制限的 visibility が visibility 軸で更に作者本人を排除してしまう（OQ-A）。
-        // SystemAdmin はステップ5の visibleByVisibility 内の高速パスで済む。
         // 作者本人の場合はここで可視と確定させ、visibility 評価を丸ごとスキップする。
         ContentStatus statusForSkip = toContentStatus(row);
         if ((statusForSkip == ContentStatus.DRAFT || statusForSkip == ContentStatus.SCHEDULED)
@@ -443,7 +441,7 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
     /** 所有スコープの直接所属ロールだけを委任役割に差し替えた snapshot を返す（他のスコープ・親組織の情報は変えない）。 */
     private static UserScopeRoleSnapshot withDelegatedRole(UserScopeRoleSnapshot snapshot, ScopeKey scope,
                                                             String delegatedRole) {
-        if (scope == null || snapshot.isSystemAdmin()) {
+        if (scope == null) {
             return snapshot;
         }
         java.util.Map<ScopeKey, String> roles = new java.util.HashMap<>(snapshot.roleByScope());
@@ -458,8 +456,8 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
      *
      * <ul>
      *   <li>{@link ContentStatus#DELETED} → 誰も不可視（SystemAdmin も含む）</li>
-     *   <li>{@link ContentStatus#ARCHIVED} → SystemAdmin のみ可視</li>
-     *   <li>{@link ContentStatus#DRAFT} / {@link ContentStatus#SCHEDULED} → SystemAdmin or 作成者本人</li>
+     *   <li>{@link ContentStatus#ARCHIVED} → 著者本人（PERSONAL か所属中）またはスコープの DEPUTY_ADMIN 以上</li>
+     *   <li>{@link ContentStatus#DRAFT} / {@link ContentStatus#SCHEDULED} → 作成者本人のみ</li>
      *   <li>{@link ContentStatus#PUBLISHED} → visibility 評価へ</li>
      * </ul>
      */
@@ -473,18 +471,33 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
         }
         return switch (status) {
             case DELETED -> false;
-            case ARCHIVED -> snapshot.isSystemAdmin();
-            case DRAFT, SCHEDULED -> snapshot.isSystemAdmin()
-                    || (viewerUserId != null && Objects.equals(viewerUserId, row.authorUserId()));
+            case ARCHIVED -> visibleArchived(row, viewerUserId, snapshot);
+            case DRAFT, SCHEDULED -> viewerUserId != null && Objects.equals(viewerUserId, row.authorUserId());
             case PUBLISHED -> true;
         };
     }
 
     /**
+     * ARCHIVED の閲覧者（マスター決定 2026-11-27、戦役 Z-A PR4）。
+     * 「著者本人（PERSONAL か、そのスコープに今も所属）」または「スコープの DEPUTY_ADMIN 以上」だけ。
+     * スコープを抜けた著者は自分の記事も見られない。SystemAdmin（運営）に特権は無い。
+     */
+    private boolean visibleArchived(P row, Long viewerUserId, UserScopeRoleSnapshot snapshot) {
+        if (viewerUserId == null) {
+            return false;
+        }
+        ScopeKey scope = scopeOf(row);
+        boolean author = Objects.equals(viewerUserId, row.authorUserId());
+        if (author && (scope == null || "PERSONAL".equals(scope.scopeType()) || snapshot.isMemberOf(scope))) {
+            return true;
+        }
+        return scope != null && snapshot.hasRoleOrAbove(scope, "DEPUTY_ADMIN");
+    }
+
+    /**
      * §11.6 親 ORG 連鎖ガード付き visibility 評価。
      *
-     * <p>SystemAdmin 高速パス（§15 D-13）はここで処理する：systemAdmin なら status ガード通過後
-     * 即 true を返し、9 値の評価をスキップする。</p>
+     * <p>SystemAdmin 高速パス（§15 D-13）は撤去済み（戦役 Z-A PR4）。運営アカウントも一般利用者と同じ判定を通る。</p>
      */
     private boolean visibleByVisibility(P row, Long viewerUserId, UserScopeRoleSnapshot snapshot) {
         return visibleByVisibility(row, viewerUserId, snapshot, null);
@@ -493,13 +506,8 @@ public abstract class AbstractContentVisibilityResolver<V extends Enum<V>, P ext
     /** 追加軸コンテキスト付きの visibility 評価（バッチ経路から使う）。 */
     private boolean visibleByVisibility(
             P row, Long viewerUserId, UserScopeRoleSnapshot snapshot, Object additionalAxisContext) {
-        // §15 D-13: SystemAdmin 高速パス（実存確認済の row に対して短絡）
-        if (snapshot.isSystemAdmin()) {
-            return true;
-        }
-
         // §7.5 DRAFT/SCHEDULED の作者本人は visibility 軸をスキップ
-        // （status ガードを通過 = 作者本人か SystemAdmin のみ。SystemAdmin は上の if で返却済み）
+        // （status ガードを通過 = 作者本人のみ）
         ContentStatus status = toContentStatus(row);
         if ((status == ContentStatus.DRAFT || status == ContentStatus.SCHEDULED)
                 && viewerUserId != null

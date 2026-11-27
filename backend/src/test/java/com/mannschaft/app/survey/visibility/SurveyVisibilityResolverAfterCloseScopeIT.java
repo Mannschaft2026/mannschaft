@@ -256,16 +256,16 @@ class SurveyVisibilityResolverAfterCloseScopeIT extends AbstractMySqlIntegration
     }
 
     /**
-     * AC-3【陽性対照】: プラットフォーム管理者は高速パスで従来どおり閲覧できる。
+     * AC-3: プラットフォーム管理者も高速パスを失い（戦役 Z-A PR4）、所属の無い SystemAdmin 単独は締切後の結果も閲覧できない。
      */
     @Test
-    @DisplayName("AC-3 SystemAdmin は締切後の結果を閲覧できる（陽性対照）")
-    void ac3_systemAdminCanViewAfterClose() {
+    @DisplayName("AC-3 SystemAdmin 単独は締切後の結果も閲覧できない（高速パス撤去）")
+    void ac3_systemAdminAloneCannotViewAfterClose() {
         Long surveyId = insertTeamSurvey("2774-sysadmin", "CLOSED", "AFTER_CLOSE", null);
         em.flush();
         em.clear();
 
-        assertThat(checker.canView(ReferenceType.SURVEY, surveyId, sysAdminUserId)).isTrue();
+        assertThat(checker.canView(ReferenceType.SURVEY, surveyId, sysAdminUserId)).isFalse();
     }
 
     // =========================================================================
@@ -290,7 +290,7 @@ class SurveyVisibilityResolverAfterCloseScopeIT extends AbstractMySqlIntegration
         assertThat(checker.canView(ReferenceType.SURVEY, surveyId, outsiderUserId)).isFalse();
         assertThat(checker.canView(ReferenceType.SURVEY, surveyId, null)).isFalse();
         // SystemAdmin だけは高速パスで可視（従来どおり）。
-        assertThat(checker.canView(ReferenceType.SURVEY, surveyId, sysAdminUserId)).isTrue();
+        assertThat(checker.canView(ReferenceType.SURVEY, surveyId, sysAdminUserId)).isFalse();
     }
 
     /**

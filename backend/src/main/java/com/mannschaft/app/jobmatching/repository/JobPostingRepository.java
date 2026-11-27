@@ -106,10 +106,11 @@ public interface JobPostingRepository extends JpaRepository<JobPostingEntity, Lo
      *
      * <p><b>status 正規化（{@code JobPostingVisibilityResolver#mapStatus} と同一の意味論）</b>:</p>
      * <ul>
-     *   <li>{@code DRAFT}: 作成者本人または SystemAdmin のみ可視</li>
+     *   <li>{@code DRAFT}: 作成者本人のみ可視</li>
      *   <li>{@code OPEN/CLOSED}（PUBLISHED 区分）: visibility ラダー述語 OR JOBBER_INTERNAL
-     *       EXISTS 述語 OR SystemAdmin</li>
-     *   <li>{@code CANCELLED}（ARCHIVED 区分）: SystemAdmin のみ可視</li>
+     *       EXISTS 述語</li>
+     *   <li>{@code CANCELLED}（ARCHIVED 区分）: 作成者本人（チームに今も所属）またはチームの DEPUTY_ADMIN 以上のみ可視
+     *       （マスター決定 2026-11-27。F00 の ARCHIVED 規則と同じ。SystemAdmin の特権は無い）</li>
      * </ul>
      *
      * @param teamId              チーム ID
@@ -117,7 +118,8 @@ public interface JobPostingRepository extends JpaRepository<JobPostingEntity, Lo
      * @param visibilities        {@code JobMatchingVisibilityMapper#toFunctional} が返した
      *                            可視ラダーの enum 集合（呼び出し側で非空を保証する）
      * @param viewerUserId        閲覧者 user_id（{@code null} 可、未認証）
-     * @param viewerIsSystemAdmin 閲覧者が SystemAdmin か
+     * @param viewerIsScopeMember 閲覧者が対象チームに今も所属しているか（snapshot 由来）
+     * @param viewerIsScopeDeputyAdminOrAbove 閲覧者が対象チームの DEPUTY_ADMIN 以上か（snapshot 由来）
      * @param pageable            ページング指定
      * @return 閲覧者に可視な求人エンティティのページ
      */
@@ -127,12 +129,11 @@ public interface JobPostingRepository extends JpaRepository<JobPostingEntity, Lo
               AND (:statusFilter IS NULL OR p.status = :statusFilter)
               AND (
                 (p.status = com.mannschaft.app.jobmatching.enums.JobPostingStatus.DRAFT
-                    AND (p.createdByUserId = :viewerUserId OR :viewerIsSystemAdmin = true))
+                    AND p.createdByUserId = :viewerUserId)
                 OR (p.status IN (com.mannschaft.app.jobmatching.enums.JobPostingStatus.OPEN,
                                   com.mannschaft.app.jobmatching.enums.JobPostingStatus.CLOSED)
                     AND (
                       p.visibilityScope IN :visibilities
-                      OR :viewerIsSystemAdmin = true
                       OR (p.visibilityScope = com.mannschaft.app.jobmatching.enums.VisibilityScope.JOBBER_INTERNAL
                           AND EXISTS (
                               SELECT 1 FROM com.mannschaft.app.role.entity.UserRoleEntity ur
@@ -141,7 +142,8 @@ public interface JobPostingRepository extends JpaRepository<JobPostingEntity, Lo
                           ))
                     ))
                 OR (p.status = com.mannschaft.app.jobmatching.enums.JobPostingStatus.CANCELLED
-                    AND :viewerIsSystemAdmin = true)
+                    AND (:viewerIsScopeDeputyAdminOrAbove = true
+                         OR (p.createdByUserId = :viewerUserId AND :viewerIsScopeMember = true)))
               )
             ORDER BY p.createdAt DESC
             """)
@@ -150,6 +152,7 @@ public interface JobPostingRepository extends JpaRepository<JobPostingEntity, Lo
             @Param("statusFilter") JobPostingStatus statusFilter,
             @Param("visibilities") Collection<VisibilityScope> visibilities,
             @Param("viewerUserId") Long viewerUserId,
-            @Param("viewerIsSystemAdmin") boolean viewerIsSystemAdmin,
+            @Param("viewerIsScopeMember") boolean viewerIsScopeMember,
+            @Param("viewerIsScopeDeputyAdminOrAbove") boolean viewerIsScopeDeputyAdminOrAbove,
             Pageable pageable);
 }

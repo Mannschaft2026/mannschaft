@@ -2,12 +2,8 @@
 # 再生成: SYSADMIN_BASELINE_REGENERATE=1 sh gradlew test --tests '*SysAdminBypassGuardTest*'
 # 増える方向の変更は禁止（縮める一方）。CODEOWNERS 対象。
 com/mannschaft/app/actionmemo/admin/AdminActionMemoController.java	hasRole('SYSTEM_ADMIN') @ -	1
-com/mannschaft/app/activity/controller/ActivityStatsController.java	systemAdmin( @ exportCsv	1
 com/mannschaft/app/activity/service/ActivityResultSearchContributor.java	"SYSTEM_ADMIN" @ visibilitiesFor	1
-com/mannschaft/app/activity/service/ActivityResultService.java	isSystemAdmin( @ listActivities	2
 com/mannschaft/app/activity/service/ActivityScopeAccessGuard.java	isSystemAdmin( @ isSystemAdmin	2
-com/mannschaft/app/activity/service/AutomaticActivityListService.java	isSystemAdmin( @ list	1
-com/mannschaft/app/activity/service/AutomaticActivityListService.java	isSystemAdmin( @ readLevels	1
 com/mannschaft/app/admin/batch/BatchEventListener.java	findSystemAdminUserIds( @ onCompleted	1
 com/mannschaft/app/admin/batch/BatchEventListener.java	findSystemAdminUserIds( @ onFailed	1
 com/mannschaft/app/admin/controller/AdminActionTemplateController.java	checkSystemAdmin( @ createTemplate	1
@@ -45,21 +41,15 @@ com/mannschaft/app/cms/service/BlogPostPreviewService.java	isSystemAdmin( @ meta
 com/mannschaft/app/cms/service/BlogPostSearchContributor.java	"SYSTEM_ADMIN" @ visibilitiesFor	1
 com/mannschaft/app/cms/service/BlogPostService.java	isSystemAdmin( @ applyPaywallMask	1
 com/mannschaft/app/cms/service/BlogPostService.java	isSystemAdmin( @ scanVisiblePage	1
-com/mannschaft/app/cms/visibility/BlogPostVisibilityResolver.java	isSystemAdmin( @ isScopeAdmin	2
 com/mannschaft/app/common/AccessControlService.java	checkNotLastSystemAdmin( @ -	1
 com/mannschaft/app/common/AccessControlService.java	checkSystemAdmin( @ -	1
 com/mannschaft/app/common/AccessControlService.java	isSystemAdmin( @ -	1
 com/mannschaft/app/common/activityschedule/AutomaticActivityActualPolicy.java	isSystemAdmin( @ filterEligible	1
 com/mannschaft/app/common/pdf/verify/PdfSignatureVerifyController.java	checkSystemAdmin( @ verify	1
 com/mannschaft/app/common/pdf/verify/PdfSignatureVerifyController.java	hasRole('SYSTEM_ADMIN') @ -	1
-com/mannschaft/app/common/visibility/AbstractContentVisibilityResolver.java	isSystemAdmin( @ visibleByStatus	2
-com/mannschaft/app/common/visibility/AbstractContentVisibilityResolver.java	isSystemAdmin( @ visibleByVisibility	1
-com/mannschaft/app/common/visibility/AbstractContentVisibilityResolver.java	isSystemAdmin( @ withDelegatedRole	1
 com/mannschaft/app/common/visibility/AbstractContentVisibilityResolver.java	systemAdmin( @ withDelegatedRole	1
 com/mannschaft/app/common/visibility/MembershipBatchQueryService.java	existsSystemAdminByUserId( @ snapshotForUser	1
-com/mannschaft/app/common/visibility/MembershipBatchQueryService.java	forSystemAdmin( @ snapshotForUser	1
 com/mannschaft/app/common/visibility/RolePriority.java	"SYSTEM_ADMIN" @ -	1
-com/mannschaft/app/common/visibility/UserScopeRoleSnapshot.java	forSystemAdmin( @ forSystemAdmin	1
 com/mannschaft/app/common/visibility/UserScopeRoleSnapshot.java	isSystemAdmin( @ isSystemAdmin	1
 com/mannschaft/app/config/SecurityConfig.java	"SYSTEM_ADMIN" @ securityFilterChain	14
 com/mannschaft/app/dashboard/ViewerRole.java	"SYSTEM_ADMIN" @ fromString	1
@@ -69,10 +59,6 @@ com/mannschaft/app/dashboard/ViewerRole.java	SYSTEM_ADMIN(bare) @ isAdminOrAbove
 com/mannschaft/app/dashboard/service/DashboardService.java	ViewerRole.SYSTEM_ADMIN @ filterAnnouncementGated	1
 com/mannschaft/app/dashboard/service/DashboardService.java	isSystemAdmin( @ canViewTargetAudience	1
 com/mannschaft/app/dashboard/service/DashboardWidgetVisibilityService.java	isSystemAdmin( @ checkUpdatePermission	1
-com/mannschaft/app/dashboard/service/RoleResolver.java	ViewerRole.SYSTEM_ADMIN @ resolveCurrentRole	1
-com/mannschaft/app/dashboard/service/RoleResolver.java	ViewerRole.SYSTEM_ADMIN @ resolveViewerRolesFresh	1
-com/mannschaft/app/dashboard/service/RoleResolver.java	isSystemAdmin( @ resolveCurrentRole	1
-com/mannschaft/app/dashboard/service/RoleResolver.java	isSystemAdmin( @ resolveViewerRolesFresh	2
 com/mannschaft/app/errorreport/batch/ErrorReportSlaOverdueAlertBatch.java	findSystemAdminUserIds( @ run	1
 com/mannschaft/app/errorreport/service/ErrorReportNotificationListener.java	notifySystemAdmins( @ onErrorReportRaised	1
 com/mannschaft/app/errorreport/service/ErrorReportNotifier.java	findSystemAdminUserIds( @ notifyAiAnalysisCompleted	1
@@ -110,7 +96,6 @@ com/mannschaft/app/gdpr/service/WithdrawalAdminCheck.java	isSystemAdmin( @ check
 com/mannschaft/app/inbox/service/adapter/AnnouncementInboxAdapter.java	"SYSTEM_ADMIN" @ isVisibleTo	1
 com/mannschaft/app/incident/service/IncidentAccessGuard.java	isSystemAdmin( @ requireListVisibility	1
 com/mannschaft/app/incident/service/IncidentAccessGuard.java	isSystemAdmin( @ requireVisibleOrConceal	1
-com/mannschaft/app/jobmatching/service/JobPostingService.java	isSystemAdmin( @ listByTeamForViewer	1
 com/mannschaft/app/match/visibility/MatchVisibilityResolver.java	isSystemAdmin( @ isAuthorized	1
 com/mannschaft/app/matching/service/MatchProposalService.java	isSystemAdmin( @ checkProposalReadAccess	1
 com/mannschaft/app/matching/service/MatchProposalService.java	isSystemAdmin( @ listProposals	1
@@ -163,14 +148,7 @@ com/mannschaft/app/publicview/controller/PublicPostCommentController.java	hasRol
 com/mannschaft/app/publicview/controller/PublicPostCommentController.java	isAdminOrSystemAdmin( @ deleteComment	1
 com/mannschaft/app/publicview/controller/PublicPostCommentController.java	isAdminOrSystemAdmin( @ isAdminOrSystemAdmin	1
 com/mannschaft/app/publicview/service/AdminPublicSettingsService.java	isSystemAdmin( @ checkScopeAdminAccess	1
-com/mannschaft/app/publicview/service/PublicPostQueryService.java	ViewerStatus.SYSTEM_ADMIN @ applyPaywallToPublicDetail	1
 com/mannschaft/app/publicview/service/SupporterNameDisclosureService.java	isSystemAdmin( @ checkScopeAdminAccess	1
-com/mannschaft/app/publicview/service/ViewerContextBuilder.java	"SYSTEM_ADMIN" @ -	1
-com/mannschaft/app/publicview/service/ViewerContextBuilder.java	ROLE_SYSTEM_ADMIN(ident) @ -	1
-com/mannschaft/app/publicview/service/ViewerContextBuilder.java	existsSystemAdminByUserId( @ buildForOrganizationByUserId	1
-com/mannschaft/app/publicview/service/ViewerContextBuilder.java	existsSystemAdminByUserId( @ buildForTeamByUserId	1
-com/mannschaft/app/publicview/service/ViewerContextBuilder.java	systemAdmin( @ buildForOrganizationByUserId	1
-com/mannschaft/app/publicview/service/ViewerContextBuilder.java	systemAdmin( @ buildForTeamByUserId	1
 com/mannschaft/app/publicview/visibility/IdentityVisibilityResolver.java	SYSTEM_ADMIN(bare) @ resolveIdentityForViewer	1
 com/mannschaft/app/publicview/visibility/ViewerContext.java	ViewerStatus.SYSTEM_ADMIN @ systemAdmin	1
 com/mannschaft/app/publicview/visibility/ViewerContext.java	systemAdmin( @ systemAdmin	1
@@ -230,7 +208,6 @@ com/mannschaft/app/schedule/service/ScheduleService.java	isSystemAdmin( @ checkM
 com/mannschaft/app/schedule/service/ScheduleService.java	isSystemAdmin( @ checkScheduleManagementAccess	1
 com/mannschaft/app/schedule/service/ScheduleService.java	isSystemAdmin( @ checkScopeAdminAccess	1
 com/mannschaft/app/schedule/service/ScheduleService.java	isSystemAdmin( @ checkScopeViewAccess	1
-com/mannschaft/app/schedule/visibility/ScheduleKeepVisibilityResolver.java	isSystemAdmin( @ isVisible	1
 com/mannschaft/app/school/controller/AttendanceBatchController.java	checkSystemAdmin( @ runDailyEvaluation	1
 com/mannschaft/app/school/controller/AttendanceBatchController.java	checkSystemAdmin( @ sendWeeklyDigest	1
 com/mannschaft/app/school/controller/AttendanceBatchController.java	hasRole('SYSTEM_ADMIN') @ -	1
@@ -276,7 +253,6 @@ com/mannschaft/app/social/announcement/OrgAnnouncementAudienceAccess.java	Viewer
 com/mannschaft/app/social/announcement/OrgAnnouncementFeedQueryService.java	"SYSTEM_ADMIN" @ getFeed	1
 com/mannschaft/app/social/announcement/audience/BroadcastAudienceResolver.java	isSystemAdmin( @ pushEnabled	1
 com/mannschaft/app/social/announcement/controller/AnnouncementFeedOrgController.java	isSystemAdmin( @ canViewTargetAudience	1
-com/mannschaft/app/social/announcement/visibility/AnnouncementFeedVisibilityResolver.java	isSystemAdmin( @ isScopeAdmin	2
 com/mannschaft/app/team/controller/TeamController.java	checkSystemAdmin( @ restoreTeam	1
 com/mannschaft/app/team/controller/TeamController.java	isSystemAdmin( @ getOrganizations	1
 com/mannschaft/app/team/repository/TeamRepository.java	findDeletedTeamsForSystemAdmin( @ -	1
@@ -307,7 +283,7 @@ com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	isSy
 com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	isSystemAdmin( @ loadParticipation	1
 com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	isSystemAdmin( @ requireVisibilityManage	1
 com/mannschaft/app/tournament/service/TournamentContactSpaceAccessGate.java	organizerAdminOrSystemAdmin( @ resolveLevelsForSpaces	1
-com/mannschaft/app/tournament/service/TournamentService.java	isSystemAdmin( @ listTournaments	2
+com/mannschaft/app/tournament/service/TournamentService.java	isSystemAdmin( @ listTournaments	1
 com/mannschaft/app/tournament/service/TournamentViewAccessGate.java	isSystemAdmin( @ isViewableBy	1
 com/mannschaft/app/tournament/submission/TournamentSubmissionRequirementService.java	isSystemAdmin( @ requireOrganizerAdmin	1
 com/mannschaft/app/village/controller/VillageCreationRequestController.java	checkSystemAdmin( @ approve	1

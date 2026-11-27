@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
  * 設計書 §5 の規約通りに行われるかを網羅検証する:</p>
  *
  * <ul>
- *   <li>SYSTEM_ADMIN フラグ true → SYSTEM_ADMIN（最優先バイパス）</li>
+ *   <li>SYSTEM_ADMIN の分岐は無い（戦役 Z-A PR4）。スコープ内ロールだけで決まる</li>
  *   <li>{@code "ADMIN" / "DEPUTY_ADMIN" / "MEMBER" / "SUPPORTER"} → 同名 ViewerRole</li>
  *   <li>{@code "GUEST"} または null → PUBLIC</li>
  *   <li>{@code AccessControlService.getRoleName(userId, scopeId, scopeType)} の引数順</li>
@@ -53,18 +53,15 @@ class RoleResolverTest {
     class SystemAdminBypass {
 
         @Test
-        @DisplayName("isSystemAdmin == true → SYSTEM_ADMIN（getRoleName を呼ばない）")
-        void systemAdmin_最優先バイパス() {
-            // Given
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
-
+        @DisplayName("SystemAdmin 単独（所属なし）は特別扱いされず PUBLIC（getRoleName で通常解決）")
+        void systemAdmin_単独は特別扱いしない() {
             // When
             ViewerRole result = roleResolver.resolveViewerRole(USER_ID, SCOPE_TYPE_TEAM, SCOPE_ID);
 
-            // Then
-            assertThat(result).isEqualTo(ViewerRole.SYSTEM_ADMIN);
-            // SYSTEM_ADMIN ならスコープ内ロール解決をしないことを確認
-            verify(accessControlService, never()).getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM);
+            // Then（戦役 Z-A PR4: SYSTEM_ADMIN の分岐は無く、スコープ内ロールだけで決まる）
+            assertThat(result).isEqualTo(ViewerRole.PUBLIC);
+            verify(accessControlService).getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM);
+            verify(accessControlService, never()).isSystemAdmin(USER_ID);
         }
     }
 
@@ -79,7 +76,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("\"ADMIN\" → ViewerRole.ADMIN")
         void admin文字列_ADMIN() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("ADMIN");
 
@@ -91,7 +87,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("\"DEPUTY_ADMIN\" → ViewerRole.DEPUTY_ADMIN")
         void deputyAdmin文字列_DEPUTY_ADMIN() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("DEPUTY_ADMIN");
 
@@ -103,7 +98,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("\"MEMBER\" → ViewerRole.MEMBER")
         void member文字列_MEMBER() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("MEMBER");
 
@@ -115,7 +109,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("\"SUPPORTER\" → ViewerRole.SUPPORTER")
         void supporter文字列_SUPPORTER() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("SUPPORTER");
 
@@ -127,7 +120,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("\"GUEST\" → ViewerRole.PUBLIC")
         void guest文字列_PUBLIC() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("GUEST");
 
@@ -139,7 +131,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("null（メンバーシップなし） → ViewerRole.PUBLIC")
         void null戻り値_PUBLIC() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn(null);
 
@@ -151,7 +142,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("未知のロール文字列 → PUBLIC（フェイルセーフ）")
         void 未知ロール文字列_PUBLIC() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("UNKNOWN_ROLE");
 
@@ -164,7 +154,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("小文字の \"member\" → ViewerRole.MEMBER（toUpperCase で正規化）")
         void 小文字戻り値_正規化() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_TEAM))
                     .willReturn("member");
 
@@ -185,7 +174,6 @@ class RoleResolverTest {
         @Test
         @DisplayName("getRoleName(userId, scopeId, scopeType) の順で呼ばれる（実コードのシグネチャに従う）")
         void 引数順_userId_scopeId_scopeType() {
-            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(false);
             given(accessControlService.getRoleName(USER_ID, SCOPE_ID, SCOPE_TYPE_ORG))
                     .willReturn("MEMBER");
 

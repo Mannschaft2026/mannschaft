@@ -42,7 +42,7 @@ class UserScopeRoleSnapshotTest {
         @Test
         @DisplayName("forSystemAdmin() は systemAdmin=true、後続データは空")
         void forSystemAdmin_systemAdminフラグのみtrue() {
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
             assertThat(s.isSystemAdmin()).isTrue();
             assertThat(s.roleByScope()).isEmpty();
             assertThat(s.parentOrgByScope()).isEmpty();
@@ -66,11 +66,11 @@ class UserScopeRoleSnapshotTest {
     class IsMemberOf {
 
         @Test
-        @DisplayName("SystemAdmin は常に true")
-        void SystemAdminは常にtrue() {
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
-            assertThat(s.isMemberOf(TEAM_1)).isTrue();
-            assertThat(s.isMemberOf(ORG_10)).isTrue();
+        @DisplayName("SystemAdmin 単独は所属が無ければ isMemberOf=false")
+        void SystemAdmin単独はfalse() {
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
+            assertThat(s.isMemberOf(TEAM_1)).isFalse();
+            assertThat(s.isMemberOf(ORG_10)).isFalse();
         }
 
         @Test
@@ -145,12 +145,12 @@ class UserScopeRoleSnapshotTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin スナップショットは scope に関わらず常に true")
-        void isMemberOf_system_admin_snapshot_returns_true() {
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
-            assertThat(s.isMemberOf(TEAM_1)).isTrue();
-            assertThat(s.isMemberOf(TEAM_2)).isTrue();
-            assertThat(s.isMemberOf(ORG_10)).isTrue();
+        @DisplayName("SystemAdmin 単独のスナップショットはどの scope でも isMemberOf=false")
+        void isMemberOf_system_admin_snapshot_returns_false() {
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
+            assertThat(s.isMemberOf(TEAM_1)).isFalse();
+            assertThat(s.isMemberOf(TEAM_2)).isFalse();
+            assertThat(s.isMemberOf(ORG_10)).isFalse();
         }
     }
 
@@ -159,11 +159,11 @@ class UserScopeRoleSnapshotTest {
     class HasRoleOrAbove {
 
         @Test
-        @DisplayName("SystemAdmin は要求ロールに関係なく常に true")
-        void SystemAdminは常にtrue() {
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
-            assertThat(s.hasRoleOrAbove(TEAM_1, "ADMIN")).isTrue();
-            assertThat(s.hasRoleOrAbove(ORG_10, "GUEST")).isTrue();
+        @DisplayName("SystemAdmin 単独は要求ロールを満たさない（hasRoleOrAbove=false）")
+        void SystemAdmin単独はfalse() {
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
+            assertThat(s.hasRoleOrAbove(TEAM_1, "ADMIN")).isFalse();
+            assertThat(s.hasRoleOrAbove(ORG_10, "GUEST")).isFalse();
         }
 
         @Test
@@ -217,10 +217,10 @@ class UserScopeRoleSnapshotTest {
     class IsMemberOfParentOrg {
 
         @Test
-        @DisplayName("SystemAdmin は常に true")
-        void SystemAdminは常にtrue() {
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
-            assertThat(s.isMemberOfParentOrg(TEAM_1)).isTrue();
+        @DisplayName("SystemAdmin 単独は isMemberOfParentOrg=false")
+        void SystemAdmin単独はfalse() {
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
+            assertThat(s.isMemberOfParentOrg(TEAM_1)).isFalse();
         }
 
         @Test
@@ -317,7 +317,7 @@ class UserScopeRoleSnapshotTest {
         void SystemAdminも事実通り() {
             // SystemAdmin の高速パスでは parentOrgByScope/suspendedOrgIds が空なので false。
             // §11.6 の運用としては Resolver 側で「SystemAdmin OR !isParentOrgInactive」と組む。
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
             assertThat(s.isParentOrgInactive(TEAM_1)).isFalse();
         }
     }
@@ -345,10 +345,10 @@ class UserScopeRoleSnapshotTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は常に isDescendantMemberOf=true")
-        void SystemAdminは常にtrue() {
-            UserScopeRoleSnapshot s = UserScopeRoleSnapshot.forSystemAdmin();
-            assertThat(s.isDescendantMemberOf(ORG_10)).isTrue();
+        @DisplayName("SystemAdmin 単独は isDescendantMemberOf=false")
+        void SystemAdmin単独はfalse() {
+            UserScopeRoleSnapshot s = new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of());
+            assertThat(s.isDescendantMemberOf(ORG_10)).isFalse();
         }
 
         @Test

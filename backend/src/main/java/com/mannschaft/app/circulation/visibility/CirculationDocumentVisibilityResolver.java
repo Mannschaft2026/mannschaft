@@ -131,7 +131,7 @@ public class CirculationDocumentVisibilityResolver
      */
     private static ContentStatus mapStatus(CirculationStatus status) {
         if (status == null) {
-            // fail-closed: status 不明は DRAFT 扱い（基底側で SystemAdmin/作成者のみ可視）
+            // fail-closed: status 不明は DRAFT 扱い（基底側で作成者のみ可視）
             return ContentStatus.DRAFT;
         }
         return switch (status) {

@@ -120,19 +120,6 @@ public record UserScopeRoleSnapshot(
                 false, Map.of(), Map.of(), Set.of(), Set.of(), Set.of(), Map.of(), Map.of());
     }
 
-    /**
-     * SystemAdmin ユーザー用の高速パススナップショット。
-     * 後続のメンバーシップ確認 SQL を発行せずに済むため、
-     * {@link MembershipBatchQueryService} は SysAdmin 判定後即座に本値を返す。
-     *
-     * <p>record コンポーネント accessor と衝突するため、static factory は
-     * {@code forSystemAdmin} という名称を採用している。</p>
-     */
-    public static UserScopeRoleSnapshot forSystemAdmin() {
-        return new UserScopeRoleSnapshot(
-                true, Map.of(), Map.of(), Set.of(), Set.of(), Set.of(), Map.of(), Map.of());
-    }
-
     public boolean isSystemAdmin() {
         return systemAdmin;
     }
@@ -148,9 +135,6 @@ public record UserScopeRoleSnapshot(
         if (scope == null) {
             return false;
         }
-        if (systemAdmin) {
-            return true;
-        }
         String role = roleByScope.get(scope);
         // JOBBER 等の並行ロール（RolePriority マップ未登録）は不可視
         return role != null && RolePriority.isRegistered(role);
@@ -161,9 +145,6 @@ public record UserScopeRoleSnapshot(
      * SystemAdmin は常に true。
      */
     public boolean hasRoleOrAbove(ScopeKey scope, String required) {
-        if (systemAdmin) {
-            return true;
-        }
         if (scope == null) {
             return false;
         }
@@ -176,9 +157,6 @@ public record UserScopeRoleSnapshot(
      * ORGANIZATION_WIDE 公開判定の中核ロジック。SystemAdmin は常に true。
      */
     public boolean isMemberOfParentOrg(ScopeKey scope) {
-        if (systemAdmin) {
-            return true;
-        }
         if (scope == null) {
             return false;
         }
@@ -210,9 +188,6 @@ public record UserScopeRoleSnapshot(
      * @return 親 ORG で {@code required} 以上のロールを持つなら {@code true}
      */
     public boolean hasParentOrgRoleOrAbove(ScopeKey scope, String required) {
-        if (systemAdmin) {
-            return true;
-        }
         if (scope == null) {
             return false;
         }
@@ -267,9 +242,6 @@ public record UserScopeRoleSnapshot(
      * {@link #isMemberOf(ScopeKey)} / {@link #isMemberOfParentOrg(ScopeKey)} の挙動には影響しない。</p>
      */
     public boolean isDescendantMemberOf(ScopeKey scope) {
-        if (systemAdmin) {
-            return true;
-        }
         if (scope == null || !"ORGANIZATION".equals(scope.scopeType())) {
             return false;
         }
@@ -297,9 +269,6 @@ public record UserScopeRoleSnapshot(
      * @return 当該 ORG の配下ツリーで {@code required} 以上のロールを持つなら {@code true}
      */
     public boolean hasDescendantRoleOrAbove(ScopeKey scope, String required) {
-        if (systemAdmin) {
-            return true;
-        }
         if (scope == null || !"ORGANIZATION".equals(scope.scopeType())) {
             return false;
         }

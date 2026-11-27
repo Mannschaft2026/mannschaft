@@ -78,7 +78,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     @DisplayName("AC-C2: 可視行20件+不可視/CUSTOM行混在でも size=20 で必ず20件返る（歯抜けゼロ）")
     void 歯抜けゼロ() {
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, PageRequest.of(0, 20));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 20));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).allMatch(t -> t.getVisibility() == TournamentVisibility.PUBLIC);
@@ -91,7 +91,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     @DisplayName("AC-C3: 総件数は実可視件数と一致する（上界近似ではない）")
     void 総件数は実可視件数と一致() {
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, PageRequest.of(0, 10));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 10));
 
         assertThat(page.getTotalElements()).isEqualTo(20L);
     }
@@ -104,7 +104,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     @DisplayName("AC-C4（拒否側）: 非参加者にPARTICIPANTS_ONLY大会は見えない")
     void 非参加者には見えない() {
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).noneMatch(t -> t.getVisibility() == TournamentVisibility.PARTICIPANTS_ONLY);
@@ -126,7 +126,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
         em.clear();
 
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).extracting(TournamentEntity::getId).contains(tid);
     }
@@ -146,7 +146,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
         em.clear();
 
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).extracting(TournamentEntity::getId).doesNotContain(tid);
     }
@@ -159,7 +159,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     @DisplayName("AC-C7: 未認証にはPUBLICのみ可視・機微な行は漏れない")
     void 未認証はPUBLICのみ() {
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), null, false, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC"), null, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).allMatch(t -> t.getVisibility() == TournamentVisibility.PUBLIC);
@@ -173,7 +173,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     @DisplayName("ADMINS_AND_ABOVE まで可視な閲覧者にはADMINS_AND_ABOVE大会が含まれる")
     void ADMINSまで可視なら含まれる() {
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC", "ADMINS_AND_ABOVE"), VIEWER_ID, false, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC", "ADMINS_AND_ABOVE"), VIEWER_ID, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getTotalElements()).isEqualTo(30L); // 20 PUBLIC + 10 ADMINS_AND_ABOVE
         assertThat(page.getContent()).anyMatch(t -> t.getVisibility() == TournamentVisibility.ADMINS_AND_ABOVE);
@@ -190,7 +190,7 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
         em.clear();
 
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).extracting(TournamentEntity::getId).contains(myDraftId);
         assertThat(page.getContent()).noneMatch(t -> t.getStatus() == TournamentStatus.DRAFT
@@ -198,19 +198,56 @@ class TournamentRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     }
 
     /**
-     * SystemAdmin には CANCELLED/ARCHIVED を含め全件見える。
+     * 戦役 Z-A PR4: SystemAdmin 単独（所属なし・DEPUTY_ADMIN 未満）は CANCELLED 大会を見られない。
+     * （引数撤去前は SystemAdmin フラグで見えていた。期待値を反転）
      */
     @Test
-    @DisplayName("SystemAdminにはCANCELLED大会も見える")
-    void SystemAdminには見える() {
+    @DisplayName("SystemAdmin単独にはCANCELLED大会は見えない")
+    void SystemAdmin単独には見えない() {
         Long cancelledId = persistTournament(TournamentVisibility.PUBLIC, TournamentStatus.CANCELLED, OTHER_AUTHOR_ID);
         em.flush();
         em.clear();
 
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, null, Set.of("PUBLIC"), VIEWER_ID, true, PageRequest.of(0, 100));
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 100));
 
-        assertThat(page.getContent()).extracting(TournamentEntity::getId).contains(cancelledId);
+        assertThat(page.getContent()).extracting(TournamentEntity::getId).doesNotContain(cancelledId);
+    }
+
+    /**
+     * 戦役 Z-A PR4（マスター決定 2026-11-27）: CANCELLED/ARCHIVED は著者本人（組織に今も所属）だけが見られる。
+     * 所属を離れた著者には見えない。
+     */
+    @Test
+    @DisplayName("CANCELLED大会は著者本人（所属中）には見え、所属を離れた著者には見えない")
+    void CANCELLEDは所属中の著者だけ() {
+        Long mine = persistTournament(TournamentVisibility.PUBLIC, TournamentStatus.CANCELLED, VIEWER_ID);
+        em.flush();
+        em.clear();
+
+        Page<TournamentEntity> member = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, true, false, PageRequest.of(0, 100));
+        Page<TournamentEntity> departed = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, false, false, PageRequest.of(0, 100));
+
+        assertThat(member.getContent()).extracting(TournamentEntity::getId).contains(mine);
+        assertThat(departed.getContent()).extracting(TournamentEntity::getId).doesNotContain(mine);
+    }
+
+    /**
+     * 戦役 Z-A PR4: CANCELLED/ARCHIVED は組織の DEPUTY_ADMIN 以上なら他人の分も見られる。
+     */
+    @Test
+    @DisplayName("CANCELLED大会は組織のDEPUTY_ADMIN以上には他人の分も見える")
+    void CANCELLEDは管理者に見える() {
+        Long other = persistTournament(TournamentVisibility.PUBLIC, TournamentStatus.CANCELLED, OTHER_AUTHOR_ID);
+        em.flush();
+        em.clear();
+
+        Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
+                orgId, null, Set.of("PUBLIC"), VIEWER_ID, true, true, PageRequest.of(0, 100));
+
+        assertThat(page.getContent()).extracting(TournamentEntity::getId).contains(other);
     }
 
     private Long persistTournament(TournamentVisibility visibility, TournamentStatus status, Long createdBy) {

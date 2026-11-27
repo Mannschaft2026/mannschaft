@@ -19,7 +19,8 @@ import java.util.Set;
  *
  * <p>F19.1 §7.6 で定義される「閲覧者コンテキストの構築」を担当する。
  * Spring Security の {@link Authentication} からユーザー ID を取り出し、
- * user_roles テーブルを参照して閲覧者立場（ANONYMOUS / NON_MEMBER / SUPPORTER / MEMBER / SYSTEM_ADMIN）を決定する。</p>
+ * user_roles テーブルを参照して閲覧者立場（ANONYMOUS / NON_MEMBER / SUPPORTER / MEMBER）を決定する。
+ * SYSTEM_ADMIN の分岐は無い（戦役 Z-A PR4: 運営アカウントも所属の有無だけで決まる）。</p>
  *
  * <p>設計書: docs/features/F19.1_public_pages_identity_disclosure.md §7.6 / §4.6.2 / §12</p>
  *
@@ -40,9 +41,6 @@ public class ViewerContextBuilder {
     private final UserRoleRepository userRoleRepository;
     private final RoleRepository roleRepository;
 
-    /** SYSTEM_ADMIN ロール名（roles テーブルの name 値）。 */
-    private static final String ROLE_SYSTEM_ADMIN = "SYSTEM_ADMIN";
-
     /** MEMBER ロール名（roles テーブルの name 値）。 */
     private static final String ROLE_MEMBER = "MEMBER";
 
@@ -59,7 +57,6 @@ public class ViewerContextBuilder {
      * チーム公開ページ用の {@link ViewerContext} を構築する。
      *
      * <p>未ログイン → {@link ViewerContext#anonymous()}<br>
-     * SYSTEM_ADMIN → {@link ViewerContext#systemAdmin(Long)}<br>
      * ADMIN / DEPUTY_ADMIN / MEMBER として所属 → {@link ViewerContext#member(Long, Set)}<br>
      * SUPPORTER として所属 → {@link ViewerContext#supporter(Long, Set)}<br>
      * 未所属 → {@link ViewerContext#nonMember(Long)}</p>
@@ -87,11 +84,6 @@ public class ViewerContextBuilder {
     public ViewerContext buildForTeamByUserId(Long userId, Long teamId) {
         if (userId == null) {
             return ViewerContext.anonymous();
-        }
-
-        // SYSTEM_ADMIN 判定（SQL 1 回）
-        if (userRoleRepository.existsSystemAdminByUserId(userId) > 0) {
-            return ViewerContext.systemAdmin(userId);
         }
 
         // チームへの直接所属ロールを取得（SQL 1 回）
@@ -142,11 +134,6 @@ public class ViewerContextBuilder {
     public ViewerContext buildForOrganizationByUserId(Long userId, Long organizationId) {
         if (userId == null) {
             return ViewerContext.anonymous();
-        }
-
-        // SYSTEM_ADMIN 判定（SQL 1 回）
-        if (userRoleRepository.existsSystemAdminByUserId(userId) > 0) {
-            return ViewerContext.systemAdmin(userId);
         }
 
         // 組織への直接所属ロールを取得（SQL 1 回）

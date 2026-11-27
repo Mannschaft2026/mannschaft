@@ -16,11 +16,10 @@ import org.springframework.stereotype.Component;
  * F02.2.1: ダッシュボード閲覧者ロール解決サービス。
  *
  * <p>F01.2 の {@link AccessControlService#getRoleName} の戻り値を {@link ViewerRole} の6値
- * （SYSTEM_ADMIN / ADMIN / DEPUTY_ADMIN / MEMBER / SUPPORTER / PUBLIC）に正規化する。</p>
+ * （ADMIN / DEPUTY_ADMIN / MEMBER / SUPPORTER / PUBLIC）に正規化する。</p>
  *
  * <p>マッピングルール:</p>
  * <ul>
- *   <li>{@code AccessControlService.isSystemAdmin == true} → {@link ViewerRole#SYSTEM_ADMIN}</li>
  *   <li>{@code "ADMIN"} → {@link ViewerRole#ADMIN}</li>
  *   <li>{@code "DEPUTY_ADMIN"} → {@link ViewerRole#DEPUTY_ADMIN}</li>
  *   <li>{@code "MEMBER"} → {@link ViewerRole#MEMBER}</li>
@@ -46,8 +45,9 @@ public class RoleResolver {
      * 閲覧者の有効ロールを解決する。
      *
      * <p>{@link AccessControlService#getRoleName} が String を返すので、
-     * 戻り値を {@link ViewerRole} に正規化する。SYSTEM_ADMIN は常に最優先で
-     * バイパス判定される（スコープ内ロールが設定されていなくても SYSTEM_ADMIN）。</p>
+     * 戻り値を {@link ViewerRole} に正規化する。SYSTEM_ADMIN の
+     * 特別扱いは無い（戦役 Z-A PR4: 運営アカウントもスコープ内の実ロールだけで決まる。
+     * 列挙値 {@link ViewerRole#SYSTEM_ADMIN} は Z-C で削除予定）。</p>
      *
      * <p>キャッシュ: {@code dashboard:viewer-role} に
      * {@code {userId}:{scopeType}:{scopeId}} 形式のキーで 60秒保持される。</p>
@@ -84,12 +84,11 @@ public class RoleResolver {
             return Map.of();
         }
         var snapshot = membershipBatchQueryService.snapshotForUser(userId, scopes, Set.of());
-        boolean canResolve = snapshot.isSystemAdmin() || accessControlService.isActiveUser(userId);
+        boolean canResolve = accessControlService.isActiveUser(userId);
         Map<ScopeKey, ViewerRole> result = new LinkedHashMap<>();
         for (ScopeKey scope : scopes) {
-            ViewerRole role = snapshot.isSystemAdmin() ? ViewerRole.SYSTEM_ADMIN
-                    : canResolve ? normalizeRoleName(snapshot.roleByScope().get(scope),
-                            userId, scope.scopeType(), scope.scopeId()) : ViewerRole.PUBLIC;
+            ViewerRole role = canResolve ? normalizeRoleName(snapshot.roleByScope().get(scope),
+                    userId, scope.scopeType(), scope.scopeId()) : ViewerRole.PUBLIC;
             result.put(scope, role);
         }
         return result;
@@ -104,11 +103,6 @@ public class RoleResolver {
         }
         if (scopeId == null) {
             throw new IllegalArgumentException("scopeId must not be null");
-        }
-
-        // SYSTEM_ADMIN は最優先（スコープ内ロール有無を問わずバイパス）
-        if (accessControlService.isSystemAdmin(userId)) {
-            return ViewerRole.SYSTEM_ADMIN;
         }
 
         // AccessControlService.getRoleName(userId, scopeId, scopeType) の引数順に注意

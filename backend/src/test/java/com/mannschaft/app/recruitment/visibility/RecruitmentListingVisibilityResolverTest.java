@@ -307,17 +307,17 @@ class RecruitmentListingVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は SCOPE_ONLY/SUPPORTERS_ONLY すべて可視")
-        void system_admin_can_see_all() {
+        @DisplayName("SystemAdmin 単独は SCOPE_ONLY/SUPPORTERS_ONLY を見られない")
+        void system_admin_cannot_see_restricted() {
             RecruitmentListingVisibilityProjection p = projection(
                     1L, "TEAM", 100L, 99L, null,
                     RecruitmentListingStatus.OPEN, RecruitmentVisibility.SUPPORTERS_ONLY);
             when(recruitmentListingRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(eq(5L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 
@@ -390,17 +390,17 @@ class RecruitmentListingVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("CANCELLED は SystemAdmin に可視")
-        void cancelled_visible_to_system_admin() {
+        @DisplayName("CANCELLED は SystemAdmin 単独には見えない（非所属と同じ）")
+        void cancelled_invisible_to_system_admin() {
             RecruitmentListingVisibilityProjection p = projection(
                     1L, "TEAM", 100L, 99L, null,
                     RecruitmentListingStatus.CANCELLED, RecruitmentVisibility.PUBLIC);
             when(recruitmentListingRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
 
         @Test

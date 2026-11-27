@@ -28,7 +28,6 @@ import com.mannschaft.app.publicview.visibility.PostAuthor;
 import com.mannschaft.app.publicview.visibility.ScopeRef;
 import com.mannschaft.app.publicview.visibility.ScopeSettings;
 import com.mannschaft.app.publicview.visibility.ViewerContext;
-import com.mannschaft.app.publicview.visibility.ViewerStatus;
 import com.mannschaft.app.team.entity.TeamEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -285,7 +284,7 @@ public class PublicPostQueryService {
      * {@code titleHidden=false} かつ未課金なら bodyHtml=null（title は残す）で 200 を返す。</p>
      *
      * <ul>
-     *   <li>著者本人・SystemAdmin はゲート無視で全文。</li>
+     *   <li>運営アカウント（SystemAdmin）も一般利用者と同じく課金結果に従う（戦役 Z-A PR4）。</li>
      *   <li>fail-closed: {@code checkAccess} が例外 → ゲート行有りなら bodyHtml=null、
      *       ゲート行無しなら従来どおり body を返す。</li>
      * </ul>
@@ -295,12 +294,6 @@ public class PublicPostQueryService {
      */
     private String applyPaywallToPublicDetail(BlogPostEntity post, ViewerContext viewerContext) {
         Long viewerUserId = viewerContext.userId();
-        // 著者本人はゲート無視で全文
-        // SystemAdmin はゲート無視で全文
-        if (viewerContext.status() == ViewerStatus.SYSTEM_ADMIN) {
-            return post.getBody();
-        }
-
         GateCheckResponse gate;
         try {
             gate = paymentGateService.checkAccess(ContentGateType.POST, post.getId(), viewerUserId,

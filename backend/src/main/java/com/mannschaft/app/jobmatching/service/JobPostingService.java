@@ -337,7 +337,8 @@ public class JobPostingService {
         // visibleScopes は非空（IN () の不正 SQL は起きない）。
 
         Page<JobPostingEntity> raw = postingRepository.findVisibleByTeamId(
-                teamId, status, visibleScopes, viewerUserId, snapshot.isSystemAdmin(), pageable);
+                teamId, status, visibleScopes, viewerUserId,
+                snapshot.isMemberOf(scope), snapshot.hasRoleOrAbove(scope, "DEPUTY_ADMIN"), pageable);
 
         List<JobPostingEntity> rawContent = raw.getContent();
         if (rawContent.isEmpty()) {

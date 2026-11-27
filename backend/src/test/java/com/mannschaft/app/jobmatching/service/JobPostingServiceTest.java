@@ -418,7 +418,7 @@ class JobPostingServiceTest {
                     new org.springframework.data.domain.PageImpl<>(
                             java.util.List.of(posting1, posting2), pageable, 5);
             given(postingRepository.findVisibleByTeamId(
-                    eq(TEAM_ID), eq(JobPostingStatus.OPEN), any(), eq(USER_ID), eq(false), eq(pageable)))
+                    eq(TEAM_ID), eq(JobPostingStatus.OPEN), any(), eq(USER_ID), eq(false), eq(false), eq(pageable)))
                     .willReturn(raw);
             // posting1（id=POSTING_ID）のみアクセス可能（posting2 は除外＝片方だけが残ることを検証）
             given(visibilityChecker.filterAccessible(

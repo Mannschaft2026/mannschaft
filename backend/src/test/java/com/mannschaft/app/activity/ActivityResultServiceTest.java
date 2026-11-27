@@ -393,7 +393,7 @@ class ActivityResultServiceTest {
 
             given(resultRepository.findVisibleByScopeTypeAndScopeId(
                     eq(ActivityScopeType.TEAM), eq(SCOPE_ID), eq(Set.of(ActivityVisibility.PUBLIC)),
-                    eq(USER_ID), eq(false), eq(pageable)))
+                    eq(USER_ID), eq(pageable)))
                     .willReturn(new PageImpl<>(List.of(published), pageable, 1));
             given(contentVisibilityChecker.filterAccessible(
                     eq(ReferenceType.ACTIVITY_RESULT), any(), eq(USER_ID)))
@@ -407,7 +407,7 @@ class ActivityResultServiceTest {
                     .containsExactly(1L);
             // DRAFT 所有者判定に使う viewerUserId が SQL へ渡ること（これが渡らないと他人の下書きが漏れる）
             verify(resultRepository).findVisibleByScopeTypeAndScopeId(
-                    any(), any(), any(), eq(USER_ID), eq(false), any());
+                    any(), any(), any(), eq(USER_ID), any());
             // 旧経路（1ページ取得→メモリフィルタ）へ戻っていないこと
             verify(resultRepository, never())
                     .findByScopeTypeAndScopeIdOrderByActivityDateDescIdDesc(any(), any(), any());
@@ -468,7 +468,7 @@ class ActivityResultServiceTest {
 
             given(resultRepository.findVisibleByScopeTypeAndScopeId(
                     eq(ActivityScopeType.TEAM), eq(SCOPE_ID), eq(Set.of(ActivityVisibility.PUBLIC)),
-                    eq(USER_ID), eq(false), eq(pageable)))
+                    eq(USER_ID), eq(pageable)))
                     .willReturn(page);
             given(contentVisibilityChecker.filterAccessible(
                     eq(ReferenceType.ACTIVITY_RESULT), any(), eq(USER_ID)))
@@ -504,7 +504,7 @@ class ActivityResultServiceTest {
             Page<ActivityResultEntity> emptyPage = new PageImpl<>(List.of(), pageable, 0);
             given(resultRepository.findVisibleByScopeTypeAndScopeIdAndTemplateId(
                     eq(ActivityScopeType.TEAM), eq(SCOPE_ID), eq(templateId),
-                    eq(Set.of(ActivityVisibility.PUBLIC)), eq(USER_ID), eq(false), eq(pageable)))
+                    eq(Set.of(ActivityVisibility.PUBLIC)), eq(USER_ID), eq(pageable)))
                     .willReturn(emptyPage);
 
             Page<ActivityResultEntity> result = service.listActivities(

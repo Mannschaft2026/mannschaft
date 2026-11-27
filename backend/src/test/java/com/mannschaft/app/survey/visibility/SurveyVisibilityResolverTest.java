@@ -236,18 +236,16 @@ class SurveyVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は AFTER_RESPONSE でも常に可視（status ガード通過後の高速パス）")
-        void system_admin_visible() {
+        @DisplayName("SystemAdmin 単独は AFTER_RESPONSE を未回答なら見られない（高速パス撤去後は回答有無を照会する）")
+        void system_admin_invisible() {
             SurveyVisibilityProjection p = projection(
                     1L, "TEAM", 100L, 99L, SurveyStatus.PUBLISHED,
                     ResultsVisibility.AFTER_RESPONSE, null);
             when(surveyRepository.findVisibilityProjectionsByIdIn(any())).thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
-            // SystemAdmin 高速パスにより CUSTOM 評価自体スキップされる
-            verify(surveyResponseRepository, never()).existsBySurveyIdAndUserId(any(), any());
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 
@@ -318,17 +316,17 @@ class SurveyVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は AFTER_CLOSE でも常に可視（高速パス）")
-        void system_admin_visible_even_before_close() {
+        @DisplayName("SystemAdmin 単独は AFTER_CLOSE の締切前は見られない（高速パス撤去）")
+        void system_admin_invisible_before_close() {
             SurveyVisibilityProjection p = projection(
                     1L, "TEAM", 100L, 99L, SurveyStatus.PUBLISHED,
                     ResultsVisibility.AFTER_CLOSE,
                     LocalDateTime.now().plusHours(1));
             when(surveyRepository.findVisibilityProjectionsByIdIn(any())).thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 
@@ -385,17 +383,16 @@ class SurveyVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は VIEWERS_ONLY でも常に可視（高速パス）")
-        void system_admin_visible() {
+        @DisplayName("SystemAdmin 単独は VIEWERS_ONLY の閲覧者でなければ見られない（高速パス撤去後は閲覧者名簿を照会する）")
+        void system_admin_invisible() {
             SurveyVisibilityProjection p = projection(
                     1L, "TEAM", 100L, 99L, SurveyStatus.PUBLISHED,
                     ResultsVisibility.VIEWERS_ONLY, null);
             when(surveyRepository.findVisibilityProjectionsByIdIn(any())).thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 5L)).isTrue();
-            verify(surveyResultViewerRepository, never()).existsBySurveyIdAndUserId(any(), any());
+            assertThat(resolver.canView(1L, 5L)).isFalse();
         }
     }
 
@@ -436,8 +433,8 @@ class SurveyVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("ARCHIVED は SystemAdmin のみ可視")
-        void archived_visible_to_sysadmin_only() {
+        @DisplayName("ARCHIVED は SystemAdmin 単独には見えない（著者でも所属を離れていれば不可視）")
+        void archived_invisible_to_sysadmin() {
             SurveyVisibilityProjection p = projection(
                     1L, "TEAM", 100L, 5L, SurveyStatus.ARCHIVED,
                     ResultsVisibility.ADMINS_ONLY, null);
@@ -448,8 +445,8 @@ class SurveyVisibilityResolverTest {
             assertThat(resolver.canView(1L, 5L)).isFalse();
 
             when(membershipBatchQueryService.snapshotForUser(eq(99L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
-            assertThat(resolver.canView(1L, 99L)).isTrue();
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
+            assertThat(resolver.canView(1L, 99L)).isFalse();
         }
 
         @Test

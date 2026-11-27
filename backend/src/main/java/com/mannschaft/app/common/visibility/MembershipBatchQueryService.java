@@ -43,7 +43,8 @@ import java.util.Set;
  *   <li>非アクティブ親 ORG 抽出 1 回（{@code OrganizationRepository.findInactiveIdsByIdIn}、§11.6）</li>
  * </ol>
  *
- * <p>SystemAdmin 判定が hit した場合は早期 return で後続 SQL を一切発行しない。</p>
+ * <p>SystemAdmin でも早期 return せず通常どおり所属・ロールを解決する（戦役 Z-A PR4: 運営アカウントにテナントの
+ * 所属・ロールの特権は無い）。{@code systemAdmin} 値は正しく計算して snapshot に載せる。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -70,7 +71,6 @@ public class MembershipBatchQueryService {
      * <p>呼び出しパターン:</p>
      * <ul>
      *   <li>{@code userId == null}（匿名）→ {@link UserScopeRoleSnapshot#empty()} を返す（SQL 0 回）</li>
-     *   <li>SystemAdmin → {@link UserScopeRoleSnapshot#systemAdmin()} を返す（SQL 1 回）</li>
      *   <li>それ以外 → directScopes / orgWideScopes に応じた SQL を発行</li>
      * </ul>
      *
@@ -118,9 +118,6 @@ public class MembershipBatchQueryService {
 
         // SQL 1: SystemAdmin 判定（既存メソッド戻り値は long、>0 で SystemAdmin）
         boolean sysAdmin = userRoleRepository.existsSystemAdminByUserId(userId) > 0;
-        if (sysAdmin) {
-            return UserScopeRoleSnapshot.forSystemAdmin();
-        }
 
         Set<ScopeKey> safeDirect = directScopes != null ? directScopes : Set.of();
         Set<ScopeKey> safeOrgWide = orgWideScopes != null ? orgWideScopes : Set.of();
@@ -186,7 +183,7 @@ public class MembershipBatchQueryService {
         Map<Long, String> descendantRoleByOrgId = resolveDescendantRoleNames(descendantRows);
 
         return new UserScopeRoleSnapshot(
-                false, roleByScope, parentOrgs, orgMemberOf, suspendedOrgIds,
+                sysAdmin, roleByScope, parentOrgs, orgMemberOf, suspendedOrgIds,
                 descendantMemberOfOrgIds, orgRoleByScope, descendantRoleByOrgId);
     }
 
@@ -588,10 +585,8 @@ public class MembershipBatchQueryService {
      * {@link MembershipBatchQueryService#snapshotForUser} が {@link UserScopeRoleSnapshot#empty()}
      * を返すため、{@code isMemberOf} 等はすべて {@code false} になり、{@code PUBLIC} のみが返る。</p>
      *
-     * <p><strong>SystemAdmin</strong>: {@link UserScopeRoleSnapshot} の各判定メソッドは
-     * {@code systemAdmin} を内部で先頭バイパスしているため、SystemAdmin では
-     * {@code ORGANIZATION_WIDE} を含む全段が自然に {@code true} になる（本メソッド側での
-     * 特別扱いは不要）。</p>
+     * <p><strong>SystemAdmin</strong>: 判定メソッドに SystemAdmin の短絡は無い（戦役 Z-A PR4）。
+     * 運営アカウントも一般利用者と同じく、実際の所属・ロールだけで可視レベルが決まる。</p>
      *
      * <p><strong>scopeType の型（設計判断）</strong>: 引数は {@link ScopeKey#scopeType()} と同じ
      * 生文字列を受け取る（{@code membership.domain.ScopeType} の 2 値 {@code TEAM}/{@code ORGANIZATION}

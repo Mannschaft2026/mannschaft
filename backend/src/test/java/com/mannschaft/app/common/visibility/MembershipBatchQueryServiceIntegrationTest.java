@@ -247,8 +247,8 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
     }
 
     @Test
-    @DisplayName("SystemAdmin → forSystemAdmin() を返し SQL 1 回で完結")
-    void SystemAdmin_早期return_SQL1回() {
+    @DisplayName("SystemAdmin でも早期 return せず通常の SQL を発行し、所属が無ければ全判定 false（systemAdmin 値は true）")
+    void SystemAdmin_早期returnしない() {
         insertUserRole(userId, systemAdminRoleId, null, null);
         em.flush();
         em.clear();
@@ -261,14 +261,14 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
                 Set.of(new ScopeKey("TEAM", teamId1)));
 
         assertThat(stats.getPrepareStatementCount())
-                .as("SystemAdmin は existsSystemAdminByUserId のみで完結すべし")
-                .isEqualTo(1L);
+                .as("SystemAdmin でも existsSystemAdminByUserId のみでは完結せず、通常の所属解決 SQL も発行する")
+                .isGreaterThan(1L);
 
         assertThat(snapshot.isSystemAdmin()).isTrue();
-        // SystemAdmin は 全スコープに対して true を返す
-        assertThat(snapshot.isMemberOf(new ScopeKey("TEAM", teamId1))).isTrue();
-        assertThat(snapshot.isMemberOfParentOrg(new ScopeKey("TEAM", teamId1))).isTrue();
-        assertThat(snapshot.hasRoleOrAbove(new ScopeKey("TEAM", teamId1), "ADMIN")).isTrue();
+        // 所属の無い SystemAdmin は全スコープに対して false（非所属と同じ）
+        assertThat(snapshot.isMemberOf(new ScopeKey("TEAM", teamId1))).isFalse();
+        assertThat(snapshot.isMemberOfParentOrg(new ScopeKey("TEAM", teamId1))).isFalse();
+        assertThat(snapshot.hasRoleOrAbove(new ScopeKey("TEAM", teamId1), "ADMIN")).isFalse();
     }
 
     @Test

@@ -248,9 +248,8 @@ public class BlogPostVisibilityResolver
     }
 
     private static boolean isScopeAdmin(BlogPostVisibilityProjection row, UserScopeRoleSnapshot snapshot) {
-        if (snapshot == null || snapshot.isSystemAdmin() || row == null
-                || row.scopeType() == null || row.scopeId() == null) {
-            return snapshot != null && snapshot.isSystemAdmin();
+        if (snapshot == null || row == null || row.scopeType() == null || row.scopeId() == null) {
+            return false;
         }
         String role = snapshot.roleByScope().get(
                 new com.mannschaft.app.common.visibility.ScopeKey(row.scopeType(), row.scopeId()));
@@ -280,7 +279,7 @@ public class BlogPostVisibilityResolver
      */
     private static ContentStatus mapStatus(PostStatus status) {
         if (status == null) {
-            // fail-closed: status 不明は DRAFT 扱い (基底側で SystemAdmin/作成者のみ可視)
+            // fail-closed: status 不明は DRAFT 扱い (基底側で作成者のみ可視)
             return ContentStatus.DRAFT;
         }
         return switch (status) {

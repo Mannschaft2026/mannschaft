@@ -53,7 +53,7 @@ import java.util.Set;
  *   <li><b>可視レベル</b>: <b>そのスコープでの</b>ロール（{@link SearchViewer.ViewerScope#roleName()}）で判定する
  *       （和集合で判定しない）。{@link ActivityVisibilityMapper#toStandard} の写像に従い、PUBLIC は SUPPORTER 以上、
  *       MEMBERS_ONLY（MEMBERS_AND_ABOVE）は MEMBER 以上（段は {@link RolePriority}）。SYSTEM_ADMIN は
- *       スコープ別ロールではないので何も満たさない（既存一覧の {@code viewerIsSystemAdmin} 貫通は使わない）。</li>
+ *       スコープ別ロールではないので何も満たさない（既存一覧の isSystemAdmin 引数は Z-A PR4 で撤去済み）。</li>
  *   <li><b>予定から自動生成された記録</b>: 既存 {@code AutomaticActivityListService#list} と同方式。キーワード・
  *       スコープ・可視レベルに一致する自動生成記録の参照を 1 回で集め、元予定を
  *       {@link ScheduleActivityVisibilityService#visibleSources} で一括判定し、元予定が可視でそのスコープが記録の

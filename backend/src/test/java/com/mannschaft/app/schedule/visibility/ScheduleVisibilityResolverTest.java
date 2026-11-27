@@ -139,14 +139,14 @@ class ScheduleVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は他人の PERSONAL でも閲覧可")
-        void personal_systemAdmin_canView() {
+        @DisplayName("SystemAdmin 単独は他人の PERSONAL を閲覧できない")
+        void personal_systemAdmin_cannotView() {
             ScheduleVisibilityProjection row = personal(1L, /*createdBy*/ 100L);
             stubProjection(row);
             when(membershipBatchQueryService.snapshotForUser(eq(999L), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 999L)).isTrue();
+            assertThat(resolver.canView(1L, 999L)).isFalse();
         }
     }
 

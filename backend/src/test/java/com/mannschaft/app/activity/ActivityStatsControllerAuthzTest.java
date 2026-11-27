@@ -97,7 +97,7 @@ class ActivityStatsControllerAuthzTest {
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode().getCode())
                         .isEqualTo("COMMON_002"));
         verify(statsService, never()).exportCsvWithAutomaticAccess(any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+                any(), any());
     }
 
     // AC-2: 自スコープ会員は従来通り成功（非回帰）。membership検証後にサービスへ委譲される

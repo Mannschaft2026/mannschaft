@@ -237,16 +237,16 @@ class BlogPostVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin 高速パス: PUBLISHED 記事は visibility に関わらず可視")
-        void systemAdmin_publishedAlwaysAllowed() {
+        @DisplayName("SystemAdmin 単独は PUBLISHED でも MEMBERS_ONLY を見られない（高速パス撤去）")
+        void systemAdmin_publishedNotAlwaysAllowed() {
             BlogPostVisibilityProjection p = projection(
                     POST_ID, TEAM_ID, null, Visibility.MEMBERS_ONLY, PostStatus.PUBLISHED);
             when(blogPostRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(any(), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(POST_ID, ADMIN_ID)).isTrue();
+            assertThat(resolver.canView(POST_ID, ADMIN_ID)).isFalse();
         }
 
         @Test
@@ -321,8 +321,8 @@ class BlogPostVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("ARCHIVED は SystemAdmin のみ可視")
-        void archived_systemAdminOnly() {
+        @DisplayName("ARCHIVED は SystemAdmin 単独には見えない（著者でも所属を離れていれば不可視）")
+        void archived_systemAdminDenied() {
             BlogPostVisibilityProjection p = projection(
                     POST_ID, TEAM_ID, null, Visibility.PUBLIC, PostStatus.ARCHIVED);
             when(blogPostRepository.findVisibilityProjectionsByIdIn(any()))
@@ -332,10 +332,10 @@ class BlogPostVisibilityResolverTest {
                     .thenReturn(UserScopeRoleSnapshot.empty());
             assertThat(resolver.canView(POST_ID, AUTHOR_ID)).isFalse();
 
-            // SystemAdmin だけ可視
+            // SystemAdmin 単独も不可視
             when(membershipBatchQueryService.snapshotForUser(any(), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
-            assertThat(resolver.canView(POST_ID, ADMIN_ID)).isTrue();
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
+            assertThat(resolver.canView(POST_ID, ADMIN_ID)).isFalse();
         }
     }
 
@@ -498,15 +498,17 @@ when(paymentGateService.checkAccess(eq("POST"), eq(GATE_POST_ID), eq(VIEWER_ID),
         }
 
         @Test
-        @DisplayName("SystemAdmin 高速パス: CUSTOM であっても SystemAdmin は visibility ガードをスキップして閲覧可")
-        void paywall_systemAdmin_alwaysAllowed() {
+        @DisplayName("SystemAdmin 単独も CUSTOM は課金結果に従う（未払いは閲覧不可）")
+        void paywall_systemAdmin_followsGateResult() {
             when(blogPostRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(customProjection()));
             when(membershipBatchQueryService.snapshotForUser(any(), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
-            // SystemAdmin は evaluateCustom に到達しないため PaymentGateService は呼ばれない
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
+            // 戦役 Z-A PR4: 運営アカウントも evaluateCustom に到達し、未払いなら課金結果どおり不可視
+            when(paymentGateService.checkAccess(eq("POST"), eq(GATE_POST_ID), eq(ADMIN_ID), any(ContentGateTarget.class)))
+                    .thenReturn(new GateCheckResponse(false, false, List.of()));
 
-            assertThat(resolver.canView(GATE_POST_ID, ADMIN_ID)).isTrue();
+            assertThat(resolver.canView(GATE_POST_ID, ADMIN_ID)).isFalse();
         }
     }
 

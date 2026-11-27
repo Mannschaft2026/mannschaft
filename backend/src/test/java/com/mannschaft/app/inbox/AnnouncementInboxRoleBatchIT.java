@@ -220,14 +220,14 @@ class AnnouncementInboxRoleBatchIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    void systemAdminOverridesMissingScopeRole() {
+    void systemAdminAloneGetsNoSpecialRole() {
         long user = insertUser();
         long team = insertScope("TEAM");
         MembershipTestHelper.insertUserRole(em, user, "SYSTEM_ADMIN", null, null);
         em.flush();
         em.clear();
         assertThat(roleResolver.resolveViewerRolesFresh(user, Set.of(new ScopeKey("TEAM", team))))
-                .containsEntry(new ScopeKey("TEAM", team), ViewerRole.SYSTEM_ADMIN);
+                .containsEntry(new ScopeKey("TEAM", team), ViewerRole.PUBLIC);
     }
 
     @Test

@@ -162,11 +162,6 @@ public class ScheduleKeepVisibilityResolver implements ContentVisibilityResolver
             return false;
         }
 
-        // SystemAdmin 高速パス（F00 §15 D-13。実存確認後に短絡する）。
-        if (snapshot.isSystemAdmin()) {
-            return true;
-        }
-
         ScheduleKeepScopeType scopeType = row.scopeType();
         if (scopeType == null) {
             // XOR 制約が破れた行。判定材料が無いので fail-closed。

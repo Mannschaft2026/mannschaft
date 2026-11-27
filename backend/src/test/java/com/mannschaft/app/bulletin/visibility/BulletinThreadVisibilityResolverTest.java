@@ -176,15 +176,15 @@ class BulletinThreadVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin は所属関係なく可視（§15 D-13 高速パス）")
-        void system_admin_visible() {
+        @DisplayName("SystemAdmin 単独は所属が無ければ不可視（非所属と同じ。D-13 高速パスは撤去済み）")
+        void system_admin_invisible() {
             BulletinThreadVisibilityProjection p = projection(1L, "TEAM", 100L, 99L);
             when(bulletinThreadRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(eq(7L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 7L)).isTrue();
+            assertThat(resolver.canView(1L, 7L)).isFalse();
         }
 
         @Test
@@ -228,15 +228,15 @@ class BulletinThreadVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("PERSONAL スコープでも SystemAdmin には可視（§15 D-13）")
-        void personal_scope_visible_to_system_admin() {
+        @DisplayName("PERSONAL スコープは SystemAdmin 単独にも不可視（D-13 撤去）")
+        void personal_scope_invisible_to_system_admin() {
             BulletinThreadVisibilityProjection p = projection(1L, "PERSONAL", 5L, 5L);
             when(bulletinThreadRepository.findVisibilityProjectionsByIdIn(any()))
                     .thenReturn(List.of(p));
             when(membershipBatchQueryService.snapshotForUser(eq(7L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.canView(1L, 7L)).isTrue();
+            assertThat(resolver.canView(1L, 7L)).isFalse();
         }
     }
 

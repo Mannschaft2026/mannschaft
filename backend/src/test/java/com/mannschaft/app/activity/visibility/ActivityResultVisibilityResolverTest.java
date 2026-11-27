@@ -247,14 +247,14 @@ class ActivityResultVisibilityResolverTest {
     }
 
     @Test
-    @DisplayName("AC-10 DRAFT は SystemAdmin には可視")
-    void draft_systemAdminAllowed() {
+    @DisplayName("AC-10 DRAFT は SystemAdmin 単独には見えない（非所属と同じ）")
+    void draft_systemAdminDenied() {
         ActivityResultVisibilityProjection p = draft(1L, "TEAM", 100L, 999L);
         when(repository.findVisibilityProjectionsByIdIn(List.of(1L))).thenReturn(List.of(p));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), any(), any()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     // ========================================================================
@@ -262,14 +262,14 @@ class ActivityResultVisibilityResolverTest {
     // ========================================================================
 
     @Test
-    @DisplayName("SystemAdmin は MEMBERS_ONLY コンテンツを実存確認後に可視")
-    void systemAdmin_canViewMembersOnly() {
+    @DisplayName("SystemAdmin 単独は MEMBERS_ONLY コンテンツを見られない（非所属と同じ）")
+    void systemAdmin_cannotViewMembersOnly() {
         ActivityResultVisibilityProjection p = members(1L, "TEAM", 100L, 999L);
         when(repository.findVisibilityProjectionsByIdIn(List.of(1L))).thenReturn(List.of(p));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), any(), any()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     @Test
@@ -306,14 +306,14 @@ class ActivityResultVisibilityResolverTest {
     }
 
     @Test
-    @DisplayName("親 ORG が SUSPENDED でも SystemAdmin は閲覧可")
-    void parentOrgSuspended_systemAdminCanView() {
+    @DisplayName("親 ORG が SUSPENDED のとき SystemAdmin 単独も閲覧できない（非所属と同じ）")
+    void parentOrgSuspended_systemAdminCannotView() {
         ActivityResultVisibilityProjection p = members(1L, "TEAM", 100L, 999L);
         when(repository.findVisibilityProjectionsByIdIn(List.of(1L))).thenReturn(List.of(p));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), any(), any()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     // ========================================================================

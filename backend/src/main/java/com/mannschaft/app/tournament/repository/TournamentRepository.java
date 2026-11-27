@@ -114,10 +114,11 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
      *
      * <p><b>status 正規化（{@code TournamentStatusMapper} と同一の意味論を SQL で再現）</b>:</p>
      * <ul>
-     *   <li>{@code DRAFT}: 作成者本人または SystemAdmin のみ可視</li>
+     *   <li>{@code DRAFT}: 作成者本人のみ可視</li>
      *   <li>{@code OPEN/IN_PROGRESS/COMPLETED}（PUBLISHED 区分）: visibility ラダー述語 OR
-     *       PARTICIPANTS_ONLY EXISTS 述語 OR SystemAdmin</li>
-     *   <li>{@code CANCELLED/ARCHIVED}（ARCHIVED 区分）: SystemAdmin のみ可視</li>
+     *       PARTICIPANTS_ONLY EXISTS 述語</li>
+     *   <li>{@code CANCELLED/ARCHIVED}（ARCHIVED 区分）: 作成者本人（組織に今も所属）または組織の DEPUTY_ADMIN 以上のみ可視
+     *       （マスター決定 2026-11-27。F00 の ARCHIVED 規則と同じ。SystemAdmin の特権は無い）</li>
      * </ul>
      *
      * <p><b>{@code statusFilter} は任意</b>: {@code null} なら全ステータス対象（上記の状態別述語で
@@ -134,7 +135,8 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
      * @param visibilities        {@code TournamentVisibilityMapper#toFunctional} が返した可視ラダー
      *                            の enum 名集合（{@code IN ()} 回避のため呼び出し側で非空を保証する）
      * @param viewerUserId        閲覧者 user_id（{@code null} 可、未認証）
-     * @param viewerIsSystemAdmin 閲覧者が SystemAdmin か
+     * @param viewerIsScopeMember 閲覧者が対象組織に今も所属しているか（snapshot 由来）
+     * @param viewerIsScopeDeputyAdminOrAbove 閲覧者が対象組織の DEPUTY_ADMIN 以上か（snapshot 由来）
      * @param pageable            ページング指定
      * @return 閲覧者に可視な大会エンティティのページ
      */
@@ -143,10 +145,9 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             + "  AND t.deleted_at IS NULL "
             + "  AND (:statusFilter IS NULL OR t.status = :statusFilter) "
             + "  AND ( "
-            + "    (t.status = 'DRAFT' AND (t.created_by = :viewerUserId OR :viewerIsSystemAdmin = true)) "
+            + "    (t.status = 'DRAFT' AND t.created_by = :viewerUserId) "
             + "    OR (t.status IN ('OPEN', 'IN_PROGRESS', 'COMPLETED') AND ( "
             + "        t.visibility IN (:visibilities) "
-            + "        OR :viewerIsSystemAdmin = true "
             + "        OR (t.visibility = 'PARTICIPANTS_ONLY' AND EXISTS ( "
             + "            SELECT 1 FROM tournament_participants p "
             + "            JOIN tournament_divisions d ON p.division_id = d.id "
@@ -155,7 +156,8 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             + "              AND p.status IN ('REGISTERED', 'ACTIVE') "
             + "              AND m.user_id = :viewerUserId AND m.left_at IS NULL)) "
             + "    )) "
-            + "    OR (t.status IN ('CANCELLED', 'ARCHIVED') AND :viewerIsSystemAdmin = true) "
+            + "    OR (t.status IN ('CANCELLED', 'ARCHIVED') AND (:viewerIsScopeDeputyAdminOrAbove = true "
+            + "        OR (t.created_by = :viewerUserId AND :viewerIsScopeMember = true))) "
             + "  ) "
             + "ORDER BY t.created_at DESC",
             countQuery = "SELECT COUNT(*) FROM tournaments t "
@@ -163,10 +165,9 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             + "  AND t.deleted_at IS NULL "
             + "  AND (:statusFilter IS NULL OR t.status = :statusFilter) "
             + "  AND ( "
-            + "    (t.status = 'DRAFT' AND (t.created_by = :viewerUserId OR :viewerIsSystemAdmin = true)) "
+            + "    (t.status = 'DRAFT' AND t.created_by = :viewerUserId) "
             + "    OR (t.status IN ('OPEN', 'IN_PROGRESS', 'COMPLETED') AND ( "
             + "        t.visibility IN (:visibilities) "
-            + "        OR :viewerIsSystemAdmin = true "
             + "        OR (t.visibility = 'PARTICIPANTS_ONLY' AND EXISTS ( "
             + "            SELECT 1 FROM tournament_participants p "
             + "            JOIN tournament_divisions d ON p.division_id = d.id "
@@ -175,7 +176,8 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             + "              AND p.status IN ('REGISTERED', 'ACTIVE') "
             + "              AND m.user_id = :viewerUserId AND m.left_at IS NULL)) "
             + "    )) "
-            + "    OR (t.status IN ('CANCELLED', 'ARCHIVED') AND :viewerIsSystemAdmin = true) "
+            + "    OR (t.status IN ('CANCELLED', 'ARCHIVED') AND (:viewerIsScopeDeputyAdminOrAbove = true "
+            + "        OR (t.created_by = :viewerUserId AND :viewerIsScopeMember = true))) "
             + "  )",
             nativeQuery = true)
     Page<TournamentEntity> findVisibleByOrganizationId(
@@ -183,6 +185,7 @@ public interface TournamentRepository extends JpaRepository<TournamentEntity, Lo
             @Param("statusFilter") String statusFilter,
             @Param("visibilities") Collection<String> visibilities,
             @Param("viewerUserId") Long viewerUserId,
-            @Param("viewerIsSystemAdmin") boolean viewerIsSystemAdmin,
+            @Param("viewerIsScopeMember") boolean viewerIsScopeMember,
+            @Param("viewerIsScopeDeputyAdminOrAbove") boolean viewerIsScopeDeputyAdminOrAbove,
             Pageable pageable);
 }

@@ -73,7 +73,7 @@ class ActivityResultRepositoryVisibilityInTest extends AbstractMySqlIntegrationT
     void 歯抜けゼロ() {
         Page<ActivityResultEntity> page = activityResultRepository.findVisibleByScopeTypeAndScopeId(
                 ActivityScopeType.TEAM, SCOPE_ID, Set.of(ActivityVisibility.PUBLIC),
-                VIEWER_ID, false, PageRequest.of(0, 20));
+                VIEWER_ID, PageRequest.of(0, 20));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).allMatch(a -> a.getVisibility() == ActivityVisibility.PUBLIC);
@@ -89,7 +89,7 @@ class ActivityResultRepositoryVisibilityInTest extends AbstractMySqlIntegrationT
     void 総件数は実可視件数と一致() {
         Page<ActivityResultEntity> page = activityResultRepository.findVisibleByScopeTypeAndScopeId(
                 ActivityScopeType.TEAM, SCOPE_ID, Set.of(ActivityVisibility.PUBLIC),
-                VIEWER_ID, false, PageRequest.of(0, 10));
+                VIEWER_ID, PageRequest.of(0, 10));
 
         assertThat(page.getTotalElements()).isEqualTo(20L);
     }
@@ -103,7 +103,7 @@ class ActivityResultRepositoryVisibilityInTest extends AbstractMySqlIntegrationT
     void 機微な行は漏れない() {
         Page<ActivityResultEntity> page = activityResultRepository.findVisibleByScopeTypeAndScopeId(
                 ActivityScopeType.TEAM, SCOPE_ID, Set.of(ActivityVisibility.PUBLIC),
-                VIEWER_ID, false, PageRequest.of(0, 100));
+                VIEWER_ID, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).noneMatch(a -> a.getVisibility() == ActivityVisibility.MEMBERS_ONLY);
@@ -121,7 +121,7 @@ class ActivityResultRepositoryVisibilityInTest extends AbstractMySqlIntegrationT
         Page<ActivityResultEntity> page = activityResultRepository.findVisibleByScopeTypeAndScopeId(
                 ActivityScopeType.TEAM, SCOPE_ID,
                 Set.of(ActivityVisibility.PUBLIC, ActivityVisibility.MEMBERS_ONLY),
-                VIEWER_ID, false, PageRequest.of(0, 100));
+                VIEWER_ID, PageRequest.of(0, 100));
 
         assertThat(page.getTotalElements()).isEqualTo(30L); // 20 PUBLIC + 10 MEMBERS_ONLY
         assertThat(page.getContent()).anyMatch(a -> a.getVisibility() == ActivityVisibility.MEMBERS_ONLY);
@@ -139,25 +139,26 @@ class ActivityResultRepositoryVisibilityInTest extends AbstractMySqlIntegrationT
 
         Page<ActivityResultEntity> page = activityResultRepository.findVisibleByScopeTypeAndScopeId(
                 ActivityScopeType.TEAM, SCOPE_ID, Set.of(ActivityVisibility.PUBLIC),
-                VIEWER_ID, false, PageRequest.of(0, 100));
+                VIEWER_ID, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).extracting(ActivityResultEntity::getId).contains(myDraftId);
     }
 
     /**
-     * AC-9（許可側 SystemAdmin）: SystemAdmin フラグが立っていれば他人の DRAFT も見える。
+     * 戦役 Z-A PR4: SystemAdmin 単独（所属なし）は非所属と同じ行だけ。他人の DRAFT は見えない。
+     * （引数撤去前は SystemAdmin フラグで他人の DRAFT 5 件が見えていた。期待値を反転）
      */
     @Test
-    @DisplayName("AC-9（許可側）: SystemAdminには他人のDRAFTも見える")
-    void SystemAdminには他人のDRAFTも見える() {
+    @DisplayName("AC-9（拒否側）: SystemAdmin単独は他人のDRAFTを見られない")
+    void SystemAdmin単独は他人のDRAFTを見られない() {
         Page<ActivityResultEntity> page = activityResultRepository.findVisibleByScopeTypeAndScopeId(
                 ActivityScopeType.TEAM, SCOPE_ID, Set.of(ActivityVisibility.PUBLIC),
-                VIEWER_ID, true, PageRequest.of(0, 100));
+                VIEWER_ID, PageRequest.of(0, 100));
 
         long draftCount = page.getContent().stream()
                 .filter(a -> a.getStatus() == ActivityStatus.DRAFT)
                 .count();
-        assertThat(draftCount).isEqualTo(5L);
+        assertThat(draftCount).isZero();
     }
 
     private Long persistActivity(ActivityVisibility visibility, ActivityStatus status, Long createdBy) {

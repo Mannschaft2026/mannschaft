@@ -59,12 +59,13 @@ class RoleResolverBatchTest {
     }
 
     @Test
-    void systemAdminWinsWithoutActiveUserQuery() {
+    void systemAdminAloneIsPublicLikeAnyoneWithoutAffiliation() {
+        // 戦役 Z-A PR4: 運営アカウントも ACTIVE 判定と実所属だけで決まる（所属が無ければ PUBLIC）
         given(membershipBatchQueryService.snapshotForUser(1L, Set.of(TEAM), Set.of()))
-                .willReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .willReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
+        given(accessControlService.isActiveUser(1L)).willReturn(true);
         assertThat(resolver.resolveViewerRolesFresh(1L, Set.of(TEAM)).get(TEAM))
-                .isEqualTo(ViewerRole.SYSTEM_ADMIN);
-        verifyNoInteractions(accessControlService);
+                .isEqualTo(ViewerRole.PUBLIC);
     }
 
     @Test

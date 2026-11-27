@@ -283,16 +283,20 @@ class AnnouncementFeedVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SystemAdmin 高速パス: CUSTOM でも SystemAdmin は visibility ガードをスキップして閲覧可")
-        void paywall_systemAdmin_alwaysAllowed() {
+        @DisplayName("SystemAdmin 単独も CUSTOM は課金結果に従う（未払いは閲覧不可）")
+        void paywall_systemAdmin_followsGateResult() {
             AnnouncementFeedVisibilityProjection p = projection(
                     FEED_ID, AnnouncementFeedVisibility.CUSTOM, null, null);
             when(membershipBatchQueryService.snapshotForUser(any(), any(), any()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
+
+            when(paymentGateService.checkAccess(
+                    eq(ContentGateType.ANNOUNCEMENT), eq(FEED_ID), eq(ADMIN_ID), any(ContentGateTarget.class)))
+                    .thenReturn(new GateCheckResponse(false, false, List.of()));
 
             AnnouncementFeedVisibilityResolver directResolver = resolverWithProjection(p);
 
-            assertThat(directResolver.canView(FEED_ID, ADMIN_ID)).isTrue();
+            assertThat(directResolver.canView(FEED_ID, ADMIN_ID)).isFalse();
         }
     }
 

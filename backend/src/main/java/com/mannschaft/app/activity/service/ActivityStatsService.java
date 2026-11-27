@@ -155,15 +155,14 @@ public class ActivityStatsService {
 
     /**
      * 認証済み CSV エクスポート（CMP-261124-0158）。manual 行は認証済み一覧と同じ可視性述語
-     * （{@code visibilities} と DRAFT の作成者本人／SystemAdmin）で、auto 行は認可段取り役が判定した
+     * （{@code visibilities} と DRAFT の作成者本人）で、auto 行は認可段取り役が判定した
      * {@code automaticIds} で絞る。閲覧者が一覧で見られない記録の題名を書き出さない。
      */
     public void exportCsvWithAutomaticAccess(ActivityScopeType scopeType, Long scopeId, Long templateId,
             LocalDate dateFrom, LocalDate dateTo, HttpServletResponse response, java.util.Set<Long> automaticIds,
-            java.util.Set<com.mannschaft.app.activity.ActivityVisibility> visibilities, Long viewerUserId,
-            boolean viewerIsSystemAdmin) {
+            java.util.Set<com.mannschaft.app.activity.ActivityVisibility> visibilities, Long viewerUserId) {
         List<ActivityResultEntity> results = resultRepository.findVisibleForExportWithAutomaticIds(
-                scopeType, scopeId, templateId, dateFrom, dateTo, visibilities, viewerUserId, viewerIsSystemAdmin,
+                scopeType, scopeId, templateId, dateFrom, dateTo, visibilities, viewerUserId,
                 automaticIds.isEmpty() ? java.util.Set.of(-1L) : automaticIds, PageRequest.of(0, 5000));
         writeCsv(scopeType, scopeId, results, response);
     }

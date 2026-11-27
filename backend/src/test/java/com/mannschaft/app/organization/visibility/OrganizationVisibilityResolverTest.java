@@ -134,17 +134,17 @@ class OrganizationVisibilityResolverTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("canView_ARCHIVED組織はSystemAdminのみ: SystemAdmin は true")
-    void canView_ARCHIVED組織はSystemAdminに可視() {
+    @DisplayName("canView_ARCHIVED組織: SystemAdmin 単独は false（著者でも DEPUTY_ADMIN 以上でもない）")
+    void canView_ARCHIVED組織はSystemAdmin単独には不可視() {
         OrganizationVisibilityProjection projection = projection(
                 1L, 1L, OrganizationEntity.Visibility.PUBLIC,
                 LocalDateTime.now().minusDays(1), null);
         when(organizationRepository.findVisibilityProjectionsByIdIn(any()))
                 .thenReturn(List.of(projection));
         when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-        assertThat(resolver.canView(1L, 1L)).isTrue();
+        assertThat(resolver.canView(1L, 1L)).isFalse();
     }
 
     @Test

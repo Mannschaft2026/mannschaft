@@ -147,7 +147,8 @@ public class TournamentService {
         // visibilityNames は非空（IN () の不正 SQL は起きない）。
 
         Page<TournamentEntity> page = tournamentRepository.findVisibleByOrganizationId(
-                orgId, status, visibilityNames, viewerUserId, snapshot.isSystemAdmin(), pageable);
+                orgId, status, visibilityNames, viewerUserId,
+                snapshot.isMemberOf(scope), snapshot.hasRoleOrAbove(scope, "DEPUTY_ADMIN"), pageable);
 
         List<TournamentEntity> content = page.getContent();
         if (content.isEmpty()) {

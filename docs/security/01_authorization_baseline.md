@@ -192,7 +192,7 @@ matcher 式は行挿入で腐らず、`SecurityConfig` を Ctrl+F すれば人�
 
 **判定順（入れ替え禁止）**:
 
-> SYSTEM_ADMIN の短絡は撤去済み（戦役 Z-A PR3、[03 §3.6](03_role_authority_model.md)）。所属の無い SYSTEM_ADMIN は越境者と同一応答（`notFoundCode`）になる。
+> SYSTEM_ADMIN の短絡は撤去済み（戦役 Z-A PR3、[03 §3.6](03_role_authority_model.md)）。所属の無い SYSTEM_ADMIN は越境者と同一応答（`notFoundCode`）になる。可視性判定（`AbstractContentVisibilityResolver`・`UserScopeRoleSnapshot`・publicview・dashboard）の短絡も PR4 で撤去済みで、ARCHIVED の閲覧者は著者本人（PERSONAL か所属中）とスコープの DEPUTY_ADMIN 以上だけ（マスター決定 2026-11-27）。
 
 1. **親リソースの生存確認を呼び出し側が先に行う**。不在・論理削除済みは、その EP の不在コード（`notFoundCode`）で拒否する（CMP-260917-1136）。子リソースを ID で引く EP では、親が論理削除済みのときも**子の不在コード**を投げる（親のコードを投げると「子は実在し親が消えている」ことが漏れる）。
 2. `isAdminOrAbove`（user_roles と memberships の 2 系統）を `isMember` より**先に**判定する。memberships 行を持たない user_roles のみの ADMIN/DEPUTY_ADMIN を越境と誤判定しないため。

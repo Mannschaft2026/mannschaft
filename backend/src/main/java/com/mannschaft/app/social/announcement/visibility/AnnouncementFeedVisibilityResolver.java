@@ -198,9 +198,8 @@ public class AnnouncementFeedVisibilityResolver
 
     private static boolean isScopeAdmin(AnnouncementFeedVisibilityProjection row,
                                         UserScopeRoleSnapshot snapshot) {
-        if (snapshot == null || snapshot.isSystemAdmin() || row == null
-                || row.scopeType() == null || row.scopeId() == null) {
-            return snapshot != null && snapshot.isSystemAdmin();
+        if (snapshot == null || row == null || row.scopeType() == null || row.scopeId() == null) {
+            return false;
         }
         String role = snapshot.roleByScope().get(
                 new com.mannschaft.app.common.visibility.ScopeKey(row.scopeType(), row.scopeId()));

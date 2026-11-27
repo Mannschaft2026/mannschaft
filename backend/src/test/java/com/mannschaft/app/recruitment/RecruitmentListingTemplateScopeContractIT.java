@@ -849,10 +849,10 @@ class RecruitmentListingTemplateScopeContractIT extends AbstractMySqlIntegration
         }
 
         @Test
-        @DisplayName("SYSTEM_ADMIN（非メンバー）は是正前どおり SCOPE_ONLY OPEN に201（F00 の SystemAdmin 高速パス）")
-        void SYSTEM_ADMINは是正前どおり201() throws Exception {
+        @DisplayName("SYSTEM_ADMIN（非メンバー）単独は SCOPE_ONLY OPEN に申し込めず、部外者と同じ不在と同一の404 R001（F00 の SystemAdmin 高速パス撤去・戦役 Z-A PR4）")
+        void SYSTEM_ADMIN単独は申込できず404() throws Exception {
             setAuth(systemAdminId);
-            expectStatus(apply(listingAId), 201);
+            assertSameAsMissing(apply(listingAId), apply(MISSING_ID), 404, R001);
         }
     }
 

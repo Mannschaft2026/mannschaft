@@ -148,7 +148,7 @@ public class ScheduleService {
      *   <li>{@link ScheduleVisibility#ORGANIZATION} は親 ORG メンバーまで可視範囲拡張
      *       （{@link com.mannschaft.app.common.visibility.StandardVisibility#ORGANIZATION_WIDE}）。</li>
      *   <li>{@link ScheduleVisibility#CUSTOM_TEMPLATE} は F01.7 テンプレート評価へ委譲。</li>
-     *   <li>SystemAdmin は全件可視（§15 D-13）。</li>
+     *   <li>SystemAdmin の高速パス（§15 D-13）は撤去済み（戦役 Z-A PR4）。運営アカウントも所属・ロールだけで判定される。</li>
      * </ul>
      *
      * @param id     スケジュールID

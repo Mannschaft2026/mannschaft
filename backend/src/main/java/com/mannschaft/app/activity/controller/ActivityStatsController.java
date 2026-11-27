@@ -103,6 +103,6 @@ public class ActivityStatsController {
         statsService.exportCsvWithAutomaticAccess(
                 scope, scopeId, templateId, dateFrom, dateTo, response,
                 automaticAccess.actualIds(userId, scope, scopeId),
-                levels.visibilities(), userId, levels.systemAdmin());
+                levels.visibilities(), userId);
     }
 }

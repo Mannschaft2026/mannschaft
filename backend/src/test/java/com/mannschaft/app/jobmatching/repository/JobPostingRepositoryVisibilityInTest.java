@@ -81,7 +81,7 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     void 歯抜けゼロ() {
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                nonMemberUserId, false, PageRequest.of(0, 20));
+                nonMemberUserId, false, false, PageRequest.of(0, 20));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).allMatch(p -> p.getVisibilityScope() == VisibilityScope.JOBBER_PUBLIC_BOARD);
@@ -95,7 +95,7 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     void 総件数は実可視件数と一致() {
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                nonMemberUserId, false, PageRequest.of(0, 10));
+                nonMemberUserId, false, false, PageRequest.of(0, 10));
 
         assertThat(page.getTotalElements()).isEqualTo(20L);
     }
@@ -108,7 +108,7 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     void 非JOBBERには見えない() {
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                nonMemberUserId, false, PageRequest.of(0, 100));
+                nonMemberUserId, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).noneMatch(p -> p.getVisibilityScope() == VisibilityScope.JOBBER_INTERNAL);
@@ -124,7 +124,7 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     void JOBBERには見える() {
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                jobberUserId, false, PageRequest.of(0, 100));
+                jobberUserId, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).hasSizeGreaterThanOrEqualTo(25); // 20 PUBLIC + 5 JOBBER_INTERNAL
         assertThat(page.getContent()).anyMatch(p -> p.getVisibilityScope() == VisibilityScope.JOBBER_INTERNAL);
@@ -138,7 +138,7 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     void 未認証はPUBLICのみ() {
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                null, false, PageRequest.of(0, 100));
+                null, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).hasSize(20);
         assertThat(page.getContent()).allMatch(p -> p.getVisibilityScope() == VisibilityScope.JOBBER_PUBLIC_BOARD);
@@ -152,7 +152,7 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
     void TEAM_MEMBERSまで可視なら含まれる() {
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD, VisibilityScope.TEAM_MEMBERS),
-                memberUserId, false, PageRequest.of(0, 100));
+                memberUserId, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getTotalElements()).isEqualTo(30L); // 20 PUBLIC + 10 TEAM_MEMBERS
         assertThat(page.getContent()).anyMatch(p -> p.getVisibilityScope() == VisibilityScope.TEAM_MEMBERS);
@@ -170,26 +170,52 @@ class JobPostingRepositoryVisibilityInTest extends AbstractMySqlIntegrationTest 
 
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                memberUserId, false, PageRequest.of(0, 100));
+                memberUserId, false, false, PageRequest.of(0, 100));
 
         assertThat(page.getContent()).extracting(JobPostingEntity::getId).contains(myDraftId);
     }
 
     /**
-     * SystemAdmin には CANCELLED 求人も見える。
+     * 戦役 Z-A PR4: SystemAdmin 単独（所属なし・DEPUTY_ADMIN 未満）は CANCELLED 求人を見られない。
+     * （引数撤去前は SystemAdmin フラグで見えていた。期待値を反転）
      */
     @Test
-    @DisplayName("SystemAdminにはCANCELLED求人も見える")
-    void SystemAdminには見える() {
+    @DisplayName("SystemAdmin単独にはCANCELLED求人は見えない")
+    void SystemAdmin単独には見えない() {
         Long cancelledId = insertPosting("jp-cancelled-repo", memberUserId, "CANCELLED", "JOBBER_PUBLIC_BOARD");
         em.flush();
         em.clear();
 
         Page<JobPostingEntity> page = postingRepository.findVisibleByTeamId(
                 teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
-                nonMemberUserId, true, PageRequest.of(0, 200));
+                nonMemberUserId, false, false, PageRequest.of(0, 200));
 
-        assertThat(page.getContent()).extracting(JobPostingEntity::getId).contains(cancelledId);
+        assertThat(page.getContent()).extracting(JobPostingEntity::getId).doesNotContain(cancelledId);
+    }
+
+    /**
+     * 戦役 Z-A PR4（マスター決定 2026-11-27）: CANCELLED は著者本人（チームに今も所属）か DEPUTY_ADMIN 以上だけが見られる。
+     */
+    @Test
+    @DisplayName("CANCELLED求人は所属中の著者とDEPUTY_ADMIN以上に見え、所属を離れた著者には見えない")
+    void CANCELLEDは著者と管理者だけ() {
+        Long mine = insertPosting("jp-cancelled-mine", memberUserId, "CANCELLED", "JOBBER_PUBLIC_BOARD");
+        em.flush();
+        em.clear();
+
+        Page<JobPostingEntity> member = postingRepository.findVisibleByTeamId(
+                teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
+                memberUserId, true, false, PageRequest.of(0, 200));
+        Page<JobPostingEntity> departed = postingRepository.findVisibleByTeamId(
+                teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
+                memberUserId, false, false, PageRequest.of(0, 200));
+        Page<JobPostingEntity> deputy = postingRepository.findVisibleByTeamId(
+                teamId, null, Set.of(VisibilityScope.JOBBER_PUBLIC_BOARD),
+                nonMemberUserId, true, true, PageRequest.of(0, 200));
+
+        assertThat(member.getContent()).extracting(JobPostingEntity::getId).contains(mine);
+        assertThat(departed.getContent()).extracting(JobPostingEntity::getId).doesNotContain(mine);
+        assertThat(deputy.getContent()).extracting(JobPostingEntity::getId).contains(mine);
     }
 
     private Long insertUser(String email) {

@@ -113,19 +113,19 @@ class AbstractContentVisibilityResolverTest {
     // ========================================================================
 
     @Nested
-    @DisplayName("SystemAdmin 高速パス（§15 D-13）")
+    @DisplayName("SystemAdmin 高速パスの撤去（§15 D-13・戦役 Z-A PR4）")
     class SystemAdminFastPath {
 
         @Test
-        @DisplayName("SystemAdmin は PUBLISHED なら全 visibility で可視")
+        @DisplayName("SystemAdmin 単独は PUBLISHED でも非所属と同じ（PRIVATE は不可視）")
         void sysAdmin_published_all_allowed() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PRIVATE);
             resolver.projections = List.of(p);
             when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
             Set<Long> result = resolver.filterAccessible(List.of(1L), 1L);
-            assertThat(result).containsExactly(1L);
+            assertThat(result).isEmpty();
         }
 
         @Test
@@ -135,21 +135,21 @@ class AbstractContentVisibilityResolverTest {
             resolver.projections = List.of(p);
             resolver.statusOverride = ContentStatus.DELETED;
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
             assertThat(resolver.filterAccessible(List.of(1L), 1L)).isEmpty();
         }
 
         @Test
-        @DisplayName("SystemAdmin は ARCHIVED も可視")
+        @DisplayName("SystemAdmin 単独は ARCHIVED も見られない（著者でも所属中でも DEPUTY_ADMIN 以上でもない）")
         void sysAdmin_archived_allowed() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
             resolver.statusOverride = ContentStatus.ARCHIVED;
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
-            assertThat(resolver.filterAccessible(List.of(1L), 1L)).containsExactly(1L);
+            assertThat(resolver.filterAccessible(List.of(1L), 1L)).isEmpty();
         }
     }
 
@@ -162,7 +162,7 @@ class AbstractContentVisibilityResolverTest {
     class StatusGuard {
 
         @Test
-        @DisplayName("ARCHIVED は SystemAdmin 以外不可視")
+        @DisplayName("ARCHIVED は著者（所属中）と DEPUTY_ADMIN 以上以外には不可視")
         void archived_blocked_for_non_admin() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
@@ -187,7 +187,7 @@ class AbstractContentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("SCHEDULED は作成者本人または SystemAdmin のみ可視")
+        @DisplayName("SCHEDULED は作成者本人のみ可視（SystemAdmin に特権は無い）")
         void scheduled_author_or_sysadmin() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
@@ -309,13 +309,13 @@ class AbstractContentVisibilityResolverTest {
             when(membershipBatchQueryService.snapshotForUser(eq(5L), anySet(), anySet()))
                     .thenReturn(new UserScopeRoleSnapshot(false,
                             Map.of(scope, "MEMBER"), Map.of(), Set.of(), Set.of()));
-            // SystemAdmin は高速パスで可視（参考）
+            // SystemAdmin 単独は高速パスが無いので不可視（戦役 Z-A PR4）
             when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
             assertThat(resolver.filterAccessible(List.of(1L), 2L)).containsExactly(1L);
             assertThat(resolver.filterAccessible(List.of(1L), 5L)).isEmpty();
-            assertThat(resolver.filterAccessible(List.of(1L), 1L)).containsExactly(1L);
+            assertThat(resolver.filterAccessible(List.of(1L), 1L)).isEmpty();
         }
 
         @Test
@@ -354,15 +354,15 @@ class AbstractContentVisibilityResolverTest {
             when(membershipBatchQueryService.snapshotForUser(eq(5L), anySet(), anySet()))
                     .thenReturn(new UserScopeRoleSnapshot(false,
                             Map.of(scope, "SUPPORTER"), Map.of(), Set.of(), Set.of()));
-            // SystemAdmin は高速パスで可視
+            // SystemAdmin 単独は高速パスが無いので不可視（戦役 Z-A PR4）
             when(membershipBatchQueryService.snapshotForUser(eq(1L), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(), java.util.Set.of()));
 
             assertThat(resolver.filterAccessible(List.of(1L), 2L)).containsExactly(1L);
             assertThat(resolver.filterAccessible(List.of(1L), 3L)).containsExactly(1L);
             assertThat(resolver.filterAccessible(List.of(1L), 4L)).isEmpty();
             assertThat(resolver.filterAccessible(List.of(1L), 5L)).isEmpty();
-            assertThat(resolver.filterAccessible(List.of(1L), 1L)).containsExactly(1L);
+            assertThat(resolver.filterAccessible(List.of(1L), 1L)).isEmpty();
         }
 
         @Test
@@ -540,7 +540,7 @@ class AbstractContentVisibilityResolverTest {
     class ParentOrgChain {
 
         @Test
-        @DisplayName("親 ORG が SUSPENDED/DELETED の TEAM コンテンツは SystemAdmin 以外不可視")
+        @DisplayName("親 ORG が SUSPENDED/DELETED の TEAM コンテンツは全員不可視")
         void inactiveParentOrg_blocked() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
@@ -553,14 +553,17 @@ class AbstractContentVisibilityResolverTest {
         }
 
         @Test
-        @DisplayName("親 ORG が SUSPENDED でも SystemAdmin は可視")
+        @DisplayName("親 ORG が SUSPENDED のとき SystemAdmin 単独も不可視（非所属と同じ）")
         void inactiveParentOrg_sysadmin_allowed() {
             FakeProjection p = projection(1L, "TEAM", 100L, 999L, FakeVisibility.PUBLIC);
             resolver.projections = List.of(p);
+            // 早期 return 撤去後の実サービスは SystemAdmin でも親 ORG の停止情報を解決する（systemAdmin 値だけ true）
+            ScopeKey teamScope = new ScopeKey("TEAM", 100L);
             when(membershipBatchQueryService.snapshotForUser(any(), anySet(), anySet()))
-                    .thenReturn(UserScopeRoleSnapshot.forSystemAdmin());
+                    .thenReturn(new UserScopeRoleSnapshot(true, Map.of(),
+                            Map.of(teamScope, Set.of(10L)), Set.of(), Set.of(10L)));
 
-            assertThat(resolver.filterAccessible(List.of(1L), 5L)).containsExactly(1L);
+            assertThat(resolver.filterAccessible(List.of(1L), 5L)).isEmpty();
         }
     }
 
