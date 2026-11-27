@@ -6,6 +6,7 @@ import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.support.test.TeamOrgFixtureHelper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -244,12 +245,7 @@ class BlogPostSlugUniquenessIT extends AbstractMySqlIntegrationTest {
     }
 
     private void insertRoleIfAbsent() {
-        Number count = (Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = 'ADMIN'")
-                .getSingleResult();
-        if (count.longValue() == 0) {
-            em.createNativeQuery("INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                    + "VALUES ('ADMIN', '管理者', 2, 0, NOW(), NOW())").executeUpdate();
-        }
+        RoleSeedSupport.ensureCanonical(em, "ADMIN");
     }
 
     private Long insertUser(String email) {

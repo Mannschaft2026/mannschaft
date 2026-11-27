@@ -1,12 +1,12 @@
 package com.mannschaft.app.shift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.shift.entity.ShiftScheduleEntity;
 import com.mannschaft.app.shift.entity.ShiftSlotEntity;
 import com.mannschaft.app.shift.repository.ShiftScheduleRepository;
 import com.mannschaft.app.shift.repository.ShiftSlotRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -234,14 +234,7 @@ class ShiftRequestSlotUniquenessConcurrencyIT extends AbstractMySqlIntegrationTe
         // flyway.enabled=false のため V2.014 の seed が入らず、priority 解決に失敗して
         // memberships のみのメンバーが権限判定で落ちる）。priority は正準表から採る。
         // 本 IT は非トランザクションのため EntityManager ではなく JdbcTemplate で行う。
-        Integer roleRows = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM roles WHERE name = 'MEMBER'", Integer.class);
-        if (roleRows == null || roleRows == 0) {
-            jdbcTemplate.update(
-                    "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                            + "VALUES ('MEMBER', 'MEMBER', ?, 0, NOW(), NOW())",
-                    RolePriority.priority("MEMBER"));
-        }
+        RoleSeedSupport.ensureCanonical(jdbcTemplate, "MEMBER");
         jdbcTemplate.update(
                 "INSERT INTO memberships (user_id, scope_type, scope_id, role_kind, joined_at, "
                         + "created_at, updated_at) VALUES (?, 'TEAM', ?, 'MEMBER', NOW(), NOW(), NOW())",

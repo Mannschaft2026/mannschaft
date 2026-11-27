@@ -919,6 +919,20 @@ public void dispatch() { ... }
 
 ---
 
+## 9.7a テストが `roles` へ書くときは `RoleSeedSupport` 経由のみ — 番人あり
+
+test プロファイルは Flyway seed（`V2.014__seed_roles.sql`）が入らず、各 IT が `roles` 行を自作する。`roles` は**コミットされるとクラスをまたいで残る**ため、あるテストが本物と異なる priority（例: `ADMIN=100`・`MEMBER=5`・全ロール `99`）を commit したままにすると、同じ JVM で後から走る IT の実効ロール解決（`AccessControlService.hasRoleOrAbove`）が崩れ、**順序依存で落ちる**（CMP-261125-0612 / CMP-261126-0906）。
+
+- `roles` 行は `RoleSeedSupport.ensureCanonical(em | jdbc, name)` で用意する。seed と同じ priority（`RolePriority`）で upsert し、**既存の誤った行も正準値へ直す**（`INSERT IGNORE` や「あれば何もしない」は誤った行を温存するので不可）。
+- JPA で作る場合も priority は `RolePriority.priority(...)` か `RoleSeedSupport.priorityOf(...)` で渡す。数値直書き・変数は不可。
+- `roleRepository.deleteAll()` のように他クラスの `roles` 行を消さない。自分が作った行だけ後始末する。
+
+番人 `RolesPriorityLiteralGuardTest` が `src/test` を走査し、`RoleSeedSupport` 以外の `INSERT [IGNORE] INTO roles` / `REPLACE INTO roles` / `UPDATE roles`（文字列連結・テキストブロック含む）と、DB を使うテストでの非正準 priority の `RoleEntity` 生成を拒否する（Mockito だけの単体テストは対象外）。
+
+**`KNOWN_VIOLATIONS`**: 未移行の既存違反を理由付きで登録する負債の一覧。新規テストは登録で逃げず `ensureCanonical` を使うこと。登録できるのは「クラスに `@Transactional` が付き、ロールバックされて `roles` が残らない」もの（`R_ROLLBACK`。クラスレベル `@Transactional` の有無を番人が検証する）と、汚染の再現を意図したもの（`R_POLLUTE`）に限る。移行したら必ず登録を外す（存在しない・違反していない登録は番人が拒否する）。commit される書き込みは登録せず移行すること。
+
+---
+
 ## 9.8 足軽 worktree の sparse 除外素材に依存するテスト
 
 足軽 worktree は cone モードの sparse checkout で牧場 PNG 素材（`backend/src/main/resources/ranch/approved` など。正本は `scripts/worktree-sparse-exclusions.json`）を展開しない。この素材（承認済み manifest・mapping JSON・PNG）を実体として読むテストは、**テスト単位（メソッドまたはクラス）に `@RequiresRanchApprovedAssets` を付ける**。

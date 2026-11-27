@@ -96,9 +96,9 @@ class TeamCoreAuthzContractIT extends AbstractMySqlIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        insertRoleIfAbsent("ADMIN", "管理者", 2);
-        insertRoleIfAbsent("MEMBER", "メンバー", 4);
-        insertRoleIfAbsent("SYSTEM_ADMIN", "システム管理者", 1);
+        insertRoleIfAbsent("ADMIN");
+        insertRoleIfAbsent("MEMBER");
+        insertRoleIfAbsent("SYSTEM_ADMIN");
 
         teamAId = insertTeam("TEAMCORE認可契約チームA", "PUBLIC");
         teamASlug = selectSlug(teamAId);
@@ -545,7 +545,7 @@ class TeamCoreAuthzContractIT extends AbstractMySqlIntegrationTest {
     }
 
     /** roles を name で引く idempotent seed（グローバル参照テーブルのため deleteAll しない）。 */
-    private void insertRoleIfAbsent(String name, String displayName, int priority) {
+    private void insertRoleIfAbsent(String name) {
         // 既存行の誤った priority も正す（seed と同じ値で upsert）
         RoleSeedSupport.ensureCanonical(em, name);
     }

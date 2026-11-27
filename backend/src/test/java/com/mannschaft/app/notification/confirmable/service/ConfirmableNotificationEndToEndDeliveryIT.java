@@ -10,6 +10,7 @@ import com.mannschaft.app.notification.confirmable.repository.ConfirmableNotific
 import com.mannschaft.app.notification.fanout.NotificationFanoutWorker;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.RoleRepository;
@@ -546,7 +547,7 @@ class ConfirmableNotificationEndToEndDeliveryIT extends AbstractMySqlIntegration
                 .orElseGet(() -> roleRepository.save(RoleEntity.builder()
                         .name("ADMIN")
                         .displayName("ADMIN")
-                        .priority(2)
+                        .priority(RolePriority.priority("ADMIN"))
                         .isSystem(Boolean.TRUE)
                         .build()));
         userRoleRepository.save(UserRoleEntity.builder()

@@ -1,5 +1,6 @@
 package com.mannschaft.app.advertising.spotlight;
 
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.advertising.AdvertisingErrorCode;
 import com.mannschaft.app.advertising.controller.SpotlightController;
 import com.mannschaft.app.advertising.dto.SpotlightContentResponse;
@@ -58,11 +59,11 @@ class SpotlightContentServingIT extends AbstractSpotlightIT {
     @BeforeEach
     void setUp() {
         setUpCommon();
-        insertRole("MEMBER", "メンバー", 5, false);
+        insertRole("MEMBER", "メンバー", RolePriority.priority("MEMBER"), false);
         // CMP-027: findTeamIdsByOrganizationId の filler 用（結合クエリは role を見ない）。
         // MEMBER(role_id=4/5) は V60.010 で user_roles から除去され本番不能ゆえ、
         // 本番で user_roles に正当に存在しうる GUEST を filler に使う。
-        insertRole("GUEST", "ゲスト", 6, false);
+        insertRole("GUEST", "ゲスト", RolePriority.priority("GUEST"), false);
         viewerId = insertUser("spotlight-viewer@example.com");
         creatorId = insertUser("spotlight-adv-owner@example.com");
         advOrgId = insertOrganization("F09192 広告主組織");

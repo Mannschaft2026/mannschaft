@@ -10,6 +10,7 @@ import com.mannschaft.app.errorreport.service.ErrorReportAggregator;
 import com.mannschaft.app.errorreport.service.ErrorReportNotifier;
 import com.mannschaft.app.moduleevent.api.event.ModuleEventOperationalAlertEvent;
 import com.mannschaft.app.moduleevent.api.event.ModuleEventOperationalAlertEvent.Kind;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.RoleRepository;
@@ -206,7 +207,7 @@ class ModuleEventOperationalAlertIT extends AbstractMySqlIntegrationTest {
         tx.executeWithoutResult(status -> {
             RoleEntity role = roles.findByName("SYSTEM_ADMIN").orElseGet(() -> {
                 RoleEntity created = roles.saveAndFlush(RoleEntity.builder().name("SYSTEM_ADMIN")
-                        .displayName("システム管理者").priority(1).isSystem(true).build());
+                        .displayName("システム管理者").priority(RolePriority.priority("SYSTEM_ADMIN")).isSystem(true).build());
                 ownedRoleId = created.getId();
                 return created;
             });

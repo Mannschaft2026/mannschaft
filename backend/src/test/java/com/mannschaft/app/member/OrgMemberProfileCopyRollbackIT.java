@@ -5,6 +5,7 @@ import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
@@ -67,8 +68,8 @@ class OrgMemberProfileCopyRollbackIT extends AbstractMySqlIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        seedRole("ADMIN", 2);
-        seedRole("MEMBER", 4);
+        seedRole("ADMIN");
+        seedRole("MEMBER");
 
         jdbc.update("INSERT INTO organizations (name, org_type, visibility, hierarchy_visibility, "
                 + "supporter_enabled, version, slug, created_at, updated_at) "
@@ -159,9 +160,8 @@ class OrgMemberProfileCopyRollbackIT extends AbstractMySqlIntegrationTest {
         return count == null ? 0 : count;
     }
 
-    private void seedRole(String name, int priority) {
-        jdbc.update("INSERT IGNORE INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                + "VALUES (?, ?, ?, 1, NOW(), NOW())", name, name, priority);
+    private void seedRole(String name) {
+        RoleSeedSupport.ensureCanonical(jdbc, name);
     }
 
     private Long insertPage(String title, String status) {

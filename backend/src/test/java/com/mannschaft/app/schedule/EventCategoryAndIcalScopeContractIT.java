@@ -13,7 +13,6 @@ import com.mannschaft.app.schedule.repository.UserIcalTokenRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -101,12 +100,12 @@ class EventCategoryAndIcalScopeContractIT extends AbstractMySqlIntegrationTest {
     @BeforeEach
     void setUp() {
         // test profile は Flyway 無効のため roles マスタが未投入。優先度つきで明示 seed する。
-        seedRole("SYSTEM_ADMIN", 1);
-        seedRole("ADMIN", 10);
-        seedRole("DEPUTY_ADMIN", 20);
-        seedRole("MEMBER", 30);
-        seedRole("SUPPORTER", 40);
-        seedRole("GUEST", 50);
+        seedRole("SYSTEM_ADMIN");
+        seedRole("ADMIN");
+        seedRole("DEPUTY_ADMIN");
+        seedRole("MEMBER");
+        seedRole("SUPPORTER");
+        seedRole("GUEST");
 
         String suffix = Long.toUnsignedString(System.nanoTime(), Character.MAX_RADIX);
         teamAId = insertTeam("W6EC チームA", "w6ec-team-a-" + suffix);
@@ -432,8 +431,8 @@ class EventCategoryAndIcalScopeContractIT extends AbstractMySqlIntegrationTest {
                 new UsernamePasswordAuthenticationToken(userId.toString(), null, List.of()));
     }
 
-    private void seedRole(String name, int priority) {
-        // priority 引数は seed の値と一致させる必要があるため使わず、正準値で upsert する
+    private void seedRole(String name) {
+        // 正準値（seed と同じ priority）で upsert し、既存の誤った行も直す
         RoleSeedSupport.ensureCanonical(em, name);
     }
 

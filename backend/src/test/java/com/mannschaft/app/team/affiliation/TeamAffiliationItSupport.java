@@ -1,10 +1,10 @@
 package com.mannschaft.app.team.affiliation;
 
-import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -146,13 +146,7 @@ abstract class TeamAffiliationItSupport extends AbstractMySqlIntegrationTest {
     /** ADMIN / DEPUTY_ADMIN / MEMBER のロール行と、MANAGE_ORG_AFFILIATION の権限行・ADMIN の既定付与を用意する（冪等）。 */
     protected void seedAffiliationPermission() {
         for (String role : List.of("ADMIN", "DEPUTY_ADMIN", "MEMBER")) {
-            em.createNativeQuery(
-                            "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                    + "SELECT :name, :name, :priority, 0, NOW(), NOW() FROM DUAL "
-                                    + "WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = :name)")
-                    .setParameter("name", role)
-                    .setParameter("priority", RolePriority.priority(role))
-                    .executeUpdate();
+            RoleSeedSupport.ensureCanonical(em, role);
         }
         em.createNativeQuery(
                         "INSERT INTO permissions (name, display_name, scope, created_at, updated_at) "

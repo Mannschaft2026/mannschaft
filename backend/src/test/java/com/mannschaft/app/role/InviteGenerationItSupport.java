@@ -4,6 +4,8 @@ import com.mannschaft.app.auth.entity.UserEntity;
 import com.mannschaft.app.auth.repository.UserRepository;
 import com.mannschaft.app.organization.entity.OrganizationEntity;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
+import com.mannschaft.app.role.authorization.RolePriority;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.role.entity.InviteTokenEntity;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
@@ -58,7 +60,7 @@ abstract class InviteGenerationItSupport extends AbstractMySqlIntegrationTest {
                             .supporterEnabled(true).build()).getId();
             RoleEntity role = roles.findByName("MEMBER").orElseGet(() -> {
                 RoleEntity created = roles.saveAndFlush(RoleEntity.builder().name("MEMBER").displayName("メンバー")
-                        .priority(4).isSystem(false).build());
+                        .priority(RolePriority.priority("MEMBER")).isSystem(false).build());
                 ownedRoles.add(created.getId());
                 return created;
             });
@@ -88,7 +90,7 @@ abstract class InviteGenerationItSupport extends AbstractMySqlIntegrationTest {
         return inTx(() -> {
             RoleEntity adminRole = roles.findByName(name).orElseGet(() -> {
                 RoleEntity created = roles.saveAndFlush(RoleEntity.builder().name(name).displayName(name)
-                        .priority(priority).isSystem(false).build());
+                        .priority(RoleSeedSupport.priorityOf(name, priority)).isSystem(false).build());
                 ownedRoles.add(created.getId());
                 return created;
             });

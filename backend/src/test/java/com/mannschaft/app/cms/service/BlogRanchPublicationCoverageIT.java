@@ -11,6 +11,7 @@ import com.mannschaft.app.cms.repository.BlogRanchTransportRepository;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.entity.MembershipEntity;
 import com.mannschaft.app.membership.repository.MembershipRepository;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.RoleRepository;
@@ -90,7 +91,7 @@ class BlogRanchPublicationCoverageIT extends AbstractMySqlIntegrationTest {
         membership=memberships.saveAndFlush(MembershipEntity.builder().userId(editor).scopeType(ScopeType.TEAM)
                 .scopeId(team).joinedAt(LocalDateTime.now()).build()).getId();
         Long admin=roles.findByName("ADMIN").map(RoleEntity::getId).orElseGet(() -> roles.saveAndFlush(
-                RoleEntity.builder().name("ADMIN").displayName("ADMIN").priority(2).isSystem(true).build()).getId());
+                RoleEntity.builder().name("ADMIN").displayName("ADMIN").priority(RolePriority.priority("ADMIN")).isSystem(true).build()).getId());
         assignment=assignments.saveAndFlush(UserRoleEntity.builder().userId(editor).roleId(admin).teamId(team).build()).getId();
     }
     @Test void existingTeamAdminMayPublishDifferentAuthorAndCapturesRecipientAuthor() {

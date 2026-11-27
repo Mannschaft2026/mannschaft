@@ -2,6 +2,7 @@ package com.mannschaft.app.advertising.spotlight;
 
 import com.mannschaft.app.admin.service.FeatureFlagService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.data.redis.core.ValueOperations;
@@ -157,21 +158,9 @@ abstract class AbstractSpotlightIT extends AbstractMySqlIntegrationTest {
     }
 
     protected void insertRole(String name, String displayName, int priority, boolean isSystem) {
-        // 冪等化: roles はグローバル参照テーブルのため、既存なら再利用し二重INSERTしない
-        // （同一 name の重複INSERTは roles の UNIQUE 制約違反になる。CI shard 再編成で
-        // 同一 JVM 内の同居テストが変わり得るため、盲目的 INSERT は禁止）。
-        Number existingRoleCount = (Number) em.createNativeQuery("SELECT COUNT(*) FROM roles WHERE name = :name")
-                .setParameter("name", name)
-                .getSingleResult();
-        if (existingRoleCount.longValue() > 0) {
-            return;
-        }
-        em.createNativeQuery(
-                        "INSERT INTO roles (name, display_name, priority, is_system, created_at, updated_at) "
-                                + "VALUES (:name, :dn, :priority, :sys, NOW(), NOW())")
-                .setParameter("name", name).setParameter("dn", displayName)
-                .setParameter("priority", priority).setParameter("sys", isSystem ? 1 : 0)
-                .executeUpdate();
+        // 引数の priority / displayName は使わない。seed と同じ正準値で upsert し、既存の誤った行も直す
+        // （CMP-261126-0906）。
+        RoleSeedSupport.ensureCanonical(em, name);
     }
 
     protected Long roleId(String name) {

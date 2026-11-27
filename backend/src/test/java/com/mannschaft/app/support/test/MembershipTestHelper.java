@@ -4,7 +4,6 @@ import com.mannschaft.app.common.visibility.RolePriority;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.NoResultException;
 
 /**
  * 統合テスト用 memberships / user_roles INSERT ヘルパー。
@@ -196,30 +195,16 @@ public final class MembershipTestHelper {
      * 値を写経すると再び drift するため、本番と同じ定数表を直接参照する。</p>
      */
     private static Long resolveRoleIdByName(EntityManager em, String roleName) {
-        try {
-            Object result = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult();
-            return ((Number) result).longValue();
-        } catch (NoResultException e) {
-            // 統合テスト環境では application-test.yml で flyway.enabled=false のため
-            // V2.014__seed_roles.sql の固定 role が投入されない。
-            int priority = RolePriority.priority(roleName);
-            if (priority == Integer.MAX_VALUE) {
-                throw new IllegalStateException(
-                        "未知の role 名です（RolePriority に定義がありません）: " + roleName);
-            }
-            em.createNativeQuery(
-                    "INSERT INTO roles (name, display_name, priority, is_system, "
-                            + "created_at, updated_at) "
-                            + "VALUES (:name, :name, :priority, 0, NOW(), NOW())")
-                    .setParameter("name", roleName)
-                    .setParameter("priority", priority)
-                    .executeUpdate();
-            Object result = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
-                    .setParameter("name", roleName)
-                    .getSingleResult();
-            return ((Number) result).longValue();
+        if (RolePriority.priority(roleName) == Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "未知の role 名です（RolePriority に定義がありません）: " + roleName);
         }
+        // 既存行があっても priority を正準値へ直す（誤った priority の行が先に commit されて
+        // 残っていると hasRoleOrAbove の判定が壊れる。CMP-261126-0906）。
+        RoleSeedSupport.ensureCanonical(em, roleName);
+        Object result = em.createNativeQuery("SELECT id FROM roles WHERE name = :name")
+                .setParameter("name", roleName)
+                .getSingleResult();
+        return ((Number) result).longValue();
     }
 }

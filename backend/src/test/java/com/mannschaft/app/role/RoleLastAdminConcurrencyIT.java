@@ -7,6 +7,7 @@ import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
 import com.mannschaft.app.membership.entity.MembershipEntity;
 import com.mannschaft.app.membership.repository.MembershipRepository;
+import com.mannschaft.app.role.authorization.RolePriority;
 import com.mannschaft.app.role.entity.RoleEntity;
 import com.mannschaft.app.role.entity.UserRoleEntity;
 import com.mannschaft.app.role.repository.RoleRepository;
@@ -59,7 +60,7 @@ class RoleLastAdminConcurrencyIT extends AbstractMySqlIntegrationTest {
         adminRoleId = roleRepository.findByName("ADMIN").map(RoleEntity::getId).orElseGet(() -> {
             createdAdminRole = true;
             return roleRepository.save(RoleEntity.builder()
-                    .name("ADMIN").displayName("ADMIN").priority(2).isSystem(false).build()).getId();
+                    .name("ADMIN").displayName("ADMIN").priority(RolePriority.priority("ADMIN")).isSystem(false).build()).getId();
         });
         firstUserId = saveUser("first");
         secondUserId = saveUser("second");

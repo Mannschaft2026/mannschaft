@@ -28,6 +28,7 @@ import com.mannschaft.app.schedule.repository.ScheduleAttendanceRepository;
 import com.mannschaft.app.schedule.repository.ScheduleRanchTransportRepository;
 import com.mannschaft.app.schedule.repository.ScheduleRepository;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
+import com.mannschaft.app.support.test.RoleSeedSupport;
 import com.mannschaft.app.team.entity.TeamEntity;
 import com.mannschaft.app.team.repository.TeamRepository;
 import com.mannschaft.app.timeline.dto.CreatePostRequest;
@@ -107,7 +108,7 @@ class RanchGroupNativeCaptureIT extends AbstractMySqlIntegrationTest {
     }
     private Long role(String name,int priority) {
         return roles.findByName(name).map(RoleEntity::getId).orElseGet(() -> roles.saveAndFlush(
-                RoleEntity.builder().name(name).displayName(name).priority(priority).isSystem(true).build()).getId());
+                RoleEntity.builder().name(name).displayName(name).priority(RoleSeedSupport.priorityOf(name, priority)).isSystem(true).build()).getId());
     }
     private CreatePostRequest post() {
         return new CreatePostRequest("グループ本文",scope,group.toString(),"USER",null,null,null,null,null,null,null,null);
