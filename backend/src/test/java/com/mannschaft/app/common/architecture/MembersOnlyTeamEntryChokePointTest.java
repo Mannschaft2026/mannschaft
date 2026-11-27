@@ -7,6 +7,7 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaCodeUnit;
 import com.tngtech.archunit.core.domain.JavaConstructorCall;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -106,6 +107,9 @@ class MembersOnlyTeamEntryChokePointTest {
     void roleKindのmutatorが無い() {
         JavaClass entity = imported(MEMBERSHIP_ENTITY);
         List<String> mutators = entity.getMethods().stream()
+                // Lombok の @Builder.Default が生成する private static な既定値の供給元（$default$roleKind）は、
+                // 新規行の初期値 MEMBER を返すだけで既存の在籍の role_kind を書き換えられないため mutator に数えない。
+                .filter(m -> !(m.getModifiers().contains(JavaModifier.STATIC) && m.getName().startsWith("$default$")))
                 .map(m -> m.getName())
                 .filter(name -> name.toLowerCase().contains("rolekind"))
                 .filter(name -> !name.startsWith("get") && !name.startsWith("is"))
