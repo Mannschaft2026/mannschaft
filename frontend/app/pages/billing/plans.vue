@@ -42,6 +42,7 @@ const currentPlanKey = ref<string | null>(null)
 const entitledFeatureKeys = ref<Set<string>>(new Set())
 const bandExpanded = ref(false)
 const showHelp = ref(false)
+const commerceModalVisible = ref(false)
 
 // === 確認モーダル ===
 const confirmVisible = ref(false)
@@ -174,14 +175,15 @@ onMounted(async () => {
       {{ t('billing.plans.subtitle') }}
     </p>
     <p class="mb-6">
-      <NuxtLink
-        to="/commerce-disclosure"
-        target="_blank"
+      <button
+        type="button"
         class="text-xs text-surface-400 hover:text-primary hover:underline"
+        @click="commerceModalVisible = true"
       >
         {{ t('landing.layout.footer_commerce') }}
-      </NuxtLink>
+      </button>
     </p>
+    <CommerceDisclosureModal v-model:visible="commerceModalVisible" />
 
     <PageLoading v-if="loading" />
 

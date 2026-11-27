@@ -6,6 +6,14 @@ const { locale, setLocale, availableLocales } = useI18n()
 const { userTimezone } = useDatetime()
 const showMobileMenu = ref(false)
 
+// 特定商取引法に基づく表記はページ遷移せずモーダルで表示する（お問い合わせは contact 項目へスクロール）
+const commerceModalVisible = ref(false)
+const commerceAnchor = ref<'contact' | undefined>(undefined)
+function openCommerce(anchor?: 'contact') {
+  commerceAnchor.value = anchor
+  commerceModalVisible.value = true
+}
+
 const localeLabels: Record<string, string> = {
   ja: '日本語',
   en: 'English',
@@ -124,8 +132,8 @@ const localeLabels: Record<string, string> = {
             <ul class="space-y-2 text-sm text-surface-500">
               <li><NuxtLink to="/terms" class="hover:text-primary">{{ t('landing.layout.footer_terms') }}</NuxtLink></li>
               <li><NuxtLink to="/privacy" class="hover:text-primary">{{ t('landing.layout.footer_privacy') }}</NuxtLink></li>
-              <li><NuxtLink to="/commerce-disclosure" class="hover:text-primary">{{ t('landing.layout.footer_commerce') }}</NuxtLink></li>
-              <li><NuxtLink to="/commerce-disclosure#contact" class="hover:text-primary">{{ t('landing.layout.footer_contact') }}</NuxtLink></li>
+              <li><button type="button" class="hover:text-primary" @click="openCommerce()">{{ t('landing.layout.footer_commerce') }}</button></li>
+              <li><button type="button" class="hover:text-primary" @click="openCommerce('contact')">{{ t('landing.layout.footer_contact') }}</button></li>
             </ul>
           </div>
         </div>
@@ -134,5 +142,7 @@ const localeLabels: Record<string, string> = {
         </div>
       </div>
     </footer>
+
+    <CommerceDisclosureModal v-model:visible="commerceModalVisible" :anchor="commerceAnchor" />
   </div>
 </template>

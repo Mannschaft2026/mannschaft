@@ -83,6 +83,7 @@ const itemId = computed(() => {
 
 /** ステップ識別子。 */
 type Step = 'beneficiary' | 'card' | 'confirm' | 'done'
+const commerceModalVisible = ref(false)
 const step = ref<Step>('beneficiary')
 
 // ── 受益者選択 ─────────────────────────────────────────────
@@ -478,13 +479,13 @@ onMounted(async () => {
         <h2 class="text-lg font-semibold">
           {{ $t('payment.membership.subscribe.stepCard') }}
         </h2>
-        <NuxtLink
-          to="/commerce-disclosure"
-          target="_blank"
-          class="text-xs text-surface-400 hover:text-primary hover:underline"
+        <button
+          type="button"
+          class="self-start text-xs text-surface-400 hover:text-primary hover:underline"
+          @click="commerceModalVisible = true"
         >
           {{ $t('landing.layout.footer_commerce') }}
-        </NuxtLink>
+        </button>
         <StripePaymentForm
           v-if="clientSecret"
           :key="clientSecret"
@@ -523,5 +524,6 @@ onMounted(async () => {
         </NuxtLink>
       </section>
     </template>
+    <CommerceDisclosureModal v-model:visible="commerceModalVisible" />
   </div>
 </template>
