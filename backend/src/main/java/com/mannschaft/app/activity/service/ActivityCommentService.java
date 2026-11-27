@@ -19,15 +19,11 @@ import java.util.List;
 
 /**
  * 活動コメントサービス。コメントのCRUDを担当する。
- *
- * <p><b>トランザクションの張り方（CMP-261124-0159）</b>: 読み取り（{@link #listComments}）はクラス単位の読み取り
- * トランザクションを張らない。読み取りの認可は共通の門（{@code ScopeContentAccessGate}）を通り、門は在籍・ロールを
- * membership / role ドメインの表から引くため、活動ドメインのトランザクション入口に含めるとドメインをまたぐ
- * （CLAUDE.md 原則 5・番人 D-3T）。書き込みはメソッド単位の {@code @Transactional} のまま。</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ActivityCommentService {
 
     private final ActivityCommentRepository commentRepository;

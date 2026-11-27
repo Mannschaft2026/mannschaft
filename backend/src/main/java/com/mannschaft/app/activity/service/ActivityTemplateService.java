@@ -32,15 +32,11 @@ import java.util.stream.Collectors;
 
 /**
  * 活動テンプレートサービス。テンプレートのCRUD・複製・インポートを担当する。
- *
- * <p><b>トランザクションの張り方（CMP-261124-0159）</b>: 読み取り（{@link #listTemplates}・{@link #getTemplate}）はクラス単位の読み取り
- * トランザクションを張らない。読み取りの認可は共通の門（{@code ScopeContentAccessGate}）を通り、門は在籍・ロールを
- * membership / role ドメインの表から引くため、活動ドメインのトランザクション入口に含めるとドメインをまたぐ
- * （CLAUDE.md 原則 5・番人 D-3T）。書き込みはメソッド単位の {@code @Transactional} のまま。</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ActivityTemplateService {
 
     private static final int MAX_TEMPLATES_PER_SCOPE = 20;
@@ -383,7 +379,6 @@ public class ActivityTemplateService {
     /**
      * テンプレートレスポンスにフィールド定義を付与して返す。
      */
-    @Transactional(readOnly = true)
     public List<ActivityTemplateResponse.TemplateFieldResponse> fieldsIfPresent(Long id, ActivityScopeType type, Long scopeId) {
         if (templateRepository.findById(id)
                 .filter(t -> t.getScopeType() == type && java.util.Objects.equals(t.getScopeId(), scopeId)).isEmpty()) return List.of();
@@ -397,7 +392,6 @@ public class ActivityTemplateService {
      * 不在・論理削除済み・別スコープは区別せず empty を返す（存在を呼び出し側の応答で漏らさないため）。
      * 照会はテンプレート1件＋フィールド一括の2クエリで、フィールド数に比例しない。</p>
      */
-    @Transactional(readOnly = true)
     public java.util.Optional<ActivityTemplateResponse> findInScope(Long id, ActivityScopeType type, Long scopeId) {
         return templateRepository.findById(id)
                 .filter(t -> t.getScopeType() == type && java.util.Objects.equals(t.getScopeId(), scopeId))

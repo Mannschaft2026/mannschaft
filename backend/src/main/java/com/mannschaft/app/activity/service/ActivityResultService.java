@@ -552,11 +552,9 @@ public class ActivityResultService {
     @Transactional
     public ActivityResultEntity duplicateActivity(Long id, Long userId, DuplicateActivityRequest request) {
         ActivityResultEntity original = findActivityOrThrow(id);
-        // 複製は元記録の本文・項目値・参加者を写して返す「中身を返す書き込み」。門（親チーム上限）は呼び出し元
-        // ActivityMutationFacade#duplicate → ActivityDetailService#requireActualForAutomatic（TX 外）で先に通す
-        // （門は membership / role を引くため、本 TX 入口に含めない。CMP-261124-0159 F00 §20.5.1・番人 D-3T）。
-        // ここでは書き込みの在籍確認（非メンバーは403。他スコープ会員による複製=IDOR を封じる）
-        scopeAccessGuard.checkMembershipForWrite(userId, original.getScopeType(), original.getScopeId());
+        // 中身を返す書き込み（複製は元記録の本文・項目値・参加者を写して返す）なので門を通す（CMP-261124-0159 F00 §20.5.1）。
+        // 非メンバー・非公開チームの MEMBER 未満は403（他スコープ会員による複製=IDOR も封じる）
+        scopeAccessGuard.checkScopeContentAccess(userId, original.getScopeType(), original.getScopeId());
 
         String title = request != null && request.getTitle() != null
                 ? request.getTitle() : original.getTitle();
@@ -603,9 +601,8 @@ public class ActivityResultService {
     @Transactional
     public List<ActivityParticipantResponse> addParticipants(Long activityId, Long userId, AddParticipantsRequest request) {
         ActivityResultEntity activity = findActivityOrThrow(activityId);
-        // 応答に参加者一覧を含む「中身を返す書き込み」。門は呼び出し元 ActivityMutationFacade →
-        // ActivityDetailService#requireEditPermission（TX 外）で先に通す（CMP-261124-0159 F00 §20.5.1・番人 D-3T）
-        scopeAccessGuard.checkMembershipForWrite(userId, activity.getScopeType(), activity.getScopeId());
+        // 中身を返す書き込み（応答に参加者一覧を含む）なので門を通す（CMP-261124-0159 F00 §20.5.1）
+        scopeAccessGuard.checkScopeContentAccess(userId, activity.getScopeType(), activity.getScopeId());
         entityManager.lock(activity, jakarta.persistence.LockModeType.OPTIMISTIC_FORCE_INCREMENT);
 
         for (Long participantUserId : request.getUserIds()) {
@@ -638,9 +635,8 @@ public class ActivityResultService {
     @Transactional
     public List<ActivityParticipantResponse> removeParticipants(Long activityId, Long userId, RemoveParticipantsRequest request) {
         ActivityResultEntity activity = findActivityOrThrow(activityId);
-        // 応答に参加者一覧を含む「中身を返す書き込み」。門は呼び出し元 ActivityMutationFacade →
-        // ActivityDetailService#requireEditPermission（TX 外）で先に通す（CMP-261124-0159 F00 §20.5.1・番人 D-3T）
-        scopeAccessGuard.checkMembershipForWrite(userId, activity.getScopeType(), activity.getScopeId());
+        // 中身を返す書き込み（応答に参加者一覧を含む）なので門を通す（CMP-261124-0159 F00 §20.5.1）
+        scopeAccessGuard.checkScopeContentAccess(userId, activity.getScopeType(), activity.getScopeId());
         entityManager.lock(activity, jakarta.persistence.LockModeType.OPTIMISTIC_FORCE_INCREMENT);
         participantRepository.deleteByActivityResultIdAndUserIdIn(activityId, request.getUserIds());
         log.info("参加者削除: activityId={}, count={}", activityId, request.getUserIds().size());
