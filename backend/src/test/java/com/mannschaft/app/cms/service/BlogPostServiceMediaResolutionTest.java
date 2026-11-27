@@ -7,6 +7,7 @@ import com.mannschaft.app.cms.media.BlogBodyMediaResolver;
 import com.mannschaft.app.cms.repository.BlogPostRepository;
 import com.mannschaft.app.cms.repository.BlogPostTagRepository;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.storage.quota.StorageScopeType;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.organization.repository.OrganizationRepository;
@@ -94,6 +95,7 @@ class BlogPostServiceMediaResolutionTest {
     @Mock private TeamService teamService;
     @Mock private OrganizationService organizationService;
     @Mock private AccessControlService accessControlService;
+    @Mock private ScopeContentAccessGate scopeContentAccessGate;
     @Mock private PaymentGateService paymentGateService;
     /** 出陣で BlogPostService へ注入されるべき新規依存。 */
     @Mock private BlogBodyMediaResolver blogBodyMediaResolver;

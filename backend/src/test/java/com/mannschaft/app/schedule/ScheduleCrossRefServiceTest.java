@@ -1,6 +1,7 @@
 package com.mannschaft.app.schedule;
 
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.schedule.dto.CrossInviteRequest;
 import com.mannschaft.app.schedule.dto.CrossRefResponse;
 import com.mannschaft.app.schedule.entity.ScheduleCrossRefEntity;
@@ -46,6 +47,9 @@ class ScheduleCrossRefServiceTest {
 
     @Mock
     private com.mannschaft.app.common.AccessControlService accessControlService;
+
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
 
     @InjectMocks
     private ScheduleCrossRefService crossRefService;
@@ -359,12 +363,12 @@ class ScheduleCrossRefServiceTest {
         }
 
         @Test
-        @DisplayName("受信招待一覧_受信側のメンバーでない_COMMON_002")
+        @DisplayName("受信招待一覧_受信側のメンバーでない_または非公開チームの上限を越える_COMMON_002（共通の門。AC-0159-14）")
         void 受信招待一覧_受信側のメンバーでない_COMMON_002() {
             org.mockito.BDDMockito.willThrow(
                             new BusinessException(com.mannschaft.app.common.CommonErrorCode.COMMON_002))
-                    .given(accessControlService)
-                    .checkMembership(USER_ID, TARGET_ID, "TEAM");
+                    .given(scopeContentAccessGate)
+                    .checkScopeContentAccess(USER_ID, TARGET_ID, "TEAM");
 
             assertThatThrownBy(() -> crossRefService.listReceivedInvitations("TEAM", TARGET_ID, USER_ID))
                     .isInstanceOf(BusinessException.class)

@@ -2,6 +2,7 @@ package com.mannschaft.app.schedule.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
@@ -104,6 +105,8 @@ class ScheduleServiceTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
     /**
      * F03.18: {@code detail} JSON のシリアライズに使う。実 ObjectMapper を spy として使い、
      * 通常テストでは実際にシリアライズさせつつ、AC-10 のみ {@code writeValueAsString} を
@@ -792,14 +795,41 @@ class ScheduleServiceTest {
         }
 
         @Test
-        @DisplayName("checkScopeViewAccess_TEAMスケジュール_checkMembershipを呼ぶ")
-        void checkScopeViewAccess_TEAM_checkMembership呼び出し() {
+        @DisplayName("checkScopeViewAccess_TEAMスケジュール_共通の門(checkScopeContentAccess)で判定する（CMP-261124-0159 AC-0159-14）")
+        void checkScopeViewAccess_TEAM_門で判定() {
             ScheduleEntity entity = createTeamScheduleEntity();
             given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
 
             scheduleService.checkScopeViewAccess(SCHEDULE_ID, USER_ID);
 
-            verify(accessControlService).checkMembership(USER_ID, TEAM_ID, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
+            verify(accessControlService, never()).checkMembership(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("checkScopeViewAccess_非公開チームで上限を越える在籍者_門の拒否(COMMON_002)をそのまま返す（AC-0159-14）")
+        void checkScopeViewAccess_TEAM_上限超過は拒否() {
+            ScheduleEntity entity = createTeamScheduleEntity();
+            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            willThrow(new BusinessException(CommonErrorCode.COMMON_002))
+                    .given(scopeContentAccessGate).checkScopeContentAccess(USER_ID, TEAM_ID, "TEAM");
+
+            assertThatThrownBy(() -> scheduleService.checkScopeViewAccess(SCHEDULE_ID, USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.COMMON_002);
+        }
+
+        @Test
+        @DisplayName("checkScopeViewAccess_SYSTEM_ADMINは従来どおり門を通さず許可（上限を課さない。F00 §20.2 規則6）")
+        void checkScopeViewAccess_SYSTEM_ADMINは従来どおり() {
+            ScheduleEntity entity = createTeamScheduleEntity();
+            given(scheduleRepository.findById(SCHEDULE_ID)).willReturn(Optional.of(entity));
+            given(accessControlService.isSystemAdmin(USER_ID)).willReturn(true);
+
+            scheduleService.checkScopeViewAccess(SCHEDULE_ID, USER_ID);
+
+            verify(scopeContentAccessGate, never()).checkScopeContentAccess(any(), any(), any());
         }
 
         @Test

@@ -1,0 +1,17 @@
+# CMP-261124-0159 PR-D2（AC-0159-15）ブログのタグ・連載一覧。先頭が _ のため経路台帳（TEAM パスの GET のみ）との突き合わせ対象外。
+package: _cms
+routes:
+  - id: R-cms-tags
+    method: GET
+    path: /api/v1/blog/tags?teamId={teamId}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW
+  - id: R-cms-series
+    method: GET
+    path: /api/v1/blog/series?teamId={teamId}
+    expect:
+      ADMIN: ALLOW
+      DEPUTY_ADMIN: ALLOW
+      MEMBER: ALLOW

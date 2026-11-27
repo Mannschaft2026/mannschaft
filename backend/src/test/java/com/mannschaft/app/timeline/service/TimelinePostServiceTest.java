@@ -1,6 +1,7 @@
 package com.mannschaft.app.timeline.service;
 
 import com.mannschaft.app.common.AccessControlService;
+import com.mannschaft.app.common.ScopeContentAccessGate;
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.DomainEventPublisher;
@@ -106,6 +107,8 @@ class TimelinePostServiceTest {
     private AccessControlService accessControlService;
 
     @Mock
+    private ScopeContentAccessGate scopeContentAccessGate;
+    @Mock
     private com.mannschaft.app.membership.service.MembershipService membershipService;
 
     @Mock
@@ -195,7 +198,7 @@ class TimelinePostServiceTest {
                     "TEAM", teamId, null, 42L, 2, USER_ID);
 
             assertThat(result).isEmpty();
-            verify(accessControlService).checkMembership(USER_ID, teamId, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, teamId, "TEAM");
             verify(postRepository).findFeedPageByScopeType(
                     PostScopeType.TEAM, teamId, 42L, PageRequest.of(0, 3));
         }
@@ -314,6 +317,7 @@ class TimelinePostServiceTest {
         TimelinePostEntity villagePost9 = TimelinePostEntity.builder()
                 .id(9L).scopeType(PostScopeType.VILLAGE).scopeVillageId(villageId).build();
         given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(1L));
+        given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(1L))).willReturn(Set.of(1L));
         given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of());
         given(postingIdentityService.getActiveVillageIdsByUser(USER_ID)).willReturn(List.of(villageId));
         given(villageAccessGate.findActiveVisibleVillages(List.of(villageId), USER_ID)).willReturn(List.of(village));
@@ -815,7 +819,7 @@ class TimelinePostServiceTest {
             timelinePostService.createPost(req, USER_ID);
 
             // 在籍確認に加えて ADMIN/DEPUTY_ADMIN 確認が課されていること
-            then(accessControlService).should().checkMembership(USER_ID, orgId, "ORGANIZATION");
+            then(scopeContentAccessGate).should().checkMembershipForWrite(USER_ID, orgId, "ORGANIZATION");
             then(accessControlService).should().checkAdminOrAbove(USER_ID, orgId, "ORGANIZATION");
             ArgumentCaptor<TimelinePostEntity> cap = ArgumentCaptor.forClass(TimelinePostEntity.class);
             verify(postRepository).save(cap.capture());
@@ -1040,7 +1044,7 @@ class TimelinePostServiceTest {
             CreatePostRequest req = new CreatePostRequest("非メンバー投稿", "TEAM", teamId,
                     "USER", null, null, null, null, null, null);
             org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessControlService).checkMembership(USER_ID, teamId, "TEAM");
+                    .when(scopeContentAccessGate).checkMembershipForWrite(USER_ID, teamId, "TEAM");
 
             // when & then
             assertThatThrownBy(() -> timelinePostService.createPost(req, USER_ID))
@@ -1060,7 +1064,7 @@ class TimelinePostServiceTest {
             CreatePostRequest req = new CreatePostRequest("非メンバー投稿", "ORGANIZATION", orgId,
                     "USER", null, null, null, null, null, null);
             org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessControlService).checkMembership(USER_ID, orgId, "ORGANIZATION");
+                    .when(scopeContentAccessGate).checkMembershipForWrite(USER_ID, orgId, "ORGANIZATION");
 
             // when & then
             assertThatThrownBy(() -> timelinePostService.createPost(req, USER_ID))
@@ -1090,7 +1094,7 @@ class TimelinePostServiceTest {
 
             // then
             assertThat(result).isNotNull();
-            verify(accessControlService).checkMembership(USER_ID, teamId, "TEAM");
+            verify(scopeContentAccessGate).checkMembershipForWrite(USER_ID, teamId, "TEAM");
             verify(postRepository).save(any(TimelinePostEntity.class));
         }
 
@@ -1112,7 +1116,7 @@ class TimelinePostServiceTest {
 
             // then
             assertThat(result).isNotNull();
-            verify(accessControlService).checkMembership(USER_ID, orgId, "ORGANIZATION");
+            verify(scopeContentAccessGate).checkMembershipForWrite(USER_ID, orgId, "ORGANIZATION");
             verify(postRepository).save(any(TimelinePostEntity.class));
         }
 
@@ -1133,7 +1137,7 @@ class TimelinePostServiceTest {
             timelinePostService.createPost(req, resolvedTeamId, USER_ID);
 
             // then: 永続化された scopeId は slug ではなく解決済み Long、会員チェックも解決済みIDで
-            verify(accessControlService).checkMembership(USER_ID, resolvedTeamId, "TEAM");
+            verify(scopeContentAccessGate).checkMembershipForWrite(USER_ID, resolvedTeamId, "TEAM");
             ArgumentCaptor<TimelinePostEntity> cap = ArgumentCaptor.forClass(TimelinePostEntity.class);
             verify(postRepository).save(cap.capture());
             assertThat(cap.getValue().getScopeType()).isEqualTo(PostScopeType.TEAM);
@@ -1149,7 +1153,7 @@ class TimelinePostServiceTest {
                     "非メンバー投稿", "TEAM", "team-000092", "USER", null, null, null,
                     null, null, null, null, null);
             org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessControlService).checkMembership(USER_ID, resolvedTeamId, "TEAM");
+                    .when(scopeContentAccessGate).checkMembershipForWrite(USER_ID, resolvedTeamId, "TEAM");
 
             // when & then
             assertThatThrownBy(() -> timelinePostService.createPost(req, resolvedTeamId, USER_ID))
@@ -1525,7 +1529,7 @@ class TimelinePostServiceTest {
             List<PostResponse> result = timelinePostService.getFeed("TEAM", teamId, null, 10, USER_ID);
 
             assertThat(result).hasSize(1);
-            verify(accessControlService).checkMembership(USER_ID, teamId, "TEAM");
+            verify(scopeContentAccessGate).checkScopeContentAccess(USER_ID, teamId, "TEAM");
         }
 
         @Test
@@ -1597,7 +1601,7 @@ class TimelinePostServiceTest {
             // given
             Long teamId = 50L;
             org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessControlService).checkMembership(USER_ID, teamId, "TEAM");
+                    .when(scopeContentAccessGate).checkScopeContentAccess(USER_ID, teamId, "TEAM");
 
             // when & then
             assertThatThrownBy(() -> timelinePostService.getFeed("TEAM", teamId, null, 20, USER_ID))
@@ -1635,6 +1639,7 @@ class TimelinePostServiceTest {
         /** membership・repo・mapper の共通スタブ（mapper は与えた raw リストをそのまま返す）。 */
         private void givenFeed(List<PostResponse> rawPosts) {
             given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(TEAM_ID));
+            given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(TEAM_ID))).willReturn(Set.of(TEAM_ID));
             given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of(ORG_ID));
             given(postRepository.findMyFeed(anyList(), anyList(), anyList(), anyList(), anyList(), anyList(), any(), any(PageRequest.class)))
                     .willReturn(List.of());
@@ -1871,6 +1876,7 @@ class TimelinePostServiceTest {
             List<PostResponse> expected = List.of(createPostResponse());
 
             given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(teamId));
+            given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(teamId))).willReturn(Set.of(teamId));
             given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of(orgId));
             given(postRepository.searchByKeyword(
                     eq("テスト"), eq(List.of(teamId)), eq(List.of(orgId)), anyList(), anyList(), eq(USER_ID), eq(10)))
@@ -2172,6 +2178,7 @@ class TimelinePostServiceTest {
             // given: OTHER_USER_ID の投稿を USER_ID が閲覧。USER_ID は teamId=50 所属
             Long teamId = 50L;
             given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(teamId));
+            given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(teamId))).willReturn(Set.of(teamId));
             given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of());
             given(postingIdentityService.getActiveVillageIdsByUser(USER_ID)).willReturn(List.of());
             given(postRepository.findByUserIdVisibleToCaller(
@@ -2513,7 +2520,7 @@ class TimelinePostServiceTest {
             // given
             Long orgId = 60L;
             org.mockito.Mockito.doThrow(new BusinessException(CommonErrorCode.COMMON_002))
-                    .when(accessControlService).checkMembership(USER_ID, orgId, "ORGANIZATION");
+                    .when(scopeContentAccessGate).checkScopeContentAccess(USER_ID, orgId, "ORGANIZATION");
 
             // when & then
             assertThatThrownBy(() -> timelinePostService.getPinnedPosts("ORGANIZATION", orgId, USER_ID))
@@ -3164,4 +3171,65 @@ class TimelinePostServiceTest {
             public long getViewerReactionCount() { return viewerCount; }
         };
     }
+    // ========================================
+    // 親チーム上限（CMP-261124-0159 AC-0159-12）
+    // ========================================
+
+    @Nested
+    @DisplayName("親チーム上限（非公開チームの中身は正式メンバー以上だけ）")
+    class MembersOnlyCap {
+
+        @Test
+        @DisplayName("AC-0159-12 getMyFeed: 在籍していても上限を越えるチーム（門が除外）の投稿は母集団に入れない")
+        void マイフィードは門が除外したチームを母集団に入れない() {
+            given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(1L, 2L));
+            given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(1L, 2L))).willReturn(Set.of(1L));
+            given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of());
+            given(postingIdentityService.getActiveVillageIdsByUser(USER_ID)).willReturn(List.of());
+            given(postRepository.findMyFeed(eq(List.of(1L)), anyList(), anyList(), anyList(), anyList(), anyList(),
+                    any(), any(PageRequest.class))).willReturn(List.of());
+            given(timelineMapper.toPostResponseList(any())).willReturn(List.of());
+
+            timelinePostService.getMyFeed(USER_ID, null, 20);
+
+            verify(postRepository).findMyFeed(eq(List.of(1L)), anyList(), anyList(), anyList(), anyList(), anyList(),
+                    any(), any(PageRequest.class));
+        }
+
+        @Test
+        @DisplayName("AC-0159-12 getUserPosts: 閲覧者の可視チームは門が除外した後の集合だけを渡す")
+        void ユーザー投稿一覧は門が除外したチームを渡さない() {
+            given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(50L, 51L));
+            given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(50L, 51L))).willReturn(Set.of(50L));
+            given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of());
+            given(postingIdentityService.getActiveVillageIdsByUser(USER_ID)).willReturn(List.of());
+            given(postRepository.findByUserIdVisibleToCaller(
+                    eq(OTHER_USER_ID), eq(USER_ID), eq(List.of(50L)), eq(List.of(-1L)), anyList(), anyList(), anyList(),
+                    any(PageRequest.class))).willReturn(List.of());
+            given(timelineMapper.toPostResponseList(any())).willReturn(List.of());
+
+            timelinePostService.getUserPosts(OTHER_USER_ID, 10, USER_ID);
+
+            verify(postRepository).findByUserIdVisibleToCaller(
+                    eq(OTHER_USER_ID), eq(USER_ID), eq(List.of(50L)), eq(List.of(-1L)), anyList(), anyList(), anyList(),
+                    any(PageRequest.class));
+        }
+
+        @Test
+        @DisplayName("AC-0159-12 searchPosts: 検索の母集団も門が除外したチームを含まない")
+        void 検索は門が除外したチームを母集団に入れない() {
+            given(membershipService.getActiveTeamIdsByUser(USER_ID)).willReturn(List.of(50L, 51L));
+            given(scopeContentAccessGate.filterAccessibleTeamIds(USER_ID, List.of(50L, 51L))).willReturn(Set.of(50L));
+            given(membershipService.getActiveOrgIdsByUser(USER_ID)).willReturn(List.of());
+            given(postRepository.searchByKeyword(eq("テスト"), eq(List.of(50L)), eq(List.of(-1L)), anyList(), anyList(),
+                    eq(USER_ID), eq(10))).willReturn(List.of());
+            given(timelineMapper.toPostResponseList(any())).willReturn(List.of());
+
+            timelinePostService.searchPosts("テスト", 10, USER_ID);
+
+            verify(postRepository).searchByKeyword(eq("テスト"), eq(List.of(50L)), eq(List.of(-1L)), anyList(), anyList(),
+                    eq(USER_ID), eq(10));
+        }
+    }
+
 }
