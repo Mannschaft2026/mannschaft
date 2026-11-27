@@ -132,10 +132,14 @@ class RoleMembershipLeaveContractIT extends AbstractMySqlIntegrationTest {
     }
 
     private Long saveTeam() {
+        return saveTeam(TeamEntity.Visibility.MEMBERS_AND_ABOVE);
+    }
+
+    private Long saveTeam(TeamEntity.Visibility visibility) {
         return teamRepository.save(TeamEntity.builder()
                 .slug("team-" + SEQ.incrementAndGet())
                 .name("契約テスト用チーム")
-                .visibility(TeamEntity.Visibility.MEMBERS_AND_ABOVE)
+                .visibility(visibility)
                 .supporterEnabled(true)
                 .build()).getId();
     }
@@ -368,7 +372,9 @@ class RoleMembershipLeaveContractIT extends AbstractMySqlIntegrationTest {
         @Test
         @DisplayName("AC8: user_roles無しのSUPPORTERは会員退会経路を使えない（CMP-261001-0835 でROLE_015/422へ仕様変更）")
         void ac8_bareSupporterCannotUseMemberLeave() {
-            Long teamId = saveTeam();
+            // CMP-261124-0159: 非公開チーム（MEMBERS_AND_ABOVE）にはサポーター在籍を作れない（入口の関所 TEAM_073）。
+            // サポーターが在籍できる公開範囲のチームで、自主退会経路の拒否だけを確かめる。
+            Long teamId = saveTeam(TeamEntity.Visibility.SUPPORTERS_AND_ABOVE);
             Long user = 9054L;
             enrollBare(user, ScopeType.TEAM, teamId, RoleKind.SUPPORTER);
 

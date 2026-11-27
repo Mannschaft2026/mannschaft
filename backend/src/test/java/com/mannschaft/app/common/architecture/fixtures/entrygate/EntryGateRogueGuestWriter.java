@@ -13,7 +13,10 @@ public class EntryGateRogueGuestWriter {
 
     public List<UserRoleEntity> bypass(Long userId, Long teamId, Long guestRoleId) {
         return List.of(userId).stream()
-                .map(id -> UserRoleEntity.builder().userId(id).roleId(guestRoleId).teamId(teamId).build())
+                .map(id -> {
+                    UserRoleEntity row = UserRoleEntity.builder().userId(id).roleId(guestRoleId).teamId(teamId).build();
+                    return row;
+                })
                 .toList();
     }
 }

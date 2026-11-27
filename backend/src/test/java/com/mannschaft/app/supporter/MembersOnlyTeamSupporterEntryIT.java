@@ -182,10 +182,10 @@ class MembersOnlyTeamSupporterEntryIT extends AbstractMySqlIntegrationTest {
 
         assertThat(e.getErrorCode()).isEqualTo(TeamErrorCode.TEAM_073);
         assertThat(activeSupporterCount(outsider)).isZero();
-        assertThat(tx.execute(t -> ((Number) em.createNativeQuery("SELECT COUNT(*) FROM supporter_applications "
+        Long applications = tx.execute(t -> ((Number) em.createNativeQuery("SELECT COUNT(*) FROM supporter_applications "
                         + "WHERE scope_type = 'TEAM' AND scope_id = :t AND user_id = :u")
-                .setParameter("t", fixture.teamId).setParameter("u", outsider).getSingleResult()).longValue()))
-                .isZero();
+                .setParameter("t", fixture.teamId).setParameter("u", outsider).getSingleResult()).longValue());
+        assertThat(applications).as("PENDING 申請も作らない").isZero();
     }
 
     @Test
