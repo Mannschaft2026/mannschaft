@@ -67,6 +67,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * 一致だけでは両方壊れたとき偽 green になるため、絶対値（404 / {@code JOB_NOT_FOUND} / 本文言）も固定する。
  * 可視範囲の正当な閲覧者は従来どおり 200。</p>
  *
+ * <p>注: DRAFT の閲覧範囲は 2026-11-27 マスター裁定（作成者のみ、SYSTEM_ADMIN も不可）で別行の戦役にしたため、本クラスでは SYSTEM_ADMIN の DRAFT 閲覧を固定しない。</p>
+ *
  * <p>金型: {@link JobPostingApplicationWriteBodyParityContractIT}（実 DB・実フィルタ・実トークン、spy なし）。</p>
  */
 @AutoConfigureMockMvc(addFilters = true)
@@ -218,7 +220,7 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
     }
 
     @Test
-    @DisplayName("AC-1118-3: 可視範囲の正当な閲覧者は従来どおり 200（同TEAMメンバー・下書きの作成者・PUBLIC相当は誰でも・SYSTEM_ADMINはDRAFT/CANCELLEDも）")
+    @DisplayName("AC-1118-3: 可視範囲の正当な閲覧者は従来どおり 200（同TEAMメンバー・下書きの作成者・PUBLIC相当は誰でも・SYSTEM_ADMINはCANCELLEDも）")
     void AC_1118_3_正当な閲覧者は200() throws Exception {
         record Case(String name, Long actor, Long posting) { }
         List<Case> cases = List.of(
@@ -227,7 +229,6 @@ class JobDetailExistenceOracleParityContractIT extends AbstractMySqlIntegrationT
                 new Case("作成者→DRAFT", requester, draft),
                 new Case("所属なし→JOBBER_PUBLIC_BOARD", outsider, publicBoard),
                 new Case("他TEAMのADMIN→JOBBER_PUBLIC_BOARD", foreignAdmin, publicBoard),
-                new Case("SYSTEM_ADMIN→DRAFT", systemAdmin, draft),
                 new Case("SYSTEM_ADMIN→CANCELLED", systemAdmin, cancelled));
         for (Case c : cases) {
             MvcResult result = call(tokens.issueAccessToken(c.actor(), List.of("USER")), c.posting());
