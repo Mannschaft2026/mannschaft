@@ -233,16 +233,18 @@ test('処理 AC-11: head の反映遅れ（current が push 前 head）は待っ
   assert.deepEqual(sleeps, [10_000, 10_000]);
 });
 
-test('処理 AC-11: 反映遅れが続いても最大6回待つだけで、実時間は待たず fixed-head-moved にする', async () => {
+test('処理 AC-11: 反映遅れが続いて6回待っても上限に達したら、第三の commit とは別の分類・別メッセージで失敗にする', async () => {
   const env = mockEnv();
   const target = pr();
   sequencedAutoMerge(env, [{ ok: false, headMismatch: true, current: target.headRefOid, error: 'stale' }]);
   const sleeps = [];
   env.deps.sleep = async (ms) => { sleeps.push(ms); };
   const result = await processPullRequest(target, env.deps);
-  assert.equal(result.outcome, 'fixed-head-moved');
+  assert.equal(result.outcome, 'fixed-head-not-reflected');
   assert.equal(sleeps.length, 6);
   assert.equal(env.autoMergeCalls.length, 7);
+  assert.match(env.comments[0].body, /反映を確認できず/);
+  assert.doesNotMatch(env.comments[0].body, /別の commit へ進んだため/);
 });
 
 test('処理 AC-11: push 前 head でも作った commit でもない第三の commit は待たず headMismatch', async () => {

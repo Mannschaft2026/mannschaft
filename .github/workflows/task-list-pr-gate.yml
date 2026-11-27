@@ -32,9 +32,31 @@ jobs:
           script: |
             const payloadPull = context.payload.pull_request;
             if (!payloadPull) throw new Error('pull_request payload is missing');
-            const { data } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: payloadPull.number });
-            core.setOutput('base_sha', data.base.sha);
-            core.setOutput('head_sha', data.head.sha);
+            const { owner, repo } = context.repo;
+            const maxAttempts = 6;
+            let latest;
+            for (let attempt = 1; ; attempt++) {
+              latest = (await github.rest.pulls.get({ owner, repo, pull_number: payloadPull.number })).data;
+              // 実行コードの取得元は、この repo の保護された main に限る（base を未レビューの別ブランチへ変えた PR のコードを実行しない）。
+              if (latest.base.repo?.full_name !== `${owner}/${repo}` || latest.base.ref !== 'main') {
+                throw new Error(`The PR base must be main of ${owner}/${repo} (got ${latest.base.repo?.full_name}:${latest.base.ref}); the trusted checker is never loaded from another branch.`);
+              }
+              if (latest.head.sha === payloadPull.head.sha) break;
+              // head が食い違う。実際のブランチ ref で「payload が古い run」と「API の反映遅れ」を区別する。
+              const headRepo = payloadPull.head.repo;
+              if (!headRepo) throw new Error('The PR head repository is unavailable; the head ref cannot be verified.');
+              const refResponse = await github.rest.git.getRef({ owner: headRepo.owner.login, repo: headRepo.name, ref: `heads/${payloadPull.head.ref}` });
+              if (refResponse.data.object.sha !== payloadPull.head.sha) {
+                core.notice(`PR head moved (${payloadPull.head.sha} -> ${refResponse.data.object.sha}); this run is stale and a newer run decides.`);
+                core.setOutput('stale', 'true');
+                return;
+              }
+              // ref は payload と同じ head のまま、pulls.get だけが旧 head を返している（反映遅れ）。上限付きで取り直す。
+              if (attempt >= maxAttempts) throw new Error(`pulls.get kept returning a different head (${latest.head.sha}) than the branch ref (${payloadPull.head.sha}) after ${maxAttempts} attempts; the PR cannot be verified.`);
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            core.setOutput('base_sha', latest.base.sha);
+            core.setOutput('pull', JSON.stringify({ number: latest.number, title: latest.title, body: latest.body, created_at: latest.created_at, changed_files: latest.changed_files, base: { sha: latest.base.sha, ref: latest.base.ref }, head: { sha: latest.head.sha } }));
 
       # pull_request_target では必ず信頼 base SHA（最新）をcheckoutする。PRのソースはcheckout/import/実行しない。
       - name: Checkout trusted base
@@ -44,9 +66,10 @@ jobs:
           persist-credentials: false
 
       - name: Validate registration and completion evidence
+        if: steps.latest.outputs.stale != 'true'
         uses: actions/github-script@v9
         env:
-          TRUSTED_BASE_SHA: ${{ steps.latest.outputs.base_sha }}
+          LATEST_PULL: ${{ steps.latest.outputs.pull }}
         with:
           script: |
             const fs = require('node:fs');
@@ -80,14 +103,8 @@ jobs:
 
             const payloadPull = context.payload.pull_request;
             if (!payloadPull) throw new Error('pull_request payload is missing');
-            // 最新の PR（title/body/base.sha/head.sha）で判定する。ペイロードと head が食い違えば新しい run に任せる。
-            const latestPull = (await github.rest.pulls.get({ owner, repo, pull_number: payloadPull.number })).data;
-            if (latestPull.head.sha !== payloadPull.head.sha) {
-              core.notice(`PR head moved (${payloadPull.head.sha} -> ${latestPull.head.sha}); this run is stale and a newer run decides.`);
-              return;
-            }
-            // checkout 済みの信頼 base と同じ SHA で判定する（検査コードと台帳読み出しの世代を揃える）。
-            const pull = { ...latestPull, base: { ...latestPull.base, sha: process.env.TRUSTED_BASE_SHA || latestPull.base.sha } };
+            // 判定は取得ステップで確認済みの最新の PR（title/body/base.sha/head.sha）で行う。base.sha は checkout 済みの信頼 base と同じ。
+            const pull = process.env.LATEST_PULL ? JSON.parse(process.env.LATEST_PULL) : payloadPull;
             const { pathToFileURL } = require('node:url');
             const validatorPath = path.join(process.cwd(), 'scripts', 'completion-evidence.mjs');
             const validatorAvailable = fs.existsSync(validatorPath);

@@ -298,7 +298,12 @@ export async function processPullRequest(pr, deps) {
       if (result.headMismatch) {
         // push 直後は PR head の反映が遅れ、push 前の head（headOid）が返ることがある。反映待ちとして再試行する。
         // push 前 head でも作った commit でもない第三の commit のときだけ headMismatch として扱う。
-        if (result.current === headOid && reflectWaits < HEAD_REFLECT_MAX_WAITS) {
+        if (result.current === headOid) {
+          if (reflectWaits >= HEAD_REFLECT_MAX_WAITS) {
+            // 第三の commit ではない。反映待ちが上限に達しただけなので、headMismatch とは別の失敗として扱う。
+            result = { ok: false, headNotReflected: true, error: 'PR head が ' + HEAD_REFLECT_MAX_WAITS + ' 回待っても push 前の ' + headOid + ' のまま（作成した ' + mergeCommit + ' が反映されない）' };
+            break;
+          }
           reflectWaits++;
           log(tag + ': PR head が push 前のまま（反映待ち ' + reflectWaits + '/' + HEAD_REFLECT_MAX_WAITS + '）');
           await sleep(HEAD_REFLECT_WAIT_MS);
@@ -313,6 +318,10 @@ export async function processPullRequest(pr, deps) {
     }
     if (result.ok) {
       autoMergeNote = 'auto-merge（SQUASH）を予約し直しました。必須チェックが緑になると自動で merge queue へ入ります。';
+    } else if (result.headNotReflected) {
+      outcome = 'fixed-head-not-reflected';
+      log(tag + ': auto-merge を予約できなかった（反映待ちの上限: ' + result.error + '）');
+      autoMergeNote = '**push 後の head 反映を確認できず、auto-merge を予約できませんでした**（' + result.error + '。別の commit が積まれたわけではありません）。head が `' + mergeCommit + '` になっていることを確かめてから `gh pr merge ' + pr.number + ' --squash` で予約してください。';
     } else if (result.headMismatch) {
       outcome = 'fixed-head-moved';
       log(tag + ': push 後に head が ' + mergeCommit + ' から動いたため auto-merge を予約し直さない（' + result.error + '）');
