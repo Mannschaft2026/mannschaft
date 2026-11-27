@@ -2,7 +2,10 @@ package com.mannschaft.app.school.service;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.common.CommonErrorCode;
+import com.mannschaft.app.common.NameResolverService;
 import com.mannschaft.app.schedule.AttendanceStatus;
+import com.mannschaft.app.school.dto.DailyAttendanceListResponse;
+import com.mannschaft.app.school.dto.DailyAttendanceResponse;
 import com.mannschaft.app.school.dto.DailyAttendanceUpdateRequest;
 import com.mannschaft.app.school.dto.DailyRollCallEntry;
 import com.mannschaft.app.school.dto.DailyRollCallRequest;
@@ -67,8 +70,30 @@ class SchoolAttendanceFacadesAuthzTest {
         @Mock
         private SchoolAttendanceAccessPolicy policy;
 
+        @Mock
+        private NameResolverService nameResolverService;
+
         @InjectMocks
         private DailyAttendanceFacade facade;
+
+        @Test
+        @DisplayName("一覧取得: 生徒氏名を 1 回のバッチ解決で付与し、解決できない生徒(退会者等)は null")
+        void list_studentDisplayName_batchResolved() {
+            DailyAttendanceResponse r1 = DailyAttendanceResponse.builder().id(1L).studentUserId(10L).build();
+            DailyAttendanceResponse r2 = DailyAttendanceResponse.builder().id(2L).studentUserId(11L).build();
+            given(service.getDailyAttendance(TEAM_ID, DATE)).willReturn(
+                    DailyAttendanceListResponse.builder().teamId(TEAM_ID).totalCount(2)
+                            .records(List.of(r1, r2)).build());
+            given(nameResolverService.resolveUserFullNames(any())).willReturn(java.util.Map.of(10L, "山田 太郎"));
+
+            DailyAttendanceListResponse res = facade.getDailyAttendance(TEAM_ID, DATE, OPERATOR);
+
+            org.assertj.core.api.Assertions.assertThat(res.getRecords().get(0).getStudentDisplayName())
+                    .isEqualTo("山田 太郎");
+            org.assertj.core.api.Assertions.assertThat(res.getRecords().get(1).getStudentDisplayName()).isNull();
+            org.assertj.core.api.Assertions.assertThat(res.getTotalCount()).isEqualTo(2);
+            verify(nameResolverService, org.mockito.Mockito.times(1)).resolveUserFullNames(any());
+        }
 
         private DailyRollCallRequest request() {
             DailyRollCallEntry entry = new DailyRollCallEntry();

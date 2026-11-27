@@ -34,7 +34,8 @@
         "arrivalTime": "到校时间",
         "leaveTime": "离校时间",
         "loading": "加载中...",
-        "noStudents": "未找到学生"
+        "noStudents": "未找到学生",
+        "unknownStudent": "未知学生"
       },
       "period": {
         "title": "课时出勤",

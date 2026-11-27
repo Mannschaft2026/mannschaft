@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260826-1041",
+  "scope": "tooling",
+  "implementation": {
+    "pr": 3685,
+    "sha": "b264b5a3b82eb77187d872005285c3a98962c4a5"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "処遇台帳の処遇列が全行埋まり、停滞PRの現況（MERGED・CLOSED・意図的OPEN維持）がGitHubの実状態と一致している",
+      "tests": [
+        {
+          "name": "処遇台帳の全行照合（#3685 MERGED・#1317 CLOSED・#1502 OPEN維持をREST実測で確認）",
+          "evidence": "docs/development/stalled_open_prs.md"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "閉じたPRには理由が残り、最後に残った依存更新 #3685 がマージされている",
+      "tests": [
+        {
+          "name": "#3685 のマージと #1317 の理由コメント付きクローズ",
+          "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/3685"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45535362904 },
+    { "runId": 45535362976 },
+    { "runId": 45535363000 },
+    { "runId": 45535363074 },
+    { "runId": 45535359185 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/3685"
+    },
+    "real": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "PRの棚卸しと台帳更新のみで、利用者向け画面・APIの変更がない"
+    },
+    "exploratory": {
+      "status": "not-applicable",
+      "scope": "tooling",
+      "reason": "PRの棚卸しと台帳更新のみで、導線を変えない"
+    }
+  },
+  "regressions": []
+}

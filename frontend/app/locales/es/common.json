@@ -3354,6 +3354,27 @@
       "created_at": "Emitido el",
       "expires_at": "Caduca el",
       "used_count": "Veces usado"
+    },
+    "signage": {
+      "section": "Tokens de pantallas",
+      "issue": "Emitir token",
+      "device_name": "Nombre del dispositivo",
+      "device_placeholder": "p. ej. Monitor de entrada",
+      "empty": "No hay tokens",
+      "issued_title": "Token del dispositivo emitido",
+      "no_expiry": "Sin caducidad",
+      "inactive": "Revocado",
+      "reissue_confirm": "Se emitirá un enlace nuevo y se revocará este token. ¿Continuar?",
+      "revoke_confirm": "¿Revocar este token?",
+      "issue_success": "Token emitido",
+      "issue_failed": "No se pudo emitir el token",
+      "reissue_success": "Token reemitido",
+      "reissue_failed": "No se pudo reemitir el token",
+      "revoke_success": "Token revocado",
+      "revoke_failed": "No se pudo revocar el token",
+      "name_required": "Introduzca el nombre del dispositivo",
+      "token_label": "Token que se configura en el dispositivo",
+      "reissue_revoke_failed": "El nuevo token se emitió, pero no se pudo revocar el anterior. Revóquelo manualmente"
     }
   },
   "globalSearch": {

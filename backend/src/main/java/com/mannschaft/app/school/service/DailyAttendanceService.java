@@ -190,8 +190,10 @@ public class DailyAttendanceService {
         List<DailyAttendanceRecordEntity> records =
                 dailyAttendanceRecordRepository.findByTeamIdAndAttendanceDate(teamId, date);
 
+        // 生徒氏名（studentDisplayName）は他ドメイン(auth)参照のため D-3T により本 TX 内では解決しない。
+        // DailyAttendanceFacade（TX の外）が付与する。ここでは null のまま返す。
         List<DailyAttendanceResponse> responseList = records.stream()
-                .map(DailyAttendanceResponse::from)
+                .map(r -> DailyAttendanceResponse.from(r))
                 .toList();
 
         int presentCount = (int) records.stream()
