@@ -91,6 +91,7 @@ Scene は登録された同個体・同段階の静止 fallback を動き抑制�
 | 正式名称 | Mannschaft |
 | リポジトリ名 | mannschaft |
 | パッケージ名 | com.mannschaft.app |
+| 課題台帳 | 戦役をまたぐ課題の正本。索引 [docs/task-list.md](docs/task-list.md)（規約のみ）＋ 月別の行 `docs/task-list/YYYY-MM.md`（新しい行は ID の月のファイルの末尾に追加し、無ければ作る）。全体表: `node scripts/task-list-ledger.mjs render [--open] [--priority P1] [--month YYYY-MM]` |
 
 モジュール式テンプレートにより、スポーツチーム、整骨院、学校、会社、飲食店、美容室、ジム、町内会など業種を問わず柔軟に対応する。
 独自のタイムライン（X風UI）やSlack風チャットを備え、メンバー間のコミュニケーションと外部への情報発信を両立する。
