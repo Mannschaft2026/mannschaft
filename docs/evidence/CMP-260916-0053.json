@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260916-0053",
+  "scope": "app",
+  "implementation": {
+    "pr": 4885,
+    "sha": "2448bf28f0bbf33026572848fe32967e062cc535"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "管理画面の通報一覧（GET /api/v1/system-admin/reports）を status で絞り込め、未指定なら全件を返す",
+      "tests": [
+        {
+          "name": "ReportActionServiceAdditionalTest#全通報をページング取得できる / ステータスで絞り込める",
+          "evidence": "backend/src/test/java/com/mannschaft/app/moderation/service/ReportActionServiceAdditionalTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "未定義の status は入力エラー（COMMON_001 → 400）になる",
+      "tests": [
+        {
+          "name": "ReportActionServiceAdditionalTest#不正なステータスは入力エラー",
+          "evidence": "backend/src/test/java/com/mannschaft/app/moderation/service/ReportActionServiceAdditionalTest.java"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "古い応答が後から届いても、最新の絞り込みの一覧と総件数を上書きしない",
+      "tests": [
+        {
+          "name": "useAdminReports の要求番号 > 古い応答が後から届いても、最新の絞り込みの一覧と総件数を上書きしない",
+          "evidence": "frontend/app/composables/useAdminReports.race.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45576410235
+    },
+    {
+      "runId": 45576410277
+    },
+    {
+      "runId": 45602293457
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4885"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260916-0053-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260916-0053-real.md"
+    }
+  },
+  "regressions": []
+}

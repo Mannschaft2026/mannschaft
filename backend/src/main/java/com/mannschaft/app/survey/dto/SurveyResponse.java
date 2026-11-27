@@ -7,6 +7,7 @@ import com.mannschaft.app.survey.UnrespondedVisibility;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 /**
@@ -40,7 +41,9 @@ public class SurveyResponse {
 
     public record SurveyDistributionDto(DistributionMode distributionMode, Boolean autoPostToTimeline,
                                          String seriesId, String remindBeforeHours, Integer manualRemindCount,
-                                         Boolean includeSupporters) {}
+                                         Boolean includeSupporters,
+                                         Instant lastRemindedAt, Integer remindMaxCount,
+                                         Instant nextRemindableAt) {}
 
     public record SurveyScheduleDto(LocalDateTime startsAt, LocalDateTime expiresAt,
                                      LocalDateTime publishedAt, LocalDateTime closedAt) {}

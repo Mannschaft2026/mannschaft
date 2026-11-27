@@ -1,5 +1,6 @@
 package com.mannschaft.app.survey;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.membership.domain.RoleKind;
 import com.mannschaft.app.membership.domain.ScopeType;
@@ -24,11 +25,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -362,6 +368,102 @@ class SurveyDetailShapeContractIT extends AbstractMySqlIntegrationTest {
                     .andExpect(jsonPath("$.data.id").value(emptySurveyId))
                     .andExpect(jsonPath("$.data.questions").isArray())
                     .andExpect(jsonPath("$.data.questions.length()").value(0));
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // CMP-261125-2221 AC1 — 督促の残り回数・次回送信可能時刻を詳細応答で返す
+    // ═════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("CMP-261125-2221 AC1: distribution に督促の状態（lastRemindedAt / remindMaxCount / nextRemindableAt）を含む")
+    class RemindStatus {
+
+        /** 未送信: lastRemindedAt=null, remindMaxCount=3, nextRemindableAt=null。 */
+        @Test
+        @DisplayName("AC1: 未送信のアンケートは lastRemindedAt=null・remindMaxCount=3・nextRemindableAt=null")
+        void ac1_neverReminded() throws Exception {
+            setAuth(adminTeamAId);
+            mockMvc.perform(get("/api/v1/teams/{slug}/surveys/{id}", TEAM_A_SLUG, publishedSurveyTeamAId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.distribution.manualRemindCount").value(0))
+                    .andExpect(jsonPath("$.data.distribution.remindMaxCount").value(3))
+                    // キー自体は存在すること（null でも省略しない＝FE が判定に使う契約）
+                    .andExpect(jsonPath("$.data.distribution", hasKey("lastRemindedAt")))
+                    .andExpect(jsonPath("$.data.distribution", hasKey("nextRemindableAt")))
+                    .andExpect(jsonPath("$.data.distribution.lastRemindedAt").value(nullValue()))
+                    .andExpect(jsonPath("$.data.distribution.nextRemindableAt").value(nullValue()));
+        }
+
+        /** 1回送信直後: nextRemindableAt = lastRemindedAt + 24h。 */
+        @Test
+        @DisplayName("AC1: 1回督促した直後は nextRemindableAt が lastRemindedAt の24時間後")
+        void ac1_justRemindedOnce() throws Exception {
+            setAuth(adminTeamAId);
+            mockMvc.perform(post("/api/v1/surveys/{id}/remind", publishedSurveyTeamAId))
+                    .andExpect(status().isOk());
+            em.flush();
+            em.clear();
+
+            String body = mockMvc.perform(
+                            get("/api/v1/teams/{slug}/surveys/{id}", TEAM_A_SLUG, publishedSurveyTeamAId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.distribution.manualRemindCount").value(1))
+                    .andExpect(jsonPath("$.data.distribution.remindMaxCount").value(3))
+                    .andExpect(jsonPath("$.data.distribution.lastRemindedAt").isString())
+                    .andExpect(jsonPath("$.data.distribution.nextRemindableAt").isString())
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+            JsonNode distribution = objectMapper.readTree(body).path("data").path("distribution");
+            // BE の LocalDateTimeTimezoneSerializer はオフセット付き ISO（例 +09:00）で出すため OffsetDateTime で読む
+            OffsetDateTime last = OffsetDateTime.parse(distribution.path("lastRemindedAt").asText());
+            OffsetDateTime next = OffsetDateTime.parse(distribution.path("nextRemindableAt").asText());
+            assertThat(next).isEqualTo(last.plusHours(24));
+        }
+
+        /** 前回から24h経過済み: nextRemindableAt は null（今すぐ送れる）。 */
+        @Test
+        @DisplayName("AC1: 前回督促から24時間経過済みなら nextRemindableAt=null")
+        void ac1_cooldownElapsed() throws Exception {
+            Long surveyId = insertRemindedSurvey(LocalDateTime.now().minusHours(25), 1);
+            setAuth(adminTeamAId);
+            mockMvc.perform(get("/api/v1/teams/{slug}/surveys/{id}", TEAM_A_SLUG, surveyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.distribution.manualRemindCount").value(1))
+                    .andExpect(jsonPath("$.data.distribution.remindMaxCount").value(3))
+                    .andExpect(jsonPath("$.data.distribution.lastRemindedAt").isString())
+                    .andExpect(jsonPath("$.data.distribution", hasKey("nextRemindableAt")))
+                    .andExpect(jsonPath("$.data.distribution.nextRemindableAt").value(nullValue()));
+        }
+
+        /** 上限到達: 24h 以内でも nextRemindableAt は null（もう送れないため時刻を示さない）。 */
+        @Test
+        @DisplayName("AC1: 上限（3回）到達なら24時間以内でも nextRemindableAt=null")
+        void ac1_quotaReached() throws Exception {
+            Long surveyId = insertRemindedSurvey(LocalDateTime.now().minusHours(1), 3);
+            setAuth(adminTeamAId);
+            mockMvc.perform(get("/api/v1/teams/{slug}/surveys/{id}", TEAM_A_SLUG, surveyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.distribution.manualRemindCount").value(3))
+                    .andExpect(jsonPath("$.data.distribution.remindMaxCount").value(3))
+                    .andExpect(jsonPath("$.data.distribution.lastRemindedAt").isString())
+                    .andExpect(jsonPath("$.data.distribution", hasKey("nextRemindableAt")))
+                    .andExpect(jsonPath("$.data.distribution.nextRemindableAt").value(nullValue()));
+        }
+
+        private Long insertRemindedSurvey(LocalDateTime lastRemindedAt, int manualRemindCount) {
+            SurveyEntity saved = surveyRepository.save(SurveyEntity.builder()
+                    .scopeType("TEAM")
+                    .scopeId(teamAId)
+                    .title("SVSHAPE 督促済み")
+                    .status(SurveyStatus.PUBLISHED)
+                    .createdBy(adminTeamAId)
+                    .lastRemindedAt(lastRemindedAt)
+                    .manualRemindCount(manualRemindCount)
+                    .build());
+            em.flush();
+            em.clear();
+            return saved.getId();
         }
     }
 

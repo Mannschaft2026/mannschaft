@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-261125-1336",
+  "scope": "app",
+  "implementation": {
+    "pr": 4900,
+    "sha": "59a25ab9fbb17d3e990c04e76e504a4c4730809e"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-1",
+      "description": "390px 幅でシフトボードの見出しが折れず、表を横スクロールしても日付・時間帯の列が固定され、各枠の割当（名札）と割当・解除操作が画面内で行える（ページ本体の横はみ出しなし、操作は44px）",
+      "tests": [
+        {
+          "name": "shift-board-mobile.spec.ts（Playwright mobile: 360/390/767/768px）",
+          "evidence": "frontend/tests/e2e/mobile/shift-board-mobile.spec.ts"
+        },
+        {
+          "name": "ShiftBoardMatrix.spec.ts",
+          "evidence": "frontend/tests/unit/components/shift/ShiftBoardMatrix.spec.ts"
+        },
+        {
+          "name": "shift-board-mobile-1336.real.spec.ts（S1-a〜S1-e 実機）",
+          "evidence": "frontend/tests/e2e/real/shift-board-mobile-1336.real.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "各枠が「〇 / 〇人」と満員表示になり、満員の枠は追加不可で理由が出る。追加・解除の失敗後は枠を再取得し、二度押しでも PATCH は1回",
+      "tests": [
+        {
+          "name": "ShiftBoardCell.spec.ts",
+          "evidence": "frontend/tests/unit/components/shift/ShiftBoardCell.spec.ts"
+        },
+        {
+          "name": "useShiftBoard.spec.ts",
+          "evidence": "frontend/tests/unit/composables/useShiftBoard.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "「メンバーを追加」で、その枠にいる人は出ず、時間が一部でも重なる別枠（日跨ぎ含む。端点接触は重ならない）の人は理由付きで選べない",
+      "tests": [
+        {
+          "name": "shiftOverlap.spec.ts",
+          "evidence": "frontend/tests/unit/utils/shiftOverlap.spec.ts"
+        },
+        {
+          "name": "ShiftAddMemberDialog.spec.ts",
+          "evidence": "frontend/tests/unit/components/shift/ShiftAddMemberDialog.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "割当の操作（追加・×・未割当一覧・自動割当）は ADMIN と MANAGE_SHIFTS を持つ副管理者にだけ出る。権限なし副管理者・一般メンバー・他チーム ADMIN では操作が出ず、URL 直打ちでも弾かれる",
+      "tests": [
+        {
+          "name": "board.spec.ts",
+          "evidence": "frontend/app/pages/teams/[slug]/shifts/[scheduleId]/board.spec.ts"
+        },
+        {
+          "name": "shift-board-team-mismatch.spec.ts",
+          "evidence": "frontend/tests/unit/pages/teams/shift-board-team-mismatch.spec.ts"
+        },
+        {
+          "name": "shift-board-mobile-1336.real.spec.ts（S2-a・S2-b・S3 実機）",
+          "evidence": "frontend/tests/e2e/real/shift-board-mobile-1336.real.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "概要カレンダー（/shift/{id}）で枠の札「1/3」が切れず、360px で右端が画面内に収まる。権限のない閲覧者には伏せた枠が「割当は非公開」と表示される",
+      "tests": [
+        {
+          "name": "shift-board-mobile-1336.real.spec.ts（S6 実機）",
+          "evidence": "frontend/tests/e2e/real/shift-board-mobile-1336.real.spec.ts"
+        },
+        {
+          "name": "shift-board-mobile.spec.ts（概要カレンダー）",
+          "evidence": "frontend/tests/e2e/mobile/shift-board-mobile.spec.ts"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    { "runId": 45753950716 },
+    { "runId": 45753950750 },
+    { "runId": 45753950812 },
+    { "runId": 45753950856 },
+    { "runId": 45753950792 },
+    { "runId": 45753950797 },
+    { "runId": 45753950754 },
+    { "runId": 45753946326 }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4900"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261125-1336-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-261125-1336-exploratory.md"
+    }
+  },
+  "regressions": []
+}

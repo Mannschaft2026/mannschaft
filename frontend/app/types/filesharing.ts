@@ -51,7 +51,6 @@ export interface SharedFile {
 export interface PublicFileLink {
   id: number
   fileId: number
-  token: string
   downloadAllowed: boolean
   hasPassword: boolean
   active: boolean
