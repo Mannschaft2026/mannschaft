@@ -184,7 +184,7 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
     // =========================================================================
 
     @Test
-    @DisplayName("一般ユーザー × directScopes 単一 TEAM → 該当所属を返し SQL 数 ≦ 4")
+    @DisplayName("一般ユーザー × directScopes 単一 TEAM → 該当所属を返し SQL 数 ≦ 5（CMP-261124-0159 非公開チーム判定 +1）")
     void 一般ユーザー_directScopes単一TEAM() {
         // 配置: ユーザーは TEAM1 に MEMBER として所属
         insertUserRole(userId, memberRoleId, teamId1, null);
@@ -203,9 +203,10 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
         // F00.5 §8.3 で memberships 由来 MEMBER/SUPPORTER を roleByScope へマージするため、
         // memberships 専属ロール解決用の単一バッチクエリが 1 本増えた（N+1 ではなく O(1)）。
         // SQL 数の番人として、緩めすぎない正しい新下限 ≦4 で締め直す。
+        // CMP-261124-0159（F00 §20.2 規則 5）: direct に TEAM があるとき非公開チームの判定（teams の主キー IN）が 1 本増える。
         assertThat(stats.getPrepareStatementCount())
-                .as("directScopes 単一 TEAM の SQL 数は 4 以下であるべし（memberships role_kind バッチ +1）")
-                .isLessThanOrEqualTo(4L);
+                .as("directScopes 単一 TEAM の SQL 数は 5 以下であるべし（memberships role_kind バッチ +1・非公開チーム判定 +1）")
+                .isLessThanOrEqualTo(5L);
 
         assertThat(snapshot.isSystemAdmin()).isFalse();
         assertThat(snapshot.roleByScope())
@@ -215,7 +216,7 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
     }
 
     @Test
-    @DisplayName("一般ユーザー × directScopes 複数 TEAM/ORG 混在 → 該当多件、SQL 数 ≦ 4")
+    @DisplayName("一般ユーザー × directScopes 複数 TEAM/ORG 混在 → 該当多件、SQL 数 ≦ 5（CMP-261124-0159 非公開チーム判定 +1）")
     void 一般ユーザー_directScopes複数混在() {
         insertUserRole(userId, memberRoleId, teamId1, null);
         insertUserRole(userId, memberRoleId, null, orgId1);
@@ -234,9 +235,10 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
         // SQL 数: existsSystemAdmin (1) + findByUserIdAndScopes (1) + role_name 解決 (1)
         //        + memberships role_kind バッチ (1) = 4
         // direct teams / orgs を 1 つの membership バッチに統合しているため、混在でも +1 のみ。
+        // CMP-261124-0159: 非公開チームの判定は TEAM が何件あっても 1 本（+1）。
         assertThat(stats.getPrepareStatementCount())
-                .as("directScopes 複数混在の SQL 数は 4 以下であるべし（memberships role_kind バッチ +1）")
-                .isLessThanOrEqualTo(4L);
+                .as("directScopes 複数混在の SQL 数は 5 以下であるべし（memberships role_kind バッチ +1・非公開チーム判定 +1）")
+                .isLessThanOrEqualTo(5L);
 
         assertThat(snapshot.roleByScope())
                 .hasSize(2)
@@ -318,7 +320,7 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
     }
 
     @Test
-    @DisplayName("匿名ユーザー (userId=null) は SQL を 1 回も発行しない")
+    @DisplayName("匿名ユーザー (userId=null) はメンバーシップ系の SQL を発行せず、非公開チームの判定 1 本だけ（CMP-261124-0159 §20.2 規則 8）")
     void 匿名ユーザー_SQL未発行() {
         Statistics stats = statisticsCleared();
 
@@ -328,8 +330,8 @@ class MembershipBatchQueryServiceIntegrationTest extends AbstractMySqlIntegratio
                 Set.of(new ScopeKey("TEAM", teamId1)));
 
         assertThat(stats.getPrepareStatementCount())
-                .as("匿名ユーザーは SQL を発行しないこと")
-                .isZero();
+                .as("匿名ユーザーは非公開チームの判定 1 本だけ（非公開チームの PUBLIC コンテンツも隠すため）")
+                .isEqualTo(1L);
         assertThat(snapshot.isSystemAdmin()).isFalse();
         assertThat(snapshot.roleByScope()).isEmpty();
     }

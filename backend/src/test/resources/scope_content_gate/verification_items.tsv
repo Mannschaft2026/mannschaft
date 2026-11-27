@@ -1,0 +1,20 @@
+# CMP-261124-0159 検証事項表（複数条項の AC を V-0159-<AC番号>-<n> に分解し、担当 PR・テスト名へ対応付ける）
+# 列: 検証ID / AC / 内容 / 担当PR / テスト名(Class#method) / 状態(未実装・実装済み)
+# 実装済みの行はテストのソース（DisplayName 等）に V 番号を書くこと。テストにだけある V 番号・表にだけある V 番号は赤（ScopeContentRouteLedgerCoverageTest）。
+検証ID	AC	内容	担当PR	テスト名	状態
+V-0159-04-1	AC-0159-04	非公開チームで MEMBER / DEPUTY_ADMIN / ADMIN を通す（門と Resolver が一致）	PR-01	ScopeContentAccessGateTruthTableTest#門の真偽表	実装済み
+V-0159-04-2	AC-0159-04	SUPPORTER / GUEST / 部外者を checkMembership の部外者拒否と同一の 403 COMMON_002 で拒否	PR-01	ScopeContentAccessGateTruthTableTest#門の真偽表	実装済み
+V-0159-04-3	AC-0159-04	ORGANIZATION スコープでは checkMembership と全件一致	PR-01	ScopeContentAccessGateTruthTableTest#組織はcheckMembershipと同一	実装済み
+V-0159-06-1	AC-0159-06	公開→非公開の直後の次の呼び出しから上限が効く	PR-01	MembersOnlyTeamCapIntegrationTest#公開範囲の変更が即時に効く	実装済み
+V-0159-06-2	AC-0159-06	非公開→公開の直後の次の呼び出しから上限が外れる	PR-01	MembersOnlyTeamCapIntegrationTest#公開範囲の変更が即時に効く	実装済み
+V-0159-94-1	AC-0159-94	所有者一致の成功経路でも上限越えは不在と同一の 404	PR-01	ScopeConcealingAccessGateMembersOnlyCapTest#上限越えの所有者は404	実装済み
+V-0159-94-2	AC-0159-94	permitted 成功経路でも上限越えは不在と同一の 404	PR-01	ScopeConcealingAccessGateMembersOnlyCapTest#上限越えのpermittedは404	実装済み
+V-0159-94-3	AC-0159-94	公開チームでは所有者経路の結果が本戦役前と同一	PR-01	ScopeConcealingAccessGateMembersOnlyCapTest#公開チームの所有者は通る	実装済み
+V-0159-94-4	AC-0159-94	在籍メンバー経路でも非公開チームの在籍サポーターは不在と同一の 404	PR-01	ScopeConcealingAccessGateMembersOnlyCapTest#在籍サポーターは404	実装済み
+V-0159-107-1	AC-0159-107	コード側の経路一覧と経路台帳が双方向に一致	PR-01	ScopeContentRouteLedgerCoverageTest#コードと台帳が一致する	実装済み
+V-0159-107-2	AC-0159-107	経路台帳の書式（補助 ID・分類・状態・テスト名の実在）	PR-01	ScopeContentRouteLedgerCoverageTest#台帳の書式	実装済み
+V-0159-107-3	AC-0159-107	Matrix 表と経路台帳が双方向に一致	PR-01	ScopeContentRouteLedgerCoverageTest#Matrix表と台帳が一致する	実装済み
+V-0159-107-4	AC-0159-107	検証事項表とテストの V 番号が双方向に一致	PR-01	ScopeContentRouteLedgerCoverageTest#検証事項表とテストが一致する	実装済み
+V-0159-107-5	AC-0159-107	自己検査: 台帳の 1 行の削除・追加で赤	PR-01	ScopeContentRouteLedgerCoverageTest#台帳の削除と追加	実装済み
+V-0159-107-6	AC-0159-107	自己検査: Matrix 表の 1 行の削除・追加で赤	PR-01	ScopeContentRouteLedgerCoverageTest#Matrixの削除と追加	実装済み
+V-0159-107-7	AC-0159-107	自己検査: 検証事項表の 1 行の削除・追加で赤	PR-01	ScopeContentRouteLedgerCoverageTest#検証事項の削除と追加	実装済み

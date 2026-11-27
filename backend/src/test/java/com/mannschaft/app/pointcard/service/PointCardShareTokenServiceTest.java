@@ -3,6 +3,8 @@ package com.mannschaft.app.pointcard.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mannschaft.app.common.AccessControlService;
 import com.mannschaft.app.common.BusinessException;
+import com.mannschaft.app.common.token.PlaintextTokenDebt;
+import com.mannschaft.app.common.token.SecretTokenVault;
 import com.mannschaft.app.pointcard.dto.ResolveTokenResponse;
 import com.mannschaft.app.pointcard.dto.ShareTokenResponse;
 import com.mannschaft.app.pointcard.entity.PointCardProviderEntity;
@@ -88,6 +90,8 @@ class PointCardShareTokenServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private final SecretTokenVault vault = new SecretTokenVault();
+
     @InjectMocks
     private PointCardShareTokenService shareTokenService;
 
@@ -95,7 +99,7 @@ class PointCardShareTokenServiceTest {
     void setUp() {
         // ObjectMapper は new で生成（InjectMocks 後に上書き）
         shareTokenService = new PointCardShareTokenService(
-                redisTemplate, objectMapper, cardRepository, providerRepository, accessControlService);
+                redisTemplate, objectMapper, cardRepository, providerRepository, accessControlService, vault);
     }
 
     // ─────────────────────────────────────────────
@@ -184,11 +188,9 @@ class PointCardShareTokenServiceTest {
 
         ShareTokenResponse response = shareTokenService.generate(CUSTOMER_USER_ID, card.getId());
 
-        // トークンは UUID 形式
+        // トークンは Base64URL 43 字（SecretTokenVault#issueBase64Url）。UUID（36 字）ではない
         assertThat(response.token()).isNotBlank();
-        assertThat(response.token()).hasSize(36);
-        // UUID.fromString が成功する（フォーマット検証）
-        UUID.fromString(response.token());
+        assertThat(response.token()).hasSize(43).matches("[A-Za-z0-9_-]{43}");
 
         // expiresAt は現在より未来
         assertThat(response.expiresAt()).isAfter(java.time.OffsetDateTime.now().minusSeconds(1));
@@ -204,15 +206,18 @@ class PointCardShareTokenServiceTest {
         ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
         verify(valueOperations).setIfAbsent(keyCaptor.capture(), jsonCaptor.capture(),
                 eq(PointCardShareTokenService.TTL));
+        // AC-x1: キーはハッシュ（SHA-256 hex64）で、平文を含まない
         assertThat(keyCaptor.getValue())
-                .startsWith(PointCardShareTokenService.KEY_PREFIX)
-                .endsWith(response.token());
+                .isEqualTo(PointCardShareTokenService.KEY_PREFIX + vault.hash(response.token()))
+                .doesNotContain(response.token());
 
         // JSON ペイロードに cardId / userId / expiresAt が含まれる
         String json = jsonCaptor.getValue();
         assertThat(json).contains("\"cardId\":\"" + card.getId() + "\"");
         assertThat(json).contains("\"userId\":" + CUSTOMER_USER_ID);
         assertThat(json).contains("\"expiresAt\":");
+        // AC-x3: 保存値（JSON ペイロード）にも平文を含めない
+        assertThat(json).doesNotContain(response.token());
     }
 
     @Test
@@ -248,16 +253,124 @@ class PointCardShareTokenServiceTest {
                 .hasMessageContaining("collision");
     }
 
+    @Test
+    @DisplayName("AC-x1: generate に @PlaintextTokenDebt が付いていない（債務の返済）")
+    void generate_hasNoPlaintextTokenDebt() throws Exception {
+        assertThat(PointCardShareTokenService.class.getMethod("generate", Long.class, UUID.class)
+                .isAnnotationPresent(PlaintextTokenDebt.class)).isFalse();
+        assertThat(PointCardShareTokenService.class.isAnnotationPresent(PlaintextTokenDebt.class)).isFalse();
+    }
+
+    @Test
+    @DisplayName("AC-x5: generate はログに平文トークンを出さない")
+    void generate_doesNotLogPlaintext() {
+        PointCardProviderEntity provider = sampleStampProvider(ORG_ID);
+        UserPointCardEntity card = sampleStampCard(provider.getId(), CUSTOMER_USER_ID, 3);
+        given(cardRepository.findByIdAndUserId(card.getId(), CUSTOMER_USER_ID)).willReturn(Optional.of(card));
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .willReturn(Boolean.TRUE);
+
+        try (LogCapture logs = LogCapture.attach()) {
+            ShareTokenResponse response = shareTokenService.generate(CUSTOMER_USER_ID, card.getId());
+            assertThat(logs.text()).isNotBlank().doesNotContain(response.token());
+        }
+    }
+
     // ─────────────────────────────────────────────
     // resolve
     // ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("AC-x2: generate の発行トークンで resolve が成功し、2 回目は GETDEL で失敗する（往復）")
+    void roundTrip_issueThenResolveOnceOnly() throws Exception {
+        PointCardProviderEntity provider = sampleStampProvider(ORG_ID);
+        UserPointCardEntity card = sampleStampCard(provider.getId(), CUSTOMER_USER_ID, 4);
+        java.util.Map<String, String> store = new java.util.HashMap<>();
+
+        given(cardRepository.findByIdAndUserId(card.getId(), CUSTOMER_USER_ID)).willReturn(Optional.of(card));
+        given(cardRepository.findById(card.getId())).willReturn(Optional.of(card));
+        given(providerRepository.findById(provider.getId())).willReturn(Optional.of(provider));
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class))).willAnswer(call ->
+                store.putIfAbsent(call.getArgument(0), call.getArgument(1)) == null);
+        given(valueOperations.getAndDelete(anyString())).willAnswer(call -> store.remove(call.<String>getArgument(0)));
+
+        ShareTokenResponse issued = shareTokenService.generate(CUSTOMER_USER_ID, card.getId());
+
+        // Valkey には平文のキーが無い（AC-x1）
+        assertThat(store.keySet()).hasSize(1).allSatisfy(key -> assertThat(key).doesNotContain(issued.token()));
+
+        try (LogCapture logs = LogCapture.attach()) {
+            ResolveTokenResponse first = shareTokenService.resolve(STAFF_USER_ID, ORG_ID, issued.token());
+            assertThat(first.cardId()).isEqualTo(card.getId());
+            assertThatThrownBy(() -> shareTokenService.resolve(STAFF_USER_ID, ORG_ID, issued.token()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(PointCardErrorCode.TOKEN_NOT_FOUND);
+            // AC-x5: resolve 側のログにも平文を出さない
+            assertThat(logs.text()).doesNotContain(issued.token());
+        }
+        assertThat(store).isEmpty();
+    }
+
+    @Test
+    @DisplayName("AC-A: 旧形式（平文）のキーを Valkey に置いても resolve は通らない")
+    void resolve_legacyPlaintextKey_isNotAccepted() {
+        String legacyToken = UUID.randomUUID().toString();
+        java.util.Map<String, String> store = new java.util.HashMap<>();
+        store.put(PointCardShareTokenService.KEY_PREFIX + legacyToken,
+                "{\"cardId\":\"" + UUID.randomUUID() + "\"}");
+
+        willDoNothing().given(accessControlService).checkAdminOrAbove(anyLong(), anyLong(), anyString());
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.getAndDelete(anyString())).willAnswer(call -> store.remove(call.<String>getArgument(0)));
+
+        assertThatThrownBy(() -> shareTokenService.resolve(STAFF_USER_ID, ORG_ID, legacyToken))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(PointCardErrorCode.TOKEN_NOT_FOUND);
+        // 旧キーには触れていない（互換照合は作らない）
+        assertThat(store).containsKey(PointCardShareTokenService.KEY_PREFIX + legacyToken);
+    }
+
+    @Test
+    @DisplayName("AC-x5: resolve の失敗ログ（JSON 破損・cardId 不正）に平文トークンを出さない")
+    void resolve_failureLogs_doNotContainPlaintext() {
+        String token = vault.issueBase64Url().plaintext();
+        willDoNothing().given(accessControlService).checkAdminOrAbove(anyLong(), anyLong(), anyString());
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.getAndDelete(anyString()))
+                .willReturn("not-a-json{")
+                .willReturn("{\"cardId\":\"not-a-uuid\"}");
+
+        try (LogCapture logs = LogCapture.attach()) {
+            for (int i = 0; i < 2; i++) {
+                assertThatThrownBy(() -> shareTokenService.resolve(STAFF_USER_ID, ORG_ID, token))
+                        .isInstanceOf(BusinessException.class);
+            }
+            assertThat(logs.text()).isNotBlank().doesNotContain(token);
+        }
+    }
+
+    @Test
+    @DisplayName("AC-x4: 不正形式（36 字 UUID・短すぎ・記号）の token は当たらず TOKEN_NOT_FOUND")
+    void resolve_malformedToken_throws019() {
+        willDoNothing().given(accessControlService).checkAdminOrAbove(anyLong(), anyLong(), anyString());
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.getAndDelete(anyString())).willReturn(null);
+
+        for (String bad : new String[] {UUID.randomUUID().toString(), "short", "!".repeat(43)}) {
+            assertThatThrownBy(() -> shareTokenService.resolve(STAFF_USER_ID, ORG_ID, bad))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(PointCardErrorCode.TOKEN_NOT_FOUND);
+        }
+    }
 
     @Test
     @DisplayName("resolve: 正常系 STAMP — GETDEL で cardId 特定 + currentStampCount 返却")
     void resolve_success_stamp() throws Exception {
         PointCardProviderEntity provider = sampleStampProvider(ORG_ID);
         UserPointCardEntity card = sampleStampCard(provider.getId(), CUSTOMER_USER_ID, 5);
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         String json = objectMapper.writeValueAsString(java.util.Map.of(
                 "cardId", card.getId().toString(),
                 "userId", CUSTOMER_USER_ID,
@@ -266,7 +379,7 @@ class PointCardShareTokenServiceTest {
         willDoNothing().given(accessControlService)
                 .checkAdminOrAbove(STAFF_USER_ID, ORG_ID, "ORGANIZATION");
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.getAndDelete(PointCardShareTokenService.KEY_PREFIX + token))
+        given(valueOperations.getAndDelete(PointCardShareTokenService.KEY_PREFIX + vault.hash(token)))
                 .willReturn(json);
         given(cardRepository.findById(card.getId())).willReturn(Optional.of(card));
         given(providerRepository.findById(provider.getId())).willReturn(Optional.of(provider));
@@ -283,7 +396,7 @@ class PointCardShareTokenServiceTest {
 
         // GETDEL が呼ばれたこと（atomic 削除）
         verify(valueOperations, times(1))
-                .getAndDelete(PointCardShareTokenService.KEY_PREFIX + token);
+                .getAndDelete(PointCardShareTokenService.KEY_PREFIX + vault.hash(token));
     }
 
     @Test
@@ -292,7 +405,7 @@ class PointCardShareTokenServiceTest {
         PointCardProviderEntity provider = sampleBalanceProvider(ORG_ID);
         UserPointCardEntity card = sampleBalanceCard(
                 provider.getId(), CUSTOMER_USER_ID, new BigDecimal("1250.00"));
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         String json = objectMapper.writeValueAsString(java.util.Map.of(
                 "cardId", card.getId().toString(),
                 "userId", CUSTOMER_USER_ID,
@@ -315,7 +428,7 @@ class PointCardShareTokenServiceTest {
     @Test
     @DisplayName("resolve: 不存在トークンで TOKEN_NOT_FOUND")
     void resolve_notFound_throws019() {
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         willDoNothing().given(accessControlService)
                 .checkAdminOrAbove(anyLong(), anyLong(), anyString());
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
@@ -335,7 +448,7 @@ class PointCardShareTokenServiceTest {
     void resolve_consumedTwice_secondCallThrows019() throws Exception {
         PointCardProviderEntity provider = sampleStampProvider(ORG_ID);
         UserPointCardEntity card = sampleStampCard(provider.getId(), CUSTOMER_USER_ID, 1);
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         String json = objectMapper.writeValueAsString(java.util.Map.of(
                 "cardId", card.getId().toString(),
                 "userId", CUSTOMER_USER_ID,
@@ -368,7 +481,7 @@ class PointCardShareTokenServiceTest {
         PointCardProviderEntity otherOrgProvider = sampleStampProvider(OTHER_ORG_ID);
         UserPointCardEntity card = sampleStampCard(
                 otherOrgProvider.getId(), CUSTOMER_USER_ID, 2);
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         String json = objectMapper.writeValueAsString(java.util.Map.of(
                 "cardId", card.getId().toString(),
                 "userId", CUSTOMER_USER_ID,
@@ -402,7 +515,7 @@ class PointCardShareTokenServiceTest {
                 .build();
         card.setId(UUID.randomUUID());
 
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         String json = objectMapper.writeValueAsString(java.util.Map.of(
                 "cardId", card.getId().toString(),
                 "userId", CUSTOMER_USER_ID,
@@ -430,7 +543,7 @@ class PointCardShareTokenServiceTest {
         UserPointCardEntity card = sampleStampCard(provider.getId(), CUSTOMER_USER_ID, 7);
         // card は "ヒミツのカード名" / "ヒミツのニックネーム" / "CARDNUMBER_HIMITSU_9999" / "ヒミツのメモ" を保持
 
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         String json = objectMapper.writeValueAsString(java.util.Map.of(
                 "cardId", card.getId().toString(),
                 "userId", CUSTOMER_USER_ID,
@@ -458,7 +571,7 @@ class PointCardShareTokenServiceTest {
     @Test
     @DisplayName("resolve: 認可違反（非 ADMIN）は AccessControlService からの例外を伝播")
     void resolve_accessDenied_propagatesException() {
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         RuntimeException accessException = new RuntimeException("ACCESS_DENIED");
         willThrow(accessException).given(accessControlService)
                 .checkAdminOrAbove(STAFF_USER_ID, ORG_ID, "ORGANIZATION");
@@ -473,7 +586,7 @@ class PointCardShareTokenServiceTest {
     @Test
     @DisplayName("resolve: JSON ペイロード破損で TOKEN_NOT_FOUND（既に削除済なのでデータ復元できず安全側に倒す）")
     void resolve_invalidJson_throws019() {
-        String token = UUID.randomUUID().toString();
+        String token = vault.issueBase64Url().plaintext();
         willDoNothing().given(accessControlService)
                 .checkAdminOrAbove(anyLong(), anyLong(), anyString());
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
@@ -483,5 +596,42 @@ class PointCardShareTokenServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(PointCardErrorCode.TOKEN_NOT_FOUND);
+    }
+
+    /** SLF4J(logback) のログを捕捉して検査する（AC-x5）。 */
+    private static final class LogCapture implements AutoCloseable {
+        private final ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(PointCardShareTokenService.class);
+        private final ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+
+        private ch.qos.logback.classic.Level previousLevel;
+
+        static LogCapture attach() {
+            LogCapture capture = new LogCapture();
+            capture.appender.start();
+            capture.previousLevel = capture.logger.getLevel();
+            capture.logger.setLevel(ch.qos.logback.classic.Level.ALL);
+            capture.logger.addAppender(capture.appender);
+            return capture;
+        }
+
+        String text() {
+            StringBuilder sb = new StringBuilder();
+            for (ch.qos.logback.classic.spi.ILoggingEvent event : appender.list) {
+                sb.append(event.getFormattedMessage()).append('\n');
+                if (event.getThrowableProxy() != null) {
+                    sb.append(event.getThrowableProxy().getMessage()).append('\n');
+                }
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public void close() {
+            logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
+            appender.stop();
+        }
     }
 }

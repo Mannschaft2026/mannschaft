@@ -1,10 +1,10 @@
-import type { CommitteeInvitation, CommitteeMember } from '~/types/committee'
+import type { CommitteeInvitation, CommitteeInvitationIssued, CommitteeMember } from '~/types/committee'
 
 export function useCommitteeInvitationApi() {
   const api = useApi()
 
   async function sendInvitations(committeeId: number, body: Record<string, unknown>) {
-    return api<{ data: CommitteeInvitation[] }>(
+    return api<{ data: { invitations: CommitteeInvitationIssued[], skippedExistingMemberCount: number, skippedExistingInvitationCount: number } }>(
       `/api/v1/committees/${committeeId}/invitations`,
       { method: 'POST', body },
     )
@@ -23,14 +23,14 @@ export function useCommitteeInvitationApi() {
   async function acceptByToken(token: string) {
     return api<{ data: CommitteeMember }>('/api/v1/committee-invitations/accept-by-token', {
       method: 'POST',
-      body: { token },
+      body: { inviteToken: token },
     })
   }
 
   async function declineByToken(token: string) {
     return api('/api/v1/committee-invitations/decline-by-token', {
       method: 'POST',
-      body: { token },
+      body: { inviteToken: token },
     })
   }
 

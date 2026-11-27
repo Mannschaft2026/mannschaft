@@ -2,6 +2,7 @@ package com.mannschaft.app.event;
 
 import com.mannschaft.app.common.BusinessException;
 import com.mannschaft.app.event.dto.CreateInviteTokenRequest;
+import com.mannschaft.app.event.dto.InviteTokenIssuedResponse;
 import com.mannschaft.app.event.dto.InviteTokenResponse;
 import com.mannschaft.app.event.entity.EventGuestInviteTokenEntity;
 import com.mannschaft.app.event.repository.EventGuestInviteTokenRepository;
@@ -38,6 +39,9 @@ class EventInviteTokenServiceTest {
     @Mock
     private EventMapper eventMapper;
 
+    @org.mockito.Spy
+    private com.mannschaft.app.common.token.SecretTokenVault vault = new com.mannschaft.app.common.token.SecretTokenVault();
+
     @InjectMocks
     private EventInviteTokenService eventInviteTokenService;
 
@@ -52,7 +56,7 @@ class EventInviteTokenServiceTest {
     private EventGuestInviteTokenEntity createTokenEntity() {
         return EventGuestInviteTokenEntity.builder()
                 .eventId(EVENT_ID)
-                .token("uuid-token-value")
+                .tokenHash("hash-value")
                 .label("VIPゲスト用")
                 .maxUses(10)
                 .expiresAt(LocalDateTime.now().plusDays(7))
@@ -62,7 +66,7 @@ class EventInviteTokenServiceTest {
 
     private InviteTokenResponse createTokenResponse() {
         return new InviteTokenResponse(
-                TOKEN_ID, EVENT_ID, "uuid-token-value", "VIPゲスト用",
+                TOKEN_ID, EVENT_ID, "VIPゲスト用",
                 10, 0, LocalDateTime.now().plusDays(7), true, USER_ID,
                 LocalDateTime.now(), LocalDateTime.now()
         );
@@ -122,25 +126,27 @@ class EventInviteTokenServiceTest {
     class CreateToken {
 
         @Test
-        @DisplayName("トークン作成_正常_レスポンス返却")
+        @DisplayName("トークン作成_正常_平文は応答のみでDBにはハッシュを保存")
         void トークン作成_正常_レスポンス返却() {
             // Given
             CreateInviteTokenRequest request = new CreateInviteTokenRequest(
                     "VIPゲスト用", 10, LocalDateTime.now().plusDays(7)
             );
-            EventGuestInviteTokenEntity savedEntity = createTokenEntity();
-            InviteTokenResponse response = createTokenResponse();
-
-            given(tokenRepository.save(any(EventGuestInviteTokenEntity.class))).willReturn(savedEntity);
-            given(eventMapper.toInviteTokenResponse(savedEntity)).willReturn(response);
+            given(tokenRepository.save(any(EventGuestInviteTokenEntity.class)))
+                    .willAnswer(inv -> inv.getArgument(0));
 
             // When
-            InviteTokenResponse result = eventInviteTokenService.createToken(EVENT_ID, USER_ID, request);
+            InviteTokenIssuedResponse result = eventInviteTokenService.createToken(EVENT_ID, USER_ID, request);
 
             // Then
-            assertThat(result.getLabel()).isEqualTo("VIPゲスト用");
-            assertThat(result.getMaxUses()).isEqualTo(10);
-            verify(tokenRepository).save(any(EventGuestInviteTokenEntity.class));
+            assertThat(result.invite().getLabel()).isEqualTo("VIPゲスト用");
+            assertThat(result.invite().getMaxUses()).isEqualTo(10);
+            assertThat(result.token()).matches("^[A-Za-z0-9_-]{43}$");
+            org.mockito.ArgumentCaptor<EventGuestInviteTokenEntity> captor =
+                    org.mockito.ArgumentCaptor.forClass(EventGuestInviteTokenEntity.class);
+            verify(tokenRepository).save(captor.capture());
+            assertThat(captor.getValue().getTokenHash()).isEqualTo(vault.hash(result.token()))
+                    .isNotEqualTo(result.token());
         }
 
         @Test
@@ -148,22 +154,14 @@ class EventInviteTokenServiceTest {
         void トークン作成_上限未指定_正常作成() {
             // Given
             CreateInviteTokenRequest request = new CreateInviteTokenRequest("一般ゲスト用", null, null);
-            EventGuestInviteTokenEntity savedEntity = EventGuestInviteTokenEntity.builder()
-                    .eventId(EVENT_ID).token("uuid-2").label("一般ゲスト用").createdBy(USER_ID).build();
-            InviteTokenResponse response = new InviteTokenResponse(
-                    11L, EVENT_ID, "uuid-2", "一般ゲスト用",
-                    null, 0, null, true, USER_ID,
-                    LocalDateTime.now(), LocalDateTime.now()
-            );
-
-            given(tokenRepository.save(any(EventGuestInviteTokenEntity.class))).willReturn(savedEntity);
-            given(eventMapper.toInviteTokenResponse(savedEntity)).willReturn(response);
+            given(tokenRepository.save(any(EventGuestInviteTokenEntity.class)))
+                    .willAnswer(inv -> inv.getArgument(0));
 
             // When
-            InviteTokenResponse result = eventInviteTokenService.createToken(EVENT_ID, USER_ID, request);
+            InviteTokenIssuedResponse result = eventInviteTokenService.createToken(EVENT_ID, USER_ID, request);
 
             // Then
-            assertThat(result.getMaxUses()).isNull();
+            assertThat(result.invite().getMaxUses()).isNull();
         }
     }
 
@@ -181,7 +179,7 @@ class EventInviteTokenServiceTest {
             // Given
             EventGuestInviteTokenEntity entity = createTokenEntity();
             InviteTokenResponse response = new InviteTokenResponse(
-                    TOKEN_ID, EVENT_ID, "uuid-token-value", "VIPゲスト用",
+                    TOKEN_ID, EVENT_ID, "VIPゲスト用",
                     10, 0, LocalDateTime.now().plusDays(7), false, USER_ID,
                     LocalDateTime.now(), LocalDateTime.now()
             );

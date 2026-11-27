@@ -26,6 +26,9 @@ const {
   hideContent,
   restoreContent,
   statusSeverity,
+  statusFilter,
+  statusOptions,
+  onStatusFilterChange,
   onPage,
   resolve,
 } = useAdminReports()
@@ -34,12 +37,21 @@ const { formatDateTime } = useDatetime()
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <!--
-      ステータス絞り込みは置かない。一覧の実体である BE の
-      `/api/v1/system-admin/reports` が status 条件を解釈しないため、
-      Select を置いても操作できるだけで結果が変わらない（CMP-260912-1823 の検分 P2）。
-    -->
     <PageHeader :title="$t('admin_report.title')" class="mb-4" />
+
+    <div class="mb-4">
+      <Select
+        v-model="statusFilter"
+        :options="statusOptions"
+        option-value="value"
+        :option-label="(o: { labelKey: string }) => $t(o.labelKey)"
+        :placeholder="$t('admin_report.filter.placeholder')"
+        show-clear
+        class="w-56"
+        data-testid="admin-report-status-filter"
+        @change="onStatusFilterChange"
+      />
+    </div>
 
     <AdminReportStatsCards v-if="stats" :stats="stats" />
 

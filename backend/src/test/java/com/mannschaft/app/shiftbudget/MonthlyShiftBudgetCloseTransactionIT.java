@@ -8,6 +8,7 @@ import com.mannschaft.app.shiftbudget.entity.ShiftBudgetAllocationEntity;
 import com.mannschaft.app.shiftbudget.entity.ShiftBudgetConsumptionEntity;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetAllocationRepository;
 import com.mannschaft.app.shiftbudget.repository.ShiftBudgetConsumptionRepository;
+import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseGate;
 import com.mannschaft.app.shiftbudget.service.MonthlyShiftBudgetCloseService;
 import com.mannschaft.app.support.test.AbstractMySqlIntegrationTest;
 import com.mannschaft.app.support.test.MembershipTestHelper;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.FileCopyUtils;
@@ -29,7 +31,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.nio.charset.StandardCharsets;
@@ -85,8 +87,6 @@ import static org.mockito.Mockito.reset;
 class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest {
 
     private static final YearMonth TARGET_MONTH = YearMonth.of(2026, 6);
-    private static final LocalDate PERIOD_START = LocalDate.of(2026, 6, 1);
-    private static final LocalDate PERIOD_END = LocalDate.of(2026, 6, 30);
     private static final BigDecimal AMOUNT_A = new BigDecimal("4800");
     private static final BigDecimal AMOUNT_B = new BigDecimal("5200");
     private static final BigDecimal TOTAL = new BigDecimal("10000");
@@ -139,6 +139,13 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
 
     @PersistenceContext
     private EntityManager em;
+
+    @Autowired
+    @Qualifier("wallClock")
+    private Clock wallClock;
+
+    @Autowired
+    private MonthlyShiftBudgetCloseGate closeGate;
 
     private Long orgId;
     private Long teamId;
@@ -214,6 +221,45 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
         assertThat(recoveryQueuePayloads(allocationId))
                 .as("正常な allocation を復旧キューへ積むと、運用者が無駄な締め直しをする")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("CMP-261021-0657 当月の締めは 032 で拒否し、消化は PLANNED のまま・月次仕訳は作られない")
+    void 当月の締めは拒否され副作用が残らない() {
+        YearMonth currentMonth = YearMonth.now(wallClock);
+        Long allocationId = seedAllocationWithPlannedConsumptions(currentMonth, TOTAL);
+
+        assertThatThrownBy(() -> closeGate.close(orgId, currentMonth))
+                .isInstanceOf(com.mannschaft.app.common.BusinessException.class)
+                .satisfies(e -> assertThat(((com.mannschaft.app.common.BusinessException) e)
+                        .getErrorCode().getCode()).isEqualTo("SHIFT_BUDGET_032"));
+
+        assertThat(consumptionStatuses(allocationId))
+                .containsExactlyInAnyOrder("PLANNED", "PLANNED");
+        assertThat(confirmedAmount(allocationId)).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(liveSummaryTransactionCount(allocationId)).isZero();
+        // 拒否は監査ログ記録（非同期）より前で起きるため、行が無いことをそのまま確かめてよい
+        assertThat(monthlyClosedAuditCount())
+                .as("拒否した締めの監査ログ SHIFT_BUDGET_MONTHLY_CLOSED が記録されてはならない")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("CMP-261021-0657 Gate 経由で前月の締めは成功する（Gate と Service のトランザクション境界が衝突しない）")
+    void Gate経由の前月締めは成功する() {
+        YearMonth previousMonth = YearMonth.now(wallClock).minusMonths(1);
+        Long allocationId = seedAllocationWithPlannedConsumptions(previousMonth, TOTAL);
+
+        MonthlyShiftBudgetCloseService.CloseResult result = closeGate.close(orgId, previousMonth);
+
+        assertThat(result.closedAllocations())
+                .as("Gate に @Transactional が付くと Service の Propagation.NEVER と衝突して失敗する")
+                .isEqualTo(1);
+        assertThat(result.closedConsumptions()).isEqualTo(2);
+        assertThat(confirmedAmount(allocationId)).isEqualByComparingTo(TOTAL);
+        assertThat(consumptionStatuses(allocationId))
+                .containsExactlyInAnyOrder("CONFIRMED", "CONFIRMED");
+        assertThat(liveSummaryTransactionCount(allocationId)).isEqualTo(1);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -520,6 +566,10 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
     }
 
     private Long seedAllocationWithPlannedConsumptions(BigDecimal consumedAmount) {
+        return seedAllocationWithPlannedConsumptions(TARGET_MONTH, consumedAmount);
+    }
+
+    private Long seedAllocationWithPlannedConsumptions(YearMonth month, BigDecimal consumedAmount) {
         return transactionTemplate.execute(tx -> {
             ShiftBudgetAllocationEntity allocation = allocationRepository.save(
                     ShiftBudgetAllocationEntity.builder()
@@ -527,8 +577,8 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
                             .teamId(teamId)
                             .fiscalYearId(fiscalYearId)
                             .budgetCategoryId(categoryId)
-                            .periodStart(PERIOD_START)
-                            .periodEnd(PERIOD_END)
+                            .periodStart(month.atDay(1))
+                            .periodEnd(month.atEndOfMonth())
                             .allocatedAmount(new BigDecimal("500000"))
                             .consumedAmount(consumedAmount)
                             .confirmedAmount(BigDecimal.ZERO)
@@ -573,6 +623,14 @@ class MonthlyShiftBudgetCloseTransactionIT extends AbstractMySqlIntegrationTest 
         return jdbcTemplate.queryForList(
                 "SELECT status FROM shift_budget_consumptions WHERE allocation_id = ? AND deleted_at IS NULL",
                 String.class, allocationId);
+    }
+
+    /** この組織の月次締め監査ログ（SHIFT_BUDGET_MONTHLY_CLOSED）の件数。 */
+    private int monthlyClosedAuditCount() {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_logs WHERE event_type = ? AND organization_id = ?",
+                Integer.class, "SHIFT_BUDGET_MONTHLY_CLOSED", orgId);
+        return n == null ? 0 : n;
     }
 
     /** 生存している（論理削除されていない）月次仕訳の件数。締めの重複判定が見るのはこちら。 */

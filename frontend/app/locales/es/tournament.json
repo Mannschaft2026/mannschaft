@@ -156,7 +156,9 @@
         "apply_template_failed": "Error al aplicar la plantilla",
         "load_all_failed": "Error al cargar las listas",
         "update_deadline_failed": "Error al actualizar el plazo"
-      }
+      },
+      "templates_unavailable": "Las plantillas no están disponibles porque no se pudo determinar la organización del equipo. Introduce los miembros manualmente.",
+      "templates_load_failed": "No se pudieron cargar las plantillas. Aún puedes introducir los miembros manualmente."
     },
     "communication": {
       "title": "Espacio de contacto",
@@ -286,8 +288,7 @@
       "pdfFailed": "No se pudo exportar el PDF",
       "empty": "Sin datos de clasificacion",
       "noDivisions": "No hay divisiones registradas",
-      "loadFailed": "No se pudo cargar la clasificacion",
-      "forbidden": "No tienes permiso para ver este torneo"
+      "loadFailed": "No se pudo cargar la clasificacion"
     },
     "rankings": {
       "title": "Rankings",
@@ -301,8 +302,7 @@
       "pdfFailed": "No se pudo exportar el PDF",
       "empty": "Sin datos de ranking",
       "noCategories": "Sin categorias de ranking",
-      "loadFailed": "No se pudieron cargar los rankings",
-      "forbidden": "No tienes permiso para ver este torneo"
+      "loadFailed": "No se pudieron cargar los rankings"
     },
     "matrix": {
       "title": "Matriz de enfrentamientos",
@@ -314,7 +314,6 @@
       "empty": "Sin datos de matriz",
       "noDivisions": "No hay divisiones registradas",
       "loadFailed": "No se pudo cargar la matriz",
-      "forbidden": "No tienes permiso para ver este torneo",
       "setsNote": "Este torneo usa sets, por lo que cada celda muestra los puntos totales de todos los sets. El ganador se decide por el número de sets ganados."
     },
     "visibility": {

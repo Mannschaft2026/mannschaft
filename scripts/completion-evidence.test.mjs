@@ -94,6 +94,8 @@ async function runCompletionWorkflow(action, { ancestor = oldCompleted, head = o
         },
         getContent: async ({ path, ref }) => {
           if (missingAncestor && ref === 'c'.repeat(40)) throw Object.assign(new Error('missing'), { status: 404 });
+          // 台帳の新配置（docs/task-list/）の有無をディレクトリ単位で確かめる（CMP-261124-1222）。旧配置なので 404。
+          if (path === 'docs/task-list' && ref in refs) throw Object.assign(new Error('Not Found'), { status: 404 });
           if (path !== 'docs/task-list.md' || !(ref in refs)) throw new Error(`Unexpected data read: ${path}@${ref}`);
           return { data: { type: 'file', encoding: 'base64', content: Buffer.from(refs[ref]).toString('base64') } };
         },
@@ -319,6 +321,15 @@ test('AC-2: 同居spec・frontend/testsだけはtest-only、scriptsとテスト�
   assert.equal(infer(['frontend/tests/unit/a.spec.ts', 'frontend/tests/e2e/b.spec.ts']), 'test-only');
   assert.equal(infer(['scripts/check.mjs', 'backend/src/test/java/A.java']), 'test-only');
   assert.equal(infer(['scripts/check.mjs', '.github/workflows/x.yml']), 'tooling');
+});
+
+test('AC-2b: backend/scripts/ のCI用スクリプトはtooling、テストとの混在はtest-only、backend/src や似た名前のディレクトリはapp（CMP-261125-0323）', () => {
+  assert.equal(infer(['backend/scripts/run-ci-tests-with-observability.sh', 'backend/scripts/test_run_ci_observability_patterns.py']), 'tooling');
+  assert.equal(infer(['backend/scripts/gradle-turnstile.sh', 'backend/src/test/java/A.java']), 'test-only');
+  assert.equal(infer(['backend/scripts/x.sh', 'backend/src/main/java/A.java']), 'app');
+  assert.equal(infer(['backend/scripts-extra/x.sh']), 'app');
+  assert.equal(infer(['backend/scripts']), 'app');
+  assert.equal(infer([{ filename: 'backend/scripts/new.sh', previous_filename: 'backend/src/main/old.sh', status: 'renamed' }]), 'app');
 });
 
 // 現行のリポジトリ名と、移管前（2026-11-21 に kenta-0420/mannschaft から移管）に記録された旧名。
