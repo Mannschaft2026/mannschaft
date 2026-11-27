@@ -278,9 +278,7 @@ class BlogPostServiceTest {
             Page<BlogPostEntity> page = new PageImpl<>(List.of(entity));
 
             ReflectionTestUtils.setField(entity, "id", POST_ID);
-            TeamEntity mockTeam = TeamEntity.builder().build();
-            org.springframework.test.util.ReflectionTestUtils.setField(mockTeam, "id", TEAM_ID);
-            given(teamRepository.findBySlugAndDeletedAtIsNull(teamSlug)).willReturn(java.util.Optional.of(mockTeam));
+            given(teamService.findIdBySlug(teamSlug)).willReturn(java.util.Optional.of(TEAM_ID));
             given(postRepository.findByTeamIdOrderByPinnedDescCreatedAtDesc(eq(TEAM_ID), any(Pageable.class)))
                     .willReturn(page);
             given(cmsMapper.toBlogPostResponse(any(BlogPostEntity.class))).willReturn(createPostResponse());
@@ -297,7 +295,7 @@ class BlogPostServiceTest {
 
                 // Then
                 assertThat(result).hasSize(1);
-                verify(teamRepository).findBySlugAndDeletedAtIsNull(teamSlug);
+                verify(teamService).findIdBySlug(teamSlug);
                 // CMP-261007-2052 AC-16: 一覧はメンバー限定を外した（可視性は F00 で判定する）。
                 verify(accessControlService, never()).checkMembership(any(), any(), any());
             }

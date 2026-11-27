@@ -262,6 +262,23 @@ public class TeamService {
     }
 
     /**
+     * スラッグからチームの内部 ID を引く（論理削除済みは除く。ライフサイクル状態は問わない）。
+     *
+     * <p>他ドメイン（cms）が TeamRepository を直接注入せず、
+     * 本 Service 経由でスラッグを内部 ID へ解決するための窓口（番人 D-5・D-3）。
+     * 判定条件は {@code findBySlugAndDeletedAtIsNull} と同一。</p>
+     *
+     * @param slug チームのスラッグ
+     * @return チームの内部 ID。不在・論理削除済み・slug が null なら空
+     */
+    public Optional<Long> findIdBySlug(String slug) {
+        if (slug == null) {
+            return Optional.empty();
+        }
+        return teamRepository.findBySlugAndDeletedAtIsNull(slug).map(e -> e.getId());
+    }
+
+    /**
      * F06.4 公開活動記録: 他ドメインが「このチームは匿名公開してよいか」を判定するための横断 SPI。
      *
      * <p>公開コンテンツ（活動記録など）を匿名公開する経路は、コンテンツ自身が PUBLIC でも

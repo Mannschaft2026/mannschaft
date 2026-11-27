@@ -31,7 +31,7 @@ import com.mannschaft.app.schedule.service.ScheduleReminderService;
 import com.mannschaft.app.schedule.service.ScheduleScheduledTaskService;
 import com.mannschaft.app.schedule.service.ScheduleService;
 import com.mannschaft.app.schedule.service.ScheduleTargetService;
-import com.mannschaft.app.team.repository.TeamOrgMembershipRepository;
+import com.mannschaft.app.team.service.TeamOrgMembershipQueryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -97,7 +97,7 @@ class ScheduleServiceTest {
     private ScheduleReminderService reminderService;
 
     @Mock
-    private TeamOrgMembershipRepository teamOrgMembershipRepository;
+    private TeamOrgMembershipQueryService teamOrgMembershipQueryService;
 
     @Mock
     private com.mannschaft.app.organization.service.OrganizationMembershipService organizationMembershipService;

@@ -65,6 +65,8 @@ class GalleryScopeContentAccessMatrixIT extends AbstractScopeContentAccessMatrix
     @Override
     protected void seed(ScopeContentFixture fx) {
         given(r2StorageService.generateDownloadUrl(any(), any())).willReturn("https://r2.example.com/signed");
+        // アルバム一括ダウンロードは R2 から原本を読んで ZIP に詰める。モックが null を返すと ZIP 生成で NPE（500）になるため、原本のバイト列を返す。
+        given(r2StorageService.download(any())).willReturn(new byte[] {1, 2, 3});
         albumId = albumRepository.save(PhotoAlbumEntity.builder().teamId(fx.teamId).title(ALBUM_TITLE)
                 .allowDownload(true).allowMemberUpload(false).build()).getId();
         photoId = photoRepository.save(PhotoEntity.builder().albumId(albumId)

@@ -32,7 +32,6 @@ import com.mannschaft.app.common.CommonErrorCode;
 import com.mannschaft.app.common.SecurityUtils;
 import com.mannschaft.app.common.visibility.ContentVisibilityChecker;
 import com.mannschaft.app.common.visibility.ReferenceType;
-import com.mannschaft.app.organization.repository.OrganizationRepository;
 import com.mannschaft.app.organization.service.OrganizationService;
 import com.mannschaft.app.payment.constant.ContentGateType;
 import com.mannschaft.app.payment.dto.GateCheckResponse;
@@ -40,7 +39,6 @@ import com.mannschaft.app.payment.spi.ContentGateTarget;
 import com.mannschaft.app.payment.service.ContentAccessState;
 import com.mannschaft.app.payment.service.PaymentGateService;
 import com.mannschaft.app.publicview.service.PostAuthorSnapshotService;
-import com.mannschaft.app.team.repository.TeamRepository;
 import com.mannschaft.app.team.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,8 +89,6 @@ public class BlogPostService {
     // TODO: publicview ドメインが cms ドメインを参照（CLAUDE.md 原則5）。将来はイベント駆動化を検討。
     private final PostAuthorSnapshotService postAuthorSnapshotService;
     // TODO: cms ドメインが team/organization ドメインを参照（CLAUDE.md 原則5）。将来はイベント駆動化を検討。
-    private final TeamRepository teamRepository;
-    private final OrganizationRepository organizationRepository;
     // 検分第2巡 残存経路チェック用（assertScopeNotProvisioned）。CrossDomainEntityImportArchTest(D-1)
     // 根治のため Entity 直参照ではなく boolean のみを返す Service API 経由にする。
     private final TeamService teamService;
@@ -1010,7 +1006,7 @@ public class BlogPostService {
      * チームID文字列（スラッグ or Long文字列）を内部Long IDに解決する。
      *
      * <p>後方互換のため Long 文字列（数値文字列）も受け入れる。
-     * 数値でない場合はスラッグとして {@link com.mannschaft.app.team.repository.TeamRepository#findBySlugAndDeletedAtIsNull}
+     * 数値でない場合はスラッグとして {@link TeamService#findIdBySlug}
      * から内部IDを引く。</p>
      *
      * @param idStr チームのスラッグまたは内部Long ID文字列
@@ -1021,9 +1017,8 @@ public class BlogPostService {
         try {
             return Long.parseLong(idStr);
         } catch (NumberFormatException e) {
-            return teamRepository.findBySlugAndDeletedAtIsNull(idStr)
-                    .orElseThrow(() -> new BusinessException(CmsErrorCode.TEAM_NOT_FOUND))
-                    .getId();
+            return teamService.findIdBySlug(idStr)
+                    .orElseThrow(() -> new BusinessException(CmsErrorCode.TEAM_NOT_FOUND));
         }
     }
 
@@ -1031,7 +1026,7 @@ public class BlogPostService {
      * 組織ID文字列（スラッグ or Long文字列）を内部Long IDに解決する。
      *
      * <p>後方互換のため Long 文字列（数値文字列）も受け入れる。
-     * 数値でない場合はスラッグとして {@link com.mannschaft.app.organization.repository.OrganizationRepository#findBySlugAndDeletedAtIsNull}
+     * 数値でない場合はスラッグとして {@link OrganizationService#findIdBySlug}
      * から内部IDを引く。</p>
      *
      * @param idStr 組織のスラッグまたは内部Long ID文字列
@@ -1042,9 +1037,8 @@ public class BlogPostService {
         try {
             return Long.parseLong(idStr);
         } catch (NumberFormatException e) {
-            return organizationRepository.findBySlugAndDeletedAtIsNull(idStr)
-                    .orElseThrow(() -> new BusinessException(CmsErrorCode.ORG_NOT_FOUND))
-                    .getId();
+            return organizationService.findIdBySlug(idStr)
+                    .orElseThrow(() -> new BusinessException(CmsErrorCode.ORG_NOT_FOUND));
         }
     }
 
