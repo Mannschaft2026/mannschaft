@@ -58441,9 +58441,15 @@ export interface components {
             /** @enum {string} */
             distributionMode?: "ALL" | "TARGETED";
             includeSupporters?: boolean;
+            /** Format: date-time */
+            lastRemindedAt?: string;
             /** Format: int32 */
             manualRemindCount?: number;
+            /** Format: date-time */
+            nextRemindableAt?: string;
             remindBeforeHours?: string;
+            /** Format: int32 */
+            remindMaxCount?: number;
             seriesId?: string;
         };
         SurveyPolicyDto: {

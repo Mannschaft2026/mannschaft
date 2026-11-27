@@ -56,6 +56,12 @@ export interface SurveyDistributionDto {
   seriesId: string | null
   remindBeforeHours: string | null
   manualRemindCount: number | null
+  /** 前回の手動督促の送信時刻（未送信は null） */
+  lastRemindedAt?: string | null
+  /** 手動督促の上限回数（BE が返す。FE に定数を持たない） */
+  remindMaxCount?: number | null
+  /** 次に督促を送れる時刻（未送信・待機なし・上限到達は null） */
+  nextRemindableAt?: string | null
 }
 export interface SurveyScheduleDto {
   startsAt: string | null

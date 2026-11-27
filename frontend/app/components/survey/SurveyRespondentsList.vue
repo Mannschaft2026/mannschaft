@@ -7,24 +7,44 @@
  *
  * 督促 UI: canRemind=true の場合のみ未回答タブに「督促送信」ボタンを表示。
  *   - Backend API: POST /api/v1/surveys/{surveyId}/remind
- *   - 認可・回数制限・24時間クールダウン等は Backend 側で判定（403/400 を画面に表示）
+ *   - 認可・回数制限・24時間クールダウン等の判定は Backend が行う。
+ *   - 画面には「残り N/M 回」を常に出し、送れないときはボタンを無効にして理由を出す。
+ *     上限回数・待機時刻は BE が返す distribution の値だけで判定し、FE は定数を持たない。
+ *   - 送信が成功したら emit('reminded') で親へ詳細の取り直しを依頼する。
+ *   - 4xx の業務エラー（待機中・上限・締切・権限）で失敗したときと、再読込ボタンを押したときも
+ *     emit('refresh') で親へ詳細（distribution）の取り直しを依頼し、表示を BE に追従させる。
+ *     5xx・ネットワーク断では取り直さない（5xx の表示は useApi が一元化している）。
+ *   - 次に送れる時刻は分単位に切り上げて表示する（切り捨てると、その時刻に見てもまだ押せないため）。
  */
-import type { RespondentItem } from '~/types/survey'
+import dayjs from 'dayjs'
+import type { RespondentItem, SurveyDistributionDto, SurveyStatus } from '~/types/survey'
 
 const props = withDefaults(
   defineProps<{
     scopeType: 'TEAM' | 'ORGANIZATION'
     scopeId: string
     surveyId: number
+    /** 督促の権限だけを表す（公開中かどうか・回数・待機は surveyStatus / distribution で判定） */
     canRemind?: boolean
+    surveyStatus?: SurveyStatus
+    distribution?: SurveyDistributionDto | null
   }>(),
-  { canRemind: false },
+  { canRemind: false, surveyStatus: undefined, distribution: null },
 )
+
+const emit = defineEmits<{
+  /** 督促の送信に成功した（親が詳細を取り直す） */
+  reminded: []
+  /** 失敗時・再読込時に、親へ詳細（distribution）の取り直しを依頼する */
+  refresh: []
+}>()
 
 const { t } = useI18n()
 const { getRespondents, remindRespondents } = useSurveyApi()
 const { error: showError, success: showSuccess } = useNotification()
+const { handleApiError } = useErrorHandler()
 const { relativeTime } = useRelativeTime()
+const { formatDateTime } = useDatetime()
 
 const respondents = ref<RespondentItem[]>([])
 const loading = ref(false)
@@ -75,13 +95,95 @@ async function sendReminder() {
     // 督促送信後は最新状態（lastRemindedAt 等）を反映するため一覧を再取得する。
     // 失敗時は再取得しない（一覧は変化しない想定 + エラートーストのみ表示）。
     await loadRespondents()
-  } catch {
-    // Backend が 400/403 を返す（上限超過・クールダウン中・権限不足）
-    showError(t('surveys.respondents.remindFailed'), t('surveys.respondents.remindFailedDetail'))
+    emit('reminded')
+  } catch (e) {
+    const apiError = e as { statusCode?: number; data?: { error?: { code?: string } } }
+    const status = apiError.statusCode
+    if (apiError.data?.error?.code && status !== undefined && status >= 400 && status < 500) {
+      // 別タブで先に送られた等で BE が業務エラー（待機中・上限・締切・権限）を返した。
+      // 業務コードに応じた文言で知らせ、古い表示のまま押し続けられないよう詳細を取り直す。
+      handleApiError(e, 'survey-remind')
+      emit('refresh')
+    } else if (status === undefined || status < 500) {
+      // ネットワーク断など。表示は変わっていない想定なので取り直さない。
+      showError(t('surveys.respondents.remindFailed'), t('surveys.respondents.remindFailedDetail'))
+    }
+    // 5xx の表示は useApi が一元化している
   } finally {
     reminding.value = false
   }
 }
+
+/** 残り回数。BE が上限を返していない間は null（表示しない・上限扱いもしない）。 */
+const remindRemaining = computed<number | null>(() => {
+  const max = props.distribution?.remindMaxCount
+  if (max == null) return null
+  return Math.max(0, max - (props.distribution?.manualRemindCount ?? 0))
+})
+
+/** 督促ヒント。上限回数を BE から受け取れていないときは回数を含まない文言にする。 */
+const remindHintText = computed<string>(() => {
+  const max = props.distribution?.remindMaxCount
+  return max == null
+    ? t('surveys.respondents.remindHintNoMax', { count: unresponded.value.length })
+    : t('surveys.respondents.remindHint', { count: unresponded.value.length, max })
+})
+
+/**
+ * 現在時刻。`remindBlockedReason` の待機判定が時間の経過で再評価されるよう ref で持ち、
+ * `nextRemindableAt` に達した時点でタイマーが更新する（computed 内で Date.now() を直読みしない）。
+ */
+const nowMs = ref(Date.now())
+let cooldownTimer: ReturnType<typeof setTimeout> | null = null
+/** setTimeout が受け付ける最大遅延（約24.8日）。超える待機は到達のたびに張り直す。 */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1
+
+function clearCooldownTimer() {
+  if (cooldownTimer !== null) {
+    clearTimeout(cooldownTimer)
+    cooldownTimer = null
+  }
+}
+
+/** nextRemindableAt までの待機が終わる時刻に現在時刻を更新する（SSR では動かさない）。 */
+function scheduleCooldownRefresh() {
+  clearCooldownTimer()
+  nowMs.value = Date.now()
+  const next = props.distribution?.nextRemindableAt
+  if (!next) return
+  const wait = new Date(next).getTime() - nowMs.value
+  if (wait <= 0) return
+  cooldownTimer = setTimeout(() => {
+    cooldownTimer = null
+    scheduleCooldownRefresh()
+  }, Math.min(wait, MAX_TIMEOUT_MS))
+}
+
+watch(() => props.distribution?.nextRemindableAt, () => {
+  if (import.meta.client) scheduleCooldownRefresh()
+})
+onBeforeUnmount(clearCooldownTimer)
+
+/**
+ * 秒以下が残る時刻を次の分へ切り上げる（23:43:40 → 23:44）。
+ * 分単位で表示するため、切り捨てると表示時刻に見ても押せない。ボタンの有効判定は元の時刻（秒単位）のまま。
+ */
+function ceilToMinute(iso: string): string {
+  const d = dayjs(iso)
+  if (!d.isValid() || (d.second() === 0 && d.millisecond() === 0)) return iso
+  return d.add(1, 'minute').startOf('minute').toISOString()
+}
+
+/** 督促を送れない理由（送れるときは null）。公開中でない > 上限 > 待機 の順で優先する。 */
+const remindBlockedReason = computed<string | null>(() => {
+  if (props.surveyStatus !== 'PUBLISHED') return t('surveys.respondents.remindBlockedNotPublished')
+  if (remindRemaining.value === 0) return t('surveys.respondents.remindBlockedQuota')
+  const next = props.distribution?.nextRemindableAt
+  if (next && new Date(next).getTime() > nowMs.value) {
+    return t('surveys.respondents.remindBlockedCooldown', { at: formatDateTime(ceilToMinute(next)) })
+  }
+  return null
+})
 
 function getInitial(name: string): string {
   const trimmed = name.trim()
@@ -89,7 +191,16 @@ function getInitial(name: string): string {
   return trimmed.charAt(0).toUpperCase()
 }
 
-onMounted(() => loadRespondents())
+onMounted(() => {
+  scheduleCooldownRefresh()
+  loadRespondents()
+})
+
+/** 再読込ボタン: 回答者一覧に加え、残り回数・次回時刻（distribution）も親に取り直させる */
+async function reload() {
+  emit('refresh')
+  await loadRespondents()
+}
 
 defineExpose({ refresh: loadRespondents })
 </script>
@@ -111,7 +222,7 @@ defineExpose({ refresh: loadRespondents })
         :aria-label="t('surveys.respondents.reload')"
         data-testid="respondents-refresh"
         class="min-h-11 min-w-11 shrink-0"
-        @click="loadRespondents"
+        @click="reload"
       />
     </div>
 
@@ -133,15 +244,35 @@ defineExpose({ refresh: loadRespondents })
         v-if="canRemind"
         class="flex items-center justify-between gap-2 rounded-lg border border-surface-200 bg-surface-50 px-3 py-2 dark:border-surface-700 dark:bg-surface-800"
       >
-        <span class="min-w-0 text-xs text-surface-600">
-          {{ t('surveys.respondents.remindHint', { count: unresponded.length }) }}
-        </span>
+        <div class="flex min-w-0 flex-col gap-0.5">
+          <span
+            v-if="!remindBlockedReason"
+            class="text-xs text-surface-600"
+            data-testid="respondents-remind-hint"
+          >
+            {{ remindHintText }}
+          </span>
+          <span
+            v-if="remindRemaining !== null"
+            class="text-xs font-medium text-surface-700"
+            data-testid="respondents-remind-quota"
+          >
+            {{ t('surveys.respondents.remindQuota', { remaining: remindRemaining, max: distribution?.remindMaxCount }) }}
+          </span>
+          <span
+            v-if="remindBlockedReason"
+            class="text-xs text-orange-600"
+            data-testid="respondents-remind-blocked-reason"
+          >
+            {{ remindBlockedReason }}
+          </span>
+        </div>
         <Button
           :label="t('surveys.respondents.remindButton')"
           icon="pi pi-send"
           size="small"
           :loading="reminding"
-          :disabled="unresponded.length === 0 || loading"
+          :disabled="unresponded.length === 0 || loading || remindBlockedReason !== null"
           data-testid="respondents-remind-button"
           class="min-h-11 min-w-11 shrink-0 whitespace-nowrap"
           @click="sendReminder"
