@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""docs/task-list.md の明記された GitHub 番号だけを読み取り専用で同期する。
+"""台帳（docs/task-list.md。新配置では docs/task-list/*.md も）の明記された GitHub 番号だけを読み取り専用で同期する。
 
 成功時だけスナップショットを置き換える。認証・通信・API エラー時は既存の
 スナップショットを変更せず、status ファイルにエラーを残す。
@@ -11,11 +11,14 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import task_list_ledger  # noqa: E402  台帳の両配置の読み取り（CMP-261124-1222）
+
 ROOT = Path(__file__).resolve().parents[2]
-TASK_LIST = ROOT / "docs" / "task-list.md"
 SNAPSHOT = ROOT / "docs" / "prototypes" / "beta-inventory-board-github.json"
 STATUS = ROOT / "docs" / "prototypes" / "beta-inventory-board-github-status.json"
 GITHUB_REFERENCE_MINIMUM = 100  # 現台帳の実GitHub参照は#902以上。#6/#7等の内部手順番号を除外する。
@@ -91,7 +94,7 @@ def main() -> None:
     parser.add_argument("--repo", default="kenta-0420/mannschaft")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    references = cmp_refs(TASK_LIST.read_text(encoding="utf-8"))
+    references = cmp_refs(task_list_ledger.read_ledger_text(ROOT))
     numbers = sorted({number for values in references.values() for number in values})
     if args.dry_run:
         print(json.dumps({"cmpCount": len(references), "referenceCount": len(numbers), "numbers": numbers}, ensure_ascii=False))

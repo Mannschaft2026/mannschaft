@@ -440,8 +440,10 @@ class ShiftDeletedParentConcealmentContractIT extends AbstractMySqlIntegrationTe
     }
 
     private Long team(String label) {
+        // CMP-261124-0159: サポーターが在籍するチームは公開側にする（F00 §20.1 不変条件「非公開チームにサポーターは在籍しない」）。
+        // 非公開チームの在籍サポーターへの応答（不在と同一の 404。AC-0159-94）は ScopeConcealingAccessGateMembersOnlyCapTest が固定する。
         Long id = teams.save(TeamEntity.builder().slug("swap-" + UUID.randomUUID().toString().substring(0, 20))
-                .name(label).visibility(TeamEntity.Visibility.MEMBERS_AND_ABOVE).supporterEnabled(true).build()).getId();
+                .name(label).visibility(TeamEntity.Visibility.SUPPORTERS_AND_ABOVE).supporterEnabled(true).build()).getId();
         teamIds.add(id);
         return id;
     }

@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gitLedgerReader, readLedger } from './task-list-ledger.mjs';
 
 const MARKDOWN_LINK_PATTERN = /\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g;
 
@@ -32,7 +33,27 @@ function splitRow(line) {
   return result;
 }
 
-export function parseTaskList(markdown) {
+/**
+ * 台帳を解析する。input は旧配置の docs/task-list.md の本文（文字列）か、scripts/task-list-ledger.mjs の readLedger の結果
+ * （旧配置・新配置のどちらでもよい。新配置は索引・月別・legacy の全ファイルを横断し、ファイル跨ぎの重複も拒否する）。
+ */
+export function parseTaskList(input) {
+  if (input && typeof input === 'object' && Array.isArray(input.files)) {
+    const rows = [];
+    const byId = new Map();
+    const files = input.layout === 'split' ? input.files : input.files.filter(file => file.path === 'docs/task-list.md');
+    for (const file of files) {
+      if (typeof file.content !== 'string') throw new Error(`${file.path} が文字列ではありません`);
+      for (const row of parseTaskList(file.content).rows) {
+        if (byId.has(row.id)) throw new Error(`台帳に ${row.id} の重複があります（${byId.get(row.id).file}, ${file.path}）`);
+        const located = { ...row, file: file.path };
+        byId.set(row.id, located);
+        rows.push(located);
+      }
+    }
+    return { rows, byId, layout: input.layout };
+  }
+  const markdown = input;
   if (typeof markdown !== 'string') throw new Error('docs/task-list.md が文字列ではありません');
   const rows = [];
   const byId = new Map();
@@ -46,11 +67,11 @@ export function parseTaskList(markdown) {
     // 状態セル先頭の優先度 P1〜P5（CMP-261106-0049）は state から分離して priority へ持つ（`**P1 保留**` 形も `**` 除去後に処理）。
     const rawState = cells[2].replaceAll('**', '').trim();
     const priorityMatch = /^(P[1-5])\s+/.exec(rawState);
-    const row = { id, cells, state: priorityMatch ? rawState.slice(priorityMatch[0].length) : rawState, priority: priorityMatch ? priorityMatch[1] : null, evidence: cells[5], lineNumber };
+    const row = { id, cells, state: priorityMatch ? rawState.slice(priorityMatch[0].length) : rawState, priority: priorityMatch ? priorityMatch[1] : null, evidence: cells[5], lineNumber, file: 'docs/task-list.md' };
     byId.set(id, row);
     rows.push(row);
   }
-  return { rows, byId };
+  return { rows, byId, layout: 'single' };
 }
 
 export function isComplete(state) {
@@ -59,7 +80,8 @@ export function isComplete(state) {
 
 function evidenceJsonLink(cell, cmpId) {
   const matches = [...cell.matchAll(MARKDOWN_LINK_PATTERN)].flatMap(([, destination]) => {
-    const match = /^(?:\.\/)?(?:evidence|docs\/evidence)\/(CMP-(?:\d{6}-\d{4}|\d{3}))([^/]*)\.json$/.exec(destination);
+    // 索引（docs/task-list.md）から見た evidence/X と、新配置の月別ファイル（docs/task-list/*.md）から見た ../evidence/X は同じ証拠。
+    const match = /^(?:\.\/|\.\.\/)?(?:evidence|docs\/evidence)\/(CMP-(?:\d{6}-\d{4}|\d{3}))([^/]*)\.json$/.exec(destination);
     if (!match) return [];
     return [{ path: `docs/evidence/${match[1]}.json`, cmp: match[1], suffix: match[2] }];
   });
@@ -70,7 +92,7 @@ function evidenceJsonLink(cell, cmpId) {
   return matches[0]?.path ?? null;
 }
 
-const TOOLING_PATH = /^(?:scripts\/|\.github\/|\.claude\/|docs\/|backend\/scripts\/|CLAUDE\.md$|AGENTS\.md$|README\.md$|TEST_CONVENTION\.md$|backend\/\.claudecode\.md$)/;
+const TOOLING_PATH = /^(?:scripts\/|\.github\/|\.claude\/|\.agents\/|docs\/|backend\/scripts\/|CLAUDE\.md$|AGENTS\.md$|README\.md$|TEST_CONVENTION\.md$|backend\/\.claudecode\.md$)/;
 
 /** テストコードだけの変更と認めるpath。大文字小文字を区別し、テスト設定（vitest/playwright設定・package.json・build.gradle）は含めない。 */
 const TEST_PATH = /^(?:backend\/src\/test\/|frontend\/tests\/|frontend\/(?:app|server|scripts|eslint-rules)\/.+\.(?:spec|test)\.(?:ts|mjs)$)/;
@@ -154,12 +176,17 @@ export function summarizeImplementationChecks({ checkRuns, statuses, mergedAt } 
   return summary;
 }
 
-/** 行の位置を除いた内容が祖先と同一で、参照JSONにもPR差分が無い場合だけmain側の前進と認める。 */
+/** 証拠JSONへの相対リンクの書き方（evidence/ ./evidence/ ../evidence/ docs/evidence/）を揃えたセル。配置の移行で行が同一と判定されるようにする。 */
+function canonicalCell(cell) {
+  return cell.replace(/\]\((?:\.\/|\.\.\/)?(?:docs\/)?evidence\/(CMP-(?:\d{6}-\d{4}|\d{3})\.json)/g, '](evidence/$1');
+}
+
+/** 行の位置（所在ファイルを含む）を除いた内容が祖先と同一で、参照JSONにもPR差分が無い場合だけmain側の前進と認める。 */
 function unchangedFromAncestor(id, baseRow, headRow, ancestor, changed) {
   if (!ancestor) return false;
   const ancestorRow = ancestor.byId.get(id);
   const sameRow = !headRow && !ancestorRow
-    || headRow && ancestorRow && headRow.cells.every((cell, index) => cell === ancestorRow.cells[index]);
+    || headRow && ancestorRow && headRow.cells.every((cell, index) => canonicalCell(cell) === canonicalCell(ancestorRow.cells[index]));
   if (!sameRow) return false;
   const links = [baseRow, ancestorRow].filter(Boolean).map(row => evidenceJsonLink(row.evidence, id));
   return !links.some(link => link && changed.has(link));
@@ -350,7 +377,7 @@ function gitShow(ref, file) {
   return execFileSync('git', ['show', `${ref}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
 }
 
-function cli() {
+async function cli() {
   const args = process.argv.slice(2);
   if (args[0] === '--input' && args[1]) {
     const input = JSON.parse(readFileSync(args[1], 'utf8'));
@@ -370,8 +397,9 @@ function cli() {
   if (baseIndex < 0 || headIndex < 0 || !args[baseIndex + 1] || !args[headIndex + 1]) throw new Error('使い方: node scripts/completion-evidence.mjs --base <ref> --head <ref>');
   const baseRef = args[baseIndex + 1];
   const headRef = args[headIndex + 1];
-  const baseTaskList = gitShow(baseRef, 'docs/task-list.md');
-  const headTaskList = gitShow(headRef, 'docs/task-list.md');
+  // base・head それぞれの配置（旧: docs/task-list.md 1ファイル / 新: 索引＋docs/task-list/*.md）を判別して読む。
+  const baseTaskList = await readLedger(gitLedgerReader(baseRef, { maxBuffer: 16 * 1024 * 1024 }));
+  const headTaskList = await readLedger(gitLedgerReader(headRef, { maxBuffer: 16 * 1024 * 1024 }));
   const before = parseTaskList(baseTaskList);
   const after = parseTaskList(headTaskList);
   const evidenceByPath = {};
@@ -416,5 +444,5 @@ function cli() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { cli(); } catch (error) { console.error(error.message); process.exitCode = 1; }
+  cli().catch((error) => { console.error(error.message); process.exitCode = 1; });
 }

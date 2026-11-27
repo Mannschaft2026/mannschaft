@@ -7,7 +7,7 @@ definePageMeta({ middleware: 'auth' })
 const { t } = useI18n()
 const route = useRoute()
 const teamSlug = String(route.params.slug)
-const { isAdminOrDeputy, isMember, loadPermissions } = useRoleAccess('team', teamSlug)
+const { isAdminOrDeputy, isMember, loadPermissions, roleLoadFailed } = useRoleAccess('team', teamSlug)
 
 const selectedThread = ref<BulletinThreadResponse | null>(null)
 const showCreateDialog = ref(false)
@@ -17,6 +17,8 @@ const { getTeam } = useTeamApi()
 const { handleApiError } = useErrorHandler()
 const linkLoading = ref(false)
 const linkError = shallowRef<unknown>(null)
+/** 権限の取得失敗（CMP-261124-0159 PR-F1 / AC-0159-87）。無表示で「権限なし」に倒して空の一覧に化けさせない。 */
+const permissionError = shallowRef<unknown>(null)
 let linkSequence = 0
 
 /** 元リンクのthreadIdはこのscopeの詳細APIで認可してから開く。 */
@@ -63,7 +65,17 @@ function onSwitchTab(tab: 'threads' | 'archive') {
   selectedThread.value = null
 }
 
-onMounted(async () => { await loadPermissions(); await loadLinkedThread() })
+async function loadPermissionsAndThread(): Promise<void> {
+  permissionError.value = null
+  const result = await loadPermissions()
+  if (!result.ok) {
+    permissionError.value = result.error ?? new Error('permission load failed')
+    return
+  }
+  await loadLinkedThread()
+}
+
+onMounted(() => { void loadPermissionsAndThread() })
 </script>
 
 <template>
@@ -72,8 +84,11 @@ onMounted(async () => { await loadPermissions(); await loadLinkedThread() })
       <PageHeader :title="t('bulletin.title')" :back-to="`/teams/${teamSlug}`" />
     </div>
 
+    <!-- 権限取得に失敗したら一覧を出さずエラーを示す（親シェルが 403/404 を先に判定済み） -->
+    <DashboardErrorState v-if="permissionError || roleLoadFailed" :error="permissionError" @retry="loadPermissionsAndThread" />
+
     <!-- スレッド詳細表示中 -->
-    <PageLoading v-if="linkLoading" />
+    <PageLoading v-else-if="linkLoading" />
     <DashboardErrorState v-else-if="linkError" :error="linkError" @retry="loadLinkedThread" />
     <div v-else-if="selectedThread" class="mx-auto max-w-3xl">
       <BulletinThreadDetail
