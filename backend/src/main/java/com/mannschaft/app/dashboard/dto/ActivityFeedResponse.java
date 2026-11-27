@@ -28,7 +28,7 @@ public class ActivityFeedResponse {
      * 発行元（ScheduleService）が未結線のため現時点では常にnull。
      */
     @Schema(type = "object", nullable = true, description = "変更差分（SCHEDULE系のみ非null）")
-    private final Object detail;
+    private final ScheduleFeedDetail detail;
 
     private final LocalDateTime createdAt;
 

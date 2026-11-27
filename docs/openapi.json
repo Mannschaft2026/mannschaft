@@ -120927,7 +120927,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListMapStringObject"
+                  "$ref": "#/components/schemas/ApiResponseListSkillSearchItemResponse"
                 }
               }
             }
@@ -154438,7 +154438,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListMapStringString"
+                  "$ref": "#/components/schemas/ApiResponseListSupportedLocaleResponse"
                 }
               }
             }
@@ -197748,7 +197748,7 @@
               "format": "int64"
             },
             "maxItems": 100,
-            "minItems": 1
+            "minItems": 0
           }
         }
       },
@@ -230743,17 +230743,61 @@
           }
         }
       },
-      "ApiResponseListMapStringObject": {
+      "ApiResponseListSkillSearchItemResponse": {
         "type": "object",
         "properties": {
           "data": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "object"
-              }
+              "$ref": "#/components/schemas/SkillSearchItemResponse"
             }
+          }
+        }
+      },
+      "SkillSearchItemResponse": {
+        "type": "object",
+        "properties": {
+          "acquiredOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date"
+          },
+          "expiringSoon": {
+            "type": "boolean"
+          },
+          "hasCertificate": {
+            "type": "boolean"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "memberSkillId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skillName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -251769,11 +251813,31 @@
           }
         }
       },
+      "TimetableTodayChange": {
+        "type": "object",
+        "properties": {
+          "change_type": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "room_name": {
+            "type": "string"
+          },
+          "subject_name": {
+            "type": "string"
+          },
+          "teacher_name": {
+            "type": "string"
+          }
+        }
+      },
       "TimetableTodayItem": {
         "type": "object",
         "properties": {
           "change": {
-            "type": "object"
+            "$ref": "#/components/schemas/TimetableTodayChange"
           },
           "color": {
             "type": "string"
@@ -254136,6 +254200,20 @@
           }
         }
       },
+      "ApiResponseListMapStringObject": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
       "AdminReservationSummaryResponse": {
         "type": "object",
         "properties": {
@@ -255128,7 +255206,7 @@
             "format": "date-time"
           },
           "detail": {
-            "type": "object",
+            "$ref": "#/components/schemas/ScheduleFeedDetail",
             "description": "変更差分（SCHEDULE系のみ非null）"
           },
           "id": {
@@ -255180,6 +255258,46 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/ActivityFeedPageResponse"
+          }
+        }
+      },
+      "FieldDiff": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          }
+        }
+      },
+      "ScheduleFeedDetail": {
+        "type": "object",
+        "description": "変更差分（SCHEDULE系のみ非null）",
+        "properties": {
+          "affectedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldDiff"
+            }
+          },
+          "scheduleId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -257713,17 +257831,25 @@
           }
         }
       },
-      "ApiResponseListMapStringString": {
+      "ApiResponseListSupportedLocaleResponse": {
         "type": "object",
         "properties": {
           "data": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
+              "$ref": "#/components/schemas/SupportedLocaleResponse"
             }
+          }
+        }
+      },
+      "SupportedLocaleResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "nativeName": {
+            "type": "string"
           }
         }
       },

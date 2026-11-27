@@ -76916,10 +76916,28 @@ export interface components {
             items?: components["schemas"]["FeedItem"][];
             provider?: string;
         };
-        ApiResponseListMapStringObject: {
-            data?: {
-                [key: string]: Record<string, never>;
-            }[];
+        ApiResponseListSkillSearchItemResponse: {
+            data?: components["schemas"]["SkillSearchItemResponse"][];
+        };
+        SkillSearchItemResponse: {
+            /** Format: date */
+            acquiredOn?: string;
+            /** Format: int64 */
+            categoryId?: number;
+            displayName?: string;
+            /** Format: date */
+            expiresAt?: string;
+            expiringSoon?: boolean;
+            hasCertificate?: boolean;
+            issuer?: string;
+            /** Format: int64 */
+            memberSkillId?: number;
+            skillName?: string;
+            status?: string;
+            /** Format: int64 */
+            userId?: number;
+            /** Format: date-time */
+            verifiedAt?: string;
         };
         ApiResponseListMemberSkillResponse: {
             data?: components["schemas"]["MemberSkillResponse"][];
@@ -84878,8 +84896,15 @@ export interface components {
             items?: components["schemas"]["TimetableTodayItem"][];
             week_pattern?: string;
         };
+        TimetableTodayChange: {
+            change_type?: string;
+            reason?: string;
+            room_name?: string;
+            subject_name?: string;
+            teacher_name?: string;
+        };
         TimetableTodayItem: {
-            change?: Record<string, never>;
+            change?: components["schemas"]["TimetableTodayChange"];
             color?: string;
             course_code?: string;
             credits?: number;
@@ -85897,6 +85922,11 @@ export interface components {
             isStale?: boolean;
             placeName?: string;
         };
+        ApiResponseListMapStringObject: {
+            data?: {
+                [key: string]: Record<string, never>;
+            }[];
+        };
         AdminReservationSummaryResponse: {
             /** Format: int64 */
             pending_count?: number;
@@ -86276,7 +86306,7 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             /** @description 変更差分（SCHEDULE系のみ非null） */
-            detail?: Record<string, never>;
+            detail?: components["schemas"]["ScheduleFeedDetail"];
             /** Format: int64 */
             id?: number;
             /** Format: int64 */
@@ -86297,6 +86327,21 @@ export interface components {
         };
         ApiResponseActivityFeedPageResponse: {
             data?: components["schemas"]["ActivityFeedPageResponse"];
+        };
+        FieldDiff: {
+            after?: string;
+            before?: string;
+            changed?: boolean;
+            field?: string;
+        };
+        /** @description 変更差分（SCHEDULE系のみ非null） */
+        ScheduleFeedDetail: {
+            /** Format: int32 */
+            affectedCount?: number;
+            fields?: components["schemas"]["FieldDiff"][];
+            /** Format: int64 */
+            scheduleId?: number;
+            title?: string;
         };
         ActionItem: {
             /** Format: date-time */
@@ -87317,10 +87362,12 @@ export interface components {
             scopeName?: string;
             scopeType?: string;
         };
-        ApiResponseListMapStringString: {
-            data?: {
-                [key: string]: string;
-            }[];
+        ApiResponseListSupportedLocaleResponse: {
+            data?: components["schemas"]["SupportedLocaleResponse"][];
+        };
+        SupportedLocaleResponse: {
+            code?: string;
+            nativeName?: string;
         };
         ApiKeyResponse: {
             /** Format: date-time */
@@ -159458,7 +159505,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListMapStringObject"];
+                    "*/*": components["schemas"]["ApiResponseListSkillSearchItemResponse"];
                 };
             };
         };
@@ -178508,7 +178555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListMapStringString"];
+                    "*/*": components["schemas"]["ApiResponseListSupportedLocaleResponse"];
                 };
             };
         };

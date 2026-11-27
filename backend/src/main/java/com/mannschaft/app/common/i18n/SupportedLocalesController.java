@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 対応言語一覧を返す公開 API。
@@ -43,16 +42,13 @@ public class SupportedLocalesController {
      * GET /api/i18n/supported-locales
      */
     @GetMapping("/supported-locales")
-    public ApiResponse<List<Map<String, String>>> getSupportedLocales() {
+    public ApiResponse<List<SupportedLocaleResponse>> getSupportedLocales() {
         // F11.3 対応6言語（pt は F11.2 の多言語コンテンツ用のため除外）
         List<String> f113Locales = List.of("ja", "en", "zh", "ko", "es", "de");
 
-        List<Map<String, String>> locales = Arrays.stream(SupportedLanguage.values())
+        List<SupportedLocaleResponse> locales = Arrays.stream(SupportedLanguage.values())
                 .filter(lang -> f113Locales.contains(lang.getCode()))
-                .map(lang -> Map.of(
-                        "code", lang.getCode(),
-                        "nativeName", lang.getDisplayName()
-                ))
+                .map(lang -> new SupportedLocaleResponse(lang.getCode(), lang.getDisplayName()))
                 .toList();
 
         return ApiResponse.of(locales);

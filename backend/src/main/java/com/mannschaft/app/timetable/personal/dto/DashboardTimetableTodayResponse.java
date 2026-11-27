@@ -43,10 +43,22 @@ public record DashboardTimetableTodayResponse(
             String color,
             @JsonProperty("linked_team_id") Long linkedTeamId,
             @JsonProperty("is_changed") Boolean isChanged,
-            Object change,
+            TimetableTodayChange change,
             @JsonProperty("link_revoked") Boolean linkRevoked,
             @JsonProperty("user_note_id") Long userNoteId,
             @JsonProperty("has_attachments") Boolean hasAttachments
+    ) {
+    }
+
+    /**
+     * 当日の臨時変更（休講・教室変更など）。項目名・値は、型を明示する前の Map 表現と同一。
+     */
+    public record TimetableTodayChange(
+            @JsonProperty("change_type") String changeType,
+            String reason,
+            @JsonProperty("subject_name") String subjectName,
+            @JsonProperty("teacher_name") String teacherName,
+            @JsonProperty("room_name") String roomName
     ) {
     }
 }
