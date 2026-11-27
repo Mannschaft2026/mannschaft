@@ -333,8 +333,8 @@ class CmsBlogPostWriteScopeContractIT extends AbstractMySqlIntegrationTest {
     class ListRevisions {
 
         @Test
-        @DisplayName("非メンバーの一覧取得は403(assertCanView相当)")
-        void 非メンバーの一覧取得は403() throws Exception {
+        @DisplayName("非メンバーの一覧取得は不存在と同一の404 CMS_001(assertCanView相当・存在オラクル対策)")
+        void 非メンバーの一覧取得は404() throws Exception {
             // DRAFT記事は作成者(adminA)以外は閲覧不可（F00 status ガード）のため、
             // ここでは PUBLISHED にして「非メンバーは MEMBERS_ONLY で弾かれる」ことを検証する。
             Long postId = createTeamPostAsAdminA();
@@ -342,7 +342,8 @@ class CmsBlogPostWriteScopeContractIT extends AbstractMySqlIntegrationTest {
 
             setAuthentication(outsiderId);
             mockMvc.perform(get("/api/v1/blog/posts/{id}/revisions", postId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("CMS_001"));
         }
 
         @Test
@@ -620,13 +621,14 @@ class CmsBlogPostWriteScopeContractIT extends AbstractMySqlIntegrationTest {
     class Reactions {
 
         @Test
-        @DisplayName("非メンバーはDRAFT記事にリアクション不可(assertCanViewで拒否)")
+        @DisplayName("非メンバーはDRAFT記事にリアクション不可(assertCanViewで拒否・不存在と同一の404 CMS_001)")
         void 非メンバーはDRAFT記事にリアクション不可() throws Exception {
             Long postId = createTeamPostAsAdminA();
 
             setAuthentication(outsiderId);
             mockMvc.perform(post("/api/v1/blog/posts/{postId}/reactions", postId))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("CMS_001"));
         }
 
         @Test
