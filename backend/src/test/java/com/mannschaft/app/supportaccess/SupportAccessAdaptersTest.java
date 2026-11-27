@@ -167,9 +167,44 @@ class SupportAccessAdaptersTest {
         }
 
         @Test
-        @DisplayName("後見の封印段階（自立）の本人はリンクがあっても保護者の承認は要らない")
-        void 自立段階は不要() {
+        @DisplayName("成人（18歳以上）で後見の封印段階の本人は、リンクがあっても保護者の承認は要らない")
+        void 成人は不要() {
+            child("2006-05-01", false);
+            links(PARENT_A);
+
+            assertThat(adapter.resolveGuardianRequirement(CHILD_ID).required()).isFalse();
+        }
+
+        @Test
+        @DisplayName("マスター決定: 後見の封印段階（自立扱い）の未成年（16歳）でも保護者の承認が要り、承認できる保護者を返す")
+        void 封印段階の未成年も保護者の承認が要る() {
             child("2010-05-01", false);
+            links(PARENT_A);
+            parent(PARENT_A, UserEntity.UserStatus.ACTIVE);
+            given(switchService.evaluateSwitch(PARENT_A, CHILD_ID)).willReturn(SwitchVerdict.ALLOWED);
+
+            SupportAccessGuardianRequirement r = adapter.resolveGuardianRequirement(CHILD_ID);
+
+            assertThat(r.required()).isTrue();
+            assertThat(r.eligibleGuardianUserIds()).containsExactly(PARENT_A);
+        }
+
+        @Test
+        @DisplayName("封印段階の未成年で保護者が解決できなければ unresolvable（依頼は SUPPORT_ACCESS_005 で拒否される）")
+        void 封印段階の未成年で保護者不在は解決不能() {
+            child("2010-05-01", false);
+            links();
+
+            SupportAccessGuardianRequirement r = adapter.resolveGuardianRequirement(CHILD_ID);
+
+            assertThat(r.required()).isTrue();
+            assertThat(r.unresolvable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("ちょうど18歳の誕生日を迎えた本人は未成年ではない（境界）")
+        void 十八歳の境界() {
+            child("2008-11-27", false);
             links(PARENT_A);
 
             assertThat(adapter.resolveGuardianRequirement(CHILD_ID).required()).isFalse();

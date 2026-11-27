@@ -3407,6 +3407,7 @@
     "decline_context": "再招待を見送る操作"
   },
   "supportAccess": {
+    "photoHidden": "代理閲覧中は写真を表示しません",
     "banner": {
       "viewing": "{name} さんの画面を閲覧中",
       "readOnly": "閲覧のみ（変更はできません）",

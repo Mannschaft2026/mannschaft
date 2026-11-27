@@ -3407,6 +3407,7 @@
     "decline_context": "Anfrage für eine neue Einladung ablehnen"
   },
   "supportAccess": {
+    "photoHidden": "Fotos werden während der Support-Ansicht nicht angezeigt",
     "banner": {
       "viewing": "Ansicht von {name} wird angezeigt",
       "readOnly": "Nur Ansicht (keine Änderungen möglich)",

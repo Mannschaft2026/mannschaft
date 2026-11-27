@@ -36,6 +36,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirectory {
 
+    /** 未成年の境界（この年齢未満は保護者の承認が要る）。 */
+    private static final int MINOR_AGE_YEARS = 18;
+
     private final UserRepository userRepository;
     private final ParentalConsentLinkRepository parentalConsentLinkRepository;
     private final GuardianshipSwitchService guardianshipSwitchService;
@@ -62,7 +65,8 @@ public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirec
      *
      * <p><b>要否</b>は保護者リンクの有無ではなく<b>本人の年齢・後見の状態</b>から決める。後見切替の年齢ポリシー
      * （{@link GuardianshipAgePolicyRegistry}・国別）で「保護者が子に代わって操作できる段階」（{@code switchAllowed}）の
-     * 子は保護者の承認が要る。生年月日が無い・読めない本人は、承認済みの保護者リンクがあれば安全側で要るとする
+     * 子は保護者の承認が要る。<b>18歳未満の未成年は、後見の封印段階（自立扱いの年齢）でも一律で要る</b>
+     * （マスター決定 2026-11-27）。生年月日が無い・読めない本人は、承認済みの保護者リンクがあれば安全側で要るとする
      * （リンクも無ければ成人の通常アカウントとして扱う）。以前は「リンクがあり後見の権原が有効な保護者がいれば要る」
      * だったため、リンクの無い（または保護者が停止した）子は保護者の承認なしで依頼・許可できた（fail-open）。</p>
      *
@@ -115,6 +119,10 @@ public class SupportAccessUserDirectoryAdapter implements SupportAccessUserDirec
         LocalDate birthDate = parseBirthDate(child);
         if (birthDate == null) {
             return hasApprovedGuardianLink;
+        }
+        // マスター決定（2026-11-27）: 未成年（18歳未満）は後見の封印段階（自立扱いの年齢）でも一律で保護者の承認を求める
+        if (birthDate.plusYears(MINOR_AGE_YEARS).isAfter(LocalDate.now(clock))) {
+            return true;
         }
         return agePolicyRegistry.forCountry(child.getCountryCode()).resolve(birthDate, clock).switchAllowed();
     }

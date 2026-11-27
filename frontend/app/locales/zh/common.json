@@ -3407,6 +3407,7 @@
     "decline_context": "拒绝重新邀请请求"
   },
   "supportAccess": {
+    "photoHidden": "支持查看期间不显示照片",
     "banner": {
       "viewing": "正在查看 {name} 的画面",
       "readOnly": "仅查看（无法进行更改）",

@@ -3407,6 +3407,7 @@
     "decline_context": "declining the re-invitation request"
   },
   "supportAccess": {
+    "photoHidden": "Photos are not shown during support viewing",
     "banner": {
       "viewing": "Viewing the screen of {name}",
       "readOnly": "View only (no changes possible)",

@@ -3407,6 +3407,7 @@
     "decline_context": "재초대 요청 거절"
   },
   "supportAccess": {
+    "photoHidden": "지원 열람 중에는 사진을 표시하지 않습니다",
     "banner": {
       "viewing": "{name} 님의 화면을 열람 중",
       "readOnly": "열람 전용 (변경할 수 없습니다)",

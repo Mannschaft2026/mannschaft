@@ -3407,6 +3407,7 @@
     "decline_context": "rechazar la solicitud de nueva invitación"
   },
   "supportAccess": {
+    "photoHidden": "Las fotos no se muestran durante la visualización de soporte",
     "banner": {
       "viewing": "Viendo la pantalla de {name}",
       "readOnly": "Solo lectura (no se pueden hacer cambios)",

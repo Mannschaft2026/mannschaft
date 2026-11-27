@@ -32,7 +32,8 @@ export interface ChartPhoto {
   id: number
   chartId: number
   photoType: 'BEFORE' | 'AFTER' | 'GENERAL'
-  photoUrl: string
+  /** 代理（サポート閲覧）中は BE が署名 URL を返さない（null）。 */
+  photoUrl: string | null
   caption: string | null
   sortOrder: number
   createdAt: string
