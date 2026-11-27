@@ -63,7 +63,8 @@ class ShiftSlotFacadeTest {
 
     @BeforeEach
     void setUp() {
-        facade = new ShiftSlotFacade(slotService, new ScopeConcealingAccessGate(accessControlService),
+        facade = new ShiftSlotFacade(slotService, new ScopeConcealingAccessGate(accessControlService,
+                new com.mannschaft.app.common.ScopeContentAccessGate(accessControlService, teamIds -> java.util.Set.of())),
                 accessControlService, userStatusLookupService);
     }
 

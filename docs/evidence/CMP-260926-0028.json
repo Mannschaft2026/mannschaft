@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "cmpId": "CMP-260926-0028",
+  "scope": "app",
+  "implementation": {
+    "pr": 4882,
+    "sha": "1d9f74f949362925c23d21c8e36270672d3543e8"
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC-0028-1",
+      "description": "copyMembers の重複判定が一括取得1回＋saveAll になり、コピー件数 N に対する SQL 発行数が N に比例しない",
+      "tests": [
+        {
+          "name": "MemberProfileServiceTest（copyMembers 一括判定）",
+          "evidence": "backend/src/test/java/com/mannschaft/app/member/service/MemberProfileServiceTest.java"
+        }
+      ]
+    }
+  ],
+  "ci": [
+    {
+      "runId": 45564489560
+    }
+  ],
+  "stages": {
+    "review": {
+      "status": "passed",
+      "evidence": "https://github.com/Mannschaft2026/mannschaft/pull/4882"
+    },
+    "real": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260926-0029-real.md"
+    },
+    "exploratory": {
+      "status": "passed",
+      "evidence": "docs/evidence/CMP-260926-0029-real.md"
+    }
+  },
+  "regressions": []
+}

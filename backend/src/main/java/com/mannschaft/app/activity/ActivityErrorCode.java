@@ -70,7 +70,13 @@ public enum ActivityErrorCode implements ErrorCode {
 
     SYNC_CONFIRMATION_REQUIRED("ACTIVITY_022", "活動記録の変更項目を確認してください", Severity.WARN),
 
-    SYNC_STATE_CONFLICT("ACTIVITY_023", "予定または活動記録が変更されています。確認をやり直してください", Severity.WARN);
+    SYNC_STATE_CONFLICT("ACTIVITY_023", "予定または活動記録が変更されています。確認をやり直してください", Severity.WARN),
+
+    /** 活動統計の期間で終了日が開始日より前（400。CMP-261124-0159 F06.4 §15） */
+    STATS_DATE_RANGE_INVERTED("ACTIVITY_024", "終了日は開始日以降の日付にしてください", Severity.WARN),
+
+    /** 活動統計の期間が上限（3 年）を超える（400。CMP-261124-0159 F06.4 §15） */
+    STATS_DATE_RANGE_TOO_LONG("ACTIVITY_025", "集計期間は 3 年以内で指定してください", Severity.WARN);
 
     private final String code;
     private final String message;
