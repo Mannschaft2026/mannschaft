@@ -544,6 +544,28 @@ class PlaintextSecretTokenGuardConditionTest {
     }
 
     @Nested
+    @DisplayName("W3: 戦役の債務残高 debtsOf")
+    class DebtBalance {
+
+        @Test
+        @DisplayName("陽性: 指定 cmp の債務注釈が付いたフィールド・メソッドを数える")
+        void countsDebtsOfTheCampaign() {
+            List<String> debts = PlaintextSecretTokenGuardRules.debtsOf(fixtureClasses, "CMP-260826-1457");
+            assertListed(debts, field(ExemptedSecretFixtureEntity.class, "inviteToken"), "フィールドの債務注釈");
+            assertListed(debts, method(SelfIssuingFixtureService.class, "issueUnderDebt"), "メソッドの債務注釈");
+        }
+
+        @Test
+        @DisplayName("陰性: 他の cmp の債務注釈・注釈の無い要素は数えない")
+        void ignoresOtherCampaignsAndUnannotated() {
+            List<String> debts = PlaintextSecretTokenGuardRules.debtsOf(fixtureClasses, "CMP-260826-1457");
+            assertNotListed(debts, field(MisdeclaredHashExemptionFixtureEntity.class, "tokenHash"), "他戦役の債務注釈");
+            assertThat(PlaintextSecretTokenGuardRules.debtsOf(fixtureClasses, "CMP-000000-0000"))
+                    .as("どの要素にも付いていない cmp は空").isEmpty();
+        }
+    }
+
+    @Nested
     @DisplayName("番人4（AC-22）: IssuedToken の永続化")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class IssuedTokenPersistence {
